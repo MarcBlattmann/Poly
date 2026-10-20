@@ -10,6 +10,7 @@ mod io;
 mod madvise;
 mod mem;
 mod process;
+mod sched;
 mod signal;
 mod socket;
 mod startup;

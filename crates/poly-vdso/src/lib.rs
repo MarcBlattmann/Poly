@@ -203,6 +203,17 @@ pub const fn timeval(ns: u64) -> (i64, i64) {
     ((ns / NANOS_PER_SEC) as i64, (ns % NANOS_PER_SEC / NANOS_PER_MICRO) as i64)
 }
 
+/// How the vDSO's `getcpu` learns the CPU it runs on: RDPID or RDTSCP read
+/// IA32_TSC_AUX, which the kernel sets to each CPU's number (SDM Vol. 2B,
+/// `RDPID`, `RDTSCP`); without either, the system call.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum CpuNumber {
+    Syscall = 0,
+    Rdtscp = 1,
+    Rdpid = 2,
+}
+
 /// The data page: the seqlock and the fields of a [`Snapshot`]. A zeroed
 /// page is valid and reads as [`Mode::Syscall`].
 #[derive(Debug, Default)]
@@ -214,7 +225,9 @@ pub struct Vvar {
     shift: AtomicU32,
     tz_minuteswest: AtomicU32,
     tz_dsttime: AtomicU32,
-    _reserved: AtomicU32,
+    /// How `getcpu` finds the CPU ([`CpuNumber`]); set once, outside the
+    /// seqlock.
+    cpu_number: AtomicU32,
     origin: AtomicU64,
     mult: AtomicU64,
     offset_ns: AtomicU64,
@@ -232,7 +245,7 @@ impl Vvar {
             shift: AtomicU32::new(0),
             tz_minuteswest: AtomicU32::new(0),
             tz_dsttime: AtomicU32::new(0),
-            _reserved: AtomicU32::new(0),
+            cpu_number: AtomicU32::new(0),
             origin: AtomicU64::new(0),
             mult: AtomicU64::new(0),
             offset_ns: AtomicU64::new(0),
@@ -297,6 +310,21 @@ impl Vvar {
                 return s;
             }
             core::hint::spin_loop();
+        }
+    }
+
+    /// Tell `getcpu` how to find the CPU it runs on.
+    pub fn set_cpu_number(&self, how: CpuNumber) {
+        self.cpu_number.store(how as u32, Ordering::Release);
+    }
+
+    /// How `getcpu` finds the CPU it runs on ([`CpuNumber::Syscall`] in a
+    /// zeroed page).
+    pub fn cpu_number(&self) -> CpuNumber {
+        match self.cpu_number.load(Ordering::Acquire) {
+            1 => CpuNumber::Rdtscp,
+            2 => CpuNumber::Rdpid,
+            _ => CpuNumber::Syscall,
         }
     }
 

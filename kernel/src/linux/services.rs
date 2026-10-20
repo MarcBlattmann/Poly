@@ -149,6 +149,24 @@ impl<'a> Thread<'a> {
         }
         process::find_thread(u32::try_from(tid).ok()?).map(|(_, f)| f)
     }
+
+    /// The kernel thread of Linux thread `tid`, for sched_setaffinity(2) and
+    /// sched_getaffinity(2). Threads of another process need the caller to
+    /// have effective user id 0 (standing in for `CAP_SYS_NICE`, as the
+    /// caller's other ids are not compared yet).
+    fn sched_target(&self, tid: i32) -> Result<crate::thread::ThreadId, Errno> {
+        if tid == self.tid as i32 {
+            return Ok(crate::thread::current());
+        }
+        let (process, flags) = process::find_thread(u32::try_from(tid).map_err(|_| Errno::ESRCH)?).ok_or(Errno::ESRCH)?;
+        if process.pid != self.process.pid && self.credentials().euid != 0 {
+            return Err(Errno::EPERM);
+        }
+        match flags.thread.load(Ordering::SeqCst) {
+            0 => Err(Errno::ESRCH),
+            bits => Ok(crate::thread::ThreadId::from_bits(bits - 1)),
+        }
+    }
 }
 
 enum TargetProcess<'a> {
@@ -630,6 +648,29 @@ impl LinuxKernel for Thread<'_> {
 
     fn tick_ns(&self) -> u64 {
         time::NANOS_PER_TICK
+    }
+
+    fn current_cpu(&self) -> u32 {
+        crate::thread::this_cpu() as u32
+    }
+
+    fn yield_cpu(&mut self) {
+        crate::thread::yield_now();
+    }
+
+    fn cpu_affinity(&mut self, tid: i32) -> Result<u64, Errno> {
+        let id = self.sched_target(tid)?;
+        let mask = crate::thread::affinity(id).ok_or(Errno::ESRCH)?;
+        Ok(mask.intersection(crate::thread::online_cpus()).bits())
+    }
+
+    fn set_cpu_affinity(&mut self, tid: i32, mask: u64) -> Result<(), Errno> {
+        let id = self.sched_target(tid)?;
+        let cpus = crate::thread::CpuSet::from_bits(mask).intersection(crate::thread::online_cpus());
+        if cpus.is_empty() {
+            return Err(Errno::EINVAL);
+        }
+        crate::thread::set_affinity(id, cpus).map_err(|_| Errno::ESRCH)
     }
 
     fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {

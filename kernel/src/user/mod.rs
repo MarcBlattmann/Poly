@@ -181,7 +181,7 @@ fn spawn_thread(
     hook: SyscallHook,
 ) -> Result<ThreadId, SpawnError> {
     let arch = arch::user::ThreadState::new(space).ok_or(SpawnError::NoMemory)?;
-    start_thread(process, arch, memory, entry, None, hook, None).map(|(id, _)| id)
+    start_thread(process, arch, memory, entry, None, hook, None, thread::CpuSet::ALL).map(|(id, _)| id)
 }
 
 /// Start a thread of `process` in `memory` that begins with every
@@ -204,7 +204,9 @@ pub fn spawn_child(
     let space = Arc::clone(memory.space());
     let arch = arch::user::ThreadState::with_state(space, fpu, fs_base, gs_base).ok_or(SpawnError::NoMemory)?;
     let entry = Entry { rip: regs.rip, rsp: regs.rsp, args: [regs.rdi, regs.rsi, regs.rdx] };
-    start_thread(process, arch, Some(memory), entry, Some(Box::new(*regs)), hook, tid)
+    // A child inherits its creator's CPU affinity (sched_setaffinity(2)).
+    let cpus = thread::affinity(thread::current()).unwrap_or(thread::CpuSet::ALL);
+    start_thread(process, arch, Some(memory), entry, Some(Box::new(*regs)), hook, tid, cpus)
 }
 
 fn start_thread(
@@ -215,6 +217,7 @@ fn start_thread(
     start: Option<Box<UserRegs>>,
     hook: SyscallHook,
     tid: Option<u32>,
+    cpus: thread::CpuSet,
 ) -> Result<(ThreadId, u32), SpawnError> {
     // A process that has ended takes no new threads.
     let attached = match tid {
@@ -237,7 +240,7 @@ fn start_thread(
         replaced: false,
         arch,
     });
-    thread::spawn_user("user", user, user_main, 0)
+    thread::spawn_user("user", user, user_main, 0, cpus)
         .inspect(|id| kick.thread.store(id.to_bits() + 1, Ordering::SeqCst))
         .map(|id| (id, tid))
         .inspect_err(|_| attached.cancel_thread(tid))

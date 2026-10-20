@@ -344,10 +344,17 @@ pub fn spawn_on(name: &'static str, f: ThreadFn, arg: usize, cpus: CpuSet) -> Re
 }
 
 /// Start `f(arg)` in a new user thread named `name`, which carries `user`
-/// from the start: its address space is loaded whenever it runs. `f` is
-/// expected to enter ring 3 (see [`crate::user::spawn`]).
-pub fn spawn_user(name: &'static str, user: Box<UserThread>, f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
-    spawn_with(name, f, arg, Some(user), CpuSet::ALL)
+/// from the start: its address space is loaded whenever it runs, on the
+/// CPUs in `cpus`. `f` is expected to enter ring 3 (see
+/// [`crate::user::spawn`]).
+pub fn spawn_user(
+    name: &'static str,
+    user: Box<UserThread>,
+    f: ThreadFn,
+    arg: usize,
+    cpus: CpuSet,
+) -> Result<ThreadId, SpawnError> {
+    spawn_with(name, f, arg, Some(user), cpus)
 }
 
 fn spawn_with(

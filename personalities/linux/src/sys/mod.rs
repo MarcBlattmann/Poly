@@ -11,6 +11,7 @@ pub mod futex;
 pub mod io;
 pub mod limits;
 pub mod madvise;
+pub mod sched;
 pub mod mem;
 pub mod path;
 pub mod perm;

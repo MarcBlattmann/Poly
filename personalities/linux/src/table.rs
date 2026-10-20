@@ -10,7 +10,7 @@ use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
 use crate::sys::{
-    cred, epoll, eventfd, fd, futex, io, limits, madvise, mem, path, perm, pipe, poll, prctl, process, signal,
+    cred, epoll, eventfd, fd, futex, io, limits, madvise, mem, sched, path, perm, pipe, poll, prctl, process, signal,
     signalfd, socket, system, task, time, timerfd,
 };
 
@@ -178,8 +178,9 @@ pub const FILE_SYSTEM: &[(u64, Handler)] = &[
 ];
 /// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
 /// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]; ADR 0049:
-/// madvise; ADR 0048: sockets).
-pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS, FILE_SYSTEM, madvise::CALLS, socket::CALLS];
+/// madvise; ADR 0048: sockets; ADR 0053: scheduling).
+pub const GROUPS: &[&[(u64, Handler)]] =
+    &[IMPLEMENTED, time::CALLS, FILE_SYSTEM, madvise::CALLS, socket::CALLS, sched::CALLS];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
 
@@ -412,6 +413,12 @@ mod tests {
             "epoll_pwait2",
         ];
         assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn sched_calls() {
+        let names: Vec<&str> = sched::CALLS.iter().map(|&(nr, _)| name(nr).unwrap()).collect();
+        assert_eq!(names, ["sched_yield", "sched_setaffinity", "sched_getaffinity"]);
     }
 
     #[test]
