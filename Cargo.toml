@@ -9,6 +9,8 @@ members = [
     "crates/poly-abi",
     "crates/poly-binfmt",
     "crates/poly-mem",
+    "crates/poly-pci",
+    "crates/poly-virtio",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -28,6 +30,8 @@ rust-version = "1.97"
 poly-abi = { path = "crates/poly-abi" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-mem = { path = "crates/poly-mem" }
+poly-pci = { path = "crates/poly-pci" }
+poly-virtio = { path = "crates/poly-virtio" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
