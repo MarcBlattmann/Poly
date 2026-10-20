@@ -12,7 +12,7 @@ use crate::fs;
 use crate::process;
 use alloc::vec::Vec;
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::fs::{DirEntry, FileStatus, LinuxFs, StatFs};
+use poly_personality_linux::fs::{DirEntry, FileStatus, LinuxFs, StatFs, TimeChange};
 use poly_personality_linux::kernel::Target;
 use poly_vfs::{Access, OpenFlags, RenameFlags, Whence};
 
@@ -71,10 +71,15 @@ impl LinuxFs for Thread<'_> {
             .map_err(vfs_errno)
     }
 
-    fn accessat(&mut self, dirfd: i32, path: &[u8], mode: u32, _effective: bool, follow: bool) -> Result<(), Errno> {
-        // Real and effective ids are the same until users arrive.
+    fn accessat(&mut self, dirfd: i32, path: &[u8], mode: u32, effective: bool, follow: bool) -> Result<(), Errno> {
+        // access(2) checks with the real ids (and for real root the
+        // permitted capabilities); AT_EACCESS with the effective ones
+        // (ADR 0045).
         let want = Access::from_bits(mode).map_err(vfs_errno)?;
-        self.process().files.accessat(dirfd, path, want, follow).map_err(vfs_errno)
+        let cred = super::cred::current_creds().map_or_else(poly_vfs::Cred::root, |c| {
+            super::cred::vfs_cred(&if effective { c.fs_ids() } else { c.access_ids() })
+        });
+        self.process().files.accessat(&cred, dirfd, path, want, follow).map_err(vfs_errno)
     }
 
     fn getcwd(&mut self) -> Result<Vec<u8>, Errno> {
@@ -163,6 +168,33 @@ impl LinuxFs for Thread<'_> {
 
     fn fchmodat(&mut self, dirfd: i32, path: &[u8], mode: u32) -> Result<(), Errno> {
         self.process().files.fchmodat(dirfd, path, mode as u16).map_err(vfs_errno)
+    }
+
+    fn fchownat(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        uid: Option<u32>,
+        gid: Option<u32>,
+        follow: bool,
+    ) -> Result<(), Errno> {
+        self.process().files.fchownat(dirfd, path, uid, gid, follow).map_err(vfs_errno)
+    }
+
+    fn fchown(&mut self, fd: i32, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno> {
+        self.process().files.fchown(fd, uid, gid).map_err(vfs_errno)
+    }
+
+    fn utimensat(
+        &mut self,
+        dirfd: i32,
+        path: Option<&[u8]>,
+        atime: Option<TimeChange>,
+        mtime: Option<TimeChange>,
+        follow: bool,
+    ) -> Result<(), Errno> {
+        let (atime, mtime) = (super::cred::set_time(atime), super::cred::set_time(mtime));
+        self.process().files.utimensat(dirfd, path, atime, mtime, follow).map_err(vfs_errno)
     }
 
     fn ftruncate(&mut self, fd: i32, len: u64) -> Result<(), Errno> {

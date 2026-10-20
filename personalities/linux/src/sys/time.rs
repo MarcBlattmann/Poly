@@ -97,9 +97,9 @@ fn timers_changed(k: &mut dyn LinuxKernel) {
     k.timers_changed(next);
 }
 
-/// Effective user id 0 stands in for `CAP_SYS_TIME` (no capabilities yet).
-fn may_set_time(k: &dyn LinuxKernel) -> bool {
-    k.credentials().euid == 0
+/// `CAP_SYS_TIME` in the calling thread's effective set (ADR 0045).
+fn may_set_time(k: &mut dyn LinuxKernel) -> bool {
+    crate::cred::current(k).capable(crate::cred::cap::SYS_TIME)
 }
 
 /// clock_getres(clockid, res): the resolution of a clock (`res` may be

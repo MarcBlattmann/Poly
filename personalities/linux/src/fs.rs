@@ -297,6 +297,15 @@ pub fn encode_dirent(e: &DirEntry<'_>, out: &mut [u8]) -> usize {
     len
 }
 
+/// A time for utimensat(2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TimeChange {
+    /// `UTIME_NOW`.
+    Now,
+    /// An explicit time (nanoseconds already checked to be 0-999999999).
+    At(Timespec),
+}
+
 /// The file system services of the kernel for the calling thread's
 /// process. `dirfd` arguments are descriptors or [`at::AT_FDCWD`]; an
 /// absolute path ignores `dirfd`. Errors are the manual pages' (`EBADF`,
@@ -366,6 +375,32 @@ pub trait LinuxFs {
 
     fn fchmod(&mut self, fd: i32, mode: u32) -> Result<(), Errno>;
     fn fchmodat(&mut self, dirfd: i32, path: &[u8], mode: u32) -> Result<(), Errno>;
+
+    /// fchownat(2) (chown, lchown): `None` for `-1`, "unchanged". An empty
+    /// `path` means `dirfd`'s file (`AT_EMPTY_PATH`, `O_PATH` descriptors
+    /// included). Checked as the calling thread (ADR 0045): `CAP_CHOWN` to
+    /// give a file away, the owner may pick one of its groups.
+    fn fchownat(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        uid: Option<u32>,
+        gid: Option<u32>,
+        follow: bool,
+    ) -> Result<(), Errno>;
+    /// fchown(2): `EBADF` for `O_PATH` descriptors.
+    fn fchown(&mut self, fd: i32, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno>;
+    /// utimensat(2): `None` for `UTIME_OMIT` (never both). `path` `None`
+    /// is the null path futimens(3) uses: the file `dirfd` is open on
+    /// (`EBADF` for `O_PATH`); an empty path is `AT_EMPTY_PATH`'s.
+    fn utimensat(
+        &mut self,
+        dirfd: i32,
+        path: Option<&[u8]>,
+        atime: Option<TimeChange>,
+        mtime: Option<TimeChange>,
+        follow: bool,
+    ) -> Result<(), Errno>;
 
     fn ftruncate(&mut self, fd: i32, len: u64) -> Result<(), Errno>;
     fn truncate(&mut self, path: &[u8], len: u64) -> Result<(), Errno>;
