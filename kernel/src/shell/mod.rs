@@ -66,6 +66,13 @@ pub trait Console: fmt::Write {
     fn width(&self) -> usize {
         poly_line::DEFAULT_WIDTH
     }
+
+    /// The terminal device on the same device as this console
+    /// (`/dev/ttyS0`, `/dev/tty1`): what `run` gives the program it starts
+    /// (ADR 0046). `None`: the console terminal.
+    fn terminal(&self) -> Option<&'static str> {
+        None
+    }
 }
 
 /// SGR sequences the commands use.

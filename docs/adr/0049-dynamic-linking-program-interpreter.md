@@ -176,7 +176,10 @@ env(1) reads them), so the loader's own switches can be used on Poly.
   dropped frames and gives zeros, file contents and shared contents back.
 - Not done yet: address space randomisation (`AT_BASE`, the PIE base and
   `mmap` are fixed), `mremap`, `rseq`, `MADV_DONTFORK` and
-  `MADV_WIPEONFORK` semantics, `MADV_REMOVE` on tmpfs, `AT_SECURE`
-  handling for set-user-ID programs (there are no other users yet), the
-  `ioctl(TCGETS)` the C library makes on its standard output (`ENOTTY`
-  until the TTY layer).
+  `MADV_WIPEONFORK` semantics, `MADV_REMOVE` on tmpfs. A program run as
+  `poly.init` has the kernel console, not a terminal, on its standard
+  output, so the C library's `ioctl(TCGETS)` there fails with `ENOTTY`
+  and stdout is fully buffered (from the shell's `run` it gets the
+  shell's terminal). Set-user-ID programs get `AT_SECURE` from the
+  credentials `execve` computes (ADR 0045), which glibc's loader honours
+  by ignoring `LD_*` variables.

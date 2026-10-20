@@ -20,6 +20,7 @@ what exists **today** and how it fits that plan.
                  kernel/src/program.rs  ← exec of programs from the VFS; poly.init + test-run records (testrun.rs)
                           │
             kernel shell: poly-line editor, commands; on COM1 and on the screen terminal
+            terminals: poly-tty line discipline, job control, ptys; /dev/ttyS0, /dev/tty1, /dev/ptmx, /dev/pts (kernel/src/tty)
             screen terminal: status bar + text grid, keys as terminal input, kernel log mirrored (poly-term)
             kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user,
                                memory maps with demand paging (poly-vm), exec of ELF programs and their
@@ -436,7 +437,7 @@ procfs and sysfs are `poly-procfs`, the random devices' generator
           │  FdTable → Arc<OpenFile> (offset, flags) → NodeRef; I/O runs unlocked
           ▼
    fs::vfs(): poly_vfs::Vfs   path resolution, permissions (Cred: ids + capabilities), mounts, char devices
-          │  FileSystem trait: lookup/create/rename/read/write/readdir by inode   └─ /dev/console, /dev/tty → kernel log
+          │  FileSystem trait: lookup/create/rename/read/write/readdir by inode   └─ /dev/console, /dev/tty → terminals (kernel/src/tty)
           ▼                                                                         /dev/null, /dev/zero, /dev/full
    ProcFs on /proc (KernelProc), StaticFs on /sys, tmpfs on /dev/shm               /dev/random, /dev/urandom → random.rs (ChaCha20)
    Tmpfs on /                 CachedFs on /mnt: page cache (poly-pagecache) ◀── user mappings (FileSource)
@@ -463,11 +464,12 @@ procfs and sysfs are `poly-procfs`, the random devices' generator
   (`01777`), `/proc`, `/sys` and the device nodes and links, unless the
   archive brought them, and procfs, sysfs and `/dev/shm` are mounted
   (`fs::proc::mount_all`). tmpfs times count from boot (no RTC yet).
-- **Devices**: `/dev/console` (5, 1) and `/dev/tty` (5, 0) write through
-  the kernel log's path (serial now; a UTF-8 character split across writes
-  stays whole); their reads return end of file until the TTY layer
-  (Phase 4) shares the serial input with the shell. `/dev/null`, `/dev/zero`,
-  `/dev/full` are `poly-vfs`'s. `ioctl` on them is `ENOTTY`.
+- **Devices**: `/dev/null`, `/dev/zero`, `/dev/full` are `poly-vfs`'s.
+  `fs::devices` registers a console device for `/dev/console` (5, 1) and
+  `/dev/tty` (5, 0) whose writes go through the kernel log's path (a UTF-8
+  character split across writes stays whole) and whose reads return end
+  of file; the terminals (see "Terminals") replace it at boot, and only
+  traced test runs still get it on fds 0-2.
   `/dev/random` (1, 8) and `/dev/urandom` (1, 9) read the kernel's
   generator (`random.rs`: `poly-random`'s ChaCha20 fast-key-erasure
   generator, seeded from RDSEED, RDRAND and timestamp-counter jitter at
@@ -764,6 +766,72 @@ Backspace, `y-Term`, Enter through QEMU's monitor and compares screenshots
 with what `poly-gfx` and `poly-term` draw on the host (see
 [DEBUGGING.md](DEBUGGING.md)).
 
+## Terminals
+
+The line discipline, terminals with job control, pseudo-terminals and
+devpts are the host-tested `poly-tty` crate; `kernel/src/tty/` gives
+them the machine (who is calling, signals, blocking, user memory, the
+serial port, the screen). Decisions in
+[ADR 0046](adr/0046-terminals-line-discipline-ptys-job-control.md).
+
+```
+   COM1 IRQ 4 ─► serial ring ─┬─► kernel shell "shell"              while no program has /dev/ttyS0 open
+                              └─► thread "tty-serial" ─┐            while one has
+   keyboard ─┬─► kernel shell "shell-screen"           │            likewise for /dev/tty1
+             └─► thread "tty-keys" (poly_term::keys) ──┤
+                                                        ▼
+   pty master write ───────────────────────────► Tty::receive ─► LineDiscipline: ISIG, IXON, ICANON editing, ECHO
+                                                        │ signals ─► Host::signal_group(foreground group)
+   program read ◄── lines, or MIN / TIME ◄──────────────┤ job control: SIGTTIN / SIGTTOU / EIO for background groups
+   program write ─► OPOST ─► Driver::write: COM1 (log::write_tty) | the screen (terminal::tty_output) | pty master buffer
+```
+
+- **`poly-tty`**: `termios` (`struct termios` / `termios2` / `termio` /
+  `winsize`, flags and special characters from `asm-generic/termbits.h`),
+  `ioctl` (request numbers), `ldisc::LineDiscipline` (plain data: input
+  processing, canonical editing with `ERASE` / `KILL` / `WERASE` /
+  `REPRINT` / `LNEXT` / `EOF` / `EOL` / `EOL2`, echo with `ECHOE` /
+  `ECHOK` / `ECHONL` / `ECHOCTL` / `ECHOKE`, `IXON` / `IXOFF` flow
+  control, a 4096-byte input buffer, `MIN` / `TIME`, `OPOST` output),
+  `Tty` (a discipline between a `Driver` and processes, with the session,
+  the foreground group and ioctl_tty(2)'s requests), `TtyFile` (one per
+  open file, counting opens), `Ttys` (which session has which
+  controlling terminal), `pty` (`/dev/ptmx`, masters and slaves),
+  `devpts` (`/dev/pts`) and `device` (the nodes that stand for
+  terminals). Host-tested against a fake host, ptys through a real VFS
+  with threads.
+- **Opening**: `poly_vfs::CharDevice::open` lets a node's device open as
+  another: `/dev/ptmx` (5, 2) makes a pair and opens its master,
+  `/dev/pts/<n>` (136, n) the slave (`EIO` while locked), `/dev/tty`
+  (5, 0) the caller's controlling terminal (`ENXIO` without one),
+  `/dev/console` (5, 1) the console terminal (`console=ttyS0`, the
+  default, or `console=tty1`), `/dev/ttyS0` (4, 64) COM1 at 115200 baud,
+  `/dev/tty1` (4, 1) the screen terminal and the keyboard (its window
+  size is the grid). A session leader without a controlling terminal
+  that opens a terminal without `O_NOCTTY` acquires it (never through
+  `/dev/console` or `/dev/tty`; `TIOCSCTTY` takes one).
+- **Sharing the console with the kernel shell**: a device's input goes to
+  its terminal while a program has it open, else to the kernel shell on
+  it. The shell's `run` gives the program the shell's own terminal
+  (`Console::terminal`), which the program, leading a session of its
+  own, acquires; `poly.init` programs get `/dev/console`. Program output
+  on COM1 erases a shown shell prompt first, like a log line; it is not
+  mirrored on the screen. Traced test runs (`poly.test.capture`) keep the
+  kernel log's console on fds 0-2 (no terminal), as before terminals.
+- **The kernel's part** (`kernel/src/tty/`): `KernelHost` (the caller from
+  the running user thread and the process tree, its signal mask and
+  dispositions, orphaned groups from the personality's `task::jobs`,
+  park / unpark as the blocker, user copies, the clock), `signal`
+  (signals the kernel sends, `SI_KERNEL`, also from the input threads;
+  init only gets those it handles), the drivers, the input threads, and
+  the process-end hook: a controlling process hangs its session up
+  (`SIGHUP` to the foreground group), groups its end orphans that have a
+  stopped member get `SIGHUP` and `SIGCONT`.
+
+```text
+tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys on /dev/pts
+```
+
 ## Personality routing
 
 - `poly-binfmt` identifies ELF / PE / Mach-O (and fat Mach-O, `#!` scripts)
@@ -822,7 +890,8 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   through `with_tree`); the kernel creates threads and processes
   (`clone_task`), replaces programs (`execve`) and blocks waiters
   (`wait_tree`), and calls `task::process_exited`, `process_stopped` and
-  `process_continued`, which signal the parent.
+  `process_continued`, which signal the parent. `task::jobs` says which
+  process groups are orphaned, for the terminals (ADR 0046).
 - **Linux credentials**
   ([ADR 0045](adr/0045-credentials-and-capabilities.md)): each thread's
   `cred::Creds` (real, effective, saved and file system ids, supplementary
@@ -914,8 +983,8 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   (and the interpreter a dynamically linked one names, opened the same way)
   through `fs::cache::FileSource` (pages read from the file at fault time) and
   starts a Linux process with the console on fds 0-2. The shell's `run
-  [NAME=value...] <program> [args]` runs one (with that environment) and
-  waits for it.
+  [NAME=value...] <program> [args]` runs one on the shell's own terminal
+  (with that environment) and waits for it.
 - **Dynamic linking** ([ADR 0049](adr/0049-dynamic-linking-program-interpreter.md)).
   A program with `PT_INTERP` starts in its interpreter, glibc's own
   `ld.so`, which exec maps next to it in free space of the `mmap` area
@@ -1034,6 +1103,9 @@ services once it decodes those system calls.
 | Credentials from ring 3: root dropped with setresuid (a 0600 file is `EACCES`, setuid(0) `EPERM`, no capabilities left), a set-user-ID-root program run with execve (euid 0 and capabilities; ignored with `no_new_privs`), capabilities lost and regained across execve, `keep_caps`, capabilities dropped with `PR_CAPBSET_DROP` and capset, the sticky `/tmp`, chown/chmod rules and a write clearing set-group-ID, credentials inherited by fork while a thread's changes stay its own, kill refused to a less privileged child | `kernel_test!` in `linux/cred_tests.rs` | every boot |
 | Static Linux hello worlds as the first process (`poly.init`): nolibc (Rust, built with the pinned toolchain), freestanding C and static glibc (skipped without a C compiler or static C library); output and exit status 0 | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | `/bin/forkexec` as init (nolibc Rust, `tools/xtask/programs/forkexec.rs`): fork + execve + wait4, copy on write, a TLS thread joined by futex, an orphan reaped by init | `tools/xtask/src/programs.rs` | `cargo xtask test` |
+| Terminals on the host: the line discipline (canonical editing, echo flags, signals, flow control, `MIN` / `TIME`, input mappings, output processing), terminals against a fake host (controlling terminal, `SIGTTIN` / `SIGTTOU` / `EIO`, the ioctls, blocking reads and writes), ptys through a real VFS with threads (devpts, locking, echo, waiting for room, hangups) | `poly-tty`, `poly-personality-linux` (`task::jobs`) | `cargo test --workspace` (host) |
+| Terminals from ring 3: a pty slave reading a line a second thread types on the master (and the echo on the master), `TCGETS` / `TCSETS` and raw mode with `poll`, `epoll` and `FIONREAD`, `^C` on the master killing the foreground group with `SIGINT`, a background child writing with `TOSTOP` getting `SIGTTOU` (its handler, `EINTR`; blocked, the write goes through), `TIOCSWINSZ` sending `SIGWINCH`, the console as a terminal and `/dev/tty` after `TIOCSCTTY`, devpts nodes coming and going | `kernel_test!` in `tty/tests.rs` | every boot |
+| `/bin/ttyinit` as init on the serial console (nolibc Rust, `tools/xtask/programs/ttyinit.rs`), typed into through QEMU's stdin: a line edited with DEL and its echo, `^C` interrupting a read with `SIGINT`, single keys in raw mode | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `run /bin/hello`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
@@ -1487,13 +1559,16 @@ the screen terminal (its `ScreenConsole`, see "Screen terminal").
 - **`Console`** (`kernel/src/shell/mod.rs`): `core::fmt::Write` for output
   (`"\n"` means a new line; the console adds a CR if it needs one) and
   `read() -> Option<Edit>`, which blocks; `None` ends the shell (only
-  scripted consoles in tests do that). `shell::spawn(name, console)` runs
-  the shell in its own kernel thread, `shell::run(console)` on the calling
-  one.
+  scripted consoles in tests do that); `terminal()` names the terminal
+  device on the same device (`/dev/ttyS0`, `/dev/tty1`), which `run`
+  gives the program. `shell::spawn(name, console)` runs the shell in its
+  own kernel thread, `shell::run(console)` on the calling one.
 - **Serial console** (`shell/serial.rs`): COM1's receive interrupt is routed
   with `arch::irq::route_isa_irq(4, ...)` (the UART raises it for each
   byte); the handler moves bytes into a 256-byte lock-free ring (one
-  producer, the handler; one consumer, the console) and wakes the reader.
+  producer, the handler; one consumer at a time under a lock: the
+  console, or the terminal on COM1 while a program has it open, see
+  "Terminals") and wakes the reader.
   Output goes through `log::write_console`, the same lock as the kernel
   log. While the shell waits for input with its prompt shown, a kernel log
   line first erases the prompt row, and the shell draws the prompt and

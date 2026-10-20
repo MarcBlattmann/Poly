@@ -535,7 +535,7 @@ fn run_program(con: &mut dyn Console, args: &[String]) -> CommandResult {
     let vars = args.iter().take_while(|a| is_variable(a)).count();
     let (envp, args) = args.split_at(vars);
     let [path, rest @ ..] = args else { return Err("needs a program".into()) };
-    let status = crate::program::run(path, rest, envp, false).map_err(|e| format!("{path}: {e}"))?;
+    let status = crate::program::run_on(path, rest, envp, con.terminal()).map_err(|e| format!("{path}: {e}"))?;
     out!(con, "{path}: {status}");
     Ok(())
 }
