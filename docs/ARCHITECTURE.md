@@ -310,6 +310,35 @@ waits up to 30 s for keys from the host, which `cargo xtask test` types
 through the QEMU monitor (`sendkey`), with the US layout and with
 `poly.keymap=de-ch` (see [DEBUGGING.md](DEBUGGING.md)).
 
+## File systems (host-tested; not yet wired into the kernel)
+
+Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md).
+
+```
+   personalities (openat, read, write, getdents64, ...)   kernel: console, exec
+          │  FdTable (per process) → Arc<OpenFile> (offset, flags) → NodeRef
+          ▼
+   poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
+          │  FileSystem trait: lookup/create/rename/read/write/readdir by inode
+          ▼
+   Tmpfs (in poly-vfs)        later: ext2, devfs, procfs
+          ▲
+   poly_cpio::unpack_fs       initramfs (newc / crc) → files, links, nodes
+```
+
+- **`poly-vfs`** (`no_std` + `alloc`): `Vfs` resolves paths as
+  `path_resolution(7)` describes (`.`/`..` across mount points, 40 symbolic
+  links then `ELOOP`, trailing slashes, `ENAMETOOLONG`), checks permissions
+  from a `Cred`, and implements the path-based calls; `FdTable` and
+  `OpenFile` implement descriptors (`dup2`/`dup3`, close-on-exec,
+  `O_APPEND`, `lseek`, `getdents` positions). Errors are `Errno` with
+  Linux's values; flags take Linux's bits.
+- **tmpfs**: sparse files in 4 KiB pages, stable `readdir` positions,
+  unlinked files and removed directories live while open.
+- **`poly-cpio`**: a parser for `newc`/`crc` that never panics, a writer,
+  and an unpacker into any file system through the VFS. Tested against
+  archives made by GNU cpio (stored, and live if `cpio` is installed).
+
 ## Personality routing
 
 - `poly-binfmt` identifies ELF / PE / Mach-O (and fat Mach-O, `#!` scripts)

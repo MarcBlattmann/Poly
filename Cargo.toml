@@ -12,6 +12,7 @@ members = [
     "crates/poly-binfmt",
     "crates/poly-block",
     "crates/poly-elf",
+    "crates/poly-cpio",
     "crates/poly-heap",
     "crates/poly-input",
     "crates/poly-irq",
@@ -23,6 +24,7 @@ members = [
     "crates/poly-virtio",
     "crates/poly-virtio-blk",
     "crates/poly-vm",
+    "crates/poly-vfs",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -46,6 +48,7 @@ poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
 poly-elf = { path = "crates/poly-elf" }
+poly-cpio = { path = "crates/poly-cpio" }
 poly-heap = { path = "crates/poly-heap" }
 poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
@@ -57,6 +60,7 @@ poly-sched = { path = "crates/poly-sched" }
 poly-virtio = { path = "crates/poly-virtio" }
 poly-virtio-blk = { path = "crates/poly-virtio-blk" }
 poly-vm = { path = "crates/poly-vm" }
+poly-vfs = { path = "crates/poly-vfs" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
