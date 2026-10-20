@@ -371,11 +371,15 @@ fn app_tree(repo: &Path, bin_dir: &Path, m: &corpus::Manifest, app: &corpus::App
 /// (removed afterwards), the launcher chrooted into it.
 fn host_app_run(tracer: Tracer, tree: &apps::Tree, name: &str, timeout: Duration) -> Result<Trace> {
     let dir = apps::fresh_tree_dir(name);
-    let result = tree.materialise(&dir).and_then(|()| runner::run_app(tracer, &dir, name, timeout));
-    // The host's /dev, /proc and /sys were bound into the tree only in the
+    let result = tree
+        .materialise(&dir)
+        .and_then(|()| apps::proc_overlays(&dir))
+        .and_then(|overlays| runner::run_app(tracer, &dir, &overlays, name, timeout));
+    // The host's /dev and /proc were bound into the tree only in the
     // launcher's own mount namespace, which ended with it: here the tree is
     // plain files.
     let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_file(dir.with_extension("filesystems"));
     result
 }
 

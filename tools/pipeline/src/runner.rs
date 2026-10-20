@@ -51,9 +51,16 @@ pub fn run(tracer: Tracer, program: &Path, test: &str, timeout: Duration) -> Res
 /// with `apps::Tree::materialise`): its launcher chrooted into it. The
 /// trace's stdout and stderr are what the launcher wrote to its own, then
 /// what the programs wrote to `/poly-app/stdout` and `/poly-app/stderr`.
-pub fn run_app(tracer: Tracer, tree: &Path, test: &str, timeout: Duration) -> Result<Trace> {
+/// `overlays`: see `ptrace::trace_in`.
+pub fn run_app(
+    tracer: Tracer,
+    tree: &Path,
+    overlays: &[(std::path::PathBuf, String)],
+    test: &str,
+    timeout: Duration,
+) -> Result<Trace> {
     let mut t = match tracer {
-        Tracer::Ptrace => ptrace::trace_in(tree, crate::poly::INIT_PATH, test, timeout)?,
+        Tracer::Ptrace => ptrace::trace_in(tree, overlays, crate::poly::INIT_PATH, test, timeout)?,
         Tracer::Strace | Tracer::None => {
             return Err("app tests run under the ptrace tracer only (--tracer ptrace)".into());
         }

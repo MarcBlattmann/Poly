@@ -41,7 +41,8 @@
 //! and `/sys` over the empty directories). On Linux it is written to a
 //! tmpfs where possible (what an initramfs is on Linux) and the launcher
 //! runs chrooted into it, in a mount namespace of its own with the host's
-//! `/dev`, `/proc` and `/sys` bound in (`ptrace.rs`).
+//! `/dev` and `/proc` bound in (`ptrace.rs`; `/sys` stays empty there),
+//! and [`proc_overlays`] over some of the host's `/proc` files.
 //!
 //! The environment is fixed: [`ENV`] plus the definition's `env`.
 
@@ -480,6 +481,28 @@ pub fn fresh_tree_dir(test: &str) -> PathBuf {
     let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     let safe: String = test.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).collect();
     tree_base().join(format!("poly-app-{}-{n}-{safe}", std::process::id()))
+}
+
+/// File systems the reference hides from `/proc/filesystems`: Poly is a
+/// Linux without SELinux, and the SELinux library that `ls`, `cp`, `mkdir`
+/// and `sed` link probes `/proc/filesystems` for `selinuxfs` (and then
+/// reads `/proc/mounts`), so the reference must look like a kernel built
+/// without it, whatever the host's kernel is.
+pub const HIDDEN_FILESYSTEMS: &[&str] = &["selinuxfs"];
+
+/// Files the reference run binds over the host's `/proc` in the tree at
+/// `tree`: a copy of `/proc/filesystems` without [`HIDDEN_FILESYSTEMS`],
+/// written next to the tree (`<tree>.filesystems`, removed with it).
+pub fn proc_overlays(tree: &Path) -> Result<Vec<(PathBuf, String)>> {
+    let host = util::read_string(Path::new("/proc/filesystems"))?;
+    let kept: String = host
+        .lines()
+        .filter(|l| !HIDDEN_FILESYSTEMS.contains(&l.split('\t').next_back().unwrap_or_default().trim()))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let file = tree.with_extension("filesystems");
+    util::write(&file, kept)?;
+    Ok(vec![(file, "proc/filesystems".into())])
 }
 
 /// The `.app` files in `dir`, sorted.

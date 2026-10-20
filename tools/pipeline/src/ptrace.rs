@@ -5,9 +5,12 @@
 //! clones. Signals are recorded and passed on.
 //!
 //! App tests (`apps.rs`) run their launcher chrooted into the test's file
-//! tree, in a mount namespace of its own with the host's `/dev`, `/proc`
-//! and `/sys` bound in ([`trace_in`]); as root directly, otherwise in a
-//! user namespace that maps the caller to root.
+//! tree, in a mount namespace of its own with the host's `/dev` and
+//! `/proc` bound in ([`trace_in`]); as root directly, otherwise in a user
+//! namespace that maps the caller to root. The tree's `/sys` stays empty:
+//! the host's describes its own devices and security modules (a
+//! `/sys/fs/selinux` that C libraries probe for), which say nothing about
+//! the program.
 //!
 //! The trace starts after `execve` of the test program has succeeded, so
 //! its first event is the program's own first syscall, which is also where
@@ -26,7 +29,7 @@ use std::io::{self, Read};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::FileExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -155,17 +158,23 @@ struct Jail {
     root: CString,
     /// (host directory, where it goes in the tree), bound recursively.
     binds: Vec<(CString, CString)>,
+    /// (host file, the file of the tree it is bound over), after `binds`.
+    overlays: Vec<(CString, CString)>,
     /// Without root: (file, contents) for the new user namespace's maps.
     maps: Option<Vec<(CString, CString)>>,
 }
 
 impl Jail {
-    fn new(root: &Path) -> Result<Jail> {
+    fn new(root: &Path, overlays: &[(PathBuf, String)]) -> Result<Jail> {
         let c = |s: &[u8]| CString::new(s).map_err(|e| e.to_string());
         let mut binds = Vec::new();
-        for dir in ["dev", "proc", "sys"] {
+        for dir in ["dev", "proc"] {
             binds.push((c(format!("/{dir}").as_bytes())?, c(root.join(dir).as_os_str().as_bytes())?));
         }
+        let overlays = overlays
+            .iter()
+            .map(|(from, to)| Ok((c(from.as_os_str().as_bytes())?, c(root.join(to).as_os_str().as_bytes())?)))
+            .collect::<Result<Vec<_>>>()?;
         // SAFETY: geteuid and getegid cannot fail and touch no memory.
         let (uid, gid) = unsafe { (libc::geteuid(), libc::getegid()) };
         let maps = (uid != 0).then(|| {
@@ -175,7 +184,7 @@ impl Jail {
                 (c(b"/proc/self/gid_map").unwrap(), c(format!("0 {gid} 1\n").as_bytes()).unwrap()),
             ]
         });
-        Ok(Jail { root: c(root.as_os_str().as_bytes())?, binds, maps })
+        Ok(Jail { root: c(root.as_os_str().as_bytes())?, binds, overlays, maps })
     }
 
     /// Enter the jail (in the child, before exec): new namespaces, the
@@ -208,6 +217,11 @@ impl Jail {
             }
             for (from, to) in &self.binds {
                 if libc::mount(from.as_ptr(), to.as_ptr(), none, libc::MS_BIND | libc::MS_REC, std::ptr::null()) < 0 {
+                    return false;
+                }
+            }
+            for (from, to) in &self.overlays {
+                if libc::mount(from.as_ptr(), to.as_ptr(), none, libc::MS_BIND, std::ptr::null()) < 0 {
                     return false;
                 }
             }
@@ -272,9 +286,17 @@ pub fn trace(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
 }
 
 /// Run `program` (a path inside `root`, which is also its argv[0])
-/// chrooted into `root`, under the tracer. `test` names the trace.
-pub fn trace_in(root: &Path, program: &str, test: &str, timeout: Duration) -> Result<Trace> {
-    trace_with(program.as_bytes(), program, test, Some(Jail::new(root)?), timeout)
+/// chrooted into `root`, under the tracer. `overlays` are host files bound
+/// over files of the tree (paths relative to `root`) once the host's
+/// `/dev` and `/proc` are bound in. `test` names the trace.
+pub fn trace_in(
+    root: &Path,
+    overlays: &[(PathBuf, String)],
+    program: &str,
+    test: &str,
+    timeout: Duration,
+) -> Result<Trace> {
+    trace_with(program.as_bytes(), program, test, Some(Jail::new(root, overlays)?), timeout)
 }
 
 fn trace_with(program: &[u8], argv0: &str, test: &str, jail: Option<Jail>, timeout: Duration) -> Result<Trace> {
