@@ -20,6 +20,7 @@
 
 #![no_std]
 
+pub mod aml;
 mod fadt;
 mod hpet;
 mod madt;

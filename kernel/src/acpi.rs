@@ -11,7 +11,8 @@ use crate::sync::SpinLock;
 use crate::{kprint, kprintln};
 use alloc::vec::Vec;
 use poly_acpi::{
-    Acpi, AddressSpace, EcamRegion, Error, Fadt, Hpet, Madt, MadtEntry, Mcfg, PhysMemory, ResetRegister, Table,
+    Acpi, AddressSpace, EcamRegion, Error, Fadt, GenericAddress, Hpet, Madt, MadtEntry, Mcfg, PhysMemory,
+    ResetRegister, Sdt, Table,
 };
 use poly_mem::{MemoryMap, RegionKind};
 
@@ -58,6 +59,21 @@ pub struct Platform {
     /// The FADT's index of the RTC's century register in CMOS RAM (none if
     /// 0, or without a FADT).
     pub rtc_century: Option<u8>,
+    /// How to enter the soft-off state S5, for powering off (ADR 0051).
+    pub soft_off: Option<SoftOff>,
+}
+
+/// Entering S5 (ACPI 6.5 §16.1.7): the PM1 control blocks from the FADT,
+/// the sleep types from the DSDT's `\_S5` package, and how to switch the
+/// machine into ACPI mode first if it is not (§4.8.2.1).
+#[derive(Clone, Copy, Debug)]
+pub struct SoftOff {
+    pub pm1a: GenericAddress,
+    pub pm1b: Option<GenericAddress>,
+    /// `SLP_TYPa` and `SLP_TYPb`.
+    pub sleep_types: (u8, u8),
+    pub smi_command: u32,
+    pub acpi_enable: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -245,10 +261,32 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<(Summary, Platform), Error> 
             kprint!(", reset {:#x}={:#x}", r.register.address, r.value);
             platform.reset = Some(r);
         }
+        platform.soft_off = soft_off(mem, &fadt);
+        if let Some(s) = &platform.soft_off {
+            kprint!(", S5 {}/{} via PM1a {:#x}", s.sleep_types.0, s.sleep_types.1, s.pm1a.address);
+        }
         kprintln!();
     }
 
     Ok((Summary { cpus, io_apics }, platform))
+}
+
+/// How to power off: the FADT's PM1 control blocks and `\_S5` from the
+/// DSDT, if the machine has both (not on hardware-reduced ACPI).
+fn soft_off(mem: &FirmwareMemory, fadt: &Fadt) -> Option<SoftOff> {
+    if fadt.hardware_reduced() {
+        return None;
+    }
+    let pm1a = fadt.pm1a_control()?;
+    let dsdt = Sdt::read(mem, fadt.dsdt_address()?).ok()?;
+    let sleep_types = poly_acpi::aml::sleep_types(dsdt.body(), 5)?;
+    Some(SoftOff {
+        pm1a,
+        pm1b: fadt.pm1b_control(),
+        sleep_types,
+        smi_command: fadt.smi_command_port(),
+        acpi_enable: fadt.acpi_enable(),
+    })
 }
 
 fn platform_from_madt(madt: &Madt) -> Platform {

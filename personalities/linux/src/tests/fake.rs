@@ -165,6 +165,8 @@ pub struct FakeKernel {
     /// reports.
     pub fs: Option<Box<dyn crate::fs::LinuxFs>>,
     pub sysinfo: Option<crate::fs::SysInfo>,
+    /// The administration services (`None`: `ENOSYS`; ADR 0051).
+    pub admin: Option<Box<dyn crate::admin::LinuxAdmin>>,
     /// The stored time zone (settimeofday).
     pub timezone: (i32, i32),
     /// CPU times the kernel accounts: the calling thread, the process, the
@@ -238,6 +240,7 @@ impl FakeKernel {
             continued: Vec::new(),
             fs: None,
             sysinfo: None,
+            admin: None,
             timezone: (0, 0),
             cpu: None,
             timer_wakeups: Vec::new(),
@@ -897,6 +900,13 @@ impl LinuxKernel for FakeKernel {
 
     fn hostname(&self) -> &[u8] {
         b"testhost"
+    }
+
+    fn admin(&mut self) -> Option<&mut dyn crate::admin::LinuxAdmin> {
+        match &mut self.admin {
+            Some(a) => Some(&mut **a),
+            None => None,
+        }
     }
 
     fn fs(&mut self) -> Option<&mut dyn crate::fs::LinuxFs> {

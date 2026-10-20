@@ -130,6 +130,13 @@ fn with_record<R>(pid: u32, f: impl FnOnce(&Record) -> R) -> Option<R> {
     RECORDS.lock().get(&pid).map(f)
 }
 
+/// The command name of process `pid` (`/proc/<pid>/comm`), if it was
+/// started from a program.
+pub fn comm(pid: u32) -> Option<Vec<u8>> {
+    let recorded = with_record(pid, |r| r.comm.clone())?;
+    Some(find(pid).and_then(|p| crate::linux::cred::process_comm(&p)).unwrap_or(recorded))
+}
+
 /// The memory map of process `pid`: the caller's own, or the one recorded
 /// at exec.
 fn memory_of(pid: u32) -> Option<Arc<Memory>> {
@@ -375,7 +382,8 @@ impl ProcSource for KernelProc {
                     dev: (m.dev.major, m.dev.minor),
                     root: b"/".to_vec(),
                     mount_point: at,
-                    source: super::disk::source_of(m.id, m.fs_name).into_bytes(),
+                    source: super::mounts::source(m.id)
+                        .unwrap_or_else(|| super::disk::source_of(m.id, m.fs_name).into_bytes()),
                     fstype: String::from(m.fs_name),
                     read_only: m.flags.read_only,
                     no_suid: m.flags.no_suid,
@@ -451,8 +459,8 @@ impl ProcSource for KernelProc {
             ostype: String::from(UNAME_SYSNAME),
             osrelease: String::from(UNAME_RELEASE),
             version: String::from(UNAME_VERSION),
-            hostname: b"poly".to_vec(),
-            domainname: b"(none)".to_vec(),
+            hostname: crate::linux::admin::hostname(),
+            domainname: crate::linux::admin::domainname(),
         }
     }
 
@@ -494,6 +502,12 @@ impl KernelProc {
     }
 }
 
+/// A procfs over the kernel's processes: what `/proc` has, and what a
+/// mount(2) of `proc` gets (ADR 0051).
+pub fn new_procfs() -> Arc<dyn poly_vfs::FileSystem> {
+    Arc::new(ProcFs::new(Arc::new(KernelProc)))
+}
+
 /// Mount procfs on `/proc`, sysfs on `/sys` and a tmpfs on `/dev/shm`
 /// (each directory made if missing). Called once at boot by `fs::init`.
 pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
@@ -504,7 +518,7 @@ pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
         let _ = vfs.mkdir(&made, &root, At::Cwd, path, perm);
     }
     let mounts: [(&[u8], Arc<dyn poly_vfs::FileSystem>); 3] = [
-        (b"/proc", Arc::new(ProcFs::new(Arc::new(KernelProc)))),
+        (b"/proc", new_procfs()),
         (b"/sys", super::sysfs::build()),
         (b"/dev/shm", Arc::new(Tmpfs::new(super::clock()))),
     ];

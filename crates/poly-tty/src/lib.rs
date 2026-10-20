@@ -40,6 +40,7 @@ extern crate std;
 
 pub mod device;
 pub mod devpts;
+pub mod hw;
 pub mod ioctl;
 pub mod ldisc;
 pub mod pty;

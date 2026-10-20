@@ -292,7 +292,7 @@ impl Vfs {
         let backend = match attr.kind {
             FileType::Regular | FileType::Directory => Backend::Inode,
             FileType::CharDevice => {
-                if loc.mount.flags.no_dev {
+                if loc.mount.flags().no_dev {
                     return Err(Errno::EACCES);
                 }
                 let dev = self.char_device(attr.rdev).ok_or(Errno::ENXIO)?;
@@ -377,7 +377,7 @@ impl Vfs {
             name: name.into_boxed_slice(),
         });
         let attr = loc.attr()?;
-        if attr.kind != FileType::Regular || loc.mount.flags.no_exec {
+        if attr.kind != FileType::Regular || loc.mount.flags().no_exec {
             return Err(Errno::EACCES);
         }
         cred.check(&attr, Access::EXEC)?;
@@ -908,6 +908,33 @@ impl Vfs {
         table.remove_tree(mount.id)
     }
 
+    /// `mount(2)` with `MS_REMOUNT`: the mount whose root `path` names gets
+    /// new per-mount flags (`CAP_SYS_ADMIN`, else `EPERM`; not the root of
+    /// a mount, `EINVAL`). A file system that is read-only itself stays
+    /// so whatever the flags say.
+    pub fn remount(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], flags: MountFlags) -> Result<()> {
+        if !cred.has(cap::SYS_ADMIN) {
+            return Err(Errno::EPERM);
+        }
+        let loc = self.resolve(ctx, cred, at, path, true)?;
+        if !loc.is_mount_root() {
+            return Err(Errno::EINVAL);
+        }
+        loc.mount.set_flags(flags);
+        Ok(())
+    }
+
+    /// The mount whose root `path` names (`EINVAL` if `path` is not a
+    /// mount point), as a `Vfs::mounts` entry: what `umount` callers check
+    /// before unmounting a mount the kernel tracks itself (a disk).
+    pub fn mount_at(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], follow: bool) -> Result<MountId> {
+        let loc = self.resolve(ctx, cred, at, path, follow)?;
+        if !loc.is_mount_root() {
+            return Err(Errno::EINVAL);
+        }
+        Ok(loc.mount.id)
+    }
+
     /// Where mount `id` is mounted, as an absolute path from `ctx`'s root
     /// (what `/proc/mounts` and `mount` show). `ENOENT` if there is no such
     /// mount or it cannot be reached from that root.
@@ -929,7 +956,7 @@ impl Vfs {
                 fs_name: m.sb.info.name,
                 dev: m.sb.dev,
                 root: m.root,
-                flags: m.flags,
+                flags: m.flags(),
             })
             .collect()
     }

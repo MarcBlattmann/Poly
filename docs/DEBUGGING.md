@@ -865,8 +865,9 @@ init: /test-binary (pid 1) ended: exit status 0
 A file that cannot run says why: `POLY-INIT: unsupported /bin/x: ENOENT`,
 `... its interpreter (PT_INTERP) cannot be opened: ENOENT`,
 `... #! scripts are not supported yet`. Every call without a handler logs
-`syscall: pid P linux/linux #N name not implemented` and returns `-ENOSYS`:
-that list is the work queue for the program. A fault that kills a Linux
+`syscall: pid P linux/linux #N name not implemented` (the first time in a
+boot; `poly.strace` shows every call) and returns `-ENOSYS`: that list is
+the work queue for the program. A fault that kills a Linux
 process is a signal, logged with where it happened:
 
 ```text
@@ -1091,7 +1092,7 @@ waits for a whole line: `Enter` (CR, which `ICRNL` turns into NL),
 `Ctrl-D` at the start of a line for end of file. In raw mode `MIN` and
 `TIME` decide. A process in a background group of its terminal's session
 that reads is stopped by `SIGTTIN` (`linux: pid N stopped by signal 21`
-in the log); writing with `TOSTOP` set, or changing the terminal, stops it
+in the log with `poly.strace`); writing with `TOSTOP` set, or changing the terminal, stops it
 with `SIGTTOU` (22). `stty -a` (or `TCGETS`) shows the attributes;
 `stty sane` puts them back.
 
@@ -1113,6 +1114,63 @@ ptys on the host), `cargo test -p poly-personality-linux jobs` (orphaned
 process groups), `cargo xtask run poly.test=tty::` (from ring 3), and the
 boot test that types into `/bin/ttyinit` as init on the serial port
 (`cargo xtask test`; its output shows the echo of what was typed).
+
+## BusyBox
+
+BusyBox as init with a shell on the console (ADR 0051):
+
+```sh
+cargo xtask run --busybox                  # init and a shell on the serial console (this terminal)
+cargo xtask run --busybox console=tty1     # the shell on the screen terminal (QEMU's window)
+cargo xtask busybox-initramfs              # just write target/poly-busybox-initramfs.cpio
+cargo xtask busybox-test                   # the boot test alone
+```
+
+The BusyBox is the host's static one (`apt install busybox-static`), or
+`POLY_BUSYBOX=<file>`, or BusyBox 1.36.1 built once into
+`target/busybox/` (`POLY_BUSYBOX=build` forces that; the build log is
+`target/busybox/build.log`). The boot shows `rcS: Linux 6.1.0-poly up,
+file systems mounted`, the shell's banner and `root@poly:~# `. `poweroff`
+ends QEMU (ACPI S5: `poweroff: ACPI S5 (SLP_TYP 0/0 to PM1a 0x604)`),
+`reboot` resets (QEMU exits too, with `-no-reboot`), Ctrl-A X always
+works. `/dev/vda`, `/dev/vdb`, `/dev/vdc` are the virtio-blk disks; with
+the test disks attached (the default) `/mnt` has the ext2 test disk
+(`poly.mount=virtio2:/mnt`), and `mount -t ext2 /dev/vdc /m` mounts it
+where you like once it is unmounted.
+
+**An applet that fails.** First look for `syscall: pid N linux/linux #NR
+name not implemented` in the log (each call is logged once per boot).
+Then trace it: `poly.strace` writes every system call of every Linux
+process, with string arguments, as it returns:
+
+```text
+strace: pid 20 openat(0xffffff9c, "/dev/tty", 0x2, 0x0, ..) = -6 ENXIO
+strace: pid 20 ioctl(0x0, 0x541e, 0x7fffffffeb08, 0x0, ..) = -25 ENOTTY
+```
+
+`poly.strace=<name>` keeps the lines of processes whose `comm` is
+`<name>` (the applet's name when the shell ran it through its link,
+`busybox` for `/sbin/init`). Tracing is slow over the serial line; trace
+one applet, not a whole session. Many applets run inside the shell
+without a new process (`sleep` and `echo`, for instance), so their calls show up
+under the shell's pid. With `poly.strace` the kernel also logs every stop,
+continue and kill of a process (`linux: pid 13 killed by signal 15`);
+without it only kills by signals that dump core (`SIGSEGV`, `SIGABRT`,
+`SIGQUIT`, ...).
+
+**Init.** BusyBox's init blocks its signals and takes them with
+`rt_sigtimedwait`; `poweroff` sends it `SIGUSR2` (`kill(0x1, 0xc, ..)`
+in a trace). If `poweroff` or `reboot` does nothing, trace pid 1. A shell
+that says `can't access tty; job control turned off` did not get a
+controlling terminal: `cttyhack` finds the console's terminal with
+`TIOCGSERIAL` (serial) or `VT_GETSTATE` (screen) and opens `/dev/ttyS0` or
+`/dev/tty1`.
+
+**The boot test** types into the shell through QEMU's standard input
+and waits for each prompt (90 s per step); when a step fails it names the
+step and the output, and writes the whole session (escape sequences
+removed) to `target/poly-busybox-boot.log`. It is skipped with the reason
+when no BusyBox could be found or built.
 
 ## Time, timers and the vDSO
 

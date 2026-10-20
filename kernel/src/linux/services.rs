@@ -486,7 +486,9 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn stop_process(&mut self, signal: u32) {
-        kprintln!("linux: pid {} stopped by signal {signal}", self.process.pid);
+        if super::strace::verbose() {
+            kprintln!("linux: pid {} stopped by signal {signal}", self.process.pid);
+        }
         self.process.stop();
         // The parent learns of it: wait(2) WUNTRACED, SIGCHLD (ADR 0041).
         poly_personality_linux::task::process_stopped(self, signal);
@@ -497,16 +499,23 @@ impl LinuxKernel for Thread<'_> {
         let target = if pid == self.process.pid as i32 { None } else { process::find(pid as u32) };
         let p = target.as_deref().unwrap_or(self.process);
         if p.cont() {
-            kprintln!("linux: pid {} continued", p.pid);
+            if super::strace::verbose() {
+                kprintln!("linux: pid {} continued", p.pid);
+            }
             poly_personality_linux::task::process_continued(self, pid);
         }
     }
 
-    fn kill_process(&mut self, signal: u32, _core_dump: bool) {
+    fn kill_process(&mut self, signal: u32, core_dump: bool) {
         // No core dumps are written, so WCOREDUMP is never reported.
         let status = ExitStatus::Signaled { signal, core: false };
         if self.fault.is_none() {
-            kprintln!("linux: pid {} killed by signal {signal}", self.process.pid);
+            // The everyday ends of a shell's jobs (SIGINT, SIGTERM, SIGKILL,
+            // SIGHUP, SIGPIPE) are only logged with `poly.strace`; the
+            // signals whose default is a core dump always are.
+            if core_dump || super::strace::verbose() {
+                kprintln!("linux: pid {} killed by signal {signal}", self.process.pid);
+            }
             if self.process.traced {
                 testrun::signal(self.process.pid, signal);
             }
@@ -716,6 +725,10 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn fs(&mut self) -> Option<&mut dyn poly_personality_linux::fs::LinuxFs> {
+        Some(self)
+    }
+
+    fn admin(&mut self) -> Option<&mut dyn poly_personality_linux::admin::LinuxAdmin> {
         Some(self)
     }
 

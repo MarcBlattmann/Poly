@@ -11,8 +11,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Install QEMU
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86
+      - name: Install QEMU and a static BusyBox (the BusyBox boot test)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static
       - name: Install Rust (version from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2

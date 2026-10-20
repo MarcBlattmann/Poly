@@ -17,6 +17,7 @@ use super::vfs;
 use crate::sync::Mutex;
 
 mod more;
+mod mounts;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_vfs::{
