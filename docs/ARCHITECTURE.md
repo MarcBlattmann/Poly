@@ -14,7 +14,8 @@ what exists **today** and how it fits that plan.
    └──────────────────────┼────────────────────────┘
                           │  poly-abi: Personality, SyscallRegs, SyscallDispatch
                  kernel/src/syscall.rs  ← routes by the process's personality tag
-                 kernel/src/linux       ← LinuxKernel for the running thread: files, memory, signals, futexes
+                 kernel/src/linux       ← LinuxKernel for the running thread: files, memory, signals, futexes;
+                                          clone/fork/execve, the process tree, wait4 (task.rs)
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt; threads, group exit, wait
                  kernel/src/program.rs  ← exec of programs from the VFS; poly.init + test-run records (testrun.rs)
                           │
@@ -744,6 +745,16 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   interrupted calls) and `Linux::thread_exit` when a thread ends (robust
   list, `clear_child_tid`); blocking uses park/unpark (`block`,
   `unblock`) plus a per-thread signal notification.
+- **Linux processes and threads**
+  ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md)): `clone`,
+  `clone3`, `fork`, `vfork`, `execve`, `wait4`, `waitid`, `setpgid`,
+  `getpgid`, `getpgrp`, `setsid` and `getsid`. The personality decodes
+  and checks them (`task::clone`, `task::exec`, `task::wait`) and owns the
+  process tree's rules (`task::tree::ProcessTree`, lent by the kernel
+  through `with_tree`); the kernel creates threads and processes
+  (`clone_task`), replaces programs (`execve`) and blocks waiters
+  (`wait_tree`), and calls `task::process_exited`, `process_stopped` and
+  `process_continued`, which signal the parent.
 
 ## Linux processes
 
@@ -774,6 +785,26 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   exception in ring 3, which `trap_dispatch` hands to
   `user::return_to_user`), parked threads are woken for it. Processes are
   listed by pid (`process::find`, `find_thread`, `all`).
+- **clone, fork, vfork, execve, wait4**
+  ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md),
+  `linux/task.rs`). The personality decodes the calls (`task::clone`,
+  `task::exec`) and keeps the rules of the process tree (`task::tree`:
+  parents, zombies, orphans to init or the kernel, process groups and
+  sessions, wait selectors); the kernel lends it the one tree behind a
+  spinlock and does the work: `clone_task` starts a thread of the caller's
+  process, or a new process with a copy-on-write copy of its memory
+  (`Memory::fork`) or the same memory (`CLONE_VM`), copies of its files
+  and signal state; the child starts with the caller's registers and FPU
+  state (`user::spawn_child`), its stack and TLS, its tids stored and
+  `clear_child_tid` set; a vfork parent waits for the exec or the end.
+  `execve` follows `#!` lines, loads the ELF, ends the other threads (a
+  per-thread `killed` flag), takes over the pid, swaps the memory, closes
+  close-on-exec files and resets signals, FPU and FS/GS. When the last
+  thread leaves a Linux process, `task::process_exited` makes it a zombie
+  (its record stays, for kill(2) and the parent) or reaps it, re-parents
+  its children and sends the parent its exit signal; stops and continues
+  are reported too (`CLD_STOPPED`, `CLD_CONTINUED`). `wait4` / `waitid`
+  sleep on the process event queue until the tree changes.
 - **Faults are signals.** An exception in ring 3 that demand paging does not
   resolve becomes a signal (`signal::fault::fault_info`: `SIGSEGV` with
   `SEGV_MAPERR` / `SEGV_ACCERR`, `SIGBUS`, `SIGILL`, `SIGFPE`, `SIGTRAP`),
@@ -888,7 +919,9 @@ services once it decodes those system calls.
 | Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
 | Time: the vDSO image and its mapping, the snapshot following the wall clock; sleeps, a POSIX timer's signal through the timer thread, `ITIMER_REAL` / `ITIMER_VIRTUAL` ending a process spinning in ring 3, CPU-time clocks; `/bin/time-test` (a Rust program without a C library, `tools/xtask/programs/time_test.rs`) finding the vDSO through `AT_SYSINFO_EHDR`, resolving its symbols and comparing it with the system calls, timers with signal handlers, CPU time, once with the vDSO forced onto the TSC | `kernel_test!` in `vdso.rs`, `cputime.rs`, `linux/tests/time_tests.rs`; `/bin/time-test` also as the first process | every boot (`time-test` with the test initramfs); `cargo xtask test` |
 | Linux processes: the kernel's `LinuxKernel` through real system calls from ring 3 (write to the process's files, brk, anonymous and file mmap/munmap/mprotect, arch_prctl and the FS base in ring 3, exit_group ending a spinning and a futex-waiting thread, EFAULT for bad pointers, a fault as SIGSEGV, a signal handler and rt_sigreturn), and `exec_path` of `/bin/hello` from the test initramfs | `kernel_test!` in `linux/tests.rs` | every boot; one boot on `-cpu max` (XSAVE signal frames) |
+| Processes and threads from ring 3: fork with copy on write, zombies (waitid `WNOWAIT`, kill 0) and wait4's status, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and a futex and its robust lock released at exit, an orphan adopted while shared anonymous memory stays shared, vfork + execve of `/bin/hello`, of a missing file and of a `#!` script, execve by a second thread (the other thread ended, close-on-exec files closed, the pid taken over); every user frame freed afterwards. `Memory::fork` itself: pages shared until written, frames freed with the last user, shared anonymous and parked pages | `kernel_test!` in `linux/task_tests.rs`, `user/memory/fork.rs` | every boot |
 | Static Linux hello worlds as the first process (`poly.init`): nolibc (Rust, built with the pinned toolchain), freestanding C and static glibc (skipped without a C compiler or static C library); output and exit status 0 | `tools/xtask/src/programs.rs` | `cargo xtask test` |
+| `/bin/forkexec` as init (nolibc Rust, `tools/xtask/programs/forkexec.rs`): fork + execve + wait4, copy on write, a TLS thread joined by futex, an orphan reaped by init | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `run /bin/hello`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
@@ -1250,6 +1283,15 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   `user::user_frames()` counts every frame held for user pages and
   `Memory::resident_pages()` those of one memory, which is how the tests
   check that nothing leaks.
+- **Fork and copy on write** (ADR 0041, `user/memory/fork.rs`).
+  `Memory::fork` copies the region map into a new address space and shares
+  every resident page of private regions: the memory's own frames become
+  `SharedFrame`s (a `UserFrame` behind an `Arc`, `AddressSpace::disown`),
+  mapped read-only on both sides; parked frames are shared unmapped;
+  shared regions are found again through the page cache or the
+  `AnonShared` object behind `MAP_SHARED | MAP_ANONYMOUS`. A write to a
+  shared frame with other users copies it; its last user takes it back
+  (`AddressSpace::adopt`). A frame is freed with its last reference.
 - **Exec.** `user::exec::load(file, &ExecParams { argv, envp, execfn,
   creds })` validates a static executable (`ET_EXEC`, or `ET_DYN` without
   `PT_INTERP`, at `0x5555_5555_4000`; `PT_INTERP` is refused), creates a

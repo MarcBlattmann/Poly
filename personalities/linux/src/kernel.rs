@@ -675,6 +675,61 @@ pub trait LinuxKernel {
     /// (exit_group(2)). Same rule: the caller never returns to user mode.
     fn exit_group(&mut self, status: u8);
 
+    // ---- processes: clone, exec, the process tree (ADR 0041) ---------
+
+    /// Create a thread of the calling process (`CLONE_THREAD`) or a new
+    /// process as `req` describes ([`crate::task::clone::CloneRequest`]:
+    /// what it shares, its stack, TLS and tid pointers) and start it.
+    /// A new process gets a copy of the caller's memory (copy on write)
+    /// unless it shares it (`CLONE_VM`), copies of its files and signal
+    /// state (the personality's [`LinuxProcess::fork`]), and a node in
+    /// the process tree under the caller (or the caller's parent with
+    /// `CLONE_PARENT`) with `req.exit_signal`. With `CLONE_VFORK` the call
+    /// returns once the child has exec'd or ended. Returns the child's
+    /// thread id (its pid for a process). Errors: `EAGAIN` (no room for
+    /// another thread), `ENOMEM`. The default: `ENOSYS`.
+    fn clone_task(&mut self, req: &crate::task::clone::CloneRequest) -> Result<i32, Errno> {
+        let _ = req;
+        Err(Errno::ENOSYS)
+    }
+
+    /// Replace the calling process's program (execve(2)): open
+    /// `req.path`, run `#!` scripts through their interpreter
+    /// ([`crate::task::exec::parse_shebang`]), load the executable, and if
+    /// that worked end every other thread, replace the memory, close the
+    /// close-on-exec descriptors, reset the signal state
+    /// ([`LinuxProcess::exec`]), FPU state and FS/GS bases, release a
+    /// vfork parent, and set the registers for the new program's entry
+    /// (with [`set_user_context`](Self::set_user_context) semantics: the
+    /// return restores every register). Errors before that point leave
+    /// the process unchanged: `ENOENT`, `EACCES`, `ENOEXEC`, `E2BIG`,
+    /// `ELOOP`, `ENOMEM`, ... The default: `ENOSYS`.
+    fn execve(&mut self, req: &crate::task::exec::ExecRequest<'_>) -> Result<(), Errno> {
+        let _ = req;
+        Err(Errno::ENOSYS)
+    }
+
+    /// Run `f` with the system's process tree locked
+    /// ([`crate::task::tree::ProcessTree`]); `f` never blocks and never
+    /// calls back into the kernel. The kernel lets go of the records of
+    /// the processes `f` reaped
+    /// ([`take_reaped`](crate::task::tree::ProcessTree::take_reaped)) and wakes the
+    /// threads in [`wait_tree`](Self::wait_tree) when the generation
+    /// moved. The default: `ENOSYS`.
+    fn with_tree(&mut self, f: &mut dyn FnMut(&mut crate::task::tree::ProcessTree)) -> Result<(), Errno> {
+        let _ = f;
+        Err(Errno::ENOSYS)
+    }
+
+    /// Block until the process tree's generation is no longer
+    /// `generation` ([`Wakeup::Woken`]) or the thread's signal
+    /// notification is set ([`Wakeup::Signal`]). The default returns
+    /// [`Wakeup::Signal`] at once.
+    fn wait_tree(&mut self, generation: u64) -> Wakeup {
+        let _ = generation;
+        Wakeup::Signal
+    }
+
     // ---- time, randomness, system identity ----------------------------
 
     /// Read `clock`. `EINVAL` if the kernel does not support it (for now

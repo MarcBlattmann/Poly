@@ -19,6 +19,13 @@
 //! with the vDSO forced onto the TSC) and runs as the first process in a
 //! boot test of its own.
 //!
+//! And for processes and threads (Phase 4, ADR 0041):
+//!
+//! - `/bin/forkexec`: `tools/xtask/programs/forkexec.rs`, no C library, as
+//!   the first process (init): fork + execve of `/bin/hello` + wait4, copy
+//!   on write, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and
+//!   a futex, and an orphan adopted and reaped by init.
+//!
 //! Builds are reproducible: fixed flags, no debug info, symbols stripped,
 //! no build id, so the same toolchain gives the same bytes.
 
@@ -37,6 +44,8 @@ pub const HELLO_OUTPUT: &str = "Hello, world!\n";
 pub const C_HELLO_OUTPUT: &str = "hello, world\n";
 /// The last line `/bin/time-test` writes when every check passed.
 pub const TIME_TEST_OUTPUT: &str = "time-test: done, 0 failed\n";
+/// What `/bin/forkexec` writes when every check passed.
+pub const FORKEXEC_OUTPUT: &str = "forkexec: ok\n";
 
 /// `rustc` flags for the nolibc programs: a static, position-dependent
 /// executable for Linux's ABI (the bare-metal target only means "no OS
@@ -56,9 +65,19 @@ fn out_dir() -> PathBuf {
     root().join(OUT)
 }
 
+/// Build `tests/linux/nolibc/hello.rs`; returns the ELF.
+pub fn nolibc_hello() -> Result<Vec<u8>> {
+    nolibc_program("tests/linux/nolibc/hello.rs", "hello")
+}
+
+/// Build `tools/xtask/programs/forkexec.rs`; returns the ELF.
+pub fn nolibc_forkexec() -> Result<Vec<u8>> {
+    nolibc_program("tools/xtask/programs/forkexec.rs", "forkexec")
+}
+
 /// Build the nolibc program `source` (relative to the repository) as
 /// `target/xtask-programs/<name>`; returns the ELF.
-fn build_nolibc(source: &str, name: &str) -> Result<Vec<u8>> {
+fn nolibc_program(source: &str, name: &str) -> Result<Vec<u8>> {
     let out = out_dir();
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let binary = out.join(name);
@@ -76,14 +95,9 @@ fn build_nolibc(source: &str, name: &str) -> Result<Vec<u8>> {
     std::fs::read(&binary).map_err(|e| format!("{}: {e}", binary.display()))
 }
 
-/// Build `tests/linux/nolibc/hello.rs`; returns the ELF.
-pub fn nolibc_hello() -> Result<Vec<u8>> {
-    build_nolibc("tests/linux/nolibc/hello.rs", "hello")
-}
-
 /// Build `tools/xtask/programs/time_test.rs`; returns the ELF.
 pub fn time_test() -> Result<Vec<u8>> {
-    build_nolibc("tools/xtask/programs/time_test.rs", "time-test")
+    nolibc_program("tools/xtask/programs/time_test.rs", "time-test")
 }
 
 /// The C programs of the corpus, built by the pipeline tool into
@@ -149,9 +163,10 @@ fn run_as_init(kernel: &Path, syms: &Arc<Symbols>, image: &Path, program: &str, 
 /// The boot tests of the hello-world milestone.
 pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let hello = nolibc_hello()?;
+    let forkexec = nolibc_forkexec()?;
     let time = time_test()?;
     let (c_programs, skipped) = c_hellos();
-    let mut programs: Vec<(&str, &[u8])> = vec![("hello", &hello), ("time-test", &time)];
+    let mut programs: Vec<(&str, &[u8])> = vec![("hello", &hello), ("forkexec", &forkexec), ("time-test", &time)];
     programs.extend(c_programs.iter().map(|(n, e)| (n.as_str(), e.as_slice())));
     let image = initramfs::write(&root(), "poly-programs-initramfs.cpio", &initramfs::programs_image(&programs))?;
 
@@ -170,6 +185,15 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     if let Some(why) = skipped {
         eprintln!("==> skipped: {why}");
+    }
+
+    eprintln!("==> boot test: init forks, execs, clones a thread with TLS, waits and reaps an orphan");
+    let b = run_as_init(kernel, syms, &image, "forkexec", FORKEXEC_OUTPUT)?;
+    if !b.output.contains(HELLO_OUTPUT.trim_end()) {
+        return Err("the child of /bin/forkexec did not run /bin/hello".into());
+    }
+    if let Some(line) = b.output.lines().find(|l| l.contains(" not implemented")) {
+        return Err(format!("/bin/forkexec made a system call Poly does not implement: {line}"));
     }
 
     eprintln!(

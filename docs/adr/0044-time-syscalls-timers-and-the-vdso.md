@@ -106,7 +106,7 @@ context switch, and splits it into user and system time in the ratio of
 tick samples (the tick records whether it interrupted ring 3). A slot
 knows its user thread's process and thread id; when a thread is reaped its
 time moves to its `Process` (`ProcessCpu`), which also has room for
-waited-for children (`add_child`, for `wait4`). `CLOCK_THREAD_CPUTIME_ID`,
+waited-for children (`add_child`, for `wait4` to fill in when it reaps a child). `CLOCK_THREAD_CPUTIME_ID`,
 `CLOCK_PROCESS_CPUTIME_ID`, `times` and `getrusage` read it through
 `LinuxKernel::cpu_times`.
 
@@ -172,7 +172,8 @@ yet fired timer reporting 1 ns left, the 4096-timer limit.
   that need it can be added when a program depends on it.
 - The CPU-time split is sampled: a thread that ran less than a tick shows
   all of its time as system time. `getrusage` fills only the two times;
-  the counters stay 0. The children's times wait for `wait4`.
+  the counters stay 0. The children's times stay 0 until `wait4` adds a
+  reaped child's time (`ProcessCpu::add_child`).
 - While any process has a CPU-time timer armed, the timer thread runs once
   per tick. SMP needs per-CPU data in the vDSO (RDPID or `TSC_AUX` for
   `getcpu`, a check that the TSCs agree) and per-CPU accounting.

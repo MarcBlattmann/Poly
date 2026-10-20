@@ -14,7 +14,7 @@
 //! | zero-fill | map a fresh zeroed frame |
 //! | read a file page | map the page cache's frame if the [`PageSource`] has one ([`PageSource::cached_page`]: a file on a disk file system), read-only in a private region; else a fresh frame filled from the source (a private copy) |
 //! | set permissions | update the entry (a read-only mapped page of a writable private region, written now; a page of a shared region, written for the first time) |
-//! | copy on write | copy a page-cache page mapped into a private region into a frame of its own (frames of the memory itself have one user until `fork`) |
+//! | copy on write | copy a page-cache page or a [`SharedFrame`] mapped into a private region into a frame of its own (or, for the frame's last user, take that frame back) |
 //! | `SIGSEGV` | nothing: the thread is killed (a signal later), a user copy returns `Efault` |
 //!
 //! Faults reach it from ring 3 (`arch::user::exception`) and from the
@@ -50,9 +50,19 @@
 //! the first write, from when on the page is dirty in the cache (written
 //! back while mapped writable, and once more when unmapped): that is how
 //! writes through the mapping reach the file. Shared mappings of a source
-//! without a cache are refused ([`MemoryError::Unsupported`]). Copy on
-//! write of the memory's own frames (for `fork`) needs frame reference
-//! counts, which `PageState::Present { refs }` already carries.
+//! without a cache are refused ([`MemoryError::Unsupported`]).
+//!
+//! # Fork and shared frames
+//!
+//! [`Memory::fork`] (`fork.rs`) copies the region map and shares every
+//! page of private regions with the child: the memory's own frames become
+//! [`SharedFrame`]s, counted by `Arc`, mapped read-only in both; the first
+//! write copies the page, unless the writer is the frame's last user, which
+//! takes the frame back as its own. Shared anonymous memory
+//! (`MAP_SHARED | MAP_ANONYMOUS`) is a shared mapping of an [`AnonShared`]
+//! object whose pages are such frames, so every memory that maps it after
+//! a fork finds the same ones. A frame is freed when its last reference
+//! goes. See ADR 0041.
 
 use super::{AddressSpace, MapError, UserFrame};
 use crate::arch::user::Prot as PageProt;
@@ -63,6 +73,11 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use poly_vm::{FaultAction, PageState, VmMap};
+
+mod fork;
+mod shared;
+
+pub use shared::{AnonShared, SharedFrame};
 
 pub use poly_vm::{Access, Backing, Kind, Layout, MapRequest, PAGE_SIZE, Placement, Prot, SegvCode, Vma};
 
@@ -104,6 +119,13 @@ pub trait PageSource: Send + Sync {
     /// only through a page cache, whose pages carry writes to the file.
     fn shareable(&self) -> bool {
         false
+    }
+
+    /// The frame holding the page at `offset`, if the source is memory
+    /// whose pages every mapping shares ([`AnonShared`]: shared anonymous
+    /// memory). `None` (the default) for files.
+    fn shared_frame(&self, _offset: u64) -> Option<Result<Arc<SharedFrame>, IoError>> {
+        None
     }
 }
 
@@ -177,6 +199,15 @@ impl FileRef {
         Some(self.source.cached_page(offset)?.map_err(|_| FaultError::Bus))
     }
 
+    /// The shared frame for the page at `offset`, for a source that has
+    /// them ([`PageSource::shared_frame`]); `SIGBUS` past its end.
+    fn shared_frame(&self, offset: u64) -> Option<Result<Arc<SharedFrame>, FaultError>> {
+        if offset >= self.source.len() {
+            return Some(Err(FaultError::Bus));
+        }
+        Some(self.source.shared_frame(offset)?.map_err(|_| FaultError::Bus))
+    }
+
     /// Fill `page` (zeroed) with the file page at `offset`. A page wholly
     /// beyond the end of the file is `SIGBUS`, as mmap(2) documents; the
     /// part of the last page past the end, or past the limit, stays zero.
@@ -227,7 +258,8 @@ pub enum FaultError {
     /// The faulting thread has no memory map (a bare address space from
     /// [`spawn`](super::spawn), or a kernel thread).
     NoMemoryMap,
-    /// An action the kernel cannot carry out yet (copy on write).
+    /// An action the kernel cannot carry out (copy on write of a page that
+    /// is neither a page-cache page nor a shared frame: never happens).
     Unsupported,
 }
 
@@ -305,6 +337,17 @@ struct Inner {
     /// Page-cache pages mapped here (frames the address space does not
     /// own), by address. Each is unmapped before its entry goes.
     cached: BTreeMap<u64, CachedMapping>,
+    /// Frames shared with other memories (copy on write after `fork`,
+    /// shared anonymous memory), by address; not owned by the address
+    /// space, unmapped before their entry goes.
+    shared: BTreeMap<u64, SharedPage>,
+}
+
+/// A [`SharedFrame`] at some address of a memory.
+struct SharedPage {
+    frame: Arc<SharedFrame>,
+    /// In the page tables (else the region is `PROT_NONE` for now).
+    mapped: bool,
 }
 
 /// A page-cache page mapped at some address of a memory.
@@ -364,7 +407,7 @@ impl Memory {
     pub fn new(layout: Layout) -> Result<Memory, MemoryError> {
         let map = VmMap::new(layout)?;
         let space = AddressSpace::new().map_err(|_| MemoryError::OutOfMemory)?;
-        let inner = Inner { map, parked: BTreeMap::new(), cached: BTreeMap::new() };
+        let inner = Inner { map, parked: BTreeMap::new(), cached: BTreeMap::new(), shared: BTreeMap::new() };
         Ok(Memory { space: Arc::new(space), inner: Mutex::new(inner) })
     }
 
@@ -451,6 +494,12 @@ impl Memory {
         // TODO(perf): this visits every page of the range; a walk that
         // skips absent page tables would make large ranges cheap.
         for page in (addr..end).step_by(PAGE_SIZE as usize) {
+            if inner.shared.contains_key(&page) {
+                if let Err(e) = self.protect_shared(&mut inner, page, prot) {
+                    result = Err(e);
+                }
+                continue;
+            }
             if let Some(m) = inner.cached.get_mut(&page) {
                 if prot == Prot::NONE {
                     // Brought back from the cache when accessible again.
@@ -518,7 +567,7 @@ impl Memory {
     /// parked under `PROT_NONE`.
     pub fn resident_pages(&self) -> u64 {
         let inner = self.inner.lock();
-        self.space.resident_pages() + inner.parked.len() as u64 + inner.cached.len() as u64
+        self.space.resident_pages() + inner.parked.len() as u64 + inner.cached.len() as u64 + inner.shared.len() as u64
     }
 
     /// Pages that map a page-cache page.
@@ -539,11 +588,14 @@ impl Memory {
         let page = poly_vm::page_down(addr);
         // The memory's own frames have a single user until fork shares
         // them; a page-cache page in a private region is the cache's too.
-        let refs = match inner.cached.get(&page) {
-            Some(m) if !m.shared => 2,
+        let refs = match (inner.cached.get(&page), inner.shared.get(&page)) {
+            (Some(m), _) if !m.shared => 2,
+            (_, Some(s)) => u32::try_from(Arc::strong_count(&s.frame)).unwrap_or(u32::MAX),
             _ => 1,
         };
-        let present = inner.parked.contains_key(&page) || self.space.translate(page).is_some();
+        let present = inner.parked.contains_key(&page)
+            || inner.shared.contains_key(&page)
+            || self.space.translate(page).is_some();
         let state = if present { PageState::Present { refs } } else { PageState::Absent };
         let shared = inner.map.find(addr).is_some_and(|v| v.is_shared());
         match inner.map.fault(addr, access, state) {
@@ -552,6 +604,9 @@ impl Memory {
                 self.space.map_owned(page, frame, page_prot(prot)).map_err(map_error)
             }
             FaultAction::ReadFile { page, file, offset, prot, private_copy } => {
+                if !private_copy && let Some(frame) = file.shared_frame(offset) {
+                    return self.map_shared(inner, page, frame?, prot);
+                }
                 if !private_copy && let Some(cached) = file.cached_page(offset) {
                     return self.map_cached(inner, page, cached?, prot, shared, access);
                 }
@@ -562,6 +617,9 @@ impl Memory {
                 let mut frame = UserFrame::zeroed().ok_or(FaultError::OutOfMemory)?;
                 file.fill(offset, frame.bytes_mut())?;
                 self.space.map_owned(page, frame, page_prot(prot)).map_err(map_error)
+            }
+            FaultAction::SetPermissions { page, prot } if inner.shared.contains_key(&page) => {
+                self.shared_permissions(inner, page, prot, shared)
             }
             FaultAction::SetPermissions { page, prot } => {
                 let mut rights = prot;
@@ -574,8 +632,11 @@ impl Memory {
                 // Also the fix for a stale TLB entry: `protect` flushes.
                 self.space.protect(page, PAGE_SIZE, page_prot(rights)).map_err(map_error)
             }
+            FaultAction::CopyOnWrite { page, prot } if inner.shared.contains_key(&page) => {
+                self.copy_shared(inner, page, prot)
+            }
             FaultAction::CopyOnWrite { page, prot } => {
-                // Only page-cache pages are shared with anyone yet.
+                // A page-cache page in a private region.
                 let Some(m) = inner.cached.get(&page) else { return Err(FaultError::Unsupported) };
                 let mut frame = UserFrame::zeroed().ok_or(FaultError::OutOfMemory)?;
                 m.page.read(0, frame.bytes_mut());
@@ -664,6 +725,10 @@ impl Memory {
             let mut after = inside.split_off(&v.end);
             inner.cached.append(&mut after);
             drop(inside);
+            let mut inside = inner.shared.split_off(&v.start);
+            let mut after = inside.split_off(&v.end);
+            inner.shared.append(&mut after);
+            drop(inside);
         }
     }
 }
@@ -676,9 +741,11 @@ impl Drop for Memory {
         // Page-cache frames are not the address space's: unmap them before
         // letting go of them, in case a thread's state still holds the
         // space for a moment. Spinlocks only, so fine anywhere.
-        for &page in inner.cached.keys() {
+        for &page in inner.cached.keys().chain(inner.shared.keys()) {
             let _ = self.space.unmap(page, PAGE_SIZE);
         }
+        // Shared frames only need the frame allocator: they go now.
+        inner.shared.clear();
         // Letting go of files and cached pages takes file system locks
         // (sleeping ones, and the page cache's index lock, which does not
         // mask interrupts). During reaping that may be inside an interrupt

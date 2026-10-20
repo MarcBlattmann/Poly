@@ -78,7 +78,7 @@ pub use crate::arch::user::{
     copy_from_user, copy_to_user, fs_base, gs_base, is_user_range, set_fs_base, set_gs_base, strncpy_from_user,
     user_frames,
 };
-pub use memory::{FaultError, FileRef, Memory, MemoryError, MemoryImage, PageSource};
+pub use memory::{AnonShared, FaultError, FileRef, Memory, MemoryError, MemoryImage, PageSource};
 
 use crate::arch;
 use crate::kprintln;
@@ -125,6 +125,9 @@ pub struct UserThread {
     process: Arc<Process>,
     hook: SyscallHook,
     entry: Entry,
+    /// Every register to start with, instead of `entry` (a child of
+    /// `clone` or `fork`, [`spawn_child`]).
+    start: Option<Box<UserRegs>>,
     /// The memory map page faults are resolved against; `None` for a bare
     /// address space ([`spawn`]), where every fault is fatal.
     memory: Option<Arc<Memory>>,
@@ -178,13 +181,53 @@ fn spawn_thread(
     hook: SyscallHook,
 ) -> Result<ThreadId, SpawnError> {
     let arch = arch::user::ThreadState::new(space).ok_or(SpawnError::NoMemory)?;
+    start_thread(process, arch, memory, entry, None, hook, None).map(|(id, _)| id)
+}
+
+/// Start a thread of `process` in `memory` that begins with every
+/// register of `regs`, the FPU state `fpu` (an image from [`fpu_image`])
+/// and FS / GS bases `fs_base` / `gs_base`: the child of `clone` or
+/// `fork`, which resumes where its parent made the call. `tid`: the
+/// thread id to take (from `process::alloc_pid`; `None` for the next one
+/// the process hands out). Returns the kernel thread and the thread id.
+#[allow(clippy::too_many_arguments)] // what a new thread is made of
+pub fn spawn_child(
+    process: Arc<Process>,
+    memory: Arc<Memory>,
+    regs: &UserRegs,
+    fpu: &[u8],
+    fs_base: u64,
+    gs_base: u64,
+    hook: SyscallHook,
+    tid: Option<u32>,
+) -> Result<(ThreadId, u32), SpawnError> {
+    let space = Arc::clone(memory.space());
+    let arch = arch::user::ThreadState::with_state(space, fpu, fs_base, gs_base).ok_or(SpawnError::NoMemory)?;
+    let entry = Entry { rip: regs.rip, rsp: regs.rsp, args: [regs.rdi, regs.rsi, regs.rdx] };
+    start_thread(process, arch, Some(memory), entry, Some(Box::new(*regs)), hook, tid)
+}
+
+fn start_thread(
+    process: Arc<Process>,
+    arch: arch::user::ThreadState,
+    memory: Option<Arc<Memory>>,
+    entry: Entry,
+    start: Option<Box<UserRegs>>,
+    hook: SyscallHook,
+    tid: Option<u32>,
+) -> Result<(ThreadId, u32), SpawnError> {
     // A process that has ended takes no new threads.
-    let (tid, flags) = process.attach_thread().ok_or(SpawnError::NoMemory)?;
+    let attached = match tid {
+        None => process.attach_thread(),
+        Some(_) => process.attach_thread_as(tid),
+    };
+    let (tid, flags) = attached.ok_or(SpawnError::NoMemory)?;
     let attached = Arc::clone(&process);
     let user = Box::new(UserThread {
         process,
         hook,
         entry,
+        start,
         memory,
         return_to: None,
         tid,
@@ -193,7 +236,7 @@ fn spawn_thread(
         replaced: false,
         arch,
     });
-    thread::spawn_user("user", user, user_main, 0).inspect_err(|_| attached.cancel_thread(tid))
+    thread::spawn_user("user", user, user_main, 0).map(|id| (id, tid)).inspect_err(|_| attached.cancel_thread(tid))
 }
 
 impl UserThread {
@@ -225,8 +268,15 @@ impl Drop for UserThread {
 /// The kernel side of a new user thread: everything is loaded by the switch
 /// that started it, so it only has to leave for ring 3.
 fn user_main(_: usize) -> usize {
-    let entry = thread::with_current_user(|u| u.entry).expect("user thread without user state");
-    arch::user::enter_user(&entry)
+    let (entry, start) =
+        thread::with_current_user(|u| (u.entry, u.start.take())).expect("user thread without user state");
+    match start {
+        Some(regs) => {
+            let regs = *regs;
+            arch::user::enter_user_regs(&regs)
+        }
+        None => arch::user::enter_user(&entry),
+    }
 }
 
 /// The running user thread's process, borrowed for as long as the thread
@@ -273,6 +323,11 @@ pub fn syscall(regs: &mut SyscallRegs) -> SyscallReturn {
     SyscallReturn { rip, restore_all }
 }
 
+/// The running thread's flags, borrowed for as long as it runs.
+fn current_thread_flags() -> Option<&'static ThreadFlags> {
+    current().map(|(_, flags, _)| flags)
+}
+
 /// The running thread is about to return to ring 3 after an interrupt or
 /// exception there, with interrupts off (called by the architecture on the
 /// way out; does nothing for kernel threads). Ends the thread if its process
@@ -281,7 +336,7 @@ pub fn syscall(regs: &mut SyscallRegs) -> SyscallReturn {
 pub fn return_to_user() {
     let Some((process, flags, _)) = current() else { return };
     let notified = flags.notified.load(Ordering::SeqCst);
-    if !notified && !process.is_exiting() && !process.is_stopped() {
+    if !notified && !process.is_exiting() && !process.is_stopped() && !flags.killed.load(Ordering::SeqCst) {
         return;
     }
     // SAFETY: the thread came from ring 3, so it holds no lock and no
@@ -302,7 +357,8 @@ fn leave_if_ended(process: &Process) {
     if process.is_stopped() && !process.is_exiting() {
         process.wait_while_stopped();
     }
-    if process.is_exiting() {
+    let killed = current_thread_flags().is_some_and(|f| f.killed.load(Ordering::SeqCst));
+    if process.is_exiting() || killed {
         end_thread(ExitStatus::Exited(0), 0);
     }
 }
@@ -362,8 +418,30 @@ pub fn end_thread(status: ExitStatus, code: usize) -> ! {
     if process.linux.is_some() {
         crate::linux::thread_exit(process, tid);
     }
-    process.detach_thread(tid, status);
+    if let Some(status) = process.detach_thread(tid, status)
+        && process.linux.is_some()
+    {
+        crate::linux::process_exit(process, status);
+    }
     thread::exit(code)
+}
+
+/// Make `memory` the running thread's memory and load its address space
+/// (`execve`). Returns the old memory and address space, which the caller
+/// drops (that may sleep: page-cache pages, files). Only for a thread with
+/// a memory map that is alone in its process.
+pub fn replace_memory(memory: Arc<Memory>) -> Option<(Option<Arc<Memory>>, Arc<AddressSpace>)> {
+    let space = Arc::clone(memory.space());
+    thread::with_current_user(|u| {
+        let old_space = u.arch.replace_space(space);
+        (u.memory.replace(memory), old_space)
+    })
+}
+
+/// Give the running user thread the id `tid` in its process (an `execve`
+/// by a thread other than the main one, which takes over the pid).
+pub fn set_current_tid(tid: u32) {
+    thread::with_current_user(|u| u.tid = tid);
 }
 
 /// Make the running user thread resume ring 3 at `rip` when the current
@@ -413,6 +491,12 @@ pub fn kill_current(fault: &Fault) -> ! {
 /// The process of the running thread, if it is a user thread.
 pub fn current_process() -> Option<Arc<Process>> {
     thread::with_current_user(|u| Arc::clone(&u.process))
+}
+
+/// The running user thread's system call hook (what its `clone`
+/// children get).
+pub fn current_hook() -> Option<SyscallHook> {
+    thread::with_current_user(|u| u.hook)
 }
 
 /// The running user thread's id in its process.

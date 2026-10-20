@@ -20,7 +20,7 @@
 pub use super::addrspace::{
     AddressSpace, LOWER_HALF_END, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, user_frames,
 };
-pub use super::syscall::{Entry, enter_user, make_next_return_fail};
+pub use super::syscall::{Entry, enter_user, enter_user_regs, make_next_return_fail};
 pub use super::usercopy::{Efault, copy_from_user, copy_to_user, is_user_range, strncpy_from_user};
 
 use super::fpu::{self, FpuArea};
@@ -114,6 +114,28 @@ impl ThreadState {
 
     pub fn space(&self) -> &Arc<AddressSpace> {
         &self.space
+    }
+
+    /// A thread in `space` that starts with FPU state `fpu` (an image from
+    /// [`fpu_image`](Self::fpu_image), or the initial state if it is
+    /// refused) and FS / GS bases `fs_base` / `gs_base` (canonical): a
+    /// child of `clone` or `fork`. `None` without memory for the FPU state.
+    pub fn with_state(space: Arc<AddressSpace>, fpu: &[u8], fs_base: u64, gs_base: u64) -> Option<ThreadState> {
+        let mut state = ThreadState::new(space)?;
+        let _irq = cpu::InterruptsOff::new();
+        let _ = state.fpu.load(fpu);
+        state.fs_base = fs_base;
+        state.gs_base = gs_base;
+        Some(state)
+    }
+
+    /// Replace the address space of the running thread (`execve`) and load
+    /// the new one; returns the old one, for the caller to drop once it is
+    /// safe to. Call with interrupts off, on the running thread's state.
+    pub fn replace_space(&mut self, space: Arc<AddressSpace>) -> Arc<AddressSpace> {
+        debug_assert!(!cpu::interrupts_enabled());
+        space.activate();
+        core::mem::replace(&mut self.space, space)
     }
 
     /// Copy the thread's FPU / vector state into `out` ([`fpu_size`]

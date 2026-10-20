@@ -8,6 +8,7 @@ mod mem;
 mod process;
 mod signal;
 mod startup;
+mod task;
 mod time;
 
 use crate::{ENOSYS, Errno, Linux, err, nr};

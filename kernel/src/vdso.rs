@@ -275,6 +275,17 @@ kernel_test! {
         if u32::from_le_bytes(seq2) != seq || u32::from_le_bytes(seq3) != seq + 2 {
             return Err("two processes do not see the one data page the kernel writes");
         }
+        // A forked memory keeps both: the image (shared copy on write) and
+        // the data page (a shared mapping: the same frame, updated live).
+        let child = other.fork().map_err(|_| "fork failed")?;
+        let mut child_head = [0u8; 64];
+        child.read(ehdr2, &mut child_head).map_err(|_| "the child's image cannot be read")?;
+        publish();
+        let mut seq4 = [0u8; 4];
+        child.read(ehdr2 - PAGE_SIZE, &mut seq4).map_err(|_| "the child's data page cannot be read")?;
+        if child_head[..] != arch::vdso::IMAGE[..64] || u32::from_le_bytes(seq4) != seq + 4 {
+            return Err("a forked memory lost the vDSO or its live data page");
+        }
         Ok(())
     }
 }
