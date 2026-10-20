@@ -512,7 +512,13 @@ impl<D: BlockIo> Ctx<'_, D> {
     pub fn sync(&mut self) -> Result<()> {
         self.ind_flush()?;
         self.flush_bitmaps()?;
-        if self.st.journal.is_some() {
+        if let Some(j) = self.st.journal.as_ref() {
+            // An idle volume commits nothing (no transaction for the
+            // superblock's write time alone).
+            if j.is_idle() && !self.st.meta_dirty && self.st.dirty_groups.is_empty() {
+                self.release_held();
+                return Ok(());
+            }
             self.st.meta_dirty = true;
             self.write_super()?;
             return self.commit();

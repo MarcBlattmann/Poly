@@ -235,6 +235,11 @@ impl Journal {
         self.max_trans = blocks.clamp(16, (((self.maxlen - self.first) / 4) as usize).max(16));
     }
 
+    /// Nothing in the running transaction.
+    pub fn is_idle(&self) -> bool {
+        self.running.is_empty() && self.revoked.is_empty()
+    }
+
     pub fn needs_recovery(&self) -> bool {
         be32(&self.sb, jsb::START) != 0
     }

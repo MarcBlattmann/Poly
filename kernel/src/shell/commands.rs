@@ -45,7 +45,7 @@ pub static COMMANDS: &[Command] = &[
     Command {
         name: "mount",
         usage: "[<disk> <path> [ro]]",
-        help: "mounted file systems, or mount a disk's ext2 volume on path",
+        help: "mounted file systems, or mount a disk's ext2/3/4 volume on path",
         run: mount,
     },
     Command { name: "umount", usage: "<path>", help: "unmount the disk mounted on path", run: umount },

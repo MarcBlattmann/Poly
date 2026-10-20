@@ -56,7 +56,7 @@ unknown command 'hlep'; did you mean 'help'?
 | `disks` | every disk: description, size, interrupt vector or polled, write cache; cache buffers, dirty, hits, misses, read-ahead, write-backs, evictions; queue requests, merges, splits, interrupts, sleeps |
 | `ls [path]` | a directory (default `/`) sorted by name, or one file: mode, size (or device number), name, link target |
 | `cat <file>...` | the files' contents (at most 64 KiB each, so `cat /dev/zero` ends) |
-| `mount [<disk> <path> [ro]]` | every mount: source (the disk for a disk mount), mount point, type, options; with arguments, mount the ext2 volume on `<disk>` (`virtio2`, `ram0`, ...) on `<path>` (made if missing) |
+| `mount [<disk> <path> [ro]]` | every mount: source (the disk for a disk mount), mount point, type, options; with arguments, mount the ext2/3/4 volume on `<disk>` (`virtio2`, `ram0`, ...) on `<path>` (made if missing) |
 | `umount <path>` | unmount the disk mounted on `<path>`: written back, synced and marked clean; refused while files there are open or mapped |
 | `write <file> [words...]` | write the words and a newline to `<file>` (created or truncated) |
 | `sync` | write back every dirty cached page and sync every disk file system and disk |
@@ -1082,8 +1082,11 @@ a tick shows everything as system time.
 `cargo xtask run` and the boot tests attach a third virtio-blk device,
 `target/poly-test-ext2.img` (8 MiB of ext2 with 4 KiB blocks, written by
 `tools/xtask/src/ext2disk.rs` with `poly-ext2` before every boot, the same
-bytes every time), and pass `poly.mount=virtio2:/mnt poly.test.ext2`. The
-kernel brings the disk up when the mount asks for it and logs the mount:
+bytes every time), and a fourth, `target/poly-test-ext4.img` (16 MiB of
+ext4 with a 4 MiB journal, `tools/xtask/src/ext4disk.rs`, likewise), and
+pass `poly.mount=virtio2:/mnt,virtio3:/ext4 poly.test.ext2
+poly.test.ext4`. The kernel brings the disks up when the mount asks for
+them and logs each mount:
 
 ```text
 fs: page cache of up to 16190 pages (63 MiB); writeback every 5 s
@@ -1092,9 +1095,20 @@ block: virtio2: virtio-blk 00:06.0, 16384 blocks of 512 bytes (8 MiB), write cac
 fs: virtio2 mounted on /mnt: ext2, 2048 blocks of 4096 bytes (1901 free), 1024 inodes (1008 free), read-write
 ```
 
-A volume that was not unmounted clean adds `; was not cleanly unmounted
-(run e2fsck)`. A mount that fails says why (`fs: mounting virtio2 on /mnt
-failed: not an ext2 file system`, `no such disk`, an unsupported feature).
+An ext2 volume (or ext4 without a journal) that was not unmounted clean
+adds `; was not cleanly unmounted (run e2fsck)`. A journaled one is
+consistent once its journal is replayed, which mounting does first and
+reports:
+
+```text
+fs: virtio3: journal replayed (2 transactions), 1 orphans processed
+```
+
+A mount that fails says why (`fs: mounting virtio2 on /mnt failed: not an
+ext2/3/4 file system`, `no such disk`, `unsupported incompatible features
+0x10` (here `meta_bg`), `corrupt superblock checksum`, `the journal needs
+recovery but the device is read-only`). An unknown read-only-compatible
+feature (quota, ...) or `inline_data` mounts read-only.
 `virtioN` is the N-th virtio-blk function in PCI order (`lspci` lists them;
 `virtio1` is the watchdog test's spare). In the shell:
 
@@ -1122,12 +1136,30 @@ e2fsck -fn target/poly-test-ext2.img                   # check without changing 
 debugfs -R 'ls -l /' target/poly-test-ext2.img         # list the root directory
 debugfs -R 'cat /note.txt' target/poly-test-ext2.img   # print a file
 cargo xtask run poly.test=disk_tests                   # only the disk file system tests
+dumpe2fs -h target/poly-test-ext4.img                  # features, journal, needs_recovery, orphans
+debugfs -R 'logdump -a' target/poly-test-ext4.img      # the journal's transactions (after a crash)
+debugfs -R 'ex /dir/fragmented.bin' target/poly-test-ext4.img   # an extent tree, level by level
 ```
+
+`e2fsck -fn` on an image whose journal needs replaying reports problems
+without replaying it (`-n` changes nothing); replay first, on a copy: `cp
+target/poly-test-ext4.img /tmp/x.img && e2fsck -fy /tmp/x.img`, or mount
+it with the driver. A file system that refuses to mount with `EBADMSG`
+errors in the log has a checksum mismatch: `e2fsck -fn` names the
+structure. `poly_ext2::Ext2::stats()` counts commits (`commits`), what
+mounting replayed (`replayed`) and orphans processed (`orphans`); with gdb,
+a thread stuck in `poly_kernel::sync::RawMutex` under `commit` waits for
+the disk's flush.
 
 `cargo xtask` rewrites the image before the next boot; copy it first to
 keep it. The boot test `ext2_persistence_test` writes a file in one boot,
 reboots, runs `e2fsck -fn` (skipped with a message when e2fsprogs are not
-installed) and reads the file in a second boot from the same image.
+installed) and reads the file in a second boot from the same image;
+`ext4disk::boot_tests` does the same on `/ext4`, then boots with
+`poly.test.ext4.crash` (a test writes and syncs `/ext4/committed.txt`, the
+boot ends without unmounting), checks on the host that the image needs a
+journal replay, and boots again: the mount must log the replay and the
+file must be there.
 
 Write errors at writeback (a full volume) lose the page's data and are
 reported by the next `sync` (`sync: ENOSPC`) and counted as
