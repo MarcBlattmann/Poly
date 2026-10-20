@@ -185,7 +185,8 @@ fn known_signature(name: &str) -> Option<(&'static [ArgKind], RetKind)> {
         "ftruncate" => (&[Int, Int], RetKind::Int),
         "renameat2" => (&[Int, CStr, Int, CStr, Hex], RetKind::Int),
         "symlinkat" => (&[CStr, Int, CStr], RetKind::Int),
-        "fsync" => (&[Int], RetKind::Int),
+        "fsync" | "fchdir" => (&[Int], RetKind::Int),
+        "rename" => (&[CStr, CStr], RetKind::Int),
         _ => return None,
     })
 }

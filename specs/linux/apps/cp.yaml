@@ -1,0 +1,80 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/linux/apps/cp.yaml. An app test entry: the program, not an API
+# symbol, so it has no coverage-map entry.
+id: linux/api/apps/cp
+oracle:
+  os: "Linux 6.18.44-fc-v140"
+  machine: "x86-64 VM, 4 CPUs, Ubuntu 24.04: GNU coreutils 9.4, grep 3.11, sed 4.9, glibc 2.39, libselinux 3.5; test tree on tmpfs, program chrooted into it"
+  observed_by: spec-c
+  date: 2026-10-20
+summary: >
+  cp(1) copies files (into a directory, or -r whole trees; -p keeping mode
+  and times), creating or truncating the target.
+environment: >
+  Each case is an app test (docs/AGENT_PIPELINE.md, "App tests"): the
+  host's unchanged, dynamically linked program runs as /bin/cp in a
+  file tree that is the same on Linux and on Poly (Poly gets it as its
+  initramfs): the program interpreter /lib64/ld-linux-x86-64.so.2 and the
+  shared libraries the program needs at their host paths
+  (/lib/x86_64-linux-gnu), no /etc/ld.so.cache, /etc/passwd and /etc/group
+  with only root (uid 0, gid 0), the case's files under /work, everything
+  owned by root, files 0644 and directories 0755 unless the case says
+  otherwise, every timestamp 2023-11-14 22:13:20 UTC. The program runs as
+  root with umask 022 in /work, with stdin from a regular file (the
+  case's stdin, else empty) and stdout and stderr redirected into regular
+  files, and the environment PATH=/bin, HOME=/work, LANG=C, TZ=UTC,
+  GLIBC_TUNABLES=glibc.cpu.hwcaps=-SSE4_2 (no zoneinfo file exists, so
+  times are UTC). /dev and /proc are the system's own; /sys is empty on
+  the reference, and /proc/filesystems lists no selinuxfs (Poly is a Linux
+  without SELinux). A case with several steps runs each step as a child
+  that is waited for, and the last step in place; its exit status is the
+  case's.
+comparison: >
+  Exit status, stdout and stderr byte for byte; the system calls in app
+  mode (per process: names and result classes, `ok`, `-1 ERRNO` or the
+  descriptor for calls that return one, consecutive repeats collapsed,
+  rseq and SIGCHLD left out). Run with `cargo xtask pipeline diff --target
+  poly --tests-dir specs/linux/apps/cp.tests`.
+returns:
+  file: "the target has the source's bytes; exit status 0; a second step (cat) shows them"
+  overwrite: "an existing target is truncated and gets the source's bytes"
+  recursive: "-r makes the directories and copies the files below them"
+  preserve: "-p: the copy keeps mode 0750 and the 2023-11-14 modification time (ls -l shows them)"
+errors:
+  missing_source: "\"cp: cannot stat 'nope': No such file or directory\\n\" on stderr, exit status 1"
+  same_file: "\"cp: 'a' and 'a' are the same file\\n\" on stderr, exit status 1"
+system_calls:                                 # observed on the reference, in order
+  - >
+    C library start-up, the same for every program: brk, mmap,
+    access(/etc/ld.so.preload) ENOENT, openat(/etc/ld.so.cache) ENOENT, then
+    for each library openat (the descriptor, 3), read of the ELF header,
+    pread64, fstat, mmap of its segments, close; arch_prctl(ARCH_SET_FS),
+    set_tid_address, set_robust_list, rseq (left out of the comparison),
+    mprotect of the RELRO ranges, prlimit64(RLIMIT_STACK) 0, and getrandom(8
+    bytes, GRND_NONBLOCK) 8 before the first allocation from the heap.
+  - >
+    libselinux start-up (ls, cp, mkdir, sed): statfs("/sys/fs/selinux") and
+    statfs("/selinux") both ENOENT, openat(/proc/filesystems) then read
+    until end of file (no selinuxfs line), close,
+    access("/etc/selinux/config") ENOENT.
+  - >
+    geteuid; openat(target, O_PATH|O_DIRECTORY) ENOENT or ENOTDIR to see
+    whether it is a directory; newfstatat of the source; openat(source) = 3,
+    fstat, openat(target, O_WRONLY|O_CREAT|O_EXCL or O_TRUNC) = 4.
+  - >
+    ioctl(4, FICLONE, 3) is -1 EOPNOTSUPP on tmpfs (a file system that
+    cannot share extents; not ENOTTY); fstat(4); fadvise64(3, 0, 0,
+    POSIX_FADV_SEQUENTIAL) = 0; uname; then copy_file_range(3, NULL, 4,
+    NULL, large, 0) returns the byte count, then 0; close both.
+  - >
+    -p: utimensat / fchmod of the copy, flistxattr; -r: mkdirat, getdents64
+    of the source tree.
+side_effects: "creates or replaces the target files and directories under /work"
+threading: single-threaded; one process per step
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "a few ms per case on the host; about a second per case on Poly under QEMU (TCG)"
+  guarantees: none
+tests:
+  visible: 5                                  # count in cp.tests/
+  held_out: 2                                 # count kept by the diff runner

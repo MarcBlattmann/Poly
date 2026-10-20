@@ -242,8 +242,15 @@ impl Target {
             .arg("-initrd")
             .arg(&image)
             .args(["-append", KERNEL_ARGS]);
-        let done = runner::run_command(&mut cmd, self.timeout)
+        let mut done = runner::run_command(&mut cmd, self.timeout)
             .map_err(|e| format!("{e} (is qemu-system-x86_64 installed?)"))?;
+        // QEMU itself killed by a signal (a crash of the emulator, seen
+        // under load) says nothing about the kernel: boot once more.
+        if let Exit::Signal(s) = done.exit {
+            eprintln!("pipeline: QEMU died with signal {s} running {test}; booting it once more");
+            done = runner::run_command(&mut cmd, self.timeout)
+                .map_err(|e| format!("{e} (is qemu-system-x86_64 installed?)"))?;
+        }
         let log = String::from_utf8_lossy(&done.stdout).into_owned();
         let log_path = work.join(format!("{test}.serial.log"));
         util::write(&log_path, &log)?;
