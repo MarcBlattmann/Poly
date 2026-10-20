@@ -14,6 +14,7 @@ mod qemu;
 mod selftest;
 mod sync;
 mod syscall;
+mod thread;
 
 use core::panic::PanicInfo;
 use poly_mem::{PAGE_SIZE, Region, RegionKind};
@@ -77,6 +78,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
             meta.phys
         );
     }
+    thread::init();
     acpi::init(boot.rsdp, &memory);
 
     let ok = selftest::run(&boot, &memory);

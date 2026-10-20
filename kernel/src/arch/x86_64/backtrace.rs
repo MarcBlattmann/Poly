@@ -39,10 +39,42 @@ pub fn set_fault_origin(pc: u64, fp: u64) {
     FAULT_PC.store(pc, Ordering::Relaxed);
 }
 
-/// Every stack the kernel runs on today. Kernel threads will add theirs.
-fn stacks() -> [Range<u64>; 2] {
-    let boot = (&raw const __boot_stack_bottom) as u64..(&raw const __boot_stack_top) as u64;
-    [boot, super::gdt::double_fault_stack()]
+/// Kernel thread stacks the walker may follow, at most one per thread slot.
+pub const THREAD_STACK_SLOTS: usize = 64;
+
+/// Each slot is one word, so the panic path can never see half an update:
+/// the page-aligned base of the stack ORed with its length in pages
+/// (1..4096), or 0 for an empty slot.
+static THREAD_STACKS: [AtomicU64; THREAD_STACK_SLOTS] = [const { AtomicU64::new(0) }; THREAD_STACK_SLOTS];
+
+const PAGE: u64 = 4096;
+
+/// Let backtraces walk the kernel stack at `base..base + len`, which must
+/// stay mapped until [`unregister_thread_stack`]. `slot` is the thread's
+/// slot in the thread table.
+pub fn register_thread_stack(slot: usize, base: u64, len: u64) {
+    assert!(base.is_multiple_of(PAGE) && len.is_multiple_of(PAGE), "thread stack not page-aligned");
+    assert!((1..PAGE).contains(&(len / PAGE)), "thread stack size out of range");
+    THREAD_STACKS[slot].store(base | (len / PAGE), Ordering::Release);
+}
+
+/// Forget the stack in `slot`; call before its memory is freed.
+pub fn unregister_thread_stack(slot: usize) {
+    THREAD_STACKS[slot].store(0, Ordering::Release);
+}
+
+/// Every stack the kernel runs on: the boot stack, the double-fault IST
+/// stack and the registered thread stacks (empty ranges for free slots).
+fn stacks() -> [Range<u64>; 2 + THREAD_STACK_SLOTS] {
+    core::array::from_fn(|i| match i {
+        0 => (&raw const __boot_stack_bottom) as u64..(&raw const __boot_stack_top) as u64,
+        1 => super::gdt::double_fault_stack(),
+        _ => {
+            let word = THREAD_STACKS[i - 2].load(Ordering::Acquire);
+            let base = word & !(PAGE - 1);
+            base..base + (word & (PAGE - 1)) * PAGE
+        }
+    })
 }
 
 #[repr(C)]
@@ -68,8 +100,8 @@ fn walk(pc: u64, fp: u64, mut f: impl FnMut(usize, u64)) -> End {
     f(0, pc);
     let read = |addr: u64| {
         // SAFETY: the walker only reads aligned words inside one of
-        // `stacks()`, which are the boot stack (.bss) and a static, both
-        // always mapped.
+        // `stacks()`: the boot stack (.bss), a static, and thread stacks,
+        // which stay mapped while registered.
         unsafe { (addr as *const u64).read_volatile() }
     };
     let mut walker = FrameWalker::new(fp, &stacks(), MAX_DEPTH, read);
@@ -77,6 +109,14 @@ fn walk(pc: u64, fp: u64, mut f: impl FnMut(usize, u64)) -> End {
         f(n, ret);
     }
     walker.end().unwrap_or(End::Bottom)
+}
+
+/// [`walk`] the current stack from here, for tests that check what a panic
+/// at this point would print.
+#[inline(never)]
+pub fn walk_from_here(f: impl FnMut(usize, u64)) -> End {
+    let Here { pc, fp } = here();
+    walk(pc, fp, f)
 }
 
 /// Print the backtrace for a panic, without taking the console lock. Starts

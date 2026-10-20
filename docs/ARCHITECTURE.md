@@ -16,8 +16,8 @@ what exists **today** and how it fits that plan.
                  kernel/src/syscall.rs  ← routes by the process's personality tag
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt
                           │
-            shared core: boot, cpu (GDT/TSS/IDT), memory map, frames
-            arch/x86_64 (PVH entry, serial, exceptions)
+            shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, threads
+            arch/x86_64 (PVH entry, serial, exceptions, context switch)
 ```
 
 ## Boot flow
@@ -94,4 +94,58 @@ spaces) replaces the boot mapping in the next milestone.
   only RAM reachable through the boot mapping), marks it `Kernel` in the map,
   and puts the allocator in the global `frames::FRAMES` spinlock. RAM above
   1 GiB is managed too; nothing maps it yet. `cargo xtask test` boots with
-  256 MiB and with 2 GiB to cover both cases.
+  256 MiB and with 2 GiB to cover both cases. `allocate_below(order, limit)`
+  takes the lowest suitable block under a physical limit, for memory the
+  kernel must reach through the boot mapping (thread stacks, for now).
+
+## Threads and scheduling
+
+Kernel threads only, on one CPU, round robin. See
+[ADR 0012](adr/0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md).
+
+- **Policy in `poly-sched`** (host-tested, including a randomized check
+  against a reference model). `Scheduler<N>` is a fixed table of `N` thread
+  slots with no other memory: a FIFO run queue and caller-owned
+  `WaitQueue`s, all linked through one `next` field per slot (a thread is on
+  at most one list). `ThreadId` is slot + generation, so a stale id never
+  names a later thread in the same slot. Every operation that changes the
+  running thread (`yield_now`, `block_current`, `join`, `exit_current`)
+  returns a `Switch { from, to }` and leaves the switching to the kernel.
+- **Time slices.** Each thread gets `TIME_SLICE_TICKS` (10) ticks when it is
+  switched in. `tick()` returns true when the slice is used up *and*
+  another thread is runnable (a lone thread just gets a new slice); the idle
+  thread gives way as soon as anything is runnable.
+- **Thread 0 and idle.** `thread::init()` (right after the frame allocator)
+  makes the boot code thread 0, still on the boot stack, and creates the
+  idle thread, which runs only when nothing else can. Without interrupts
+  nothing could wake a thread at that point, so today it panics with a
+  "deadlock" message and a backtrace instead of hanging.
+- **Mechanism in the kernel.** `kernel/src/thread.rs` keeps the scheduler
+  and each thread's stack in one spinlock (`THREADS`), and saved stack
+  pointers in a static array. Stacks are 16 KiB (one order-2 buddy block)
+  below the boot-mapping limit, registered with the backtrace walker. There
+  is no guard page yet (TODO once page tables are dynamic).
+  `arch/x86_64/context.rs` switches by pushing the six callee-saved
+  registers, swapping `rsp` and popping; a new thread's stack is primed so
+  that the switch "returns" into `thread_trampoline`, which calls
+  `thread_start(f, arg)` with `rbp = 0` (the end of every thread's
+  backtrace) and exits with `f`'s return value.
+- **API:** `spawn(fn, arg)`, `yield_now()`, `exit(code)`, `current()`,
+  `join(id)` (returns the exit code), `detach(id)`, `state(id)`, and
+  `WaitQueue::{wait_until(cond), wake_one(), wake_all()}`. `wait_until`
+  checks its condition with the scheduler locked, so a wakeup between the
+  check and going to sleep cannot be lost.
+- **Exit.** An exiting thread is still on its stack, so the next thread
+  frees it (`finish_switch` after every switch). The table slot is freed
+  once the thread is also joined or detached.
+- **Interrupts and locking.** Every `THREADS` critical section runs with
+  interrupts off, and the lock is dropped before the switch; with one CPU
+  and interrupts off nothing can run in between. Each thread restores its
+  own interrupt state when the switch returns into it. SMP needs the lock
+  (or an "on CPU" flag) held until the outgoing thread's registers are
+  saved.
+- **Preemption hook.** `thread::preempt_tick()` is all the timer handler has
+  to call: with interrupts off, after EOI, on the interrupted thread's own
+  stack (not an IST stack, since the handler's frames stay there while the
+  thread is switched out). New threads start with interrupts off; once the
+  timer exists, `thread_start` must enable them.

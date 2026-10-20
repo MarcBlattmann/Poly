@@ -91,6 +91,21 @@ frame pointer that is outside the kernel's stacks, misaligned or not moving up
 the stack; the reason is printed when it is not the bottom. A corrupt stack
 therefore gives a short backtrace, never a second fault.
 
+A panic on a kernel thread walks that thread's own stack, which ends in the
+code every thread starts in:
+
+```text
+  #3 0xffffffff8010560c poly_kernel::thread::panic_in_thread+0x1c
+  #4 0xffffffff80105558 poly_kernel::thread::thread_start+0x18
+  #5 0xffffffff8010d8db thread_trampoline+0x9
+```
+
+If every thread blocks, nothing can wake them yet (no interrupts), so the idle
+thread panics with `deadlock: every thread is blocked ...` and a backtrace
+through `poly_kernel::thread::idle_main`. To see where the other threads were
+blocked, attach a debugger before the panic. `cargo xtask run
+poly.test=thread::deadlock poly.selftest.deadlock` shows what this looks like.
+
 ## Attaching a debugger
 
 ```sh

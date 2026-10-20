@@ -33,6 +33,7 @@ dependencies = [
  "poly-personality-linux",
  "poly-personality-nt",
  "poly-personality-xnu",
+ "poly-sched",
 ]
 
 [[package]]
@@ -59,3 +60,7 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
 ]
+
+[[package]]
+name = "poly-sched"
+version = "0.0.1"

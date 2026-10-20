@@ -3,6 +3,7 @@
 
 pub mod backtrace;
 mod boot;
+pub mod context;
 pub mod cpu;
 pub mod gdt;
 pub mod idt;

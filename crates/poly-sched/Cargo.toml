@@ -1,0 +1,11 @@
+[package]
+name = "poly-sched"
+description = "Round-robin thread scheduler bookkeeping: run queue, wait queues, time slices, join"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
