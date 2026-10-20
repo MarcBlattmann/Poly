@@ -29,6 +29,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0021](0021-kernel-shell.md) | The kernel shell: a host-tested line editor on `alloc`, a `Console` trait, serial input on IRQ 4 | Accepted (amends 0003: shared crates may use `alloc`) |
 | [0027](0027-agent-pipeline-tools-and-test-run-protocol.md) | Agent pipeline tools: own ptrace tracer, per-test diff runner, a serial test-run protocol for Poly, held-out store outside the repository | Accepted |
 | [0023](0023-vfs-tmpfs-and-cpio.md) | The VFS in a host-tested crate with `alloc`, tmpfs beside it, cpio unpacked through the VFS | Accepted |
+| [0032](0032-ext2-driver.md) | ext2 in a host-tested crate over a block access trait, metadata ordered by flushes instead of a journal | Accepted |
 
 ## Open decisions
 

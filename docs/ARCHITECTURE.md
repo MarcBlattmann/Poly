@@ -312,7 +312,8 @@ through the QEMU monitor (`sendkey`), with the US layout and with
 
 ## File systems (host-tested; not yet wired into the kernel)
 
-Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md).
+Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md) and, for ext2,
+[ADR 0032](adr/0032-ext2-driver.md).
 
 ```
    personalities (openat, read, write, getdents64, ...)   kernel: console, exec
@@ -321,9 +322,10 @@ Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md).
    poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
           │  FileSystem trait: lookup/create/rename/read/write/readdir by inode
           ▼
-   Tmpfs (in poly-vfs)        later: ext2, devfs, procfs
-          ▲
-   poly_cpio::unpack_fs       initramfs (newc / crc) → files, links, nodes
+   Tmpfs (in poly-vfs)        poly_ext2::Ext2<D: BlockIo>      later: devfs, procfs
+          ▲                          │  BlockIo: read/write/flush device blocks
+   poly_cpio::unpack_fs              ▼
+   initramfs → files, links   block::Disk (queue + buffer cache), or CachedIo / DeviceIo
 ```
 
 - **`poly-vfs`** (`no_std` + `alloc`): `Vfs` resolves paths as
@@ -338,6 +340,16 @@ Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md).
 - **`poly-cpio`**: a parser for `newc`/`crc` that never panics, a writer,
   and an unpacker into any file system through the VFS. Tested against
   archives made by GNU cpio (stored, and live if `cpio` is installed).
+- **`poly-ext2`**: ext2 (revisions 0 and 1, 1/2/4 KiB blocks, `filetype`,
+  `sparse_super`, `large_file`; unknown incompatible features refuse the
+  mount, unknown read-only ones mount read-only) over a `BlockIo` (the
+  kernel's `block::Disk`, or `CachedIo`/`DeviceIo` over `poly-block`).
+  Group-local allocation, indirect block maps with holes, directory records
+  split and merged, `format` for new volumes. Without a journal, metadata
+  writes are ordered by flushes so a crash leaves a volume e2fsck repairs
+  without shared blocks or lost names. Corrupt volumes give `EUCLEAN`,
+  never a panic. Tested against `mke2fs`/`debugfs`/`e2fsck` images, a
+  random model test against tmpfs, byte flips and simulated crashes.
 
 ## Personality routing
 

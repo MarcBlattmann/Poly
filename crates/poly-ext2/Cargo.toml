@@ -1,0 +1,15 @@
+[package]
+name = "poly-ext2"
+description = "The ext2 file system: on-disk format, allocation, directories and a poly-vfs FileSystem over any block device"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-block.workspace = true
+poly-vfs.workspace = true
+
+[lints]
+workspace = true
