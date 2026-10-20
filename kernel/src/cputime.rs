@@ -10,7 +10,9 @@
 //!   sample for the running thread, as user time if the tick interrupted
 //!   ring 3 and as system time otherwise ([`tick`]). A thread's measured
 //!   total is split in the ratio of its samples (all of it is system time
-//!   until the first sample).
+//!   until the first sample). Neither part ever goes down: a read clamps
+//!   the split so that both are at least what the thread last reported,
+//!   since a new sample shifts the ratio.
 //! - Accounting is per thread-table slot; a slot remembers the process and
 //!   thread ids of the user thread in it ([`started`], from the scheduler).
 //!   When a thread is reaped its time moves to its process
@@ -39,19 +41,30 @@ struct Slot {
     since: u64,
     user_ticks: u64,
     system_ticks: u64,
+    /// The split last reported, which later reads never go below.
+    reported_user_ns: u64,
+    reported_system_ns: u64,
 }
 
 impl Slot {
     /// The slot's CPU time at `now`, if it is the running one.
-    fn times(&self, running: bool, now: u64) -> CpuTimes {
+    fn times(&mut self, running: bool, now: u64) -> CpuTimes {
         let total = self.ran_ns + if running { now.saturating_sub(self.since) } else { 0 };
         let samples = self.user_ticks + self.system_ticks;
-        let user_ns = if samples == 0 {
+        let ideal_user_ns = if samples == 0 {
             0
         } else {
             (u128::from(total) * u128::from(self.user_ticks) / u128::from(samples)) as u64
         };
-        CpuTimes { user_ns, system_ns: total - user_ns }
+        // The total only grows, so the range is never empty (and both
+        // bounds are 0 for a fresh slot).
+        let floor = self.reported_user_ns;
+        let ceiling = total.saturating_sub(self.reported_system_ns).max(floor);
+        let user_ns = ideal_user_ns.clamp(floor, ceiling);
+        let system_ns = total.saturating_sub(user_ns).max(self.reported_system_ns);
+        self.reported_user_ns = user_ns;
+        self.reported_system_ns = system_ns;
+        CpuTimes { user_ns, system_ns }
     }
 }
 
@@ -62,7 +75,16 @@ struct Table {
 }
 
 static TABLE: SpinLock<Table> = SpinLock::new(Table {
-    slots: [Slot { pid: 0, tid: 0, ran_ns: 0, since: 0, user_ticks: 0, system_ticks: 0 }; MAX_THREADS],
+    slots: [Slot {
+        pid: 0,
+        tid: 0,
+        ran_ns: 0,
+        since: 0,
+        user_ticks: 0,
+        system_ticks: 0,
+        reported_user_ns: 0,
+        reported_system_ns: 0,
+    }; MAX_THREADS],
     running: 0,
 });
 
@@ -135,7 +157,7 @@ pub fn tick(user: bool) {
 /// The thread in `slot` has been reaped: what it used moves to `process`.
 pub fn reaped(slot: usize, process: &Process) {
     let mut t = TABLE.lock();
-    let s = t.slots[slot];
+    let mut s = t.slots[slot];
     if s.pid == process.pid {
         process.cpu.add(s.times(false, 0));
     }
@@ -145,19 +167,21 @@ pub fn reaped(slot: usize, process: &Process) {
 /// Thread `tid` of process `pid`, if it is live.
 pub fn thread(pid: u32, tid: u32) -> Option<CpuTimes> {
     let now = time::now_ns();
-    let t = TABLE.lock();
+    let mut t = TABLE.lock();
     let i = t.slots.iter().position(|s| s.pid == pid && s.tid == tid && pid != 0)?;
-    Some(t.slots[i].times(i == t.running, now))
+    let running = t.running;
+    Some(t.slots[i].times(i == running, now))
 }
 
 /// Every live thread of process `pid`: `(tid, times)`.
 pub fn threads_of(pid: u32) -> Vec<(u32, CpuTimes)> {
     let mut out = Vec::with_capacity(MAX_THREADS);
     let now = time::now_ns();
-    let t = TABLE.lock();
-    for (i, s) in t.slots.iter().enumerate() {
+    let mut t = TABLE.lock();
+    let running = t.running;
+    for (i, s) in t.slots.iter_mut().enumerate() {
         if s.pid == pid && pid != 0 {
-            out.push((s.tid, s.times(i == t.running, now)));
+            out.push((s.tid, s.times(i == running, now)));
         }
     }
     out
@@ -166,11 +190,12 @@ pub fn threads_of(pid: u32) -> Vec<(u32, CpuTimes)> {
 /// What `process` used: its ended threads and its live ones so far.
 pub fn process(process: &Process) -> CpuTimes {
     let now = time::now_ns();
-    let t = TABLE.lock();
+    let mut t = TABLE.lock();
+    let running = t.running;
     let mut total = process.cpu.ended_threads();
-    for (i, s) in t.slots.iter().enumerate() {
+    for (i, s) in t.slots.iter_mut().enumerate() {
         if s.pid == process.pid && process.pid != 0 {
-            let c = s.times(i == t.running, now);
+            let c = s.times(i == running, now);
             total.user_ns += c.user_ns;
             total.system_ns += c.system_ns;
         }
@@ -181,8 +206,9 @@ pub fn process(process: &Process) -> CpuTimes {
 /// The running thread's CPU time (kernel threads too).
 pub fn current() -> CpuTimes {
     let now = time::now_ns();
-    let t = TABLE.lock();
-    t.slots[t.running].times(true, now)
+    let mut t = TABLE.lock();
+    let running = t.running;
+    t.slots[running].times(true, now)
 }
 
 // --- Tests ------------------------------------------------------------------
@@ -207,6 +233,33 @@ kernel_test! {
         crate::thread::sleep(core::time::Duration::from_millis(30));
         if current().total_ns() - start > 20 * time::NANOS_PER_MILLI {
             return Err("a sleeping thread was charged for the time it slept");
+        }
+        Ok(())
+    }
+}
+
+kernel_test! {
+    /// A new sample shifts the user / system ratio; neither part may go
+    /// down for it (getrusage(2) and times(2) callers subtract readings).
+    fn the_split_never_goes_down() -> TestResult {
+        let mut s = Slot { ran_ns: 1000, user_ticks: 1, system_ticks: 1, ..Slot::default() };
+        let mut last = s.times(false, 0);
+        let steps: [(u64, bool); 6] = [(10, true), (10, true), (10, true), (500, false), (0, false), (0, false)];
+        for (ran, user) in steps {
+            s.ran_ns += ran;
+            if user {
+                s.user_ticks += 1;
+            } else {
+                s.system_ticks += 1;
+            }
+            let now = s.times(false, 0);
+            if now.user_ns < last.user_ns || now.system_ns < last.system_ns {
+                return Err("a part of the CPU time went down");
+            }
+            if now.user_ns + now.system_ns != s.ran_ns {
+                return Err("the parts do not add up to the total");
+            }
+            last = now;
         }
         Ok(())
     }
