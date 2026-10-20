@@ -11,8 +11,11 @@
  * asm/sigcontext.h and asm/ucontext.h; clone flags from linux/sched.h;
  * futex operations from linux/futex.h; socket constants and structures
  * from linux/socket.h, linux/in.h, linux/un.h and asm-generic/socket.h;
- * ioctl numbers from asm-generic/ioctls.h. Behaviour only; no code is
- * copied from anywhere.
+ * ioctl numbers from asm-generic/ioctls.h; poll bits from
+ * asm-generic/poll.h; epoll from linux/eventpoll.h; eventfd, timerfd and
+ * signalfd flags and struct signalfd_siginfo from linux/eventfd.h,
+ * linux/timerfd.h and linux/signalfd.h. Behaviour only; no code is copied
+ * from anywhere.
  *
  * Tests that run more than one task (fork, threads) or whose syscalls
  * depend on timing carry the directive `poly-diff: syscalls=off` in their
@@ -505,6 +508,108 @@ static __attribute__((unused)) void gate_open(volatile unsigned *g) {
 static __attribute__((unused)) void gate_wait(volatile unsigned *g) {
     while (__atomic_load_n(g, __ATOMIC_SEQ_CST) == 0) futex(g, FUTEX_WAIT, 0, 0, 0, 0);
 }
+
+/* Readiness: asm-generic/poll.h, linux/posix_types.h (fd_set),
+ * linux/eventpoll.h (struct epoll_event is packed on x86-64). */
+#define POLLIN 0x0001
+#define POLLPRI 0x0002
+#define POLLOUT 0x0004
+#define POLLERR 0x0008
+#define POLLHUP 0x0010
+#define POLLNVAL 0x0020
+#define POLLRDNORM 0x0040
+#define POLLRDBAND 0x0080
+#define POLLWRNORM 0x0100
+#define POLLWRBAND 0x0200
+#define POLLRDHUP 0x2000
+
+struct k_pollfd {
+    int fd;
+    short events;
+    short revents;
+};
+
+struct k_fd_set {
+    u64 bits[16]; /* 1024 descriptors */
+};
+
+static __attribute__((unused)) void fdset_zero(struct k_fd_set *s) { memset(s, 0, sizeof *s); }
+static __attribute__((unused)) void fdset_add(struct k_fd_set *s, int fd) { s->bits[fd / 64] |= 1UL << (fd % 64); }
+static __attribute__((unused)) int fdset_has(const struct k_fd_set *s, int fd) {
+    return (s->bits[fd / 64] >> (fd % 64)) & 1;
+}
+
+struct k_timeval {
+    i64 tv_sec;
+    i64 tv_usec;
+};
+
+#define EPOLL_CLOEXEC O_CLOEXEC
+#define EPOLL_CTL_ADD 1
+#define EPOLL_CTL_DEL 2
+#define EPOLL_CTL_MOD 3
+#define EPOLLIN 0x00000001U
+#define EPOLLPRI 0x00000002U
+#define EPOLLOUT 0x00000004U
+#define EPOLLERR 0x00000008U
+#define EPOLLHUP 0x00000010U
+#define EPOLLRDNORM 0x00000040U
+#define EPOLLWRNORM 0x00000100U
+#define EPOLLRDHUP 0x00002000U
+#define EPOLLEXCLUSIVE (1U << 28)
+#define EPOLLWAKEUP (1U << 29)
+#define EPOLLONESHOT (1U << 30)
+#define EPOLLET (1U << 31)
+
+struct __attribute__((packed)) k_epoll_event {
+    unsigned events;
+    u64 data;
+};
+
+/* Event files: linux/eventfd.h, linux/timerfd.h, linux/signalfd.h. */
+#define EFD_SEMAPHORE 1
+#define EFD_CLOEXEC O_CLOEXEC
+#define EFD_NONBLOCK O_NONBLOCK
+#define TFD_TIMER_ABSTIME 1
+#define TFD_TIMER_CANCEL_ON_SET 2
+#define TFD_CLOEXEC O_CLOEXEC
+#define TFD_NONBLOCK O_NONBLOCK
+#define SFD_CLOEXEC O_CLOEXEC
+#define SFD_NONBLOCK O_NONBLOCK
+#define CLOCK_BOOTTIME 7
+#define CLOCK_REALTIME_ALARM 8
+#define CLOCK_PROCESS_CPUTIME_ID 2
+
+struct k_itimerspec {
+    struct k_timespec interval;
+    struct k_timespec value;
+};
+
+/* struct signalfd_siginfo, 128 bytes; the fields the tests read. */
+struct k_signalfd_siginfo {
+    unsigned ssi_signo;
+    int ssi_errno;
+    int ssi_code;
+    unsigned ssi_pid;
+    unsigned ssi_uid;
+    int ssi_fd;
+    unsigned ssi_tid;
+    unsigned ssi_band;
+    unsigned ssi_overrun;
+    unsigned ssi_trapno;
+    int ssi_status;
+    int ssi_int;
+    u64 ssi_ptr;
+    u64 ssi_utime;
+    u64 ssi_stime;
+    u64 ssi_addr;
+    unsigned short ssi_addr_lsb;
+    unsigned short pad0;
+    int ssi_syscall;
+    u64 ssi_call_addr;
+    unsigned ssi_arch;
+    unsigned char pad[28];
+};
 
 /* Sockets: linux/socket.h, linux/in.h, linux/un.h, asm-generic/socket.h. */
 #define AF_UNSPEC 0
