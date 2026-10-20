@@ -518,13 +518,14 @@ pub fn getrusage(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 }
 
 /// getcpu(cpu, node, tcache): the CPU and NUMA node the thread runs on,
-/// each stored if its pointer is not null. Poly runs Linux processes on
-/// one CPU of one node: both 0. `tcache` is unused (getcpu(2): "since
+/// each stored if its pointer is not null: the kernel's CPU number, and
+/// node 0 (Poly has one NUMA node). `tcache` is unused (getcpu(2): "since
 /// Linux 2.6.24, this argument is ignored"). `EFAULT`.
 pub fn getcpu(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    for i in 0..2 {
+    let cpu = k.current_cpu();
+    for (i, value) in [(0, cpu), (1, 0u32)] {
         if !a.ptr(i).is_null() {
-            k.copy_to_user(a.ptr(i), &0u32.to_le_bytes())?;
+            k.copy_to_user(a.ptr(i), &value.to_le_bytes())?;
         }
     }
     Ok(0)

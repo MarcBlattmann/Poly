@@ -437,6 +437,20 @@ hang). To check a change, boot the CI configuration many times in parallel
 next to a few busy loops (`while :; do :; done`) and count failures per
 test.
 
+With several CPUs, "nothing else runs while interrupts are off" no longer
+holds, and a thread may run on another CPU than its test. Tests that need
+the old guarantees say so: `thread::pin_current()` keeps the test on its
+CPU, `thread::spawn_here` starts a thread on the same one,
+`smp::exclusive()` parks every other CPU (for tests that count frames or
+other global totals), and `time::cpu_ticks()` counts this CPU's ticks.
+Waiting for something another CPU does (reaping a thread that ran there,
+a thread pinned there getting going) is a wait in time with a generous
+deadline (`thread::wait_until`), not a number of yields: the other CPU may
+be held off by the host for a while. Where a test must tell "late" from
+"never", count the other CPU's own ticks (`percpu::cpu(i).ticks()`), which
+stand still while the host does not run it (see the TLB shootdown tests in
+`user/tests.rs`).
+
 ## Panic backtraces
 
 The kernel is built with frame pointers, so the panic handler can walk the
@@ -562,9 +576,69 @@ add `-monitor stdio` to a hand-written QEMU command line:
   `apic_deliver_irq` trace event).
 
 `info registers` shows `RFLAGS` (bit 9, IF: interrupts enabled). In gdb,
-`print poly_kernel::arch::x86_64::time::TICKS` gives the tick count, and a
-breakpoint on `poly_kernel::arch::x86_64::irq::dispatch` stops at every
-interrupt (expect one per millisecond from the tick).
+`print poly_kernel::arch::x86_64::time::TICKS` gives the boot CPU's tick
+count, and a breakpoint on `poly_kernel::arch::x86_64::irq::dispatch`
+stops at every interrupt (expect one per millisecond from each CPU's
+tick).
+
+## Several CPUs
+
+The boot log says which CPUs came up:
+
+```text
+acpi: CPUs: 4 enabled, 0 online-capable; local APIC at 0xfee00000, 8259 PICs present
+smp: 4 of 4 CPUs online (0-3)
+```
+
+`poly.smp=off` runs on the boot CPU only, `poly.cpus=<n>` on at most `n`
+CPUs (`smp: 2 of 4 CPUs online (0-1), 2 left out by poly.smp / poly.cpus`):
+the first thing to try when a bug might be a race between CPUs. `cargo
+xtask run` uses QEMU's `-smp 2`; add `-smp <n>` to a hand-written QEMU
+command line for more. The shell's `ps` shows each thread's CPU, and the
+status bar the CPUs online.
+
+**An AP that does not start** is logged as `smp: CPU <i> (APIC ID <id>) did
+not start: ...` and left out; the boot goes on with the others.
+
+- `it never reached long mode`: no answer to INIT and SIPI; the AP never ran the trampoline's first
+  instructions, or died before it reported "started". Check the start-up
+  area: `smp: no room below 1 MiB for the start-up code` means the memory
+  map had no usable RAM there. With `-d int,cpu_reset -D qemu.log` QEMU
+  logs the INIT and the SIPI's start address (the area's page) and every
+  exception the AP takes on the way; a triple fault there resets only that
+  CPU. In gdb, `info threads` lists one thread per vCPU: `thread 2` and
+  `x/8i $pc` show where the AP is (real-mode addresses are `cs * 16 + ip`;
+  break on the area's physical address with `hbreak *0x<base>`).
+- `it reached the kernel but did not come online`: the trampoline worked and `ap_entry` ran, but
+  the AP stopped in its own set-up (page tables, GDT/TSS, APIC, timer).
+  Its own panic, if any, is in the serial log, prefixed like any panic.
+  Break on `poly_kernel::arch::x86_64::smp::ap_entry` (a hardware
+  breakpoint: the AP runs before the kernel's page tables are loaded there).
+- An AP is up but never runs anything: `ps` shows no thread ever on it. Its
+  idle loop halts until an interrupt: check its tick (`info lapic` on that
+  vCPU: the timer LVT periodic, vector 0xf0) and that reschedule IPIs
+  (vector 0xf1) arrive (`irq` in the shell counts every vector, over all
+  CPUs).
+
+**Debugging with several CPUs in gdb.** Each vCPU is a gdb thread:
+
+- `info threads` lists them (thread 1 is CPU 0); `thread <n>` switches,
+  then `bt`, `info registers` and `x` are that CPU's. `thread apply all bt`
+  shows what every CPU is doing, the first thing to look at in a hang.
+- The running CPU's per-CPU area is at its GS base: `p/x $gs_base`, then
+  `p *(poly_kernel::arch::x86_64::percpu::PerCpu *)$gs_base` (CPU number,
+  APIC ID, current thread, spinlocks held, ticks). On entry from ring 3
+  the kernel's GS base is in `KERNEL_GS_BASE` until `swapgs`.
+- Breakpoints stop the CPU that hits them; with QEMU's TCG the other vCPUs
+  stop too while gdb has control. `set scheduler-locking on` keeps `step`
+  and `next` on the current CPU.
+- A hang with every CPU spinning in `SpinLock::lock` is a lock-order
+  problem (see "Synchronisation" in ARCHITECTURE.md); one CPU waiting in
+  `tlb::shoot` means a target CPU stopped serving shootdowns: look at what
+  it runs with interrupts off.
+- A panic stops the other CPUs with an NMI, so the backtrace in the log is
+  the panicking CPU's; the others halt where they were (`thread apply all
+  bt` shows where).
 
 ## User mode
 

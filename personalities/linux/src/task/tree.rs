@@ -80,6 +80,9 @@ struct Node {
     exit_signal: u32,
     children: BTreeSet<i32>,
     zombie: Option<Termination>,
+    /// A zombie whose parent has not been sent its exit signal yet
+    /// ([`ProcessTree::exit_announced_later`]): not waitable until then.
+    unannounced: bool,
     report: Option<Report>,
     /// It has called execve(2) since it was created (setpgid(2): `EACCES`).
     execed: bool,
@@ -141,6 +144,10 @@ pub enum Poll {
     Ready(Waited),
     /// There are children the wait looks at, but none had an event.
     Pending,
+    /// None had an event yet, but one has ended and its exit signal is on
+    /// its way to the parent ([`ProcessTree::announce`] comes next): even
+    /// a `WNOHANG` wait waits for that.
+    Exiting,
     /// No child matches (`ECHILD`).
     NoChildren,
 }
@@ -308,6 +315,29 @@ impl ProcessTree {
     /// `parent_ignores` (the parent's `SIGCHLD` is `SIG_IGN` or has
     /// `SA_NOCLDWAIT`), in which case it is reaped now.
     pub fn exit(&mut self, pid: i32, how: Termination, parent_ignores: bool) -> ExitReport {
+        self.exit_with(pid, how, parent_ignores, false)
+    }
+
+    /// [`exit`](Self::exit), but a zombie that is to send its parent an
+    /// exit signal is not waitable until [`announce`](Self::announce): a
+    /// parent on another CPU must not reap the child, and go on, before the
+    /// signal is pending (on Linux, wait(2) never returns a child whose
+    /// `SIGCHLD` is still to come).
+    pub fn exit_announced_later(&mut self, pid: i32, how: Termination, parent_ignores: bool) -> ExitReport {
+        self.exit_with(pid, how, parent_ignores, true)
+    }
+
+    /// The exit signal of `pid`, which [`exit_announced_later`]
+    /// (Self::exit_announced_later) left a zombie, is pending: its parent may
+    /// reap it now.
+    pub fn announce(&mut self, pid: i32) {
+        if let Some(n) = self.nodes.get_mut(&pid).filter(|n| n.unannounced) {
+            n.unannounced = false;
+            self.generation += 1;
+        }
+    }
+
+    fn exit_with(&mut self, pid: i32, how: Termination, parent_ignores: bool, later: bool) -> ExitReport {
         let mut report = ExitReport::default();
         let Some(node) = self.nodes.get(&pid) else { return report };
         let children: Vec<i32> = node.children.iter().copied().collect();
@@ -336,6 +366,7 @@ impl ProcessTree {
             self.reap(pid);
         } else if let Some(n) = self.nodes.get_mut(&pid) {
             n.zombie = Some(how);
+            n.unannounced = later && n.exit_signal != 0;
             n.report = None;
             report.zombie = true;
         }
@@ -370,6 +401,7 @@ impl ProcessTree {
     pub fn poll(&mut self, waiter: i32, filter: &WaitFilter) -> Poll {
         let Some(w) = self.nodes.get(&waiter) else { return Poll::NoChildren };
         let mut any = false;
+        let mut exiting = false;
         let mut found = None;
         for &child in &w.children {
             let Some(c) = self.nodes.get(&child) else { continue };
@@ -388,6 +420,10 @@ impl ProcessTree {
                 continue;
             }
             any = true;
+            if c.zombie.is_some() && c.unannounced {
+                exiting |= filter.ended;
+                continue;
+            }
             let event = match (c.zombie, c.report) {
                 (Some(how), _) if filter.ended => Some(ChildEvent::Ended(how)),
                 (None, Some(Report::Stopped(sig))) if filter.stopped => Some(ChildEvent::Stopped(sig)),
@@ -399,7 +435,13 @@ impl ProcessTree {
                 break;
             }
         }
-        let Some(waited) = found else { return if any { Poll::Pending } else { Poll::NoChildren } };
+        let Some(waited) = found else {
+            return match (exiting, any) {
+                (true, _) => Poll::Exiting,
+                (false, true) => Poll::Pending,
+                (false, false) => Poll::NoChildren,
+            };
+        };
         if filter.consume {
             match waited.event {
                 ChildEvent::Ended(_) => {
@@ -485,6 +527,7 @@ impl Node {
             exit_signal,
             children: BTreeSet::new(),
             zombie: None,
+            unannounced: false,
             report: None,
             execed: false,
             reaper: INIT_PID,
@@ -517,6 +560,24 @@ mod tests {
         assert_eq!((t.parent(11), t.pgid(11), t.sid(11)), (Some(10), Some(1), Some(1)));
         assert_eq!(t.children(10), [11, 12]);
         assert_eq!(t.parent(1), Some(0));
+    }
+
+    #[test]
+    fn a_zombie_is_waitable_once_its_exit_signal_is_announced() {
+        let mut t = family();
+        let r = t.exit_announced_later(11, Termination::Exited(3), false);
+        assert!(r.zombie && t.is_zombie(11));
+        // Not reaped before the parent's SIGCHLD is pending (the exiting
+        // thread may still be sending it on another CPU).
+        assert_eq!(t.poll(10, &any(true, false, false)), Poll::Exiting);
+        assert_eq!(t.poll(10, &any(false, true, false)), Poll::Pending, "only waits for ends wait for it");
+        let g = t.generation();
+        t.announce(11);
+        assert!(t.generation() > g, "waiters wake");
+        assert!(matches!(t.poll(10, &any(true, false, false)), Poll::Ready(Waited { pid: 11, .. })));
+        t.exit_announced_later(12, Termination::Exited(0), false);
+        t.announce(12);
+        assert!(matches!(t.poll(10, &any(true, false, false)), Poll::Ready(Waited { pid: 12, .. })));
     }
 
     #[test]

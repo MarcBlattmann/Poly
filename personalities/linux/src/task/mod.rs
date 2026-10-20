@@ -95,11 +95,14 @@ pub fn process_exited(k: &mut dyn LinuxKernel, how: Termination) {
     end_namespace(k, pid);
     let Ok(Some(parent)) = with_tree(k, |t| t.parent(pid)) else { return };
     let ignores = parent != 0 && sigchld_of(k, parent).is_some_and(|(ign, flags)| ign || flags & SA_NOCLDWAIT != 0);
-    let Ok(report) = with_tree(k, |t| t.exit(pid, how, ignores)) else { return };
+    let Ok(report) = with_tree(k, |t| t.exit_announced_later(pid, how, ignores)) else { return };
     if report.parent != 0 && report.exit_signal != 0 {
         let waited = Waited { pid, uid, event: ChildEvent::Ended(how) };
         signal_process(k, report.parent, wait::child_info(report.exit_signal, &waited));
     }
+    // The parent may reap it now (it is waitable only once the signal is
+    // pending, as on Linux).
+    let _ = with_tree(k, |t| t.announce(pid));
     for &(child, uid, how, signal, adopter) in &report.adopted_zombies {
         if signal != 0 {
             let waited = Waited { pid: child, uid, event: ChildEvent::Ended(how) };

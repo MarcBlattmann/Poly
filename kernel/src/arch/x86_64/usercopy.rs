@@ -83,6 +83,18 @@ user_strncpy:
 user_strncpy_fixup:
     mov rax, -1
     ret
+    /* u64 user_cmpxchg32(addr: rdi, expected: esi, new: edx): an atomic
+       compare-exchange on the user word; returns the value found (32 bits),
+       or u64::MAX on a fault. */
+    .global user_cmpxchg32
+user_cmpxchg32:
+    mov eax, esi
+    lock cmpxchg dword ptr [rdi], edx
+    ret
+    .global user_cmpxchg32_fixup
+user_cmpxchg32_fixup:
+    mov rax, -1
+    ret
     .global user_copy_end
 user_copy_end:
 "#
@@ -91,6 +103,8 @@ user_copy_end:
 unsafe extern "sysv64" {
     fn user_copy_bytes(dst: *mut u8, src: *const u8, len: usize) -> usize;
     fn user_strncpy(dst: *mut u8, src: *const u8, max: usize) -> isize;
+    fn user_cmpxchg32(addr: *mut u32, expected: u32, new: u32) -> u64;
+    static user_cmpxchg32_fixup: u8;
     static user_copy_bytes_fixup: u8;
     static user_strncpy_fixup: u8;
     static user_copy_end: u8;
@@ -106,7 +120,7 @@ struct Fixup {
 
 /// The exception table: every user-copy routine and where its faults go.
 /// Each routine's fixup label directly follows its body.
-fn fixups() -> [Fixup; 2] {
+fn fixups() -> [Fixup; 3] {
     let addr = |p: *const u8| p as u64;
     [
         Fixup {
@@ -118,6 +132,11 @@ fn fixups() -> [Fixup; 2] {
             start: user_strncpy as *const () as u64,
             end: addr(&raw const user_strncpy_fixup),
             fixup: addr(&raw const user_strncpy_fixup),
+        },
+        Fixup {
+            start: user_cmpxchg32 as *const () as u64,
+            end: addr(&raw const user_cmpxchg32_fixup),
+            fixup: addr(&raw const user_cmpxchg32_fixup),
         },
     ]
 }
@@ -223,6 +242,23 @@ pub fn copy_to_user(dst: u64, src: &[u8]) -> Result<(), Efault> {
     // read-only or missing user page fault and are caught.
     let left = unsafe { user_copy_bytes(dst as *mut u8, src.as_ptr(), src.len()) };
     if left == 0 { Ok(()) } else { Err(Efault) }
+}
+
+/// Atomically compare the aligned 32-bit word at the user address `addr`
+/// (in the address space that is loaded) with `expected` and, if equal,
+/// replace it with `new` (`LOCK CMPXCHG`, SDM Vol. 2A): another CPU running
+/// a thread of the same process sees either the old or the new word, never
+/// a mix of a read and a write. Returns the value it found. A page that is
+/// not present is brought in first when interrupts are on, like for a copy.
+pub fn cmpxchg_user_u32(addr: u64, expected: u32, new: u32) -> Result<u32, Efault> {
+    if !addr.is_multiple_of(4) || !is_user_range(addr, 4) {
+        return Err(Efault);
+    }
+    let _access = UserAccess::open();
+    // SAFETY: an aligned user address; a fault on it is caught by the
+    // fixup (the routine is in the exception table).
+    let found = unsafe { user_cmpxchg32(addr as *mut u32, expected, new) };
+    u32::try_from(found).map_err(|_| Efault)
 }
 
 /// Copy the NUL-terminated string at the user address `src` into `dst`,

@@ -2,7 +2,10 @@
 //! data port 0x71. Only read, once, for the wall clock (`time::realtime_ns`);
 //! `poly-rtc` decodes the registers.
 
-use super::cpu::InterruptsOff;
+use crate::sync::SpinLock;
+
+/// CMOS index / data ports: one access at a time across CPUs.
+static CMOS: SpinLock<()> = SpinLock::new(());
 use super::port::{inb, outb};
 use poly_rtc::{Registers, STATUS_A_UPDATE_IN_PROGRESS, reg};
 
@@ -37,7 +40,8 @@ fn snapshot(century: Option<u8>) -> Registers {
 /// seconds). `century` is the century register's index, if the platform
 /// has one. `None` if the registers never held still.
 pub fn read(century: Option<u8>) -> Option<Registers> {
-    let _irq = InterruptsOff::new();
+    // The index / data port pair is shared by every CPU.
+    let _cmos = CMOS.lock();
     for _ in 0..8 {
         // The update-in-progress flag stays up for under 2 ms.
         let mut waited = 0;

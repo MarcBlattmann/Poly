@@ -125,6 +125,12 @@ pub struct FakeKernel {
     pub maps: Vec<MapRequest>,
     /// Every (fd, request, arg) ioctl that reached the kernel.
     pub ioctls: Vec<(i32, u32, u64)>,
+    /// The CPU the caller runs on, its yields, and each thread's affinity
+    /// (absent: CPU 0 only); the system has `cpus` CPUs.
+    pub on_cpu: u32,
+    pub yields: usize,
+    pub affinity: BTreeMap<i32, u64>,
+    pub cpus: u32,
     /// Every madvise that reached the kernel (ADR 0049).
     pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
     /// Every mprotect that reached the kernel.
@@ -215,6 +221,10 @@ impl FakeKernel {
             ioctls: Vec::new(),
             protects: Vec::new(),
             advised: Vec::new(),
+            on_cpu: 0,
+            yields: 0,
+            affinity: BTreeMap::new(),
+            cpus: 1,
             procs: BTreeMap::new(),
             notified: BTreeSet::new(),
             unblocked: BTreeSet::new(),
@@ -890,6 +900,32 @@ impl LinuxKernel for FakeKernel {
 
     fn tick_ns(&self) -> u64 {
         4_000_000
+    }
+
+    fn current_cpu(&self) -> u32 {
+        self.on_cpu
+    }
+
+    fn yield_cpu(&mut self) {
+        self.yields += 1;
+    }
+
+    fn cpu_affinity(&mut self, tid: i32) -> Result<u64, Errno> {
+        let exists = tid == self.tid || self.procs.get(&self.pid).is_some_and(|p| p.state.has_thread(tid));
+        if !exists {
+            return Err(Errno::ESRCH);
+        }
+        Ok(*self.affinity.get(&tid).unwrap_or(&1))
+    }
+
+    fn set_cpu_affinity(&mut self, tid: i32, mask: u64) -> Result<(), Errno> {
+        self.cpu_affinity(tid)?;
+        let present = if self.cpus >= 64 { u64::MAX } else { (1u64 << self.cpus) - 1 };
+        if mask & present == 0 {
+            return Err(Errno::EINVAL);
+        }
+        self.affinity.insert(tid, mask & present);
+        Ok(())
     }
 
     fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {

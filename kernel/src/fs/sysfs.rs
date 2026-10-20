@@ -3,8 +3,8 @@
 //! as a read-only [`StaticFs`](poly_procfs::StaticFs).
 //!
 //! ```text
-//! /sys/devices/system/cpu/{online,possible,present}   "0\n": one CPU until SMP
-//! /sys/devices/system/cpu/cpu0/
+//! /sys/devices/system/cpu/{online,possible,present}   "0-3\n": the CPUs running (no hot-plug)
+//! /sys/devices/system/cpu/cpu<n>/
 //! /sys/devices/virtual/mem/{null,zero,full,random,urandom}/dev   "major:minor\n"
 //! /sys/devices/virtual/tty/{console,tty}/dev
 //! /sys/dev/char/<major>:<minor> -> ../../devices/virtual/<class>/<name>
@@ -22,17 +22,20 @@ use poly_procfs::{StaticFs, StaticFsBuilder};
 use poly_vfs::Timespec;
 use poly_vfs::device::{CONSOLE, FULL, NULL, RANDOM, TTY, URANDOM, ZERO};
 
-/// The CPUs that exist and are online, in the list format of
-/// `cpu/online` ("0", "0-3", ...): CPU 0 only until SMP.
-const CPU_LIST: &str = "0\n";
-
 pub fn build() -> Arc<StaticFs> {
     let boot = Timespec::new((crate::time::realtime_ns() / crate::time::NANOS_PER_SEC) as i64, 0);
     let mut b = StaticFsBuilder::new("sysfs", poly_vfs::SYSFS_MAGIC, boot);
+    // The CPUs that run, in the list format of `cpu/online` ("0", "0-3",
+    // ...). They are up by the time this is built, and CPUs do not come
+    // and go, so the three lists are the same.
+    let cpus = crate::smp::online_cpus();
+    let list = format!("{cpus}\n");
     for name in ["online", "possible", "present"] {
-        b.text(&format!("devices/system/cpu/{name}"), CPU_LIST);
+        b.text(&format!("devices/system/cpu/{name}"), &list);
     }
-    b.dir("devices/system/cpu/cpu0");
+    for cpu in cpus.iter() {
+        b.dir(&format!("devices/system/cpu/cpu{cpu}"));
+    }
     let devices = [
         ("mem", "null", NULL),
         ("mem", "zero", ZERO),

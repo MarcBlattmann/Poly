@@ -27,13 +27,14 @@ what exists **today** and how it fits that plan.
                                interpreter, glibc's own ld.so (poly-elf)
             file systems: VFS (poly-vfs), tmpfs root from the initramfs, ext2/ext4 disks behind the page cache (poly-pagecache)
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
+            SMP: every CPU started (poly-smp), per-CPU areas, run queues per CPU (poly-sched), IPIs, TLB shootdowns
             block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
             network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets;
                      socket files (inet, poly-unix Unix sockets, netlink) with per-socket wake-ups
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             display: QEMU standard VGA framebuffer + RAM back buffer; poly-gfx (drawing, font, text grid)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
-                         syscall/sysret, FPU state, context switch)
+                         syscall/sysret, FPU state, context switch, AP start-up, per-CPU data)
 ```
 
 ## Boot flow
@@ -49,7 +50,8 @@ what exists **today** and how it fits that plan.
    FPU state, SMEP/SMAP/PCIDs when present), hands all usable RAM to the
    frame allocator, starts the
    scheduler, reads the ACPI tables, sets up interrupts and time
-   (`arch::init_interrupts`) and enables them, enumerates PCI, brings up the
+   (`arch::init_interrupts`) and enables them, starts the other CPUs
+   (`smp::init`, see "Several CPUs"), enumerates PCI, brings up the
    block layer (the virtio-blk disk if there is one, and a RAM disk) and the
    PS/2 keyboard and the display (which shows the boot screen), mounts a
    tmpfs on `/` filled from the initramfs, makes the page cache, starts the
@@ -961,8 +963,9 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   personality (privileges, `MountRequest`, per-type mount options) and
   done by the kernel through a third services trait, `LinuxAdmin`
   (`LinuxKernel::admin`); `getpriority`, `setpriority` and the `sched_*`
-  calls (`sys/sched.rs`) keep a nice value per process and report one CPU
-  and `SCHED_OTHER`; `sendfile` (`sys/sendfile.rs`) copies through a
+  calls (`sys/sched.rs`) keep a nice value per process and report
+  `SCHED_OTHER`; CPU affinity and `sched_yield` go to the kernel's
+  scheduler (`LinuxKernel::cpu_affinity`, ADR 0053); `sendfile` (`sys/sendfile.rs`) copies through a
   kernel buffer.
 - **Linux processes and threads**
   ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md)): `clone`,
@@ -1220,7 +1223,8 @@ services once it decodes those system calls.
 | Processes and threads from ring 3: fork with copy on write, zombies (waitid `WNOWAIT`, kill 0) and wait4's status, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and a futex and its robust lock released at exit, an orphan adopted while shared anonymous memory stays shared, vfork + execve of `/bin/hello`, of a missing file and of a `#!` script, execve by a second thread (the other thread ended, close-on-exec files closed, the pid taken over); every user frame freed afterwards. `Memory::fork` itself: pages shared until written, frames freed with the last user, shared anonymous and parked pages | `kernel_test!` in `linux/task_tests.rs`, `user/memory/fork.rs` | every boot |
 | Credentials from ring 3: root dropped with setresuid (a 0600 file is `EACCES`, setuid(0) `EPERM`, no capabilities left), a set-user-ID-root program run with execve (euid 0 and capabilities; ignored with `no_new_privs`), capabilities lost and regained across execve, `keep_caps`, capabilities dropped with `PR_CAPBSET_DROP` and capset, the sticky `/tmp`, chown/chmod rules and a write clearing set-group-ID, credentials inherited by fork while a thread's changes stay its own, kill refused to a less privileged child | `kernel_test!` in `linux/cred_tests.rs` | every boot |
 | Static Linux hello worlds as the first process (`poly.init`): nolibc (Rust, built with the pinned toolchain), freestanding C and static glibc (skipped without a C compiler or static C library); output and exit status 0 | `tools/xtask/src/programs.rs` | `cargo xtask test` |
-| `/bin/forkexec` as init (nolibc Rust, `tools/xtask/programs/forkexec.rs`): fork + execve + wait4, copy on write, a TLS thread joined by futex, an orphan reaped by init | `tools/xtask/src/programs.rs` | `cargo xtask test` |
+| `/bin/forkexec` as init (nolibc Rust, `tools/xtask/programs/forkexec.rs`): fork + execve + wait4, copy on write, a TLS thread joined by futex, two threads pinned to two CPUs waking each other with futexes and a fork while one stores on the other CPU (the child's copy must stand still), an orphan reaped by init | `tools/xtask/src/programs.rs` | `cargo xtask test` |
+| SMP: every CPU the MADT lists online (numbers, APIC IDs, each CPU's tick), one thread pinned to each CPU running at once, spinlock and mutex counters exact under contention from every CPU, TLB shootdowns (a thread on another CPU reading a page that is unmapped, or writing one made read-only, faults at once) | `kernel_test!` in `smp.rs`, `user/tests.rs` | every boot; `cargo xtask test` boots on 1, 2 and 4 CPUs, and with `poly.cpus=2` and `poly.smp=off` |
 | Terminals on the host: the line discipline (canonical editing, echo flags, signals, flow control, `MIN` / `TIME`, input mappings, output processing), terminals against a fake host (controlling terminal, `SIGTTIN` / `SIGTTOU` / `EIO`, the ioctls, blocking reads and writes), ptys through a real VFS with threads (devpts, locking, echo, waiting for room, hangups) | `poly-tty`, `poly-personality-linux` (`task::jobs`) | `cargo test --workspace` (host) |
 | Terminals from ring 3: a pty slave reading a line a second thread types on the master (and the echo on the master), `TCGETS` / `TCSETS` and raw mode with `poll`, `epoll` and `FIONREAD`, `^C` on the master killing the foreground group with `SIGINT`, a background child writing with `TOSTOP` getting `SIGTTOU` (its handler, `EINTR`; blocked, the write goes through), `TIOCSWINSZ` sending `SIGWINCH`, the console as a terminal and `/dev/tty` after `TIOCSCTTY`, devpts nodes coming and going | `kernel_test!` in `tty/tests.rs` | every boot |
 | `/bin/ttyinit` as init on the serial console (nolibc Rust, `tools/xtask/programs/ttyinit.rs`), typed into through QEMU's stdin: a line edited with DEL and its echo, `^C` interrupting a read with `SIGINT`, single keys in raw mode | `tools/xtask/src/programs.rs` | `cargo xtask test` |
@@ -1337,7 +1341,8 @@ own PML4: the lower half is theirs, the higher half is the kernel's
 
 ## Interrupts and time
 
-Single CPU (the application processors stay parked). The controllers and
+Each CPU has its own local APIC and tick; device interrupts go to the boot
+CPU (see "Several CPUs" for the APs). The controllers and
 the arithmetic are in `poly-irq`
 ([ADR 0013](adr/0013-interrupt-controllers-and-time-base.md)); the kernel
 wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md)).
@@ -1358,8 +1363,9 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   virtio), `apic::CpuMsr` (only the APIC's MSRs) and `apic::CpuPorts` (only
   the 8259's ports).
 - **Vectors:** 0x00-0x1f exceptions, 0x20-0x2f the masked 8259s (only a
-  spurious IRQ 7/15 can arrive), 0x30-0xef devices, 0xf0 the tick,
-  0xf1-0xfd reserved for IPIs, 0xfe APIC error, 0xff APIC spurious (never an
+  spurious IRQ 7/15 can arrive), 0x30-0xef devices, 0xf0 the tick (every CPU's),
+  0xf1 the reschedule IPI, 0xf2 the TLB shootdown IPI, 0xf3-0xfd reserved
+  for IPIs, 0xfe APIC error, 0xff APIC spurious (never an
   EOI). Every vector has an interrupt-gate stub in `idt.rs` pushing the same
   `TrapFrame`; `arch::irq::dispatch` handles 32-255.
 - **Drivers:** `arch::irq::allocate_vector(handler, data)` claims a device
@@ -1375,7 +1381,9 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
 - **Time:** `time::now_ns()` is nanoseconds since boot from
   `poly_irq::MonotonicClock`: the TSC when it is invariant and calibrated,
   otherwise the reference timer (under QEMU's TCG: the HPET). It never goes
-  backwards, also across threads. `time::ticks()` counts tick interrupts.
+  backwards, also across threads and CPUs. `time::ticks()` counts the boot
+  CPU's tick interrupts, `time::cpu_ticks()` the running CPU's (each CPU's
+  count is in its per-CPU area).
   The boot log prints the APIC mode, the HPET, the TSC rate, the clock
   source and the APIC timer rate.
 - **Wall clock:** `time::realtime_ns()` reads the CMOS RTC once, at its
@@ -1389,28 +1397,114 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   user and system time by tick samples (the tick records whether it
   interrupted ring 3); a reaped thread's time moves to its process.
 
+## Several CPUs (SMP)
+
+Every CPU the MADT lists is started at boot and runs threads; decisions in
+[ADR 0053](adr/0053-smp-per-cpu-data-scheduling-and-tlb-shootdowns.md).
+The boot log says how it went:
+
+```text
+smp: 4 of 4 CPUs online (0-3)
+```
+
+- **Which CPUs.** `poly_smp::plan` (host-tested): the boot CPU, then the
+  MADT's enabled processors in order, up to `poly.cpus=<n>` (the boot CPU
+  included) and `percpu::MAX_CPUS` (16); `poly.smp=off` keeps the boot CPU
+  only. CPU numbers are dense, 0 the boot CPU, in start order; the local
+  APIC ID of each is in its per-CPU area, for IPIs.
+- **Start-up** (`arch/x86_64/smp.rs`, after interrupts and the clock are up
+  on the boot CPU, one AP at a time): the trampoline (four pages of usable
+  RAM below 640 KiB, kept out of every allocator by `kernel_entry`; layout
+  in `poly_smp::trampoline`) gets its code, its GDT, page tables (the first
+  2 MiB 1:1 and the kernel's higher half) and a parameter block (the AP's
+  idle stack, `ap_entry`, its CPU number). INIT, then two SIPIs with the
+  SDM's delays (`poly_smp::startup`). The AP climbs from real mode to long
+  mode, enters `ap_entry` on its idle thread's stack, loads the kernel
+  PML4, its own GDT and TSS (own double-fault and NMI/machine-check IST
+  stacks), the IDT and its GS base, says "started" (the trampoline is free
+  for the next AP), then sets up NXE, PAT, global pages,
+  SMEP/SMAP/PCIDs, the FPU, `syscall`, IA32_TSC_AUX (its CPU number, for
+  `getcpu`), its local APIC and its tick (the boot CPU's calibration),
+  says "online", joins the scheduler and runs its idle loop. The boot CPU
+  waits up to two seconds per step; a CPU that does not answer is logged
+  and left out.
+- **Per-CPU data** (`arch/x86_64/percpu.rs`): one `PerCpu` per CPU, its
+  address in GS base in the kernel: at fixed offsets the `syscall` kernel
+  stack (`gs:[0]`), a user-RSP scratch slot (`gs:[8]`) and a pointer to
+  itself (`gs:[16]`); then the CPU number and APIC ID, the current thread,
+  the spinlock count, interrupt nesting, the tick count, the FPU owner, the
+  loaded address space and its PCID table, the CPU's TSS. `percpu::this()`
+  reads it. Entries from ring 3 `swapgs`; NMI, double fault and machine
+  check (IST stacks, any GS) load GS base from the top word of their IST
+  stack, where each CPU stored its area, and restore the old one on exit.
+- **IPIs.** Vector 0xf1 reschedules: the scheduler names the idle CPUs it
+  just gave a thread to, and the kernel sends them this after unlocking,
+  ending their `hlt`; it also hurries a thread on another CPU to a signal
+  or a group exit (`process::ThreadFlags::kick`). Vector 0xf2 is the TLB
+  shootdown (below). A panic stops every other CPU with an NMI.
+- **TLB shootdowns** (`arch/x86_64/tlb.rs` over `poly_smp::tlb`): one
+  request at a time in a mailbox: an address space (its PML4) or the
+  kernel's mappings, and the pages (or everything, past 32 pages); a
+  pending flag per target CPU, the IPI, and the sender waits (interrupts
+  off) until every target cleared its flag. Every loop that waits with
+  interrupts off (a spinlock spin, a shootdown's wait, a parked CPU) serves
+  its own CPU's mailbox, so CPUs shooting at each other, or spinning on a
+  lock the sender holds, cannot deadlock. Each address space keeps the mask
+  of CPUs it is loaded on; a change that removes or narrows translations
+  (`munmap`, `mprotect`, a page taken out, `fork`'s write-protection for
+  copy on write, freed page tables) forgets the space's PCIDs on the other
+  CPUs, invalidates locally, then shoots the CPUs in the mask, and frees
+  frames and tables only afterwards; one operation is one shootdown
+  (`fork` makes all its pages read-only, then shoots once). Unmapping a
+  thread stack (global kernel mappings) shoots every CPU
+  (`tlb::flush_kernel`).
+- **One CPU at a time when needed.** `smp::exclusive()` drains every other
+  CPU (its threads move away) and parks it in its idle loop with
+  interrupts off until the guard is dropped; tests that count frames use
+  it. `thread::pin_current()` keeps the caller on its CPU.
+- **What user space sees.** `/proc/cpuinfo` lists every CPU running,
+  `/sys/devices/system/cpu/{online,possible,present}` are `0-<n-1>` with a
+  `cpu<i>` directory each, `sched_getaffinity` / `sched_setaffinity` (a
+  64-bit mask, inherited by `clone` and `fork`), `sched_yield`, and
+  `getcpu` (the system call, and the vDSO through `RDPID` or `RDTSCP` when
+  the CPU has them). The status bar counts the CPUs online.
+
 ## Threads and scheduling
 
-Kernel threads, some of which run user code (user threads, below), on one
-CPU, round robin, preempted by the timer. See
-[ADR 0012](adr/0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md)
-and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
+Kernel threads, some of which run user code (user threads, below), on
+every CPU, round robin per CPU, preempted by each CPU's timer. See
+[ADR 0012](adr/0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md),
+[ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md) and
+[ADR 0053](adr/0053-smp-per-cpu-data-scheduling-and-tlb-shootdowns.md).
 
-- **Policy in `poly-sched`** (host-tested, including a randomized check
-  against a reference model). `Scheduler<N>` is a fixed table of `N` thread
-  slots with no other memory: a FIFO run queue and caller-owned
-  `WaitQueue`s, all linked through one `next` field per slot (a thread is on
-  at most one list). `ThreadId` is slot + generation, so a stale id never
-  names a later thread in the same slot. Every operation that changes the
-  running thread (`yield_now`, `block_current`, `join`, `exit_current`)
-  returns a `Switch { from, to }` and leaves the switching to the kernel.
+- **Policy in `poly-sched`** (host-tested, including randomized checks
+  against a reference model and of the SMP invariants). `Scheduler<N, C>`
+  is a fixed table of `N` thread slots with no other memory: a FIFO run
+  queue per CPU and caller-owned `WaitQueue`s, all linked through one
+  `next` field per slot (a thread is on at most one list). `ThreadId` is
+  slot + generation, so a stale id never names a later thread in the same
+  slot. Every operation that changes a CPU's running thread (`yield_now`,
+  `block_current`, `join`, `exit_current`, all per CPU) returns a
+  `Switch { from, to }` and leaves the switching to the kernel.
+- **Placement and balancing.** A new or woken thread goes to its previous
+  CPU if that is idle, else to an idle CPU it may run on (its affinity, a
+  `CpuSet`), else to the least loaded one. A CPU whose queue is empty, or
+  two shorter than another's, takes the first thread there that may run
+  on it when it picks its next thread. The idle CPUs that got a thread are
+  collected (`take_kicks`) and sent a reschedule IPI.
+- **Affinity.** `spawn_on(name, f, arg, cpus)`, `set_affinity(id, cpus)`
+  (a running thread outside the set leaves at its CPU's next tick, at once
+  if it is the caller), `affinity(id)`, `cpu_of(id)`, `pin_current()`;
+  Linux threads through `sched_setaffinity`.
 - **Time slices.** Each thread gets `TIME_SLICE_TICKS` (10) ticks when it is
   switched in. `tick()` returns true when the slice is used up *and*
   another thread is runnable (a lone thread just gets a new slice); the idle
   thread gives way as soon as anything is runnable.
 - **Thread 0 and idle.** `thread::init()` (right after the frame allocator)
-  makes the boot code thread 0, still on the boot stack, and creates the
-  idle thread, which runs only when nothing else can. It halts with
+  makes the boot code thread 0, still on the boot stack, and creates CPU
+  0's idle thread; each AP gets one when it is started (`prepare_cpu`) and
+  runs its start-up code on its stack. An idle thread runs only when
+  nothing else can on its CPU. It halts with
   interrupts enabled (`sti; hlt`, atomic) until an interrupt makes a thread
   runnable. Before interrupts are set up nothing could, so then it panics
   with a "deadlock" message and a backtrace instead of hanging.
@@ -1449,18 +1543,23 @@ and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
   take a lock that does not mask interrupts checks `thread::reaping()`
   and defers that part (a `user::Memory` hands its files and page-cache
   pages to the writeback thread, `fs::cache::release_later`).
-- **Interrupts and locking.** Every `THREADS` critical section runs with
-  interrupts off, and the lock is dropped before the switch; with one CPU
-  and interrupts off nothing can run in between. Each thread restores its
-  own interrupt state when the switch returns into it; new threads start
-  with interrupts enabled. `switch` panics if the thread holds a spinlock
-  or is inside an interrupt handler. SMP needs the lock (or an "on CPU"
-  flag) held until the outgoing thread's registers are saved.
-- **Preemption.** The tick handler counts the tick, sends the EOI and calls
-  `thread::on_timer_tick()`: it wakes sleepers whose deadline has passed
-  (the earliest deadline is kept in an atomic, so most ticks do nothing
-  there) and calls `preempt_tick()`, which switches once the running thread
-  has used its 10-tick slice and another is runnable. This runs on the
+- **Interrupts and locking.** All scheduler state for all CPUs is behind
+  one spinlock, `THREADS`, which masks interrupts while held, and the lock
+  is dropped before the switch. Until the outgoing thread's registers are
+  saved, another CPU must neither resume it nor reap its stack: the
+  scheduler marks it "being saved" (not pickable, stealable or reapable)
+  until its CPU calls `saved(cpu)`, first thing on the incoming thread
+  (`finish_switch`, under the lock, which also publishes the saved stack
+  pointer). Each thread restores its own interrupt state when the switch
+  returns into it; new threads start with interrupts enabled. `switch`
+  panics if the thread holds a spinlock or is inside an interrupt handler.
+- **Preemption.** Each CPU's tick handler counts the tick, sends the EOI
+  and calls `thread::on_timer_tick()`: it wakes sleepers whose deadline
+  has passed (the earliest deadline is kept in an atomic, so most ticks do
+  nothing there; a CPU claims a due deadline with a compare-and-exchange,
+  so one CPU wakes it) and calls `preempt_tick()`, which switches once the
+  CPU's running thread has used its 10-tick slice and the CPU has another
+  to run, its own or one it takes from a busier CPU. This runs on the
   interrupted thread's own stack (no IST), since the handler's frames stay
   there while the thread is switched out.
 
@@ -1482,13 +1581,16 @@ machine; the decisions are in
   lower half (`poly_paging::PageTables::clear`) and the PML4. All of it is
   4 KiB pages under a per-space spinlock (taken before `FRAMES`).
 - **CR3 and the TLB.** The scheduler loads the address space of each user
-  thread it switches to, and the kernel PML4 for kernel threads. Changing a
-  loaded space invalidates the page (`INVLPG`); without PCIDs every CR3 load
-  flushes the rest. With PCIDs (CPUID.01H:ECX.PCID; QEMU's TCG has none, so
-  this path is only exercised on KVM or hardware) spaces take PCIDs 1-255
-  round robin, a load skips the flush when the PCID is still the space's,
-  and a space that changed while not loaded flushes on its next load.
-  Kernel mappings are global and never flushed.
+  thread it switches to, and the kernel PML4 for kernel threads; the space
+  records the CPUs it is loaded on. Changing a space invalidates the page
+  (`INVLPG`) here and shoots down the other CPUs that have it loaded (see
+  "Several CPUs"); without PCIDs every CR3 load flushes the rest. With
+  PCIDs (CPUID.01H:ECX.PCID; QEMU's TCG has none, so this path is only
+  exercised on KVM or hardware) each CPU hands out PCIDs 1-255 round robin,
+  a load skips the flush when the CPU's PCID is still the space's, and a
+  space that changed forgets its PCIDs on the other CPUs, so they flush on
+  their next load. Kernel mappings are global and flushed only by
+  `tlb::flush_kernel`.
 - **Threads.** `user::spawn(process, space, entry, hook)` starts a thread
   of `process` in `space` at `entry` (RIP, RSP, three arguments in RDI, RSI,
   RDX). It is a kernel thread with a 16 KiB kernel stack whose user state
@@ -1537,10 +1639,11 @@ machine; the decisions are in
   still hold.
 - **FPU state.** The kernel is soft-float. Each user thread has an XSAVE
   area (x87, SSE, AVX when present; FXSAVE's 512 bytes without XSAVE) on the
-  heap. The registers always hold one user thread's state (the owner):
-  switching to another user thread saves the owner's and restores the new
-  one's, switching to kernel threads or back to the owner costs nothing; no
-  #NM traps. IA32_FS_BASE and the user GS base are saved and restored per
+  heap. Each CPU's registers hold one user thread's state (that CPU's
+  owner): switching away from a user thread saves it (it may run on
+  another CPU next), switching to one restores its state unless this CPU's
+  registers still hold it (it was the owner here and ran nowhere else
+  since); switching to kernel threads costs nothing; no #NM traps. IA32_FS_BASE and the user GS base are saved and restored per
   thread (`user::set_fs_base`, `set_gs_base`; FSGSBASE stays off).
 
 ```text
@@ -1633,11 +1736,14 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
 
 `kernel/src/sync.rs`:
 
-- `SpinLock<T>` busy-waits and keeps interrupts disabled from before it is
+- `SpinLock<T>` is an SMP lock (atomic exchange, Acquire / Release) that
+  busy-waits and keeps interrupts disabled on its CPU from before it is
   taken until after it is released (restoring the previous state), so an
   interrupt handler can never deadlock on a lock held by the code it
-  interrupted, and holders are never preempted. `RawIrqSpinLock` is the same
-  for the heap. Critical sections must not block; the scheduler checks.
+  interrupted, and holders are never preempted. While spinning it serves
+  TLB shootdowns. `RawIrqSpinLock` is the same for the heap. Critical
+  sections must not block; the scheduler checks (`spinlocks_held()` is per
+  CPU). Interrupts off is no lock any more: other CPUs run meanwhile.
 - `Mutex<T>` sleeps: a thread that finds it held blocks on a `WaitQueue`
   and is woken when it is released. It may be held across blocking calls,
   not taken in interrupt handlers, and locking it twice from one thread
@@ -1647,6 +1753,15 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   lock, the page cache's inode and namespace locks).
 - `SetOnce<T>`: written once at boot, read without a lock (local APIC,
   clock).
+
+Lock order, where locks nest: the heap; then `paging::KERNEL` or a user
+address space's table lock; then `FRAMES`. `THREADS` is a leaf (it takes
+`FRAMES` only with `try_lock`, and drops exited threads' user state after
+unlocking); waking threads from under another lock is fine, that lock
+comes first. A TLB shootdown may be sent holding a table lock (it waits
+with interrupts off, serving its own mailbox); its mailbox is last of all.
+Sleeping locks (`Mutex`, `RawMutex`) come before every spinlock and are
+never taken with one held.
 
 ## Kernel shell
 

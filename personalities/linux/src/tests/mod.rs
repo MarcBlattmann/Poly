@@ -12,6 +12,7 @@ mod madvise;
 mod mem;
 mod ns;
 mod process;
+mod sched;
 mod seccomp;
 mod signal;
 mod socket;

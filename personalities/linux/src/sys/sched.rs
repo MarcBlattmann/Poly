@@ -1,12 +1,21 @@
-//! Priorities and scheduling (ADR 0051): getpriority(2), setpriority(2),
-//! sched_yield(2), sched_getaffinity(2), sched_setaffinity(2) and the
-//! scheduling policy calls of sched(7).
+//! Priorities and scheduling (ADR 0051, ADR 0053): getpriority(2),
+//! setpriority(2), sched_yield(2), sched_getaffinity(2),
+//! sched_setaffinity(2) and the scheduling policy calls of sched(7).
 //!
 //! Poly's scheduler is round-robin without priorities (ADR 0012), so the
 //! nice value is kept per process ([`LinuxProcess::nice`], inherited by
 //! fork) and reported, but changes nothing yet; the policy is always
 //! `SCHED_OTHER`. Real-time policies are refused (`EPERM`): accepting them
 //! would promise behaviour Poly does not have.
+//!
+//! CPU affinity is real (ADR 0053): the kernel keeps each thread's set of
+//! CPUs ([`LinuxKernel::cpu_affinity`]). An affinity mask is a bit set of
+//! CPU numbers in memory, `cpusetsize` bytes long, CPU `n` in bit `n % 8`
+//! of byte `n / 8` (CPU_SET(3)); the kernel's mask is [`MASK_BYTES`] bytes
+//! (64 CPUs), and bits beyond it are ignored. A mask with no CPU the
+//! system runs is `EINVAL`. The two calls answer `ESRCH` for a thread id
+//! that names no thread, a negative one included (their man page lists no
+//! `EINVAL` for the id).
 //!
 //! [`LinuxProcess::nice`]: crate::LinuxProcess::nice
 
@@ -51,13 +60,10 @@ pub const SCHED_DEADLINE: i32 = 6;
 /// `SCHED_RESET_ON_FORK`, or-ed into the policy.
 pub const SCHED_RESET_ON_FORK: i32 = 0x4000_0000;
 
-/// The CPUs Poly schedules on: one, CPU 0 (`sched_getaffinity` reports it;
-/// a mask without it is refused).
-pub const CPUS: u32 = 1;
-
-/// sched_yield(): always succeeds; the caller's time slice simply goes on
-/// (the scheduler preempts at the next tick).
-pub fn sched_yield(_k: &mut dyn LinuxKernel, _a: &Args) -> SysResult {
+/// sched_yield(): let another thread run on this CPU, if one is waiting;
+/// always succeeds.
+pub fn sched_yield(k: &mut dyn LinuxKernel, _a: &Args) -> SysResult {
+    k.yield_cpu();
     Ok(0)
 }
 
@@ -222,9 +228,18 @@ pub fn sched_get_priority_min(_k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
 }
 
-/// The size of the kernel's CPU mask: one `unsigned long` covers
-/// [`CPUS`].
-const MASK_BYTES: usize = 8;
+/// The size of the kernel's CPU mask: one `unsigned long`, 64 CPUs.
+pub const MASK_BYTES: usize = 8;
+
+/// The thread id an affinity call names: 0 is the caller; `ESRCH` for a
+/// negative one.
+fn affinity_target(k: &dyn LinuxKernel, pid: i32) -> Result<i32, Errno> {
+    match pid {
+        0 => Ok(k.tid()),
+        p if p < 0 => Err(Errno::ESRCH),
+        p => Ok(p),
+    }
+}
 
 /// sched_getaffinity(pid, cpusetsize, mask): the raw call returns the
 /// number of bytes it wrote (sched_setaffinity(2) NOTES); `EINVAL` if
@@ -235,19 +250,25 @@ pub fn sched_getaffinity(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if size < MASK_BYTES || !size.is_multiple_of(8) {
         return Err(Errno::EINVAL);
     }
-    thread_target(k, a.int(0))?;
-    let mask = ((1u64 << CPUS) - 1).to_le_bytes();
-    k.copy_to_user(a.ptr(2), &mask)?;
+    let tid = affinity_target(k, a.int(0))?;
+    let mask = k.cpu_affinity(tid)?;
+    k.copy_to_user(a.ptr(2), &mask.to_le_bytes())?;
     Ok(MASK_BYTES as u64)
 }
 
-/// sched_setaffinity(pid, cpusetsize, mask): the mask must contain a CPU
-/// Poly runs on (`EINVAL` otherwise); the thread keeps running there.
+/// sched_setaffinity(pid, cpusetsize, mask): the thread runs only on the
+/// mask's CPUs from now on (a running thread moves at once if it is the
+/// caller, else at its CPU's next tick); `EINVAL` if the mask names no CPU
+/// the system runs.
 pub fn sched_setaffinity(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let size = (a.ulong(1) as usize).min(4096);
-    let mut mask = alloc::vec![0u8; size];
-    k.copy_from_user(a.ptr(2), &mut mask)?;
-    thread_target(k, a.int(0))?;
-    let ours = (0..CPUS as usize).any(|cpu| mask.get(cpu / 8).is_some_and(|b| b & (1 << (cpu % 8)) != 0));
-    if ours { Ok(0) } else { Err(Errno::EINVAL) }
+    let tid = affinity_target(k, a.int(0))?;
+    let len = (a.ulong(1) as usize).min(MASK_BYTES);
+    let mut bytes = [0u8; MASK_BYTES];
+    k.copy_from_user(a.ptr(2), &mut bytes[..len])?;
+    let mask = u64::from_le_bytes(bytes);
+    if mask == 0 {
+        return Err(Errno::EINVAL);
+    }
+    k.set_cpu_affinity(tid, mask)?;
+    Ok(0)
 }

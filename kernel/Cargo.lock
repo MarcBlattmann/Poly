@@ -101,6 +101,7 @@ dependencies = [
  "poly-random",
  "poly-rtc",
  "poly-sched",
+ "poly-smp",
  "poly-term",
  "poly-tty",
  "poly-unix",
@@ -179,6 +180,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-sched"
 version = "0.0.1"
+
+[[package]]
+name = "poly-smp"
+version = "0.0.1"
+dependencies = [
+ "poly-sched",
+]
 
 [[package]]
 name = "poly-term"

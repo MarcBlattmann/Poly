@@ -443,7 +443,10 @@ impl ProcSource for KernelProc {
 
     fn cpus(&self) -> Vec<CpuInfo> {
         let khz = arch::time::info().and_then(|i| i.tsc_hz).map_or(0, |hz| hz / 1000);
-        alloc::vec![arch::cpuinfo::cpu_info(khz)]
+        crate::arch::percpu::all()
+            .filter(|c| crate::smp::online_cpus().contains(c.index()))
+            .map(|c| arch::cpuinfo::cpu_info(c.index() as u32, c.apic_id(), khz))
+            .collect()
     }
 
     fn filesystems(&self) -> Vec<(String, bool)> {

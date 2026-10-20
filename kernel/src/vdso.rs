@@ -159,6 +159,11 @@ fn setup() -> Option<&'static Vdso> {
         vvar: Arc::new(VvarSource { page }),
     };
     let v = VDSO.set(vdso).ok()?;
+    v.vvar.vvar().set_cpu_number(match arch::user::cpu_number_instruction() {
+        arch::user::CpuNumber::Rdpid => poly_vdso::CpuNumber::Rdpid,
+        arch::user::CpuNumber::Rdtscp => poly_vdso::CpuNumber::Rdtscp,
+        arch::user::CpuNumber::Syscall => poly_vdso::CpuNumber::Syscall,
+    });
     publish();
     Some(v)
 }

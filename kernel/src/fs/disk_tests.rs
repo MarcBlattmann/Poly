@@ -6,7 +6,6 @@
 use super::cache::{self, FileSource};
 use super::disk::{self, DiskIo};
 use super::*;
-use crate::arch::cpu::InterruptsOff;
 use crate::frames::FRAMES;
 use crate::kernel_test;
 use crate::ktest::TestEnv;
@@ -318,7 +317,7 @@ kernel_test! {
             return Err("/mnt/dir/big.bin has the wrong size");
         }
         let c = cache::cache();
-        let _irq = InterruptsOff::new();
+        let _only = crate::smp::exclusive();
         // Frames that are free or the heap's: eviction's own bookkeeping may
         // move frames between the two.
         let free = || FRAMES.lock().as_ref().map_or(0, |f| f.free_frames()) + crate::heap::stats().pages_held as u64;

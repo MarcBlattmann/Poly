@@ -777,6 +777,31 @@ pub trait LinuxKernel {
         let _ = (minuteswest, dsttime);
     }
 
+    /// The CPU the calling thread runs on (getcpu(2)); it may move to
+    /// another right after.
+    fn current_cpu(&self) -> u32 {
+        0
+    }
+
+    /// Give up the CPU to another runnable thread, if there is one
+    /// (sched_yield(2)).
+    fn yield_cpu(&mut self) {}
+
+    /// The CPUs thread `tid` may run on, as a mask of CPU numbers (bit `n`
+    /// = CPU `n`), limited to the CPUs the system has. `ESRCH` if there is
+    /// no such thread, `EPERM` if the caller may not look at it.
+    fn cpu_affinity(&mut self, tid: i32) -> Result<u64, Errno> {
+        if tid == self.tid() { Ok(1) } else { Err(Errno::ESRCH) }
+    }
+
+    /// Let thread `tid` run only on the CPUs in `mask` (sched_setaffinity(2)).
+    /// `EINVAL` if `mask` names no CPU the system has, `ESRCH` if there is
+    /// no such thread, `EPERM` if the caller may not change it.
+    fn set_cpu_affinity(&mut self, tid: i32, mask: u64) -> Result<(), Errno> {
+        self.cpu_affinity(tid)?;
+        if mask & 1 == 0 { Err(Errno::EINVAL) } else { Ok(()) }
+    }
+
     /// The period of the kernel's timer tick in nanoseconds: the
     /// resolution of the coarse clocks.
     fn tick_ns(&self) -> u64 {
