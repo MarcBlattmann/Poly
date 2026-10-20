@@ -2,6 +2,7 @@
 //! getrandom(2).
 
 use crate::abi::{Timespec, clock as id, random, utsname_bytes};
+use crate::admin::SystemName;
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::{Clock, LinuxKernel, RandomMode};
@@ -31,13 +32,20 @@ pub const UNAME_MACHINE: &str = "x86_64";
 /// uname(buf): fills `struct new_utsname`; `EFAULT` if `buf` cannot be
 /// written ("EFAULT buf is not valid").
 pub fn uname(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    // The names sethostname(2) and setdomainname(2) set, where the kernel
+    // keeps them (ADR 0051).
+    let names = k.admin().map(|s| (s.system_name(SystemName::Host), s.system_name(SystemName::Domain)));
+    let (host, domain) = match &names {
+        Some((h, d)) => (h.as_slice(), d.as_slice()),
+        None => (k.hostname(), k.domainname()),
+    };
     let bytes = utsname_bytes([
         UNAME_SYSNAME.as_bytes(),
-        k.hostname(),
+        host,
         UNAME_RELEASE.as_bytes(),
         UNAME_VERSION.as_bytes(),
         UNAME_MACHINE.as_bytes(),
-        k.domainname(),
+        domain,
     ]);
     k.copy_to_user(a.ptr(0), &bytes)?;
     Ok(0)

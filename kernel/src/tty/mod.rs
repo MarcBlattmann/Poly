@@ -53,6 +53,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_tty::device::{Console, ControllingTty, TtyDevice};
 use poly_tty::devpts::DevPts;
+use poly_tty::hw;
 use poly_tty::pty::{PTMX, Ptys};
 use poly_tty::termios::{Termios, Winsize, cflag};
 use poly_tty::{Driver, Tty, Ttys};
@@ -118,6 +119,19 @@ impl Driver for SerialDriver {
         crate::log::write_tty(bytes);
     }
 
+    fn device_ioctl(&self, request: u32) -> Option<alloc::vec::Vec<u8>> {
+        // COM1: a 16550A at port 0x3f8, ISA IRQ 4, 1.8432 MHz / 16.
+        let info = hw::SerialInfo {
+            kind: hw::PORT_16550A,
+            line: 0,
+            port: 0x3f8,
+            irq: 4,
+            xmit_fifo_size: 16,
+            baud_base: 115_200,
+        };
+        hw::serial_ioctl(&info, request)
+    }
+
     fn opened(&self, open: bool) {
         SERIAL_OPEN.store(open, Ordering::SeqCst);
         OPENED.wake_all();
@@ -130,6 +144,11 @@ struct ScreenDriver;
 impl Driver for ScreenDriver {
     fn write(&self, bytes: &[u8]) {
         terminal::tty_output(bytes);
+    }
+
+    fn device_ioctl(&self, request: u32) -> Option<alloc::vec::Vec<u8>> {
+        // tty1, the one virtual console.
+        hw::vt_ioctl(1, request)
     }
 
     fn opened(&self, open: bool) {
@@ -186,6 +205,12 @@ pub fn init(boot: &BootInfo) {
         "tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is {}, ptys on /dev/pts",
         console_tty.name()
     );
+}
+
+/// A devpts over the machine's pseudo-terminals, for a mount(2) of
+/// `devpts` (ADR 0051): every instance shows the same ptys.
+pub fn new_devpts() -> Option<Arc<dyn poly_vfs::FileSystem>> {
+    Some(Arc::new(DevPts::new(terminals()?.ptys.clone())))
 }
 
 /// The nodes in `/dev` (those the root does not have yet) and devpts.

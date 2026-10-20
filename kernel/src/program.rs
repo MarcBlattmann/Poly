@@ -175,6 +175,7 @@ pub fn run_on(
 /// program's own status being in the `POLY-EXIT` record. Returns whether
 /// `poly.init` was given.
 pub fn run_init(boot: &BootInfo) -> bool {
+    crate::linux::strace::configure(boot);
     let Some(path) = boot.arg(testrun::INIT_ARG) else { return false };
     let traced = boot.has_flag(testrun::CAPTURE_FLAG);
     kprintln!("init: running {path}{}", if traced { " (traced)" } else { "" });

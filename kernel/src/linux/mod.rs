@@ -28,6 +28,8 @@
 //! to the personality by `with_process`. One futex table serves every
 //! process ([`FUTEXES`]).
 
+pub mod admin;
+mod admin_tests;
 pub mod cred;
 mod cred_tests;
 mod fileio_tests;
@@ -37,6 +39,7 @@ pub mod net;
 mod services;
 pub mod signalfd;
 mod socket_tests;
+pub mod strace;
 pub mod task;
 mod task_tests;
 mod tests;
@@ -134,12 +137,16 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     };
     let number = regs.rax;
     let args = [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9];
+    let strace = strace::enter(process, number, &args);
     k.enter_syscall(number);
     let outcome = Linux::dispatch_with(&mut k, regs);
     k.set_result(regs.rax);
     let exit = k.take_exit();
     if process.traced {
         testrun::syscall(process.pid, number, &args, exit.is_none().then_some(regs.rax));
+    }
+    if let Some(line) = strace {
+        strace::exit(line, exit.is_none().then_some(regs.rax));
     }
     if let Some(status) = exit {
         let _ = user::request_exit(status);

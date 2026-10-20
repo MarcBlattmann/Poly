@@ -4,8 +4,8 @@
 extern crate std;
 
 use crate::fadt::{
-    CENTURY, DSDT, FADT_MINOR_VERSION, FLAGS, IAPC_BOOT_ARCH, PM_TMR_BLK, PM_TMR_LEN, RESET_REG, RESET_VALUE, SCI_INT,
-    SMI_CMD, X_DSDT, X_PM_TMR_BLK,
+    ACPI_ENABLE, CENTURY, DSDT, FADT_MINOR_VERSION, FLAGS, IAPC_BOOT_ARCH, PM_TMR_BLK, PM_TMR_LEN, PM1_CNT_LEN,
+    PM1A_CNT_BLK, RESET_REG, RESET_VALUE, SCI_INT, SMI_CMD, X_DSDT, X_PM_TMR_BLK,
 };
 use crate::*;
 use std::hint::black_box;
@@ -230,6 +230,9 @@ pub fn fadt_table(dsdt: u64, len: usize) -> Vec<u8> {
     }
     put(&mut t, SCI_INT, &9u16.to_le_bytes());
     put(&mut t, SMI_CMD, &0xb2u32.to_le_bytes());
+    put(&mut t, ACPI_ENABLE, &[0xf1]);
+    put(&mut t, PM1A_CNT_BLK, &0x604u32.to_le_bytes());
+    put(&mut t, PM1_CNT_LEN, &[2]);
     put(&mut t, PM_TMR_BLK, &0x608u32.to_le_bytes());
     put(&mut t, PM_TMR_LEN, &[4]);
     put(&mut t, CENTURY, &[0x32]);

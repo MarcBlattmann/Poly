@@ -13,6 +13,10 @@ pub(crate) const DSDT: usize = 40;
 pub(crate) const PREFERRED_PM_PROFILE: usize = 45;
 pub(crate) const SCI_INT: usize = 46;
 pub(crate) const SMI_CMD: usize = 48;
+pub(crate) const ACPI_ENABLE: usize = 52;
+pub(crate) const PM1A_CNT_BLK: usize = 64;
+pub(crate) const PM1B_CNT_BLK: usize = 68;
+pub(crate) const PM1_CNT_LEN: usize = 89;
 pub(crate) const PM_TMR_BLK: usize = 76;
 pub(crate) const PM_TMR_LEN: usize = 91;
 pub(crate) const CENTURY: usize = 108;
@@ -23,6 +27,8 @@ pub(crate) const RESET_VALUE: usize = 128;
 pub(crate) const FADT_MINOR_VERSION: usize = 131;
 pub(crate) const X_FIRMWARE_CTRL: usize = 132;
 pub(crate) const X_DSDT: usize = 140;
+pub(crate) const X_PM1A_CNT_BLK: usize = 172;
+pub(crate) const X_PM1B_CNT_BLK: usize = 184;
 pub(crate) const X_PM_TMR_BLK: usize = 208;
 
 /// Length of the ACPI 1.0 FADT, the shortest one accepted.
@@ -89,6 +95,42 @@ impl<'a> Fadt<'a> {
     /// mode transition (already in ACPI mode, or hardware-reduced).
     pub fn smi_command_port(&self) -> u32 {
         u32_at(self.b(), SMI_CMD).unwrap_or(0)
+    }
+
+    /// The value to write to [`smi_command_port`](Self::smi_command_port)
+    /// to switch the machine into ACPI mode (§4.8.2.1); 0 if it needs none.
+    pub fn acpi_enable(&self) -> u8 {
+        u8_at(self.b(), ACPI_ENABLE).unwrap_or(0)
+    }
+
+    /// The PM1a control register block (`SLP_TYP`, `SLP_EN`, `SCI_EN`;
+    /// §4.8.3.2.1), if the platform has one.
+    pub fn pm1a_control(&self) -> Option<GenericAddress> {
+        self.pm1_control(X_PM1A_CNT_BLK, PM1A_CNT_BLK)
+    }
+
+    /// The optional PM1b control register block, written together with
+    /// PM1a's.
+    pub fn pm1b_control(&self) -> Option<GenericAddress> {
+        self.pm1_control(X_PM1B_CNT_BLK, PM1B_CNT_BLK)
+    }
+
+    fn pm1_control(&self, x_off: usize, legacy_off: usize) -> Option<GenericAddress> {
+        if let Some(block) = self.gas(x_off).filter(|g| g.address != 0) {
+            return Some(block);
+        }
+        // The 32-bit field is an I/O port; PM1_CNT_LEN is at least 2.
+        let port = u32_at(self.b(), legacy_off).filter(|&p| p != 0)?;
+        if u8_at(self.b(), PM1_CNT_LEN).is_none_or(|len| len < 2) {
+            return None;
+        }
+        Some(GenericAddress {
+            space: AddressSpace::SystemIo,
+            bit_width: 16,
+            bit_offset: 0,
+            access_size: 2,
+            address: port.into(),
+        })
     }
 
     /// The ACPI PM timer, a 3.579545 MHz counter, if the platform has one.
@@ -259,6 +301,25 @@ mod tests {
         assert_eq!(reset.register.space, AddressSpace::SystemIo);
         assert_eq!(reset.register.address, 0xcf9);
         assert_eq!(reset.value, 0x06);
+
+        let pm1a = f.pm1a_control().unwrap();
+        assert_eq!((pm1a.space, pm1a.address, pm1a.bit_width), (AddressSpace::SystemIo, 0x604, 16));
+        assert_eq!(f.pm1b_control(), None);
+        assert_eq!(f.acpi_enable(), 0xf1);
+    }
+
+    #[test]
+    fn pm1_control_blocks() {
+        let mut t = fadt_table(0x10_0000, FADT_FULL_LEN);
+        put(&mut t, X_PM1B_CNT_BLK, &[1, 16, 0, 2]);
+        put(&mut t, X_PM1B_CNT_BLK + 4, &0x1604u64.to_le_bytes());
+        fix_checksum(&mut t);
+        assert_eq!(fadt(&t).pm1b_control().unwrap().address, 0x1604);
+        // A legacy block shorter than two bytes is not usable.
+        let mut t = fadt_table(0x10_0000, 116);
+        put(&mut t, PM1_CNT_LEN, &[1]);
+        fix_checksum(&mut t);
+        assert_eq!(fadt(&t).pm1a_control(), None);
     }
 
     #[test]

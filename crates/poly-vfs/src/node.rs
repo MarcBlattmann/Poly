@@ -87,7 +87,7 @@ impl NodeRef {
         if st.magic == 0 {
             st.magic = magic_for(mount.sb.info.name);
         }
-        let f = mount.flags;
+        let f = mount.flags();
         st.flags = [
             (mount.read_only(), crate::ST_RDONLY),
             (f.no_suid, crate::ST_NOSUID),

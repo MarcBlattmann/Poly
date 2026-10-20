@@ -75,6 +75,12 @@ what exists **today** and how it fits that plan.
 - `kernel/src/acpi.rs` implements `PhysMemory` over the direct map (never
   usable RAM or the kernel image), prints a summary at boot and keeps the
   counts the self-test checks.
+- **Powering off** (ADR 0051): the FADT's PM1a/PM1b control blocks and
+  `ACPI_ENABLE`, and the `\_S5` sleep types, which `poly_acpi::aml`
+  finds in the DSDT by the AML grammar (`NameOp _S5_ Package {...}`)
+  without an interpreter, give `Platform::soft_off`. `power::power_off`
+  writes the disks back, enters ACPI mode if needed and writes `SLP_TYP |
+  SLP_EN` (QEMU exits); without S5 it halts (`power::halt`).
 
 ## Devices: PCI and virtio
 
@@ -625,6 +631,18 @@ initramfs.
   writes back, syncs and marks the volume clean; `power::reboot` first runs
   `fs::disk::shutdown`, which does the same for every volume, files open
   or not.
+- **mount(2)** (ADR 0051, `fs/mounts.rs`, `fs/files/mounts.rs`,
+  `linux/admin.rs`): `proc` and `sysfs` mount new instances over the same
+  kernel source, `devpts` a view of the one set of ptys, `tmpfs` /
+  `ramfs` a new tmpfs (root `mode`, `uid`, `gid` from the options), `ext2`
+  the volume on the disk a block device node names: `/dev/vda`, `/dev/vdb`,
+  ... are the virtio-blk functions in PCI order (`virtio0`, ...; block
+  major 254, 16 minors each), `/dev/ram0` the RAM disk, made at boot. A
+  disk mounted this way is a disk mount like `poly.mount`'s (page cache,
+  writeback, unmounted clean). Remounts change a mount's flags in place
+  (`Vfs::remount`), bind mounts use `Vfs::bind`, propagation changes do
+  nothing (every mount is private); the source string is kept for
+  `/proc/mounts`.
 - **The page cache** (`poly-pagecache`, kernel glue in
   `kernel/src/fs/cache.rs`): file pages in frames, keyed by file system,
   inode and page index. `PageCache::register(ext2)` returns a `CachedFs`,
@@ -833,8 +851,11 @@ serial port, the screen). Decisions in
   open file, counting opens), `Ttys` (which session has which
   controlling terminal), `pty` (`/dev/ptmx`, masters and slaves),
   `devpts` (`/dev/pts`) and `device` (the nodes that stand for
-  terminals). Host-tested against a fake host, ptys through a real VFS
-  with threads.
+  terminals), and `hw`: what a device answers on its own
+  (`Driver::device_ioctl`: COM1's `TIOCGSERIAL`, `tty1`'s `VT_GETSTATE`,
+  `VT_OPENQRY`, `KDGKBTYPE`; BusyBox's `cttyhack` finds the console's
+  terminal with them). Host-tested against a fake host, ptys through a
+  real VFS with threads.
 - **Opening**: `poly_vfs::CharDevice::open` lets a node's device open as
   another: `/dev/ptmx` (5, 2) makes a pair and opens its master,
   `/dev/pts/<n>` (136, n) the slave (`EIO` while locked), `/dev/tty`
@@ -916,6 +937,16 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   interrupted calls) and `Linux::thread_exit` when a thread ends (robust
   list, `clear_child_tid`); blocking uses park/unpark (`block`,
   `unblock`) plus a per-thread signal notification.
+- **Linux system administration**
+  ([ADR 0051](adr/0051-busybox-init-mount-and-power-off.md)): `mount`,
+  `umount2`, `mknod`, `mknodat`, `chroot`, `sethostname`,
+  `setdomainname` and `reboot` (`sys/admin.rs`) are checked in the
+  personality (privileges, `MountRequest`, per-type mount options) and
+  done by the kernel through a third services trait, `LinuxAdmin`
+  (`LinuxKernel::admin`); `getpriority`, `setpriority` and the `sched_*`
+  calls (`sys/sched.rs`) keep a nice value per process and report one CPU
+  and `SCHED_OTHER`; `sendfile` (`sys/sendfile.rs`) copies through a
+  kernel buffer.
 - **Linux processes and threads**
   ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md)): `clone`,
   `clone3`, `fork`, `vfork`, `execve`, `wait4`, `waitid`, `setpgid`,
@@ -1059,6 +1090,28 @@ POLY-SYSCALL: pid=1 nr=1 args=0x1,0x20019f,0xe,0x0,0x0,0x0 ret=14
 POLY-SYSCALL: pid=1 nr=231 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=?
 POLY-EXIT: pid=1 code=0
 ```
+
+## BusyBox as init
+
+[ADR 0051](adr/0051-busybox-init-mount-and-power-off.md). `cargo xtask run
+--busybox` (and the BusyBox boot test) boots an initramfs made by
+`tools/xtask/src/initramfs.rs` (`busybox_image`) with a BusyBox taken at
+test time (`tools/xtask/src/busybox.rs`: the host's static
+`busybox-static`, or BusyBox 1.36.1 built and cached under
+`target/busybox/`; never committed) as `poly.init=/sbin/init`:
+
+```text
+ /sbin/init (BusyBox, pid 1) ── /etc/inittab
+   ├─ sysinit: /etc/init.d/rcS    mount(2) tmpfs on /tmp (proc, sysfs, devpts, /dev/shm are up already), hostname
+   ├─ respawn: cttyhack /bin/sh -l    TIOCGSERIAL / VT_GETSTATE → opens /dev/ttyS0 or /dev/tty1, setsid + TIOCSCTTY
+   │     └─ ash: job control on the console (tcsetpgrp, ^C ^Z, fg/bg), /etc/profile
+   └─ poweroff / reboot: SIGUSR2 / SIGTERM to init (taken with rt_sigtimedwait) → SIGTERM, SIGKILL to all,
+        umount -a -r, reboot(2) → power::power_off (ACPI S5) / power::reboot / power::halt
+```
+
+Signals to init that it blocks or waits for stay pending (kill(2)'s
+"only signals it has handlers for" applies to the others), which is how
+BusyBox's init receives them.
 
 ## Time, timers and the vDSO
 

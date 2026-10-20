@@ -273,5 +273,5 @@ fn traced_calls_still_missing() {
             missing.push(call);
         }
     }
-    assert_eq!(missing, ["rseq", "sched_getaffinity"]);
+    assert_eq!(missing, ["rseq"]);
 }

@@ -811,6 +811,13 @@ pub trait LinuxKernel {
         b"(none)"
     }
 
+    /// The system administration services (mounts, device nodes, the
+    /// host name, rebooting; ADR 0051); `None` (the default) makes those
+    /// calls fail with `ENOSYS`.
+    fn admin(&mut self) -> Option<&mut dyn crate::admin::LinuxAdmin> {
+        None
+    }
+
     // ---- file systems and system information (ADR 0043) ---------------
 
     /// The file system services for the calling thread's process; `None`

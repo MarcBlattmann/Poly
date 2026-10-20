@@ -52,6 +52,10 @@ pub struct LinuxThread {
     /// The thread's name (`PR_SET_NAME`, `/proc/[pid]/comm`): up to 15
     /// bytes and a NUL, set from the program's file name by execve(2).
     pub comm: [u8; 16],
+    /// The signals the thread waits for in rt_sigtimedwait(2): unblocked
+    /// for the wait, but blocked as far as discarding goes (a signal the
+    /// thread waits for is never discarded as ignored).
+    pub sigwait: SigSet,
 }
 
 impl LinuxThread {
@@ -98,6 +102,10 @@ pub struct LinuxProcess {
     pub limits: crate::rlimit::ResourceLimits,
     /// Interval and POSIX timers (ADR 0044).
     pub timers: crate::time::timers::Timers,
+    /// The nice value, -20 (most favourable) to 19 (getpriority(2),
+    /// `sys::sched`): inherited by fork, kept by exec. The scheduler does
+    /// not use it yet.
+    pub nice: i32,
 }
 
 impl LinuxProcess {
@@ -114,6 +122,7 @@ impl LinuxProcess {
             exited_creds: None,
             limits: crate::rlimit::ResourceLimits::new(),
             timers: crate::time::timers::Timers::new(),
+            nice: 0,
         }
     }
 
@@ -147,6 +156,7 @@ impl LinuxProcess {
             exited_creds: None,
             limits: self.limits,
             timers,
+            nice: self.nice,
         }
     }
 
@@ -270,11 +280,21 @@ impl LinuxProcess {
         }
     }
 
+    /// Whether a thread `dest` names waits for `signal` in
+    /// rt_sigtimedwait(2).
+    fn waited_for(&self, signal: u32, dest: Dest) -> bool {
+        match dest {
+            Dest::Thread(tid) => self.threads.get(&tid).is_some_and(|t| t.sigwait.contains(signal)),
+            Dest::Process => self.threads.values().any(|t| t.sigwait.contains(signal)),
+        }
+    }
+
     /// Generate `info` (signal 1-64) for `dest`. `protect_init` is set when
     /// the target is process 1 and the sender is not the kernel: kill(2),
     /// NOTES: "The only signals that can be sent to process ID 1, the init
     /// process, are those for which init has explicitly installed signal
-    /// handlers."
+    /// handlers." A signal init blocks is kept pending all the same, for
+    /// sigwaitinfo(2).
     ///
     /// - Stop signals discard pending `SIGCONT`, and `SIGCONT` discards
     ///   pending stop signals and continues the process even if it is
@@ -306,11 +326,15 @@ impl LinuxProcess {
             sent.continue_process = true;
         }
         let action = self.actions.get(signal);
-        if protect_init && disposition(signal, &action) != Disposition::Handler {
+        let blocked = self.blocked(signal, dest) || self.waited_for(signal, dest);
+        // A signal init blocks (or waits for) stays pending, like a default-ignored one
+        // (below), so init can take it with sigwaitinfo(2) or a handler it
+        // installs later; BusyBox's init waits for its signals that way
+        // (to be confirmed by the diff runner).
+        if protect_init && disposition(signal, &action) != Disposition::Handler && !blocked {
             sent.continue_process = false;
             return Ok(sent);
         }
-        let blocked = self.blocked(signal, dest);
         let ignored = match disposition(signal, &action) {
             Disposition::Ignore => true,
             Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => !blocked,

@@ -49,3 +49,15 @@ pub const TIOCSIG: u32 = 0x4004_5436;
 pub const TIOCGPTLCK: u32 = 0x8004_5439;
 /// `_IOR('T', 0x40, int)`: whether the terminal is in exclusive mode.
 pub const TIOCGEXCL: u32 = 0x8004_5440;
+
+/// `TIOCGSERIAL` (`asm-generic/ioctls.h`): a serial port's settings as a
+/// `struct serial_struct` ([`crate::hw::SerialInfo`]); setserial(8).
+pub const TIOCGSERIAL: u32 = 0x541E;
+/// `VT_OPENQRY` (`linux/vt.h`, ioctl_console(2)): the first free virtual
+/// console, as an `int`.
+pub const VT_OPENQRY: u32 = 0x5600;
+/// `VT_GETSTATE` (`linux/vt.h`, ioctl_console(2)): the active virtual
+/// console and which are open, as a `struct vt_stat`.
+pub const VT_GETSTATE: u32 = 0x5603;
+/// `KDGKBTYPE` (`linux/kd.h`, ioctl_console(2)): the keyboard type, one byte.
+pub const KDGKBTYPE: u32 = 0x4B33;

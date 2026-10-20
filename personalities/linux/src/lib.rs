@@ -54,6 +54,7 @@
 extern crate alloc;
 
 pub mod abi;
+pub mod admin;
 pub mod args;
 pub mod cred;
 pub mod errno;
