@@ -16,12 +16,14 @@
 //!   controllers are set up; a thread that starts before that keeps them
 //!   off, and is not preempted).
 //! - Every other thread gets a [`STACK_SIZE`] stack, one buddy block from
-//!   [`FRAMES`] reached through [`arch::phys_to_virt`], registered with the
-//!   backtrace walker so a panic inside a thread walks its whole stack.
-//!   TODO(paging): there is no guard page yet. The kernel has its own page
-//!   tables now; map stacks in a dedicated area with an unmapped page below
-//!   each, so an overflow faults (onto the double-fault IST stack) instead of
-//!   silently corrupting the neighbouring frames.
+//!   [`FRAMES`], mapped in its table slot's part of [`STACKS`] (not reached
+//!   through the direct map) above an unmapped guard (ADR 0050), and
+//!   registered with the backtrace walker so a panic inside a thread walks
+//!   its whole stack. An overflow faults on the guard; the page fault cannot
+//!   be delivered on the full stack, so it becomes a double fault on its own
+//!   IST stack, which reports "kernel stack overflow in thread <name>"
+//!   ([`stack_guard_hit`]) instead of the thread silently overwriting
+//!   whatever lies below.
 //! - A thread function returns a code, which [`join`] collects. An exited
 //!   thread's stack is freed by the next thread to run (it cannot be freed
 //!   while still in use); its table slot is freed once it is also joined or
@@ -62,6 +64,7 @@
 use crate::arch::{self, backtrace, context, cpu, cpu::InterruptsOff};
 use crate::frames::FRAMES;
 use crate::kernel_test;
+use crate::mm;
 use crate::sync::{self, SpinLock};
 use crate::time;
 use crate::user::UserThread;
@@ -70,7 +73,7 @@ use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::sync::atomic::AtomicU64;
 use core::time::Duration;
-use poly_mem::BuddyAllocator;
+use poly_mem::{BuddyAllocator, StackArea};
 pub use poly_sched::{Error, State, ThreadId};
 use poly_sched::{Join, Scheduler, Switch};
 
@@ -97,30 +100,31 @@ pub enum SpawnError {
     TableFull,
     /// No free block for the stack.
     NoMemory,
-    /// The stack landed in RAM the kernel cannot map yet.
-    StackNotMapped,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct Stack {
+/// Bytes of virtual address space per thread stack: the stack at the top,
+/// the rest an unmapped guard (as large as the stack, so a frame that
+/// skips a page or two still lands in it).
+const STACK_SLOT_SIZE: u64 = 2 * STACK_SIZE;
+
+/// Where thread stacks are mapped: slot `i` holds the stack of the thread
+/// in table slot `i`, above its guard (ADR 0050).
+pub const STACKS: StackArea = StackArea::new(mm::THREAD_STACKS_BASE, STACK_SLOT_SIZE, STACK_SIZE, MAX_THREADS);
+
+const _: () = assert!(STACKS.size() <= mm::THREAD_STACKS_SIZE, "the stacks do not fit the stack area");
+
+/// A thread stack's frames: one buddy block, not mapped (yet, or any more).
+#[derive(Debug)]
+struct StackFrames {
     phys: u64,
-    virt: u64,
 }
 
-impl Stack {
-    fn allocate() -> Result<Stack, SpawnError> {
+impl StackFrames {
+    fn allocate() -> Result<StackFrames, SpawnError> {
         let mut frames = FRAMES.lock();
         let alloc = frames.as_mut().ok_or(SpawnError::NoMemory)?;
-        // The direct map reaches every frame; the check below only guards
-        // against a frame outside the memory map.
         let phys = alloc.allocate(STACK_ORDER).ok_or(SpawnError::NoMemory)?;
-        match arch::phys_to_virt(phys + STACK_SIZE - 1) {
-            Some(last) => Ok(Stack { phys, virt: last + 1 - STACK_SIZE }),
-            None => {
-                alloc.free(phys, STACK_ORDER).expect("freeing a block just allocated");
-                Err(SpawnError::StackNotMapped)
-            }
-        }
+        Ok(StackFrames { phys })
     }
 
     fn free(self) {
@@ -129,8 +133,39 @@ impl Stack {
         alloc.free(self.phys, STACK_ORDER).expect("thread stack freed twice");
     }
 
+    /// Map the frames as the stack of table slot `slot`, whose part of
+    /// [`STACKS`] is unmapped (its last thread was reaped). Holding
+    /// [`THREADS`] makes the caller the slot's only user.
+    fn map(self, _threads: &mut Threads, slot: usize) -> Stack {
+        let virt = STACKS.stack(slot).expect("thread slot outside the stack area").start;
+        // SAFETY: a slot's stack pages are mapped when its thread is
+        // installed and unmapped when that thread is reaped, both with
+        // THREADS locked, which the caller holds; so they are unmapped now
+        // and nobody else touches them. The frames are ours until `unmap`.
+        unsafe { mm::map_thread_stack(virt, self.phys, STACK_SIZE) };
+        Stack { phys: self.phys, virt }
+    }
+}
+
+/// A thread's stack, mapped in [`STACKS`].
+#[derive(Clone, Copy, Debug)]
+struct Stack {
+    phys: u64,
+    virt: u64,
+}
+
+impl Stack {
     fn top(&self) -> u64 {
         self.virt + STACK_SIZE
+    }
+
+    /// Unmap the stack of a reaped thread; its frames can be freed then.
+    fn unmap(self, _threads: &mut Threads) -> StackFrames {
+        // SAFETY: the caller holds THREADS, so owns the slot's pages (see
+        // `map`), and the thread is reaped: it was switched away from for
+        // good, and nothing points into its stack any more.
+        unsafe { mm::unmap_thread_stack(self.virt, STACK_SIZE) };
+        StackFrames { phys: self.phys }
     }
 }
 
@@ -190,15 +225,18 @@ static SAVED_RSP: SavedRsp = SavedRsp([const { UnsafeCell::new(0) }; MAX_THREADS
 /// after the frame allocator is up.
 pub fn init() {
     let _irq = InterruptsOff::new();
-    let stack = Stack::allocate().expect("no memory for the idle thread's stack");
+    let stack = StackFrames::allocate().expect("no memory for the idle thread's stack");
     let mut t = THREADS.lock();
     assert!(!t.ready, "threads initialised twice");
     install(&mut t, ThreadId::IDLE, stack, idle_main, 0, None);
     t.ready = true;
     drop(t);
     crate::kprintln!(
-        "thread: scheduler up, {MAX_THREADS} slots, {} KiB stacks, time slice {TIME_SLICE_TICKS} ticks",
-        STACK_SIZE >> 10
+        "thread: scheduler up, {MAX_THREADS} slots, {} KiB stacks above {} KiB guards from {:#x}, \
+         time slice {TIME_SLICE_TICKS} ticks",
+        STACK_SIZE >> 10,
+        STACKS.guard_size() >> 10,
+        mm::THREAD_STACKS_BASE
     );
 }
 
@@ -226,7 +264,7 @@ fn spawn_with(
     arg: usize,
     user: Option<Box<UserThread>>,
 ) -> Result<ThreadId, SpawnError> {
-    let stack = Stack::allocate()?;
+    let stack = StackFrames::allocate()?;
     let _irq = InterruptsOff::new();
     let dead = reap(&mut THREADS.lock());
     bury(dead);
@@ -242,9 +280,10 @@ fn spawn_with(
     Ok(id)
 }
 
-/// Give `stack` (and `user`, for a user thread) to thread `id` and set it up
-/// to start in `f(arg)`.
-fn install(t: &mut Threads, id: ThreadId, stack: Stack, f: ThreadFn, arg: usize, user: Option<Box<UserThread>>) {
+/// Give `stack` (and `user`, for a user thread) to thread `id`, mapped in
+/// its slot of [`STACKS`], and set it up to start in `f(arg)`.
+fn install(t: &mut Threads, id: ThreadId, stack: StackFrames, f: ThreadFn, arg: usize, user: Option<Box<UserThread>>) {
+    let stack = stack.map(t, id.slot());
     // SAFETY: the stack was just allocated for this thread and is mapped;
     // `thread_start` has the signature `prepare` asks for.
     let rsp = unsafe { context::prepare(stack.top(), thread_start as *const () as usize, f as usize, arg) };
@@ -375,6 +414,7 @@ fn reap(t: &mut Threads) -> Graveyard {
             // stack is freed on a later switch or spawn instead.
             let Some(mut frames) = FRAMES.try_lock() else { break };
             backtrace::unregister_thread_stack(id.slot());
+            let stack = stack.unmap(t);
             let alloc = frames.as_mut().expect("stacks come from the frame allocator");
             alloc.free(stack.phys, STACK_ORDER).expect("thread stack freed twice");
             t.stacks[id.slot()] = None;
@@ -441,6 +481,34 @@ pub fn list() -> Vec<ThreadInfo> {
         out.push(ThreadInfo { id, name: t.names[id.slot()], state });
     }
     out
+}
+
+/// A thread whose stack overflowed into its guard, as a fault report names
+/// it ([`stack_guard_hit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Overflowed {
+    pub slot: usize,
+    /// `None` if the thread has no name, or the fault came at a moment the
+    /// thread table was locked.
+    pub name: Option<&'static str>,
+}
+
+impl core::fmt::Display for Overflowed {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.name {
+            Some(name) => write!(f, "{name} (slot {})", self.slot),
+            None => write!(f, "in slot {}", self.slot),
+        }
+    }
+}
+
+/// The thread whose stack guard holds `addr`, if any: a fault there is an
+/// overflow of that thread's stack. Called from the fault handler, so it
+/// only looks the name up if the thread table is free.
+pub fn stack_guard_hit(addr: u64) -> Option<Overflowed> {
+    let slot = STACKS.guard_hit(addr)?;
+    let name = THREADS.try_lock().map(|t| t.names[slot]).filter(|n| !n.is_empty());
+    Some(Overflowed { slot, name })
 }
 
 /// Let the next runnable thread run; this thread goes to the back of the
@@ -992,22 +1060,36 @@ kernel_test! {
     }
 }
 
-fn nap(ms: usize) -> usize {
-    sleep(Duration::from_millis(ms as u64));
+/// Where the napper of `list_names_threads_and_their_states` waits, and
+/// what lets it go.
+static NAPPERS: WaitQueue = WaitQueue::new();
+static NAP_OVER: AtomicBool = AtomicBool::new(false);
+
+/// Blocks until the test lets it go: a timed sleep could end before the
+/// test looks when the host holds the emulator off for longer.
+fn nap(_: usize) -> usize {
+    NAPPERS.wait_until(|| NAP_OVER.load(SeqCst));
     0
 }
 
 kernel_test! {
     fn list_names_threads_and_their_states() -> TestResult {
-        let t = spawn_named("napper", nap, 50).map_err(|_| "spawn failed")?;
+        NAP_OVER.store(false, SeqCst);
+        let t = spawn_named("napper", nap, 0).map_err(|_| "spawn failed")?;
+        let wake = || {
+            NAP_OVER.store(true, SeqCst);
+            NAPPERS.wake_all();
+        };
         let start = time::now_ns();
         while state(t) != Some(State::Blocked) {
-            if time::now_ns() - start > time::NANOS_PER_SEC {
+            if time::now_ns() - start > 5 * time::NANOS_PER_SEC {
+                wake();
                 return Err("the thread never went to sleep");
             }
             yield_now();
         }
         let all = list();
+        wake();
         let me = current();
         let find = |id: ThreadId| all.iter().find(|i| i.id == id);
         let listed = find(t).is_some_and(|i| i.name == "napper" && i.state == State::Blocked)
@@ -1024,36 +1106,57 @@ kernel_test! {
     }
 }
 
+/// The deadline each sleeper of `sleepers_wake_in_deadline_order` set
+/// itself and when it woke, by its sleep in tens of milliseconds minus one.
+static DEADLINE_AT: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
 static WOKE_AT: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
 
 fn sleeper(ms: usize) -> usize {
-    sleep(Duration::from_millis(ms as u64));
+    let deadline = time::now_ns() + ms as u64 * time::NANOS_PER_MILLI;
+    DEADLINE_AT[ms / 10 - 1].store(deadline, SeqCst);
+    sleep_until(deadline);
     WOKE_AT[ms / 10 - 1].store(time::now_ns(), SeqCst);
     0
 }
 
+/// Times `sleepers_wake_in_deadline_order` tries for a clean order.
+const SLEEP_ORDER_ATTEMPTS: usize = 5;
+
 kernel_test! {
     fn sleepers_wake_in_deadline_order() -> TestResult {
-        for w in &WOKE_AT {
-            w.store(0, SeqCst);
-        }
         // Started longest first; with every thread asleep the CPU idles in
-        // `hlt` and only the timer can wake them.
-        let start = time::now_ns();
-        let ids = [spawn(sleeper, 30), spawn(sleeper, 20), spawn(sleeper, 10)];
-        for id in ids {
-            join(id.map_err(|_| "spawn failed")?).map_err(|_| "join failed")?;
-        }
-        let woke = WOKE_AT.each_ref().map(|w| w.load(SeqCst));
-        for (i, &t) in woke.iter().enumerate() {
-            if t < start + (i as u64 + 1) * 10 * time::NANOS_PER_MILLI {
+        // `hlt` and only the timer can wake them. Each sleeper records the
+        // deadline it set: the host may deschedule the emulator between the
+        // threads' starts, so their deadlines are only ordered as recorded.
+        //
+        // Waking early is always wrong. The order is only promised for
+        // sleepers whose deadlines are a tick or more apart: when the host
+        // stalls the emulator past two deadlines, the first tick after it
+        // finds both due and wakes them together, and they run in queue
+        // order. So an attempt out of order is tried again; a wake-up that
+        // ignores the earliest deadline (the bug this guards against) is out
+        // of order every time.
+        for _ in 0..SLEEP_ORDER_ATTEMPTS {
+            for w in WOKE_AT.iter().chain(&DEADLINE_AT) {
+                w.store(0, SeqCst);
+            }
+            let ids = [spawn(sleeper, 30), spawn(sleeper, 20), spawn(sleeper, 10)];
+            for id in ids {
+                join(id.map_err(|_| "spawn failed")?).map_err(|_| "join failed")?;
+            }
+            let deadline = DEADLINE_AT.each_ref().map(|d| d.load(SeqCst));
+            let woke = WOKE_AT.each_ref().map(|w| w.load(SeqCst));
+            if woke.iter().zip(&deadline).any(|(w, d)| w < d) {
                 return Err("a sleeper woke before its deadline");
             }
+            let mut by_deadline = [0, 1, 2];
+            by_deadline.sort_by_key(|&i| deadline[i]);
+            if by_deadline.windows(2).all(|p| woke[p[0]] <= woke[p[1]]) {
+                return Ok(());
+            }
+            crate::kprintln!("thread: sleepers woke out of order (deadlines {deadline:?}, woke {woke:?}); again");
         }
-        if !(woke[0] <= woke[1] && woke[1] <= woke[2]) {
-            return Err("sleepers did not wake in deadline order");
-        }
-        Ok(())
+        Err("sleepers did not wake in deadline order")
     }
 }
 

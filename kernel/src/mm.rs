@@ -3,14 +3,18 @@
 //! The architecture builds the kernel page tables (on x86-64:
 //! `arch/x86_64/paging.rs`, which documents the layout): a direct map of all
 //! physical memory, through which [`arch::phys_to_virt`] reaches any frame,
-//! the kernel image mapped W^X, guard pages below the kernel stacks, and
+//! the kernel image mapped W^X, guard pages below the kernel stacks, an
+//! area for the kernel thread stacks ([`map_thread_stack`]), and
 //! uncached mappings of device memory for drivers ([`map_mmio`]), and
 //! write-combining ones for framebuffers ([`map_mmio_wc`]).
 
 use crate::arch;
 use poly_mem::MemoryMap;
 
-pub use crate::arch::paging::{Caching, caching, map_mmio, map_mmio_wc};
+pub use crate::arch::paging::{
+    Caching, THREAD_STACKS_BASE, THREAD_STACKS_SIZE, caching, map_mmio, map_mmio_wc, map_thread_stack,
+    unmap_thread_stack,
+};
 
 /// Switch to the kernel page tables. Returns `memory` with the frames the
 /// page tables took marked as kernel memory; build the frame allocator from

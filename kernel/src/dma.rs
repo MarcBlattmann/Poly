@@ -13,7 +13,7 @@
 //! The block layer hands drivers the caller's memory, so drivers need its
 //! bus address: [`bus_address`] (and [`KernelDma`], the same for
 //! `poly-virtio-blk`). A device needs the whole buffer at consecutive bus
-//! addresses, and the kernel only knows that for the direct map, which maps
+//! addresses, and the kernel knows that for the direct map, which maps
 //! physical memory linearly: a range that lies entirely inside it is
 //! physically contiguous, page boundaries or not. Everything else is
 //! refused, and the request fails with `BadBuffer` instead of the device
@@ -26,8 +26,11 @@
 //!   in one slot of one slab, which is one run too. So no heap allocation
 //!   crosses from one run into another, and every byte of one is
 //!   physically next to the one before.
-//! - **[`DmaBuffer`]s** and **thread stacks**: frames reached through the
-//!   direct map, accepted.
+//! - **[`DmaBuffer`]s**: frames reached through the direct map, accepted.
+//! - **Thread stacks**: one buddy block each, mapped page by page in the
+//!   thread stack area (ADR 0050); accepted when every page of the range is
+//!   mapped and the pages are physically consecutive, which the translation
+//!   checks in the page table (always so within one stack).
 //! - **The kernel image** (statics, the boot stack, which the boot code and
 //!   the in-kernel tests run on), **MMIO mappings**, holes and user
 //!   addresses: refused. The image is linear too, but drivers should not
@@ -44,7 +47,7 @@ use poly_mem::{BuddyAllocator, MAX_ORDER, PAGE_SIZE};
 
 /// The bus address of the `len` bytes at CPU address `virt`, if a device
 /// can reach all of them at consecutive bus addresses: they must lie in the
-/// direct map (see the module documentation).
+/// direct map or on one thread stack (see the module documentation).
 pub fn bus_address(virt: u64, len: usize) -> Option<u64> {
     arch::virt_range_to_phys(virt, len as u64)
 }

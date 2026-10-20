@@ -27,7 +27,7 @@
 //! (ADR 0048).
 
 use super::{
-    Devices, PASS_MARKER, QEMU_SUCCESS, Result, SHELL_FLAG, Symbols, boot_typing, boot_with, console, initramfs, ktest,
+    Devices, PASS_MARKER, QEMU_SUCCESS, Result, SHELL_FLAG, Symbols, boot_typing, boot_with, console, initramfs,
     programs, root,
 };
 use std::io::{Read, Write};
@@ -171,8 +171,7 @@ fn traffic_test(kernel: &Path, syms: &Arc<Symbols>, echo: &EchoServers, polled: 
     };
     let qemu_args = nic_args(Some(host_port), polled);
     let b = boot_with(kernel, syms, super::DEFAULT_MEMORY, &append, Devices::None, &qemu_args, None, on_line)?;
-    let report = ktest::parse(&b.output);
-    report.check()?;
+    b.tests(&b.output)?;
     match b.status {
         Some(QEMU_SUCCESS) if b.output.contains(PASS_MARKER) => {}
         s => return Err(format!("the network boot ({how}) ended with status {s:?}")),

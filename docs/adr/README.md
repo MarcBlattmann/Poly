@@ -14,7 +14,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0007](0007-buddy-allocator-out-of-band-metadata.md) | Buddy frame allocator with its metadata outside the memory it manages | Accepted |
 | [0008](0008-in-kernel-tests-and-backtraces.md) | In-kernel tests in a linker section; frame-pointer backtraces symbolised on the host | Accepted |
 | [0009](0009-drivers-behind-access-traits.md) | Device drivers as host-tested crates behind access traits | Accepted |
-| [0010](0010-kernel-address-space.md) | Kernel address space: direct map of the memory map's regions, W^X, guard pages | Accepted |
+| [0010](0010-kernel-address-space.md) | Kernel address space: direct map of the memory map's regions, W^X, guard pages | Accepted (thread stacks: see 0050) |
 | [0012](0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md) | Scheduler policy in a host-tested crate; context switch and stacks in the kernel | Accepted |
 | [0013](0013-interrupt-controllers-and-time-base.md) | Interrupt controllers and the time base in one host-tested crate (`poly-irq`) | Accepted |
 | [0014](0014-block-layer.md) | Block layer: submit/poll devices, ordering request queue, pinning buffer cache | Accepted |
@@ -50,6 +50,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0046](0046-terminals-line-discipline-ptys-job-control.md) | Terminals: the line discipline, terminals with job control, ptys and devpts in a host-tested crate (`poly-tty`) on a kernel `Host`; a device may open as another (`CharDevice::open`); a device's input goes to its terminal while a program has it open, else to the kernel shell | Accepted |
 | [0048](0048-sockets-inet-unix-netlink.md) | Sockets: socket files over the stack with per-socket wake-ups (`Stack::take_changed`), Unix sockets with names, credentials and descriptor passing in `poly-unix` (in-flight cycles collected), `NETLINK_ROUTE` dumps in the personality, the socket calls behind one `LinuxNet` services trait | Accepted |
 | [0049](0049-dynamic-linking-program-interpreter.md) | Dynamic linking: exec loads the program interpreter (glibc's own `ld.so`, unchanged) next to the program in free space of the `mmap` area (`poly_elf::Footprint`), `AT_BASE`/`AT_ENTRY`/`AT_PHDR`; `madvise`; `rseq` stays `ENOSYS`; test programs and the host's C library collected from `DT_NEEDED` at test time | Accepted |
+| [0050](0050-kernel-thread-stacks-with-guards.md) | Kernel thread stacks in a 2 MiB stack area of their own (PML4 slot 385, tables made at boot), one 32 KiB slot per thread-table slot with the stack above 16 KiB that are never mapped; overflows reported by thread name, DMA from stacks via a page-table check | Accepted |
 
 ## Open decisions
 

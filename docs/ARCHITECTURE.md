@@ -1345,9 +1345,14 @@ and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
   with a "deadlock" message and a backtrace instead of hanging.
 - **Mechanism in the kernel.** `kernel/src/thread.rs` keeps the scheduler
   and each thread's stack in one spinlock (`THREADS`), and saved stack
-  pointers in a static array. Stacks are 16 KiB (one order-2 buddy block)
-  below the boot-mapping limit, registered with the backtrace walker. There
-  is no guard page yet (TODO once page tables are dynamic).
+  pointers in a static array. Stacks are 16 KiB (one order-2 buddy block),
+  registered with the backtrace walker and mapped in a stack area of their
+  own (`thread::STACKS`, 2 MiB at `0xffff_c080_0000_0000`): table slot `i`'s
+  stack sits at the top of a 32 KiB slot whose lower 16 KiB is never mapped,
+  so an overflow faults (a double fault on its IST stack, reported as
+  "kernel stack overflow in thread <name>") instead of corrupting the frames
+  below (ADR 0050). A buffer on a thread stack is still usable for DMA: the
+  translation checks that its pages are physically contiguous.
   `arch/x86_64/context.rs` switches by pushing the six callee-saved
   registers, swapping `rsp` and popping; a new thread's stack is primed so
   that the switch "returns" into `thread_trampoline`, which calls

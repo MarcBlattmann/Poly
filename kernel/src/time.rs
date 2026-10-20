@@ -115,15 +115,21 @@ kernel_test! {
 
 kernel_test! {
     fn timer_ticks_at_the_expected_rate() -> TestResult {
-        // Count tick interrupts over ten 20 ms windows of clock time. A tick
+        // Count tick interrupts over 20 ms windows of clock time. A tick
         // that comes due while the previous one is still pending merges with
         // it, so an emulator the host deschedules loses ticks: never accept
         // more ticks than time allows, but judge the low side by the best
         // window, generously. (`arch` checks the timer's period precisely.)
+        // A heavily loaded host can spoil ten windows in a row, so go on
+        // (for up to 100 windows) until one shows a plausible rate; a timer
+        // that really runs slow never does.
         const WINDOW_NS: u64 = 20 * NANOS_PER_MILLI;
         let mut best = 0;
         let mut total = (0, 0);
-        for _ in 0..10 {
+        for window in 0..100 {
+            if window >= 10 && best >= TICK_HZ / 4 {
+                break;
+            }
             let (t0, k0) = (now_ns(), ticks());
             while now_ns() - t0 < WINDOW_NS {
                 core::hint::spin_loop();

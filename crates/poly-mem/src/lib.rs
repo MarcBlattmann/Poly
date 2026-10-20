@@ -5,16 +5,19 @@
 //! non-overlapping regions where the most restrictive type wins wherever two
 //! entries overlap, and usable RAM is trimmed inward to whole pages.
 //! [`BuddyAllocator`] then manages the usable frames, and [`DirectMap`] says
-//! which physical ranges the kernel's direct map covers. Nothing here
+//! which physical ranges the kernel's direct map covers; [`StackArea`] lays out
+//! the kernel thread stacks with their guards. Nothing here
 //! allocates, so the kernel can use it before it has a heap.
 
 #![no_std]
 
 mod buddy;
 mod direct_map;
+mod stack_area;
 
 pub use buddy::{BuddyAllocator, FreeError, MAX_ORDER, MetadataTooSmall, RangeError};
 pub use direct_map::DirectMap;
+pub use stack_area::StackArea;
 
 pub const PAGE_SIZE: u64 = 4096;
 

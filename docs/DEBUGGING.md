@@ -416,9 +416,26 @@ crate::kernel_test! {
 Write `fn name(env: &TestEnv) -> TestResult` to get the boot info and memory
 map. Put `#[boot_only]` first (before any doc comment) for a test that checks
 boot-time state; the shell's `test` command then leaves it out. `cargo xtask test` fails if any test fails, if the summary line is missing
-(the kernel crashed during the tests), or if the counts do not add up. Only
-put tests here that need the real machine; pure logic belongs in a crate under
-`crates/` with ordinary `#[test]`s.
+(the kernel crashed during the tests), or if the counts do not add up. A boot
+still running after 60 s is killed and reported as `timed out after 60 s
+during the kernel tests (last line: "...")`: the kernel hung (or crawled)
+after printing that line, which is different from `kernel test summary line
+missing: the kernel stopped during the tests`, where QEMU exited early (a
+triple fault, say). Only put tests here that need the real machine; pure
+logic belongs in a crate under `crates/` with ordinary `#[test]`s.
+
+Tests that involve time must hold on a slow, loaded host too (CI runners,
+many QEMUs at once). There QEMU's clocks (HPET, TSC) follow the host's
+wall-clock time while the emulated CPU gets only part of a host CPU, and
+timer ticks that come due while the vCPU is held off merge into one: 30 ms
+of clock time can hold three ticks, and a thread may get no turn for tens
+of milliseconds. So count in ticks rather than clock time, check order and
+eventual progress rather than "within N ms", bound waits with a generous
+deadline that ends as soon as the progress is seen, and keep the failure the
+test is about detectable (a tick that stops altogether must still fail or
+hang). To check a change, boot the CI configuration many times in parallel
+next to a few busy loops (`while :; do :; done`) and count failures per
+test.
 
 ## Panic backtraces
 
@@ -467,6 +484,18 @@ double fault on its own stack, and the report says which stack overflowed:
 CPU exception 8 (double fault), error 0x0, rip 0xffffffff8010f07b, rsp 0xffffffff80127fb0, cr2 0xffffffff80127fa8
 kernel stack overflow: hit the guard page below the boot stack
 ```
+
+Kernel threads' stacks (16 KiB each) lie in their own area at
+`0xffff_c080_0000_0000`, each above 16 KiB that are never mapped (ADR 0050),
+so an overflow there names the thread (and its table slot):
+
+```text
+CPU exception 8 (double fault), error 0x0, rip 0xffffffff801d519b, rsp 0xffffc08000043f80, cr2 0xffffc08000043f78
+kernel stack overflow in thread overflow (slot 8): hit the guard below its stack
+```
+
+`poly.selftest.stack_overflow` and `poly.selftest.thread_stack_overflow`
+provoke the two on purpose (the boot tests do).
 
 Symbols come from the ELF that was built last, so symbolise before you rebuild.
 For file and line numbers, use `addr2line -f -C -i -e

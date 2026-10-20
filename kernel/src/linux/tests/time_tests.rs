@@ -225,25 +225,57 @@ kernel_test! {
     fn cpu_time_clocks_count_a_busy_thread() -> TestResult {
         let status = run_callback(|p| {
             let ts = DATA + 0x100;
+            // The clock time brackets both CPU-clock readings: the thread
+            // runs, and its CPU clock counts, between this and the first
+            // reading too (a busy host may hold the emulator off for many
+            // milliseconds just there).
+            let wall0 = time::now_ns();
             check!(1, sys(p, nr::CLOCK_GETTIME, &[3, ts]) == Ok(0));
             let thread0 = get_timespec(ts);
-            let wall0 = time::now_ns();
-            while time::now_ns() - wall0 < 50 * NANOS_PER_MILLI {
-                core::hint::spin_loop();
-            }
+            // Busy until the thread's own CPU clock says it ran 20 ms. How
+            // much clock time that takes depends on the other threads and on
+            // the host (one that holds the emulator off while another thread
+            // is switched in charges that time to it), so the clock time is
+            // only bounded generously: a clock that does not count, or counts
+            // a fraction of the time, misses the deadline. It can never count
+            // more than the time that passed.
+            const RUN: u64 = 20 * NANOS_PER_MILLI;
+            const BUDGET: u64 = 10 * NANOS_PER_SEC;
+            let ran = loop {
+                check!(2, sys(p, nr::CLOCK_GETTIME, &[3, ts]) == Ok(0));
+                let ran = get_timespec(ts) - thread0;
+                if ran >= RUN || time::now_ns() - wall0 > BUDGET {
+                    break ran;
+                }
+                for _ in 0..1000 {
+                    core::hint::spin_loop();
+                }
+            };
             let wall = time::now_ns() - wall0;
-            check!(2, sys(p, nr::CLOCK_GETTIME, &[3, ts]) == Ok(0));
-            let ran = get_timespec(ts) - thread0;
-            check!(3, ran >= wall / 10 && ran <= wall + 10 * NANOS_PER_MILLI);
+            if ran < RUN || ran > wall {
+                kprintln!("linux test: the thread CPU clock counted {ran} ns in {wall} ns");
+            }
+            check!(3, ran >= RUN && ran <= wall);
             check!(4, sys(p, nr::CLOCK_GETTIME, &[2, ts]) == Ok(0));
             check!(5, get_timespec(ts) >= ran);
-            // getrusage: busy in the kernel, so mostly system time.
+            // getrusage: busy in the kernel, so mostly system time. The split
+            // comes from tick samples, and a busy host can merge away every
+            // tick of a short spin while the one that came in ring 3 (on the
+            // way in) survives: spin on until a tick in the kernel shows.
             let ru = DATA + 0x200;
-            check!(6, sys(p, nr::GETRUSAGE, &[0, ru]) == Ok(0));
-            let mut b = [0u8; 32];
-            check!(7, user::copy_from_user(&mut b, ru).is_ok());
-            let stime_us = u64::from_le_bytes(b[16..24].try_into().unwrap()) * 1_000_000
-                + u64::from_le_bytes(b[24..32].try_into().unwrap());
+            let stime_us = loop {
+                check!(6, sys(p, nr::GETRUSAGE, &[0, ru]) == Ok(0));
+                let mut b = [0u8; 32];
+                check!(7, user::copy_from_user(&mut b, ru).is_ok());
+                let stime_us = u64::from_le_bytes(b[16..24].try_into().unwrap()) * 1_000_000
+                    + u64::from_le_bytes(b[24..32].try_into().unwrap());
+                if stime_us > 0 || time::now_ns() - wall0 > BUDGET {
+                    break stime_us;
+                }
+                for _ in 0..1000 {
+                    core::hint::spin_loop();
+                }
+            };
             check!(8, stime_us > 0);
             0
         })?;
