@@ -548,7 +548,8 @@ impl<D: BlockIo> Ctx<'_, D> {
     }
 
     /// Cuts `node`'s subtree back to the blocks below `keep`; returns
-    /// whether it changed.
+    /// whether anything in it changed (`node` itself is the caller's to
+    /// store).
     fn trunc_node(&mut self, inode: &mut Inode, node: &mut Node, keep: u64, freed: &mut Vec<u64>) -> Result<bool> {
         let mut changed = false;
         if node.depth == 0 {
@@ -580,10 +581,10 @@ impl<D: BlockIo> Ctx<'_, D> {
                 continue;
             }
             if self.trunc_node(inode, &mut child, keep, freed)? {
+                changed = true;
                 if child.ents.is_empty() {
                     self.drop_node(inode, child.block, freed);
                     node.ents.pop();
-                    changed = true;
                     continue;
                 }
                 self.store(inode, &child, false)?;
