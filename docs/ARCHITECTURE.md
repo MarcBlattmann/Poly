@@ -236,6 +236,18 @@ while its reader sleeps. Each test puts the disks back as it found them.
   personality, which reads arguments and writes results in its own convention.
 - Unimplemented calls return each OS's native "not implemented" result and are
   logged. That log line is the seed of the API tracer.
+- **Linux** ([ADR 0025](adr/0025-linux-syscall-table-and-kernel-services-trait.md)):
+  `personalities/linux` has the whole x86-64 table (numbers and names
+  generated from the coverage map) and handlers for the calls a static C or
+  Rust program makes at startup (`read`, `write`, `readv`, `writev`, `close`,
+  `fstat`, `ioctl`, `mmap`, `munmap`, `mprotect`, `brk`, `arch_prctl`,
+  `set_tid_address`, `exit`, `exit_group`, the id getters, `uname`,
+  `rt_sigaction`, `rt_sigprocmask`, `clock_gettime`, `getrandom`). Handlers
+  validate arguments per the man pages and do the work through
+  `LinuxKernel`, a trait the kernel implements over its VFS, VMA manager and
+  thread state; `Linux::dispatch_with(&mut kernel, regs)` is the entry point.
+  Host tests run every call, and scripted startup sequences of real static
+  binaries, against a fake kernel.
 
 ## Testing strategy
 
