@@ -44,6 +44,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0040](0040-page-cache-and-ext2-on-virtio-blk.md) | A page cache in a host-tested crate (`poly-pagecache`) wrapping disk file systems, shared with memory mappings; ext2 mounted on virtio-blk with a sleeping volume lock, a writeback thread, clean unmount at reboot | Accepted |
 | [0041](0041-processes-threads-fork-exec-wait.md) | Processes and threads: copy-on-write fork with `Arc`-counted shared frames, clone and execve in the kernel, the process tree (parents, zombies, groups, sessions, wait) in the Linux personality | Accepted |
 | [0042](0042-readiness-pipes-poll-epoll-and-event-files.md) | Readiness: wait queues, file objects (pipes, event counters, timers, epoll sets) and `poll` in `poly-vfs`, the wait and signal rules in the personality (`FileIo`), park / unpark and a timer thread in the kernel | Accepted |
+| [0046](0046-terminals-line-discipline-ptys-job-control.md) | Terminals: the line discipline, terminals with job control, ptys and devpts in a host-tested crate (`poly-tty`) on a kernel `Host`; a device may open as another (`CharDevice::open`); a device's input goes to its terminal while a program has it open, else to the kernel shell | Accepted |
 
 ## Open decisions
 

@@ -39,6 +39,7 @@ poly-sched = { path = "../crates/poly-sched" }
 poly-pci = { path = "../crates/poly-pci" }
 poly-rtc = { path = "../crates/poly-rtc" }
 poly-term = { path = "../crates/poly-term" }
+poly-tty = { path = "../crates/poly-tty" }
 poly-vfs = { path = "../crates/poly-vfs" }
 poly-personality-linux = { path = "../personalities/linux" }
 poly-personality-nt = { path = "../personalities/nt" }

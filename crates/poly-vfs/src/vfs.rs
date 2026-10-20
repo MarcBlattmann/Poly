@@ -281,7 +281,9 @@ impl Vfs {
                 if loc.mount.flags.no_dev {
                     return Err(Errno::EACCES);
                 }
-                Backend::Device(self.char_device(attr.rdev).ok_or(Errno::ENXIO)?)
+                let dev = self.char_device(attr.rdev).ok_or(Errno::ENXIO)?;
+                // A device may open as another one (`CharDevice::open`).
+                Backend::Device(dev.open(flags)?.unwrap_or(dev))
             }
             // Block devices are reached through the block layer, opening a
             // FIFO (a `pipe::Pipe` per node, blocking opens) comes with the

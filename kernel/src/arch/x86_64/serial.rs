@@ -60,6 +60,14 @@ impl SerialPort {
         }
     }
 
+    /// Send `bytes` as they are (no CR added before LF): a terminal's
+    /// output, already through its line discipline.
+    pub fn write_raw(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_byte(b);
+        }
+    }
+
     fn write_byte(&mut self, byte: u8) {
         // LSR bit 5: the transmit holding register (or FIFO) is empty.
         // SAFETY: polling the line status register of a UART we own.

@@ -717,9 +717,8 @@ The self-test boots use `target/poly-test-initramfs.cpio` (built by
 same on every run) with `poly.test.initrd`, which makes the `fs::` kernel
 tests check its contents; `cargo xtask run poly.test=fs::
 --initrd=target/poly-test-initramfs.cpio poly.test.initrd` runs them by
-hand. Writes to `/dev/console` (fds 0-2 of every new process) appear in
-the serial log like kernel log lines; reads from it return end of file
-until the TTY layer exists.
+hand. `/dev/console` (fds 0-2 of every new process) is a terminal, see
+"Terminals" below.
 
 ## Linux programs
 
@@ -821,6 +820,64 @@ in one:
 The kernel tests run with `poly.test=linux::fileio_tests`; the host tests
 are `cargo test -p poly-vfs objects` and `cargo test -p
 poly-personality-linux fileio`.
+
+## Terminals
+
+The terminals (ADR 0046) log one line at boot:
+
+```text
+tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys on /dev/pts
+```
+
+`/dev/console` is the terminal `console=` names: `ttyS0` (the default)
+or `tty1`, the screen terminal, which then comes up before the first
+program. A program started with `poly.init` gets `/dev/console` on fds
+0-2 but no controlling terminal (as on Linux): a shell started there has
+no job control, and `^C` signals nobody, until it takes the terminal with
+`ioctl(0, TIOCSCTTY, 0)` (BusyBox: `setsid cttyhack sh`). A program
+started with the shell's `run` gets the shell's own terminal and leads a
+session on it, so its job control works.
+
+```sh
+cargo xtask run --initrd=prog.cpio poly.init=/bin/sh            # init on the serial terminal
+cargo xtask run --initrd=prog.cpio poly.init=/bin/sh console=tty1   # init on the screen's terminal
+```
+
+**Who gets typed input.** While any program has a terminal open, its
+device's input is the terminal's (threads `tty-serial` and `tty-keys` in
+`ps`); otherwise the kernel shell on that device reads it. If the serial
+shell seems deaf after a `run`, something the program started still has
+`/dev/ttyS0` open (a background child): it gets the input. Program output
+on COM1 is written as it comes (`log::write_tty`), erasing a shown shell
+prompt first; it does not appear on the screen.
+
+**A read that does not return.** In canonical mode (the default) a read
+waits for a whole line: `Enter` (CR, which `ICRNL` turns into NL),
+`Ctrl-D` at the start of a line for end of file. In raw mode `MIN` and
+`TIME` decide. A process in a background group of its terminal's session
+that reads is stopped by `SIGTTIN` (`linux: pid N stopped by signal 21`
+in the log); writing with `TOSTOP` set, or changing the terminal, stops it
+with `SIGTTOU` (22). `stty -a` (or `TCGETS`) shows the attributes;
+`stty sane` puts them back.
+
+**Signals.** `^C` (`SIGINT`), `^\` (`SIGQUIT`) and `^Z` (`SIGTSTP`) go to
+the terminal's foreground process group, and only when the terminal is a
+session's controlling terminal. Init only gets the ones it handles. When a
+session leader ends, its terminal's foreground group gets `SIGHUP`; a pty
+whose master closes sends `SIGHUP` to the session leader and `SIGHUP` and
+`SIGCONT` to the foreground group, and its slave reads end of file from
+then on.
+
+**Pseudo-terminals.** `/dev/ptmx` makes a pair; `/dev/pts` lists one node
+per open master (`ls /dev/pts` in the shell). A slave cannot be opened
+(`EIO`) until the master unlocks it (`TIOCSPTLCK` with 0, what
+unlockpt(3) does). With every slave closed, master reads fail with `EIO`.
+
+The tests: `cargo test -p poly-tty` (the line discipline, terminals and
+ptys on the host), `cargo test -p poly-personality-linux jobs` (orphaned
+process groups), `cargo xtask run poly.test=tty::` (from ring 3), and the
+boot test that types into `/bin/ttyinit` as init on the serial port
+(`cargo xtask test`; its output shows the echo of what was typed).
 
 ## Disk file systems and the page cache
 

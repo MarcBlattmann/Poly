@@ -96,6 +96,7 @@ dependencies = [
  "poly-rtc",
  "poly-sched",
  "poly-term",
+ "poly-tty",
  "poly-vfs",
  "poly-virtio",
  "poly-virtio-blk",
@@ -165,6 +166,13 @@ version = "0.0.1"
 dependencies = [
  "poly-gfx",
  "poly-input",
+]
+
+[[package]]
+name = "poly-tty"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
 ]
 
 [[package]]

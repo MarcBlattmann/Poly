@@ -1,0 +1,14 @@
+[package]
+name = "poly-tty"
+description = "Terminals without the machine: termios, the line discipline, terminals with job control, pseudo-terminals and devpts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-vfs.workspace = true
+
+[lints]
+workspace = true

@@ -156,7 +156,9 @@ impl Process {
     /// (ADR 0027).
     pub fn new_linux(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
         let linux = Some(LinuxState::new(pid));
-        Process::with_state(pid, ppid, Personality::Linux, format, linux, traced, crate::fs::Files::with_console())
+        // A traced test run keeps the kernel log's console (ADR 0046).
+        let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
+        Process::with_state(pid, ppid, Personality::Linux, format, linux, traced, files)
     }
 
     /// A Linux process made by `fork` / `clone` (`linux::task`): its files

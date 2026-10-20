@@ -178,6 +178,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-tty"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-vfs"
 version = "0.0.1"
 

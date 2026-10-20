@@ -60,6 +60,18 @@ pub fn write_console(s: &str) {
     let _ = CONSOLE.lock().write_str(s);
 }
 
+/// Write a program's terminal output (`/dev/ttyS0`, ADR 0046) to the
+/// serial port as it is: like a log line, it erases a shown shell prompt
+/// first (which the shell then draws again), but it is not mirrored on the
+/// screen, which has a terminal of its own.
+pub fn write_tty(bytes: &[u8]) {
+    let mut port = CONSOLE.lock();
+    if PROMPT.compare_exchange(PROMPT_SHOWN, PROMPT_ERASED, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+        let _ = port.write_str("\r\x1b[K");
+    }
+    port.write_raw(bytes);
+}
+
 /// The shell's prompt and line are on the serial console's current row
 /// (true), or not any more (false: the line was submitted). Marking it
 /// shown keeps a pending "erased" state, so a redraw is not lost.
