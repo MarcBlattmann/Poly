@@ -34,6 +34,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0029](0029-pe-loader-logic-in-poly-pe.md) | PE loader logic in a host-tested crate (`poly-pe`), working on mapped images in place | Accepted |
 | [0019](0019-display-framebuffer-and-drawing.md) | The display: Bochs VBE mode setting, a write-combining framebuffer behind a RAM back buffer, a drawing library and text grid over caller memory | Accepted |
 | [0028](0028-tcp-ip-stack-in-a-crate.md) | Our own TCP/IP stack in `poly-net`: RFC-based, host-tested in a simulated network, driven by `poll(now)`, Linux errno | Accepted |
+| [0031](0031-linux-signals-and-futexes.md) | Linux signals and futexes: personality-owned state, kernel-provided blocking | Accepted |
 
 ## Open decisions
 

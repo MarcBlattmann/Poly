@@ -36,12 +36,13 @@ fn id_getters() {
 #[test]
 fn set_tid_address_records_the_pointer_and_returns_the_tid() {
     let mut k = FakeKernel::new();
+    k.add_thread(123);
     k.tid = 123;
     assert_eq!(sys(&mut k, nr::SET_TID_ADDRESS, &[0x4005_0650]), Ok(123));
-    assert_eq!(k.clear_child_tid.0, 0x4005_0650);
+    assert_eq!(k.thread_state().clear_child_tid.0, 0x4005_0650);
     assert_eq!(sys(&mut k, nr::SET_TID_ADDRESS, &[UNMAPPED]), Ok(123), "never fails, not even on a bad pointer");
     assert_eq!(sys(&mut k, nr::SET_TID_ADDRESS, &[0]), Ok(123));
-    assert!(k.clear_child_tid.is_null());
+    assert!(k.thread_state().clear_child_tid.is_null());
 }
 
 #[test]
@@ -95,7 +96,7 @@ fn rt_sigaction_records_and_reports_actions() {
     let sigpipe = signal::SIGPIPE as u64;
     assert_eq!(sys(&mut k, nr::RT_SIGACTION, &[sigpipe, act, scratch(0x40), 8]), Ok(0));
     assert_eq!(get_action(&k, scratch(0x40)), SigAction::default(), "old action: SIG_DFL");
-    assert_eq!(k.actions.get(signal::SIGPIPE), ign);
+    assert_eq!(k.actions().get(signal::SIGPIPE), ign);
     // Query only.
     assert_eq!(sys(&mut k, nr::RT_SIGACTION, &[sigpipe, 0, scratch(0x80), 8]), Ok(0));
     assert_eq!(get_action(&k, scratch(0x80)), ign);
@@ -121,7 +122,7 @@ fn rt_sigaction_errors() {
     assert_eq!(sys(&mut k, nr::RT_SIGACTION, &[2, UNMAPPED, 0, 8]), Err(Errno::EFAULT));
     let ro = read_only_page(&mut k);
     assert_eq!(sys(&mut k, nr::RT_SIGACTION, &[2, act, ro, 8]), Err(Errno::EFAULT));
-    assert_eq!(k.actions.get(2), SigAction::default(), "an EFAULT changes nothing");
+    assert_eq!(k.actions().get(2), SigAction::default(), "an EFAULT changes nothing");
 }
 
 #[test]
@@ -134,15 +135,15 @@ fn rt_sigprocmask_block_unblock_setmask() {
     let s = set(&mut k, 0b1010);
     assert_eq!(sys(&mut k, nr::RT_SIGPROCMASK, &[signal::SIG_BLOCK as u64, s, scratch(8), 8]), Ok(0));
     assert_eq!(k.peek_u64(scratch(8)), 0);
-    assert_eq!(k.mask, SigSet(0b1010));
+    assert_eq!(k.mask(), SigSet(0b1010));
     let s = set(&mut k, 0b0010);
     assert_eq!(sys(&mut k, nr::RT_SIGPROCMASK, &[signal::SIG_UNBLOCK as u64, s, scratch(8), 8]), Ok(0));
     assert_eq!(k.peek_u64(scratch(8)), 0b1010);
-    assert_eq!(k.mask, SigSet(0b1000));
+    assert_eq!(k.mask(), SigSet(0b1000));
     let s = set(&mut k, u64::MAX);
     assert_eq!(sys(&mut k, nr::RT_SIGPROCMASK, &[signal::SIG_SETMASK as u64, s, 0, 8]), Ok(0));
-    assert_eq!(k.mask, SigSet(!SigSet::UNBLOCKABLE.0), "SIGKILL and SIGSTOP silently stay unblocked");
-    assert!(!k.mask.contains(signal::SIGKILL) && !k.mask.contains(signal::SIGSTOP) && k.mask.contains(64));
+    assert_eq!(k.mask(), SigSet(!SigSet::UNBLOCKABLE.0), "SIGKILL and SIGSTOP silently stay unblocked");
+    assert!(!k.mask().contains(signal::SIGKILL) && !k.mask().contains(signal::SIGSTOP) && k.mask().contains(64));
     // set == NULL: how is ignored, the mask is only reported.
     assert_eq!(sys(&mut k, nr::RT_SIGPROCMASK, &[99, 0, scratch(8), 8]), Ok(0));
     assert_eq!(k.peek_u64(scratch(8)), !SigSet::UNBLOCKABLE.0);
@@ -159,7 +160,7 @@ fn rt_sigprocmask_errors() {
     assert_eq!(sys(&mut k, nr::RT_SIGPROCMASK, &[0, UNMAPPED, 0, 8]), Err(Errno::EFAULT));
     let ro = read_only_page(&mut k);
     assert_eq!(sys(&mut k, nr::RT_SIGPROCMASK, &[0, scratch(0), ro, 8]), Err(Errno::EFAULT));
-    assert_eq!(k.mask, SigSet::EMPTY, "nothing changed");
+    assert_eq!(k.mask(), SigSet::EMPTY, "nothing changed");
 }
 
 #[test]

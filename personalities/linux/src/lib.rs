@@ -17,6 +17,12 @@
 //!         │
 //!         ▼
 //!     rax = value or -errno, Outcome::Handled
+//!     (interrupted by a signal: rax = -EINTR, restart decided below)
+//!
+//! kernel, before every return to user mode ──► Linux::exit_to_user(&mut kernel)
+//!     pending signals: ignore / stop / kill / handler frame; restart or EINTR
+//! kernel, when a thread exits ──► Linux::thread_exit(&mut kernel, shares_memory)
+//!     robust futex list, clear_child_tid
 //! ```
 //!
 //! - [`table`]: all ~370 x86-64 calls by number and name (generated from the
@@ -25,6 +31,8 @@
 //! - [`args`], [`abi`], [`errno`]: argument decoding, UAPI constants and
 //!   structure layouts, error numbers.
 //! - [`sys`]: the handlers.
+//! - [`signal`]: signal state, delivery, frames (ADR 0031).
+//! - [`futex`]: futex wait queues, robust lists (ADR 0031).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -38,8 +46,10 @@ extern crate alloc;
 pub mod abi;
 pub mod args;
 pub mod errno;
+pub mod futex;
 pub mod kernel;
 mod numbers;
+pub mod signal;
 pub mod sys;
 pub mod table;
 
@@ -49,6 +59,7 @@ mod tests;
 pub use args::Args;
 pub use errno::{Errno, SysResult};
 pub use kernel::{LinuxKernel, UserPtr};
+pub use signal::{ExitToUser, LinuxProcess};
 pub use table::nr;
 
 use poly_abi::{Outcome, Personality, SyscallDispatch, SyscallRegs};
@@ -78,12 +89,23 @@ impl Linux {
     ///
     /// After `exit` / `exit_group` the kernel has been told to end the
     /// thread or process; it must not resume the thread.
+    ///
+    /// A call a signal interrupted returns `-EINTR` here; whether it stays
+    /// that way or is restarted is decided by [`Linux::exit_to_user`],
+    /// which the kernel must call before the thread returns to user mode.
     pub fn dispatch_with(kernel: &mut dyn LinuxKernel, regs: &mut SyscallRegs) -> Outcome {
         let number = regs.rax;
         match table::handler(number) {
             Some(handler) => {
                 let args = Args::from_regs(regs);
-                regs.rax = errno::encode(handler(kernel, &args));
+                let result = match handler(kernel, &args) {
+                    Err(e) if e.is_restart() => {
+                        signal::deliver::note_restart(kernel, number, e);
+                        Err(Errno::EINTR)
+                    }
+                    other => other,
+                };
+                regs.rax = errno::encode(result);
                 Outcome::Handled
             }
             None => {
@@ -91,6 +113,35 @@ impl Linux {
                 Outcome::Unimplemented { table: TABLE, number }
             }
         }
+    }
+}
+
+impl Linux {
+    /// Called by the kernel before a thread of a Linux process returns to
+    /// user mode (after every system call, interrupt and exception): acts
+    /// on pending signals and finishes interrupted system calls. See
+    /// [`signal::deliver::exit_to_user`]. On [`ExitToUser::Killed`] the
+    /// thread must not return to user mode.
+    pub fn exit_to_user(kernel: &mut dyn LinuxKernel) -> ExitToUser {
+        signal::exit_to_user(kernel)
+    }
+
+    /// Called by the kernel when a thread of a Linux process exits, with
+    /// `shares_memory` set if its address space has other users: the
+    /// robust futex list and `clear_child_tid`. See
+    /// [`futex::thread_exit`]. The kernel then removes the thread from
+    /// its [`LinuxProcess`].
+    pub fn thread_exit(kernel: &mut dyn LinuxKernel, shares_memory: bool) {
+        futex::thread_exit(kernel, shares_memory);
+    }
+
+    /// Called by the kernel for a fault in user mode that becomes a signal
+    /// for the faulting thread (`SIGSEGV`, `SIGBUS`, `SIGFPE`, `SIGILL`,
+    /// `SIGTRAP`), with `trapno`, `err` and `cr2` set in the thread's
+    /// [`kernel::UserContext`]. Delivered by the next
+    /// [`exit_to_user`](Self::exit_to_user).
+    pub fn fault_signal(kernel: &mut dyn LinuxKernel, info: abi::SigInfo) {
+        signal::force_signal(kernel, info);
     }
 }
 

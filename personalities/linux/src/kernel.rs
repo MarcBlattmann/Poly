@@ -12,6 +12,9 @@
 
 use crate::abi::{FileStat, SigAction, Timespec, signal};
 use crate::errno::Errno;
+use crate::futex::{FutexKey, FutexTable};
+use crate::signal::LinuxProcess;
+use alloc::vec::Vec;
 
 /// A user-space address as the caller passed it. It is never dereferenced
 /// by the personality: all access goes through [`LinuxKernel::copy_from_user`]
@@ -174,6 +177,7 @@ pub struct SigSet(pub u64);
 
 impl SigSet {
     pub const EMPTY: SigSet = SigSet(0);
+    pub const FULL: SigSet = SigSet(u64::MAX);
 
     /// The set with only `signal` (1-64).
     pub const fn only(signal: u32) -> SigSet {
@@ -186,12 +190,50 @@ impl SigSet {
 
     /// The signals that can never be blocked: `SIGKILL` and `SIGSTOP`.
     pub const UNBLOCKABLE: SigSet = SigSet((1 << (signal::SIGKILL - 1)) | (1 << (signal::SIGSTOP - 1)));
+
+    /// The standard signals (1-31); the rest are real-time signals.
+    pub const STANDARD: SigSet = SigSet((1 << (signal::SIGRTMIN - 1)) - 1);
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    pub const fn union(self, other: SigSet) -> SigSet {
+        SigSet(self.0 | other.0)
+    }
+
+    pub const fn intersection(self, other: SigSet) -> SigSet {
+        SigSet(self.0 & other.0)
+    }
+
+    /// The signals of `self` that are not in `other`.
+    pub const fn without(self, other: SigSet) -> SigSet {
+        SigSet(self.0 & !other.0)
+    }
+
+    /// Add `signal` (1-64).
+    pub fn insert(&mut self, signal: u32) {
+        self.0 |= SigSet::only(signal).0;
+    }
+
+    /// Remove `signal` (1-64).
+    pub fn remove(&mut self, signal: u32) {
+        self.0 &= !SigSet::only(signal).0;
+    }
+
+    /// The lowest-numbered signal in the set.
+    pub const fn lowest(self) -> Option<u32> {
+        if self.0 == 0 { None } else { Some(self.0.trailing_zeros() + 1) }
+    }
+
+    /// The signals in the set, lowest first.
+    pub fn iter(self) -> impl Iterator<Item = u32> {
+        (1..=signal::NSIG).filter(move |&s| self.contains(s))
+    }
 }
 
 /// The disposition of every signal of a process, as `rt_sigaction` sets and
-/// reports it. The kernel keeps one per process (threads share it) and
-/// hands it out through [`LinuxKernel::signal_actions`]; the personality
-/// does all the reading and writing. Nothing delivers signals yet.
+/// reports it. Part of [`LinuxProcess`] (threads share it).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SignalActions {
     actions: [SigAction; signal::NSIG as usize],
@@ -218,6 +260,118 @@ impl SignalActions {
     pub fn set(&mut self, signal: u32, action: SigAction) {
         self.actions[signal as usize - 1] = action;
     }
+}
+
+/// The user registers of a thread, as it will see them when it returns to
+/// user mode: what a signal frame saves (`struct sigcontext`) and what
+/// rt_sigreturn(2) restores.
+///
+/// `trapno`, `err` and `cr2` describe the exception that caused a signal
+/// (the vector, its error code and, for page faults, the address); the
+/// kernel sets them for fault signals and leaves them 0 otherwise. During
+/// a system call `rcx` and `r11` hold what the `syscall` instruction put
+/// there (the return address and flags).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UserContext {
+    pub r8: u64,
+    pub r9: u64,
+    pub r10: u64,
+    pub r11: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
+    pub rdi: u64,
+    pub rsi: u64,
+    pub rbp: u64,
+    pub rbx: u64,
+    pub rdx: u64,
+    pub rax: u64,
+    pub rcx: u64,
+    pub rsp: u64,
+    pub rip: u64,
+    pub rflags: u64,
+    /// The user code and stack segment selectors.
+    pub cs: u16,
+    pub ss: u16,
+    pub trapno: u64,
+    pub err: u64,
+    pub cr2: u64,
+}
+
+/// The calling thread's floating-point and vector state, as the CPU saves
+/// it: an `FXSAVE` image (512 bytes) or, on CPUs with `XSAVE`, an XSAVE
+/// image (the 512-byte legacy area, the 64-byte header, the extended
+/// components) with the feature bits saved in it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FpuState<'a> {
+    pub image: &'a [u8],
+    /// `Some(features)` for an XSAVE image, `None` for `FXSAVE`.
+    pub xfeatures: Option<u64>,
+}
+
+/// Which process [`LinuxKernel::with_process`] acts on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    /// The calling thread's process.
+    Current,
+    /// The process (thread group) with this id.
+    Process(i32),
+    /// The process that has a thread with this thread id.
+    Thread(i32),
+}
+
+/// What the kernel tells the personality about a process: ids and
+/// credentials for the permission checks of kill(2) and
+/// get_robust_list(2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ProcessInfo {
+    /// The thread group id.
+    pub pid: i32,
+    pub pgid: i32,
+    /// The session id.
+    pub sid: i32,
+    /// Real, effective and saved user ids.
+    pub uid: u32,
+    pub euid: u32,
+    pub suid: u32,
+    /// Real, effective and saved group ids.
+    pub gid: u32,
+    pub egid: u32,
+    pub sgid: u32,
+    /// The process has ended but has not been waited for. Signals to it
+    /// succeed and do nothing (kill(2): "an existing process might be a
+    /// zombie").
+    pub zombie: bool,
+}
+
+/// Which processes [`LinuxKernel::process_ids`] lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProcessSelector {
+    /// Every process the caller can see (kill(-1, sig)).
+    All,
+    /// The members of a process group.
+    Group(i32),
+}
+
+/// Why [`LinuxKernel::block`] returned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Wakeup {
+    /// [`LinuxKernel::unblock`] was called for the thread (perhaps before
+    /// it blocked, or for an earlier wait: callers check their condition).
+    Woken,
+    /// The deadline passed.
+    TimedOut,
+    /// The thread's signal notification is set
+    /// ([`LinuxKernel::notify_signal`]).
+    Signal,
+}
+
+/// An absolute point in time on a clock (`Realtime` or `Monotonic`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Deadline {
+    pub clock: Clock,
+    pub at: Timespec,
 }
 
 /// Kernel services for the Linux personality, implemented by the kernel for
@@ -338,16 +492,150 @@ pub trait LinuxKernel {
     /// Set the GS base; the value is below [`crate::abi::USER_ADDRESS_LIMIT`].
     fn set_gs_base(&mut self, base: u64);
 
-    /// Store the thread's `clear_child_tid` address (set_tid_address(2)).
-    /// When the thread exits and the address is not null, the kernel writes
-    /// 0 there and wakes one futex waiter on it (once futexes exist).
-    fn set_clear_child_tid(&mut self, addr: UserPtr);
+    // ---- processes, threads and signals (ADR 0031) ------------------
 
-    /// The calling thread's blocked-signal mask (per thread).
-    fn signal_mask(&mut self) -> &mut SigSet;
+    /// The calling process's process group id.
+    fn pgid(&self) -> i32;
+    /// The calling process's session id.
+    fn sid(&self) -> i32;
 
-    /// The calling process's signal dispositions (per process).
-    fn signal_actions(&mut self) -> &mut SignalActions;
+    /// Run `f` on the Linux state of a process ([`LinuxProcess`]: signal
+    /// dispositions, pending signals, and every thread's mask, alternate
+    /// stack, robust list and `clear_child_tid`) together with what the
+    /// kernel knows about the process. `ESRCH` if there is no such process
+    /// or thread.
+    ///
+    /// The kernel keeps one `LinuxProcess` per Linux process, creates it
+    /// with [`LinuxProcess::new`] (or [`LinuxProcess::fork`]), tells it
+    /// about new and ended threads ([`LinuxProcess::add_thread`],
+    /// [`LinuxProcess::remove_thread`]) and holds the process's lock while
+    /// `f` runs. `f` never blocks and never calls back into the kernel, so
+    /// a spinlock will do; the personality never holds two processes'
+    /// state at once.
+    fn with_process(&mut self, target: Target, f: &mut dyn FnMut(&mut LinuxProcess, &ProcessInfo))
+    -> Result<(), Errno>;
+
+    /// The thread group ids of the processes `selector` names, in any
+    /// order (empty if there are none). Process 1 and the caller are
+    /// included; the personality applies kill(2)'s exceptions.
+    fn process_ids(&self, selector: ProcessSelector) -> Vec<i32>;
+
+    /// Thread `tid` has a signal to act on: set its signal notification,
+    /// end its [`block`](Self::block) with [`Wakeup::Signal`], and end
+    /// its interruptible kernel waits (a pipe read, say), which then
+    /// return one of the `Errno::RESTART_*` codes. The notification stays
+    /// set until the thread clears it
+    /// ([`clear_signal_notification`](Self::clear_signal_notification)).
+    /// Unknown threads are ignored.
+    fn notify_signal(&mut self, tid: i32);
+
+    /// Clear the calling thread's signal notification.
+    fn clear_signal_notification(&mut self);
+
+    /// Stop every thread of the calling process (the default action of
+    /// `SIGSTOP`, `SIGTSTP`, `SIGTTIN`, `SIGTTOU`) and tell the parent
+    /// (wait(2) `WIFSTOPPED`; `SIGCHLD` with `CLD_STOPPED` unless it set
+    /// `SA_NOCLDSTOP`). Returns once the process is continued
+    /// ([`continue_process`](Self::continue_process)) or killed.
+    fn stop_process(&mut self, signal: u32);
+
+    /// Continue process `pid` if it is stopped (`SIGCONT` was generated
+    /// for it, whatever its disposition) and tell its parent
+    /// (`CLD_CONTINUED`). Nothing happens if it is not stopped.
+    fn continue_process(&mut self, pid: i32);
+
+    /// End every thread of the calling process because of `signal`
+    /// (wait(2) `WIFSIGNALED`, `WTERMSIG` = `signal`). `core_dump` says the
+    /// default action is "Core"; the kernel reports `WCOREDUMP` only if it
+    /// wrote a dump. Like [`exit_group`](Self::exit_group), the thread
+    /// must not return to user mode.
+    fn kill_process(&mut self, signal: u32, core_dump: bool);
+
+    // ---- user registers (signal frames) ------------------------------
+
+    /// The calling thread's user registers as it would return to user
+    /// mode now.
+    fn user_context(&self) -> UserContext;
+
+    /// Replace the calling thread's user registers. The thread returns to
+    /// user mode with exactly these (with `iret`, since `rcx` and `r11`
+    /// matter), not with the `SyscallRegs` the dispatcher was given; the
+    /// dispatcher writes only `rax` afterwards, with the same value.
+    /// `cs` and `ss` are the current selectors; the kernel keeps
+    /// `rflags.IF` set and the reserved bits as they must be.
+    fn set_user_context(&mut self, ctx: &UserContext);
+
+    /// The calling thread's user FPU / vector state.
+    fn fpu_state(&self) -> FpuState<'_>;
+
+    /// Load the calling thread's FPU state from a signal frame: an XSAVE
+    /// image (when the frame says so) or a 512-byte `FXSAVE` image. The
+    /// image comes from user memory: `EINVAL` if loading it would fault
+    /// (reserved `MXCSR` bits, a bad XSAVE header, features the thread
+    /// may not use); the thread then gets `SIGSEGV`.
+    fn set_fpu_state(&mut self, image: &[u8]) -> Result<(), Errno>;
+
+    /// Give the calling thread a clean FPU state (as after `FNINIT`, with
+    /// the default `MXCSR`), for a signal handler.
+    fn reset_fpu_state(&mut self);
+
+    // ---- blocking -----------------------------------------------------
+
+    /// Block the calling thread until [`unblock`](Self::unblock) is
+    /// called for it, `deadline` passes, or its signal notification is
+    /// set. An `unblock` that came before the call is not lost: the call
+    /// returns `Woken` at once and consumes it. Callers re-check what they
+    /// wait for, so spurious returns are fine.
+    fn block(&mut self, deadline: Option<Deadline>) -> Wakeup;
+
+    /// Wake thread `tid` from [`block`](Self::block), or make its next
+    /// `block` return at once. Unknown threads are ignored.
+    fn unblock(&mut self, tid: i32);
+
+    // ---- futexes ------------------------------------------------------
+
+    /// Run `f` with the system's futex table locked. `f` gets the kernel
+    /// back for atomic user-memory access ([`futex_load`](Self::futex_load),
+    /// [`futex_cmpxchg`](Self::futex_cmpxchg)) and
+    /// [`unblock`](Self::unblock); it never blocks and never calls
+    /// `with_futexes` or `with_process`. One table serves every process
+    /// (shared futexes cross address spaces).
+    fn with_futexes(&mut self, f: &mut dyn FnMut(&mut FutexTable, &mut dyn LinuxKernel));
+
+    /// An id of the calling thread's address space, the same for every
+    /// thread that shares it and different from every other live one.
+    fn address_space_id(&self) -> u64;
+
+    /// The key of the futex word at `addr` (4-byte aligned). Private
+    /// futexes are keyed by address space and address. A shared futex in
+    /// memory other processes can map is keyed by the object and offset,
+    /// so every mapping of it finds the same waiters; in private memory it
+    /// gets the same key as the private futex. `EFAULT` if `addr` is not
+    /// mapped.
+    ///
+    /// The default treats all memory as private, which is right until the
+    /// kernel has shared mappings.
+    fn futex_key(&self, addr: UserPtr, private: bool) -> Result<FutexKey, Errno> {
+        let _ = private;
+        Ok(FutexKey::Private { space: self.address_space_id(), addr: addr.0 })
+    }
+
+    /// Read the aligned 32-bit word at `addr` in one access. `EFAULT` if
+    /// it is not readable. It may be called with the futex table locked,
+    /// so it must not sleep: the personality reads the word once before
+    /// locking the table, which is when a kernel that loads pages lazily
+    /// can do so.
+    fn futex_load(&self, addr: UserPtr) -> Result<u32, Errno> {
+        let mut b = [0; 4];
+        self.copy_from_user(addr, &mut b)?;
+        Ok(u32::from_le_bytes(b))
+    }
+
+    /// Atomically replace the aligned 32-bit word at `addr` with `new` if
+    /// it holds `expected` (`lock cmpxchg`), and return the value found
+    /// (equal to `expected` on success). `EFAULT` if the word is not
+    /// readable and writable. Same rules as [`futex_load`](Self::futex_load).
+    fn futex_cmpxchg(&mut self, addr: UserPtr, expected: u32, new: u32) -> Result<u32, Errno>;
 
     // ---- exit ---------------------------------------------------------
 

@@ -10,7 +10,7 @@
 extern crate std;
 
 use super::fake::*;
-use crate::abi::{SigAction, arch_prctl as op, ioctl, map, prot, random, signal};
+use crate::abi::{SigAction, StackT, arch_prctl as op, ioctl, map, prot, random, signal};
 use crate::kernel::SigSet;
 use crate::table::name;
 use crate::{Errno, nr};
@@ -105,7 +105,7 @@ fn glibc_static_hello(stdout: Kind) -> Script {
     s.step(nr::BRK, &[b + 0xd00], Expect::Value(b + 0xd00));
     s.step(nr::ARCH_PRCTL, &[op::ARCH_SET_FS as u64, b + 0x380], Expect::Value(0));
     s.step(nr::SET_TID_ADDRESS, &[b + 0x650], Expect::Value(100));
-    s.step(nr::SET_ROBUST_LIST, &[b + 0x660, 24], Expect::Enosys);
+    s.step(nr::SET_ROBUST_LIST, &[b + 0x660, 24], Expect::Value(0));
     s.step(nr::RSEQ, &[b + 0xca0, 0x20, 0, 0x5305_3053], Expect::Enosys);
     s.step(nr::PRLIMIT64, &[0, 3, 0, STACK], Expect::Enosys);
     s.step(nr::READLINKAT, &[(-100i64) as u64, STACK, STACK + 0x100, 4096], Expect::Enosys);
@@ -123,6 +123,7 @@ fn glibc_static_hello(stdout: Kind) -> Script {
     // The heap the program grew is usable memory.
     assert!(s.k.is_mapped(b + 0x21fff));
     assert_eq!(s.k.fs_base, b + 0x380);
+    assert_eq!(s.k.thread_state().robust_list.0, b + 0x660);
     s
 }
 
@@ -183,13 +184,17 @@ fn rust_std_musl_static_hello_world() {
     assert_eq!(SigAction::from_bytes(&s.k.peek(old, 32).try_into().unwrap()), SigAction::default());
     s.step(nr::RT_SIGACTION, &[signal::SIGSEGV as u64, 0, old, 8], Expect::Value(0));
     assert_eq!(SigAction::from_bytes(&s.k.peek(old, 32).try_into().unwrap()).handler, signal::SIG_DFL);
-    s.step(nr::SIGALTSTACK, &[0, old], Expect::Enosys);
+    s.step(nr::SIGALTSTACK, &[0, old], Expect::Value(0));
+    let disabled = StackT { sp: 0, flags: signal::SS_DISABLE, size: 0 };
+    assert_eq!(StackT::from_bytes(&s.k.peek(old, StackT::SIZE).try_into().unwrap()), disabled);
 
     let rw = (prot::PROT_READ | prot::PROT_WRITE) as u64;
     let anon = (map::MAP_PRIVATE | map::MAP_ANONYMOUS) as u64;
     let alt = s.step(nr::MMAP, &[0, 16048, rw, anon | map::MAP_STACK as u64, u64::MAX, 0], Expect::Any);
     s.step(nr::MPROTECT, &[alt, 4096, prot::PROT_NONE as u64], Expect::Value(0));
-    s.step(nr::SIGALTSTACK, &[STACK, 0], Expect::Enosys);
+    s.k.poke(STACK, &StackT { sp: alt + 4096, flags: 0, size: 11952 }.to_bytes());
+    s.step(nr::SIGALTSTACK, &[STACK, 0], Expect::Value(0));
+    assert_eq!(s.k.thread_state().altstack.sp, alt + 4096);
     s.k.poke(STACK, &(SigSet::only(33).0 | SigSet::only(34).0).to_le_bytes());
     s.step(nr::RT_SIGPROCMASK, &[signal::SIG_UNBLOCK as u64, STACK, 0, 8], Expect::Value(0));
 
@@ -203,8 +208,8 @@ fn rust_std_musl_static_hello_world() {
     s.step(nr::RT_SIGACTION, &[signal::SIGSEGV as u64, STACK, 0, 8], Expect::Value(0));
     s.step(nr::RT_SIGACTION, &[signal::SIGBUS as u64, 0, old, 8], Expect::Value(0));
     s.step(nr::RT_SIGACTION, &[signal::SIGBUS as u64, STACK, 0, 8], Expect::Value(0));
-    assert_eq!(s.k.actions.get(signal::SIGSEGV), handler);
-    assert_eq!(s.k.actions.get(signal::SIGPIPE), ign);
+    assert_eq!(s.k.actions().get(signal::SIGSEGV), handler);
+    assert_eq!(s.k.actions().get(signal::SIGPIPE), ign);
 
     let b = s.step(nr::BRK, &[0], Expect::Any);
     s.step(nr::BRK, &[b + 0x2000], Expect::Value(b + 0x2000));
@@ -214,7 +219,9 @@ fn rust_std_musl_static_hello_world() {
     s.k.poke(buf, HELLO);
     s.step(nr::WRITE, &[1, buf, 14], Expect::Value(14));
     s.step(nr::MUNMAP, &[buf, 4096], Expect::Value(0));
-    s.step(nr::SIGALTSTACK, &[STACK, 0], Expect::Enosys);
+    s.k.poke(STACK, &StackT { sp: 0, flags: signal::SS_DISABLE, size: 11952 }.to_bytes());
+    s.step(nr::SIGALTSTACK, &[STACK, 0], Expect::Value(0));
+    assert!(!s.k.thread_state().altstack.is_enabled());
     s.step(nr::MUNMAP, &[alt, 16048], Expect::Value(0));
     s.step(nr::EXIT_GROUP, &[0], Expect::Value(0));
 
@@ -262,8 +269,5 @@ fn traced_calls_still_missing() {
             missing.push(call);
         }
     }
-    assert_eq!(
-        missing,
-        ["set_robust_list", "rseq", "prlimit64", "readlinkat", "poll", "sigaltstack", "openat", "sched_getaffinity"]
-    );
+    assert_eq!(missing, ["rseq", "prlimit64", "readlinkat", "poll", "openat", "sched_getaffinity"]);
 }

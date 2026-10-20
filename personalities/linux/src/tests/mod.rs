@@ -2,9 +2,11 @@
 //! [`fake::FakeKernel`].
 
 mod fake;
+mod futex;
 mod io;
 mod mem;
 mod process;
+mod signal;
 mod startup;
 
 use crate::{ENOSYS, Errno, Linux, err, nr};
@@ -22,7 +24,7 @@ fn unimplemented_returns_negative_enosys() {
 #[test]
 fn dispatch_with_kernel_reports_unimplemented_calls() {
     let mut k = FakeKernel::new();
-    for number in [nr::OPENAT, nr::SET_ROBUST_LIST, 400, 472, 473, 0x4000_0000, u64::MAX] {
+    for number in [nr::OPENAT, nr::RSEQ, 400, 472, 473, 0x4000_0000, u64::MAX] {
         let (outcome, rax) = call(&mut k, number, &[1, 2, 3]);
         assert_eq!(outcome, Outcome::Unimplemented { table: "linux", number });
         assert_eq!(rax as i64, -38);

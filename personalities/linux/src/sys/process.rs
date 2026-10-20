@@ -5,6 +5,7 @@ use crate::abi::{USER_ADDRESS_LIMIT, arch_prctl as op};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::LinuxKernel;
+use crate::signal::deliver::with_own;
 
 /// exit(status): ends the calling thread only (_exit(2): "the raw Linux
 /// _exit() system call terminates only the calling thread"); the parent
@@ -65,10 +66,13 @@ pub fn getegid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
 /// set_tid_address(tidptr): stores `tidptr` as the thread's
 /// `clear_child_tid` and "always returns the caller's thread ID"
 /// (set_tid_address(2)). The pointer is not checked here: it is only used
-/// when the thread exits, and errors then are ignored.
+/// when the thread exits ([`crate::futex::thread_exit`]), and errors then
+/// are ignored.
 pub fn set_tid_address(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    k.set_clear_child_tid(a.ptr(0));
-    pid_result(k.tid())
+    let tid = k.tid();
+    let ptr = a.ptr(0);
+    with_own(k, |p| p.thread_mut(tid).clear_child_tid = ptr);
+    pid_result(tid)
 }
 
 /// arch_prctl(op, addr)

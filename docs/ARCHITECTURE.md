@@ -444,6 +444,21 @@ output.
   thread state; `Linux::dispatch_with(&mut kernel, regs)` is the entry point.
   Host tests run every call, and scripted startup sequences of real static
   binaries, against a fake kernel.
+- **Linux signals and futexes**
+  ([ADR 0031](adr/0031-linux-signals-and-futexes.md)): the personality
+  owns each process's signal state (`LinuxProcess`: dispositions, pending
+  queues, per-thread masks, alternate stacks, robust list heads), which
+  the kernel stores and lends out under the process's lock, and the
+  futex wait queues (`FutexTable`), which the kernel locks system-wide.
+  `kill`, `tgkill`, `tkill`, `rt_sigqueueinfo`, `rt_sigpending`,
+  `rt_sigsuspend`, `rt_sigtimedwait`, `sigaltstack`, `rt_sigreturn`,
+  `futex` (no PI operations), `set_robust_list` / `get_robust_list` and
+  `restart_syscall` are implemented. The kernel calls
+  `Linux::exit_to_user` before every return to user mode (delivery: frames
+  on the user stack, stops, kills, and `SA_RESTART` / `EINTR` for
+  interrupted calls) and `Linux::thread_exit` when a thread ends (robust
+  list, `clear_child_tid`); blocking uses park/unpark (`block`,
+  `unblock`) plus a per-thread signal notification.
 
 ## NT object manager (logic only, not wired yet)
 
