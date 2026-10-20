@@ -500,9 +500,16 @@ fn finish_switch() {
 fn bury(dead: Graveyard) {
     let flag = percpu::this().reaping();
     let was = flag.swap(true, core::sync::atomic::Ordering::SeqCst);
+    let n = dead.iter().flatten().count();
     drop(dead);
+    BURYING.fetch_sub(n, core::sync::atomic::Ordering::SeqCst);
     flag.store(was, core::sync::atomic::Ordering::SeqCst);
 }
+
+/// User states [`reap`] took out of the table that [`bury`] has not
+/// finished dropping yet (on any CPU): their memory is still on its way
+/// out ([`dying_user_threads`]).
+static BURYING: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
 /// Whether the running code is dropping the user state of a reaped thread
 /// (see [`bury`]): it must not sleep or take non-masking locks.
@@ -540,6 +547,7 @@ fn reap(t: &mut Threads) -> Graveyard {
             crate::cputime::reaped(id.slot(), user.process());
             dead[buried] = Some(user);
             buried += 1;
+            BURYING.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         }
         t.sched.reap(id).expect("unreaped() names an exited thread");
     }
@@ -683,13 +691,15 @@ pub struct ThreadInfo {
 
 /// User threads whose process has ended: still on their way out (the
 /// last one wakes the process's waiters before it exits) or exited and
-/// not reaped yet. Their memory, and the frames in it, goes when the
-/// scheduler reaps them, so a count of user frames taken meanwhile still
+/// not reaped yet, plus reaped ones whose user state another CPU (or this
+/// one) is still dropping. Their memory, and the frames in it, goes when
+/// that drop is done, so a count of user frames taken meanwhile still
 /// includes those.
 pub fn dying_user_threads() -> usize {
     let _irq = InterruptsOff::new();
     let t = THREADS.lock();
     t.user.iter().flatten().filter(|u| u.process().has_ended()).count()
+        + BURYING.load(core::sync::atomic::Ordering::SeqCst)
 }
 
 /// Every thread that exists and has not been joined, in slot order.

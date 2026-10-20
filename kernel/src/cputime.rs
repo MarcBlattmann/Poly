@@ -248,12 +248,22 @@ kernel_test! {
             crate::kprintln!("cputime: {ran} ns of CPU time over 20 ms");
             return Err("a busy kernel thread's CPU time did not grow plausibly");
         }
-        let start = current().total_ns();
-        crate::thread::sleep(core::time::Duration::from_millis(30));
-        if current().total_ns() - start > 20 * time::NANOS_PER_MILLI {
-            return Err("a sleeping thread was charged for the time it slept");
+        // Sleeping 30 ms: the clock time that passed minus the CPU time
+        // charged is the time the thread was off the CPU, most of the 30
+        // ms. Not "charged under 20 ms": a host that stalls the emulator
+        // while the thread runs (before it blocks, or after it wakes)
+        // charges it for the stall, which passes on the clock too. A thread
+        // charged for its sleep fails every attempt; a stall right before
+        // it blocks spoils one at most.
+        for _ in 0..3 {
+            let (start, charged) = (time::now_ns(), current().total_ns());
+            crate::thread::sleep(core::time::Duration::from_millis(30));
+            let off = (time::now_ns() - start).saturating_sub(current().total_ns() - charged);
+            if off >= 15 * time::NANOS_PER_MILLI {
+                return Ok(());
+            }
         }
-        Ok(())
+        Err("a sleeping thread was charged for the time it slept")
     }
 }
 
