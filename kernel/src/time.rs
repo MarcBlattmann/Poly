@@ -80,9 +80,15 @@ pub fn restore_realtime_offset(offset: u64) {
     crate::vdso::publish();
 }
 
-/// Timer interrupts since the tick started.
+/// Timer interrupts since the tick started, counted on the boot CPU: one
+/// per `NANOS_PER_TICK`, whichever CPU asks.
 pub fn ticks() -> u64 {
     arch::time::ticks()
+}
+
+/// Timer interrupts the running CPU has taken (every CPU ticks).
+pub fn cpu_ticks() -> u64 {
+    arch::time::cpu_ticks()
 }
 
 /// Whether the clock and the tick are running (after `arch::init_interrupts`).

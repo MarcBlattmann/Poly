@@ -134,16 +134,31 @@ isr_stub_\n:
     jmp isr_common
     .endm
 
+    /* NMI, double fault, machine check: on IST stacks, possibly between
+       swapgs and a ring change, so GS is not trusted (isr_paranoid). */
+    .macro ISR_PARANOID_NOERR n
+isr_stub_\n:
+    pushq $0
+    pushq $\n
+    jmp isr_paranoid
+    .endm
+
+    .macro ISR_PARANOID_ERR n
+isr_stub_\n:
+    pushq $\n
+    jmp isr_paranoid
+    .endm
+
     .section .text.isr, "ax", @progbits
     ISR_NOERR 0
     ISR_NOERR 1
-    ISR_NOERR 2
+    ISR_PARANOID_NOERR 2
     ISR_NOERR 3
     ISR_NOERR 4
     ISR_NOERR 5
     ISR_NOERR 6
     ISR_NOERR 7
-    ISR_ERR   8
+    ISR_PARANOID_ERR 8
     ISR_NOERR 9
     ISR_ERR   10
     ISR_ERR   11
@@ -153,7 +168,7 @@ isr_stub_\n:
     ISR_NOERR 15
     ISR_NOERR 16
     ISR_ERR   17
-    ISR_NOERR 18
+    ISR_PARANOID_NOERR 18
     ISR_NOERR 19
     ISR_NOERR 20
     ISR_ERR   21
@@ -249,6 +264,70 @@ trap_return:
 trap_return_iretq:
     iretq
 
+    /* The IST vectors: the same frame, but GS base is set from the word
+       above the IST stack's top (this CPU's per-CPU area, percpu::ist_top)
+       instead of trusting the saved CS, and whatever it was is restored
+       on the way out. r12 (saved in the frame, preserved by the call)
+       keeps the old value. */
+isr_paranoid:
+    push %rax
+    push %rbx
+    push %rcx
+    push %rdx
+    push %rsi
+    push %rdi
+    push %rbp
+    push %r8
+    push %r9
+    push %r10
+    push %r11
+    push %r12
+    push %r13
+    push %r14
+    push %r15
+    mov $0xc0000101, %ecx       /* IA32_GS_BASE */
+    rdmsr
+    mov %eax, %r12d
+    shl $32, %rdx
+    or %rdx, %r12
+    mov 176(%rsp), %rax         /* above the 22-word frame: the area */
+    mov %rax, %rdx
+    shr $32, %rdx
+    wrmsr
+    cmpb $0, {smap}(%rip)
+    je 5f
+    clac
+5:
+    mov %rsp, %rdi
+    testb $3, 144(%rsp)
+    jz 6f
+    xor %ebp, %ebp
+6:
+    cld
+    call {dispatch}
+    mov %r12, %rax
+    mov %r12, %rdx
+    shr $32, %rdx
+    mov $0xc0000101, %ecx
+    wrmsr
+    pop %r15
+    pop %r14
+    pop %r13
+    pop %r12
+    pop %r11
+    pop %r10
+    pop %r9
+    pop %r8
+    pop %rbp
+    pop %rdi
+    pop %rsi
+    pop %rdx
+    pop %rcx
+    pop %rbx
+    pop %rax
+    add $16, %rsp
+    iretq
+
     .section .rodata.isr, "a", @progbits
     .balign 8
     .global isr_stub_table
@@ -317,6 +396,16 @@ impl IdtEntry {
 
 static mut IDT: [IdtEntry; 256] = [IdtEntry::MISSING; 256];
 
+/// Load the IDT on an application processor (the table is shared).
+///
+/// # Safety
+/// After [`init`] ran on the boot CPU, once per AP.
+pub unsafe fn load() {
+    let ptr = DescriptorTablePointer { limit: (size_of::<[IdtEntry; 256]>() - 1) as u16, base: (&raw const IDT) as u64 };
+    // SAFETY: the IDT was filled in by `init` and is never changed again.
+    unsafe { asm!("lidt [{}]", in(reg) &ptr, options(readonly, nostack, preserves_flags)) };
+}
+
 /// # Safety
 /// Call once on the boot CPU after [`super::gdt::init`].
 pub unsafe fn init() {
@@ -349,6 +438,9 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
     // SAFETY: the stub passes the complete frame it just pushed on this
     // stack; nothing else refers to it during these reads.
     let (vector, from_user) = unsafe { ((*frame).vector, (*frame).in_user_mode()) };
+    if vector == NMI && super::smp::stopped_by_nmi() {
+        super::cpu::halt_forever();
+    }
     if vector >= u64::from(FIRST_INTERRUPT_VECTOR) {
         super::irq::set_interrupted_user(from_user);
         super::irq::dispatch(vector as u8);

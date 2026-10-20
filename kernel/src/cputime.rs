@@ -19,8 +19,10 @@
 //!   ([`ProcessCpu`], in [`Process`]), so the process's total is what its
 //!   ended threads used plus what its live ones have used so far.
 //!
-//! Single CPU: the table is one spinlock, taken with interrupts off by the
-//! scheduler and the tick.
+//! Every CPU switches and ticks: the table is one spinlock, taken with
+//! interrupts off by each CPU's scheduler and tick; a slot knows whether
+//! its thread runs (on some CPU) now, and each tick samples the thread
+//! running on the CPU that took it.
 
 use crate::process::Process;
 use crate::sync::SpinLock;
@@ -44,6 +46,8 @@ struct Slot {
     /// The split last reported, which later reads never go below.
     reported_user_ns: u64,
     reported_system_ns: u64,
+    /// Running on some CPU now (since `since`).
+    running: bool,
 }
 
 impl Slot {
@@ -70,22 +74,26 @@ impl Slot {
 
 struct Table {
     slots: [Slot; MAX_THREADS],
-    /// The slot of the running thread.
-    running: usize,
 }
 
 static TABLE: SpinLock<Table> = SpinLock::new(Table {
-    slots: [Slot {
-        pid: 0,
-        tid: 0,
-        ran_ns: 0,
-        since: 0,
-        user_ticks: 0,
-        system_ticks: 0,
-        reported_user_ns: 0,
-        reported_system_ns: 0,
-    }; MAX_THREADS],
-    running: 0,
+    slots: {
+        let free = Slot {
+            pid: 0,
+            tid: 0,
+            ran_ns: 0,
+            since: 0,
+            user_ticks: 0,
+            system_ticks: 0,
+            reported_user_ns: 0,
+            reported_system_ns: 0,
+            running: false,
+        };
+        let mut slots = [free; MAX_THREADS];
+        // The boot thread runs from the start.
+        slots[0].running = true;
+        slots
+    },
 });
 
 /// The CPU time a process's ended threads used, and its waited-for
@@ -131,21 +139,33 @@ pub fn started(slot: usize, ids: Option<(u32, u32)>) {
     TABLE.lock().slots[slot] = Slot { pid, tid, since: time::now_ns(), ..Slot::default() };
 }
 
-/// The scheduler switches from the thread in slot `from` to the one in
-/// `to`.
+/// The thread in `slot` runs from now on, without a switch: an
+/// application processor's idle thread, which is its start-up code.
+pub fn running(slot: usize) {
+    let mut t = TABLE.lock();
+    t.slots[slot].since = time::now_ns();
+    t.slots[slot].running = true;
+}
+
+/// A CPU switches from the thread in slot `from` to the one in `to`.
 pub fn switched(from: usize, to: usize) {
     let now = time::now_ns();
     let mut t = TABLE.lock();
     let s = &mut t.slots[from];
-    s.ran_ns += now.saturating_sub(s.since);
-    t.slots[to].since = now;
-    t.running = to;
+    if s.running {
+        s.ran_ns += now.saturating_sub(s.since);
+    }
+    s.running = false;
+    let s = &mut t.slots[to];
+    s.since = now;
+    s.running = true;
 }
 
-/// A timer tick interrupted the running thread, in ring 3 if `user`.
+/// A timer tick interrupted the thread running on this CPU, in ring 3 if
+/// `user`.
 pub fn tick(user: bool) {
+    let running = crate::thread::current().slot();
     let mut t = TABLE.lock();
-    let running = t.running;
     let s = &mut t.slots[running];
     if user {
         s.user_ticks += 1;
@@ -168,9 +188,9 @@ pub fn reaped(slot: usize, process: &Process) {
 pub fn thread(pid: u32, tid: u32) -> Option<CpuTimes> {
     let now = time::now_ns();
     let mut t = TABLE.lock();
-    let i = t.slots.iter().position(|s| s.pid == pid && s.tid == tid && pid != 0)?;
-    let running = t.running;
-    Some(t.slots[i].times(i == running, now))
+    let s = t.slots.iter_mut().find(|s| s.pid == pid && s.tid == tid && pid != 0)?;
+    let running = s.running;
+    Some(s.times(running, now))
 }
 
 /// Every live thread of process `pid`: `(tid, times)`.
@@ -178,10 +198,10 @@ pub fn threads_of(pid: u32) -> Vec<(u32, CpuTimes)> {
     let mut out = Vec::with_capacity(MAX_THREADS);
     let now = time::now_ns();
     let mut t = TABLE.lock();
-    let running = t.running;
-    for (i, s) in t.slots.iter_mut().enumerate() {
+    for s in t.slots.iter_mut() {
         if s.pid == pid && pid != 0 {
-            out.push((s.tid, s.times(i == running, now)));
+            let running = s.running;
+            out.push((s.tid, s.times(running, now)));
         }
     }
     out
@@ -191,11 +211,11 @@ pub fn threads_of(pid: u32) -> Vec<(u32, CpuTimes)> {
 pub fn process(process: &Process) -> CpuTimes {
     let now = time::now_ns();
     let mut t = TABLE.lock();
-    let running = t.running;
     let mut total = process.cpu.ended_threads();
-    for (i, s) in t.slots.iter_mut().enumerate() {
+    for s in t.slots.iter_mut() {
         if s.pid == process.pid && process.pid != 0 {
-            let c = s.times(i == running, now);
+            let running = s.running;
+            let c = s.times(running, now);
             total.user_ns += c.user_ns;
             total.system_ns += c.system_ns;
         }
@@ -206,9 +226,8 @@ pub fn process(process: &Process) -> CpuTimes {
 /// The running thread's CPU time (kernel threads too).
 pub fn current() -> CpuTimes {
     let now = time::now_ns();
-    let mut t = TABLE.lock();
-    let running = t.running;
-    t.slots[running].times(true, now)
+    let me = crate::thread::current().slot();
+    TABLE.lock().slots[me].times(true, now)
 }
 
 // --- Tests ------------------------------------------------------------------

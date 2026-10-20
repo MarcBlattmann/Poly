@@ -7,10 +7,14 @@
 //! (`rdmsr` / `wrmsr`, limited to the APIC's MSRs), [`CpuPorts`] (`in` /
 //! `out`, limited to the 8259's ports) and [`MmioRegion`].
 //!
-//! Single CPU: only the boot CPU's local APIC is set up, and I/O APIC and
-//! MSI interrupts are delivered to it. Each application processor will run
-//! [`init_local_apic`] for its own APIC (same physical address in xAPIC
-//! mode, so the mapping can be shared).
+//! Every CPU sets up its own local APIC: the boot CPU with
+//! [`init_local_apic`], each application processor with [`init_ap`], in the
+//! same mode. One [`Apic`] value serves them all: in xAPIC mode every CPU
+//! sees its own APIC at the same physical address (so one mapping), and in
+//! x2APIC mode the MSRs are per CPU. I/O APIC routes and MSI messages all
+//! target the boot CPU. IPIs ([`send_ipi`], [`send_nmi_to_others`],
+//! [`send_init`], [`send_startup`]) are sent with interrupts off, since an
+//! xAPIC ICR write is two register writes.
 
 use super::cpu;
 use super::irq::{ERROR_VECTOR, PIC_BASE, SPURIOUS_VECTOR};
@@ -156,6 +160,7 @@ pub fn init_local_apic(features: &CpuFeatures, platform: Option<&Platform>) -> R
     apic.enable(SPURIOUS_VECTOR);
     apic.set_lvt(LvtReg::Error, Lvt::new(ERROR_VECTOR)).map_err(|_| "could not program the APIC error entry")?;
     let nmis = configure_lint_nmis(&apic, platform);
+    super::percpu::boot_cpu().apic_id.store(apic.id(), core::sync::atomic::Ordering::Relaxed);
     // Clear errors left over from before (the register latches them).
     apic.error_status();
     let mode = match apic.registers() {
@@ -170,6 +175,72 @@ pub fn init_local_apic(features: &CpuFeatures, platform: Option<&Platform>) -> R
         apic.version().max_lvt() + 1,
     );
     LAPIC.set(apic).map_err(|_| "local APIC initialised twice")
+}
+
+/// Set up this application processor's local APIC the way the boot CPU's
+/// is (same mode, LVT entries masked but the error entry and the LINT
+/// inputs the MADT wires to NMI, spurious vector). Its timer is started by
+/// the time module. Returns its APIC ID.
+pub fn init_ap(features: &CpuFeatures, platform: Option<&Platform>) -> Result<u32, &'static str> {
+    let apic = LAPIC.get().ok_or("the boot CPU's local APIC is not set up")?;
+    match apic.registers() {
+        Backend::X2Apic(_) => {
+            lapic::enable_x2apic(&CpuMsr, features).map_err(|_| "x2APIC mode could not be enabled")?;
+        }
+        Backend::XApic(_) => {
+            let base = lapic::enable_xapic(&CpuMsr).map_err(|_| "firmware left the APIC in x2APIC mode")?;
+            if base.address() != lapic::read_apic_base(&CpuMsr).address() {
+                return Err("this CPU's APIC is at another address");
+            }
+        }
+    }
+    apic.mask_all_lvts();
+    apic.set_task_priority(0);
+    apic.enable(SPURIOUS_VECTOR);
+    apic.set_lvt(LvtReg::Error, Lvt::new(ERROR_VECTOR)).map_err(|_| "could not program the APIC error entry")?;
+    configure_lint_nmis(apic, platform);
+    apic.error_status();
+    Ok(apic.id())
+}
+
+/// Send fixed interrupt `vector` to the CPU with local APIC ID `apic_id`.
+pub fn send_ipi(apic_id: u32, vector: u8) -> bool {
+    send(&Ipi::fixed(Destination::Physical(apic_id), vector))
+}
+
+/// Send an NMI to every CPU but this one (stopping them on a panic).
+pub fn send_nmi_to_others() -> bool {
+    send(&Ipi::nmi(Destination::AllExcludingSelf))
+}
+
+/// Send an INIT IPI to `apic_id` (the first step of starting a CPU).
+pub fn send_init(apic_id: u32) -> Result<(), poly_irq::ApicError> {
+    let apic = LAPIC.get().ok_or(poly_irq::ApicError::Unsupported)?;
+    let _irq = cpu::InterruptsOff::new();
+    apic.send_ipi(&Ipi::init(Destination::Physical(apic_id)))
+}
+
+/// Send a start-up IPI to `apic_id`: it starts in real mode at page `vector`.
+pub fn send_startup(apic_id: u32, vector: u8) -> Result<(), poly_irq::ApicError> {
+    let apic = LAPIC.get().ok_or(poly_irq::ApicError::Unsupported)?;
+    let _irq = cpu::InterruptsOff::new();
+    apic.send_ipi(&Ipi::startup(Destination::Physical(apic_id), vector))
+}
+
+fn send(ipi: &Ipi) -> bool {
+    let Some(apic) = LAPIC.get() else { return false };
+    let _irq = cpu::InterruptsOff::new();
+    apic.send_ipi(ipi).is_ok()
+}
+
+/// Whether the local APIC runs in x2APIC mode (32-bit IDs).
+pub fn is_x2apic() -> bool {
+    LAPIC.get().is_some_and(|a| a.is_x2apic())
+}
+
+/// The running CPU's local APIC ID (read from its APIC).
+pub fn current_id() -> Option<u32> {
+    LAPIC.get().map(|a| a.id())
 }
 
 /// Program the LINT inputs the MADT wires to NMI for this processor.
@@ -203,7 +274,7 @@ pub fn interrupt_destination() -> Option<u32> {
 
 /// Send fixed interrupt `vector` to this CPU through the local APIC.
 pub fn send_self_ipi(vector: u8) -> bool {
-    LAPIC.get().is_some_and(|a| a.send_ipi(&Ipi::fixed(Destination::ToSelf, vector)).is_ok())
+    send(&Ipi::fixed(Destination::ToSelf, vector))
 }
 
 /// Every I/O APIC, and where the ISA IRQs arrive on them. The

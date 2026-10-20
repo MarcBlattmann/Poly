@@ -361,6 +361,29 @@ pub fn kernel_root() -> u64 {
     KERNEL_ROOT.load(Ordering::Acquire)
 }
 
+/// What [`init`] set up in this CPU's registers, on an application
+/// processor: IA32_EFER.NXE, IA32_PAT and CR4.PGE, as on the boot CPU (the
+/// kernel's tables use the XD bit, PAT entry 1 and global pages).
+///
+/// # Safety
+/// Once per AP, with the kernel's tables loaded and interrupts off.
+pub(super) unsafe fn init_ap() {
+    let features = cpu::features();
+    // SAFETY: the same values as on the boot CPU, which the tables loaded
+    // now were built for; CPUID reports each feature.
+    unsafe {
+        if NX.load(Ordering::Relaxed) {
+            cpu::write_msr(cpu::MSR_EFER, cpu::read_msr(cpu::MSR_EFER) | cpu::EFER_NXE);
+        }
+        if WC.load(Ordering::Relaxed) {
+            cpu::write_msr(cpu::MSR_PAT, PAT);
+        }
+        if features.pge {
+            cpu::write_cr4(cpu::read_cr4() | cpu::CR4_PGE);
+        }
+    }
+}
+
 /// PML4 slot of the MMIO window.
 const MMIO_SLOT: usize = ((MMIO_BASE >> 39) & 0x1ff) as usize;
 

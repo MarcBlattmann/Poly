@@ -5,14 +5,17 @@
 //! or AVX instructions. User code does, so each user thread has a save area
 //! ([`FpuArea`]) and the registers are switched with the threads.
 //!
-//! **Policy: eager, with an owner.** The registers always hold the state of
-//! one user thread, the *owner* ([`OWNER`]). Switching to a user thread
-//! that is not the owner saves the registers into the owner's area and
-//! loads the new thread's; switching to a kernel thread, or back to the
-//! owner, costs nothing. CR0.TS stays clear, so there is no lazy #NM trap
-//! (nor its information leaks); the kernel has nothing of its own to save
-//! because it never uses the registers. A dying owner's area is simply
-//! forgotten (its `Drop` clears [`OWNER`]).
+//! **Policy: eager, with an owner per CPU.** Each CPU's registers hold the
+//! state of one user thread, that CPU's *owner* (`PerCpu::fpu_owner`).
+//! Switching away from a user thread saves its registers into its area
+//! (it may run on another CPU next, which must find its state in memory);
+//! switching to a user thread loads its area unless it is this CPU's owner
+//! and has not run anywhere else since ([`FpuArea::make_current`]), so
+//! going to a kernel thread and back costs one save and no load. CR0.TS
+//! stays clear, so there is no lazy #NM trap (nor its information leaks);
+//! the kernel has nothing of its own to save because it never uses the
+//! registers. A dying owner's area is simply forgotten (its `Drop` clears
+//! every CPU's owner that names it).
 //!
 //! **Format.** With XSAVE (CPUID.01H:ECX.XSAVE), CR4.OSXSAVE is set and
 //! XCR0 enables x87, SSE and, if present, AVX; the area is as large as
@@ -70,8 +73,13 @@ static AREA_SIZE: AtomicUsize = AtomicUsize::new(LEGACY_SIZE);
 /// and XRSTOR fault.
 static MXCSR_MASK: AtomicU32 = AtomicU32::new(MXCSR_MASK_DEFAULT);
 
-/// The area whose thread's state is in the registers (null: none).
-static OWNER: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
+/// The area whose thread's state is in this CPU's registers (null: none).
+fn owner() -> &'static AtomicPtr<u8> {
+    &super::percpu::this().fpu_owner
+}
+
+/// No CPU yet (`FpuArea::cpu`).
+const NO_CPU: u32 = u32::MAX;
 
 /// How user state is saved, for the boot log.
 #[derive(Clone, Copy, Debug)]
@@ -94,31 +102,21 @@ pub fn info() -> Info {
 /// # Safety
 /// Call once on the boot CPU, before any user thread exists.
 pub(super) unsafe fn init() {
-    // x87 present and not emulated, no #NM on use, native error reporting.
-    let cr0 = (cpu::read_cr0() | cpu::CR0_MP | cpu::CR0_NE) & !(cpu::CR0_EM | cpu::CR0_TS);
-    // SAFETY: only the FPU-related bits change; paging and protection stay.
-    unsafe { cpu::write_cr0(cr0) };
-    let mut cr4 = cpu::read_cr4() | cpu::CR4_OSFXSR | cpu::CR4_OSXMMEXCPT;
     // CPUID.01H:ECX.XSAVE [bit 26].
     let xsave = __cpuid(1).ecx & (1 << 26) != 0 && __cpuid(0).eax >= 0xd;
     if xsave {
-        cr4 |= cpu::CR4_OSXSAVE;
-    }
-    // SAFETY: every x86-64 CPU has FXSR and SSE; OSXSAVE only with XSAVE.
-    unsafe { cpu::write_cr4(cr4) };
-    if xsave {
         // CPUID.(EAX=0DH,ECX=0):EAX lists the XCR0 bits the CPU supports.
         let supported = u64::from(__cpuid_count(0xd, 0).eax);
-        let xcr0 = supported & (XCR0_X87 | XCR0_SSE | XCR0_AVX);
-        // SAFETY: OSXSAVE is set and only supported components are enabled
-        // (x87 and SSE always are; AVX needs SSE, which is on).
-        unsafe { cpu::xsetbv(0, xcr0) };
+        XCR0.store(supported & (XCR0_X87 | XCR0_SSE | XCR0_AVX), Ordering::Relaxed);
+    }
+    XSAVE.store(xsave, Ordering::Relaxed);
+    // SAFETY: forwarded from the caller; the format is chosen above.
+    unsafe { init_cpu() };
+    if xsave {
         // EBX: the area size for the components enabled in XCR0 now.
         let size = __cpuid_count(0xd, 0).ebx as usize;
         AREA_SIZE.store(size.max(LEGACY_SIZE + 64), Ordering::Relaxed);
-        XCR0.store(xcr0, Ordering::Relaxed);
     }
-    XSAVE.store(xsave, Ordering::Relaxed);
     // MXCSR_MASK as FXSAVE reports it (SDM Vol. 1 §11.6.6).
     #[repr(C, align(16))]
     struct Image([u8; LEGACY_SIZE]);
@@ -128,6 +126,30 @@ pub(super) unsafe fn init() {
     unsafe { asm!("fxsave64 [{}]", in(reg) image.0.as_mut_ptr(), options(nostack)) };
     let mask = u32::from_le_bytes(image.0[MXCSR_MASK_OFFSET..MXCSR_MASK_OFFSET + 4].try_into().expect("4 bytes"));
     MXCSR_MASK.store(if mask == 0 { MXCSR_MASK_DEFAULT } else { mask }, Ordering::Relaxed);
+}
+
+/// Enable the FPU state [`init`] chose on this CPU: CR0 and CR4 bits, and
+/// XCR0 with XSAVE (every CPU must save the same components).
+///
+/// # Safety
+/// After [`init`] on the boot CPU; on an AP once, before it runs a thread.
+pub(super) unsafe fn init_cpu() {
+    // x87 present and not emulated, no #NM on use, native error reporting.
+    let cr0 = (cpu::read_cr0() | cpu::CR0_MP | cpu::CR0_NE) & !(cpu::CR0_EM | cpu::CR0_TS);
+    // SAFETY: only the FPU-related bits change; paging and protection stay.
+    unsafe { cpu::write_cr0(cr0) };
+    let xsave = XSAVE.load(Ordering::Relaxed);
+    let mut cr4 = cpu::read_cr4() | cpu::CR4_OSFXSR | cpu::CR4_OSXMMEXCPT;
+    if xsave {
+        cr4 |= cpu::CR4_OSXSAVE;
+    }
+    // SAFETY: every x86-64 CPU has FXSR and SSE; OSXSAVE only with XSAVE.
+    unsafe { cpu::write_cr4(cr4) };
+    if xsave {
+        // SAFETY: OSXSAVE is set and only supported components are enabled
+        // (x87 and SSE always are; AVX needs SSE, which is on).
+        unsafe { cpu::xsetbv(0, XCR0.load(Ordering::Relaxed)) };
+    }
 }
 
 /// Bytes in a thread's FPU image ([`FpuArea::snapshot`]).
@@ -149,11 +171,15 @@ pub struct BadImage;
 #[derive(Debug)]
 pub struct FpuArea {
     ptr: NonNull<u8>,
+    /// The CPU whose registers this state was last loaded into (or saved
+    /// from); [`NO_CPU`] before.
+    cpu: AtomicU32,
 }
 
 // SAFETY: the area is plain memory owned by this value; the only other
-// access is the save into it when it is the owner, made with interrupts off
-// on the one CPU by the scheduler, which also owns the thread this belongs to.
+// accesses are the save into it and the load from it when its thread is
+// switched out or in, with interrupts off, under the scheduler's lock,
+// which also owns the thread this belongs to.
 unsafe impl Send for FpuArea {}
 
 impl FpuArea {
@@ -169,34 +195,40 @@ impl FpuArea {
             ptr.add(FCW_OFFSET).cast::<u16>().write(FCW_INIT);
             ptr.add(MXCSR_OFFSET).cast::<u32>().write(MXCSR_INIT);
         }
-        Some(FpuArea { ptr })
+        Some(FpuArea { ptr, cpu: AtomicU32::new(NO_CPU) })
     }
 
     fn layout() -> Layout {
         Layout::from_size_align(AREA_SIZE.load(Ordering::Relaxed), ALIGN).expect("FPU area layout")
     }
 
-    /// Put this area's state into the registers, saving the previous
-    /// owner's first; nothing to do if it is there already. Call with
-    /// interrupts off, when switching to this area's thread.
+    /// Put this area's state into this CPU's registers; nothing to do if
+    /// they hold it already (this CPU is its owner and it ran nowhere else
+    /// since). Call with interrupts off, when switching to its thread.
+    /// The previous owner's state was saved when it was switched out.
     pub fn make_current(&self) {
-        let owner = OWNER.load(Ordering::Relaxed);
-        if owner == self.ptr.as_ptr() {
+        let me = super::percpu::cpu_index() as u32;
+        if self.is_owner() && self.cpu.load(Ordering::Relaxed) == me {
             return;
-        }
-        if let Some(owner) = NonNull::new(owner) {
-            // SAFETY: OWNER points at a live area (`Drop` clears it before
-            // the memory goes), and the registers hold its thread's state.
-            unsafe { save(owner) };
         }
         // SAFETY: `self` is a live area holding a valid state: the initial
         // one or one `save` wrote.
         unsafe { restore(self.ptr) };
-        OWNER.store(self.ptr.as_ptr(), Ordering::Relaxed);
+        owner().store(self.ptr.as_ptr(), Ordering::Relaxed);
+        self.cpu.store(me, Ordering::Relaxed);
+    }
+
+    /// Save this CPU's registers into the area if they hold its state
+    /// (its thread is being switched out). Call with interrupts off.
+    pub fn save(&self) {
+        if self.is_owner() {
+            // SAFETY: a live area; the registers hold its thread's state.
+            unsafe { save(self.ptr) };
+        }
     }
 
     fn is_owner(&self) -> bool {
-        OWNER.load(Ordering::Relaxed) == self.ptr.as_ptr()
+        owner().load(Ordering::Relaxed) == self.ptr.as_ptr()
     }
 
     fn bytes_mut(&mut self) -> &mut [u8] {
@@ -299,7 +331,14 @@ impl FpuArea {
 impl Drop for FpuArea {
     fn drop(&mut self) {
         // The registers' contents belong to nobody now; nothing saves them.
-        let _ = OWNER.compare_exchange(self.ptr.as_ptr(), core::ptr::null_mut(), Ordering::Relaxed, Ordering::Relaxed);
+        for area in super::percpu::all() {
+            let _ = area.fpu_owner.compare_exchange(
+                self.ptr.as_ptr(),
+                core::ptr::null_mut(),
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            );
+        }
         // SAFETY: allocated in `new` with this layout (the size never
         // changes after `init`).
         unsafe { dealloc(self.ptr.as_ptr(), Self::layout()) };
