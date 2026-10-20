@@ -1089,10 +1089,12 @@ fn burn(_: usize) -> usize {
 /// Reads `read_many` makes.
 const MANY_READS: u64 = 40;
 /// Reads that must give the CPU-bound thread a turn. A busy host completes
-/// many requests before the reader sleeps, so `read_many` keeps going (up to
-/// `MAX_READS`) until this many did; waiting with interrupts off gives none.
+/// many requests before the reader sleeps, and other kernel threads (the
+/// screen terminal) take some of the turns, so `read_many` keeps going (for
+/// up to `READ_BUDGET_NS`) until this many did; waiting with interrupts off
+/// gives none however long it reads.
 const READS_WITH_A_TURN: usize = 10;
-const MAX_READS: u64 = 400;
+const READ_BUDGET_NS: u64 = 3 * time::NANOS_PER_SEC;
 
 /// Thread body: `MANY_READS` uncached reads from the disk at address
 /// `disk`. Exit code: in how many of them the CPU-bound thread made
@@ -1103,8 +1105,9 @@ fn read_many(disk: usize) -> usize {
     let bs = d.info().block_size as usize;
     let mut buf = vec![0u8; 4 * bs];
     let mut progressed = 0;
-    for i in 0..MAX_READS {
-        if i >= MANY_READS && progressed >= READS_WITH_A_TURN {
+    let deadline = time::now_ns() + READ_BUDGET_NS;
+    for i in 0.. {
+        if i >= MANY_READS && (progressed >= READS_WITH_A_TURN || time::now_ns() > deadline) {
             break;
         }
         let first = (i * 37) % (d.info().blocks - 4);
