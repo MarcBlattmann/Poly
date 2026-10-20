@@ -34,6 +34,17 @@ impl SyscallMode {
             _ => Err(format!("unknown syscall mode {s} (exact, names, off)")),
         }
     }
+
+    /// The weaker of two modes: a test's own directive can relax the run's
+    /// mode, never tighten it.
+    pub fn weaker(self, other: SyscallMode) -> SyscallMode {
+        let rank = |m: SyscallMode| match m {
+            SyscallMode::Exact => 0,
+            SyscallMode::Names => 1,
+            SyscallMode::Off => 2,
+        };
+        if rank(other) > rank(self) { other } else { self }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -331,6 +342,15 @@ mod tests {
             call("exit_group", vec![Arg::Int(0)], None),
         ];
         t
+    }
+
+    #[test]
+    fn a_directive_only_weakens_the_mode() {
+        use SyscallMode::*;
+        assert_eq!(Exact.weaker(Off), Off);
+        assert_eq!(Off.weaker(Exact), Off);
+        assert_eq!(Names.weaker(Exact), Names);
+        assert_eq!(Exact.weaker(Names), Names);
     }
 
     #[test]

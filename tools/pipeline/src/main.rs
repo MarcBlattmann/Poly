@@ -251,7 +251,11 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
         };
         let target_file = format!("{target}/{name}.json");
         util::write_json(&run_dir.join(&target_file), &target_trace)?;
-        let mut r = TestResult::compared(name, &reference, &target_trace, &opts);
+        let mut test_opts = opts.clone();
+        if let Some(mode) = &b.syscalls {
+            test_opts.syscalls = opts.syscalls.weaker(SyscallMode::parse(mode)?);
+        }
+        let mut r = TestResult::compared(name, &reference, &target_trace, &test_opts);
         r.files = vec![ref_file, target_file];
         summary.tests.push(r);
     }
