@@ -89,7 +89,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] SMP: start all CPUs, per-CPU data, TLB shootdown, multi-core scheduler
 - [x] Networking: virtio-net driver, own TCP/IP stack (IPv4, IPv6, TCP, UDP, ICMP)
 - [x] Sockets: `AF_INET`, `AF_INET6`, `AF_UNIX` (incl. fd passing), `AF_NETLINK` basics
-- [ ] Linux namespaces / seccomp basics (needed by browsers' sandboxes)
+- [x] Linux namespaces / seccomp basics (needed by browsers' sandboxes)
 - [ ] **Milestone (proof of concept a):** a recorded trace of a simple Linux CLI app passes
 - [ ] bash, coreutils, Python and a C compiler run from the persistent disk
 

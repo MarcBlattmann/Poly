@@ -387,10 +387,15 @@ fn parse_control(k: &mut dyn LinuxKernel, ptr: UserPtr, len: u64) -> Result<Cont
                 // unix(7): the caller's own process id (any with
                 // CAP_SYS_ADMIN), its real, effective or saved user id (any
                 // with CAP_SETUID) and group id (any with CAP_SETGID).
+                // The ids are the caller's namespaces' (ADR 0054).
                 let me = crate::cred::current(k);
-                let pid_ok = u.pid == k.pid() || me.capable(crate::cred::cap::SYS_ADMIN);
-                let uid_ok = [me.uid, me.euid, me.suid].contains(&u.uid) || me.capable(crate::cred::cap::SETUID);
-                let gid_ok = [me.gid, me.egid, me.sgid].contains(&u.gid) || me.capable(crate::cred::cap::SETGID);
+                let own = crate::ns::pid::view(k, k.pid());
+                let pid_ok = u.pid == own || me.capable(crate::cred::cap::SYS_ADMIN);
+                let (uid, gid) = (me.kuid(u.uid), me.kgid(u.gid));
+                let uid_ok = uid.is_ok_and(|id| [me.uid, me.euid, me.suid].contains(&id))
+                    || me.capable(crate::cred::cap::SETUID);
+                let gid_ok = gid.is_ok_and(|id| [me.gid, me.egid, me.sgid].contains(&id))
+                    || me.capable(crate::cred::cap::SETGID);
                 if !(pid_ok && uid_ok && gid_ok) {
                     return Err(Errno::EPERM);
                 }

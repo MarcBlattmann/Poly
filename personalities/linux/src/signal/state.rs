@@ -56,6 +56,9 @@ pub struct LinuxThread {
     /// for the wait, but blocked as far as discarding goes (a signal the
     /// thread waits for is never discarded as ignored).
     pub sigwait: SigSet,
+    /// Strict mode or the seccomp filters (ADR 0054): inherited by the
+    /// threads and processes it creates, kept by execve(2).
+    pub seccomp: crate::seccomp::Seccomp,
 }
 
 impl LinuxThread {
@@ -106,6 +109,10 @@ pub struct LinuxProcess {
     /// `sys::sched`): inherited by fork, kept by exec. The scheduler does
     /// not use it yet.
     pub nice: i32,
+    /// The process's namespaces but its user namespace, which is each
+    /// thread's (ADR 0054). fork(2) copies them (a child's pid namespace
+    /// is its parent's `pid_for_children`); execve(2) keeps them.
+    pub ns: crate::ns::Namespaces,
 }
 
 impl LinuxProcess {
@@ -123,6 +130,7 @@ impl LinuxProcess {
             limits: crate::rlimit::ResourceLimits::new(),
             timers: crate::time::timers::Timers::new(),
             nice: 0,
+            ns: crate::ns::Namespaces::default(),
         }
     }
 
@@ -142,6 +150,7 @@ impl LinuxProcess {
             altstack: parent.altstack,
             creds: parent.creds.clone(),
             comm: parent.comm,
+            seccomp: parent.seccomp.clone(),
             ..LinuxThread::default()
         };
         let mut threads = BTreeMap::new();
@@ -157,6 +166,7 @@ impl LinuxProcess {
             limits: self.limits,
             timers,
             nice: self.nice,
+            ns: self.ns.for_child(),
         }
     }
 
@@ -201,6 +211,7 @@ impl LinuxProcess {
             altstack,
             creds: parent.creds.clone(),
             comm: parent.comm,
+            seccomp: parent.seccomp.clone(),
             ..LinuxThread::default()
         };
         self.threads.insert(tid, thread);

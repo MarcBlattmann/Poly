@@ -26,6 +26,15 @@ impl Clock for FixedClock {
 struct Fake {
     current: Mutex<Option<u32>>,
     pids: Mutex<Vec<u32>>,
+    /// What was written to uid_map: (pid, offset, data).
+    uid_map: Mutex<Vec<(u32, u64, Vec<u8>)>>,
+}
+
+/// Process 42's namespaces have inode numbers 100 + kind (pid 1's: 200 +
+/// kind), but it has no network namespace.
+fn fake_inum(pid: u32, kind: usize) -> Option<u32> {
+    let base = if pid == 42 { 100 } else { 200 };
+    (pid != 42 || NS_KINDS[kind] != "net").then_some(base + kind as u32)
 }
 
 const EXE: &[u8] = b"/bin/prog";
@@ -275,6 +284,33 @@ impl ProcSource for Fake {
     fn entropy_avail(&self) -> u32 {
         256
     }
+
+    fn namespace(&self, pid: u32, kind: usize) -> Option<u32> {
+        if NS_KINDS[kind] == "pid_for_children" {
+            return fake_inum(pid, 3);
+        }
+        fake_inum(pid, kind)
+    }
+
+    fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
+        [42, 1].iter().any(|&p| fake_inum(p, kind) == Some(inum))
+    }
+
+    fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {
+        match file {
+            IdMapFile::Uid => alloc::format!("{:>10} {:>10} {:>10}\n", 0, pid, 1).into_bytes(),
+            IdMapFile::Gid => Vec::new(),
+            IdMapFile::Setgroups => b"allow\n".to_vec(),
+        }
+    }
+
+    fn write_id_map(&self, pid: u32, file: IdMapFile, offset: u64, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        if file != IdMapFile::Uid {
+            return Err(poly_vfs::Errno::EPERM);
+        }
+        self.uid_map.lock().unwrap().push((pid, offset, data.to_vec()));
+        Ok(data.len())
+    }
 }
 
 struct Env {
@@ -433,7 +469,11 @@ fn process_directories_list_their_files() {
             "fd",
             "fdinfo",
             "mounts",
-            "mountinfo"
+            "mountinfo",
+            "ns",
+            "uid_map",
+            "gid_map",
+            "setgroups"
         ]
     );
     assert_eq!(names(&e.list("/proc/42/fd")), [".", "..", "0", "1", "2", "5"]);
@@ -474,6 +514,43 @@ fn links_lead_to_files() {
     assert_eq!(e.read("/proc/self/fd/5").unwrap(), b"payload");
     let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/self/cwd", true).unwrap();
     assert_eq!(st.kind(), Some(FileType::Directory));
+}
+
+#[test]
+fn namespace_links_and_id_maps() {
+    let e = env();
+    assert_eq!(names(&e.list("/proc/42/ns")), [".", "..", "ipc", "mnt", "pid", "pid_for_children", "user", "uts"]);
+    assert_eq!(e.readlink("/proc/42/ns/uts").unwrap(), b"uts:[106]");
+    assert_eq!(e.readlink("/proc/42/ns/pid_for_children").unwrap(), b"pid:[103]");
+    assert_eq!(e.readlink("/proc/1/ns/net").unwrap(), b"net:[202]");
+    assert_eq!(e.readlink("/proc/42/ns/net"), Err(poly_vfs::Errno::ENOENT));
+    // Followed, a link reaches the hidden file of its namespace: the same
+    // inode from every process in that namespace.
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/ns/uts", true).unwrap();
+    assert_eq!((st.kind(), st.mode & 0o777), (Some(FileType::Regular), 0o444));
+    let f = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/self/ns/user", OpenFlags::RDONLY, 0).unwrap();
+    assert_eq!(namespace_file(f.node().ino()), Some((105, 5)));
+    let by_name = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/1/ns/user:[105]", true).unwrap();
+    assert_eq!(by_name.ino, f.node().ino());
+    let mut buf = [0u8; 8];
+    assert_eq!(f.read(&mut buf), Err(poly_vfs::Errno::EINVAL));
+    assert_eq!(e.read("/proc/42/ns/net:[999]"), Err(poly_vfs::Errno::ENOENT));
+    assert_eq!(e.read("/proc/42/ns/uts:[105]"), Err(poly_vfs::Errno::ENOENT), "wrong type");
+    let lst = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/ns/uts", false).unwrap();
+    assert_eq!(lst.kind(), Some(FileType::Symlink));
+    assert_eq!(namespace_file(lst.ino), None);
+    // The user namespace files are read through the source, and written.
+    assert_eq!(e.text("/proc/42/uid_map"), "         0         42          1\n");
+    assert_eq!(e.text("/proc/self/setgroups"), "allow\n");
+    let flags = OpenFlags::WRONLY | OpenFlags::TRUNC;
+    let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/uid_map", flags, 0).unwrap();
+    assert_eq!(w.write(b"0 1000 1\n"), Ok(9));
+    assert_eq!(*e.fake.uid_map.lock().unwrap(), [(42, 0, b"0 1000 1\n".to_vec())]);
+    let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/gid_map", OpenFlags::WRONLY, 0).unwrap();
+    assert_eq!(w.write(b"0 1000 1\n"), Err(poly_vfs::Errno::EPERM));
+    // Other files stay read-only.
+    let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/comm", OpenFlags::WRONLY, 0);
+    assert_eq!(w.err(), Some(poly_vfs::Errno::EROFS));
 }
 
 #[test]

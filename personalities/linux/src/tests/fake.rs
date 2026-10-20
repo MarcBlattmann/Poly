@@ -174,6 +174,16 @@ pub struct FakeKernel {
     pub io: super::fileio::FakeIo,
     /// Sockets (`tests/socket.rs`; `None`: `ENOSYS`).
     pub net: Option<super::socket::FakeNet>,
+    /// seccomp state was installed (ADR 0054), and what was logged.
+    pub seccomp_on: bool,
+    pub seccomp_logged: Vec<(u64, u32)>,
+    /// Namespaces (ADR 0054): the root is not the mount namespace's; the
+    /// mount tables copied (their ids); the mount namespaces entered; what
+    /// namespace each descriptor on a `/proc/<pid>/ns` file names.
+    pub chroot: bool,
+    pub mount_copies: Vec<u32>,
+    pub entered_mounts: Vec<Option<u32>>,
+    pub ns_fds: BTreeMap<i32, (u32, crate::ns::Kind)>,
 }
 
 impl Default for FakeKernel {
@@ -237,6 +247,12 @@ impl FakeKernel {
             tasks: Default::default(),
             io: Default::default(),
             net: None,
+            seccomp_on: false,
+            seccomp_logged: Vec::new(),
+            chroot: false,
+            mount_copies: Vec::new(),
+            entered_mounts: Vec::new(),
+            ns_fds: BTreeMap::new(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -774,6 +790,45 @@ impl LinuxKernel for FakeKernel {
 
     fn signal_queued(&mut self, pid: i32) {
         self.io.queued.push(pid);
+    }
+
+    fn seccomp_active(&self) -> bool {
+        self.seccomp_on
+    }
+
+    fn seccomp_installed(&mut self) {
+        self.seccomp_on = true;
+    }
+
+    fn seccomp_log(&mut self, number: u64, ret: u32) {
+        self.seccomp_logged.push((number, ret));
+    }
+
+    fn pid_ns(&self) -> crate::ns::pid::PidNsRef {
+        self.procs[&self.pid].state.ns.pid.clone()
+    }
+
+    fn chrooted(&self) -> bool {
+        self.chroot
+    }
+
+    fn copy_mounts(&mut self, owner: &crate::ns::user::UserNsRef) -> Result<std::sync::Arc<crate::ns::MntNs>, Errno> {
+        let id = 1000 + self.mount_copies.len() as u32;
+        self.mount_copies.push(id);
+        Ok(crate::ns::MntNs::new(owner, id))
+    }
+
+    fn enter_mounts(&mut self, ns: &Option<std::sync::Arc<crate::ns::MntNs>>) -> Result<(), Errno> {
+        self.entered_mounts.push(ns.as_ref().map(|m| m.id()));
+        Ok(())
+    }
+
+    fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, crate::ns::Kind), Errno> {
+        match self.ns_fds.get(&fd) {
+            Some(&found) => Ok(found),
+            None if self.files.contains_key(&fd) => Err(Errno::EINVAL),
+            None => Err(Errno::EBADF),
+        }
     }
 
     fn with_futexes(&mut self, f: &mut dyn FnMut(&mut FutexTable, &mut dyn LinuxKernel)) {
