@@ -10,11 +10,13 @@ members = [
     "crates/poly-acpi",
     "crates/poly-backtrace",
     "crates/poly-binfmt",
+    "crates/poly-block",
     "crates/poly-heap",
     "crates/poly-mem",
     "crates/poly-paging",
     "crates/poly-pci",
     "crates/poly-virtio",
+    "crates/poly-virtio-blk",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -35,11 +37,13 @@ poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
 poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
+poly-block = { path = "crates/poly-block" }
 poly-heap = { path = "crates/poly-heap" }
 poly-mem = { path = "crates/poly-mem" }
 poly-paging = { path = "crates/poly-paging" }
 poly-pci = { path = "crates/poly-pci" }
 poly-virtio = { path = "crates/poly-virtio" }
+poly-virtio-blk = { path = "crates/poly-virtio-blk" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }

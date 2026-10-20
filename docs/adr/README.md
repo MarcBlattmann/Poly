@@ -14,6 +14,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0007](0007-buddy-allocator-out-of-band-metadata.md) | Buddy frame allocator with its metadata outside the memory it manages | Accepted |
 | [0008](0008-in-kernel-tests-and-backtraces.md) | In-kernel tests in a linker section; frame-pointer backtraces symbolised on the host | Accepted |
 | [0009](0009-drivers-behind-access-traits.md) | Device drivers as host-tested crates behind access traits | Accepted |
+| [0014](0014-block-layer.md) | Block layer: submit/poll devices, ordering request queue, pinning buffer cache | Accepted |
 
 ## Open decisions
 

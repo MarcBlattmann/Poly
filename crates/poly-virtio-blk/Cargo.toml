@@ -1,0 +1,16 @@
+[package]
+name = "poly-virtio-blk"
+description = "virtio block device driver: request format, configuration, and a BlockDevice over a split virtqueue"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+poly-block.workspace = true
+poly-pci.workspace = true
+poly-virtio.workspace = true

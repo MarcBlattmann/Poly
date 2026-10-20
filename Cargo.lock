@@ -34,6 +34,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-block"
+version = "0.0.1"
+
+[[package]]
 name = "poly-coverage"
 version = "0.0.1"
 dependencies = [
@@ -83,6 +87,15 @@ name = "poly-virtio"
 version = "0.0.1"
 dependencies = [
  "poly-pci",
+]
+
+[[package]]
+name = "poly-virtio-blk"
+version = "0.0.1"
+dependencies = [
+ "poly-block",
+ "poly-pci",
+ "poly-virtio",
 ]
 
 [[package]]
