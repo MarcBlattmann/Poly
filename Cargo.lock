@@ -197,6 +197,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-tty"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-vdso"
 version = "0.0.1"
 dependencies = [
@@ -326,6 +333,7 @@ version = "0.0.1"
 dependencies = [
  "poly-block",
  "poly-cpio",
+ "poly-elf",
  "poly-ext2",
  "poly-gfx",
  "poly-term",

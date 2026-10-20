@@ -104,3 +104,69 @@ fn an_unseekable_terminal_like_device() {
     env.write("/f", b"");
     assert_eq!(env.open("/f", OpenFlags::RDONLY).unwrap().ioctl(0x5401, 0), Err(Errno::ENOTTY));
 }
+
+/// A device that opens as a new device per open (as `/dev/ptmx` does),
+/// counting the opens still alive; with `O_EXCL` it refuses.
+#[derive(Default)]
+struct Cloning {
+    live: Arc<core::sync::atomic::AtomicUsize>,
+}
+
+struct Handle(Arc<core::sync::atomic::AtomicUsize>, u8);
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl CharDevice for Handle {
+    fn read(&self, _: u64, buf: &mut [u8], _: bool) -> Result<usize> {
+        buf[0] = self.1;
+        Ok(1)
+    }
+
+    fn write(&self, _: u64, buf: &[u8], _: bool) -> Result<usize> {
+        Ok(buf.len())
+    }
+}
+
+impl CharDevice for Cloning {
+    fn read(&self, _: u64, _: &mut [u8], _: bool) -> Result<usize> {
+        Err(Errno::EIO)
+    }
+
+    fn write(&self, _: u64, _: &[u8], _: bool) -> Result<usize> {
+        Err(Errno::EIO)
+    }
+
+    fn open(&self, flags: OpenFlags) -> Result<Option<Arc<dyn CharDevice>>> {
+        if flags.contains(OpenFlags::EXCL) {
+            return Err(Errno::EBUSY);
+        }
+        let n = self.live.fetch_add(1, Ordering::SeqCst) + 1;
+        Ok(Some(Arc::new(Handle(self.live.clone(), n as u8))))
+    }
+}
+
+#[test]
+fn a_device_may_open_as_another() {
+    let env = Env::new();
+    let dev = Arc::new(Cloning::default());
+    let live = dev.live.clone();
+    env.vfs.register_char_device(DeviceId::new(5, 2), dev).unwrap();
+    mknod(&env, "/ptmx", DeviceId::new(5, 2));
+    let a = env.open("/ptmx", OpenFlags::RDWR).unwrap();
+    let b = env.open("/ptmx", OpenFlags::RDWR).unwrap();
+    let mut buf = [0u8; 1];
+    assert_eq!((a.read(&mut buf), buf[0]), (Ok(1), 1));
+    assert_eq!((b.read(&mut buf), buf[0]), (Ok(1), 2));
+    assert_eq!(live.load(Ordering::SeqCst), 2);
+    // The node still says what was opened.
+    assert_eq!(a.stat().unwrap().rdev, DeviceId::new(5, 2));
+    drop(a);
+    assert_eq!(live.load(Ordering::SeqCst), 1, "the handle goes with the open file");
+    assert_eq!(env.open("/ptmx", OpenFlags::RDWR | OpenFlags::EXCL).map(|_| ()), Err(Errno::EBUSY));
+    drop(b);
+    assert_eq!(live.load(Ordering::SeqCst), 0);
+}

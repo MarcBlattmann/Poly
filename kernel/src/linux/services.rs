@@ -303,7 +303,12 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn ioctl(&mut self, fd: i32, request: u32, arg: u64) -> Result<u64, Errno> {
-        self.process.files.ioctl(fd, request, arg).map_err(vfs_errno)
+        // A terminal request interrupted (job control's SIGTTOU) restarts
+        // under SA_RESTART, as on a slow device (signal(7), ADR 0046).
+        self.process.files.ioctl(fd, request, arg).map_err(|e| match e {
+            poly_vfs::Errno::EINTR => Errno::RESTART_IF_SA_RESTART,
+            e => vfs_errno(e),
+        })
     }
 
     fn mmap(&mut self, r: &MapRequest) -> Result<u64, Errno> {
@@ -362,6 +367,23 @@ impl LinuxKernel for Thread<'_> {
         // PROT_GROWSDOWN would extend the change to the start of a stack
         // region; it is applied to the given range only for now.
         self.memory()?.protect(addr, len, vm_prot(prot)).map_err(memory_errno)
+    }
+
+    fn madvise(
+        &mut self,
+        addr: u64,
+        len: u64,
+        advice: poly_personality_linux::sys::madvise::Advice,
+    ) -> Result<(), Errno> {
+        use crate::user::memory::Advice as Do;
+        use poly_personality_linux::sys::madvise::Advice;
+        let what = match advice {
+            Advice::Hint => Do::Keep,
+            Advice::DontNeed => Do::Discard,
+            Advice::Free => Do::DiscardAnonymous,
+            Advice::Remove => Do::FreeBacking,
+        };
+        self.memory()?.advise(addr, len, what).map_err(|e| Errno::new(e.linux_errno()).unwrap_or(Errno::EINVAL))
     }
 
     fn brk(&self) -> u64 {

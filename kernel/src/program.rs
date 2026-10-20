@@ -5,18 +5,20 @@
 //! [`exec_path`] opens the file through the VFS with the kernel's root
 //! credentials (`Vfs::open_exec`: a regular file with execute permission),
 //! decides the personality from its first bytes (`poly-binfmt`), and for a
-//! static Linux ELF makes a Linux process (pid from `process::alloc_pid`,
-//! the console on fds 0, 1 and 2) and starts it with `user::exec::load`
-//! reading the file through a [`FileSource`]. Other formats are refused
-//! with a reason: PE and Mach-O need their personalities' loaders, `#!`
-//! scripts and dynamically linked ELF files (`PT_INTERP`) come with
-//! `execve` and `ld.so` support (Phase 4).
+//! Linux ELF makes a Linux process (pid from `process::alloc_pid`, the
+//! console on fds 0, 1 and 2) and starts it with `user::exec::load_dynamic`
+//! reading the file through a [`FileSource`]; a dynamically linked one gets
+//! the interpreter its `PT_INTERP` names, opened the same way (ADR 0049).
+//! Other formats are refused with a reason: PE and Mach-O need their
+//! personalities' loaders; `#!` scripts are left to `execve` (a program can
+//! run one).
 
 use crate::boot_info::BootInfo;
 use crate::fs::cache::FileSource;
 use crate::process::{self, ExitStatus, Process};
 use crate::user;
 use crate::user::exec::{self, ExecError, ExecParams};
+use crate::user::memory::PageSource;
 use crate::{fs, kprintln, qemu, testrun, thread};
 use alloc::format;
 use alloc::string::String;
@@ -45,8 +47,12 @@ impl core::fmt::Display for ExecPathError {
         match self {
             ExecPathError::Open(e) => f.write_str(e.name()),
             ExecPathError::Unsupported(why) => f.write_str(why),
-            ExecPathError::Exec(ExecError::Interpreter) => {
-                f.write_str("a dynamically linked executable (PT_INTERP): not supported yet")
+            ExecPathError::Exec(ExecError::InterpreterOpen(errno)) => {
+                let name = poly_vfs::Errno::from_code(i32::from(*errno)).map_or("error", poly_vfs::Errno::name);
+                write!(f, "its interpreter (PT_INTERP) cannot be opened: {name}")
+            }
+            ExecPathError::Exec(ExecError::BadInterpreter(e)) => {
+                write!(f, "its interpreter (PT_INTERP) is not a loadable ELF image ({e:?})")
             }
             ExecPathError::Exec(ExecError::Elf(e)) => write!(f, "not a loadable x86-64 ELF executable ({e:?})"),
             ExecPathError::Exec(e) => write!(f, "exec failed: {e:?}"),
@@ -102,7 +108,14 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
         None => return Err(ExecPathError::Unsupported("#! scripts are not supported yet".into())),
     }
     let source = FileSource::of(&file);
-    let image = exec::load(Arc::new(source), &ExecParams::new(argv, envp, path)).map_err(ExecPathError::Exec)?;
+    let open_interp = |interp: &[u8]| -> Result<Arc<dyn PageSource>, ExecError> {
+        let ctx = vfs.root_context().map_err(|e| ExecError::InterpreterOpen(e.code() as u16))?;
+        let file = vfs.open_exec(&ctx, &Cred::root(), At::Cwd, interp);
+        let file = file.map_err(|e| ExecError::InterpreterOpen(e.code() as u16))?;
+        Ok(Arc::new(FileSource::of(&file)))
+    };
+    let params = ExecParams::new(argv, envp, path);
+    let image = exec::load_dynamic(Arc::new(source), &params, &open_interp).map_err(ExecPathError::Exec)?;
     let process = Arc::new(Process::new_linux(process::alloc_pid(), 0, format, traced));
     if let Some(linux) = &process.linux {
         // The program's name (prctl(2) PR_GET_NAME); it runs as root.
@@ -123,12 +136,36 @@ pub fn split_args(path: &str, args: &[String]) -> Vec<Vec<u8>> {
     argv
 }
 
-/// Run the program at `path` with `args` and wait for it to end.
-pub fn run(path: &str, args: &[String], traced: bool) -> Result<ExitStatus, ExecPathError> {
+/// Run the program at `path` with `args` and the environment `envp`
+/// (`NAME=value` strings: the shell's `run NAME=value ... <program>`, for
+/// `LD_DEBUG` and the like, ADR 0049) on the terminal `terminal` (its fds
+/// 0, 1 and 2; `None`: the console) and wait for it to end: the shell's
+/// `run`. The program leads a session of its own, so opening the terminal
+/// makes it the program's controlling terminal (ADR 0046).
+pub fn run_on(
+    path: &str,
+    args: &[String],
+    envp: &[String],
+    terminal: Option<&str>,
+) -> Result<ExitStatus, ExecPathError> {
     let argv = split_args(path, args);
     let argv: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
-    let process = exec_path(path.as_bytes(), &argv, &[], traced)?;
-    Ok(process.wait())
+    let envp: Vec<&[u8]> = envp.iter().map(String::as_bytes).collect();
+    let prepared = prepare(path.as_bytes(), &argv, &envp, false)?;
+    if let Some(tty) = terminal {
+        let files = &prepared.process.files;
+        for fd in 0..3 {
+            let _ = files.close(fd);
+        }
+        let opened = files
+            .open(tty.as_bytes(), poly_vfs::OpenFlags::RDWR, 0)
+            .and_then(|_| files.dup(0))
+            .and_then(|_| files.dup(0));
+        if let Err(e) = opened {
+            kprintln!("run: {tty}: {}", e.name());
+        }
+    }
+    Ok(prepared.start()?.wait())
 }
 
 /// `poly.init=<path>`: run that program as the first process before

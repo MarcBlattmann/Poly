@@ -36,6 +36,17 @@
 //! 4. the data word after writing it (the file must not change);
 //! 5. a word written 192 KiB below the initial RSP, past the initial stack
 //!    region: the stack grows down on demand.
+//!
+//! [`TestElf::Dyn`] is the same program as a position-independent
+//! executable naming the interpreter `/lib/ld-poly.so.1`, and
+//! [`TestElf::Ld`] is that interpreter (ADR 0049): a tiny `ET_DYN` image,
+//! one read-execute segment linked at 0, that finds `AT_BASE`, `AT_ENTRY`
+//! and `AT_PHDR` in the auxiliary vector, reports them with its own load
+//! address ([`Seen::LdBase`], [`Seen::LdEntry`]), exits with
+//! [`LD_BAD_BASE`] if `AT_BASE` is not where it was loaded or
+//! [`LD_NO_ENTRY`] if there is no `AT_ENTRY`, and otherwise jumps to
+//! `AT_ENTRY` with the stack as it got it and RDX 0, as a dynamic linker
+//! does once it has loaded the program's libraries.
 
 use core::arch::global_asm;
 
@@ -45,6 +56,12 @@ pub const REPORT: u64 = 1;
 pub const EXIT: u64 = 2;
 /// What the program exits with when it got to the end.
 pub const EXIT_CODE: usize = 0x600d;
+/// What [`TestElf::Ld`] exits with when `AT_BASE` is not its load address.
+pub const LD_BAD_BASE: usize = 0xbad1;
+/// What [`TestElf::Ld`] exits with when there is no `AT_ENTRY`.
+pub const LD_NO_ENTRY: usize = 0xbad2;
+/// The interpreter [`TestElf::Dyn`] names.
+pub const LD_PATH: &[u8] = b"/lib/ld-poly.so.1";
 
 /// Link address of the text segment of [`TestElf::Exec`] (0 for the PIE).
 pub const TEXT_BASE: u64 = 0x40_0000;
@@ -89,6 +106,10 @@ pub enum Seen {
     Bss = 9,
     /// RSI = the word written below the stack.
     Stack = 10,
+    /// From [`TestElf::Ld`]: RSI = its own load address, RDX = `AT_BASE`.
+    LdBase = 11,
+    /// From [`TestElf::Ld`]: RSI = `AT_ENTRY`, RDX = `AT_PHDR`.
+    LdEntry = 12,
 }
 
 global_asm!(
@@ -229,6 +250,78 @@ global_asm!(
     poly_test_elf poly_test_elf_exec, 2, {text_base}, 0
     poly_test_elf poly_test_elf_pie, 3, 0, 0
     poly_test_elf poly_test_elf_interp, 2, {text_base}, 1
+    poly_test_elf poly_test_elf_dyn, 3, 0, 1
+
+    /* The test interpreter: ET_DYN, PT_LOAD (R X, the whole file at 0),
+       PT_GNU_STACK. */
+    .balign 16
+    .global poly_test_ld_start
+poly_test_ld_start:
+    .byte 0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0
+    .quad 0
+    .short 3, 62
+    .long 1
+    .quad poly_test_ld_entry - poly_test_ld_start
+    .quad 64, 0
+    .long 0
+    .short 64, 56, 2, 64, 0, 0
+    .long 1, 5
+    .quad 0, 0, 0
+    .quad poly_test_ld_end - poly_test_ld_start, poly_test_ld_end - poly_test_ld_start
+    .quad 0x1000
+    .long 0x6474e551, 6
+    .quad 0, 0, 0, 0, 0, 16
+poly_test_ld_entry:
+    mov %rsp, %r12
+    lea poly_test_ld_start(%rip), %rbp
+    /* The auxiliary vector: past argc, argv + NULL, envp + NULL. */
+    mov (%r12), %rcx
+    lea 16(%r12,%rcx,8), %r13
+1:
+    cmpq $0, (%r13)
+    lea 8(%r13), %r13
+    jne 1b
+    xor %r14d, %r14d
+    xor %r15d, %r15d
+    xor %ebx, %ebx
+2:
+    mov (%r13), %rax
+    test %rax, %rax
+    jz 5f
+    cmp ${at_base}, %rax
+    jne 3f
+    mov 8(%r13), %r14
+3:
+    cmp ${at_entry}, %rax
+    jne 4f
+    mov 8(%r13), %r15
+4:
+    cmp ${at_phdr}, %rax
+    jne 6f
+    mov 8(%r13), %rbx
+6:
+    add $16, %r13
+    jmp 2b
+5:
+    poly_elf_report {ld_base}, %rbp, %r14
+    poly_elf_report {ld_entry}, %r15, %rbx
+    mov ${ld_bad_base}, %edi
+    cmp %rbp, %r14
+    jne 7f
+    mov ${ld_no_entry}, %edi
+    test %r15, %r15
+    jz 7f
+    /* To the program, with its initial stack and RDX 0 (psABI: no
+       function for atexit). */
+    mov %r12, %rsp
+    xor %edx, %edx
+    jmp *%r15
+7:
+    mov ${exit}, %eax
+    syscall
+    ud2
+    .global poly_test_ld_end
+poly_test_ld_end:
 "#,
     report = const REPORT,
     exit = const EXIT,
@@ -252,6 +345,13 @@ global_asm!(
     tail = const Seen::Tail as u64,
     bss_kind = const Seen::Bss as u64,
     stack = const Seen::Stack as u64,
+    ld_base = const Seen::LdBase as u64,
+    ld_entry = const Seen::LdEntry as u64,
+    ld_bad_base = const LD_BAD_BASE,
+    ld_no_entry = const LD_NO_ENTRY,
+    at_base = const poly_elf::AT_BASE,
+    at_entry = const poly_elf::AT_ENTRY,
+    at_phdr = const poly_elf::AT_PHDR,
     options(att_syntax)
 );
 
@@ -262,6 +362,10 @@ unsafe extern "C" {
     static poly_test_elf_pie_end: u8;
     static poly_test_elf_interp_start: u8;
     static poly_test_elf_interp_end: u8;
+    static poly_test_elf_dyn_start: u8;
+    static poly_test_elf_dyn_end: u8;
+    static poly_test_ld_start: u8;
+    static poly_test_ld_end: u8;
 }
 
 /// The test executables.
@@ -271,8 +375,13 @@ pub enum TestElf {
     Exec,
     /// `ET_DYN` without an interpreter (a static PIE), linked at 0.
     Pie,
-    /// `ET_EXEC` with a `PT_INTERP`: exec must refuse it.
+    /// `ET_EXEC` with a `PT_INTERP` naming [`LD_PATH`].
     Interp,
+    /// `ET_DYN` with a `PT_INTERP` naming [`LD_PATH`] (a dynamically
+    /// linked PIE), linked at 0.
+    Dyn,
+    /// The test interpreter (see the module docs).
+    Ld,
 }
 
 impl TestElf {
@@ -282,6 +391,8 @@ impl TestElf {
             TestElf::Exec => (&raw const poly_test_elf_exec_start, &raw const poly_test_elf_exec_end),
             TestElf::Pie => (&raw const poly_test_elf_pie_start, &raw const poly_test_elf_pie_end),
             TestElf::Interp => (&raw const poly_test_elf_interp_start, &raw const poly_test_elf_interp_end),
+            TestElf::Dyn => (&raw const poly_test_elf_dyn_start, &raw const poly_test_elf_dyn_end),
+            TestElf::Ld => (&raw const poly_test_ld_start, &raw const poly_test_ld_end),
         };
         // SAFETY: the assembly above puts each image between its two
         // symbols, in a read-only section of the kernel image.
@@ -290,6 +401,10 @@ impl TestElf {
 
     /// Number of program headers.
     pub fn phnum(self) -> u64 {
-        if self == TestElf::Interp { 4 } else { 3 }
+        match self {
+            TestElf::Interp | TestElf::Dyn => 4,
+            TestElf::Ld => 2,
+            TestElf::Exec | TestElf::Pie => 3,
+        }
     }
 }

@@ -125,6 +125,8 @@ pub struct FakeKernel {
     pub maps: Vec<MapRequest>,
     /// Every (fd, request, arg) ioctl that reached the kernel.
     pub ioctls: Vec<(i32, u32, u64)>,
+    /// Every madvise that reached the kernel (ADR 0049).
+    pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
     /// Every mprotect that reached the kernel.
     pub protects: Vec<(u64, u64, Prot)>,
     /// Every process, by pid.
@@ -198,6 +200,7 @@ impl FakeKernel {
             maps: Vec::new(),
             ioctls: Vec::new(),
             protects: Vec::new(),
+            advised: Vec::new(),
             procs: BTreeMap::new(),
             notified: BTreeSet::new(),
             unblocked: BTreeSet::new(),
@@ -580,6 +583,22 @@ impl LinuxKernel for FakeKernel {
             return Err(Errno::EINVAL);
         }
         self.unmap_range(addr, len);
+        Ok(())
+    }
+
+    fn madvise(&mut self, addr: u64, len: u64, advice: crate::sys::madvise::Advice) -> Result<(), Errno> {
+        self.advised.push((addr, len, advice));
+        let pages = addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE);
+        if advice == crate::sys::madvise::Advice::DontNeed {
+            for p in pages.clone() {
+                if let Some(page) = self.pages.get_mut(&p) {
+                    page.data.fill(0);
+                }
+            }
+        }
+        if pages.into_iter().any(|p| !self.pages.contains_key(&p)) {
+            return Err(Errno::ENOMEM);
+        }
         Ok(())
     }
 
