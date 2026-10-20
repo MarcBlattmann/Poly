@@ -1,0 +1,11 @@
+[package]
+name = "poly-input"
+description = "Keyboard input: key and event types, the PS/2 scancode set 1 decoder, modifier and lock state, keyboard layouts (US, Swiss German) with dead keys, and the i8042 controller protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

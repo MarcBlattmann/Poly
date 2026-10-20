@@ -18,7 +18,7 @@ what exists **today** and how it fits that plan.
                           │
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
-            devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk
+            devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, context switch)
 ```
 
@@ -34,8 +34,9 @@ what exists **today** and how it fits that plan.
    after this), hands all usable RAM to the frame allocator, starts the
    scheduler, reads the ACPI tables, sets up interrupts and time
    (`arch::init_interrupts`) and enables them, enumerates PCI, brings up the
-   block layer (the virtio-blk disk if there is one, and a RAM disk) and runs
-   the boot self-test with the timer preempting threads.
+   block layer (the virtio-blk disk if there is one, and a RAM disk) and the
+   PS/2 keyboard, and runs the boot self-test with the timer preempting
+   threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
 
@@ -226,6 +227,85 @@ until unmasked and that a request whose notification was dropped
 (`VirtioBlk::set_drop_notifications`) fails at the watchdog's deadline
 while its reader sleeps. Each test puts the disks back as it found them.
 
+## Input
+
+Keyboard input is the host-tested `poly-input` crate; `kernel/src/keyboard.rs`
+drives the PS/2 keyboard with it, and `arch/x86_64/i8042.rs` gives it the
+controller's ports ([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md)).
+
+```
+   IRQ 1 ─▶ keyboard::on_irq: data port ─▶ ByteRing (256 bytes, lock-free) ─▶ wake waiters
+                                                           │
+   keyboard::next_event / try_next_event (thread) ◀────────┘
+      poly_input::Keyboard
+        Set1Decoder   bytes ─▶ (Key, pressed): E0 / E1 prefixes, fake shifts, Print Screen, Pause
+        KeyState      ─▶ KeyEvent { key, pressed, repeat, modifiers }: Shift/Ctrl/Alt/AltGr/Meta, 3 locks
+        Composer      ─▶ Output: Char, Chars (accent + char), Dead, Special (Enter, arrows, F-keys, ...)
+          + Layout    US, Swiss German (de-CH); six levels per key, as data
+```
+
+- **Keys** (`poly_input::Key`) are physical positions named after the US
+  legends (W3C UI Events `code` names): 105 keys, the ISO key next to the
+  left Shift (`IntlBackslash`) included. `Modifiers` is a bit set (Shift,
+  Control, Alt, AltGr, Meta, Caps / Num / Scroll Lock), `Leds` the PS/2 LED
+  mask.
+- **Decoding.** The controller translates the keyboard's scancode set 2
+  into set 1, which `Set1Decoder` decodes; it ignores replies and unknown
+  codes, resynchronises after broken sequences and never panics.
+  `set1::encode` is the reverse (tests, `keyboard::inject`). `KeyState`
+  flags a press of a key that is down as a repeat (locks toggle only on
+  the first press) and makes the right Alt key AltGr on layouts that have
+  it.
+- **Layouts** (`poly_input::layout`) are tables built at compile time:
+  base, Shift, Caps Lock, Caps Lock + Shift, AltGr and AltGr + Shift, each a
+  character, a dead key (\` ´ ^ ~ ¨) or nothing. `Composer` picks the
+  level, types the keypad's digits when Num Lock is on (navigation keys
+  otherwise, Shift reverses it), turns Ctrl + letter into a control
+  character and composes dead keys (accent + letter: the accented letter;
+  + Space: the accent; + anything else: both; a special key drops it).
+  `layout::by_name` finds one (`us`, `de-ch`).
+- **Bring-up** (`keyboard::init`, after the block layer). If the ACPI FADT
+  (revision 2+) says there is no 8042, nothing is touched. Otherwise
+  `poly_input::i8042::init`, polled with both ports' interrupts off:
+  disable both ports, flush the output buffer, clear the interrupt and
+  translation bits in the configuration byte, controller self-test (0xAA
+  → 0x55) and the configuration written again, keyboard port test (0xAB →
+  0x00), enable the port, reset the keyboard (0xFF → ACK, 0xAA), scancode
+  set 2 (0xF0 0x02), enable scanning (0xF4). Every wait is bounded; a
+  missing controller (status 0xFF), a failed self-test or no keyboard is
+  logged and the kernel runs on without one. Then ISA IRQ 1 is routed
+  (`arch::irq::route_isa_irq`), the configuration byte gets the keyboard
+  interrupt and translation on (mouse port off), and the controller is
+  drained once. The layout comes from `poly.keymap=` (default `us`); Num
+  Lock starts on.
+- **Interrupts and waiting.** The handler moves every waiting byte into
+  the ring and wakes the readers; decoding happens in the reader's thread
+  under a sleeping `Mutex`, which is never held while waiting for input. A
+  reader that sleeps looks at the controller itself every 100 ms, so a
+  lost interrupt costs latency, not the keyboard. LED updates (0xED + mask)
+  follow the locks: the reader writes each byte and sleeps until the
+  handler hands it the keyboard's ACK (or RESEND) instead of queueing it.
+- **API** (what the terminal uses): `keyboard::next_event()` (sleeps),
+  `next_event_until(deadline_ns)`, `try_next_event()`, each an `Input {
+  event: KeyEvent, output: Output }` for every press and release;
+  `set_layout(&'static Layout)`, `layout()`, `modifiers()`,
+  `is_present()`, `inject(bytes)` (set 1 bytes as if typed), `stats()`.
+
+```text
+keyboard: i8042 config 0x71 -> 0x61, 0 stale byte(s) flushed; keyboard reset ok, scancode set 2 translated to set 1
+keyboard: ISA IRQ 1 -> GSI 1 -> vector 0x31; layout us (US English (QWERTY)), Num Lock on
+```
+
+The kernel tests (`keyboard::*`) decode injected scancodes through the ring
+(US and de-CH, with AltGr and dead keys), check modifiers on events, the
+I/O APIC route for IRQ 1, bytes the controller fakes with its "write
+keyboard output" command (0xD2) arriving through the interrupt, and Caps
+Lock LED updates acknowledged by the keyboard. With
+`poly.test.keyboard=<text>`, `keyboard::typed_text_matches_the_host_keys`
+waits up to 30 s for keys from the host, which `cargo xtask test` types
+through the QEMU monitor (`sendkey`), with the US layout and with
+`poly.keymap=de-ch` (see [DEBUGGING.md](DEBUGGING.md)).
+
 ## Personality routing
 
 - `poly-binfmt` identifies ELF / PE / Mach-O (and fat Mach-O, `#!` scripts)
@@ -245,6 +325,7 @@ while its reader sleeps. Each test puts the disks back as it found them.
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi` | `cargo xtask test` |
+| Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
 | App trace replay | recorded sessions | later |
 

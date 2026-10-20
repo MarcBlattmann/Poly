@@ -12,6 +12,7 @@ members = [
     "crates/poly-binfmt",
     "crates/poly-block",
     "crates/poly-heap",
+    "crates/poly-input",
     "crates/poly-irq",
     "crates/poly-mem",
     "crates/poly-paging",
@@ -41,6 +42,7 @@ poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
 poly-heap = { path = "crates/poly-heap" }
+poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
 poly-mem = { path = "crates/poly-mem" }
 poly-paging = { path = "crates/poly-paging" }

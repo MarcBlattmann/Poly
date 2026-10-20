@@ -17,6 +17,7 @@ mod ktest;
 mod symbols;
 
 use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::{Arc, mpsc};
@@ -250,7 +251,22 @@ struct Boot {
 /// Boot headless with a timeout, echoing serial output as it arrives, with
 /// symbols added to backtrace lines.
 fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, devices: Devices<'_>) -> Result<Boot> {
+    boot_with(kernel, syms, memory, append, devices, &[], |_| {})
+}
+
+/// [`boot`] with more QEMU arguments, calling `on_line` with every line of
+/// serial output (from the thread that reads it) as it arrives.
+fn boot_with(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    memory: &str,
+    append: &str,
+    devices: Devices<'_>,
+    qemu_args: &[String],
+    mut on_line: impl FnMut(&str) + Send + 'static,
+) -> Result<Boot> {
     let mut child = qemu(kernel, memory, append, devices, "stdio")
+        .args(qemu_args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()
@@ -262,6 +278,7 @@ fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, devices:
         for line in BufReader::new(stdout).lines().map_while(std::result::Result::ok) {
             let line = syms.symbolize_line(&line);
             println!("    | {line}");
+            on_line(&line);
             let _ = tx.send(line);
         }
     });
@@ -281,6 +298,73 @@ fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, devices:
     let _ = reader.join();
     let output = rx.try_iter().collect::<Vec<_>>().join("\n");
     Ok(Boot { status, output })
+}
+
+/// Must match `keyboard::TEST_READY` in the kernel.
+const KEYBOARD_READY: &str = "keyboard: ready for test input";
+
+/// Press `keys` (QEMU key names in `sendkey` syntax, e.g. `shift-p`,
+/// `alt_r-2`) on the guest's PS/2 keyboard through the human monitor on
+/// the Unix socket `monitor`, one at a time.
+fn send_keys(monitor: &Path, keys: &[&str]) -> Result {
+    let mut sock = UnixStream::connect(monitor).map_err(|e| format!("{}: {e}", monitor.display()))?;
+    // Read (and drop) the monitor's banner and echo so it never blocks.
+    let mut echo = sock.try_clone().map_err(|e| e.to_string())?;
+    thread::spawn(move || std::io::copy(&mut echo, &mut std::io::sink()));
+    for key in keys {
+        writeln!(sock, "sendkey {key}").map_err(|e| e.to_string())?;
+        // sendkey holds the keys for 100 ms; let them go before the next.
+        thread::sleep(Duration::from_millis(250));
+    }
+    Ok(())
+}
+
+/// Boot with `poly.test.keyboard=<expected>` (and `poly.keymap=<keymap>`),
+/// press `keys` once the kernel waits for them, and check the kernel typed
+/// `expected` with that layout.
+fn keyboard_boot_test(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    keymap: Option<&str>,
+    keys: &'static [&'static str],
+    expected: &str,
+) -> Result {
+    let monitor = std::env::temp_dir().join(format!("poly-monitor-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&monitor);
+    let qemu_args = ["-monitor".to_string(), format!("unix:{},server=on,wait=off", monitor.display())];
+    let mut append = format!("poly.qemu_exit poly.test=keyboard::typed poly.test.keyboard={expected}");
+    if let Some(k) = keymap {
+        append.push_str(&format!(" poly.keymap={k}"));
+    }
+    let socket = monitor.clone();
+    let mut sent = false;
+    let on_line = move |line: &str| {
+        if !sent && line.contains(KEYBOARD_READY) {
+            sent = true;
+            let socket = socket.clone();
+            thread::spawn(move || {
+                if let Err(e) = send_keys(&socket, keys) {
+                    eprintln!("xtask: sending keys through the QEMU monitor: {e}");
+                }
+            });
+        }
+    };
+    let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &qemu_args, on_line);
+    let _ = std::fs::remove_file(&monitor);
+    let b = b?;
+    ktest::parse(&b.output).check()?;
+    let layout = keymap.unwrap_or("us");
+    if !b.output.contains("keyboard: ISA IRQ 1 -> GSI ") || !b.output.contains(&format!("; layout {layout} (")) {
+        return Err(format!("the keyboard was not brought up on IRQ 1 with layout {layout}"));
+    }
+    let typed = format!("keyboard: typed {expected:?}");
+    if b.status != Some(QEMU_SUCCESS) || !b.output.lines().any(|l| l.trim_end() == typed) {
+        return Err(format!(
+            "keys sent through the QEMU monitor did not type {expected:?} with layout {layout} (status {:?})",
+            b.status
+        ));
+    }
+    Ok(())
 }
 
 fn boot_tests() -> Result {
@@ -335,6 +419,30 @@ fn boot_tests() -> Result {
             return Err(format!("the test disk was not {want} with {memory}"));
         }
     }
+
+    // Keys pressed on the host reach the kernel through the i8042 and IRQ 1.
+    eprintln!("==> boot test: keys sent through the QEMU monitor type text (US layout)");
+    keyboard_boot_test(&kernel, &syms, None, &["shift-p", "o", "l", "y", "ret"], "Poly")?;
+    // QEMU names keys by their US position: "z" is the Swiss German y, "equal"
+    // the ^ dead key, "bracket_left" ü, "bracket_right" the ¨ dead key.
+    eprintln!("==> boot test: keys sent through the QEMU monitor type text (Swiss German: AltGr, dead keys)");
+    const DE_CH_KEYS: [&str; 14] = [
+        "p",
+        "o",
+        "l",
+        "z",
+        "alt_r-2",
+        "equal",
+        "a",
+        "alt_r-equal",
+        "n",
+        "bracket_left",
+        "shift-bracket_left",
+        "bracket_right",
+        "spc",
+        "ret",
+    ];
+    keyboard_boot_test(&kernel, &syms, Some("de-ch"), &DE_CH_KEYS, "poly@\u{e2}\u{f1}\u{fc}\u{e8}\u{a8}")?;
 
     // Expecting the test disk without attaching it must fail the disk
     // tests, so a boot that silently lost its disk cannot pass.

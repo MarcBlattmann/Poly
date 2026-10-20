@@ -91,6 +91,12 @@ pub fn free_vector(vector: u8) -> bool {
     old > CLAIMED
 }
 
+/// Whether a handler from [`allocate_vector`] is installed on `vector`.
+pub fn has_handler(vector: u8) -> bool {
+    (FIRST_DEVICE_VECTOR..=LAST_DEVICE_VECTOR).contains(&vector)
+        && SLOTS[usize::from(vector)].handler.load(Ordering::Acquire) > CLAIMED
+}
+
 /// The MSI / MSI-X message that raises `vector` on the boot CPU (fixed
 /// delivery, physical destination, edge). `None` before the local APIC is
 /// set up or if its ID does not fit an MSI address (above 255).
