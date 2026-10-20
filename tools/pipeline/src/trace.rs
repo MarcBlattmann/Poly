@@ -265,6 +265,8 @@ pub fn render_arg(arg: &Arg, known_call: bool, normalize: bool) -> String {
         Arg::Opaque(_) if normalize => WILDCARD.into(),
         Arg::Opaque(v) => format!("{v:#x}"),
         Arg::Pid(v) if normalize && *v > 0 => "<pid>".into(),
+        // A process group (kill, wait4): -pgid. 0 and -1 keep their meaning.
+        Arg::Pid(v) if normalize && *v < -1 => "-<pid>".into(),
         Arg::Pid(v) => v.to_string(),
         Arg::Raw(s) if normalize => mask_addresses(s),
         Arg::Raw(s) => s.clone(),
@@ -458,6 +460,9 @@ pub mod tests {
             ),
             call("brk", vec![Arg::Ptr(0x4000_0000)], Some(0x4000_0000)),
             call("getpid", vec![], Some(1234)),
+            call("kill", vec![Arg::Pid(-1234), Arg::Int(15)], Some(0)),
+            call("kill", vec![Arg::Pid(0), Arg::Int(15)], Some(0)),
+            call("rt_sigqueueinfo", vec![Arg::Pid(1234), Arg::Int(10), Arg::Ptr(0x7000)], Some(0)),
             call("write", vec![Arg::Int(1), Arg::Unreadable(8), Arg::Int(5)], Some(-14)),
             call("exit_group", vec![Arg::Int(0)], None),
             Event::Signal { pid: 0, signal: 11 },
@@ -469,13 +474,16 @@ pub mod tests {
                 "mmap(NULL, 8192, 0x3, 0x22, -1, 0x0) = <addr>",
                 "brk(<ptr>) = <addr>",
                 "getpid() = <pid>",
+                "kill(-<pid>, 15) = 0",
+                "kill(0, 15) = 0",
+                "rt_sigqueueinfo(<pid>, 10, <ptr>) = 0",
                 "write(1, <unreadable>, 5) = -1 EFAULT",
                 "exit_group(0) = ?",
                 "--- SIGSEGV ---",
             ]
         );
         let ignore = NormOptions { ignore: BTreeSet::from(["getpid".to_string()]) };
-        assert_eq!(normalize(&t, &ignore).len(), 5);
+        assert_eq!(normalize(&t, &ignore).len(), 8);
         assert!(render_raw(&t).contains("brk(0x40000000) = 0x40000000"));
     }
 
