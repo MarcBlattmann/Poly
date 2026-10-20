@@ -1,12 +1,17 @@
-//! Physical memory map handling.
+//! Physical memory map handling and frame allocation.
 //!
 //! Firmware memory maps (E820, UEFI) can be unsorted, overlapping and not
 //! page-aligned. [`MemoryMap::normalized`] turns one into a sorted list of
 //! non-overlapping regions where the most restrictive type wins wherever two
-//! entries overlap, and usable RAM is trimmed inward to whole pages. Nothing
-//! here allocates, so the kernel can use it before it has a heap.
+//! entries overlap, and usable RAM is trimmed inward to whole pages.
+//! [`BuddyAllocator`] then manages the usable frames. Nothing here allocates,
+//! so the kernel can use it before it has a heap.
 
 #![no_std]
+
+mod buddy;
+
+pub use buddy::{BuddyAllocator, FreeError, MAX_ORDER, MetadataTooSmall};
 
 pub const PAGE_SIZE: u64 = 4096;
 
@@ -150,6 +155,17 @@ impl MemoryMap {
         Ok(out)
     }
 
+    /// Lowest page-aligned address where `len` bytes (rounded up to whole
+    /// pages) fit inside one usable region and end at or below `limit`.
+    pub fn find_usable(&self, len: u64, limit: u64) -> Option<u64> {
+        let len = align_up(len, PAGE_SIZE);
+        self.regions().iter().filter(|r| r.kind == RegionKind::Usable).find_map(|r| {
+            let start = align_up(r.start, PAGE_SIZE);
+            let end = start.checked_add(len)?;
+            (end <= r.end && end <= limit).then_some(start)
+        })
+    }
+
     /// Most restrictive type covering all of `[a, b)`, if any region does.
     fn kind_over(&self, a: u64, b: u64) -> Option<RegionKind> {
         self.regions().iter().filter(|r| r.start <= a && r.end >= b).map(|r| r.kind).max()
@@ -168,7 +184,7 @@ impl MemoryMap {
 }
 
 /// Hands out physical frames from usable RAM, front to back, and never
-/// frees. Used only until the real allocator is up.
+/// frees. For code that runs before [`BuddyAllocator`] can be set up.
 #[derive(Debug)]
 pub struct BumpFrameAllocator<'a> {
     map: &'a MemoryMap,
@@ -277,6 +293,20 @@ mod tests {
         assert_eq!(a.allocate(), Some(0x5000));
         assert_eq!(a.allocate(), None);
         assert_eq!(a.allocated(), 3);
+    }
+
+    #[test]
+    fn find_usable_respects_regions_and_limit() {
+        let n = map(&[(0x1000, 0x3000, Usable), (0x3000, 0x4000, Reserved), (0x4000, 0x10000, Usable)])
+            .normalized()
+            .unwrap();
+        assert_eq!(n.find_usable(0x2000, u64::MAX), Some(0x1000));
+        // Does not fit in the first region, and never spans the reserved page.
+        assert_eq!(n.find_usable(0x2001, u64::MAX), Some(0x4000));
+        assert_eq!(n.find_usable(0x3000, 0x7000), Some(0x4000));
+        assert_eq!(n.find_usable(0x3000, 0x6fff), None);
+        assert_eq!(n.find_usable(0xd000, u64::MAX), None);
+        assert_eq!(n.find_usable(u64::MAX, u64::MAX), None);
     }
 
     #[test]

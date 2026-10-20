@@ -76,9 +76,12 @@ fn build_kernel(release: bool) -> Result<PathBuf> {
     Ok(kernel_dir().join("target/x86_64-unknown-none").join(profile).join("poly-kernel"))
 }
 
-fn qemu(kernel: &Path, append: &str) -> Command {
+/// Guest RAM for `cargo xtask run` and most boot tests.
+const DEFAULT_MEMORY: &str = "256M";
+
+fn qemu(kernel: &Path, memory: &str, append: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
-    cmd.args(["-machine", "q35", "-m", "256M", "-display", "none", "-serial", "stdio", "-no-reboot"])
+    cmd.args(["-machine", "q35", "-m", memory, "-display", "none", "-serial", "stdio", "-no-reboot"])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
         .arg("-kernel")
         .arg(kernel)
@@ -89,7 +92,7 @@ fn qemu(kernel: &Path, append: &str) -> Command {
 fn run(release: bool) -> Result {
     let kernel = build_kernel(release)?;
     eprintln!("==> boot (Ctrl-A X to quit)");
-    let _ = qemu(&kernel, "").status().map_err(|e| format!("qemu: {e}"))?;
+    let _ = qemu(&kernel, DEFAULT_MEMORY, "").status().map_err(|e| format!("qemu: {e}"))?;
     Ok(())
 }
 
@@ -99,8 +102,8 @@ struct Boot {
 }
 
 /// Boot headless with a timeout, echoing serial output as it arrives.
-fn boot(kernel: &Path, append: &str) -> Result<Boot> {
-    let mut child = qemu(kernel, append)
+fn boot(kernel: &Path, memory: &str, append: &str) -> Result<Boot> {
+    let mut child = qemu(kernel, memory, append)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()
@@ -134,16 +137,20 @@ fn boot(kernel: &Path, append: &str) -> Result<Boot> {
 fn boot_tests() -> Result {
     let kernel = build_kernel(false)?;
 
-    eprintln!("==> boot test: self-test passes");
-    let b = boot(&kernel, "poly.qemu_exit")?;
-    match b.status {
-        Some(QEMU_SUCCESS) if b.output.contains(PASS_MARKER) => {}
-        Some(s) => return Err(format!("self-test boot exited with status {s}")),
-        None => return Err(format!("self-test boot timed out after {BOOT_TIMEOUT:?}")),
+    // 2 GiB puts RAM above the 1 GiB boot mapping: the frame allocator must
+    // manage it without touching it.
+    for memory in [DEFAULT_MEMORY, "2G"] {
+        eprintln!("==> boot test: self-test passes with {memory} of RAM");
+        let b = boot(&kernel, memory, "poly.qemu_exit")?;
+        match b.status {
+            Some(QEMU_SUCCESS) if b.output.contains(PASS_MARKER) => {}
+            Some(s) => return Err(format!("self-test boot ({memory}) exited with status {s}")),
+            None => return Err(format!("self-test boot ({memory}) timed out after {BOOT_TIMEOUT:?}")),
+        }
     }
 
     eprintln!("==> boot test: page fault is caught and reported");
-    let b = boot(&kernel, "poly.qemu_exit poly.selftest.page_fault")?;
+    let b = boot(&kernel, DEFAULT_MEMORY, "poly.qemu_exit poly.selftest.page_fault")?;
     let reported = b.output.contains("KERNEL PANIC") && b.output.contains("CPU exception 14 (page fault)");
     if b.status != Some(QEMU_FAILURE) || !reported {
         return Err(format!("page fault was not reported as expected (status {:?})", b.status));

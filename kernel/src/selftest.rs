@@ -2,11 +2,12 @@
 //! kernel in QEMU and checks the result.
 
 use crate::arch::{self, idt::BREAKPOINTS};
+use crate::frames::FRAMES;
 use crate::process::Process;
 use crate::syscall;
 use core::sync::atomic::Ordering;
 use poly_abi::{Outcome, Personality, RFLAGS_CF, SyscallRegs};
-use poly_mem::{BumpFrameAllocator, MemoryMap, PAGE_SIZE, RegionKind};
+use poly_mem::{BuddyAllocator, FreeError, MAX_ORDER, MemoryMap, PAGE_SIZE, RegionKind};
 
 /// Printed on success; the test runner looks for this exact line.
 pub const PASS_MARKER: &str = "POLY-SELFTEST: PASS";
@@ -43,23 +44,92 @@ fn breakpoint() -> TestResult {
     if BREAKPOINTS.load(Ordering::Relaxed) == before + 1 { Ok(()) } else { Err("handler did not run") }
 }
 
+/// Mixed orders, including the largest, in no particular order.
+const FRAME_ORDERS: [usize; 12] = [0, 3, 1, 0, MAX_ORDER, 2, 0, 9, 5, 0, 1, 4];
+
 fn frames(memory: &MemoryMap) -> TestResult {
-    let mut alloc = BumpFrameAllocator::new(memory);
-    let mut last = None;
-    for _ in 0..64 {
-        let f = alloc.allocate().ok_or("out of frames")?;
-        if f % PAGE_SIZE != 0 {
-            return Err("unaligned frame");
-        }
-        if last.is_some_and(|l| f <= l) {
-            return Err("frames not increasing");
+    let mut guard = FRAMES.lock();
+    let alloc = guard.as_mut().ok_or("frame allocator not initialised")?;
+    let start = alloc.free_frames();
+
+    let mut live = [(0u64, 0usize); FRAME_ORDERS.len()];
+    for (slot, &order) in live.iter_mut().zip(&FRAME_ORDERS) {
+        let f = alloc.allocate(order).ok_or("out of frames")?;
+        let size = BuddyAllocator::block_size(order);
+        if !f.is_multiple_of(size) {
+            return Err("block not aligned to its size");
         }
         let inside_usable =
-            memory.regions().iter().any(|r| r.kind == RegionKind::Usable && r.start <= f && f + PAGE_SIZE <= r.end);
+            memory.regions().iter().any(|r| r.kind == RegionKind::Usable && r.start <= f && f + size <= r.end);
         if !inside_usable {
-            return Err("frame outside usable RAM");
+            return Err("block outside usable RAM");
         }
-        last = Some(f);
+        *slot = (f, order);
+    }
+    for (i, &(a, ao)) in live.iter().enumerate() {
+        for &(b, bo) in &live[..i] {
+            if a < b + BuddyAllocator::block_size(bo) && b < a + BuddyAllocator::block_size(ao) {
+                return Err("blocks overlap");
+            }
+        }
+    }
+    let used: u64 = FRAME_ORDERS.iter().map(|&o| 1 << o).sum();
+    if alloc.free_frames() != start - used {
+        return Err("free count wrong after allocating");
+    }
+
+    // Write a pattern to the first and last frame of every block the boot
+    // mapping reaches, then read it all back.
+    let mut touched = 0;
+    for pass in [Pass::Write, Pass::Check] {
+        for &(f, order) in &live {
+            let last = f + BuddyAllocator::block_size(order) - PAGE_SIZE;
+            for frame in [f, last] {
+                if let Some(virt) = arch::phys_to_virt(frame) {
+                    pattern(virt as *mut u64, frame, pass)?;
+                    touched += 1;
+                }
+            }
+        }
+    }
+    if touched == 0 {
+        return Err("no allocated frame below the boot mapping limit");
+    }
+
+    // Free in a different order than allocated so merges happen out of order.
+    for &(f, order) in live.iter().step_by(2).chain(live.iter().skip(1).step_by(2)) {
+        alloc.free(f, order).map_err(|_| "free refused a live block")?;
+    }
+    if alloc.free(live[0].0, live[0].1) != Err(FreeError::NotAllocated) {
+        return Err("double free not detected");
+    }
+    if alloc.free_frames() != start {
+        return Err("free count did not return to its starting value");
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pass {
+    Write,
+    Check,
+}
+
+/// Fill one frame with values derived from its address, or check them.
+fn pattern(frame: *mut u64, phys: u64, pass: Pass) -> TestResult {
+    let words = (PAGE_SIZE / 8) as usize;
+    for i in 0..words {
+        let value = phys ^ (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        // SAFETY: `frame` maps a whole 4 KiB frame that this test allocated
+        // and still owns, and `i` stays inside it.
+        unsafe {
+            let p = frame.add(i);
+            match pass {
+                Pass::Write => p.write_volatile(value),
+                Pass::Check if p.read_volatile() != value => return Err("frame did not hold its pattern"),
+                Pass::Check => {}
+            }
+        }
     }
     Ok(())
 }

@@ -27,8 +27,8 @@ what exists **today** and how it fits that plan.
 2. `arch/x86_64/boot.rs` checks for long mode, maps physical [0, 1 GiB) at
    0 and at `0xffffffff80000000`, enables paging and jumps to `kernel_entry`.
 3. `kernel_entry` brings up serial, loads our GDT/TSS/IDT, reads the boot info,
-   normalises the memory map (reserving the first MiB and the kernel image)
-   and runs the boot self-test.
+   normalises the memory map (reserving the first MiB and the kernel image),
+   hands all usable RAM to the frame allocator and runs the boot self-test.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
 
@@ -62,3 +62,21 @@ what exists **today** and how it fits that plan.
 
 The real virtual memory manager (direct map of all RAM, per-process address
 spaces) replaces the boot mapping in the next milestone.
+
+## Physical memory
+
+- `poly-mem` normalises the firmware memory map (sorted, non-overlapping,
+  most restrictive type wins, usable RAM trimmed to whole pages).
+- `poly_mem::BuddyAllocator` manages every usable 4 KiB frame in blocks of
+  2^0 to 2^10 frames (4 KiB to 4 MiB), aligned to their size; freed buddies
+  merge again. It never touches the memory it manages: its state is a few
+  bitmaps per order in a caller-provided buffer (about 4 bits per frame of
+  span, 256 KiB for 2 GiB), with summary levels so finding a free block costs
+  one step per level rather than a scan. `free` checks a per-order
+  "allocated" bitmap and rejects double, misaligned, out-of-range and
+  wrong-order frees. See [ADR 0007](adr/0007-buddy-allocator-out-of-band-metadata.md).
+- `kernel/src/frames.rs` carves that buffer from usable RAM below 1 GiB (the
+  only RAM reachable through the boot mapping), marks it `Kernel` in the map,
+  and puts the allocator in the global `frames::FRAMES` spinlock. RAM above
+  1 GiB is managed too; nothing maps it yet. `cargo xtask test` boots with
+  256 MiB and with 2 GiB to cover both cases.
