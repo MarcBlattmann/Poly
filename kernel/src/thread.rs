@@ -1445,11 +1445,16 @@ kernel_test! {
         // order. So an attempt out of order is tried again; a wake-up that
         // ignores the earliest deadline (the bug this guards against) is out
         // of order every time.
+        let _pin = pin_current();
         for _ in 0..SLEEP_ORDER_ATTEMPTS {
             for w in WOKE_AT.iter().chain(&DEADLINE_AT) {
                 w.store(0, SeqCst);
             }
-            let ids = [spawn(sleeper, 30), spawn(sleeper, 20), spawn(sleeper, 10)];
+            // On one CPU: woken threads on several CPUs record their wake-up
+            // as each of those CPUs gets to run them, which the host may hold
+            // off for any of them; on one CPU they run in the order they were
+            // woken.
+            let ids = [spawn_here(sleeper, 30), spawn_here(sleeper, 20), spawn_here(sleeper, 10)];
             for id in ids {
                 join(id.map_err(|_| "spawn failed")?).map_err(|_| "join failed")?;
             }
