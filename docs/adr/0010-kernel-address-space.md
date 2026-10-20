@@ -3,7 +3,10 @@
 **Status:** Accepted. Amends [0007](0007-buddy-allocator-out-of-band-metadata.md):
 the buddy allocator's metadata may now live in any usable RAM. Amended by
 [0019](0019-display-framebuffer-and-drawing.md): PAT entry 1 is
-write-combining, for framebuffer mappings (`map_mmio_wc`).
+write-combining, for framebuffer mappings (`map_mmio_wc`). Amended by
+[0050](0050-kernel-thread-stacks-with-guards.md): kernel thread stacks
+live in a stack area of their own (PML4 slot 385), each above an unmapped
+guard.
 
 ## Context
 

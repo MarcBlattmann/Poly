@@ -14,7 +14,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0007](0007-buddy-allocator-out-of-band-metadata.md) | Buddy frame allocator with its metadata outside the memory it manages | Accepted |
 | [0008](0008-in-kernel-tests-and-backtraces.md) | In-kernel tests in a linker section; frame-pointer backtraces symbolised on the host | Accepted |
 | [0009](0009-drivers-behind-access-traits.md) | Device drivers as host-tested crates behind access traits | Accepted |
-| [0010](0010-kernel-address-space.md) | Kernel address space: direct map of the memory map's regions, W^X, guard pages | Accepted |
+| [0010](0010-kernel-address-space.md) | Kernel address space: direct map of the memory map's regions, W^X, guard pages | Accepted (thread stacks: see 0050) |
 | [0012](0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md) | Scheduler policy in a host-tested crate; context switch and stacks in the kernel | Accepted |
 | [0013](0013-interrupt-controllers-and-time-base.md) | Interrupt controllers and the time base in one host-tested crate (`poly-irq`) | Accepted |
 | [0014](0014-block-layer.md) | Block layer: submit/poll devices, ordering request queue, pinning buffer cache | Accepted |
@@ -46,6 +46,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0042](0042-readiness-pipes-poll-epoll-and-event-files.md) | Readiness: wait queues, file objects (pipes, event counters, timers, epoll sets) and `poll` in `poly-vfs`, the wait and signal rules in the personality (`FileIo`), park / unpark and a timer thread in the kernel | Accepted |
 | [0043](0043-dev-proc-sys-and-file-system-calls.md) | `/dev`, `/proc` and `/sys`: a ChaCha20 fast-key-erasure generator (`poly-random`), procfs over a kernel-provided source and a static sysfs (`poly-procfs`), open files that know their names; the Linux file system calls behind one `LinuxFs` services trait, resource limits in the personality | Accepted |
 | [0044](0044-time-syscalls-timers-and-the-vdso.md) | Time system calls, process timers (state in the personality, one kernel timer thread), CPU time per thread measured at context switches and split by tick samples, a settable wall clock, and a vDSO built from our own Rust by `kernel/build.rs` reading a seqlock data page (`poly-vdso`) shared through the page cache | Accepted |
+| [0050](0050-kernel-thread-stacks-with-guards.md) | Kernel thread stacks in a 2 MiB stack area of their own (PML4 slot 385, tables made at boot), one 32 KiB slot per thread-table slot with the stack above 16 KiB that are never mapped; overflows reported by thread name, DMA from stacks via a page-table check | Accepted |
 
 ## Open decisions
 
