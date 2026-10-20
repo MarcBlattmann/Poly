@@ -185,6 +185,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-virtio-net"
+version = "0.0.1"
+dependencies = [
+ "poly-net",
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
 name = "poly-vm"
 version = "0.0.1"
 

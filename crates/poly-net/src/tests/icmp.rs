@@ -56,6 +56,8 @@ fn ping_loopback_and_self() {
         assert_eq!(buf[0], icmpv4::ECHO_REPLY);
     }
     assert_eq!(s.frames, [0, 0]);
+    // Request and reply, twice, all through the loopback queue.
+    assert_eq!(s.a.stats().loop_packets, 4);
 }
 
 #[test]

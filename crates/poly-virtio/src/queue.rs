@@ -409,6 +409,14 @@ impl<'a> SplitQueue<'a> {
         self.read16(self.layout.used_idx()) != self.last_used
     }
 
+    /// How many used buffers are waiting to be harvested. A device that
+    /// moved `used.idx` further than there are buffers in flight is broken;
+    /// the count is capped at the buffers in flight, and
+    /// [`SplitQueue::pop_used`] reports the error.
+    pub fn used_pending(&self) -> u16 {
+        self.read16(self.layout.used_idx()).wrapping_sub(self.last_used).min(self.in_flight)
+    }
+
     /// Take the next buffer the device has finished with, putting its
     /// descriptors back on the free list. `Ok(None)` if there is none.
     pub fn pop_used(&mut self) -> Result<Option<Used>, UsedError> {
@@ -643,7 +651,9 @@ mod tests {
             b"rand".to_vec()
         });
         assert_eq!(seen, [b"log line".to_vec(), Vec::new()]);
+        assert_eq!(q.used_pending(), 2);
         assert_eq!(q.pop_used(), Ok(Some(Used { head: h1, len: 0 })));
+        assert_eq!(q.used_pending(), 1);
         assert_eq!(q.pop_used(), Ok(Some(Used { head: h2, len: 4 })));
         assert_eq!(&inp, b"rand");
     }
@@ -761,6 +771,7 @@ mod tests {
         let (mut q, mut d) = f.queue(false);
         q.add(&[], &[buf(&mut b)]).unwrap();
         d.set_used_idx(3);
+        assert_eq!(q.used_pending(), 1, "capped at the buffers in flight");
         assert_eq!(q.pop_used(), Err(UsedError::IndexJump));
     }
 

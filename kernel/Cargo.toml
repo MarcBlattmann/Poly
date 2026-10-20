@@ -31,6 +31,7 @@ poly-input = { path = "../crates/poly-input" }
 poly-irq = { path = "../crates/poly-irq" }
 poly-line = { path = "../crates/poly-line" }
 poly-mem = { path = "../crates/poly-mem" }
+poly-net = { path = "../crates/poly-net" }
 poly-paging = { path = "../crates/poly-paging" }
 poly-sched = { path = "../crates/poly-sched" }
 poly-pci = { path = "../crates/poly-pci" }
@@ -41,6 +42,7 @@ poly-personality-nt = { path = "../personalities/nt" }
 poly-personality-xnu = { path = "../personalities/xnu" }
 poly-virtio = { path = "../crates/poly-virtio" }
 poly-virtio-blk = { path = "../crates/poly-virtio-blk" }
+poly-virtio-net = { path = "../crates/poly-virtio-net" }
 poly-vm = { path = "../crates/poly-vm" }
 
 [profile.dev]

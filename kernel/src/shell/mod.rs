@@ -23,6 +23,7 @@
 //! automated test run (`poly.qemu_exit` without `poly.shell`).
 
 mod commands;
+mod net;
 pub mod serial;
 
 use crate::boot_info::BootInfo;

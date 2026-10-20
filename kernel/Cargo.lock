@@ -77,6 +77,7 @@ dependencies = [
  "poly-irq",
  "poly-line",
  "poly-mem",
+ "poly-net",
  "poly-paging",
  "poly-pci",
  "poly-personality-linux",
@@ -87,6 +88,7 @@ dependencies = [
  "poly-vfs",
  "poly-virtio",
  "poly-virtio-blk",
+ "poly-virtio-net",
  "poly-vm",
 ]
 
@@ -96,6 +98,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-mem"
+version = "0.0.1"
+
+[[package]]
+name = "poly-net"
 version = "0.0.1"
 
 [[package]]
@@ -155,6 +161,15 @@ name = "poly-virtio-blk"
 version = "0.0.1"
 dependencies = [
  "poly-block",
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
+name = "poly-virtio-net"
+version = "0.0.1"
+dependencies = [
+ "poly-net",
  "poly-pci",
  "poly-virtio",
 ]

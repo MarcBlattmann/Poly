@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 38 of 139 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 39 of 139 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">38 / 139 milestones · 27%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">39 / 139 milestones · 28%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -174,8 +174,8 @@
 <g><title>SMP: start all CPUs, per-CPU data, TLB shootdown, multi-core scheduler</title>
 <rect x="648.0" y="173.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>Networking: virtio-net driver, own TCP/IP stack (IPv4, IPv6, TCP, UDP, ICMP)</title>
-<rect x="676.0" y="173.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Networking: virtio-net driver, own TCP/IP stack (IPv4, IPv6, TCP, UDP, ICMP)</title>
+<rect x="676.0" y="173.0" width="26.0" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>Sockets: AF_INET, AF_INET6, AF_UNIX (incl. fd passing), AF_NETLINK basics</title>
 <rect x="704.0" y="173.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
@@ -189,7 +189,7 @@
 <g><title>bash, coreutils, Python and a C compiler run from the persistent disk</title>
 <rect x="788.0" y="173.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">0/17</text>
+<text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">1/17</text>
 <text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 5  NT personality and Windows console apps</text>
 <g><title>⚖️ Decide: reimplement MSVC / DirectX redistributable DLLs, or run apps' own copies</title>
 <rect x="340.0" y="203.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
