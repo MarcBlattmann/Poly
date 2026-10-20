@@ -52,6 +52,9 @@ impl Errno {
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
     pub const EOVERFLOW: Errno = Errno(75);
+    /// `EUSERS` (`asm-generic/errno.h`): "Too many users"; user
+    /// namespaces nested too deep (clone(2), unshare(2)).
+    pub const EUSERS: Errno = Errno(87);
     pub const EOPNOTSUPP: Errno = Errno(95);
     pub const ETIMEDOUT: Errno = Errno(110);
 
@@ -151,6 +154,7 @@ impl Errno {
             36 => "ENAMETOOLONG",
             38 => "ENOSYS",
             75 => "EOVERFLOW",
+            87 => "EUSERS",
             95 => "EOPNOTSUPP",
             110 => "ETIMEDOUT",
             3840 => "RESTART_IF_SA_RESTART",

@@ -20,7 +20,13 @@
 //!   which then lets go of the process record.
 //! - **Orphans.** When a process ends, its children are adopted by init
 //!   (pid 1) if init is alive, else by the kernel (and zombies among them
-//!   are reaped at once). (A "subreaper", prctl(2), is not supported.)
+//!   are reaped at once). A child in another pid namespace goes to that
+//!   namespace's init instead (pid_namespaces(7): orphans "are reparented
+//!   to the init process of their PID namespace"), and an init whose
+//!   parent ends to the reaper of its parent's namespace: each process
+//!   has a reaper ([`ProcessTree::set_reaper`]), and when that one has
+//!   ended too, its own reaper counts (ADR 0054). (A "subreaper",
+//!   prctl(2), is not supported.)
 //! - **Process groups and sessions.** A child starts in its creator's
 //!   group and session (fork(2)); setpgid(2) and setsid(2) change them
 //!   by the man pages' rules.
@@ -77,6 +83,9 @@ struct Node {
     report: Option<Report>,
     /// It has called execve(2) since it was created (setpgid(2): `EACCES`).
     execed: bool,
+    /// Who adopts it when its parent ends (the init of its pid namespace;
+    /// [`INIT_PID`] by default).
+    reaper: i32,
 }
 
 /// Which children a wait looks at.
@@ -144,11 +153,11 @@ pub struct ExitReport {
     pub exit_signal: u32,
     /// The process stays as a zombie for its parent to reap.
     pub zombie: bool,
-    /// Who adopted its children (0: the kernel).
+    /// Who adopted its children whose reaper is init (0: the kernel).
     pub adopter: i32,
-    /// Children that had already ended and that the adopter now has to
-    /// reap: `(pid, uid, how it ended, its exit signal)`.
-    pub adopted_zombies: Vec<(i32, u32, Termination, u32)>,
+    /// Children that had already ended and that their adopter now has to
+    /// reap: `(pid, uid, how it ended, its exit signal, the adopter)`.
+    pub adopted_zombies: Vec<(i32, u32, Termination, u32, i32)>,
 }
 
 /// See the module docs.
@@ -242,6 +251,14 @@ impl ProcessTree {
         core::mem::take(&mut self.reaped)
     }
 
+    /// Process `pid` is adopted by `reaper` when its parent ends (and by
+    /// `reaper`'s own reaper if that has ended too).
+    pub fn set_reaper(&mut self, pid: i32, reaper: i32) {
+        if let Some(n) = self.nodes.get_mut(&pid) {
+            n.reaper = reaper;
+        }
+    }
+
     /// `pid` called execve(2).
     pub fn exec(&mut self, pid: i32) {
         if let Some(n) = self.nodes.get_mut(&pid) {
@@ -256,6 +273,25 @@ impl ProcessTree {
             Some(init) if exiting != INIT_PID && init.zombie.is_none() => INIT_PID,
             _ => 0,
         }
+    }
+
+    /// Who adopts `child` of `exiting`: its reaper if alive (and not the
+    /// one exiting), else that one's reaper, and so on; init's, if it is
+    /// gone, the kernel.
+    fn adopter_of(&self, child: i32, exiting: i32) -> i32 {
+        let mut r = self.nodes.get(&child).map_or(INIT_PID, |n| n.reaper);
+        // Reapers form a chain towards init; bounded anyway.
+        for _ in 0..=self.nodes.len() {
+            if r == INIT_PID {
+                return self.adopter(exiting);
+            }
+            match self.nodes.get(&r) {
+                Some(n) if r != exiting && n.zombie.is_none() => return r,
+                Some(n) if n.reaper != r => r = n.reaper,
+                _ => r = INIT_PID,
+            }
+        }
+        self.adopter(exiting)
     }
 
     fn reap(&mut self, pid: i32) {
@@ -279,16 +315,17 @@ impl ProcessTree {
         report.exit_signal = node.exit_signal;
         report.adopter = self.adopter(pid);
         for child in children {
+            let adopter = self.adopter_of(child, pid);
             let Some(c) = self.nodes.get_mut(&child) else { continue };
-            c.parent = report.adopter;
+            c.parent = adopter;
             if let Some(how) = c.zombie {
-                if report.adopter == 0 {
+                if adopter == 0 {
                     self.reap(child);
                     continue;
                 }
-                report.adopted_zombies.push((child, c.uid, how, c.exit_signal));
+                report.adopted_zombies.push((child, c.uid, how, c.exit_signal, adopter));
             }
-            if let Some(a) = self.nodes.get_mut(&report.adopter) {
+            if let Some(a) = self.nodes.get_mut(&adopter) {
                 a.children.insert(child);
             }
         }
@@ -450,6 +487,7 @@ impl Node {
             zombie: None,
             report: None,
             execed: false,
+            reaper: INIT_PID,
         }
     }
 }
@@ -540,7 +578,7 @@ mod tests {
         t.exit(11, Termination::Exited(1), false);
         let r = t.exit(10, Termination::Exited(0), false);
         assert_eq!(r.adopter, INIT_PID);
-        assert_eq!(r.adopted_zombies, [(11, 1000, Termination::Exited(1), SIGCHLD)]);
+        assert_eq!(r.adopted_zombies, [(11, 1000, Termination::Exited(1), SIGCHLD, INIT_PID)]);
         assert_eq!((t.parent(11), t.parent(12)), (Some(1), Some(1)));
         assert_eq!(t.children(1), [10, 11, 12]);
         assert!(matches!(t.poll(1, &any(true, false, false)), Poll::Ready(Waited { pid: 10, .. })));

@@ -13,6 +13,7 @@ pub mod io;
 pub mod limits;
 pub mod madvise;
 pub mod mem;
+pub mod ns;
 pub mod path;
 pub mod perm;
 pub mod pipe;

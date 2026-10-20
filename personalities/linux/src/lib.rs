@@ -43,6 +43,8 @@
 //! - [`time`]: time structures and process timers (ADR 0044).
 //! - [`seccomp`]: strict mode and BPF filters checked before every call
 //!   (ADR 0054).
+//! - [`ns`]: namespaces (user, pid, mount, network, UTS, IPC) and the
+//!   rules of clone(2), unshare(2) and setns(2) about them (ADR 0054).
 //! - [`net`]: what the socket calls need from the kernel
 //!   ([`net::LinuxNet`]), socket structures and `NETLINK_ROUTE` (ADR 0048).
 //!
@@ -65,6 +67,7 @@ pub mod fs;
 pub mod futex;
 pub mod kernel;
 pub mod net;
+pub mod ns;
 mod numbers;
 pub mod rlimit;
 pub mod seccomp;

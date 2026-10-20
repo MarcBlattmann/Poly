@@ -879,4 +879,47 @@ pub trait LinuxKernel {
     fn seccomp_log(&mut self, number: u64, ret: u32) {
         let _ = (number, ret);
     }
+
+    // ---- namespaces (ADR 0054) -----------------------------------------
+
+    /// The calling process's pid namespace (`None`: the initial one):
+    /// where the ids [`pid`](Self::pid), [`tid`](Self::tid) and the rest
+    /// (all global) are translated for user space ([`crate::ns::pid`]).
+    /// The default: the initial one.
+    fn pid_ns(&self) -> crate::ns::pid::PidNsRef {
+        None
+    }
+
+    /// Whether the calling process's root directory is not the root of its
+    /// mount namespace (chroot(2) moved it): unshare(2) and setns(2) of a
+    /// user namespace are then `EPERM`.
+    fn chrooted(&self) -> bool {
+        false
+    }
+
+    /// unshare(2) `CLONE_NEWNS`: a copy of the calling process's mount
+    /// table as a new mount namespace owned by `owner`, the process's root
+    /// and working directory moved to the same places in the copy. Copied
+    /// into a namespace owned by a less privileged user namespace, the
+    /// mounts are locked (mount_namespaces(7): they cannot be unmounted
+    /// one by one or have their flags cleared). `EINVAL` by default.
+    fn copy_mounts(&mut self, owner: &crate::ns::user::UserNsRef) -> Result<alloc::sync::Arc<crate::ns::MntNs>, Errno> {
+        let _ = owner;
+        Err(Errno::EINVAL)
+    }
+
+    /// setns(2) into mount namespace `ns`: the calling process's root and
+    /// working directory become its root (setns(2)). `EINVAL` by default.
+    fn enter_mounts(&mut self, ns: &Option<alloc::sync::Arc<crate::ns::MntNs>>) -> Result<(), Errno> {
+        let _ = ns;
+        Err(Errno::EINVAL)
+    }
+
+    /// The namespace descriptor `fd` refers to (opened from
+    /// `/proc/[pid]/ns/<kind>`): its inode number and kind. `EBADF`,
+    /// `EINVAL` for another file. `EINVAL` by default.
+    fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, crate::ns::Kind), Errno> {
+        let _ = fd;
+        Err(Errno::EINVAL)
+    }
 }

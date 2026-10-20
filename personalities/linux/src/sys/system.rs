@@ -33,8 +33,15 @@ pub const UNAME_MACHINE: &str = "x86_64";
 /// written ("EFAULT buf is not valid").
 pub fn uname(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     // The names sethostname(2) and setdomainname(2) set, where the kernel
-    // keeps them (ADR 0051).
-    let names = k.admin().map(|s| (s.system_name(SystemName::Host), s.system_name(SystemName::Domain)));
+    // keeps them (ADR 0051), or the caller's UTS namespace (ADR 0054).
+    let uts = crate::signal::deliver::with_own(k, |p| p.ns.uts.clone());
+    let names = match uts {
+        Some(u) => {
+            let n = u.names();
+            Some((n.hostname, n.domainname))
+        }
+        None => k.admin().map(|s| (s.system_name(SystemName::Host), s.system_name(SystemName::Domain))),
+    };
     let (host, domain) = match &names {
         Some((h, d)) => (h.as_slice(), d.as_slice()),
         None => (k.hostname(), k.domainname()),

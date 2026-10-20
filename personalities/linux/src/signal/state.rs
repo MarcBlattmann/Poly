@@ -109,6 +109,10 @@ pub struct LinuxProcess {
     /// `sys::sched`): inherited by fork, kept by exec. The scheduler does
     /// not use it yet.
     pub nice: i32,
+    /// The process's namespaces but its user namespace, which is each
+    /// thread's (ADR 0054). fork(2) copies them (a child's pid namespace
+    /// is its parent's `pid_for_children`); execve(2) keeps them.
+    pub ns: crate::ns::Namespaces,
 }
 
 impl LinuxProcess {
@@ -126,6 +130,7 @@ impl LinuxProcess {
             limits: crate::rlimit::ResourceLimits::new(),
             timers: crate::time::timers::Timers::new(),
             nice: 0,
+            ns: crate::ns::Namespaces::default(),
         }
     }
 
@@ -161,6 +166,7 @@ impl LinuxProcess {
             limits: self.limits,
             timers,
             nice: self.nice,
+            ns: self.ns.for_child(),
         }
     }
 
