@@ -57,6 +57,7 @@ unknown command 'hlep'; did you mean 'help'?
 | `ls [path]` | a directory (default `/`) sorted by name, or one file: mode, size (or device number), name, link target |
 | `cat <file>...` | the files' contents (at most 64 KiB each, so `cat /dev/zero` ends) |
 | `mount` | every mount: file system, mount point, options |
+| `run <program> [args]` | start a static Linux program from the file system and wait for it; its output goes to the console, then its exit status (see "Linux programs") |
 | `uptime` | time since the clock started, ticks, threads |
 | `irq` | interrupts taken per vector with their owner (timer, serial, disk, ...), and the spurious / unhandled / 8259 / APIC error counters |
 | `cpu` | CPUID vendor, brand string, family / model / stepping, TSC rate, APIC ID, feature flags |
@@ -460,7 +461,10 @@ interrupt (expect one per millisecond from the tick).
 ## User mode
 
 The boot log says how user mode was set up, and every user thread a CPU
-exception kills leaves one line (the kernel goes on):
+exception kills leaves one line (the kernel goes on). That is for the
+kernel tests' bare processes; in a Linux process the exception becomes a
+signal instead (`linux: pid ... killed by signal 11 after page fault ...`
+when nothing handles it; see "Linux programs"):
 
 ```text
 user: syscall/sysret on; PCID: no, SMEP: no, SMAP: no; FPU state: FXSAVE, 512 bytes, XCR0 0x0
@@ -637,6 +641,64 @@ tests check its contents; `cargo xtask run poly.test=fs::
 hand. Writes to `/dev/console` (fds 0-2 of every new process) appear in
 the serial log like kernel log lines; reads from it return end of file
 until the TTY layer exists.
+
+## Linux programs
+
+Static Linux executables run from the root file system (ADR 0038). Put
+one in an initramfs and either run it from the shell or make it the first
+process:
+
+```sh
+cargo xtask pipeline initramfs ./prog --out target/prog.cpio      # ./prog as /test-binary
+cargo xtask run --initrd=target/prog.cpio                          # then: run /test-binary arg1 arg2
+cargo xtask run --headless --no-disk --initrd=target/prog.cpio poly.init=/test-binary poly.test.capture
+cargo xtask run --headless --no-disk --initrd=target/prog.cpio poly.qemu_exit poly.init=/test-binary
+```
+
+`poly.init=<path>` runs the program as pid 1 right after the file systems
+are up, before the self-test, and logs how it ended; with `poly.qemu_exit`
+QEMU exits after it (status 33 whatever the program's status). With
+`poly.test.capture` every system call is a `POLY-SYSCALL` line (number, the
+six argument registers, the result in decimal, `ret=?` for `exit_group`),
+and the bytes written to fds 1 and 2 come again as hex in `POLY-OUT`
+lines, as the diff runner reads them (ADR 0027):
+
+```text
+init: running /test-binary (traced)
+POLY-INIT: exec /test-binary
+POLY-SYSCALL: pid=1 nr=334 args=0x4b2ca0,0x20,0x0,0x53053053,0x0,0x4a8480 ret=-38
+syscall: pid 1 linux/linux #334 rseq not implemented
+POLY-SYSCALL: pid=1 nr=1 args=0x1,0x4b33d0,0xd,0x4b31b0,0x1,0x7 ret=13
+POLY-SYSCALL: pid=1 nr=231 args=0x0,0xffffffffffffffc0,0xe7,0x4b31b0,0x1,0x7 ret=?
+POLY-EXIT: pid=1 code=0
+init: /test-binary (pid 1) ended: exit status 0
+```
+
+A file that cannot run says why: `POLY-INIT: unsupported /bin/x: ENOENT`,
+`... a dynamically linked executable (PT_INTERP): not supported yet`,
+`... #! scripts are not supported yet`. Every call without a handler logs
+`syscall: pid P linux/linux #N name not implemented` and returns `-ENOSYS`:
+that list is the work queue for the program. A fault that kills a Linux
+process is a signal, logged with where it happened:
+
+```text
+linux: pid 1 killed by signal 11 after page fault at rip 0x401012, address 0x10
+```
+
+The diff runner does all of this per corpus test:
+`cargo xtask pipeline diff --target poly [--tests brk,mmap]` boots one
+kernel per test (the debug kernel; `--build-kernel` rebuilds it), compares
+it with real Linux and keeps each boot's serial log under
+`target/pipeline/runs/latest/poly/<test>.serial.log` next to the traces.
+`cargo xtask pipeline polycheck` (part of `cargo xtask ci`) does the same
+and fails if a test listed in `tests/linux/poly-pass.txt` no longer
+passes; it names tests that newly pass, to be added there.
+
+The in-kernel tests of the Linux services run with `poly.test=linux::`;
+they make real system calls from ring 3 (`kernel/src/linux/tests.rs`).
+The hello worlds the boot tests use are built into
+`target/xtask-programs/` (`hello`: Rust, no C library; `corpus/`: the C
+corpus with `hello` and the static glibc `libc-hello`).
 
 ## Attaching a debugger
 

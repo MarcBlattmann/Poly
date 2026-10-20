@@ -1,0 +1,11 @@
+[package]
+name = "poly-rtc"
+description = "Wall-clock time from a PC real-time clock (MC146818-compatible CMOS registers) and calendar arithmetic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

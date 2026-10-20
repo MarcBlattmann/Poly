@@ -34,7 +34,7 @@ use alloc::alloc::{Layout, alloc_zeroed, dealloc};
 use core::arch::asm;
 use core::arch::x86_64::{__cpuid, __cpuid_count};
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 /// XCR0 bits (SDM Vol. 1 §13.3): x87, SSE (XMM registers and MXCSR), AVX
 /// (upper halves of the YMM registers).
@@ -54,9 +54,21 @@ const MXCSR_INIT: u32 = 0x1f80;
 /// XSAVE requires a 64-byte aligned area; FXSAVE 16.
 const ALIGN: usize = 64;
 
+/// The XSAVE header follows the legacy region; XSTATE_BV is its first
+/// field, XCOMP_BV the second (SDM Vol. 1 §13.4.2).
+const HEADER_OFFSET: usize = LEGACY_SIZE;
+const HEADER_SIZE: usize = 64;
+/// MXCSR_MASK in an FXSAVE image (SDM Vol. 1 §10.5.1.2); 0 there means
+/// the default mask 0xFFBF.
+const MXCSR_MASK_OFFSET: usize = 28;
+const MXCSR_MASK_DEFAULT: u32 = 0xffbf;
+
 static XSAVE: AtomicBool = AtomicBool::new(false);
 static XCR0: AtomicU64 = AtomicU64::new(0);
 static AREA_SIZE: AtomicUsize = AtomicUsize::new(LEGACY_SIZE);
+/// The MXCSR bits this CPU accepts: setting any other one makes FXRSTOR
+/// and XRSTOR fault.
+static MXCSR_MASK: AtomicU32 = AtomicU32::new(MXCSR_MASK_DEFAULT);
 
 /// The area whose thread's state is in the registers (null: none).
 static OWNER: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
@@ -107,7 +119,31 @@ pub(super) unsafe fn init() {
         XCR0.store(xcr0, Ordering::Relaxed);
     }
     XSAVE.store(xsave, Ordering::Relaxed);
+    // MXCSR_MASK as FXSAVE reports it (SDM Vol. 1 §11.6.6).
+    #[repr(C, align(16))]
+    struct Image([u8; LEGACY_SIZE]);
+    let mut image = Image([0; LEGACY_SIZE]);
+    // SAFETY: a 512-byte, 16-byte aligned buffer on this stack; the
+    // registers are nobody's yet (no user thread exists).
+    unsafe { asm!("fxsave64 [{}]", in(reg) image.0.as_mut_ptr(), options(nostack)) };
+    let mask = u32::from_le_bytes(image.0[MXCSR_MASK_OFFSET..MXCSR_MASK_OFFSET + 4].try_into().expect("4 bytes"));
+    MXCSR_MASK.store(if mask == 0 { MXCSR_MASK_DEFAULT } else { mask }, Ordering::Relaxed);
 }
+
+/// Bytes in a thread's FPU image ([`FpuArea::snapshot`]).
+pub fn area_size() -> usize {
+    AREA_SIZE.load(Ordering::Relaxed)
+}
+
+/// The XSAVE feature bits images are saved with (XCR0), or `None` when
+/// images are FXSAVE images.
+pub fn xfeatures() -> Option<u64> {
+    XSAVE.load(Ordering::Relaxed).then(|| XCR0.load(Ordering::Relaxed))
+}
+
+/// Why [`FpuArea::load`] refused an image: loading it would fault.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BadImage;
 
 /// One user thread's saved x87 / SSE / AVX state.
 #[derive(Debug)]
@@ -157,6 +193,106 @@ impl FpuArea {
         // one or one `save` wrote.
         unsafe { restore(self.ptr) };
         OWNER.store(self.ptr.as_ptr(), Ordering::Relaxed);
+    }
+
+    fn is_owner(&self) -> bool {
+        OWNER.load(Ordering::Relaxed) == self.ptr.as_ptr()
+    }
+
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        // SAFETY: the area is `area_size()` bytes, owned by `self`, and the
+        // `&mut self` excludes other access from this side; the CPU only
+        // writes it in `save`, which callers order (interrupts off).
+        unsafe { core::slice::from_raw_parts_mut(self.ptr.as_ptr(), area_size()) }
+    }
+
+    /// Copy this thread's state into `out` ([`area_size`] bytes; a shorter
+    /// buffer gets a prefix): the registers' current contents if it is the
+    /// owner. Call with interrupts off, so it cannot change hands meanwhile.
+    pub fn snapshot(&mut self, out: &mut [u8]) {
+        debug_assert!(!cpu::interrupts_enabled());
+        if self.is_owner() {
+            // SAFETY: a live area; the registers hold its thread's state.
+            unsafe { save(self.ptr) };
+        }
+        let bytes = self.bytes_mut();
+        let n = out.len().min(bytes.len());
+        out[..n].copy_from_slice(&bytes[..n]);
+    }
+
+    /// Make `image` this thread's state (and the registers' if it is the
+    /// owner): a 512-byte FXSAVE image, or with XSAVE an XSAVE image in the
+    /// standard format (legacy region, header, extended components as
+    /// laid out for XCR0). Refused, changing nothing, if loading it would
+    /// fault: reserved MXCSR bits, a header with XCOMP_BV or reserved bytes
+    /// set, components outside XCR0, or a component the image is too short
+    /// to hold (SDM Vol. 1 §13.8, Vol. 2B `XRSTOR` and `FXRSTOR`). Call
+    /// with interrupts off.
+    pub fn load(&mut self, image: &[u8]) -> Result<(), BadImage> {
+        debug_assert!(!cpu::interrupts_enabled());
+        if image.len() < LEGACY_SIZE {
+            return Err(BadImage);
+        }
+        let mxcsr = u32::from_le_bytes(image[MXCSR_OFFSET..MXCSR_OFFSET + 4].try_into().expect("4 bytes"));
+        if mxcsr & !MXCSR_MASK.load(Ordering::Relaxed) != 0 {
+            return Err(BadImage);
+        }
+        let xsave = XSAVE.load(Ordering::Relaxed);
+        let size = area_size();
+        let xstate_bv = if !xsave {
+            0
+        } else if image.len() == LEGACY_SIZE {
+            // A plain FXSAVE image: x87 and SSE state, the rest initial.
+            XCR0_X87 | XCR0_SSE
+        } else {
+            if image.len() < HEADER_OFFSET + HEADER_SIZE {
+                return Err(BadImage);
+            }
+            let header = &image[HEADER_OFFSET..HEADER_OFFSET + HEADER_SIZE];
+            let bv = u64::from_le_bytes(header[..8].try_into().expect("8 bytes"));
+            if header[8..].iter().any(|&b| b != 0) || bv & !XCR0.load(Ordering::Relaxed) != 0 {
+                return Err(BadImage);
+            }
+            // Components beyond SSE live past the header, up to the area's
+            // size for XCR0.
+            if bv & !(XCR0_X87 | XCR0_SSE) != 0 && image.len() < size {
+                return Err(BadImage);
+            }
+            bv
+        };
+        let owner = self.is_owner();
+        let area = self.bytes_mut();
+        area.fill(0);
+        area[..LEGACY_SIZE].copy_from_slice(&image[..LEGACY_SIZE]);
+        if xsave {
+            area[HEADER_OFFSET..HEADER_OFFSET + 8].copy_from_slice(&xstate_bv.to_le_bytes());
+            let ext = HEADER_OFFSET + HEADER_SIZE;
+            if image.len() > ext {
+                let n = image.len().min(size) - ext;
+                area[ext..ext + n].copy_from_slice(&image[ext..ext + n]);
+            }
+        }
+        if owner {
+            // SAFETY: a live area holding a state checked above to load
+            // without a fault.
+            unsafe { restore(self.ptr) };
+        }
+        Ok(())
+    }
+
+    /// Give this thread the initial state (see the module docs), in the
+    /// registers too if it is the owner. Call with interrupts off.
+    pub fn reset(&mut self) {
+        debug_assert!(!cpu::interrupts_enabled());
+        let owner = self.is_owner();
+        let area = self.bytes_mut();
+        area.fill(0);
+        area[FCW_OFFSET..FCW_OFFSET + 2].copy_from_slice(&FCW_INIT.to_le_bytes());
+        area[MXCSR_OFFSET..MXCSR_OFFSET + 4].copy_from_slice(&MXCSR_INIT.to_le_bytes());
+        if owner {
+            // SAFETY: a live area holding the initial state.
+            unsafe { restore(self.ptr) };
+        }
     }
 }
 

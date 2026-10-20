@@ -16,17 +16,20 @@ mod fs;
 mod heap;
 mod keyboard;
 mod ktest;
+mod linux;
 mod log;
 mod mm;
 mod pci;
 mod power;
 mod process;
+mod program;
 mod qemu;
 mod selftest;
 mod shell;
 mod sync;
 mod syscall;
 mod terminal;
+mod testrun;
 mod thread;
 mod time;
 mod user;
@@ -120,6 +123,9 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     keyboard::init(&boot);
     display::init(&boot);
     fs::init(&boot, initrd);
+    // `poly.init=<path>`: the first program runs before anything else; a
+    // test run (`poly.qemu_exit`) ends with it (ADR 0027, ADR 0038).
+    program::run_init(&boot);
 
     // The shell's `test` command runs the tests again later.
     let memory: &'static MemoryMap = Box::leak(Box::new(memory));

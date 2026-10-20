@@ -82,6 +82,7 @@ dependencies = [
  "poly-personality-linux",
  "poly-personality-nt",
  "poly-personality-xnu",
+ "poly-rtc",
  "poly-sched",
  "poly-term",
  "poly-vfs",
@@ -126,6 +127,10 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
 ]
+
+[[package]]
+name = "poly-rtc"
+version = "0.0.1"
 
 [[package]]
 name = "poly-sched"

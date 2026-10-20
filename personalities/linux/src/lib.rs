@@ -139,7 +139,8 @@ impl Linux {
     /// for the faulting thread (`SIGSEGV`, `SIGBUS`, `SIGFPE`, `SIGILL`,
     /// `SIGTRAP`), with `trapno`, `err` and `cr2` set in the thread's
     /// [`kernel::UserContext`]. Delivered by the next
-    /// [`exit_to_user`](Self::exit_to_user).
+    /// [`exit_to_user`](Self::exit_to_user). [`signal::fault::fault_info`]
+    /// says which signal and code a CPU exception raises.
     pub fn fault_signal(kernel: &mut dyn LinuxKernel, info: abi::SigInfo) {
         signal::force_signal(kernel, info);
     }

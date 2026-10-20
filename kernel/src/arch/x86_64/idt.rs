@@ -42,7 +42,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Saved CPU state, in the order the stubs push it (lowest address first).
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct TrapFrame {
     pub r15: u64,
     pub r14: u64,
@@ -341,19 +341,35 @@ pub unsafe fn init() {
     }
 }
 
-extern "C" fn trap_dispatch(frame: &mut TrapFrame) {
-    if frame.vector >= u64::from(FIRST_INTERRUPT_VECTOR) {
-        super::irq::dispatch(frame.vector as u8);
+/// Called by `isr_common` with the frame it pushed. A raw pointer, not a
+/// reference: on the way back to ring 3 the thread's personality may
+/// rewrite the frame (a signal handler's registers) through
+/// `user::set_user_regs`.
+extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
+    // SAFETY: the stub passes the complete frame it just pushed on this
+    // stack; nothing else refers to it during these reads.
+    let (vector, from_user) = unsafe { ((*frame).vector, (*frame).in_user_mode()) };
+    if vector >= u64::from(FIRST_INTERRUPT_VECTOR) {
+        super::irq::dispatch(vector as u8);
+        if from_user {
+            crate::user::return_to_user();
+        }
         return;
     }
     // An NMI or machine check that happens to arrive in ring 3 is not the
     // thread's doing (and runs on an IST stack): it is handled, or not, as
     // in ring 0.
-    if frame.in_user_mode() && !matches!(frame.vector, NMI | MACHINE_CHECK | DOUBLE_FAULT) {
-        // Returns only if it resolved a page fault; the instruction is retried.
-        super::user::exception(frame);
+    if from_user && !matches!(vector, NMI | MACHINE_CHECK | DOUBLE_FAULT) {
+        // Returns only if the thread goes on: a page fault was resolved and
+        // the instruction is retried, or a signal handler runs next.
+        // SAFETY: as above; the handler gets a copy.
+        super::user::exception(unsafe { *frame });
+        crate::user::return_to_user();
         return;
     }
+    // SAFETY: a fault in ring 0: nothing else refers to the frame, and the
+    // handlers below may change it (a user-copy routine's fixup).
+    let frame = unsafe { &mut *frame };
     if frame.vector == PAGE_FAULT && super::usercopy::page_fault(frame) {
         return;
     }

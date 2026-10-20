@@ -4,6 +4,7 @@ use super::fake::*;
 use crate::abi::{PAGE_SIZE, map, prot};
 use crate::kernel::{Backing, MapHints, MapRequest, Placement, Prot};
 use crate::{Errno, nr};
+use alloc::vec;
 
 const RW_PROT: u64 = (prot::PROT_READ | prot::PROT_WRITE) as u64;
 const PRIV_ANON: u64 = (map::MAP_PRIVATE | map::MAP_ANONYMOUS) as u64;
@@ -42,15 +43,26 @@ fn mapping_types() {
     assert_eq!(mmap(&mut k, 0, 4096, RW_PROT, anon | 0x4, u64::MAX, 0), Err(Errno::EINVAL), "type 4");
     assert!(mmap(&mut k, 0, 4096, RW_PROT, anon | map::MAP_SHARED as u64, u64::MAX, 0).is_ok());
     assert!(k.maps[0].shared);
-    assert!(mmap(&mut k, 0, 4096, RW_PROT, anon | map::MAP_SHARED_VALIDATE as u64, u64::MAX, 0).is_ok());
+    // MAP_SHARED | MAP_PRIVATE is MAP_SHARED_VALIDATE: not for anonymous
+    // memory (tests/linux/mmap.c, mmap_shared_and_private_einval).
+    let both = (map::MAP_SHARED | map::MAP_PRIVATE) as u64;
+    assert_eq!(both, map::MAP_SHARED_VALIDATE as u64);
+    assert_eq!(mmap(&mut k, 0, 4096, RW_PROT, anon | both, u64::MAX, 0), Err(Errno::EINVAL));
+    k.files.insert(3, File::new(Kind::Regular));
+    k.file_mut(3).written = vec![7; 4096];
+    let validate = map::MAP_SHARED_VALIDATE as u64;
+    assert!(mmap(&mut k, 0, 4096, prot::PROT_READ as u64, validate, 3, 0).is_ok());
     assert!(k.maps[1].shared);
 }
 
 #[test]
 fn shared_validate_rejects_unknown_flags_others_ignore_them() {
     let mut k = FakeKernel::new();
+    k.files.insert(3, File::new(Kind::Regular));
+    k.file_mut(3).written = vec![7; 4096];
     let unknown = 0x200u64; // not defined by mmap(2)
-    let validate = (map::MAP_SHARED_VALIDATE | map::MAP_ANONYMOUS) as u64;
+    let validate = map::MAP_SHARED_VALIDATE as u64;
+    let mmap = |k: &mut FakeKernel, addr, len, prot, flags, _fd: u64, off| mmap(k, addr, len, prot, flags, 3, off);
     assert_eq!(mmap(&mut k, 0, 4096, RW_PROT, validate | unknown, u64::MAX, 0), Err(Errno::EOPNOTSUPP));
     assert_eq!(
         mmap(&mut k, 0, 4096, RW_PROT, validate | map::MAP_SYNC as u64, u64::MAX, 0),

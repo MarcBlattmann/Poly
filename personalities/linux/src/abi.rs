@@ -213,6 +213,12 @@ pub mod signal {
     pub const SI_TKILL: i32 = -6;
     pub const SEGV_MAPERR: i32 = 1;
     pub const SEGV_ACCERR: i32 = 2;
+    pub const ILL_ILLOPN: i32 = 2;
+    pub const FPE_INTDIV: i32 = 1;
+    pub const BUS_ADRALN: i32 = 1;
+    pub const BUS_ADRERR: i32 = 2;
+    pub const TRAP_BRKPT: i32 = 1;
+    pub const TRAP_TRACE: i32 = 2;
 
     /// `uc_flags` bits (x86 `asm/ucontext.h`).
     pub const UC_FP_XSTATE: u64 = 0x1;
@@ -523,6 +529,15 @@ pub struct FileStat {
     pub ctime: Timespec,
 }
 
+/// A `dev_t` (`st_dev`, `st_rdev`) from a major and minor number, in the
+/// encoding the C library's `makedev` uses (glibc `<sys/sysmacros.h>`):
+/// minor bits 0-7, major bits 8-19, minor bits 8-31 at 20-43, major bits
+/// 12-31 at 44-63. Small numbers come out as `major << 8 | minor`.
+pub const fn makedev(major: u32, minor: u32) -> u64 {
+    let (major, minor) = (major as u64, minor as u64);
+    ((major & 0xffff_f000) << 32) | ((major & 0xfff) << 8) | ((minor & 0xffff_ff00) << 12) | (minor & 0xff)
+}
+
 impl FileStat {
     /// `sizeof(struct stat)` on x86-64.
     pub const SIZE: usize = 144;
@@ -613,6 +628,17 @@ mod tests {
         assert_eq!(page_round_up(u64::MAX), None);
         assert_eq!(page_round_up(u64::MAX - 4095), Some(u64::MAX - 4095));
         assert!(page_aligned(0x7000) && !page_aligned(0x7001));
+    }
+
+    #[test]
+    fn device_numbers() {
+        // Small numbers: major in bits 8-19, minor in bits 0-7.
+        assert_eq!(makedev(5, 1), 0x501);
+        assert_eq!(makedev(1, 3), 0x103);
+        assert_eq!(makedev(136, 0), 0x8800);
+        // Large ones spill into the high bits.
+        assert_eq!(makedev(0, 0x1234), 0x0120_0034);
+        assert_eq!(makedev(0x1_0001, 0), (0x10 << 44) | (1 << 8));
     }
 
     #[test]

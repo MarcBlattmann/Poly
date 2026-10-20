@@ -1,6 +1,6 @@
 //! The shell's commands. Each one reads kernel state through the modules'
 //! public APIs and prints it; none changes anything except `test` (which
-//! runs the kernel tests), `clear` and `reboot`.
+//! runs the kernel tests), `run` (which starts a program), `clear` and `reboot`.
 
 use super::{Console, TEST_CONTEXT, sgr};
 use crate::arch::{self, cpu, irq};
@@ -42,6 +42,7 @@ pub static COMMANDS: &[Command] = &[
     Command { name: "ls", usage: "[path]", help: "list a directory (default /) with modes and sizes", run: ls },
     Command { name: "cat", usage: "<file>...", help: "print files", run: cat },
     Command { name: "mount", usage: "", help: "mounted file systems", run: mount },
+    Command { name: "run", usage: "<program> [args]", help: "run a program until it ends", run: run_program },
     Command { name: "uptime", usage: "", help: "time since boot and timer ticks", run: uptime },
     Command { name: "irq", usage: "", help: "interrupt counts per vector", run: irqs },
     Command { name: "cpu", usage: "", help: "processor vendor, model and features (CPUID)", run: cpu_info },
@@ -440,6 +441,15 @@ fn test(con: &mut dyn Console, args: &[String]) -> CommandResult {
     let ms = (time::now_ns() - start) / time::NANOS_PER_MILLI;
     let color = if summary.failed == 0 { sgr::GREEN } else { sgr::RED };
     out!(con, "{color}{} passed, {} failed{} in {ms} ms", summary.passed, summary.failed, sgr::RESET);
+    Ok(())
+}
+
+/// `run <program> [args...]`: start a program from the file system and
+/// wait for it; its output goes to the console like the kernel log's.
+fn run_program(con: &mut dyn Console, args: &[String]) -> CommandResult {
+    let [path, rest @ ..] = args else { return Err("needs a program".into()) };
+    let status = crate::program::run(path, rest, false).map_err(|e| format!("{path}: {e}"))?;
+    out!(con, "{path}: {status}");
     Ok(())
 }
 

@@ -16,6 +16,43 @@ pub fn now_ns() -> u64 {
     arch::time::now_ns()
 }
 
+/// Wall-clock time at boot (`now_ns() == 0`), in nanoseconds since the Unix
+/// epoch, once [`realtime_ns`] has read the RTC; [`UNKNOWN`] before.
+static BOOT_EPOCH_NS: AtomicU64 = AtomicU64::new(UNKNOWN);
+const UNKNOWN: u64 = u64::MAX;
+
+/// Wall-clock time in nanoseconds since the Unix epoch (UTC): the RTC,
+/// read once at the first call, plus the monotonic clock since then. A
+/// machine whose RTC reads as garbage counts from the epoch at boot. Not
+/// adjustable yet (no `settimeofday`), so it moves exactly like
+/// [`now_ns`].
+pub fn realtime_ns() -> u64 {
+    let mut base = BOOT_EPOCH_NS.load(SeqCst);
+    if base == UNKNOWN {
+        let century = crate::acpi::platform().and_then(|p| p.rtc_century);
+        let rtc = arch::rtc::read(century).and_then(|r| r.decode());
+        let now = now_ns();
+        let wall = rtc.map_or(now, |t| t.unix_seconds() * NANOS_PER_SEC);
+        base = wall.saturating_sub(now);
+        match BOOT_EPOCH_NS.compare_exchange(UNKNOWN, base, SeqCst, SeqCst) {
+            Ok(_) => match rtc {
+                Some(t) => crate::kprintln!(
+                    "time: RTC reads {:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC",
+                    t.year,
+                    t.month,
+                    t.day,
+                    t.hour,
+                    t.minute,
+                    t.second
+                ),
+                None => crate::kprintln!("time: the RTC gives no valid time; the wall clock starts at the epoch"),
+            },
+            Err(first) => base = first,
+        }
+    }
+    base.saturating_add(now_ns())
+}
+
 /// Timer interrupts since the tick started.
 pub fn ticks() -> u64 {
     arch::time::ticks()

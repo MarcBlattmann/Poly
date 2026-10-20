@@ -1,6 +1,6 @@
 # 0027: Agent pipeline tools: own ptrace tracer, per-test diff runner, a serial test-run protocol for Poly, held-out store outside the repository
 
-**Status:** Accepted.
+**Status:** Accepted. The kernel side of the test-run protocol is implemented as described in [0038](0038-linux-processes-in-the-kernel-and-the-first-program.md).
 
 ## Context
 

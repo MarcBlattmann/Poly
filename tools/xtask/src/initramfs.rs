@@ -7,7 +7,10 @@
 //!   and `/dev/console` as a Linux initramfs has it.
 //! - The test image (the self-test boots, with `poly.test.initrd`): the same
 //!   plus `/test`, a tree of every kind of entry the kernel's file system
-//!   tests check (`kernel/src/fs/tests.rs`).
+//!   tests check (`kernel/src/fs/tests.rs`), and `/bin/hello`, the nolibc
+//!   hello world the exec tests run (`programs.rs`).
+//! - The programs image (boots with `poly.init=/bin/<name>`): the default
+//!   image plus the hello worlds in `/bin`.
 
 use poly_cpio::{Format, Writer};
 use poly_vfs::{DeviceId, FileType};
@@ -56,10 +59,40 @@ pub fn default_image() -> Vec<u8> {
     w.finish()
 }
 
-/// The image the self-test boots use.
+/// The test image without programs.
+#[cfg(test)]
 pub fn test_image() -> Vec<u8> {
+    test_image_with(&[])
+}
+
+/// Programs (`name`, ELF bytes) for an image's `/bin`, mode 0755.
+pub type Programs<'a> = [(&'a str, &'a [u8])];
+
+fn bin(w: &mut Writer, programs: &Programs<'_>) {
+    if programs.is_empty() {
+        return;
+    }
+    w.dir(b"bin", 0o755);
+    for (name, elf) in programs {
+        w.file(format!("bin/{name}").as_bytes(), 0o755, elf);
+    }
+}
+
+/// The default image with `programs` in `/bin`: what the boots that run a
+/// program as the first process (`poly.init=/bin/<name>`) use.
+pub fn programs_image(programs: &Programs<'_>) -> Vec<u8> {
     let mut w = writer();
     base(&mut w);
+    bin(&mut w, programs);
+    w.finish()
+}
+
+/// The test image with `programs` in `/bin` (the kernel's exec tests run
+/// `/bin/hello` from it).
+pub fn test_image_with(programs: &Programs<'_>) -> Vec<u8> {
+    let mut w = writer();
+    base(&mut w);
+    bin(&mut w, programs);
     w.dir(b"test", 0o750);
     w.file(b"test/hello.txt", 0o644, b"Hello from the initramfs!\n");
     w.file(b"test/empty", 0o600, b"");
@@ -108,6 +141,21 @@ mod tests {
         // The test image is the default one (less its trailer) and more.
         let default = default_image();
         assert!(test_image().starts_with(&default[..default.len() - 128]));
+    }
+
+    #[test]
+    fn programs_go_to_bin_executable() {
+        let image = programs_image(&[("hello", b"\x7fELF hello"), ("hello-libc", b"\x7fELF libc")]);
+        assert_eq!(image, programs_image(&[("hello", b"\x7fELF hello"), ("hello-libc", b"\x7fELF libc")]));
+        let fs = Arc::new(Tmpfs::new(Arc::new(Zero)));
+        poly_cpio::unpack_fs(&image, fs.clone()).unwrap();
+        let vfs = Vfs::new(fs);
+        let ctx = vfs.root_context().unwrap();
+        let stat = vfs.stat(&ctx, &Cred::root(), At::Cwd, b"/bin/hello-libc", false).unwrap();
+        assert_eq!((stat.perm(), stat.size), (0o755, 9));
+        assert_eq!(vfs.stat(&ctx, &Cred::root(), At::Cwd, b"/bin", false).unwrap().perm(), 0o755);
+        // No programs, no /bin: the test image is unchanged by this.
+        assert_eq!(test_image_with(&[]), test_image());
     }
 
     #[test]

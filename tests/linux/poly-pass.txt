@@ -1,0 +1,20 @@
+# Corpus tests that pass on Poly: the diff runner (`cargo xtask pipeline diff
+# --target poly`) finds no difference from real Linux in exit status, stdout,
+# stderr and the normalised syscall sequence. `cargo xtask ci` runs
+# `pipeline polycheck`, which fails if one of these stops passing and names
+# tests that newly pass. Add a test here once it passes; never remove one to
+# make CI green.
+#
+# Not here yet: libc-hello (glibc registers rseq, which Poly answers with
+# ENOSYS; its output and exit status already match).
+arch_prctl
+brk
+clock
+efault
+exit42
+getrandom
+hello
+mmap
+segv
+stderr
+uname

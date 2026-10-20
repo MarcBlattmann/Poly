@@ -28,6 +28,7 @@ mod console;
 mod font;
 mod initramfs;
 mod ktest;
+mod programs;
 mod screen;
 mod symbols;
 mod terminal;
@@ -616,7 +617,7 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let disk = test_disk()?;
     let devices = Devices::Test(&disk);
     let append = format!("poly.qemu_exit {SHELL_FLAG} poly.test=shell:: {}", devices.flags());
-    let initrd = initramfs::write(&root(), "poly-test-initramfs.cpio", &initramfs::test_image())?;
+    let initrd = programs::test_initramfs()?;
     let qemu_args = ["-initrd".to_string(), initrd.display().to_string()];
     let commands = [
         "help\r",
@@ -629,6 +630,7 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         "test shell::\r",
         "ls /test\r",
         "cat /etc/motd\r",
+        "run /bin/hello\r",
         "reboot\r",
     ];
     let steps: Vec<_> = commands.iter().map(|&c| (console::PROMPT, c)).collect();
@@ -645,7 +647,7 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         ));
     }
     let out = |i: usize| ex[i].output;
-    let checks: [(&str, bool); 10] = [
+    let checks: [(&str, bool); 11] = [
         (
             "help lists the commands",
             ["uptime ", "lspci ", "reboot ", "list the commands"].iter().all(|s| out(0).contains(s)),
@@ -667,7 +669,11 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             .all(|s| out(7).contains(s)),
         ),
         ("cat prints /etc/motd", out(8) == initramfs::MOTD),
-        ("reboot uses the ACPI reset register", out(9).contains("reboot: ACPI reset register")),
+        (
+            "run starts /bin/hello and reports its exit",
+            out(9).contains(programs::HELLO_OUTPUT) && out(9).ends_with("/bin/hello: exit status 0\n"),
+        ),
+        ("reboot uses the ACPI reset register", out(10).contains("reboot: ACPI reset register")),
     ];
     for (what, ok) in checks {
         if !ok {
@@ -694,7 +700,7 @@ fn boot_tests() -> Result {
     // All but the fourth boot with the test initramfs (QEMU puts it at the
     // top of RAM, so with 2 GiB above the first GiB); the fourth has none,
     // so the kernel must come up with an empty root as well.
-    let initrd = initramfs::write(&root(), "poly-test-initramfs.cpio", &initramfs::test_image())?;
+    let initrd = programs::test_initramfs()?;
     let configs = [(DEFAULT_MEMORY, false, None), ("2G", false, None), (DEFAULT_MEMORY, true, None)];
     for (memory, polled, cpu) in configs.into_iter().chain([(DEFAULT_MEMORY, false, Some("max"))]) {
         let how = if polled { "the test disk without MSI-X (polled)" } else { "the test devices" };
@@ -803,6 +809,9 @@ fn boot_tests() -> Result {
 
     eprintln!("==> boot test: the shell on the serial port answers typed commands");
     shell_test(&kernel, &syms)?;
+
+    // Static Linux hello worlds as the first process (poly.init).
+    programs::boot_tests(&kernel, &syms)?;
 
     // Expecting the test disk without attaching it must fail the disk
     // tests, so a boot that silently lost its disk cannot pass.
@@ -1010,7 +1019,11 @@ fn ci() -> Result {
     // The test corpus on Linux against itself: the tracer and the diff
     // runner must find no differences. Takes a few seconds; skips itself
     // without a C compiler or where ptrace is not permitted.
-    pipeline(&["selfcheck".into()])
+    pipeline(&["selfcheck".into()])?;
+    // The corpus on Poly against Linux (one QEMU boot per test, about a
+    // second each): the tests of tests/linux/poly-pass.txt must pass. Skips
+    // itself like selfcheck, and without QEMU.
+    pipeline(&["polycheck".into()])
 }
 
 fn pipeline(args: &[String]) -> Result {
