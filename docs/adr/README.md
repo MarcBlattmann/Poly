@@ -19,8 +19,9 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0013](0013-interrupt-controllers-and-time-base.md) | Interrupt controllers and the time base in one host-tested crate (`poly-irq`) | Accepted |
 | [0014](0014-block-layer.md) | Block layer: submit/poll devices, ordering request queue, pinning buffer cache | Accepted |
 | [0015](0015-pci-and-virtio-in-the-kernel.md) | PCI and virtio in the kernel: ECAM only, a boot-time device list, DMA from the frame allocator, polling first | Accepted (virtio-blk driver parts superseded by 0017) |
-| [0017](0017-block-layer-in-the-kernel.md) | The block layer in the kernel: poly-virtio-blk on direct-map DMA, a watchdog, a queue and a cache per disk | Accepted |
+| [0017](0017-block-layer-in-the-kernel.md) | The block layer in the kernel: poly-virtio-blk on direct-map DMA, a watchdog, a queue and a cache per disk | Accepted (waiting and watchdog superseded by 0018) |
 | [0016](0016-interrupt-dispatch-tick-and-kernel-locks.md) | Interrupt dispatch and vector allocation, a 1 kHz periodic tick, spinlocks that mask interrupts, a sleeping mutex | Accepted |
+| [0018](0018-msi-x-and-interrupt-driven-disk-io.md) | MSI and MSI-X for PCI functions, interrupt-driven disks with sleeping waiters, a watchdog on the clock | Accepted |
 
 ## Open decisions
 

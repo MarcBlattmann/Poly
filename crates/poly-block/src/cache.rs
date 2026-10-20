@@ -1,6 +1,6 @@
 //! The buffer cache; see [`BufferCache`].
 
-use crate::{BlockDevice, IoBuf, IoError, Op, RequestQueue, SubmitError, Ticket};
+use crate::{IoBuf, IoError, IoQueue, Op, SubmitError, Ticket};
 
 const NIL: u32 = u32::MAX;
 
@@ -105,9 +105,11 @@ pub struct CacheStats {
 /// - **Read-ahead.** [`BufferCache::prefetch`] reads a run of blocks in one
 ///   go, into slots that hold nothing or clean blocks only.
 ///
-/// The cache does its I/O through a [`RequestQueue`] and waits for it, so it
-/// hands out data only for blocks it has completely read, and no buffer
-/// changes while the device works on it. Batched writes (sync) and reads
+/// The cache does its I/O through an [`IoQueue`] (a
+/// [`crate::RequestQueue`], or a kernel's handle on a shared one) and waits
+/// for it, so it hands out data only for blocks it has completely read, and
+/// no buffer changes while the device works on it. How it waits (spinning,
+/// sleeping) is the queue's business. Batched writes (sync) and reads
 /// (read-ahead) go to the queue together, which sorts and merges them.
 ///
 /// On a write-back error the block stays dirty and cached, and the
@@ -190,7 +192,7 @@ impl<'a> BufferCache<'a> {
     }
 
     /// The block, read from the device unless it is cached, pinned.
-    pub fn get<D: BlockDevice>(&mut self, q: &mut RequestQueue<'_, D>, block: u64) -> Result<Buf, CacheError> {
+    pub fn get<Q: IoQueue + ?Sized>(&mut self, q: &mut Q, block: u64) -> Result<Buf, CacheError> {
         self.check_device(q)?;
         if let Some(i) = self.lookup(block) {
             self.stats.hits += 1;
@@ -210,7 +212,7 @@ impl<'a> BufferCache<'a> {
 
     /// The block, pinned, filled with zeros and dirty, without reading it:
     /// for a block about to be overwritten in full.
-    pub fn get_zeroed<D: BlockDevice>(&mut self, q: &mut RequestQueue<'_, D>, block: u64) -> Result<Buf, CacheError> {
+    pub fn get_zeroed<Q: IoQueue + ?Sized>(&mut self, q: &mut Q, block: u64) -> Result<Buf, CacheError> {
         self.check_device(q)?;
         let info = q.info();
         if block >= info.blocks {
@@ -263,7 +265,7 @@ impl<'a> BufferCache<'a> {
 
     /// Write the block to the device now if it is dirty. (It is durable only
     /// after a flush; see [`BufferCache::sync`].)
-    pub fn write_back<D: BlockDevice>(&mut self, q: &mut RequestQueue<'_, D>, b: &Buf) -> Result<(), CacheError> {
+    pub fn write_back<Q: IoQueue + ?Sized>(&mut self, q: &mut Q, b: &Buf) -> Result<(), CacheError> {
         self.check(b);
         self.check_device(q)?;
         if self.slots[b.slot as usize].dirty {
@@ -275,7 +277,7 @@ impl<'a> BufferCache<'a> {
     /// Write every dirty block (pinned ones too) and flush the device, so
     /// everything changed so far is durable. Blocks that fail to write stay
     /// dirty; the first error is returned, and then no flush is sent.
-    pub fn sync<D: BlockDevice>(&mut self, q: &mut RequestQueue<'_, D>) -> Result<(), CacheError> {
+    pub fn sync<Q: IoQueue + ?Sized>(&mut self, q: &mut Q) -> Result<(), CacheError> {
         self.check_device(q)?;
         let mut error = None;
         for i in 0..self.slots.len() as u32 {
@@ -319,7 +321,7 @@ impl<'a> BufferCache<'a> {
     /// slots, least recently used first; it never writes anything back to
     /// make room. The blocks arrive unpinned, as most recently used. Returns
     /// how many were read.
-    pub fn prefetch<D: BlockDevice>(&mut self, q: &mut RequestQueue<'_, D>, first: u64, count: u64) -> usize {
+    pub fn prefetch<Q: IoQueue + ?Sized>(&mut self, q: &mut Q, first: u64, count: u64) -> usize {
         if self.check_device(q).is_err() {
             return 0;
         }
@@ -390,7 +392,7 @@ impl<'a> BufferCache<'a> {
         );
     }
 
-    fn check_device<D: BlockDevice>(&self, q: &RequestQueue<'_, D>) -> Result<(), CacheError> {
+    fn check_device<Q: IoQueue + ?Sized>(&self, q: &Q) -> Result<(), CacheError> {
         if q.info().block_size as usize != self.block_size {
             return Err(IoError::BadRequest.into());
         }
@@ -464,7 +466,7 @@ impl<'a> BufferCache<'a> {
 
     /// A slot to reuse, off the LRU list and empty. Writes the least
     /// recently used block back first if it is dirty.
-    fn victim<D: BlockDevice>(&mut self, q: &mut RequestQueue<'_, D>) -> Result<u32, CacheError> {
+    fn victim<Q: IoQueue + ?Sized>(&mut self, q: &mut Q) -> Result<u32, CacheError> {
         let i = self.lru_head;
         if i == NIL {
             return Err(CacheError::AllPinned);
@@ -491,7 +493,7 @@ impl<'a> BufferCache<'a> {
         None
     }
 
-    fn write_slot<D: BlockDevice>(&mut self, q: &mut RequestQueue<'_, D>, i: u32) -> Result<(), IoError> {
+    fn write_slot<Q: IoQueue + ?Sized>(&mut self, q: &mut Q, i: u32) -> Result<(), IoError> {
         let at = i as usize * self.block_size;
         q.write(self.slots[i as usize].block, &self.data[at..at + self.block_size])?;
         self.slots[i as usize].dirty = false;
@@ -505,7 +507,7 @@ impl<'a> BufferCache<'a> {
 
     /// Wait for every batched transfer and account for it; remember the
     /// first error.
-    fn finish_io<D: BlockDevice>(&mut self, q: &mut RequestQueue<'_, D>, error: &mut Option<IoError>) {
+    fn finish_io<Q: IoQueue + ?Sized>(&mut self, q: &mut Q, error: &mut Option<IoError>) {
         for i in 0..self.slots.len() as u32 {
             let io = core::mem::replace(&mut self.slots[i as usize].io, Io::None);
             match io {

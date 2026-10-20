@@ -1,6 +1,6 @@
 //! The request queue in front of one block device; see [`RequestQueue`].
 
-use crate::{BlockDevice, DeviceInfo, IoBuf, IoError, Op, Request, RequestId, SubmitError};
+use crate::{BlockDevice, DeviceInfo, IoBuf, IoError, IoQueue, Op, Request, RequestId, SubmitError, user_error};
 use core::ptr::NonNull;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,8 +58,9 @@ impl RequestSlot {
     }
 
     /// Record that one piece is back (or never left), and finish the
-    /// request if nothing else is outstanding.
-    fn settle(&mut self, result: Result<(), IoError>) {
+    /// request if nothing else is outstanding. True if it finished now.
+    #[must_use]
+    fn settle(&mut self, result: Result<(), IoError>) -> bool {
         if let Err(e) = result {
             if self.result.is_ok() {
                 self.result = Err(e);
@@ -69,7 +70,9 @@ impl RequestSlot {
         }
         if self.outstanding == 0 && self.dispatched == self.units {
             self.state = State::Done;
+            return true;
         }
+        false
     }
 }
 
@@ -134,6 +137,10 @@ pub struct QueueStats {
     pub merged: u64,
     /// Device requests that ended before the user request they carried.
     pub split: u64,
+    /// User requests finished (successfully or not), collected or not. A
+    /// change after [`RequestQueue::process`] means there are results for
+    /// waiters to pick up.
+    pub finished: u64,
 }
 
 /// Names an enqueued request until its result is collected.
@@ -151,7 +158,10 @@ pub struct Ticket {
 /// `process` call collects finished device requests and starts new ones
 /// until neither makes progress; a polling kernel calls it in a wait loop,
 /// an interrupt-driven one from the device's interrupt handler, and then
-/// wakes the owners of [`RequestQueue::finished`] requests.
+/// wakes the owners of [`RequestQueue::finished`] requests (or, when
+/// [`QueueStats::finished`] moved, every waiter, each of which collects its
+/// own result with [`RequestQueue::take`]). Through [`IoQueue`] a
+/// [`crate::BufferCache`] works on either kind of kernel.
 ///
 /// # What goes to the device, in which order
 ///
@@ -460,7 +470,9 @@ impl<'a, D: BlockDevice> RequestQueue<'a, D> {
             for k in base..base + slot.parts as usize {
                 let r = &mut self.requests[self.parts[k].owner as usize];
                 r.outstanding -= 1;
-                r.settle(c.result);
+                if r.settle(c.result) {
+                    self.stats.finished += 1;
+                }
             }
             self.in_flight -= 1;
             n += 1;
@@ -479,7 +491,9 @@ impl<'a, D: BlockDevice> RequestQueue<'a, D> {
                 // means durable.
                 let r = &mut self.requests[first];
                 r.dispatched = 1;
-                r.settle(Ok(()));
+                if r.settle(Ok(())) {
+                    self.stats.finished += 1;
+                }
                 progress += 1;
                 continue;
             }
@@ -540,7 +554,9 @@ impl<'a, D: BlockDevice> RequestQueue<'a, D> {
     /// The device refused the request built at `base`: fail its owners.
     fn fail(&mut self, base: usize, parts: usize, e: IoError) {
         for k in base..base + parts {
-            self.requests[self.parts[k].owner as usize].settle(Err(e));
+            if self.requests[self.parts[k].owner as usize].settle(Err(e)) {
+                self.stats.finished += 1;
+            }
         }
     }
 
@@ -668,10 +684,19 @@ fn conflicts(earlier: &RequestSlot, later: &RequestSlot) -> bool {
     }
 }
 
-fn user_error(e: SubmitError) -> IoError {
-    match e {
-        SubmitError::Busy => IoError::Busy,
-        SubmitError::Rejected(e) => e,
+/// The queue as its own user sees it: waiting runs it, spinning.
+impl<D: BlockDevice> IoQueue for RequestQueue<'_, D> {
+    fn info(&self) -> DeviceInfo {
+        self.info
+    }
+
+    unsafe fn enqueue(&mut self, op: Op, lba: u64, buf: IoBuf) -> Result<Ticket, SubmitError> {
+        // SAFETY: our caller's promise, which is the same.
+        unsafe { RequestQueue::enqueue(self, op, lba, buf) }
+    }
+
+    fn wait(&mut self, t: Ticket) -> Result<(), IoError> {
+        RequestQueue::wait(self, t)
     }
 }
 

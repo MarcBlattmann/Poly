@@ -1,6 +1,6 @@
 use super::*;
-use crate::RamDisk;
 use crate::sim::{Event, Rng, SimDisk, Tables};
+use crate::{DeviceInfo, RamDisk, RequestQueue};
 extern crate std;
 use std::{vec, vec::Vec};
 
@@ -414,4 +414,104 @@ fn randomized_with_crashes() {
             assert_eq!(d.block(b), latest[b as usize], "seed {seed} block {b}");
         }
     }
+}
+
+/// An [`IoQueue`] that waits the way a kernel with disk interrupts does:
+/// enqueueing never runs the queue, and waiting starts it once, then
+/// "sleeps" until an "interrupt" (the device finishing what it holds, and
+/// the handler running the queue) has finished something.
+struct Sleeping<'q, 'a> {
+    q: &'q mut RequestQueue<'a, SimDisk>,
+    sleeps: usize,
+    interrupts: usize,
+}
+
+impl IoQueue for Sleeping<'_, '_> {
+    fn info(&self) -> DeviceInfo {
+        *self.q.info()
+    }
+
+    unsafe fn enqueue(&mut self, op: Op, lba: u64, buf: IoBuf) -> Result<Ticket, SubmitError> {
+        // SAFETY: our caller's promise, passed on.
+        unsafe { self.q.enqueue(op, lba, buf) }
+    }
+
+    fn wait(&mut self, t: Ticket) -> Result<(), IoError> {
+        self.q.process();
+        loop {
+            if let Some(r) = self.q.take(t) {
+                return r;
+            }
+            self.sleeps += 1;
+            let finished = self.q.stats().finished;
+            while self.q.stats().finished == finished {
+                // The device finishes what it has and interrupts; the
+                // handler runs the queue (which may start more).
+                self.interrupts += 1;
+                self.q.device_mut().hold = false;
+                self.q.process();
+                self.q.device_mut().hold = true;
+            }
+        }
+    }
+}
+
+#[test]
+fn a_cache_that_sleeps_through_a_wait_hook() {
+    let mut t = Tables::new(16, 2, 8);
+    let mut disk = SimDisk::new(64, BS as u32, true, 5);
+    for b in 0..64u64 {
+        disk.durable[b as usize * BS..(b as usize + 1) * BS].copy_from_slice(&pattern(b));
+    }
+    disk.hold = true;
+    let mut q = RequestQueue::new(disk, t.storage()).unwrap();
+    // Another user's read sits in the same queue, not waited for.
+    let mut other = vec![0u8; BS];
+    // SAFETY: `other` outlives the request, collected below.
+    let theirs = unsafe { q.enqueue(Op::Read, 50, IoBuf::from_mut(&mut other)) }.unwrap();
+    let mut s = Store::new(16);
+    let mut c = s.cache();
+    let mut io = Sleeping { q: &mut q, sleeps: 0, interrupts: 0 };
+
+    // A miss sleeps once, until its read is back.
+    let x = c.get(&mut io, 3).unwrap();
+    assert_eq!(c.data(&x), &pattern(3)[..]);
+    c.release(x);
+    assert_eq!((io.sleeps, io.interrupts), (1, 1));
+    // A hit does not wait at all.
+    let x = c.get(&mut io, 3).unwrap();
+    c.release(x);
+    assert_eq!(io.sleeps, 1);
+    // Read-ahead enqueues everything before the first wait, so the queue
+    // merges it into one device request.
+    assert_eq!(c.prefetch(&mut io, 10, 8), 8);
+    assert!(requests(&io.q.device().log, Op::Read).contains(&(10, 8)));
+    // Dirty blocks go out together on sync, then the flush.
+    for b in 20..24 {
+        let x = c.get_zeroed(&mut io, b).unwrap();
+        c.data_mut(&x).copy_from_slice(&pattern(b + 100));
+        c.release(x);
+    }
+    let before = io.sleeps;
+    c.sync(&mut io).unwrap();
+    assert!(io.sleeps > before);
+    assert!(requests(&io.q.device().log, Op::Write).contains(&(20, 4)));
+    let d = io.q.device();
+    assert!(d.volatile.is_empty(), "flushed");
+    for b in 20..24 {
+        assert_eq!(&d.durable[b as usize * BS..(b as usize + 1) * BS], &pattern(b + 100)[..]);
+    }
+    // The helpers the trait provides wait the same way.
+    let mut buf = vec![0u8; 2 * BS];
+    io.read(30, &mut buf).unwrap();
+    assert_eq!(&buf[BS..], &pattern(31)[..]);
+    io.write(40, &buf).unwrap();
+    io.flush().unwrap();
+    assert_eq!(&io.q.device().durable[41 * BS..42 * BS], &pattern(31)[..]);
+    assert_eq!(io.read(63, &mut buf), Err(IoError::OutOfRange));
+    // The other user's request finished on the way, and its result waited
+    // for its owner.
+    assert_eq!(q.take(theirs), Some(Ok(())));
+    assert_eq!(other, pattern(50));
+    assert_eq!(q.stats().finished, q.stats().requests);
 }

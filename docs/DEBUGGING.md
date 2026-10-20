@@ -33,11 +33,26 @@ block layer:
 
 ```text
 pci: 00:03.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd5000 4 KiB, BAR4 mem64 pf 0xfe000000 16 KiB
-virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800; left disabled, polling
+pci: 00:04.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd6000 4 KiB, BAR4 mem64 pf 0xfe004000 16 KiB
+pci: 00:05.0 1234:11e8 class 00.ff.00, BAR0 mem32 0xfea00000 1 MiB
+virtio-blk: 00:04.0: ignored, only one device is driven for now
+virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800
 virtio-blk: 00:03.0: 1 MiB (2048 sectors), block size 512, features 0x120000244, queue 128 entries, 126 segments per request, write cache
-block: virtio0: virtio-blk 00:03.0, 2048 blocks of 512 bytes (1 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB)
-block: ram0: RAM disk, 512 blocks of 512 bytes (256 KiB); queue 32 requests, cache 128 buffers (64 KiB)
+virtio-blk: 00:03.0: request queue on MSI-X entry 0 -> vector 0x30; interrupt-driven, waiters sleep
+block: virtio0: virtio-blk 00:03.0, 2048 blocks of 512 bytes (1 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB); interrupt-driven (vector 0x30)
+block: ram0: RAM disk, 512 blocks of 512 bytes (256 KiB); queue 32 requests, cache 128 buffers (64 KiB); polled
 block: virtio0: block 0: 50 4f 4c 59 00 00 00 00 08 09 0a 0b 0c 0d 0e 0f  POLY............
+```
+
+00:04.0 is the spare virtio-blk device (QEMU's null block driver), used
+only by the watchdog test; 00:05.0 is QEMU's `edu` device, used by the MSI
+test. A device without MSI-X (or whose MSI-X cannot be set up) logs why and
+is polled instead:
+
+```text
+virtio-blk: 00:03.0: no MSI-X; polling
+virtio-blk: 00:03.0: polled: waiters run the queue and yield
+block: virtio0: virtio-blk 00:03.0, ... cache 128 buffers (64 KiB); polled
 ```
 
 `features` is what the driver negotiated (bit 32 is VERSION_1, bit 29
@@ -49,16 +64,32 @@ QEMU's own view, open the monitor (Ctrl-A C under `cargo xtask run`, or
 
 | Command | Shows |
 |---|---|
-| `info pci` | every function with its IDs, IRQ pin and BAR addresses as QEMU sees them |
-| `info qtree` | the device tree, including the virtio-blk properties and MSI-X vector count |
+| `info pci` | every function with its IDs, IRQ pin and BAR addresses as QEMU sees them (not its MSI or MSI-X state) |
+| `info qtree` | the device tree, including the virtio-blk properties and MSI-X vector count (`vectors = 3`) |
 | `info block` | the drives and the image file behind `disk0` |
 | `info mtree` | the guest physical address map: where ECAM (`pcie-mmcfg-mmio`) and each BAR sit |
+| `xp /4wx <table>` | an MSI-X table entry, read from the BAR at its physical address (table BAR + offset from the boot log, 16 bytes per entry): address low, high, data, vector control |
+
+For virtio0 the table is at BAR1 + 0, so `xp /4wx 0xfebd5000` should show
+`0xfee00000 0x00000000 0x00000030 0x00000000`: the boot CPU's local APIC
+(destination 0), vector 0x30, unmasked (bit 0 of the last word clear).
+`info irq` does not help with MSI or MSI-X: it counts only I/O APIC and
+8259 inputs, and messages go straight to the local APIC. To see them,
+run QEMU by hand with `-trace msix_write_config` (each change of the
+enable and function-mask bits) and `-trace apic_deliver_irq` (every message
+delivered, with its vector), or compare the kernel's own counters: the
+`interrupts` and `sleeps` in `block::Disk::stats()`, which the tests
+print. `info lapic` shows a vector stuck in the IRR or ISR.
 
 `cargo xtask run` and the boot tests attach a fresh test image,
 `target/poly-test-disk.img` (1 MiB, raw), as a modern-only virtio-blk device
 (`-device virtio-blk-pci,drive=disk0,disable-legacy=on`) and pass
 `poly.test.disk`, which makes the `block::*` and `virtio_blk::*` tests
-require it. Every 512-byte sector starts with "POLY" and its number
+require it (and the spare device, `-blockdev driver=null-co,...`). They
+also attach `-device edu` and pass `poly.test.msi`, which makes
+`pci::msi_without_msix_reaches_its_handler` require it. Adding
+`vectors=0` to a virtio-blk device takes its MSI-X away; one boot test does
+that to check the polled fallback. Every 512-byte sector starts with "POLY" and its number
 (le32); the rest is a pattern of the sector and the offset
 (`block::test_pattern`). The block tests run against the RAM disk too,
 which they fill with the same pattern first:
@@ -83,11 +114,17 @@ cache):
 | Error | Means |
 |---|---|
 | `BadBuffer` | the buffer is not in the direct map (on the boot stack, say), so the device cannot be given its address; nothing was sent. Use heap memory. |
-| `DeviceFailed` | the device broke the virtqueue protocol, or a request did not come back within the watchdog's budget (20 million polls, about 30 s under TCG): the device was reset and marked FAILED, and every later request fails the same way |
+| `DeviceFailed` | the device broke the virtqueue protocol, or requests were out and none came back for the watchdog's limit (10 s on the monotonic clock): the device was reset and marked FAILED, and every later request fails the same way |
 | `OutOfRange`, `BadRequest` | past the end of the disk, or not a whole number of blocks; refused before reaching the device |
 | `AllPinned` | every cache buffer is pinned, so nothing can be evicted for a new block |
 
-Interrupts are not used yet: MSI-X is reported, not enabled.
+A thread waiting for an interrupt-driven disk is `Blocked` (on the disk's
+wait queue) and wakes when the interrupt handler finishes requests, or at
+the watchdog's deadline at the latest. If disk I/O hangs for the full 10
+seconds and then fails with `DeviceFailed`, the device stopped answering or
+its interrupts do not arrive: check the MSI-X entry and trace the
+deliveries as above. `VirtioBlk::set_drop_notifications(true)` loses
+requests on purpose (the watchdog test uses it on the spare device).
 
 ## In-kernel tests
 
@@ -226,8 +263,11 @@ add `-monitor stdio` to a hand-written QEMU command line:
   service.
 - `info pic`: the 8259s and the I/O APIC redirection table: every input
   should be masked except the ones a driver routed.
-- `info irq`: how many interrupts each source has raised, to see whether a
-  device fires at all.
+- `info irq`: how many interrupts each I/O APIC and 8259 input has raised,
+  to see whether a device fires at all. MSI and MSI-X messages are not
+  counted there (they go straight to the local APIC); for those, see "PCI
+  devices and the test disk" above (`xp` on the MSI-X table, the
+  `apic_deliver_irq` trace event).
 
 `info registers` shows `RFLAGS` (bit 9, IF: interrupts enabled). In gdb,
 `print poly_kernel::arch::x86_64::time::TICKS` gives the tick count, and a

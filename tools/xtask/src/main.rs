@@ -4,7 +4,7 @@
 //!   build [--release]   build the kernel
 //!   run   [--release] [--gdb] [--no-disk] [kernel args...]
 //!                       boot the kernel in QEMU (serial on stdio, Ctrl-A X quits)
-//!                       with the test disk attached (--no-disk: without);
+//!                       with the test devices attached (--no-disk: without them);
 //!                       --gdb waits for a debugger on localhost:1234 (docs/DEBUGGING.md)
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   ci                  everything CI checks: fmt, clippy, tests, coverage
@@ -127,9 +127,39 @@ fn test_disk() -> Result<PathBuf> {
     Ok(path)
 }
 
+/// Kernel flag saying QEMU's `edu` device is attached, a function with MSI
+/// and no MSI-X; the kernel's MSI test then requires it
+/// (`pci::TEST_MSI_FLAG`).
+const TEST_MSI_FLAG: &str = "poly.test.msi";
+
+/// The test devices a boot gets.
+#[derive(Clone, Copy, Debug)]
+enum Devices<'a> {
+    None,
+    /// The test disk image as a modern-only virtio-blk device with MSI-X;
+    /// a spare virtio-blk device on QEMU's null block driver (1 MiB of
+    /// zeros), which the kernel's watchdog test breaks on purpose; and
+    /// QEMU's `edu` device, for MSI.
+    Test(&'a Path),
+    /// The test disk image and the spare device, both without MSI-X
+    /// (`vectors=0`), so they are polled.
+    PolledDisk(&'a Path),
+}
+
+impl Devices<'_> {
+    /// The kernel flags that say what is attached.
+    fn flags(self) -> String {
+        match self {
+            Devices::None => String::new(),
+            Devices::Test(_) => format!("{TEST_DISK_FLAG} {TEST_MSI_FLAG}"),
+            Devices::PolledDisk(_) => TEST_DISK_FLAG.into(),
+        }
+    }
+}
+
 /// QEMU for `kernel`, with the serial port on `serial` (a QEMU character
-/// device); `disk` is attached as a modern-only virtio-blk PCI device.
-fn qemu(kernel: &Path, memory: &str, append: &str, disk: Option<&Path>, serial: &str) -> Command {
+/// device) and `devices` attached.
+fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
     cmd.args(["-machine", "q35", "-m", memory, "-display", "none", "-serial", serial, "-no-reboot"])
         .args(["-smp", &QEMU_CPUS.to_string()])
@@ -137,10 +167,17 @@ fn qemu(kernel: &Path, memory: &str, append: &str, disk: Option<&Path>, serial: 
         .arg("-kernel")
         .arg(kernel)
         .args(["-append", append]);
-    if let Some(disk) = disk {
-        cmd.arg("-drive")
-            .arg(format!("if=none,id=disk0,format=raw,file={}", disk.display()))
-            .args(["-device", "virtio-blk-pci,drive=disk0,disable-legacy=on"]);
+    let (Devices::Test(disk) | Devices::PolledDisk(disk)) = devices else { return cmd };
+    let vectors = if let Devices::PolledDisk(_) = devices { ",vectors=0" } else { "" };
+    // The test disk comes first, so it is the first virtio-blk function the
+    // kernel finds (`virtio0`).
+    cmd.arg("-drive")
+        .arg(format!("if=none,id=disk0,format=raw,file={}", disk.display()))
+        .args(["-device", &format!("virtio-blk-pci,drive=disk0,disable-legacy=on{vectors}")]);
+    cmd.args(["-blockdev", "driver=null-co,node-name=spare,size=1048576,read-zeroes=on"])
+        .args(["-device", &format!("virtio-blk-pci,drive=spare,disable-legacy=on{vectors}")]);
+    if let Devices::Test(_) = devices {
+        cmd.args(["-device", "edu"]);
     }
     cmd
 }
@@ -159,12 +196,14 @@ fn run(args: &[String]) -> Result {
     }
     let kernel = build_kernel(release)?;
     let disk = if with_disk { Some(test_disk()?) } else { None };
-    if disk.is_some() {
-        cmdline.insert(0, TEST_DISK_FLAG);
+    let devices = disk.as_deref().map_or(Devices::None, Devices::Test);
+    let flags = devices.flags();
+    if !flags.is_empty() {
+        cmdline.insert(0, &flags);
     }
     // `mon:stdio` shares the terminal between the serial port and QEMU's
     // monitor: Ctrl-A C switches between them, Ctrl-A X quits.
-    let mut cmd = qemu(&kernel, DEFAULT_MEMORY, &cmdline.join(" "), disk.as_deref(), "mon:stdio");
+    let mut cmd = qemu(&kernel, DEFAULT_MEMORY, &cmdline.join(" "), devices, "mon:stdio");
     if gdb {
         // -s: gdb stub on tcp::1234, -S: do not start the CPU until told to.
         cmd.args(["-s", "-S"]);
@@ -210,8 +249,8 @@ struct Boot {
 
 /// Boot headless with a timeout, echoing serial output as it arrives, with
 /// symbols added to backtrace lines.
-fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, disk: Option<&Path>) -> Result<Boot> {
-    let mut child = qemu(kernel, memory, append, disk, "stdio")
+fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, devices: Devices<'_>) -> Result<Boot> {
+    let mut child = qemu(kernel, memory, append, devices, "stdio")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()
@@ -249,12 +288,15 @@ fn boot_tests() -> Result {
     let syms = Arc::new(Symbols::from_file(&kernel)?);
 
     // 2 GiB puts RAM, and QEMU's ACPI tables, above the first GiB that the
-    // boot stub maps: the direct map must reach them. Both boots have the
-    // test disk, so the block layer tests read and write it.
-    for memory in [DEFAULT_MEMORY, "2G"] {
-        eprintln!("==> boot test: self-test passes with {memory} of RAM and the test disk");
+    // boot stub maps: the direct map must reach them. Every boot here has
+    // the test disk, so the block layer tests read and write it; the third
+    // has it without MSI-X, so the kernel must poll it.
+    for (memory, polled) in [(DEFAULT_MEMORY, false), ("2G", false), (DEFAULT_MEMORY, true)] {
+        let how = if polled { "the test disk without MSI-X (polled)" } else { "the test devices" };
+        eprintln!("==> boot test: self-test passes with {memory} of RAM and {how}");
         let disk = test_disk()?;
-        let b = boot(&kernel, &syms, memory, &format!("poly.qemu_exit {TEST_DISK_FLAG}"), Some(&disk))?;
+        let devices = if polled { Devices::PolledDisk(&disk) } else { Devices::Test(&disk) };
+        let b = boot(&kernel, &syms, memory, &format!("poly.qemu_exit {}", devices.flags()), devices)?;
         let report = ktest::parse(&b.output);
         if let Some(s) = report.summary {
             eprintln!("==> kernel tests: {} passed, {} failed, {} filtered out", s.passed, s.failed, s.filtered_out);
@@ -280,13 +322,25 @@ fn boot_tests() -> Result {
         if !b.output.contains("block: ram0: RAM disk") {
             return Err(format!("the RAM disk was not registered with {memory}"));
         }
+        // How the disk waits, as the boot log says.
+        let virtio0 = b.output.lines().find(|l| l.contains("block: virtio0: virtio-blk")).unwrap_or_default();
+        let mode_ok = if polled {
+            b.output.contains(": no MSI-X; polling") && virtio0.ends_with("; polled")
+        } else {
+            b.output.contains(": request queue on MSI-X entry 0 -> vector 0x")
+                && virtio0.contains("; interrupt-driven (vector 0x")
+        };
+        if !mode_ok {
+            let want = if polled { "polled" } else { "interrupt-driven through MSI-X" };
+            return Err(format!("the test disk was not {want} with {memory}"));
+        }
     }
 
     // Expecting the test disk without attaching it must fail the disk
     // tests, so a boot that silently lost its disk cannot pass.
     eprintln!("==> boot test: the disk tests fail when the test disk is missing");
     let only = format!("poly.qemu_exit poly.test=virtio_blk::device_found {TEST_DISK_FLAG}");
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &only, None)?;
+    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &only, Devices::None)?;
     let report = ktest::parse(&b.output);
     let failed = matches!(report.failed.as_slice(), [(name, _)] if name == "virtio_blk::device_found_with_sane_bars");
     if b.status != Some(QEMU_FAILURE) || !failed {
@@ -329,7 +383,7 @@ fn boot_tests() -> Result {
     // `selftest::fails_on_request` fails or panics when asked to.
     let only = "poly.qemu_exit poly.test=selftest::fails_on_request";
     eprintln!("==> boot test: a failing kernel test is reported by name");
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("{only} poly.selftest.fail"), None)?;
+    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("{only} poly.selftest.fail"), Devices::None)?;
     let report = ktest::parse(&b.output);
     let failed_alone = matches!(report.failed.as_slice(), [(name, _)] if name == "selftest::fails_on_request");
     let filtered = report.summary.is_some_and(|s| s.passed == 0 && s.filtered_out > 0);
@@ -338,7 +392,7 @@ fn boot_tests() -> Result {
     }
 
     eprintln!("==> boot test: a panic inside a kernel test is reported with a backtrace");
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("{only} poly.selftest.panic"), None)?;
+    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("{only} poly.selftest.panic"), Devices::None)?;
     let no_summary = ktest::parse(&b.output).summary.is_none();
     let frames: Vec<_> = b.output.lines().filter_map(symbols::parse_frame).map(|(_, _, sym)| sym).collect();
     let in_backtrace = |f: &str| frames.iter().any(|sym| sym.starts_with(f));
@@ -351,7 +405,7 @@ fn boot_tests() -> Result {
     // `heap::out_of_memory_on_request` asks for more than the heap can give.
     eprintln!("==> boot test: running out of heap memory panics with the size and a backtrace");
     let only = "poly.qemu_exit poly.test=heap::out_of_memory_on_request poly.selftest.oom";
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, only, None)?;
+    let b = boot(&kernel, &syms, DEFAULT_MEMORY, only, Devices::None)?;
     let reported = b
         .output
         .lines()
@@ -384,7 +438,7 @@ fn boot_tests() -> Result {
     ];
     for (what, args, message, function) in thread_panics {
         eprintln!("==> boot test: {what} is reported with a backtrace of the thread's stack");
-        let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("poly.qemu_exit poly.test={args}"), None)?;
+        let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("poly.qemu_exit poly.test={args}"), Devices::None)?;
         let frames: Vec<_> = b.output.lines().filter_map(symbols::parse_frame).map(|(_, _, sym)| sym).collect();
         let in_backtrace = |f: &str| frames.iter().any(|sym| sym.starts_with(f));
         let named = in_backtrace(function) && in_backtrace("poly_kernel::thread::thread_start+");
@@ -401,7 +455,7 @@ fn boot_tests() -> Result {
 /// and check that the fault was reported: a panic whose message contains
 /// `report`, and QEMU's failure status.
 fn expect_fault(kernel: &Path, syms: &Arc<Symbols>, flag: &str, report: &str) -> Result<Boot> {
-    let b = boot(kernel, syms, DEFAULT_MEMORY, &format!("poly.qemu_exit {flag}"), None)?;
+    let b = boot(kernel, syms, DEFAULT_MEMORY, &format!("poly.qemu_exit {flag}"), Devices::None)?;
     let reported = b.output.contains("KERNEL PANIC") && b.output.contains(report);
     if b.status != Some(QEMU_FAILURE) || !reported {
         return Err(format!("{flag}: expected a panic reporting \"{report}\" (status {:?})", b.status));

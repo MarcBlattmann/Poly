@@ -18,7 +18,7 @@ what exists **today** and how it fits that plan.
                           │
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
-            devices: PCI (ECAM), virtio-blk (polled), RAM disk
+            devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk
             arch/x86_64 (PVH entry, serial, exceptions, page tables, context switch)
 ```
 
@@ -74,11 +74,22 @@ memory, implements the traits and drives the devices. Decisions are in
   alignment-checked volatile accesses, with `subregion` for the virtio
   structures inside a BAR. Drivers enable memory decoding and bus mastering
   themselves (`poly_pci::enable`).
-- **Interrupts.** Not used by PCI devices yet: `Device::msix()` parses and
-  checks a function's MSI-X capability so drivers can log it, but nothing
-  enables MSI-X or INTx. The kernel side exists (see "Interrupts and time":
-  `arch::irq::allocate_vector` and `msi_message`); the steps to switch
-  virtio-blk to MSI-X are in `kernel/src/virtio_blk.rs`.
+- **Interrupts: MSI-X and MSI** ([ADR 0018](adr/0018-msi-x-and-interrupt-driven-disk-io.md)).
+  INTx is never used. `Device::enable_msix` maps the MSI-X table and PBA
+  (`map_bar`), turns INTx and MSI off and enables MSI-X with the function
+  mask set and every entry masked; the driver then `attach`es the entries
+  it uses (`MsixVectors::attach`: a kernel vector from
+  `arch::irq::allocate_vector` running its handler, and the entry written
+  with `pci::msi_message(vector)`) and clears the function mask
+  (`set_function_masked(false)`), so nothing is sent before its entry is
+  programmed. `MsixVectors` also masks and unmasks entries, reads entries
+  and pending bits back, and `disable` turns MSI-X off and frees the
+  vectors. Functions without MSI-X get plain MSI with one vector
+  (`Device::enable_msi`; several would need an aligned block of
+  consecutive vectors); `Device::enable_interrupt` picks MSI-X entry 0 or
+  MSI. `to_pci_message` / `from_pci_message` convert between
+  `poly_irq::MsiMessage` and `poly_pci::Message`. Messages are memory
+  writes, so the function needs bus mastering, which its driver enables.
 - **DMA.** `kernel/src/dma.rs`: `DmaBuffer` is a zeroed block of frames from
   `FRAMES`, used through the direct map. There is no IOMMU, so the bus
   address a device gets is the physical address. Drivers that take the
@@ -98,16 +109,23 @@ memory, implements the traits and drives the devices. Decisions are in
   `KernelDma`. `init` negotiates features (VERSION_1 required; SIZE_MAX,
   SEG_MAX, RO, BLK_SIZE, FLUSH, EVENT_IDX and ACCESS_PLATFORM taken when
   offered) and sets DRIVER_OK. Data moves straight between the device and
-  the caller's buffers, several requests at a time. The driver sits behind a
-  `poly_block::Watchdog`: when requests are out and 20 million polls in a
-  row bring nothing back, it resets the device (`Abort`) and fails them,
-  and every later request fails too. All of it lives as long as the kernel.
+  the caller's buffers, several requests at a time. If the function has
+  MSI-X, it is enabled (masked) before `init`, which maps the request
+  queue to entry 0; once the block layer has made the disk,
+  `virtio_blk::start` attaches entry 0 to the disk's interrupt handler,
+  asks the device for interrupts and clears the function mask. Without
+  MSI-X (or if the device refuses the vector) the disk is polled; the boot
+  log says which. The driver sits behind a `poly_block::Watchdog`: when
+  requests are out and none has come back for 10 seconds (monotonic
+  clock), it resets the device (`Abort`) and fails them, and every later
+  request fails too. All of it lives as long as the kernel.
 
 ```text
 pci: segment 0 buses 00-ff: ECAM at 0xb0000000, mapped at 0xffffc00000000000
 pci: 00:03.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd5000 4 KiB, BAR4 mem64 pf 0xfe000000 16 KiB
-virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800; left disabled, polling
+virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800
 virtio-blk: 00:03.0: 1 MiB (2048 sectors), block size 512, features 0x120000244, queue 128 entries, 126 segments per request, write cache
+virtio-blk: 00:03.0: request queue on MSI-X entry 0 -> vector 0x30; interrupt-driven, waiters sleep
 ```
 
 `cargo xtask` writes a fresh 1 MiB test image (`target/poly-test-disk.img`,
@@ -116,14 +134,20 @@ and attaches it as `-device virtio-blk-pci,disable-legacy=on` with the
 kernel flag `poly.test.disk`. With the flag, the block layer tests (below)
 run against the disk as well as the RAM disk. Without it they check only
 what is there, so the kernel boots without a disk too (`cargo xtask run
---no-disk`).
+--no-disk`). Two more test devices come with it: a spare virtio-blk device
+on QEMU's null block driver (1 MiB of zeros), which the kernel leaves alone
+except for the watchdog test, and QEMU's `edu` device (MSI, no MSI-X;
+flag `poly.test.msi`) for the MSI test. One self-test boot attaches the
+test disk and the spare device without MSI-X (`vectors=0`), so the block
+layer is tested polled as well.
 
 ## Block layer
 
 The block layer is the host-tested `poly-block` crate
 ([ADR 0014](adr/0014-block-layer.md)); `kernel/src/block.rs` gives it
-memory and a lock per disk, and keeps the list of disks
-([ADR 0017](adr/0017-block-layer-in-the-kernel.md)).
+memory, locks, interrupt handling and sleeping waits per disk, and keeps
+the list of disks ([ADR 0017](adr/0017-block-layer-in-the-kernel.md),
+[ADR 0018](adr/0018-msi-x-and-interrupt-driven-disk-io.md)).
 
 ```
    file systems (later)           block::root(), block::ram(), block::find(name)
@@ -134,8 +158,8 @@ memory and a lock per disk, and keeps the list of disks
    RequestQueue  32 requests; ordering, C-LOOK elevator, merging, splitting;
           │      4 requests of up to 16 segments at the device
           ▼
-   block::Device ── Virtio: Watchdog<poly_virtio_blk::VirtioBlk>  ("virtio0")
-                └── Ram:    poly_block::RamDisk, 256 KiB of heap    ("ram0")
+   block::Device ── Virtio: Watchdog<poly_virtio_blk::VirtioBlk, clock>  ("virtio0", MSI-X)
+                └── Ram:    poly_block::RamDisk, 256 KiB of heap           ("ram0", polled)
 ```
 
 - **Disks.** `block::init` (after `pci::init`) registers the virtio-blk disk
@@ -143,9 +167,11 @@ memory and a lock per disk, and keeps the list of disks
   file system code can be tested without a disk. `block::root()` is the
   disk a file system mounts (`virtio0`), `block::ram()` the RAM disk,
   `block::disks()` all of them.
-- **Each disk** is a `Disk`: a name, the device's `DeviceInfo` and, behind
-  one spinlock, a `Cached`: the device in a `RequestQueue`, with a
-  `BufferCache` on top. The tables of both and the cache's buffers come
+- **Each disk** is a `Disk`: a name, the device's `DeviceInfo`, the device
+  in a `RequestQueue` behind a `SpinLock` (held only to enqueue, run the
+  queue or collect a result, and taken by the disk's interrupt handler),
+  and a `BufferCache` behind a sleeping `Mutex` (held across waits); lock
+  order: cache, then queue. The tables of both and the cache's buffers come
   from the heap, once, and live as long as the kernel; the cache's buffers
   are one heap allocation, so the device can DMA into them.
 - **Reads** (`read_block`, and `read` for several blocks, which reads the
@@ -153,20 +179,33 @@ memory and a lock per disk, and keeps the list of disks
   cache. **Writes** (`write_block`) go into the cache without reading the
   block first and reach the device when the block is evicted or on `sync`,
   which writes every dirty block and flushes the device's write cache; only
-  then are they durable. `Disk::lock()` gives the rest: pinned buffers
-  (`get`, `data`, `release`), `invalidate` (drop clean blocks), and reads and
-  writes that go past the cache (`read_uncached`, `write_uncached`).
-- **Waiting.** Every operation is synchronous: the caller spins in
-  `RequestQueue::wait`, polling the device, with the disk's lock held. The
-  virtio-blk watchdog bounds that wait. The disk's lock is a `SpinLock`, so
-  interrupts stay off for the whole wait: the tick (and preemption) stalls
-  during disk I/O, and ticks due meanwhile merge into one. With interrupts, the queue's
-  interrupt handler will run `RequestQueue::process` and waiters will sleep
-  on their tickets instead (steps in `kernel/src/virtio_blk.rs`).
+  then are they durable. `Disk::lock()` gives the rest (a `Cached`, the
+  cache locked): pinned buffers (`get`, `data`, `release`), `invalidate`
+  (drop clean blocks). Reads and writes that go past the cache
+  (`Disk::read_uncached`, `write_uncached`) take only the queue lock.
+- **Waiting** ([ADR 0018](adr/0018-msi-x-and-interrupt-driven-disk-io.md)).
+  Every operation is synchronous for its caller, who waits for its ticket
+  through `block::Io`, the kernel's `poly_block::IoQueue`: the hook the
+  cache does its I/O through (a bare `RequestQueue` implements it by
+  spinning). The waiter runs the queue once, which starts its request.
+  On an interrupt-driven disk it then sleeps on the disk's `WaitQueue`
+  until the completion counter moves; the interrupt handler runs the queue
+  (collecting finished requests, starting waiting ones) and, if requests
+  finished, bumps the counter and wakes the waiters, each of which collects
+  its own result. Whoever finishes requests wakes the waiters, so a
+  completion a waiter picked up instead of the handler is not lost. The
+  sleep is a timed wait that ends at the watchdog's deadline at the latest,
+  since a lost request raises no interrupt: the waiter then runs the queue
+  and the watchdog fails the request. A polled disk (the RAM disk, which
+  finishes requests as they are submitted; virtio-blk without MSI-X) runs
+  the queue and yields between tries. Either way interrupts stay on: the
+  tick keeps time and preempts threads during disk I/O, and other threads
+  run while a reader waits. All threads share each disk's 32 request
+  slots.
 
 ```text
-block: virtio0: virtio-blk 00:03.0, 2048 blocks of 512 bytes (1 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB)
-block: ram0: RAM disk, 512 blocks of 512 bytes (256 KiB); queue 32 requests, cache 128 buffers (64 KiB)
+block: virtio0: virtio-blk 00:03.0, 2048 blocks of 512 bytes (1 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB); interrupt-driven (vector 0x30)
+block: ram0: RAM disk, 512 blocks of 512 bytes (256 KiB); queue 32 requests, cache 128 buffers (64 KiB); polled
 block: virtio0: block 0: 50 4f 4c 59 00 00 00 00 08 09 0a 0b 0c 0d 0e 0f  POLY............
 ```
 
@@ -177,9 +216,15 @@ that must be read ahead in merged requests), hit and miss counters, a write
 that stays in the cache until `sync` and comes back from the disk after the
 cache is dropped, dirty blocks written back when more blocks are written
 than the cache holds, pinned blocks surviving a full cache, a read-only RAM
-disk refusing writes, and DMA into a heap buffer that crosses a page
-boundary (a buffer on the boot stack is refused). Each test puts the disks
-back as it found them.
+disk refusing writes, DMA into a heap buffer that crosses a page
+boundary (a buffer on the boot stack is refused), and two threads reading
+overlapping ranges at once. On `virtio0` they also check that a CPU-bound
+thread runs while another thread does 40 reads (and the tick keeps
+coming), that reads finish with MSI-X interrupts and sleeping waiters, and
+on the spare device that a masked MSI-X entry holds its interrupt back
+until unmasked and that a request whose notification was dropped
+(`VirtioBlk::set_drop_notifications`) fails at the watchdog's deadline
+while its reader sleeps. Each test puts the disks back as it found them.
 
 ## Personality routing
 
@@ -199,7 +244,7 @@ back as it found them.
 | Unit tests for pure logic | `crates/`, `personalities/`, `tools/` | `cargo test --workspace` (host) |
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
-| Device tests against QEMU's devices: PCI config space, the block layer on the virtio-blk test image and the RAM disk (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk` | `cargo xtask test` |
+| Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi` | `cargo xtask test` |
 | Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
 | App trace replay | recorded sessions | later |
 
@@ -315,8 +360,10 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   `handler(data)` with interrupts off, before the EOI. Point a device at the
   vector with `arch::irq::msi_message(vector)` (address / data for MSI or
   MSI-X, targeting the boot CPU) or route an I/O APIC input with
-  `route_gsi` / `route_isa_irq` (undo with `unroute_gsi`). Handlers must not
-  block; they may wake a `WaitQueue`.
+  `route_gsi` / `route_isa_irq` (undo with `unroute_gsi`). PCI functions do
+  all of it through `pci::Device::enable_msix` / `enable_msi` /
+  `enable_interrupt` (see "Devices"). Handlers must not block; they may
+  wake a `WaitQueue`.
 - **Time:** `time::now_ns()` is nanoseconds since boot from
   `poly_irq::MonotonicClock`: the TSC when it is invariant and calibrated,
   otherwise the reference timer (under QEMU's TCG: the HPET). It never goes
@@ -361,9 +408,13 @@ and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
 - **API:** `spawn(fn, arg)`, `yield_now()`, `exit(code)`, `current()`,
   `join(id)` (returns the exit code), `detach(id)`, `state(id)`,
   `sleep(duration)` / `sleep_until(ns)`, and
-  `WaitQueue::{wait_until(cond), wake_one(), wake_all()}`. `wait_until`
-  checks its condition with the scheduler locked, so a wakeup between the
-  check and going to sleep cannot be lost.
+  `WaitQueue::{wait_until(cond), wait_until_deadline(cond, ns), wake_one(),
+  wake_all()}`. `wait_until` checks its condition with the scheduler
+  locked, so a wakeup between the check and going to sleep cannot be lost.
+  `wait_until_deadline` also gives up at a deadline: the thread table keeps
+  one (deadline, queue) entry per thread in a timed wait, and the tick wakes
+  the queue of each one that is due (the other waiters on it check their
+  conditions and sleep again).
 - **Exit.** An exiting thread is still on its stack, so the next thread
   frees it (`finish_switch` after every switch). The table slot is freed
   once the thread is also joined or detached.
