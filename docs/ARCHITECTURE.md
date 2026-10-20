@@ -362,6 +362,29 @@ Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md).
   Host tests run every call, and scripted startup sequences of real static
   binaries, against a fake kernel.
 
+## NT object manager (logic only, not wired yet)
+
+`crates/poly-ntobj` is what the NT object and synchronisation services do,
+without the machine ([ADR 0030](adr/0030-nt-object-manager-and-dispatcher-in-a-crate.md)).
+The kernel does not use it yet; the NT personality will call its `nt_*`
+services once it decodes those system calls.
+
+- `ObjectManager` holds every object (directories, symbolic links, events,
+  mutants, semaphores, timers, and opaque sections, files, processes,
+  threads, keys and devices the kernel fills in), the namespace (`\`, `\??`,
+  `\GLOBAL??`, `\Device`, `\BaseNamedObjects`, `\Sessions`, `\KernelObjects`),
+  one handle table per process plus a kernel table, and the blocked waits.
+- Handle count and pointer count per object; temporary names go with the
+  last handle, objects with the last reference. Handles are multiples of 4
+  with the tag bits ignored; `-1`/`-2` are the current process and thread.
+- Waits: the crate returns `Done(status)` or `Blocked(WaitId)` and queues a
+  `Wake` for each blocked wait a later call satisfies; the kernel sleeps and
+  wakes threads, and cancels waits on timeout, alert or APC.
+- A `ParseHook` receives lookups that reach a device (or later a file system
+  or the registry), so those own the names below them.
+- Behaviour public documentation does not settle is marked "to be confirmed
+  by the spec agent against real Windows" in the code; ADR 0030 lists it.
+
 ## Testing strategy
 
 | Level | Where | Runs |

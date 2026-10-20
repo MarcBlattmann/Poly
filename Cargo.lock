@@ -86,6 +86,10 @@ name = "poly-mem"
 version = "0.0.1"
 
 [[package]]
+name = "poly-ntobj"
+version = "0.0.1"
+
+[[package]]
 name = "poly-paging"
 version = "0.0.1"
 
