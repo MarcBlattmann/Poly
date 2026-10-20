@@ -91,7 +91,8 @@ impl World {
             spec_files: SpecFiles { spec: true, visible: 7, held_out: 3 },
             ..World::default()
         };
-        w.commits.insert("main0".into(), Commit { parent: None, subject: "main".into(), changes: vec![], green: false });
+        w.commits
+            .insert("main0".into(), Commit { parent: None, subject: "main".into(), changes: vec![], green: false });
         w
     }
 
@@ -242,7 +243,8 @@ impl Ops for World {
         let brk: String = if green {
             "{\"symbol\":\"brk\",\"number\":12,\"status\":\"green\",\"tests_visible\":7,\"tests_held_out\":3,\"src\":[\"t\"]}".replace("brk", &sym)
         } else if claimed {
-            "{\"symbol\":\"brk\",\"number\":12,\"status\":\"claimed\",\"claimed_by\":\"spec-claude-1\",\"src\":[\"t\"]}".replace("brk", &sym)
+            "{\"symbol\":\"brk\",\"number\":12,\"status\":\"claimed\",\"claimed_by\":\"spec-claude-1\",\"src\":[\"t\"]}"
+                .replace("brk", &sym)
         } else {
             "{\"symbol\":\"brk\",\"number\":12,\"src\":[\"t\"]}".replace("brk", &sym)
         };
@@ -260,7 +262,8 @@ impl Ops for World {
     }
     fn handoff_record(&mut self, _slot: usize, entry: &EntryId) -> Result<Out> {
         self.call("handoff_record");
-        let row = format!("| 2026-10-20 10:00:00 | {} | c002 | spec-claude-1 | impl-claude-1 | `f` sha256:0 |", entry.id());
+        let row =
+            format!("| 2026-10-20 10:00:00 | {} | c002 | spec-claude-1 | impl-claude-1 | `f` sha256:0 |", entry.id());
         self.staged.push(change("specs/HANDOFF_LOG.md", &[&row]));
         Ok(Out::with(0, ""))
     }
@@ -449,8 +452,7 @@ fn green_path_opens_a_pr_and_finishes_when_merged() {
     // The PR branch carries the claim, the spec, the hand-off, the
     // implementation and the green status, in that order.
     let head = d.ops.origin["pipeline/impl/brk"].clone();
-    let subjects: Vec<String> =
-        d.ops.ancestors(&head).iter().rev().map(|c| d.ops.commits[c].subject.clone()).collect();
+    let subjects: Vec<String> = d.ops.ancestors(&head).iter().rev().map(|c| d.ops.commits[c].subject.clone()).collect();
     assert_eq!(
         subjects,
         [

@@ -299,17 +299,16 @@ impl<O: Ops> Driver<'_, O> {
         st.note(now, format!("to the human queue: {reason}"));
         let Ok(entry) = EntryId::parse(&st.entry) else { return Next::Yield(Yielded::Done(Step::Human)) };
         let mut pushed = Vec::new();
-        if self.cfg.push_human_branches
-            && let Ok((slot, _lock)) = self.slot()
-            && self.ops.prepare(slot, &format!("{}/{}", self.cfg.remote, self.cfg.base_branch)).is_ok()
-        {
+        if self.cfg.push_human_branches {
+            // Every hub head was pushed from the runner's object store, which
+            // the worktrees share: no checkout is needed to push it on (and
+            // no slot lock, which the calling step may hold).
             for b in [spec_branch(&entry), impl_branch(&entry)] {
-                if let Ok(Some(_)) = self.ops.hub_head(&b) {
-                    match self.ops.push(slot, Remote::Origin, &format!("hub/{b}"), &b) {
-                        Ok(Push::Done) => pushed.push(b),
-                        Ok(Push::Rejected(m)) | Err(m) => {
-                            self.log.log(4, &self.who(&st.entry), &format!("could not push {b}: {m}"))
-                        }
+                let Ok(Some(sha)) = self.ops.hub_head(&b) else { continue };
+                match self.ops.push(0, Remote::Origin, &sha, &b) {
+                    Ok(Push::Done) => pushed.push(b),
+                    Ok(Push::Rejected(m)) | Err(m) => {
+                        self.log.log(4, &self.who(&st.entry), &format!("could not push {b}: {m}"))
                     }
                 }
             }
