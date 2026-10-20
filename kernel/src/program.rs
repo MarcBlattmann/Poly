@@ -117,6 +117,12 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
     let params = ExecParams::new(argv, envp, path);
     let image = exec::load_dynamic(Arc::new(source), &params, &open_interp).map_err(ExecPathError::Exec)?;
     let process = Arc::new(Process::new_linux(process::alloc_pid(), 0, format, traced));
+    if let Some(linux) = &process.linux {
+        // The program's name (prctl(2) PR_GET_NAME); it runs as root.
+        let comm = poly_personality_linux::sys::prctl::comm_from_path(path);
+        let pid = process.pid as i32;
+        linux.with(|p| p.thread_mut(pid).comm = comm);
+    }
     fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
     Ok(Prepared { process, image })
 }

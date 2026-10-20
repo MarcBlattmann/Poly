@@ -42,8 +42,9 @@ fn prlimit(k: &mut dyn LinuxKernel, pid: i32, resource: u32, new: UserPtr, old: 
         p if p > 0 => Target::Process(p),
         _ => return Err(Errno::ESRCH),
     };
-    let me = k.credentials();
-    let privileged = me.euid == 0;
+    // CAP_SYS_RESOURCE, and the ids, are the calling thread's (ADR 0045).
+    let me = crate::cred::current(k);
+    let privileged = me.capable(crate::cred::cap::SYS_RESOURCE);
     let own = pid == 0 || pid == k.pid();
     let mut result: Result<Rlimit, Errno> = Err(Errno::ESRCH);
     k.with_process(target, &mut |p, info| {
@@ -51,8 +52,12 @@ fn prlimit(k: &mut dyn LinuxKernel, pid: i32, resource: u32, new: UserPtr, old: 
         // prlimit(2): without CAP_SYS_RESOURCE, the caller's real,
         // effective and saved user ids must match the target's real
         // user id (and so for groups).
-        let same_user = [info.uid, info.euid, info.suid].iter().all(|&u| u == me.uid)
-            && [info.gid, info.egid, info.sgid].iter().all(|&g| g == me.gid);
+        let ids = p
+            .process_creds(info.pid)
+            .map_or(([info.uid, info.euid, info.suid], [info.gid, info.egid, info.sgid]), |c| {
+                ([c.uid, c.euid, c.suid], [c.gid, c.egid, c.sgid])
+            });
+        let same_user = ids.0.iter().all(|&u| u == me.uid) && ids.1.iter().all(|&g| g == me.gid);
         if !own && !privileged && !same_user {
             result = Err(Errno::EPERM);
             return;

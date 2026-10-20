@@ -4,6 +4,8 @@
 //! order), so the same sources always give the same image.
 //!
 //! - The default image (`cargo xtask run`): `/etc/motd`, `/etc/hostname`,
+//!   a minimal user database (`/etc/passwd`, `/etc/group`: root and nobody,
+//!   for the C libraries and BusyBox later; the kernel never reads them),
 //!   and `/dev/console` as a Linux initramfs has it.
 //! - The test image (the self-test boots, with `poly.test.initrd`): the same
 //!   plus `/test`, a tree of every kind of entry the kernel's file system
@@ -29,6 +31,13 @@ pub const MOTD: &str = "Welcome to Poly.\n\
 This is /etc/motd from the initramfs `cargo xtask` builds (tools/xtask/src/initramfs.rs),\n\
 unpacked into the root tmpfs at boot. Try `ls /`, `ls /dev`, `cat /etc/hostname` and `mount`.\n";
 
+/// `/etc/passwd` (passwd(5): name, password, uid, gid, comment, home,
+/// shell; `x`: the password lives elsewhere).
+pub const PASSWD: &str = "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/nonexistent:/bin/false\n";
+
+/// `/etc/group` (group(5): name, password, gid, members).
+pub const GROUP: &str = "root:x:0:\nnogroup:x:65534:\n";
+
 /// Length of `/test/big.bin`: more than nine 4 KiB pages, not a multiple.
 pub const BIG_BIN_LEN: usize = 40_000;
 
@@ -48,6 +57,8 @@ fn base(w: &mut Writer) {
     w.dir(b"etc", 0o755);
     w.file(b"etc/motd", 0o644, MOTD.as_bytes());
     w.file(b"etc/hostname", 0o644, b"poly\n");
+    w.file(b"etc/passwd", 0o644, PASSWD.as_bytes());
+    w.file(b"etc/group", 0o644, GROUP.as_bytes());
     w.dir(b"dev", 0o755);
     w.node(b"dev/console", FileType::CharDevice, 0o600, DeviceId::new(5, 1));
 }
@@ -247,5 +258,9 @@ mod tests {
         assert_eq!(stat("/test/zero-node").rdev, DeviceId::new(1, 5));
         assert_eq!(stat("/test/hello.txt").mtime.sec, i64::from(MTIME));
         assert_eq!(stat("/test/script.sh").size, 18);
+        assert_eq!(read("/etc/passwd"), PASSWD.as_bytes());
+        assert_eq!(read("/etc/group"), GROUP.as_bytes());
+        assert_eq!((stat("/etc/passwd").perm(), stat("/etc/passwd").uid), (0o644, 0));
+        assert!(PASSWD.lines().all(|l| l.split(':').count() == 7) && GROUP.lines().all(|l| l.split(':').count() == 4));
     }
 }

@@ -676,7 +676,22 @@ fn cpu_tests() {
         r == 0 && user + system > 0 && user + system <= clock(CLOCK_PROCESS_CPUTIME_ID),
         (user / 1000) as i64,
     );
-    check(b"busy_loops_are_user_time", user >= system, (system / 1000) as i64);
+    // Over the whole run the sleeps, timers and exec count as system time,
+    // so compare only what a busy loop with few system calls adds.
+    let rusage = || {
+        let mut ru = [0i64; 18];
+        sys(SYS_GETRUSAGE, &[0, ru.as_mut_ptr() as u64]);
+        ((ru[0] * 1_000_000 + ru[1]) as u64, (ru[2] * 1_000_000 + ru[3]) as u64)
+    };
+    let ((user0, system0), wall0) = (rusage(), mono());
+    while mono() - wall0 < 200 * MS {
+        for _ in 0..50 {
+            spin();
+        }
+    }
+    let (user1, system1) = rusage();
+    let (busy_user, busy_system) = (user1 - user0, system1 - system0);
+    check(b"busy_loops_are_user_time", busy_user >= busy_system, busy_system as i64);
     let mut tms = [0i64; 4];
     let ticks = sys(SYS_TIMES, &[tms.as_mut_ptr() as u64]);
     check(b"times", ticks > 0 && tms[0] + tms[1] > 0, ticks);

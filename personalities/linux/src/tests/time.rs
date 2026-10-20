@@ -38,7 +38,7 @@ fn tv_at(k: &FakeKernel, at: u64) -> Timeval {
 
 fn root() -> FakeKernel {
     let mut k = FakeKernel::new();
-    k.creds.euid = 0;
+    k.creds_mut().caps = crate::cred::Caps::ROOT;
     k
 }
 

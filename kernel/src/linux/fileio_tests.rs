@@ -314,7 +314,7 @@ fn shared(i: usize) -> i64 {
 /// A pipe made from kernel code, as pipe2(2) makes one: `(read, write)`.
 fn kernel_pipe(p: &Process) -> TestResult<(i32, i32)> {
     let (r, w) = Pipe::pair(false);
-    let node = fs::vfs().anon_node(FileType::Fifo, 0o600, p.files.cred()).map_err(|_| "anon_node")?;
+    let node = fs::vfs().anon_node(FileType::Fifo, 0o600, &p.files.cred()).map_err(|_| "anon_node")?;
     let read = Arc::new(OpenFile::on_object(node.clone(), Arc::new(r), OpenFlags::RDONLY));
     let write = Arc::new(OpenFile::on_object(node, Arc::new(w), OpenFlags::WRONLY));
     let rfd = p.files.install(read, false).map_err(|_| "install")?;

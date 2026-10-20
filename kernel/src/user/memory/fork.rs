@@ -232,8 +232,15 @@ fn frames_reach(expected: u64) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// The user frame count once it has not changed for a while.
+/// The user frame count once it has not changed for a while, and the
+/// threads of processes that ended (earlier tests') are gone with their
+/// frames.
 fn settled_frames() -> u64 {
+    // Bounded: if they never go, the frame checks report it.
+    let deadline = crate::time::now_ns() + 30 * crate::time::NANOS_PER_SEC;
+    while crate::thread::dying_user_threads() != 0 && crate::time::now_ns() < deadline {
+        crate::thread::sleep(core::time::Duration::from_millis(2));
+    }
     let mut last = super::super::user_frames();
     loop {
         crate::thread::sleep(core::time::Duration::from_millis(20));

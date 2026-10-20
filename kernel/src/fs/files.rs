@@ -28,13 +28,15 @@ use poly_vfs::{
 /// directory.
 pub const AT_REMOVEDIR: u32 = 0x200;
 
-/// One process's file state: its descriptor table, its root and working
-/// directories and umask ([`FsContext`]), and the credentials permission
-/// checks use. Locks: the context, then the table; neither is held during
-/// a read or write.
+mod perm;
+
+/// One process's file state: its descriptor table and its root and working
+/// directories and umask ([`FsContext`]). Permission checks use the
+/// credentials of the thread that calls ([`Files::cred`], ADR 0045).
+/// Locks: the context, then the table; neither is held during a read or
+/// write.
 #[derive(Debug)]
 pub struct Files {
-    cred: Cred,
     ctx: Mutex<FsContext>,
     fds: Mutex<FdTable>,
 }
@@ -46,11 +48,10 @@ impl Default for Files {
 }
 
 impl Files {
-    /// No descriptors, root and working directory at `/`, umask 022, root
-    /// credentials (users and groups come with Phase 4).
+    /// No descriptors, root and working directory at `/`, umask 022.
     pub fn new() -> Files {
         let ctx = vfs().root_context().expect("the root directory is always there");
-        Files { cred: Cred::root(), ctx: Mutex::new(ctx), fds: Mutex::new(FdTable::new()) }
+        Files { ctx: Mutex::new(ctx), fds: Mutex::new(FdTable::new()) }
     }
 
     /// What a new process starts with: `/dev/console` open for reading and
@@ -75,11 +76,14 @@ impl Files {
     pub fn fork(&self) -> Files {
         let ctx = self.ctx.lock().clone();
         let fds = self.fds.lock().clone();
-        Files { cred: self.cred.clone(), ctx: Mutex::new(ctx), fds: Mutex::new(fds) }
+        Files { ctx: Mutex::new(ctx), fds: Mutex::new(fds) }
     }
 
-    pub fn cred(&self) -> &Cred {
-        &self.cred
+    /// The credentials permission checks use: the calling thread's file
+    /// system ids, groups and effective capabilities (a Linux thread's,
+    /// `linux::cred`), root for the kernel's own threads.
+    pub fn cred(&self) -> Cred {
+        crate::linux::cred::current_vfs_cred()
     }
 
     // ---- descriptors ----------------------------------------------------
@@ -166,9 +170,12 @@ impl Files {
     }
 
     /// `fcntl(F_SETFL)`: changes `O_APPEND`, `O_NONBLOCK`, `O_ASYNC`,
-    /// `O_DIRECT`, `O_NOATIME`; ignores the rest.
+    /// `O_DIRECT`, `O_NOATIME`; ignores the rest. Turning `O_NOATIME` on
+    /// needs ownership or `CAP_FOWNER` (`EPERM`, as for open(2)).
     pub fn set_status_flags(&self, fd: Fd, flags: OpenFlags) -> Result<()> {
-        self.file(fd)?.set_flags(flags);
+        let file = self.file(fd)?;
+        self.check_noatime(&file, flags)?;
+        file.set_flags(flags);
         Ok(())
     }
 
@@ -199,7 +206,9 @@ impl Files {
 
     /// `write(2)`.
     pub fn write(&self, fd: Fd, buf: &[u8]) -> Result<usize> {
-        self.file(fd)?.write(buf)
+        let file = self.file(fd)?;
+        self.before_write(&file, buf.len())?;
+        file.write(buf)
     }
 
     /// `pread64(2)`: at `offset`, leaving the file offset alone.
@@ -209,7 +218,9 @@ impl Files {
 
     /// `pwrite64(2)`.
     pub fn pwrite(&self, fd: Fd, buf: &[u8], offset: u64) -> Result<usize> {
-        self.file(fd)?.write_at(offset, buf)
+        let file = self.file(fd)?;
+        self.before_write(&file, buf.len())?;
+        file.write_at(offset, buf)
     }
 
     /// `lseek(2)`: returns the new offset.
@@ -239,7 +250,9 @@ impl Files {
 
     /// `ftruncate(2)`.
     pub fn ftruncate(&self, fd: Fd, len: u64) -> Result<()> {
-        self.file(fd)?.truncate(len)
+        let file = self.file(fd)?;
+        self.before_write(&file, 1)?;
+        file.truncate(len)
     }
 
     /// `fsync(2)`.
@@ -279,7 +292,7 @@ impl Files {
     /// close-on-exec if `flags` has `O_CLOEXEC`. `mode` (masked by the
     /// umask) is used when `O_CREAT` makes the file.
     pub fn openat(&self, dirfd: Fd, path: &[u8], flags: OpenFlags, mode: u16) -> Result<Fd> {
-        let file = self.at(dirfd, path, |vfs, ctx, at| vfs.open(ctx, &self.cred, at, path, flags, mode))?;
+        let file = self.at(dirfd, path, |vfs, ctx, at| vfs.open(ctx, &self.cred(), at, path, flags, mode))?;
         self.fds.lock().install(file, flags.contains(OpenFlags::CLOEXEC))
     }
 
@@ -287,12 +300,12 @@ impl Files {
     /// a regular file with execute permission on a mount that allows
     /// executing (`EACCES` otherwise). Not installed as a descriptor.
     pub fn open_exec_at(&self, dirfd: Fd, path: &[u8]) -> Result<Arc<OpenFile>> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.open_exec(ctx, &self.cred, at, path))
+        self.at(dirfd, path, |vfs, ctx, at| vfs.open_exec(ctx, &self.cred(), at, path))
     }
 
     /// `stat(2)` (`follow`) and `lstat(2)`, `fstatat(2)` with `dirfd`.
     pub fn statat(&self, dirfd: Fd, path: &[u8], follow: bool) -> Result<Stat> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.stat(ctx, &self.cred, at, path, follow))
+        self.at(dirfd, path, |vfs, ctx, at| vfs.stat(ctx, &self.cred(), at, path, follow))
     }
 
     /// `stat(2)` from the working directory, following a final symbolic link.
@@ -308,39 +321,39 @@ impl Files {
     /// `readlinkat(2)`: the whole target (the caller truncates to the user's
     /// buffer, as `readlink` does).
     pub fn readlinkat(&self, dirfd: Fd, path: &[u8]) -> Result<Vec<u8>> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.readlink(ctx, &self.cred, at, path))
+        self.at(dirfd, path, |vfs, ctx, at| vfs.readlink(ctx, &self.cred(), at, path))
     }
 
     /// `mkdirat(2)`.
     pub fn mkdirat(&self, dirfd: Fd, path: &[u8], mode: u16) -> Result<()> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.mkdir(ctx, &self.cred, at, path, mode))
+        self.at(dirfd, path, |vfs, ctx, at| vfs.mkdir(ctx, &self.cred(), at, path, mode))
     }
 
     /// `unlinkat(2)`: with [`AT_REMOVEDIR`], `rmdir`; other flags `EINVAL`.
     pub fn unlinkat(&self, dirfd: Fd, path: &[u8], flags: u32) -> Result<()> {
         match flags {
-            0 => self.at(dirfd, path, |vfs, ctx, at| vfs.unlink(ctx, &self.cred, at, path)),
-            AT_REMOVEDIR => self.at(dirfd, path, |vfs, ctx, at| vfs.rmdir(ctx, &self.cred, at, path)),
+            0 => self.at(dirfd, path, |vfs, ctx, at| vfs.unlink(ctx, &self.cred(), at, path)),
+            AT_REMOVEDIR => self.at(dirfd, path, |vfs, ctx, at| vfs.rmdir(ctx, &self.cred(), at, path)),
             _ => Err(Errno::EINVAL),
         }
     }
 
     /// `symlinkat(2)`: a link at `path` to `target`.
     pub fn symlinkat(&self, target: &[u8], dirfd: Fd, path: &[u8]) -> Result<()> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.symlink(ctx, &self.cred, target, at, path))
+        self.at(dirfd, path, |vfs, ctx, at| vfs.symlink(ctx, &self.cred(), target, at, path))
     }
 
     /// `chdir(2)`.
     pub fn chdir(&self, path: &[u8]) -> Result<()> {
         // Resolved unlocked, like every walk (see `at`).
-        let dir = self.at(AT_FDCWD, path, |vfs, ctx, at| vfs.lookup(ctx, &self.cred, at, path, true))?;
-        self.ctx.lock().set_cwd(&self.cred, dir)
+        let dir = self.at(AT_FDCWD, path, |vfs, ctx, at| vfs.lookup(ctx, &self.cred(), at, path, true))?;
+        self.ctx.lock().set_cwd(&self.cred(), dir)
     }
 
     /// `fchdir(2)`.
     pub fn fchdir(&self, fd: Fd) -> Result<()> {
         let dir = self.file(fd)?.node().clone();
-        self.ctx.lock().set_cwd(&self.cred, dir)
+        self.ctx.lock().set_cwd(&self.cred(), dir)
     }
 
     /// `getcwd(2)`: the working directory's absolute path.

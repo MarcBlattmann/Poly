@@ -33,6 +33,8 @@
 //! - [`sys`]: the handlers.
 //! - [`signal`]: signal state, delivery, frames (ADR 0031).
 //! - [`futex`]: futex wait queues, robust lists (ADR 0031).
+//! - [`cred`]: per-thread credentials and capabilities, and the rules that
+//!   change them (ADR 0045).
 //! - [`fs`]: the file system services the kernel provides
 //!   ([`fs::LinuxFs`], through [`LinuxKernel::fs`]) and the file system
 //!   calls' structures; [`rlimit`]: resource limits (ADR 0043).
@@ -51,6 +53,7 @@ extern crate alloc;
 
 pub mod abi;
 pub mod args;
+pub mod cred;
 pub mod errno;
 pub mod fileio;
 pub mod fs;

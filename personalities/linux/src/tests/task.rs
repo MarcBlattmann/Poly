@@ -47,7 +47,7 @@ pub fn clone_task(k: &mut FakeKernel, req: &CloneRequest) -> Result<i32, Errno> 
     if !req.thread() {
         let me = k.pid;
         let parent = if req.sibling() { k.tasks.tree.parent(me).unwrap_or(0) } else { me };
-        k.tasks.tree.insert_child(me, parent, pid, req.exit_signal, k.creds.uid);
+        k.tasks.tree.insert_child(me, parent, pid, req.exit_signal, k.creds().uid);
     }
     if let Some(ptr) = req.parent_tid {
         let _ = k.copy_to_user(ptr, &pid.to_le_bytes());

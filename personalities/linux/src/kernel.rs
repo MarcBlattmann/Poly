@@ -43,7 +43,8 @@ impl UserPtr {
     }
 }
 
-/// The real and effective user and group ids of the calling process.
+/// The real and effective user and group ids of the calling thread: a
+/// summary of its [`Creds`](crate::cred::Creds) (ADR 0045).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Credentials {
     pub uid: u32,
@@ -413,7 +414,9 @@ pub trait LinuxKernel {
     fn tid(&self) -> i32;
     /// The parent's process id (0 if the parent is not in this pid namespace).
     fn ppid(&self) -> i32;
-    /// The process's real and effective user and group ids.
+    /// The calling thread's real and effective user and group ids: its
+    /// [`LinuxThread::creds`](crate::signal::LinuxThread::creds) summed up
+    /// ([`Creds::summary`](crate::cred::Creds::summary)).
     fn credentials(&self) -> Credentials;
 
     // ---- user memory --------------------------------------------------

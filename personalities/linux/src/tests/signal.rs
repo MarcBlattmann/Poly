@@ -451,8 +451,8 @@ fn kill_permissions_and_targets() {
     install(&mut k, SIGWINCH, 0, SigSet::EMPTY);
     assert_eq!(sys(&mut k, nr::KILL, &[u64::MAX, SIGWINCH as u64]), Ok(0));
     assert!(!k.me().pending(100).contains(SIGWINCH), "not the caller");
-    // Root may signal anyone; init only gets signals it handles.
-    k.creds.euid = 0;
+    // CAP_KILL may signal anyone; init only gets signals it handles.
+    k.creds_mut().caps.effective = crate::cred::CapSet::only(crate::cred::cap::KILL);
     assert_eq!(sys(&mut k, nr::KILL, &[400, sigterm]), Ok(0));
     assert_eq!(sys(&mut k, nr::KILL, &[1, SIGKILL as u64]), Ok(0));
     assert!(k.proc_state(1).pending(1).is_empty(), "init ignores what it does not handle");
