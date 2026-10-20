@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mincore
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  mincore(addr, length, vec) stores one byte per page of [addr, addr +
+  length rounded up to pages) into vec; bit 0 is 1 when the page is
+  resident, the other bits are 0; bytes of vec after the last page are
+  untouched. addr must be page aligned. Pages that were written, pages
+  locked with mlock, the program's own code while it runs, and pages of a
+  file that are in the page cache (for example just written) are resident.
+  Whether untouched anonymous pages are resident is not specified. PROT_NONE
+  pages count as mapped.
+returns:
+  success: "0"
+  length_0: "0"
+errors:
+  unaligned_addr: "EINVAL"
+  range_with_unmapped_pages: "ENOMEM (also kernel addresses)"
+  bad_vec: "EFAULT"
+side_effects: "none"
+threading: "the address space is shared by all threads of a process; changes are visible to every thread at once"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

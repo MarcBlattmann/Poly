@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/munlock
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  munlock(addr, length) unlocks the pages of a range; pages that were never
+  locked are fine, and unlocking twice is fine. addr is rounded down and the
+  end up to page boundaries; length 0 succeeds. The contents are kept. In a
+  forked child (which did not inherit the parent's locks) mlock and munlock
+  work on its own copy without affecting the parent.
+returns:
+  success: "0"
+errors:
+  range_with_unmapped_pages: "ENOMEM (also kernel addresses)"
+  length_wraps_around: "EINVAL"
+side_effects: "none visible"
+threading: "the address space is shared by all threads of a process; changes are visible to every thread at once"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

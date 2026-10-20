@@ -31,6 +31,8 @@ typedef unsigned char u8;
 #define SYS_access 21
 #define SYS_sched_yield 24
 #define SYS_mremap 25
+#define SYS_msync 26
+#define SYS_mincore 27
 #define SYS_madvise 28
 #define SYS_dup 32
 #define SYS_dup2 33
@@ -81,6 +83,10 @@ typedef unsigned char u8;
 #define SYS_getsid 124
 #define SYS_statfs 137
 #define SYS_fstatfs 138
+#define SYS_mlock 149
+#define SYS_munlock 150
+#define SYS_mlockall 151
+#define SYS_munlockall 152
 #define SYS_setrlimit 160
 #define SYS_gettid 186
 #define SYS_time 201
@@ -508,6 +514,12 @@ struct a_siginfo {
 #define MADV_KEEPONFORK 19
 #define MADV_COLD 20
 #define MADV_PAGEOUT 21
+#define MS_ASYNC 1
+#define MS_INVALIDATE 2
+#define MS_SYNC 4
+#define MCL_CURRENT 1
+#define MCL_FUTURE 2
+#define MCL_ONFAULT 4
 
 /* linux/stat.h: utimensat special nanosecond values */
 #define UTIME_NOW ((1L << 30) - 1L)
@@ -656,6 +668,35 @@ static A_UNUSED long a_spawn(int slot, volatile i32 *done, int (*fn)(void *), vo
     return a_clone(CLONE_VM | CLONE_CHILD_CLEARTID | SIGCHLD, a_stacks[slot] + A_STACK_SIZE, 0, (i32 *)done, 0, fn,
                    arg);
 }
+
+/* A page of MAP_SHARED anonymous memory, mapped on first use: it stays
+ * shared with children made by fork, so they can report through it. */
+static A_UNUSED volatile i32 *a_shared_page;
+static A_UNUSED volatile i32 *a_shared(void) {
+    if (!a_shared_page)
+        a_shared_page = (volatile i32 *)syscall6(SYS_mmap, 0, A_PAGE, PROT_READ | PROT_WRITE,
+                                                 MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    return a_shared_page;
+}
+
+/*
+ * fork with a way to see the child's end without a system call: a raw
+ * clone with fork semantics (own copy of memory, SIGCHLD at its end) and
+ * CLONE_CHILD_CLEARTID on `done`, which must be in a_shared() memory. The
+ * kernel clears *done when the child has ended; the parent waits for that
+ * with a_fork_wait before its next system call, so the order of the two
+ * processes' system calls is the same on every run. Returns 0 in the
+ * child, the child's pid (or -errno) in the parent.
+ */
+static A_UNUSED long a_fork(volatile i32 *done) {
+    *done = -1;
+    long r = syscall5(SYS_clone, CLONE_CHILD_CLEARTID | SIGCHLD, 0, 0, done, 0);
+    if (r < 0) *done = 0; /* no child: nothing to wait for */
+    return r;
+}
+
+/* Spin until the child of a_fork has ended; 1 if it did in time. */
+static A_UNUSED int a_fork_wait(volatile i32 *done) { return a_spin_until(done, 0, A_SPIN_LIMIT); }
 
 /* Block SIGCHLD, so a child's end does not interrupt this process at a
  * point that varies from run to run (a tracer would report it there). */
