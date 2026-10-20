@@ -7,10 +7,15 @@
 //! show a C library's startup sequence. They are skipped where the host
 //! has no static C library.
 //!
+//! `tests/linux/apps/<name>.app` are app tests (`apps.rs`): a host program
+//! run with fixed arguments and files, started by the launcher
+//! `tests/linux/apps/launch.c`, which is built like a freestanding test.
+//!
 //! Builds are reproducible: fixed flags, no build id, sources passed by
 //! relative path, so the same compiler gives the same bytes. The manifest
 //! records the compiler and the hash of every source and binary.
 
+use crate::apps;
 use crate::sha256;
 use crate::util::{self, Result};
 use serde::{Deserialize, Serialize};
@@ -90,6 +95,16 @@ pub struct Built {
     pub binary_sha256: String,
 }
 
+/// An app test of the corpus or of an entry's tests directory.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct App {
+    pub name: String,
+    /// The definition (`.app` file), relative to the repository root if
+    /// it is inside it.
+    pub definition: String,
+    pub definition_sha256: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Skipped {
     pub name: String,
@@ -106,6 +121,12 @@ pub struct Manifest {
     pub libc_flags: Vec<String>,
     pub tests: Vec<Built>,
     pub skipped: Vec<Skipped>,
+    /// App tests; they run after the programs.
+    #[serde(default)]
+    pub apps: Vec<App>,
+    /// The app tests' launcher, built like a freestanding test.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launcher: Option<Built>,
 }
 
 impl Manifest {
@@ -115,6 +136,21 @@ impl Manifest {
 
     pub fn find(&self, name: &str) -> Option<&Built> {
         self.tests.iter().find(|b| b.name == name)
+    }
+
+    pub fn find_app(&self, name: &str) -> Option<&App> {
+        self.apps.iter().find(|a| a.name == name)
+    }
+
+    /// Whether a program or an app test is called `name`.
+    pub fn has(&self, name: &str) -> bool {
+        self.find(name).is_some() || self.find_app(name).is_some()
+    }
+
+    /// The definition of app test `app`, absolute.
+    pub fn definition_path(root: &Path, app: &App) -> PathBuf {
+        let p = Path::new(&app.definition);
+        if p.is_absolute() { p.to_path_buf() } else { root.join(p) }
     }
 }
 
@@ -136,8 +172,8 @@ pub fn compiler_version(cc: &str) -> Result<String> {
 /// tests, written in the corpus format), named after their files.
 pub fn discover_extra(root: &Path, dir: &Path) -> Result<Vec<Program>> {
     let files = c_files(dir)?;
-    if files.is_empty() {
-        return Err(format!("no .c test programs in {}", dir.display()));
+    if files.is_empty() && apps::definitions(dir)?.is_empty() {
+        return Err(format!("no .c test programs or .app tests in {}", dir.display()));
     }
     Ok(files
         .into_iter()
@@ -154,6 +190,22 @@ pub fn build(root: &Path, out: &Path, cc: &str) -> Result<Manifest> {
     build_with(root, out, cc, &[])
 }
 
+/// The app tests of the corpus (`tests/linux/apps/`) and of `extra`
+/// directories, checked.
+pub fn discover_apps(root: &Path, extra: &[PathBuf]) -> Result<Vec<App>> {
+    let mut out = Vec::new();
+    let dirs = std::iter::once(root.join(DIR).join("apps")).chain(extra.iter().map(|d| util::absolute(d)));
+    for dir in dirs {
+        for path in apps::definitions(&dir)? {
+            apps::AppDef::load(&path)?;
+            let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+            let definition = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().into_owned();
+            out.push(App { name, definition, definition_sha256: sha256::hex(&util::read(&path)?) });
+        }
+    }
+    Ok(out)
+}
+
 /// Compile the corpus and the test programs in `extra` directories.
 pub fn build_with(root: &Path, out: &Path, cc: &str, extra: &[PathBuf]) -> Result<Manifest> {
     let mut programs = discover(root)?;
@@ -163,6 +215,12 @@ pub fn build_with(root: &Path, out: &Path, cc: &str, extra: &[PathBuf]) -> Resul
                 return Err(format!("two test programs are called {} ({})", p.name, p.source.display()));
             }
             programs.push(p);
+        }
+    }
+    let app_tests = discover_apps(root, extra)?;
+    for (i, a) in app_tests.iter().enumerate() {
+        if programs.iter().any(|p| p.name == a.name) || app_tests[..i].iter().any(|b| b.name == a.name) {
+            return Err(format!("two test programs are called {} ({})", a.name, a.definition));
         }
     }
     let compiler = compiler_version(cc)?;
@@ -176,41 +234,55 @@ pub fn build_with(root: &Path, out: &Path, cc: &str, extra: &[PathBuf]) -> Resul
         libc_flags: LIBC_FLAGS.iter().map(|s| s.to_string()).collect(),
         tests: Vec::new(),
         skipped: Vec::new(),
+        apps: Vec::new(),
+        launcher: None,
     };
+    if !app_tests.is_empty() {
+        let launcher =
+            Program { name: apps::LAUNCHER_BINARY.into(), source: PathBuf::from(apps::LAUNCHER_SOURCE), libc: false };
+        manifest.launcher = Some(compile(root, &out, cc, &launcher)?.map_err(|e| format!("the app launcher: {e}"))?);
+        manifest.apps = app_tests;
+    }
     for p in programs {
-        let binary = out.join(&p.name);
-        let flags = if p.libc { LIBC_FLAGS } else { FREESTANDING_FLAGS };
-        let result = Command::new(cc)
-            .current_dir(root)
-            .args(flags)
-            .arg(format!("-frandom-seed={}", p.name))
-            .arg("-o")
-            .arg(&binary)
-            .arg(&p.source)
-            .output()
-            .map_err(|e| format!("{cc}: {e}"))?;
-        if !result.status.success() {
-            let msg = String::from_utf8_lossy(&result.stderr).trim().to_string();
-            if p.libc {
-                // No static C library here: not an error, the corpus just
-                // lacks the C library startup trace.
-                let reason = msg.lines().last().unwrap_or("link failed").to_string();
-                manifest.skipped.push(Skipped { name: p.name, reason });
-                continue;
-            }
-            return Err(format!("{}: compile failed:\n{msg}", p.source.display()));
+        match compile(root, &out, cc, &p)? {
+            Ok(built) => manifest.tests.push(built),
+            // No static C library here: not an error, the corpus just
+            // lacks the C library startup trace.
+            Err(reason) if p.libc => manifest
+                .skipped
+                .push(Skipped { name: p.name, reason: reason.lines().last().unwrap_or("link failed").into() }),
+            Err(msg) => return Err(format!("{}: compile failed:\n{msg}", p.source.display())),
         }
-        manifest.tests.push(Built {
-            name: p.name.clone(),
-            kind: if p.libc { "libc" } else { "freestanding" }.into(),
-            source: p.source.to_string_lossy().into_owned(),
-            source_sha256: sha256::hex(&util::read(&root.join(&p.source))?),
-            binary: p.name,
-            binary_sha256: sha256::hex(&util::read(&binary)?),
-        });
     }
     util::write_json(&out.join(MANIFEST), &manifest)?;
     Ok(manifest)
+}
+
+/// Compile one program into `out`: `Ok(Err(compiler output))` if the
+/// compiler refused it.
+fn compile(root: &Path, out: &Path, cc: &str, p: &Program) -> Result<std::result::Result<Built, String>> {
+    let binary = out.join(&p.name);
+    let flags = if p.libc { LIBC_FLAGS } else { FREESTANDING_FLAGS };
+    let result = Command::new(cc)
+        .current_dir(root)
+        .args(flags)
+        .arg(format!("-frandom-seed={}", p.name))
+        .arg("-o")
+        .arg(&binary)
+        .arg(&p.source)
+        .output()
+        .map_err(|e| format!("{cc}: {e}"))?;
+    if !result.status.success() {
+        return Ok(Err(String::from_utf8_lossy(&result.stderr).trim().to_string()));
+    }
+    Ok(Ok(Built {
+        name: p.name.clone(),
+        kind: if p.libc { "libc" } else { "freestanding" }.into(),
+        source: p.source.to_string_lossy().into_owned(),
+        source_sha256: sha256::hex(&util::read(&root.join(&p.source))?),
+        binary: p.name.clone(),
+        binary_sha256: sha256::hex(&util::read(&binary)?),
+    }))
 }
 
 #[cfg(test)]

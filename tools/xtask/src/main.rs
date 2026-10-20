@@ -39,6 +39,7 @@ mod ext4disk;
 mod font;
 mod initramfs;
 mod ktest;
+mod libsearch;
 mod net;
 mod programs;
 mod screen;

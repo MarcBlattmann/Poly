@@ -224,8 +224,16 @@ impl Target {
     /// Boot `binary` as `/test-binary`. Files go into `work`: the
     /// initramfs and the serial log.
     pub fn run(&self, test: &str, binary: &Path, work: &Path) -> Result<(Outcome, PathBuf)> {
-        let image = work.join(format!("{test}.initramfs.cpio"));
-        util::write(&image, initramfs(&util::read(binary)?)?)?;
+        let bytes = util::read(binary)?;
+        self.run_image(test, &initramfs(&bytes)?, &crate::sha256::hex(&bytes), work)
+    }
+
+    /// Boot the initramfs `image`, whose `/test-binary` has the hash
+    /// `binary_sha256` (an app test's tree, `apps::Tree::cpio`).
+    pub fn run_image(&self, test: &str, image: &[u8], binary_sha256: &str, work: &Path) -> Result<(Outcome, PathBuf)> {
+        let image_path = work.join(format!("{test}.initramfs.cpio"));
+        util::write(&image_path, image)?;
+        let image = image_path;
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.args(["-machine", "q35", "-m", "256M", "-smp", "2", "-display", "none", "-serial", "stdio", "-no-reboot"])
             .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
@@ -241,7 +249,7 @@ impl Target {
         util::write(&log_path, &log)?;
         let outcome = match parse_serial(&log, test)? {
             Some(Outcome::Ran(mut t)) => {
-                t.binary_sha256 = Some(crate::sha256::hex(&util::read(binary)?));
+                t.binary_sha256 = Some(binary_sha256.to_string());
                 if done.exit == Exit::Timeout {
                     t.exit = Exit::Timeout;
                 } else if t.exit == Exit::Unknown {

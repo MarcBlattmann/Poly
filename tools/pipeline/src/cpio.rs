@@ -4,8 +4,8 @@
 //! NUL-terminated name, the data, each padded to 4 bytes; a `TRAILER!!!`
 //! entry ends the archive.
 //!
-//! Archives are reproducible: every timestamp is 0, owners are root, inode
-//! numbers count up from 1 in the order given.
+//! Archives are reproducible: timestamps are the entries' own (0 unless
+//! set), owners are root, inode numbers count up from 1 in the order given.
 
 use crate::util::Result;
 
@@ -13,6 +13,8 @@ const MAGIC: &str = "070701";
 const TRAILER: &str = "TRAILER!!!";
 pub const S_IFDIR: u32 = 0o040000;
 pub const S_IFREG: u32 = 0o100000;
+pub const S_IFLNK: u32 = 0o120000;
+const S_IFMT: u32 = 0o170000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
@@ -20,16 +22,33 @@ pub struct Entry {
     pub name: String,
     /// File type and permission bits (`S_IFREG | 0o755`).
     pub mode: u32,
+    /// File contents, or a symbolic link's target.
     pub data: Vec<u8>,
+    /// Modification time, seconds since 1970.
+    pub mtime: u32,
 }
 
 impl Entry {
     pub fn file(name: &str, mode: u32, data: Vec<u8>) -> Entry {
-        Entry { name: name.into(), mode: S_IFREG | mode, data }
+        Entry { name: name.into(), mode: S_IFREG | mode, data, mtime: 0 }
     }
 
     pub fn dir(name: &str) -> Entry {
-        Entry { name: name.into(), mode: S_IFDIR | 0o755, data: Vec::new() }
+        Entry::dir_mode(name, 0o755)
+    }
+
+    pub fn dir_mode(name: &str, mode: u32) -> Entry {
+        Entry { name: name.into(), mode: S_IFDIR | mode, data: Vec::new(), mtime: 0 }
+    }
+
+    pub fn symlink(name: &str, target: &str) -> Entry {
+        Entry { name: name.into(), mode: S_IFLNK | 0o777, data: target.as_bytes().to_vec(), mtime: 0 }
+    }
+
+    /// The same entry with modification time `mtime`.
+    pub fn at(mut self, mtime: u32) -> Entry {
+        self.mtime = mtime;
+        self
     }
 }
 
@@ -39,9 +58,9 @@ fn pad4(out: &mut Vec<u8>) {
     }
 }
 
-fn header(out: &mut Vec<u8>, ino: u32, mode: u32, nlink: u32, size: usize, name: &str) {
+fn header(out: &mut Vec<u8>, ino: u32, mode: u32, nlink: u32, mtime: u32, size: usize, name: &str) {
     // ino mode uid gid nlink mtime filesize devmajor devminor rdevmajor rdevminor namesize check
-    let fields = [ino, mode, 0, 0, nlink, 0, size as u32, 0, 0, 0, 0, name.len() as u32 + 1, 0];
+    let fields = [ino, mode, 0, 0, nlink, mtime, size as u32, 0, 0, 0, 0, name.len() as u32 + 1, 0];
     out.extend_from_slice(MAGIC.as_bytes());
     for f in fields {
         out.extend_from_slice(format!("{f:08x}").as_bytes());
@@ -62,12 +81,12 @@ pub fn write(entries: &[Entry]) -> Result<Vec<u8>> {
         if u32::try_from(e.data.len()).is_err() {
             return Err(format!("{}: too large for cpio newc", e.name));
         }
-        let nlink = if e.mode & S_IFDIR == S_IFDIR { 2 } else { 1 };
-        header(&mut out, i as u32 + 1, e.mode, nlink, e.data.len(), &e.name);
+        let nlink = if e.mode & S_IFMT == S_IFDIR { 2 } else { 1 };
+        header(&mut out, i as u32 + 1, e.mode, nlink, e.mtime, e.data.len(), &e.name);
         out.extend_from_slice(&e.data);
         pad4(&mut out);
     }
-    header(&mut out, 0, 0, 1, 0, TRAILER);
+    header(&mut out, 0, 0, 1, 0, 0, TRAILER);
     Ok(out)
 }
 
@@ -84,7 +103,7 @@ pub fn read(mut bytes: &[u8]) -> Result<Vec<Entry>> {
             let s = std::str::from_utf8(&bytes[6 + i * 8..14 + i * 8]).map_err(|e| e.to_string())?;
             u32::from_str_radix(s, 16).map_err(|e| format!("offset {offset}: {e}"))
         };
-        let (mode, size, namesize) = (field(1)?, field(6)? as usize, field(11)? as usize);
+        let (mode, mtime, size, namesize) = (field(1)?, field(5)?, field(6)? as usize, field(11)? as usize);
         let name_end = 110 + namesize;
         let data_start = name_end.next_multiple_of(4);
         if namesize == 0 || bytes.len() < data_start + size {
@@ -94,7 +113,7 @@ pub fn read(mut bytes: &[u8]) -> Result<Vec<Entry>> {
         if name == TRAILER {
             return Ok(out);
         }
-        out.push(Entry { name, mode, data: bytes[data_start..data_start + size].to_vec() });
+        out.push(Entry { name, mode, data: bytes[data_start..data_start + size].to_vec(), mtime });
         bytes = &bytes[(data_start + size).next_multiple_of(4).min(bytes.len())..];
     }
 }
@@ -102,6 +121,7 @@ pub fn read(mut bytes: &[u8]) -> Result<Vec<Entry>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use std::process::{Command, Stdio};
 
     fn sample() -> Vec<Entry> {
@@ -109,6 +129,7 @@ mod tests {
             Entry::dir("dev"),
             Entry::file("test-binary", 0o755, b"\x7fELF hello".to_vec()),
             Entry::file("a", 0o644, vec![]),
+            Entry::symlink("l", "/a").at(1_700_000_000),
         ]
     }
 
@@ -154,7 +175,8 @@ mod tests {
         assert_eq!(std::fs::read(dir.join("test-binary")).unwrap(), b"\x7fELF hello");
         assert!(dir.join("dev").is_dir());
         let list = Command::new(&cpio).args(["-t", "--quiet", "-F"]).arg(&archive).output().unwrap();
-        assert_eq!(String::from_utf8_lossy(&list.stdout), "dev\ntest-binary\na\n");
+        assert_eq!(String::from_utf8_lossy(&list.stdout), "dev\ntest-binary\na\nl\n");
+        assert_eq!(std::fs::read_link(dir.join("l")).unwrap(), Path::new("/a"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
