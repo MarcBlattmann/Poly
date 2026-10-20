@@ -50,20 +50,23 @@ unknown command 'hlep'; did you mean 'help'?
 | Command | Shows or does |
 |---|---|
 | `help [command]` | every command with one line of help, or one command |
-| `mem` | RAM total / free / used from the frame allocator; heap bytes in use, pages held, large runs, failed allocations |
+| `mem` | RAM total / free / used from the frame allocator; heap bytes in use, pages held, large runs, failed allocations; the page cache's pages, frames, dirty pages, limit, hits, misses, pages read, written and evicted |
 | `ps` | every thread: id (slot.generation), state (running, runnable, blocked, exited) and name |
 | `lspci` | every PCI function: address, vendor:device, class name and code, BARs |
 | `disks` | every disk: description, size, interrupt vector or polled, write cache; cache buffers, dirty, hits, misses, read-ahead, write-backs, evictions; queue requests, merges, splits, interrupts, sleeps |
 | `ls [path]` | a directory (default `/`) sorted by name, or one file: mode, size (or device number), name, link target |
 | `cat <file>...` | the files' contents (at most 64 KiB each, so `cat /dev/zero` ends) |
-| `mount` | every mount: file system, mount point, options |
+| `mount [<disk> <path> [ro]]` | every mount: source (the disk for a disk mount), mount point, type, options; with arguments, mount the ext2 volume on `<disk>` (`virtio2`, `ram0`, ...) on `<path>` (made if missing) |
+| `umount <path>` | unmount the disk mounted on `<path>`: written back, synced and marked clean; refused while files there are open or mapped |
+| `write <file> [words...]` | write the words and a newline to `<file>` (created or truncated) |
+| `sync` | write back every dirty cached page and sync every disk file system and disk |
 | `uptime` | time since the clock started, ticks, threads |
 | `irq` | interrupts taken per vector with their owner (timer, serial, disk, ...), and the spurious / unhandled / 8259 / APIC error counters |
 | `cpu` | CPUID vendor, brand string, family / model / stepping, TSC rate, APIC ID, feature flags |
 | `test [filter]` | run the in-kernel tests whose name contains `filter` (all without one), with the same output as at boot |
 | `echo [words]` | print the words (quotes group words: `echo 'a  b'`) |
 | `clear` | clear the screen |
-| `reboot` | write back the disk caches and reset (ACPI reset register, then the 8042, then a triple fault). `cargo xtask` runs QEMU with `-no-reboot`, so QEMU exits |
+| `reboot` | unmount the disk file systems clean, write back the disk caches and reset (ACPI reset register, then the 8042, then a triple fault). `cargo xtask` runs QEMU with `-no-reboot`, so QEMU exits |
 
 Keys: Left / Right, Ctrl-Left / Ctrl-Right (or Alt-B / Alt-F) by word,
 Home / End (Ctrl-A / Ctrl-E), Backspace, Delete, Ctrl-K / Ctrl-U kill to the
@@ -110,7 +113,8 @@ block layer:
 pci: 00:03.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd5000 4 KiB, BAR4 mem64 pf 0xfe000000 16 KiB
 pci: 00:04.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd6000 4 KiB, BAR4 mem64 pf 0xfe004000 16 KiB
 pci: 00:05.0 1234:11e8 class 00.ff.00, BAR0 mem32 0xfea00000 1 MiB
-virtio-blk: 00:04.0: ignored, only one device is driven for now
+virtio-blk: 00:04.0: not started; comes up as virtio1 when asked for (a mount)
+virtio-blk: 00:06.0: not started; comes up as virtio2 when asked for (a mount)
 virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800
 virtio-blk: 00:03.0: 1 MiB (2048 sectors), block size 512, features 0x120000244, queue 128 entries, 126 segments per request, write cache
 virtio-blk: 00:03.0: request queue on MSI-X entry 0 -> vector 0x30; interrupt-driven, waiters sleep
@@ -637,6 +641,69 @@ tests check its contents; `cargo xtask run poly.test=fs::
 hand. Writes to `/dev/console` (fds 0-2 of every new process) appear in
 the serial log like kernel log lines; reads from it return end of file
 until the TTY layer exists.
+
+## Disk file systems and the page cache
+
+`cargo xtask run` and the boot tests attach a third virtio-blk device,
+`target/poly-test-ext2.img` (8 MiB of ext2 with 4 KiB blocks, written by
+`tools/xtask/src/ext2disk.rs` with `poly-ext2` before every boot, the same
+bytes every time), and pass `poly.mount=virtio2:/mnt poly.test.ext2`. The
+kernel brings the disk up when the mount asks for it and logs the mount:
+
+```text
+fs: page cache of up to 16190 pages (63 MiB); writeback every 5 s
+virtio-blk: 00:06.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800
+block: virtio2: virtio-blk 00:06.0, 16384 blocks of 512 bytes (8 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB); interrupt-driven (vector 0x32)
+fs: virtio2 mounted on /mnt: ext2, 2048 blocks of 4096 bytes (1901 free), 1024 inodes (1008 free), read-write
+```
+
+A volume that was not unmounted clean adds `; was not cleanly unmounted
+(run e2fsck)`. A mount that fails says why (`fs: mounting virtio2 on /mnt
+failed: not an ext2 file system`, `no such disk`, an unsupported feature).
+`virtioN` is the N-th virtio-blk function in PCI order (`lspci` lists them;
+`virtio1` is the watchdog test's spare). In the shell:
+
+```text
+poly> write /mnt/note.txt hello disk
+poly> cat /mnt/note.txt
+hello disk
+poly> sync
+1 cached pages written back; every disk synced
+poly> mount
+tmpfs on / type tmpfs (rw)
+virtio2 on /mnt type ext2 (rw)
+poly> umount /mnt
+poly> mount virtio2 /mnt ro
+```
+
+Data written to a file sits in the page cache (dirty, `mem` counts it)
+until the `writeback` thread (every 5 s; `ps` shows it), `sync`, `umount`
+or `reboot` writes it to ext2 and syncs the disk. `reboot` prints `fs:
+/mnt (virtio2) unmounted clean` for each volume. The image survives QEMU,
+so after a boot it can be checked and read on the host:
+
+```sh
+e2fsck -fn target/poly-test-ext2.img                   # check without changing anything
+debugfs -R 'ls -l /' target/poly-test-ext2.img         # list the root directory
+debugfs -R 'cat /note.txt' target/poly-test-ext2.img   # print a file
+cargo xtask run poly.test=disk_tests                   # only the disk file system tests
+```
+
+`cargo xtask` rewrites the image before the next boot; copy it first to
+keep it. The boot test `ext2_persistence_test` writes a file in one boot,
+reboots, runs `e2fsck -fn` (skipped with a message when e2fsprogs are not
+installed) and reads the file in a second boot from the same image.
+
+Write errors at writeback (a full volume) lose the page's data and are
+reported by the next `sync` (`sync: ENOSPC`) and counted as
+`write_errors` in the cache's stats; a writeback by the thread that fails
+logs `fs: writeback to /mnt (virtio2) failed: ...`. When less than 1/16 of
+RAM is free, the thread evicts clean pages and logs how many. In gdb,
+`poly_kernel::fs::cache::CACHE_FRAMES` and `poly_kernel::fs::cache::PASSES`
+are the frames the cache holds and the writeback passes made; a thread
+stuck in `poly_kernel::sync::RawMutex` waits for a volume or inode lock
+(the holder is in the block layer, or deadlocked: the order is namespace,
+inode, ext2 volume, disk cache).
 
 ## Attaching a debugger
 

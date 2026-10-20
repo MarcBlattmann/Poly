@@ -1,12 +1,12 @@
-//! The lock around a mounted file system's state.
+//! The lock inside the crate's own [`BlockIo`](crate::BlockIo)
+//! implementations, [`DeviceIo`](crate::DeviceIo) and
+//! [`CachedIo`](crate::CachedIo), which are for hosts and tests.
 //!
-//! A test-and-test-and-set spinlock, like the VFS's own. Unlike the VFS's
-//! critical sections, ext2's are held across disk I/O (one lock per mounted
-//! file system keeps every operation atomic, which is what the `FileSystem`
-//! contract asks for). That is correct with a preemptive scheduler: a thread
-//! spinning here is preempted by the tick, and the holder, sleeping in the
-//! block layer, runs again when its I/O is done. It wastes the spinner's
-//! time slice under contention; see ADR 0032 for when that changes.
+//! A test-and-test-and-set spinlock, like the VFS's own, held across the
+//! device's I/O. The volume's own lock is a type parameter of
+//! [`Ext2`](crate::Ext2) instead (a spinlock unless the user passes another
+//! with [`Ext2::mount_with_lock`](crate::Ext2::mount_with_lock)): the kernel
+//! passes its sleeping mutex there.
 
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};

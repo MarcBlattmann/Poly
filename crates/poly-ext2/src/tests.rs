@@ -330,3 +330,44 @@ fn unordered_mounts_take_no_barriers() {
         fs.unmount().unwrap();
     }
 }
+
+/// A [`RawLock`] that counts how often it was taken and checks that it is
+/// never held twice at once.
+struct CountingLock {
+    inner: RawSpinLock,
+    held: AtomicBool,
+    taken: Arc<core::sync::atomic::AtomicUsize>,
+}
+
+// SAFETY: mutual exclusion and ordering come from the inner spinlock; the
+// counters only observe.
+unsafe impl RawLock for CountingLock {
+    fn lock(&self) {
+        self.inner.lock();
+        assert!(!self.held.swap(true, Ordering::Relaxed), "the volume lock was held twice at once");
+        self.taken.fetch_add(1, Ordering::Relaxed);
+    }
+
+    unsafe fn unlock(&self) {
+        self.held.store(false, Ordering::Relaxed);
+        // SAFETY: forwarded: the caller holds the lock.
+        unsafe { self.inner.unlock() }
+    }
+}
+
+#[test]
+fn the_volume_lock_is_the_one_passed_in() {
+    let mut mem = formatted(1 << 20, 512, &k1());
+    let io = DeviceIo::new(RamDisk::new(&mut mem, 512).unwrap());
+    let taken = Arc::new(core::sync::atomic::AtomicUsize::new(0));
+    let lock = CountingLock { inner: RawSpinLock::new(), held: AtomicBool::new(false), taken: Arc::clone(&taken) };
+    let fs = Ext2::mount_with_lock(&io, clock(), MountOptions::default(), lock).unwrap();
+    let mounted = taken.load(Ordering::Relaxed);
+    assert!(mounted >= 1, "mounting takes the lock");
+    let f = fs.create(fs.root(), b"f", &REG).unwrap();
+    fs.write(f, 0, b"locked").unwrap();
+    assert_eq!(read_all(&fs, f), b"locked");
+    // create, write, getattr and read each take it at least once.
+    assert!(taken.load(Ordering::Relaxed) >= mounted + 4);
+    fs.unmount().unwrap();
+}

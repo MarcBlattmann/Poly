@@ -38,6 +38,9 @@
 //! that is never held across a call into a file system or a device, with one
 //! documented exception (the offset of an open file, see `sync.rs`). File
 //! systems do their own locking; [`FileSystem`] methods take `&self`.
+//! Those that hold a lock across disk I/O take it as a type parameter,
+//! a [`lock::RawLock`] (a spinlock by default; the kernel passes its
+//! sleeping mutex) wrapped around their data by [`lock::Lock`].
 //!
 //! # How a Linux system call maps onto this
 //!
@@ -64,6 +67,7 @@ mod errno;
 mod fdtable;
 mod file;
 mod fs;
+pub mod lock;
 mod mount;
 mod node;
 mod path;

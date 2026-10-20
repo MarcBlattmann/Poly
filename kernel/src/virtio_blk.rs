@@ -201,10 +201,16 @@ pub fn probe() -> Option<Found> {
         kprintln!("virtio-blk: no device");
         return None;
     };
-    for other in found {
-        kprintln!("virtio-blk: {}: ignored, only one device is driven for now", other.bdf());
+    for (n, other) in found.enumerate() {
+        kprintln!("virtio-blk: {}: not started; comes up as virtio{} when asked for (a mount)", other.bdf(), n + 1);
     }
     bring_up_device(dev)
+}
+
+/// The `n`-th virtio-blk function [`pci::init`] found, in PCI order
+/// (`block::open("virtio<n>")` makes it a disk).
+pub fn nth_function(n: usize) -> Option<&'static Device> {
+    pci::devices().iter().filter(|d| is_virtio_blk(d)).nth(n)
 }
 
 /// Bring up virtio-blk function `dev`: MSI-X on (masked) if it has it, the

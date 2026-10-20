@@ -41,21 +41,32 @@ pub fn report() -> Option<&'static Report> {
 
 /// Keep the initramfs's pages away from everything that takes memory
 /// before it is unpacked: returns `memory` (normalized) with them marked
-/// `Kernel`, and the page range when it lies in usable RAM, so
+/// `Kernel`, and the range of them that lies in usable RAM, so
 /// `frames::init` can hold it and [`unpack`] give it back. `None` without
 /// an initramfs, or for one in memory that is not RAM to reuse (the kernel
 /// image, firmware areas), which is then only read.
+///
+/// An archive that starts in usable RAM but runs past its end into memory
+/// the firmware reserved gives back only the pages below: QEMU puts the
+/// archive at the top of RAM, and SeaBIOS's reservation there grows with
+/// the devices it sets up (each virtio-blk disk), so with enough disks the
+/// two overlap.
 pub fn reserve(boot: &BootInfo, memory: &MemoryMap) -> (MemoryMap, Option<Region>) {
     let Some(m) = boot.initrd else { return (memory.clone(), None) };
     let (start, end) = (align_down(m.phys, PAGE_SIZE), align_up(m.end(), PAGE_SIZE));
-    let in_ram = memory.regions().iter().any(|r| r.kind == RegionKind::Usable && r.start <= start && end <= r.end);
+    let usable = memory.regions().iter().find(|r| r.kind == RegionKind::Usable && r.start <= start && start < r.end);
+    let held = usable.map(|r| Region::new(start, end.min(r.end), RegionKind::Kernel));
     let mut map = memory.clone();
     map.push(Region::new(start, end, RegionKind::Kernel)).expect("memory map full");
     kprintln!("boot: initramfs at {:#x}-{:#x} ({} KiB)", m.phys, m.end(), m.len.div_ceil(1024));
-    if !in_ram {
-        kprintln!("boot: the initramfs is not in usable RAM; its pages stay reserved");
+    match held {
+        None => kprintln!("boot: the initramfs is not in usable RAM; its pages stay reserved"),
+        Some(h) if h.end < end => {
+            kprintln!("boot: the initramfs runs into reserved memory at {:#x}; only the pages below are reused", h.end)
+        }
+        Some(_) => {}
     }
-    (map.normalized().expect("memory map full"), in_ram.then_some(Region::new(start, end, RegionKind::Kernel)))
+    (map.normalized().expect("memory map full"), held)
 }
 
 /// Unpack the boot's initramfs at `module` into `vfs` (as root, at `ctx`'s

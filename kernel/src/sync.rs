@@ -14,6 +14,9 @@
 //!   cannot be taken in an interrupt handler (that panics) or by the idle
 //!   thread. Locking a mutex the thread already holds is a deadlock and
 //!   panics.
+//! - [`RawMutex`] is a [`Mutex`] without data, the sleeping
+//!   `poly_vfs::lock::RawLock` the file system crates hold across disk
+//!   I/O (ext2's volume lock, the page cache's inode locks).
 //! - [`SetOnce`] holds a value written once during boot and read without a
 //!   lock afterwards (the local APIC, the clock).
 //!
@@ -233,6 +236,12 @@ impl<T> Mutex<T> {
     pub fn is_locked(&self) -> bool {
         self.locked.load(Ordering::Relaxed)
     }
+
+    /// The value, without locking: `&mut self` proves nobody holds it.
+    /// Usable where locking is not (a drop during reaping).
+    pub fn get_mut(&mut self) -> &mut T {
+        self.value.get_mut()
+    }
 }
 
 /// Exclusive access to a [`Mutex`]'s value; unlocks on drop. Not `Send`:
@@ -257,11 +266,56 @@ impl<T> DerefMut for MutexGuard<'_, T> {
     }
 }
 
+impl<T> Mutex<T> {
+    /// Release the mutex the calling thread holds and wake one waiter.
+    fn release(&self) {
+        self.owner.store(0, Ordering::Relaxed);
+        self.locked.store(false, Ordering::Release);
+        self.waiters.wake_one();
+    }
+}
+
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.owner.store(0, Ordering::Relaxed);
-        self.mutex.locked.store(false, Ordering::Release);
-        self.mutex.waiters.wake_one();
+        self.mutex.release();
+    }
+}
+
+/// A [`Mutex`] without data, for code that locks and unlocks by hand: the
+/// sleeping `poly_vfs::lock::RawLock` the file system crates take as their
+/// lock type. Same rules as the mutex: not in interrupt handlers, not
+/// twice from one thread (that panics), and the thread that locked it
+/// unlocks it.
+#[derive(Debug)]
+pub struct RawMutex(Mutex<()>);
+
+impl RawMutex {
+    pub const fn new() -> RawMutex {
+        RawMutex(Mutex::new(()))
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.0.is_locked()
+    }
+}
+
+impl Default for RawMutex {
+    fn default() -> RawMutex {
+        RawMutex::new()
+    }
+}
+
+// SAFETY: `lock` returns only to the thread whose `try_acquire` moved
+// `locked` from false to true (Acquire), and only `unlock` (`release`)
+// clears it (Release): one holder at a time, each seeing the last one's
+// writes. Forgetting the guard keeps the mutex held until `unlock`.
+unsafe impl poly_vfs::lock::RawLock for RawMutex {
+    fn lock(&self) {
+        core::mem::forget(self.0.lock());
+    }
+
+    unsafe fn unlock(&self) {
+        self.0.release();
     }
 }
 
@@ -443,6 +497,52 @@ kernel_test! {
 }
 
 static COUNTER: Mutex<u64> = Mutex::new(0);
+static RAW: RawMutex = RawMutex::new();
+static RAW_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Adds to RAW_COUNTER non-atomically (load, yield, store) under RAW.
+fn add_slowly_raw(_: usize) -> usize {
+    use poly_vfs::lock::RawLock;
+    for _ in 0..ADDS_PER_THREAD {
+        RAW.lock();
+        let v = RAW_COUNTER.load(Ordering::Relaxed);
+        yield_now();
+        RAW_COUNTER.store(v + 1, Ordering::Relaxed);
+        // SAFETY: this thread took RAW just above.
+        unsafe { RAW.unlock() };
+    }
+    0
+}
+
+kernel_test! {
+    /// The raw mutex the file system crates use excludes and sleeps like
+    /// the mutex itself.
+    fn raw_mutex_excludes_and_blocks_until_released() -> TestResult {
+        use poly_vfs::lock::RawLock;
+        RAW_COUNTER.store(0, Ordering::Relaxed);
+        RAW.lock();
+        let t = spawn(add_slowly_raw, 0).map_err(|_| "spawn failed")?;
+        yield_now();
+        let blocked = thread::state(t) == Some(State::Blocked);
+        // SAFETY: taken above by this thread.
+        unsafe { RAW.unlock() };
+        thread::join(t).map_err(|_| "join failed")?;
+        if !blocked {
+            return Err("a thread waiting for a held raw mutex did not block");
+        }
+        let mut ids = [None; 3];
+        for id in ids.iter_mut() {
+            *id = Some(spawn(add_slowly_raw, 0).map_err(|_| "spawn failed")?);
+        }
+        for id in ids.into_iter().flatten() {
+            thread::join(id).map_err(|_| "join failed")?;
+        }
+        if RAW_COUNTER.load(Ordering::Relaxed) != 4 * ADDS_PER_THREAD {
+            return Err("updates under the raw mutex were lost");
+        }
+        if RAW.is_locked() { Err("raw mutex still locked after every unlock") } else { Ok(()) }
+    }
+}
 const ADDS_PER_THREAD: u64 = 200;
 
 /// Adds to COUNTER non-atomically, yielding in the middle of every update:

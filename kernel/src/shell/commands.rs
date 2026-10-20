@@ -1,6 +1,7 @@
 //! The shell's commands. Each one reads kernel state through the modules'
 //! public APIs and prints it; none changes anything except `test` (which
-//! runs the kernel tests), `clear` and `reboot`.
+//! runs the kernel tests), `mount` and `umount` with arguments, `write`,
+//! `sync`, `clear` and `reboot`.
 
 use super::{Console, TEST_CONTEXT, sgr};
 use crate::arch::{self, cpu, irq};
@@ -41,7 +42,15 @@ pub static COMMANDS: &[Command] = &[
     Command { name: "disks", usage: "", help: "block devices with their cache and queue counters", run: disks },
     Command { name: "ls", usage: "[path]", help: "list a directory (default /) with modes and sizes", run: ls },
     Command { name: "cat", usage: "<file>...", help: "print files", run: cat },
-    Command { name: "mount", usage: "", help: "mounted file systems", run: mount },
+    Command {
+        name: "mount",
+        usage: "[<disk> <path> [ro]]",
+        help: "mounted file systems, or mount a disk's ext2 volume on path",
+        run: mount,
+    },
+    Command { name: "umount", usage: "<path>", help: "unmount the disk mounted on path", run: umount },
+    Command { name: "write", usage: "<file> [words...]", help: "write the words and a newline to a file", run: write },
+    Command { name: "sync", usage: "", help: "write back cached file data and disk caches", run: sync },
     Command { name: "uptime", usage: "", help: "time since boot and timer ticks", run: uptime },
     Command { name: "irq", usage: "", help: "interrupt counts per vector", run: irqs },
     Command { name: "cpu", usage: "", help: "processor vendor, model and features (CPUID)", run: cpu_info },
@@ -120,6 +129,21 @@ fn mem(con: &mut dyn Console, args: &[String]) -> CommandResult {
         h.large_pages,
         h.large_allocations,
         h.failed_allocations
+    );
+    let c = fs::cache::cache().stats();
+    out!(
+        con,
+        "cache {} pages ({}, {} frames), {} dirty, limit {}; {} hits, {} misses, {} read, {} written, {} evicted",
+        c.pages,
+        human((c.pages * PAGE_SIZE as usize) as u64),
+        fs::cache::frames(),
+        c.dirty,
+        c.limit,
+        c.hits,
+        c.misses,
+        c.filled,
+        c.written,
+        c.evicted
     );
     Ok(())
 }
@@ -316,7 +340,16 @@ fn cat(con: &mut dyn Console, args: &[String]) -> CommandResult {
 }
 
 fn mount(con: &mut dyn Console, args: &[String]) -> CommandResult {
-    no_args(args)?;
+    let read_only = match args {
+        [] => false,
+        [_, _] => false,
+        [_, _, ro] if ro == "ro" => true,
+        _ => return Err("takes no arguments, or <disk> <path> [ro]".into()),
+    };
+    if let [disk, path, ..] = args {
+        fs::disk::mount(disk, path, read_only).map_err(|e| format!("{disk} on {path}: {e} ({})", e.errno().name()))?;
+        return Ok(());
+    }
     let vfs = fs::vfs();
     let ctx = vfs.root_context().map_err(|e| format!("/: {}", e.name()))?;
     for m in vfs.mounts() {
@@ -330,8 +363,38 @@ fn mount(con: &mut dyn Console, args: &[String]) -> CommandResult {
                 opts.push_str(name);
             }
         }
-        out!(con, "{} on {at} type {} ({opts})", m.fs_name, m.fs_name);
+        out!(con, "{} on {at} type {} ({opts})", fs::disk::source_of(m.id, m.fs_name), m.fs_name);
     }
+    Ok(())
+}
+
+fn umount(_con: &mut dyn Console, args: &[String]) -> CommandResult {
+    let [path] = args else { return Err("needs one path".into()) };
+    fs::disk::unmount(path).map_err(|e| format!("{path}: {}", e.name()))
+}
+
+fn write(_con: &mut dyn Console, args: &[String]) -> CommandResult {
+    let [path, words @ ..] = args else { return Err("needs a file".into()) };
+    let mut text = words.join(" ");
+    text.push('\n');
+    let files = fs::Files::new();
+    let flags = fs::OpenFlags::WRONLY | fs::OpenFlags::CREAT | fs::OpenFlags::TRUNC;
+    let fd = files.open(path.as_bytes(), flags, 0o644).map_err(|e| format!("{path}: {}", e.name()))?;
+    let written = files.write(fd, text.as_bytes());
+    let _ = files.close(fd);
+    match written {
+        Ok(n) if n == text.len() => Ok(()),
+        Ok(n) => Err(format!("{path}: wrote {n} of {} bytes", text.len())),
+        Err(e) => Err(format!("{path}: {}", e.name())),
+    }
+}
+
+fn sync(con: &mut dyn Console, args: &[String]) -> CommandResult {
+    no_args(args)?;
+    let before = fs::cache::cache().stats();
+    fs::disk::sync_all().map_err(|e| format!("sync: {}", e.name()))?;
+    let after = fs::cache::cache().stats();
+    out!(con, "{} cached pages written back; every disk synced", after.written - before.written);
     Ok(())
 }
 

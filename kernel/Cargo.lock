@@ -41,6 +41,14 @@ name = "poly-elf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-ext2"
+version = "0.0.1"
+dependencies = [
+ "poly-block",
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-gfx"
 version = "0.0.1"
 
@@ -71,12 +79,14 @@ dependencies = [
  "poly-bochs-vbe",
  "poly-cpio",
  "poly-elf",
+ "poly-ext2",
  "poly-gfx",
  "poly-heap",
  "poly-input",
  "poly-irq",
  "poly-line",
  "poly-mem",
+ "poly-pagecache",
  "poly-paging",
  "poly-pci",
  "poly-personality-linux",
@@ -97,6 +107,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-mem"
 version = "0.0.1"
+
+[[package]]
+name = "poly-pagecache"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
 
 [[package]]
 name = "poly-paging"
