@@ -1,0 +1,139 @@
+//! The initramfs images `cargo xtask` boots the kernel with (QEMU's
+//! `-initrd`): `newc` cpio archives written with `poly-cpio`, so the host
+//! needs no `cpio`. Every byte is fixed (times, owners, inode numbers,
+//! order), so the same sources always give the same image.
+//!
+//! - The default image (`cargo xtask run`): `/etc/motd`, `/etc/hostname`,
+//!   and `/dev/console` as a Linux initramfs has it.
+//! - The test image (the self-test boots, with `poly.test.initrd`): the same
+//!   plus `/test`, a tree of every kind of entry the kernel's file system
+//!   tests check (`kernel/src/fs/tests.rs`).
+
+use poly_cpio::{Format, Writer};
+use poly_vfs::{DeviceId, FileType};
+use std::path::{Path, PathBuf};
+
+/// Kernel flag saying the boot has the test image (`fs::TEST_INITRD_FLAG`).
+pub const TEST_INITRD_FLAG: &str = "poly.test.initrd";
+
+/// Modification time of every entry (2023-11-14 22:13:20 UTC). Must match
+/// `INITRAMFS_MTIME` in `kernel/src/fs/tests.rs`.
+pub const MTIME: u32 = 1_700_000_000;
+
+/// `/etc/motd`.
+pub const MOTD: &str = "Welcome to Poly.\n\
+\n\
+This is /etc/motd from the initramfs `cargo xtask` builds (tools/xtask/src/initramfs.rs),\n\
+unpacked into the root tmpfs at boot. Try `ls /`, `ls /dev`, `cat /etc/hostname` and `mount`.\n";
+
+/// Length of `/test/big.bin`: more than nine 4 KiB pages, not a multiple.
+pub const BIG_BIN_LEN: usize = 40_000;
+
+/// Byte `i` of `/test/big.bin`. Must match `big_bin` in `kernel/src/fs/tests.rs`.
+pub fn big_bin(i: usize) -> u8 {
+    (i * 7 + i / 251) as u8
+}
+
+fn writer() -> Writer {
+    let mut w = Writer::new(Format::Newc);
+    w.mtime = MTIME;
+    w
+}
+
+fn base(w: &mut Writer) {
+    w.dir(b".", 0o755);
+    w.dir(b"etc", 0o755);
+    w.file(b"etc/motd", 0o644, MOTD.as_bytes());
+    w.file(b"etc/hostname", 0o644, b"poly\n");
+    w.dir(b"dev", 0o755);
+    w.node(b"dev/console", FileType::CharDevice, 0o600, DeviceId::new(5, 1));
+}
+
+/// The image `cargo xtask run` boots with.
+pub fn default_image() -> Vec<u8> {
+    let mut w = writer();
+    base(&mut w);
+    w.finish()
+}
+
+/// The image the self-test boots use.
+pub fn test_image() -> Vec<u8> {
+    let mut w = writer();
+    base(&mut w);
+    w.dir(b"test", 0o750);
+    w.file(b"test/hello.txt", 0o644, b"Hello from the initramfs!\n");
+    w.file(b"test/empty", 0o600, b"");
+    let big: Vec<u8> = (0..BIG_BIN_LEN).map(big_bin).collect();
+    w.file(b"test/big.bin", 0o644, &big);
+    w.file(b"test/script.sh", 0o755, b"#!/bin/sh\necho hi\n");
+    w.dir(b"test/tree", 0o755);
+    w.dir(b"test/tree/a", 0o755);
+    w.dir(b"test/tree/a/b", 0o755);
+    w.dir(b"test/tree/a/b/c", 0o700);
+    w.file(b"test/tree/a/b/c/leaf.txt", 0o444, b"leaf\n");
+    w.symlink(b"test/link", b"hello.txt");
+    w.symlink(b"test/abs-link", b"/etc/motd");
+    w.symlink(b"test/dangling", b"nowhere");
+    w.node(b"test/zero-node", FileType::CharDevice, 0o666, DeviceId::new(1, 5));
+    w.hard_link(&[b"test/hard1", b"test/hard2"], 0o640, b"linked\n");
+    w.finish()
+}
+
+/// Write `image` to `target/<name>` and return its path. Rewritten on every
+/// boot, like the test disk.
+pub fn write(root: &Path, name: &str, image: &[u8]) -> Result<PathBuf, String> {
+    let path = root.join("target").join(name);
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| format!("{}: {e}", path.display()))?;
+    std::fs::write(&path, image).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use poly_vfs::{At, Clock, Cred, OpenFlags, Stat, Timespec, Tmpfs, Vfs};
+    use std::sync::Arc;
+
+    struct Zero;
+    impl Clock for Zero {
+        fn now(&self) -> Timespec {
+            Timespec::default()
+        }
+    }
+
+    #[test]
+    fn images_are_reproducible() {
+        assert_eq!(test_image(), test_image());
+        assert_eq!(default_image(), default_image());
+        // The test image is the default one (less its trailer) and more.
+        let default = default_image();
+        assert!(test_image().starts_with(&default[..default.len() - 128]));
+    }
+
+    #[test]
+    fn the_test_image_unpacks_as_the_kernel_tests_expect() {
+        let fs = Arc::new(Tmpfs::new(Arc::new(Zero)));
+        let stats = poly_cpio::unpack_fs(&test_image(), fs.clone()).unwrap();
+        assert_eq!((stats.symlinks, stats.nodes, stats.hard_links), (3, 2, 1));
+        let vfs = Vfs::new(fs);
+        let ctx = vfs.root_context().unwrap();
+        let root = Cred::root();
+        let stat = |p: &str| -> Stat { vfs.stat(&ctx, &root, At::Cwd, p.as_bytes(), false).unwrap() };
+        let read = |p: &str| {
+            let f = vfs.open(&ctx, &root, At::Cwd, p.as_bytes(), OpenFlags::RDONLY, 0).unwrap();
+            let mut buf = vec![0; 100_000];
+            let n = f.read(&mut buf).unwrap();
+            buf.truncate(n);
+            buf
+        };
+        assert_eq!(read("/test/hello.txt"), b"Hello from the initramfs!\n");
+        assert_eq!(read("/test/abs-link"), MOTD.as_bytes());
+        assert_eq!(read("/test/big.bin"), (0..BIG_BIN_LEN).map(big_bin).collect::<Vec<_>>());
+        assert_eq!((stat("/test").perm(), stat("/test/tree/a/b/c").perm()), (0o750, 0o700));
+        assert_eq!((stat("/test/hard1").ino, stat("/test/hard1").nlink), (stat("/test/hard2").ino, 2));
+        assert_eq!(stat("/dev/console").rdev, DeviceId::new(5, 1));
+        assert_eq!(stat("/test/zero-node").rdev, DeviceId::new(1, 5));
+        assert_eq!(stat("/test/hello.txt").mtime.sec, i64::from(MTIME));
+        assert_eq!(stat("/test/script.sh").size, 18);
+    }
+}

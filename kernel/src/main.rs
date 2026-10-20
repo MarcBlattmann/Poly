@@ -12,6 +12,7 @@ mod boot_info;
 mod display;
 mod dma;
 mod frames;
+mod fs;
 mod heap;
 mod keyboard;
 mod ktest;
@@ -81,6 +82,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
         memory.total(RegionKind::Usable) >> 20,
         memory.total(RegionKind::Kernel) >> 10
     );
+    // The initramfs's pages stay out of every allocator until it is unpacked.
+    let (memory, initrd) = fs::initrd::reserve(&boot, &memory);
 
     // SAFETY: once, on the boot CPU with interrupts off, before the frame
     // allocator. `boot` copied what it needed out of the PVH start info, so
@@ -90,7 +93,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     // page tables and the GDT, before any user thread.
     unsafe { arch::user::init() };
 
-    let (memory, meta) = frames::init(&memory);
+    let (memory, meta) = frames::init(&memory, initrd);
     if let Some(f) = frames::FRAMES.lock().as_ref() {
         kprintln!(
             "frames: buddy allocator, {} frames total ({} MiB), {} free, metadata {} KiB at {:#x}",
@@ -115,6 +118,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     block::init();
     keyboard::init(&boot);
     display::init(&boot);
+    fs::init(&boot, initrd);
 
     // The shell's `test` command runs the tests again later.
     let memory: &'static MemoryMap = Box::leak(Box::new(memory));

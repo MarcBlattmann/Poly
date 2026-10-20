@@ -2,12 +2,14 @@
 //!
 //! Commands:
 //!   build [--release]   build the kernel
-//!   run   [--release] [--gdb] [--no-disk] [--headless] [kernel args...]
+//!   run   [--release] [--gdb] [--no-disk] [--headless] [--initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices attached (--no-disk: without them),
 //!                       the screen in a window when there is a desktop (--headless:
 //!                       never); --gdb waits for a debugger on localhost:1234
-//!                       (docs/DEBUGGING.md)
+//!                       (docs/DEBUGGING.md); the root file system is a small
+//!                       initramfs (--initrd=<file>: that cpio archive instead,
+//!                       --no-initrd: none)
 //!   screenshot [--release] [--out <file>] [--wait <text>] [kernel args...]
 //!                       boot headless, wait for a serial line containing <text>
 //!                       (default: the self-test's verdict), save the screen to <file>
@@ -24,6 +26,7 @@
 
 mod console;
 mod font;
+mod initramfs;
 mod ktest;
 mod screen;
 mod symbols;
@@ -221,15 +224,19 @@ fn has_desktop() -> bool {
     cfg!(any(target_os = "macos", windows)) || set("DISPLAY") || set("WAYLAND_DISPLAY")
 }
 
-/// `run [--release] [--gdb] [--no-disk] [--headless] [kernel args...]`
+/// `run [--release] [--gdb] [--no-disk] [--headless] [--initrd=<file> | --no-initrd] [kernel args...]`
 fn run(args: &[String]) -> Result {
     let (mut release, mut gdb, mut with_disk, mut window, mut cmdline) = (false, false, true, true, Vec::new());
+    // The default initramfs: an empty path until it is written below.
+    let mut initrd = Some(PathBuf::new());
     for a in args {
         match a.as_str() {
             "--release" => release = true,
             "--gdb" => gdb = true,
             "--no-disk" => with_disk = false,
             "--headless" => window = false,
+            "--no-initrd" => initrd = None,
+            flag if flag.starts_with("--initrd=") => initrd = Some(PathBuf::from(&flag["--initrd=".len()..])),
             flag if flag.starts_with("--") => return Err(format!("run: unknown option {flag}")),
             arg => cmdline.push(arg),
         }
@@ -241,9 +248,15 @@ fn run(args: &[String]) -> Result {
     if !flags.is_empty() {
         cmdline.insert(0, &flags);
     }
+    if initrd.as_deref() == Some(Path::new("")) {
+        initrd = Some(initramfs::write(&root(), "poly-initramfs.cpio", &initramfs::default_image())?);
+    }
     // `mon:stdio` shares the terminal between the serial port and QEMU's
     // monitor: Ctrl-A C switches between them, Ctrl-A X quits.
     let mut cmd = qemu(&kernel, DEFAULT_MEMORY, &cmdline.join(" "), devices, "mon:stdio");
+    if let Some(file) = &initrd {
+        cmd.arg("-initrd").arg(file);
+    }
     if window && !has_desktop() {
         eprintln!(
             "==> no desktop (DISPLAY / WAYLAND_DISPLAY unset): no window; `cargo xtask screenshot` shows the screen"
@@ -304,16 +317,22 @@ fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, devices:
     boot_with(kernel, syms, memory, append, devices, &[], None, |_| {})
 }
 
-/// [`boot`] on a given QEMU CPU model (`-cpu`), or QEMU's default one.
+/// [`boot`] on a given QEMU CPU model (`-cpu`), or QEMU's default one, with
+/// an initramfs (`-initrd`) or without.
+#[allow(clippy::too_many_arguments)]
 fn boot_on(
     cpu: Option<&str>,
+    initrd: Option<&Path>,
     kernel: &Path,
     syms: &Arc<Symbols>,
     memory: &str,
     append: &str,
     devices: Devices<'_>,
 ) -> Result<Boot> {
-    let args: Vec<String> = cpu.map(|c| vec!["-cpu".into(), c.into()]).unwrap_or_default();
+    let mut args: Vec<String> = cpu.map(|c| vec!["-cpu".into(), c.into()]).unwrap_or_default();
+    if let Some(file) = initrd {
+        args.extend(["-initrd".into(), file.display().to_string()]);
+    }
     boot_with(kernel, syms, memory, append, devices, &args, None, |_| {})
 }
 
@@ -520,10 +539,12 @@ fn boot_typing(
     syms: &Arc<Symbols>,
     append: &str,
     devices: Devices<'_>,
+    qemu_args: &[String],
     steps: &[(&str, &str)],
 ) -> Result<Boot> {
     let mut child = qemu(kernel, DEFAULT_MEMORY, append, devices, "stdio")
         .args(["-display", "none"])
+        .args(qemu_args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -592,6 +613,8 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let disk = test_disk()?;
     let devices = Devices::Test(&disk);
     let append = format!("poly.qemu_exit {SHELL_FLAG} poly.test=shell:: {}", devices.flags());
+    let initrd = initramfs::write(&root(), "poly-test-initramfs.cpio", &initramfs::test_image())?;
+    let qemu_args = ["-initrd".to_string(), initrd.display().to_string()];
     let commands = [
         "help\r",
         "uptime\r",
@@ -601,10 +624,12 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         "ech\t'over  serial'\r",
         "echo ac\x1b[Db\r",
         "test shell::\r",
+        "ls /test\r",
+        "cat /etc/motd\r",
         "reboot\r",
     ];
     let steps: Vec<_> = commands.iter().map(|&c| (console::PROMPT, c)).collect();
-    let b = boot_typing(kernel, syms, &append, devices, &steps)?;
+    let b = boot_typing(kernel, syms, &append, devices, &qemu_args, &steps)?;
     let boot_log = b.output.split(console::PROMPT).next().unwrap_or_default();
     ktest::parse(boot_log).check()?;
     let ex = console::exchanges(&b.output);
@@ -617,7 +642,7 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         ));
     }
     let out = |i: usize| ex[i].output;
-    let checks: [(&str, bool); 8] = [
+    let checks: [(&str, bool); 10] = [
         (
             "help lists the commands",
             ["uptime ", "lspci ", "reboot ", "list the commands"].iter().all(|s| out(0).contains(s)),
@@ -628,7 +653,18 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         ("Tab completes over the serial line", out(4) == "over  serial\n"),
         ("cursor keys edit over the serial line", out(5) == "abc\n"),
         ("test runs the kernel tests at runtime", out(6).contains("test result: ok.") && !out(6).contains("FAILED")),
-        ("reboot uses the ACPI reset register", out(7).contains("reboot: ACPI reset register")),
+        (
+            "ls lists the initramfs",
+            [
+                "-rw-r--r--        26 hello.txt\n",
+                "lrwxrwxrwx         9 link -> hello.txt\n",
+                "crw-rw-rw-      1, 5 zero-node\n",
+            ]
+            .iter()
+            .all(|s| out(7).contains(s)),
+        ),
+        ("cat prints /etc/motd", out(8) == initramfs::MOTD),
+        ("reboot uses the ACPI reset register", out(9).contains("reboot: ACPI reset register")),
     ];
     for (what, ok) in checks {
         if !ok {
@@ -652,14 +688,24 @@ fn boot_tests() -> Result {
     // has it without MSI-X, so the kernel must poll it. The fourth runs on
     // QEMU's most capable CPU model, whose SMEP, SMAP and XSAVE (with AVX)
     // the default one lacks, so user mode is tested with and without them.
+    // All but the fourth boot with the test initramfs (QEMU puts it at the
+    // top of RAM, so with 2 GiB above the first GiB); the fourth has none,
+    // so the kernel must come up with an empty root as well.
+    let initrd = initramfs::write(&root(), "poly-test-initramfs.cpio", &initramfs::test_image())?;
     let configs = [(DEFAULT_MEMORY, false, None), ("2G", false, None), (DEFAULT_MEMORY, true, None)];
     for (memory, polled, cpu) in configs.into_iter().chain([(DEFAULT_MEMORY, false, Some("max"))]) {
         let how = if polled { "the test disk without MSI-X (polled)" } else { "the test devices" };
         let on = cpu.map_or(String::new(), |c| format!(" on -cpu {c}"));
-        eprintln!("==> boot test: self-test passes with {memory} of RAM and {how}{on}");
+        let initrd = cpu.is_none().then_some(initrd.as_path());
+        let with = if initrd.is_some() { "the test initramfs" } else { "no initramfs" };
+        eprintln!("==> boot test: self-test passes with {memory} of RAM, {how} and {with}{on}");
         let disk = test_disk()?;
         let devices = if polled { Devices::PolledDisk(&disk) } else { Devices::Test(&disk) };
-        let b = boot_on(cpu, &kernel, &syms, memory, &format!("poly.qemu_exit {}", devices.flags()), devices)?;
+        let mut append = format!("poly.qemu_exit {}", devices.flags());
+        if initrd.is_some() {
+            append = format!("{append} {}", initramfs::TEST_INITRD_FLAG);
+        }
+        let b = boot_on(cpu, initrd, &kernel, &syms, memory, &append, devices)?;
         let report = ktest::parse(&b.output);
         if let Some(s) = report.summary {
             eprintln!("==> kernel tests: {} passed, {} failed, {} filtered out", s.passed, s.failed, s.filtered_out);
@@ -712,6 +758,19 @@ fn boot_tests() -> Result {
         if !mode_ok {
             let want = if polled { "polled" } else { "interrupt-driven through MSI-X" };
             return Err(format!("the test disk was not {want} with {memory}"));
+        }
+        // The root file system: the initramfs unpacked and its pages freed,
+        // or an empty tmpfs.
+        let root_ok = if initrd.is_some() {
+            b.output.contains("fs: initramfs unpacked into /: ")
+                && b.output
+                    .lines()
+                    .any(|l| l.starts_with("fs: initramfs: ") && l.contains(" returned to the frame allocator"))
+        } else {
+            b.output.contains("fs: no initramfs (no boot module); / is an empty tmpfs")
+        };
+        if !root_ok {
+            return Err(format!("the root file system was not set up from {with} with {memory}{on}"));
         }
     }
 

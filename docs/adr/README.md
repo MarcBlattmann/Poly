@@ -33,6 +33,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0030](0030-nt-object-manager-and-dispatcher-in-a-crate.md) | NT object manager and dispatcher logic in a host-tested crate (`poly-ntobj`) | Accepted |
 | [0029](0029-pe-loader-logic-in-poly-pe.md) | PE loader logic in a host-tested crate (`poly-pe`), working on mapped images in place | Accepted |
 | [0019](0019-display-framebuffer-and-drawing.md) | The display: Bochs VBE mode setting, a write-combining framebuffer behind a RAM back buffer, a drawing library and text grid over caller memory | Accepted |
+| [0037](0037-vfs-and-initramfs-in-the-kernel.md) | The VFS in the kernel: one global `Vfs` on a tmpfs root, the initramfs as PVH module 0 held by the frame allocator until unpacked, per-process `Files` behind sleeping mutexes, console reads at end of file | Accepted |
 
 ## Open decisions
 

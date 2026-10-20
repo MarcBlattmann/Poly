@@ -30,6 +30,13 @@ name = "poly-bochs-vbe"
 version = "0.0.1"
 
 [[package]]
+name = "poly-cpio"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-gfx"
 version = "0.0.1"
 
@@ -58,6 +65,7 @@ dependencies = [
  "poly-binfmt",
  "poly-block",
  "poly-bochs-vbe",
+ "poly-cpio",
  "poly-gfx",
  "poly-heap",
  "poly-input",
@@ -70,6 +78,7 @@ dependencies = [
  "poly-personality-nt",
  "poly-personality-xnu",
  "poly-sched",
+ "poly-vfs",
  "poly-virtio",
  "poly-virtio-blk",
 ]
@@ -113,6 +122,10 @@ dependencies = [
 
 [[package]]
 name = "poly-sched"
+version = "0.0.1"
+
+[[package]]
+name = "poly-vfs"
 version = "0.0.1"
 
 [[package]]

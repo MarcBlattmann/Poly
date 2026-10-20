@@ -91,6 +91,18 @@ pub enum FreeError {
     NotAllocated,
 }
 
+/// Why [`BuddyAllocator::allocate_range`] refused a range. The allocator is
+/// unchanged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RangeError {
+    /// An end is not page aligned, or the range is inverted.
+    Misaligned,
+    /// The range reaches outside the memory this allocator spans.
+    OutOfRange,
+    /// A frame of the range is allocated, or is not usable RAM.
+    NotFree,
+}
+
 /// A bitmap with summary levels, stored in the metadata buffer.
 #[derive(Clone, Copy, Debug)]
 struct BitTree {
@@ -163,6 +175,24 @@ impl BitTree {
 /// at a multiple of its own size when the run starts at one of the first.
 fn run_pieces(frames: u64) -> impl Iterator<Item = (u64, usize)> {
     (0..ORDERS).rev().filter(move |&k| frames & (1 << k) != 0).map(move |k| (frames & !((2 << k) - 1), k))
+}
+
+/// The blocks the frames `[f, end)` are made of, as `(frame, order)`: from
+/// the start, each time the largest block aligned to its size that fits
+/// (how [`BuddyAllocator::new`] fills usable memory).
+fn range_pieces(mut f: u64, end: u64) -> impl Iterator<Item = (u64, usize)> {
+    core::iter::from_fn(move || {
+        if f >= end {
+            return None;
+        }
+        let mut order = (f.trailing_zeros() as usize).min(MAX_ORDER);
+        while f + (1 << order) > end {
+            order -= 1;
+        }
+        let piece = (f, order);
+        f += 1 << order;
+        Some(piece)
+    })
 }
 
 /// Words for a flat bitmap of `bits` bits; at least one so every order has
@@ -408,6 +438,76 @@ impl<'a> BuddyAllocator<'a> {
             self.release((piece - self.geo.base) / PAGE_SIZE, k);
         }
         Ok(())
+    }
+
+    /// Take the frames `[start, end)` (page aligned) out of free memory,
+    /// wherever they lie in the free blocks: for memory that must stay at a
+    /// place someone else chose, such as an initramfs the boot loader put
+    /// in RAM. Every frame must be free; otherwise ([`RangeError::NotFree`])
+    /// nothing changes. Returns the number of frames taken. Give them back
+    /// with [`free_range`](Self::free_range) and the same range.
+    pub fn allocate_range(&mut self, start: u64, end: u64) -> Result<u64, RangeError> {
+        let (first, last) = self.range_frames(start, end)?;
+        // Checking every piece first is enough: taking one piece frees the
+        // rest of its block again as aligned blocks, and an aligned block
+        // that misses the piece lies inside one of those.
+        if range_pieces(first, last).any(|(f, k)| self.free_order_holding(f, k).is_none()) {
+            return Err(RangeError::NotFree);
+        }
+        for (f, k) in range_pieces(first, last) {
+            let Some(j) = self.free_order_holding(f, k) else { unreachable!("checked above") };
+            self.geo.free[j].clear(self.meta, f >> j);
+            self.free_blocks[j] -= 1;
+            // Split down to the piece, freeing the halves that miss it.
+            for i in (k..j).rev() {
+                self.geo.free[i].set(self.meta, (f >> i) ^ 1);
+                self.free_blocks[i] += 1;
+            }
+            set_bit(self.meta, self.geo.allocated[k], f >> k, true);
+            self.free -= 1 << k;
+        }
+        Ok(last - first)
+    }
+
+    /// Give back frames taken with [`allocate_range`](Self::allocate_range)
+    /// with the same range. Checks the whole range before changing anything,
+    /// so a bad free leaves the allocator as it was.
+    pub fn free_range(&mut self, start: u64, end: u64) -> Result<(), FreeError> {
+        let (first, last) = self.range_frames(start, end).map_err(|e| match e {
+            RangeError::Misaligned => FreeError::Misaligned,
+            _ => FreeError::OutOfRange,
+        })?;
+        let base = self.geo.base;
+        for (f, k) in range_pieces(first, last) {
+            self.check_allocated(base + f * PAGE_SIZE, k)?;
+        }
+        for (f, k) in range_pieces(first, last) {
+            self.release(f, k);
+        }
+        Ok(())
+    }
+
+    /// Frame indices of `[start, end)`, if it is page aligned and inside the
+    /// span.
+    fn range_frames(&self, start: u64, end: u64) -> Result<(u64, u64), RangeError> {
+        if !start.is_multiple_of(PAGE_SIZE) || !end.is_multiple_of(PAGE_SIZE) || start > end {
+            return Err(RangeError::Misaligned);
+        }
+        if start == end {
+            return Ok((0, 0));
+        }
+        let first = start.checked_sub(self.geo.base).ok_or(RangeError::OutOfRange)? / PAGE_SIZE;
+        let last = (end - self.geo.base) / PAGE_SIZE;
+        if last > self.geo.frames {
+            return Err(RangeError::OutOfRange);
+        }
+        Ok((first, last))
+    }
+
+    /// The order of the free block that holds the order-`k` block at frame
+    /// `f`, if one does.
+    fn free_order_holding(&self, f: u64, k: usize) -> Option<usize> {
+        (k..ORDERS).find(|&j| self.geo.free[j].get(self.meta, f >> j))
     }
 
     /// Frame index of the block of `order` allocated at `addr`, or why
@@ -913,6 +1013,126 @@ mod tests {
         assert!(refused > 0);
         while let Some((f, order)) = live.pop() {
             a.free(f, order).unwrap();
+        }
+        assert_eq!(a.free_frames(), total);
+        let restored: Vec<u64> = (0..=MAX_ORDER).map(|k| a.free_blocks(k)).collect();
+        assert_eq!(restored, initial);
+    }
+
+    #[test]
+    fn ranges_are_taken_where_they_lie_and_given_back() {
+        // An "initramfs" in the middle of a usable region, aligned to
+        // nothing above a page, across a 4 MiB block boundary.
+        let m = map(&[(0x10_0000, 64 * MIB, Usable)]);
+        let mut meta = meta_for(&m);
+        let mut a = BuddyAllocator::new(&m, &mut meta).unwrap();
+        let initial: Vec<u64> = (0..=MAX_ORDER).map(|k| a.free_blocks(k)).collect();
+        let total = a.free_frames();
+        let (start, end) = (2 * BLOCK - 5 * PAGE_SIZE, 3 * BLOCK + 7 * PAGE_SIZE);
+        let frames = (end - start) / PAGE_SIZE;
+        assert_eq!(a.allocate_range(start, end), Ok(frames));
+        assert_eq!(a.free_frames(), total - frames);
+        // Taking it again, or any frame of it, is refused without changes.
+        assert_eq!(a.allocate_range(start, end), Err(RangeError::NotFree));
+        assert_eq!(a.allocate_range(end - PAGE_SIZE, end), Err(RangeError::NotFree));
+        assert_eq!(a.free_frames(), total - frames);
+        // Everything else is still handed out, and nothing of the range.
+        let all = drain(&mut a);
+        assert_eq!(all.len() as u64, total - frames);
+        assert!(all.iter().all(|&f| f < start || f >= end));
+        for f in all {
+            a.free(f, 0).unwrap();
+        }
+        a.free_range(start, end).unwrap();
+        assert_eq!(a.free_range(start, end), Err(FreeError::NotAllocated));
+        assert_eq!(a.free_frames(), total);
+        let restored: Vec<u64> = (0..=MAX_ORDER).map(|k| a.free_blocks(k)).collect();
+        assert_eq!(restored, initial);
+    }
+
+    #[test]
+    fn ranges_must_be_free_aligned_and_inside() {
+        let m = map(&[(0, 8 * MIB, Usable), (4 * MIB, 4 * MIB + 0x3000, Reserved)]);
+        let mut meta = meta_for(&m);
+        let mut a = BuddyAllocator::new(&m, &mut meta).unwrap();
+        let total = a.free_frames();
+        // Not usable RAM, or partly allocated: refused, nothing changes.
+        assert_eq!(a.allocate_range(4 * MIB - 0x2000, 4 * MIB + 0x1000), Err(RangeError::NotFree));
+        let f = a.allocate(0).unwrap();
+        assert_eq!(a.allocate_range(f, f + 16 * PAGE_SIZE), Err(RangeError::NotFree));
+        assert_eq!(a.free_frames(), total - 1);
+        a.free(f, 0).unwrap();
+        assert_eq!(a.allocate_range(0x1001, 0x3000), Err(RangeError::Misaligned));
+        assert_eq!(a.allocate_range(0x3000, 0x1000), Err(RangeError::Misaligned));
+        assert_eq!(a.allocate_range(7 * MIB, 9 * MIB), Err(RangeError::OutOfRange));
+        assert_eq!(a.allocate_range(0x2000, 0x2000), Ok(0));
+        assert_eq!(a.free_frames(), total);
+        // Freeing what was never taken as a range is refused, whole.
+        let b = a.allocate(1).unwrap();
+        assert_eq!(a.free_range(b, b + 3 * PAGE_SIZE), Err(FreeError::NotAllocated));
+        assert_eq!(a.free_range(b, b + 2 * PAGE_SIZE), Ok(()), "a range of one aligned block is that block");
+        assert_eq!(a.free_range(0x1000, 0x1800), Err(FreeError::Misaligned));
+        assert_eq!(a.free_range(7 * MIB, 9 * MIB), Err(FreeError::OutOfRange));
+        assert_eq!(a.free_frames(), total);
+    }
+
+    #[test]
+    fn ranges_mix_with_blocks_and_runs() {
+        let m = map(&[(0x1000, 37 * MIB + 0x3000, Usable), (40 * MIB + 0x7000, 61 * MIB, Usable)]);
+        let mut meta = meta_for(&m);
+        let mut a = BuddyAllocator::new(&m, &mut meta).unwrap();
+        let initial: Vec<u64> = (0..=MAX_ORDER).map(|k| a.free_blocks(k)).collect();
+        let total = a.free_frames();
+        let mut rng = XorShift(0x2545_f491_4f6c_dd1d);
+        let mut ranges: Vec<(u64, u64)> = Vec::new();
+        let mut blocks: Vec<(u64, usize)> = Vec::new();
+        let mut owned: HashSet<u64> = HashSet::new();
+        for step in 0..3000 {
+            match rng.below(4) {
+                0 => {
+                    let start = (rng.below(61 * MIB / PAGE_SIZE)) * PAGE_SIZE;
+                    let end = (start + rng.below(300) * PAGE_SIZE).min(61 * MIB);
+                    let all_free = (start..end).step_by(PAGE_SIZE as usize).all(|f| !owned.contains(&f))
+                        && (start..end).step_by(PAGE_SIZE as usize).all(|f| usable_contains(&m, f, PAGE_SIZE));
+                    match a.allocate_range(start, end) {
+                        Ok(n) => {
+                            assert!(all_free, "step {step}: {start:#x}-{end:#x} taken though not free");
+                            assert_eq!(n, (end - start) / PAGE_SIZE);
+                            owned.extend((start..end).step_by(PAGE_SIZE as usize));
+                            ranges.push((start, end));
+                        }
+                        Err(e) => assert!(!all_free && e == RangeError::NotFree, "step {step}: {e:?}"),
+                    }
+                }
+                1 => {
+                    let order = (rng.below(1 << 6).trailing_zeros() as usize).min(5);
+                    if let Some(f) = a.allocate(order) {
+                        for frame in (f..f + BuddyAllocator::block_size(order)).step_by(PAGE_SIZE as usize) {
+                            assert!(owned.insert(frame), "step {step}: {frame:#x} handed out twice");
+                        }
+                        blocks.push((f, order));
+                    }
+                }
+                2 if !ranges.is_empty() => {
+                    let (s, e) = ranges.swap_remove(rng.below(ranges.len() as u64) as usize);
+                    a.free_range(s, e).unwrap();
+                    (s..e).step_by(PAGE_SIZE as usize).for_each(|f| assert!(owned.remove(&f)));
+                }
+                _ if !blocks.is_empty() => {
+                    let (f, k) = blocks.swap_remove(rng.below(blocks.len() as u64) as usize);
+                    a.free(f, k).unwrap();
+                    let size = BuddyAllocator::block_size(k);
+                    (f..f + size).step_by(PAGE_SIZE as usize).for_each(|x| assert!(owned.remove(&x)));
+                }
+                _ => {}
+            }
+            assert_eq!(a.free_frames() + owned.len() as u64, total, "step {step}");
+        }
+        for (s, e) in ranges {
+            a.free_range(s, e).unwrap();
+        }
+        for (f, k) in blocks {
+            a.free(f, k).unwrap();
         }
         assert_eq!(a.free_frames(), total);
         let restored: Vec<u64> = (0..=MAX_ORDER).map(|k| a.free_blocks(k)).collect();

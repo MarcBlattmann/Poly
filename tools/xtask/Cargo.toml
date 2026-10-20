@@ -6,7 +6,9 @@ license.workspace = true
 publish = false
 
 [dependencies]
+poly-cpio.workspace = true
 poly-gfx.workspace = true
+poly-vfs.workspace = true
 rustc-demangle.workspace = true
 
 [lints]

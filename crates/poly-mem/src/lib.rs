@@ -13,7 +13,7 @@
 mod buddy;
 mod direct_map;
 
-pub use buddy::{BuddyAllocator, FreeError, MAX_ORDER, MetadataTooSmall};
+pub use buddy::{BuddyAllocator, FreeError, MAX_ORDER, MetadataTooSmall, RangeError};
 pub use direct_map::DirectMap;
 
 pub const PAGE_SIZE: u64 = 4096;
@@ -158,6 +158,25 @@ impl MemoryMap {
         Ok(out)
     }
 
+    /// A normalized copy in which `[start, end)` is `kind`, whatever it was
+    /// before. Unlike [`push`](Self::push) and [`normalized`](Self::normalized),
+    /// where the most restrictive type wins, this can make memory less
+    /// restricted: the kernel uses it to hand memory it held back (an
+    /// initramfs the boot loader put in RAM) to the frame allocator.
+    pub fn with_kind(&self, start: u64, end: u64, kind: RegionKind) -> Result<MemoryMap, Full> {
+        let mut out = MemoryMap::new();
+        for r in self.regions() {
+            if r.end <= start || r.start >= end {
+                out.push(*r)?;
+                continue;
+            }
+            out.push(Region::new(r.start, start, r.kind))?;
+            out.push(Region::new(end, r.end, r.kind))?;
+        }
+        out.push(Region::new(start, end, kind))?;
+        out.normalized()
+    }
+
     /// Lowest page-aligned address where `len` bytes (rounded up to whole
     /// pages) fit inside one usable region and end at or below `limit`.
     pub fn find_usable(&self, len: u64, limit: u64) -> Option<u64> {
@@ -240,6 +259,30 @@ mod tests {
     fn sorts_and_merges() {
         let n = map(&[(0x2000, 0x3000, Usable), (0x1000, 0x2000, Usable)]).normalized().unwrap();
         assert_eq!(n.regions(), &[Region::new(0x1000, 0x3000, Usable)]);
+    }
+
+    #[test]
+    fn with_kind_overrides_a_range() {
+        let m =
+            map(&[(0, 0x10000, Usable), (0x4000, 0x6000, Kernel), (0x10000, 0x20000, Reserved)]).normalized().unwrap();
+        // Held memory goes back to usable and merges with its neighbours.
+        let n = m.with_kind(0x4000, 0x6000, Usable).unwrap();
+        assert_eq!(n.regions(), &[Region::new(0, 0x10000, Usable), Region::new(0x10000, 0x20000, Reserved)]);
+        // A range across two regions splits both; a less restrictive type wins.
+        let n = m.with_kind(0x5000, 0x12000, Usable).unwrap();
+        assert_eq!(
+            n.regions(),
+            &[
+                Region::new(0, 0x4000, Usable),
+                Region::new(0x4000, 0x5000, Kernel),
+                Region::new(0x5000, 0x12000, Usable),
+                Region::new(0x12000, 0x20000, Reserved),
+            ]
+        );
+        // Outside every region it adds one; an empty range changes nothing.
+        let n = m.with_kind(0x30000, 0x31000, Kernel).unwrap();
+        assert_eq!(n.regions().last(), Some(&Region::new(0x30000, 0x31000, Kernel)));
+        assert_eq!(m.with_kind(0x5000, 0x5000, Bad).unwrap().regions(), m.regions());
     }
 
     #[test]
