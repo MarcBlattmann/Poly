@@ -1,0 +1,14 @@
+[package]
+name = "poly-personality-linux"
+description = "Linux personality: x86-64 Linux syscall ABI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-abi.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,20 @@
+# Architecture decision records
+
+One file per decision: context, decision, consequences. Never rewrite an
+accepted ADR. Supersede it with a new one and link both ways.
+
+| # | Decision | Status |
+|---|---|---|
+| [0001](0001-multiple-personalities-one-kernel.md) | Three personalities on one Rust kernel, chosen by binary format | Accepted |
+| [0002](0002-pvh-boot-first.md) | Boot via PVH under QEMU first; UEFI later | Accepted |
+| [0003](0003-workspace-layout.md) | Host-testable crates + thin kernel, kernel in its own workspace | Accepted |
+| [0004](0004-coverage-map-format.md) | `coverage.json` format, seeded from public name lists | Accepted |
+| [0005](0005-license.md) | MIT OR Apache-2.0 | Proposed |
+
+## Open decisions (from the brief)
+
+- **Global menu bar vs. per-window menus.** Needed before compositor work (roadmap step 4).
+- **Window frames:** native per app (macOS traffic lights, Windows frames) or one neutral frame.
+- **MSVC / DirectX redistributables:** 62% of Windows entries are versioned C++
+  runtime DLLs (`msvcp*`, `msvcr*`, `vcruntime*`) that apps normally ship
+  themselves. Decide whether we reimplement them or run the app's own copies.

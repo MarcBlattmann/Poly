@@ -1,0 +1,11 @@
+[package]
+name = "poly-abi"
+description = "Types shared by the kernel core and the personalities: personality IDs and the syscall boundary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

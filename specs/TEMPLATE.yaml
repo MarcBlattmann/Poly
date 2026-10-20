@@ -1,0 +1,25 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/kernel32.dll/FindFirstFileW   # must match coverage.json
+oracle:                                        # where the behaviour was observed
+  os: "Windows 11 23H2 (build 22631.xxxx)"
+  machine: "VM, NTFS volume"
+  observed_by: spec-agent-<id>
+  date: YYYY-MM-DD
+summary: >
+  One paragraph: what the call does, in terms an implementer can act on.
+returns:
+  order: "NTFS: case-insensitive name order; FAT32: creation order"
+  includes: [".", ".."]
+errors:
+  path_not_found: ERROR_PATH_NOT_FOUND (3)
+  empty_dir: returns "." and "..", then ERROR_NO_MORE_FILES (18)
+side_effects: none
+threading: handle not safe to share across threads
+ordering: []          # observable ordering of events/callbacks, if any
+timing:               # envelopes, never exact values
+  typical: "< 50µs per entry, local SSD"
+  guarantees: none
+tests:
+  visible: 0          # count in <symbol>.tests/
+  held_out: 0         # count kept by the diff runner

@@ -1,0 +1,14 @@
+[package]
+name = "poly-binfmt"
+description = "Executable format detection (ELF / PE / Mach-O) used to pick a process personality"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+poly-abi.workspace = true

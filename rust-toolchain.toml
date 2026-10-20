@@ -1,0 +1,7 @@
+# Pinned so every agent, CI run and developer builds with the same compiler.
+# Bump deliberately, in its own commit.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy", "rust-src", "llvm-tools"]
+targets = ["x86_64-unknown-none"]
+profile = "minimal"

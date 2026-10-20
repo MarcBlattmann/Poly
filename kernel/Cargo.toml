@@ -1,0 +1,39 @@
+# The kernel is its own workspace because it only builds for the bare-metal
+# target. Build, run and test it with `cargo xtask` from the repo root.
+[workspace]
+
+[package]
+name = "poly-kernel"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[[bin]]
+name = "poly-kernel"
+test = false
+bench = false
+
+# No third-party crates in the kernel: every line that runs in ring 0 is ours
+# or comes from the shared crates in this repo.
+[dependencies]
+poly-abi = { path = "../crates/poly-abi" }
+poly-binfmt = { path = "../crates/poly-binfmt" }
+poly-mem = { path = "../crates/poly-mem" }
+poly-personality-linux = { path = "../personalities/linux" }
+poly-personality-nt = { path = "../personalities/nt" }
+poly-personality-xnu = { path = "../personalities/xnu" }
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+
+[profile.release]
+panic = "abort"
+debug = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "warn"

@@ -1,0 +1,5 @@
+/target
+/kernel/target
+/.vendor
+*.img
+*.iso
