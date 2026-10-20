@@ -127,6 +127,12 @@ pub fn render(c: &Coverage, r: &Roadmap) -> String {
 
     let _ = writeln!(out, "<a href=\"docs/ROADMAP.md\">\n{}\n</a>\n", picture("roadmap", "Roadmap progress by phase"));
     let _ = writeln!(out, "{}\n", picture("coverage", "API coverage map per OS"));
+    out.push_str(
+        "<sub>Block size = amount of work, green = done. The map counts callable functions: kernel calls for all \
+         three OSes, plus the system libraries we rewrite for Windows and macOS (Linux's run unchanged). Interfaces \
+         behind single calls, such as <code>ioctl</code> codes, <code>/proc</code> files or <code>sysctl</code> \
+         names, are tracked as roadmap milestones and added here when app traces show they are used.</sub>\n\n",
+    );
 
     // Numbers, folded away.
     out.push_str("<details>\n<summary>Coverage numbers</summary>\n\n");

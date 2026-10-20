@@ -84,6 +84,8 @@ kernel, and all three share one core. More detail in
   <img alt="API coverage map per OS" src="docs/progress/coverage-light.svg" width="100%">
 </picture>
 
+<sub>Block size = amount of work, green = done. The map counts callable functions: kernel calls for all three OSes, plus the system libraries we rewrite for Windows and macOS (Linux's run unchanged). Interfaces behind single calls, such as <code>ioctl</code> codes, <code>/proc</code> files or <code>sysctl</code> names, are tracked as roadmap milestones and added here when app traces show they are used.</sub>
+
 <details>
 <summary>Coverage numbers</summary>
 
