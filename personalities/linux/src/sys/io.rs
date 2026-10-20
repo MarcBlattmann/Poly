@@ -109,6 +109,13 @@ pub fn fstat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let request = a.uint(1);
+    // SIOCOUTQ on a socket (ADR 0048): the same number as the terminal
+    // request TIOCOUTQ, so it is answered before the terminal check.
+    if request == crate::net::abi::SIOCOUTQ
+        && let Some(r) = crate::sys::socket::ioctl_outq(k, fd, a.ptr(2))
+    {
+        return r;
+    }
     let st = k.fstat(fd)?;
     if ioctl::is_terminal_request(request) && st.file_type() != mode::S_IFCHR {
         return Err(Errno::ENOTTY);

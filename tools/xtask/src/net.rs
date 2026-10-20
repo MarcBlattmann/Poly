@@ -19,9 +19,17 @@
 //!
 //! and xtask checks that the echo servers really saw the traffic. One boot
 //! is interrupt-driven (MSI-X), one polled (`vectors=0`). A third types
-//! `ifconfig`, `ping` and `nc` into the shell.
+//! `ifconfig`, `ping` and `nc` into the shell. A fourth runs
+//! `/bin/socket-test` as the first process with `/etc/socket-test.conf`
+//! naming the echo servers: a user program connects over TCP through the
+//! socket system calls, pushes 256 KiB through the echo server under
+//! `poll`, sends UDP datagrams, and finds 10.0.2.15 in a netlink dump
+//! (ADR 0048).
 
-use super::{Devices, PASS_MARKER, QEMU_SUCCESS, Result, SHELL_FLAG, Symbols, boot_typing, boot_with, console, ktest};
+use super::{
+    Devices, PASS_MARKER, QEMU_SUCCESS, Result, SHELL_FLAG, Symbols, boot_typing, boot_with, console, initramfs, ktest,
+    programs, root,
+};
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream, UdpSocket};
 use std::path::Path;
@@ -262,10 +270,47 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>, echo: &EchoServers) -> Result 
     Ok(())
 }
 
+/// `/bin/socket-test` as the first process, talking to the host's echo
+/// servers through the socket system calls.
+fn socket_program_test(kernel: &Path, syms: &Arc<Symbols>, echo: &EchoServers) -> Result {
+    eprintln!("==> boot test: a user program uses TCP, UDP and netlink sockets on virtio-net (/bin/socket-test)");
+    let elf = programs::socket_test()?;
+    let conf = format!("10.0.2.2 {}\n", echo.port);
+    let tree = initramfs::Tree {
+        files: vec![("etc/socket-test.conf".into(), 0o644, conf.into_bytes())],
+        symlinks: Vec::new(),
+    };
+    let image = initramfs::programs_image_with(&[("socket-test", &elf)], &tree);
+    let image = initramfs::write(&root(), "poly-socket-test-initramfs.cpio", &image)?;
+    let (tcp_before, udp_before) = (echo.tcp_bytes.load(Ordering::Relaxed), echo.udp_datagrams.load(Ordering::Relaxed));
+    let mut args = nic_args(None, false);
+    args.extend(["-initrd".into(), image.display().to_string()]);
+    let append = "poly.qemu_exit poly.net=qemu poly.init=/bin/socket-test";
+    let b = boot_with(kernel, syms, super::DEFAULT_MEMORY, append, Devices::None, &args, None, |_| {})?;
+    if let Some(line) = b.output.lines().find(|l| l.contains("socket-test: FAIL") || l.contains(" not implemented")) {
+        return Err(format!("/bin/socket-test on the NIC: {line}"));
+    }
+    let ok = b.status == Some(QEMU_SUCCESS)
+        && b.output.contains("socket-test: remote ok")
+        && b.output.contains(programs::SOCKET_TEST_OUTPUT.trim_end())
+        && b.output.contains("POLY-EXIT: pid=1 code=0");
+    if !ok {
+        return Err(format!("/bin/socket-test on the NIC did not pass (QEMU status {:?})", b.status));
+    }
+    let tcp = echo.tcp_bytes.load(Ordering::Relaxed) - tcp_before;
+    let udp = echo.udp_datagrams.load(Ordering::Relaxed) - udp_before;
+    if tcp < 256 * 1024 || udp < 3 {
+        return Err(format!("the host's echo servers saw {tcp} TCP bytes and {udp} datagrams from /bin/socket-test"));
+    }
+    eprintln!("==> the host echoed {tcp} TCP bytes and {udp} UDP datagrams for /bin/socket-test");
+    Ok(())
+}
+
 /// All network boot tests.
 pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let echo = EchoServers::start()?;
     traffic_test(kernel, syms, &echo, false)?;
     traffic_test(kernel, syms, &echo, true)?;
-    shell_test(kernel, syms, &echo)
+    shell_test(kernel, syms, &echo)?;
+    socket_program_test(kernel, syms, &echo)
 }

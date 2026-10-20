@@ -196,6 +196,9 @@ pub(crate) struct DgramSocket {
     pub rd_shut: bool,
     pub wr_shut: bool,
     pub rx_dropped: u64,
+    /// Per-socket IP options (`IP_TTL`, `IP_TOS`); `None`: the stack's TTL.
+    pub ttl: Option<u8>,
+    pub tos: u8,
 }
 
 impl DgramSocket {
@@ -215,6 +218,8 @@ impl DgramSocket {
             rd_shut: false,
             wr_shut: false,
             rx_dropped: 0,
+            ttl: None,
+            tos: 0,
         }
     }
 

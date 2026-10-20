@@ -170,6 +170,8 @@ pub struct FakeKernel {
     pub tasks: super::task::Tasks,
     /// Pipes, waits and event files (`tests/fileio.rs`).
     pub io: super::fileio::FakeIo,
+    /// Sockets (`tests/socket.rs`; `None`: `ENOSYS`).
+    pub net: Option<super::socket::FakeNet>,
 }
 
 impl Default for FakeKernel {
@@ -231,6 +233,7 @@ impl FakeKernel {
             timer_wakeups: Vec::new(),
             tasks: Default::default(),
             io: Default::default(),
+            net: None,
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -865,6 +868,10 @@ impl LinuxKernel for FakeKernel {
             Some(fs) => Some(&mut **fs),
             None => None,
         }
+    }
+
+    fn net(&mut self) -> Option<&mut dyn crate::net::LinuxNet> {
+        self.net.as_mut().map(|n| n as &mut dyn crate::net::LinuxNet)
     }
 
     fn system_info(&mut self) -> Result<crate::fs::SysInfo, Errno> {
