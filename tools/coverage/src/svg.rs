@@ -438,18 +438,20 @@ fn draw_group(s: &mut Svg, g: &Group, (x, y, w, h): (f64, f64, f64, f64), t: &Th
     s.raw("</g>");
 }
 
-/// Layout: Windows (the largest surface) gets a full-width row; macOS
-/// (two thirds) and Linux (one third) share the row below.
+/// Layout follows the data: the OS with the most entries gets a full-width
+/// row, the second two thirds of the row below, the smallest one third.
 pub fn coverage_map(c: &Coverage, t: &Theme) -> String {
     const W: f64 = 900.0;
     const PAD: f64 = 15.0;
     const GAP: f64 = 15.0;
     let inner = W - 2.0 * PAD - GAP;
-    let (mac_w, linux_w) = (inner * 2.0 / 3.0, inner / 3.0);
+    let mut order = Os::ALL;
+    order.sort_by_key(|os| std::cmp::Reverse(c.entries.iter().filter(|e| e.os == *os).count()));
+    let (wide, second_w, third_w) = (W - 2.0 * PAD, inner * 2.0 / 3.0, inner / 3.0);
     let layout = [
-        (Os::Windows, PAD, 46.0, W - 2.0 * PAD, 330.0, 150),
-        (Os::Macos, PAD, 430.0, mac_w, 220.0, 80),
-        (Os::Linux, PAD + mac_w + GAP, 430.0, linux_w, 220.0, 20),
+        (order[0], PAD, 46.0, wide, 330.0, 300),
+        (order[1], PAD, 430.0, second_w, 220.0, 200),
+        (order[2], PAD + second_w + GAP, 430.0, third_w, 220.0, 60),
     ];
     let h = 430.0 + PANEL_HEAD + 220.0 + 36.0;
 
