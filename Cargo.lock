@@ -46,6 +46,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-cpio"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-heap"
 version = "0.0.1"
 
@@ -91,6 +98,10 @@ dependencies = [
 
 [[package]]
 name = "poly-sched"
+version = "0.0.1"
+
+[[package]]
+name = "poly-vfs"
 version = "0.0.1"
 
 [[package]]
