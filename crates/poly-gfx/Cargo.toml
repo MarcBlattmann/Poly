@@ -1,0 +1,11 @@
+[package]
+name = "poly-gfx"
+description = "Drawing on linear framebuffers: pixels, rectangles, bitmap fonts, and a text grid with ANSI escapes and dirty tracking"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

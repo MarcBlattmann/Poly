@@ -11,6 +11,8 @@ members = [
     "crates/poly-backtrace",
     "crates/poly-binfmt",
     "crates/poly-block",
+    "crates/poly-bochs-vbe",
+    "crates/poly-gfx",
     "crates/poly-heap",
     "crates/poly-irq",
     "crates/poly-mem",
@@ -40,6 +42,8 @@ poly-acpi = { path = "crates/poly-acpi" }
 poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
+poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
+poly-gfx = { path = "crates/poly-gfx" }
 poly-heap = { path = "crates/poly-heap" }
 poly-irq = { path = "crates/poly-irq" }
 poly-mem = { path = "crates/poly-mem" }

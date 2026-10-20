@@ -1,7 +1,9 @@
 # 0010: Kernel address space: a direct map of the memory map's regions, W^X, guard pages
 
 **Status:** Accepted. Amends [0007](0007-buddy-allocator-out-of-band-metadata.md):
-the buddy allocator's metadata may now live in any usable RAM.
+the buddy allocator's metadata may now live in any usable RAM. Amended by
+[0019](0019-display-framebuffer-and-drawing.md): PAT entry 1 is
+write-combining, for framebuffer mappings (`map_mmio_wc`).
 
 ## Context
 

@@ -9,6 +9,7 @@ mod acpi;
 mod arch;
 mod block;
 mod boot_info;
+mod display;
 mod dma;
 mod frames;
 mod heap;
@@ -104,6 +105,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     kprintln!("irq: interrupts enabled");
     pci::init();
     block::init();
+    display::init(&boot);
 
     let ok = selftest::run(&boot, &memory);
     heap::log_stats();

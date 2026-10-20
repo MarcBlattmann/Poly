@@ -7,7 +7,8 @@ backtrace, and a debugger attached to QEMU.
 
 Everything the kernel prints goes to COM1, which `cargo xtask run` connects
 to your terminal, shared with QEMU's monitor: Ctrl-A C switches between the
-two, Ctrl-A X quits. Anything after the command is passed on as the kernel
+two, Ctrl-A X quits. The screen opens in QEMU's own window (see "The
+screen" below). Anything after the command is passed on as the kernel
 command line:
 
 ```sh
@@ -125,6 +126,75 @@ seconds and then fails with `DeviceFailed`, the device stopped answering or
 its interrupts do not arrive: check the MSI-X entry and trace the
 deliveries as above. `VirtioBlk::set_drop_notifications(true)` loses
 requests on purpose (the watchdog test uses it on the spare device).
+
+## The screen
+
+`cargo xtask run` shows the guest's screen in a QEMU window when there is a
+desktop: always on macOS, on Linux when `DISPLAY` or `WAYLAND_DISPLAY` is
+set. Serial output and the monitor stay in the terminal. Without a desktop,
+or with `cargo xtask run --headless`, there is no window (`-display none`);
+the display is still there, and screenshots still work.
+
+The boot log says what the display driver did:
+
+```text
+mm: direct map at 0xffff800000000000: ...; write-combining (PAT): yes
+pci: 00:01.0 1234:1111 class 03.00.00, BAR0 mem32 pf 0xfd000000 16 MiB, BAR2 mem32 0xfebd4000 4 KiB
+display: 00:01.0 1280x800x32, 5120 bytes per line; framebuffer 0xfd000000 (16 MiB) mapped write-combining; registers through MMIO (BAR 2)
+```
+
+```sh
+cargo xtask run poly.display=1920x1080   # another mode (default 1280x800; 32 bits per pixel)
+cargo xtask run poly.display=off         # leave the VGA alone (text mode)
+cargo xtask run poly.test=display        # only the display tests
+```
+
+A mode the device cannot show (larger than its maximum or its 16 MiB of
+video memory) falls back to the default with a line saying why, e.g.
+`display: 00:01.0: 9000x9000x32: the mode needs 324000000 bytes but the
+framebuffer has 16777216; trying 1280x800x32`. Without the device (QEMU's
+`-vga none`) the log says `display: no QEMU standard VGA or
+bochs-display`. QEMU's `-device VGA,vgamem_mb=32` gives more video memory.
+
+**Screenshots.** `cargo xtask screenshot` boots headless (with the test
+devices, like `run`), waits for a line on the serial port, saves what the
+screen shows and quits QEMU:
+
+```sh
+cargo xtask screenshot                                     # after the self-test's verdict, to target/poly-screen.png
+cargo xtask screenshot --out shot.ppm poly.display=800x600 # PPM instead of PNG, another mode
+cargo xtask screenshot --wait "idle"                       # after any line containing "idle"
+```
+
+It talks to QEMU's QMP socket (`screendump`); from the monitor of a running
+QEMU (Ctrl-A C under `cargo xtask run`) the same is `screendump
+/tmp/screen.ppm` or `screendump /tmp/screen.png -f png`. macOS Preview opens
+both formats.
+
+The boot test `screenshot_test` boots at 1024x768 with only the display
+tests, takes a screenshot (`target/poly-screen-test.ppm`) and compares it
+pixel for pixel with the boot screen drawn on the host by the same code
+(`poly_gfx::boot_screen`). On a mismatch it says how many pixels differ and
+where, and writes what it expected to `target/poly-screen-expected.ppm`, to
+open side by side. A display test that drew on the screen and did not put
+it back shows up here.
+
+**Looking at the device.** The Bochs VBE registers are 16-bit words at
+BAR 2 + 0x500 (`poly_bochs_vbe::index` has the list), so from the monitor:
+
+```text
+(qemu) xp /11hx 0xfebd4500
+00000000febd4500: 0xb0c5 0x0500 0x0320 0x0020 0x0041 0x0000 0x0500 0x0ccc
+00000000febd4510: 0x0000 0x0000 0x0100
+```
+
+That is the ID (0xb0c5), 1280 x 800 at 32 bits, enabled with the linear
+framebuffer (0x41), line length 1280, 3276 lines of video memory, offset
+(0, 0) and 16 MiB (0x100 × 64 KiB). A black screen with ENABLE at 0x41
+means nothing was flushed; ENABLE at 0 means the mode was never set or was
+turned off. `xp /4wx 0xfd000000` reads the top-left pixels (0x00RRGGBB; the boot screen's
+background is 0x0015171c).
+`info mtree` shows where `vga.vram` and the `vga.mmio` registers sit.
 
 ## In-kernel tests
 

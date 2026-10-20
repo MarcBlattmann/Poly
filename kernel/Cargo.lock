@@ -26,6 +26,14 @@ name = "poly-block"
 version = "0.0.1"
 
 [[package]]
+name = "poly-bochs-vbe"
+version = "0.0.1"
+
+[[package]]
+name = "poly-gfx"
+version = "0.0.1"
+
+[[package]]
 name = "poly-heap"
 version = "0.0.1"
 
@@ -45,6 +53,8 @@ dependencies = [
  "poly-backtrace",
  "poly-binfmt",
  "poly-block",
+ "poly-bochs-vbe",
+ "poly-gfx",
  "poly-heap",
  "poly-irq",
  "poly-mem",

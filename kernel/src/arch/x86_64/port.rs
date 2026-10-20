@@ -26,6 +26,22 @@ pub unsafe fn inb(port: u16) -> u8 {
 }
 
 /// # Safety
+/// Writing to an I/O port can have arbitrary hardware side effects.
+pub unsafe fn outw(port: u16, value: u16) {
+    // SAFETY: caller guarantees the port write is valid.
+    unsafe { asm!("out dx, ax", in("dx") port, in("ax") value, options(nomem, nostack, preserves_flags)) }
+}
+
+/// # Safety
+/// Reading some I/O ports has side effects (e.g. acknowledging data).
+pub unsafe fn inw(port: u16) -> u16 {
+    let value: u16;
+    // SAFETY: caller guarantees the port read is valid.
+    unsafe { asm!("in ax, dx", in("dx") port, out("ax") value, options(nomem, nostack, preserves_flags)) }
+    value
+}
+
+/// # Safety
 /// Reading some I/O ports has side effects (e.g. acknowledging data).
 pub unsafe fn inl(port: u16) -> u32 {
     let value: u32;

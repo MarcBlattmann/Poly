@@ -1,6 +1,7 @@
 //! Kernel page tables: a direct map of physical memory, the kernel image with
 //! per-section permissions (W^X), guard pages below the kernel stacks, and
-//! uncached mappings of device memory.
+//! uncached (or, for framebuffers, write-combining) mappings of device
+//! memory.
 //!
 //! The page-table editing itself is `poly-paging` (host-tested); this module
 //! decides what to map and drives the CPU.
@@ -11,7 +12,7 @@
 //! |---|---|---|
 //! | `0x0000_0000_0000_0000` – `0x0000_7fff_ffff_ffff` | 128 TiB | lower half: nothing mapped (for user space later) |
 //! | [`DIRECT_MAP_BASE`] + phys | up to 64 TiB | direct map: every region of the memory map, read-write, no-execute |
-//! | [`MMIO_BASE`] | 512 GiB | device memory from [`map_mmio`]: uncached, no-execute |
+//! | [`MMIO_BASE`] | 512 GiB | device memory from [`map_mmio`] (uncached) and [`map_mmio_wc`] (write-combining), no-execute |
 //! | [`KERNEL_VMA`] + phys | image | kernel image, per-section permissions (see `kernel/linker.ld`) |
 //!
 //! Every kernel mapping is global (CR4.PGE, when the CPU has it), so it will
@@ -40,6 +41,17 @@
 //! [`FRAMES`]. The boot stub's own four tables stay where they are, in the
 //! kernel image.
 //!
+//! # Memory types
+//!
+//! A page's PAT, PCD and PWT bits select one of eight memory types in the
+//! IA32_PAT MSR (SDM Vol. 3A §11.12.3). [`init`] keeps the power-on table
+//! except for entry 1 (PWT alone), which it changes from write-through to
+//! write-combining before any mapping uses it (ADR 0019). So: no bits is
+//! write-back (RAM), PCD | PWT is uncached (registers, [`map_mmio`]), PWT
+//! alone is write-combining (framebuffers, [`map_mmio_wc`]). Every CPU must
+//! load the same table; application processors will copy it when they
+//! start.
+//!
 //! # Locking
 //!
 //! The kernel page tables are behind a spinlock; take it before [`FRAMES`].
@@ -67,9 +79,21 @@ pub const MMIO_BASE: u64 = 0xffff_c000_0000_0000;
 /// Size of the MMIO window: one PML4 slot.
 pub const MMIO_SIZE: u64 = 512 << 30;
 
-/// PCD | PWT: uncached (UC) with the power-on PAT (SDM Vol. 3A §11.12.3,
-/// Table 11-11: PAT entry 3 is UC). The kernel never reprograms the PAT.
+/// PCD | PWT: uncached (UC): PAT entry 3, which is UC at power-on (SDM
+/// Vol. 3A §11.12.3, Table 11-11) and which [`init`] leaves alone.
 const UNCACHED: PageFlags = PageFlags::CACHE_DISABLE.union(PageFlags::WRITE_THROUGH);
+
+/// PWT alone: PAT entry 1, write-through at power-on, write-combining (WC)
+/// once [`init`] has programmed [`PAT`].
+const WRITE_COMBINING: PageFlags = PageFlags::WRITE_THROUGH;
+
+/// The IA32_PAT value [`init`] loads: the power-on table (entries 0-7 WB,
+/// WT, UC-, UC, WB, WT, UC-, UC; SDM Vol. 3A Table 11-12) with entry 1 set
+/// to WC (memory type 0x01, Table 11-10).
+pub const PAT: u64 = 0x0007_0406_0007_0106;
+
+/// Whether IA32_PAT holds [`PAT`], so [`WRITE_COMBINING`] means WC.
+static WC: AtomicBool = AtomicBool::new(false);
 
 unsafe extern "C" {
     static __text_start: u8;
@@ -331,6 +355,15 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
         unsafe { cpu::write_msr(cpu::MSR_EFER, cpu::read_msr(cpu::MSR_EFER) | cpu::EFER_NXE) };
     }
     NX.store(features.nx, Ordering::Relaxed);
+    if features.pat {
+        // SAFETY: CPUID says the CPU has IA32_PAT. Only entry 1 changes, and
+        // nothing maps memory with it yet: the boot tables set none of PAT,
+        // PCD and PWT, and the kernel tables are built below. So no cache
+        // line or TLB entry has the old type, and the CR3 load below flushes
+        // the TLB anyway (SDM Vol. 3A §11.12.4).
+        unsafe { cpu::write_msr(cpu::MSR_PAT, PAT) };
+        WC.store(true, Ordering::Relaxed);
+    }
     let largest = if features.page_1g { PageSize::Size1G } else { PageSize::Size2M };
 
     let direct = DirectMap::from_map(memory, DIRECT_MAP_SIZE);
@@ -366,11 +399,12 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     let yes_no = |b: bool| if b { "yes" } else { "no" };
     kprintln!(
         "mm: direct map at {DIRECT_MAP_BASE:#x}: {spans} ranges, {} MiB, up to {end:#x}; \
-         NX: {}, 1 GiB pages: {}, global pages: {}",
+         NX: {}, 1 GiB pages: {}, global pages: {}, write-combining (PAT): {}",
         mapped >> 20,
         yes_no(features.nx),
         yes_no(features.page_1g),
-        yes_no(features.pge)
+        yes_no(features.pge),
+        yes_no(features.pat)
     );
     kprintln!(
         "mm: kernel page tables at {:#x} ({} KiB); text r-x, rodata r--, data rw-, stacks rw- above guard pages; \
@@ -406,6 +440,27 @@ fn map_direct(
     }
 }
 
+/// How a device mapping is cached.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Caching {
+    /// UC: every access reaches the device, in program order. For
+    /// registers.
+    Uncached,
+    /// WC: writes collect in the CPU's write-combining buffers and reach the
+    /// device in bursts, possibly out of order; reads are uncached. For
+    /// framebuffers, where only the final pixels matter.
+    WriteCombining,
+}
+
+impl Caching {
+    const fn flags(self) -> PageFlags {
+        match self {
+            Caching::Uncached => UNCACHED,
+            Caching::WriteCombining => WRITE_COMBINING,
+        }
+    }
+}
+
 /// Map the device memory at `[phys, phys + len)` for the kernel: uncached,
 /// writable, never executable. Returns the virtual address of `phys`.
 ///
@@ -415,10 +470,27 @@ fn map_direct(
 /// coherence). Each call creates a new mapping, with an unmapped page after
 /// it; mappings are never removed yet.
 pub fn map_mmio(phys: u64, len: u64) -> Option<u64> {
+    map_device(phys, len, Caching::Uncached)
+}
+
+/// Like [`map_mmio`], but write-combining: for a framebuffer. Also `None`
+/// when the CPU has no PAT, and for ranges that overlap the direct map at
+/// all: it maps reserved ranges uncached, and two mappings of one page with
+/// different memory types are not allowed (SDM Vol. 3A §11.12.4).
+pub fn map_mmio_wc(phys: u64, len: u64) -> Option<u64> {
+    map_device(phys, len, Caching::WriteCombining)
+}
+
+fn map_device(phys: u64, len: u64, caching: Caching) -> Option<u64> {
     let start = phys & !(PAGE_SIZE - 1);
     let end = align_up(phys.checked_add(len.max(1))?, PAGE_SIZE);
-    let ram = DIRECT_MAP.get()?.spans().iter().any(|s| is_ram(s.kind) && s.start < end && start < s.end);
-    if ram || end > poly_paging::PHYS_LIMIT {
+    let overlaps = |s: &&Region| s.start < end && start < s.end;
+    let spans = DIRECT_MAP.get()?.spans();
+    let refused = match caching {
+        Caching::Uncached => spans.iter().filter(overlaps).any(|s| is_ram(s.kind)),
+        Caching::WriteCombining => !WC.load(Ordering::Relaxed) || spans.iter().any(|s| overlaps(&s)),
+    };
+    if refused || end > poly_paging::PHYS_LIMIT {
         return None;
     }
     let size = end - start;
@@ -435,10 +507,24 @@ pub fn map_mmio(phys: u64, len: u64) -> Option<u64> {
         return None;
     }
     let mut frames = FRAMES.lock();
-    let flags = fix(PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::GLOBAL | PageFlags::NO_EXECUTE | UNCACHED);
-    k.tables.map_range(virt, start, size, flags, k.largest, &mut BuddyFrames(frames.as_mut()?)).ok()?;
+    let flags = PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::GLOBAL | PageFlags::NO_EXECUTE | caching.flags();
+    k.tables.map_range(virt, start, size, fix(flags), k.largest, &mut BuddyFrames(frames.as_mut()?)).ok()?;
     k.mmio_next = virt + size + PAGE_SIZE;
     Some(virt + (phys - start))
+}
+
+/// How the kernel mapping at `virt` is cached, if it is a device mapping
+/// ([`map_mmio`], [`map_mmio_wc`], or the direct map of a reserved range);
+/// `None` for write-back memory and for addresses not mapped.
+pub fn caching(virt: u64) -> Option<Caching> {
+    let flags = translate(virt).ok()?.flags;
+    if flags.contains(UNCACHED) {
+        Some(Caching::Uncached)
+    } else if flags.contains(WRITE_COMBINING) && WC.load(Ordering::Relaxed) {
+        Some(Caching::WriteCombining)
+    } else {
+        None
+    }
 }
 
 /// Where `virt` leads in the kernel page tables.
@@ -543,6 +629,39 @@ crate::kernel_test! {
         let ram = env.memory.regions().iter().find(|r| r.kind == RegionKind::Usable).ok_or("no usable RAM")?;
         if crate::mm::map_mmio(ram.start, PAGE_SIZE).is_some() {
             return Err("map_mmio made an uncached alias of RAM");
+        }
+        if caching(lapic) != Some(Caching::Uncached) {
+            return Err("caching() does not see an MMIO mapping as uncached");
+        }
+        Ok(())
+    }
+}
+
+crate::kernel_test! {
+    fn pat_entry_1_is_write_combining(env: &TestEnv) -> TestResult {
+        if !cpu::features().pat {
+            return Ok(());
+        }
+        // SAFETY: CPUID says IA32_PAT exists; reading it has no effect.
+        let pat = unsafe { cpu::read_msr(cpu::MSR_PAT) };
+        if pat != PAT {
+            kprintln!("paging: IA32_PAT is {pat:#018x}, expected {PAT:#018x}");
+            return Err("IA32_PAT does not hold the kernel's table");
+        }
+        // No write-combining alias of anything the direct map covers, RAM or
+        // reserved (the ECAM window is reserved, so it is mapped uncached).
+        let ram = env.memory.regions().iter().find(|r| r.kind == RegionKind::Usable).ok_or("no usable RAM")?;
+        let reserved = env.memory.regions().iter().find(|r| r.kind == RegionKind::Reserved && r.start >= 1 << 20);
+        for r in [Some(ram), reserved].into_iter().flatten() {
+            if crate::mm::map_mmio_wc(r.start, PAGE_SIZE).is_some() {
+                kprintln!("paging: {:#x} ({:?}) mapped write-combining", r.start, r.kind);
+                return Err("map_mmio_wc mapped memory the direct map covers");
+            }
+        }
+        // The direct map is write-back for RAM.
+        let ram_virt = crate::arch::phys_to_virt(ram.start).ok_or("RAM outside the direct map")?;
+        if caching(ram_virt).is_some() {
+            return Err("the direct map of RAM is not write-back");
         }
         Ok(())
     }

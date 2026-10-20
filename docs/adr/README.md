@@ -22,6 +22,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0017](0017-block-layer-in-the-kernel.md) | The block layer in the kernel: poly-virtio-blk on direct-map DMA, a watchdog, a queue and a cache per disk | Accepted (waiting and watchdog superseded by 0018) |
 | [0016](0016-interrupt-dispatch-tick-and-kernel-locks.md) | Interrupt dispatch and vector allocation, a 1 kHz periodic tick, spinlocks that mask interrupts, a sleeping mutex | Accepted |
 | [0018](0018-msi-x-and-interrupt-driven-disk-io.md) | MSI and MSI-X for PCI functions, interrupt-driven disks with sleeping waiters, a watchdog on the clock | Accepted |
+| [0019](0019-display-framebuffer-and-drawing.md) | The display: Bochs VBE mode setting, a write-combining framebuffer behind a RAM back buffer, a drawing library and text grid over caller memory | Accepted |
 
 ## Open decisions
 
