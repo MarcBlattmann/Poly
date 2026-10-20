@@ -290,12 +290,22 @@ mod tests {
                         let req = Request { space: (me as u64) << 32 | id, flush: Flush::All };
                         // Yielding while waiting keeps the test quick on a
                         // host with fewer cores than threads.
-                        s.shoot(me, targets, req, |_| {}, || {
-                            serve(&s);
-                            std::thread::yield_now();
-                        });
+                        s.shoot(
+                            me,
+                            targets,
+                            req,
+                            |_| {},
+                            || {
+                                serve(&s);
+                                std::thread::yield_now();
+                            },
+                        );
                         for t in targets.iter() {
-                            assert_eq!(applied[t][me].load(Ordering::SeqCst), id, "CPU {t} missed request {id} of {me}");
+                            assert_eq!(
+                                applied[t][me].load(Ordering::SeqCst),
+                                id,
+                                "CPU {t} missed request {id} of {me}"
+                            );
                         }
                     }
                     done.fetch_add(1, Ordering::SeqCst);

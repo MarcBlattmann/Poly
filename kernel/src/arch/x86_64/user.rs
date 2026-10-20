@@ -21,9 +21,7 @@ pub use super::addrspace::{
     AddressSpace, Flush, LOWER_HALF_END, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, user_frames,
 };
 pub use super::syscall::{Entry, enter_user, enter_user_regs, make_next_return_fail};
-pub use super::usercopy::{
-    Efault, cmpxchg_user_u32, copy_from_user, copy_to_user, is_user_range, strncpy_from_user,
-};
+pub use super::usercopy::{Efault, cmpxchg_user_u32, copy_from_user, copy_to_user, is_user_range, strncpy_from_user};
 
 use super::fpu::{self, FpuArea};
 use super::idt::{self, TrapFrame};

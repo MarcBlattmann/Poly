@@ -10,7 +10,7 @@ use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
 use crate::sys::{
-    cred, epoll, eventfd, fd, futex, io, limits, madvise, mem, sched, path, perm, pipe, poll, prctl, process, signal,
+    cred, epoll, eventfd, fd, futex, io, limits, madvise, mem, path, perm, pipe, poll, prctl, process, sched, signal,
     signalfd, socket, system, task, time, timerfd,
 };
 

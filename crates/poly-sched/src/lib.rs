@@ -427,17 +427,16 @@ struct Cpu {
 }
 
 impl Cpu {
-    const ABSENT: Cpu =
-        Cpu {
-            run: WaitQueue::new(),
-            queued: 0,
-            current: NONE,
-            idle: NONE,
-            left: 0,
-            online: false,
-            prev: None,
-            draining: false,
-        };
+    const ABSENT: Cpu = Cpu {
+        run: WaitQueue::new(),
+        queued: 0,
+        current: NONE,
+        idle: NONE,
+        left: 0,
+        online: false,
+        prev: None,
+        draining: false,
+    };
 
     fn exists(&self) -> bool {
         self.idle != NONE

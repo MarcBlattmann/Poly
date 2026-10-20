@@ -221,13 +221,20 @@ pub fn start_aps(platform: Option<&Platform>, smp: Option<&str>, cpus: Option<&s
             }
         }
     }
-    let unreachable =
-        if plan.unreachable > 0 { alloc::format!(", {} unreachable in xAPIC mode", plan.unreachable) } else { "".into() };
+    let unreachable = if plan.unreachable > 0 {
+        alloc::format!(", {} unreachable in xAPIC mode", plan.unreachable)
+    } else {
+        "".into()
+    };
     kprintln!(
         "smp: {online} of {} CPUs online ({}){}{unreachable}",
         processors.len().max(1),
         online_cpus(),
-        if plan.left_out > 0 { alloc::format!(", {} left out by poly.smp / poly.cpus", plan.left_out) } else { "".into() },
+        if plan.left_out > 0 {
+            alloc::format!(", {} left out by poly.smp / poly.cpus", plan.left_out)
+        } else {
+            "".into()
+        },
     );
     let s = Summary { planned: plan.cpus.len(), online, left_out: plan.left_out, unreachable: plan.unreachable };
     let packed = [s.planned, s.online, s.left_out, s.unreachable]
@@ -270,14 +277,16 @@ unsafe fn prepare_area(base: u64) {
 /// returns its end.
 fn ist_stack() -> Result<u64, &'static str> {
     const ORDER: usize = 2;
-    let phys = crate::frames::FRAMES.lock().as_mut().and_then(|f| f.allocate(ORDER)).ok_or("no memory for IST stacks")?;
+    let phys =
+        crate::frames::FRAMES.lock().as_mut().and_then(|f| f.allocate(ORDER)).ok_or("no memory for IST stacks")?;
     let virt = super::phys_to_virt(phys).ok_or("an IST stack outside the direct map")?;
     Ok(virt + (poly_mem::PAGE_SIZE << ORDER))
 }
 
 /// Start AP `index` (MADT entry `p`) through the area at `base`.
 fn start_one(base: u64, index: usize, p: &Processor) -> Result<(), &'static str> {
-    let (_, stack_top) = crate::thread::prepare_cpu(index).map_err(|_| "no thread slot or stack for its idle thread")?;
+    let (_, stack_top) =
+        crate::thread::prepare_cpu(index).map_err(|_| "no thread slot or stack for its idle thread")?;
     let area = percpu::register(index, Box::leak(Box::new(PerCpu::new())), p.apic_id);
     let setup = &AP_SETUP[index];
     setup.tables.store(Box::leak(Box::new(CpuTables::new())), Ordering::Release);
@@ -384,11 +393,10 @@ extern "sysv64" fn ap_entry(index: u64) -> ! {
     }
     let features = super::irq_features();
     let platform = crate::acpi::platform();
-    let started = super::apic::init_ap(&features, platform.as_ref())
-        .and_then(|id| {
-            area.apic_id.store(id, Ordering::Relaxed);
-            super::time::start_ap_timer(apic::local_apic().expect("checked by init_ap"))
-        });
+    let started = super::apic::init_ap(&features, platform.as_ref()).and_then(|id| {
+        area.apic_id.store(id, Ordering::Relaxed);
+        super::time::start_ap_timer(apic::local_apic().expect("checked by init_ap"))
+    });
     if let Err(why) = started {
         kprintln!("smp: CPU {index}: {why}; halting it");
         cpu::halt_forever();

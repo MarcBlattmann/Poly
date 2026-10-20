@@ -401,7 +401,8 @@ static mut IDT: [IdtEntry; 256] = [IdtEntry::MISSING; 256];
 /// # Safety
 /// After [`init`] ran on the boot CPU, once per AP.
 pub unsafe fn load() {
-    let ptr = DescriptorTablePointer { limit: (size_of::<[IdtEntry; 256]>() - 1) as u16, base: (&raw const IDT) as u64 };
+    let ptr =
+        DescriptorTablePointer { limit: (size_of::<[IdtEntry; 256]>() - 1) as u16, base: (&raw const IDT) as u64 };
     // SAFETY: the IDT was filled in by `init` and is never changed again.
     unsafe { asm!("lidt [{}]", in(reg) &ptr, options(readonly, nostack, preserves_flags)) };
 }

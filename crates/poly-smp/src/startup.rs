@@ -50,7 +50,12 @@ pub struct Started {
 
 /// Start the AP with APIC ID `apic_id` at start-up page `vector`, waiting
 /// up to `timeout_us` after the last SIPI for it to report.
-pub fn start_ap<S: Startup>(s: &mut S, apic_id: u32, vector: u8, timeout_us: u64) -> Result<Started, StartError<S::Error>> {
+pub fn start_ap<S: Startup>(
+    s: &mut S,
+    apic_id: u32,
+    vector: u8,
+    timeout_us: u64,
+) -> Result<Started, StartError<S::Error>> {
     s.send_init(apic_id).map_err(StartError::Ipi)?;
     s.delay_us(INIT_DELAY_US);
     let mut sipis = 0;
@@ -133,7 +138,14 @@ mod tests {
         assert_eq!(start_ap(&mut sim, 3, 0x08, 1_000_000), Ok(Started { sipis: 2 }));
         assert_eq!(
             sim.log,
-            [Step::Init(3), Step::Delay(10_000), Step::Sipi(3, 8), Step::Delay(200), Step::Sipi(3, 8), Step::Delay(200)]
+            [
+                Step::Init(3),
+                Step::Delay(10_000),
+                Step::Sipi(3, 8),
+                Step::Delay(200),
+                Step::Sipi(3, 8),
+                Step::Delay(200)
+            ]
         );
     }
 

@@ -158,7 +158,8 @@ impl<'a> Thread<'a> {
         if tid == self.tid as i32 {
             return Ok(crate::thread::current());
         }
-        let (process, flags) = process::find_thread(u32::try_from(tid).map_err(|_| Errno::ESRCH)?).ok_or(Errno::ESRCH)?;
+        let (process, flags) =
+            process::find_thread(u32::try_from(tid).map_err(|_| Errno::ESRCH)?).ok_or(Errno::ESRCH)?;
         if process.pid != self.process.pid && self.credentials().euid != 0 {
             return Err(Errno::EPERM);
         }
