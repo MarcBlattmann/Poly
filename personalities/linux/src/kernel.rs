@@ -854,4 +854,29 @@ pub trait LinuxKernel {
     fn signal_queued(&mut self, pid: i32) {
         let _ = pid;
     }
+
+    // ---- seccomp (ADR 0054) ---------------------------------------------
+
+    /// Whether any thread of the calling process may have seccomp state
+    /// (strict mode or filters): the dispatcher runs the seccomp check
+    /// only then, so a process without filters pays one test per call.
+    /// Once [`seccomp_installed`](Self::seccomp_installed) was called for
+    /// a process this must stay true for it and for every process it
+    /// creates afterwards (filters are inherited and never removed).
+    /// The default: false (a kernel that never installs any).
+    fn seccomp_active(&self) -> bool {
+        false
+    }
+
+    /// A thread of the calling process got seccomp state: from now on
+    /// [`seccomp_active`](Self::seccomp_active) is true for the process.
+    fn seccomp_installed(&mut self) {}
+
+    /// A seccomp action worth logging (`SECCOMP_RET_LOG`, a kill, or any
+    /// action of a filter installed with `SECCOMP_FILTER_FLAG_LOG`) was
+    /// taken for system call `number`; `ret` is the filter's value. The
+    /// default logs nothing.
+    fn seccomp_log(&mut self, number: u64, ret: u32) {
+        let _ = (number, ret);
+    }
 }

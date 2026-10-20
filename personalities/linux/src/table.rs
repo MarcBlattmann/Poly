@@ -178,7 +178,8 @@ pub const FILE_SYSTEM: &[(u64, Handler)] = &[
 ];
 /// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
 /// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]; ADR 0049:
-/// madvise; ADR 0048: sockets; ADR 0051: administration and scheduling).
+/// madvise; ADR 0048: sockets; ADR 0051: administration and scheduling;
+/// ADR 0054: seccomp and namespaces).
 pub const GROUPS: &[&[(u64, Handler)]] = &[
     IMPLEMENTED,
     time::CALLS,
@@ -188,6 +189,7 @@ pub const GROUPS: &[&[(u64, Handler)]] = &[
     crate::sys::admin::CALLS,
     crate::sys::sched::CALLS,
     crate::sys::sendfile::CALLS,
+    crate::sys::seccomp::CALLS,
 ];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();

@@ -20,6 +20,7 @@ pub mod poll;
 pub mod prctl;
 pub mod process;
 pub mod sched;
+pub mod seccomp;
 pub mod sendfile;
 pub mod signal;
 pub mod signalfd;

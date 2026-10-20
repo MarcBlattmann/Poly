@@ -56,6 +56,9 @@ pub struct LinuxThread {
     /// for the wait, but blocked as far as discarding goes (a signal the
     /// thread waits for is never discarded as ignored).
     pub sigwait: SigSet,
+    /// Strict mode or the seccomp filters (ADR 0054): inherited by the
+    /// threads and processes it creates, kept by execve(2).
+    pub seccomp: crate::seccomp::Seccomp,
 }
 
 impl LinuxThread {
@@ -142,6 +145,7 @@ impl LinuxProcess {
             altstack: parent.altstack,
             creds: parent.creds.clone(),
             comm: parent.comm,
+            seccomp: parent.seccomp.clone(),
             ..LinuxThread::default()
         };
         let mut threads = BTreeMap::new();
@@ -201,6 +205,7 @@ impl LinuxProcess {
             altstack,
             creds: parent.creds.clone(),
             comm: parent.comm,
+            seccomp: parent.seccomp.clone(),
             ..LinuxThread::default()
         };
         self.threads.insert(tid, thread);

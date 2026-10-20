@@ -11,6 +11,7 @@ mod io;
 mod madvise;
 mod mem;
 mod process;
+mod seccomp;
 mod signal;
 mod socket;
 mod startup;

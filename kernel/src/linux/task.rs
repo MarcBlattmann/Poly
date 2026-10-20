@@ -155,7 +155,9 @@ fn child_state(parent: &LinuxState, parent_tid: u32, child: u32, clear_handlers:
             }
         }
     }
-    LinuxState { process: SpinLock::new(state) }
+    // Filters are inherited (seccomp(2)): so is the dispatcher's check.
+    let seccomp = AtomicBool::new(parent.seccomp.load(Ordering::SeqCst));
+    LinuxState { process: SpinLock::new(state), seccomp }
 }
 
 /// Register a vfork child (thread `tid`): its parent waits on the flag.

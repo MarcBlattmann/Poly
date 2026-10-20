@@ -174,6 +174,9 @@ pub struct FakeKernel {
     pub io: super::fileio::FakeIo,
     /// Sockets (`tests/socket.rs`; `None`: `ENOSYS`).
     pub net: Option<super::socket::FakeNet>,
+    /// seccomp state was installed (ADR 0054), and what was logged.
+    pub seccomp_on: bool,
+    pub seccomp_logged: Vec<(u64, u32)>,
 }
 
 impl Default for FakeKernel {
@@ -237,6 +240,8 @@ impl FakeKernel {
             tasks: Default::default(),
             io: Default::default(),
             net: None,
+            seccomp_on: false,
+            seccomp_logged: Vec::new(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -774,6 +779,18 @@ impl LinuxKernel for FakeKernel {
 
     fn signal_queued(&mut self, pid: i32) {
         self.io.queued.push(pid);
+    }
+
+    fn seccomp_active(&self) -> bool {
+        self.seccomp_on
+    }
+
+    fn seccomp_installed(&mut self) {
+        self.seccomp_on = true;
+    }
+
+    fn seccomp_log(&mut self, number: u64, ret: u32) {
+        self.seccomp_logged.push((number, ret));
     }
 
     fn with_futexes(&mut self, f: &mut dyn FnMut(&mut FutexTable, &mut dyn LinuxKernel)) {

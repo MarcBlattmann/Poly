@@ -713,4 +713,17 @@ impl LinuxKernel for Thread<'_> {
     fn net(&mut self) -> Option<&mut dyn poly_personality_linux::net::LinuxNet> {
         Some(self)
     }
+
+    fn seccomp_active(&self) -> bool {
+        self.linux.seccomp.load(Ordering::Relaxed)
+    }
+
+    fn seccomp_installed(&mut self) {
+        self.linux.seccomp.store(true, Ordering::SeqCst);
+    }
+
+    fn seccomp_log(&mut self, number: u64, ret: u32) {
+        let name = poly_personality_linux::table::name(number).unwrap_or("?");
+        kprintln!("seccomp: pid {} tid {} {name} (#{number}): action {ret:#010x}", self.process.pid, self.tid);
+    }
 }

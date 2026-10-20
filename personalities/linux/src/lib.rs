@@ -41,6 +41,8 @@
 //! - [`fileio`]: what pipes, `poll` / `select`, `epoll` and the event files
 //!   (`eventfd`, `timerfd`, `signalfd`) need from the kernel (ADR 0042).
 //! - [`time`]: time structures and process timers (ADR 0044).
+//! - [`seccomp`]: strict mode and BPF filters checked before every call
+//!   (ADR 0054).
 //! - [`net`]: what the socket calls need from the kernel
 //!   ([`net::LinuxNet`]), socket structures and `NETLINK_ROUTE` (ADR 0048).
 //!
@@ -65,6 +67,7 @@ pub mod kernel;
 pub mod net;
 mod numbers;
 pub mod rlimit;
+pub mod seccomp;
 pub mod signal;
 pub mod sys;
 pub mod table;
@@ -113,6 +116,10 @@ impl Linux {
     /// which the kernel must call before the thread returns to user mode.
     pub fn dispatch_with(kernel: &mut dyn LinuxKernel, regs: &mut SyscallRegs) -> Outcome {
         let number = regs.rax;
+        // seccomp(2): the filters decide before the call runs (ADR 0054).
+        if kernel.seccomp_active() && seccomp::check(kernel, regs) == seccomp::Verdict::Skip {
+            return Outcome::Handled;
+        }
         match table::handler(number) {
             Some(handler) => {
                 let args = Args::from_regs(regs);

@@ -53,6 +53,7 @@ use crate::user::memory::SegvCode;
 use crate::user::{self, Fault, FaultError};
 use crate::{kprintln, testrun};
 use alloc::sync::Arc;
+use core::sync::atomic::AtomicBool;
 use poly_abi::{Outcome, SyscallRegs};
 use poly_personality_linux::futex::FutexTable;
 use poly_personality_linux::signal::fault::{PageFault, fault_info};
@@ -69,6 +70,9 @@ static FUTEXES: SpinLock<FutexTable> = SpinLock::new(FutexTable::new());
 #[derive(Debug)]
 pub struct LinuxState {
     process: SpinLock<LinuxProcess>,
+    /// Some thread of the process has seccomp state (ADR 0054): the
+    /// dispatcher checks every call. Never cleared; copied to children.
+    pub(crate) seccomp: AtomicBool,
 }
 
 impl LinuxState {
@@ -77,7 +81,7 @@ impl LinuxState {
     pub fn new(pid: u32) -> LinuxState {
         // A process the kernel starts: the root of a process tree.
         task::register_root(pid);
-        LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)) }
+        LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)), seccomp: AtomicBool::new(false) }
     }
 
     /// A thread `tid` was started (the main thread is there from the start):
