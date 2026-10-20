@@ -8,8 +8,8 @@
 //! - [`EcamSpace`] implements [`ConfigSpace`] over one ECAM window from the
 //!   ACPI MCFG, mapped uncached with [`mm::map_mmio`]. Accesses are volatile
 //!   and exactly as wide as asked (PCI Express Base Specification §7.2.2).
-//! - [`MmioRegion`] implements [`Mmio`] over a mapped memory BAR, or a part
-//!   of one.
+//! - [`MmioRegion`] (`arch/x86_64/mmio.rs`, the kernel's one `poly_pci::Mmio`)
+//!   over a mapped memory BAR, or a part of one.
 //!
 //! [`init`] maps every window, finds every function (every bus the window
 //! decodes is probed, so root buses that no bridge leads to are found too),
@@ -28,7 +28,7 @@ use core::fmt;
 use core::ptr;
 use poly_acpi::EcamRegion;
 use poly_pci::{
-    Bar, BarKind, Bdf, Capabilities, ConfigSpace, Ecam, Header, Mmio, MsiError, MsiX, cap_id, probe_bars, reg, scan_all,
+    Bar, BarKind, Bdf, Capabilities, ConfigSpace, Ecam, Header, MsiError, MsiX, cap_id, probe_bars, reg, scan_all,
 };
 
 /// The configuration space of one PCI segment group, through its ECAM
@@ -126,87 +126,7 @@ impl ConfigSpace for EcamSpace {
     }
 }
 
-/// A block of mapped device registers: a memory BAR or part of one.
-///
-/// Out-of-range or misaligned accesses never reach memory: reads return all
-/// ones and writes are dropped, as [`Mmio`] asks.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MmioRegion {
-    virt: u64,
-    len: usize,
-}
-
-impl MmioRegion {
-    pub const fn len(&self) -> usize {
-        self.len
-    }
-
-    /// `len` bytes starting `offset` bytes in, if they lie inside.
-    pub fn subregion(&self, offset: usize, len: usize) -> Option<MmioRegion> {
-        (offset.checked_add(len)? <= self.len).then_some(MmioRegion { virt: self.virt + offset as u64, len })
-    }
-
-    fn at(&self, offset: usize, width: usize) -> Option<u64> {
-        let inside = offset.is_multiple_of(width) && offset.checked_add(width).is_some_and(|end| end <= self.len);
-        // The region start is at least dword-aligned (BARs are, and so are
-        // the subregions drivers carve out), so an aligned offset gives an
-        // aligned address; check anyway rather than risk a misaligned
-        // volatile access.
-        let addr = self.virt + offset as u64;
-        (inside && addr.is_multiple_of(width as u64)).then_some(addr)
-    }
-}
-
-// Every access goes through `at`: only `MmioRegion`s made by `map_bar` (and
-// `subregion`, which stays inside) exist, so the address lies in a BAR
-// mapped uncached for the kernel's lifetime, aligned for the width.
-// Registers are little-endian, like the CPU.
-impl Mmio for MmioRegion {
-    fn read8(&self, offset: usize) -> u8 {
-        match self.at(offset, 1) {
-            // SAFETY: mapped device memory, aligned (see above).
-            Some(a) => unsafe { ptr::read_volatile(a as *const u8) },
-            None => u8::MAX,
-        }
-    }
-
-    fn read16(&self, offset: usize) -> u16 {
-        match self.at(offset, 2) {
-            // SAFETY: as for `read8`.
-            Some(a) => unsafe { ptr::read_volatile(a as *const u16) },
-            None => u16::MAX,
-        }
-    }
-
-    fn read32(&self, offset: usize) -> u32 {
-        match self.at(offset, 4) {
-            // SAFETY: as for `read8`.
-            Some(a) => unsafe { ptr::read_volatile(a as *const u32) },
-            None => u32::MAX,
-        }
-    }
-
-    fn write8(&self, offset: usize, value: u8) {
-        if let Some(a) = self.at(offset, 1) {
-            // SAFETY: as for `read8`.
-            unsafe { ptr::write_volatile(a as *mut u8, value) }
-        }
-    }
-
-    fn write16(&self, offset: usize, value: u16) {
-        if let Some(a) = self.at(offset, 2) {
-            // SAFETY: as for `read8`.
-            unsafe { ptr::write_volatile(a as *mut u16, value) }
-        }
-    }
-
-    fn write32(&self, offset: usize, value: u32) {
-        if let Some(a) = self.at(offset, 4) {
-            // SAFETY: as for `read8`.
-            unsafe { ptr::write_volatile(a as *mut u32, value) }
-        }
-    }
-}
+pub use crate::arch::mmio::MmioRegion;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MapError {
@@ -268,12 +188,17 @@ impl Device {
         let len = usize::try_from(bar.size).map_err(|_| MapError::MapFailed)?;
         let key = (self.cfg.segment, self.bdf(), index as u8);
         let mut mapped = MAPPED_BARS.lock();
-        if let Some(&(_, virt)) = mapped.iter().find(|(k, _)| *k == key) {
-            return Ok(MmioRegion { virt, len });
-        }
-        let virt = mm::map_mmio(bar.address, bar.size).ok_or(MapError::MapFailed)?;
-        mapped.push((key, virt));
-        Ok(MmioRegion { virt, len })
+        let virt = match mapped.iter().find(|(k, _)| *k == key) {
+            Some(&(_, virt)) => virt,
+            None => {
+                let virt = mm::map_mmio(bar.address, bar.size).ok_or(MapError::MapFailed)?;
+                mapped.push((key, virt));
+                virt
+            }
+        };
+        // SAFETY: `virt` is this BAR's `map_mmio` mapping (made here once and
+        // kept in MAPPED_BARS), `len` bytes, never unmapped.
+        Ok(unsafe { MmioRegion::from_mapping(virt, len) })
     }
 }
 

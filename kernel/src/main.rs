@@ -22,6 +22,7 @@ mod selftest;
 mod sync;
 mod syscall;
 mod thread;
+mod time;
 mod virtio_blk;
 
 use core::panic::PanicInfo;
@@ -93,6 +94,14 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     }
     thread::init();
     acpi::init(boot.rsdp, &memory);
+    // SAFETY: once, on the boot CPU with interrupts still off, after the
+    // heap, the scheduler and the ACPI tables.
+    if let Err(e) = unsafe { arch::init_interrupts(acpi::platform().as_ref()) } {
+        panic!("interrupt and timer setup failed: {e}");
+    }
+    // SAFETY: the boot thread holds no lock; from here on the tick preempts it.
+    unsafe { arch::cpu::enable_interrupts() };
+    kprintln!("irq: interrupts enabled");
     pci::init();
     block::init();
 
@@ -102,7 +111,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     qemu::exit(if ok { qemu::ExitCode::Success } else { qemu::ExitCode::Failure });
 
     kprintln!("idle");
-    arch::cpu::halt_forever()
+    // The idle thread takes over, halting between interrupts.
+    thread::exit(0)
 }
 
 fn kernel_phys_start() -> u64 {
@@ -115,6 +125,8 @@ fn kernel_phys_end() -> u64 {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    // No preemption or interrupt handlers while the report is printed.
+    arch::cpu::disable_interrupts();
     log::emergency_print(format_args!("\nKERNEL PANIC: {info}\n"));
     arch::backtrace::print_for_panic();
     qemu::exit(qemu::ExitCode::Failure);

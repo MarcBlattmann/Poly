@@ -24,3 +24,12 @@ pub unsafe fn inb(port: u16) -> u8 {
     unsafe { asm!("in al, dx", in("dx") port, out("al") value, options(nomem, nostack, preserves_flags)) }
     value
 }
+
+/// # Safety
+/// Reading some I/O ports has side effects (e.g. acknowledging data).
+pub unsafe fn inl(port: u16) -> u32 {
+    let value: u32;
+    // SAFETY: caller guarantees the port read is valid.
+    unsafe { asm!("in eax, dx", in("dx") port, out("eax") value, options(nomem, nostack, preserves_flags)) }
+    value
+}

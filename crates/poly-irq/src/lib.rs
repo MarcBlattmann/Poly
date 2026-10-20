@@ -16,6 +16,8 @@
 //!   monotonic clock.
 //! - [`cpuid`]: the CPUID bits all of the above depend on, decoded from raw
 //!   register values.
+//! - [`msi`]: the x86 address / data encoding of message signalled
+//!   interrupts, for PCI MSI and MSI-X.
 //!
 //! The kernel supplies three small access traits: [`Mmio`] (shared with
 //! `poly-pci`; the xAPIC page, each I/O APIC and the HPET block), [`Msr`]
@@ -38,6 +40,7 @@ pub mod cpuid;
 pub mod hpet;
 pub mod ioapic;
 pub mod lapic;
+pub mod msi;
 pub mod pic;
 pub mod time;
 
@@ -45,6 +48,7 @@ pub use cpuid::CpuFeatures;
 pub use hpet::{Hpet, HpetError};
 pub use ioapic::{IoApic, IoApicError, IsaOverride, IsaRoute, IsaRoutes, RedirectionEntry};
 pub use lapic::{ApicError, ApicRegisters, Backend, Destination, Divide, Ipi, LocalApic, Lvt, LvtReg, X2Apic, XApic};
+pub use msi::{MsiError, MsiMessage};
 pub use pic::Pic8259;
 pub use poly_pci::Mmio;
 pub use time::{Calibration, CalibrationConfig, CalibrationError, Counter, MonotonicClock, Scale};

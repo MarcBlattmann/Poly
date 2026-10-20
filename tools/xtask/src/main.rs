@@ -376,10 +376,10 @@ fn boot_tests() -> Result {
             "poly_kernel::thread::panic_in_thread+",
         ),
         (
-            "a deadlock (every thread blocked)",
-            "thread::deadlock_on_request poly.selftest.deadlock",
-            "deadlock: every thread is blocked",
-            "poly_kernel::thread::idle_main+",
+            "a deadlock (a thread locks a mutex it holds)",
+            "sync::deadlock_on_request poly.selftest.deadlock",
+            "deadlock: thread ",
+            "poly_kernel::sync::lock_twice+",
         ),
     ];
     for (what, args, message, function) in thread_panics {

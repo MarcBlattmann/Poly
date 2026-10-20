@@ -1,8 +1,15 @@
 //! Interrupt descriptor table and CPU exception handling.
 //!
 //! Every vector enters through a small assembly stub that pushes a uniform
-//! [`TrapFrame`] and calls [`exception_dispatch`]. The same frame layout will
-//! carry hardware interrupts and, later, the syscall path.
+//! [`TrapFrame`] and calls [`trap_dispatch`]: vectors 0-31 are CPU
+//! exceptions, handled here; 32-255 are external interrupts, IPIs and the
+//! local APIC's own (timer, error, spurious), handed to [`super::irq`]. The
+//! same frame layout will carry the syscall path later.
+//!
+//! All 256 entries are interrupt gates, so the CPU clears RFLAGS.IF on entry
+//! and handlers never nest. Only the double fault uses an IST stack: an
+//! interrupt handler may switch threads (the timer preempts), which needs
+//! the trap frame to stay on the interrupted thread's own stack.
 
 use super::gdt::{DOUBLE_FAULT_IST, DescriptorTablePointer, KERNEL_CODE};
 use core::arch::{asm, global_asm};
@@ -129,6 +136,26 @@ isr_stub_\n:
     ISR_ERR   30
     ISR_NOERR 31
 
+    /* Vectors 32-255: no error code. One stub every 16 bytes from
+       irq_stubs, so the IDT entry for vector v is irq_stubs + 16 * (v - 32).
+       Each is at most 12 bytes: two pushes (2 and 2 or 5 bytes) and a jmp
+       (5). The assembler substitutes the current value of irq_stub_vector
+       at each use, as it is an absolute symbol. */
+    .balign 16
+    .global irq_stubs
+irq_stubs:
+    .set irq_stub_vector, 32
+    .rept 224
+    .balign 16
+    pushq $0
+    pushq $irq_stub_vector
+    jmp isr_common
+    .set irq_stub_vector, irq_stub_vector + 1
+    .endr
+    .balign 16
+    .global irq_stubs_end
+irq_stubs_end:
+
 isr_common:
     push %rax
     push %rbx
@@ -174,12 +201,26 @@ isr_stub_table:
     .quad isr_stub_\n
     .endr
 "#,
-    dispatch = sym exception_dispatch,
+    dispatch = sym trap_dispatch,
     options(att_syntax)
 );
 
 unsafe extern "C" {
     static isr_stub_table: [u64; 32];
+    static irq_stubs: u8;
+    static irq_stubs_end: u8;
+}
+
+/// Bytes between the stubs of consecutive vectors from 32 up.
+const IRQ_STUB_SIZE: u64 = 16;
+
+/// First vector that is not a CPU exception.
+pub const FIRST_INTERRUPT_VECTOR: u8 = 32;
+
+/// Address of the entry stub for vector `vector` (32 or more).
+pub fn irq_stub(vector: u8) -> u64 {
+    debug_assert!(vector >= FIRST_INTERRUPT_VECTOR);
+    (&raw const irq_stubs) as u64 + IRQ_STUB_SIZE * u64::from(vector - FIRST_INTERRUPT_VECTOR)
 }
 
 #[repr(C)]
@@ -223,12 +264,21 @@ pub unsafe fn init() {
             let ist = if vector as u64 == DOUBLE_FAULT { DOUBLE_FAULT_IST } else { 0 };
             idt.add(vector).write(IdtEntry::interrupt_gate(stub, ist));
         }
+        let stubs_len = (&raw const irq_stubs_end) as u64 - (&raw const irq_stubs) as u64;
+        assert_eq!(stubs_len, IRQ_STUB_SIZE * (256 - u64::from(FIRST_INTERRUPT_VECTOR)), "irq stubs misassembled");
+        for vector in FIRST_INTERRUPT_VECTOR..=u8::MAX {
+            idt.add(vector.into()).write(IdtEntry::interrupt_gate(irq_stub(vector), 0));
+        }
         let ptr = DescriptorTablePointer { limit: (size_of::<[IdtEntry; 256]>() - 1) as u16, base: idt as u64 };
         asm!("lidt [{}]", in(reg) &ptr, options(readonly, nostack, preserves_flags));
     }
 }
 
-extern "C" fn exception_dispatch(frame: &mut TrapFrame) {
+extern "C" fn trap_dispatch(frame: &mut TrapFrame) {
+    if frame.vector >= u64::from(FIRST_INTERRUPT_VECTOR) {
+        super::irq::dispatch(frame.vector as u8);
+        return;
+    }
     match frame.vector {
         BREAKPOINT => {
             BREAKPOINTS.fetch_add(1, Ordering::Relaxed);

@@ -187,11 +187,52 @@ code every thread starts in:
   #5 0xffffffff8010d8db thread_trampoline+0x9
 ```
 
-If every thread blocks, nothing can wake them yet (no interrupts), so the idle
-thread panics with `deadlock: every thread is blocked ...` and a backtrace
-through `poly_kernel::thread::idle_main`. To see where the other threads were
-blocked, attach a debugger before the panic. `cargo xtask run
-poly.test=thread::deadlock poly.selftest.deadlock` shows what this looks like.
+A thread that locks a `Mutex` it already holds panics with `deadlock: thread
+N locks a mutex it already holds` and a backtrace of its stack; `cargo xtask
+run poly.test=sync::deadlock poly.selftest.deadlock` shows what this looks
+like. Blocking or yielding while holding a spinlock panics too (`... while
+holding a spinlock`), as does blocking inside an interrupt handler. A thread
+that waits on a `WaitQueue` nobody wakes is not detected: with interrupts on,
+every thread being blocked is normal (they may all be sleeping), so the
+kernel just idles. Attach a debugger and look at the threads' stacks, or
+watch `monitor info lapic` to see whether interrupts still arrive.
+
+## Interrupts and the timer
+
+The boot log shows what was set up:
+
+```text
+irq: 8259 PICs remapped to vectors 0x20-0x2f, all masked
+apic: local APIC id 0 version 0x14, xAPIC mode at 0xfee00000, 6 LVT entries, spurious vector 0xff, 1 LINT input(s) wired to NMI
+apic: I/O APIC 0 at 0xfec00000: version 0x20, GSI 0-23, all masked
+time: HPET at 0xfed00000: 100.000 MHz, 64-bit counter, 3 timers
+time: TSC 2699.992 MHz, calibrated against the HPET (5 of 6 measurements, spread 14 ppm), invariant: no
+time: clock source HPET (TSC not invariant)
+time: APIC timer 62.499 MHz (input clock / 16), periodic tick 1000 Hz on vector 0xf0
+irq: interrupts enabled
+```
+
+An interrupt on a vector without a handler prints `irq: interrupt on vector
+0x..., which has no handler` (the first few times) and is acknowledged; an
+APIC error prints its ESR. The QEMU monitor shows the controllers' state.
+Run with `cargo xtask run --gdb` and use `monitor <cmd>` from the debugger, or
+add `-monitor stdio` to a hand-written QEMU command line:
+
+- `info lapic`: the local APIC of the current CPU: the LVT (the timer entry
+  should be periodic, vector 0xf0, unmasked), the timer's initial and
+  current count, and the ISR / IRR bitmaps. A vector stuck in the ISR means
+  a handler never sent its EOI; one stuck in the IRR means interrupts are
+  disabled (a spinlock held too long?) or a higher-priority vector is in
+  service.
+- `info pic`: the 8259s and the I/O APIC redirection table: every input
+  should be masked except the ones a driver routed.
+- `info irq`: how many interrupts each source has raised, to see whether a
+  device fires at all.
+
+`info registers` shows `RFLAGS` (bit 9, IF: interrupts enabled). In gdb,
+`print poly_kernel::arch::x86_64::time::TICKS` gives the tick count, and a
+breakpoint on `poly_kernel::arch::x86_64::irq::dispatch` stops at every
+interrupt (expect one per millisecond from the tick).
 
 ## Attaching a debugger
 

@@ -1,6 +1,7 @@
 # 0012: Scheduler policy in a host-tested crate; context switch and stacks in the kernel
 
-**Status:** Accepted.
+**Status:** Accepted. Amended by [0016](0016-interrupt-dispatch-tick-and-kernel-locks.md):
+with interrupts the idle thread halts instead of reporting a deadlock.
 
 ## Context
 
