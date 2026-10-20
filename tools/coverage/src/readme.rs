@@ -22,9 +22,14 @@ struct Tally {
 }
 
 impl Tally {
+    /// App-provided entries are counted but carry no weight: they are not
+    /// ours to build (ADR 0055).
     fn add(&mut self, e: &Entry) {
         self.total += 1;
         *self.by_status.entry(e.status).or_default() += 1;
+        if e.status == Status::AppProvided {
+            return;
+        }
         self.weight += e.weight;
         if e.status == Status::Green {
             self.weight_green += e.weight;
@@ -35,8 +40,13 @@ impl Tally {
         self.by_status.get(&s).copied().unwrap_or(0)
     }
 
+    /// Entries that are ours to build: the percentages' denominator.
+    fn ours(&self) -> u64 {
+        self.total - self.count(Status::AppProvided)
+    }
+
     fn raw(&self) -> f64 {
-        percent(self.count(Status::Green), self.total)
+        percent(self.count(Status::Green), self.ours())
     }
 
     fn weighted(&self) -> Option<f64> {
@@ -131,7 +141,10 @@ pub fn render(c: &Coverage, r: &Roadmap) -> String {
         "<sub>Block size = amount of work, green = done. The map counts callable functions: kernel calls for all \
          three OSes, plus the system libraries we rewrite for Windows and macOS (Linux's run unchanged). Interfaces \
          behind single calls, such as <code>ioctl</code> codes, <code>/proc</code> files or <code>sysctl</code> \
-         names, are tracked as roadmap milestones and added here when app traces show they are used.</sub>\n\n",
+         names, are tracked as roadmap milestones and added here when app traces show they are used. Libraries \
+         that apps bring with them (Microsoft's redistributable C++ and DirectX runtimes, \
+         <a href=\"docs/adr/0055-microsoft-redistributables-run-apps-own-copies.md\">ADR 0055</a>) are \
+         <em>app-provided</em>: left out of the map and of the percentages.</sub>\n\n",
     );
 
     // Numbers, folded away.
@@ -150,8 +163,8 @@ pub fn render(c: &Coverage, r: &Roadmap) -> String {
             traces.total
         );
     }
-    out.push_str("\n| OS | Layer | Entries | Green | Stub | Claimed | Missing | Blocked |\n");
-    out.push_str("|---|---|---:|---:|---:|---:|---:|---:|\n");
+    out.push_str("\n| OS | Layer | Entries | Green | Stub | Claimed | Missing | Blocked | App-provided |\n");
+    out.push_str("|---|---|---:|---:|---:|---:|---:|---:|---:|\n");
     for os in Os::ALL {
         for layer in [Layer::Syscall, Layer::Api] {
             let title = layer_title(os, layer);
@@ -159,14 +172,15 @@ pub fn render(c: &Coverage, r: &Roadmap) -> String {
                 Some(t) => {
                     let _ = writeln!(
                         out,
-                        "| {} | {title} | {} | {} | {} | {} | {} | {} |",
+                        "| {} | {title} | {} | {} | {} | {} | {} | {} | {} |",
                         os.title(),
                         thousands(t.total),
                         thousands(t.count(Status::Green)),
                         thousands(t.count(Status::Stub)),
                         thousands(t.count(Status::Claimed)),
                         thousands(t.count(Status::Missing)),
-                        thousands(t.count(Status::BlockedByDesign))
+                        thousands(t.count(Status::BlockedByDesign)),
+                        thousands(t.count(Status::AppProvided))
                     );
                 }
                 None => {
@@ -175,14 +189,16 @@ pub fn render(c: &Coverage, r: &Roadmap) -> String {
                     } else {
                         "not mapped yet"
                     };
-                    let _ = writeln!(out, "| {} | {title} | {note} | | | | | |", os.title());
+                    let _ = writeln!(out, "| {} | {title} | {note} | | | | | | |", os.title());
                 }
             }
         }
     }
     out.push_str(
-        "\n*App-weighted* counts each API by how often the target apps call it; it is the number that \
-         tracks real progress and appears once the call tracer exists.\n",
+        "\n*API coverage* is green entries out of the entries that are ours to build: *app-provided* entries \
+         (libraries the application or its installer supplies, ADR 0055) are listed under *Entries* but left \
+         out of the percentages. *App-weighted* counts each API by how often the target apps call it; it is \
+         the number that tracks real progress and appears once the call tracer exists.\n",
     );
     if !c.sources.is_empty() {
         out.push_str("\nSeeded from (names only):\n\n");
@@ -213,6 +229,41 @@ mod tests {
     fn splice_replaces_only_section() {
         let r = format!("top\n{BEGIN}\nold\n{END}\nbottom\n");
         assert_eq!(splice(&r, "NEW").unwrap(), "top\nNEW\nbottom\n");
+    }
+
+    #[test]
+    fn app_provided_is_left_out_of_percentages() {
+        use crate::model::Source;
+        let mut c = Coverage::default();
+        c.sources.insert("t".into(), Source { description: "test".into(), revision: "1".into() });
+        let mut entries = vec![
+            Entry::new(Os::Windows, Layer::Api, "kernel32.dll", "A", "t"),
+            Entry::new(Os::Windows, Layer::Api, "kernel32.dll", "B", "t"),
+        ];
+        for s in ["x", "y", "z"] {
+            let mut e = Entry::new(Os::Windows, Layer::Api, "msvcp140.dll", s, "t");
+            e.status = Status::AppProvided;
+            e.weight = 5.0;
+            entries.push(e);
+        }
+        entries[0].status = Status::Green;
+        entries[0].tests_visible = 1;
+        entries[0].weight = 1.0;
+        entries[1].weight = 3.0;
+        c.merge(entries);
+        assert!(c.check().is_empty());
+
+        let (per_os, _) = tallies(&c);
+        let t = &per_os[&Os::Windows];
+        assert_eq!((t.total, t.ours(), t.count(Status::AppProvided)), (5, 2, 3));
+        assert_eq!(t.raw(), 50.0);
+        assert_eq!(t.weighted(), Some(25.0));
+
+        let r = Roadmap::parse("## Phase 0: A\n- [ ] one\n").unwrap();
+        let section = render(&c, &r);
+        assert!(section.contains("| Windows | 50.0% | 25.0% |"), "{section}");
+        assert!(section.contains("| Windows | user-mode DLL exports | 5 | 1 | 0 | 0 | 1 | 0 | 3 |"), "{section}");
+        assert!(section.contains("Windows API coverage: 50.0%"));
     }
 
     #[test]
