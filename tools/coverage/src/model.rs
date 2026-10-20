@@ -83,14 +83,8 @@ pub enum Status {
 }
 
 impl Status {
-    pub const ALL: [Status; 6] = [
-        Status::Missing,
-        Status::Claimed,
-        Status::Stub,
-        Status::Green,
-        Status::BlockedByDesign,
-        Status::AppProvided,
-    ];
+    pub const ALL: [Status; 6] =
+        [Status::Missing, Status::Claimed, Status::Stub, Status::Green, Status::BlockedByDesign, Status::AppProvided];
 
     pub fn name(self) -> &'static str {
         match self {

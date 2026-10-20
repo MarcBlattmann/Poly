@@ -489,8 +489,7 @@ const PANEL_HEAD: f64 = 38.0;
 
 fn panel(s: &mut Svg, c: &Coverage, os: Os, (x, y, w, map_h): (f64, f64, f64, f64), max_groups: usize, t: &Theme) {
     let mut groups: BTreeMap<String, Group> = BTreeMap::new();
-    let app_provided =
-        c.entries.iter().filter(|e| e.os == os && e.status == Status::AppProvided).count() as u64;
+    let app_provided = c.entries.iter().filter(|e| e.os == os && e.status == Status::AppProvided).count() as u64;
     for e in c.entries.iter().filter(|e| e.os == os && e.status != Status::AppProvided) {
         let name = display_group(os, e.layer, &e.component);
         let g = groups.entry(name.clone()).or_insert_with(|| Group { name, ..Default::default() });

@@ -155,8 +155,7 @@ fn parse_status(s: &str) -> Result<Status, String> {
 }
 
 fn set_status(args: &[String]) -> Result<(), String> {
-    const USAGE: &str =
-        "usage: coverage set-status <id> <status> | coverage set-status --component <os>/<layer>/<component> ... <status>";
+    const USAGE: &str = "usage: coverage set-status <id> <status> | coverage set-status --component <os>/<layer>/<component> ... <status>";
     let pos = positional(args);
     let components = opts(args, "--component");
     if !components.is_empty() {
