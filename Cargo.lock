@@ -148,6 +148,15 @@ name = "poly-sched"
 version = "0.0.1"
 
 [[package]]
+name = "poly-term"
+version = "0.0.1"
+dependencies = [
+ "poly-gfx",
+ "poly-input",
+ "poly-line",
+]
+
+[[package]]
 name = "poly-vfs"
 version = "0.0.1"
 
@@ -260,6 +269,7 @@ name = "xtask"
 version = "0.0.1"
 dependencies = [
  "poly-gfx",
+ "poly-term",
  "rustc-demangle",
 ]
 

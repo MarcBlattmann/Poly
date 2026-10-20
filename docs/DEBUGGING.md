@@ -8,7 +8,8 @@ shell, the panic backtrace, and a debugger attached to QEMU.
 Everything the kernel prints goes to COM1, which `cargo xtask run` connects
 to your terminal, shared with QEMU's monitor: Ctrl-A C switches between the
 two, Ctrl-A X quits. The screen opens in QEMU's own window (see "The
-screen" below). Anything after the command is passed on as the kernel
+screen" below), where the screen terminal shows the same log (in grey)
+from the last 64 KiB of the boot on. Anything after the command is passed on as the kernel
 command line:
 
 ```sh
@@ -82,7 +83,15 @@ If a line ever looks garbled anyway, Ctrl-L redraws it. Characters wider
 than one column (East Asian, emoji) and lines longer than the terminal is
 wide are edited correctly but drawn wrong.
 
-The shell does not start in an automated test boot (`poly.qemu_exit`
+**The shell on the screen.** With a display, a second shell runs in the
+screen terminal (thread `shell-screen`), typed on the guest's keyboard:
+in the QEMU window, or with `sendkey` from the monitor (see "Keyboard
+input"). It has the same commands and keys, its own history, and the log
+behaves the same: a line arriving while you type goes above the prompt,
+which is drawn again below it. Shift+Page Up / Page Down scroll back
+through 1000 lines; typing scrolls back down. See "The screen" below.
+
+The shells do not start in an automated test boot (`poly.qemu_exit`
 without `poly.shell`). If the COM1 interrupt cannot be routed, the boot log
 says `shell: COM1 receive interrupt not routed (...); polling`, and the
 shell polls the UART every 10 ms instead.
@@ -218,6 +227,44 @@ framebuffer has 16777216; trying 1280x800x32`. Without the device (QEMU's
 `-vga none`) the log says `display: no QEMU standard VGA or
 bochs-display`. QEMU's `-device VGA,vgamem_mb=32` gives more video memory.
 
+**The screen terminal.** After the kernel tests the display shows the
+terminal (`kernel/src/terminal.rs`, logic in `poly-term`): a status bar on
+the top row and a shell below it, which starts with the end of the boot
+log. The boot log says what it set up:
+
+```text
+terminal: 160x49 cells in Spleen 8x16 on the display, status bar on top, 1000 lines of scrollback; a shell on the keyboard
+```
+
+The status bar reads ` Poly 0.0.1 | up 0:01:23 | 243 MiB free of 255 MiB |
+us | 1 of 2 CPUs` and, on the right, `Shift+PgUp: scrollback` (or, while
+scrolled back, `scrollback 48 of 300 lines`). It is refreshed every second
+by the render thread `terminal`; if the uptime stops moving, that thread
+is stuck (`ps` on the serial shell shows its state). Kernel log lines are
+grey, the shell's output in the terminal's colours.
+
+```sh
+cargo xtask run poly.terminal=off        # keep the boot screen; no shell on the screen
+cargo xtask run poly.display=1920x1200   # 12x24 font from 1920x1200 up
+cargo xtask run poly.test=terminal       # only the terminal's tests
+```
+
+Log output reaches the screen up to 25 ms after the serial port. If more
+than 64 KiB arrive between two looks, the oldest part is skipped and the
+screen says `[N bytes of kernel log lost]`. While kernel tests run (the
+`test` command from the serial shell), the screen's shell takes no keys,
+since the keyboard tests read the keyboard; while a `display::` test runs,
+the terminal does not draw.
+
+The boot test `terminal::boot_test` boots at 1024x768 with only the
+terminal's tests, waits for `boot: done`, types `ech`, Tab, `Polx`,
+Backspace, `y-Term`, Enter through the monitor (`sendkey`) and takes a
+screenshot (`target/poly-terminal-test.ppm`) every half second until a
+grid row starts with `Poly-Term` exactly as `poly-gfx` draws it on the
+host and the status bar starts with ` Poly <version>` in its colours (with
+no other colours on that row), or the boot times out; then it says what
+did not match. Open the screenshot to see why.
+
 **Screenshots.** `cargo xtask screenshot` boots headless (with the test
 devices, like `run`), waits for a line on the serial port, saves what the
 screen shows and quits QEMU:
@@ -234,7 +281,7 @@ QEMU (Ctrl-A C under `cargo xtask run`) the same is `screendump
 both formats.
 
 The boot test `screenshot_test` boots at 1024x768 with only the display
-tests, takes a screenshot (`target/poly-screen-test.ppm`) and compares it
+tests (and `poly.terminal=off`), takes a screenshot (`target/poly-screen-test.ppm`) and compares it
 pixel for pixel with the boot screen drawn on the host by the same code
 (`poly_gfx::boot_screen`). On a mismatch it says how many pixels differ and
 where, and writes what it expected to `target/poly-screen-expected.ppm`, to
@@ -471,9 +518,10 @@ The layout is chosen on the command line, `poly.keymap=us` (the default)
 or `poly.keymap=de-ch`. `keyboard::stats()` counts interrupts, bytes,
 bytes dropped because nobody read them, and LED updates.
 
-**Typing into the guest.** `cargo xtask run` runs QEMU without a window,
-and what you type in the terminal goes to the serial port, not to the PS/2
-keyboard. Press PS/2 keys from QEMU's monitor (Ctrl-A C, then Ctrl-A C
+**Typing into the guest.** What you type in the terminal running `cargo
+xtask run` goes to the serial port, not to the PS/2 keyboard; what you
+type into QEMU's window (when there is one) goes to the keyboard. Without
+a window, press PS/2 keys from QEMU's monitor (Ctrl-A C, then Ctrl-A C
 again to go back): `sendkey` takes QEMU's key names, which are US
 positions (`z` is the key that types y on a Swiss German keyboard), joined
 with `-` for chords, and holds them for 100 ms:
@@ -485,9 +533,9 @@ with `-` for chords, and holds them for 100 ms:
 (qemu) sendkey ret
 ```
 
-Nothing reads the keyboard at boot yet except its tests. To watch
-decoding, run the end-to-end test and type within 30 seconds; the kernel
-prints what it got:
+After the kernel tests, the screen terminal's shell reads the keyboard
+(see "The screen"). To watch decoding by itself, run the end-to-end test
+and type within 30 seconds; the kernel prints what it got:
 
 ```sh
 cargo xtask run poly.test=keyboard:: poly.test.keyboard=poly poly.keymap=de-ch

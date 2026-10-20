@@ -16,7 +16,8 @@ what exists **today** and how it fits that plan.
                  kernel/src/syscall.rs  ← routes by the process's personality tag
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt
                           │
-            kernel shell: poly-line editor, commands; on COM1 now, screen + keyboard later
+            kernel shell: poly-line editor, commands; on COM1 and on the screen terminal
+            screen terminal: status bar + text grid, keys as terminal input, kernel log mirrored (poly-term)
             kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
@@ -46,8 +47,9 @@ what exists **today** and how it fits that plan.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
 5. Otherwise (or with `poly.shell` as well, once the tests passed) the
-   kernel starts the shell on COM1 in a thread of its own and the boot
-   thread exits (see "Kernel shell").
+   kernel puts the screen terminal on the display with a shell of its own
+   (see "Screen terminal"), starts the shell on COM1 in a thread of its
+   own, and the boot thread exits (see "Kernel shell").
 
 ## Firmware tables (ACPI)
 
@@ -351,8 +353,8 @@ host-tested drawing library `poly-gfx`
 ([ADR 0019](adr/0019-display-framebuffer-and-drawing.md)).
 
 ```
-   terminal (Phase 2), a panic screen (later)
-          │  display::draw(|canvas| grid.render(canvas, x, y, &font, &palette))
+   screen terminal (below), a panic screen (later)
+          │  display::with_canvas(|canvas| terminal.render(canvas)), display::flush(rect)
           ▼
    poly-gfx      Canvas: fill, clip, lines, blit, copy_within, text
           │      Font: Spleen 8x16 and 12x24     TextGrid: cells, scrollback, escapes, dirty cells
@@ -419,6 +421,74 @@ it. With `poly.test.display` (which `cargo xtask` passes) they require a
 display. Under TCG a full redraw of 1280x800 in the 8x16 font takes about
 40 ms and a full flush about 20 ms, so a terminal renders once per batch of
 output.
+
+## Screen terminal
+
+A status bar and a text grid on the display, a second kernel shell on the
+keyboard, and the kernel log mirrored into the grid
+([ADR 0035](adr/0035-screen-terminal.md)). The logic is the host-tested
+`poly-term` crate; `kernel/src/terminal.rs` gives it memory, locks,
+threads and the devices.
+
+```
+   kprintln ─▶ log::_print ─▶ COM1
+                     └──────▶ terminal::mirror ─▶ LOG: LogRing, 64 KiB (spinlock; never draws)
+                                                        │ drained by whoever holds the terminal
+   keyboard::next_shared_event_until ─▶ poly_term::keys ─▶ bytes ─▶ TermDecoder ─▶ Edit ─▶ shell "shell-screen"
+                                                                                            │ output
+   SCREEN.term (sleeping mutex): poly_term::Terminal = TextGrid + prompt state ◀────────────┘ poke
+          │ render thread "terminal": drain LOG, status line, Terminal::render
+          ▼
+   display back buffer ─▶ display::flush in bands of 64 rows
+```
+
+- **Layout** (`poly_term::Screen`): the status bar is the top text row,
+  the grid fills the rest from the left edge in Spleen 8x16 (12x24 from
+  1920x1200 up): 160x49 cells at 1280x800. The scrollback holds up to 1000
+  lines, fewer if the cells (16 bytes each) would pass 3 MiB.
+- **Status bar** (`poly_term::status`): " Poly <version> | up h:mm:ss |
+  <free> free of <total> | <layout> | 1 of N CPUs" on the left, a
+  Shift+PgUp hint (or the scrollback position) on the right, light text on
+  slate; refreshed every second, on the second.
+- **Keys** (`poly_term::keys::translate`) become the bytes an xterm sends
+  (UTF-8, `CR`, `DEL`, `ESC [ A`, `ESC [ 1 ; 5 D`, `ESC [ 3 ~`, `ESC O P`,
+  Alt as an `ESC` prefix), decoded by the line editor's `TermDecoder` as on
+  the serial line. Shift+Page Up / Page Down scroll the view a page
+  (`TextGrid::scroll_view`); a key that types scrolls back. The console
+  reads with `keyboard::next_shared_event_until`, which takes no keys
+  while kernel tests run (the keyboard tests read the keyboard).
+- **The log**: `log::_print` also calls `terminal::mirror`, which appends
+  to a `LogRing` (overwrites the oldest bytes; readers keep their own
+  position and learn how much they lost) under a spinlock nothing holds
+  longer than a copy. The shell drains it into the grid before its own
+  output (keeping the order), the render thread at least every 25 ms. The
+  terminal starts with what the ring holds of the boot log. Log text is
+  grey (`poly_term::LOG_STYLE`).
+- **The prompt**: as on the serial console, the console marks it shown
+  while it waits; log output erases its row first, and within 50 ms the
+  console returns `Edit::Redraw`, which draws prompt and line below the
+  log (`Terminal::prompt_shown`, `take_redraw`).
+- **Rendering**: writers change cells under `SCREEN.term` and poke the
+  render thread, which renders at most every 15 ms (`TextGrid`'s dirty
+  cells, scrolling by moving pixels, the status bar when its text
+  changed) into the back buffer and flushes the changed rectangle in bands
+  of 64 rows. It pauses while a `display::` test runs.
+- **Off**: no display, or `poly.terminal=off`, starts nothing (the mirror
+  turns itself off); the serial shell is the same either way.
+
+```text
+terminal: 160x49 cells in Spleen 8x16 on the display, status bar on top, 1000 lines of scrollback; a shell on the keyboard
+```
+
+The kernel tests (`terminal::*`) run the real shell on a screen console
+with scripted key events (Tab completion, editing, Ctrl-C, history, the
+keypad's Enter), log output arriving while a line is typed (it goes above,
+the prompt is drawn again below), Shift+Page Up and typing scrolling the
+view, a `kprintln` reaching a terminal through the ring, and a render on a
+display-sized canvas. `cargo xtask test` boots, types `ech`, Tab, `Polx`,
+Backspace, `y-Term`, Enter through QEMU's monitor and compares screenshots
+with what `poly-gfx` and `poly-term` draw on the host (see
+[DEBUGGING.md](DEBUGGING.md)).
 
 ## Personality routing
 
@@ -495,6 +565,7 @@ services once it decodes those system calls.
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail), the display's mode, mapping, back buffer and flush (and a boot without VGA must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi`, `poly.test.display` | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
+| The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
 | Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff`; Linux against Linux in `cargo xtask ci`; Poly reports "unsupported" until it runs programs |
 | App trace replay | recorded sessions | later |
 
@@ -802,12 +873,12 @@ user: pid 4242 thread 5.20 killed: page fault (vector 14) at rip 0x4000c3, error
 
 A shell built into the kernel, the debug console of the Phase 2 terminal
 ([ADR 0021](adr/0021-kernel-shell.md)). It never touches a device: it talks
-to a `shell::Console`, so the same shell runs on the serial port now and
-on the screen and keyboard later.
+to a `shell::Console`, so the same shell runs on the serial port and on
+the screen terminal (its `ScreenConsole`, see "Screen terminal").
 
 ```
    COM1 bytes ──► IRQ 4 handler ──► ring ──► TermDecoder ──┐
-   (later) key events ──────────────────────► Edit ────────┤
+   key events ─► poly_term::keys ─► bytes ─► TermDecoder ─┤
                                                            ▼
    Console::read ──Edit──► poly_line::Editor ──line──► words::split ──► COMMANDS[name](console, args)
                                   │ redraw: text + ANSI                         │ output

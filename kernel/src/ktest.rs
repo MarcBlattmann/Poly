@@ -30,7 +30,7 @@ use crate::boot_info::BootInfo;
 use crate::log::Kprint;
 use core::fmt::Write;
 use core::mem::size_of;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use poly_mem::MemoryMap;
 
 pub type TestResult = Result<(), &'static str>;
@@ -107,6 +107,23 @@ pub enum RunError {
 
 /// Set while [`run`] runs.
 static RUNNING: AtomicBool = AtomicBool::new(false);
+/// The test running now: its index in [`all`] plus one, 0 for none.
+static CURRENT: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether tests are running (at boot, or from the shell's `test`).
+/// Readers of shared devices step aside meanwhile: the keyboard tests read
+/// the keyboard themselves.
+pub fn running() -> bool {
+    RUNNING.load(Ordering::Acquire)
+}
+
+/// The name of the test running now, if one is.
+pub fn current() -> Option<&'static str> {
+    match CURRENT.load(Ordering::Acquire) {
+        0 => None,
+        i => all().get(i - 1).map(KernelTest::name),
+    }
+}
 
 /// Run every test whose name contains `filter` (all with `None`), writing
 /// the lines `cargo xtask test` parses to `out`. At [`When::Runtime`],
@@ -125,12 +142,15 @@ pub fn run(env: &TestEnv, filter: Option<&str>, when: When, out: &mut dyn Write)
         let _ = writeln!(out, "ktest: leaving out {boot_only} tests that only run at boot");
     }
     let mut s = Summary::default();
-    for test in tests {
+    for (i, test) in tests.iter().enumerate() {
         if !selected(test) {
             s.filtered_out += 1;
             continue;
         }
-        let _ = match (test.run)(env) {
+        CURRENT.store(i + 1, Ordering::Release);
+        let result = (test.run)(env);
+        CURRENT.store(0, Ordering::Release);
+        let _ = match result {
             Ok(()) => {
                 s.passed += 1;
                 writeln!(out, "test {} ... ok", test.name())

@@ -25,6 +25,7 @@ mod selftest;
 mod shell;
 mod sync;
 mod syscall;
+mod terminal;
 mod thread;
 mod time;
 mod user;
@@ -127,6 +128,9 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     if boot.has_flag("poly.qemu_exit") && !(ok && boot.has_flag(shell::SHELL_FLAG)) {
         qemu::exit(if ok { qemu::ExitCode::Success } else { qemu::ExitCode::Failure });
     }
+    // The screen terminal (if there is a display) logs as it starts, so
+    // before the serial shell's first prompt.
+    terminal::start(&boot);
     // Log before the shell starts: once its thread runs, the prompt may come
     // first and a later log line would land after it.
     kprintln!("boot: done; starting the shell on COM1 (type 'help')");

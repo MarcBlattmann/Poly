@@ -27,6 +27,7 @@ mod font;
 mod ktest;
 mod screen;
 mod symbols;
+mod terminal;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -251,7 +252,9 @@ fn run(args: &[String]) -> Result {
         window = false;
     }
     if window {
-        eprintln!("==> the screen is in QEMU's window; serial output and the monitor stay in this terminal");
+        eprintln!(
+            "==> the screen terminal (a shell on the keyboard) is in QEMU's window; serial output, the serial shell and the monitor stay in this terminal"
+        );
     } else {
         cmd.args(["-display", "none"]);
     }
@@ -769,6 +772,11 @@ fn boot_tests() -> Result {
     // the display tests (which draw and must put the screen back).
     screenshot_test(&kernel, &syms)?;
 
+    // The screen terminal: a command typed on the keyboard runs in the
+    // shell on the screen, whose output and status bar show up.
+    eprintln!("==> boot test: a command typed on the keyboard runs in the screen terminal (screenshots through QMP)");
+    terminal::boot_test(&kernel, &syms, &kernel_version()?)?;
+
     eprintln!("==> boot test: page fault is caught and reported with a backtrace");
     let b = expect_fault(&kernel, &syms, "poly.selftest.page_fault", "CPU exception 14 (page fault)")?;
     // Frame #0 is the faulting instruction, so it must name the function.
@@ -885,7 +893,9 @@ fn screenshot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let target = root().join("target");
     std::fs::create_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
     let file = target.join("poly-screen-test.ppm");
-    let append = format!("poly.test=display {TEST_DISPLAY_FLAG} poly.display={w}x{h}");
+    // No screen terminal: it would draw over the boot screen once the
+    // tests pass.
+    let append = format!("poly.test=display {TEST_DISPLAY_FLAG} poly.display={w}x{h} poly.terminal=off");
     let shot = Screenshot { marker: PASS_MARKER, file: &file };
     let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &[], Some(shot), |_| {})?;
     ktest::parse(&b.output).check()?;

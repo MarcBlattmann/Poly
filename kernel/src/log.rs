@@ -1,4 +1,5 @@
-//! Kernel console output (serial for now).
+//! Kernel console output: the serial port, mirrored onto the screen
+//! terminal (`terminal::mirror`) when there is one.
 //!
 //! The kernel log ([`kprint!`](crate::kprint), [`kprintln!`](crate::kprintln))
 //! and the shell share COM1. While the shell waits for input with its prompt
@@ -37,6 +38,9 @@ pub fn _print(args: fmt::Arguments) {
         let _ = port.write_str("\r\x1b[K");
     }
     let _ = port.write_fmt(args);
+    // The screen terminal shows the log too: into a ring its render thread
+    // drains, never onto the screen from here (see `terminal`).
+    crate::terminal::mirror(args);
 }
 
 /// The kernel log as a [`fmt::Write`], for code that writes to any console.

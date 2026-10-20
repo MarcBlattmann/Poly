@@ -1,0 +1,18 @@
+[package]
+name = "poly-term"
+description = "The kernel's screen terminal without the machine: screen layout, status bar, keys to terminal input, the kernel log ring, prompt handling"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-gfx.workspace = true
+poly-input.workspace = true
+
+[dev-dependencies]
+poly-line.workspace = true
+
+[lints]
+workspace = true

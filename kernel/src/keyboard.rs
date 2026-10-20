@@ -187,6 +187,36 @@ pub fn next_event_until(deadline_ns: u64) -> Option<Input> {
     }
 }
 
+/// Like [`next_event_until`], for a reader that runs alongside the kernel
+/// tests (the screen terminal's shell): while tests run (`ktest::running`),
+/// it takes no events, since the keyboard tests read the keyboard
+/// themselves, and just waits for the deadline. Whether tests run is
+/// checked under the decoder's lock, right before taking an event.
+pub fn next_shared_event_until(deadline_ns: u64) -> Option<Input> {
+    let testing = crate::ktest::running;
+    loop {
+        {
+            let mut d = DRIVER.lock();
+            while !testing()
+                && let Some(byte) = RING.pop()
+            {
+                if let Some(input) = d.keyboard.feed(byte) {
+                    d.sync_leds();
+                    return Some(input);
+                }
+            }
+        }
+        let now = time::now_ns();
+        if now >= deadline_ns {
+            return None;
+        }
+        let wake = deadline_ns.min(now.saturating_add(POLL_NS));
+        if !ARRIVED.wait_until_deadline(|| !RING.is_empty() && !testing(), wake) && !testing() {
+            poll_controller();
+        }
+    }
+}
+
 /// Switch the layout. A pending dead key is dropped.
 pub fn set_layout(layout: &'static Layout) {
     DRIVER.lock().keyboard.set_layout(layout);
