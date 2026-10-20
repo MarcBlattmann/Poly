@@ -1,6 +1,8 @@
 # 0015: PCI and virtio in the kernel: ECAM only, a boot-time device list, DMA from the frame allocator, polling first
 
-**Status:** Accepted
+**Status:** Accepted. The virtio-blk driver parts (one request at a time,
+the bounce buffer, `virtio_blk/protocol.rs`) are superseded by
+[ADR 0017](0017-block-layer-in-the-kernel.md).
 
 ## Context
 

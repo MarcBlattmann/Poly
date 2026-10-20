@@ -4,7 +4,9 @@
 //!   [`BlkConfig::read`] reads the device configuration that goes with it.
 //! - [`VirtioBlk`] is the driver: it turns block requests into descriptor
 //!   chains on the device's request queue and their status bytes back into
-//!   results.
+//!   results. It implements [`poly_block::Abort`] (reset the device, fail
+//!   what is in flight), so a [`poly_block::Watchdog`] can give up on a
+//!   device that stops answering.
 //! - [`init`] runs the whole of device initialisation (§3.1.1) with
 //!   [`poly_virtio`] and hands back a running driver.
 //!

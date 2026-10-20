@@ -2,7 +2,7 @@
 
 use crate::{BlkConfig, ConfigError, Dma, HEADER_LEN, ID_LEN, SECTOR_SIZE, req_status, req_type, select_features};
 use core::ptr::{self, NonNull};
-use poly_block::{BlockDevice, Completion, DeviceInfo, IoBuf, IoError, Op, Request, RequestId, SubmitError};
+use poly_block::{Abort, BlockDevice, Completion, DeviceInfo, IoBuf, IoError, Op, Request, RequestId, SubmitError};
 use poly_pci::Mmio;
 use poly_virtio::{
     AddError, Buffer, CommonCfg, DescState, Layout, Notifier, PciTransport, SetupError, SplitQueue, begin, feature,
@@ -510,5 +510,19 @@ impl<M: Mmio, N: Mmio, T: Dma> BlockDevice for VirtioBlk<'_, M, N, T> {
         let slot = (0..self.queue.size()).find(|&s| self.slots[s as usize].busy)?;
         let id = self.release(slot);
         Some(Completion { id, result: Err(IoError::DeviceFailed) })
+    }
+}
+
+/// Giving up on the device ([`poly_block::Watchdog`] does this when requests
+/// stop coming back): reset it, so it stops using the memory of the
+/// requests in flight, mark it FAILED, and fail those requests with
+/// [`IoError::DeviceFailed`], as after a protocol violation. Every later
+/// request fails too. If the reset does not finish, nothing comes back yet;
+/// aborting again retries it.
+impl<M: Mmio, N: Mmio, T: Dma> Abort for VirtioBlk<'_, M, N, T> {
+    fn abort(&mut self) {
+        if !self.reset_done {
+            self.fail();
+        }
     }
 }

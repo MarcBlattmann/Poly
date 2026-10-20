@@ -27,17 +27,23 @@ To keep a copy, add `| tee serial.log`.
 ## PCI devices and the test disk
 
 The boot log has one `pci:` line per function (address, vendor:device,
-class, BARs with their sizes) and the virtio-blk bring-up:
+class, BARs with their sizes), the virtio-blk bring-up and one `block:`
+line per disk, then the first bytes of the root disk read through the
+block layer:
 
 ```text
 pci: 00:03.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd5000 4 KiB, BAR4 mem64 pf 0xfe000000 16 KiB
 virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800; left disabled, polling
-virtio-blk: 00:03.0: 1 MiB (2048 sectors), block size 512, features 0x100000240 of 0x10130007e54, queue 16 entries of 256
-virtio-blk: sector 0: 50 4f 4c 59 00 00 00 00 08 09 0a 0b 0c 0d 0e 0f  POLY............
+virtio-blk: 00:03.0: 1 MiB (2048 sectors), block size 512, features 0x120000244, queue 128 entries, 126 segments per request, write cache
+block: virtio0: virtio-blk 00:03.0, 2048 blocks of 512 bytes (1 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB)
+block: ram0: RAM disk, 512 blocks of 512 bytes (256 KiB); queue 32 requests, cache 128 buffers (64 KiB)
+block: virtio0: block 0: 50 4f 4c 59 00 00 00 00 08 09 0a 0b 0c 0d 0e 0f  POLY............
 ```
 
-`features` is what the driver accepted, of what the device offered (bit 32
-is VERSION_1; the virtio-blk bits are in VIRTIO 1.2 §5.2.3). To compare with
+`features` is what the driver negotiated (bit 32 is VERSION_1, bit 29
+EVENT_IDX; the virtio-blk bits are in VIRTIO 1.2 §5.2.3). "Segments per
+request" is the device's `seg_max` minus the header and status descriptors
+(the driver counts them in, to be safe), capped by the queue size. To compare with
 QEMU's own view, open the monitor (Ctrl-A C under `cargo xtask run`, or
 `monitor <cmd>` from gdb) and use:
 
@@ -51,26 +57,37 @@ QEMU's own view, open the monitor (Ctrl-A C under `cargo xtask run`, or
 `cargo xtask run` and the boot tests attach a fresh test image,
 `target/poly-test-disk.img` (1 MiB, raw), as a modern-only virtio-blk device
 (`-device virtio-blk-pci,drive=disk0,disable-legacy=on`) and pass
-`poly.test.disk`, which makes the `virtio_blk::*` tests require it. Every
-512-byte sector starts with "POLY" and its number (le32); the rest is a
-pattern of the sector and the offset (`virtio_blk::test_pattern`):
+`poly.test.disk`, which makes the `block::*` and `virtio_blk::*` tests
+require it. Every 512-byte sector starts with "POLY" and its number
+(le32); the rest is a pattern of the sector and the offset
+(`block::test_pattern`). The block tests run against the RAM disk too,
+which they fill with the same pattern first:
 
 ```sh
 od -A x -t x1z -N 16 -j $((512 * 7)) target/poly-test-disk.img   # sector 7
-cargo xtask run --no-disk                                       # boot without the disk
-cargo xtask run poly.test=virtio_blk                            # only the disk tests
+cargo xtask run --no-disk                                       # boot without the disk (ram0 only)
+cargo xtask run poly.test=block                                 # only the block layer tests
 ```
 
-The write test changes sector 1 and puts it back, and xtask rewrites the
-image before every boot anyway. To watch the device side, run QEMU by hand
-with the same arguments plus QEMU trace events, e.g. `-trace
-'virtio_blk_*' -trace virtio_queue_notify -trace 'pci_cfg_*'` (printed on
-stderr with the log trace backend that distribution builds use).
+The write tests change blocks 1 and 100 to 243 and put them back, and
+xtask rewrites the image before every boot anyway. A failing block test
+prints the disk, the operation and the error first, e.g. `block: virtio0:
+sync: Io(DeviceFailed)`. To watch the device side, run QEMU by hand with
+the same arguments plus QEMU trace events, e.g. `-trace 'virtio_blk_*'
+-trace virtio_queue_notify -trace 'pci_cfg_*'` (printed on stderr with
+the log trace backend that distribution builds use).
 
-A request that never comes back fails after a spin budget of a few seconds
-with `Timeout`; the driver then resets the device and every later request
-fails with `Broken`. Interrupts are not used yet: MSI-X is reported, not
-enabled.
+Errors to know (`poly_block::IoError`, wrapped in `CacheError::Io` by the
+cache):
+
+| Error | Means |
+|---|---|
+| `BadBuffer` | the buffer is not in the direct map (on the boot stack, say), so the device cannot be given its address; nothing was sent. Use heap memory. |
+| `DeviceFailed` | the device broke the virtqueue protocol, or a request did not come back within the watchdog's budget (20 million polls, about 30 s under TCG): the device was reset and marked FAILED, and every later request fails the same way |
+| `OutOfRange`, `BadRequest` | past the end of the disk, or not a whole number of blocks; refused before reaching the device |
+| `AllPinned` | every cache buffer is pinned, so nothing can be evicted for a new block |
+
+Interrupts are not used yet: MSI-X is reported, not enabled.
 
 ## In-kernel tests
 
