@@ -11,7 +11,9 @@
  * asm/sigcontext.h and asm/ucontext.h; clone flags from linux/sched.h;
  * futex operations from linux/futex.h; socket constants and structures
  * from linux/socket.h, linux/in.h, linux/un.h and asm-generic/socket.h;
- * ioctl numbers from asm-generic/ioctls.h; poll bits from
+ * ioctl numbers from asm-generic/ioctls.h; struct termios, its flags and
+ * struct winsize from asm-generic/termbits.h and asm-generic/termios.h;
+ * mount flags from linux/mount.h; poll bits from
  * asm-generic/poll.h; epoll from linux/eventpoll.h; eventfd, timerfd and
  * signalfd flags and struct signalfd_siginfo from linux/eventfd.h,
  * linux/timerfd.h and linux/signalfd.h. Behaviour only; no code is copied
@@ -134,6 +136,7 @@
 #define ENOENT 2
 #define ESRCH 3
 #define EINTR 4
+#define EIO 5
 #define ENXIO 6
 #define ECHILD 10
 #define EAGAIN 11
@@ -362,11 +365,61 @@ static __attribute__((unused)) int mem_eq(const void *a, const void *b, u64 n) {
 #define TIOCOUTQ 0x5411
 #define TIOCGWINSZ 0x5413
 #define TIOCSWINSZ 0x5414
+#define TIOCSCTTY 0x540E
 #define FIONREAD 0x541B
+#define TIOCINQ FIONREAD
 #define FIONBIO 0x5421
+#define TIOCNOTTY 0x5422
+#define TIOCGSID 0x5429
 #define TIOCGPTN 0x80045430
 #define TIOCSPTLCK 0x40045431
 #define TIOCGPTLCK 0x80045439
+#define TIOCGPTPEER 0x5441
+
+/* asm-generic/termbits.h: struct termios as TCGETS/TCSETS use it. */
+struct k_termios {
+    unsigned c_iflag, c_oflag, c_cflag, c_lflag;
+    unsigned char c_line;
+    unsigned char c_cc[19];
+};
+#define VINTR 0
+#define VERASE 2
+#define VEOF 4
+#define VTIME 5
+#define VMIN 6
+#define ICRNL 0000400
+#define OPOST 0000001
+#define ONLCR 0000004
+#define ISIG 0000001
+#define ICANON 0000002
+#define ECHO 0000010
+
+struct k_winsize {
+    unsigned short ws_row, ws_col, ws_xpixel, ws_ypixel;
+};
+
+/* linux/mount.h */
+#define MS_RDONLY 1
+#define MS_NOSUID 2
+#define MS_NODEV 4
+#define MS_NOEXEC 8
+#define MS_REMOUNT 32
+#define MS_BIND 4096
+#define MS_REC 16384
+#define MS_PRIVATE (1 << 18)
+#define MNT_FORCE 1
+#define MNT_DETACH 2
+#define MNT_EXPIRE 4
+#define UMOUNT_NOFOLLOW 8
+#define EROFS 30
+#define ELOOP 40
+#define ENOTEMPTY 39
+#define SYS_statfs 137
+#define SYS_symlinkat 266
+#define SYS_mkdirat 258
+#define SYS_unlinkat 263
+#define AT_REMOVEDIR 0x200
+#define TMPFS_MAGIC 0x01021994
 
 /* Time. */
 struct k_timespec {
