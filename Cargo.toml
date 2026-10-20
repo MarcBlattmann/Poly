@@ -25,6 +25,7 @@ members = [
     "crates/poly-pci",
     "crates/poly-pe",
     "crates/poly-sched",
+    "crates/poly-term",
     "crates/poly-virtio",
     "crates/poly-virtio-blk",
     "crates/poly-vm",
@@ -65,6 +66,7 @@ poly-paging = { path = "crates/poly-paging" }
 poly-pci = { path = "crates/poly-pci" }
 poly-pe = { path = "crates/poly-pe" }
 poly-sched = { path = "crates/poly-sched" }
+poly-term = { path = "crates/poly-term" }
 poly-virtio = { path = "crates/poly-virtio" }
 poly-virtio-blk = { path = "crates/poly-virtio-blk" }
 poly-vm = { path = "crates/poly-vm" }

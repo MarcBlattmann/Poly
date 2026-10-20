@@ -32,6 +32,7 @@ poly-mem = { path = "../crates/poly-mem" }
 poly-paging = { path = "../crates/poly-paging" }
 poly-sched = { path = "../crates/poly-sched" }
 poly-pci = { path = "../crates/poly-pci" }
+poly-term = { path = "../crates/poly-term" }
 poly-personality-linux = { path = "../personalities/linux" }
 poly-personality-nt = { path = "../personalities/nt" }
 poly-personality-xnu = { path = "../personalities/xnu" }
