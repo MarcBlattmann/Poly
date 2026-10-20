@@ -391,6 +391,15 @@ fn mount_namespaces_are_copies_of_the_tree() {
     env.vfs.enter_namespace(&mut other, copy).unwrap();
     assert_eq!(env.vfs.namespace_of(&other), copy);
     assert_eq!(env.vfs.enter_namespace(&mut other, id), Err(Errno::EINVAL), "not a namespace's root");
+    // A root moved by chroot is not the namespace's root; "/" is, also
+    // when a file system is mounted over it.
+    assert!(!env.vfs.is_chrooted(&env.ctx) && !env.vfs.is_chrooted(&other));
+    let mut jail = env.vfs.root_context().unwrap();
+    jail.set_root(r, env.vfs.lookup(&jail, r, At::Cwd, b"/m", true).unwrap()).unwrap();
+    assert!(env.vfs.is_chrooted(&jail));
+    jail.set_root(r, env.vfs.lookup(&env.ctx, r, At::Cwd, b"/", true).unwrap()).unwrap();
+    assert!(!env.vfs.is_chrooted(&jail));
+    drop(jail);
     // The initial namespace cannot be dropped; a copy can.
     assert_eq!(env.vfs.drop_namespace(initial), Err(Errno::EBUSY));
     drop((ctx, other));

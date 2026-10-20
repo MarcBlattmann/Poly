@@ -117,7 +117,9 @@ pub fn setpriority(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::ESRCH);
     }
     let me = cred::current(k);
-    let privileged = me.capable(cap::SYS_NICE);
+    // Priorities are the machine's: CAP_SYS_NICE in the initial user
+    // namespace (ADR 0054).
+    let privileged = me.capable_initial(cap::SYS_NICE);
     let mut result = Ok(0);
     for (pid, uid, euid) in found {
         if !privileged && me.euid != uid && me.euid != euid {

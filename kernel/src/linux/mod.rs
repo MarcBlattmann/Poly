@@ -35,6 +35,7 @@ mod cred_tests;
 mod fileio_tests;
 mod files;
 mod files_tests;
+mod ns_tests;
 pub mod net;
 mod services;
 pub mod signalfd;
@@ -100,9 +101,19 @@ impl LinuxState {
         }
     }
 
-    /// Thread `tid` has ended.
-    pub fn remove_thread(&self, tid: u32) {
-        self.process.lock().remove_thread(tid as i32);
+    /// Thread `tid` of process `pid` has ended. A thread other than the
+    /// main one gives back its numbers in its pid namespaces now; the main
+    /// thread's are the process's, kept until it is reaped
+    /// ([`task::with_tree`]).
+    pub fn remove_thread(&self, pid: u32, tid: u32) {
+        let ns = {
+            let mut p = self.process.lock();
+            p.remove_thread(tid as i32);
+            p.ns.pid.clone()
+        };
+        if tid != pid {
+            poly_personality_linux::ns::pid::detach(&ns, tid as i32);
+        }
     }
 
     /// Run `f` on the personality's state, locked. `f` must not block.

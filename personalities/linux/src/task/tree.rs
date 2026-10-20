@@ -597,6 +597,33 @@ mod tests {
     }
 
     #[test]
+    fn orphans_in_a_pid_namespace_go_to_its_init() {
+        // init (1); 10 is the init of a pid namespace, 11 and 12 in it.
+        let mut t = ProcessTree::new();
+        t.insert_root(1, 0);
+        t.insert_child(1, 1, 10, SIGCHLD, 0);
+        t.insert_child(10, 10, 11, SIGCHLD, 0);
+        t.insert_child(11, 11, 12, SIGCHLD, 0);
+        t.set_reaper(11, 10);
+        t.set_reaper(12, 10);
+        t.exit(12, Termination::Exited(3), false);
+        let r = t.exit(11, Termination::Exited(0), false);
+        assert_eq!(r.adopted_zombies, [(12, 0, Termination::Exited(3), SIGCHLD, 10)], "to the namespace's init");
+        assert_eq!(t.parent(12), Some(10));
+        // With its init gone, the next reaper out adopts.
+        let mut t = ProcessTree::new();
+        t.insert_root(1, 0);
+        t.insert_child(1, 1, 10, SIGCHLD, 0);
+        t.insert_child(10, 10, 11, SIGCHLD, 0);
+        t.insert_child(11, 11, 12, SIGCHLD, 0);
+        t.set_reaper(11, 10);
+        t.set_reaper(12, 10);
+        t.exit(10, Termination::Killed { signal: 9, core: false }, false);
+        t.exit(11, Termination::Exited(0), false);
+        assert_eq!(t.parent(12), Some(1));
+    }
+
+    #[test]
     fn ignoring_sigchld_reaps_at_once() {
         let mut t = family();
         let r = t.exit(11, Termination::Exited(0), true);

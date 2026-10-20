@@ -110,6 +110,8 @@ pub fn init(boot: &BootInfo, held: Option<Region>) {
     if VFS.set(vfs).is_err() {
         panic!("fs::init called twice");
     }
+    // Mount namespaces the personality lets go of drop their mount tables.
+    crate::linux::task::init_namespaces();
     cache::init();
     if let Some(arg) = boot.arg(disk::MOUNT_ARG) {
         disk::mount_from_cmdline(arg);

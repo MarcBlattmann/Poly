@@ -957,6 +957,18 @@ impl Vfs {
         crate::mount::base_of(&ctx.root.loc().mount)
     }
 
+    /// Whether `ctx`'s root shows something else than its mount
+    /// namespace's root (chroot(2) moved it). A root that is the
+    /// namespace's first mount, or what is mounted over it, is not.
+    pub fn is_chrooted(&self, ctx: &FsContext) -> bool {
+        let mut first = ctx.root.loc().mount.clone();
+        while let Some((p, _)) = first.parent.clone() {
+            first = p;
+        }
+        let top = self.follow_mounts(Location { ino: first.root, mount: first });
+        !self.follow_mounts(ctx.root.loc().clone()).same(&top)
+    }
+
     /// `unshare(CLONE_NEWNS)`: copies the mount namespace `ctx` is in and
     /// moves `ctx`'s root and working directory to the same places in the
     /// copy (a working directory in another tree stays). Returns the new

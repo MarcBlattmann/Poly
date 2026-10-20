@@ -667,8 +667,3 @@ pub fn join(
     }
     Ok(Join::Namespaces(n))
 }
-
-#[cfg(test)]
-pub(crate) fn test_uts(owner: &UserNsRef, names: UtsNames) -> Arc<UtsNs> {
-    Arc::new(UtsNs { common: Common::new(owner), names: Mutex::new(names) })
-}

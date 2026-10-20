@@ -10,6 +10,7 @@ mod futex;
 mod io;
 mod madvise;
 mod mem;
+mod ns;
 mod process;
 mod seccomp;
 mod signal;

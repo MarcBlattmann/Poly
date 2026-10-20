@@ -55,7 +55,7 @@ pub fn with_target<R>(
 /// thread's, and the target thread's or the target process's
 /// ([`LinuxProcess::process_creds`]).
 pub fn may_signal(sender: &Creds, sender_sid: i32, target: &Creds, target_sid: i32, signal: u32) -> bool {
-    sender.capable(cap::KILL)
+    crate::ns::user::ns_capable(sender, &target.user_ns, cap::KILL)
         || [sender.uid, sender.euid].iter().any(|&id| id == target.uid || id == target.suid)
         || (signal == SIGCONT && sender_sid == target_sid)
 }

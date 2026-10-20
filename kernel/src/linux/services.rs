@@ -726,4 +726,41 @@ impl LinuxKernel for Thread<'_> {
         let name = poly_personality_linux::table::name(number).unwrap_or("?");
         kprintln!("seccomp: pid {} tid {} {name} (#{number}): action {ret:#010x}", self.process.pid, self.tid);
     }
+
+    fn pid_ns(&self) -> poly_personality_linux::ns::pid::PidNsRef {
+        self.linux.with(|p| p.ns.pid.clone())
+    }
+
+    fn chrooted(&self) -> bool {
+        self.process.files.chrooted()
+    }
+
+    fn copy_mounts(
+        &mut self,
+        owner: &poly_personality_linux::ns::user::UserNsRef,
+    ) -> Result<Arc<poly_personality_linux::ns::MntNs>, Errno> {
+        super::task::release_mount_namespaces();
+        super::task::copy_mounts(&self.process.files, owner)
+    }
+
+    fn enter_mounts(&mut self, ns: &Option<Arc<poly_personality_linux::ns::MntNs>>) -> Result<(), Errno> {
+        let base = match ns {
+            Some(m) => m.id(),
+            None => {
+                let vfs = crate::fs::vfs();
+                vfs.namespace_of(&vfs.root_context().map_err(vfs_errno)?)
+            }
+        };
+        self.process.files.enter_mount_namespace(base).map_err(vfs_errno)
+    }
+
+    fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, poly_personality_linux::ns::Kind), Errno> {
+        let file = self.process.files.file(fd).map_err(vfs_errno)?;
+        if file.node().mount().fs().info().name != "proc" {
+            return Err(Errno::EINVAL);
+        }
+        let (inum, kind) = poly_procfs::namespace_file(file.node().ino()).ok_or(Errno::EINVAL)?;
+        let kind = poly_personality_linux::ns::Kind::from_index(kind as u32).ok_or(Errno::EINVAL)?;
+        Ok((inum, kind))
+    }
 }

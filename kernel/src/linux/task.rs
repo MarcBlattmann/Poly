@@ -23,6 +23,13 @@
 //!   once the last thread left): the personality updates the tree and
 //!   signals the parent.
 //!
+//! - **Namespaces** (ADR 0054): clone(2)'s `CLONE_NEW*` flags make the
+//!   child's namespaces with the personality's `ns::make` (a new mount
+//!   namespace is a copy of the mount table for the child's files); every
+//!   thread and process gets a number in each pid namespace it is in
+//!   (`ns::pid::attach`), given back when a thread ends or a process is
+//!   reaped, and a process is adopted by the init of its namespace.
+//!
 //! Not done yet: `CLONE_FILES`, `CLONE_FS` and `CLONE_SIGHAND` between
 //! *processes* (without `CLONE_THREAD`) copy instead of sharing, since a
 //! process owns its files and signal state; threads share all three.
@@ -47,7 +54,11 @@ use poly_personality_linux::abi::SigAction;
 use poly_personality_linux::abi::signal::{NSIG, SIG_DFL, SIG_IGN, SIGSEGV};
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::kernel::{LinuxKernel, Wakeup};
-use poly_personality_linux::task::clone::CloneRequest;
+use poly_personality_linux::ns::pid as pid_ns;
+use poly_personality_linux::ns::user::UserNsRef;
+use poly_personality_linux::ns::{self, UtsNames};
+use poly_personality_linux::sys::ns::initial_names;
+use poly_personality_linux::task::clone::{CLONE_NEWUTS, CloneRequest};
 use poly_personality_linux::task::exec::{ELOOP, ExecRequest, MAX_SCRIPT_DEPTH, parse_shebang, script_argv};
 use poly_personality_linux::task::tree::{ProcessTree, Termination};
 
@@ -90,11 +101,42 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
             let mut zombies = ZOMBIES.lock();
             reaped.iter().filter_map(|&pid| zombies.remove(&(pid as u32))).collect()
         };
+        // A reaped process's numbers in its pid namespaces are free again
+        // (ADR 0054).
+        for p in &gone {
+            if let Some(ns) = p.linux.as_ref().map(|l| l.with(|s| s.ns.pid.clone())) {
+                poly_personality_linux::ns::pid::detach(&ns, p.pid as i32);
+            }
+        }
         // The last reference to a process record may go here: its file
         // system context may take sleeping locks, so not under the lock.
         drop(gone);
+        release_mount_namespaces();
     }
     r
+}
+
+/// Mount namespaces whose last process left them, to be dropped where no
+/// lock is held ([`release_mount_namespaces`]).
+static RELEASED_MOUNTS: SpinLock<Vec<u32>> = SpinLock::new(Vec::new());
+
+/// The personality let go of mount namespace `base` (its `MntNs` went,
+/// perhaps with the personality's state locked): noted for later.
+fn mounts_released(base: u32) {
+    RELEASED_MOUNTS.lock().push(base);
+}
+
+/// Drop the mount tables of the mount namespaces nobody is in any more.
+pub fn release_mount_namespaces() {
+    let bases = core::mem::take(&mut *RELEASED_MOUNTS.lock());
+    for base in bases {
+        let _ = crate::fs::vfs().drop_namespace(base);
+    }
+}
+
+/// Install the kernel's side of the personality's namespaces (ADR 0054).
+pub fn init_namespaces() {
+    poly_personality_linux::ns::on_mounts_released(mounts_released);
 }
 
 /// Make `generation` (the tree's, read with it locked) the published one
@@ -190,41 +232,74 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
     let fs_base = req.tls.unwrap_or_else(user::fs_base);
     let gs_base = user::gs_base();
     let clear_child_tid = req.clear_child_tid.unwrap_or_default();
+    // Ids are stored as each side sees them (ADR 0054).
+    let own_ns = k.linux.with(|p| p.ns.pid.clone());
     let tid = if req.thread() {
         let tid = process::alloc_pid();
+        pid_ns::attach(&own_ns, tid as i32, false)?;
         k.linux.with(|p| {
             p.add_thread(k.tid as i32, tid as i32, req.drops_altstack());
             p.thread_mut(tid as i32).clear_child_tid = clear_child_tid;
         });
-        store_tids(k, req, tid, None);
+        let seen = pid_ns::local_or_zero(&own_ns, tid as i32);
+        store_tids(k, req, seen, seen, None);
         let done = req.vfork_wait().then(|| vfork_register(tid));
         let started = user::spawn_child(process, memory, &regs, &fpu, fs_base, gs_base, hook, Some(tid));
         if started.is_err() {
-            k.linux.with(|p| p.remove_thread(tid as i32));
+            k.linux.remove_thread(k.process.pid, tid);
             VFORKS.lock().remove(&tid);
             return Err(Errno::EAGAIN);
         }
         start(started, done, k)?;
         tid
     } else {
+        let names = if req.flags & CLONE_NEWUTS != 0 { initial_names(k) } else { UtsNames::default() };
         let pid = process::alloc_pid();
-        let memory = if req.shares_memory() { memory } else { Arc::new(memory.fork().map_err(|_| Errno::ENOMEM)?) };
-        crate::fs::proc::record_fork(k.process.pid, pid, &memory);
-        let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
-        linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
         let files = k.process.files.fork();
+        let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
+        // The namespaces clone(2) asks for (the checks are done): made for
+        // the child, its mount namespace a copy for its own files.
+        let new = req.flags & ns::NEW_NAMESPACES;
+        if new != 0 {
+            let (mut n, mut c) = linux.with(|p| (p.ns.clone(), p.thread(pid as i32).creds.clone()));
+            ns::make(&mut n, &mut c, new, true, names, &mut |owner| copy_mounts(&files, owner))?;
+            linux.with(|p| {
+                p.ns = n;
+                p.thread_mut(pid as i32).creds = c;
+            });
+        }
+        let child_ns = linux.with(|p| p.ns.pid.clone());
+        pid_ns::attach(&child_ns, pid as i32, true)?;
+        let memory = if req.shares_memory() {
+            memory
+        } else {
+            match memory.fork() {
+                Ok(m) => Arc::new(m),
+                Err(_) => {
+                    pid_ns::detach(&child_ns, pid as i32);
+                    return Err(Errno::ENOMEM);
+                }
+            }
+        };
+        crate::fs::proc::record_fork(k.process.pid, pid, &memory);
+        linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
         let child = Process::new_linux_child(pid, k.process.pid, k.process.format, k.process.traced, files, linux);
         let me = k.process.pid as i32;
         let uid = k.credentials().uid;
+        let reaper = pid_ns::reaper_of_new(&child_ns, pid as i32);
         with_tree(|t| {
             let parent = if req.sibling() { t.parent(me).unwrap_or(0) } else { me };
             t.insert_child(me, parent, pid as i32, req.exit_signal, uid);
+            t.set_reaper(pid as i32, reaper);
         });
-        store_tids(k, req, pid, (!req.shares_memory()).then_some(&memory));
+        let (parent_sees, child_sees) =
+            (pid_ns::local_or_zero(&own_ns, pid as i32), pid_ns::local_or_zero(&child_ns, pid as i32));
+        store_tids(k, req, parent_sees, child_sees, (!req.shares_memory()).then_some(&memory));
         let done = req.vfork_wait().then(|| vfork_register(pid));
         let started = user::spawn_child(Arc::new(child), memory, &regs, &fpu, fs_base, gs_base, hook, None);
         if started.is_err() {
             with_tree(|t| t.remove(pid as i32));
+            pid_ns::detach(&child_ns, pid as i32);
             VFORKS.lock().remove(&pid);
             return Err(Errno::EAGAIN);
         }
@@ -232,6 +307,13 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
         pid
     };
     Ok(tid as i32)
+}
+
+/// A copy of `files`' mount namespace, which `files` moves to, as the
+/// personality's mount namespace owned by `owner`.
+pub fn copy_mounts(files: &crate::fs::Files, owner: &UserNsRef) -> Result<Arc<ns::MntNs>, Errno> {
+    let base = files.copy_mount_namespace().map_err(super::services::vfs_errno)?;
+    Ok(ns::MntNs::new(owner, base))
 }
 
 /// The child is running: let it go, and for vfork wait until it exec'd or
@@ -254,15 +336,22 @@ fn start(
 }
 
 /// `CLONE_PARENT_SETTID` and `CLONE_CHILD_SETTID`: the child's id, as an
-/// `int`, in the caller's memory and in the child's (`child_memory`, when
-/// it is not the caller's). Failures are ignored (to be confirmed by the
-/// diff runner).
-fn store_tids(k: &mut Thread<'_>, req: &CloneRequest, tid: u32, child_memory: Option<&Arc<user::Memory>>) {
-    let bytes = (tid as i32).to_le_bytes();
+/// `int`, in the caller's memory (as the caller's pid namespace sees it,
+/// `parent_sees`) and in the child's (`child_memory`, when it is not the
+/// caller's; as the child's namespace sees it, `child_sees`). Failures are
+/// ignored (to be confirmed by the diff runner).
+fn store_tids(
+    k: &mut Thread<'_>,
+    req: &CloneRequest,
+    parent_sees: i32,
+    child_sees: i32,
+    child_memory: Option<&Arc<user::Memory>>,
+) {
     if let Some(ptr) = req.parent_tid {
-        let _ = k.copy_to_user(ptr, &bytes);
+        let _ = k.copy_to_user(ptr, &parent_sees.to_le_bytes());
     }
     if let Some(ptr) = req.child_tid {
+        let bytes = child_sees.to_le_bytes();
         match child_memory {
             Some(memory) => {
                 let _ = memory.write(ptr.0, &bytes);
@@ -372,10 +461,12 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         // "the calling thread ... takes the thread group leader's PID".
         k.process.rename_thread(old_tid, pid);
         user::set_current_tid(pid);
-        k.linux.with(|p| {
+        let ns = k.linux.with(|p| {
             p.add_thread(old_tid as i32, pid as i32, false);
             p.remove_thread(old_tid as i32);
+            p.ns.pid.clone()
         });
+        poly_personality_linux::ns::pid::detach(&ns, old_tid as i32);
         k.tid = pid;
     }
     k.linux.with(|p| p.exec(pid as i32));

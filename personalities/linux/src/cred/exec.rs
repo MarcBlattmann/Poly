@@ -6,6 +6,7 @@
 //! rules make them full.
 
 use super::{CapSet, Caps, Creds};
+use crate::ns::user::IdKind;
 
 /// Mode bits (UAPI `linux/stat.h`).
 pub const S_ISUID: u16 = 0o4000;
@@ -46,12 +47,15 @@ impl Creds {
     pub fn exec(&self, file: &ExecFile) -> (Creds, bool) {
         let mut new = self.clone();
         let honor = !file.nosuid && !self.no_new_privs;
+        // user_namespaces(7): the bits of a file whose owner (group) has no
+        // mapping in the caller's user namespace are ignored.
+        let mapped = |kind, id| crate::ns::user::up(&self.user_ns, kind, id).is_some();
         let mut privileged_file = false;
-        if honor && file.perm & S_ISUID != 0 {
+        if honor && file.perm & S_ISUID != 0 && mapped(IdKind::Uid, file.uid) {
             new.euid = file.uid;
             privileged_file = true;
         }
-        if honor && file.perm & S_ISGID != 0 && file.perm & S_IXGRP != 0 {
+        if honor && file.perm & S_ISGID != 0 && file.perm & S_IXGRP != 0 && mapped(IdKind::Gid, file.gid) {
             new.egid = file.gid;
             privileged_file = true;
         }
