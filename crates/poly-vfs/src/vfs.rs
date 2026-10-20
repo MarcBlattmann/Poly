@@ -271,7 +271,7 @@ impl Vfs {
             return Err(Errno::EISDIR);
         }
         if !created {
-            if (write || flags.contains(OpenFlags::TRUNC)) && is_fs_object(attr.kind) && loc.mount.read_only() {
+            if (write || flags.contains(OpenFlags::TRUNC)) && is_fs_object(attr.kind) && loc.mount.read_only_for(loc.ino) {
                 return Err(Errno::EROFS);
             }
             let mut want = Access::NONE;
@@ -942,6 +942,104 @@ impl Vfs {
         let mount = self.mounts.lock().mounts.iter().find(|m| m.id == id).cloned().ok_or(Errno::ENOENT)?;
         let root = Location { ino: mount.root, mount }.pin()?;
         self.path_of(ctx, &root)
+    }
+
+    // ----- mount namespaces -----
+    //
+    // A mount namespace is a tree of mounts: the mounts below one first
+    // mount (a mount without a mount point), which names it. The first
+    // root's tree is the initial namespace. A copy duplicates every mount
+    // of a tree, so mounting and unmounting in one copy does not show in
+    // the others; the file systems (superblocks) are shared, so files are.
+
+    /// The mount namespace `ctx`'s root is in.
+    pub fn namespace_of(&self, ctx: &FsContext) -> MountId {
+        crate::mount::base_of(&ctx.root.loc().mount)
+    }
+
+    /// `unshare(CLONE_NEWNS)`: copies the mount namespace `ctx` is in and
+    /// moves `ctx`'s root and working directory to the same places in the
+    /// copy (a working directory in another tree stays). Returns the new
+    /// namespace. The flags of each mount are copied.
+    pub fn copy_namespace(&self, ctx: &mut FsContext) -> Result<MountId> {
+        let base = self.namespace_of(ctx);
+        let mut copies: BTreeMap<MountId, Arc<Mount>> = BTreeMap::new();
+        let new_base = {
+            let mut table = self.mounts.lock();
+            let mut new_base = None;
+            for m in table.tree(base) {
+                let parent = match &m.parent {
+                    None => None,
+                    // A parent that left the table (a lazy unmount) takes
+                    // its subtree with it.
+                    Some((p, ino)) => match copies.get(&p.id) {
+                        Some(c) => Some((c.clone(), *ino)),
+                        None => continue,
+                    },
+                };
+                let is_base = parent.is_none();
+                let copy = table.add(m.sb.clone(), m.root, parent, m.flags());
+                if is_base {
+                    new_base = Some(copy.id);
+                }
+                copies.insert(m.id, copy);
+            }
+            new_base.ok_or(Errno::EINVAL)?
+        };
+        let moved = |n: &NodeRef| -> Result<Option<NodeRef>> {
+            match copies.get(&n.loc().mount.id) {
+                Some(m) => Location { mount: m.clone(), ino: n.loc().ino }.pin().map(Some),
+                None => Ok(None),
+            }
+        };
+        let root = moved(&ctx.root)?;
+        let cwd = moved(&ctx.cwd)?;
+        if let Some(r) = root {
+            ctx.root = r;
+        }
+        if let Some(c) = cwd {
+            ctx.cwd = c;
+        }
+        Ok(new_base)
+    }
+
+    /// `setns(2)` into mount namespace `base`: `ctx`'s root and working
+    /// directory become its root. `EINVAL` if there is no such namespace.
+    pub fn enter_namespace(&self, ctx: &mut FsContext, base: MountId) -> Result<()> {
+        let first = self
+            .mounts
+            .lock()
+            .mounts
+            .iter()
+            .find(|m| m.id == base && m.parent.is_none())
+            .cloned()
+            .ok_or(Errno::EINVAL)?;
+        let root = Location { ino: first.root, mount: first }.pin()?;
+        ctx.cwd = root.clone();
+        ctx.root = root;
+        Ok(())
+    }
+
+    /// The last process left mount namespace `base`: its mounts go (files
+    /// open on them keep them alive). The initial namespace stays
+    /// (`EBUSY`).
+    pub fn drop_namespace(&self, base: MountId) -> Result<()> {
+        let mut table = self.mounts.lock();
+        if table.mounts.first().is_some_and(|m| m.id == base) {
+            return Err(Errno::EBUSY);
+        }
+        let doomed: Vec<MountId> = table.tree(base).iter().map(|m| m.id).collect();
+        if doomed.is_empty() {
+            return Err(Errno::EINVAL);
+        }
+        table.mounts.retain(|m| !doomed.contains(&m.id));
+        Ok(())
+    }
+
+    /// The mounts of namespace `base`, in mount order.
+    pub fn namespace_mounts(&self, base: MountId) -> Vec<MountInfo> {
+        let ids: Vec<MountId> = self.mounts.lock().tree(base).iter().map(|m| m.id).collect();
+        self.mounts().into_iter().filter(|m| ids.contains(&m.id)).collect()
     }
 
     /// Every mount, in mount order.

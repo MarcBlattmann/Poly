@@ -210,6 +210,24 @@ impl MntNs {
     }
 }
 
+/// What the kernel does when the last reference to a mount namespace goes
+/// (its last process left it): drop its copy of the mount table.
+static MOUNTS_RELEASED: Mutex<Option<fn(u32)>> = Mutex::new(None);
+
+/// Tell the personality how to drop a mount table ([`MntNs::id`]).
+pub fn on_mounts_released(release: fn(u32)) {
+    *MOUNTS_RELEASED.lock() = Some(release);
+}
+
+impl Drop for MntNs {
+    fn drop(&mut self) {
+        let release = *MOUNTS_RELEASED.lock();
+        if let Some(release) = release {
+            release(self.id);
+        }
+    }
+}
+
 macro_rules! namespace {
     ($($t:ty),*) => {$(
         impl PartialEq for $t {

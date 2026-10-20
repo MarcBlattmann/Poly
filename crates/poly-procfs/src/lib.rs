@@ -6,7 +6,8 @@
 //!   tables, mounts, clocks and CPUID) each time they are read, formatted
 //!   as the proc(5) family of manual pages describes. `/proc/self`,
 //!   `/proc/<pid>/{stat,statm,status,maps,cmdline,environ,comm,exe,cwd,
-//!   root,fd/,fdinfo/,mounts,mountinfo}`, `/proc/{cpuinfo,meminfo,uptime,
+//!   root,fd/,fdinfo/,mounts,mountinfo,ns/,uid_map,gid_map,setgroups}`,
+//!   `/proc/{cpuinfo,meminfo,uptime,
 //!   loadavg,version,stat,mounts,filesystems}` and
 //!   `/proc/sys/{kernel/{ostype,osrelease,version,hostname,domainname,
 //!   pid_max,random/{boot_id,uuid,entropy_avail,poolsize}},fs/nr_open}`.
@@ -16,8 +17,16 @@
 //! - [`format`] holds the text of each file, [`cpuflags`] the names of
 //!   CPU features; both are plain functions, tested here.
 //!
-//! Everything is read-only (`EROFS`); writes to `/proc` files that Linux
-//! accepts (`comm`, `sys/kernel/hostname`) are not supported yet.
+//! Everything is read-only (`EROFS`) but a process's `uid_map`, `gid_map`
+//! and `setgroups`, which the kernel's [`ProcSource::write_id_map`] takes;
+//! other writes Linux accepts (`comm`, `sys/kernel/hostname`) are not
+//! supported yet.
+//!
+//! `/proc/<pid>/ns/<kind>` (namespaces(7)) is a link whose text,
+//! `<type>:[<inode number>]`, names a hidden regular file in the same
+//! directory: following the link opens that file, and a descriptor on it
+//! names the namespace ([`namespace_file`]) for setns(2). (Linux's links
+//! are "magic"; Poly's resolve like any other.)
 
 #![no_std]
 
@@ -29,10 +38,10 @@ mod procfs;
 mod source;
 mod staticfs;
 
-pub use procfs::{NR_OPEN, PID_MAX, PID_POS, ProcFs, copy_at};
+pub use procfs::{NR_OPEN, NS_KINDS, PID_MAX, PID_POS, ProcFs, copy_at, namespace_file};
 pub use source::{
-    CpuFeatures, CpuInfo, CpuTimes, FdInfo, KernelInfo, MapEntry, MapName, MountEntry, NANOS_PER_TICK, Owner,
-    ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo, USER_HZ,
+    CpuFeatures, CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, MapEntry, MapName, MountEntry, NANOS_PER_TICK,
+    Owner, ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo, USER_HZ,
 };
 pub use staticfs::{Contents, StaticFs, StaticFsBuilder};
 

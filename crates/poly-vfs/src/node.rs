@@ -106,7 +106,7 @@ impl NodeRef {
     /// asking to write a file, directory or link on a read-only mount.
     pub fn access(&self, cred: &Cred, want: Access) -> Result<()> {
         let attr = self.attr()?;
-        if want.contains(Access::WRITE) && self.loc.mount.read_only() && is_fs_object(attr.kind) {
+        if want.contains(Access::WRITE) && self.loc.mount.read_only_for(self.loc.ino) && is_fs_object(attr.kind) {
             return Err(Errno::EROFS);
         }
         cred.check(&attr, want)
