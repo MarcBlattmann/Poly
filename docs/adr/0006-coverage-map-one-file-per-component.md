@@ -33,3 +33,11 @@ form, or if a component file exists that the map does not contain.
 - Agents working on different libraries change different files, so parallel
   claims rarely conflict.
 - The tooling reads the whole directory, so commands and the README are unchanged.
+- *Note, 2026-10-20:* [0055](0055-microsoft-redistributables-run-apps-own-copies.md)
+  adds a sixth status to those of 0004, `app-provided`: "supplied by the
+  application or its installer, per ADR 0055" (Microsoft's redistributable
+  C++ and DirectX runtimes). It is stored like the others (`"status":"app-provided"`),
+  always covers a whole component file, cannot be claimed or carry tests, and
+  is left out of the README percentages and the treemap.
+  `coverage set-status --component <os>/<layer>/<component> <status>` sets a
+  status for every entry of a component.

@@ -1,5 +1,5 @@
 [
-{"symbol":"__CxxFrameHandler4","src":["wine-spec"]},
-{"symbol":"__NLG_Dispatch2","src":["wine-spec"]},
-{"symbol":"__NLG_Return2","src":["wine-spec"]}
+{"symbol":"__CxxFrameHandler4","status":"app-provided","src":["wine-spec"]},
+{"symbol":"__NLG_Dispatch2","status":"app-provided","src":["wine-spec"]},
+{"symbol":"__NLG_Return2","status":"app-provided","src":["wine-spec"]}
 ]
