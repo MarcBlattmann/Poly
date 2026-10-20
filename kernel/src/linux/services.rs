@@ -15,6 +15,7 @@
 //! | FPU state | the thread's save area (`user::fpu_image`, `user::load_fpu`) |
 //! | futexes | one global table under a spinlock ([`super::FUTEXES`]) |
 //! | clocks, random bytes | `time::now_ns`, `time::realtime_ns` (the CMOS RTC read once), RDRAND or the TSC |
+//! | `clone_task`, `execve`, `with_tree`, `wait_tree`, `ppid`, group and session ids | `super::task`: the process tree, `user::spawn_child`, `Memory::fork`, `exec::load` (ADR 0041) |
 //!
 //! Nothing here holds a lock while it touches user memory, except the
 //! futex calls the personality makes with the table locked
@@ -22,9 +23,8 @@
 //! with `EFAULT` on a page that is not present, which the personality
 //! prevents by reading the word first, unlocked.
 //!
-//! Not done yet, each documented where it is: parent notification on stop
-//! and continue (no `wait4` yet), core dumps, shared mappings of files the
-//! page cache does not hold (tmpfs: `ENODEV`), `MAP_32BIT` placement (refused with `ENOMEM` when the address
+//! Not done yet, each documented where it is: core dumps, shared mappings
+//! of files the page cache does not hold (tmpfs: `ENODEV`), `MAP_32BIT` placement (refused with `ENOMEM` when the address
 //! is not low), `PROT_GROWSDOWN` (applied to the given range only), CPU-time
 //! clocks (`EINVAL`).
 
@@ -53,10 +53,10 @@ use poly_vm::Access;
 /// The running thread of a Linux process, for one system call or one
 /// return to user mode.
 pub struct Thread<'a> {
-    process: &'a Process,
-    linux: &'a LinuxState,
-    tid: u32,
-    flags: Arc<ThreadFlags>,
+    pub(super) process: &'a Process,
+    pub(super) linux: &'a LinuxState,
+    pub(super) tid: u32,
+    pub(super) flags: Arc<ThreadFlags>,
     /// During a system call: `rax` as the thread will see it (the call
     /// number until the dispatcher has written the result).
     rax: Option<u64>,
@@ -64,7 +64,7 @@ pub struct Thread<'a> {
     fault: Option<(u64, u64, u64)>,
     /// How the thread (or its process) is to end.
     exit: Option<ExitStatus>,
-    replaced: bool,
+    pub(super) replaced: bool,
     /// The FPU image, saved at the first request.
     fpu: OnceCell<(Vec<u8>, Option<u64>)>,
 }
@@ -122,7 +122,10 @@ impl<'a> Thread<'a> {
     fn target(&self, target: Target) -> Result<TargetProcess<'a>, Errno> {
         match target {
             Target::Current => Ok(TargetProcess::Own(self.process)),
-            Target::Process(pid) if pid > 0 => process::find(pid as u32).map(TargetProcess::Other).ok_or(Errno::ESRCH),
+            Target::Process(pid) if pid > 0 => process::find(pid as u32)
+                .or_else(|| super::task::zombie(pid as u32))
+                .map(TargetProcess::Other)
+                .ok_or(Errno::ESRCH),
             Target::Thread(tid) if tid > 0 => {
                 process::find_thread(tid as u32).map(|(p, _)| TargetProcess::Other(p)).ok_or(Errno::ESRCH)
             }
@@ -187,9 +190,10 @@ pub fn file_stat(st: &poly_vfs::Stat) -> FileStat {
 
 fn info_of(p: &Process) -> ProcessInfo {
     let pid = p.pid as i32;
-    // One process group and session per process, all root, until
-    // setsid / setpgid and users arrive.
-    ProcessInfo { pid, pgid: pid, sid: pid, zombie: p.has_ended(), ..ProcessInfo::default() }
+    // Groups and sessions from the process tree; everyone is root until
+    // users arrive.
+    let (pgid, sid) = super::task::group_and_session(p.pid);
+    ProcessInfo { pid, pgid, sid, zombie: p.has_ended(), ..ProcessInfo::default() }
 }
 
 /// The region protection for validated `PROT_*` bits (`PROT_SEM` and the
@@ -238,7 +242,7 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn ppid(&self) -> i32 {
-        self.process.ppid as i32
+        super::task::parent_of(self.process) as i32
     }
 
     fn credentials(&self) -> Credentials {
@@ -282,7 +286,12 @@ impl LinuxKernel for Thread<'_> {
         let memory = self.memory()?;
         let prot = vm_prot(r.prot);
         let req = match r.backing {
-            // Shared anonymous memory is private until fork shares it.
+            // Shared anonymous memory is a shared mapping of an object of
+            // its own, whose pages every process mapping it finds (ADR 0041).
+            Backing::Anonymous if r.shared => {
+                let object = FileRef::new(Arc::new(user::AnonShared::new(r.len)));
+                poly_vm::MapRequest::file(r.len, prot, object, 0, true)
+            }
             Backing::Anonymous => poly_vm::MapRequest::anonymous(r.len, prot),
             Backing::File { fd, offset } => {
                 let file = self.process.files.file(fd).map_err(vfs_errno)?;
@@ -354,11 +363,11 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn pgid(&self) -> i32 {
-        self.process.pid as i32
+        super::task::group_and_session(self.process.pid).0
     }
 
     fn sid(&self) -> i32 {
-        self.process.pid as i32
+        super::task::group_and_session(self.process.pid).1
     }
 
     fn with_process(
@@ -382,8 +391,7 @@ impl LinuxKernel for Thread<'_> {
             .map(|p| p.pid as i32)
             .filter(|&pid| match selector {
                 ProcessSelector::All => true,
-                // Every process is its own group for now.
-                ProcessSelector::Group(g) => pid == g,
+                ProcessSelector::Group(g) => super::task::group_and_session(pid as u32).0 == g,
             })
             .collect()
     }
@@ -399,9 +407,10 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn stop_process(&mut self, signal: u32) {
-        // Parent notification (wait(2) WIFSTOPPED, SIGCHLD) waits for wait4.
         kprintln!("linux: pid {} stopped by signal {signal}", self.process.pid);
         self.process.stop();
+        // The parent learns of it: wait(2) WUNTRACED, SIGCHLD (ADR 0041).
+        poly_personality_linux::task::process_stopped(self, signal);
         self.process.wait_while_stopped();
     }
 
@@ -410,6 +419,7 @@ impl LinuxKernel for Thread<'_> {
         let p = target.as_deref().unwrap_or(self.process);
         if p.cont() {
             kprintln!("linux: pid {} continued", p.pid);
+            poly_personality_linux::task::process_continued(self, pid);
         }
     }
 
@@ -547,6 +557,26 @@ impl LinuxKernel for Thread<'_> {
             // CPU time is not accounted per thread yet.
             Clock::ProcessCpuTime | Clock::ThreadCpuTime => Err(Errno::EINVAL),
         }
+    }
+
+    fn clone_task(&mut self, req: &poly_personality_linux::task::clone::CloneRequest) -> Result<i32, Errno> {
+        super::task::clone_task(self, req)
+    }
+
+    fn execve(&mut self, req: &poly_personality_linux::task::exec::ExecRequest<'_>) -> Result<(), Errno> {
+        super::task::execve(self, req)
+    }
+
+    fn with_tree(
+        &mut self,
+        f: &mut dyn FnMut(&mut poly_personality_linux::task::tree::ProcessTree),
+    ) -> Result<(), Errno> {
+        super::task::with_tree(|t| f(t));
+        Ok(())
+    }
+
+    fn wait_tree(&mut self, generation: u64) -> Wakeup {
+        super::task::wait_tree(self, generation)
     }
 
     fn random_bytes(&mut self, buf: &mut [u8], _mode: RandomMode) -> Result<usize, Errno> {

@@ -74,8 +74,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 ## Phase 4: Linux userland
 
-- [ ] Processes and threads: `clone`, `fork` (copy-on-write), `execve`, `exit`, `wait4`
-- [ ] Thread-local storage, `futex`, robust futex lists, `set_tid_address`
+- [x] Processes and threads: `clone`, `fork` (copy-on-write), `execve`, `exit`, `wait4`
+- [x] Thread-local storage, `futex`, robust futex lists, `set_tid_address`
 - [ ] Signals: delivery, handlers, `sigaltstack`, `rt_sigreturn`, process groups
 - [ ] Pipes, `poll` / `select`, `epoll`, `eventfd`, `timerfd`, `signalfd`
 - [ ] Time syscalls and a vDSO (`clock_gettime` without a syscall)

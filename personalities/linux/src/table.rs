@@ -9,7 +9,7 @@
 use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
-use crate::sys::{futex, io, mem, process, signal, system};
+use crate::sys::{futex, io, mem, process, signal, system, task};
 
 pub use crate::numbers::{SYSCALLS, nr};
 
@@ -37,14 +37,24 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::READV, io::readv),
     (nr::WRITEV, io::writev),
     (nr::GETPID, process::getpid),
+    (nr::CLONE, task::clone),
+    (nr::FORK, task::fork),
+    (nr::VFORK, task::vfork),
+    (nr::EXECVE, task::execve),
     (nr::EXIT, process::exit),
+    (nr::WAIT4, task::wait4),
     (nr::KILL, signal::kill),
     (nr::UNAME, system::uname),
     (nr::GETUID, process::getuid),
     (nr::GETGID, process::getgid),
     (nr::GETEUID, process::geteuid),
     (nr::GETEGID, process::getegid),
+    (nr::SETPGID, task::setpgid),
     (nr::GETPPID, process::getppid),
+    (nr::GETPGRP, task::getpgrp),
+    (nr::SETSID, task::setsid),
+    (nr::GETPGID, task::getpgid),
+    (nr::GETSID, task::getsid),
     (nr::RT_SIGPENDING, signal::rt_sigpending),
     (nr::RT_SIGTIMEDWAIT, signal::rt_sigtimedwait),
     (nr::RT_SIGQUEUEINFO, signal::rt_sigqueueinfo),
@@ -59,10 +69,12 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::CLOCK_GETTIME, system::clock_gettime),
     (nr::EXIT_GROUP, process::exit_group),
     (nr::TGKILL, signal::tgkill),
+    (nr::WAITID, task::waitid),
     (nr::SET_ROBUST_LIST, futex::set_robust_list),
     (nr::GET_ROBUST_LIST, futex::get_robust_list),
     (nr::RT_TGSIGQUEUEINFO, signal::rt_tgsigqueueinfo),
     (nr::GETRANDOM, system::getrandom),
+    (nr::CLONE3, task::clone3),
 ];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
@@ -216,14 +228,24 @@ mod tests {
             "readv",
             "writev",
             "getpid",
+            "clone",
+            "fork",
+            "vfork",
+            "execve",
             "exit",
+            "wait4",
             "kill",
             "uname",
             "getuid",
             "getgid",
             "geteuid",
             "getegid",
+            "setpgid",
             "getppid",
+            "getpgrp",
+            "setsid",
+            "getpgid",
+            "getsid",
             "rt_sigpending",
             "rt_sigtimedwait",
             "rt_sigqueueinfo",
@@ -238,10 +260,12 @@ mod tests {
             "clock_gettime",
             "exit_group",
             "tgkill",
+            "waitid",
             "set_robust_list",
             "get_robust_list",
             "rt_tgsigqueueinfo",
             "getrandom",
+            "clone3",
         ];
         assert_eq!(names, expected);
     }

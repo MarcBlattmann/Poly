@@ -44,7 +44,9 @@ use poly_binfmt as binfmt;
 #[derive(Debug)]
 pub struct Process {
     pub pid: u32,
-    /// The parent's process id; 0 for processes the kernel started.
+    /// The parent's process id when the process was made; 0 for processes
+    /// the kernel started. A Linux process's current parent (after its
+    /// parent ended) is in the personality's process tree (`linux::task`).
     pub ppid: u32,
     pub personality: Personality,
     pub format: binfmt::Format,
@@ -66,6 +68,9 @@ pub struct Process {
     exiting: AtomicBool,
     /// The process is stopped ([`Process::stop`]).
     stopped: AtomicBool,
+    /// Live threads (the length of `threads.live`), readable without the
+    /// lock.
+    live: AtomicU32,
 }
 
 /// How a process (or a thread) ended.
@@ -99,6 +104,9 @@ pub struct ThreadFlags {
     pub notified: AtomicBool,
     /// An unpark is waiting to be consumed (`LinuxKernel::unblock`).
     pub unparked: AtomicBool,
+    /// The thread must end, though its process goes on (another thread's
+    /// `execve`, [`Process::end_other_threads`]).
+    pub killed: AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -139,7 +147,7 @@ impl Process {
     /// A bare process record for a personality and format decided
     /// elsewhere, without personality state (kernel tests).
     pub fn new(pid: u32, personality: Personality, format: binfmt::Format) -> Process {
-        Process::with_state(pid, 0, personality, format, None, false)
+        Process::with_state(pid, 0, personality, format, None, false, crate::fs::Files::with_console())
     }
 
     /// A Linux process with its personality state, whose system calls get
@@ -148,7 +156,20 @@ impl Process {
     /// (ADR 0027).
     pub fn new_linux(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
         let linux = Some(LinuxState::new(pid));
-        Process::with_state(pid, ppid, Personality::Linux, format, linux, traced)
+        Process::with_state(pid, ppid, Personality::Linux, format, linux, traced, crate::fs::Files::with_console())
+    }
+
+    /// A Linux process made by `fork` / `clone` (`linux::task`): its files
+    /// and personality state come from the parent.
+    pub fn new_linux_child(
+        pid: u32,
+        ppid: u32,
+        format: binfmt::Format,
+        traced: bool,
+        files: crate::fs::Files,
+        linux: LinuxState,
+    ) -> Process {
+        Process::with_state(pid, ppid, Personality::Linux, format, Some(linux), traced, files)
     }
 
     fn with_state(
@@ -158,19 +179,21 @@ impl Process {
         format: binfmt::Format,
         linux: Option<LinuxState>,
         traced: bool,
+        files: crate::fs::Files,
     ) -> Process {
         Process {
             pid,
             ppid,
             personality,
             format,
-            files: crate::fs::Files::with_console(),
+            files,
             linux,
             traced,
             threads: SpinLock::new(Threads::default()),
             ended: AtomicBool::new(false),
             exiting: AtomicBool::new(false),
             stopped: AtomicBool::new(false),
+            live: AtomicU32::new(0),
         }
     }
 
@@ -185,15 +208,23 @@ impl Process {
     /// Register a new thread: its id (the process id for the first one, a
     /// fresh id otherwise) and its flags. `None` if the process has ended.
     pub fn attach_thread(self: &Arc<Self>) -> Option<(u32, Arc<ThreadFlags>)> {
+        self.attach_thread_as(None)
+    }
+
+    /// [`attach_thread`](Self::attach_thread) with the id given (`Some`: an
+    /// id from [`alloc_pid`] the caller has prepared state for, a `clone`
+    /// child's).
+    pub fn attach_thread_as(self: &Arc<Self>, id: Option<u32>) -> Option<(u32, Arc<ThreadFlags>)> {
         let flags = Arc::new(ThreadFlags::default());
         let (tid, first) = {
             let mut t = self.threads.lock();
             if t.status.is_some() {
                 return None;
             }
-            let tid = if t.started == 0 { self.pid } else { alloc_pid() };
+            let tid = id.unwrap_or_else(|| if t.started == 0 { self.pid } else { alloc_pid() });
             t.started += 1;
             t.live.push((tid, Arc::clone(&flags)));
+            self.live.store(t.live.len() as u32, Ordering::SeqCst);
             (tid, t.live.len() == 1)
         };
         if first {
@@ -215,6 +246,7 @@ impl Process {
         let empty = {
             let mut t = self.threads.lock();
             t.live.retain(|(id, _)| *id != tid);
+            self.live.store(t.live.len() as u32, Ordering::SeqCst);
             t.live.is_empty()
         };
         if empty {
@@ -236,7 +268,11 @@ impl Process {
         let status = {
             let mut t = self.threads.lock();
             t.live.retain(|(id, _)| *id != tid);
+            self.live.store(t.live.len() as u32, Ordering::SeqCst);
             if !t.live.is_empty() || t.status.is_some() {
+                drop(t);
+                // A thread may wait for the others to go (`execve`).
+                EVENTS.wake_all();
                 return None;
             }
             let status = t.group_exit.unwrap_or(own);
@@ -312,6 +348,40 @@ impl Process {
         self.threads.lock().live.len()
     }
 
+    /// End every thread but `tid` (`execve`): each leaves the next time it
+    /// would return to user mode, parked ones at once; the process goes
+    /// on. Then wait until they are gone (or the process is being ended
+    /// as a whole, or `tid`, whose `flags` these are, is ended by another
+    /// thread's `execve`). Returns whether `tid` is alone now.
+    pub fn end_other_threads(&self, tid: u32, flags: &ThreadFlags) -> bool {
+        {
+            let t = self.threads.lock();
+            for (id, flags) in &t.live {
+                if *id != tid {
+                    flags.killed.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+        EVENTS.wake_all();
+        let ended = || self.exiting.load(Ordering::SeqCst) || flags.killed.load(Ordering::SeqCst);
+        EVENTS.wait_until(|| self.live.load(Ordering::SeqCst) <= 1 || ended());
+        self.live.load(Ordering::SeqCst) == 1 && !ended()
+    }
+
+    /// Give the live thread `old` the id `new` (an `execve` by a thread
+    /// other than the main one takes over the process id). Returns whether
+    /// it was there.
+    pub fn rename_thread(&self, old: u32, new: u32) -> bool {
+        let mut t = self.threads.lock();
+        match t.live.iter_mut().find(|(id, _)| *id == old) {
+            Some(entry) => {
+                entry.0 = new;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Stop the process (a stop signal's default action): its threads wait
     /// in [`wait_while_stopped`](Self::wait_while_stopped) at their next
     /// return to user mode until [`cont`](Self::cont).
@@ -357,6 +427,7 @@ pub fn park(process: &Process, flags: &ThreadFlags, deadline_ns: Option<u64>) ->
     let ready = || {
         flags.notified.load(Ordering::SeqCst)
             || flags.unparked.load(Ordering::SeqCst)
+            || flags.killed.load(Ordering::SeqCst)
             || process.exiting.load(Ordering::SeqCst)
     };
     let in_time = match deadline_ns {
@@ -366,7 +437,7 @@ pub fn park(process: &Process, flags: &ThreadFlags, deadline_ns: Option<u64>) ->
             true
         }
     };
-    if flags.notified.load(Ordering::SeqCst) || process.is_exiting() {
+    if flags.notified.load(Ordering::SeqCst) || flags.killed.load(Ordering::SeqCst) || process.is_exiting() {
         Unparked::Interrupted
     } else if flags.unparked.swap(false, Ordering::SeqCst) {
         Unparked::Woken
@@ -376,6 +447,22 @@ pub fn park(process: &Process, flags: &ThreadFlags, deadline_ns: Option<u64>) ->
     } else {
         Unparked::TimedOut
     }
+}
+
+/// Block the calling thread until `ready()` holds. It is checked again
+/// whenever anything a parked thread may wait for happens: a process
+/// ends, stops or continues, a signal notification, an unpark, a group
+/// exit or an `execve` ending threads, and [`wake_waiters`]. So a wait
+/// that also checks those (a `wait4`, a vfork parent) is interrupted by
+/// them like [`park`].
+pub fn wait_event(ready: impl FnMut() -> bool) {
+    EVENTS.wait_until(ready);
+}
+
+/// Make every thread in [`wait_event`] (and [`park`]) check its condition
+/// again.
+pub fn wake_waiters() {
+    EVENTS.wake_all();
 }
 
 /// Wake thread `flags` from [`park`], or make its next park return at once.
