@@ -38,6 +38,10 @@ name = "poly-mem"
 version = "0.0.1"
 
 [[package]]
+name = "poly-paging"
+version = "0.0.1"
+
+[[package]]
 name = "poly-personality-linux"
 version = "0.0.1"
 dependencies = [
