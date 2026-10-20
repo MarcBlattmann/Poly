@@ -7,7 +7,9 @@
 //! coverage import macos-sdk <MacOSX.sdk> --revision <sdk version>   (run on a Mac)
 //! coverage claim <id> --agent <agent-id>
 //! coverage release <id>
-//! coverage set-status <id> <missing|stub|green|blocked-by-design>
+//! coverage set-status <id> <missing|stub|green|blocked-by-design|app-provided>
+//! coverage set-status --component <os>/<layer>/<component> [--component ...] <status>
+//!                                                    (every entry of those components)
 //! coverage check
 //! coverage readme [--check]      README progress section + docs/progress/*.svg
 //! ```
@@ -142,10 +144,32 @@ fn release(args: &[String]) -> Result<(), String> {
     save(&c)
 }
 
+/// Every value following a `--name` in `args` (the option may repeat).
+fn opts<'a>(args: &'a [String], name: &str) -> Vec<&'a str> {
+    args.windows(2).filter(|w| w[0] == name).map(|w| w[1].as_str()).collect()
+}
+
+fn parse_status(s: &str) -> Result<Status, String> {
+    let names: Vec<&str> = Status::ALL.iter().map(|s| s.name()).collect();
+    Status::parse(s).ok_or_else(|| format!("unknown status {s} (one of {})", names.join(", ")))
+}
+
 fn set_status(args: &[String]) -> Result<(), String> {
+    const USAGE: &str = "usage: coverage set-status <id> <status> | coverage set-status --component <os>/<layer>/<component> ... <status>";
     let pos = positional(args);
-    let [id, status] = pos.as_slice() else { return Err("usage: coverage set-status <id> <status>".into()) };
-    let status = Status::parse(status).ok_or_else(|| format!("unknown status {status}"))?;
+    let components = opts(args, "--component");
+    if !components.is_empty() {
+        let [status] = pos.as_slice() else { return Err(USAGE.into()) };
+        let status = parse_status(status)?;
+        let mut c = load()?;
+        for component in components {
+            let n = c.set_component_status(component, status)?;
+            println!("{component}: {n} entries set to {}", status.name());
+        }
+        return save(&c);
+    }
+    let [id, status] = pos.as_slice() else { return Err(USAGE.into()) };
+    let status = parse_status(status)?;
     if status == Status::Claimed {
         return Err("use `coverage claim` to claim".into());
     }
