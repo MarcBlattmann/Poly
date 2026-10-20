@@ -22,6 +22,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-heap"
+version = "0.0.1"
+
+[[package]]
 name = "poly-kernel"
 version = "0.0.1"
 dependencies = [
@@ -29,6 +33,7 @@ dependencies = [
  "poly-acpi",
  "poly-backtrace",
  "poly-binfmt",
+ "poly-heap",
  "poly-mem",
  "poly-personality-linux",
  "poly-personality-nt",

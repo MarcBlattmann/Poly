@@ -6,6 +6,9 @@
 //! usable RAM below [`arch::BOOT_MAPPED_PHYS`], the only RAM the kernel can
 //! reach before it has its own page tables. Frames above that limit are
 //! managed too; they are just not mapped yet.
+//!
+//! The kernel heap takes its pages from here while holding its own lock, so
+//! nothing may allocate from the heap while holding [`FRAMES`].
 
 use crate::arch;
 use crate::sync::SpinLock;

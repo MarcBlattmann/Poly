@@ -90,8 +90,33 @@ spaces) replaces the boot mapping in the next milestone.
   one step per level rather than a scan. `free` checks a per-order
   "allocated" bitmap and rejects double, misaligned, out-of-range and
   wrong-order frees. See [ADR 0007](adr/0007-buddy-allocator-out-of-band-metadata.md).
+  `allocate_below` limits a request to memory under an address, and
+  `allocate_run` / `free_run` hand out runs of any length up to 4 MiB
+  without rounding them up to a power of two.
 - `kernel/src/frames.rs` carves that buffer from usable RAM below 1 GiB (the
   only RAM reachable through the boot mapping), marks it `Kernel` in the map,
   and puts the allocator in the global `frames::FRAMES` spinlock. RAM above
   1 GiB is managed too; nothing maps it yet. `cargo xtask test` boots with
   256 MiB and with 2 GiB to cover both cases.
+
+## Kernel heap
+
+- `poly-heap` is the allocator: size-class slabs (16 B to 2 KiB, slabs of
+  one page up to 32 KiB, aligned to their size so a free finds its slab by
+  rounding the pointer down) for small objects, and whole-page runs for
+  everything larger or more strictly aligned. It takes pages from a
+  `PageSource` and is host-tested against a mock one.
+- `kernel/src/heap.rs` makes it the `#[global_allocator]`, so the kernel
+  uses `alloc` (`Box`, `Vec`, `String`, `BTreeMap`). Its page source takes
+  runs of frames from `frames::FRAMES` with `BuddyAllocator::allocate_run`,
+  which frees the unused tail of the buddy block, and maps them with
+  `arch::phys_to_virt`. One allocation is at most one buddy block (4 MiB).
+  Until the direct map lands only the first 1 GiB is reachable, so the page
+  source asks for frames there first and the heap fails cleanly when it is
+  used up.
+- Lock order is heap, then `FRAMES`: never allocate while holding `FRAMES`.
+  Neither lock masks interrupts yet.
+- Out of memory: fallible APIs (`try_reserve`) see the error; everything
+  else panics with "memory allocation of N bytes failed" and a backtrace
+  (stable Rust's default handler in `no_std`), checked by a boot test.
+  Boot prints the heap's numbers after the self-test.

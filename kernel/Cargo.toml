@@ -21,6 +21,7 @@ poly-abi = { path = "../crates/poly-abi" }
 poly-acpi = { path = "../crates/poly-acpi" }
 poly-backtrace = { path = "../crates/poly-backtrace" }
 poly-binfmt = { path = "../crates/poly-binfmt" }
+poly-heap = { path = "../crates/poly-heap" }
 poly-mem = { path = "../crates/poly-mem" }
 poly-personality-linux = { path = "../personalities/linux" }
 poly-personality-nt = { path = "../personalities/nt" }

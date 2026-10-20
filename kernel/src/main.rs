@@ -3,10 +3,13 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 mod acpi;
 mod arch;
 mod boot_info;
 mod frames;
+mod heap;
 mod ktest;
 mod log;
 mod process;
@@ -80,6 +83,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     acpi::init(boot.rsdp, &memory);
 
     let ok = selftest::run(&boot, &memory);
+    heap::log_stats();
     if boot.has_flag("poly.selftest.page_fault") {
         selftest::trigger_page_fault();
     }
