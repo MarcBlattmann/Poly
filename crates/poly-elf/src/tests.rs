@@ -860,3 +860,193 @@ fn initial_stack_size_is_a_tight_upper_bound() {
     let longer = params(&[b"xy"], &[]);
     assert_eq!(initial_stack_size(&longer), initial_stack_size(&p).map(|n| n + 1));
 }
+
+// --- Interpreters (ADR 0049) ------------------------------------------------
+
+#[test]
+fn footprint_spans_the_segments_from_the_aligned_first_page() {
+    let bytes = static_pie().bytes();
+    let elf = Elf::parse(&bytes).unwrap();
+    let fp = Footprint::of(&elf).unwrap();
+    let plan = LoadPlan::new(&elf, &LoadOptions::default()).unwrap();
+    assert_eq!(fp.align, PAGE_SIZE);
+    assert_eq!(fp.size, plan.end() - plan.start());
+    assert_eq!(fp.reservation(), Some(fp.size));
+    assert_eq!(fp.base_in(0x7000_0000_0000), Some(0x7000_0000_0000));
+
+    // A large alignment: the reservation has room for any page-aligned
+    // start. (The data segment moves to keep p_vaddr ≡ p_offset.)
+    let big = with(static_pie(), |i| {
+        for p in &mut i.phdrs {
+            if p.vaddr != p.offset {
+                p.vaddr = p.offset + 0x20_0000;
+                p.paddr = p.vaddr;
+            }
+            if p.p_type == PT_LOAD {
+                p.align = 0x20_0000;
+            }
+        }
+    })
+    .bytes();
+    let elf = Elf::parse(&big).unwrap();
+    let fp = Footprint::of(&elf).unwrap();
+    assert_eq!(fp.align, 0x20_0000);
+    let reserve = fp.reservation().unwrap();
+    for hole in [0x7f00_0000_0000u64, 0x7f00_0000_1000, 0x7f00_001f_f000] {
+        let base = fp.base_in(hole).unwrap();
+        assert!(base >= hole && base + fp.size <= hole + reserve, "{hole:#x}");
+        let plan = LoadPlan::new(&elf, &interpreter_options(&LoadOptions::default(), base)).unwrap();
+        assert_eq!((plan.start(), plan.end()), (base, base + fp.size));
+        assert_eq!(plan.bias(), base);
+    }
+    assert_eq!(Footprint { size: u64::MAX - 0xfff, align: 0x2000 }.reservation(), None);
+    assert_eq!(Footprint { size: 0x1000, align: 0x2000 }.base_in(u64::MAX - 0xfff), None);
+}
+
+#[test]
+fn footprint_of_an_image_linked_above_zero() {
+    let bytes = static_exec().bytes();
+    let elf = Elf::parse(&bytes).unwrap();
+    // 0x400000 up to the page after 0x403010 + 0x3000.
+    assert_eq!(Footprint::of(&elf).unwrap().size, 0x7000);
+    assert!(!is_relocatable(&elf));
+    assert!(is_relocatable(&Elf::parse(&static_pie().bytes()).unwrap()));
+}
+
+#[test]
+fn interpreters_may_not_name_an_interpreter() {
+    let ld = static_pie().bytes();
+    assert_eq!(check_interpreter(&Elf::parse(&ld).unwrap()), Ok(()));
+    let exe = dynamic_pie().bytes();
+    assert_eq!(check_interpreter(&Elf::parse(&exe).unwrap()), Err(Error::NestedInterpreter));
+    // An ET_EXEC interpreter is allowed (loaded at its link addresses).
+    assert_eq!(check_interpreter(&Elf::parse(&static_exec().bytes()).unwrap()), Ok(()));
+}
+
+#[test]
+fn planning_in_place_matches_new_and_clears_on_error() {
+    let mut plan = LoadPlan::EMPTY;
+    assert!(plan.mappings().is_empty());
+    let pie = static_pie().bytes();
+    let exe = static_exec().bytes();
+    for bytes in [&pie, &exe, &pie] {
+        let elf = Elf::parse(bytes).unwrap();
+        plan.plan(&elf, &LoadOptions::default()).unwrap();
+        let fresh = LoadPlan::new(&elf, &LoadOptions::default()).unwrap();
+        assert_eq!(plan.mappings(), fresh.mappings());
+        assert_eq!(
+            (plan.bias(), plan.entry(), plan.phdr(), plan.brk()),
+            (fresh.bias(), fresh.entry(), fresh.phdr(), fresh.brk())
+        );
+        assert_eq!((plan.tls(), plan.warnings(), plan.phnum()), (fresh.tls(), fresh.warnings(), fresh.phnum()));
+    }
+    // A plan that fails leaves no mappings behind from the previous one.
+    let elf = Elf::parse(&exe).unwrap();
+    let tight = LoadOptions { user_end: 0x40_1000, ..LoadOptions::default() };
+    assert_eq!(plan.plan(&elf, &tight), Err(Error::OutsideUserSpace));
+    assert!(plan.mappings().is_empty());
+}
+
+#[test]
+fn interpreter_options_keep_the_limits() {
+    let opts = LoadOptions { dyn_base: 1, min_addr: 0x2_0000, user_end: 0x7000_0000_0000 };
+    let i = interpreter_options(&opts, 0x6000_0000_0000);
+    assert_eq!((i.dyn_base, i.min_addr, i.user_end), (0x6000_0000_0000, 0x2_0000, 0x7000_0000_0000));
+}
+
+// --- The dynamic section ----------------------------------------------------
+
+/// The static PIE with its dynamic array at file offset 0x1e00 (address
+/// 0x2e00, in its data segment) and a string table at 0x1f00 (0x2f00).
+fn with_dynamic(entries: &[(i64, u64)], strtab: &[u8]) -> Image {
+    let mut img = static_pie();
+    let mut dynamic = Vec::new();
+    for &(tag, value) in entries {
+        dynamic.extend_from_slice(&tag.to_le_bytes());
+        dynamic.extend_from_slice(&value.to_le_bytes());
+    }
+    let n = dynamic.len() as u64;
+    let slot = img.phdrs.iter_mut().find(|p| p.p_type == PT_DYNAMIC).unwrap();
+    *slot = ph(PT_DYNAMIC, RW, 0x1e00, 0x2e00, n, n, 8);
+    img.patches.push((0x1e00, dynamic));
+    img.patches.push((0x1f00, strtab.to_vec()));
+    img
+}
+
+const STRTAB: &[u8] = b"\0libc.so.6\0libm.so.6\0libpoly.so\0$ORIGIN/../lib:/opt\0/old\0";
+
+#[test]
+fn dynamic_section_names_needed_libraries_and_paths() {
+    let len = STRTAB.len() as u64;
+    let entries = [
+        (DT_NEEDED, 1),
+        (DT_STRTAB, 0x2f00),
+        (DT_NEEDED, 11),
+        (DT_STRSZ, len),
+        (DT_SONAME, 21),
+        (DT_RUNPATH, 32),
+        (DT_RPATH, 52),
+        (0x6fff_fffb, 0x0800_0000),
+        (DT_NULL, 0),
+        (DT_NEEDED, 1),
+    ];
+    let bytes = with_dynamic(&entries, STRTAB).bytes();
+    let elf = Elf::parse(&bytes).unwrap();
+    let d = Dynamic::parse(&elf).unwrap().unwrap();
+    assert_eq!(d.needed().collect::<Vec<_>>(), [&b"libc.so.6"[..], b"libm.so.6"]);
+    assert_eq!(d.soname(), Some(&b"libpoly.so"[..]));
+    assert_eq!(d.runpath(), Some(&b"$ORIGIN/../lib:/opt"[..]));
+    assert_eq!(d.rpath(), Some(&b"/old"[..]));
+    // The entries stop at DT_NULL.
+    assert_eq!(d.entries().count(), 8);
+    assert!(d.entries().any(|e| e == (0x6fff_fffb, 0x0800_0000)));
+    // No PT_DYNAMIC: nothing.
+    assert!(Dynamic::parse(&Elf::parse(&static_exec().bytes()).unwrap()).unwrap().is_none());
+}
+
+#[test]
+fn bad_dynamic_sections_are_refused() {
+    let len = STRTAB.len() as u64;
+    let bad: [&[(i64, u64)]; 6] = [
+        // No DT_NULL.
+        &[(DT_STRTAB, 0x2f00), (DT_STRSZ, len)],
+        // A string past the table.
+        &[(DT_STRTAB, 0x2f00), (DT_STRSZ, len), (DT_NEEDED, len), (DT_NULL, 0)],
+        // A string table outside every segment's file bytes.
+        &[(DT_STRTAB, 0x9_0000), (DT_STRSZ, len), (DT_NULL, 0)],
+        // Only one of DT_STRTAB and DT_STRSZ.
+        &[(DT_STRTAB, 0x2f00), (DT_NULL, 0)],
+        // A needed name without a string table.
+        &[(DT_NEEDED, 1), (DT_NULL, 0)],
+        // A string with no NUL before the end of the table.
+        &[(DT_STRTAB, 0x2f00), (DT_STRSZ, 5), (DT_SONAME, 1), (DT_NULL, 0)],
+    ];
+    for entries in bad {
+        let bytes = with_dynamic(entries, STRTAB).bytes();
+        let elf = Elf::parse(&bytes).unwrap();
+        assert_eq!(Dynamic::parse(&elf).err(), Some(Error::BadDynamic), "{entries:?}");
+    }
+}
+
+#[test]
+fn mutated_dynamic_sections_never_panic() {
+    let entries = [(DT_NEEDED, 1), (DT_STRTAB, 0x2f00), (DT_STRSZ, STRTAB.len() as u64), (DT_NULL, 0)];
+    let good = with_dynamic(&entries, STRTAB).bytes();
+    let mut rng = Rng(0x0123_4567_89ab_cdef);
+    let mut parsed = 0;
+    for _ in 0..20_000 {
+        let mut b = good.clone();
+        for _ in 0..1 + rng.below(4) {
+            let at = 0x1e00 + rng.below(0x140);
+            b[at] = rng.next() as u8;
+        }
+        if let Ok(elf) = Elf::parse(&b)
+            && let Ok(Some(d)) = Dynamic::parse(&elf)
+        {
+            parsed += 1;
+            assert!(d.needed().all(|n| !n.contains(&0)));
+            let _ = (d.soname(), d.rpath(), d.runpath());
+        }
+    }
+    assert!(parsed > 0);
+}

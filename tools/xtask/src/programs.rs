@@ -158,7 +158,13 @@ pub fn test_initramfs() -> Result<PathBuf> {
 /// One boot that runs `/bin/<program>` as the first process and checks
 /// that it printed `output` and ended with exit status 0, and that QEMU
 /// then exited with the kernel's success status.
-fn run_as_init(kernel: &Path, syms: &Arc<Symbols>, image: &Path, program: &str, output: &str) -> Result<Boot> {
+pub(crate) fn run_as_init(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    image: &Path,
+    program: &str,
+    output: &str,
+) -> Result<Boot> {
     let append = format!("poly.qemu_exit poly.init=/bin/{program}");
     let b = boot_on(None, Some(image), kernel, syms, DEFAULT_MEMORY, &append, Devices::None)?;
     let started = b.output.contains(&format!("POLY-INIT: exec /bin/{program}"));

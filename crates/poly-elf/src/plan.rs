@@ -244,8 +244,35 @@ pub struct LoadPlan {
 }
 
 impl LoadPlan {
+    /// A plan of nothing, to plan into with [`plan`](Self::plan).
+    pub const EMPTY: LoadPlan = LoadPlan {
+        mappings: [Mapping::EMPTY; MAX_MAPPINGS],
+        count: 0,
+        elf_type: ElfType::Exec,
+        bias: 0,
+        entry: 0,
+        phdr: None,
+        phnum: 0,
+        start: 0,
+        end: 0,
+        stack_executable: false,
+        warnings: Warnings::NONE,
+        tls: None,
+    };
+
     /// Plans the mappings of `elf` within the limits of `opts`.
     pub fn new(elf: &Elf<'_>, opts: &LoadOptions) -> Result<LoadPlan, Error> {
+        let mut plan = LoadPlan::EMPTY;
+        plan.plan(elf, opts)?;
+        Ok(plan)
+    }
+
+    /// [`new`](Self::new) into `self`, replacing what it held: a plan is
+    /// about 1.6 KiB, so a kernel with small stacks keeps it on the heap
+    /// (`Box::new(LoadPlan::EMPTY)`) and plans in place, never holding a
+    /// copy on the stack. After an error `self` holds no mappings.
+    pub fn plan(&mut self, elf: &Elf<'_>, opts: &LoadOptions) -> Result<(), Error> {
+        self.count = 0;
         // Link-time page the image starts at and the address it is moved to.
         let mut loads = elf.load_segments().filter(|ph| ph.memsz != 0);
         let first = loads.next().ok_or(Error::NoLoadableSegments)?;
@@ -263,23 +290,35 @@ impl LoadPlan {
             vaddr.checked_sub(link_base).and_then(|o| o.checked_add(load_base)).ok_or(Error::AddressOverflow)
         };
 
-        let mut plan = LoadPlan {
-            mappings: [Mapping::EMPTY; MAX_MAPPINGS],
-            count: 0,
-            elf_type: elf.elf_type(),
-            bias: load_base.wrapping_sub(link_base),
-            entry: reloc(elf.entry())?,
-            phdr: None,
-            phnum: elf.phnum(),
-            start: 0,
-            end: 0,
-            stack_executable: false,
-            warnings: Warnings::NONE,
-            tls: None,
-        };
+        let plan = self;
+        plan.elf_type = elf.elf_type();
+        plan.bias = load_base.wrapping_sub(link_base);
+        plan.entry = reloc(elf.entry())?;
+        plan.phdr = None;
+        plan.phnum = elf.phnum();
+        plan.start = 0;
+        plan.end = 0;
+        plan.stack_executable = false;
+        plan.warnings = Warnings::NONE;
+        plan.tls = None;
+        let result = plan.add_segments(elf, opts, &reloc);
+        if result.is_err() {
+            plan.count = 0;
+        }
+        result
+    }
+
+    /// The body of [`plan`](Self::plan) once the bias is known.
+    fn add_segments(
+        &mut self,
+        elf: &Elf<'_>,
+        opts: &LoadOptions,
+        reloc: &impl Fn(u64) -> Result<u64, Error>,
+    ) -> Result<(), Error> {
+        let plan = self;
 
         for ph in elf.load_segments().filter(|ph| ph.memsz != 0) {
-            plan.add_segment(&ph, &reloc)?;
+            plan.add_segment(&ph, reloc)?;
             let prot = Prot::from_flags(ph.flags);
             if prot.writable() && prot.executable() {
                 plan.warnings = plan.warnings.with(Warnings::WRITABLE_AND_EXECUTABLE);
@@ -313,7 +352,7 @@ impl LoadPlan {
             Some(_) => {}
             None => plan.warnings = plan.warnings.with(Warnings::NO_GNU_STACK),
         }
-        Ok(plan)
+        Ok(())
     }
 
     fn push(&mut self, m: Mapping) -> Result<(), Error> {

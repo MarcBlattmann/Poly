@@ -51,7 +51,12 @@ pub static COMMANDS: &[Command] = &[
     Command { name: "umount", usage: "<path>", help: "unmount the disk mounted on path", run: umount },
     Command { name: "write", usage: "<file> [words...]", help: "write the words and a newline to a file", run: write },
     Command { name: "sync", usage: "", help: "write back cached file data and disk caches", run: sync },
-    Command { name: "run", usage: "<program> [args]", help: "run a program until it ends", run: run_program },
+    Command {
+        name: "run",
+        usage: "[NAME=value...] <program> [args]",
+        help: "run a program until it ends, with the variables as its environment",
+        run: run_program,
+    },
     Command { name: "uptime", usage: "", help: "time since boot and timer ticks", run: uptime },
     Command { name: "irq", usage: "", help: "interrupt counts per vector", run: irqs },
     Command { name: "cpu", usage: "", help: "processor vendor, model and features (CPUID)", run: cpu_info },
@@ -521,11 +526,16 @@ fn test(con: &mut dyn Console, args: &[String]) -> CommandResult {
     Ok(())
 }
 
-/// `run <program> [args...]`: start a program from the file system and
-/// wait for it; its output goes to the console like the kernel log's.
+/// `run [NAME=value...] <program> [args...]`: start a program from the
+/// file system and wait for it; its output goes to the console like the
+/// kernel log's. Leading `NAME=value` words (a name without `/`) are its
+/// environment, as with env(1): `run LD_DEBUG=libs /bin/prog`.
 fn run_program(con: &mut dyn Console, args: &[String]) -> CommandResult {
+    let is_variable = |a: &String| a.split_once('=').is_some_and(|(name, _)| !name.is_empty() && !name.contains('/'));
+    let vars = args.iter().take_while(|a| is_variable(a)).count();
+    let (envp, args) = args.split_at(vars);
     let [path, rest @ ..] = args else { return Err("needs a program".into()) };
-    let status = crate::program::run_on(path, rest, con.terminal()).map_err(|e| format!("{path}: {e}"))?;
+    let status = crate::program::run_on(path, rest, envp, con.terminal()).map_err(|e| format!("{path}: {e}"))?;
     out!(con, "{path}: {status}");
     Ok(())
 }

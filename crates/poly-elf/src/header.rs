@@ -124,6 +124,10 @@ pub enum Error {
     BadPhdr,
     /// `e_entry` is not inside a loaded segment.
     BadEntry,
+    /// A program interpreter names an interpreter itself.
+    NestedInterpreter,
+    /// `PT_DYNAMIC` or a table it points to is malformed (`dynamic`).
+    BadDynamic,
 }
 
 /// `e_type` of an image that can run.
