@@ -51,5 +51,5 @@ timing:
   typical: "microseconds; no measurable cost beyond a syscall"
   guarantees: "none"
 tests:
-  visible: 0                                  # count in <symbol>.tests/
-  held_out: 0                                 # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

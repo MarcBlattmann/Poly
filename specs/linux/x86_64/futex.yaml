@@ -48,5 +48,5 @@ timing:
   typical: "a relative timeout of T returns after at least T"
   guarantees: "a waiter is never woken by a wake on another word, or by a bitset wake that does not overlap"
 tests:
-  visible: 0                                  # count in <symbol>.tests/
-  held_out: 0                                 # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

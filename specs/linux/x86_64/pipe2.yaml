@@ -40,5 +40,5 @@ timing:
   typical: "microseconds per call"
   guarantees: "none"
 tests:
-  visible: 0                                  # count in <symbol>.tests/
-  held_out: 0                                 # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -33,5 +33,5 @@ timing:
   typical: "a timeout of T returns after T plus scheduling delay"
   guarantees: "never returns 0 before the timeout has elapsed"
 tests:
-  visible: 0                                  # count in <symbol>.tests/
-  held_out: 0                                 # count kept by the diff runner
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
