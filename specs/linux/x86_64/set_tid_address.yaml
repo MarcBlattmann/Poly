@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/set_tid_address
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  set_tid_address(addr) sets the calling thread's clear_child_tid address
+  (replacing one given with CLONE_CHILD_CLEARTID) and returns the caller's
+  thread id. When the thread exits, if its memory is still shared with
+  another thread or process, the kernel writes 0 (32-bit) at addr and wakes
+  a futex waiter there. NULL unregisters (nothing is written at exit). Only
+  the latest address is cleared.
+returns:
+  always: "the caller's tid"
+errors:
+  none: "cannot fail (a bad address is only used at exit)"
+side_effects: "Registers the address for the thread's exit."
+threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

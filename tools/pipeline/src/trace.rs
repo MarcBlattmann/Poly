@@ -265,6 +265,8 @@ pub fn render_arg(arg: &Arg, known_call: bool, normalize: bool) -> String {
         Arg::Opaque(_) if normalize => WILDCARD.into(),
         Arg::Opaque(v) => format!("{v:#x}"),
         Arg::Pid(v) if normalize && *v > 0 => "<pid>".into(),
+        // A process group given as -pgid (wait4, kill); -1 means "all".
+        Arg::Pid(v) if normalize && *v < -1 => "-<pid>".into(),
         Arg::Pid(v) => v.to_string(),
         Arg::Raw(s) if normalize => mask_addresses(s),
         Arg::Raw(s) => s.clone(),
@@ -456,6 +458,8 @@ pub mod tests {
             call("times", vec![Arg::Ptr(0x7fff_0000)], Some(4_242_424)),
             call("getpgid", vec![Arg::Pid(0)], Some(4321)),
             call("setpgid", vec![Arg::Pid(4322), Arg::Pid(4322)], Some(0)),
+            call("wait4", vec![Arg::Pid(-4322), Arg::Ptr(0), Arg::Hex(0), Arg::Ptr(0)], Some(4323)),
+            call("wait4", vec![Arg::Pid(-1), Arg::Ptr(0), Arg::Hex(1), Arg::Ptr(0)], Some(0)),
             call("time", vec![Arg::Ptr(8)], Some(-14)),
         ];
         let lines: Vec<String> = normalize(&t, &NormOptions::default()).iter().map(ToString::to_string).collect();
@@ -466,6 +470,8 @@ pub mod tests {
                 "times(<ptr>) = <time>",
                 "getpgid(0) = <pid>",
                 "setpgid(<pid>, <pid>) = 0",
+                "wait4(-<pid>, NULL, 0x0, NULL) = <pid>",
+                "wait4(-1, NULL, 0x1, NULL) = 0",
                 "time(<ptr>) = -1 EFAULT",
             ]
         );

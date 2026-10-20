@@ -1,0 +1,25 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getpgid
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  getpgid(pid) returns the process group of pid (0: the caller). A thread id
+  gives its process's group; a zombie child still answers; a forked child
+  starts in its parent's group.
+returns:
+  success: "the process group id"
+errors:
+  no_such_process: "ESRCH (unknown, negative, or reaped)"
+side_effects: "none"
+threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

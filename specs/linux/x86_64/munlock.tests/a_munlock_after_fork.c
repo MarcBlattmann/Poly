@@ -4,12 +4,12 @@
 
 int test_main(void) {
     a_block_sigchld();
-    volatile i32 *done = a_shared();
     i64 m = syscall6(SYS_mmap, 0, 2 * A_PAGE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     volatile char *p = (volatile char *)m;
     p[0] = 'P';
     i64 r = syscall2(SYS_mlock, m, 2 * A_PAGE);
-    i64 pid = a_fork(done);
+    /* fork semantics, the parent waiting until the child has exited */
+    i64 pid = a_fork_sync();
     if (pid == 0) {
         int code = 0;
         code |= syscall2(SYS_munlock, m, 2 * A_PAGE) == 0 ? 1 : 0;
@@ -19,7 +19,6 @@ int test_main(void) {
         syscall1(SYS_exit_group, code);
     }
     i32 st = -1;
-    a_fork_wait(done);
     syscall4(SYS_wait4, pid, &st, 0, 0);
     expect("parent_lock", r, 0);
     check("fork", pid > 0, pid);

@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getrusage
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  getrusage(who, usage) fills struct rusage (144 bytes: ru_utime, ru_stime
+  as timevals with usec in [0, 1e6), then 14 longs: maxrss in KiB, ixrss,
+  idrss, isrss, minflt, majflt, nswap, inblock, oublock, msgsnd, msgrcv,
+  nsignals, nvcsw, nivcsw). RUSAGE_SELF (0): the process; its CPU time grows
+  with CPU work; maxrss > 0; touching N new pages adds about N minor faults.
+  RUSAGE_CHILDREN (-1): reaped descendants only (zero before any child is
+  reaped; a zombie does not count). RUSAGE_THREAD (1): the calling thread.
+returns:
+  success: "0"
+errors:
+  bad_who: "EINVAL (2, -2)"
+  bad_pointer: "EFAULT (also NULL)"
+side_effects: "none"
+threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "CPU times are accurate to at least the scheduler tick (they increase within 0.3 s of busy CPU)"
+tests:
+  visible: 2
+  held_out: 1

@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getppid
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  getppid() returns the pid of the parent process: the process that created
+  the caller (by fork, vfork or clone; for a child created by a thread, that
+  thread's process). All threads of a process report the same parent. When
+  the parent exits, the caller is given to the nearest ancestor marked as
+  child subreaper (prctl PR_SET_CHILD_SUBREAPER 36) or to init, and getppid
+  reports that process once it has happened (by the time the old parent has
+  been reaped it certainly has). The new parent can wait for it.
+returns:
+  always: "the parent's pid (0 for init); never fails"
+errors:
+  none: "cannot fail"
+side_effects: "none"
+threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1
