@@ -55,15 +55,24 @@ int test_main(void) {
     r = syscall6(SYS_recvfrom, sv[0], (i64)buf, sizeof buf, 0, (i64)&un, (i64)&ulen);
     check("stream_recvfrom_bytes", r == 4, r);
     check("stream_address_length_zero", ulen == 0, ulen);
+    /* The child stays until the parent has read: its exit (SIGCHLD) must
+     * not fall into the wait. */
+    int done[2];
+    syscall2(SYS_pipe2, done, 0);
     i64 pid = fork();
     if (pid == 0) {
+        char c;
+        close(done[1]);
         write(sv[1], "ab", 2);
         sleep_ms(20);
         write(sv[1], "cd", 2);
+        read(done[0], &c, 1);
         exit_group(0);
     }
+    close(done[0]);
     r = syscall6(SYS_recvfrom, sv[0], (i64)buf, 4, MSG_WAITALL, 0, 0);
     check("waitall_full_count", r == 4 && mem_eq(buf, "abcd", 4), r);
+    close(done[1]);
     wait_exit(pid);
 
     r = syscall6(SYS_recvfrom, sv[0], 8, 4, MSG_DONTWAIT, 0, 0);
