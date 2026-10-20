@@ -54,6 +54,8 @@ run() {
         "$@"
     fi
 }
+# Run as another user (git refuses repositories of other users, so every
+# git command runs as the owner of the repository it touches).
 as() {
     local u=$1
     shift
@@ -84,7 +86,7 @@ sudo -u "$RUNNER_USER" -H bash -lc 'gh auth status' >/dev/null 2>&1 ||
     echo "    warning: gh is not logged in as $RUNNER_USER (gh auth login): the loop cannot open PRs"
 
 if [ -z "$REPO_URL" ]; then
-    REPO_URL=$(git -C "$POLY/runner/repo" remote get-url origin 2>/dev/null ||
+    REPO_URL=$(sudo -u "$RUNNER_USER" git -C "$POLY/runner/repo" remote get-url origin 2>/dev/null ||
         git -C "$HERE" remote get-url origin 2>/dev/null || echo https://github.com/MarcBlattmann/Poly.git)
 fi
 
@@ -134,7 +136,7 @@ if [ ! -d "$POLY/git/poly.git" ]; then
 fi
 # Nothing is ever forced into the hub, by anyone.
 as "$RUNNER_USER" git -C "$POLY/git/poly.git" config receive.denyNonFastForwards true
-git -C "$POLY/runner/repo" remote get-url hub >/dev/null 2>&1 ||
+sudo -u "$RUNNER_USER" git -C "$POLY/runner/repo" remote get-url hub >/dev/null 2>&1 ||
     as "$RUNNER_USER" git -C "$POLY/runner/repo" remote add hub "$POLY/git/poly.git"
 as "$RUNNER_USER" git -C "$POLY/runner/repo" fetch -q origin
 as "$RUNNER_USER" git -C "$POLY/runner/repo" push -q hub "refs/remotes/origin/main:refs/heads/main"
@@ -150,8 +152,9 @@ for u in "$SPEC_USER:$POLY/spec:Poly spec agent" "$IMPL_USER:$POLY/impl:Poly imp
         as "$name" git clone -q -o hub "$POLY/git/poly.git" "$home/repo"
     fi
     # The role checkout has no GitHub remote and no credentials.
-    if git -C "$home/repo" remote 2>/dev/null | grep -qvx hub; then
-        echo "    warning: $home/repo has remotes other than hub: $(git -C "$home/repo" remote | tr '\n' ' ')"
+    remotes=$(sudo -u "$name" git -C "$home/repo" remote 2>/dev/null | tr '\n' ' ' || true)
+    if [ -n "${remotes// /}" ] && [ "$remotes" != "hub " ]; then
+        echo "    warning: $home/repo has remotes other than hub: $remotes"
     fi
 done
 
@@ -188,6 +191,7 @@ $RUNNER_USER ALL=($SPEC_USER) NOPASSWD: $POLY/bin/poly-role spec *
 $RUNNER_USER ALL=($IMPL_USER) NOPASSWD: $POLY/bin/poly-role implementer *
 EOF
 visudo -cqf "$tmp" || die "the generated sudoers rule does not validate"
+[ "$DRY" = 0 ] || sed "s/^/      | /" "$tmp"
 if ! cmp -s "$tmp" "$SUDOERS" 2>/dev/null; then
     run install -o root -g root -m 0440 "$tmp" "$SUDOERS"
 fi
@@ -230,6 +234,7 @@ TasksMax=4096
 [Install]
 WantedBy=multi-user.target
 EOF
+[ "$DRY" = 0 ] || sed "s/^/      | /" "$tmp"
 if ! cmp -s "$tmp" "$UNIT" 2>/dev/null; then
     run install -o root -g root -m 0644 "$tmp" "$UNIT"
     run systemctl daemon-reload

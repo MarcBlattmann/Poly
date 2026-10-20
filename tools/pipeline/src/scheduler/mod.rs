@@ -252,9 +252,14 @@ fn reset(a: &Args) -> Result<u8> {
         }
     }
     store.remove(id)?;
+    println!("{id}: state removed; the loop starts it again from the queue.");
     println!(
-        "{id}: state removed; the loop starts it again from the queue. Branches and PRs on {} are left as they are.",
-        cfg.remote
+        "Branches and PRs on {} are left as they are. The loop never forces a push, so delete old branches \
+         there before the new attempt reaches them:\n  git push {} --delete {} {}",
+        cfg.remote,
+        cfg.remote,
+        cycle::spec_branch(&entry),
+        cycle::impl_branch(&entry)
     );
     Ok(0)
 }
