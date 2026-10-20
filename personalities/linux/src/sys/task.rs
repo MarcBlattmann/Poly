@@ -92,7 +92,16 @@ fn wait_for(k: &mut dyn LinuxKernel, filter: &WaitFilter, nohang: bool) -> Resul
             Poll::Ready(w) => return Ok(Some(w)),
             Poll::NoChildren => return Err(Errno::ECHILD),
             Poll::Pending if nohang => return Ok(None),
-            Poll::Pending => {
+            // A child is in the middle of ending (on another CPU): its exit
+            // signal is about to be sent, then it is waitable. Not worth a
+            // "nothing yet", even with WNOHANG, which a pending signal of
+            // the caller does not end either (it is not a blocking wait).
+            Poll::Exiting if nohang => {
+                if k.wait_tree(generation) == Wakeup::Signal {
+                    k.yield_cpu();
+                }
+            }
+            Poll::Pending | Poll::Exiting => {
                 if k.wait_tree(generation) == Wakeup::Signal {
                     return Err(Errno::RESTART_IF_SA_RESTART);
                 }
