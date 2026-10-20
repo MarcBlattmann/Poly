@@ -186,6 +186,30 @@ fn join_before_reap_frees_at_reap() {
 }
 
 #[test]
+fn live_threads_lists_every_unjoined_thread() {
+    let mut s = Scheduler::<6>::new(1);
+    let a = s.spawn().unwrap();
+    let b = s.spawn().unwrap();
+    let c = s.spawn().unwrap();
+    let mut q = WaitQueue::new();
+    s.block_current(&mut q).unwrap(); // BOOT blocks, a runs
+    s.exit_current(1).unwrap(); // a exits, b runs
+    s.join(c).unwrap(); // b waits for c, which runs
+    let live: Vec<_> = s.live_threads().collect();
+    assert_eq!(
+        live,
+        [(BOOT, State::Blocked), (IDLE, State::Runnable), (a, State::Exited), (b, State::Blocked), (c, State::Running)]
+    );
+    s.reap(a).unwrap();
+    s.detach(a).unwrap();
+    assert_eq!(s.live_threads().map(|(t, _)| t).collect::<Vec<_>>(), [BOOT, IDLE, b, c], "a's slot is free");
+    s.exit_current(0).unwrap(); // c exits and wakes b, which runs
+    assert_eq!(s.current(), b);
+    assert_eq!(s.join(c), Ok(Join::Exited(0)));
+    assert!(s.live_threads().all(|(t, _)| t != c), "joined, though not reaped yet");
+}
+
+#[test]
 fn detached_threads_free_themselves() {
     let mut s = Scheduler::<4>::new(1);
     let t = s.spawn().unwrap();

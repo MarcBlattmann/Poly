@@ -9,6 +9,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "libc"
+version = "0.2.191"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -46,7 +52,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-cpio"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
+name = "poly-elf"
+version = "0.0.1"
+
+[[package]]
 name = "poly-heap"
+version = "0.0.1"
+
+[[package]]
+name = "poly-input"
 version = "0.0.1"
 
 [[package]]
@@ -55,6 +76,10 @@ version = "0.0.1"
 dependencies = [
  "poly-pci",
 ]
+
+[[package]]
+name = "poly-line"
+version = "0.0.1"
 
 [[package]]
 name = "poly-mem"
@@ -90,7 +115,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-pipeline"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "poly-sched"
+version = "0.0.1"
+
+[[package]]
+name = "poly-vfs"
 version = "0.0.1"
 
 [[package]]
@@ -108,6 +146,10 @@ dependencies = [
  "poly-pci",
  "poly-virtio",
 ]
+
+[[package]]
+name = "poly-vm"
+version = "0.0.1"
 
 [[package]]
 name = "proc-macro2"

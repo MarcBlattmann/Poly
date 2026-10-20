@@ -66,6 +66,7 @@ use crate::sync::{self, SpinLock};
 use crate::time;
 use crate::user::UserThread;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::sync::atomic::AtomicU64;
 use core::time::Duration;
@@ -143,6 +144,8 @@ struct Threads {
     timeouts: [Option<Timeout>; MAX_THREADS],
     /// The user state of each slot's thread; `None` for kernel threads.
     user: [Option<Box<UserThread>>; MAX_THREADS],
+    /// Each slot's thread's name, for `ps` (empty: none).
+    names: [&'static str; MAX_THREADS],
     ready: bool,
 }
 
@@ -162,6 +165,12 @@ static THREADS: SpinLock<Threads> = SpinLock::new(Threads {
     stacks: [None; MAX_THREADS],
     timeouts: [None; MAX_THREADS],
     user: [const { None }; MAX_THREADS],
+    names: {
+        let mut names = [""; MAX_THREADS];
+        names[ThreadId::BOOT.slot()] = "boot";
+        names[ThreadId::IDLE.slot()] = "idle";
+        names
+    },
     ready: false,
 });
 
@@ -196,17 +205,27 @@ pub fn init() {
 /// Start `f(arg)` in a new thread. It runs once the threads ahead of it on
 /// the run queue have had their turn; the caller keeps running.
 pub fn spawn(f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
-    spawn_with(f, arg, None)
+    spawn_named("", f, arg)
 }
 
-/// Start `f(arg)` in a new user thread, which carries `user` from the start:
-/// its address space is loaded whenever it runs. `f` is expected to enter
-/// ring 3 (see [`crate::user::spawn`]).
-pub fn spawn_user(user: Box<UserThread>, f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
-    spawn_with(f, arg, Some(user))
+/// [`spawn`] with a name, which [`list`] reports.
+pub fn spawn_named(name: &'static str, f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
+    spawn_with(name, f, arg, None)
 }
 
-fn spawn_with(f: ThreadFn, arg: usize, user: Option<Box<UserThread>>) -> Result<ThreadId, SpawnError> {
+/// Start `f(arg)` in a new user thread named `name`, which carries `user`
+/// from the start: its address space is loaded whenever it runs. `f` is
+/// expected to enter ring 3 (see [`crate::user::spawn`]).
+pub fn spawn_user(name: &'static str, user: Box<UserThread>, f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
+    spawn_with(name, f, arg, Some(user))
+}
+
+fn spawn_with(
+    name: &'static str,
+    f: ThreadFn,
+    arg: usize,
+    user: Option<Box<UserThread>>,
+) -> Result<ThreadId, SpawnError> {
     let stack = Stack::allocate()?;
     let _irq = InterruptsOff::new();
     let dead = reap(&mut THREADS.lock());
@@ -219,6 +238,7 @@ fn spawn_with(f: ThreadFn, arg: usize, user: Option<Box<UserThread>>) -> Result<
         return Err(SpawnError::TableFull);
     };
     install(&mut t, id, stack, f, arg, user);
+    t.names[id.slot()] = name;
     Ok(id)
 }
 
@@ -367,6 +387,27 @@ pub fn current() -> ThreadId {
 pub fn state(id: ThreadId) -> Option<State> {
     let _irq = InterruptsOff::new();
     THREADS.lock().sched.state(id)
+}
+
+/// One thread, as [`list`] reports it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ThreadInfo {
+    pub id: ThreadId,
+    /// Empty for threads started with [`spawn`].
+    pub name: &'static str,
+    pub state: State,
+}
+
+/// Every thread that exists and has not been joined, in slot order.
+pub fn list() -> Vec<ThreadInfo> {
+    // Allocated before locking: nothing allocates under THREADS.
+    let mut out = Vec::with_capacity(MAX_THREADS);
+    let _irq = InterruptsOff::new();
+    let t = THREADS.lock();
+    for (id, state) in t.sched.live_threads() {
+        out.push(ThreadInfo { id, name: t.names[id.slot()], state });
+    }
+    out
 }
 
 /// Let the next runnable thread run; this thread goes to the back of the
@@ -620,6 +661,7 @@ fn ping(tag: usize) -> usize {
 }
 
 kernel_test! {
+    #[boot_only]
     fn yield_interleaves_round_robin() -> TestResult {
         let _irq = no_preemption();
         TRACE.lock().len = 0;
@@ -912,6 +954,38 @@ kernel_test! {
             if slept > ms * time::NANOS_PER_MILLI + 500 * time::NANOS_PER_MILLI {
                 return Err("sleep overslept by more than half a second");
             }
+        }
+        Ok(())
+    }
+}
+
+fn nap(ms: usize) -> usize {
+    sleep(Duration::from_millis(ms as u64));
+    0
+}
+
+kernel_test! {
+    fn list_names_threads_and_their_states() -> TestResult {
+        let t = spawn_named("napper", nap, 50).map_err(|_| "spawn failed")?;
+        let start = time::now_ns();
+        while state(t) != Some(State::Blocked) {
+            if time::now_ns() - start > time::NANOS_PER_SEC {
+                return Err("the thread never went to sleep");
+            }
+            yield_now();
+        }
+        let all = list();
+        let me = current();
+        let find = |id: ThreadId| all.iter().find(|i| i.id == id);
+        let listed = find(t).is_some_and(|i| i.name == "napper" && i.state == State::Blocked)
+            && find(me).is_some_and(|i| i.state == State::Running && (me != ThreadId::BOOT || i.name == "boot"))
+            && find(ThreadId::IDLE).is_some_and(|i| i.name == "idle" && i.state == State::Runnable);
+        join(t).map_err(|_| "join failed")?;
+        if !listed {
+            return Err("list() did not report the threads' names and states");
+        }
+        if list().iter().any(|i| i.id == t) {
+            return Err("a joined thread is still listed");
         }
         Ok(())
     }

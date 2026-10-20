@@ -16,10 +16,11 @@ what exists **today** and how it fits that plan.
                  kernel/src/syscall.rs  ← routes by the process's personality tag
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt
                           │
+            kernel shell: poly-line editor, commands; on COM1 now, screen + keyboard later
             kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
-            devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk
+            devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
                          syscall/sysret, FPU state, context switch)
 ```
@@ -38,10 +39,14 @@ what exists **today** and how it fits that plan.
    frame allocator, starts the
    scheduler, reads the ACPI tables, sets up interrupts and time
    (`arch::init_interrupts`) and enables them, enumerates PCI, brings up the
-   block layer (the virtio-blk disk if there is one, and a RAM disk) and runs
-   the boot self-test with the timer preempting threads.
+   block layer (the virtio-blk disk if there is one, and a RAM disk) and the
+   PS/2 keyboard, and runs the boot self-test with the timer preempting
+   threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
+5. Otherwise (or with `poly.shell` as well, once the tests passed) the
+   kernel starts the shell on COM1 in a thread of its own and the boot
+   thread exits (see "Kernel shell").
 
 ## Firmware tables (ACPI)
 
@@ -230,6 +235,114 @@ until unmasked and that a request whose notification was dropped
 (`VirtioBlk::set_drop_notifications`) fails at the watchdog's deadline
 while its reader sleeps. Each test puts the disks back as it found them.
 
+## Input
+
+Keyboard input is the host-tested `poly-input` crate; `kernel/src/keyboard.rs`
+drives the PS/2 keyboard with it, and `arch/x86_64/i8042.rs` gives it the
+controller's ports ([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md)).
+
+```
+   IRQ 1 ─▶ keyboard::on_irq: data port ─▶ ByteRing (256 bytes, lock-free) ─▶ wake waiters
+                                                           │
+   keyboard::next_event / try_next_event (thread) ◀────────┘
+      poly_input::Keyboard
+        Set1Decoder   bytes ─▶ (Key, pressed): E0 / E1 prefixes, fake shifts, Print Screen, Pause
+        KeyState      ─▶ KeyEvent { key, pressed, repeat, modifiers }: Shift/Ctrl/Alt/AltGr/Meta, 3 locks
+        Composer      ─▶ Output: Char, Chars (accent + char), Dead, Special (Enter, arrows, F-keys, ...)
+          + Layout    US, Swiss German (de-CH); six levels per key, as data
+```
+
+- **Keys** (`poly_input::Key`) are physical positions named after the US
+  legends (W3C UI Events `code` names): 105 keys, the ISO key next to the
+  left Shift (`IntlBackslash`) included. `Modifiers` is a bit set (Shift,
+  Control, Alt, AltGr, Meta, Caps / Num / Scroll Lock), `Leds` the PS/2 LED
+  mask.
+- **Decoding.** The controller translates the keyboard's scancode set 2
+  into set 1, which `Set1Decoder` decodes; it ignores replies and unknown
+  codes, resynchronises after broken sequences and never panics.
+  `set1::encode` is the reverse (tests, `keyboard::inject`). `KeyState`
+  flags a press of a key that is down as a repeat (locks toggle only on
+  the first press) and makes the right Alt key AltGr on layouts that have
+  it.
+- **Layouts** (`poly_input::layout`) are tables built at compile time:
+  base, Shift, Caps Lock, Caps Lock + Shift, AltGr and AltGr + Shift, each a
+  character, a dead key (\` ´ ^ ~ ¨) or nothing. `Composer` picks the
+  level, types the keypad's digits when Num Lock is on (navigation keys
+  otherwise, Shift reverses it), turns Ctrl + letter into a control
+  character and composes dead keys (accent + letter: the accented letter;
+  + Space: the accent; + anything else: both; a special key drops it).
+  `layout::by_name` finds one (`us`, `de-ch`).
+- **Bring-up** (`keyboard::init`, after the block layer). If the ACPI FADT
+  (revision 2+) says there is no 8042, nothing is touched. Otherwise
+  `poly_input::i8042::init`, polled with both ports' interrupts off:
+  disable both ports, flush the output buffer, clear the interrupt and
+  translation bits in the configuration byte, controller self-test (0xAA
+  → 0x55) and the configuration written again, keyboard port test (0xAB →
+  0x00), enable the port, reset the keyboard (0xFF → ACK, 0xAA), scancode
+  set 2 (0xF0 0x02), enable scanning (0xF4). Every wait is bounded; a
+  missing controller (status 0xFF), a failed self-test or no keyboard is
+  logged and the kernel runs on without one. Then ISA IRQ 1 is routed
+  (`arch::irq::route_isa_irq`), the configuration byte gets the keyboard
+  interrupt and translation on (mouse port off), and the controller is
+  drained once. The layout comes from `poly.keymap=` (default `us`); Num
+  Lock starts on.
+- **Interrupts and waiting.** The handler moves every waiting byte into
+  the ring and wakes the readers; decoding happens in the reader's thread
+  under a sleeping `Mutex`, which is never held while waiting for input. A
+  reader that sleeps looks at the controller itself every 100 ms, so a
+  lost interrupt costs latency, not the keyboard. LED updates (0xED + mask)
+  follow the locks: the reader writes each byte and sleeps until the
+  handler hands it the keyboard's ACK (or RESEND) instead of queueing it.
+- **API** (what the terminal uses): `keyboard::next_event()` (sleeps),
+  `next_event_until(deadline_ns)`, `try_next_event()`, each an `Input {
+  event: KeyEvent, output: Output }` for every press and release;
+  `set_layout(&'static Layout)`, `layout()`, `modifiers()`,
+  `is_present()`, `inject(bytes)` (set 1 bytes as if typed), `stats()`.
+
+```text
+keyboard: i8042 config 0x71 -> 0x61, 0 stale byte(s) flushed; keyboard reset ok, scancode set 2 translated to set 1
+keyboard: ISA IRQ 1 -> GSI 1 -> vector 0x31; layout us (US English (QWERTY)), Num Lock on
+```
+
+The kernel tests (`keyboard::*`) decode injected scancodes through the ring
+(US and de-CH, with AltGr and dead keys), check modifiers on events, the
+I/O APIC route for IRQ 1, bytes the controller fakes with its "write
+keyboard output" command (0xD2) arriving through the interrupt, and Caps
+Lock LED updates acknowledged by the keyboard. With
+`poly.test.keyboard=<text>`, `keyboard::typed_text_matches_the_host_keys`
+waits up to 30 s for keys from the host, which `cargo xtask test` types
+through the QEMU monitor (`sendkey`), with the US layout and with
+`poly.keymap=de-ch` (see [DEBUGGING.md](DEBUGGING.md)).
+
+## File systems (host-tested; not yet wired into the kernel)
+
+Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md).
+
+```
+   personalities (openat, read, write, getdents64, ...)   kernel: console, exec
+          │  FdTable (per process) → Arc<OpenFile> (offset, flags) → NodeRef
+          ▼
+   poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
+          │  FileSystem trait: lookup/create/rename/read/write/readdir by inode
+          ▼
+   Tmpfs (in poly-vfs)        later: ext2, devfs, procfs
+          ▲
+   poly_cpio::unpack_fs       initramfs (newc / crc) → files, links, nodes
+```
+
+- **`poly-vfs`** (`no_std` + `alloc`): `Vfs` resolves paths as
+  `path_resolution(7)` describes (`.`/`..` across mount points, 40 symbolic
+  links then `ELOOP`, trailing slashes, `ENAMETOOLONG`), checks permissions
+  from a `Cred`, and implements the path-based calls; `FdTable` and
+  `OpenFile` implement descriptors (`dup2`/`dup3`, close-on-exec,
+  `O_APPEND`, `lseek`, `getdents` positions). Errors are `Errno` with
+  Linux's values; flags take Linux's bits.
+- **tmpfs**: sparse files in 4 KiB pages, stable `readdir` positions,
+  unlinked files and removed directories live while open.
+- **`poly-cpio`**: a parser for `newc`/`crc` that never panics, a writer,
+  and an unpacker into any file system through the VFS. Tested against
+  archives made by GNU cpio (stored, and live if `cpio` is installed).
+
 ## Personality routing
 
 - `poly-binfmt` identifies ELF / PE / Mach-O (and fat Mach-O, `#!` scripts)
@@ -242,6 +355,18 @@ while its reader sleeps. Each test puts the disks back as it found them.
   hook, `user::DEFAULT_HOOK` unless it was given another).
 - Unimplemented calls return each OS's native "not implemented" result and are
   logged. That log line is the seed of the API tracer.
+- **Linux** ([ADR 0025](adr/0025-linux-syscall-table-and-kernel-services-trait.md)):
+  `personalities/linux` has the whole x86-64 table (numbers and names
+  generated from the coverage map) and handlers for the calls a static C or
+  Rust program makes at startup (`read`, `write`, `readv`, `writev`, `close`,
+  `fstat`, `ioctl`, `mmap`, `munmap`, `mprotect`, `brk`, `arch_prctl`,
+  `set_tid_address`, `exit`, `exit_group`, the id getters, `uname`,
+  `rt_sigaction`, `rt_sigprocmask`, `clock_gettime`, `getrandom`). Handlers
+  validate arguments per the man pages and do the work through
+  `LinuxKernel`, a trait the kernel implements over its VFS, VMA manager and
+  thread state; `Linux::dispatch_with(&mut kernel, regs)` is the entry point.
+  Host tests run every call, and scripted startup sequences of real static
+  binaries, against a fake kernel.
 
 ## Testing strategy
 
@@ -251,8 +376,10 @@ while its reader sleeps. Each test puts the disks back as it found them.
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
+| The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi` | `cargo xtask test` |
-| Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
+| Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
+| Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff`; Linux against Linux in `cargo xtask ci`; Poly reports "unsupported" until it runs programs |
 | App trace replay | recorded sessions | later |
 
 Backtraces, symbolisation and attaching gdb/lldb are described in
@@ -387,7 +514,8 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   `route_gsi` / `route_isa_irq` (undo with `unroute_gsi`). PCI functions do
   all of it through `pci::Device::enable_msix` / `enable_msi` /
   `enable_interrupt` (see "Devices"). Handlers must not block; they may
-  wake a `WaitQueue`.
+  wake a `WaitQueue`. `irq::count(vector)` counts the interrupts taken on
+  each vector (the shell's `irq` command lists them).
 - **Time:** `time::now_ns()` is nanoseconds since boot from
   `poly_irq::MonotonicClock`: the TSC when it is invariant and calibrated,
   otherwise the reference timer (under QEMU's TCG: the HPET). It never goes
@@ -430,8 +558,10 @@ and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
   that the switch "returns" into `thread_trampoline`, which calls
   `thread_start(f, arg)` with `rbp = 0` (the end of every thread's
   backtrace) and exits with `f`'s return value.
-- **API:** `spawn(fn, arg)`, `yield_now()`, `exit(code)`, `current()`,
-  `join(id)` (returns the exit code), `detach(id)`, `state(id)`,
+- **API:** `spawn(fn, arg)` (or `spawn_named(name, fn, arg)`; the boot and
+  idle threads are named too), `yield_now()`, `exit(code)`, `current()`,
+  `join(id)` (returns the exit code), `detach(id)`, `state(id)`, `list()`
+  (every thread with its name and state, for `ps`),
   `sleep(duration)` / `sleep_until(ns)`, and
   `WaitQueue::{wait_until(cond), wait_until_deadline(cond, ns), wake_one(),
   wake_all()}`. `wait_until` checks its condition with the scheduler
@@ -552,3 +682,67 @@ user: pid 4242 thread 5.20 killed: page fault (vector 14) at rip 0x4000c3, error
 - `SetOnce<T>`: written once at boot, read without a lock (local APIC,
   clock).
 
+## Kernel shell
+
+A shell built into the kernel, the debug console of the Phase 2 terminal
+([ADR 0021](adr/0021-kernel-shell.md)). It never touches a device: it talks
+to a `shell::Console`, so the same shell runs on the serial port now and
+on the screen and keyboard later.
+
+```
+   COM1 bytes ──► IRQ 4 handler ──► ring ──► TermDecoder ──┐
+   (later) key events ──────────────────────► Edit ────────┤
+                                                           ▼
+   Console::read ──Edit──► poly_line::Editor ──line──► words::split ──► COMMANDS[name](console, args)
+                                  │ redraw: text + ANSI                         │ output
+                                  └──────────────► Console (fmt::Write) ◄───────┘
+```
+
+- **`poly-line`** (host-tested, uses `alloc`) is the line editor: a line of
+  `char`s with a cursor, edited by abstract `Edit`s (insert, Backspace,
+  Delete, Left / Right, word left / right, Home / End, kill to end / start /
+  word, history previous / next, complete, Enter, cancel, clear screen,
+  redraw). It writes text and a few ECMA-48 sequences (cursor left / right
+  by n, erase to end of line, erase screen, cursor home; SGR in the prompt),
+  always moving relative to the cursor, one column per character. History
+  keeps 64 lines without blank lines or a repeat of the newest; browsing it
+  keeps the line being typed. Tab asks a callback for candidates, completes
+  their common prefix (and a space after a unique one) and lists them in
+  columns on a second Tab. `TermDecoder` turns a terminal's byte stream
+  into edits (UTF-8, `CR`/`LF`/`CR LF`, `DEL`/`BS`, `ESC [` / `ESC O`
+  arrows, Home, End, Delete, Ctrl-arrows, Ctrl-letters); `Edit::control`
+  maps Ctrl-letters for a keyboard. `words` splits a line into arguments
+  (whitespace, optional quotes, backslash escapes) and finds the closest
+  word for a typo.
+- **`Console`** (`kernel/src/shell/mod.rs`): `core::fmt::Write` for output
+  (`"\n"` means a new line; the console adds a CR if it needs one) and
+  `read() -> Option<Edit>`, which blocks; `None` ends the shell (only
+  scripted consoles in tests do that). `shell::spawn(name, console)` runs
+  the shell in its own kernel thread, `shell::run(console)` on the calling
+  one.
+- **Serial console** (`shell/serial.rs`): COM1's receive interrupt is routed
+  with `arch::irq::route_isa_irq(4, ...)` (the UART raises it for each
+  byte); the handler moves bytes into a 256-byte lock-free ring (one
+  producer, the handler; one consumer, the console) and wakes the reader.
+  Output goes through `log::write_console`, the same lock as the kernel
+  log. While the shell waits for input with its prompt shown, a kernel log
+  line first erases the prompt row, and the shell draws the prompt and
+  line again under it (`Edit::Redraw`) within 50 ms.
+- **Commands** (`shell/commands.rs`, one static table of name, usage, help
+  and handler): `help`, `mem` (frames and heap), `ps` (`thread::list`),
+  `lspci` (`pci::devices`, with class names from `poly_pci::ClassCode::name`),
+  `disks` (`block::disks` with cache and queue counters), `uptime`, `irq`
+  (per-vector counts), `cpu` (CPUID: vendor, brand, family / model /
+  stepping, features), `test [filter]`, `echo`, `clear`, `reboot`. An unknown
+  command gets the closest command name as a suggestion.
+- **`test`** runs the kernel tests again with `ktest::run(env, filter,
+  When::Runtime, console)`: the boot's `poly.selftest.*` flags are dropped,
+  tests marked `#[boot_only]` (they check the state at boot, or must run on
+  the boot thread) are left out, and only one run happens at a time, so a
+  test that drives the shell cannot run the tests inside itself.
+- **`reboot`** (`power::reboot`) writes back every disk's cache, then tries
+  the FADT reset register (`acpi::Platform::reset`), the 8042's reset line
+  and a triple fault (`arch::reset`), half a second each.
+- The kernel tests drive the real shell with a scripted console that types
+  terminal bytes; `cargo xtask test` boots with `poly.shell` and types into
+  QEMU's stdin, which is the serial port.

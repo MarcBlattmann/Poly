@@ -89,7 +89,7 @@ pub fn spawn(
 ) -> Result<ThreadId, SpawnError> {
     let arch = arch::user::ThreadState::new(space).ok_or(SpawnError::NoMemory)?;
     let user = Box::new(UserThread { process, hook, entry, return_to: None, arch });
-    thread::spawn_user(user, user_main, 0)
+    thread::spawn_user("user", user, user_main, 0)
 }
 
 /// The kernel side of a new user thread: everything is loaded by the switch

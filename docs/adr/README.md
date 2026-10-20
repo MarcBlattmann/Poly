@@ -23,6 +23,13 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0016](0016-interrupt-dispatch-tick-and-kernel-locks.md) | Interrupt dispatch and vector allocation, a 1 kHz periodic tick, spinlocks that mask interrupts, a sleeping mutex | Accepted |
 | [0018](0018-msi-x-and-interrupt-driven-disk-io.md) | MSI and MSI-X for PCI functions, interrupt-driven disks with sleeping waiters, a watchdog on the clock | Accepted |
 | [0022](0022-user-mode-address-spaces-and-system-calls.md) | User mode: one PML4 per process sharing the kernel half, PCIDs, syscall/SYSRET with an IRETQ fallback, user copies through an exception table, eager FPU switching | Accepted |
+| [0024](0024-elf-loader.md) | ELF loader in a host-tested crate: validated headers, page mapping plans, the psABI initial stack | Accepted |
+| [0026](0026-user-address-space-regions.md) | User address spaces: a region map in a host-tested crate (`poly-vm`), page state in the page tables | Accepted |
+| [0025](0025-linux-syscall-table-and-kernel-services-trait.md) | Linux system calls: a generated table, man-page handlers, a kernel-services trait | Accepted |
+| [0020](0020-ps2-keyboard-and-layouts.md) | PS/2 keyboard: decoding and layouts in `poly-input`, an i8042 driver on IRQ 1 with a byte ring | Accepted |
+| [0021](0021-kernel-shell.md) | The kernel shell: a host-tested line editor on `alloc`, a `Console` trait, serial input on IRQ 4 | Accepted (amends 0003: shared crates may use `alloc`) |
+| [0027](0027-agent-pipeline-tools-and-test-run-protocol.md) | Agent pipeline tools: own ptrace tracer, per-test diff runner, a serial test-run protocol for Poly, held-out store outside the repository | Accepted |
+| [0023](0023-vfs-tmpfs-and-cpio.md) | The VFS in a host-tested crate with `alloc`, tmpfs beside it, cpio unpacked through the VFS | Accepted |
 
 ## Open decisions
 

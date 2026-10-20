@@ -53,8 +53,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 - [ ] Display: QEMU standard VGA (Bochs VBE) linear framebuffer driver and mode setting
 - [ ] Drawing library: pixels, rectangles, a permissively licensed bitmap font, scrolling text grid
-- [ ] Keyboard: PS/2 (i8042) driver on interrupts, scancode decoding, US and Swiss German layouts
-- [ ] Kernel shell: line editor with history and completion, commands (help, mem, ps, lspci, disks, uptime, test, clear, reboot)
+- [x] Keyboard: PS/2 (i8042) driver on interrupts, scancode decoding, US and Swiss German layouts
+- [x] Kernel shell: line editor with history and completion, commands (help, mem, ps, lspci, disks, uptime, test, clear, reboot)
 - [ ] **Milestone:** the kernel boots into a full-screen terminal with a status bar, usable with the keyboard
 
 ## Phase 3: User space and the first Linux program
@@ -70,7 +70,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] **Milestone:** a static Linux "hello world" runs and exits cleanly
 - [ ] Agent pipeline v0: Linux syscall tracer on a real Linux VM, spec agent, implementer agent
 - [ ] Diff runner v0: same tests on real Linux and on Poly, results compared per test
-- [ ] Held-out test store outside this repo; hand-off logging in `specs/HANDOFF_LOG.md`
+- [x] Held-out test store outside this repo; hand-off logging in `specs/HANDOFF_LOG.md`
 
 ## Phase 4: Linux userland
 

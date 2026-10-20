@@ -25,6 +25,23 @@ impl BootInfo {
         self.cmdline().split_ascii_whitespace().any(|w| w == flag)
     }
 
+    /// A copy whose command line keeps only the words `keep` accepts (the
+    /// shell runs the kernel tests without the boot's `poly.selftest.*`
+    /// requests to fail or panic).
+    pub fn filtered(&self, keep: impl Fn(&str) -> bool) -> BootInfo {
+        let mut copy = BootInfo { memory: self.memory.clone(), rsdp: self.rsdp, cmdline: [0; 512], cmdline_len: 0 };
+        for word in self.cmdline().split_ascii_whitespace().filter(|w| keep(w)) {
+            let start = copy.cmdline_len + usize::from(copy.cmdline_len > 0);
+            // Every kept word fits: it fitted in the original line.
+            copy.cmdline[start..start + word.len()].copy_from_slice(word.as_bytes());
+            if start > 0 {
+                copy.cmdline[start - 1] = b' ';
+            }
+            copy.cmdline_len = start + word.len();
+        }
+        copy
+    }
+
     /// The value of the first `key=value` word on the command line.
     pub fn arg(&self, key: &str) -> Option<&str> {
         self.cmdline().split_ascii_whitespace().find_map(|w| w.strip_prefix(key)?.strip_prefix('='))

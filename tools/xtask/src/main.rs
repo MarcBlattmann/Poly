@@ -3,7 +3,7 @@
 //! Commands:
 //!   build [--release]   build the kernel
 //!   run   [--release] [--gdb] [--no-disk] [kernel args...]
-//!                       boot the kernel in QEMU (serial on stdio, Ctrl-A X quits)
+//!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices attached (--no-disk: without them);
 //!                       --gdb waits for a debugger on localhost:1234 (docs/DEBUGGING.md)
 //!   test                host unit tests + kernel boot tests in QEMU
@@ -12,11 +12,14 @@
 //!                       print the kernel function at each address; with no
 //!                       addresses, add symbols to the backtrace in a log on stdin
 //!   coverage <args>     run the coverage tool (see tools/coverage)
+//!   pipeline <args>     run the agent pipeline tool (see tools/pipeline, docs/AGENT_PIPELINE.md)
 
+mod console;
 mod ktest;
 mod symbols;
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::{Arc, mpsc};
@@ -45,8 +48,9 @@ fn main() -> ExitCode {
         Some("ci") => ci(),
         Some("symbolize") => symbolize(&args[1..]),
         Some("coverage") => coverage(&args[1..]),
+        Some("pipeline") => pipeline(&args[1..]),
         _ => {
-            eprintln!("usage: cargo xtask <build|run|test|ci|symbolize|coverage> [--release]");
+            eprintln!("usage: cargo xtask <build|run|test|ci|symbolize|coverage|pipeline> [--release]");
             return ExitCode::from(2);
         }
     };
@@ -126,6 +130,10 @@ fn test_disk() -> Result<PathBuf> {
     std::fs::write(&path, image).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(path)
 }
+
+/// Kernel flag that starts the shell after the tests even with
+/// `poly.qemu_exit` (`shell::SHELL_FLAG`).
+const SHELL_FLAG: &str = "poly.shell";
 
 /// Kernel flag saying QEMU's `edu` device is attached, a function with MSI
 /// and no MSI-X; the kernel's MSI test then requires it
@@ -250,7 +258,7 @@ struct Boot {
 /// Boot headless with a timeout, echoing serial output as it arrives, with
 /// symbols added to backtrace lines.
 fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, devices: Devices<'_>) -> Result<Boot> {
-    boot_on(None, kernel, syms, memory, append, devices)
+    boot_with(kernel, syms, memory, append, devices, &[], |_| {})
 }
 
 /// [`boot`] on a given QEMU CPU model (`-cpu`), or QEMU's default one.
@@ -262,11 +270,23 @@ fn boot_on(
     append: &str,
     devices: Devices<'_>,
 ) -> Result<Boot> {
-    let mut cmd = qemu(kernel, memory, append, devices, "stdio");
-    if let Some(cpu) = cpu {
-        cmd.args(["-cpu", cpu]);
-    }
-    let mut child = cmd
+    let args: Vec<String> = cpu.map(|c| vec!["-cpu".into(), c.into()]).unwrap_or_default();
+    boot_with(kernel, syms, memory, append, devices, &args, |_| {})
+}
+
+/// [`boot`] with more QEMU arguments, calling `on_line` with every line of
+/// serial output (from the thread that reads it) as it arrives.
+fn boot_with(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    memory: &str,
+    append: &str,
+    devices: Devices<'_>,
+    qemu_args: &[String],
+    mut on_line: impl FnMut(&str) + Send + 'static,
+) -> Result<Boot> {
+    let mut child = qemu(kernel, memory, append, devices, "stdio")
+        .args(qemu_args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()
@@ -278,6 +298,7 @@ fn boot_on(
         for line in BufReader::new(stdout).lines().map_while(std::result::Result::ok) {
             let line = syms.symbolize_line(&line);
             println!("    | {line}");
+            on_line(&line);
             let _ = tx.send(line);
         }
     });
@@ -297,6 +318,204 @@ fn boot_on(
     let _ = reader.join();
     let output = rx.try_iter().collect::<Vec<_>>().join("\n");
     Ok(Boot { status, output })
+}
+
+/// Must match `keyboard::TEST_READY` in the kernel.
+const KEYBOARD_READY: &str = "keyboard: ready for test input";
+
+/// Press `keys` (QEMU key names in `sendkey` syntax, e.g. `shift-p`,
+/// `alt_r-2`) on the guest's PS/2 keyboard through the human monitor on
+/// the Unix socket `monitor`, one at a time.
+fn send_keys(monitor: &Path, keys: &[&str]) -> Result {
+    let mut sock = UnixStream::connect(monitor).map_err(|e| format!("{}: {e}", monitor.display()))?;
+    // Read (and drop) the monitor's banner and echo so it never blocks.
+    let mut echo = sock.try_clone().map_err(|e| e.to_string())?;
+    thread::spawn(move || std::io::copy(&mut echo, &mut std::io::sink()));
+    for key in keys {
+        writeln!(sock, "sendkey {key}").map_err(|e| e.to_string())?;
+        // sendkey holds the keys for 100 ms; let them go before the next.
+        thread::sleep(Duration::from_millis(250));
+    }
+    Ok(())
+}
+
+/// Boot with `poly.test.keyboard=<expected>` (and `poly.keymap=<keymap>`),
+/// press `keys` once the kernel waits for them, and check the kernel typed
+/// `expected` with that layout.
+fn keyboard_boot_test(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    keymap: Option<&str>,
+    keys: &'static [&'static str],
+    expected: &str,
+) -> Result {
+    let monitor = std::env::temp_dir().join(format!("poly-monitor-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&monitor);
+    let qemu_args = ["-monitor".to_string(), format!("unix:{},server=on,wait=off", monitor.display())];
+    let mut append = format!("poly.qemu_exit poly.test=keyboard::typed poly.test.keyboard={expected}");
+    if let Some(k) = keymap {
+        append.push_str(&format!(" poly.keymap={k}"));
+    }
+    let socket = monitor.clone();
+    let mut sent = false;
+    let on_line = move |line: &str| {
+        if !sent && line.contains(KEYBOARD_READY) {
+            sent = true;
+            let socket = socket.clone();
+            thread::spawn(move || {
+                if let Err(e) = send_keys(&socket, keys) {
+                    eprintln!("xtask: sending keys through the QEMU monitor: {e}");
+                }
+            });
+        }
+    };
+    let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &qemu_args, on_line);
+    let _ = std::fs::remove_file(&monitor);
+    let b = b?;
+    ktest::parse(&b.output).check()?;
+    let layout = keymap.unwrap_or("us");
+    if !b.output.contains("keyboard: ISA IRQ 1 -> GSI ") || !b.output.contains(&format!("; layout {layout} (")) {
+        return Err(format!("the keyboard was not brought up on IRQ 1 with layout {layout}"));
+    }
+    let typed = format!("keyboard: typed {expected:?}");
+    if b.status != Some(QEMU_SUCCESS) || !b.output.lines().any(|l| l.trim_end() == typed) {
+        return Err(format!(
+            "keys sent through the QEMU monitor did not type {expected:?} with layout {layout} (status {:?})",
+            b.status
+        ));
+    }
+    Ok(())
+}
+
+/// Boot headless with the serial port on QEMU's stdin and stdout, and type
+/// into it: for each `(expect, input)` step, wait until the output (escape
+/// sequences removed) shows `expect` after what the previous step matched,
+/// then write `input`. Returns when QEMU exits, with the output stripped of
+/// escape sequences (or after [`BOOT_TIMEOUT`], with no status).
+fn boot_typing(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    append: &str,
+    devices: Devices<'_>,
+    steps: &[(&str, &str)],
+) -> Result<Boot> {
+    let mut child = qemu(kernel, DEFAULT_MEMORY, append, devices, "stdio")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("qemu-system-x86_64: {e} (is QEMU installed?)"))?;
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    let (tx, rx) = mpsc::channel();
+    // Raw bytes, not lines: the prompt has no newline after it.
+    let reader = thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        while let Ok(n @ 1..) = stdout.read(&mut buf) {
+            if tx.send(buf[..n].to_vec()).is_err() {
+                break;
+            }
+        }
+    });
+
+    let deadline = Instant::now() + BOOT_TIMEOUT;
+    let (mut raw, mut printed, mut matched) = (Vec::new(), 0, 0);
+    let mut steps = steps.iter();
+    let mut step = steps.next();
+    let status = loop {
+        if let Ok(chunk) = rx.recv_timeout(Duration::from_millis(20)) {
+            raw.extend(chunk);
+            raw.extend(rx.try_iter().flatten());
+        }
+        // Up to the last whole character, so the text only ever grows.
+        let upto = match std::str::from_utf8(&raw) {
+            Err(e) if e.error_len().is_none() => e.valid_up_to(),
+            _ => raw.len(),
+        };
+        let text = console::strip_ansi(&String::from_utf8_lossy(&raw[..upto]));
+        for line in text.split_inclusive('\n').skip(printed).filter(|l| l.ends_with('\n')) {
+            println!("    | {}", syms.symbolize_line(line.trim_end()));
+            printed += 1;
+        }
+        if let Some((expect, input)) = step
+            && let Some(at) = text[matched..].find(expect)
+        {
+            matched += at + expect.len();
+            stdin.write_all(input.as_bytes()).and_then(|()| stdin.flush()).map_err(|e| format!("qemu stdin: {e}"))?;
+            step = steps.next();
+        }
+        if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
+            break s.code();
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+    };
+    drop(stdin);
+    let _ = reader.join();
+    raw.extend(rx.try_iter().flatten());
+    let rest = console::strip_ansi(&String::from_utf8_lossy(&raw));
+    for line in rest.lines().skip(printed) {
+        println!("    | {}", syms.symbolize_line(line));
+    }
+    Ok(Boot { status, output: rest })
+}
+
+/// Type commands into the kernel shell on the serial port and check what
+/// they print; `reboot` ends the boot (QEMU runs with `-no-reboot`).
+fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    let disk = test_disk()?;
+    let devices = Devices::Test(&disk);
+    let append = format!("poly.qemu_exit {SHELL_FLAG} poly.test=shell:: {}", devices.flags());
+    let commands = [
+        "help\r",
+        "uptime\r",
+        "lspci\r",
+        "hlep\r",
+        // Tab completes "echo"; Left moves back over the "c" to insert "b".
+        "ech\t'over  serial'\r",
+        "echo ac\x1b[Db\r",
+        "test shell::\r",
+        "reboot\r",
+    ];
+    let steps: Vec<_> = commands.iter().map(|&c| (console::PROMPT, c)).collect();
+    let b = boot_typing(kernel, syms, &append, devices, &steps)?;
+    let boot_log = b.output.split(console::PROMPT).next().unwrap_or_default();
+    ktest::parse(boot_log).check()?;
+    let ex = console::exchanges(&b.output);
+    if ex.len() < commands.len() {
+        return Err(format!(
+            "the shell answered {} of {} command lines (status {:?})",
+            ex.len(),
+            commands.len(),
+            b.status
+        ));
+    }
+    let out = |i: usize| ex[i].output;
+    let checks: [(&str, bool); 8] = [
+        (
+            "help lists the commands",
+            ["uptime ", "lspci ", "reboot ", "list the commands"].iter().all(|s| out(0).contains(s)),
+        ),
+        ("uptime", out(1).starts_with("up ") && out(1).contains(" ticks at 1000 Hz")),
+        ("lspci lists the test disk", out(2).contains(" 1af4:1042 SCSI storage") && out(2).contains(" functions\n")),
+        ("an unknown command gets a suggestion", out(3) == "unknown command 'hlep'; did you mean 'help'?\n"),
+        ("Tab completes over the serial line", out(4) == "over  serial\n"),
+        ("cursor keys edit over the serial line", out(5) == "abc\n"),
+        ("test runs the kernel tests at runtime", out(6).contains("test result: ok.") && !out(6).contains("FAILED")),
+        ("reboot uses the ACPI reset register", out(7).contains("reboot: ACPI reset register")),
+    ];
+    for (what, ok) in checks {
+        if !ok {
+            return Err(format!("shell over the serial port: {what} failed"));
+        }
+    }
+    // QEMU turns the reset into an exit with -no-reboot.
+    if b.status != Some(0) {
+        return Err(format!("reboot did not reset the machine (status {:?})", b.status));
+    }
+    Ok(())
 }
 
 fn boot_tests() -> Result {
@@ -366,6 +585,33 @@ fn boot_tests() -> Result {
             return Err(format!("the test disk was not {want} with {memory}"));
         }
     }
+
+    // Keys pressed on the host reach the kernel through the i8042 and IRQ 1.
+    eprintln!("==> boot test: keys sent through the QEMU monitor type text (US layout)");
+    keyboard_boot_test(&kernel, &syms, None, &["shift-p", "o", "l", "y", "ret"], "Poly")?;
+    // QEMU names keys by their US position: "z" is the Swiss German y, "equal"
+    // the ^ dead key, "bracket_left" ü, "bracket_right" the ¨ dead key.
+    eprintln!("==> boot test: keys sent through the QEMU monitor type text (Swiss German: AltGr, dead keys)");
+    const DE_CH_KEYS: [&str; 14] = [
+        "p",
+        "o",
+        "l",
+        "z",
+        "alt_r-2",
+        "equal",
+        "a",
+        "alt_r-equal",
+        "n",
+        "bracket_left",
+        "shift-bracket_left",
+        "bracket_right",
+        "spc",
+        "ret",
+    ];
+    keyboard_boot_test(&kernel, &syms, Some("de-ch"), &DE_CH_KEYS, "poly@\u{e2}\u{f1}\u{fc}\u{e8}\u{a8}")?;
+
+    eprintln!("==> boot test: the shell on the serial port answers typed commands");
+    shell_test(&kernel, &syms)?;
 
     // Expecting the test disk without attaching it must fail the disk
     // tests, so a boot that silently lost its disk cannot pass.
@@ -518,7 +764,18 @@ fn ci() -> Result {
     step("clippy (kernel)", cargo().current_dir(kernel_dir()).args(["clippy", "--", "-D", "warnings"]))?;
     test()?;
     coverage(&["check".into()])?;
-    coverage(&["readme".into(), "--check".into()])
+    coverage(&["readme".into(), "--check".into()])?;
+    // The test corpus on Linux against itself: the tracer and the diff
+    // runner must find no differences. Takes a few seconds; skips itself
+    // without a C compiler or where ptrace is not permitted.
+    pipeline(&["selfcheck".into()])
+}
+
+fn pipeline(args: &[String]) -> Result {
+    step(
+        "pipeline",
+        cargo().current_dir(root()).args(["run", "--quiet", "--package", "poly-pipeline", "--"]).args(args),
+    )
 }
 
 fn coverage(args: &[String]) -> Result {

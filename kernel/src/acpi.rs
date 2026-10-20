@@ -10,7 +10,9 @@ use crate::arch::phys_range_to_virt;
 use crate::sync::SpinLock;
 use crate::{kprint, kprintln};
 use alloc::vec::Vec;
-use poly_acpi::{Acpi, AddressSpace, EcamRegion, Error, Fadt, Hpet, Madt, MadtEntry, Mcfg, PhysMemory, Table};
+use poly_acpi::{
+    Acpi, AddressSpace, EcamRegion, Error, Fadt, Hpet, Madt, MadtEntry, Mcfg, PhysMemory, ResetRegister, Table,
+};
 use poly_mem::{MemoryMap, RegionKind};
 
 /// What the self-test checks.
@@ -48,6 +50,11 @@ pub struct Platform {
     pub hpet: Option<u64>,
     /// ACPI PM timer I/O port and counter width (24 or 32).
     pub pm_timer: Option<(u16, u8)>,
+    /// The FADT's "8042 present" boot architecture flag (§5.2.9.3); `None`
+    /// without a FADT or with an ACPI 1.0 one, where the field is reserved.
+    pub has_8042: Option<bool>,
+    /// The FADT's reset register and value, for rebooting.
+    pub reset: Option<ResetRegister>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -226,8 +233,13 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<(Summary, Platform), Error> 
         if fadt.boot_arch().has_8042() {
             kprint!(", 8042");
         }
+        // IAPC_BOOT_ARCH exists from FADT revision 2 (ACPI 2.0) on.
+        if fadt.sdt().header().revision >= 2 {
+            platform.has_8042 = Some(fadt.boot_arch().has_8042());
+        }
         if let Some(r) = fadt.reset() {
             kprint!(", reset {:#x}={:#x}", r.register.address, r.value);
+            platform.reset = Some(r);
         }
         kprintln!();
     }

@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 25 of 139 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 28 of 139 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">25 / 139 milestones · 18%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">28 / 139 milestones · 20%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -89,16 +89,16 @@
 <g><title>Drawing library: pixels, rectangles, a permissively licensed bitmap font, scrolling text grid</title>
 <rect x="435.2" y="113.0" width="93.2" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>Keyboard: PS/2 (i8042) driver on interrupts, scancode decoding, US and Swiss German layouts</title>
-<rect x="530.4" y="113.0" width="93.2" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Keyboard: PS/2 (i8042) driver on interrupts, scancode decoding, US and Swiss German layouts</title>
+<rect x="530.4" y="113.0" width="93.2" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Kernel shell: line editor with history and completion, commands (help, mem, ps, lspci, disks, uptime, test, clear, reboot)</title>
-<rect x="625.6" y="113.0" width="93.2" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Kernel shell: line editor with history and completion, commands (help, mem, ps, lspci, disks, uptime, test, clear, reboot)</title>
+<rect x="625.6" y="113.0" width="93.2" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>Milestone: the kernel boots into a full-screen terminal with a status bar, usable with the keyboard</title>
 <rect x="720.8" y="113.0" width="93.2" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">0/5</text>
+<text x="884.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">2/5</text>
 <text x="16.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 3  User space and the first Linux program</text>
 <g><title>Per-process address spaces, switching on context switch (PCID where available)</title>
 <rect x="340.0" y="143.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
@@ -133,10 +133,10 @@
 <g><title>Diff runner v0: same tests on real Linux and on Poly, results compared per test</title>
 <rect x="736.7" y="143.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>Held-out test store outside this repo; hand-off logging in specs/HANDOFF_LOG.md</title>
-<rect x="776.3" y="143.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Held-out test store outside this repo; hand-off logging in specs/HANDOFF_LOG.md</title>
+<rect x="776.3" y="143.0" width="37.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">0/12</text>
+<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">1/12</text>
 <text x="16.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 4  Linux userland</text>
 <g><title>Processes and threads: clone, fork (copy-on-write), execve, exit, wait4</title>
 <rect x="340.0" y="173.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
