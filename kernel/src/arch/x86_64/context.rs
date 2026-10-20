@@ -13,9 +13,11 @@
 //!   flag clear, as at any call); each thread restores its own interrupt
 //!   state when it leaves the critical section the switch returned into.
 //! - Segment registers: every kernel thread uses the same flat segments.
-//! - FPU/SSE state: the kernel target (x86_64-unknown-none) is soft-float and
-//!   never touches it. User threads will need xsave/xrstor here, plus
-//!   TSS.rsp0 and the FS/GS bases.
+//! - FPU/SSE state, the FS/GS bases, CR3 and TSS.rsp0: the kernel target
+//!   (x86_64-unknown-none) is soft-float and never touches the FPU, and
+//!   kernel threads share one address space. For user threads the
+//!   scheduler switches all of these just before calling [`switch`]
+//!   (`user.rs`).
 
 use core::arch::global_asm;
 use core::mem::size_of;

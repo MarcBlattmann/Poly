@@ -117,6 +117,15 @@ impl PageFlags {
     /// G (bit 8) in a leaf: the translation survives CR3 loads when
     /// CR4.PGE = 1 (SDM Vol. 3A §4.10.2.4). Ignored in non-leaf entries.
     pub const GLOBAL: PageFlags = PageFlags(1 << 8);
+    /// Bit 9 of a leaf: ignored by the CPU and free for the OS (SDM Vol. 3A
+    /// §4.5, Tables 4-18 to 4-20, "Ignored"). Like the other flags it is
+    /// kept as given and reported back by [`PageTables::translate`].
+    pub const SOFTWARE_9: PageFlags = PageFlags(1 << 9);
+    /// Bit 10 of a leaf: ignored by the CPU, free for the OS.
+    pub const SOFTWARE_10: PageFlags = PageFlags(1 << 10);
+    /// Bit 11 of a leaf: ignored by the CPU, free for the OS. (Only HLAT
+    /// paging, which nothing here enables, gives it a meaning.)
+    pub const SOFTWARE_11: PageFlags = PageFlags(1 << 11);
     /// XD (bit 63): instruction fetches are not allowed (SDM Vol. 3A §4.6).
     /// Only valid with IA32_EFER.NXE = 1; otherwise the bit is reserved and
     /// a set bit causes a reserved-bit page fault.
@@ -182,7 +191,7 @@ impl Not for PageFlags {
 
 impl fmt::Debug for PageFlags {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const NAMES: [(PageFlags, &str); 10] = [
+        const NAMES: [(PageFlags, &str); 13] = [
             (PageFlags::PRESENT, "PRESENT"),
             (PageFlags::WRITABLE, "WRITABLE"),
             (PageFlags::USER, "USER"),
@@ -192,6 +201,9 @@ impl fmt::Debug for PageFlags {
             (PageFlags::DIRTY, "DIRTY"),
             (PageFlags::HUGE, "HUGE"),
             (PageFlags::GLOBAL, "GLOBAL"),
+            (PageFlags::SOFTWARE_9, "SOFTWARE_9"),
+            (PageFlags::SOFTWARE_10, "SOFTWARE_10"),
+            (PageFlags::SOFTWARE_11, "SOFTWARE_11"),
             (PageFlags::NO_EXECUTE, "NO_EXECUTE"),
         ];
         f.write_str("PageFlags(")?;
@@ -375,6 +387,16 @@ impl FreedTables {
         self.frames[self.len] = frame;
         self.len += 1;
     }
+}
+
+/// What [`PageTables::clear`] took out of the tables.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cleared {
+    /// A page that was mapped at `virt`.
+    Page { virt: u64, page: Unmapped },
+    /// The frame of a page table (PDPT, PD or PT) that was unlinked. Every
+    /// page and table below it has been reported before it.
+    Table(u64),
 }
 
 /// The tables visited on a walk: `path[4 - level]` is the table at `level`,
@@ -602,6 +624,55 @@ impl<M: PhysMemory> PageTables<M> {
         }
         self.mem.write_entry(leaf.path[4 - leaf.level], index(virt, leaf.level), leaf_entry(leaf.frame(), size, flags));
         Ok(leaf.flags())
+    }
+
+    /// Remove everything below the PML4 entries `slots` (a range of
+    /// `0..512`): every page is unmapped and every table below those
+    /// entries is unlinked, and `visit` is told about each, children before
+    /// the table that held them. Afterwards the entries are zero. The PML4
+    /// itself stays. Non-present entries that carry software data are
+    /// cleared without being reported.
+    ///
+    /// Nothing is freed here, for the reasons given under
+    /// [`PageTables::unmap_and_prune`]: the caller hands the frames back
+    /// once no CPU can still be using the old translations (for a process
+    /// that is gone, once its tables are loaded nowhere).
+    pub fn clear(&mut self, slots: core::ops::Range<usize>, mut visit: impl FnMut(Cleared)) {
+        assert!(slots.end <= ENTRIES, "PML4 slot out of range");
+        for slot in slots {
+            // Bit 47 of the first address in the slot decides the sign
+            // extension of the upper bits.
+            let base = slot as u64 * PageSize::Size1G.bytes() * ENTRIES as u64;
+            let base = if slot >= ENTRIES / 2 { base | 0xffff_0000_0000_0000 } else { base };
+            self.clear_entry(self.root, slot, 4, base, &mut visit);
+        }
+    }
+
+    /// Clear entry `i` of the table at `level`, which maps the addresses
+    /// from `virt` on, and everything below it.
+    fn clear_entry(&mut self, table: u64, i: usize, level: usize, virt: u64, visit: &mut impl FnMut(Cleared)) {
+        let entry = self.mem.read_entry(table, i);
+        if entry == 0 {
+            return;
+        }
+        self.mem.write_entry(table, i, 0);
+        if entry & PageFlags::PRESENT.0 == 0 {
+            return;
+        }
+        if level == 1 || (level <= 3 && entry & PageFlags::HUGE.0 != 0) {
+            let leaf = Leaf { path: [0; 4], level, entry };
+            visit(Cleared::Page {
+                virt,
+                page: Unmapped { frame: leaf.frame(), size: leaf.size(), flags: leaf.flags() },
+            });
+            return;
+        }
+        let child = entry & ADDR_MASK;
+        let step = 1u64 << (12 + 9 * (level - 2));
+        for j in 0..ENTRIES {
+            self.clear_entry(child, j, level - 1, virt + j as u64 * step, visit);
+        }
+        visit(Cleared::Table(child));
     }
 
     /// Read-only walk towards the slot for a `size` page at `virt`; fails if

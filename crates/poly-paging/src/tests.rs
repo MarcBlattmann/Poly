@@ -145,7 +145,7 @@ fn flag_operations() {
     let mut g = PageFlags::empty();
     g |= PageFlags::NO_EXECUTE;
     assert_eq!(std::format!("{:?}", g | RW), "PageFlags(WRITABLE | NO_EXECUTE)");
-    assert_eq!(std::format!("{:?}", PageFlags::from_bits(1 << 9)), "PageFlags(0x200)");
+    assert_eq!(std::format!("{:?}", PageFlags::from_bits(1 << 52)), "PageFlags(0x10000000000000)");
 }
 
 #[test]
@@ -406,6 +406,90 @@ fn prune_keeps_tables_with_non_present_data() {
     let (_, freed) = pt.unmap_and_prune(0x1000).unwrap();
     assert!(freed.is_empty());
     assert_eq!(pt.memory().read_entry(table, 2), 0xdead_0000);
+}
+
+#[test]
+fn software_bits_are_kept_and_reported() {
+    let (mut pt, mut frames) = setup();
+    let sw = PageFlags::SOFTWARE_9 | PageFlags::SOFTWARE_11;
+    assert_eq!(sw.bits(), (1 << 9) | (1 << 11));
+    pt.map(0x7000, 0x9000, Size4K, RW | PageFlags::USER | sw, &mut frames).unwrap();
+    assert_eq!(tr(&pt, 0x7000).flags, PageFlags::PRESENT | RW | PageFlags::USER | sw);
+    // Intermediate entries never get them.
+    assert!(walk(&pt, 0x7000)[..3].iter().all(|e| e & sw.bits() == 0));
+    let old = pt.update_flags(0x7000, PageFlags::USER | PageFlags::SOFTWARE_10).unwrap();
+    assert!(old.contains(sw));
+    assert_eq!(pt.unmap(0x7000).unwrap().flags, PageFlags::PRESENT | PageFlags::USER | PageFlags::SOFTWARE_10);
+    assert_eq!(std::format!("{:?}", PageFlags::SOFTWARE_10), "PageFlags(SOFTWARE_10)");
+}
+
+#[test]
+fn clear_empties_a_range_of_slots_and_reports_everything() {
+    let (mut pt, mut frames) = setup();
+    let user = RW | PageFlags::USER;
+    // Lower half: 4 KiB pages in two PTs, a 2 MiB page, a 1 GiB page, and
+    // a page in the last slot of the lower half.
+    pt.map(0x1000, 0xa000, Size4K, user, &mut frames).unwrap();
+    pt.map(0x3000, 0xb000, Size4K, user, &mut frames).unwrap();
+    pt.map(M2 + 0x5000, 0xc000, Size4K, user, &mut frames).unwrap();
+    pt.map(4 * M2, 8 * M2, Size2M, user, &mut frames).unwrap();
+    pt.map(3 * G1, 5 * G1, Size1G, user, &mut frames).unwrap();
+    let top = 0x7fff_ffff_f000;
+    pt.map(top, 0xd000, Size4K, user, &mut frames).unwrap();
+    // Higher half: must survive.
+    pt.map(HIGH + 0x1000, 0xe000, Size4K, RW, &mut frames).unwrap();
+    pt.map(0xffff_ffff_8000_0000, 0, Size2M, RW, &mut frames).unwrap();
+    // A non-present entry with software data is dropped without a report.
+    let table = walk(&pt, 0x1000)[2] & ADDR_MASK;
+    pt.memory_mut().write_entry(table, 7, 0xdead_0000);
+    let tables_before = frames.live.len();
+
+    let mut pages = Vec::new();
+    let mut tables = Vec::new();
+    pt.clear(0..ENTRIES / 2, |c| match c {
+        Cleared::Page { virt, page } => pages.push((virt, page.frame, page.size)),
+        Cleared::Table(frame) => {
+            // Children before parents: nothing reported later lives in it.
+            assert!(!tables.contains(&frame));
+            tables.push(frame);
+        }
+    });
+    pages.sort();
+    assert_eq!(
+        pages,
+        [
+            (0x1000, 0xa000, Size4K),
+            (0x3000, 0xb000, Size4K),
+            (M2 + 0x5000, 0xc000, Size4K),
+            (4 * M2, 8 * M2, Size2M),
+            (3 * G1, 5 * G1, Size1G),
+            (top, 0xd000, Size4K),
+        ]
+    );
+    // Two PTs and a PD for the low GiB, the low PDPT, and a PDPT, PD and
+    // PT for the top page.
+    assert_eq!(tables.len(), 7);
+    assert!((0..ENTRIES / 2).all(|i| pt.memory().read_entry(pt.root(), i) == 0));
+    for f in &tables {
+        frames.deallocate_frame(*f);
+    }
+    assert_eq!(frames.live.len(), tables_before - 7);
+    assert_eq!(tr(&pt, HIGH + 0x1000).phys, 0xe000);
+    assert_eq!(tr(&pt, 0xffff_ffff_8000_0000).size, Size2M);
+
+    // The higher half reports its own (sign-extended) addresses.
+    let mut high = Vec::new();
+    pt.clear(ENTRIES / 2..ENTRIES, |c| {
+        if let Cleared::Page { virt, .. } = c {
+            high.push(virt);
+        }
+    });
+    high.sort();
+    assert_eq!(high, [HIGH + 0x1000, 0xffff_ffff_8000_0000]);
+    assert!((0..ENTRIES).all(|i| pt.memory().read_entry(pt.root(), i) == 0));
+
+    // Clearing an empty range reports nothing.
+    pt.clear(0..ENTRIES, |_| panic!("nothing left to clear"));
 }
 
 #[test]

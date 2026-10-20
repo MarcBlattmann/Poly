@@ -26,6 +26,7 @@ mod sync;
 mod syscall;
 mod thread;
 mod time;
+mod user;
 mod virtio_blk;
 
 use alloc::boxed::Box;
@@ -84,6 +85,9 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     // allocator. `boot` copied what it needed out of the PVH start info, so
     // nothing holds a pointer into the boot mapping.
     let memory = unsafe { mm::init(&memory) };
+    // SAFETY: once, on the boot CPU with interrupts off, after the kernel
+    // page tables and the GDT, before any user thread.
+    unsafe { arch::user::init() };
 
     let (memory, meta) = frames::init(&memory);
     if let Some(f) = frames::FRAMES.lock().as_ref() {

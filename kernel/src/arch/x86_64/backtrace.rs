@@ -63,14 +63,16 @@ pub fn unregister_thread_stack(slot: usize) {
     THREAD_STACKS[slot].store(0, Ordering::Release);
 }
 
-/// Every stack the kernel runs on: the boot stack, the double-fault IST
-/// stack and the registered thread stacks (empty ranges for free slots).
-fn stacks() -> [Range<u64>; 2 + THREAD_STACK_SLOTS] {
+/// Every stack the kernel runs on: the boot stack, the double-fault and NMI
+/// IST stacks and the registered thread stacks (empty ranges for free
+/// slots).
+fn stacks() -> [Range<u64>; 3 + THREAD_STACK_SLOTS] {
     core::array::from_fn(|i| match i {
         0 => (&raw const __boot_stack_bottom) as u64..(&raw const __boot_stack_top) as u64,
         1 => super::gdt::double_fault_stack(),
+        2 => super::gdt::nmi_stack(),
         _ => {
-            let word = THREAD_STACKS[i - 2].load(Ordering::Acquire);
+            let word = THREAD_STACKS[i - 3].load(Ordering::Acquire);
             let base = word & !(PAGE - 1);
             base..base + (word & (PAGE - 1)) * PAGE
         }

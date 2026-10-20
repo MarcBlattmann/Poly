@@ -17,9 +17,11 @@
 //! - [`SetOnce`] holds a value written once during boot and read without a
 //!   lock afterwards (the local APIC, the clock).
 //!
-//! Lock order where locks nest: the heap, then `paging::KERNEL`, then
-//! [`FRAMES`](crate::frames::FRAMES); the scheduler's `THREADS` takes
-//! `FRAMES` only with `try_lock`. Nothing allocates while holding `FRAMES`.
+//! Lock order where locks nest: the heap, then `paging::KERNEL` or a user
+//! address space's tables, then [`FRAMES`](crate::frames::FRAMES); the
+//! scheduler's `THREADS` takes `FRAMES` only with `try_lock`, and drops the
+//! user state of exited threads (address spaces) only after unlocking.
+//! Nothing allocates while holding `FRAMES`.
 //!
 //! TODO(smp): the held-lock count is global; with several CPUs it must be
 //! per CPU (as must the scheduler's notion of "current thread").

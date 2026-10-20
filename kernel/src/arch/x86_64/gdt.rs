@@ -1,22 +1,33 @@
 //! Global descriptor table and task state segment.
 //!
 //! Selector layout is chosen for `syscall`/`sysret`, which require kernel
-//! code/data and user data/code to sit next to each other in this order.
+//! code/data and user data/code to sit next to each other in this order
+//! (SDM Vol. 2B, `SYSCALL` and `SYSRET`; IA32_STAR is programmed in
+//! `syscall.rs`).
+//!
+//! The TSS holds the stacks the CPU switches to: `rsp0`, the kernel stack
+//! of the running thread, for interrupts and exceptions from ring 3 (the
+//! scheduler updates it on every switch to a user thread), and two
+//! interrupt-stack-table entries (see [`DOUBLE_FAULT_IST`], [`NMI_IST`]).
 
 use core::arch::{asm, global_asm};
 use core::mem::size_of;
 
 pub const KERNEL_CODE: u16 = 0x08;
 pub const KERNEL_DATA: u16 = 0x10;
-#[allow(dead_code, reason = "used by the syscall/sysret path")]
 pub const USER_DATA: u16 = 0x18 | 3;
-#[allow(dead_code, reason = "used by the syscall/sysret path")]
 pub const USER_CODE: u16 = 0x20 | 3;
 pub const TSS: u16 = 0x28;
 
 /// IST slot used for double faults, so they get a known-good stack even
 /// when the fault was caused by a stack overflow.
 pub const DOUBLE_FAULT_IST: u8 = 1;
+
+/// IST slot for the non-maskable interrupt and the machine check. Neither
+/// can be masked, so either may arrive in the first instructions of the
+/// `syscall` entry, while `rsp` is still the user's stack: without a stack
+/// of their own they would run on memory user mode chose.
+pub const NMI_IST: u8 = 2;
 
 #[repr(C, packed(4))]
 struct TaskStateSegment {
@@ -46,14 +57,42 @@ global_asm!(
     options(att_syntax)
 );
 
+// The NMI / machine-check stack, likewise above a guard page.
+global_asm!(
+    r#"
+    .section .stack.nmi, "aw", @nobits
+    .balign 4096
+    .skip 16 * 1024
+"#,
+    options(att_syntax)
+);
+
 unsafe extern "C" {
     static __double_fault_stack_bottom: u8;
     static __double_fault_stack_top: u8;
+    static __nmi_stack_bottom: u8;
+    static __nmi_stack_top: u8;
 }
 
 /// Address range of the double-fault IST stack.
 pub fn double_fault_stack() -> core::ops::Range<u64> {
     (&raw const __double_fault_stack_bottom) as u64..(&raw const __double_fault_stack_top) as u64
+}
+
+/// Address range of the NMI / machine-check IST stack.
+pub fn nmi_stack() -> core::ops::Range<u64> {
+    (&raw const __nmi_stack_bottom) as u64..(&raw const __nmi_stack_top) as u64
+}
+
+/// Point TSS.rsp0 at `top`: the stack the CPU switches to when an interrupt
+/// or exception arrives in ring 3. The scheduler sets it to the kernel
+/// stack of every user thread it switches to.
+pub fn set_kernel_stack(top: u64) {
+    // SAFETY: one CPU, and the CPU reads rsp0 only while delivering an
+    // interrupt from ring 3, which cannot happen while the kernel runs this.
+    // The field is not 8-byte aligned in the packed TSS, hence the
+    // unaligned write.
+    unsafe { (&raw mut TSS_SEGMENT.rsp).cast::<u64>().write_unaligned(top) }
 }
 
 static mut TSS_SEGMENT: TaskStateSegment = TaskStateSegment {
@@ -82,6 +121,7 @@ pub unsafe fn init() {
     // SAFETY: single-threaded early boot; nothing else touches these statics.
     unsafe {
         TSS_SEGMENT.ist[DOUBLE_FAULT_IST as usize - 1] = double_fault_stack().end;
+        TSS_SEGMENT.ist[NMI_IST as usize - 1] = nmi_stack().end;
 
         let base = (&raw const TSS_SEGMENT) as u64;
         let limit = size_of::<TaskStateSegment>() as u64 - 1;
