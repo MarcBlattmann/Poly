@@ -946,8 +946,9 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   personality (privileges, `MountRequest`, per-type mount options) and
   done by the kernel through a third services trait, `LinuxAdmin`
   (`LinuxKernel::admin`); `getpriority`, `setpriority` and the `sched_*`
-  calls (`sys/sched.rs`) keep a nice value per process and report one CPU
-  and `SCHED_OTHER`; `sendfile` (`sys/sendfile.rs`) copies through a
+  calls (`sys/sched.rs`) keep a nice value per process and report
+  `SCHED_OTHER`; CPU affinity and `sched_yield` go to the kernel's
+  scheduler (`LinuxKernel::cpu_affinity`, ADR 0053); `sendfile` (`sys/sendfile.rs`) copies through a
   kernel buffer.
 - **Linux processes and threads**
   ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md)): `clone`,

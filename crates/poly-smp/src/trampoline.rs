@@ -114,7 +114,7 @@ pub fn startup_vector(base: u64) -> Option<u8> {
 /// The identity-map entries of the area's own page tables at `base`:
 /// PML4[0], PDPT[0] and PD[0] (2 MiB at physical 0, which holds the area).
 pub fn identity_entries(base: u64) -> [u64; 3] {
-    [base + PDPT_OFFSET | PRESENT | WRITABLE, base + PD_OFFSET | PRESENT | WRITABLE, PRESENT | WRITABLE | LARGE]
+    [(base + PDPT_OFFSET) | PRESENT | WRITABLE, (base + PD_OFFSET) | PRESENT | WRITABLE, PRESENT | WRITABLE | LARGE]
 }
 
 /// Why [`Params::write`] refused.
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(u64_at(&page, param::STACK), 0xffff_8000_1234_0000);
         assert_eq!(u64_at(&page, param::ENTRY), 0xffff_ffff_8010_0000);
         assert_eq!(u64_at(&page, param::ARG), 3);
-        assert!(param::END <= 4096);
+        const { assert!(param::END <= 4096) };
         assert_eq!(page[param::END..], [0xcc; 4096 - param::END]);
     }
 

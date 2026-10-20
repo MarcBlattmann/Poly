@@ -209,6 +209,7 @@ pub fn spawn_child(
     start_thread(process, arch, Some(memory), entry, Some(Box::new(*regs)), hook, tid, cpus)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn start_thread(
     process: Arc<Process>,
     arch: arch::user::ThreadState,
