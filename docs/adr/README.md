@@ -24,6 +24,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0018](0018-msi-x-and-interrupt-driven-disk-io.md) | MSI and MSI-X for PCI functions, interrupt-driven disks with sleeping waiters, a watchdog on the clock | Accepted |
 | [0024](0024-elf-loader.md) | ELF loader in a host-tested crate: validated headers, page mapping plans, the psABI initial stack | Accepted |
 | [0026](0026-user-address-space-regions.md) | User address spaces: a region map in a host-tested crate (`poly-vm`), page state in the page tables | Accepted |
+| [0025](0025-linux-syscall-table-and-kernel-services-trait.md) | Linux system calls: a generated table, man-page handlers, a kernel-services trait | Accepted |
 
 ## Open decisions
 
