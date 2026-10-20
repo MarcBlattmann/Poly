@@ -20,6 +20,7 @@ pub mod prctl;
 pub mod process;
 pub mod signal;
 pub mod signalfd;
+pub mod socket;
 pub mod system;
 pub mod task;
 pub mod time;

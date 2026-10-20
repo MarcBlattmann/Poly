@@ -295,7 +295,10 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn close(&mut self, fd: i32) -> Result<(), Errno> {
-        self.process.files.close(fd).map_err(vfs_errno)
+        self.process.files.close(fd).map_err(vfs_errno)?;
+        // Sockets only descriptors in flight hold (ADR 0048).
+        super::net::after_close();
+        Ok(())
     }
 
     fn fstat(&mut self, fd: i32) -> Result<FileStat, Errno> {
@@ -692,5 +695,9 @@ impl LinuxKernel for Thread<'_> {
 
     fn signal_queued(&mut self, pid: i32) {
         super::signalfd::signal_queued(pid);
+    }
+
+    fn net(&mut self) -> Option<&mut dyn poly_personality_linux::net::LinuxNet> {
+        Some(self)
     }
 }

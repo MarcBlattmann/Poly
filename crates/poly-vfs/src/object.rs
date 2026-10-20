@@ -43,6 +43,14 @@ pub trait FileObject: Any + Send + Sync {
     fn bytes_readable(&self) -> Option<usize> {
         None
     }
+
+    /// How long a blocking read (first) or write (second) may wait, in
+    /// nanoseconds; `None`: until it can go on. Sockets answer their
+    /// `SO_RCVTIMEO` / `SO_SNDTIMEO` here (socket(7)); everything else
+    /// waits for ever.
+    fn timeouts(&self) -> (Option<u64>, Option<u64>) {
+        (None, None)
+    }
 }
 
 /// The inode number of the anonymous file system's root directory.

@@ -11,7 +11,7 @@ use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
 use crate::sys::{
     cred, epoll, eventfd, fd, futex, io, limits, madvise, mem, path, perm, pipe, poll, prctl, process, signal,
-    signalfd, system, task, time, timerfd,
+    signalfd, socket, system, task, time, timerfd,
 };
 
 pub use crate::numbers::{SYSCALLS, nr};
@@ -178,8 +178,8 @@ pub const FILE_SYSTEM: &[(u64, Handler)] = &[
 ];
 /// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
 /// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]; ADR 0049:
-/// madvise).
-pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS, FILE_SYSTEM, madvise::CALLS];
+/// madvise; ADR 0048: sockets).
+pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS, FILE_SYSTEM, madvise::CALLS, socket::CALLS];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
 

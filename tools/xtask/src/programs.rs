@@ -19,6 +19,12 @@
 //! with the vDSO forced onto the TSC) and runs as the first process in a
 //! boot test of its own.
 //!
+//! And `/bin/socket-test` (`tools/xtask/programs/socket_test.rs`): the
+//! socket system calls from ring 3 (ADR 0048), in the self-test initramfs
+//! (a kernel test runs it), as the first process in a boot test of its
+//! own, and against the host's echo servers in a network boot
+//! (`net.rs`).
+//!
 //! And for processes and threads (Phase 4, ADR 0041):
 //!
 //! - `/bin/forkexec`: `tools/xtask/programs/forkexec.rs`, no C library, as
@@ -52,6 +58,8 @@ pub const HELLO_OUTPUT: &str = "Hello, world!\n";
 pub const C_HELLO_OUTPUT: &str = "hello, world\n";
 /// The last line `/bin/time-test` writes when every check passed.
 pub const TIME_TEST_OUTPUT: &str = "time-test: done, 0 failed\n";
+/// The last line `/bin/socket-test` writes when every check passed.
+pub const SOCKET_TEST_OUTPUT: &str = "socket-test: done, 0 failed\n";
 /// What `/bin/forkexec` writes when every check passed.
 pub const FORKEXEC_OUTPUT: &str = "forkexec: ok\n";
 /// What `/bin/ttyinit` writes when every check passed.
@@ -115,6 +123,11 @@ pub fn time_test() -> Result<Vec<u8>> {
     nolibc_program("tools/xtask/programs/time_test.rs", "time-test")
 }
 
+/// Build `tools/xtask/programs/socket_test.rs`; returns the ELF.
+pub fn socket_test() -> Result<Vec<u8>> {
+    nolibc_program("tools/xtask/programs/socket_test.rs", "socket-test")
+}
+
 /// The C programs of the corpus, built by the pipeline tool into
 /// `target/xtask-programs/corpus`: `(name, ELF)` for `hello` and
 /// `libc-hello` as far as they were built. Empty, with the reason, without
@@ -146,12 +159,14 @@ pub fn c_hellos() -> (Vec<(String, Vec<u8>)>, Option<String>) {
 }
 
 /// The test initramfs (`initramfs::test_image_with`) with the nolibc hello
-/// as `/bin/hello` and the time test as `/bin/time-test`, for the
-/// self-test boots (the kernel's exec and time tests run them).
+/// as `/bin/hello`, the time test as `/bin/time-test` and the socket test
+/// as `/bin/socket-test`, for the self-test boots (the kernel's exec, time
+/// and socket tests run them).
 pub fn test_initramfs() -> Result<PathBuf> {
     let hello = nolibc_hello()?;
     let time = time_test()?;
-    let image = initramfs::test_image_with(&[("hello", &hello), ("time-test", &time)]);
+    let sockets = socket_test()?;
+    let image = initramfs::test_image_with(&[("hello", &hello), ("time-test", &time), ("socket-test", &sockets)]);
     initramfs::write(&root(), "poly-test-initramfs.cpio", &image)
 }
 
@@ -186,10 +201,16 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let hello = nolibc_hello()?;
     let forkexec = nolibc_forkexec()?;
     let time = time_test()?;
+    let sockets = socket_test()?;
     let ttyinit = nolibc_ttyinit()?;
     let (c_programs, skipped) = c_hellos();
-    let mut programs: Vec<(&str, &[u8])> =
-        vec![("hello", &hello), ("forkexec", &forkexec), ("time-test", &time), ("ttyinit", &ttyinit)];
+    let mut programs: Vec<(&str, &[u8])> = vec![
+        ("hello", &hello),
+        ("forkexec", &forkexec),
+        ("time-test", &time),
+        ("socket-test", &sockets),
+        ("ttyinit", &ttyinit),
+    ];
     programs.extend(c_programs.iter().map(|(n, e)| (n.as_str(), e.as_slice())));
     let image = initramfs::write(&root(), "poly-programs-initramfs.cpio", &initramfs::programs_image(&programs))?;
 
@@ -225,6 +246,12 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let b = run_as_init(kernel, syms, &image, "time-test", TIME_TEST_OUTPUT)?;
     if let Some(line) = b.output.lines().find(|l| l.contains("time-test: FAIL")) {
         return Err(format!("/bin/time-test: {line}"));
+    }
+
+    eprintln!("==> boot test: the socket system calls from ring 3 (/bin/socket-test as the first process)");
+    let b = run_as_init(kernel, syms, &image, "socket-test", SOCKET_TEST_OUTPUT)?;
+    if let Some(line) = b.output.lines().find(|l| l.contains("socket-test: FAIL") || l.contains(" not implemented")) {
+        return Err(format!("/bin/socket-test: {line}"));
     }
 
     eprintln!("==> boot test: init on the serial console's terminal: line editing and echo, ^C, raw mode");
