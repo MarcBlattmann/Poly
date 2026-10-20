@@ -3,7 +3,7 @@
 //! Selector layout is chosen for `syscall`/`sysret`, which require kernel
 //! code/data and user data/code to sit next to each other in this order.
 
-use core::arch::asm;
+use core::arch::{asm, global_asm};
 use core::mem::size_of;
 
 pub const KERNEL_CODE: u16 = 0x08;
@@ -35,15 +35,25 @@ pub(super) struct DescriptorTablePointer {
     pub base: u64,
 }
 
-#[repr(C, align(16))]
-struct Stack([u8; 16 * 1024]);
+// The double-fault stack. The linker script puts it above an unmapped guard
+// page and defines the symbols around it.
+global_asm!(
+    r#"
+    .section .stack.double_fault, "aw", @nobits
+    .balign 4096
+    .skip 16 * 1024
+"#,
+    options(att_syntax)
+);
 
-static mut DOUBLE_FAULT_STACK: Stack = Stack([0; 16 * 1024]);
+unsafe extern "C" {
+    static __double_fault_stack_bottom: u8;
+    static __double_fault_stack_top: u8;
+}
 
 /// Address range of the double-fault IST stack.
 pub fn double_fault_stack() -> core::ops::Range<u64> {
-    let bottom = (&raw const DOUBLE_FAULT_STACK) as u64;
-    bottom..bottom + size_of::<Stack>() as u64
+    (&raw const __double_fault_stack_bottom) as u64..(&raw const __double_fault_stack_top) as u64
 }
 
 static mut TSS_SEGMENT: TaskStateSegment = TaskStateSegment {
@@ -71,8 +81,7 @@ static mut GDT: [u64; 7] = [
 pub unsafe fn init() {
     // SAFETY: single-threaded early boot; nothing else touches these statics.
     unsafe {
-        let stack_top = (&raw const DOUBLE_FAULT_STACK) as u64 + size_of::<Stack>() as u64;
-        TSS_SEGMENT.ist[DOUBLE_FAULT_IST as usize - 1] = stack_top;
+        TSS_SEGMENT.ist[DOUBLE_FAULT_IST as usize - 1] = double_fault_stack().end;
 
         let base = (&raw const TSS_SEGMENT) as u64;
         let limit = size_of::<TaskStateSegment>() as u64 - 1;

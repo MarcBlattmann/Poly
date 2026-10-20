@@ -203,8 +203,8 @@ fn boot_tests() -> Result {
     let kernel = build_kernel(false)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
 
-    // 2 GiB puts RAM above the 1 GiB boot mapping: the frame allocator must
-    // manage it without touching it.
+    // 2 GiB puts RAM, and QEMU's ACPI tables, above the first GiB that the
+    // boot stub maps: the direct map must reach them.
     for memory in [DEFAULT_MEMORY, "2G"] {
         eprintln!("==> boot test: self-test passes with {memory} of RAM");
         let b = boot(&kernel, &syms, memory, "poly.qemu_exit")?;
@@ -218,25 +218,45 @@ fn boot_tests() -> Result {
             Some(s) => return Err(format!("self-test boot ({memory}) exited with status {s}")),
             None => return Err(format!("self-test boot ({memory}) timed out after {BOOT_TIMEOUT:?}")),
         }
-        // With more RAM, QEMU places the ACPI tables above the 1 GiB boot
-        // mapping; the kernel skips them until it has a direct map.
         let cpus = format!("acpi: CPUs: {QEMU_CPUS} enabled");
-        if memory == DEFAULT_MEMORY && !b.output.contains(&cpus) {
-            return Err(format!("ACPI did not report the {QEMU_CPUS} CPUs QEMU emulates (expected \"{cpus}\")"));
+        if !b.output.contains(&cpus) {
+            return Err(format!(
+                "ACPI did not report the {QEMU_CPUS} CPUs QEMU emulates with {memory} (expected \"{cpus}\")"
+            ));
         }
     }
 
     eprintln!("==> boot test: page fault is caught and reported with a backtrace");
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, "poly.qemu_exit poly.selftest.page_fault")?;
-    let reported = b.output.contains("KERNEL PANIC") && b.output.contains("CPU exception 14 (page fault)");
-    if b.status != Some(QEMU_FAILURE) || !reported {
-        return Err(format!("page fault was not reported as expected (status {:?})", b.status));
-    }
+    let b = expect_fault(&kernel, &syms, "poly.selftest.page_fault", "CPU exception 14 (page fault)")?;
     // Frame #0 is the faulting instruction, so it must name the function.
     match b.output.lines().find_map(symbols::parse_frame) {
         Some((0, _, sym)) if sym.starts_with("poly_kernel::selftest::trigger_page_fault+0x") => {}
         Some((_, addr, sym)) => return Err(format!("backtrace does not start in trigger_page_fault: {addr:#x} {sym}")),
         None => return Err("page fault panic printed no backtrace".into()),
+    }
+
+    // W^X. Page-fault error codes (SDM Vol. 3A §4.7): bit 0 = protection
+    // violation (the page is present), bit 1 = write, bit 4 = instruction
+    // fetch. Each trigger prints the address it touches first.
+    eprintln!("==> boot test: writing to kernel text is a page fault");
+    let b = expect_fault(&kernel, &syms, "poly.selftest.write_text", "CPU exception 14 (page fault), error 0x3,")?;
+    let addr = announced(&b.output, "selftest: writing to kernel text at ")?;
+    if !b.output.contains(&format!("cr2 {addr}")) {
+        return Err(format!("write to kernel text faulted, but not at {addr}"));
+    }
+    for (flag, what) in [("poly.selftest.exec_stack", "the stack"), ("poly.selftest.exec_data", "kernel data")] {
+        eprintln!("==> boot test: executing {what} is a page fault (no-execute)");
+        let b = expect_fault(&kernel, &syms, flag, "CPU exception 14 (page fault), error 0x11,")?;
+        let addr = announced(&b.output, &format!("selftest: executing {what} at "))?;
+        if !b.output.contains(&format!("rip {addr},")) || !b.output.contains(&format!("cr2 {addr}")) {
+            return Err(format!("executing {what} faulted, but not on the fetch at {addr}"));
+        }
+    }
+
+    eprintln!("==> boot test: a kernel stack overflow hits the guard page and is reported");
+    let b = expect_fault(&kernel, &syms, "poly.selftest.stack_overflow", "CPU exception 8 (double fault)")?;
+    if !b.output.contains("kernel stack overflow: hit the guard page below the boot stack") {
+        return Err("stack overflow was not attributed to the boot stack's guard page".into());
     }
 
     // `selftest::fails_on_request` fails or panics when asked to.
@@ -262,6 +282,27 @@ fn boot_tests() -> Result {
     }
     eprintln!("==> boot tests passed");
     Ok(())
+}
+
+/// Boot with a `poly.selftest.*` flag that makes the kernel fault on purpose
+/// and check that the fault was reported: a panic whose message contains
+/// `report`, and QEMU's failure status.
+fn expect_fault(kernel: &Path, syms: &Arc<Symbols>, flag: &str, report: &str) -> Result<Boot> {
+    let b = boot(kernel, syms, DEFAULT_MEMORY, &format!("poly.qemu_exit {flag}"))?;
+    let reported = b.output.contains("KERNEL PANIC") && b.output.contains(report);
+    if b.status != Some(QEMU_FAILURE) || !reported {
+        return Err(format!("{flag}: expected a panic reporting \"{report}\" (status {:?})", b.status));
+    }
+    Ok(b)
+}
+
+/// The rest of the first output line that starts with `prefix`: the address
+/// a negative test announced before touching it.
+fn announced<'a>(output: &'a str, prefix: &str) -> Result<&'a str> {
+    output
+        .lines()
+        .find_map(|l| l.trim().strip_prefix(prefix))
+        .ok_or_else(|| format!("the kernel did not print \"{prefix}<address>\""))
 }
 
 fn test() -> Result {

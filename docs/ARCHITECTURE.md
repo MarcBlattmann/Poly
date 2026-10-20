@@ -28,8 +28,9 @@ what exists **today** and how it fits that plan.
    0 and at `0xffffffff80000000`, enables paging and jumps to `kernel_entry`.
 3. `kernel_entry` brings up serial, loads our GDT/TSS/IDT, reads the boot info,
    normalises the memory map (reserving the first MiB and the kernel image),
-   hands all usable RAM to the frame allocator, reads the ACPI tables and runs
-   the boot self-test.
+   switches to the kernel page tables (`mm::init`; the boot mapping is gone
+   after this), hands all usable RAM to the frame allocator, reads the ACPI
+   tables and runs the boot self-test.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
 
@@ -40,9 +41,9 @@ what exists **today** and how it fits that plan.
   No AML yet. It never touches physical memory itself: it asks a
   `PhysMemory` implementation for bytes, so the host tests feed it synthetic
   tables and the kernel decides what is safe to read.
-- `kernel/src/acpi.rs` implements `PhysMemory` over the boot mapping (only
-  the first 1 GiB, and never usable RAM or the kernel image), prints a
-  summary at boot and keeps the counts the self-test checks.
+- `kernel/src/acpi.rs` implements `PhysMemory` over the direct map (never
+  usable RAM or the kernel image), prints a summary at boot and keeps the
+  counts the self-test checks.
 
 ## Personality routing
 
@@ -61,7 +62,7 @@ what exists **today** and how it fits that plan.
 |---|---|---|
 | Unit tests for pure logic | `crates/`, `personalities/`, `tools/` | `cargo test --workspace` (host) |
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
-| Negative boot tests (faults, failures and panics must be reported, with a backtrace) | `poly.selftest.*` flags | `cargo xtask test` |
+| Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
 | App trace replay | recorded sessions | later |
 
@@ -70,13 +71,38 @@ Backtraces, symbolisation and attaching gdb/lldb are described in
 
 ## Memory layout (current)
 
+The kernel page tables (`kernel/src/arch/x86_64/paging.rs`, decisions in
+[ADR 0010](adr/0010-kernel-address-space.md)) replace the boot stub's
+mapping early in `kernel_entry`:
+
 | Virtual | Physical | What |
 |---|---|---|
-| `0x0` – `0x4000_0000` | same | identity map used by the boot stub (to be removed) |
-| `0xffff_ffff_8000_0000` + phys | 0 – 1 GiB | kernel image and early access to low memory |
+| `0x0` – `0x7fff_ffff_ffff` | – | nothing (user space later); the boot identity map is gone |
+| `0xffff_8000_0000_0000` + phys | every region of the memory map, up to 64 TiB | direct map: RW, NX; RAM write-back, reserved ranges uncached; holes unmapped |
+| `0xffff_c000_0000_0000` – `+512 GiB` | device ranges | `mm::map_mmio`: uncached (PCD+PWT), NX, a gap page after each |
+| `0xffff_ffff_8000_0000` + phys | kernel image | `.text` R+X, `.rodata`/`.kernel_tests` R, `.data`/`.bss` RW+NX, stacks RW+NX |
 
-The real virtual memory manager (direct map of all RAM, per-process address
-spaces) replaces the boot mapping in the next milestone.
+Kernel image detail (`kernel/linker.ld`, every boundary page-aligned):
+
+| Part | Mapped | Note |
+|---|---|---|
+| `.boot`, `.boot.bss` (physical 1 MiB) | direct map only | 32-bit entry stub and its page tables, unused after boot |
+| `__text_start` – `__text_end` | read-only, executable | also read-only through the direct map |
+| `__rodata_start` – `__rodata_end` | read-only, no-execute | includes `.kernel_tests` |
+| `__data_start` – `__data_end` | read-write, no-execute | `.data`, `.bss` |
+| `__boot_stack_guard` (4 KiB) | **unmapped** | an overflow faults, reported as a double fault |
+| boot stack (64 KiB) | read-write, no-execute | |
+| `__double_fault_stack_guard` (4 KiB) | **unmapped** | |
+| double-fault IST stack (16 KiB) | read-write, no-execute | |
+
+All kernel mappings are global and use 2 MiB pages (1 GiB where the CPU has
+them) wherever alignment allows. No-execute needs EFER.NXE, which is enabled
+when CPUID reports NX (without it, pages stay executable and the boot log
+says `NX: no`). `arch::phys_to_virt(phys)` translates through the direct map and returns
+`None` for addresses outside it; `arch::phys_range_to_virt` checks a whole
+range. Before the switch it uses the boot mapping, which is why the first page
+tables come from a bump allocator over RAM below 1 GiB, before the buddy
+allocator exists. Per-process address spaces come in Phase 2.
 
 ## Physical memory
 
@@ -90,8 +116,8 @@ spaces) replaces the boot mapping in the next milestone.
   one step per level rather than a scan. `free` checks a per-order
   "allocated" bitmap and rejects double, misaligned, out-of-range and
   wrong-order frees. See [ADR 0007](adr/0007-buddy-allocator-out-of-band-metadata.md).
-- `kernel/src/frames.rs` carves that buffer from usable RAM below 1 GiB (the
-  only RAM reachable through the boot mapping), marks it `Kernel` in the map,
-  and puts the allocator in the global `frames::FRAMES` spinlock. RAM above
-  1 GiB is managed too; nothing maps it yet. `cargo xtask test` boots with
-  256 MiB and with 2 GiB to cover both cases.
+- `kernel/src/frames.rs` carves that buffer from usable RAM, reached through
+  the direct map, marks it `Kernel` in the map, and puts the allocator in the
+  global `frames::FRAMES` spinlock. Every frame it hands out is reachable with
+  `arch::phys_to_virt`. `cargo xtask test` boots with 256 MiB and with 2 GiB,
+  so RAM and ACPI tables above 1 GiB are covered too.

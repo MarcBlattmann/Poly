@@ -1,10 +1,10 @@
-//! ACPI tables, read through the boot mapping.
+//! ACPI tables, read through the direct map.
 //!
 //! All parsing lives in `poly-acpi`; this module only gives it access to
 //! physical memory, prints what the firmware describes and keeps a summary
 //! for the self-test (and, later, for interrupt and SMP setup).
 
-use crate::arch::phys_to_virt;
+use crate::arch::phys_range_to_virt;
 use crate::sync::SpinLock;
 use crate::{kprint, kprintln};
 use poly_acpi::{Acpi, AddressSpace, Error, Fadt, Hpet, Madt, Mcfg, PhysMemory, Table};
@@ -20,23 +20,12 @@ pub struct Summary {
 
 static SUMMARY: SpinLock<Option<Summary>> = SpinLock::new(None);
 
-/// Set when the tables live beyond the boot mapping. That is expected until
-/// the kernel has a direct map of all RAM (QEMU puts them near the top of low
-/// RAM, which is above 1 GiB once the guest has more than 1 GiB).
-static BEYOND_BOOT_MAPPING: SpinLock<Option<u64>> = SpinLock::new(None);
-
-/// Physical address of the first table that was out of reach, if that is
-/// why [`summary`] is empty.
-pub fn beyond_boot_mapping() -> Option<u64> {
-    *BEYOND_BOOT_MAPPING.lock()
-}
-
 /// The summary from [`init`], if the tables could be read.
 pub fn summary() -> Option<Summary> {
     *SUMMARY.lock()
 }
 
-/// Physical memory through the kernel's boot mapping, limited to memory the
+/// Physical memory through the kernel's direct map, limited to memory the
 /// kernel never writes: firmware tables must not live in usable RAM or in
 /// the kernel image, so a pointer into those is rejected as bogus.
 #[derive(Debug)]
@@ -58,14 +47,9 @@ impl PhysMemory for FirmwareMemory<'_> {
         if owned {
             return None;
         }
-        // The boot mapping is linear, so both ends being mapped (and the
-        // right distance apart) means everything in between is.
-        let start = phys_to_virt(phys)?;
-        if phys_to_virt(last)? != start + (len as u64 - 1) {
-            return None;
-        }
-        // SAFETY: the range is mapped by the boot page tables (checked
-        // above), which stay in place for the kernel's lifetime. It lies
+        let start = phys_range_to_virt(phys, len as u64)?;
+        // SAFETY: the whole range is direct-mapped (checked above), and the
+        // direct map stays in place for the kernel's lifetime. It lies
         // outside usable RAM and the kernel image, so nothing in the kernel
         // writes it while the shared slice exists.
         Some(unsafe { core::slice::from_raw_parts(start as *const u8, len) })
@@ -80,10 +64,6 @@ pub fn init(rsdp: Option<u64>, memory: &MemoryMap) {
     };
     match probe(&FirmwareMemory { memory }, rsdp) {
         Ok(s) => *SUMMARY.lock() = Some(s),
-        Err(Error::Unmapped { phys, .. }) if phys >= crate::arch::BOOT_MAPPED_PHYS => {
-            kprintln!("acpi: tables at {phys:#x} are beyond the boot mapping; skipped until RAM is direct-mapped");
-            *BEYOND_BOOT_MAPPING.lock() = Some(phys);
-        }
         Err(e) => kprintln!("acpi: unavailable: {e:?}"),
     }
 }

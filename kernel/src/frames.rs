@@ -3,9 +3,8 @@
 //!
 //! The allocator keeps its metadata outside the memory it manages, so the
 //! only memory it needs to touch is that metadata buffer. It is carved from
-//! usable RAM below [`arch::BOOT_MAPPED_PHYS`], the only RAM the kernel can
-//! reach before it has its own page tables. Frames above that limit are
-//! managed too; they are just not mapped yet.
+//! usable RAM and reached through the direct map, so [`init`] runs after the
+//! kernel page tables are loaded (`mm::init`).
 
 use crate::arch;
 use crate::sync::SpinLock;
@@ -32,15 +31,15 @@ pub fn init(memory: &MemoryMap) -> (MemoryMap, Metadata) {
     // this is enough for the final map too.
     let words = BuddyAllocator::metadata_words(memory);
     let bytes = align_up((words * size_of::<u64>()) as u64, PAGE_SIZE);
-    let phys = memory.find_usable(bytes, arch::BOOT_MAPPED_PHYS).expect("no low memory for frame metadata");
+    let phys = memory.find_usable(bytes, u64::MAX).expect("no memory for frame metadata");
 
     let mut map = memory.clone();
     map.push(Region::new(phys, phys + bytes, RegionKind::Kernel)).expect("memory map full");
     let map = map.normalized().expect("memory map full");
 
-    let virt = arch::phys_to_virt(phys).expect("frame metadata below the boot mapping limit");
-    // SAFETY: [phys, phys + bytes) is usable RAM that ends below
-    // BOOT_MAPPED_PHYS, so the boot page tables map it writable at `virt`.
+    let virt = arch::phys_range_to_virt(phys, bytes).expect("frame metadata outside the direct map");
+    // SAFETY: [phys, phys + bytes) is usable RAM, which the direct map maps
+    // writable at `virt` (checked above) for the kernel's lifetime.
     // Nothing else uses it: it was free RAM, it is marked Kernel in the map
     // the allocator manages, and the assert above guarantees this runs only
     // once, so this is the only reference ever made to it. It is never freed,
