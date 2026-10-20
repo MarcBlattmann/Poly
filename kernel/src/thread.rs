@@ -1060,22 +1060,36 @@ kernel_test! {
     }
 }
 
-fn nap(ms: usize) -> usize {
-    sleep(Duration::from_millis(ms as u64));
+/// Where the napper of `list_names_threads_and_their_states` waits, and
+/// what lets it go.
+static NAPPERS: WaitQueue = WaitQueue::new();
+static NAP_OVER: AtomicBool = AtomicBool::new(false);
+
+/// Blocks until the test lets it go: a timed sleep could end before the
+/// test looks when the host holds the emulator off for longer.
+fn nap(_: usize) -> usize {
+    NAPPERS.wait_until(|| NAP_OVER.load(SeqCst));
     0
 }
 
 kernel_test! {
     fn list_names_threads_and_their_states() -> TestResult {
-        let t = spawn_named("napper", nap, 50).map_err(|_| "spawn failed")?;
+        NAP_OVER.store(false, SeqCst);
+        let t = spawn_named("napper", nap, 0).map_err(|_| "spawn failed")?;
+        let wake = || {
+            NAP_OVER.store(true, SeqCst);
+            NAPPERS.wake_all();
+        };
         let start = time::now_ns();
         while state(t) != Some(State::Blocked) {
-            if time::now_ns() - start > time::NANOS_PER_SEC {
+            if time::now_ns() - start > 5 * time::NANOS_PER_SEC {
+                wake();
                 return Err("the thread never went to sleep");
             }
             yield_now();
         }
         let all = list();
+        wake();
         let me = current();
         let find = |id: ThreadId| all.iter().find(|i| i.id == id);
         let listed = find(t).is_some_and(|i| i.name == "napper" && i.state == State::Blocked)

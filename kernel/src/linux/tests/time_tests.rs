@@ -258,13 +258,24 @@ kernel_test! {
             check!(3, ran >= RUN && ran <= wall);
             check!(4, sys(p, nr::CLOCK_GETTIME, &[2, ts]) == Ok(0));
             check!(5, get_timespec(ts) >= ran);
-            // getrusage: busy in the kernel, so mostly system time.
+            // getrusage: busy in the kernel, so mostly system time. The split
+            // comes from tick samples, and a busy host can merge away every
+            // tick of a short spin while the one that came in ring 3 (on the
+            // way in) survives: spin on until a tick in the kernel shows.
             let ru = DATA + 0x200;
-            check!(6, sys(p, nr::GETRUSAGE, &[0, ru]) == Ok(0));
-            let mut b = [0u8; 32];
-            check!(7, user::copy_from_user(&mut b, ru).is_ok());
-            let stime_us = u64::from_le_bytes(b[16..24].try_into().unwrap()) * 1_000_000
-                + u64::from_le_bytes(b[24..32].try_into().unwrap());
+            let stime_us = loop {
+                check!(6, sys(p, nr::GETRUSAGE, &[0, ru]) == Ok(0));
+                let mut b = [0u8; 32];
+                check!(7, user::copy_from_user(&mut b, ru).is_ok());
+                let stime_us = u64::from_le_bytes(b[16..24].try_into().unwrap()) * 1_000_000
+                    + u64::from_le_bytes(b[24..32].try_into().unwrap());
+                if stime_us > 0 || time::now_ns() - wall0 > BUDGET {
+                    break stime_us;
+                }
+                for _ in 0..1000 {
+                    core::hint::spin_loop();
+                }
+            };
             check!(8, stime_us > 0);
             0
         })?;
