@@ -120,4 +120,4 @@ The rules that keep this legally clean are in **[CLEAN_ROOM.md](CLEAN_ROOM.md)**
 
 ## License
 
-MIT OR Apache-2.0 (proposed, see [ADR 0005](docs/adr/0005-license.md)).
+Licensed under the [Apache License 2.0](LICENSE). See [ADR 0005](docs/adr/0005-license.md).

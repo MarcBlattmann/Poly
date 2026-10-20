@@ -1,21 +1,25 @@
 # 0005: License
 
-**Status:** Proposed (needs the project owner's confirmation)
+**Status:** Accepted (2026-10-20, by the project owner)
 
 ## Decision
 
-Dual-license under MIT OR Apache-2.0, the Rust ecosystem default.
+Poly is licensed under the Apache License 2.0 only (see `LICENSE`).
+Every contribution is accepted under the same license (section 5 of the license).
 
 ## Why
 
-- Permissive: anyone can embed or ship it, which suits an OS that wants adoption.
-- Apache-2.0 adds an explicit patent grant.
+- Permissive: anyone can use, change and ship it, which suits an OS that wants adoption.
+- Explicit patent grant from every contributor, with automatic termination
+  for anyone who sues over patents in the code. This protects users and the
+  project from contributors who later assert patents.
 - It keeps the clean-room boundary simple: no GPL or LGPL code may enter, and
   there is no copyleft on our side that would raise questions about which
   combinations can be distributed.
 
-## Alternative
+## Alternatives considered
 
-GPL-2.0 or later, to force derivatives to stay open. Reading GPL sources would
-still be limited to behaviour (see CLEAN_ROOM.md), so it would not make the
-clean-room process any easier.
+- **MIT OR Apache-2.0** (the Rust ecosystem default): rejected to keep a single
+  license with the patent grant always in force.
+- **GPL-2.0 or later**: forces derivatives to stay open, but discourages
+  adoption and does not make the clean-room process any easier.

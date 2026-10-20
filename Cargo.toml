@@ -20,8 +20,8 @@ exclude = ["kernel"]
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/MarcBlattmann/poly"
+license = "Apache-2.0"
+repository = "https://github.com/MarcBlattmann/Poly"
 rust-version = "1.97"
 
 [workspace.dependencies]

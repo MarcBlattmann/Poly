@@ -9,7 +9,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0002](0002-pvh-boot-first.md) | Boot via PVH under QEMU first; UEFI later | Accepted |
 | [0003](0003-workspace-layout.md) | Host-testable crates + thin kernel, kernel in its own workspace | Accepted |
 | [0004](0004-coverage-map-format.md) | `coverage.json` format, seeded from public name lists | Accepted |
-| [0005](0005-license.md) | MIT OR Apache-2.0 | Proposed |
+| [0005](0005-license.md) | Apache-2.0 | Accepted |
 
 ## Open decisions (from the brief)
 
