@@ -46,6 +46,13 @@ name = "poly-heap"
 version = "0.0.1"
 
 [[package]]
+name = "poly-irq"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+]
+
+[[package]]
 name = "poly-mem"
 version = "0.0.1"
 

@@ -1,0 +1,14 @@
+[package]
+name = "poly-irq"
+description = "x86 interrupt controllers and timers: local APIC (xAPIC and x2APIC), I/O APIC, 8259 PIC, HPET, TSC calibration and a monotonic clock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-pci.workspace = true
+
+[lints]
+workspace = true
