@@ -38,10 +38,10 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [x] In-kernel test harness: unit tests that run inside QEMU and report per test
 - [x] Symbolised kernel backtraces on panic; documented GDB workflow (`qemu -s`)
 - [x] ACPI table parsing (RSDP, MADT, HPET, FADT); no AML interpreter yet
-- [ ] Interrupt controllers: local APIC + I/O APIC, legacy PIC masked
-- [ ] Time: TSC calibrated against HPET, monotonic clock, APIC timer interrupts
-- [ ] Kernel threads, context switching, preemptive round-robin scheduler
-- [ ] Synchronisation: interrupt-safe spinlocks, mutexes, wait queues, sleep/wakeup
+- [x] Interrupt controllers: local APIC + I/O APIC, legacy PIC masked
+- [x] Time: TSC calibrated against HPET, monotonic clock, APIC timer interrupts
+- [x] Kernel threads, context switching, preemptive round-robin scheduler
+- [x] Synchronisation: interrupt-safe spinlocks, mutexes, wait queues, sleep/wakeup
 - [ ] PCI/PCIe enumeration (ECAM), MSI/MSI-X interrupts
 - [x] virtio core (virtqueues) and virtio-blk driver: first real disk I/O
 - [x] Block layer with request queue and buffer cache
