@@ -298,6 +298,34 @@ fn boot_tests() -> Result {
     if b.status != Some(QEMU_FAILURE) || !b.output.contains("KERNEL PANIC") || !reported || !named {
         return Err(format!("out-of-memory was not reported as expected (status {:?})", b.status));
     }
+
+    // Panics on kernel threads: the backtrace must follow the thread's own
+    // stack down to the thread trampoline, where every thread starts.
+    let thread_panics = [
+        (
+            "a panic inside a kernel thread",
+            "thread::panics_in_thread_on_request poly.selftest.thread_panic",
+            "poly.selftest.thread_panic",
+            "poly_kernel::thread::panic_in_thread+",
+        ),
+        (
+            "a deadlock (every thread blocked)",
+            "thread::deadlock_on_request poly.selftest.deadlock",
+            "deadlock: every thread is blocked",
+            "poly_kernel::thread::idle_main+",
+        ),
+    ];
+    for (what, args, message, function) in thread_panics {
+        eprintln!("==> boot test: {what} is reported with a backtrace of the thread's stack");
+        let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("poly.qemu_exit poly.test={args}"))?;
+        let frames: Vec<_> = b.output.lines().filter_map(symbols::parse_frame).map(|(_, _, sym)| sym).collect();
+        let in_backtrace = |f: &str| frames.iter().any(|sym| sym.starts_with(f));
+        let named = in_backtrace(function) && in_backtrace("poly_kernel::thread::thread_start+");
+        let to_bottom = frames.last().is_some_and(|sym| sym.starts_with("thread_trampoline+"));
+        if b.status != Some(QEMU_FAILURE) || !b.output.contains(message) || !named || !to_bottom {
+            return Err(format!("{what} was not reported as expected (status {:?})", b.status));
+        }
+    }
     eprintln!("==> boot tests passed");
     Ok(())
 }

@@ -630,6 +630,47 @@ mod tests {
     }
 
     #[test]
+    fn allocate_below_skips_small_blocks_above_the_limit() {
+        // Like a machine where only the low half of RAM is mapped: RAM ends
+        // in small leftover blocks, which plain `allocate` prefers.
+        let (start, top, limit) = (MIB + 0x5000, 64 * MIB - 0x21000, 32 * MIB);
+        let m = map(&[(start, top, Usable)]);
+        let mut meta = meta_for(&m);
+        let mut a = BuddyAllocator::new(&m, &mut meta).unwrap();
+        let total = a.free_frames();
+        let size = BuddyAllocator::block_size(2);
+        let high = a.allocate(2).unwrap();
+        assert!(high >= limit, "plain allocate takes a leftover block at the top");
+        a.free(high, 2).unwrap();
+
+        let mut low = Vec::new();
+        while let Some(f) = a.allocate_below(2, limit) {
+            assert_eq!(f % size, 0);
+            assert!(f + size <= limit && usable_contains(&m, f, size), "{f:#x}");
+            low.push((f, 2));
+        }
+        // Every aligned 16 KiB block from the first one in RAM up to the
+        // limit, the last one ending exactly there.
+        assert_eq!(low.len() as u64, (limit - align_up(start, size)) / size);
+        // The frames before the first aligned block are still there.
+        let blocks = low.len();
+        while let Some(f) = a.allocate_below(0, limit) {
+            assert!(f < align_up(start, size) && usable_contains(&m, f, PAGE_SIZE), "{f:#x}");
+            low.push((f, 0));
+        }
+        assert_eq!((low.len() - blocks) as u64, (align_up(start, size) - start) / PAGE_SIZE);
+        let high = a.allocate(2).unwrap();
+        assert!(high >= limit, "memory above the limit is still there");
+        low.push((high, 2));
+        assert_eq!(a.allocate_below(0, 0), None);
+        assert_eq!(a.allocate_below(MAX_ORDER + 1, u64::MAX), None);
+        for (f, order) in low {
+            a.free(f, order).unwrap();
+        }
+        assert_eq!(a.free_frames(), total);
+    }
+
+    #[test]
     fn bad_frees_are_rejected_without_damage() {
         let m = map(&[(BLOCK, 3 * BLOCK, Usable), (2 * BLOCK, 2 * BLOCK + MIB, Reserved)]);
         let mut meta = meta_for(&m);
