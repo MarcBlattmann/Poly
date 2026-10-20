@@ -250,7 +250,23 @@ struct Boot {
 /// Boot headless with a timeout, echoing serial output as it arrives, with
 /// symbols added to backtrace lines.
 fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, devices: Devices<'_>) -> Result<Boot> {
-    let mut child = qemu(kernel, memory, append, devices, "stdio")
+    boot_on(None, kernel, syms, memory, append, devices)
+}
+
+/// [`boot`] on a given QEMU CPU model (`-cpu`), or QEMU's default one.
+fn boot_on(
+    cpu: Option<&str>,
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    memory: &str,
+    append: &str,
+    devices: Devices<'_>,
+) -> Result<Boot> {
+    let mut cmd = qemu(kernel, memory, append, devices, "stdio");
+    if let Some(cpu) = cpu {
+        cmd.args(["-cpu", cpu]);
+    }
+    let mut child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()
@@ -290,13 +306,17 @@ fn boot_tests() -> Result {
     // 2 GiB puts RAM, and QEMU's ACPI tables, above the first GiB that the
     // boot stub maps: the direct map must reach them. Every boot here has
     // the test disk, so the block layer tests read and write it; the third
-    // has it without MSI-X, so the kernel must poll it.
-    for (memory, polled) in [(DEFAULT_MEMORY, false), ("2G", false), (DEFAULT_MEMORY, true)] {
+    // has it without MSI-X, so the kernel must poll it. The fourth runs on
+    // QEMU's most capable CPU model, whose SMEP, SMAP and XSAVE (with AVX)
+    // the default one lacks, so user mode is tested with and without them.
+    let configs = [(DEFAULT_MEMORY, false, None), ("2G", false, None), (DEFAULT_MEMORY, true, None)];
+    for (memory, polled, cpu) in configs.into_iter().chain([(DEFAULT_MEMORY, false, Some("max"))]) {
         let how = if polled { "the test disk without MSI-X (polled)" } else { "the test devices" };
-        eprintln!("==> boot test: self-test passes with {memory} of RAM and {how}");
+        let on = cpu.map_or(String::new(), |c| format!(" on -cpu {c}"));
+        eprintln!("==> boot test: self-test passes with {memory} of RAM and {how}{on}");
         let disk = test_disk()?;
         let devices = if polled { Devices::PolledDisk(&disk) } else { Devices::Test(&disk) };
-        let b = boot(&kernel, &syms, memory, &format!("poly.qemu_exit {}", devices.flags()), devices)?;
+        let b = boot_on(cpu, &kernel, &syms, memory, &format!("poly.qemu_exit {}", devices.flags()), devices)?;
         let report = ktest::parse(&b.output);
         if let Some(s) = report.summary {
             eprintln!("==> kernel tests: {} passed, {} failed, {} filtered out", s.passed, s.failed, s.filtered_out);
@@ -330,6 +350,17 @@ fn boot_tests() -> Result {
             b.output.contains(": request queue on MSI-X entry 0 -> vector 0x")
                 && virtio0.contains("; interrupt-driven (vector 0x")
         };
+        // User mode: set up (with the CPU's protections when it has them),
+        // and user threads that fault are killed with a log line while the
+        // kernel goes on.
+        let user = b.output.lines().find(|l| l.starts_with("user: syscall/sysret on;")).unwrap_or_default();
+        let protected = user.contains("SMEP: yes, SMAP: yes") && user.contains("FPU state: XSAVE");
+        if user.is_empty() || (cpu == Some("max") && !protected) {
+            return Err(format!("user mode was not set up as expected{on}: \"{user}\""));
+        }
+        if !b.output.lines().any(|l| l.starts_with("user: pid ") && l.contains(" killed: page fault (vector 14)")) {
+            return Err(format!("no user thread was reported killed by a page fault{on}"));
+        }
         if !mode_ok {
             let want = if polled { "polled" } else { "interrupt-driven through MSI-X" };
             return Err(format!("the test disk was not {want} with {memory}"));

@@ -21,6 +21,11 @@ pub enum ExecError {
 }
 
 impl Process {
+    /// A process record for a personality and format decided elsewhere.
+    pub fn new(pid: u32, personality: Personality, format: binfmt::Format) -> Process {
+        Process { pid, personality, format }
+    }
+
     /// Create the process record for an image. Loading and mapping the
     /// image is the personality's job and comes later.
     pub fn from_image(pid: u32, image: &[u8]) -> Result<Process, ExecError> {

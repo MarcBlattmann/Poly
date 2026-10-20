@@ -96,6 +96,15 @@ SECTIONS
     } :data
     . = ALIGN(4096);
 
+    __nmi_stack_guard = .;
+    . += 4096;
+    .stack.nmi (NOLOAD) : AT(ADDR(.stack.nmi) - KERNEL_VMA) {
+        __nmi_stack_bottom = .;
+        KEEP(*(.stack.nmi))
+        __nmi_stack_top = .;
+    } :data
+    . = ALIGN(4096);
+
     __kernel_phys_end = . - KERNEL_VMA;
 
     /DISCARD/ : { *(.eh_frame*) *(.note.gnu*) *(.comment*) }

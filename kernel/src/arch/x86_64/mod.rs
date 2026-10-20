@@ -1,11 +1,13 @@
 //! x86-64 support. Everything CPU- or board-specific lives under `arch/` so
 //! that an aarch64 port only has to add a sibling module.
 
+mod addrspace;
 pub mod apic;
 pub mod backtrace;
 mod boot;
 pub mod context;
 pub mod cpu;
+mod fpu;
 pub mod gdt;
 pub mod idt;
 pub mod irq;
@@ -13,7 +15,10 @@ pub mod mmio;
 pub mod paging;
 pub mod port;
 pub mod serial;
+mod syscall;
 pub mod time;
+pub mod user;
+mod usercopy;
 
 use crate::acpi::Platform;
 use core::sync::atomic::{AtomicBool, Ordering};

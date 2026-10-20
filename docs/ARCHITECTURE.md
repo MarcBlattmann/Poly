@@ -16,10 +16,12 @@ what exists **today** and how it fits that plan.
                  kernel/src/syscall.rs  ← routes by the process's personality tag
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt
                           │
+            kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk
-            arch/x86_64 (PVH entry, serial, exceptions, page tables, context switch)
+            arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
+                         syscall/sysret, FPU state, context switch)
 ```
 
 ## Boot flow
@@ -31,7 +33,9 @@ what exists **today** and how it fits that plan.
 3. `kernel_entry` brings up serial, loads our GDT/TSS/IDT, reads the boot info,
    normalises the memory map (reserving the first MiB and the kernel image),
    switches to the kernel page tables (`mm::init`; the boot mapping is gone
-   after this), hands all usable RAM to the frame allocator, starts the
+   after this), sets the CPU up for user mode (`arch::user::init`: SYSCALL,
+   FPU state, SMEP/SMAP/PCIDs when present), hands all usable RAM to the
+   frame allocator, starts the
    scheduler, reads the ACPI tables, sets up interrupts and time
    (`arch::init_interrupts`) and enables them, enumerates PCI, brings up the
    block layer (the virtio-blk disk if there is one, and a RAM disk) and runs
@@ -233,7 +237,9 @@ while its reader sleeps. Each test puts the disks back as it found them.
 - `Process::from_image` tags the process with its personality once, at exec.
 - All three worlds enter through the same `syscall` instruction. The core
   saves registers into `SyscallRegs` and `syscall::dispatch` hands them to the
-  personality, which reads arguments and writes results in its own convention.
+  personality, which reads arguments and writes results in its own convention
+  (see "User mode and system calls": a user thread's system calls go to its
+  hook, `user::DEFAULT_HOOK` unless it was given another).
 - Unimplemented calls return each OS's native "not implemented" result and are
   logged. That log line is the seed of the API tracer.
 
@@ -243,6 +249,7 @@ while its reader sleeps. Each test puts the disks back as it found them.
 |---|---|---|
 | Unit tests for pure logic | `crates/`, `personalities/`, `tools/` | `cargo test --workspace` (host) |
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
+| User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi` | `cargo xtask test` |
 | Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
@@ -259,7 +266,7 @@ mapping early in `kernel_entry`:
 
 | Virtual | Physical | What |
 |---|---|---|
-| `0x0` – `0x7fff_ffff_ffff` | – | nothing (user space later); the boot identity map is gone |
+| `0x0` – `0x7fff_ffff_ffff` | – | user half: empty in the kernel PML4 (the boot identity map is gone); each user address space has its own (below) |
 | `0xffff_8000_0000_0000` + phys | every region of the memory map, up to 64 TiB | direct map: RW, NX; RAM write-back, reserved ranges uncached; holes unmapped |
 | `0xffff_c000_0000_0000` – `+512 GiB` | device ranges | `mm::map_mmio`: uncached (PCD+PWT), NX, a gap page after each; PCI ECAM windows and BARs |
 | `0xffff_ffff_8000_0000` + phys | kernel image | `.text` R+X, `.rodata`/`.kernel_tests` R, `.data`/`.bss` RW+NX, stacks RW+NX |
@@ -276,6 +283,8 @@ Kernel image detail (`kernel/linker.ld`, every boundary page-aligned):
 | boot stack (64 KiB) | read-write, no-execute | |
 | `__double_fault_stack_guard` (4 KiB) | **unmapped** | |
 | double-fault IST stack (16 KiB) | read-write, no-execute | |
+| `__nmi_stack_guard` (4 KiB) | **unmapped** | |
+| NMI / machine-check IST stack (16 KiB) | read-write, no-execute | |
 
 All kernel mappings are global and use 2 MiB pages (1 GiB where the CPU has
 them) wherever alignment allows. No-execute needs EFER.NXE, which is enabled
@@ -284,7 +293,22 @@ says `NX: no`). `arch::phys_to_virt(phys)` translates through the direct map and
 `None` for addresses outside it; `arch::phys_range_to_virt` checks a whole
 range. Before the switch it uses the boot mapping, which is why the first page
 tables come from a bump allocator over RAM below 1 GiB, before the buddy
-allocator exists. Per-process address spaces come in Phase 2.
+allocator exists. Every PML4 entry of the higher half is created here, at
+boot (the MMIO window's as an empty PDPT), so the copies user address
+spaces make of it never go stale.
+
+User address spaces (`arch/x86_64/addrspace.rs`, decisions in
+[ADR 0022](adr/0022-user-mode-address-spaces-and-system-calls.md)) have their
+own PML4: the lower half is theirs, the higher half is the kernel's
+(slots 256-511 copied, pointing at the kernel's own PDPTs, supervisor-only).
+
+| User virtual | What |
+|---|---|
+| `0x0` – `0xffff` | never mapped (`USER_START` is 64 KiB): null pointers and small offsets from them fault |
+| `0x1_0000` – `0x7fff_ffff_efff` | user mappings, 4 KiB pages, user-accessible (`USER_START` – `USER_END`); program, heap, `mmap`, stacks (laid out by the loader and `poly-vm` later) |
+| `0x7fff_ffff_f000` – `0x7fff_ffff_ffff` | never mapped: no `syscall` can sit at the very end of the lower half, so SYSRET never sees a non-canonical RCX |
+| `0x8000_0000_0000` – `0xffff_7fff_ffff_ffff` | the non-canonical hole |
+| `0xffff_8000_0000_0000` – | the kernel half, as above: present in every address space, ring 0 only |
 
 ## Physical memory
 
@@ -373,7 +397,8 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
 
 ## Threads and scheduling
 
-Kernel threads only, on one CPU, round robin, preempted by the timer. See
+Kernel threads, some of which run user code (user threads, below), on one
+CPU, round robin, preempted by the timer. See
 [ADR 0012](adr/0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md)
 and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
 
@@ -432,6 +457,84 @@ and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
   has used its 10-tick slice and another is runnable. This runs on the
   interrupted thread's own stack (no IST), since the handler's frames stay
   there while the thread is switched out.
+
+## User mode and system calls
+
+`kernel/src/user/` is the architecture-neutral side, `arch/x86_64/`
+(`user.rs`, `syscall.rs`, `addrspace.rs`, `fpu.rs`, `usercopy.rs`) the
+machine; the decisions are in
+[ADR 0022](adr/0022-user-mode-address-spaces-and-system-calls.md).
+
+- **Address spaces.** `user::AddressSpace::new()` makes a PML4 with an empty
+  lower half and the kernel's higher half. `map_zeroed(virt, len, prot)`
+  maps fresh zeroed frames that the space owns, `map_frames` (unsafe) maps
+  frames the caller keeps owning (shared memory), `unmap` (holes skipped),
+  `protect`, `translate`; `read` and `write` reach a space through the
+  direct map whether or not it is loaded (a loader filling a new process).
+  Ownership is a bit the CPU ignores in each leaf (`PageFlags::SOFTWARE_9`).
+  Dropping the last `Arc` frees every owned frame, every page table of the
+  lower half (`poly_paging::PageTables::clear`) and the PML4. All of it is
+  4 KiB pages under a per-space spinlock (taken before `FRAMES`).
+- **CR3 and the TLB.** The scheduler loads the address space of each user
+  thread it switches to, and the kernel PML4 for kernel threads. Changing a
+  loaded space invalidates the page (`INVLPG`); without PCIDs every CR3 load
+  flushes the rest. With PCIDs (CPUID.01H:ECX.PCID; QEMU's TCG has none, so
+  this path is only exercised on KVM or hardware) spaces take PCIDs 1-255
+  round robin, a load skips the flush when the PCID is still the space's,
+  and a space that changed while not loaded flushes on its next load.
+  Kernel mappings are global and never flushed.
+- **Threads.** `user::spawn(process, space, entry, hook)` starts a thread
+  of `process` in `space` at `entry` (RIP, RSP, three arguments in RDI, RSI,
+  RDX). It is a kernel thread with a 16 KiB kernel stack whose user state
+  (`user::UserThread`: process, hook, address space, FPU state, FS/GS bases)
+  lives in the thread table; it enters ring 3 with IRETQ and comes back on
+  system calls, interrupts and exceptions. Join it like any thread.
+- **Entering the kernel.** IA32_STAR/LSTAR/FMASK and EFER.SCE are set at
+  boot. `syscall` lands in an assembly stub that does `swapgs` (GS base is
+  the per-CPU area in ring 0, the user's GS base in ring 3), switches from
+  the user stack to the thread's kernel stack (from the per-CPU area), and
+  pushes the same `TrapFrame` an interrupt from ring 3 leaves. Interrupts
+  and exceptions from ring 3 arrive on TSS.rsp0, the same stack; their entry
+  swaps GS when the saved CS is ring 3. Both are set by the scheduler on every
+  switch to a user thread. NMI and machine check have an IST stack of their
+  own (they can hit the instructions before the stack switch), the double
+  fault keeps its own; all gates have DPL 0, so `int n` from ring 3 is a #GP.
+- **System calls.** The handler copies the frame into a
+  `poly_abi::SyscallRegs`, enables interrupts and calls the thread's hook,
+  `fn(&Process, &mut SyscallRegs)`: `user::DEFAULT_HOOK` routes to
+  `syscall::dispatch` (the process's personality). A hook may block, sleep,
+  copy user memory, end the thread (`user::exit`) or make it resume
+  elsewhere (`user::set_return_address`). The return is SYSRET when the
+  return address is in the lower half and IRETQ otherwise (SYSRET to a
+  non-canonical address would fault in ring 0 on the user's stack); an IRETQ
+  that faults on its way to ring 3 kills the thread. RFLAGS is sanitised
+  (IF on; IOPL, NT, RF, VM off); RCX and R11 hold RIP and RFLAGS afterwards.
+- **Faults.** A CPU exception in ring 3 kills the thread, never the kernel:
+  one log line (`user: pid P thread T killed: page fault (vector 14) at rip
+  ..., error ..., address ...`) and `thread::exit(user::killed(vector))`.
+  Other threads, of the process too, go on (there is no process-wide kill
+  yet).
+- **User memory.** `user::copy_from_user`, `copy_to_user` and
+  `strncpy_from_user` work on the loaded address space: they refuse ranges
+  that leave the user range, and run the copy in an assembly routine listed
+  in an exception table, so a page fault on user memory inside it resumes at
+  the routine's fixup and the call returns `Efault`. A fault on a kernel
+  address there stays a kernel bug (panic). With SMAP the copies run between
+  STAC and CLAC (interrupt entry clears AC), with SMEP the kernel cannot
+  execute user pages; without them (QEMU's default CPU) the range checks
+  still hold.
+- **FPU state.** The kernel is soft-float. Each user thread has an XSAVE
+  area (x87, SSE, AVX when present; FXSAVE's 512 bytes without XSAVE) on the
+  heap. The registers always hold one user thread's state (the owner):
+  switching to another user thread saves the owner's and restores the new
+  one's, switching to kernel threads or back to the owner costs nothing; no
+  #NM traps. IA32_FS_BASE and the user GS base are saved and restored per
+  thread (`user::set_fs_base`, `set_gs_base`; FSGSBASE stays off).
+
+```text
+user: syscall/sysret on; PCID: no, SMEP: yes, SMAP: yes; FPU state: XSAVE, 832 bytes, XCR0 0x7
+user: pid 4242 thread 5.20 killed: page fault (vector 14) at rip 0x4000c3, error 0x7, address 0x400000
+```
 
 ## Synchronisation
 

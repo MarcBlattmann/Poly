@@ -26,3 +26,9 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     }
     outcome
 }
+
+/// [`dispatch`] as a `user::SyscallHook`: what user threads use unless
+/// they are given another hook.
+pub fn dispatch_hook(process: &Process, regs: &mut SyscallRegs) {
+    dispatch(process, regs);
+}

@@ -41,8 +41,49 @@ pub unsafe fn write_cr3(pml4: u64) {
     unsafe { asm!("mov cr3, {}", in(reg) pml4, options(nostack, preserves_flags)) }
 }
 
+/// CR0.MP (bit 1): WAIT/FWAIT honour CR0.TS (SDM Vol. 3A §2.5).
+pub const CR0_MP: u64 = 1 << 1;
+/// CR0.EM (bit 2): x87 and SSE instructions raise #UD / #NM when set.
+pub const CR0_EM: u64 = 1 << 2;
+/// CR0.TS (bit 3): the next x87 / SSE instruction raises #NM.
+pub const CR0_TS: u64 = 1 << 3;
+/// CR0.NE (bit 5): x87 errors are reported as #MF, not through IRQ 13.
+pub const CR0_NE: u64 = 1 << 5;
+
+pub fn read_cr0() -> u64 {
+    let v: u64;
+    // SAFETY: reading CR0 has no side effects.
+    unsafe { asm!("mov {}, cr0", out(reg) v, options(nomem, nostack, preserves_flags)) }
+    v
+}
+
+/// # Safety
+/// The new value must keep the kernel running (paging and protection stay
+/// on, write protection stays as the kernel expects).
+pub unsafe fn write_cr0(v: u64) {
+    // SAFETY: forwarded from the caller.
+    unsafe { asm!("mov cr0, {}", in(reg) v, options(nostack, preserves_flags)) }
+}
+
 /// CR4.PGE (bit 7): global pages (SDM Vol. 3A §2.5).
 pub const CR4_PGE: u64 = 1 << 7;
+/// CR4.OSFXSR (bit 9): the OS saves SSE state with FXSAVE / FXRSTOR, which
+/// makes SSE instructions usable (SDM Vol. 3A §2.5, §13.1.3).
+pub const CR4_OSFXSR: u64 = 1 << 9;
+/// CR4.OSXMMEXCPT (bit 10): unmasked SIMD floating-point exceptions raise
+/// #XM instead of #UD.
+pub const CR4_OSXMMEXCPT: u64 = 1 << 10;
+/// CR4.PCIDE (bit 17): process-context identifiers in CR3[11:0]
+/// (SDM Vol. 3A §4.10.1).
+pub const CR4_PCIDE: u64 = 1 << 17;
+/// CR4.OSXSAVE (bit 18): XSAVE / XRSTOR and XSETBV enabled.
+pub const CR4_OSXSAVE: u64 = 1 << 18;
+/// CR4.SMEP (bit 20): supervisor-mode execution prevention (SDM Vol. 3A
+/// §4.6.1): ring 0 cannot execute user pages.
+pub const CR4_SMEP: u64 = 1 << 20;
+/// CR4.SMAP (bit 21): supervisor-mode access prevention: ring 0 cannot
+/// touch user pages unless RFLAGS.AC is set (STAC / CLAC).
+pub const CR4_SMAP: u64 = 1 << 21;
 
 pub fn read_cr4() -> u64 {
     let v: u64;
@@ -61,8 +102,22 @@ pub unsafe fn write_cr4(v: u64) {
 
 /// IA32_EFER (SDM Vol. 4, Table 2-2).
 pub const MSR_EFER: u32 = 0xc000_0080;
+/// IA32_EFER.SCE (bit 0): SYSCALL / SYSRET enabled.
+pub const EFER_SCE: u64 = 1 << 0;
 /// IA32_EFER.NXE (bit 11): enables the execute-disable bit in page tables.
 pub const EFER_NXE: u64 = 1 << 11;
+/// IA32_STAR: SYSCALL and SYSRET segment selectors (SDM Vol. 4, Table 2-2).
+pub const MSR_STAR: u32 = 0xc000_0081;
+/// IA32_LSTAR: the SYSCALL entry point in 64-bit mode.
+pub const MSR_LSTAR: u32 = 0xc000_0082;
+/// IA32_FMASK: RFLAGS bits SYSCALL clears.
+pub const MSR_FMASK: u32 = 0xc000_0084;
+/// IA32_FS_BASE: the FS segment base in 64-bit mode.
+pub const MSR_FS_BASE: u32 = 0xc000_0100;
+/// IA32_GS_BASE: the GS segment base in 64-bit mode.
+pub const MSR_GS_BASE: u32 = 0xc000_0101;
+/// IA32_KERNEL_GS_BASE: swapped with IA32_GS_BASE by SWAPGS.
+pub const MSR_KERNEL_GS_BASE: u32 = 0xc000_0102;
 /// IA32_APIC_BASE (SDM Vol. 4, Table 2-2): bits 12 and up hold the local
 /// APIC's physical base address.
 pub const MSR_APIC_BASE: u32 = 0x1b;
@@ -83,6 +138,27 @@ pub unsafe fn write_msr(msr: u32, v: u64) {
     // SAFETY: forwarded from the caller.
     unsafe {
         asm!("wrmsr", in("ecx") msr, in("eax") v as u32, in("edx") (v >> 32) as u32, options(nostack, preserves_flags))
+    }
+}
+
+/// Invalidate the TLB entries for the page holding `virt` in the current
+/// PCID, global ones included, and the paging-structure caches of the
+/// current PCID (SDM Vol. 2A, `INVLPG`; Vol. 3A §4.10.4.1).
+pub fn invlpg(virt: u64) {
+    // SAFETY: invlpg only drops cached translations; any address is valid.
+    // Not `nomem`: page-table writes before it must not move past it.
+    unsafe { asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags)) }
+}
+
+/// Write extended control register `xcr` (SDM Vol. 2C, `XSETBV`).
+///
+/// # Safety
+/// CR4.OSXSAVE is set and `value` is valid for this CPU (bit 0 set, only
+/// supported components).
+pub unsafe fn xsetbv(xcr: u32, value: u64) {
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        asm!("xsetbv", in("ecx") xcr, in("eax") value as u32, in("edx") (value >> 32) as u32, options(nostack, preserves_flags))
     }
 }
 

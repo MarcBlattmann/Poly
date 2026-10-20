@@ -274,6 +274,42 @@ add `-monitor stdio` to a hand-written QEMU command line:
 breakpoint on `poly_kernel::arch::x86_64::irq::dispatch` stops at every
 interrupt (expect one per millisecond from the tick).
 
+## User mode
+
+The boot log says how user mode was set up, and every user thread a CPU
+exception kills leaves one line (the kernel goes on):
+
+```text
+user: syscall/sysret on; PCID: no, SMEP: no, SMAP: no; FPU state: FXSAVE, 512 bytes, XCR0 0x0
+user: pid 4242 thread 2.6 killed: page fault (vector 14) at rip 0x4000be, error 0x4, address 0x50000000
+user: pid 4242 thread 3.7 killed: general protection fault (vector 13) returning to rip 0x4004b7, error 0x10
+```
+
+`rip` is the user instruction (or, with "returning to", where a return
+to ring 3 failed in IRETQ); `address` is CR2. The page-fault error bits are
+as above, plus bit 2 (user mode): `0x4` is a user read of an unmapped page,
+`0x5` a user read of a kernel page, `0x7` a user write to a read-only page,
+`0x15` a user fetch from a no-execute or kernel page. The thread's exit code
+(what `thread::join` returns) is `user::killed(vector)`, bit 63 plus the
+vector. QEMU's default (TCG) CPU does not check addresses for canonicality:
+a non-canonical access is reported as a page fault there, a #GP on hardware.
+
+`cargo xtask run poly.test=user` runs only the user-mode tests (and
+`poly.test=addrspace` the address-space ones). The test programs are
+assembled into the kernel (`kernel/src/user/programs.rs`) and copied to
+`0x400000` in each test address space, so a user `rip` minus `0x400000` is
+the offset into `user_programs_start`. SMEP, SMAP and XSAVE need a CPU model
+that has them: run QEMU by hand with the command line `cargo xtask run`
+uses plus `-cpu max` (QEMU's TCG has no PCIDs in any model).
+
+In gdb, `info registers cr3` shows the address space that is loaded (bits
+11:0 are the PCID when PCIDs are on), `monitor info tlb` and `monitor info
+mem` its mappings (user pages have the `u` flag), and `print
+poly_kernel::arch::x86_64::syscall::PERCPU` the kernel stack the next
+`syscall` will use. A breakpoint on `poly_kernel::user::kill_current`
+stops at every killed thread; `up` to `trap_dispatch` and `print *frame`
+show its user registers.
+
 ## Attaching a debugger
 
 ```sh

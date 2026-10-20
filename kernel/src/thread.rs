@@ -26,6 +26,15 @@
 //!   thread's stack is freed by the next thread to run (it cannot be freed
 //!   while still in use); its table slot is freed once it is also joined or
 //!   [`detach`]ed.
+//! - A *user thread* ([`spawn_user`], used by [`crate::user`]) is a thread
+//!   like any other that also carries a [`UserThread`]: its process, address
+//!   space, FPU state and FS/GS bases. Every switch hands the outgoing and
+//!   incoming threads' user state to `arch::user::switch`, which loads the
+//!   incoming thread's address space (the kernel PML4 for kernel threads),
+//!   FPU state and bases and points the ring-3 entries (TSS.rsp0, the
+//!   `syscall` stack) at its kernel stack. The user state of an exited thread
+//!   is dropped by the reaper, after [`THREADS`] is unlocked: the last
+//!   reference to an address space frees its memory.
 //!
 //! # Locking and interrupts
 //!
@@ -55,6 +64,8 @@ use crate::frames::FRAMES;
 use crate::kernel_test;
 use crate::sync::{self, SpinLock};
 use crate::time;
+use crate::user::UserThread;
+use alloc::boxed::Box;
 use core::cell::UnsafeCell;
 use core::sync::atomic::AtomicU64;
 use core::time::Duration;
@@ -130,6 +141,8 @@ struct Threads {
     /// Each slot's thread in [`WaitQueue::wait_until_deadline`]: its
     /// deadline and the queue it waits on.
     timeouts: [Option<Timeout>; MAX_THREADS],
+    /// The user state of each slot's thread; `None` for kernel threads.
+    user: [Option<Box<UserThread>>; MAX_THREADS],
     ready: bool,
 }
 
@@ -148,6 +161,7 @@ static THREADS: SpinLock<Threads> = SpinLock::new(Threads {
     sched: Scheduler::new(TIME_SLICE_TICKS),
     stacks: [None; MAX_THREADS],
     timeouts: [None; MAX_THREADS],
+    user: [const { None }; MAX_THREADS],
     ready: false,
 });
 
@@ -170,7 +184,7 @@ pub fn init() {
     let stack = Stack::allocate().expect("no memory for the idle thread's stack");
     let mut t = THREADS.lock();
     assert!(!t.ready, "threads initialised twice");
-    install(&mut t, ThreadId::IDLE, stack, idle_main, 0);
+    install(&mut t, ThreadId::IDLE, stack, idle_main, 0, None);
     t.ready = true;
     drop(t);
     crate::kprintln!(
@@ -182,22 +196,35 @@ pub fn init() {
 /// Start `f(arg)` in a new thread. It runs once the threads ahead of it on
 /// the run queue have had their turn; the caller keeps running.
 pub fn spawn(f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
+    spawn_with(f, arg, None)
+}
+
+/// Start `f(arg)` in a new user thread, which carries `user` from the start:
+/// its address space is loaded whenever it runs. `f` is expected to enter
+/// ring 3 (see [`crate::user::spawn`]).
+pub fn spawn_user(user: Box<UserThread>, f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
+    spawn_with(f, arg, Some(user))
+}
+
+fn spawn_with(f: ThreadFn, arg: usize, user: Option<Box<UserThread>>) -> Result<ThreadId, SpawnError> {
     let stack = Stack::allocate()?;
     let _irq = InterruptsOff::new();
+    let dead = reap(&mut THREADS.lock());
+    drop(dead);
     let mut t = THREADS.lock();
     assert!(t.ready, "thread::spawn before thread::init");
-    reap(&mut t);
     let Ok(id) = t.sched.spawn() else {
         drop(t);
         stack.free();
         return Err(SpawnError::TableFull);
     };
-    install(&mut t, id, stack, f, arg);
+    install(&mut t, id, stack, f, arg, user);
     Ok(id)
 }
 
-/// Give `stack` to thread `id` and set it up to start in `f(arg)`.
-fn install(t: &mut Threads, id: ThreadId, stack: Stack, f: ThreadFn, arg: usize) {
+/// Give `stack` (and `user`, for a user thread) to thread `id` and set it up
+/// to start in `f(arg)`.
+fn install(t: &mut Threads, id: ThreadId, stack: Stack, f: ThreadFn, arg: usize, user: Option<Box<UserThread>>) {
     // SAFETY: the stack was just allocated for this thread and is mapped;
     // `thread_start` has the signature `prepare` asks for.
     let rsp = unsafe { context::prepare(stack.top(), thread_start as *const () as usize, f as usize, arg) };
@@ -205,6 +232,7 @@ fn install(t: &mut Threads, id: ThreadId, stack: Stack, f: ThreadFn, arg: usize)
     unsafe { *SAVED_RSP.0[id.slot()].get() = rsp };
     backtrace::register_thread_stack(id.slot(), stack.virt, STACK_SIZE);
     t.stacks[id.slot()] = Some(stack);
+    t.user[id.slot()] = user;
 }
 
 /// Where every new thread starts, called by the trampoline in
@@ -259,6 +287,13 @@ fn switch(sw: Switch) {
     // blocks would leave its interrupt unacknowledged.
     assert_eq!(sync::spinlocks_held(), 0, "thread {} blocks or yields while holding a spinlock", sw.from);
     assert!(!arch::irq::in_interrupt(), "thread {} blocks inside an interrupt handler", sw.from);
+    {
+        let mut guard = THREADS.lock();
+        let t = &mut *guard;
+        let top = t.stacks[sw.to.slot()].map(|s| s.top());
+        let [from, to] = t.user.get_disjoint_mut([sw.from.slot(), sw.to.slot()]).expect("switch to the running thread");
+        arch::user::switch(from.as_deref_mut().map(|u| &mut u.arch), to.as_deref().map(|u| &u.arch), top);
+    }
     let save = SAVED_RSP.0[sw.from.slot()].get();
     // SAFETY: `sw.to` is not running, so its saved stack pointer is stable
     // (see `SavedRsp`).
@@ -272,25 +307,54 @@ fn switch(sw: Switch) {
 
 /// Runs on the thread just switched in, first thing.
 fn finish_switch() {
-    reap(&mut THREADS.lock());
+    let dead = reap(&mut THREADS.lock());
+    // THREADS is unlocked again: freeing address spaces may take a while
+    // and takes the frame allocator and the heap.
+    drop(dead);
 }
 
-/// Free the stacks of exited threads. Never sees the current thread's own
-/// stack: a thread is only reaped after the switch away from it.
-fn reap(t: &mut Threads) {
+/// User state of reaped threads, dropped by the caller of [`reap`] once
+/// THREADS is unlocked.
+type Graveyard = [Option<Box<UserThread>>; 4];
+
+/// Free the stacks of exited threads and take out their user state. Never
+/// sees the current thread's own stack: a thread is only reaped after the
+/// switch away from it. Stops early (the rest is reaped on a later switch or
+/// spawn) when the frame allocator is busy or the graveyard is full.
+fn reap(t: &mut Threads) -> Graveyard {
+    let mut dead: Graveyard = Default::default();
+    let mut buried = 0;
     while let Some(id) = t.sched.unreaped() {
+        if t.user[id.slot()].is_some() && buried == dead.len() {
+            break;
+        }
         if let Some(stack) = t.stacks[id.slot()] {
             // Lock order is THREADS before FRAMES only with try_lock: if the
             // frame allocator is busy (its holder was switched away), the
             // stack is freed on a later switch or spawn instead.
-            let Some(mut frames) = FRAMES.try_lock() else { return };
+            let Some(mut frames) = FRAMES.try_lock() else { break };
             backtrace::unregister_thread_stack(id.slot());
             let alloc = frames.as_mut().expect("stacks come from the frame allocator");
             alloc.free(stack.phys, STACK_ORDER).expect("thread stack freed twice");
             t.stacks[id.slot()] = None;
         }
+        if let Some(user) = t.user[id.slot()].take() {
+            dead[buried] = Some(user);
+            buried += 1;
+        }
         t.sched.reap(id).expect("unreaped() names an exited thread");
     }
+    dead
+}
+
+/// Run `f` on the running thread's user state, if it is a user thread.
+/// `f` runs with [`THREADS`] locked and interrupts off, so it must be short
+/// and must not call into this module.
+pub fn with_current_user<R>(f: impl FnOnce(&mut UserThread) -> R) -> Option<R> {
+    let _irq = InterruptsOff::new();
+    let mut t = THREADS.lock();
+    let me = t.sched.current().slot();
+    t.user[me].as_deref_mut().map(f)
 }
 
 /// The running thread.

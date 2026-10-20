@@ -4,14 +4,37 @@
 //! [`TrapFrame`] and calls [`trap_dispatch`]: vectors 0-31 are CPU
 //! exceptions, handled here; 32-255 are external interrupts, IPIs and the
 //! local APIC's own (timer, error, spurious), handed to [`super::irq`]. The
-//! same frame layout will carry the syscall path later.
+//! `syscall` entry (`syscall.rs`) builds the same frame, and every return
+//! goes through the same exit, `trap_return`.
 //!
 //! All 256 entries are interrupt gates, so the CPU clears RFLAGS.IF on entry
-//! and handlers never nest. Only the double fault uses an IST stack: an
-//! interrupt handler may switch threads (the timer preempts), which needs
-//! the trap frame to stay on the interrupted thread's own stack.
+//! and handlers never nest. Every gate has DPL 0, so user mode cannot raise
+//! any vector with `INT n` (or `INT3`): that is a #GP, which kills it. An
+//! interrupt or exception in ring 3 makes the CPU switch to TSS.rsp0, the
+//! running thread's kernel stack. Only three vectors use an IST stack: the
+//! double fault (it may come from a kernel stack overflow), and the NMI and
+//! machine check, which cannot be masked and may arrive while `syscall` is
+//! still on the user's stack. Every other handler, the timer above all, may
+//! switch threads, which needs the trap frame on the thread's own stack.
+//!
+//! # Entry and exit
+//!
+//! `isr_common` executes `swapgs` when the saved CS is a ring-3 selector, so
+//! GS base points at the per-CPU area in the kernel (`syscall.rs`), clears
+//! RFLAGS.AC when SMAP is on (an interrupted user copy gets it back with its
+//! RFLAGS), and starts the kernel's frame-pointer chain at 0 when it came
+//! from ring 3 (a user RBP means nothing to the backtrace). `trap_return`
+//! pops the frame and swaps GS back when returning to ring 3.
+//!
+//! # Exceptions
+//!
+//! An exception in ring 3 kills the thread (`user.rs`). In ring 0 it is a
+//! kernel bug and panics, except a page fault on user memory inside a
+//! user-copy routine, which resumes at the routine's fixup (`usercopy.rs`),
+//! and a #GP from the IRETQ of a return to ring 3, which kills the
+//! returning thread.
 
-use super::gdt::{DOUBLE_FAULT_IST, DescriptorTablePointer, KERNEL_CODE};
+use super::gdt::{DOUBLE_FAULT_IST, DescriptorTablePointer, KERNEL_CODE, NMI_IST};
 use core::arch::{asm, global_asm};
 use core::mem::size_of;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -45,9 +68,12 @@ pub struct TrapFrame {
     pub ss: u64,
 }
 
+pub const NMI: u64 = 2;
 pub const BREAKPOINT: u64 = 3;
 pub const DOUBLE_FAULT: u64 = 8;
+pub const GENERAL_PROTECTION: u64 = 13;
 pub const PAGE_FAULT: u64 = 14;
+pub const MACHINE_CHECK: u64 = 18;
 
 const EXCEPTION_NAMES: [&str; 32] = [
     "divide error",
@@ -83,6 +109,11 @@ const EXCEPTION_NAMES: [&str; 32] = [
     "security exception",
     "reserved",
 ];
+
+/// Name of exception vector `v` (0-31).
+pub fn exception_name(v: u8) -> &'static str {
+    EXCEPTION_NAMES.get(usize::from(v)).copied().unwrap_or("unknown")
+}
 
 /// Number of breakpoint exceptions handled; used by the boot self-test.
 pub static BREAKPOINTS: AtomicU64 = AtomicU64::new(0);
@@ -157,6 +188,10 @@ irq_stubs:
 irq_stubs_end:
 
 isr_common:
+    testb $3, 24(%rsp)          /* saved CS: from ring 3? */
+    jz 1f
+    swapgs
+1:
     push %rax
     push %rbx
     push %rcx
@@ -172,9 +207,23 @@ isr_common:
     push %r13
     push %r14
     push %r15
+    cmpb $0, {smap}(%rip)
+    je 2f
+    clac
+2:
     mov %rsp, %rdi
+    testb $3, 144(%rsp)         /* saved CS, now above 15 registers */
+    jz 3f
+    xor %ebp, %ebp
+3:
     cld
     call {dispatch}
+
+    /* The one way out of the kernel to an interrupted context or to ring 3
+       (the syscall entry and enter_user_frame jump here too): rsp points
+       at a TrapFrame. */
+    .global trap_return
+trap_return:
     pop %r15
     pop %r14
     pop %r13
@@ -191,6 +240,12 @@ isr_common:
     pop %rbx
     pop %rax
     add $16, %rsp               /* vector + error code */
+    testb $3, 8(%rsp)           /* CS to return to: ring 3? */
+    jz 4f
+    swapgs
+4:
+    .global trap_return_iretq
+trap_return_iretq:
     iretq
 
     .section .rodata.isr, "a", @progbits
@@ -202,13 +257,20 @@ isr_stub_table:
     .endr
 "#,
     dispatch = sym trap_dispatch,
+    smap = sym super::usercopy::SMAP,
     options(att_syntax)
 );
 
 unsafe extern "C" {
+    static trap_return_iretq: u8;
     static isr_stub_table: [u64; 32];
     static irq_stubs: u8;
     static irq_stubs_end: u8;
+}
+
+/// Address of the IRETQ instruction of the common exit.
+pub fn return_iretq() -> u64 {
+    (&raw const trap_return_iretq) as u64
 }
 
 /// Bytes between the stubs of consecutive vectors from 32 up.
@@ -261,7 +323,11 @@ pub unsafe fn init() {
     unsafe {
         let idt = (&raw mut IDT).cast::<IdtEntry>();
         for (vector, &stub) in isr_stub_table.iter().enumerate() {
-            let ist = if vector as u64 == DOUBLE_FAULT { DOUBLE_FAULT_IST } else { 0 };
+            let ist = match vector as u64 {
+                DOUBLE_FAULT => DOUBLE_FAULT_IST,
+                NMI | MACHINE_CHECK => NMI_IST,
+                _ => 0,
+            };
             idt.add(vector).write(IdtEntry::interrupt_gate(stub, ist));
         }
         let stubs_len = (&raw const irq_stubs_end) as u64 - (&raw const irq_stubs) as u64;
@@ -279,13 +345,28 @@ extern "C" fn trap_dispatch(frame: &mut TrapFrame) {
         super::irq::dispatch(frame.vector as u8);
         return;
     }
+    // An NMI or machine check that happens to arrive in ring 3 is not the
+    // thread's doing (and runs on an IST stack): it is handled, or not, as
+    // in ring 0.
+    if frame.in_user_mode() && !matches!(frame.vector, NMI | MACHINE_CHECK | DOUBLE_FAULT) {
+        super::user::exception(frame);
+    }
+    if frame.vector == PAGE_FAULT
+        && let Some(fixup) = super::usercopy::fixup(frame.rip, super::cpu::read_cr2())
+    {
+        frame.rip = fixup;
+        return;
+    }
     match frame.vector {
         BREAKPOINT => {
             BREAKPOINTS.fetch_add(1, Ordering::Relaxed);
             crate::kprintln!("breakpoint at {:#x}", frame.rip);
         }
         v => {
-            let name = EXCEPTION_NAMES.get(v as usize).copied().unwrap_or("unknown");
+            if v == GENERAL_PROTECTION {
+                super::user::failed_return(frame);
+            }
+            let name = exception_name(v as u8);
             // A double fault is usually a page fault that could not be
             // delivered, so CR2 still says where that one hit.
             let cr2 = if v == PAGE_FAULT || v == DOUBLE_FAULT { super::cpu::read_cr2() } else { 0 };

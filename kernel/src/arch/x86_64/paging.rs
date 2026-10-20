@@ -9,13 +9,17 @@
 //!
 //! | Virtual | Size | What |
 //! |---|---|---|
-//! | `0x0000_0000_0000_0000` – `0x0000_7fff_ffff_ffff` | 128 TiB | lower half: nothing mapped (for user space later) |
+//! | `0x0000_0000_0000_0000` – `0x0000_7fff_ffff_ffff` | 128 TiB | lower half: empty here; each user address space has its own (`addrspace.rs`) |
 //! | [`DIRECT_MAP_BASE`] + phys | up to 64 TiB | direct map: every region of the memory map, read-write, no-execute |
 //! | [`MMIO_BASE`] | 512 GiB | device memory from [`map_mmio`]: uncached, no-execute |
 //! | [`KERNEL_VMA`] + phys | image | kernel image, per-section permissions (see `kernel/linker.ld`) |
 //!
-//! Every kernel mapping is global (CR4.PGE, when the CPU has it), so it will
-//! survive the CR3 switches between per-process address spaces.
+//! Every kernel mapping is global (CR4.PGE, when the CPU has it), so it
+//! survives the CR3 switches between per-process address spaces. Those copy
+//! the kernel half of this PML4 (slots 256-511) when they are created, so
+//! every PML4 entry the kernel will ever use is made here, at boot, and
+//! never changes afterwards: the direct map's, the kernel image's, and an
+//! empty PDPT for the MMIO window, which [`map_mmio`] fills later.
 //!
 //! The direct map covers the regions of the memory map, not the holes between
 //! them (see [`poly_mem::DirectMap`]), so [`phys_to_virt`] answers `None` for a
@@ -49,7 +53,7 @@ use crate::frames::FRAMES;
 use crate::kprintln;
 use crate::sync::SpinLock;
 use core::cell::UnsafeCell;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use poly_mem::{BuddyAllocator, BumpFrameAllocator, DirectMap, MemoryMap, PAGE_SIZE, Region, RegionKind, align_up};
 use poly_paging::{ENTRIES, FRAME_SIZE, FrameAllocator, PageFlags, PageSize, PageTables, PhysMemory};
 
@@ -82,6 +86,7 @@ unsafe extern "C" {
     static __boot_stack_bottom: u8;
     static __boot_stack_top: u8;
     static __double_fault_stack_guard: u8;
+    static __nmi_stack_guard: u8;
 }
 
 /// A page-aligned part of the kernel image and how it is mapped.
@@ -110,12 +115,13 @@ impl Section {
 /// Everything of the kernel image that the kernel page tables map. The rest
 /// (the 32-bit boot stub and its tables) stays reachable through the direct
 /// map only.
-fn sections() -> [Section; 5] {
+fn sections() -> [Section; 6] {
     let text = (&raw const __text_start) as u64..(&raw const __text_end) as u64;
     let rodata = (&raw const __rodata_start) as u64..(&raw const __rodata_end) as u64;
     let data = (&raw const __data_start) as u64..(&raw const __data_end) as u64;
     let boot_stack = (&raw const __boot_stack_bottom) as u64..(&raw const __boot_stack_top) as u64;
     let df_stack = gdt::double_fault_stack();
+    let nmi_stack = gdt::nmi_stack();
     let section = |name, r: core::ops::Range<u64>, writable, executable| Section {
         name,
         start: r.start,
@@ -129,12 +135,17 @@ fn sections() -> [Section; 5] {
         section("data", data, true, false),
         section("boot stack", boot_stack, true, false),
         section("double-fault stack", df_stack, true, false),
+        section("NMI stack", nmi_stack, true, false),
     ]
 }
 
 /// The unmapped page below each kernel stack, with the stack's name.
-fn guard_pages() -> [(&'static str, u64); 2] {
-    [("boot", (&raw const __boot_stack_guard) as u64), ("double-fault", (&raw const __double_fault_stack_guard) as u64)]
+fn guard_pages() -> [(&'static str, u64); 3] {
+    [
+        ("boot", (&raw const __boot_stack_guard) as u64),
+        ("double-fault", (&raw const __double_fault_stack_guard) as u64),
+        ("NMI", (&raw const __nmi_stack_guard) as u64),
+    ]
 }
 
 /// Name of the stack whose guard page holds `addr`, if any: a fault there is
@@ -147,7 +158,8 @@ pub fn stack_guard_hit(addr: u64) -> Option<&'static str> {
 /// reserved, so [`fix`] strips it from every entry.
 static NX: AtomicBool = AtomicBool::new(false);
 
-fn fix(flags: PageFlags) -> PageFlags {
+/// `flags` as the CPU accepts them: without the XD bit if NXE is off.
+pub(super) fn fix(flags: PageFlags) -> PageFlags {
     if NX.load(Ordering::Relaxed) { flags } else { flags.difference(PageFlags::NO_EXECUTE) }
 }
 
@@ -291,7 +303,7 @@ impl FrameAllocator for EarlyFrames<'_> {
 }
 
 /// Frames from the buddy allocator, for page tables created after [`init`].
-struct BuddyFrames<'a, 'm>(&'a mut BuddyAllocator<'m>);
+pub(super) struct BuddyFrames<'a, 'm>(pub(super) &'a mut BuddyAllocator<'m>);
 
 impl FrameAllocator for BuddyFrames<'_, '_> {
     fn allocate_frame(&mut self) -> Option<u64> {
@@ -314,6 +326,23 @@ struct Kernel {
 }
 
 static KERNEL: SpinLock<Option<Kernel>> = SpinLock::new(None);
+
+/// Physical address of the kernel PML4, once [`init`] has loaded it.
+static KERNEL_ROOT: AtomicU64 = AtomicU64::new(0);
+
+/// The kernel PML4: what CR3 holds while no user address space is loaded,
+/// and where user address spaces copy the kernel half from. 0 before
+/// [`init`].
+pub fn kernel_root() -> u64 {
+    KERNEL_ROOT.load(Ordering::Acquire)
+}
+
+/// PML4 slot of the MMIO window.
+const MMIO_SLOT: usize = ((MMIO_BASE >> 39) & 0x1ff) as usize;
+
+/// How `poly-paging` links a table it creates (its intermediate entry
+/// policy: present and writable, the rest left to the leaves).
+const TABLE_ENTRY_FLAGS: PageFlags = PageFlags::PRESENT.union(PageFlags::WRITABLE);
 
 /// Build the kernel page tables for the normalized map `memory`, load them
 /// and drop the boot mapping. Returns `memory` with the page-table frames
@@ -341,6 +370,12 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
         let res = tables.map_range(s.start, s.start - KERNEL_VMA, s.end - s.start, fix(s.flags()), largest, &mut early);
         res.unwrap_or_else(|e| panic!("mapping the kernel {}: {e:?}", s.name));
     }
+    // The MMIO window's PDPT exists from the start, empty, so `map_mmio`
+    // never adds a PML4 entry that user address spaces would lack.
+    let pdpt = early.allocate_frame().expect("no low memory for the kernel page tables");
+    tables.memory_mut().zero_table(pdpt);
+    let root = tables.root();
+    tables.memory_mut().write_entry(root, MMIO_SLOT, pdpt | TABLE_ENTRY_FLAGS.bits());
 
     let mapped: u64 = direct.spans().iter().map(Region::len).sum();
     let (spans, end) = (direct.spans().len(), direct.end());
@@ -352,6 +387,7 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     // SAFETY: called once, on the only running CPU; the tables just loaded
     // map exactly `direct` at DIRECT_MAP_BASE.
     unsafe { DIRECT_MAP.activate(direct) };
+    KERNEL_ROOT.store(tables.root(), Ordering::Release);
     if features.pge {
         // SAFETY: CPUID says the CPU has global pages; enabling them changes
         // no translation.
