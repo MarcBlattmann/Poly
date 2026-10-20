@@ -437,6 +437,65 @@ impl AddressSpace {
         Some(UserFrame { phys: old.frame })
     }
 
+    /// The pages mapped in `[start, end)`, in address order, with where
+    /// each leads (empty for a range outside user space). Walks only the
+    /// page tables that exist (`fork` visits whole regions this way).
+    pub fn mapped_pages(&self, start: u64, end: u64) -> alloc::vec::Vec<(u64, Mapping)> {
+        let mut out = alloc::vec::Vec::new();
+        let (start, end) = (start.max(USER_START), end.min(USER_END));
+        let tables = self.tables.lock();
+        tables.mapped(start, end, |virt, t| {
+            out.push((virt, Mapping { phys: t.phys, prot: Prot::of(t.flags), owned: t.flags.contains(OWNED) }));
+        });
+        out
+    }
+
+    /// Keep the page `virt` mapped, with `prot`, but give its frame up: it
+    /// is no longer the space's (unmapping or dropping the space leaves it
+    /// alone), and the caller owns it from now on (copy on write after
+    /// `fork`: the frame becomes shared). `None` if nothing is mapped there
+    /// or the frame is not the space's.
+    ///
+    /// # Safety
+    /// The caller keeps the returned frame allocated, and holding nothing
+    /// user mode must not see, for as long as it stays mapped here.
+    pub unsafe fn disown(&self, virt: u64, prot: Prot) -> Option<UserFrame> {
+        check_range(virt, PAGE_SIZE).ok()?;
+        let flags = prot.flags()?;
+        let mut tables = self.tables.lock();
+        let t = tables.translate(virt).ok()?;
+        if !t.flags.contains(OWNED) {
+            return None;
+        }
+        tables.update_flags(virt, flags).expect("translated above");
+        self.flush(virt);
+        self.resident.fetch_sub(1, Ordering::Relaxed);
+        // The count of user frames stays: the frame moves to the UserFrame.
+        Some(UserFrame { phys: t.frame })
+    }
+
+    /// Take ownership of `frame`, which is mapped at `virt` already but not
+    /// owned by the space (the reverse of [`disown`](Self::disown): the
+    /// last user of a shared frame keeps it), and give the page `prot`.
+    /// Hands the frame back if `virt` does not map it, or maps an owned
+    /// frame.
+    pub fn adopt(&self, virt: u64, frame: UserFrame, prot: Prot) -> Result<(), UserFrame> {
+        let Some(flags) = prot.flags() else { return Err(frame) };
+        if check_range(virt, PAGE_SIZE).is_err() {
+            return Err(frame);
+        }
+        let mut tables = self.tables.lock();
+        match tables.translate(virt) {
+            Ok(t) if t.frame == frame.phys() && !t.flags.contains(OWNED) => {}
+            _ => return Err(frame),
+        }
+        tables.update_flags(virt, flags | OWNED).expect("translated above");
+        self.flush(virt);
+        frame.into_phys();
+        self.resident.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
     /// Pages mapped with a frame the space owns.
     pub fn resident_pages(&self) -> u64 {
         self.resident.load(Ordering::Relaxed)

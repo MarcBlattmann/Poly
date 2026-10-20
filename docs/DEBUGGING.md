@@ -775,9 +775,19 @@ passes; it names tests that newly pass, to be added there.
 
 The in-kernel tests of the Linux services run with `poly.test=linux::`;
 they make real system calls from ring 3 (`kernel/src/linux/tests.rs`).
+`poly.test=task_tests` runs those of fork, clone, execve and wait4
+(`kernel/src/linux/task_tests.rs`): each program exits with 0 or the
+number of its first failed check (90 and up, next to the check in the
+assembly), which the failing test prints. `poly.test=memory::fork` runs
+the copy-on-write tests of `Memory::fork`. A process tree that looks
+wrong: `getppid` 0 means the kernel adopted the process (no live init);
+a parent that never reaps keeps its children as zombies (their records
+stay until then, in `linux::task`'s `ZOMBIES`).
 The hello worlds the boot tests use are built into
-`target/xtask-programs/` (`hello`: Rust, no C library; `corpus/`: the C
-corpus with `hello` and the static glibc `libc-hello`).
+`target/xtask-programs/` (`hello`: Rust, no C library; `forkexec`: the
+nolibc process and thread test, `poly.init=/bin/forkexec`, which prints
+`forkexec: ok` or what failed; `corpus/`: the C corpus with `hello` and
+the static glibc `libc-hello`).
 
 ## Disk file systems and the page cache
 

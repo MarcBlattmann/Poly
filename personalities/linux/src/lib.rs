@@ -52,6 +52,7 @@ mod numbers;
 pub mod signal;
 pub mod sys;
 pub mod table;
+pub mod task;
 
 #[cfg(test)]
 mod tests;

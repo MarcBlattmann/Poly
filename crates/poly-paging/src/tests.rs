@@ -809,3 +809,37 @@ fn randomized_against_a_reference_model() {
     assert_eq!(frames.live.len(), 1);
     assert_eq!(pt.memory().tables.values().filter(|t| t.iter().any(|&e| e != 0)).count(), 0);
 }
+
+#[test]
+fn mapped_walks_present_leaves_in_order() {
+    let (mut pt, mut frames) = setup();
+    let user = PageFlags::USER | RW;
+    // Pages spread over different tables, and a 2 MiB page.
+    let pages = [0x1_0000, 0x1_1000, 0x40_0000, 0x7fff_ffff_e000, 0x55_5555_4000];
+    for (i, &v) in pages.iter().enumerate() {
+        pt.map(v, 0x100_0000 + i as u64 * K4, Size4K, user, &mut frames).unwrap();
+    }
+    pt.map(0x4000_0000, 0x8000_0000, Size2M, user, &mut frames).unwrap();
+    pt.map(HIGH, 0x9000_0000, Size4K, RW, &mut frames).unwrap();
+    let mut seen = Vec::new();
+    pt.mapped(0, u64::MAX, |v, t| seen.push((v, t.frame, t.size)));
+    let want = [
+        (0x1_0000, 0x100_0000, Size4K),
+        (0x1_1000, 0x100_1000, Size4K),
+        (0x40_0000, 0x100_2000, Size4K),
+        (0x4000_0000, 0x8000_0000, Size2M),
+        (0x55_5555_4000, 0x100_4000, Size4K),
+        (0x7fff_ffff_e000, 0x100_3000, Size4K),
+    ];
+    assert_eq!(seen, want, "lower half only, in address order");
+    seen.clear();
+    pt.mapped(0x1_1000, 0x40_1000, |v, t| seen.push((v, t.frame, t.size)));
+    assert_eq!(seen, want[1..3]);
+    seen.clear();
+    pt.mapped(0x4000_1000, 0x4040_0000, |v, t| seen.push((v, t.frame, t.size)));
+    assert!(seen.is_empty(), "a huge page that starts before the range is not reported");
+    let mut flags = Vec::new();
+    pt.mapped(0x40_0000, 0x40_1000, |_, t| flags.push(t.flags));
+    assert_eq!(flags, [tr(&pt, 0x40_0000).flags]);
+    pt.mapped(0x50_0000, 0x40_0000, |_, _| panic!("an empty range visits nothing"));
+}

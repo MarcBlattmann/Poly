@@ -78,6 +78,9 @@ pub const fn is_canonical(virt: u64) -> bool {
     (((virt << 16) as i64) >> 16) as u64 == virt
 }
 
+/// The first address above the lower half of the 48-bit address space.
+const LOWER_HALF_END: u64 = 1 << 47;
+
 /// Index of `virt` in the table at `level` (4 = PML4 ... 1 = PT). Each level
 /// consumes 9 bits above the 12-bit page offset (SDM Vol. 3A §4.5.4).
 const fn index(virt: u64, level: usize) -> usize {
@@ -569,6 +572,52 @@ impl<M: PhysMemory> PageTables<M> {
             size: leaf.size(),
             flags: leaf.flags(),
         })
+    }
+
+    /// Call `visit(virt, translation)` for every present leaf of the lower
+    /// half (below `2^47`) that starts in `[start, end)`, in address order.
+    /// Absent tables are skipped whole, so a large, mostly empty range costs
+    /// a walk of the tables that exist, not a lookup per page. A huge page
+    /// that starts before `start` is not reported.
+    pub fn mapped(&self, start: u64, end: u64, mut visit: impl FnMut(u64, Translation)) {
+        let end = end.min(LOWER_HALF_END);
+        if start < end {
+            self.walk_range(self.root, 4, 0, start, end, &mut visit);
+        }
+    }
+
+    /// [`mapped`](Self::mapped) below the table at `level` that maps the
+    /// addresses from `base` on.
+    fn walk_range(
+        &self,
+        table: u64,
+        level: usize,
+        base: u64,
+        start: u64,
+        end: u64,
+        visit: &mut impl FnMut(u64, Translation),
+    ) {
+        let span = 1u64 << (12 + 9 * (level - 1));
+        let first = if start > base { ((start - base) / span) as usize } else { 0 };
+        for i in first..ENTRIES {
+            let virt = base + i as u64 * span;
+            if virt >= end {
+                break;
+            }
+            let entry = self.mem.read_entry(table, i);
+            if entry & PageFlags::PRESENT.0 == 0 {
+                continue;
+            }
+            if level == 1 || (level <= 3 && entry & PageFlags::HUGE.0 != 0) {
+                if virt >= start {
+                    let leaf = Leaf { path: [0; 4], level, entry };
+                    let frame = leaf.frame();
+                    visit(virt, Translation { phys: frame, frame, size: leaf.size(), flags: leaf.flags() });
+                }
+                continue;
+            }
+            self.walk_range(entry & ADDR_MASK, level - 1, virt, start, end, visit);
+        }
     }
 
     /// Remove the page that starts at `virt`, whatever its size. Intermediate

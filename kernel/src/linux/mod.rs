@@ -15,7 +15,12 @@
 //!  interrupt from ring 3, thread notified ──► user::return_to_user ──► linux::exit_to_user
 //!  thread ends ──► user::end_thread ──► linux::thread_exit
 //!       Linux::thread_exit                   robust futexes, clear_child_tid
+//!  last thread gone ──► user::end_thread ──► linux::process_exit
+//!       task::process_exited                 the tree (zombie, orphans), SIGCHLD
 //! ```
+//!
+//! Processes and threads (`clone`, `fork`, `execve`, `wait4`, the process
+//! tree) are in `task.rs` (ADR 0041).
 //!
 //! A Linux process ([`crate::process::Process::new_linux`]) carries a
 //! [`LinuxState`]: the personality's [`LinuxProcess`] (signal dispositions,
@@ -24,6 +29,8 @@
 //! process ([`FUTEXES`]).
 
 mod services;
+pub mod task;
+mod task_tests;
 mod tests;
 
 pub use services::Thread;
@@ -33,6 +40,7 @@ use crate::sync::SpinLock;
 use crate::user::memory::SegvCode;
 use crate::user::{self, Fault, FaultError};
 use crate::{kprintln, testrun};
+use alloc::sync::Arc;
 use poly_abi::{Outcome, SyscallRegs};
 use poly_personality_linux::futex::FutexTable;
 use poly_personality_linux::signal::fault::{PageFault, fault_info};
@@ -55,6 +63,8 @@ impl LinuxState {
     /// The state of a new process whose main thread has id `pid`: default
     /// signal dispositions, nothing blocked or pending.
     pub fn new(pid: u32) -> LinuxState {
+        // A process the kernel starts: the root of a process tree.
+        task::register_root(pid);
         LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)) }
     }
 
@@ -190,7 +200,17 @@ fn page_fault(why: FaultError) -> PageFault {
 pub fn thread_exit(process: &Process, tid: u32) {
     if let Some(mut k) = Thread::current(process) {
         debug_assert_eq!(k.tid(), tid as i32);
-        let shares_memory = process.thread_count() > 1;
+        // set_tid_address(2): "if the thread is sharing memory with other
+        // threads": other threads, or another process (CLONE_VM).
+        let shares_memory =
+            process.thread_count() > 1 || user::current_memory().is_some_and(|m| Arc::strong_count(&m) > 2);
         Linux::thread_exit(&mut k, shares_memory);
     }
+    task::vfork_release(tid);
+}
+
+/// The last thread of `process` (the running thread) has left it with
+/// `status`: the process tree and the parent learn of it (`task.rs`).
+pub fn process_exit(process: &Process, status: crate::process::ExitStatus) {
+    task::process_exit(process, status);
 }

@@ -152,6 +152,8 @@ pub struct FakeKernel {
     /// stop_process calls (signal), and the pids continue_process got.
     pub stops: Vec<u32>,
     pub continued: Vec<i32>,
+    /// Children, programs and the process tree (`tests/task.rs`).
+    pub tasks: super::task::Tasks,
 }
 
 impl Default for FakeKernel {
@@ -206,6 +208,7 @@ impl FakeKernel {
             futexes_locked: false,
             stops: Vec::new(),
             continued: Vec::new(),
+            tasks: Default::default(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -751,6 +754,23 @@ impl LinuxKernel for FakeKernel {
 
     fn hostname(&self) -> &[u8] {
         b"testhost"
+    }
+
+    fn clone_task(&mut self, req: &crate::task::clone::CloneRequest) -> Result<i32, Errno> {
+        super::task::clone_task(self, req)
+    }
+
+    fn execve(&mut self, req: &crate::task::exec::ExecRequest<'_>) -> Result<(), Errno> {
+        super::task::execve(self, req)
+    }
+
+    fn with_tree(&mut self, f: &mut dyn FnMut(&mut crate::task::tree::ProcessTree)) -> Result<(), Errno> {
+        f(&mut self.tasks.tree);
+        Ok(())
+    }
+
+    fn wait_tree(&mut self, generation: u64) -> Wakeup {
+        super::task::wait_tree(self, generation)
     }
 }
 
