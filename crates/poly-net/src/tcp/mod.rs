@@ -277,6 +277,10 @@ pub(crate) struct Tcb {
     /// Already in the listener's queue of established connections.
     pub accept_queued: bool,
     pub stats: TcpStats,
+    /// Per-socket IP options (`IP_TTL` / `IPV6_UNICAST_HOPS`, `IP_TOS`);
+    /// `None` uses the stack's TTL.
+    pub ttl: Option<u8>,
+    pub tos: u8,
 }
 
 fn rcv_wscale_for(buffer: usize) -> u8 {
@@ -372,6 +376,8 @@ impl Tcb {
             parent: None,
             accept_queued: false,
             stats: TcpStats::default(),
+            ttl: None,
+            tos: 0,
         }
     }
 

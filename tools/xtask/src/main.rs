@@ -338,8 +338,36 @@ fn symbolize(args: &[String]) -> Result {
 }
 
 struct Boot {
+    /// QEMU's exit status; `None` if it was killed (at [`BOOT_TIMEOUT`], or
+    /// on purpose, e.g. once a screenshot was taken).
     status: Option<i32>,
     output: String,
+    /// Whether QEMU was still running at [`BOOT_TIMEOUT`] and was killed.
+    timed_out: bool,
+}
+
+impl Boot {
+    /// The kernel tests' report in `log` (the boot's output, or the part
+    /// of it before the shell), checked. A boot that ran into
+    /// [`BOOT_TIMEOUT`] before the summary is reported as a timeout, with
+    /// the last line the kernel printed; one whose QEMU exited early, as a
+    /// kernel that stopped during the tests.
+    fn tests(&self, log: &str) -> Result<ktest::Report> {
+        let report = ktest::parse(log);
+        let end = if self.timed_out {
+            ktest::End::TimedOut { secs: BOOT_TIMEOUT.as_secs(), last_line: ktest::last_line(&self.output) }
+        } else {
+            ktest::End::Exited
+        };
+        report.check_end(end)?;
+        Ok(report)
+    }
+}
+
+/// Say that a boot ran into [`BOOT_TIMEOUT`] (and is being killed), with the
+/// last line it printed, before whatever check then fails on it.
+fn report_timeout(last_line: &str) {
+    eprintln!("==> QEMU timed out after {} s (last line: {last_line:?}); killing it", BOOT_TIMEOUT.as_secs());
 }
 
 /// Boot headless with a timeout, echoing serial output as it arrives, with
@@ -419,7 +447,7 @@ fn boot_with(
     });
 
     let deadline = Instant::now() + BOOT_TIMEOUT;
-    let (mut lines, mut taken) = (Vec::new(), None);
+    let (mut lines, mut taken, mut timed_out) = (Vec::new(), None, false);
     let status = loop {
         for line in rx.try_iter() {
             if let Some(s) = shot.filter(|_| taken.is_none()) {
@@ -436,6 +464,8 @@ fn boot_with(
             break s.code();
         }
         if Instant::now() > deadline {
+            timed_out = true;
+            report_timeout(lines.iter().rev().map(|l| l.trim()).find(|l| !l.is_empty()).unwrap_or_default());
             let _ = child.kill();
             let _ = child.wait();
             break None;
@@ -449,7 +479,7 @@ fn boot_with(
         let what = format!("screenshot after \"{}\"", s.marker);
         taken.unwrap_or_else(|| Err("the kernel never printed it".into())).map_err(|e| format!("{what}: {e}"))?;
     }
-    Ok(Boot { status, output: lines.join("\n") })
+    Ok(Boot { status, output: lines.join("\n"), timed_out })
 }
 
 /// The kernel's version, from `kernel/Cargo.toml`, as the boot screen shows it.
@@ -545,7 +575,7 @@ fn keyboard_boot_test(
     let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &qemu_args, None, on_line);
     let _ = std::fs::remove_file(&monitor);
     let b = b?;
-    ktest::parse(&b.output).check()?;
+    b.tests(&b.output)?;
     let layout = keymap.unwrap_or("us");
     if !b.output.contains("keyboard: ISA IRQ 1 -> GSI ") || !b.output.contains(&format!("; layout {layout} (")) {
         return Err(format!("the keyboard was not brought up on IRQ 1 with layout {layout}"));
@@ -594,7 +624,7 @@ fn boot_typing(
     });
 
     let deadline = Instant::now() + BOOT_TIMEOUT;
-    let (mut raw, mut printed, mut matched) = (Vec::new(), 0, 0);
+    let (mut raw, mut printed, mut matched, mut timed_out) = (Vec::new(), 0, 0, false);
     let mut steps = steps.iter();
     let mut step = steps.next();
     let status = loop {
@@ -623,6 +653,8 @@ fn boot_typing(
             break s.code();
         }
         if Instant::now() > deadline {
+            timed_out = true;
+            report_timeout(ktest::last_line(&text));
             let _ = child.kill();
             let _ = child.wait();
             break None;
@@ -635,7 +667,7 @@ fn boot_typing(
     for line in rest.lines().skip(printed) {
         println!("    | {}", syms.symbolize_line(line));
     }
-    Ok(Boot { status, output: rest })
+    Ok(Boot { status, output: rest, timed_out })
 }
 
 /// Type commands into the kernel shell on the serial port and check what
@@ -663,7 +695,7 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let steps: Vec<_> = commands.iter().map(|&c| (console::PROMPT, c)).collect();
     let b = boot_typing(kernel, syms, &append, devices, &qemu_args, &steps)?;
     let boot_log = b.output.split(console::PROMPT).next().unwrap_or_default();
-    ktest::parse(boot_log).check()?;
+    b.tests(boot_log)?;
     let ex = console::exchanges(&b.output);
     if ex.len() < commands.len() {
         return Err(format!(
@@ -731,7 +763,7 @@ fn ext2_persistence_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     ];
     let steps: Vec<_> = first.iter().map(|(p, c)| (*p, c.as_str())).collect();
     let b = boot_typing(kernel, syms, &append, devices, &[], &steps)?;
-    ktest::parse(b.output.split(console::PROMPT).next().unwrap_or_default()).check()?;
+    b.tests(b.output.split(console::PROMPT).next().unwrap_or_default())?;
     let ex = console::exchanges(&b.output);
     let out = |i: usize| ex.get(i).map_or("", |e| e.output);
     if ex.len() < 3 || !out(0).is_empty() || !out(1).contains("every disk synced") {
@@ -747,7 +779,7 @@ fn ext2_persistence_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let second = ["cat /mnt/persist.txt\r", "mount\r", "reboot\r"];
     let steps: Vec<_> = second.iter().map(|c| (console::PROMPT, *c)).collect();
     let b = boot_typing(kernel, syms, &append, devices, &[], &steps)?;
-    ktest::parse(b.output.split(console::PROMPT).next().unwrap_or_default()).check()?;
+    b.tests(b.output.split(console::PROMPT).next().unwrap_or_default())?;
     let ex = console::exchanges(&b.output);
     let out = |i: usize| ex.get(i).map_or("", |e| e.output);
     if out(0) != format!("{TEXT}\n") {
@@ -787,11 +819,10 @@ fn boot_tests() -> Result {
             append = format!("{append} {}", initramfs::TEST_INITRD_FLAG);
         }
         let b = boot_on(cpu, initrd, &kernel, &syms, memory, &append, devices)?;
-        let report = ktest::parse(&b.output);
-        if let Some(s) = report.summary {
+        if let Some(s) = ktest::parse(&b.output).summary {
             eprintln!("==> kernel tests: {} passed, {} failed, {} filtered out", s.passed, s.failed, s.filtered_out);
         }
-        report.check()?;
+        b.tests(&b.output)?;
         match b.status {
             Some(QEMU_SUCCESS) if b.output.contains(PASS_MARKER) => {}
             Some(s) => return Err(format!("self-test boot ({memory}) exited with status {s}")),
@@ -957,6 +988,20 @@ fn boot_tests() -> Result {
     if !b.output.contains("kernel stack overflow: hit the guard page below the boot stack") {
         return Err("stack overflow was not attributed to the boot stack's guard page".into());
     }
+    eprintln!("==> boot test: a kernel thread's stack overflow hits its guard and is reported with the thread's name");
+    let flag = "poly.selftest.thread_stack_overflow";
+    let b = expect_fault(&kernel, &syms, flag, "CPU exception 8 (double fault)")?;
+    if !b.output.contains("kernel stack overflow in thread overflow (slot ") {
+        return Err("a thread stack overflow was not attributed to the thread's guard".into());
+    }
+    let recursed = b
+        .output
+        .lines()
+        .filter_map(symbols::parse_frame)
+        .any(|(_, _, s)| s.starts_with("poly_kernel::selftest::recurse+"));
+    if !recursed {
+        return Err("the thread stack overflow's backtrace does not show the recursion".into());
+    }
 
     // `selftest::fails_on_request` fails or panics when asked to.
     let only = "poly.qemu_exit poly.test=selftest::fails_on_request";
@@ -1046,7 +1091,7 @@ fn screenshot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let append = format!("poly.test=display {TEST_DISPLAY_FLAG} poly.display={w}x{h} poly.terminal=off");
     let shot = Screenshot { marker: PASS_MARKER, file: &file };
     let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &[], Some(shot), |_| {})?;
-    ktest::parse(&b.output).check()?;
+    b.tests(&b.output)?;
     let got = screen::Image::read_ppm(&file)?;
     let want = screen::boot_screen(w, h, &kernel_version()?);
     screen::compare(&got, &want).map_err(|e| {

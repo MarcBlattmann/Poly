@@ -409,21 +409,39 @@ kernel_test! {
 kernel_test! {
     fn ring3_is_preempted_by_the_timer() -> TestResult {
         // The program never makes a system call until it sees the flag: the
-        // timer has to take the CPU from ring 3 for this thread to run on.
+        // timer has to take the CPU from ring 3 for this thread to run on,
+        // again and again until 20 ticks have passed. Counted in ticks, not
+        // clock time: an emulator the host deschedules merges the ticks that
+        // came due meanwhile, so 30 ms of clock time can hold far fewer than
+        // 30 ticks. A tick that stops in ring 3 (interrupts off there, no
+        // EOI) leaves nothing to end the sleep below, and the boot times
+        // out; one that slows to a trickle misses the generous deadline.
+        const TICKS: u64 = 20;
+        const DEADLINE_NS: u64 = 5 * time::NANOS_PER_SEC;
         // Both share one CPU, which the spinner must be preempted on.
         let pin = thread::pin_current();
         let space = new_space()?;
         let t = start(&space, Program::Spin, [DATA, 0, 0])?;
         thread::set_affinity(t, thread::CpuSet::one(pin.cpu())).map_err(|_| "could not pin the spinner")?;
-        let ticks = time::ticks();
-        thread::sleep(Duration::from_millis(30));
-        if time::ticks() < ticks + 20 {
+        let (t0, k0) = (time::now_ns(), time::ticks());
+        let mut kept_ticking = true;
+        while time::ticks() < k0 + TICKS {
+            if time::now_ns() - t0 > DEADLINE_NS {
+                kept_ticking = false;
+                break;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        let runnable = thread::state(t) == Some(State::Runnable);
+        // Stop the spinner whatever happened, so a failure does not leave it
+        // taking turns for the rest of the tests.
+        write_u64(&space, DATA, 0xd0e)?;
+        if !kept_ticking {
             return Err("the tick stopped while a thread ran in ring 3");
         }
-        if thread::state(t) != Some(State::Runnable) {
+        if !runnable {
             return Err("the spinning thread is not runnable");
         }
-        write_u64(&space, DATA, 0xd0e)?;
         if thread::join(t) != Ok(0xd0e) {
             return Err("the spinning thread did not see the flag");
         }

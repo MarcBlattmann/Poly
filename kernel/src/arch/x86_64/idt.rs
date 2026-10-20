@@ -479,7 +479,10 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
             // A double fault is usually a page fault that could not be
             // delivered, so CR2 still says where that one hit.
             let cr2 = if v == PAGE_FAULT || v == DOUBLE_FAULT { super::cpu::read_cr2() } else { 0 };
-            let overflow = StackOverflow([cr2, frame.rsp].into_iter().find_map(super::paging::stack_guard_hit));
+            let overflow = StackOverflow([cr2, frame.rsp].into_iter().find_map(|addr| {
+                let fixed = super::paging::stack_guard_hit(addr).map(Guard::Fixed);
+                fixed.or_else(|| crate::thread::stack_guard_hit(addr).map(Guard::Thread))
+            }));
             super::backtrace::set_fault_origin(frame.rip, frame.rbp);
             panic!(
                 "CPU exception {v} ({name}), error {:#x}, rip {:#x}, rsp {:#x}, cr2 {cr2:#x}{overflow}\n{frame:#x?}",
@@ -489,13 +492,27 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
     }
 }
 
-/// Names the stack whose guard page a fault hit, if any.
-struct StackOverflow(Option<&'static str>);
+/// A stack guard a fault hit.
+enum Guard {
+    /// The guard page below one of the stacks in the kernel image (boot,
+    /// double fault, NMI), by name.
+    Fixed(&'static str),
+    /// The guard below a kernel thread's stack.
+    Thread(crate::thread::Overflowed),
+}
+
+/// Names the stack whose guard a fault hit, if any.
+struct StackOverflow(Option<Guard>);
 
 impl core::fmt::Display for StackOverflow {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self.0 {
-            Some(stack) => write!(f, "\nkernel stack overflow: hit the guard page below the {stack} stack"),
+        match &self.0 {
+            Some(Guard::Fixed(stack)) => {
+                write!(f, "\nkernel stack overflow: hit the guard page below the {stack} stack")
+            }
+            Some(Guard::Thread(thread)) => {
+                write!(f, "\nkernel stack overflow in thread {thread}: hit the guard below its stack")
+            }
             None => Ok(()),
         }
     }

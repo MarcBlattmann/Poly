@@ -90,9 +90,17 @@ fn drive(rx: &mpsc::Receiver<String>, qmp: &Path, monitor: &Path, file: &Path, v
     let deadline = Instant::now() + BOOT_TIMEOUT;
     let mut log = String::new();
     loop {
-        let line = rx
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .map_err(|_| format!("the kernel never printed \"{STARTED}\""))?;
+        let line = rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).map_err(|e| {
+            let last = ktest::last_line(&log);
+            match e {
+                mpsc::RecvTimeoutError::Timeout => {
+                    format!("timed out after {} s without \"{STARTED}\" (last line: {last:?})", BOOT_TIMEOUT.as_secs())
+                }
+                mpsc::RecvTimeoutError::Disconnected => ktest::parse(&log).check().err().unwrap_or_else(|| {
+                    format!("QEMU exited before the kernel printed \"{STARTED}\" (last line: {last:?})")
+                }),
+            }
+        })?;
         log.push_str(&line);
         log.push('\n');
         if line.contains("POLY-SELFTEST: FAIL") || line.contains("KERNEL PANIC") {

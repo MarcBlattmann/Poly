@@ -13,14 +13,17 @@
 //! | `0x0000_0000_0000_0000` – `0x0000_7fff_ffff_ffff` | 128 TiB | lower half: empty here; each user address space has its own (`addrspace.rs`) |
 //! | [`DIRECT_MAP_BASE`] + phys | up to 64 TiB | direct map: every region of the memory map, read-write, no-execute |
 //! | [`MMIO_BASE`] | 512 GiB | device memory from [`map_mmio`] (uncached) and [`map_mmio_wc`] (write-combining), no-execute |
+//! | [`THREAD_STACKS_BASE`] | 2 MiB | kernel thread stacks from [`map_thread_stack`], read-write, no-execute, each above unmapped guard pages |
 //! | [`KERNEL_VMA`] + phys | image | kernel image, per-section permissions (see `kernel/linker.ld`) |
 //!
 //! Every kernel mapping is global (CR4.PGE, when the CPU has it), so it
 //! survives the CR3 switches between per-process address spaces. Those copy
 //! the kernel half of this PML4 (slots 256-511) when they are created, so
 //! every PML4 entry the kernel will ever use is made here, at boot, and
-//! never changes afterwards: the direct map's, the kernel image's, and an
-//! empty PDPT for the MMIO window, which [`map_mmio`] fills later.
+//! never changes afterwards: the direct map's, the kernel image's, an empty
+//! PDPT for the MMIO window, which [`map_mmio`] fills later, and the tables
+//! of the thread stack area down to its one page table, whose entries
+//! [`map_thread_stack`] and [`unmap_thread_stack`] set and clear.
 //!
 //! The direct map covers the regions of the memory map, not the holes between
 //! them (see [`poly_mem::DirectMap`]), so [`phys_to_virt`] answers `None` for a
@@ -59,6 +62,9 @@
 //! # Locking
 //!
 //! The kernel page tables are behind a spinlock; take it before [`FRAMES`].
+//! The entries of the thread stack area's page table are not: each thread
+//! slot's stack pages belong to that slot, and the scheduler maps and
+//! unmaps them under its own lock, with no allocation (the tables exist).
 
 use super::{BOOT_MAPPED_PHYS, KERNEL_VMA, cpu, gdt};
 use crate::frames::FRAMES;
@@ -82,6 +88,15 @@ pub const MMIO_BASE: u64 = 0xffff_c000_0000_0000;
 
 /// Size of the MMIO window: one PML4 slot.
 pub const MMIO_SIZE: u64 = 512 << 30;
+
+/// Start of the kernel thread stack area (PML4 slot 385), which
+/// [`map_thread_stack`] fills: `thread::STACKS` lays the stacks out in it,
+/// each above unmapped guard pages (ADR 0050).
+pub const THREAD_STACKS_BASE: u64 = 0xffff_c080_0000_0000;
+
+/// Size of the thread stack area: what one page table maps, so its tables
+/// are made once at boot and the area never needs another one.
+pub const THREAD_STACKS_SIZE: u64 = (ENTRIES as u64) * PAGE_SIZE;
 
 /// PCD | PWT: uncached (UC): PAT entry 3, which is UC at power-on (SDM
 /// Vol. 3A §11.12.3, Table 11-11) and which [`init`] leaves alone.
@@ -247,9 +262,13 @@ pub fn phys_range_to_virt(phys: u64, len: u64) -> Option<u64> {
 
 /// The physical address behind `[virt, virt + len)` if all of it lies in
 /// the direct map, which maps physical memory linearly, so the range is
-/// physically contiguous too. `None` for anything else (the kernel image,
-/// MMIO, holes in the memory map) and before the direct map is in use.
+/// physically contiguous too, or on one thread stack, whose pages are
+/// mapped in order. `None` for anything else (the kernel image, MMIO,
+/// holes in the memory map) and before the direct map is in use.
 pub fn virt_range_to_phys(virt: u64, len: u64) -> Option<u64> {
+    if (THREAD_STACKS_BASE..THREAD_STACKS_BASE + THREAD_STACKS_SIZE).contains(&virt) {
+        return stack_range_to_phys(virt, len);
+    }
     let map = DIRECT_MAP.get()?;
     let phys = virt.checked_sub(DIRECT_MAP_BASE).filter(|&p| p < DIRECT_MAP_SIZE)?;
     map.covers(phys, len).then_some(phys)
@@ -387,6 +406,88 @@ pub(super) unsafe fn init_ap() {
 /// PML4 slot of the MMIO window.
 const MMIO_SLOT: usize = ((MMIO_BASE >> 39) & 0x1ff) as usize;
 
+/// Physical address of the page table that maps the thread stack area
+/// ([`THREAD_STACKS_BASE`]); 0 before [`init`].
+static STACKS_PT: AtomicU64 = AtomicU64::new(0);
+
+const _: () =
+    assert!(THREAD_STACKS_BASE.is_multiple_of(THREAD_STACKS_SIZE), "the stack area needs a page table of its own");
+const _: () = assert!(THREAD_STACKS_BASE >= MMIO_BASE + MMIO_SIZE && THREAD_STACKS_BASE < KERNEL_VMA);
+
+/// The stack area's page-table entry indices for `[virt, virt + len)`, if
+/// that is whole pages inside the area and the area is set up.
+fn stack_pages(virt: u64, len: u64) -> Option<(u64, core::ops::Range<usize>)> {
+    let pt = STACKS_PT.load(Ordering::Acquire);
+    let offset = virt.checked_sub(THREAD_STACKS_BASE)?;
+    let end = offset.checked_add(len)?;
+    let whole = offset.is_multiple_of(PAGE_SIZE) && len.is_multiple_of(PAGE_SIZE);
+    (pt != 0 && whole && end <= THREAD_STACKS_SIZE)
+        .then_some((pt, (offset / PAGE_SIZE) as usize..(end / PAGE_SIZE) as usize))
+}
+
+/// Map the `len` bytes of physical memory at `phys` (whole frames, which
+/// must be RAM) at `virt` in the thread stack area: read-write, no-execute.
+///
+/// # Safety
+/// The pages at `[virt, virt + len)` must be unmapped and owned by the
+/// caller: no other code maps or unmaps them meanwhile (`thread` gives each
+/// thread slot its own part of the area, under its scheduler lock). The
+/// frames must stay allocated until [`unmap_thread_stack`].
+pub unsafe fn map_thread_stack(virt: u64, phys: u64, len: u64) {
+    let (pt, pages) = stack_pages(virt, len).expect("thread stack outside the stack area");
+    assert!(phys.is_multiple_of(PAGE_SIZE), "thread stack frames not page-aligned");
+    let flags = fix(PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::GLOBAL | PageFlags::NO_EXECUTE);
+    let first = pages.start;
+    for i in pages {
+        let page = virt + (i - first) as u64 * PAGE_SIZE;
+        let frame = phys + (i - first) as u64 * PAGE_SIZE;
+        assert_eq!(KernelPhysMemory.read_entry(pt, i), 0, "thread stack page {page:#x} is mapped already");
+        KernelPhysMemory.write_entry(pt, i, frame | flags.bits());
+        // Not needed for a page that was not present, which the TLB does
+        // not cache (SDM Vol. 3A §4.10.2.3); cheap insurance.
+        cpu::invlpg(page);
+    }
+}
+
+/// Unmap `[virt, virt + len)` in the thread stack area, which
+/// [`map_thread_stack`] mapped; its frames can be freed afterwards.
+///
+/// # Safety
+/// The caller owns the pages, as for [`map_thread_stack`], and nothing uses
+/// them any more (the thread that ran on the stack has exited and been
+/// switched away from). Other CPUs, once they run kernel code, will need a
+/// TLB shootdown here.
+pub unsafe fn unmap_thread_stack(virt: u64, len: u64) {
+    let (pt, pages) = stack_pages(virt, len).expect("thread stack outside the stack area");
+    let first = pages.start;
+    for i in pages {
+        KernelPhysMemory.write_entry(pt, i, 0);
+        // The mapping was global: a CR3 switch would not drop it.
+        cpu::invlpg(virt + (i - first) as u64 * PAGE_SIZE);
+    }
+    // Nor on the other CPUs, any of which may have run on the stack: they
+    // must drop it before its frames are reused.
+    let mut flush = super::tlb::Flush::None;
+    flush.add_range(virt, virt + len);
+    super::tlb::shoot(super::smp::online_cpus(), super::tlb::Request { space: 0, flush });
+}
+
+/// The physical address behind `[virt, virt + len)` if it lies in the
+/// thread stack area, every page of it is mapped, and the pages are
+/// physically contiguous (each stack is one buddy block, mapped in order).
+fn stack_range_to_phys(virt: u64, len: u64) -> Option<u64> {
+    let start = virt & !(PAGE_SIZE - 1);
+    let end = align_up(virt.checked_add(len.max(1))?, PAGE_SIZE);
+    let (pt, pages) = stack_pages(start, end - start)?;
+    let frame = |i: usize| {
+        let entry = KernelPhysMemory.read_entry(pt, i);
+        (entry & PageFlags::PRESENT.bits() != 0).then_some(entry & poly_paging::ADDR_MASK)
+    };
+    let base = frame(pages.start)?;
+    let first = pages.start;
+    pages.into_iter().all(|i| frame(i) == Some(base + (i - first) as u64 * PAGE_SIZE)).then_some(base + (virt - start))
+}
+
 /// How `poly-paging` links a table it creates (its intermediate entry
 /// policy: present and writable, the rest left to the leaves).
 const TABLE_ENTRY_FLAGS: PageFlags = PageFlags::PRESENT.union(PageFlags::WRITABLE);
@@ -432,6 +533,17 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     tables.memory_mut().zero_table(pdpt);
     let root = tables.root();
     tables.memory_mut().write_entry(root, MMIO_SLOT, pdpt | TABLE_ENTRY_FLAGS.bits());
+    // The thread stack area's PDPT, page directory and page table, empty.
+    let mut link = |table: u64, index: usize| {
+        let next = early.allocate_frame().expect("no low memory for the kernel page tables");
+        tables.memory_mut().zero_table(next);
+        tables.memory_mut().write_entry(table, index, next | TABLE_ENTRY_FLAGS.bits());
+        next
+    };
+    let index = |level: u32| ((THREAD_STACKS_BASE >> (12 + 9 * level)) & 0x1ff) as usize;
+    let stacks_pdpt = link(root, index(3));
+    let stacks_pd = link(stacks_pdpt, index(2));
+    let stacks_pt = link(stacks_pd, index(1));
 
     let mapped: u64 = direct.spans().iter().map(Region::len).sum();
     let (spans, end) = (direct.spans().len(), direct.end());
@@ -444,6 +556,7 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     // map exactly `direct` at DIRECT_MAP_BASE.
     unsafe { DIRECT_MAP.activate(direct) };
     KERNEL_ROOT.store(tables.root(), Ordering::Release);
+    STACKS_PT.store(stacks_pt, Ordering::Release);
     if features.pge {
         // SAFETY: CPUID says the CPU has global pages; enabling them changes
         // no translation.
@@ -621,6 +734,63 @@ crate::kernel_test! {
             if alias.flags.contains(PageFlags::WRITABLE) {
                 return Err("direct-map alias of the kernel text or rodata is writable");
             }
+        }
+        Ok(())
+    }
+}
+
+/// Exit codes of `check_own_stack`.
+const STACK_OK: usize = 0;
+const STACK_NOT_IN_SLOT: usize = 1;
+const STACK_BAD_MAPPING: usize = 2;
+const STACK_GUARD_MAPPED: usize = 3;
+const STACK_NO_BUS_ADDRESS: usize = 4;
+
+/// A thread checks its own stack: in its slot of `thread::STACKS`, mapped
+/// read-write and no-execute above an unmapped guard, and usable for DMA.
+fn check_own_stack(_: usize) -> usize {
+    let local = core::hint::black_box([0u8; 64]);
+    let addr = local.as_ptr() as u64;
+    let slot = crate::thread::current().slot();
+    if crate::thread::STACKS.stack_holding(addr, 64) != Some(slot) {
+        return STACK_NOT_IN_SLOT;
+    }
+    let (stack, guard) = (crate::thread::STACKS.stack(slot).unwrap(), crate::thread::STACKS.guard(slot).unwrap());
+    let no_nx = !NX.load(Ordering::Relaxed);
+    for page in stack.clone().step_by(PAGE_SIZE as usize) {
+        match translate(page) {
+            Ok(t) if t.flags.contains(PageFlags::WRITABLE) && (no_nx || t.flags.contains(PageFlags::NO_EXECUTE)) => {}
+            _ => return STACK_BAD_MAPPING,
+        }
+    }
+    if guard.step_by(PAGE_SIZE as usize).any(|page| translate(page).is_ok()) {
+        return STACK_GUARD_MAPPED;
+    }
+    let phys = translate(addr).ok().map(|t| t.phys);
+    // A buffer on the stack reaches a device; one that runs into the guard
+    // does not.
+    if virt_range_to_phys(addr, 64) != phys || virt_range_to_phys(stack.start - 8, 16).is_some() {
+        return STACK_NO_BUS_ADDRESS;
+    }
+    STACK_OK
+}
+
+crate::kernel_test! {
+    fn thread_stacks_sit_above_unmapped_guards() -> TestResult {
+        let t = crate::thread::spawn(check_own_stack, 0).map_err(|_| "spawn failed")?;
+        let slot = t.slot();
+        match crate::thread::join(t) {
+            Ok(STACK_OK) => {}
+            Ok(STACK_NOT_IN_SLOT) => return Err("a thread's stack is not in its slot of the stack area"),
+            Ok(STACK_BAD_MAPPING) => return Err("a thread stack page is not mapped read-write, no-execute"),
+            Ok(STACK_GUARD_MAPPED) => return Err("the guard below a thread stack is mapped"),
+            Ok(_) => return Err("a buffer on a thread stack got the wrong bus address"),
+            Err(_) => return Err("join failed"),
+        }
+        // Joined, so reaped: the stack is unmapped and its frames are free.
+        let stack = crate::thread::STACKS.stack(slot).ok_or("no stack slot")?;
+        if stack.step_by(PAGE_SIZE as usize).any(|page| translate(page).is_ok()) {
+            return Err("a reaped thread's stack is still mapped");
         }
         Ok(())
     }

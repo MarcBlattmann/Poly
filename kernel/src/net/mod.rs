@@ -30,6 +30,11 @@
 //!   attempt returns the value it saw ([`call_and_generation`]), so a
 //!   waiter misses no change made after its attempt and sleeps through
 //!   polls that changed nothing.
+//! - **Socket files** ([`file::InetSocket`], ADR 0048) are the sockets of
+//!   user space: open files whose wait queues are woken per socket. After
+//!   each of those polls, with the interface locked, [`notify`] asks the
+//!   stack which sockets changed (`Stack::take_changed`) and, once the
+//!   lock is released, wakes only their queues.
 //! - **Configuration** comes from the command line (`poly.net=`, parsed by
 //!   `poly_net::setting`): `poly.net=10.0.2.15/24,gw=10.0.2.2,dns=10.0.2.3`,
 //!   `poly.net=qemu` for exactly that (QEMU's user networking), or
@@ -39,6 +44,8 @@
 //!   port choice, RFC 6528) and for a MAC address when the device has none
 //!   comes from `arch::user::random_bytes` (RDRAND, or the TSC mixed).
 
+pub mod file;
+pub mod notify;
 pub mod socket;
 mod tests;
 mod virtio;
@@ -286,7 +293,7 @@ pub fn call_and_wake<R>(op: impl FnOnce(&mut Stack) -> R) -> R {
 }
 
 fn run_call<R>(op: impl FnOnce(&mut Stack) -> R, changes: bool) -> (R, u64) {
-    let (r, next, seen, moved) = {
+    let (r, next, seen, moved, sockets) = {
         let mut guard = IFACE.lock();
         let iface = guard.as_mut().expect("net::init has not run");
         let r = op(&mut iface.stack);
@@ -295,11 +302,12 @@ fn run_call<R>(op: impl FnOnce(&mut Stack) -> R, changes: bool) -> (R, u64) {
         if moved || changes {
             mark_changed();
         }
-        (r, next, seen, moved || changes)
+        (r, next, seen, moved || changes, notify::collect(&mut iface.stack))
     };
     if moved {
         wake_waiters();
     }
+    notify::wake(sockets);
     let planned = PLANNED.load(SeqCst);
     if planned == 0 || next.is_some_and(|t| instant_ns(t) < planned) {
         kick();
@@ -339,7 +347,7 @@ fn network_thread(_: usize) -> usize {
     loop {
         PLANNED.store(0, SeqCst);
         let seen = WAKE.load(SeqCst);
-        let (next, link_up, dev_failed) = {
+        let (next, link_up, dev_failed, sockets) = {
             let mut guard = IFACE.lock();
             let Some(iface) = guard.as_mut() else { return 1 };
             let (mut next, mut moved) = iface.poll();
@@ -357,11 +365,12 @@ fn network_thread(_: usize) -> usize {
             if changed {
                 mark_changed();
             }
-            (next, link_up, iface.dev.failed())
+            (next, link_up, iface.dev.failed(), notify::collect(&mut iface.stack))
         };
         if changed {
             wake_waiters();
         }
+        notify::wake(sockets);
         let now_ns = time::now_ns();
         if link.is_some_and(|l| l != link_up) {
             kprintln!("net: {NAME}: link {}", if link_up { "up" } else { "down" });

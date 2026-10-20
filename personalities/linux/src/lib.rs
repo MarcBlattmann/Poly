@@ -41,6 +41,8 @@
 //! - [`fileio`]: what pipes, `poll` / `select`, `epoll` and the event files
 //!   (`eventfd`, `timerfd`, `signalfd`) need from the kernel (ADR 0042).
 //! - [`time`]: time structures and process timers (ADR 0044).
+//! - [`net`]: what the socket calls need from the kernel
+//!   ([`net::LinuxNet`]), socket structures and `NETLINK_ROUTE` (ADR 0048).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -59,6 +61,7 @@ pub mod fileio;
 pub mod fs;
 pub mod futex;
 pub mod kernel;
+pub mod net;
 mod numbers;
 pub mod rlimit;
 pub mod signal;

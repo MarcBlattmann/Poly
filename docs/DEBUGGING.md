@@ -416,9 +416,26 @@ crate::kernel_test! {
 Write `fn name(env: &TestEnv) -> TestResult` to get the boot info and memory
 map. Put `#[boot_only]` first (before any doc comment) for a test that checks
 boot-time state; the shell's `test` command then leaves it out. `cargo xtask test` fails if any test fails, if the summary line is missing
-(the kernel crashed during the tests), or if the counts do not add up. Only
-put tests here that need the real machine; pure logic belongs in a crate under
-`crates/` with ordinary `#[test]`s.
+(the kernel crashed during the tests), or if the counts do not add up. A boot
+still running after 60 s is killed and reported as `timed out after 60 s
+during the kernel tests (last line: "...")`: the kernel hung (or crawled)
+after printing that line, which is different from `kernel test summary line
+missing: the kernel stopped during the tests`, where QEMU exited early (a
+triple fault, say). Only put tests here that need the real machine; pure
+logic belongs in a crate under `crates/` with ordinary `#[test]`s.
+
+Tests that involve time must hold on a slow, loaded host too (CI runners,
+many QEMUs at once). There QEMU's clocks (HPET, TSC) follow the host's
+wall-clock time while the emulated CPU gets only part of a host CPU, and
+timer ticks that come due while the vCPU is held off merge into one: 30 ms
+of clock time can hold three ticks, and a thread may get no turn for tens
+of milliseconds. So count in ticks rather than clock time, check order and
+eventual progress rather than "within N ms", bound waits with a generous
+deadline that ends as soon as the progress is seen, and keep the failure the
+test is about detectable (a tick that stops altogether must still fail or
+hang). To check a change, boot the CI configuration many times in parallel
+next to a few busy loops (`while :; do :; done`) and count failures per
+test.
 
 ## Panic backtraces
 
@@ -467,6 +484,18 @@ double fault on its own stack, and the report says which stack overflowed:
 CPU exception 8 (double fault), error 0x0, rip 0xffffffff8010f07b, rsp 0xffffffff80127fb0, cr2 0xffffffff80127fa8
 kernel stack overflow: hit the guard page below the boot stack
 ```
+
+Kernel threads' stacks (16 KiB each) lie in their own area at
+`0xffff_c080_0000_0000`, each above 16 KiB that are never mapped (ADR 0050),
+so an overflow there names the thread (and its table slot):
+
+```text
+CPU exception 8 (double fault), error 0x0, rip 0xffffffff801d519b, rsp 0xffffc08000043f80, cr2 0xffffc08000043f78
+kernel stack overflow in thread overflow (slot 8): hit the guard below its stack
+```
+
+`poly.selftest.stack_overflow` and `poly.selftest.thread_stack_overflow`
+provoke the two on purpose (the boot tests do).
 
 Symbols come from the ELF that was built last, so symbolise before you rebuild.
 For file and line numbers, use `addr2line -f -C -i -e
@@ -908,6 +937,50 @@ in one:
 The kernel tests run with `poly.test=linux::fileio_tests`; the host tests
 are `cargo test -p poly-vfs objects` and `cargo test -p
 poly-personality-linux fileio`.
+
+## Sockets
+
+Sockets (ADR 0048) are open files on anonymous `S_IFSOCK` inodes: a
+thread blocked in `accept`, `recv`, `connect` or a
+blocking `read` / `write` on one is parked on that socket's `WaitQueue`,
+like a pipe reader (see the previous section). What to check when one
+hangs:
+
+- An Internet socket's queue is woken by `net::notify` after a poll of
+  the stack found the socket changed (`Stack::take_changed`). The socket
+  file must be watched: `net::notify::watched()` counts them (every
+  `InetSocket` registers itself, and unregisters when dropped). A change
+  the stack does not see as one (readiness and queued input the same
+  as before) wakes nobody; every waiter retries after a wake-up anyway.
+- `ifconfig` shows whether packets moved at all; loopback traffic is the
+  stack's `loop` count.
+- Unix sockets wake each other directly (a send notifies the receiver, a
+  receive the sender or the blocked datagram senders, `accept` the
+  connectors waiting for a backlog slot).
+- Descriptors in flight (`SCM_RIGHTS`) live in receive queues until
+  received or dropped with the queue; `linux::net::in_flight()` counts
+  them, and the collector for unreachable cycles runs after every
+  `close` while any are in flight.
+- A call a signal ended returns `RESTART_IF_SA_RESTART` inside the
+  kernel unless the socket has a timeout (`SO_RCVTIMEO` for accept and
+  receives, `SO_SNDTIMEO` for connect and sends), as for pipes.
+
+`/bin/socket-test` (`tools/xtask/programs/socket_test.rs`, in the test
+initramfs) prints one line per check (`socket-test: ok <name>` or
+`socket-test: FAIL <name>: <value>`). Run it from the shell (`run
+/bin/socket-test` with the test initramfs), or as the first process:
+
+```sh
+cargo xtask pipeline initramfs target/xtask-programs/socket-test --out target/socket-test.cpio
+cargo xtask run --headless --no-disk --initrd=target/socket-test.cpio poly.qemu_exit poly.init=/test-binary
+```
+
+With `/etc/socket-test.conf` (`<address> <port>`) in the image it also
+talks to TCP and UDP echo servers there; the network boot test of `cargo
+xtask test` does that with the host's servers at 10.0.2.2. The kernel
+tests run with `poly.test=socket_tests`; the host tests are `cargo test
+-p poly-unix`, `cargo test -p poly-net syscalls` and `cargo test -p
+poly-personality-linux socket` / `netlink`.
 
 ## Terminals
 

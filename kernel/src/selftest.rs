@@ -212,12 +212,13 @@ kernel_test! {
 /// that the fault is reported as expected. Each trigger announces the address
 /// it is about to touch, so the runner can compare it with the fault report.
 pub fn trigger_requested_fault(boot: &BootInfo) {
-    let triggers: [(&str, fn()); 5] = [
+    let triggers: [(&str, fn()); 6] = [
         ("poly.selftest.page_fault", trigger_page_fault),
         ("poly.selftest.write_text", trigger_write_text),
         ("poly.selftest.exec_stack", trigger_exec_stack),
         ("poly.selftest.exec_data", trigger_exec_data),
         ("poly.selftest.stack_overflow", trigger_stack_overflow),
+        ("poly.selftest.thread_stack_overflow", trigger_thread_stack_overflow),
     ];
     for (flag, trigger) in triggers {
         if boot.has_flag(flag) {
@@ -285,6 +286,17 @@ fn trigger_stack_overflow() {
     crate::kprintln!("selftest: overflowing the boot stack on purpose");
     let depth = recurse(0);
     crate::kprintln!("unexpectedly returned after {depth} calls");
+}
+
+/// `poly.selftest.thread_stack_overflow`: the same on a kernel thread's
+/// stack, whose guard lies below it in the thread stack area; the report
+/// names the thread ("overflow").
+#[inline(never)]
+fn trigger_thread_stack_overflow() {
+    crate::kprintln!("selftest: overflowing a kernel thread's stack on purpose");
+    let t = crate::thread::spawn_named("overflow", |_| recurse(0) as usize, 0).expect("spawning the overflow thread");
+    let depth = crate::thread::join(t);
+    crate::kprintln!("unexpectedly returned after {depth:?} calls");
 }
 
 /// Uses stack until something stops it; `black_box` keeps each frame alive

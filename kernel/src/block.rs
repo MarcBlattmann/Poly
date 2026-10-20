@@ -1047,6 +1047,10 @@ struct ReadJob {
     disk: &'static Disk,
     /// First block of its range of 60.
     base: u64,
+    /// For an interrupt-driven disk, the disk's sleep count when the test
+    /// started: the reader goes on past its four rounds until a waiter has
+    /// slept since (or `READ_BUDGET_NS` has passed).
+    sleeps_before: Option<u64>,
 }
 
 /// Thread body: read the job's range a few times, through the cache in
@@ -1061,7 +1065,12 @@ fn read_job(job: usize) -> usize {
     let bs = d.info().block_size as usize;
     let mut wrong = 0;
     let mut buf = vec![0u8; 5 * bs];
-    for round in 0..4 {
+    let deadline = time::now_ns() + READ_BUDGET_NS;
+    let slept = || job.sleeps_before.is_none_or(|before| d.stats().sleeps > before);
+    for round in 0.. {
+        if round >= 4 && (slept() || time::now_ns() > deadline) {
+            break;
+        }
         for first in (job.base..job.base + 60).step_by(5) {
             if d.read(first, &mut buf).is_err() || d.read_uncached(first + 1, &mut buf[..3 * bs]).is_err() {
                 return usize::MAX;
@@ -1085,8 +1094,11 @@ kernel_test! {
         for d in test_disks(env)? {
             // Overlapping ranges, so the threads share cached blocks and
             // queue requests for the same blocks.
-            let jobs = [ReadJob { disk: d, base: 200 }, ReadJob { disk: d, base: 230 }];
+            // A busy host can finish every request before its waiter gets to
+            // sleep; the readers then read on until one did.
             let before = d.stats();
+            let sleeps_before = (d.waiting() != Waiting::Polled).then_some(before.sleeps);
+            let jobs = [ReadJob { disk: d, base: 200, sleeps_before }, ReadJob { disk: d, base: 230, sleeps_before }];
             let mut ids = Vec::new();
             for job in &jobs {
                 ids.push(thread::spawn(read_job, job as *const ReadJob as usize).map_err(|_| "spawn failed")?);
@@ -1202,7 +1214,13 @@ kernel_test! {
         if progressed < READS_WITH_A_TURN {
             return Err("the CPU-bound thread did not run while the reader waited for the disk");
         }
-        if ticks1 - ticks0 < ms / 4 {
+        // The CPU-bound thread never yields or blocks, so each of its turns
+        // ended with the tick taking the CPU back after a full time slice:
+        // counted in ticks, which a busy host stretches in clock time (it
+        // merges the ticks that came due while it held the emulator off) but
+        // cannot shorten. With the tick stalled there is no way back to the
+        // reader at all, and the boot times out.
+        if ticks1 - ticks0 < progressed as u64 * u64::from(thread::TIME_SLICE_TICKS) {
             return Err("the timer tick stalled during disk reads");
         }
         if d.waiting() != Waiting::Polled && after.sleeps - before.sleeps == 0 {

@@ -169,6 +169,15 @@ pub struct Stats {
     pub reassembly: ReassemblyStats,
 }
 
+/// A socket's boolean options ([`Stack::flags`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SocketFlags {
+    pub reuse_addr: bool,
+    pub keepalive: bool,
+    pub nodelay: bool,
+    pub broadcast: bool,
+}
+
 /// TCP connection details (`TCP_INFO`-like), for diagnostics and tests.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TcpInfo {
@@ -199,6 +208,9 @@ struct Entry {
     domain: Domain,
     reuse_addr: bool,
     sock: Sock,
+    /// Readiness and queued input as [`Stack::take_changed`] last reported
+    /// them.
+    seen: Option<(Readiness, usize)>,
 }
 
 /// Where a packet goes next.
@@ -252,6 +264,10 @@ pub struct Stack {
     icmp_tokens: u64,
     icmp_refill: Instant,
     stats: Stats,
+    /// TTL and TOS of the packet being sent (a socket's own options while
+    /// its output runs).
+    pkt_ttl: Option<u8>,
+    pkt_tos: u8,
     #[cfg(test)]
     pub(crate) isn_override: Option<u32>,
 }
@@ -287,6 +303,8 @@ impl Stack {
             icmp_tokens: u64::from(cfg.icmp_burst) * 1000,
             icmp_refill: Instant::ZERO,
             stats: Stats::default(),
+            pkt_ttl: None,
+            pkt_tos: 0,
             #[cfg(test)]
             isn_override: None,
         }
@@ -1094,7 +1112,8 @@ impl Stack {
                     self.frame_buf = frame;
                     return Err(Errno::EMSGSIZE);
                 }
-                let mut h = ipv4::Ipv4Header::new(s, d, protocol, self.cfg.ttl, payload.len());
+                let mut h = ipv4::Ipv4Header::new(s, d, protocol, self.pkt_ttl.unwrap_or(self.cfg.ttl), payload.len());
+                h.tos = self.pkt_tos;
                 h.dont_fragment = dont_fragment;
                 h.ident = self.ip_ident;
                 self.ip_ident = self.ip_ident.wrapping_add(1);
@@ -1112,7 +1131,7 @@ impl Stack {
                     flow_label: 0,
                     payload_len: payload.len(),
                     next_header: protocol,
-                    hop_limit: self.cfg.ttl,
+                    hop_limit: self.pkt_ttl.unwrap_or(self.cfg.ttl),
                     src: s,
                     dst: d,
                 };
@@ -1213,6 +1232,12 @@ impl Stack {
 
     fn tcp_output<D: NetDevice>(&mut self, dev: &mut D, tcb: &mut Tcb, blocked: &mut bool) {
         tcb.on_timers(self.now);
+        (self.pkt_ttl, self.pkt_tos) = (tcb.ttl, tcb.tos);
+        self.tcp_output_segments(dev, tcb, blocked);
+        (self.pkt_ttl, self.pkt_tos) = (None, 0);
+    }
+
+    fn tcp_output_segments<D: NetDevice>(&mut self, dev: &mut D, tcb: &mut Tcb, blocked: &mut bool) {
         for _ in 0..TCP_BUDGET {
             if !tcb.wants_to_send() || !self.path_ready(tcb.remote.ip()) {
                 break;
@@ -1236,6 +1261,12 @@ impl Stack {
     }
 
     fn dgram_output<D: NetDevice>(&mut self, dev: &mut D, s: &mut DgramSocket, blocked: &mut bool) {
+        (self.pkt_ttl, self.pkt_tos) = (s.ttl, s.tos);
+        self.dgram_output_queue(dev, s, blocked);
+        (self.pkt_ttl, self.pkt_tos) = (None, 0);
+    }
+
+    fn dgram_output_queue<D: NetDevice>(&mut self, dev: &mut D, s: &mut DgramSocket, blocked: &mut bool) {
         while let Some(d) = s.tx.front() {
             if !self.path_ready(d.addr.ip()) {
                 break;
@@ -1374,6 +1405,7 @@ impl Stack {
         }
         let Some(Entry { sock: Sock::Tcp(l), domain, .. }) = self.sockets[lidx].as_ref() else { return };
         let (cfg, nodelay, keepalive, domain) = (l.cfg, l.nodelay, l.keepalive, *domain);
+        let (ttl, tos) = (l.ttl, l.tos);
         // The backlog bounds connections waiting for accept, established or
         // not; half-open ones are bounded separately as well.
         let full = l
@@ -1390,12 +1422,14 @@ impl Stack {
         let mut child = Tcb::from_syn(cfg, nodelay, local, remote, h, iss, self.mss_limit(src), self.now);
         child.parent = Some(lidx);
         child.keepalive = keepalive;
+        (child.ttl, child.tos) = (ttl, tos);
         let Ok(_) = self.insert(Entry {
             generation: 0,
             user: false,
             domain,
             reuse_addr: false,
             sock: Sock::Tcp(Box::new(child)),
+            seen: None,
         }) else {
             return;
         };
@@ -1655,7 +1689,7 @@ impl Stack {
             Protocol::Tcp => Sock::Tcp(Box::new(Tcb::new(self.cfg.tcp, domain.any(0), self.now))),
             _ => Sock::Dgram(DgramSocket::new(p, self.cfg.udp_recv_buffer, self.cfg.udp_send_buffer)),
         };
-        let idx = self.insert(Entry { generation: 0, user: true, domain, reuse_addr: false, sock })?;
+        let idx = self.insert(Entry { generation: 0, user: true, domain, reuse_addr: false, sock, seen: None })?;
         Ok(self.handle_of(idx))
     }
 
@@ -1984,8 +2018,11 @@ impl Stack {
 
     /// Readiness flags of a socket.
     pub fn readiness(&self, h: SocketHandle) -> Result<Readiness, Errno> {
-        let e = self.entry_ref(h)?;
-        Ok(match &e.sock {
+        Ok(Self::readiness_of(self.entry_ref(h)?))
+    }
+
+    fn readiness_of(e: &Entry) -> Readiness {
+        match &e.sock {
             Sock::Tcp(t) => {
                 let mut r = Readiness::default();
                 if t.readable() {
@@ -2006,7 +2043,160 @@ impl Stack {
                 r
             }
             Sock::Dgram(s) => s.readiness(),
+        }
+    }
+
+    /// What [`take_changed`](Self::take_changed) compares: the readiness
+    /// and how much input is queued (bytes, datagrams, connections), so
+    /// that more data arriving on a socket that was readable already
+    /// counts as a change too (edge-triggered waiters need it).
+    fn signature(e: &Entry) -> (Readiness, usize) {
+        let queued = match &e.sock {
+            Sock::Tcp(t) => t.recv_queued() + t.listen.as_ref().map_or(0, |l| l.ready.len()),
+            Sock::Dgram(s) => s.rx_bytes + s.rx.len(),
+        };
+        (Self::readiness_of(e), queued)
+    }
+
+    /// Append to `out` every open socket whose readiness or queued input
+    /// changed since the previous call (or that is new since then), so a
+    /// kernel can wake only the waiters of those sockets. Call it after
+    /// [`poll`](Self::poll) and after socket calls; it costs one look at
+    /// every socket.
+    pub fn take_changed(&mut self, out: &mut Vec<SocketHandle>) {
+        for idx in 0..self.sockets.len() {
+            let Some(e) = self.sockets[idx].as_mut() else { continue };
+            if !e.user {
+                continue;
+            }
+            let sig = Self::signature(e);
+            if e.seen != Some(sig) {
+                e.seen = Some(sig);
+                out.push(self.handle_of(idx));
+            }
+        }
+    }
+
+    /// Bytes a read would return now (`FIONREAD` / `SIOCINQ`): queued
+    /// stream bytes for TCP (`EINVAL` on a listening socket, tcp(7)), the
+    /// size of the next datagram or 0 for datagram sockets (udp(7)).
+    pub fn bytes_readable(&self, h: SocketHandle) -> Result<usize, Errno> {
+        match &self.entry_ref(h)?.sock {
+            Sock::Tcp(t) if t.state == TcpState::Listen => Err(Errno::EINVAL),
+            Sock::Tcp(t) => Ok(t.recv_queued()),
+            Sock::Dgram(s) => Ok(s.rx.front().map_or(0, |d| d.data.len())),
+        }
+    }
+
+    /// Bytes queued for sending and not yet acknowledged (TCP) or not yet
+    /// sent (datagrams): `SIOCOUTQ`.
+    pub fn send_queued(&self, h: SocketHandle) -> Result<usize, Errno> {
+        match &self.entry_ref(h)?.sock {
+            Sock::Tcp(t) if t.state == TcpState::Listen => Err(Errno::EINVAL),
+            Sock::Tcp(t) => Ok(t.send_queued()),
+            Sock::Dgram(s) => Ok(s.tx_bytes),
+        }
+    }
+
+    /// The send and receive buffer sizes, as `(send, recv)`.
+    pub fn buffer_sizes(&self, h: SocketHandle) -> Result<(usize, usize), Errno> {
+        Ok(match &self.entry_ref(h)?.sock {
+            Sock::Tcp(t) => (t.cfg.send_buffer, t.cfg.recv_buffer),
+            Sock::Dgram(s) => (s.tx_cap, s.rx_cap),
         })
+    }
+
+    /// The stack's default TTL / hop limit.
+    pub fn default_ttl(&self) -> u8 {
+        self.cfg.ttl
+    }
+
+    /// `IP_TTL` / `IPV6_UNICAST_HOPS` (`None`: the stack's default) and
+    /// `IP_TOS` of a socket's packets.
+    pub fn set_ip_options(&mut self, h: SocketHandle, ttl: Option<u8>, tos: u8) -> Result<(), Errno> {
+        match &mut self.entry(h)?.sock {
+            Sock::Tcp(t) => (t.ttl, t.tos) = (ttl, tos),
+            Sock::Dgram(s) => (s.ttl, s.tos) = (ttl, tos),
+        }
+        Ok(())
+    }
+
+    /// The socket's TTL (`None`: the default) and TOS.
+    pub fn ip_options(&self, h: SocketHandle) -> Result<(Option<u8>, u8), Errno> {
+        Ok(match &self.entry_ref(h)?.sock {
+            Sock::Tcp(t) => (t.ttl, t.tos),
+            Sock::Dgram(s) => (s.ttl, s.tos),
+        })
+    }
+
+    /// `TCP_KEEPIDLE`, `TCP_KEEPINTVL`, `TCP_KEEPCNT`: the keepalive
+    /// timing of one TCP socket (`None` leaves a value alone). A running
+    /// keepalive timer starts over with the new idle time.
+    pub fn set_keepalive_params(
+        &mut self,
+        h: SocketHandle,
+        idle: Option<Duration>,
+        interval: Option<Duration>,
+        probes: Option<u32>,
+    ) -> Result<(), Errno> {
+        let now = self.now;
+        match &mut self.entry(h)?.sock {
+            Sock::Tcp(t) => {
+                if let Some(v) = idle {
+                    t.cfg.keepalive_idle = v;
+                }
+                if let Some(v) = interval {
+                    t.cfg.keepalive_interval = v;
+                }
+                if let Some(v) = probes {
+                    t.cfg.keepalive_probes = v;
+                }
+                let on = t.keepalive;
+                t.set_keepalive(on, now);
+                Ok(())
+            }
+            Sock::Dgram(_) => Err(Errno::ENOPROTOOPT),
+        }
+    }
+
+    /// The keepalive timing: `(idle, interval, probes)`.
+    pub fn keepalive_params(&self, h: SocketHandle) -> Result<(Duration, Duration, u32), Errno> {
+        match &self.entry_ref(h)?.sock {
+            Sock::Tcp(t) => Ok((t.cfg.keepalive_idle, t.cfg.keepalive_interval, t.cfg.keepalive_probes)),
+            Sock::Dgram(_) => Err(Errno::ENOPROTOOPT),
+        }
+    }
+
+    /// The boolean options: `SO_REUSEADDR`, `SO_KEEPALIVE`, `TCP_NODELAY`,
+    /// `SO_BROADCAST`.
+    pub fn flags(&self, h: SocketHandle) -> Result<SocketFlags, Errno> {
+        let e = self.entry_ref(h)?;
+        Ok(match &e.sock {
+            Sock::Tcp(t) => {
+                SocketFlags { reuse_addr: e.reuse_addr, keepalive: t.keepalive, nodelay: t.nodelay, broadcast: false }
+            }
+            Sock::Dgram(s) => {
+                SocketFlags { reuse_addr: e.reuse_addr, keepalive: false, nodelay: false, broadcast: s.broadcast }
+            }
+        })
+    }
+
+    /// Close with a reset (`SO_LINGER` with a zero timeout, socket(7) and
+    /// RFC 9293 3.10.5 ABORT): a connection sends RST and is gone; other
+    /// sockets close as [`close`](Self::close) does.
+    pub fn abort(&mut self, h: SocketHandle) -> Result<(), Errno> {
+        let idx = h.index as usize;
+        let e = self.entry(h)?;
+        match &mut e.sock {
+            Sock::Tcp(t) if t.listen.is_none() && t.state != TcpState::Closed => {
+                e.user = false;
+                t.orphan = true;
+                t.abort();
+                self.settle(idx);
+                Ok(())
+            }
+            _ => self.close(h),
+        }
     }
 
     /// Take the pending error (`getsockopt(SO_ERROR)`).

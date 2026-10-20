@@ -65,7 +65,7 @@ pub use neighbor::NeighborConfig;
 pub use reassembly::{ReassemblyConfig, ReassemblyStats};
 pub use setting::{Setting, SettingError, StaticIpv4};
 pub use socket::{Domain, Protocol, Readiness, RecvFlags, RecvInfo, Shutdown, SockType, SocketHandle};
-pub use stack::{Config, Ipv4Cidr, Ipv6Cidr, Stack, Stats, TcpInfo};
+pub use stack::{Config, Ipv4Cidr, Ipv6Cidr, SocketFlags, Stack, Stats, TcpInfo};
 pub use tcp::{TcpConfig, TcpState, TcpStats};
 pub use time::Instant;
 pub use wire::ethernet::MacAddr;

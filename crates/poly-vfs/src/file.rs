@@ -514,10 +514,14 @@ impl OpenFile {
     /// until data (or end of file) comes. `EINTR` if the thread is
     /// interrupted first.
     pub fn read_wait(&self, buf: &mut [u8], blocker: &mut dyn Blocker) -> Result<usize> {
+        self.read_wait_until(buf, blocker, Timeout::Never)
+    }
+
+    /// [`read_wait`](Self::read_wait) that gives up with `EAGAIN` at
+    /// `timeout` (a socket's `SO_RCVTIMEO`).
+    pub fn read_wait_until(&self, buf: &mut [u8], blocker: &mut dyn Blocker, timeout: Timeout) -> Result<usize> {
         match self.waits() {
-            Some(queue) => {
-                poll::wait_until_done(queue, PollEvents::READABLE, blocker, Timeout::Never, || self.read(buf))
-            }
+            Some(queue) => poll::wait_until_done(queue, PollEvents::READABLE, blocker, timeout, || self.read(buf)),
             None => self.read(buf),
         }
     }
@@ -528,12 +532,18 @@ impl OpenFile {
     /// Interrupted or failing after some bytes went out, it returns how
     /// many (a partial write); before, the error (`EINTR`, `EPIPE`, ...).
     pub fn write_wait(&self, buf: &[u8], blocker: &mut dyn Blocker) -> Result<usize> {
+        self.write_wait_until(buf, blocker, Timeout::Never)
+    }
+
+    /// [`write_wait`](Self::write_wait) that gives up at `timeout` (a
+    /// socket's `SO_SNDTIMEO`): with the count written so far, or `EAGAIN`
+    /// if nothing was.
+    pub fn write_wait_until(&self, buf: &[u8], blocker: &mut dyn Blocker, timeout: Timeout) -> Result<usize> {
         let Some(queue) = self.waits() else { return self.write(buf) };
         let mut done = 0;
         loop {
-            let result = poll::wait_until_done(queue, PollEvents::WRITABLE, blocker, Timeout::Never, || {
-                self.write(&buf[done..])
-            });
+            let result =
+                poll::wait_until_done(queue, PollEvents::WRITABLE, blocker, timeout, || self.write(&buf[done..]));
             match result {
                 Ok(n) => {
                     done += n;

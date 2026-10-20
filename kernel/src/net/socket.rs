@@ -13,9 +13,10 @@
 //! which fails with `ETIMEDOUT`. Nonblocking callers use [`super::call`]
 //! directly and get the stack's own answers.
 //!
-//! Not here yet, for the socket system calls to add: interruption by
-//! signals (`EINTR`, `ERESTARTSYS`), which needs a wait that a signal can
-//! end, and `SIGPIPE` (the stack's `EPIPE` is passed on unchanged).
+//! These are the kernel's own sockets (the shell, the kernel tests): their
+//! waits cannot be interrupted. User space's sockets are socket files
+//! ([`super::file::InetSocket`], ADR 0048), whose waits a signal ends and
+//! whose `SIGPIPE` the personality raises.
 
 use super::{Domain, Errno, Protocol, Readiness, RecvFlags, RecvInfo, Shutdown, SockType, SocketHandle};
 use super::{call, call_and_generation, call_and_wake, wait_for_change};

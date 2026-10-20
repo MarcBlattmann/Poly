@@ -49,13 +49,41 @@ fn parse_summary(s: &str) -> Option<Summary> {
     Some(Summary { passed: n[0]?, failed: n[1]?, filtered_out: n[2]? })
 }
 
+/// How the boot whose output a [`Report`] comes from ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum End<'a> {
+    /// QEMU exited (or was stopped on purpose) before the boot timeout.
+    Exited,
+    /// QEMU was still running after `secs` seconds and was killed;
+    /// `last_line` is the last line the kernel printed ([`last_line`]).
+    TimedOut { secs: u64, last_line: &'a str },
+}
+
+/// The last non-empty line of `output`, trimmed (empty if there is none).
+pub fn last_line(output: &str) -> &str {
+    output.lines().map(str::trim).rfind(|l| !l.is_empty()).unwrap_or_default()
+}
+
 impl Report {
     /// Ok if the summary is there, agrees with the per-test lines, and no
     /// test failed.
     pub fn check(&self) -> Result<(), String> {
+        self.check_end(End::Exited)
+    }
+
+    /// [`check`](Self::check) for a boot that ended as `end`. Without a
+    /// summary, a boot that ran into the timeout is reported as that (the
+    /// kernel hung or slowed to a crawl; the last line says where), and
+    /// only one that QEMU ended early as a kernel that stopped.
+    pub fn check_end(&self, end: End<'_>) -> Result<(), String> {
         let Some(s) = self.summary else {
             let last = self.passed.last().map_or(String::new(), |t| format!(" (last passing test: {t})"));
-            return Err(format!("kernel test summary line missing: the kernel stopped during the tests{last}"));
+            return Err(match end {
+                End::TimedOut { secs, last_line } => {
+                    format!("timed out after {secs} s during the kernel tests (last line: {last_line:?}){last}")
+                }
+                End::Exited => format!("kernel test summary line missing: the kernel stopped during the tests{last}"),
+            });
         };
         if !self.failed.is_empty() {
             let names: Vec<_> = self.failed.iter().map(|(n, why)| format!("{n} ({why})")).collect();
@@ -115,6 +143,20 @@ POLY-SELFTEST: PASS
         assert_eq!(r.summary, None);
         let err = r.check().unwrap_err();
         assert!(err.contains("summary line missing") && err.contains("a::one"), "{err}");
+    }
+
+    #[test]
+    fn a_timeout_is_reported_as_one() {
+        let log = "test a::one ... ok\nblock: virtio0: still reading  \n\n";
+        let r = parse(log);
+        let err = r.check_end(End::TimedOut { secs: 60, last_line: last_line(log) }).unwrap_err();
+        assert!(err.starts_with("timed out after 60 s"), "{err}");
+        assert!(err.contains("(last line: \"block: virtio0: still reading\")") && err.contains("a::one"), "{err}");
+        assert!(!err.contains("summary line missing"), "{err}");
+        // One that timed out after the summary is judged by its tests.
+        let done = parse("test a::one ... ok\ntest result: ok. 1 passed; 0 failed; 0 filtered out\n");
+        assert_eq!(done.check_end(End::TimedOut { secs: 60, last_line: "$" }), Ok(()));
+        assert_eq!(last_line(" \n"), "");
     }
 
     #[test]

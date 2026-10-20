@@ -585,12 +585,24 @@ kernel_test! {
             check!(26, sys(p, nr::READ, &[t, DATA + 0x200, 8]) == Ok(8) && peek_u64(DATA + 0x200) == 1);
             let Ok(rt) = sys(p, nr::TIMERFD_CREATE, &[0, O_NONBLOCK]) else { return 27 };
             check!(28, sys(p, nr::CLOCK_GETTIME, &[0, DATA + 0x600]) == Ok(0));
-            check!(29, itimerspec(DATA, 0, timespec_ns(DATA + 0x600) + 10 * MS));
+            let deadline = timespec_ns(DATA + 0x600) + 10 * MS;
+            check!(29, itimerspec(DATA, 0, deadline));
             check!(30, sys(p, nr::TIMERFD_SETTIME, &[rt, 1, DATA, 0]) == Ok(0));
-            check!(31, sys(p, nr::READ, &[rt, DATA + 0x200, 8]) == Err(Errno::EAGAIN));
-            check!(32, pollfd(DATA + 0x700, rt, POLLIN));
-            check!(33, sys(p, nr::POLL, &[DATA + 0x700, 1, u64::MAX]) == Ok(1));
-            check!(34, sys(p, nr::READ, &[rt, DATA + 0x200, 8]) == Ok(8));
+            match sys(p, nr::READ, &[rt, DATA + 0x200, 8]) {
+                // Not yet expired: wait for it.
+                Err(Errno::EAGAIN) => {
+                    check!(32, pollfd(DATA + 0x700, rt, POLLIN));
+                    check!(33, sys(p, nr::POLL, &[DATA + 0x700, 1, u64::MAX]) == Ok(1));
+                    check!(34, sys(p, nr::READ, &[rt, DATA + 0x200, 8]) == Ok(8));
+                }
+                // A host stall longer than 10 ms let it expire first; then
+                // it must really be past the deadline.
+                Ok(8) => {
+                    check!(31, sys(p, nr::CLOCK_GETTIME, &[0, DATA + 0x600]) == Ok(0));
+                    check!(31, timespec_ns(DATA + 0x600) >= deadline);
+                }
+                _ => return 31,
+            }
             check!(35, sys(p, nr::CLOSE, &[rt]) == Ok(0) && sys(p, nr::CLOSE, &[t]) == Ok(0));
             0
         }])
