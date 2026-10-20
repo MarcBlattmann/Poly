@@ -1,7 +1,7 @@
 # Debugging the kernel
 
-Three tools, from quickest to most thorough: the serial log, the panic
-backtrace, and a debugger attached to QEMU.
+Four tools, from quickest to most thorough: the serial log, the kernel
+shell, the panic backtrace, and a debugger attached to QEMU.
 
 ## Serial log
 
@@ -11,7 +11,7 @@ two, Ctrl-A X quits. Anything after the command is passed on as the kernel
 command line:
 
 ```sh
-cargo xtask run                          # plain boot
+cargo xtask run                          # plain boot, into the shell
 cargo xtask run poly.test=sync           # run only the in-kernel tests whose name contains "sync"
 cargo xtask run poly.selftest.page_fault # boot, then fault on purpose
 ```
@@ -23,6 +23,68 @@ no-execute memory) and `stack_overflow` (run the boot stack into its guard
 page). Each prints the address it is about to touch first.
 
 To keep a copy, add `| tee serial.log`.
+
+## The kernel shell
+
+After the in-kernel tests, `cargo xtask run` drops into the kernel shell on
+the same serial console (any boot without `poly.qemu_exit` does; the boot
+tests add `poly.shell` to get it after their tests too):
+
+```text
+POLY-SELFTEST: PASS
+shell: serial input on COM1, ISA IRQ 4 -> vector 0x31
+boot: done; starting the shell on COM1 (type 'help')
+poly> uptime
+up 0:00:02.418 (2418836190 ns), 2410 ticks at 1000 Hz, 3 threads
+poly> lspci
+00:00.0 8086:29c0 host bridge       06.00.00
+00:03.0 1af4:1042 SCSI storage      01.00.00  BAR1 mem 0xfebd5000 4 KiB  BAR4 mem 0xfe000000 16 KiB
+...
+9 functions
+poly> hlep
+unknown command 'hlep'; did you mean 'help'?
+```
+
+| Command | Shows or does |
+|---|---|
+| `help [command]` | every command with one line of help, or one command |
+| `mem` | RAM total / free / used from the frame allocator; heap bytes in use, pages held, large runs, failed allocations |
+| `ps` | every thread: id (slot.generation), state (running, runnable, blocked, exited) and name |
+| `lspci` | every PCI function: address, vendor:device, class name and code, BARs |
+| `disks` | every disk: description, size, interrupt vector or polled, write cache; cache buffers, dirty, hits, misses, read-ahead, write-backs, evictions; queue requests, merges, splits, interrupts, sleeps |
+| `uptime` | time since the clock started, ticks, threads |
+| `irq` | interrupts taken per vector with their owner (timer, serial, disk, ...), and the spurious / unhandled / 8259 / APIC error counters |
+| `cpu` | CPUID vendor, brand string, family / model / stepping, TSC rate, APIC ID, feature flags |
+| `test [filter]` | run the in-kernel tests whose name contains `filter` (all without one), with the same output as at boot |
+| `echo [words]` | print the words (quotes group words: `echo 'a  b'`) |
+| `clear` | clear the screen |
+| `reboot` | write back the disk caches and reset (ACPI reset register, then the 8042, then a triple fault). `cargo xtask` runs QEMU with `-no-reboot`, so QEMU exits |
+
+Keys: Left / Right, Ctrl-Left / Ctrl-Right (or Alt-B / Alt-F) by word,
+Home / End (Ctrl-A / Ctrl-E), Backspace, Delete, Ctrl-K / Ctrl-U kill to the
+end / start of the line, Ctrl-W the word before the cursor, Up / Down
+(Ctrl-P / Ctrl-N) recall earlier lines, Tab completes command names (and
+test names after `test`; a second Tab lists the choices), Ctrl-C drops
+the line, Ctrl-L clears the screen. Ctrl-A is QEMU's escape key under
+`cargo xtask run` (`-serial mon:stdio`), so press it twice (Ctrl-A Ctrl-A)
+to send it to the shell, or use Home.
+
+`test` runs the tests on the shell's thread while the rest of the kernel
+keeps running. It leaves out the tests marked `#[boot_only]` (they check
+state from boot, such as every I/O APIC input being masked, or must run on
+the boot thread) and ignores the boot's `poly.selftest.*` flags, so no test
+panics on purpose. Tests that print go to the same serial console.
+
+A kernel log line that arrives while the prompt is waiting erases the
+prompt row and the shell draws it again under the log line, within 50 ms.
+If a line ever looks garbled anyway, Ctrl-L redraws it. Characters wider
+than one column (East Asian, emoji) and lines longer than the terminal is
+wide are edited correctly but drawn wrong.
+
+The shell does not start in an automated test boot (`poly.qemu_exit`
+without `poly.shell`). If the COM1 interrupt cannot be routed, the boot log
+says `shell: COM1 receive interrupt not routed (...); polling`, and the
+shell polls the UART every 10 ms instead.
 
 ## PCI devices and the test disk
 
@@ -152,7 +214,8 @@ crate::kernel_test! {
 ```
 
 Write `fn name(env: &TestEnv) -> TestResult` to get the boot info and memory
-map. `cargo xtask test` fails if any test fails, if the summary line is missing
+map. Put `#[boot_only]` first (before any doc comment) for a test that checks
+boot-time state; the shell's `test` command then leaves it out. `cargo xtask test` fails if any test fails, if the summary line is missing
 (the kernel crashed during the tests), or if the counts do not add up. Only
 put tests here that need the real machine; pure logic belongs in a crate under
 `crates/` with ordinary `#[test]`s.

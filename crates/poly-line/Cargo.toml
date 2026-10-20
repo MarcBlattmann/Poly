@@ -1,0 +1,11 @@
+[package]
+name = "poly-line"
+description = "Line editor for the kernel shell: editing, history, completion, terminal input decoding, argument words"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

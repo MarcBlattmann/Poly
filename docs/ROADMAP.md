@@ -54,7 +54,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Display: QEMU standard VGA (Bochs VBE) linear framebuffer driver and mode setting
 - [ ] Drawing library: pixels, rectangles, a permissively licensed bitmap font, scrolling text grid
 - [x] Keyboard: PS/2 (i8042) driver on interrupts, scancode decoding, US and Swiss German layouts
-- [ ] Kernel shell: line editor with history and completion, commands (help, mem, ps, lspci, disks, uptime, test, clear, reboot)
+- [x] Kernel shell: line editor with history and completion, commands (help, mem, ps, lspci, disks, uptime, test, clear, reboot)
 - [ ] **Milestone:** the kernel boots into a full-screen terminal with a status bar, usable with the keyboard
 
 ## Phase 3: User space and the first Linux program

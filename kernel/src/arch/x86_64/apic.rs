@@ -300,6 +300,7 @@ pub fn gsi_entry(gsi: u32) -> Option<RedirectionEntry> {
 }
 
 crate::kernel_test! {
+    #[boot_only]
     fn io_apic_inputs_start_masked() -> TestResult {
         if io_apic_inputs() == 0 {
             return Err("no I/O APIC was set up");

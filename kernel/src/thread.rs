@@ -55,6 +55,7 @@ use crate::frames::FRAMES;
 use crate::kernel_test;
 use crate::sync::{self, SpinLock};
 use crate::time;
+use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::sync::atomic::AtomicU64;
 use core::time::Duration;
@@ -130,6 +131,8 @@ struct Threads {
     /// Each slot's thread in [`WaitQueue::wait_until_deadline`]: its
     /// deadline and the queue it waits on.
     timeouts: [Option<Timeout>; MAX_THREADS],
+    /// Each slot's thread's name, for `ps` (empty: none).
+    names: [&'static str; MAX_THREADS],
     ready: bool,
 }
 
@@ -148,6 +151,12 @@ static THREADS: SpinLock<Threads> = SpinLock::new(Threads {
     sched: Scheduler::new(TIME_SLICE_TICKS),
     stacks: [None; MAX_THREADS],
     timeouts: [None; MAX_THREADS],
+    names: {
+        let mut names = [""; MAX_THREADS];
+        names[ThreadId::BOOT.slot()] = "boot";
+        names[ThreadId::IDLE.slot()] = "idle";
+        names
+    },
     ready: false,
 });
 
@@ -182,6 +191,11 @@ pub fn init() {
 /// Start `f(arg)` in a new thread. It runs once the threads ahead of it on
 /// the run queue have had their turn; the caller keeps running.
 pub fn spawn(f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
+    spawn_named("", f, arg)
+}
+
+/// [`spawn`] with a name, which [`list`] reports.
+pub fn spawn_named(name: &'static str, f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
     let stack = Stack::allocate()?;
     let _irq = InterruptsOff::new();
     let mut t = THREADS.lock();
@@ -193,6 +207,7 @@ pub fn spawn(f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
         return Err(SpawnError::TableFull);
     };
     install(&mut t, id, stack, f, arg);
+    t.names[id.slot()] = name;
     Ok(id)
 }
 
@@ -303,6 +318,27 @@ pub fn current() -> ThreadId {
 pub fn state(id: ThreadId) -> Option<State> {
     let _irq = InterruptsOff::new();
     THREADS.lock().sched.state(id)
+}
+
+/// One thread, as [`list`] reports it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ThreadInfo {
+    pub id: ThreadId,
+    /// Empty for threads started with [`spawn`].
+    pub name: &'static str,
+    pub state: State,
+}
+
+/// Every thread that exists and has not been joined, in slot order.
+pub fn list() -> Vec<ThreadInfo> {
+    // Allocated before locking: nothing allocates under THREADS.
+    let mut out = Vec::with_capacity(MAX_THREADS);
+    let _irq = InterruptsOff::new();
+    let t = THREADS.lock();
+    for (id, state) in t.sched.live_threads() {
+        out.push(ThreadInfo { id, name: t.names[id.slot()], state });
+    }
+    out
 }
 
 /// Let the next runnable thread run; this thread goes to the back of the
@@ -556,6 +592,7 @@ fn ping(tag: usize) -> usize {
 }
 
 kernel_test! {
+    #[boot_only]
     fn yield_interleaves_round_robin() -> TestResult {
         let _irq = no_preemption();
         TRACE.lock().len = 0;
@@ -848,6 +885,38 @@ kernel_test! {
             if slept > ms * time::NANOS_PER_MILLI + 500 * time::NANOS_PER_MILLI {
                 return Err("sleep overslept by more than half a second");
             }
+        }
+        Ok(())
+    }
+}
+
+fn nap(ms: usize) -> usize {
+    sleep(Duration::from_millis(ms as u64));
+    0
+}
+
+kernel_test! {
+    fn list_names_threads_and_their_states() -> TestResult {
+        let t = spawn_named("napper", nap, 50).map_err(|_| "spawn failed")?;
+        let start = time::now_ns();
+        while state(t) != Some(State::Blocked) {
+            if time::now_ns() - start > time::NANOS_PER_SEC {
+                return Err("the thread never went to sleep");
+            }
+            yield_now();
+        }
+        let all = list();
+        let me = current();
+        let find = |id: ThreadId| all.iter().find(|i| i.id == id);
+        let listed = find(t).is_some_and(|i| i.name == "napper" && i.state == State::Blocked)
+            && find(me).is_some_and(|i| i.state == State::Running && (me != ThreadId::BOOT || i.name == "boot"))
+            && find(ThreadId::IDLE).is_some_and(|i| i.name == "idle" && i.state == State::Runnable);
+        join(t).map_err(|_| "join failed")?;
+        if !listed {
+            return Err("list() did not report the threads' names and states");
+        }
+        if list().iter().any(|i| i.id == t) {
+            return Err("a joined thread is still listed");
         }
         Ok(())
     }

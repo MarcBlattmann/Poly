@@ -26,6 +26,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0026](0026-user-address-space-regions.md) | User address spaces: a region map in a host-tested crate (`poly-vm`), page state in the page tables | Accepted |
 | [0025](0025-linux-syscall-table-and-kernel-services-trait.md) | Linux system calls: a generated table, man-page handlers, a kernel-services trait | Accepted |
 | [0020](0020-ps2-keyboard-and-layouts.md) | PS/2 keyboard: decoding and layouts in `poly-input`, an i8042 driver on IRQ 1 with a byte ring | Accepted |
+| [0021](0021-kernel-shell.md) | The kernel shell: a host-tested line editor on `alloc`, a `Console` trait, serial input on IRQ 4 | Accepted (amends 0003: shared crates may use `alloc`) |
 
 ## Open decisions
 

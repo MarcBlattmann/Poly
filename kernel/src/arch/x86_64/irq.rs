@@ -61,6 +61,9 @@ static UNHANDLED: AtomicU64 = AtomicU64::new(0);
 static LEGACY: AtomicU64 = AtomicU64::new(0);
 /// Local APIC error interrupts.
 static ERRORS: AtomicU64 = AtomicU64::new(0);
+/// Interrupts taken on each vector (32-255; the exceptions are not counted).
+/// TODO(smp): per CPU, summed when read.
+static COUNTS: [AtomicU64; 256] = [const { AtomicU64::new(0) }; 256];
 /// Handlers running on this CPU (0 or 1: they do not nest).
 /// TODO(smp): per CPU.
 static DEPTH: AtomicUsize = AtomicUsize::new(0);
@@ -158,6 +161,17 @@ pub struct Stats {
     pub errors: u64,
 }
 
+/// Interrupts taken on `vector` since boot.
+pub fn count(vector: u8) -> u64 {
+    COUNTS[usize::from(vector)].load(Ordering::Relaxed)
+}
+
+/// Whether a device vector has a handler from [`allocate_vector`].
+pub fn is_allocated(vector: u8) -> bool {
+    (FIRST_DEVICE_VECTOR..=LAST_DEVICE_VECTOR).contains(&vector)
+        && SLOTS[usize::from(vector)].handler.load(Ordering::Relaxed) > CLAIMED
+}
+
 pub fn stats() -> Stats {
     Stats {
         spurious: SPURIOUS.load(Ordering::Relaxed),
@@ -171,6 +185,7 @@ pub fn stats() -> Stats {
 /// disabled, on the interrupted thread's stack.
 pub(super) fn dispatch(vector: u8) {
     DEPTH.fetch_add(1, Ordering::Relaxed);
+    COUNTS[usize::from(vector)].fetch_add(1, Ordering::Relaxed);
     match vector {
         // Not an interrupt at all: the APIC withdrew it after starting to
         // deliver it, nothing is in service, and an EOI would end the wrong
@@ -268,12 +283,19 @@ kernel_test! {
                     return Err("allocate_vector skipped a free vector");
                 }
                 allocated[usize::from(v)] = true;
+                if !is_allocated(v) {
+                    return Err("an allocated vector does not say so");
+                }
+                let before = count(v);
                 if !send_self_ipi(v) {
                     return Err("self-IPI refused");
                 }
                 if !wait_for(|| seen(v)) {
                     crate::kprintln!("irq: vector {v:#x} did not arrive");
                     return Err("a self-IPI did not reach the vector's handler");
+                }
+                if count(v) != before + 1 {
+                    return Err("the vector's interrupt count did not go up by one");
                 }
             }
             if MISMATCHED.load(SeqCst) != 0 {

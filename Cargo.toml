@@ -15,6 +15,7 @@ members = [
     "crates/poly-heap",
     "crates/poly-input",
     "crates/poly-irq",
+    "crates/poly-line",
     "crates/poly-mem",
     "crates/poly-paging",
     "crates/poly-pci",
@@ -47,6 +48,7 @@ poly-elf = { path = "crates/poly-elf" }
 poly-heap = { path = "crates/poly-heap" }
 poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
+poly-line = { path = "crates/poly-line" }
 poly-mem = { path = "crates/poly-mem" }
 poly-paging = { path = "crates/poly-paging" }
 poly-pci = { path = "crates/poly-pci" }

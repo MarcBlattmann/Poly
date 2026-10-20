@@ -13,6 +13,7 @@ pub mod irq;
 pub mod mmio;
 pub mod paging;
 pub mod port;
+pub mod reset;
 pub mod serial;
 pub mod time;
 

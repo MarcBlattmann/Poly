@@ -52,6 +52,7 @@ dependencies = [
  "poly-heap",
  "poly-input",
  "poly-irq",
+ "poly-line",
  "poly-mem",
  "poly-paging",
  "poly-pci",
@@ -62,6 +63,10 @@ dependencies = [
  "poly-virtio",
  "poly-virtio-blk",
 ]
+
+[[package]]
+name = "poly-line"
+version = "0.0.1"
 
 [[package]]
 name = "poly-mem"
