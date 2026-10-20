@@ -193,7 +193,14 @@ impl<O: Ops> Driver<'_, O> {
                 continue;
             }
             if let Some(lock) = self.store.try_lock(&format!("entry-{}", state::key(&st.entry)))? {
-                return Ok(Ok((st.clone(), lock)));
+                // Another worker may have released it just now: its state
+                // as saved, not as read before the lock.
+                match self.store.load(&st.entry)? {
+                    Some(fresh) if !fresh.step.terminal() && self.ready_at(&fresh, now)? <= now => {
+                        return Ok(Ok((fresh, lock)));
+                    }
+                    _ => continue,
+                }
             }
         }
         let idle = now + self.cfg.idle_secs;

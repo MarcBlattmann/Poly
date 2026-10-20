@@ -269,13 +269,24 @@ impl Store {
     }
 
     /// The lock `name` if nobody holds it.
+    ///
+    /// A lock just released can look held for a moment: a child process
+    /// another thread is starting holds a copy of every descriptor between
+    /// its fork and its exec, and the `flock` lasts until the last copy is
+    /// closed. So "held" is believed only after a few short retries.
     pub fn try_lock(&self, name: &str) -> Result<Option<Lock>> {
         let (f, path) = self.lock_file(name)?;
-        match f.try_lock() {
-            Ok(()) => Ok(Some(Lock { _file: f })),
-            Err(TryLockError::WouldBlock) => Ok(None),
-            Err(TryLockError::Error(e)) => Err(format!("{}: {e}", path.display())),
+        for attempt in 0..5 {
+            match f.try_lock() {
+                Ok(()) => return Ok(Some(Lock { _file: f })),
+                Err(TryLockError::WouldBlock) if attempt < 4 => {
+                    std::thread::sleep(std::time::Duration::from_millis(20))
+                }
+                Err(TryLockError::WouldBlock) => return Ok(None),
+                Err(TryLockError::Error(e)) => return Err(format!("{}: {e}", path.display())),
+            }
         }
+        Ok(None)
     }
 
     /// Wait for the lock `name`.
