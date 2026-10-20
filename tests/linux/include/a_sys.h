@@ -23,6 +23,7 @@ typedef unsigned char u8;
 #define SYS_fstat 5
 #define SYS_lstat 6
 #define SYS_lseek 8
+#define SYS_rt_sigaction 13
 #define SYS_rt_sigprocmask 14
 #define SYS_pread64 17
 #define SYS_pwrite64 18
@@ -75,12 +76,16 @@ typedef unsigned char u8;
 #define SYS_times 100
 #define SYS_getuid 102
 #define SYS_getgid 104
+#define SYS_geteuid 107
+#define SYS_getegid 108
 #define SYS_setpgid 109
 #define SYS_getppid 110
 #define SYS_getpgrp 111
 #define SYS_setsid 112
 #define SYS_getpgid 121
 #define SYS_getsid 124
+#define SYS_rt_sigpending 127
+#define SYS_rt_sigtimedwait 128
 #define SYS_statfs 137
 #define SYS_fstatfs 138
 #define SYS_mlock 149
@@ -476,8 +481,26 @@ struct a_siginfo {
 #define SIGUSR1 10
 #define SIGSEGV 11
 #define SIGALRM 14
+#define SIGUSR2 12
 #define SIGTERM 15
 #define SIGCHLD 17
+#define SIGCONT 18
+#define SIGSTOP 19
+#define SIGVTALRM 26
+#define SIGPROF 27
+#define SIG_DFL 0
+#define SIG_IGN 1
+#define SA_RESTORER 0x04000000
+
+/* The kernel's struct sigaction on x86-64 (rt_sigaction with an 8-byte
+ * mask): handler, flags, restorer, mask. */
+struct a_sigaction {
+    u64 handler;
+    u64 flags;
+    u64 restorer;
+    u64 mask;
+};
+#define A_SIGBIT(sig) (1UL << ((sig) - 1))
 #define SIG_BLOCK 0
 #define SIG_UNBLOCK 1
 #define SIG_SETMASK 2
@@ -680,23 +703,37 @@ static A_UNUSED volatile i32 *a_shared(void) {
 }
 
 /*
- * fork with a way to see the child's end without a system call: a raw
- * clone with fork semantics (own copy of memory, SIGCHLD at its end) and
- * CLONE_CHILD_CLEARTID on `done`, which must be in a_shared() memory. The
- * kernel clears *done when the child has ended; the parent waits for that
- * with a_fork_wait before its next system call, so the order of the two
- * processes' system calls is the same on every run. Returns 0 in the
- * child, the child's pid (or -errno) in the parent.
+ * fork with the parent suspended until the child has ended: a raw clone
+ * with CLONE_VFORK but not CLONE_VM, so the child has its own copy of
+ * memory (fork semantics) and the parent resumes only once the child has
+ * exited (or called execve). The order of the two processes' system calls
+ * is then the same on every run. Returns 0 in the child, the child's pid
+ * (or -errno) in the parent. (The kernel clears a CLONE_CHILD_CLEARTID
+ * word only while the address space is shared, so that cannot be used to
+ * see the end of a child with its own memory.)
  */
-static A_UNUSED long a_fork(volatile i32 *done) {
-    *done = -1;
-    long r = syscall5(SYS_clone, CLONE_CHILD_CLEARTID | SIGCHLD, 0, 0, done, 0);
-    if (r < 0) *done = 0; /* no child: nothing to wait for */
-    return r;
-}
+static A_UNUSED long a_fork_sync(void) { return syscall5(SYS_clone, CLONE_VFORK | SIGCHLD, 0, 0, 0, 0); }
 
-/* Spin until the child of a_fork has ended; 1 if it did in time. */
-static A_UNUSED int a_fork_wait(volatile i32 *done) { return a_spin_until(done, 0, A_SPIN_LIMIT); }
+static A_UNUSED i64 a_block_sigchld(void);
+
+/*
+ * Run `body` in a child that has started a new session (so it is the
+ * leader of its own session and process group, whatever the test was
+ * started as: under a tracer, or as init on Poly). The child's output is
+ * the test's output; the result is the child's exit status (1 if it did
+ * not exit normally). The parent is suspended while the child runs.
+ */
+static A_UNUSED int a_in_session(int (*body)(void)) {
+    a_block_sigchld();
+    i64 pid = a_fork_sync();
+    if (pid == 0) {
+        syscall0(SYS_setsid);
+        syscall1(SYS_exit_group, body());
+    }
+    i32 status = -1;
+    if (pid < 0 || syscall4(SYS_wait4, pid, &status, 0, 0) != pid) return 1;
+    return (status & 0x7f) == 0 ? (status >> 8) & 0xff : 1;
+}
 
 /* Block SIGCHLD, so a child's end does not interrupt this process at a
  * point that varies from run to run (a tracer would report it there). */
@@ -724,6 +761,24 @@ static A_UNUSED u64 a_auxv(u64 tag) {
     for (u64 *a = (u64 *)(e + 1); a[0] != AT_NULL; a += 2)
         if (a[0] == tag) return a[1];
     return 0;
+}
+
+/* Decimal text of n (n >= 0) into buf; returns buf. */
+static A_UNUSED char *a_utoa(char *buf, u64 n) {
+    char tmp[24];
+    int i = 0;
+    do tmp[i++] = (char)('0' + n % 10); while (n /= 10);
+    char *p = buf;
+    while (i) *p++ = tmp[--i];
+    *p = 0;
+    return buf;
+}
+
+/* Value of decimal text (no sign). */
+static A_UNUSED u64 a_atou(const char *s) {
+    u64 n = 0;
+    while (*s >= '0' && *s <= '9') n = n * 10 + (u64)(*s++ - '0');
+    return n;
 }
 
 /* The path this program was started from: AT_EXECFN, else argv[0]. */
