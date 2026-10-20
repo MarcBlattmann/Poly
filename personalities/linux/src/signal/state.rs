@@ -84,6 +84,8 @@ pub struct LinuxProcess {
     threads: BTreeMap<i32, LinuxThread>,
     /// See [`DEFAULT_QUEUE_LIMIT`].
     pub queue_limit: usize,
+    /// Resource limits (getrlimit(2)): inherited by fork, kept by exec.
+    pub limits: crate::rlimit::ResourceLimits,
     /// Interval and POSIX timers (ADR 0044).
     pub timers: crate::time::timers::Timers,
 }
@@ -99,6 +101,7 @@ impl LinuxProcess {
             shared: SigQueue::new(),
             threads,
             queue_limit: DEFAULT_QUEUE_LIMIT,
+            limits: crate::rlimit::ResourceLimits::new(),
             timers: crate::time::timers::Timers::new(),
         }
     }
@@ -117,7 +120,14 @@ impl LinuxProcess {
         threads.insert(child_tid, child);
         // fork(2): "The child does not inherit timers from its parent".
         let timers = crate::time::timers::Timers::new();
-        LinuxProcess { actions: self.actions, shared: SigQueue::new(), threads, queue_limit: self.queue_limit, timers }
+        LinuxProcess {
+            actions: self.actions,
+            shared: SigQueue::new(),
+            threads,
+            queue_limit: self.queue_limit,
+            limits: self.limits,
+            timers,
+        }
     }
 
     /// execve(2) by thread `tid`, which becomes the only thread. execve(2):

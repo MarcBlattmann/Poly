@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 47 of 140 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 48 of 140 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">47 / 140 milestones · 34%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">48 / 140 milestones · 34%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -156,8 +156,8 @@
 <g><title>Dynamic linking: glibc's own ld.so loads shared libraries unchanged</title>
 <rect x="472.2" y="173.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>/dev (null, zero, random, urandom, tty, console), /proc (self, maps, status, cpuinfo), minimal /sys</title>
-<rect x="498.7" y="173.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ /dev (null, zero, random, urandom, tty, console), /proc (self, maps, status, cpuinfo), minimal /sys</title>
+<rect x="498.7" y="173.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>TTY layer: line discipline, pseudo-terminals, job control</title>
 <rect x="525.1" y="173.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
@@ -192,7 +192,7 @@
 <g><title>bash, coreutils, Python and a C compiler run from the persistent disk</title>
 <rect x="789.6" y="173.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">6/18</text>
+<text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">7/18</text>
 <text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 5  NT personality and Windows console apps</text>
 <g><title>⚖️ Decide: reimplement MSVC / DirectX redistributable DLLs, or run apps' own copies</title>
 <rect x="340.0" y="203.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>

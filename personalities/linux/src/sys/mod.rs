@@ -5,9 +5,12 @@
 
 pub mod epoll;
 pub mod eventfd;
+pub mod fd;
 pub mod futex;
 pub mod io;
+pub mod limits;
 pub mod mem;
+pub mod path;
 pub mod pipe;
 pub mod poll;
 pub mod process;

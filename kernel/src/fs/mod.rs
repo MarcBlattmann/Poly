@@ -42,6 +42,9 @@ mod disk_tests;
 mod files;
 pub mod initrd;
 pub mod poll;
+pub mod proc;
+mod proc_tests;
+mod sysfs;
 mod tests;
 
 use crate::boot_info::BootInfo;
@@ -100,6 +103,7 @@ pub fn init(boot: &BootInfo, held: Option<Region>) {
         None => kprintln!("fs: no initramfs (no boot module); / is an empty tmpfs"),
     }
     devices::install(&vfs, &ctx);
+    proc::mount_all(&vfs, &ctx);
     drop(ctx);
     if VFS.set(vfs).is_err() {
         panic!("fs::init called twice");

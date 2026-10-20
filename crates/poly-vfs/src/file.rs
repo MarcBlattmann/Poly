@@ -2,12 +2,14 @@
 
 use crate::device::CharDevice;
 use crate::fs::DirEntry;
+use crate::mount::Mount;
 use crate::node::NodeRef;
 use crate::object::FileObject;
 use crate::poll::{self, Blocker, PollEvents, Timeout, WaitQueue};
 use crate::sync::SpinMutex;
-use crate::{Errno, FileType, MAX_FILE_SIZE, Result, Stat};
-use alloc::sync::Arc;
+use crate::{Errno, FileType, Ino, MAX_FILE_SIZE, Result, Stat};
+use alloc::boxed::Box;
+use alloc::sync::{Arc, Weak};
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// `open(2)` flags. The bit values are Linux's (UAPI
@@ -136,6 +138,17 @@ pub(crate) enum Backend {
     Path,
 }
 
+/// Where an open file was found: the directory it was looked up in and
+/// the name it had there, so `/proc/<pid>/fd` and `/proc/<pid>/maps` can
+/// name it later ([`Vfs::file_path`](crate::Vfs::file_path)). It keeps
+/// nothing alive.
+#[derive(Clone)]
+pub(crate) struct Origin {
+    pub(crate) mount: Weak<Mount>,
+    pub(crate) dir: Ino,
+    pub(crate) name: Box<[u8]>,
+}
+
 /// An open file description: what `open` makes and descriptors share.
 ///
 /// Reads and writes on regular files and directories update the offset
@@ -147,6 +160,8 @@ pub struct OpenFile {
     /// Access mode and status flags, as `fcntl(F_GETFL)` reports them.
     flags: AtomicU32,
     offset: SpinMutex<u64>,
+    /// How `open` found it, if it did.
+    origin: Option<Origin>,
 }
 
 impl OpenFile {
@@ -165,7 +180,17 @@ impl OpenFile {
 
     pub(crate) fn new(node: NodeRef, kind: FileType, backend: Backend, flags: OpenFlags) -> OpenFile {
         let flags = flags.intersection(Self::KEPT);
-        OpenFile { node, kind, backend, flags: AtomicU32::new(flags.bits()), offset: SpinMutex::new(0) }
+        OpenFile { node, kind, backend, flags: AtomicU32::new(flags.bits()), offset: SpinMutex::new(0), origin: None }
+    }
+
+    /// Records how `open` found the file.
+    pub(crate) fn with_origin(mut self, origin: Option<Origin>) -> OpenFile {
+        self.origin = origin;
+        self
+    }
+
+    pub(crate) fn origin(&self) -> Option<&Origin> {
+        self.origin.as_ref()
     }
 
     /// An open file on `object`, with `node` (from
@@ -223,6 +248,14 @@ impl OpenFile {
     /// The current offset.
     pub fn offset(&self) -> u64 {
         *self.offset.lock()
+    }
+
+    /// The current offset without waiting: `None` while a read, write or
+    /// listing of this description holds it (which may be the caller's own,
+    /// as when a process reads its `/proc/self/fdinfo` entry of the very
+    /// file being read).
+    pub fn offset_now(&self) -> Option<u64> {
+        self.offset.try_lock().map(|o| *o)
     }
 
     pub fn stat(&self) -> Result<Stat> {

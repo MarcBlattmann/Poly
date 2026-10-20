@@ -192,6 +192,9 @@ fn relieve_memory_pressure() {
 pub struct FileSource {
     node: NodeRef,
     cached: Option<Arc<CachedDiskFs>>,
+    /// The open file it was made from, which knows the file's name
+    /// (`/proc/<pid>/maps`).
+    file: Option<Arc<poly_vfs::OpenFile>>,
 }
 
 impl core::fmt::Debug for FileSource {
@@ -204,12 +207,12 @@ impl FileSource {
     /// The file `node` names.
     pub fn new(node: NodeRef) -> FileSource {
         let cached = disk::cached_fs_of(node.mount().fs());
-        FileSource { node, cached }
+        FileSource { node, cached, file: None }
     }
 
     /// The file `file` is open on.
-    pub fn of(file: &poly_vfs::OpenFile) -> FileSource {
-        FileSource::new(file.node().clone())
+    pub fn of(file: &Arc<poly_vfs::OpenFile>) -> FileSource {
+        FileSource { file: Some(Arc::clone(file)), ..FileSource::new(file.node().clone()) }
     }
 
     pub fn node(&self) -> &NodeRef {
@@ -224,6 +227,10 @@ impl PageSource for FileSource {
 
     fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, IoError> {
         self.node.mount().fs().read(self.node.ino(), offset, buf).map_err(|_| IoError)
+    }
+
+    fn file(&self) -> Option<&Arc<poly_vfs::OpenFile>> {
+        self.file.as_ref()
     }
 
     fn cached_page(&self, offset: u64) -> Option<Result<CachedPage, IoError>> {

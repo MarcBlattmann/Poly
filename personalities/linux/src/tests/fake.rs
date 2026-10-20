@@ -153,6 +153,10 @@ pub struct FakeKernel {
     /// stop_process calls (signal), and the pids continue_process got.
     pub stops: Vec<u32>,
     pub continued: Vec<i32>,
+    /// The file system services (`None`: `ENOSYS`), and what sysinfo
+    /// reports.
+    pub fs: Option<Box<dyn crate::fs::LinuxFs>>,
+    pub sysinfo: Option<crate::fs::SysInfo>,
     /// The stored time zone (settimeofday).
     pub timezone: (i32, i32),
     /// CPU times the kernel accounts: the calling thread, the process, the
@@ -218,6 +222,8 @@ impl FakeKernel {
             futexes_locked: false,
             stops: Vec::new(),
             continued: Vec::new(),
+            fs: None,
+            sysinfo: None,
             timezone: (0, 0),
             cpu: None,
             timer_wakeups: Vec::new(),
@@ -811,6 +817,17 @@ impl LinuxKernel for FakeKernel {
 
     fn hostname(&self) -> &[u8] {
         b"testhost"
+    }
+
+    fn fs(&mut self) -> Option<&mut dyn crate::fs::LinuxFs> {
+        match &mut self.fs {
+            Some(fs) => Some(&mut **fs),
+            None => None,
+        }
+    }
+
+    fn system_info(&mut self) -> Result<crate::fs::SysInfo, Errno> {
+        self.sysinfo.ok_or(Errno::ENOSYS)
     }
 
     fn clone_task(&mut self, req: &crate::task::clone::CloneRequest) -> Result<i32, Errno> {

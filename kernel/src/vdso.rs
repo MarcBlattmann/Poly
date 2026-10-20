@@ -93,6 +93,32 @@ impl PageSource for VvarSource {
     fn shareable(&self) -> bool {
         true
     }
+
+    fn label(&self) -> Option<&str> {
+        Some("[vvar]")
+    }
+}
+
+/// The image as a mappable source, named `[vdso]` in `/proc/<pid>/maps`
+/// (proc_pid_maps(5)).
+struct ImageSource(MemoryImage<&'static [u8]>);
+
+impl PageSource for ImageSource {
+    fn len(&self) -> u64 {
+        self.0.len()
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, IoError> {
+        self.0.read_at(offset, buf)
+    }
+
+    fn contents(&self) -> Option<&[u8]> {
+        self.0.contents()
+    }
+
+    fn label(&self) -> Option<&str> {
+        Some("[vdso]")
+    }
 }
 
 /// The page the data lives in: a zeroed one-page file of a private tmpfs,
@@ -128,7 +154,7 @@ fn setup() -> Option<&'static Vdso> {
     };
     let image = arch::vdso::IMAGE;
     let vdso = Vdso {
-        image: Arc::new(MemoryImage(image)),
+        image: Arc::new(ImageSource(MemoryImage(image))),
         image_len: poly_vm::page_up(image.len() as u64).expect("a small image"),
         vvar: Arc::new(VvarSource { page }),
     };

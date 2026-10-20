@@ -424,9 +424,11 @@ The logic is host-tested in `poly-vfs` and `poly-cpio`
 `poly-ext2` ([ADR 0032](adr/0032-ext2-driver.md)), mounted on virtio-blk disks
 behind the page cache, `poly-pagecache`
 ([ADR 0040](adr/0040-page-cache-and-ext2-on-virtio-blk.md)); both host-tested.
+procfs and sysfs are `poly-procfs`, the random devices' generator
+`poly-random` ([ADR 0043](adr/0043-dev-proc-sys-and-file-system-calls.md)).
 
 ```
-   personalities (later: openat, read, write, getdents64, ...)   kernel shell: ls, cat, mount
+   Linux personality: openat, stat, getdents64, ... (LinuxFs)   kernel shell: ls, cat, mount
           │  user memory copied by the system call layer; fs works on kernel buffers
           ▼
    fs::Files (on each Process)   FsContext + FdTable (sleeping mutexes) + Cred
@@ -435,10 +437,11 @@ behind the page cache, `poly-pagecache`
    fs::vfs(): poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
           │  FileSystem trait: lookup/create/rename/read/write/readdir by inode   └─ /dev/console, /dev/tty → kernel log
           ▼                                                                         /dev/null, /dev/zero, /dev/full
+   ProcFs on /proc (KernelProc), StaticFs on /sys, tmpfs on /dev/shm               /dev/random, /dev/urandom → random.rs (ChaCha20)
    Tmpfs on /                 CachedFs on /mnt: page cache (poly-pagecache) ◀── user mappings (FileSource)
           ▲                          │  fill with read-ahead / writeback (thread, sync, unmount)
    poly_cpio::unpack                 ▼
-   initramfs (PVH module 0)   poly_ext2::Ext2<DiskIo, RawMutex>        later: devfs, procfs, ext4
+   initramfs (PVH module 0)   poly_ext2::Ext2<DiskIo, RawMutex>        later: ext4
                                      │  BlockIo: read/write/flush device blocks
                                      ▼
                               block::Disk virtio2 (queue + buffer cache)
@@ -456,13 +459,35 @@ behind the page cache, `poly-pagecache`
   mounted on `/` with `poly_cpio::unpack`, as root and with the archive's
   owners, modes and times, and gives the pages back (`frames::free_range`).
   Without a module `/` starts empty. Either way it then gets `/dev`, `/tmp`
-  (`01777`) and `/proc` (empty, for procfs later) and the device nodes,
-  unless the archive brought them. tmpfs times count from boot (no RTC yet).
+  (`01777`), `/proc`, `/sys` and the device nodes and links, unless the
+  archive brought them, and procfs, sysfs and `/dev/shm` are mounted
+  (`fs::proc::mount_all`). tmpfs times count from boot (no RTC yet).
 - **Devices**: `/dev/console` (5, 1) and `/dev/tty` (5, 0) write through
   the kernel log's path (serial now; a UTF-8 character split across writes
   stays whole); their reads return end of file until the TTY layer
   (Phase 4) shares the serial input with the shell. `/dev/null`, `/dev/zero`,
   `/dev/full` are `poly-vfs`'s. `ioctl` on them is `ENOTTY`.
+  `/dev/random` (1, 8) and `/dev/urandom` (1, 9) read the kernel's
+  generator (`random.rs`: `poly-random`'s ChaCha20 fast-key-erasure
+  generator, seeded from RDSEED, RDRAND and timestamp-counter jitter at
+  first use, reseeded every minute; writes are mixed in). `getrandom(2)`
+  uses it too. `/dev/fd` and `/dev/std{in,out,err}` link into
+  `/proc/self/fd`; `/dev/shm` is a tmpfs.
+- **procfs** (`poly-procfs`'s `ProcFs`, `fs/proc.rs`): a `FileSystem` whose
+  files are made on every read from `KernelProc`, the kernel's
+  `ProcSource` (process table and tree, memory maps, descriptor tables,
+  mounts, frames, the page cache, CPUID), formatted per proc(5):
+  `/proc/self`, `/proc/<pid>/{stat,statm,status,maps,cmdline,environ,
+  comm,exe,cwd,root,fd/,fdinfo/,mounts,mountinfo}`, `/proc/{cpuinfo,
+  meminfo,uptime,loadavg,version,stat,mounts,filesystems}`,
+  `/proc/sys/kernel/...` and `/proc/sys/fs/nr_open`. Open files remember
+  the directory and name they were opened by (`Vfs::file_path`), so
+  descriptors and mappings have paths (`" (deleted)"` once unlinked).
+  Exec and fork record each program (`record_exec`, `record_fork`):
+  executable, `comm`, where `argv` and `envp` are in memory.
+- **sysfs** (`fs/sysfs.rs`): a read-only `StaticFs` with the CPU lists,
+  the character devices' `dev` files and `/sys/dev/char` and `/sys/class`
+  links.
 - **`fs::Files`** is a process's file state (`Process::files`): `FsContext`
   (root, working directory, umask) and `FdTable` behind sleeping mutexes
   (lock order: context, then table), and the `Cred` (root for now). New
@@ -472,15 +497,21 @@ behind the page cache, `poly-pagecache`
   `lseek`, `dup`/`dup2`/`dup3`/`dup_from`, close-on-exec and status flags,
   `fstat`/`statat`, `getdents` (a callback per entry), `ioctl`, `ftruncate`,
   `fsync`, `readlinkat`, `mkdirat`, `unlinkat`, `symlinkat`, `chdir`,
-  `fchdir`, `getcwd`, `umask`, `close_on_exec`, `close_all`, `fork`. Reads
-  and writes run with no lock held, so a blocking read stalls nothing else.
+  `fchdir`, `getcwd`, `umask`, `close_on_exec`, `close_all`, `fork`, and
+  (`files/more.rs`) `accessat`, `renameat`, `linkat`, `fchmod(at)`,
+  `truncate`, `statfs`, `syncfs`, descriptor lists and limits for procfs
+  and `RLIMIT_NOFILE`. Reads and writes run with no lock held, so a
+  blocking read stalls nothing else; path walks run on a copy of the
+  context, so following `/proc/self/cwd` cannot deadlock.
   The `Vfs` locks itself (ADR 0023); no interrupt handler enters it.
 
 ```text
 boot: initramfs at 0xffcd000-0xffd7884 (43 KiB)
 fs: initramfs unpacked into /: 7 directories, 8 files (40263 bytes), 3 symbolic links, 2 device nodes, 1 hard links
 fs: initramfs: 11 pages (44 KiB) at 0xffcd000-0xffd8000 returned to the frame allocator
-fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7); 6 of 8 directories and nodes made
+fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); 12 of 14 directories, nodes and links made
+fs: proc on /proc, sysfs on /sys, tmpfs on /dev/shm; 3 of 3 mounted
+random: ChaCha20 generator seeded from jitter
 ```
 
 The kernel tests (`fs::*`) check, with the test initramfs `cargo xtask`
@@ -748,6 +779,15 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   validate arguments per the man pages and do the work through
   `LinuxKernel`, a trait the kernel implements over its VFS, VMA manager and
   thread state; `Linux::dispatch_with(&mut kernel, regs)` is the entry point.
+  The file system calls (`openat`, the `stat` family and `statx`,
+  `getdents64`, `readlinkat`, `faccessat2`, `fcntl`, `dup*`, `lseek`,
+  `pread64`/`pwrite64`, `mkdirat`, `unlinkat`, `renameat2`, `symlinkat`,
+  `linkat`, `fchmod*`, `truncate`, `fsync`, `sync`, `statfs`, `getcwd`,
+  `chdir`, `umask` and their older forms) go through a second trait,
+  `LinuxFs`, reached with `LinuxKernel::fs()` (`kernel/src/linux/files.rs`
+  implements it over `fs::Files`); resource limits (`prlimit64`,
+  `getrlimit`, `setrlimit`) live in the personality's per-process state,
+  and `sysinfo` reads what procfs shows (ADR 0043).
   Host tests run every call, and scripted startup sequences of real static
   binaries, against a fake kernel.
 - **Linux signals and futexes**
