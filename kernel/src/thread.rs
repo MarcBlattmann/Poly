@@ -420,6 +420,17 @@ pub struct ThreadInfo {
     pub state: State,
 }
 
+/// User threads whose process has ended: still on their way out (the
+/// last one wakes the process's waiters before it exits) or exited and
+/// not reaped yet. Their memory, and the frames in it, goes when the
+/// scheduler reaps them, so a count of user frames taken meanwhile still
+/// includes those.
+pub fn dying_user_threads() -> usize {
+    let _irq = InterruptsOff::new();
+    let t = THREADS.lock();
+    t.user.iter().flatten().filter(|u| u.process().has_ended()).count()
+}
+
 /// Every thread that exists and has not been joined, in slot order.
 pub fn list() -> Vec<ThreadInfo> {
     // Allocated before locking: nothing allocates under THREADS.

@@ -480,6 +480,23 @@ fn expect_exit(status: ExitStatus, code: u8, what: &'static str) -> TestResult {
     }
 }
 
+/// The user frames held before a test starts, once the threads of
+/// processes that ended earlier (other tests' processes) are gone. A test
+/// that only waits for its process to end returns while the last thread
+/// may still be on its way out; counted then, its frames would be in the
+/// baseline but freed during this test, and the count would never come
+/// back to it.
+fn frames_before() -> TestResult<u64> {
+    let deadline = time::now_ns() + DEADLINE_NS;
+    while crate::thread::dying_user_threads() != 0 {
+        if time::now_ns() > deadline {
+            return Err("threads of processes that ended were not reaped");
+        }
+        crate::thread::sleep(core::time::Duration::from_millis(2));
+    }
+    Ok(user::user_frames())
+}
+
 /// Wait until every user frame the test took is free again: the threads'
 /// memories go when the scheduler reaps them, a moment after they end.
 fn frames_back_to(before: u64) -> TestResult {
@@ -497,7 +514,7 @@ fn frames_back_to(before: u64) -> TestResult {
 /// Run `program` as a fresh process with the default hook; returns its
 /// exit status once it and its memory are gone (and checks the frames).
 fn run(program: *const u8, prepare: impl FnOnce(&Memory) -> TestResult) -> TestResult<ExitStatus> {
-    let before = user::user_frames();
+    let before = frames_before()?;
     let status = {
         let (process, memory) = setup()?;
         prepare(&memory)?;
@@ -593,7 +610,7 @@ kernel_test! {
             return Ok(());
         }
         EXEC_CHECKS.store(0, Ordering::SeqCst);
-        let before = user::user_frames();
+        let before = frames_before()?;
         let status = {
             let (process, memory) = setup()?;
             exec_args(&memory, b"/bin/hello")?;
