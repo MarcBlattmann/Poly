@@ -350,6 +350,23 @@ impl LinuxKernel for Thread<'_> {
         self.memory()?.protect(addr, len, vm_prot(prot)).map_err(memory_errno)
     }
 
+    fn madvise(
+        &mut self,
+        addr: u64,
+        len: u64,
+        advice: poly_personality_linux::sys::madvise::Advice,
+    ) -> Result<(), Errno> {
+        use crate::user::memory::Advice as Do;
+        use poly_personality_linux::sys::madvise::Advice;
+        let what = match advice {
+            Advice::Hint => Do::Keep,
+            Advice::DontNeed => Do::Discard,
+            Advice::Free => Do::DiscardAnonymous,
+            Advice::Remove => Do::FreeBacking,
+        };
+        self.memory()?.advise(addr, len, what).map_err(|e| Errno::new(e.linux_errno()).unwrap_or(Errno::EINVAL))
+    }
+
     fn brk(&self) -> u64 {
         user::current_memory().map_or(0, |m| m.brk(0))
     }

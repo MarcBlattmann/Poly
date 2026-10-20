@@ -507,6 +507,17 @@ pub trait LinuxKernel {
     /// reports the current break, so the error value itself is not seen.
     fn set_brk(&mut self, addr: u64) -> Result<u64, Errno>;
 
+    /// madvise(2) on `[addr, addr + len)` (both page aligned, `len`
+    /// non-zero, no overflow) with the advice the personality decoded
+    /// ([`crate::sys::madvise::Advice`]): apply it to the mapped parts and
+    /// fail with `ENOMEM` if part of the range is not mapped; `EINVAL` for
+    /// `Free` on anything but private anonymous memory and `Remove` on
+    /// anything but a shared writable mapping. `ENOSYS` by default.
+    fn madvise(&mut self, addr: u64, len: u64, advice: crate::sys::madvise::Advice) -> Result<(), Errno> {
+        let _ = (addr, len, advice);
+        Err(Errno::ENOSYS)
+    }
+
     // ---- thread state -------------------------------------------------
 
     /// The calling thread's FS segment base.

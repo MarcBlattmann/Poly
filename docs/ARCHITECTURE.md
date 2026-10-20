@@ -22,7 +22,8 @@ what exists **today** and how it fits that plan.
             kernel shell: poly-line editor, commands; on COM1 and on the screen terminal
             screen terminal: status bar + text grid, keys as terminal input, kernel log mirrored (poly-term)
             kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user,
-                               memory maps with demand paging (poly-vm), exec of static ELF (poly-elf)
+                               memory maps with demand paging (poly-vm), exec of ELF programs and their
+                               interpreter, glibc's own ld.so (poly-elf)
             file systems: VFS (poly-vfs), tmpfs root from the initramfs, ext2 disks behind the page cache (poly-pagecache)
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
@@ -885,10 +886,21 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   frame rewritten and the return made with IRETQ) or the process dies with
   the signal.
 - **Programs from the VFS.** `program::exec_path(path, argv, envp, traced)`
-  opens an executable regular file, checks its format, loads a static ELF
+  opens an executable regular file, checks its format, loads an ELF program
+  (and the interpreter a dynamically linked one names, opened the same way)
   through `fs::cache::FileSource` (pages read from the file at fault time) and
   starts a Linux process with the console on fds 0-2. The shell's
   `run <program> [args]` runs one and waits for it.
+- **Dynamic linking** ([ADR 0049](adr/0049-dynamic-linking-program-interpreter.md)).
+  A program with `PT_INTERP` starts in its interpreter, glibc's own
+  `ld.so`, which exec maps next to it in free space of the `mmap` area
+  (`exec::load_dynamic`, `poly_elf::Footprint`), with `AT_BASE`, `AT_PHDR`
+  and `AT_ENTRY` saying where both are; the loader then maps the shared
+  libraries itself with `openat`, `mmap` and `mprotect`. `madvise`
+  (`sys/madvise.rs`, `Memory::advise`) gives a finished thread's stack
+  back. `rseq` stays `ENOSYS`. The boot tests run dynamically linked C and
+  C++ programs built with the host's compiler against the host's C library
+  (`tools/xtask/src/dynamic.rs`).
 - **The first program and the test-run protocol** (ADR 0027).
   `poly.init=<path>` runs a program as pid 1 before the self-test and
   reports `POLY-INIT` / `POLY-EXIT`; `poly.test.capture` adds a
@@ -1366,9 +1378,9 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   `AnonShared` object behind `MAP_SHARED | MAP_ANONYMOUS`. A write to a
   shared frame with other users copies it; its last user takes it back
   (`AddressSpace::adopt`). A frame is freed with its last reference.
-- **Exec.** `user::exec::load(file, &ExecParams { argv, envp, execfn,
-  creds })` validates a static executable (`ET_EXEC`, or `ET_DYN` without
-  `PT_INTERP`, at `0x5555_5555_4000`; `PT_INTERP` is refused), creates a
+- **Exec.** `user::exec::load_dynamic(file, &ExecParams { argv, envp,
+  execfn, creds }, open_interp)` validates an executable (`ET_EXEC`, or
+  `ET_DYN` at `0x5555_5555_4000`), creates a
   region per planned mapping (segment file bytes through a `FileRef` window
   ending at `p_filesz`, so last pages have zero tails; `.bss` anonymous),
   starts the break after the highest segment, creates a 128 KiB stack
@@ -1378,13 +1390,21 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   `AT_EXECFN`, `AT_PLATFORM`, `AT_HWCAP`, `AT_SYSINFO_EHDR` for the vDSO
   it maps, ...). Only the stack page is
   resident when it returns. `exec::exec` (any `PageSource`) and
-  `exec::exec_image` (an `Arc<[u8]>`) also start the thread.
+  `exec::exec_image` (an `Arc<[u8]>`) also start the thread. A
+  dynamically linked program (`PT_INTERP`) gets its interpreter, opened by
+  the caller's `open_interp` (the VFS for `program.rs` and `execve`):
+  reserved in free space for its footprint, mapped there, `AT_BASE` set to
+  its bias, the thread started at its entry (ADR 0049); `exec::load` has
+  no opener and refuses such programs.
+- **Advice.** `Memory::advise` (madvise(2), `user/memory/advice.rs`) drops
+  the pages of a range like an unmap does but keeps the regions, so the
+  next access finds zeros or the file's (or shared object's) contents.
 
 | User virtual (after exec) | What |
 |---|---|
-| `0x40_0000` (`ET_EXEC`) or `0x5555_5555_4000` (static PIE) | the image's segments, then `.bss` |
+| `0x40_0000` (`ET_EXEC`) or `0x5555_5555_4000` (PIE) | the image's segments, then `.bss` |
 | page after the highest segment | the program break (`brk`), growing up |
-| below `0x7fff_f7ef_f000` (128 MiB for the stack and a 1 MiB guard gap under its top) | `mmap` area, top-down; its first mappings are the vDSO's data page and, above it, the vDSO image (`AT_SYSINFO_EHDR`) |
+| below `0x7fff_f7ef_f000` (128 MiB for the stack and a 1 MiB guard gap under its top) | `mmap` area, top-down; its first mappings are the interpreter of a dynamically linked program (`AT_BASE`), then the vDSO's data page and, above it, the vDSO image (`AT_SYSINFO_EHDR`) |
 | `0x7fff_ffff_f000` - 128 KiB – `0x7fff_ffff_f000` | the stack region (grows to 8 MiB) |
 
 ## Synchronisation

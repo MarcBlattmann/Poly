@@ -22,10 +22,13 @@
 //!                       addresses, add symbols to the backtrace in a log on stdin
 //!   coverage <args>     run the coverage tool (see tools/coverage)
 //!   pipeline <args>     run the agent pipeline tool (see tools/pipeline, docs/AGENT_PIPELINE.md)
+//!   dynamic-initramfs   build the dynamically linked test programs and an initramfs
+//!                       with them and the host's ld.so and libraries (docs/DEBUGGING.md)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
 mod console;
+mod dynamic;
 mod ext2disk;
 mod font;
 mod initramfs;
@@ -69,8 +72,11 @@ fn main() -> ExitCode {
         Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => pipeline(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
+        Some("dynamic-initramfs") => dynamic::command(),
         _ => {
-            eprintln!("usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font> [--release]");
+            eprintln!(
+                "usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font|dynamic-initramfs> [--release]"
+            );
             return ExitCode::from(2);
         }
     };
@@ -878,6 +884,8 @@ fn boot_tests() -> Result {
 
     // Static Linux hello worlds as the first process (poly.init).
     programs::boot_tests(&kernel, &syms)?;
+    // Dynamically linked glibc programs through glibc's own ld.so (dynamic.rs).
+    dynamic::boot_tests(&kernel, &syms)?;
 
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).

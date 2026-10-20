@@ -9,6 +9,7 @@ pub mod fd;
 pub mod futex;
 pub mod io;
 pub mod limits;
+pub mod madvise;
 pub mod mem;
 pub mod path;
 pub mod pipe;
