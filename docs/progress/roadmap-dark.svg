@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="406" viewBox="0 0 900 406" role="img" aria-label="Roadmap: 25 of 134 milestones done">
-<rect x="0.5" y="0.5" width="899.0" height="405.0" fill="#0d1117" rx="8" stroke="#30363d"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 25 of 139 milestones done">
+<rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">25 / 134 milestones · 19%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">25 / 139 milestones · 18%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -81,356 +81,373 @@
 <rect x="782.0" y="83.0" width="32.0" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <text x="884.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">14/14</text>
-<text x="16.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#4493f8" text-anchor="start"> 2  User space and the first Linux program</text>
+<text x="16.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#4493f8" text-anchor="start"> 2  Kernel terminal</text>
 <text x="328.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#4493f8" text-anchor="end">NOW</text>
+<g><title>Display: QEMU standard VGA (Bochs VBE) linear framebuffer driver and mode setting</title>
+<rect x="340.0" y="113.0" width="93.2" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Drawing library: pixels, rectangles, a permissively licensed bitmap font, scrolling text grid</title>
+<rect x="435.2" y="113.0" width="93.2" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Keyboard: PS/2 (i8042) driver on interrupts, scancode decoding, US and Swiss German layouts</title>
+<rect x="530.4" y="113.0" width="93.2" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Kernel shell: line editor with history and completion, commands (help, mem, ps, lspci, disks, uptime, test, clear, reboot)</title>
+<rect x="625.6" y="113.0" width="93.2" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Milestone: the kernel boots into a full-screen terminal with a status bar, usable with the keyboard</title>
+<rect x="720.8" y="113.0" width="93.2" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<text x="884.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/5</text>
+<text x="16.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 3  User space and the first Linux program</text>
 <g><title>Per-process address spaces, switching on context switch (PCID where available)</title>
-<rect x="340.0" y="113.0" width="37.7" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>User mode (ring 3) and the syscall/sysret entry path with per-CPU kernel stacks</title>
-<rect x="379.7" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="379.7" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Safe user-memory access (copy_from_user / copy_to_user with fault recovery)</title>
-<rect x="419.3" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="419.3" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Virtual memory areas, demand paging, page-fault handler for user space</title>
-<rect x="459.0" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="459.0" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>VFS core: inodes, dentries, mounts, file descriptor tables, path lookup</title>
-<rect x="498.7" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="498.7" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Initial RAM disk (cpio) mounted as the root file system; tmpfs</title>
-<rect x="538.3" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="538.3" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>ELF loader for static binaries: segments, initial stack, auxiliary vector</title>
-<rect x="578.0" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="578.0" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>First Linux syscalls: write, exit_group, brk, mmap, munmap, arch_prctl</title>
-<rect x="617.7" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="617.7" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: a static Linux &quot;hello world&quot; runs and exits cleanly</title>
-<rect x="657.3" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="657.3" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Agent pipeline v0: Linux syscall tracer on a real Linux VM, spec agent, implementer agent</title>
-<rect x="697.0" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="697.0" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Diff runner v0: same tests on real Linux and on Poly, results compared per test</title>
-<rect x="736.7" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="736.7" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Held-out test store outside this repo; hand-off logging in specs/HANDOFF_LOG.md</title>
-<rect x="776.3" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="776.3" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/12</text>
-<text x="16.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 3  Linux userland</text>
+<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/12</text>
+<text x="16.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 4  Linux userland</text>
 <g><title>Processes and threads: clone, fork (copy-on-write), execve, exit, wait4</title>
-<rect x="340.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Thread-local storage, futex, robust futex lists, set_tid_address</title>
-<rect x="368.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="368.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Signals: delivery, handlers, sigaltstack, rt_sigreturn, process groups</title>
-<rect x="396.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="396.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Pipes, poll / select, epoll, eventfd, timerfd, signalfd</title>
-<rect x="424.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="424.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Time syscalls and a vDSO (clock_gettime without a syscall)</title>
-<rect x="452.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="452.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Dynamic linking: glibc's own ld.so loads shared libraries unchanged</title>
-<rect x="480.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="480.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>/dev (null, zero, random, urandom, tty, console), /proc (self, maps, status, cpuinfo), minimal /sys</title>
-<rect x="508.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="508.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>TTY layer: line discipline, pseudo-terminals, job control</title>
-<rect x="536.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="536.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Users, groups, credentials, file permissions, umask</title>
-<rect x="564.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="564.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Persistent file system on virtio-blk (ext2 first, then ext4), page cache and writeback</title>
-<rect x="592.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="592.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: BusyBox shell boots as init and runs interactively</title>
-<rect x="620.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="620.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>SMP: start all CPUs, per-CPU data, TLB shootdown, multi-core scheduler</title>
-<rect x="648.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="648.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Networking: virtio-net driver, own TCP/IP stack (IPv4, IPv6, TCP, UDP, ICMP)</title>
-<rect x="676.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="676.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Sockets: AF_INET, AF_INET6, AF_UNIX (incl. fd passing), AF_NETLINK basics</title>
-<rect x="704.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="704.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Linux namespaces / seccomp basics (needed by browsers' sandboxes)</title>
-<rect x="732.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="732.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone (proof of concept a): a recorded trace of a simple Linux CLI app passes</title>
-<rect x="760.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="760.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>bash, coreutils, Python and a C compiler run from the persistent disk</title>
-<rect x="788.0" y="143.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="788.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/17</text>
-<text x="16.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 4  NT personality and Windows console apps</text>
+<text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/17</text>
+<text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 5  NT personality and Windows console apps</text>
 <g><title>⚖️ Decide: reimplement MSVC / DirectX redistributable DLLs, or run apps' own copies</title>
-<rect x="340.0" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds</title>
-<rect x="366.4" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="366.4" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>NT object manager: handles, object namespace (\??, \Device, \BaseNamedObjects), reference counts</title>
-<rect x="392.9" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="392.9" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>NT memory services: sections, NtAllocateVirtualMemory, NtMapViewOfSection, protections</title>
-<rect x="419.3" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="419.3" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>NT processes and threads, TEB/PEB, thread contexts, APCs</title>
-<rect x="445.8" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="445.8" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>NT synchronisation: events, mutants, semaphores, timers, NtWaitForMultipleObjects</title>
-<rect x="472.2" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="472.2" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O</title>
-<rect x="498.7" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="498.7" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Structured exception handling: kernel-to-user exception dispatch, unwinding</title>
-<rect x="525.1" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="525.1" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Registry: hive storage, NtOpenKey family, default system hives</title>
-<rect x="551.6" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="551.6" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Our ntdll: PE loader (imports, relocations, TLS, delay-load), heap, Rtl*, loader lock</title>
-<rect x="578.0" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="578.0" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Our kernelbase / kernel32: files, processes, threads, memory, synchronisation, errors</title>
-<rect x="604.4" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="604.4" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>C runtime: ucrtbase / msvcrt (or app-local copies per the decision above)</title>
-<rect x="630.9" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="630.9" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>advapi32 basics: registry API, security descriptors, tokens (single user)</title>
-<rect x="657.3" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="657.3" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Console: our console host, AllocConsole, ReadConsole / WriteConsole, standard handles</title>
-<rect x="683.8" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="683.8" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Windows file system layout: C:\Windows, System32, Program Files, user profile</title>
-<rect x="710.2" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="710.2" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace</title>
-<rect x="736.7" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="736.7" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Winsock (ws2_32) on our sockets; winhttp / wininet basics</title>
-<rect x="763.1" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="763.1" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Cryptography: bcrypt, crypt32 certificate stores (needed by almost every networked app)</title>
-<rect x="789.6" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="789.6" y="203.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/18</text>
-<text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 5  Graphics, input, audio and the desktop</text>
+<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/18</text>
+<text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>⚖️ Decide: global menu bar or per-window menus</title>
-<rect x="340.0" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>⚖️ Decide: native window frames per app, or one neutral frame</title>
-<rect x="376.6" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="376.6" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>virtio-gpu driver: modesetting and 2D framebuffer</title>
-<rect x="413.2" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="413.2" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps</title>
-<rect x="449.8" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="449.8" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged</title>
-<rect x="486.5" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="486.5" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa</title>
-<rect x="523.1" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="523.1" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface</title>
-<rect x="559.7" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="559.7" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Compositor: Wayland server, surface composition, HiDPI scaling, vsync</title>
-<rect x="596.3" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="596.3" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Shell: launcher, window management, notifications, settings (own non-glass design)</title>
-<rect x="632.9" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="632.9" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Compositor exposes the content behind each window (needed later for Liquid Glass)</title>
-<rect x="669.5" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="669.5" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>XWayland for X11 apps</title>
-<rect x="706.2" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="706.2" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Fonts: font store, rasterisation, fontconfig-compatible discovery</title>
-<rect x="742.8" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="742.8" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: GTK and Qt apps run; VLC plays a video with sound</title>
-<rect x="779.4" y="203.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="779.4" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/13</text>
-<text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 6  Windows GUI apps</text>
+<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/13</text>
+<text x="16.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 7  Windows GUI apps</text>
 <g><title>win32k services: windows, message queues, input routing, hooks, timers</title>
-<rect x="340.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>user32: window classes, messages, dialogs, menus, clipboard, DPI awareness</title>
-<rect x="374.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="374.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>gdi32: device contexts, bitmaps, regions, text output; surfaces handed to the compositor</title>
-<rect x="408.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="408.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Native look: uxtheme visual styles, comctl32 common controls matching real Windows</title>
-<rect x="442.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="442.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Text: DirectWrite, GDI font mapping, Uniscribe / complex scripts</title>
-<rect x="476.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="476.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>COM runtime: combase / ole32, apartments, marshalling, RPC, oleaut32 automation</title>
-<rect x="510.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="510.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Shell: shell32 / shlwapi, known folders, file open/save dialogs</title>
-<rect x="544.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="544.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Graphics: DXGI, Direct3D 11 on Vulkan, Direct2D; then Direct3D 12</title>
-<rect x="578.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="578.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Audio: MMDevice / WASAPI and winmm on our audio server</title>
-<rect x="612.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="612.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Security model: tokens, ACLs, integrity levels, job objects, restricted tokens (Chrome sandbox)</title>
-<rect x="646.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="646.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Services: service control manager, scheduled tasks, Windows event log</title>
-<rect x="680.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="680.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: Notepad++ and the 7-Zip GUI run with native-looking controls</title>
-<rect x="714.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="714.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: Paint.NET (.NET desktop) and VS Code (Electron) run</title>
-<rect x="748.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="748.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: Chrome runs with its sandbox enabled</title>
-<rect x="782.0" y="233.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="782.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/14</text>
-<text x="16.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 7  Integration bridges</text>
+<text x="884.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/14</text>
+<text x="16.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 8  Integration bridges</text>
 <g><title>Shared clipboard across Linux, Windows and macOS formats</title>
-<rect x="340.0" y="263.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="293.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Drag and drop between app worlds</title>
-<rect x="419.3" y="263.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="419.3" y="293.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>One file picker for every app world, mapped to each OS's path conventions</title>
-<rect x="498.7" y="263.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="498.7" y="293.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Unified notifications, app launcher entries and file associations</title>
-<rect x="578.0" y="263.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="578.0" y="293.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)</title>
-<rect x="657.3" y="263.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="657.3" y="293.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>One user home visible as ~, C:\Users\&lt;name&gt; and /Users/&lt;name&gt;</title>
-<rect x="736.7" y="263.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="736.7" y="293.0" width="77.3" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/6</text>
-<text x="16.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 8  XNU personality and macOS foundations</text>
+<text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/6</text>
+<text x="16.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 9  XNU personality and macOS foundations</text>
 <g><title>⚖️ Decide: aarch64 kernel port or x86-64 only (modern Mac apps are increasingly arm64-only)</title>
-<rect x="340.0" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API</title>
-<rect x="379.7" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="379.7" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Mach-O loading and our own dyld (shared cache optional, chained fixups)</title>
-<rect x="419.3" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="419.3" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Mach core: tasks, threads, ports, port rights, messages, Mach VM</title>
-<rect x="459.0" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="459.0" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>BSD layer: XNU syscalls, kqueue, posix_spawn, signals with Darwin semantics</title>
-<rect x="498.7" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="498.7" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>File system semantics: case-insensitive APFS behaviour, extended attributes, resource forks</title>
-<rect x="538.3" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="538.3" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>libSystem: libc, libpthread (incl. workqueues), libdispatch (GCD), libxpc</title>
-<rect x="578.0" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="578.0" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Objective-C runtime (libobjc) and Swift runtime</title>
-<rect x="617.7" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="617.7" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>System daemons: launchd, XPC services, preferences (cfprefsd), notifyd</title>
-<rect x="657.3" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="657.3" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>CoreFoundation, Foundation, Security framework, keychain</title>
-<rect x="697.0" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="697.0" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Networking: CFNetwork, Network.framework on our sockets</title>
-<rect x="736.7" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="736.7" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: macOS command-line tools run (Swift and Objective-C)</title>
-<rect x="776.3" y="293.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="776.3" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/12</text>
-<text x="16.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 9  macOS GUI apps and Liquid Glass</text>
+<text x="884.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/12</text>
+<text x="16.0" y="365.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start">10  macOS GUI apps and Liquid Glass</text>
 <g><title>Window server: Quartz / CoreGraphics windows composited by our compositor, global menu bar handling</title>
-<rect x="340.0" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Core Text and font rendering matching macOS</title>
-<rect x="387.6" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="387.6" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Core Animation: layer tree, implicit animations, timing curves</title>
-<rect x="435.2" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="435.2" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Metal on Vulkan; Core Image</title>
-<rect x="482.8" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="482.8" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>AppKit: windows, views, controls, menus, event handling, accessibility</title>
-<rect x="530.4" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="530.4" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>SwiftUI on our AppKit / Core Animation</title>
-<rect x="578.0" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="578.0" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Liquid Glass: materials, blur, refraction, sampling the content behind the window</title>
-<rect x="625.6" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="625.6" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Visual fidelity runner: noise-floor calibration, exact layout checks, perceptual checks</title>
-<rect x="673.2" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="673.2" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Audio: Core Audio / AVFoundation on our audio server</title>
-<rect x="720.8" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="720.8" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: a native AppKit app and a SwiftUI app match the real Mac within the noise floor</title>
-<rect x="768.4" y="323.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="768.4" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/10</text>
-<text x="16.0" y="365.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start">10  Real hardware</text>
+<text x="884.0" y="365.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/10</text>
+<text x="16.0" y="395.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start">11  Real hardware</text>
 <g><title>UEFI boot (own loader or Limine) producing the same BootInfo as PVH</title>
-<rect x="340.0" y="353.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="383.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>ACPI AML interpreter, power buttons, battery, thermal, suspend/resume</title>
-<rect x="408.0" y="353.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="408.0" y="383.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>NVMe storage, xHCI USB with HID (keyboard, mouse, touchpad)</title>
-<rect x="476.0" y="353.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="476.0" y="383.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>GPU driver for the chosen laptop (Intel or AMD), display output and 3D</title>
-<rect x="544.0" y="353.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="544.0" y="383.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Wi-Fi, Bluetooth, laptop audio codec, backlight, webcam</title>
-<rect x="612.0" y="353.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="612.0" y="383.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Installer, disk encryption, updates</title>
-<rect x="680.0" y="353.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="680.0" y="383.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Milestone: Poly runs as the only OS on one real laptop for a full workday</title>
-<rect x="748.0" y="353.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="748.0" y="383.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="365.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/7</text>
-<rect x="16.0" y="383.0" width="10.0" height="10.0" fill="#2ea043" rx="2" stroke="#30363d"/>
-<text x="31.0" y="392.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">done</text>
-<rect x="72.0" y="383.0" width="10.0" height="10.0" fill="#4493f8" rx="2" stroke="#30363d"/>
-<text x="87.0" y="392.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">next up</text>
-<rect x="144.5" y="383.0" width="10.0" height="10.0" fill="#161b22" rx="2" stroke="#30363d"/>
-<text x="159.5" y="392.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">to do</text>
+<text x="884.0" y="395.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/7</text>
+<rect x="16.0" y="413.0" width="10.0" height="10.0" fill="#2ea043" rx="2" stroke="#30363d"/>
+<text x="31.0" y="422.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">done</text>
+<rect x="72.0" y="413.0" width="10.0" height="10.0" fill="#4493f8" rx="2" stroke="#30363d"/>
+<text x="87.0" y="422.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">next up</text>
+<rect x="144.5" y="413.0" width="10.0" height="10.0" fill="#161b22" rx="2" stroke="#30363d"/>
+<text x="159.5" y="422.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">to do</text>
 </svg>

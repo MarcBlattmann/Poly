@@ -46,7 +46,18 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [x] virtio core (virtqueues) and virtio-blk driver: first real disk I/O
 - [x] Block layer with request queue and buffer cache
 
-## Phase 2: User space and the first Linux program
+## Phase 2: Kernel terminal
+
+A terminal built into the kernel: a debug console on screen until user-mode
+programs (and later the real desktop) exist. The drivers stay for good.
+
+- [ ] Display: QEMU standard VGA (Bochs VBE) linear framebuffer driver and mode setting
+- [ ] Drawing library: pixels, rectangles, a permissively licensed bitmap font, scrolling text grid
+- [ ] Keyboard: PS/2 (i8042) driver on interrupts, scancode decoding, US and Swiss German layouts
+- [ ] Kernel shell: line editor with history and completion, commands (help, mem, ps, lspci, disks, uptime, test, clear, reboot)
+- [ ] **Milestone:** the kernel boots into a full-screen terminal with a status bar, usable with the keyboard
+
+## Phase 3: User space and the first Linux program
 
 - [ ] Per-process address spaces, switching on context switch (PCID where available)
 - [ ] User mode (ring 3) and the `syscall`/`sysret` entry path with per-CPU kernel stacks
@@ -61,7 +72,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] Diff runner v0: same tests on real Linux and on Poly, results compared per test
 - [ ] Held-out test store outside this repo; hand-off logging in `specs/HANDOFF_LOG.md`
 
-## Phase 3: Linux userland
+## Phase 4: Linux userland
 
 - [ ] Processes and threads: `clone`, `fork` (copy-on-write), `execve`, `exit`, `wait4`
 - [ ] Thread-local storage, `futex`, robust futex lists, `set_tid_address`
@@ -81,7 +92,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] **Milestone (proof of concept a):** a recorded trace of a simple Linux CLI app passes
 - [ ] bash, coreutils, Python and a C compiler run from the persistent disk
 
-## Phase 4: NT personality and Windows console apps
+## Phase 5: NT personality and Windows console apps
 
 - [ ] ⚖️ Decide: reimplement MSVC / DirectX redistributable DLLs, or run apps' own copies
 - [ ] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds
@@ -102,7 +113,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics
 - [ ] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app)
 
-## Phase 5: Graphics, input, audio and the desktop
+## Phase 6: Graphics, input, audio and the desktop
 
 - [ ] ⚖️ Decide: global menu bar or per-window menus
 - [ ] ⚖️ Decide: native window frames per app, or one neutral frame
@@ -118,7 +129,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] Fonts: font store, rasterisation, fontconfig-compatible discovery
 - [ ] **Milestone:** GTK and Qt apps run; VLC plays a video with sound
 
-## Phase 6: Windows GUI apps
+## Phase 7: Windows GUI apps
 
 - [ ] win32k services: windows, message queues, input routing, hooks, timers
 - [ ] `user32`: window classes, messages, dialogs, menus, clipboard, DPI awareness
@@ -135,7 +146,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] **Milestone:** Paint.NET (.NET desktop) and VS Code (Electron) run
 - [ ] **Milestone:** Chrome runs with its sandbox enabled
 
-## Phase 7: Integration bridges
+## Phase 8: Integration bridges
 
 - [ ] Shared clipboard across Linux, Windows and macOS formats
 - [ ] Drag and drop between app worlds
@@ -144,7 +155,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)
 - [ ] One user home visible as `~`, `C:\Users\<name>` and `/Users/<name>`
 
-## Phase 8: XNU personality and macOS foundations
+## Phase 9: XNU personality and macOS foundations
 
 - [ ] ⚖️ Decide: aarch64 kernel port or x86-64 only (modern Mac apps are increasingly arm64-only)
 - [ ] macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API
@@ -159,7 +170,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] Networking: CFNetwork, Network.framework on our sockets
 - [ ] **Milestone:** macOS command-line tools run (Swift and Objective-C)
 
-## Phase 9: macOS GUI apps and Liquid Glass
+## Phase 10: macOS GUI apps and Liquid Glass
 
 - [ ] Window server: Quartz / CoreGraphics windows composited by our compositor, global menu bar handling
 - [ ] Core Text and font rendering matching macOS
@@ -172,7 +183,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] Audio: Core Audio / AVFoundation on our audio server
 - [ ] **Milestone:** a native AppKit app and a SwiftUI app match the real Mac within the noise floor
 
-## Phase 10: Real hardware
+## Phase 11: Real hardware
 
 - [ ] UEFI boot (own loader or Limine) producing the same `BootInfo` as PVH
 - [ ] ACPI AML interpreter, power buttons, battery, thermal, suspend/resume

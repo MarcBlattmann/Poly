@@ -27,7 +27,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 
 These are also marked ⚖️ in [ROADMAP.md](../ROADMAP.md) at the point where they block work.
 
-- **Global menu bar vs. per-window menus.** Needed before compositor work (roadmap step 4).
+- **Global menu bar vs. per-window menus.** Needed before compositor work (roadmap Phase 6).
 - **Window frames:** native per app (macOS traffic lights, Windows frames) or one neutral frame.
 - **MSVC / DirectX redistributables:** 62% of Windows entries are versioned C++
   runtime DLLs (`msvcp*`, `msvcr*`, `vcruntime*`) that apps normally ship
