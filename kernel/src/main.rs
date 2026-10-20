@@ -5,6 +5,7 @@
 
 mod arch;
 mod boot_info;
+mod frames;
 mod log;
 mod process;
 mod qemu;
@@ -13,7 +14,7 @@ mod sync;
 mod syscall;
 
 use core::panic::PanicInfo;
-use poly_mem::{BumpFrameAllocator, Region, RegionKind};
+use poly_mem::{PAGE_SIZE, Region, RegionKind};
 
 unsafe extern "C" {
     static __kernel_phys_start: u8;
@@ -62,7 +63,18 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
         memory.total(RegionKind::Usable) >> 20,
         memory.total(RegionKind::Kernel) >> 10
     );
-    let _early_frames = BumpFrameAllocator::new(&memory);
+
+    let (memory, meta) = frames::init(&memory);
+    if let Some(f) = frames::FRAMES.lock().as_ref() {
+        kprintln!(
+            "frames: buddy allocator, {} frames total ({} MiB), {} free, metadata {} KiB at {:#x}",
+            f.total_frames(),
+            (f.total_frames() * PAGE_SIZE) >> 20,
+            f.free_frames(),
+            meta.bytes >> 10,
+            meta.phys
+        );
+    }
 
     let ok = selftest::run(&memory);
     if boot.has_flag("poly.selftest.page_fault") {
