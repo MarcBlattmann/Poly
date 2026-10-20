@@ -95,7 +95,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 ## Phase 5: NT personality and Windows console apps
 
-- [ ] ⚖️ Decide: reimplement MSVC / DirectX redistributable DLLs, or run apps' own copies
+- [x] Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed
 - [ ] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds
 - [ ] NT object manager: handles, object namespace (`\??`, `\Device`, `\BaseNamedObjects`), reference counts
 - [ ] NT memory services: sections, `NtAllocateVirtualMemory`, `NtMapViewOfSection`, protections
@@ -106,13 +106,14 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Registry: hive storage, `NtOpenKey` family, default system hives
 - [ ] Our `ntdll`: PE loader (imports, relocations, TLS, delay-load), heap, `Rtl*`, loader lock
 - [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors
-- [ ] C runtime: `ucrtbase` / `msvcrt` (or app-local copies per the decision above)
+- [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055)
 - [ ] `advapi32` basics: registry API, security descriptors, tokens (single user)
 - [ ] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles
 - [ ] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile
 - [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace
 - [ ] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics
 - [ ] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app)
+- [ ] Fallback if needed: our own `vcruntime140` (and `msvcp140` subsets) per ADR 0055
 
 ## Phase 6: Graphics, input, audio and the desktop
 
