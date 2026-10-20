@@ -248,16 +248,15 @@ kernel_test! {
         if st.kind() != Some(FileType::CharDevice) || st.rdev != device::NULL || st.perm() != 0o666 {
             return Err("/dev/null is not character device 1,3 with mode 0666");
         }
-        for path in [b"/dev/console".as_slice(), b"/dev/tty"] {
-            let fd = open(path)?;
-            let msg = b"fs: console test: a line written to /dev/console\n";
-            let wrote = f.write(fd, if path == b"/dev/tty" { b"" } else { msg });
-            if f.read(fd, &mut buf) != Ok(0) || !wrote.is_ok_and(|n| n == 0 || n == msg.len()) {
-                return Err("the console does not take writes and read end of file");
-            }
-            if f.lseek(fd, 0, Whence::Set) != Err(Errno::ESPIPE) || f.ioctl(fd, 0x5401, 0) != Err(Errno::ENOTTY) {
-                return Err("the console seeks, or answers an ioctl");
-            }
+        // The console is a terminal (`crate::tty`, ADR 0046, which tests it
+        // further); the kernel has no controlling terminal for /dev/tty.
+        let fd = open(b"/dev/console")?;
+        let msg = b"fs: console test: a line written to /dev/console\n";
+        if f.write(fd, msg) != Ok(msg.len()) || f.lseek(fd, 0, Whence::Set) != Err(Errno::ESPIPE) {
+            return Err("the console does not take writes, or seeks");
+        }
+        if open(b"/dev/tty") != Err("ENXIO") {
+            return Err("/dev/tty opened without a controlling terminal");
         }
         // Opening a node of an unregistered device fails with ENXIO.
         let tmp = b"/tmp/fs-test-nodev";
@@ -297,7 +296,9 @@ kernel_test! {
         if f.status_flags(1).map_err(e)?.intersection(OpenFlags::ACCMODE) != OpenFlags::RDWR {
             return Err("the console is not open for reading and writing");
         }
-        if f.write(1, b"") != Ok(0) || f.read(0, &mut [0u8; 4]) != Ok(0) {
+        // A terminal: nothing typed, so a read would wait (the kernel
+        // cannot block in it and gets EAGAIN).
+        if f.write(1, b"") != Ok(0) || f.read(0, &mut [0u8; 4]) != Err(Errno::EAGAIN) {
             return Err("the console fds do not work");
         }
         if f.getcwd().map_err(e)? != b"/" {

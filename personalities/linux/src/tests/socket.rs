@@ -431,7 +431,7 @@ fn sendmsg_passes_rights_and_checked_credentials() {
     k.poke(S + 0x900, b" world");
     let iovs = [Iovec { base: S + 0x800, len: 5 }, Iovec { base: S + 0x900, len: 6 }];
     let mut control = cmsg(abi::SOL_SOCKET, abi::SCM_RIGHTS, &[3, 0, 0, 0, 4, 0, 0, 0]);
-    let me = Ucred { pid: k.pid, uid: k.creds.uid, gid: k.creds.egid };
+    let me = Ucred { pid: k.pid, uid: k.creds().uid, gid: k.creds().egid };
     control.extend(cmsg(abi::SOL_SOCKET, abi::SCM_CREDENTIALS, &me.to_bytes()));
     k.poke(S + 0xa00, &control);
     msghdr(&mut k, S, &iovs, (0, 0), (S + 0xa00, control.len() as u64));

@@ -28,6 +28,8 @@
 //! to the personality by `with_process`. One futex table serves every
 //! process ([`FUTEXES`]).
 
+pub mod cred;
+mod cred_tests;
 mod fileio_tests;
 mod files;
 mod files_tests;

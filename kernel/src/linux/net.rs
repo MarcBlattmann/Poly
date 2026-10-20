@@ -35,6 +35,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::net::{SocketAddr, SocketAddrV6};
 use core::time::Duration;
+use poly_personality_linux::LinuxKernel;
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::fileio::NewFd;
 use poly_personality_linux::net::{
@@ -148,8 +149,10 @@ impl Thread<'_> {
         Ok((file, sock))
     }
 
+    /// The calling process's id and real ids (unix(7): what a receiver
+    /// with `SO_PASSCRED` gets unless the sender names others).
     fn unix_creds(&self) -> Credentials {
-        let c = self.process.files.cred();
+        let c = LinuxKernel::credentials(self);
         Credentials { pid: self.process.pid as i32, uid: c.uid, gid: c.gid }
     }
 
@@ -157,7 +160,7 @@ impl Thread<'_> {
     /// descriptor.
     fn install_socket(&self, object: Arc<dyn FileObject>, new: NewFd) -> Result<i32, Errno> {
         let files = &self.process.files;
-        let node = fs::vfs().anon_node(FileType::Socket, 0o777, files.cred()).map_err(verr)?;
+        let node = fs::vfs().anon_node(FileType::Socket, 0o777, &files.cred()).map_err(verr)?;
         let flags = if new.nonblock { OpenFlags::RDWR | OpenFlags::NONBLOCK } else { OpenFlags::RDWR };
         files.install(Arc::new(OpenFile::on_object(node, object, flags)), new.cloexec).map_err(verr)
     }
@@ -181,7 +184,7 @@ impl Thread<'_> {
         match addr {
             SockAddr::Unix(UnixAddr::Path(p)) => {
                 let files = &self.process.files;
-                ns.lookup_path(fs::vfs(), &files.context(), files.cred(), At::Cwd, p).map_err(verr)
+                ns.lookup_path(fs::vfs(), &files.context(), &files.cred(), At::Cwd, p).map_err(verr)
             }
             SockAddr::Unix(UnixAddr::Abstract(n)) => ns.lookup_abstract(n).ok_or(Errno::ECONNREFUSED),
             _ => Err(Errno::EINVAL),
@@ -436,7 +439,7 @@ impl LinuxNet for Thread<'_> {
                     SockAddr::Unix(UnixAddr::Abstract(n)) => sock.bind_abstract(n).map_err(verr),
                     SockAddr::Unix(UnixAddr::Path(p)) => {
                         let files = &self.process.files;
-                        sock.bind_path(fs::vfs(), &files.context(), files.cred(), At::Cwd, p).map_err(verr)
+                        sock.bind_path(fs::vfs(), &files.context(), &files.cred(), At::Cwd, p).map_err(verr)
                     }
                     _ => Err(Errno::EINVAL),
                 }

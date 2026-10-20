@@ -3,7 +3,7 @@
 //!
 //! | Trait methods | Kernel |
 //! |---|---|
-//! | ids, credentials | the [`Process`] (everyone is root until users arrive) |
+//! | ids, credentials | each thread's `LinuxThread::creds` in the [`LinuxState`](super::LinuxState) (`linux::cred`, ADR 0045) |
 //! | `copy_*_user` | `user::copy_*_user` (demand paging, `EFAULT`) |
 //! | `write`, `read`, `close`, `fstat`, `ioctl`, file paths | the process's [`crate::fs::Files`] |
 //! | `mmap`, `munmap`, `mprotect`, `brk` | the thread's [`Memory`] (`user::current_memory`) |
@@ -200,10 +200,21 @@ pub fn file_stat(st: &poly_vfs::Stat) -> FileStat {
 
 fn info_of(p: &Process) -> ProcessInfo {
     let pid = p.pid as i32;
-    // Groups and sessions from the process tree; everyone is root until
-    // users arrive.
+    // Groups and sessions from the process tree; the ids are filled in
+    // under the process's lock (`with_process`).
     let (pgid, sid) = super::task::group_and_session(p.pid);
     ProcessInfo { pid, pgid, sid, zombie: p.has_ended(), ..ProcessInfo::default() }
+}
+
+/// `info` with the ids of thread `tid` of `state`, or of the process
+/// (`LinuxProcess::process_creds`) when `tid` is not one of its threads.
+fn with_ids(mut info: ProcessInfo, state: &LinuxProcess, tid: i32) -> ProcessInfo {
+    let creds = if state.has_thread(tid) { Some(&state.thread(tid).creds) } else { state.process_creds(info.pid) };
+    if let Some(c) = creds {
+        (info.uid, info.euid, info.suid) = (c.uid, c.euid, c.suid);
+        (info.gid, info.egid, info.sgid) = (c.gid, c.egid, c.sgid);
+    }
+    info
 }
 
 /// The region protection for validated `PROT_*` bits (`PROT_SEM` and the
@@ -256,8 +267,11 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn credentials(&self) -> Credentials {
-        let cred = self.process.files.cred();
-        Credentials { uid: cred.uid, euid: cred.uid, gid: cred.gid, egid: cred.gid }
+        let (tid, pid) = (self.tid as i32, self.process.pid as i32);
+        self.linux.with(|p| {
+            let creds = if p.has_thread(tid) { Some(&p.thread(tid).creds) } else { p.process_creds(pid) };
+            creds.map_or_else(Credentials::default, |c| c.summary())
+        })
     }
 
     fn copy_from_user(&self, src: UserPtr, dst: &mut [u8]) -> Result<(), Errno> {
@@ -292,7 +306,12 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn ioctl(&mut self, fd: i32, request: u32, arg: u64) -> Result<u64, Errno> {
-        self.process.files.ioctl(fd, request, arg).map_err(vfs_errno)
+        // A terminal request interrupted (job control's SIGTTOU) restarts
+        // under SA_RESTART, as on a slow device (signal(7), ADR 0046).
+        self.process.files.ioctl(fd, request, arg).map_err(|e| match e {
+            poly_vfs::Errno::EINTR => Errno::RESTART_IF_SA_RESTART,
+            e => vfs_errno(e),
+        })
     }
 
     fn mmap(&mut self, r: &MapRequest) -> Result<u64, Errno> {
@@ -392,12 +411,20 @@ impl LinuxKernel for Thread<'_> {
         target: Target,
         f: &mut dyn FnMut(&mut LinuxProcess, &ProcessInfo),
     ) -> Result<(), Errno> {
+        let tid = match target {
+            Target::Thread(tid) => tid,
+            Target::Current => self.tid as i32,
+            Target::Process(pid) => pid,
+        };
         let target = self.target(target)?;
         let p = target.get();
         let linux = if core::ptr::eq(p, self.process) { Some(self.linux) } else { p.linux.as_ref() };
         let linux = linux.ok_or(Errno::ESRCH)?;
         let info = info_of(p);
-        linux.with(|state| f(state, &info));
+        linux.with(|state| {
+            let info = with_ids(info, state, tid);
+            f(state, &info)
+        });
         Ok(())
     }
 

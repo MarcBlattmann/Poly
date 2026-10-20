@@ -11,7 +11,7 @@
 //!          │  open / read / write / lseek / dup / fstat / getdents on byte buffers
 //!          ▼
 //!   fs::vfs() ── poly_vfs::Vfs: mounts, path lookup, permissions, char devices
-//!          │                          └── /dev/console, /dev/tty → kernel log (serial, later the screen)
+//!          │                          └── /dev/console, /dev/tty → terminals (crate::tty, ADR 0046)
 //!          ▼                              /dev/null, /dev/zero, /dev/full
 //!   Tmpfs on /  ◀── poly_cpio::unpack ◀── initramfs (boot module 0, QEMU -initrd)
 //!   ext2 on /mnt (or wherever poly.mount= says) ── page cache ── block::Disk (disk.rs, cache.rs)

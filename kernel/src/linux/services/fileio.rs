@@ -66,7 +66,7 @@ fn open_object(
     flags: OpenFlags,
     new: NewFd,
 ) -> Result<Arc<OpenFile>, Errno> {
-    let node = fs::vfs().anon_node(kind, 0o600, files.cred()).map_err(vfs_errno)?;
+    let node = fs::vfs().anon_node(kind, 0o600, &files.cred()).map_err(vfs_errno)?;
     let flags = if new.nonblock { flags | OpenFlags::NONBLOCK } else { flags };
     Ok(Arc::new(OpenFile::on_object(node, object, flags)))
 }
@@ -96,6 +96,9 @@ pub(super) fn read(t: &mut Thread<'_>, fd: Fd, buf: &mut [u8]) -> Result<usize, 
 /// out before a signal or the last reader's close).
 pub(super) fn write(t: &mut Thread<'_>, fd: Fd, buf: &[u8]) -> Result<usize, Errno> {
     let file = t.file(fd)?;
+    // A writer without CAP_FSETID clears set-user-ID / set-group-ID bits
+    // (ADR 0045).
+    t.process.files.before_write(&file, buf.len()).map_err(super::vfs_errno)?;
     let mut blocker = t.blocker();
     match file.object().and_then(|o| o.timeouts().1) {
         Some(ns) => {
@@ -141,7 +144,7 @@ impl FileIo for Thread<'_> {
     fn pipe(&mut self, new: NewFd, direct: bool) -> Result<[i32; 2], Errno> {
         let (r, w) = Pipe::pair(direct);
         let files = &self.process.files;
-        let node = fs::vfs().anon_node(FileType::Fifo, 0o600, files.cred()).map_err(vfs_errno)?;
+        let node = fs::vfs().anon_node(FileType::Fifo, 0o600, &files.cred()).map_err(vfs_errno)?;
         let mut flags = if new.nonblock { OpenFlags::NONBLOCK } else { OpenFlags::RDONLY };
         if direct {
             flags = flags | OpenFlags::DIRECT;

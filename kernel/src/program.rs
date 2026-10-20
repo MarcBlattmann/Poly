@@ -104,6 +104,12 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
     let source = FileSource::of(&file);
     let image = exec::load(Arc::new(source), &ExecParams::new(argv, envp, path)).map_err(ExecPathError::Exec)?;
     let process = Arc::new(Process::new_linux(process::alloc_pid(), 0, format, traced));
+    if let Some(linux) = &process.linux {
+        // The program's name (prctl(2) PR_GET_NAME); it runs as root.
+        let comm = poly_personality_linux::sys::prctl::comm_from_path(path);
+        let pid = process.pid as i32;
+        linux.with(|p| p.thread_mut(pid).comm = comm);
+    }
     fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
     Ok(Prepared { process, image })
 }
@@ -117,12 +123,28 @@ pub fn split_args(path: &str, args: &[String]) -> Vec<Vec<u8>> {
     argv
 }
 
-/// Run the program at `path` with `args` and wait for it to end.
-pub fn run(path: &str, args: &[String], traced: bool) -> Result<ExitStatus, ExecPathError> {
+/// Run the program at `path` with `args` on the terminal `terminal` (its
+/// fds 0, 1 and 2; `None`: the console) and wait for it to end: the
+/// shell's `run`. The program leads a session of its own, so opening the
+/// terminal makes it the program's controlling terminal (ADR 0046).
+pub fn run_on(path: &str, args: &[String], terminal: Option<&str>) -> Result<ExitStatus, ExecPathError> {
     let argv = split_args(path, args);
     let argv: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
-    let process = exec_path(path.as_bytes(), &argv, &[], traced)?;
-    Ok(process.wait())
+    let prepared = prepare(path.as_bytes(), &argv, &[], false)?;
+    if let Some(tty) = terminal {
+        let files = &prepared.process.files;
+        for fd in 0..3 {
+            let _ = files.close(fd);
+        }
+        let opened = files
+            .open(tty.as_bytes(), poly_vfs::OpenFlags::RDWR, 0)
+            .and_then(|_| files.dup(0))
+            .and_then(|_| files.dup(0));
+        if let Err(e) = opened {
+            kprintln!("run: {tty}: {}", e.name());
+        }
+    }
+    Ok(prepared.start()?.wait())
 }
 
 /// `poly.init=<path>`: run that program as the first process before

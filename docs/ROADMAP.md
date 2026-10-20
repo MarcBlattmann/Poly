@@ -81,8 +81,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Time syscalls and a vDSO (`clock_gettime` without a syscall)
 - [ ] Dynamic linking: glibc's own `ld.so` loads shared libraries unchanged
 - [x] `/dev` (null, zero, random, urandom, tty, console), `/proc` (self, maps, status, cpuinfo), minimal `/sys`
-- [ ] TTY layer: line discipline, pseudo-terminals, job control
-- [ ] Users, groups, credentials, file permissions, `umask`
+- [x] TTY layer: line discipline, pseudo-terminals, job control
+- [x] Users, groups, credentials, file permissions, `umask`
 - [x] Persistent file system on virtio-blk (ext2), page cache and writeback
 - [ ] ext4 on the persistent disk (extents, journal)
 - [ ] **Milestone:** BusyBox shell boots as init and runs interactively

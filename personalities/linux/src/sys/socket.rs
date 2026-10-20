@@ -384,13 +384,14 @@ fn parse_control(k: &mut dyn LinuxKernel, ptr: UserPtr, len: u64) -> Result<Cont
                     return Err(Errno::EINVAL);
                 }
                 let u = Ucred::from_bytes(&m.data);
-                let me = k.credentials();
-                let privileged = me.euid == 0;
-                let ok = privileged
-                    || (u.pid == k.pid()
-                        && (u.uid == me.uid || u.uid == me.euid)
-                        && (u.gid == me.gid || u.gid == me.egid));
-                if !ok {
+                // unix(7): the caller's own process id (any with
+                // CAP_SYS_ADMIN), its real, effective or saved user id (any
+                // with CAP_SETUID) and group id (any with CAP_SETGID).
+                let me = crate::cred::current(k);
+                let pid_ok = u.pid == k.pid() || me.capable(crate::cred::cap::SYS_ADMIN);
+                let uid_ok = [me.uid, me.euid, me.suid].contains(&u.uid) || me.capable(crate::cred::cap::SETUID);
+                let gid_ok = [me.gid, me.egid, me.sgid].contains(&u.gid) || me.capable(crate::cred::cap::SETGID);
+                if !(pid_ok && uid_ok && gid_ok) {
                     return Err(Errno::EPERM);
                 }
                 c.creds = Some(u);

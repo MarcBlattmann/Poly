@@ -35,6 +35,7 @@ mod terminal;
 mod testrun;
 mod thread;
 mod time;
+mod tty;
 mod user;
 mod vdso;
 mod virtio_blk;
@@ -127,9 +128,14 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     keyboard::init(&boot);
     display::init(&boot);
     fs::init(&boot, initrd);
+    tty::init(&boot);
     net::init(&boot);
     // `poly.init=<path>`: the first program runs before anything else; a
-    // test run (`poly.qemu_exit`) ends with it (ADR 0027, ADR 0038).
+    // test run (`poly.qemu_exit`) ends with it (ADR 0027, ADR 0038). With
+    // `console=tty1` its console is the screen's terminal (ADR 0046).
+    if tty::console_is_screen(&boot) {
+        terminal::bring_up(&boot);
+    }
     program::run_init(&boot);
 
     // The shell's `test` command runs the tests again later.

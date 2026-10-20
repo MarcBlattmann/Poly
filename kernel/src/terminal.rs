@@ -44,6 +44,12 @@
 //!   kernel tests run (they read the keyboard themselves), and the render
 //!   thread pauses during the display tests, which draw on the screen.
 //!
+//! - **The terminal device** (`/dev/tty1`, `crate::tty`, ADR 0046): what
+//!   programs write to it goes into [`TTY_OUT`] ([`tty_output`], which
+//!   never draws or sleeps: terminals call it with their lock held) and
+//!   into the grid with the log; while a program has tty1 open, the
+//!   keyboard is the terminal's and the screen's shell waits.
+//!
 //! Without a display (`poly.display=off`, no VGA) or with
 //! `poly.terminal=off`, nothing starts and the mirror turns itself off.
 
@@ -100,11 +106,58 @@ pub fn mirror(args: fmt::Arguments) {
     LOG_WRITTEN.store(ring.written(), SeqCst);
 }
 
+/// Program output for the grid from `/dev/tty1`, not drawn yet.
+static TTY_OUT: SpinLock<TtyOut> = SpinLock::new(TtyOut { bytes: VecDeque::new(), lost: 0 });
+/// Most bytes of program output waiting for the grid; more push the
+/// oldest out (the terminal reports how many).
+const TTY_OUT_BYTES: usize = 64 * 1024;
+
+struct TtyOut {
+    bytes: VecDeque<u8>,
+    lost: u64,
+}
+
+/// Bytes a program wrote to the screen's terminal (`/dev/tty1`), already
+/// through its line discipline: queued for the grid and the render thread
+/// poked. Never draws or sleeps.
+pub fn tty_output(bytes: &[u8]) {
+    if MIRROR_OFF.load(SeqCst) {
+        return;
+    }
+    {
+        let mut out = TTY_OUT.lock();
+        out.bytes.extend(bytes);
+        let over = out.bytes.len().saturating_sub(TTY_OUT_BYTES);
+        if over > 0 {
+            out.bytes.drain(..over);
+            out.lost += over as u64;
+        }
+    }
+    SCREEN.poke();
+}
+
+/// Scroll the screen's view `pages` pages back (negative: forward), as
+/// Shift+Page Up / Down do.
+pub fn scroll_pages(pages: i32) {
+    SCREEN.with(|t| t.scroll_pages(pages));
+    SCREEN.poke();
+}
+
+/// Show the screen again if the view is scrolled back (a key that types).
+pub fn scroll_to_bottom() {
+    if SCREEN.with(|t| t.grid().view_offset() > 0).unwrap_or(false) {
+        SCREEN.with(Terminal::scroll_to_bottom);
+        SCREEN.poke();
+    }
+}
+
 /// The terminal and what goes with it.
 struct Term<'a> {
     t: Terminal<'a>,
     /// Position in [`LOG`] up to which the log is in the grid.
     log_pos: u64,
+    /// A UTF-8 character of program output split between two writes.
+    carry: crate::fs::devices::Utf8Carry,
 }
 
 /// A terminal shared by a console, a render thread and the log.
@@ -141,6 +194,7 @@ impl<'a> Shared<'a> {
         let mut guard = self.term.lock();
         let term = guard.as_mut()?;
         self.drain_log(term);
+        self.drain_tty(term);
         Some(f(&mut term.t))
     }
 
@@ -162,9 +216,35 @@ impl<'a> Shared<'a> {
         self.log_seen.store(term.log_pos, SeqCst);
     }
 
+    /// Move program output from `/dev/tty1` into the grid.
+    fn drain_tty(&self, term: &mut Term<'a>) {
+        if !self.follows_log {
+            return;
+        }
+        let mut buf = [0u8; 512];
+        loop {
+            let (n, lost) = {
+                let mut out = TTY_OUT.lock();
+                let n = out.bytes.len().min(buf.len());
+                for (dst, src) in buf.iter_mut().zip(out.bytes.drain(..n)) {
+                    *dst = src;
+                }
+                (n, core::mem::take(&mut out.lost))
+            };
+            if lost > 0 {
+                term.t.log_lost(lost);
+            }
+            if n == 0 {
+                break;
+            }
+            let t = &mut term.t;
+            term.carry.feed(&buf[..n], &mut |s| t.write_shell(s));
+        }
+    }
+
     /// Log output the terminal has not shown yet.
     fn log_pending(&self) -> bool {
-        self.follows_log && LOG_WRITTEN.load(SeqCst) != self.log_seen.load(SeqCst)
+        self.follows_log && (LOG_WRITTEN.load(SeqCst) != self.log_seen.load(SeqCst) || !TTY_OUT.lock().bytes.is_empty())
     }
 
     /// Something changed: get the render thread going.
@@ -176,29 +256,61 @@ impl<'a> Shared<'a> {
 
 // --- Start ------------------------------------------------------------------
 
+/// The screen terminal is up ([`bring_up`] made it).
+static UP: AtomicBool = AtomicBool::new(false);
+/// [`bring_up`] ran (whatever it found).
+static TRIED: AtomicBool = AtomicBool::new(false);
+
 /// Put the terminal on the display and start a shell on it with the
 /// keyboard. Call once, after the kernel tests and before the serial shell
 /// starts (it logs, which would disturb that shell's first prompt).
 pub fn start(boot: &BootInfo) {
+    if !bring_up(boot) {
+        return;
+    }
+    let console = ScreenConsole::new(&SCREEN, KeyboardKeys);
+    if let Err(e) = shell::spawn("shell-screen", Box::new(console)) {
+        kprintln!("terminal: the shell could not start: {e:?}");
+    }
+    if let Some(screen) = SCREEN.with(|t| *t.screen()) {
+        kprintln!(
+            "terminal: {}x{} cells in {} on the display, status bar on top, {} lines of scrollback; a shell on the keyboard{}",
+            screen.cols,
+            screen.rows,
+            screen.font.name(),
+            screen.scrollback,
+            if keyboard::is_present() { "" } else { " (no keyboard found)" },
+        );
+    }
+}
+
+/// Put the terminal on the display, with its render thread, without a
+/// shell: early, when the first program's console is the screen's
+/// terminal (`console=tty1`), and from [`start`]. Returns whether the
+/// terminal is up; later calls do nothing again.
+pub fn bring_up(boot: &BootInfo) -> bool {
+    if TRIED.swap(true, SeqCst) {
+        return UP.load(SeqCst);
+    }
     let Some(info) = display::info() else {
         MIRROR_OFF.store(true, SeqCst);
-        return;
+        return false;
     };
     if boot.arg(TERMINAL_ARG) == Some("off") {
         MIRROR_OFF.store(true, SeqCst);
         kprintln!("terminal: off ({TERMINAL_ARG}=off); the display keeps the boot screen");
-        return;
+        return false;
     }
     let Some(screen) = Screen::new(info.width, info.height) else {
         MIRROR_OFF.store(true, SeqCst);
         kprintln!("terminal: a {}x{} display is too small for a terminal", info.width, info.height);
-        return;
+        return false;
     };
     let mut cells = Vec::new();
     if cells.try_reserve_exact(screen.cells()).is_err() {
         MIRROR_OFF.store(true, SeqCst);
         kprintln!("terminal: no memory for {} cells", screen.cells());
-        return;
+        return false;
     }
     cells.resize(screen.cells(), Cell::BLANK);
     // The terminal lives as long as the kernel.
@@ -206,23 +318,14 @@ pub fn start(boot: &BootInfo) {
     let t = Terminal::new(screen, cells).expect("the screen layout fits a text grid");
     // Start with what the ring still has of the boot log.
     let log_pos = LOG.lock().oldest();
-    *SCREEN.term.lock() = Some(Term { t, log_pos });
+    *SCREEN.term.lock() = Some(Term { t, log_pos, carry: crate::fs::devices::Utf8Carry::default() });
     if let Err(e) = thread::spawn_named("terminal", render_main, 0) {
         kprintln!("terminal: the render thread could not start: {e:?}");
-        return;
+        return false;
     }
-    let console = ScreenConsole::new(&SCREEN, KeyboardKeys);
-    if let Err(e) = shell::spawn("shell-screen", Box::new(console)) {
-        kprintln!("terminal: the shell could not start: {e:?}");
-    }
-    kprintln!(
-        "terminal: {}x{} cells in {} on the display, status bar on top, {} lines of scrollback; a shell on the keyboard{}",
-        screen.cols,
-        screen.rows,
-        screen.font.name(),
-        screen.scrollback,
-        if keyboard::is_present() { "" } else { " (no keyboard found)" },
-    );
+    UP.store(true, SeqCst);
+    crate::tty::screen_size(screen.cols, screen.rows);
+    true
 }
 
 // --- Rendering ----------------------------------------------------------------
@@ -329,6 +432,11 @@ struct KeyboardKeys;
 
 impl Keys for KeyboardKeys {
     fn next(&mut self, deadline_ns: u64) -> KeyWait {
+        // While a program has /dev/tty1 open, the keys are its.
+        if crate::tty::screen_in_use() {
+            thread::sleep_until(deadline_ns);
+            return KeyWait::Timeout;
+        }
         keyboard::next_shared_event_until(deadline_ns).map_or(KeyWait::Timeout, KeyWait::Key)
     }
 }
@@ -406,6 +514,10 @@ impl<K: Keys> shell::Console for ScreenConsole<'_, '_, K> {
 
     fn width(&self) -> usize {
         self.cols
+    }
+
+    fn terminal(&self) -> Option<&'static str> {
+        Some("/dev/tty1")
     }
 }
 
@@ -501,7 +613,7 @@ kernel_test! {
     fn shell_runs_on_a_screen_console() -> TestResult {
         let mut cells = vec![Cell::BLANK; 80 * 106];
         let shared = Shared::new(false);
-        *shared.term.lock() = Some(Term { t: small_terminal(&mut cells), log_pos: 0 });
+        *shared.term.lock() = Some(Term { t: small_terminal(&mut cells), log_pos: 0, carry: Default::default() });
         let mut kb = Keyboard::new(&layout::US);
         kb.set_locks(Modifiers::NUM_LOCK);
         let mut steps: Vec<Step> = typing(&mut kb, "ech");
@@ -541,7 +653,7 @@ kernel_test! {
     fn log_output_moves_the_screen_prompt_down() -> TestResult {
         let mut cells = vec![Cell::BLANK; 80 * 106];
         let shared = Shared::new(false);
-        *shared.term.lock() = Some(Term { t: small_terminal(&mut cells), log_pos: 0 });
+        *shared.term.lock() = Some(Term { t: small_terminal(&mut cells), log_pos: 0, carry: Default::default() });
         let mut kb = Keyboard::new(&layout::US);
         let mut steps = typing(&mut kb, "echo a");
         steps.push(Step::Log("disk: a log line\n"));
@@ -589,7 +701,7 @@ kernel_test! {
         let mut cells = vec![Cell::BLANK; 80 * 106];
         let shared = Shared::new(true);
         let start = LOG_WRITTEN.load(SeqCst);
-        *shared.term.lock() = Some(Term { t: small_terminal(&mut cells), log_pos: start });
+        *shared.term.lock() = Some(Term { t: small_terminal(&mut cells), log_pos: start, carry: Default::default() });
         let marker = time::now_ns();
         kprintln!("terminal: mirror check {marker}");
         let want = alloc::format!("terminal: mirror check {marker}");

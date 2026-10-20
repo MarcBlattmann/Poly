@@ -232,7 +232,9 @@ impl ProcSource for KernelProc {
         } else {
             ProcState::Sleeping
         };
-        let cred = p.files.cred();
+        // proc(5): real, effective, saved set and file system ids, of
+        // the main thread (ADR 0045: credentials are per thread).
+        let cred = crate::linux::cred::process_creds(&p);
         let fds = p.files.fd_list();
         let slots = fds.last().map_or(0, |(fd, _, _)| *fd as u32 + 1).next_multiple_of(64).max(64);
         let memory = memory_of(pid);
@@ -241,6 +243,8 @@ impl ProcSource for KernelProc {
         let rec = with_record(pid, |r| (r.comm.clone(), r.start_ns, r.start_stack, r.arg, r.env, r.exe.clone()));
         let (comm, start_ns, start_stack, arg, env, exe) =
             rec.unwrap_or_else(|| (b"?".to_vec(), 0, 0, (0, 0), (0, 0), Vec::new()));
+        // The name prctl(PR_SET_NAME) may have changed (ADR 0045).
+        let comm = crate::linux::cred::process_comm(&p).unwrap_or(comm);
         Some(ProcessInfo {
             pid,
             ppid: crate::linux::task::parent_of(&p),
@@ -248,8 +252,8 @@ impl ProcSource for KernelProc {
             session: session as u32,
             comm,
             state,
-            uids: [cred.uid; 4],
-            gids: [cred.gid; 4],
+            uids: [cred.uid, cred.euid, cred.suid, cred.fsuid],
+            gids: [cred.gid, cred.egid, cred.sgid, cred.fsgid],
             umask: p.files.current_umask(),
             threads: p.thread_count() as u32,
             fd_slots: slots,
@@ -271,8 +275,9 @@ impl ProcSource for KernelProc {
 
     fn owner(&self, pid: u32) -> Option<Owner> {
         let p = find(pid)?;
-        let cred = p.files.cred();
-        Some(Owner { uid: cred.uid, gid: cred.gid, start_ns: with_record(pid, |r| r.start_ns).unwrap_or(0) })
+        // proc(5): owned by the process's effective user and group ids.
+        let cred = crate::linux::cred::process_creds(&p);
+        Some(Owner { uid: cred.euid, gid: cred.egid, start_ns: with_record(pid, |r| r.start_ns).unwrap_or(0) })
     }
 
     fn maps(&self, pid: u32) -> Vec<MapEntry> {

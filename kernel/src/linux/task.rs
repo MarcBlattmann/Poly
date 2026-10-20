@@ -64,13 +64,24 @@ const HEADER_BYTES: usize = 4096;
 
 /// Run `f` on the process tree, locked; then wake waiters if it changed and
 /// let go of the records of the processes it reaped.
+///
+/// The generation is published while the tree is still locked, so
+/// [`GENERATION`] only ever moves forward, in the order of the changes.
+/// Published after the unlock, a caller that changed nothing could be
+/// preempted between the two while another thread changed the tree and
+/// published the new generation; the late caller then wrote its older one
+/// back, and a `wait4` that had polled the tree at that older generation
+/// slept until the next change, which might never come (a hang in the
+/// fork test, ADR 0041).
 pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
-    let (r, reaped, generation) = {
+    let (r, reaped, moved) = {
         let mut t = TREE.lock();
         let r = f(&mut t);
-        (r, t.take_reaped(), t.generation())
+        (r, t.take_reaped(), publish(&GENERATION, t.generation()))
     };
-    if GENERATION.swap(generation, Ordering::SeqCst) != generation {
+    // Woken after the unlock: a waiter that checks GENERATION meanwhile
+    // sees the new value already and does not sleep.
+    if moved {
         process::wake_waiters();
     }
     if !reaped.is_empty() {
@@ -83,6 +94,13 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
         drop(gone);
     }
     r
+}
+
+/// Make `generation` (the tree's, read with it locked) the published one
+/// in `published`, unless that is newer already: a generation never goes
+/// back. Returns whether it moved, i.e. whether waiters need waking.
+fn publish(published: &AtomicU64, generation: u64) -> bool {
+    published.fetch_max(generation, Ordering::SeqCst) < generation
 }
 
 /// A process the kernel started: the root of a tree of its own (its
@@ -272,8 +290,11 @@ pub fn process_exit(process: &Process, status: ExitStatus) {
     let pid = process.pid;
     // Listed first, so a parent that reaps at once finds it to let go of.
     ZOMBIES.lock().insert(pid, me);
+    // Terminals: hangups and orphaned process groups (ADR 0046).
+    let jobs = crate::tty::before_exit(pid);
     if let Some(mut k) = Thread::current(process) {
         poly_personality_linux::task::process_exited(&mut k, termination(status));
+        crate::tty::after_exit(&mut k, pid, jobs);
     }
     if !with_tree(|t| t.is_zombie(pid as i32)) {
         let gone = ZOMBIES.lock().remove(&pid);
@@ -315,7 +336,13 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     };
     let argv_refs: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
     let envp_refs: Vec<&[u8]> = req.envp.iter().map(Vec::as_slice).collect();
-    let params = ExecParams::new(&argv_refs, &envp_refs, &path);
+    let mut params = ExecParams::new(&argv_refs, &envp_refs, &path);
+    // The credentials the program will run with (set-user-ID and
+    // set-group-ID bits of the executable, not of a script; capabilities):
+    // computed now for the auxiliary vector, installed past the point of
+    // no return (ADR 0045).
+    let (creds, _secure) = super::cred::exec_creds(k, &file)?;
+    params.creds = super::cred::aux_creds(&creds);
     let image = exec::load(Arc::new(FileSource::of(&file)), &params)
         .map_err(|e| Errno::new(e.linux_errno() as u16).unwrap_or(Errno::ENOEXEC))?;
     if let Some(me) = user::current_process() {
@@ -341,6 +368,7 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         k.tid = pid;
     }
     k.linux.with(|p| p.exec(pid as i32));
+    super::cred::commit_exec(k, pid, creds, req.path);
     let old = user::replace_memory(image.memory);
     // Dropping the old memory may take file system locks: fine here.
     drop(old);
@@ -357,4 +385,32 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     vfork_release(old_tid);
     vfork_release(pid);
     Ok(())
+}
+
+crate::kernel_test! {
+    fn a_late_publish_never_moves_the_tree_generation_back() -> TestResult {
+        // The interleaving that hung the fork test: wait4 polls the tree
+        // and finds nothing yet; before it has published the generation it
+        // saw, the child ends (a change, published with it); then the
+        // poller's publish comes, late. Waiting for a move away from what it
+        // saw must not sleep: the generation has to stay the newer one.
+        let seen = with_tree(|t| t.generation());
+        let pid = process::alloc_pid() as i32;
+        let changed = with_tree(|t| {
+            // A process of the kernel's that ends: reaped at once, no trace.
+            t.insert_root(pid, 0);
+            t.exit(pid, Termination::Exited(0), false);
+            t.generation()
+        });
+        if changed == seen || GENERATION.load(Ordering::SeqCst) < changed {
+            return Err("a change to the tree was not published with it");
+        }
+        if publish(&GENERATION, seen) {
+            return Err("publishing an older generation counted as a change");
+        }
+        if GENERATION.load(Ordering::SeqCst) < changed {
+            return Err("a late publish moved the generation back: a waiter would sleep through the change");
+        }
+        Ok(())
+    }
 }
