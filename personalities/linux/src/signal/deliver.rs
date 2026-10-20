@@ -61,6 +61,9 @@ pub fn may_signal(sender: &Creds, sender_sid: i32, target: &Creds, target_sid: i
 
 /// Act on what [`LinuxProcess::send`] asked for.
 pub fn complete(k: &mut dyn LinuxKernel, pid: i32, sent: &Sent) {
+    if sent.queued {
+        k.signal_queued(pid);
+    }
     if sent.continue_process {
         k.continue_process(pid);
     }

@@ -4,7 +4,6 @@
 //! | Trait methods | Kernel |
 //! |---|---|
 //! | ids, credentials | each thread's `LinuxThread::creds` in the [`LinuxState`](super::LinuxState) (`linux::cred`, ADR 0045) |
-//! | `change_attr`, `check_access`, `umask` | the process's [`crate::fs::Files`] with the credentials the personality picked (`linux::cred`) |
 //! | `copy_*_user` | `user::copy_*_user` (demand paging, `EFAULT`) |
 //! | `write`, `read`, `close`, `fstat`, `ioctl`, file paths | the process's [`crate::fs::Files`] |
 //! | `mmap`, `munmap`, `mprotect`, `brk` | the thread's [`Memory`] (`user::current_memory`) |
@@ -15,8 +14,11 @@
 //! | `user_context`, `set_user_context` | the thread's trap frame (`user::registers`, `user::set_registers`) |
 //! | FPU state | the thread's save area (`user::fpu_image`, `user::load_fpu`) |
 //! | futexes | one global table under a spinlock ([`super::FUTEXES`]) |
-//! | clocks, random bytes | `time::now_ns`, `time::realtime_ns` (the CMOS RTC read once), RDRAND or the TSC |
+//! | clocks, random bytes | `time::now_ns`, `time::realtime_ns` (the CMOS RTC read once, settable), `crate::random` (ChaCha20) |
+//! | CPU times, timers, time zone | [`crate::cputime`], [`super::timers`], [`crate::vdso`] (ADR 0044) |
+//! | `fs()`: paths, descriptors, `statfs`, `sync`; `system_info` | `files.rs` over `fs::Files`; `fs::proc` (ADR 0043) |
 //! | `clone_task`, `execve`, `with_tree`, `wait_tree`, `ppid`, group and session ids | `super::task`: the process tree, `user::spawn_child`, `Memory::fork`, `exec::load` (ADR 0041) |
+//! | `file_io`: pipes, `poll`, `epoll`, event files; blocking `read` / `write` | `fileio.rs` (ADR 0042) |
 //!
 //! Nothing here holds a lock while it touches user memory, except the
 //! futex calls the personality makes with the table locked
@@ -26,8 +28,7 @@
 //!
 //! Not done yet, each documented where it is: core dumps, shared mappings
 //! of files the page cache does not hold (tmpfs: `ENODEV`), `MAP_32BIT` placement (refused with `ENOMEM` when the address
-//! is not low), `PROT_GROWSDOWN` (applied to the given range only), CPU-time
-//! clocks (`EINVAL`).
+//! is not low), `PROT_GROWSDOWN` (applied to the given range only).
 
 use super::LinuxState;
 use crate::arch::cpu::InterruptsOff;
@@ -35,22 +36,24 @@ use crate::fs::cache::FileSource;
 use crate::process::{self, ExitStatus, Process, ThreadFlags, Unparked};
 use crate::testrun;
 use crate::user::{self, FileRef, Memory, MemoryError, UserRegs};
-use crate::{kprintln, time};
+use crate::{cputime, kprintln, time};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cell::OnceCell;
 use core::sync::atomic::Ordering;
 use poly_personality_linux::abi::{FileStat, Timespec, makedev};
-use poly_personality_linux::cred::{AttrChange, FileTarget, FsIds};
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::futex::FutexTable;
 use poly_personality_linux::kernel::{
-    Backing, Clock, Credentials, Deadline, FpuState, LinuxKernel, MapRequest, Placement, ProcessInfo, ProcessSelector,
-    Prot, RandomMode, Target, UserContext, UserPtr, Wakeup,
+    Backing, Clock, CpuTimes, CpuTimesOf, Credentials, Deadline, FpuState, LinuxKernel, MapRequest, Placement,
+    ProcessInfo, ProcessSelector, Prot, RandomMode, Target, UserContext, UserPtr, Wakeup,
 };
 use poly_personality_linux::signal::LinuxProcess;
+use poly_personality_linux::time::TimerWakeup;
 use poly_vfs::FileType;
 use poly_vm::Access;
+
+mod fileio;
 
 /// The running thread of a Linux process, for one system call or one
 /// return to user mode.
@@ -114,6 +117,11 @@ impl<'a> Thread<'a> {
     /// Whether `set_user_context` replaced the registers.
     pub fn registers_replaced(&self) -> bool {
         self.replaced
+    }
+
+    /// The thread's process.
+    pub(super) fn process(&self) -> &'a Process {
+        self.process
     }
 
     fn memory(&self) -> Result<Arc<Memory>, Errno> {
@@ -275,7 +283,7 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn write(&mut self, fd: i32, buf: &[u8]) -> Result<usize, Errno> {
-        let n = self.process.files.write(fd, buf).map_err(vfs_errno)?;
+        let n = fileio::write(self, fd, buf)?;
         if self.process.traced && (fd == 1 || fd == 2) && n > 0 {
             testrun::output(fd, &buf[..n.min(buf.len())]);
         }
@@ -283,7 +291,7 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
-        self.process.files.read(fd, buf).map_err(vfs_errno)
+        fileio::read(self, fd, buf)
     }
 
     fn close(&mut self, fd: i32) -> Result<(), Errno> {
@@ -316,6 +324,10 @@ impl LinuxKernel for Thread<'_> {
                 // for reading."
                 if !file.readable() {
                     return Err(Errno::EACCES);
+                }
+                // Pipes and event files have nothing to map.
+                if file.object().is_some() {
+                    return Err(Errno::ENODEV);
                 }
                 if file.kind() != FileType::Regular {
                     return Err(if file.kind() == FileType::CharDevice { Errno::ENODEV } else { Errno::EACCES });
@@ -516,10 +528,11 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn block(&mut self, deadline: Option<Deadline>) -> Wakeup {
-        // The wall clock moves with the monotonic one (it cannot be set
-        // yet), so a wall-clock deadline is a fixed monotonic time.
+        // A wall-clock deadline is the monotonic time the wall clock
+        // reaches it, as the clock is set now; callers that care check the
+        // wall clock again when the wait ends (it may have been set back).
         let deadline = deadline.map(|d| match d.clock {
-            Clock::Realtime => to_ns(d.at).saturating_sub(time::realtime_ns() - time::now_ns()),
+            Clock::Realtime => to_ns(d.at).saturating_sub(time::realtime_offset_ns()),
             _ => to_ns(d.at),
         });
         match process::park(self.process, &self.flags, deadline) {
@@ -578,21 +591,42 @@ impl LinuxKernel for Thread<'_> {
         match clock {
             Clock::Realtime => Ok(Timespec::from_nanos(time::realtime_ns())),
             Clock::Monotonic => Ok(Timespec::from_nanos(time::now_ns())),
-            // CPU time is not accounted per thread yet.
-            Clock::ProcessCpuTime | Clock::ThreadCpuTime => Err(Errno::EINVAL),
+            Clock::ProcessCpuTime => Ok(Timespec::from_nanos(cputime::process(self.process).total_ns())),
+            Clock::ThreadCpuTime => cputime::thread(self.process.pid, self.tid)
+                .map(|t| Timespec::from_nanos(t.total_ns()))
+                .ok_or(Errno::EINVAL),
         }
     }
 
-    fn change_attr(&mut self, file: FileTarget<'_>, change: &AttrChange, ids: &FsIds) -> Result<(), Errno> {
-        super::cred::change_attr(&self.process.files, file, change, ids)
+    fn set_realtime(&mut self, at: Timespec) -> Result<(), Errno> {
+        time::set_realtime_ns(to_ns(at)).map_err(|()| Errno::EINVAL)
     }
 
-    fn check_access(&mut self, file: FileTarget<'_>, mode: u32, ids: &FsIds) -> Result<(), Errno> {
-        super::cred::check_access(&self.process.files, file, mode, ids)
+    fn timezone(&self) -> (i32, i32) {
+        let tz = crate::vdso::timezone();
+        (tz.minuteswest, tz.dsttime)
     }
 
-    fn umask(&mut self, mask: u32) -> Result<u32, Errno> {
-        Ok(u32::from(self.process.files.umask(mask as u16)))
+    fn set_timezone(&mut self, minuteswest: i32, dsttime: i32) {
+        crate::vdso::set_timezone(poly_vdso::Timezone { minuteswest, dsttime });
+    }
+
+    fn tick_ns(&self) -> u64 {
+        time::NANOS_PER_TICK
+    }
+
+    fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {
+        match of {
+            CpuTimesOf::Thread(tid) => cputime::thread(self.process.pid, u32::try_from(tid).ok()?),
+            CpuTimesOf::Process => Some(cputime::process(self.process)),
+            CpuTimesOf::Children => Some(self.process.cpu.children()),
+        }
+    }
+
+    fn timers_changed(&mut self, _next: TimerWakeup) {
+        // Recomputed with the process's state locked, so that concurrent
+        // changes and the timer thread never store a stale wake-up.
+        super::timers::changed(self.process);
     }
 
     fn clone_task(&mut self, req: &poly_personality_linux::task::clone::CloneRequest) -> Result<i32, Errno> {
@@ -616,11 +650,25 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn random_bytes(&mut self, buf: &mut [u8], _mode: RandomMode) -> Result<usize, Errno> {
-        // The source never needs initialising, so no mode ever waits.
-        for chunk in buf.chunks_mut(16) {
-            let bytes = crate::arch::user::random_bytes();
-            chunk.copy_from_slice(&bytes[..chunk.len()]);
-        }
+        // The generator is seeded at its first use and never waits
+        // (`crate::random`), so no mode ever blocks.
+        crate::random::fill(buf);
         Ok(buf.len())
+    }
+
+    fn fs(&mut self) -> Option<&mut dyn poly_personality_linux::fs::LinuxFs> {
+        Some(self)
+    }
+
+    fn system_info(&mut self) -> Result<poly_personality_linux::fs::SysInfo, Errno> {
+        Ok(super::files::system_info())
+    }
+
+    fn file_io(&mut self) -> Option<&mut dyn poly_personality_linux::fileio::FileIo> {
+        Some(self)
+    }
+
+    fn signal_queued(&mut self, pid: i32) {
+        super::signalfd::signal_queued(pid);
     }
 }

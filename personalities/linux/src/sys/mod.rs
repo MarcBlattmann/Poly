@@ -4,12 +4,22 @@
 //! for the work. They are registered by number in [`crate::table`].
 
 pub mod cred;
+pub mod epoll;
+pub mod eventfd;
+pub mod fd;
 pub mod futex;
 pub mod io;
+pub mod limits;
 pub mod mem;
+pub mod path;
 pub mod perm;
+pub mod pipe;
+pub mod poll;
 pub mod prctl;
 pub mod process;
 pub mod signal;
+pub mod signalfd;
 pub mod system;
 pub mod task;
+pub mod time;
+pub mod timerfd;

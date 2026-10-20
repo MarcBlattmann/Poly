@@ -252,6 +252,7 @@ fn install(t: &mut Threads, id: ThreadId, stack: Stack, f: ThreadFn, arg: usize,
     unsafe { *SAVED_RSP.0[id.slot()].get() = rsp };
     backtrace::register_thread_stack(id.slot(), stack.virt, STACK_SIZE);
     t.stacks[id.slot()] = Some(stack);
+    crate::cputime::started(id.slot(), user.as_deref().map(UserThread::cpu_owner));
     t.user[id.slot()] = user;
 }
 
@@ -314,6 +315,7 @@ fn switch(sw: Switch) {
         let [from, to] = t.user.get_disjoint_mut([sw.from.slot(), sw.to.slot()]).expect("switch to the running thread");
         arch::user::switch(from.as_deref_mut().map(|u| &mut u.arch), to.as_deref().map(|u| &u.arch), top);
     }
+    crate::cputime::switched(sw.from.slot(), sw.to.slot());
     let save = SAVED_RSP.0[sw.from.slot()].get();
     // SAFETY: `sw.to` is not running, so its saved stack pointer is stable
     // (see `SavedRsp`).
@@ -378,6 +380,7 @@ fn reap(t: &mut Threads) -> Graveyard {
             t.stacks[id.slot()] = None;
         }
         if let Some(user) = t.user[id.slot()].take() {
+            crate::cputime::reaped(id.slot(), user.process());
             dead[buried] = Some(user);
             buried += 1;
         }

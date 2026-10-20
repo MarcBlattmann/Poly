@@ -1,0 +1,14 @@
+[package]
+name = "poly-vdso"
+description = "The vDSO's data page: a seqlock-protected snapshot of the kernel's clock parameters, and the time arithmetic the vDSO and the kernel share"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+poly-irq.workspace = true

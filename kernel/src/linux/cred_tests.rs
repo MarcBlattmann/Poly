@@ -5,11 +5,7 @@
 //! kernel afterwards.
 //!
 //! Each program exits with 0 when every check it makes passed, else with
-//! the number of the first failed one (90 and up). Files are opened and
-//! removed through two test system calls of [`hook`] (`TEST_OPEN`,
-//! `TEST_UNLINK`), which run `fs::Files` on the calling thread, with its
-//! credentials, until the file system calls have system call handlers of
-//! their own.
+//! the number of the first failed one (90 and up).
 
 use crate::fs::{self, Files, OpenFlags};
 use crate::kernel_test;
@@ -20,7 +16,6 @@ use crate::user::{self, Entry, Memory};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::global_asm;
-use poly_abi::SyscallRegs;
 use poly_binfmt::{Arch, Bits, Format};
 use poly_personality_linux::task::clone::{CLONE_FILES, CLONE_FS, CLONE_SIGHAND, CLONE_THREAD, CLONE_VM};
 
@@ -33,12 +28,6 @@ const DATA: u64 = 0x60_0000;
 const DATA_LEN: u64 = 0x4000;
 /// Generous: a loaded host makes the emulator slow.
 const DEADLINE_NS: u64 = 60 * time::NANOS_PER_SEC;
-
-/// Test system call: `open(rdi = path, rsi = flags, rdx = mode)` through
-/// the process's `Files`, as the calling thread.
-const TEST_OPEN: u64 = 0x7000_0001;
-/// Test system call: `unlink(rdi = path)`.
-const TEST_UNLINK: u64 = 0x7000_0002;
 
 /// Paths in the data pages: `PATH_A` at `DATA + 0x100`, `PATH_B` at
 /// `+ 0x180`, `PATH_C` at `+ 0x200`, the program to exec at `+ 0x280`
@@ -58,22 +47,44 @@ global_asm!(
     .global cred_test_start
 cred_test_start:
 
-/* Root opens PATH_A (0600, root's); after setresuid(1000, 1000, 1000)
-   open and access are EACCES, setuid(0) is EPERM, every capability is
-   gone, and umask works. */
+/* Root opens PATH_A (0600, root's). With real uid 1000 and effective 0,
+   access (real ids) is EACCES and faccessat2 with AT_EACCESS succeeds.
+   After setresuid(1000, 1000, 1000) open and access are EACCES,
+   setuid(0) is EPERM, every capability is gone, and umask works. */
     .global cred_test_drop
 cred_test_drop:
     mov rbx, {data}
     lea rdi, [rbx + {a}]
     xor esi, esi
     xor edx, edx
-    mov rax, {test_open}
+    mov eax, 2
     syscall
     test rax, rax
     js 90f
     mov rdi, rax
     mov eax, 3
     syscall
+    mov edi, 1000
+    mov esi, -1
+    mov edx, -1
+    mov eax, 117
+    syscall
+    test rax, rax
+    jnz 91f
+    lea rdi, [rbx + {a}]
+    mov esi, 4
+    mov eax, 21
+    syscall
+    cmp rax, -13
+    jne 98f
+    mov edi, -100
+    lea rsi, [rbx + {a}]
+    mov edx, 4
+    mov r10d, 0x200
+    mov eax, 439
+    syscall
+    test rax, rax
+    jnz 98f
     mov edi, 1000
     mov esi, 1000
     mov edx, 1000
@@ -97,7 +108,7 @@ cred_test_drop:
     lea rdi, [rbx + {a}]
     xor esi, esi
     xor edx, edx
-    mov rax, {test_open}
+    mov eax, 2
     syscall
     cmp rax, -13
     jne 93f
@@ -193,7 +204,7 @@ cred_test_exec_root:
     lea rdi, [rbx + {a}]
     xor esi, esi
     xor edx, edx
-    mov rax, {test_open}
+    mov eax, 2
     syscall
     test rax, rax
     jns 91f
@@ -244,7 +255,7 @@ cred_test_keepcaps:
     lea rdi, [rbx + {a}]
     xor esi, esi
     xor edx, edx
-    mov rax, {test_open}
+    mov eax, 2
     syscall
     cmp rax, -13
     jne 94f
@@ -258,7 +269,7 @@ cred_test_keepcaps:
     lea rdi, [rbx + {a}]
     xor esi, esi
     xor edx, edx
-    mov rax, {test_open}
+    mov eax, 2
     syscall
     test rax, rax
     js 96f
@@ -313,7 +324,7 @@ cred_test_capdrop:
     lea rdi, [rbx + {b}]
     xor esi, esi
     xor edx, edx
-    mov rax, {test_open}
+    mov eax, 2
     syscall
     cmp rax, -13
     jne 94f
@@ -353,14 +364,14 @@ cred_test_sticky:
     test rax, rax
     jnz 90f
     lea rdi, [rbx + {c}]
-    mov rax, {test_unlink}
+    mov eax, 87
     syscall
     cmp rax, -1
     jne 91f
     lea rdi, [rbx + {a}]
     mov esi, 0x41
     mov edx, 384
-    mov rax, {test_open}
+    mov eax, 2
     syscall
     test rax, rax
     js 92f
@@ -368,7 +379,7 @@ cred_test_sticky:
     mov eax, 3
     syscall
     lea rdi, [rbx + {a}]
-    mov rax, {test_unlink}
+    mov eax, 87
     syscall
     test rax, rax
     jnz 93f
@@ -440,7 +451,7 @@ cred_test_chown:
     lea rdi, [rbx + {b}]
     mov esi, 1
     xor edx, edx
-    mov rax, {test_open}
+    mov eax, 2
     syscall
     test rax, rax
     js 96f
@@ -628,6 +639,8 @@ cred_test_fork:
     jmp 99f
 96: mov edi, 96
     jmp 99f
+98: mov edi, 98
+    jmp 99f
 97: mov edi, 97
 99: mov eax, 231
     syscall
@@ -686,8 +699,6 @@ cred_report_end:
     b = const B,
     c = const C,
     exec = const EXEC,
-    test_open = const TEST_OPEN,
-    test_unlink = const TEST_UNLINK,
     plain_thread = const PLAIN_THREAD,
 );
 
@@ -755,43 +766,6 @@ fn report_elf() -> Vec<u8> {
     e
 }
 
-/// The path at `path` in the calling user thread's memory (at most 255
-/// bytes, NUL-terminated).
-fn user_path(addr: u64) -> Option<Vec<u8>> {
-    let mut buf = [0u8; 256];
-    user::copy_from_user(&mut buf, addr).ok()?;
-    let n = buf.iter().position(|&b| b == 0)?;
-    Some(buf[..n].to_vec())
-}
-
-fn errno(e: poly_vfs::Errno) -> u64 {
-    (-(e as i64)) as u64
-}
-
-/// The default hook plus [`TEST_OPEN`] and [`TEST_UNLINK`], which use the
-/// process's `Files` on the calling thread (so with its credentials).
-fn hook(process: &Process, regs: &mut SyscallRegs) {
-    let efault = errno(poly_vfs::Errno::EFAULT);
-    match regs.rax {
-        TEST_OPEN => {
-            regs.rax = match user_path(regs.rdi) {
-                Some(p) => match process.files.open(&p, OpenFlags::from_bits(regs.rsi as u32), regs.rdx as u16) {
-                    Ok(fd) => fd as u64,
-                    Err(e) => errno(e),
-                },
-                None => efault,
-            };
-        }
-        TEST_UNLINK => {
-            regs.rax = match user_path(regs.rdi) {
-                Some(p) => process.files.unlinkat(fs::AT_FDCWD, &p, 0).map_or_else(errno, |()| 0),
-                None => efault,
-            };
-        }
-        _ => user::DEFAULT_HOOK(process, regs),
-    }
-}
-
 /// A Linux process (root, a root of its own tree) and a memory with the
 /// programs, the data pages (`prepare` fills them) and a stack.
 fn setup(prepare: impl FnOnce(&Memory) -> TestResult) -> TestResult<(Arc<Process>, Arc<Memory>)> {
@@ -846,14 +820,15 @@ fn frames_back_to(before: u64) -> TestResult {
     Ok(())
 }
 
-/// Run `program` as a fresh root process with [`hook`]; its exit status
+/// Run `program` as a fresh root process; its exit status
 /// once it and its memory are gone.
 fn run(program: *const u8, prepare: impl FnOnce(&Memory) -> TestResult) -> TestResult<ExitStatus> {
     let before = user::user_frames();
     let status = {
         let (process, memory) = setup(prepare)?;
         let entry = Entry { rip: at(program), rsp: memory.layout().stack_top - 64, args: [0; 3] };
-        let tid = user::spawn_in(Arc::clone(&process), memory, entry, hook).map_err(|_| "spawn failed")?;
+        let tid =
+            user::spawn_in(Arc::clone(&process), memory, entry, user::DEFAULT_HOOK).map_err(|_| "spawn failed")?;
         let _ = crate::thread::detach(tid);
         process.wait_until(time::now_ns() + DEADLINE_NS).ok_or("the test process did not end in time")?
     };
@@ -878,8 +853,8 @@ fn make_file(files: &Files, path: &[u8], data: &[u8], uid: u32, gid: u32, perm: 
     let written = files.write(fd, data);
     let _ = files.close(fd);
     written.map_err(|e| e.name())?;
-    files.chownat(fs::AT_FDCWD, path, Some(uid), Some(gid)).map_err(|e| e.name())?;
-    files.chmodat(fs::AT_FDCWD, path, perm).map_err(|e| e.name())
+    files.fchownat(fs::AT_FDCWD, path, Some(uid), Some(gid), true).map_err(|e| e.name())?;
+    files.fchmodat(fs::AT_FDCWD, path, perm).map_err(|e| e.name())
 }
 
 /// Removes the test's files when it ends, however it ends.
@@ -992,7 +967,7 @@ kernel_test! {
         })?;
         expect_exit(status, 2, "with no_new_privs the set-user-ID bit was honoured")?;
         // Without the bit: nothing gained.
-        files.chmodat(fs::AT_FDCWD, SUID, 0o755).map_err(|e| e.name())?;
+        files.fchmodat(fs::AT_FDCWD, SUID, 0o755).map_err(|e| e.name())?;
         let status = run(&raw const cred_test_suid, |m| paths(m, &[(EXEC, SUID)]))?;
         expect_exit(status, 2, "a plain program changed the ids")
     }
@@ -1041,6 +1016,6 @@ kernel_test! {
             return Err("a kernel thread is not root");
         }
         let alice = poly_vfs::Cred::user(1000, 1000);
-        files.access_as(&alice, ALICES, poly_vfs::Access::WRITE).map_err(|e| e.name())
+        files.accessat(&alice, fs::AT_FDCWD, ALICES, poly_vfs::Access::WRITE, true).map_err(|e| e.name())
     }
 }

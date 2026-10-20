@@ -13,6 +13,12 @@
 //!   flags and manifest as the diff runner's corpus). Skipped with a
 //!   message where there is no C compiler or no static C library.
 //!
+//! And `/bin/time-test` (`tools/xtask/programs/time_test.rs`, built the
+//! same way): the time system calls, timers and the vDSO from ring 3 (ADR
+//! 0044). It is in the self-test initramfs (a kernel test runs it, once
+//! with the vDSO forced onto the TSC) and runs as the first process in a
+//! boot test of its own.
+//!
 //! And for processes and threads (Phase 4, ADR 0041):
 //!
 //! - `/bin/forkexec`: `tools/xtask/programs/forkexec.rs`, no C library, as
@@ -36,6 +42,8 @@ const OUT: &str = "target/xtask-programs";
 pub const HELLO_OUTPUT: &str = "Hello, world!\n";
 /// What the C hellos of the corpus write.
 pub const C_HELLO_OUTPUT: &str = "hello, world\n";
+/// The last line `/bin/time-test` writes when every check passed.
+pub const TIME_TEST_OUTPUT: &str = "time-test: done, 0 failed\n";
 /// What `/bin/forkexec` writes when every check passed.
 pub const FORKEXEC_OUTPUT: &str = "forkexec: ok\n";
 
@@ -87,6 +95,11 @@ fn nolibc_program(source: &str, name: &str) -> Result<Vec<u8>> {
     std::fs::read(&binary).map_err(|e| format!("{}: {e}", binary.display()))
 }
 
+/// Build `tools/xtask/programs/time_test.rs`; returns the ELF.
+pub fn time_test() -> Result<Vec<u8>> {
+    nolibc_program("tools/xtask/programs/time_test.rs", "time-test")
+}
+
 /// The C programs of the corpus, built by the pipeline tool into
 /// `target/xtask-programs/corpus`: `(name, ELF)` for `hello` and
 /// `libc-hello` as far as they were built. Empty, with the reason, without
@@ -118,11 +131,13 @@ pub fn c_hellos() -> (Vec<(String, Vec<u8>)>, Option<String>) {
 }
 
 /// The test initramfs (`initramfs::test_image_with`) with the nolibc hello
-/// as `/bin/hello`, for the self-test boots (the kernel's exec tests run
-/// it).
+/// as `/bin/hello` and the time test as `/bin/time-test`, for the
+/// self-test boots (the kernel's exec and time tests run them).
 pub fn test_initramfs() -> Result<PathBuf> {
     let hello = nolibc_hello()?;
-    initramfs::write(&root(), "poly-test-initramfs.cpio", &initramfs::test_image_with(&[("hello", &hello)]))
+    let time = time_test()?;
+    let image = initramfs::test_image_with(&[("hello", &hello), ("time-test", &time)]);
+    initramfs::write(&root(), "poly-test-initramfs.cpio", &image)
 }
 
 /// One boot that runs `/bin/<program>` as the first process and checks
@@ -149,8 +164,9 @@ fn run_as_init(kernel: &Path, syms: &Arc<Symbols>, image: &Path, program: &str, 
 pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let hello = nolibc_hello()?;
     let forkexec = nolibc_forkexec()?;
+    let time = time_test()?;
     let (c_programs, skipped) = c_hellos();
-    let mut programs: Vec<(&str, &[u8])> = vec![("hello", &hello), ("forkexec", &forkexec)];
+    let mut programs: Vec<(&str, &[u8])> = vec![("hello", &hello), ("forkexec", &forkexec), ("time-test", &time)];
     programs.extend(c_programs.iter().map(|(n, e)| (n.as_str(), e.as_slice())));
     let image = initramfs::write(&root(), "poly-programs-initramfs.cpio", &initramfs::programs_image(&programs))?;
 
@@ -178,6 +194,14 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     if let Some(line) = b.output.lines().find(|l| l.contains(" not implemented")) {
         return Err(format!("/bin/forkexec made a system call Poly does not implement: {line}"));
+    }
+
+    eprintln!(
+        "==> boot test: the time system calls, timers and the vDSO from ring 3 (/bin/time-test as the first process)"
+    );
+    let b = run_as_init(kernel, syms, &image, "time-test", TIME_TEST_OUTPUT)?;
+    if let Some(line) = b.output.lines().find(|l| l.contains("time-test: FAIL")) {
+        return Err(format!("/bin/time-test: {line}"));
     }
 
     eprintln!("==> boot test: a program that is not there is reported as unsupported");

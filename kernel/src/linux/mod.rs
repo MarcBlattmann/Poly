@@ -30,10 +30,15 @@
 
 pub mod cred;
 mod cred_tests;
+mod fileio_tests;
+mod files;
+mod files_tests;
 mod services;
+pub mod signalfd;
 pub mod task;
 mod task_tests;
 mod tests;
+pub mod timers;
 
 pub use services::Thread;
 

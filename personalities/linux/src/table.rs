@@ -9,7 +9,10 @@
 use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
-use crate::sys::{cred, futex, io, mem, perm, prctl, process, signal, system, task};
+use crate::sys::{
+    cred, epoll, eventfd, fd, futex, io, limits, mem, path, perm, pipe, poll, prctl, process, signal, signalfd, system,
+    task, time, timerfd,
+};
 
 pub use crate::numbers::{SYSCALLS, nr};
 
@@ -26,6 +29,7 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::WRITE, io::write),
     (nr::CLOSE, io::close),
     (nr::FSTAT, io::fstat),
+    (nr::POLL, poll::poll),
     (nr::MMAP, mem::mmap),
     (nr::MPROTECT, mem::mprotect),
     (nr::MUNMAP, mem::munmap),
@@ -36,6 +40,8 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::IOCTL, io::ioctl),
     (nr::READV, io::readv),
     (nr::WRITEV, io::writev),
+    (nr::PIPE, pipe::pipe),
+    (nr::SELECT, poll::select),
     (nr::GETPID, process::getpid),
     (nr::CLONE, task::clone),
     (nr::FORK, task::fork),
@@ -65,24 +71,33 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::TKILL, signal::tkill),
     (nr::FUTEX, futex::futex),
     (nr::SET_TID_ADDRESS, process::set_tid_address),
+    (nr::EPOLL_CREATE, epoll::epoll_create),
     (nr::RESTART_SYSCALL, signal::restart_syscall),
     (nr::CLOCK_GETTIME, system::clock_gettime),
     (nr::EXIT_GROUP, process::exit_group),
+    (nr::EPOLL_WAIT, epoll::epoll_wait),
+    (nr::EPOLL_CTL, epoll::epoll_ctl),
     (nr::TGKILL, signal::tgkill),
     (nr::WAITID, task::waitid),
+    (nr::PSELECT6, poll::pselect6),
+    (nr::PPOLL, poll::ppoll),
     (nr::SET_ROBUST_LIST, futex::set_robust_list),
     (nr::GET_ROBUST_LIST, futex::get_robust_list),
+    (nr::EPOLL_PWAIT, epoll::epoll_pwait),
+    (nr::SIGNALFD, signalfd::signalfd),
+    (nr::TIMERFD_CREATE, timerfd::timerfd_create),
+    (nr::EVENTFD, eventfd::eventfd),
+    (nr::TIMERFD_SETTIME, timerfd::timerfd_settime),
+    (nr::TIMERFD_GETTIME, timerfd::timerfd_gettime),
+    (nr::SIGNALFD4, signalfd::signalfd4),
+    (nr::EVENTFD2, eventfd::eventfd2),
+    (nr::EPOLL_CREATE1, epoll::epoll_create1),
+    (nr::PIPE2, pipe::pipe2),
     (nr::RT_TGSIGQUEUEINFO, signal::rt_tgsigqueueinfo),
     (nr::GETRANDOM, system::getrandom),
     (nr::CLONE3, task::clone3),
-    // Credentials and file permissions (ADR 0045).
-    (nr::ACCESS, perm::access),
-    (nr::CHMOD, perm::chmod),
-    (nr::FCHMOD, perm::fchmod),
-    (nr::CHOWN, perm::chown),
-    (nr::FCHOWN, perm::fchown),
-    (nr::LCHOWN, perm::lchown),
-    (nr::UMASK, perm::umask),
+    (nr::EPOLL_PWAIT2, epoll::epoll_pwait2),
+    // Credentials (ADR 0045).
     (nr::SETUID, cred::setuid),
     (nr::SETGID, cred::setgid),
     (nr::SETREUID, cred::setreuid),
@@ -98,23 +113,88 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::CAPGET, cred::capget),
     (nr::CAPSET, cred::capset),
     (nr::PRCTL, prctl::prctl),
-    (nr::FCHOWNAT, perm::fchownat),
-    (nr::FCHMODAT, perm::fchmodat),
-    (nr::FACCESSAT, perm::faccessat),
-    (nr::UTIMENSAT, perm::utimensat),
-    (nr::FACCESSAT2, perm::faccessat2),
 ];
+
+/// The file system calls and resource limits (ADR 0043), registered like
+/// [`IMPLEMENTED`].
+pub const FILE_SYSTEM: &[(u64, Handler)] = &[
+    (nr::STAT, path::stat),
+    (nr::LSTAT, path::lstat),
+    (nr::OPEN, path::open),
+    (nr::LSEEK, fd::lseek),
+    (nr::PREAD64, fd::pread64),
+    (nr::PWRITE64, fd::pwrite64),
+    (nr::ACCESS, path::access),
+    (nr::DUP, fd::dup),
+    (nr::DUP2, fd::dup2),
+    (nr::FCNTL, fd::fcntl),
+    (nr::FSYNC, fd::fsync),
+    (nr::FDATASYNC, fd::fdatasync),
+    (nr::TRUNCATE, path::truncate),
+    (nr::FTRUNCATE, fd::ftruncate),
+    (nr::GETDENTS, fd::getdents),
+    (nr::GETCWD, path::getcwd),
+    (nr::CHDIR, path::chdir),
+    (nr::FCHDIR, path::fchdir),
+    (nr::RENAME, path::rename),
+    (nr::MKDIR, path::mkdir),
+    (nr::RMDIR, path::rmdir),
+    (nr::CREAT, path::creat),
+    (nr::LINK, path::link),
+    (nr::UNLINK, path::unlink),
+    (nr::SYMLINK, path::symlink),
+    (nr::READLINK, path::readlink),
+    (nr::CHMOD, path::chmod),
+    (nr::FCHMOD, path::fchmod),
+    (nr::CHOWN, perm::chown),
+    (nr::FCHOWN, perm::fchown),
+    (nr::LCHOWN, perm::lchown),
+    (nr::UMASK, path::umask),
+    (nr::GETRLIMIT, limits::getrlimit),
+    (nr::SYSINFO, limits::sysinfo),
+    (nr::STATFS, path::statfs),
+    (nr::FSTATFS, fd::fstatfs),
+    (nr::SETRLIMIT, limits::setrlimit),
+    (nr::SYNC, fd::sync),
+    (nr::GETDENTS64, fd::getdents64),
+    (nr::OPENAT, path::openat),
+    (nr::MKDIRAT, path::mkdirat),
+    (nr::FCHOWNAT, perm::fchownat),
+    (nr::NEWFSTATAT, path::newfstatat),
+    (nr::UNLINKAT, path::unlinkat),
+    (nr::RENAMEAT, path::renameat),
+    (nr::LINKAT, path::linkat),
+    (nr::SYMLINKAT, path::symlinkat),
+    (nr::READLINKAT, path::readlinkat),
+    (nr::FCHMODAT, path::fchmodat),
+    (nr::FACCESSAT, path::faccessat),
+    (nr::UTIMENSAT, perm::utimensat),
+    (nr::DUP3, fd::dup3),
+    (nr::PRLIMIT64, limits::prlimit64),
+    (nr::SYNCFS, fd::syncfs),
+    (nr::RENAMEAT2, path::renameat2),
+    (nr::STATX, path::statx),
+    (nr::FACCESSAT2, path::faccessat2),
+];
+/// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
+/// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]).
+pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS, FILE_SYSTEM];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
 
 const fn build() -> [Option<Handler>; TABLE_LEN] {
     let mut table: [Option<Handler>; TABLE_LEN] = [None; TABLE_LEN];
-    let mut i = 0;
-    while i < IMPLEMENTED.len() {
-        let (number, handler) = IMPLEMENTED[i];
-        assert!(table[number as usize].is_none(), "system call registered twice");
-        table[number as usize] = Some(handler);
-        i += 1;
+    let mut g = 0;
+    while g < GROUPS.len() {
+        let group = GROUPS[g];
+        let mut i = 0;
+        while i < group.len() {
+            let (number, handler) = group[i];
+            assert!(table[number as usize].is_none(), "system call registered twice");
+            table[number as usize] = Some(handler);
+            i += 1;
+        }
+        g += 1;
     }
     table
 }
@@ -227,24 +307,26 @@ mod tests {
 
     #[test]
     fn handlers_are_registered_by_number() {
-        for &(number, _) in IMPLEMENTED {
+        for &(number, _) in GROUPS.iter().flat_map(|g| g.iter()) {
             assert!(name(number).is_some(), "handler for unknown number {number}");
             assert!(handler(number).is_some());
         }
-        assert_eq!(implemented().count(), IMPLEMENTED.len());
-        assert!(handler(nr::OPENAT).is_none());
+        assert_eq!(implemented().count(), GROUPS.iter().map(|g| g.len()).sum::<usize>());
+        assert!(handler(nr::SWAPON).is_none());
         assert!(handler(TABLE_LEN as u64).is_none());
         assert!(handler(u64::MAX).is_none());
     }
 
     #[test]
     fn implemented_set() {
-        let names: Vec<&str> = implemented().map(|(_, n)| n).collect();
+        let in_groups = |nr: u64| time::CALLS.iter().chain(FILE_SYSTEM).any(|&(n, _)| n == nr);
+        let names: Vec<&str> = implemented().filter(|&(nr, _)| !in_groups(nr)).map(|(_, n)| n).collect();
         let expected = [
             "read",
             "write",
             "close",
             "fstat",
+            "poll",
             "mmap",
             "mprotect",
             "munmap",
@@ -255,7 +337,8 @@ mod tests {
             "ioctl",
             "readv",
             "writev",
-            "access",
+            "pipe",
+            "select",
             "getpid",
             "clone",
             "fork",
@@ -265,12 +348,6 @@ mod tests {
             "wait4",
             "kill",
             "uname",
-            "chmod",
-            "fchmod",
-            "chown",
-            "fchown",
-            "lchown",
-            "umask",
             "getuid",
             "getgid",
             "setuid",
@@ -305,22 +382,59 @@ mod tests {
             "gettid",
             "tkill",
             "futex",
+            "epoll_create",
             "set_tid_address",
             "restart_syscall",
             "clock_gettime",
             "exit_group",
+            "epoll_wait",
+            "epoll_ctl",
             "tgkill",
             "waitid",
-            "fchownat",
-            "fchmodat",
-            "faccessat",
+            "pselect6",
+            "ppoll",
             "set_robust_list",
             "get_robust_list",
-            "utimensat",
+            "epoll_pwait",
+            "signalfd",
+            "timerfd_create",
+            "eventfd",
+            "timerfd_settime",
+            "timerfd_gettime",
+            "signalfd4",
+            "eventfd2",
+            "epoll_create1",
+            "pipe2",
             "rt_tgsigqueueinfo",
             "getrandom",
             "clone3",
-            "faccessat2",
+            "epoll_pwait2",
+        ];
+        assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn time_calls() {
+        let names: Vec<&str> = time::CALLS.iter().map(|&(nr, _)| name(nr).unwrap()).collect();
+        let expected = [
+            "nanosleep",
+            "getitimer",
+            "alarm",
+            "setitimer",
+            "gettimeofday",
+            "getrusage",
+            "times",
+            "settimeofday",
+            "time",
+            "timer_create",
+            "timer_settime",
+            "timer_gettime",
+            "timer_getoverrun",
+            "timer_delete",
+            "clock_settime",
+            "clock_getres",
+            "clock_nanosleep",
+            "getcpu",
         ];
         assert_eq!(names, expected);
     }

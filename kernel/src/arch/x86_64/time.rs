@@ -143,6 +143,12 @@ pub fn reference() -> Option<&'static Reference> {
     CLOCK.get().map(|c| c.reference())
 }
 
+/// While the clock reads an invariant TSC: how it converts TSC readings
+/// to its nanoseconds (for the vDSO). `None` on the reference timer.
+pub fn tsc_conversion() -> Option<poly_irq::time::TscConversion> {
+    CLOCK.get()?.tsc_conversion()
+}
+
 /// The timer interrupt, before its EOI.
 pub(super) fn on_tick() {
     TICKS.fetch_add(1, Ordering::Relaxed);

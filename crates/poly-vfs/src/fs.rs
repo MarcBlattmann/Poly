@@ -115,6 +115,66 @@ pub trait FileSystem: Send + Sync {
     fn sync(&self) -> Result<()> {
         Ok(())
     }
+
+    /// Space and inode counts for `statfs(2)`. The default reports a file
+    /// system without blocks or inode limits; the VFS fills in the magic
+    /// number from the name when this leaves it 0 (see [`FsStats`]).
+    fn statfs(&self) -> Result<FsStats> {
+        Ok(FsStats { block_size: 4096, fragment_size: 4096, name_max: crate::NAME_MAX as u64, ..FsStats::default() })
+    }
+}
+
+/// What `statfs(2)` reports about a file system (`struct statfs`, Linux
+/// UAPI `asm-generic/statfs.h`). Sizes count blocks of `block_size` bytes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FsStats {
+    /// The file system type (`f_type`): the magic numbers of Linux UAPI
+    /// `linux/magic.h`. 0 lets the VFS pick it from [`FsInfo::name`]
+    /// ([`magic_for`]).
+    pub magic: u64,
+    /// `f_bsize`: the optimal transfer block size.
+    pub block_size: u64,
+    /// `f_blocks`, `f_bfree`, `f_bavail` (free for unprivileged users).
+    pub blocks: u64,
+    pub blocks_free: u64,
+    pub blocks_avail: u64,
+    /// `f_files`, `f_ffree`: inodes in all and free.
+    pub files: u64,
+    pub files_free: u64,
+    /// `f_namelen`: the longest file name.
+    pub name_max: u64,
+    /// `f_frsize`: the fragment size.
+    pub fragment_size: u64,
+    /// `f_flags`: the mount's `ST_*` flags (filled in by the VFS from the
+    /// mount; see [`ST_RDONLY`] and friends).
+    pub flags: u64,
+    /// `f_fsid`, filled in by the VFS: the file system's device number.
+    pub fsid: [u32; 2],
+}
+
+/// `f_flags` bits, equal to the `MS_*` mount flags of Linux UAPI
+/// `linux/mount.h` (statfs(2), statvfs(3)).
+pub const ST_RDONLY: u64 = 1;
+pub const ST_NOSUID: u64 = 2;
+pub const ST_NODEV: u64 = 4;
+pub const ST_NOEXEC: u64 = 8;
+
+/// Magic numbers of the file systems Poly has (Linux UAPI `linux/magic.h`).
+pub const TMPFS_MAGIC: u64 = 0x0102_1994;
+pub const EXT2_SUPER_MAGIC: u64 = 0xef53;
+pub const PROC_SUPER_MAGIC: u64 = 0x9fa0;
+pub const SYSFS_MAGIC: u64 = 0x6265_6572;
+
+/// The `f_type` of a file system by its name ([`FsInfo::name`]); 0 for
+/// names without one here.
+pub fn magic_for(name: &str) -> u64 {
+    match name {
+        "tmpfs" => TMPFS_MAGIC,
+        "ext2" => EXT2_SUPER_MAGIC,
+        "proc" => PROC_SUPER_MAGIC,
+        "sysfs" => SYSFS_MAGIC,
+        _ => 0,
+    }
 }
 
 /// Static facts about a file system.

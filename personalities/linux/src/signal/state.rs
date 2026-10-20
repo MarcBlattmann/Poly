@@ -94,6 +94,10 @@ pub struct LinuxProcess {
     /// The credentials of the last thread to leave, so a zombie is still
     /// seen with them ([`LinuxProcess::process_creds`]).
     exited_creds: Option<Creds>,
+    /// Resource limits (getrlimit(2)): inherited by fork, kept by exec.
+    pub limits: crate::rlimit::ResourceLimits,
+    /// Interval and POSIX timers (ADR 0044).
+    pub timers: crate::time::timers::Timers,
 }
 
 impl LinuxProcess {
@@ -108,6 +112,8 @@ impl LinuxProcess {
             threads,
             queue_limit: DEFAULT_QUEUE_LIMIT,
             exited_creds: None,
+            limits: crate::rlimit::ResourceLimits::new(),
+            timers: crate::time::timers::Timers::new(),
         }
     }
 
@@ -131,12 +137,16 @@ impl LinuxProcess {
         };
         let mut threads = BTreeMap::new();
         threads.insert(child_tid, child);
+        // fork(2): "The child does not inherit timers from its parent".
+        let timers = crate::time::timers::Timers::new();
         LinuxProcess {
             actions: self.actions,
             shared: SigQueue::new(),
             threads,
             queue_limit: self.queue_limit,
             exited_creds: None,
+            limits: self.limits,
+            timers,
         }
     }
 
@@ -162,6 +172,9 @@ impl LinuxProcess {
         thread.restart_block = None;
         self.threads.clear();
         self.threads.insert(tid, thread);
+        // timer_create(2): POSIX timers are deleted; setitimer(2): interval
+        // timers are preserved.
+        self.timers.exec();
     }
 
     /// A new thread `tid` created by `parent_tid` with clone(2). It

@@ -30,12 +30,10 @@
 //! namespaces: every id is valid except `(uid_t) -1`.
 
 mod exec;
-mod file;
 #[cfg(test)]
 mod tests;
 
 pub use exec::{ExecFile, S_ISGID, S_ISUID, S_IXGRP};
-pub use file::{AttrChange, FileTarget, TimeChange};
 
 use crate::errno::Errno;
 use crate::kernel::{Credentials, LinuxKernel};

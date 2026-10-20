@@ -2,60 +2,16 @@
 //! 0045) through the dispatcher, against the fake kernel.
 
 use super::fake::{DATA, FakeKernel, UNMAPPED, sys};
-use crate::cred::{AttrChange, CapSet, Caps, Creds, FileTarget, FsIds, TimeChange, cap};
+use super::files::{AT, Env, env, s};
+use crate::cred::{CapSet, Caps, Creds, cap};
 use crate::errno::Errno;
+use crate::fs::at::{AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW};
 use crate::kernel::LinuxKernel;
 use crate::nr;
 use crate::sys::cred::{CAPABILITY_VERSION_1, CAPABILITY_VERSION_3};
-use crate::sys::perm::{AT_EACCESS, AT_EMPTY_PATH, AT_FDCWD, AT_SYMLINK_NOFOLLOW, UTIME_NOW, UTIME_OMIT};
+use crate::sys::perm::{UTIME_NOW, UTIME_OMIT};
 use crate::sys::prctl::*;
 use alloc::vec::Vec;
-
-/// A file target, owned.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Target {
-    Path(i32, Vec<u8>, bool),
-    Fd(i32),
-    Empty(i32),
-}
-
-impl From<FileTarget<'_>> for Target {
-    fn from(t: FileTarget<'_>) -> Target {
-        match t {
-            FileTarget::Path { dirfd, path, follow } => Target::Path(dirfd, path.to_vec(), follow),
-            FileTarget::Fd(fd) => Target::Fd(fd),
-            FileTarget::EmptyPath(fd) => Target::Empty(fd),
-        }
-    }
-}
-
-/// What the fake kernel saw of `change_attr`, `check_access` and `umask`.
-#[derive(Debug)]
-pub struct PermCalls {
-    pub changes: Vec<(Target, AttrChange, FsIds)>,
-    pub accesses: Vec<(Target, u32, FsIds)>,
-    pub umask: u32,
-    /// What the next calls return.
-    pub result: Result<(), Errno>,
-}
-
-impl Default for PermCalls {
-    fn default() -> Self {
-        PermCalls { changes: Vec::new(), accesses: Vec::new(), umask: 0o022, result: Ok(()) }
-    }
-}
-
-impl PermCalls {
-    pub fn change(&mut self, file: FileTarget<'_>, change: &AttrChange, ids: &FsIds) -> Result<(), Errno> {
-        self.changes.push((file.into(), *change, ids.clone()));
-        self.result
-    }
-
-    pub fn access(&mut self, file: FileTarget<'_>, mode: u32, ids: &FsIds) -> Result<(), Errno> {
-        self.accesses.push((file.into(), mode, ids.clone()));
-        self.result
-    }
-}
 
 const ALICE: u32 = 1000;
 const P: u64 = DATA + 0x100;
@@ -307,113 +263,82 @@ fn kill_uses_the_target_threads_credentials() {
     assert_eq!(sys(&mut r, nr::KILL, &[400, 0]), Ok(0));
 }
 
-fn path_at(k: &mut FakeKernel, path: &[u8]) -> u64 {
-    let mut p = path.to_vec();
-    p.push(0);
-    k.poke(P + 0x200, &p);
-    P + 0x200
-}
-
-#[test]
-fn chmod_and_chown_requests() {
-    let mut k = FakeKernel::new();
-    let path = path_at(&mut k, b"/etc/f");
-    assert_eq!(sys(&mut k, nr::CHMOD, &[path, 0o104755]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FCHMOD, &[3, 0o600]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FCHMODAT, &[neg(AT_FDCWD), path, 0o2711]), Ok(0));
-    assert_eq!(sys(&mut k, nr::CHOWN, &[path, 5, u64::from(u32::MAX)]), Ok(0));
-    assert_eq!(sys(&mut k, nr::LCHOWN, &[path, u64::MAX, 6]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FCHOWN, &[4, 7, 8]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FCHOWNAT, &[9, path, 1, 2, AT_SYMLINK_NOFOLLOW.into()]), Ok(0));
-    let empty = path_at(&mut k, b"");
-    assert_eq!(sys(&mut k, nr::FCHOWNAT, &[9, empty, 1, 2, AT_EMPTY_PATH.into()]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FCHOWNAT, &[9, empty, 1, 2, 0]), Err(Errno::ENOENT));
-    assert_eq!(sys(&mut k, nr::FCHOWNAT, &[9, path, 1, 2, 0x800]), Err(Errno::EINVAL));
-    assert_eq!(sys(&mut k, nr::CHMOD, &[UNMAPPED, 0o644]), Err(Errno::EFAULT));
-    let p = |follow| Target::Path(AT_FDCWD, b"/etc/f".to_vec(), follow);
-    let own = |uid, gid| AttrChange::Owner { uid, gid };
-    let expected = [
-        (p(true), AttrChange::Mode(0o4755)),
-        (Target::Fd(3), AttrChange::Mode(0o600)),
-        (p(true), AttrChange::Mode(0o2711)),
-        (p(true), own(Some(5), None)),
-        (p(false), own(None, Some(6))),
-        (Target::Fd(4), own(Some(7), Some(8))),
-        (Target::Path(9, b"/etc/f".to_vec(), false), own(Some(1), Some(2))),
-        (Target::Empty(9), own(Some(1), Some(2))),
-    ];
-    let got: Vec<(Target, AttrChange)> = k.perm.changes.iter().map(|(t, c, _)| (t.clone(), *c)).collect();
-    assert_eq!(got, expected);
-    // Checked as the file system ids, with the effective capabilities.
-    let ids = &k.perm.changes[0].2;
-    assert_eq!((ids.uid, ids.gid, ids.caps), (1001, 2001, CapSet::EMPTY));
-    // The kernel's answer comes back.
-    k.perm.result = Err(Errno::EPERM);
-    assert_eq!(sys(&mut k, nr::FCHMOD, &[3, 0o600]), Err(Errno::EPERM));
-}
-
-#[test]
-fn access_uses_real_ids_unless_eaccess() {
-    let mut k = root();
-    sys(&mut k, nr::SETRESUID, &[ALICE as u64, u64::MAX, u64::MAX]).unwrap();
-    let path = path_at(&mut k, b"f");
-    assert_eq!(sys(&mut k, nr::ACCESS, &[path, 4]), Ok(0));
-    assert_eq!(sys(&mut k, nr::ACCESS, &[path, 8]), Err(Errno::EINVAL));
-    assert_eq!(sys(&mut k, nr::FACCESSAT, &[3, path, 2]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FACCESSAT2, &[3, path, 1, AT_EACCESS.into()]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FACCESSAT2, &[3, path, 1, AT_SYMLINK_NOFOLLOW.into()]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FACCESSAT2, &[3, path, 1, 0x4000]), Err(Errno::EINVAL));
-    let a = &k.perm.accesses;
-    assert_eq!(a.len(), 4);
-    assert_eq!((a[0].0.clone(), a[0].1), (Target::Path(AT_FDCWD, b"f".to_vec(), true), 4));
-    assert_eq!((a[0].2.uid, a[0].2.caps), (ALICE, CapSet::EMPTY), "real uid, no capabilities");
-    assert_eq!((a[1].0.clone(), a[1].1), (Target::Path(3, b"f".to_vec(), true), 2));
-    assert_eq!((a[2].2.uid, a[2].2.caps), (0, CapSet::ALL), "AT_EACCESS: effective ids and capabilities");
-    assert_eq!(a[3].0, Target::Path(3, b"f".to_vec(), false));
-}
-
-#[test]
-fn umask_returns_the_old_mask() {
-    let mut k = FakeKernel::new();
-    assert_eq!(sys(&mut k, nr::UMASK, &[0o077]), Ok(0o022));
-    assert_eq!(sys(&mut k, nr::UMASK, &[0o7777]), Ok(0o077));
-    assert_eq!(k.perm.umask, 0o777, "only the permission bits");
-}
-
 fn times(k: &mut FakeKernel, a: (i64, i64), m: (i64, i64)) -> u64 {
     let b: Vec<u8> = [a.0, a.1, m.0, m.1].iter().flat_map(|v| v.to_le_bytes()).collect();
     k.poke(P + 0x300, &b);
     P + 0x300
 }
 
+fn stat(e: &Env, path: &[u8], follow: bool) -> poly_vfs::Stat {
+    e.vfs.stat(&e.vfs.root_context().unwrap(), &poly_vfs::Cred::root(), poly_vfs::At::Cwd, path, follow).unwrap()
+}
+
 #[test]
-fn utimensat_requests() {
-    let mut k = FakeKernel::new();
-    let path = path_at(&mut k, b"/f");
-    let now = Some(TimeChange::Now);
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[neg(AT_FDCWD), path, 0, 0]), Ok(0));
-    let t = times(&mut k, (5, 6), (0, UTIME_OMIT));
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[neg(AT_FDCWD), path, t, AT_SYMLINK_NOFOLLOW.into()]), Ok(0));
-    let t = times(&mut k, (9, UTIME_NOW), (1, UTIME_OMIT));
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[7, 0, t, 0]), Ok(0), "a null path: the file fd 7 is");
-    let omit = times(&mut k, (0, UTIME_OMIT), (0, UTIME_OMIT));
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[neg(AT_FDCWD), path, omit, 0]), Ok(0));
-    assert_eq!(k.perm.changes.len(), 3, "both omitted: nothing asked of the kernel");
-    let bad = times(&mut k, (0, 1_000_000_000), (0, 0));
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[neg(AT_FDCWD), path, bad, 0]), Err(Errno::EINVAL));
-    let bad = times(&mut k, (0, 0), (0, -1));
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[neg(AT_FDCWD), path, bad, 0]), Err(Errno::EINVAL));
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[neg(AT_FDCWD), path, 0, 0x2]), Err(Errno::EINVAL));
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[neg(AT_FDCWD), 0, 0, 0]), Err(Errno::EFAULT));
-    assert_eq!(sys(&mut k, nr::UTIMENSAT, &[neg(AT_FDCWD), path, UNMAPPED, 0]), Err(Errno::EFAULT));
-    let c = &k.perm.changes;
-    let at = |s, n| Some(TimeChange::At(crate::abi::Timespec { sec: s, nsec: n }));
-    assert_eq!(c[0].1, AttrChange::Times { atime: now, mtime: now });
-    assert_eq!(
-        (c[1].0.clone(), c[1].1),
-        (Target::Path(AT_FDCWD, b"/f".to_vec(), false), AttrChange::Times { atime: at(5, 6), mtime: None })
-    );
-    assert_eq!((c[2].0.clone(), c[2].1), (Target::Fd(7), AttrChange::Times { atime: now, mtime: None }));
+fn chown_calls_reach_the_file_system() {
+    let mut e = env();
+    let k = &mut e.k;
+    let file = s(k, 0, b"/dir/file");
+    let link = s(k, 0x40, b"/link");
+    let neg1 = u64::from(u32::MAX);
+    assert_eq!(sys(k, nr::CHOWN, &[file, 5, neg1]), Ok(0));
+    assert_eq!((stat(&e, b"/dir/file", true).uid, stat(&e, b"/dir/file", true).gid), (5, 0));
+    let k = &mut e.k;
+    // lchown changes the link, chown through it the target.
+    assert_eq!(sys(k, nr::LCHOWN, &[link, 7, 8]), Ok(0));
+    assert_eq!((stat(&e, b"/link", false).uid, stat(&e, b"/dir/file", true).uid), (7, 5));
+    let k = &mut e.k;
+    assert_eq!(sys(k, nr::FCHOWNAT, &[AT, file, neg1, 9, AT_SYMLINK_NOFOLLOW.into()]), Ok(0));
+    assert_eq!(stat(&e, b"/dir/file", true).gid, 9);
+    let k = &mut e.k;
+    // fchown and AT_EMPTY_PATH on an open file; O_PATH only with the latter.
+    let fd = sys(k, nr::OPENAT, &[AT, file, 0, 0]).unwrap();
+    assert_eq!(sys(k, nr::FCHOWN, &[fd, 11, neg1]), Ok(0));
+    let empty = s(k, 0x80, b"");
+    assert_eq!(sys(k, nr::FCHOWNAT, &[fd, empty, neg1, 12, AT_EMPTY_PATH.into()]), Ok(0));
+    assert_eq!((stat(&e, b"/dir/file", true).uid, stat(&e, b"/dir/file", true).gid), (11, 12));
+    let k = &mut e.k;
+    let path_fd = sys(k, nr::OPENAT, &[AT, file, 0o10000000, 0]).unwrap();
+    assert_eq!(sys(k, nr::FCHOWN, &[path_fd, 1, 1]), Err(Errno::EBADF));
+    assert_eq!(sys(k, nr::FCHOWNAT, &[path_fd, empty, 1, 1, AT_EMPTY_PATH.into()]), Ok(0));
+    // Errors: an empty path without the flag, unknown flags, bad pointers.
+    assert_eq!(sys(k, nr::FCHOWNAT, &[fd, empty, 1, 1, 0]), Err(Errno::ENOENT));
+    assert_eq!(sys(k, nr::FCHOWNAT, &[fd, file, 1, 1, 0x800]), Err(Errno::EINVAL));
+    assert_eq!(sys(k, nr::CHOWN, &[UNMAPPED, 1, 1]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::FCHOWN, &[99, 1, 1]), Err(Errno::EBADF));
+    let missing = s(k, 0xc0, b"/nope");
+    assert_eq!(sys(k, nr::CHOWN, &[missing, 1, 1]), Err(Errno::ENOENT));
+}
+
+#[test]
+fn utimensat_calls() {
+    let mut e = env();
+    let k = &mut e.k;
+    let file = s(k, 0, b"/dir/file");
+    let t = times(k, (5, 6), (0, UTIME_OMIT));
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, file, t, 0]), Ok(0));
+    let st = stat(&e, b"/dir/file", true);
+    assert_eq!((st.atime, st.mtime.sec), (poly_vfs::Timespec::new(5, 6), 1000), "mtime left alone");
+    let k = &mut e.k;
+    // A null path: the file the descriptor is open on.
+    let fd = sys(k, nr::OPENAT, &[AT, file, 0, 0]).unwrap();
+    let t = times(k, (0, UTIME_OMIT), (77, 0));
+    assert_eq!(sys(k, nr::UTIMENSAT, &[fd, 0, t, 0]), Ok(0));
+    assert_eq!(stat(&e, b"/dir/file", true).mtime, poly_vfs::Timespec::new(77, 0));
+    let k = &mut e.k;
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, 0, 0, 0]), Err(Errno::EFAULT));
+    // Null times: both now; both omitted: success even for a missing file.
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, file, 0, 0]), Ok(0));
+    let missing = s(k, 0x40, b"/nope");
+    let omit = times(k, (0, UTIME_OMIT), (0, UTIME_OMIT));
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, missing, omit, 0]), Ok(0));
+    let now = times(k, (0, UTIME_NOW), (0, UTIME_NOW));
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, missing, now, 0]), Err(Errno::ENOENT));
+    let bad = times(k, (0, 1_000_000_000), (0, 0));
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, file, bad, 0]), Err(Errno::EINVAL));
+    let bad = times(k, (0, 0), (0, -1));
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, file, bad, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, file, 0, 0x2]), Err(Errno::EINVAL));
+    assert_eq!(sys(k, nr::UTIMENSAT, &[AT, file, UNMAPPED, 0]), Err(Errno::EFAULT));
 }
 
 #[test]

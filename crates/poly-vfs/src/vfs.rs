@@ -3,11 +3,12 @@
 use crate::cred::{Access, Cred, cap};
 use crate::device::CharDevice;
 use crate::fdtable::At;
-use crate::file::{Backend, OpenFile, OpenFlags};
+use crate::file::{Backend, OpenFile, OpenFlags, Origin};
 use crate::fs::{FileSystem, NewNode, RenameFlags};
 use crate::mount::{Mount, MountFlags, MountId, MountInfo, MountTable};
 use crate::node::{FsContext, Location, NodeRef, is_fs_object};
-use crate::path::{Last, PATH_MAX, Parent, Walk, check_path};
+use crate::object::AnonFs;
+use crate::path::{Found, Last, PATH_MAX, Parent, Walk, check_path};
 use crate::sync::SpinMutex;
 use crate::{Attr, DeviceId, Errno, FileType, Ino, PERM_MASK, Result, S_ISGID, S_ISVTX, Stat};
 use alloc::collections::BTreeMap;
@@ -22,6 +23,9 @@ use alloc::vec::Vec;
 pub struct Vfs {
     pub(crate) mounts: SpinMutex<MountTable>,
     devices: SpinMutex<BTreeMap<DeviceId, Arc<dyn CharDevice>>>,
+    /// The inodes of file objects (pipes, event files, epoll sets), on a
+    /// mount no path reaches (`object.rs`).
+    anon: (Arc<AnonFs>, Arc<Mount>),
 }
 
 impl core::fmt::Debug for Vfs {
@@ -42,7 +46,27 @@ impl Vfs {
         let info = root.info();
         let sb = table.superblock(root, info);
         table.add(sb, root_ino, None, flags);
-        Vfs { mounts: SpinMutex::new(table), devices: SpinMutex::new(BTreeMap::new()) }
+        let anon_fs = Arc::new(AnonFs::default());
+        let anon_info = anon_fs.info();
+        let anon_sb = table.superblock(anon_fs.clone(), anon_info);
+        let anon_mount = table.detached(anon_sb, anon_fs.root());
+        Vfs { mounts: SpinMutex::new(table), devices: SpinMutex::new(BTreeMap::new()), anon: (anon_fs, anon_mount) }
+    }
+
+    /// A new inode for a file object (`kind` and `perm` as `fstat` will
+    /// report them, owned by `cred`), pinned by the returned reference and
+    /// gone with its last one. Open files on the object take clones
+    /// ([`OpenFile::on_object`](crate::OpenFile::on_object)); a pipe's two ends
+    /// share one inode.
+    pub fn anon_node(&self, kind: FileType, perm: u16, cred: &Cred) -> Result<NodeRef> {
+        let (fs, mount) = &self.anon;
+        let ino = fs.alloc(kind, perm & PERM_MASK, cred.uid, cred.gid);
+        Location { mount: mount.clone(), ino }.pin()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn anon_inodes(&self) -> usize {
+        self.anon.0.live()
     }
 
     /// A context with root and working directory at `/` and the default
@@ -220,11 +244,16 @@ impl Vfs {
         check_path(path)?;
         let mut walk = self.walk(ctx, cred);
         let start = Self::start(ctx, at);
-        let (loc, created) = if !flags.contains(OpenFlags::CREAT) {
-            (walk.resolve(start, path, follow)?, false)
+        let ((loc, named), created) = if !flags.contains(OpenFlags::CREAT) {
+            (walk.resolve_named(start, path, follow)?, false)
         } else {
             self.open_creat(&mut walk, ctx, start, path, flags, mode)?
         };
+        let origin = named.map(|(dir, name)| Origin {
+            mount: Arc::downgrade(&dir.mount),
+            dir: dir.ino,
+            name: name.into_boxed_slice(),
+        });
         let attr = loc.attr()?;
         let path_only = flags.contains(OpenFlags::PATH);
         if attr.kind == FileType::Symlink && !path_only {
@@ -235,7 +264,7 @@ impl Vfs {
             return Err(Errno::ENOTDIR);
         }
         if path_only {
-            return Ok(Arc::new(OpenFile::new(loc.pin()?, attr.kind, Backend::Path, flags)));
+            return Ok(Arc::new(OpenFile::new(loc.pin()?, attr.kind, Backend::Path, flags).with_origin(origin)));
         }
         let write = flags.writable();
         if attr.kind == FileType::Directory && (write || flags.contains(OpenFlags::CREAT)) {
@@ -268,9 +297,10 @@ impl Vfs {
                 }
                 Backend::Device(self.char_device(attr.rdev).ok_or(Errno::ENXIO)?)
             }
-            // Block devices are reached through the block layer, FIFOs come
-            // with pipes (Phase 4), and a socket's name cannot be opened
-            // (`open(2)`: ENXIO).
+            // Block devices are reached through the block layer, opening a
+            // FIFO (a `pipe::Pipe` per node, blocking opens) comes with the
+            // path-based file calls (ADR 0042), and a socket's name cannot
+            // be opened (`open(2)`: ENXIO).
             FileType::BlockDevice | FileType::Fifo | FileType::Socket | FileType::Symlink => {
                 return Err(Errno::ENXIO);
             }
@@ -282,7 +312,7 @@ impl Vfs {
                 node.truncate_unchecked(0)?;
             }
         }
-        Ok(Arc::new(OpenFile::new(node, attr.kind, backend, flags)))
+        Ok(Arc::new(OpenFile::new(node, attr.kind, backend, flags).with_origin(origin)))
     }
 
     /// The `O_CREAT` walk: the last component is created if missing, and
@@ -296,7 +326,7 @@ impl Vfs {
         path: &[u8],
         flags: OpenFlags,
         mode: u16,
-    ) -> Result<(Location, bool)> {
+    ) -> Result<(Found, bool)> {
         let mut p = walk.parent(start, path)?;
         loop {
             let Last::Name(name) = &p.last else { return Err(Errno::EISDIR) };
@@ -307,7 +337,7 @@ impl Vfs {
                         if p.trailing_slash && loc.attr()?.kind != FileType::Directory {
                             return Err(Errno::ENOTDIR);
                         }
-                        return Ok((loc, false));
+                        return Ok(((loc, Some((p.dir, name.clone()))), false));
                     }
                     if flags.contains(OpenFlags::NOFOLLOW) {
                         return Err(Errno::ELOOP);
@@ -326,7 +356,8 @@ impl Vfs {
                     let (uid, gid, perm) = Self::new_owner(walk.cred, &dir_attr, mode & !ctx.umask, false);
                     let node = NewNode { kind: FileType::Regular, perm, uid, gid, rdev: DeviceId::default() };
                     let ino = p.dir.mount.sb.fs.create(p.dir.ino, name, &node)?;
-                    return Ok((Location { mount: p.dir.mount.clone(), ino }, true));
+                    let loc = Location { mount: p.dir.mount.clone(), ino };
+                    return Ok(((loc, Some((p.dir, name.clone()))), true));
                 }
                 Err(e) => return Err(e),
             }
@@ -336,13 +367,19 @@ impl Vfs {
     /// Opens a file for `execve`: a regular file (`EACCES` otherwise) the
     /// caller may execute, not on a `noexec` mount (`EACCES`).
     pub fn open_exec(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8]) -> Result<Arc<OpenFile>> {
-        let loc = self.resolve(ctx, cred, at, path, true)?;
+        check_path(path)?;
+        let (loc, named) = self.walk(ctx, cred).resolve_named(Self::start(ctx, at), path, true)?;
+        let origin = named.map(|(dir, name)| Origin {
+            mount: Arc::downgrade(&dir.mount),
+            dir: dir.ino,
+            name: name.into_boxed_slice(),
+        });
         let attr = loc.attr()?;
         if attr.kind != FileType::Regular || loc.mount.flags.no_exec {
             return Err(Errno::EACCES);
         }
         cred.check(&attr, Access::EXEC)?;
-        Ok(Arc::new(OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY)))
+        Ok(Arc::new(OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin)))
     }
 
     /// `mkdir(2)`: `mode` is masked by the umask.
@@ -728,6 +765,42 @@ impl Vfs {
         }
         if path.is_empty() {
             path.push(b'/');
+        }
+        Ok(path)
+    }
+
+    /// The absolute path of the file `file` is open on, as seen from
+    /// `ctx`'s root: what `/proc/<pid>/fd/<n>` links to and what
+    /// `/proc/<pid>/maps` shows. A directory's path is found by walking
+    /// `..` ([`path_of`](Self::path_of)); any other file's from the
+    /// directory and name `open` found it by. If that name no longer leads
+    /// to the file, the directory is searched for its new name (a rename
+    /// within the directory); a file with no links left gets `" (deleted)"`
+    /// appended (proc(5)), and one renamed into another directory keeps
+    /// its old path. `ENOENT` when the file was not opened by name (pipes,
+    /// sockets) or its directory is gone or outside the root.
+    pub fn file_path(&self, ctx: &FsContext, file: &OpenFile) -> Result<Vec<u8>> {
+        let node = file.node();
+        if file.kind() == FileType::Directory {
+            return self.path_of(ctx, node);
+        }
+        let origin = file.origin().ok_or(Errno::ENOENT)?;
+        let mount = origin.mount.upgrade().ok_or(Errno::ENOENT)?;
+        let dir = Location { mount, ino: origin.dir }.pin()?;
+        let mut path = self.path_of(ctx, &dir)?;
+        if path != b"/" {
+            path.push(b'/');
+        }
+        let linked = node.attr()?.nlink > 0;
+        let same = self.child(dir.loc(), &origin.name).is_ok_and(|l| l.same(node.loc()));
+        let name = if linked && !same && Arc::ptr_eq(dir.mount(), node.mount()) {
+            Self::name_in(dir.mount(), dir.ino(), node.ino()).ok()
+        } else {
+            None
+        };
+        path.extend_from_slice(name.as_deref().unwrap_or(&origin.name));
+        if !linked {
+            path.extend_from_slice(b" (deleted)");
         }
         Ok(path)
     }

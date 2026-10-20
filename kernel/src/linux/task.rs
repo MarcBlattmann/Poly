@@ -188,6 +188,7 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
     } else {
         let pid = process::alloc_pid();
         let memory = if req.shares_memory() { memory } else { Arc::new(memory.fork().map_err(|_| Errno::ENOMEM)?) };
+        crate::fs::proc::record_fork(k.process.pid, pid, &memory);
         let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
         linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
         let files = k.process.files.fork();
@@ -323,6 +324,9 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     params.creds = super::cred::aux_creds(&creds);
     let image = exec::load(Arc::new(FileSource::of(&file)), &params)
         .map_err(|e| Errno::new(e.linux_errno() as u16).unwrap_or(Errno::ENOEXEC))?;
+    if let Some(me) = user::current_process() {
+        crate::fs::proc::record_exec(&me, &file, &image.memory, &image.info.stack, &argv_refs, &envp_refs);
+    }
     drop(file);
     // The point of no return: the other threads go (execve(2): "All
     // threads other than the calling thread are destroyed").

@@ -37,6 +37,8 @@ poly-pagecache = { path = "../crates/poly-pagecache" }
 poly-paging = { path = "../crates/poly-paging" }
 poly-sched = { path = "../crates/poly-sched" }
 poly-pci = { path = "../crates/poly-pci" }
+poly-procfs = { path = "../crates/poly-procfs" }
+poly-random = { path = "../crates/poly-random" }
 poly-rtc = { path = "../crates/poly-rtc" }
 poly-term = { path = "../crates/poly-term" }
 poly-vfs = { path = "../crates/poly-vfs" }
@@ -46,6 +48,7 @@ poly-personality-xnu = { path = "../personalities/xnu" }
 poly-virtio = { path = "../crates/poly-virtio" }
 poly-virtio-blk = { path = "../crates/poly-virtio-blk" }
 poly-virtio-net = { path = "../crates/poly-virtio-net" }
+poly-vdso = { path = "../crates/poly-vdso" }
 poly-vm = { path = "../crates/poly-vm" }
 
 [profile.dev]

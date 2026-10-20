@@ -2,6 +2,8 @@
 
 **Status:** Accepted. Builds on [0023](0023-vfs-tmpfs-and-cpio.md) /
 [0037](0037-vfs-and-initramfs-in-the-kernel.md) (the VFS's `Cred`),
+[0043](0043-dev-proc-sys-and-file-system-calls.md) (the `LinuxFs` file
+system services),
 [0031](0031-linux-signals-and-futexes.md) (per-process Linux state, kill
 permissions) and [0041](0041-processes-threads-fork-exec-wait.md) (clone,
 fork, execve).
@@ -86,15 +88,16 @@ access. A personality without capabilities gives its superuser
 ids, groups and effective capabilities (`linux::cred::current_vfs_cred`),
 and the kernel's own threads (shell, tests, the initramfs) are root. So
 every file operation, whoever added it, checks as the thread that asked.
-The attribute calls go through two new `LinuxKernel` methods,
-`change_attr(file, change, ids)` (chmod, chown, utimensat) and
-`check_access(file, mode, ids)`, which take the ids from the personality,
-because access(2) checks with the real ids ("for the root user ... the set
-of permitted capabilities ...; for non-root users, ... an empty set") and
-faccessat2's `AT_EACCESS` with the effective ones; plus `umask(mask)`. All
-three have `ENOSYS` defaults, so other kernels keep compiling. The file a
-call names is a `FileTarget`: a path from a directory descriptor, a
-descriptor (`EBADF` for `O_PATH`), or `AT_EMPTY_PATH`'s descriptor.
+The file calls take one path, ADR 0043's `LinuxFs`: chown and utimensat
+became `LinuxFs::fchownat`, `fchown` and `utimensat` beside its `fchmodat`
+and `umask`, and its `accessat(.., effective, ..)` picks the ids in the
+kernel: access(2) checks with the real ids ("for the root user ... the set
+of permitted capabilities ...; for non-root users, ... an empty set"),
+faccessat2's `AT_EACCESS` with the effective ones (`Creds::access_ids`,
+`Creds::fs_ids`). Privilege checks elsewhere in the personality use
+capabilities too (`CAP_SYS_RESOURCE` for prlimit, `CAP_SYS_TIME` for
+setting clocks), and `/proc/<pid>/status` shows the main thread's four
+user and group ids.
 
 **execve transforms in two steps.** Before loading, the kernel asks
 `Creds::exec` for the new credentials from the executable's owner, group,
@@ -114,10 +117,11 @@ setresgid, getresuid, getresgid, setfsuid, setfsgid, getgroups, setgroups,
 capget, capset (versions 1 to 3; an unknown version gets the preferred one
 written back with `EINVAL`), prctl (`PR_SET`/`GET_KEEPCAPS`,
 `PR_CAPBSET_READ`/`DROP`, `PR_SET`/`GET_NO_NEW_PRIVS`, `PR_CAP_AMBIENT`,
-`PR_GET_SECUREBITS`, `PR_SET`/`GET_NAME`), access, faccessat, faccessat2,
-chmod, fchmod, fchmodat, chown, fchown, lchown, fchownat, umask and
-utimensat (with the null-path form futimens(3) uses). They live in
-`sys/cred.rs`, `sys/prctl.rs` and `sys/perm.rs`.
+`PR_GET_SECUREBITS`, `PR_SET`/`GET_NAME`, which `/proc/<pid>/comm` shows)
+in `sys/cred.rs` and `sys/prctl.rs`; chown, fchown, lchown, fchownat and
+utimensat (with the null-path form futimens(3) uses) in `sys/perm.rs`,
+registered with ADR 0043's file system calls. access, faccessat,
+faccessat2, chmod, fchmod, fchmodat and umask are ADR 0043's handlers.
 
 **A user database is user space's.** The default initramfs carries a
 minimal `/etc/passwd` and `/etc/group` (root and nobody, passwd(5) and
@@ -136,7 +140,9 @@ group(5) formats) for C libraries and BusyBox; the kernel never reads them.
 - Each file operation costs a lookup of the calling thread's credentials
   (the process's spinlock, an `Arc` clone), and each write to a regular
   file one `getattr` to see whether set-id bits need clearing.
-- Code that kept a `Cred` field in `Files` now calls `Files::cred()`.
+- Code that kept a `Cred` field in `Files` now calls `Files::cred()`;
+  `LinuxFs` implementations implement `fchownat`, `fchown` and
+  `utimensat`.
 - Not done yet: user namespaces (every id is valid but `-1`), file
   capabilities (`security.capability`), securebits beyond `keep_caps`
   (`PR_SET_SECUREBITS` is `EINVAL`), `PR_SET_DUMPABLE` and the

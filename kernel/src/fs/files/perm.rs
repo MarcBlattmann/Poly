@@ -1,11 +1,10 @@
 //! The permission side of [`Files`] (ADR 0045): what a write does to
-//! set-user-ID and set-group-ID bits, `O_NOATIME`, and lookups with
-//! explicit credentials for the attribute calls (`chmod`, `chown`,
-//! `access`, `utimensat`), which may check as other ids than the caller's
-//! file system ids (access(2) uses the real ones).
+//! set-user-ID and set-group-ID bits, `O_NOATIME`, and the ownership and
+//! time calls (`chown`, `utimensat`). Every check is made as the calling
+//! thread ([`Files::cred`]).
 
-use super::{Files, vfs};
-use poly_vfs::{AT_FDCWD, At, Cred, Errno, Fd, FileType, NodeRef, OpenFile, OpenFlags, Result, S_ISGID, S_ISUID};
+use super::Files;
+use poly_vfs::{Errno, Fd, FileType, NodeRef, OpenFile, OpenFlags, Result, S_ISGID, S_ISUID, SetTime};
 
 impl Files {
     /// Before `len` bytes are written to `file` (or it is truncated): a
@@ -14,7 +13,7 @@ impl Files {
     /// S_ISUID and S_ISGID bits of the file mode may be cleared";
     /// `NodeRef::clear_setid`). Only the mode is read when neither bit is
     /// set, which is nearly always.
-    pub(super) fn before_write(&self, file: &OpenFile, len: usize) -> Result<()> {
+    pub fn before_write(&self, file: &OpenFile, len: usize) -> Result<()> {
         if len == 0 || file.kind() != FileType::Regular || !file.writable() {
             return Ok(());
         }
@@ -35,38 +34,43 @@ impl Files {
         if self.cred().owns(&attr) { Ok(()) } else { Err(Errno::EPERM) }
     }
 
-    /// The node `path` names from `dirfd` (as for `openat`), resolved and
-    /// checked (search permission on the way) as `cred`.
-    pub fn lookup_as(&self, cred: &Cred, dirfd: Fd, path: &[u8], follow: bool) -> Result<NodeRef> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.lookup(ctx, cred, at, path, follow))
+    /// The node `path` names from `dirfd`, or with an empty `path` what
+    /// `dirfd` is open on (`AT_EMPTY_PATH`).
+    fn target(&self, dirfd: Fd, path: &[u8], follow: bool) -> Result<NodeRef> {
+        if path.is_empty() { self.node_at(dirfd) } else { self.lookupat(dirfd, path, follow) }
     }
 
-    /// What `dirfd` names with an empty path and `AT_EMPTY_PATH`: the node
-    /// it is open on (`O_PATH` included), or the working directory for
-    /// `AT_FDCWD`.
-    pub fn empty_path(&self, dirfd: Fd) -> Result<NodeRef> {
-        if dirfd == AT_FDCWD {
-            return Ok(self.ctx.lock().cwd().clone());
-        }
-        Ok(self.file(dirfd)?.node().clone())
+    /// The node `fd` is open on, not for `O_PATH` (`EBADF`).
+    fn open_node(&self, fd: Fd) -> Result<NodeRef> {
+        let file = self.file(fd)?;
+        if file.is_path_only() { Err(Errno::EBADF) } else { Ok(file.node().clone()) }
     }
 
-    /// `fchmodat(2)` as the calling thread, for the kernel's own use (the
-    /// shell, tests): `path` from `dirfd`.
-    pub fn chmodat(&self, dirfd: Fd, path: &[u8], perm: u16) -> Result<()> {
-        let cred = self.cred();
-        self.lookup_as(&cred, dirfd, path, true)?.chmod(&cred, perm)
+    /// `fchownat(2)`: `None` leaves an id alone; an empty `path` is
+    /// `dirfd`'s file.
+    pub fn fchownat(&self, dirfd: Fd, path: &[u8], uid: Option<u32>, gid: Option<u32>, follow: bool) -> Result<()> {
+        self.target(dirfd, path, follow)?.chown(&self.cred(), uid, gid)
     }
 
-    /// `fchownat(2)` as the calling thread; `None` leaves an id alone.
-    pub fn chownat(&self, dirfd: Fd, path: &[u8], uid: Option<u32>, gid: Option<u32>) -> Result<()> {
-        let cred = self.cred();
-        self.lookup_as(&cred, dirfd, path, true)?.chown(&cred, uid, gid)
+    /// `fchown(2)`.
+    pub fn fchown(&self, fd: Fd, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
+        self.open_node(fd)?.chown(&self.cred(), uid, gid)
     }
 
-    /// `access(2)`-style check of `path` as `cred`.
-    pub fn access_as(&self, cred: &Cred, path: &[u8], want: poly_vfs::Access) -> Result<()> {
-        let ctx = self.ctx.lock();
-        vfs().access(&ctx, cred, At::Cwd, path, want, true)
+    /// `utimensat(2)`: `None` leaves a time alone; `path` `None` is the
+    /// file `dirfd` is open on (futimens(3)), an empty one `AT_EMPTY_PATH`.
+    pub fn utimensat(
+        &self,
+        dirfd: Fd,
+        path: Option<&[u8]>,
+        atime: Option<SetTime>,
+        mtime: Option<SetTime>,
+        follow: bool,
+    ) -> Result<()> {
+        let node = match path {
+            None => self.open_node(dirfd)?,
+            Some(p) => self.target(dirfd, p, follow)?,
+        };
+        node.set_times(&self.cred(), atime, mtime)
     }
 }

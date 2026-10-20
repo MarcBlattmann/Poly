@@ -225,6 +225,14 @@ impl MountTable {
         m
     }
 
+    /// A mount that is in no tree: the anonymous file system of file
+    /// objects, which no path reaches and nothing can unmount.
+    pub(crate) fn detached(&mut self, sb: Arc<Superblock>, root: Ino) -> Arc<Mount> {
+        let m = Arc::new(Mount { id: self.next_id, sb, root, parent: None, flags: MountFlags::default() });
+        self.next_id += 1;
+        m
+    }
+
     /// The topmost mount on mount point `(mount, ino)`.
     pub(crate) fn covering(&self, mount: MountId, ino: Ino) -> Option<&Arc<Mount>> {
         self.mounts.iter().rev().find(|m| matches!(&m.parent, Some((p, i)) if p.id == mount && *i == ino))

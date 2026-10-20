@@ -15,6 +15,8 @@
 
 use super::vfs;
 use crate::sync::Mutex;
+
+mod more;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_vfs::{
@@ -95,6 +97,17 @@ impl Files {
     /// Open descriptors.
     pub fn count(&self) -> usize {
         self.fds.lock().count()
+    }
+
+    /// Put `file` at the lowest free descriptor: an open file that does
+    /// not come from a path (a pipe end, an event file; ADR 0042).
+    pub fn install(&self, file: Arc<OpenFile>, cloexec: bool) -> Result<Fd> {
+        self.fds.lock().install(file, cloexec)
+    }
+
+    /// The most descriptors the process may have (`RLIMIT_NOFILE`).
+    pub fn fd_limit(&self) -> usize {
+        self.fds.lock().limit()
     }
 
     /// `close(2)`.
@@ -252,7 +265,9 @@ impl Files {
     /// Runs `f` with the VFS, the context and where `path` starts for a
     /// `*at` call: the working directory for [`AT_FDCWD`] or an absolute
     /// path (which ignores `dirfd`, even a bad one), else the node `dirfd`
-    /// is open on (`EBADF`).
+    /// is open on (`EBADF`). The walk runs on a copy of the context, with
+    /// no lock of this `Files` held: following `/proc/self/cwd` asks for
+    /// this very context (ADR 0043).
     fn at<R>(
         &self,
         dirfd: Fd,
@@ -264,7 +279,7 @@ impl Files {
         } else {
             Some(self.fds.lock().get(dirfd)?.node().clone())
         };
-        let ctx = self.ctx.lock();
+        let ctx = self.ctx.lock().clone();
         f(vfs(), &ctx, dir.as_ref().map_or(At::Cwd, At::Node))
     }
 
@@ -330,8 +345,9 @@ impl Files {
 
     /// `chdir(2)`.
     pub fn chdir(&self, path: &[u8]) -> Result<()> {
-        let mut ctx = self.ctx.lock();
-        vfs().chdir(&mut ctx, &self.cred(), At::Cwd, path)
+        // Resolved unlocked, like every walk (see `at`).
+        let dir = self.at(AT_FDCWD, path, |vfs, ctx, at| vfs.lookup(ctx, &self.cred(), at, path, true))?;
+        self.ctx.lock().set_cwd(&self.cred(), dir)
     }
 
     /// `fchdir(2)`.
@@ -342,7 +358,8 @@ impl Files {
 
     /// `getcwd(2)`: the working directory's absolute path.
     pub fn getcwd(&self) -> Result<Vec<u8>> {
-        let ctx = self.ctx.lock();
+        // On a copy, unlocked: the walk up may read procfs (see `at`).
+        let ctx = self.ctx.lock().clone();
         vfs().getcwd(&ctx)
     }
 

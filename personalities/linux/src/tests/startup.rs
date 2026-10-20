@@ -107,8 +107,12 @@ fn glibc_static_hello(stdout: Kind) -> Script {
     s.step(nr::SET_TID_ADDRESS, &[b + 0x650], Expect::Value(100));
     s.step(nr::SET_ROBUST_LIST, &[b + 0x660, 24], Expect::Value(0));
     s.step(nr::RSEQ, &[b + 0xca0, 0x20, 0, 0x5305_3053], Expect::Enosys);
-    s.step(nr::PRLIMIT64, &[0, 3, 0, STACK], Expect::Enosys);
-    s.step(nr::READLINKAT, &[(-100i64) as u64, STACK, STACK + 0x100, 4096], Expect::Enosys);
+    s.step(nr::PRLIMIT64, &[0, 3, 0, STACK], Expect::Value(0));
+    assert_eq!(s.k.peek(STACK, 16), crate::rlimit::DEFAULT_STACK.to_bytes(), "the stack limit");
+    // Without file system services (the fake has none here) readlinkat
+    // fails, which glibc tolerates (it then has no AT_EXECFN fallback).
+    s.k.poke(STACK, b"/proc/self/exe\0");
+    s.step(nr::READLINKAT, &[(-100i64) as u64, STACK, STACK + 0x100, 4096], Expect::Errno(Errno::ENOSYS));
     s.step(nr::GETRANDOM, &[STACK, 8, random::GRND_NONBLOCK as u64], Expect::Value(8));
     s.step(nr::BRK, &[0], Expect::Value(b + 0xd00));
     s.step(nr::BRK, &[b + 0x21d00], Expect::Value(b + 0x21d00));
@@ -173,7 +177,7 @@ fn rust_std_musl_static_hello_world() {
     let tls = 0x7f38_4bfd_c188;
     s.step(nr::ARCH_PRCTL, &[op::ARCH_SET_FS as u64, tls], Expect::Value(0));
     s.step(nr::SET_TID_ADDRESS, &[tls + 0x190], Expect::Value(100));
-    s.step(nr::POLL, &[STACK, 3, 0], Expect::Enosys);
+    s.step(nr::POLL, &[STACK, 3, 0], Expect::Value(0));
 
     let restorer = 0x40_1802;
     let ign =
@@ -269,5 +273,5 @@ fn traced_calls_still_missing() {
             missing.push(call);
         }
     }
-    assert_eq!(missing, ["rseq", "prlimit64", "readlinkat", "poll", "openat", "sched_getaffinity"]);
+    assert_eq!(missing, ["rseq", "sched_getaffinity"]);
 }

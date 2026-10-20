@@ -8,10 +8,12 @@
 //! up to one chunk and copies the result out. Both may transfer fewer bytes
 //! than asked, which read(2) and write(2) allow.
 
-use crate::abi::{FileStat, IOV_MAX, Iovec, MAX_RW_COUNT, ioctl, mode};
+use crate::abi::signal::{SI_KERNEL, SIGPIPE};
+use crate::abi::{FileStat, IOV_MAX, Iovec, MAX_RW_COUNT, SigInfo, ioctl, mode};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
-use crate::kernel::{LinuxKernel, UserPtr};
+use crate::kernel::{LinuxKernel, Target, UserPtr};
+use crate::signal::deliver::send;
 use alloc::vec::Vec;
 
 /// The largest bounce buffer: 64 KiB. Writes of up to this size reach the
@@ -48,7 +50,8 @@ pub fn read(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn write(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let count = a.ulong(2).min(MAX_RW_COUNT);
-    write_from(k, fd, &[Iovec { base: a.ptr(1).0, len: count }], count)
+    let result = write_from(k, fd, &[Iovec { base: a.ptr(1).0, len: count }], count);
+    sigpipe_on_epipe(k, result)
 }
 
 /// readv(fd, iov, iovcnt)
@@ -62,7 +65,21 @@ pub fn readv(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn writev(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let (iovs, total) = load_iovecs(k, a.ptr(1), a.int(2))?;
-    write_from(k, fd, &iovs, total)
+    let result = write_from(k, fd, &iovs, total);
+    sigpipe_on_epipe(k, result)
+}
+
+/// write(2): "EPIPE fd is connected to a pipe or socket whose reading end
+/// is closed. When this happens the writing process will also receive a
+/// SIGPIPE signal." It goes to the writing thread, with `SI_KERNEL` as its
+/// code (Poly's choice, to be confirmed by the diff runner).
+fn sigpipe_on_epipe(k: &mut dyn LinuxKernel, result: SysResult) -> SysResult {
+    if result == Err(Errno::EPIPE) {
+        let tid = k.tid();
+        let info = SigInfo::new(SIGPIPE, SI_KERNEL);
+        let _ = send(k, Target::Thread(tid), Some(tid), None, info);
+    }
+    result
 }
 
 /// close(fd)
@@ -95,6 +112,16 @@ pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let st = k.fstat(fd)?;
     if ioctl::is_terminal_request(request) && st.file_type() != mode::S_IFCHR {
         return Err(Errno::ENOTTY);
+    }
+    // FIONREAD on a pipe (and other byte streams the kernel knows the
+    // length of): the bytes a read would return, as an int.
+    if request == ioctl::FIONREAD
+        && let Some(io) = k.file_io()
+        && let Some(n) = io.bytes_readable(fd)?
+    {
+        let n = n.min(i32::MAX as usize) as i32;
+        k.copy_to_user(a.ptr(2), &n.to_le_bytes())?;
+        return Ok(0);
     }
     k.ioctl(fd, request, a.ulong(2))
 }

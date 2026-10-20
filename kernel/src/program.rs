@@ -110,6 +110,7 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
         let pid = process.pid as i32;
         linux.with(|p| p.thread_mut(pid).comm = comm);
     }
+    fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
     Ok(Prepared { process, image })
 }
 

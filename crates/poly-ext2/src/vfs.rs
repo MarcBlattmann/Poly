@@ -181,4 +181,22 @@ impl<D: BlockIo, L: RawLock> FileSystem for Ext2<D, L> {
     fn sync(&self) -> Result<()> {
         Ext2::sync(self)
     }
+
+    /// From the group descriptors' free counts ([`Ext2::stats`]); blocks
+    /// reserved for root are not held back from `f_bavail`.
+    fn statfs(&self) -> Result<poly_vfs::FsStats> {
+        let s = self.stats();
+        Ok(poly_vfs::FsStats {
+            magic: poly_vfs::EXT2_SUPER_MAGIC,
+            block_size: u64::from(s.block_size),
+            blocks: s.blocks,
+            blocks_free: s.free_blocks,
+            blocks_avail: s.free_blocks,
+            files: s.inodes,
+            files_free: s.free_inodes,
+            name_max: 255,
+            fragment_size: u64::from(s.block_size),
+            ..poly_vfs::FsStats::default()
+        })
+    }
 }
