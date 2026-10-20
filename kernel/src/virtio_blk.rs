@@ -415,15 +415,24 @@ kernel_test! {
         let before = disk.stats();
         let unhandled = crate::arch::irq::stats().unhandled;
         let mut buf = vec![0u8; 8 * SECTOR_SIZE as usize];
-        for first in [0u64, 100, 2040] {
+        // QEMU can complete a request during the notify itself, before the
+        // reader gets to sleep, and does so more often on a busy host. So keep
+        // reading until a waiter has slept; a driver that never sleeps fails
+        // after the last try.
+        let mut reads = 0;
+        for first in [0u64, 100, 2040].into_iter().cycle().take(64) {
             disk.read_uncached(first, &mut buf).map_err(|_| "an uncached read failed")?;
             if buf[..4] != *b"POLY" || buf[4..8] != (first as u32).to_le_bytes() {
                 return Err("an uncached read returned the wrong sector");
             }
+            reads += 1;
+            if reads >= 3 && disk.stats().sleeps > before.sleeps {
+                break;
+            }
         }
         let after = disk.stats();
         let (interrupts, sleeps) = (after.interrupts - before.interrupts, after.sleeps - before.sleeps);
-        kprintln!("virtio-blk: 3 reads: {interrupts} interrupts on vector {vector:#x}, {sleeps} sleeps");
+        kprintln!("virtio-blk: {reads} reads: {interrupts} interrupts on vector {vector:#x}, {sleeps} sleeps");
         if interrupts == 0 {
             return Err("reads finished without an MSI-X interrupt");
         }

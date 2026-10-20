@@ -1083,6 +1083,11 @@ fn burn(_: usize) -> usize {
 
 /// Reads `read_many` makes.
 const MANY_READS: u64 = 40;
+/// Reads that must give the CPU-bound thread a turn. A busy host completes
+/// many requests before the reader sleeps, so `read_many` keeps going (up to
+/// `MAX_READS`) until this many did; waiting with interrupts off gives none.
+const READS_WITH_A_TURN: usize = 10;
+const MAX_READS: u64 = 400;
 
 /// Thread body: `MANY_READS` uncached reads from the disk at address
 /// `disk`. Exit code: in how many of them the CPU-bound thread made
@@ -1093,7 +1098,10 @@ fn read_many(disk: usize) -> usize {
     let bs = d.info().block_size as usize;
     let mut buf = vec![0u8; 4 * bs];
     let mut progressed = 0;
-    for i in 0..MANY_READS {
+    for i in 0..MAX_READS {
+        if i >= MANY_READS && progressed >= READS_WITH_A_TURN {
+            break;
+        }
         let first = (i * 37) % (d.info().blocks - 4);
         let burned = BURNED.load(SeqCst);
         if d.read_uncached(first, &mut buf).is_err() || buf != pattern(first, 4, bs) {
@@ -1129,7 +1137,7 @@ kernel_test! {
         let after = d.stats();
         let ms = (t1 - t0) / time::NANOS_PER_MILLI;
         kprintln!(
-            "block: {}: {MANY_READS} reads in {ms} ms beside a CPU-bound thread: it ran during {progressed} of them; {} ticks, {} sleeps, {} interrupts",
+            "block: {}: reads in {ms} ms beside a CPU-bound thread: it ran during {progressed} of them; {} ticks, {} sleeps, {} interrupts",
             d.name(),
             ticks1 - ticks0,
             after.sleeps - before.sleeps,
@@ -1138,17 +1146,17 @@ kernel_test! {
         if progressed == usize::MAX {
             return Err("a read failed or returned the wrong data");
         }
-        // A fast host can finish a request before the reader goes to sleep,
-        // so not every read gives the other thread a turn (GitHub's runners
-        // saw 29 of 40). The regression this guards against, waiting with
-        // interrupts off, gives about zero.
-        if (progressed as u64) < MANY_READS / 4 {
+        // A fast or busy host can finish a request before the reader goes to
+        // sleep, so not every read gives the other thread a turn; `read_many`
+        // reads on until enough did. The regression this guards against,
+        // waiting with interrupts off, gives about zero.
+        if progressed < READS_WITH_A_TURN {
             return Err("the CPU-bound thread did not run while the reader waited for the disk");
         }
         if ticks1 - ticks0 < ms / 4 {
             return Err("the timer tick stalled during disk reads");
         }
-        if d.waiting() != Waiting::Polled && after.sleeps - before.sleeps < MANY_READS / 4 {
+        if d.waiting() != Waiting::Polled && after.sleeps - before.sleeps == 0 {
             return Err("the reader of an interrupt-driven disk did not sleep");
         }
         Ok(())

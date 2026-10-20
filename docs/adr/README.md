@@ -23,6 +23,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0016](0016-interrupt-dispatch-tick-and-kernel-locks.md) | Interrupt dispatch and vector allocation, a 1 kHz periodic tick, spinlocks that mask interrupts, a sleeping mutex | Accepted |
 | [0018](0018-msi-x-and-interrupt-driven-disk-io.md) | MSI and MSI-X for PCI functions, interrupt-driven disks with sleeping waiters, a watchdog on the clock | Accepted |
 | [0024](0024-elf-loader.md) | ELF loader in a host-tested crate: validated headers, page mapping plans, the psABI initial stack | Accepted |
+| [0026](0026-user-address-space-regions.md) | User address spaces: a region map in a host-tested crate (`poly-vm`), page state in the page tables | Accepted |
 
 ## Open decisions
 
