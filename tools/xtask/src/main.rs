@@ -1173,7 +1173,10 @@ fn ci() -> Result {
     // The corpus on Poly against Linux (one QEMU boot per test, about a
     // second each): the tests of tests/linux/poly-pass.txt must pass. Skips
     // itself like selfcheck, and without QEMU.
-    pipeline(&["polycheck".into()])
+    pipeline(&["polycheck".into()])?;
+    // The scheduler loop in dry-run mode: every command of one cycle for
+    // the next entry, printed and pretended (ADR 0056). Runs nothing.
+    pipeline(&["loop".into(), "--dry-run".into(), "--quiet".into()])
 }
 
 fn pipeline(args: &[String]) -> Result {

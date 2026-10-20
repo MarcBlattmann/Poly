@@ -114,7 +114,8 @@ Goal: describe the observable behaviour of {entry} on the real OS, as a spec she
    30% held-out share to matter (10 or more).
 4. `cargo xtask pipeline tests split {entry} {generated} --spec-agent {agent}` keeps about 30%
    held out (outside the repository) and copies the rest to {tests}.
-5. Commit the spec sheet and visible tests on a branch. Never push to main.
+5. Commit the spec sheet and visible tests on the current branch (do not create or switch
+   branches, do not rewrite commits, never push). Change nothing else in the repository.
 Never write implementation code. Never look at implementer output for this entry.
 ";
 
@@ -129,8 +130,9 @@ read Linux or any other kernel's source, or copy code from anywhere.
 
 Implement {entry} in the Linux personality (personalities/linux) and the kernel glue it needs,
 host-testable logic in crates with unit tests derived from the visible tests. Safe Rust only:
-no `unsafe` in code you write. Run `cargo xtask ci` until it passes, then commit on your branch.
-Never push and never edit specs/, coverage/ or docs/ROADMAP.md.
+no `unsafe` in code you write, no build scripts, no new third-party crates. Run `cargo xtask ci`
+until it passes, then commit on the current branch (do not create or switch branches, do not
+rewrite commits). Never push and never edit specs/, coverage/, tools/, tests/, README.md or docs/.
 ";
 
 #[derive(Debug)]

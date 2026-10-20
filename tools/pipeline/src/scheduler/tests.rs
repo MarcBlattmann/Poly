@@ -811,3 +811,105 @@ fn the_dry_run_walks_the_whole_cycle_with_real_commands() {
     // The CLI dry run (what `cargo xtask ci` runs) works too.
     assert_eq!(super::command(&crate::repo_root(), &["--dry-run".into(), "--quiet".into()]), Ok(0));
 }
+
+/// The deploy wrapper itself, with /srv/poly and the role users replaced
+/// by a scratch layout and the current user, and the agent session
+/// replaced by printing what it would get.
+#[test]
+fn the_role_wrapper_checks_everything_and_syncs_from_the_hub() {
+    use std::process::Command;
+    if crate::util::which("bash").is_none() || crate::util::which("git").is_none() {
+        eprintln!("skipped: no bash or git");
+        return;
+    }
+    let base = std::env::temp_dir().join(format!("poly-loop-wrapper-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let me = String::from_utf8(Command::new("id").arg("-un").output().unwrap().stdout).unwrap().trim().to_string();
+    let script = crate::util::read_string(&crate::repo_root().join("tools/pipeline/deploy/poly-role")).unwrap();
+    let script = script
+        .replace("POLY=/srv/poly", &format!("POLY={}", base.display()))
+        .replace("user=polyspec", &format!("user={me}"))
+        .replace("user=polyimpl", &format!("user={me}"))
+        .replace("exec cargo xtask pipeline role", "env; echo ARGS:");
+    let wrapper = base.join("poly-role");
+    crate::util::write(&wrapper, script).unwrap();
+    let vcs = |dir: &std::path::Path, args: &[&str]| {
+        let ok = Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"])
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap()
+            .status
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    let hub = base.join("git/poly.git");
+    for d in ["git/poly.git", "src", "inbox", "heldout/linux/syscall/x86_64/brk"] {
+        std::fs::create_dir_all(base.join(d)).unwrap();
+    }
+    vcs(&hub, &["init", "-q", "--bare"]);
+    vcs(&base.join("src"), &["init", "-q"]);
+    vcs(&base.join("src"), &["commit", "-q", "--allow-empty", "-m", "spec of brk"]);
+    let h = hub.display().to_string();
+    vcs(&base.join("src"), &["push", "-q", &h, "HEAD:refs/heads/main", "HEAD:refs/heads/pipeline/spec/brk"]);
+    for role in ["spec", "impl"] {
+        vcs(&base, &["clone", "-q", "-o", "hub", &h, &format!("{role}/repo")]);
+    }
+    let run = |args: &[&str]| {
+        let o = Command::new("bash").arg(&wrapper).args(args).env("POLY_HELDOUT_DIR", "/leak").output().unwrap();
+        let text = String::from_utf8_lossy(&o.stdout).into_owned() + &String::from_utf8_lossy(&o.stderr);
+        (o.status.code().unwrap_or(-1), text)
+    };
+    let (code, out) = run(&["spec", "sync", "pipeline/spec/brk", "pipeline/spec/brk"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("spec of brk"));
+    let (code, out) = run(&["implementer", "sync", "pipeline/impl/brk", "pipeline/spec/brk"]);
+    assert_eq!(code, 0, "{out}");
+    let branch = Command::new("git")
+        .args(["-C", &base.join("impl/repo").display().to_string(), "branch", "--show-current"])
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&branch.stdout).trim(), "pipeline/impl/brk");
+
+    // The implementer: no held-out store, even when the caller's environment has one.
+    let fb = base.join("inbox/feedback-1.txt");
+    crate::util::write(&fb, "red").unwrap();
+    let fbs = fb.display().to_string();
+    let (code, out) = run(&["implementer", "run", BRK, "impl-1", "--model", "opus", "--feedback", &fbs]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("POLY_ROLE=implementer") && !out.contains("POLY_HELDOUT_DIR"), "{out}");
+    let want = format!(
+        "ARGS: implementer {BRK} --workdir {}/impl/repo --agent impl-1 --preset claude --model opus --feedback {fbs}",
+        base.display()
+    );
+    assert!(out.contains(&want), "{out}");
+    // The spec agent: the held-out store, and a clean slate for this entry.
+    let (code, out) = run(&["spec", "run", BRK, "spec-1"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains(&format!("POLY_HELDOUT_DIR={}/heldout", base.display())), "{out}");
+    assert!(out.contains(&format!("--generated {}/generated/brk", base.display())));
+    assert!(!base.join("heldout/linux/syscall/x86_64/brk").exists() && base.join("generated/brk").is_dir());
+
+    let outside = base.join("elsewhere.txt");
+    crate::util::write(&outside, "x").unwrap();
+    let outside = outside.display().to_string();
+    for bad in [
+        vec!["implementer", "sync", "pipeline/spec/brk", "pipeline/spec/brk"],
+        vec!["spec", "sync", "pipeline/spec/../x", "pipeline/spec/brk"],
+        vec!["spec", "sync", "main", "pipeline/spec/brk"],
+        vec!["implementer", "run", "linux/syscall/x86_64/brk;rm", "impl-1"],
+        vec!["implementer", "run", "linux/syscall/../brk", "impl-1"],
+        vec!["implementer", "run", BRK, "impl 1"],
+        vec!["implementer", "run", BRK, "impl-1", "--model", "o;pus"],
+        vec!["implementer", "run", BRK, "impl-1", "--feedback", &outside],
+        vec!["spec", "run", BRK, "spec-1", "--feedback", &fbs],
+        vec!["implementer", "run", BRK, "impl-1", "--other", "x"],
+        vec!["implementer", "push", "pipeline/impl/brk"],
+        vec!["root", "run", BRK, "x"],
+    ] {
+        let (code, out) = run(&bad);
+        assert_eq!(code, 2, "{bad:?} was accepted: {out}");
+    }
+    let _ = std::fs::remove_dir_all(&base);
+}
