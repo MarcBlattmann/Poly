@@ -31,6 +31,7 @@ members = [
     "crates/poly-random",
     "crates/poly-rtc",
     "crates/poly-sched",
+    "crates/poly-smp",
     "crates/poly-term",
     "crates/poly-virtio",
     "crates/poly-virtio-blk",
@@ -80,6 +81,7 @@ poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
 poly-rtc = { path = "crates/poly-rtc" }
 poly-sched = { path = "crates/poly-sched" }
+poly-smp = { path = "crates/poly-smp" }
 poly-term = { path = "crates/poly-term" }
 poly-virtio = { path = "crates/poly-virtio" }
 poly-virtio-blk = { path = "crates/poly-virtio-blk" }

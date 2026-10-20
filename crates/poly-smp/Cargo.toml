@@ -1,0 +1,14 @@
+[package]
+name = "poly-smp"
+description = "Multiprocessor logic: which CPUs to start, the AP trampoline's parameters, the INIT-SIPI-SIPI sequence, TLB shootdown batching and mailboxes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-sched.workspace = true
+
+[lints]
+workspace = true

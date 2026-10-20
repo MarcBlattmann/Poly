@@ -12,7 +12,7 @@ fn sw(from: ThreadId, to: ThreadId) -> Option<Switch> {
 }
 
 /// Slots on a list, following the links from `head`. Panics on a cycle.
-fn list<const N: usize>(s: &Scheduler<N>, head: Link) -> Vec<usize> {
+fn list<const N: usize, const C: usize>(s: &Scheduler<N, C>, head: Link) -> Vec<usize> {
     let mut out = Vec::new();
     let mut at = head;
     while let Some(slot) = at {
@@ -23,7 +23,7 @@ fn list<const N: usize>(s: &Scheduler<N>, head: Link) -> Vec<usize> {
     out
 }
 
-fn queue<const N: usize>(s: &Scheduler<N>, q: &WaitQueue) -> Vec<usize> {
+fn queue<const N: usize, const C: usize>(s: &Scheduler<N, C>, q: &WaitQueue) -> Vec<usize> {
     let l = list(s, q.head);
     assert_eq!(q.tail.map(usize::from), l.last().copied(), "tail is not the last element");
     l
@@ -32,11 +32,11 @@ fn queue<const N: usize>(s: &Scheduler<N>, q: &WaitQueue) -> Vec<usize> {
 #[test]
 fn starts_with_boot_running_and_idle_ready() {
     let s = Scheduler::<4>::new(5);
-    assert_eq!(s.current(), BOOT);
+    assert_eq!(s.current(0), BOOT);
     assert_eq!(s.state(BOOT), Some(State::Running));
     assert_eq!(s.state(IDLE), Some(State::Runnable));
     assert_eq!(s.threads(), 2);
-    assert!(!s.has_runnable());
+    assert!(!s.has_runnable(0));
     assert_eq!(s.time_slice(), 5);
     assert_eq!(std::format!("{BOOT} {IDLE}"), "0.0 1.0");
 }
@@ -44,33 +44,33 @@ fn starts_with_boot_running_and_idle_ready() {
 #[test]
 fn spawn_fills_the_table_in_slot_order() {
     let mut s = Scheduler::<5>::new(1);
-    let ids: Vec<_> = (0..3).map(|_| s.spawn().unwrap()).collect();
+    let ids: Vec<_> = (0..3).map(|_| s.spawn(0, CpuSet::ALL).unwrap()).collect();
     assert_eq!(ids.iter().map(|t| t.slot()).collect::<Vec<_>>(), [2, 3, 4]);
     assert!(ids.iter().all(|&t| s.state(t) == Some(State::Runnable)));
-    assert_eq!(s.spawn(), Err(Error::TableFull));
+    assert_eq!(s.spawn(0, CpuSet::ALL), Err(Error::TableFull));
     assert_eq!(s.threads(), 5);
-    assert_eq!(queue(&s, &s.run), [2, 3, 4]);
+    assert_eq!(queue(&s, &s.cpus[0].run), [2, 3, 4]);
 }
 
 #[test]
 fn tiny_table_has_no_free_slot() {
     let mut s = Scheduler::<2>::new(1);
-    assert_eq!(s.spawn(), Err(Error::TableFull));
+    assert_eq!(s.spawn(0, CpuSet::ALL), Err(Error::TableFull));
 }
 
 #[test]
 fn yield_rotates_round_robin() {
     let mut s = Scheduler::<8>::new(3);
-    assert_eq!(s.yield_now(), None, "nobody else to run");
-    let a = s.spawn().unwrap();
-    let b = s.spawn().unwrap();
-    assert_eq!(s.yield_now(), sw(BOOT, a));
+    assert_eq!(s.yield_now(0), None, "nobody else to run");
+    let a = s.spawn(0, CpuSet::ALL).unwrap();
+    let b = s.spawn(0, CpuSet::ALL).unwrap();
+    assert_eq!(s.yield_now(0), sw(BOOT, a));
     assert_eq!(s.state(BOOT), Some(State::Runnable));
     assert_eq!(s.state(a), Some(State::Running));
-    assert_eq!(s.yield_now(), sw(a, b));
-    assert_eq!(s.yield_now(), sw(b, BOOT));
-    assert_eq!(s.yield_now(), sw(BOOT, a));
-    assert_eq!(queue(&s, &s.run), [b.slot(), BOOT.slot()]);
+    assert_eq!(s.yield_now(0), sw(a, b));
+    assert_eq!(s.yield_now(0), sw(b, BOOT));
+    assert_eq!(s.yield_now(0), sw(BOOT, a));
+    assert_eq!(queue(&s, &s.cpus[0].run), [b.slot(), BOOT.slot()]);
 }
 
 #[test]
@@ -78,92 +78,95 @@ fn tick_preempts_after_the_slice_only_if_someone_waits() {
     let mut s = Scheduler::<8>::new(3);
     // Alone: the slice just renews.
     for _ in 0..10 {
-        assert!(!s.tick());
+        assert!(!s.tick(0));
     }
-    let a = s.spawn().unwrap();
+    let a = s.spawn(0, CpuSet::ALL).unwrap();
     // The slice left over from the loop above: 10 ticks = 3 + 3 + 3 + 1.
-    assert!(!s.tick());
-    assert!(s.tick());
-    assert!(s.tick(), "keeps asking until the caller switches");
-    assert_eq!(s.yield_now(), sw(BOOT, a));
+    assert!(!s.tick(0));
+    assert!(s.tick(0));
+    assert!(s.tick(0), "keeps asking until the caller switches");
+    assert_eq!(s.yield_now(0), sw(BOOT, a));
     // A switched-in thread gets a full slice.
-    assert!(!s.tick());
-    assert!(!s.tick());
-    assert!(s.tick());
-    assert_eq!(s.yield_now(), sw(a, BOOT));
+    assert!(!s.tick(0));
+    assert!(!s.tick(0));
+    assert!(s.tick(0));
+    assert_eq!(s.yield_now(0), sw(a, BOOT));
 }
 
 #[test]
 fn idle_runs_when_everyone_blocks_and_is_preempted_at_once() {
     let mut s = Scheduler::<8>::new(100);
     let mut q = WaitQueue::new();
-    assert_eq!(s.block_current(&mut q), Ok(Switch { from: BOOT, to: IDLE }));
-    assert_eq!(s.current(), IDLE);
+    assert_eq!(s.block_current(0, &mut q), Ok(Switch { from: BOOT, to: IDLE }));
+    assert_eq!(s.current(0), IDLE);
     assert_eq!(s.state(BOOT), Some(State::Blocked));
-    assert!(!s.tick(), "idle keeps running while nothing is runnable");
-    assert_eq!(s.yield_now(), None);
+    assert!(!s.tick(0), "idle keeps running while nothing is runnable");
+    assert_eq!(s.yield_now(0), None);
     assert_eq!(s.wake_one(&mut q), Some(BOOT));
-    assert!(s.tick(), "idle gives way on the next tick");
-    assert_eq!(s.yield_now(), sw(IDLE, BOOT));
+    assert!(s.tick(0), "idle gives way on the next tick");
+    assert_eq!(s.yield_now(0), sw(IDLE, BOOT));
     assert_eq!(s.state(IDLE), Some(State::Runnable));
-    assert!(!s.has_runnable(), "idle is never queued");
+    assert!(!s.has_runnable(0), "idle is never queued");
 }
 
 #[test]
 fn idle_cannot_block_exit_or_be_joined() {
     let mut s = Scheduler::<8>::new(1);
     let mut q = WaitQueue::new();
-    assert_eq!(s.join(IDLE), Err(Error::Idle));
+    assert_eq!(s.join(0, IDLE), Err(Error::Idle));
     assert_eq!(s.detach(IDLE), Err(Error::Idle));
     assert_eq!(s.reap(IDLE), Err(Error::NotExited));
-    s.block_current(&mut q).unwrap();
-    assert_eq!(s.current(), IDLE);
-    assert_eq!(s.block_current(&mut WaitQueue::new()), Err(Error::Idle));
-    assert_eq!(s.exit_current(0), Err(Error::Idle));
-    assert_eq!(s.join(BOOT), Err(Error::Idle), "idle cannot wait for a live thread");
+    s.block_current(0, &mut q).unwrap();
+    assert_eq!(s.current(0), IDLE);
+    assert_eq!(s.block_current(0, &mut WaitQueue::new()), Err(Error::Idle));
+    assert_eq!(s.exit_current(0, 0), Err(Error::Idle));
+    assert_eq!(s.join(0, BOOT), Err(Error::Idle), "idle cannot wait for a live thread");
 }
 
 #[test]
 fn wait_queue_is_fifo() {
     let mut s = Scheduler::<8>::new(1);
     let mut q = WaitQueue::new();
-    let ids: Vec<_> = (0..3).map(|_| s.spawn().unwrap()).collect();
+    let ids: Vec<_> = (0..3).map(|_| s.spawn(0, CpuSet::ALL).unwrap()).collect();
     // Each of boot, ids[0], ids[1] blocks in turn; ids[2] is left running.
-    assert_eq!(s.block_current(&mut q), Ok(Switch { from: BOOT, to: ids[0] }));
-    assert_eq!(s.block_current(&mut q), Ok(Switch { from: ids[0], to: ids[1] }));
-    assert_eq!(s.block_current(&mut q), Ok(Switch { from: ids[1], to: ids[2] }));
+    assert_eq!(s.block_current(0, &mut q), Ok(Switch { from: BOOT, to: ids[0] }));
+    assert_eq!(s.block_current(0, &mut q), Ok(Switch { from: ids[0], to: ids[1] }));
+    assert_eq!(s.block_current(0, &mut q), Ok(Switch { from: ids[1], to: ids[2] }));
     assert_eq!(queue(&s, &q), [0, 2, 3]);
     assert_eq!(s.wake_one(&mut q), Some(BOOT));
     assert_eq!(s.wake_all(&mut q), 2);
     assert!(q.is_empty());
     assert_eq!(s.wake_one(&mut q), None);
     assert_eq!(s.wake_all(&mut q), 0);
-    assert_eq!(queue(&s, &s.run), [0, 2, 3]);
+    assert_eq!(queue(&s, &s.cpus[0].run), [0, 2, 3]);
 }
 
 #[test]
 fn join_waits_for_exit_and_frees_the_slot() {
     let mut s = Scheduler::<4>::new(1);
-    let t = s.spawn().unwrap();
-    assert_eq!(s.join(t), Ok(Join::Blocked(Switch { from: BOOT, to: t })));
+    let t = s.spawn(0, CpuSet::ALL).unwrap();
+    assert_eq!(s.join(0, t), Ok(Join::Blocked(Switch { from: BOOT, to: t })));
     assert_eq!(s.state(BOOT), Some(State::Blocked));
     assert_eq!(s.unreaped(), None);
-    assert_eq!(s.exit_current(42), Ok(Switch { from: t, to: BOOT }), "exit wakes the joiner");
+    assert_eq!(s.exit_current(0, 42), Ok(Switch { from: t, to: BOOT }), "exit wakes the joiner");
     assert_eq!(s.state(t), Some(State::Exited));
+    assert_eq!(s.unreaped(), None, "still being switched away from");
+    assert_eq!(s.reap(t), Err(Error::NotExited));
+    s.saved(0);
     assert_eq!(s.unreaped(), Some(t));
     assert_eq!(s.reap(t), Ok(()));
     assert_eq!(s.reap(t), Err(Error::NotExited));
     assert_eq!(s.unreaped(), None);
     assert_eq!(s.threads(), 3, "not joined yet");
-    assert_eq!(s.join(t), Ok(Join::Exited(42)));
+    assert_eq!(s.join(0, t), Ok(Join::Exited(42)));
     assert_eq!(s.threads(), 2);
     assert_eq!(s.state(t), None);
-    assert_eq!(s.join(t), Err(Error::NoSuchThread));
+    assert_eq!(s.join(0, t), Err(Error::NoSuchThread));
     // The slot comes back with a new generation; the old id stays dead.
-    let u = s.spawn().unwrap();
+    let u = s.spawn(0, CpuSet::ALL).unwrap();
     assert_eq!(u.slot(), t.slot());
     assert_ne!(u, t);
-    assert_eq!(s.join(t), Err(Error::NoSuchThread));
+    assert_eq!(s.join(0, t), Err(Error::NoSuchThread));
     assert_eq!(s.detach(t), Err(Error::NoSuchThread));
     assert_eq!(s.reap(t), Err(Error::NoSuchThread));
 }
@@ -171,30 +174,32 @@ fn join_waits_for_exit_and_frees_the_slot() {
 #[test]
 fn join_before_reap_frees_at_reap() {
     let mut s = Scheduler::<4>::new(1);
-    let t = s.spawn().unwrap();
-    s.yield_now().unwrap();
-    s.exit_current(7).unwrap();
-    assert_eq!(s.join(t), Ok(Join::Exited(7)));
+    let t = s.spawn(0, CpuSet::ALL).unwrap();
+    s.yield_now(0).unwrap();
+    s.exit_current(0, 7).unwrap();
+    s.saved(0);
+    assert_eq!(s.join(0, t), Ok(Join::Exited(7)));
     assert_eq!(s.state(t), None, "joined threads are gone");
     assert_eq!(s.threads(), 3, "but the slot waits for reap");
-    assert_eq!(s.spawn().map(|u| u.slot()), Ok(3));
-    assert_eq!(s.spawn(), Err(Error::TableFull));
+    assert_eq!(s.spawn(0, CpuSet::ALL).map(|u| u.slot()), Ok(3));
+    assert_eq!(s.spawn(0, CpuSet::ALL), Err(Error::TableFull));
     assert_eq!(s.unreaped(), Some(t));
     s.reap(t).unwrap();
     assert_eq!(s.threads(), 3);
-    assert_eq!(s.spawn().map(|u| u.slot()), Ok(t.slot()));
+    assert_eq!(s.spawn(0, CpuSet::ALL).map(|u| u.slot()), Ok(t.slot()));
 }
 
 #[test]
 fn live_threads_lists_every_unjoined_thread() {
     let mut s = Scheduler::<6>::new(1);
-    let a = s.spawn().unwrap();
-    let b = s.spawn().unwrap();
-    let c = s.spawn().unwrap();
+    let a = s.spawn(0, CpuSet::ALL).unwrap();
+    let b = s.spawn(0, CpuSet::ALL).unwrap();
+    let c = s.spawn(0, CpuSet::ALL).unwrap();
     let mut q = WaitQueue::new();
-    s.block_current(&mut q).unwrap(); // BOOT blocks, a runs
-    s.exit_current(1).unwrap(); // a exits, b runs
-    s.join(c).unwrap(); // b waits for c, which runs
+    s.block_current(0, &mut q).unwrap(); // BOOT blocks, a runs
+    s.exit_current(0, 1).unwrap(); // a exits, b runs
+    s.saved(0);
+    s.join(0, c).unwrap(); // b waits for c, which runs
     let live: Vec<_> = s.live_threads().collect();
     assert_eq!(
         live,
@@ -203,30 +208,32 @@ fn live_threads_lists_every_unjoined_thread() {
     s.reap(a).unwrap();
     s.detach(a).unwrap();
     assert_eq!(s.live_threads().map(|(t, _)| t).collect::<Vec<_>>(), [BOOT, IDLE, b, c], "a's slot is free");
-    s.exit_current(0).unwrap(); // c exits and wakes b, which runs
-    assert_eq!(s.current(), b);
-    assert_eq!(s.join(c), Ok(Join::Exited(0)));
+    s.exit_current(0, 0).unwrap(); // c exits and wakes b, which runs
+    assert_eq!(s.current(0), b);
+    assert_eq!(s.join(0, c), Ok(Join::Exited(0)));
     assert!(s.live_threads().all(|(t, _)| t != c), "joined, though not reaped yet");
 }
 
 #[test]
 fn detached_threads_free_themselves() {
     let mut s = Scheduler::<4>::new(1);
-    let t = s.spawn().unwrap();
+    let t = s.spawn(0, CpuSet::ALL).unwrap();
     s.detach(t).unwrap();
     s.detach(t).unwrap();
-    assert_eq!(s.join(t), Err(Error::Detached));
-    s.yield_now().unwrap();
-    s.exit_current(1).unwrap();
+    assert_eq!(s.join(0, t), Err(Error::Detached));
+    s.yield_now(0).unwrap();
+    s.exit_current(0, 1).unwrap();
+    s.saved(0);
     assert_eq!(s.state(t), Some(State::Exited));
     s.reap(t).unwrap();
     assert_eq!(s.state(t), None);
     assert_eq!(s.threads(), 2);
 
     // Detaching after exit and reap frees at once.
-    let u = s.spawn().unwrap();
-    s.yield_now().unwrap();
-    s.exit_current(1).unwrap();
+    let u = s.spawn(0, CpuSet::ALL).unwrap();
+    s.yield_now(0).unwrap();
+    s.exit_current(0, 1).unwrap();
+    s.saved(0);
     s.reap(u).unwrap();
     assert_eq!(s.threads(), 3);
     s.detach(u).unwrap();
@@ -236,39 +243,40 @@ fn detached_threads_free_themselves() {
 #[test]
 fn joiners_of_a_thread_detached_later_get_an_error() {
     let mut s = Scheduler::<4>::new(1);
-    let t = s.spawn().unwrap();
-    assert!(matches!(s.join(t), Ok(Join::Blocked(_))));
+    let t = s.spawn(0, CpuSet::ALL).unwrap();
+    assert!(matches!(s.join(0, t), Ok(Join::Blocked(_))));
     s.detach(t).unwrap();
-    s.exit_current(0).unwrap();
-    assert_eq!(s.current(), BOOT);
-    assert_eq!(s.join(t), Err(Error::Detached));
+    s.exit_current(0, 0).unwrap();
+    assert_eq!(s.current(0), BOOT);
+    assert_eq!(s.join(0, t), Err(Error::Detached));
 }
 
 #[test]
 fn second_joiner_finds_the_thread_gone() {
     let mut s = Scheduler::<8>::new(1);
-    let t = s.spawn().unwrap();
-    let other = s.spawn().unwrap();
-    assert_eq!(s.join(t), Ok(Join::Blocked(Switch { from: BOOT, to: t })));
-    assert_eq!(s.yield_now(), sw(t, other));
-    assert_eq!(s.join(t), Ok(Join::Blocked(Switch { from: other, to: t })));
+    let t = s.spawn(0, CpuSet::ALL).unwrap();
+    let other = s.spawn(0, CpuSet::ALL).unwrap();
+    assert_eq!(s.join(0, t), Ok(Join::Blocked(Switch { from: BOOT, to: t })));
+    assert_eq!(s.yield_now(0), sw(t, other));
+    assert_eq!(s.join(0, t), Ok(Join::Blocked(Switch { from: other, to: t })));
     assert_eq!(queue(&s, &s.slots[t.slot()].joiners), [BOOT.slot(), other.slot()]);
-    assert_eq!(s.join(t), Err(Error::Current));
-    assert_eq!(s.exit_current(9), Ok(Switch { from: t, to: BOOT }));
-    assert_eq!(s.join(t), Ok(Join::Exited(9)));
-    assert_eq!(s.yield_now(), sw(BOOT, other));
-    assert_eq!(s.join(t), Err(Error::NoSuchThread));
+    assert_eq!(s.join(0, t), Err(Error::Current));
+    assert_eq!(s.exit_current(0, 9), Ok(Switch { from: t, to: BOOT }));
+    assert_eq!(s.join(0, t), Ok(Join::Exited(9)));
+    assert_eq!(s.yield_now(0), sw(BOOT, other));
+    assert_eq!(s.join(0, t), Err(Error::NoSuchThread));
 }
 
 #[test]
 fn boot_thread_may_exit() {
     let mut s = Scheduler::<4>::new(1);
-    let t = s.spawn().unwrap();
-    assert_eq!(s.exit_current(3), Ok(Switch { from: BOOT, to: t }));
+    let t = s.spawn(0, CpuSet::ALL).unwrap();
+    assert_eq!(s.exit_current(0, 3), Ok(Switch { from: BOOT, to: t }));
+    s.saved(0);
     s.reap(BOOT).unwrap();
-    assert_eq!(s.join(BOOT), Ok(Join::Exited(3)));
+    assert_eq!(s.join(0, BOOT), Ok(Join::Exited(3)));
     assert_eq!(s.state(BOOT), None);
-    assert_eq!(s.exit_current(0), Ok(Switch { from: t, to: IDLE }));
+    assert_eq!(s.exit_current(0, 0), Ok(Switch { from: t, to: IDLE }));
 }
 
 #[test]
@@ -279,7 +287,7 @@ fn bad_ids_are_rejected() {
     let stale_boot = ThreadId { slot: 0, generation: 1 };
     for t in [beyond, never, stale_boot] {
         assert_eq!(s.state(t), None);
-        assert_eq!(s.join(t), Err(Error::NoSuchThread));
+        assert_eq!(s.join(0, t), Err(Error::NoSuchThread));
         assert_eq!(s.detach(t), Err(Error::NoSuchThread));
         assert_eq!(s.reap(t), Err(Error::NoSuchThread));
     }
@@ -288,7 +296,15 @@ fn bad_ids_are_rejected() {
 
 #[test]
 fn errors_have_descriptions() {
-    for e in [Error::TableFull, Error::NoSuchThread, Error::Idle, Error::Current, Error::Detached, Error::NotExited] {
+    for e in [
+        Error::TableFull,
+        Error::NoSuchThread,
+        Error::Idle,
+        Error::Current,
+        Error::Detached,
+        Error::NotExited,
+        Error::NoSuchCpu,
+    ] {
         assert!(!e.describe().is_empty());
     }
 }
@@ -516,13 +532,13 @@ const MODEL_QUEUES: usize = 3;
 
 /// Compare every observable piece of state, and the lists themselves.
 fn compare(s: &Scheduler<MODEL_SLOTS>, m: &Model, qs: &[WaitQueue], ids: &[ThreadId]) {
-    assert_eq!(s.current(), m.id(m.current));
+    assert_eq!(s.current(0), m.id(m.current));
     for &id in ids {
         assert_eq!(s.state(id), m.state(id), "state of {id}");
     }
     assert_eq!(s.threads(), m.threads.iter().flatten().count());
-    assert_eq!(s.has_runnable(), !m.run.is_empty());
-    assert_eq!(queue(s, &s.run), Vec::from(m.run.clone()));
+    assert_eq!(s.has_runnable(0), !m.run.is_empty());
+    assert_eq!(queue(s, &s.cpus[0].run), Vec::from(m.run.clone()));
     for (q, mq) in qs.iter().zip(&m.queues) {
         assert_eq!(queue(s, q), Vec::from(mq.clone()));
     }
@@ -533,7 +549,7 @@ fn compare(s: &Scheduler<MODEL_SLOTS>, m: &Model, qs: &[WaitQueue], ids: &[Threa
     let free = list(s, s.free);
     assert_eq!(free.len(), MODEL_SLOTS - s.threads());
     assert!(free.iter().all(|&f| m.threads[f].is_none()), "a used slot is on the free list");
-    assert_eq!(s.left, m.left, "ticks left in the slice");
+    assert_eq!(s.cpus[0].left, m.left, "ticks left in the slice");
     if let Some(t) = s.unreaped() {
         assert!(m.unreaped().contains(&t));
     } else {
@@ -558,7 +574,7 @@ fn run_model(seed: u64, steps: usize) {
 
     for _ in 0..steps {
         match rng.below(100) {
-            0..=14 => match s.spawn() {
+            0..=14 => match s.spawn(0, CpuSet::ALL) {
                 Ok(t) => {
                     assert!(m.threads[t.slot()].is_none(), "spawn reused a live slot");
                     assert!(last_generation[t.slot()].is_none_or(|g| t.generation() > g), "generation reused");
@@ -572,17 +588,17 @@ fn run_model(seed: u64, steps: usize) {
                     assert!(m.threads.iter().all(Option::is_some));
                 }
             },
-            15..=29 => assert_eq!(s.yield_now(), m.yield_now()),
+            15..=29 => assert_eq!(s.yield_now(0), m.yield_now()),
             30..=44 => {
-                let preempt = s.tick();
+                let preempt = s.tick(0);
                 assert_eq!(preempt, m.tick());
                 if preempt && rng.below(4) != 0 {
-                    assert_eq!(s.yield_now(), m.yield_now());
+                    assert_eq!(s.yield_now(0), m.yield_now());
                 }
             }
             45..=54 => {
                 let q = rng.below(MODEL_QUEUES);
-                assert_eq!(s.block_current(&mut qs[q]), m.block(q));
+                assert_eq!(s.block_current(0, &mut qs[q]), m.block(q));
             }
             55..=62 => {
                 let q = rng.below(MODEL_QUEUES);
@@ -596,11 +612,11 @@ fn run_model(seed: u64, steps: usize) {
             }
             66..=73 => {
                 code += 1;
-                assert_eq!(s.exit_current(code), m.exit(code));
+                assert_eq!(s.exit_current(0, code), m.exit(code));
             }
             74..=81 => {
                 let t = pick(&mut rng, &ids);
-                assert_eq!(s.join(t), m.join(t), "join {t}");
+                assert_eq!(s.join(0, t), m.join(t), "join {t}");
             }
             82..=86 => {
                 let t = pick(&mut rng, &ids);
@@ -609,7 +625,7 @@ fn run_model(seed: u64, steps: usize) {
             87..=94 => {
                 // What the kernel does after every switch.
                 while let Some(t) = s.unreaped() {
-                    assert_ne!(t, s.current());
+                    assert_ne!(t, s.current(0));
                     assert_eq!(s.reap(t), m.reap(t));
                 }
             }
@@ -618,6 +634,9 @@ fn run_model(seed: u64, steps: usize) {
                 assert_eq!(s.reap(t), m.reap(t), "reap {t}");
             }
         }
+        // What the kernel does right after every switch.
+        s.saved(0);
+        let _ = s.take_kicks();
         compare(&s, &m, &qs, &ids);
     }
 }
