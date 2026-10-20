@@ -1,0 +1,6 @@
+[
+{"symbol":"AHTRestoreCreateDeviceList","src":["macos-sdk"]},
+{"symbol":"AHTRestoreFailureCleanup","src":["macos-sdk"]},
+{"symbol":"AHTRestoreUpdateDevice","src":["macos-sdk"]},
+{"symbol":"AHTRestoreUpdateDeviceWithOverrides","src":["macos-sdk"]}
+]

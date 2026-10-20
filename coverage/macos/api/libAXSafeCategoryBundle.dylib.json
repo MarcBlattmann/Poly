@@ -1,0 +1,8 @@
+[
+{"symbol":"AXSetUIAXReportSenderErrorLoggerFunction","src":["macos-sdk"]},
+{"symbol":"AXSetValidationErrorLoggingFunction","src":["macos-sdk"]},
+{"symbol":"UIAccessibilityInstallSafeCategories","src":["macos-sdk"]},
+{"symbol":"UIAccessibilityInstallSafeCategory","src":["macos-sdk"]},
+{"symbol":"objc:UIAccessibilitySafeCategory","src":["macos-sdk"]},
+{"symbol":"objc:_UIAccessibilitySwiftSafeCategory","src":["macos-sdk"]}
+]

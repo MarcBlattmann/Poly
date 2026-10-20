@@ -1,0 +1,4 @@
+[
+{"symbol":"kDetachedCertificatesLookupErrorDomain","src":["macos-sdk"]},
+{"symbol":"objc:DetachedCertificatesLookup","src":["macos-sdk"]}
+]

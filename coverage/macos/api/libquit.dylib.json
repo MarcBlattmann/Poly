@@ -1,0 +1,11 @@
+[
+{"symbol":"LQCachePort","src":["macos-sdk"]},
+{"symbol":"LQForceQuit","src":["macos-sdk"]},
+{"symbol":"LQReportCpuResource","src":["macos-sdk"]},
+{"symbol":"LQReportHang","src":["macos-sdk"]},
+{"symbol":"LQReportPotentialHang","src":["macos-sdk"]},
+{"symbol":"LQReportPotentialSpin","src":["macos-sdk"]},
+{"symbol":"LQReportStuckApp","src":["macos-sdk"]},
+{"symbol":"LQReportUnstuckApp","src":["macos-sdk"]},
+{"symbol":"LQReportWakeupsResource","src":["macos-sdk"]}
+]

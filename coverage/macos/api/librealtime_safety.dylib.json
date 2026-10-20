@@ -1,0 +1,10 @@
+[
+{"symbol":"__realtime_assert_rtn","src":["macos-sdk"]},
+{"symbol":"realtime_runtime_check_crash","src":["macos-sdk"]},
+{"symbol":"realtime_runtime_check_pop_authorization","src":["macos-sdk"]},
+{"symbol":"realtime_runtime_check_push_authorization","src":["macos-sdk"]},
+{"symbol":"realtime_runtime_check_register_checker","src":["macos-sdk"]},
+{"symbol":"realtime_runtime_check_start","src":["macos-sdk"]},
+{"symbol":"realtime_runtime_check_stop","src":["macos-sdk"]},
+{"symbol":"realtime_runtime_checker_get_current_thread_storage","src":["macos-sdk"]}
+]

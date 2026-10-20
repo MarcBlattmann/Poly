@@ -1,0 +1,6 @@
+[
+{"symbol":"AXSpeechLanguageCanonicalFormToGeneralLanguage","src":["macos-sdk"]},
+{"symbol":"AXSpeechTransformText","src":["macos-sdk"]},
+{"symbol":"AXSpeechTransformTextWithLanguage","src":["macos-sdk"]},
+{"symbol":"AXSpeechTransformTextWithLanguageAndVoiceIdentifier","src":["macos-sdk"]}
+]

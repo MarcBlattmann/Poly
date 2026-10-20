@@ -1,0 +1,4 @@
+[
+{"symbol":"objc:FIFinderSync","src":["macos-sdk"]},
+{"symbol":"objc:FIFinderSyncController","src":["macos-sdk"]}
+]

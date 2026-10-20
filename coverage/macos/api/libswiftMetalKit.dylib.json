@@ -1,0 +1,6 @@
+[
+{"symbol":"$s8MetalKit030MTKModelIOVertexDescriptorFromA9WithErrorySo09MDLVertexE0CSo09MTLVertexE0CKF","src":["macos-sdk"]},
+{"symbol":"$s8MetalKit44MTKMetalVertexDescriptorFromModelIOWithErrorySo09MTLVertexE0CSgSo09MDLVertexE0CKF","src":["macos-sdk"]},
+{"symbol":"$sSo7MTKMeshC8MetalKitE9newMeshes5asset6deviceSaySo7MDLMeshCG13modelIOMeshes_SayABG05metalcE0tSo8MDLAssetC_So9MTLDevice_ptKFZ","src":["macos-sdk"]},
+{"symbol":"_swift_FORCE_LOAD_$_swiftMetalKit","src":["macos-sdk"]}
+]

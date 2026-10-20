@@ -1,0 +1,5 @@
+[
+{"symbol":"Ace3UpdaterCreate","src":["macos-sdk"]},
+{"symbol":"Ace3UpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"Ace3UpdaterIsDone","src":["macos-sdk"]}
+]

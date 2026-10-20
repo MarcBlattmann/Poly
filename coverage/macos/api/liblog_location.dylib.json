@@ -1,0 +1,8 @@
+[
+{"symbol":"OSLogCopyFormattedString","src":["macos-sdk"]},
+{"symbol":"OSStateCreateStringWithData","src":["macos-sdk"]},
+{"symbol":"extractEncryptedData","src":["macos-sdk"]},
+{"symbol":"liblog_locationVersionNumber","src":["macos-sdk"]},
+{"symbol":"liblog_locationVersionString","src":["macos-sdk"]},
+{"symbol":"objc:CLLogFormatter","src":["macos-sdk"]}
+]

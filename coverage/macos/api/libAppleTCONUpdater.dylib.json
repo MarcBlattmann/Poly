@@ -1,0 +1,5 @@
+[
+{"symbol":"AppleTCONUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"AppleTCONUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"AppleTCONUpdaterIsDone","src":["macos-sdk"]}
+]

@@ -1,0 +1,17 @@
+[
+{"symbol":"bottom_panel","src":["macos-sdk"]},
+{"symbol":"del_panel","src":["macos-sdk"]},
+{"symbol":"hide_panel","src":["macos-sdk"]},
+{"symbol":"move_panel","src":["macos-sdk"]},
+{"symbol":"new_panel","src":["macos-sdk"]},
+{"symbol":"panel_above","src":["macos-sdk"]},
+{"symbol":"panel_below","src":["macos-sdk"]},
+{"symbol":"panel_hidden","src":["macos-sdk"]},
+{"symbol":"panel_userptr","src":["macos-sdk"]},
+{"symbol":"panel_window","src":["macos-sdk"]},
+{"symbol":"replace_panel","src":["macos-sdk"]},
+{"symbol":"set_panel_userptr","src":["macos-sdk"]},
+{"symbol":"show_panel","src":["macos-sdk"]},
+{"symbol":"top_panel","src":["macos-sdk"]},
+{"symbol":"update_panels","src":["macos-sdk"]}
+]

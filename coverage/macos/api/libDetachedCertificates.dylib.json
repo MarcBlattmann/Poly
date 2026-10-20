@@ -1,0 +1,5 @@
+[
+{"symbol":"kDetachedCertificatesErrorDomain","src":["macos-sdk"]},
+{"symbol":"objc:DetachedCertificateEntry","src":["macos-sdk"]},
+{"symbol":"objc:DetachedCertificatesFile","src":["macos-sdk"]}
+]

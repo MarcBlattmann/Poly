@@ -1,0 +1,14 @@
+[
+{"symbol":"AppleTconUARPRestoreInfoCopyFirmware","src":["macos-sdk"]},
+{"symbol":"AppleTconUARPRestoreInfoCreateRequest","src":["macos-sdk"]},
+{"symbol":"AppleTconUARPRestoreInfoGetTags","src":["macos-sdk"]},
+{"symbol":"AppleTconUARPUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"AppleTconUARPUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"AppleTconUARPUpdaterIsDone","src":["macos-sdk"]},
+{"symbol":"BanyanUARPRestoreInfoCopyFirmware","src":["macos-sdk"]},
+{"symbol":"BanyanUARPRestoreInfoCreateRequest","src":["macos-sdk"]},
+{"symbol":"BanyanUARPRestoreInfoGetTags","src":["macos-sdk"]},
+{"symbol":"BanyanUARPUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"BanyanUARPUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"BanyanUARPUpdaterIsDone","src":["macos-sdk"]}
+]

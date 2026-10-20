@@ -1,0 +1,15 @@
+[
+{"symbol":"$s9_Volatile0A14MappedRegisterV11_rawPointerBpvg","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterV11_rawPointerBpvpMV","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterV16unsafeBitPatternACyxGSu_tcfC","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVAAs5UInt8VRszlE4loadAEyF","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVAAs5UInt8VRszlE5storeyyAEF","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVAAs6UInt16VRszlE4loadAEyF","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVAAs6UInt16VRszlE5storeyyAEF","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVAAs6UInt32VRszlE4loadAEyF","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVAAs6UInt32VRszlE5storeyyAEF","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVAAs6UInt64VRszlE4loadAEyF","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVAAs6UInt64VRszlE5storeyyAEF","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVMa","src":["macos-sdk"]},
+{"symbol":"$s9_Volatile0A14MappedRegisterVMn","src":["macos-sdk"]}
+]

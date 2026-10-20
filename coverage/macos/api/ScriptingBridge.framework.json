@@ -1,0 +1,7 @@
+[
+{"symbol":"objc:SBAppContext","src":["macos-sdk"]},
+{"symbol":"objc:SBAppLocator","src":["macos-sdk"]},
+{"symbol":"objc:SBApplication","src":["macos-sdk"]},
+{"symbol":"objc:SBElementArray","src":["macos-sdk"]},
+{"symbol":"objc:SBObject","src":["macos-sdk"]}
+]

@@ -1,0 +1,10 @@
+[
+{"symbol":"STMachServiceNameScreenTime","src":["macos-sdk"]},
+{"symbol":"objc:STScreenTimeAgentConnection","src":["macos-sdk"]},
+{"symbol":"objc:STScreenTimeConfiguration","src":["macos-sdk"]},
+{"symbol":"objc:STScreenTimeConfigurationObserver","src":["macos-sdk"]},
+{"symbol":"objc:STWebHistory","src":["macos-sdk"]},
+{"symbol":"objc:STWebRemoteViewController","src":["macos-sdk"]},
+{"symbol":"objc:STWebService","src":["macos-sdk"]},
+{"symbol":"objc:STWebpageController","src":["macos-sdk"]}
+]

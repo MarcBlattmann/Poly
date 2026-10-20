@@ -1,0 +1,10 @@
+[
+{"symbol":"SEUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"SEUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"SEUpdaterIsDone","src":["macos-sdk"]},
+{"symbol":"kSECmdCopyIdentifier","src":["macos-sdk"]},
+{"symbol":"kSECmdPerformNextStage","src":["macos-sdk"]},
+{"symbol":"kSECmdQueryInfo","src":["macos-sdk"]},
+{"symbol":"kSECmdSendApduFile","src":["macos-sdk"]},
+{"symbol":"kSECmdVerifyPairing","src":["macos-sdk"]}
+]

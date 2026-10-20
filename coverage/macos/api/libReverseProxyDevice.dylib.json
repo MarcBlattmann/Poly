@@ -1,0 +1,11 @@
+[
+{"symbol":"RPCopyProxyDictionary","src":["macos-sdk"]},
+{"symbol":"RPCopyProxyDictionaryWithOptions","src":["macos-sdk"]},
+{"symbol":"RPRegisterForAvailability","src":["macos-sdk"]},
+{"symbol":"RPRegistrationInvalidate","src":["macos-sdk"]},
+{"symbol":"RPRegistrationResume","src":["macos-sdk"]},
+{"symbol":"RPSetLogLevel","src":["macos-sdk"]},
+{"symbol":"_RPCopyProxyDictionaryWithOptions","src":["macos-sdk"]},
+{"symbol":"_RPRegisterForAvailability","src":["macos-sdk"]},
+{"symbol":"_RPSetLogLevel","src":["macos-sdk"]}
+]

@@ -24,7 +24,7 @@ progress chart in the README.
 - [x] System call routing to Linux / NT / XNU personalities (native error conventions)
 - [x] Boot self-test on every boot, plus negative test (page fault is reported)
 - [x] Coverage map seeded from Wine `.spec`, Linux syscall table, XNU syscall/trap tables
-- [ ] macOS framework API mapped from the SDK `.tbd` files (owner runs `tools/scripts/import-macos-sdk.sh` on a Mac)
+- [x] macOS framework API mapped from the SDK `.tbd` files (owner runs `tools/scripts/import-macos-sdk.sh` on a Mac)
 - [x] Clean-room rules, architecture docs, ADRs, spec sheet template, CI
 
 ## Phase 1: Kernel core

@@ -1,0 +1,5 @@
+[
+{"symbol":"PFXUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"PFXUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"PFXUpdaterIsDone","src":["macos-sdk"]}
+]

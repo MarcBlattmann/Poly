@@ -1,0 +1,11 @@
+[
+{"symbol":"AuthenticationPriorityForPolicy","src":["macos-sdk"]},
+{"symbol":"objc:AgentProxy","src":["macos-sdk"]},
+{"symbol":"objc:AuthenticationInProgress","src":["macos-sdk"]},
+{"symbol":"objc:AuthenticationInProgressToken","src":["macos-sdk"]},
+{"symbol":"objc:AuthenticationManager","src":["macos-sdk"]},
+{"symbol":"objc:ContextPlugin","src":["macos-sdk"]},
+{"symbol":"objc:MechanismManager","src":["macos-sdk"]},
+{"symbol":"objc:Module","src":["macos-sdk"]},
+{"symbol":"objc:RemoteContext","src":["macos-sdk"]}
+]

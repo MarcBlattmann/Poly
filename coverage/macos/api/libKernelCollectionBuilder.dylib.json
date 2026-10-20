@@ -1,0 +1,17 @@
+[
+{"symbol":"addCollectionFile","src":["macos-sdk"]},
+{"symbol":"addInterfaceFile","src":["macos-sdk"]},
+{"symbol":"addKernelFile","src":["macos-sdk"]},
+{"symbol":"addKextDataFile","src":["macos-sdk"]},
+{"symbol":"addPrelinkInfo","src":["macos-sdk"]},
+{"symbol":"addSegmentData","src":["macos-sdk"]},
+{"symbol":"createKernelCollectionBuilder","src":["macos-sdk"]},
+{"symbol":"destroyKernelCollectionBuilder","src":["macos-sdk"]},
+{"symbol":"findBestKextArch","src":["macos-sdk"]},
+{"symbol":"getCollectionFileResults","src":["macos-sdk"]},
+{"symbol":"getErrors","src":["macos-sdk"]},
+{"symbol":"getKextErrors","src":["macos-sdk"]},
+{"symbol":"getVersion","src":["macos-sdk"]},
+{"symbol":"runKernelCollectionBuilder","src":["macos-sdk"]},
+{"symbol":"setProgressCallback","src":["macos-sdk"]}
+]

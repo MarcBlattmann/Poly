@@ -1,0 +1,4 @@
+[
+{"symbol":"_os_feature_enabled_impl","src":["macos-sdk"]},
+{"symbol":"_os_feature_enabled_simple_impl","src":["macos-sdk"]}
+]

@@ -1,0 +1,15 @@
+[
+{"symbol":"isOldInterface","src":["macos-sdk"]},
+{"symbol":"isSplitKext","src":["macos-sdk"]},
+{"symbol":"kaslr_offsets","src":["macos-sdk"]},
+{"symbol":"kaslr_offsets_count","src":["macos-sdk"]},
+{"symbol":"kaslr_offsets_index","src":["macos-sdk"]},
+{"symbol":"kxld_create_context","src":["macos-sdk"]},
+{"symbol":"kxld_destroy_context","src":["macos-sdk"]},
+{"symbol":"kxld_get_effective_page_size","src":["macos-sdk"]},
+{"symbol":"kxld_link_file","src":["macos-sdk"]},
+{"symbol":"kxld_link_split_file","src":["macos-sdk"]},
+{"symbol":"kxld_round_page_cross_safe","src":["macos-sdk"]},
+{"symbol":"kxld_set_cross_link_page_size","src":["macos-sdk"]},
+{"symbol":"kxld_validate_copyright_string","src":["macos-sdk"]}
+]

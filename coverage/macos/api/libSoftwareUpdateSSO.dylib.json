@@ -1,0 +1,17 @@
+[
+{"symbol":"MSUSSOIsAvailable","src":["macos-sdk"]},
+{"symbol":"copyDawToken","src":["macos-sdk"]},
+{"symbol":"copyPersonID","src":["macos-sdk"]},
+{"symbol":"copyPersonalizationSSOToken","src":["macos-sdk"]},
+{"symbol":"kSUExtensibleSSOAppIdentifierKey","src":["macos-sdk"]},
+{"symbol":"kSUExtensibleSSODAWTokenRequiredKey","src":["macos-sdk"]},
+{"symbol":"kSUExtensibleSSOEnvIdentifierKey","src":["macos-sdk"]},
+{"symbol":"kSUExtensibleSSOInteractivityKey","src":["macos-sdk"]},
+{"symbol":"kSUExtensibleSSOOtherParametersKey","src":["macos-sdk"]},
+{"symbol":"kSUExtensibleSSOUsernameKey","src":["macos-sdk"]},
+{"symbol":"kSoftwareUpdateSSOErrorDomain","src":["macos-sdk"]},
+{"symbol":"kSoftwareUpdateSSOPersonIDKey","src":["macos-sdk"]},
+{"symbol":"kSoftwareUpdateSSOUserNameKey","src":["macos-sdk"]},
+{"symbol":"objc:SoftwareUpdateExtensibleSSOAuthenticator","src":["macos-sdk"]},
+{"symbol":"objc:SoftwareUpdateSSO","src":["macos-sdk"]}
+]

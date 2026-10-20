@@ -1,0 +1,11 @@
+[
+{"symbol":"ct_green_tea_logger_create","src":["macos-sdk"]},
+{"symbol":"ct_green_tea_logger_create_static","src":["macos-sdk"]},
+{"symbol":"ct_green_tea_logger_destroy","src":["macos-sdk"]},
+{"symbol":"ct_green_tea_logging_enabled","src":["macos-sdk"]},
+{"symbol":"getCTGreenTeaOsLogHandle","src":["macos-sdk"]},
+{"symbol":"kCTGreenTeaMessageDeleteLoggingFormat","src":["macos-sdk"]},
+{"symbol":"kCTGreenTeaMessageReadLoggingFormat","src":["macos-sdk"]},
+{"symbol":"kCTGreenTeaMessageTransmitLoggingFormat","src":["macos-sdk"]},
+{"symbol":"kCTGreenTeaPhoneNumberTransmitLoggingFormat","src":["macos-sdk"]}
+]

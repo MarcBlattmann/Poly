@@ -1,0 +1,11 @@
+[
+{"symbol":"USBCFlasherCreate","src":["macos-sdk"]},
+{"symbol":"USBCFlasherExecCmd","src":["macos-sdk"]},
+{"symbol":"USBCFlasherIsDone","src":["macos-sdk"]},
+{"symbol":"USBCFlasherSupported","src":["macos-sdk"]},
+{"symbol":"objc:IECSInterface","src":["macos-sdk"]},
+{"symbol":"objc:IOKitUtilities","src":["macos-sdk"]},
+{"symbol":"objc:flashUpdater","src":["macos-sdk"]},
+{"symbol":"objc:iecsUpdater","src":["macos-sdk"]},
+{"symbol":"objc:swdUpdater","src":["macos-sdk"]}
+]

@@ -1,0 +1,6 @@
+[
+{"symbol":"AppTrackingTransparencyVersionNumber","src":["macos-sdk"]},
+{"symbol":"AppTrackingTransparencyVersionString","src":["macos-sdk"]},
+{"symbol":"objc:ATTrackingEnforcementManager","src":["macos-sdk"]},
+{"symbol":"objc:ATTrackingManager","src":["macos-sdk"]}
+]

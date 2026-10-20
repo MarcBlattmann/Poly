@@ -1,0 +1,6 @@
+[
+{"symbol":"CentauriUpdaterCopySiKPublicKey","src":["macos-sdk"]},
+{"symbol":"CentauriUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"CentauriUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"CentauriUpdaterIsDone","src":["macos-sdk"]}
+]

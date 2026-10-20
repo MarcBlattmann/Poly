@@ -1,0 +1,12 @@
+[
+{"symbol":"PKNonMacTokenName","src":["macos-sdk"]},
+{"symbol":"PKPushIncomingCallReportedNotification","src":["macos-sdk"]},
+{"symbol":"PKPushTypeFileProvider","src":["macos-sdk"]},
+{"symbol":"PKPushTypeUserNotifications","src":["macos-sdk"]},
+{"symbol":"objc:PKPublicChannel","src":["macos-sdk"]},
+{"symbol":"objc:PKPushCredentials","src":["macos-sdk"]},
+{"symbol":"objc:PKPushPayload","src":["macos-sdk"]},
+{"symbol":"objc:PKPushRegistry","src":["macos-sdk"]},
+{"symbol":"objc:PKUserNotificationsRemoteNotificationServiceConnection","src":["macos-sdk"]},
+{"symbol":"objc:PKVoIPPushMetadata","src":["macos-sdk"]}
+]

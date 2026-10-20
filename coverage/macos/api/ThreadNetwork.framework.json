@@ -1,0 +1,5 @@
+[
+{"symbol":"objc:THClient","src":["macos-sdk"]},
+{"symbol":"objc:THCredentials","src":["macos-sdk"]},
+{"symbol":"objc:THPreferredNetworkEntry","src":["macos-sdk"]}
+]

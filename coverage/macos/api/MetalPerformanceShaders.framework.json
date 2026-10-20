@@ -1,0 +1,6 @@
+[
+{"symbol":"MPSGetPreferredDevice","src":["macos-sdk"]},
+{"symbol":"MPSHintTemporaryMemoryHighWaterMark","src":["macos-sdk"]},
+{"symbol":"MPSSetHeapCacheDuration","src":["macos-sdk"]},
+{"symbol":"MPSSupportsMTLDevice","src":["macos-sdk"]}
+]

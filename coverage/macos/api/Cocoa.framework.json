@@ -1,0 +1,4 @@
+[
+{"symbol":"CocoaVersionNumber","src":["macos-sdk"]},
+{"symbol":"CocoaVersionString","src":["macos-sdk"]}
+]

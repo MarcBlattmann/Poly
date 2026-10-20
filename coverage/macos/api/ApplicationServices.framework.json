@@ -1,0 +1,4 @@
+[
+{"symbol":"ApplicationServicesVersionNumber","src":["macos-sdk"]},
+{"symbol":"ApplicationServicesVersionString","src":["macos-sdk"]}
+]

@@ -1,0 +1,12 @@
+[
+{"symbol":"AppleTypeCRetimerUARPUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUARPUpdaterDFUCheck","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUARPUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUARPUpdaterIsDone","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUARPUpdaterReset","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUpdaterDFUCheck","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUpdaterIsDone","src":["macos-sdk"]},
+{"symbol":"AppleTypeCRetimerUpdaterReset","src":["macos-sdk"]}
+]

@@ -1,0 +1,13 @@
+[
+{"symbol":"VDADecoderCreate","src":["macos-sdk"]},
+{"symbol":"VDADecoderDecode","src":["macos-sdk"]},
+{"symbol":"VDADecoderDestroy","src":["macos-sdk"]},
+{"symbol":"VDADecoderFlush","src":["macos-sdk"]},
+{"symbol":"kVDADecoderConfiguration_Height","src":["macos-sdk"]},
+{"symbol":"kVDADecoderConfiguration_SourceFormat","src":["macos-sdk"]},
+{"symbol":"kVDADecoderConfiguration_Width","src":["macos-sdk"]},
+{"symbol":"kVDADecoderConfiguration_avcCData","src":["macos-sdk"]},
+{"symbol":"kVDADecoderConfiguration_forceSW","src":["macos-sdk"]},
+{"symbol":"myVTOutputCallback","src":["macos-sdk"]},
+{"symbol":"mykVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder","src":["macos-sdk"]}
+]

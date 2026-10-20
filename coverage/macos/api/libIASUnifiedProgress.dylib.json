@@ -1,0 +1,4 @@
+[
+{"symbol":"objc:IASUnifiedProgressClient","src":["macos-sdk"]},
+{"symbol":"objc:IASUnifiedProgressManager","src":["macos-sdk"]}
+]

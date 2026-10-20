@@ -1,0 +1,8 @@
+[
+{"symbol":"OTABMUResistanceReadFrom","src":["macos-sdk"]},
+{"symbol":"OTAParamRCReadFrom","src":["macos-sdk"]},
+{"symbol":"OTAResistanceDataReadFrom","src":["macos-sdk"]},
+{"symbol":"objc:OTABMUResistance","src":["macos-sdk"]},
+{"symbol":"objc:OTAParamRC","src":["macos-sdk"]},
+{"symbol":"objc:OTAResistanceData","src":["macos-sdk"]}
+]

@@ -1,0 +1,14 @@
+[
+{"symbol":"xcselect_bundle_is_developer_tool","src":["macos-sdk"]},
+{"symbol":"xcselect_developer_dir_matches_path","src":["macos-sdk"]},
+{"symbol":"xcselect_find_developer_contents_from_path","src":["macos-sdk"]},
+{"symbol":"xcselect_get_developer_dir_path","src":["macos-sdk"]},
+{"symbol":"xcselect_get_manpaths","src":["macos-sdk"]},
+{"symbol":"xcselect_get_version","src":["macos-sdk"]},
+{"symbol":"xcselect_host_sdk_path","src":["macos-sdk"]},
+{"symbol":"xcselect_invoke_xcrun","src":["macos-sdk"]},
+{"symbol":"xcselect_manpaths_free","src":["macos-sdk"]},
+{"symbol":"xcselect_manpaths_get_num_paths","src":["macos-sdk"]},
+{"symbol":"xcselect_manpaths_get_path","src":["macos-sdk"]},
+{"symbol":"xcselect_trigger_install_request","src":["macos-sdk"]}
+]

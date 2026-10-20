@@ -1,0 +1,9 @@
+[
+{"symbol":"objc:BootCacheApplication","src":["macos-sdk"]},
+{"symbol":"objc:BootCacheBundle","src":["macos-sdk"]},
+{"symbol":"objc:BootCacheFileItem","src":["macos-sdk"]},
+{"symbol":"objc:BootCacheInformationProvider","src":["macos-sdk"]},
+{"symbol":"objc:BootCacheItem","src":["macos-sdk"]},
+{"symbol":"objc:BootCacheItemStore","src":["macos-sdk"]},
+{"symbol":"objc:BootCacheItemStoreKey","src":["macos-sdk"]}
+]

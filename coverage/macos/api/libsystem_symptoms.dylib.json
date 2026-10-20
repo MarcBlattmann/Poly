@@ -1,0 +1,12 @@
+[
+{"symbol":"_symptoms_daemon_fallback_initial_disposition","src":["macos-sdk"]},
+{"symbol":"_symptoms_daemon_fallback_subseq_disposition","src":["macos-sdk"]},
+{"symbol":"_symptoms_is_daemon_fallback_blacklisted","src":["macos-sdk"]},
+{"symbol":"symptom_framework_init","src":["macos-sdk"]},
+{"symbol":"symptom_framework_set_version","src":["macos-sdk"]},
+{"symbol":"symptom_new","src":["macos-sdk"]},
+{"symbol":"symptom_send","src":["macos-sdk"]},
+{"symbol":"symptom_send_immediate","src":["macos-sdk"]},
+{"symbol":"symptom_set_additional_qualifier","src":["macos-sdk"]},
+{"symbol":"symptom_set_qualifier","src":["macos-sdk"]}
+]

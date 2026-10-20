@@ -1,0 +1,4 @@
+[
+{"symbol":"objc:SystemHealthClient","src":["macos-sdk"]},
+{"symbol":"objc:SystemHealthManager","src":["macos-sdk"]}
+]

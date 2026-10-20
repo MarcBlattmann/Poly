@@ -1,0 +1,15 @@
+[
+{"symbol":"$sSo10OSLogStoreC0A0E10getEntries4with2at8matchings11AnySequenceVySo0A5EntryCGSo0A17EnumeratorOptionsV_So0A8PositionCSgSo11NSPredicateCSgtKF","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentO4datayAE10Foundation4DataVcAEmFWC","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentO6doubleyAESdcAEmFWC","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentO6signedyAEs5Int64VcAEmFWC","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentO6stringyAESScAEmFWC","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentO8unsignedyAEs6UInt64VcAEmFWC","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentO9undefinedyA2EmFWC","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentOMa","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentOMn","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentON","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8argumentAbCE8ArgumentOvg","src":["macos-sdk"]},
+{"symbol":"$sSo21OSLogMessageComponentC0A0E8argumentAbCE8ArgumentOvpMV","src":["macos-sdk"]},
+{"symbol":"_swift_FORCE_LOAD_$_swiftOSLog","src":["macos-sdk"]}
+]

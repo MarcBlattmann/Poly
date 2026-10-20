@@ -1,0 +1,4 @@
+[
+{"symbol":"objc:PPMClient","src":["macos-sdk"]},
+{"symbol":"objc:PPMClientUserClientInterface","src":["macos-sdk"]}
+]

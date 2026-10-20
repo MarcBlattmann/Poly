@@ -1,0 +1,16 @@
+[
+{"symbol":"langid_consume_string","src":["macos-sdk"]},
+{"symbol":"langid_create","src":["macos-sdk"]},
+{"symbol":"langid_create_with_datapath","src":["macos-sdk"]},
+{"symbol":"langid_dispose","src":["macos-sdk"]},
+{"symbol":"langid_global_dispose","src":["macos-sdk"]},
+{"symbol":"langid_highest_score","src":["macos-sdk"]},
+{"symbol":"langid_identify","src":["macos-sdk"]},
+{"symbol":"langid_identify_bufsize","src":["macos-sdk"]},
+{"symbol":"langid_identify_withbuf","src":["macos-sdk"]},
+{"symbol":"langid_languagecode","src":["macos-sdk"]},
+{"symbol":"langid_numlanguages","src":["macos-sdk"]},
+{"symbol":"langid_reset","src":["macos-sdk"]},
+{"symbol":"textcat_Classify","src":["macos-sdk"]},
+{"symbol":"textcat_Init","src":["macos-sdk"]}
+]

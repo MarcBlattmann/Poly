@@ -1,0 +1,11 @@
+[
+{"symbol":"_LSApplicationHasAVisibleWindowOrContext","src":["macos-sdk"]},
+{"symbol":"_LSForceQuitApplication","src":["macos-sdk"]},
+{"symbol":"_LSRegisterAsQuitReallyHelperClient","src":["macos-sdk"]},
+{"symbol":"_LSSysdiagnoseStatus","src":["macos-sdk"]},
+{"symbol":"_kLSForceQuitApplicationASNsToIgnoreArrayKey","src":["macos-sdk"]},
+{"symbol":"_kLSForceQuitApplicationDoNotInformLibQuitKey","src":["macos-sdk"]},
+{"symbol":"_kLSForceQuitApplicationPresentFirstForceQuitDialogKey","src":["macos-sdk"]},
+{"symbol":"_kLSForceQuitApplicationSendQUITAppleEventForApplicationsKey","src":["macos-sdk"]},
+{"symbol":"_kLSForceQuitApplicationSynchronousOperationKey","src":["macos-sdk"]}
+]

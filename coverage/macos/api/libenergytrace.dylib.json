@@ -1,0 +1,10 @@
+[
+{"symbol":"entr_act_associate","src":["macos-sdk"]},
+{"symbol":"entr_act_begin","src":["macos-sdk"]},
+{"symbol":"entr_act_end","src":["macos-sdk"]},
+{"symbol":"entr_act_modify","src":["macos-sdk"]},
+{"symbol":"entr_act_set","src":["macos-sdk"]},
+{"symbol":"entr_act_setd","src":["macos-sdk"]},
+{"symbol":"entr_event","src":["macos-sdk"]},
+{"symbol":"entr_shouldtrace","src":["macos-sdk"]}
+]

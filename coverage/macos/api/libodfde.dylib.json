@@ -1,0 +1,8 @@
+[
+{"symbol":"ODFDEAddUser","src":["macos-sdk"]},
+{"symbol":"ODFDEResetPassword","src":["macos-sdk"]},
+{"symbol":"ODFDESynchronizeUsers","src":["macos-sdk"]},
+{"symbol":"ODFDESynchronizeUsersOnVolume","src":["macos-sdk"]},
+{"symbol":"__odfdeVersionNumber","src":["macos-sdk"]},
+{"symbol":"__odfdeVersionString","src":["macos-sdk"]}
+]

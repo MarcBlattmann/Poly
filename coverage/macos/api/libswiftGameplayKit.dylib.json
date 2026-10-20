@@ -1,0 +1,12 @@
+[
+{"symbol":"$sSo14GKStateMachineC11GameplayKitE5state8forClassxSgxm_tSo0A0CRbzlF","src":["macos-sdk"]},
+{"symbol":"$sSo17GKPolygonObstacleC11GameplayKitE6pointsABSays5SIMD2VySfGG_tcfC","src":["macos-sdk"]},
+{"symbol":"$sSo17GKPolygonObstacleC11GameplayKitE6pointsABSays5SIMD2VySfGG_tcfc","src":["macos-sdk"]},
+{"symbol":"$sSo6GKPathC11GameplayKitE6points6radius8cyclicalABSays5SIMD2VySfGG_SfSbtcfC","src":["macos-sdk"]},
+{"symbol":"$sSo6GKPathC11GameplayKitE6points6radius8cyclicalABSays5SIMD2VySfGG_SfSbtcfc","src":["macos-sdk"]},
+{"symbol":"$sSo6GKPathC11GameplayKitE6points6radius8cyclicalABSays5SIMD3VySfGG_SfSbtcfC","src":["macos-sdk"]},
+{"symbol":"$sSo6GKPathC11GameplayKitE6points6radius8cyclicalABSays5SIMD3VySfGG_SfSbtcfc","src":["macos-sdk"]},
+{"symbol":"$sSo8GKEntityC11GameplayKitE15removeComponent6ofTypeyxm_tSo11GKComponentCRbzlF","src":["macos-sdk"]},
+{"symbol":"$sSo8GKEntityC11GameplayKitE9component6ofTypexSgxm_tSo11GKComponentCRbzlF","src":["macos-sdk"]},
+{"symbol":"_swift_FORCE_LOAD_$_swiftGameplayKit","src":["macos-sdk"]}
+]

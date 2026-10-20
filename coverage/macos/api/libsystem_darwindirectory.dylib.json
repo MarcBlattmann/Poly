@@ -1,0 +1,5 @@
+[
+{"symbol":"DarwinDirectoryGetGeneration","src":["macos-sdk"]},
+{"symbol":"DarwinDirectoryRecordStoreApply","src":["macos-sdk"]},
+{"symbol":"DarwinDirectoryRecordStoreApplyWithFilter","src":["macos-sdk"]}
+]

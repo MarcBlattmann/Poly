@@ -1,0 +1,10 @@
+[
+{"symbol":"InterpreterSecurity_Create","src":["macos-sdk"]},
+{"symbol":"InterpreterSecurity_Destroy","src":["macos-sdk"]},
+{"symbol":"InterpreterSecurity_OpenScripting","src":["macos-sdk"]},
+{"symbol":"InterpreterSecurity_ScanBuffer","src":["macos-sdk"]},
+{"symbol":"InterpreterSecurity_ScanBufferWithPath","src":["macos-sdk"]},
+{"symbol":"InterpreterSecurity_ScanPath","src":["macos-sdk"]},
+{"symbol":"kInterpreterOpenScripting","src":["macos-sdk"]},
+{"symbol":"objc:InterpreterSecurity","src":["macos-sdk"]}
+]

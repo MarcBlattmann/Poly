@@ -1,0 +1,7 @@
+[
+{"symbol":"C_GetFunctionList","src":["macos-sdk"]},
+{"symbol":"sk_api_version","src":["macos-sdk"]},
+{"symbol":"sk_enroll","src":["macos-sdk"]},
+{"symbol":"sk_load_resident_keys","src":["macos-sdk"]},
+{"symbol":"sk_sign","src":["macos-sdk"]}
+]

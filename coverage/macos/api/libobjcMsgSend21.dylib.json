@@ -1,0 +1,17 @@
+[
+{"symbol":"_objc_msgForward","src":["macos-sdk"]},
+{"symbol":"_objc_msgForward_impcache","src":["macos-sdk"]},
+{"symbol":"_objc_returnNil","src":["macos-sdk"]},
+{"symbol":"cache_getImp","src":["macos-sdk"]},
+{"symbol":"method_invoke","src":["macos-sdk"]},
+{"symbol":"objc_msgLookup","src":["macos-sdk"]},
+{"symbol":"objc_msgLookupSuper2","src":["macos-sdk"]},
+{"symbol":"objc_msgSend","src":["macos-sdk"]},
+{"symbol":"objc_msgSendSuper","src":["macos-sdk"]},
+{"symbol":"objc_msgSendSuper2","src":["macos-sdk"]},
+{"symbol":"objc_msgSendSuper2_debug","src":["macos-sdk"]},
+{"symbol":"objc_msgSend_debug","src":["macos-sdk"]},
+{"symbol":"objc_msgSend_indirect_branch","src":["macos-sdk"]},
+{"symbol":"objc_msgSend_noarg","src":["macos-sdk"]},
+{"symbol":"objc_restartableRanges","src":["macos-sdk"]}
+]

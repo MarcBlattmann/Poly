@@ -1,0 +1,4 @@
+[
+{"symbol":"objc:CRInputDeviceManager","src":["macos-sdk"]},
+{"symbol":"objc:CRRepairStateSnapshot","src":["macos-sdk"]}
+]

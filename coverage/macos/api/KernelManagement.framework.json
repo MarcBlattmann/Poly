@@ -1,0 +1,11 @@
+[
+{"symbol":"KMExtensionPathForBundleIdentifier","src":["macos-sdk"]},
+{"symbol":"KMLoadExtensionsWithIdentifiers","src":["macos-sdk"]},
+{"symbol":"KMLoadExtensionsWithPaths","src":["macos-sdk"]},
+{"symbol":"KMUnloadExtensionsWithIdentifiers","src":["macos-sdk"]},
+{"symbol":"KernelManagementVersionNumber","src":["macos-sdk"]},
+{"symbol":"KernelManagementVersionString","src":["macos-sdk"]},
+{"symbol":"OSKernelManagementErrorDomain","src":["macos-sdk"]},
+{"symbol":"objc:KernelManagementClient","src":["macos-sdk"]},
+{"symbol":"objc:SimpleKernelExtension","src":["macos-sdk"]}
+]

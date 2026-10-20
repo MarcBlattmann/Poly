@@ -1,0 +1,6 @@
+[
+{"symbol":"nw_protocol_tcp_identifier","src":["macos-sdk"]},
+{"symbol":"nw_tcp_destroy_globals","src":["macos-sdk"]},
+{"symbol":"nw_tcp_init_globals","src":["macos-sdk"]},
+{"symbol":"tcp_next_mtu","src":["macos-sdk"]}
+]

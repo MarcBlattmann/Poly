@@ -1,0 +1,6 @@
+[
+{"symbol":"pcre2_regcomp","src":["macos-sdk"]},
+{"symbol":"pcre2_regerror","src":["macos-sdk"]},
+{"symbol":"pcre2_regexec","src":["macos-sdk"]},
+{"symbol":"pcre2_regfree","src":["macos-sdk"]}
+]

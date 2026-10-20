@@ -1,0 +1,5 @@
+[
+{"symbol":"_os_trial_factor_get_bool_impl","src":["macos-sdk"]},
+{"symbol":"_os_trial_factor_get_long_long_impl","src":["macos-sdk"]},
+{"symbol":"_os_trial_factor_has_impl","src":["macos-sdk"]}
+]

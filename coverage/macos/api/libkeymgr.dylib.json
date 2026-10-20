@@ -1,0 +1,13 @@
+[
+{"symbol":"__keymgr_dwarf2_register_sections","src":["macos-sdk"]},
+{"symbol":"__keymgr_initializer","src":["macos-sdk"]},
+{"symbol":"_keymgr_get_and_lock_processwide_ptr","src":["macos-sdk"]},
+{"symbol":"_keymgr_get_and_lock_processwide_ptr_2","src":["macos-sdk"]},
+{"symbol":"_keymgr_get_lock_count_processwide_ptr","src":["macos-sdk"]},
+{"symbol":"_keymgr_get_lockmode_processwide_ptr","src":["macos-sdk"]},
+{"symbol":"_keymgr_set_and_unlock_processwide_ptr","src":["macos-sdk"]},
+{"symbol":"_keymgr_set_lockmode_processwide_ptr","src":["macos-sdk"]},
+{"symbol":"_keymgr_unlock_processwide_ptr","src":["macos-sdk"]},
+{"symbol":"keymgrVersionNumber","src":["macos-sdk"]},
+{"symbol":"keymgrVersionString","src":["macos-sdk"]}
+]

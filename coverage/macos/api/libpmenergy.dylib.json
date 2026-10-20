@@ -1,0 +1,9 @@
+[
+{"symbol":"pm_energy_impact","src":["macos-sdk"]},
+{"symbol":"pm_energy_impact_internal","src":["macos-sdk"]},
+{"symbol":"pm_mach_time_to_ns","src":["macos-sdk"]},
+{"symbol":"pm_task_add","src":["macos-sdk"]},
+{"symbol":"pm_task_add_version","src":["macos-sdk"]},
+{"symbol":"pm_task_subtract","src":["macos-sdk"]},
+{"symbol":"pm_task_subtract_version","src":["macos-sdk"]}
+]

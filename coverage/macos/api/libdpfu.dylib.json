@@ -1,0 +1,16 @@
+[
+{"symbol":"DPFUGetDeviceModeString","src":["macos-sdk"]},
+{"symbol":"DPFUGetDeviceStatusString","src":["macos-sdk"]},
+{"symbol":"DPFUSessionCreate","src":["macos-sdk"]},
+{"symbol":"DPFUSessionEnterUpdateMode","src":["macos-sdk"]},
+{"symbol":"DPFUSessionGetDeviceInfo","src":["macos-sdk"]},
+{"symbol":"DPFUSessionGetTypeID","src":["macos-sdk"]},
+{"symbol":"DPFUSessionInstallFilePayload","src":["macos-sdk"]},
+{"symbol":"DPFUSessionInstallMemoryPayload","src":["macos-sdk"]},
+{"symbol":"DPFUSessionLeaveUpdateMode","src":["macos-sdk"]},
+{"symbol":"DPFUSessionSetExpectDeviceTerminationUponRestart","src":["macos-sdk"]},
+{"symbol":"DPFUSessionSetLogLevel","src":["macos-sdk"]},
+{"symbol":"DPFUSessionSetProgressCallback","src":["macos-sdk"]},
+{"symbol":"DPFUSessionSetRestartAfterUpdate","src":["macos-sdk"]},
+{"symbol":"dpfuUpdateDeviceWithContentsOfFile","src":["macos-sdk"]}
+]

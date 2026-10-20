@@ -1,0 +1,11 @@
+[
+{"symbol":"createGTrace","src":["macos-sdk"]},
+{"symbol":"destroyGTrace","src":["macos-sdk"]},
+{"symbol":"formatToken","src":["macos-sdk"]},
+{"symbol":"getBreadcrumbBase","src":["macos-sdk"]},
+{"symbol":"getBufferID","src":["macos-sdk"]},
+{"symbol":"recordToken","src":["macos-sdk"]},
+{"symbol":"recordTokenNT","src":["macos-sdk"]},
+{"symbol":"recordTokenNow","src":["macos-sdk"]},
+{"symbol":"recordTokenNowNT","src":["macos-sdk"]}
+]

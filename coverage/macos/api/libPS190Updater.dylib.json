@@ -1,0 +1,5 @@
+[
+{"symbol":"PS190UpdaterCreate","src":["macos-sdk"]},
+{"symbol":"PS190UpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"PS190UpdaterIsDone","src":["macos-sdk"]}
+]

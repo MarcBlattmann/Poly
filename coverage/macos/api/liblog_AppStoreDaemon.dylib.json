@@ -1,0 +1,6 @@
+[
+{"symbol":"LogPushConnectionReadFrom","src":["macos-sdk"]},
+{"symbol":"LogTransactionsReadFrom","src":["macos-sdk"]},
+{"symbol":"OSLogCopyFormattedString","src":["macos-sdk"]},
+{"symbol":"OSStateCreateStringWithData","src":["macos-sdk"]}
+]

@@ -1,0 +1,5 @@
+[
+{"symbol":"objc:ExecutionMessage","src":["macos-sdk"]},
+{"symbol":"objc:SLAMObjC","src":["macos-sdk"]},
+{"symbol":"objc:ScriptResult","src":["macos-sdk"]}
+]

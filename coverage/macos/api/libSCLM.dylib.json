@@ -1,0 +1,6 @@
+[
+{"symbol":"objc:LibSCLM","src":["macos-sdk"]},
+{"symbol":"objc:SCLMMessage","src":["macos-sdk"]},
+{"symbol":"objc:SCLMResult","src":["macos-sdk"]},
+{"symbol":"objc:ScriptInfo","src":["macos-sdk"]}
+]

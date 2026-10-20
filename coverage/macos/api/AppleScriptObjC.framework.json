@@ -1,0 +1,5 @@
+[
+{"symbol":"BACreateClassForOSAIDInComponent","src":["macos-sdk"]},
+{"symbol":"BAHandleEvent","src":["macos-sdk"]},
+{"symbol":"BAObjCIDForOSAIDInComponent","src":["macos-sdk"]}
+]

@@ -1,0 +1,15 @@
+[
+{"symbol":"_fakelink_destination_void","src":["macos-sdk"]},
+{"symbol":"fakelink_get_property","src":["macos-sdk"]},
+{"symbol":"fakelink_group_add","src":["macos-sdk"]},
+{"symbol":"fakelink_group_free","src":["macos-sdk"]},
+{"symbol":"fakelink_group_iterate_mappings","src":["macos-sdk"]},
+{"symbol":"fakelink_group_iterate_mappings_with_filter","src":["macos-sdk"]},
+{"symbol":"fakelink_group_new","src":["macos-sdk"]},
+{"symbol":"fakelink_group_resolve","src":["macos-sdk"]},
+{"symbol":"fakelink_group_set_manifest_path","src":["macos-sdk"]},
+{"symbol":"fakelink_group_set_synthetic_conf_path","src":["macos-sdk"]},
+{"symbol":"fakelink_group_unresolve","src":["macos-sdk"]},
+{"symbol":"fakelink_volume_free","src":["macos-sdk"]},
+{"symbol":"fakelink_volume_new","src":["macos-sdk"]}
+]

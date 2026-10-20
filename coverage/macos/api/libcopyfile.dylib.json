@@ -1,0 +1,13 @@
+[
+{"symbol":"copyfile","src":["macos-sdk"]},
+{"symbol":"copyfile_state_alloc","src":["macos-sdk"]},
+{"symbol":"copyfile_state_free","src":["macos-sdk"]},
+{"symbol":"copyfile_state_get","src":["macos-sdk"]},
+{"symbol":"copyfile_state_set","src":["macos-sdk"]},
+{"symbol":"fcopyfile","src":["macos-sdk"]},
+{"symbol":"xattr_flags_from_name","src":["macos-sdk"]},
+{"symbol":"xattr_intent_with_flags","src":["macos-sdk"]},
+{"symbol":"xattr_name_with_flags","src":["macos-sdk"]},
+{"symbol":"xattr_name_without_flags","src":["macos-sdk"]},
+{"symbol":"xattr_preserve_for_intent","src":["macos-sdk"]}
+]

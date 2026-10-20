@@ -1,0 +1,4 @@
+[
+{"symbol":"objc:AEDSingleAppModeConfiguration","src":["macos-sdk"]},
+{"symbol":"objc:AEDWindowPrimitivesProvider","src":["macos-sdk"]}
+]

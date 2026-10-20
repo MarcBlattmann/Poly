@@ -1,0 +1,7 @@
+[
+{"symbol":"_libsecinit_initializer","src":["macos-sdk"]},
+{"symbol":"libsecinit_delete_all_data_container_content_for_current_user","src":["macos-sdk"]},
+{"symbol":"libsecinit_fileoperation_save","src":["macos-sdk"]},
+{"symbol":"libsecinit_fileoperation_set_attributes","src":["macos-sdk"]},
+{"symbol":"libsecinit_fileoperation_symlink","src":["macos-sdk"]}
+]

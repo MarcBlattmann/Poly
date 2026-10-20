@@ -1,0 +1,6 @@
+[
+{"symbol":"xpc_datastore_copy_state","src":["macos-sdk"]},
+{"symbol":"xpc_datastore_publisher_create","src":["macos-sdk"]},
+{"symbol":"xpc_datastore_publisher_invalidate_state","src":["macos-sdk"]},
+{"symbol":"xpc_datastore_subscriber_create","src":["macos-sdk"]}
+]

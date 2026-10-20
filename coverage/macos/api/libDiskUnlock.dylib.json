@@ -1,0 +1,6 @@
+[
+{"symbol":"DUUnlockVolume","src":["macos-sdk"]},
+{"symbol":"DUUnlockVolumeAllowingRememberPasswordOverWindow","src":["macos-sdk"]},
+{"symbol":"DUUnlockVolumeOverWindow","src":["macos-sdk"]},
+{"symbol":"DUUnlockVolumeWithOptions","src":["macos-sdk"]}
+]

@@ -1,0 +1,8 @@
+[
+{"symbol":"_objc_blockTrampolineImpl","src":["macos-sdk"]},
+{"symbol":"_objc_blockTrampolineImpl_stret","src":["macos-sdk"]},
+{"symbol":"_objc_blockTrampolineLast","src":["macos-sdk"]},
+{"symbol":"_objc_blockTrampolineLast_stret","src":["macos-sdk"]},
+{"symbol":"_objc_blockTrampolineStart","src":["macos-sdk"]},
+{"symbol":"_objc_blockTrampolineStart_stret","src":["macos-sdk"]}
+]

@@ -1,0 +1,10 @@
+[
+{"symbol":"ChineseTokenizerAdvanceToNextToken","src":["macos-sdk"]},
+{"symbol":"ChineseTokenizerCreate","src":["macos-sdk"]},
+{"symbol":"ChineseTokenizerGetCurrentTokenRange","src":["macos-sdk"]},
+{"symbol":"ChineseTokenizerGoToTokenAtIndex","src":["macos-sdk"]},
+{"symbol":"ChineseTokenizerRelease","src":["macos-sdk"]},
+{"symbol":"ChineseTokenizerSetCustomWordCheckBlock","src":["macos-sdk"]},
+{"symbol":"ChineseTokenizerSetDynamicLexicon","src":["macos-sdk"]},
+{"symbol":"ChineseTokenizerSetString","src":["macos-sdk"]}
+]

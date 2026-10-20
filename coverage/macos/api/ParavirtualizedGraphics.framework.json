@@ -1,0 +1,13 @@
+[
+{"symbol":"PGCopyOptionROMURL","src":["macos-sdk"]},
+{"symbol":"PGCreateDeviceWithDescriptor","src":["macos-sdk"]},
+{"symbol":"PGMaxDisplayPortCount","src":["macos-sdk"]},
+{"symbol":"PGResumeErrorDomain","src":["macos-sdk"]},
+{"symbol":"PGResumeErrorStringKey","src":["macos-sdk"]},
+{"symbol":"objc:PGDeviceDescriptor","src":["macos-sdk"]},
+{"symbol":"objc:PGDisplayDescriptor","src":["macos-sdk"]},
+{"symbol":"objc:PGDisplayMode","src":["macos-sdk"]},
+{"symbol":"objc:PGIOSurfaceHostDevice","src":["macos-sdk"]},
+{"symbol":"objc:PGIOSurfaceHostDeviceDescriptor","src":["macos-sdk"]},
+{"symbol":"objc:PGMemoryMapDescriptor","src":["macos-sdk"]}
+]

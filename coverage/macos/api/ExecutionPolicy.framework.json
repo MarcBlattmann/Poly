@@ -1,0 +1,5 @@
+[
+{"symbol":"EPErrorDomain","src":["macos-sdk"]},
+{"symbol":"objc:EPDeveloperTool","src":["macos-sdk"]},
+{"symbol":"objc:EPExecutionPolicy","src":["macos-sdk"]}
+]

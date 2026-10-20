@@ -1,0 +1,9 @@
+[
+{"symbol":"ThaiTokenizerAdvanceToNextToken","src":["macos-sdk"]},
+{"symbol":"ThaiTokenizerCreate","src":["macos-sdk"]},
+{"symbol":"ThaiTokenizerDestroy","src":["macos-sdk"]},
+{"symbol":"ThaiTokenizerGetCurrentTokenRange","src":["macos-sdk"]},
+{"symbol":"ThaiTokenizerGoToTokenAtIndex","src":["macos-sdk"]},
+{"symbol":"ThaiTokenizerSetString","src":["macos-sdk"]},
+{"symbol":"ThaiTokenizerSetStringWithRange","src":["macos-sdk"]}
+]

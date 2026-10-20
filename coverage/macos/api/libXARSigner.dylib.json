@@ -1,0 +1,11 @@
+[
+{"symbol":"XARCMSSignatureSize","src":["macos-sdk"]},
+{"symbol":"XARRSASignatureSize","src":["macos-sdk"]},
+{"symbol":"XARSignerErrorDomain","src":["macos-sdk"]},
+{"symbol":"XARStonehengeKeyDevelopmentCMS","src":["macos-sdk"]},
+{"symbol":"XARStonehengeKeyDevelopmentRSA","src":["macos-sdk"]},
+{"symbol":"XARStonehengeSignerErrorDomain","src":["macos-sdk"]},
+{"symbol":"objc:XARSigner","src":["macos-sdk"]},
+{"symbol":"objc:XARSignerDefaultSignatureProvider","src":["macos-sdk"]},
+{"symbol":"objc:XARStonehengeSigner","src":["macos-sdk"]}
+]

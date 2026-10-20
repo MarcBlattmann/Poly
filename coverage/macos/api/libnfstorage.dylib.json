@@ -1,0 +1,5 @@
+[
+{"symbol":"objc:NFStorageController","src":["macos-sdk"]},
+{"symbol":"objc:NFStorageControllerApplet","src":["macos-sdk"]},
+{"symbol":"objc:NFStorageControllerESEExpress","src":["macos-sdk"]}
+]

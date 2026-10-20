@@ -1,0 +1,14 @@
+[
+{"symbol":"cupsRasterClose","src":["macos-sdk"]},
+{"symbol":"cupsRasterErrorString","src":["macos-sdk"]},
+{"symbol":"cupsRasterInitPWGHeader","src":["macos-sdk"]},
+{"symbol":"cupsRasterInterpretPPD","src":["macos-sdk"]},
+{"symbol":"cupsRasterOpen","src":["macos-sdk"]},
+{"symbol":"cupsRasterOpenIO","src":["macos-sdk"]},
+{"symbol":"cupsRasterReadHeader","src":["macos-sdk"]},
+{"symbol":"cupsRasterReadHeader2","src":["macos-sdk"]},
+{"symbol":"cupsRasterReadPixels","src":["macos-sdk"]},
+{"symbol":"cupsRasterWriteHeader","src":["macos-sdk"]},
+{"symbol":"cupsRasterWriteHeader2","src":["macos-sdk"]},
+{"symbol":"cupsRasterWritePixels","src":["macos-sdk"]}
+]

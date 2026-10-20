@@ -1,0 +1,15 @@
+[
+{"symbol":"matchCombine","src":["macos-sdk"]},
+{"symbol":"matchCompile","src":["macos-sdk"]},
+{"symbol":"matchDiagram","src":["macos-sdk"]},
+{"symbol":"matchDup","src":["macos-sdk"]},
+{"symbol":"matchExec","src":["macos-sdk"]},
+{"symbol":"matchFree","src":["macos-sdk"]},
+{"symbol":"matchInit","src":["macos-sdk"]},
+{"symbol":"matchOptimize","src":["macos-sdk"]},
+{"symbol":"matchPack","src":["macos-sdk"]},
+{"symbol":"matchPrintNodes","src":["macos-sdk"]},
+{"symbol":"matchSetOption","src":["macos-sdk"]},
+{"symbol":"matchUnpack","src":["macos-sdk"]},
+{"symbol":"matchValidate","src":["macos-sdk"]}
+]

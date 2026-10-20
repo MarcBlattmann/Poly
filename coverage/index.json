@@ -5,6 +5,10 @@
       "description": "Linux arch/x86/entry/syscalls/syscall_64.tbl",
       "revision": "f47d223627f80cb7a1eb14c585fe6cb35de5e984"
     },
+    "macos-sdk": {
+      "description": "macOS SDK .tbd stubs (exported symbols and Objective-C classes)",
+      "revision": "macOS SDK 27.0 (26A425)"
+    },
     "wine-spec": {
       "description": "Wine .spec export lists (wine-mirror/wine dlls/*/*.spec)",
       "revision": "840a939ee526137639665ff5f587224d6a36403f"

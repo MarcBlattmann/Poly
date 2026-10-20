@@ -1,0 +1,12 @@
+[
+{"symbol":"PQLSqliteErrorDomain","src":["macos-sdk"]},
+{"symbol":"objc:PQLConnection","src":["macos-sdk"]},
+{"symbol":"objc:PQLFormatInjection","src":["macos-sdk"]},
+{"symbol":"objc:PQLNameInjection","src":["macos-sdk"]},
+{"symbol":"objc:PQLQueryBuilder","src":["macos-sdk"]},
+{"symbol":"objc:PQLRawInjection","src":["macos-sdk"]},
+{"symbol":"objc:PQLResultSet","src":["macos-sdk"]},
+{"symbol":"pql_sqlite3_bind_pointer","src":["macos-sdk"]},
+{"symbol":"pql_sqlite3_value_object","src":["macos-sdk"]},
+{"symbol":"pql_sqlite3_value_pointer","src":["macos-sdk"]}
+]

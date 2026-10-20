@@ -1,0 +1,4 @@
+[
+{"symbol":"OSLogCopyFormattedString","src":["macos-sdk"]},
+{"symbol":"OSStateCreateStringWithData","src":["macos-sdk"]}
+]

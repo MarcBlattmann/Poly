@@ -1,0 +1,11 @@
+[
+{"symbol":"MCErrorDomain","src":["macos-sdk"]},
+{"symbol":"kMCSessionMaximumNumberOfPeers","src":["macos-sdk"]},
+{"symbol":"kMCSessionMinimumNumberOfPeers","src":["macos-sdk"]},
+{"symbol":"objc:MCAdvertiserAssistant","src":["macos-sdk"]},
+{"symbol":"objc:MCBrowserViewController","src":["macos-sdk"]},
+{"symbol":"objc:MCNearbyServiceAdvertiser","src":["macos-sdk"]},
+{"symbol":"objc:MCNearbyServiceBrowser","src":["macos-sdk"]},
+{"symbol":"objc:MCPeerID","src":["macos-sdk"]},
+{"symbol":"objc:MCSession","src":["macos-sdk"]}
+]

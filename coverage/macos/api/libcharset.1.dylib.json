@@ -1,0 +1,4 @@
+[
+{"symbol":"libcharset_set_relocation_prefix","src":["macos-sdk"]},
+{"symbol":"locale_charset","src":["macos-sdk"]}
+]

@@ -1,0 +1,6 @@
+[
+{"symbol":"cryptex_trampoline_upgrade_wait","src":["macos-sdk"]},
+{"symbol":"cryptex_trampoline_upgrade_wait_options_create","src":["macos-sdk"]},
+{"symbol":"cryptex_trampoline_upgrade_wait_options_destroy","src":["macos-sdk"]},
+{"symbol":"cryptex_trampoline_upgrade_wait_options_set_cryptex_name","src":["macos-sdk"]}
+]

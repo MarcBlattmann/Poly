@@ -1,0 +1,9 @@
+[
+{"symbol":"$s16FoundationModels10AttachmentV01_aB7_AppKitAA05ImageC7ContentVRszlE_11orientationACyAFGSo7NSImageC_So26CGImagePropertyOrientationVSgtcfC","src":["macos-sdk"]},
+{"symbol":"$sSo7NSImageC16FoundationModels19PromptRepresentable01_bC7_AppKitMc","src":["macos-sdk"]},
+{"symbol":"$sSo7NSImageC16FoundationModels25InstructionsRepresentable01_bC7_AppKitMc","src":["macos-sdk"]},
+{"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE20promptRepresentation0bC06PromptVvg","src":["macos-sdk"]},
+{"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE20promptRepresentation0bC06PromptVvpMV","src":["macos-sdk"]},
+{"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE26instructionsRepresentation0bC012InstructionsVvg","src":["macos-sdk"]},
+{"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE26instructionsRepresentation0bC012InstructionsVvpMV","src":["macos-sdk"]}
+]

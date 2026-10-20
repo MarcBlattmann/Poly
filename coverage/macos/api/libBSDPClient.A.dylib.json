@@ -1,0 +1,13 @@
+[
+{"symbol":"BSDPClientCreate","src":["macos-sdk"]},
+{"symbol":"BSDPClientCreateWithInterface","src":["macos-sdk"]},
+{"symbol":"BSDPClientCreateWithInterfaceAndAttributes","src":["macos-sdk"]},
+{"symbol":"BSDPClientFree","src":["macos-sdk"]},
+{"symbol":"BSDPClientList","src":["macos-sdk"]},
+{"symbol":"BSDPClientSelect","src":["macos-sdk"]},
+{"symbol":"BSDPImageDescriptionIdentifierImageKind","src":["macos-sdk"]},
+{"symbol":"BSDPImageDescriptionIdentifierIsInstall","src":["macos-sdk"]},
+{"symbol":"BSDPImageDescriptionIdentifierIsServerLocal","src":["macos-sdk"]},
+{"symbol":"BSDPImageDescriptionIndexIsServerLocal","src":["macos-sdk"]},
+{"symbol":"BSPPClientSelect","src":["macos-sdk"]}
+]

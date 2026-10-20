@@ -1,0 +1,12 @@
+[
+{"symbol":"dscsym_buffer_iterate","src":["macos-sdk"]},
+{"symbol":"dscsym_buffer_iterate_binaries","src":["macos-sdk"]},
+{"symbol":"dscsym_copy_dscsym_files","src":["macos-sdk"]},
+{"symbol":"dscsym_generate_dscsym_file","src":["macos-sdk"]},
+{"symbol":"dscsym_iterate","src":["macos-sdk"]},
+{"symbol":"dscsym_iterate_binaries","src":["macos-sdk"]},
+{"symbol":"dscsym_iterate_buffer","src":["macos-sdk"]},
+{"symbol":"dscsym_mmap_dscsym_for_uuid","src":["macos-sdk"]},
+{"symbol":"dscsym_save_dscsyms_for_current_caches","src":["macos-sdk"]},
+{"symbol":"dscsym_uuid_iterate","src":["macos-sdk"]}
+]

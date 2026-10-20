@@ -1,0 +1,7 @@
+[
+{"symbol":"nwswifttls_common_copy_options_contents","src":["macos-sdk"]},
+{"symbol":"nwswifttls_copy_definition","src":["macos-sdk"]},
+{"symbol":"nwswifttls_identifier","src":["macos-sdk"]},
+{"symbol":"nwswifttlsrecord_copy_definition","src":["macos-sdk"]},
+{"symbol":"nwswifttlsrecord_identifier","src":["macos-sdk"]}
+]

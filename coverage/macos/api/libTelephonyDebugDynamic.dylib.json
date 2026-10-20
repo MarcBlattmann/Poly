@@ -1,0 +1,5 @@
+[
+{"symbol":"TelephonyBasebandWatchdogStart","src":["macos-sdk"]},
+{"symbol":"TelephonyBasebandWatchdogStartWithStackshot","src":["macos-sdk"]},
+{"symbol":"TelephonyBasebandWatchdogStop","src":["macos-sdk"]}
+]

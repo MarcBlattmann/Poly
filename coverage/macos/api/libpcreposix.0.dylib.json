@@ -1,0 +1,6 @@
+[
+{"symbol":"regcomp","src":["macos-sdk"]},
+{"symbol":"regerror","src":["macos-sdk"]},
+{"symbol":"regexec","src":["macos-sdk"]},
+{"symbol":"regfree","src":["macos-sdk"]}
+]

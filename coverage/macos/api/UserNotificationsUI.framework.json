@@ -1,0 +1,11 @@
+[
+{"symbol":"UNAppLaunchOriginContentExtension","src":["macos-sdk"]},
+{"symbol":"UNLogExtensions","src":["macos-sdk"]},
+{"symbol":"UNLogExtensionsHost","src":["macos-sdk"]},
+{"symbol":"UNLogExtensionsService","src":["macos-sdk"]},
+{"symbol":"UNRegisterUserNotificationsUILogging","src":["macos-sdk"]},
+{"symbol":"_UNNotificationExtensionActionsKey","src":["macos-sdk"]},
+{"symbol":"objc:_UNMachSendRight","src":["macos-sdk"]},
+{"symbol":"objc:_UNNotificationContentExtensionHostContext","src":["macos-sdk"]},
+{"symbol":"objc:_UNNotificationContentExtensionManager","src":["macos-sdk"]}
+]

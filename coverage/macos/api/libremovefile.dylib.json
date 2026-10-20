@@ -1,0 +1,16 @@
+[
+{"symbol":"__removefile_init_random","src":["macos-sdk"]},
+{"symbol":"__removefile_random_char","src":["macos-sdk"]},
+{"symbol":"__removefile_randomize_buffer","src":["macos-sdk"]},
+{"symbol":"__removefile_rename_unlink","src":["macos-sdk"]},
+{"symbol":"__removefile_sunlink","src":["macos-sdk"]},
+{"symbol":"__removefile_tree_walker","src":["macos-sdk"]},
+{"symbol":"__removefile_tree_walker_slim","src":["macos-sdk"]},
+{"symbol":"removefile","src":["macos-sdk"]},
+{"symbol":"removefile_cancel","src":["macos-sdk"]},
+{"symbol":"removefile_state_alloc","src":["macos-sdk"]},
+{"symbol":"removefile_state_free","src":["macos-sdk"]},
+{"symbol":"removefile_state_get","src":["macos-sdk"]},
+{"symbol":"removefile_state_set","src":["macos-sdk"]},
+{"symbol":"removefileat","src":["macos-sdk"]}
+]

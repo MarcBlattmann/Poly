@@ -1,0 +1,7 @@
+[
+{"symbol":"NSExceptionHandlerResume","src":["macos-sdk"]},
+{"symbol":"NSStackTraceKey","src":["macos-sdk"]},
+{"symbol":"NSUncaughtRuntimeErrorException","src":["macos-sdk"]},
+{"symbol":"NSUncaughtSystemExceptionException","src":["macos-sdk"]},
+{"symbol":"objc:NSExceptionHandler","src":["macos-sdk"]}
+]

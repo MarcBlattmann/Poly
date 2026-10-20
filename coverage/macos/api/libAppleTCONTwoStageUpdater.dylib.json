@@ -1,0 +1,5 @@
+[
+{"symbol":"AppleTCONTwoStageUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"AppleTCONTwoStageUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"AppleTCONTwoStageUpdaterIsDone","src":["macos-sdk"]}
+]

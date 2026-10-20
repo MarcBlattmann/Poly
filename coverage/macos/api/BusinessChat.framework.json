@@ -1,0 +1,8 @@
+[
+{"symbol":"BCParameterNameBody","src":["macos-sdk"]},
+{"symbol":"BCParameterNameGroup","src":["macos-sdk"]},
+{"symbol":"BCParameterNameIntent","src":["macos-sdk"]},
+{"symbol":"objc:BCChatAction","src":["macos-sdk"]},
+{"symbol":"objc:BCChatButton","src":["macos-sdk"]},
+{"symbol":"objc:BCImageManager","src":["macos-sdk"]}
+]

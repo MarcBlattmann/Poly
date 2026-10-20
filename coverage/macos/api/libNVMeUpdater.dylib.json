@@ -1,0 +1,8 @@
+[
+{"symbol":"NVMeRestoreInfoCopyFirmware","src":["macos-sdk"]},
+{"symbol":"NVMeRestoreInfoCreateRequest","src":["macos-sdk"]},
+{"symbol":"NVMeRestoreInfoGetTags","src":["macos-sdk"]},
+{"symbol":"NVMeUpdaterCreate","src":["macos-sdk"]},
+{"symbol":"NVMeUpdaterExecCommand","src":["macos-sdk"]},
+{"symbol":"NVMeUpdaterIsDone","src":["macos-sdk"]}
+]

@@ -1,0 +1,4 @@
+[
+{"symbol":"_citrus_iconv_std_iconv_getops","src":["macos-sdk"]},
+{"symbol":"_citrus_iconv_std_iconv_ops","src":["macos-sdk"]}
+]

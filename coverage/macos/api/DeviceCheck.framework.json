@@ -1,0 +1,8 @@
+[
+{"symbol":"DCErrorDomain","src":["macos-sdk"]},
+{"symbol":"objc:DCAppAttestDeviceService","src":["macos-sdk"]},
+{"symbol":"objc:DCAppAttestService","src":["macos-sdk"]},
+{"symbol":"objc:DCAppAttestServicePriv","src":["macos-sdk"]},
+{"symbol":"objc:DCAppAttestWebAuthService","src":["macos-sdk"]},
+{"symbol":"objc:DCDevice","src":["macos-sdk"]}
+]

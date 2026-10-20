@@ -1,9 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="406" viewBox="0 0 900 406" role="img" aria-label="Roadmap: 10 of 134 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="406" viewBox="0 0 900 406" role="img" aria-label="Roadmap: 11 of 134 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="405.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">10 / 134 milestones · 7%</text>
-<text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#4493f8" text-anchor="start"> 0  Foundation</text>
-<text x="328.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#4493f8" text-anchor="end">NOW</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">11 / 134 milestones · 8%</text>
+<text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
 </g>
@@ -31,16 +30,17 @@
 <g><title>✔ Coverage map seeded from Wine .spec, Linux syscall table, XNU syscall/trap tables</title>
 <rect x="686.2" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>macOS framework API mapped from the SDK .tbd files (owner runs tools/scripts/import-macos-sdk.sh on a Mac)</title>
-<rect x="729.5" y="53.0" width="41.3" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
+<g><title>✔ macOS framework API mapped from the SDK .tbd files (owner runs tools/scripts/import-macos-sdk.sh on a Mac)</title>
+<rect x="729.5" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>✔ Clean-room rules, architecture docs, ADRs, spec sheet template, CI</title>
 <rect x="772.7" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<text x="884.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">10/11</text>
-<text x="16.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 1  Kernel core</text>
+<text x="884.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">11/11</text>
+<text x="16.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#4493f8" text-anchor="start"> 1  Kernel core</text>
+<text x="328.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#4493f8" text-anchor="end">NOW</text>
 <g><title>Physical frame allocator for all RAM (buddy allocator), host-tested</title>
-<rect x="340.0" y="83.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="83.0" width="32.0" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Kernel page tables: direct map of all physical memory, drop the boot identity map</title>
 <rect x="374.0" y="83.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>

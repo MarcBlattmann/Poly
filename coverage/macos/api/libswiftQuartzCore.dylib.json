@@ -1,0 +1,17 @@
+[
+{"symbol":"$sSo13CACornerRadiiV10QuartzCoreE2eeoiySbAB_ABtFZ","src":["macos-sdk"]},
+{"symbol":"$sSo13CACornerRadiiVSQ10QuartzCoreMc","src":["macos-sdk"]},
+{"symbol":"$sSo13CATransform3DV10QuartzCoreE19_bridgeToObjectiveCSo7NSValueCyF","src":["macos-sdk"]},
+{"symbol":"$sSo13CATransform3DV10QuartzCoreE26_forceBridgeFromObjectiveC_6resultySo7NSValueC_ABSgztFZ","src":["macos-sdk"]},
+{"symbol":"$sSo13CATransform3DV10QuartzCoreE34_conditionallyBridgeFromObjectiveC_6resultSbSo7NSValueC_ABSgztFZ","src":["macos-sdk"]},
+{"symbol":"$sSo13CATransform3DV10QuartzCoreE36_unconditionallyBridgeFromObjectiveCyABSo7NSValueCSgFZ","src":["macos-sdk"]},
+{"symbol":"$sSo13CATransform3DVs21_ObjectiveCBridgeable10QuartzCoreMc","src":["macos-sdk"]},
+{"symbol":"$sSo16CAFrameRateRangeV10QuartzCoreE2eeoiySbAB_ABtFZ","src":["macos-sdk"]},
+{"symbol":"$sSo16CAFrameRateRangeV10QuartzCoreE7minimum7maximum9preferredABSf_S2fSgtcfC","src":["macos-sdk"]},
+{"symbol":"$sSo16CAFrameRateRangeV10QuartzCoreE9preferredSfSgvM","src":["macos-sdk"]},
+{"symbol":"$sSo16CAFrameRateRangeV10QuartzCoreE9preferredSfSgvg","src":["macos-sdk"]},
+{"symbol":"$sSo16CAFrameRateRangeV10QuartzCoreE9preferredSfSgvpMV","src":["macos-sdk"]},
+{"symbol":"$sSo16CAFrameRateRangeV10QuartzCoreE9preferredSfSgvs","src":["macos-sdk"]},
+{"symbol":"$sSo16CAFrameRateRangeVSQ10QuartzCoreMc","src":["macos-sdk"]},
+{"symbol":"_swift_FORCE_LOAD_$_swiftQuartzCore","src":["macos-sdk"]}
+]

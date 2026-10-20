@@ -1,0 +1,14 @@
+[
+{"symbol":"msgtracer_domain_free","src":["macos-sdk"]},
+{"symbol":"msgtracer_domain_new","src":["macos-sdk"]},
+{"symbol":"msgtracer_log","src":["macos-sdk"]},
+{"symbol":"msgtracer_log_with_keys","src":["macos-sdk"]},
+{"symbol":"msgtracer_log_with_keys_skip_nulls","src":["macos-sdk"]},
+{"symbol":"msgtracer_msg_free","src":["macos-sdk"]},
+{"symbol":"msgtracer_msg_new","src":["macos-sdk"]},
+{"symbol":"msgtracer_set","src":["macos-sdk"]},
+{"symbol":"msgtracer_uuid_create","src":["macos-sdk"]},
+{"symbol":"msgtracer_vlog","src":["macos-sdk"]},
+{"symbol":"msgtracer_vlog_with_keys","src":["macos-sdk"]},
+{"symbol":"msgtracer_vlog_with_keys_skip_nulls","src":["macos-sdk"]}
+]

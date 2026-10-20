@@ -1,0 +1,5 @@
+[
+{"symbol":"ba_is_current_process_extension","src":["macos-sdk"]},
+{"symbol":"ba_is_process_extension","src":["macos-sdk"]},
+{"symbol":"ba_is_process_extension_ls","src":["macos-sdk"]}
+]

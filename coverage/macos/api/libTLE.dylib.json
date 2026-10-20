@@ -1,0 +1,16 @@
+[
+{"symbol":"LWCRErrorDomain","src":["macos-sdk"]},
+{"symbol":"_ZN3TLE29getLowestCompatibleVersionForE13LWCRVersion_t","src":["macos-sdk"]},
+{"symbol":"_ZN3TLE4LWCR10loadFromCEEP14CEQueryContext","src":["macos-sdk"]},
+{"symbol":"_ZN3TLE4LWCR12requirementsEv","src":["macos-sdk"]},
+{"symbol":"_ZN3TLE4LWCRC1Ev","src":["macos-sdk"]},
+{"symbol":"_ZN3TLE4LWCRC2Ev","src":["macos-sdk"]},
+{"symbol":"_ZN3TLE8Executor19getOperationsFromCEEP14CEQueryContext","src":["macos-sdk"]},
+{"symbol":"_ZN3TLE8Executor29getDependentOpsFromDictionaryE14der_vm_contextRKNS_14FactDefinitionEbmPK8CEBuffer","src":["macos-sdk"]},
+{"symbol":"_ZNK3TLE4LWCR13compatVersionEv","src":["macos-sdk"]},
+{"symbol":"_ZNK3TLE4LWCR18constraintCategoryEv","src":["macos-sdk"]},
+{"symbol":"_ZNK3TLE4LWCR7versionEv","src":["macos-sdk"]},
+{"symbol":"objc:LWCR","src":["macos-sdk"]},
+{"symbol":"objc:LWCRExecutor","src":["macos-sdk"]},
+{"symbol":"objc:LWCRFact","src":["macos-sdk"]}
+]
