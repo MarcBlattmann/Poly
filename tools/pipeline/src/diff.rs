@@ -8,7 +8,7 @@
 //! with `--timing-envelope F` the target may take at most F times as long
 //! as the reference (plus 50 ms), and only when both sides measured it.
 
-use crate::trace::{NormCall, NormOptions, Trace, normalize};
+use crate::trace::{Exit, NormCall, NormOptions, Trace, normalize};
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -209,10 +209,19 @@ impl TestResult {
 
     pub fn compared(test: &str, reference: &Trace, target: &Trace, opts: &Options) -> TestResult {
         let comparison = compare(reference, target, opts);
+        // The reference always finishes: if it did not, the test or the
+        // tracer is broken, whatever the target did.
+        let (verdict, reason) = if reference.exit == Exit::Timeout {
+            (Verdict::Error, Some("the reference run timed out (a broken test, or the tracer)".to_string()))
+        } else if comparison.mismatches.is_empty() {
+            (Verdict::Pass, None)
+        } else {
+            (Verdict::Fail, None)
+        };
         TestResult {
             test: test.into(),
-            verdict: if comparison.mismatches.is_empty() { Verdict::Pass } else { Verdict::Fail },
-            reason: None,
+            verdict,
+            reason,
             reference_exit: Some(reference.exit.to_string()),
             target_exit: Some(target.exit.to_string()),
             reference_syscalls: reference.syscalls().count(),
@@ -404,6 +413,19 @@ mod tests {
             ]
         );
         assert!(!c.syscalls_compared);
+    }
+
+    #[test]
+    fn a_reference_timeout_is_an_error_even_when_the_target_agrees() {
+        let mut a = hello("x", 1);
+        a.exit = Exit::Timeout;
+        let b = a.clone();
+        let r = TestResult::compared("t", &a, &b, &Options::default());
+        assert_eq!(r.verdict, Verdict::Error);
+        assert!(r.reason.unwrap().contains("timed out"));
+        let mut c = hello("x", 1);
+        c.exit = Exit::Timeout;
+        assert_eq!(TestResult::compared("t", &hello("x", 1), &c, &Options::default()).verdict, Verdict::Fail);
     }
 
     #[test]

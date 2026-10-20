@@ -92,7 +92,21 @@ Per test it compares the exit status, stdout and stderr exactly and the
 syscall sequence after masking addresses, pids and times; the first
 divergence is printed. It exits non-zero on any failure, or with
 `--baseline` only on regressions; `--strict` also fails on unsupported
-tests. `--tracer strace` uses strace instead of our ptrace tracer.
+tests. A test whose reference run times out is an error, whatever the
+target did. `--tracer strace` uses strace instead of our ptrace tracer.
+
+A test can weaken the syscall comparison for itself with a line
+`poly-diff: syscalls=off` (or `names`) in its source, usually in the
+header comment with the reason: tests with several processes or threads
+(their calls interleave by scheduling), and tests whose calls depend on
+timing or read data carrying pids. Their exit status and output are
+still compared exactly, and a directive never strengthens the mode the
+run was given.
+
+The ptrace tracer follows forks and clones, including children that
+leave the test's process group, and keeps job control intact: a tracee
+stopped by SIGSTOP stays stopped and its parent sees it (`WUNTRACED`).
+The program starts with default signal actions and an empty signal mask.
 
 **Poly:** the tool builds a one-program initramfs per test, boots
 `kernel/target/x86_64-unknown-none/debug/poly-kernel` (built if missing,
