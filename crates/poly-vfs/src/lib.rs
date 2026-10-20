@@ -28,6 +28,11 @@
 //!   node with that number. [`device`] has null, zero and full.
 //! - Every error is an [`Errno`], with Linux's values, so the Linux
 //!   personality returns them unchanged.
+//! - [`poll`] is readiness (ADR 0042): [`PollEvents`], the [`WaitQueue`] of
+//!   a file whose readiness changes, a [`Blocker`] for the calling thread,
+//!   and `poll(2)` itself. [`FileObject`]s are open files that are not on a
+//!   file system: [`pipe`], [`eventfd`], [`timerfd`], [`epoll`], and the
+//!   kernel's own (signal files); [`Vfs::anon_node`] gives them an inode.
 //!
 //! # Allocation and locking
 //!
@@ -63,15 +68,21 @@ extern crate alloc;
 
 mod cred;
 pub mod device;
+pub mod epoll;
 mod errno;
+pub mod eventfd;
 mod fdtable;
 mod file;
 mod fs;
 pub mod lock;
 mod mount;
 mod node;
+mod object;
 mod path;
+pub mod pipe;
+pub mod poll;
 mod sync;
+pub mod timerfd;
 mod tmpfs;
 mod vfs;
 
@@ -86,7 +97,9 @@ pub use fs::{
 };
 pub use mount::{Mount, MountFlags, MountId, MountInfo};
 pub use node::{FsContext, NodeRef};
+pub use object::FileObject;
 pub use path::{MAX_SYMLINKS, NAME_MAX, PATH_MAX};
+pub use poll::{Blocker, PollEvents, Timeout, WaitQueue, Waker, Woke};
 pub use tmpfs::Tmpfs;
 pub use vfs::Vfs;
 

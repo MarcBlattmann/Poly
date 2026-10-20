@@ -41,6 +41,7 @@ pub mod disk;
 mod disk_tests;
 mod files;
 pub mod initrd;
+pub mod poll;
 pub mod proc;
 mod proc_tests;
 mod sysfs;

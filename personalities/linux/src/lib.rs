@@ -36,6 +36,9 @@
 //! - [`fs`]: the file system services the kernel provides
 //!   ([`fs::LinuxFs`], through [`LinuxKernel::fs`]) and the file system
 //!   calls' structures; [`rlimit`]: resource limits (ADR 0043).
+//! - [`fileio`]: what pipes, `poll` / `select`, `epoll` and the event files
+//!   (`eventfd`, `timerfd`, `signalfd`) need from the kernel (ADR 0042).
+//! - [`time`]: time structures and process timers (ADR 0044).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -49,6 +52,7 @@ extern crate alloc;
 pub mod abi;
 pub mod args;
 pub mod errno;
+pub mod fileio;
 pub mod fs;
 pub mod futex;
 pub mod kernel;
@@ -58,6 +62,7 @@ pub mod signal;
 pub mod sys;
 pub mod table;
 pub mod task;
+pub mod time;
 
 #[cfg(test)]
 mod tests;

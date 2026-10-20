@@ -9,7 +9,10 @@
 use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
-use crate::sys::{fd, futex, io, limits, mem, path, process, signal, system, task};
+use crate::sys::{
+    epoll, eventfd, fd, futex, io, limits, mem, path, pipe, poll, process, signal, signalfd, system, task, time,
+    timerfd,
+};
 
 pub use crate::numbers::{SYSCALLS, nr};
 
@@ -26,6 +29,7 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::WRITE, io::write),
     (nr::CLOSE, io::close),
     (nr::FSTAT, io::fstat),
+    (nr::POLL, poll::poll),
     (nr::MMAP, mem::mmap),
     (nr::MPROTECT, mem::mprotect),
     (nr::MUNMAP, mem::munmap),
@@ -36,6 +40,8 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::IOCTL, io::ioctl),
     (nr::READV, io::readv),
     (nr::WRITEV, io::writev),
+    (nr::PIPE, pipe::pipe),
+    (nr::SELECT, poll::select),
     (nr::GETPID, process::getpid),
     (nr::CLONE, task::clone),
     (nr::FORK, task::fork),
@@ -65,16 +71,32 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::TKILL, signal::tkill),
     (nr::FUTEX, futex::futex),
     (nr::SET_TID_ADDRESS, process::set_tid_address),
+    (nr::EPOLL_CREATE, epoll::epoll_create),
     (nr::RESTART_SYSCALL, signal::restart_syscall),
     (nr::CLOCK_GETTIME, system::clock_gettime),
     (nr::EXIT_GROUP, process::exit_group),
+    (nr::EPOLL_WAIT, epoll::epoll_wait),
+    (nr::EPOLL_CTL, epoll::epoll_ctl),
     (nr::TGKILL, signal::tgkill),
     (nr::WAITID, task::waitid),
+    (nr::PSELECT6, poll::pselect6),
+    (nr::PPOLL, poll::ppoll),
     (nr::SET_ROBUST_LIST, futex::set_robust_list),
     (nr::GET_ROBUST_LIST, futex::get_robust_list),
+    (nr::EPOLL_PWAIT, epoll::epoll_pwait),
+    (nr::SIGNALFD, signalfd::signalfd),
+    (nr::TIMERFD_CREATE, timerfd::timerfd_create),
+    (nr::EVENTFD, eventfd::eventfd),
+    (nr::TIMERFD_SETTIME, timerfd::timerfd_settime),
+    (nr::TIMERFD_GETTIME, timerfd::timerfd_gettime),
+    (nr::SIGNALFD4, signalfd::signalfd4),
+    (nr::EVENTFD2, eventfd::eventfd2),
+    (nr::EPOLL_CREATE1, epoll::epoll_create1),
+    (nr::PIPE2, pipe::pipe2),
     (nr::RT_TGSIGQUEUEINFO, signal::rt_tgsigqueueinfo),
     (nr::GETRANDOM, system::getrandom),
     (nr::CLONE3, task::clone3),
+    (nr::EPOLL_PWAIT2, epoll::epoll_pwait2),
 ];
 
 /// The file system calls and resource limits (ADR 0043), registered like
@@ -133,23 +155,25 @@ pub const FILE_SYSTEM: &[(u64, Handler)] = &[
     (nr::STATX, path::statx),
     (nr::FACCESSAT2, path::faccessat2),
 ];
+/// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
+/// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]).
+pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS, FILE_SYSTEM];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
 
 const fn build() -> [Option<Handler>; TABLE_LEN] {
     let mut table: [Option<Handler>; TABLE_LEN] = [None; TABLE_LEN];
-    let lists = [IMPLEMENTED, FILE_SYSTEM];
-    let mut l = 0;
-    while l < lists.len() {
-        let list = lists[l];
+    let mut g = 0;
+    while g < GROUPS.len() {
+        let group = GROUPS[g];
         let mut i = 0;
-        while i < list.len() {
-            let (number, handler) = list[i];
+        while i < group.len() {
+            let (number, handler) = group[i];
             assert!(table[number as usize].is_none(), "system call registered twice");
             table[number as usize] = Some(handler);
             i += 1;
         }
-        l += 1;
+        g += 1;
     }
     table
 }
@@ -262,11 +286,11 @@ mod tests {
 
     #[test]
     fn handlers_are_registered_by_number() {
-        for &(number, _) in IMPLEMENTED.iter().chain(FILE_SYSTEM) {
+        for &(number, _) in GROUPS.iter().flat_map(|g| g.iter()) {
             assert!(name(number).is_some(), "handler for unknown number {number}");
             assert!(handler(number).is_some());
         }
-        assert_eq!(implemented().count(), IMPLEMENTED.len() + FILE_SYSTEM.len());
+        assert_eq!(implemented().count(), GROUPS.iter().map(|g| g.len()).sum::<usize>());
         assert!(handler(nr::SWAPON).is_none());
         assert!(handler(TABLE_LEN as u64).is_none());
         assert!(handler(u64::MAX).is_none());
@@ -274,13 +298,14 @@ mod tests {
 
     #[test]
     fn implemented_set() {
-        let names: Vec<&str> =
-            implemented().filter(|&(nr, _)| !FILE_SYSTEM.iter().any(|f| f.0 == nr)).map(|(_, n)| n).collect();
+        let in_groups = |nr: u64| time::CALLS.iter().chain(FILE_SYSTEM).any(|&(n, _)| n == nr);
+        let names: Vec<&str> = implemented().filter(|&(nr, _)| !in_groups(nr)).map(|(_, n)| n).collect();
         let expected = [
             "read",
             "write",
             "close",
             "fstat",
+            "poll",
             "mmap",
             "mprotect",
             "munmap",
@@ -291,6 +316,8 @@ mod tests {
             "ioctl",
             "readv",
             "writev",
+            "pipe",
+            "select",
             "getpid",
             "clone",
             "fork",
@@ -319,17 +346,59 @@ mod tests {
             "gettid",
             "tkill",
             "futex",
+            "epoll_create",
             "set_tid_address",
             "restart_syscall",
             "clock_gettime",
             "exit_group",
+            "epoll_wait",
+            "epoll_ctl",
             "tgkill",
             "waitid",
+            "pselect6",
+            "ppoll",
             "set_robust_list",
             "get_robust_list",
+            "epoll_pwait",
+            "signalfd",
+            "timerfd_create",
+            "eventfd",
+            "timerfd_settime",
+            "timerfd_gettime",
+            "signalfd4",
+            "eventfd2",
+            "epoll_create1",
+            "pipe2",
             "rt_tgsigqueueinfo",
             "getrandom",
             "clone3",
+            "epoll_pwait2",
+        ];
+        assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn time_calls() {
+        let names: Vec<&str> = time::CALLS.iter().map(|&(nr, _)| name(nr).unwrap()).collect();
+        let expected = [
+            "nanosleep",
+            "getitimer",
+            "alarm",
+            "setitimer",
+            "gettimeofday",
+            "getrusage",
+            "times",
+            "settimeofday",
+            "time",
+            "timer_create",
+            "timer_settime",
+            "timer_gettime",
+            "timer_getoverrun",
+            "timer_delete",
+            "clock_settime",
+            "clock_getres",
+            "clock_nanosleep",
+            "getcpu",
         ];
         assert_eq!(names, expected);
     }

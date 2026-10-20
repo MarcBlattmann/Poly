@@ -25,6 +25,7 @@ mod syscall;
 pub mod time;
 pub mod user;
 mod usercopy;
+pub mod vdso;
 
 use crate::acpi::Platform;
 use core::sync::atomic::{AtomicBool, Ordering};

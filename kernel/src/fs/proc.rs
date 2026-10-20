@@ -9,9 +9,9 @@
 //! [`Files`](super::Files) lock held (path walks work on a copy of the
 //! context), so it may lock any process's files and memory map.
 //!
-//! What is not tracked yet reads as 0: CPU time per process and for the
-//! system (all of it counts as idle), load averages, context switches,
-//! page faults. A process the kernel did not start through
+//! What is not tracked yet reads as 0: CPU time of the system as a whole
+//! (all of it counts as idle; processes' own CPU time is `crate::cputime`'s),
+//! load averages, context switches, page faults. A process the kernel did not start through
 //! [`record_exec`] (the kernel tests' bare processes) has no command line
 //! and is named `?`; its memory map is shown only to itself.
 
@@ -237,6 +237,7 @@ impl ProcSource for KernelProc {
         let slots = fds.last().map_or(0, |(fd, _, _)| *fd as u32 + 1).next_multiple_of(64).max(64);
         let memory = memory_of(pid);
         let (signals, rss_limit) = signal_sets(&p);
+        let cpu = crate::cputime::process(&p);
         let rec = with_record(pid, |r| (r.comm.clone(), r.start_ns, r.start_stack, r.arg, r.env, r.exe.clone()));
         let (comm, start_ns, start_stack, arg, env, exe) =
             rec.unwrap_or_else(|| (b"?".to_vec(), 0, 0, (0, 0), (0, 0), Vec::new()));
@@ -253,8 +254,8 @@ impl ProcSource for KernelProc {
             threads: p.thread_count() as u32,
             fd_slots: slots,
             start_ns,
-            user_ns: 0,
-            system_ns: 0,
+            user_ns: cpu.user_ns,
+            system_ns: cpu.system_ns,
             resident_pages: memory.as_ref().map_or(0, |m| m.resident_pages()),
             resident_file_pages: memory.as_ref().map_or(0, |m| m.cached_pages()),
             rss_limit,

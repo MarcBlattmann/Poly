@@ -2,6 +2,7 @@
 //! [`fake::FakeKernel`].
 
 mod fake;
+mod fileio;
 mod files;
 mod futex;
 mod io;
@@ -10,6 +11,7 @@ mod process;
 mod signal;
 mod startup;
 mod task;
+mod time;
 
 use crate::{ENOSYS, Errno, Linux, err, nr};
 use fake::{FakeKernel, call, sys};

@@ -177,7 +177,7 @@ fn rust_std_musl_static_hello_world() {
     let tls = 0x7f38_4bfd_c188;
     s.step(nr::ARCH_PRCTL, &[op::ARCH_SET_FS as u64, tls], Expect::Value(0));
     s.step(nr::SET_TID_ADDRESS, &[tls + 0x190], Expect::Value(100));
-    s.step(nr::POLL, &[STACK, 3, 0], Expect::Enosys);
+    s.step(nr::POLL, &[STACK, 3, 0], Expect::Value(0));
 
     let restorer = 0x40_1802;
     let ign =
@@ -273,5 +273,5 @@ fn traced_calls_still_missing() {
             missing.push(call);
         }
     }
-    assert_eq!(missing, ["rseq", "poll", "sched_getaffinity"]);
+    assert_eq!(missing, ["rseq", "sched_getaffinity"]);
 }

@@ -796,6 +796,76 @@ nolibc process and thread test, `poly.init=/bin/forkexec`, which prints
 `forkexec: ok` or what failed; `corpus/`: the C corpus with `hello` and
 the static glibc `libc-hello`).
 
+## Pipes, waits and event files
+
+Pipes, `poll` / `select`, `epoll` and the event files (ADR 0042) leave
+nothing in the log while they work. What to look at when a thread hangs
+in one:
+
+- A thread blocked in a pipe read, `poll` or `epoll_wait` is parked
+  (`process::park`) with a waker registered on the file's `WaitQueue`:
+  `OpenFile::wait_queue()` and `WaitQueue::len()` say who waits (the
+  kernel tests wait for exactly that before they write or signal). A
+  file whose readiness never changes has no queue; `poll` on it only
+  sees a change when something else wakes the thread.
+- A wake-up that never comes is usually a notification that was not
+  made: every change of a file object's readiness must call `notify`
+  (pipes on every read and write and on the last close of an end).
+  Spurious wake-ups are fine; every wait checks again.
+- Timer files are woken by the `timers` kernel thread (`ps` lists it
+  once the first timer was armed); `fs::poll::pending_timers()` counts
+  the callbacks it waits for. A timer read always counts expirations
+  from the clock, so a late callback delays a waiter but loses nothing.
+- Signal files read the reading thread's pending signals: a signal the
+  thread does not block is delivered normally first (and ends the read
+  with `EINTR`). `rt_sigpending` shows what is pending.
+- A blocked read interrupted by a signal returns
+  `RESTART_IF_SA_RESTART` inside the kernel: the call is restarted under
+  `SA_RESTART` (`rip` back at the `syscall`) or fails with `EINTR`;
+  `poll` / `select` are never restarted after a handler, `epoll_wait`
+  never at all.
+
+The kernel tests run with `poly.test=linux::fileio_tests`; the host tests
+are `cargo test -p poly-vfs objects` and `cargo test -p
+poly-personality-linux fileio`.
+
+## Time, timers and the vDSO
+
+The first exec sets the vDSO up and says how `clock_gettime` works in
+user mode (ADR 0044):
+
+```text
+vdso: 3552 bytes, mapped into every Linux process; clock_gettime makes system calls (the clock does not read an invariant TSC)
+```
+
+"makes system calls" is the normal case under QEMU's TCG (no invariant
+TSC); with KVM on a host with an invariant TSC it says "reads the TSC".
+The image is `kernel/target/x86_64-unknown-none/<profile>/build/poly-kernel-*/out/vdso.so`:
+`readelf -lrdW --dyn-syms -V` shows its one `PT_LOAD`, the five
+`__vdso_*@@LINUX_2.6` symbols and no relocations (`build.rs` refuses the
+build otherwise), `objdump -d -M intel` its code. In a process the image
+sits right above its data page, both near the top of the `mmap` area;
+`AT_SYSINFO_EHDR` gives the image's address.
+
+`cargo xtask run poly.test=time` runs the time tests (sleeps, a POSIX
+timer, interval timers ending a spinning process, CPU-time clocks) and
+`poly.test=vdso` the vDSO ones. `/bin/time-test` prints one line per check
+(`time-test: ok <name>` or `time-test: FAIL <name>: <value>`); run it from
+the shell (`run /bin/time-test` with the test initramfs) or as the first
+process:
+
+```sh
+cargo xtask pipeline initramfs target/xtask-programs/time-test --out target/time-test.cpio
+cargo xtask run --headless --no-disk --initrd=target/time-test.cpio poly.qemu_exit poly.init=/test-binary
+```
+
+A timer that does not fire: the `linux-timers` thread must exist (`ps`;
+it starts with the first timer anyone arms), and a signal with the default
+action never reaches process 1 (kill(2)'s rule for init, which timers
+follow too). CPU-time clocks only move while the thread runs; their user
+and system split comes from tick samples, so a thread that ran less than
+a tick shows everything as system time.
+
 ## Disk file systems and the page cache
 
 `cargo xtask run` and the boot tests attach a third virtio-blk device,

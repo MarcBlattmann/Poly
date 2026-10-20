@@ -87,8 +87,9 @@ kernel computes; following them resolves that text like any link (unlike
 Linux's "magic" links, a deleted file or a pipe cannot be reopened through
 them). `cpuinfo`'s flags are the SDM's (leaves 01H, 07H) and the AMD
 APM's (80000001H) mnemonics, lower-cased; a few may differ from Linux's
-names, for the spec agent to confirm. Not tracked yet and reported as 0:
-CPU time (all of it counts as idle in `/proc/stat` and `/proc/uptime`),
+names, for the spec agent to confirm. A process's CPU time is ADR 0044's
+accounting. Not tracked yet and reported as 0: the system's CPU time (all
+of it counts as idle in `/proc/stat` and `/proc/uptime`),
 load averages, context switches, page faults.
 
 **Naming open files.** `/proc/<pid>/fd` and `/proc/<pid>/maps` need a
@@ -99,8 +100,8 @@ directory's (walking `..`) and that name; if the name no longer leads to
 the file it looks for the file's new name in that directory, appends
 `" (deleted)"` (proc(5)) when the file has no links left, and otherwise
 keeps the old path. `FileSource` (file mappings and exec) keeps its
-`OpenFile`, and `PageSource` has `file()` and `label()` (for `[vdso]`-like
-mappings), so `maps` names every mapping. `OpenFile::offset_now` reads
+`OpenFile`, and `PageSource` has `file()` and `label()` (the vDSO's
+sources answer `[vdso]` and `[vvar]`), so `maps` names every mapping. `OpenFile::offset_now` reads
 the offset without waiting: reading `fdinfo` of the very description being
 read reports 0 instead of deadlocking on the offset lock.
 
@@ -192,5 +193,5 @@ manual's contract forbids; C libraries treat `ENOSYS` as "no rseq".
   renamed into another directory keeps its old path in `/proc`.
 - Not done yet: writable `/proc` files (`comm`, `sys/kernel/hostname`),
   `/proc/<pid>/task`, `smaps`, `limits`, `auxv`, `/proc/thread-self`,
-  per-process CPU time and load averages, `utimensat`, `chown`, `mknod`,
+  the system's CPU time and load averages, `utimensat`, `chown`, `mknod`,
   file locks, `O_TMPFILE`, `ioctl(FIOCLEX)`, `preadv`/`pwritev`.

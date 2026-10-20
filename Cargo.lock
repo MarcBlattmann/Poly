@@ -190,6 +190,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-vdso"
+version = "0.0.1"
+dependencies = [
+ "poly-irq",
+]
+
+[[package]]
 name = "poly-vfs"
 version = "0.0.1"
 

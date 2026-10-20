@@ -28,12 +28,8 @@ impl Files {
         self.fds.lock().iter().map(|(fd, f, cloexec)| (fd, f.clone(), cloexec)).collect()
     }
 
-    /// The soft `RLIMIT_NOFILE`: descriptors at or above it cannot be
+    /// Set the soft `RLIMIT_NOFILE`: descriptors at or above it cannot be
     /// opened.
-    pub fn fd_limit(&self) -> usize {
-        self.fds.lock().limit()
-    }
-
     pub fn set_fd_limit(&self, limit: usize) {
         self.fds.lock().set_limit(limit);
     }

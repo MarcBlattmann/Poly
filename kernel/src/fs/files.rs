@@ -95,6 +95,17 @@ impl Files {
         self.fds.lock().count()
     }
 
+    /// Put `file` at the lowest free descriptor: an open file that does
+    /// not come from a path (a pipe end, an event file; ADR 0042).
+    pub fn install(&self, file: Arc<OpenFile>, cloexec: bool) -> Result<Fd> {
+        self.fds.lock().install(file, cloexec)
+    }
+
+    /// The most descriptors the process may have (`RLIMIT_NOFILE`).
+    pub fn fd_limit(&self) -> usize {
+        self.fds.lock().limit()
+    }
+
     /// `close(2)`.
     pub fn close(&self, fd: Fd) -> Result<()> {
         // The file is dropped after the table's lock is released.

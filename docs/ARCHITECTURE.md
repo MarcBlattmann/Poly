@@ -535,6 +535,26 @@ initramfs.
   Linux's values; flags take Linux's bits.
 - **tmpfs**: sparse files in 4 KiB pages, stable `readdir` positions,
   unlinked files and removed directories live while open.
+- **Readiness and file objects** ([ADR 0042](adr/0042-readiness-pipes-poll-epoll-and-event-files.md)):
+  every open file reports `PollEvents` (Linux's `POLL*` / `EPOLL*` bits);
+  one whose readiness changes has a `WaitQueue` that whoever changes it
+  notifies, and waiters register a `Waker` on it, check again and block
+  through a `Blocker` (the kernel's park / unpark). `FileObject`s are open
+  files that are not on a file system, on inodes of an anonymous file
+  system no path reaches (`Vfs::anon_node`): pipes (64 KiB, `PIPE_BUF`
+  atomicity, end of file, `EPIPE`, packet mode), event counters, timers
+  (expirations counted from the clock, a `TimerService` callback to wake
+  waiters) and epoll sets (an interest entry is a waker that puts itself
+  on the ready list; level- and edge-triggered, one-shot, nested). Their
+  operations never block; `OpenFile::read_wait` / `write_wait` wait on
+  the queue unless the file is `O_NONBLOCK`, and `poll::poll` waits over
+  many files.
+
+```text
+ pipe write ──► WaitQueue::notify(IN) ──► waker: thread in read / poll ──► unpark
+                                      └─► waker: epoll entry ──► ready list ──► epoll's WaitQueue ──► thread in epoll_wait
+ timer thread (timers) ──► TimerFd::expire ──► notify(IN)        signal queued ──► signal files' queue
+```
 - **`poly-cpio`**: a parser for `newc`/`crc` that never panics, a writer,
   and an unpacker into any file system through the VFS. Tested against
   archives made by GNU cpio (stored, and live if `cpio` is installed).
@@ -754,7 +774,8 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   Rust program makes at startup (`read`, `write`, `readv`, `writev`, `close`,
   `fstat`, `ioctl`, `mmap`, `munmap`, `mprotect`, `brk`, `arch_prctl`,
   `set_tid_address`, `exit`, `exit_group`, the id getters, `uname`,
-  `rt_sigaction`, `rt_sigprocmask`, `clock_gettime`, `getrandom`). Handlers
+  `rt_sigaction`, `rt_sigprocmask`, `clock_gettime`, `getrandom`; the time
+  calls of ADR 0044 are listed under "Time, timers and the vDSO"). Handlers
   validate arguments per the man pages and do the work through
   `LinuxKernel`, a trait the kernel implements over its VFS, VMA manager and
   thread state; `Linux::dispatch_with(&mut kernel, regs)` is the entry point.
@@ -794,6 +815,19 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   (`clone_task`), replaces programs (`execve`) and blocks waiters
   (`wait_tree`), and calls `task::process_exited`, `process_stopped` and
   `process_continued`, which signal the parent.
+- **Pipes, waits and event files**
+  ([ADR 0042](adr/0042-readiness-pipes-poll-epoll-and-event-files.md)):
+  `pipe`, `pipe2`, `poll`, `ppoll`, `select`, `pselect6`, `epoll_create`,
+  `epoll_create1`, `epoll_ctl`, `epoll_wait`, `epoll_pwait`,
+  `epoll_pwait2`, `eventfd`, `eventfd2`, `timerfd_create`,
+  `timerfd_settime`, `timerfd_gettime`, `signalfd`, `signalfd4`, and
+  `SIGPIPE` / `FIONREAD`. The handlers check arguments, turn timeouts into
+  deadlines, convert `select`'s sets, swap the signal mask of the `p*`
+  variants (rt_sigsuspend's `saved_mask`) and decide `EINTR` or a restart;
+  the kernel's part is `fileio::FileIo` (`LinuxKernel::file_io`): making
+  the objects, looking descriptors up, waiting. Signal files read the
+  reading thread's pending signals out of its `LinuxProcess`;
+  `LinuxKernel::signal_queued` wakes their readers.
 
 ## Linux processes
 
@@ -873,6 +907,58 @@ POLY-SYSCALL: pid=1 nr=231 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=?
 POLY-EXIT: pid=1 code=0
 ```
 
+## Time, timers and the vDSO
+
+[ADR 0044](adr/0044-time-syscalls-timers-and-the-vdso.md). The personality
+has the calls (`personalities/linux/src/sys/time.rs`, registered through
+`sys::time::CALLS`) and the timers (`time/`); the kernel has the clocks,
+the CPU-time accounting, the timer thread and the vDSO.
+
+```text
+  user mode:  __vdso_clock_gettime ── seqlock read of [vvar] ── lfence; rdtsc ──► time
+                  │ Mode::Syscall, unknown clock, null pointer
+                  ▼
+  syscall:    clock_gettime / nanosleep / setitimer / timer_* ... (personality)
+                  │ LinuxKernel: clock, set_realtime, cpu_times, block, timers_changed
+                  ▼
+  kernel:     time.rs (monotonic + settable wall clock) ──publish──► vdso.rs ──► [vvar]
+              cputime.rs (per-slot run time, tick samples)
+              linux/timers.rs: wake-ups by pid ──► linux-timers thread ──► time::fire ──► signals
+```
+
+- **Calls:** `clock_gettime`, `clock_getres`, `clock_settime`,
+  `gettimeofday`, `settimeofday`, `time`, `nanosleep`, `clock_nanosleep`
+  (relative and `TIMER_ABSTIME`; `EINTR` after a handler, restart after a
+  stop through restart_syscall(2) with the deadline it had), `alarm`,
+  `getitimer`, `setitimer` (`ITIMER_REAL`, `ITIMER_VIRTUAL`, `ITIMER_PROF`),
+  `timer_create` / `settime` / `gettime` / `getoverrun` / `delete`
+  (`SIGEV_SIGNAL`, `SIGEV_NONE`, `SIGEV_THREAD_ID`), `times`, `getrusage`
+  (the two times), `getcpu`. Clocks: `CLOCK_REALTIME` (settable),
+  `CLOCK_MONOTONIC` = `_RAW` = `CLOCK_BOOTTIME`, the coarse clocks (same
+  values, the tick as resolution), `CLOCK_PROCESS_CPUTIME_ID`,
+  `CLOCK_THREAD_CPUTIME_ID`.
+- **Timers** live in each process's `LinuxProcess` (`time::Timers`). After
+  a change the kernel records the earliest monotonic expiry (and whether a
+  CPU-time timer exists) by pid, with the process's state locked; the
+  `linux-timers` thread sleeps until then (a tick at a time for CPU-time
+  timers) and calls `time::fire`, which queues the signals (once per
+  timer; overruns counted) and re-arms periodic timers; the threads it
+  names are notified like for any signal.
+- **The vDSO** (`kernel/src/arch/x86_64/vdso/vdso.rs`, built by
+  `kernel/build.rs` with the pinned `rustc` and `rust-lld`, embedded as
+  `arch::vdso::IMAGE`): an ELF shared object, one read-execute segment, no
+  relocations, exporting `__vdso_clock_gettime`, `__vdso_gettimeofday`,
+  `__vdso_time`, `__vdso_clock_getres` and `__vdso_getcpu` in `LINUX_2.6`.
+  It reads the `poly_vdso::Vvar` page right below its ELF header: a
+  seqlock-protected snapshot of the clock's TSC conversion (the same
+  `mult`/`shift` the kernel's clock applies), the wall clock's offset, the
+  tick and the time zone. Where the clock does not read an invariant TSC
+  the snapshot says so and the vDSO makes the system call.
+- **Mapping:** exec maps the image (private, read-execute) and the data
+  page below it (shared, read-only, never writable: a page-cache page every
+  process maps, which the kernel writes through the direct map) and sets
+  `AT_SYSINFO_EHDR`.
+
 ## NT object manager (logic only, not wired yet)
 
 `crates/poly-ntobj` is what the NT object and synchronisation services do,
@@ -904,6 +990,8 @@ services once it decodes those system calls.
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
+| Pipes, waits and event files from ring 3: a pipe between two threads (a blocked read woken by a write, a 200 KB blocking write drained, end of file), non-blocking pipes, `FIONREAD`, `EPIPE` with `SIGPIPE` blocked and the process killed by it unblocked, `poll` / `select` / `epoll` (level- and edge-triggered, a thread woken in `epoll_wait`) on pipes and an event counter, timer expirations (blocking read, epoll, absolute times on both clocks), a signal file reading signals (also blocked in a read until another thread's `tgkill`), a blocked read ended by a handler with `EINTR` and restarted under `SA_RESTART` | `kernel_test!` in `linux/fileio_tests.rs` | every boot |
+| Time: the vDSO image and its mapping, the snapshot following the wall clock; sleeps, a POSIX timer's signal through the timer thread, `ITIMER_REAL` / `ITIMER_VIRTUAL` ending a process spinning in ring 3, CPU-time clocks; `/bin/time-test` (a Rust program without a C library, `tools/xtask/programs/time_test.rs`) finding the vDSO through `AT_SYSINFO_EHDR`, resolving its symbols and comparing it with the system calls, timers with signal handlers, CPU time, once with the vDSO forced onto the TSC | `kernel_test!` in `vdso.rs`, `cputime.rs`, `linux/tests/time_tests.rs`; `/bin/time-test` also as the first process | every boot (`time-test` with the test initramfs); `cargo xtask test` |
 | Linux processes: the kernel's `LinuxKernel` through real system calls from ring 3 (write to the process's files, brk, anonymous and file mmap/munmap/mprotect, arch_prctl and the FS base in ring 3, exit_group ending a spinning and a futex-waiting thread, EFAULT for bad pointers, a fault as SIGSEGV, a signal handler and rt_sigreturn), and `exec_path` of `/bin/hello` from the test initramfs | `kernel_test!` in `linux/tests.rs` | every boot; one boot on `-cpu max` (XSAVE signal frames) |
 | Processes and threads from ring 3: fork with copy on write, zombies (waitid `WNOWAIT`, kill 0) and wait4's status, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and a futex and its robust lock released at exit, an orphan adopted while shared anonymous memory stays shared, vfork + execve of `/bin/hello`, of a missing file and of a `#!` script, execve by a second thread (the other thread ended, close-on-exec files closed, the pid taken over); every user frame freed afterwards. `Memory::fork` itself: pages shared until written, frames freed with the last user, shared anonymous and parked pages | `kernel_test!` in `linux/task_tests.rs`, `user/memory/fork.rs` | every boot |
 | Static Linux hello worlds as the first process (`poly.init`): nolibc (Rust, built with the pinned toolchain), freestanding C and static glibc (skipped without a C compiler or static C library); output and exit status 0 | `tools/xtask/src/programs.rs` | `cargo xtask test` |
@@ -1064,9 +1152,13 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
 - **Wall clock:** `time::realtime_ns()` reads the CMOS RTC once, at its
   first use (`arch/x86_64/rtc.rs`; the registers are decoded and turned into
   Unix time by the host-tested `poly-rtc`, with the century register the
-  FADT names), and adds the monotonic clock since; it cannot be set yet.
-  Linux's `CLOCK_REALTIME` reads it. The file systems' timestamps still
-  count from boot.
+  FADT names), and adds the monotonic clock since; `time::set_realtime_ns`
+  moves it (never below the monotonic clock). Linux's `CLOCK_REALTIME`
+  reads it. The file systems' timestamps still count from boot.
+- **CPU time** (`cputime.rs`, ADR 0044): each thread-table slot's run time,
+  measured with the monotonic clock at every context switch, split into
+  user and system time by tick samples (the tick records whether it
+  interrupted ring 3); a reaped thread's time moves to its process.
 
 ## Threads and scheduling
 
@@ -1283,7 +1375,8 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   region under `0x7fff_ffff_f000` and writes the psABI initial stack
   (`argc`, `argv`, `envp`, auxiliary vector with `AT_PHDR`, `AT_PHENT`,
   `AT_PHNUM`, `AT_PAGESZ`, `AT_ENTRY`, `AT_RANDOM`, IDs, `AT_SECURE`,
-  `AT_EXECFN`, `AT_PLATFORM`, `AT_HWCAP`, ...). Only the stack page is
+  `AT_EXECFN`, `AT_PLATFORM`, `AT_HWCAP`, `AT_SYSINFO_EHDR` for the vDSO
+  it maps, ...). Only the stack page is
   resident when it returns. `exec::exec` (any `PageSource`) and
   `exec::exec_image` (an `Arc<[u8]>`) also start the thread.
 
@@ -1291,7 +1384,7 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
 |---|---|
 | `0x40_0000` (`ET_EXEC`) or `0x5555_5555_4000` (static PIE) | the image's segments, then `.bss` |
 | page after the highest segment | the program break (`brk`), growing up |
-| below `0x7fff_f7ef_f000` (128 MiB for the stack and a 1 MiB guard gap under its top) | `mmap` area, top-down |
+| below `0x7fff_f7ef_f000` (128 MiB for the stack and a 1 MiB guard gap under its top) | `mmap` area, top-down; its first mappings are the vDSO's data page and, above it, the vDSO image (`AT_SYSINFO_EHDR`) |
 | `0x7fff_ffff_f000` - 128 KiB – `0x7fff_ffff_f000` | the stack region (grows to 8 MiB) |
 
 ## Synchronisation
