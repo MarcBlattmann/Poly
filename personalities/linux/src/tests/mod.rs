@@ -9,6 +9,7 @@ mod io;
 mod mem;
 mod process;
 mod signal;
+mod socket;
 mod startup;
 mod task;
 mod time;

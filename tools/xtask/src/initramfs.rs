@@ -4,7 +4,10 @@
 //! order), so the same sources always give the same image.
 //!
 //! - The default image (`cargo xtask run`): `/etc/motd`, `/etc/hostname`,
-//!   and `/dev/console` as a Linux initramfs has it.
+//!   `/etc/hosts` and `/etc/resolv.conf` (name resolution is the C
+//!   library's: QEMU's user-networking DNS server at 10.0.2.3, which
+//!   `poly.net=qemu` sets up), and `/dev/console` as a Linux initramfs has
+//!   it.
 //! - The test image (the self-test boots, with `poly.test.initrd`): the same
 //!   plus `/test`, a tree of every kind of entry the kernel's file system
 //!   tests check (`kernel/src/fs/tests.rs`), and `/bin/hello`, the nolibc
@@ -29,6 +32,13 @@ pub const MOTD: &str = "Welcome to Poly.\n\
 This is /etc/motd from the initramfs `cargo xtask` builds (tools/xtask/src/initramfs.rs),\n\
 unpacked into the root tmpfs at boot. Try `ls /`, `ls /dev`, `cat /etc/hostname` and `mount`.\n";
 
+/// `/etc/hosts` (hosts(5)).
+pub const HOSTS: &str = "127.0.0.1\tlocalhost\n::1\tlocalhost ip6-localhost ip6-loopback\n127.0.1.1\tpoly\n";
+
+/// `/etc/resolv.conf` (resolv.conf(5)): QEMU's user-networking DNS
+/// server (QEMU documentation, "Network options").
+pub const RESOLV_CONF: &str = "nameserver 10.0.2.3\n";
+
 /// Length of `/test/big.bin`: more than nine 4 KiB pages, not a multiple.
 pub const BIG_BIN_LEN: usize = 40_000;
 
@@ -48,6 +58,8 @@ fn base(w: &mut Writer) {
     w.dir(b"etc", 0o755);
     w.file(b"etc/motd", 0o644, MOTD.as_bytes());
     w.file(b"etc/hostname", 0o644, b"poly\n");
+    w.file(b"etc/hosts", 0o644, HOSTS.as_bytes());
+    w.file(b"etc/resolv.conf", 0o644, RESOLV_CONF.as_bytes());
     w.dir(b"dev", 0o755);
     w.node(b"dev/console", FileType::CharDevice, 0o600, DeviceId::new(5, 1));
 }
@@ -84,6 +96,17 @@ pub fn programs_image(programs: &Programs<'_>) -> Vec<u8> {
     let mut w = writer();
     base(&mut w);
     bin(&mut w, programs);
+    w.finish()
+}
+
+/// [`programs_image`] with more files (`path` relative to `/`, mode 0644).
+pub fn programs_image_with_files(programs: &Programs<'_>, files: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut w = writer();
+    base(&mut w);
+    bin(&mut w, programs);
+    for (path, data) in files {
+        w.file(path.as_bytes(), 0o644, data);
+    }
     w.finish()
 }
 

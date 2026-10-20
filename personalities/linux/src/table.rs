@@ -10,8 +10,8 @@ use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
 use crate::sys::{
-    epoll, eventfd, fd, futex, io, limits, mem, path, pipe, poll, process, signal, signalfd, system, task, time,
-    timerfd,
+    epoll, eventfd, fd, futex, io, limits, mem, path, pipe, poll, process, signal, signalfd, socket, system, task,
+    time, timerfd,
 };
 
 pub use crate::numbers::{SYSCALLS, nr};
@@ -156,8 +156,9 @@ pub const FILE_SYSTEM: &[(u64, Handler)] = &[
     (nr::FACCESSAT2, path::faccessat2),
 ];
 /// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
-/// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]).
-pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS, FILE_SYSTEM];
+/// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]; ADR 0048:
+/// sockets).
+pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS, FILE_SYSTEM, socket::CALLS];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
 
@@ -298,7 +299,7 @@ mod tests {
 
     #[test]
     fn implemented_set() {
-        let in_groups = |nr: u64| time::CALLS.iter().chain(FILE_SYSTEM).any(|&(n, _)| n == nr);
+        let in_groups = |nr: u64| time::CALLS.iter().chain(FILE_SYSTEM).chain(socket::CALLS).any(|&(n, _)| n == nr);
         let names: Vec<&str> = implemented().filter(|&(nr, _)| !in_groups(nr)).map(|(_, n)| n).collect();
         let expected = [
             "read",

@@ -31,8 +31,10 @@
 mod fileio_tests;
 mod files;
 mod files_tests;
+pub mod net;
 mod services;
 pub mod signalfd;
+mod socket_tests;
 pub mod task;
 mod task_tests;
 mod tests;

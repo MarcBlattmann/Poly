@@ -26,7 +26,8 @@ what exists **today** and how it fits that plan.
             file systems: VFS (poly-vfs), tmpfs root from the initramfs, ext2 disks behind the page cache (poly-pagecache)
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
-            network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets
+            network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets;
+                     socket files (inet, poly-unix Unix sockets, netlink) with per-socket wake-ups
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             display: QEMU standard VGA framebuffer + RAM back buffer; poly-gfx (drawing, font, text grid)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
@@ -336,6 +337,40 @@ network boot tests, on QEMU's user networking) they also ping the gateway
 echo server that `cargo xtask` runs on the host's `<port>` (reached at
 10.0.2.2), and accept a connection the host makes through a port forward
 to guest port 7777, checking the bytes at both ends.
+
+### Sockets for user space
+
+[ADR 0048](adr/0048-sockets-inet-unix-netlink.md). A socket descriptor is
+an open file on an anonymous `S_IFSOCK` inode whose object is the socket,
+so `read`, `write`, `poll`, `epoll`, `fstat`, `fork` and `close` work on it
+like on a pipe (ADR 0042):
+
+```text
+ socket(2) ... recvmsg(2) (personality: sys/socket.rs, decoding, SIGPIPE, restarts)
+        │ LinuxNet (LinuxKernel::net)
+        ▼
+ linux/net.rs: find the socket object, wait on its queue (ThreadBlocker, SO_*TIMEO, O_NONBLOCK)
+   ├─ InetSocket (net/file.rs) ──net::call──► poly-net Stack ── poll ── take_changed ──► net::notify ──► that socket's WaitQueue
+   ├─ poly_unix::UnixFile ──► UnixSocket queues, Namespace (abstract names, path inodes via Vfs::mknod), in-flight GC
+   └─ NetlinkFile (linux/net/netlink.rs) ──► personality's NETLINK_ROUTE over interfaces(): lo, eth0, addresses, gateways
+```
+
+- **Internet sockets** (`InetSocket`) wrap a stack handle and keep what
+  the stack does not (type, protocol, timeouts, linger, whether it
+  listens or was connecting). After every poll of the stack the kernel
+  asks which sockets changed (`Stack::take_changed`: readiness or queued
+  input) and notifies only their queues (`net::notify`), with the
+  interface unlocked.
+- **Unix sockets** are `poly-unix`: stream, datagram and sequenced-packet
+  sockets, `socketpair`, abstract names and names in the file system
+  (socket inodes; connecting needs write permission), `SCM_RIGHTS`
+  (open files in flight until received or dropped with the queue),
+  `SCM_CREDENTIALS` / `SO_PASSCRED`, `SO_PEERCRED`, and a collector for
+  cycles of sockets in flight that the kernel runs after `close`.
+- **Netlink** (`NETLINK_ROUTE`, read-only): link, address and route dumps
+  built by the personality from a snapshot of the interface.
+- `/etc/hosts` and `/etc/resolv.conf` (DNS 10.0.2.3) come with the
+  initramfs; name resolution is the C library's.
 
 ## Input
 
@@ -815,6 +850,18 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   (`clone_task`), replaces programs (`execve`) and blocks waiters
   (`wait_tree`), and calls `task::process_exited`, `process_stopped` and
   `process_continued`, which signal the parent.
+- **Sockets** ([ADR 0048](adr/0048-sockets-inet-unix-netlink.md)):
+  `socket`, `socketpair`, `bind`, `listen`, `accept`, `accept4`,
+  `connect`, `getsockname`, `getpeername`, `sendto`, `recvfrom`,
+  `sendmsg`, `recvmsg`, `sendmmsg`, `recvmmsg`, `shutdown`, `setsockopt`,
+  `getsockopt` and `SIOCOUTQ` (`sys/socket.rs`, group `socket::CALLS`).
+  The handlers decode `sockaddr_in` / `in6` / `un` / `nl`, `msghdr`,
+  control messages and option values, move data between iovecs and
+  kernel buffers, raise `SIGPIPE` (not with `MSG_NOSIGNAL`) and restart
+  interrupted calls under `SA_RESTART` unless the socket has a timeout;
+  the kernel's part is `net::LinuxNet` (`LinuxKernel::net`,
+  `kernel/src/linux/net.rs`). `NETLINK_ROUTE` replies are built by
+  `net::netlink`.
 - **Pipes, waits and event files**
   ([ADR 0042](adr/0042-readiness-pipes-poll-epoll-and-event-files.md)):
   `pipe`, `pipe2`, `poll`, `ppoll`, `select`, `pselect6`, `epoll_create`,
@@ -991,6 +1038,7 @@ services once it decodes those system calls.
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
 | Pipes, waits and event files from ring 3: a pipe between two threads (a blocked read woken by a write, a 200 KB blocking write drained, end of file), non-blocking pipes, `FIONREAD`, `EPIPE` with `SIGPIPE` blocked and the process killed by it unblocked, `poll` / `select` / `epoll` (level- and edge-triggered, a thread woken in `epoll_wait`) on pipes and an event counter, timer expirations (blocking read, epoll, absolute times on both clocks), a signal file reading signals (also blocked in a read until another thread's `tgkill`), a blocked read ended by a handler with `EINTR` and restarted under `SA_RESTART` | `kernel_test!` in `linux/fileio_tests.rs` | every boot |
+| Sockets: per-socket wake-ups (a datagram wakes its receiver's waiters only); `/bin/socket-test` (a Rust program without a C library, `tools/xtask/programs/socket_test.rs`) from ring 3: TCP over 127.0.0.1 between two processes under `epoll` and `poll`, UDP (`FIONREAD`, `MSG_TRUNC`, `SO_RCVTIMEO`), Unix sockets on a path (`S_IFSOCK`, `SO_PEERCRED`), an abstract name, datagram and sequenced-packet pairs, `SCM_RIGHTS` passing a pipe end and a write end released with an unread queue, a blocked `accept` ended by a signal (`EINTR`, restarted with `SA_RESTART`), `SIGPIPE` and `MSG_NOSIGNAL`, netlink `RTM_GETADDR` / `RTM_GETLINK`; nothing left watched or in flight afterwards | `kernel_test!` in `linux/socket_tests.rs`; `/bin/socket-test` also as the first process, and on virtio-net against the host's echo servers (`net.rs`) | every boot (`socket-test` with the test initramfs); `cargo xtask test` |
 | Time: the vDSO image and its mapping, the snapshot following the wall clock; sleeps, a POSIX timer's signal through the timer thread, `ITIMER_REAL` / `ITIMER_VIRTUAL` ending a process spinning in ring 3, CPU-time clocks; `/bin/time-test` (a Rust program without a C library, `tools/xtask/programs/time_test.rs`) finding the vDSO through `AT_SYSINFO_EHDR`, resolving its symbols and comparing it with the system calls, timers with signal handlers, CPU time, once with the vDSO forced onto the TSC | `kernel_test!` in `vdso.rs`, `cputime.rs`, `linux/tests/time_tests.rs`; `/bin/time-test` also as the first process | every boot (`time-test` with the test initramfs); `cargo xtask test` |
 | Linux processes: the kernel's `LinuxKernel` through real system calls from ring 3 (write to the process's files, brk, anonymous and file mmap/munmap/mprotect, arch_prctl and the FS base in ring 3, exit_group ending a spinning and a futex-waiting thread, EFAULT for bad pointers, a fault as SIGSEGV, a signal handler and rt_sigreturn), and `exec_path` of `/bin/hello` from the test initramfs | `kernel_test!` in `linux/tests.rs` | every boot; one boot on `-cpu max` (XSAVE signal frames) |
 | Processes and threads from ring 3: fork with copy on write, zombies (waitid `WNOWAIT`, kill 0) and wait4's status, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and a futex and its robust lock released at exit, an orphan adopted while shared anonymous memory stays shared, vfork + execve of `/bin/hello`, of a missing file and of a `#!` script, execve by a second thread (the other thread ended, close-on-exec files closed, the pid taken over); every user frame freed afterwards. `Memory::fork` itself: pages shared until written, frames freed with the last user, shared anonymous and parked pages | `kernel_test!` in `linux/task_tests.rs`, `user/memory/fork.rs` | every boot |

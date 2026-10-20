@@ -5,6 +5,7 @@ mod frag;
 mod fuzz;
 mod icmp;
 mod ipv6;
+mod syscalls;
 mod tcp;
 mod tcp_loss;
 mod udp;

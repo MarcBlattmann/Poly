@@ -819,6 +819,14 @@ pub trait LinuxKernel {
         None
     }
 
+    // ---- sockets (ADR 0048) ---------------------------------------------
+
+    /// The kernel's sockets ([`crate::net::LinuxNet`]); `None` (the
+    /// default) makes the socket calls fail with `ENOSYS`.
+    fn net(&mut self) -> Option<&mut dyn crate::net::LinuxNet> {
+        None
+    }
+
     /// A signal was queued for process `pid` or one of its threads,
     /// blocked or not: wake the threads waiting to read signals through
     /// a signal file (signalfd(2)).

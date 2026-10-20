@@ -41,6 +41,7 @@ poly-procfs = { path = "../crates/poly-procfs" }
 poly-random = { path = "../crates/poly-random" }
 poly-rtc = { path = "../crates/poly-rtc" }
 poly-term = { path = "../crates/poly-term" }
+poly-unix = { path = "../crates/poly-unix" }
 poly-vfs = { path = "../crates/poly-vfs" }
 poly-personality-linux = { path = "../personalities/linux" }
 poly-personality-nt = { path = "../personalities/nt" }

@@ -82,7 +82,14 @@ fn io_errno(e: poly_vfs::Errno) -> Errno {
 pub(super) fn read(t: &mut Thread<'_>, fd: Fd, buf: &mut [u8]) -> Result<usize, Errno> {
     let file = t.file(fd)?;
     let mut blocker = t.blocker();
-    file.read_wait(buf, &mut blocker).map_err(io_errno)
+    // A socket with SO_RCVTIMEO gives up then, and is not restarted after
+    // a signal (signal(7); ADR 0048).
+    match file.object().and_then(|o| o.timeouts().0) {
+        Some(ns) => {
+            file.read_wait_until(buf, &mut blocker, Timeout::At(time::now_ns().saturating_add(ns))).map_err(vfs_errno)
+        }
+        None => file.read_wait(buf, &mut blocker).map_err(io_errno),
+    }
 }
 
 /// `LinuxKernel::write`: on a blocking pipe, all of `buf` (or what went
@@ -90,7 +97,12 @@ pub(super) fn read(t: &mut Thread<'_>, fd: Fd, buf: &mut [u8]) -> Result<usize, 
 pub(super) fn write(t: &mut Thread<'_>, fd: Fd, buf: &[u8]) -> Result<usize, Errno> {
     let file = t.file(fd)?;
     let mut blocker = t.blocker();
-    file.write_wait(buf, &mut blocker).map_err(io_errno)
+    match file.object().and_then(|o| o.timeouts().1) {
+        Some(ns) => {
+            file.write_wait_until(buf, &mut blocker, Timeout::At(time::now_ns().saturating_add(ns))).map_err(vfs_errno)
+        }
+        None => file.write_wait(buf, &mut blocker).map_err(io_errno),
+    }
 }
 
 fn timeout(wait: WaitTime) -> Timeout {
