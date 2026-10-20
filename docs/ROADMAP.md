@@ -42,7 +42,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [x] Time: TSC calibrated against HPET, monotonic clock, APIC timer interrupts
 - [x] Kernel threads, context switching, preemptive round-robin scheduler
 - [x] Synchronisation: interrupt-safe spinlocks, mutexes, wait queues, sleep/wakeup
-- [ ] PCI/PCIe enumeration (ECAM), MSI/MSI-X interrupts
+- [x] PCI/PCIe enumeration (ECAM), MSI/MSI-X interrupts
 - [x] virtio core (virtqueues) and virtio-blk driver: first real disk I/O
 - [x] Block layer with request queue and buffer cache
 
