@@ -22,6 +22,11 @@
 //! claim <id> --agent ID | release <id>           through the coverage tool
 //! role <spec|implementer> <entry> --workdir DIR --agent ID [--preset claude|opencode]
 //!      [--model M] [--generated DIR] [--revision REV] [--feedback FILE] [--dry-run]
+//! loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet]
+//!                                                the scheduler: runs the whole pipeline unattended
+//! loop status [--config FILE] [--json]           what every entry in the loop is doing
+//! loop reset <entry> [--config FILE] [--keep-branches]
+//!                                                forget an entry (e.g. after the human queue)
 //! ```
 
 mod corpus;
@@ -33,6 +38,7 @@ mod ptrace;
 mod queue;
 mod roles;
 mod runner;
+mod scheduler;
 mod sha256;
 mod store;
 mod syscalls;
@@ -627,9 +633,10 @@ fn run(args: &[String]) -> Result<u8> {
         "next" => next_cmd(&repo, &a),
         "claim" | "release" => coverage_tool(&repo, args),
         "role" => role_cmd(&repo, &a),
+        "loop" => scheduler::command(&repo, rest),
         _ => Err(format!(
             "unknown command {cmd}; commands: build trace diff selfcheck polycheck initramfs spec tests handoff next \
-             claim release role"
+             claim release role loop"
         )),
     }
 }
