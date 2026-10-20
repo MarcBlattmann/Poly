@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/msync
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  msync(addr, length, flags) flushes a shared file mapping to its file.
+  flags: MS_ASYNC (1), MS_INVALIDATE (2), MS_SYNC (4), or 0; not MS_ASYNC
+  with MS_SYNC. addr must be page aligned; length is rounded up; length 0 is
+  allowed. It is accepted on anonymous and private mappings too. The page
+  cache is unified: a write through a MAP_SHARED mapping is seen by
+  read/pread on the file at once, a pwrite is seen through the mapping at
+  once, and two shared mappings of one file see each other's writes
+  immediately. A MAP_PRIVATE mapping sees the file until it writes a page,
+  then keeps its own copy of that page, never written back.
+returns:
+  success: "0"
+errors:
+  unaligned_addr: "EINVAL"
+  ms_sync_with_ms_async: "EINVAL"
+  unknown_flags: "EINVAL (e.g. 8)"
+  range_with_unmapped_pages: "ENOMEM"
+side_effects: "Data written through shared mappings is in the file after msync (and stays after munmap and close)."
+threading: "the address space is shared by all threads of a process; changes are visible to every thread at once"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

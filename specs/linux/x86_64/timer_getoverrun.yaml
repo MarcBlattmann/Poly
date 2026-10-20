@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/timer_getoverrun
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  timer_getoverrun(id) returns how many extra expiries happened between the
+  timer's signal being queued and being delivered (taken): while a periodic
+  timer's signal stays pending, later expiries are not queued again but
+  counted. It is fixed when the signal is taken and equals the siginfo's
+  si_overrun. 0 for a timer that never fired, for SIGEV_NONE timers, and
+  when each signal is taken in time.
+returns:
+  success: "the overrun count"
+errors:
+  unknown_or_deleted_timer: "EINVAL"
+side_effects: "none"
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

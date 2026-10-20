@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/umask
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  umask(mask) sets the file mode creation mask to mask & 0777 and returns
+  the previous mask. It is applied to the mode given to openat/O_CREAT,
+  O_TMPFILE and mkdirat; not to symbolic links (always 0777), not to
+  fchmodat, not to an O_CREAT open of an existing file, and it cannot clear
+  the sticky bit given to mkdirat. A child process inherits the mask; its
+  changes do not reach the parent.
+returns:
+  always: "the previous mask (0..0777); never fails"
+errors:
+  none: "umask cannot fail"
+side_effects: "Per process (shared with CLONE_FS children)."
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

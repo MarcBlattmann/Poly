@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setrlimit
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  setrlimit(resource, rlim) sets {soft, hard}. Lowering either and raising
+  the soft limit up to the hard one are always allowed; raising the hard
+  limit needs CAP_SYS_RESOURCE. RLIMIT_NOFILE: new descriptors (open, dup,
+  pipe2, ...) must be below the soft limit (EMFILE otherwise); it cannot
+  exceed nr_open (1048576). RLIMIT_FSIZE: a write that would take a file
+  past the limit is cut short at it; one that starts at or past it, a pwrite
+  past it and an ftruncate past it fail with EFBIG, and the writes raise
+  SIGXFSZ (25).
+returns:
+  success: "0"
+errors:
+  soft_above_hard: "EINVAL; limits unchanged"
+  unknown_resource: "EINVAL"
+  bad_pointer: "EFAULT"
+  nofile_above_nr_open: "EPERM"
+  raise_hard_without_privilege: "EPERM"
+side_effects: "Existing descriptors above a lowered RLIMIT_NOFILE stay open."
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

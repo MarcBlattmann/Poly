@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/prlimit64
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  prlimit64(pid, resource, new, old) gets and/or sets a resource limit
+  {rlim_cur, rlim_max} (two u64; RLIM_INFINITY = ~0) of process pid (0 or
+  the caller's own pid: the caller). With old given, the limits before the
+  call are stored there; with new given, they are set (as setrlimit would).
+  Both NULL is allowed. Root may read and set a child's limits; the child
+  sees them.
+returns:
+  success: "0"
+errors:
+  unknown_resource: "EINVAL (16 or more, negative)"
+  soft_above_hard: "EINVAL; nothing changes and old is not written"
+  no_such_process: "ESRCH"
+  bad_pointers: "EFAULT"
+  raise_hard_without_privilege: "EPERM (needs CAP_SYS_RESOURCE)"
+side_effects: "Limits are per process and inherited by children."
+threading: "the tests run as uid 0 with no extra capabilities assumed beyond those of root in a container (CAP_SYS_RESOURCE may be missing)"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1
