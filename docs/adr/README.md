@@ -42,6 +42,8 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0038](0038-linux-processes-in-the-kernel-and-the-first-program.md) | Linux processes in the kernel: `LinuxKernel` per running thread, threads registered with their process and ended at their next return to user mode, signals on every way out (faults included) through the trap frame, programs exec'd from the VFS, `poly.init` and the ADR 0027 records, the CMOS RTC as wall clock | Accepted |
 | [0039](0039-networking-in-the-kernel.md) | Networking in the kernel: virtio-net in a host-tested crate (`poly-virtio-net`), one stack behind a sleeping mutex, a network thread, readiness generations for blocking sockets | Accepted |
 | [0040](0040-page-cache-and-ext2-on-virtio-blk.md) | A page cache in a host-tested crate (`poly-pagecache`) wrapping disk file systems, shared with memory mappings; ext2 mounted on virtio-blk with a sleeping volume lock, a writeback thread, clean unmount at reboot | Accepted |
+| [0041](0041-processes-threads-fork-exec-wait.md) | Processes and threads: copy-on-write fork with `Arc`-counted shared frames, clone and execve in the kernel, the process tree (parents, zombies, groups, sessions, wait) in the Linux personality | Accepted |
+| [0043](0043-dev-proc-sys-and-file-system-calls.md) | `/dev`, `/proc` and `/sys`: a ChaCha20 fast-key-erasure generator (`poly-random`), procfs over a kernel-provided source and a static sysfs (`poly-procfs`), open files that know their names; the Linux file system calls behind one `LinuxFs` services trait, resource limits in the personality | Accepted |
 
 ## Open decisions
 

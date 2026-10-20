@@ -272,6 +272,13 @@ impl Files {
         self.fds.lock().install(file, flags.contains(OpenFlags::CLOEXEC))
     }
 
+    /// `execve(2)`: open `path` (from `dirfd`, as for `openat`) to run it:
+    /// a regular file with execute permission on a mount that allows
+    /// executing (`EACCES` otherwise). Not installed as a descriptor.
+    pub fn open_exec_at(&self, dirfd: Fd, path: &[u8]) -> Result<Arc<OpenFile>> {
+        self.at(dirfd, path, |vfs, ctx, at| vfs.open_exec(ctx, &self.cred, at, path))
+    }
+
     /// `stat(2)` (`follow`) and `lstat(2)`, `fstatat(2)` with `dirfd`.
     pub fn statat(&self, dirfd: Fd, path: &[u8], follow: bool) -> Result<Stat> {
         self.at(dirfd, path, |vfs, ctx, at| vfs.stat(ctx, &self.cred, at, path, follow))

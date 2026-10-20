@@ -2,9 +2,9 @@
 
 use crate::device::CharDevice;
 use crate::fs::DirEntry;
+use crate::mount::Mount;
 use crate::node::NodeRef;
 use crate::sync::SpinMutex;
-use crate::mount::Mount;
 use crate::{Errno, FileType, Ino, MAX_FILE_SIZE, Result, Stat};
 use alloc::boxed::Box;
 use alloc::sync::{Arc, Weak};

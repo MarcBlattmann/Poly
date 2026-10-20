@@ -357,6 +357,23 @@ pub fn enter_user(entry: &Entry) -> ! {
     unsafe { enter_user_frame(&frame) }
 }
 
+/// Leave for ring 3 with every register from `regs` (a child of `clone`
+/// or `fork`, which starts where its parent made the call), never to
+/// return, like [`enter_user`]. CS and SS are the user selectors and
+/// RFLAGS is sanitised, whatever `regs` holds.
+pub fn enter_user_regs(regs: &TrapFrame) -> ! {
+    cpu::disable_interrupts();
+    let mut frame = *regs;
+    frame.vector = 0;
+    frame.error_code = 0;
+    frame.cs = u64::from(USER_CODE);
+    frame.ss = u64::from(USER_DATA);
+    frame.rflags = user_rflags(regs.rflags);
+    // SAFETY: as in `enter_user`: a complete ring-3 frame on this stack. A
+    // non-canonical RIP faults in IRETQ, which kills the thread.
+    unsafe { enter_user_frame(&frame) }
+}
+
 /// Load `value` into IA32_FS_BASE, the running user thread's FS base.
 ///
 /// # Safety

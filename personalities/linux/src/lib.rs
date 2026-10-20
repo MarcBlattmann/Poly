@@ -33,6 +33,9 @@
 //! - [`sys`]: the handlers.
 //! - [`signal`]: signal state, delivery, frames (ADR 0031).
 //! - [`futex`]: futex wait queues, robust lists (ADR 0031).
+//! - [`fs`]: the file system services the kernel provides
+//!   ([`fs::LinuxFs`], through [`LinuxKernel::fs`]) and the file system
+//!   calls' structures; [`rlimit`]: resource limits (ADR 0043).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -54,6 +57,7 @@ pub mod rlimit;
 pub mod signal;
 pub mod sys;
 pub mod table;
+pub mod task;
 
 #[cfg(test)]
 mod tests;

@@ -31,8 +31,8 @@ mod staticfs;
 
 pub use procfs::{NR_OPEN, PID_MAX, PID_POS, ProcFs, copy_at};
 pub use source::{
-    CpuFeatures, CpuInfo, CpuTimes, FdInfo, KernelInfo, MapEntry, MapName, MountEntry, NANOS_PER_TICK, ProcSource,
-    ProcState, ProcessInfo, SignalSets, SystemInfo, USER_HZ,
+    CpuFeatures, CpuInfo, CpuTimes, FdInfo, KernelInfo, MapEntry, MapName, MountEntry, NANOS_PER_TICK, Owner,
+    ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo, USER_HZ,
 };
 pub use staticfs::{Contents, StaticFs, StaticFsBuilder};
 

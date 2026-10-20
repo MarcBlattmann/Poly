@@ -17,7 +17,7 @@
 //! are opened and closed.
 
 use crate::format;
-use crate::source::{ProcSource, ProcessInfo};
+use crate::source::{Owner, ProcSource, ProcessInfo};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_vfs::{
@@ -67,30 +67,30 @@ const TOP: usize = usize::MAX;
 
 /// The fixed tree: name, parent (an index here, or [`TOP`]), contents.
 const GLOBALS: &[(&[u8], usize, G)] = &[
-    (b"self", TOP, G::SelfLink),          // 0
-    (b"mounts", TOP, G::MountsLink),      // 1
-    (b"cpuinfo", TOP, G::Cpuinfo),        // 2
-    (b"meminfo", TOP, G::Meminfo),        // 3
-    (b"uptime", TOP, G::Uptime),          // 4
-    (b"loadavg", TOP, G::Loadavg),        // 5
-    (b"version", TOP, G::Version),        // 6
-    (b"stat", TOP, G::Stat),              // 7
-    (b"filesystems", TOP, G::Filesystems), // 8
-    (b"sys", TOP, G::Dir),                // 9
-    (b"kernel", 9, G::Dir),               // 10
-    (b"ostype", 10, G::Ostype),           // 11
-    (b"osrelease", 10, G::Osrelease),     // 12
-    (b"version", 10, G::KernelVersion),   // 13
-    (b"hostname", 10, G::Hostname),       // 14
-    (b"domainname", 10, G::Domainname),   // 15
-    (b"pid_max", 10, G::PidMax),          // 16
-    (b"random", 10, G::Dir),              // 17
-    (b"boot_id", 17, G::BootId),          // 18
-    (b"uuid", 17, G::Uuid),               // 19
+    (b"self", TOP, G::SelfLink),             // 0
+    (b"mounts", TOP, G::MountsLink),         // 1
+    (b"cpuinfo", TOP, G::Cpuinfo),           // 2
+    (b"meminfo", TOP, G::Meminfo),           // 3
+    (b"uptime", TOP, G::Uptime),             // 4
+    (b"loadavg", TOP, G::Loadavg),           // 5
+    (b"version", TOP, G::Version),           // 6
+    (b"stat", TOP, G::Stat),                 // 7
+    (b"filesystems", TOP, G::Filesystems),   // 8
+    (b"sys", TOP, G::Dir),                   // 9
+    (b"kernel", 9, G::Dir),                  // 10
+    (b"ostype", 10, G::Ostype),              // 11
+    (b"osrelease", 10, G::Osrelease),        // 12
+    (b"version", 10, G::KernelVersion),      // 13
+    (b"hostname", 10, G::Hostname),          // 14
+    (b"domainname", 10, G::Domainname),      // 15
+    (b"pid_max", 10, G::PidMax),             // 16
+    (b"random", 10, G::Dir),                 // 17
+    (b"boot_id", 17, G::BootId),             // 18
+    (b"uuid", 17, G::Uuid),                  // 19
     (b"entropy_avail", 17, G::EntropyAvail), // 20
-    (b"poolsize", 17, G::Poolsize),       // 21
-    (b"fs", 9, G::Dir),                   // 22
-    (b"nr_open", 22, G::NrOpen),          // 23
+    (b"poolsize", 17, G::Poolsize),          // 21
+    (b"fs", 9, G::Dir),                      // 22
+    (b"nr_open", 22, G::NrOpen),             // 23
 ];
 
 /// What a file in a process directory holds.
@@ -229,6 +229,10 @@ impl ProcFs {
         self.src.process(pid).ok_or(Errno::ENOENT)
     }
 
+    fn owner(&self, pid: u32) -> Result<Owner> {
+        self.src.owner(pid).ok_or(Errno::ENOENT)
+    }
+
     fn has_fd(&self, pid: u32, fd: u32) -> bool {
         self.src.fds(pid).contains(&fd)
     }
@@ -281,7 +285,11 @@ impl ProcFs {
             Node::Root => {
                 fixed(
                     &mut out,
-                    &mut GLOBALS.iter().enumerate().filter(|(_, g)| g.1 == TOP).map(|(i, g)| (g.0.to_vec(), Node::Global(i))),
+                    &mut GLOBALS
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, g)| g.1 == TOP)
+                        .map(|(i, g)| (g.0.to_vec(), Node::Global(i))),
                 );
                 let mut pids = self.src.pids();
                 pids.sort_unstable();
@@ -298,11 +306,11 @@ impl ProcFs {
                 &mut GLOBALS.iter().enumerate().filter(|(_, g)| g.1 == d).map(|(i, g)| (g.0.to_vec(), Node::Global(i))),
             ),
             Node::Pid(p) => {
-                self.process(p)?;
+                self.owner(p)?;
                 fixed(&mut out, &mut PID_ENTRIES.iter().enumerate().map(|(i, e)| (e.0.to_vec(), Node::Entry(p, i))))
             }
             Node::Entry(p, i) if matches!(PID_ENTRIES[i].1, E::FdDir | E::FdinfoDir) => {
-                self.process(p)?;
+                self.owner(p)?;
                 let mut fds = self.src.fds(p);
                 fds.sort_unstable();
                 fds.dedup();
@@ -324,7 +332,7 @@ impl ProcFs {
     fn exists(&self, node: Node) -> bool {
         match node {
             Node::Root | Node::Global(_) => true,
-            Node::Pid(p) | Node::Entry(p, _) => self.src.process(p).is_some(),
+            Node::Pid(p) | Node::Entry(p, _) => self.src.owner(p).is_some(),
             Node::Fd(p, fd) | Node::FdInfo(p, fd) => self.has_fd(p, fd),
         }
     }
@@ -406,13 +414,13 @@ impl FileSystem for ProcFs {
         let found = match dir {
             Node::Root => match GLOBALS.iter().position(|g| g.1 == TOP && g.0 == name) {
                 Some(i) => Some(Node::Global(i)),
-                None => parse_number(name).filter(|&p| p != 0 && self.src.process(p).is_some()).map(Node::Pid),
+                None => parse_number(name).filter(|&p| p != 0 && self.src.owner(p).is_some()).map(Node::Pid),
             },
             Node::Global(d) => GLOBALS.iter().position(|g| g.1 == d && g.0 == name).map(Node::Global),
             Node::Pid(p) => PID_ENTRIES.iter().position(|e| e.0 == name).map(|i| Node::Entry(p, i)),
-            Node::Entry(p, i) => parse_number(name).filter(|&fd| fd <= MAX_FD && self.has_fd(p, fd)).map(|fd| {
-                if PID_ENTRIES[i].1 == E::FdinfoDir { Node::FdInfo(p, fd) } else { Node::Fd(p, fd) }
-            }),
+            Node::Entry(p, i) => parse_number(name)
+                .filter(|&fd| fd <= MAX_FD && self.has_fd(p, fd))
+                .map(|fd| if PID_ENTRIES[i].1 == E::FdinfoDir { Node::FdInfo(p, fd) } else { Node::Fd(p, fd) }),
             _ => None,
         };
         found.map(Node::ino).ok_or(Errno::ENOENT)
@@ -420,18 +428,16 @@ impl FileSystem for ProcFs {
 
     fn getattr(&self, ino: Ino) -> Result<Attr> {
         let node = self.node(ino)?;
-        let sys = self.src.system();
-        let boot = Timespec::new(sys.boot_time as i64, 0);
+        let boot_time = self.src.boot_time();
+        let boot = Timespec::new(boot_time as i64, 0);
         let (uid, gid, time) = match node {
             Node::Root | Node::Global(_) => (0, 0, boot),
             Node::Pid(p) | Node::Entry(p, _) | Node::Fd(p, _) | Node::FdInfo(p, _) => {
-                let info = self.process(p)?;
+                let info = self.owner(p)?;
                 let start = info.start_ns;
-                let time = Timespec::new(
-                    sys.boot_time as i64 + (start / 1_000_000_000) as i64,
-                    (start % 1_000_000_000) as u32,
-                );
-                (info.uids[1], info.gids[1], time)
+                let time =
+                    Timespec::new(boot_time as i64 + (start / 1_000_000_000) as i64, (start % 1_000_000_000) as u32);
+                (info.uid, info.gid, time)
             }
         };
         if !self.exists(node) {
@@ -517,7 +523,7 @@ impl FileSystem for ProcFs {
             }
             Node::Global(i) if GLOBALS[i].2 == G::MountsLink => Ok(b"self/mounts".to_vec()),
             Node::Entry(p, i) => {
-                self.process(p)?;
+                self.owner(p)?;
                 match PID_ENTRIES[i].1 {
                     E::Exe => src.exe(p),
                     E::Cwd => src.cwd(p),
@@ -567,6 +573,12 @@ impl FileSystem for ProcFs {
     }
 
     fn statfs(&self) -> Result<FsStats> {
-        Ok(FsStats { magic: PROC_SUPER_MAGIC, block_size: 4096, fragment_size: 4096, name_max: 255, ..FsStats::default() })
+        Ok(FsStats {
+            magic: PROC_SUPER_MAGIC,
+            block_size: 4096,
+            fragment_size: 4096,
+            name_max: 255,
+            ..FsStats::default()
+        })
     }
 }

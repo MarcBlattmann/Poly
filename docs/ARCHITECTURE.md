@@ -14,7 +14,8 @@ what exists **today** and how it fits that plan.
    └──────────────────────┼────────────────────────┘
                           │  poly-abi: Personality, SyscallRegs, SyscallDispatch
                  kernel/src/syscall.rs  ← routes by the process's personality tag
-                 kernel/src/linux       ← LinuxKernel for the running thread: files, memory, signals, futexes
+                 kernel/src/linux       ← LinuxKernel for the running thread: files, memory, signals, futexes;
+                                          clone/fork/execve, the process tree, wait4 (task.rs)
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt; threads, group exit, wait
                  kernel/src/program.rs  ← exec of programs from the VFS; poly.init + test-run records (testrun.rs)
                           │
@@ -423,9 +424,11 @@ The logic is host-tested in `poly-vfs` and `poly-cpio`
 `poly-ext2` ([ADR 0032](adr/0032-ext2-driver.md)), mounted on virtio-blk disks
 behind the page cache, `poly-pagecache`
 ([ADR 0040](adr/0040-page-cache-and-ext2-on-virtio-blk.md)); both host-tested.
+procfs and sysfs are `poly-procfs`, the random devices' generator
+`poly-random` ([ADR 0043](adr/0043-dev-proc-sys-and-file-system-calls.md)).
 
 ```
-   personalities (later: openat, read, write, getdents64, ...)   kernel shell: ls, cat, mount
+   Linux personality: openat, stat, getdents64, ... (LinuxFs)   kernel shell: ls, cat, mount
           │  user memory copied by the system call layer; fs works on kernel buffers
           ▼
    fs::Files (on each Process)   FsContext + FdTable (sleeping mutexes) + Cred
@@ -434,10 +437,11 @@ behind the page cache, `poly-pagecache`
    fs::vfs(): poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
           │  FileSystem trait: lookup/create/rename/read/write/readdir by inode   └─ /dev/console, /dev/tty → kernel log
           ▼                                                                         /dev/null, /dev/zero, /dev/full
+   ProcFs on /proc (KernelProc), StaticFs on /sys, tmpfs on /dev/shm               /dev/random, /dev/urandom → random.rs (ChaCha20)
    Tmpfs on /                 CachedFs on /mnt: page cache (poly-pagecache) ◀── user mappings (FileSource)
           ▲                          │  fill with read-ahead / writeback (thread, sync, unmount)
    poly_cpio::unpack                 ▼
-   initramfs (PVH module 0)   poly_ext2::Ext2<DiskIo, RawMutex>        later: devfs, procfs, ext4
+   initramfs (PVH module 0)   poly_ext2::Ext2<DiskIo, RawMutex>        later: ext4
                                      │  BlockIo: read/write/flush device blocks
                                      ▼
                               block::Disk virtio2 (queue + buffer cache)
@@ -455,13 +459,35 @@ behind the page cache, `poly-pagecache`
   mounted on `/` with `poly_cpio::unpack`, as root and with the archive's
   owners, modes and times, and gives the pages back (`frames::free_range`).
   Without a module `/` starts empty. Either way it then gets `/dev`, `/tmp`
-  (`01777`) and `/proc` (empty, for procfs later) and the device nodes,
-  unless the archive brought them. tmpfs times count from boot (no RTC yet).
+  (`01777`), `/proc`, `/sys` and the device nodes and links, unless the
+  archive brought them, and procfs, sysfs and `/dev/shm` are mounted
+  (`fs::proc::mount_all`). tmpfs times count from boot (no RTC yet).
 - **Devices**: `/dev/console` (5, 1) and `/dev/tty` (5, 0) write through
   the kernel log's path (serial now; a UTF-8 character split across writes
   stays whole); their reads return end of file until the TTY layer
   (Phase 4) shares the serial input with the shell. `/dev/null`, `/dev/zero`,
   `/dev/full` are `poly-vfs`'s. `ioctl` on them is `ENOTTY`.
+  `/dev/random` (1, 8) and `/dev/urandom` (1, 9) read the kernel's
+  generator (`random.rs`: `poly-random`'s ChaCha20 fast-key-erasure
+  generator, seeded from RDSEED, RDRAND and timestamp-counter jitter at
+  first use, reseeded every minute; writes are mixed in). `getrandom(2)`
+  uses it too. `/dev/fd` and `/dev/std{in,out,err}` link into
+  `/proc/self/fd`; `/dev/shm` is a tmpfs.
+- **procfs** (`poly-procfs`'s `ProcFs`, `fs/proc.rs`): a `FileSystem` whose
+  files are made on every read from `KernelProc`, the kernel's
+  `ProcSource` (process table and tree, memory maps, descriptor tables,
+  mounts, frames, the page cache, CPUID), formatted per proc(5):
+  `/proc/self`, `/proc/<pid>/{stat,statm,status,maps,cmdline,environ,
+  comm,exe,cwd,root,fd/,fdinfo/,mounts,mountinfo}`, `/proc/{cpuinfo,
+  meminfo,uptime,loadavg,version,stat,mounts,filesystems}`,
+  `/proc/sys/kernel/...` and `/proc/sys/fs/nr_open`. Open files remember
+  the directory and name they were opened by (`Vfs::file_path`), so
+  descriptors and mappings have paths (`" (deleted)"` once unlinked).
+  Exec and fork record each program (`record_exec`, `record_fork`):
+  executable, `comm`, where `argv` and `envp` are in memory.
+- **sysfs** (`fs/sysfs.rs`): a read-only `StaticFs` with the CPU lists,
+  the character devices' `dev` files and `/sys/dev/char` and `/sys/class`
+  links.
 - **`fs::Files`** is a process's file state (`Process::files`): `FsContext`
   (root, working directory, umask) and `FdTable` behind sleeping mutexes
   (lock order: context, then table), and the `Cred` (root for now). New
@@ -471,15 +497,21 @@ behind the page cache, `poly-pagecache`
   `lseek`, `dup`/`dup2`/`dup3`/`dup_from`, close-on-exec and status flags,
   `fstat`/`statat`, `getdents` (a callback per entry), `ioctl`, `ftruncate`,
   `fsync`, `readlinkat`, `mkdirat`, `unlinkat`, `symlinkat`, `chdir`,
-  `fchdir`, `getcwd`, `umask`, `close_on_exec`, `close_all`, `fork`. Reads
-  and writes run with no lock held, so a blocking read stalls nothing else.
+  `fchdir`, `getcwd`, `umask`, `close_on_exec`, `close_all`, `fork`, and
+  (`files/more.rs`) `accessat`, `renameat`, `linkat`, `fchmod(at)`,
+  `truncate`, `statfs`, `syncfs`, descriptor lists and limits for procfs
+  and `RLIMIT_NOFILE`. Reads and writes run with no lock held, so a
+  blocking read stalls nothing else; path walks run on a copy of the
+  context, so following `/proc/self/cwd` cannot deadlock.
   The `Vfs` locks itself (ADR 0023); no interrupt handler enters it.
 
 ```text
 boot: initramfs at 0xffcd000-0xffd7884 (43 KiB)
 fs: initramfs unpacked into /: 7 directories, 8 files (40263 bytes), 3 symbolic links, 2 device nodes, 1 hard links
 fs: initramfs: 11 pages (44 KiB) at 0xffcd000-0xffd8000 returned to the frame allocator
-fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7); 6 of 8 directories and nodes made
+fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); 12 of 14 directories, nodes and links made
+fs: proc on /proc, sysfs on /sys, tmpfs on /dev/shm; 3 of 3 mounted
+random: ChaCha20 generator seeded from jitter
 ```
 
 The kernel tests (`fs::*`) check, with the test initramfs `cargo xtask`
@@ -726,6 +758,15 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   validate arguments per the man pages and do the work through
   `LinuxKernel`, a trait the kernel implements over its VFS, VMA manager and
   thread state; `Linux::dispatch_with(&mut kernel, regs)` is the entry point.
+  The file system calls (`openat`, the `stat` family and `statx`,
+  `getdents64`, `readlinkat`, `faccessat2`, `fcntl`, `dup*`, `lseek`,
+  `pread64`/`pwrite64`, `mkdirat`, `unlinkat`, `renameat2`, `symlinkat`,
+  `linkat`, `fchmod*`, `truncate`, `fsync`, `sync`, `statfs`, `getcwd`,
+  `chdir`, `umask` and their older forms) go through a second trait,
+  `LinuxFs`, reached with `LinuxKernel::fs()` (`kernel/src/linux/files.rs`
+  implements it over `fs::Files`); resource limits (`prlimit64`,
+  `getrlimit`, `setrlimit`) live in the personality's per-process state,
+  and `sysinfo` reads what procfs shows (ADR 0043).
   Host tests run every call, and scripted startup sequences of real static
   binaries, against a fake kernel.
 - **Linux signals and futexes**
@@ -743,6 +784,16 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   interrupted calls) and `Linux::thread_exit` when a thread ends (robust
   list, `clear_child_tid`); blocking uses park/unpark (`block`,
   `unblock`) plus a per-thread signal notification.
+- **Linux processes and threads**
+  ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md)): `clone`,
+  `clone3`, `fork`, `vfork`, `execve`, `wait4`, `waitid`, `setpgid`,
+  `getpgid`, `getpgrp`, `setsid` and `getsid`. The personality decodes
+  and checks them (`task::clone`, `task::exec`, `task::wait`) and owns the
+  process tree's rules (`task::tree::ProcessTree`, lent by the kernel
+  through `with_tree`); the kernel creates threads and processes
+  (`clone_task`), replaces programs (`execve`) and blocks waiters
+  (`wait_tree`), and calls `task::process_exited`, `process_stopped` and
+  `process_continued`, which signal the parent.
 
 ## Linux processes
 
@@ -773,6 +824,26 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   exception in ring 3, which `trap_dispatch` hands to
   `user::return_to_user`), parked threads are woken for it. Processes are
   listed by pid (`process::find`, `find_thread`, `all`).
+- **clone, fork, vfork, execve, wait4**
+  ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md),
+  `linux/task.rs`). The personality decodes the calls (`task::clone`,
+  `task::exec`) and keeps the rules of the process tree (`task::tree`:
+  parents, zombies, orphans to init or the kernel, process groups and
+  sessions, wait selectors); the kernel lends it the one tree behind a
+  spinlock and does the work: `clone_task` starts a thread of the caller's
+  process, or a new process with a copy-on-write copy of its memory
+  (`Memory::fork`) or the same memory (`CLONE_VM`), copies of its files
+  and signal state; the child starts with the caller's registers and FPU
+  state (`user::spawn_child`), its stack and TLS, its tids stored and
+  `clear_child_tid` set; a vfork parent waits for the exec or the end.
+  `execve` follows `#!` lines, loads the ELF, ends the other threads (a
+  per-thread `killed` flag), takes over the pid, swaps the memory, closes
+  close-on-exec files and resets signals, FPU and FS/GS. When the last
+  thread leaves a Linux process, `task::process_exited` makes it a zombie
+  (its record stays, for kill(2) and the parent) or reaps it, re-parents
+  its children and sends the parent its exit signal; stops and continues
+  are reported too (`CLD_STOPPED`, `CLD_CONTINUED`). `wait4` / `waitid`
+  sleep on the process event queue until the tree changes.
 - **Faults are signals.** An exception in ring 3 that demand paging does not
   resolve becomes a signal (`signal::fault::fault_info`: `SIGSEGV` with
   `SEGV_MAPERR` / `SEGV_ACCERR`, `SIGBUS`, `SIGILL`, `SIGFPE`, `SIGTRAP`),
@@ -834,7 +905,9 @@ services once it decodes those system calls.
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
 | Linux processes: the kernel's `LinuxKernel` through real system calls from ring 3 (write to the process's files, brk, anonymous and file mmap/munmap/mprotect, arch_prctl and the FS base in ring 3, exit_group ending a spinning and a futex-waiting thread, EFAULT for bad pointers, a fault as SIGSEGV, a signal handler and rt_sigreturn), and `exec_path` of `/bin/hello` from the test initramfs | `kernel_test!` in `linux/tests.rs` | every boot; one boot on `-cpu max` (XSAVE signal frames) |
+| Processes and threads from ring 3: fork with copy on write, zombies (waitid `WNOWAIT`, kill 0) and wait4's status, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and a futex and its robust lock released at exit, an orphan adopted while shared anonymous memory stays shared, vfork + execve of `/bin/hello`, of a missing file and of a `#!` script, execve by a second thread (the other thread ended, close-on-exec files closed, the pid taken over); every user frame freed afterwards. `Memory::fork` itself: pages shared until written, frames freed with the last user, shared anonymous and parked pages | `kernel_test!` in `linux/task_tests.rs`, `user/memory/fork.rs` | every boot |
 | Static Linux hello worlds as the first process (`poly.init`): nolibc (Rust, built with the pinned toolchain), freestanding C and static glibc (skipped without a C compiler or static C library); output and exit status 0 | `tools/xtask/src/programs.rs` | `cargo xtask test` |
+| `/bin/forkexec` as init (nolibc Rust, `tools/xtask/programs/forkexec.rs`): fork + execve + wait4, copy on write, a TLS thread joined by futex, an orphan reaped by init | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `run /bin/hello`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
@@ -1192,6 +1265,15 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   `user::user_frames()` counts every frame held for user pages and
   `Memory::resident_pages()` those of one memory, which is how the tests
   check that nothing leaks.
+- **Fork and copy on write** (ADR 0041, `user/memory/fork.rs`).
+  `Memory::fork` copies the region map into a new address space and shares
+  every resident page of private regions: the memory's own frames become
+  `SharedFrame`s (a `UserFrame` behind an `Arc`, `AddressSpace::disown`),
+  mapped read-only on both sides; parked frames are shared unmapped;
+  shared regions are found again through the page cache or the
+  `AnonShared` object behind `MAP_SHARED | MAP_ANONYMOUS`. A write to a
+  shared frame with other users copies it; its last user takes it back
+  (`AddressSpace::adopt`). A frame is freed with its last reference.
 - **Exec.** `user::exec::load(file, &ExecParams { argv, envp, execfn,
   creds })` validates a static executable (`ET_EXEC`, or `ET_DYN` without
   `PT_INTERP`, at `0x5555_5555_4000`; `PT_INTERP` is refused), creates a

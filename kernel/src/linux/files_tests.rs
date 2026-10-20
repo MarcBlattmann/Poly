@@ -123,8 +123,16 @@ fn sys(p: &Process, number: u64, args: &[u64]) -> Result<u64, Errno> {
     let mut k = Thread::current(p).expect("a thread of a Linux process");
     let mut a = [0u64; 6];
     a[..args.len()].copy_from_slice(args);
-    let mut regs =
-        SyscallRegs { rax: number, rdi: a[0], rsi: a[1], rdx: a[2], r10: a[3], r8: a[4], r9: a[5], ..Default::default() };
+    let mut regs = SyscallRegs {
+        rax: number,
+        rdi: a[0],
+        rsi: a[1],
+        rdx: a[2],
+        r10: a[3],
+        r8: a[4],
+        r9: a[5],
+        ..Default::default()
+    };
     Linux::dispatch_with(&mut k, &mut regs);
     match Errno::from_rax(regs.rax) {
         Some(e) => Err(e),
@@ -268,8 +276,8 @@ kernel_test! {
             execfn: 0,
             phdr: 0,
         };
+        // The program's mappings would keep the file open; `file` does here.
         fs::proc::record_exec(&process, &file, &memory, &stack, &[b"prog", b"arg1"], &[b"A=1"]);
-        drop(file);
         let result = run(&process, &memory, |p| {
             check!(1, readlink(p, "/proc/self/exe") == Ok(b"/tmp/fs-test-prog".to_vec()));
             check!(2, read_file(p, "/proc/self/cmdline") == Ok(b"prog\0arg1\0".to_vec()));
@@ -282,24 +290,30 @@ kernel_test! {
             check!(8, readlink(p, "/proc/self/fd/3") == Ok(b"/tmp/fs-test-prog".to_vec()));
             check!(9, readlink(p, "/proc/self/fd/0") == Ok(b"/dev/console".to_vec()));
             check!(10, text(p, "/proc/self/fdinfo/3").starts_with("pos:\t0\nflags:\t02000000\nmnt_id:\t"));
-            // Reading a descriptor's own fdinfo: the file being read is
-            // the one described, and nothing deadlocks.
-            let own = sys(p, nr::OPENAT, &[AT_FDCWD, cstr(1, "/proc/self/fdinfo/4"), 0, 0]).map_err(|_| 11u64)?;
-            check!(12, own == 4);
-            let n = sys(p, nr::READ, &[own, BUF, 4096]).map_err(|_| 13u64)?;
-            check!(14, String::from_utf8_lossy(&peek(BUF, n as usize)).starts_with("pos:\t0\nflags:\t00\n"));
-            check!(15, sys(p, nr::CLOSE, &[own]) == Ok(0));
+            // A descriptor that does not exist yet has no entry.
+            check!(11, sys(p, nr::OPENAT, &[AT_FDCWD, cstr(1, "/proc/self/fdinfo/4"), 0, 0]) == Err(Errno::ENOENT));
             let dir = sys(p, nr::OPENAT, &[AT_FDCWD, cstr(2, "/proc/self/fd"), 0o200000, 0]).map_err(|_| 16u64)?;
             let names = list(p, dir).map_err(|_| 17u64)?;
             check!(18, names == [&b"."[..], b"..", b"0", b"1", b"2", b"3", b"4"]);
+            check!(12, sys(p, nr::CLOSE, &[dir]) == Ok(0));
             // The link follows to the file.
             check!(19, sys(p, nr::NEWFSTATAT, &[AT_FDCWD, cstr(3, "/proc/self/fd/3"), BUF, 0]) == Ok(0));
             check!(20, u32::from_le_bytes(peek(BUF + 24, 4).try_into().unwrap_or_default()) == 0o100755);
             // The program is deleted: exe says so.
             check!(21, sys(p, nr::UNLINKAT, &[AT_FDCWD, cstr(0, "/tmp/fs-test-prog"), 0]) == Ok(0));
             check!(22, readlink(p, "/proc/self/exe") == Ok(b"/tmp/fs-test-prog (deleted)".to_vec()));
+            // Reading the fdinfo of the very description being read (fd 4
+            // describes fd 5, then fd 5 becomes a duplicate of fd 4): its
+            // offset is busy, so it reads as 0, and nothing deadlocks.
+            let own = sys(p, nr::OPENAT, &[AT_FDCWD, cstr(1, "/proc/self/fdinfo/3"), 0, 0]).map_err(|_| 23u64)?;
+            check!(24, own == 4);
+            check!(25, sys(p, nr::DUP2, &[own, 3]) == Ok(3));
+            let n = sys(p, nr::READ, &[own, BUF, 4096]).map_err(|_| 26u64)?;
+            check!(27, String::from_utf8_lossy(&peek(BUF, n as usize)).starts_with("pos:\t0\nflags:\t00\n"));
+            check!(28, sys(p, nr::READ, &[own, BUF, 4096]) == Ok(0));
             Ok(())
         });
+        drop(file);
         result
     }
 }
@@ -351,7 +365,7 @@ kernel_test! {
     fn dev_random_urandom_and_links() -> TestResult {
         let (process, memory) = setup()?;
         run(&process, &memory, |p| {
-            let fd = sys(p, nr::OPENAT, &[AT_FDCWD, cstr(0, "/dev/urandom"), 0, 0]).map_err(|_| 1u64)?;
+            let fd = sys(p, nr::OPENAT, &[AT_FDCWD, cstr(0, "/dev/urandom"), 2, 0]).map_err(|_| 1u64)?;
             check!(2, sys(p, nr::READ, &[fd, BUF, 64]) == Ok(64));
             let a = peek(BUF, 64);
             check!(3, sys(p, nr::READ, &[fd, BUF, 64]) == Ok(64));

@@ -26,14 +26,14 @@ use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use poly_procfs::{
-    CpuInfo, CpuTimes, FdInfo, KernelInfo, MapEntry, MapName, MountEntry, ProcFs, ProcSource, ProcState,
+    CpuInfo, CpuTimes, FdInfo, KernelInfo, MapEntry, MapName, MountEntry, Owner, ProcFs, ProcSource, ProcState,
     ProcessInfo, SignalSets, SystemInfo,
 };
 use poly_vfs::{At, Cred, FileType, FsContext, MountFlags, OpenFile, Tmpfs, Vfs};
 
 /// What the kernel remembers about the program a process runs.
+#[derive(Clone)]
 struct Record {
-    process: Weak<Process>,
     /// The executable, while something keeps it open (its mappings do).
     exe_file: Weak<OpenFile>,
     /// Its path at exec, for when the file is gone.
@@ -56,9 +56,9 @@ fn extent(start: u64, strings: &[&[u8]]) -> (u64, u64) {
     (start, start + len)
 }
 
-/// Note that `process` now runs the program in `file` (`path` is the name
-/// it was started by), with memory `memory` whose initial stack holds
-/// `argv` and `envp` as `stack` describes. `execve` calls this too.
+/// Note that `process` now runs the program in `file`, with memory
+/// `memory` whose initial stack holds `argv` and `envp` as `stack`
+/// describes. `program::prepare` and `execve` call this.
 pub fn record_exec(
     process: &Arc<Process>,
     file: &Arc<OpenFile>,
@@ -83,7 +83,6 @@ pub fn record_exec(
     let exe = ctx.and_then(|c| vfs().file_path(&c, file).ok()).unwrap_or_default();
     let name = exe.rsplit(|&b| b == b'/').next().unwrap_or(&exe);
     let record = Record {
-        process: Arc::downgrade(process),
         exe_file: Arc::downgrade(file),
         comm: name[..name.len().min(15)].to_vec(),
         exe,
@@ -93,9 +92,29 @@ pub fn record_exec(
         arg,
         env,
     };
+    insert(process.pid, record);
+}
+
+/// Keep `record` for `pid`, forgetting the records of processes that are
+/// gone (no memory left, not in the process table, not a zombie).
+fn insert(pid: u32, record: Record) {
     let mut records = RECORDS.lock();
-    records.retain(|_, r| r.process.strong_count() > 0);
-    records.insert(process.pid, record);
+    records.retain(|&p, r| r.memory.strong_count() > 0 || find(p).is_some());
+    records.insert(pid, record);
+}
+
+/// `fork`: process `child` runs what `parent` ran, in `memory` (a copy of
+/// the parent's, so the strings are at the same addresses).
+pub fn record_fork(parent: u32, child: u32, memory: &Arc<Memory>) {
+    let Some(mut record) = RECORDS.lock().get(&parent).cloned() else { return };
+    record.memory = Arc::downgrade(memory);
+    record.start_ns = time::now_ns();
+    insert(child, record);
+}
+
+/// Process `pid`: a live one, or a zombie waiting for its parent.
+fn find(pid: u32) -> Option<Arc<Process>> {
+    process::find(pid).or_else(|| crate::linux::task::zombie(pid))
 }
 
 /// The kernel's facts for procfs.
@@ -108,7 +127,7 @@ fn root() -> Option<FsContext> {
 }
 
 fn with_record<R>(pid: u32, f: impl FnOnce(&Record) -> R) -> Option<R> {
-    RECORDS.lock().get(&pid).filter(|r| r.process.strong_count() > 0).map(f)
+    RECORDS.lock().get(&pid).map(f)
 }
 
 /// The memory map of process `pid`: the caller's own, or the one recorded
@@ -201,7 +220,8 @@ impl ProcSource for KernelProc {
     }
 
     fn process(&self, pid: u32) -> Option<ProcessInfo> {
-        let p = process::find(pid)?;
+        let p = find(pid)?;
+        let (pgrp, session) = crate::linux::task::group_and_session(pid);
         let current = user::current_process().is_some_and(|c| c.pid == pid);
         let state = if p.has_ended() {
             ProcState::Zombie
@@ -222,11 +242,9 @@ impl ProcSource for KernelProc {
             rec.unwrap_or_else(|| (b"?".to_vec(), 0, 0, (0, 0), (0, 0), Vec::new()));
         Some(ProcessInfo {
             pid,
-            ppid: p.ppid,
-            // One process group and session per process until setsid and
-            // setpgid exist (as the Linux services report them).
-            pgrp: pid,
-            session: pid,
+            ppid: crate::linux::task::parent_of(&p),
+            pgrp: pgrp as u32,
+            session: session as u32,
             comm,
             state,
             uids: [cred.uid; 4],
@@ -248,6 +266,12 @@ impl ProcSource for KernelProc {
             signals,
             exit_code: p.status().map_or(0, wait_status),
         })
+    }
+
+    fn owner(&self, pid: u32) -> Option<Owner> {
+        let p = find(pid)?;
+        let cred = p.files.cred();
+        Some(Owner { uid: cred.uid, gid: cred.gid, start_ns: with_record(pid, |r| r.start_ns).unwrap_or(0) })
     }
 
     fn maps(&self, pid: u32) -> Vec<MapEntry> {
@@ -295,25 +319,26 @@ impl ProcSource for KernelProc {
     }
 
     fn cwd(&self, pid: u32) -> Option<Vec<u8>> {
-        let p = process::find(pid)?;
+        let p = find(pid)?;
         let cwd = p.files.context().cwd().clone();
         vfs().path_of(&root()?, &cwd).ok()
     }
 
     fn root(&self, pid: u32) -> Option<Vec<u8>> {
-        let p = process::find(pid)?;
+        let p = find(pid)?;
         let dir = p.files.context().root().clone();
         vfs().path_of(&root()?, &dir).ok()
     }
 
     fn fds(&self, pid: u32) -> Vec<u32> {
-        process::find(pid).map_or_else(Vec::new, |p| p.files.fd_list().iter().map(|(fd, _, _)| *fd as u32).collect())
+        find(pid).map_or_else(Vec::new, |p| p.files.fd_list().iter().map(|(fd, _, _)| *fd as u32).collect())
     }
 
     fn fd(&self, pid: u32, fd: u32) -> Option<FdInfo> {
-        let p = process::find(pid)?;
+        let p = find(pid)?;
         let (_, file, cloexec) = p.files.fd_list().into_iter().find(|(n, _, _)| *n as u32 == fd)?;
-        let target = root().and_then(|ctx| vfs().file_path(&ctx, &file).ok()).unwrap_or_else(|| anonymous_target(&file));
+        let target =
+            root().and_then(|ctx| vfs().file_path(&ctx, &file).ok()).unwrap_or_else(|| anonymous_target(&file));
         let mut flags = file.flags().bits();
         if cloexec {
             flags |= poly_procfs::format::O_CLOEXEC;
@@ -357,10 +382,8 @@ impl ProcSource for KernelProc {
 
     fn system(&self) -> SystemInfo {
         let now = time::now_ns();
-        let (total, free) = crate::frames::FRAMES
-            .lock()
-            .as_ref()
-            .map_or((0, 0), |f| (f.total_frames() * PAGE, f.free_frames() * PAGE));
+        let (total, free) =
+            crate::frames::FRAMES.lock().as_ref().map_or((0, 0), |f| (f.total_frames() * PAGE, f.free_frames() * PAGE));
         let c = super::cache::cache().stats();
         let cached = c.pages as u64 * PAGE;
         let dirty = c.dirty as u64 * PAGE;
@@ -394,6 +417,10 @@ impl ProcSource for KernelProc {
             context_switches: 0,
             forks: procs.iter().map(|p| u64::from(p.pid)).max().unwrap_or(0),
         }
+    }
+
+    fn boot_time(&self) -> u64 {
+        time::realtime_ns().saturating_sub(time::now_ns()) / time::NANOS_PER_SEC
     }
 
     fn cpus(&self) -> Vec<CpuInfo> {
@@ -446,7 +473,7 @@ impl KernelProc {
     fn strings(&self, pid: u32, range: impl FnOnce(&Record) -> (u64, u64)) -> Vec<u8> {
         let Some((start, end)) = with_record(pid, range) else { return Vec::new() };
         let Some(memory) = memory_of(pid) else { return Vec::new() };
-        if process::find(pid).is_none_or(|p| p.has_ended()) {
+        if find(pid).is_none_or(|p| p.has_ended()) {
             return Vec::new();
         }
         let len = end.saturating_sub(start).min(STRINGS_MAX) as usize;
@@ -476,7 +503,13 @@ pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
     for (path, fs) in mounts {
         let flags = MountFlags { no_suid: true, no_dev: true, no_exec: path != b"/dev/shm", read_only: false };
         match vfs.mount(ctx, &root, At::Cwd, path, fs, flags) {
-            Ok(_) => ok += 1,
+            Ok(_) => {
+                ok += 1;
+                if path == b"/dev/shm" {
+                    // A new tmpfs's root is 0755; shared memory is for everyone.
+                    let _ = vfs.chmod(ctx, &root, At::Cwd, path, 0o1777, true);
+                }
+            }
             Err(e) => kprintln!("fs: mounting on {}: {}", String::from_utf8_lossy(path), e.name()),
         }
     }

@@ -701,10 +701,17 @@ allocator:
 boot: initramfs at 0xffd7000-0xffd7418 (2 KiB)
 fs: initramfs unpacked into /: 2 directories, 2 files (207 bytes), 0 symbolic links, 1 device nodes, 0 hard links
 fs: initramfs: 1 pages (4 KiB) at 0xffd7000-0xffd8000 returned to the frame allocator
-fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7); 6 of 8 directories and nodes made
+fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); 12 of 14 directories, nodes and links made
+fs: proc on /proc, sysfs on /sys, tmpfs on /dev/shm; 3 of 3 mounted
 ```
 
-Then `ls /`, `ls /dev`, `cat /etc/motd` and `mount` in the shell. Without
+Then `ls /`, `ls /dev`, `cat /etc/motd` and `mount` in the shell; `cat
+/proc/meminfo`, `cat /proc/cpuinfo`, `ls /proc`, `ls /sys/devices/system/cpu`
+show procfs and sysfs (ADR 0043). The shell is a kernel thread, so it has
+no `/proc/self` (and `/proc/mounts`, a link to `self/mounts`, does not
+open there): use `/proc/<pid>/...` of a running program, or `mount`. A
+`/proc` file is made anew by every read; `/proc/<pid>/maps` names file
+mappings by the path the file was opened by. Without
 an archive the log says `fs: no initramfs (no boot module); / is an empty
 tmpfs`. A damaged archive is reported by entry (`fs: initramfs: unpacking
 stopped: <name>: <errno>`, or `bad archive: ...` with the byte offset);
@@ -775,9 +782,19 @@ passes; it names tests that newly pass, to be added there.
 
 The in-kernel tests of the Linux services run with `poly.test=linux::`;
 they make real system calls from ring 3 (`kernel/src/linux/tests.rs`).
+`poly.test=task_tests` runs those of fork, clone, execve and wait4
+(`kernel/src/linux/task_tests.rs`): each program exits with 0 or the
+number of its first failed check (90 and up, next to the check in the
+assembly), which the failing test prints. `poly.test=memory::fork` runs
+the copy-on-write tests of `Memory::fork`. A process tree that looks
+wrong: `getppid` 0 means the kernel adopted the process (no live init);
+a parent that never reaps keeps its children as zombies (their records
+stay until then, in `linux::task`'s `ZOMBIES`).
 The hello worlds the boot tests use are built into
-`target/xtask-programs/` (`hello`: Rust, no C library; `corpus/`: the C
-corpus with `hello` and the static glibc `libc-hello`).
+`target/xtask-programs/` (`hello`: Rust, no C library; `forkexec`: the
+nolibc process and thread test, `poly.init=/bin/forkexec`, which prints
+`forkexec: ok` or what failed; `corpus/`: the C corpus with `hello` and
+the static glibc `libc-hello`).
 
 ## Disk file systems and the page cache
 

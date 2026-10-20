@@ -47,7 +47,14 @@ fn maps_of(pid: u32) -> Vec<MapEntry> {
         file(0x40_0000, 0x40_1000, false, false, 0),
         file(0x40_1000, 0x40_3000, false, true, 0x1000),
         file(0x40_3000, 0x40_4000, true, false, 0x3000),
-        MapEntry { start: 0x50_0000, end: 0x52_0000, read: true, write: true, name: MapName::Heap, ..Default::default() },
+        MapEntry {
+            start: 0x50_0000,
+            end: 0x52_0000,
+            read: true,
+            write: true,
+            name: MapName::Heap,
+            ..Default::default()
+        },
         MapEntry {
             start: 0x7f00_0000_0000,
             end: 0x7f00_0000_2000,
@@ -120,6 +127,10 @@ impl ProcSource for Fake {
             },
             exit_code: 0,
         })
+    }
+
+    fn owner(&self, pid: u32) -> Option<Owner> {
+        self.process(pid).map(|p| Owner { uid: p.uids[1], gid: p.gids[1], start_ns: p.start_ns })
     }
 
     fn maps(&self, pid: u32) -> Vec<MapEntry> {
@@ -209,6 +220,10 @@ impl ProcSource for Fake {
             forks: 41,
             ..Default::default()
         }
+    }
+
+    fn boot_time(&self) -> u64 {
+        self.system().boot_time
     }
 
     fn cpus(&self) -> Vec<CpuInfo> {
@@ -436,7 +451,8 @@ fn process_directories_list_their_files() {
 fn missing_things_are_enoent() {
     let e = env();
     use poly_vfs::Errno::ENOENT;
-    for path in ["/proc/7", "/proc/7/status", "/proc/42/nope", "/proc/42/fd/3", "/proc/42/fd/05", "/proc/0", "/proc/042"]
+    for path in
+        ["/proc/7", "/proc/7/status", "/proc/42/nope", "/proc/42/fd/3", "/proc/42/fd/05", "/proc/0", "/proc/042"]
     {
         assert_eq!(e.read(path).err(), Some(ENOENT), "{path}");
     }
@@ -530,7 +546,14 @@ fn status_reports_the_process() {
     // VmData: the private writable data mapping and the heap.
     assert!(text.contains(&std::format!("VmData:\t{:>8} kB\n", (0x1000 + 0x20000) / 1024)), "{text}");
     assert_eq!(e.text("/proc/1/status").lines().next(), Some("Name:\ta-very-long-pro"));
-    assert_eq!(e.text("/proc/42/statm"), std::format!("{} 10 4 2 0 {} 0\n", (0x4000 + 0x20000 + 0x2000 + 0x21000) / 4096, (0x1000 + 0x20000 + 0x21000) / 4096));
+    assert_eq!(
+        e.text("/proc/42/statm"),
+        std::format!(
+            "{} 10 4 2 0 {} 0\n",
+            (0x4000 + 0x20000 + 0x2000 + 0x21000) / 4096,
+            (0x1000 + 0x20000 + 0x21000) / 4096
+        )
+    );
 }
 
 #[test]
@@ -594,7 +617,10 @@ fn system_files() {
         assert!(stat.contains(l), "{l}");
     }
     let mem = e.text("/proc/meminfo");
-    assert!(mem.starts_with("MemTotal:         524288 kB\nMemFree:          409600 kB\nMemAvailable:     460800 kB\n"), "{mem}");
+    assert!(
+        mem.starts_with("MemTotal:         524288 kB\nMemFree:          409600 kB\nMemAvailable:     460800 kB\n"),
+        "{mem}"
+    );
     assert!(mem.contains("\nSwapTotal:             0 kB\n"));
     assert!(mem.lines().all(|l| l.ends_with(" kB") && l.len() == 27), "{mem}");
 }

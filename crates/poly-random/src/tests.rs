@@ -9,10 +9,7 @@ use std::vec::Vec;
 /// Bytes from hex digits; whitespace and `:` are ignored.
 fn hex(s: &str) -> Vec<u8> {
     let digits: Vec<u8> = s.bytes().filter(|b| b.is_ascii_hexdigit()).collect();
-    digits
-        .chunks(2)
-        .map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap(), 16).unwrap())
-        .collect()
+    digits.chunks(2).map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap(), 16).unwrap()).collect()
 }
 
 fn key_0_to_31() -> [u8; 32] {

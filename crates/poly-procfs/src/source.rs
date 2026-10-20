@@ -126,6 +126,14 @@ pub enum MapName {
     Label(String),
 }
 
+/// Who owns a process directory (see [`ProcSource::owner`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Owner {
+    pub uid: u32,
+    pub gid: u32,
+    pub start_ns: u64,
+}
+
 /// One mapping of `/proc/<pid>/maps`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MapEntry {
@@ -315,6 +323,12 @@ pub trait ProcSource: Send + Sync {
 
     fn process(&self, pid: u32) -> Option<ProcessInfo>;
 
+    /// Whether process `pid` exists, and its effective user and group ids
+    /// and start time (nanoseconds after boot): what `stat` of its
+    /// directory needs, cheaply. It must not take the process's file
+    /// system context lock: a `chdir` into `/proc` holds it while it asks.
+    fn owner(&self, pid: u32) -> Option<Owner>;
+
     /// The mappings, in address order.
     fn maps(&self, pid: u32) -> Vec<MapEntry>;
 
@@ -336,6 +350,10 @@ pub trait ProcSource: Send + Sync {
     fn mounts(&self, pid: u32) -> Vec<MountEntry>;
 
     fn system(&self) -> SystemInfo;
+    /// The wall-clock time of boot in seconds since the epoch (what
+    /// [`SystemInfo::boot_time`] holds), cheaply: every `stat` of a procfs
+    /// file asks.
+    fn boot_time(&self) -> u64;
     fn cpus(&self) -> Vec<CpuInfo>;
     /// The file system types, and whether each needs no device (`nodev`).
     fn filesystems(&self) -> Vec<(String, bool)>;

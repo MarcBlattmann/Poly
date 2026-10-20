@@ -65,7 +65,9 @@ impl LinuxFs for Thread<'_> {
     fn getdents(&mut self, fd: i32, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<usize, Errno> {
         self.process()
             .files
-            .getdents(fd, &mut |e| emit(&DirEntry { ino: e.ino, next: e.next, kind: e.kind.dirent_type(), name: e.name }))
+            .getdents(fd, &mut |e| {
+                emit(&DirEntry { ino: e.ino, next: e.next, kind: e.kind.dirent_type(), name: e.name })
+            })
             .map_err(vfs_errno)
     }
 

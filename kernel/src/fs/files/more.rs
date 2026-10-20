@@ -14,9 +14,12 @@ impl Files {
         self.ctx.lock().clone()
     }
 
-    /// The file creation mask.
+    /// The file creation mask, for `/proc/<pid>/status`. Read without
+    /// waiting: the reader may be this process in the middle of a
+    /// `chdir` into `/proc`, holding the context; then the default
+    /// (`022`) is reported.
     pub fn current_umask(&self) -> u16 {
-        self.ctx.lock().umask()
+        self.ctx.try_lock().map_or(FsContext::DEFAULT_UMASK, |c| c.umask())
     }
 
     /// Every open descriptor with its file and close-on-exec flag, in
@@ -44,7 +47,11 @@ impl Files {
     /// Where a relative path starts: `None` for the working directory (or
     /// an absolute path), else the node `dirfd` is open on.
     fn start(&self, dirfd: Fd, path: &[u8]) -> Result<Option<NodeRef>> {
-        if dirfd == AT_FDCWD || path.first() == Some(&b'/') { Ok(None) } else { Ok(Some(self.file(dirfd)?.node().clone())) }
+        if dirfd == AT_FDCWD || path.first() == Some(&b'/') {
+            Ok(None)
+        } else {
+            Ok(Some(self.file(dirfd)?.node().clone()))
+        }
     }
 
     /// The node `path` names from `dirfd` (`stat(2)` and friends).
@@ -67,7 +74,15 @@ impl Files {
         let o = self.start(olddirfd, old)?;
         let n = self.start(newdirfd, new)?;
         let ctx = self.context();
-        vfs().rename(&ctx, &self.cred, o.as_ref().map_or(At::Cwd, At::Node), old, n.as_ref().map_or(At::Cwd, At::Node), new, flags)
+        vfs().rename(
+            &ctx,
+            &self.cred,
+            o.as_ref().map_or(At::Cwd, At::Node),
+            old,
+            n.as_ref().map_or(At::Cwd, At::Node),
+            new,
+            flags,
+        )
     }
 
     /// `linkat(2)`. An empty `old` (`AT_EMPTY_PATH`, meant for files made
@@ -79,7 +94,15 @@ impl Files {
         let o = self.start(olddirfd, old)?;
         let n = self.start(newdirfd, new)?;
         let ctx = self.context();
-        vfs().link(&ctx, &self.cred, o.as_ref().map_or(At::Cwd, At::Node), old, n.as_ref().map_or(At::Cwd, At::Node), new, follow)
+        vfs().link(
+            &ctx,
+            &self.cred,
+            o.as_ref().map_or(At::Cwd, At::Node),
+            old,
+            n.as_ref().map_or(At::Cwd, At::Node),
+            new,
+            follow,
+        )
     }
 
     /// `fchmodat(2)` (following links: the system call has no flags).

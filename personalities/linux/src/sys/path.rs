@@ -173,7 +173,14 @@ pub fn symlink(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     symlink_common(k, a.ptr(0), AT_FDCWD, a.ptr(1))
 }
 
-fn link_common(k: &mut dyn LinuxKernel, olddirfd: i32, old: UserPtr, newdirfd: i32, new: UserPtr, flags: u32) -> SysResult {
+fn link_common(
+    k: &mut dyn LinuxKernel,
+    olddirfd: i32,
+    old: UserPtr,
+    newdirfd: i32,
+    new: UserPtr,
+    flags: u32,
+) -> SysResult {
     if flags & !(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH) != 0 {
         return Err(Errno::EINVAL);
     }
@@ -261,7 +268,14 @@ pub fn rmdir(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     fs(k)?.unlinkat(AT_FDCWD, &path, true).map(|()| 0)
 }
 
-fn rename_common(k: &mut dyn LinuxKernel, olddirfd: i32, old: UserPtr, newdirfd: i32, new: UserPtr, flags: u32) -> SysResult {
+fn rename_common(
+    k: &mut dyn LinuxKernel,
+    olddirfd: i32,
+    old: UserPtr,
+    newdirfd: i32,
+    new: UserPtr,
+    flags: u32,
+) -> SysResult {
     let old = nonempty_path(k, old)?;
     let new = nonempty_path(k, new)?;
     fs(k)?.renameat(olddirfd, &old, newdirfd, &new, flags).map(|()| 0)

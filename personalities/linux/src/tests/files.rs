@@ -6,7 +6,8 @@ extern crate std;
 use super::fake::*;
 use crate::abi::{le_u64, makedev};
 use crate::fs::{
-    DirEntry, FileStatus, LinuxFs, StatFs, SysInfo, at::AT_FDCWD, dirent64_len, encode_dirent64, major, minor, rlimit::*,
+    DirEntry, FileStatus, LinuxFs, StatFs, SysInfo, at::AT_FDCWD, dirent64_len, encode_dirent64, major, minor,
+    rlimit::*,
 };
 use crate::kernel::Target;
 use crate::rlimit::Rlimit;

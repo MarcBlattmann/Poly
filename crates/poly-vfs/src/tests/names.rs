@@ -82,7 +82,8 @@ fn files_on_other_mounts_get_their_full_path() {
 fn files_opened_for_exec_have_names() {
     let env = Env::new();
     env.mkdir("/bin");
-    let f = env.vfs.open(&env.ctx, &env.root, At::Cwd, b"/bin/prog", OpenFlags::WRONLY | OpenFlags::CREAT, 0o755).unwrap();
+    let f =
+        env.vfs.open(&env.ctx, &env.root, At::Cwd, b"/bin/prog", OpenFlags::WRONLY | OpenFlags::CREAT, 0o755).unwrap();
     drop(f);
     let exe = env.vfs.open_exec(&env.ctx, &env.root, At::Cwd, b"/bin/../bin/prog").unwrap();
     assert_eq!(path_of(&env, &exe).unwrap(), b"/bin/prog");

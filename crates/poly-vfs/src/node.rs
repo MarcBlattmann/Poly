@@ -1,8 +1,8 @@
 //! References to inodes on mounts, and the operations that need no path.
 
 use crate::cred::{Access, Cred};
-use crate::mount::Mount;
 use crate::fs::{FsStats, magic_for};
+use crate::mount::Mount;
 use crate::{Attr, Errno, FileType, Ino, MAX_FILE_SIZE, Result, S_ISGID, S_ISUID, S_IXGRP, SetAttr, SetTime, Stat};
 use alloc::sync::Arc;
 use alloc::vec::Vec;

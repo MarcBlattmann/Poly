@@ -107,9 +107,9 @@ pub fn stat(p: &ProcessInfo, maps: &[MapEntry], sys: &SystemInfo) -> Vec<u8> {
     let mut o = Out::default();
     let _ = write!(o, "{} (", p.pid);
     o.bytes(comm(&p.comm));
-    let _ = write!(
+    let _ = writeln!(
         o,
-        ") {} {} {} {} 0 -1 {} 0 0 0 0 {} {} 0 0 20 0 {} 0 {} {} {} {} {} {} {} 0 0 {} {} {} {} 0 0 0 17 0 0 0 0 0 0 {} {} {} {} {} {} {} {}\n",
+        ") {} {} {} {} 0 -1 {} 0 0 0 0 {} {} 0 0 20 0 {} 0 {} {} {} {} {} {} {} 0 0 {} {} {} {} 0 0 0 17 0 0 0 0 0 0 {} {} {} {} {} {} {} {}",
         p.state.letter(),
         p.ppid,
         p.pgrp,
