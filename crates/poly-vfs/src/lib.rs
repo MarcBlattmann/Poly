@@ -91,7 +91,10 @@ pub use device::CharDevice;
 pub use errno::Errno;
 pub use fdtable::{AT_FDCWD, At, DEFAULT_FD_LIMIT, Fd, FdTable};
 pub use file::{OpenFile, OpenFlags, Whence};
-pub use fs::{Clock, DirEntry, FileSystem, FsInfo, NewNode, RenameFlags};
+pub use fs::{
+    Clock, DirEntry, EXT2_SUPER_MAGIC, FileSystem, FsInfo, FsStats, NewNode, PROC_SUPER_MAGIC, RenameFlags, ST_NODEV,
+    ST_NOEXEC, ST_NOSUID, ST_RDONLY, SYSFS_MAGIC, TMPFS_MAGIC, magic_for,
+};
 pub use mount::{Mount, MountFlags, MountId, MountInfo};
 pub use node::{FsContext, NodeRef};
 pub use object::FileObject;

@@ -14,9 +14,14 @@
 //! 4. Switches to raw mode (`TCSETS`: no `ICANON`, no `ECHO`, `MIN` 1),
 //!    prints `ttyinit: raw> ` and reads three single keys, `xyz`; then
 //!    puts the attributes back.
+//! 5. A pseudo-terminal as posix_openpt(3), grantpt(3), unlockpt(3) and
+//!    ptsname(3) make one: `openat("/dev/ptmx")`, `TIOCGPTN`,
+//!    `TIOCSPTLCK`, `openat("/dev/pts/<n>")`; a line typed on the master
+//!    is read on the slave, and its echo on the master.
 //!
 //! It prints what it got (`ttyinit: line [poly]`, `ttyinit: interrupted
-//! by SIGINT`, `ttyinit: raw [xyz]`), then `ttyinit: ok`, and exits 0;
+//! by SIGINT`, `ttyinit: raw [xyz]`, `ttyinit: pty [pty]`), then
+//! `ttyinit: ok`, and exits 0;
 //! any failure prints what failed and exits 1. Every call is a raw
 //! `syscall` (numbers from `asm/unistd_64.h`, ioctls from
 //! `asm-generic/ioctls.h`, `struct termios` from `asm-generic/termbits.h`).
@@ -30,6 +35,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 const SYS_READ: u64 = 0;
 const SYS_WRITE: u64 = 1;
+const SYS_OPENAT: u64 = 257;
 const SYS_RT_SIGACTION: u64 = 13;
 const SYS_IOCTL: u64 = 16;
 const SYS_GETPID: u64 = 39;
@@ -39,6 +45,11 @@ const TCGETS: u64 = 0x5401;
 const TCSETS: u64 = 0x5402;
 const TIOCSCTTY: u64 = 0x540E;
 const TIOCGPGRP: u64 = 0x540F;
+const TIOCGPTN: u64 = 0x8004_5430;
+const TIOCSPTLCK: u64 = 0x4004_5431;
+const AT_FDCWD: u64 = -100i64 as u64;
+const O_RDWR: u64 = 0o2;
+const O_NOCTTY: u64 = 0o400;
 const SIGINT: u64 = 2;
 const SA_RESTORER: u64 = 0x0400_0000;
 const EINTR: u64 = 4;
@@ -91,7 +102,20 @@ fn is_err(ret: u64) -> bool {
 }
 
 fn read(buf: &mut [u8]) -> u64 {
-    sys(SYS_READ, [0, buf.as_mut_ptr() as u64, buf.len() as u64, 0])
+    read_fd(0, buf)
+}
+
+fn read_fd(fd: u64, buf: &mut [u8]) -> u64 {
+    sys(SYS_READ, [fd, buf.as_mut_ptr() as u64, buf.len() as u64, 0])
+}
+
+/// `openat(AT_FDCWD, path, O_RDWR | O_NOCTTY)`; `path` ends in a NUL.
+fn open_rw(path: &[u8]) -> u64 {
+    let fd = sys(SYS_OPENAT, [AT_FDCWD, path.as_ptr() as u64, O_RDWR | O_NOCTTY, 0]);
+    if is_err(fd) {
+        fail(b"openat");
+    }
+    fd
 }
 
 /// The kernel's `struct termios` (36 bytes).
@@ -160,9 +184,9 @@ extern "C" fn main() -> ! {
 
     // 3. ^C: SIGINT to the foreground group ends the read.
     let act = SigAction {
-        handler: on_signal as usize as u64,
+        handler: on_signal as *const () as u64,
         flags: SA_RESTORER,
-        restorer: ttyinit_restorer as usize as u64,
+        restorer: ttyinit_restorer as *const () as u64,
         mask: 0,
     };
     if sys(SYS_RT_SIGACTION, [SIGINT, &raw const act as u64, 0, 8]) != 0 {
@@ -202,6 +226,44 @@ extern "C" fn main() -> ! {
     }
     write(b"\nttyinit: raw [");
     write(&keys);
+    write(b"]\n");
+
+    // 5. A pseudo-terminal.
+    let master = open_rw(b"/dev/ptmx\0");
+    let mut n = 0u32;
+    let unlock = 0i32;
+    if sys(SYS_IOCTL, [master, TIOCGPTN, &raw mut n as u64, 0]) != 0
+        || sys(SYS_IOCTL, [master, TIOCSPTLCK, &raw const unlock as u64, 0]) != 0
+    {
+        fail(b"TIOCGPTN / TIOCSPTLCK");
+    }
+    let mut path = *b"/dev/pts/0000000000\0";
+    let mut digits = [0u8; 10];
+    let mut len = 0;
+    let mut v = n;
+    loop {
+        digits[len] = b'0' + (v % 10) as u8;
+        len += 1;
+        v /= 10;
+        if v == 0 {
+            break;
+        }
+    }
+    for i in 0..len {
+        path[9 + i] = digits[len - 1 - i];
+    }
+    path[9 + len] = 0;
+    let slave = open_rw(&path);
+    sys(SYS_WRITE, [master, b"pty\r".as_ptr() as u64, 4, 0]);
+    let mut got = [0u8; 16];
+    if read_fd(slave, &mut got) != 4 || &got[..4] != b"pty\n" {
+        fail(b"reading the slave");
+    }
+    if read_fd(master, &mut got) != 5 || &got[..5] != b"pty\r\n" {
+        fail(b"the echo on the master");
+    }
+    write(b"ttyinit: pty [");
+    write(&got[..3]);
     write(b"]\nttyinit: ok\n");
     exit(0)
 }

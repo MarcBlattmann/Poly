@@ -701,10 +701,17 @@ allocator:
 boot: initramfs at 0xffd7000-0xffd7418 (2 KiB)
 fs: initramfs unpacked into /: 2 directories, 2 files (207 bytes), 0 symbolic links, 1 device nodes, 0 hard links
 fs: initramfs: 1 pages (4 KiB) at 0xffd7000-0xffd8000 returned to the frame allocator
-fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7); 6 of 8 directories and nodes made
+fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); 12 of 14 directories, nodes and links made
+fs: proc on /proc, sysfs on /sys, tmpfs on /dev/shm; 3 of 3 mounted
 ```
 
-Then `ls /`, `ls /dev`, `cat /etc/motd` and `mount` in the shell. Without
+Then `ls /`, `ls /dev`, `cat /etc/motd` and `mount` in the shell; `cat
+/proc/meminfo`, `cat /proc/cpuinfo`, `ls /proc`, `ls /sys/devices/system/cpu`
+show procfs and sysfs (ADR 0043). The shell is a kernel thread, so it has
+no `/proc/self` (and `/proc/mounts`, a link to `self/mounts`, does not
+open there): use `/proc/<pid>/...` of a running program, or `mount`. A
+`/proc` file is made anew by every read; `/proc/<pid>/maps` names file
+mappings by the path the file was opened by. Without
 an archive the log says `fs: no initramfs (no boot module); / is an empty
 tmpfs`. A damaged archive is reported by entry (`fs: initramfs: unpacking
 stopped: <name>: <errno>`, or `bad archive: ...` with the byte offset);
@@ -878,6 +885,43 @@ ptys on the host), `cargo test -p poly-personality-linux jobs` (orphaned
 process groups), `cargo xtask run poly.test=tty::` (from ring 3), and the
 boot test that types into `/bin/ttyinit` as init on the serial port
 (`cargo xtask test`; its output shows the echo of what was typed).
+
+## Time, timers and the vDSO
+
+The first exec sets the vDSO up and says how `clock_gettime` works in
+user mode (ADR 0044):
+
+```text
+vdso: 3552 bytes, mapped into every Linux process; clock_gettime makes system calls (the clock does not read an invariant TSC)
+```
+
+"makes system calls" is the normal case under QEMU's TCG (no invariant
+TSC); with KVM on a host with an invariant TSC it says "reads the TSC".
+The image is `kernel/target/x86_64-unknown-none/<profile>/build/poly-kernel-*/out/vdso.so`:
+`readelf -lrdW --dyn-syms -V` shows its one `PT_LOAD`, the five
+`__vdso_*@@LINUX_2.6` symbols and no relocations (`build.rs` refuses the
+build otherwise), `objdump -d -M intel` its code. In a process the image
+sits right above its data page, both near the top of the `mmap` area;
+`AT_SYSINFO_EHDR` gives the image's address.
+
+`cargo xtask run poly.test=time` runs the time tests (sleeps, a POSIX
+timer, interval timers ending a spinning process, CPU-time clocks) and
+`poly.test=vdso` the vDSO ones. `/bin/time-test` prints one line per check
+(`time-test: ok <name>` or `time-test: FAIL <name>: <value>`); run it from
+the shell (`run /bin/time-test` with the test initramfs) or as the first
+process:
+
+```sh
+cargo xtask pipeline initramfs target/xtask-programs/time-test --out target/time-test.cpio
+cargo xtask run --headless --no-disk --initrd=target/time-test.cpio poly.qemu_exit poly.init=/test-binary
+```
+
+A timer that does not fire: the `linux-timers` thread must exist (`ps`;
+it starts with the first timer anyone arms), and a signal with the default
+action never reaches process 1 (kill(2)'s rule for init, which timers
+follow too). CPU-time clocks only move while the thread runs; their user
+and system split comes from tick samples, so a thread that ran less than
+a tick shows everything as system time.
 
 ## Disk file systems and the page cache
 

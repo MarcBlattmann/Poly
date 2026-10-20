@@ -252,6 +252,7 @@ fn install(t: &mut Threads, id: ThreadId, stack: Stack, f: ThreadFn, arg: usize,
     unsafe { *SAVED_RSP.0[id.slot()].get() = rsp };
     backtrace::register_thread_stack(id.slot(), stack.virt, STACK_SIZE);
     t.stacks[id.slot()] = Some(stack);
+    crate::cputime::started(id.slot(), user.as_deref().map(UserThread::cpu_owner));
     t.user[id.slot()] = user;
 }
 
@@ -314,6 +315,7 @@ fn switch(sw: Switch) {
         let [from, to] = t.user.get_disjoint_mut([sw.from.slot(), sw.to.slot()]).expect("switch to the running thread");
         arch::user::switch(from.as_deref_mut().map(|u| &mut u.arch), to.as_deref().map(|u| &u.arch), top);
     }
+    crate::cputime::switched(sw.from.slot(), sw.to.slot());
     let save = SAVED_RSP.0[sw.from.slot()].get();
     // SAFETY: `sw.to` is not running, so its saved stack pointer is stable
     // (see `SavedRsp`).
@@ -378,6 +380,7 @@ fn reap(t: &mut Threads) -> Graveyard {
             t.stacks[id.slot()] = None;
         }
         if let Some(user) = t.user[id.slot()].take() {
+            crate::cputime::reaped(id.slot(), user.process());
             dead[buried] = Some(user);
             buried += 1;
         }
@@ -415,6 +418,17 @@ pub struct ThreadInfo {
     /// Empty for threads started with [`spawn`].
     pub name: &'static str,
     pub state: State,
+}
+
+/// User threads whose process has ended: still on their way out (the
+/// last one wakes the process's waiters before it exits) or exited and
+/// not reaped yet. Their memory, and the frames in it, goes when the
+/// scheduler reaps them, so a count of user frames taken meanwhile still
+/// includes those.
+pub fn dying_user_threads() -> usize {
+    let _irq = InterruptsOff::new();
+    let t = THREADS.lock();
+    t.user.iter().flatten().filter(|u| u.process().has_ended()).count()
 }
 
 /// Every thread that exists and has not been joined, in slot order.

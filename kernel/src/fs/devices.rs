@@ -2,11 +2,17 @@
 //!
 //! | Node | Number | Device |
 //! |---|---|---|
-//! | `/dev/console` | 5, 1 | [`Console`]: writes go to the kernel console, reads are end of file |
-//! | `/dev/tty` | 5, 0 | the same console (every process's controlling terminal, for now) |
+//! | `/dev/console` | 5, 1 | [`Console`] (writes to the kernel console, reads end of file) until `crate::tty` puts the console terminal here |
+//! | `/dev/tty` | 5, 0 | the same, until `crate::tty` puts the caller's controlling terminal here |
 //! | `/dev/null` | 1, 3 | `poly_vfs::device::Null` |
 //! | `/dev/zero` | 1, 5 | `poly_vfs::device::Zero` |
 //! | `/dev/full` | 1, 7 | `poly_vfs::device::Full` |
+//! | `/dev/random` | 1, 8 | `crate::random::RandomDevice` (random(4)) |
+//! | `/dev/urandom` | 1, 9 | the same generator, larger reads |
+//!
+//! And the links `/dev/fd` -> `/proc/self/fd`, `/dev/stdin`, `/dev/stdout`,
+//! `/dev/stderr` -> `/proc/self/fd/0`, `1`, `2` (proc_pid_fd(5)); procfs
+//! itself and the tmpfs on `/dev/shm` are mounted by `fs::proc::mount_all`.
 //!
 //! The numbers are the ones `console(4)`, `tty(4)`, `null(4)`, `zero(4)`
 //! and `full(4)` give, so device nodes an initramfs brings along (a Linux
@@ -132,12 +138,24 @@ struct Node {
     perm: u16,
 }
 
-const NODES: [Node; 5] = [
+const NODES: [Node; 7] = [
     Node { name: b"/dev/console", id: device::CONSOLE, perm: 0o600 },
     Node { name: b"/dev/tty", id: device::TTY, perm: 0o666 },
     Node { name: b"/dev/null", id: device::NULL, perm: 0o666 },
     Node { name: b"/dev/zero", id: device::ZERO, perm: 0o666 },
     Node { name: b"/dev/full", id: device::FULL, perm: 0o666 },
+    Node { name: b"/dev/random", id: device::RANDOM, perm: 0o666 },
+    Node { name: b"/dev/urandom", id: device::URANDOM, perm: 0o666 },
+];
+
+/// Symbolic links every `/dev` gets (proc_pid_fd(5): "/dev/fd ... link to
+/// /proc/self/fd"; "/dev/stdin, /dev/stdout, and /dev/stderr, which
+/// respectively link to the files 0, 1, and 2 in /proc/self/fd").
+const LINKS: [(&[u8], &[u8]); 4] = [
+    (b"/dev/fd", b"/proc/self/fd"),
+    (b"/dev/stdin", b"/proc/self/fd/0"),
+    (b"/dev/stdout", b"/proc/self/fd/1"),
+    (b"/dev/stderr", b"/proc/self/fd/2"),
 ];
 
 /// Directories every root gets: `/dev` for the nodes, `/tmp` (sticky, as
@@ -148,12 +166,14 @@ const DIRS: [(&[u8], u16); 3] = [(b"/dev", 0o755), (b"/tmp", 0o1777), (b"/proc",
 /// there yet.
 pub fn install(vfs: &Vfs, ctx: &FsContext) {
     let console: Arc<dyn CharDevice> = Arc::new(Console::new());
-    let devices: [(DeviceId, Arc<dyn CharDevice>); 5] = [
+    let devices: [(DeviceId, Arc<dyn CharDevice>); 7] = [
         (device::CONSOLE, console.clone()),
         (device::TTY, console),
         (device::NULL, Arc::new(Null)),
         (device::ZERO, Arc::new(Zero)),
         (device::FULL, Arc::new(Full)),
+        (device::RANDOM, Arc::new(crate::random::RandomDevice::RANDOM)),
+        (device::URANDOM, Arc::new(crate::random::RandomDevice::URANDOM)),
     ];
     for (id, dev) in devices {
         vfs.register_char_device(id, dev).expect("each device number is registered once");
@@ -169,9 +189,13 @@ pub fn install(vfs: &Vfs, ctx: &FsContext) {
     for n in &NODES {
         made += created(vfs.mknod(&ctx, &root, At::Cwd, n.name, FileType::CharDevice, n.perm, n.id), n.name);
     }
+    for (path, target) in LINKS {
+        made += created(vfs.symlink(&ctx, &root, target, At::Cwd, path), path);
+    }
     crate::kprintln!(
-        "fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7); {made} of {} directories and nodes made",
-        DIRS.len() + NODES.len()
+        "fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); \
+         {made} of {} directories, nodes and links made",
+        DIRS.len() + NODES.len() + LINKS.len()
     );
 }
 

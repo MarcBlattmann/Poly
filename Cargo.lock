@@ -135,6 +135,7 @@ name = "poly-personality-linux"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-vfs",
 ]
 
 [[package]]
@@ -161,6 +162,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-procfs"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
+name = "poly-random"
+version = "0.0.1"
+
+[[package]]
 name = "poly-rtc"
 version = "0.0.1"
 
@@ -182,6 +194,13 @@ name = "poly-tty"
 version = "0.0.1"
 dependencies = [
  "poly-vfs",
+]
+
+[[package]]
+name = "poly-vdso"
+version = "0.0.1"
+dependencies = [
+ "poly-irq",
 ]
 
 [[package]]

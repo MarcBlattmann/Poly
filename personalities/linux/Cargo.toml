@@ -10,5 +10,9 @@ rust-version.workspace = true
 [dependencies]
 poly-abi.workspace = true
 
+[dev-dependencies]
+# The host tests of the file system calls run them on a real VFS.
+poly-vfs.workspace = true
+
 [lints]
 workspace = true

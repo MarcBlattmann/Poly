@@ -22,11 +22,17 @@ static BOOT_EPOCH_NS: AtomicU64 = AtomicU64::new(UNKNOWN);
 const UNKNOWN: u64 = u64::MAX;
 
 /// Wall-clock time in nanoseconds since the Unix epoch (UTC): the RTC,
-/// read once at the first call, plus the monotonic clock since then. A
-/// machine whose RTC reads as garbage counts from the epoch at boot. Not
-/// adjustable yet (no `settimeofday`), so it moves exactly like
-/// [`now_ns`].
+/// read once at the first call, plus the monotonic clock since then, moved
+/// by [`set_realtime_ns`] (clock_settime(2), settimeofday(2)). A machine
+/// whose RTC reads as garbage counts from the epoch at boot. Between
+/// settings it moves exactly like [`now_ns`].
 pub fn realtime_ns() -> u64 {
+    realtime_offset_ns().saturating_add(now_ns())
+}
+
+/// `realtime_ns() - now_ns()`: the wall-clock time at which the monotonic
+/// clock read 0. Reads the RTC the first time.
+pub fn realtime_offset_ns() -> u64 {
     let mut base = BOOT_EPOCH_NS.load(SeqCst);
     if base == UNKNOWN {
         let century = crate::acpi::platform().and_then(|p| p.rtc_century);
@@ -50,7 +56,28 @@ pub fn realtime_ns() -> u64 {
             Err(first) => base = first,
         }
     }
-    base.saturating_add(now_ns())
+    base
+}
+
+/// Set the wall clock to `ns` since the epoch, which must not be below the
+/// monotonic clock (clock_settime(2) refuses that with `EINVAL`; `Err`
+/// here). The monotonic clock is not affected; the vDSO's snapshot follows.
+pub fn set_realtime_ns(ns: u64) -> Result<(), ()> {
+    realtime_offset_ns();
+    let now = now_ns();
+    if ns < now {
+        return Err(());
+    }
+    BOOT_EPOCH_NS.store(ns - now, SeqCst);
+    crate::vdso::publish();
+    Ok(())
+}
+
+/// Put the wall clock back to a [`realtime_offset_ns`] read earlier (tests
+/// that set it).
+pub fn restore_realtime_offset(offset: u64) {
+    BOOT_EPOCH_NS.store(offset, SeqCst);
+    crate::vdso::publish();
 }
 
 /// Timer interrupts since the tick started.

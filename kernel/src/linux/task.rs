@@ -64,13 +64,24 @@ const HEADER_BYTES: usize = 4096;
 
 /// Run `f` on the process tree, locked; then wake waiters if it changed and
 /// let go of the records of the processes it reaped.
+///
+/// The generation is published while the tree is still locked, so
+/// [`GENERATION`] only ever moves forward, in the order of the changes.
+/// Published after the unlock, a caller that changed nothing could be
+/// preempted between the two while another thread changed the tree and
+/// published the new generation; the late caller then wrote its older one
+/// back, and a `wait4` that had polled the tree at that older generation
+/// slept until the next change, which might never come (a hang in the
+/// fork test, ADR 0041).
 pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
-    let (r, reaped, generation) = {
+    let (r, reaped, moved) = {
         let mut t = TREE.lock();
         let r = f(&mut t);
-        (r, t.take_reaped(), t.generation())
+        (r, t.take_reaped(), publish(&GENERATION, t.generation()))
     };
-    if GENERATION.swap(generation, Ordering::SeqCst) != generation {
+    // Woken after the unlock: a waiter that checks GENERATION meanwhile
+    // sees the new value already and does not sleep.
+    if moved {
         process::wake_waiters();
     }
     if !reaped.is_empty() {
@@ -83,6 +94,13 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
         drop(gone);
     }
     r
+}
+
+/// Make `generation` (the tree's, read with it locked) the published one
+/// in `published`, unless that is newer already: a generation never goes
+/// back. Returns whether it moved, i.e. whether waiters need waking.
+fn publish(published: &AtomicU64, generation: u64) -> bool {
+    published.fetch_max(generation, Ordering::SeqCst) < generation
 }
 
 /// A process the kernel started: the root of a tree of its own (its
@@ -188,6 +206,7 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
     } else {
         let pid = process::alloc_pid();
         let memory = if req.shares_memory() { memory } else { Arc::new(memory.fork().map_err(|_| Errno::ENOMEM)?) };
+        crate::fs::proc::record_fork(k.process.pid, pid, &memory);
         let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
         linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
         let files = k.process.files.fork();
@@ -320,6 +339,9 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     let params = ExecParams::new(&argv_refs, &envp_refs, &path);
     let image = exec::load(Arc::new(FileSource::of(&file)), &params)
         .map_err(|e| Errno::new(e.linux_errno() as u16).unwrap_or(Errno::ENOEXEC))?;
+    if let Some(me) = user::current_process() {
+        crate::fs::proc::record_exec(&me, &file, &image.memory, &image.info.stack, &argv_refs, &envp_refs);
+    }
     drop(file);
     // The point of no return: the other threads go (execve(2): "All
     // threads other than the calling thread are destroyed").
@@ -356,4 +378,32 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     vfork_release(old_tid);
     vfork_release(pid);
     Ok(())
+}
+
+crate::kernel_test! {
+    fn a_late_publish_never_moves_the_tree_generation_back() -> TestResult {
+        // The interleaving that hung the fork test: wait4 polls the tree
+        // and finds nothing yet; before it has published the generation it
+        // saw, the child ends (a change, published with it); then the
+        // poller's publish comes, late. Waiting for a move away from what it
+        // saw must not sleep: the generation has to stay the newer one.
+        let seen = with_tree(|t| t.generation());
+        let pid = process::alloc_pid() as i32;
+        let changed = with_tree(|t| {
+            // A process of the kernel's that ends: reaped at once, no trace.
+            t.insert_root(pid, 0);
+            t.exit(pid, Termination::Exited(0), false);
+            t.generation()
+        });
+        if changed == seen || GENERATION.load(Ordering::SeqCst) < changed {
+            return Err("a change to the tree was not published with it");
+        }
+        if publish(&GENERATION, seen) {
+            return Err("publishing an older generation counted as a change");
+        }
+        if GENERATION.load(Ordering::SeqCst) < changed {
+            return Err("a late publish moved the generation back: a waiter would sleep through the change");
+        }
+        Ok(())
+    }
 }

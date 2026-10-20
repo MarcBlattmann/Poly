@@ -350,6 +350,7 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
     // stack; nothing else refers to it during these reads.
     let (vector, from_user) = unsafe { ((*frame).vector, (*frame).in_user_mode()) };
     if vector >= u64::from(FIRST_INTERRUPT_VECTOR) {
+        super::irq::set_interrupted_user(from_user);
         super::irq::dispatch(vector as u8);
         if from_user {
             crate::user::return_to_user();

@@ -9,7 +9,10 @@
 use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
-use crate::sys::{epoll, eventfd, futex, io, mem, pipe, poll, process, signal, signalfd, system, task, timerfd};
+use crate::sys::{
+    epoll, eventfd, fd, futex, io, limits, mem, path, pipe, poll, process, signal, signalfd, system, task, time,
+    timerfd,
+};
 
 pub use crate::numbers::{SYSCALLS, nr};
 
@@ -96,16 +99,81 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::EPOLL_PWAIT2, epoll::epoll_pwait2),
 ];
 
+/// The file system calls and resource limits (ADR 0043), registered like
+/// [`IMPLEMENTED`].
+pub const FILE_SYSTEM: &[(u64, Handler)] = &[
+    (nr::STAT, path::stat),
+    (nr::LSTAT, path::lstat),
+    (nr::OPEN, path::open),
+    (nr::LSEEK, fd::lseek),
+    (nr::PREAD64, fd::pread64),
+    (nr::PWRITE64, fd::pwrite64),
+    (nr::ACCESS, path::access),
+    (nr::DUP, fd::dup),
+    (nr::DUP2, fd::dup2),
+    (nr::FCNTL, fd::fcntl),
+    (nr::FSYNC, fd::fsync),
+    (nr::FDATASYNC, fd::fdatasync),
+    (nr::TRUNCATE, path::truncate),
+    (nr::FTRUNCATE, fd::ftruncate),
+    (nr::GETDENTS, fd::getdents),
+    (nr::GETCWD, path::getcwd),
+    (nr::CHDIR, path::chdir),
+    (nr::FCHDIR, path::fchdir),
+    (nr::RENAME, path::rename),
+    (nr::MKDIR, path::mkdir),
+    (nr::RMDIR, path::rmdir),
+    (nr::CREAT, path::creat),
+    (nr::LINK, path::link),
+    (nr::UNLINK, path::unlink),
+    (nr::SYMLINK, path::symlink),
+    (nr::READLINK, path::readlink),
+    (nr::CHMOD, path::chmod),
+    (nr::FCHMOD, path::fchmod),
+    (nr::UMASK, path::umask),
+    (nr::GETRLIMIT, limits::getrlimit),
+    (nr::SYSINFO, limits::sysinfo),
+    (nr::STATFS, path::statfs),
+    (nr::FSTATFS, fd::fstatfs),
+    (nr::SETRLIMIT, limits::setrlimit),
+    (nr::SYNC, fd::sync),
+    (nr::GETDENTS64, fd::getdents64),
+    (nr::OPENAT, path::openat),
+    (nr::MKDIRAT, path::mkdirat),
+    (nr::NEWFSTATAT, path::newfstatat),
+    (nr::UNLINKAT, path::unlinkat),
+    (nr::RENAMEAT, path::renameat),
+    (nr::LINKAT, path::linkat),
+    (nr::SYMLINKAT, path::symlinkat),
+    (nr::READLINKAT, path::readlinkat),
+    (nr::FCHMODAT, path::fchmodat),
+    (nr::FACCESSAT, path::faccessat),
+    (nr::DUP3, fd::dup3),
+    (nr::PRLIMIT64, limits::prlimit64),
+    (nr::SYNCFS, fd::syncfs),
+    (nr::RENAMEAT2, path::renameat2),
+    (nr::STATX, path::statx),
+    (nr::FACCESSAT2, path::faccessat2),
+];
+/// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
+/// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]).
+pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS, FILE_SYSTEM];
+
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
 
 const fn build() -> [Option<Handler>; TABLE_LEN] {
     let mut table: [Option<Handler>; TABLE_LEN] = [None; TABLE_LEN];
-    let mut i = 0;
-    while i < IMPLEMENTED.len() {
-        let (number, handler) = IMPLEMENTED[i];
-        assert!(table[number as usize].is_none(), "system call registered twice");
-        table[number as usize] = Some(handler);
-        i += 1;
+    let mut g = 0;
+    while g < GROUPS.len() {
+        let group = GROUPS[g];
+        let mut i = 0;
+        while i < group.len() {
+            let (number, handler) = group[i];
+            assert!(table[number as usize].is_none(), "system call registered twice");
+            table[number as usize] = Some(handler);
+            i += 1;
+        }
+        g += 1;
     }
     table
 }
@@ -218,19 +286,20 @@ mod tests {
 
     #[test]
     fn handlers_are_registered_by_number() {
-        for &(number, _) in IMPLEMENTED {
+        for &(number, _) in GROUPS.iter().flat_map(|g| g.iter()) {
             assert!(name(number).is_some(), "handler for unknown number {number}");
             assert!(handler(number).is_some());
         }
-        assert_eq!(implemented().count(), IMPLEMENTED.len());
-        assert!(handler(nr::OPENAT).is_none());
+        assert_eq!(implemented().count(), GROUPS.iter().map(|g| g.len()).sum::<usize>());
+        assert!(handler(nr::SWAPON).is_none());
         assert!(handler(TABLE_LEN as u64).is_none());
         assert!(handler(u64::MAX).is_none());
     }
 
     #[test]
     fn implemented_set() {
-        let names: Vec<&str> = implemented().map(|(_, n)| n).collect();
+        let in_groups = |nr: u64| time::CALLS.iter().chain(FILE_SYSTEM).any(|&(n, _)| n == nr);
+        let names: Vec<&str> = implemented().filter(|&(nr, _)| !in_groups(nr)).map(|(_, n)| n).collect();
         let expected = [
             "read",
             "write",
@@ -304,6 +373,32 @@ mod tests {
             "getrandom",
             "clone3",
             "epoll_pwait2",
+        ];
+        assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn time_calls() {
+        let names: Vec<&str> = time::CALLS.iter().map(|&(nr, _)| name(nr).unwrap()).collect();
+        let expected = [
+            "nanosleep",
+            "getitimer",
+            "alarm",
+            "setitimer",
+            "gettimeofday",
+            "getrusage",
+            "times",
+            "settimeofday",
+            "time",
+            "timer_create",
+            "timer_settime",
+            "timer_gettime",
+            "timer_getoverrun",
+            "timer_delete",
+            "clock_settime",
+            "clock_getres",
+            "clock_nanosleep",
+            "getcpu",
         ];
         assert_eq!(names, expected);
     }

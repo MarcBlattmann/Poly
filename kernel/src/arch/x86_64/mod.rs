@@ -7,7 +7,9 @@ pub mod backtrace;
 mod boot;
 pub mod context;
 pub mod cpu;
+pub mod cpuinfo;
 pub mod dispi;
+pub mod entropy;
 mod fpu;
 pub mod gdt;
 pub mod i8042;
@@ -23,6 +25,7 @@ mod syscall;
 pub mod time;
 pub mod user;
 mod usercopy;
+pub mod vdso;
 
 use crate::acpi::Platform;
 use core::sync::atomic::{AtomicBool, Ordering};

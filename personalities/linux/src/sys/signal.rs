@@ -386,5 +386,6 @@ pub fn restart_syscall(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
         Some(RestartBlock::FutexWait { addr, private, val, bitset, deadline }) => {
             crate::sys::futex::wait_with_restart(k, UserPtr(addr), private, val, bitset, Some(deadline), true)
         }
+        Some(RestartBlock::Sleep { deadline, rem }) => crate::sys::time::sleep(k, deadline, Some(UserPtr(rem))),
     }
 }

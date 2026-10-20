@@ -5,9 +5,12 @@
 
 pub mod epoll;
 pub mod eventfd;
+pub mod fd;
 pub mod futex;
 pub mod io;
+pub mod limits;
 pub mod mem;
+pub mod path;
 pub mod pipe;
 pub mod poll;
 pub mod process;
@@ -15,4 +18,5 @@ pub mod signal;
 pub mod signalfd;
 pub mod system;
 pub mod task;
+pub mod time;
 pub mod timerfd;

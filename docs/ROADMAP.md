@@ -78,9 +78,9 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Thread-local storage, `futex`, robust futex lists, `set_tid_address`
 - [ ] Signals: delivery, handlers, `sigaltstack`, `rt_sigreturn`, process groups
 - [x] Pipes, `poll` / `select`, `epoll`, `eventfd`, `timerfd`, `signalfd`
-- [ ] Time syscalls and a vDSO (`clock_gettime` without a syscall)
+- [x] Time syscalls and a vDSO (`clock_gettime` without a syscall)
 - [ ] Dynamic linking: glibc's own `ld.so` loads shared libraries unchanged
-- [ ] `/dev` (null, zero, random, urandom, tty, console), `/proc` (self, maps, status, cpuinfo), minimal `/sys`
+- [x] `/dev` (null, zero, random, urandom, tty, console), `/proc` (self, maps, status, cpuinfo), minimal `/sys`
 - [x] TTY layer: line discipline, pseudo-terminals, job control
 - [ ] Users, groups, credentials, file permissions, `umask`
 - [x] Persistent file system on virtio-blk (ext2), page cache and writeback

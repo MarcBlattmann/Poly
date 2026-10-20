@@ -104,6 +104,7 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
     let source = FileSource::of(&file);
     let image = exec::load(Arc::new(source), &ExecParams::new(argv, envp, path)).map_err(ExecPathError::Exec)?;
     let process = Arc::new(Process::new_linux(process::alloc_pid(), 0, format, traced));
+    fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
     Ok(Prepared { process, image })
 }
 

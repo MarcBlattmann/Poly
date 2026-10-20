@@ -23,7 +23,8 @@
 //!    `argc`, `argv`, `envp`, the auxiliary vector (`AT_PHDR`, `AT_PHENT`,
 //!    `AT_PHNUM`, `AT_PAGESZ`, `AT_ENTRY`, `AT_RANDOM`, `AT_UID`/`EUID`/
 //!    `GID`/`EGID`, `AT_SECURE`, `AT_EXECFN`, `AT_PLATFORM`, `AT_HWCAP`,
-//!    `AT_CLKTCK`, `AT_BASE`, `AT_FLAGS`, `AT_NULL`) and the strings, built
+//!    `AT_CLKTCK`, `AT_BASE`, `AT_FLAGS`, `AT_SYSINFO_EHDR` for the vDSO
+//!    mapped with its data page by `crate::vdso`, `AT_NULL`) and the strings, built
 //!    by [`poly_elf::build_initial_stack`] and written into the stack pages.
 //! 7. A thread at the entry point with `rsp` at `argc`; every other
 //!    register is 0 (`rdx` 0: no function for `atexit`, as the psABI
@@ -187,8 +188,10 @@ pub fn load(file: Arc<dyn PageSource>, params: &ExecParams<'_>) -> Result<Image,
     }
     memory.init_brk(plan.brk())?;
 
+    // The vDSO and its data page (ADR 0044), announced as AT_SYSINFO_EHDR.
+    let sysinfo_ehdr = crate::vdso::map_into(&memory);
     let random = arch::user::random_bytes();
-    let aux = AuxInfo { hwcap: arch::user::hwcap(), ..AuxInfo::new(&plan, None, params.creds) };
+    let aux = AuxInfo { hwcap: arch::user::hwcap(), sysinfo_ehdr, ..AuxInfo::new(&plan, None, params.creds) };
     let stack = StackParams {
         argv: params.argv,
         envp: params.envp,

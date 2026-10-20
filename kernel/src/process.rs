@@ -61,6 +61,8 @@ pub struct Process {
     /// The process reports its system calls, output, signals and exit on
     /// the serial port (`poly.test.capture`, ADR 0027).
     pub traced: bool,
+    /// CPU time of its ended threads and waited-for children (ADR 0044).
+    pub cpu: crate::cputime::ProcessCpu,
     threads: SpinLock<Threads>,
     /// The process has ended: [`Process::status`] says how.
     ended: AtomicBool,
@@ -191,6 +193,7 @@ impl Process {
             files,
             linux,
             traced,
+            cpu: crate::cputime::ProcessCpu::default(),
             threads: SpinLock::new(Threads::default()),
             ended: AtomicBool::new(false),
             exiting: AtomicBool::new(false),
