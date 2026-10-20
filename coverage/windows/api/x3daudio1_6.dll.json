@@ -1,4 +1,4 @@
 [
-{"symbol":"X3DAudioCalculate","src":["wine-spec"]},
-{"symbol":"X3DAudioInitialize","src":["wine-spec"]}
+{"symbol":"X3DAudioCalculate","status":"app-provided","src":["wine-spec"]},
+{"symbol":"X3DAudioInitialize","status":"app-provided","src":["wine-spec"]}
 ]

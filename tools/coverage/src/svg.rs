@@ -284,10 +284,13 @@ fn display_group(os: Os, layer: Layer, component: &str) -> String {
         (Os::Windows, Layer::Api) => {
             let c = component;
             let msvc = ["msvcp", "msvcr", "vcruntime", "msvcirt", "concrt", "vcomp"];
-            let dx = ["d3dx", "d3dcompiler_", "xinput", "xaudio", "x3daudio", "xapofx"];
+            // The DirectX end-user runtime's families. xinput1_4, xaudio2_8/2_9,
+            // d3dcompiler_47 and d3dxof come with Windows and keep their own blocks.
+            let dx = ["d3dx9_", "d3dx10_", "d3dx11_", "d3dcompiler_", "xinput1_", "xaudio2_", "x3daudio", "xapofx"];
+            let in_windows = ["xinput1_4.dll", "xaudio2_8.dll", "xaudio2_9.dll", "d3dcompiler_47.dll"];
             if msvc.iter().any(|p| c.starts_with(p)) {
                 "MSVC runtimes".into()
-            } else if dx.iter().any(|p| c.starts_with(p)) {
+            } else if dx.iter().any(|p| c.starts_with(p)) && !in_windows.contains(&c) {
                 "DirectX redist".into()
             } else {
                 c.trim_end_matches(".dll").into()
@@ -359,6 +362,8 @@ fn squarify(values: &[f64], x: f64, y: f64, w: f64, h: f64) -> Vec<(f64, f64, f6
     out
 }
 
+/// Statuses drawn in the map, in drawing order. App-provided entries are not
+/// our work and are left out of the map (ADR 0055).
 const STATUS_ORDER: [Status; 5] =
     [Status::Green, Status::Stub, Status::Claimed, Status::BlockedByDesign, Status::Missing];
 
@@ -368,7 +373,7 @@ fn status_color(st: Status, t: &Theme) -> &'static str {
         Status::Stub => t.stub,
         Status::Claimed => t.claimed,
         Status::BlockedByDesign => t.blocked,
-        Status::Missing => t.missing,
+        Status::Missing | Status::AppProvided => t.missing,
     }
 }
 
@@ -484,7 +489,9 @@ const PANEL_HEAD: f64 = 38.0;
 
 fn panel(s: &mut Svg, c: &Coverage, os: Os, (x, y, w, map_h): (f64, f64, f64, f64), max_groups: usize, t: &Theme) {
     let mut groups: BTreeMap<String, Group> = BTreeMap::new();
-    for e in c.entries.iter().filter(|e| e.os == os) {
+    let app_provided =
+        c.entries.iter().filter(|e| e.os == os && e.status == Status::AppProvided).count() as u64;
+    for e in c.entries.iter().filter(|e| e.os == os && e.status != Status::AppProvided) {
         let name = display_group(os, e.layer, &e.component);
         let g = groups.entry(name.clone()).or_insert_with(|| Group { name, ..Default::default() });
         *g.counts.entry(e.status).or_default() += 1;
@@ -508,6 +515,9 @@ fn panel(s: &mut Svg, c: &Coverage, os: Os, (x, y, w, map_h): (f64, f64, f64, f6
     let mut sub = format!("{} / {} entries", thousands(done), thousands(total));
     if os == Os::Macos && !c.entries.iter().any(|e| e.os == Os::Macos && e.layer == Layer::Api) {
         sub.push_str(" · frameworks not mapped yet");
+    }
+    if app_provided > 0 {
+        let _ = write!(sub, " · {} app-provided not counted", thousands(app_provided));
     }
     s.text(x, y + 14.0, 14.0, t.text, 600, "start", os.title());
     s.text(x + w, y + 14.0, 14.0, t.text, 600, "end", &format!("{:.1}%", percent(done, total)));
@@ -551,11 +561,33 @@ mod tests {
     fn grouping() {
         assert_eq!(display_group(Os::Windows, Layer::Api, "msvcp140.dll"), "MSVC runtimes");
         assert_eq!(display_group(Os::Windows, Layer::Api, "d3dx9_43.dll"), "DirectX redist");
+        assert_eq!(display_group(Os::Windows, Layer::Api, "xinput1_3.dll"), "DirectX redist");
+        assert_eq!(display_group(Os::Windows, Layer::Api, "xinput1_4.dll"), "xinput1_4");
+        assert_eq!(display_group(Os::Windows, Layer::Api, "d3dcompiler_47.dll"), "d3dcompiler_47");
+        assert_eq!(display_group(Os::Windows, Layer::Api, "d3dxof.dll"), "d3dxof");
         assert_eq!(display_group(Os::Windows, Layer::Api, "kernel32.dll"), "kernel32");
         assert_eq!(display_group(Os::Windows, Layer::Syscall, "ntoskrnl"), "NT services");
         assert_eq!(display_group(Os::Macos, Layer::Api, "AppKit.framework"), "AppKit");
         assert_eq!(display_group(Os::Macos, Layer::Api, "libswiftFoundation.dylib"), "Swift overlays");
         assert_eq!(display_group(Os::Macos, Layer::Api, "libswiftCore.dylib"), "libswiftCore");
+    }
+
+    #[test]
+    fn map_leaves_out_app_provided() {
+        use crate::model::{Entry, Source};
+        let mut c = Coverage::default();
+        c.sources.insert("t".into(), Source { description: "test".into(), revision: "1".into() });
+        let mut entries = vec![Entry::new(Os::Windows, Layer::Api, "kernel32.dll", "A", "t")];
+        for s in ["x", "y", "z"] {
+            let mut e = Entry::new(Os::Windows, Layer::Api, "msvcp140.dll", s, "t");
+            e.status = Status::AppProvided;
+            entries.push(e);
+        }
+        c.merge(entries);
+        let map = coverage_map(&c, &LIGHT);
+        assert!(map.contains("0 / 1 entries · 3 app-provided not counted"), "{map}");
+        assert!(!map.contains("MSVC runtimes"));
+        assert!(map.contains("kernel32: 0 / 1 done"));
     }
 
     #[test]

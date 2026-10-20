@@ -75,11 +75,22 @@ pub enum Status {
     Green,
     /// Cannot be made to work for reasons outside our control (see README).
     BlockedByDesign,
+    /// Supplied by the application or its installer, not by Poly: Microsoft's
+    /// redistributable C++ and DirectX runtimes (ADR 0055). Kept in the map so
+    /// the names stay known, but not counted as our work. Always set for a
+    /// whole component.
+    AppProvided,
 }
 
 impl Status {
-    pub const ALL: [Status; 5] =
-        [Status::Missing, Status::Claimed, Status::Stub, Status::Green, Status::BlockedByDesign];
+    pub const ALL: [Status; 6] = [
+        Status::Missing,
+        Status::Claimed,
+        Status::Stub,
+        Status::Green,
+        Status::BlockedByDesign,
+        Status::AppProvided,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -88,6 +99,7 @@ impl Status {
             Status::Stub => "stub",
             Status::Green => "green",
             Status::BlockedByDesign => "blocked-by-design",
+            Status::AppProvided => "app-provided",
         }
     }
 
@@ -304,12 +316,14 @@ impl Coverage {
     }
 
     /// Add or refresh imported entries. Existing entries keep their status,
-    /// claim, weight and test counts; only imported facts are updated.
+    /// claim, weight and test counts; only imported facts are updated. New
+    /// entries of an app-provided component are app-provided too.
     pub fn merge(&mut self, imported: Vec<Entry>) -> MergeStats {
         let mut index: BTreeMap<String, usize> =
             self.entries.iter().enumerate().map(|(i, e)| (e.id.clone(), i)).collect();
+        let app_provided = self.app_provided_components();
         let mut stats = MergeStats::default();
-        for new in imported {
+        for mut new in imported {
             match index.get(&new.id) {
                 Some(&i) => {
                     let e = &mut self.entries[i];
@@ -324,6 +338,9 @@ impl Coverage {
                     stats.updated += 1;
                 }
                 None => {
+                    if app_provided.contains(&(new.os, new.layer, new.component.clone())) {
+                        new.status = Status::AppProvided;
+                    }
                     index.insert(new.id.clone(), self.entries.len());
                     self.entries.push(new);
                     stats.added += 1;
@@ -336,6 +353,46 @@ impl Coverage {
 
     pub fn find_mut(&mut self, id: &str) -> Option<&mut Entry> {
         self.entries.iter_mut().find(|e| e.id == id)
+    }
+
+    /// Components whose entries are all app-provided.
+    pub fn app_provided_components(&self) -> BTreeSet<(Os, Layer, String)> {
+        let mut all: BTreeMap<(Os, Layer, &str), bool> = BTreeMap::new();
+        for e in &self.entries {
+            *all.entry((e.os, e.layer, &e.component)).or_insert(true) &= e.status == Status::AppProvided;
+        }
+        all.into_iter().filter(|(_, app)| *app).map(|((os, layer, c), _)| (os, layer, c.to_string())).collect()
+    }
+
+    /// Set the status of every entry of one component, named
+    /// `<os>/<layer>/<component>`. Changes nothing and fails if an entry is
+    /// claimed or green, since that is someone's work and changes one entry
+    /// at a time. Returns how many entries changed.
+    pub fn set_component_status(&mut self, component: &str, status: Status) -> Result<usize, String> {
+        if status == Status::Claimed {
+            return Err("use `coverage claim` to claim".into());
+        }
+        let in_component = |e: &Entry| {
+            component.strip_prefix(&format!("{}/{}/", e.os.name(), e.layer.name())) == Some(e.component.as_str())
+        };
+        let mut found = false;
+        for e in self.entries.iter().filter(|e| in_component(e)) {
+            found = true;
+            if matches!(e.status, Status::Claimed | Status::Green) && e.status != status {
+                return Err(format!("{} is {}; change it on its own", e.id, e.status.name()));
+            }
+        }
+        if !found {
+            return Err(format!("no component {component} (expected <os>/<layer>/<component>)"));
+        }
+        let mut changed = 0;
+        for e in self.entries.iter_mut().filter(|e| in_component(e)) {
+            if e.status != status {
+                e.status = status;
+                changed += 1;
+            }
+        }
+        Ok(changed)
     }
 
     /// Invariants that CI enforces.
@@ -362,6 +419,9 @@ impl Coverage {
             if e.status == Status::Green && e.tests_visible == 0 {
                 errors.push(format!("{}: green with no tests", e.id));
             }
+            if e.status == Status::AppProvided && (e.tests_visible > 0 || e.tests_held_out > 0) {
+                errors.push(format!("{}: app-provided but has tests of ours", e.id));
+            }
             if !e.weight.is_finite() || e.weight < 0.0 {
                 errors.push(format!("{}: invalid weight {}", e.id, e.weight));
             }
@@ -372,6 +432,22 @@ impl Coverage {
                 if !self.sources.contains_key(s) {
                     errors.push(format!("{}: unknown source {s}", e.id));
                 }
+            }
+        }
+        // App-provided is a property of a whole library (ADR 0055).
+        let mut components: BTreeMap<(Os, Layer, &str), (usize, usize)> = BTreeMap::new();
+        for e in &self.entries {
+            let (all, app) = components.entry((e.os, e.layer, &e.component)).or_default();
+            *all += 1;
+            *app += usize::from(e.status == Status::AppProvided);
+        }
+        for ((os, layer, component), (all, app)) in components {
+            if app > 0 && app < all {
+                errors.push(format!(
+                    "{}/{}/{component}: {app} of {all} entries app-provided; it covers a whole component",
+                    os.name(),
+                    layer.name()
+                ));
             }
         }
         errors
@@ -489,6 +565,46 @@ mod tests {
         let stats = c.merge(vec![Entry::new(Os::Windows, Layer::Api, "kernel32.dll", "CreateFileW", "t")]);
         assert_eq!((stats.added, stats.updated), (0, 1));
         assert_eq!(c.find_mut(id).unwrap().status, Status::Green);
+    }
+
+    #[test]
+    fn app_provided_is_stored_and_covers_whole_components() {
+        let mut c = sample();
+        c.merge(vec![Entry::new(Os::Windows, Layer::Api, "msvcp140.dll", "a", "t")]);
+        assert_eq!(c.set_component_status("windows/api/msvcp140.dll", Status::AppProvided), Ok(1));
+        assert_eq!(Status::parse("app-provided"), Some(Status::AppProvided));
+        assert!(c.check().is_empty());
+        let text = &c.files()[&PathBuf::from("windows/api/msvcp140.dll.json")];
+        assert_eq!(text, "[\n{\"symbol\":\"a\",\"status\":\"app-provided\",\"src\":[\"t\"]}\n]\n");
+        assert_eq!(c.find_mut("windows/api/kernel32.dll/CreateFileW").unwrap().status, Status::Missing);
+
+        // A newly imported export of an app-provided library joins it.
+        let stats = c.merge(vec![Entry::new(Os::Windows, Layer::Api, "msvcp140.dll", "b", "t")]);
+        assert_eq!(stats.added, 1);
+        assert_eq!(c.find_mut("windows/api/msvcp140.dll/b").unwrap().status, Status::AppProvided);
+        assert!(c.check().is_empty());
+
+        // Half a library is an error, and so are tests of ours.
+        c.find_mut("windows/api/msvcp140.dll/b").unwrap().status = Status::Missing;
+        assert_eq!(c.check().len(), 1);
+        c.find_mut("windows/api/msvcp140.dll/b").unwrap().status = Status::AppProvided;
+        c.find_mut("windows/api/msvcp140.dll/b").unwrap().tests_visible = 1;
+        assert_eq!(c.check().len(), 1);
+    }
+
+    #[test]
+    fn component_status_protects_work() {
+        let mut c = sample();
+        assert!(c.set_component_status("windows/api/nope.dll", Status::AppProvided).is_err());
+        assert!(c.set_component_status("kernel32.dll", Status::AppProvided).is_err());
+        assert!(c.set_component_status("windows/api/kernel32.dll", Status::Claimed).is_err());
+        let e = c.find_mut("windows/api/kernel32.dll/CreateFileW").unwrap();
+        e.status = Status::Green;
+        e.tests_visible = 1;
+        assert!(c.set_component_status("windows/api/kernel32.dll", Status::AppProvided).is_err());
+        assert_eq!(c.find_mut("windows/api/kernel32.dll/CreateFileW").unwrap().status, Status::Green);
+        assert_eq!(c.set_component_status("linux/syscall/x86_64", Status::Stub), Ok(1));
+        assert_eq!(c.set_component_status("linux/syscall/x86_64", Status::Stub), Ok(0));
     }
 
     #[test]
