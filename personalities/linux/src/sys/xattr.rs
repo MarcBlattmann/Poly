@@ -1,5 +1,5 @@
 //! Extended attributes (xattr(7)): getxattr(2), setxattr(2),
-//! listxattr(2), removexattr(2) and their `l` and `f` forms (ADR 0057; GNU
+//! listxattr(2), removexattr(2) and their `l` and `f` forms (ADR 0059; GNU
 //! `ls -l` asks for ACLs and security labels, `cp -a` copies attributes).
 //!
 //! No file system of Poly stores extended attributes yet, so every call

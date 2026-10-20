@@ -244,7 +244,7 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
     let mut cursor = Cursor::new(iovs, total);
     let mut done: u64 = 0;
     // Files whose reads never wait (regular files, the memory devices)
-    // give as much as asked, a chunk after another (ADR 0057: `dd bs=1M`
+    // give as much as asked, a chunk after another (ADR 0059: `dd bs=1M`
     // counts a short read of /dev/zero as a partial record); a pipe or a
     // terminal gets one read.
     let mut whole = None;

@@ -191,7 +191,7 @@ impl Flock {
 }
 
 /// fcntl(2)'s record locks: `F_GETLK`, `F_SETLK`, `F_SETLKW` and the open
-/// file description forms `F_OFD_*` (ADR 0057; SQLite, Python's
+/// file description forms `F_OFD_*` (ADR 0059; SQLite, Python's
 /// `fcntl.lockf`).
 ///
 /// The `struct flock` at `arg` names the range from `l_whence`
@@ -272,7 +272,7 @@ pub const LOCK_EX: u32 = 2;
 pub const LOCK_NB: u32 = 4;
 pub const LOCK_UN: u32 = 8;
 
-/// flock(fd, operation) (ADR 0057): "EINVAL operation is invalid" unless
+/// flock(fd, operation) (ADR 0059): "EINVAL operation is invalid" unless
 /// it is exactly one of `LOCK_SH`, `LOCK_EX`, `LOCK_UN`, optionally with
 /// `LOCK_NB`; "EWOULDBLOCK The file is locked and the LOCK_NB flag was
 /// selected"; without `LOCK_NB` the call waits and a signal ends it
@@ -327,7 +327,7 @@ fn getdents_common(
 pub const CLOSE_RANGE_UNSHARE: u32 = 1 << 1;
 pub const CLOSE_RANGE_CLOEXEC: u32 = 1 << 2;
 
-/// close_range(first, last, flags) (ADR 0057; Python's `subprocess` closes
+/// close_range(first, last, flags) (ADR 0059; Python's `subprocess` closes
 /// a child's descriptors with it): "EINVAL flags is not valid, or first is
 /// greater than last". Descriptors in the range that are not open are
 /// skipped; `CLOSE_RANGE_CLOEXEC` marks instead of closing.

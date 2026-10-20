@@ -367,14 +367,14 @@ pub trait LinuxFs {
     fn cloexec(&mut self, fd: i32) -> Result<bool, Errno>;
     fn set_cloexec(&mut self, fd: i32, cloexec: bool) -> Result<(), Errno>;
     /// close_range(2): close (with `cloexec`: mark close-on-exec) the open
-    /// descriptors from `first` to `last`, both included (ADR 0057).
+    /// descriptors from `first` to `last`, both included (ADR 0059).
     fn close_range(&mut self, _first: u32, _last: u32, _cloexec: bool) -> Result<(), Errno> {
         Err(Errno::ENOSYS)
     }
     /// fcntl(2) `F_GETLK` (`ofd`: `F_OFD_GETLK`): the lock of another
     /// owner that keeps the caller from a read (`write` false) or write
     /// lock on `[start, end)` of `fd`'s file (`end` `u64::MAX`: to the end
-    /// of the file), if any (ADR 0057).
+    /// of the file), if any (ADR 0059).
     fn test_lock(&mut self, _fd: i32, _ofd: bool, _write: bool, _start: u64, _end: u64) -> Result<Option<LockHolder>, Errno> {
         Err(Errno::ENOSYS)
     }

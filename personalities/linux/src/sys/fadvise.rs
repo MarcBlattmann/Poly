@@ -1,5 +1,5 @@
 //! fadvise64(2) (posix_fadvise(2)): advice about how a file will be read
-//! (ADR 0057; GNU `sort` and `cat` give it).
+//! (ADR 0059; GNU `sort` and `cat` give it).
 //!
 //! The advice is only a hint for the page cache, whose read-ahead does not
 //! take hints yet, so a valid call does nothing and succeeds. The checks

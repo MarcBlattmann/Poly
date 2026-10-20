@@ -1,5 +1,5 @@
 //! Advisory file locks (fcntl(2) record locks, open file description locks,
-//! flock(2); ADR 0057): one `poly_vfs::locks::LockTable` for every file
+//! flock(2); ADR 0059): one `poly_vfs::locks::LockTable` for every file
 //! of every file system, keyed by the file system's device and the inode.
 //!
 //! The table decides; this keeps it, tells waiters when locks go (a

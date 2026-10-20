@@ -400,6 +400,33 @@ impl LinuxKernel for Thread<'_> {
         self.memory()?.remap(old, old_len, new_len, how).map_err(memory_errno)
     }
 
+    fn msync(&mut self, addr: u64, len: u64, sync: bool) -> Result<(), Errno> {
+        let end = addr + len;
+        let regions = self.memory()?.regions();
+        let mut covered = addr;
+        let mut files = Vec::new();
+        for v in regions.iter().filter(|v| v.end > addr && v.start < end) {
+            if v.start > covered {
+                return Err(Errno::ENOMEM);
+            }
+            covered = v.end;
+            if let user::memory::Backing::File { file, shared: true, .. } = &v.backing
+                && let Some(open) = file.source().file()
+            {
+                files.push(Arc::clone(open));
+            }
+        }
+        if covered < end {
+            return Err(Errno::ENOMEM);
+        }
+        if sync {
+            for f in files {
+                f.sync().map_err(vfs_errno)?;
+            }
+        }
+        Ok(())
+    }
+
     fn mprotect(&mut self, addr: u64, len: u64, prot: Prot) -> Result<(), Errno> {
         // PROT_GROWSDOWN would extend the change to the start of a stack
         // region; it is applied to the given range only for now.

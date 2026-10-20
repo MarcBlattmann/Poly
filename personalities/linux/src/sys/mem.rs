@@ -1,4 +1,4 @@
-//! Memory: mmap(2), munmap(2), mprotect(2), mremap(2), brk(2).
+//! Memory: mmap(2), munmap(2), mprotect(2), mremap(2), msync(2), brk(2).
 //!
 //! The personality validates arguments as the man pages describe and turns
 //! them into a [`MapRequest`] or a page-aligned range; the kernel's VMA
@@ -178,7 +178,7 @@ pub const MREMAP_MAYMOVE: u32 = 1;
 pub const MREMAP_FIXED: u32 = 2;
 pub const MREMAP_DONTUNMAP: u32 = 4;
 
-/// mremap(old_address, old_size, new_size, flags, new_address) (ADR 0057;
+/// mremap(old_address, old_size, new_size, flags, new_address) (ADR 0059;
 /// the C library's `realloc` of large blocks, Python's `mmap.resize`).
 ///
 /// mremap(2) ERRORS, checked in this order (ours, to be confirmed by the
@@ -211,6 +211,37 @@ pub fn mremap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         Remap::InPlace
     };
     k.mremap(old, old_len, new_len, to)
+}
+
+/// msync(2) flags (`asm-generic/mman-common.h`).
+pub const MS_ASYNC: u32 = 1;
+pub const MS_INVALIDATE: u32 = 2;
+pub const MS_SYNC: u32 = 4;
+
+/// msync(addr, length, flags) (ADR 0059; Python's `mmap.flush`).
+///
+/// msync(2): `EINVAL` if `addr` is not page aligned, `flags` has unknown
+/// bits or both `MS_SYNC` and `MS_ASYNC`; `ENOMEM` if part of the range is
+/// not mapped (the kernel checks). The length is rounded up to pages; a
+/// zero length succeeds. `MS_SYNC` writes the files of shared mappings in
+/// the range to their disks before returning; `MS_ASYNC` has nothing to
+/// start (the page cache writes dirty pages back on its own, and every
+/// mapping of a file shares its pages), nor has `MS_INVALIDATE` (no other
+/// copies of the pages exist).
+pub fn msync(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let (addr, length, flags) = (a.ulong(0), a.ulong(1), a.uint(2));
+    if !page_aligned(addr) || flags & !(MS_ASYNC | MS_INVALIDATE | MS_SYNC) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    if flags & MS_SYNC != 0 && flags & MS_ASYNC != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let len = page_round_up(length).ok_or(Errno::ENOMEM)?;
+    addr.checked_add(len).ok_or(Errno::ENOMEM)?;
+    if len == 0 {
+        return Ok(0);
+    }
+    k.msync(addr, len, flags & MS_SYNC != 0).map(|()| 0)
 }
 
 /// brk(addr)

@@ -183,7 +183,7 @@ pub enum CpuTimesOf {
     /// (getrusage(2) `RUSAGE_CHILDREN`, times(2) `tms_cutime`).
     Children,
     /// The child (global pid) the calling thread has just waited for, it
-    /// and its own waited-for children: wait4(2)'s `rusage` (ADR 0057).
+    /// and its own waited-for children: wait4(2)'s `rusage` (ADR 0059).
     /// Asked once per wait; `None` if the kernel does not know it.
     Reaped(i32),
 }
@@ -534,6 +534,15 @@ pub trait LinuxKernel {
     /// default.
     fn mremap(&mut self, old: u64, old_len: u64, new_len: u64, to: Remap) -> Result<u64, Errno> {
         let _ = (old, old_len, new_len, to);
+        Err(Errno::ENOSYS)
+    }
+
+    /// msync(2) of `[addr, addr + len)` (both page aligned, `len` non-zero,
+    /// no overflow): `ENOMEM` if part of it is not mapped; with `sync`,
+    /// the files of the shared mappings in it are written to their disks
+    /// first. `ENOSYS` by default.
+    fn msync(&mut self, addr: u64, len: u64, sync: bool) -> Result<(), Errno> {
+        let _ = (addr, len, sync);
         Err(Errno::ENOSYS)
     }
 

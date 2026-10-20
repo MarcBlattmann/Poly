@@ -125,7 +125,7 @@ impl Files {
     }
 
     /// Drop `files`, which descriptors of this table no longer hold, and
-    /// let go of the record locks on them (ADR 0057).
+    /// let go of the record locks on them (ADR 0059).
     fn released(&self, files: Vec<Arc<OpenFile>>) {
         let keys = super::locks::keys_of(&files);
         drop(files);

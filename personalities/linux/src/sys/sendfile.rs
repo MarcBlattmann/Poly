@@ -113,7 +113,7 @@ fn offset_arg(k: &mut dyn LinuxKernel, ptr: crate::kernel::UserPtr) -> Result<Op
     u64::try_from(i64::from_le_bytes(raw)).map(Some).map_err(|_| Errno::EINVAL)
 }
 
-/// copy_file_range(fd_in, off_in, fd_out, off_out, len, flags) (ADR 0057;
+/// copy_file_range(fd_in, off_in, fd_out, off_out, len, flags) (ADR 0059;
 /// GNU `cp` tries it first).
 ///
 /// copy_file_range(2): `flags` must be 0 (`EINVAL`); `EBADF` when a

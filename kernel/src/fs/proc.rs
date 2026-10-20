@@ -124,7 +124,7 @@ pub struct KernelProc;
 
 /// The root context paths are shown from: the reading process's root
 /// directory (chroot(2): a chrooted shell reads `/proc/self/exe` as
-/// `/usr/bin/readlink`, not with the chroot's own path in front, ADR 0057),
+/// `/usr/bin/readlink`, not with the chroot's own path in front, ADR 0059),
 /// the system's for kernel threads. A file outside that root is named from
 /// the system's root.
 fn root() -> Option<FsContext> {

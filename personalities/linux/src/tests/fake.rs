@@ -135,6 +135,8 @@ pub struct FakeKernel {
     pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
     /// mremap calls: old, old length, new length, placement.
     pub remapped: Vec<(u64, u64, u64, crate::kernel::Remap)>,
+    /// msync calls: address, length, sync.
+    pub synced_maps: Vec<(u64, u64, bool)>,
     /// Every mprotect that reached the kernel.
     pub protects: Vec<(u64, u64, Prot)>,
     /// Every process, by pid.
@@ -224,6 +226,7 @@ impl FakeKernel {
             protects: Vec::new(),
             advised: Vec::new(),
             remapped: Vec::new(),
+            synced_maps: Vec::new(),
             on_cpu: 0,
             yields: 0,
             affinity: BTreeMap::new(),
@@ -640,6 +643,15 @@ impl LinuxKernel for FakeKernel {
             return Err(Errno::EINVAL);
         }
         self.unmap_range(addr, len);
+        Ok(())
+    }
+
+    fn msync(&mut self, addr: u64, len: u64, sync: bool) -> Result<(), Errno> {
+        self.synced_maps.push((addr, len, sync));
+        let pages = addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE);
+        if pages.into_iter().any(|p| !self.pages.contains_key(&p)) {
+            return Err(Errno::ENOMEM);
+        }
         Ok(())
     }
 

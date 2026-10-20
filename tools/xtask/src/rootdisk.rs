@@ -1,5 +1,5 @@
 //! The persistent root disk (roadmap Phase 4, "bash, coreutils, Python and
-//! a C compiler run from the persistent disk"; ADR 0057).
+//! a C compiler run from the persistent disk"; ADR 0059).
 //!
 //! An ext4 image holding a small root tree of the host's own programs and
 //! what they need, made at test time and never committed:
@@ -1183,11 +1183,14 @@ pub fn boot_test(kernel: &Path, syms: &std::sync::Arc<crate::symbols::Symbols>) 
         return Ok(());
     }
     eprintln!("==> BusyBox from {origin}");
-    let mut cmd = super::qemu(kernel, MEMORY, &boot_args(), super::Devices::None, "stdio");
+    // POLY_ROOTDISK_APPEND: more kernel arguments (`poly.strace=python3.13`, ...).
+    let append = format!("{} {}", boot_args(), std::env::var("POLY_ROOTDISK_APPEND").unwrap_or_default());
+    let mut cmd = super::qemu(kernel, MEMORY, append.trim_end(), super::Devices::None, "stdio");
     cmd.args(["-display", "none"]).args(drive_args(&image)).arg("-initrd").arg(&initrd);
     let mut s = crate::busybox::Session::spawn(cmd, syms)?;
     s.set_timeouts(STEP_TIMEOUT, SESSION_TIMEOUT);
-    let result = session(&mut s, &contents.have);
+    let mut ran = BTreeSet::new();
+    let result = session(&mut s, &contents.have, &mut ran);
     if result.is_err() {
         let log = super::root().join("target/poly-rootdisk-boot.log");
         let _ = std::fs::write(&log, s.text());
@@ -1199,9 +1202,11 @@ pub fn boot_test(kernel: &Path, syms: &std::sync::Arc<crate::symbols::Symbols>) 
         Some(_) => eprintln!("==> e2fsck -fn passes on the root disk after the session"),
         None => eprintln!("==> e2fsck not installed; skipped checking the image"),
     }
-    if contents.have.contains("gcc") {
+    if ran.contains(GCC_STEP) {
         let elf = read_back(&image, "root/hello")?;
-        if !elf.starts_with(b"\x7fELF") || !elf.windows(22).any(|w| w == b"hello from gcc on Poly") {
+        // The format string is in the file whatever the optimiser did with
+        // the copied text.
+        if !elf.starts_with(b"\x7fELF") || !elf.windows(10).any(|w| w == b"%s, argc=%") {
             return Err("the program gcc wrote is not on the root disk after the boot".into());
         }
         eprintln!("==> /root/hello, compiled on Poly, is on the image ({} bytes)", elf.len());
@@ -1250,6 +1255,10 @@ impl Step {
         Step { ok: Box::new(ok), ..self }
     }
 }
+
+/// The step that compiles `/root/hello` onto the disk, which the test then
+/// reads back from the image.
+const GCC_STEP: &str = "gcc compiles hello.c onto the disk and runs it";
 
 /// The session's command lines, in order.
 fn steps() -> Vec<Step> {
@@ -1336,7 +1345,7 @@ fn steps() -> Vec<Step> {
             &format!("{}status=0\n", python_sys_expected(super::QEMU_CPUS)),
         ),
         step(
-            "gcc compiles hello.c onto the disk and runs it",
+            GCC_STEP,
             &["gcc"],
             "gcc -O1 -Wall -o /root/hello /root/hello.c && /root/hello a b; echo \"status=$?\"",
             "hello from gcc on Poly, argc=3\nstatus=42\n",
@@ -1359,19 +1368,34 @@ fn is_kernel_line(line: &str) -> bool {
 }
 
 /// System calls a program may make that Poly answers with `ENOSYS` on
-/// purpose (ADR 0043, 0049, 0057).
+/// purpose (ADR 0043, 0049, 0059).
 const EXPECTED_ENOSYS: &[&str] = &[" rseq not implemented"];
 
-fn session(s: &mut crate::busybox::Session, have: &BTreeSet<&'static str>) -> super::Result {
+/// Run the steps; `ran` gets the names of those that ran.
+fn session(
+    s: &mut crate::busybox::Session,
+    have: &BTreeSet<&'static str>,
+    ran: &mut BTreeSet<&'static str>,
+) -> super::Result {
     s.expect("rootdisk: /dev/vda mounted on /mnt/root")?;
     s.prompt()?;
     let mut failed = Vec::new();
     let mut unimplemented = BTreeSet::new();
+    // POLY_ROOTDISK_STEPS=<text>: only the steps whose name contains it
+    // (and the terminal's size), for debugging one program.
+    let only = std::env::var("POLY_ROOTDISK_STEPS").ok().filter(|s| !s.is_empty());
     for step in steps() {
+        if let Some(only) = &only
+            && !step.what.contains(only.as_str())
+            && !step.what.starts_with("stty")
+        {
+            continue;
+        }
         if let Some(missing) = step.needs.iter().find(|n| !have.contains(**n)) {
             eprintln!("==> skipped: {} (no {missing} on this host)", step.what);
             continue;
         }
+        ran.insert(step.what);
         let raw = s.run(&step.line)?;
         let mut out = String::new();
         for line in raw.split_inclusive('\n') {

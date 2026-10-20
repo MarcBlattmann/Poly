@@ -1,4 +1,4 @@
-//! Resizing and moving a mapping (mremap(2), ADR 0057): the region map
+//! Resizing and moving a mapping (mremap(2), ADR 0059): the region map
 //! decides ([`poly_vm::VmMap::remap`]); this moves the pages.
 //!
 //! A moved page keeps what it holds without a copy: the memory's own frames

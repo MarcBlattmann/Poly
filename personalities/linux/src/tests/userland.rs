@@ -1,5 +1,5 @@
 //! The calls bash, coreutils, Python and gcc needed beyond the earlier
-//! milestones (ADR 0057), against [`FakeKernel`].
+//! milestones (ADR 0059), against [`FakeKernel`].
 
 extern crate std;
 
@@ -175,6 +175,22 @@ fn mremap_checks_its_flags_and_rounds_the_sizes() {
         assert_eq!(sys(&mut k, nr::MREMAP, args), Err(Errno::EINVAL), "{what}");
     }
     assert_eq!(k.remapped.len(), 3, "refused calls never reach the kernel");
+}
+
+// ---- msync --------------------------------------------------------------
+
+#[test]
+fn msync_checks_its_flags_and_the_range() {
+    let mut k = FakeKernel::new();
+    let a = scratch(0);
+    assert_eq!(sys(&mut k, nr::MSYNC, &[a, 100, 4]), Ok(0), "MS_SYNC");
+    assert_eq!(sys(&mut k, nr::MSYNC, &[a, 4096, 1 | 2]), Ok(0), "MS_ASYNC | MS_INVALIDATE");
+    assert_eq!(sys(&mut k, nr::MSYNC, &[a, 0, 4]), Ok(0), "nothing to do");
+    assert_eq!(k.synced_maps, [(a, 4096, true), (a, 4096, false)]);
+    assert_eq!(sys(&mut k, nr::MSYNC, &[a + 1, 4096, 4]), Err(Errno::EINVAL), "misaligned");
+    assert_eq!(sys(&mut k, nr::MSYNC, &[a, 4096, 5]), Err(Errno::EINVAL), "MS_SYNC | MS_ASYNC");
+    assert_eq!(sys(&mut k, nr::MSYNC, &[a, 4096, 8]), Err(Errno::EINVAL), "an unknown flag");
+    assert_eq!(sys(&mut k, nr::MSYNC, &[UNMAPPED, 4096, 4]), Err(Errno::ENOMEM));
 }
 
 // ---- copy_file_range ----------------------------------------------------

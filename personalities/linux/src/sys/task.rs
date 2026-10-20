@@ -137,7 +137,7 @@ fn wait_for(k: &mut dyn LinuxKernel, filter: &WaitFilter, nohang: bool) -> Resul
 }
 
 /// Resource usage of the child `pid` (global) the caller has just waited
-/// for: its CPU time and that of its own waited-for children (ADR 0057);
+/// for: its CPU time and that of its own waited-for children (ADR 0059);
 /// the other fields are not accounted and stay 0.
 fn write_rusage(k: &mut dyn LinuxKernel, ptr: UserPtr, pid: i32) -> Result<(), Errno> {
     use crate::time::abi::{Rusage, Timeval};

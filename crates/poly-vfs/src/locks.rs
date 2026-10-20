@@ -1,4 +1,4 @@
-//! Advisory file locks (ADR 0057): POSIX record locks and open file
+//! Advisory file locks (ADR 0059): POSIX record locks and open file
 //! description locks (fcntl(2) `F_SETLK`, `F_OFD_SETLK`, ...) and whole-file
 //! locks (flock(2)), as a table the kernel keeps for every file.
 //!
