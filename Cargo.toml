@@ -23,6 +23,7 @@ members = [
     "personalities/nt",
     "personalities/xnu",
     "tools/coverage",
+    "tools/pipeline",
     "tools/xtask",
 ]
 exclude = ["kernel"]
@@ -51,6 +52,7 @@ poly-virtio-blk = { path = "crates/poly-virtio-blk" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
+libc = "0.2.177"
 rustc-demangle = "0.1.28"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
