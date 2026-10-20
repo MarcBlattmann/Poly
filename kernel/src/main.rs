@@ -8,17 +8,20 @@ extern crate alloc;
 mod acpi;
 mod arch;
 mod boot_info;
+mod dma;
 mod frames;
 mod heap;
 mod ktest;
 mod log;
 mod mm;
+mod pci;
 mod process;
 mod qemu;
 mod selftest;
 mod sync;
 mod syscall;
 mod thread;
+mod virtio_blk;
 
 use core::panic::PanicInfo;
 use poly_mem::{PAGE_SIZE, Region, RegionKind};
@@ -89,6 +92,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     }
     thread::init();
     acpi::init(boot.rsdp, &memory);
+    pci::init();
+    virtio_blk::init();
 
     let ok = selftest::run(&boot, &memory);
     heap::log_stats();

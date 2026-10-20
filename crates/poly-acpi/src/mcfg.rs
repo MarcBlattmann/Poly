@@ -42,7 +42,12 @@ impl<'a> Mcfg<'a> {
 /// One memory-mapped configuration space base address allocation structure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EcamRegion {
-    /// Base address of the enhanced configuration access mechanism window.
+    /// Base address of the segment group's enhanced configuration access
+    /// mechanism (PCI Firmware Specification 3.2, §4.1.2, table 4-3). It is
+    /// the address bus 0 has in the ECAM layout, also when `start_bus` is
+    /// higher: bus `n` starts at `base + (n << 20)`, so the window this
+    /// structure describes begins `start_bus` MiB above `base` and nothing
+    /// is decoded below that.
     pub base: u64,
     /// PCI segment group number.
     pub segment: u16,

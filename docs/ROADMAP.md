@@ -43,7 +43,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] Kernel threads, context switching, preemptive round-robin scheduler
 - [ ] Synchronisation: interrupt-safe spinlocks, mutexes, wait queues, sleep/wakeup
 - [ ] PCI/PCIe enumeration (ECAM), MSI/MSI-X interrupts
-- [ ] virtio core (virtqueues) and virtio-blk driver: first real disk I/O
+- [x] virtio core (virtqueues) and virtio-blk driver: first real disk I/O
 - [ ] Block layer with request queue and buffer cache
 
 ## Phase 2: User space and the first Linux program
