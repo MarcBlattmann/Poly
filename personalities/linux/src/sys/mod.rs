@@ -7,6 +7,7 @@ pub mod admin;
 pub mod cred;
 pub mod epoll;
 pub mod eventfd;
+pub mod fadvise;
 pub mod fd;
 pub mod futex;
 pub mod io;

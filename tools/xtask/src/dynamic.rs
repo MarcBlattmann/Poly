@@ -203,7 +203,7 @@ fn file_name(path: &str) -> String {
 /// The directories an object asks to be searched first: `DT_RUNPATH`, or
 /// `DT_RPATH` without one (ld.so(8)). `$ORIGIN` entries are left out: they
 /// only name directories of the image (the plugin's), not of the host.
-fn own_paths(d: &Dynamic<'_>) -> Vec<PathBuf> {
+pub(crate) fn own_paths(d: &Dynamic<'_>) -> Vec<PathBuf> {
     let list = d.runpath().or_else(|| d.rpath()).unwrap_or_default();
     String::from_utf8_lossy(list)
         .split(':')
@@ -213,14 +213,14 @@ fn own_paths(d: &Dynamic<'_>) -> Vec<PathBuf> {
 }
 
 /// The host's library directories, in search order.
-struct SearchPath {
+pub(crate) struct SearchPath {
     dirs: Vec<PathBuf>,
 }
 
 impl SearchPath {
     /// `/etc/ld.so.conf` (and the files it includes), then the default
     /// directories.
-    fn host() -> SearchPath {
+    pub(crate) fn host() -> SearchPath {
         let mut dirs = Vec::new();
         read_ld_so_conf(Path::new("/etc/ld.so.conf"), &mut dirs, 0);
         dirs.extend(["/lib64", "/usr/lib64", "/lib", "/usr/lib"].map(PathBuf::from));
@@ -229,7 +229,7 @@ impl SearchPath {
 
     /// The first x86-64 ELF file called `name` in `first` or the search
     /// path, with its contents.
-    fn find(&self, name: &str, first: &[PathBuf]) -> Option<(PathBuf, Vec<u8>)> {
+    pub(crate) fn find(&self, name: &str, first: &[PathBuf]) -> Option<(PathBuf, Vec<u8>)> {
         if name.contains('/') {
             let bytes = std::fs::read(name).ok()?;
             return Elf::parse(&bytes).is_ok().then(|| (PathBuf::from(name), bytes));
