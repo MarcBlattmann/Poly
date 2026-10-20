@@ -1,18 +1,20 @@
 //! Device registers through an uncached mapping: the kernel's one
 //! implementation of [`Mmio`] (the trait `poly-pci` defines and `poly-irq`
-//! reuses), shared by the APICs, the HPET, PCI and virtio.
+//! reuses), shared by the APICs, the HPET, PCI BARs and virtio.
 //!
-//! [`MmioRegion::map`] maps the range with `mm::map_mmio` (uncached,
-//! no-execute, never RAM). Every access is a single volatile load or store of
-//! its natural width, which device registers require; an access that does
-//! not fit inside the region (or is misaligned) is dropped, reading all ones,
-//! as the trait asks.
+//! [`MmioRegion::map`] maps a range with `mm::map_mmio` (uncached,
+//! no-execute, never RAM); `pci::Device::map_bar` hands out regions over a
+//! BAR it mapped once. Every access is a single volatile load or store of its
+//! natural width, which device registers require; an access that does not
+//! fit inside the region (or is misaligned) is dropped, reading all ones, as
+//! the trait asks. Registers are little-endian, like the CPU.
 
 use crate::mm;
 use poly_irq::Mmio;
 
-/// A mapped block of device registers.
-#[derive(Debug)]
+/// A mapped block of device registers, or part of one. Copies share the
+/// mapping, which lives for the kernel's lifetime.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MmioRegion {
     virt: u64,
     len: usize,
@@ -23,14 +25,35 @@ impl MmioRegion {
     /// if `mm::map_mmio` refuses (RAM, too large, out of window or frames).
     pub fn map(phys: u64, len: usize) -> Option<MmioRegion> {
         let virt = mm::map_mmio(phys, len as u64)?;
-        Some(MmioRegion { virt, len })
+        // SAFETY: `map_mmio` just mapped `len` bytes at `virt`, uncached and
+        // never unmapped.
+        Some(unsafe { MmioRegion::from_mapping(virt, len) })
+    }
+
+    /// A region over `len` bytes at `virt`.
+    ///
+    /// # Safety
+    /// `virt..virt + len` is device memory mapped by `mm::map_mmio` (or an
+    /// equivalent uncached mapping) for the kernel's lifetime.
+    pub unsafe fn from_mapping(virt: u64, len: usize) -> MmioRegion {
+        MmioRegion { virt, len }
+    }
+
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// `len` bytes starting `offset` bytes in, if they lie inside.
+    pub fn subregion(&self, offset: usize, len: usize) -> Option<MmioRegion> {
+        (offset.checked_add(len)? <= self.len).then_some(MmioRegion { virt: self.virt + offset as u64, len })
     }
 
     /// The address of a `size`-byte access at `offset`, if it lies inside
     /// the region and is naturally aligned.
     fn at(&self, offset: usize, size: usize) -> Option<u64> {
         let end = offset.checked_add(size)?;
-        (end <= self.len && offset.is_multiple_of(size)).then(|| self.virt + offset as u64)
+        let addr = self.virt + offset as u64;
+        (end <= self.len && addr.is_multiple_of(size as u64)).then_some(addr)
     }
 }
 
@@ -39,9 +62,9 @@ macro_rules! access {
         fn $read(&self, offset: usize) -> $t {
             match self.at(offset, size_of::<$t>()) {
                 // SAFETY: `at` checked that the access lies inside the region,
-                // which `map_mmio` mapped (uncached) for the kernel's lifetime,
-                // and is naturally aligned. Device registers are not Rust
-                // objects, so a volatile access does not alias anything.
+                // which is mapped uncached for the kernel's lifetime (see
+                // `from_mapping`), and is naturally aligned. Device registers
+                // are not Rust objects, so a volatile access aliases nothing.
                 Some(addr) => unsafe { (addr as *const $t).read_volatile() },
                 None => <$t>::MAX,
             }

@@ -16,8 +16,10 @@ what exists **today** and how it fits that plan.
                  kernel/src/syscall.rs  ← routes by the process's personality tag
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt
                           │
-            shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, threads
-            arch/x86_64 (PVH entry, serial, exceptions, context switch)
+            shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
+            block layer: request queue + buffer cache per disk (virtio0, ram0)
+            devices: PCI (ECAM), virtio-blk (polled), RAM disk
+            arch/x86_64 (PVH entry, serial, exceptions, page tables, context switch)
 ```
 
 ## Boot flow
@@ -31,8 +33,9 @@ what exists **today** and how it fits that plan.
    switches to the kernel page tables (`mm::init`; the boot mapping is gone
    after this), hands all usable RAM to the frame allocator, starts the
    scheduler, reads the ACPI tables, sets up interrupts and time
-   (`arch::init_interrupts`), enables interrupts and runs the boot self-test
-   with the timer preempting threads.
+   (`arch::init_interrupts`) and enables them, enumerates PCI, brings up the
+   block layer (the virtio-blk disk if there is one, and a RAM disk) and runs
+   the boot self-test with the timer preempting threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
 
@@ -46,6 +49,137 @@ what exists **today** and how it fits that plan.
 - `kernel/src/acpi.rs` implements `PhysMemory` over the direct map (never
   usable RAM or the kernel image), prints a summary at boot and keeps the
   counts the self-test checks.
+
+## Devices: PCI and virtio
+
+Protocol logic lives in host-tested crates behind access traits
+([ADR 0009](adr/0009-drivers-behind-access-traits.md)); the kernel maps
+memory, implements the traits and drives the devices. Decisions are in
+[ADR 0015](adr/0015-pci-and-virtio-in-the-kernel.md).
+
+- **Configuration space.** `kernel/src/pci.rs` takes the ECAM windows from
+  the ACPI MCFG (`acpi::ecam_regions`), maps each with `mm::map_mmio` and
+  implements `poly_pci::ConfigSpace` over it with volatile accesses of the
+  width asked for. The MCFG base is the address of bus 0 even when a window
+  starts higher, so a window for buses N-M is mapped from base + N MiB. No
+  MCFG means no PCI (the legacy 0xcf8 port mechanism is not implemented).
+- **Enumeration.** `pci::init` probes every bus the windows decode
+  (`poly_pci::scan_all`), sizes BARs (`probe_bars`; host and ISA bridges are
+  skipped, since sizing briefly turns off decoding the kernel depends on)
+  and prints one line per function. The list (`pci::devices()`) lives for
+  the kernel's lifetime; drivers find their device in it.
+- **BARs.** `Device::map_bar(i)` maps a memory BAR once (uncached) and
+  returns an `MmioRegion` (`arch/x86_64/mmio.rs`, the kernel's one
+  `poly_pci::Mmio`, also used for the APICs and the HPET): bounds- and
+  alignment-checked volatile accesses, with `subregion` for the virtio
+  structures inside a BAR. Drivers enable memory decoding and bus mastering
+  themselves (`poly_pci::enable`).
+- **Interrupts.** Not used by PCI devices yet: `Device::msix()` parses and
+  checks a function's MSI-X capability so drivers can log it, but nothing
+  enables MSI-X or INTx. The kernel side exists (see "Interrupts and time":
+  `arch::irq::allocate_vector` and `msi_message`); the steps to switch
+  virtio-blk to MSI-X are in `kernel/src/virtio_blk.rs`.
+- **DMA.** `kernel/src/dma.rs`: `DmaBuffer` is a zeroed block of frames from
+  `FRAMES`, used through the direct map. There is no IOMMU, so the bus
+  address a device gets is the physical address. Drivers that take the
+  caller's memory translate it with `dma::bus_address` (`KernelDma` for
+  `poly-virtio-blk`), which accepts only ranges inside the direct map: the
+  map is linear, so such a range is physically contiguous. Heap memory
+  qualifies (every heap allocation lies in one run of frames from one buddy
+  block, reached through the direct map), and so do `DmaBuffer`s and thread
+  stacks; the kernel image (statics, the boot stack), MMIO mappings and
+  everything else are refused, which fails the request with `BadBuffer`.
+- **virtio-blk** (`kernel/src/virtio_blk.rs`): the driver is the host-tested
+  `poly-virtio-blk` crate. The kernel finds the first virtio block function,
+  discovers its structures (`poly_virtio::PciTransport`), maps them, turns
+  on memory decoding, resets the device, turns on bus mastering and hands
+  everything to `poly_virtio_blk::init` with DMA memory for the virtqueue
+  (128 entries) and the request headers, tables from the heap and
+  `KernelDma`. `init` negotiates features (VERSION_1 required; SIZE_MAX,
+  SEG_MAX, RO, BLK_SIZE, FLUSH, EVENT_IDX and ACCESS_PLATFORM taken when
+  offered) and sets DRIVER_OK. Data moves straight between the device and
+  the caller's buffers, several requests at a time. The driver sits behind a
+  `poly_block::Watchdog`: when requests are out and 20 million polls in a
+  row bring nothing back, it resets the device (`Abort`) and fails them,
+  and every later request fails too. All of it lives as long as the kernel.
+
+```text
+pci: segment 0 buses 00-ff: ECAM at 0xb0000000, mapped at 0xffffc00000000000
+pci: 00:03.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd5000 4 KiB, BAR4 mem64 pf 0xfe000000 16 KiB
+virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800; left disabled, polling
+virtio-blk: 00:03.0: 1 MiB (2048 sectors), block size 512, features 0x120000244, queue 128 entries, 126 segments per request, write cache
+```
+
+`cargo xtask` writes a fresh 1 MiB test image (`target/poly-test-disk.img`,
+every 512-byte sector starting with "POLY" and its number) before each boot
+and attaches it as `-device virtio-blk-pci,disable-legacy=on` with the
+kernel flag `poly.test.disk`. With the flag, the block layer tests (below)
+run against the disk as well as the RAM disk. Without it they check only
+what is there, so the kernel boots without a disk too (`cargo xtask run
+--no-disk`).
+
+## Block layer
+
+The block layer is the host-tested `poly-block` crate
+([ADR 0014](adr/0014-block-layer.md)); `kernel/src/block.rs` gives it
+memory and a lock per disk, and keeps the list of disks
+([ADR 0017](adr/0017-block-layer-in-the-kernel.md)).
+
+```
+   file systems (later)           block::root(), block::ram(), block::find(name)
+          │  Disk: read_block, read, write_block, sync, stats, lock() → Cached
+          ▼
+   BufferCache   64 KiB per disk: write-back, exact LRU, pinning, read-ahead
+          │
+   RequestQueue  32 requests; ordering, C-LOOK elevator, merging, splitting;
+          │      4 requests of up to 16 segments at the device
+          ▼
+   block::Device ── Virtio: Watchdog<poly_virtio_blk::VirtioBlk>  ("virtio0")
+                └── Ram:    poly_block::RamDisk, 256 KiB of heap    ("ram0")
+```
+
+- **Disks.** `block::init` (after `pci::init`) registers the virtio-blk disk
+  as `virtio0` if there is one, and always a 256 KiB RAM disk as `ram0`, so
+  file system code can be tested without a disk. `block::root()` is the
+  disk a file system mounts (`virtio0`), `block::ram()` the RAM disk,
+  `block::disks()` all of them.
+- **Each disk** is a `Disk`: a name, the device's `DeviceInfo` and, behind
+  one spinlock, a `Cached`: the device in a `RequestQueue`, with a
+  `BufferCache` on top. The tables of both and the cache's buffers come
+  from the heap, once, and live as long as the kernel; the cache's buffers
+  are one heap allocation, so the device can DMA into them.
+- **Reads** (`read_block`, and `read` for several blocks, which reads the
+  missing ones ahead in one batch so the queue merges them) copy out of the
+  cache. **Writes** (`write_block`) go into the cache without reading the
+  block first and reach the device when the block is evicted or on `sync`,
+  which writes every dirty block and flushes the device's write cache; only
+  then are they durable. `Disk::lock()` gives the rest: pinned buffers
+  (`get`, `data`, `release`), `invalidate` (drop clean blocks), and reads and
+  writes that go past the cache (`read_uncached`, `write_uncached`).
+- **Waiting.** Every operation is synchronous: the caller spins in
+  `RequestQueue::wait`, polling the device, with the disk's lock held. The
+  virtio-blk watchdog bounds that wait. The disk's lock is a `SpinLock`, so
+  interrupts stay off for the whole wait: the tick (and preemption) stalls
+  during disk I/O, and ticks due meanwhile merge into one. With interrupts, the queue's
+  interrupt handler will run `RequestQueue::process` and waiters will sleep
+  on their tickets instead (steps in `kernel/src/virtio_blk.rs`).
+
+```text
+block: virtio0: virtio-blk 00:03.0, 2048 blocks of 512 bytes (1 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB)
+block: ram0: RAM disk, 512 blocks of 512 bytes (256 KiB); queue 32 requests, cache 128 buffers (64 KiB)
+block: virtio0: block 0: 50 4f 4c 59 00 00 00 00 08 09 0a 0b 0c 0d 0e 0f  POLY............
+```
+
+The kernel tests (`block::*`) run the same suite against `ram0` (filled
+with the test pattern first) and, with `poly.test.disk`, `virtio0`: the
+pattern read through the cache (first and last block, a multi-block read
+that must be read ahead in merged requests), hit and miss counters, a write
+that stays in the cache until `sync` and comes back from the disk after the
+cache is dropped, dirty blocks written back when more blocks are written
+than the cache holds, pinned blocks surviving a full cache, a read-only RAM
+disk refusing writes, and DMA into a heap buffer that crosses a page
+boundary (a buffer on the boot stack is refused). Each test puts the disks
+back as it found them.
 
 ## Personality routing
 
@@ -65,6 +199,7 @@ what exists **today** and how it fits that plan.
 | Unit tests for pure logic | `crates/`, `personalities/`, `tools/` | `cargo test --workspace` (host) |
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
+| Device tests against QEMU's devices: PCI config space, the block layer on the virtio-blk test image and the RAM disk (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk` | `cargo xtask test` |
 | Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
 | App trace replay | recorded sessions | later |
 
@@ -81,7 +216,7 @@ mapping early in `kernel_entry`:
 |---|---|---|
 | `0x0` – `0x7fff_ffff_ffff` | – | nothing (user space later); the boot identity map is gone |
 | `0xffff_8000_0000_0000` + phys | every region of the memory map, up to 64 TiB | direct map: RW, NX; RAM write-back, reserved ranges uncached; holes unmapped |
-| `0xffff_c000_0000_0000` – `+512 GiB` | device ranges | `mm::map_mmio`: uncached (PCD+PWT), NX, a gap page after each |
+| `0xffff_c000_0000_0000` – `+512 GiB` | device ranges | `mm::map_mmio`: uncached (PCD+PWT), NX, a gap page after each; PCI ECAM windows and BARs |
 | `0xffff_ffff_8000_0000` + phys | kernel image | `.text` R+X, `.rodata`/`.kernel_tests` R, `.data`/`.bss` RW+NX, stacks RW+NX |
 
 Kernel image detail (`kernel/linker.ld`, every boundary page-aligned):

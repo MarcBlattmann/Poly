@@ -7,12 +7,15 @@ extern crate alloc;
 
 mod acpi;
 mod arch;
+mod block;
 mod boot_info;
+mod dma;
 mod frames;
 mod heap;
 mod ktest;
 mod log;
 mod mm;
+mod pci;
 mod process;
 mod qemu;
 mod selftest;
@@ -20,6 +23,7 @@ mod sync;
 mod syscall;
 mod thread;
 mod time;
+mod virtio_blk;
 
 use core::panic::PanicInfo;
 use poly_mem::{PAGE_SIZE, Region, RegionKind};
@@ -98,6 +102,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     // SAFETY: the boot thread holds no lock; from here on the tick preempts it.
     unsafe { arch::cpu::enable_interrupts() };
     kprintln!("irq: interrupts enabled");
+    pci::init();
+    block::init();
 
     let ok = selftest::run(&boot, &memory);
     heap::log_stats();

@@ -82,6 +82,11 @@ thread. The deadlock negative boot test now locks a `Mutex` twice.
   characters on real hardware. A buffered console fixes that later.
 - A thread that waits for a device to be woken by an interrupt handler uses
   a `WaitQueue`: handlers may wake threads but never block.
+- The block layer (ADR 0017) polls its disk with the disk's `SpinLock` held,
+  so interrupts are off for the length of every disk operation and the tick
+  stalls meanwhile. Nothing deadlocks (completion is polled, not signalled),
+  but preemption latency is as long as the slowest request. MSI-X with
+  sleeping waiters (the steps in `kernel/src/virtio_blk.rs`) removes this.
 - SMP needs: per-CPU held-lock and interrupt-depth counters, per-CPU local
   APIC setup and tick on each application processor, IPIs (0xf1-0xfd) for
   rescheduling and TLB shootdown, the scheduler lock (or an "on CPU" flag)

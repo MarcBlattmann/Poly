@@ -2,14 +2,15 @@
 //!
 //! All parsing lives in `poly-acpi`; this module only gives it access to
 //! physical memory, prints what the firmware describes and keeps a summary
-//! for the self-test and a [`Platform`] description for interrupt and timer
-//! setup (and, later, SMP).
+//! for the self-test, a [`Platform`] description for interrupt and timer
+//! setup (and, later, SMP), and the PCI ECAM windows from the MCFG for
+//! [`crate::pci`].
 
 use crate::arch::phys_range_to_virt;
 use crate::sync::SpinLock;
 use crate::{kprint, kprintln};
 use alloc::vec::Vec;
-use poly_acpi::{Acpi, AddressSpace, Error, Fadt, Hpet, Madt, MadtEntry, Mcfg, PhysMemory, Table};
+use poly_acpi::{Acpi, AddressSpace, EcamRegion, Error, Fadt, Hpet, Madt, MadtEntry, Mcfg, PhysMemory, Table};
 use poly_mem::{MemoryMap, RegionKind};
 
 /// What the self-test checks.
@@ -21,6 +22,7 @@ pub struct Summary {
 }
 
 static SUMMARY: SpinLock<Option<Summary>> = SpinLock::new(None);
+static ECAM: SpinLock<Vec<EcamRegion>> = SpinLock::new(Vec::new());
 
 /// The summary from [`init`], if the tables could be read.
 pub fn summary() -> Option<Summary> {
@@ -86,6 +88,13 @@ static PLATFORM: SpinLock<Option<Platform>> = SpinLock::new(None);
 /// The platform description from [`init`], if the tables could be read.
 pub fn platform() -> Option<Platform> {
     PLATFORM.lock().clone()
+}
+
+/// The PCI ECAM windows the MCFG describes, one per segment group and bus
+/// range. Empty without an MCFG (no PCI Express, or a machine like QEMU's
+/// `pc` that only has the legacy port mechanism).
+pub fn ecam_regions() -> Vec<EcamRegion> {
+    ECAM.lock().clone()
 }
 
 /// Physical memory through the kernel's direct map, limited to memory the
@@ -199,9 +208,11 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<(Summary, Platform), Error> 
         }
     }
     if let Some(mcfg) = optional::<Mcfg>(&acpi) {
-        for r in mcfg.regions() {
+        let regions: Vec<EcamRegion> = mcfg.regions().collect();
+        for r in &regions {
             kprintln!("acpi: PCI ECAM at {:#x}, segment {} buses {}-{}", r.base, r.segment, r.start_bus, r.end_bus);
         }
+        *ECAM.lock() = regions;
     }
     if let Some(fadt) = optional::<Fadt>(&acpi) {
         kprint!("acpi: FADT SCI {}, century {:#x}", fadt.sci_interrupt(), fadt.century());

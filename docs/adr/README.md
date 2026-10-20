@@ -17,6 +17,9 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0010](0010-kernel-address-space.md) | Kernel address space: direct map of the memory map's regions, W^X, guard pages | Accepted |
 | [0012](0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md) | Scheduler policy in a host-tested crate; context switch and stacks in the kernel | Accepted |
 | [0013](0013-interrupt-controllers-and-time-base.md) | Interrupt controllers and the time base in one host-tested crate (`poly-irq`) | Accepted |
+| [0014](0014-block-layer.md) | Block layer: submit/poll devices, ordering request queue, pinning buffer cache | Accepted |
+| [0015](0015-pci-and-virtio-in-the-kernel.md) | PCI and virtio in the kernel: ECAM only, a boot-time device list, DMA from the frame allocator, polling first | Accepted (virtio-blk driver parts superseded by 0017) |
+| [0017](0017-block-layer-in-the-kernel.md) | The block layer in the kernel: poly-virtio-blk on direct-map DMA, a watchdog, a queue and a cache per disk | Accepted |
 | [0016](0016-interrupt-dispatch-tick-and-kernel-locks.md) | Interrupt dispatch and vector allocation, a 1 kHz periodic tick, spinlocks that mask interrupts, a sleeping mutex | Accepted |
 
 ## Open decisions

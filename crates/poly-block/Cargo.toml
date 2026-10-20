@@ -1,0 +1,11 @@
+[package]
+name = "poly-block"
+description = "Block layer: the block device interface, a request queue, a buffer cache and a RAM disk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

@@ -22,6 +22,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-block"
+version = "0.0.1"
+
+[[package]]
 name = "poly-heap"
 version = "0.0.1"
 
@@ -40,14 +44,18 @@ dependencies = [
  "poly-acpi",
  "poly-backtrace",
  "poly-binfmt",
+ "poly-block",
  "poly-heap",
  "poly-irq",
  "poly-mem",
  "poly-paging",
+ "poly-pci",
  "poly-personality-linux",
  "poly-personality-nt",
  "poly-personality-xnu",
  "poly-sched",
+ "poly-virtio",
+ "poly-virtio-blk",
 ]
 
 [[package]]
@@ -86,3 +94,19 @@ dependencies = [
 [[package]]
 name = "poly-sched"
 version = "0.0.1"
+
+[[package]]
+name = "poly-virtio"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+]
+
+[[package]]
+name = "poly-virtio-blk"
+version = "0.0.1"
+dependencies = [
+ "poly-block",
+ "poly-pci",
+ "poly-virtio",
+]

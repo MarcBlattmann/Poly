@@ -21,14 +21,18 @@ poly-abi = { path = "../crates/poly-abi" }
 poly-acpi = { path = "../crates/poly-acpi" }
 poly-backtrace = { path = "../crates/poly-backtrace" }
 poly-binfmt = { path = "../crates/poly-binfmt" }
+poly-block = { path = "../crates/poly-block" }
 poly-heap = { path = "../crates/poly-heap" }
 poly-irq = { path = "../crates/poly-irq" }
 poly-mem = { path = "../crates/poly-mem" }
 poly-paging = { path = "../crates/poly-paging" }
 poly-sched = { path = "../crates/poly-sched" }
+poly-pci = { path = "../crates/poly-pci" }
 poly-personality-linux = { path = "../personalities/linux" }
 poly-personality-nt = { path = "../personalities/nt" }
 poly-personality-xnu = { path = "../personalities/xnu" }
+poly-virtio = { path = "../crates/poly-virtio" }
+poly-virtio-blk = { path = "../crates/poly-virtio-blk" }
 
 [profile.dev]
 panic = "abort"
