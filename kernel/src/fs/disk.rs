@@ -217,7 +217,12 @@ pub fn mount(name: &str, path: &str, read_only: bool) -> Result<Arc<DiskMount>, 
         if s.was_clean || s.journaled { "" } else { "; was not cleanly unmounted (run e2fsck)" },
     );
     if s.replayed > 0 || s.orphans > 0 {
-        kprintln!("fs: {}: journal replayed ({} transactions), {} orphans processed", disk.name(), s.replayed, s.orphans);
+        kprintln!(
+            "fs: {}: journal replayed ({} transactions), {} orphans processed",
+            disk.name(),
+            s.replayed,
+            s.orphans
+        );
     }
     let m = Arc::new(DiskMount { disk, path: String::from(path), ext2, cached, mount_id, read_only });
     mounts.push(Arc::clone(&m));

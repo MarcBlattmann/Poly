@@ -380,7 +380,8 @@ impl<D: BlockIo> Ctx<'_, D> {
             if level == 0 {
                 // Grow: the root's entries move into a new block.
                 let root = &mut path[0];
-                let child = Node { block: b, depth: root.node.depth, max: bmax, ents: core::mem::take(&mut root.node.ents) };
+                let child =
+                    Node { block: b, depth: root.node.depth, max: bmax, ents: core::mem::take(&mut root.node.ents) };
                 root.node.ents.push(Ent { lblk: child.ents[0].lblk, len: 0, uninit: false, ptr: b });
                 root.node.depth += 1;
                 let idx = root.idx;
@@ -439,9 +440,11 @@ impl<D: BlockIo> Ctx<'_, D> {
             let p = &l.node.ents[pos - 1];
             !p.uninit && p.end() == lblk as u64 && p.ptr + p.len as u64 == b && p.len < INIT_MAX
         };
-        let joins_next = l.node.ents.get(pos).is_some_and(|n| {
-            !n.uninit && n.lblk as u64 == lblk as u64 + 1 && n.ptr == b + 1 && n.len < INIT_MAX
-        });
+        let joins_next = l
+            .node
+            .ents
+            .get(pos)
+            .is_some_and(|n| !n.uninit && n.lblk as u64 == lblk as u64 + 1 && n.ptr == b + 1 && n.len < INIT_MAX);
         if joins_prev {
             l.node.ents[pos - 1].len += 1;
             if joins_next && l.node.ents[pos - 1].len + l.node.ents[pos].len <= INIT_MAX {
@@ -481,12 +484,7 @@ impl<D: BlockIo> Ctx<'_, D> {
         }
         pieces.push(Ent { lblk: lblk as u32, len: 1, uninit: false, ptr: e.ptr + off });
         if off + 1 < e.len as u64 {
-            pieces.push(Ent {
-                lblk: lblk as u32 + 1,
-                len: e.len - off as u32 - 1,
-                uninit: true,
-                ptr: e.ptr + off + 1,
-            });
+            pieces.push(Ent { lblk: lblk as u32 + 1, len: e.len - off as u32 - 1, uninit: true, ptr: e.ptr + off + 1 });
         }
         l.node.ents[i] = pieces[0];
         l.dirty = true;
@@ -651,7 +649,8 @@ mod tests {
         assert_eq!(&raw[12..24], &[0, 0, 0, 0, 5, 0, 2, 0, 7, 0, 0, 0]);
         // Uninitialised: length plus 32768.
         assert_eq!(le16(&raw, 28), 32768 + 2);
-        let idx = Node { block: 0, depth: 1, max: 4, ents: vec![Ent { lblk: 3, len: 0, uninit: false, ptr: 1 << 32 | 9 }] };
+        let idx =
+            Node { block: 0, depth: 1, max: 4, ents: vec![Ent { lblk: 3, len: 0, uninit: false, ptr: 1 << 32 | 9 }] };
         encode(&idx, &mut raw);
         // ei_block, ei_leaf_lo, ei_leaf_hi.
         assert_eq!(&raw[12..24], &[3, 0, 0, 0, 9, 0, 0, 0, 1, 0, 0, 0]);

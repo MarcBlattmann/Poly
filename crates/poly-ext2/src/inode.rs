@@ -1,9 +1,7 @@
 //! Inodes in the inode tables: finding, reading, writing (with their
 //! checksums), initialising, and turning them into the VFS's attributes.
 
-use crate::layout::{
-    BG_INODE_UNINIT, FAST_SYMLINK_MAX, FL_EA_INODE, FL_EXTENTS, FL_INLINE_DATA, Inode, ino as off,
-};
+use crate::layout::{BG_INODE_UNINIT, FAST_SYMLINK_MAX, FL_EA_INODE, FL_EXTENTS, FL_INLINE_DATA, Inode, ino as off};
 use crate::{BlockIo, Ctx, csum};
 use alloc::vec;
 use alloc::vec::Vec;

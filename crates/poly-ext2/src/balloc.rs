@@ -191,8 +191,11 @@ impl<D: BlockIo> Ctx<'_, D> {
             let block = if inode { d.inode_bitmap } else { d.block_bitmap };
             let data = self.read_block(block)?;
             if let Some(seed) = self.geo.meta_seed() {
-                let (bits, want) =
-                    if inode { (self.geo.ipg as u64, d.inode_bitmap_csum) } else { (self.geo.bpg, d.block_bitmap_csum) };
+                let (bits, want) = if inode {
+                    (self.geo.ipg as u64, d.inode_bitmap_csum)
+                } else {
+                    (self.geo.bpg, d.block_bitmap_csum)
+                };
                 let mut got = csum::bitmap(seed, &data, bits);
                 if self.geo.desc_size < crate::layout::DESC_SIZE_64 {
                     got &= 0xFFFF;

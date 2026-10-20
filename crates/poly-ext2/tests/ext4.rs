@@ -197,7 +197,9 @@ fn workload(fs: &dyn FileSystem, bs: u64) {
 /// Volumes to write to: mke2fs configurations and `format`'s ext4.
 fn write_volumes(t: &Option<Tools>, dir: &TempDir) -> Vec<(String, Vec<u8>, u64)> {
     let mut out = Vec::new();
-    for (name, bs, journal) in [("format-4k", 4096u32, 1024u32), ("format-1k", 1024, 1024), ("format-nojournal", 4096, 0)] {
+    for (name, bs, journal) in
+        [("format-4k", 4096u32, 1024u32), ("format-1k", 1024, 1024), ("format-nojournal", 4096, 0)]
+    {
         let disk = MemDisk::new(vec![0; 64 << 20], 512);
         poly_ext2::format(&disk, &FormatOptions::ext4(bs, journal)).unwrap();
         out.push((name.to_string(), disk.image(), bs as u64));

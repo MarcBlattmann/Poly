@@ -636,7 +636,8 @@ impl Inode {
 
     /// The creation time (`i_crtime`), if the record has room for it.
     pub fn crtime(raw: &[u8]) -> Option<Timespec> {
-        Inode::has(raw, ino::CRTIME_EXTRA).then(|| decode_time(le32(raw, ino::CRTIME), Some(le32(raw, ino::CRTIME_EXTRA))))
+        Inode::has(raw, ino::CRTIME_EXTRA)
+            .then(|| decode_time(le32(raw, ino::CRTIME), Some(le32(raw, ino::CRTIME_EXTRA))))
     }
 
     /// The `i_block` bytes, for fast symbolic links and extent roots.

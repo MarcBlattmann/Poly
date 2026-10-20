@@ -820,8 +820,8 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
     /// Replays the journal if it needs it (the probe mount does this).
     fn recover(&self) -> core::result::Result<u32, MountError> {
         let mut st = self.state.lock();
-        let needs = st.sb.feature_incompat() & INCOMPAT_RECOVER != 0
-            || st.journal.as_ref().is_some_and(|j| j.needs_recovery());
+        let needs =
+            st.sb.feature_incompat() & INCOMPAT_RECOVER != 0 || st.journal.as_ref().is_some_and(|j| j.needs_recovery());
         if st.journal.is_none() || !needs {
             return Ok(0);
         }

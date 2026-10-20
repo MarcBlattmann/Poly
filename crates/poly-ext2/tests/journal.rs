@@ -396,7 +396,13 @@ fn model_against_tmpfs_on_journaled_volumes() {
                         read_all(f, ino).map(|d| format!("{} {}", d.len(), d.iter().map(|&b| b as u64).sum::<u64>()))
                     }
                     _ => f
-                        .rename(r, name.as_bytes(), r, names[(op as usize + n as usize) % 4].as_bytes(), RenameFlags::default())
+                        .rename(
+                            r,
+                            name.as_bytes(),
+                            r,
+                            names[(op as usize + n as usize) % 4].as_bytes(),
+                            RenameFlags::default(),
+                        )
                         .map(|_| String::new()),
                 }
             };

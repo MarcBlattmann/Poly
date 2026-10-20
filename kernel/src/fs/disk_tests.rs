@@ -441,7 +441,7 @@ kernel_test! {
         if big_bin.len() != BIG4_LEN || big_bin.iter().enumerate().any(|(i, &b)| b != big4(i)) {
             return Err("/ext4/dir/big.bin has the wrong contents");
         }
-        let fragmented = read_file(&f, "/ext4/dir/fragmented.bin").map_err(e)?;
+        let fragmented = f.read_to_end(b"/ext4/dir/fragmented.bin", 2 << 20).map_err(e)?.0;
         if fragmented.len() != (2 * FRAG_BLOCKS - 1) * 4096 {
             return Err("/ext4/dir/fragmented.bin has the wrong size");
         }

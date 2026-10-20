@@ -184,12 +184,7 @@ impl Tools {
         let img = dir.path("mkfs.img");
         let _ = std::fs::remove_file(&img);
         std::fs::File::create(&img).unwrap().set_len(size).unwrap();
-        let out = Command::new(&self.mke2fs)
-            .args(["-q", "-F", "-t", fs_type])
-            .args(args)
-            .arg(&img)
-            .output()
-            .unwrap();
+        let out = Command::new(&self.mke2fs).args(["-q", "-F", "-t", fs_type]).args(args).arg(&img).output().unwrap();
         assert!(out.status.success(), "mke2fs {args:?}: {}", String::from_utf8_lossy(&out.stderr));
         std::fs::read(&img).unwrap()
     }

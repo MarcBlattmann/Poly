@@ -658,7 +658,7 @@ initramfs.
 fs: page cache of up to 16190 pages (63 MiB); writeback every 5 s
 block: virtio2: virtio-blk 00:06.0, 16384 blocks of 512 bytes (8 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB); interrupt-driven (vector 0x32)
 fs: virtio2 mounted on /mnt: ext2, 2048 blocks of 4096 bytes (1901 free), 1024 inodes (1008 free), read-write
-fs: virtio3 mounted on /ext4: ext4, 4096 blocks of 4096 bytes (2770 free), 2048 inodes (2033 free), read-write
+fs: virtio3 mounted on /ext4: ext4, 4096 blocks of 4096 bytes (2661 free), 2048 inodes (2032 free), read-write
 ```
 
 The disk file system tests (`fs::disk_tests::*`) format the RAM disk as

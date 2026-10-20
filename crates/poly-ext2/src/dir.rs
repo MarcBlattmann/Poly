@@ -26,8 +26,8 @@
 
 use crate::csum;
 use crate::layout::{
-    DIR_TAIL, DIRENT_HEADER, FL_INDEX, FL_INLINE_DATA, Inode, RawEntry, dirent_kind, dirent_type, has_dir_tail,
-    le16, le32, put_dir_tail, put16, put32, rec_len_for,
+    DIR_TAIL, DIRENT_HEADER, FL_INDEX, FL_INLINE_DATA, Inode, RawEntry, dirent_kind, dirent_type, has_dir_tail, le16,
+    le32, put_dir_tail, put16, put32, rec_len_for,
 };
 use crate::{BlockIo, Ctx};
 use alloc::vec;

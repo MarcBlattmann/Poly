@@ -22,7 +22,9 @@ use crate::dir::Slot;
 use crate::extent::{Lookup, MAX_LBLK};
 use crate::inode::encode_rdev;
 use crate::layout::RO_COMPAT_LARGE_FILE;
-use crate::layout::{FAST_SYMLINK_MAX, FL_APPEND, FL_EXTENTS, FL_IMMUTABLE, FL_INLINE_DATA, Inode, ROOT_INO, encode_time};
+use crate::layout::{
+    FAST_SYMLINK_MAX, FL_APPEND, FL_EXTENTS, FL_IMMUTABLE, FL_INLINE_DATA, Inode, ROOT_INO, encode_time,
+};
 use crate::{BlockIo, Ctx};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -506,7 +508,10 @@ impl<D: BlockIo> Ctx<'_, D> {
             i.blocks = i.blocks.saturating_sub(self.geo.spb as u64);
             i.file_acl = 0;
         }
-        i.dtime = encode_time(self.now, false).0.max(1);
+        // A deletion time below the inode count would read as an orphan
+        // list link (e2fsck takes it for one): never write one that small,
+        // whatever the clock says.
+        i.dtime = encode_time(self.now, false).0.max(self.geo.inodes.saturating_add(1));
         if i.kind() == Some(FileType::Regular) {
             i.size = 0;
         }

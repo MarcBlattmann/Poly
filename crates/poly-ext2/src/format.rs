@@ -256,7 +256,14 @@ pub fn format<D: BlockIo>(dev: &D, opts: &FormatOptions) -> Result<()> {
     }
 
     // Root and lost+found (and the journal's inode).
-    let ifmt = InodeFormat { size: isz, large_size: dynamic, id_high: true, huge_file: ext4, wide: ext4, spb: (bs / 512) as u32 };
+    let ifmt = InodeFormat {
+        size: isz,
+        large_size: dynamic,
+        id_high: true,
+        huge_file: ext4,
+        wide: ext4,
+        spb: (bs / 512) as u32,
+    };
     let spb = (bs / 512) as u64;
     let ext_flag = if ext4 { FL_EXTENTS } else { 0 };
     let dir = |ino: u32, links: u16, perm: u16, block: u64| Inode {
@@ -281,7 +288,10 @@ pub fn format<D: BlockIo>(dev: &D, opts: &FormatOptions) -> Result<()> {
     let mut lb = vec![0u8; bs];
     RawEntry::encode(&mut lb, 0, LOST_AND_FOUND, 12, b".", ft, filetype);
     RawEntry::encode(&mut lb, 12, ROOT_INO, bs - 12 - tail, b"..", ft, filetype);
-    let mut inodes_out = vec![(ROOT_INO, dir(ROOT_INO, 3, 0o755, root_block)), (LOST_AND_FOUND, dir(LOST_AND_FOUND, 2, 0o700, lf_block))];
+    let mut inodes_out = vec![
+        (ROOT_INO, dir(ROOT_INO, 3, 0o755, root_block)),
+        (LOST_AND_FOUND, dir(LOST_AND_FOUND, 2, 0o700, lf_block)),
+    ];
     for (block, data, ino) in [(root_block, &mut rb, ROOT_INO), (lf_block, &mut lb, LOST_AND_FOUND)] {
         if let Some(seed) = seed {
             put_dir_tail(data);
@@ -376,7 +386,8 @@ pub fn format<D: BlockIo>(dev: &D, opts: &FormatOptions) -> Result<()> {
         sb.set_first_ino(LOST_AND_FOUND);
         sb.set_inode_size(isz as u16);
         let mut incompat = if filetype { INCOMPAT_FILETYPE } else { 0 };
-        let mut ro = if sparse { RO_COMPAT_SPARSE_SUPER } else { 0 } | if large_file { RO_COMPAT_LARGE_FILE } else { 0 };
+        let mut ro =
+            if sparse { RO_COMPAT_SPARSE_SUPER } else { 0 } | if large_file { RO_COMPAT_LARGE_FILE } else { 0 };
         let mut compat = 0;
         if ext4 {
             incompat |= INCOMPAT_EXTENTS | INCOMPAT_64BIT;
