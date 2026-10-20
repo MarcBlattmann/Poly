@@ -18,6 +18,7 @@ mod keyboard;
 mod ktest;
 mod log;
 mod mm;
+mod net;
 mod pci;
 mod power;
 mod process;
@@ -120,6 +121,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     keyboard::init(&boot);
     display::init(&boot);
     fs::init(&boot, initrd);
+    net::init(&boot);
 
     // The shell's `test` command runs the tests again later.
     let memory: &'static MemoryMap = Box::leak(Box::new(memory));

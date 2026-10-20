@@ -39,6 +39,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0035](0035-screen-terminal.md) | The screen terminal: a status bar and a text grid on the display, a second shell on the keyboard, the kernel log mirrored through a ring (`poly-term`) | Accepted |
 | [0037](0037-vfs-and-initramfs-in-the-kernel.md) | The VFS in the kernel: one global `Vfs` on a tmpfs root, the initramfs as PVH module 0 held by the frame allocator until unpacked, per-process `Files` behind sleeping mutexes, console reads at end of file | Accepted |
 | [0032](0032-ext2-driver.md) | ext2 in a host-tested crate over a block access trait, metadata ordered by flushes instead of a journal | Accepted |
+| [0039](0039-networking-in-the-kernel.md) | Networking in the kernel: virtio-net in a host-tested crate (`poly-virtio-net`), one stack behind a sleeping mutex, a network thread, readiness generations for blocking sockets | Accepted |
 
 ## Open decisions
 

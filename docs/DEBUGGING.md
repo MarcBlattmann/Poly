@@ -60,6 +60,9 @@ unknown command 'hlep'; did you mean 'help'?
 | `uptime` | time since the clock started, ticks, threads |
 | `irq` | interrupts taken per vector with their owner (timer, serial, disk, ...), and the spurious / unhandled / 8259 / APIC error counters |
 | `cpu` | CPUID vendor, brand string, family / model / stepping, TSC rate, APIC ID, feature flags |
+| `ifconfig`, `ip` | the network interface `eth0`: device, interrupt vector or polled, link, MTU, MAC, IPv4 and IPv6 addresses, frames and bytes in and out, drops, stack counters, interrupts and polls; and loopback |
+| `ping [-c count] <ipv4>` | ICMP echo requests (default 4, one a second), each reply's round-trip time, loss and min/avg/max |
+| `nc <ipv4> <port> [text...]` | a TCP connection: sends the text and a newline, closes its side, prints what comes back until the peer closes (or 5 s of silence) |
 | `test [filter]` | run the in-kernel tests whose name contains `filter` (all without one), with the same output as at boot |
 | `echo [words]` | print the words (quotes group words: `echo 'a  b'`) |
 | `clear` | clear the screen |
@@ -200,6 +203,78 @@ seconds and then fails with `DeviceFailed`, the device stopped answering or
 its interrupts do not arrive: check the MSI-X entry and trace the
 deliveries as above. `VirtioBlk::set_drop_notifications(true)` loses
 requests on purpose (the watchdog test uses it on the spare device).
+
+## Networking
+
+`cargo xtask run` attaches a virtio-net device on QEMU's user networking
+(`-netdev user,id=net0 -device virtio-net-pci,netdev=net0,disable-legacy=on`)
+and passes `poly.net=qemu`, so the guest is 10.0.2.15/24 with QEMU's
+virtual router (which is also the way to the host) at 10.0.2.2 and its DNS
+server at 10.0.2.3. The boot log says what came up:
+
+```text
+virtio-net: 00:02.0: MSI-X with 4 vectors, table BAR1+0x0, PBA BAR1+0x800
+virtio-net: 00:02.0: MAC 52:54:00:12:34:56, MTU 1500, link up, features 0x120018020, queues 128 rx / 128 tx entries
+net: eth0: virtio-net 00:02.0; queues on MSI-X entry 0 -> vector 0x31; interrupt-driven
+net: eth0: inet 10.0.2.15/24 gateway 10.0.2.2 dns 10.0.2.3; inet6 fe80::5054:ff:fe12:3456/64
+```
+
+`features` is what the driver negotiated: bit 5 MAC, 15 MRG_RXBUF, 16
+STATUS, 29 EVENT_IDX, 32 VERSION_1 (VIRTIO 1.2 §5.1.3, §6). Without a
+virtio-net device the log says `net: no network device; loopback only`,
+and 127.0.0.1 still works (QEMU's own default NIC, an e1000e, which q35
+adds when no `-netdev` is given, is not driven). `poly.net=off` leaves the
+device alone; a malformed `poly.net=` is reported and ignored.
+
+```text
+poly> ping -c 2 10.0.2.2
+PING 10.0.2.2: 56 data bytes
+64 bytes from 10.0.2.2: icmp_seq=1 time=4.676 ms
+64 bytes from 10.0.2.2: icmp_seq=2 time=0.511 ms
+--- 10.0.2.2 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss
+rtt min/avg/max = 0.511/2.594/4.676 ms
+```
+
+Under user networking only pings to 10.0.2.2 are answered (QEMU's
+documentation: ICMP does not work in general). TCP and UDP to 10.0.2.2
+reach the host's 127.0.0.1, so a listener on the host is a quick partner:
+run `nc -l 127.0.0.1 9000` (or `python3 -m http.server 9000 --bind
+127.0.0.1`) on the host and `nc 10.0.2.2 9000 hello` in the guest. To
+reach a port in the guest from the host, add a forward to the `-netdev`
+by hand (`hostfwd=tcp:127.0.0.1:<host port>-:<guest port>`; the boot tests
+use guest port 7777).
+
+When traffic does not flow:
+
+- `ifconfig` shows the counters on both sides of the driver. `rx` frames
+  that never reach a socket show up in the stack's `ignored`, `malformed`
+  or `bad checksums`; `tx busy` counts frames refused because all 128
+  transmit buffers were out. `interrupts` should grow with traffic on an
+  interrupt-driven device; if only `polls` grow, check the MSI-X entry as
+  for the disk (`xp /4wx <table>`, see above).
+- A device that breaks the virtqueue protocol is reset and the log says
+  `net: eth0: the device broke the virtqueue protocol and was reset`;
+  `ifconfig` then shows `link failed`.
+- QEMU can record every frame: add `-object filter-dump,id=f0,netdev=net0,file=net.pcap`
+  and open `net.pcap` in Wireshark or `tcpdump -r`. Trace events show the
+  device side: `-trace 'virtio_net_*' -trace virtio_queue_notify`.
+- The network thread is `net` in `ps`: `blocked` when idle. A socket
+  call that hangs is a thread `blocked` on the readiness wait queue; it
+  wakes whenever a poll moves packets or a timer fires.
+
+`cargo xtask test` runs three network boots: one interrupt-driven and one
+polled (`vectors=0`) with `poly.test.net=<port>`, where the kernel's
+`net::tests` ping 10.0.2.2, push 1 MiB through a TCP echo server and
+datagrams through a UDP echo server that xtask runs on the host's
+`<port>`, and accept a connection that xtask makes through a host forward
+once the kernel prints `net: test: listening for the host on port 7777`;
+and one that types `ifconfig`, `ping` and `nc` into the shell. To run the
+kernel side by hand: start an echo server on the host (`socat
+TCP-LISTEN:9000,fork,bind=127.0.0.1 EXEC:cat` and the same for
+`UDP-LISTEN`), then `cargo xtask run poly.test=net:: poly.test.net=9000`
+(the host-forward test then waits 30 s for a connection to the guest's
+port 7777 unless one is made).
 
 ## The screen
 

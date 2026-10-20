@@ -30,6 +30,7 @@ members = [
     "crates/poly-term",
     "crates/poly-virtio",
     "crates/poly-virtio-blk",
+    "crates/poly-virtio-net",
     "crates/poly-vm",
     "crates/poly-vfs",
     "personalities/linux",
@@ -73,6 +74,7 @@ poly-sched = { path = "crates/poly-sched" }
 poly-term = { path = "crates/poly-term" }
 poly-virtio = { path = "crates/poly-virtio" }
 poly-virtio-blk = { path = "crates/poly-virtio-blk" }
+poly-virtio-net = { path = "crates/poly-virtio-net" }
 poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
 poly-personality-linux = { path = "personalities/linux" }

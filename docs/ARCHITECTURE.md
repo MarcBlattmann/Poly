@@ -22,6 +22,7 @@ what exists **today** and how it fits that plan.
                                memory maps with demand paging (poly-vm), exec of static ELF (poly-elf)
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
+            network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             display: QEMU standard VGA framebuffer + RAM back buffer; poly-gfx (drawing, font, text grid)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
@@ -239,6 +240,91 @@ on the spare device that a masked MSI-X entry holds its interrupt back
 until unmasked and that a request whose notification was dropped
 (`VirtioBlk::set_drop_notifications`) fails at the watchdog's deadline
 while its reader sleeps. Each test puts the disks back as it found them.
+
+## Networking
+
+One interface, `eth0`: the host-tested TCP/IP stack `poly-net`
+([ADR 0028](adr/0028-tcp-ip-stack-in-a-crate.md)) on a virtio-net device
+driven by the host-tested `poly-virtio-net`, a network thread that polls
+the stack, and blocking sockets for the system call layers. Decisions are
+in [ADR 0039](adr/0039-networking-in-the-kernel.md).
+
+```text
+ socket::Socket (blocking) ──net::call(op)──► IFACE: Mutex<Interface { Stack, Device }>
+        ▲  wait_for_change(generation)            ▲ poll(dev, now) -> next deadline
+        │                                         │
+ CHANGED += 1, wake ◄───── network thread ────────┘  sleeps until WAKE moves or the deadline
+                                ▲
+             MSI-X entry 0 ─────┘ on_interrupt: WAKE += 1, wake the thread (touches nothing else)
+```
+
+- **`poly-virtio-net`** (VIRTIO 1.2 §5.1) negotiates VERSION_1, MAC,
+  STATUS, MTU (only if the buffers can hold a frame of that size),
+  MRG_RXBUF, EVENT_IDX and ACCESS_PLATFORM, never checksum or segmentation
+  offloads, the control queue or several queue pairs. Every packet buffer
+  is 2 KiB of driver-owned DMA memory with one descriptor: transmit puts
+  the 12-byte `virtio_net_hdr` (all zeros) and the frame in one
+  device-readable buffer; receive buffers are all handed to the device at
+  start and each goes back as soon as its frame is copied out. With
+  MRG_RXBUF a packet spanning several buffers is gathered (and held until
+  all of them are back). Lengths, buffer counts and used-ring entries are
+  checked; a device that breaks the queue protocol is reset and refused
+  from then on. Transmit completions interrupt only while every transmit
+  buffer is in flight (otherwise they are reclaimed by the next send). It
+  implements `poly_net::NetDevice`; frames are copied between its buffers
+  and the stack's, so the device never sees other memory. Host tests run
+  it against a simulated device written from the specification, including
+  a `poly-net` stack doing ARP, ping and a 300 KB TCP echo over it.
+- **The kernel side** (`kernel/src/net/virtio.rs`) finds the first
+  virtio-net function, maps its structures, enables MSI-X masked, resets
+  the device before bus mastering and gives `poly_virtio_net::init` 128
+  receive and 128 transmit buffers (`DmaBuffer`s, 2 x 256 KiB) plus rings
+  and tables, with both queues and configuration changes on MSI-X entry 0.
+  Without MSI-X the network thread polls every 10 ms.
+- **`kernel/src/net/mod.rs`** keeps the stack and its device together in
+  one `Interface` behind a sleeping `Mutex` (the stack allocates and a poll
+  can take a while; no interrupt handler takes the lock). Without a
+  device, the stack sits on a stand-in that drops everything, so loopback
+  (127.0.0.0/8) works in every boot. The MSI-X handler only bumps a counter
+  and wakes the network thread, which polls, asks the device for
+  interrupts again (polling again if work arrived meanwhile), and sleeps
+  until the next interrupt or the deadline `poll` returned. Socket calls go
+  through `net::call`: the operation, then a `poll` right away, then the
+  network thread is kicked if the stack's deadline moved earlier.
+- **Blocking** (`kernel/src/net/socket.rs`): `Socket` wraps a handle with
+  blocking `connect`, `accept`, `send`, `recv` and friends (optional
+  deadlines; `EAGAIN` or, for `connect`, `ETIMEDOUT` when they pass) and a
+  one-socket `wait(interest)`; `Pinger` sends ICMP echo through a ping
+  socket. A blocking call tries, and on `EAGAIN` sleeps on one wait queue
+  until the readiness generation moves away from the value its attempt
+  saw (`call_and_generation`, `wait_for_change`). The generation moves,
+  with the interface locked, whenever a poll moved packets (device frames
+  or the stack's loopback), ran a due timer or saw the link change, and on
+  `shutdown` and `close`. So no change after an attempt is missed, and a
+  poll that moved nothing wakes nobody.
+- **Configuration**: `poly.net=<addr>/<prefix>[,gw=<addr>][,dns=<addr>]`,
+  `poly.net=qemu` (QEMU's user networking: 10.0.2.15/24, gateway
+  10.0.2.2, DNS 10.0.2.3) or `poly.net=off`, parsed by
+  `poly_net::setting`; without it the interface has only its IPv6
+  link-local address. The stack's secret (initial sequence numbers and
+  ports, RFC 6528) and a MAC address for devices without one come from
+  `arch::user::random_bytes` (RDRAND, or the TSC mixed).
+
+```text
+virtio-net: 00:02.0: MSI-X with 4 vectors, table BAR1+0x0, PBA BAR1+0x800
+virtio-net: 00:02.0: MAC 52:54:00:12:34:56, MTU 1500, link up, features 0x120018020, queues 128 rx / 128 tx entries
+net: eth0: virtio-net 00:02.0; queues on MSI-X entry 0 -> vector 0x31; interrupt-driven
+net: eth0: inet 10.0.2.15/24 gateway 10.0.2.2 dns 10.0.2.3; inet6 fe80::5054:ff:fe12:3456/64
+```
+
+The kernel tests (`net::tests`) run TCP between two kernel threads over
+loopback (the server asleep in `accept` first), UDP and ping over loopback
+and a receive timing out in every boot. With `poly.test.net=<port>` (the
+network boot tests, on QEMU's user networking) they also ping the gateway
+10.0.2.2, push 1 MiB through a TCP echo server and datagrams through a UDP
+echo server that `cargo xtask` runs on the host's `<port>` (reached at
+10.0.2.2), and accept a connection the host makes through a port forward
+to guest port 7777, checking the bytes at both ends.
 
 ## Input
 
@@ -635,6 +721,7 @@ services once it decodes those system calls.
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail), the display's mode, mapping, back buffer and flush (and a boot without VGA must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi`, `poly.test.display` | `cargo xtask test` |
+| Networking: virtio-net on QEMU's user networking (interrupt-driven, and in another boot polled): ping to the gateway, 1 MiB TCP and UDP through echo servers on the host, a connection from the host through a port forward; `ifconfig`, `ping` and `nc` in the shell. Loopback TCP, UDP and ping in every boot | `kernel_test!` + `poly.test.net=<port>`; `cargo xtask` (`net.rs`) | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
@@ -1052,6 +1139,12 @@ the screen terminal (its `ScreenConsole`, see "Screen terminal").
   (per-vector counts), `cpu` (CPUID: vendor, brand, family / model /
   stepping, features), `test [filter]`, `echo`, `clear`, `reboot`. An unknown
   command gets the closest command name as a suggestion.
+- **Network commands** (`shell/net.rs`): `ifconfig` (and `ip`, the same)
+  shows `eth0` (device, link, MTU, MAC, addresses, driver and stack
+  counters); `ping [-c count] <ipv4>` sends ICMP echo through a ping
+  socket, one a second; `nc <ipv4> <port> [text...]` connects over TCP,
+  sends the text, closes its side and prints the answer. They use the
+  blocking sockets of `net::socket`, like a program would.
 - **`test`** runs the kernel tests again with `ktest::run(env, filter,
   When::Runtime, console)`: the boot's `poly.selftest.*` flags are dropped,
   tests marked `#[boot_only]` (they check the state at boot, or must run on

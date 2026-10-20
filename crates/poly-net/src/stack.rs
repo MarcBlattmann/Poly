@@ -163,6 +163,9 @@ pub struct Stats {
     pub udp_no_port: u64,
     /// Packets dropped because the internal loopback queue was full.
     pub loop_dropped: u64,
+    /// Packets delivered through the internal loopback queue (to
+    /// 127.0.0.0/8, ::1 and the stack's own addresses).
+    pub loop_packets: u64,
     pub reassembly: ReassemblyStats,
 }
 
@@ -348,6 +351,7 @@ impl Stack {
 
         for _ in 0..LOOP_BUDGET {
             let Some(p) = self.loopq.pop_front() else { break };
+            self.stats.loop_packets += 1;
             self.process_ip(dev, &p, true);
         }
 

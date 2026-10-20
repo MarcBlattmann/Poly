@@ -4,7 +4,8 @@
 //!   build [--release]   build the kernel
 //!   run   [--release] [--gdb] [--no-disk] [--headless] [--initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
-//!                       with the test devices attached (--no-disk: without them),
+//!                       with the test devices and a virtio-net NIC on QEMU's user
+//!                       networking attached (--no-disk: without them),
 //!                       the screen in a window when there is a desktop (--headless:
 //!                       never); --gdb waits for a debugger on localhost:1234
 //!                       (docs/DEBUGGING.md); the root file system is a small
@@ -28,6 +29,7 @@ mod console;
 mod font;
 mod initramfs;
 mod ktest;
+mod net;
 mod screen;
 mod symbols;
 mod terminal;
@@ -252,9 +254,17 @@ fn run(args: &[String]) -> Result {
     if initrd.as_deref() == Some(Path::new("")) {
         initrd = Some(initramfs::write(&root(), "poly-initramfs.cpio", &initramfs::default_image())?);
     }
+    // A virtio-net device on QEMU's user networking with its addresses
+    // (an earlier poly.net= on the command line wins).
+    if with_disk {
+        cmdline.push("poly.net=qemu");
+    }
     // `mon:stdio` shares the terminal between the serial port and QEMU's
     // monitor: Ctrl-A C switches between them, Ctrl-A X quits.
     let mut cmd = qemu(&kernel, DEFAULT_MEMORY, &cmdline.join(" "), devices, "mon:stdio");
+    if with_disk {
+        cmd.args(net::nic_args(None, false));
+    }
     if let Some(file) = &initrd {
         cmd.arg("-initrd").arg(file);
     }
@@ -803,6 +813,10 @@ fn boot_tests() -> Result {
 
     eprintln!("==> boot test: the shell on the serial port answers typed commands");
     shell_test(&kernel, &syms)?;
+
+    // Networking: virtio-net on QEMU's user networking, against servers on
+    // the host (see net.rs).
+    net::boot_tests(&kernel, &syms)?;
 
     // Expecting the test disk without attaching it must fail the disk
     // tests, so a boot that silently lost its disk cannot pass.

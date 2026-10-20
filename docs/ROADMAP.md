@@ -86,7 +86,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Persistent file system on virtio-blk (ext2 first, then ext4), page cache and writeback
 - [ ] **Milestone:** BusyBox shell boots as init and runs interactively
 - [ ] SMP: start all CPUs, per-CPU data, TLB shootdown, multi-core scheduler
-- [ ] Networking: virtio-net driver, own TCP/IP stack (IPv4, IPv6, TCP, UDP, ICMP)
+- [x] Networking: virtio-net driver, own TCP/IP stack (IPv4, IPv6, TCP, UDP, ICMP)
 - [ ] Sockets: `AF_INET`, `AF_INET6`, `AF_UNIX` (incl. fd passing), `AF_NETLINK` basics
 - [ ] Linux namespaces / seccomp basics (needed by browsers' sandboxes)
 - [ ] **Milestone (proof of concept a):** a recorded trace of a simple Linux CLI app passes
