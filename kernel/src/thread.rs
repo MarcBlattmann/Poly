@@ -849,10 +849,8 @@ pub fn on_reschedule() {
     }
 }
 
-/// Threads in [`sleep`] / [`sleep_until`].
-static SLEEPERS: WaitQueue = WaitQueue::new();
-/// Earliest deadline among them and the timed waits (`u64::MAX`: none), so
-/// the tick only looks at them when one is due.
+/// Earliest deadline among the sleepers and the timed waits (`u64::MAX`:
+/// none), so the tick only looks at them when one is due.
 static NEXT_WAKE: AtomicU64 = AtomicU64::new(u64::MAX);
 
 /// Block the running thread for at least `duration` (measured with the
@@ -863,43 +861,46 @@ pub fn sleep(duration: Duration) {
     sleep_until(time::now_ns().saturating_add(ns));
 }
 
-/// Block the running thread until the clock reads `deadline_ns` or later.
+/// Block the running thread until the clock reads `deadline_ns` or later:
+/// a timed wait on a queue of its own that nothing else wakes.
 pub fn sleep_until(deadline_ns: u64) {
     assert!(time::is_running(), "thread::sleep before the timer is running");
-    SLEEPERS.wait_until(|| {
-        if time::now_ns() >= deadline_ns {
-            return true;
-        }
-        // Checked by every tick from now on, until it wakes the sleepers.
-        NEXT_WAKE.fetch_min(deadline_ns, SeqCst);
-        false
-    });
+    let alone = WaitQueue::new();
+    while time::now_ns() < deadline_ns {
+        alone.wait_until_deadline(|| false, deadline_ns);
+    }
 }
 
-/// Wake every sleeper once the earliest deadline has passed; the ones not
-/// yet due re-register theirs and go back to sleep. The CPU whose tick sees
-/// the deadline first claims it (resets it with a compare-exchange), so one
-/// CPU wakes per deadline. Resetting the deadline before waking cannot lose
-/// one: a sleeper that registers in between is on the queue by the time
-/// `wake_all` gets the scheduler lock. Then wake the queues of the timed
-/// waits that are due; the others register their deadlines again.
+/// Wake the timed waits (sleepers among them) whose deadline has passed,
+/// earliest deadline first, and register the earliest of the others. The
+/// CPU whose tick sees the deadline first claims it (resets it with a
+/// compare-exchange), so one CPU wakes per deadline; a wait that registers
+/// in between is in the table by the time this scan locks it. Waking in
+/// deadline order keeps the order when a host stall makes several due at
+/// once: woken onto one CPU's queue, they run in that order.
 fn wake_sleepers() {
     let next = NEXT_WAKE.load(SeqCst);
     let now = time::now_ns();
     if next == u64::MAX || now < next || NEXT_WAKE.compare_exchange(next, u64::MAX, SeqCst, SeqCst).is_err() {
         return;
     }
-    SLEEPERS.wake_all();
     let _irq = InterruptsOff::new();
     let kicks = {
         let mut t = THREADS.lock();
+        let mut due = [(u64::MAX, 0usize); MAX_THREADS];
+        let mut n = 0;
         for slot in 0..MAX_THREADS {
             let Some(to) = t.timeouts[slot] else { continue };
             if to.deadline > now {
                 NEXT_WAKE.fetch_min(to.deadline, SeqCst);
-                continue;
+            } else {
+                due[n] = (to.deadline, slot);
+                n += 1;
             }
-            t.timeouts[slot] = None;
+        }
+        due[..n].sort_unstable();
+        for &(_, slot) in &due[..n] {
+            let Some(to) = t.timeouts[slot].take() else { continue };
             // SAFETY: the entry existed, so the queue is alive (see
             // `Timeout`); THREADS is locked, as its inner queue requires.
             let q = unsafe { &mut *(*(to.queue as *const WaitQueue)).0.get() };
