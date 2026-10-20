@@ -701,10 +701,17 @@ allocator:
 boot: initramfs at 0xffd7000-0xffd7418 (2 KiB)
 fs: initramfs unpacked into /: 2 directories, 2 files (207 bytes), 0 symbolic links, 1 device nodes, 0 hard links
 fs: initramfs: 1 pages (4 KiB) at 0xffd7000-0xffd8000 returned to the frame allocator
-fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7); 6 of 8 directories and nodes made
+fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); 12 of 14 directories, nodes and links made
+fs: proc on /proc, sysfs on /sys, tmpfs on /dev/shm; 3 of 3 mounted
 ```
 
-Then `ls /`, `ls /dev`, `cat /etc/motd` and `mount` in the shell. Without
+Then `ls /`, `ls /dev`, `cat /etc/motd` and `mount` in the shell; `cat
+/proc/meminfo`, `cat /proc/cpuinfo`, `ls /proc`, `ls /sys/devices/system/cpu`
+show procfs and sysfs (ADR 0043). The shell is a kernel thread, so it has
+no `/proc/self` (and `/proc/mounts`, a link to `self/mounts`, does not
+open there): use `/proc/<pid>/...` of a running program, or `mount`. A
+`/proc` file is made anew by every read; `/proc/<pid>/maps` names file
+mappings by the path the file was opened by. Without
 an archive the log says `fs: no initramfs (no boot module); / is an empty
 tmpfs`. A damaged archive is reported by entry (`fs: initramfs: unpacking
 stopped: <name>: <errno>`, or `bad archive: ...` with the byte offset);

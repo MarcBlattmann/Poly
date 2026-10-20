@@ -26,6 +26,7 @@ mod power;
 mod process;
 mod program;
 mod qemu;
+mod random;
 mod selftest;
 mod shell;
 mod sync;

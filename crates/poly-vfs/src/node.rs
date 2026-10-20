@@ -1,6 +1,7 @@
 //! References to inodes on mounts, and the operations that need no path.
 
 use crate::cred::{Access, Cred};
+use crate::fs::{FsStats, magic_for};
 use crate::mount::Mount;
 use crate::{Attr, Errno, FileType, Ino, MAX_FILE_SIZE, Result, S_ISGID, S_ISUID, S_IXGRP, SetAttr, SetTime, Stat};
 use alloc::sync::Arc;
@@ -74,6 +75,31 @@ impl NodeRef {
     /// A symbolic link's target (`EINVAL` for anything else).
     pub fn readlink(&self) -> Result<Vec<u8>> {
         self.loc.mount.sb.fs.readlink(self.loc.ino)
+    }
+
+    /// `statfs(2)` / `fstatfs(2)` for the file system this node is on: its
+    /// counts, the magic number by name if the file system left it 0, the
+    /// mount's `ST_*` flags, and the device number as `f_fsid` (major,
+    /// minor).
+    pub fn statfs(&self) -> Result<FsStats> {
+        let mount = &self.loc.mount;
+        let mut st = mount.sb.fs.statfs()?;
+        if st.magic == 0 {
+            st.magic = magic_for(mount.sb.info.name);
+        }
+        let f = mount.flags;
+        st.flags = [
+            (mount.read_only(), crate::ST_RDONLY),
+            (f.no_suid, crate::ST_NOSUID),
+            (f.no_dev, crate::ST_NODEV),
+            (f.no_exec, crate::ST_NOEXEC),
+        ]
+        .iter()
+        .filter(|(on, _)| *on)
+        .fold(0, |acc, (_, bit)| acc | bit);
+        let dev = mount.dev();
+        st.fsid = [dev.major, dev.minor];
+        Ok(st)
     }
 
     /// `access(2)` on this node: `EACCES` when `cred` may not, `EROFS` when

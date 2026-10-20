@@ -29,6 +29,8 @@
 //! process ([`FUTEXES`]).
 
 mod fileio_tests;
+mod files;
+mod files_tests;
 mod services;
 pub mod signalfd;
 pub mod task;

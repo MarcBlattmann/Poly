@@ -179,6 +179,10 @@ fn running_out_of_space_and_inodes() {
     let fs = Ext2::mount(&io, clock(), MountOptions::default()).unwrap();
     let r = fs.root();
     let start = fs.stats();
+    let st = FileSystem::statfs(&fs).unwrap();
+    assert_eq!((st.magic, st.block_size, st.name_max), (0xef53, 1024, 255));
+    assert_eq!((st.blocks, st.blocks_free), (start.blocks, start.free_blocks));
+    assert_eq!((st.files, st.files_free), (start.inodes, start.free_inodes));
     // Fill the disk: the write that runs out reports what fit.
     let f = fs.create(r, b"fill", &REG).unwrap();
     let mut total = 0;
