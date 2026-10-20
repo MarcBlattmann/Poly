@@ -11,6 +11,7 @@ members = [
     "crates/poly-backtrace",
     "crates/poly-binfmt",
     "crates/poly-block",
+    "crates/poly-elf",
     "crates/poly-heap",
     "crates/poly-irq",
     "crates/poly-mem",
@@ -40,6 +41,7 @@ poly-acpi = { path = "crates/poly-acpi" }
 poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
+poly-elf = { path = "crates/poly-elf" }
 poly-heap = { path = "crates/poly-heap" }
 poly-irq = { path = "crates/poly-irq" }
 poly-mem = { path = "crates/poly-mem" }
