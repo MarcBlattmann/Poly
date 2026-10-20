@@ -214,6 +214,18 @@ pub fn build_kernel(root: &Path) -> Result {
     if status.success() { Ok(()) } else { Err(format!("kernel build failed ({status})")) }
 }
 
+/// How often a boot is retried when QEMU itself crashes. QEMU 8.2 under
+/// TCG on a loaded host occasionally dies with SIGSEGV during boot; a
+/// guest cannot make the emulator take a signal (a triple fault or a
+/// kernel panic ends QEMU with an exit status), and a timeout is ours
+/// ([`Exit::Timeout`]), so a signal is the host's problem, not the test's.
+pub const QEMU_CRASH_RETRIES: usize = 2;
+
+/// QEMU ended by a signal it was not sent by us.
+pub fn qemu_crashed(exit: &Exit) -> bool {
+    matches!(exit, Exit::Signal(_))
+}
+
 #[derive(Debug)]
 pub struct Target {
     pub kernel: PathBuf,
@@ -226,19 +238,37 @@ impl Target {
     pub fn run(&self, test: &str, binary: &Path, work: &Path) -> Result<(Outcome, PathBuf)> {
         let image = work.join(format!("{test}.initramfs.cpio"));
         util::write(&image, initramfs(&util::read(binary)?)?)?;
-        let mut cmd = Command::new("qemu-system-x86_64");
-        cmd.args(["-machine", "q35", "-m", "256M", "-smp", "2", "-display", "none", "-serial", "stdio", "-no-reboot"])
-            .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
-            .arg("-kernel")
-            .arg(&self.kernel)
-            .arg("-initrd")
-            .arg(&image)
-            .args(["-append", KERNEL_ARGS]);
-        let done = runner::run_command(&mut cmd, self.timeout)
-            .map_err(|e| format!("{e} (is qemu-system-x86_64 installed?)"))?;
-        let log = String::from_utf8_lossy(&done.stdout).into_owned();
         let log_path = work.join(format!("{test}.serial.log"));
-        util::write(&log_path, &log)?;
+        let mut attempt = 0;
+        let (done, log) = loop {
+            let mut cmd = Command::new("qemu-system-x86_64");
+            cmd.args(["-machine", "q35", "-m", "256M", "-smp", "2", "-display", "none", "-serial", "stdio"])
+                .args(["-no-reboot", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
+                .arg("-kernel")
+                .arg(&self.kernel)
+                .arg("-initrd")
+                .arg(&image)
+                .args(["-append", KERNEL_ARGS]);
+            let done = runner::run_command(&mut cmd, self.timeout)
+                .map_err(|e| format!("{e} (is qemu-system-x86_64 installed?)"))?;
+            let log = String::from_utf8_lossy(&done.stdout).into_owned();
+            util::write(&log_path, &log)?;
+            if !qemu_crashed(&done.exit) {
+                break (done, log);
+            }
+            // The emulator itself died: that says nothing about the kernel
+            // or the test. Keep the log, boot again.
+            attempt += 1;
+            util::write(&work.join(format!("{test}.serial.crash-{attempt}.log")), &log)?;
+            if attempt > QEMU_CRASH_RETRIES {
+                return Err(format!(
+                    "QEMU crashed ({}) on {} boots in a row; serial log {}",
+                    done.exit,
+                    attempt,
+                    log_path.display()
+                ));
+            }
+        };
         let outcome = match parse_serial(&log, test)? {
             Some(Outcome::Ran(mut t)) => {
                 t.binary_sha256 = Some(crate::sha256::hex(&util::read(binary)?));
@@ -309,6 +339,16 @@ mod tests {
             panic!()
         };
         assert_eq!(r, "kernel: no ELF loader");
+    }
+
+    /// Only a signal is a crash of the emulator; our timeout and the
+    /// kernel's own exit statuses are results.
+    #[test]
+    fn only_a_signal_is_a_qemu_crash() {
+        assert!(qemu_crashed(&Exit::Signal(11)));
+        assert!(!qemu_crashed(&Exit::Timeout));
+        assert!(!qemu_crashed(&Exit::Code(QEMU_SUCCESS)));
+        assert!(!qemu_crashed(&Exit::Code(0)));
     }
 
     #[test]
