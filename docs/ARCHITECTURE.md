@@ -14,7 +14,9 @@ what exists **today** and how it fits that plan.
    └──────────────────────┼────────────────────────┘
                           │  poly-abi: Personality, SyscallRegs, SyscallDispatch
                  kernel/src/syscall.rs  ← routes by the process's personality tag
-                 kernel/src/process.rs  ← tag set at exec from poly-binfmt
+                 kernel/src/linux       ← LinuxKernel for the running thread: files, memory, signals, futexes
+                 kernel/src/process.rs  ← tag set at exec from poly-binfmt; threads, group exit, wait
+                 kernel/src/program.rs  ← exec of programs from the VFS; poly.init + test-run records (testrun.rs)
                           │
             kernel shell: poly-line editor, commands; on COM1 and on the screen terminal
             screen terminal: status bar + text grid, keys as terminal input, kernel log mirrored (poly-term)
@@ -48,8 +50,10 @@ what exists **today** and how it fits that plan.
    PS/2 keyboard and the display (which shows the boot screen), mounts a
    tmpfs on `/` filled from the initramfs, makes the page cache, starts the
    writeback thread and mounts the disks `poly.mount=` names (see "File
-   systems"), and runs the boot self-test with the timer preempting
-   threads.
+   systems"), brings up the network, runs the first program if
+   `poly.init=<path>` names one (see "Linux processes"; with
+   `poly.qemu_exit` the boot ends when it does), and runs the boot
+   self-test with the timer preempting threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
 5. Otherwise (or with `poly.shell` as well, once the tests passed) the
@@ -740,6 +744,64 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   list, `clear_child_tid`); blocking uses park/unpark (`block`,
   `unblock`) plus a per-thread signal notification.
 
+## Linux processes
+
+`kernel/src/linux/`, `process.rs`, `program.rs`, `testrun.rs`; decisions
+in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
+
+- **Kernel services.** `linux::Thread` implements `LinuxKernel` for the
+  running thread of a Linux process, one value per system call (or per
+  return to user mode): files on the process's `fs::Files`, memory on
+  `user::current_memory()`, FS/GS through the MSRs, `with_process` on each
+  process's `LinuxState` (the personality's `LinuxProcess` behind a
+  spinlock), park/unpark for `block`, one global futex table, the trap
+  frame for `user_context`, the thread's FPU save area for signal frames,
+  the monotonic clock and the CMOS RTC (`time::realtime_ns`, decoded by
+  `poly-rtc`) for clocks.
+- **Routing.** A process made with `Process::new_linux` has a `LinuxState`;
+  `syscall::dispatch` sends its calls to `linux::syscall`
+  (`Linux::dispatch_with`, then `Linux::exit_to_user`). Bare records
+  (`Process::new`, the kernel tests' own hooks) still get only `-ENOSYS`
+  from the personality.
+- **Threads and exits.** Threads register with their process
+  (`attach_thread`: the first gets the pid as its id, later ones fresh ids
+  from the pid counter) and end themselves (`user::end_thread`): the
+  personality's thread-exit duties, then the last thread ends the process
+  (files closed, `ExitStatus` set, `Process::wait` returns). `exit_group`
+  and fatal signals set a group exit; every other thread ends at its next
+  return to user mode (after a system call, or after an interrupt or
+  exception in ring 3, which `trap_dispatch` hands to
+  `user::return_to_user`), parked threads are woken for it. Processes are
+  listed by pid (`process::find`, `find_thread`, `all`).
+- **Faults are signals.** An exception in ring 3 that demand paging does not
+  resolve becomes a signal (`signal::fault::fault_info`: `SIGSEGV` with
+  `SEGV_MAPERR` / `SEGV_ACCERR`, `SIGBUS`, `SIGILL`, `SIGFPE`, `SIGTRAP`),
+  delivered at once: a handler runs (its frame on the user stack, the trap
+  frame rewritten and the return made with IRETQ) or the process dies with
+  the signal.
+- **Programs from the VFS.** `program::exec_path(path, argv, envp, traced)`
+  opens an executable regular file, checks its format, loads a static ELF
+  through `fs::cache::FileSource` (pages read from the file at fault time) and
+  starts a Linux process with the console on fds 0-2. The shell's
+  `run <program> [args]` runs one and waits for it.
+- **The first program and the test-run protocol** (ADR 0027).
+  `poly.init=<path>` runs a program as pid 1 before the self-test and
+  reports `POLY-INIT` / `POLY-EXIT`; `poly.test.capture` adds a
+  `POLY-SYSCALL` record per call, `POLY-OUT` for bytes written to fds 1
+  and 2 and `POLY-SIGNAL`; with `poly.qemu_exit` QEMU exits after it. The
+  diff runner (`cargo xtask pipeline diff --target poly`) boots one kernel
+  per corpus test this way.
+
+```text
+init: running /test-binary (traced)
+POLY-INIT: exec /test-binary
+POLY-SYSCALL: pid=1 nr=12 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=2109440
+POLY-OUT: fd=1 hex=48656c6c6f2c20776f726c64210a
+POLY-SYSCALL: pid=1 nr=1 args=0x1,0x20019f,0xe,0x0,0x0,0x0 ret=14
+POLY-SYSCALL: pid=1 nr=231 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=?
+POLY-EXIT: pid=1 code=0
+```
+
 ## NT object manager (logic only, not wired yet)
 
 `crates/poly-ntobj` is what the NT object and synchronisation services do,
@@ -771,8 +833,10 @@ services once it decodes those system calls.
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
+| Linux processes: the kernel's `LinuxKernel` through real system calls from ring 3 (write to the process's files, brk, anonymous and file mmap/munmap/mprotect, arch_prctl and the FS base in ring 3, exit_group ending a spinning and a futex-waiting thread, EFAULT for bad pointers, a fault as SIGSEGV, a signal handler and rt_sigreturn), and `exec_path` of `/bin/hello` from the test initramfs | `kernel_test!` in `linux/tests.rs` | every boot; one boot on `-cpu max` (XSAVE signal frames) |
+| Static Linux hello worlds as the first process (`poly.init`): nolibc (Rust, built with the pinned toolchain), freestanding C and static glibc (skipped without a C compiler or static C library); output and exit status 0 | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
-| The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
+| The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `run /bin/hello`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
 | Disk file systems: ext2 on the RAM disk; the ext2 test disk (made by `cargo xtask` with `poly-ext2`, attached as `virtio2`, mounted on `/mnt`): its files, writes surviving a remount, `read` and mappings sharing a page-cache page, the writeback thread, eviction freeing frames | `kernel_test!` + `poly.test.ext2`, `poly.mount=` | `cargo xtask test` |
 | Persistence: a file written through the shell on the ext2 test disk, `sync`, `reboot` (unmounted clean), `e2fsck -fn` on the image (when e2fsprogs are installed), a second boot from the same image reads it | `cargo xtask` (`ext2_persistence_test`) | `cargo xtask test` |
@@ -781,7 +845,7 @@ services once it decodes those system calls.
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
-| Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff`; Linux against Linux in `cargo xtask ci`; Poly reports "unsupported" until it runs programs |
+| Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff [--target poly]`; in `cargo xtask ci`: Linux against Linux (`selfcheck`) and Poly against Linux for the tests in `tests/linux/poly-pass.txt` (`polycheck`) |
 | App trace replay | recorded sessions | later |
 
 Backtraces, symbolisation and attaching gdb/lldb are described in
@@ -924,6 +988,12 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   backwards, also across threads. `time::ticks()` counts tick interrupts.
   The boot log prints the APIC mode, the HPET, the TSC rate, the clock
   source and the APIC timer rate.
+- **Wall clock:** `time::realtime_ns()` reads the CMOS RTC once, at its
+  first use (`arch/x86_64/rtc.rs`; the registers are decoded and turned into
+  Unix time by the host-tested `poly-rtc`, with the century register the
+  FADT names), and adds the monotonic clock since; it cannot be set yet.
+  Linux's `CLOCK_REALTIME` reads it. The file systems' timestamps still
+  count from boot.
 
 ## Threads and scheduling
 
@@ -1046,11 +1116,17 @@ machine; the decisions are in
   non-canonical address would fault in ring 0 on the user's stack); an IRETQ
   that faults on its way to ring 3 kills the thread. RFLAGS is sanitised
   (IF on; IOPL, NT, RF, VM off); RCX and R11 hold RIP and RFLAGS afterwards.
-- **Faults.** A CPU exception in ring 3 kills the thread, never the kernel:
-  one log line (`user: pid P thread T killed: page fault (vector 14) at rip
-  ..., error ..., address ...`) and `thread::exit(user::killed(vector))`.
-  Other threads, of the process too, go on (there is no process-wide kill
-  yet).
+- **Faults.** A CPU exception in ring 3 never reaches the kernel's panic
+  path. In a Linux process it becomes a signal (see "Linux processes"); in
+  a bare process it kills the thread: one log line (`user: pid P thread T
+  killed: page fault (vector 14) at rip ..., error ..., address
+  ...`) and `user::killed(vector)` as its exit code, while the other
+  threads go on.
+- **Register frame.** While a user thread is in the kernel from ring 3,
+  its `TrapFrame` sits at the top of its kernel stack whichever way it
+  came in; `user::registers()` and `user::set_registers()` read and
+  replace it (a signal handler's entry, `rt_sigreturn`), and a system call
+  whose registers were replaced returns with IRETQ.
 - **User memory.** `user::copy_from_user`, `copy_to_user` and
   `strncpy_from_user` work on the loaded address space: they refuse ranges
   that leave the user range, and run the copy in an assembly routine listed

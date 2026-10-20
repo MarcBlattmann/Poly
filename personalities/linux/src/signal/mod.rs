@@ -24,10 +24,12 @@
 //! - [`frame`]: the x86-64 frame layout.
 //! - [`restart`]: `SA_RESTART` / `EINTR` / restart_syscall(2).
 //! - [`deliver`]: sending, [`deliver::exit_to_user`], rt_sigreturn.
+//! - [`fault`]: which signal a CPU exception in user mode raises.
 
 pub mod action;
 pub mod altstack;
 pub mod deliver;
+pub mod fault;
 pub mod frame;
 pub mod pending;
 pub mod restart;

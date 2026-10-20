@@ -253,17 +253,37 @@ impl TrapFrame {
     }
 }
 
+/// Where the running thread's ring-3 trap frame is while it is in the
+/// kernel from ring 3: at the top of its kernel stack, where both the
+/// `syscall` entry and the CPU (TSS.rsp0, already 16-byte aligned) put it.
+pub(super) fn user_frame() -> *mut TrapFrame {
+    let top = PERCPU.kernel_rsp.load(Ordering::Relaxed);
+    (top - core::mem::size_of::<TrapFrame>() as u64) as *mut TrapFrame
+}
+
 /// The Rust half of the `syscall` entry, on the thread's kernel stack with
-/// interrupts off. Returns whether to leave with SYSRET (else IRETQ).
-extern "sysv64" fn syscall_handler(frame: &mut TrapFrame) -> bool {
-    let mut regs = frame.syscall_regs();
+/// interrupts off. Returns whether to leave with SYSRET (else IRETQ). The
+/// frame comes as a raw pointer: the system call may rewrite it through
+/// [`user_frame`] (`user::set_registers`).
+extern "sysv64" fn syscall_handler(frame: *mut TrapFrame) -> bool {
+    // SAFETY: the entry stub passes the complete frame it pushed; nothing
+    // else refers to it during this read.
+    let mut regs = unsafe { (*frame).syscall_regs() };
     // SAFETY: this thread came from ring 3, so it holds no lock and no
     // `InterruptsOff`; the frame is complete.
     unsafe { cpu::enable_interrupts() };
-    let resume = crate::user::syscall(&mut regs);
+    let ret = crate::user::syscall(&mut regs);
     cpu::disable_interrupts();
+    // SAFETY: the system call is over; nothing else refers to the frame.
+    let frame = unsafe { &mut *frame };
+    if ret.restore_all {
+        // Every register was replaced (and sanitised) in the frame: only
+        // the result comes from the call, and IRETQ restores RCX and R11.
+        frame.rax = regs.rax;
+        return false;
+    }
     frame.set_syscall_regs(&regs);
-    if let Some(rip) = resume {
+    if let Some(rip) = ret.rip {
         frame.rip = rip;
     }
     // What SYSRET puts in RCX and R11 anyway; the IRETQ path restores them

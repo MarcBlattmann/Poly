@@ -17,6 +17,7 @@ pub mod mmio;
 pub mod paging;
 pub mod port;
 pub mod reset;
+pub mod rtc;
 pub mod serial;
 mod syscall;
 pub mod time;

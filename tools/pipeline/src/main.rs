@@ -10,6 +10,7 @@
 //!      [--kernel ELF] [--build-kernel] [--timeout SECS] [--bin-dir DIR] [--cc CC] [--tests-dir DIR]...
 //!                                                run the corpus on the reference and a target, compare per test
 //! selfcheck                                      Linux against Linux must be clean (CI)
+//! polycheck                                      Linux against Poly: the tests of tests/linux/poly-pass.txt pass (CI)
 //! initramfs <binary> --out FILE | --list FILE    write (or list) a test initramfs
 //! spec new <entry> --agent ID [--oracle-os TEXT] spec sheet skeleton from specs/TEMPLATE.yaml
 //! tests split <entry> <dir> --spec-agent ID [--ratio 0.3] [--replace]
@@ -306,6 +307,83 @@ fn selfcheck(repo: &Path) -> Result<u8> {
     Ok(0)
 }
 
+/// The corpus tests that pass on Poly, one name per line (`#` comments):
+/// `polycheck` fails if one of them does not.
+pub const POLY_PASS_LIST: &str = "tests/linux/poly-pass.txt";
+
+/// The tests [`POLY_PASS_LIST`] names.
+fn poly_pass_list(repo: &Path) -> Result<Vec<String>> {
+    let text = util::read_string(&repo.join(POLY_PASS_LIST))?;
+    Ok(text
+        .lines()
+        .map(|l| l.split('#').next().unwrap_or_default().trim())
+        .filter(|l| !l.is_empty())
+        .map(String::from)
+        .collect())
+}
+
+/// Linux against Poly over the whole corpus: every test in
+/// [`POLY_PASS_LIST`] must pass (CI). Skipped, successfully, like
+/// `selfcheck`: without a C compiler, where ptrace is not permitted,
+/// without QEMU, and for implementer agents (it runs the reference OS).
+fn polycheck(repo: &Path) -> Result<u8> {
+    if oracle_guard("polycheck").is_err() {
+        println!("pipeline polycheck: skipped (implementer agents do not run programs on the reference OS)");
+        return Ok(0);
+    }
+    let cc = corpus::compiler(None);
+    if corpus::compiler_version(&cc).is_err() {
+        println!("pipeline polycheck: skipped (no C compiler; install gcc or set CC)");
+        return Ok(0);
+    }
+    if Command::new("qemu-system-x86_64").arg("--version").output().is_err() {
+        println!("pipeline polycheck: skipped (no qemu-system-x86_64)");
+        return Ok(0);
+    }
+    let base = repo.join("target/pipeline/polycheck");
+    let bin = base.join("bin");
+    corpus::build(repo, &bin, &cc)?;
+    if let Err(e) = ptrace::trace(&bin.join("hello"), "hello", DEFAULT_TIMEOUT)
+        && e.contains("not permitted")
+    {
+        println!("pipeline polycheck: skipped ({e})");
+        return Ok(0);
+    }
+    let run_dir = base.join("run");
+    let args: Vec<String> = ["--target", "poly", "--build-kernel", "--bin-dir"]
+        .iter()
+        .map(|s| s.to_string())
+        .chain([bin.display().to_string(), "--run-dir".into(), run_dir.display().to_string()])
+        .collect();
+    // Failures of tests not on the list are expected: they are reported in
+    // the table, and the list decides.
+    diff_cmd(repo, &Args::parse(&args, &["strict", "build-kernel"])?)?;
+    let summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
+    let passed = |name: &str| summary.tests.iter().any(|t| t.test == name && t.verdict == Verdict::Pass);
+    let expected = poly_pass_list(repo)?;
+    let regressed: Vec<&String> = expected.iter().filter(|t| !passed(t)).collect();
+    let new: Vec<&str> = summary
+        .tests
+        .iter()
+        .filter(|t| t.verdict == Verdict::Pass && !expected.contains(&t.test))
+        .map(|t| t.test.as_str())
+        .collect();
+    if !new.is_empty() {
+        println!("pipeline polycheck: also passing now (add them to {POLY_PASS_LIST}): {}", new.join(", "));
+    }
+    if !regressed.is_empty() {
+        let names: Vec<&str> = regressed.iter().map(|s| s.as_str()).collect();
+        return Err(format!(
+            "on Poly, {} no longer pass{} (listed in {POLY_PASS_LIST}; report: {})",
+            names.join(", "),
+            if names.len() == 1 { "es" } else { "" },
+            run_dir.join("report.txt").display()
+        ));
+    }
+    println!("pipeline polycheck: the {} tests of {POLY_PASS_LIST} pass on Poly", expected.len());
+    Ok(0)
+}
+
 /// The freestanding hello world makes exactly two syscalls.
 fn check_hello(t: &Trace) -> Result {
     let lines: Vec<String> = trace::normalize(t, &NormOptions::default()).iter().map(ToString::to_string).collect();
@@ -541,6 +619,7 @@ fn run(args: &[String]) -> Result<u8> {
         "trace" => trace_cmd(&repo, &a),
         "diff" => diff_cmd(&repo, &a),
         "selfcheck" => selfcheck(&repo),
+        "polycheck" => polycheck(&repo),
         "initramfs" => initramfs(&a),
         "spec" => spec(&repo, &a),
         "tests" => tests_cmd(&repo, &a),
@@ -549,8 +628,8 @@ fn run(args: &[String]) -> Result<u8> {
         "claim" | "release" => coverage_tool(&repo, args),
         "role" => role_cmd(&repo, &a),
         _ => Err(format!(
-            "unknown command {cmd}; commands: build trace diff selfcheck initramfs spec tests handoff next claim \
-             release role"
+            "unknown command {cmd}; commands: build trace diff selfcheck polycheck initramfs spec tests handoff next \
+             claim release role"
         )),
     }
 }

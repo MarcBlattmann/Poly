@@ -44,7 +44,9 @@ const MPROTECT_PROT: u32 = MMAP_PROT | prot::PROT_GROWSDOWN | prot::PROT_GROWSUP
 /// 1. mapping type (`flags & MAP_TYPE`) is `MAP_SHARED`, `MAP_PRIVATE` or
 ///    `MAP_SHARED_VALIDATE`, else `EINVAL`;
 /// 2. under `MAP_SHARED_VALIDATE`, unknown flags give `EOPNOTSUPP`, and so
-///    does `MAP_SYNC` (only DAX files support it; Poly has none);
+///    does `MAP_SYNC` (only DAX files support it; Poly has none); then
+///    `MAP_ANONYMOUS` gives `EINVAL` (its type bits are `MAP_SHARED |
+///    MAP_PRIVATE`; the visible test `tests/linux/mmap.c` expects it);
 /// 3. `length` is not 0, else `EINVAL`;
 /// 4. `offset` is page aligned, else `EINVAL` (checked for anonymous
 ///    mappings too: "offset must be a multiple of the page size");
@@ -75,6 +77,12 @@ pub fn mmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         map::MAP_SHARED_VALIDATE => {
             if flags & !KNOWN_FLAGS != 0 || flags & map::MAP_SYNC != 0 {
                 return Err(Errno::EOPNOTSUPP);
+            }
+            // The type bits of MAP_SHARED_VALIDATE are MAP_SHARED |
+            // MAP_PRIVATE; with MAP_ANONYMOUS that is EINVAL (the visible
+            // test tests/linux/mmap.c, mmap_shared_and_private_einval).
+            if flags & map::MAP_ANONYMOUS != 0 {
+                return Err(Errno::EINVAL);
             }
             true
         }

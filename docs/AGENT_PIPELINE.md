@@ -81,7 +81,8 @@ cargo xtask pipeline diff --target poly         # real Linux against Poly in QEM
 cargo xtask pipeline diff --tests hello,brk --syscalls names --timing-envelope 50
 cargo xtask pipeline diff --target poly --baseline target/pipeline/runs/<old>/summary.json
 cargo xtask pipeline diff --target poly --tests-dir <entry>.tests --tests-dir <held-out dir of the entry>
-cargo xtask pipeline selfcheck                  # what `cargo xtask ci` runs
+cargo xtask pipeline selfcheck                  # what `cargo xtask ci` runs: Linux against Linux
+cargo xtask pipeline polycheck                  # and Poly against Linux (tests/linux/poly-pass.txt)
 ```
 
 `--tests-dir` adds an entry's test programs (visible or held-out, `.c`
@@ -93,13 +94,20 @@ divergence is printed. It exits non-zero on any failure, or with
 `--baseline` only on regressions; `--strict` also fails on unsupported
 tests. `--tracer strace` uses strace instead of our ptrace tracer.
 
-**Poly today:** the kernel ignores `poly.init`, boots its self-test and
-never prints `POLY-INIT`, so every test is reported **unsupported** (one
-boot, then the rest are not booted). The tool already builds the
-initramfs, boots `kernel/target/x86_64-unknown-none/debug/poly-kernel`
-(built if missing, or `--kernel`), and parses the serial protocol of
-ADR 0027; once the kernel runs `/test-binary` and prints the `POLY-*`
-records, the same command compares for real.
+**Poly:** the tool builds a one-program initramfs per test, boots
+`kernel/target/x86_64-unknown-none/debug/poly-kernel` (built if missing,
+`--build-kernel` to rebuild, or `--kernel`) with
+`poly.qemu_exit poly.init=/test-binary poly.test.capture`, and turns the
+kernel's `POLY-*` records (ADR 0027, kernel side in ADR 0038) into a trace;
+about half a second per test. Records carry no `data<i>` fields yet, so
+pointer arguments are compared as "anything". A kernel that cannot run a
+test's file says `POLY-INIT: unsupported <reason>`, and the test is
+reported **unsupported**. `pipeline polycheck` (in `cargo xtask ci`) runs
+the corpus this way and fails if a test listed in
+`tests/linux/poly-pass.txt` does not pass; tests that newly pass are named,
+to be added to the list. Today 11 of the 12 corpus programs pass;
+`libc-hello` differs at `rseq` (Poly answers `ENOSYS`), with the same
+output and exit status.
 
 ### Held-out store and hand-off log
 
@@ -147,7 +155,7 @@ resumed), so the two roles' contexts never mix, and neither do two
 hand-offs. Prompts, the exact command and the output are kept in
 `target/pipeline/roles/<time>-<role>-<symbol>/`. With `POLY_ROLE=implementer`
 the pipeline refuses `trace`, `diff`, `spec` and `tests`, and `cargo xtask ci`
-skips its Linux self-check.
+skips its Linux self-check and the Poly check (both run the reference OS).
 
 ### Preset 1: Claude Code (headless)
 
@@ -255,6 +263,7 @@ other through settings, memory files or session history.
 ## What is not built yet
 
 - The scheduler loop itself (the steps above, as a script or service).
-- The kernel side of the test-run protocol (`poly.init`, the `POLY-*`
-  records): until then the Poly target reports every test as unsupported.
+- `data<i>` fields and times in the kernel's `POLY-SYSCALL` records, and
+  `POLY-SIGNAL` for signals a handler takes (only faults and fatal signals
+  are reported).
 - Windows and macOS oracles and tracers (later phases).

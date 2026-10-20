@@ -115,6 +115,74 @@ impl ThreadState {
     pub fn space(&self) -> &Arc<AddressSpace> {
         &self.space
     }
+
+    /// Copy the thread's FPU / vector state into `out` ([`fpu_size`]
+    /// bytes): an XSAVE image (returns `Some(XCR0)`) or an FXSAVE image
+    /// (`None`). Call with interrupts off (`thread::with_current_user`).
+    pub fn fpu_image(&mut self, out: &mut [u8]) -> Option<u64> {
+        self.fpu.snapshot(out);
+        fpu::xfeatures()
+    }
+
+    /// Load the thread's FPU state from `image` (an FXSAVE image, or an
+    /// XSAVE image); refused if it would fault. Call with interrupts off.
+    pub fn load_fpu(&mut self, image: &[u8]) -> Result<(), fpu::BadImage> {
+        self.fpu.load(image)
+    }
+
+    /// Give the thread the initial FPU state. Call with interrupts off.
+    pub fn reset_fpu(&mut self) {
+        self.fpu.reset();
+    }
+}
+
+/// Bytes in a thread's FPU image ([`ThreadState::fpu_image`]).
+pub fn fpu_size() -> usize {
+    fpu::area_size()
+}
+
+pub use super::fpu::BadImage;
+
+/// A user thread's registers while it is in the kernel from ring 3: its
+/// trap frame (general registers, RIP, CS, RFLAGS, RSP, SS).
+pub use super::idt::TrapFrame as UserRegs;
+
+/// The running user thread's registers as it will return to ring 3. Only
+/// meaningful while it is in the kernel from ring 3 (a system call, an
+/// interrupt or an exception there): the frame is then at the top of its
+/// kernel stack.
+pub fn user_regs() -> UserRegs {
+    let frame = syscall::user_frame();
+    // SAFETY: the frame slot at the top of the running thread's kernel
+    // stack is mapped and holds a trap frame while the thread is in the
+    // kernel from ring 3; the entry code wrote it and only `set_user_regs`
+    // changes it before the return.
+    let regs = unsafe { frame.read() };
+    debug_assert!(regs.in_user_mode(), "user_regs outside a ring-3 entry");
+    regs
+}
+
+/// Replace the running user thread's registers for its return to ring 3
+/// (see [`user_regs`]). CS and SS stay the user selectors and RFLAGS is
+/// sanitised (interrupts on, nothing privileged); a non-canonical RIP makes
+/// the return fail, which kills the thread. The caller makes the return
+/// restore every register (`user::set_registers`).
+pub fn set_user_regs(regs: &UserRegs) {
+    let frame = syscall::user_frame();
+    let mut new = *regs;
+    new.cs = u64::from(super::gdt::USER_CODE);
+    new.ss = u64::from(super::gdt::USER_DATA);
+    new.rflags = syscall::user_rflags(regs.rflags);
+    // SAFETY: as in `user_regs`; the vector and error code slots are
+    // ignored by the exit path, everything else is what IRETQ and the
+    // register pops consume.
+    unsafe {
+        let old = frame.read();
+        debug_assert!(old.in_user_mode(), "set_user_regs outside a ring-3 entry");
+        new.vector = old.vector;
+        new.error_code = old.error_code;
+        frame.write(new);
+    }
 }
 
 /// Switch the user state from thread `from` to thread `to` (`None`: a
@@ -203,6 +271,10 @@ pub struct Fault {
     pub on_return: bool,
     /// Why a page fault could not be resolved (`SEGV_MAPERR`, ...).
     pub reason: Option<&'static str>,
+    /// The same, for a fault in a thread with a memory map: what the
+    /// personality turns into a signal (`SIGSEGV` with `SEGV_MAPERR` or
+    /// `SEGV_ACCERR`, `SIGBUS`).
+    pub page: Option<crate::user::FaultError>,
 }
 
 impl core::fmt::Display for Fault {
@@ -242,25 +314,34 @@ pub(super) fn fault_access(error_code: u64) -> Option<Access> {
 }
 
 /// A CPU exception in ring 3, on the thread's kernel stack with interrupts
-/// off. A page fault that the thread's memory map resolves (a page that
-/// is part of a region but not present yet) returns, and the instruction is
-/// retried; everything else kills the thread.
-pub(super) fn exception(frame: &TrapFrame) {
+/// off (`frame` is a copy of the thread's trap frame). A page fault that the
+/// thread's memory map resolves (a page that is part of a region but not
+/// present yet) returns, and the instruction is retried; anything else goes
+/// to `user::fault`, which returns only if the thread goes on (into a
+/// signal handler, with its frame rewritten), and otherwise ends it.
+/// Returns with interrupts off.
+pub(super) fn exception(frame: TrapFrame) {
     let vector = frame.vector as u8;
     let address = (frame.vector == idt::PAGE_FAULT).then(cpu::read_cr2);
+    // SAFETY: the thread came from ring 3, so it holds no lock and no
+    // `InterruptsOff`; CR2 has been read. Resolving the fault may block (a
+    // mutex, a disk read), as a system call may, and so may turning it
+    // into a signal or ending the thread.
+    unsafe { cpu::enable_interrupts() };
     let mut reason = None;
+    let mut fault_kind = None;
     if let (Some(addr), Some(access)) = (address, fault_access(frame.error_code)) {
-        // SAFETY: the thread came from ring 3, so it holds no lock and no
-        // `InterruptsOff`; CR2 has been read. Resolving the fault may block
-        // (a mutex, later a disk read), as a system call may.
-        unsafe { cpu::enable_interrupts() };
-        let resolved = crate::user::page_fault(addr, access);
-        cpu::disable_interrupts();
-        match resolved {
-            Ok(()) => return,
+        match crate::user::page_fault(addr, access) {
+            Ok(()) => {
+                cpu::disable_interrupts();
+                return;
+            }
             // A bare address space (no memory map): the old log line.
             Err(crate::user::FaultError::NoMemoryMap) => {}
-            Err(why) => reason = Some(why.name()),
+            Err(why) => {
+                reason = Some(why.name());
+                fault_kind = Some(why);
+            }
         }
     }
     let fault = Fault {
@@ -271,8 +352,10 @@ pub(super) fn exception(frame: &TrapFrame) {
         address,
         on_return: false,
         reason,
+        page: fault_kind,
     };
-    crate::user::kill_current(&fault)
+    crate::user::fault(&fault);
+    cpu::disable_interrupts();
 }
 
 /// A #GP in ring 0: if it is IRETQ refusing a return to ring 3 (a
@@ -302,7 +385,11 @@ pub(super) fn failed_return(frame: &TrapFrame) {
         address: None,
         on_return: true,
         reason: None,
+        page: None,
     };
+    // SAFETY: the thread was leaving the kernel, so it holds no lock and no
+    // `InterruptsOff`; GS is the kernel's again. Ending it may block.
+    unsafe { cpu::enable_interrupts() };
     crate::user::kill_current(&fault)
 }
 

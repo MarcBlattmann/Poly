@@ -55,6 +55,9 @@ pub struct Platform {
     pub has_8042: Option<bool>,
     /// The FADT's reset register and value, for rebooting.
     pub reset: Option<ResetRegister>,
+    /// The FADT's index of the RTC's century register in CMOS RAM (none if
+    /// 0, or without a FADT).
+    pub rtc_century: Option<u8>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -223,6 +226,7 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<(Summary, Platform), Error> 
     }
     if let Some(fadt) = optional::<Fadt>(&acpi) {
         kprint!("acpi: FADT SCI {}, century {:#x}", fadt.sci_interrupt(), fadt.century());
+        platform.rtc_century = (fadt.century() != 0).then(|| fadt.century());
         if let Some(t) = fadt.pm_timer() {
             let space = if t.block.space == AddressSpace::SystemIo { "port" } else { "address" };
             kprint!(", PM timer {space} {:#x} ({}-bit)", t.block.address, t.bits);
