@@ -22,6 +22,8 @@ const PASS_MARKER: &str = "POLY-SELFTEST: PASS";
 /// QEMU exit statuses produced by the kernel's `qemu::ExitCode`.
 const QEMU_SUCCESS: i32 = 33;
 const QEMU_FAILURE: i32 = 35;
+/// CPUs QEMU emulates; the self-test boot checks ACPI reports exactly these.
+const QEMU_CPUS: u32 = 2;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -82,6 +84,7 @@ const DEFAULT_MEMORY: &str = "256M";
 fn qemu(kernel: &Path, memory: &str, append: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
     cmd.args(["-machine", "q35", "-m", memory, "-display", "none", "-serial", "stdio", "-no-reboot"])
+        .args(["-smp", &QEMU_CPUS.to_string()])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
         .arg("-kernel")
         .arg(kernel)
@@ -146,6 +149,12 @@ fn boot_tests() -> Result {
             Some(QEMU_SUCCESS) if b.output.contains(PASS_MARKER) => {}
             Some(s) => return Err(format!("self-test boot ({memory}) exited with status {s}")),
             None => return Err(format!("self-test boot ({memory}) timed out after {BOOT_TIMEOUT:?}")),
+        }
+        // With more RAM, QEMU places the ACPI tables above the 1 GiB boot
+        // mapping; the kernel skips them until it has a direct map.
+        let cpus = format!("acpi: CPUs: {QEMU_CPUS} enabled");
+        if memory == DEFAULT_MEMORY && !b.output.contains(&cpus) {
+            return Err(format!("ACPI did not report the {QEMU_CPUS} CPUs QEMU emulates (expected \"{cpus}\")"));
         }
     }
 

@@ -19,6 +19,10 @@ name = "poly-abi"
 version = "0.0.1"
 
 [[package]]
+name = "poly-acpi"
+version = "0.0.1"
+
+[[package]]
 name = "poly-binfmt"
 version = "0.0.1"
 dependencies = [

@@ -1,0 +1,11 @@
+[package]
+name = "poly-acpi"
+description = "ACPI static table parsing (RSDP, RSDT/XSDT, MADT, HPET, FADT, MCFG); no AML"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

@@ -15,10 +15,11 @@ pub const PASS_MARKER: &str = "POLY-SELFTEST: PASS";
 type TestResult = Result<(), &'static str>;
 
 pub fn run(memory: &MemoryMap) -> bool {
-    let tests: [(&str, &dyn Fn() -> TestResult); 3] = [
+    let tests: [(&str, &dyn Fn() -> TestResult); 4] = [
         ("cpu exceptions return", &breakpoint),
         ("frame allocator", &|| frames(memory)),
         ("personality routing", &personality_routing),
+        ("acpi tables", &acpi_tables),
     ];
     let mut ok = true;
     for (name, test) in tests {
@@ -130,6 +131,23 @@ fn pattern(frame: *mut u64, phys: u64, pass: Pass) -> TestResult {
                 Pass::Check => {}
             }
         }
+    }
+    Ok(())
+}
+
+fn acpi_tables() -> TestResult {
+    let Some(s) = crate::acpi::summary() else {
+        if let Some(phys) = crate::acpi::beyond_boot_mapping() {
+            crate::kprintln!("selftest: acpi tables skipped: tables at {phys:#x} need the direct map");
+            return Ok(());
+        }
+        return Err("ACPI tables not read");
+    };
+    if s.cpus == 0 {
+        return Err("no enabled CPU in the MADT");
+    }
+    if s.io_apics == 0 {
+        return Err("no I/O APIC in the MADT");
     }
     Ok(())
 }

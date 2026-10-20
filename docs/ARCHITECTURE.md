@@ -28,9 +28,21 @@ what exists **today** and how it fits that plan.
    0 and at `0xffffffff80000000`, enables paging and jumps to `kernel_entry`.
 3. `kernel_entry` brings up serial, loads our GDT/TSS/IDT, reads the boot info,
    normalises the memory map (reserving the first MiB and the kernel image),
-   hands all usable RAM to the frame allocator and runs the boot self-test.
+   hands all usable RAM to the frame allocator, reads the ACPI tables and runs
+   the boot self-test.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
+
+## Firmware tables (ACPI)
+
+- `poly-acpi` validates the RSDP, RSDT/XSDT and table checksums, and decodes
+  the MADT (CPUs, I/O APICs, interrupt overrides, NMIs), HPET, FADT and MCFG.
+  No AML yet. It never touches physical memory itself: it asks a
+  `PhysMemory` implementation for bytes, so the host tests feed it synthetic
+  tables and the kernel decides what is safe to read.
+- `kernel/src/acpi.rs` implements `PhysMemory` over the boot mapping (only
+  the first 1 GiB, and never usable RAM or the kernel image), prints a
+  summary at boot and keeps the counts the self-test checks.
 
 ## Personality routing
 

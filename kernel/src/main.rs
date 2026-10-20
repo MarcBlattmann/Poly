@@ -3,6 +3,7 @@
 #![no_std]
 #![no_main]
 
+mod acpi;
 mod arch;
 mod boot_info;
 mod frames;
@@ -75,6 +76,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
             meta.phys
         );
     }
+    acpi::init(boot.rsdp, &memory);
 
     let ok = selftest::run(&memory);
     if boot.has_flag("poly.selftest.page_fault") {
