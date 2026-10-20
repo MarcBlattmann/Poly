@@ -158,9 +158,12 @@ pub const CONFIG_SPACE_SIZE: u16 = 4096;
 /// group (PCI Express Base Specification §7.2.2).
 ///
 /// Each function gets 4 KiB at `base + (bus << 20 | device << 15 | function
-/// << 12)`. `base` is the address that formula gives for bus 0, which is what
-/// the ACPI MCFG table's base address field holds (PCI Firmware
-/// Specification, MCFG); the window only decodes `start_bus..=end_bus`.
+/// << 12)`. `base` is the address that formula gives for bus 0, even when
+/// the window starts at a higher bus: that is what the base address field
+/// of an ACPI MCFG allocation structure holds (PCI Firmware Specification
+/// 3.2, §4.1.2, table 4-3), so it is copied over unchanged. The window only
+/// decodes `start_bus..=end_bus`; it occupies `[base + (start_bus << 20),
+/// base + ((end_bus + 1) << 20))`, see [`Ecam::window`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Ecam {
     pub base: u64,
@@ -220,6 +223,16 @@ mod tests {
         assert_eq!(e.address(Bdf::new(0xff, 31, 7), 0xffc), Some(0xb000_0000 + 0x0fff_fffc));
         assert_eq!(e.address(Bdf::new(0, 0, 0), 0x1000), None);
         assert_eq!(e.window(), Some((0xb000_0000, 256 << 20)));
+    }
+
+    /// An MCFG entry for buses 0x10-0x1f with base B: the window starts at
+    /// B + 16 MiB, and bus 0x10 is found there, not at B.
+    #[test]
+    fn ecam_base_is_for_bus_zero() {
+        let e = Ecam { base: 0xe000_0000, start_bus: 0x10, end_bus: 0x1f };
+        let (start, len) = e.window().unwrap();
+        assert_eq!(e.address(Bdf::new(0x10, 0, 0), 0), Some(start));
+        assert_eq!(e.address(Bdf::new(0x1f, 31, 7), 0xfff), Some(start + len - 1));
     }
 
     #[test]

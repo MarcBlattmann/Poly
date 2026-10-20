@@ -6,7 +6,8 @@ backtrace, and a debugger attached to QEMU.
 ## Serial log
 
 Everything the kernel prints goes to COM1, which `cargo xtask run` connects
-to your terminal. Anything after the command is passed on as the kernel
+to your terminal, shared with QEMU's monitor: Ctrl-A C switches between the
+two, Ctrl-A X quits. Anything after the command is passed on as the kernel
 command line:
 
 ```sh
@@ -22,6 +23,54 @@ no-execute memory) and `stack_overflow` (run the boot stack into its guard
 page). Each prints the address it is about to touch first.
 
 To keep a copy, add `| tee serial.log`.
+
+## PCI devices and the test disk
+
+The boot log has one `pci:` line per function (address, vendor:device,
+class, BARs with their sizes) and the virtio-blk bring-up:
+
+```text
+pci: 00:03.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd5000 4 KiB, BAR4 mem64 pf 0xfe000000 16 KiB
+virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800; left disabled, polling
+virtio-blk: 00:03.0: 1 MiB (2048 sectors), block size 512, features 0x100000240 of 0x10130007e54, queue 16 entries of 256
+virtio-blk: sector 0: 50 4f 4c 59 00 00 00 00 08 09 0a 0b 0c 0d 0e 0f  POLY............
+```
+
+`features` is what the driver accepted, of what the device offered (bit 32
+is VERSION_1; the virtio-blk bits are in VIRTIO 1.2 §5.2.3). To compare with
+QEMU's own view, open the monitor (Ctrl-A C under `cargo xtask run`, or
+`monitor <cmd>` from gdb) and use:
+
+| Command | Shows |
+|---|---|
+| `info pci` | every function with its IDs, IRQ pin and BAR addresses as QEMU sees them |
+| `info qtree` | the device tree, including the virtio-blk properties and MSI-X vector count |
+| `info block` | the drives and the image file behind `disk0` |
+| `info mtree` | the guest physical address map: where ECAM (`pcie-mmcfg-mmio`) and each BAR sit |
+
+`cargo xtask run` and the boot tests attach a fresh test image,
+`target/poly-test-disk.img` (1 MiB, raw), as a modern-only virtio-blk device
+(`-device virtio-blk-pci,drive=disk0,disable-legacy=on`) and pass
+`poly.test.disk`, which makes the `virtio_blk::*` tests require it. Every
+512-byte sector starts with "POLY" and its number (le32); the rest is a
+pattern of the sector and the offset (`virtio_blk::test_pattern`):
+
+```sh
+od -A x -t x1z -N 16 -j $((512 * 7)) target/poly-test-disk.img   # sector 7
+cargo xtask run --no-disk                                       # boot without the disk
+cargo xtask run poly.test=virtio_blk                            # only the disk tests
+```
+
+The write test changes sector 1 and puts it back, and xtask rewrites the
+image before every boot anyway. To watch the device side, run QEMU by hand
+with the same arguments plus QEMU trace events, e.g. `-trace
+'virtio_blk_*' -trace virtio_queue_notify -trace 'pci_cfg_*'` (printed on
+stderr with the log trace backend that distribution builds use).
+
+A request that never comes back fails after a spin budget of a few seconds
+with `Timeout`; the driver then resets the device and every later request
+fails with `Broken`. Interrupts are not used yet: MSI-X is reported, not
+enabled.
 
 ## In-kernel tests
 

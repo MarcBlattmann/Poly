@@ -36,9 +36,11 @@ dependencies = [
  "poly-heap",
  "poly-mem",
  "poly-paging",
+ "poly-pci",
  "poly-personality-linux",
  "poly-personality-nt",
  "poly-personality-xnu",
+ "poly-virtio",
 ]
 
 [[package]]
@@ -47,6 +49,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-paging"
+version = "0.0.1"
+
+[[package]]
+name = "poly-pci"
 version = "0.0.1"
 
 [[package]]
@@ -68,4 +74,11 @@ name = "poly-personality-xnu"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+]
+
+[[package]]
+name = "poly-virtio"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
 ]
