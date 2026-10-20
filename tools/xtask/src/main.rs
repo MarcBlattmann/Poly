@@ -1220,9 +1220,10 @@ fn ci() -> Result {
     // runner must find no differences. Takes a few seconds; skips itself
     // without a C compiler or where ptrace is not permitted.
     pipeline(&["selfcheck".into()])?;
-    // The corpus on Poly against Linux (one QEMU boot per test, about a
-    // second each): the tests of tests/linux/poly-pass.txt must pass. Skips
-    // itself like selfcheck, and without QEMU.
+    // The corpus and the visible spec tests of every green coverage entry
+    // on Poly against Linux (one QEMU boot per test, up to four at a time):
+    // the tests of tests/linux/poly-pass.txt and of the green entries must
+    // pass. Skips itself like selfcheck, and without QEMU.
     pipeline(&["polycheck".into()])?;
     // The scheduler loop in dry-run mode: every command of one cycle for
     // the next entry, printed and pretended (ADR 0056). Runs nothing.
