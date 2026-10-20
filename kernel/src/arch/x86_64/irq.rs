@@ -28,7 +28,7 @@
 
 use super::apic::{self, RouteError};
 use crate::kprintln;
-use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use poly_irq::{MsiMessage, Polarity, Trigger};
 
 pub const PIC_BASE: u8 = 0x20;
@@ -181,6 +181,15 @@ pub fn stats() -> Stats {
     }
 }
 
+/// Whether the interrupt being handled came from ring 3 (set by
+/// `trap_dispatch`; interrupts do not nest), for CPU-time sampling.
+static INTERRUPTED_USER: AtomicBool = AtomicBool::new(false);
+
+/// The interrupt about to be dispatched came from ring 3 (`user`) or not.
+pub(super) fn set_interrupted_user(user: bool) {
+    INTERRUPTED_USER.store(user, Ordering::Relaxed);
+}
+
 /// Called by the IDT stub of every vector from 32 up, with interrupts
 /// disabled, on the interrupted thread's stack.
 pub(super) fn dispatch(vector: u8) {
@@ -199,6 +208,7 @@ pub(super) fn dispatch(vector: u8) {
         }
         TIMER_VECTOR => {
             super::time::on_tick();
+            crate::cputime::tick(INTERRUPTED_USER.load(Ordering::Relaxed));
             apic::eoi();
             DEPTH.fetch_sub(1, Ordering::Relaxed);
             // After the EOI, on this thread's own stack (see preempt_tick):

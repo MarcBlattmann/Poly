@@ -35,6 +35,7 @@
 //! - [`futex`]: futex wait queues, robust lists (ADR 0031).
 //! - [`fileio`]: what pipes, `poll` / `select`, `epoll` and the event files
 //!   (`eventfd`, `timerfd`, `signalfd`) need from the kernel (ADR 0042).
+//! - [`time`]: time structures and process timers (ADR 0044).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -56,6 +57,7 @@ pub mod signal;
 pub mod sys;
 pub mod table;
 pub mod task;
+pub mod time;
 
 #[cfg(test)]
 mod tests;

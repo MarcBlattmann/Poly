@@ -9,7 +9,7 @@
 use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
-use crate::sys::{epoll, eventfd, futex, io, mem, pipe, poll, process, signal, signalfd, system, task, timerfd};
+use crate::sys::{epoll, eventfd, futex, io, mem, pipe, poll, process, signal, signalfd, system, task, time, timerfd};
 
 pub use crate::numbers::{SYSCALLS, nr};
 
@@ -96,16 +96,25 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::EPOLL_PWAIT2, epoll::epoll_pwait2),
 ];
 
+/// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
+/// (ADR 0044: time).
+pub const GROUPS: &[&[(u64, Handler)]] = &[IMPLEMENTED, time::CALLS];
+
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
 
 const fn build() -> [Option<Handler>; TABLE_LEN] {
     let mut table: [Option<Handler>; TABLE_LEN] = [None; TABLE_LEN];
-    let mut i = 0;
-    while i < IMPLEMENTED.len() {
-        let (number, handler) = IMPLEMENTED[i];
-        assert!(table[number as usize].is_none(), "system call registered twice");
-        table[number as usize] = Some(handler);
-        i += 1;
+    let mut g = 0;
+    while g < GROUPS.len() {
+        let group = GROUPS[g];
+        let mut i = 0;
+        while i < group.len() {
+            let (number, handler) = group[i];
+            assert!(table[number as usize].is_none(), "system call registered twice");
+            table[number as usize] = Some(handler);
+            i += 1;
+        }
+        g += 1;
     }
     table
 }
@@ -218,11 +227,11 @@ mod tests {
 
     #[test]
     fn handlers_are_registered_by_number() {
-        for &(number, _) in IMPLEMENTED {
+        for &(number, _) in GROUPS.iter().flat_map(|g| g.iter()) {
             assert!(name(number).is_some(), "handler for unknown number {number}");
             assert!(handler(number).is_some());
         }
-        assert_eq!(implemented().count(), IMPLEMENTED.len());
+        assert_eq!(implemented().count(), GROUPS.iter().map(|g| g.len()).sum::<usize>());
         assert!(handler(nr::OPENAT).is_none());
         assert!(handler(TABLE_LEN as u64).is_none());
         assert!(handler(u64::MAX).is_none());
@@ -230,7 +239,8 @@ mod tests {
 
     #[test]
     fn implemented_set() {
-        let names: Vec<&str> = implemented().map(|(_, n)| n).collect();
+        let in_groups = |nr: u64| time::CALLS.iter().any(|&(n, _)| n == nr);
+        let names: Vec<&str> = implemented().filter(|&(nr, _)| !in_groups(nr)).map(|(_, n)| n).collect();
         let expected = [
             "read",
             "write",
@@ -304,6 +314,32 @@ mod tests {
             "getrandom",
             "clone3",
             "epoll_pwait2",
+        ];
+        assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn time_calls() {
+        let names: Vec<&str> = time::CALLS.iter().map(|&(nr, _)| name(nr).unwrap()).collect();
+        let expected = [
+            "nanosleep",
+            "getitimer",
+            "alarm",
+            "setitimer",
+            "gettimeofday",
+            "getrusage",
+            "times",
+            "settimeofday",
+            "time",
+            "timer_create",
+            "timer_settime",
+            "timer_gettime",
+            "timer_getoverrun",
+            "timer_delete",
+            "clock_settime",
+            "clock_getres",
+            "clock_nanosleep",
+            "getcpu",
         ];
         assert_eq!(names, expected);
     }

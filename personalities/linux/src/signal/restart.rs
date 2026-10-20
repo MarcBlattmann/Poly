@@ -56,6 +56,9 @@ pub struct PendingRestart {
 pub enum RestartBlock {
     /// A `FUTEX_WAIT` with a relative timeout, now an absolute deadline.
     FutexWait { addr: u64, private: bool, val: u32, bitset: u32, deadline: Deadline },
+    /// A relative nanosleep / clock_nanosleep, now an absolute deadline;
+    /// `rem` is where to report the time left.
+    Sleep { deadline: Deadline, rem: u64 },
 }
 
 /// What becomes of the interrupted call.

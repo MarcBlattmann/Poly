@@ -473,3 +473,6 @@ kernel_test! {
         Ok(())
     }
 }
+
+/// Time: sleeps, timers, CPU time, the vDSO from ring 3 (ADR 0044).
+mod time_tests;

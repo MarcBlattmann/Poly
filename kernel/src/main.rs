@@ -9,6 +9,7 @@ mod acpi;
 mod arch;
 mod block;
 mod boot_info;
+mod cputime;
 mod display;
 mod dma;
 mod frames;
@@ -34,6 +35,7 @@ mod testrun;
 mod thread;
 mod time;
 mod user;
+mod vdso;
 mod virtio_blk;
 
 use alloc::boxed::Box;
