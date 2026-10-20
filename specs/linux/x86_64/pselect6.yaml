@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pselect6
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  pselect6(nfds, readfds, writefds, exceptfds, timeout, sigarg) is select
+  with a timespec timeout (written back with the time left) and a sixth
+  argument pointing to {sigset pointer, sigset size}: the mask is in effect
+  for the duration of the call (a pending signal it unblocks ends the call
+  with EINTR after the handler; the old mask comes back). A NULL sigarg, or
+  a NULL sigset inside it, means no mask change.
+returns:
+  success: "as select; the timespec holds the time left"
+errors:
+  negative_nfds: "EINVAL (22)"
+  bad_timeout: "EINVAL (22) for tv_nsec out of range or a negative tv_sec/tv_nsec"
+  sigset_size: "EINVAL (22) when a sigset is given with a size other than 8"
+  bad_pointer: "EFAULT (14) for an unreadable timespec, sigarg, or sigset"
+  closed_fd: "EBADF (9)"
+  interrupted: "EINTR (4)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ppoll
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  ppoll(fds, nfds, timeout, sigmask, sigsetsize) is poll with a timespec
+  timeout (NULL waits forever, zero returns at once; the remaining time is
+  written back, zero after a timeout) and an optional signal mask that is in
+  effect only during the call: a pending signal the mask unblocks ends it
+  with EINTR after its handler ran, and the old mask is back when it
+  returns; a signal kept blocked by the mask does not interrupt (the call
+  times out or returns its events) and its handler runs after ppoll has
+  restored the old mask.
+returns:
+  success: "number of ready entries; the timespec holds the time left"
+errors:
+  interrupted: "EINTR (4)"
+  bad_timeout: "EINVAL (22) for tv_nsec out of range or a negative time"
+  sigsetsize: "EINVAL (22) when a mask is given and sigsetsize is not 8"
+  bad_pointer: "EFAULT (14) for an unreadable timeout"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

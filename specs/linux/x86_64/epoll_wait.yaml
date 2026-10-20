@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/epoll_wait
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  epoll_wait(epfd, events, maxevents, timeout_ms) returns up to maxevents
+  ready registrations as {events, data}; the array is written only up to the
+  count. Level-triggered (default): reported on every call while the
+  condition holds. EPOLLET: once per new arrival of data (not again while
+  old data remains; again after more is written or after a MOD).
+  EPOLLONESHOT: once, then disabled (still registered) until MOD re-arms it.
+  With maxevents 1 and several ready level-triggered registrations
+  successive calls go round all of them in turn. Timeout 0 returns at once,
+  positive after at least that many ms, -1 waits; a handled signal ends the
+  wait with EINTR (not restarted); when the last writer of a watched pipe
+  exits the read end reports EPOLLHUP.
+returns:
+  success: "the number of events written (0 on timeout)"
+errors:
+  bad_maxevents: "EINVAL (22) for maxevents 0 or negative"
+  not_epoll: "EINVAL (22) when epfd is not an epoll instance"
+  bad_fd: "EBADF (9)"
+  bad_events: "EFAULT (14) only when an event is to be copied out; with nothing ready the call returns 0"
+  interrupted: "EINTR (4)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering:
+  - "with maxevents smaller than the ready count, the rest are returned by later calls in rotation"
+timing:
+  typical: "a timeout of T returns after T plus scheduling delay"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

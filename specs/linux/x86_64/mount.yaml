@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mount
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  mount(source, target, type, flags, data). A tmpfs (source is free text,
+  data like "size=1m") on an existing directory hides its contents until
+  unmounted; statfs reports TMPFS_MAGIC; a second mount on the same point
+  stacks on top. MS_RDONLY makes file creation EROFS and statfs f_flags has
+  ST_RDONLY; MS_REMOUNT without MS_RDONLY makes it writable again (files
+  kept). MS_BIND mounts a directory at a second place (same files, changes
+  visible both ways); MS_REMOUNT|MS_BIND|MS_RDONLY makes only that place
+  read-only. Needs CAP_SYS_ADMIN.
+returns:
+  success: "0"
+errors:
+  missing_target: "ENOENT (2)"
+  unknown_type: "ENODEV (19)"
+  file_target: "ENOTDIR (20)"
+  bad_pointer: "EFAULT (14)"
+  permission: "EPERM (1) without CAP_SYS_ADMIN"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

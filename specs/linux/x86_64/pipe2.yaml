@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pipe2
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  pipe2(fds, flags) makes a pipe and writes two descriptors, the lowest free
+  ones, read end first (O_RDONLY) then write end (O_WRONLY). Flags:
+  O_CLOEXEC (FD_CLOEXEC on both), O_NONBLOCK (in both status flags),
+  O_DIRECT (accepted). Bytes come out in order; a read returns what is there
+  up to the request; FIONREAD counts queued bytes; a zero write returns 0.
+  Capacity is 65536 bytes (F_GETPIPE_SZ); a nonblocking writer fills it and
+  then gets EAGAIN; writes of at most PIPE_BUF (4096) are all-or-nothing,
+  larger ones may be partial; space is freed a page (4096 bytes) at a time,
+  so after reading part of a page of a full pipe even a small write does not
+  fit. F_SETPIPE_SZ rounds up to a power-of-two number of pages (5000 ->
+  8192, 12288 -> 16384, 0 -> 4096) and cannot go below the queued bytes
+  (EBUSY); -1 is EINVAL. When every write end is closed reads return the
+  rest and then 0 (a dup of the write end keeps it open); writing when every
+  read end is closed raises SIGPIPE and fails with EPIPE (also when SIGPIPE
+  is ignored; blocked: EPIPE and SIGPIPE stays pending); a zero-length write
+  then returns 0 without a signal. A blocking read waits for a writer's
+  data; a blocking writer on a full pipe waits for the reader.
+returns:
+  success: "0, fds[0] read end, fds[1] write end"
+errors:
+  bad_flags: "EINVAL (22) for any flag but O_CLOEXEC, O_NONBLOCK, O_DIRECT (O_RDWR, O_WRONLY, O_CREAT...)"
+  bad_pointer: "EFAULT (14); no descriptors are left open"
+  wrong_end: "read on the write end or write on the read end: EBADF (9)"
+  lseek: "ESPIPE (29)"
+  full_nonblocking: "EAGAIN (11) for a write that does not fit (or an empty nonblocking read)"
+  broken: "EPIPE (32) plus SIGPIPE when no reader is left"
+side_effects: "none"
+threading: "no thread-specific behaviour"
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

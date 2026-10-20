@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sendto
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  sendto(fd, buf, len, flags, addr, addrlen). UDP: each call is one datagram
+  to addr; an unbound sender is bound to an ephemeral port by the first
+  send; a zero-length datagram is sent; on a connected socket the address
+  may be omitted (goes to the peer) or given (used); at most 65507 bytes.
+  Streams: on a connected stream without an address the data goes to the
+  peer; MSG_DONTWAIT on a full AF_UNIX stream is EAGAIN even for a blocking
+  socket.
+returns:
+  success: "the number of bytes sent"
+errors:
+  too_big: "EMSGSIZE (90) for a UDP datagram over 65507 bytes"
+  short_address: "EINVAL (22)"
+  wrong_family: "EAFNOSUPPORT (97)"
+  unix_stream_address: "EISCONN (106) for an address on a connected AF_UNIX stream"
+  unix_unconnected: "ENOTCONN (107) on an unconnected AF_UNIX stream"
+  tcp_unconnected: "EPIPE (32) on an unconnected TCP socket"
+  no_destination: "EDESTADDRREQ (89) for UDP without address or peer"
+  bad_buffer: "EFAULT (14)"
+  not_socket: "ENOTSOCK (88)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

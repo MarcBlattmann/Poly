@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rt_sigtimedwait
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  rt_sigtimedwait(set, info, timeout, sigsetsize) takes one pending signal
+  of set (normally blocked) without running its handler and returns its
+  number, filling info (when not NULL) with its siginfo: signo, code
+  (SI_USER, SI_QUEUE...), sender pid and uid, value, and the other fields as
+  queued (the rest zero). Several pending: lowest number first, standard
+  signals before real-time ones; a queued real-time signal is taken one
+  entry at a time. With nothing pending: a zero timeout fails at once with
+  EAGAIN, a positive one after waiting at least that long, NULL waits
+  forever. A signal outside set that runs a handler ends the wait with EINTR
+  (never restarted, SA_RESTART or not). SIGKILL and SIGSTOP in set are
+  ignored. An unwritable info is EFAULT, but the signal is taken anyway.
+returns:
+  success: "the signal number"
+errors:
+  timeout: "EAGAIN (11) when nothing arrived before the timeout"
+  interrupted: "EINTR (4) when another signal ran a handler"
+  bad_timeout: "EINVAL (22) for tv_nsec outside 0..999999999 or a negative tv_sec"
+  sigsetsize: "EINVAL (22) when sigsetsize is not 8"
+  bad_pointer: "EFAULT (14) for an unreadable set or timeout, or an unwritable info (signal consumed)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "a timeout of T returns after T plus scheduling delay"
+  guarantees: "never returns EAGAIN before the timeout has elapsed"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

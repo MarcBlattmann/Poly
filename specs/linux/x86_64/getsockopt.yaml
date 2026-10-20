@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getsockopt
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  getsockopt(fd, level, name, value, len) at SOL_SOCKET (1): SO_TYPE,
+  SO_DOMAIN, SO_PROTOCOL, SO_ERROR (0; a pending error such as ECONNREFUSED
+  after a refused nonblocking connect is returned once and cleared),
+  SO_ACCEPTCONN, SO_REUSEADDR and SO_KEEPALIVE (0 by default), SO_PASSCRED
+  (0), SO_RCVLOWAT (1), SO_SNDBUF and SO_RCVBUF (positive), SO_LINGER (8
+  bytes, {0, 0} by default), SO_PEERCRED (12 bytes {pid, uid, gid};
+  unconnected: pid 0, uid and gid 0xffffffff). Int options write 4 bytes and
+  set len to 4 (a longer buffer gets 4, a shorter one that many bytes).
+  IPPROTO_TCP TCP_NODELAY on TCP sockets.
+returns:
+  success: "0; value and len written"
+errors:
+  unknown: "ENOPROTOOPT (92)"
+  wrong_level: "EOPNOTSUPP (95) for a TCP option on an AF_UNIX socket"
+  negative_length: "EINVAL (22)"
+  bad_pointer: "EFAULT (14) for an unreadable len"
+  not_socket: "ENOTSOCK (88)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

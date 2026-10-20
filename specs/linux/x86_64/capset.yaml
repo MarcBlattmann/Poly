@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/capset
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  capset(header, data) changes the caller's sets (version 3: two records;
+  version 1: one record, and it clears capabilities 32 and up from the
+  effective and permitted sets). Dropping a capability from the effective
+  set takes effect at once (e.g. without CAP_SETUID setresuid to another uid
+  is EPERM) and it can be raised again while permitted; dropping it from the
+  permitted set is final. With CAP_SETPCAP a permitted capability can be
+  added to and removed from the inheritable set. Setting the current sets
+  again is a no-op.
+returns:
+  success: "0"
+errors:
+  raise_permitted: "EPERM (1) for adding to the permitted set"
+  effective_outside_permitted: "EPERM (1)"
+  other_pid: "EPERM (1) for any pid but 0 or the caller's"
+  bad_version: "EINVAL (22)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

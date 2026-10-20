@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getsockname
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  getsockname(fd, addr, len) writes the socket's own address; len is in/out
+  (a short buffer gets the start, len the full size). AF_UNIX: an unbound
+  socket is unnamed (len 2); a path name comes back with the length as bound
+  (terminating NUL included if it was); an abstract name exactly as bound
+  (embedded NULs kept, nothing appended); an autobound name has len 8 and
+  stays the same; sending from an unbound datagram socket does not autobind
+  it. AF_INET: unbound reads 0.0.0.0 port 0 (zero padding); after bind or
+  connect the local address and port.
+returns:
+  success: "0"
+errors:
+  not_socket: "ENOTSOCK (88)"
+  closed_fd: "EBADF (9)"
+  negative_length: "EINVAL (22)"
+  bad_pointer: "EFAULT (14) for an unwritable addr or len"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

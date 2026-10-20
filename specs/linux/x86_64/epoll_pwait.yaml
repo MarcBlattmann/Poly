@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/epoll_pwait
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  epoll_pwait(epfd, events, maxevents, timeout, sigmask, sigsetsize) is
+  epoll_wait with a signal mask for the duration of the call. A NULL mask is
+  plain epoll_wait and sigsetsize is then not checked. A mask that unblocks
+  a pending signal ends the call with EINTR after the handler; the old mask
+  comes back. A mask that blocks a signal keeps it from interrupting (the
+  call returns its events or times out) and the handler runs once the old
+  mask is back.
+returns:
+  success: "as epoll_wait"
+errors:
+  sigsetsize: "EINVAL (22) when a mask is given and sigsetsize is not 8"
+  bad_mask: "EFAULT (14) for an unreadable mask"
+  bad_maxevents: "EINVAL (22)"
+  interrupted: "EINTR (4)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

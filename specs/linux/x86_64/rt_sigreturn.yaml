@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rt_sigreturn
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  rt_sigreturn restores the context saved in the signal frame that the
+  kernel built for a handler: the restorer of the action (SA_RESTORER) calls
+  it when the handler returns. All general registers come back as they were
+  when the signal interrupted the program, except those the handler changed
+  in the ucontext (uc_mcontext): an edited register, an edited rip
+  (execution resumes there) and an edited uc_sigmask (it becomes the signal
+  mask) take effect; uc_stack restores the alternate signal stack setting.
+  The result of an interrupted syscall (rax) is in the frame and can be
+  edited too. Nested handlers return in order, each restoring its own mask.
+  Fault frames carry the fault: SIGSEGV for an unmapped read has si_code
+  SEGV_MAPERR (1), si_addr and cr2 the address, trapno 14 and error code 4
+  (user read, not present); SIGILL from ud2 ILL_ILLOPN (2) with si_addr the
+  instruction and trapno 6; SIGFPE from a division by zero FPE_INTDIV (1),
+  trapno 0; SIGTRAP from int3 SI_KERNEL (0x80), rip after the instruction,
+  trapno 3. Calling rt_sigreturn without a valid frame on the stack (a
+  zeroed area) does not return: the process is killed by SIGSEGV; a handler
+  that sets rip to an unmapped address makes the process fault there
+  (SIGSEGV).
+returns:
+  success: "does not return to its caller: execution continues at the restored rip with the restored registers"
+errors:
+  bad_frame: "the process is killed by SIGSEGV (no error code is returned)"
+side_effects: "signal mask and alternate stack setting are taken from the frame"
+threading: "acts on the calling thread only"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

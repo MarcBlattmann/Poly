@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/kill
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  kill(pid, sig) sends a signal: pid > 0 to that process, pid 0 to every
+  process in the caller's process group, pid -pgid to every process in group
+  pgid (and nobody else). Signal 0 sends nothing and only checks that the
+  target exists. A signal to the caller itself is delivered before kill
+  returns (if not blocked). pid and sig are ints: the upper 32 bits of the
+  registers are ignored. Default actions seen through wait4: terminate for
+  SIGTERM, SIGUSR1, SIGHUP, SIGALRM, SIGPIPE, SIGRTMIN; terminate (core) for
+  SIGQUIT, SIGABRT (only the signal number is compared); ignore for SIGCHLD,
+  SIGURG, SIGWINCH, SIGCONT; SIGSTOP stops the process (the parent sees it
+  with WUNTRACED: status 0x137f) and SIGCONT continues it (WCONTINUED:
+  status 0xffff); a SIGTERM sent to a stopped process acts once it is
+  continued; SIGKILL ends a stopped process. The receiver's siginfo has
+  si_code SI_USER (0) and the sender's pid and real uid.
+returns:
+  success: "0 (also when the signal is ignored or blocked by the target)"
+errors:
+  bad_signal: "EINVAL (22) for a signal number below 0 or above 64 (for an existing target)"
+  no_target: "ESRCH (3) when no process or group matches; this is checked before the signal number"
+  permission: "EPERM (1) when the caller may not signal the target (another uid, without CAP_KILL)"
+side_effects: "none"
+threading: "a process-directed signal is taken by any thread that does not block it"
+ordering:
+  - "a signal sent to oneself and not blocked runs its handler before kill returns"
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner

@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/eventfd
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  eventfd(initval) is eventfd2(initval, 0): blocking, no FD_CLOEXEC, not a
+  semaphore; initval is an unsigned int (the upper 32 bits of the register
+  are ignored, 0xffffffff is the largest). O_NONBLOCK can be set later with
+  fcntl(F_SETFL). readv and writev with one 8-byte element behave like read
+  and write. FIONREAD is ENOTTY.
+returns:
+  success: "a new descriptor"
+errors:
+  fionread: "ENOTTY (25)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 0                                  # count in <symbol>.tests/
+  held_out: 0                                 # count kept by the diff runner
