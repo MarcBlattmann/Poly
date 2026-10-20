@@ -159,13 +159,14 @@ kernel_test! {
 
 kernel_test! {
     fn initramfs_frames_return_to_the_allocator(env: &TestEnv) -> TestResult {
-        // The boot's archive: every page it touched came back.
+        // The boot's archive: every page it touched in usable RAM came back.
         if let Some(r) = initrd::report() {
-            let pages = (align_up(r.module.end(), PAGE_SIZE) - align_down(r.module.phys, PAGE_SIZE)) / PAGE_SIZE;
-            let in_ram = env.memory.regions().iter().any(|m| {
-                m.kind == RegionKind::Usable && m.start <= r.module.phys && r.module.end() <= m.end
+            let (start, end) = (align_down(r.module.phys, PAGE_SIZE), align_up(r.module.end(), PAGE_SIZE));
+            let usable = env.memory.regions().iter().find(|m| {
+                m.kind == RegionKind::Usable && m.start <= start && start < m.end
             });
-            if r.free_error.is_some() || (in_ram && r.freed_frames != pages) {
+            let pages = usable.map_or(0, |m| (end.min(m.end) - start) / PAGE_SIZE);
+            if r.free_error.is_some() || r.freed_frames != pages {
                 return Err("the initramfs's pages were not all returned to the frame allocator");
             }
         }

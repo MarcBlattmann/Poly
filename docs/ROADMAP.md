@@ -83,7 +83,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] `/dev` (null, zero, random, urandom, tty, console), `/proc` (self, maps, status, cpuinfo), minimal `/sys`
 - [ ] TTY layer: line discipline, pseudo-terminals, job control
 - [ ] Users, groups, credentials, file permissions, `umask`
-- [ ] Persistent file system on virtio-blk (ext2 first, then ext4), page cache and writeback
+- [x] Persistent file system on virtio-blk (ext2), page cache and writeback
+- [ ] ext4 on the persistent disk (extents, journal)
 - [ ] **Milestone:** BusyBox shell boots as init and runs interactively
 - [ ] SMP: start all CPUs, per-CPU data, TLB shootdown, multi-core scheduler
 - [x] Networking: virtio-net driver, own TCP/IP stack (IPv4, IPv6, TCP, UDP, ICMP)

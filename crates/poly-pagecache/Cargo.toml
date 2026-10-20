@@ -1,0 +1,18 @@
+[package]
+name = "poly-pagecache"
+description = "Page cache: file pages kept in frames per inode, shared by read/write and memory mappings, with dirty tracking, writeback and eviction"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-vfs.workspace = true
+
+[dev-dependencies]
+poly-block.workspace = true
+poly-ext2.workspace = true
+
+[lints]
+workspace = true

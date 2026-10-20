@@ -229,7 +229,7 @@ fn spawn_with(
     let stack = Stack::allocate()?;
     let _irq = InterruptsOff::new();
     let dead = reap(&mut THREADS.lock());
-    drop(dead);
+    bury(dead);
     let mut t = THREADS.lock();
     assert!(t.ready, "thread::spawn before thread::init");
     let Ok(id) = t.sched.spawn() else {
@@ -330,7 +330,26 @@ fn finish_switch() {
     let dead = reap(&mut THREADS.lock());
     // THREADS is unlocked again: freeing address spaces may take a while
     // and takes the frame allocator and the heap.
+    bury(dead);
+}
+
+/// Set while [`bury`] drops reaped threads' user state.
+static REAPING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Drop the user state [`reap`] took out. This runs in whichever thread
+/// happened to switch or spawn: maybe inside an interrupt handler, maybe
+/// holding sleeping locks. Drop code that may sleep, or take a lock that
+/// does not mask interrupts, checks [`reaping`] and defers that part.
+fn bury(dead: Graveyard) {
+    let was = REAPING.swap(true, core::sync::atomic::Ordering::SeqCst);
     drop(dead);
+    REAPING.store(was, core::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether the running code is dropping the user state of a reaped thread
+/// (see [`bury`]): it must not sleep or take non-masking locks.
+pub fn reaping() -> bool {
+    REAPING.load(core::sync::atomic::Ordering::SeqCst)
 }
 
 /// User state of reaped threads, dropped by the caller of [`reap`] once

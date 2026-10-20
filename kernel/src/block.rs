@@ -9,6 +9,8 @@
 //!
 //! - `virtio0` is the virtio-blk disk, if there is one ([`root`]): the disk a
 //!   file system mounts.
+//! - `virtio1`, `virtio2`, ... are the other virtio-blk functions, brought
+//!   up when something names them ([`open`]: a mount).
 //! - `ram0` is a RAM disk of [`RAM_DISK_BYTES`] from the heap ([`ram`]),
 //!   always there, so file system code can be tested without a disk.
 //!
@@ -589,6 +591,62 @@ pub fn find(name: &str) -> Option<&'static Disk> {
     DISKS.lock().iter().copied().find(|d| d.name == name)
 }
 
+/// Serialises [`open`], so a disk is brought up once.
+static OPENING: Mutex<()> = Mutex::new(());
+
+/// The disk called `name`, bringing it up first if it is a virtio-blk disk
+/// that has not been started: `virtio<n>` is the `n`-th virtio-blk function
+/// in PCI order. `virtio0` comes up at boot ([`init`]); the others only
+/// when something asks for them (a mount), so a device nobody names is
+/// left alone. `None` if there is no such disk or it cannot be brought up.
+pub fn open(name: &str) -> Option<&'static Disk> {
+    if let Some(d) = find(name) {
+        return Some(d);
+    }
+    let n: usize = name.strip_prefix("virtio")?.parse().ok()?;
+    let _once = OPENING.lock();
+    if let Some(d) = find(name) {
+        return Some(d);
+    }
+    let found = virtio_blk::bring_up_device(virtio_blk::nth_function(n)?)?;
+    let what = format!("virtio-blk {}", found.bdf);
+    // Disks live as long as the kernel, and so do their names.
+    let name: &'static str = Box::leak(format!("virtio{n}").into_boxed_str());
+    match register(name, what, Device::Virtio(Box::new(found.disk))) {
+        Ok(disk) => {
+            virtio_blk::start(disk, found.bdf, found.msix);
+            log_disk(disk);
+            Some(disk)
+        }
+        Err(e) => {
+            kprintln!("block: {name}: no queue or cache: {e:?}");
+            None
+        }
+    }
+}
+
+/// The boot log's line about a disk.
+fn log_disk(d: &Disk) {
+    let i = d.info();
+    let s = d.stats();
+    let waiting = match d.waiting() {
+        Waiting::Polled => String::from("polled"),
+        Waiting::Interrupt(v) => format!("interrupt-driven (vector {v:#x})"),
+    };
+    kprintln!(
+        "block: {}: {}, {} blocks of {} bytes ({}){}{}; queue {QUEUE_REQUESTS} requests, cache {} buffers ({}); {waiting}",
+        d.name,
+        d.what,
+        i.blocks,
+        i.block_size,
+        Size(i.bytes()),
+        if i.write_cache { ", write cache" } else { "" },
+        if i.read_only { ", read-only" } else { "" },
+        s.buffers,
+        Size((s.buffers * i.block_size as usize) as u64),
+    );
+}
+
 /// The disk a file system mounts: the virtio-blk disk, if there is one.
 pub fn root() -> Option<&'static Disk> {
     find(VIRTIO_NAME)
@@ -620,24 +678,7 @@ pub fn init() {
         None => kprintln!("block: {RAM_NAME}: bad block size"),
     }
     for d in disks() {
-        let i = d.info();
-        let s = d.stats();
-        let waiting = match d.waiting() {
-            Waiting::Polled => String::from("polled"),
-            Waiting::Interrupt(v) => format!("interrupt-driven (vector {v:#x})"),
-        };
-        kprintln!(
-            "block: {}: {}, {} blocks of {} bytes ({}){}{}; queue {QUEUE_REQUESTS} requests, cache {} buffers ({}); {waiting}",
-            d.name,
-            d.what,
-            i.blocks,
-            i.block_size,
-            Size(i.bytes()),
-            if i.write_cache { ", write cache" } else { "" },
-            if i.read_only { ", read-only" } else { "" },
-            s.buffers,
-            Size((s.buffers * i.block_size as usize) as u64),
-        );
+        log_disk(d);
     }
     let Some(root) = root() else { return };
     let mut first = vec![0u8; root.info().block_size as usize];

@@ -3,7 +3,9 @@
 **Status:** Accepted. Builds on [0022](0022-user-mode-address-spaces-and-system-calls.md)
 (address spaces, the fault and user-copy paths), [0024](0024-elf-loader.md)
 (load plans and the initial stack) and [0026](0026-user-address-space-regions.md)
-(the region map and what a fault means).
+(the region map and what a fault means). Mapping page-cache pages and
+shared file mappings came with [0040](0040-page-cache-and-ext2-on-virtio-blk.md);
+the rest stands.
 
 ## Context
 

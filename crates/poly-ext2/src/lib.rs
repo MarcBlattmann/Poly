@@ -35,6 +35,13 @@
 //!   corrupted volume answers `EUCLEAN` (and is marked as having errors),
 //!   device failures `EIO`.
 //!
+//! # Locking
+//!
+//! One lock per volume, held by every operation from start to end, disk
+//! I/O included, so each operation is atomic. [`Ext2::mount`] uses a
+//! spinlock; [`Ext2::mount_with_lock`] takes any [`RawLock`], which is how
+//! the kernel makes threads that wait for the volume sleep.
+//!
 //! # Mounting from the kernel
 //!
 //! The kernel's `block::Disk` (a request queue and a buffer cache per disk)
@@ -54,8 +61,9 @@
 //!     }
 //!     fn flush(&self) -> Result<(), IoError> { self.0.sync().map_err(io) }
 //! }
-//! let fs = Ext2::mount(DiskIo(block::root()?), clock, MountOptions::default())?;
-//! vfs.mount(&ctx, &cred, AT_FDCWD, b"/mnt", Arc::new(fs), MountFlags::default())?;
+//! // The kernel's sleeping mutex as the volume lock (any `poly_vfs::lock::RawLock`).
+//! let fs = Ext2::mount_with_lock(DiskIo(block::root()?), clock, MountOptions::default(), RawMutex::new())?;
+//! vfs.mount(&ctx, &cred, At::Cwd, b"/mnt", Arc::new(fs), MountFlags::default())?;
 //! // Periodically (writeback) and at shutdown: fs.sync(), then fs.unmount().
 //! ```
 //!
@@ -82,12 +90,12 @@ pub use io::{BlockIo, CachedIo, DeviceIo};
 
 use crate::io::Disk;
 use crate::layout::*;
-use crate::sync::SpinMutex;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
+use poly_vfs::lock::{Lock, RawLock, RawSpinLock};
 use poly_vfs::{Clock, Errno, Result, Timespec};
 
 /// How to mount.
@@ -252,16 +260,17 @@ pub(crate) struct State {
     pub next_generation: u32,
 }
 
-/// A mounted ext2 volume.
-pub struct Ext2<D> {
+/// A mounted ext2 volume on device `D`, its state behind a lock of type
+/// `L` (see [`Ext2::mount_with_lock`]).
+pub struct Ext2<D, L = RawSpinLock> {
     disk: Disk<D>,
     geo: Geometry,
     clock: Arc<dyn Clock>,
     errors: AtomicBool,
-    state: SpinMutex<State>,
+    state: Lock<L, State>,
 }
 
-impl<D> core::fmt::Debug for Ext2<D> {
+impl<D, L> core::fmt::Debug for Ext2<D, L> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Ext2").field("geometry", &self.geo).finish_non_exhaustive()
     }
@@ -366,9 +375,25 @@ impl<D: BlockIo> Ctx<'_, D> {
 }
 
 impl<D: BlockIo> Ext2<D> {
-    /// Mounts the ext2 volume on `dev`. Unless read-only, the volume is
-    /// marked "not clean" on disk until [`Ext2::unmount`].
+    /// Mounts the ext2 volume on `dev`, its state behind a spinlock. Unless
+    /// read-only, the volume is marked "not clean" on disk until
+    /// [`Ext2::unmount`].
     pub fn mount(dev: D, clock: Arc<dyn Clock>, opts: MountOptions) -> core::result::Result<Ext2<D>, MountError> {
+        Ext2::mount_with_lock(dev, clock, opts, RawSpinLock::new())
+    }
+}
+
+impl<D: BlockIo, L: RawLock> Ext2<D, L> {
+    /// [`Ext2::mount`] with the volume's state behind `lock`, which every
+    /// operation holds while it runs, disk I/O included: a kernel passes
+    /// its sleeping mutex, so threads waiting for the volume sleep while the
+    /// holder waits for the disk.
+    pub fn mount_with_lock(
+        dev: D,
+        clock: Arc<dyn Clock>,
+        opts: MountOptions,
+        lock: L,
+    ) -> core::result::Result<Ext2<D, L>, MountError> {
         let dbs = dev.block_size();
         if !dbs.is_power_of_two() || dbs < 512 {
             return Err(MountError::Unsupported("device block size"));
@@ -501,7 +526,7 @@ impl<D: BlockIo> Ext2<D> {
             inode_bitmap: None,
             next_generation: now.sec as u32 ^ now.nsec,
         };
-        let fs = Ext2 { disk, geo, clock, errors: AtomicBool::new(false), state: SpinMutex::new(state) };
+        let fs = Ext2 { disk, geo, clock, errors: AtomicBool::new(false), state: Lock::with_raw(lock, state) };
         {
             let mut st = fs.state.lock();
             let mut ctx = fs.ctx(&mut st);

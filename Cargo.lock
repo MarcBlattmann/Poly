@@ -110,6 +110,15 @@ name = "poly-ntobj"
 version = "0.0.1"
 
 [[package]]
+name = "poly-pagecache"
+version = "0.0.1"
+dependencies = [
+ "poly-block",
+ "poly-ext2",
+ "poly-vfs",
+]
+
+[[package]]
 name = "poly-paging"
 version = "0.0.1"
 
@@ -285,7 +294,9 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 name = "xtask"
 version = "0.0.1"
 dependencies = [
+ "poly-block",
  "poly-cpio",
+ "poly-ext2",
  "poly-gfx",
  "poly-term",
  "poly-vfs",
