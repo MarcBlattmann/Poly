@@ -1,7 +1,7 @@
 //! App tests: an unchanged, dynamically linked program of this (real Linux)
 //! machine, run with fixed arguments, stdin, environment and files, on the
 //! reference system and on Poly, and compared like a corpus test
-//! (docs/AGENT_PIPELINE.md, "App tests"; ADR 0056).
+//! (docs/AGENT_PIPELINE.md, "App tests"; ADR 0057).
 //!
 //! A test is a JSON file `<name>.app` (`tests/linux/apps/`, or an entry's
 //! tests directory):

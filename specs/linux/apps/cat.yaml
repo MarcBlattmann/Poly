@@ -43,7 +43,7 @@ returns:
   s: "-s: at most one empty line in a row"
   A: "-A: tab as ^I, byte 0x01 as ^A, $ before each newline"
 errors:
-  missing_file: "\"cat: nope.txt: No such file or directory\\n\" on stderr, exit status 1, the other operands still copied"
+  missing_file: "\"cat: <name>: No such file or directory\\n\" on stderr, exit status 1, the other operands still copied"
 system_calls:                                 # observed on the reference, in order
   - >
     C library start-up, the same for every program: brk, mmap,
@@ -60,9 +60,9 @@ system_calls:                                 # observed on the reference, in or
     Plain copying into the regular file stdout uses copy_file_range(fd,
     NULL, 1, NULL, large, 0): on Linux it copies the bytes and returns their
     count, then returns 0 at end of file; cat falls back to read/write when
-    it fails (ENOSYS, EXDEV, EINVAL). The bytes it writes to fd 1 are the
-    program's output (and must be in the test-run protocol's POLY-OUT
-    records like those of write).
+    it fails with ENOSYS (seen on Poly, with the same output). The bytes it
+    writes to fd 1 are the program's output (and must be in the test-run
+    protocol's POLY-OUT records like those of write).
   - >
     With -n, -s or -A cat reads in blocks: ioctl(fd, FIONREAD) on a regular
     input file returns 0 and stores the number of bytes left to read; then

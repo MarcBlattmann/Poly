@@ -425,7 +425,11 @@ fn selfcheck(repo: &Path) -> Result<u8> {
     if code != 0 {
         return Err("Linux against Linux is not clean: the tracer or the normalisation is nondeterministic".into());
     }
-    println!("pipeline selfcheck: {} test programs, Linux against Linux clean", m.tests.len());
+    println!(
+        "pipeline selfcheck: {} test programs and {} app tests, Linux against Linux clean",
+        m.tests.len(),
+        m.apps.len()
+    );
     Ok(0)
 }
 

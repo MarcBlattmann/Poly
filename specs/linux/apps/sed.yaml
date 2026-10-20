@@ -43,7 +43,7 @@ returns:
   extended: "-E 's/(.)(.*)/\\\\2\\\\1/' moves the first character to the end"
   in_place: "-i writes the result back to the file (cat shows it), nothing on stdout"
 errors:
-  missing_file: "\"sed: can't read nope: No such file or directory\\n\" on stderr, exit status 2"
+  missing_file: "\"sed: can't read <name>: No such file or directory\\n\" on stderr, exit status 2"
 system_calls:                                 # observed on the reference, in order
   - >
     C library start-up, the same for every program: brk, mmap,

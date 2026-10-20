@@ -44,7 +44,7 @@ returns:
   fields: "-t: -k3 orders by the third colon-separated field; -k2,2n numerically by field 2, ties by the whole line"
   stdin: "without operands stdin is sorted"
 errors:
-  check: "-c on unsorted input: \"sort: fruit.txt:2: disorder: apple\\n\" on stderr, nothing on stdout, exit status 1"
+  check: "-c on unsorted input: \"sort: <name>:<line number>: disorder: <that line>\\n\" on stderr for the first line out of order, nothing on stdout, exit status 1"
 system_calls:                                 # observed on the reference, in order
   - >
     C library start-up, the same for every program: brk, mmap,

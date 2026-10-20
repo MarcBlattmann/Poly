@@ -41,7 +41,7 @@ returns:
   recursive: "-r makes the directories and copies the files below them"
   preserve: "-p: the copy keeps mode 0750 and the 2023-11-14 modification time (ls -l shows them)"
 errors:
-  missing_source: "\"cp: cannot stat 'nope': No such file or directory\\n\" on stderr, exit status 1"
+  missing_source: "\"cp: cannot stat '<name>': No such file or directory\\n\" on stderr, exit status 1"
   same_file: "\"cp: 'a' and 'a' are the same file\\n\" on stderr, exit status 1"
 system_calls:                                 # observed on the reference, in order
   - >
