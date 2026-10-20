@@ -486,7 +486,7 @@ fn deep_extent_trees_split_merge_and_shrink() {
     let fs = mount(&disk);
     let f = fs.create(fs.root(), b"f", &REG).unwrap();
     let mut model = vec![0u8; 0];
-    let mut put = |fs: &Fs<'_>, model: &mut Vec<u8>, at: usize, data: &[u8]| {
+    let put = |fs: &Fs<'_>, model: &mut Vec<u8>, at: usize, data: &[u8]| {
         fs.write(f, at as u64, data).unwrap();
         if model.len() < at + data.len() {
             model.resize(at + data.len(), 0);
