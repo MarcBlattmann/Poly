@@ -75,7 +75,7 @@ mod tests;
 
 pub use crate::arch::user::{
     AddressSpace, Efault, Entry, Fault, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, UserRegs,
-    copy_from_user, copy_to_user, fs_base, gs_base, is_user_range, set_fs_base, set_gs_base, strncpy_from_user,
+    cmpxchg_user_u32, copy_from_user, copy_to_user, fs_base, gs_base, is_user_range, set_fs_base, set_gs_base, strncpy_from_user,
     user_frames,
 };
 pub use memory::{AnonShared, FaultError, FileRef, Memory, MemoryError, MemoryImage, PageSource};
@@ -223,6 +223,7 @@ fn start_thread(
     };
     let (tid, flags) = attached.ok_or(SpawnError::NoMemory)?;
     let attached = Arc::clone(&process);
+    let kick = Arc::clone(&flags);
     let user = Box::new(UserThread {
         process,
         hook,
@@ -236,7 +237,10 @@ fn start_thread(
         replaced: false,
         arch,
     });
-    thread::spawn_user("user", user, user_main, 0).map(|id| (id, tid)).inspect_err(|_| attached.cancel_thread(tid))
+    thread::spawn_user("user", user, user_main, 0)
+        .inspect(|id| kick.thread.store(id.to_bits() + 1, Ordering::SeqCst))
+        .map(|id| (id, tid))
+        .inspect_err(|_| attached.cancel_thread(tid))
 }
 
 impl UserThread {

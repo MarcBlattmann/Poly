@@ -20,7 +20,6 @@
 //! The layout is US unless the command line says `poly.keymap=de-ch`;
 //! [`set_layout`] changes it. Num Lock starts on.
 
-use crate::arch::cpu::InterruptsOff;
 use crate::arch::i8042::I8042Ports;
 use crate::boot_info::BootInfo;
 use crate::sync::{Mutex, SpinLock};
@@ -45,6 +44,11 @@ const RING_BYTES: usize = 256;
 const POLL_NS: u64 = 100 * time::NANOS_PER_MILLI;
 
 static RING: ByteRing<RING_BYTES> = ByteRing::new();
+/// The ring has one producer at a time: the interrupt handler (on the boot
+/// CPU), a thread polling the controller or injecting bytes, on any CPU.
+/// They also share the controller's ports. Consumers are serialised by the
+/// driver's lock.
+static PRODUCER: SpinLock<()> = SpinLock::new(());
 /// Woken when bytes arrive.
 static ARRIVED: WaitQueue = WaitQueue::new();
 static PRESENT: AtomicBool = AtomicBool::new(false);
@@ -236,8 +240,7 @@ pub fn modifiers() -> Modifiers {
 /// False if the buffer was full and some were dropped.
 pub fn inject(bytes: &[u8]) -> bool {
     let all = {
-        // The interrupt handler is the ring's other producer.
-        let _irq = InterruptsOff::new();
+        let _producer = PRODUCER.lock();
         bytes.iter().filter(|&&b| !RING.push(b)).count() == 0
     };
     ARRIVED.wake_all();
@@ -325,6 +328,7 @@ fn keyboard_command(bytes: &[u8]) -> Result<(), &'static str> {
 /// command's reply over). Runs in the interrupt handler, or with
 /// interrupts off.
 fn drain() -> bool {
+    let _producer = PRODUCER.lock();
     let mut got = false;
     let mut reply = false;
     // Bounded: a controller that always reports a byte cannot hold us here.
@@ -362,10 +366,7 @@ fn poll_controller() {
     if !is_present() {
         return;
     }
-    let got = {
-        let _irq = InterruptsOff::new();
-        drain()
-    };
+    let got = drain();
     if got {
         ARRIVED.wake_all();
     }

@@ -37,37 +37,54 @@
 //! [`user_frames`] counts every frame held for user pages, so tests can
 //! check that unmapping and teardown free them.
 //!
-//! # TLB and PCIDs
+//! # TLB, PCIDs and other CPUs
 //!
 //! Without PCIDs, every CR3 load flushes all non-global translations, so
-//! only the space that is loaded can have stale entries; unmapping or
-//! write-protecting a page of it invalidates the page with `INVLPG`.
+//! only CPUs that have the space loaded can have stale entries.
 //!
 //! With PCIDs (CPUID.01H:ECX.PCID, CR4.PCIDE), translations are tagged with
 //! the 12-bit PCID in CR3[11:0] and survive loads with bit 63 set
-//! (SDM Vol. 3A §4.10.1, §4.10.4.1). Address spaces get PCIDs from a small
-//! table, round robin; [`PCID_OWNER`] remembers which space each was last
-//! given to. Loading a space whose PCID is still its own skips the flush;
-//! otherwise it takes the next PCID and loads CR3 *without* bit 63, which
-//! flushes whatever the previous owner left under it. A space that changes
-//! while it is not loaded forgets its PCID, so its next load flushes too.
-//! The kernel PML4 uses PCID 0. Kernel mappings are global, so they are
-//! never flushed by any of this.
+//! (SDM Vol. 3A §4.10.1, §4.10.4.1). PCIDs are per CPU: each CPU hands its
+//! own out to spaces round robin and remembers which space each was last
+//! given to (`PerCpu::pcid_owner`); a space remembers its PCID on each CPU.
+//! Loading a space whose PCID on this CPU is still its own skips the flush;
+//! otherwise it takes the CPU's next PCID and loads CR3 *without* bit 63,
+//! which flushes whatever the previous owner left under it. The kernel PML4
+//! uses PCID 0. Kernel mappings are global, so they are never flushed by
+//! any of this.
 //!
-//! TODO(smp): a space loaded on another CPU needs a TLB shootdown (IPI)
-//! when it changes, and PCIDs are per CPU.
+//! **Changes** ([`AddressSpace::sync_tlb`]): every change that removes or
+//! narrows a translation (unmap, protect, the read-only copy-on-write
+//! pages of `fork`, taking a page out) is followed, before the old frame
+//! or page table can be reused, by: forgetting the space's PCID on every
+//! other CPU (their next load flushes), invalidating the pages here if the
+//! space is loaded here, and a TLB shootdown (`tlb.rs`) to every other CPU
+//! that has it loaded now, found in the space's CPU mask (`active`), which
+//! [`AddressSpace::activate`] and [`activate_kernel`] keep. A CPU sets its
+//! bit before it loads CR3 and reads its PCID, and the changer forgets the
+//! PCIDs before it reads the mask, so a CPU is either sent the shootdown
+//! or flushes on its load. Frames and page tables an operation frees are
+//! collected and freed after its shootdown (`Reclaim`); several pages
+//! changed by one operation are one shootdown (`tlb::Flush`). Widening a
+//! translation needs no shootdown on x86 (a stale narrower entry only
+//! causes a page fault, which demand paging resolves as a stale entry),
+//! but it is synced the same way, which costs little and keeps the rule
+//! simple.
 //!
 //! # Locking
 //!
 //! Each space's tables are behind a spinlock, taken before `FRAMES`.
 
-use super::cpu;
 use super::paging::{self, BuddyFrames, KernelPhysMemory, fix};
+use super::percpu::{self, MAX_CPUS};
+use super::{cpu, tlb};
 use crate::frames::FRAMES;
 use crate::sync::SpinLock;
 use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
-use poly_mem::{BuddyAllocator, PAGE_SIZE};
+use poly_mem::PAGE_SIZE;
 use poly_paging::{ADDR_MASK, Cleared, ENTRIES, PageFlags, PageSize, PageTables, PhysMemory};
+use poly_smp::CpuSet;
+pub use tlb::Flush;
 
 /// Lowest user address that can be mapped (64 KiB): the pages below stay
 /// unmapped so that a null pointer, or a small offset from one, faults.
@@ -194,12 +211,9 @@ pub struct Mapping {
 /// Whether CR4.PCIDE is set.
 static PCID: AtomicBool = AtomicBool::new(false);
 
-/// PCIDs handed out, 1 to `PCIDS - 1` (0 is the kernel's).
-const PCIDS: usize = 256;
+/// PCIDs handed out on each CPU, 1 to `PCIDS - 1` (0 is the kernel's).
+const PCIDS: usize = percpu::PCIDS;
 
-/// The [`AddressSpace::id`] each PCID was last given to.
-static PCID_OWNER: [AtomicU64; PCIDS] = [const { AtomicU64::new(0) }; PCIDS];
-static NEXT_PCID: AtomicU16 = AtomicU16::new(1);
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Frames held for user pages: owned by an address space, or by a
@@ -289,6 +303,22 @@ pub(super) fn activate_kernel() {
         // translation under PCID 0 needs flushing.
         unsafe { cpu::write_cr3(kernel | flags) };
     }
+    left_space(core::ptr::null());
+}
+
+/// This CPU now has `space` loaded (null: the kernel's tables): take it out
+/// of the CPU mask of the space it had before. Call after the CR3 load.
+fn left_space(space: *const AddressSpace) {
+    let area = percpu::this();
+    let old = area.active_space.swap(space.cast_mut().cast(), Ordering::AcqRel);
+    if !old.is_null() && old != space.cast_mut().cast() {
+        // SAFETY: a space is in a CPU's `active_space` only while that CPU
+        // has it loaded, which only a thread holding a reference to it (or
+        // the space's own `Drop`, which unloads it first) arranges, so it
+        // is alive until this CPU loads something else, which is now.
+        let old = unsafe { &*old.cast::<AddressSpace>() };
+        old.active.fetch_and(!(1u64 << area.index()), Ordering::SeqCst);
+    }
 }
 
 /// A user address space. Shared between the threads of a process (behind
@@ -296,10 +326,14 @@ pub(super) fn activate_kernel() {
 #[derive(Debug)]
 pub struct AddressSpace {
     tables: SpinLock<PageTables<KernelPhysMemory>>,
-    /// Unique for the kernel's lifetime: names the space in [`PCID_OWNER`].
+    /// Unique for the kernel's lifetime: names the space in the CPUs'
+    /// PCID tables.
     id: u64,
-    /// The PCID last given to this space; 0 if it has none (or must flush).
-    pcid: AtomicU16,
+    /// The PCID last given to this space on each CPU; 0 if it has none
+    /// there (or must flush).
+    pcid: [AtomicU16; MAX_CPUS],
+    /// The CPUs that have it loaded now (bit = CPU number).
+    active: AtomicU64,
     root: u64,
     /// Pages mapped with a frame the space owns.
     resident: AtomicU64,
@@ -319,7 +353,8 @@ impl AddressSpace {
         Ok(AddressSpace {
             tables: SpinLock::new(PageTables::from_root(root, mem)),
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-            pcid: AtomicU16::new(0),
+            pcid: [const { AtomicU16::new(0) }; MAX_CPUS],
+            active: AtomicU64::new(0),
             root,
             resident: AtomicU64::new(0),
         })
@@ -358,9 +393,12 @@ impl AddressSpace {
                 })
             });
             if let Err(e) = mapped {
+                drop(frames);
+                let mut reclaim = Reclaim::new();
                 for done in (virt..page).step_by(PAGE_SIZE as usize) {
-                    self.unmap_page(&mut tables, alloc, done);
+                    self.unmap_page(&mut tables, &mut reclaim, done);
                 }
+                reclaim.finish(self);
                 return Err(e);
             }
         }
@@ -387,9 +425,12 @@ impl AddressSpace {
         let alloc = frames.as_mut().ok_or(MapError::OutOfMemory)?;
         for (page, frame) in (virt..end).step_by(PAGE_SIZE as usize).zip((phys..).step_by(PAGE_SIZE as usize)) {
             if tables.map(page, frame, PageSize::Size4K, flags, &mut BuddyFrames(alloc)).is_err() {
+                drop(frames);
+                let mut reclaim = Reclaim::new();
                 for done in (virt..page).step_by(PAGE_SIZE as usize) {
-                    self.unmap_page(&mut tables, alloc, done);
+                    self.unmap_page(&mut tables, &mut reclaim, done);
                 }
+                reclaim.finish(self);
                 return Err(MapError::OutOfMemory);
             }
         }
@@ -423,7 +464,7 @@ impl AddressSpace {
         check_range(virt, PAGE_SIZE).ok()?;
         let mut tables = self.tables.lock();
         let (old, freed) = tables.unmap_and_prune(virt).ok()?;
-        self.flush(virt);
+        self.sync_page(virt);
         let mut frames = FRAMES.lock();
         let alloc = frames.as_mut().expect("address spaces need the frame allocator");
         for &table in freed.as_slice() {
@@ -456,10 +497,16 @@ impl AddressSpace {
     /// `fork`: the frame becomes shared). `None` if nothing is mapped there
     /// or the frame is not the space's.
     ///
+    /// The TLBs are not synced: the page is added to `flush`, and the
+    /// caller calls [`sync_tlb`](Self::sync_tlb) with it before anything
+    /// relies on the page being read-only on other CPUs (`fork` does, once
+    /// for all the pages, before the child runs or `fork` returns).
+    ///
     /// # Safety
     /// The caller keeps the returned frame allocated, and holding nothing
-    /// user mode must not see, for as long as it stays mapped here.
-    pub unsafe fn disown(&self, virt: u64, prot: Prot) -> Option<UserFrame> {
+    /// user mode must not see, for as long as it stays mapped here, and
+    /// syncs `flush`.
+    pub unsafe fn disown(&self, virt: u64, prot: Prot, flush: &mut Flush) -> Option<UserFrame> {
         check_range(virt, PAGE_SIZE).ok()?;
         let flags = prot.flags()?;
         let mut tables = self.tables.lock();
@@ -468,9 +515,8 @@ impl AddressSpace {
             return None;
         }
         tables.update_flags(virt, flags).expect("translated above");
-        self.flush(virt);
+        flush.add_page(virt);
         self.resident.fetch_sub(1, Ordering::Relaxed);
-        // The count of user frames stays: the frame moves to the UserFrame.
         Some(UserFrame { phys: t.frame })
     }
 
@@ -490,7 +536,7 @@ impl AddressSpace {
             _ => return Err(frame),
         }
         tables.update_flags(virt, flags | OWNED).expect("translated above");
-        self.flush(virt);
+        self.sync_page(virt);
         frame.into_phys();
         self.resident.fetch_add(1, Ordering::Relaxed);
         Ok(())
@@ -507,11 +553,11 @@ impl AddressSpace {
     pub fn unmap(&self, virt: u64, len: u64) -> Result<(), MapError> {
         let end = check_range(virt, len)?;
         let mut tables = self.tables.lock();
-        let mut frames = FRAMES.lock();
-        let alloc = frames.as_mut().ok_or(MapError::OutOfMemory)?;
+        let mut reclaim = Reclaim::new();
         for page in (virt..end).step_by(PAGE_SIZE as usize) {
-            self.unmap_page(&mut tables, alloc, page);
+            self.unmap_page(&mut tables, &mut reclaim, page);
         }
+        reclaim.finish(self);
         Ok(())
     }
 
@@ -524,11 +570,13 @@ impl AddressSpace {
         for page in (virt..end).step_by(PAGE_SIZE as usize) {
             tables.translate(page).map_err(|_| MapError::NotMapped)?;
         }
+        let mut flush = Flush::None;
         for page in (virt..end).step_by(PAGE_SIZE as usize) {
             let owned = tables.translate(page).expect("checked above").flags & OWNED;
             tables.update_flags(page, flags | owned).expect("checked above");
-            self.flush(page);
+            flush.add_page(page);
         }
+        self.sync_tlb(flush);
         Ok(())
     }
 
@@ -572,9 +620,19 @@ impl AddressSpace {
         })
     }
 
-    /// Load this space into CR3 (see the module docs for the PCIDs).
-    /// Called by the scheduler when it switches to one of its threads.
+    /// Load this space into CR3 on this CPU (see the module docs for the
+    /// PCIDs and the CPU mask). Called by the scheduler when it switches to
+    /// one of its threads.
     pub(super) fn activate(&self) {
+        let area = percpu::this();
+        let me = area.index();
+        // In the mask before the PCID is read and CR3 loaded (module docs).
+        self.active.fetch_or(1 << me, Ordering::SeqCst);
+        self.load_cr3(area, me);
+        left_space(self);
+    }
+
+    fn load_cr3(&self, area: &percpu::PerCpu, me: usize) {
         let cr3 = cpu::read_cr3();
         if !pcid_enabled() {
             if cr3 & ADDR_MASK != self.root {
@@ -584,37 +642,45 @@ impl AddressSpace {
             }
             return;
         }
-        let pcid = self.pcid.load(Ordering::Relaxed);
+        let pcid = self.pcid[me].load(Ordering::SeqCst);
         if pcid != 0 && cr3 & ADDR_MASK == self.root && cr3 & 0xfff == u64::from(pcid) {
             return;
         }
-        if pcid != 0 && PCID_OWNER[usize::from(pcid)].load(Ordering::Relaxed) == self.id {
-            // SAFETY: as above; everything tagged with this PCID was put
-            // there by this space and is still valid for it.
+        if pcid != 0 && area.pcid_owner[usize::from(pcid)].load(Ordering::Relaxed) == self.id {
+            // SAFETY: as above; everything tagged with this PCID on this
+            // CPU was put there by this space and is still valid for it.
             unsafe { cpu::write_cr3(self.root | u64::from(pcid) | CR3_NO_FLUSH) };
             return;
         }
-        let next = NEXT_PCID.load(Ordering::Relaxed);
-        NEXT_PCID.store(if usize::from(next) + 1 == PCIDS { 1 } else { next + 1 }, Ordering::Relaxed);
-        PCID_OWNER[usize::from(next)].store(self.id, Ordering::Relaxed);
-        self.pcid.store(next, Ordering::Relaxed);
+        let next = area.next_pcid.load(Ordering::Relaxed);
+        area.next_pcid.store(if usize::from(next) + 1 == PCIDS { 1 } else { next + 1 }, Ordering::Relaxed);
+        area.pcid_owner[usize::from(next)].store(self.id, Ordering::Relaxed);
+        self.pcid[me].store(next, Ordering::SeqCst);
         // SAFETY: as above. Bit 63 clear flushes what the PCID's previous
         // owner (or this space, before it changed) left behind.
         unsafe { cpu::write_cr3(self.root | u64::from(next)) };
     }
 
-    /// Unmap one page if it is mapped; flush it and free what is no longer
-    /// used.
-    fn unmap_page(&self, tables: &mut PageTables<KernelPhysMemory>, alloc: &mut BuddyAllocator<'_>, page: u64) {
+    /// The CPUs that have this space loaded now.
+    pub fn active_cpus(&self) -> CpuSet {
+        CpuSet::from_bits(self.active.load(Ordering::SeqCst))
+    }
+
+    /// Unmap one page if it is mapped; queue its frame (if the space owns
+    /// it) and the page tables that became empty in `reclaim`, which frees
+    /// them after the TLB sync.
+    fn unmap_page(&self, tables: &mut PageTables<KernelPhysMemory>, reclaim: &mut Reclaim, page: u64) {
         let Ok((old, freed)) = tables.unmap_and_prune(page) else { return };
-        self.flush(page);
+        reclaim.flush.add_page(page);
         if old.flags.contains(OWNED) {
-            alloc.free(old.frame, 0).expect("user frame freed twice");
             self.resident.fetch_sub(1, Ordering::Relaxed);
-            USER_FRAMES.fetch_sub(1, Ordering::Relaxed);
+            reclaim.push(old.frame, true);
         }
         for &table in freed.as_slice() {
-            alloc.free(table, 0).expect("page table freed twice");
+            reclaim.push(table, false);
+        }
+        if reclaim.is_full() {
+            reclaim.finish(self);
         }
     }
 
@@ -624,15 +690,85 @@ impl AddressSpace {
         USER_FRAMES.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Drop any cached translation of `page` after its entry changed: with
-    /// `INVLPG` if the space is loaded, else by making its next load flush
-    /// (only PCIDs keep translations across loads).
-    fn flush(&self, page: u64) {
-        if self.is_active() {
-            cpu::invlpg(page);
-        } else {
-            self.pcid.store(0, Ordering::Relaxed);
+    /// Make every CPU drop the cached translations in `flush` after their
+    /// entries changed (see the module docs): forget the space's PCID on
+    /// the other CPUs, invalidate here if it is loaded here (else forget its
+    /// PCID here too), and shoot down the CPUs that have it loaded. Returns
+    /// once no CPU can use the old entries.
+    pub fn sync_tlb(&self, flush: Flush) {
+        if flush.is_none() {
+            return;
         }
+        let _irq = cpu::InterruptsOff::new();
+        let me = percpu::cpu_index();
+        if pcid_enabled() {
+            for (c, pcid) in self.pcid.iter().enumerate().take(percpu::count()) {
+                if c != me {
+                    pcid.store(0, Ordering::SeqCst);
+                }
+            }
+        }
+        if self.is_active() {
+            tlb::invalidate_current(flush);
+        } else {
+            self.pcid[me].store(0, Ordering::SeqCst);
+        }
+        let mut targets = self.active_cpus();
+        targets.remove(me);
+        if !targets.is_empty() {
+            tlb::shoot(targets, tlb::Request { space: self.root, flush });
+        }
+    }
+
+    fn sync_page(&self, page: u64) {
+        let mut flush = Flush::None;
+        flush.add_page(page);
+        self.sync_tlb(flush);
+    }
+}
+
+/// Frames and page tables an operation took out of the page tables, freed
+/// once the TLBs no longer hold translations through them.
+struct Reclaim {
+    flush: Flush,
+    frames: [u64; Reclaim::CAPACITY],
+    /// How many of `frames` were user frames (counted in `USER_FRAMES`).
+    user: u64,
+    n: usize,
+}
+
+impl Reclaim {
+    const CAPACITY: usize = 64;
+
+    fn new() -> Reclaim {
+        Reclaim { flush: Flush::None, frames: [0; Reclaim::CAPACITY], user: 0, n: 0 }
+    }
+
+    fn push(&mut self, frame: u64, user: bool) {
+        self.frames[self.n] = frame;
+        self.n += 1;
+        self.user += u64::from(user);
+    }
+
+    /// Whether another page (a frame and up to three page tables) might not
+    /// fit.
+    fn is_full(&self) -> bool {
+        self.n + 4 > Reclaim::CAPACITY
+    }
+
+    /// Sync the TLBs, then free everything collected.
+    fn finish(&mut self, space: &AddressSpace) {
+        space.sync_tlb(core::mem::take(&mut self.flush));
+        if self.n > 0 {
+            let mut frames = FRAMES.lock();
+            let alloc = frames.as_mut().expect("address spaces need the frame allocator");
+            for &f in &self.frames[..self.n] {
+                alloc.free(f, 0).expect("user frame or page table freed twice");
+            }
+        }
+        USER_FRAMES.fetch_sub(self.user, Ordering::Relaxed);
+        self.n = 0;
+        self.user = 0;
     }
 }
 
@@ -641,9 +777,13 @@ impl Drop for AddressSpace {
         if self.is_active() {
             activate_kernel();
         }
-        // Not loaded anywhere now (one CPU), so no TLB holds a translation
-        // through these tables: they and the pages can go at once. Should
-        // the PCID come back to a later space, its first load flushes.
+        // Not loaded on any CPU now (nobody else holds a reference, and a
+        // CPU takes itself out of the mask whenever it loads something
+        // else), and a CPU that loaded it before flushed or will flush on
+        // its next load of the PCID, so no TLB uses a translation through
+        // these tables: they and the pages can go at once. A later space
+        // that gets one of its PCIDs flushes on its first load.
+        debug_assert_eq!(self.active.load(Ordering::SeqCst), 0, "a dropped address space is loaded somewhere");
         let mut tables = self.tables.lock();
         let mut frames = FRAMES.lock();
         let alloc = frames.as_mut().expect("address spaces need the frame allocator");

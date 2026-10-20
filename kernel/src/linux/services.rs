@@ -31,7 +31,6 @@
 //! is not low), `PROT_GROWSDOWN` (applied to the given range only).
 
 use super::LinuxState;
-use crate::arch::cpu::InterruptsOff;
 use crate::fs::cache::FileSource;
 use crate::process::{self, ExitStatus, Process, ThreadFlags, Unparked};
 use crate::testrun;
@@ -591,16 +590,9 @@ impl LinuxKernel for Thread<'_> {
         if crate::arch::cpu::interrupts_enabled() {
             let _ = user::page_fault(addr.0, Access::Write);
         }
-        // One CPU: with interrupts off nothing else runs between the read
-        // and the write. TODO(smp): a `lock cmpxchg` with a fixup.
-        let _irq = InterruptsOff::new();
-        let mut word = [0u8; 4];
-        user::copy_from_user(&mut word, addr.0).map_err(|_| Errno::EFAULT)?;
-        let found = u32::from_le_bytes(word);
-        if found == expected {
-            user::copy_to_user(addr.0, &new.to_le_bytes()).map_err(|_| Errno::EFAULT)?;
-        }
-        Ok(found)
+        // Atomic on the user word: other threads of the process may run on
+        // other CPUs meanwhile.
+        user::cmpxchg_user_u32(addr.0, expected, new).map_err(|_| Errno::EFAULT)
     }
 
     fn exit_thread(&mut self, status: u8) {

@@ -37,7 +37,7 @@ use crate::thread::WaitQueue;
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use poly_abi::Personality;
 use poly_binfmt as binfmt;
 
@@ -109,6 +109,23 @@ pub struct ThreadFlags {
     /// The thread must end, though its process goes on (another thread's
     /// `execve`, [`Process::end_other_threads`]).
     pub killed: AtomicBool,
+    /// Its kernel thread (`ThreadId::to_bits` + 1; 0 until it is known), to
+    /// interrupt it when it runs on another CPU ([`ThreadFlags::kick`]).
+    pub thread: AtomicU64,
+}
+
+impl ThreadFlags {
+    /// Make the thread look at its flags soon: if it runs on another CPU
+    /// (maybe in ring 3, where it would not look until its next interrupt
+    /// or system call), interrupt that CPU; on its way back to user mode it
+    /// sees what was set. A thread that is not running sees it when it
+    /// next runs; a parked one is woken by the caller.
+    pub fn kick(&self) {
+        match self.thread.load(Ordering::SeqCst) {
+            0 => {}
+            bits => crate::thread::kick_thread(crate::thread::ThreadId::from_bits(bits - 1)),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -312,7 +329,17 @@ impl Process {
         };
         self.exiting.store(true, Ordering::SeqCst);
         EVENTS.wake_all();
+        self.kick_threads(None);
         status
+    }
+
+    /// [`ThreadFlags::kick`] every live thread but `except`.
+    fn kick_threads(&self, except: Option<u32>) {
+        let flags: Vec<Arc<ThreadFlags>> =
+            self.threads.lock().live.iter().filter(|(id, _)| Some(*id) != except).map(|(_, f)| Arc::clone(f)).collect();
+        for f in flags {
+            f.kick();
+        }
     }
 
     /// Whether the process is being ended as a whole: its threads must not
@@ -368,6 +395,7 @@ impl Process {
             }
         }
         EVENTS.wake_all();
+        self.kick_threads(Some(tid));
         let ended = || self.exiting.load(Ordering::SeqCst) || flags.killed.load(Ordering::SeqCst);
         EVENTS.wait_until(|| self.live.load(Ordering::SeqCst) <= 1 || ended());
         self.live.load(Ordering::SeqCst) == 1 && !ended()
@@ -392,6 +420,7 @@ impl Process {
     /// return to user mode until [`cont`](Self::cont).
     pub fn stop(&self) {
         self.stopped.store(true, Ordering::SeqCst);
+        self.kick_threads(None);
     }
 
     /// Continue a stopped process. Returns whether it was stopped.
@@ -480,6 +509,7 @@ pub fn unpark(flags: &ThreadFlags) {
 pub fn notify(flags: &ThreadFlags) {
     flags.notified.store(true, Ordering::SeqCst);
     EVENTS.wake_all();
+    flags.kick();
 }
 
 /// The process with id `pid`, if it is in the table.
