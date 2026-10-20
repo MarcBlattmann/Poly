@@ -184,21 +184,24 @@ impl<O: Ops> Driver<'_, O> {
         let now = self.ops.now();
         let mut states = self.store.load_all()?;
         states.sort_by(|a, b| a.created.cmp(&b.created).then_with(|| a.entry.cmp(&b.entry)));
-        let mut wake = now + self.cfg.idle_secs;
+        // The earliest time an entry in progress can move.
+        let mut ready = u64::MAX;
         for st in states.iter().filter(|s| !s.step.terminal() && only.is_none_or(|o| o == s.entry)) {
             let at = self.ready_at(st, now)?;
             if at > now {
-                wake = wake.min(at);
+                ready = ready.min(at);
                 continue;
             }
             if let Some(lock) = self.store.try_lock(&format!("entry-{}", state::key(&st.entry)))? {
                 return Ok(Ok((st.clone(), lock)));
             }
         }
+        let idle = now + self.cfg.idle_secs;
         let in_flight = states.iter().filter(|s| !s.step.terminal() && s.step != Step::AwaitingMerge).count();
         let open_prs = states.iter().filter(|s| s.step == Step::AwaitingMerge).count();
         if in_flight >= self.cfg.max_parallel || open_prs >= self.cfg.max_open_prs {
-            return Ok(Err(wake));
+            // No new entries: wake when one in progress can move.
+            return Ok(Err(if ready == u64::MAX { idle } else { ready }));
         }
         self.ops.set_entry(None);
         self.ops.refresh_main()?;
@@ -217,7 +220,7 @@ impl<O: Ops> Driver<'_, O> {
             self.store.save(&st)?;
             return Ok(Ok((st, lock)));
         }
-        Ok(Err(wake))
+        Ok(Err(ready.min(idle)))
     }
 
     /// One scheduling decision: drive an entry until it yields, or say
@@ -363,8 +366,8 @@ impl<O: Ops> Driver<'_, O> {
         }
         let file = self.ops.write_feedback(entry, st.cycle, feedback)?;
         st.feedback_file = Some(file);
-        st.step = Step::Implement;
         self.note(st, format!("red ({}/{}): {result}; back to the implementer", st.cycle, self.cfg.max_cycles));
+        st.step = Step::Implement;
         Ok(Next::Continue)
     }
 
@@ -411,8 +414,8 @@ impl<O: Ops> Driver<'_, O> {
                     }
                     st.claim_sha = Some(sha);
                 }
-                st.step = Step::Spec;
                 self.note(st, format!("claimed for {} on {spec_b}", self.cfg.spec.agent));
+                st.step = Step::Spec;
                 Ok(Next::Continue)
             }
             Step::Spec => {
@@ -459,8 +462,8 @@ impl<O: Ops> Driver<'_, O> {
                 }
                 st.spec_head = Some(head);
                 st.pending_head = None;
-                st.step = Step::SpecCheck;
                 self.note(st, "spec agent done");
+                st.step = Step::SpecCheck;
                 Ok(Next::Continue)
             }
             Step::SpecCheck => {
@@ -496,8 +499,8 @@ impl<O: Ops> Driver<'_, O> {
                         return Ok(self.human(st, format!("the spec branch fails `cargo xtask ci`: {}", ci.describe())));
                     }
                 }
-                st.step = Step::Handoff;
                 self.note(st, format!("spec checked: {} visible, {} held-out tests", files.visible, files.held_out));
+                st.step = Step::Handoff;
                 Ok(Next::Continue)
             }
             Step::Handoff => {
@@ -525,8 +528,8 @@ impl<O: Ops> Driver<'_, O> {
                     self.save(st);
                 }
                 st.bundle_dir = Some(self.ops.handoff_bundle(slot, &entry)?);
-                st.step = Step::Implement;
                 self.note(st, format!("handed off to {}", self.cfg.implementer.agent));
+                st.step = Step::Implement;
                 Ok(Next::Continue)
             }
             Step::Implement => {
@@ -584,8 +587,8 @@ impl<O: Ops> Driver<'_, O> {
                 }
                 st.impl_head = Some(head);
                 st.pending_head = None;
-                st.step = Step::Verify;
                 self.note(st, "implementer done");
+                st.step = Step::Verify;
                 Ok(Next::Continue)
             }
             Step::Verify => {
@@ -627,8 +630,8 @@ impl<O: Ops> Driver<'_, O> {
                     return self.red(st, &entry, format!("diff red: {}", d.summary), &d.feedback);
                 }
                 st.last_result = Some(format!("green: {}", d.summary));
-                st.step = Step::Publish;
                 self.note(st, format!("green: {}", d.summary));
+                st.step = Step::Publish;
                 Ok(Next::Continue)
             }
             Step::Publish => {
@@ -671,8 +674,8 @@ impl<O: Ops> Driver<'_, O> {
                 }
                 st.impl_head = Some(head.clone());
                 if !self.cfg.open_prs {
-                    st.step = Step::Merged;
                     self.note(st, format!("pushed {impl_b} to {} (PRs are off)", self.cfg.remote));
+                    st.step = Step::Merged;
                     return Ok(Next::Yield(Yielded::Done(Step::Merged)));
                 }
                 let url = match self.ops.pr_find(&impl_b)? {
@@ -695,9 +698,9 @@ impl<O: Ops> Driver<'_, O> {
                         Err(e) => self.note(st, format!("auto-merge not enabled ({e}); {url} waits for the owner")),
                     }
                 }
+                self.note(st, format!("PR {url}"));
                 st.step = Step::AwaitingMerge;
                 st.last_poll = now;
-                self.note(st, format!("PR {url}"));
                 Ok(Next::Yield(Yielded::Waiting(now + self.cfg.poll_secs)))
             }
             Step::AwaitingMerge => {
@@ -708,16 +711,16 @@ impl<O: Ops> Driver<'_, O> {
                 match self.ops.pr_find(&impl_b)? {
                     None => Ok(self.human(st, format!("the PR of {impl_b} is gone"))),
                     Some(pr) if pr.state == "MERGED" => {
-                        st.step = Step::Merged;
                         self.note(st, format!("merged: {}", pr.url));
+                        st.step = Step::Merged;
                         Ok(Next::Yield(Yielded::Done(Step::Merged)))
                     }
                     Some(pr) if pr.state == "CLOSED" => {
                         Ok(self.human(st, format!("{} was closed without merging", pr.url)))
                     }
                     Some(pr) if pr.mergeable == "CONFLICTING" => {
-                        st.step = Step::Refresh;
                         self.note(st, format!("{} conflicts with {}", pr.url, self.cfg.base_branch));
+                        st.step = Step::Refresh;
                         Ok(Next::Continue)
                     }
                     Some(_) => Ok(Next::Yield(Yielded::Waiting(now + self.cfg.poll_secs))),
@@ -735,8 +738,8 @@ impl<O: Ops> Driver<'_, O> {
                         return Ok(self.human(st, format!("conflicts with main in {}", files.join(", "))));
                     }
                     Merge::UpToDate => {
-                        st.step = Step::AwaitingMerge;
                         self.note(st, "already up to date with main");
+                        st.step = Step::AwaitingMerge;
                         return Ok(Next::Continue);
                     }
                     Merge::Merged(head) => head,
@@ -746,8 +749,8 @@ impl<O: Ops> Driver<'_, O> {
                 }
                 st.impl_base = Some(head.clone());
                 st.impl_head = Some(head);
-                st.step = Step::Verify;
                 self.note(st, format!("merged {} in; verifying again", self.cfg.base_branch));
+                st.step = Step::Verify;
                 Ok(Next::Continue)
             }
             Step::Merged | Step::Human => Ok(Next::Yield(Yielded::Done(st.step))),
