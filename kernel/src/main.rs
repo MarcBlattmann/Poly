@@ -3,6 +3,7 @@
 #![no_std]
 #![no_main]
 
+mod acpi;
 mod arch;
 mod boot_info;
 mod log;
@@ -63,6 +64,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
         memory.total(RegionKind::Kernel) >> 10
     );
     let _early_frames = BumpFrameAllocator::new(&memory);
+    acpi::init(boot.rsdp, &memory);
 
     let ok = selftest::run(&memory);
     if boot.has_flag("poly.selftest.page_fault") {

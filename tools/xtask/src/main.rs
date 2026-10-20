@@ -22,6 +22,8 @@ const PASS_MARKER: &str = "POLY-SELFTEST: PASS";
 /// QEMU exit statuses produced by the kernel's `qemu::ExitCode`.
 const QEMU_SUCCESS: i32 = 33;
 const QEMU_FAILURE: i32 = 35;
+/// CPUs QEMU emulates; the self-test boot checks ACPI reports exactly these.
+const QEMU_CPUS: u32 = 2;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -79,6 +81,7 @@ fn build_kernel(release: bool) -> Result<PathBuf> {
 fn qemu(kernel: &Path, append: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
     cmd.args(["-machine", "q35", "-m", "256M", "-display", "none", "-serial", "stdio", "-no-reboot"])
+        .args(["-smp", &QEMU_CPUS.to_string()])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
         .arg("-kernel")
         .arg(kernel)
@@ -140,6 +143,10 @@ fn boot_tests() -> Result {
         Some(QEMU_SUCCESS) if b.output.contains(PASS_MARKER) => {}
         Some(s) => return Err(format!("self-test boot exited with status {s}")),
         None => return Err(format!("self-test boot timed out after {BOOT_TIMEOUT:?}")),
+    }
+    let cpus = format!("acpi: CPUs: {QEMU_CPUS} enabled");
+    if !b.output.contains(&cpus) {
+        return Err(format!("ACPI did not report the {QEMU_CPUS} CPUs QEMU emulates (expected \"{cpus}\")"));
     }
 
     eprintln!("==> boot test: page fault is caught and reported");

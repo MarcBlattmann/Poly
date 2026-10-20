@@ -14,10 +14,11 @@ pub const PASS_MARKER: &str = "POLY-SELFTEST: PASS";
 type TestResult = Result<(), &'static str>;
 
 pub fn run(memory: &MemoryMap) -> bool {
-    let tests: [(&str, &dyn Fn() -> TestResult); 3] = [
+    let tests: [(&str, &dyn Fn() -> TestResult); 4] = [
         ("cpu exceptions return", &breakpoint),
         ("frame allocator", &|| frames(memory)),
         ("personality routing", &personality_routing),
+        ("acpi tables", &acpi_tables),
     ];
     let mut ok = true;
     for (name, test) in tests {
@@ -60,6 +61,17 @@ fn frames(memory: &MemoryMap) -> TestResult {
             return Err("frame outside usable RAM");
         }
         last = Some(f);
+    }
+    Ok(())
+}
+
+fn acpi_tables() -> TestResult {
+    let s = crate::acpi::summary().ok_or("ACPI tables not read")?;
+    if s.cpus == 0 {
+        return Err("no enabled CPU in the MADT");
+    }
+    if s.io_apics == 0 {
+        return Err("no I/O APIC in the MADT");
     }
     Ok(())
 }
