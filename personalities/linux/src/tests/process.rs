@@ -21,6 +21,9 @@ fn exit_ends_the_thread_and_exit_group_the_process() {
 #[test]
 fn id_getters() {
     let mut k = FakeKernel::new();
+    // Credentials are the calling thread's (ADR 0045): a new thread has a
+    // copy of its creator's.
+    k.add_thread(101);
     k.tid = 101;
     assert_eq!(sys(&mut k, nr::GETPID, &[]), Ok(100));
     assert_eq!(sys(&mut k, nr::GETTID, &[]), Ok(101));

@@ -567,12 +567,12 @@ fn set_and_get_robust_list() {
     // Another process: only with matching ids, or as root.
     k.add_process(300, 1000, 300, 300);
     assert_eq!(sys(&mut k, nr::GET_ROBUST_LIST, &[300, h, l]), Err(Errno::EPERM), "uid 1000 but gid differs");
-    k.creds.gid = 1000;
+    k.creds_mut().gid = 1000;
     assert_eq!(sys(&mut k, nr::GET_ROBUST_LIST, &[300, h, l]), Ok(0));
     assert_eq!(k.peek_u64(h), 0);
     k.add_process(400, 4000, 400, 400);
     assert_eq!(sys(&mut k, nr::GET_ROBUST_LIST, &[400, h, l]), Err(Errno::EPERM));
-    k.creds.euid = 0;
+    k.creds_mut().caps.effective = crate::cred::CapSet::only(crate::cred::cap::SYS_PTRACE);
     assert_eq!(sys(&mut k, nr::GET_ROBUST_LIST, &[400, h, l]), Ok(0));
     assert_eq!(sys(&mut k, nr::GET_ROBUST_LIST, &[999, h, l]), Err(Errno::ESRCH));
     assert_eq!(sys(&mut k, nr::GET_ROBUST_LIST, &[u32::MAX as u64, h, l]), Err(Errno::ESRCH));

@@ -314,7 +314,13 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     };
     let argv_refs: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
     let envp_refs: Vec<&[u8]> = req.envp.iter().map(Vec::as_slice).collect();
-    let params = ExecParams::new(&argv_refs, &envp_refs, &path);
+    let mut params = ExecParams::new(&argv_refs, &envp_refs, &path);
+    // The credentials the program will run with (set-user-ID and
+    // set-group-ID bits of the executable, not of a script; capabilities):
+    // computed now for the auxiliary vector, installed past the point of
+    // no return (ADR 0045).
+    let (creds, _secure) = super::cred::exec_creds(k, &file)?;
+    params.creds = super::cred::aux_creds(&creds);
     let image = exec::load(Arc::new(FileSource::of(&file)), &params)
         .map_err(|e| Errno::new(e.linux_errno() as u16).unwrap_or(Errno::ENOEXEC))?;
     drop(file);
@@ -337,6 +343,7 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         k.tid = pid;
     }
     k.linux.with(|p| p.exec(pid as i32));
+    super::cred::commit_exec(k, pid, creds, req.path);
     let old = user::replace_memory(image.memory);
     // Dropping the old memory may take file system locks: fine here.
     drop(old);

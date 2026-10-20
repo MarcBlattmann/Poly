@@ -20,8 +20,9 @@
 //!   `fork`.
 //! - [`FdTable`] is a process's descriptor table: lowest-free allocation,
 //!   `dup`/`dup2`/`dup3`, the close-on-exec flag, `close_on_exec` at exec.
-//! - [`Cred`] carries the ids permission checks use (owner/group/other
-//!   `rwx`, root bypass), passed to every call that checks permissions.
+//! - [`Cred`] carries the ids and capabilities permission checks use
+//!   (owner/group/other `rwx`, supplementary groups, `CAP_DAC_OVERRIDE` and
+//!   friends), passed to every call that checks permissions.
 //! - [`CharDevice`] is how the kernel provides `/dev/console`, `/dev/null`
 //!   and the like: registered by device number with
 //!   [`Vfs::register_char_device`], reached by opening a character device
@@ -75,7 +76,7 @@ mod sync;
 mod tmpfs;
 mod vfs;
 
-pub use cred::{Access, Cred};
+pub use cred::{Access, CapSet, Cred, cap};
 pub use device::CharDevice;
 pub use errno::Errno;
 pub use fdtable::{AT_FDCWD, At, DEFAULT_FD_LIMIT, Fd, FdTable};

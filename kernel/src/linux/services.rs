@@ -3,7 +3,8 @@
 //!
 //! | Trait methods | Kernel |
 //! |---|---|
-//! | ids, credentials | the [`Process`] (everyone is root until users arrive) |
+//! | ids, credentials | each thread's `LinuxThread::creds` in the [`LinuxState`](super::LinuxState) (`linux::cred`, ADR 0045) |
+//! | `change_attr`, `check_access`, `umask` | the process's [`crate::fs::Files`] with the credentials the personality picked (`linux::cred`) |
 //! | `copy_*_user` | `user::copy_*_user` (demand paging, `EFAULT`) |
 //! | `write`, `read`, `close`, `fstat`, `ioctl`, file paths | the process's [`crate::fs::Files`] |
 //! | `mmap`, `munmap`, `mprotect`, `brk` | the thread's [`Memory`] (`user::current_memory`) |
@@ -40,6 +41,7 @@ use alloc::vec::Vec;
 use core::cell::OnceCell;
 use core::sync::atomic::Ordering;
 use poly_personality_linux::abi::{FileStat, Timespec, makedev};
+use poly_personality_linux::cred::{AttrChange, FileTarget, FsIds};
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::futex::FutexTable;
 use poly_personality_linux::kernel::{
@@ -190,10 +192,21 @@ pub fn file_stat(st: &poly_vfs::Stat) -> FileStat {
 
 fn info_of(p: &Process) -> ProcessInfo {
     let pid = p.pid as i32;
-    // Groups and sessions from the process tree; everyone is root until
-    // users arrive.
+    // Groups and sessions from the process tree; the ids are filled in
+    // under the process's lock (`with_process`).
     let (pgid, sid) = super::task::group_and_session(p.pid);
     ProcessInfo { pid, pgid, sid, zombie: p.has_ended(), ..ProcessInfo::default() }
+}
+
+/// `info` with the ids of thread `tid` of `state`, or of the process
+/// (`LinuxProcess::process_creds`) when `tid` is not one of its threads.
+fn with_ids(mut info: ProcessInfo, state: &LinuxProcess, tid: i32) -> ProcessInfo {
+    let creds = if state.has_thread(tid) { Some(&state.thread(tid).creds) } else { state.process_creds(info.pid) };
+    if let Some(c) = creds {
+        (info.uid, info.euid, info.suid) = (c.uid, c.euid, c.suid);
+        (info.gid, info.egid, info.sgid) = (c.gid, c.egid, c.sgid);
+    }
+    info
 }
 
 /// The region protection for validated `PROT_*` bits (`PROT_SEM` and the
@@ -246,8 +259,11 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn credentials(&self) -> Credentials {
-        let cred = self.process.files.cred();
-        Credentials { uid: cred.uid, euid: cred.uid, gid: cred.gid, egid: cred.gid }
+        let (tid, pid) = (self.tid as i32, self.process.pid as i32);
+        self.linux.with(|p| {
+            let creds = if p.has_thread(tid) { Some(&p.thread(tid).creds) } else { p.process_creds(pid) };
+            creds.map_or_else(Credentials::default, |c| c.summary())
+        })
     }
 
     fn copy_from_user(&self, src: UserPtr, dst: &mut [u8]) -> Result<(), Errno> {
@@ -375,12 +391,20 @@ impl LinuxKernel for Thread<'_> {
         target: Target,
         f: &mut dyn FnMut(&mut LinuxProcess, &ProcessInfo),
     ) -> Result<(), Errno> {
+        let tid = match target {
+            Target::Thread(tid) => tid,
+            Target::Current => self.tid as i32,
+            Target::Process(pid) => pid,
+        };
         let target = self.target(target)?;
         let p = target.get();
         let linux = if core::ptr::eq(p, self.process) { Some(self.linux) } else { p.linux.as_ref() };
         let linux = linux.ok_or(Errno::ESRCH)?;
         let info = info_of(p);
-        linux.with(|state| f(state, &info));
+        linux.with(|state| {
+            let info = with_ids(info, state, tid);
+            f(state, &info)
+        });
         Ok(())
     }
 
@@ -557,6 +581,18 @@ impl LinuxKernel for Thread<'_> {
             // CPU time is not accounted per thread yet.
             Clock::ProcessCpuTime | Clock::ThreadCpuTime => Err(Errno::EINVAL),
         }
+    }
+
+    fn change_attr(&mut self, file: FileTarget<'_>, change: &AttrChange, ids: &FsIds) -> Result<(), Errno> {
+        super::cred::change_attr(&self.process.files, file, change, ids)
+    }
+
+    fn check_access(&mut self, file: FileTarget<'_>, mode: u32, ids: &FsIds) -> Result<(), Errno> {
+        super::cred::check_access(&self.process.files, file, mode, ids)
+    }
+
+    fn umask(&mut self, mask: u32) -> Result<u32, Errno> {
+        Ok(u32::from(self.process.files.umask(mask as u16)))
     }
 
     fn clone_task(&mut self, req: &poly_personality_linux::task::clone::CloneRequest) -> Result<i32, Errno> {

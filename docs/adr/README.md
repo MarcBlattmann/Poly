@@ -43,6 +43,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0039](0039-networking-in-the-kernel.md) | Networking in the kernel: virtio-net in a host-tested crate (`poly-virtio-net`), one stack behind a sleeping mutex, a network thread, readiness generations for blocking sockets | Accepted |
 | [0040](0040-page-cache-and-ext2-on-virtio-blk.md) | A page cache in a host-tested crate (`poly-pagecache`) wrapping disk file systems, shared with memory mappings; ext2 mounted on virtio-blk with a sleeping volume lock, a writeback thread, clean unmount at reboot | Accepted |
 | [0041](0041-processes-threads-fork-exec-wait.md) | Processes and threads: copy-on-write fork with `Arc`-counted shared frames, clone and execve in the kernel, the process tree (parents, zombies, groups, sessions, wait) in the Linux personality | Accepted |
+| [0045](0045-credentials-and-capabilities.md) | Credentials and capabilities: per-thread `Creds` (ids, groups, capability sets) in the Linux personality, capability-based permission checks in the VFS, execve's set-user-ID and capability transformation | Accepted |
 
 ## Open decisions
 

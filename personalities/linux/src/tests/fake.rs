@@ -13,6 +13,7 @@ extern crate std;
 
 use crate::Linux;
 use crate::abi::{FileStat, PAGE_SIZE, Timespec, ioctl, mode};
+use crate::cred::Creds;
 use crate::errno::Errno;
 use crate::futex::FutexTable;
 use crate::kernel::{
@@ -115,7 +116,6 @@ pub struct FakeKernel {
     pub pid: i32,
     pub tid: i32,
     pub ppid: i32,
-    pub creds: Credentials,
     pub realtime: Timespec,
     pub monotonic: Timespec,
     pub random_ready: bool,
@@ -154,6 +154,8 @@ pub struct FakeKernel {
     pub continued: Vec<i32>,
     /// Children, programs and the process tree (`tests/task.rs`).
     pub tasks: super::task::Tasks,
+    /// File attribute requests (ADR 0045).
+    pub perm: super::cred::PermCalls,
 }
 
 impl Default for FakeKernel {
@@ -177,7 +179,6 @@ impl FakeKernel {
             pid: 100,
             tid: 100,
             ppid: 1,
-            creds: Credentials { uid: 1000, euid: 1001, gid: 2000, egid: 2001 },
             realtime: Timespec { sec: 1_700_000_000, nsec: 123 },
             monotonic: Timespec { sec: 42, nsec: 999_999_999 },
             random_ready: true,
@@ -209,6 +210,7 @@ impl FakeKernel {
             stops: Vec::new(),
             continued: Vec::new(),
             tasks: Default::default(),
+            perm: Default::default(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -228,7 +230,28 @@ impl FakeKernel {
             zombie: false,
         };
         k.procs.insert(100, FakeProc { info, state: LinuxProcess::new(100) });
+        // Real uid 1000, effective and saved 1001; gids 2000 and 2001; no
+        // capabilities.
+        let mut creds = Creds::user(1000, 2000);
+        creds.euid = 1001;
+        creds.suid = 1001;
+        creds.fsuid = 1001;
+        creds.egid = 2001;
+        creds.sgid = 2001;
+        creds.fsgid = 2001;
+        k.me().thread_mut(100).creds = creds;
         k
+    }
+
+    /// The calling thread's credentials, to change.
+    pub fn creds_mut(&mut self) -> &mut Creds {
+        let tid = self.tid;
+        &mut self.me().thread_mut(tid).creds
+    }
+
+    /// The calling thread's credentials.
+    pub fn creds(&self) -> &Creds {
+        &self.procs[&self.pid].state.thread(self.tid).creds
     }
 
     /// Add a process `pid` with main thread `pid`, owned by `uid`, in
@@ -236,7 +259,9 @@ impl FakeKernel {
     pub fn add_process(&mut self, pid: i32, uid: u32, pgid: i32, sid: i32) -> &mut FakeProc {
         let info =
             ProcessInfo { pid, pgid, sid, uid, euid: uid, suid: uid, gid: uid, egid: uid, sgid: uid, zombie: false };
-        self.procs.insert(pid, FakeProc { info, state: LinuxProcess::new(pid) });
+        let mut state = LinuxProcess::new(pid);
+        state.thread_mut(pid).creds = Creds::user(uid, uid);
+        self.procs.insert(pid, FakeProc { info, state });
         self.procs.get_mut(&pid).unwrap()
     }
 
@@ -401,7 +426,7 @@ impl LinuxKernel for FakeKernel {
     }
 
     fn credentials(&self) -> Credentials {
-        self.creds
+        self.creds().summary()
     }
 
     fn copy_from_user(&self, src: UserPtr, dst: &mut [u8]) -> Result<(), Errno> {
@@ -459,8 +484,8 @@ impl LinuxKernel for FakeKernel {
             ino: 1000 + fd as u64,
             nlink: 1,
             mode: kind,
-            uid: self.creds.uid,
-            gid: self.creds.gid,
+            uid: self.creds().uid,
+            gid: self.creds().gid,
             rdev,
             size: f.written.len() as i64,
             blksize: 4096,
@@ -754,6 +779,28 @@ impl LinuxKernel for FakeKernel {
 
     fn hostname(&self) -> &[u8] {
         b"testhost"
+    }
+
+    fn change_attr(
+        &mut self,
+        file: crate::cred::FileTarget<'_>,
+        change: &crate::cred::AttrChange,
+        ids: &crate::cred::FsIds,
+    ) -> Result<(), Errno> {
+        self.perm.change(file, change, ids)
+    }
+
+    fn check_access(
+        &mut self,
+        file: crate::cred::FileTarget<'_>,
+        mode: u32,
+        ids: &crate::cred::FsIds,
+    ) -> Result<(), Errno> {
+        self.perm.access(file, mode, ids)
+    }
+
+    fn umask(&mut self, mask: u32) -> Result<u32, Errno> {
+        Ok(core::mem::replace(&mut self.perm.umask, mask))
     }
 
     fn clone_task(&mut self, req: &crate::task::clone::CloneRequest) -> Result<i32, Errno> {

@@ -8,8 +8,9 @@ use super::restart::{self, Decision};
 use super::state::{Dest, LinuxProcess, Sent};
 use crate::abi::signal::*;
 use crate::abi::{SigAction, SigInfo};
+use crate::cred::{Creds, cap};
 use crate::errno::Errno;
-use crate::kernel::{Credentials, FpuState, LinuxKernel, ProcessInfo, SigSet, Target, UserContext, UserPtr};
+use crate::kernel::{FpuState, LinuxKernel, ProcessInfo, SigSet, Target, UserContext, UserPtr};
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -48,12 +49,14 @@ pub fn with_target<R>(
 /// user namespace of the target process), or the real or effective user ID
 /// of the sending process must equal the real or saved set-user-ID of the
 /// target process. In the case of SIGCONT, it suffices when the sending and
-/// receiving processes belong to the same session." Poly has no
-/// capabilities yet: effective user id 0 is privileged.
-pub fn may_signal(sender: &Credentials, sender_sid: i32, target: &ProcessInfo, signal: u32) -> bool {
-    sender.euid == 0
+/// receiving processes belong to the same session." The sender's and the
+/// target's credentials are their threads' own (ADR 0045): the calling
+/// thread's, and the target thread's or the target process's
+/// ([`LinuxProcess::process_creds`]).
+pub fn may_signal(sender: &Creds, sender_sid: i32, target: &Creds, target_sid: i32, signal: u32) -> bool {
+    sender.capable(cap::KILL)
         || [sender.uid, sender.euid].iter().any(|&id| id == target.uid || id == target.suid)
-        || (signal == SIGCONT && sender_sid == target.sid)
+        || (signal == SIGCONT && sender_sid == target_sid)
 }
 
 /// Act on what [`LinuxProcess::send`] asked for.
@@ -78,14 +81,19 @@ pub fn send(
     tgid: Option<i32>,
     info: SigInfo,
 ) -> Result<(), Errno> {
-    let creds = k.credentials();
+    let creds = crate::cred::current(k);
     let sid = k.sid();
     let signal = info.signal();
     let (pid, sent) = with_target(k, target, |p, t| {
         if tgid.is_some_and(|g| g != t.pid) || thread.is_some_and(|tid| !p.has_thread(tid)) {
             return Err(Errno::ESRCH);
         }
-        if !may_signal(&creds, sid, t, signal) {
+        let root = Creds::root();
+        let target_creds = match thread {
+            Some(tid) => &p.thread(tid).creds,
+            None => p.process_creds(t.pid).unwrap_or(&root),
+        };
+        if !may_signal(&creds, sid, target_creds, t.sid, signal) {
             return Err(Errno::EPERM);
         }
         if signal == 0 || t.zombie {
@@ -466,18 +474,33 @@ mod tests {
 
     #[test]
     fn permission_rules_of_kill_2() {
-        let me = Credentials { uid: 1000, euid: 1000, gid: 100, egid: 100 };
-        let other = ProcessInfo { pid: 5, uid: 2000, euid: 2000, suid: 2000, sid: 9, ..Default::default() };
-        assert!(!may_signal(&me, 1, &other, SIGTERM));
-        assert!(may_signal(&me, 9, &other, SIGCONT), "same session, SIGCONT");
-        assert!(!may_signal(&me, 9, &other, SIGTERM));
-        assert!(may_signal(&me, 1, &ProcessInfo { uid: 1000, ..other }, SIGTERM), "real uid matches");
-        assert!(may_signal(&me, 1, &ProcessInfo { suid: 1000, ..other }, SIGTERM), "saved uid matches");
-        assert!(!may_signal(&me, 1, &ProcessInfo { euid: 1000, ..other }, SIGTERM), "target euid does not count");
-        let setuid = Credentials { uid: 3000, euid: 2000, ..me };
-        assert!(may_signal(&setuid, 1, &other, SIGTERM), "sender euid matches");
-        let root = Credentials { uid: 1000, euid: 0, ..me };
-        assert!(may_signal(&root, 1, &other, SIGKILL));
+        let me = Creds::user(1000, 100);
+        let other = Creds::user(2000, 2000);
+        let ids = |r, e, s| {
+            let mut c = Creds::root();
+            c.set_resuid(Some(r), Some(e), Some(s)).unwrap();
+            c
+        };
+        assert!(!may_signal(&me, 1, &other, 9, SIGTERM));
+        assert!(may_signal(&me, 9, &other, 9, SIGCONT), "same session, SIGCONT");
+        assert!(!may_signal(&me, 9, &other, 9, SIGTERM));
+        assert!(may_signal(&me, 1, &ids(1000, 2000, 2000), 9, SIGTERM), "real uid matches");
+        assert!(may_signal(&me, 1, &ids(2000, 2000, 1000), 9, SIGTERM), "saved uid matches");
+        assert!(!may_signal(&me, 1, &ids(2000, 1000, 2000), 9, SIGTERM), "target euid does not count");
+        assert!(may_signal(&ids(3000, 2000, 2000), 1, &other, 9, SIGTERM), "sender euid matches");
+        // Privilege is CAP_KILL, not user id 0.
+        assert!(may_signal(&ids(1000, 0, 0), 1, &other, 9, SIGKILL));
+        let mut no_kill = Creds::root();
+        no_kill.set_caps(cap_set_without_kill(), cap_set_without_kill(), Default::default()).unwrap();
+        assert!(!may_signal(&no_kill, 1, &other, 9, SIGKILL), "root without CAP_KILL");
+        assert!(may_signal(&no_kill, 1, &Creds::root(), 9, SIGKILL), "but same uid");
+        let mut killer = Creds::user(1000, 100);
+        killer.caps.effective = crate::cred::CapSet::only(cap::KILL);
+        assert!(may_signal(&killer, 1, &other, 9, SIGKILL), "CAP_KILL without uid 0");
+    }
+
+    fn cap_set_without_kill() -> crate::cred::CapSet {
+        crate::cred::CapSet::ALL.without(cap::KILL)
     }
 
     #[test]

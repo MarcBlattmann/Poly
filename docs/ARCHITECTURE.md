@@ -429,10 +429,10 @@ behind the page cache, `poly-pagecache`
    personalities (later: openat, read, write, getdents64, ...)   kernel shell: ls, cat, mount
           │  user memory copied by the system call layer; fs works on kernel buffers
           ▼
-   fs::Files (on each Process)   FsContext + FdTable (sleeping mutexes) + Cred
+   fs::Files (on each Process)   FsContext + FdTable (sleeping mutexes); Cred of the calling thread
           │  FdTable → Arc<OpenFile> (offset, flags) → NodeRef; I/O runs unlocked
           ▼
-   fs::vfs(): poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
+   fs::vfs(): poly_vfs::Vfs   path resolution, permissions (Cred: ids + capabilities), mounts, char devices
           │  FileSystem trait: lookup/create/rename/read/write/readdir by inode   └─ /dev/console, /dev/tty → kernel log
           ▼                                                                         /dev/null, /dev/zero, /dev/full
    Tmpfs on /                 CachedFs on /mnt: page cache (poly-pagecache) ◀── user mappings (FileSource)
@@ -465,8 +465,11 @@ behind the page cache, `poly-pagecache`
   `/dev/full` are `poly-vfs`'s. `ioctl` on them is `ENOTTY`.
 - **`fs::Files`** is a process's file state (`Process::files`): `FsContext`
   (root, working directory, umask) and `FdTable` behind sleeping mutexes
-  (lock order: context, then table), and the `Cred` (root for now). New
-  processes get `/dev/console` on 0, 1 and 2 (one open file description).
+  (lock order: context, then table). Permission checks use the calling
+  thread's credentials (`Files::cred()`: a Linux thread's file system
+  ids, groups and effective capabilities, root for kernel threads; ADR
+  0045). New processes get `/dev/console` on 0, 1 and 2 (one open file
+  description).
   The API takes kernel byte buffers and returns `Errno`s with Linux's
   numbers: `open`/`openat`, `read`, `write`, `pread`, `pwrite`, `close`,
   `lseek`, `dup`/`dup2`/`dup3`/`dup_from`, close-on-exec and status flags,
@@ -498,7 +501,11 @@ initramfs.
 - **`poly-vfs`** (`no_std` + `alloc`): `Vfs` resolves paths as
   `path_resolution(7)` describes (`.`/`..` across mount points, 40 symbolic
   links then `ELOOP`, trailing slashes, `ENAMETOOLONG`), checks permissions
-  from a `Cred`, and implements the path-based calls; `FdTable` and
+  from a `Cred` (ids, groups and a capability set: `CAP_DAC_OVERRIDE`,
+  `CAP_DAC_READ_SEARCH`, `CAP_FOWNER`, `CAP_CHOWN`, `CAP_FSETID`,
+  `CAP_MKNOD`, ...; the sticky bit, set-group-ID directories, set-id bits
+  cleared by writes, truncation and chown), and implements the path-based
+  calls; `FdTable` and
   `OpenFile` implement descriptors (`dup2`/`dup3`, close-on-exec,
   `O_APPEND`, `lseek`, `getdents` positions). Errors are `Errno` with
   Linux's values; flags take Linux's bits.
@@ -754,6 +761,23 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   (`clone_task`), replaces programs (`execve`) and blocks waiters
   (`wait_tree`), and calls `task::process_exited`, `process_stopped` and
   `process_continued`, which signal the parent.
+- **Linux credentials**
+  ([ADR 0045](adr/0045-credentials-and-capabilities.md)): each thread's
+  `cred::Creds` (real, effective, saved and file system ids, supplementary
+  groups, effective/permitted/inheritable/bounding/ambient capabilities,
+  `keep_caps`, `no_new_privs`) sits in its `LinuxThread`, copied by clone
+  and fork; the rules of credentials(7) and capabilities(7) are methods of
+  `Creds`. `setuid` and the rest of the family, `getresuid`,
+  `getresgid`, `setfsuid`, `setfsgid`, `getgroups`, `setgroups`, `capget`,
+  `capset`, `prctl` (keep caps, bounding set, no new privileges, ambient
+  set, thread name), `access`, `faccessat`, `faccessat2`, `chmod`,
+  `fchmod`, `fchmodat`, `chown`, `fchown`, `lchown`, `fchownat`, `umask`
+  and `utimensat` are implemented; the attribute calls reach the VFS
+  through `LinuxKernel::change_attr` / `check_access` with the ids the
+  personality picked (real ones for access(2)). execve applies
+  set-user-ID / set-group-ID bits (not on `nosuid` mounts or with
+  `no_new_privs`) and recomputes capabilities (`Creds::exec`); kill(2)
+  checks the target thread's real credentials and `CAP_KILL`.
 
 ## Linux processes
 
@@ -866,6 +890,7 @@ services once it decodes those system calls.
 | Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
 | Linux processes: the kernel's `LinuxKernel` through real system calls from ring 3 (write to the process's files, brk, anonymous and file mmap/munmap/mprotect, arch_prctl and the FS base in ring 3, exit_group ending a spinning and a futex-waiting thread, EFAULT for bad pointers, a fault as SIGSEGV, a signal handler and rt_sigreturn), and `exec_path` of `/bin/hello` from the test initramfs | `kernel_test!` in `linux/tests.rs` | every boot; one boot on `-cpu max` (XSAVE signal frames) |
 | Processes and threads from ring 3: fork with copy on write, zombies (waitid `WNOWAIT`, kill 0) and wait4's status, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and a futex and its robust lock released at exit, an orphan adopted while shared anonymous memory stays shared, vfork + execve of `/bin/hello`, of a missing file and of a `#!` script, execve by a second thread (the other thread ended, close-on-exec files closed, the pid taken over); every user frame freed afterwards. `Memory::fork` itself: pages shared until written, frames freed with the last user, shared anonymous and parked pages | `kernel_test!` in `linux/task_tests.rs`, `user/memory/fork.rs` | every boot |
+| Credentials from ring 3: root dropped with setresuid (a 0600 file is `EACCES`, setuid(0) `EPERM`, no capabilities left), a set-user-ID-root program run with execve (euid 0 and capabilities; ignored with `no_new_privs`), capabilities lost and regained across execve, `keep_caps`, capabilities dropped with `PR_CAPBSET_DROP` and capset, the sticky `/tmp`, chown/chmod rules and a write clearing set-group-ID, credentials inherited by fork while a thread's changes stay its own, kill refused to a less privileged child | `kernel_test!` in `linux/cred_tests.rs` | every boot |
 | Static Linux hello worlds as the first process (`poly.init`): nolibc (Rust, built with the pinned toolchain), freestanding C and static glibc (skipped without a C compiler or static C library); output and exit status 0 | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | `/bin/forkexec` as init (nolibc Rust, `tools/xtask/programs/forkexec.rs`): fork + execve + wait4, copy on write, a TLS thread joined by futex, an orphan reaped by init | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |

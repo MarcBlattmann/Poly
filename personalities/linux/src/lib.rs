@@ -33,6 +33,8 @@
 //! - [`sys`]: the handlers.
 //! - [`signal`]: signal state, delivery, frames (ADR 0031).
 //! - [`futex`]: futex wait queues, robust lists (ADR 0031).
+//! - [`cred`]: per-thread credentials and capabilities, and the rules that
+//!   change them (ADR 0045).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -45,6 +47,7 @@ extern crate alloc;
 
 pub mod abi;
 pub mod args;
+pub mod cred;
 pub mod errno;
 pub mod futex;
 pub mod kernel;

@@ -42,7 +42,8 @@ impl UserPtr {
     }
 }
 
-/// The real and effective user and group ids of the calling process.
+/// The real and effective user and group ids of the calling thread: a
+/// summary of its [`Creds`](crate::cred::Creds) (ADR 0045).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Credentials {
     pub uid: u32,
@@ -386,7 +387,9 @@ pub trait LinuxKernel {
     fn tid(&self) -> i32;
     /// The parent's process id (0 if the parent is not in this pid namespace).
     fn ppid(&self) -> i32;
-    /// The process's real and effective user and group ids.
+    /// The calling thread's real and effective user and group ids: its
+    /// [`LinuxThread::creds`](crate::signal::LinuxThread::creds) summed up
+    /// ([`Creds::summary`](crate::cred::Creds::summary)).
     fn credentials(&self) -> Credentials;
 
     // ---- user memory --------------------------------------------------
@@ -702,6 +705,47 @@ pub trait LinuxKernel {
     fn wait_tree(&mut self, generation: u64) -> Wakeup {
         let _ = generation;
         Wakeup::Signal
+    }
+
+    // ---- file attributes and permissions (ADR 0045) -------------------
+
+    /// Change an attribute of `file` (chmod(2), chown(2), utimensat(2)),
+    /// checking as `ids` (the caller's [`Creds::fs_ids`](crate::cred::Creds::fs_ids)):
+    /// the rules of those pages (owner or `CAP_FOWNER` for the mode and
+    /// explicit times, `CAP_CHOWN` to give a file away, set-user-ID and
+    /// set-group-ID cleared on a change of owner). Errors: `ENOENT`,
+    /// `ENOTDIR`, `EACCES` (a directory on the way, or utimensat's "now"
+    /// without write access), `EPERM`, `EROFS`, `EBADF`, `ELOOP`,
+    /// `ENAMETOOLONG`. The default: `ENOSYS`.
+    fn change_attr(
+        &mut self,
+        file: crate::cred::FileTarget<'_>,
+        change: &crate::cred::AttrChange,
+        ids: &crate::cred::FsIds,
+    ) -> Result<(), Errno> {
+        let _ = (file, change, ids);
+        Err(Errno::ENOSYS)
+    }
+
+    /// Whether `ids` may access `file` as access(2)'s `mode` (`R_OK` 4,
+    /// `W_OK` 2, `X_OK` 1, or 0 for existence) asks: `EACCES`, `EROFS`
+    /// (write access on a read-only mount), and the lookup errors. The
+    /// default: `ENOSYS`.
+    fn check_access(
+        &mut self,
+        file: crate::cred::FileTarget<'_>,
+        mode: u32,
+        ids: &crate::cred::FsIds,
+    ) -> Result<(), Errno> {
+        let _ = (file, mode, ids);
+        Err(Errno::ENOSYS)
+    }
+
+    /// umask(2): set the process's file creation mask to `mask` (already
+    /// `& 0777`) and return the old one. The default: `ENOSYS`.
+    fn umask(&mut self, mask: u32) -> Result<u32, Errno> {
+        let _ = mask;
+        Err(Errno::ENOSYS)
     }
 
     // ---- time, randomness, system identity ----------------------------

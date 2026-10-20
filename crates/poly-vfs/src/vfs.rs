@@ -1,6 +1,6 @@
 //! The VFS: mount table, device registry and path-based operations.
 
-use crate::cred::{Access, Cred};
+use crate::cred::{Access, Cred, cap};
 use crate::device::CharDevice;
 use crate::fdtable::At;
 use crate::file::{Backend, OpenFile, OpenFlags};
@@ -145,9 +145,10 @@ impl Vfs {
     }
 
     /// The sticky-bit rule for removing or replacing `victim` in `dir`
-    /// (`unlink(2)`, `rename(2)`: `EPERM`).
+    /// (`unlink(2)`, `rename(2)`: `EPERM` unless the caller owns the file
+    /// or the directory or has `CAP_FOWNER`).
     fn sticky_allows(cred: &Cred, dir: &Attr, victim: &Attr) -> Result<()> {
-        if dir.perm & S_ISVTX != 0 && !cred.is_root() && cred.uid != dir.uid && cred.uid != victim.uid {
+        if dir.perm & S_ISVTX != 0 && !cred.has(cap::FOWNER) && cred.uid != dir.uid && cred.uid != victim.uid {
             Err(Errno::EPERM)
         } else {
             Ok(())
@@ -157,7 +158,9 @@ impl Vfs {
     /// Owner, group and permission bits of a node created in a directory
     /// with attributes `dir`: the caller's ids, or the directory's group if
     /// it is set-group-ID (a new directory then inherits the bit), as
-    /// `open(2)` and `mkdir(2)` describe for Linux.
+    /// `open(2)` and `mkdir(2)` describe for Linux. A new file asking for
+    /// set-group-ID in a group the caller is not in loses the bit unless
+    /// the caller has `CAP_FSETID` (`inode(7)`).
     fn new_owner(cred: &Cred, dir: &Attr, perm: u16, is_dir: bool) -> (u32, u32, u16) {
         let mut perm = perm & PERM_MASK;
         let gid = if dir.perm & S_ISGID != 0 {
@@ -168,7 +171,7 @@ impl Vfs {
         } else {
             cred.gid
         };
-        if !is_dir && perm & S_ISGID != 0 && !cred.is_root() && !cred.in_group(gid) {
+        if !is_dir && perm & S_ISGID != 0 && !cred.has(cap::FSETID) && !cred.in_group(gid) {
             perm &= !S_ISGID;
         }
         (cred.uid, gid, perm)
@@ -250,6 +253,12 @@ impl Vfs {
                 want = want | Access::WRITE;
             }
             cred.check(&attr, want)?;
+            // open(2): "EPERM The O_NOATIME flag was specified, but the
+            // effective user ID of the caller did not match the owner of
+            // the file and the caller was not privileged" (CAP_FOWNER).
+            if flags.contains(OpenFlags::NOATIME) && !cred.owns(&attr) {
+                return Err(Errno::EPERM);
+            }
         }
         let backend = match attr.kind {
             FileType::Regular | FileType::Directory => Backend::Inode,
@@ -267,8 +276,11 @@ impl Vfs {
             }
         };
         let node = loc.pin()?;
-        if flags.contains(OpenFlags::TRUNC) && attr.kind == FileType::Regular && !created && attr.size != 0 {
-            node.truncate_unchecked(0)?;
+        if flags.contains(OpenFlags::TRUNC) && attr.kind == FileType::Regular && !created {
+            node.clear_setid(cred)?;
+            if attr.size != 0 {
+                node.truncate_unchecked(0)?;
+            }
         }
         Ok(Arc::new(OpenFile::new(node, attr.kind, backend, flags)))
     }
@@ -343,7 +355,8 @@ impl Vfs {
     }
 
     /// `mknod(2)`: regular files, FIFOs and sockets for anyone with write
-    /// permission on the directory, device nodes for root only (`EPERM`);
+    /// permission on the directory, device nodes only with `CAP_MKNOD`
+    /// (`EPERM`);
     /// directories and symbolic links are `EINVAL`.
     #[allow(clippy::too_many_arguments)] // the system call's own arguments
     pub fn mknod(
@@ -358,7 +371,7 @@ impl Vfs {
     ) -> Result<()> {
         match kind {
             FileType::Directory | FileType::Symlink => return Err(Errno::EINVAL),
-            FileType::CharDevice | FileType::BlockDevice if !cred.is_root() => return Err(Errno::EPERM),
+            FileType::CharDevice | FileType::BlockDevice if !cred.has(cap::MKNOD) => return Err(Errno::EPERM),
             _ => {}
         }
         let p = self.parent_of(ctx, cred, at, path)?;
@@ -626,6 +639,22 @@ impl Vfs {
         self.lookup(ctx, cred, at, path, follow)?.chown(cred, uid, gid)
     }
 
+    /// `utimensat(2)` on a path: `None` leaves a time alone (`UTIME_OMIT`);
+    /// see [`NodeRef::set_times`] for who may.
+    #[allow(clippy::too_many_arguments)] // the system call's own arguments
+    pub fn utimens(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        atime: Option<crate::SetTime>,
+        mtime: Option<crate::SetTime>,
+        follow: bool,
+    ) -> Result<()> {
+        self.lookup(ctx, cred, at, path, follow)?.set_times(cred, atime, mtime)
+    }
+
     /// `truncate(2)`.
     pub fn truncate(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], size: u64) -> Result<()> {
         self.lookup(ctx, cred, at, path, true)?.truncate(cred, size)
@@ -718,8 +747,8 @@ impl Vfs {
 
     // ----- mounting -----
 
-    /// `mount(2)`: puts `fs` on the directory `path` names (root only,
-    /// `EPERM`; a directory, `ENOTDIR`).
+    /// `mount(2)`: puts `fs` on the directory `path` names (`CAP_SYS_ADMIN`,
+    /// else `EPERM`; a directory, `ENOTDIR`).
     pub fn mount(
         &self,
         ctx: &FsContext,
@@ -729,7 +758,7 @@ impl Vfs {
         fs: Arc<dyn FileSystem>,
         flags: MountFlags,
     ) -> Result<MountId> {
-        if !cred.is_root() {
+        if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
         }
         let target = self.resolve(ctx, cred, at, path, true)?;
@@ -759,7 +788,7 @@ impl Vfs {
         target: &[u8],
         flags: MountFlags,
     ) -> Result<MountId> {
-        if !cred.is_root() {
+        if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
         }
         let src = self.resolve(ctx, cred, source_at, source, true)?;
@@ -781,7 +810,7 @@ impl Vfs {
     /// live on for whoever still uses them. The first root cannot be
     /// unmounted (`EBUSY`).
     pub fn umount(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], lazy: bool) -> Result<()> {
-        if !cred.is_root() {
+        if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
         }
         let loc = self.resolve(ctx, cred, at, path, true)?;

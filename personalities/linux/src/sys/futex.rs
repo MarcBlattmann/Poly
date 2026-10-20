@@ -180,8 +180,9 @@ pub fn set_robust_list(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// be found", `EPERM` without permission (a ptrace(2) "read, real
 /// credentials" check: the same process, or the caller's real uid equal to
 /// the target's real, effective and saved uids and its real gid equal to
-/// the target's real, effective and saved gids, or effective uid 0 for
-/// `CAP_SYS_PTRACE`), `EFAULT` for either pointer. Negative `pid`s name no
+/// the target's real, effective and saved gids, or `CAP_SYS_PTRACE`; the
+/// target thread's own credentials, ADR 0045), `EFAULT` for either
+/// pointer. Negative `pid`s name no
 /// thread (`ESRCH`; to be confirmed by the diff runner).
 pub fn get_robust_list(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let pid = a.int(0);
@@ -192,14 +193,15 @@ pub fn get_robust_list(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::ESRCH);
     } else {
         let me = k.pid();
-        let creds = k.credentials();
+        let creds = crate::cred::current(k);
         with_target(k, Target::Thread(pid), |p, t| {
             if !p.has_thread(pid) {
                 return Err(Errno::ESRCH);
             }
-            let same_ids = [t.uid, t.euid, t.suid].iter().all(|&id| id == creds.uid)
-                && [t.gid, t.egid, t.sgid].iter().all(|&id| id == creds.gid);
-            if t.pid != me && !same_ids && creds.euid != 0 {
+            let c = &p.thread(pid).creds;
+            let same_ids = [c.uid, c.euid, c.suid].iter().all(|&id| id == creds.uid)
+                && [c.gid, c.egid, c.sgid].iter().all(|&id| id == creds.gid);
+            if t.pid != me && !same_ids && !creds.capable(crate::cred::cap::SYS_PTRACE) {
                 return Err(Errno::EPERM);
             }
             Ok(p.thread(pid).robust_list)

@@ -1,6 +1,6 @@
 //! References to inodes on mounts, and the operations that need no path.
 
-use crate::cred::{Access, Cred};
+use crate::cred::{Access, Cred, cap};
 use crate::mount::Mount;
 use crate::{Attr, Errno, FileType, Ino, MAX_FILE_SIZE, Result, S_ISGID, S_ISUID, S_IXGRP, SetAttr, SetTime, Stat};
 use alloc::sync::Arc;
@@ -86,8 +86,12 @@ impl NodeRef {
         cred.check(&attr, want)
     }
 
-    /// `chmod`: only the owner or root (`EPERM`). A non-root caller outside
-    /// the file's group loses the set-group-ID bit (`chmod(2)`).
+    /// `chmod`: only the owner or a caller with `CAP_FOWNER` (`EPERM`).
+    /// chmod(2): "If the calling process is not privileged (Linux: does
+    /// not have the CAP_FSETID capability), and the group of the file does
+    /// not match the effective group ID of the process or one of its
+    /// supplementary group IDs, the S_ISGID bit will be turned off, but
+    /// this will not cause an error to be returned."
     pub fn chmod(&self, cred: &Cred, perm: u16) -> Result<()> {
         let attr = self.attr()?;
         self.writable_mount()?;
@@ -95,22 +99,31 @@ impl NodeRef {
             return Err(Errno::EPERM);
         }
         let mut perm = perm & crate::PERM_MASK;
-        if !cred.is_root() && !cred.in_group(attr.gid) {
+        if !cred.has(cap::FSETID) && !cred.in_group(attr.gid) {
             perm &= !S_ISGID;
         }
         self.setattr(&SetAttr { perm: Some(perm), ..SetAttr::default() })
     }
 
-    /// `chown`, `None` for "leave alone" (`-1`). Only root changes the owner;
-    /// the owner may change the group to one of its own groups (`EPERM`
-    /// otherwise). Changing either clears set-user-ID, and set-group-ID if
-    /// the group may execute, on anything but a directory (`chown(2)`).
+    /// `chown`, `None` for "leave alone" (`-1`). chown(2): "Only a
+    /// privileged process (Linux: one with the CAP_CHOWN capability) may
+    /// change the owner of a file. The owner of a file may change the
+    /// group of the file to any group of which that owner is a member. A
+    /// privileged process (Linux: with CAP_CHOWN) may change the group
+    /// arbitrarily" (`EPERM` otherwise; setting the id a file already has
+    /// is not a change for its owner). Changing either clears set-user-ID,
+    /// and set-group-ID if the group may execute, on anything but a
+    /// directory, whoever does it ("since Linux 2.2.13, root is treated
+    /// like other users").
     pub fn chown(&self, cred: &Cred, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
         let attr = self.attr()?;
         self.writable_mount()?;
-        let uid = uid.filter(|&u| u != attr.uid || !cred.owns(&attr));
-        let gid = gid.filter(|&g| g != attr.gid || !cred.owns(&attr));
-        if !cred.is_root() {
+        // The owner, or a caller who may change anything, setting the ids
+        // the file has changes nothing.
+        let may = cred.uid == attr.uid || cred.has(cap::CHOWN);
+        let uid = uid.filter(|&u| u != attr.uid || !may);
+        let gid = gid.filter(|&g| g != attr.gid || !may);
+        if !cred.has(cap::CHOWN) {
             if uid.is_some() {
                 return Err(Errno::EPERM);
             }
@@ -138,18 +151,21 @@ impl NodeRef {
         self.setattr(&set)
     }
 
-    /// `utimensat`: `None` leaves a time alone (`UTIME_OMIT`). Setting
-    /// explicit times needs ownership (`EPERM`); setting both to now needs
-    /// ownership or write permission (`EACCES`).
+    /// `utimensat`: `None` leaves a time alone (`UTIME_OMIT`). utimensat(2):
+    /// setting both times to the current time needs ownership, write
+    /// permission, `CAP_FOWNER` or `CAP_DAC_OVERRIDE` (`EACCES`); any other
+    /// change ("to change one of the timestamps to the current time while
+    /// leaving the other timestamp unchanged" included) needs ownership or
+    /// `CAP_FOWNER` (`EPERM`).
     pub fn set_times(&self, cred: &Cred, atime: Option<SetTime>, mtime: Option<SetTime>) -> Result<()> {
         if atime.is_none() && mtime.is_none() {
             return Ok(());
         }
         let attr = self.attr()?;
         self.writable_mount()?;
-        let explicit = matches!(atime, Some(SetTime::At(_))) || matches!(mtime, Some(SetTime::At(_)));
+        let both_now = atime == Some(SetTime::Now) && mtime == Some(SetTime::Now);
         if !cred.owns(&attr) {
-            if explicit {
+            if !both_now {
                 return Err(Errno::EPERM);
             }
             cred.check(&attr, Access::WRITE)?;
@@ -167,7 +183,34 @@ impl NodeRef {
         }
         self.writable_mount()?;
         cred.check(&attr, Access::WRITE)?;
+        self.clear_setid(cred)?;
         self.truncate_unchecked(size)
+    }
+
+    /// What a write or a truncation by `cred` does to the mode: a caller
+    /// without `CAP_FSETID` clears set-user-ID, and set-group-ID if the
+    /// group may execute (without group execute, set-group-ID marks
+    /// mandatory locking, `inode(7)`, and stays). POSIX write(): "if the
+    /// file is a regular file, the S_ISUID and S_ISGID bits of the file
+    /// mode may be cleared"; truncate(2): "the set-user-ID and
+    /// set-group-ID mode bits may be cleared". Regular files only; nothing
+    /// changes (not even `ctime`) when no bit is set.
+    pub fn clear_setid(&self, cred: &Cred) -> Result<()> {
+        if cred.has(cap::FSETID) {
+            return Ok(());
+        }
+        let attr = self.attr()?;
+        if attr.kind != FileType::Regular {
+            return Ok(());
+        }
+        let mut perm = attr.perm & !S_ISUID;
+        if perm & S_IXGRP != 0 {
+            perm &= !S_ISGID;
+        }
+        if perm == attr.perm {
+            return Ok(());
+        }
+        self.setattr(&SetAttr { perm: Some(perm), ..SetAttr::default() })
     }
 
     /// Truncates without a permission check (`ftruncate` checks the open
@@ -258,11 +301,11 @@ impl FsContext {
         Ok(())
     }
 
-    /// `chroot(2)` to a node: root only (`EPERM`), a directory (`ENOTDIR`)
-    /// the caller may search. The working directory is left alone, as in
-    /// Linux.
+    /// `chroot(2)` to a node: `CAP_SYS_CHROOT` only (`EPERM`), a directory
+    /// (`ENOTDIR`) the caller may search. The working directory is left
+    /// alone, as in Linux.
     pub fn set_root(&mut self, cred: &Cred, dir: NodeRef) -> Result<()> {
-        if !cred.is_root() {
+        if !cred.has(cap::SYS_CHROOT) {
             return Err(Errno::EPERM);
         }
         let attr = dir.attr()?;
