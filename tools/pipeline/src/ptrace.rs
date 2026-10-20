@@ -6,9 +6,7 @@
 //!
 //! Tracees are attached with `PTRACE_SEIZE`, so job control works as
 //! without a tracer: a stopped tracee stays stopped (`PTRACE_LISTEN`) and
-//! its parent sees the stop and the continue. Tracees may leave the test's
-//! process group (setpgid, setsid); the tracer waits for all of them and
-//! the timeout kills all of them.
+//! its parent sees the stop and the continue.
 //!
 //! The trace starts after `execve` of the test program has succeeded, so
 //! its first event is the program's own first syscall, which is also where
@@ -20,7 +18,7 @@
 use crate::syscalls;
 use crate::trace::{self, Event, Exit, Memory, Syscall, Trace};
 use crate::util::Result;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::fs::File;
 use std::io::{self, Read};
@@ -153,51 +151,35 @@ fn wait_pid(pid: libc::pid_t, flags: libc::c_int) -> io::Result<(libc::pid_t, li
     }
 }
 
-/// The child that has something to report (a stop or an exit), without
-/// consuming it (`WNOWAIT`); `None` when this process has no children.
-fn peek_child() -> io::Result<Option<libc::pid_t>> {
+/// `waitpid(-1)` for the children and tracees of the calling thread only
+/// (`__WNOTHREAD`), retried on EINTR. A tracee can leave the test's process
+/// group (setpgid, setsid), so waiting for the group would miss its stops;
+/// other threads of this process may be tracing other programs.
+fn wait_any() -> io::Result<(libc::pid_t, libc::c_int)> {
     loop {
-        // SAFETY: siginfo_t is plain data; all zeroes is a valid value.
-        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
-        // SAFETY: `info` is a valid siginfo_t for waitid to fill.
-        let r = unsafe {
-            libc::waitid(libc::P_ALL, 0, &mut info, libc::WEXITED | libc::WSTOPPED | libc::WNOWAIT | libc::__WALL)
-        };
-        if r == 0 {
-            // SAFETY: waitid filled in a SIGCHLD siginfo, whose si_pid is set.
-            return Ok(Some(unsafe { info.si_pid() }));
+        let mut status = 0;
+        // SAFETY: `status` is a valid int for waitpid to fill.
+        let r = unsafe { libc::waitpid(-1, &mut status, libc::__WALL | libc::__WNOTHREAD) };
+        if r >= 0 {
+            return Ok((r, status));
         }
         let e = io::Error::last_os_error();
-        match e.raw_os_error() {
-            Some(libc::EINTR) => continue,
-            Some(libc::ECHILD) => return Ok(None),
-            _ => return Err(e),
+        if e.kind() != io::ErrorKind::Interrupted {
+            return Err(e);
         }
     }
 }
 
-/// The thread id of the caller: ptrace relations are per thread.
-fn gettid() -> libc::pid_t {
-    // SAFETY: gettid has no arguments and cannot fail.
-    unsafe { libc::syscall(libc::SYS_gettid) as libc::pid_t }
-}
-
-/// The tracer of `pid` as /proc reports it (0: not traced).
-fn tracer_of(pid: libc::pid_t) -> libc::pid_t {
-    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).unwrap_or_default();
-    status.lines().find_map(|l| l.strip_prefix("TracerPid:")).and_then(|v| v.trim().parse().ok()).unwrap_or(0)
-}
-
-/// Kill every process in `pids` and the process group `pgid`.
-fn kill_all(pgid: libc::pid_t, pids: &[libc::pid_t]) {
-    // SAFETY: kill has no memory-safety requirements. The group and the
-    // processes are the tracees', which the tracer has not all reaped (so
-    // none of these numbers can have been reused by an unrelated process).
-    unsafe {
-        libc::kill(-pgid, libc::SIGKILL);
-        for &p in pids {
-            libc::kill(p, libc::SIGKILL);
-        }
+/// Send SIGKILL to the test's process group and to every tracee known to
+/// be alive (some may have left the group).
+fn kill_all(pgid: libc::pid_t, live: &Mutex<BTreeSet<libc::pid_t>>) {
+    // SAFETY: kill has no memory-safety requirements. The group is the
+    // tracee's (it called setpgid(0, 0)); the pids are tracees that the
+    // tracer has not reaped, so they cannot have been reused.
+    unsafe { libc::kill(-pgid, libc::SIGKILL) };
+    for &pid in live.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        // SAFETY: as above.
+        unsafe { libc::kill(pid, libc::SIGKILL) };
     }
 }
 
@@ -279,21 +261,17 @@ pub fn trace(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
     let stdout = read_all(out_r);
     let stderr = read_all(err_r);
 
-    // The watchdog kills every tracee if the run takes too long: the test's
-    // process group and the processes that left it (setpgid, setsid).
-    let live = Arc::new(Mutex::new(vec![pid]));
+    // The watchdog kills every tracee if the run takes too long.
     let (done, done_rx) = mpsc::channel::<()>();
     let timed_out = Arc::new(AtomicBool::new(false));
+    let live = Arc::new(Mutex::new(BTreeSet::from([pid])));
     let watchdog = {
         let timed_out = Arc::clone(&timed_out);
         let live = Arc::clone(&live);
         thread::spawn(move || {
             if done_rx.recv_timeout(timeout) == Err(mpsc::RecvTimeoutError::Timeout) {
                 timed_out.store(true, Ordering::SeqCst);
-                // The lock is held while killing, so the tracer cannot reap
-                // (and the system reuse) one of these pids meanwhile.
-                let pids = live.lock().unwrap_or_else(|e| e.into_inner());
-                kill_all(pid, &pids);
+                kill_all(pid, &live);
             }
         })
     };
@@ -304,24 +282,12 @@ pub fn trace(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
         procs: BTreeMap::new(),
         next_index: 0,
         exit: Exit::Unknown,
-        tid: gettid(),
         live: Arc::clone(&live),
     };
     let result = tracer.run(pid);
     if result.is_err() {
-        {
-            let pids = live.lock().unwrap_or_else(|e| e.into_inner());
-            kill_all(pid, &pids);
-        }
-        while !tracer.procs.is_empty() {
-            match tracer.next_event() {
-                Ok(Some((wpid, status))) if libc::WIFEXITED(status) || libc::WIFSIGNALED(status) => {
-                    tracer.remove(wpid);
-                }
-                Ok(Some(_)) => {}
-                _ => break,
-            }
-        }
+        kill_all(pid, &live);
+        while wait_any().is_ok() {}
     }
     let _ = done.send(());
     let _ = watchdog.join();
@@ -344,10 +310,8 @@ struct Tracer {
     procs: BTreeMap<libc::pid_t, Proc>,
     next_index: u32,
     exit: Exit,
-    /// The tracing thread (the tracees' tracer).
-    tid: libc::pid_t,
-    /// The pids in `procs`, for the watchdog.
-    live: Arc<Mutex<Vec<libc::pid_t>>>,
+    /// Tracees not reaped yet, for the watchdog.
+    live: Arc<Mutex<BTreeSet<libc::pid_t>>>,
 }
 
 impl Tracer {
@@ -363,38 +327,7 @@ impl Tracer {
             };
             self.next_index += 1;
             self.procs.insert(pid, p);
-            self.live.lock().unwrap_or_else(|e| e.into_inner()).push(pid);
-        }
-    }
-
-    fn remove(&mut self, pid: libc::pid_t) -> Option<Proc> {
-        self.live.lock().unwrap_or_else(|e| e.into_inner()).retain(|&p| p != pid);
-        self.procs.remove(&pid)
-    }
-
-    /// Is `pid` one of ours: known, or a new tracee (auto-attached at a
-    /// fork) whose first stop came before its parent's fork event?
-    fn is_tracee(&self, pid: libc::pid_t) -> bool {
-        self.procs.contains_key(&pid) || tracer_of(pid) == self.tid
-    }
-
-    /// The next stop or exit of a tracee. Tracees can leave the test's
-    /// process group (setpgid, setsid), so this waits for any child; a
-    /// child that is not a tracee (a command another thread runs) is left
-    /// for its owner, and the tracees are polled until it is gone.
-    fn next_event(&self) -> io::Result<Option<(libc::pid_t, libc::c_int)>> {
-        loop {
-            let Some(wpid) = peek_child()? else { return Ok(None) };
-            if self.is_tracee(wpid) {
-                return wait_pid(wpid, 0).map(Some);
-            }
-            for &p in self.procs.keys() {
-                let (r, status) = wait_pid(p, libc::WNOHANG)?;
-                if r > 0 {
-                    return Ok(Some((r, status)));
-                }
-            }
-            thread::sleep(Duration::from_micros(200));
+            self.live.lock().unwrap_or_else(|e| e.into_inner()).insert(pid);
         }
     }
 
@@ -430,9 +363,14 @@ impl Tracer {
         unsafe { libc::kill(pid, libc::SIGCONT) };
 
         while !self.procs.is_empty() {
-            let Some((wpid, status)) = self.next_event().map_err(|e| format!("waitpid: {e}"))? else { break };
+            let (wpid, status) = match wait_any() {
+                Ok(w) => w,
+                Err(e) if e.raw_os_error() == Some(libc::ECHILD) => break,
+                Err(e) => return Err(format!("waitpid: {e}")),
+            };
             if libc::WIFEXITED(status) || libc::WIFSIGNALED(status) {
-                if let Some(p) = self.remove(wpid)
+                self.live.lock().unwrap_or_else(|e| e.into_inner()).remove(&wpid);
+                if let Some(p) = self.procs.remove(&wpid)
                     && p.index == 0
                 {
                     if !p.started && libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == CHILD_EXEC_FAILED {

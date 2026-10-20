@@ -265,7 +265,7 @@ pub fn render_arg(arg: &Arg, known_call: bool, normalize: bool) -> String {
         Arg::Opaque(_) if normalize => WILDCARD.into(),
         Arg::Opaque(v) => format!("{v:#x}"),
         Arg::Pid(v) if normalize && *v > 0 => "<pid>".into(),
-        // A process group (kill, wait4): -pgid. 0 and -1 keep their meaning.
+        // A process group given as -pgid (wait4, kill); -1 means "all".
         Arg::Pid(v) if normalize && *v < -1 => "-<pid>".into(),
         Arg::Pid(v) => v.to_string(),
         Arg::Raw(s) if normalize => mask_addresses(s),

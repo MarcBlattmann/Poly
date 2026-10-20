@@ -146,8 +146,6 @@ fn known_signature(name: &str) -> Option<(&'static [ArgKind], RetKind)> {
         "tkill" => (&[Pid, Int], RetKind::Int),
         "rt_sigqueueinfo" => (&[Pid, Int, Ptr], RetKind::Int),
         "rt_tgsigqueueinfo" => (&[Pid, Pid, Int, Ptr], RetKind::Int),
-        "setpgid" => (&[Pid, Pid], RetKind::Int),
-        "getpgid" | "getsid" => (&[Pid], RetKind::Pid),
         "uname" | "sysinfo" => (&[Ptr], RetKind::Int),
         "arch_prctl" => (&[Hex, Ptr], RetKind::Int),
         "prctl" => (&[Int, Hex, Hex, Hex, Hex], RetKind::Int),
