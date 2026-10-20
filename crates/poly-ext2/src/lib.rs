@@ -996,6 +996,15 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
         self.state.lock().read_only
     }
 
+    /// Caps journal transactions at `blocks` (at least 16) instead of a
+    /// quarter of the log, so tests can make operations span several
+    /// transactions. No effect without a journal.
+    pub fn limit_transactions(&self, blocks: usize) {
+        if let Some(j) = self.state.lock().journal.as_mut() {
+            j.set_max_trans(blocks);
+        }
+    }
+
     pub fn device(&self) -> &D {
         &self.disk.dev
     }

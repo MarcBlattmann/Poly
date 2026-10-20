@@ -231,6 +231,10 @@ impl Journal {
         })
     }
 
+    pub fn set_max_trans(&mut self, blocks: usize) {
+        self.max_trans = blocks.clamp(16, (((self.maxlen - self.first) / 4) as usize).max(16));
+    }
+
     pub fn needs_recovery(&self) -> bool {
         be32(&self.sb, jsb::START) != 0
     }
@@ -499,14 +503,14 @@ impl<D: BlockIo> Ctx<'_, D> {
 
     /// Whether the running transaction is nearly as big as one may be.
     pub fn journal_tight(&self) -> bool {
-        self.st.journal.as_ref().is_some_and(|j| self.journal_load() + 64 > j.max_trans)
+        self.st.journal.as_ref().is_some_and(|j| self.journal_load() + j.max_trans / 4 > j.max_trans)
     }
 
     /// Before an operation: commits if the transaction is getting big, or
     /// if freed space the operation may need is held until a commit.
     pub fn journal_reserve(&mut self) -> Result<()> {
         let Some(j) = self.st.journal.as_ref() else { return Ok(()) };
-        let big = self.journal_load() + 128 > j.max_trans;
+        let big = self.journal_load() + j.max_trans / 2 > j.max_trans;
         let blocks_held = !self.st.held_blocks.is_empty() && self.free_block_count() < 4096;
         let free_inodes: u64 = self.st.groups.iter().map(|d| d.free_inodes as u64).sum();
         let inodes_held = !self.st.held_inodes.is_empty() && free_inodes < 64 + self.st.held_inodes.len() as u64;
