@@ -1138,13 +1138,17 @@ kernel_test! {
         if progressed == usize::MAX {
             return Err("a read failed or returned the wrong data");
         }
-        if (progressed as u64) < MANY_READS * 3 / 4 {
+        // A fast host can finish a request before the reader goes to sleep,
+        // so not every read gives the other thread a turn (GitHub's runners
+        // saw 29 of 40). The regression this guards against, waiting with
+        // interrupts off, gives about zero.
+        if (progressed as u64) < MANY_READS / 4 {
             return Err("the CPU-bound thread did not run while the reader waited for the disk");
         }
         if ticks1 - ticks0 < ms / 4 {
             return Err("the timer tick stalled during disk reads");
         }
-        if d.waiting() != Waiting::Polled && after.sleeps - before.sleeps < MANY_READS / 2 {
+        if d.waiting() != Waiting::Polled && after.sleeps - before.sleeps < MANY_READS / 4 {
             return Err("the reader of an interrupt-driven disk did not sleep");
         }
         Ok(())
