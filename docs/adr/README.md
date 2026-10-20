@@ -30,6 +30,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0027](0027-agent-pipeline-tools-and-test-run-protocol.md) | Agent pipeline tools: own ptrace tracer, per-test diff runner, a serial test-run protocol for Poly, held-out store outside the repository | Accepted |
 | [0023](0023-vfs-tmpfs-and-cpio.md) | The VFS in a host-tested crate with `alloc`, tmpfs beside it, cpio unpacked through the VFS | Accepted |
 | [0030](0030-nt-object-manager-and-dispatcher-in-a-crate.md) | NT object manager and dispatcher logic in a host-tested crate (`poly-ntobj`) | Accepted |
+| [0029](0029-pe-loader-logic-in-poly-pe.md) | PE loader logic in a host-tested crate (`poly-pe`), working on mapped images in place | Accepted |
 
 ## Open decisions
 

@@ -1,0 +1,11 @@
+[package]
+name = "poly-pe"
+description = "PE/COFF image parsing and load planning: headers, sections, relocations, imports, exports, TLS and more"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

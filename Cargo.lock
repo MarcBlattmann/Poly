@@ -98,6 +98,10 @@ name = "poly-pci"
 version = "0.0.1"
 
 [[package]]
+name = "poly-pe"
+version = "0.0.1"
+
+[[package]]
 name = "poly-personality-linux"
 version = "0.0.1"
 dependencies = [
