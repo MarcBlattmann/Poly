@@ -147,8 +147,11 @@ the end orphans that have a stopped member get `SIGHUP` then `SIGCONT`
 - The input threads look every 50 ms whether their terminal is still
   open; a byte typed just as a program closes the terminal may go to
   either side.
-- Not done: the `open`/`openat` system calls themselves (the file-call
-  work; the kernel side, `Files::open`, does everything above), packet
+- `posix_openpt` works from programs through `openat` of `/dev/ptmx`
+  ([ADR 0043](0043-dev-proc-sys-and-file-system-calls.md)'s file calls),
+  and `ttyname` through `/proc/self/fd`, whose links name the path a
+  terminal was opened by (`/dev/pts/<n>`, `/dev/console`).
+- Not done: packet
   mode (`TIOCPKT`), `TIOCGPTPEER`, modem lines (`TIOCM*`), `ECHOPRT` and
   `XCASE`, `VDISCARD`, breaks and parity, a real drain for `TCSETSW` /
   `tcdrain` (output is synchronous), `SIGIO` (`O_ASYNC`), per-process
