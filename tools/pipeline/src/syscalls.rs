@@ -83,6 +83,8 @@ pub enum RetKind {
     Addr,
     /// A process or thread id: masked.
     Pid,
+    /// A clock reading (`time`, `times`): differs between runs, masked.
+    Time,
 }
 
 /// Six raw arguments, for calls the table does not describe.
@@ -133,7 +135,7 @@ fn known_signature(name: &str) -> Option<(&'static [ArgKind], RetKind)> {
         "clock_gettime" | "clock_getres" => (&[Int, Ptr], RetKind::Int),
         "clock_nanosleep" => (&[Int, Hex, Ptr, Ptr], RetKind::Int),
         "gettimeofday" => (&[Ptr, Ptr], RetKind::Int),
-        "time" => (&[Ptr], RetKind::Int),
+        "time" => (&[Ptr], RetKind::Time),
         "getpid" | "getppid" | "gettid" | "fork" | "vfork" | "setsid" | "getpgrp" => (&[], RetKind::Pid),
         "getuid" | "geteuid" | "getgid" | "getegid" => (&[], RetKind::Int),
         "clone" => (&[Hex, Ptr, Ptr, Ptr, Hex], RetKind::Pid),
@@ -187,6 +189,12 @@ fn known_signature(name: &str) -> Option<(&'static [ArgKind], RetKind)> {
         "symlinkat" => (&[CStr, Int, CStr], RetKind::Int),
         "fsync" | "fchdir" => (&[Int], RetKind::Int),
         "rename" => (&[CStr, CStr], RetKind::Int),
+        // Process groups and sessions: their ids differ between runs.
+        "getpgid" | "getsid" => (&[Pid], RetKind::Pid),
+        "setpgid" => (&[Pid, Pid], RetKind::Int),
+        "waitid" => (&[Int, Pid, Ptr, Hex, Ptr], RetKind::Int),
+        // Clock readings returned as the result.
+        "times" => (&[Ptr], RetKind::Time),
         _ => return None,
     })
 }
@@ -343,5 +351,8 @@ mod tests {
         assert_eq!(signature("pread64").0.len(), 4);
         assert!(is_known_signature("mmap"));
         assert!(!is_known_signature("bpf"));
+        assert_eq!(signature("getpgid"), (&[ArgKind::Pid][..], RetKind::Pid));
+        assert_eq!(signature("time").1, RetKind::Time);
+        assert_eq!(signature("times").1, RetKind::Time);
     }
 }

@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/openat
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  openat(dirfd, path, flags, mode) opens or creates a file and returns the
+  lowest-numbered free descriptor. The access mode (flags & 3: O_RDONLY 0,
+  O_WRONLY 1, O_RDWR 2, and 3 which opens but allows neither reading nor
+  writing) decides whether read and write work. O_CREAT creates a missing
+  regular file with mode & ~umask; O_EXCL with O_CREAT fails if the name
+  exists; O_TRUNC empties a regular file (also with O_RDONLY). Symbolic
+  links are followed except in the last component with O_NOFOLLOW. F_GETFL
+  afterwards reports the access mode plus the kept status flags: O_APPEND,
+  O_NONBLOCK, O_DIRECT, O_NOATIME, O_DIRECTORY, O_NOFOLLOW and always
+  O_LARGEFILE (0100000) on x86-64; O_CREAT, O_EXCL, O_TRUNC, O_NOCTTY and
+  O_CLOEXEC are not reported. O_CLOEXEC sets FD_CLOEXEC on the new
+  descriptor. Unknown flag bits are ignored.
+returns:
+  success: "the lowest descriptor number not in use (3 when only 0, 1, 2 are open)"
+  o_creat_existing: "opens the existing file; its contents and mode are unchanged"
+  o_creat_new: "regular file, size 0, mode (mode & ~umask & 07777), owner the caller's uid/gid"
+  o_path: "a descriptor that only names the file: fstat, fchdir, *at dirfd and AT_EMPTY_PATH work; read and write give EBADF; F_GETFL reports only O_PATH plus O_DIRECTORY/O_NOFOLLOW if given (no O_LARGEFILE)"
+  o_path_o_nofollow: "on a symbolic link: a descriptor for the link itself (fstat shows S_IFLNK)"
+  o_directory: "succeeds only on a directory"
+  o_tmpfile: "O_TMPFILE (020000000|O_DIRECTORY) with O_WRONLY or O_RDWR on a directory: an unnamed regular file there, st_nlink 0, mode & ~umask; it can be given a name with linkat(fd, \"\", ..., AT_EMPTY_PATH)"
+  o_append: "every write goes to the current end of file; lseek still moves the offset for reads"
+  dirfd: "relative paths start at dirfd (AT_FDCWD = -100 means the working directory); absolute paths ignore dirfd entirely, even an invalid one; a dirfd that is not open: EBADF; a dirfd open on a non-directory with a relative path: ENOTDIR; an O_PATH directory descriptor works as dirfd"
+errors:
+  exists_with_o_excl: "EEXIST"
+  missing_without_o_creat: "ENOENT"
+  path: "missing component or empty path: ENOENT; a non-directory used as a directory (including a trailing slash after a file): ENOTDIR; a component over 255 bytes or a path of 4096 bytes or more with its NUL: ENAMETOOLONG; an unreadable path pointer: EFAULT; too many symbolic links: ELOOP"
+  o_creat_with_trailing_slash: "EISDIR"
+  directory_opened_for_writing: "O_WRONLY, O_RDWR or O_CREAT on a directory: EISDIR"
+  o_creat_with_o_directory_new_name: "EINVAL, and nothing is created"
+  o_directory_on_non_directory: "ENOTDIR (also for a symbolic link with O_DIRECTORY|O_NOFOLLOW)"
+  o_nofollow_on_symlink: "ELOOP (also with O_CREAT)"
+  o_tmpfile_read_only: "EINVAL"
+  o_tmpfile_on_file: "ENOTDIR"
+  descriptor_limit: "EMFILE when every number below RLIMIT_NOFILE is in use"
+side_effects: "O_CREAT adds a directory entry; O_TRUNC sets the size to 0 and updates mtime/ctime. The new descriptor shares nothing with other opens of the same file (own offset, own status flags)."
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 3
+  held_out: 1

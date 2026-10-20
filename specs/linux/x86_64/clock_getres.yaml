@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/clock_getres
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  clock_getres(clock, res) stores the resolution of a clock: 1 ns for
+  CLOCK_REALTIME, CLOCK_MONOTONIC, CLOCK_MONOTONIC_RAW, CLOCK_BOOTTIME,
+  CLOCK_TAI and the CPU-time clocks; the scheduler tick (more than 0, at
+  most 10 ms, the same for both) for CLOCK_REALTIME_COARSE and
+  CLOCK_MONOTONIC_COARSE. CPU- time clock ids for a process or thread are
+  (~pid << 3) | 2 and (~tid << 3) | 6, id 0 meaning the caller
+  (clock_gettime on them works too and advances with CPU work). A NULL res
+  is allowed.
+returns:
+  success: "0"
+errors:
+  unknown_clock: "EINVAL (10, 12, 100, also with NULL res)"
+  cpu_clock_of_missing_process_or_thread: "EINVAL"
+  fd_clock_of_closed_descriptor: "EINVAL ((~fd << 3) | 3)"
+  bad_pointer: "EFAULT"
+side_effects: "none"
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

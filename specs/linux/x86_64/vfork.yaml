@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/vfork
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  vfork() creates a child that runs in the caller's memory while the caller
+  is suspended; the caller resumes when the child exits or its execve
+  succeeds (a failing execve returns to the child). Values the child stores
+  are seen by the parent afterwards. The child must only call execve or
+  exit.
+returns:
+  parent: "the child's pid, after the child has exited or exec'd"
+  child: "0"
+errors:
+  resources: "EAGAIN/ENOMEM (not tested)"
+side_effects: "The child's exit status (or, after execve, the new program's) is reported to wait4 as for fork."
+threading: "no thread-specific behaviour unless stated"
+ordering:
+  - "the parent does not run between vfork and the child's exit or successful execve"
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1
