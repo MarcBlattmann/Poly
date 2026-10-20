@@ -62,10 +62,10 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Per-process address spaces, switching on context switch (PCID where available)
 - [x] User mode (ring 3) and the `syscall`/`sysret` entry path with per-CPU kernel stacks
 - [x] Safe user-memory access (`copy_from_user` / `copy_to_user` with fault recovery)
-- [ ] Virtual memory areas, demand paging, page-fault handler for user space
+- [x] Virtual memory areas, demand paging, page-fault handler for user space
 - [ ] VFS core: inodes, dentries, mounts, file descriptor tables, path lookup
 - [ ] Initial RAM disk (cpio) mounted as the root file system; tmpfs
-- [ ] ELF loader for static binaries: segments, initial stack, auxiliary vector
+- [x] ELF loader for static binaries: segments, initial stack, auxiliary vector
 - [ ] First Linux syscalls: `write`, `exit_group`, `brk`, `mmap`, `munmap`, `arch_prctl`
 - [ ] **Milestone:** a static Linux "hello world" runs and exits cleanly
 - [ ] Agent pipeline v0: Linux syscall tracer on a real Linux VM, spec agent, implementer agent

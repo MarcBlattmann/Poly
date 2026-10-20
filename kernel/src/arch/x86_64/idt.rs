@@ -28,11 +28,12 @@
 //!
 //! # Exceptions
 //!
-//! An exception in ring 3 kills the thread (`user.rs`). In ring 0 it is a
-//! kernel bug and panics, except a page fault on user memory inside a
-//! user-copy routine, which resumes at the routine's fixup (`usercopy.rs`),
-//! and a #GP from the IRETQ of a return to ring 3, which kills the
-//! returning thread.
+//! An exception in ring 3 kills the thread (`user.rs`), unless it is a page
+//! fault that demand paging resolves. In ring 0 it is a kernel bug and
+//! panics, except a page fault on user memory inside a user-copy routine,
+//! which brings the page in or resumes at the routine's fixup
+//! (`usercopy.rs`), and a #GP from the IRETQ of a return to ring 3, which
+//! kills the returning thread.
 
 use super::gdt::{DOUBLE_FAULT_IST, DescriptorTablePointer, KERNEL_CODE, NMI_IST};
 use core::arch::{asm, global_asm};
@@ -349,12 +350,11 @@ extern "C" fn trap_dispatch(frame: &mut TrapFrame) {
     // thread's doing (and runs on an IST stack): it is handled, or not, as
     // in ring 0.
     if frame.in_user_mode() && !matches!(frame.vector, NMI | MACHINE_CHECK | DOUBLE_FAULT) {
+        // Returns only if it resolved a page fault; the instruction is retried.
         super::user::exception(frame);
+        return;
     }
-    if frame.vector == PAGE_FAULT
-        && let Some(fixup) = super::usercopy::fixup(frame.rip, super::cpu::read_cr2())
-    {
-        frame.rip = fixup;
+    if frame.vector == PAGE_FAULT && super::usercopy::page_fault(frame) {
         return;
     }
     match frame.vector {

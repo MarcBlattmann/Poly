@@ -824,3 +824,39 @@ fn stack_reader_survives_garbage() {
         }
     }
 }
+
+#[test]
+fn initial_stack_size_is_a_tight_upper_bound() {
+    let words: [&[u8]; 6] = [b"a", b"bb", b"", b"dddd", b"eeeee", b"ffffffffffffffffffffffff"];
+    let extras = [(AT_MINSIGSTKSZ, 2048), (AT_IGNORE, 0)];
+    let bytes = static_exec().bytes();
+    let elf = Elf::parse(&bytes).unwrap();
+    for top in [TOP, TOP - 8, TOP - 3, TOP + 1] {
+        for argc in 0..=6 {
+            for envc in 0..=6 {
+                for variant in 0..4 {
+                    let mut p = params(&words[..argc], &words[6 - envc..]);
+                    p.extra_aux = &extras[..variant.min(2)];
+                    if variant >= 2 {
+                        p.aux.hwcap2 = Some(2);
+                        p.aux.sysinfo_ehdr = Some(0x7fff_f7fc_1000);
+                        p.platform = b"";
+                    }
+                    if variant == 3 {
+                        p.aux.phdr = None;
+                        p.phdr_table = elf.program_header_table();
+                    }
+                    let size = initial_stack_size(&p).unwrap();
+                    let mut buf = vec![0u8; size];
+                    let l = build_initial_stack(&mut buf, top, &p).unwrap();
+                    let used = l.used(top) as usize;
+                    assert!(used <= size && size - used <= 37, "used {used}, bound {size}");
+                }
+            }
+        }
+    }
+    // The bound grows with every byte of every string.
+    let p = params(&[b"x"], &[]);
+    let longer = params(&[b"xy"], &[]);
+    assert_eq!(initial_stack_size(&longer), initial_stack_size(&p).map(|n| n + 1));
+}

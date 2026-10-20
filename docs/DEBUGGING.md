@@ -427,11 +427,43 @@ as above, plus bit 2 (user mode): `0x4` is a user read of an unmapped page,
 vector. QEMU's default (TCG) CPU does not check addresses for canonicality:
 a non-canonical access is reported as a page fault there, a #GP on hardware.
 
+A thread with a memory map (started by `exec` or `user::spawn_in`) only
+gets that line for page faults its map could not resolve, and the line ends
+with why:
+
+```text
+user: pid 4343 thread 2.15 killed: page fault (vector 14) at rip 0x4000c3, error 0x7, address 0x702000 (SEGV_ACCERR)
+user: pid 4343 thread 2.20 killed: page fault (vector 14) at rip 0x4000be, error 0x4, address 0x50000000 (SEGV_MAPERR)
+user: pid 4343 thread 2.22 killed: page fault (vector 14) at rip 0x4000be, error 0x4, address 0x902000 (SIGBUS)
+```
+
+`SEGV_MAPERR`: no region there (and not just below the stack, within its
+8 MiB limit and above the guard gap). `SEGV_ACCERR`: the region does not
+allow the access: a write to a read-only region (`0x7` or, before the page
+was ever touched, `0x6`), a fetch from a non-executable one (`0x14`), any
+access to `PROT_NONE`. `SIGBUS`: a file page wholly past the end of the
+file. Faults that are resolved leave no trace; a page that is "missing"
+when the kernel itself looks (`monitor info mem`, `AddressSpace::translate`)
+may simply not have been touched yet. `Memory::regions()` lists what is
+mapped, and a breakpoint on `poly_kernel::user::memory::Memory::fault`
+stops at every resolution (`finish` shows its result). A user copy made
+with interrupts off (under a spinlock) does not fault pages in: it returns
+`Efault` for a page that is not present yet, which looks like a bad user
+pointer. A copy made while holding the memory map's mutex panics with
+"deadlock: thread ... locks a mutex it already holds".
+
 `cargo xtask run poly.test=user` runs only the user-mode tests (and
-`poly.test=addrspace` the address-space ones). The test programs are
-assembled into the kernel (`kernel/src/user/programs.rs`) and copied to
+`poly.test=addrspace` the address-space ones, `poly.test=memory_tests` the
+demand-paging ones, `poly.test=exec` the exec ones). The test programs are
+assembled into the kernel (`kernel/src/user/programs.rs`) and mapped at
 `0x400000` in each test address space, so a user `rip` minus `0x400000` is
-the offset into `user_programs_start`. SMEP, SMAP and XSAVE need a CPU model
+the offset into `user_programs_start`. The exec tests run small static ELF
+executables assembled into the kernel as well (`kernel/src/user/test_elf.rs`,
+between `poly_test_elf_*_start` and `_end` in the kernel's symbols): copy
+one out of the kernel image with the addresses `nm` gives and `readelf -lW`
+or `objdump -D -b binary -m i386:x86-64` reads it. Each reports what it
+finds on its initial stack through a test system call, so a failing exec
+test usually names the first value that was wrong. SMEP, SMAP and XSAVE need a CPU model
 that has them: run QEMU by hand with the command line `cargo xtask run`
 uses plus `-cpu max` (QEMU's TCG has no PCIDs in any model).
 

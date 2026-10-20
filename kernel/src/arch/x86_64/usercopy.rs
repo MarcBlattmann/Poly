@@ -19,10 +19,19 @@
 //! (QEMU's default CPU) the instructions do not exist and are skipped; the
 //! range checks still apply.
 //!
-//! TODO(vm): a fault on a user page that is part of a mapping but not yet
-//! present (demand paging) must be resolved before the fixup is considered.
+//! **Demand paging.** A fault in a copy routine may be a page that belongs
+//! to the thread's memory map but is not present yet. [`page_fault`] asks
+//! `user::page_fault` to bring it in first and retries the instruction
+//! (`rep movsb` resumes where it stopped); only a fault it cannot resolve
+//! goes to the fixup. That needs interrupts on (resolving may block on the
+//! memory map's mutex, later on a disk read), so a copy made with
+//! interrupts off (under a spinlock) does not fault pages in and fails
+//! with [`Efault`] on a page that is not present yet. A copy must never be
+//! made while holding the memory map's mutex.
 
 use super::addrspace::USER_END;
+use super::cpu;
+use super::idt::TrapFrame;
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -113,10 +122,38 @@ fn fixups() -> [Fixup; 2] {
     ]
 }
 
+/// RFLAGS.IF.
+const RFLAGS_IF: u64 = 1 << 9;
+
+/// A page fault in ring 0. If it hit user memory inside a user-copy
+/// routine, either bring the page in (demand paging) and retry, or resume
+/// at the routine's fixup; returns `true` then. Returns `false` for every
+/// other fault, which is the kernel's own.
+pub(super) fn page_fault(frame: &mut TrapFrame) -> bool {
+    let addr = cpu::read_cr2();
+    let Some(fixup) = fixup(frame.rip, addr) else { return false };
+    if frame.rflags & RFLAGS_IF != 0
+        && let Some(access) = super::user::fault_access(frame.error_code)
+    {
+        // SAFETY: the interrupted copy ran with interrupts on, so it held
+        // no spinlock and no `InterruptsOff` that this would break; CR2 has
+        // been read. The trap frame is on this thread's stack, so blocking
+        // or being preempted here is like doing so in the copy itself.
+        unsafe { cpu::enable_interrupts() };
+        let resolved = crate::user::page_fault(addr, access).is_ok();
+        cpu::disable_interrupts();
+        if resolved {
+            return true;
+        }
+    }
+    frame.rip = fixup;
+    true
+}
+
 /// Where to resume after a page fault at `rip` on address `addr` in ring 0,
 /// if it hit user memory inside a user-copy routine. Faults on kernel
 /// addresses (a bad kernel buffer) are bugs and stay fatal.
-pub(super) fn fixup(rip: u64, addr: u64) -> Option<u64> {
+fn fixup(rip: u64, addr: u64) -> Option<u64> {
     if addr >= USER_END {
         return None;
     }

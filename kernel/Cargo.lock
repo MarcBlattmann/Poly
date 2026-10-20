@@ -30,6 +30,10 @@ name = "poly-bochs-vbe"
 version = "0.0.1"
 
 [[package]]
+name = "poly-elf"
+version = "0.0.1"
+
+[[package]]
 name = "poly-gfx"
 version = "0.0.1"
 
@@ -58,6 +62,7 @@ dependencies = [
  "poly-binfmt",
  "poly-block",
  "poly-bochs-vbe",
+ "poly-elf",
  "poly-gfx",
  "poly-heap",
  "poly-input",
@@ -72,6 +77,7 @@ dependencies = [
  "poly-sched",
  "poly-virtio",
  "poly-virtio-blk",
+ "poly-vm",
 ]
 
 [[package]]
@@ -130,3 +136,7 @@ dependencies = [
  "poly-pci",
  "poly-virtio",
 ]
+
+[[package]]
+name = "poly-vm"
+version = "0.0.1"

@@ -260,6 +260,38 @@ impl Down<'_> {
     }
 }
 
+/// Bytes [`build_initial_stack`] needs at most for `p`, wherever the stack
+/// top is: a buffer this long never fails with [`StackError::TooSmall`], and
+/// the stack it gets uses at most 37 bytes less (the alignment padding of
+/// a copied program header table, of the random bytes and of `rsp`). `None` if the size does not fit in a
+/// `usize`. The kernel sizes its buffer with this and checks it against the
+/// argument size limit (`E2BIG`, execve(2)) before building anything.
+pub fn initial_stack_size(p: &StackParams<'_>) -> Option<usize> {
+    let string = |s: &[u8]| s.len().checked_add(1);
+    let mut strings = string(p.execfn)?;
+    for s in p.argv.iter().chain(p.envp) {
+        strings = strings.checked_add(string(s)?)?;
+    }
+    if !p.platform.is_empty() {
+        strings = strings.checked_add(string(p.platform)?)?;
+    }
+    // The copied program headers start 8-aligned: up to 7 bytes of padding.
+    let phdr = if p.aux.phdr.is_none() { p.phdr_table.len().checked_add(7)? } else { 0 };
+    // The random bytes start 16-aligned: up to 15 bytes of padding.
+    let random = p.random.len() + 15;
+    // argc, argv + NULL, envp + NULL, then the auxiliary vector; `rsp` is
+    // aligned down to 16 below them (up to 15 more bytes).
+    let optional = [p.aux.sysinfo_ehdr.is_some(), p.aux.hwcap2.is_some(), !p.platform.is_empty()];
+    let auxc = FIXED_AUX_ENTRIES + optional.iter().filter(|&&b| b).count() + p.extra_aux.len();
+    let words = p.argv.len().checked_add(p.envp.len())?.checked_add(3)?.checked_add(auxc.checked_mul(2)?)?;
+    let vectors = words.checked_mul(8)?.checked_add(15)?;
+    END_MARKER.checked_add(strings)?.checked_add(phdr)?.checked_add(random)?.checked_add(vectors)
+}
+
+/// Auxiliary vector entries [`build_initial_stack`] always writes: the 15
+/// fixed ones from `AT_HWCAP` to `AT_RANDOM`, `AT_EXECFN` and `AT_NULL`.
+const FIXED_AUX_ENTRIES: usize = 17;
+
 /// Builds the initial stack of a new process.
 ///
 /// `buf` stands for the `buf.len()` bytes of the stack just below

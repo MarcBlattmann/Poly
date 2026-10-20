@@ -29,6 +29,14 @@
 //! owning. Which is which is recorded in each page-table entry, in a bit
 //! the CPU ignores ([`OWNED`]).
 //!
+//! Demand paging (`user::Memory`) fills one page at a time: it takes a
+//! [`UserFrame`], fills it (zeros, or a file's bytes) and hands it to
+//! [`AddressSpace::map_owned`]; [`AddressSpace::take`] unmaps a page and
+//! hands its frame back out (a page parked while its region is
+//! `PROT_NONE`). A `UserFrame` that is dropped frees its frame.
+//! [`user_frames`] counts every frame held for user pages, so tests can
+//! check that unmapping and teardown free them.
+//!
 //! # TLB and PCIDs
 //!
 //! Without PCIDs, every CR3 load flushes all non-global translations, so
@@ -93,6 +101,18 @@ impl Prot {
     pub const EXEC: Prot = Prot(4);
     pub const RW: Prot = Prot(1 | 2);
     pub const RX: Prot = Prot(1 | 4);
+
+    /// The rights with these `PROT_READ` (1), `PROT_WRITE` (2) and
+    /// `PROT_EXEC` (4) bits (Linux UAPI `asm-generic/mman-common.h`);
+    /// other bits are ignored.
+    pub const fn from_bits(bits: u8) -> Prot {
+        Prot(bits & 7)
+    }
+
+    /// The `PROT_*` bits.
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
 
     pub const fn contains(self, other: Prot) -> bool {
         self.0 & other.0 == other.0
@@ -182,6 +202,65 @@ static PCID_OWNER: [AtomicU64; PCIDS] = [const { AtomicU64::new(0) }; PCIDS];
 static NEXT_PCID: AtomicU16 = AtomicU16::new(1);
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Frames held for user pages: owned by an address space, or by a
+/// [`UserFrame`] on its way in or out of one.
+static USER_FRAMES: AtomicU64 = AtomicU64::new(0);
+
+/// How many frames are held for user pages right now, in all address
+/// spaces together (page tables not included).
+pub fn user_frames() -> u64 {
+    USER_FRAMES.load(Ordering::Relaxed)
+}
+
+/// One frame for a user page, not mapped anywhere: filled by the kernel,
+/// then given to [`AddressSpace::map_owned`]. Dropping it frees the frame.
+#[derive(Debug)]
+pub struct UserFrame {
+    phys: u64,
+}
+
+impl UserFrame {
+    /// A zeroed frame, or `None` if memory ran out.
+    pub fn zeroed() -> Option<UserFrame> {
+        let phys = FRAMES.lock().as_mut().and_then(|f| f.allocate(0))?;
+        USER_FRAMES.fetch_add(1, Ordering::Relaxed);
+        let mut frame = UserFrame { phys };
+        frame.bytes_mut().fill(0);
+        Some(frame)
+    }
+
+    /// The frame's contents, through the direct map.
+    pub fn bytes_mut(&mut self) -> &mut [u8; PAGE_SIZE as usize] {
+        let virt = paging::phys_to_virt(self.phys).expect("frame outside the direct map");
+        // SAFETY: the frame belongs to this value alone (allocated for it,
+        // or taken out of the page tables by `take`), it is RAM reached
+        // through the direct map, writable and page-aligned, and the borrow
+        // of `self` keeps any other access out while the reference lives.
+        unsafe { &mut *(virt as *mut [u8; PAGE_SIZE as usize]) }
+    }
+
+    /// Physical address of the frame.
+    pub fn phys(&self) -> u64 {
+        self.phys
+    }
+
+    /// Give up ownership without freeing: the caller now owns the frame.
+    fn into_phys(self) -> u64 {
+        let phys = self.phys;
+        core::mem::forget(self);
+        phys
+    }
+}
+
+impl Drop for UserFrame {
+    fn drop(&mut self) {
+        USER_FRAMES.fetch_sub(1, Ordering::Relaxed);
+        if let Some(f) = FRAMES.lock().as_mut() {
+            f.free(self.phys, 0).expect("user frame freed twice");
+        }
+    }
+}
+
 /// Turn on PCIDs. Call once, with the kernel PML4 loaded (PCID 0): CR4.PCIDE
 /// can only be set while CR3[11:0] is 0.
 ///
@@ -222,6 +301,8 @@ pub struct AddressSpace {
     /// The PCID last given to this space; 0 if it has none (or must flush).
     pcid: AtomicU16,
     root: u64,
+    /// Pages mapped with a frame the space owns.
+    resident: AtomicU64,
 }
 
 impl AddressSpace {
@@ -240,6 +321,7 @@ impl AddressSpace {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             pcid: AtomicU16::new(0),
             root,
+            resident: AtomicU64::new(0),
         })
     }
 
@@ -270,7 +352,7 @@ impl AddressSpace {
                 // reached through the direct map, which maps it writable.
                 unsafe { ptr.write_bytes(0, PAGE_SIZE as usize) };
                 let res = tables.map(page, frame, PageSize::Size4K, flags, &mut BuddyFrames(alloc));
-                res.map_err(|_| {
+                res.map(|()| self.gained_page()).map_err(|_| {
                     alloc.free(frame, 0).expect("freeing a frame just allocated");
                     MapError::OutOfMemory
                 })
@@ -312,6 +394,52 @@ impl AddressSpace {
             }
         }
         Ok(())
+    }
+
+    /// Map `frame` at the page `virt` with `prot`; the space owns it from
+    /// now on. On error (the page is mapped already, no memory for a page
+    /// table, ...) the frame is freed.
+    pub fn map_owned(&self, virt: u64, frame: UserFrame, prot: Prot) -> Result<(), MapError> {
+        check_range(virt, PAGE_SIZE)?;
+        let flags = prot.flags().ok_or(MapError::NoAccess)? | OWNED;
+        let mut tables = self.tables.lock();
+        free_slots(&tables, virt, virt + PAGE_SIZE)?;
+        let mut frames = FRAMES.lock();
+        let alloc = frames.as_mut().ok_or(MapError::OutOfMemory)?;
+        if tables.map(virt, frame.phys(), PageSize::Size4K, flags, &mut BuddyFrames(alloc)).is_err() {
+            drop(frames);
+            return Err(MapError::OutOfMemory);
+        }
+        // The frame was counted in USER_FRAMES when it was allocated.
+        frame.into_phys();
+        self.resident.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Unmap the page `virt` and hand its frame out, instead of freeing it,
+    /// if the space owns it. `None` if nothing is mapped there or the frame
+    /// is not the space's (then it is just unmapped).
+    pub fn take(&self, virt: u64) -> Option<UserFrame> {
+        check_range(virt, PAGE_SIZE).ok()?;
+        let mut tables = self.tables.lock();
+        let (old, freed) = tables.unmap_and_prune(virt).ok()?;
+        self.flush(virt);
+        let mut frames = FRAMES.lock();
+        let alloc = frames.as_mut().expect("address spaces need the frame allocator");
+        for &table in freed.as_slice() {
+            alloc.free(table, 0).expect("page table freed twice");
+        }
+        if !old.flags.contains(OWNED) {
+            return None;
+        }
+        self.resident.fetch_sub(1, Ordering::Relaxed);
+        // The count of user frames stays: the frame moves to the UserFrame.
+        Some(UserFrame { phys: old.frame })
+    }
+
+    /// Pages mapped with a frame the space owns.
+    pub fn resident_pages(&self) -> u64 {
+        self.resident.load(Ordering::Relaxed)
     }
 
     /// Unmap every page of `[virt, virt + len)` that is mapped (holes are
@@ -423,10 +551,18 @@ impl AddressSpace {
         self.flush(page);
         if old.flags.contains(OWNED) {
             alloc.free(old.frame, 0).expect("user frame freed twice");
+            self.resident.fetch_sub(1, Ordering::Relaxed);
+            USER_FRAMES.fetch_sub(1, Ordering::Relaxed);
         }
         for &table in freed.as_slice() {
             alloc.free(table, 0).expect("page table freed twice");
         }
+    }
+
+    /// Count a page mapped with a frame the space owns.
+    fn gained_page(&self) {
+        self.resident.fetch_add(1, Ordering::Relaxed);
+        USER_FRAMES.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Drop any cached translation of `page` after its entry changed: with
@@ -454,7 +590,10 @@ impl Drop for AddressSpace {
         let alloc = frames.as_mut().expect("address spaces need the frame allocator");
         tables.clear(0..ENTRIES / 2, |c| {
             let frame = match c {
-                Cleared::Page { page, .. } if page.flags.contains(OWNED) => page.frame,
+                Cleared::Page { page, .. } if page.flags.contains(OWNED) => {
+                    USER_FRAMES.fetch_sub(1, Ordering::Relaxed);
+                    page.frame
+                }
                 Cleared::Page { .. } => return,
                 Cleared::Table(frame) => frame,
             };

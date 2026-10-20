@@ -17,7 +17,8 @@ what exists **today** and how it fits that plan.
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt
                           │
             kernel shell: poly-line editor, commands; on COM1 now, screen + keyboard later
-            kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user
+            kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user,
+                               memory maps with demand paging (poly-vm), exec of static ELF (poly-elf)
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
@@ -475,6 +476,7 @@ services once it decodes those system calls.
 | Unit tests for pure logic | `crates/`, `personalities/`, `tools/` | `cargo test --workspace` (host) |
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
+| Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail), the display's mode, mapping, back buffer and flush (and a boot without VGA must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi`, `poly.test.display` | `cargo xtask test` |
@@ -533,7 +535,7 @@ own PML4: the lower half is theirs, the higher half is the kernel's
 | User virtual | What |
 |---|---|
 | `0x0` – `0xffff` | never mapped (`USER_START` is 64 KiB): null pointers and small offsets from them fault |
-| `0x1_0000` – `0x7fff_ffff_efff` | user mappings, 4 KiB pages, user-accessible (`USER_START` – `USER_END`); program, heap, `mmap`, stacks (laid out by the loader and `poly-vm` later) |
+| `0x1_0000` – `0x7fff_ffff_efff` | user mappings, 4 KiB pages, user-accessible (`USER_START` – `USER_END`); program, heap, `mmap`, stacks (laid out by `exec` and `poly-vm`, below) |
 | `0x7fff_ffff_f000` – `0x7fff_ffff_ffff` | never mapped: no `syscall` can sit at the very end of the lower half, so SYSRET never sees a non-canonical RCX |
 | `0x8000_0000_0000` – `0xffff_7fff_ffff_ffff` | the non-canonical hole |
 | `0xffff_8000_0000_0000` – | the kernel half, as above: present in every address space, ring 0 only |
@@ -766,6 +768,63 @@ machine; the decisions are in
 user: syscall/sysret on; PCID: no, SMEP: yes, SMAP: yes; FPU state: XSAVE, 832 bytes, XCR0 0x7
 user: pid 4242 thread 5.20 killed: page fault (vector 14) at rip 0x4000c3, error 0x7, address 0x400000
 ```
+
+## Memory maps, demand paging and exec
+
+`kernel/src/user/memory.rs` and `exec.rs`; decisions in
+[ADR 0036](adr/0036-demand-paging-and-exec.md). The region logic is
+`poly-vm` ([ADR 0026](adr/0026-user-address-space-regions.md)), the ELF
+logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
+
+- **`user::Memory`** is a process's memory (Linux's `mm`): an
+  `AddressSpace` plus the `poly_vm::VmMap` of its regions behind a `Mutex`.
+  `user::spawn_in(process, memory, entry, hook)` starts a thread in it, and
+  its threads share it; `user::current_memory()` gives the running
+  thread's. Regions are created empty: `map_anonymous`, `map_file`
+  (private), `map` (any `poly_vm::MapRequest`), `unmap`, `protect`,
+  `init_brk` / `brk`, `setup_stack`. Unmapped pages' frames are freed at
+  once; populated pages of a region made `PROT_NONE` are parked (kept out
+  of the page tables) until it is accessible again or unmapped.
+- **Page faults.** A fault from ring 3 enables interrupts and calls
+  `user::page_fault(addr, access)`, which asks `VmMap::fault` what the fault
+  means and does it: map a zeroed frame, map a frame filled from the file,
+  or upgrade the entry's rights. Success retries the instruction; anything
+  else kills the thread as before, with the reason in the log line. A fault
+  inside `copy_from_user` / `copy_to_user` / `strncpy_from_user` goes the
+  same way before the fixup, if the copy ran with interrupts on, so a valid
+  page that is not present yet never makes a copy fail. The stack region
+  grows down on a fault below it, within the 8 MiB limit and above the
+  guard gap. `Memory::read` / `write` do the same for the kernel's own
+  accesses to a space that is not loaded.
+- **Backing.** A file region maps a `FileRef`: an `Arc<dyn PageSource>`
+  (`len`, `read_at`, optionally the bytes in memory; `MemoryImage` wraps
+  kernel bytes, a VFS file implements it later) and a limit past which
+  pages read as zero. There is no page cache yet: every file page gets a
+  private frame, and shared file mappings are refused.
+- **Frames.** `UserFrame` is a frame on its way into or out of an address
+  space (`AddressSpace::map_owned`, `take`); dropping one frees it.
+  `user::user_frames()` counts every frame held for user pages and
+  `Memory::resident_pages()` those of one memory, which is how the tests
+  check that nothing leaks.
+- **Exec.** `user::exec::load(file, &ExecParams { argv, envp, execfn,
+  creds })` validates a static executable (`ET_EXEC`, or `ET_DYN` without
+  `PT_INTERP`, at `0x5555_5555_4000`; `PT_INTERP` is refused), creates a
+  region per planned mapping (segment file bytes through a `FileRef` window
+  ending at `p_filesz`, so last pages have zero tails; `.bss` anonymous),
+  starts the break after the highest segment, creates a 128 KiB stack
+  region under `0x7fff_ffff_f000` and writes the psABI initial stack
+  (`argc`, `argv`, `envp`, auxiliary vector with `AT_PHDR`, `AT_PHENT`,
+  `AT_PHNUM`, `AT_PAGESZ`, `AT_ENTRY`, `AT_RANDOM`, IDs, `AT_SECURE`,
+  `AT_EXECFN`, `AT_PLATFORM`, `AT_HWCAP`, ...). Only the stack page is
+  resident when it returns. `exec::exec` (any `PageSource`) and
+  `exec::exec_image` (an `Arc<[u8]>`) also start the thread.
+
+| User virtual (after exec) | What |
+|---|---|
+| `0x40_0000` (`ET_EXEC`) or `0x5555_5555_4000` (static PIE) | the image's segments, then `.bss` |
+| page after the highest segment | the program break (`brk`), growing up |
+| below `0x7fff_f7ef_f000` (128 MiB for the stack and a 1 MiB guard gap under its top) | `mmap` area, top-down |
+| `0x7fff_ffff_f000` - 128 KiB – `0x7fff_ffff_f000` | the stack region (grows to 8 MiB) |
 
 ## Synchronisation
 
