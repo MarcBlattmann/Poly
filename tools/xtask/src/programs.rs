@@ -233,7 +233,9 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         eprintln!("==> skipped: {why}");
     }
 
-    eprintln!("==> boot test: init forks, execs, clones a thread with TLS, forks across two CPUs, waits and reaps an orphan");
+    eprintln!(
+        "==> boot test: init forks, execs, clones a thread with TLS, forks across two CPUs, waits and reaps an orphan"
+    );
     let b = run_as_init(kernel, syms, &image, "forkexec", FORKEXEC_OUTPUT)?;
     if !b.output.contains(HELLO_OUTPUT.trim_end()) {
         return Err("the child of /bin/forkexec did not run /bin/hello".into());
