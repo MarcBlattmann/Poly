@@ -31,3 +31,4 @@ pub mod system;
 pub mod task;
 pub mod time;
 pub mod timerfd;
+pub mod xattr;

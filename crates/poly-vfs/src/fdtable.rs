@@ -204,6 +204,28 @@ impl FdTable {
         self.slots.clear();
     }
 
+    /// `close_range(2)`: closes every open descriptor from `first` to
+    /// `last` (both included; descriptors that are not open are skipped)
+    /// and returns their files, to be dropped by the caller (unlocked); or,
+    /// with `cloexec`, marks them close-on-exec and returns nothing.
+    pub fn close_range(&mut self, first: u32, last: u32, cloexec: bool) -> Vec<Arc<OpenFile>> {
+        let mut closed = Vec::new();
+        let (first, last) = (first as usize, (last as usize).min(self.slots.len().saturating_sub(1)));
+        for slot in self.slots.iter_mut().take(last + 1).skip(first) {
+            if cloexec {
+                if let Some(e) = slot.as_mut() {
+                    e.cloexec = true;
+                }
+            } else if let Some(e) = slot.take() {
+                closed.push(e.file);
+            }
+        }
+        while matches!(self.slots.last(), Some(None)) {
+            self.slots.pop();
+        }
+        closed
+    }
+
     /// Open descriptors in increasing order, with their close-on-exec flag.
     pub fn iter(&self) -> impl Iterator<Item = (Fd, &Arc<OpenFile>, bool)> {
         self.slots.iter().enumerate().filter_map(|(i, s)| s.as_ref().map(|e| (i as Fd, &e.file, e.cloexec)))

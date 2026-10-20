@@ -5,8 +5,9 @@
 //! of at most [`CHUNK`] bytes: a write copies a chunk from user memory and
 //! hands it to [`LinuxKernel::write`], until everything is written or the
 //! file takes less than offered; a read does one [`LinuxKernel::read`] of
-//! up to one chunk and copies the result out. Both may transfer fewer bytes
-//! than asked, which read(2) and write(2) allow.
+//! up to one chunk and copies the result out, and goes on chunk by chunk for
+//! files whose reads never wait (regular files, the memory devices). Both
+//! may transfer fewer bytes than asked, which read(2) and write(2) allow.
 
 use crate::abi::signal::{SI_KERNEL, SIGPIPE};
 use crate::abi::{FileStat, IOV_MAX, Iovec, MAX_RW_COUNT, SigInfo, ioctl, mode};
@@ -240,12 +241,41 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
         return k.read(fd, &mut []).map(|n| n as u64);
     }
     let mut buf = bounce(total.min(CHUNK as u64) as usize)?;
-    let n = k.read(fd, &mut buf)?.min(buf.len());
-    let mut cursor = Cursor::new(iovs, n as u64);
-    let mut copied = 0;
-    while let Some((at, len)) = cursor.next(u64::MAX) {
-        k.copy_to_user(at, &buf[copied..copied + len as usize])?;
-        copied += len as usize;
+    let mut cursor = Cursor::new(iovs, total);
+    let mut done: u64 = 0;
+    // Files whose reads never wait (regular files, the memory devices)
+    // give as much as asked, a chunk after another (ADR 0057: `dd bs=1M`
+    // counts a short read of /dev/zero as a partial record); a pipe or a
+    // terminal gets one read.
+    let mut whole = None;
+    loop {
+        let want = (total - done).min(buf.len() as u64) as usize;
+        let n = match k.read(fd, &mut buf[..want]) {
+            Ok(n) => n.min(want),
+            Err(e) if done == 0 => return Err(e),
+            Err(_) => break,
+        };
+        let mut copied = 0;
+        while copied < n {
+            let Some((at, len)) = cursor.next((n - copied) as u64) else { break };
+            if let Err(e) = k.copy_to_user(at, &buf[copied..copied + len as usize]) {
+                return if done == 0 && copied == 0 { Err(e) } else { Ok(done + copied as u64) };
+            }
+            copied += len as usize;
+        }
+        done += n as u64;
+        if n < want || done >= total || !*whole.get_or_insert_with(|| reads_whole(k, fd)) {
+            break;
+        }
     }
-    Ok(n as u64)
+    Ok(done)
+}
+
+/// Whether reads of `fd` never wait, so a read may go on after a full
+/// chunk: a regular file, or a memory device (major 1: `/dev/null`,
+/// `/dev/zero`, `/dev/full`, `/dev/random`, `/dev/urandom`).
+fn reads_whole(k: &mut dyn LinuxKernel, fd: i32) -> bool {
+    k.fstat(fd).is_ok_and(|st| {
+        st.file_type() == mode::S_IFREG || (st.file_type() == mode::S_IFCHR && crate::fs::major(st.rdev) == 1)
+    })
 }

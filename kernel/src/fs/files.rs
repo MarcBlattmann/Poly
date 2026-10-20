@@ -192,6 +192,14 @@ impl Files {
         drop(closed);
     }
 
+    /// `close_range(2)`: close (or, with `cloexec`, mark close-on-exec)
+    /// the open descriptors from `first` to `last`.
+    pub fn close_range(&self, first: u32, last: u32, cloexec: bool) {
+        let closed = self.fds.lock().close_range(first, last, cloexec);
+        // The files' last references go unlocked.
+        drop(closed);
+    }
+
     /// At exit: close everything.
     pub fn close_all(&self) {
         let old = core::mem::take(&mut *self.fds.lock());

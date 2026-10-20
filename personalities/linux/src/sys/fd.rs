@@ -1,7 +1,7 @@
 //! System calls on descriptors beyond plain reading and writing: lseek(2),
 //! pread64(2), pwrite64(2), dup(2), dup2(2), dup3(2), fcntl(2),
 //! getdents64(2) and getdents(2), ftruncate(2), fsync(2), fdatasync(2),
-//! sync(2), syncfs(2), fstatfs(2).
+//! sync(2), syncfs(2), fstatfs(2), close_range(2).
 
 use crate::abi::MAX_RW_COUNT;
 use crate::args::Args;
@@ -165,6 +165,30 @@ fn getdents_common(
     }
     k.copy_to_user(dirp, &buf[..used])?;
     Ok(used as u64)
+}
+
+/// close_range(2) flags (`linux/close_range.h`).
+pub const CLOSE_RANGE_UNSHARE: u32 = 1 << 1;
+pub const CLOSE_RANGE_CLOEXEC: u32 = 1 << 2;
+
+/// close_range(first, last, flags) (ADR 0057; Python's `subprocess` closes
+/// a child's descriptors with it): "EINVAL flags is not valid, or first is
+/// greater than last". Descriptors in the range that are not open are
+/// skipped; `CLOSE_RANGE_CLOEXEC` marks instead of closing.
+/// `CLOSE_RANGE_UNSHARE` first gives the caller a descriptor table of its
+/// own: a Poly process's table is already its own (ADR 0054), so this is
+/// nothing to do for a single thread; with other threads sharing it Poly
+/// cannot split it and refuses (`EINVAL`, Poly's choice, as unshare(2)
+/// with `CLONE_FILES`).
+pub fn close_range(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let (first, last, flags) = (a.uint(0), a.uint(1), a.uint(2));
+    if flags & !(CLOSE_RANGE_UNSHARE | CLOSE_RANGE_CLOEXEC) != 0 || first > last {
+        return Err(Errno::EINVAL);
+    }
+    if flags & CLOSE_RANGE_UNSHARE != 0 && crate::signal::deliver::with_own(k, |p| p.thread_ids().count()) > 1 {
+        return Err(Errno::EINVAL);
+    }
+    fs(k)?.close_range(first, last, flags & CLOSE_RANGE_CLOEXEC != 0).map(|()| 0)
 }
 
 /// getdents64(fd, dirp, count)

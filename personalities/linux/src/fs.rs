@@ -355,6 +355,11 @@ pub trait LinuxFs {
     /// `F_GETFD` / `F_SETFD`.
     fn cloexec(&mut self, fd: i32) -> Result<bool, Errno>;
     fn set_cloexec(&mut self, fd: i32, cloexec: bool) -> Result<(), Errno>;
+    /// close_range(2): close (with `cloexec`: mark close-on-exec) the open
+    /// descriptors from `first` to `last`, both included (ADR 0057).
+    fn close_range(&mut self, _first: u32, _last: u32, _cloexec: bool) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
     /// `F_GETFL` / `F_SETFL` (only `O_APPEND`, `O_ASYNC`, `O_DIRECT`,
     /// `O_NOATIME`, `O_NONBLOCK` change).
     fn status_flags(&mut self, fd: i32) -> Result<u32, Errno>;

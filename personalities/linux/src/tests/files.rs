@@ -158,6 +158,11 @@ impl LinuxFs for VfsFs {
         self.fds.set_cloexec(fd, cloexec).map_err(errno)
     }
 
+    fn close_range(&mut self, first: u32, last: u32, cloexec: bool) -> Result<(), Errno> {
+        self.fds.close_range(first, last, cloexec);
+        Ok(())
+    }
+
     fn status_flags(&mut self, fd: i32) -> Result<u32, Errno> {
         Ok(self.fds.get(fd).map_err(errno)?.flags().bits())
     }

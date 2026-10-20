@@ -384,6 +384,22 @@ impl LinuxKernel for Thread<'_> {
         self.memory()?.unmap(addr, len).map_err(memory_errno)
     }
 
+    fn mremap(
+        &mut self,
+        old: u64,
+        old_len: u64,
+        new_len: u64,
+        to: poly_personality_linux::kernel::Remap,
+    ) -> Result<u64, Errno> {
+        use poly_personality_linux::kernel::Remap;
+        let how = match to {
+            Remap::InPlace => poly_vm::RemapPlacement::InPlace,
+            Remap::MayMove => poly_vm::RemapPlacement::MayMove,
+            Remap::Fixed(at) => poly_vm::RemapPlacement::Fixed(at),
+        };
+        self.memory()?.remap(old, old_len, new_len, how).map_err(memory_errno)
+    }
+
     fn mprotect(&mut self, addr: u64, len: u64, prot: Prot) -> Result<(), Errno> {
         // PROT_GROWSDOWN would extend the change to the start of a stack
         // region; it is applied to the given range only for now.

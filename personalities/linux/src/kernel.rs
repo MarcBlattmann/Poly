@@ -101,6 +101,17 @@ pub enum Placement {
     FixedNoReplace,
 }
 
+/// Where mremap(2) may put a mapping it resizes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Remap {
+    /// Where it is (no `MREMAP_MAYMOVE`).
+    InPlace,
+    /// `MREMAP_MAYMOVE`: where it is if it can grow there, else anywhere.
+    MayMove,
+    /// `MREMAP_MAYMOVE | MREMAP_FIXED`: at this address.
+    Fixed(u64),
+}
+
 /// What backs a new mapping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backing {
@@ -509,6 +520,18 @@ pub trait LinuxKernel {
     /// mapping, or exceeds the data size limit; the personality then
     /// reports the current break, so the error value itself is not seen.
     fn set_brk(&mut self, addr: u64) -> Result<u64, Errno>;
+
+    /// mremap(2) of `[old, old + old_len)` to `new_len` bytes (`old` page
+    /// aligned, both lengths non-zero; the personality checked the flags):
+    /// returns the mapping's address afterwards. `EFAULT` if the range is
+    /// not inside one mapping, `EINVAL` for a fixed destination that is
+    /// misaligned or overlaps the old range, `ENOMEM` if it cannot grow
+    /// where it is (and may not move) or there is no room. `ENOSYS` by
+    /// default.
+    fn mremap(&mut self, old: u64, old_len: u64, new_len: u64, to: Remap) -> Result<u64, Errno> {
+        let _ = (old, old_len, new_len, to);
+        Err(Errno::ENOSYS)
+    }
 
     /// madvise(2) on `[addr, addr + len)` (both page aligned, `len`
     /// non-zero, no overflow) with the advice the personality decoded

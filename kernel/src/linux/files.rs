@@ -128,6 +128,11 @@ impl LinuxFs for Thread<'_> {
         self.process().files.set_cloexec(fd, cloexec).map_err(vfs_errno)
     }
 
+    fn close_range(&mut self, first: u32, last: u32, cloexec: bool) -> Result<(), Errno> {
+        self.process().files.close_range(first, last, cloexec);
+        Ok(())
+    }
+
     fn status_flags(&mut self, fd: i32) -> Result<u32, Errno> {
         self.process().files.status_flags(fd).map(OpenFlags::bits).map_err(vfs_errno)
     }

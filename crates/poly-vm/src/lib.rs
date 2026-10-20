@@ -378,6 +378,15 @@ impl<F: Clone + PartialEq> Vma<F> {
     }
 }
 
+/// `backing` for the pages `by` bytes further on (a file's offset moves
+/// with them).
+fn shifted<F: Clone>(backing: &Backing<F>, by: u64) -> Backing<F> {
+    match backing {
+        Backing::Anonymous => Backing::Anonymous,
+        Backing::File { file, offset, shared } => Backing::File { file: file.clone(), offset: offset + by, shared: *shared },
+    }
+}
+
 /// Which way the free-space search goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Search {
@@ -485,11 +494,14 @@ pub enum Error {
     /// The file offset plus the length does not fit in 64 bits
     /// (`EOVERFLOW`). A negative `off_t` is the personality's to reject.
     Overflow,
+    /// A range [`VmMap::remap`] was given is not inside one region
+    /// (`EFAULT`, as mremap(2) says).
+    Fault,
 }
 
 impl Error {
     /// The Linux errno for this error: values from the UAPI headers
-    /// `asm-generic/errno-base.h` (`EPERM` 1, `ENOMEM` 12, `EACCES` 13,
+    /// `asm-generic/errno-base.h` (`EPERM` 1, `ENOMEM` 12, `EACCES` 13, `EFAULT` 14,
     /// `EEXIST` 17, `EINVAL` 22) and `asm-generic/errno.h` (`EOVERFLOW` 75).
     pub const fn linux_errno(self) -> u64 {
         match self {
@@ -499,6 +511,7 @@ impl Error {
             Error::Exists => 17,
             Error::Invalid => 22,
             Error::Overflow => 75,
+            Error::Fault => 14,
         }
     }
 }
@@ -572,6 +585,41 @@ pub struct Mapped<F> {
     /// address order. The kernel must unmap their pages (and drop their file
     /// handles) before the new mapping's pages can fault in.
     pub replaced: Vec<Vma<F>>,
+}
+
+/// Where [`VmMap::remap`] may put the region (mremap(2)'s flags).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RemapPlacement {
+    /// Where it is: grow only into free space right after it.
+    InPlace,
+    /// Where it is if it can grow there, else anywhere (`MREMAP_MAYMOVE`).
+    MayMove,
+    /// At this address, replacing what is there (`MREMAP_MAYMOVE |
+    /// MREMAP_FIXED`).
+    Fixed(u64),
+}
+
+/// Pages [`VmMap::remap`] moved: the kernel moves the pages of `[from,
+/// from + len)` to `[to, to + len)`, after unmapping the pages of
+/// [`Remap::removed`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Move {
+    pub from: u64,
+    pub to: u64,
+    pub len: u64,
+}
+
+/// The result of [`VmMap::remap`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Remap<F> {
+    /// Where the region now starts.
+    pub addr: u64,
+    /// Pages to move, if the region moved.
+    pub moved: Option<Move>,
+    /// What the call removed: the end of a shrunk range, and for
+    /// [`RemapPlacement::Fixed`] what was at the new address. Their pages
+    /// go first, as for [`VmMap::unmap`].
+    pub removed: Vec<Vma<F>>,
 }
 
 /// The result of [`VmMap::brk`].
@@ -812,6 +860,87 @@ impl<F: Clone + PartialEq> VmMap<F> {
             return Err(Error::Access);
         }
         self.rewrite(addr, end, Op::Protect(prot)).map(|_| ())
+    }
+
+    /// Resize the mapping `[old, old + old_len)` to `new_len` bytes, moving
+    /// it if `how` allows (`mremap`). Lengths are rounded up to pages.
+    ///
+    /// The range must lie inside one region of [`Kind::Normal`] (the break
+    /// area and the stack are not remapped; they are the kernel's to grow).
+    /// Shrinking removes the end of the range. Growing extends the region
+    /// in place when the range ends where the region does and the space
+    /// after it is free; otherwise, with [`RemapPlacement::MayMove`], the
+    /// range moves to a free hole of the new size (search order as for
+    /// [`VmMap::map`]) and grows there, the rest of the old region staying
+    /// where it was. The moved part keeps its protection and backing (a
+    /// file mapping keeps its offset; the grown pages continue the file).
+    /// [`RemapPlacement::Fixed`] moves it to that address in every case,
+    /// replacing whatever was there.
+    ///
+    /// Errors, in this order (mremap(2)): a misaligned `old` or a zero
+    /// `new_len` ([`Error::Invalid`]), a zero `old_len` (Poly does not
+    /// duplicate shared mappings: [`Error::Invalid`]); a range outside
+    /// the address space or not inside one region, or in the break area or
+    /// the stack ([`Error::Fault`]); for `Fixed`, a misaligned address or a
+    /// new range overlapping the old one ([`Error::Invalid`]) or leaving the
+    /// address space ([`Error::NoMemory`]); no room to grow in place without
+    /// `MayMove`, no hole, or too many regions ([`Error::NoMemory`]). Nothing
+    /// changes on error.
+    pub fn remap(&mut self, old: u64, old_len: u64, new_len: u64, how: RemapPlacement) -> Result<Remap<F>, Error> {
+        if !is_page_aligned(old) || new_len == 0 || old_len == 0 {
+            return Err(Error::Invalid);
+        }
+        let old_len = page_up(old_len).ok_or(Error::Fault)?;
+        let new_len = page_up(new_len).ok_or(Error::NoMemory)?;
+        let old_end = old.checked_add(old_len).ok_or(Error::Fault)?;
+        let vma = self.find(old).filter(|v| v.end >= old_end && v.kind == Kind::Normal).ok_or(Error::Fault)?.clone();
+        if let RemapPlacement::Fixed(to) = how {
+            if !is_page_aligned(to) {
+                return Err(Error::Invalid);
+            }
+            let to_end = to.checked_add(new_len).ok_or(Error::NoMemory)?;
+            if to < old_end && old < to_end {
+                return Err(Error::Invalid);
+            }
+            if to < self.layout.min_addr || to_end > self.layout.max_addr {
+                return Err(Error::NoMemory);
+            }
+        }
+        // Work on a copy, so that an error half-way changes nothing.
+        let mut next = self.clone();
+        let mut removed = Vec::new();
+        let kept = old_len.min(new_len);
+        if new_len < old_len {
+            removed.extend(next.rewrite(old + new_len, old_end, Op::Remove)?);
+        }
+        let grow_in_place = |m: &VmMap<F>| {
+            vma.end == old_end
+                && old.checked_add(new_len).is_some_and(|end| end <= m.layout.max_addr && m.is_free(old_end, end))
+        };
+        let to = match how {
+            RemapPlacement::Fixed(to) => to,
+            _ if new_len <= old_len => {
+                *self = next;
+                return Ok(Remap { addr: old, moved: None, removed });
+            }
+            _ if grow_in_place(&next) => {
+                let grown = vma.clip(old, old_end);
+                let tail = Vma { start: old_end, end: old + new_len, backing: shifted(&grown.backing, old_len), ..grown };
+                next.rewrite(old_end, old + new_len, Op::Insert(tail))?;
+                *self = next;
+                return Ok(Remap { addr: old, moved: None, removed });
+            }
+            RemapPlacement::InPlace => return Err(Error::NoMemory),
+            RemapPlacement::MayMove => next.place(0, new_len).ok_or(Error::NoMemory)?,
+        };
+        // Move: the kept part leaves its place (its pages move, nothing is
+        // freed), the destination is cleared and gets the region.
+        let part = vma.clip(old, old + kept);
+        next.rewrite(old, old + kept, Op::Remove)?;
+        let moved = Vma { start: to, end: to + new_len, ..part };
+        removed.extend(next.rewrite(to, to + new_len, Op::Insert(moved))?);
+        *self = next;
+        Ok(Remap { addr: to, moved: Some(Move { from: old, to, len: kept }), removed })
     }
 
     /// Create the stack region: the top `size` bytes below

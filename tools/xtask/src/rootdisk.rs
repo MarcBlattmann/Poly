@@ -55,6 +55,7 @@ pub const COREUTILS: &[&str] = &[
     "cp",
     "cut",
     "date",
+    "dd",
     "df",
     "dirname",
     "du",
@@ -84,6 +85,7 @@ pub const COREUTILS: &[&str] = &[
     "sort",
     "stat",
     "stty",
+    "sync",
     "tail",
     "tee",
     "test",
@@ -517,6 +519,191 @@ subprocess 0 ['c', 'b', 'a']\n\
 wc 2\n\
 done 3\n";
 
+/// The second Python script of the boot test, `/root/poly-test-sys.py`:
+/// what Python asks of the system (threads, memory maps and a growing
+/// buffer, fork, record and `flock` locks across processes, SQLite,
+/// temporary files, signals, the terminal's size, resource usage, big file
+/// I/O, `posix_spawn`). Compared with [`PYTHON_SYS_EXPECTED`].
+pub const PYTHON_SYS_TEST: &str = r#"import fcntl, hashlib, mmap, os, resource, shutil, signal, sqlite3, subprocess, sys, tempfile, threading, time, zlib
+results = [0] * 4
+def work(i):
+    results[i] = sum(range(i * 100000, (i + 1) * 100000))
+threads = [threading.Thread(target=work, args=(i,)) for i in range(4)]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+print("threads", sum(results) == sum(range(400000)))
+b = bytearray()
+for i in range(48):
+    b += bytes([i]) * (1 << 20)
+print("grow", len(b), b[0], b[-1])
+del b
+path = "/root/poly-mmap.bin"
+with open(path, "wb") as f:
+    f.write(b"\0" * 8192)
+with open(path, "r+b") as f:
+    m = mmap.mmap(f.fileno(), 0)
+    m[0:4] = b"poly"
+    m[8190:8192] = b"!!"
+    m.resize(16384)
+    m[16380:16384] = b"tail"
+    m.flush()
+    m.close()
+with open(path, "rb") as f:
+    d = f.read()
+print("mmap", len(d), d[:4], d[8190:8192], d[-4:])
+os.unlink(path)
+a = mmap.mmap(-1, 4096)
+pid = os.fork()
+if pid == 0:
+    a[0:5] = b"child"
+    os._exit(7)
+_, status = os.waitpid(pid, 0)
+print("fork", os.waitstatus_to_exitcode(status), a[0:5])
+TRY = """import fcntl, os
+fd = os.open('/root/poly-lock', os.O_RDWR)
+try:
+    fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    print('locked')
+except OSError as e:
+    print('busy', e.errno in (11, 13))
+try:
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    print('flocked')
+except OSError as e:
+    print('flock-busy', e.errno)
+"""
+fd = os.open("/root/poly-lock", os.O_RDWR | os.O_CREAT, 0o644)
+fcntl.lockf(fd, fcntl.LOCK_EX)
+print("lock", subprocess.run([sys.executable, "-c", TRY], capture_output=True, text=True).stdout.split())
+fcntl.lockf(fd, fcntl.LOCK_UN)
+print("unlocked", subprocess.run([sys.executable, "-c", TRY], capture_output=True, text=True).stdout.split())
+fcntl.lockf(fd, fcntl.LOCK_EX)
+WAIT = "import fcntl, os\nfd = os.open('/root/poly-lock', os.O_RDWR)\nfcntl.lockf(fd, fcntl.LOCK_EX)\nprint('waited')"
+p = subprocess.Popen([sys.executable, "-c", WAIT], stdout=subprocess.PIPE, text=True)
+time.sleep(1)
+fcntl.lockf(fd, fcntl.LOCK_UN)
+print("lockw", p.communicate()[0].strip(), p.returncode)
+os.close(fd)
+os.unlink("/root/poly-lock")
+db = sqlite3.connect("/root/poly-test.db")
+db.execute("create table t (k integer primary key, v text)")
+db.executemany("insert into t (v) values (?)", [(str(i),) for i in range(100)])
+db.commit()
+print("sqlite", db.execute("select count(*), sum(k) from t").fetchone())
+db.close()
+os.unlink("/root/poly-test.db")
+with tempfile.TemporaryFile() as t:
+    t.write(b"temporary")
+    t.seek(0)
+    print("tempfile", t.read())
+with tempfile.NamedTemporaryFile("w", dir="/tmp", delete=False) as t:
+    t.write("named")
+    name = t.name
+print("named", open(name).read(), os.path.dirname(name))
+os.unlink(name)
+d = tempfile.mkdtemp()
+shutil.copyfile("/etc/hostname", d + "/h")
+print("copyfile", open(d + "/h").read().strip())
+shutil.rmtree(d)
+h = hashlib.sha256(b"poly").hexdigest()
+s = subprocess.run(["sha256sum"], input=b"poly", capture_output=True).stdout.split()[0].decode()
+print("sha256", h == s, len(h))
+print("zlib", zlib.decompress(zlib.compress(b"poly" * 1000)) == b"poly" * 1000)
+got = []
+signal.signal(signal.SIGALRM, lambda n, f: got.append(n))
+signal.setitimer(signal.ITIMER_REAL, 0.2)
+time.sleep(1)
+print("alarm", got)
+print("terminal", os.get_terminal_size())
+print("nofile", resource.getrlimit(resource.RLIMIT_NOFILE)[0] > 0)
+r = resource.getrusage(resource.RUSAGE_CHILDREN)
+print("rusage", r.ru_utime + r.ru_stime > 0)
+print("cpus", os.cpu_count())
+st = os.statvfs("/")
+print("statvfs", st.f_bsize, st.f_blocks > 0)
+print("exe", os.readlink("/proc/self/exe") == os.path.realpath(sys.executable))
+data = os.urandom(1 << 20) * 24
+with open("/root/poly-big.bin", "wb") as f:
+    f.write(data)
+with open("/root/poly-big.bin", "rb") as f:
+    back = f.read()
+print("bigfile", len(back), back == data)
+os.unlink("/root/poly-big.bin")
+pid = os.posix_spawn("/usr/bin/true", ["true"], os.environ)
+print("posix_spawn", os.waitpid(pid, 0)[1])
+print("done")
+"#;
+
+/// What [`PYTHON_SYS_TEST`] prints when every check passes, for a boot on
+/// `cpus` CPUs.
+pub fn python_sys_expected(cpus: u32) -> String {
+    format!(
+        "threads True\n\
+grow 50331648 0 47\n\
+mmap 16384 b'poly' b'!!' b'tail'\n\
+fork 7 b'child'\n\
+lock ['busy', 'True', 'flocked']\n\
+unlocked ['locked', 'flocked']\n\
+lockw waited 0\n\
+sqlite (100, 5050)\n\
+tempfile b'temporary'\n\
+named named /tmp\n\
+copyfile poly\n\
+sha256 True 64\n\
+zlib True\n\
+alarm [14]\n\
+terminal os.terminal_size(columns=250, lines=50)\n\
+nofile True\n\
+rusage True\n\
+cpus {cpus}\n\
+statvfs 4096 True\n\
+exe True\n\
+bigfile 25165824 True\n\
+posix_spawn 0\n\
+done\n"
+    )
+}
+
+/// A C program of two files and a header, `/root/cc/`: separate
+/// compilation, linking with libm, and the program forking a child that
+/// runs a coreutils program through a pipe.
+pub const C_MAIN: &str = r#"#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include "util.h"
+
+int main(void) {
+    int fds[2];
+    if (pipe(fds) != 0) return 1;
+    pid_t pid = fork();
+    if (pid == 0) {
+        dup2(fds[1], 1);
+        close(fds[0]);
+        close(fds[1]);
+        execl("/usr/bin/echo", "echo", "from", "the", "child", (char *)0);
+        _exit(127);
+    }
+    close(fds[1]);
+    char buf[64] = {0};
+    ssize_t n = read(fds[0], buf, sizeof buf - 1);
+    int status = 0;
+    waitpid(pid, &status, 0);
+    if (n > 0 && buf[n - 1] == '\n') buf[n - 1] = 0;
+    printf("%s; sum %ld; sqrt %.3f; child %d\n", buf, sum_to(1000), sqrt(2.0), WEXITSTATUS(status));
+    return 0;
+}
+"#;
+
+/// `/root/cc/util.h`.
+pub const C_UTIL_H: &str = "long sum_to(long n);\n";
+
+/// `/root/cc/util.c`.
+pub const C_UTIL: &str = "#include \"util.h\"\nlong sum_to(long n) {\n    long s = 0;\n    for (long i = 1; i <= n; i++) s += i;\n    return s;\n}\n";
+
 /// The C program of the boot test, `/root/hello.c`.
 pub const HELLO_C: &str = "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\
 int main(int argc, char **argv) {\n\
@@ -650,6 +837,10 @@ pub fn collect() -> Result<Contents, String> {
     tree.file("usr/local/sbin/reboot", 0o755, REBOOT.as_bytes());
     tree.file("root/poly-test.py", 0o644, PYTHON_TEST.as_bytes());
     tree.file("root/hello.c", 0o644, HELLO_C.as_bytes());
+    tree.file("root/poly-test-sys.py", 0o644, PYTHON_SYS_TEST.as_bytes());
+    tree.file("root/cc/main.c", 0o644, C_MAIN.as_bytes());
+    tree.file("root/cc/util.c", 0o644, C_UTIL.as_bytes());
+    tree.file("root/cc/util.h", 0o644, C_UTIL_H.as_bytes());
     Ok(Contents { tree, have, notes })
 }
 
@@ -1053,6 +1244,13 @@ fn step(what: &'static str, needs: &'static [&'static str], line: &str, want: &s
     Step { what, needs, line: line.to_string(), ok: Box::new(move |out| out == want) }
 }
 
+impl Step {
+    /// The same step with another output check.
+    fn then(self, ok: impl Fn(&str) -> bool + 'static) -> Step {
+        Step { ok: Box::new(ok), ..self }
+    }
+}
+
 /// The session's command lines, in order.
 fn steps() -> Vec<Step> {
     let mut steps = vec![
@@ -1096,6 +1294,35 @@ fn steps() -> Vec<Step> {
             "FOO=bar\n5\nnobody\n",
         ),
         step("bash -c 'exit 7'", &[], "bash -c 'exit 7'; echo \"status=$?\"", "status=7\n"),
+        // The terminal's size (TIOCGWINSZ) as bash's checkwinsize sees it,
+        // command substitution, here-strings, arithmetic.
+        step(
+            "bash: window size, substitution, arithmetic",
+            &[],
+            "echo \"$COLUMNS $LINES $(echo sub) $((6 * 7))\"; read -r x <<< 'here'; echo $x",
+            "250 50 sub 42\nhere\n",
+        ),
+        step(
+            "stat, ls -l, readlink /proc/self/exe, ulimit",
+            &["coreutils"],
+            "stat -c '%s %a %U %F' /etc/hostname; ls -l /etc/hostname | cut -d' ' -f1,3,5; readlink /proc/self/exe; ulimit -n",
+            "5 644 root regular file\n-rw-r--r-- root 5\n/usr/bin/readlink\n1024\n",
+        ),
+        step(
+            "dd 32 MiB through the page cache, wc, sha256sum, rm",
+            &["coreutils"],
+            "dd if=/dev/zero of=/root/big bs=1M count=32 status=none && wc -c < /root/big && cat /root/big | sha256sum | cut -c1-8 && head -c 33554432 /dev/zero | sha256sum | cut -c1-8 && rm /root/big",
+            "33554432\n",
+        )
+        .then(|out| {
+            // The two digests of 32 MiB of zeros agree.
+            let lines: Vec<&str> = out.lines().collect();
+            lines.len() == 3 && lines[0] == "33554432" && lines[1] == lines[2] && lines[1].len() == 8
+        }),
+        step("a background job", &["coreutils"], "sleep 30 &", "").then(|out| out.starts_with("[1] ")),
+        step("jobs", &["coreutils"], "jobs", "").then(|out| out.starts_with("[1]+  Running") && out.contains("sleep 30 &")),
+        step("kill %1 and wait", &["coreutils"], "kill %1; wait %1; echo \"status=$?\"", "")
+            .then(|out| out.ends_with("status=143\n")),
         step(
             "python3 /root/poly-test.py",
             &["python3", "coreutils"],
@@ -1103,10 +1330,22 @@ fn steps() -> Vec<Step> {
             &format!("{PYTHON_EXPECTED}status=0\n"),
         ),
         step(
+            "python3 /root/poly-test-sys.py",
+            &["python3", "coreutils"],
+            "python3 /root/poly-test-sys.py; echo \"status=$?\"",
+            &format!("{}status=0\n", python_sys_expected(super::QEMU_CPUS)),
+        ),
+        step(
             "gcc compiles hello.c onto the disk and runs it",
             &["gcc"],
             "gcc -O1 -Wall -o /root/hello /root/hello.c && /root/hello a b; echo \"status=$?\"",
             "hello from gcc on Poly, argc=3\nstatus=42\n",
+        ),
+        step(
+            "gcc: two files compiled apart, linked with libm, run",
+            &["gcc", "coreutils"],
+            "cd /root/cc && gcc -O2 -Wall -c util.c && gcc -O2 -Wall -o prog main.c util.o -lm && ./prog; echo \"status=$?\"; cd",
+            "from the child; sum 500500; sqrt 1.414; child 0\nstatus=0\n",
         ),
     ];
     steps.push(step("sync", &["coreutils"], "sync; echo synced", "synced\n"));
