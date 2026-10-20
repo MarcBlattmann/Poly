@@ -422,10 +422,11 @@ pub fn end_thread(status: ExitStatus, code: usize) -> ! {
     if process.linux.is_some() {
         crate::linux::thread_exit(process, tid);
     }
-    if let Some(status) = process.detach_thread(tid, status)
-        && process.linux.is_some()
-    {
-        crate::linux::process_exit(process, status);
+    if let Some(status) = process.detach_thread(tid, status) {
+        if process.linux.is_some() {
+            crate::linux::process_exit(process, status);
+        }
+        process.ended();
     }
     thread::exit(code)
 }

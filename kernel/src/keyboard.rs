@@ -495,11 +495,20 @@ kernel_test! {
         let before = stats();
         // The controller puts these in its output buffer as if the keyboard
         // had sent them, which raises IRQ 1 (scancodes for B down and up).
-        for b in [0x30, 0xb0] {
-            let _c = CONTROLLER.lock();
-            i8042::write_keyboard_output(&I8042Ports, b).map_err(|_| "the controller did not take the command")?;
-        }
+        // One at a time: the controller holds one byte, and the interrupt
+        // that takes it out may run on another CPU (the boot CPU) a little
+        // later than this one writes.
         let deadline = time::now_ns() + time::NANOS_PER_SEC;
+        for b in [0x30, 0xb0] {
+            let pushed = RING.pushed();
+            {
+                let _c = CONTROLLER.lock();
+                i8042::write_keyboard_output(&I8042Ports, b).map_err(|_| "the controller did not take the command")?;
+            }
+            while RING.pushed() == pushed && time::now_ns() < deadline {
+                crate::thread::yield_now();
+            }
+        }
         let down = next_event_until(deadline).ok_or("no key event from the controller")?;
         let up = next_event_until(deadline).ok_or("no release event from the controller")?;
         let after = stats();

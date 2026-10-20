@@ -281,8 +281,10 @@ impl Process {
 
     /// Thread `tid` has ended with `own` (its exit status, or how it was
     /// killed). If it was the last one, the process ends: with the status
-    /// [`group_exit`](Self::group_exit) asked for, else `own`. Returns the
-    /// process's status if it ended.
+    /// [`group_exit`](Self::group_exit) asked for, else `own`; its files are
+    /// closed and it leaves the process table. Returns the process's status
+    /// if it ended: the caller finishes its personality's part of the exit
+    /// and then calls [`ended`](Self::ended), which wakes its waiters.
     pub fn detach_thread(&self, tid: u32, own: ExitStatus) -> Option<ExitStatus> {
         if let Some(linux) = &self.linux {
             linux.remove_thread(tid);
@@ -301,13 +303,6 @@ impl Process {
             t.status = Some(status);
             status
         };
-        self.finish();
-        Some(status)
-    }
-
-    /// The process has no threads left: close its files, leave the
-    /// process table and wake the waiters.
-    fn finish(&self) {
         self.files.close_all();
         {
             let mut table = TABLE.lock();
@@ -315,6 +310,16 @@ impl Process {
                 table.remove(&self.pid);
             }
         }
+        Some(status)
+    }
+
+    /// The process's exit is complete (after [`detach_thread`] and the
+    /// personality's part): wake whoever waits for it ([`wait`]). Last, so
+    /// that a waiter on another CPU sees everything the exit did.
+    ///
+    /// [`detach_thread`]: Self::detach_thread
+    /// [`wait`]: Self::wait
+    pub fn ended(&self) {
         self.ended.store(true, Ordering::SeqCst);
         EVENTS.wake_all();
     }
