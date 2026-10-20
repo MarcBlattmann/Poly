@@ -924,6 +924,30 @@ fn interpreters_may_not_name_an_interpreter() {
 }
 
 #[test]
+fn planning_in_place_matches_new_and_clears_on_error() {
+    let mut plan = LoadPlan::EMPTY;
+    assert!(plan.mappings().is_empty());
+    let pie = static_pie().bytes();
+    let exe = static_exec().bytes();
+    for bytes in [&pie, &exe, &pie] {
+        let elf = Elf::parse(bytes).unwrap();
+        plan.plan(&elf, &LoadOptions::default()).unwrap();
+        let fresh = LoadPlan::new(&elf, &LoadOptions::default()).unwrap();
+        assert_eq!(plan.mappings(), fresh.mappings());
+        assert_eq!(
+            (plan.bias(), plan.entry(), plan.phdr(), plan.brk()),
+            (fresh.bias(), fresh.entry(), fresh.phdr(), fresh.brk())
+        );
+        assert_eq!((plan.tls(), plan.warnings(), plan.phnum()), (fresh.tls(), fresh.warnings(), fresh.phnum()));
+    }
+    // A plan that fails leaves no mappings behind from the previous one.
+    let elf = Elf::parse(&exe).unwrap();
+    let tight = LoadOptions { user_end: 0x40_1000, ..LoadOptions::default() };
+    assert_eq!(plan.plan(&elf, &tight), Err(Error::OutsideUserSpace));
+    assert!(plan.mappings().is_empty());
+}
+
+#[test]
 fn interpreter_options_keep_the_limits() {
     let opts = LoadOptions { dyn_base: 1, min_addr: 0x2_0000, user_end: 0x7000_0000_0000 };
     let i = interpreter_options(&opts, 0x6000_0000_0000);

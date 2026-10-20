@@ -29,6 +29,13 @@
 //! Nothing here is committed: the C library is the host's, only copied
 //! into the test initramfs. Without a C compiler or a shared C library the
 //! tests are skipped with the reason.
+//!
+//! The boot tests ([`boot_tests`]) run every program as the first process
+//! (`poly.init`), then all of them from the shell's `run`, the dynamic
+//! linker as a program (`run /lib64/ld-linux-x86-64.so.2 /bin/dyn-hello`)
+//! and `run LD_DEBUG=libs /bin/dyn-hello`; each must print its line and
+//! exit with status 0, and no system call but `rseq` may be missing.
+//! `cargo xtask dynamic-initramfs` writes the image for a boot by hand.
 
 use crate::initramfs::Tree;
 use poly_elf::{Dynamic, Elf};

@@ -142,6 +142,17 @@ tests say so and are skipped.
 validated dynamic array and string table of a file, never panicking on
 damaged input), both host-tested, the latter also against `readelf -d` of
 real programs and with the host's own `ld.so` planned at a base.
+`LoadPlan::plan` plans into an existing plan: exec keeps both plans on
+the heap (`Box::new(LoadPlan::EMPTY)`, then `plan`), never a 1.6 KiB copy
+on the kernel stack. Kernel stacks are 16 KiB without a guard page, and
+exec runs deep (a shell command, or `execve` from a system call): with a
+second plan by value the shell's `run` of a dynamically linked program
+overflowed its stack. The exec path's frames are now smaller than before
+this change.
+
+**The shell's `run` takes an environment**: `run NAME=value ...
+<program> [args]` (leading words with `=` and a name without `/`, as
+env(1) reads them), so the loader's own switches can be used on Poly.
 
 ## Consequences
 
@@ -149,10 +160,9 @@ real programs and with the host's own `ld.so` planned at a base.
   `dyn-hello-nopie`, `dyn-dlopen`, `dyn-threads` and `dyn-cxx` as the first
   process and from the shell's `run`, and `run
   /lib64/ld-linux-x86-64.so.2 /bin/dyn-hello`; the only call without a
-  handler is `rseq`. `LD_DEBUG` and the other environment variables of
-  ld.so(8) work as on Linux, since the loader is glibc's own (the shell's
-  `run` passes no environment; a program that `execve`s with one can set
-  them).
+  handler is `rseq`. `LD_DEBUG`, `LD_LIBRARY_PATH`, `LD_BIND_NOW` and the
+  loader's options (`--list`) work as ld.so(8) describes, since the loader
+  is glibc's own (`run LD_DEBUG=libs /bin/dyn-hello`).
 - `ExecError` has two more variants (`InterpreterOpen`, `BadInterpreter`)
   and `ImageInfo` the interpreter's placement (`InterpInfo`).
 - The `LinuxKernel` trait has one more method, `madvise`, with an `ENOSYS`

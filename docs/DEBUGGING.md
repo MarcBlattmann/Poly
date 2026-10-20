@@ -60,7 +60,7 @@ unknown command 'hlep'; did you mean 'help'?
 | `umount <path>` | unmount the disk mounted on `<path>`: written back, synced and marked clean; refused while files there are open or mapped |
 | `write <file> [words...]` | write the words and a newline to `<file>` (created or truncated) |
 | `sync` | write back every dirty cached page and sync every disk file system and disk |
-| `run <program> [args]` | start a static Linux program from the file system and wait for it; its output goes to the console, then its exit status (see "Linux programs") |
+| `run [NAME=value...] <program> [args]` | start a Linux program (static or dynamically linked) from the file system, with the variables as its environment, and wait for it; its output goes to the console, then its exit status (see "Linux programs" and "Dynamically linked programs") |
 | `uptime` | time since the clock started, ticks, threads |
 | `irq` | interrupts taken per vector with their owner (timer, serial, disk, ...), and the spurious / unhandled / 8259 / APIC error counters |
 | `cpu` | CPUID vendor, brand string, family / model / stepping, TSC rate, APIC ID, feature flags |
@@ -761,7 +761,7 @@ init: /test-binary (pid 1) ended: exit status 0
 ```
 
 A file that cannot run says why: `POLY-INIT: unsupported /bin/x: ENOENT`,
-`... a dynamically linked executable (PT_INTERP): not supported yet`,
+`... its interpreter (PT_INTERP) cannot be opened: ENOENT`,
 `... #! scripts are not supported yet`. Every call without a handler logs
 `syscall: pid P linux/linux #N name not implemented` and returns `-ENOSYS`:
 that list is the work queue for the program. A fault that kills a Linux
@@ -803,6 +803,79 @@ The hello worlds the boot tests use are built into
 nolibc process and thread test, `poly.init=/bin/forkexec`, which prints
 `forkexec: ok` or what failed; `corpus/`: the C corpus with `hello` and
 the static glibc `libc-hello`).
+
+## Dynamically linked programs
+
+A program with `PT_INTERP` starts in its interpreter, glibc's own
+`ld.so`, which exec maps next to it (ADR 0049); everything after that
+(finding, mapping and relocating the shared libraries) is the loader's
+work, done with ordinary system calls. The boot tests' programs and an
+image with them, the host's `ld.so` and the libraries they need come from
+one command (nothing is run on the host; the C library is only copied):
+
+```sh
+cargo xtask dynamic-initramfs                 # prints target/poly-dynamic-initramfs.cpio
+cargo xtask run --initrd=target/poly-dynamic-initramfs.cpio
+cargo xtask run --headless --no-disk --initrd=target/poly-dynamic-initramfs.cpio \
+    poly.qemu_exit poly.init=/bin/dyn-threads poly.test.capture
+```
+
+`/bin/dyn-hello` (and `dyn-hello-nopie`, the same as `ET_EXEC`),
+`/bin/dyn-dlopen` (its plugin is `/lib/poly/libpolyplugin.so`),
+`/bin/dyn-threads` and `/bin/dyn-cxx` print `<name>: ok` (the hello: `dyn-hello:
+hello, world`) or `<name>: FAIL <what>`. The sources are in
+`tools/xtask/programs/dynamic/`, the binaries in
+`target/xtask-programs/dynamic/`. The libraries sit where the host has
+them (`/lib/x86_64-linux-gnu/...` on Debian and Ubuntu), with links from
+`/lib`, `/usr/lib`, `/lib64` and `/usr/lib64`; there is no
+`/etc/ld.so.cache`.
+
+When a dynamically linked program fails:
+
+- `POLY-INIT: unsupported ...: its interpreter (PT_INTERP) cannot be
+  opened: ENOENT` (or `execve` failing with `ENOENT` although the program
+  exists): the image lacks the interpreter the program names
+  (`readelf -l` shows it). `ELIBBAD`: the interpreter is not an ELF file,
+  or names an interpreter itself.
+- The loader's own messages (`error while loading shared libraries:
+  libfoo.so.1: cannot open shared object file`) mean it searched and did
+  not find the library: put it in one of the directories above.
+- glibc's loader is unchanged, so its debugging switches (ld.so(8)) work.
+  `run` takes environment variables before the program:
+
+  ```text
+  poly> run LD_DEBUG=libs /bin/dyn-hello
+           1:	find library=libc.so.6 [0]; searching
+           1:	 search cache=/etc/ld.so.cache
+           1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+           1:	  trying file=/lib/x86_64-linux-gnu/libc.so.6
+  ...
+  ```
+
+  `LD_DEBUG=help` lists the categories (`files`, `symbols`, `bindings`,
+  `reloc`, `all`, ...); `LD_LIBRARY_PATH`, `LD_PRELOAD` and `LD_BIND_NOW`
+  work too. The loader can also be run as a program: `run
+  /lib64/ld-linux-x86-64.so.2 /bin/dyn-hello` (then it maps the program
+  itself), or with ld.so(8)'s options (`--list`, `--library-path`).
+- `poly.test.capture` shows every call the loader makes: `openat` of each
+  library it tries (`ret=-2` for the misses), `mmap` of a reservation and
+  of each segment over it (`MAP_FIXED`), `mprotect` of the RELRO pages.
+  The only call without a handler should be `rseq` (`ENOSYS` on purpose,
+  ADR 0049); any other "not implemented" line is what to build next.
+- A crash inside a library: the `killed by signal` line gives `rip`, and
+  `run LD_DEBUG=files <program>` prints where the loader put each
+  library (`base: 0x00007ffff7cae000` for `libc.so.6`), so `rip` minus
+  the base of the library it falls in is the address in that file, for
+  `objdump -d` or `addr2line -e` on the host's copy. The interpreter is
+  the first mapping of the `mmap` area (just under the stack's reserve);
+  `AT_BASE` says where. A running program's `/proc/self/maps` names the
+  file of every mapping.
+
+The kernel side: `poly.test=exec_tests` runs the exec tests, among them a
+PIE and an `ET_EXEC` program naming a tiny interpreter of our own
+(`user/test_elf.rs`, `TestElf::Ld`), which reports its load address,
+`AT_BASE`, `AT_ENTRY` and `AT_PHDR` and jumps to the program;
+`poly.test=advice` the `madvise` tests of `Memory::advise`.
 
 ## Pipes, waits and event files
 

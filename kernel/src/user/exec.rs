@@ -225,8 +225,10 @@ pub fn load_dynamic(
         }
     };
     let elf = Elf::parse(bytes).map_err(ExecError::Elf)?;
-    // About 1.6 KiB: off the 16 KiB kernel stack.
-    let plan = Box::new(LoadPlan::new(&elf, &LoadOptions::DEFAULT).map_err(ExecError::Elf)?);
+    // About 1.6 KiB: planned in place on the heap, never on the 16 KiB
+    // kernel stack (exec runs deep: a shell command, or a system call).
+    let mut plan = empty_plan();
+    plan.plan(&elf, &LoadOptions::DEFAULT).map_err(ExecError::Elf)?;
     // The interpreter is opened and checked before anything is built.
     let interp_file = match elf.interp() {
         Some(path) => Some(open_interp(path)?),
@@ -370,9 +372,17 @@ fn load_interpreter(memory: &Memory, elf: &Elf<'_>, file: Arc<dyn PageSource>) -
     } else {
         LoadOptions::DEFAULT
     };
-    let plan = Box::new(LoadPlan::new(elf, &opts).map_err(ExecError::BadInterpreter)?);
+    let mut plan = empty_plan();
+    plan.plan(elf, &opts).map_err(ExecError::BadInterpreter)?;
     map_plan(memory, &plan, &file)?;
     Ok(plan)
+}
+
+/// An empty plan on the heap, to plan into. Not inlined: whatever
+/// temporary building it takes stays out of the callers' frames.
+#[inline(never)]
+fn empty_plan() -> Box<LoadPlan> {
+    Box::new(LoadPlan::EMPTY)
 }
 
 /// The region protection for a segment's `p_flags`.

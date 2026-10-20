@@ -913,8 +913,9 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   opens an executable regular file, checks its format, loads an ELF program
   (and the interpreter a dynamically linked one names, opened the same way)
   through `fs::cache::FileSource` (pages read from the file at fault time) and
-  starts a Linux process with the console on fds 0-2. The shell's
-  `run <program> [args]` runs one and waits for it.
+  starts a Linux process with the console on fds 0-2. The shell's `run
+  [NAME=value...] <program> [args]` runs one (with that environment) and
+  waits for it.
 - **Dynamic linking** ([ADR 0049](adr/0049-dynamic-linking-program-interpreter.md)).
   A program with `PT_INTERP` starts in its interpreter, glibc's own
   `ld.so`, which exec maps next to it in free space of the `mmap` area

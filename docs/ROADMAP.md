@@ -79,7 +79,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Signals: delivery, handlers, `sigaltstack`, `rt_sigreturn`, process groups
 - [x] Pipes, `poll` / `select`, `epoll`, `eventfd`, `timerfd`, `signalfd`
 - [x] Time syscalls and a vDSO (`clock_gettime` without a syscall)
-- [ ] Dynamic linking: glibc's own `ld.so` loads shared libraries unchanged
+- [x] Dynamic linking: glibc's own `ld.so` loads shared libraries unchanged
 - [x] `/dev` (null, zero, random, urandom, tty, console), `/proc` (self, maps, status, cpuinfo), minimal `/sys`
 - [ ] TTY layer: line discipline, pseudo-terminals, job control
 - [x] Users, groups, credentials, file permissions, `umask`
