@@ -169,6 +169,12 @@ with `try_lock`) and the shootdown mailbox comes after everything.
   thread of each Linux thread.
 - Process exit wakes the parent's waiters only after the whole exit is
   done (it could run concurrently with the waiter on another CPU).
+- A zombie is waitable only once its parent's `SIGCHLD` is pending
+  (`ProcessTree::exit_announced_later` / `announce`): a parent on another
+  CPU could otherwise reap the child and go on before the signal came,
+  which then interrupted it later (a shell redrawing its prompt).
+- MSI messages and I/O APIC routes target the boot CPU's APIC ID from the
+  per-CPU area: reading the APIC's ID register gave the running CPU's.
 - CPU time accounting reads the running thread per CPU.
 - Panics stop the other CPUs with an NMI before printing.
 - The status bar, `/proc/cpuinfo`, `/sys/devices/system/cpu/*`, `getcpu`
