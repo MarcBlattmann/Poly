@@ -31,7 +31,7 @@ progress chart in the README.
 
 The machinery every personality needs. Single CPU, kernel threads only.
 
-- [ ] Physical frame allocator for all RAM (buddy allocator), host-tested
+- [x] Physical frame allocator for all RAM (buddy allocator), host-tested
 - [ ] Kernel page tables: direct map of all physical memory, drop the boot identity map
 - [ ] W^X for the kernel: text read-only + executable, data non-executable, guard pages
 - [ ] Kernel heap (slab + large allocations) so the kernel can use `alloc` (`Box`, `Vec`)
