@@ -4,8 +4,8 @@
 //! ```text
 //! build [--cc CC] [--out DIR]                    compile the test corpus in tests/linux/
 //! trace <test|path>... [--all] [--tracer ptrace|strace|none] [--out-dir DIR] [--print]
-//!                                                trace programs on this (real Linux) machine
-//! diff [--target linux|poly] [--tests a,b] [--tracer T] [--syscalls exact|names|off]
+//!                                                trace programs (and app tests) on this (real Linux) machine
+//! diff [--target linux|poly] [--tests a,b] [--tracer T] [--syscalls exact|names|off|app]
 //!      [--ignore-syscall NAME]... [--timing-envelope F] [--baseline SUMMARY] [--strict]
 //!      [--kernel ELF] [--build-kernel] [--timeout SECS] [--bin-dir DIR] [--cc CC] [--tests-dir DIR]...
 //!      [--jobs N]                                run the corpus on the reference and a target, compare per test
@@ -31,11 +31,16 @@
 //!                                                forget an entry (e.g. after the human queue)
 //! ```
 
+mod apps;
 mod corpus;
 mod cpio;
 mod diff;
 mod green;
 mod handoff;
+// The host's shared libraries of a program, found as the dynamic linking
+// boot tests find them (one source for both tools).
+#[path = "../../xtask/src/libsearch.rs"]
+mod libsearch;
 mod poly;
 mod ptrace;
 mod queue;
@@ -129,6 +134,7 @@ fn trace_cmd(repo: &Path, a: &Args) -> Result<u8> {
         let name = Path::new(p).file_stem().map_or("program".into(), |s| s.to_string_lossy().into_owned());
         programs.push((name, util::absolute(Path::new(p))));
     }
+    let mut app_tests: Vec<(String, apps::Tree)> = Vec::new();
     if a.has("all") || !names.is_empty() {
         let (dir, m) = corpus_binaries(repo, a)?;
         for b in &m.tests {
@@ -136,17 +142,30 @@ fn trace_cmd(repo: &Path, a: &Args) -> Result<u8> {
                 programs.push((b.name.clone(), dir.join(&b.binary)));
             }
         }
+        for app in &m.apps {
+            if a.has("all") || names.iter().any(|n| **n == app.name) {
+                app_tests.push((app.name.clone(), app_tree(repo, &dir, &m, app)?));
+            }
+        }
         for n in names {
-            if m.find(n).is_none() {
-                return Err(format!("no test program {n} (see tests/linux/)"));
+            if !m.has(n) {
+                return Err(format!("no test program or app test {n} (see tests/linux/)"));
             }
         }
     }
-    if programs.is_empty() {
+    if programs.is_empty() && app_tests.is_empty() {
         return Err("usage: pipeline trace <test|path>... | --all".into());
     }
-    for (name, path) in programs {
-        let t = runner::run(tracer, &path, &name, timeout(a, DEFAULT_TIMEOUT)?)?;
+    let runs = programs
+        .into_iter()
+        .map(|(n, p)| (n, Some(p), None))
+        .chain(app_tests.into_iter().map(|(n, t)| (n, None, Some(t))));
+    for (name, path, tree) in runs {
+        let t = match (path, tree) {
+            (Some(path), _) => runner::run(tracer, &path, &name, timeout(a, DEFAULT_TIMEOUT)?)?,
+            (None, Some(tree)) => host_app_run(tracer, &tree, &name, timeout(a, DEFAULT_TIMEOUT)?)?,
+            (None, None) => unreachable!(),
+        };
         let file = out_dir.join(format!("{name}.json"));
         util::write_json(&file, &t)?;
         if a.has("print") {
@@ -212,8 +231,8 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
     let (bin_dir, manifest) = corpus_binaries(repo, a)?;
     let wanted: Vec<&str> = a.opt("tests").map(|t| t.split(',').collect()).unwrap_or_default();
     for w in &wanted {
-        if manifest.find(w).is_none() {
-            return Err(format!("no test program {w}"));
+        if !manifest.has(w) {
+            return Err(format!("no test program or app test {w}"));
         }
     }
     let runs = repo.join(RUNS_DIR);
@@ -276,6 +295,81 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
     for r in util::parallel_map(&tests, jobs, run_one) {
         summary.tests.push(r?);
     }
+    let unsupported: Option<String> = unsupported.into_inner().unwrap_or_else(|e| e.into_inner());
+
+    // App tests: the same tree on both systems, compared in app mode
+    // unless --syscalls says otherwise.
+    let app_opts = Options {
+        syscalls: if a.opt("syscalls").is_some() { opts.syscalls } else { SyscallMode::App },
+        ..opts.clone()
+    };
+    let mut no_jail: Option<String> = None;
+    for app in manifest.apps.iter().filter(|b| wanted.is_empty() || wanted.contains(&b.name.as_str())) {
+        let name = app.name.as_str();
+        let tree = match app_tree(repo, &bin_dir, &manifest, app) {
+            Ok(t) => t,
+            Err(e) => {
+                let verdict = if e.contains("not installed") { Verdict::Unsupported } else { Verdict::Error };
+                summary.tests.push(TestResult::not_run(name, verdict, format!("app tree: {e}")));
+                continue;
+            }
+        };
+        util::write(&run_dir.join(format!("trees/{name}.txt")), tree.listing())?;
+        if let Some(reason) = &no_jail {
+            summary.tests.push(TestResult::not_run(name, Verdict::Unsupported, reason.clone()));
+            continue;
+        }
+        let reference = match host_app_run(tracer, &tree, name, timeout(a, DEFAULT_TIMEOUT)?) {
+            Ok(t) => t,
+            Err(e) => {
+                let unsupported = e.contains("not permitted") || e.contains("ptrace tracer only");
+                if unsupported {
+                    no_jail = Some(format!("reference run: {e}"));
+                }
+                let verdict = if unsupported { Verdict::Unsupported } else { Verdict::Error };
+                summary.tests.push(TestResult::not_run(name, verdict, format!("reference run: {e}")));
+                continue;
+            }
+        };
+        let ref_file = format!("reference/{name}.json");
+        util::write_json(&run_dir.join(&ref_file), &reference)?;
+        let target_run: Result<Trace> = match (&poly, &unsupported) {
+            (None, _) => host_app_run(tracer, &tree, name, timeout(a, DEFAULT_TIMEOUT)?),
+            (Some(_), Some(reason)) => {
+                summary.tests.push(TestResult::not_run(name, Verdict::Unsupported, reason.clone()));
+                continue;
+            }
+            (Some(p), None) => {
+                let sha = reference.binary_sha256.clone().unwrap_or_default();
+                match p.run_image(name, &tree.cpio()?, &sha, &run_dir.join(target)) {
+                    Ok((poly::Outcome::Ran(t), _)) => Ok(t),
+                    Ok((poly::Outcome::Unsupported(reason), log)) => {
+                        let log = log.strip_prefix(&run_dir).unwrap_or(&log).display().to_string();
+                        summary.tests.push(TestResult::not_run(
+                            name,
+                            Verdict::Unsupported,
+                            format!("{reason} ({log})"),
+                        ));
+                        continue;
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+        };
+        let target_trace = match target_run {
+            Ok(t) => t,
+            Err(e) => {
+                summary.tests.push(TestResult::not_run(name, Verdict::Error, format!("target run: {e}")));
+                continue;
+            }
+        };
+        let target_file = format!("{target}/{name}.json");
+        util::write_json(&run_dir.join(&target_file), &target_trace)?;
+        let mut r = TestResult::compared(name, &reference, &target_trace, &app_opts);
+        r.files = vec![ref_file, target_file];
+        r.syscall_mode = Some(app_opts.syscalls);
+        summary.tests.push(r);
+    }
     summary.finish(baseline.as_ref());
     let table = summary.table();
     util::write_json(&run_dir.join("summary.json"), &summary)?;
@@ -286,6 +380,29 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
     print!("{table}");
     println!("run directory: {}", run_dir.display());
     Ok(if summary.failed(baseline.is_some(), a.has("strict")) { 1 } else { 0 })
+}
+
+/// The file tree of app test `app` of the corpus build in `bin_dir`.
+fn app_tree(repo: &Path, bin_dir: &Path, m: &corpus::Manifest, app: &corpus::App) -> Result<apps::Tree> {
+    let launcher = m.launcher.as_ref().ok_or("the corpus build has no app launcher")?;
+    let def = apps::AppDef::load(&corpus::Manifest::definition_path(repo, app))?;
+    apps::build_tree(&def, &util::read(&bin_dir.join(&launcher.binary))?)
+}
+
+/// Run an app test on this machine: its tree written to a fresh directory
+/// (removed afterwards), the launcher chrooted into it.
+fn host_app_run(tracer: Tracer, tree: &apps::Tree, name: &str, timeout: Duration) -> Result<Trace> {
+    let dir = apps::fresh_tree_dir(name);
+    let result = tree
+        .materialise(&dir)
+        .and_then(|()| apps::proc_overlays(&dir))
+        .and_then(|overlays| runner::run_app(tracer, &dir, &overlays, name, timeout));
+    // The host's /dev and /proc were bound into the tree only in the
+    // launcher's own mount namespace, which ended with it: here the tree is
+    // plain files.
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_file(dir.with_extension("filesystems"));
+    result
 }
 
 /// Linux against Linux over the whole corpus: must be clean. Skipped (with
@@ -324,7 +441,11 @@ fn selfcheck(repo: &Path) -> Result<u8> {
     if code != 0 {
         return Err("Linux against Linux is not clean: the tracer or the normalisation is nondeterministic".into());
     }
-    println!("pipeline selfcheck: {} test programs, Linux against Linux clean", m.tests.len());
+    println!(
+        "pipeline selfcheck: {} test programs and {} app tests, Linux against Linux clean",
+        m.tests.len(),
+        m.apps.len()
+    );
     Ok(0)
 }
 
@@ -391,7 +512,25 @@ fn polycheck(repo: &Path) -> Result<u8> {
     diff_cmd(repo, &Args::parse(&args, &["strict", "build-kernel"])?)?;
     let summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
     let expected = poly_pass_list(repo)?;
-    let c = green::check(&summary, &expected, &green);
+    // App tests this host cannot run as the reference (no chroot allowed,
+    // a program not installed) say nothing about Poly: skipped, like the
+    // whole check where ptrace is not permitted.
+    let host_cannot = |name: &str| {
+        summary.tests.iter().any(|t| {
+            t.test == name
+                && t.verdict == Verdict::Unsupported
+                && t.reason.as_deref().is_some_and(|r| r.starts_with("reference run:") || r.starts_with("app tree:"))
+        })
+    };
+    let skipped: Vec<&str> = expected.iter().map(String::as_str).filter(|t| host_cannot(t)).collect();
+    if !skipped.is_empty() {
+        println!(
+            "pipeline polycheck: skipped on this host (its reference run is not possible): {}",
+            skipped.join(", ")
+        );
+    }
+    let checked: Vec<String> = expected.iter().filter(|t| !host_cannot(t)).cloned().collect();
+    let c = green::check(&summary, &checked, &green);
     if !c.newly_passing.is_empty() {
         println!("pipeline polycheck: also passing now (add them to {POLY_PASS_LIST}): {}", c.newly_passing.join(", "));
     }
@@ -402,8 +541,10 @@ fn polycheck(repo: &Path) -> Result<u8> {
     }
     let entry_tests: usize = green.iter().map(|g| g.tests.len()).sum();
     println!(
-        "pipeline polycheck: the {} tests of {POLY_PASS_LIST} and the {entry_tests} visible tests of {} green entries pass on Poly",
-        expected.len(),
+        "pipeline polycheck: the {} tests of {POLY_PASS_LIST}{} and the {entry_tests} visible tests of {} green \
+         entries pass on Poly",
+        checked.len(),
+        if skipped.is_empty() { String::new() } else { format!(" ({} skipped)", skipped.len()) },
         green.len()
     );
     Ok(0)
