@@ -1,0 +1,3 @@
+LIBRARY delayed.dll
+EXPORTS
+    delayed_function

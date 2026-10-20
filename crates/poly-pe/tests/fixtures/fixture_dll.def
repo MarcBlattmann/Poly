@@ -1,0 +1,7 @@
+LIBRARY fixture.dll
+EXPORTS
+    fixture_add
+    fixture_counter DATA
+    fixture_counter_ptr DATA
+    fixture_hidden @7 NONAME
+    FixtureAllocate = NTDLL.RtlAllocateHeap
