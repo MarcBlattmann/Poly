@@ -26,6 +26,13 @@ name = "poly-heap"
 version = "0.0.1"
 
 [[package]]
+name = "poly-irq"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+]
+
+[[package]]
 name = "poly-kernel"
 version = "0.0.1"
 dependencies = [
@@ -34,6 +41,7 @@ dependencies = [
  "poly-backtrace",
  "poly-binfmt",
  "poly-heap",
+ "poly-irq",
  "poly-mem",
  "poly-paging",
  "poly-personality-linux",
@@ -48,6 +56,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-paging"
+version = "0.0.1"
+
+[[package]]
+name = "poly-pci"
 version = "0.0.1"
 
 [[package]]

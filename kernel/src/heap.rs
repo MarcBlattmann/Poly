@@ -22,9 +22,9 @@
 //!
 //! [`HEAP`]'s lock is taken first, then [`FRAMES`] inside the page source.
 //! Code holding [`FRAMES`] must therefore never allocate: it would wait for
-//! itself. Neither lock masks interrupts, which is fine while interrupts are
-//! off; once an interrupt handler can allocate, [`HEAP`] needs a lock that
-//! masks them (`LockedHeap::with_lock`).
+//! itself. Both locks disable interrupts while held ([`RawIrqSpinLock`] for
+//! the heap), so an interrupt handler may allocate (sparingly), and a thread
+//! is never preempted in the middle of an allocation.
 //!
 //! # Running out of memory
 //!
@@ -40,6 +40,7 @@
 use crate::arch;
 use crate::frames::FRAMES;
 use crate::ktest::TestResult;
+use crate::sync::RawIrqSpinLock;
 use crate::{kernel_test, kprintln};
 use alloc::alloc::{alloc, dealloc};
 use alloc::boxed::Box;
@@ -54,7 +55,8 @@ use poly_heap::{CLASS_SIZES, LockedHeap, MAX_SMALL, PAGE_SIZE, PageSource, Stats
 use poly_mem::{BuddyAllocator, MAX_ORDER};
 
 #[global_allocator]
-pub static HEAP: LockedHeap<FramePages> = LockedHeap::new(FramePages { offset: None });
+pub static HEAP: LockedHeap<FramePages, RawIrqSpinLock> =
+    LockedHeap::with_lock(RawIrqSpinLock::new(), FramePages { offset: None });
 
 /// The heap's page source: runs of frames from [`FRAMES`].
 #[derive(Debug)]

@@ -116,6 +116,49 @@ pub fn interrupts_enabled() -> bool {
     flags & RFLAGS_IF != 0
 }
 
+/// Disable maskable interrupts on this CPU. Prefer [`InterruptsOff`], which
+/// restores the previous state.
+pub fn disable_interrupts() {
+    // SAFETY: cli only masks interrupts on this CPU. Not `nomem`: memory
+    // accesses must not move out of the critical section that follows.
+    unsafe { asm!("cli", options(nostack)) }
+}
+
+/// Enable maskable interrupts on this CPU.
+///
+/// # Safety
+/// The caller owns this CPU's interrupt state: no [`InterruptsOff`] guard
+/// or spinlock on this CPU expects interrupts to stay off (the scheduler's
+/// data, for one, relies on that).
+pub unsafe fn enable_interrupts() {
+    // SAFETY: forwarded from the caller. Not `nomem`: memory accesses must
+    // not move into the region where interrupts are on.
+    unsafe { asm!("sti", options(nostack)) }
+}
+
+/// Enable interrupts and halt until the next one, atomically: `sti` takes
+/// effect only after the following instruction (SDM Vol. 2B, `STI`), so an
+/// interrupt that arrives in between still ends the `hlt` rather than being
+/// handled before it and leaving the CPU asleep. Returns, with interrupts
+/// enabled, after an interrupt has been handled.
+///
+/// # Safety
+/// As for [`enable_interrupts`].
+pub unsafe fn enable_interrupts_and_halt() {
+    // SAFETY: forwarded from the caller; hlt only waits.
+    unsafe { asm!("sti", "hlt", options(nostack)) }
+}
+
+/// The time-stamp counter (SDM Vol. 3B §18.17). Not serialising: it may be
+/// read slightly before earlier instructions finish.
+pub fn rdtsc() -> u64 {
+    let (lo, hi): (u32, u32);
+    // SAFETY: rdtsc only reads the counter; CR4.TSD is clear, so it is
+    // allowed at any privilege level (and we run in ring 0).
+    unsafe { asm!("rdtsc", out("eax") lo, out("edx") hi, options(nomem, nostack, preserves_flags)) }
+    (u64::from(hi) << 32) | u64::from(lo)
+}
+
 /// Interrupts disabled on this CPU until dropped, then restored to how they
 /// were. Nests. Held across a context switch, it belongs to the thread that
 /// created it: that thread restores its own state when it resumes.
@@ -128,9 +171,7 @@ pub struct InterruptsOff {
 impl InterruptsOff {
     pub fn new() -> InterruptsOff {
         let was_enabled = interrupts_enabled();
-        // SAFETY: cli only masks interrupts on this CPU. Not `nomem`: memory
-        // accesses must not move out of the critical section.
-        unsafe { asm!("cli", options(nostack)) }
+        disable_interrupts();
         InterruptsOff { was_enabled }
     }
 }
@@ -140,7 +181,7 @@ impl Drop for InterruptsOff {
         if self.was_enabled {
             // SAFETY: interrupts were enabled when this guard was made, so
             // the code that owns this CPU's interrupt state wants them on.
-            unsafe { asm!("sti", options(nostack)) }
+            unsafe { enable_interrupts() }
         }
     }
 }

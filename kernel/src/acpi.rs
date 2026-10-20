@@ -2,12 +2,14 @@
 //!
 //! All parsing lives in `poly-acpi`; this module only gives it access to
 //! physical memory, prints what the firmware describes and keeps a summary
-//! for the self-test (and, later, for interrupt and SMP setup).
+//! for the self-test and a [`Platform`] description for interrupt and timer
+//! setup (and, later, SMP).
 
 use crate::arch::phys_range_to_virt;
 use crate::sync::SpinLock;
 use crate::{kprint, kprintln};
-use poly_acpi::{Acpi, AddressSpace, Error, Fadt, Hpet, Madt, Mcfg, PhysMemory, Table};
+use alloc::vec::Vec;
+use poly_acpi::{Acpi, AddressSpace, Error, Fadt, Hpet, Madt, MadtEntry, Mcfg, PhysMemory, Table};
 use poly_mem::{MemoryMap, RegionKind};
 
 /// What the self-test checks.
@@ -23,6 +25,67 @@ static SUMMARY: SpinLock<Option<Summary>> = SpinLock::new(None);
 /// The summary from [`init`], if the tables could be read.
 pub fn summary() -> Option<Summary> {
     *SUMMARY.lock()
+}
+
+/// What interrupt and timer setup needs from the tables, copied out as plain
+/// values (from the MADT, HPET and FADT).
+#[derive(Clone, Debug, Default)]
+pub struct Platform {
+    /// Physical address of the local APICs (xAPIC mode).
+    pub local_apic: u64,
+    /// Legacy 8259 PICs present, to be remapped and masked.
+    pub has_8259: bool,
+    /// Enabled processors.
+    pub processors: Vec<Cpu>,
+    pub io_apics: Vec<IoApicInfo>,
+    /// Interrupt source overrides.
+    pub overrides: Vec<Override>,
+    /// Local APIC inputs wired to NMI.
+    pub lint_nmis: Vec<LintNmi>,
+    /// Physical address of the HPET block (memory space only).
+    pub hpet: Option<u64>,
+    /// ACPI PM timer I/O port and counter width (24 or 32).
+    pub pm_timer: Option<(u16, u8)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Cpu {
+    pub uid: u32,
+    pub apic_id: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IoApicInfo {
+    pub id: u8,
+    pub address: u64,
+    pub gsi_base: u32,
+}
+
+/// An Interrupt Source Override (ACPI 6.5 §5.2.12.5); `flags` are the MPS
+/// INTI flags.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Override {
+    pub bus: u8,
+    pub source: u8,
+    pub gsi: u32,
+    pub flags: u16,
+}
+
+/// A Local APIC NMI structure (§5.2.12.7, §5.2.12.13).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LintNmi {
+    /// `None` for every processor.
+    pub processor_uid: Option<u32>,
+    /// LINT0 or LINT1.
+    pub lint: u8,
+    pub flags: u16,
+}
+
+static PLATFORM: SpinLock<Option<Platform>> = SpinLock::new(None);
+
+/// The platform description from [`init`], if the tables could be read.
+pub fn platform() -> Option<Platform> {
+    PLATFORM.lock().clone()
 }
 
 /// Physical memory through the kernel's direct map, limited to memory the
@@ -63,7 +126,10 @@ pub fn init(rsdp: Option<u64>, memory: &MemoryMap) {
         return;
     };
     match probe(&FirmwareMemory { memory }, rsdp) {
-        Ok(s) => *SUMMARY.lock() = Some(s),
+        Ok((s, p)) => {
+            *SUMMARY.lock() = Some(s);
+            *PLATFORM.lock() = Some(p);
+        }
         Err(e) => kprintln!("acpi: unavailable: {e:?}"),
     }
 }
@@ -84,7 +150,7 @@ fn optional<'a, T: Table<'a>>(acpi: &Acpi<'a, FirmwareMemory<'_>>) -> Option<T> 
     }
 }
 
-fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<Summary, Error> {
+fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<(Summary, Platform), Error> {
     let acpi = Acpi::new(mem, rsdp)?;
     let root = acpi.root();
     kprint!(
@@ -119,6 +185,7 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<Summary, Error> {
         kprint!(" IRQ{}->GSI{}", o.source, o.gsi);
     }
     kprintln!();
+    let mut platform = platform_from_madt(&madt);
 
     if let Some(hpet) = optional::<Hpet>(&acpi) {
         kprintln!(
@@ -127,6 +194,9 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<Summary, Error> {
             hpet.comparator_count(),
             hpet.minimum_tick
         );
+        if hpet.base.space == AddressSpace::SystemMemory && hpet.base.address != 0 {
+            platform.hpet = Some(hpet.base.address);
+        }
     }
     if let Some(mcfg) = optional::<Mcfg>(&acpi) {
         for r in mcfg.regions() {
@@ -138,6 +208,9 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<Summary, Error> {
         if let Some(t) = fadt.pm_timer() {
             let space = if t.block.space == AddressSpace::SystemIo { "port" } else { "address" };
             kprint!(", PM timer {space} {:#x} ({}-bit)", t.block.address, t.bits);
+            if let (AddressSpace::SystemIo, Ok(port)) = (t.block.space, u16::try_from(t.block.address)) {
+                platform.pm_timer = Some((port, t.bits));
+            }
         }
         if fadt.boot_arch().has_8042() {
             kprint!(", 8042");
@@ -148,5 +221,39 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<Summary, Error> {
         kprintln!();
     }
 
-    Ok(Summary { cpus, io_apics })
+    Ok((Summary { cpus, io_apics }, platform))
+}
+
+fn platform_from_madt(madt: &Madt) -> Platform {
+    let mut p = Platform {
+        local_apic: madt.local_apic_address(),
+        has_8259: madt.has_8259(),
+        processors: madt.processors().filter(|c| c.enabled()).map(|c| Cpu { uid: c.uid, apic_id: c.apic_id }).collect(),
+        io_apics: madt
+            .io_apics()
+            .map(|io| IoApicInfo { id: io.id, address: io.address.into(), gsi_base: io.gsi_base })
+            .collect(),
+        overrides: madt
+            .interrupt_overrides()
+            .map(|o| Override { bus: o.bus, source: o.source, gsi: o.gsi, flags: o.flags.0 })
+            .collect(),
+        ..Platform::default()
+    };
+    for e in madt.entries() {
+        let nmi = match e {
+            MadtEntry::LocalApicNmi(n) => LintNmi {
+                processor_uid: (n.processor_uid != 0xff).then_some(n.processor_uid.into()),
+                lint: n.lint,
+                flags: n.flags.0,
+            },
+            MadtEntry::LocalX2ApicNmi(n) => LintNmi {
+                processor_uid: (n.processor_uid != u32::MAX).then_some(n.processor_uid),
+                lint: n.lint,
+                flags: n.flags.0,
+            },
+            _ => continue,
+        };
+        p.lint_nmis.push(nmi);
+    }
+    p
 }

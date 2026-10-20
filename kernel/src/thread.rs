@@ -1,4 +1,5 @@
-//! Kernel threads: spawn, yield, sleep on wait queues, exit and join.
+//! Kernel threads: spawn, yield, sleep on wait queues or for a time, exit
+//! and join; preempted round robin by the timer tick.
 //!
 //! Which thread runs is decided by [`poly_sched::Scheduler`] (round robin,
 //! host-tested); this module owns what only the kernel can: thread stacks,
@@ -8,10 +9,12 @@
 //!
 //! - After [`init`], the code that was running on the boot stack is thread 0
 //!   (`ThreadId::BOOT`) and keeps that stack.
-//! - The idle thread runs when no other thread is runnable. Until the kernel
-//!   takes interrupts nothing could ever make a thread runnable again at that
-//!   point, so it panics with a deadlock message (which gives a backtrace of
-//!   the idle thread, not a hang).
+//! - The idle thread runs when no other thread is runnable. It halts the CPU
+//!   (`sti; hlt`) until an interrupt, and gives way at the next tick once
+//!   something made a thread runnable.
+//! - New threads start with interrupts enabled (once the interrupt
+//!   controllers are set up; a thread that starts before that keeps them
+//!   off, and is not preempted).
 //! - Every other thread gets a [`STACK_SIZE`] stack, one buddy block from
 //!   [`FRAMES`] reached through [`arch::phys_to_virt`], registered with the
 //!   backtrace walker so a panic inside a thread walks its whole stack.
@@ -26,26 +29,33 @@
 //!
 //! # Locking and interrupts
 //!
-//! All scheduler state is in [`THREADS`]. Everything that locks it disables
-//! interrupts first ([`cpu::InterruptsOff`]), so the timer interrupt can
-//! never find the lock held by the thread it interrupted. The lock is
-//! released *before* the context switch, which is sound on one CPU because
-//! interrupts stay off until the switch is done. SMP will need more: the
-//! outgoing thread is already on the run queue while its registers are being
-//! saved, so another CPU must not pick it (or reap its stack) until the
-//! switch has finished, e.g. by holding the lock across the switch and
+//! All scheduler state is in [`THREADS`], a spinlock, which keeps interrupts
+//! disabled while held, so the timer interrupt can never find it held by the
+//! thread it interrupted. The lock is released *before* the context switch,
+//! which is sound on one CPU because every switch runs inside an
+//! [`InterruptsOff`] section, so interrupts stay off until it is done. A
+//! thread never switches while it holds a spinlock (they mask interrupts, so
+//! the tick cannot preempt it, and [`switch`] checks that nothing blocks
+//! with one held) or from inside an interrupt handler. SMP will need more:
+//! the outgoing thread is already on the run queue while its registers are
+//! being saved, so another CPU must not pick it (or reap its stack) until
+//! the switch has finished, e.g. by holding the lock across the switch and
 //! releasing it in the incoming thread.
 //!
-//! # Preemption
+//! # Preemption and sleeping
 //!
-//! There is no timer interrupt yet. Its handler only has to call
-//! [`preempt_tick`]; see there for the rules.
+//! The timer interrupt calls [`on_timer_tick`] on every tick (`TICK_HZ`):
+//! it wakes the threads whose [`sleep`] has ended, then [`preempt_tick`]
+//! switches threads once the running one has used up its time slice.
 
-use crate::arch::{self, backtrace, context, cpu::InterruptsOff};
+use crate::arch::{self, backtrace, context, cpu, cpu::InterruptsOff};
 use crate::frames::FRAMES;
 use crate::kernel_test;
-use crate::sync::SpinLock;
+use crate::sync::{self, SpinLock};
+use crate::time;
 use core::cell::UnsafeCell;
+use core::sync::atomic::AtomicU64;
+use core::time::Duration;
 use poly_mem::BuddyAllocator;
 pub use poly_sched::{Error, State, ThreadId};
 use poly_sched::{Join, Scheduler, Switch};
@@ -182,19 +192,40 @@ fn install(t: &mut Threads, id: ThreadId, stack: Stack, f: ThreadFn, arg: usize)
 #[allow(improper_ctypes_definitions, reason = "only our trampoline calls this, passing on what `install` stored")]
 extern "sysv64" fn thread_start(f: ThreadFn, arg: usize) -> ! {
     finish_switch();
-    // TODO(timer): enable interrupts here. A new thread starts with them off
-    // because every switch happens with interrupts off, and it has no
-    // `InterruptsOff` of its own to restore.
+    // A new thread starts with interrupts off, because every switch happens
+    // with them off, but it has no `InterruptsOff` of its own to restore:
+    // turn them on so the tick can preempt it.
+    if arch::interrupts_ready() {
+        // SAFETY: this thread holds no lock and no `InterruptsOff`; the
+        // switch that started it is complete, and the controllers are set up.
+        unsafe { cpu::enable_interrupts() };
+    }
     exit(f(arg))
 }
 
-/// The idle thread: runs only when no other thread is runnable.
+/// The idle thread: runs only when no other thread is runnable, and then
+/// halts until an interrupt.
 fn idle_main(_: usize) -> usize {
     loop {
-        if !yield_now() {
-            // TODO(timer): enable interrupts and halt (`sti; hlt`, which takes
-            // no interrupt in between) until one makes a thread runnable.
-            panic!("deadlock: every thread is blocked and no interrupt can wake one");
+        cpu::disable_interrupts();
+        let switched = yield_now();
+        if !switched && !arch::interrupts_ready() {
+            // Nothing could ever wake a thread: report it rather than hang.
+            panic!("deadlock: every thread is blocked before interrupts are set up");
+        }
+        // With interrupts off, nothing can make a thread runnable between
+        // that check and the halt: whatever does is an interrupt, which then
+        // ends the `hlt` (`sti` holds interrupts back for one instruction).
+        // Its handler wakes the thread, and the next tick (or yield)
+        // switches to it.
+        // SAFETY: the idle thread holds no lock and no `InterruptsOff`, so
+        // it owns this CPU's interrupt state.
+        unsafe {
+            if switched {
+                cpu::enable_interrupts();
+            } else {
+                cpu::enable_interrupts_and_halt();
+            }
         }
     }
 }
@@ -203,6 +234,11 @@ fn idle_main(_: usize) -> usize {
 /// [`THREADS`] unlocked. Returns when `sw.from` is resumed, which for an
 /// exited thread is never.
 fn switch(sw: Switch) {
+    // A spinlock held across the switch would stay held (with interrupts
+    // off) while other threads run and spin on it; an interrupt handler that
+    // blocks would leave its interrupt unacknowledged.
+    assert_eq!(sync::spinlocks_held(), 0, "thread {} blocks or yields while holding a spinlock", sw.from);
+    assert!(!arch::irq::in_interrupt(), "thread {} blocks inside an interrupt handler", sw.from);
     let save = SAVED_RSP.0[sw.from.slot()].get();
     // SAFETY: `sw.to` is not running, so its saved stack pointer is stable
     // (see `SavedRsp`).
@@ -300,9 +336,8 @@ pub fn detach(id: ThreadId) -> Result<(), Error> {
 ///   next interrupt in the meantime.
 ///
 /// The interrupted thread may have been anywhere except inside a
-/// `THREADS` critical section (those run with interrupts off). Code that
-/// must not be preempted (holding a spinlock) must keep interrupts off,
-/// which the interrupt-safe spinlocks of the next milestone will do.
+/// spinlock's critical section (`THREADS` included): spinlocks keep
+/// interrupts off while held, so the tick cannot get in there.
 pub fn preempt_tick() -> bool {
     let _irq = InterruptsOff::new();
     let sw = {
@@ -310,6 +345,53 @@ pub fn preempt_tick() -> bool {
         if t.ready && t.sched.tick() { t.sched.yield_now() } else { None }
     };
     sw.map(switch).is_some()
+}
+
+/// Called by the timer interrupt handler on every tick, under the same rules
+/// as [`preempt_tick`]: wake the sleepers whose time is up, then account the
+/// tick (and maybe switch threads).
+pub fn on_timer_tick() -> bool {
+    wake_sleepers();
+    preempt_tick()
+}
+
+/// Threads in [`sleep`] / [`sleep_until`].
+static SLEEPERS: WaitQueue = WaitQueue::new();
+/// Earliest deadline among them (`u64::MAX`: none), so the tick only wakes
+/// them when one is due.
+static NEXT_WAKE: AtomicU64 = AtomicU64::new(u64::MAX);
+
+/// Block the running thread for at least `duration` (measured with the
+/// monotonic clock). It is woken by the first tick after the deadline, so it
+/// usually sleeps up to one tick longer.
+pub fn sleep(duration: Duration) {
+    let ns = u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX);
+    sleep_until(time::now_ns().saturating_add(ns));
+}
+
+/// Block the running thread until the clock reads `deadline_ns` or later.
+pub fn sleep_until(deadline_ns: u64) {
+    assert!(time::is_running(), "thread::sleep before the timer is running");
+    SLEEPERS.wait_until(|| {
+        if time::now_ns() >= deadline_ns {
+            return true;
+        }
+        // Checked by every tick from now on, until it wakes the sleepers.
+        NEXT_WAKE.fetch_min(deadline_ns, SeqCst);
+        false
+    });
+}
+
+/// Wake every sleeper once the earliest deadline has passed; the ones not
+/// yet due re-register theirs and go back to sleep. Resetting the deadline
+/// before waking cannot lose one: a sleeper that registers in between is on
+/// the queue by the time `wake_all` gets the scheduler lock.
+fn wake_sleepers() {
+    let next = NEXT_WAKE.load(SeqCst);
+    if next != u64::MAX && time::now_ns() >= next {
+        NEXT_WAKE.store(u64::MAX, SeqCst);
+        SLEEPERS.wake_all();
+    }
 }
 
 /// Threads blocked until some condition holds, woken by whoever changes it.
@@ -333,7 +415,8 @@ impl WaitQueue {
     /// locked and interrupts off, so a waker that makes it true and then
     /// calls [`wake_one`](Self::wake_one) or [`wake_all`](Self::wake_all)
     /// cannot slip in between the check and going to sleep: no lost wakeups.
-    /// It must be short and must not call into this module.
+    /// It must be short and must not call into this module or take a lock
+    /// (atomics and reading the clock are fine).
     pub fn wait_until(&self, mut ready: impl FnMut() -> bool) {
         let _irq = InterruptsOff::new();
         loop {
@@ -371,6 +454,14 @@ impl WaitQueue {
 
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
 
+/// For tests whose threads must take turns in a fixed order: the calling
+/// thread cannot be preempted while this is held (the others still can, but
+/// each starts with a fresh time slice and gives up the CPU long before it
+/// ends).
+fn no_preemption() -> InterruptsOff {
+    InterruptsOff::new()
+}
+
 /// Characters recorded by threads, in the order they ran.
 struct Trace {
     buf: [u8; 32],
@@ -398,6 +489,7 @@ fn ping(tag: usize) -> usize {
 
 kernel_test! {
     fn yield_interleaves_round_robin() -> TestResult {
+        let _irq = no_preemption();
         TRACE.lock().len = 0;
         if current() != ThreadId::BOOT {
             return Err("tests do not run on the boot thread");
@@ -440,6 +532,7 @@ fn waiter(_: usize) -> usize {
 
 kernel_test! {
     fn wait_queue_blocks_and_wakes() -> TestResult {
+        let _irq = no_preemption();
         TOKENS.store(0, SeqCst);
         WOKEN.store(0, SeqCst);
         if WAITERS.wake_one() || WAITERS.wake_all() != 0 {
@@ -545,8 +638,10 @@ kernel_test! {
 static SPINS: AtomicUsize = AtomicUsize::new(0);
 static STOP: AtomicBool = AtomicBool::new(false);
 
-/// Stands in for the timer: calls `preempt_tick` until told to stop.
+/// Stands in for the timer: calls `preempt_tick` until told to stop, with
+/// the real tick held off.
 fn spinner(_: usize) -> usize {
+    let _irq = InterruptsOff::new();
     while !STOP.load(SeqCst) {
         SPINS.fetch_add(1, SeqCst);
         preempt_tick();
@@ -556,6 +651,7 @@ fn spinner(_: usize) -> usize {
 
 kernel_test! {
     fn preempt_tick_switches_after_a_time_slice() -> TestResult {
+        let _irq = no_preemption();
         for _ in 0..2 * TIME_SLICE_TICKS {
             if preempt_tick() {
                 return Err("preempted with nobody else to run");
@@ -565,12 +661,110 @@ kernel_test! {
         STOP.store(false, SeqCst);
         let t = spawn(spinner, 0).map_err(|_| "spawn failed")?;
         yield_now();
-        // The spinner got a full slice, then the tick switched back here.
-        if SPINS.load(SeqCst) != TIME_SLICE_TICKS as usize {
-            return Err("not preempted after exactly one time slice");
+        // The spinner got a full slice, then the tick switched back here. A
+        // real tick or two may land in the few instructions between the
+        // spinner's start (interrupts on) and its `InterruptsOff`.
+        let spins = SPINS.load(SeqCst);
+        if !(TIME_SLICE_TICKS as usize - 2..=TIME_SLICE_TICKS as usize).contains(&spins) {
+            return Err("not preempted after one time slice");
         }
         STOP.store(true, SeqCst);
         join(t).map(|_| ()).map_err(|_| "spinner did not finish")
+    }
+}
+
+/// Progress of each `burn` thread.
+static BURNED: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];
+
+/// CPU-bound: never yields, blocks or sleeps. Only preemption lets anyone
+/// else run while it does.
+fn burn(i: usize) -> usize {
+    while !STOP.load(SeqCst) {
+        BURNED[i].fetch_add(1, SeqCst);
+    }
+    0
+}
+
+kernel_test! {
+    fn cpu_bound_threads_are_preempted() -> TestResult {
+        STOP.store(false, SeqCst);
+        for b in &BURNED {
+            b.store(0, SeqCst);
+        }
+        let a = spawn(burn, 0).map_err(|_| "spawn failed")?;
+        let b = spawn(burn, 1).map_err(|_| "spawn failed")?;
+        // This thread is CPU-bound too: it shares the CPU with both and sees
+        // each make progress between its own turns. Two turns each take
+        // about six time slices; allow far more for a slow or busy host.
+        let start = time::now_ns();
+        let mut turns = [0usize; 2];
+        let mut last = [0usize; 2];
+        while turns.iter().any(|&t| t < 2) && time::now_ns() - start < 2 * time::NANOS_PER_SEC {
+            for i in 0..2 {
+                let now = BURNED[i].load(SeqCst);
+                if now != last[i] {
+                    turns[i] += 1;
+                    last[i] = now;
+                }
+            }
+        }
+        STOP.store(true, SeqCst);
+        join(a).map_err(|_| "join failed")?;
+        join(b).map_err(|_| "join failed")?;
+        if turns[0] < 2 || turns[1] < 2 {
+            return Err("CPU-bound threads did not take turns: no preemption");
+        }
+        Ok(())
+    }
+}
+
+kernel_test! {
+    fn sleep_lasts_at_least_the_duration() -> TestResult {
+        for ms in [0u64, 1, 10] {
+            let start = time::now_ns();
+            sleep(Duration::from_millis(ms));
+            let slept = time::now_ns() - start;
+            if slept < ms * time::NANOS_PER_MILLI {
+                return Err("sleep returned early");
+            }
+            if slept > ms * time::NANOS_PER_MILLI + 500 * time::NANOS_PER_MILLI {
+                return Err("sleep overslept by more than half a second");
+            }
+        }
+        Ok(())
+    }
+}
+
+static WOKE_AT: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
+
+fn sleeper(ms: usize) -> usize {
+    sleep(Duration::from_millis(ms as u64));
+    WOKE_AT[ms / 10 - 1].store(time::now_ns(), SeqCst);
+    0
+}
+
+kernel_test! {
+    fn sleepers_wake_in_deadline_order() -> TestResult {
+        for w in &WOKE_AT {
+            w.store(0, SeqCst);
+        }
+        // Started longest first; with every thread asleep the CPU idles in
+        // `hlt` and only the timer can wake them.
+        let start = time::now_ns();
+        let ids = [spawn(sleeper, 30), spawn(sleeper, 20), spawn(sleeper, 10)];
+        for id in ids {
+            join(id.map_err(|_| "spawn failed")?).map_err(|_| "join failed")?;
+        }
+        let woke = WOKE_AT.each_ref().map(|w| w.load(SeqCst));
+        for (i, &t) in woke.iter().enumerate() {
+            if t < start + (i as u64 + 1) * 10 * time::NANOS_PER_MILLI {
+                return Err("a sleeper woke before its deadline");
+            }
+        }
+        if !(woke[0] <= woke[1] && woke[1] <= woke[2]) {
+            return Err("sleepers did not wake in deadline order");
+        }
+        Ok(())
     }
 }
 
@@ -616,18 +810,4 @@ kernel_test! {
 #[inline(never)]
 fn panic_in_thread(_: usize) -> usize {
     panic!("panic requested by poly.selftest.thread_panic");
-}
-
-static NEVER: WaitQueue = WaitQueue::new();
-
-kernel_test! {
-    /// Negative test (`poly.selftest.deadlock`): the only thread blocks for
-    /// good, so the idle thread must report a deadlock instead of hanging.
-    fn deadlock_on_request(env: &TestEnv) -> TestResult {
-        if !env.boot.has_flag("poly.selftest.deadlock") {
-            return Ok(());
-        }
-        NEVER.wait_until(|| false);
-        Err("woke up from a wait nobody ends")
-    }
 }

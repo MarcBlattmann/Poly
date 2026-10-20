@@ -29,8 +29,10 @@ what exists **today** and how it fits that plan.
 3. `kernel_entry` brings up serial, loads our GDT/TSS/IDT, reads the boot info,
    normalises the memory map (reserving the first MiB and the kernel image),
    switches to the kernel page tables (`mm::init`; the boot mapping is gone
-   after this), hands all usable RAM to the frame allocator, reads the ACPI
-   tables and runs the boot self-test.
+   after this), hands all usable RAM to the frame allocator, starts the
+   scheduler, reads the ACPI tables, sets up interrupts and time
+   (`arch::init_interrupts`), enables interrupts and runs the boot self-test
+   with the timer preempting threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
 
@@ -139,16 +141,59 @@ allocator exists. Per-process address spaces come in Phase 2.
   `arch::phys_to_virt` (the direct map). One allocation is at most one buddy
   block (4 MiB).
 - Lock order is heap, then `FRAMES`: never allocate while holding `FRAMES`.
-  Neither lock masks interrupts yet.
+  Both locks mask interrupts while held (the heap through
+  `sync::RawIrqSpinLock`), so an interrupt handler may allocate.
 - Out of memory: fallible APIs (`try_reserve`) see the error; everything
   else panics with "memory allocation of N bytes failed" and a backtrace
   (stable Rust's default handler in `no_std`), checked by a boot test.
   Boot prints the heap's numbers after the self-test.
 
+## Interrupts and time
+
+Single CPU (the application processors stay parked). The controllers and
+the arithmetic are in `poly-irq`
+([ADR 0013](adr/0013-interrupt-controllers-and-time-base.md)); the kernel
+wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md)).
+
+- **Bring-up** (`arch::init_interrupts`, after the heap, `thread::init` and
+  ACPI, with interrupts off): CPUID features; the 8259s remapped to
+  0x20-0x2f and fully masked; the local APIC in x2APIC mode when the CPU has
+  it, else xAPIC through `map_mmio` (every LVT entry masked except the error
+  entry and the LINT inputs the MADT wires to NMI; spurious vector 0xff);
+  every I/O APIC from the MADT mapped with all inputs masked, ISA routes
+  from the interrupt source overrides; the HPET mapped, its timers stopped,
+  started (the ACPI PM timer if there is no HPET); the TSC and the local
+  APIC timer calibrated against it; the monotonic clock; the APIC timer
+  started periodic at `TICK_HZ` = 1000 on vector 0xf0. Then `kernel_entry`
+  enables interrupts.
+- **Hardware access** for `poly-irq`: `arch/x86_64/mmio.rs` (`MmioRegion`,
+  the kernel's one `Mmio` implementation, over `map_mmio`, shared with PCI and
+  virtio), `apic::CpuMsr` (only the APIC's MSRs) and `apic::CpuPorts` (only
+  the 8259's ports).
+- **Vectors:** 0x00-0x1f exceptions, 0x20-0x2f the masked 8259s (only a
+  spurious IRQ 7/15 can arrive), 0x30-0xef devices, 0xf0 the tick,
+  0xf1-0xfd reserved for IPIs, 0xfe APIC error, 0xff APIC spurious (never an
+  EOI). Every vector has an interrupt-gate stub in `idt.rs` pushing the same
+  `TrapFrame`; `arch::irq::dispatch` handles 32-255.
+- **Drivers:** `arch::irq::allocate_vector(handler, data)` claims a device
+  vector (lock-free; `free_vector` releases it); the handler runs as
+  `handler(data)` with interrupts off, before the EOI. Point a device at the
+  vector with `arch::irq::msi_message(vector)` (address / data for MSI or
+  MSI-X, targeting the boot CPU) or route an I/O APIC input with
+  `route_gsi` / `route_isa_irq` (undo with `unroute_gsi`). Handlers must not
+  block; they may wake a `WaitQueue`.
+- **Time:** `time::now_ns()` is nanoseconds since boot from
+  `poly_irq::MonotonicClock`: the TSC when it is invariant and calibrated,
+  otherwise the reference timer (under QEMU's TCG: the HPET). It never goes
+  backwards, also across threads. `time::ticks()` counts tick interrupts.
+  The boot log prints the APIC mode, the HPET, the TSC rate, the clock
+  source and the APIC timer rate.
+
 ## Threads and scheduling
 
-Kernel threads only, on one CPU, round robin. See
-[ADR 0012](adr/0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md).
+Kernel threads only, on one CPU, round robin, preempted by the timer. See
+[ADR 0012](adr/0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md)
+and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
 
 - **Policy in `poly-sched`** (host-tested, including a randomized check
   against a reference model). `Scheduler<N>` is a fixed table of `N` thread
@@ -164,9 +209,10 @@ Kernel threads only, on one CPU, round robin. See
   thread gives way as soon as anything is runnable.
 - **Thread 0 and idle.** `thread::init()` (right after the frame allocator)
   makes the boot code thread 0, still on the boot stack, and creates the
-  idle thread, which runs only when nothing else can. Without interrupts
-  nothing could wake a thread at that point, so today it panics with a
-  "deadlock" message and a backtrace instead of hanging.
+  idle thread, which runs only when nothing else can. It halts with
+  interrupts enabled (`sti; hlt`, atomic) until an interrupt makes a thread
+  runnable. Before interrupts are set up nothing could, so then it panics
+  with a "deadlock" message and a backtrace instead of hanging.
 - **Mechanism in the kernel.** `kernel/src/thread.rs` keeps the scheduler
   and each thread's stack in one spinlock (`THREADS`), and saved stack
   pointers in a static array. Stacks are 16 KiB (one order-2 buddy block)
@@ -178,7 +224,8 @@ Kernel threads only, on one CPU, round robin. See
   `thread_start(f, arg)` with `rbp = 0` (the end of every thread's
   backtrace) and exits with `f`'s return value.
 - **API:** `spawn(fn, arg)`, `yield_now()`, `exit(code)`, `current()`,
-  `join(id)` (returns the exit code), `detach(id)`, `state(id)`, and
+  `join(id)` (returns the exit code), `detach(id)`, `state(id)`,
+  `sleep(duration)` / `sleep_until(ns)`, and
   `WaitQueue::{wait_until(cond), wake_one(), wake_all()}`. `wait_until`
   checks its condition with the scheduler locked, so a wakeup between the
   check and going to sleep cannot be lost.
@@ -188,11 +235,31 @@ Kernel threads only, on one CPU, round robin. See
 - **Interrupts and locking.** Every `THREADS` critical section runs with
   interrupts off, and the lock is dropped before the switch; with one CPU
   and interrupts off nothing can run in between. Each thread restores its
-  own interrupt state when the switch returns into it. SMP needs the lock
-  (or an "on CPU" flag) held until the outgoing thread's registers are
-  saved.
-- **Preemption hook.** `thread::preempt_tick()` is all the timer handler has
-  to call: with interrupts off, after EOI, on the interrupted thread's own
-  stack (not an IST stack, since the handler's frames stay there while the
-  thread is switched out). New threads start with interrupts off; once the
-  timer exists, `thread_start` must enable them.
+  own interrupt state when the switch returns into it; new threads start
+  with interrupts enabled. `switch` panics if the thread holds a spinlock
+  or is inside an interrupt handler. SMP needs the lock (or an "on CPU"
+  flag) held until the outgoing thread's registers are saved.
+- **Preemption.** The tick handler counts the tick, sends the EOI and calls
+  `thread::on_timer_tick()`: it wakes sleepers whose deadline has passed
+  (the earliest deadline is kept in an atomic, so most ticks do nothing
+  there) and calls `preempt_tick()`, which switches once the running thread
+  has used its 10-tick slice and another is runnable. This runs on the
+  interrupted thread's own stack (no IST), since the handler's frames stay
+  there while the thread is switched out.
+
+## Synchronisation
+
+`kernel/src/sync.rs`:
+
+- `SpinLock<T>` busy-waits and keeps interrupts disabled from before it is
+  taken until after it is released (restoring the previous state), so an
+  interrupt handler can never deadlock on a lock held by the code it
+  interrupted, and holders are never preempted. `RawIrqSpinLock` is the same
+  for the heap. Critical sections must not block; the scheduler checks.
+- `Mutex<T>` sleeps: a thread that finds it held blocks on a `WaitQueue`
+  and is woken when it is released. It may be held across blocking calls,
+  not taken in interrupt handlers, and locking it twice from one thread
+  panics with "deadlock".
+- `SetOnce<T>`: written once at boot, read without a lock (local APIC,
+  clock).
+
