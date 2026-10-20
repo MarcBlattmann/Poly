@@ -17,6 +17,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0010](0010-kernel-address-space.md) | Kernel address space: direct map of the memory map's regions, W^X, guard pages | Accepted |
 | [0012](0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md) | Scheduler policy in a host-tested crate; context switch and stacks in the kernel | Accepted |
 | [0013](0013-interrupt-controllers-and-time-base.md) | Interrupt controllers and the time base in one host-tested crate (`poly-irq`) | Accepted |
+| [0014](0014-block-layer.md) | Block layer: submit/poll devices, ordering request queue, pinning buffer cache | Accepted |
 
 ## Open decisions
 
