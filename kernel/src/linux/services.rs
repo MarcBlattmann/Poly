@@ -14,7 +14,8 @@
 //! | `user_context`, `set_user_context` | the thread's trap frame (`user::registers`, `user::set_registers`) |
 //! | FPU state | the thread's save area (`user::fpu_image`, `user::load_fpu`) |
 //! | futexes | one global table under a spinlock ([`super::FUTEXES`]) |
-//! | clocks, random bytes | `time::now_ns`, `time::realtime_ns` (the CMOS RTC read once), RDRAND or the TSC |
+//! | clocks, random bytes | `time::now_ns`, `time::realtime_ns` (the CMOS RTC read once), `crate::random` (ChaCha20) |
+//! | `fs()`: paths, descriptors, `statfs`, `sync`; `system_info` | `files.rs` over `fs::Files`; `fs::proc` (ADR 0043) |
 //!
 //! Nothing here holds a lock while it touches user memory, except the
 //! futex calls the personality makes with the table locked
@@ -112,6 +113,11 @@ impl<'a> Thread<'a> {
     /// Whether `set_user_context` replaced the registers.
     pub fn registers_replaced(&self) -> bool {
         self.replaced
+    }
+
+    /// The thread's process.
+    pub(super) fn process(&self) -> &'a Process {
+        self.process
     }
 
     fn memory(&self) -> Result<Arc<Memory>, Errno> {
@@ -550,11 +556,17 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn random_bytes(&mut self, buf: &mut [u8], _mode: RandomMode) -> Result<usize, Errno> {
-        // The source never needs initialising, so no mode ever waits.
-        for chunk in buf.chunks_mut(16) {
-            let bytes = crate::arch::user::random_bytes();
-            chunk.copy_from_slice(&bytes[..chunk.len()]);
-        }
+        // The generator is seeded at its first use and never waits
+        // (`crate::random`), so no mode ever blocks.
+        crate::random::fill(buf);
         Ok(buf.len())
+    }
+
+    fn fs(&mut self) -> Option<&mut dyn poly_personality_linux::fs::LinuxFs> {
+        Some(self)
+    }
+
+    fn system_info(&mut self) -> Result<poly_personality_linux::fs::SysInfo, Errno> {
+        Ok(super::files::system_info())
     }
 }

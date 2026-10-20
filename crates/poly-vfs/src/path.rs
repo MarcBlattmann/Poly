@@ -57,6 +57,10 @@ pub(crate) struct Parent {
     pub(crate) trailing_slash: bool,
 }
 
+/// A resolved location and, when it was found by name, the directory and
+/// the name.
+pub(crate) type Found = (Location, Option<(Location, Vec<u8>)>);
+
 /// One resolution: who asks, where `/` is, how many links may still be
 /// followed.
 pub(crate) struct Walk<'a> {
@@ -163,11 +167,25 @@ impl<'a> Walk<'a> {
     }
 
     /// Resolves the last component of a [`Parent`].
-    pub(crate) fn finish(&mut self, mut p: Parent, follow: bool) -> Result<Location> {
+    pub(crate) fn finish(&mut self, p: Parent, follow: bool) -> Result<Location> {
+        self.finish_named(p, follow).map(|(loc, _)| loc)
+    }
+
+    /// Resolves `path` completely, like [`resolve`](Self::resolve), and
+    /// also returns the directory and name the result was found by.
+    pub(crate) fn resolve_named(&mut self, start: Location, path: &[u8], follow: bool) -> Result<Found> {
+        let p = self.parent(start, path)?;
+        self.finish_named(p, follow)
+    }
+
+    /// [`finish`](Self::finish), also returning the directory and name the
+    /// result was looked up by (after following symbolic links); `None`
+    /// when the path ended in `/`, `.` or `..`.
+    pub(crate) fn finish_named(&mut self, mut p: Parent, follow: bool) -> Result<Found> {
         loop {
             let name = match p.last {
-                Last::Root | Last::Dot => return Ok(p.dir),
-                Last::DotDot => return self.dotdot(p.dir),
+                Last::Root | Last::Dot => return Ok((p.dir, None)),
+                Last::DotDot => return Ok((self.dotdot(p.dir)?, None)),
                 Last::Name(name) => name,
             };
             let loc = self.vfs.child(&p.dir, &name)?;
@@ -183,7 +201,7 @@ impl<'a> Walk<'a> {
             if p.trailing_slash && kind != FileType::Directory {
                 return Err(Errno::ENOTDIR);
             }
-            return Ok(loc);
+            return Ok((loc, Some((p.dir, name))));
         }
     }
 

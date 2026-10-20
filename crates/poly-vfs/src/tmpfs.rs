@@ -426,6 +426,28 @@ impl FileSystem for Tmpfs {
         FsInfo { name: "tmpfs", read_only: false, cache_lookups: false }
     }
 
+    /// Blocks are 4 KiB pages: the limit (or, without one, the pages in
+    /// use, none free) and the pages in use; inodes are not limited, so
+    /// the count of free ones is the room left in the inode numbers.
+    fn statfs(&self) -> Result<crate::FsStats> {
+        let inner = self.inner.lock();
+        let total = self.page_limit.unwrap_or(inner.pages).max(inner.pages);
+        let free = total - inner.pages;
+        let files = inner.nodes.len() as u64;
+        Ok(crate::FsStats {
+            magic: crate::TMPFS_MAGIC,
+            block_size: PAGE,
+            blocks: total,
+            blocks_free: free,
+            blocks_avail: free,
+            files,
+            files_free: u64::from(u32::MAX).saturating_sub(files),
+            name_max: crate::NAME_MAX as u64,
+            fragment_size: PAGE,
+            ..crate::FsStats::default()
+        })
+    }
+
     fn root(&self) -> Ino {
         ROOT
     }

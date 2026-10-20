@@ -9,7 +9,7 @@
 use crate::args::Args;
 use crate::errno::SysResult;
 use crate::kernel::LinuxKernel;
-use crate::sys::{futex, io, mem, process, signal, system};
+use crate::sys::{fd, futex, io, limits, mem, path, process, signal, system};
 
 pub use crate::numbers::{SYSCALLS, nr};
 
@@ -65,16 +65,79 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::GETRANDOM, system::getrandom),
 ];
 
+/// The file system calls and resource limits (ADR 0043), registered like
+/// [`IMPLEMENTED`].
+pub const FILE_SYSTEM: &[(u64, Handler)] = &[
+    (nr::STAT, path::stat),
+    (nr::LSTAT, path::lstat),
+    (nr::OPEN, path::open),
+    (nr::LSEEK, fd::lseek),
+    (nr::PREAD64, fd::pread64),
+    (nr::PWRITE64, fd::pwrite64),
+    (nr::ACCESS, path::access),
+    (nr::DUP, fd::dup),
+    (nr::DUP2, fd::dup2),
+    (nr::FCNTL, fd::fcntl),
+    (nr::FSYNC, fd::fsync),
+    (nr::FDATASYNC, fd::fdatasync),
+    (nr::TRUNCATE, path::truncate),
+    (nr::FTRUNCATE, fd::ftruncate),
+    (nr::GETDENTS, fd::getdents),
+    (nr::GETCWD, path::getcwd),
+    (nr::CHDIR, path::chdir),
+    (nr::FCHDIR, path::fchdir),
+    (nr::RENAME, path::rename),
+    (nr::MKDIR, path::mkdir),
+    (nr::RMDIR, path::rmdir),
+    (nr::CREAT, path::creat),
+    (nr::LINK, path::link),
+    (nr::UNLINK, path::unlink),
+    (nr::SYMLINK, path::symlink),
+    (nr::READLINK, path::readlink),
+    (nr::CHMOD, path::chmod),
+    (nr::FCHMOD, path::fchmod),
+    (nr::UMASK, path::umask),
+    (nr::GETRLIMIT, limits::getrlimit),
+    (nr::SYSINFO, limits::sysinfo),
+    (nr::STATFS, path::statfs),
+    (nr::FSTATFS, fd::fstatfs),
+    (nr::SETRLIMIT, limits::setrlimit),
+    (nr::SYNC, fd::sync),
+    (nr::GETDENTS64, fd::getdents64),
+    (nr::OPENAT, path::openat),
+    (nr::MKDIRAT, path::mkdirat),
+    (nr::NEWFSTATAT, path::newfstatat),
+    (nr::UNLINKAT, path::unlinkat),
+    (nr::RENAMEAT, path::renameat),
+    (nr::LINKAT, path::linkat),
+    (nr::SYMLINKAT, path::symlinkat),
+    (nr::READLINKAT, path::readlinkat),
+    (nr::FCHMODAT, path::fchmodat),
+    (nr::FACCESSAT, path::faccessat),
+    (nr::DUP3, fd::dup3),
+    (nr::PRLIMIT64, limits::prlimit64),
+    (nr::SYNCFS, fd::syncfs),
+    (nr::RENAMEAT2, path::renameat2),
+    (nr::STATX, path::statx),
+    (nr::FACCESSAT2, path::faccessat2),
+];
+
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
 
 const fn build() -> [Option<Handler>; TABLE_LEN] {
     let mut table: [Option<Handler>; TABLE_LEN] = [None; TABLE_LEN];
-    let mut i = 0;
-    while i < IMPLEMENTED.len() {
-        let (number, handler) = IMPLEMENTED[i];
-        assert!(table[number as usize].is_none(), "system call registered twice");
-        table[number as usize] = Some(handler);
-        i += 1;
+    let lists = [IMPLEMENTED, FILE_SYSTEM];
+    let mut l = 0;
+    while l < lists.len() {
+        let list = lists[l];
+        let mut i = 0;
+        while i < list.len() {
+            let (number, handler) = list[i];
+            assert!(table[number as usize].is_none(), "system call registered twice");
+            table[number as usize] = Some(handler);
+            i += 1;
+        }
+        l += 1;
     }
     table
 }
@@ -187,19 +250,20 @@ mod tests {
 
     #[test]
     fn handlers_are_registered_by_number() {
-        for &(number, _) in IMPLEMENTED {
+        for &(number, _) in IMPLEMENTED.iter().chain(FILE_SYSTEM) {
             assert!(name(number).is_some(), "handler for unknown number {number}");
             assert!(handler(number).is_some());
         }
-        assert_eq!(implemented().count(), IMPLEMENTED.len());
-        assert!(handler(nr::OPENAT).is_none());
+        assert_eq!(implemented().count(), IMPLEMENTED.len() + FILE_SYSTEM.len());
+        assert!(handler(nr::SWAPON).is_none());
         assert!(handler(TABLE_LEN as u64).is_none());
         assert!(handler(u64::MAX).is_none());
     }
 
     #[test]
     fn implemented_set() {
-        let names: Vec<&str> = implemented().map(|(_, n)| n).collect();
+        let names: Vec<&str> =
+            implemented().filter(|&(nr, _)| !FILE_SYSTEM.iter().any(|f| f.0 == nr)).map(|(_, n)| n).collect();
         let expected = [
             "read",
             "write",

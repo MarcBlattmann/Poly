@@ -1,0 +1,14 @@
+[package]
+name = "poly-procfs"
+description = "Synthetic file systems: procfs over a kernel-provided source of process and system facts, and a static tree for sysfs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-vfs.workspace = true
+
+[lints]
+workspace = true

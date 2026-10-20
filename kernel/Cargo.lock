@@ -93,6 +93,8 @@ dependencies = [
  "poly-personality-linux",
  "poly-personality-nt",
  "poly-personality-xnu",
+ "poly-procfs",
+ "poly-random",
  "poly-rtc",
  "poly-sched",
  "poly-term",
@@ -150,6 +152,17 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
 ]
+
+[[package]]
+name = "poly-procfs"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
+name = "poly-random"
+version = "0.0.1"
 
 [[package]]
 name = "poly-rtc"

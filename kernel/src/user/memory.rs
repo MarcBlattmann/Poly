@@ -105,6 +105,18 @@ pub trait PageSource: Send + Sync {
     fn shareable(&self) -> bool {
         false
     }
+
+    /// The open file behind the source, if it is a VFS file: what
+    /// `/proc/<pid>/maps` names the mapping by (ADR 0043).
+    fn file(&self) -> Option<&alloc::sync::Arc<poly_vfs::OpenFile>> {
+        None
+    }
+
+    /// A pseudo-path for `/proc/<pid>/maps` (`[vdso]`, say) for sources
+    /// that are not files.
+    fn label(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// A [`PageSource`] over bytes the kernel holds: `&'static [u8]` (images

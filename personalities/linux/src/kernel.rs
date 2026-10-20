@@ -671,4 +671,17 @@ pub trait LinuxKernel {
     fn domainname(&self) -> &[u8] {
         b"(none)"
     }
+
+    // ---- file systems and system information (ADR 0043) ---------------
+
+    /// The file system services for the calling thread's process; `None`
+    /// (the default) makes the file system calls fail with `ENOSYS`.
+    fn fs(&mut self) -> Option<&mut dyn crate::fs::LinuxFs> {
+        None
+    }
+
+    /// What sysinfo(2) reports. `ENOSYS` by default.
+    fn system_info(&mut self) -> Result<crate::fs::SysInfo, Errno> {
+        Err(Errno::ENOSYS)
+    }
 }

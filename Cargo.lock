@@ -135,6 +135,7 @@ name = "poly-personality-linux"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-vfs",
 ]
 
 [[package]]
@@ -159,6 +160,17 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "poly-procfs"
+version = "0.0.1"
+dependencies = [
+ "poly-vfs",
+]
+
+[[package]]
+name = "poly-random"
+version = "0.0.1"
 
 [[package]]
 name = "poly-rtc"

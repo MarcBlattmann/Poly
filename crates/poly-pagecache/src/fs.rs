@@ -434,4 +434,10 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
         synced?;
         earlier.map_or(Ok(()), Err)
     }
+
+    /// The inner file system's counts (dirty pages not yet written back
+    /// have no blocks yet, so free space may be overstated).
+    fn statfs(&self) -> Result<poly_vfs::FsStats> {
+        self.st.inner.statfs()
+    }
 }

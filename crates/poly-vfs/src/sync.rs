@@ -44,6 +44,14 @@ impl<T> SpinMutex<T> {
         }
         SpinGuard { mutex: self }
     }
+
+    /// The lock if it is free now; `None` if someone holds it.
+    pub(crate) fn try_lock(&self) -> Option<SpinGuard<'_, T>> {
+        self.locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .ok()
+            .map(|_| SpinGuard { mutex: self })
+    }
 }
 
 impl<T: Default> Default for SpinMutex<T> {

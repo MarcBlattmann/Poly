@@ -84,6 +84,8 @@ pub struct LinuxProcess {
     threads: BTreeMap<i32, LinuxThread>,
     /// See [`DEFAULT_QUEUE_LIMIT`].
     pub queue_limit: usize,
+    /// Resource limits (getrlimit(2)): inherited by fork, kept by exec.
+    pub limits: crate::rlimit::ResourceLimits,
 }
 
 impl LinuxProcess {
@@ -97,6 +99,7 @@ impl LinuxProcess {
             shared: SigQueue::new(),
             threads,
             queue_limit: DEFAULT_QUEUE_LIMIT,
+            limits: crate::rlimit::ResourceLimits::new(),
         }
     }
 
@@ -112,7 +115,13 @@ impl LinuxProcess {
         let child = LinuxThread { mask: parent.mask, altstack: parent.altstack, ..LinuxThread::default() };
         let mut threads = BTreeMap::new();
         threads.insert(child_tid, child);
-        LinuxProcess { actions: self.actions, shared: SigQueue::new(), threads, queue_limit: self.queue_limit }
+        LinuxProcess {
+            actions: self.actions,
+            shared: SigQueue::new(),
+            threads,
+            queue_limit: self.queue_limit,
+            limits: self.limits,
+        }
     }
 
     /// execve(2) by thread `tid`, which becomes the only thread. execve(2):
