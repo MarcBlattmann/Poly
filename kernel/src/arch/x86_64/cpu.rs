@@ -121,6 +121,9 @@ pub const MSR_KERNEL_GS_BASE: u32 = 0xc000_0102;
 /// IA32_APIC_BASE (SDM Vol. 4, Table 2-2): bits 12 and up hold the local
 /// APIC's physical base address.
 pub const MSR_APIC_BASE: u32 = 0x1b;
+/// IA32_PAT (SDM Vol. 4, Table 2-2; Vol. 3A §11.12.2): eight memory types,
+/// one byte each, selected by a page's PAT, PCD and PWT bits.
+pub const MSR_PAT: u32 = 0x277;
 
 /// # Safety
 /// `msr` must exist on this CPU (reading a missing MSR raises #GP).
@@ -171,6 +174,8 @@ pub struct Features {
     pub page_1g: bool,
     /// CPUID.01H:EDX.PGE [bit 13]: global pages (CR4.PGE).
     pub pge: bool,
+    /// CPUID.01H:EDX.PAT [bit 16]: the page attribute table (IA32_PAT).
+    pub pat: bool,
 }
 
 pub fn features() -> Features {
@@ -178,7 +183,12 @@ pub fn features() -> Features {
     // The boot stub already checked that leaf 0x80000001 exists (long mode).
     let basic = __cpuid(1);
     let ext = __cpuid(0x8000_0001);
-    Features { nx: ext.edx & (1 << 20) != 0, page_1g: ext.edx & (1 << 26) != 0, pge: basic.edx & (1 << 13) != 0 }
+    Features {
+        nx: ext.edx & (1 << 20) != 0,
+        page_1g: ext.edx & (1 << 26) != 0,
+        pge: basic.edx & (1 << 13) != 0,
+        pat: basic.edx & (1 << 16) != 0,
+    }
 }
 
 /// RFLAGS.IF (bit 9): maskable interrupts enabled.

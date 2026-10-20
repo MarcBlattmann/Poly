@@ -13,6 +13,8 @@ members = [
     "crates/poly-block",
     "crates/poly-elf",
     "crates/poly-cpio",
+    "crates/poly-bochs-vbe",
+    "crates/poly-gfx",
     "crates/poly-heap",
     "crates/poly-input",
     "crates/poly-irq",
@@ -51,6 +53,8 @@ poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
 poly-elf = { path = "crates/poly-elf" }
 poly-cpio = { path = "crates/poly-cpio" }
+poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
+poly-gfx = { path = "crates/poly-gfx" }
 poly-heap = { path = "crates/poly-heap" }
 poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }

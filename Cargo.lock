@@ -44,6 +44,10 @@ name = "poly-block"
 version = "0.0.1"
 
 [[package]]
+name = "poly-bochs-vbe"
+version = "0.0.1"
+
+[[package]]
 name = "poly-coverage"
 version = "0.0.1"
 dependencies = [
@@ -60,6 +64,10 @@ dependencies = [
 
 [[package]]
 name = "poly-elf"
+version = "0.0.1"
+
+[[package]]
+name = "poly-gfx"
 version = "0.0.1"
 
 [[package]]
@@ -247,6 +255,7 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 name = "xtask"
 version = "0.0.1"
 dependencies = [
+ "poly-gfx",
  "rustc-demangle",
 ]
 

@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 28 of 139 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 33 of 139 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">28 / 139 milestones · 20%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">33 / 139 milestones · 24%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -83,11 +83,11 @@
 <text x="884.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">14/14</text>
 <text x="16.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#4493f8" text-anchor="start"> 2  Kernel terminal</text>
 <text x="328.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#4493f8" text-anchor="end">NOW</text>
-<g><title>Display: QEMU standard VGA (Bochs VBE) linear framebuffer driver and mode setting</title>
-<rect x="340.0" y="113.0" width="93.2" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
+<g><title>✔ Display: QEMU standard VGA (Bochs VBE) linear framebuffer driver and mode setting</title>
+<rect x="340.0" y="113.0" width="93.2" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Drawing library: pixels, rectangles, a permissively licensed bitmap font, scrolling text grid</title>
-<rect x="435.2" y="113.0" width="93.2" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ Drawing library: pixels, rectangles, a permissively licensed bitmap font, scrolling text grid</title>
+<rect x="435.2" y="113.0" width="93.2" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>✔ Keyboard: PS/2 (i8042) driver on interrupts, scancode decoding, US and Swiss German layouts</title>
 <rect x="530.4" y="113.0" width="93.2" height="16.0" fill="#2ea043" rx="3"/>
@@ -96,18 +96,18 @@
 <rect x="625.6" y="113.0" width="93.2" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>Milestone: the kernel boots into a full-screen terminal with a status bar, usable with the keyboard</title>
-<rect x="720.8" y="113.0" width="93.2" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="720.8" y="113.0" width="93.2" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">2/5</text>
+<text x="884.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">4/5</text>
 <text x="16.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 3  User space and the first Linux program</text>
-<g><title>Per-process address spaces, switching on context switch (PCID where available)</title>
-<rect x="340.0" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ Per-process address spaces, switching on context switch (PCID where available)</title>
+<rect x="340.0" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>User mode (ring 3) and the syscall/sysret entry path with per-CPU kernel stacks</title>
-<rect x="379.7" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ User mode (ring 3) and the syscall/sysret entry path with per-CPU kernel stacks</title>
+<rect x="379.7" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Safe user-memory access (copy_from_user / copy_to_user with fault recovery)</title>
-<rect x="419.3" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ Safe user-memory access (copy_from_user / copy_to_user with fault recovery)</title>
+<rect x="419.3" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>Virtual memory areas, demand paging, page-fault handler for user space</title>
 <rect x="459.0" y="143.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
@@ -136,7 +136,7 @@
 <g><title>✔ Held-out test store outside this repo; hand-off logging in specs/HANDOFF_LOG.md</title>
 <rect x="776.3" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">1/12</text>
+<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">4/12</text>
 <text x="16.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 4  Linux userland</text>
 <g><title>Processes and threads: clone, fork (copy-on-write), execve, exit, wait4</title>
 <rect x="340.0" y="173.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>

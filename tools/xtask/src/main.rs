@@ -2,10 +2,16 @@
 //!
 //! Commands:
 //!   build [--release]   build the kernel
-//!   run   [--release] [--gdb] [--no-disk] [kernel args...]
+//!   run   [--release] [--gdb] [--no-disk] [--headless] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
-//!                       with the test devices attached (--no-disk: without them);
-//!                       --gdb waits for a debugger on localhost:1234 (docs/DEBUGGING.md)
+//!                       with the test devices attached (--no-disk: without them),
+//!                       the screen in a window when there is a desktop (--headless:
+//!                       never); --gdb waits for a debugger on localhost:1234
+//!                       (docs/DEBUGGING.md)
+//!   screenshot [--release] [--out <file>] [--wait <text>] [kernel args...]
+//!                       boot headless, wait for a serial line containing <text>
+//!                       (default: the self-test's verdict), save the screen to <file>
+//!                       (default target/poly-screen.png; .ppm for PPM) and quit
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   ci                  everything CI checks: fmt, clippy, tests, coverage
 //!   symbolize [--release] [--elf <path>] [addr...]
@@ -13,9 +19,13 @@
 //!                       addresses, add symbols to the backtrace in a log on stdin
 //!   coverage <args>     run the coverage tool (see tools/coverage)
 //!   pipeline <args>     run the agent pipeline tool (see tools/pipeline, docs/AGENT_PIPELINE.md)
+//!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
+//!                       in third_party/ (--check: fail if they are out of date)
 
 mod console;
+mod font;
 mod ktest;
+mod screen;
 mod symbols;
 
 use std::io::{BufRead, BufReader, Read, Write};
@@ -44,13 +54,15 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("build") => build_kernel(release).map(|_| ()),
         Some("run") => run(&args[1..]),
+        Some("screenshot") => screenshot(&args[1..]),
         Some("test") => test(),
         Some("ci") => ci(),
         Some("symbolize") => symbolize(&args[1..]),
         Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => pipeline(&args[1..]),
+        Some("font") => font::run(&root(), &args[1..]),
         _ => {
-            eprintln!("usage: cargo xtask <build|run|test|ci|symbolize|coverage|pipeline> [--release]");
+            eprintln!("usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font> [--release]");
             return ExitCode::from(2);
         }
     };
@@ -140,6 +152,16 @@ const SHELL_FLAG: &str = "poly.shell";
 /// (`pci::TEST_MSI_FLAG`).
 const TEST_MSI_FLAG: &str = "poly.test.msi";
 
+/// Kernel flag saying the boot has a display, which QEMU's `q35` machine
+/// always has unless told otherwise (`-vga none`); the kernel's display
+/// tests then require it (`display::TEST_DISPLAY_FLAG`).
+const TEST_DISPLAY_FLAG: &str = "poly.test.display";
+/// The mode the kernel sets without `poly.display=` (`display::DEFAULT_MODE`).
+const DEFAULT_DISPLAY: (u32, u32) = (1280, 800);
+/// The mode the screenshot boot test asks for, so the command line option
+/// is tested too.
+const SCREENSHOT_DISPLAY: (u32, u32) = (1024, 768);
+
 /// The test devices a boot gets.
 #[derive(Clone, Copy, Debug)]
 enum Devices<'a> {
@@ -159,17 +181,18 @@ impl Devices<'_> {
     fn flags(self) -> String {
         match self {
             Devices::None => String::new(),
-            Devices::Test(_) => format!("{TEST_DISK_FLAG} {TEST_MSI_FLAG}"),
-            Devices::PolledDisk(_) => TEST_DISK_FLAG.into(),
+            Devices::Test(_) => format!("{TEST_DISK_FLAG} {TEST_MSI_FLAG} {TEST_DISPLAY_FLAG}"),
+            Devices::PolledDisk(_) => format!("{TEST_DISK_FLAG} {TEST_DISPLAY_FLAG}"),
         }
     }
 }
 
 /// QEMU for `kernel`, with the serial port on `serial` (a QEMU character
-/// device) and `devices` attached.
+/// device) and `devices` attached. The machine has QEMU's standard VGA; add
+/// `-display none` for no window.
 fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
-    cmd.args(["-machine", "q35", "-m", memory, "-display", "none", "-serial", serial, "-no-reboot"])
+    cmd.args(["-machine", "q35", "-m", memory, "-serial", serial, "-no-reboot"])
         .args(["-smp", &QEMU_CPUS.to_string()])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
         .arg("-kernel")
@@ -190,14 +213,23 @@ fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial:
     cmd
 }
 
-/// `run [--release] [--gdb] [--no-disk] [kernel args...]`
+/// Whether QEMU can open a window: on macOS (Cocoa) and Windows always,
+/// elsewhere when an X11 or Wayland display is set. Without one, QEMU's
+/// default display (GTK or SDL) would fail to start.
+fn has_desktop() -> bool {
+    let set = |var: &str| std::env::var_os(var).is_some_and(|v| !v.is_empty());
+    cfg!(any(target_os = "macos", windows)) || set("DISPLAY") || set("WAYLAND_DISPLAY")
+}
+
+/// `run [--release] [--gdb] [--no-disk] [--headless] [kernel args...]`
 fn run(args: &[String]) -> Result {
-    let (mut release, mut gdb, mut with_disk, mut cmdline) = (false, false, true, Vec::new());
+    let (mut release, mut gdb, mut with_disk, mut window, mut cmdline) = (false, false, true, true, Vec::new());
     for a in args {
         match a.as_str() {
             "--release" => release = true,
             "--gdb" => gdb = true,
             "--no-disk" => with_disk = false,
+            "--headless" => window = false,
             flag if flag.starts_with("--") => return Err(format!("run: unknown option {flag}")),
             arg => cmdline.push(arg),
         }
@@ -212,6 +244,17 @@ fn run(args: &[String]) -> Result {
     // `mon:stdio` shares the terminal between the serial port and QEMU's
     // monitor: Ctrl-A C switches between them, Ctrl-A X quits.
     let mut cmd = qemu(&kernel, DEFAULT_MEMORY, &cmdline.join(" "), devices, "mon:stdio");
+    if window && !has_desktop() {
+        eprintln!(
+            "==> no desktop (DISPLAY / WAYLAND_DISPLAY unset): no window; `cargo xtask screenshot` shows the screen"
+        );
+        window = false;
+    }
+    if window {
+        eprintln!("==> the screen is in QEMU's window; serial output and the monitor stay in this terminal");
+    } else {
+        cmd.args(["-display", "none"]);
+    }
     if gdb {
         // -s: gdb stub on tcp::1234, -S: do not start the CPU until told to.
         cmd.args(["-s", "-S"]);
@@ -258,7 +301,7 @@ struct Boot {
 /// Boot headless with a timeout, echoing serial output as it arrives, with
 /// symbols added to backtrace lines.
 fn boot(kernel: &Path, syms: &Arc<Symbols>, memory: &str, append: &str, devices: Devices<'_>) -> Result<Boot> {
-    boot_with(kernel, syms, memory, append, devices, &[], |_| {})
+    boot_with(kernel, syms, memory, append, devices, &[], None, |_| {})
 }
 
 /// [`boot`] on a given QEMU CPU model (`-cpu`), or QEMU's default one.
@@ -271,11 +314,26 @@ fn boot_on(
     devices: Devices<'_>,
 ) -> Result<Boot> {
     let args: Vec<String> = cpu.map(|c| vec!["-cpu".into(), c.into()]).unwrap_or_default();
-    boot_with(kernel, syms, memory, append, devices, &args, |_| {})
+    boot_with(kernel, syms, memory, append, devices, &args, None, |_| {})
 }
 
-/// [`boot`] with more QEMU arguments, calling `on_line` with every line of
-/// serial output (from the thread that reads it) as it arrives.
+/// A screenshot to take during a boot: once the kernel prints a line
+/// containing `marker`, the screen goes to `file` and QEMU quits. A failed
+/// self-test or a panic ends the boot without one.
+#[derive(Clone, Copy, Debug)]
+struct Screenshot<'a> {
+    marker: &'a str,
+    file: &'a Path,
+}
+
+/// The kernel's verdicts that end a boot taken for a screenshot when the
+/// marker has not come (the kernel does not exit QEMU in those boots).
+const STOP_MARKERS: [&str; 2] = ["POLY-SELFTEST: FAIL", "KERNEL PANIC"];
+
+/// [`boot`] with more QEMU arguments and, optionally, a screenshot, calling
+/// `on_line` with every line of serial output (from the thread that reads it)
+/// as it arrives.
+#[allow(clippy::too_many_arguments)]
 fn boot_with(
     kernel: &Path,
     syms: &Arc<Symbols>,
@@ -283,10 +341,17 @@ fn boot_with(
     append: &str,
     devices: Devices<'_>,
     qemu_args: &[String],
+    shot: Option<Screenshot<'_>>,
     mut on_line: impl FnMut(&str) + Send + 'static,
 ) -> Result<Boot> {
-    let mut child = qemu(kernel, memory, append, devices, "stdio")
-        .args(qemu_args)
+    let socket = std::env::temp_dir().join(format!("poly-qmp-{}.sock", std::process::id()));
+    let mut cmd = qemu(kernel, memory, append, devices, "stdio");
+    cmd.args(["-display", "none"]).args(qemu_args);
+    if shot.is_some() {
+        let _ = std::fs::remove_file(&socket);
+        cmd.arg("-qmp").arg(format!("unix:{},server=on,wait=off", socket.display()));
+    }
+    let mut child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .spawn()
@@ -304,7 +369,19 @@ fn boot_with(
     });
 
     let deadline = Instant::now() + BOOT_TIMEOUT;
+    let (mut lines, mut taken) = (Vec::new(), None);
     let status = loop {
+        for line in rx.try_iter() {
+            if let Some(s) = shot.filter(|_| taken.is_none()) {
+                if line.contains(s.marker) {
+                    taken = Some(screen::screenshot(&socket, s.file));
+                } else if STOP_MARKERS.iter().any(|m| line.contains(m)) {
+                    taken = Some(Err(format!("the kernel printed \"{}\" first", line.trim())));
+                    let _ = child.kill();
+                }
+            }
+            lines.push(line);
+        }
         if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
             break s.code();
         }
@@ -316,8 +393,54 @@ fn boot_with(
         thread::sleep(Duration::from_millis(50));
     };
     let _ = reader.join();
-    let output = rx.try_iter().collect::<Vec<_>>().join("\n");
-    Ok(Boot { status, output })
+    lines.extend(rx.try_iter());
+    if let Some(s) = shot {
+        let _ = std::fs::remove_file(&socket);
+        let what = format!("screenshot after \"{}\"", s.marker);
+        taken.unwrap_or_else(|| Err("the kernel never printed it".into())).map_err(|e| format!("{what}: {e}"))?;
+    }
+    Ok(Boot { status, output: lines.join("\n") })
+}
+
+/// The kernel's version, from `kernel/Cargo.toml`, as the boot screen shows it.
+fn kernel_version() -> Result<String> {
+    let path = kernel_dir().join("Cargo.toml");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    text.lines()
+        .find_map(|l| l.strip_prefix("version = \"")?.strip_suffix('"'))
+        .map(String::from)
+        .ok_or_else(|| format!("{}: no version", path.display()))
+}
+
+/// What the self-test prints before PASS or FAIL.
+const SELFTEST_VERDICT: &str = "POLY-SELFTEST: ";
+
+/// `screenshot [--release] [--out <file>] [--wait <text>] [kernel args...]`
+fn screenshot(args: &[String]) -> Result {
+    let (mut release, mut out, mut wait, mut cmdline) = (false, None, SELFTEST_VERDICT.to_string(), Vec::new());
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--release" => release = true,
+            "--out" => out = Some(PathBuf::from(it.next().ok_or("--out needs a file")?)),
+            "--wait" => wait = it.next().ok_or("--wait needs a text")?.clone(),
+            flag if flag.starts_with("--") => return Err(format!("screenshot: unknown option {flag}")),
+            arg => cmdline.push(arg),
+        }
+    }
+    let kernel = build_kernel(release)?;
+    let syms = Arc::new(Symbols::from_file(&kernel)?);
+    let disk = test_disk()?;
+    let devices = Devices::Test(&disk);
+    let flags = devices.flags();
+    cmdline.insert(0, &flags);
+    let out = out.unwrap_or_else(|| root().join("target").join("poly-screen.png"));
+    // QEMU writes the file itself, so give it a full path.
+    let out = std::path::absolute(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let shot = Screenshot { marker: &wait, file: &out };
+    boot_with(&kernel, &syms, DEFAULT_MEMORY, &cmdline.join(" "), devices, &[], Some(shot), |_| {})?;
+    eprintln!("==> screenshot saved to {}", out.display());
+    Ok(())
 }
 
 /// Must match `keyboard::TEST_READY` in the kernel.
@@ -369,7 +492,7 @@ fn keyboard_boot_test(
             });
         }
     };
-    let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &qemu_args, on_line);
+    let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &qemu_args, None, on_line);
     let _ = std::fs::remove_file(&monitor);
     let b = b?;
     ktest::parse(&b.output).check()?;
@@ -400,6 +523,7 @@ fn boot_typing(
     steps: &[(&str, &str)],
 ) -> Result<Boot> {
     let mut child = qemu(kernel, DEFAULT_MEMORY, append, devices, "stdio")
+        .args(["-display", "none"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -561,6 +685,11 @@ fn boot_tests() -> Result {
         if !b.output.contains("block: ram0: RAM disk") {
             return Err(format!("the RAM disk was not registered with {memory}"));
         }
+        let (w, h) = DEFAULT_DISPLAY;
+        let display = b.output.lines().find(|l| l.contains("display: ") && l.contains(" bytes per line;"));
+        if !display.is_some_and(|l| l.contains(&format!(" {w}x{h}x32, ")) && l.contains(" write-combining;")) {
+            return Err(format!("the display did not come up {w}x{h}, write-combining, with {memory}"));
+        }
         // How the disk waits, as the boot log says.
         let virtio0 = b.output.lines().find(|l| l.contains("block: virtio0: virtio-blk")).unwrap_or_default();
         let mode_ok = if polled {
@@ -623,6 +752,22 @@ fn boot_tests() -> Result {
     if b.status != Some(QEMU_FAILURE) || !failed {
         return Err(format!("a missing test disk was not reported as a failure (status {:?})", b.status));
     }
+
+    // The same for the display: no VGA (`-vga none`), but the flag.
+    eprintln!("==> boot test: the display tests fail when there is no display");
+    let only = format!("poly.qemu_exit poly.test=display::device_found {TEST_DISPLAY_FLAG}");
+    let b =
+        boot_with(&kernel, &syms, DEFAULT_MEMORY, &only, Devices::None, &["-vga".into(), "none".into()], None, |_| {})?;
+    let report = ktest::parse(&b.output);
+    let failed = matches!(report.failed.as_slice(), [(name, _)] if name == "display::device_found_and_mode_set");
+    if b.status != Some(QEMU_FAILURE) || !failed {
+        return Err(format!("a missing display was not reported as a failure (status {:?})", b.status));
+    }
+
+    // What the screen shows: a screenshot through QMP, compared pixel for
+    // pixel with the boot screen poly-gfx draws for the same size, after
+    // the display tests (which draw and must put the screen back).
+    screenshot_test(&kernel, &syms)?;
 
     eprintln!("==> boot test: page fault is caught and reported with a backtrace");
     let b = expect_fault(&kernel, &syms, "poly.selftest.page_fault", "CPU exception 14 (page fault)")?;
@@ -728,6 +873,32 @@ fn boot_tests() -> Result {
     Ok(())
 }
 
+/// Boot in a mode other than the default, take a screenshot once the
+/// display tests have passed, and compare it with the boot screen.
+fn screenshot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    let (w, h) = SCREENSHOT_DISPLAY;
+    eprintln!("==> boot test: the screen shows the boot screen at {w}x{h} (screenshot through QMP)");
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: screenshots need a Unix host");
+        return Ok(());
+    }
+    let target = root().join("target");
+    std::fs::create_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+    let file = target.join("poly-screen-test.ppm");
+    let append = format!("poly.test=display {TEST_DISPLAY_FLAG} poly.display={w}x{h}");
+    let shot = Screenshot { marker: PASS_MARKER, file: &file };
+    let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &[], Some(shot), |_| {})?;
+    ktest::parse(&b.output).check()?;
+    let got = screen::Image::read_ppm(&file)?;
+    let want = screen::boot_screen(w, h, &kernel_version()?);
+    screen::compare(&got, &want).map_err(|e| {
+        let expected = target.join("poly-screen-expected.ppm");
+        let saved =
+            want.write_ppm(&expected).map_or_else(|e| e, |()| format!("expected image: {}", expected.display()));
+        format!("the screenshot ({}) is not the boot screen: {e}; {saved}", file.display())
+    })
+}
+
 /// Boot with a `poly.selftest.*` flag that makes the kernel fault on purpose
 /// and check that the fault was reported: a panic whose message contains
 /// `report`, and QEMU's failure status.
@@ -762,6 +933,8 @@ fn ci() -> Result {
         cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
     )?;
     step("clippy (kernel)", cargo().current_dir(kernel_dir()).args(["clippy", "--", "-D", "warnings"]))?;
+    eprintln!("==> font tables");
+    font::run(&root(), &["--check".into()])?;
     test()?;
     coverage(&["check".into()])?;
     coverage(&["readme".into(), "--check".into()])?;

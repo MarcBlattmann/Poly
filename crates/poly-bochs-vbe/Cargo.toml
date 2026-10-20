@@ -1,0 +1,11 @@
+[package]
+name = "poly-bochs-vbe"
+description = "The Bochs VBE (DISPI) display interface of QEMU's standard VGA and bochs-display devices: probing and mode setting"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

@@ -7,6 +7,7 @@ pub mod backtrace;
 mod boot;
 pub mod context;
 pub mod cpu;
+pub mod dispi;
 mod fpu;
 pub mod gdt;
 pub mod i8042;

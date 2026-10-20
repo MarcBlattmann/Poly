@@ -9,6 +9,7 @@ mod acpi;
 mod arch;
 mod block;
 mod boot_info;
+mod display;
 mod dma;
 mod frames;
 mod heap;
@@ -113,6 +114,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     pci::init();
     block::init();
     keyboard::init(&boot);
+    display::init(&boot);
 
     // The shell's `test` command runs the tests again later.
     let memory: &'static MemoryMap = Box::leak(Box::new(memory));

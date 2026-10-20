@@ -21,6 +21,7 @@ what exists **today** and how it fits that plan.
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
+            display: QEMU standard VGA framebuffer + RAM back buffer; poly-gfx (drawing, font, text grid)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
                          syscall/sysret, FPU state, context switch)
 ```
@@ -40,8 +41,8 @@ what exists **today** and how it fits that plan.
    scheduler, reads the ACPI tables, sets up interrupts and time
    (`arch::init_interrupts`) and enables them, enumerates PCI, brings up the
    block layer (the virtio-blk disk if there is one, and a RAM disk) and the
-   PS/2 keyboard, and runs the boot self-test with the timer preempting
-   threads.
+   PS/2 keyboard and the display (which shows the boot screen), and runs the
+   boot self-test with the timer preempting threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
 5. Otherwise (or with `poly.shell` as well, once the tests passed) the
@@ -343,6 +344,82 @@ Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md).
   and an unpacker into any file system through the VFS. Tested against
   archives made by GNU cpio (stored, and live if `cpio` is installed).
 
+## Display
+
+A linear framebuffer on QEMU's standard VGA, a back buffer in RAM, and the
+host-tested drawing library `poly-gfx`
+([ADR 0019](adr/0019-display-framebuffer-and-drawing.md)).
+
+```
+   terminal (Phase 2), a panic screen (later)
+          │  display::draw(|canvas| grid.render(canvas, x, y, &font, &palette))
+          ▼
+   poly-gfx      Canvas: fill, clip, lines, blit, copy_within, text
+          │      Font: Spleen 8x16 and 12x24     TextGrid: cells, scrollback, escapes, dirty cells
+          ▼
+   back buffer   width × height × 4 bytes of contiguous frames, write-back (direct map)
+          │  display::flush(rect): copies those rows
+          ▼
+   framebuffer   BAR 0 of PCI 1234:1111, mapped write-combining (PAT entry 1)
+                 mode set with poly-bochs-vbe through BAR 2 + 0x500 (or I/O ports 0x1ce/0x1cf)
+```
+
+- **Bring-up** (`display::init`, after `block::init`): finds PCI function
+  1234:1111 (the standard VGA that `q35` always has, or `bochs-display`),
+  turns on decoding, checks the Bochs VBE interface ID, reads the largest
+  mode (GETCAPS) and sets `poly.display=<width>x<height>` from the command
+  line or 1280x800, at 32 bits per pixel (XRGB8888), falling back to the
+  default when the device refuses. The registers are read back to confirm
+  the mode. It maps all of BAR 0 write-combining (`mm::map_mmio_wc`,
+  uncached without PAT), allocates the back buffer
+  (`frames::allocate_contiguous`: more than one 4 MiB block for modes past
+  1280x800), draws the boot screen (`poly_gfx::boot_screen`: "Poly", the
+  version and the mode) and flushes it. `poly.display=off` skips it all.
+  The protocol (`poly-bochs-vbe`) is tested on the host against a
+  simulated device, including devices that refuse modes.
+- **Drawing.** `display::with_canvas(|c| ...)` hands out the back buffer as
+  a `poly_gfx::Canvas`; `display::flush(rect)` / `flush_all()` copy rows of
+  it to the framebuffer; `display::draw(|c| -> Option<Rect>)` does both,
+  flushing the rectangle the closure returns (what `TextGrid::render`
+  returns). `display::info()` gives width, height, stride, pixel format,
+  the framebuffer's address and size, and whether it is write-combining.
+  Everything sits behind one spinlock (interrupts off while drawing), so
+  any context may draw. Only the flush touches device memory, and only
+  with writes.
+- **`poly-gfx`** draws on any `Canvas` (a byte slice, width, height,
+  stride, one of four pixel formats), clipping everything: rectangles,
+  lines, blits with format conversion, `copy_within` (overlapping moves, for
+  scrolling), and text in a `Font` (Spleen 8x16 and 12x24, BSD 2-Clause,
+  converted from BDF by `cargo xtask font`; see `THIRD_PARTY.md`; ASCII,
+  Latin-1 and Extended-A, Greek, Cyrillic, box drawing, blocks, Braille;
+  a box for anything else), optionally scaled up. `TextGrid` is a terminal
+  screen over caller-provided cells: wrap with a pending wrap, scrolling
+  into a bounded scrollback (a ring, so scrolling moves no cells), a view
+  that scrolls back into it, `\n` `\r` `\b` `\t`, the common escape
+  sequences (SGR colours: 16, 256 and RGB; bold, faint, underline, inverse,
+  hidden, crossed out; cursor movement, erase, insert / delete characters
+  and lines, scroll, save / restore, cursor on / off, wrap on / off) and a
+  cursor in three shapes. It tracks changed cells per row, scrolled lines
+  and the drawn cursor; `render` moves scrolled pixels and draws only the
+  changed cells at any offset on a canvas, so a status bar can sit next to
+  it. Nothing in `poly-gfx` allocates.
+
+```text
+mm: direct map at 0xffff800000000000: ...; NX: yes, 1 GiB pages: no, global pages: yes, write-combining (PAT): yes
+display: 00:01.0 1280x800x32, 5120 bytes per line; framebuffer 0xfd000000 (16 MiB) mapped write-combining; registers through MMIO (BAR 2)
+```
+
+The kernel tests (`display::*`) check that the registers read back the
+mode asked for, that the I/O ports and the MMIO BAR show the same
+registers, that the framebuffer mapping is write-combining and holds a
+pixel written to it, that drawing reaches the back buffer and not the
+screen, that a flush copies exactly its rectangle (and nothing around it),
+and that `draw` flushes what it drew; each puts the screen back as it found
+it. With `poly.test.display` (which `cargo xtask` passes) they require a
+display. Under TCG a full redraw of 1280x800 in the 8x16 font takes about
+40 ms and a full flush about 20 ms, so a terminal renders once per batch of
+output.
+
 ## Personality routing
 
 - `poly-binfmt` identifies ELF / PE / Mach-O (and fat Mach-O, `#!` scripts)
@@ -400,8 +477,9 @@ services once it decodes those system calls.
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
-| Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi` | `cargo xtask test` |
+| Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail), the display's mode, mapping, back buffer and flush (and a boot without VGA must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi`, `poly.test.display` | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
+| What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
 | Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff`; Linux against Linux in `cargo xtask ci`; Poly reports "unsupported" until it runs programs |
 | App trace replay | recorded sessions | later |
 
@@ -418,7 +496,7 @@ mapping early in `kernel_entry`:
 |---|---|---|
 | `0x0` – `0x7fff_ffff_ffff` | – | user half: empty in the kernel PML4 (the boot identity map is gone); each user address space has its own (below) |
 | `0xffff_8000_0000_0000` + phys | every region of the memory map, up to 64 TiB | direct map: RW, NX; RAM write-back, reserved ranges uncached; holes unmapped |
-| `0xffff_c000_0000_0000` – `+512 GiB` | device ranges | `mm::map_mmio`: uncached (PCD+PWT), NX, a gap page after each; PCI ECAM windows and BARs |
+| `0xffff_c000_0000_0000` – `+512 GiB` | device ranges | `mm::map_mmio`: uncached (PCD+PWT), NX, a gap page after each; PCI ECAM windows and BARs. `mm::map_mmio_wc`: write-combining (PWT alone, PAT entry 1), for the framebuffer |
 | `0xffff_ffff_8000_0000` + phys | kernel image | `.text` R+X, `.rodata`/`.kernel_tests` R, `.data`/`.bss` RW+NX, stacks RW+NX |
 
 Kernel image detail (`kernel/linker.ld`, every boundary page-aligned):
