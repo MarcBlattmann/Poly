@@ -3,6 +3,7 @@
 //! page describes and calls the [`LinuxKernel`](crate::kernel::LinuxKernel)
 //! for the work. They are registered by number in [`crate::table`].
 
+pub mod futex;
 pub mod io;
 pub mod mem;
 pub mod process;

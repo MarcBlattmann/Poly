@@ -25,6 +25,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0024](0024-elf-loader.md) | ELF loader in a host-tested crate: validated headers, page mapping plans, the psABI initial stack | Accepted |
 | [0026](0026-user-address-space-regions.md) | User address spaces: a region map in a host-tested crate (`poly-vm`), page state in the page tables | Accepted |
 | [0025](0025-linux-syscall-table-and-kernel-services-trait.md) | Linux system calls: a generated table, man-page handlers, a kernel-services trait | Accepted |
+| [0031](0031-linux-signals-and-futexes.md) | Linux signals and futexes: personality-owned state, kernel-provided blocking | Accepted |
 
 ## Open decisions
 

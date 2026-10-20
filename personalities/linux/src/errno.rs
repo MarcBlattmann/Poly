@@ -53,11 +53,46 @@ impl Errno {
     pub const ENOSYS: Errno = Errno(38);
     pub const EOVERFLOW: Errno = Errno(75);
     pub const EOPNOTSUPP: Errno = Errno(95);
+    pub const ETIMEDOUT: Errno = Errno(110);
+
+    // ---- internal: never returned to user space -----------------------
+    //
+    // A handler that was interrupted by a signal returns one of these.
+    // The dispatcher turns it into `-EINTR` in `rax` and records how the
+    // call may be restarted; signal delivery
+    // ([`crate::signal::deliver::exit_to_user`]) then either leaves the
+    // `EINTR` or rewinds the thread to the `syscall` instruction, the way
+    // signal(7) describes for each kind of call. The values are Poly's own;
+    // they lie above every error number Linux defines for user space.
+
+    /// Restart unless a handler without `SA_RESTART` runs (signal(7):
+    /// "automatically restarted after the signal handler returns if the
+    /// SA_RESTART flag was used; otherwise the call fails with EINTR").
+    pub const RESTART_IF_SA_RESTART: Errno = Errno(3840);
+    /// Always restart, whatever the handler's flags.
+    pub const RESTART_ALWAYS: Errno = Errno(3841);
+    /// Restart only if no handler runs (a stop and `SIGCONT`, or a signal
+    /// that is ignored after all); with a handler: `EINTR`.
+    pub const RESTART_IF_NO_HANDLER: Errno = Errno(3842);
+    /// Like [`Errno::RESTART_IF_NO_HANDLER`], but the call continues
+    /// through restart_syscall(2) with the state saved in the thread: a
+    /// wait with a relative timeout continues with the time left. With a
+    /// handler it fails with `EINTR`, `SA_RESTART` or not: restarting it
+    /// after a handler would start the timeout over, and restart_syscall(2)
+    /// "ensures that the restarted call doesn't sleep for longer than the
+    /// time it was told to" (to be confirmed by the diff runner).
+    pub const RESTART_WITH_BLOCK: Errno = Errno(3843);
 
     /// An error number from its value. Returns `None` for 0 and for values
     /// above [`MAX_ERRNO`], which the ABI cannot express.
     pub const fn new(value: u16) -> Option<Errno> {
         if value == 0 || value > MAX_ERRNO { None } else { Some(Errno(value)) }
+    }
+
+    /// True for the internal restart codes, which the dispatcher must
+    /// never return to user space.
+    pub const fn is_restart(self) -> bool {
+        self.0 >= 3840 && self.0 <= 3843
     }
 
     /// The positive error number.
@@ -117,6 +152,11 @@ impl Errno {
             38 => "ENOSYS",
             75 => "EOVERFLOW",
             95 => "EOPNOTSUPP",
+            110 => "ETIMEDOUT",
+            3840 => "RESTART_IF_SA_RESTART",
+            3841 => "RESTART_ALWAYS",
+            3842 => "RESTART_IF_NO_HANDLER",
+            3843 => "RESTART_WITH_BLOCK",
             _ => return None,
         })
     }
