@@ -7,6 +7,7 @@ mod fileio;
 mod files;
 mod futex;
 mod io;
+mod madvise;
 mod mem;
 mod process;
 mod signal;

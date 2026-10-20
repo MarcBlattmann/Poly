@@ -110,13 +110,43 @@ pub fn programs_image(programs: &Programs<'_>) -> Vec<u8> {
     w.finish()
 }
 
-/// [`programs_image`] with more files (`path` relative to `/`, mode 0644).
-pub fn programs_image_with_files(programs: &Programs<'_>, files: &[(&str, &[u8])]) -> Vec<u8> {
+/// More of a file tree than `/bin`: files (path without the leading `/`,
+/// mode, contents) and symbolic links (path, target). Parent directories
+/// are made as needed (mode 0755).
+#[derive(Debug, Default)]
+pub struct Tree {
+    pub files: Vec<(String, u16, Vec<u8>)>,
+    pub symlinks: Vec<(String, String)>,
+}
+
+/// [`programs_image`] plus `tree`: the image of the dynamic linking boot
+/// tests (`/bin` holds the programs, `tree` the dynamic linker and the
+/// shared libraries, see `dynamic.rs`).
+pub fn programs_image_with(programs: &Programs<'_>, tree: &Tree) -> Vec<u8> {
     let mut w = writer();
     base(&mut w);
     bin(&mut w, programs);
-    for (path, data) in files {
-        w.file(path.as_bytes(), 0o644, data);
+    let mut made: std::collections::BTreeSet<String> = ["etc", "dev", "bin"].map(String::from).into();
+    let paths = tree.files.iter().map(|(p, _, _)| p).chain(tree.symlinks.iter().map(|(p, _)| p));
+    let mut dirs = std::collections::BTreeSet::new();
+    for path in paths {
+        let mut parent = Path::new(path).parent();
+        while let Some(dir) = parent.filter(|d| !d.as_os_str().is_empty()) {
+            dirs.insert(dir.to_string_lossy().into_owned());
+            parent = dir.parent();
+        }
+    }
+    // BTreeSet order puts every directory after its parent.
+    for dir in dirs {
+        if made.insert(dir.clone()) {
+            w.dir(dir.as_bytes(), 0o755);
+        }
+    }
+    for (path, mode, data) in &tree.files {
+        w.file(path.as_bytes(), *mode, data);
+    }
+    for (path, target) in &tree.symlinks {
+        w.symlink(path.as_bytes(), target.as_bytes());
     }
     w.finish()
 }
@@ -190,6 +220,29 @@ mod tests {
         assert_eq!(vfs.stat(&ctx, &Cred::root(), At::Cwd, b"/bin", false).unwrap().perm(), 0o755);
         // No programs, no /bin: the test image is unchanged by this.
         assert_eq!(test_image_with(&[]), test_image());
+    }
+
+    #[test]
+    fn trees_get_their_directories_files_and_links() {
+        let tree = Tree {
+            files: vec![
+                ("lib64/ld.so".into(), 0o755, b"\x7fELF ld".to_vec()),
+                ("usr/lib/x/libc.so.6".into(), 0o644, b"\x7fELF libc".to_vec()),
+            ],
+            symlinks: vec![("lib/libc.so.6".into(), "/usr/lib/x/libc.so.6".into())],
+        };
+        let image = programs_image_with(&[("prog", b"\x7fELF prog")], &tree);
+        assert_eq!(image, programs_image_with(&[("prog", b"\x7fELF prog")], &tree));
+        let fs = Arc::new(Tmpfs::new(Arc::new(Zero)));
+        poly_cpio::unpack_fs(&image, fs.clone()).unwrap();
+        let vfs = Vfs::new(fs);
+        let ctx = vfs.root_context().unwrap();
+        let stat = |p: &str, follow| vfs.stat(&ctx, &Cred::root(), At::Cwd, p.as_bytes(), follow).unwrap();
+        assert_eq!(stat("/usr/lib/x", false).perm(), 0o755);
+        assert_eq!((stat("/lib64/ld.so", false).perm(), stat("/lib64/ld.so", false).size), (0o755, 7));
+        assert_eq!(stat("/lib/libc.so.6", true).size, 9, "the link leads to the library");
+        assert_eq!(stat("/bin/prog", false).perm(), 0o755);
+        assert_eq!(stat("/etc/motd", false).size, MOTD.len() as u64);
     }
 
     #[test]

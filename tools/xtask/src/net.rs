@@ -276,8 +276,11 @@ fn socket_program_test(kernel: &Path, syms: &Arc<Symbols>, echo: &EchoServers) -
     eprintln!("==> boot test: a user program uses TCP, UDP and netlink sockets on virtio-net (/bin/socket-test)");
     let elf = programs::socket_test()?;
     let conf = format!("10.0.2.2 {}\n", echo.port);
-    let image =
-        initramfs::programs_image_with_files(&[("socket-test", &elf)], &[("etc/socket-test.conf", conf.as_bytes())]);
+    let tree = initramfs::Tree {
+        files: vec![("etc/socket-test.conf".into(), 0o644, conf.into_bytes())],
+        symlinks: Vec::new(),
+    };
+    let image = initramfs::programs_image_with(&[("socket-test", &elf)], &tree);
     let image = initramfs::write(&root(), "poly-socket-test-initramfs.cpio", &image)?;
     let (tcp_before, udp_before) = (echo.tcp_bytes.load(Ordering::Relaxed), echo.udp_datagrams.load(Ordering::Relaxed));
     let mut args = nic_args(None, false);

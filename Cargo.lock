@@ -333,6 +333,7 @@ version = "0.0.1"
 dependencies = [
  "poly-block",
  "poly-cpio",
+ "poly-elf",
  "poly-ext2",
  "poly-gfx",
  "poly-term",

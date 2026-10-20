@@ -3,8 +3,11 @@
 //! segments ([`Seen`]); the test hook records it (dereferencing the
 //! strings and `AT_RANDOM` with the user-copy routines) and the tests
 //! compare it with what the psABI and getauxval(3) say they should find.
+//! The dynamically linked ones (`ET_EXEC` and `ET_DYN` with `PT_INTERP`)
+//! start in the test interpreter, which checks and reports the auxiliary
+//! vector and jumps to the program (ADR 0049).
 
-use super::exec::{self, ExecError, ExecParams, INITIAL_STACK};
+use super::exec::{self, ExecError, ExecParams, INITIAL_STACK, OpenInterpreter};
 use super::memory::{Kind, PAGE_SIZE};
 use super::test_elf::{self, Seen, TestElf};
 use super::*;
@@ -113,11 +116,21 @@ fn link_entry(image: &[u8]) -> u64 {
     u64::from_le_bytes(image[24..32].try_into().expect("8 bytes"))
 }
 
+/// Opens [`TestElf::Ld`] for its path, as a kernel's VFS would; anything
+/// else is `ENOENT`.
+fn open_ld(path: &[u8]) -> Result<Arc<dyn PageSource>, ExecError> {
+    if path == test_elf::LD_PATH {
+        Ok(Arc::new(MemoryImage(TestElf::Ld.image())))
+    } else {
+        Err(ExecError::InterpreterOpen(2))
+    }
+}
+
 /// Exec `which`, run it to its end, and check everything it reported.
 fn run_and_check(which: TestElf, bias: u64) -> TestResult {
     let image = which.image();
     SEEN.lock().clear();
-    let loaded = exec::load(Arc::new(MemoryImage(image)), &params()).map_err(|e| {
+    let loaded = exec::load_dynamic(Arc::new(MemoryImage(image)), &params(), &open_ld).map_err(|e| {
         kprintln!("user: exec of the test executable failed: {e:?}");
         "exec of the test executable failed"
     })?;
@@ -128,10 +141,33 @@ fn run_and_check(which: TestElf, bias: u64) -> TestResult {
     if memory.resident_pages() != stack_pages {
         return Err("exec populated more than the initial stack");
     }
-    let base = bias + if which == TestElf::Pie { 0 } else { test_elf::TEXT_BASE };
+    let base = bias + if matches!(which, TestElf::Pie | TestElf::Dyn) { 0 } else { test_elf::TEXT_BASE };
     if info.bias != bias || info.entry != bias + link_entry(image) || info.start != base || !info.warnings.is_empty() {
         return Err("exec placed the image or its entry point wrong");
     }
+    // A dynamically linked program starts in its interpreter, which lies
+    // in free space of the mmap area, above the program and its break.
+    let dynamic = matches!(which, TestElf::Interp | TestElf::Dyn);
+    match info.interp {
+        Some(ld) if dynamic => {
+            let layout = memory.layout();
+            if loaded.entry.rip != ld.entry || ld.entry != ld.base + link_entry(TestElf::Ld.image()) {
+                return Err("a dynamically linked program does not start at its interpreter's entry point");
+            }
+            if ld.start != ld.base || ld.end != ld.base + PAGE_SIZE || ld.start < info.end || ld.end > layout.mmap_base
+            {
+                kprintln!("user: interpreter at {:#x}-{:#x}, program ends at {:#x}", ld.start, ld.end, info.end);
+                return Err("the interpreter is not in free space below the stack");
+            }
+        }
+        None if !dynamic => {
+            if loaded.entry.rip != info.entry {
+                return Err("a static program does not start at its entry point");
+            }
+        }
+        _ => return Err("exec loaded an interpreter for a static program, or none for a dynamic one"),
+    }
+    let interp_base = info.interp.map_or(0, |ld| ld.base);
     let t = spawn_in(process(), loaded.memory, loaded.entry, hook).map_err(|_| "could not spawn the program")?;
     let code = thread::join(t).map_err(|_| "join failed")?;
     let seen = core::mem::take(&mut *SEEN.lock());
@@ -173,7 +209,7 @@ fn run_and_check(which: TestElf, bias: u64) -> TestResult {
         (AT_PHENT, 56),
         (AT_PHNUM, which.phnum()),
         (AT_PAGESZ, PAGE_SIZE),
-        (AT_BASE, 0),
+        (AT_BASE, interp_base),
         (AT_FLAGS, 0),
         (AT_ENTRY, info.entry),
         (AT_UID, 0),
@@ -198,6 +234,24 @@ fn run_and_check(which: TestElf, bias: u64) -> TestResult {
     let random = bytes(AT_RANDOM).ok_or("AT_RANDOM does not point at 16 readable bytes")?;
     if random.iter().all(|&b| b == 0) || !on_stack(value(AT_RANDOM)) || !on_stack(value(AT_EXECFN)) {
         return Err("AT_RANDOM or AT_EXECFN does not point into the information block");
+    }
+
+    // What the interpreter saw, before the program ran.
+    let ld_base = of(&seen, Seen::LdBase);
+    let ld_entry = of(&seen, Seen::LdEntry);
+    if dynamic {
+        let first = seen.first().map(|r| r.kind);
+        if first != Some(Seen::LdBase as u64) || ld_base.len() != 1 || ld_entry.len() != 1 {
+            return Err("the interpreter did not run before the program");
+        }
+        if (ld_base[0].a, ld_base[0].b) != (interp_base, interp_base) {
+            return Err("AT_BASE is not the interpreter's load address");
+        }
+        if (ld_entry[0].a, ld_entry[0].b) != (info.entry, base + 64) {
+            return Err("the interpreter did not find the program's AT_ENTRY and AT_PHDR");
+        }
+    } else if !ld_base.is_empty() || !ld_entry.is_empty() {
+        return Err("a static program ran an interpreter");
     }
 
     // The segments: data, zero tails, .bss, a private copy, stack growth.
@@ -245,6 +299,51 @@ kernel_test! {
 kernel_test! {
     fn exec_runs_a_static_pie_at_the_default_base() -> TestResult {
         run_and_check(TestElf::Pie, DEFAULT_DYN_BASE)
+    }
+}
+
+kernel_test! {
+    fn exec_starts_a_dynamically_linked_pie_in_its_interpreter() -> TestResult {
+        run_and_check(TestElf::Dyn, DEFAULT_DYN_BASE)
+    }
+}
+
+kernel_test! {
+    fn exec_starts_a_dynamically_linked_executable_in_its_interpreter() -> TestResult {
+        run_and_check(TestElf::Interp, 0)
+    }
+}
+
+kernel_test! {
+    fn exec_refuses_interpreters_it_cannot_load() -> TestResult {
+        let not_elf: &'static [u8] = b"#!/bin/sh\n";
+        let missing = |_: &[u8]| -> Result<Arc<dyn PageSource>, ExecError> { Err(ExecError::InterpreterOpen(2)) };
+        let garbage = |_: &[u8]| -> Result<Arc<dyn PageSource>, ExecError> { Ok(Arc::new(MemoryImage(not_elf))) };
+        // An interpreter that names an interpreter itself.
+        let nested =
+            |_: &[u8]| -> Result<Arc<dyn PageSource>, ExecError> { Ok(Arc::new(MemoryImage(TestElf::Dyn.image()))) };
+        let cases: [(OpenInterpreter<'_>, ExecError, u64); 3] = [
+            (&missing, ExecError::InterpreterOpen(2), 2),
+            (&garbage, ExecError::BadInterpreter(poly_elf::Error::NotElf), 80),
+            (&nested, ExecError::BadInterpreter(poly_elf::Error::NestedInterpreter), 80),
+        ];
+        for (open, error, errno) in cases {
+            for which in [TestElf::Dyn, TestElf::Interp] {
+                let _irq = InterruptsOff::new();
+                let before = user_frames();
+                let result = exec::load_dynamic(Arc::new(MemoryImage(which.image())), &params(), open).map(|_| ());
+                if result != Err(error) || error.linux_errno() != errno || user_frames() != before {
+                    kprintln!("user: exec gave {result:?}, expected {error:?}");
+                    return Err("exec did not refuse a bad interpreter as expected");
+                }
+            }
+        }
+        // The interpreter run as the program: a static PIE.
+        let ld = exec::load(Arc::new(MemoryImage(TestElf::Ld.image())), &params()).map_err(|_| "exec of ld failed")?;
+        if ld.info.interp.is_some() || ld.info.bias != DEFAULT_DYN_BASE || ld.entry.rip != ld.info.entry {
+            return Err("the interpreter run as a program is not loaded like a static PIE");
+        }
+        tear_down(ld.memory)
     }
 }
 

@@ -49,6 +49,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0045](0045-credentials-and-capabilities.md) | Credentials and capabilities: per-thread `Creds` (ids, groups, capability sets) in the Linux personality, capability-based permission checks in the VFS, execve's set-user-ID and capability transformation | Accepted |
 | [0046](0046-terminals-line-discipline-ptys-job-control.md) | Terminals: the line discipline, terminals with job control, ptys and devpts in a host-tested crate (`poly-tty`) on a kernel `Host`; a device may open as another (`CharDevice::open`); a device's input goes to its terminal while a program has it open, else to the kernel shell | Accepted |
 | [0048](0048-sockets-inet-unix-netlink.md) | Sockets: socket files over the stack with per-socket wake-ups (`Stack::take_changed`), Unix sockets with names, credentials and descriptor passing in `poly-unix` (in-flight cycles collected), `NETLINK_ROUTE` dumps in the personality, the socket calls behind one `LinuxNet` services trait | Accepted |
+| [0049](0049-dynamic-linking-program-interpreter.md) | Dynamic linking: exec loads the program interpreter (glibc's own `ld.so`, unchanged) next to the program in free space of the `mmap` area (`poly_elf::Footprint`), `AT_BASE`/`AT_ENTRY`/`AT_PHDR`; `madvise`; `rseq` stays `ENOSYS`; test programs and the host's C library collected from `DT_NEEDED` at test time | Accepted |
 
 ## Open decisions
 
