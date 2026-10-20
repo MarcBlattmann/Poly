@@ -12,6 +12,7 @@
 //!                       print the kernel function at each address; with no
 //!                       addresses, add symbols to the backtrace in a log on stdin
 //!   coverage <args>     run the coverage tool (see tools/coverage)
+//!   pipeline <args>     run the agent pipeline tool (see tools/pipeline, docs/AGENT_PIPELINE.md)
 
 mod console;
 mod ktest;
@@ -47,8 +48,9 @@ fn main() -> ExitCode {
         Some("ci") => ci(),
         Some("symbolize") => symbolize(&args[1..]),
         Some("coverage") => coverage(&args[1..]),
+        Some("pipeline") => pipeline(&args[1..]),
         _ => {
-            eprintln!("usage: cargo xtask <build|run|test|ci|symbolize|coverage> [--release]");
+            eprintln!("usage: cargo xtask <build|run|test|ci|symbolize|coverage|pipeline> [--release]");
             return ExitCode::from(2);
         }
     };
@@ -734,7 +736,18 @@ fn ci() -> Result {
     step("clippy (kernel)", cargo().current_dir(kernel_dir()).args(["clippy", "--", "-D", "warnings"]))?;
     test()?;
     coverage(&["check".into()])?;
-    coverage(&["readme".into(), "--check".into()])
+    coverage(&["readme".into(), "--check".into()])?;
+    // The test corpus on Linux against itself: the tracer and the diff
+    // runner must find no differences. Takes a few seconds; skips itself
+    // without a C compiler or where ptrace is not permitted.
+    pipeline(&["selfcheck".into()])
+}
+
+fn pipeline(args: &[String]) -> Result {
+    step(
+        "pipeline",
+        cargo().current_dir(root()).args(["run", "--quiet", "--package", "poly-pipeline", "--"]).args(args),
+    )
 }
 
 fn coverage(args: &[String]) -> Result {

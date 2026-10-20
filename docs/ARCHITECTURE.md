@@ -343,7 +343,7 @@ through the QEMU monitor (`sendkey`), with the US layout and with
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi` | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
-| Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
+| Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff`; Linux against Linux in `cargo xtask ci`; Poly reports "unsupported" until it runs programs |
 | App trace replay | recorded sessions | later |
 
 Backtraces, symbolisation and attaching gdb/lldb are described in

@@ -9,7 +9,9 @@ spec sheet and visible tests you were handed, plus public docs and export names.
 - `kernel/`: the bare-metal kernel (its own Cargo workspace, target `x86_64-unknown-none`)
 - `crates/`: `no_std` libraries shared by the kernel, unit-tested on the host
 - `personalities/{linux,nt,xnu}/`: per-OS system call layers
-- `tools/xtask/`: build/run/test driver; `tools/coverage/`: coverage map tooling
+- `tools/xtask/`: build/run/test driver; `tools/coverage/`: coverage map tooling;
+  `tools/pipeline/`: agent pipeline tools (tracer, diff runner, specs, hand-offs; see docs/AGENT_PIPELINE.md)
+- `tests/linux/`: test programs run on real Linux and on Poly by the diff runner
 - `coverage/`: the coverage map, source of truth for implementation status
   (`index.json` + one file per component: `coverage/<os>/<layer>/<component>.json`)
 - `specs/`: spec sheets and visible tests, one directory per OS

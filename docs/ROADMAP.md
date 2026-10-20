@@ -70,7 +70,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] **Milestone:** a static Linux "hello world" runs and exits cleanly
 - [ ] Agent pipeline v0: Linux syscall tracer on a real Linux VM, spec agent, implementer agent
 - [ ] Diff runner v0: same tests on real Linux and on Poly, results compared per test
-- [ ] Held-out test store outside this repo; hand-off logging in `specs/HANDOFF_LOG.md`
+- [x] Held-out test store outside this repo; hand-off logging in `specs/HANDOFF_LOG.md`
 
 ## Phase 4: Linux userland
 
