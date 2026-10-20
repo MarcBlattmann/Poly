@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 34 of 139 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 36 of 139 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">34 / 139 milestones · 24%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">36 / 139 milestones · 26%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -109,17 +109,17 @@
 <g><title>✔ Safe user-memory access (copy_from_user / copy_to_user with fault recovery)</title>
 <rect x="419.3" y="143.0" width="37.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Virtual memory areas, demand paging, page-fault handler for user space</title>
-<rect x="459.0" y="143.0" width="37.7" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Virtual memory areas, demand paging, page-fault handler for user space</title>
+<rect x="459.0" y="143.0" width="37.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>VFS core: inodes, dentries, mounts, file descriptor tables, path lookup</title>
-<rect x="498.7" y="143.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="498.7" y="143.0" width="37.7" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Initial RAM disk (cpio) mounted as the root file system; tmpfs</title>
 <rect x="538.3" y="143.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>ELF loader for static binaries: segments, initial stack, auxiliary vector</title>
-<rect x="578.0" y="143.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ ELF loader for static binaries: segments, initial stack, auxiliary vector</title>
+<rect x="578.0" y="143.0" width="37.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>First Linux syscalls: write, exit_group, brk, mmap, munmap, arch_prctl</title>
 <rect x="617.7" y="143.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
@@ -136,7 +136,7 @@
 <g><title>✔ Held-out test store outside this repo; hand-off logging in specs/HANDOFF_LOG.md</title>
 <rect x="776.3" y="143.0" width="37.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">4/12</text>
+<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">6/12</text>
 <text x="16.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 4  Linux userland</text>
 <g><title>Processes and threads: clone, fork (copy-on-write), execve, exit, wait4</title>
 <rect x="340.0" y="173.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>

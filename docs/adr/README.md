@@ -25,6 +25,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0022](0022-user-mode-address-spaces-and-system-calls.md) | User mode: one PML4 per process sharing the kernel half, PCIDs, syscall/SYSRET with an IRETQ fallback, user copies through an exception table, eager FPU switching | Accepted |
 | [0024](0024-elf-loader.md) | ELF loader in a host-tested crate: validated headers, page mapping plans, the psABI initial stack | Accepted |
 | [0026](0026-user-address-space-regions.md) | User address spaces: a region map in a host-tested crate (`poly-vm`), page state in the page tables | Accepted |
+| [0036](0036-demand-paging-and-exec.md) | Demand paging and exec: a per-process memory map, faults resolved against it (user copies too), ELF segments mapped lazily through file windows | Accepted |
 | [0025](0025-linux-syscall-table-and-kernel-services-trait.md) | Linux system calls: a generated table, man-page handlers, a kernel-services trait | Accepted |
 | [0020](0020-ps2-keyboard-and-layouts.md) | PS/2 keyboard: decoding and layouts in `poly-input`, an i8042 driver on IRQ 1 with a byte ring | Accepted |
 | [0021](0021-kernel-shell.md) | The kernel shell: a host-tested line editor on `alloc`, a `Console` trait, serial input on IRQ 4 | Accepted (amends 0003: shared crates may use `alloc`) |

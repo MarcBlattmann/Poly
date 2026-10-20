@@ -4,9 +4,17 @@
 //!
 //! # Running user code
 //!
-//! 1. [`AddressSpace::new`] makes an empty address space (the kernel half is
-//!    shared); [`AddressSpace::map_zeroed`], [`AddressSpace::write`] and
-//!    [`AddressSpace::protect`] fill it (the ELF loader's job later).
+//! 1. [`exec::load`] builds the [`Memory`] of a static ELF executable
+//!    (regions for its segments and stack, the initial stack with argv,
+//!    envp and the auxiliary vector) and [`spawn_in`] starts a thread in it;
+//!    [`exec::exec`] does both. Its pages come in on demand, at the first
+//!    access ([`memory`]).
+//!
+//!    Tests also build bare address spaces by hand: [`AddressSpace::new`]
+//!    makes an empty one (the kernel half is shared);
+//!    [`AddressSpace::map_zeroed`], [`AddressSpace::write`] and
+//!    [`AddressSpace::protect`] fill it. Such a space has no memory map,
+//!    so every page fault in it is fatal.
 //! 2. [`spawn`] starts a thread of a [`Process`] in it at an [`Entry`]
 //!    (RIP, RSP and three arguments in RDI, RSI, RDX), with a
 //!    [`SyscallHook`] that handles its system calls. [`DEFAULT_HOOK`]
@@ -16,9 +24,11 @@
 //!    registers as a `poly_abi::SyscallRegs`. It may block, sleep, yield,
 //!    copy from and to user memory, end the thread ([`exit`]) or make it
 //!    resume somewhere else ([`set_return_address`]).
-//! 4. A CPU exception in user mode kills the thread ([`kill_current`]): the
-//!    kernel logs it and the thread exits with [`killed`]`(vector)`, which
-//!    is what [`thread::join`] returns.
+//! 4. A page fault on a page its [`Memory`] can bring in is resolved and the
+//!    instruction retried ([`page_fault`]). Any other CPU exception in user
+//!    mode kills the thread ([`kill_current`]): the kernel logs it and the
+//!    thread exits with [`killed`]`(vector)`, which is what
+//!    [`thread::join`] returns.
 //!
 //! Killing a thread does not (yet) end the other threads of its process:
 //! there is no process-wide thread list until exit_group needs one.
@@ -28,18 +38,26 @@
 //! [`copy_from_user`], [`copy_to_user`] and [`strncpy_from_user`] access the
 //! address space that is loaded, i.e. the calling thread's, and return
 //! [`Efault`] for any address that is not mapped user memory with the right
-//! access, instead of faulting. Code that runs on behalf of a process uses
-//! nothing else to touch its memory. [`AddressSpace::read`] and
-//! [`AddressSpace::write`] reach a space that is not loaded (a loader
-//! filling a new process, a debugger).
+//! access, instead of faulting. Pages of the thread's [`Memory`] that are
+//! not present yet are brought in first, as for an access from ring 3.
+//! Code that runs on behalf of a process uses nothing else to touch its
+//! memory. [`Memory::read`], [`Memory::write`],
+//! [`AddressSpace::read`] and [`AddressSpace::write`] reach a space that is
+//! not loaded (a loader filling a new process, a debugger).
 
+pub mod exec;
+mod exec_tests;
+pub mod memory;
+mod memory_tests;
 mod programs;
+mod test_elf;
 mod tests;
 
 pub use crate::arch::user::{
-    AddressSpace, Efault, Entry, Fault, MapError, Mapping, Prot, USER_END, USER_START, copy_from_user, copy_to_user,
-    fs_base, gs_base, is_user_range, set_fs_base, set_gs_base, strncpy_from_user,
+    AddressSpace, Efault, Entry, Fault, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, copy_from_user,
+    copy_to_user, fs_base, gs_base, is_user_range, set_fs_base, set_gs_base, strncpy_from_user, user_frames,
 };
+pub use memory::{FaultError, FileRef, Memory, MemoryError, MemoryImage, PageSource};
 
 use crate::arch;
 use crate::kprintln;
@@ -71,6 +89,9 @@ pub struct UserThread {
     process: Arc<Process>,
     hook: SyscallHook,
     entry: Entry,
+    /// The memory map page faults are resolved against; `None` for a bare
+    /// address space ([`spawn`]), where every fault is fatal.
+    memory: Option<Arc<Memory>>,
     /// Where to resume ring 3 after the current system call, if not after
     /// the `syscall` instruction ([`set_return_address`]).
     return_to: Option<u64>,
@@ -87,8 +108,32 @@ pub fn spawn(
     entry: Entry,
     hook: SyscallHook,
 ) -> Result<ThreadId, SpawnError> {
+    spawn_thread(process, space, None, entry, hook)
+}
+
+/// Start a thread of `process` in `memory` (see [`spawn`]): its page faults
+/// are resolved against `memory`'s regions, so its pages come in on
+/// demand. Threads started in the same `memory` share it, as the threads of
+/// one process do.
+pub fn spawn_in(
+    process: Arc<Process>,
+    memory: Arc<Memory>,
+    entry: Entry,
+    hook: SyscallHook,
+) -> Result<ThreadId, SpawnError> {
+    let space = Arc::clone(memory.space());
+    spawn_thread(process, space, Some(memory), entry, hook)
+}
+
+fn spawn_thread(
+    process: Arc<Process>,
+    space: Arc<AddressSpace>,
+    memory: Option<Arc<Memory>>,
+    entry: Entry,
+    hook: SyscallHook,
+) -> Result<ThreadId, SpawnError> {
     let arch = arch::user::ThreadState::new(space).ok_or(SpawnError::NoMemory)?;
-    let user = Box::new(UserThread { process, hook, entry, return_to: None, arch });
+    let user = Box::new(UserThread { process, hook, entry, memory, return_to: None, arch });
     thread::spawn_user("user", user, user_main, 0)
 }
 
@@ -141,4 +186,21 @@ pub fn current_process() -> Option<Arc<Process>> {
 /// The address space of the running thread, if it is a user thread.
 pub fn current_address_space() -> Option<Arc<AddressSpace>> {
     thread::with_current_user(|u| Arc::clone(u.arch.space()))
+}
+
+/// The memory map of the running thread, if it is a user thread started
+/// with [`spawn_in`]. The system calls that manage memory (`mmap`, `brk`,
+/// ...) work on this.
+pub fn current_memory() -> Option<Arc<Memory>> {
+    thread::with_current_user(|u| u.memory.clone()).flatten()
+}
+
+/// A page fault at the user address `addr` in the running thread, from
+/// ring 3 or from a user-copy routine, with interrupts on: resolve it
+/// against the thread's memory map ([`Memory::fault`]). On `Ok` the
+/// faulting instruction is retried; an error kills the thread, or makes the
+/// copy return [`Efault`].
+pub fn page_fault(addr: u64, access: memory::Access) -> Result<(), FaultError> {
+    let memory = current_memory().ok_or(FaultError::NoMemoryMap)?;
+    memory.fault(addr, access)
 }

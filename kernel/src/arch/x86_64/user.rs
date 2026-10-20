@@ -10,10 +10,16 @@
 //!   bases. [`switch`] moves it in and out when the scheduler switches
 //!   threads, and points TSS.rsp0 and the `syscall` entry at the incoming
 //!   thread's kernel stack.
-//! - [`exception`]: a CPU exception in ring 3 kills the thread that caused
-//!   it (with a log line), never the kernel.
+//! - [`exception`]: a page fault in ring 3 that demand paging can resolve
+//!   (`user::page_fault`) returns to the faulting instruction; any other CPU
+//!   exception in ring 3 kills the thread that caused it (with a log line),
+//!   never the kernel.
+//! - [`hwcap`] and [`random_bytes`]: what `exec` puts in the auxiliary
+//!   vector (`AT_HWCAP`, `AT_RANDOM`).
 
-pub use super::addrspace::{AddressSpace, LOWER_HALF_END, MapError, Mapping, Prot, USER_END, USER_START};
+pub use super::addrspace::{
+    AddressSpace, LOWER_HALF_END, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, user_frames,
+};
 pub use super::syscall::{Entry, enter_user, make_next_return_fail};
 pub use super::usercopy::{Efault, copy_from_user, copy_to_user, is_user_range, strncpy_from_user};
 
@@ -23,6 +29,7 @@ use super::{addrspace, cpu, syscall, usercopy};
 use alloc::sync::Arc;
 use core::arch::x86_64::{__cpuid, __cpuid_count};
 use core::sync::atomic::Ordering;
+use poly_vm::Access;
 
 /// The optional protections and accelerators user mode can use.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,6 +201,8 @@ pub struct Fault {
     pub address: Option<u64>,
     /// True if the fault came from returning to ring 3, not from user code.
     pub on_return: bool,
+    /// Why a page fault could not be resolved (`SEGV_MAPERR`, ...).
+    pub reason: Option<&'static str>,
 }
 
 impl core::fmt::Display for Fault {
@@ -203,17 +212,57 @@ impl core::fmt::Display for Fault {
         if let Some(addr) = self.address {
             write!(f, ", address {addr:#x}")?;
         }
+        if let Some(reason) = self.reason {
+            write!(f, " ({reason})")?;
+        }
         Ok(())
     }
 }
 
-/// A CPU exception in ring 3: kill the thread. Runs on its kernel stack with
-/// interrupts off.
-pub(super) fn exception(frame: &TrapFrame) -> ! {
+/// Page-fault error code bits (SDM Vol. 3A §4.7): W/R (a write), RSVD (a
+/// reserved bit was set in a paging entry), I/D (an instruction fetch).
+const PF_WRITE: u64 = 1 << 1;
+const PF_RESERVED: u64 = 1 << 3;
+const PF_FETCH: u64 = 1 << 4;
+
+/// The access a page-fault error code describes, or `None` for a fault
+/// demand paging must not touch (a reserved bit in a paging entry is a
+/// kernel bug, not a missing page).
+pub(super) fn fault_access(error_code: u64) -> Option<Access> {
+    if error_code & PF_RESERVED != 0 {
+        return None;
+    }
+    Some(if error_code & PF_FETCH != 0 {
+        Access::Execute
+    } else if error_code & PF_WRITE != 0 {
+        Access::Write
+    } else {
+        Access::Read
+    })
+}
+
+/// A CPU exception in ring 3, on the thread's kernel stack with interrupts
+/// off. A page fault that the thread's memory map resolves (a page that
+/// is part of a region but not present yet) returns, and the instruction is
+/// retried; everything else kills the thread.
+pub(super) fn exception(frame: &TrapFrame) {
     let vector = frame.vector as u8;
     let address = (frame.vector == idt::PAGE_FAULT).then(cpu::read_cr2);
-    // TODO(vm): a page fault on a page that belongs to a mapping but is not
-    // present yet (demand paging, copy-on-write) is resolved here instead.
+    let mut reason = None;
+    if let (Some(addr), Some(access)) = (address, fault_access(frame.error_code)) {
+        // SAFETY: the thread came from ring 3, so it holds no lock and no
+        // `InterruptsOff`; CR2 has been read. Resolving the fault may block
+        // (a mutex, later a disk read), as a system call may.
+        unsafe { cpu::enable_interrupts() };
+        let resolved = crate::user::page_fault(addr, access);
+        cpu::disable_interrupts();
+        match resolved {
+            Ok(()) => return,
+            // A bare address space (no memory map): the old log line.
+            Err(crate::user::FaultError::NoMemoryMap) => {}
+            Err(why) => reason = Some(why.name()),
+        }
+    }
     let fault = Fault {
         vector,
         name: idt::exception_name(vector),
@@ -221,6 +270,7 @@ pub(super) fn exception(frame: &TrapFrame) -> ! {
         rip: frame.rip,
         address,
         on_return: false,
+        reason,
     };
     crate::user::kill_current(&fault)
 }
@@ -251,6 +301,60 @@ pub(super) fn failed_return(frame: &TrapFrame) {
         rip,
         address: None,
         on_return: true,
+        reason: None,
     };
     crate::user::kill_current(&fault)
+}
+
+/// `AT_HWCAP` on x86-64: the feature bits of CPUID.01H:EDX (getauxval(3):
+/// "an architecture and ABI dependent bit-mask whose settings indicate
+/// detailed processor capabilities"; on x86 the C library reads it as
+/// leaf 1's EDX).
+pub fn hwcap() -> u64 {
+    u64::from(__cpuid(1).edx)
+}
+
+/// 16 bytes for `AT_RANDOM`, which the C library seeds its stack protector
+/// and pointer guard from. RDRAND when the CPU has it (CPUID.01H:ECX[30];
+/// each call may fail and is retried, SDM Vol. 1 §7.3.17.1), else the TSC
+/// stirred through a 64-bit mixer: unpredictable enough for now, not for
+/// cryptography.
+pub fn random_bytes() -> [u8; 16] {
+    let rdrand = __cpuid(1).ecx & (1 << 30) != 0;
+    let mut out = [0u8; 16];
+    // The stack address varies a little between threads: one more input.
+    let salt = &raw const out as u64;
+    for (i, chunk) in out.chunks_exact_mut(8).enumerate() {
+        let word = rdrand.then(rdrand64).flatten().unwrap_or_else(|| {
+            let seed = cpu::rdtsc() ^ ((i as u64) << 56) ^ salt;
+            mix64(seed.wrapping_add(cpu::rdtsc().rotate_left(29)))
+        });
+        chunk.copy_from_slice(&word.to_le_bytes());
+    }
+    out
+}
+
+/// One RDRAND result, retrying a few times when it reports no entropy.
+fn rdrand64() -> Option<u64> {
+    for _ in 0..10 {
+        let (value, ok): (u64, u8);
+        // SAFETY: the caller checked CPUID for RDRAND; it only writes the
+        // destination register and CF.
+        unsafe {
+            core::arch::asm!("rdrand {v}", "setc {ok}", v = out(reg) value, ok = out(reg_byte) ok, options(nomem, nostack));
+        }
+        if ok != 0 {
+            return Some(value);
+        }
+    }
+    None
+}
+
+/// A bijective 64-bit mixer, the output function of the SplitMix64
+/// generator (Steele, Lea and Flood, "Fast splittable pseudorandom number
+/// generators", OOPSLA 2014): every input bit affects every output bit.
+fn mix64(mut z: u64) -> u64 {
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }
