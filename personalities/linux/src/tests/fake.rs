@@ -968,6 +968,7 @@ impl LinuxKernel for FakeKernel {
             CpuTimesOf::Thread(tid) => self.procs[&self.pid].state.has_thread(tid).then_some(CpuTimes::default()),
             CpuTimesOf::Process => Some(c[1]),
             CpuTimesOf::Children => Some(c[2]),
+            CpuTimesOf::Reaped(_) => Some(c[2]),
         }
     }
 

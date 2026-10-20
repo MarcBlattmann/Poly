@@ -182,6 +182,10 @@ pub enum CpuTimesOf {
     /// The calling process's children that have ended and been waited for
     /// (getrusage(2) `RUSAGE_CHILDREN`, times(2) `tms_cutime`).
     Children,
+    /// The child (global pid) the calling thread has just waited for, it
+    /// and its own waited-for children: wait4(2)'s `rusage` (ADR 0057).
+    /// Asked once per wait; `None` if the kernel does not know it.
+    Reaped(i32),
 }
 
 /// CPU time in nanoseconds, split into time running user code and time

@@ -53,7 +53,7 @@ use poly_abi::Personality;
 use poly_personality_linux::abi::SigAction;
 use poly_personality_linux::abi::signal::{NSIG, SIG_DFL, SIG_IGN, SIGSEGV};
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::kernel::{LinuxKernel, Wakeup};
+use poly_personality_linux::kernel::{CpuTimes, LinuxKernel, Wakeup};
 use poly_personality_linux::ns::pid as pid_ns;
 use poly_personality_linux::ns::user::UserNsRef;
 use poly_personality_linux::ns::{self, UtsNames};
@@ -101,6 +101,26 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
             let mut zombies = ZOMBIES.lock();
             reaped.iter().filter_map(|&pid| zombies.remove(&(pid as u32))).collect()
         };
+        // A child the running process waited for: what it used (and its
+        // own waited-for children) counts as the waiter's children's time
+        // (getrusage(2) `RUSAGE_CHILDREN`) and is wait4(2)'s `rusage`. A
+        // process reaped as it ends (its parent ignores SIGCHLD) was not
+        // waited for.
+        if let Some(waiter) = user::current_process() {
+            for p in gone.iter().filter(|p| p.pid != waiter.pid) {
+                let (own, children) = (crate::cputime::process(p), p.cpu.children());
+                let t = CpuTimes {
+                    user_ns: own.user_ns + children.user_ns,
+                    system_ns: own.system_ns + children.system_ns,
+                };
+                waiter.cpu.add_child(t);
+                let mut reaped = REAPED_TIMES.lock();
+                while reaped.len() >= MAX_REAPED_TIMES {
+                    reaped.pop_first();
+                }
+                reaped.insert(p.pid, t);
+            }
+        }
         // A reaped process's numbers in its pid namespaces are free again
         // (ADR 0054).
         for p in &gone {
@@ -114,6 +134,18 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
         release_mount_namespaces();
     }
     r
+}
+
+/// What children that were just waited for used, by pid, until the
+/// waiter's wait4(2) reads it ([`reaped_times`]); at most
+/// [`MAX_REAPED_TIMES`], the oldest pids go first.
+static REAPED_TIMES: SpinLock<BTreeMap<u32, CpuTimes>> = SpinLock::new(BTreeMap::new());
+const MAX_REAPED_TIMES: usize = 64;
+
+/// `LinuxKernel::cpu_times(CpuTimesOf::Reaped(pid))`: what the child
+/// `pid` the caller just waited for used, once.
+pub fn reaped_times(pid: u32) -> Option<CpuTimes> {
+    REAPED_TIMES.lock().remove(&pid)
 }
 
 /// Mount namespaces whose last process left them, to be dropped where no

@@ -6,6 +6,7 @@ extern crate std;
 mod caps;
 mod devices;
 mod fdtable;
+mod locks;
 mod files;
 mod mounts;
 mod names;

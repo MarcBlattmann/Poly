@@ -24,6 +24,93 @@ fn reads_of_files_that_never_wait_are_whole() {
     }
 }
 
+// ---- record locks and flock ---------------------------------------------
+
+/// A `struct flock` at `at`.
+fn put_flock(k: &mut FakeKernel, at: u64, kind: i16, whence: i16, start: i64, len: i64, pid: i32) {
+    let mut b = [0u8; 32];
+    b[0..2].copy_from_slice(&kind.to_le_bytes());
+    b[2..4].copy_from_slice(&whence.to_le_bytes());
+    b[8..16].copy_from_slice(&start.to_le_bytes());
+    b[16..24].copy_from_slice(&len.to_le_bytes());
+    b[24..28].copy_from_slice(&pid.to_le_bytes());
+    k.poke(at, &b);
+}
+
+/// `(l_type, l_whence, l_start, l_len, l_pid)` of the `struct flock` at `at`.
+fn get_flock(k: &FakeKernel, at: u64) -> (i16, i16, i64, i64, i32) {
+    let b = k.peek(at, 32);
+    let i64_at = |o: usize| i64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+    (
+        i16::from_le_bytes([b[0], b[1]]),
+        i16::from_le_bytes([b[2], b[3]]),
+        i64_at(8),
+        i64_at(16),
+        i32::from_le_bytes(b[24..28].try_into().unwrap()),
+    )
+}
+
+#[test]
+fn fcntl_record_locks_decode_struct_flock() {
+    let mut e = super::files::env();
+    let k = &mut e.k;
+    let p = super::files::s(k, 0, b"/dir/file");
+    let rw = sys(k, nr::OPEN, &[p, 2, 0]).unwrap();
+    let ro = sys(k, nr::OPEN, &[p, 0, 0]).unwrap();
+    let fl = scratch(0x200);
+    // A write lock from the end of the 8-byte file, start -2, length -2:
+    // bytes 4 and 5 ("l_start+l_len up to and including l_start-1").
+    put_flock(k, fl, 1, 2, -2, -2, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 6, fl]), Ok(0));
+    // The same process sees no conflict with itself.
+    put_flock(k, fl, 1, 0, 0, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 5, fl]), Ok(0));
+    assert_eq!(get_flock(k, fl).0, 2, "F_UNLCK: nothing in the way");
+    // As an open file description, the process's lock is in the way.
+    put_flock(k, fl, 0, 1, 0, 10, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[ro, 36, fl]), Ok(0));
+    assert_eq!(get_flock(k, fl), (1, 0, 4, 2, 1));
+    put_flock(k, fl, 0, 0, 0, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[ro, 37, fl]), Err(Errno::EAGAIN), "F_OFD_SETLK meets the lock");
+    put_flock(k, fl, 0, 0, 0, 4, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[ro, 37, fl]), Ok(0), "below it");
+    // Unlock, then the description's read lock is all that is left.
+    put_flock(k, fl, 2, 0, 0, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 6, fl]), Ok(0));
+    put_flock(k, fl, 1, 0, 0, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 5, fl]), Ok(0));
+    assert_eq!(get_flock(k, fl), (0, 0, 0, 4, -1));
+    // Errors.
+    put_flock(k, fl, 1, 0, 0, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[ro, 6, fl]), Err(Errno::EBADF), "a write lock on a read-only descriptor");
+    put_flock(k, fl, 3, 0, 0, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 6, fl]), Err(Errno::EINVAL), "l_type");
+    put_flock(k, fl, 0, 3, 0, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 6, fl]), Err(Errno::EINVAL), "l_whence");
+    put_flock(k, fl, 0, 0, -1, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 6, fl]), Err(Errno::EINVAL), "before the start of the file");
+    put_flock(k, fl, 0, 0, 0, 0, 5);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 37, fl]), Err(Errno::EINVAL), "F_OFD_SETLK with an l_pid");
+    put_flock(k, fl, 2, 0, 0, 0, 0);
+    assert_eq!(sys(k, nr::FCNTL, &[rw, 5, fl]), Err(Errno::EINVAL), "F_GETLK of F_UNLCK");
+}
+
+#[test]
+fn flock_takes_whole_file_locks_per_description() {
+    let mut e = super::files::env();
+    let k = &mut e.k;
+    let p = super::files::s(k, 0, b"/dir/file");
+    let (a, b) = (sys(k, nr::OPEN, &[p, 0, 0]).unwrap(), sys(k, nr::OPEN, &[p, 0, 0]).unwrap());
+    assert_eq!(sys(k, nr::FLOCK, &[a, 2 | 4]), Ok(0), "LOCK_EX | LOCK_NB");
+    assert_eq!(sys(k, nr::FLOCK, &[b, 1 | 4]), Err(Errno::EAGAIN), "another description");
+    assert_eq!(sys(k, nr::FLOCK, &[a, 8]), Ok(0), "LOCK_UN");
+    assert_eq!(sys(k, nr::FLOCK, &[b, 1]), Ok(0));
+    assert_eq!(sys(k, nr::FLOCK, &[a, 1 | 4]), Ok(0), "two shared locks");
+    assert_eq!(sys(k, nr::FLOCK, &[a, 3]), Err(Errno::EINVAL));
+    assert_eq!(sys(k, nr::FLOCK, &[a, 4]), Err(Errno::EINVAL));
+    assert_eq!(sys(k, nr::FLOCK, &[99, 1]), Err(Errno::EBADF));
+}
+
 // ---- extended attributes ------------------------------------------------
 
 #[test]

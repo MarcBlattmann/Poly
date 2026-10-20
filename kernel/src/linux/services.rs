@@ -704,6 +704,7 @@ impl LinuxKernel for Thread<'_> {
             CpuTimesOf::Thread(tid) => cputime::thread(self.process.pid, u32::try_from(tid).ok()?),
             CpuTimesOf::Process => Some(cputime::process(self.process)),
             CpuTimesOf::Children => Some(self.process.cpu.children()),
+            CpuTimesOf::Reaped(pid) => super::task::reaped_times(u32::try_from(pid).ok()?),
         }
     }
 

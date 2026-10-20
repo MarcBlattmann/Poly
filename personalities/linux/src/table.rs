@@ -177,6 +177,7 @@ pub const FILE_SYSTEM: &[(u64, Handler)] = &[
     (nr::STATX, path::statx),
     (nr::FACCESSAT2, path::faccessat2),
     (nr::CLOSE_RANGE, fd::close_range),
+    (nr::FLOCK, fd::flock),
 ];
 /// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
 /// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]; ADR 0049:

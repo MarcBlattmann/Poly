@@ -136,10 +136,17 @@ fn wait_for(k: &mut dyn LinuxKernel, filter: &WaitFilter, nohang: bool) -> Resul
     }
 }
 
-/// Resource usage of a child: all zero (CPU time and the rest are not
-/// accounted yet).
-fn write_rusage(k: &mut dyn LinuxKernel, ptr: UserPtr) -> Result<(), Errno> {
-    if ptr.is_null() { Ok(()) } else { k.copy_to_user(ptr, &[0; wait::RUSAGE_SIZE]) }
+/// Resource usage of the child `pid` (global) the caller has just waited
+/// for: its CPU time and that of its own waited-for children (ADR 0057);
+/// the other fields are not accounted and stay 0.
+fn write_rusage(k: &mut dyn LinuxKernel, ptr: UserPtr, pid: i32) -> Result<(), Errno> {
+    use crate::time::abi::{Rusage, Timeval};
+    let t = k.cpu_times(crate::kernel::CpuTimesOf::Reaped(pid)).unwrap_or_default();
+    if ptr.is_null() {
+        return Ok(());
+    }
+    let usage = Rusage { utime: Timeval::from_nanos(t.user_ns), stime: Timeval::from_nanos(t.system_ns) };
+    k.copy_to_user(ptr, &usage.to_bytes())
 }
 
 /// wait4(pid, wstatus, options, rusage): the child's pid and its status
@@ -154,7 +161,7 @@ pub fn wait4(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if !a.ptr(1).is_null() {
         k.copy_to_user(a.ptr(1), &wait::status_word(w.event).to_le_bytes())?;
     }
-    write_rusage(k, a.ptr(3))?;
+    write_rusage(k, a.ptr(3), w.pid)?;
     seen(k, w.pid)
 }
 
@@ -166,13 +173,14 @@ pub fn waitid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let pgid = view(k, k.pgid());
     let (mut filter, nohang) = wait::waitid_filter(a.uint(0), a.int(1), a.uint(3), pgid)?;
     filter.selector = global_selector(k, filter.selector);
-    let found = wait_for(k, &filter, nohang)?.map(|w| Waited { pid: view(k, w.pid), ..w });
+    let waited = wait_for(k, &filter, nohang)?;
+    let found = waited.map(|w| Waited { pid: view(k, w.pid), ..w });
     if !a.ptr(2).is_null() {
         let info = found.map_or([0; SigInfo::SIZE], |w| wait::sigchld(&w).to_bytes());
         k.copy_to_user(a.ptr(2), &info)?;
     }
-    if found.is_some() {
-        write_rusage(k, a.ptr(4))?;
+    if let Some(w) = waited {
+        write_rusage(k, a.ptr(4), w.pid)?;
     }
     Ok(0)
 }
