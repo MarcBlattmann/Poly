@@ -2,7 +2,10 @@
  * data goes to the peer; an address on a connected AF_UNIX stream is
  * EISCONN; on an
  * unconnected stream socket sendto is ENOTCONN (TCP: EPIPE); MSG_DONTWAIT
- * on a full AF_UNIX stream is EAGAIN even for a blocking socket. */
+ * on a full AF_UNIX stream is EAGAIN even for a blocking socket.
+ * poly-diff: syscalls=off (filling a socket buffer takes a number of
+ * calls that depends on the host's buffer sizes)
+ */
 #include "poly_ipc.h"
 
 static char big[1 << 20];
