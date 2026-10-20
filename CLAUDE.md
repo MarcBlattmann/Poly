@@ -12,7 +12,8 @@ spec sheet and visible tests you were handed, plus public docs and export names.
 - `tools/xtask/`: build/run/test driver; `tools/coverage/`: coverage map tooling
 - `coverage/coverage.json`: source of truth for implementation status
 - `specs/`: spec sheets and visible tests, one directory per OS
-- `docs/`: architecture and decision records (`docs/adr/`)
+- `docs/`: architecture, decision records (`docs/adr/`) and the ordered plan (`docs/ROADMAP.md`)
+- `docs/progress/`: generated SVG badges and charts shown in the README
 
 ## Commands
 
@@ -34,7 +35,11 @@ Run `cargo xtask ci` before every commit. It must pass.
 - **Every `unsafe` block gets a `// SAFETY:` comment** explaining why it is sound.
 - **Claim before you work.** `cargo xtask coverage claim` marks an entry so no
   other agent duplicates it. Release it if you stop.
-- **Never hand-edit the README coverage section.** Run `cargo xtask coverage readme`.
+- **Never hand-edit the README progress section or `docs/progress/`.** Run
+  `cargo xtask coverage readme` after changing `coverage.json` or `docs/ROADMAP.md`.
+- **Work in roadmap order.** Pick the next unticked milestone in `docs/ROADMAP.md`;
+  tick it (`- [x]`) in the same change that delivers it with tests. Do not start a
+  milestone marked ⚖️ until the owner has made that decision.
 - **Constants from public SDK headers** (error codes, struct layouts) cite the header.
 - Architecture-specific code lives under `kernel/src/arch/<arch>/` only.
 - Significant design decisions get an ADR in `docs/adr/`.

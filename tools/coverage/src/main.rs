@@ -8,14 +8,17 @@
 //! coverage release <id>
 //! coverage set-status <id> <missing|stub|green|blocked-by-design>
 //! coverage check
-//! coverage readme [--check]
+//! coverage readme [--check]      README progress section + docs/progress/*.svg
 //! ```
 
 mod import;
 mod model;
 mod readme;
+mod roadmap;
+mod svg;
 
 use model::{Coverage, Entry, Source, Status};
+use roadmap::Roadmap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -166,19 +169,39 @@ fn check() -> Result<(), String> {
 }
 
 fn readme(args: &[String]) -> Result<(), String> {
-    let path = root().join("README.md");
-    let current = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let updated = readme::splice(&current, &readme::render(&load()?))?;
-    if args.iter().any(|a| a == "--check") {
-        if updated != current {
-            return Err("README coverage section is stale; run `cargo xtask coverage readme`".into());
+    let roadmap_path = root().join("docs/ROADMAP.md");
+    let roadmap = Roadmap::parse(
+        &std::fs::read_to_string(&roadmap_path).map_err(|e| format!("{}: {e}", roadmap_path.display()))?,
+    )?;
+    let coverage = load()?;
+    let readme_path = root().join("README.md");
+    let current = std::fs::read_to_string(&readme_path).map_err(|e| format!("{}: {e}", readme_path.display()))?;
+
+    let mut files = readme::assets(&coverage, &roadmap);
+    files.push(("README.md".into(), readme::splice(&current, &readme::render(&coverage, &roadmap))?));
+
+    let check = args.iter().any(|a| a == "--check");
+    let mut stale = Vec::new();
+    for (rel, contents) in &files {
+        let path = root().join(rel);
+        if std::fs::read_to_string(&path).ok().as_deref() == Some(contents.as_str()) {
+            continue;
         }
-        println!("README coverage section up to date");
-        return Ok(());
+        if check {
+            stale.push(rel.clone());
+        } else {
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&path, contents).map_err(|e| format!("{}: {e}", path.display()))?;
+            println!("updated {rel}");
+        }
     }
-    if updated != current {
-        std::fs::write(&path, updated).map_err(|e| e.to_string())?;
-        println!("README coverage section updated");
+    if !stale.is_empty() {
+        return Err(format!("stale: {}; run `cargo xtask coverage readme`", stale.join(", ")));
+    }
+    if check {
+        println!("README progress section and graphics up to date");
     }
     Ok(())
 }
