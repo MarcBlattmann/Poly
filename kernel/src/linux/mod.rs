@@ -23,7 +23,9 @@
 //! to the personality by `with_process`. One futex table serves every
 //! process ([`FUTEXES`]).
 
+mod fileio_tests;
 mod services;
+pub mod signalfd;
 mod tests;
 
 pub use services::Thread;

@@ -152,6 +152,8 @@ pub struct FakeKernel {
     /// stop_process calls (signal), and the pids continue_process got.
     pub stops: Vec<u32>,
     pub continued: Vec<i32>,
+    /// Pipes, waits and event files (`tests/fileio.rs`).
+    pub io: super::fileio::FakeIo,
 }
 
 impl Default for FakeKernel {
@@ -206,6 +208,7 @@ impl FakeKernel {
             futexes_locked: false,
             stops: Vec::new(),
             continued: Vec::new(),
+            io: Default::default(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -696,6 +699,14 @@ impl LinuxKernel for FakeKernel {
 
     fn unblock(&mut self, tid: i32) {
         self.unblocked.insert(tid);
+    }
+
+    fn file_io(&mut self) -> Option<&mut dyn crate::fileio::FileIo> {
+        Some(self)
+    }
+
+    fn signal_queued(&mut self, pid: i32) {
+        self.io.queued.push(pid);
     }
 
     fn with_futexes(&mut self, f: &mut dyn FnMut(&mut FutexTable, &mut dyn LinuxKernel)) {

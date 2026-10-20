@@ -779,6 +779,39 @@ The hello worlds the boot tests use are built into
 `target/xtask-programs/` (`hello`: Rust, no C library; `corpus/`: the C
 corpus with `hello` and the static glibc `libc-hello`).
 
+## Pipes, waits and event files
+
+Pipes, `poll` / `select`, `epoll` and the event files (ADR 0042) leave
+nothing in the log while they work. What to look at when a thread hangs
+in one:
+
+- A thread blocked in a pipe read, `poll` or `epoll_wait` is parked
+  (`process::park`) with a waker registered on the file's `WaitQueue`:
+  `OpenFile::wait_queue()` and `WaitQueue::len()` say who waits (the
+  kernel tests wait for exactly that before they write or signal). A
+  file whose readiness never changes has no queue; `poll` on it only
+  sees a change when something else wakes the thread.
+- A wake-up that never comes is usually a notification that was not
+  made: every change of a file object's readiness must call `notify`
+  (pipes on every read and write and on the last close of an end).
+  Spurious wake-ups are fine; every wait checks again.
+- Timer files are woken by the `timers` kernel thread (`ps` lists it
+  once the first timer was armed); `fs::poll::pending_timers()` counts
+  the callbacks it waits for. A timer read always counts expirations
+  from the clock, so a late callback delays a waiter but loses nothing.
+- Signal files read the reading thread's pending signals: a signal the
+  thread does not block is delivered normally first (and ends the read
+  with `EINTR`). `rt_sigpending` shows what is pending.
+- A blocked read interrupted by a signal returns
+  `RESTART_IF_SA_RESTART` inside the kernel: the call is restarted under
+  `SA_RESTART` (`rip` back at the `syscall`) or fails with `EINTR`;
+  `poll` / `select` are never restarted after a handler, `epoll_wait`
+  never at all.
+
+The kernel tests run with `poly.test=linux::fileio_tests`; the host tests
+are `cargo test -p poly-vfs objects` and `cargo test -p
+poly-personality-linux fileio`.
+
 ## Disk file systems and the page cache
 
 `cargo xtask run` and the boot tests attach a third virtio-blk device,

@@ -3,9 +3,15 @@
 //! page describes and calls the [`LinuxKernel`](crate::kernel::LinuxKernel)
 //! for the work. They are registered by number in [`crate::table`].
 
+pub mod epoll;
+pub mod eventfd;
 pub mod futex;
 pub mod io;
 pub mod mem;
+pub mod pipe;
+pub mod poll;
 pub mod process;
 pub mod signal;
+pub mod signalfd;
 pub mod system;
+pub mod timerfd;

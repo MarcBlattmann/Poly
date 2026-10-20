@@ -15,6 +15,7 @@
 //! | FPU state | the thread's save area (`user::fpu_image`, `user::load_fpu`) |
 //! | futexes | one global table under a spinlock ([`super::FUTEXES`]) |
 //! | clocks, random bytes | `time::now_ns`, `time::realtime_ns` (the CMOS RTC read once), RDRAND or the TSC |
+//! | `file_io`: pipes, `poll`, `epoll`, event files; blocking `read` / `write` | `fileio.rs` (ADR 0042) |
 //!
 //! Nothing here holds a lock while it touches user memory, except the
 //! futex calls the personality makes with the table locked
@@ -49,6 +50,8 @@ use poly_personality_linux::kernel::{
 use poly_personality_linux::signal::LinuxProcess;
 use poly_vfs::FileType;
 use poly_vm::Access;
+
+mod fileio;
 
 /// The running thread of a Linux process, for one system call or one
 /// return to user mode.
@@ -255,7 +258,7 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn write(&mut self, fd: i32, buf: &[u8]) -> Result<usize, Errno> {
-        let n = self.process.files.write(fd, buf).map_err(vfs_errno)?;
+        let n = fileio::write(self, fd, buf)?;
         if self.process.traced && (fd == 1 || fd == 2) && n > 0 {
             testrun::output(fd, &buf[..n.min(buf.len())]);
         }
@@ -263,7 +266,7 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
-        self.process.files.read(fd, buf).map_err(vfs_errno)
+        fileio::read(self, fd, buf)
     }
 
     fn close(&mut self, fd: i32) -> Result<(), Errno> {
@@ -291,6 +294,10 @@ impl LinuxKernel for Thread<'_> {
                 // for reading."
                 if !file.readable() {
                     return Err(Errno::EACCES);
+                }
+                // Pipes and event files have nothing to map.
+                if file.object().is_some() {
+                    return Err(Errno::ENODEV);
                 }
                 if file.kind() != FileType::Regular {
                     return Err(if file.kind() == FileType::CharDevice { Errno::ENODEV } else { Errno::EACCES });
@@ -556,5 +563,13 @@ impl LinuxKernel for Thread<'_> {
             chunk.copy_from_slice(&bytes[..chunk.len()]);
         }
         Ok(buf.len())
+    }
+
+    fn file_io(&mut self) -> Option<&mut dyn poly_personality_linux::fileio::FileIo> {
+        Some(self)
+    }
+
+    fn signal_queued(&mut self, pid: i32) {
+        super::signalfd::signal_queued(pid);
     }
 }

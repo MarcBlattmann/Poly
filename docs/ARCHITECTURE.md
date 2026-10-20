@@ -503,6 +503,26 @@ initramfs.
   Linux's values; flags take Linux's bits.
 - **tmpfs**: sparse files in 4 KiB pages, stable `readdir` positions,
   unlinked files and removed directories live while open.
+- **Readiness and file objects** ([ADR 0042](adr/0042-readiness-pipes-poll-epoll-and-event-files.md)):
+  every open file reports `PollEvents` (Linux's `POLL*` / `EPOLL*` bits);
+  one whose readiness changes has a `WaitQueue` that whoever changes it
+  notifies, and waiters register a `Waker` on it, check again and block
+  through a `Blocker` (the kernel's park / unpark). `FileObject`s are open
+  files that are not on a file system, on inodes of an anonymous file
+  system no path reaches (`Vfs::anon_node`): pipes (64 KiB, `PIPE_BUF`
+  atomicity, end of file, `EPIPE`, packet mode), event counters, timers
+  (expirations counted from the clock, a `TimerService` callback to wake
+  waiters) and epoll sets (an interest entry is a waker that puts itself
+  on the ready list; level- and edge-triggered, one-shot, nested). Their
+  operations never block; `OpenFile::read_wait` / `write_wait` wait on
+  the queue unless the file is `O_NONBLOCK`, and `poll::poll` waits over
+  many files.
+
+```text
+ pipe write ──► WaitQueue::notify(IN) ──► waker: thread in read / poll ──► unpark
+                                      └─► waker: epoll entry ──► ready list ──► epoll's WaitQueue ──► thread in epoll_wait
+ timer thread (timers) ──► TimerFd::expire ──► notify(IN)        signal queued ──► signal files' queue
+```
 - **`poly-cpio`**: a parser for `newc`/`crc` that never panics, a writer,
   and an unpacker into any file system through the VFS. Tested against
   archives made by GNU cpio (stored, and live if `cpio` is installed).
@@ -743,6 +763,19 @@ with what `poly-gfx` and `poly-term` draw on the host (see
   interrupted calls) and `Linux::thread_exit` when a thread ends (robust
   list, `clear_child_tid`); blocking uses park/unpark (`block`,
   `unblock`) plus a per-thread signal notification.
+- **Pipes, waits and event files**
+  ([ADR 0042](adr/0042-readiness-pipes-poll-epoll-and-event-files.md)):
+  `pipe`, `pipe2`, `poll`, `ppoll`, `select`, `pselect6`, `epoll_create`,
+  `epoll_create1`, `epoll_ctl`, `epoll_wait`, `epoll_pwait`,
+  `epoll_pwait2`, `eventfd`, `eventfd2`, `timerfd_create`,
+  `timerfd_settime`, `timerfd_gettime`, `signalfd`, `signalfd4`, and
+  `SIGPIPE` / `FIONREAD`. The handlers check arguments, turn timeouts into
+  deadlines, convert `select`'s sets, swap the signal mask of the `p*`
+  variants (rt_sigsuspend's `saved_mask`) and decide `EINTR` or a restart;
+  the kernel's part is `fileio::FileIo` (`LinuxKernel::file_io`): making
+  the objects, looking descriptors up, waiting. Signal files read the
+  reading thread's pending signals out of its `LinuxProcess`;
+  `LinuxKernel::signal_queued` wakes their readers.
 
 ## Linux processes
 
@@ -833,6 +866,7 @@ services once it decodes those system calls.
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
+| Pipes, waits and event files from ring 3: a pipe between two threads (a blocked read woken by a write, a 200 KB blocking write drained, end of file), non-blocking pipes, `FIONREAD`, `EPIPE` with `SIGPIPE` blocked and the process killed by it unblocked, `poll` / `select` / `epoll` (level- and edge-triggered, a thread woken in `epoll_wait`) on pipes and an event counter, timer expirations (blocking read, epoll, absolute times on both clocks), a signal file reading signals (also blocked in a read until another thread's `tgkill`), a blocked read ended by a handler with `EINTR` and restarted under `SA_RESTART` | `kernel_test!` in `linux/fileio_tests.rs` | every boot |
 | Linux processes: the kernel's `LinuxKernel` through real system calls from ring 3 (write to the process's files, brk, anonymous and file mmap/munmap/mprotect, arch_prctl and the FS base in ring 3, exit_group ending a spinning and a futex-waiting thread, EFAULT for bad pointers, a fault as SIGSEGV, a signal handler and rt_sigreturn), and `exec_path` of `/bin/hello` from the test initramfs | `kernel_test!` in `linux/tests.rs` | every boot; one boot on `-cpu max` (XSAVE signal frames) |
 | Static Linux hello worlds as the first process (`poly.init`): nolibc (Rust, built with the pinned toolchain), freestanding C and static glibc (skipped without a C compiler or static C library); output and exit status 0 | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |

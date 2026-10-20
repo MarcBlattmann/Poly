@@ -2,6 +2,7 @@
 //! [`fake::FakeKernel`].
 
 mod fake;
+mod fileio;
 mod futex;
 mod io;
 mod mem;

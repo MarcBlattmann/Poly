@@ -7,6 +7,7 @@ mod devices;
 mod fdtable;
 mod files;
 mod mounts;
+mod objects;
 mod path;
 mod perm;
 mod tmpfs;

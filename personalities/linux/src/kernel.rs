@@ -12,6 +12,7 @@
 
 use crate::abi::{FileStat, SigAction, Timespec, signal};
 use crate::errno::Errno;
+use crate::fileio::FileIo;
 use crate::futex::{FutexKey, FutexTable};
 use crate::signal::LinuxProcess;
 use alloc::vec::Vec;
@@ -670,5 +671,21 @@ pub trait LinuxKernel {
     /// `(none)` until one is set.
     fn domainname(&self) -> &[u8] {
         b"(none)"
+    }
+
+    // ---- pipes, readiness waits and event files (ADR 0042) -----------
+
+    /// The kernel's pipes, `poll` / `epoll` waits and event files
+    /// ([`FileIo`]); `None` if it has none, and those calls fail with
+    /// `ENOSYS`.
+    fn file_io(&mut self) -> Option<&mut dyn FileIo> {
+        None
+    }
+
+    /// A signal was queued for process `pid` or one of its threads,
+    /// blocked or not: wake the threads waiting to read signals through
+    /// a signal file (signalfd(2)).
+    fn signal_queued(&mut self, pid: i32) {
+        let _ = pid;
     }
 }

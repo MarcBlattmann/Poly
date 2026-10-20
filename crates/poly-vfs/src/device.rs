@@ -11,7 +11,9 @@
 //! devices (`null(4)`, `zero(4)` and `full(4)`: major 1; `tty(4)` and
 //! `console(4)`: major 5), so device nodes in a Linux initramfs work as is.
 
+use crate::poll::{PollEvents, WaitQueue};
 use crate::{DeviceId, Errno, Result};
+use alloc::sync::Arc;
 
 /// A character device.
 ///
@@ -34,6 +36,19 @@ pub trait CharDevice: Send + Sync {
     /// request (which is how `isatty` tells a terminal from anything else).
     fn ioctl(&self, _request: u32, _arg: u64) -> Result<u64> {
         Err(Errno::ENOTTY)
+    }
+
+    /// What the device is ready for now (`poll(2)`); always ready to read
+    /// and write by default, like the memory devices.
+    fn poll(&self) -> PollEvents {
+        PollEvents::READABLE | PollEvents::WRITABLE
+    }
+
+    /// Where waiters for a change of [`poll`](Self::poll) register (a
+    /// terminal with input coming, say); `None` for a device whose
+    /// readiness never changes.
+    fn wait_queue(&self) -> Option<&Arc<WaitQueue>> {
+        None
     }
 }
 

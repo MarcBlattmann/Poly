@@ -3,6 +3,8 @@
 use crate::device::CharDevice;
 use crate::fs::DirEntry;
 use crate::node::NodeRef;
+use crate::object::FileObject;
+use crate::poll::{self, Blocker, PollEvents, Timeout, WaitQueue};
 use crate::sync::SpinMutex;
 use crate::{Errno, FileType, MAX_FILE_SIZE, Result, Stat};
 use alloc::sync::Arc;
@@ -24,7 +26,7 @@ impl OpenFlags {
     pub const NOCTTY: OpenFlags = OpenFlags(0o400);
     pub const TRUNC: OpenFlags = OpenFlags(0o1000);
     pub const APPEND: OpenFlags = OpenFlags(0o2000);
-    /// Accepted and reported; nothing blocks yet except devices, which get it.
+    /// Reads and writes that would block fail with `EAGAIN` instead.
     pub const NONBLOCK: OpenFlags = OpenFlags(0o4000);
     pub const DSYNC: OpenFlags = OpenFlags(0o10000);
     /// `FASYNC`: signal-driven I/O, recorded only.
@@ -128,6 +130,8 @@ pub(crate) enum Backend {
     /// An inode of the node's file system (regular file or directory).
     Inode,
     Device(Arc<dyn CharDevice>),
+    /// A pipe, event counter, timer, epoll set... (`object.rs`).
+    Object(Arc<dyn FileObject>),
     /// `O_PATH`: the description only names the node.
     Path,
 }
@@ -162,6 +166,14 @@ impl OpenFile {
     pub(crate) fn new(node: NodeRef, kind: FileType, backend: Backend, flags: OpenFlags) -> OpenFile {
         let flags = flags.intersection(Self::KEPT);
         OpenFile { node, kind, backend, flags: AtomicU32::new(flags.bits()), offset: SpinMutex::new(0) }
+    }
+
+    /// An open file on `object`, with `node` (from
+    /// [`Vfs::anon_node`](crate::Vfs::anon_node)) for `fstat`. `flags`
+    /// gives the access mode and status flags (`O_NONBLOCK`).
+    pub fn on_object(node: NodeRef, object: Arc<dyn FileObject>, flags: OpenFlags) -> OpenFile {
+        let kind = node.kind().unwrap_or(FileType::Regular);
+        OpenFile::new(node, kind, Backend::Object(object), flags)
     }
 
     /// The node this file is open on.
@@ -237,6 +249,7 @@ impl OpenFile {
                 Ok(n)
             }
             Backend::Device(dev) => dev.read(0, buf, self.nonblock()),
+            Backend::Object(obj) => obj.read(buf),
             Backend::Path => Err(Errno::EBADF),
         }
     }
@@ -266,6 +279,7 @@ impl OpenFile {
                 Ok(n)
             }
             Backend::Device(dev) => dev.write(0, buf, self.nonblock()),
+            Backend::Object(obj) => obj.write(buf),
             Backend::Path => Err(Errno::EBADF),
         }
     }
@@ -283,7 +297,7 @@ impl OpenFile {
             Backend::Inode if self.kind == FileType::Directory => Err(Errno::EISDIR),
             Backend::Inode => self.fs().read(self.node.ino(), offset, buf),
             Backend::Device(dev) if dev.seekable() => dev.read(offset, buf, self.nonblock()),
-            Backend::Device(_) => Err(Errno::ESPIPE),
+            Backend::Device(_) | Backend::Object(_) => Err(Errno::ESPIPE),
             Backend::Path => Err(Errno::EBADF),
         }
     }
@@ -304,7 +318,7 @@ impl OpenFile {
             }
             Backend::Inode => self.fs().write(self.node.ino(), offset, buf),
             Backend::Device(dev) if dev.seekable() => dev.write(offset, buf, self.nonblock()),
-            Backend::Device(_) => Err(Errno::ESPIPE),
+            Backend::Device(_) | Backend::Object(_) => Err(Errno::ESPIPE),
             Backend::Path => Err(Errno::EBADF),
         }
     }
@@ -316,6 +330,7 @@ impl OpenFile {
         let size = match &self.backend {
             Backend::Path => return Err(Errno::EBADF),
             Backend::Device(dev) if !dev.seekable() => return Err(Errno::ESPIPE),
+            Backend::Object(_) => return Err(Errno::ESPIPE),
             Backend::Device(_) => 0,
             Backend::Inode => self.node.attr()?.size,
         };
@@ -351,7 +366,7 @@ impl OpenFile {
         if self.is_path_only() {
             return Err(Errno::EBADF);
         }
-        if self.kind != FileType::Directory {
+        if self.kind != FileType::Directory || self.object().is_some() {
             return Err(Errno::ENOTDIR);
         }
         let mut off = self.offset.lock();
@@ -376,7 +391,7 @@ impl OpenFile {
         if self.is_path_only() {
             return Err(Errno::EBADF);
         }
-        if !self.writable() || self.kind != FileType::Regular {
+        if !self.writable() || self.kind != FileType::Regular || self.object().is_some() {
             return Err(Errno::EINVAL);
         }
         if self.node.mount().read_only() {
@@ -390,7 +405,7 @@ impl OpenFile {
         match &self.backend {
             Backend::Path => Err(Errno::EBADF),
             Backend::Inode => self.fs().sync(),
-            Backend::Device(_) => Err(Errno::EINVAL),
+            Backend::Device(_) | Backend::Object(_) => Err(Errno::EINVAL),
         }
     }
 
@@ -398,6 +413,7 @@ impl OpenFile {
     pub fn ioctl(&self, request: u32, arg: u64) -> Result<u64> {
         match &self.backend {
             Backend::Device(dev) => dev.ioctl(request, arg),
+            Backend::Object(obj) => obj.ioctl(request, arg),
             Backend::Path => Err(Errno::EBADF),
             Backend::Inode => Err(Errno::ENOTTY),
         }
@@ -409,6 +425,92 @@ impl OpenFile {
         match &self.backend {
             Backend::Device(dev) => Some(dev),
             _ => None,
+        }
+    }
+
+    /// The object behind this file, if it is one.
+    pub fn object(&self) -> Option<&Arc<dyn FileObject>> {
+        match &self.backend {
+            Backend::Object(obj) => Some(obj),
+            _ => None,
+        }
+    }
+
+    /// The object behind this file as a `T`, if it is one.
+    pub fn object_as<T: FileObject>(&self) -> Option<Arc<T>> {
+        let any: Arc<dyn core::any::Any + Send + Sync> = self.object()?.clone();
+        any.downcast::<T>().ok()
+    }
+
+    // ---- readiness (ADR 0042) ------------------------------------------
+
+    /// What the file is ready for now (`poll(2)`). Regular files and
+    /// directories are always ready to read and write; devices and objects
+    /// say for themselves.
+    pub fn poll(&self) -> PollEvents {
+        match &self.backend {
+            Backend::Inode | Backend::Path => PollEvents::READABLE | PollEvents::WRITABLE,
+            Backend::Device(dev) => dev.poll(),
+            Backend::Object(obj) => obj.poll(),
+        }
+    }
+
+    /// Where to wait for [`poll`](Self::poll) to change; `None` if it never
+    /// does by itself.
+    pub fn wait_queue(&self) -> Option<&Arc<WaitQueue>> {
+        match &self.backend {
+            Backend::Device(dev) => dev.wait_queue(),
+            Backend::Object(obj) => obj.wait_queue(),
+            Backend::Inode | Backend::Path => None,
+        }
+    }
+
+    /// Bytes a read would return now (`FIONREAD`), for pipes and the like.
+    pub fn bytes_readable(&self) -> Option<usize> {
+        self.object().and_then(|o| o.bytes_readable())
+    }
+
+    /// Whether a blocking call waits on this file: it has a wait queue and
+    /// is not `O_NONBLOCK`.
+    fn waits(&self) -> Option<&Arc<WaitQueue>> {
+        if self.nonblock() { None } else { self.wait_queue() }
+    }
+
+    /// `read(2)` that blocks: like [`read`](Self::read), but where that
+    /// would fail with `EAGAIN` on a blocking file with a wait queue, wait
+    /// until data (or end of file) comes. `EINTR` if the thread is
+    /// interrupted first.
+    pub fn read_wait(&self, buf: &mut [u8], blocker: &mut dyn Blocker) -> Result<usize> {
+        match self.waits() {
+            Some(queue) => {
+                poll::wait_until_done(queue, PollEvents::READABLE, blocker, Timeout::Never, || self.read(buf))
+            }
+            None => self.read(buf),
+        }
+    }
+
+    /// `write(2)` that blocks: on a blocking file with a wait queue, write
+    /// everything, waiting for room as often as needed (pipe(7): a
+    /// blocking write "may block until all n bytes have been written").
+    /// Interrupted or failing after some bytes went out, it returns how
+    /// many (a partial write); before, the error (`EINTR`, `EPIPE`, ...).
+    pub fn write_wait(&self, buf: &[u8], blocker: &mut dyn Blocker) -> Result<usize> {
+        let Some(queue) = self.waits() else { return self.write(buf) };
+        let mut done = 0;
+        loop {
+            let result = poll::wait_until_done(queue, PollEvents::WRITABLE, blocker, Timeout::Never, || {
+                self.write(&buf[done..])
+            });
+            match result {
+                Ok(n) => {
+                    done += n;
+                    if done >= buf.len() || n == 0 {
+                        return Ok(done);
+                    }
+                }
+                Err(_) if done > 0 => return Ok(done),
+                Err(e) => return Err(e),
+            }
         }
     }
 }
