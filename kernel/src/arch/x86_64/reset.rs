@@ -4,9 +4,9 @@
 
 use super::gdt::DescriptorTablePointer;
 use super::mmio::MmioRegion;
-use super::port::{inb, outb};
+use super::port::{inb, inw, outb, outw};
 use core::arch::asm;
-use poly_acpi::{AddressSpace, ResetRegister};
+use poly_acpi::{AddressSpace, GenericAddress, ResetRegister, aml};
 use poly_irq::Mmio;
 
 /// The 8042's status (read) and command (write) port, and its "pulse output
@@ -39,6 +39,45 @@ pub fn acpi(reset: &ResetRegister) -> bool {
             None => false,
         },
         _ => false,
+    }
+}
+
+/// A 16-bit PM1 control register (ACPI 6.5 §4.8.3.2.1) in I/O space;
+/// `None` for a block elsewhere or past the 16-bit port space.
+fn pm1_port(block: &GenericAddress) -> Option<u16> {
+    (block.space == AddressSpace::SystemIo).then(|| u16::try_from(block.address).ok()).flatten()
+}
+
+/// Enter ACPI sleeping state S5 (soft off, §16.1.7): switch the machine
+/// into ACPI mode if `SCI_EN` is clear (write `acpi_enable` to the SMI
+/// command port and wait for it), then write `SLP_TYPx` with `SLP_EN` to
+/// the PM1a (and PM1b) control registers. Returns if the machine is still
+/// running (the registers are not in I/O space, or the write did nothing).
+pub fn acpi_soft_off(off: &crate::acpi::SoftOff) {
+    let Some(pm1a) = pm1_port(&off.pm1a) else { return };
+    let pm1b = off.pm1b.as_ref().and_then(pm1_port);
+    // SAFETY: the FADT names these ports as the PM1 control registers and
+    // the SMI command port; reading the control registers has no side
+    // effects, and the values written are the ones §4.8.2.1 and §16.1.7
+    // prescribe for entering ACPI mode and S5.
+    unsafe {
+        if inw(pm1a) & aml::SCI_EN == 0
+            && off.acpi_enable != 0
+            && let Ok(smi) = u16::try_from(off.smi_command)
+            && smi != 0
+        {
+            outb(smi, off.acpi_enable);
+            for _ in 0..1_000_000 {
+                if inw(pm1a) & aml::SCI_EN != 0 {
+                    break;
+                }
+                core::hint::spin_loop();
+            }
+        }
+        if let Some(b) = pm1b {
+            outw(b, aml::sleep_control(inw(b), off.sleep_types.1));
+        }
+        outw(pm1a, aml::sleep_control(inw(pm1a), off.sleep_types.0));
     }
 }
 

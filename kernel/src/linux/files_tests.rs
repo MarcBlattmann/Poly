@@ -23,22 +23,22 @@ use poly_abi::SyscallRegs;
 use poly_binfmt::{Arch, Bits, Format};
 use poly_personality_linux::{Errno, Linux, nr};
 
-type Check = Result<(), u64>;
+pub(super) type Check = Result<(), u64>;
 
 /// The hook's own system call: run the test's checks.
 const CALLBACK: u64 = 0x7e58;
 /// Where the program is mapped (read, execute).
 const CODE: u64 = 0x40_0000;
 /// 64 KiB of read-write data: strings at `PATHS`, buffers at `BUF`.
-const DATA: u64 = 0x60_0000;
+pub(super) const DATA: u64 = 0x60_0000;
 const DATA_LEN: u64 = 0x1_0000;
 const PATHS: u64 = DATA + 0x1000;
-const BUF: u64 = DATA + 0x8000;
+pub(super) const BUF: u64 = DATA + 0x8000;
 const BUF_LEN: u64 = 0x8000;
 /// Where the program break starts.
 const BRK: u64 = 0x80_0000;
 const DEADLINE_NS: u64 = 60 * time::NANOS_PER_SEC;
-const AT_FDCWD: u64 = -100i64 as u64;
+pub(super) const AT_FDCWD: u64 = -100i64 as u64;
 
 global_asm!(
     r#"
@@ -80,7 +80,7 @@ fn hook(process: &Process, regs: &mut SyscallRegs) {
 }
 
 /// A Linux process with the program, data, a break and a stack.
-fn setup() -> Result<(Arc<Process>, Arc<Memory>), &'static str> {
+pub(super) fn setup() -> Result<(Arc<Process>, Arc<Memory>), &'static str> {
     let format = Format::Elf { bits: Bits::B64, arch: Arch::X86_64 };
     let process = Arc::new(Process::new_linux(process::alloc_pid(), 0, format, false));
     let memory = Memory::new(Layout::default()).map_err(|_| "no memory for a memory map")?;
@@ -103,7 +103,7 @@ fn setup() -> Result<(Arc<Process>, Arc<Memory>), &'static str> {
 
 /// Run `f` in a thread of `process` in `memory`; its result is the exit
 /// status.
-fn run(process: &Arc<Process>, memory: &Arc<Memory>, f: Callback) -> Result<(), &'static str> {
+pub(super) fn run(process: &Arc<Process>, memory: &Arc<Memory>, f: Callback) -> Result<(), &'static str> {
     *RUN.lock() = Some(f);
     let rsp = memory.layout().stack_top - 64;
     let entry = Entry { rip: CODE, rsp, args: [0; 3] };
@@ -119,7 +119,7 @@ fn run(process: &Arc<Process>, memory: &Arc<Memory>, f: Callback) -> Result<(), 
 }
 
 /// A system call from the callback, as the dispatcher makes it.
-fn sys(p: &Process, number: u64, args: &[u64]) -> Result<u64, Errno> {
+pub(super) fn sys(p: &Process, number: u64, args: &[u64]) -> Result<u64, Errno> {
     let mut k = Thread::current(p).expect("a thread of a Linux process");
     let mut a = [0u64; 6];
     a[..args.len()].copy_from_slice(args);
@@ -152,7 +152,7 @@ macro_rules! check {
 
 /// `s` as a NUL-terminated string in user memory, in slot `slot` (256
 /// bytes each).
-fn cstr(slot: u64, s: &str) -> u64 {
+pub(super) fn cstr(slot: u64, s: &str) -> u64 {
     let at = PATHS + slot * 256;
     let mut b = Vec::from(s.as_bytes());
     b.push(0);
@@ -161,7 +161,7 @@ fn cstr(slot: u64, s: &str) -> u64 {
 }
 
 /// The bytes at `at` in user memory.
-fn peek(at: u64, len: usize) -> Vec<u8> {
+pub(super) fn peek(at: u64, len: usize) -> Vec<u8> {
     let mut b = alloc::vec![0u8; len];
     let _ = user::copy_from_user(&mut b, at);
     b
@@ -169,7 +169,7 @@ fn peek(at: u64, len: usize) -> Vec<u8> {
 
 /// The whole file at `path`, read with openat/read/close from ring 3's
 /// point of view.
-fn read_file(p: &Process, path: &str) -> Result<Vec<u8>, Errno> {
+pub(super) fn read_file(p: &Process, path: &str) -> Result<Vec<u8>, Errno> {
     let fd = sys(p, nr::OPENAT, &[AT_FDCWD, cstr(15, path), 0, 0])?;
     let mut out = Vec::new();
     let result = loop {
@@ -183,11 +183,11 @@ fn read_file(p: &Process, path: &str) -> Result<Vec<u8>, Errno> {
     result
 }
 
-fn text(p: &Process, path: &str) -> String {
+pub(super) fn text(p: &Process, path: &str) -> String {
     read_file(p, path).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default()
 }
 
-fn readlink(p: &Process, path: &str) -> Result<Vec<u8>, Errno> {
+pub(super) fn readlink(p: &Process, path: &str) -> Result<Vec<u8>, Errno> {
     let n = sys(p, nr::READLINKAT, &[AT_FDCWD, cstr(14, path), BUF, 4096])?;
     Ok(peek(BUF, n as usize))
 }

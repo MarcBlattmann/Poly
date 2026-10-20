@@ -132,6 +132,13 @@ pub trait Driver: Send + Sync {
     /// Readers took input, so the discipline has room again (a pty
     /// master waiting to write is woken).
     fn input_drained(&self) {}
+
+    /// A request only some devices answer (a serial port's `TIOCGSERIAL`,
+    /// a virtual console's `VT_GETSTATE`, see [`crate::hw`]): the bytes the
+    /// request stores at its argument, or `None` (`ENOTTY`).
+    fn device_ioctl(&self, _request: u32) -> Option<alloc::vec::Vec<u8>> {
+        None
+    }
 }
 
 /// The terminals of one machine: what they share (the host, which
@@ -836,7 +843,13 @@ impl Tty {
                 self.receive(&[byte]);
                 Ok(0)
             }
-            _ => self.common_ioctl(request, arg, true).unwrap_or(Err(Errno::ENOTTY)),
+            _ => match self.common_ioctl(request, arg, true) {
+                Some(result) => result,
+                None => match self.driver.device_ioctl(request) {
+                    Some(bytes) => self.put(arg, &bytes).map(|_| 0),
+                    None => Err(Errno::ENOTTY),
+                },
+            },
         }
     }
 

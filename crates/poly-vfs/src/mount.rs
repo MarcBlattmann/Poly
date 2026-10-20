@@ -22,6 +22,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU8, Ordering};
 
 /// Identifies a mount for as long as the VFS lives (ids are not reused).
 pub type MountId = u32;
@@ -41,6 +42,34 @@ pub struct MountFlags {
     pub no_dev: bool,
 }
 
+impl MountFlags {
+    const READ_ONLY: u8 = 1;
+    const NO_EXEC: u8 = 2;
+    const NO_SUID: u8 = 4;
+    const NO_DEV: u8 = 8;
+
+    fn to_bits(self) -> u8 {
+        [
+            (self.read_only, Self::READ_ONLY),
+            (self.no_exec, Self::NO_EXEC),
+            (self.no_suid, Self::NO_SUID),
+            (self.no_dev, Self::NO_DEV),
+        ]
+        .iter()
+        .filter(|(on, _)| *on)
+        .fold(0, |acc, (_, bit)| acc | bit)
+    }
+
+    fn from_bits(bits: u8) -> MountFlags {
+        MountFlags {
+            read_only: bits & Self::READ_ONLY != 0,
+            no_exec: bits & Self::NO_EXEC != 0,
+            no_suid: bits & Self::NO_SUID != 0,
+            no_dev: bits & Self::NO_DEV != 0,
+        }
+    }
+}
+
 /// One mounted subtree.
 pub struct Mount {
     pub(crate) id: MountId,
@@ -49,7 +78,8 @@ pub struct Mount {
     /// The mount point: a mount and an inode on it. `None` for the first
     /// root.
     pub(crate) parent: Option<(Arc<Mount>, Ino)>,
-    pub(crate) flags: MountFlags,
+    /// [`MountFlags`] as bits: a remount changes them in place.
+    flags: AtomicU8,
 }
 
 impl Mount {
@@ -58,7 +88,11 @@ impl Mount {
     }
 
     pub fn flags(&self) -> MountFlags {
-        self.flags
+        MountFlags::from_bits(self.flags.load(Ordering::Relaxed))
+    }
+
+    pub(crate) fn set_flags(&self, flags: MountFlags) {
+        self.flags.store(flags.to_bits(), Ordering::Relaxed);
     }
 
     pub fn fs(&self) -> &Arc<dyn FileSystem> {
@@ -77,7 +111,7 @@ impl Mount {
 
     /// Whether changes must fail with `EROFS`.
     pub fn read_only(&self) -> bool {
-        self.flags.read_only || self.sb.info.read_only
+        self.flags().read_only || self.sb.info.read_only
     }
 }
 
@@ -88,7 +122,7 @@ impl core::fmt::Debug for Mount {
             .field("fs", &self.sb.info.name)
             .field("root", &self.root)
             .field("parent", &self.parent.as_ref().map(|(m, ino)| (m.id, *ino)))
-            .field("flags", &self.flags)
+            .field("flags", &self.flags())
             .finish()
     }
 }
@@ -219,7 +253,7 @@ impl MountTable {
         parent: Option<(Arc<Mount>, Ino)>,
         flags: MountFlags,
     ) -> Arc<Mount> {
-        let m = Arc::new(Mount { id: self.next_id, sb, root, parent, flags });
+        let m = Arc::new(Mount { id: self.next_id, sb, root, parent, flags: AtomicU8::new(flags.to_bits()) });
         self.next_id += 1;
         self.mounts.push(m.clone());
         m
@@ -228,7 +262,8 @@ impl MountTable {
     /// A mount that is in no tree: the anonymous file system of file
     /// objects, which no path reaches and nothing can unmount.
     pub(crate) fn detached(&mut self, sb: Arc<Superblock>, root: Ino) -> Arc<Mount> {
-        let m = Arc::new(Mount { id: self.next_id, sb, root, parent: None, flags: MountFlags::default() });
+        let flags = AtomicU8::new(0);
+        let m = Arc::new(Mount { id: self.next_id, sb, root, parent: None, flags });
         self.next_id += 1;
         m
     }

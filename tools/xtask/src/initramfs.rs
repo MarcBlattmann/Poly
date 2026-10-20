@@ -16,6 +16,10 @@
 //!   hello world the exec tests run (`programs.rs`).
 //! - The programs image (boots with `poly.init=/bin/<name>`): the default
 //!   image plus the hello worlds in `/bin`.
+//! - The BusyBox image (`cargo xtask run --busybox`, the BusyBox boot test):
+//!   the default image plus `/bin/busybox`, a link per applet, and what
+//!   BusyBox's init and shell read: `/etc/inittab`, `/etc/init.d/rcS`,
+//!   `/etc/profile`, `/etc/fstab`, `/etc/shells` (see `busybox.rs`).
 
 use poly_cpio::{Format, Writer};
 use poly_vfs::{DeviceId, FileType};
@@ -151,6 +155,256 @@ pub fn programs_image_with(programs: &Programs<'_>, tree: &Tree) -> Vec<u8> {
     w.finish()
 }
 
+/// `/etc/inittab` for BusyBox's init: `<id>:<runlevels>:<action>:<process>`
+/// (no id: the console). `rcS` once at boot; then a login shell on the
+/// console that `cttyhack` gives a controlling terminal (so it has job
+/// control), started again whenever it exits; at reboot or power-off the
+/// file systems are unmounted (or made read-only).
+pub const INITTAB: &str = "\
+# BusyBox init(8) table for Poly (tools/xtask/src/initramfs.rs)
+::sysinit:/etc/init.d/rcS
+::respawn:/bin/cttyhack /bin/sh -l
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/umount -a -r
+";
+
+/// `/etc/init.d/rcS`, run by init once at boot. The kernel mounts procfs,
+/// sysfs, devpts and the tmpfs on `/dev/shm` before the first program
+/// (ADR 0043, 0046), so each is mounted only if it is not there yet; the
+/// tmpfs on `/tmp` always is.
+pub const RCS: &str = "\
+#!/bin/sh
+# Run once by init at boot (/etc/inittab).
+mounted() { grep -q \" $1 \" /proc/mounts 2>/dev/null; }
+mounted /proc || mount -t proc -o nosuid,nodev,noexec proc /proc
+mounted /sys || mount -t sysfs -o nosuid,nodev,noexec sysfs /sys
+mkdir -p /dev/pts /dev/shm
+mounted /dev/pts || mount -t devpts -o nosuid,noexec devpts /dev/pts
+mounted /dev/shm || mount -t tmpfs -o nosuid,nodev tmpfs /dev/shm
+mount -t tmpfs -o nosuid,nodev,mode=1777 tmpfs /tmp
+hostname -F /etc/hostname
+echo \"rcS: $(uname -sr) up, file systems mounted\"
+";
+
+/// `/etc/profile`, read by the login shell.
+pub const PROFILE: &str = "\
+# Read by login shells (tools/xtask/src/initramfs.rs).
+export PATH=/sbin:/usr/sbin:/bin:/usr/bin
+export HOME=/root
+export TERM=${TERM:-linux}
+export PS1='\\u@\\h:\\w\\$ '
+cd \"$HOME\"
+";
+
+/// `/etc/fstab` (fstab(5)), for `mount -a` and `mount <dir>`.
+pub const FSTAB: &str = "\
+# <file system> <dir> <type> <options> <dump> <pass>
+proc /proc proc nosuid,nodev,noexec 0 0
+sysfs /sys sysfs nosuid,nodev,noexec 0 0
+devpts /dev/pts devpts nosuid,noexec 0 0
+tmpfs /tmp tmpfs nosuid,nodev,mode=1777 0 0
+";
+
+/// The applets the BusyBox image links to `/bin/busybox`, by directory.
+/// An applet a BusyBox binary was built without says "applet not found".
+pub const BUSYBOX_APPLETS: &[(&str, &[&str])] = &[
+    (
+        "bin",
+        &[
+            "ash",
+            "base64",
+            "cat",
+            "chgrp",
+            "chmod",
+            "chown",
+            "cp",
+            "cttyhack",
+            "date",
+            "dd",
+            "df",
+            "dmesg",
+            "echo",
+            "egrep",
+            "false",
+            "fgrep",
+            "grep",
+            "gunzip",
+            "gzip",
+            "hostname",
+            "ionice",
+            "kill",
+            "link",
+            "ln",
+            "login",
+            "ls",
+            "mkdir",
+            "mknod",
+            "mktemp",
+            "more",
+            "mount",
+            "mountpoint",
+            "mv",
+            "nice",
+            "pidof",
+            "printenv",
+            "ps",
+            "pwd",
+            "rm",
+            "rmdir",
+            "sed",
+            "setpriv",
+            "sh",
+            "sleep",
+            "stat",
+            "stty",
+            "su",
+            "sync",
+            "tar",
+            "touch",
+            "true",
+            "umount",
+            "uname",
+            "usleep",
+            "vi",
+            "watch",
+            "zcat",
+        ],
+    ),
+    (
+        "sbin",
+        &[
+            "blkid",
+            "chroot",
+            "getty",
+            "halt",
+            "hwclock",
+            "init",
+            "losetup",
+            "mdev",
+            "mkdosfs",
+            "mke2fs",
+            "pivot_root",
+            "poweroff",
+            "reboot",
+            "runlevel",
+            "start-stop-daemon",
+            "switch_root",
+            "sysctl",
+        ],
+    ),
+    (
+        "usr/bin",
+        &[
+            "[",
+            "[[",
+            "awk",
+            "basename",
+            "bc",
+            "cksum",
+            "clear",
+            "cmp",
+            "comm",
+            "cut",
+            "dc",
+            "diff",
+            "dirname",
+            "du",
+            "env",
+            "expand",
+            "expr",
+            "factor",
+            "find",
+            "flock",
+            "fold",
+            "free",
+            "fuser",
+            "head",
+            "hexdump",
+            "id",
+            "install",
+            "killall",
+            "less",
+            "logname",
+            "md5sum",
+            "mesg",
+            "mkfifo",
+            "nl",
+            "nohup",
+            "nproc",
+            "od",
+            "paste",
+            "patch",
+            "printf",
+            "pstree",
+            "readlink",
+            "realpath",
+            "renice",
+            "reset",
+            "resize",
+            "script",
+            "seq",
+            "setsid",
+            "sha1sum",
+            "sha256sum",
+            "sha512sum",
+            "shuf",
+            "sort",
+            "split",
+            "strings",
+            "sum",
+            "tac",
+            "tail",
+            "tee",
+            "test",
+            "time",
+            "timeout",
+            "top",
+            "tr",
+            "truncate",
+            "tty",
+            "uniq",
+            "unlink",
+            "uptime",
+            "uudecode",
+            "uuencode",
+            "wc",
+            "which",
+            "whoami",
+            "xargs",
+            "xxd",
+            "yes",
+        ],
+    ),
+    ("usr/sbin", &["chpasswd", "crond", "nologin", "rdate"]),
+];
+
+/// The BusyBox image: the default image plus `busybox` as `/bin/busybox`
+/// with a link to it for every applet ([`BUSYBOX_APPLETS`]; `/sbin/init`
+/// among them) and the files BusyBox's init and shell read.
+pub fn busybox_image(busybox: &[u8]) -> Vec<u8> {
+    let mut w = writer();
+    base(&mut w);
+    w.file(b"etc/inittab", 0o644, INITTAB.as_bytes());
+    w.dir(b"etc/init.d", 0o755);
+    w.file(b"etc/init.d/rcS", 0o755, RCS.as_bytes());
+    w.file(b"etc/profile", 0o644, PROFILE.as_bytes());
+    w.file(b"etc/fstab", 0o644, FSTAB.as_bytes());
+    w.file(b"etc/shells", 0o644, b"/bin/sh\n/bin/ash\n");
+    for dir in ["bin", "sbin", "usr", "usr/bin", "usr/sbin", "mnt", "home", "var", "var/log", "run"] {
+        w.dir(dir.as_bytes(), 0o755);
+    }
+    w.symlink(b"var/run", b"../run");
+    w.dir(b"root", 0o700);
+    w.dir(b"tmp", 0o1777);
+    w.file(b"bin/busybox", 0o755, busybox);
+    for (dir, applets) in BUSYBOX_APPLETS {
+        for applet in *applets {
+            w.symlink(format!("{dir}/{applet}").as_bytes(), b"/bin/busybox");
+        }
+    }
+    w.finish()
+}
+
 /// The test image with `programs` in `/bin` (the kernel's exec tests run
 /// `/bin/hello` from it).
 pub fn test_image_with(programs: &Programs<'_>) -> Vec<u8> {
@@ -243,6 +497,45 @@ mod tests {
         assert_eq!(stat("/lib/libc.so.6", true).size, 9, "the link leads to the library");
         assert_eq!(stat("/bin/prog", false).perm(), 0o755);
         assert_eq!(stat("/etc/motd", false).size, MOTD.len() as u64);
+    }
+
+    #[test]
+    fn the_busybox_image_has_init_its_applets_and_configuration() {
+        let image = busybox_image(b"\x7fELF busybox");
+        assert_eq!(image, busybox_image(b"\x7fELF busybox"));
+        let fs = Arc::new(Tmpfs::new(Arc::new(Zero)));
+        poly_cpio::unpack_fs(&image, fs.clone()).unwrap();
+        let vfs = Vfs::new(fs);
+        let ctx = vfs.root_context().unwrap();
+        let root = Cred::root();
+        let link = |p: &str| vfs.readlink(&ctx, &root, At::Cwd, p.as_bytes()).unwrap();
+        for p in ["/sbin/init", "/bin/sh", "/bin/cttyhack", "/bin/mount", "/usr/bin/seq", "/sbin/poweroff"] {
+            assert_eq!(link(p), b"/bin/busybox", "{p}");
+        }
+        assert_eq!(link("/var/run"), b"../run");
+        let stat = |p: &str| vfs.stat(&ctx, &root, At::Cwd, p.as_bytes(), false).unwrap();
+        assert_eq!(stat("/bin/busybox").perm(), 0o755);
+        assert_eq!(stat("/etc/init.d/rcS").perm(), 0o755);
+        assert_eq!((stat("/tmp").perm(), stat("/root").perm()), (0o1777, 0o700));
+        let read = |p: &str| {
+            let f = vfs.open(&ctx, &root, At::Cwd, p.as_bytes(), OpenFlags::RDONLY, 0).unwrap();
+            let mut buf = vec![0; 4096];
+            let n = f.read(&mut buf).unwrap();
+            buf.truncate(n);
+            String::from_utf8(buf).unwrap()
+        };
+        assert!(read("/etc/inittab").contains("::sysinit:/etc/init.d/rcS\n"));
+        assert!(read("/etc/inittab").contains("::respawn:/bin/cttyhack /bin/sh -l\n"));
+        assert!(read("/etc/init.d/rcS").starts_with("#!/bin/sh\n"));
+        assert!(read("/etc/profile").contains("PS1="));
+        // Every inittab line is <id>:<runlevels>:<action>:<process>.
+        assert!(INITTAB.lines().filter(|l| !l.starts_with('#')).all(|l| l.split(':').count() == 4));
+        // No applet twice.
+        let mut all: Vec<&str> = BUSYBOX_APPLETS.iter().flat_map(|(_, a)| a.iter().copied()).collect();
+        let n = all.len();
+        all.sort_unstable();
+        all.dedup();
+        assert_eq!(all.len(), n);
     }
 
     #[test]

@@ -1,4 +1,6 @@
-//! Rebooting the machine, after unmounting the disk file systems clean.
+//! Rebooting, halting and powering off the machine, after unmounting the
+//! disk file systems clean. reboot(2) (ADR 0051) and the kernel shell's
+//! `reboot` come here.
 
 use crate::{acpi, arch, block, fs, time};
 use core::fmt::Write;
@@ -27,6 +29,42 @@ pub fn prepare_shutdown(out: &mut dyn Write) {
             let _ = writeln!(out, "reboot: {}: writing back the cache failed: {e:?}", d.name());
         }
     }
+}
+
+/// Write back and unmount the disks, then power off: ACPI soft-off (S5)
+/// if the firmware describes it (QEMU then exits), else halt.
+pub fn power_off(out: &mut dyn Write) -> ! {
+    prepare_shutdown(out);
+    if let Some(off) = acpi::platform().and_then(|p| p.soft_off) {
+        let _ = writeln!(
+            out,
+            "poweroff: ACPI S5 (SLP_TYP {}/{} to PM1a {:#x}{})",
+            off.sleep_types.0,
+            off.sleep_types.1,
+            off.pm1a.address,
+            off.pm1b.map(|b| alloc::format!(", PM1b {:#x}", b.address)).unwrap_or_default()
+        );
+        settle();
+        arch::reset::acpi_soft_off(&off);
+        wait(RESET_WAIT_NS);
+        let _ = writeln!(out, "poweroff: the machine is still on; halting instead");
+    } else {
+        let _ = writeln!(out, "poweroff: no ACPI soft-off (S5) on this machine; halting instead");
+    }
+    halt_now(out)
+}
+
+/// Write back and unmount the disks, then stop: interrupts off, every
+/// CPU this kernel runs halted.
+pub fn halt(out: &mut dyn Write) -> ! {
+    prepare_shutdown(out);
+    halt_now(out)
+}
+
+fn halt_now(out: &mut dyn Write) -> ! {
+    let _ = writeln!(out, "System halted.");
+    settle();
+    arch::cpu::halt_forever()
 }
 
 /// Reset the machine, each way reported to `out` first.

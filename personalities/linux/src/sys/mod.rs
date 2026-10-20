@@ -3,6 +3,7 @@
 //! page describes and calls the [`LinuxKernel`](crate::kernel::LinuxKernel)
 //! for the work. They are registered by number in [`crate::table`].
 
+pub mod admin;
 pub mod cred;
 pub mod epoll;
 pub mod eventfd;
@@ -18,6 +19,8 @@ pub mod pipe;
 pub mod poll;
 pub mod prctl;
 pub mod process;
+pub mod sched;
+pub mod sendfile;
 pub mod signal;
 pub mod signalfd;
 pub mod socket;

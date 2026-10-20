@@ -2,7 +2,7 @@
 //!
 //! Commands:
 //!   build [--release]   build the kernel
-//!   run   [--release] [--gdb] [--no-disk] [--headless] [--initrd=<file> | --no-initrd] [kernel args...]
+//!   run   [--release] [--gdb] [--no-disk] [--headless] [--busybox | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices and a virtio-net NIC on QEMU's user
 //!                       networking attached (--no-disk: without them),
@@ -10,7 +10,9 @@
 //!                       never); --gdb waits for a debugger on localhost:1234
 //!                       (docs/DEBUGGING.md); the root file system is a small
 //!                       initramfs (--initrd=<file>: that cpio archive instead,
-//!                       --no-initrd: none)
+//!                       --no-initrd: none; --busybox: BusyBox's image, booting into
+//!                       BusyBox's init and a shell on the console, see busybox.rs;
+//!                       add console=tty1 for the screen)
 //!   screenshot [--release] [--out <file>] [--wait <text>] [kernel args...]
 //!                       boot headless, wait for a serial line containing <text>
 //!                       (default: the self-test's verdict), save the screen to <file>
@@ -24,9 +26,12 @@
 //!   pipeline <args>     run the agent pipeline tool (see tools/pipeline, docs/AGENT_PIPELINE.md)
 //!   dynamic-initramfs   build the dynamically linked test programs and an initramfs
 //!                       with them and the host's ld.so and libraries (docs/DEBUGGING.md)
+//!   busybox-initramfs   write the BusyBox image (BusyBox from the host or built; busybox.rs)
+//!   busybox-test        only the BusyBox boot test of `test` (busybox.rs)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
+mod busybox;
 mod console;
 mod dynamic;
 mod ext2disk;
@@ -73,9 +78,11 @@ fn main() -> ExitCode {
         Some("pipeline") => pipeline(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
         Some("dynamic-initramfs") => dynamic::command(),
+        Some("busybox-initramfs") => busybox::command(),
+        Some("busybox-test") => busybox_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font|dynamic-initramfs> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font|dynamic-initramfs|busybox-initramfs|busybox-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -245,9 +252,10 @@ fn has_desktop() -> bool {
     cfg!(any(target_os = "macos", windows)) || set("DISPLAY") || set("WAYLAND_DISPLAY")
 }
 
-/// `run [--release] [--gdb] [--no-disk] [--headless] [--initrd=<file> | --no-initrd] [kernel args...]`
+/// `run [--release] [--gdb] [--no-disk] [--headless] [--busybox | --initrd=<file> | --no-initrd] [kernel args...]`
 fn run(args: &[String]) -> Result {
     let (mut release, mut gdb, mut with_disk, mut window, mut cmdline) = (false, false, true, true, Vec::new());
+    let mut with_busybox = false;
     // The default initramfs: an empty path until it is written below.
     let mut initrd = Some(PathBuf::new());
     for a in args {
@@ -257,6 +265,7 @@ fn run(args: &[String]) -> Result {
             "--no-disk" => with_disk = false,
             "--headless" => window = false,
             "--no-initrd" => initrd = None,
+            "--busybox" => with_busybox = true,
             flag if flag.starts_with("--initrd=") => initrd = Some(PathBuf::from(&flag["--initrd=".len()..])),
             flag if flag.starts_with("--") => return Err(format!("run: unknown option {flag}")),
             arg => cmdline.push(arg),
@@ -269,7 +278,14 @@ fn run(args: &[String]) -> Result {
     if !flags.is_empty() {
         cmdline.insert(0, &flags);
     }
-    if initrd.as_deref() == Some(Path::new("")) {
+    if with_busybox {
+        let (image, binary) = busybox::write_image()?.map_err(|why| format!("--busybox: {why}"))?;
+        eprintln!("==> BusyBox from {}; init is /sbin/init (exit QEMU with `poweroff`)", binary.origin);
+        initrd = Some(image);
+        if !cmdline.iter().any(|a| a.starts_with("poly.init=")) {
+            cmdline.push(busybox::INIT_ARGS);
+        }
+    } else if initrd.as_deref() == Some(Path::new("")) {
         initrd = Some(initramfs::write(&root(), "poly-initramfs.cpio", &initramfs::default_image())?);
     }
     // A virtio-net device on QEMU's user networking with its addresses
@@ -791,6 +807,13 @@ fn ext2_persistence_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     Ok(())
 }
 
+/// `cargo xtask busybox-test`: the BusyBox boot test alone.
+fn busybox_test() -> Result {
+    let kernel = build_kernel(false)?;
+    let syms = Arc::new(Symbols::from_file(&kernel)?);
+    busybox::boot_test(&kernel, &syms)
+}
+
 fn boot_tests() -> Result {
     let kernel = build_kernel(false)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
@@ -917,6 +940,8 @@ fn boot_tests() -> Result {
     programs::boot_tests(&kernel, &syms)?;
     // Dynamically linked glibc programs through glibc's own ld.so (dynamic.rs).
     dynamic::boot_tests(&kernel, &syms)?;
+    // BusyBox as init, its shell typed into on the serial console (busybox.rs).
+    busybox::boot_test(&kernel, &syms)?;
 
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
