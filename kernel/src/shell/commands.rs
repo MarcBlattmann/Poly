@@ -525,7 +525,7 @@ fn test(con: &mut dyn Console, args: &[String]) -> CommandResult {
 /// wait for it; its output goes to the console like the kernel log's.
 fn run_program(con: &mut dyn Console, args: &[String]) -> CommandResult {
     let [path, rest @ ..] = args else { return Err("needs a program".into()) };
-    let status = crate::program::run(path, rest, false).map_err(|e| format!("{path}: {e}"))?;
+    let status = crate::program::run_on(path, rest, con.terminal()).map_err(|e| format!("{path}: {e}"))?;
     out!(con, "{path}: {status}");
     Ok(())
 }

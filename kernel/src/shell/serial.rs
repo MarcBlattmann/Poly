@@ -13,6 +13,10 @@
 //! first (see `log`); the reader notices within [`REDRAW_CHECK_NS`] and
 //! hands the editor an [`Edit::Redraw`], which draws the prompt and the line
 //! again below the log output.
+//!
+//! The terminal on COM1 (`/dev/ttyS0`, `crate::tty`) reads the same ring
+//! while a program has it open ([`take_input`], ADR 0046); the shell then
+//! leaves the input alone. Either reader takes bytes under [`CONSUMER`].
 
 use super::Console;
 use crate::arch::irq;
@@ -39,11 +43,16 @@ static RX_TAIL: AtomicUsize = AtomicUsize::new(0);
 static RX_DROPPED: AtomicU64 = AtomicU64::new(0);
 /// The reader waits here for bytes.
 static RX_WAIT: WaitQueue = WaitQueue::new();
+/// Taken by whoever takes bytes out of the ring: the shell's console or
+/// the terminal's input thread.
+static CONSUMER: SpinLock<()> = SpinLock::new(());
 
 /// The receive interrupt's vector, 0 while polled.
 static VECTOR: AtomicU8 = AtomicU8::new(0);
 /// The one [`SerialConsole`] has been handed out.
 static TAKEN: AtomicBool = AtomicBool::new(false);
+/// [`start_receiving`] ran.
+static RECEIVING: AtomicBool = AtomicBool::new(false);
 
 /// How often a waiting reader checks whether log output erased the prompt.
 const REDRAW_CHECK_NS: u64 = 50 * time::NANOS_PER_MILLI;
@@ -71,8 +80,10 @@ fn push(byte: u8) {
     RX_HEAD.store(head.wrapping_add(1), Ordering::Release);
 }
 
-/// Consumer side: only the [`SerialConsole`].
+/// Consumer side: the [`SerialConsole`] or the terminal, holding
+/// [`CONSUMER`].
 fn pop() -> Option<u8> {
+    let _consumer = CONSUMER.lock();
     let tail = RX_TAIL.load(Ordering::Relaxed);
     if tail == RX_HEAD.load(Ordering::Acquire) {
         return None;
@@ -105,6 +116,48 @@ fn on_receive(_: usize) {
     }
 }
 
+/// Route COM1's receive interrupt and start filling the ring (once; later
+/// calls do nothing). Without a route, readers poll the UART.
+pub fn start_receiving() {
+    if RECEIVING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    match irq::route_isa_irq(COM1_IRQ, on_receive, 0) {
+        Ok(v) => {
+            VECTOR.store(v, Ordering::Relaxed);
+            let mut rx = RECEIVER.lock();
+            rx.enable_interrupt();
+            // Whatever arrived before the interrupt was on; with
+            // interrupts off (the lock), the handler cannot run meanwhile.
+            drain(&mut rx);
+            kprintln!("shell: serial input on COM1, ISA IRQ {COM1_IRQ} -> vector {v:#x}");
+        }
+        Err(e) => kprintln!("shell: COM1 receive interrupt not routed ({e:?}); polling"),
+    }
+}
+
+/// Take up to `buf.len()` received bytes (the terminal on COM1).
+pub fn take_input(buf: &mut [u8]) -> usize {
+    let mut n = 0;
+    while n < buf.len() {
+        let b = if vector().is_none() { RECEIVER.lock().read() } else { pop() };
+        let Some(b) = b else { break };
+        buf[n] = b;
+        n += 1;
+    }
+    n
+}
+
+/// Wait until bytes were received or the monotonic clock reaches
+/// `deadline_ns`.
+pub fn wait_for_input(deadline_ns: u64) {
+    if vector().is_none() {
+        thread::sleep(Duration::from_millis(10));
+    } else {
+        RX_WAIT.wait_until_deadline(available, deadline_ns);
+    }
+}
+
 /// The shell's console on COM1. There is one; [`take`](Self::take) hands it
 /// out once.
 #[derive(Debug)]
@@ -119,27 +172,21 @@ impl SerialConsole {
         if TAKEN.swap(true, Ordering::Relaxed) {
             return None;
         }
-        match irq::route_isa_irq(COM1_IRQ, on_receive, 0) {
-            Ok(v) => {
-                VECTOR.store(v, Ordering::Relaxed);
-                let mut rx = RECEIVER.lock();
-                rx.enable_interrupt();
-                // Whatever arrived before the interrupt was on; with
-                // interrupts off (the lock), the handler cannot run meanwhile.
-                drain(&mut rx);
-                kprintln!("shell: serial input on COM1, ISA IRQ {COM1_IRQ} -> vector {v:#x}");
-            }
-            Err(e) => kprintln!("shell: COM1 receive interrupt not routed ({e:?}); polling"),
-        }
+        start_receiving();
         Some(SerialConsole { decoder: TermDecoder::new() })
     }
 
     /// The next byte, waiting for one. `None`: the wait ended because log
-    /// output erased the prompt.
+    /// output erased the prompt. While a program has the terminal on COM1
+    /// open, its bytes are the terminal's.
     fn next_byte(&mut self) -> Option<u8> {
         loop {
             if log::prompt_disturbed() {
                 return None;
+            }
+            if crate::tty::serial_in_use() {
+                thread::sleep(Duration::from_millis(REDRAW_CHECK_NS / time::NANOS_PER_MILLI));
+                continue;
             }
             if vector().is_none() {
                 if let Some(b) = RECEIVER.lock().read() {
@@ -165,6 +212,10 @@ impl fmt::Write for SerialConsole {
 }
 
 impl Console for SerialConsole {
+    fn terminal(&self) -> Option<&'static str> {
+        Some("/dev/ttyS0")
+    }
+
     fn read(&mut self) -> Option<Edit> {
         // The editor has drawn the prompt (and maybe part of a line) by now.
         log::prompt_shown(true);
@@ -188,8 +239,9 @@ impl Console for SerialConsole {
 
 crate::kernel_test! {
     fn ring_buffer_keeps_order_and_drops_when_full() -> TestResult {
-        // Only before the console exists: it is the ring's one consumer.
-        if TAKEN.load(Ordering::Relaxed) {
+        // Only before the console exists, and while no program has the
+        // terminal open: they are the ring's consumers.
+        if TAKEN.load(Ordering::Relaxed) || crate::tty::serial_in_use() {
             return Ok(());
         }
         let dropped = RX_DROPPED.load(Ordering::Relaxed);

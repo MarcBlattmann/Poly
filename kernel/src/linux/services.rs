@@ -303,7 +303,12 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn ioctl(&mut self, fd: i32, request: u32, arg: u64) -> Result<u64, Errno> {
-        self.process.files.ioctl(fd, request, arg).map_err(vfs_errno)
+        // A terminal request interrupted (job control's SIGTTOU) restarts
+        // under SA_RESTART, as on a slow device (signal(7), ADR 0046).
+        self.process.files.ioctl(fd, request, arg).map_err(|e| match e {
+            poly_vfs::Errno::EINTR => Errno::RESTART_IF_SA_RESTART,
+            e => vfs_errno(e),
+        })
     }
 
     fn mmap(&mut self, r: &MapRequest) -> Result<u64, Errno> {

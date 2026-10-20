@@ -290,8 +290,11 @@ pub fn process_exit(process: &Process, status: ExitStatus) {
     let pid = process.pid;
     // Listed first, so a parent that reaps at once finds it to let go of.
     ZOMBIES.lock().insert(pid, me);
+    // Terminals: hangups and orphaned process groups (ADR 0046).
+    let jobs = crate::tty::before_exit(pid);
     if let Some(mut k) = Thread::current(process) {
         poly_personality_linux::task::process_exited(&mut k, termination(status));
+        crate::tty::after_exit(&mut k, pid, jobs);
     }
     if !with_tree(|t| t.is_zombie(pid as i32)) {
         let gone = ZOMBIES.lock().remove(&pid);
