@@ -418,6 +418,17 @@ impl<S: Shell> RealOps<S> {
         Ok(out)
     }
 
+    /// `git add -A` of those `paths` that exist (a pathspec matching
+    /// nothing is an error to git).
+    fn add(&mut self, dir: &Path, paths: &[String]) -> Result {
+        let mut add = vec!["add", "-A", "--"];
+        add.extend(paths.iter().filter(|p| self.shell.exists(&dir.join(p))).map(String::as_str));
+        if add.len() > 3 {
+            self.git_ok(dir, &add)?;
+        }
+        Ok(())
+    }
+
     fn heldout_names(&mut self, entry: &EntryId) -> Result<Vec<String>> {
         let dir = entry.heldout_dir(&self.cfg.heldout);
         Ok(self.shell.list(&dir)?.into_iter().filter(|f| f != store::MANIFEST).collect())
@@ -560,9 +571,7 @@ impl<S: Shell> Ops for RealOps<S> {
 
     fn commit(&mut self, slot: usize, message: &str, paths: &[String]) -> Result<String> {
         let dir = self.slot_dir(slot);
-        let mut add = vec!["add", "-A", "--"];
-        add.extend(paths.iter().map(String::as_str));
-        self.git_ok(&dir, &add)?;
+        self.add(&dir, paths)?;
         self.git_ok(&dir, &["commit", "-q", "-m", message])?;
         self.git_ok(&dir, &["rev-parse", "HEAD"])
     }
@@ -767,7 +776,7 @@ impl<S: Shell> Ops for RealOps<S> {
             let _ = self.git(&dir, &["merge", "--abort"]);
             return Err(format!("coverage readme after the merge: {}", o.tail(3)));
         }
-        self.git_ok(&dir, &["add", "-A", "--", "README.md", "docs/progress"])?;
+        self.add(&dir, &["README.md".into(), "docs/progress".into()])?;
         self.git_ok(&dir, &["commit", "-q", "--no-edit"])?;
         Ok(Merge::Merged(self.git_ok(&dir, &["rev-parse", "HEAD"])?))
     }
@@ -1017,5 +1026,151 @@ mod tests {
         assert!(o.ok() && o.text.ends_with("x\nunset\n"), "{}", o.text);
         assert!(o.text.starts_with("$ POLY_X=x sh -c"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Run git for the test's own setup.
+    fn vcs(dir: &Path, args: &[&str]) -> String {
+        let o = Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"])
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&o.stderr));
+        String::from_utf8_lossy(&o.stdout).trim().to_string()
+    }
+
+    const COVERAGE: &str = "coverage/linux/syscall/x86_64.json";
+    const LOG_HEADER: &str = "# Hand-off log\n\n| Date (UTC) | Entry id | Spec revision (git) | Spec agent | Implementer agent | Files handed over |\n|---|---|---|---|---|---|\n";
+
+    /// The git side of `RealOps` on real repositories: an "origin" (GitHub),
+    /// the runner's clone with worktrees, the hub, a role checkout.
+    #[test]
+    fn real_git_operations() {
+        if util::which("git").is_none() {
+            eprintln!("skipped: no git");
+            return;
+        }
+        let base = std::env::temp_dir().join(format!("poly-loop-git-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let (origin, seed, runner, hub, role) =
+            (base.join("origin.git"), base.join("seed"), base.join("runner"), base.join("hub.git"), base.join("spec"));
+        for d in [&origin, &seed, &hub] {
+            util::create_dir(d).unwrap();
+        }
+        vcs(&origin, &["init", "-q", "--bare", "-b", "main"]);
+        vcs(&hub, &["init", "-q", "--bare"]);
+        vcs(&seed, &["init", "-q", "-b", "main"]);
+        util::write(
+            &seed.join(COVERAGE),
+            "[\n{\"symbol\":\"brk\",\"src\":[\"t\"]},\n{\"symbol\":\"mmap\",\"src\":[\"t\"]}\n]\n",
+        )
+        .unwrap();
+        util::write(&seed.join("README.md"), "progress 0\n").unwrap();
+        util::write(&seed.join("specs/HANDOFF_LOG.md"), LOG_HEADER).unwrap();
+        util::write(&seed.join("src.rs"), "fn a() {}\n").unwrap();
+        vcs(&seed, &["add", "."]);
+        vcs(&seed, &["commit", "-q", "-m", "seed"]);
+        let o = origin.display().to_string();
+        vcs(&seed, &["push", "-q", &o, "main"]);
+        vcs(&base, &["clone", "-q", &o, "runner"]);
+        let main0 = vcs(&runner, &["rev-parse", "HEAD"]);
+
+        let cfg = Config {
+            repo: runner.clone(),
+            worktrees: base.join("work"),
+            hub: hub.clone(),
+            heldout: base.join("heldout"),
+            inbox: base.join("inbox"),
+            author: Some("Poly pipeline <p@example.com>".into()),
+            cargo: "true".into(),
+            spec: crate::scheduler::config::RoleConfig { repo: role.clone(), ..Config::default().spec },
+            ..Config::default()
+        };
+        let mut ops = RealOps::new(cfg, RealShell, &base.join("logs"));
+        ops.set_entry(Some("linux/syscall/x86_64/brk"));
+
+        // A worktree on main, a commit, pushed to the hub.
+        assert_eq!(ops.prepare(0, "origin/main").unwrap(), main0);
+        util::write(&base.join("work/w0/specs/linux/x86_64/brk.yaml"), "id: brk\n").unwrap();
+        let c1 = ops.commit(0, "spec", &["specs/linux/x86_64/brk.yaml".into()]).unwrap();
+        assert_eq!(ops.subject(0, &c1).unwrap(), "spec");
+        assert_eq!(ops.hub_head("pipeline/spec/brk").unwrap(), None);
+        assert_eq!(ops.push(0, Remote::Hub, &c1, "pipeline/spec/brk").unwrap(), Push::Done);
+        assert_eq!(ops.hub_head("pipeline/spec/brk").unwrap(), Some(c1.clone()));
+        let ch = ops.changes(0, &main0, &c1).unwrap();
+        assert_eq!(
+            (ch.len(), ch[0].path.as_str(), ch[0].added.as_slice()),
+            (1, "specs/linux/x86_64/brk.yaml", &["id: brk".to_string()][..])
+        );
+        assert!(ops.file_at(0, &c1, COVERAGE).unwrap().unwrap().contains("\"brk\""));
+        assert_eq!(ops.file_at(0, &c1, "nope").unwrap(), None);
+        assert_eq!(ops.merge_base(0, "origin/main", &c1).unwrap(), main0);
+
+        // A second worktree sees the hub branch; a diverging push is refused.
+        assert_eq!(ops.prepare(1, "hub/pipeline/spec/brk").unwrap(), c1);
+        ops.prepare(0, "origin/main").unwrap();
+        util::write(&base.join("work/w0/other.txt"), "x\n").unwrap();
+        let c2 = ops.commit(0, "other", &["other.txt".into()]).unwrap();
+        assert!(matches!(ops.push(0, Remote::Hub, &c2, "pipeline/spec/brk").unwrap(), Push::Rejected(_)));
+
+        // The role's checkout: cloned from the hub, the agent commits, the loop fetches.
+        vcs(&base, &["clone", "-q", "-o", "hub", &hub.display().to_string(), "spec"]);
+        vcs(&role, &["checkout", "-q", "-b", "pipeline/spec/brk", "hub/pipeline/spec/brk"]);
+        util::write(&role.join("specs/linux/x86_64/brk.tests/t1.c"), "int x;\n").unwrap();
+        vcs(&role, &["add", "."]);
+        vcs(&role, &["commit", "-q", "-m", "tests"]);
+        let agent = vcs(&role, &["rev-parse", "HEAD"]);
+        assert_eq!(ops.role_fetch(Role::Spec, "pipeline/spec/brk").unwrap(), Some(agent.clone()));
+        assert_eq!(ops.role_fetch(Role::Spec, "pipeline/spec/none").unwrap(), None);
+        assert_eq!(ops.push(1, Remote::Hub, &agent, "pipeline/spec/brk").unwrap(), Push::Done);
+
+        // Main moves on: README, the coverage line next to ours, the hand-off log.
+        let e = EntryId::parse("linux/syscall/x86_64/brk").unwrap();
+        ops.prepare(0, "hub/pipeline/spec/brk").unwrap();
+        let w0 = base.join("work/w0");
+        util::write(&w0.join("README.md"), "progress 1\n").unwrap();
+        util::write(&w0.join(COVERAGE), "[\n{\"symbol\":\"brk\",\"status\":\"green\",\"tests_visible\":1,\"src\":[\"t\"]},\n{\"symbol\":\"mmap\",\"src\":[\"t\"]}\n]\n").unwrap();
+        util::write(
+            &w0.join("specs/HANDOFF_LOG.md"),
+            format!("{LOG_HEADER}| d | linux/syscall/x86_64/brk | r | s | i | f |\n"),
+        )
+        .unwrap();
+        let ours =
+            ops.commit(0, "green", &["README.md".into(), COVERAGE.into(), "specs/HANDOFF_LOG.md".into()]).unwrap();
+        util::write(&seed.join("README.md"), "progress 2\n").unwrap();
+        util::write(&seed.join(COVERAGE), "[\n{\"symbol\":\"brk\",\"src\":[\"t\"]},\n{\"symbol\":\"mmap\",\"status\":\"green\",\"tests_visible\":1,\"src\":[\"t\"]}\n]\n").unwrap();
+        util::write(
+            &seed.join("specs/HANDOFF_LOG.md"),
+            format!("{LOG_HEADER}| d | linux/syscall/x86_64/mmap | r | s | i | f |\n"),
+        )
+        .unwrap();
+        vcs(&seed, &["commit", "-q", "-am", "mmap green"]);
+        vcs(&seed, &["push", "-q", &o, "main"]);
+        ops.prepare(0, &ours).unwrap();
+        let merged = match ops.merge_main(0, &e).unwrap() {
+            Merge::Merged(h) => h,
+            m => panic!("{m:?}"),
+        };
+        let log = ops.file_at(0, &merged, "specs/HANDOFF_LOG.md").unwrap().unwrap();
+        assert!(log.contains("x86_64/mmap |") && log.contains("x86_64/brk |"), "{log}");
+        assert_eq!(
+            ops.file_at(0, &merged, "README.md").unwrap().unwrap(),
+            "progress 2\n",
+            "main's, made again by `coverage readme`"
+        );
+        assert!(ops.file_at(0, &merged, COVERAGE).unwrap().unwrap().contains("\"mmap\",\"status\":\"green\""));
+        assert_eq!(ops.merge_main(0, &e).unwrap(), Merge::UpToDate);
+
+        // A conflict in code is the owner's.
+        util::write(&w0.join("src.rs"), "fn ours() {}\n").unwrap();
+        ops.commit(0, "code", &["src.rs".into()]).unwrap();
+        util::write(&seed.join("src.rs"), "fn theirs() {}\n").unwrap();
+        vcs(&seed, &["commit", "-q", "-am", "code"]);
+        vcs(&seed, &["push", "-q", &o, "main"]);
+        ops.prepare(0, "HEAD").unwrap();
+        assert_eq!(ops.merge_main(0, &e).unwrap(), Merge::Conflicts(vec!["src.rs".into()]));
+        assert_eq!(vcs(&w0, &["status", "--porcelain"]), "", "the merge was aborted");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
