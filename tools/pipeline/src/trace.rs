@@ -347,14 +347,44 @@ pub fn normalize_call(c: &Syscall, normalize: bool) -> NormCall {
     }
 }
 
+/// Linux's internal "restart" results, which ptrace shows at the exit of an
+/// interrupted syscall but the program never sees: ERESTARTSYS,
+/// ERESTARTNOINTR, ERESTARTNOHAND, ERESTART_RESTARTBLOCK.
+const RESTART_ERRNOS: [i64; 4] = [512, 513, 514, 516];
+
+/// What the program saw of a syscall that ended with a restart result:
+/// nothing if it was restarted (ERESTARTNOINTR always is; the others when
+/// the same pid's next syscall is the same call again), else EINTR.
+fn restart_outcome(events: &[Event], i: usize, c: &Syscall) -> Option<i64> {
+    let errno = -c.ret?;
+    if !RESTART_ERRNOS.contains(&errno) {
+        return None;
+    }
+    if errno == 513 {
+        return Some(0);
+    }
+    let next = events[i + 1..].iter().find_map(|e| match e {
+        Event::Syscall(n) if n.pid == c.pid => Some(n),
+        _ => None,
+    });
+    let again = next.is_some_and(|n| n.nr == c.nr && normalize_call(n, true).args == normalize_call(c, true).args);
+    Some(if again { 0 } else { -4 })
+}
+
 /// The normalised event sequence of `trace`.
 pub fn normalize(trace: &Trace, opts: &NormOptions) -> Vec<NormCall> {
     trace
         .events
         .iter()
-        .filter_map(|e| match e {
+        .enumerate()
+        .filter_map(|(i, e)| match e {
             Event::Syscall(c) if opts.ignore.contains(&c.name) => None,
-            Event::Syscall(c) => Some(normalize_call(c, true)),
+            Event::Syscall(c) => match restart_outcome(&trace.events, i, c) {
+                // Restarted: the program sees only the next attempt.
+                Some(0) => None,
+                Some(seen) => Some(normalize_call(&Syscall { ret: Some(seen), ..c.clone() }, true)),
+                None => Some(normalize_call(c, true)),
+            },
             Event::Signal { pid, signal } => Some(signal_event(*pid, *signal)),
         })
         .collect()
@@ -447,6 +477,33 @@ pub mod tests {
     fn renders_like_strace() {
         assert_eq!(render_bytes(b"a\"b\\\x01\t", false), "\"a\\\"b\\\\\\x01\\t\"");
         assert_eq!(render_bytes(b"abc", true), "\"abc\"...");
+    }
+
+    /// Restart results become what the program saw: EINTR after a handler,
+    /// nothing when the call was simply made again.
+    #[test]
+    fn restart_results_are_what_the_program_saw() {
+        let mut t = Trace::new("x", "linux", "ptrace");
+        t.events = vec![
+            call("ppoll", vec![Arg::Ptr(0x7000), Arg::Int(1), Arg::Ptr(0), Arg::Ptr(0x7100), Arg::Int(8)], Some(-514)),
+            Event::Signal { pid: 0, signal: 10 },
+            call("rt_sigreturn", vec![], Some(-4)),
+            call("read", vec![Arg::Int(3), Arg::Ptr(0x7000), Arg::Int(1)], Some(-512)),
+            call("read", vec![Arg::Int(3), Arg::Ptr(0x7000), Arg::Int(1)], Some(1)),
+            call("fork", vec![], Some(-513)),
+            call("fork", vec![], Some(55)),
+        ];
+        let lines: Vec<String> = normalize(&t, &NormOptions::default()).iter().map(ToString::to_string).collect();
+        assert_eq!(
+            lines,
+            [
+                "ppoll(<ptr>, 1, NULL, <ptr>, 8) = -1 EINTR",
+                "--- SIGUSR1 ---",
+                "rt_sigreturn() = -1 EINTR",
+                "read(3, <ptr>, 1) = 1",
+                "fork() = <pid>",
+            ]
+        );
     }
 
     #[test]
