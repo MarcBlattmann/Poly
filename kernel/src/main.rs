@@ -12,6 +12,7 @@ mod boot_info;
 mod dma;
 mod frames;
 mod heap;
+mod keyboard;
 mod ktest;
 mod log;
 mod mm;
@@ -104,6 +105,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     kprintln!("irq: interrupts enabled");
     pci::init();
     block::init();
+    keyboard::init(&boot);
 
     let ok = selftest::run(&boot, &memory);
     heap::log_stats();

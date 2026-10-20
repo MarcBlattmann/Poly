@@ -274,6 +274,83 @@ add `-monitor stdio` to a hand-written QEMU command line:
 breakpoint on `poly_kernel::arch::x86_64::irq::dispatch` stops at every
 interrupt (expect one per millisecond from the tick).
 
+## Keyboard input
+
+The boot log says whether the PS/2 keyboard came up, and how:
+
+```text
+acpi: FADT SCI 9, century 0x32, PM timer port 0x608 (24-bit), 8042, reset 0xcf9=0xf
+keyboard: i8042 config 0x71 -> 0x61, 0 stale byte(s) flushed; keyboard reset ok, scancode set 2 translated to set 1
+keyboard: ISA IRQ 1 -> GSI 1 -> vector 0x31; layout us (US English (QWERTY)), Num Lock on
+```
+
+`, 8042` in the FADT line is the firmware's "8042 present" flag. The
+config byte goes from what firmware left (read after disabling both ports)
+to keyboard interrupt and translation on, mouse port off (0x61 on QEMU).
+Without a keyboard the kernel says why and carries on:
+
+| Message | Means |
+|---|---|
+| `no 8042 controller (ACPI FADT)` | the FADT (revision 2+) clears the 8042 flag; the ports are not touched |
+| `i8042: NoController` | the status port reads 0xFF: nothing is there |
+| `i8042: Timeout("...")` | the controller did not take a byte or answer within 100 ms; names the step |
+| `i8042: SelfTest(x)`, `PortTest(x)` | the controller self-test (0xAA) did not answer 0x55, or the keyboard port test (0xAB) not 0x00 (1-4: clock or data line stuck) |
+| `i8042: NoKeyboard`, `KeyboardSelfTest(x)` | nothing acknowledged the reset (0xFF), or the keyboard's own test failed (0xFC / 0xFD) |
+| `setting the LEDs to 0b... failed: ...` | the keyboard did not acknowledge 0xED and its mask in 250 ms |
+
+The layout is chosen on the command line, `poly.keymap=us` (the default)
+or `poly.keymap=de-ch`. `keyboard::stats()` counts interrupts, bytes,
+bytes dropped because nobody read them, and LED updates.
+
+**Typing into the guest.** `cargo xtask run` runs QEMU without a window,
+and what you type in the terminal goes to the serial port, not to the PS/2
+keyboard. Press PS/2 keys from QEMU's monitor (Ctrl-A C, then Ctrl-A C
+again to go back): `sendkey` takes QEMU's key names, which are US
+positions (`z` is the key that types y on a Swiss German keyboard), joined
+with `-` for chords, and holds them for 100 ms:
+
+```text
+(qemu) sendkey shift-p
+(qemu) sendkey alt_r-2          # AltGr-2: @ on de-ch
+(qemu) sendkey equal            # the ^ dead key on de-ch
+(qemu) sendkey ret
+```
+
+Nothing reads the keyboard at boot yet except its tests. To watch
+decoding, run the end-to-end test and type within 30 seconds; the kernel
+prints what it got:
+
+```sh
+cargo xtask run poly.test=keyboard:: poly.test.keyboard=poly poly.keymap=de-ch
+```
+
+**Headless**, from a script or another terminal: give QEMU a monitor on a
+Unix socket and write `sendkey` lines to it (this is what `cargo xtask
+test` does, after the kernel prints `keyboard: ready for test input`):
+
+```sh
+qemu-system-x86_64 ... -monitor unix:/tmp/poly-mon.sock,server=on,wait=off
+printf 'sendkey p\nsendkey o\nsendkey l\nsendkey y\nsendkey ret\n' | nc -U -q 1 /tmp/poly-mon.sock
+```
+
+(QMP's `send-key` command does the same with JSON.) To see the device
+side, run QEMU by hand with `-trace 'ps2_*' -trace 'pckbd_*'`:
+`ps2_put_keycode` is each byte the keyboard sends (set 2, before
+translation), `pckbd_kbd_read_data` each byte the kernel reads,
+`pckbd_kbd_write_command` / `pckbd_kbd_write_data` the commands the
+driver writes, `ps2_set_ledstate` the LED mask. In the monitor, `info
+irq` counts IRQ 1 on the I/O APIC (one per byte) and `info pic` shows its
+redirection entry: unmasked, edge-triggered, the vector from the boot log.
+If keys stop arriving while `info irq` still counts, the bytes are read
+but not decoded (look for a thread holding the keyboard); if the count
+stands still, the controller holds a byte nobody read: a waiting reader
+drains it itself within 100 ms.
+
+The kernel tests can feed the decoder without a host: `keyboard::inject`
+takes set 1 bytes as if the keyboard had sent them, and the controller's
+command 0xD2 makes it deliver a byte through IRQ 1
+(`keyboard::irq_delivers_controller_bytes`).
+
 ## Attaching a debugger
 
 ```sh

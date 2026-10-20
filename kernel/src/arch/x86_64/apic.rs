@@ -309,8 +309,11 @@ crate::kernel_test! {
         for chip in &io.chips {
             for input in 0..chip.inputs() {
                 let gsi = chip.gsi_base() + u32::from(input);
-                // Tests may route an input for a moment, but never leave it so.
-                if chip.entry(input).map_or(true, |e| !e.is_masked()) {
+                // Only drivers leave an input unmasked (the keyboard's IRQ 1),
+                // pointing at their handler's vector; tests may route one
+                // for a moment, but never leave it so.
+                let driven = |e: &RedirectionEntry| e.is_masked() || super::irq::has_handler(e.vector());
+                if !chip.entry(input).is_ok_and(|e| driven(&e)) {
                     crate::kprintln!("apic: GSI {gsi} is unmasked: {:x?}", chip.entry(input));
                     return Err("an I/O APIC input is unmasked with no driver for it");
                 }
