@@ -73,22 +73,16 @@ kernel_test! {
             return Err("free count wrong after allocating");
         }
 
-        // Write a pattern to the first and last frame of every block the boot
-        // mapping reaches, then read it all back.
-        let mut touched = 0;
+        // Write a pattern to the first and last frame of every block through
+        // the direct map, then read it all back.
         for pass in [Pass::Write, Pass::Check] {
             for &(f, order) in &live {
                 let last = f + BuddyAllocator::block_size(order) - PAGE_SIZE;
                 for frame in [f, last] {
-                    if let Some(virt) = arch::phys_to_virt(frame) {
-                        pattern(virt as *mut u64, frame, pass)?;
-                        touched += 1;
-                    }
+                    let virt = arch::phys_to_virt(frame).ok_or("allocated frame outside the direct map")?;
+                    pattern(virt as *mut u64, frame, pass)?;
                 }
             }
-        }
-        if touched == 0 {
-            return Err("no allocated frame below the boot mapping limit");
         }
 
         // Free in a different order than allocated so merges happen out of order.
@@ -106,13 +100,14 @@ kernel_test! {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Pass {
+pub enum Pass {
     Write,
     Check,
 }
 
 /// Fill one frame with values derived from its address, or check them.
-fn pattern(frame: *mut u64, phys: u64, pass: Pass) -> TestResult {
+/// `frame` must map a whole 4 KiB frame that the caller owns.
+pub fn pattern(frame: *mut u64, phys: u64, pass: Pass) -> TestResult {
     let words = (PAGE_SIZE / 8) as usize;
     for i in 0..words {
         let value = phys ^ (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
@@ -132,13 +127,7 @@ fn pattern(frame: *mut u64, phys: u64, pass: Pass) -> TestResult {
 
 kernel_test! {
     fn acpi_tables() -> TestResult {
-        let Some(s) = crate::acpi::summary() else {
-            if let Some(phys) = crate::acpi::beyond_boot_mapping() {
-                crate::kprintln!("selftest: acpi tables skipped: tables at {phys:#x} need the direct map");
-                return Ok(());
-            }
-            return Err("ACPI tables not read");
-        };
+        let s = crate::acpi::summary().ok_or("ACPI tables not read")?;
         if s.cpus == 0 {
             return Err("no enabled CPU in the MADT");
         }
@@ -218,16 +207,95 @@ kernel_test! {
     }
 }
 
-/// Negative test (`poly.selftest.page_fault`): touch an unmapped address and
-/// let the exception path report it. The runner expects a panic, not a pass,
-/// and a backtrace naming this function, so it must not be inlined.
+/// Negative boot tests: with one of these flags on the command line the
+/// kernel faults on purpose after the tests, and `cargo xtask test` checks
+/// that the fault is reported as expected. Each trigger announces the address
+/// it is about to touch, so the runner can compare it with the fault report.
+pub fn trigger_requested_fault(boot: &BootInfo) {
+    let triggers: [(&str, fn()); 5] = [
+        ("poly.selftest.page_fault", trigger_page_fault),
+        ("poly.selftest.write_text", trigger_write_text),
+        ("poly.selftest.exec_stack", trigger_exec_stack),
+        ("poly.selftest.exec_data", trigger_exec_data),
+        ("poly.selftest.stack_overflow", trigger_stack_overflow),
+    ];
+    for (flag, trigger) in triggers {
+        if boot.has_flag(flag) {
+            trigger();
+        }
+    }
+}
+
+/// `poly.selftest.page_fault`: touch an unmapped address and let the
+/// exception path report it. The runner expects a panic, not a pass, and a
+/// backtrace naming this function, so it must not be inlined.
 #[inline(never)]
-pub fn trigger_page_fault() {
+fn trigger_page_fault() {
     crate::kprintln!("selftest: touching unmapped memory on purpose");
     let p = 0x7fff_0000_0000u64 as *const u64; // canonical, never mapped
     // SAFETY: deliberately invalid; the page fault handler panics.
     let v = unsafe { core::ptr::read_volatile(p) };
     crate::kprintln!("unexpectedly read {v:#x}");
+}
+
+/// `poly.selftest.write_text`: the kernel's code is mapped read-only, so
+/// writing to it is a page fault (CR0.WP makes that hold in ring 0 too).
+#[inline(never)]
+fn trigger_write_text() {
+    let target = trigger_write_text as *const () as *mut u8;
+    crate::kprintln!("selftest: writing to kernel text at {:#x}", target as u64);
+    // SAFETY: deliberately invalid: .text is mapped read-only, so the write
+    // faults before it changes anything and the page fault handler panics.
+    unsafe { target.write_volatile(arch::cpu::RETURN_OPCODE) };
+    crate::kprintln!("unexpectedly wrote to kernel text");
+}
+
+/// Return instructions in writable data, for `poly.selftest.exec_data`.
+static mut DATA_CODE: [u8; 16] = [arch::cpu::RETURN_OPCODE; 16];
+
+/// `poly.selftest.exec_stack`: the stack is no-execute.
+#[inline(never)]
+fn trigger_exec_stack() {
+    let code = core::hint::black_box([arch::cpu::RETURN_OPCODE; 16]);
+    jump_to("the stack", code.as_ptr());
+}
+
+/// `poly.selftest.exec_data`: writable data is no-execute.
+#[inline(never)]
+fn trigger_exec_data() {
+    jump_to("kernel data", (&raw const DATA_CODE).cast());
+}
+
+#[inline(never)]
+fn jump_to(what: &str, code: *const u8) {
+    crate::kprintln!("selftest: executing {what} at {:#x}", code as u64);
+    // SAFETY: deliberately invalid: `code` points at return instructions in
+    // no-execute memory, so fetching the first one faults and the page fault
+    // handler panics. (If the memory were executable, it would just return.)
+    let f = unsafe { core::mem::transmute::<*const u8, extern "C" fn()>(code) };
+    f();
+    crate::kprintln!("unexpectedly executed {what}");
+}
+
+/// `poly.selftest.stack_overflow`: recurse until the boot stack runs into
+/// its guard page. The page fault cannot be delivered on the full stack, so
+/// it becomes a double fault, which runs on its own stack and reports it.
+#[inline(never)]
+fn trigger_stack_overflow() {
+    crate::kprintln!("selftest: overflowing the boot stack on purpose");
+    let depth = recurse(0);
+    crate::kprintln!("unexpectedly returned after {depth} calls");
+}
+
+/// Uses stack until something stops it; `black_box` keeps each frame alive
+/// and the call from becoming a loop.
+#[inline(never)]
+fn recurse(depth: u64) -> u64 {
+    let frame = core::hint::black_box([depth; 16]);
+    if depth == u64::MAX {
+        return 0;
+    }
+    recurse(depth + 1) + frame[1]
 }
 
 kernel_test! {

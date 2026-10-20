@@ -14,12 +14,9 @@
 //!   ([`MAX_ORDER`](poly_mem::MAX_ORDER)), in size and in alignment. Larger
 //!   requests fail like any other out-of-memory. Bigger buffers will need
 //!   virtually contiguous mappings of scattered frames.
-//! - Until the direct map of all RAM lands, `phys_to_virt` only reaches the
-//!   first 1 GiB. The page source asks for frames below
-//!   [`arch::BOOT_MAPPED_PHYS`] first and takes frames from anywhere else
-//!   only if `phys_to_virt` reaches them, so the heap fails cleanly (instead
-//!   of using memory it cannot touch) once the reachable RAM is gone. With
-//!   the direct map that restriction disappears.
+//! - Frames are reached through the direct map. The page source still checks
+//!   that `phys_to_virt` reaches each run, so a frame outside the map fails
+//!   the allocation cleanly instead of being used.
 //!
 //! # Locking
 //!
@@ -100,17 +97,8 @@ unsafe impl PageSource for FramePages {
 
 /// A run of `count` frames the kernel can reach, aligned to
 /// `2^align_order` frames.
-///
-/// The buddy allocator's own first choice is the smallest free block, which
-/// is often a fragment at the top of RAM, out of reach of the boot mapping.
-/// So this asks for frames below [`arch::BOOT_MAPPED_PHYS`] first and takes
-/// a run from anywhere else only if `phys_to_virt` reaches it. Once the
-/// direct map covers all RAM, the first step can go.
 fn allocate_reachable(frames: &mut BuddyAllocator<'_>, count: u64, align_order: usize) -> Option<u64> {
-    let phys = match frames.allocate_run(count, align_order, arch::BOOT_MAPPED_PHYS) {
-        Some(phys) => phys,
-        None => frames.allocate_run(count, align_order, u64::MAX)?,
-    };
+    let phys = frames.allocate_run(count, align_order, u64::MAX)?;
     if reachable(phys, count * PAGE_SIZE as u64) {
         return Some(phys);
     }

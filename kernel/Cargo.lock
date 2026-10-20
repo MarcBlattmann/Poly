@@ -35,6 +35,7 @@ dependencies = [
  "poly-binfmt",
  "poly-heap",
  "poly-mem",
+ "poly-paging",
  "poly-personality-linux",
  "poly-personality-nt",
  "poly-personality-xnu",
@@ -42,6 +43,10 @@ dependencies = [
 
 [[package]]
 name = "poly-mem"
+version = "0.0.1"
+
+[[package]]
+name = "poly-paging"
 version = "0.0.1"
 
 [[package]]

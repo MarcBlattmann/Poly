@@ -6,19 +6,19 @@ mod boot;
 pub mod cpu;
 pub mod gdt;
 pub mod idt;
+pub mod paging;
 pub mod port;
 pub mod serial;
 
-/// Virtual address where physical address 0 is mapped for the kernel.
+pub use paging::{phys_range_to_virt, phys_to_virt};
+
+/// Virtual address where physical address 0 is mapped for the kernel image
+/// (and, until [`paging::init`], for all of the first GiB).
 pub const KERNEL_VMA: u64 = 0xffff_ffff_8000_0000;
 
-/// Physical memory reachable through the boot page tables.
+/// Physical memory reachable through the boot page tables, before
+/// [`paging::init`] switches to the direct map.
 pub const BOOT_MAPPED_PHYS: u64 = 1 << 30;
-
-/// Translate a physical address covered by the boot mapping.
-pub fn phys_to_virt(phys: u64) -> Option<u64> {
-    (phys < BOOT_MAPPED_PHYS).then_some(phys + KERNEL_VMA)
-}
 
 /// # Safety
 /// Call once, first thing on the boot CPU.

@@ -4,14 +4,17 @@
 //! page-aligned. [`MemoryMap::normalized`] turns one into a sorted list of
 //! non-overlapping regions where the most restrictive type wins wherever two
 //! entries overlap, and usable RAM is trimmed inward to whole pages.
-//! [`BuddyAllocator`] then manages the usable frames. Nothing here allocates,
-//! so the kernel can use it before it has a heap.
+//! [`BuddyAllocator`] then manages the usable frames, and [`DirectMap`] says
+//! which physical ranges the kernel's direct map covers. Nothing here
+//! allocates, so the kernel can use it before it has a heap.
 
 #![no_std]
 
 mod buddy;
+mod direct_map;
 
 pub use buddy::{BuddyAllocator, FreeError, MAX_ORDER, MetadataTooSmall};
+pub use direct_map::DirectMap;
 
 pub const PAGE_SIZE: u64 = 4096;
 

@@ -15,6 +15,12 @@ cargo xtask run poly.test=sync           # run only the in-kernel tests whose na
 cargo xtask run poly.selftest.page_fault # boot, then fault on purpose
 ```
 
+The negative boot tests use these `poly.selftest.*` flags, which fault on
+purpose after the in-kernel tests: `page_fault` (unmapped address),
+`write_text` (write to kernel code), `exec_stack` and `exec_data` (jump into
+no-execute memory) and `stack_overflow` (run the boot stack into its guard
+page). Each prints the address it is about to touch first.
+
 To keep a copy, add `| tee serial.log`.
 
 ## In-kernel tests
@@ -79,6 +85,21 @@ backtrace:
   #0 0xffffffff8010776c poly_kernel::selftest::trigger_page_fault+0xcc
   #1 0xffffffff801070bc kernel_entry+0x81c
   #2 0x00000000001000d5 pvh_start64+0x2b
+```
+
+A page fault's error code says what went wrong (SDM Vol. 3A §4.7): bit 0 set
+means the page was present (a protection violation, not a missing page),
+bit 1 a write, bit 4 an instruction fetch. So `error 0x3` is a write to a
+read-only page such as kernel code, and `error 0x11` is executing no-execute
+memory (then `rip` and `cr2` are equal).
+
+A kernel stack overflow runs into the unmapped guard page below the stack.
+The page fault cannot be delivered on the full stack, so it arrives as a
+double fault on its own stack, and the report says which stack overflowed:
+
+```text
+CPU exception 8 (double fault), error 0x0, rip 0xffffffff8010f07b, rsp 0xffffffff80127fb0, cr2 0xffffffff80127fa8
+kernel stack overflow: hit the guard page below the boot stack
 ```
 
 Symbols come from the ELF that was built last, so symbolise before you rebuild.
@@ -150,5 +171,9 @@ lldb kernel/target/x86_64-unknown-none/debug/poly-kernel
   and `bt` still shows where it stopped; the panic message is in the serial log.
 - `info registers` (gdb) / `register read` (lldb) also show the control
   registers (`cr0`, `cr2`, `cr3`, `cr4`), handy for page faults.
+- Physical memory is visible at `0xffff800000000000 + phys` (the direct
+  map), e.g. `x/4gx 0xffff800000000000 + 0x100000`. `monitor info mem`
+  lists every mapping with its permissions; `monitor xp /4gx 0x100000` reads
+  physical memory directly.
 - To find a kernel test in the debugger, break on its function: tests are
   ordinary functions named after the test (`poly_kernel::sync::spinlock_excludes_until_guard_dropped`).

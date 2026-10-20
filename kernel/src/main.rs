@@ -12,6 +12,7 @@ mod frames;
 mod heap;
 mod ktest;
 mod log;
+mod mm;
 mod process;
 mod qemu;
 mod selftest;
@@ -69,6 +70,11 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
         memory.total(RegionKind::Kernel) >> 10
     );
 
+    // SAFETY: once, on the boot CPU with interrupts off, before the frame
+    // allocator. `boot` copied what it needed out of the PVH start info, so
+    // nothing holds a pointer into the boot mapping.
+    let memory = unsafe { mm::init(&memory) };
+
     let (memory, meta) = frames::init(&memory);
     if let Some(f) = frames::FRAMES.lock().as_ref() {
         kprintln!(
@@ -84,9 +90,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
 
     let ok = selftest::run(&boot, &memory);
     heap::log_stats();
-    if boot.has_flag("poly.selftest.page_fault") {
-        selftest::trigger_page_fault();
-    }
+    selftest::trigger_requested_fault(&boot);
     qemu::exit(if ok { qemu::ExitCode::Success } else { qemu::ExitCode::Failure });
 
     kprintln!("idle");

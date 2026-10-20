@@ -7,8 +7,10 @@
 //!
 //! The stub builds a temporary page table that maps physical [0, 1 GiB) twice:
 //! at 0 (identity, so the stub keeps running after paging turns on) and at
-//! [`KERNEL_VMA`](super::KERNEL_VMA) (where Rust code is linked). The memory
-//! manager replaces this mapping later.
+//! [`KERNEL_VMA`](super::KERNEL_VMA) (where Rust code is linked).
+//! [`paging::init`](super::paging::init) replaces both with the kernel page
+//! tables early in `kernel_entry`; nothing runs at the identity-mapped
+//! addresses after that, and the call below never returns.
 
 use core::arch::global_asm;
 
@@ -122,13 +124,11 @@ boot_pdpt_low:  .skip 4096
 boot_pdpt_high: .skip 4096
 boot_pd:        .skip 4096
 
-    .section .bss.boot_stack, "aw", @nobits
-    .balign 16
-    .global __boot_stack_bottom
-__boot_stack_bottom:
+    /* The linker script puts this above a guard page and defines
+       __boot_stack_bottom / __boot_stack_top around it. */
+    .section .stack.boot, "aw", @nobits
+    .balign 4096
     .skip 64 * 1024
-    .global __boot_stack_top
-__boot_stack_top:
 "#,
     options(att_syntax)
 );

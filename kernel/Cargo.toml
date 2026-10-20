@@ -23,6 +23,7 @@ poly-backtrace = { path = "../crates/poly-backtrace" }
 poly-binfmt = { path = "../crates/poly-binfmt" }
 poly-heap = { path = "../crates/poly-heap" }
 poly-mem = { path = "../crates/poly-mem" }
+poly-paging = { path = "../crates/poly-paging" }
 poly-personality-linux = { path = "../personalities/linux" }
 poly-personality-nt = { path = "../personalities/nt" }
 poly-personality-xnu = { path = "../personalities/xnu" }

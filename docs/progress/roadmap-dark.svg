@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="406" viewBox="0 0 900 406" role="img" aria-label="Roadmap: 16 of 134 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="406" viewBox="0 0 900 406" role="img" aria-label="Roadmap: 18 of 134 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="405.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">16 / 134 milestones · 12%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">18 / 134 milestones · 13%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -42,11 +42,11 @@
 <g><title>✔ Physical frame allocator for all RAM (buddy allocator), host-tested</title>
 <rect x="340.0" y="83.0" width="32.0" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Kernel page tables: direct map of all physical memory, drop the boot identity map</title>
-<rect x="374.0" y="83.0" width="32.0" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
+<g><title>✔ Kernel page tables: direct map of all physical memory, drop the boot identity map</title>
+<rect x="374.0" y="83.0" width="32.0" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>W^X for the kernel: text read-only + executable, data non-executable, guard pages</title>
-<rect x="408.0" y="83.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ W^X for the kernel: text read-only + executable, data non-executable, guard pages</title>
+<rect x="408.0" y="83.0" width="32.0" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>✔ Kernel heap (slab + large allocations) so the kernel can use alloc (Box, Vec)</title>
 <rect x="442.0" y="83.0" width="32.0" height="16.0" fill="#2ea043" rx="3"/>
@@ -61,7 +61,7 @@
 <rect x="544.0" y="83.0" width="32.0" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>Interrupt controllers: local APIC + I/O APIC, legacy PIC masked</title>
-<rect x="578.0" y="83.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="578.0" y="83.0" width="32.0" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Time: TSC calibrated against HPET, monotonic clock, APIC timer interrupts</title>
 <rect x="612.0" y="83.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
@@ -81,7 +81,7 @@
 <g><title>Block layer with request queue and buffer cache</title>
 <rect x="782.0" y="83.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">5/14</text>
+<text x="884.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">7/14</text>
 <text x="16.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 2  User space and the first Linux program</text>
 <g><title>Per-process address spaces, switching on context switch (PCID where available)</title>
 <rect x="340.0" y="113.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>

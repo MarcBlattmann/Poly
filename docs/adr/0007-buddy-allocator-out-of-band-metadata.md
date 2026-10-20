@@ -1,6 +1,7 @@
 # 0007: Buddy frame allocator with out-of-band metadata
 
-**Status:** Accepted
+**Status:** Accepted. Amended by [0010](0010-kernel-address-space.md): the
+metadata buffer may now come from any usable RAM, reached through the direct map.
 
 ## Context
 
