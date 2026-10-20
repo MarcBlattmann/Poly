@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fcntl
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  fcntl(fd, cmd, arg) for descriptor and status flags and duplication.
+  F_GETFD (1) returns FD_CLOEXEC (1) or 0; F_SETFD (2) keeps only bit 0 of
+  arg. F_GETFL (3) returns the access mode and status flags (O_LARGEFILE
+  0100000 is always set on x86-64 for non-O_PATH files); F_SETFL (4) changes
+  only O_APPEND, O_NONBLOCK, O_ASYNC, O_DIRECT, O_NOATIME, ignoring access
+  mode, creation flags and O_CLOEXEC, and keeps O_LARGEFILE. F_DUPFD (0) and
+  F_DUPFD_CLOEXEC (1030) return the lowest free number >= arg, without or
+  with FD_CLOEXEC.
+returns:
+  f_setfd_f_setfl: "0"
+  f_getfl_o_path: "O_PATH (010000000) only"
+  f_dupfd: "the lowest free number >= arg; the copy shares offset and status flags"
+errors:
+  bad_fd: "EBADF (checked before the command: an unknown command on a closed fd gives EBADF)"
+  unknown_cmd: "EINVAL"
+  f_setfl_on_o_path: "EBADF (F_GETFD/F_SETFD work on O_PATH descriptors)"
+  f_dupfd_arg_out_of_range: "EINVAL for arg >= RLIMIT_NOFILE soft limit or negative"
+  f_dupfd_full: "EMFILE when no number in [arg, limit) is free"
+side_effects: "F_SETFL affects every descriptor sharing the open file; F_SETFD only the one descriptor."
+threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fstatfs
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  fstatfs(fd, buf) is statfs for the file system of an open descriptor; it
+  gives the same fields as statfs on the file's path. It works on regular
+  files, directories, O_PATH descriptors, unlinked files, pipes, /dev/null
+  and the standard descriptors; copies from dup agree with the original.
+returns:
+  success: "0"
+errors:
+  bad_fd: "EBADF"
+  bad_buffer: "EFAULT (also NULL)"
+side_effects: "none"
+threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

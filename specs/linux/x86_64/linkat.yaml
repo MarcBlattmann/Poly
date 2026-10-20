@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/linkat
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  linkat(olddirfd, oldpath, newdirfd, newpath, flags) gives a file a new
+  name: same inode, shared contents, st_nlink incremented. A symbolic link
+  source is linked itself unless flags has AT_SYMLINK_FOLLOW (0x400), which
+  links its target. AT_EMPTY_PATH (0x1000) with an empty oldpath links the
+  file olddirfd refers to (allowed for root), including an O_TMPFILE file,
+  which gets its first name (nlink 1). The old link (86) call is linkat with
+  flags 0.
+returns:
+  success: "0"
+  dirfd: "relative paths start at dirfd (AT_FDCWD = -100 means the working directory); absolute paths ignore dirfd entirely, even an invalid one; a dirfd that is not open: EBADF; a dirfd open on a non-directory with a relative path: ENOTDIR; an O_PATH directory descriptor works as dirfd"
+errors:
+  target_exists: "EEXIST"
+  source_missing: "ENOENT (also a dangling link with AT_SYMLINK_FOLLOW)"
+  directory_source: "EPERM (also a link to a directory with AT_SYMLINK_FOLLOW)"
+  trailing_slash_on_new_name: "ENOENT"
+  trailing_slash_on_file_source: "ENOTDIR"
+  empty_path_without_flag: "ENOENT"
+  unknown_flag: "EINVAL (e.g. 0x1)"
+  path: "missing component or empty path: ENOENT; a non-directory used as a directory (including a trailing slash after a file): ENOTDIR; a component over 255 bytes or a path of 4096 bytes or more with its NUL: ENAMETOOLONG; an unreadable path pointer: EFAULT; too many symbolic links: ELOOP"
+side_effects: "st_nlink and ctime of the inode change."
+threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

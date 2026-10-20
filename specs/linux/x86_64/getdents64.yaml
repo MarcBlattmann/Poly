@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getdents64
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  getdents64(fd, buf, size) reads directory entries from a directory
+  descriptor into buf as packed struct linux_dirent64 records: d_ino (u64,
+  nonzero), d_off (i64, an opaque position cookie), d_reclen (u16), d_type
+  (u8), d_name (NUL-terminated). d_reclen is 19 + strlen(name) + 1 rounded
+  up to a multiple of 8. Every entry, including "." and "..", is returned
+  exactly once per pass, in an unspecified order; then 0. It returns as many
+  whole records as fit. lseek(fd, 0, SEEK_SET) restarts the listing; a
+  following call resumes after the last record returned.
+returns:
+  success: "bytes of whole records stored (a 24-byte buffer returns one 24-byte record per call)"
+  end_of_directory: "0, repeatedly"
+  d_type: "DT_DIR 4, DT_REG 8, DT_LNK 10, DT_FIFO 1, DT_CHR 2"
+  changes: "after a rewind, added names appear and removed or renamed-away names are gone"
+  empty_directory: "just \".\" and \"..\""
+errors:
+  buffer_too_small: "EINVAL when not even one record fits (size 0 or 8)"
+  not_a_directory: "ENOTDIR"
+  bad_fd_or_o_path: "EBADF"
+  bad_buffer: "EFAULT"
+  directory_removed_while_open: "ENOENT"
+side_effects: "Advances the directory position."
+threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; no blocking on regular files"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1
