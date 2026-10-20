@@ -220,6 +220,8 @@ pub struct VirtioBlk<'a, M, N, T> {
     features: u64,
     /// Requests added since the last notification decision.
     unkicked: bool,
+    /// Fault injection: notifications are not sent.
+    drop_notifications: bool,
     /// The device broke the queue protocol.
     failed: bool,
     /// ... and has since been reset, so it no longer touches memory.
@@ -280,6 +282,7 @@ impl<'a, M: Mmio, N: Mmio, T: Dma> VirtioBlk<'a, M, N, T> {
             info,
             features,
             unkicked: false,
+            drop_notifications: false,
             failed: false,
             reset_done: false,
         }
@@ -313,6 +316,16 @@ impl<'a, M: Mmio, N: Mmio, T: Dma> VirtioBlk<'a, M, N, T> {
     /// poll before waiting for an interrupt.
     pub fn enable_interrupts(&mut self) -> bool {
         self.queue.enable_interrupts()
+    }
+
+    /// Fault injection, for testing the layers above: while set,
+    /// [`BlockDevice::kick`] does not notify the device, so requests
+    /// submitted meanwhile sit in the queue unseen, as if the notification
+    /// had been lost (the device may still find them when something else
+    /// is notified later). Only an abort (a [`poly_block::Watchdog`]) gets
+    /// them back.
+    pub fn set_drop_notifications(&mut self, drop: bool) {
+        self.drop_notifications = drop;
     }
 
     /// The device's ID string (GET_ID, §5.2.6), waiting for the answer. Only
@@ -474,7 +487,9 @@ impl<M: Mmio, N: Mmio, T: Dma> BlockDevice for VirtioBlk<'_, M, N, T> {
     fn kick(&mut self) {
         if self.unkicked {
             self.unkicked = false;
-            if self.queue.should_notify() {
+            // Asked even when dropping, to keep the queue's notification
+            // bookkeeping right.
+            if self.queue.should_notify() && !self.drop_notifications {
                 self.notifier.notify(&self.notify);
             }
         }

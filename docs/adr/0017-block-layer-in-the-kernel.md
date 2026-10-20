@@ -3,7 +3,11 @@
 **Status:** Accepted. Supersedes the virtio-blk driver parts of
 [ADR 0015](0015-pci-and-virtio-in-the-kernel.md) (the kernel's own request
 code, its bounce buffer and `virtio_blk/protocol.rs`); PCI, DMA allocation
-and polling stay as decided there.
+and polling stay as decided there. Waiting (polling with the disk's
+spinlock held) and the poll-counting watchdog are superseded by
+[ADR 0018](0018-msi-x-and-interrupt-driven-disk-io.md), which resolves the
+open points in the consequences below: the lock is split, waiters sleep,
+the cache waits through a hook, and the watchdog has a time limit.
 
 ## Context
 

@@ -18,42 +18,58 @@ impl<D: Abort + ?Sized> Abort for &mut D {
     }
 }
 
-/// Wraps a device and aborts it when requests are outstanding but
-/// `budget` polls in a row bring nothing back.
+/// The time a [`Watchdog`] measures silence in: any unit, as long as it
+/// never goes backwards. Any `Fn() -> u64` is one, such as a kernel's
+/// nanosecond clock.
+pub trait Clock {
+    fn now(&self) -> u64;
+}
+
+impl<F: Fn() -> u64> Clock for F {
+    fn now(&self) -> u64 {
+        self()
+    }
+}
+
+/// Wraps a device and aborts it when requests are outstanding but none has
+/// come back for `limit` (in the [`Clock`]'s units).
 ///
-/// Without a timer a poll count is the only clock there is, so the budget is
-/// a number of [`BlockDevice::poll`] calls, which a waiting
-/// [`crate::RequestQueue`] makes in a tight loop. Whatever completes resets
-/// the count, so a busy device that keeps finishing requests never trips it,
-/// however long its queue. If the abort itself cannot take the requests back
-/// (the device does not finish its reset), the watchdog tries again after
-/// another budget.
-pub struct Watchdog<D> {
+/// The silence starts when a request goes out while nothing else is
+/// outstanding, and starts again whenever one comes back, so a busy device
+/// that keeps finishing requests never trips it, however long its queue.
+/// The limit is checked whenever someone polls: a polling waiter does so in
+/// a loop; an interrupt-driven kernel polls from the device's interrupt
+/// handler and, since a lost request raises no interrupt, also when a
+/// sleeping waiter reaches [`Watchdog::deadline`]. If the abort itself
+/// cannot take the requests back (the device does not finish its reset),
+/// the watchdog tries again after another `limit`.
+pub struct Watchdog<D, C> {
     dev: D,
-    budget: u64,
-    /// Polls in a row that returned nothing while requests were outstanding.
-    idle: u64,
+    clock: C,
+    limit: u64,
+    /// When the current silence began; `None` while nothing is outstanding.
+    since: Option<u64>,
     /// Requests accepted and not yet handed back.
     outstanding: u64,
     aborts: u64,
 }
 
-impl<D> core::fmt::Debug for Watchdog<D> {
+impl<D, C> core::fmt::Debug for Watchdog<D, C> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Watchdog")
-            .field("budget", &self.budget)
-            .field("idle", &self.idle)
+            .field("limit", &self.limit)
+            .field("since", &self.since)
             .field("outstanding", &self.outstanding)
             .field("aborts", &self.aborts)
             .finish()
     }
 }
 
-impl<D: Abort> Watchdog<D> {
-    /// `dev`, which must have nothing in flight, aborted after `budget`
-    /// fruitless polls (at least 1).
-    pub fn new(dev: D, budget: u64) -> Watchdog<D> {
-        Watchdog { dev, budget: budget.max(1), idle: 0, outstanding: 0, aborts: 0 }
+impl<D: Abort, C: Clock> Watchdog<D, C> {
+    /// `dev`, which must have nothing in flight, aborted after `limit` (at
+    /// least 1) of silence as `clock` measures it.
+    pub fn new(dev: D, clock: C, limit: u64) -> Watchdog<D, C> {
+        Watchdog { dev, clock, limit: limit.max(1), since: None, outstanding: 0, aborts: 0 }
     }
 
     pub const fn device(&self) -> &D {
@@ -70,9 +86,37 @@ impl<D: Abort> Watchdog<D> {
     pub const fn aborts(&self) -> u64 {
         self.aborts
     }
+
+    pub const fn limit(&self) -> u64 {
+        self.limit
+    }
+
+    /// Change the limit (at least 1). It applies to the current silence
+    /// too.
+    pub fn set_limit(&mut self, limit: u64) {
+        self.limit = limit.max(1);
+    }
+
+    /// When the watchdog gives up unless something comes back first: the
+    /// time by which a sleeping waiter should poll. `None` while nothing is
+    /// outstanding.
+    pub fn deadline(&self) -> Option<u64> {
+        self.since.map(|s| s.saturating_add(self.limit))
+    }
+
+    /// Requests accepted and not yet handed back.
+    pub const fn outstanding(&self) -> u64 {
+        self.outstanding
+    }
+
+    /// A request came back: the silence starts again.
+    fn completed(&mut self) {
+        self.outstanding = self.outstanding.saturating_sub(1);
+        self.since = if self.outstanding > 0 { Some(self.clock.now()) } else { None };
+    }
 }
 
-impl<D: Abort> BlockDevice for Watchdog<D> {
+impl<D: Abort, C: Clock> BlockDevice for Watchdog<D, C> {
     fn info(&self) -> DeviceInfo {
         self.dev.info()
     }
@@ -80,6 +124,9 @@ impl<D: Abort> BlockDevice for Watchdog<D> {
     unsafe fn submit(&mut self, req: &Request<'_>) -> Result<(), SubmitError> {
         // SAFETY: our caller's promise, passed on unchanged.
         unsafe { self.dev.submit(req) }?;
+        if self.outstanding == 0 {
+            self.since = Some(self.clock.now());
+        }
         self.outstanding += 1;
         Ok(())
     }
@@ -90,30 +137,25 @@ impl<D: Abort> BlockDevice for Watchdog<D> {
 
     fn poll(&mut self) -> Option<Completion> {
         if let Some(c) = self.dev.poll() {
-            self.idle = 0;
-            self.outstanding = self.outstanding.saturating_sub(1);
+            self.completed();
             return Some(c);
         }
         if self.outstanding == 0 {
+            self.since = None;
             return None;
         }
-        self.idle += 1;
-        if self.idle < self.budget {
+        let now = self.clock.now();
+        let since = *self.since.get_or_insert(now);
+        if now.saturating_sub(since) < self.limit {
             return None;
         }
-        self.idle = 0;
+        // Another full limit before the next try, should this abort not
+        // take the requests back.
+        self.since = Some(now);
         self.aborts += 1;
         self.dev.abort();
-        self.poll_after_abort()
-    }
-}
-
-impl<D: Abort> Watchdog<D> {
-    /// The first completion an abort released, if any, without counting
-    /// another idle poll.
-    fn poll_after_abort(&mut self) -> Option<Completion> {
         let c = self.dev.poll()?;
-        self.outstanding = self.outstanding.saturating_sub(1);
+        self.completed();
         Some(c)
     }
 }
@@ -125,6 +167,7 @@ mod tests {
         DeviceSlot, IoBuf, IoError, Op, Part, QueueStorage, RamDisk, RequestId, RequestQueue, RequestSlot, sync,
     };
     extern crate std;
+    use core::cell::Cell;
     use std::{vec, vec::Vec};
 
     /// Takes requests and never finishes them, until aborted; it can also
@@ -181,27 +224,74 @@ mod tests {
         }
     }
 
+    /// A clock that advances by one every time it is read: the watchdog
+    /// then counts polls, as a waiter spinning on the device makes them.
+    fn ticking(t: &Cell<u64>) -> impl Fn() -> u64 + '_ {
+        move || {
+            t.set(t.get() + 1);
+            t.get()
+        }
+    }
+
     #[test]
-    fn lost_requests_fail_after_the_budget() {
-        let mut w = Watchdog::new(BlackHole::new(), 100);
+    fn lost_requests_fail_after_the_limit() {
+        let t = Cell::new(0);
+        let mut w = Watchdog::new(BlackHole::new(), ticking(&t), 100);
         let mut buf = [0u8; 512];
-        // Nothing outstanding: idle polls cost nothing.
+        // Nothing outstanding: idle polls cost nothing, not even a clock
+        // read.
         for _ in 0..1000 {
             assert_eq!(w.poll(), None);
         }
-        assert_eq!(w.aborts(), 0);
+        assert_eq!((w.aborts(), t.get(), w.deadline()), (0, 0, None));
         assert_eq!(sync::read(&mut w, 0, &mut buf), Err(IoError::DeviceFailed));
         assert_eq!(w.aborts(), 1);
-        // The request was submitted, then polled until the budget ran out.
+        // The request was submitted, then polled until the limit ran out.
         assert_eq!(w.device().polls, 1000 + 100 + 1);
-        assert_eq!(w.outstanding, 0);
+        assert_eq!((w.outstanding(), w.deadline()), (0, None));
+    }
+
+    #[test]
+    fn the_deadline_follows_the_last_completion() {
+        let now = Cell::new(1000);
+        let mut w = Watchdog::new(BlackHole::new(), || now.get(), 50);
+        let mut buf = [0u8; 512];
+        let seg = [IoBuf::from_mut(&mut buf)];
+        let req = |id| Request { id: RequestId(id), op: Op::Read, lba: 0, segments: &seg };
+        // SAFETY: the black hole never touches the memory.
+        unsafe {
+            w.submit(&req(1)).unwrap();
+            now.set(1010);
+            w.submit(&req(2)).unwrap();
+        }
+        // The silence began with the first request.
+        assert_eq!(w.deadline(), Some(1050));
+        // Polls do nothing until the deadline, however many.
+        now.set(1049);
+        for _ in 0..10_000 {
+            assert_eq!(w.poll(), None);
+        }
+        // One comes back: the silence starts again.
+        w.dev.failed.push(RequestId(1));
+        w.dev.held.retain(|&id| id != RequestId(1));
+        assert!(w.poll().is_some());
+        assert_eq!((w.outstanding(), w.deadline()), (1, Some(1099)));
+        // A shorter limit applies to the current silence at once.
+        w.set_limit(10);
+        assert_eq!(w.deadline(), Some(1059));
+        now.set(1059);
+        assert_eq!(w.poll(), Some(Completion { id: RequestId(2), result: Err(IoError::DeviceFailed) }));
+        assert_eq!((w.aborts(), w.outstanding(), w.deadline(), w.limit()), (1, 0, None, 10));
+        w.set_limit(0);
+        assert_eq!(w.limit(), 1);
     }
 
     #[test]
     fn a_device_stuck_in_its_reset_is_aborted_again() {
         let mut dev = BlackHole::new();
         dev.stuck_aborts = 2;
-        let mut w = Watchdog::new(dev, 10);
+        let t = Cell::new(0);
+        let mut w = Watchdog::new(dev, ticking(&t), 10);
         let mut requests = [RequestSlot::EMPTY; 4];
         let mut device = [DeviceSlot::EMPTY; 4];
         let mut segments = [IoBuf::EMPTY; 8];
@@ -229,8 +319,8 @@ mod tests {
     fn a_working_device_is_never_aborted() {
         let mut mem = vec![0u8; 64 * 512];
         let disk = RamDisk::new(&mut mem, 512).unwrap();
-        // A RAM disk completes inside submit, so a budget of one poll is
-        // plenty.
+        // A RAM disk completes inside submit, so a limit of one clock tick
+        // is plenty.
         struct NeverAbort<'a>(RamDisk<'a>);
         impl BlockDevice for NeverAbort<'_> {
             fn info(&self) -> DeviceInfo {
@@ -249,7 +339,8 @@ mod tests {
                 panic!("aborted a working device");
             }
         }
-        let mut w = Watchdog::new(NeverAbort(disk), 1);
+        let t = Cell::new(0);
+        let mut w = Watchdog::new(NeverAbort(disk), ticking(&t), 1);
         let data = [7u8; 2048];
         let mut back = [0u8; 2048];
         for lba in 0..32 {

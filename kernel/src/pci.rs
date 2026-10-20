@@ -21,14 +21,18 @@
 //! Configuration space is not locked: enumeration runs once at boot on one
 //! CPU, and afterwards each driver only touches its own functions.
 
+use crate::arch::irq::{self, Handler};
 use crate::sync::SpinLock;
 use crate::{acpi, kprint, kprintln, mm};
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ptr;
 use poly_acpi::EcamRegion;
+use poly_irq::MsiMessage;
 use poly_pci::{
-    Bar, BarKind, Bdf, Capabilities, ConfigSpace, Ecam, Header, MsiError, MsiX, cap_id, probe_bars, reg, scan_all,
+    Bar, BarKind, Bdf, Capabilities, ConfigSpace, Ecam, Header, Message, Msi, MsiError, MsiX, cap_id, command,
+    probe_bars, reg, scan_all,
 };
 
 /// The configuration space of one PCI segment group, through its ECAM
@@ -199,6 +203,274 @@ impl Device {
         // SAFETY: `virt` is this BAR's `map_mmio` mapping (made here once and
         // kept in MAPPED_BARS), `len` bytes, never unmapped.
         Ok(unsafe { MmioRegion::from_mapping(virt, len) })
+    }
+}
+
+// --- Message signalled interrupts --------------------------------------------
+
+/// Why a function's interrupts could not be set up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IrqError {
+    /// The function has no MSI-X capability (or, for MSI, no MSI one).
+    NoCapability,
+    /// The capability is malformed or cannot do what was asked.
+    Msi(MsiError),
+    /// The MSI-X table or PBA could not be mapped.
+    Bar(MapError),
+    /// Every device vector is taken.
+    NoVector,
+    /// No message can reach the boot CPU (its local APIC is not set up, or
+    /// its ID does not fit an MSI address).
+    NoDestination,
+    /// The MSI-X table entry already has a vector.
+    EntryInUse,
+}
+
+/// The x86 message `poly-irq` builds, as `poly-pci` writes it into a
+/// function (the same address / data pair; the crates do not know each
+/// other).
+pub const fn to_pci_message(m: MsiMessage) -> Message {
+    Message { address: m.address, data: m.data }
+}
+
+/// A message read back from a function, for `poly-irq` to decode.
+pub const fn from_pci_message(m: Message) -> MsiMessage {
+    MsiMessage { address: m.address, data: m.data }
+}
+
+/// The message that raises kernel vector `vector` on the boot CPU.
+pub fn msi_message(vector: u8) -> Option<Message> {
+    irq::msi_message(vector).map(to_pci_message)
+}
+
+/// A function's MSI-X, enabled: which table entries raise which kernel
+/// vector. Made by [`Device::enable_msix`]; [`MsixVectors::disable`] turns
+/// it off again and frees the vectors (dropping it without that leaves
+/// both as they are, which suits a device that lives as long as the
+/// kernel).
+#[derive(Debug)]
+pub struct MsixVectors {
+    cfg: &'static EcamSpace,
+    bdf: Bdf,
+    cap: MsiX,
+    table: MmioRegion,
+    pba: MmioRegion,
+    /// The kernel vector of each table entry, once attached.
+    vectors: Vec<Option<u8>>,
+}
+
+impl MsixVectors {
+    /// The kernel vector table entry `entry` raises, if attached.
+    pub fn vector(&self, entry: u16) -> Option<u8> {
+        self.vectors.get(entry as usize).copied().flatten()
+    }
+
+    /// Give table entry `entry` a fresh kernel vector running
+    /// `handler(data)`, and program it (unmasked) with the message for that
+    /// vector. Nothing arrives while the function mask is set (as
+    /// [`Device::enable_msix`] leaves it). Returns the vector.
+    pub fn attach(&mut self, entry: u16, handler: Handler, data: usize) -> Result<u8, IrqError> {
+        if entry >= self.cap.table_size {
+            return Err(IrqError::Msi(MsiError::NoSuchVector));
+        }
+        if self.vectors[entry as usize].is_some() {
+            return Err(IrqError::EntryInUse);
+        }
+        let vector = irq::allocate_vector(handler, data).ok_or(IrqError::NoVector)?;
+        let result = match msi_message(vector) {
+            Some(msg) => self.cap.write_entry(&self.table, entry, msg, false).map_err(IrqError::Msi),
+            None => Err(IrqError::NoDestination),
+        };
+        if let Err(e) = result {
+            irq::free_vector(vector);
+            return Err(e);
+        }
+        self.vectors[entry as usize] = Some(vector);
+        Ok(vector)
+    }
+
+    /// Mask table entry `entry` and free its vector. False if it had none.
+    pub fn detach(&mut self, entry: u16) -> bool {
+        let Some(vector) = self.vector(entry) else { return false };
+        // In range: it has a vector.
+        let _ = self.cap.set_vector_masked(&self.table, entry, true);
+        self.vectors[entry as usize] = None;
+        irq::free_vector(vector)
+    }
+
+    /// Hold back (or let through) every entry at once.
+    pub fn set_function_masked(&self, masked: bool) {
+        self.cap.set_function_mask(self.cfg, self.bdf, masked);
+    }
+
+    pub fn is_function_masked(&self) -> bool {
+        self.cap.is_function_masked(self.cfg, self.bdf)
+    }
+
+    /// Mask or unmask one entry. A masked entry's interrupt waits in the
+    /// PBA ([`MsixVectors::is_pending`]) and is sent once it is unmasked.
+    pub fn set_masked(&self, entry: u16, masked: bool) -> Result<(), IrqError> {
+        self.cap.set_vector_masked(&self.table, entry, masked).map_err(IrqError::Msi)
+    }
+
+    /// Table entry `entry` as the function sees it: message and mask.
+    pub fn entry(&self, entry: u16) -> Result<(Message, bool), IrqError> {
+        self.cap.read_entry(&self.table, entry).map_err(IrqError::Msi)
+    }
+
+    pub fn is_pending(&self, entry: u16) -> Result<bool, IrqError> {
+        self.cap.is_pending(&self.pba, entry).map_err(IrqError::Msi)
+    }
+
+    /// Turn MSI-X off: mask the function and every attached entry, clear
+    /// the enable bit and free the vectors. The function cannot interrupt
+    /// afterwards (INTx stays disabled).
+    pub fn disable(mut self) {
+        self.set_function_masked(true);
+        for entry in 0..self.cap.table_size {
+            self.detach(entry);
+        }
+        self.cap.set_enabled(self.cfg, self.bdf, false);
+    }
+}
+
+/// A function's plain MSI, enabled with one vector: made by
+/// [`Device::enable_msi`], undone by [`MsiVector::disable`].
+#[derive(Debug)]
+pub struct MsiVector {
+    cfg: &'static EcamSpace,
+    bdf: Bdf,
+    cap: Msi,
+    vector: u8,
+}
+
+impl MsiVector {
+    pub const fn vector(&self) -> u8 {
+        self.vector
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.cap.is_enabled(self.cfg, self.bdf)
+    }
+
+    /// The message the function sends, as programmed.
+    pub fn message(&self) -> Message {
+        self.cap.read_message(self.cfg, self.bdf).0
+    }
+
+    /// Mask or unmask the vector; only functions with per-vector masking
+    /// can.
+    pub fn set_masked(&self, masked: bool) -> Result<(), IrqError> {
+        self.cap.set_masked(self.cfg, self.bdf, 0, masked).map_err(IrqError::Msi)
+    }
+
+    /// Turn MSI off and free the vector (INTx stays disabled).
+    pub fn disable(self) {
+        self.cap.set_enabled(self.cfg, self.bdf, false);
+        irq::free_vector(self.vector);
+    }
+}
+
+/// A function's interrupt, whichever way it is delivered; see
+/// [`Device::enable_interrupt`].
+#[derive(Debug)]
+pub enum Interrupt {
+    /// MSI-X table entry 0.
+    MsiX(MsixVectors),
+    Msi(MsiVector),
+}
+
+impl Interrupt {
+    /// The kernel vector it raises (`None` if MSI-X entry 0 was detached).
+    pub fn vector(&self) -> Option<u8> {
+        match self {
+            Interrupt::MsiX(v) => v.vector(0),
+            Interrupt::Msi(v) => Some(v.vector()),
+        }
+    }
+
+    pub fn disable(self) {
+        match self {
+            Interrupt::MsiX(v) => v.disable(),
+            Interrupt::Msi(v) => v.disable(),
+        }
+    }
+}
+
+impl Device {
+    /// Turn on the function's MSI-X with everything masked (the function
+    /// mask and every entry), and memory decoding (the table is in a BAR),
+    /// INTx and MSI off. Then [`MsixVectors::attach`] the entries the driver
+    /// uses and clear the function mask; this order sends no interrupt
+    /// before its entry is programmed (PCI 3.0 §6.8.2). The function needs
+    /// bus mastering to send messages, which its driver turns on.
+    pub fn enable_msix(&self) -> Result<MsixVectors, IrqError> {
+        let (cfg, bdf) = (self.cfg, self.bdf());
+        let cap = self.msix().ok_or(IrqError::NoCapability)?.map_err(IrqError::Msi)?;
+        let part = |bar: u8, offset: u32, len: u64| {
+            let region = self.map_bar(bar as usize).map_err(IrqError::Bar)?;
+            region.subregion(offset as usize, len as usize).ok_or(IrqError::Msi(MsiError::OutsideBar))
+        };
+        let table = part(cap.table_bar, cap.table_offset, cap.table_len())?;
+        let pba = part(cap.pba_bar, cap.pba_offset, cap.pba_len())?;
+        if let Some(Ok(msi)) = self.capabilities().find_id(cap_id::MSI).map(|c| Msi::new(cfg, bdf, c)) {
+            msi.set_enabled(cfg, bdf, false);
+        }
+        poly_pci::enable(cfg, bdf, command::MEMORY_SPACE | command::INTX_DISABLE);
+        cap.set_function_mask(cfg, bdf, true);
+        cap.set_enabled(cfg, bdf, true);
+        for entry in 0..cap.table_size {
+            cap.set_vector_masked(&table, entry, true).map_err(IrqError::Msi)?;
+        }
+        let vectors = vec![None; cap.table_size as usize];
+        Ok(MsixVectors { cfg, bdf, cap, table, pba, vectors })
+    }
+
+    /// Turn on plain MSI with one vector for `handler(data)`, INTx off: for
+    /// functions without MSI-X. (Several MSI vectors would need a block of
+    /// consecutive kernel vectors, aligned to its size, since the function
+    /// fills in the low data bits; the allocator hands out single ones.)
+    /// Bus mastering is the driver's to turn on.
+    pub fn enable_msi(&self, handler: Handler, data: usize) -> Result<MsiVector, IrqError> {
+        let (cfg, bdf) = (self.cfg, self.bdf());
+        let cap = self.capabilities().find_id(cap_id::MSI).ok_or(IrqError::NoCapability)?;
+        let cap = Msi::new(cfg, bdf, cap).map_err(IrqError::Msi)?;
+        cap.set_enabled(cfg, bdf, false);
+        let vector = irq::allocate_vector(handler, data).ok_or(IrqError::NoVector)?;
+        let configured = match msi_message(vector) {
+            Some(msg) => cap.configure(cfg, bdf, msg, 1).map_err(IrqError::Msi),
+            None => Err(IrqError::NoDestination),
+        };
+        if let Err(e) = configured {
+            irq::free_vector(vector);
+            return Err(e);
+        }
+        if cap.per_vector_masking() {
+            // Vector 0 exists, and masking is supported.
+            let _ = cap.set_masked(cfg, bdf, 0, false);
+        }
+        poly_pci::enable(cfg, bdf, command::INTX_DISABLE);
+        cap.set_enabled(cfg, bdf, true);
+        Ok(MsiVector { cfg, bdf, cap, vector })
+    }
+
+    /// One interrupt for `handler(data)`: MSI-X table entry 0 if the
+    /// function has usable MSI-X, plain MSI otherwise.
+    pub fn enable_interrupt(&self, handler: Handler, data: usize) -> Result<Interrupt, IrqError> {
+        if let Some(Ok(_)) = self.msix() {
+            let mut v = self.enable_msix()?;
+            return match v.attach(0, handler, data) {
+                Ok(_) => {
+                    v.set_function_masked(false);
+                    Ok(Interrupt::MsiX(v))
+                }
+                Err(e) => {
+                    v.disable();
+                    Err(e)
+                }
+            };
+        }
+        self.enable_msi(handler, data).map(Interrupt::Msi)
     }
 }
 
@@ -382,4 +654,123 @@ crate::kernel_test! {
         }
         Ok(())
     }
+}
+
+/// The boot test attaches QEMU's `edu` device (a function with plain MSI
+/// and no MSI-X) and says so with this flag.
+pub const TEST_MSI_FLAG: &str = "poly.test.msi";
+
+/// QEMU's educational device (QEMU documentation, `docs/specs/edu.rst`):
+/// IDs, and registers in BAR 0.
+mod edu {
+    pub const VENDOR: u16 = 0x1234;
+    pub const DEVICE: u16 = 0x11e8;
+    /// Identification, 0xRRrr00ed (major, minor version).
+    pub const ID: usize = 0x00;
+    /// Interrupt status: the bits raised and not yet acknowledged.
+    pub const IRQ_STATUS: usize = 0x24;
+    /// Writing ORs the value into the status and raises the interrupt.
+    pub const IRQ_RAISE: usize = 0x60;
+    /// Writing clears those status bits.
+    pub const IRQ_ACK: usize = 0x64;
+}
+
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering::SeqCst};
+use poly_pci::Mmio;
+
+/// The edu device's registers, for its interrupt handler.
+static EDU: SpinLock<Option<MmioRegion>> = SpinLock::new(None);
+static EDU_INTERRUPTS: AtomicU64 = AtomicU64::new(0);
+static EDU_STATUS: AtomicU32 = AtomicU32::new(0);
+
+/// The edu device's interrupt: note and acknowledge what was raised.
+fn edu_interrupt(_: usize) {
+    let Some(regs) = *EDU.lock() else { return };
+    let status = regs.read32(edu::IRQ_STATUS);
+    regs.write32(edu::IRQ_ACK, status);
+    EDU_STATUS.fetch_or(status, SeqCst);
+    EDU_INTERRUPTS.fetch_add(1, SeqCst);
+}
+
+fn is_edu(d: &&Device) -> bool {
+    (d.header.vendor_id, d.header.device_id) == (edu::VENDOR, edu::DEVICE)
+}
+
+crate::kernel_test! {
+    /// The MSI fallback of `enable_interrupt`, on a function without MSI-X:
+    /// each interrupt the device raises arrives at the handler through the
+    /// message `msi_message` built; after `disable` none does.
+    fn msi_without_msix_reaches_its_handler(env: &TestEnv) -> TestResult {
+        let expected = env.boot.has_flag(TEST_MSI_FLAG);
+        let Some(dev) = devices().iter().find(is_edu) else {
+            return if expected { Err("poly.test.msi is set but there is no edu device") } else { Ok(()) };
+        };
+        if dev.msix().is_some() {
+            return Err("the edu device has MSI-X, so it cannot test the MSI fallback");
+        }
+        let regs = dev.map_bar(0).map_err(|_| "cannot map the edu device's BAR 0")?;
+        // Messages are memory writes: they need bus mastering.
+        poly_pci::enable(dev.config(), dev.bdf(), command::MEMORY_SPACE | command::BUS_MASTER);
+        if regs.read32(edu::ID) & 0xff != 0xed {
+            return Err("the edu device does not identify itself");
+        }
+        *EDU.lock() = Some(regs);
+        EDU_INTERRUPTS.store(0, SeqCst);
+        EDU_STATUS.store(0, SeqCst);
+        let unhandled = irq::stats().unhandled;
+        let irq = dev.enable_interrupt(edu_interrupt, 0).map_err(|_| "enable_interrupt failed")?;
+        let vector = irq.vector().unwrap_or(0);
+        let result = (|| {
+            let Interrupt::Msi(msi) = &irq else { return Err("enable_interrupt did not fall back to MSI") };
+            let (cfg, bdf) = (dev.config(), dev.bdf());
+            if Some(msi.message()) != msi_message(vector) || from_pci_message(msi.message()).vector() != vector {
+                return Err("the MSI capability does not hold the message for the vector");
+            }
+            if !msi.is_enabled() || poly_pci::read_command(cfg, bdf) & command::INTX_DISABLE == 0 {
+                return Err("MSI is not enabled, or INTx is not disabled");
+            }
+            for i in 0..3 {
+                let before = EDU_INTERRUPTS.load(SeqCst);
+                regs.write32(edu::IRQ_RAISE, 1 << i);
+                if !wait_until(|| EDU_INTERRUPTS.load(SeqCst) > before) {
+                    return Err("an interrupt the edu device raised did not arrive");
+                }
+                if EDU_STATUS.load(SeqCst) & (1 << i) == 0 {
+                    return Err("the handler did not see the status bit that was raised");
+                }
+            }
+            if msi.set_masked(true) != Err(IrqError::Msi(MsiError::NoMasking)) {
+                return Err("masking was accepted on a function without per-vector masking");
+            }
+            let n = EDU_INTERRUPTS.load(SeqCst);
+            kprintln!("pci: {} MSI -> vector {vector:#x}: {n} interrupts delivered", dev.bdf());
+            Ok(())
+        })();
+        irq.disable();
+        let before = EDU_INTERRUPTS.load(SeqCst);
+        regs.write32(edu::IRQ_RAISE, 1 << 7);
+        let quiet = !wait_until(|| EDU_INTERRUPTS.load(SeqCst) > before);
+        regs.write32(edu::IRQ_ACK, regs.read32(edu::IRQ_STATUS));
+        *EDU.lock() = None;
+        result?;
+        if !quiet || irq::free_vector(vector) {
+            return Err("after disable the function still interrupts, or its vector is still allocated");
+        }
+        if irq::stats().unhandled != unhandled {
+            return Err("an edu interrupt arrived on a vector without a handler");
+        }
+        Ok(())
+    }
+}
+
+/// Wait up to 100 ms (with interrupts on) for something an interrupt does.
+fn wait_until(mut done: impl FnMut() -> bool) -> bool {
+    let start = crate::time::now_ns();
+    while crate::time::now_ns() - start < 100 * crate::time::NANOS_PER_MILLI {
+        if done() {
+            return true;
+        }
+        core::hint::spin_loop();
+    }
+    done()
 }

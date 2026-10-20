@@ -160,6 +160,23 @@ impl Msi {
         cfg.write16(bdf, self.control_offset(), control);
     }
 
+    pub fn is_enabled<C: ConfigSpace + ?Sized>(&self, cfg: &C, bdf: Bdf) -> bool {
+        cfg.read16(bdf, self.control_offset()) & msi_control::ENABLE != 0
+    }
+
+    /// The message as programmed now, and the number of vectors enabled.
+    pub fn read_message<C: ConfigSpace + ?Sized>(&self, cfg: &C, bdf: Bdf) -> (Message, u8) {
+        let base = self.offset as u16;
+        let mut address = cfg.read32(bdf, base + 4) as u64;
+        if self.is_64bit() {
+            address |= (cfg.read32(bdf, base + 8) as u64) << 32;
+        }
+        let data = cfg.read16(bdf, self.data_offset()) as u32;
+        let mme = (cfg.read16(bdf, self.control_offset()) & msi_control::MULTIPLE_MESSAGE_ENABLE)
+            >> msi_control::MULTIPLE_MESSAGE_ENABLE_SHIFT;
+        (Message { address, data }, 1 << mme.min(5))
+    }
+
     /// Mask or unmask one vector. Needs per-vector masking.
     pub fn set_masked<C: ConfigSpace + ?Sized>(
         &self,
@@ -287,6 +304,14 @@ impl MsiX {
         self.update_control(cfg, bdf, msix_control::ENABLE, enabled);
     }
 
+    pub fn is_enabled<C: ConfigSpace + ?Sized>(&self, cfg: &C, bdf: Bdf) -> bool {
+        cfg.read16(bdf, self.offset as u16 + 2) & msix_control::ENABLE != 0
+    }
+
+    pub fn is_function_masked<C: ConfigSpace + ?Sized>(&self, cfg: &C, bdf: Bdf) -> bool {
+        cfg.read16(bdf, self.offset as u16 + 2) & msix_control::FUNCTION_MASK != 0
+    }
+
     /// Mask (or unmask) every vector at once, whatever the per-entry masks
     /// say.
     pub fn set_function_mask<C: ConfigSpace + ?Sized>(&self, cfg: &C, bdf: Bdf, masked: bool) {
@@ -332,6 +357,16 @@ impl MsiX {
         let control = table.read32(off);
         table.write32(off, if masked { control | VECTOR_MASKED } else { control & !VECTOR_MASKED });
         Ok(())
+    }
+
+    /// Table entry `index` as it is now: its message and whether it is
+    /// masked.
+    pub fn read_entry<M: Mmio + ?Sized>(&self, table: &M, index: u16) -> Result<(Message, bool), MsiError> {
+        let entry = self.entry(index)?;
+        let address =
+            table.read32(entry + ENTRY_ADDRESS_LOW) as u64 | (table.read32(entry + ENTRY_ADDRESS_HIGH) as u64) << 32;
+        let msg = Message { address, data: table.read32(entry + ENTRY_DATA) };
+        Ok((msg, table.read32(entry + ENTRY_VECTOR_CONTROL) & VECTOR_MASKED != 0))
     }
 
     /// Pending bit of vector `index`. `pba` maps the PBA.
@@ -392,8 +427,11 @@ mod tests {
         assert_eq!(m.max_vectors(), 4);
         assert_eq!(m.size(), 0x0a);
         let msg = Message { address: 0xfee0_0000, data: 0x40 };
+        assert!(!m.is_enabled(&s, B));
         m.configure(&s, B, msg, 4).unwrap();
         m.set_enabled(&s, B, true);
+        assert!(m.is_enabled(&s, B));
+        assert_eq!(m.read_message(&s, B), (msg, 4));
         assert_eq!(s.get32(B, 0x54), 0xfee0_0000);
         assert_eq!(s.get16(B, 0x58), 0x40);
         let control = s.get16(B, 0x52);
@@ -418,7 +456,9 @@ mod tests {
         assert!(m.is_64bit() && m.per_vector_masking());
         assert_eq!(m.max_vectors(), 32);
         assert_eq!(m.size(), 0x18);
-        m.configure(&s, B, Message { address: 0x1_2345_6780, data: 0x20 }, 32).unwrap();
+        let msg = Message { address: 0x1_2345_6780, data: 0x20 };
+        m.configure(&s, B, msg, 32).unwrap();
+        assert_eq!(m.read_message(&s, B), (msg, 32));
         assert_eq!((s.get32(B, 0x54), s.get32(B, 0x58)), (0x2345_6780, 1));
         assert_eq!(s.get16(B, 0x5c), 0x20);
         m.set_masked(&s, B, 3, true).unwrap();
@@ -473,11 +513,14 @@ mod tests {
             MsiX { offset: 0x50, table_size: 64, table_bar: 4, table_offset: 0x2000, pba_bar: 4, pba_offset: 0x3000 }
         );
         assert_eq!((m.table_len(), m.pba_len()), (1024, 8));
+        assert!(!m.is_enabled(&s, B) && !m.is_function_masked(&s, B));
         m.set_function_mask(&s, B, true);
         m.set_enabled(&s, B, true);
         assert_eq!(s.get16(B, 0x52), 0xc000 | 63);
+        assert!(m.is_enabled(&s, B) && m.is_function_masked(&s, B));
         m.set_function_mask(&s, B, false);
         assert_eq!(s.get16(B, 0x52), 0x8000 | 63);
+        assert!(m.is_enabled(&s, B) && !m.is_function_masked(&s, B));
 
         let bar = |size| Some(Bar { kind: BarKind::Memory64, address: 0xfe00_0000, size, prefetchable: false });
         let mut bars = [None; 6];
@@ -535,8 +578,11 @@ mod tests {
         // Entries come out of reset masked; bit 31 stands in for a reserved
         // bit that must survive.
         let t = Table { mem: RefCell::new(vec![1 | 1 << 31; 16]), log: RefCell::new(vec![]) };
-        m.write_entry(&t, 2, Message { address: 0x1_fee0_1000, data: 0x31 }, false).unwrap();
+        let msg = Message { address: 0x1_fee0_1000, data: 0x31 };
+        m.write_entry(&t, 2, msg, false).unwrap();
         assert_eq!(&t.mem.borrow()[8..12], &[0xfee0_1000, 1, 0x31, 1 << 31]);
+        assert_eq!(m.read_entry(&t, 2), Ok((msg, false)));
+        assert_eq!(m.read_entry(&t, 4), Err(MsiError::NoSuchVector));
         // Masked first, unmasked last.
         let log = t.log.borrow().clone();
         assert_eq!(log.first(), Some(&(44, 1 | 1 << 31)));

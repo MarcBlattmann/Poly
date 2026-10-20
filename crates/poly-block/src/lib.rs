@@ -5,12 +5,17 @@
 //!   submitted with an id and completed later, possibly out of order. A
 //!   polling driver and an interrupt-driven one look the same from above:
 //!   [`BlockDevice::poll`] hands back finished requests, called from a wait
-//!   loop today and from the interrupt handler later.
+//!   loop when polling and from the interrupt handler (and the waiters it
+//!   wakes) when not.
 //! - [`RequestQueue`] sits in front of one device. It keeps requests from
 //!   several users, sorts them (one-way elevator), merges neighbours into one
 //!   device request, splits requests the device cannot take in one go, keeps
 //!   overlapping requests and flushes in submission order, and tells each
 //!   user when its request is done.
+//! - [`IoQueue`] is how the buffer cache reaches a request queue: queue
+//!   requests, then wait for them. A `RequestQueue` waits by running itself
+//!   (spinning); a kernel with interrupts implements it over a shared queue
+//!   and sleeps instead.
 //! - [`BufferCache`] keeps recently used blocks in memory, writes dirty ones
 //!   back on eviction or [`BufferCache::sync`], and never evicts a block
 //!   someone holds.
@@ -41,7 +46,7 @@ mod watchdog;
 pub use cache::{Buf, BufferCache, CacheError, CacheSlot, CacheStats};
 pub use queue::{DeviceSlot, Part, QueueStats, QueueStorage, RequestQueue, RequestSlot, SetupError, Ticket};
 pub use ramdisk::{RAMDISK_COMPLETIONS, RamDisk};
-pub use watchdog::{Abort, Watchdog};
+pub use watchdog::{Abort, Clock, Watchdog};
 
 use core::ptr::NonNull;
 
@@ -262,6 +267,74 @@ pub trait BlockDevice {
 
     /// The next finished request, if any. Never blocks.
     fn poll(&mut self) -> Option<Completion>;
+}
+
+/// Somewhere to queue requests and wait for them: what a [`BufferCache`]
+/// does its I/O through.
+///
+/// A [`RequestQueue`] is one: its `wait` runs the queue and spins until the
+/// request is back, which suits a single user that polls. A kernel whose
+/// disks interrupt implements it for a handle on a queue it shares between
+/// threads and the interrupt handler: `enqueue` takes the queue's lock for
+/// a moment, and `wait` gets the request started, then sleeps until the
+/// handler (which runs [`RequestQueue::process`]) has finished it. That is
+/// the hook that lets the cache sleep instead of spin without knowing
+/// anything about threads.
+///
+/// Requests need not reach the device before the next `wait` on this queue
+/// (requests enqueued together can then be merged), so a user enqueues
+/// everything it wants and then waits for each ticket.
+pub trait IoQueue {
+    /// The device's shape and limits.
+    fn info(&self) -> DeviceInfo;
+
+    /// Queue a read or write of the whole blocks in `buf` from block `lba`,
+    /// or a flush (with [`IoBuf::EMPTY`]), as [`RequestQueue::enqueue`]
+    /// does. [`SubmitError::Busy`]: no room now; wait for a ticket of one's
+    /// own and try again.
+    ///
+    /// # Safety
+    ///
+    /// As for [`RequestQueue::enqueue`]: until [`IoQueue::wait`] has
+    /// returned the request's result, `buf` must stay valid and nothing but
+    /// the queue and the device may touch it (only read it, for a write).
+    unsafe fn enqueue(&mut self, op: Op, lba: u64, buf: IoBuf) -> Result<Ticket, SubmitError>;
+
+    /// Start the request if it has not started, wait until it has finished
+    /// and return its result. The ticket is spent.
+    fn wait(&mut self, t: Ticket) -> Result<(), IoError>;
+
+    /// Read whole blocks starting at `lba` into `buf`, waiting for the
+    /// result.
+    fn read(&mut self, lba: u64, buf: &mut [u8]) -> Result<(), IoError> {
+        // SAFETY: `buf` stays borrowed until `wait` has returned the result.
+        let t = unsafe { self.enqueue(Op::Read, lba, IoBuf::from_mut(buf)) }.map_err(user_error)?;
+        self.wait(t)
+    }
+
+    /// Write whole blocks starting at `lba` from `buf`, waiting for the
+    /// result.
+    fn write(&mut self, lba: u64, buf: &[u8]) -> Result<(), IoError> {
+        // SAFETY: `buf` stays borrowed until `wait` has returned the result,
+        // and the device only reads it.
+        let t = unsafe { self.enqueue(Op::Write, lba, IoBuf::from_ref(buf)) }.map_err(user_error)?;
+        self.wait(t)
+    }
+
+    /// Make every write enqueued so far durable, waiting for the result.
+    fn flush(&mut self) -> Result<(), IoError> {
+        // SAFETY: a flush transfers no memory.
+        let t = unsafe { self.enqueue(Op::Flush, 0, IoBuf::EMPTY) }.map_err(user_error)?;
+        self.wait(t)
+    }
+}
+
+/// A refused request as the error its user sees.
+pub(crate) fn user_error(e: SubmitError) -> IoError {
+    match e {
+        SubmitError::Busy => IoError::Busy,
+        SubmitError::Rejected(e) => e,
+    }
 }
 
 impl<D: BlockDevice + ?Sized> BlockDevice for &mut D {

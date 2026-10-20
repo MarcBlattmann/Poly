@@ -475,7 +475,12 @@ fn a_device_that_stops_answering_is_aborted() {
     let mut drv = h.init();
     // The device takes requests and never answers.
     sim.dev().hold = true;
-    let mut w = Watchdog::new(&mut drv, 50);
+    let polls = core::cell::Cell::new(0);
+    let clock = || {
+        polls.set(polls.get() + 1);
+        polls.get()
+    };
+    let mut w = Watchdog::new(&mut drv, clock, 50);
     let mut t = Tables::new(4, 2, 4);
     let mut q = RequestQueue::new(&mut w, t.storage()).unwrap();
     let mut buf = vec![0u8; 1024];
@@ -490,6 +495,38 @@ fn a_device_that_stops_answering_is_aborted() {
     let resets = sim.0.status_writes.borrow().iter().filter(|&&s| s == 0).count();
     drv.abort();
     assert_eq!(sim.0.status_writes.borrow().iter().filter(|&&s| s == 0).count(), resets);
+}
+
+#[test]
+fn a_lost_notification_is_caught_by_the_watchdog() {
+    let sim = Sim::new(64, VERSION_1 | EVENT_IDX, 16);
+    let mut h = Harness::new(&sim, 16);
+    let mut drv = h.init();
+    let mut buf = vec![0u8; 512];
+    // Notifications get through: requests are served.
+    poly_block::sync::read(&mut drv, 0, &mut buf).unwrap();
+    assert_eq!(sim.0.notifies.get(), 1);
+    drv.set_drop_notifications(true);
+    let now = core::cell::Cell::new(0u64);
+    let mut w = Watchdog::new(&mut drv, || now.get(), 1000);
+    let seg = [IoBuf::from_mut(&mut buf)];
+    // SAFETY: `buf` outlives the request, which comes back below.
+    unsafe { w.submit(&Request { id: RequestId(7), op: Op::Read, lba: 1, segments: &seg }) }.unwrap();
+    w.kick();
+    // The device never heard of it: nothing comes back, however often it is
+    // polled, until the limit has passed.
+    assert_eq!(sim.0.notifies.get(), 1);
+    for t in [0, 10, 999] {
+        now.set(t);
+        assert_eq!(w.poll(), None);
+    }
+    assert_eq!(w.deadline(), Some(1000));
+    now.set(1000);
+    assert_eq!(w.poll(), Some(poly_block::Completion { id: RequestId(7), result: Err(IoError::DeviceFailed) }));
+    assert_eq!(w.aborts(), 1);
+    assert!(w.device().is_failed() && w.device().in_flight() == 0);
+    assert_eq!(sim.0.status.get(), poly_virtio::status::FAILED);
+    assert_eq!(sim.dev().log.len(), 1, "the lost request never reached the device");
 }
 
 #[test]

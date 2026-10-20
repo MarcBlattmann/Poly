@@ -63,6 +63,9 @@ pub struct SimDisk {
     pub bad: Vec<u64>,
     /// Complete the oldest request first instead of a random one.
     pub in_order: bool,
+    /// Complete nothing for now: requests wait, as for a device that
+    /// finishes them later and interrupts.
+    pub hold: bool,
 }
 
 impl SimDisk {
@@ -86,6 +89,7 @@ impl SimDisk {
             log: Vec::new(),
             bad: Vec::new(),
             in_order: false,
+            hold: false,
         }
     }
 
@@ -182,7 +186,7 @@ impl BlockDevice for SimDisk {
     }
 
     fn poll(&mut self) -> Option<Completion> {
-        if self.pending.is_empty() {
+        if self.pending.is_empty() || self.hold {
             return None;
         }
         let i = if self.in_order { 0 } else { self.rng.below(self.pending.len() as u64) as usize };

@@ -45,8 +45,10 @@
 //! # Preemption and sleeping
 //!
 //! The timer interrupt calls [`on_timer_tick`] on every tick (`TICK_HZ`):
-//! it wakes the threads whose [`sleep`] has ended, then [`preempt_tick`]
-//! switches threads once the running one has used up its time slice.
+//! it wakes the threads whose [`sleep`] has ended and the wait queues of
+//! timed waits ([`WaitQueue::wait_until_deadline`]) whose deadline has
+//! passed, then [`preempt_tick`] switches threads once the running one has
+//! used up its time slice.
 
 use crate::arch::{self, backtrace, context, cpu, cpu::InterruptsOff};
 use crate::frames::FRAMES;
@@ -125,11 +127,29 @@ struct Threads {
     /// Stack of each slot's thread; `None` for the boot thread (boot stack)
     /// and free slots.
     stacks: [Option<Stack>; MAX_THREADS],
+    /// Each slot's thread in [`WaitQueue::wait_until_deadline`]: its
+    /// deadline and the queue it waits on.
+    timeouts: [Option<Timeout>; MAX_THREADS],
     ready: bool,
 }
 
-static THREADS: SpinLock<Threads> =
-    SpinLock::new(Threads { sched: Scheduler::new(TIME_SLICE_TICKS), stacks: [None; MAX_THREADS], ready: false });
+/// A thread's timed wait, for the tick.
+#[derive(Clone, Copy, Debug)]
+struct Timeout {
+    deadline: u64,
+    /// The address of the [`WaitQueue`]. It stays valid while the entry
+    /// exists: the waiting thread is inside `wait_until_deadline` (which
+    /// borrows the queue) and removes the entry before it returns, with
+    /// [`THREADS`] locked, as is every read of it.
+    queue: usize,
+}
+
+static THREADS: SpinLock<Threads> = SpinLock::new(Threads {
+    sched: Scheduler::new(TIME_SLICE_TICKS),
+    stacks: [None; MAX_THREADS],
+    timeouts: [None; MAX_THREADS],
+    ready: false,
+});
 
 /// Saved stack pointer of each slot's thread while it is not running.
 struct SavedRsp([UnsafeCell<u64>; MAX_THREADS]);
@@ -357,8 +377,8 @@ pub fn on_timer_tick() -> bool {
 
 /// Threads in [`sleep`] / [`sleep_until`].
 static SLEEPERS: WaitQueue = WaitQueue::new();
-/// Earliest deadline among them (`u64::MAX`: none), so the tick only wakes
-/// them when one is due.
+/// Earliest deadline among them and the timed waits (`u64::MAX`: none), so
+/// the tick only looks at them when one is due.
 static NEXT_WAKE: AtomicU64 = AtomicU64::new(u64::MAX);
 
 /// Block the running thread for at least `duration` (measured with the
@@ -385,12 +405,29 @@ pub fn sleep_until(deadline_ns: u64) {
 /// Wake every sleeper once the earliest deadline has passed; the ones not
 /// yet due re-register theirs and go back to sleep. Resetting the deadline
 /// before waking cannot lose one: a sleeper that registers in between is on
-/// the queue by the time `wake_all` gets the scheduler lock.
+/// the queue by the time `wake_all` gets the scheduler lock. Then wake the
+/// queues of the timed waits that are due; the others register their
+/// deadlines again.
 fn wake_sleepers() {
     let next = NEXT_WAKE.load(SeqCst);
-    if next != u64::MAX && time::now_ns() >= next {
+    let now = time::now_ns();
+    if next != u64::MAX && now >= next {
         NEXT_WAKE.store(u64::MAX, SeqCst);
         SLEEPERS.wake_all();
+        let _irq = InterruptsOff::new();
+        let mut t = THREADS.lock();
+        for slot in 0..MAX_THREADS {
+            let Some(to) = t.timeouts[slot] else { continue };
+            if to.deadline > now {
+                NEXT_WAKE.fetch_min(to.deadline, SeqCst);
+                continue;
+            }
+            t.timeouts[slot] = None;
+            // SAFETY: the entry existed, so the queue is alive (see
+            // `Timeout`); THREADS is locked, as its inner queue requires.
+            let q = unsafe { &mut *(*(to.queue as *const WaitQueue)).0.get() };
+            t.sched.wake_all(q);
+        }
     }
 }
 
@@ -425,6 +462,37 @@ impl WaitQueue {
                 if ready() {
                     return;
                 }
+                // SAFETY: THREADS is locked.
+                let q = unsafe { &mut *self.0.get() };
+                t.sched.block_current(q).expect("the idle thread cannot sleep")
+            };
+            switch(sw);
+        }
+    }
+
+    /// Like [`wait_until`](Self::wait_until), but give up once the clock
+    /// reads `deadline_ns` or later: true if `ready()` returned true, false
+    /// on the timeout. The thread is woken by a wake on this queue or by the
+    /// first tick after the deadline, whichever comes first (a tick wakes
+    /// the whole queue; the other waiters check their conditions and go
+    /// back to sleep).
+    pub fn wait_until_deadline(&self, mut ready: impl FnMut() -> bool, deadline_ns: u64) -> bool {
+        assert!(time::is_running(), "timed wait before the timer is running");
+        let _irq = InterruptsOff::new();
+        loop {
+            let sw = {
+                let mut t = THREADS.lock();
+                let me = t.sched.current().slot();
+                if ready() {
+                    t.timeouts[me] = None;
+                    return true;
+                }
+                if time::now_ns() >= deadline_ns {
+                    t.timeouts[me] = None;
+                    return false;
+                }
+                t.timeouts[me] = Some(Timeout { deadline: deadline_ns, queue: self as *const WaitQueue as usize });
+                NEXT_WAKE.fetch_min(deadline_ns, SeqCst);
                 // SAFETY: THREADS is locked.
                 let q = unsafe { &mut *self.0.get() };
                 t.sched.block_current(q).expect("the idle thread cannot sleep")
@@ -567,6 +635,56 @@ kernel_test! {
         }
         if join(w1) != Ok(0) || join(w2) != Ok(0) || WOKEN.load(SeqCst) != 2 {
             return Err("waiters did not finish");
+        }
+        Ok(())
+    }
+}
+
+static TIMED: WaitQueue = WaitQueue::new();
+static TIMED_TOKENS: AtomicUsize = AtomicUsize::new(0);
+
+/// Waits on TIMED for a token for `ms` milliseconds; exits with 1 if it got
+/// one, 0 on the timeout.
+fn timed_waiter(ms: usize) -> usize {
+    let take = || TIMED_TOKENS.fetch_update(SeqCst, SeqCst, |n| n.checked_sub(1)).is_ok();
+    TIMED.wait_until_deadline(take, time::now_ns() + ms as u64 * time::NANOS_PER_MILLI) as usize
+}
+
+kernel_test! {
+    fn timed_waits_end_on_a_wake_or_the_deadline() -> TestResult {
+        TIMED_TOKENS.store(0, SeqCst);
+        // Nobody wakes it: the deadline does, not before it, and not long
+        // after (the first tick after it).
+        let start = time::now_ns();
+        if TIMED.wait_until_deadline(|| false, start + 20 * time::NANOS_PER_MILLI) {
+            return Err("a timed wait on a false condition reported success");
+        }
+        let waited = time::now_ns() - start;
+        if !(20 * time::NANOS_PER_MILLI..520 * time::NANOS_PER_MILLI).contains(&waited) {
+            return Err("a timed wait did not end at its deadline");
+        }
+        if !TIMED.wait_until_deadline(|| true, 0) {
+            return Err("a timed wait on a true condition timed out");
+        }
+        // Two waiters on one queue: the short one times out (the tick wakes
+        // the queue), the long one goes back to sleep until it is woken.
+        let short = spawn(timed_waiter, 20).map_err(|_| "spawn failed")?;
+        let long = spawn(timed_waiter, 10_000).map_err(|_| "spawn failed")?;
+        let start = time::now_ns();
+        if join(short) != Ok(0) {
+            return Err("the short timed wait did not time out");
+        }
+        sleep(Duration::from_millis(5));
+        if state(long) != Some(State::Blocked) {
+            return Err("waking the queue for one deadline ended another thread's wait");
+        }
+        TIMED_TOKENS.store(1, SeqCst);
+        TIMED.wake_one();
+        if join(long) != Ok(1) {
+            return Err("a timed wait that was woken did not report success");
+        }
+        if time::now_ns() - start > 5 * time::NANOS_PER_SEC {
+            return Err("a woken timed wait waited for its deadline");
         }
         Ok(())
     }
