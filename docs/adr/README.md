@@ -42,6 +42,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0038](0038-linux-processes-in-the-kernel-and-the-first-program.md) | Linux processes in the kernel: `LinuxKernel` per running thread, threads registered with their process and ended at their next return to user mode, signals on every way out (faults included) through the trap frame, programs exec'd from the VFS, `poly.init` and the ADR 0027 records, the CMOS RTC as wall clock | Accepted |
 | [0039](0039-networking-in-the-kernel.md) | Networking in the kernel: virtio-net in a host-tested crate (`poly-virtio-net`), one stack behind a sleeping mutex, a network thread, readiness generations for blocking sockets | Accepted |
 | [0040](0040-page-cache-and-ext2-on-virtio-blk.md) | A page cache in a host-tested crate (`poly-pagecache`) wrapping disk file systems, shared with memory mappings; ext2 mounted on virtio-blk with a sleeping volume lock, a writeback thread, clean unmount at reboot | Accepted |
+| [0044](0044-time-syscalls-timers-and-the-vdso.md) | Time system calls, process timers (state in the personality, one kernel timer thread), CPU time per thread measured at context switches and split by tick samples, a settable wall clock, and a vDSO built from our own Rust by `kernel/build.rs` reading a seqlock data page (`poly-vdso`) shared through the page cache | Accepted |
 
 ## Open decisions
 

@@ -1,0 +1,11 @@
+/* The vDSO's exported symbols and their version, as vdso(7) lists them for
+ * x86-64. Everything else stays local. */
+LINUX_2.6 {
+    global:
+        __vdso_clock_gettime;
+        __vdso_clock_getres;
+        __vdso_getcpu;
+        __vdso_gettimeofday;
+        __vdso_time;
+    local: *;
+};

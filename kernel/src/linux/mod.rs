@@ -25,6 +25,7 @@
 
 mod services;
 mod tests;
+pub mod timers;
 
 pub use services::Thread;
 

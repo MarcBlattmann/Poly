@@ -159,6 +159,32 @@ pub enum Clock {
     ThreadCpuTime,
 }
 
+/// Whose CPU time [`LinuxKernel::cpu_times`] reports.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CpuTimesOf {
+    /// Thread `tid` of the calling process.
+    Thread(i32),
+    /// Every thread of the calling process, those that have ended too.
+    Process,
+    /// The calling process's children that have ended and been waited for
+    /// (getrusage(2) `RUSAGE_CHILDREN`, times(2) `tms_cutime`).
+    Children,
+}
+
+/// CPU time in nanoseconds, split into time running user code and time
+/// in the kernel on its behalf.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CpuTimes {
+    pub user_ns: u64,
+    pub system_ns: u64,
+}
+
+impl CpuTimes {
+    pub const fn total_ns(self) -> u64 {
+        self.user_ns.saturating_add(self.system_ns)
+    }
+}
+
 /// How `getrandom` may wait for the random source.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RandomMode {
@@ -660,6 +686,49 @@ pub trait LinuxKernel {
     /// the source is not initialised, `EINTR` if a blocking wait is
     /// interrupted.
     fn random_bytes(&mut self, buf: &mut [u8], mode: RandomMode) -> Result<usize, Errno>;
+
+    /// Set the wall clock (`CLOCK_REALTIME`) to `at`, a valid time the
+    /// personality has checked the caller may set. `EINVAL` if it is below
+    /// the monotonic clock (clock_settime(2)). The monotonic clocks do not
+    /// move.
+    fn set_realtime(&mut self, at: Timespec) -> Result<(), Errno> {
+        let _ = at;
+        Err(Errno::EPERM)
+    }
+
+    /// The time zone `settimeofday` stored, as `(tz_minuteswest,
+    /// tz_dsttime)` (`(0, 0)` until one is set).
+    fn timezone(&self) -> (i32, i32) {
+        (0, 0)
+    }
+
+    /// Store `settimeofday`'s time zone, system-wide.
+    fn set_timezone(&mut self, minuteswest: i32, dsttime: i32) {
+        let _ = (minuteswest, dsttime);
+    }
+
+    /// The period of the kernel's timer tick in nanoseconds: the
+    /// resolution of the coarse clocks.
+    fn tick_ns(&self) -> u64 {
+        1_000_000
+    }
+
+    /// CPU time used so far; `None` if the kernel does not account it (or,
+    /// for [`CpuTimesOf::Thread`], there is no such thread in the calling
+    /// process).
+    fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {
+        let _ = of;
+        None
+    }
+
+    /// The calling process's timers changed (setitimer, alarm,
+    /// timer_settime, ...): `next` says when they must next be looked at.
+    /// When that time comes the kernel calls [`crate::time::fire`] on the
+    /// process's state, with its lock held, and acts on the result (ADR
+    /// 0044).
+    fn timers_changed(&mut self, next: crate::time::TimerWakeup) {
+        let _ = next;
+    }
 
     /// The host name (`uname`'s `nodename`); at most 64 bytes are used.
     fn hostname(&self) -> &[u8] {

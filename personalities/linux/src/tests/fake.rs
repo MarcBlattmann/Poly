@@ -16,10 +16,11 @@ use crate::abi::{FileStat, PAGE_SIZE, Timespec, ioctl, mode};
 use crate::errno::Errno;
 use crate::futex::FutexTable;
 use crate::kernel::{
-    Backing, Clock, Credentials, Deadline, FpuState, LinuxKernel, MapRequest, Placement, ProcessInfo, ProcessSelector,
-    Prot, RandomMode, SigSet, SignalActions, Target, UserContext, UserPtr, Wakeup,
+    Backing, Clock, CpuTimes, CpuTimesOf, Credentials, Deadline, FpuState, LinuxKernel, MapRequest, Placement,
+    ProcessInfo, ProcessSelector, Prot, RandomMode, SigSet, SignalActions, Target, UserContext, UserPtr, Wakeup,
 };
 use crate::signal::{ExitToUser, LinuxProcess, LinuxThread};
+use crate::time::TimerWakeup;
 use poly_abi::{Outcome, SyscallRegs};
 use std::boxed::Box;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -152,6 +153,13 @@ pub struct FakeKernel {
     /// stop_process calls (signal), and the pids continue_process got.
     pub stops: Vec<u32>,
     pub continued: Vec<i32>,
+    /// The stored time zone (settimeofday).
+    pub timezone: (i32, i32),
+    /// CPU times the kernel accounts: the calling thread, the process, the
+    /// children (`None`: not accounted).
+    pub cpu: Option<[CpuTimes; 3]>,
+    /// Every timers_changed report.
+    pub timer_wakeups: Vec<TimerWakeup>,
 }
 
 impl Default for FakeKernel {
@@ -206,6 +214,9 @@ impl FakeKernel {
             futexes_locked: false,
             stops: Vec::new(),
             continued: Vec::new(),
+            timezone: (0, 0),
+            cpu: None,
+            timer_wakeups: Vec::new(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -734,8 +745,43 @@ impl LinuxKernel for FakeKernel {
         match clock {
             Clock::Realtime => Ok(self.realtime),
             Clock::Monotonic => Ok(self.monotonic),
-            Clock::ProcessCpuTime | Clock::ThreadCpuTime => Err(Errno::EINVAL),
+            Clock::ProcessCpuTime => self.cpu.map(|c| Timespec::from_nanos(c[1].total_ns())).ok_or(Errno::EINVAL),
+            Clock::ThreadCpuTime => self.cpu.map(|c| Timespec::from_nanos(c[0].total_ns())).ok_or(Errno::EINVAL),
         }
+    }
+
+    fn set_realtime(&mut self, at: Timespec) -> Result<(), Errno> {
+        if (at.sec, at.nsec) < (self.monotonic.sec, self.monotonic.nsec) {
+            return Err(Errno::EINVAL);
+        }
+        self.realtime = at;
+        Ok(())
+    }
+
+    fn timezone(&self) -> (i32, i32) {
+        self.timezone
+    }
+
+    fn set_timezone(&mut self, minuteswest: i32, dsttime: i32) {
+        self.timezone = (minuteswest, dsttime);
+    }
+
+    fn tick_ns(&self) -> u64 {
+        4_000_000
+    }
+
+    fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {
+        let c = self.cpu?;
+        match of {
+            CpuTimesOf::Thread(tid) if tid == self.tid => Some(c[0]),
+            CpuTimesOf::Thread(tid) => self.procs[&self.pid].state.has_thread(tid).then_some(CpuTimes::default()),
+            CpuTimesOf::Process => Some(c[1]),
+            CpuTimesOf::Children => Some(c[2]),
+        }
+    }
+
+    fn timers_changed(&mut self, next: TimerWakeup) {
+        self.timer_wakeups.push(next);
     }
 
     fn random_bytes(&mut self, buf: &mut [u8], mode: RandomMode) -> Result<usize, Errno> {

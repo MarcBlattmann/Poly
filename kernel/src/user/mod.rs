@@ -196,6 +196,18 @@ fn spawn_thread(
     thread::spawn_user("user", user, user_main, 0).inspect_err(|_| attached.cancel_thread(tid))
 }
 
+impl UserThread {
+    /// Its process id and thread id (CPU-time accounting, ADR 0044).
+    pub(crate) fn cpu_owner(&self) -> (u32, u32) {
+        (self.process.pid, self.tid)
+    }
+
+    /// Its process.
+    pub(crate) fn process(&self) -> &Process {
+        &self.process
+    }
+}
+
 impl Drop for UserThread {
     fn drop(&mut self) {
         // The scheduler drops an exited thread's state wherever it reaps it,

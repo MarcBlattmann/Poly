@@ -8,6 +8,7 @@ mod mem;
 mod process;
 mod signal;
 mod startup;
+mod time;
 
 use crate::{ENOSYS, Errno, Linux, err, nr};
 use fake::{FakeKernel, call, sys};

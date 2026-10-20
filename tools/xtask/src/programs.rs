@@ -13,6 +13,12 @@
 //!   flags and manifest as the diff runner's corpus). Skipped with a
 //!   message where there is no C compiler or no static C library.
 //!
+//! And `/bin/time-test` (`tools/xtask/programs/time_test.rs`, built the
+//! same way): the time system calls, timers and the vDSO from ring 3 (ADR
+//! 0044). It is in the self-test initramfs (a kernel test runs it, once
+//! with the vDSO forced onto the TSC) and runs as the first process in a
+//! boot test of its own.
+//!
 //! Builds are reproducible: fixed flags, no debug info, symbols stripped,
 //! no build id, so the same toolchain gives the same bytes.
 
@@ -29,6 +35,8 @@ const OUT: &str = "target/xtask-programs";
 pub const HELLO_OUTPUT: &str = "Hello, world!\n";
 /// What the C hellos of the corpus write.
 pub const C_HELLO_OUTPUT: &str = "hello, world\n";
+/// The last line `/bin/time-test` writes when every check passed.
+pub const TIME_TEST_OUTPUT: &str = "time-test: done, 0 failed\n";
 
 /// `rustc` flags for the nolibc programs: a static, position-dependent
 /// executable for Linux's ABI (the bare-metal target only means "no OS
@@ -48,23 +56,34 @@ fn out_dir() -> PathBuf {
     root().join(OUT)
 }
 
-/// Build `tests/linux/nolibc/hello.rs`; returns the ELF.
-pub fn nolibc_hello() -> Result<Vec<u8>> {
+/// Build the nolibc program `source` (relative to the repository) as
+/// `target/xtask-programs/<name>`; returns the ELF.
+fn build_nolibc(source: &str, name: &str) -> Result<Vec<u8>> {
     let out = out_dir();
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let binary = out.join("hello");
+    let binary = out.join(name);
     let status = Command::new("rustc")
         .current_dir(root())
         .args(RUSTC_FLAGS)
         .arg("-o")
         .arg(&binary)
-        .arg("tests/linux/nolibc/hello.rs")
+        .arg(source)
         .status()
         .map_err(|e| format!("rustc: {e}"))?;
     if !status.success() {
-        return Err(format!("building tests/linux/nolibc/hello.rs failed ({status})"));
+        return Err(format!("building {source} failed ({status})"));
     }
     std::fs::read(&binary).map_err(|e| format!("{}: {e}", binary.display()))
+}
+
+/// Build `tests/linux/nolibc/hello.rs`; returns the ELF.
+pub fn nolibc_hello() -> Result<Vec<u8>> {
+    build_nolibc("tests/linux/nolibc/hello.rs", "hello")
+}
+
+/// Build `tools/xtask/programs/time_test.rs`; returns the ELF.
+pub fn time_test() -> Result<Vec<u8>> {
+    build_nolibc("tools/xtask/programs/time_test.rs", "time-test")
 }
 
 /// The C programs of the corpus, built by the pipeline tool into
@@ -98,11 +117,13 @@ pub fn c_hellos() -> (Vec<(String, Vec<u8>)>, Option<String>) {
 }
 
 /// The test initramfs (`initramfs::test_image_with`) with the nolibc hello
-/// as `/bin/hello`, for the self-test boots (the kernel's exec tests run
-/// it).
+/// as `/bin/hello` and the time test as `/bin/time-test`, for the
+/// self-test boots (the kernel's exec and time tests run them).
 pub fn test_initramfs() -> Result<PathBuf> {
     let hello = nolibc_hello()?;
-    initramfs::write(&root(), "poly-test-initramfs.cpio", &initramfs::test_image_with(&[("hello", &hello)]))
+    let time = time_test()?;
+    let image = initramfs::test_image_with(&[("hello", &hello), ("time-test", &time)]);
+    initramfs::write(&root(), "poly-test-initramfs.cpio", &image)
 }
 
 /// One boot that runs `/bin/<program>` as the first process and checks
@@ -128,8 +149,9 @@ fn run_as_init(kernel: &Path, syms: &Arc<Symbols>, image: &Path, program: &str, 
 /// The boot tests of the hello-world milestone.
 pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let hello = nolibc_hello()?;
+    let time = time_test()?;
     let (c_programs, skipped) = c_hellos();
-    let mut programs: Vec<(&str, &[u8])> = vec![("hello", &hello)];
+    let mut programs: Vec<(&str, &[u8])> = vec![("hello", &hello), ("time-test", &time)];
     programs.extend(c_programs.iter().map(|(n, e)| (n.as_str(), e.as_slice())));
     let image = initramfs::write(&root(), "poly-programs-initramfs.cpio", &initramfs::programs_image(&programs))?;
 
@@ -148,6 +170,14 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     if let Some(why) = skipped {
         eprintln!("==> skipped: {why}");
+    }
+
+    eprintln!(
+        "==> boot test: the time system calls, timers and the vDSO from ring 3 (/bin/time-test as the first process)"
+    );
+    let b = run_as_init(kernel, syms, &image, "time-test", TIME_TEST_OUTPUT)?;
+    if let Some(line) = b.output.lines().find(|l| l.contains("time-test: FAIL")) {
+        return Err(format!("/bin/time-test: {line}"));
     }
 
     eprintln!("==> boot test: a program that is not there is reported as unsupported");

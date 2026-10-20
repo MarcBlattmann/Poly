@@ -33,6 +33,7 @@
 //! - [`sys`]: the handlers.
 //! - [`signal`]: signal state, delivery, frames (ADR 0031).
 //! - [`futex`]: futex wait queues, robust lists (ADR 0031).
+//! - [`time`]: time structures and process timers (ADR 0044).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -52,6 +53,7 @@ mod numbers;
 pub mod signal;
 pub mod sys;
 pub mod table;
+pub mod time;
 
 #[cfg(test)]
 mod tests;

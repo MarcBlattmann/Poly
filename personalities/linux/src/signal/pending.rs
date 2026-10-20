@@ -80,6 +80,17 @@ impl SigQueue {
         self.set = self.set.without(signals);
     }
 
+    /// The queued siginfos, oldest first.
+    pub fn iter(&self) -> impl Iterator<Item = &SigInfo> + '_ {
+        self.entries.iter()
+    }
+
+    /// The oldest queued siginfo `f` picks, to change in place (a POSIX
+    /// timer's overrun count while its signal is pending).
+    pub fn find_mut(&mut self, f: impl Fn(&SigInfo) -> bool) -> Option<&mut SigInfo> {
+        self.entries.iter_mut().find(|e| f(e))
+    }
+
     /// Queued real-time instances (they count against the queue limit).
     pub fn realtime_len(&self) -> usize {
         self.entries.iter().filter(|e| is_realtime(e.signal())).count()

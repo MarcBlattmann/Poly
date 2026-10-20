@@ -330,6 +330,17 @@ pub enum ClockSource {
     Reference,
 }
 
+/// What [`MonotonicClock::tsc_conversion`] reports: the clock reads
+/// `offset_ns + ((tsc - origin) * mult) >> shift` (wrapping subtraction;
+/// the TSC is 64 bits wide), before keeping its readings monotonic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TscConversion {
+    pub origin: u64,
+    pub mult: u64,
+    pub shift: u32,
+    pub offset_ns: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClockError {
     /// The TSC is unusable and the reference rate is 0.
@@ -416,6 +427,18 @@ impl<T: Counter, R: Counter> MonotonicClock<T, R> {
 
     pub fn tsc(&self) -> &T {
         &self.tsc
+    }
+
+    /// While the clock reads the TSC: how it turns a TSC reading into its
+    /// nanoseconds, so that code outside the kernel (the vDSO) can compute
+    /// the same time. `None` on the reference counter.
+    pub fn tsc_conversion(&self) -> Option<TscConversion> {
+        (self.source == ClockSource::Tsc).then_some(TscConversion {
+            origin: self.origin,
+            mult: self.scale.mult,
+            shift: self.scale.shift,
+            offset_ns: self.offset_ns,
+        })
     }
 
     pub fn reference(&self) -> &R {
@@ -723,6 +746,28 @@ mod tests {
         }
         assert!(h.counter() < 0xff00_0000);
         assert!((last - start).abs_diff(20_000_000_000) < 10_000, "{}", last - start);
+    }
+
+    #[test]
+    fn tsc_conversion_reproduces_the_clock() {
+        let clock = SimClock::new(5).read_cost(20_000, 0);
+        let h = hpet(&clock, true);
+        let hz = h.capabilities().frequency_hz();
+        let mut c = MonotonicClock::new(FakeTsc::new(&clock, TSC_HZ), &h, hz, Some(TSC_HZ), true).unwrap();
+        let conv = c.tsc_conversion().expect("the clock reads the TSC");
+        for _ in 0..50 {
+            clock.advance_ps(37_000_000_000);
+            let tsc = c.tsc().read();
+            let ns = c.now_ns();
+            // What code outside the kernel computes from a TSC reading it
+            // took just before the clock's own.
+            let outside = conv
+                .offset_ns
+                .saturating_add(Scale { mult: conv.mult, shift: conv.shift }.apply(tsc.wrapping_sub(conv.origin)));
+            assert!(outside <= ns && ns - outside < 100, "{outside} vs {ns}");
+        }
+        assert!(c.fall_back_to_reference());
+        assert_eq!(c.tsc_conversion(), None, "the reference counter is not for user mode");
     }
 
     #[test]
