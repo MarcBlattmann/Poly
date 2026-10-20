@@ -260,6 +260,24 @@ fn boot_tests() -> Result {
     if b.status != Some(QEMU_FAILURE) || !no_summary || !named {
         return Err(format!("panic in a kernel test was not reported as expected (status {:?})", b.status));
     }
+
+    // `heap::out_of_memory_on_request` asks for more than the heap can give.
+    eprintln!("==> boot test: running out of heap memory panics with the size and a backtrace");
+    let only = "poly.qemu_exit poly.test=heap::out_of_memory_on_request poly.selftest.oom";
+    let b = boot(&kernel, &syms, DEFAULT_MEMORY, only)?;
+    let reported = b
+        .output
+        .lines()
+        .map(str::trim_end)
+        .any(|l| l.starts_with("memory allocation of ") && l.ends_with(" bytes failed"));
+    let named = b
+        .output
+        .lines()
+        .filter_map(symbols::parse_frame)
+        .any(|(_, _, sym)| sym.starts_with("poly_kernel::heap::allocate_too_much+"));
+    if b.status != Some(QEMU_FAILURE) || !b.output.contains("KERNEL PANIC") || !reported || !named {
+        return Err(format!("out-of-memory was not reported as expected (status {:?})", b.status));
+    }
     eprintln!("==> boot tests passed");
     Ok(())
 }

@@ -29,13 +29,24 @@
 //! That is about 4 bits per 4 KiB frame of span (1/8192 of the span: 256 KiB
 //! of metadata for 2 GiB).
 //!
+//! # Runs
+//!
+//! [`BuddyAllocator::allocate_run`] hands out a run of any number of frames
+//! up to the largest block: it takes one block that is big enough (and as
+//! aligned as asked), keeps the run at its start as the blocks of the binary
+//! decomposition of its length, and frees the rest at once. The run is then
+//! an ordinary set of allocated blocks, which
+//! [`BuddyAllocator::free_run`] gives back.
+//!
 //! # Complexity
 //!
 //! With `L` summary levels (`L <= 4` up to 64 GiB of span, `L <= 7` for the
 //! whole 52-bit physical address space), [`allocate`](BuddyAllocator::allocate)
 //! and [`free`](BuddyAllocator::free) are `O(MAX_ORDER * L)`: at most one
-//! split or merge per order, each touching one word per level. Nothing is
-//! proportional to the amount of memory.
+//! split or merge per order, each touching one word per level, and so is
+//! [`allocate_below`](BuddyAllocator::allocate_below). The run calls do that
+//! once per block of the run or its tail, so at most `MAX_ORDER` times.
+//! Nothing is proportional to the amount of memory.
 
 use crate::{MemoryMap, PAGE_SIZE, RegionKind, align_down, align_up};
 use core::fmt;
@@ -145,6 +156,13 @@ impl BitTree {
         }
         Some(i)
     }
+}
+
+/// The blocks a run of `frames` frames is made of, as `(frame offset,
+/// order)`: one per set bit of `frames`, largest first, so each block starts
+/// at a multiple of its own size when the run starts at one of the first.
+fn run_pieces(frames: u64) -> impl Iterator<Item = (u64, usize)> {
+    (0..ORDERS).rev().filter(move |&k| frames & (1 << k) != 0).map(move |k| (frames & !((2 << k) - 1), k))
 }
 
 /// Words for a flat bitmap of `bits` bits; at least one so every order has
@@ -294,8 +312,21 @@ impl<'a> BuddyAllocator<'a> {
     /// size. Takes the lowest-addressed block of the smallest order that has
     /// one, splitting it down as needed. `None` if no block is large enough.
     pub fn allocate(&mut self, order: usize) -> Option<u64> {
-        let from = (order..ORDERS).find(|&k| self.free_blocks[k] > 0)?;
-        let slot = self.geo.free[from].first(self.meta)?;
+        self.allocate_below(order, u64::MAX)
+    }
+
+    /// Like [`allocate`](Self::allocate), but only from memory that ends at
+    /// or below `limit`: the lowest-addressed block of the smallest order
+    /// whose lowest block leaves the result below `limit`. The lowest block
+    /// of an order is the only candidate worth checking there, so this costs
+    /// no more than `allocate`.
+    pub fn allocate_below(&mut self, order: usize, limit: u64) -> Option<u64> {
+        let size = Self::block_size(order.min(MAX_ORDER));
+        let (from, slot) = (order..ORDERS).filter(|&k| self.free_blocks[k] > 0).find_map(|k| {
+            let slot = self.geo.free[k].first(self.meta)?;
+            let addr = self.geo.base + (slot << k) * PAGE_SIZE;
+            (addr + size <= limit).then_some((k, slot))
+        })?;
         self.geo.free[from].clear(self.meta, slot);
         self.free_blocks[from] -= 1;
 
@@ -313,6 +344,75 @@ impl<'a> BuddyAllocator<'a> {
     /// Return a block from [`allocate`](Self::allocate) with the same
     /// `order`, merging it with free buddies.
     pub fn free(&mut self, addr: u64, order: usize) -> Result<(), FreeError> {
+        let frame = self.check_allocated(addr, order)?;
+        self.release(frame, order);
+        Ok(())
+    }
+
+    /// Allocate a run of `frames` contiguous frames (1 to `2^MAX_ORDER`)
+    /// that starts at a multiple of `2^align_order` frames and comes from a
+    /// block ending at or below `limit` (`u64::MAX` for anywhere).
+    ///
+    /// The run is carved from the start of one block of the smallest order
+    /// that holds it and satisfies the alignment; the frames after the run
+    /// go straight back as smaller free blocks, so nothing is wasted. Give
+    /// the run back with [`free_run`](Self::free_run) and the same `frames`.
+    /// When `frames` is `2^order` and `align_order <= order` this is exactly
+    /// `allocate_below(order, limit)`.
+    pub fn allocate_run(&mut self, frames: u64, align_order: usize, limit: u64) -> Option<u64> {
+        if frames == 0 || frames > MAX_BLOCK_FRAMES {
+            return None;
+        }
+        let order = (frames.next_power_of_two().trailing_zeros() as usize).max(align_order);
+        if order > MAX_ORDER {
+            return None;
+        }
+        let addr = self.allocate_below(order, limit)?;
+        let frame = (addr - self.geo.base) / PAGE_SIZE;
+        if frames == 1 << order {
+            return Some(addr);
+        }
+
+        // Re-mark the run as the blocks `free_run` will find (the binary
+        // decomposition of `frames`, largest first), then free the tail.
+        set_bit(self.meta, self.geo.allocated[order], frame >> order, false);
+        for (offset, k) in run_pieces(frames) {
+            set_bit(self.meta, self.geo.allocated[k], (frame + offset) >> k, true);
+        }
+        let mut offset = frames;
+        while offset < 1 << order {
+            // The lowest set bit of the offset is the largest aligned block
+            // that starts there; it never reaches past the end of the block.
+            let k = offset.trailing_zeros() as usize;
+            self.insert(frame + offset, k);
+            offset += 1 << k;
+        }
+        self.free += (1 << order) - frames;
+        Some(addr)
+    }
+
+    /// Free a run from [`allocate_run`](Self::allocate_run) with the same
+    /// `frames`. Checks the whole run before changing anything, so a bad
+    /// free leaves the allocator as it was. `frames` of 0 or above
+    /// `2^MAX_ORDER` is [`FreeError::BadOrder`].
+    pub fn free_run(&mut self, addr: u64, frames: u64) -> Result<(), FreeError> {
+        if frames == 0 || frames > MAX_BLOCK_FRAMES {
+            return Err(FreeError::BadOrder);
+        }
+        addr.checked_add(frames * PAGE_SIZE).ok_or(FreeError::OutOfRange)?;
+        let pieces = || run_pieces(frames).map(|(offset, k)| (addr + offset * PAGE_SIZE, k));
+        for (piece, k) in pieces() {
+            self.check_allocated(piece, k)?;
+        }
+        for (piece, k) in pieces() {
+            self.release((piece - self.geo.base) / PAGE_SIZE, k);
+        }
+        Ok(())
+    }
+
+    /// Frame index of the block of `order` allocated at `addr`, or why
+    /// freeing it would be wrong.
+    fn check_allocated(&self, addr: u64, order: usize) -> Result<u64, FreeError> {
         if order > MAX_ORDER {
             return Err(FreeError::BadOrder);
         }
@@ -323,14 +423,17 @@ impl<'a> BuddyAllocator<'a> {
         if frame >= self.geo.frames {
             return Err(FreeError::OutOfRange);
         }
-        let slot = frame >> order;
-        if !bit(self.meta, self.geo.allocated[order], slot) {
+        if !bit(self.meta, self.geo.allocated[order], frame >> order) {
             return Err(FreeError::NotAllocated);
         }
-        set_bit(self.meta, self.geo.allocated[order], slot, false);
+        Ok(frame)
+    }
+
+    /// Free a block that [`check_allocated`](Self::check_allocated) accepted.
+    fn release(&mut self, frame: u64, order: usize) {
+        set_bit(self.meta, self.geo.allocated[order], frame >> order, false);
         self.free += 1 << order;
         self.insert(frame, order);
-        Ok(())
     }
 
     /// Mark the block at `frame` free, merging upwards while its buddy is
@@ -554,6 +657,127 @@ mod tests {
         assert_eq!(a.free(g, 0), Err(FreeError::NotAllocated), "double free");
         assert_eq!(a.free_frames(), start);
         assert_eq!(a.free_blocks(MAX_ORDER), 1);
+    }
+
+    #[test]
+    fn allocate_below_respects_the_limit() {
+        let m = map(&[(0, 64 * MIB, Usable)]);
+        let mut meta = meta_for(&m);
+        let mut a = BuddyAllocator::new(&m, &mut meta).unwrap();
+        // Take every order-0 frame of the first 4 MiB block except the last,
+        // and a frame from the second block so it is split too.
+        let low: Vec<u64> = (0..1023).map(|_| a.allocate(0).unwrap()).collect();
+        assert_eq!(*low.last().unwrap(), BLOCK - 2 * PAGE_SIZE);
+        let high = a.allocate_below(0, u64::MAX).unwrap();
+        assert_eq!(high, BLOCK - PAGE_SIZE, "no limit is plain allocate");
+
+        // Order 0 is now empty below 4 MiB but not above.
+        let second = a.allocate(1).unwrap();
+        assert_eq!(second, BLOCK);
+        assert_eq!(a.allocate_below(0, BLOCK), None);
+        let f = a.allocate_below(0, 2 * BLOCK).unwrap();
+        assert_eq!(f, BLOCK + 2 * PAGE_SIZE);
+        // The limit covers the whole block, not just its start.
+        assert_eq!(a.allocate_below(3, BLOCK + 8 * PAGE_SIZE + 1), None);
+        assert_eq!(a.allocate_below(3, BLOCK + 16 * PAGE_SIZE), Some(BLOCK + 8 * PAGE_SIZE));
+        assert_eq!(a.allocate_below(MAX_ORDER + 1, u64::MAX), None);
+        assert_eq!(a.allocate_below(0, 0), None);
+
+        // A smaller free block above the limit does not hide a larger one
+        // below it: order 0 only has a frame above 4 MiB, order 1 has one below.
+        assert_eq!(a.free_blocks(0), 1);
+        a.free(low[0], 0).unwrap();
+        a.free(low[1], 0).unwrap();
+        assert_eq!(a.free_blocks(1), 1);
+        assert_eq!(a.allocate_below(0, BLOCK), Some(0));
+        // Its buddy is the lowest order-0 frame now; the one above stayed free.
+        assert_eq!(a.allocate(0), Some(PAGE_SIZE));
+        assert_eq!(a.allocate(0), Some(BLOCK + 3 * PAGE_SIZE));
+    }
+
+    #[test]
+    fn runs_keep_their_frames_and_free_the_tail() {
+        let m = map(&[(BLOCK, 2 * BLOCK, Usable)]);
+        let mut meta = meta_for(&m);
+        let mut a = BuddyAllocator::new(&m, &mut meta).unwrap();
+        let start = a.free_frames();
+
+        // Five frames come from an order-3 block; the three after it are free.
+        let r = a.allocate_run(5, 0, u64::MAX).unwrap();
+        assert_eq!(r, BLOCK);
+        assert_eq!(a.free_frames(), start - 5);
+        assert_eq!(a.allocate(0), Some(BLOCK + 5 * PAGE_SIZE));
+        assert_eq!(a.allocate(1), Some(BLOCK + 6 * PAGE_SIZE));
+        assert_eq!(a.allocate(0), Some(BLOCK + 8 * PAGE_SIZE));
+
+        // The run is its pieces: wrong lengths and double frees are refused
+        // without freeing anything.
+        assert_eq!(a.free_run(r, 0), Err(FreeError::BadOrder));
+        assert_eq!(a.free_run(r, 2 * MAX_BLOCK_FRAMES), Err(FreeError::BadOrder));
+        assert_eq!(a.free_run(r, 6), Err(FreeError::NotAllocated));
+        assert_eq!(a.free_run(r, 8), Err(FreeError::NotAllocated));
+        assert_eq!(a.free_run(r + PAGE_SIZE, 5), Err(FreeError::Misaligned));
+        assert_eq!(a.free_run(u64::MAX - PAGE_SIZE + 1, 1), Err(FreeError::OutOfRange));
+        assert_eq!(a.free_frames(), start - 5 - 4);
+        a.free_run(r, 5).unwrap();
+        assert_eq!(a.free_run(r, 5), Err(FreeError::NotAllocated));
+        a.free(BLOCK + 5 * PAGE_SIZE, 0).unwrap();
+        a.free(BLOCK + 6 * PAGE_SIZE, 1).unwrap();
+        a.free(BLOCK + 8 * PAGE_SIZE, 0).unwrap();
+        assert_eq!(a.free_frames(), start);
+        assert_eq!(a.free_blocks(MAX_ORDER), 1, "everything merged back");
+
+        // Alignment above the length, and runs that are whole blocks.
+        a.allocate(0).unwrap();
+        let aligned = a.allocate_run(3, 4, u64::MAX).unwrap();
+        assert_eq!(aligned, BLOCK + 16 * PAGE_SIZE);
+        let whole = a.allocate_run(8, 0, u64::MAX).unwrap();
+        assert_eq!(whole % (8 * PAGE_SIZE), 0);
+        a.free(whole, 3).unwrap();
+        assert_eq!(a.allocate_run(0, 0, u64::MAX), None);
+        assert_eq!(a.allocate_run(MAX_BLOCK_FRAMES + 1, 0, u64::MAX), None);
+        assert_eq!(a.allocate_run(1, MAX_ORDER + 1, u64::MAX), None);
+        assert_eq!(a.allocate_run(1, 0, BLOCK), None, "limit applies");
+        a.free_run(aligned, 3).unwrap();
+        a.free(BLOCK, 0).unwrap();
+        assert_eq!(a.free_frames(), start);
+        assert_eq!(a.free_blocks(MAX_ORDER), 1);
+    }
+
+    #[test]
+    fn runs_of_every_length_round_trip() {
+        let m = map(&[(0, 16 * MIB, Usable)]);
+        let mut meta = meta_for(&m);
+        let mut a = BuddyAllocator::new(&m, &mut meta).unwrap();
+        let initial: Vec<u64> = (0..=MAX_ORDER).map(|k| a.free_blocks(k)).collect();
+        let mut owned: HashSet<u64> = HashSet::new();
+        let mut live = Vec::new();
+        for frames in 1..=MAX_BLOCK_FRAMES {
+            let align_order = (frames % 5) as usize;
+            let Some(r) = a.allocate_run(frames, align_order, u64::MAX) else {
+                // Out of memory: give everything back and carry on.
+                for (r, n) in live.drain(..) {
+                    a.free_run(r, n).unwrap();
+                }
+                owned.clear();
+                let r = a.allocate_run(frames, align_order, u64::MAX).unwrap();
+                live.push((r, frames));
+                owned.extend((0..frames).map(|i| r + i * PAGE_SIZE));
+                continue;
+            };
+            assert_eq!(r % (PAGE_SIZE << align_order), 0, "{frames} frames");
+            for i in 0..frames {
+                assert!(owned.insert(r + i * PAGE_SIZE), "{frames} frames: overlap at {:#x}", r + i * PAGE_SIZE);
+            }
+            assert_eq!(a.free_frames() + owned.len() as u64, a.total_frames(), "{frames} frames");
+            live.push((r, frames));
+        }
+        for (r, n) in live.drain(..).rev() {
+            a.free_run(r, n).unwrap();
+        }
+        assert_eq!(a.free_frames(), a.total_frames());
+        let restored: Vec<u64> = (0..=MAX_ORDER).map(|k| a.free_blocks(k)).collect();
+        assert_eq!(restored, initial);
     }
 
     #[test]
