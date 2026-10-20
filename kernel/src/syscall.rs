@@ -17,9 +17,13 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         Personality::Nt => Nt::dispatch(regs),
         Personality::Xnu => Xnu::dispatch(regs),
     };
-    if let Outcome::Unimplemented { table, number } = outcome {
+    if let Outcome::Unimplemented { table, number } = outcome
+        && first_time(process.personality, number)
+    {
         // This line is the seed of the API tracer: every unimplemented call
-        // an app makes is a work item.
+        // an app makes is a work item. Each is logged once per boot, so a
+        // call every program makes (`rseq`) does not flood the console of
+        // an interactive shell; `poly.strace` shows every call.
         let name = match process.personality {
             Personality::Linux => poly_personality_linux::table::name(number),
             _ => None,
@@ -35,6 +39,22 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         );
     }
     outcome
+}
+
+/// Whether this is the first time call `number` of `personality` is
+/// reported unimplemented in this boot (numbers past 1023 always are).
+fn first_time(personality: Personality, number: u64) -> bool {
+    use core::sync::atomic::{AtomicU64, Ordering};
+    const WORDS: usize = 16;
+    static SEEN: [[AtomicU64; WORDS]; 3] = [const { [const { AtomicU64::new(0) }; WORDS] }; 3];
+    let table = match personality {
+        Personality::Linux => 0,
+        Personality::Nt => 1,
+        Personality::Xnu => 2,
+    };
+    let Some(word) = SEEN[table].get((number / 64) as usize) else { return true };
+    let bit = 1 << (number % 64);
+    word.fetch_or(bit, Ordering::Relaxed) & bit == 0
 }
 
 /// [`dispatch`] as a `user::SyscallHook`: what user threads use unless

@@ -41,6 +41,7 @@ pub mod disk;
 mod disk_tests;
 mod files;
 pub mod initrd;
+pub mod mounts;
 pub mod poll;
 pub mod proc;
 mod proc_tests;
@@ -116,6 +117,7 @@ pub fn init(boot: &BootInfo, held: Option<Region>) {
         None => kprintln!("fs: no initramfs (no boot module); / is an empty tmpfs"),
     }
     devices::install(&vfs, &ctx);
+    mounts::make_block_nodes(&vfs, &ctx);
     proc::mount_all(&vfs, &ctx);
     drop(ctx);
     if VFS.set(vfs).is_err() {

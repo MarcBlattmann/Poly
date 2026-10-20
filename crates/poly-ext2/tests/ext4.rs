@@ -80,7 +80,7 @@ fn reads_ext4_images_made_by_mke2fs() {
         let rootarg = root.display().to_string();
         let mut all = args.to_vec();
         all.extend(["-d", &rootarg]);
-        let mut image = t.mkfs_type(&dir, 48 << 20, "ext4", &all);
+        let mut image = t.mkfs_type(&dir, 32 << 20, "ext4", &all);
         // Index the big directories, as e2fsck -D does.
         let (code, out) = t.fsck(&dir, &mut image, "-fyD");
         assert!(code <= 1, "{name}: e2fsck -fyD: {out}");
@@ -207,7 +207,7 @@ fn write_volumes(t: &Option<Tools>, dir: &TempDir) -> Vec<(String, Vec<u8>, u64)
     if let Some(t) = t {
         for (name, args) in CONFIGS {
             let bs: u64 = args.windows(2).find(|w| w[0] == "-b").map_or(4096, |w| w[1].parse().unwrap());
-            out.push((format!("mke2fs-{name}"), t.mkfs_type(dir, 64 << 20, "ext4", args), bs));
+            out.push((format!("mke2fs-{name}"), t.mkfs_type(dir, 32 << 20, "ext4", args), bs));
         }
     }
     out

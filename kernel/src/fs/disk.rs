@@ -180,24 +180,47 @@ pub fn mount(name: &str, path: &str, read_only: bool) -> Result<Arc<DiskMount>, 
     if !path.starts_with('/') {
         return Err(MountError::Vfs(Errno::EINVAL));
     }
+    mount_with(name, read_only, |fs, flags| {
+        make_dirs(path)?;
+        let v = vfs();
+        let ctx = v.root_context()?;
+        let id = v.mount(&ctx, &Cred::root(), At::Cwd, path.as_bytes(), fs, flags)?;
+        Ok((id, String::from(path)))
+    })
+}
+
+/// Mount the ext2 volume on disk `name` with `place`, which puts the file
+/// system the VFS is to have (with the flags it is to get) on a mount
+/// point and returns the new mount and its path: the shell's `mount` puts
+/// it on an absolute path ([`mount`]), mount(2) where the calling process
+/// names it (ADR 0051). `per_mount` adds the caller's per-mount flags.
+pub fn mount_with(
+    name: &str,
+    read_only: bool,
+    place: impl FnOnce(Arc<dyn FileSystem>, MountFlags) -> Result<(MountId, String), Errno>,
+) -> Result<Arc<DiskMount>, MountError> {
+    mount_flags(name, MountFlags { read_only, ..MountFlags::default() }, place)
+}
+
+/// [`mount_with`] with every per-mount flag.
+pub fn mount_flags(
+    name: &str,
+    per_mount: MountFlags,
+    place: impl FnOnce(Arc<dyn FileSystem>, MountFlags) -> Result<(MountId, String), Errno>,
+) -> Result<Arc<DiskMount>, MountError> {
     let disk = block::open(name).ok_or(MountError::NoDisk)?;
     let mut mounts = MOUNTS.lock();
     if mounts.iter().any(|m| core::ptr::eq(m.disk, disk)) {
         return Err(MountError::Busy);
     }
-    let opts = MountOptions { read_only, ..MountOptions::default() };
+    let opts = MountOptions { read_only: per_mount.read_only, ..MountOptions::default() };
     let ext2 = Ext2::mount_with_lock(DiskIo(disk), super::clock(), opts, RawMutex::new()).map_err(MountError::Ext2)?;
     let ext2 = Arc::new(ext2);
     let read_only = ext2.read_only();
     let cached = cache::cache().register(Arc::clone(&ext2) as Arc<dyn FileSystem>);
-    let v = vfs();
-    let flags = MountFlags { read_only, ..MountFlags::default() };
-    let mounted = make_dirs(path).and_then(|()| {
-        let ctx = v.root_context()?;
-        v.mount(&ctx, &Cred::root(), At::Cwd, path.as_bytes(), Arc::clone(&cached) as Arc<dyn FileSystem>, flags)
-    });
-    let mount_id = match mounted {
-        Ok(id) => id,
+    let flags = MountFlags { read_only, ..per_mount };
+    let (mount_id, path) = match place(Arc::clone(&cached) as Arc<dyn FileSystem>, flags) {
+        Ok(placed) => placed,
         Err(e) => {
             let _ = ext2.unmount();
             return Err(MountError::Vfs(e));
@@ -224,9 +247,15 @@ pub fn mount(name: &str, path: &str, read_only: bool) -> Result<Arc<DiskMount>, 
             s.orphans
         );
     }
-    let m = Arc::new(DiskMount { disk, path: String::from(path), ext2, cached, mount_id, read_only });
+    let m = Arc::new(DiskMount { disk, path, ext2, cached, mount_id, read_only });
     mounts.push(Arc::clone(&m));
     Ok(m)
+}
+
+/// Unmount disk mount `m` (umount2(2) on a disk mount, ADR 0051): like
+/// [`unmount`], found by its VFS mount rather than its path.
+pub fn unmount_mount(m: &Arc<DiskMount>) -> Result<(), Errno> {
+    unmount(&m.path)
 }
 
 /// Unmount the disk mounted at `path`: `EBUSY` while anything uses the

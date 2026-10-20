@@ -268,7 +268,7 @@ fn crashes_replay_clean_1k() {
 
 #[test]
 fn crashes_replay_clean_on_mke2fs_volumes() {
-    crashes(4096, 64 << 20, 3, true);
+    crashes(4096, 32 << 20, 3, true);
 }
 
 #[test]

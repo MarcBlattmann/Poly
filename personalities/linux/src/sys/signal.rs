@@ -342,10 +342,15 @@ pub fn rt_sigtimedwait(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
                 let t = p.thread_mut(tid);
                 let real = t.mask;
                 t.mask = real.without(set);
+                t.sigwait = set;
                 real
             });
             let got = wait_for_signal(k, tid, set, deadline);
-            with_own(k, |p| p.thread_mut(tid).mask = real_mask);
+            with_own(k, |p| {
+                let t = p.thread_mut(tid);
+                t.mask = real_mask;
+                t.sigwait = SigSet::default();
+            });
             got
         }
     }?;
