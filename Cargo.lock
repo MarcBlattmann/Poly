@@ -94,6 +94,10 @@ name = "poly-mem"
 version = "0.0.1"
 
 [[package]]
+name = "poly-net"
+version = "0.0.1"
+
+[[package]]
 name = "poly-ntobj"
 version = "0.0.1"
 

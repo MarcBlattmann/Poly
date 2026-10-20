@@ -21,6 +21,7 @@ members = [
     "crates/poly-line",
     "crates/poly-mem",
     "crates/poly-ntobj",
+    "crates/poly-net",
     "crates/poly-paging",
     "crates/poly-pci",
     "crates/poly-pe",
@@ -61,6 +62,7 @@ poly-irq = { path = "crates/poly-irq" }
 poly-line = { path = "crates/poly-line" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
+poly-net = { path = "crates/poly-net" }
 poly-paging = { path = "crates/poly-paging" }
 poly-pci = { path = "crates/poly-pci" }
 poly-pe = { path = "crates/poly-pe" }

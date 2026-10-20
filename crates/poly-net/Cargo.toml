@@ -1,0 +1,11 @@
+[package]
+name = "poly-net"
+description = "TCP/IP stack: Ethernet, ARP, IPv4, IPv6, ICMP, UDP, TCP and a socket API, driven by poll(now)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
