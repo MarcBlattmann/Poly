@@ -43,7 +43,8 @@ impl UserPtr {
     }
 }
 
-/// The real and effective user and group ids of the calling process.
+/// The real and effective user and group ids of the calling thread: a
+/// summary of its [`Creds`](crate::cred::Creds) (ADR 0045).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Credentials {
     pub uid: u32,
@@ -413,7 +414,9 @@ pub trait LinuxKernel {
     fn tid(&self) -> i32;
     /// The parent's process id (0 if the parent is not in this pid namespace).
     fn ppid(&self) -> i32;
-    /// The process's real and effective user and group ids.
+    /// The calling thread's real and effective user and group ids: its
+    /// [`LinuxThread::creds`](crate::signal::LinuxThread::creds) summed up
+    /// ([`Creds::summary`](crate::cred::Creds::summary)).
     fn credentials(&self) -> Credentials;
 
     // ---- user memory --------------------------------------------------
@@ -506,6 +509,17 @@ pub trait LinuxKernel {
     /// mapping, or exceeds the data size limit; the personality then
     /// reports the current break, so the error value itself is not seen.
     fn set_brk(&mut self, addr: u64) -> Result<u64, Errno>;
+
+    /// madvise(2) on `[addr, addr + len)` (both page aligned, `len`
+    /// non-zero, no overflow) with the advice the personality decoded
+    /// ([`crate::sys::madvise::Advice`]): apply it to the mapped parts and
+    /// fail with `ENOMEM` if part of the range is not mapped; `EINVAL` for
+    /// `Free` on anything but private anonymous memory and `Remove` on
+    /// anything but a shared writable mapping. `ENOSYS` by default.
+    fn madvise(&mut self, addr: u64, len: u64, advice: crate::sys::madvise::Advice) -> Result<(), Errno> {
+        let _ = (addr, len, advice);
+        Err(Errno::ENOSYS)
+    }
 
     // ---- thread state -------------------------------------------------
 

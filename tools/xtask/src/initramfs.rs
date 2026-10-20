@@ -4,6 +4,8 @@
 //! order), so the same sources always give the same image.
 //!
 //! - The default image (`cargo xtask run`): `/etc/motd`, `/etc/hostname`,
+//!   a minimal user database (`/etc/passwd`, `/etc/group`: root and nobody,
+//!   for the C libraries and BusyBox later; the kernel never reads them),
 //!   and `/dev/console` as a Linux initramfs has it.
 //! - The test image (the self-test boots, with `poly.test.initrd`): the same
 //!   plus `/test`, a tree of every kind of entry the kernel's file system
@@ -29,6 +31,13 @@ pub const MOTD: &str = "Welcome to Poly.\n\
 This is /etc/motd from the initramfs `cargo xtask` builds (tools/xtask/src/initramfs.rs),\n\
 unpacked into the root tmpfs at boot. Try `ls /`, `ls /dev`, `cat /etc/hostname` and `mount`.\n";
 
+/// `/etc/passwd` (passwd(5): name, password, uid, gid, comment, home,
+/// shell; `x`: the password lives elsewhere).
+pub const PASSWD: &str = "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/nonexistent:/bin/false\n";
+
+/// `/etc/group` (group(5): name, password, gid, members).
+pub const GROUP: &str = "root:x:0:\nnogroup:x:65534:\n";
+
 /// Length of `/test/big.bin`: more than nine 4 KiB pages, not a multiple.
 pub const BIG_BIN_LEN: usize = 40_000;
 
@@ -48,6 +57,8 @@ fn base(w: &mut Writer) {
     w.dir(b"etc", 0o755);
     w.file(b"etc/motd", 0o644, MOTD.as_bytes());
     w.file(b"etc/hostname", 0o644, b"poly\n");
+    w.file(b"etc/passwd", 0o644, PASSWD.as_bytes());
+    w.file(b"etc/group", 0o644, GROUP.as_bytes());
     w.dir(b"dev", 0o755);
     w.node(b"dev/console", FileType::CharDevice, 0o600, DeviceId::new(5, 1));
 }
@@ -84,6 +95,47 @@ pub fn programs_image(programs: &Programs<'_>) -> Vec<u8> {
     let mut w = writer();
     base(&mut w);
     bin(&mut w, programs);
+    w.finish()
+}
+
+/// More of a file tree than `/bin`: files (path without the leading `/`,
+/// mode, contents) and symbolic links (path, target). Parent directories
+/// are made as needed (mode 0755).
+#[derive(Debug, Default)]
+pub struct Tree {
+    pub files: Vec<(String, u16, Vec<u8>)>,
+    pub symlinks: Vec<(String, String)>,
+}
+
+/// [`programs_image`] plus `tree`: the image of the dynamic linking boot
+/// tests (`/bin` holds the programs, `tree` the dynamic linker and the
+/// shared libraries, see `dynamic.rs`).
+pub fn programs_image_with(programs: &Programs<'_>, tree: &Tree) -> Vec<u8> {
+    let mut w = writer();
+    base(&mut w);
+    bin(&mut w, programs);
+    let mut made: std::collections::BTreeSet<String> = ["etc", "dev", "bin"].map(String::from).into();
+    let paths = tree.files.iter().map(|(p, _, _)| p).chain(tree.symlinks.iter().map(|(p, _)| p));
+    let mut dirs = std::collections::BTreeSet::new();
+    for path in paths {
+        let mut parent = Path::new(path).parent();
+        while let Some(dir) = parent.filter(|d| !d.as_os_str().is_empty()) {
+            dirs.insert(dir.to_string_lossy().into_owned());
+            parent = dir.parent();
+        }
+    }
+    // BTreeSet order puts every directory after its parent.
+    for dir in dirs {
+        if made.insert(dir.clone()) {
+            w.dir(dir.as_bytes(), 0o755);
+        }
+    }
+    for (path, mode, data) in &tree.files {
+        w.file(path.as_bytes(), *mode, data);
+    }
+    for (path, target) in &tree.symlinks {
+        w.symlink(path.as_bytes(), target.as_bytes());
+    }
     w.finish()
 }
 
@@ -159,6 +211,29 @@ mod tests {
     }
 
     #[test]
+    fn trees_get_their_directories_files_and_links() {
+        let tree = Tree {
+            files: vec![
+                ("lib64/ld.so".into(), 0o755, b"\x7fELF ld".to_vec()),
+                ("usr/lib/x/libc.so.6".into(), 0o644, b"\x7fELF libc".to_vec()),
+            ],
+            symlinks: vec![("lib/libc.so.6".into(), "/usr/lib/x/libc.so.6".into())],
+        };
+        let image = programs_image_with(&[("prog", b"\x7fELF prog")], &tree);
+        assert_eq!(image, programs_image_with(&[("prog", b"\x7fELF prog")], &tree));
+        let fs = Arc::new(Tmpfs::new(Arc::new(Zero)));
+        poly_cpio::unpack_fs(&image, fs.clone()).unwrap();
+        let vfs = Vfs::new(fs);
+        let ctx = vfs.root_context().unwrap();
+        let stat = |p: &str, follow| vfs.stat(&ctx, &Cred::root(), At::Cwd, p.as_bytes(), follow).unwrap();
+        assert_eq!(stat("/usr/lib/x", false).perm(), 0o755);
+        assert_eq!((stat("/lib64/ld.so", false).perm(), stat("/lib64/ld.so", false).size), (0o755, 7));
+        assert_eq!(stat("/lib/libc.so.6", true).size, 9, "the link leads to the library");
+        assert_eq!(stat("/bin/prog", false).perm(), 0o755);
+        assert_eq!(stat("/etc/motd", false).size, MOTD.len() as u64);
+    }
+
+    #[test]
     fn the_test_image_unpacks_as_the_kernel_tests_expect() {
         let fs = Arc::new(Tmpfs::new(Arc::new(Zero)));
         let stats = poly_cpio::unpack_fs(&test_image(), fs.clone()).unwrap();
@@ -183,5 +258,9 @@ mod tests {
         assert_eq!(stat("/test/zero-node").rdev, DeviceId::new(1, 5));
         assert_eq!(stat("/test/hello.txt").mtime.sec, i64::from(MTIME));
         assert_eq!(stat("/test/script.sh").size, 18);
+        assert_eq!(read("/etc/passwd"), PASSWD.as_bytes());
+        assert_eq!(read("/etc/group"), GROUP.as_bytes());
+        assert_eq!((stat("/etc/passwd").perm(), stat("/etc/passwd").uid), (0o644, 0));
+        assert!(PASSWD.lines().all(|l| l.split(':').count() == 7) && GROUP.lines().all(|l| l.split(':').count() == 4));
     }
 }

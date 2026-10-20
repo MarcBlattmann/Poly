@@ -302,6 +302,85 @@ fn dynamic_executable_names_its_interpreter() {
     check_plan("hello-dynamic", &elf, &plan);
 }
 
+/// The `NEEDED`, `SONAME` and `RUNPATH` entries `readelf -dW` lists.
+fn readelf_dynamic(path: &std::path::Path) -> Option<Vec<(String, String)>> {
+    let out = match Command::new("readelf").arg("-dW").arg(path).output() {
+        Ok(out) if out.status.success() => out,
+        _ => {
+            eprintln!("readelf not available; not comparing {}", path.display());
+            return None;
+        }
+    };
+    let text = String::from_utf8(out.stdout).expect("readelf prints UTF-8");
+    let mut entries = Vec::new();
+    for line in text.lines() {
+        // 0x...01 (NEEDED)             Shared library: [libc.so.6]
+        for (tag, label) in [("(NEEDED)", "Shared library: ["), ("(SONAME)", "soname: ["), ("(RUNPATH)", "runpath: [")]
+        {
+            if line.contains(tag)
+                && let Some(rest) = line.split(label).nth(1)
+            {
+                entries.push((tag.to_string(), rest.trim_end_matches(']').to_string()));
+            }
+        }
+    }
+    Some(entries)
+}
+
+/// What `poly_elf::Dynamic` reads, in `readelf`'s form.
+fn our_dynamic(elf: &Elf<'_>) -> Vec<(String, String)> {
+    let d = Dynamic::parse(elf).unwrap().expect("a PT_DYNAMIC");
+    let s = |b: &[u8]| String::from_utf8_lossy(b).into_owned();
+    let mut v: Vec<_> = d.needed().map(|n| ("(NEEDED)".to_string(), s(n))).collect();
+    v.extend(d.soname().map(|n| ("(SONAME)".to_string(), s(n))));
+    v.extend(d.runpath().map(|n| ("(RUNPATH)".to_string(), s(n))));
+    v
+}
+
+/// The dynamic section of a dynamically linked program, as `readelf -d`
+/// shows it; and the interpreter it names, planned the way the kernel
+/// loads it: at a base inside a reservation of its footprint (ADR 0049).
+#[test]
+fn dynamic_sections_and_the_host_interpreter() {
+    let flags = ["-O1", "-Wl,-rpath,$ORIGIN/../lib/poly", "-lm"];
+    let Some(b) = build("hello-dynamic-rpath", HELLO, &flags) else { return };
+    let elf = Elf::parse(&b).unwrap();
+    let ours = our_dynamic(&elf);
+    assert!(ours.contains(&("(NEEDED)".into(), "libc.so.6".into())), "{ours:?}");
+    if let Some(theirs) = readelf_dynamic(&out_dir().join("hello-dynamic-rpath")) {
+        let mut sorted = ours.clone();
+        sorted.sort();
+        let mut theirs = theirs;
+        theirs.sort();
+        assert_eq!(sorted, theirs);
+    }
+
+    // The interpreter: an ET_DYN image without an interpreter of its own.
+    let interp = String::from_utf8_lossy(elf.interp().unwrap()).into_owned();
+    let Ok(ld) = std::fs::read(&interp) else {
+        eprintln!("skipping the interpreter: cannot read {interp}");
+        return;
+    };
+    let ld_elf = Elf::parse(&ld).unwrap_or_else(|e| panic!("{interp}: {e:?}"));
+    assert_eq!(check_interpreter(&ld_elf), Ok(()));
+    assert!(is_relocatable(&ld_elf));
+    let fp = Footprint::of(&ld_elf).unwrap();
+    // A reservation somewhere below the stack, not aligned to fp.align.
+    let hole = 0x7fff_f7f0_1000;
+    let base = fp.base_in(hole).unwrap();
+    assert!(base + fp.size <= hole + fp.reservation().unwrap());
+    let plan = LoadPlan::new(&ld_elf, &interpreter_options(&LoadOptions::default(), base)).unwrap();
+    assert_eq!((plan.start(), plan.end()), (base, base + fp.size));
+    check_plan(&interp, &ld_elf, &plan);
+    let exe = LoadPlan::new(&elf, &LoadOptions::default()).unwrap();
+    let aux = AuxInfo::new(&exe, Some(&plan), Credentials::default());
+    assert_eq!((aux.base, aux.entry, aux.phdr), (base, exe.entry(), exe.phdr()));
+    assert_eq!(start_address(&exe, Some(&plan)), plan.entry());
+    if let Some(d) = Dynamic::parse(&ld_elf).unwrap() {
+        assert!(d.soname().is_some(), "{interp} has a soname");
+    }
+}
+
 /// The test binary itself: whatever rustc and the linker made of it.
 #[test]
 fn this_test_binary() {

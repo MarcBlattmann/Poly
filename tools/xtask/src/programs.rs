@@ -26,10 +26,18 @@
 //!   on write, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and
 //!   a futex, and an orphan adopted and reaped by init.
 //!
+//! And for terminals (Phase 4, ADR 0046):
+//!
+//! - `/bin/ttyinit`: `tools/xtask/programs/ttyinit.rs`, no C library, as
+//!   init on the serial console, typed into through QEMU's standard input:
+//!   a line edited in canonical mode (with its echo), Ctrl-C as `SIGINT`
+//!   for the foreground group, single keys in raw mode, and a pty opened
+//!   with `openat` as posix_openpt(3) does.
+//!
 //! Builds are reproducible: fixed flags, no debug info, symbols stripped,
 //! no build id, so the same toolchain gives the same bytes.
 
-use super::{Boot, DEFAULT_MEMORY, Devices, QEMU_SUCCESS, Result, boot_on, cargo, initramfs, root};
+use super::{Boot, DEFAULT_MEMORY, Devices, QEMU_SUCCESS, Result, boot_on, boot_typing, cargo, initramfs, root};
 use crate::symbols::Symbols;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -46,6 +54,8 @@ pub const C_HELLO_OUTPUT: &str = "hello, world\n";
 pub const TIME_TEST_OUTPUT: &str = "time-test: done, 0 failed\n";
 /// What `/bin/forkexec` writes when every check passed.
 pub const FORKEXEC_OUTPUT: &str = "forkexec: ok\n";
+/// What `/bin/ttyinit` writes when every check passed.
+pub const TTYINIT_OUTPUT: &str = "ttyinit: ok\n";
 
 /// `rustc` flags for the nolibc programs: a static, position-dependent
 /// executable for Linux's ABI (the bare-metal target only means "no OS
@@ -73,6 +83,11 @@ pub fn nolibc_hello() -> Result<Vec<u8>> {
 /// Build `tools/xtask/programs/forkexec.rs`; returns the ELF.
 pub fn nolibc_forkexec() -> Result<Vec<u8>> {
     nolibc_program("tools/xtask/programs/forkexec.rs", "forkexec")
+}
+
+/// Build `tools/xtask/programs/ttyinit.rs`; returns the ELF.
+pub fn nolibc_ttyinit() -> Result<Vec<u8>> {
+    nolibc_program("tools/xtask/programs/ttyinit.rs", "ttyinit")
 }
 
 /// Build the nolibc program `source` (relative to the repository) as
@@ -143,7 +158,13 @@ pub fn test_initramfs() -> Result<PathBuf> {
 /// One boot that runs `/bin/<program>` as the first process and checks
 /// that it printed `output` and ended with exit status 0, and that QEMU
 /// then exited with the kernel's success status.
-fn run_as_init(kernel: &Path, syms: &Arc<Symbols>, image: &Path, program: &str, output: &str) -> Result<Boot> {
+pub(crate) fn run_as_init(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    image: &Path,
+    program: &str,
+    output: &str,
+) -> Result<Boot> {
     let append = format!("poly.qemu_exit poly.init=/bin/{program}");
     let b = boot_on(None, Some(image), kernel, syms, DEFAULT_MEMORY, &append, Devices::None)?;
     let started = b.output.contains(&format!("POLY-INIT: exec /bin/{program}"));
@@ -165,8 +186,10 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let hello = nolibc_hello()?;
     let forkexec = nolibc_forkexec()?;
     let time = time_test()?;
+    let ttyinit = nolibc_ttyinit()?;
     let (c_programs, skipped) = c_hellos();
-    let mut programs: Vec<(&str, &[u8])> = vec![("hello", &hello), ("forkexec", &forkexec), ("time-test", &time)];
+    let mut programs: Vec<(&str, &[u8])> =
+        vec![("hello", &hello), ("forkexec", &forkexec), ("time-test", &time), ("ttyinit", &ttyinit)];
     programs.extend(c_programs.iter().map(|(n, e)| (n.as_str(), e.as_slice())));
     let image = initramfs::write(&root(), "poly-programs-initramfs.cpio", &initramfs::programs_image(&programs))?;
 
@@ -204,11 +227,43 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         return Err(format!("/bin/time-test: {line}"));
     }
 
+    eprintln!("==> boot test: init on the serial console's terminal: line editing and echo, ^C, raw mode");
+    tty_test(kernel, syms, &image)?;
+
     eprintln!("==> boot test: a program that is not there is reported as unsupported");
     let b =
         boot_on(None, Some(&image), kernel, syms, DEFAULT_MEMORY, "poly.qemu_exit poly.init=/bin/nope", Devices::None)?;
     if b.status != Some(QEMU_SUCCESS) || !b.output.contains("POLY-INIT: unsupported /bin/nope: ENOENT") {
         return Err(format!("a missing init program was not reported (status {:?})", b.status));
+    }
+    Ok(())
+}
+
+/// `/bin/ttyinit` as init on the serial console (`/dev/console` is
+/// `/dev/ttyS0`), typed into through QEMU's standard input: each prompt
+/// it prints is answered, and what comes back (its echo, its reports) is
+/// checked.
+fn tty_test(kernel: &Path, syms: &Arc<Symbols>, image: &Path) -> Result {
+    let append = "poly.qemu_exit poly.init=/bin/ttyinit console=ttyS0";
+    let qemu_args = ["-initrd".to_string(), image.display().to_string()];
+    let steps = [("ttyinit: name? ", "pola\x7fy\r"), ("ttyinit: press ^C> ", "\x03"), ("ttyinit: raw> ", "xyz")];
+    let b = boot_typing(kernel, syms, append, Devices::None, &qemu_args, &steps)?;
+    let checks = [
+        ("the typed line was echoed, DEL erasing a character", b.output.contains("pola\x08 \x08y\n")),
+        ("the edited line was read", b.output.contains("ttyinit: line [poly]")),
+        ("^C was echoed and interrupted the read with SIGINT", b.output.contains("^C\nttyinit: interrupted by SIGINT")),
+        ("raw mode read single keys without echo", b.output.contains("ttyinit: raw> \nttyinit: raw [xyz]")),
+        ("a line went through a pty opened with openat", b.output.contains("ttyinit: pty [pty]")),
+        ("every check passed", b.output.contains(TTYINIT_OUTPUT.trim_end())),
+        ("init exited 0", b.output.contains("POLY-EXIT: pid=1 code=0")),
+    ];
+    for (what, ok) in checks {
+        if !ok {
+            return Err(format!("/bin/ttyinit on the serial console: {what} failed (QEMU status {:?})", b.status));
+        }
+    }
+    if b.status != Some(QEMU_SUCCESS) {
+        return Err(format!("/bin/ttyinit on the serial console: QEMU status {:?}", b.status));
     }
     Ok(())
 }

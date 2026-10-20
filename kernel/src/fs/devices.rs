@@ -2,8 +2,8 @@
 //!
 //! | Node | Number | Device |
 //! |---|---|---|
-//! | `/dev/console` | 5, 1 | [`Console`]: writes go to the kernel console, reads are end of file |
-//! | `/dev/tty` | 5, 0 | the same console (every process's controlling terminal, for now) |
+//! | `/dev/console` | 5, 1 | [`Console`] (writes to the kernel console, reads end of file) until `crate::tty` puts the console terminal here |
+//! | `/dev/tty` | 5, 0 | the same, until `crate::tty` puts the caller's controlling terminal here |
 //! | `/dev/null` | 1, 3 | `poly_vfs::device::Null` |
 //! | `/dev/zero` | 1, 5 | `poly_vfs::device::Zero` |
 //! | `/dev/full` | 1, 7 | `poly_vfs::device::Full` |
@@ -19,12 +19,10 @@
 //! one has `/dev/console`) reach the same devices; nodes it already has are
 //! left alone.
 //!
-//! **Console input.** Reading `/dev/console` returns end of file for now.
-//! The serial port's input belongs to the kernel shell, which reads it
-//! through its own console; sharing it needs the TTY layer (line discipline,
-//! foreground process, roadmap Phase 4), which will make these reads block
-//! for a line instead. End of file rather than blocking forever means a
-//! program that reads its standard input finishes.
+//! **Terminals.** `crate::tty` (ADR 0046) registers terminals for (5, 0)
+//! and (5, 1) in place of [`Console`] once the devices are installed;
+//! [`Console`] (writes to the kernel log, reads end of file) stays what
+//! traced test runs get on fds 0-2.
 
 use crate::log;
 use crate::sync::SpinLock;

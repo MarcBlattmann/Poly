@@ -12,7 +12,7 @@
 //! `console(4)`: major 5), so device nodes in a Linux initramfs work as is.
 
 use crate::poll::{PollEvents, WaitQueue};
-use crate::{DeviceId, Errno, Result};
+use crate::{DeviceId, Errno, OpenFlags, Result};
 use alloc::sync::Arc;
 
 /// A character device.
@@ -49,6 +49,18 @@ pub trait CharDevice: Send + Sync {
     /// readiness never changes.
     fn wait_queue(&self) -> Option<&Arc<WaitQueue>> {
         None
+    }
+
+    /// Called when a node with this device's number is opened with
+    /// `flags`, before the open file exists. A device that opens as
+    /// another one returns it, and the open file reads, writes and polls
+    /// that one instead: a name for whatever device stands behind it
+    /// (`/dev/tty`, the caller's terminal), a multiplexer that makes a new
+    /// device for every open (`/dev/ptmx`), or a per-open handle that
+    /// counts opens and closes (dropped with the open file). An error
+    /// fails the `open`. The default opens the device itself.
+    fn open(&self, _flags: OpenFlags) -> Result<Option<Arc<dyn CharDevice>>> {
+        Ok(None)
     }
 }
 

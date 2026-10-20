@@ -6,7 +6,7 @@ use super::Files;
 use crate::fs::vfs;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use poly_vfs::{AT_FDCWD, Access, At, Errno, Fd, FsContext, FsStats, NodeRef, OpenFile, RenameFlags, Result};
+use poly_vfs::{AT_FDCWD, Access, At, Cred, Errno, Fd, FsContext, FsStats, NodeRef, OpenFile, RenameFlags, Result};
 
 impl Files {
     /// A copy of the context: root, working directory, umask.
@@ -52,17 +52,17 @@ impl Files {
 
     /// The node `path` names from `dirfd` (`stat(2)` and friends).
     pub fn lookupat(&self, dirfd: Fd, path: &[u8], follow: bool) -> Result<NodeRef> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.lookup(ctx, &self.cred, at, path, follow))
+        self.at(dirfd, path, |vfs, ctx, at| vfs.lookup(ctx, &self.cred(), at, path, follow))
     }
 
-    /// `faccessat2(2)`; an empty `path` checks `dirfd`'s file. `cred` is
-    /// the process's (real and effective ids are the same until users
-    /// arrive, so `AT_EACCESS` changes nothing).
-    pub fn accessat(&self, dirfd: Fd, path: &[u8], want: Access, follow: bool) -> Result<()> {
+    /// `faccessat2(2)` as `cred`; an empty `path` checks `dirfd`'s file.
+    /// The caller picks `cred`: access(2) checks with the real ids, and
+    /// with `AT_EACCESS` the effective ones (ADR 0045).
+    pub fn accessat(&self, cred: &Cred, dirfd: Fd, path: &[u8], want: Access, follow: bool) -> Result<()> {
         if path.is_empty() {
-            return self.node_at(dirfd)?.access(&self.cred, want);
+            return self.node_at(dirfd)?.access(cred, want);
         }
-        self.at(dirfd, path, |vfs, ctx, at| vfs.access(ctx, &self.cred, at, path, want, follow))
+        self.at(dirfd, path, |vfs, ctx, at| vfs.access(ctx, cred, at, path, want, follow))
     }
 
     /// `renameat2(2)`.
@@ -72,7 +72,7 @@ impl Files {
         let ctx = self.context();
         vfs().rename(
             &ctx,
-            &self.cred,
+            &self.cred(),
             o.as_ref().map_or(At::Cwd, At::Node),
             old,
             n.as_ref().map_or(At::Cwd, At::Node),
@@ -92,7 +92,7 @@ impl Files {
         let ctx = self.context();
         vfs().link(
             &ctx,
-            &self.cred,
+            &self.cred(),
             o.as_ref().map_or(At::Cwd, At::Node),
             old,
             n.as_ref().map_or(At::Cwd, At::Node),
@@ -103,22 +103,22 @@ impl Files {
 
     /// `fchmodat(2)` (following links: the system call has no flags).
     pub fn fchmodat(&self, dirfd: Fd, path: &[u8], perm: u16) -> Result<()> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.chmod(ctx, &self.cred, at, path, perm, true))
+        self.at(dirfd, path, |vfs, ctx, at| vfs.chmod(ctx, &self.cred(), at, path, perm, true))
     }
 
     /// `fchmod(2)`.
     pub fn fchmod(&self, fd: Fd, perm: u16) -> Result<()> {
-        self.file(fd)?.node().chmod(&self.cred, perm)
+        self.file(fd)?.node().chmod(&self.cred(), perm)
     }
 
     /// `truncate(2)`.
     pub fn truncate(&self, path: &[u8], len: u64) -> Result<()> {
-        self.at(AT_FDCWD, path, |vfs, ctx, at| vfs.truncate(ctx, &self.cred, at, path, len))
+        self.at(AT_FDCWD, path, |vfs, ctx, at| vfs.truncate(ctx, &self.cred(), at, path, len))
     }
 
     /// `statfs(2)`.
     pub fn statfs(&self, path: &[u8]) -> Result<FsStats> {
-        self.at(AT_FDCWD, path, |vfs, ctx, at| vfs.lookup(ctx, &self.cred, at, path, true))?.statfs()
+        self.at(AT_FDCWD, path, |vfs, ctx, at| vfs.lookup(ctx, &self.cred(), at, path, true))?.statfs()
     }
 
     /// `fstatfs(2)`.

@@ -35,7 +35,8 @@ use crate::fs::cache::FileSource;
 use crate::process::{self, ExitStatus, Process};
 use crate::sync::SpinLock;
 use crate::thread;
-use crate::user::exec::{self, ExecParams};
+use crate::user::exec::{self, ExecError, ExecParams};
+use crate::user::memory::PageSource;
 use crate::user::{self, UserRegs};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -290,8 +291,11 @@ pub fn process_exit(process: &Process, status: ExitStatus) {
     let pid = process.pid;
     // Listed first, so a parent that reaps at once finds it to let go of.
     ZOMBIES.lock().insert(pid, me);
+    // Terminals: hangups and orphaned process groups (ADR 0046).
+    let jobs = crate::tty::before_exit(pid);
     if let Some(mut k) = Thread::current(process) {
         poly_personality_linux::task::process_exited(&mut k, termination(status));
+        crate::tty::after_exit(&mut k, pid, jobs);
     }
     if !with_tree(|t| t.is_zombie(pid as i32)) {
         let gone = ZOMBIES.lock().remove(&pid);
@@ -333,8 +337,22 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     };
     let argv_refs: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
     let envp_refs: Vec<&[u8]> = req.envp.iter().map(Vec::as_slice).collect();
-    let params = ExecParams::new(&argv_refs, &envp_refs, &path);
-    let image = exec::load(Arc::new(FileSource::of(&file)), &params)
+    let mut params = ExecParams::new(&argv_refs, &envp_refs, &path);
+    // The credentials the program will run with (set-user-ID and
+    // set-group-ID bits of the executable, not of a script; capabilities):
+    // computed now for the auxiliary vector, installed past the point of
+    // no return (ADR 0045).
+    let (creds, _secure) = super::cred::exec_creds(k, &file)?;
+    params.creds = super::cred::aux_creds(&creds);
+    // A dynamically linked program's interpreter (ADR 0049), opened like
+    // the program: from the working directory if its path is relative.
+    let files = &k.process.files;
+    let open_interp = |interp: &[u8]| -> Result<Arc<dyn PageSource>, ExecError> {
+        let file = files.open_exec_at(crate::fs::AT_FDCWD, interp);
+        let file = file.map_err(|e| ExecError::InterpreterOpen(e.code() as u16))?;
+        Ok(Arc::new(FileSource::of(&file)))
+    };
+    let image = exec::load_dynamic(Arc::new(FileSource::of(&file)), &params, &open_interp)
         .map_err(|e| Errno::new(e.linux_errno() as u16).unwrap_or(Errno::ENOEXEC))?;
     if let Some(me) = user::current_process() {
         crate::fs::proc::record_exec(&me, &file, &image.memory, &image.info.stack, &argv_refs, &envp_refs);
@@ -359,6 +377,7 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         k.tid = pid;
     }
     k.linux.with(|p| p.exec(pid as i32));
+    super::cred::commit_exec(k, pid, creds, req.path);
     let old = user::replace_memory(image.memory);
     // Dropping the old memory may take file system locks: fine here.
     drop(old);

@@ -22,8 +22,11 @@
 //! names its interpreter in `PT_INTERP` ([`Elf::interp`]); the kernel then
 //! plans the interpreter as a second image at another base
 //! ([`LoadOptions::dyn_base`]), jumps to the interpreter's entry point and
-//! passes both through the auxiliary vector ([`AuxInfo::new`]). ADR 0024
-//! records the policies chosen here.
+//! passes both through the auxiliary vector ([`AuxInfo::new`]); the
+//! `interp` module ([`Footprint`], [`check_interpreter`]) says where the
+//! interpreter fits. ADR 0024 records the policies chosen here, ADR 0049
+//! those of dynamic linking. [`Dynamic`] reads an image's dynamic section
+//! (the shared objects it needs), for tools that collect them.
 //!
 //! Sources: the System V gABI (ELF header, program headers, segment
 //! contents), the System V AMD64 psABI (initial process stack, auxiliary
@@ -37,11 +40,15 @@
 
 #![no_std]
 
+mod dynamic;
 mod header;
+mod interp;
 mod plan;
 mod stack;
 
+pub use dynamic::*;
 pub use header::*;
+pub use interp::*;
 pub use plan::*;
 pub use stack::*;
 

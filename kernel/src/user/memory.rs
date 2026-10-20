@@ -74,9 +74,11 @@ use alloc::vec::Vec;
 use core::fmt;
 use poly_vm::{FaultAction, PageState, VmMap};
 
+mod advice;
 mod fork;
 mod shared;
 
+pub use advice::Advice;
 pub use shared::{AnonShared, SharedFrame};
 
 pub use poly_vm::{Access, Backing, Kind, Layout, MapRequest, PAGE_SIZE, Placement, Prot, SegvCode, Vma};

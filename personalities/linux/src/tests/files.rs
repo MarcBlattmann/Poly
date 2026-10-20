@@ -6,8 +6,8 @@ extern crate std;
 use super::fake::*;
 use crate::abi::{le_u64, makedev};
 use crate::fs::{
-    DirEntry, FileStatus, LinuxFs, StatFs, SysInfo, at::AT_FDCWD, dirent64_len, encode_dirent64, major, minor,
-    rlimit::*,
+    DirEntry, FileStatus, LinuxFs, StatFs, SysInfo, TimeChange, at::AT_FDCWD, dirent64_len, encode_dirent64, major,
+    minor, rlimit::*,
 };
 use crate::kernel::Target;
 use crate::rlimit::Rlimit;
@@ -210,6 +210,58 @@ impl LinuxFs for VfsFs {
         self.at(dirfd, path, |v, at| v.chmod(&self.ctx, &self.cred, at, path, mode as u16, true))
     }
 
+    fn fchownat(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        uid: Option<u32>,
+        gid: Option<u32>,
+        follow: bool,
+    ) -> Result<(), Errno> {
+        let node = if path.is_empty() {
+            self.node(dirfd)?
+        } else {
+            self.at(dirfd, path, |v, at| v.lookup(&self.ctx, &self.cred, at, path, follow))?
+        };
+        node.chown(&self.cred, uid, gid).map_err(errno)
+    }
+
+    fn fchown(&mut self, fd: i32, uid: Option<u32>, gid: Option<u32>) -> Result<(), Errno> {
+        let file = self.fds.get(fd).map_err(errno)?;
+        if file.is_path_only() {
+            return Err(Errno::EBADF);
+        }
+        file.node().chown(&self.cred, uid, gid).map_err(errno)
+    }
+
+    fn utimensat(
+        &mut self,
+        dirfd: i32,
+        path: Option<&[u8]>,
+        atime: Option<TimeChange>,
+        mtime: Option<TimeChange>,
+        follow: bool,
+    ) -> Result<(), Errno> {
+        let set = |t: Option<TimeChange>| {
+            t.map(|t| match t {
+                TimeChange::Now => poly_vfs::SetTime::Now,
+                TimeChange::At(ts) => poly_vfs::SetTime::At(poly_vfs::Timespec::new(ts.sec, ts.nsec as u32)),
+            })
+        };
+        let node = match path {
+            None => {
+                let file = self.fds.get(dirfd).map_err(errno)?;
+                if file.is_path_only() {
+                    return Err(Errno::EBADF);
+                }
+                file.node().clone()
+            }
+            Some([]) => self.node(dirfd)?,
+            Some(p) => self.at(dirfd, p, |v, at| v.lookup(&self.ctx, &self.cred, at, p, follow))?,
+        };
+        node.set_times(&self.cred, set(atime), set(mtime)).map_err(errno)
+    }
+
     fn ftruncate(&mut self, fd: i32, len: u64) -> Result<(), Errno> {
         self.fds.get(fd).map_err(errno)?.truncate(len).map_err(errno)
     }
@@ -251,9 +303,9 @@ impl LinuxFs for VfsFs {
     }
 }
 
-struct Env {
-    k: FakeKernel,
-    vfs: Arc<Vfs>,
+pub(super) struct Env {
+    pub(super) k: FakeKernel,
+    pub(super) vfs: Arc<Vfs>,
     limits: Arc<Mutex<Vec<(Target, u64)>>>,
     synced: Arc<Mutex<u32>>,
 }
@@ -261,7 +313,7 @@ struct Env {
 /// A fake kernel whose file system is a tmpfs with `/dir/file`
 /// ("contents"), `/dir/sub/`, `/link` -> `dir/file`; descriptors 0-2 are
 /// not open in the VFS table (the fake's own read/write files stay).
-fn env() -> Env {
+pub(super) fn env() -> Env {
     let vfs = Arc::new(Vfs::new(Arc::new(Tmpfs::new(Arc::new(Clock)))));
     let ctx = vfs.root_context().unwrap();
     let cred = Cred::root();
@@ -291,7 +343,7 @@ fn env() -> Env {
 }
 
 /// Puts a NUL-terminated string in the data area at `offset`.
-fn s(k: &mut FakeKernel, offset: u64, text: &[u8]) -> u64 {
+pub(super) fn s(k: &mut FakeKernel, offset: u64, text: &[u8]) -> u64 {
     let mut b = text.to_vec();
     b.push(0);
     k.poke(scratch(offset), &b);
@@ -299,7 +351,7 @@ fn s(k: &mut FakeKernel, offset: u64, text: &[u8]) -> u64 {
 }
 
 const OUT: u64 = 0x8000;
-const AT: u64 = AT_FDCWD as i64 as u64;
+pub(super) const AT: u64 = AT_FDCWD as i64 as u64;
 
 #[test]
 fn without_kernel_services_file_calls_are_enosys() {
@@ -692,7 +744,7 @@ fn rlimit_at(k: &FakeKernel, at: u64) -> Rlimit {
 fn prlimit64_reads_and_sets_limits() {
     let mut e = env();
     let k = &mut e.k;
-    k.creds.euid = 0;
+    k.creds_mut().caps = crate::cred::Caps::ROOT;
     assert_eq!(sys(k, nr::PRLIMIT64, &[0, u64::from(RLIMIT_NOFILE), 0, scratch(OUT)]), Ok(0));
     assert_eq!(rlimit_at(k, scratch(OUT)), Rlimit { cur: 1024, max: 4096 });
     assert_eq!(sys(k, nr::PRLIMIT64, &[0, u64::from(RLIMIT_STACK), 0, scratch(OUT)]), Ok(0));
@@ -726,7 +778,7 @@ fn prlimit64_errors() {
     k.poke(scratch(0), &Rlimit { cur: 100, max: 2000 }.to_bytes());
     assert_eq!(sys(k, nr::PRLIMIT64, &[0, u64::from(RLIMIT_NOFILE), scratch(0), 0]), Ok(0));
     // Root may raise, but not past nr_open.
-    k.creds.euid = 0;
+    k.creds_mut().caps = crate::cred::Caps::ROOT;
     k.poke(scratch(0), &Rlimit { cur: 100, max: (1 << 20) + 1 }.to_bytes());
     assert_eq!(sys(k, nr::PRLIMIT64, &[0, u64::from(RLIMIT_NOFILE), scratch(0), 0]), Err(Errno::EPERM));
     k.poke(scratch(0), &Rlimit { cur: 1 << 20, max: 1 << 20 }.to_bytes());
@@ -735,9 +787,9 @@ fn prlimit64_errors() {
     assert_eq!(sys(k, nr::PRLIMIT64, &[555, 0, 0, scratch(OUT)]), Err(Errno::ESRCH));
     assert_eq!(sys(k, nr::PRLIMIT64, &[u64::MAX, 0, 0, scratch(OUT)]), Err(Errno::ESRCH));
     k.add_process(200, 3000, 200, 200);
-    k.creds.euid = 1001;
+    k.creds_mut().caps = crate::cred::Caps::NONE;
     assert_eq!(sys(k, nr::PRLIMIT64, &[200, 0, 0, scratch(OUT)]), Err(Errno::EPERM), "another user's");
-    k.creds.euid = 0;
+    k.creds_mut().caps = crate::cred::Caps::ROOT;
     assert_eq!(sys(k, nr::PRLIMIT64, &[200, u64::from(RLIMIT_CORE), 0, scratch(OUT)]), Ok(0));
     assert_eq!(rlimit_at(k, scratch(OUT)), Rlimit { cur: 0, max: RLIM_INFINITY });
 }
