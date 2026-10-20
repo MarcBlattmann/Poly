@@ -33,6 +33,8 @@
 //! - [`sys`]: the handlers.
 //! - [`signal`]: signal state, delivery, frames (ADR 0031).
 //! - [`futex`]: futex wait queues, robust lists (ADR 0031).
+//! - [`fileio`]: what pipes, `poll` / `select`, `epoll` and the event files
+//!   (`eventfd`, `timerfd`, `signalfd`) need from the kernel (ADR 0042).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -46,6 +48,7 @@ extern crate alloc;
 pub mod abi;
 pub mod args;
 pub mod errno;
+pub mod fileio;
 pub mod futex;
 pub mod kernel;
 mod numbers;

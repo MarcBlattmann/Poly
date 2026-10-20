@@ -41,6 +41,7 @@ pub mod disk;
 mod disk_tests;
 mod files;
 pub mod initrd;
+pub mod poll;
 mod tests;
 
 use crate::boot_info::BootInfo;

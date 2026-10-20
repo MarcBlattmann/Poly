@@ -7,6 +7,7 @@ use crate::file::{Backend, OpenFile, OpenFlags};
 use crate::fs::{FileSystem, NewNode, RenameFlags};
 use crate::mount::{Mount, MountFlags, MountId, MountInfo, MountTable};
 use crate::node::{FsContext, Location, NodeRef, is_fs_object};
+use crate::object::AnonFs;
 use crate::path::{Last, PATH_MAX, Parent, Walk, check_path};
 use crate::sync::SpinMutex;
 use crate::{Attr, DeviceId, Errno, FileType, Ino, PERM_MASK, Result, S_ISGID, S_ISVTX, Stat};
@@ -22,6 +23,9 @@ use alloc::vec::Vec;
 pub struct Vfs {
     pub(crate) mounts: SpinMutex<MountTable>,
     devices: SpinMutex<BTreeMap<DeviceId, Arc<dyn CharDevice>>>,
+    /// The inodes of file objects (pipes, event files, epoll sets), on a
+    /// mount no path reaches (`object.rs`).
+    anon: (Arc<AnonFs>, Arc<Mount>),
 }
 
 impl core::fmt::Debug for Vfs {
@@ -42,7 +46,27 @@ impl Vfs {
         let info = root.info();
         let sb = table.superblock(root, info);
         table.add(sb, root_ino, None, flags);
-        Vfs { mounts: SpinMutex::new(table), devices: SpinMutex::new(BTreeMap::new()) }
+        let anon_fs = Arc::new(AnonFs::default());
+        let anon_info = anon_fs.info();
+        let anon_sb = table.superblock(anon_fs.clone(), anon_info);
+        let anon_mount = table.detached(anon_sb, anon_fs.root());
+        Vfs { mounts: SpinMutex::new(table), devices: SpinMutex::new(BTreeMap::new()), anon: (anon_fs, anon_mount) }
+    }
+
+    /// A new inode for a file object (`kind` and `perm` as `fstat` will
+    /// report them, owned by `cred`), pinned by the returned reference and
+    /// gone with its last one. Open files on the object take clones
+    /// ([`OpenFile::on_object`](crate::OpenFile::on_object)); a pipe's two ends
+    /// share one inode.
+    pub fn anon_node(&self, kind: FileType, perm: u16, cred: &Cred) -> Result<NodeRef> {
+        let (fs, mount) = &self.anon;
+        let ino = fs.alloc(kind, perm & PERM_MASK, cred.uid, cred.gid);
+        Location { mount: mount.clone(), ino }.pin()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn anon_inodes(&self) -> usize {
+        self.anon.0.live()
     }
 
     /// A context with root and working directory at `/` and the default
@@ -259,9 +283,10 @@ impl Vfs {
                 }
                 Backend::Device(self.char_device(attr.rdev).ok_or(Errno::ENXIO)?)
             }
-            // Block devices are reached through the block layer, FIFOs come
-            // with pipes (Phase 4), and a socket's name cannot be opened
-            // (`open(2)`: ENXIO).
+            // Block devices are reached through the block layer, opening a
+            // FIFO (a `pipe::Pipe` per node, blocking opens) comes with the
+            // path-based file calls (ADR 0042), and a socket's name cannot
+            // be opened (`open(2)`: ENXIO).
             FileType::BlockDevice | FileType::Fifo | FileType::Socket | FileType::Symlink => {
                 return Err(Errno::ENXIO);
             }

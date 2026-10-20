@@ -154,6 +154,8 @@ pub struct FakeKernel {
     pub continued: Vec<i32>,
     /// Children, programs and the process tree (`tests/task.rs`).
     pub tasks: super::task::Tasks,
+    /// Pipes, waits and event files (`tests/fileio.rs`).
+    pub io: super::fileio::FakeIo,
 }
 
 impl Default for FakeKernel {
@@ -209,6 +211,7 @@ impl FakeKernel {
             stops: Vec::new(),
             continued: Vec::new(),
             tasks: Default::default(),
+            io: Default::default(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -699,6 +702,14 @@ impl LinuxKernel for FakeKernel {
 
     fn unblock(&mut self, tid: i32) {
         self.unblocked.insert(tid);
+    }
+
+    fn file_io(&mut self) -> Option<&mut dyn crate::fileio::FileIo> {
+        Some(self)
+    }
+
+    fn signal_queued(&mut self, pid: i32) {
+        self.io.queued.push(pid);
     }
 
     fn with_futexes(&mut self, f: &mut dyn FnMut(&mut FutexTable, &mut dyn LinuxKernel)) {
