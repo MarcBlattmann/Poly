@@ -809,7 +809,11 @@ fn the_dry_run_walks_the_whole_cycle_with_real_commands() {
         assert!(!l.contains("POLY_HELDOUT_DIR") && !l.contains("/srv/poly/heldout"), "{l}");
     }
     // The CLI dry run (what `cargo xtask ci` runs) works too.
-    assert_eq!(super::command(&crate::repo_root(), &["--dry-run".into(), "--quiet".into()]), Ok(0));
+    // Through the binary's own argument handling, as `cargo xtask ci` calls it.
+    let args: Vec<String> = ["loop", "--dry-run", "--quiet"].iter().map(|s| s.to_string()).collect();
+    assert_eq!(crate::run(&args), Ok(0));
+    let bad: Vec<String> = ["loop", "--once", "--entry"].iter().map(|s| s.to_string()).collect();
+    assert!(crate::run(&bad).unwrap_err().contains("--entry needs a value"));
 }
 
 /// The deploy wrapper itself, with /srv/poly and the role users replaced

@@ -618,6 +618,10 @@ fn role_cmd(repo: &Path, a: &Args) -> Result<u8> {
 fn run(args: &[String]) -> Result<u8> {
     let repo = repo_root();
     let (cmd, rest) = args.split_first().ok_or("usage: pipeline <command> (see tools/pipeline/src/main.rs)")?;
+    if cmd == "loop" {
+        // Its own options and switches.
+        return scheduler::command(&repo, rest);
+    }
     let switches = ["all", "print", "strict", "build-kernel", "replace", "allow-dirty", "json", "dry-run"];
     let a = Args::parse(rest, &switches)?;
     match cmd.as_str() {
@@ -633,7 +637,6 @@ fn run(args: &[String]) -> Result<u8> {
         "next" => next_cmd(&repo, &a),
         "claim" | "release" => coverage_tool(&repo, args),
         "role" => role_cmd(&repo, &a),
-        "loop" => scheduler::command(&repo, rest),
         _ => Err(format!(
             "unknown command {cmd}; commands: build trace diff selfcheck polycheck initramfs spec tests handoff next \
              claim release role loop"
