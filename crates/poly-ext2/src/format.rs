@@ -365,7 +365,7 @@ pub fn format<D: BlockIo>(dev: &D, opts: &FormatOptions) -> Result<()> {
     }
 
     // Superblock and descriptors, with their backups.
-    let mut sb = Superblock::new([0; SUPERBLOCK_SIZE]);
+    let mut sb = Superblock::from_bytes(&[]);
     sb.set_inodes_count(inodes as u32);
     sb.set_first_data_block(first_data as u32);
     let log = (bs / 1024).trailing_zeros();
@@ -402,10 +402,10 @@ pub fn format<D: BlockIo>(dev: &D, opts: &FormatOptions) -> Result<()> {
             // The journal inode's block map, backed up in s_jnl_blocks.
             sb.set_jnl_backup_type(1);
             for (i, w) in block.iter().enumerate() {
-                put32(&mut sb.raw, 0x10C + 4 * i, *w);
+                put32(&mut sb.raw[..], 0x10C + 4 * i, *w);
             }
-            put32(&mut sb.raw, 0x10C + 60, (size >> 32) as u32);
-            put32(&mut sb.raw, 0x10C + 64, size as u32);
+            put32(&mut sb.raw[..], 0x10C + 60, (size >> 32) as u32);
+            put32(&mut sb.raw[..], 0x10C + 64, size as u32);
         }
         sb.set_feature_compat(compat);
         sb.set_feature_incompat(incompat);
@@ -438,11 +438,11 @@ pub fn format<D: BlockIo>(dev: &D, opts: &FormatOptions) -> Result<()> {
         }
         sb.set_block_group_nr(g as u16);
         if ext4 {
-            let c = csum::sb(&sb.raw);
+            let c = csum::sb(&sb.raw[..]);
             sb.set_checksum(c);
         }
         let at = if g == 0 { SUPERBLOCK_OFFSET } else { start(g) * bs as u64 };
-        disk.write_bytes(at, &sb.raw)?;
+        disk.write_bytes(at, &sb.raw[..])?;
         disk.write(start(g) + 1, &gdt)?;
     }
     disk.flush()

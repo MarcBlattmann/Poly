@@ -368,7 +368,8 @@ pub struct Ext2<D, L = RawSpinLock> {
     geo: Geometry,
     clock: Arc<dyn Clock>,
     errors: AtomicBool,
-    state: Lock<L, State>,
+    /// Boxed: it holds the superblock's 1 KiB, and kernel stacks are small.
+    state: Lock<L, alloc::boxed::Box<State>>,
 }
 
 impl<D, L> core::fmt::Debug for Ext2<D, L> {
@@ -433,7 +434,7 @@ impl<D: BlockIo> Ctx<'_, D> {
             st.sb.set_state(st.sb.state() | STATE_ERROR);
         }
         if geo.meta_seed().is_some() {
-            let c = csum::sb(&st.sb.raw);
+            let c = csum::sb(&st.sb.raw[..]);
             st.sb.set_checksum(c);
         }
     }
@@ -463,10 +464,10 @@ impl<D: BlockIo> Ctx<'_, D> {
         let (sb_block, sb_off) = geo.sb_block();
         if journaled {
             let mut b = self.read_block(sb_block)?;
-            b[sb_off..sb_off + SUPERBLOCK_SIZE].copy_from_slice(&self.st.sb.raw);
+            b[sb_off..sb_off + SUPERBLOCK_SIZE].copy_from_slice(&self.st.sb.raw[..]);
             self.journal_put(sb_block, b);
         } else {
-            self.disk.write_bytes(SUPERBLOCK_OFFSET, &self.st.sb.raw)?;
+            self.disk.write_bytes(SUPERBLOCK_OFFSET, &self.st.sb.raw[..])?;
         }
         for i in gdt_blocks {
             let at = i as usize * geo.bs;
@@ -503,7 +504,7 @@ impl<D: BlockIo> Ctx<'_, D> {
     /// checksum, and makes it durable.
     pub fn write_super_now(&mut self) -> Result<()> {
         self.seal_super();
-        self.disk.write_bytes(SUPERBLOCK_OFFSET, &self.st.sb.raw)?;
+        self.disk.write_bytes(SUPERBLOCK_OFFSET, &self.st.sb.raw[..])?;
         self.disk.flush()
     }
 
@@ -566,7 +567,7 @@ fn geometry<D: BlockIo>(disk: &mut Disk<D>, sb: &Superblock) -> core::result::Re
         if sb.checksum_type() != 1 {
             return Err(MountError::Unsupported("checksum type"));
         }
-        if csum::sb(&sb.raw) != sb.checksum() {
+        if csum::sb(&sb.raw[..]) != sb.checksum() {
             return Err(MountError::Corrupt("superblock checksum"));
         }
         let seed = if incompat & INCOMPAT_CSUM_SEED != 0 { sb.checksum_seed() } else { crc::crc32c(!0, &sb.uuid()) };
@@ -714,7 +715,9 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
     }
 
     /// Reads and checks the superblock, the descriptors and the journal's
-    /// superblock; writes nothing.
+    /// superblock; writes nothing. Not inlined: its frame is big, and
+    /// mounting runs on kernel stacks.
+    #[inline(never)]
     fn load(
         dev: D,
         clock: Arc<dyn Clock>,
@@ -727,12 +730,12 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
             return Err(MountError::Unsupported("device block size"));
         }
         let mut disk = Disk::new(dev, 1024);
-        let mut raw = [0u8; SUPERBLOCK_SIZE];
+        let mut raw = vec![0u8; SUPERBLOCK_SIZE];
         if disk.dev.blocks().saturating_mul(dbs as u64) < SUPERBLOCK_OFFSET + SUPERBLOCK_SIZE as u64 {
             return Err(MountError::TooSmall);
         }
         disk.read_bytes(SUPERBLOCK_OFFSET, &mut raw).map_err(MountError::Io)?;
-        let sb = Superblock::new(raw);
+        let sb = Superblock::from_bytes(&raw);
         let mut geo = geometry(&mut disk, &sb)?;
         let bs = geo.bs;
         let ds = geo.desc_size;
@@ -805,7 +808,13 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
             replayed: 0,
             orphans_at_mount: 0,
         };
-        let fs = Ext2 { disk, geo, clock, errors: AtomicBool::new(false), state: Lock::with_raw(lock, state) };
+        let fs = Ext2 {
+            disk,
+            geo,
+            clock,
+            errors: AtomicBool::new(false),
+            state: Lock::with_raw(lock, alloc::boxed::Box::new(state)),
+        };
         if fs.geo.has_journal {
             let j = {
                 let mut st = fs.state.lock();
@@ -818,6 +827,7 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
     }
 
     /// Replays the journal if it needs it (the probe mount does this).
+    #[inline(never)]
     fn recover(&self) -> core::result::Result<u32, MountError> {
         let mut st = self.state.lock();
         let needs =
@@ -831,20 +841,21 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
         let mut ctx = self.ctx(&mut st);
         let n = journal::recover(&mut ctx)?;
         // The replayed superblock is on disk now: clear the flag there.
-        let mut raw = [0u8; SUPERBLOCK_SIZE];
+        let mut raw = vec![0u8; SUPERBLOCK_SIZE];
         self.disk.read_bytes(SUPERBLOCK_OFFSET, &mut raw).map_err(MountError::Io)?;
-        let mut sb = Superblock::new(raw);
+        let mut sb = Superblock::from_bytes(&raw);
         sb.set_feature_incompat(sb.feature_incompat_raw() & !INCOMPAT_RECOVER);
         if sb.feature_ro_compat() & RO_COMPAT_METADATA_CSUM != 0 {
-            let c = csum::sb(&sb.raw);
+            let c = csum::sb(&sb.raw[..]);
             sb.set_checksum(c);
         }
-        self.disk.write_bytes(SUPERBLOCK_OFFSET, &sb.raw).map_err(MountError::Io)?;
+        self.disk.write_bytes(SUPERBLOCK_OFFSET, &sb.raw[..]).map_err(MountError::Io)?;
         self.disk.flush().map_err(MountError::Io)?;
         Ok(n)
     }
 
     /// Checks the root, processes orphans and marks the volume mounted.
+    #[inline(never)]
     fn start(&self, replayed: u32) -> core::result::Result<(), MountError> {
         let mut st = self.state.lock();
         st.replayed = replayed;

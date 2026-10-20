@@ -156,29 +156,30 @@ pub fn put64(b: &mut [u8], at: usize, v: u64) {
     b[at..at + 8].copy_from_slice(&v.to_le_bytes());
 }
 
-/// The superblock, kept as its 1024 raw bytes; accessors decode fields.
+/// The superblock, kept as its 1024 raw bytes (on the heap: kernel stacks
+/// are small); accessors decode fields.
 #[derive(Clone)]
 pub struct Superblock {
-    pub raw: [u8; SUPERBLOCK_SIZE],
+    pub raw: alloc::boxed::Box<[u8; SUPERBLOCK_SIZE]>,
 }
 
 macro_rules! field {
     ($get:ident, $set:ident, u32, $off:expr) => {
         pub fn $get(&self) -> u32 {
-            le32(&self.raw, $off)
+            le32(&self.raw[..], $off)
         }
         #[allow(dead_code)]
         pub fn $set(&mut self, v: u32) {
-            put32(&mut self.raw, $off, v)
+            put32(&mut self.raw[..], $off, v)
         }
     };
     ($get:ident, $set:ident, u16, $off:expr) => {
         pub fn $get(&self) -> u16 {
-            le16(&self.raw, $off)
+            le16(&self.raw[..], $off)
         }
         #[allow(dead_code)]
         pub fn $set(&mut self, v: u16) {
-            put16(&mut self.raw, $off, v)
+            put16(&mut self.raw[..], $off, v)
         }
     };
     ($get:ident, $set:ident, u8, $off:expr) => {
@@ -250,6 +251,15 @@ impl Superblock {
     field!(checksum, set_checksum, u32, 1020);
 
     pub fn new(raw: [u8; SUPERBLOCK_SIZE]) -> Superblock {
+        Superblock::from_bytes(&raw)
+    }
+
+    /// From the first 1024 bytes of `raw` (zeros past its end).
+    pub fn from_bytes(raw: &[u8]) -> Superblock {
+        let mut v = alloc::vec![0u8; SUPERBLOCK_SIZE];
+        let n = raw.len().min(SUPERBLOCK_SIZE);
+        v[..n].copy_from_slice(&raw[..n]);
+        let raw: alloc::boxed::Box<[u8; SUPERBLOCK_SIZE]> = v.into_boxed_slice().try_into().expect("1024 bytes");
         Superblock { raw }
     }
 
@@ -320,7 +330,7 @@ impl Superblock {
 
     /// `s_backup_bgs` (`sparse_super2`).
     pub fn backup_bgs(&self) -> [u32; 2] {
-        [le32(&self.raw, 0x24C), le32(&self.raw, 0x250)]
+        [le32(&self.raw[..], 0x24C), le32(&self.raw[..], 0x250)]
     }
 
     pub fn hash_seed(&self) -> [u8; 16] {
