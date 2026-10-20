@@ -361,7 +361,7 @@ impl poly_vfs::FileObject for LogConsole {
 pub fn log_console_files() -> Files {
     let files = Files::new();
     let object = Arc::new(LogConsole(fs::devices::Console::new()));
-    let Ok(node) = fs::vfs().anon_node(FileType::CharDevice, 0o600, files.cred()) else { return files };
+    let Ok(node) = fs::vfs().anon_node(FileType::CharDevice, 0o600, &files.cred()) else { return files };
     let file = Arc::new(OpenFile::on_object(node, object, OpenFlags::RDWR));
     if files.install(file, false).is_ok() {
         let _ = files.dup(0).and_then(|_| files.dup(0));

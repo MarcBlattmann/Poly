@@ -24,8 +24,11 @@ impl Host for KernelHost {
     fn caller(&self) -> Option<Caller> {
         let p = linux_process()?;
         let (pgid, sid) = crate::linux::task::group_and_session(p.pid);
-        let cred = p.files.cred();
-        Some(Caller { pid: p.pid as i32, pgid, sid, uid: cred.uid, gid: cred.gid, privileged: cred.is_root() })
+        // The calling thread's credentials (ADR 0045): effective ids own a
+        // new pty; CAP_SYS_ADMIN is the privilege ioctl_tty(2) asks for.
+        let c = crate::linux::cred::current_creds().unwrap_or_default();
+        let privileged = c.capable(poly_personality_linux::cred::cap::SYS_ADMIN);
+        Some(Caller { pid: p.pid as i32, pgid, sid, uid: c.euid, gid: c.egid, privileged })
     }
 
     fn blocks_or_ignores(&self, signal: u32) -> bool {

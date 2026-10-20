@@ -789,6 +789,14 @@ the copy-on-write tests of `Memory::fork`. A process tree that looks
 wrong: `getppid` 0 means the kernel adopted the process (no live init);
 a parent that never reaps keeps its children as zombies (their records
 stay until then, in `linux::task`'s `ZOMBIES`).
+`poly.test=cred_tests` runs the credential tests (ADR 0045,
+`kernel/src/linux/cred_tests.rs`), numbered the same way; their exec
+tests run a small report program whose exit status is a bit set (1:
+effective uid 0, 2: real uid 1000, 4: saved uid 0, 8: some effective
+capability). Every process the kernel starts runs as root with every
+capability; an unexpected `EACCES` or `EPERM` from a program that changed
+its ids usually means a capability rule (capabilities(7)) took a
+capability away: `capget` shows the sets, `getresuid` the ids.
 The hello worlds the boot tests use are built into
 `target/xtask-programs/` (`hello`: Rust, no C library; `forkexec`: the
 nolibc process and thread test, `poly.init=/bin/forkexec`, which prints

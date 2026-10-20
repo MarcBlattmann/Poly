@@ -14,6 +14,7 @@ use super::pending::{SigQueue, next_signal};
 use super::restart::{PendingRestart, RestartBlock};
 use crate::abi::signal::{SIG_DFL, SIG_IGN, SIGCONT, SIGKILL, SIGSTOP};
 use crate::abi::{SigAction, SigInfo};
+use crate::cred::Creds;
 use crate::errno::Errno;
 use crate::kernel::{SigSet, SignalActions, UserPtr};
 use alloc::collections::BTreeMap;
@@ -45,6 +46,12 @@ pub struct LinuxThread {
     /// set_tid_address(2) / `CLONE_CHILD_CLEARTID`: cleared and woken at
     /// exit.
     pub clear_child_tid: UserPtr,
+    /// The thread's credentials (ADR 0045: per thread, copied to threads
+    /// and processes it creates, changed by execve(2) as `cred` says).
+    pub creds: Creds,
+    /// The thread's name (`PR_SET_NAME`, `/proc/[pid]/comm`): up to 15
+    /// bytes and a NUL, set from the program's file name by execve(2).
+    pub comm: [u8; 16],
 }
 
 impl LinuxThread {
@@ -84,6 +91,9 @@ pub struct LinuxProcess {
     threads: BTreeMap<i32, LinuxThread>,
     /// See [`DEFAULT_QUEUE_LIMIT`].
     pub queue_limit: usize,
+    /// The credentials of the last thread to leave, so a zombie is still
+    /// seen with them ([`LinuxProcess::process_creds`]).
+    exited_creds: Option<Creds>,
     /// Resource limits (getrlimit(2)): inherited by fork, kept by exec.
     pub limits: crate::rlimit::ResourceLimits,
     /// Interval and POSIX timers (ADR 0044).
@@ -101,6 +111,7 @@ impl LinuxProcess {
             shared: SigQueue::new(),
             threads,
             queue_limit: DEFAULT_QUEUE_LIMIT,
+            exited_creds: None,
             limits: crate::rlimit::ResourceLimits::new(),
             timers: crate::time::timers::Timers::new(),
         }
@@ -112,10 +123,18 @@ impl LinuxProcess {
     /// signals is initially empty"; the signal mask and the alternate stack
     /// (sigaltstack(2)) are inherited from the calling thread. The robust
     /// list is not (set_robust_list(2) registers it per thread; to be
-    /// confirmed by the diff runner).
+    /// confirmed by the diff runner). The credentials and the name are the
+    /// calling thread's (fork(2) inherits the process's credentials, which
+    /// are per thread in the kernel: ADR 0045).
     pub fn fork(&self, parent_tid: i32, child_tid: i32) -> LinuxProcess {
         let parent = self.thread(parent_tid);
-        let child = LinuxThread { mask: parent.mask, altstack: parent.altstack, ..LinuxThread::default() };
+        let child = LinuxThread {
+            mask: parent.mask,
+            altstack: parent.altstack,
+            creds: parent.creds.clone(),
+            comm: parent.comm,
+            ..LinuxThread::default()
+        };
         let mut threads = BTreeMap::new();
         threads.insert(child_tid, child);
         // fork(2): "The child does not inherit timers from its parent".
@@ -125,6 +144,7 @@ impl LinuxProcess {
             shared: SigQueue::new(),
             threads,
             queue_limit: self.queue_limit,
+            exited_creds: None,
             limits: self.limits,
             timers,
         }
@@ -161,18 +181,40 @@ impl LinuxProcess {
     /// inherits the mask; sigaltstack(2): the alternate stack is inherited
     /// "unless the clone flags include CLONE_VM and do not include
     /// CLONE_VFORK, in which case any alternate signal stack that was
-    /// established in the parent is disabled".
+    /// established in the parent is disabled". It gets a copy of its
+    /// creator's credentials and name.
     pub fn add_thread(&mut self, parent_tid: i32, tid: i32, clone_vm_without_vfork: bool) {
         let parent = self.thread(parent_tid);
         let altstack = if clone_vm_without_vfork { AltStack::DISABLED } else { parent.altstack };
-        let thread = LinuxThread { mask: parent.mask, altstack, ..LinuxThread::default() };
+        let thread = LinuxThread {
+            mask: parent.mask,
+            altstack,
+            creds: parent.creds.clone(),
+            comm: parent.comm,
+            ..LinuxThread::default()
+        };
         self.threads.insert(tid, thread);
     }
 
     /// Forget thread `tid` (it has exited). Signals pending for it alone
     /// go with it; the process's shared ones stay.
     pub fn remove_thread(&mut self, tid: i32) -> Option<LinuxThread> {
-        self.threads.remove(&tid)
+        let thread = self.threads.remove(&tid);
+        if self.threads.is_empty() {
+            self.exited_creds = thread.as_ref().map(|t| t.creds.clone());
+        }
+        thread
+    }
+
+    /// The credentials process `pid` is seen with by kill(2) and the
+    /// like: its main thread's (thread `pid`), else its oldest thread's,
+    /// else, once every thread has gone (a zombie), the last one's.
+    /// `None` only for a process that never had a thread.
+    pub fn process_creds(&self, pid: i32) -> Option<&Creds> {
+        match self.threads.get(&pid) {
+            Some(t) => Some(&t.creds),
+            None => self.threads.values().next().map(|t| &t.creds).or(self.exited_creds.as_ref()),
+        }
     }
 
     /// Whether the process has a thread `tid`.
