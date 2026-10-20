@@ -1,5 +1,5 @@
-//! Disk file systems: ext2 volumes on the kernel's disks, behind the page
-//! cache, mounted into the VFS (ADR 0040).
+//! Disk file systems: ext2/ext3/ext4 volumes on the kernel's disks, behind
+//! the page cache, mounted into the VFS (ADR 0040, ADR 0052).
 //!
 //! ```text
 //!   fs::vfs() ── mount at <path> ──▶ CachedDiskFs (page cache) ──▶ Ext2<DiskIo, RawMutex> ──▶ block::Disk
@@ -174,7 +174,7 @@ fn make_dirs(path: &str) -> Result<(), Errno> {
     Ok(())
 }
 
-/// Mount the ext2 volume on disk `name` at `path` (absolute; made if
+/// Mount the ext2/3/4 volume on disk `name` at `path` (absolute; made if
 /// missing), read-only if asked or if the volume or disk says so.
 pub fn mount(name: &str, path: &str, read_only: bool) -> Result<Arc<DiskMount>, MountError> {
     if !path.starts_with('/') {
@@ -205,16 +205,20 @@ pub fn mount(name: &str, path: &str, read_only: bool) -> Result<Arc<DiskMount>, 
     };
     let s = ext2.stats();
     kprintln!(
-        "fs: {} mounted on {path}: ext2, {} blocks of {} bytes ({} free), {} inodes ({} free), {}{}",
+        "fs: {} mounted on {path}: {}, {} blocks of {} bytes ({} free), {} inodes ({} free), {}{}",
         disk.name(),
+        ext2.fs_type(),
         s.blocks,
         s.block_size,
         s.free_blocks,
         s.inodes,
         s.free_inodes,
         if read_only { "read-only" } else { "read-write" },
-        if s.was_clean { "" } else { "; was not cleanly unmounted (run e2fsck)" },
+        if s.was_clean || s.journaled { "" } else { "; was not cleanly unmounted (run e2fsck)" },
     );
+    if s.replayed > 0 || s.orphans > 0 {
+        kprintln!("fs: {}: journal replayed ({} transactions), {} orphans processed", disk.name(), s.replayed, s.orphans);
+    }
     let m = Arc::new(DiskMount { disk, path: String::from(path), ext2, cached, mount_id, read_only });
     mounts.push(Arc::clone(&m));
     Ok(m)

@@ -202,6 +202,8 @@ pub struct FsStats {
     pub errors: bool,
     pub uuid: [u8; 16],
     pub label: [u8; 16],
+    /// The volume has a journal (an unclean one is consistent after replay).
+    pub journaled: bool,
     /// Journal transactions replayed at mount.
     pub replayed: u32,
     /// Inodes on the orphan list at mount, deleted or truncated then.
@@ -974,6 +976,7 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
             errors: self.errors.load(Ordering::Relaxed),
             uuid: st.sb.uuid(),
             label: st.sb.volume_name(),
+            journaled: self.geo.has_journal,
             replayed: st.replayed,
             orphans: st.orphans_at_mount,
             commits: st.journal.as_ref().map_or(0, |j| j.commits),

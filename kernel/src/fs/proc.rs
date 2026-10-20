@@ -438,7 +438,7 @@ impl ProcSource for KernelProc {
         ["sysfs", "tmpfs", "proc"]
             .iter()
             .map(|n| (String::from(*n), true))
-            .chain(core::iter::once((String::from("ext2"), false)))
+            .chain(["ext2", "ext3", "ext4"].iter().map(|n| (String::from(*n), false)))
             .collect()
     }
 
