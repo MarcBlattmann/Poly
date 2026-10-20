@@ -402,9 +402,8 @@ fn status_info() -> StatusInfo {
         free_bytes: free,
         total_bytes: total,
         layout: keyboard::layout().name,
-        // One CPU runs the kernel until SMP (Phase 4); ACPI says how many
-        // the machine has.
-        cpus_online: 1,
+        // The CPUs running, of those ACPI says the machine has.
+        cpus_online: crate::smp::cpus_online(),
         cpus: acpi::summary().map_or(1, |s| s.cpus.max(1)),
         scrolled: None,
     }
