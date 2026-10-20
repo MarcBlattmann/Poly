@@ -19,10 +19,18 @@
 //! Boot with `poly.test=<substring>` to run only the tests whose name
 //! contains that substring. Pure logic belongs in a host-tested crate;
 //! these are for what only the kernel can check.
+//!
+//! The shell's `test` command runs them again at runtime with [`run`]: any
+//! subset, with the output going to the shell's console. One run at a time
+//! ([`RunError::Busy`]), so a test never runs inside itself. Tests marked
+//! `#[boot_only]` check the state at boot (they run on the boot thread, or
+//! before any driver routed an interrupt) and are left out at runtime.
 
 use crate::boot_info::BootInfo;
-use crate::kprintln;
+use crate::log::Kprint;
+use core::fmt::Write;
 use core::mem::size_of;
+use core::sync::atomic::{AtomicBool, Ordering};
 use poly_mem::MemoryMap;
 
 pub type TestResult = Result<(), &'static str>;
@@ -42,6 +50,8 @@ pub struct KernelTest {
     /// `module_path!()::name`, including the crate name.
     pub path: &'static str,
     pub run: fn(&TestEnv) -> TestResult,
+    /// Only meaningful during the boot self-test (`#[boot_only]`).
+    pub boot_only: bool,
 }
 
 impl KernelTest {
@@ -76,32 +86,69 @@ pub struct Summary {
 }
 
 /// Run every test, or with `poly.test=<filter>` on the command line, every
-/// test whose name contains `filter`.
+/// test whose name contains `filter`, printing to the kernel log.
 pub fn run_all(env: &TestEnv) -> Summary {
-    let filter = env.boot.arg("poly.test");
+    run(env, env.boot.arg("poly.test"), When::Boot, &mut Kprint).expect("the boot tests run first")
+}
+
+/// Whether [`run`] is the boot self-test, which runs `#[boot_only]` tests too.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum When {
+    Boot,
+    Runtime,
+}
+
+/// Why [`run`] did not run anything.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunError {
+    /// Tests are running already (this is called from inside a test).
+    Busy,
+}
+
+/// Set while [`run`] runs.
+static RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Run every test whose name contains `filter` (all with `None`), writing
+/// the lines `cargo xtask test` parses to `out`. At [`When::Runtime`],
+/// `#[boot_only]` tests are left out (counted as filtered out). The tests'
+/// own messages still go to the kernel log.
+pub fn run(env: &TestEnv, filter: Option<&str>, when: When, out: &mut dyn Write) -> Result<Summary, RunError> {
+    if RUNNING.swap(true, Ordering::Acquire) {
+        return Err(RunError::Busy);
+    }
     let tests = all();
-    let selected = |t: &KernelTest| filter.is_none_or(|f| t.name().contains(f));
-    kprintln!("ktest: running {} of {} tests", tests.iter().filter(|t| selected(t)).count(), tests.len());
+    let matches = |t: &KernelTest| filter.is_none_or(|f| t.name().contains(f));
+    let selected = |t: &KernelTest| matches(t) && (when == When::Boot || !t.boot_only);
+    let _ = writeln!(out, "ktest: running {} of {} tests", tests.iter().filter(|t| selected(t)).count(), tests.len());
+    let boot_only = tests.iter().filter(|t| matches(t) && !selected(t)).count();
+    if boot_only > 0 {
+        let _ = writeln!(out, "ktest: leaving out {boot_only} tests that only run at boot");
+    }
     let mut s = Summary::default();
     for test in tests {
         if !selected(test) {
             s.filtered_out += 1;
             continue;
         }
-        match (test.run)(env) {
+        let _ = match (test.run)(env) {
             Ok(()) => {
-                kprintln!("test {} ... ok", test.name());
                 s.passed += 1;
+                writeln!(out, "test {} ... ok", test.name())
             }
             Err(why) => {
-                kprintln!("test {} ... FAILED: {why}", test.name());
                 s.failed += 1;
+                writeln!(out, "test {} ... FAILED: {why}", test.name())
             }
-        }
+        };
     }
     let verdict = if s.failed == 0 { "ok" } else { "FAILED" };
-    kprintln!("test result: {verdict}. {} passed; {} failed; {} filtered out", s.passed, s.failed, s.filtered_out);
-    s
+    let _ = writeln!(
+        out,
+        "test result: {verdict}. {} passed; {} failed; {} filtered out",
+        s.passed, s.failed, s.filtered_out
+    );
+    RUNNING.store(false, Ordering::Release);
+    Ok(s)
 }
 
 /// Define an in-kernel test next to the code it tests:
@@ -124,27 +171,40 @@ pub fn run_all(env: &TestEnv) -> Summary {
 ///
 /// The test is named after its module path and function name. `TestResult`
 /// and `TestEnv` must be written exactly like that; the macro supplies the
-/// real types, so they do not need to be imported.
+/// real types, so they do not need to be imported. Write `#[boot_only]`
+/// first (before any doc comment) for a test that checks the state at boot
+/// and cannot pass when the shell runs it later.
 #[macro_export]
 macro_rules! kernel_test {
-    (@register $name:ident, $run:expr) => {
+    (@register $name:ident, $run:expr, $boot_only:expr) => {
         const _: () = {
             #[used]
             #[unsafe(link_section = concat!(".kernel_tests.", module_path!(), "::", stringify!($name)))]
             static TEST: $crate::ktest::KernelTest = $crate::ktest::KernelTest {
                 path: concat!(module_path!(), "::", stringify!($name)),
                 run: $run,
+                boot_only: $boot_only,
             };
         };
+    };
+    (#[boot_only] $(#[$attr:meta])* fn $name:ident() -> TestResult $body:block) => {
+        $(#[$attr])*
+        fn $name() -> $crate::ktest::TestResult $body
+        $crate::kernel_test!(@register $name, |_| $name(), true);
+    };
+    (#[boot_only] $(#[$attr:meta])* fn $name:ident($env:ident: &TestEnv) -> TestResult $body:block) => {
+        $(#[$attr])*
+        fn $name($env: &$crate::ktest::TestEnv) -> $crate::ktest::TestResult $body
+        $crate::kernel_test!(@register $name, $name, true);
     };
     ($(#[$attr:meta])* fn $name:ident() -> TestResult $body:block) => {
         $(#[$attr])*
         fn $name() -> $crate::ktest::TestResult $body
-        $crate::kernel_test!(@register $name, |_| $name());
+        $crate::kernel_test!(@register $name, |_| $name(), false);
     };
     ($(#[$attr:meta])* fn $name:ident($env:ident: &TestEnv) -> TestResult $body:block) => {
         $(#[$attr])*
         fn $name($env: &$crate::ktest::TestEnv) -> $crate::ktest::TestResult $body
-        $crate::kernel_test!(@register $name, $name);
+        $crate::kernel_test!(@register $name, $name, false);
     };
 }

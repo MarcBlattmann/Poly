@@ -141,6 +141,7 @@ pub fn print_for_panic() {
 }
 
 crate::kernel_test! {
+    #[boot_only]
     fn walks_to_kernel_entry() -> TestResult {
         let Here { pc, fp } = here();
         let (mut frames, mut last, mut higher_half) = (0, 0, true);

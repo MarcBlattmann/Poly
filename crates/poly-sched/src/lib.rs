@@ -292,6 +292,15 @@ impl<const N: usize> Scheduler<N> {
         self.slots.iter().filter(|s| s.state != SlotState::Free).count()
     }
 
+    /// Every thread that exists and has not been joined, with its state, in
+    /// slot order (boot and idle first).
+    pub fn live_threads(&self) -> impl Iterator<Item = (ThreadId, State)> + '_ {
+        (0..self.slots.len()).filter_map(|slot| {
+            let id = self.id(slot as u16);
+            Some((id, self.state(id)?))
+        })
+    }
+
     /// State of thread `t`, or `None` if it no longer exists (freed or joined).
     pub fn state(&self, t: ThreadId) -> Option<State> {
         let slot = self.live(t).ok()?;

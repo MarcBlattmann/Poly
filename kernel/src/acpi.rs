@@ -10,7 +10,9 @@ use crate::arch::phys_range_to_virt;
 use crate::sync::SpinLock;
 use crate::{kprint, kprintln};
 use alloc::vec::Vec;
-use poly_acpi::{Acpi, AddressSpace, EcamRegion, Error, Fadt, Hpet, Madt, MadtEntry, Mcfg, PhysMemory, Table};
+use poly_acpi::{
+    Acpi, AddressSpace, EcamRegion, Error, Fadt, Hpet, Madt, MadtEntry, Mcfg, PhysMemory, ResetRegister, Table,
+};
 use poly_mem::{MemoryMap, RegionKind};
 
 /// What the self-test checks.
@@ -48,6 +50,8 @@ pub struct Platform {
     pub hpet: Option<u64>,
     /// ACPI PM timer I/O port and counter width (24 or 32).
     pub pm_timer: Option<(u16, u8)>,
+    /// The FADT's reset register and value, for rebooting.
+    pub reset: Option<ResetRegister>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -228,6 +232,7 @@ fn probe(mem: &FirmwareMemory, rsdp: u64) -> Result<(Summary, Platform), Error> 
         }
         if let Some(r) = fadt.reset() {
             kprint!(", reset {:#x}={:#x}", r.register.address, r.value);
+            platform.reset = Some(r);
         }
         kprintln!();
     }

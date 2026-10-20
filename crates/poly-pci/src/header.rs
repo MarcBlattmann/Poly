@@ -71,6 +71,39 @@ impl ClassCode {
     pub const fn is_pci_bridge(self) -> bool {
         self.class == 0x06 && self.subclass == 0x04
     }
+
+    /// A short description for listings: the subclass for common ones, else
+    /// the base class (PCI Code and ID Assignment Specification 1.11 §1).
+    pub const fn name(self) -> &'static str {
+        match (self.class, self.subclass) {
+            (0x01, 0x00) => "SCSI storage",
+            (0x01, 0x01) => "IDE storage",
+            (0x01, 0x05) => "ATA storage",
+            (0x01, 0x06) => "SATA storage",
+            (0x01, 0x08) => "NVM storage",
+            (0x01, _) => "mass storage",
+            (0x02, 0x00) => "Ethernet",
+            (0x02, _) => "network",
+            (0x03, 0x00) => "VGA display",
+            (0x03, _) => "display",
+            (0x04, 0x03) => "audio (HD)",
+            (0x04, _) => "multimedia",
+            (0x05, _) => "memory controller",
+            (0x06, 0x00) => "host bridge",
+            (0x06, 0x01) => "ISA bridge",
+            (0x06, 0x04) => "PCI bridge",
+            (0x06, _) => "bridge",
+            (0x07, _) => "communication",
+            (0x08, _) => "system peripheral",
+            (0x09, _) => "input",
+            (0x0c, 0x03) => "USB",
+            (0x0c, 0x05) => "SMBus",
+            (0x0c, _) => "serial bus",
+            (0x0d, _) => "wireless",
+            (0x00, _) | (0xff, _) => "unclassified",
+            _ => "other",
+        }
+    }
 }
 
 /// Bus numbers of a type 1 header.
@@ -181,6 +214,18 @@ pub fn disable<C: ConfigSpace + ?Sized>(cfg: &C, bdf: Bdf, bits: u16) {
 mod tests {
     use super::*;
     use crate::sim::{Function, Sim};
+
+    #[test]
+    fn class_names() {
+        let name = |class, subclass| ClassCode { class, subclass, prog_if: 0 }.name();
+        assert_eq!(name(0x01, 0x00), "SCSI storage", "virtio-blk");
+        assert_eq!(name(0x01, 0x80), "mass storage");
+        assert_eq!(name(0x06, 0x00), "host bridge");
+        assert_eq!(name(0x06, 0x01), "ISA bridge");
+        assert_eq!(name(0x0c, 0x05), "SMBus");
+        assert_eq!(name(0x00, 0xff), "unclassified", "QEMU's edu device");
+        assert_eq!(name(0x12, 0x00), "other");
+    }
 
     #[test]
     fn parses_endpoint() {

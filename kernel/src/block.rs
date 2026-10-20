@@ -270,6 +270,11 @@ impl Disk {
         self.name
     }
 
+    /// What the disk is: "RAM disk", "virtio-blk 00:03.0".
+    pub fn description(&self) -> &str {
+        &self.what
+    }
+
     pub const fn info(&self) -> &DeviceInfo {
         &self.info
     }

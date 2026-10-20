@@ -16,6 +16,7 @@ what exists **today** and how it fits that plan.
                  kernel/src/syscall.rs  ← routes by the process's personality tag
                  kernel/src/process.rs  ← tag set at exec from poly-binfmt
                           │
+            kernel shell: poly-line editor, commands; on COM1 now, screen + keyboard later
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             block layer: request queue + buffer cache per disk (virtio0, ram0)
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk
@@ -38,6 +39,9 @@ what exists **today** and how it fits that plan.
    the boot self-test with the timer preempting threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
+5. Otherwise (or with `poly.shell` as well, once the tests passed) the
+   kernel starts the shell on COM1 in a thread of its own and the boot
+   thread exits (see "Kernel shell").
 
 ## Firmware tables (ACPI)
 
@@ -244,6 +248,7 @@ while its reader sleeps. Each test puts the disks back as it found them.
 | Unit tests for pure logic | `crates/`, `personalities/`, `tools/` | `cargo test --workspace` (host) |
 | In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
+| The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi` | `cargo xtask test` |
 | Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
 | App trace replay | recorded sessions | later |
@@ -363,7 +368,8 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   `route_gsi` / `route_isa_irq` (undo with `unroute_gsi`). PCI functions do
   all of it through `pci::Device::enable_msix` / `enable_msi` /
   `enable_interrupt` (see "Devices"). Handlers must not block; they may
-  wake a `WaitQueue`.
+  wake a `WaitQueue`. `irq::count(vector)` counts the interrupts taken on
+  each vector (the shell's `irq` command lists them).
 - **Time:** `time::now_ns()` is nanoseconds since boot from
   `poly_irq::MonotonicClock`: the TSC when it is invariant and calibrated,
   otherwise the reference timer (under QEMU's TCG: the HPET). It never goes
@@ -405,8 +411,10 @@ and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
   that the switch "returns" into `thread_trampoline`, which calls
   `thread_start(f, arg)` with `rbp = 0` (the end of every thread's
   backtrace) and exits with `f`'s return value.
-- **API:** `spawn(fn, arg)`, `yield_now()`, `exit(code)`, `current()`,
-  `join(id)` (returns the exit code), `detach(id)`, `state(id)`,
+- **API:** `spawn(fn, arg)` (or `spawn_named(name, fn, arg)`; the boot and
+  idle threads are named too), `yield_now()`, `exit(code)`, `current()`,
+  `join(id)` (returns the exit code), `detach(id)`, `state(id)`, `list()`
+  (every thread with its name and state, for `ps`),
   `sleep(duration)` / `sleep_until(ns)`, and
   `WaitQueue::{wait_until(cond), wait_until_deadline(cond, ns), wake_one(),
   wake_all()}`. `wait_until` checks its condition with the scheduler
@@ -449,3 +457,67 @@ and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
 - `SetOnce<T>`: written once at boot, read without a lock (local APIC,
   clock).
 
+## Kernel shell
+
+A shell built into the kernel, the debug console of the Phase 2 terminal
+([ADR 0021](adr/0021-kernel-shell.md)). It never touches a device: it talks
+to a `shell::Console`, so the same shell runs on the serial port now and
+on the screen and keyboard later.
+
+```
+   COM1 bytes ──► IRQ 4 handler ──► ring ──► TermDecoder ──┐
+   (later) key events ──────────────────────► Edit ────────┤
+                                                           ▼
+   Console::read ──Edit──► poly_line::Editor ──line──► words::split ──► COMMANDS[name](console, args)
+                                  │ redraw: text + ANSI                         │ output
+                                  └──────────────► Console (fmt::Write) ◄───────┘
+```
+
+- **`poly-line`** (host-tested, uses `alloc`) is the line editor: a line of
+  `char`s with a cursor, edited by abstract `Edit`s (insert, Backspace,
+  Delete, Left / Right, word left / right, Home / End, kill to end / start /
+  word, history previous / next, complete, Enter, cancel, clear screen,
+  redraw). It writes text and a few ECMA-48 sequences (cursor left / right
+  by n, erase to end of line, erase screen, cursor home; SGR in the prompt),
+  always moving relative to the cursor, one column per character. History
+  keeps 64 lines without blank lines or a repeat of the newest; browsing it
+  keeps the line being typed. Tab asks a callback for candidates, completes
+  their common prefix (and a space after a unique one) and lists them in
+  columns on a second Tab. `TermDecoder` turns a terminal's byte stream
+  into edits (UTF-8, `CR`/`LF`/`CR LF`, `DEL`/`BS`, `ESC [` / `ESC O`
+  arrows, Home, End, Delete, Ctrl-arrows, Ctrl-letters); `Edit::control`
+  maps Ctrl-letters for a keyboard. `words` splits a line into arguments
+  (whitespace, optional quotes, backslash escapes) and finds the closest
+  word for a typo.
+- **`Console`** (`kernel/src/shell/mod.rs`): `core::fmt::Write` for output
+  (`"\n"` means a new line; the console adds a CR if it needs one) and
+  `read() -> Option<Edit>`, which blocks; `None` ends the shell (only
+  scripted consoles in tests do that). `shell::spawn(name, console)` runs
+  the shell in its own kernel thread, `shell::run(console)` on the calling
+  one.
+- **Serial console** (`shell/serial.rs`): COM1's receive interrupt is routed
+  with `arch::irq::route_isa_irq(4, ...)` (the UART raises it for each
+  byte); the handler moves bytes into a 256-byte lock-free ring (one
+  producer, the handler; one consumer, the console) and wakes the reader.
+  Output goes through `log::write_console`, the same lock as the kernel
+  log. While the shell waits for input with its prompt shown, a kernel log
+  line first erases the prompt row, and the shell draws the prompt and
+  line again under it (`Edit::Redraw`) within 50 ms.
+- **Commands** (`shell/commands.rs`, one static table of name, usage, help
+  and handler): `help`, `mem` (frames and heap), `ps` (`thread::list`),
+  `lspci` (`pci::devices`, with class names from `poly_pci::ClassCode::name`),
+  `disks` (`block::disks` with cache and queue counters), `uptime`, `irq`
+  (per-vector counts), `cpu` (CPUID: vendor, brand, family / model /
+  stepping, features), `test [filter]`, `echo`, `clear`, `reboot`. An unknown
+  command gets the closest command name as a suggestion.
+- **`test`** runs the kernel tests again with `ktest::run(env, filter,
+  When::Runtime, console)`: the boot's `poly.selftest.*` flags are dropped,
+  tests marked `#[boot_only]` (they check the state at boot, or must run on
+  the boot thread) are left out, and only one run happens at a time, so a
+  test that drives the shell cannot run the tests inside itself.
+- **`reboot`** (`power::reboot`) writes back every disk's cache, then tries
+  the FADT reset register (`acpi::Platform::reset`), the 8042's reset line
+  and a triple fault (`arch::reset`), half a second each.
+- The kernel tests drive the real shell with a scripted console that types
+  terminal bytes; `cargo xtask test` boots with `poly.shell` and types into
+  QEMU's stdin, which is the serial port.

@@ -16,17 +16,20 @@ mod ktest;
 mod log;
 mod mm;
 mod pci;
+mod power;
 mod process;
 mod qemu;
 mod selftest;
+mod shell;
 mod sync;
 mod syscall;
 mod thread;
 mod time;
 mod virtio_blk;
 
+use alloc::boxed::Box;
 use core::panic::PanicInfo;
-use poly_mem::{PAGE_SIZE, Region, RegionKind};
+use poly_mem::{MemoryMap, PAGE_SIZE, Region, RegionKind};
 
 unsafe extern "C" {
     static __kernel_phys_start: u8;
@@ -105,13 +108,22 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     pci::init();
     block::init();
 
-    let ok = selftest::run(&boot, &memory);
+    // The shell's `test` command runs the tests again later.
+    let memory: &'static MemoryMap = Box::leak(Box::new(memory));
+    shell::set_test_env(&boot, memory);
+    let ok = selftest::run(&boot, memory);
     heap::log_stats();
     selftest::trigger_requested_fault(&boot);
-    qemu::exit(if ok { qemu::ExitCode::Success } else { qemu::ExitCode::Failure });
-
-    kprintln!("idle");
-    // The idle thread takes over, halting between interrupts.
+    // An automated test run ends here, unless it asked for the shell (and
+    // the tests passed): then a boot test types into it.
+    if boot.has_flag("poly.qemu_exit") && !(ok && boot.has_flag(shell::SHELL_FLAG)) {
+        qemu::exit(if ok { qemu::ExitCode::Success } else { qemu::ExitCode::Failure });
+    }
+    match shell::start_serial() {
+        Ok(_) => kprintln!("boot: done; the shell runs on COM1 (type 'help')"),
+        Err(e) => kprintln!("boot: done; the shell could not start: {e:?}"),
+    }
+    // The idle thread (and the shell) take over, halting between interrupts.
     thread::exit(0)
 }
 
