@@ -3,3 +3,4 @@
 /.vendor
 *.img
 *.iso
+/.claude/worktrees
