@@ -1,0 +1,8 @@
+[
+{"symbol":"CreateXmlReader","src":["wine-spec"]},
+{"symbol":"CreateXmlReaderInputWithEncodingCodePage","src":["wine-spec"]},
+{"symbol":"CreateXmlReaderInputWithEncodingName","src":["wine-spec"]},
+{"symbol":"CreateXmlWriter","src":["wine-spec"]},
+{"symbol":"CreateXmlWriterOutputWithEncodingCodePage","src":["wine-spec"]},
+{"symbol":"CreateXmlWriterOutputWithEncodingName","src":["wine-spec"]}
+]

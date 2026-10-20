@@ -299,6 +299,14 @@ fn display_group(os: Os, layer: Layer, component: &str) -> String {
             "mach" => "Mach traps".into(),
             c => c.into(),
         },
+        (Os::Macos, Layer::Api) => {
+            let c = component;
+            if c.starts_with("libswift") && c != "libswiftCore.dylib" {
+                "Swift overlays".into()
+            } else {
+                c.trim_end_matches(".framework").trim_end_matches(".dylib").into()
+            }
+        }
         _ => component.into(),
     }
 }
@@ -430,19 +438,20 @@ fn draw_group(s: &mut Svg, g: &Group, (x, y, w, h): (f64, f64, f64, f64), t: &Th
     s.raw("</g>");
 }
 
-/// Layout: Windows (by far the largest surface) gets a full-width row;
-/// Linux and macOS share the row below.
+/// Layout: Windows (the largest surface) gets a full-width row; macOS
+/// (two thirds) and Linux (one third) share the row below.
 pub fn coverage_map(c: &Coverage, t: &Theme) -> String {
     const W: f64 = 900.0;
     const PAD: f64 = 15.0;
     const GAP: f64 = 15.0;
-    let half = (W - 2.0 * PAD - GAP) / 2.0;
+    let inner = W - 2.0 * PAD - GAP;
+    let (mac_w, linux_w) = (inner * 2.0 / 3.0, inner / 3.0);
     let layout = [
         (Os::Windows, PAD, 46.0, W - 2.0 * PAD, 330.0, 150),
-        (Os::Linux, PAD, 430.0, half, 170.0, 40),
-        (Os::Macos, PAD + half + GAP, 430.0, half, 170.0, 40),
+        (Os::Macos, PAD, 430.0, mac_w, 220.0, 80),
+        (Os::Linux, PAD + mac_w + GAP, 430.0, linux_w, 220.0, 20),
     ];
-    let h = 430.0 + PANEL_HEAD + 170.0 + 36.0;
+    let h = 430.0 + PANEL_HEAD + 220.0 + 36.0;
 
     let mut s = Svg::new(W, h, "API coverage map");
     s.rect(0.5, 0.5, W - 1.0, h - 1.0, t.bg, &format!(r#" rx="8" stroke="{}""#, t.border));
@@ -542,6 +551,9 @@ mod tests {
         assert_eq!(display_group(Os::Windows, Layer::Api, "d3dx9_43.dll"), "DirectX redist");
         assert_eq!(display_group(Os::Windows, Layer::Api, "kernel32.dll"), "kernel32");
         assert_eq!(display_group(Os::Windows, Layer::Syscall, "ntoskrnl"), "NT services");
+        assert_eq!(display_group(Os::Macos, Layer::Api, "AppKit.framework"), "AppKit");
+        assert_eq!(display_group(Os::Macos, Layer::Api, "libswiftFoundation.dylib"), "Swift overlays");
+        assert_eq!(display_group(Os::Macos, Layer::Api, "libswiftCore.dylib"), "libswiftCore");
     }
 
     #[test]

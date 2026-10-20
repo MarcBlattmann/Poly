@@ -1,0 +1,10 @@
+[
+{"symbol":"CreateNGenPdbWriter","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllGetClassObjectInternal","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"VSDllRegisterServer","src":["wine-spec"]},
+{"symbol":"VSDllUnregisterServer","src":["wine-spec"]}
+]

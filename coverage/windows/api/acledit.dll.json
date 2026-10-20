@@ -1,0 +1,10 @@
+[
+{"symbol":"DllMain","src":["wine-spec"]},
+{"symbol":"EditAuditInfo","src":["wine-spec"]},
+{"symbol":"EditOwnerInfo","src":["wine-spec"]},
+{"symbol":"EditPermissionInfo","src":["wine-spec"]},
+{"symbol":"FMExtensionProcW","src":["wine-spec"]},
+{"symbol":"SedDiscretionaryAclEditor","src":["wine-spec"]},
+{"symbol":"SedSystemAclEditor","src":["wine-spec"]},
+{"symbol":"SedTakeOwnership","src":["wine-spec"]}
+]

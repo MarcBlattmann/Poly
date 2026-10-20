@@ -1,0 +1,9 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"GetPStoreProvider","src":["wine-spec"]},
+{"symbol":"PStoreCreateInstance","src":["wine-spec"]},
+{"symbol":"PStoreEnumProviders","src":["wine-spec"]}
+]

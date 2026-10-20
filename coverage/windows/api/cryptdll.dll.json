@@ -1,0 +1,16 @@
+[
+{"symbol":"CDBuildIntegrityVect","src":["wine-spec"]},
+{"symbol":"CDBuildVect","src":["wine-spec"]},
+{"symbol":"CDFindCommonCSystem","src":["wine-spec"]},
+{"symbol":"CDFindCommonCSystemWithKey","src":["wine-spec"]},
+{"symbol":"CDGenerateRandomBits","src":["wine-spec"]},
+{"symbol":"CDLocateCSystem","src":["wine-spec"]},
+{"symbol":"CDLocateCheckSum","src":["wine-spec"]},
+{"symbol":"CDLocateRng","src":["wine-spec"]},
+{"symbol":"CDRegisterCSystem","src":["wine-spec"]},
+{"symbol":"CDRegisterCheckSum","src":["wine-spec"]},
+{"symbol":"CDRegisterRng","src":["wine-spec"]},
+{"symbol":"MD5Final","forward":"advapi32.MD5Final","src":["wine-spec"]},
+{"symbol":"MD5Init","forward":"advapi32.MD5Init","src":["wine-spec"]},
+{"symbol":"MD5Update","forward":"advapi32.MD5Update","src":["wine-spec"]}
+]

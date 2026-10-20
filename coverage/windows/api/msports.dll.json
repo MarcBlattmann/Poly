@@ -1,0 +1,13 @@
+[
+{"symbol":"ComDBClaimNextFreePort","src":["wine-spec"]},
+{"symbol":"ComDBClaimPort","src":["wine-spec"]},
+{"symbol":"ComDBClose","src":["wine-spec"]},
+{"symbol":"ComDBGetCurrentPortUsage","src":["wine-spec"]},
+{"symbol":"ComDBOpen","src":["wine-spec"]},
+{"symbol":"ComDBReleasePort","src":["wine-spec"]},
+{"symbol":"ComDBResizeDatabase","src":["wine-spec"]},
+{"symbol":"ParallelPortPropPageProvider","src":["wine-spec"]},
+{"symbol":"PortsClassInstaller","src":["wine-spec"]},
+{"symbol":"SerialDisplayAdvancedSettings","src":["wine-spec"]},
+{"symbol":"SerialPortPropPageProvider","src":["wine-spec"]}
+]

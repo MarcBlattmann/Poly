@@ -1,0 +1,10 @@
+[
+{"symbol":"FmtIdToPropStgName","forward":"ole32.FmtIdToPropStgName","src":["wine-spec"]},
+{"symbol":"FreePropVariantArray","forward":"ole32.FreePropVariantArray","src":["wine-spec"]},
+{"symbol":"PropStgNameToFmtId","forward":"ole32.PropStgNameToFmtId","src":["wine-spec"]},
+{"symbol":"PropVariantClear","forward":"ole32.PropVariantClear","src":["wine-spec"]},
+{"symbol":"PropVariantCopy","forward":"ole32.PropVariantCopy","src":["wine-spec"]},
+{"symbol":"StgCreatePropSetStg","forward":"ole32.StgCreatePropSetStg","src":["wine-spec"]},
+{"symbol":"StgCreatePropStg","forward":"ole32.StgCreatePropStg","src":["wine-spec"]},
+{"symbol":"StgOpenPropStg","forward":"ole32.StgOpenPropStg","src":["wine-spec"]}
+]

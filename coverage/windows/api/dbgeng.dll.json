@@ -1,0 +1,8 @@
+[
+{"symbol":"#327","src":["wine-spec"]},
+{"symbol":"DebugConnect","src":["wine-spec"]},
+{"symbol":"DebugConnectWide","src":["wine-spec"]},
+{"symbol":"DebugCreate","src":["wine-spec"]},
+{"symbol":"DebugCreateEx","src":["wine-spec"]},
+{"symbol":"DebugExtensionInitialize","src":["wine-spec"]}
+]

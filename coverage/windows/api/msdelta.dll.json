@@ -1,0 +1,17 @@
+[
+{"symbol":"ApplyDeltaA","src":["wine-spec"]},
+{"symbol":"ApplyDeltaB","src":["wine-spec"]},
+{"symbol":"ApplyDeltaProvidedB","src":["wine-spec"]},
+{"symbol":"ApplyDeltaW","src":["wine-spec"]},
+{"symbol":"CreateDeltaA","src":["wine-spec"]},
+{"symbol":"CreateDeltaB","src":["wine-spec"]},
+{"symbol":"CreateDeltaW","src":["wine-spec"]},
+{"symbol":"DeltaFree","src":["wine-spec"]},
+{"symbol":"DeltaNormalizeProvidedB","src":["wine-spec"]},
+{"symbol":"GetDeltaInfoA","src":["wine-spec"]},
+{"symbol":"GetDeltaInfoB","src":["wine-spec"]},
+{"symbol":"GetDeltaInfoW","src":["wine-spec"]},
+{"symbol":"GetDeltaSignatureA","src":["wine-spec"]},
+{"symbol":"GetDeltaSignatureB","src":["wine-spec"]},
+{"symbol":"GetDeltaSignatureW","src":["wine-spec"]}
+]

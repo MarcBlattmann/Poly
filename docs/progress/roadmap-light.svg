@@ -1,43 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="406" viewBox="0 0 900 406" role="img" aria-label="Roadmap: 10 of 133 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="406" viewBox="0 0 900 406" role="img" aria-label="Roadmap: 10 of 134 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="405.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">10 / 133 milestones · 8%</text>
-<text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">10 / 134 milestones · 7%</text>
+<text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#0969da" text-anchor="start"> 0  Foundation</text>
+<text x="328.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#0969da" text-anchor="end">NOW</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
-<rect x="340.0" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Kernel boots in QEMU via PVH, enters 64-bit long mode, higher-half kernel</title>
-<rect x="387.6" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="383.3" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Serial console logging, panic handler, QEMU exit codes for automated tests</title>
-<rect x="435.2" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="426.5" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ GDT, TSS (double-fault stack), IDT with handlers for all CPU exceptions</title>
-<rect x="482.8" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="469.8" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Boot info parsing and normalised physical memory map, early frame allocator</title>
-<rect x="530.4" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="513.1" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Binary format detection (ELF / PE / Mach-O) and personality tag per process</title>
-<rect x="578.0" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="556.4" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ System call routing to Linux / NT / XNU personalities (native error conventions)</title>
-<rect x="625.6" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="599.6" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Boot self-test on every boot, plus negative test (page fault is reported)</title>
-<rect x="673.2" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="642.9" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Coverage map seeded from Wine .spec, Linux syscall table, XNU syscall/trap tables</title>
-<rect x="720.8" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="686.2" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>macOS framework API mapped from the SDK .tbd files (owner runs tools/scripts/import-macos-sdk.sh on a Mac)</title>
+<rect x="729.5" y="53.0" width="41.3" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>✔ Clean-room rules, architecture docs, ADRs, spec sheet template, CI</title>
-<rect x="768.4" y="53.0" width="45.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="772.7" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<text x="884.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">10/10</text>
-<text x="16.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#0969da" text-anchor="start"> 1  Kernel core</text>
-<text x="328.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#0969da" text-anchor="end">NOW</text>
+<text x="884.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">10/11</text>
+<text x="16.0" y="95.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 1  Kernel core</text>
 <g><title>Physical frame allocator for all RAM (buddy allocator), host-tested</title>
-<rect x="340.0" y="83.0" width="32.0" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
+<rect x="340.0" y="83.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Kernel page tables: direct map of all physical memory, drop the boot identity map</title>
 <rect x="374.0" y="83.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
@@ -335,7 +338,7 @@
 <g><title>⚖️ Decide: aarch64 kernel port or x86-64 only (modern Mac apps are increasingly arm64-only)</title>
 <rect x="340.0" y="293.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>macOS test oracle (licensed Mac), seed the framework API map from SDK .tbd files and Objective-C metadata</title>
+<g><title>macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API</title>
 <rect x="379.7" y="293.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Mach-O loading and our own dyld (shared cache optional, chained fixups)</title>

@@ -1,0 +1,9 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"DoMsCtfMonitor","src":["wine-spec"]},
+{"symbol":"InitLocalMsCtfMonitor","src":["wine-spec"]},
+{"symbol":"UnInitLocalMsCtfMonitor","src":["wine-spec"]}
+]

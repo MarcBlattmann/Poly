@@ -1,0 +1,17 @@
+[
+{"symbol":"CreateString","src":["wine-spec"]},
+{"symbol":"CreateXamlUIPresenter","src":["wine-spec"]},
+{"symbol":"DeleteString","src":["wine-spec"]},
+{"symbol":"DisableDeferredInvoke","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllMain","src":["wine-spec"]},
+{"symbol":"GetDependencyObjectAddress","src":["wine-spec"]},
+{"symbol":"GetErrorContextIndex","src":["wine-spec"]},
+{"symbol":"GetGlobalModuleParams","src":["wine-spec"]},
+{"symbol":"GetStringLen","src":["wine-spec"]},
+{"symbol":"GetStringRawBuffer","src":["wine-spec"]},
+{"symbol":"InitializeXamlDiagnosticsEx","src":["wine-spec"]},
+{"symbol":"OverrideXamlMetadataProvider","src":["wine-spec"]},
+{"symbol":"OverrideXamlResourcePropertyBag","src":["wine-spec"]}
+]

@@ -1,0 +1,7 @@
+[
+{"symbol":"XInputEnable","src":["wine-spec"]},
+{"symbol":"XInputGetCapabilities","src":["wine-spec"]},
+{"symbol":"XInputGetDSoundAudioDeviceGuids","src":["wine-spec"]},
+{"symbol":"XInputGetState","src":["wine-spec"]},
+{"symbol":"XInputSetState","src":["wine-spec"]}
+]

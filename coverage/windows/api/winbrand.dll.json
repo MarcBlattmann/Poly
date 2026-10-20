@@ -1,0 +1,17 @@
+[
+{"symbol":"BrandingFormatString","src":["wine-spec"]},
+{"symbol":"BrandingFormatStringForEdition","src":["wine-spec"]},
+{"symbol":"BrandingLoadBitmap","src":["wine-spec"]},
+{"symbol":"BrandingLoadCursor","src":["wine-spec"]},
+{"symbol":"BrandingLoadIcon","src":["wine-spec"]},
+{"symbol":"BrandingLoadImage","src":["wine-spec"]},
+{"symbol":"BrandingLoadNeutralStringForEdition","src":["wine-spec"]},
+{"symbol":"BrandingLoadString","src":["wine-spec"]},
+{"symbol":"BrandingLoadStringForEdition","src":["wine-spec"]},
+{"symbol":"GetEULAFile","src":["wine-spec"]},
+{"symbol":"GetEULAFileEx","src":["wine-spec"]},
+{"symbol":"GetEULAInCurrentUILanguage","src":["wine-spec"]},
+{"symbol":"GetHinstanceByNamespace","src":["wine-spec"]},
+{"symbol":"GetInstalledEULAPath","src":["wine-spec"]},
+{"symbol":"InstallEULA","src":["wine-spec"]}
+]

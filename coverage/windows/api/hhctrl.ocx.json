@@ -1,0 +1,8 @@
+[
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"HtmlHelpA","src":["wine-spec"]},
+{"symbol":"HtmlHelpW","src":["wine-spec"]},
+{"symbol":"doWinMain","src":["wine-spec"]}
+]

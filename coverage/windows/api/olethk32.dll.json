@@ -1,0 +1,16 @@
+[
+{"symbol":"CSm16ReleaseHandler_Release32","src":["wine-spec"]},
+{"symbol":"CallbackProcessing_3216","src":["wine-spec"]},
+{"symbol":"ConvertHr1632Thunk","src":["wine-spec"]},
+{"symbol":"ConvertHr3216Thunk","src":["wine-spec"]},
+{"symbol":"ConvertObjDescriptor","src":["wine-spec"]},
+{"symbol":"IUnknownObj32","src":["wine-spec"]},
+{"symbol":"IntOpInitialize","src":["wine-spec"]},
+{"symbol":"IntOpUninitialize","src":["wine-spec"]},
+{"symbol":"InvokeOn32","src":["wine-spec"]},
+{"symbol":"ThkAddAppCompatFlag","src":["wine-spec"]},
+{"symbol":"ThkMgrInitialize","src":["wine-spec"]},
+{"symbol":"ThkMgrUninitialize","src":["wine-spec"]},
+{"symbol":"TransformHRESULT_1632","src":["wine-spec"]},
+{"symbol":"TransformHRESULT_3216","src":["wine-spec"]}
+]

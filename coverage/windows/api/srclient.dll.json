@@ -1,0 +1,15 @@
+[
+{"symbol":"DisableSR","src":["wine-spec"]},
+{"symbol":"DisableSRInternal","src":["wine-spec"]},
+{"symbol":"EnableSR","src":["wine-spec"]},
+{"symbol":"EnableSREx","src":["wine-spec"]},
+{"symbol":"EnableSRInternal","src":["wine-spec"]},
+{"symbol":"SRNewSystemId","src":["wine-spec"]},
+{"symbol":"SRRemoveRestorePoint","src":["wine-spec"]},
+{"symbol":"SRSetRestorePointA","forward":"sfc_os.SRSetRestorePointA","src":["wine-spec"]},
+{"symbol":"SRSetRestorePointInternal","src":["wine-spec"]},
+{"symbol":"SRSetRestorePointW","forward":"sfc_os.SRSetRestorePointW","src":["wine-spec"]},
+{"symbol":"SetSRStateAfterSetup","src":["wine-spec"]},
+{"symbol":"SysprepCleanup","src":["wine-spec"]},
+{"symbol":"SysprepGeneralize","src":["wine-spec"]}
+]

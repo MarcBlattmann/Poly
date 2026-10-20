@@ -1,0 +1,17 @@
+[
+{"symbol":"DMOEnum","src":["wine-spec"]},
+{"symbol":"DMOGetName","src":["wine-spec"]},
+{"symbol":"DMOGetTypes","src":["wine-spec"]},
+{"symbol":"DMOGuidToStrA","src":["wine-spec"]},
+{"symbol":"DMOGuidToStrW","src":["wine-spec"]},
+{"symbol":"DMORegister","src":["wine-spec"]},
+{"symbol":"DMOStrToGuidA","src":["wine-spec"]},
+{"symbol":"DMOStrToGuidW","src":["wine-spec"]},
+{"symbol":"DMOUnregister","src":["wine-spec"]},
+{"symbol":"MoCopyMediaType","src":["wine-spec"]},
+{"symbol":"MoCreateMediaType","src":["wine-spec"]},
+{"symbol":"MoDeleteMediaType","src":["wine-spec"]},
+{"symbol":"MoDuplicateMediaType","src":["wine-spec"]},
+{"symbol":"MoFreeMediaType","src":["wine-spec"]},
+{"symbol":"MoInitMediaType","src":["wine-spec"]}
+]

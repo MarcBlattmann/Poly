@@ -1,0 +1,6 @@
+[
+{"symbol":"?id@?$codecvt@_SDU_Mbstatet@@@std@@2V0locale@2@A","src":["wine-spec"]},
+{"symbol":"?id@?$codecvt@_S_QU_Mbstatet@@@std@@2V0locale@2@A","src":["wine-spec"]},
+{"symbol":"?id@?$codecvt@_UDU_Mbstatet@@@std@@2V0locale@2@A","src":["wine-spec"]},
+{"symbol":"?id@?$codecvt@_U_QU_Mbstatet@@@std@@2V0locale@2@A","src":["wine-spec"]}
+]

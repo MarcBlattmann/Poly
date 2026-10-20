@@ -1,0 +1,4 @@
+[
+{"symbol":"CreateCDirectMusicEmulatePort","src":["wine-spec"]},
+{"symbol":"EnumLegacyDevices","src":["wine-spec"]}
+]

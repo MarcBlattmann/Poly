@@ -1,0 +1,11 @@
+[
+{"symbol":"SnmpMgrClose","src":["wine-spec"]},
+{"symbol":"SnmpMgrCtl","src":["wine-spec"]},
+{"symbol":"SnmpMgrGetTrap","src":["wine-spec"]},
+{"symbol":"SnmpMgrGetTrapEx","src":["wine-spec"]},
+{"symbol":"SnmpMgrOidToStr","src":["wine-spec"]},
+{"symbol":"SnmpMgrOpen","src":["wine-spec"]},
+{"symbol":"SnmpMgrRequest","src":["wine-spec"]},
+{"symbol":"SnmpMgrStrToOid","src":["wine-spec"]},
+{"symbol":"SnmpMgrTrapListen","src":["wine-spec"]}
+]

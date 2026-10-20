@@ -24,6 +24,7 @@ progress chart in the README.
 - [x] System call routing to Linux / NT / XNU personalities (native error conventions)
 - [x] Boot self-test on every boot, plus negative test (page fault is reported)
 - [x] Coverage map seeded from Wine `.spec`, Linux syscall table, XNU syscall/trap tables
+- [ ] macOS framework API mapped from the SDK `.tbd` files (owner runs `tools/scripts/import-macos-sdk.sh` on a Mac)
 - [x] Clean-room rules, architecture docs, ADRs, spec sheet template, CI
 
 ## Phase 1: Kernel core
@@ -146,7 +147,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 ## Phase 8: XNU personality and macOS foundations
 
 - [ ] ⚖️ Decide: aarch64 kernel port or x86-64 only (modern Mac apps are increasingly arm64-only)
-- [ ] macOS test oracle (licensed Mac), seed the framework API map from SDK `.tbd` files and Objective-C metadata
+- [ ] macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API
 - [ ] Mach-O loading and our own `dyld` (shared cache optional, chained fixups)
 - [ ] Mach core: tasks, threads, ports, port rights, messages, Mach VM
 - [ ] BSD layer: XNU syscalls, `kqueue`, `posix_spawn`, signals with Darwin semantics

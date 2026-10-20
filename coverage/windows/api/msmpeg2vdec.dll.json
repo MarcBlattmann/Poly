@@ -1,0 +1,16 @@
+[
+{"symbol":"?GetSurface@CVIDEOfilter@@QAAJHPAEJ@Z","arch":["arm"],"src":["wine-spec"]},
+{"symbol":"?GetSurface@CVIDEOfilter@@QAEJHPAEJ@Z","arch":["i386"],"src":["wine-spec"]},
+{"symbol":"?GetSurface@CVIDEOfilter@@QEAAJHPEAEJ@Z","arch":["win64"],"src":["wine-spec"]},
+{"symbol":"?GetSurfaceSize@CVIDEOfilter@@QAAJHPAJ@Z","arch":["arm"],"src":["wine-spec"]},
+{"symbol":"?GetSurfaceSize@CVIDEOfilter@@QAEJHPAJ@Z","arch":["i386"],"src":["wine-spec"]},
+{"symbol":"?GetSurfaceSize@CVIDEOfilter@@QEAAJHPEAJ@Z","arch":["win64"],"src":["wine-spec"]},
+{"symbol":"?LoadSurface@CVIDEOfilter@@QAAJHPAEK@Z","arch":["arm"],"src":["wine-spec"]},
+{"symbol":"?LoadSurface@CVIDEOfilter@@QAEJHPAEK@Z","arch":["i386"],"src":["wine-spec"]},
+{"symbol":"?LoadSurface@CVIDEOfilter@@QEAAJHPEAEK@Z","arch":["win64"],"src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"GetH264DecoderFunctionTable","src":["wine-spec"]}
+]

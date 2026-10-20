@@ -1,0 +1,8 @@
+[
+{"symbol":"DtcGetTransactionManager","src":["wine-spec"]},
+{"symbol":"DtcGetTransactionManagerC","src":["wine-spec"]},
+{"symbol":"DtcGetTransactionManagerEx","src":["wine-spec"]},
+{"symbol":"DtcGetTransactionManagerExA","src":["wine-spec"]},
+{"symbol":"DtcGetTransactionManagerExW","src":["wine-spec"]},
+{"symbol":"GetDtcLocaleResourceHandle","src":["wine-spec"]}
+]

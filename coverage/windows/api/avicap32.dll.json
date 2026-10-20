@@ -1,0 +1,6 @@
+[
+{"symbol":"capCreateCaptureWindowA","src":["wine-spec"]},
+{"symbol":"capCreateCaptureWindowW","src":["wine-spec"]},
+{"symbol":"capGetDriverDescriptionA","src":["wine-spec"]},
+{"symbol":"capGetDriverDescriptionW","src":["wine-spec"]}
+]

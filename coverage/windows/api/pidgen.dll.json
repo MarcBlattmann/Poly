@@ -1,0 +1,9 @@
+[
+{"symbol":"PIDGenA","src":["wine-spec"]},
+{"symbol":"PIDGenSimpA","src":["wine-spec"]},
+{"symbol":"PIDGenSimpW","src":["wine-spec"]},
+{"symbol":"PIDGenW","src":["wine-spec"]},
+{"symbol":"SetupPIDGenA","src":["wine-spec"]},
+{"symbol":"SetupPIDGenW","src":["wine-spec"]},
+{"symbol":"VerifyPIDSequenceW","src":["wine-spec"]}
+]

@@ -1,0 +1,5 @@
+[
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"IWICColorTransform_Initialize_Proxy","src":["wine-spec"]},
+{"symbol":"WICCreateColorTransform_Proxy","src":["wine-spec"]}
+]

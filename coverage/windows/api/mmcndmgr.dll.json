@@ -1,0 +1,9 @@
+[
+{"symbol":"CreateExecutivePlatform","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"GetAllocCounters","arch":["win64"],"src":["wine-spec"]},
+{"symbol":"_GetAllocCounters@0","arch":["win32"],"src":["wine-spec"]}
+]

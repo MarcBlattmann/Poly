@@ -10,6 +10,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0003](0003-workspace-layout.md) | Host-testable crates + thin kernel, kernel in its own workspace | Accepted |
 | [0004](0004-coverage-map-format.md) | `coverage.json` format, seeded from public name lists | Accepted |
 | [0005](0005-license.md) | Apache-2.0 | Accepted |
+| [0006](0006-coverage-map-one-file-per-component.md) | Coverage map stored as one file per component | Accepted |
 
 ## Open decisions
 

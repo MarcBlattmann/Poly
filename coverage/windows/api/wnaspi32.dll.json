@@ -1,0 +1,9 @@
+[
+{"symbol":"FreeASPI32Buffer","src":["wine-spec"]},
+{"symbol":"GetASPI32Buffer","src":["wine-spec"]},
+{"symbol":"GetASPI32DLLVersion","src":["wine-spec"]},
+{"symbol":"GetASPI32SupportInfo","src":["wine-spec"]},
+{"symbol":"RegisterWOWPost","src":["wine-spec"]},
+{"symbol":"SendASPI32Command","src":["wine-spec"]},
+{"symbol":"TranslateASPI32Address","src":["wine-spec"]}
+]

@@ -1,0 +1,7 @@
+[
+{"symbol":"GetOpenCardNameA","src":["wine-spec"]},
+{"symbol":"GetOpenCardNameW","src":["wine-spec"]},
+{"symbol":"SCardDlgExtendedError","src":["wine-spec"]},
+{"symbol":"SCardUIDlgSelectCardA","src":["wine-spec"]},
+{"symbol":"SCardUIDlgSelectCardW","src":["wine-spec"]}
+]

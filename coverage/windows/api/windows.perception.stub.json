@@ -1,0 +1,7 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactoryPerceptionStub","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"GetProxyDllInfo","src":["wine-spec"]}
+]

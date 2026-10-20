@@ -1,0 +1,9 @@
+[
+{"symbol":"_Aligned_get_default_resource","src":["wine-spec"]},
+{"symbol":"_Aligned_new_delete_resource","src":["wine-spec"]},
+{"symbol":"_Aligned_set_default_resource","src":["wine-spec"]},
+{"symbol":"_Unaligned_get_default_resource","src":["wine-spec"]},
+{"symbol":"_Unaligned_new_delete_resource","src":["wine-spec"]},
+{"symbol":"_Unaligned_set_default_resource","src":["wine-spec"]},
+{"symbol":"null_memory_resource","src":["wine-spec"]}
+]

@@ -1,0 +1,14 @@
+[
+{"symbol":"OleBlockServer","src":["wine-spec"]},
+{"symbol":"OleQueryServerVersion","src":["wine-spec"]},
+{"symbol":"OleRegisterServer","src":["wine-spec"]},
+{"symbol":"OleRegisterServerDoc","src":["wine-spec"]},
+{"symbol":"OleRenameServerDoc","src":["wine-spec"]},
+{"symbol":"OleRevertServerDoc","src":["wine-spec"]},
+{"symbol":"OleRevokeObject","src":["wine-spec"]},
+{"symbol":"OleRevokeServer","src":["wine-spec"]},
+{"symbol":"OleRevokeServerDoc","src":["wine-spec"]},
+{"symbol":"OleSavedServerDoc","src":["wine-spec"]},
+{"symbol":"OleUnblockServer","src":["wine-spec"]},
+{"symbol":"WEP","src":["wine-spec"]}
+]

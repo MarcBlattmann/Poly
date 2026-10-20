@@ -1,0 +1,12 @@
+[
+{"symbol":"D3DCompileFromMemory","src":["wine-spec"]},
+{"symbol":"D3DDisassembleCode","src":["wine-spec"]},
+{"symbol":"D3DDisassembleEffect","src":["wine-spec"]},
+{"symbol":"D3DGetCodeDebugInfo","src":["wine-spec"]},
+{"symbol":"D3DGetInputAndOutputSignatureBlob","src":["wine-spec"]},
+{"symbol":"D3DGetInputSignatureBlob","src":["wine-spec"]},
+{"symbol":"D3DGetOutputSignatureBlob","src":["wine-spec"]},
+{"symbol":"D3DPreprocessFromMemory","src":["wine-spec"]},
+{"symbol":"D3DReflectCode","src":["wine-spec"]},
+{"symbol":"DebugSetMute","src":["wine-spec"]}
+]

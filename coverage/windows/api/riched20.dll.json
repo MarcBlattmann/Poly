@@ -1,0 +1,11 @@
+[
+{"symbol":"CreateTextServices","src":["wine-spec"]},
+{"symbol":"IID_IRichEditOle","src":["wine-spec"]},
+{"symbol":"IID_IRichEditOleCallback","src":["wine-spec"]},
+{"symbol":"IID_ITextHost","src":["wine-spec"]},
+{"symbol":"IID_ITextHost2","src":["wine-spec"]},
+{"symbol":"IID_ITextServices","src":["wine-spec"]},
+{"symbol":"REExtendedRegisterClass","src":["wine-spec"]},
+{"symbol":"RichEdit10ANSIWndProc","src":["wine-spec"]},
+{"symbol":"RichEditANSIWndProc","src":["wine-spec"]}
+]

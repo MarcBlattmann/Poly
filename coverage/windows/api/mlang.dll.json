@@ -1,0 +1,16 @@
+[
+{"symbol":"ConvertINetMultiByteToUnicode","src":["wine-spec"]},
+{"symbol":"ConvertINetReset","src":["wine-spec"]},
+{"symbol":"ConvertINetString","src":["wine-spec"]},
+{"symbol":"ConvertINetUnicodeToMultiByte","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"GetGlobalFontLinkObject","src":["wine-spec"]},
+{"symbol":"IsConvertINetStringAvailable","src":["wine-spec"]},
+{"symbol":"LcidToRfc1766A","src":["wine-spec"]},
+{"symbol":"LcidToRfc1766W","src":["wine-spec"]},
+{"symbol":"Rfc1766ToLcidA","src":["wine-spec"]},
+{"symbol":"Rfc1766ToLcidW","src":["wine-spec"]}
+]

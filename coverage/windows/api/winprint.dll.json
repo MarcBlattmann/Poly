@@ -1,0 +1,9 @@
+[
+{"symbol":"ClosePrintProcessor","src":["wine-spec"]},
+{"symbol":"ControlPrintProcessor","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"EnumPrintProcessorDatatypesW","src":["wine-spec"]},
+{"symbol":"GetPrintProcessorCapabilities","src":["wine-spec"]},
+{"symbol":"OpenPrintProcessor","src":["wine-spec"]},
+{"symbol":"PrintDocumentOnPrintProcessor","src":["wine-spec"]}
+]

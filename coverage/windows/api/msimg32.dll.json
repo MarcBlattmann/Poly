@@ -1,0 +1,7 @@
+[
+{"symbol":"AlphaBlend","forward":"gdi32.GdiAlphaBlend","src":["wine-spec"]},
+{"symbol":"DllInitialize","src":["wine-spec"]},
+{"symbol":"GradientFill","forward":"gdi32.GdiGradientFill","src":["wine-spec"]},
+{"symbol":"TransparentBlt","forward":"gdi32.GdiTransparentBlt","src":["wine-spec"]},
+{"symbol":"vSetDdrawflag","src":["wine-spec"]}
+]

@@ -1,0 +1,11 @@
+[
+{"symbol":"AMGetErrorTextA","src":["wine-spec"]},
+{"symbol":"AMGetErrorTextW","src":["wine-spec"]},
+{"symbol":"AmpFactorToDB","src":["wine-spec"]},
+{"symbol":"DBToAmpFactor","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"GetProxyDllInfo","src":["wine-spec"]}
+]

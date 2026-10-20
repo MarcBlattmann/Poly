@@ -1,0 +1,9 @@
+[
+{"symbol":"IME32SendIMEMessageEx","src":["wine-spec"]},
+{"symbol":"IMP32GetIME","src":["wine-spec"]},
+{"symbol":"IMP32QueryIME","src":["wine-spec"]},
+{"symbol":"IMP32SetIME","src":["wine-spec"]},
+{"symbol":"WINNLS32EnableIME","src":["wine-spec"]},
+{"symbol":"WINNLS32GetEnableStatus","src":["wine-spec"]},
+{"symbol":"WINNLS32GetIMEHotKey","src":["wine-spec"]}
+]

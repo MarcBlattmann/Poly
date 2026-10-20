@@ -1,0 +1,9 @@
+[
+{"symbol":"DirectInputCreateA","src":["wine-spec"]},
+{"symbol":"DirectInputCreateEx","src":["wine-spec"]},
+{"symbol":"DirectInputCreateW","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]}
+]

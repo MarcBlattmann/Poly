@@ -1,0 +1,15 @@
+[
+{"symbol":"AmsiCloseSession","src":["wine-spec"]},
+{"symbol":"AmsiInitialize","src":["wine-spec"]},
+{"symbol":"AmsiOpenSession","src":["wine-spec"]},
+{"symbol":"AmsiScanBuffer","src":["wine-spec"]},
+{"symbol":"AmsiScanString","src":["wine-spec"]},
+{"symbol":"AmsiUacInitialize","src":["wine-spec"]},
+{"symbol":"AmsiUacScan","src":["wine-spec"]},
+{"symbol":"AmsiUacUninitialize","src":["wine-spec"]},
+{"symbol":"AmsiUninitialize","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]}
+]

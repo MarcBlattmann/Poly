@@ -1,0 +1,8 @@
+[
+{"symbol":"CreateDXGIFactory","src":["wine-spec"]},
+{"symbol":"CreateDXGIFactory1","src":["wine-spec"]},
+{"symbol":"CreateDXGIFactory2","src":["wine-spec"]},
+{"symbol":"DXGID3D10CreateDevice","src":["wine-spec"]},
+{"symbol":"DXGID3D10RegisterLayers","src":["wine-spec"]},
+{"symbol":"DXGIGetDebugInterface1","src":["wine-spec"]}
+]

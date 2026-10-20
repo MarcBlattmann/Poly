@@ -1,0 +1,14 @@
+[
+{"symbol":"CopyLZFile","forward":"kernel32.CopyLZFile","src":["wine-spec"]},
+{"symbol":"GetExpandedNameA","forward":"kernel32.GetExpandedNameA","src":["wine-spec"]},
+{"symbol":"GetExpandedNameW","forward":"kernel32.GetExpandedNameW","src":["wine-spec"]},
+{"symbol":"LZClose","forward":"kernel32.LZClose","src":["wine-spec"]},
+{"symbol":"LZCopy","forward":"kernel32.LZCopy","src":["wine-spec"]},
+{"symbol":"LZDone","forward":"kernel32.LZDone","src":["wine-spec"]},
+{"symbol":"LZInit","forward":"kernel32.LZInit","src":["wine-spec"]},
+{"symbol":"LZOpenFileA","forward":"kernel32.LZOpenFileA","src":["wine-spec"]},
+{"symbol":"LZOpenFileW","forward":"kernel32.LZOpenFileW","src":["wine-spec"]},
+{"symbol":"LZRead","forward":"kernel32.LZRead","src":["wine-spec"]},
+{"symbol":"LZSeek","forward":"kernel32.LZSeek","src":["wine-spec"]},
+{"symbol":"LZStart","forward":"kernel32.LZStart","src":["wine-spec"]}
+]

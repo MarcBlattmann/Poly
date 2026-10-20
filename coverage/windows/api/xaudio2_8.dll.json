@@ -1,0 +1,9 @@
+[
+{"symbol":"CreateAudioReverb","src":["wine-spec"]},
+{"symbol":"CreateAudioVolumeMeter","src":["wine-spec"]},
+{"symbol":"CreateFX","src":["wine-spec"]},
+{"symbol":"X3DAudioCalculate","src":["wine-spec"]},
+{"symbol":"X3DAudioInitialize","src":["wine-spec"]},
+{"symbol":"XAudio2Create","src":["wine-spec"]},
+{"symbol":"XAudio2CreateWithVersionInfo","src":["wine-spec"]}
+]

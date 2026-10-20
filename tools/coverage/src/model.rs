@@ -1,13 +1,19 @@
-//! `coverage/coverage.json`: the single source of truth for what exists, who
-//! is working on it and what is done.
+//! The coverage map in `coverage/`: the single source of truth for what
+//! exists, who is working on it and what is done.
 //!
-//! Layout on disk: a small pretty-printed header, then one entry per line,
-//! sorted by id. That keeps the file greppable and makes every merge a
-//! one-line diff per changed entry.
+//! Layout on disk (see ADR 0006):
+//!
+//! ```text
+//! coverage/index.json                        schema version, sources, traces
+//! coverage/<os>/<layer>/<component>.json     one entry per line, sorted by symbol
+//! ```
+//!
+//! Small files keep every file well under GitHub's size limits and let many
+//! agents claim work in parallel without touching the same file.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::fmt::Write as _;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
 pub const SCHEMA_VERSION: u32 = 1;
 
@@ -56,9 +62,10 @@ impl Layer {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Status {
+    #[default]
     Missing,
     /// An agent is working on it; `claimed_by` says which.
     Claimed,
@@ -87,6 +94,10 @@ impl Status {
     pub fn parse(s: &str) -> Option<Status> {
         Status::ALL.into_iter().find(|st| st.name() == s)
     }
+
+    fn is_missing(&self) -> bool {
+        *self == Status::Missing
+    }
 }
 
 fn is_zero_f64(x: &f64) -> bool {
@@ -99,8 +110,9 @@ fn is_zero_u32(x: &u32) -> bool {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Entry {
-    /// `<os>/<layer>/<component>/<symbol>`. The four parts below are derived
-    /// from it on load and not stored separately.
+    /// `<os>/<layer>/<component>/<symbol>`. On disk only the symbol is
+    /// stored; the rest comes from the file's path.
+    #[serde(skip)]
     pub id: String,
     #[serde(skip, default = "default_os")]
     pub os: Os,
@@ -109,11 +121,11 @@ pub struct Entry {
     /// DLL, framework, syscall table, ...
     #[serde(skip)]
     pub component: String,
-    #[serde(skip)]
     pub symbol: String,
     /// Call number, where the number is part of the ABI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub number: Option<u64>,
+    #[serde(default, skip_serializing_if = "Status::is_missing")]
     pub status: Status,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claimed_by: Option<String>,
@@ -141,25 +153,6 @@ fn default_os() -> Os {
 
 fn default_layer() -> Layer {
     Layer::Api
-}
-
-/// Split an id into os, layer, component and symbol.
-pub fn parse_id(id: &str) -> Option<(Os, Layer, &str, &str)> {
-    let mut parts = id.splitn(4, '/');
-    let os = match parts.next()? {
-        "linux" => Os::Linux,
-        "windows" => Os::Windows,
-        "macos" => Os::Macos,
-        _ => return None,
-    };
-    let layer = match parts.next()? {
-        "syscall" => Layer::Syscall,
-        "api" => Layer::Api,
-        _ => return None,
-    };
-    let component = parts.next().filter(|c| !c.is_empty())?;
-    let symbol = parts.next().filter(|s| !s.is_empty())?;
-    Some((os, layer, component, symbol))
 }
 
 impl Entry {
@@ -218,31 +211,92 @@ impl Default for Coverage {
 }
 
 impl Coverage {
-    pub fn parse(text: &str) -> Result<Coverage, String> {
-        let mut c: Coverage = serde_json::from_str(text).map_err(|e| format!("coverage.json: {e}"))?;
-        if c.schema_version != SCHEMA_VERSION {
-            return Err(format!("unsupported schema_version {}", c.schema_version));
+    /// Read the coverage map from `dir`. A missing directory is an empty map.
+    pub fn load(dir: &Path) -> Result<Coverage, String> {
+        let index_path = dir.join(INDEX);
+        let mut c = match std::fs::read_to_string(&index_path) {
+            Ok(text) => {
+                let index: Index = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", index_path.display()))?;
+                if index.schema_version != SCHEMA_VERSION {
+                    return Err(format!("unsupported schema_version {}", index.schema_version));
+                }
+                Coverage {
+                    schema_version: index.schema_version,
+                    sources: index.sources,
+                    traces: index.traces,
+                    entries: vec![],
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Coverage::default(),
+            Err(e) => return Err(format!("{}: {e}", index_path.display())),
+        };
+        for (os, layer, component, path) in component_files(dir)? {
+            let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let entries: Vec<Entry> = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+            for mut e in entries {
+                e.id = Entry::make_id(os, layer, &component, &e.symbol);
+                (e.os, e.layer, e.component) = (os, layer, component.clone());
+                c.entries.push(e);
+            }
         }
-        for e in &mut c.entries {
-            let (os, layer, component, symbol) = parse_id(&e.id).ok_or_else(|| format!("malformed id {}", e.id))?;
-            (e.os, e.layer) = (os, layer);
-            (e.component, e.symbol) = (component.to_string(), symbol.to_string());
-        }
+        c.sort();
         Ok(c)
     }
 
-    pub fn to_text(&self) -> String {
-        let mut out = String::from("{\n");
-        let _ = writeln!(out, "  \"schema_version\": {},", self.schema_version);
-        let _ = writeln!(out, "  \"sources\": {},", indent(&serde_json::to_string_pretty(&self.sources).unwrap()));
-        let _ = writeln!(out, "  \"traces\": {},", indent(&serde_json::to_string_pretty(&self.traces).unwrap()));
-        out.push_str("  \"entries\": [\n");
-        for (i, e) in self.entries.iter().enumerate() {
-            let sep = if i + 1 == self.entries.len() { "" } else { "," };
-            let _ = writeln!(out, "    {}{sep}", serde_json::to_string(e).unwrap());
+    /// Every file of the on-disk form: (path relative to the coverage dir, contents).
+    pub fn files(&self) -> BTreeMap<PathBuf, String> {
+        let mut out = BTreeMap::new();
+        let index =
+            Index { schema_version: self.schema_version, sources: self.sources.clone(), traces: self.traces.clone() };
+        out.insert(PathBuf::from(INDEX), serde_json::to_string_pretty(&index).unwrap() + "\n");
+        let mut groups: BTreeMap<PathBuf, Vec<&Entry>> = BTreeMap::new();
+        for e in &self.entries {
+            groups.entry(component_path(e.os, e.layer, &e.component)).or_default().push(e);
         }
-        out.push_str("  ]\n}\n");
+        for (path, entries) in groups {
+            let lines: Vec<String> = entries.iter().map(|e| serde_json::to_string(e).unwrap()).collect();
+            out.insert(path, format!("[\n{}\n]\n", lines.join(",\n")));
+        }
         out
+    }
+
+    /// Write the map to `dir`, removing component files that no longer exist.
+    pub fn save(&self, dir: &Path) -> Result<(), String> {
+        let files = self.files();
+        for (_, _, _, path) in component_files(dir)? {
+            let rel = path.strip_prefix(dir).unwrap().to_path_buf();
+            if !files.contains_key(&rel) {
+                std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            }
+        }
+        for (rel, contents) in files {
+            let path = dir.join(&rel);
+            if std::fs::read_to_string(&path).ok().as_deref() == Some(contents.as_str()) {
+                continue;
+            }
+            std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+            std::fs::write(&path, contents).map_err(|e| format!("{}: {e}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    /// Files in `dir` that differ from (or are missing in, or are extra to)
+    /// the canonical form of this map.
+    pub fn stale_files(&self, dir: &Path) -> Result<Vec<PathBuf>, String> {
+        let files = self.files();
+        let mut stale = Vec::new();
+        for (rel, contents) in &files {
+            if std::fs::read_to_string(dir.join(rel)).ok().as_deref() != Some(contents.as_str()) {
+                stale.push(rel.clone());
+            }
+        }
+        for (_, _, _, path) in component_files(dir)? {
+            let rel = path.strip_prefix(dir).unwrap().to_path_buf();
+            if !files.contains_key(&rel) {
+                stale.push(rel);
+            }
+        }
+        Ok(stale)
     }
 
     pub fn sort(&mut self) {
@@ -296,6 +350,9 @@ impl Coverage {
             if e.id != Entry::make_id(e.os, e.layer, &e.component, &e.symbol) {
                 errors.push(format!("{}: id does not match os/layer/component/symbol", e.id));
             }
+            if !valid_component(&e.component) {
+                errors.push(format!("{}: component name cannot be a file name", e.id));
+            }
             match (e.status, &e.claimed_by) {
                 (Status::Claimed, None) => errors.push(format!("{}: claimed without claimed_by", e.id)),
                 (Status::Claimed, Some(_)) => {}
@@ -327,8 +384,48 @@ pub struct MergeStats {
     pub updated: usize,
 }
 
-fn indent(s: &str) -> String {
-    s.replace('\n', "\n  ")
+const INDEX: &str = "index.json";
+
+#[derive(Serialize, Deserialize)]
+struct Index {
+    schema_version: u32,
+    #[serde(default)]
+    sources: BTreeMap<String, Source>,
+    /// Recorded app trace sessions per OS.
+    #[serde(default)]
+    traces: BTreeMap<Os, Traces>,
+}
+
+fn valid_component(c: &str) -> bool {
+    !c.is_empty() && !c.starts_with('.') && !c.contains(['/', '\\']) && c != "index"
+}
+
+fn component_path(os: Os, layer: Layer, component: &str) -> PathBuf {
+    PathBuf::from(os.name()).join(layer.name()).join(format!("{component}.json"))
+}
+
+/// All `<os>/<layer>/<component>.json` files under `dir`, sorted.
+fn component_files(dir: &Path) -> Result<Vec<(Os, Layer, String, PathBuf)>, String> {
+    let mut out = Vec::new();
+    for os in Os::ALL {
+        for layer in [Layer::Syscall, Layer::Api] {
+            let d = dir.join(os.name()).join(layer.name());
+            let Ok(read) = std::fs::read_dir(&d) else { continue };
+            let mut names = BTreeSet::new();
+            for f in read {
+                let f = f.map_err(|e| e.to_string())?;
+                let name = f.file_name().to_string_lossy().to_string();
+                if let Some(component) = name.strip_suffix(".json") {
+                    names.insert(component.to_string());
+                }
+            }
+            for component in names {
+                let path = d.join(format!("{component}.json"));
+                out.push((os, layer, component, path));
+            }
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -345,13 +442,41 @@ mod tests {
         c
     }
 
+    fn temp_dir(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("poly-coverage-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        d
+    }
+
     #[test]
     fn roundtrip_is_stable() {
         let c = sample();
-        let text = c.to_text();
-        let back = Coverage::parse(&text).unwrap();
+        let dir = temp_dir("roundtrip");
+        c.save(&dir).unwrap();
+        assert!(dir.join("windows/api/kernel32.dll.json").exists());
+        let back = Coverage::load(&dir).unwrap();
         assert_eq!(back, c);
-        assert_eq!(back.to_text(), text);
+        assert!(back.stale_files(&dir).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_removes_vanished_components_and_check_sees_extras() {
+        let mut c = sample();
+        let dir = temp_dir("vanish");
+        c.save(&dir).unwrap();
+        c.entries.retain(|e| e.os != Os::Linux);
+        assert_eq!(c.stale_files(&dir).unwrap(), [PathBuf::from("linux/syscall/x86_64.json")]);
+        c.save(&dir).unwrap();
+        assert!(!dir.join("linux/syscall/x86_64.json").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_status_is_not_stored() {
+        let c = sample();
+        let text = &c.files()[&PathBuf::from("windows/api/kernel32.dll.json")];
+        assert_eq!(text, "[\n{\"symbol\":\"CreateFileW\",\"src\":[\"t\"]}\n]\n");
     }
 
     #[test]

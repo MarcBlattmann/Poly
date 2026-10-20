@@ -1,9 +1,10 @@
-//! `coverage`: maintain coverage/coverage.json and the README progress section.
+//! `coverage`: maintain the coverage map in `coverage/` and the README progress section.
 //!
 //! ```text
 //! coverage import wine <wine-checkout> --revision <rev>
 //! coverage import linux <syscall_64.tbl> --revision <rev>
 //! coverage import xnu <syscalls.master> <syscall_sw.c> --revision <rev>
+//! coverage import macos-sdk <MacOSX.sdk> --revision <sdk version>   (run on a Mac)
 //! coverage claim <id> --agent <agent-id>
 //! coverage release <id>
 //! coverage set-status <id> <missing|stub|green|blocked-by-design>
@@ -26,16 +27,12 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2).unwrap().to_path_buf()
 }
 
-fn coverage_path() -> PathBuf {
-    root().join("coverage/coverage.json")
+fn coverage_dir() -> PathBuf {
+    root().join("coverage")
 }
 
 fn load() -> Result<Coverage, String> {
-    match std::fs::read_to_string(coverage_path()) {
-        Ok(text) => Coverage::parse(&text),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Coverage::default()),
-        Err(e) => Err(format!("{}: {e}", coverage_path().display())),
-    }
+    Coverage::load(&coverage_dir())
 }
 
 fn save(c: &Coverage) -> Result<(), String> {
@@ -43,7 +40,7 @@ fn save(c: &Coverage) -> Result<(), String> {
     if let Some(first) = errors.first() {
         return Err(format!("refusing to save: {} invariant violations, first: {first}", errors.len()));
     }
-    std::fs::write(coverage_path(), c.to_text()).map_err(|e| e.to_string())
+    c.save(&coverage_dir())
 }
 
 fn read(path: &str) -> Result<String, String> {
@@ -94,7 +91,15 @@ fn import(args: &[String]) -> Result<(), String> {
                 v,
             )
         }
-        _ => return Err("usage: coverage import <wine DIR | linux TBL | xnu MASTER SW> --revision REV".into()),
+        ["macos-sdk", sdk] => (
+            vec![(import::MACOS_SDK, "macOS SDK .tbd stubs (exported symbols and Objective-C classes)")],
+            import::macos_sdk(Path::new(sdk))?,
+        ),
+        _ => {
+            return Err(
+                "usage: coverage import <wine DIR | linux TBL | xnu MASTER SW | macos-sdk SDK> --revision REV".into()
+            );
+        }
     };
     for (id, description) in sources {
         c.sources.insert(id.into(), Source { description: description.into(), revision: revision.into() });
@@ -160,11 +165,16 @@ fn check() -> Result<(), String> {
     if !errors.is_empty() {
         return Err(format!("{} invariant violations", errors.len()));
     }
-    let text = std::fs::read_to_string(coverage_path()).map_err(|e| e.to_string())?;
-    if text != c.to_text() {
-        return Err("coverage.json is not in canonical form; run any coverage command to rewrite it".into());
+    let stale = c.stale_files(&coverage_dir())?;
+    if !stale.is_empty() {
+        let names: Vec<String> = stale.iter().take(5).map(|p| p.display().to_string()).collect();
+        return Err(format!(
+            "{} coverage files not in canonical form (e.g. {}); run `cargo xtask coverage readme` or any write command",
+            stale.len(),
+            names.join(", ")
+        ));
     }
-    println!("coverage.json ok: {} entries", c.entries.len());
+    println!("coverage map ok: {} entries", c.entries.len());
     Ok(())
 }
 

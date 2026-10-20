@@ -1,0 +1,8 @@
+[
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"WLFreeProfile","src":["wine-spec"]},
+{"symbol":"WLFreeProfileXml","src":["wine-spec"]},
+{"symbol":"WLInvokeProfileUI","src":["wine-spec"]},
+{"symbol":"WLInvokeProfileUIFromXMLFile","src":["wine-spec"]},
+{"symbol":"WlanUIEditProfile","src":["wine-spec"]}
+]

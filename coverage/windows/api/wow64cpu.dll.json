@@ -1,0 +1,10 @@
+[
+{"symbol":"BTCpuGetBopCode","src":["wine-spec"]},
+{"symbol":"BTCpuGetContext","src":["wine-spec"]},
+{"symbol":"BTCpuIsProcessorFeaturePresent","src":["wine-spec"]},
+{"symbol":"BTCpuProcessInit","src":["wine-spec"]},
+{"symbol":"BTCpuResetToConsistentState","src":["wine-spec"]},
+{"symbol":"BTCpuSetContext","src":["wine-spec"]},
+{"symbol":"BTCpuSimulate","src":["wine-spec"]},
+{"symbol":"BTCpuTurboThunkControl","src":["wine-spec"]}
+]

@@ -1,0 +1,4 @@
+[
+{"symbol":"DirectPlayCreate","forward":"dplayx.DirectPlayCreate","src":["wine-spec"]},
+{"symbol":"DirectPlayEnumerate","forward":"dplayx.DirectPlayEnumerate","src":["wine-spec"]}
+]

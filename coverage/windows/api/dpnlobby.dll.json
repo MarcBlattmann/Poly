@@ -1,0 +1,3 @@
+[
+{"symbol":"DirectPlay8LobbyCreate","forward":"dpnet.DirectPlay8Create","src":["wine-spec"]}
+]

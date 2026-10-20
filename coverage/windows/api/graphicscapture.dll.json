@@ -1,0 +1,4 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]}
+]

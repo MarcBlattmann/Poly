@@ -1,0 +1,6 @@
+[
+{"symbol":"CreateAssemblyCache","src":["wine-spec"]},
+{"symbol":"CreateAssemblyNameObject","src":["wine-spec"]},
+{"symbol":"SxsLookupClrGuid","src":["wine-spec"]},
+{"symbol":"SxspGenerateManifestPathOnAssemblyIdentity","src":["wine-spec"]}
+]

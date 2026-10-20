@@ -1,0 +1,6 @@
+[
+{"symbol":"DllInstall","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"InitializePKI","src":["wine-spec"]}
+]

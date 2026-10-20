@@ -1,0 +1,15 @@
+[
+{"symbol":"D3DFree","src":["wine-spec"]},
+{"symbol":"D3DMalloc","src":["wine-spec"]},
+{"symbol":"D3DRealloc","src":["wine-spec"]},
+{"symbol":"Direct3DCreate","src":["wine-spec"]},
+{"symbol":"Direct3DCreateDevice","src":["wine-spec"]},
+{"symbol":"Direct3DCreateTexture","src":["wine-spec"]},
+{"symbol":"Direct3DGetSWRastZPixFmts","src":["wine-spec"]},
+{"symbol":"Direct3D_HALCleanUp","src":["wine-spec"]},
+{"symbol":"FlushD3DDevices","src":["wine-spec"]},
+{"symbol":"FlushD3DDevices2","src":["wine-spec"]},
+{"symbol":"PaletteAssociateNotify","src":["wine-spec"]},
+{"symbol":"PaletteUpdateNotify","src":["wine-spec"]},
+{"symbol":"SurfaceFlipNotify","src":["wine-spec"]}
+]

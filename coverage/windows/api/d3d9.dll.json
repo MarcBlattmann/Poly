@@ -1,0 +1,17 @@
+[
+{"symbol":"D3DPERF_BeginEvent","src":["wine-spec"]},
+{"symbol":"D3DPERF_EndEvent","src":["wine-spec"]},
+{"symbol":"D3DPERF_GetStatus","src":["wine-spec"]},
+{"symbol":"D3DPERF_QueryRepeatFrame","src":["wine-spec"]},
+{"symbol":"D3DPERF_SetMarker","src":["wine-spec"]},
+{"symbol":"D3DPERF_SetOptions","src":["wine-spec"]},
+{"symbol":"D3DPERF_SetRegion","src":["wine-spec"]},
+{"symbol":"DebugSetLevel","src":["wine-spec"]},
+{"symbol":"DebugSetMute","src":["wine-spec"]},
+{"symbol":"Direct3DCreate9","src":["wine-spec"]},
+{"symbol":"Direct3DCreate9Ex","src":["wine-spec"]},
+{"symbol":"Direct3DCreate9On12","src":["wine-spec"]},
+{"symbol":"Direct3DShaderValidatorCreate9","src":["wine-spec"]},
+{"symbol":"PSGPError","src":["wine-spec"]},
+{"symbol":"PSGPSampleTexture","src":["wine-spec"]}
+]

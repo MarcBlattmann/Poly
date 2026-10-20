@@ -1,0 +1,10 @@
+[
+{"symbol":"CreateIUriBuilder","src":["wine-spec"]},
+{"symbol":"CreateUri","src":["wine-spec"]},
+{"symbol":"CreateUriWithFragment","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"PrivateCoInternetCombineIUri","src":["wine-spec"]},
+{"symbol":"PrivateCoInternetParseIUri","src":["wine-spec"]}
+]

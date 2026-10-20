@@ -1,0 +1,9 @@
+[
+{"symbol":"EnumPropPages","src":["wine-spec"]},
+{"symbol":"drvCommConfigDialogA","src":["wine-spec"]},
+{"symbol":"drvCommConfigDialogW","src":["wine-spec"]},
+{"symbol":"drvGetDefaultCommConfigA","src":["wine-spec"]},
+{"symbol":"drvGetDefaultCommConfigW","src":["wine-spec"]},
+{"symbol":"drvSetDefaultCommConfigA","src":["wine-spec"]},
+{"symbol":"drvSetDefaultCommConfigW","src":["wine-spec"]}
+]

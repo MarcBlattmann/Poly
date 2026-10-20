@@ -1,0 +1,14 @@
+[
+{"symbol":"D2D1ComputeMaximumScaleFactor","src":["wine-spec"]},
+{"symbol":"D2D1ConvertColorSpace","src":["wine-spec"]},
+{"symbol":"D2D1CreateDevice","src":["wine-spec"]},
+{"symbol":"D2D1CreateDeviceContext","src":["wine-spec"]},
+{"symbol":"D2D1CreateFactory","src":["wine-spec"]},
+{"symbol":"D2D1InvertMatrix","src":["wine-spec"]},
+{"symbol":"D2D1IsMatrixInvertible","src":["wine-spec"]},
+{"symbol":"D2D1MakeRotateMatrix","src":["wine-spec"]},
+{"symbol":"D2D1MakeSkewMatrix","src":["wine-spec"]},
+{"symbol":"D2D1SinCos","src":["wine-spec"]},
+{"symbol":"D2D1Tan","src":["wine-spec"]},
+{"symbol":"D2D1Vec3Length","src":["wine-spec"]}
+]

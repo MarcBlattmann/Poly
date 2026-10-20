@@ -1,0 +1,4 @@
+[
+{"symbol":"DsRoleFreeMemory","src":["wine-spec"]},
+{"symbol":"DsRoleGetPrimaryDomainInformation","src":["wine-spec"]}
+]

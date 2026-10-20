@@ -1,0 +1,5 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"GameInputCreate","src":["wine-spec"]}
+]

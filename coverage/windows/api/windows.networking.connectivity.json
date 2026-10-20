@@ -1,0 +1,12 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"FixDisabledComponentsForTeredo","src":["wine-spec"]},
+{"symbol":"RefreshTeredoClientState","src":["wine-spec"]},
+{"symbol":"SetHostNameMediaStreamingMode","src":["wine-spec"]},
+{"symbol":"TeredoExtAcquireTeredoConsumerHandle","src":["wine-spec"]},
+{"symbol":"TeredoExtReleaseTeredoConsumerHandle","src":["wine-spec"]}
+]

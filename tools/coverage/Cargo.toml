@@ -1,6 +1,6 @@
 [package]
 name = "poly-coverage"
-description = "Maintains coverage/coverage.json and the progress section of the README"
+description = "Maintains the coverage map in coverage/ and the progress section of the README"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

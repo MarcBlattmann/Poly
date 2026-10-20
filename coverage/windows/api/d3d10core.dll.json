@@ -1,0 +1,4 @@
+[
+{"symbol":"D3D10CoreCreateDevice","src":["wine-spec"]},
+{"symbol":"D3D10CoreRegisterLayers","src":["wine-spec"]}
+]

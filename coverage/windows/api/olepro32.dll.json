@@ -1,0 +1,13 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"OleCreateFontIndirect","forward":"oleaut32.OleCreateFontIndirect","src":["wine-spec"]},
+{"symbol":"OleCreatePictureIndirect","forward":"oleaut32.OleCreatePictureIndirect","src":["wine-spec"]},
+{"symbol":"OleCreatePropertyFrame","forward":"oleaut32.OleCreatePropertyFrame","src":["wine-spec"]},
+{"symbol":"OleCreatePropertyFrameIndirect","forward":"oleaut32.OleCreatePropertyFrameIndirect","src":["wine-spec"]},
+{"symbol":"OleIconToCursor","forward":"oleaut32.OleIconToCursor","src":["wine-spec"]},
+{"symbol":"OleLoadPicture","forward":"oleaut32.OleLoadPicture","src":["wine-spec"]},
+{"symbol":"OleTranslateColor","forward":"oleaut32.OleTranslateColor","src":["wine-spec"]}
+]

@@ -1,0 +1,16 @@
+[
+{"symbol":"CreateTextServices","forward":"riched20.CreateTextServices","src":["wine-spec"]},
+{"symbol":"DllGetVersion","src":["wine-spec"]},
+{"symbol":"IID_IRichEditOle","src":["wine-spec"]},
+{"symbol":"IID_IRichEditOleCallback","src":["wine-spec"]},
+{"symbol":"IID_ITextHost","forward":"riched20.IID_ITextHost","src":["wine-spec"]},
+{"symbol":"IID_ITextHost2","forward":"riched20.IID_ITextHost2","src":["wine-spec"]},
+{"symbol":"IID_ITextServices","forward":"riched20.IID_ITextServices","src":["wine-spec"]},
+{"symbol":"REExtendedRegisterClass","forward":"riched20.REExtendedRegisterClass","src":["wine-spec"]},
+{"symbol":"RichComboBoxWndProc","src":["wine-spec"]},
+{"symbol":"RichEdit10ANSIWndProc","forward":"riched20.RichEdit10ANSIWndProc","src":["wine-spec"]},
+{"symbol":"RichEditANSIWndProc","forward":"riched20.RichEditANSIWndProc","src":["wine-spec"]},
+{"symbol":"RichEditWndProc","src":["wine-spec"]},
+{"symbol":"RichListBoxWndProc","src":["wine-spec"]},
+{"symbol":"SetCustomTextOutHandlerEx","src":["wine-spec"]}
+]

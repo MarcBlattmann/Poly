@@ -1,0 +1,11 @@
+[
+{"symbol":"CreateContainerConsumer","src":["wine-spec"]},
+{"symbol":"CreateContainerProducer","src":["wine-spec"]},
+{"symbol":"CreateReachPackageReceiver","src":["wine-spec"]},
+{"symbol":"CreateReachPackageSender","src":["wine-spec"]},
+{"symbol":"CreateSeekableBuffer","src":["wine-spec"]},
+{"symbol":"CreateStreamReceiverOnFileHandle","src":["wine-spec"]},
+{"symbol":"CreateStreamSenderOnFileHandle","src":["wine-spec"]},
+{"symbol":"CreateStreamSenderOnIStream","src":["wine-spec"]},
+{"symbol":"DDLogHelper","src":["wine-spec"]}
+]

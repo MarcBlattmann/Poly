@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "linux-syscall-tbl": {
+      "description": "Linux arch/x86/entry/syscalls/syscall_64.tbl",
+      "revision": "f47d223627f80cb7a1eb14c585fe6cb35de5e984"
+    },
+    "wine-spec": {
+      "description": "Wine .spec export lists (wine-mirror/wine dlls/*/*.spec)",
+      "revision": "840a939ee526137639665ff5f587224d6a36403f"
+    },
+    "xnu-mach-traps": {
+      "description": "XNU osfmk/kern/syscall_sw.c mach_trap_table",
+      "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea"
+    },
+    "xnu-syscalls-master": {
+      "description": "XNU bsd/kern/syscalls.master",
+      "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea"
+    }
+  },
+  "traces": {}
+}

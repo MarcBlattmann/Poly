@@ -1,0 +1,10 @@
+[
+{"symbol":"DllMain","src":["wine-spec"]},
+{"symbol":"XInputEnable","src":["wine-spec"]},
+{"symbol":"XInputGetAudioDeviceIds","src":["wine-spec"]},
+{"symbol":"XInputGetBatteryInformation","src":["wine-spec"]},
+{"symbol":"XInputGetCapabilities","src":["wine-spec"]},
+{"symbol":"XInputGetKeystroke","src":["wine-spec"]},
+{"symbol":"XInputGetState","src":["wine-spec"]},
+{"symbol":"XInputSetState","src":["wine-spec"]}
+]

@@ -1,0 +1,13 @@
+[
+{"symbol":"WofEnumEntries","src":["wine-spec"]},
+{"symbol":"WofFileEnumFiles","src":["wine-spec"]},
+{"symbol":"WofGetDriverVersion","src":["wine-spec"]},
+{"symbol":"WofIsExternalFile","src":["wine-spec"]},
+{"symbol":"WofSetFileDataLocation","src":["wine-spec"]},
+{"symbol":"WofShouldCompressBinaries","src":["wine-spec"]},
+{"symbol":"WofWimAddEntry","src":["wine-spec"]},
+{"symbol":"WofWimEnumFiles","src":["wine-spec"]},
+{"symbol":"WofWimRemoveEntry","src":["wine-spec"]},
+{"symbol":"WofWimSuspendEntry","src":["wine-spec"]},
+{"symbol":"WofWimUpdateEntry","src":["wine-spec"]}
+]

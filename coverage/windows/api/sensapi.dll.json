@@ -1,0 +1,5 @@
+[
+{"symbol":"IsDestinationReachableA","src":["wine-spec"]},
+{"symbol":"IsDestinationReachableW","src":["wine-spec"]},
+{"symbol":"IsNetworkAlive","src":["wine-spec"]}
+]

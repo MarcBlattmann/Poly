@@ -1,0 +1,13 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"RoCreateNonAgilePropertySet","src":["wine-spec"]},
+{"symbol":"RoCreatePropertySetSerializer","src":["wine-spec"]},
+{"symbol":"RoGetBufferMarshaler","src":["wine-spec"]},
+{"symbol":"RoGetMetaDataFile","src":["wine-spec"]},
+{"symbol":"RoIsApiContractMajorVersionPresent","src":["wine-spec"]},
+{"symbol":"RoIsApiContractPresent","src":["wine-spec"]},
+{"symbol":"RoParseTypeName","src":["wine-spec"]},
+{"symbol":"RoResolveNamespace","src":["wine-spec"]}
+]

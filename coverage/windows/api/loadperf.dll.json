@@ -1,0 +1,16 @@
+[
+{"symbol":"BackupPerfRegistryToFileW","src":["wine-spec"]},
+{"symbol":"InstallPerfDllA","src":["wine-spec"]},
+{"symbol":"InstallPerfDllW","src":["wine-spec"]},
+{"symbol":"LoadMofFromInstalledServiceA","src":["wine-spec"]},
+{"symbol":"LoadMofFromInstalledServiceW","src":["wine-spec"]},
+{"symbol":"LoadPerfCounterTextStringsA","src":["wine-spec"]},
+{"symbol":"LoadPerfCounterTextStringsW","src":["wine-spec"]},
+{"symbol":"RestorePerfRegistryFromFileW","src":["wine-spec"]},
+{"symbol":"SetServiceAsTrustedA","src":["wine-spec"]},
+{"symbol":"SetServiceAsTrustedW","src":["wine-spec"]},
+{"symbol":"UnloadPerfCounterTextStringsA","src":["wine-spec"]},
+{"symbol":"UnloadPerfCounterTextStringsW","src":["wine-spec"]},
+{"symbol":"UpdatePerfNameFilesA","src":["wine-spec"]},
+{"symbol":"UpdatePerfNameFilesW","src":["wine-spec"]}
+]

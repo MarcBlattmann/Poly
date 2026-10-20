@@ -1,0 +1,10 @@
+[
+{"symbol":"IcmpCloseHandle","forward":"iphlpapi.IcmpCloseHandle","src":["wine-spec"]},
+{"symbol":"IcmpCreateFile","forward":"iphlpapi.IcmpCreateFile","src":["wine-spec"]},
+{"symbol":"IcmpParseReplies","forward":"iphlpapi.IcmpParseReplies","src":["wine-spec"]},
+{"symbol":"IcmpSendEcho","forward":"iphlpapi.IcmpSendEcho","src":["wine-spec"]},
+{"symbol":"IcmpSendEcho2","forward":"iphlpapi.IcmpSendEcho2","src":["wine-spec"]},
+{"symbol":"do_echo_rep","forward":"iphlpapi.do_echo_rep","src":["wine-spec"]},
+{"symbol":"do_echo_req","forward":"iphlpapi.do_echo_req","src":["wine-spec"]},
+{"symbol":"register_icmp","forward":"iphlpapi.register_icmp","src":["wine-spec"]}
+]

@@ -1,0 +1,14 @@
+[
+{"symbol":"GetCLRVersionForPSVersion","src":["wine-spec"]},
+{"symbol":"PerformWSManPluginReportCompletion","src":["wine-spec"]},
+{"symbol":"WSManPluginCommand","src":["wine-spec"]},
+{"symbol":"WSManPluginConnect","src":["wine-spec"]},
+{"symbol":"WSManPluginReceive","src":["wine-spec"]},
+{"symbol":"WSManPluginReleaseCommandContext","src":["wine-spec"]},
+{"symbol":"WSManPluginReleaseShellContext","src":["wine-spec"]},
+{"symbol":"WSManPluginSend","src":["wine-spec"]},
+{"symbol":"WSManPluginShell","src":["wine-spec"]},
+{"symbol":"WSManPluginShutdown","src":["wine-spec"]},
+{"symbol":"WSManPluginSignal","src":["wine-spec"]},
+{"symbol":"WSManPluginStartup","src":["wine-spec"]}
+]

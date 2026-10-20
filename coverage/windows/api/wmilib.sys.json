@@ -1,0 +1,7 @@
+[
+{"symbol":"DllInitialize","src":["wine-spec"]},
+{"symbol":"DllUnload","src":["wine-spec"]},
+{"symbol":"WmiCompleteRequest","src":["wine-spec"]},
+{"symbol":"WmiFireEvent","src":["wine-spec"]},
+{"symbol":"WmiSystemControl","src":["wine-spec"]}
+]

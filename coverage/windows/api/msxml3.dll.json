@@ -1,0 +1,13 @@
+[
+{"symbol":"#10","src":["wine-spec"]},
+{"symbol":"#11","src":["wine-spec"]},
+{"symbol":"#12","src":["wine-spec"]},
+{"symbol":"#6","src":["wine-spec"]},
+{"symbol":"#7","src":["wine-spec"]},
+{"symbol":"#8","src":["wine-spec"]},
+{"symbol":"#9","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]}
+]

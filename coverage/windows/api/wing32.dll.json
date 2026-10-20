@@ -1,0 +1,12 @@
+[
+{"symbol":"WinGBitBlt","src":["wine-spec"]},
+{"symbol":"WinGCreateBitmap","src":["wine-spec"]},
+{"symbol":"WinGCreateDC","src":["wine-spec"]},
+{"symbol":"WinGCreateHalftoneBrush","src":["wine-spec"]},
+{"symbol":"WinGCreateHalftonePalette","src":["wine-spec"]},
+{"symbol":"WinGGetDIBColorTable","src":["wine-spec"]},
+{"symbol":"WinGGetDIBPointer","src":["wine-spec"]},
+{"symbol":"WinGRecommendDIBFormat","src":["wine-spec"]},
+{"symbol":"WinGSetDIBColorTable","src":["wine-spec"]},
+{"symbol":"WinGStretchBlt","src":["wine-spec"]}
+]

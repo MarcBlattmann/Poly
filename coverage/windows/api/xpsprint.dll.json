@@ -1,0 +1,7 @@
+[
+{"symbol":"#3","src":["wine-spec"]},
+{"symbol":"#5","src":["wine-spec"]},
+{"symbol":"DllMain","src":["wine-spec"]},
+{"symbol":"StartXpsPrintJob","src":["wine-spec"]},
+{"symbol":"StartXpsPrintJob1","src":["wine-spec"]}
+]

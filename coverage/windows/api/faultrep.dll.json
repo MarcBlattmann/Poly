@@ -1,0 +1,16 @@
+[
+{"symbol":"AddERExcludedApplicationA","src":["wine-spec"]},
+{"symbol":"AddERExcludedApplicationW","src":["wine-spec"]},
+{"symbol":"CreateMinidumpA","src":["wine-spec"]},
+{"symbol":"CreateMinidumpW","src":["wine-spec"]},
+{"symbol":"ReportEREvent","src":["wine-spec"]},
+{"symbol":"ReportEREventDW","src":["wine-spec"]},
+{"symbol":"ReportFault","src":["wine-spec"]},
+{"symbol":"ReportFaultDWM","src":["wine-spec"]},
+{"symbol":"ReportFaultFromQueue","src":["wine-spec"]},
+{"symbol":"ReportFaultToQueue","src":["wine-spec"]},
+{"symbol":"ReportHang","src":["wine-spec"]},
+{"symbol":"ReportKernelFaultA","src":["wine-spec"]},
+{"symbol":"ReportKernelFaultDWW","src":["wine-spec"]},
+{"symbol":"ReportKernelFaultW","src":["wine-spec"]}
+]

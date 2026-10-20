@@ -1,0 +1,11 @@
+[
+{"symbol":"CryptSIPCreateIndirectData","src":["wine-spec"]},
+{"symbol":"CryptSIPGetInfo","src":["wine-spec"]},
+{"symbol":"CryptSIPGetRegWorkingFlags","src":["wine-spec"]},
+{"symbol":"CryptSIPGetSignedDataMsg","src":["wine-spec"]},
+{"symbol":"CryptSIPPutSignedDataMsg","src":["wine-spec"]},
+{"symbol":"CryptSIPRemoveSignedDataMsg","src":["wine-spec"]},
+{"symbol":"CryptSIPVerifyIndirectData","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]}
+]

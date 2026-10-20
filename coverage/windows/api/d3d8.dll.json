@@ -1,0 +1,7 @@
+[
+{"symbol":"D3D8GetSWInfo","src":["wine-spec"]},
+{"symbol":"DebugSetMute","src":["wine-spec"]},
+{"symbol":"Direct3DCreate8","src":["wine-spec"]},
+{"symbol":"ValidatePixelShader","src":["wine-spec"]},
+{"symbol":"ValidateVertexShader","src":["wine-spec"]}
+]

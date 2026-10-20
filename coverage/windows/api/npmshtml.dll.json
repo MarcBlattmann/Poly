@@ -1,0 +1,5 @@
+[
+{"symbol":"NP_GetEntryPoints","forward":"mshtml.NP_GetEntryPoints","src":["wine-spec"]},
+{"symbol":"NP_Initialize","src":["wine-spec"]},
+{"symbol":"NP_Shutdown","src":["wine-spec"]}
+]

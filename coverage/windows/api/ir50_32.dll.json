@@ -1,0 +1,5 @@
+[
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"DriverProc","src":["wine-spec"]}
+]

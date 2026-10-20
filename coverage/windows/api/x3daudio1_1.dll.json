@@ -1,0 +1,6 @@
+[
+{"symbol":"X3DAudioCalculate","arch":["!i386"],"src":["wine-spec"]},
+{"symbol":"X3DAudioInitialize","arch":["!i386"],"src":["wine-spec"]},
+{"symbol":"_X3DAudioCalculate@20","arch":["i386"],"src":["wine-spec"]},
+{"symbol":"_X3DAudioInitialize@12","arch":["i386"],"src":["wine-spec"]}
+]

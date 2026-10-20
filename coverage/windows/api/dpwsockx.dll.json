@@ -1,0 +1,5 @@
+[
+{"symbol":"DPWS_BuildIPMessageHeader","src":["wine-spec"]},
+{"symbol":"DPWS_GetEnumPort","src":["wine-spec"]},
+{"symbol":"SPInit","src":["wine-spec"]}
+]

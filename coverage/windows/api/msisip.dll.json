@@ -1,0 +1,10 @@
+[
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"MsiSIPCreateIndirectData","src":["wine-spec"]},
+{"symbol":"MsiSIPGetSignedDataMsg","src":["wine-spec"]},
+{"symbol":"MsiSIPIsMyTypeOfFile","src":["wine-spec"]},
+{"symbol":"MsiSIPPutSignedDataMsg","src":["wine-spec"]},
+{"symbol":"MsiSIPRemoveSignedDataMsg","src":["wine-spec"]},
+{"symbol":"MsiSIPVerifyIndirectData","src":["wine-spec"]}
+]

@@ -1,0 +1,15 @@
+[
+{"symbol":"WebSocketAbortHandle","src":["wine-spec"]},
+{"symbol":"WebSocketBeginClientHandshake","src":["wine-spec"]},
+{"symbol":"WebSocketBeginServerHandshake","src":["wine-spec"]},
+{"symbol":"WebSocketCompleteAction","src":["wine-spec"]},
+{"symbol":"WebSocketCreateClientHandle","src":["wine-spec"]},
+{"symbol":"WebSocketCreateServerHandle","src":["wine-spec"]},
+{"symbol":"WebSocketDeleteHandle","src":["wine-spec"]},
+{"symbol":"WebSocketEndClientHandshake","src":["wine-spec"]},
+{"symbol":"WebSocketEndServerHandshake","src":["wine-spec"]},
+{"symbol":"WebSocketGetAction","src":["wine-spec"]},
+{"symbol":"WebSocketGetGlobalProperty","src":["wine-spec"]},
+{"symbol":"WebSocketReceive","src":["wine-spec"]},
+{"symbol":"WebSocketSend","src":["wine-spec"]}
+]

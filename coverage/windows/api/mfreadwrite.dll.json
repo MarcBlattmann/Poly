@@ -1,0 +1,11 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"MFCreateSinkWriterFromMediaSink","src":["wine-spec"]},
+{"symbol":"MFCreateSinkWriterFromURL","src":["wine-spec"]},
+{"symbol":"MFCreateSourceReaderFromByteStream","src":["wine-spec"]},
+{"symbol":"MFCreateSourceReaderFromMediaSource","src":["wine-spec"]},
+{"symbol":"MFCreateSourceReaderFromURL","src":["wine-spec"]}
+]

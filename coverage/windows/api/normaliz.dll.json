@@ -1,0 +1,7 @@
+[
+{"symbol":"IdnToAscii","forward":"kernel32.IdnToAscii","src":["wine-spec"]},
+{"symbol":"IdnToNameprepUnicode","forward":"kernel32.IdnToNameprepUnicode","src":["wine-spec"]},
+{"symbol":"IdnToUnicode","forward":"kernel32.IdnToUnicode","src":["wine-spec"]},
+{"symbol":"IsNormalizedString","forward":"kernel32.IsNormalizedString","src":["wine-spec"]},
+{"symbol":"NormalizeString","forward":"kernel32.NormalizeString","src":["wine-spec"]}
+]

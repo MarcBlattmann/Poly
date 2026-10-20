@@ -1,0 +1,14 @@
+[
+{"symbol":"RmAddFilter","src":["wine-spec"]},
+{"symbol":"RmCancelCurrentTask","src":["wine-spec"]},
+{"symbol":"RmEndSession","src":["wine-spec"]},
+{"symbol":"RmGetFilterList","src":["wine-spec"]},
+{"symbol":"RmGetList","src":["wine-spec"]},
+{"symbol":"RmJoinSession","src":["wine-spec"]},
+{"symbol":"RmRegisterResources","src":["wine-spec"]},
+{"symbol":"RmRemoveFilter","src":["wine-spec"]},
+{"symbol":"RmReserveHeap","src":["wine-spec"]},
+{"symbol":"RmRestart","src":["wine-spec"]},
+{"symbol":"RmShutdown","src":["wine-spec"]},
+{"symbol":"RmStartSession","src":["wine-spec"]}
+]

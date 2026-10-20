@@ -1,0 +1,6 @@
+[
+{"symbol":"CleanupTemporaryState","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]}
+]

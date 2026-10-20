@@ -1,0 +1,17 @@
+[
+{"symbol":"CreateHTMLPropertyPage","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllEnumClassObjects","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllInstall","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"MatchExactGetIDsOfNames","src":["wine-spec"]},
+{"symbol":"NP_GetEntryPoints","src":["wine-spec"]},
+{"symbol":"PrintHTML","src":["wine-spec"]},
+{"symbol":"RNIGetCompatibleVersion","src":["wine-spec"]},
+{"symbol":"RunHTMLApplication","src":["wine-spec"]},
+{"symbol":"ShowHTMLDialog","src":["wine-spec"]},
+{"symbol":"ShowModalDialog","src":["wine-spec"]},
+{"symbol":"ShowModelessHTMLDialog","src":["wine-spec"]}
+]

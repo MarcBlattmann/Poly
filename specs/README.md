@@ -1,7 +1,7 @@
 # Specs
 
 Behaviour specifications written by the **spec agent** from observing the
-real OS, one file per entry in `coverage/coverage.json`:
+real OS, one file per entry in the coverage map (`coverage/`):
 
 ```
 specs/<os>/<component>/<symbol>.yaml      spec sheet (see TEMPLATE.yaml)

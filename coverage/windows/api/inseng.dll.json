@@ -1,0 +1,14 @@
+[
+{"symbol":"CheckForVersionConflict","src":["wine-spec"]},
+{"symbol":"CheckTrust","src":["wine-spec"]},
+{"symbol":"CheckTrustEx","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllInstall","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"DownloadFile","src":["wine-spec"]},
+{"symbol":"GetICifFileFromFile","src":["wine-spec"]},
+{"symbol":"GetICifRWFileFromFile","src":["wine-spec"]},
+{"symbol":"PurgeDownloadDirectory","src":["wine-spec"]}
+]

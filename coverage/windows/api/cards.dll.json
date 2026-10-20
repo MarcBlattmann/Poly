@@ -1,0 +1,7 @@
+[
+{"symbol":"cdtAnimate","src":["wine-spec"]},
+{"symbol":"cdtDraw","src":["wine-spec"]},
+{"symbol":"cdtDrawExt","src":["wine-spec"]},
+{"symbol":"cdtInit","src":["wine-spec"]},
+{"symbol":"cdtTerm","src":["wine-spec"]}
+]

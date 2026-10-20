@@ -1,0 +1,6 @@
+[
+{"symbol":"CommonPropertySheetUIA","src":["wine-spec"]},
+{"symbol":"CommonPropertySheetUIW","src":["wine-spec"]},
+{"symbol":"GetCPSUIUserData","src":["wine-spec"]},
+{"symbol":"SetCPSUIUserData","src":["wine-spec"]}
+]

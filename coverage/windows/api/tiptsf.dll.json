@@ -1,0 +1,13 @@
+[
+{"symbol":"AdviseHook","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"EndCaretTracking","src":["wine-spec"]},
+{"symbol":"ProcessCaretEvents","src":["wine-spec"]},
+{"symbol":"ProcessCiceroCaretEvent","src":["wine-spec"]},
+{"symbol":"RestrictedModeMsgWndProc","src":["wine-spec"]},
+{"symbol":"StartCaretTracking","src":["wine-spec"]},
+{"symbol":"UnadviseHook","src":["wine-spec"]}
+]

@@ -1,0 +1,12 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"KsGetMediaType","src":["wine-spec"]},
+{"symbol":"KsGetMediaTypeCount","src":["wine-spec"]},
+{"symbol":"KsGetMultiplePinFactoryItems","src":["wine-spec"]},
+{"symbol":"KsOpenDefaultDevice","src":["wine-spec"]},
+{"symbol":"KsResolveRequiredAttributes","src":["wine-spec"]},
+{"symbol":"KsSynchronousDeviceControl","src":["wine-spec"]}
+]

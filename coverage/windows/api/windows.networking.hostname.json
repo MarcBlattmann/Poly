@@ -1,0 +1,14 @@
+[
+{"symbol":"CreateEndpointPairFromSockAddrs","src":["wine-spec"]},
+{"symbol":"CreateHostNameFromSockAddr","src":["wine-spec"]},
+{"symbol":"CreateHostNameFromString","src":["wine-spec"]},
+{"symbol":"CreateNetworkAdapterFromGuid","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllMain","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"GetAllHostNames","src":["wine-spec"]},
+{"symbol":"GetSortedEndpointPairs","src":["wine-spec"]}
+]

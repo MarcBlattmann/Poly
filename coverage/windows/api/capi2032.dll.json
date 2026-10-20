@@ -1,0 +1,13 @@
+[
+{"symbol":"CAPI_GET_MANUFACTURER","src":["wine-spec"]},
+{"symbol":"CAPI_GET_MESSAGE","src":["wine-spec"]},
+{"symbol":"CAPI_GET_PROFILE","src":["wine-spec"]},
+{"symbol":"CAPI_GET_SERIAL_NUMBER","src":["wine-spec"]},
+{"symbol":"CAPI_GET_VERSION","src":["wine-spec"]},
+{"symbol":"CAPI_INSTALLED","src":["wine-spec"]},
+{"symbol":"CAPI_MANUFACTURER","src":["wine-spec"]},
+{"symbol":"CAPI_PUT_MESSAGE","src":["wine-spec"]},
+{"symbol":"CAPI_REGISTER","src":["wine-spec"]},
+{"symbol":"CAPI_RELEASE","src":["wine-spec"]},
+{"symbol":"CAPI_WAIT_FOR_SIGNAL","src":["wine-spec"]}
+]

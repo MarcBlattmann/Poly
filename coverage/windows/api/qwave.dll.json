@@ -1,0 +1,16 @@
+[
+{"symbol":"QDLHPathDiagnostics","src":["wine-spec"]},
+{"symbol":"QDLHStartDiagnosingPath","src":["wine-spec"]},
+{"symbol":"QOSAddSocketToFlow","src":["wine-spec"]},
+{"symbol":"QOSCancel","src":["wine-spec"]},
+{"symbol":"QOSCloseHandle","src":["wine-spec"]},
+{"symbol":"QOSCreateHandle","src":["wine-spec"]},
+{"symbol":"QOSEnumerateFlows","src":["wine-spec"]},
+{"symbol":"QOSNotifyFlow","src":["wine-spec"]},
+{"symbol":"QOSQueryFlow","src":["wine-spec"]},
+{"symbol":"QOSRemoveSocketFromFlow","src":["wine-spec"]},
+{"symbol":"QOSSetFlow","src":["wine-spec"]},
+{"symbol":"QOSStartTrackingClient","src":["wine-spec"]},
+{"symbol":"QOSStopTrackingClient","src":["wine-spec"]},
+{"symbol":"ServiceMain","src":["wine-spec"]}
+]

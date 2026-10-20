@@ -1,0 +1,6 @@
+[
+{"symbol":"SnmpExtensionInit","src":["wine-spec"]},
+{"symbol":"SnmpExtensionInitEx","src":["wine-spec"]},
+{"symbol":"SnmpExtensionQuery","src":["wine-spec"]},
+{"symbol":"SnmpExtensionTrap","src":["wine-spec"]}
+]

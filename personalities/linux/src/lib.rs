@@ -4,7 +4,7 @@
 //! documented user ABI): number in `rax`, arguments in `rdi, rsi, rdx, r10,
 //! r8, r9`, result in `rax`, errors returned as `-errno`.
 //!
-//! Implementation status lives in `coverage/coverage.json`, not here.
+//! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
 #![no_std]
 

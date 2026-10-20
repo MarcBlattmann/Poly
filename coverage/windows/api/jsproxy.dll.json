@@ -1,0 +1,8 @@
+[
+{"symbol":"InternetDeInitializeAutoProxyDll","src":["wine-spec"]},
+{"symbol":"InternetDeInitializeAutoProxyDllEx","src":["wine-spec"]},
+{"symbol":"InternetGetProxyInfo","src":["wine-spec"]},
+{"symbol":"InternetGetProxyInfoEx","src":["wine-spec"]},
+{"symbol":"InternetInitializeAutoProxyDll","src":["wine-spec"]},
+{"symbol":"InternetInitializeAutoProxyDllEx","src":["wine-spec"]}
+]

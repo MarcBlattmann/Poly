@@ -1,0 +1,8 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"MFPCreateMediaPlayer","src":["wine-spec"]},
+{"symbol":"MFPCreateMediaPlayerEx","src":["wine-spec"]}
+]

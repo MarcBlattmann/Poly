@@ -1,0 +1,5 @@
+[
+{"symbol":"CreateSecurityPage","src":["wine-spec"]},
+{"symbol":"EditSecurity","src":["wine-spec"]},
+{"symbol":"IID_ISecurityInformation","src":["wine-spec"]}
+]

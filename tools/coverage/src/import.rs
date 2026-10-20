@@ -10,6 +10,7 @@ pub const WINE_SPEC: &str = "wine-spec";
 pub const LINUX_TBL: &str = "linux-syscall-tbl";
 pub const XNU_SYSCALLS: &str = "xnu-syscalls-master";
 pub const XNU_MACH_TRAPS: &str = "xnu-mach-traps";
+pub const MACOS_SDK: &str = "macos-sdk";
 
 /// One export line from a Wine `.spec` file.
 #[derive(Debug, PartialEq, Eq)]
@@ -196,6 +197,298 @@ pub fn xnu_mach_traps(text: &str) -> Vec<Entry> {
     dedup(out)
 }
 
+// ---------------------------------------------------------------- macOS SDK
+
+/// What one library inside a `.tbd` file exports for macOS.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct TbdLibrary {
+    pub install_name: String,
+    /// Raw exported symbol names (`_malloc`, `_OBJC_CLASS_$_NSObject`, ...).
+    pub symbols: Vec<String>,
+    /// Objective-C class names.
+    pub objc_classes: Vec<String>,
+}
+
+/// Parse a text-based stub (`.tbd`): YAML versions 1–4 or JSON version 5.
+/// Only exports for macOS targets are kept (not iOS, Mac Catalyst, ...).
+pub fn parse_tbd(text: &str) -> Result<Vec<TbdLibrary>, String> {
+    if text.trim_start().starts_with('{') { parse_tbd_json(text) } else { Ok(parse_tbd_yaml(text)) }
+}
+
+fn is_macos_target(t: &str) -> bool {
+    t.ends_with("-macos") || t.ends_with("-macosx")
+}
+
+fn unquote(s: &str) -> &str {
+    let s = s.trim();
+    s.strip_prefix('\'')
+        .and_then(|s| s.strip_suffix('\''))
+        .or_else(|| s.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
+        .unwrap_or(s)
+}
+
+fn flow_list(value: &str) -> Vec<String> {
+    let v = value.trim();
+    let inner = v.strip_prefix('[').and_then(|v| v.strip_suffix(']')).unwrap_or(v);
+    inner.split(',').map(unquote).filter(|s| !s.is_empty()).map(str::to_string).collect()
+}
+
+/// `(indent, key, value)` per YAML line, with multi-line `[ ... ]` lists joined.
+fn yaml_lines(doc: &str) -> Vec<(usize, String, String)> {
+    let mut out: Vec<(usize, String, String)> = Vec::new();
+    let mut open = false;
+    for line in doc.lines() {
+        if open {
+            if let Some(last) = out.last_mut() {
+                last.2.push(' ');
+                last.2.push_str(line.trim());
+                open = !last.2.contains(']');
+            }
+            continue;
+        }
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let mut indent = line.len() - trimmed.len();
+        let rest = match trimmed.strip_prefix("- ") {
+            Some(r) => {
+                indent += 2;
+                // A new list item: mark it so blocks can be told apart.
+                out.push((indent, "-".into(), String::new()));
+                r
+            }
+            None => trimmed,
+        };
+        let Some((key, value)) = rest.split_once(':') else { continue };
+        let value = value.trim().to_string();
+        open = value.starts_with('[') && !value.contains(']');
+        out.push((indent, key.trim().to_string(), value));
+    }
+    out
+}
+
+#[derive(Default)]
+struct Block {
+    targets: Vec<String>,
+    symbols: Vec<String>,
+    classes: Vec<String>,
+}
+
+fn parse_tbd_yaml(text: &str) -> Vec<TbdLibrary> {
+    let mut docs: Vec<String> = Vec::new();
+    for line in text.lines() {
+        if line.starts_with("---") || docs.is_empty() {
+            docs.push(String::new());
+        }
+        if line.starts_with("...") {
+            continue;
+        }
+        let d = docs.last_mut().unwrap();
+        d.push_str(line);
+        d.push('\n');
+    }
+
+    let mut out = Vec::new();
+    for doc in docs {
+        let header = doc.lines().next().unwrap_or("");
+        // v1 and v2 write Objective-C class names with a leading underscore.
+        let old_format = !header.contains("!tapi-tbd-v3")
+            && !header.contains("!tapi-tbd\n")
+            && !header.trim_end().ends_with("!tapi-tbd");
+        let mut lib = TbdLibrary::default();
+        let mut platform_macos = true;
+        let mut section = String::new();
+        let mut blocks: Vec<Block> = Vec::new();
+        for (indent, key, value) in yaml_lines(&doc) {
+            if indent == 0 {
+                section = key.clone();
+                match key.as_str() {
+                    "install-name" => lib.install_name = unquote(&value).to_string(),
+                    "platform" => platform_macos = matches!(unquote(&value), "macos" | "macosx"),
+                    _ => {}
+                }
+                continue;
+            }
+            if section != "exports" {
+                continue;
+            }
+            if key == "-" {
+                blocks.push(Block::default());
+                continue;
+            }
+            let Some(b) = blocks.last_mut() else { continue };
+            match key.as_str() {
+                "targets" => b.targets = flow_list(&value),
+                "symbols" | "weak-symbols" | "weak-def-symbols" | "thread-local-symbols" => {
+                    b.symbols.extend(flow_list(&value))
+                }
+                "objc-classes" => b.classes.extend(flow_list(&value)),
+                _ => {}
+            }
+        }
+        if lib.install_name.is_empty() {
+            continue;
+        }
+        for b in blocks {
+            let wanted =
+                if b.targets.is_empty() { platform_macos } else { b.targets.iter().any(|t| is_macos_target(t)) };
+            if !wanted {
+                continue;
+            }
+            lib.symbols.extend(b.symbols);
+            lib.objc_classes.extend(
+                b.classes
+                    .into_iter()
+                    .map(|c| if old_format { c.strip_prefix('_').map(str::to_string).unwrap_or(c) } else { c }),
+            );
+        }
+        out.push(lib);
+    }
+    out
+}
+
+fn parse_tbd_json(text: &str) -> Result<Vec<TbdLibrary>, String> {
+    use serde_json::Value;
+    let root: Value = serde_json::from_str(text).map_err(|e| format!("tbd v5: {e}"))?;
+    let strings = |v: Option<&Value>| -> Vec<String> {
+        v.and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .unwrap_or_default()
+    };
+    let mut libs: Vec<&Value> = root.get("main_library").into_iter().collect();
+    if let Some(more) = root.get("libraries").and_then(Value::as_array) {
+        libs.extend(more);
+    }
+    let mut out = Vec::new();
+    for lib in libs {
+        let install_name = lib
+            .get("install_names")
+            .and_then(Value::as_array)
+            .and_then(|a| a.first())
+            .and_then(|n| n.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if install_name.is_empty() {
+            continue;
+        }
+        let lib_targets: Vec<String> = lib
+            .get("target_info")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|t| t.get("target").and_then(Value::as_str)).map(str::to_string).collect())
+            .unwrap_or_default();
+        let mut t = TbdLibrary { install_name, ..Default::default() };
+        for group in lib.get("exported_symbols").and_then(Value::as_array).into_iter().flatten() {
+            let targets = match group.get("targets") {
+                Some(v) => strings(Some(v)),
+                None => lib_targets.clone(),
+            };
+            if !targets.is_empty() && !targets.iter().any(|t| is_macos_target(t)) {
+                continue;
+            }
+            for kind in ["data", "text"] {
+                let Some(section) = group.get(kind) else { continue };
+                for key in ["global", "weak", "thread_local"] {
+                    t.symbols.extend(strings(section.get(key)));
+                }
+                t.objc_classes.extend(strings(section.get("objc_class")));
+            }
+        }
+        out.push(t);
+    }
+    Ok(out)
+}
+
+/// Coverage component for a library's install name: the innermost
+/// framework (`AppKit.framework`) or the dylib file name. Private
+/// frameworks are not public API and return `None`.
+pub fn sdk_component(install_name: &str) -> Option<String> {
+    if install_name.contains("/PrivateFrameworks/") {
+        return None;
+    }
+    if let Some(pos) = install_name.rfind(".framework/") {
+        let start = install_name[..pos].rfind('/').map_or(0, |i| i + 1);
+        return Some(install_name[start..pos + ".framework".len()].to_string());
+    }
+    install_name.rsplit('/').next().filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+/// Coverage symbol for a raw exported name, or `None` for linker metadata.
+/// C symbols lose the leading underscore Mach-O adds; Objective-C class
+/// symbols become `objc:ClassName`.
+pub fn sdk_symbol(raw: &str) -> Option<String> {
+    if raw.starts_with("$ld$") {
+        return None;
+    }
+    for prefix in ["_OBJC_CLASS_$_", "_OBJC_METACLASS_$_"] {
+        if let Some(class) = raw.strip_prefix(prefix) {
+            return Some(format!("objc:{class}"));
+        }
+    }
+    if raw.starts_with("_OBJC_IVAR_$_") || raw.starts_with("_OBJC_EHTYPE_$_") {
+        return None;
+    }
+    Some(raw.strip_prefix('_').unwrap_or(raw).to_string())
+}
+
+pub fn entries_from_tbd(libs: &[TbdLibrary]) -> Vec<Entry> {
+    let mut out = Vec::new();
+    for lib in libs {
+        let Some(component) = sdk_component(&lib.install_name) else { continue };
+        let symbols = lib.symbols.iter().filter_map(|s| sdk_symbol(s));
+        let classes = lib.objc_classes.iter().map(|c| format!("objc:{c}"));
+        for symbol in symbols.chain(classes) {
+            out.push(Entry::new(Os::Macos, Layer::Api, &component, &symbol, MACOS_SDK));
+        }
+    }
+    out
+}
+
+/// Every public `.tbd` under the SDK's frameworks and `usr/lib`.
+/// Symlinks are skipped: each one points at a real file that is read anyway.
+pub fn macos_sdk(sdk: &Path) -> Result<Vec<Entry>, String> {
+    if !sdk.join("SDKSettings.json").exists() && !sdk.join("SDKSettings.plist").exists() {
+        return Err(format!("{} does not look like a macOS SDK (no SDKSettings)", sdk.display()));
+    }
+    let mut files = Vec::new();
+    for dir in ["System/Library/Frameworks", "usr/lib"] {
+        collect_tbd(&sdk.join(dir), &mut files)?;
+    }
+    files.sort();
+    let mut out = Vec::new();
+    for f in &files {
+        let text = std::fs::read_to_string(f).map_err(|e| format!("{}: {e}", f.display()))?;
+        let libs = parse_tbd(&text).map_err(|e| format!("{}: {e}", f.display()))?;
+        out.extend(entries_from_tbd(&libs));
+    }
+    if out.is_empty() {
+        return Err(format!("no exports found in {} .tbd files under {}", files.len(), sdk.display()));
+    }
+    eprintln!("read {} .tbd files", files.len());
+    Ok(dedup(out))
+}
+
+fn collect_tbd(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<(), String> {
+    let Ok(read) = std::fs::read_dir(dir) else { return Ok(()) };
+    for entry in read {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        if meta.is_dir() {
+            if entry.file_name() != "PrivateFrameworks" {
+                collect_tbd(&path, out)?;
+            }
+        } else if path.extension().is_some_and(|x| x == "tbd") {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
 /// Collapse duplicate ids (the same export listed per architecture, or the
 /// same syscall under different `#if` branches). An entry restricted to
 /// some architectures widens to the union; unrestricted wins.
@@ -316,5 +609,143 @@ mod tests {
         assert_eq!(v[0].arch, ["win32", "win64"]);
         let v = dedup(vec![a, Entry::new(Os::Windows, Layer::Api, "m.dll", "F", WINE_SPEC)]);
         assert!(v[0].arch.is_empty());
+    }
+
+    const TBD_V4: &str = "--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos, arm64-maccatalyst ]
+install-name:    '/System/Library/Frameworks/Demo.framework/Versions/A/Demo'
+current-version: 1
+exports:
+  - targets:         [ x86_64-macos, arm64-macos ]
+    symbols:         [ _DemoFunction, '_$s4Demo4ViewVMn', __ZN4demo3fooEv,
+                       '$ld$previous$/usr/lib/libold.dylib$$1$10.0$11.0$$' ]
+    objc-classes:    [ DemoWindow, DemoView ]
+    objc-ivars:      [ DemoWindow._frame ]
+    weak-symbols:    [ _DemoWeak ]
+  - targets:         [ arm64-maccatalyst ]
+    symbols:         [ _CatalystOnly ]
+reexports:
+  - targets:         [ x86_64-macos ]
+    symbols:         [ _ReexportedElsewhere ]
+undefineds:
+  - targets:         [ x86_64-macos ]
+    symbols:         [ _Undefined ]
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos ]
+install-name:    '/System/Library/Frameworks/Demo.framework/Versions/A/Frameworks/Inner.framework/Versions/A/Inner'
+exports:
+  - targets:         [ x86_64-macos ]
+    symbols:         [ _InnerFn ]
+...
+";
+
+    fn ids(entries: Vec<Entry>) -> Vec<String> {
+        let mut v: Vec<String> = entries.into_iter().map(|e| e.id).collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn tbd_v4() {
+        let libs = parse_tbd(TBD_V4).unwrap();
+        assert_eq!(libs.len(), 2);
+        assert_eq!(
+            ids(entries_from_tbd(&libs)),
+            [
+                "macos/api/Demo.framework/$s4Demo4ViewVMn",
+                "macos/api/Demo.framework/DemoFunction",
+                "macos/api/Demo.framework/DemoWeak",
+                "macos/api/Demo.framework/_ZN4demo3fooEv",
+                "macos/api/Demo.framework/objc:DemoView",
+                "macos/api/Demo.framework/objc:DemoWindow",
+                "macos/api/Inner.framework/InnerFn",
+            ]
+        );
+    }
+
+    #[test]
+    fn tbd_v5_json() {
+        let text = r#"{
+          "tapi_tbd_version": 5,
+          "main_library": {
+            "target_info": [ { "target": "x86_64-macos" }, { "target": "arm64-macos" } ],
+            "install_names": [ { "name": "/usr/lib/libdemo.dylib" } ],
+            "exported_symbols": [
+              { "data": { "global": [ "_dataSym" ], "objc_class": [ "DemoClass" ] },
+                "text": { "global": [ "_textSym" ], "weak": [ "_weakSym" ] } },
+              { "targets": [ "arm64-ios" ], "text": { "global": [ "_iosOnly" ] } }
+            ]
+          },
+          "libraries": [
+            { "install_names": [ { "name": "/System/Library/PrivateFrameworks/Secret.framework/Secret" } ],
+              "exported_symbols": [ { "text": { "global": [ "_hidden" ] } } ] }
+          ]
+        }"#;
+        let libs = parse_tbd(text).unwrap();
+        assert_eq!(
+            ids(entries_from_tbd(&libs)),
+            [
+                "macos/api/libdemo.dylib/dataSym",
+                "macos/api/libdemo.dylib/objc:DemoClass",
+                "macos/api/libdemo.dylib/textSym",
+                "macos/api/libdemo.dylib/weakSym",
+            ]
+        );
+    }
+
+    #[test]
+    fn tbd_v3_and_v2() {
+        let v3 = "--- !tapi-tbd-v3\narchs: [ x86_64 ]\nplatform: macosx\ninstall-name: /usr/lib/libv3.dylib\n\
+                  exports:\n  - archs: [ x86_64 ]\n    re-exports: [ /usr/lib/libother.dylib ]\n    \
+                  symbols: [ _a ]\n    objc-classes: [ C3 ]\n    weak-def-symbols: [ _w ]\n...\n";
+        assert_eq!(
+            ids(entries_from_tbd(&parse_tbd(v3).unwrap())),
+            ["macos/api/libv3.dylib/a", "macos/api/libv3.dylib/objc:C3", "macos/api/libv3.dylib/w"]
+        );
+        let v2 = "--- !tapi-tbd-v2\narchs: [ x86_64 ]\nplatform: macosx\ninstall-name: /usr/lib/libv2.dylib\n\
+                  exports:\n  - archs: [ x86_64 ]\n    objc-classes: [ _C2 ]\n...\n";
+        assert_eq!(ids(entries_from_tbd(&parse_tbd(v2).unwrap())), ["macos/api/libv2.dylib/objc:C2"]);
+        let ios = "--- !tapi-tbd-v3\narchs: [ arm64 ]\nplatform: ios\ninstall-name: /usr/lib/libios.dylib\n\
+                   exports:\n  - archs: [ arm64 ]\n    symbols: [ _x ]\n...\n";
+        assert!(entries_from_tbd(&parse_tbd(ios).unwrap()).is_empty());
+    }
+
+    #[test]
+    fn sdk_names() {
+        assert_eq!(
+            sdk_component("/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit").as_deref(),
+            Some("AppKit.framework")
+        );
+        assert_eq!(sdk_component("/usr/lib/libSystem.B.dylib").as_deref(), Some("libSystem.B.dylib"));
+        assert_eq!(sdk_component("/System/Library/PrivateFrameworks/X.framework/X"), None);
+        assert_eq!(sdk_symbol("_OBJC_CLASS_$_NSWindow").as_deref(), Some("objc:NSWindow"));
+        assert_eq!(sdk_symbol("_OBJC_IVAR_$_NSWindow._frame"), None);
+        assert_eq!(sdk_symbol("$ld$hide$os10.4$_foo"), None);
+        assert_eq!(sdk_symbol("_malloc").as_deref(), Some("malloc"));
+    }
+
+    #[test]
+    fn sdk_walk_skips_symlinks_and_private_frameworks() {
+        let sdk = std::env::temp_dir().join(format!("poly-fake-sdk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&sdk);
+        let fw = sdk.join("System/Library/Frameworks/Demo.framework/Versions/A");
+        std::fs::create_dir_all(&fw).unwrap();
+        std::fs::write(sdk.join("SDKSettings.json"), "{}").unwrap();
+        std::fs::write(fw.join("Demo.tbd"), TBD_V4).unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("A", sdk.join("System/Library/Frameworks/Demo.framework/Versions/Current"))
+                .unwrap();
+        }
+        let private = sdk.join("System/Library/PrivateFrameworks/Secret.framework");
+        std::fs::create_dir_all(&private).unwrap();
+        std::fs::write(private.join("Secret.tbd"), TBD_V4.replace("Demo.framework", "Secret.framework")).unwrap();
+        let v = macos_sdk(&sdk).unwrap();
+        assert_eq!(v.len(), 7, "each symbol once, despite the Current symlink");
+        assert!(v.iter().all(|e| !e.id.contains("Secret")));
+        assert!(macos_sdk(&sdk.join("nope")).is_err());
+        let _ = std::fs::remove_dir_all(&sdk);
     }
 }

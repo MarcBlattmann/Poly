@@ -1,0 +1,16 @@
+[
+{"symbol":"DirectSoundCaptureCreate","src":["wine-spec"]},
+{"symbol":"DirectSoundCaptureCreate8","src":["wine-spec"]},
+{"symbol":"DirectSoundCaptureEnumerateA","src":["wine-spec"]},
+{"symbol":"DirectSoundCaptureEnumerateW","src":["wine-spec"]},
+{"symbol":"DirectSoundCreate","src":["wine-spec"]},
+{"symbol":"DirectSoundCreate8","src":["wine-spec"]},
+{"symbol":"DirectSoundEnumerateA","src":["wine-spec"]},
+{"symbol":"DirectSoundEnumerateW","src":["wine-spec"]},
+{"symbol":"DirectSoundFullDuplexCreate","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"GetDeviceID","src":["wine-spec"]}
+]

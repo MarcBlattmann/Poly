@@ -1,0 +1,10 @@
+[
+{"symbol":"#3000","src":["wine-spec"]},
+{"symbol":"#3002","src":["wine-spec"]},
+{"symbol":"#3003","src":["wine-spec"]},
+{"symbol":"#3004","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]}
+]

@@ -1,0 +1,17 @@
+[
+{"symbol":"DSRunStoreAsComServer","src":["wine-spec"]},
+{"symbol":"DllInstall","src":["wine-spec"]},
+{"symbol":"DllMain","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"GeneralizeForImaging","src":["wine-spec"]},
+{"symbol":"GetAUOptionsEx","src":["wine-spec"]},
+{"symbol":"GetEngineStatusInfo","src":["wine-spec"]},
+{"symbol":"RegisterServiceVersion","src":["wine-spec"]},
+{"symbol":"ServiceHandler","src":["wine-spec"]},
+{"symbol":"ServiceMain","src":["wine-spec"]},
+{"symbol":"UHRunRemoteHandlerServer","src":["wine-spec"]},
+{"symbol":"WUAutoUpdateAtShutdown","src":["wine-spec"]},
+{"symbol":"WUCheckForUpdatesAtShutdown","src":["wine-spec"]},
+{"symbol":"WUServiceMain","src":["wine-spec"]}
+]

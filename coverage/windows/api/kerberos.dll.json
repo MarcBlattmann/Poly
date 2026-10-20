@@ -1,0 +1,13 @@
+[
+{"symbol":"DllMain","src":["wine-spec"]},
+{"symbol":"KerbCreateTokenFromTicket","src":["wine-spec"]},
+{"symbol":"KerbDomainChangeCallback","src":["wine-spec"]},
+{"symbol":"KerbIsInitialized","src":["wine-spec"]},
+{"symbol":"KerbKdcCallBack","src":["wine-spec"]},
+{"symbol":"KerbMakeKdcCall","src":["wine-spec"]},
+{"symbol":"Kerberos","src":["wine-spec"]},
+{"symbol":"SpInitialize","src":["wine-spec"]},
+{"symbol":"SpInstanceInit","src":["wine-spec"]},
+{"symbol":"SpLsaModeInitialize","src":["wine-spec"]},
+{"symbol":"SpUserModeInitialize","src":["wine-spec"]}
+]

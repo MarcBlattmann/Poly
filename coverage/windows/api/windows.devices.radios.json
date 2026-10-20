@@ -1,0 +1,14 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllMain","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"RadioDeviceCreate","src":["wine-spec"]},
+{"symbol":"RadioDeviceDelete","src":["wine-spec"]},
+{"symbol":"RadioDeviceStart","src":["wine-spec"]},
+{"symbol":"RadioDeviceStop","src":["wine-spec"]},
+{"symbol":"StartRadioMonitor","src":["wine-spec"]},
+{"symbol":"StopRadioMonitor","src":["wine-spec"]}
+]

@@ -1,0 +1,7 @@
+[
+{"symbol":"CreateAsfFormatSet","src":["wine-spec"]},
+{"symbol":"NSSecurityLibraryInit","src":["wine-spec"]},
+{"symbol":"SelectCrabis","src":["wine-spec"]},
+{"symbol":"SelectHelper","src":["wine-spec"]},
+{"symbol":"SelectMediaStream","src":["wine-spec"]}
+]

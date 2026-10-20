@@ -1,0 +1,11 @@
+[
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","src":["wine-spec"]},
+{"symbol":"IEGetWriteableHKCU","src":["wine-spec"]},
+{"symbol":"IERefreshElevationPolicy","src":["wine-spec"]},
+{"symbol":"IEWinMain","src":["wine-spec"]},
+{"symbol":"OpenURL","src":["wine-spec"]},
+{"symbol":"SetQueryNetSessionCount","src":["wine-spec"]}
+]

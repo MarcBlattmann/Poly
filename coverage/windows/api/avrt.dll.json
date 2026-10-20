@@ -1,0 +1,16 @@
+[
+{"symbol":"AvQuerySystemResponsiveness","src":["wine-spec"]},
+{"symbol":"AvRevertMmThreadCharacteristics","src":["wine-spec"]},
+{"symbol":"AvRtCreateThreadOrderingGroup","src":["wine-spec"]},
+{"symbol":"AvRtCreateThreadOrderingGroupExA","src":["wine-spec"]},
+{"symbol":"AvRtCreateThreadOrderingGroupExW","src":["wine-spec"]},
+{"symbol":"AvRtDeleteThreadOrderingGroup","src":["wine-spec"]},
+{"symbol":"AvRtJoinThreadOrderingGroup","src":["wine-spec"]},
+{"symbol":"AvRtLeaveThreadOrderingGroup","src":["wine-spec"]},
+{"symbol":"AvRtWaitOnThreadOrderingGroup","src":["wine-spec"]},
+{"symbol":"AvSetMmMaxThreadCharacteristicsA","src":["wine-spec"]},
+{"symbol":"AvSetMmMaxThreadCharacteristicsW","src":["wine-spec"]},
+{"symbol":"AvSetMmThreadCharacteristicsA","src":["wine-spec"]},
+{"symbol":"AvSetMmThreadCharacteristicsW","src":["wine-spec"]},
+{"symbol":"AvSetMmThreadPriority","src":["wine-spec"]}
+]

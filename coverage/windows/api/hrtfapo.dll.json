@@ -1,0 +1,7 @@
+[
+{"symbol":"CreateHrtfApo","src":["wine-spec"]},
+{"symbol":"CreateHrtfApoWithDatasetType","src":["wine-spec"]},
+{"symbol":"CreateHrtfEngineFactory","src":["wine-spec"]},
+{"symbol":"GetHrtfEngineMinFrameCount","src":["wine-spec"]},
+{"symbol":"IsHrtfApoAvailable","src":["wine-spec"]}
+]

@@ -1,0 +1,13 @@
+[
+{"symbol":"CreateCaptureAudioStateMonitor","src":["wine-spec"]},
+{"symbol":"CreateCaptureAudioStateMonitorForCategory","src":["wine-spec"]},
+{"symbol":"CreateCaptureAudioStateMonitorForCategoryAndDeviceId","src":["wine-spec"]},
+{"symbol":"CreateCaptureAudioStateMonitorForCategoryAndDeviceRole","src":["wine-spec"]},
+{"symbol":"CreateRenderAudioStateMonitor","src":["wine-spec"]},
+{"symbol":"CreateRenderAudioStateMonitorForCategory","src":["wine-spec"]},
+{"symbol":"CreateRenderAudioStateMonitorForCategoryAndDeviceId","src":["wine-spec"]},
+{"symbol":"CreateRenderAudioStateMonitorForCategoryAndDeviceRole","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]}
+]

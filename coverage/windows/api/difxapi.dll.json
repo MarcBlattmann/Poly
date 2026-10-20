@@ -1,0 +1,14 @@
+[
+{"symbol":"DIFXAPISetLogCallbackA","src":["wine-spec"]},
+{"symbol":"DIFXAPISetLogCallbackW","src":["wine-spec"]},
+{"symbol":"DriverPackageGetPathA","src":["wine-spec"]},
+{"symbol":"DriverPackageGetPathW","src":["wine-spec"]},
+{"symbol":"DriverPackageInstallA","src":["wine-spec"]},
+{"symbol":"DriverPackageInstallW","src":["wine-spec"]},
+{"symbol":"DriverPackagePreinstallA","src":["wine-spec"]},
+{"symbol":"DriverPackagePreinstallW","src":["wine-spec"]},
+{"symbol":"DriverPackageUninstallA","src":["wine-spec"]},
+{"symbol":"DriverPackageUninstallW","src":["wine-spec"]},
+{"symbol":"SetDifxLogCallbackA","src":["wine-spec"]},
+{"symbol":"SetDifxLogCallbackW","src":["wine-spec"]}
+]

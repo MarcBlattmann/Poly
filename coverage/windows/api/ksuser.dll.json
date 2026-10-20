@@ -1,0 +1,6 @@
+[
+{"symbol":"KsCreateAllocator","src":["wine-spec"]},
+{"symbol":"KsCreateClock","src":["wine-spec"]},
+{"symbol":"KsCreatePin","src":["wine-spec"]},
+{"symbol":"KsCreateTopologyNode","src":["wine-spec"]}
+]

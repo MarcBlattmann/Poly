@@ -1,6 +1,6 @@
 # 0004: Coverage map format
 
-**Status:** Accepted
+**Status:** Accepted; storage layout superseded by [0006](0006-coverage-map-one-file-per-component.md)
 
 ## Decision
 

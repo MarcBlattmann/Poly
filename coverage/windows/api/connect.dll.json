@@ -1,0 +1,17 @@
+[
+{"symbol":"AddConnectionOptionListEntries","src":["wine-spec"]},
+{"symbol":"CreateVPNConnection","src":["wine-spec"]},
+{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"GetInternetConnected","src":["wine-spec"]},
+{"symbol":"GetNetworkConnected","src":["wine-spec"]},
+{"symbol":"GetVPNConnected","src":["wine-spec"]},
+{"symbol":"HrIsInternetConnected","src":["wine-spec"]},
+{"symbol":"HrIsInternetConnectedGUID","src":["wine-spec"]},
+{"symbol":"IsInternetConnected","src":["wine-spec"]},
+{"symbol":"IsInternetConnectedGUID","src":["wine-spec"]},
+{"symbol":"IsUniqueConnectionName","src":["wine-spec"]},
+{"symbol":"RegisterPageWithPage","src":["wine-spec"]},
+{"symbol":"UnregisterPage","src":["wine-spec"]},
+{"symbol":"UnregisterPagesLink","src":["wine-spec"]}
+]

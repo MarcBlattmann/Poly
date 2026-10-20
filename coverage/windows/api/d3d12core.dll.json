@@ -1,0 +1,4 @@
+[
+{"symbol":"D3D12GetInterface","src":["wine-spec"]},
+{"symbol":"D3D12SDKVersion","src":["wine-spec"]}
+]

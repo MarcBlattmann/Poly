@@ -1,0 +1,4 @@
+[
+{"symbol":"SHGetFolderPathA","forward":"shell32.SHGetFolderPathA","src":["wine-spec"]},
+{"symbol":"SHGetFolderPathW","forward":"shell32.SHGetFolderPathW","src":["wine-spec"]}
+]
