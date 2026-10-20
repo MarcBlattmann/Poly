@@ -1299,11 +1299,15 @@ kernel_test! {
         // real tick or two may land in the few instructions between the
         // spinner's start (interrupts on) and its `InterruptsOff`.
         let spins = SPINS.load(SeqCst);
+        // Stopped either way: a spinner left running would hold this CPU
+        // with interrupts off for the rest of the boot.
+        STOP.store(true, SeqCst);
+        let joined = join(t);
         if !(TIME_SLICE_TICKS as usize - 2..=TIME_SLICE_TICKS as usize).contains(&spins) {
+            crate::kprintln!("thread: the spinner ran {spins} ticks of a {TIME_SLICE_TICKS}-tick slice");
             return Err("not preempted after one time slice");
         }
-        STOP.store(true, SeqCst);
-        join(t).map(|_| ()).map_err(|_| "spinner did not finish")
+        joined.map(|_| ()).map_err(|_| "spinner did not finish")
     }
 }
 
