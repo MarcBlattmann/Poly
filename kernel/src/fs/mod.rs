@@ -14,13 +14,16 @@
 //!          │                          └── /dev/console, /dev/tty → kernel log (serial, later the screen)
 //!          ▼                              /dev/null, /dev/zero, /dev/full
 //!   Tmpfs on /  ◀── poly_cpio::unpack ◀── initramfs (boot module 0, QEMU -initrd)
+//!   ext2 on /mnt (or wherever poly.mount= says) ── page cache ── block::Disk (disk.rs, cache.rs)
 //! ```
 //!
 //! [`init`] runs once at boot, after interrupts and time are up and before
 //! the self-test: it makes the tmpfs, unpacks the initramfs into it
 //! ([`initrd`]), gives the initramfs's frames back to the frame allocator,
 //! makes `/dev`, `/tmp` and `/proc` and the device nodes, and registers the
-//! devices. Without an initramfs `/` starts empty but for those.
+//! devices. Without an initramfs `/` starts empty but for those. Then it
+//! makes the page cache, starts the writeback thread ([`cache`]) and
+//! mounts the disks `poly.mount=` names ([`disk`], ADR 0040).
 //!
 //! # Locking
 //!
@@ -32,7 +35,10 @@
 //! walks: reads and writes run with no lock of `Files` held, so a read that
 //! blocks never stalls the process's other descriptors.
 
+pub mod cache;
 pub mod devices;
+pub mod disk;
+mod disk_tests;
 mod files;
 pub mod initrd;
 mod tests;
@@ -73,6 +79,12 @@ impl Clock for UptimeClock {
     }
 }
 
+/// The clock disk file systems take their timestamps from (see
+/// [`UptimeClock`]).
+pub(crate) fn clock() -> Arc<dyn Clock> {
+    Arc::new(UptimeClock)
+}
+
 /// Set up the file systems: a tmpfs on `/`, filled from the initramfs if
 /// the boot loader passed one, and the devices. `held` is what
 /// [`initrd::reserve`] returned: the initramfs's pages, which the frame
@@ -90,5 +102,9 @@ pub fn init(boot: &BootInfo, held: Option<Region>) {
     drop(ctx);
     if VFS.set(vfs).is_err() {
         panic!("fs::init called twice");
+    }
+    cache::init();
+    if let Some(arg) = boot.arg(disk::MOUNT_ARG) {
+        disk::mount_from_cmdline(arg);
     }
 }

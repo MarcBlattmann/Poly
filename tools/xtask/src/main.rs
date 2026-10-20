@@ -4,7 +4,8 @@
 //!   build [--release]   build the kernel
 //!   run   [--release] [--gdb] [--no-disk] [--headless] [--initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
-//!                       with the test devices attached (--no-disk: without them),
+//!                       with the test devices and a virtio-net NIC on QEMU's user
+//!                       networking attached (--no-disk: without them),
 //!                       the screen in a window when there is a desktop (--headless:
 //!                       never); --gdb waits for a debugger on localhost:1234
 //!                       (docs/DEBUGGING.md); the root file system is a small
@@ -25,9 +26,11 @@
 //!                       in third_party/ (--check: fail if they are out of date)
 
 mod console;
+mod ext2disk;
 mod font;
 mod initramfs;
 mod ktest;
+mod net;
 mod programs;
 mod screen;
 mod symbols;
@@ -145,6 +148,8 @@ fn test_disk() -> Result<PathBuf> {
     let image: Vec<u8> = (0..TEST_DISK_SECTORS).flat_map(test_disk_sector).collect();
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| format!("{}: {e}", path.display()))?;
     std::fs::write(&path, image).map_err(|e| format!("{}: {e}", path.display()))?;
+    // The ext2 test disk goes next to it (`qemu` attaches it from there).
+    ext2disk::write_next_to(&path)?;
     Ok(path)
 }
 
@@ -186,8 +191,10 @@ impl Devices<'_> {
     fn flags(self) -> String {
         match self {
             Devices::None => String::new(),
-            Devices::Test(_) => format!("{TEST_DISK_FLAG} {TEST_MSI_FLAG} {TEST_DISPLAY_FLAG}"),
-            Devices::PolledDisk(_) => format!("{TEST_DISK_FLAG} {TEST_DISPLAY_FLAG}"),
+            Devices::Test(_) => {
+                format!("{TEST_DISK_FLAG} {TEST_MSI_FLAG} {TEST_DISPLAY_FLAG} {}", ext2disk::KERNEL_FLAGS)
+            }
+            Devices::PolledDisk(_) => format!("{TEST_DISK_FLAG} {TEST_DISPLAY_FLAG} {}", ext2disk::KERNEL_FLAGS),
         }
     }
 }
@@ -215,6 +222,12 @@ fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial:
     if let Devices::Test(_) = devices {
         cmd.args(["-device", "edu"]);
     }
+    // The ext2 test disk (`test_disk` writes it): the third virtio-blk
+    // function, `virtio2`, which the kernel mounts on /mnt.
+    let ext2 = disk.with_file_name(ext2disk::FILE_NAME);
+    cmd.arg("-drive")
+        .arg(format!("if=none,id=ext2,format=raw,file={}", ext2.display()))
+        .args(["-device", &format!("virtio-blk-pci,drive=ext2,disable-legacy=on{vectors}")]);
     cmd
 }
 
@@ -253,9 +266,17 @@ fn run(args: &[String]) -> Result {
     if initrd.as_deref() == Some(Path::new("")) {
         initrd = Some(initramfs::write(&root(), "poly-initramfs.cpio", &initramfs::default_image())?);
     }
+    // A virtio-net device on QEMU's user networking with its addresses
+    // (an earlier poly.net= on the command line wins).
+    if with_disk {
+        cmdline.push("poly.net=qemu");
+    }
     // `mon:stdio` shares the terminal between the serial port and QEMU's
     // monitor: Ctrl-A C switches between them, Ctrl-A X quits.
     let mut cmd = qemu(&kernel, DEFAULT_MEMORY, &cmdline.join(" "), devices, "mon:stdio");
+    if with_disk {
+        cmd.args(net::nic_args(None, false));
+    }
     if let Some(file) = &initrd {
         cmd.arg("-initrd").arg(file);
     }
@@ -687,6 +708,51 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     Ok(())
 }
 
+/// Boot with the ext2 test disk mounted on /mnt, write a file there through
+/// the shell, `sync` and `reboot` (which unmounts it clean); check the
+/// image with `e2fsck -fn` if e2fsprogs are installed; then boot again from
+/// the same image and read the file back.
+fn ext2_persistence_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    const TEXT: &str = "persisted across boots";
+    let disk = test_disk()?;
+    let image = disk.with_file_name(ext2disk::FILE_NAME);
+    let devices = Devices::Test(&disk);
+    let append = format!("poly.qemu_exit {SHELL_FLAG} poly.test=ext2_test_disk {}", devices.flags());
+    let first = [
+        (console::PROMPT, format!("write /mnt/persist.txt {TEXT}\r")),
+        (console::PROMPT, "sync\r".to_string()),
+        (console::PROMPT, "reboot\r".to_string()),
+    ];
+    let steps: Vec<_> = first.iter().map(|(p, c)| (*p, c.as_str())).collect();
+    let b = boot_typing(kernel, syms, &append, devices, &[], &steps)?;
+    ktest::parse(b.output.split(console::PROMPT).next().unwrap_or_default()).check()?;
+    let ex = console::exchanges(&b.output);
+    let out = |i: usize| ex.get(i).map_or("", |e| e.output);
+    if ex.len() < 3 || !out(0).is_empty() || !out(1).contains("every disk synced") {
+        return Err(format!("writing to the ext2 test disk failed (status {:?}): {:?}", b.status, ex));
+    }
+    if !out(2).contains("fs: /mnt (virtio2) unmounted clean") || b.status != Some(0) {
+        return Err(format!("reboot did not unmount the ext2 test disk clean (status {:?})", b.status));
+    }
+    match ext2disk::e2fsck(&image)? {
+        Some(_) => eprintln!("==> e2fsck -fn passes on the image after the writing boot"),
+        None => eprintln!("==> e2fsck not installed; skipped checking the image"),
+    }
+    let second = ["cat /mnt/persist.txt\r", "mount\r", "reboot\r"];
+    let steps: Vec<_> = second.iter().map(|c| (console::PROMPT, *c)).collect();
+    let b = boot_typing(kernel, syms, &append, devices, &[], &steps)?;
+    ktest::parse(b.output.split(console::PROMPT).next().unwrap_or_default()).check()?;
+    let ex = console::exchanges(&b.output);
+    let out = |i: usize| ex.get(i).map_or("", |e| e.output);
+    if out(0) != format!("{TEXT}\n") {
+        return Err(format!("the file written in the first boot reads {:?} in the second", out(0)));
+    }
+    if !out(1).contains("virtio2 on /mnt type ext2 (rw)") || b.status != Some(0) {
+        return Err(format!("the second boot did not mount the ext2 test disk (status {:?})", b.status));
+    }
+    Ok(())
+}
+
 fn boot_tests() -> Result {
     let kernel = build_kernel(false)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
@@ -812,6 +878,12 @@ fn boot_tests() -> Result {
 
     // Static Linux hello worlds as the first process (poly.init).
     programs::boot_tests(&kernel, &syms)?;
+
+    // Networking: virtio-net on QEMU's user networking, against servers on
+    // the host (see net.rs).
+    net::boot_tests(&kernel, &syms)?;
+    eprintln!("==> boot test: a file written to the ext2 test disk in one boot is there in the next");
+    ext2_persistence_test(&kernel, &syms)?;
 
     // Expecting the test disk without attaching it must fail the disk
     // tests, so a boot that silently lost its disk cannot pass.

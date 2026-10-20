@@ -91,8 +91,9 @@ first when it may block, then reads, compares and writes with interrupts
 off, which is atomic on one CPU (a `lock cmpxchg` with a fixup replaces it
 with SMP).
 
-**Programs come from the VFS.** `user::FileSource` makes an open regular
-file a `PageSource` (pages read at fault time through the file system).
+**Programs come from the VFS.** `fs::cache::FileSource` (ADR 0040) makes a
+file a `PageSource` (pages read at fault time through the file system, or
+the page cache's own pages on a disk mount); exec and file `mmap` use it.
 `program::exec_path(path, argv, envp, traced)` opens the file with
 `Vfs::open_exec` (regular, executable), reads its first 4 KiB, decides the
 personality (`poly-binfmt`), and for a static Linux ELF builds the memory
@@ -158,7 +159,8 @@ tool, and its Linux side was only used through the test verdicts.
   `rseq`.
 - Not done yet, each marked where it is: parent notification on stop and
   continue (`wait4` does not exist), core dumps (`WCOREDUMP` is never
-  set), shared file mappings (no page cache), `MAP_32BIT` placement (a
+  set), shared mappings of files outside the page cache (tmpfs:
+  `ENODEV`), `MAP_32BIT` placement (a
   mapping that lands high is refused with `ENOMEM`), `PROT_GROWSDOWN`
   (applied to the given range only), CPU-time clocks (`EINVAL`),
   `POLY-SIGNAL` for signals that a handler takes (only faults and fatal
@@ -170,3 +172,10 @@ tool, and its Linux side was only used through the test verdicts.
   parent link and zombies are not.
 - Every return from an interrupt in ring 3 now looks up the running
   thread's process (one lock of the thread table and a few atomic loads).
+- A process's open files are closed by its last thread, in its own
+  context, before it is reaped. The scheduler drops a reaped thread's
+  state wherever it switches (maybe in an interrupt handler); so that the
+  process's last reference (its file system context, possibly on a disk
+  mount whose locks sleep) is never dropped there, a thread buried while
+  reaping hands a reference to its process to the writeback thread
+  (`fs::cache::release_later`, ADR 0040).

@@ -1,6 +1,8 @@
 # 0032: ext2 in a host-tested crate over a block access trait, metadata ordered by flushes instead of a journal
 
-**Status:** Accepted
+**Status:** Accepted. The volume lock became a type parameter (the kernel's
+sleeping mutex), and the page cache, writeback timing and unmounting at
+shutdown arrived with [ADR 0040](0040-page-cache-and-ext2-on-virtio-blk.md).
 
 ## Context
 

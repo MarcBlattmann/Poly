@@ -50,21 +50,27 @@ unknown command 'hlep'; did you mean 'help'?
 | Command | Shows or does |
 |---|---|
 | `help [command]` | every command with one line of help, or one command |
-| `mem` | RAM total / free / used from the frame allocator; heap bytes in use, pages held, large runs, failed allocations |
+| `mem` | RAM total / free / used from the frame allocator; heap bytes in use, pages held, large runs, failed allocations; the page cache's pages, frames, dirty pages, limit, hits, misses, pages read, written and evicted |
 | `ps` | every thread: id (slot.generation), state (running, runnable, blocked, exited) and name |
 | `lspci` | every PCI function: address, vendor:device, class name and code, BARs |
 | `disks` | every disk: description, size, interrupt vector or polled, write cache; cache buffers, dirty, hits, misses, read-ahead, write-backs, evictions; queue requests, merges, splits, interrupts, sleeps |
 | `ls [path]` | a directory (default `/`) sorted by name, or one file: mode, size (or device number), name, link target |
 | `cat <file>...` | the files' contents (at most 64 KiB each, so `cat /dev/zero` ends) |
-| `mount` | every mount: file system, mount point, options |
+| `mount [<disk> <path> [ro]]` | every mount: source (the disk for a disk mount), mount point, type, options; with arguments, mount the ext2 volume on `<disk>` (`virtio2`, `ram0`, ...) on `<path>` (made if missing) |
+| `umount <path>` | unmount the disk mounted on `<path>`: written back, synced and marked clean; refused while files there are open or mapped |
+| `write <file> [words...]` | write the words and a newline to `<file>` (created or truncated) |
+| `sync` | write back every dirty cached page and sync every disk file system and disk |
 | `run <program> [args]` | start a static Linux program from the file system and wait for it; its output goes to the console, then its exit status (see "Linux programs") |
 | `uptime` | time since the clock started, ticks, threads |
 | `irq` | interrupts taken per vector with their owner (timer, serial, disk, ...), and the spurious / unhandled / 8259 / APIC error counters |
 | `cpu` | CPUID vendor, brand string, family / model / stepping, TSC rate, APIC ID, feature flags |
+| `ifconfig`, `ip` | the network interface `eth0`: device, interrupt vector or polled, link, MTU, MAC, IPv4 and IPv6 addresses, frames and bytes in and out, drops, stack counters, interrupts and polls; and loopback |
+| `ping [-c count] <ipv4>` | ICMP echo requests (default 4, one a second), each reply's round-trip time, loss and min/avg/max |
+| `nc <ipv4> <port> [text...]` | a TCP connection: sends the text and a newline, closes its side, prints what comes back until the peer closes (or 5 s of silence) |
 | `test [filter]` | run the in-kernel tests whose name contains `filter` (all without one), with the same output as at boot |
 | `echo [words]` | print the words (quotes group words: `echo 'a  b'`) |
 | `clear` | clear the screen |
-| `reboot` | write back the disk caches and reset (ACPI reset register, then the 8042, then a triple fault). `cargo xtask` runs QEMU with `-no-reboot`, so QEMU exits |
+| `reboot` | unmount the disk file systems clean, write back the disk caches and reset (ACPI reset register, then the 8042, then a triple fault). `cargo xtask` runs QEMU with `-no-reboot`, so QEMU exits |
 
 Keys: Left / Right, Ctrl-Left / Ctrl-Right (or Alt-B / Alt-F) by word,
 Home / End (Ctrl-A / Ctrl-E), Backspace, Delete, Ctrl-K / Ctrl-U kill to the
@@ -111,7 +117,8 @@ block layer:
 pci: 00:03.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd5000 4 KiB, BAR4 mem64 pf 0xfe000000 16 KiB
 pci: 00:04.0 1af4:1042 class 01.00.00, BAR1 mem32 0xfebd6000 4 KiB, BAR4 mem64 pf 0xfe004000 16 KiB
 pci: 00:05.0 1234:11e8 class 00.ff.00, BAR0 mem32 0xfea00000 1 MiB
-virtio-blk: 00:04.0: ignored, only one device is driven for now
+virtio-blk: 00:04.0: not started; comes up as virtio1 when asked for (a mount)
+virtio-blk: 00:06.0: not started; comes up as virtio2 when asked for (a mount)
 virtio-blk: 00:03.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800
 virtio-blk: 00:03.0: 1 MiB (2048 sectors), block size 512, features 0x120000244, queue 128 entries, 126 segments per request, write cache
 virtio-blk: 00:03.0: request queue on MSI-X entry 0 -> vector 0x30; interrupt-driven, waiters sleep
@@ -201,6 +208,78 @@ seconds and then fails with `DeviceFailed`, the device stopped answering or
 its interrupts do not arrive: check the MSI-X entry and trace the
 deliveries as above. `VirtioBlk::set_drop_notifications(true)` loses
 requests on purpose (the watchdog test uses it on the spare device).
+
+## Networking
+
+`cargo xtask run` attaches a virtio-net device on QEMU's user networking
+(`-netdev user,id=net0 -device virtio-net-pci,netdev=net0,disable-legacy=on`)
+and passes `poly.net=qemu`, so the guest is 10.0.2.15/24 with QEMU's
+virtual router (which is also the way to the host) at 10.0.2.2 and its DNS
+server at 10.0.2.3. The boot log says what came up:
+
+```text
+virtio-net: 00:02.0: MSI-X with 4 vectors, table BAR1+0x0, PBA BAR1+0x800
+virtio-net: 00:02.0: MAC 52:54:00:12:34:56, MTU 1500, link up, features 0x120018020, queues 128 rx / 128 tx entries
+net: eth0: virtio-net 00:02.0; queues on MSI-X entry 0 -> vector 0x31; interrupt-driven
+net: eth0: inet 10.0.2.15/24 gateway 10.0.2.2 dns 10.0.2.3; inet6 fe80::5054:ff:fe12:3456/64
+```
+
+`features` is what the driver negotiated: bit 5 MAC, 15 MRG_RXBUF, 16
+STATUS, 29 EVENT_IDX, 32 VERSION_1 (VIRTIO 1.2 §5.1.3, §6). Without a
+virtio-net device the log says `net: no network device; loopback only`,
+and 127.0.0.1 still works (QEMU's own default NIC, an e1000e, which q35
+adds when no `-netdev` is given, is not driven). `poly.net=off` leaves the
+device alone; a malformed `poly.net=` is reported and ignored.
+
+```text
+poly> ping -c 2 10.0.2.2
+PING 10.0.2.2: 56 data bytes
+64 bytes from 10.0.2.2: icmp_seq=1 time=4.676 ms
+64 bytes from 10.0.2.2: icmp_seq=2 time=0.511 ms
+--- 10.0.2.2 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss
+rtt min/avg/max = 0.511/2.594/4.676 ms
+```
+
+Under user networking only pings to 10.0.2.2 are answered (QEMU's
+documentation: ICMP does not work in general). TCP and UDP to 10.0.2.2
+reach the host's 127.0.0.1, so a listener on the host is a quick partner:
+run `nc -l 127.0.0.1 9000` (or `python3 -m http.server 9000 --bind
+127.0.0.1`) on the host and `nc 10.0.2.2 9000 hello` in the guest. To
+reach a port in the guest from the host, add a forward to the `-netdev`
+by hand (`hostfwd=tcp:127.0.0.1:<host port>-:<guest port>`; the boot tests
+use guest port 7777).
+
+When traffic does not flow:
+
+- `ifconfig` shows the counters on both sides of the driver. `rx` frames
+  that never reach a socket show up in the stack's `ignored`, `malformed`
+  or `bad checksums`; `tx busy` counts frames refused because all 128
+  transmit buffers were out. `interrupts` should grow with traffic on an
+  interrupt-driven device; if only `polls` grow, check the MSI-X entry as
+  for the disk (`xp /4wx <table>`, see above).
+- A device that breaks the virtqueue protocol is reset and the log says
+  `net: eth0: the device broke the virtqueue protocol and was reset`;
+  `ifconfig` then shows `link failed`.
+- QEMU can record every frame: add `-object filter-dump,id=f0,netdev=net0,file=net.pcap`
+  and open `net.pcap` in Wireshark or `tcpdump -r`. Trace events show the
+  device side: `-trace 'virtio_net_*' -trace virtio_queue_notify`.
+- The network thread is `net` in `ps`: `blocked` when idle. A socket
+  call that hangs is a thread `blocked` on the readiness wait queue; it
+  wakes whenever a poll moves packets or a timer fires.
+
+`cargo xtask test` runs three network boots: one interrupt-driven and one
+polled (`vectors=0`) with `poly.test.net=<port>`, where the kernel's
+`net::tests` ping 10.0.2.2, push 1 MiB through a TCP echo server and
+datagrams through a UDP echo server that xtask runs on the host's
+`<port>`, and accept a connection that xtask makes through a host forward
+once the kernel prints `net: test: listening for the host on port 7777`;
+and one that types `ifconfig`, `ping` and `nc` into the shell. To run the
+kernel side by hand: start an echo server on the host (`socat
+TCP-LISTEN:9000,fork,bind=127.0.0.1 EXEC:cat` and the same for
+`UDP-LISTEN`), then `cargo xtask run poly.test=net:: poly.test.net=9000`
+(the host-forward test then waits 30 s for a connection to the guest's
+port 7777 unless one is made).
 
 ## The screen
 
@@ -699,6 +778,69 @@ they make real system calls from ring 3 (`kernel/src/linux/tests.rs`).
 The hello worlds the boot tests use are built into
 `target/xtask-programs/` (`hello`: Rust, no C library; `corpus/`: the C
 corpus with `hello` and the static glibc `libc-hello`).
+
+## Disk file systems and the page cache
+
+`cargo xtask run` and the boot tests attach a third virtio-blk device,
+`target/poly-test-ext2.img` (8 MiB of ext2 with 4 KiB blocks, written by
+`tools/xtask/src/ext2disk.rs` with `poly-ext2` before every boot, the same
+bytes every time), and pass `poly.mount=virtio2:/mnt poly.test.ext2`. The
+kernel brings the disk up when the mount asks for it and logs the mount:
+
+```text
+fs: page cache of up to 16190 pages (63 MiB); writeback every 5 s
+virtio-blk: 00:06.0: MSI-X with 3 vectors, table BAR1+0x0, PBA BAR1+0x800
+block: virtio2: virtio-blk 00:06.0, 16384 blocks of 512 bytes (8 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB); interrupt-driven (vector 0x32)
+fs: virtio2 mounted on /mnt: ext2, 2048 blocks of 4096 bytes (1901 free), 1024 inodes (1008 free), read-write
+```
+
+A volume that was not unmounted clean adds `; was not cleanly unmounted
+(run e2fsck)`. A mount that fails says why (`fs: mounting virtio2 on /mnt
+failed: not an ext2 file system`, `no such disk`, an unsupported feature).
+`virtioN` is the N-th virtio-blk function in PCI order (`lspci` lists them;
+`virtio1` is the watchdog test's spare). In the shell:
+
+```text
+poly> write /mnt/note.txt hello disk
+poly> cat /mnt/note.txt
+hello disk
+poly> sync
+1 cached pages written back; every disk synced
+poly> mount
+tmpfs on / type tmpfs (rw)
+virtio2 on /mnt type ext2 (rw)
+poly> umount /mnt
+poly> mount virtio2 /mnt ro
+```
+
+Data written to a file sits in the page cache (dirty, `mem` counts it)
+until the `writeback` thread (every 5 s; `ps` shows it), `sync`, `umount`
+or `reboot` writes it to ext2 and syncs the disk. `reboot` prints `fs:
+/mnt (virtio2) unmounted clean` for each volume. The image survives QEMU,
+so after a boot it can be checked and read on the host:
+
+```sh
+e2fsck -fn target/poly-test-ext2.img                   # check without changing anything
+debugfs -R 'ls -l /' target/poly-test-ext2.img         # list the root directory
+debugfs -R 'cat /note.txt' target/poly-test-ext2.img   # print a file
+cargo xtask run poly.test=disk_tests                   # only the disk file system tests
+```
+
+`cargo xtask` rewrites the image before the next boot; copy it first to
+keep it. The boot test `ext2_persistence_test` writes a file in one boot,
+reboots, runs `e2fsck -fn` (skipped with a message when e2fsprogs are not
+installed) and reads the file in a second boot from the same image.
+
+Write errors at writeback (a full volume) lose the page's data and are
+reported by the next `sync` (`sync: ENOSPC`) and counted as
+`write_errors` in the cache's stats; a writeback by the thread that fails
+logs `fs: writeback to /mnt (virtio2) failed: ...`. When less than 1/16 of
+RAM is free, the thread evicts clean pages and logs how many. In gdb,
+`poly_kernel::fs::cache::CACHE_FRAMES` and `poly_kernel::fs::cache::PASSES`
+are the frames the cache holds and the writeback passes made; a thread
+stuck in `poly_kernel::sync::RawMutex` waits for a volume or inode lock
+(the holder is in the block layer, or deadlocked: the order is namespace,
+inode, ext2 volume, disk cache).
 
 ## Attaching a debugger
 

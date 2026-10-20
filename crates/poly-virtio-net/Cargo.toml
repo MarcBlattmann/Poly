@@ -1,0 +1,16 @@
+[package]
+name = "poly-virtio-net"
+description = "virtio network device driver: feature negotiation, the virtio_net_hdr, receive and transmit virtqueues, behind poly-net's NetDevice"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+poly-net.workspace = true
+poly-pci.workspace = true
+poly-virtio.workspace = true

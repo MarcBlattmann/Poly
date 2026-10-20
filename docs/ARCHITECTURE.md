@@ -22,8 +22,10 @@ what exists **today** and how it fits that plan.
             screen terminal: status bar + text grid, keys as terminal input, kernel log mirrored (poly-term)
             kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user,
                                memory maps with demand paging (poly-vm), exec of static ELF (poly-elf)
+            file systems: VFS (poly-vfs), tmpfs root from the initramfs, ext2 disks behind the page cache (poly-pagecache)
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
-            block layer: request queue + buffer cache per disk (virtio0, ram0)
+            block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
+            network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             display: QEMU standard VGA framebuffer + RAM back buffer; poly-gfx (drawing, font, text grid)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
@@ -46,9 +48,11 @@ what exists **today** and how it fits that plan.
    (`arch::init_interrupts`) and enables them, enumerates PCI, brings up the
    block layer (the virtio-blk disk if there is one, and a RAM disk) and the
    PS/2 keyboard and the display (which shows the boot screen), mounts a
-   tmpfs on `/` filled from the initramfs (see "File systems"), runs the
-   first program if `poly.init=<path>` names one (see "Linux processes";
-   with `poly.qemu_exit` the boot ends when it does), and runs the boot
+   tmpfs on `/` filled from the initramfs, makes the page cache, starts the
+   writeback thread and mounts the disks `poly.mount=` names (see "File
+   systems"), brings up the network, runs the first program if
+   `poly.init=<path>` names one (see "Linux processes"; with
+   `poly.qemu_exit` the boot ends when it does), and runs the boot
    self-test with the timer preempting threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
@@ -182,7 +186,10 @@ the list of disks ([ADR 0017](adr/0017-block-layer-in-the-kernel.md),
 
 - **Disks.** `block::init` (after `pci::init`) registers the virtio-blk disk
   as `virtio0` if there is one, and always a 256 KiB RAM disk as `ram0`, so
-  file system code can be tested without a disk. `block::root()` is the
+  file system code can be tested without a disk. The other virtio-blk
+  functions are `virtio1`, `virtio2`, ... in PCI order, brought up the first
+  time something names them (`block::open`, which a mount calls); one
+  nobody names (the watchdog test's spare) is left alone. `block::root()` is the
   disk a file system mounts (`virtio0`), `block::ram()` the RAM disk,
   `block::disks()` all of them.
 - **Each disk** is a `Disk`: a name, the device's `DeviceInfo`, the device
@@ -243,6 +250,91 @@ on the spare device that a masked MSI-X entry holds its interrupt back
 until unmasked and that a request whose notification was dropped
 (`VirtioBlk::set_drop_notifications`) fails at the watchdog's deadline
 while its reader sleeps. Each test puts the disks back as it found them.
+
+## Networking
+
+One interface, `eth0`: the host-tested TCP/IP stack `poly-net`
+([ADR 0028](adr/0028-tcp-ip-stack-in-a-crate.md)) on a virtio-net device
+driven by the host-tested `poly-virtio-net`, a network thread that polls
+the stack, and blocking sockets for the system call layers. Decisions are
+in [ADR 0039](adr/0039-networking-in-the-kernel.md).
+
+```text
+ socket::Socket (blocking) ──net::call(op)──► IFACE: Mutex<Interface { Stack, Device }>
+        ▲  wait_for_change(generation)            ▲ poll(dev, now) -> next deadline
+        │                                         │
+ CHANGED += 1, wake ◄───── network thread ────────┘  sleeps until WAKE moves or the deadline
+                                ▲
+             MSI-X entry 0 ─────┘ on_interrupt: WAKE += 1, wake the thread (touches nothing else)
+```
+
+- **`poly-virtio-net`** (VIRTIO 1.2 §5.1) negotiates VERSION_1, MAC,
+  STATUS, MTU (only if the buffers can hold a frame of that size),
+  MRG_RXBUF, EVENT_IDX and ACCESS_PLATFORM, never checksum or segmentation
+  offloads, the control queue or several queue pairs. Every packet buffer
+  is 2 KiB of driver-owned DMA memory with one descriptor: transmit puts
+  the 12-byte `virtio_net_hdr` (all zeros) and the frame in one
+  device-readable buffer; receive buffers are all handed to the device at
+  start and each goes back as soon as its frame is copied out. With
+  MRG_RXBUF a packet spanning several buffers is gathered (and held until
+  all of them are back). Lengths, buffer counts and used-ring entries are
+  checked; a device that breaks the queue protocol is reset and refused
+  from then on. Transmit completions interrupt only while every transmit
+  buffer is in flight (otherwise they are reclaimed by the next send). It
+  implements `poly_net::NetDevice`; frames are copied between its buffers
+  and the stack's, so the device never sees other memory. Host tests run
+  it against a simulated device written from the specification, including
+  a `poly-net` stack doing ARP, ping and a 300 KB TCP echo over it.
+- **The kernel side** (`kernel/src/net/virtio.rs`) finds the first
+  virtio-net function, maps its structures, enables MSI-X masked, resets
+  the device before bus mastering and gives `poly_virtio_net::init` 128
+  receive and 128 transmit buffers (`DmaBuffer`s, 2 x 256 KiB) plus rings
+  and tables, with both queues and configuration changes on MSI-X entry 0.
+  Without MSI-X the network thread polls every 10 ms.
+- **`kernel/src/net/mod.rs`** keeps the stack and its device together in
+  one `Interface` behind a sleeping `Mutex` (the stack allocates and a poll
+  can take a while; no interrupt handler takes the lock). Without a
+  device, the stack sits on a stand-in that drops everything, so loopback
+  (127.0.0.0/8) works in every boot. The MSI-X handler only bumps a counter
+  and wakes the network thread, which polls, asks the device for
+  interrupts again (polling again if work arrived meanwhile), and sleeps
+  until the next interrupt or the deadline `poll` returned. Socket calls go
+  through `net::call`: the operation, then a `poll` right away, then the
+  network thread is kicked if the stack's deadline moved earlier.
+- **Blocking** (`kernel/src/net/socket.rs`): `Socket` wraps a handle with
+  blocking `connect`, `accept`, `send`, `recv` and friends (optional
+  deadlines; `EAGAIN` or, for `connect`, `ETIMEDOUT` when they pass) and a
+  one-socket `wait(interest)`; `Pinger` sends ICMP echo through a ping
+  socket. A blocking call tries, and on `EAGAIN` sleeps on one wait queue
+  until the readiness generation moves away from the value its attempt
+  saw (`call_and_generation`, `wait_for_change`). The generation moves,
+  with the interface locked, whenever a poll moved packets (device frames
+  or the stack's loopback), ran a due timer or saw the link change, and on
+  `shutdown` and `close`. So no change after an attempt is missed, and a
+  poll that moved nothing wakes nobody.
+- **Configuration**: `poly.net=<addr>/<prefix>[,gw=<addr>][,dns=<addr>]`,
+  `poly.net=qemu` (QEMU's user networking: 10.0.2.15/24, gateway
+  10.0.2.2, DNS 10.0.2.3) or `poly.net=off`, parsed by
+  `poly_net::setting`; without it the interface has only its IPv6
+  link-local address. The stack's secret (initial sequence numbers and
+  ports, RFC 6528) and a MAC address for devices without one come from
+  `arch::user::random_bytes` (RDRAND, or the TSC mixed).
+
+```text
+virtio-net: 00:02.0: MSI-X with 4 vectors, table BAR1+0x0, PBA BAR1+0x800
+virtio-net: 00:02.0: MAC 52:54:00:12:34:56, MTU 1500, link up, features 0x120018020, queues 128 rx / 128 tx entries
+net: eth0: virtio-net 00:02.0; queues on MSI-X entry 0 -> vector 0x31; interrupt-driven
+net: eth0: inet 10.0.2.15/24 gateway 10.0.2.2 dns 10.0.2.3; inet6 fe80::5054:ff:fe12:3456/64
+```
+
+The kernel tests (`net::tests`) run TCP between two kernel threads over
+loopback (the server asleep in `accept` first), UDP and ping over loopback
+and a receive timing out in every boot. With `poly.test.net=<port>` (the
+network boot tests, on QEMU's user networking) they also ping the gateway
+10.0.2.2, push 1 MiB through a TCP echo server and datagrams through a UDP
+echo server that `cargo xtask` runs on the host's `<port>` (reached at
+10.0.2.2), and accept a connection the host makes through a port forward
+to guest port 7777, checking the bytes at both ends.
 
 ## Input
 
@@ -328,7 +420,9 @@ through the QEMU monitor (`sendkey`), with the US layout and with
 The logic is host-tested in `poly-vfs` and `poly-cpio`
 ([ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md)); `kernel/src/fs/` wires it in
 ([ADR 0037](adr/0037-vfs-and-initramfs-in-the-kernel.md)). The ext2 driver is
-`poly-ext2` ([ADR 0032](adr/0032-ext2-driver.md)), host-tested, not mounted yet.
+`poly-ext2` ([ADR 0032](adr/0032-ext2-driver.md)), mounted on virtio-blk disks
+behind the page cache, `poly-pagecache`
+([ADR 0040](adr/0040-page-cache-and-ext2-on-virtio-blk.md)); both host-tested.
 
 ```
    personalities (later: openat, read, write, getdents64, ...)   kernel shell: ls, cat, mount
@@ -340,10 +434,13 @@ The logic is host-tested in `poly-vfs` and `poly-cpio`
    fs::vfs(): poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
           │  FileSystem trait: lookup/create/rename/read/write/readdir by inode   └─ /dev/console, /dev/tty → kernel log
           ▼                                                                         /dev/null, /dev/zero, /dev/full
-   Tmpfs on /                 poly_ext2::Ext2<D: BlockIo>      later: devfs, procfs
-          ▲                          │  BlockIo: read/write/flush device blocks
+   Tmpfs on /                 CachedFs on /mnt: page cache (poly-pagecache) ◀── user mappings (FileSource)
+          ▲                          │  fill with read-ahead / writeback (thread, sync, unmount)
    poly_cpio::unpack                 ▼
-   initramfs (PVH module 0)   block::Disk (queue + buffer cache), or CachedIo / DeviceIo
+   initramfs (PVH module 0)   poly_ext2::Ext2<DiskIo, RawMutex>        later: devfs, procfs, ext4
+                                     │  BlockIo: read/write/flush device blocks
+                                     ▼
+                              block::Disk virtio2 (queue + buffer cache)
 ```
 
 - **The initramfs** is the first PVH boot module (`hvm_start_info.nr_modules`
@@ -419,6 +516,49 @@ initramfs.
   without shared blocks or lost names. Corrupt volumes give `EUCLEAN`,
   never a panic. Tested against `mke2fs`/`debugfs`/`e2fsck` images, a
   random model test against tmpfs, byte flips and simulated crashes.
+  Its volume lock is a type parameter (`poly_vfs::lock::RawLock`): a
+  spinlock on the host, the kernel's sleeping `sync::RawMutex` when mounted.
+- **Disk mounts** (`kernel/src/fs/disk.rs`): `fs::disk::mount(disk, path,
+  ro)` brings the disk up (`block::open`), mounts ext2 on it through
+  `DiskIo` (the disk's buffer cache as `BlockIo`, `flush` = `Disk::sync`)
+  with a `RawMutex`, registers it with the page cache and mounts the
+  result on `path`, made if missing. `poly.mount=<disk>:<path>[:ro]`
+  (comma-separated) mounts at boot; the shell has `mount <disk> <path>
+  [ro]`, `umount`, `sync` and `write`. `unmount` refuses a busy mount, then
+  writes back, syncs and marks the volume clean; `power::reboot` first runs
+  `fs::disk::shutdown`, which does the same for every volume, files open
+  or not.
+- **The page cache** (`poly-pagecache`, kernel glue in
+  `kernel/src/fs/cache.rs`): file pages in frames, keyed by file system,
+  inode and page index. `PageCache::register(ext2)` returns a `CachedFs`,
+  the `FileSystem` the VFS mounts: regular files' reads and writes go
+  through it (a miss reads up to 16 pages ahead; writes dirty pages and
+  update the size and time at once, the data reaches ext2 at writeback),
+  everything else passes through; files that shrink or are deleted lose
+  their pages. Per-inode locks (the kernel's `RawMutex`) are held across a
+  file's page I/O. Frames come from `FRAMES` (`KernelFrame`); the cache
+  keeps at most a quarter of RAM, evicting clean unused pages least
+  recently used first (and half of them when free memory drops below 1/16
+  of RAM). The `writeback` thread syncs every disk mount that changed every
+  5 seconds; `sync` and unmounting do it at once. `FileSource` makes a VFS
+  file a `user::PageSource` whose pages on a disk mount are the cache's,
+  for mappings (see "Memory maps").
+
+```text
+fs: page cache of up to 16190 pages (63 MiB); writeback every 5 s
+block: virtio2: virtio-blk 00:06.0, 16384 blocks of 512 bytes (8 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB); interrupt-driven (vector 0x32)
+fs: virtio2 mounted on /mnt: ext2, 2048 blocks of 4096 bytes (1901 free), 1024 inodes (1008 free), read-write
+```
+
+The disk file system tests (`fs::disk_tests::*`) format the RAM disk as
+ext2 and mount, write, unmount and check it in every boot; with
+`poly.test.ext2` (the ext2 test disk that `cargo xtask` builds, mounted on
+`/mnt`) they read its files, write and unmount and mount it again
+(read-only too, with the disk's buffer cache dropped), check that `read`
+and a private and a shared mapping get the same page (copied on a private
+write, written to the file through the shared one), that the writeback
+thread cleans a dirty page, and that evicting clean pages gives their
+frames back.
 
 ## Display
 
@@ -641,7 +781,7 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   the signal.
 - **Programs from the VFS.** `program::exec_path(path, argv, envp, traced)`
   opens an executable regular file, checks its format, loads a static ELF
-  through `user::FileSource` (pages read from the file at fault time) and
+  through `fs::cache::FileSource` (pages read from the file at fault time) and
   starts a Linux process with the console on fds 0-2. The shell's
   `run <program> [args]` runs one and waits for it.
 - **The first program and the test-run protocol** (ADR 0027).
@@ -698,7 +838,10 @@ services once it decodes those system calls.
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `run /bin/hello`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
+| Disk file systems: ext2 on the RAM disk; the ext2 test disk (made by `cargo xtask` with `poly-ext2`, attached as `virtio2`, mounted on `/mnt`): its files, writes surviving a remount, `read` and mappings sharing a page-cache page, the writeback thread, eviction freeing frames | `kernel_test!` + `poly.test.ext2`, `poly.mount=` | `cargo xtask test` |
+| Persistence: a file written through the shell on the ext2 test disk, `sync`, `reboot` (unmounted clean), `e2fsck -fn` on the image (when e2fsprogs are installed), a second boot from the same image reads it | `cargo xtask` (`ext2_persistence_test`) | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail), the display's mode, mapping, back buffer and flush (and a boot without VGA must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi`, `poly.test.display` | `cargo xtask test` |
+| Networking: virtio-net on QEMU's user networking (interrupt-driven, and in another boot polled): ping to the gateway, 1 MiB TCP and UDP through echo servers on the host, a connection from the host through a port forward; `ifconfig`, `ping` and `nc` in the shell. Loopback TCP, UDP and ping in every boot | `kernel_test!` + `poly.test.net=<port>`; `cargo xtask` (`net.rs`) | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
@@ -901,7 +1044,12 @@ and [ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md).
   conditions and sleep again).
 - **Exit.** An exiting thread is still on its stack, so the next thread
   frees it (`finish_switch` after every switch). The table slot is freed
-  once the thread is also joined or detached.
+  once the thread is also joined or detached. Its user state is dropped
+  there too, in whatever thread switched (maybe inside the tick's
+  handler, maybe holding sleeping locks): drop code that would sleep or
+  take a lock that does not mask interrupts checks `thread::reaping()`
+  and defers that part (a `user::Memory` hands its files and page-cache
+  pages to the writeback thread, `fs::cache::release_later`).
 - **Interrupts and locking.** Every `THREADS` critical section runs with
   interrupts off, and the lock is dropped before the switch; with one CPU
   and interrupts off nothing can run in between. Each thread restores its
@@ -1030,9 +1178,15 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   accesses to a space that is not loaded.
 - **Backing.** A file region maps a `FileRef`: an `Arc<dyn PageSource>`
   (`len`, `read_at`, optionally the bytes in memory; `MemoryImage` wraps
-  kernel bytes, `FileSource` an open VFS file) and a limit past which
-  pages read as zero. There is no page cache yet: every file page gets a
-  private frame, and shared file mappings are refused.
+  kernel bytes, `fs::cache::FileSource` a VFS file) and a limit past which
+  pages read as zero. A source on a disk mount hands out the page cache's
+  pages (`PageSource::cached_page`): the memory maps the cache's frame
+  itself (not owned by the address space) and holds the page while it is
+  mapped, read-only in a private region and copied on the first write
+  (`CopyOnWrite`), read-only then writable on the first write in a shared
+  one (`MAP_SHARED`, `Memory::map_shared_file`), whose writes thereby
+  reach the file. Other sources (and pages that cross a region's limit)
+  get private frames, and shared mappings of them are refused (ADR 0040).
 - **Frames.** `UserFrame` is a frame on its way into or out of an address
   space (`AddressSpace::map_owned`, `take`); dropping one frees it.
   `user::user_frames()` counts every frame held for user pages and
@@ -1071,6 +1225,9 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   and is woken when it is released. It may be held across blocking calls,
   not taken in interrupt handlers, and locking it twice from one thread
   panics with "deadlock".
+- `RawMutex`: a `Mutex<()>` locked and unlocked by hand, the
+  `poly_vfs::lock::RawLock` the file system crates take (ext2's volume
+  lock, the page cache's inode and namespace locks).
 - `SetOnce<T>`: written once at boot, read without a lock (local APIC,
   clock).
 
@@ -1124,16 +1281,24 @@ the screen terminal (its `ScreenConsole`, see "Screen terminal").
   and handler): `help`, `mem` (frames and heap), `ps` (`thread::list`),
   `lspci` (`pci::devices`, with class names from `poly_pci::ClassCode::name`),
   `disks` (`block::disks` with cache and queue counters), `ls`, `cat` and
-  `mount` (through `fs::Files` and `fs::vfs()`), `uptime`, `irq`
+  `mount` (through `fs::Files` and `fs::vfs()`; with arguments it mounts a
+  disk), `umount`, `write` (a line into a file), `sync`, `uptime`, `irq`
   (per-vector counts), `cpu` (CPUID: vendor, brand, family / model /
   stepping, features), `test [filter]`, `echo`, `clear`, `reboot`. An unknown
   command gets the closest command name as a suggestion.
+- **Network commands** (`shell/net.rs`): `ifconfig` (and `ip`, the same)
+  shows `eth0` (device, link, MTU, MAC, addresses, driver and stack
+  counters); `ping [-c count] <ipv4>` sends ICMP echo through a ping
+  socket, one a second; `nc <ipv4> <port> [text...]` connects over TCP,
+  sends the text, closes its side and prints the answer. They use the
+  blocking sockets of `net::socket`, like a program would.
 - **`test`** runs the kernel tests again with `ktest::run(env, filter,
   When::Runtime, console)`: the boot's `poly.selftest.*` flags are dropped,
   tests marked `#[boot_only]` (they check the state at boot, or must run on
   the boot thread) are left out, and only one run happens at a time, so a
   test that drives the shell cannot run the tests inside itself.
-- **`reboot`** (`power::reboot`) writes back every disk's cache, then tries
+- **`reboot`** (`power::reboot`) unmounts the disk file systems clean
+  (`fs::disk::shutdown`), writes back every disk's cache, then tries
   the FADT reset register (`acpi::Platform::reset`), the 8042's reset line
   and a triple fault (`arch::reset`), half a second each.
 - The kernel tests drive the real shell with a scripted console that types

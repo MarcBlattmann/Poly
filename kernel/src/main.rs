@@ -19,6 +19,7 @@ mod ktest;
 mod linux;
 mod log;
 mod mm;
+mod net;
 mod pci;
 mod power;
 mod process;
@@ -123,6 +124,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     keyboard::init(&boot);
     display::init(&boot);
     fs::init(&boot, initrd);
+    net::init(&boot);
     // `poly.init=<path>`: the first program runs before anything else; a
     // test run (`poly.qemu_exit`) ends with it (ADR 0027, ADR 0038).
     program::run_init(&boot);

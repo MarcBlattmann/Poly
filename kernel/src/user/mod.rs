@@ -9,7 +9,7 @@
 //!    envp and the auxiliary vector) and [`spawn_in`] starts a thread in it;
 //!    [`exec::exec`] does both. Its pages come in on demand, at the first
 //!    access ([`memory`]). The file comes from anywhere that implements
-//!    [`PageSource`]: a VFS file ([`FileSource`]) or bytes in memory.
+//!    [`PageSource`]: a VFS file (`fs::cache::FileSource`) or bytes in memory.
 //!
 //!    Tests also build bare address spaces by hand: [`AddressSpace::new`]
 //!    makes an empty one (the kernel half is shared);
@@ -67,7 +67,6 @@
 
 pub mod exec;
 mod exec_tests;
-mod file;
 pub mod memory;
 mod memory_tests;
 mod programs;
@@ -79,7 +78,6 @@ pub use crate::arch::user::{
     copy_from_user, copy_to_user, fs_base, gs_base, is_user_range, set_fs_base, set_gs_base, strncpy_from_user,
     user_frames,
 };
-pub use file::FileSource;
 pub use memory::{FaultError, FileRef, Memory, MemoryError, MemoryImage, PageSource};
 
 use crate::arch;
@@ -196,6 +194,20 @@ fn spawn_thread(
         arch,
     });
     thread::spawn_user("user", user, user_main, 0).inspect_err(|_| attached.cancel_thread(tid))
+}
+
+impl Drop for UserThread {
+    fn drop(&mut self) {
+        // The scheduler drops an exited thread's state wherever it reaps it,
+        // perhaps in an interrupt handler. If this were the process's last
+        // reference, dropping it there would let go of its file system
+        // context (inodes, maybe on a disk mount, whose locks sleep): the
+        // writeback thread drops it instead. Its open files were closed by
+        // its last thread already (`Process::detach_thread`).
+        if thread::reaping() {
+            crate::fs::cache::release_later(Box::new(Arc::clone(&self.process)));
+        }
+    }
 }
 
 /// The kernel side of a new user thread: everything is loaded by the switch

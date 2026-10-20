@@ -1,6 +1,6 @@
-//! Rebooting the machine.
+//! Rebooting the machine, after unmounting the disk file systems clean.
 
-use crate::{acpi, arch, block, time};
+use crate::{acpi, arch, block, fs, time};
 use core::fmt::Write;
 use poly_acpi::AddressSpace;
 
@@ -12,11 +12,25 @@ const RESET_WAIT_NS: u64 = 500 * time::NANOS_PER_MILLI;
 /// 8042 keyboard controller, and finally a triple fault. Each step is
 /// reported to `out` first.
 pub fn reboot(out: &mut dyn Write) -> ! {
+    prepare_shutdown(out);
+    arch_reset(out)
+}
+
+/// What every way of going down does first: the disk file systems are
+/// written back and unmounted clean (`fs::disk::shutdown`), then every
+/// disk's cache is written back. A power-off (once ACPI sleep states can
+/// be entered) calls this too.
+pub fn prepare_shutdown(out: &mut dyn Write) {
+    fs::disk::shutdown(out);
     for d in block::disks() {
         if let Err(e) = d.sync() {
             let _ = writeln!(out, "reboot: {}: writing back the cache failed: {e:?}", d.name());
         }
     }
+}
+
+/// Reset the machine, each way reported to `out` first.
+fn arch_reset(out: &mut dyn Write) -> ! {
     if let Some(r) = acpi::platform().and_then(|p| p.reset) {
         let space = match r.register.space {
             AddressSpace::SystemIo => "port",

@@ -3,13 +3,14 @@
 
 use crate::{BlockIo, Ext2};
 use alloc::vec::Vec;
+use poly_vfs::lock::RawLock;
 use poly_vfs::{Attr, DirEntry, Errno, FileSystem, FsInfo, Ino, NewNode, RenameFlags, Result, SetAttr};
 
 /// Entries `readdir` copies out per round, between which the lock is
 /// released for the callback.
 const READDIR_BATCH: usize = 64;
 
-impl<D: BlockIo> Ext2<D> {
+impl<D: BlockIo, L: RawLock> Ext2<D, L> {
     /// Runs an operation that changes nothing visible but may update access
     /// times when the volume is writable.
     fn access_op<R>(&self, f: impl FnOnce(&mut crate::Ctx<'_, D>) -> Result<R>) -> Result<R> {
@@ -17,7 +18,7 @@ impl<D: BlockIo> Ext2<D> {
     }
 }
 
-impl<D: BlockIo> FileSystem for Ext2<D> {
+impl<D: BlockIo, L: RawLock> FileSystem for Ext2<D, L> {
     fn info(&self) -> FsInfo {
         FsInfo { name: "ext2", read_only: self.read_only(), cache_lookups: true }
     }

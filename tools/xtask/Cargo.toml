@@ -6,7 +6,9 @@ license.workspace = true
 publish = false
 
 [dependencies]
+poly-block.workspace = true
 poly-cpio.workspace = true
+poly-ext2.workspace = true
 poly-gfx.workspace = true
 poly-term.workspace = true
 poly-vfs.workspace = true

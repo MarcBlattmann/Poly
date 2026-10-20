@@ -23,16 +23,17 @@
 //! prevents by reading the word first, unlocked.
 //!
 //! Not done yet, each documented where it is: parent notification on stop
-//! and continue (no `wait4` yet), core dumps, shared file mappings (no page
-//! cache), `MAP_32BIT` placement (refused with `ENOMEM` when the address
+//! and continue (no `wait4` yet), core dumps, shared mappings of files the
+//! page cache does not hold (tmpfs: `ENODEV`), `MAP_32BIT` placement (refused with `ENOMEM` when the address
 //! is not low), `PROT_GROWSDOWN` (applied to the given range only), CPU-time
 //! clocks (`EINVAL`).
 
 use super::LinuxState;
 use crate::arch::cpu::InterruptsOff;
+use crate::fs::cache::FileSource;
 use crate::process::{self, ExitStatus, Process, ThreadFlags, Unparked};
 use crate::testrun;
-use crate::user::{self, FileRef, FileSource, Memory, MemoryError, UserRegs};
+use crate::user::{self, FileRef, Memory, MemoryError, UserRegs};
 use crate::{kprintln, time};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -297,7 +298,7 @@ impl LinuxKernel for Thread<'_> {
                 if r.shared && r.prot.writable() && !file.writable() {
                     return Err(Errno::EACCES);
                 }
-                let source = FileSource::new(file).ok_or(Errno::EACCES)?;
+                let source = FileSource::of(&file);
                 poly_vm::MapRequest::file(r.len, prot, FileRef::new(Arc::new(source)), offset, r.shared)
             }
         };

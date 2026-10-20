@@ -13,9 +13,10 @@
 //! `execve` and `ld.so` support (Phase 4).
 
 use crate::boot_info::BootInfo;
+use crate::fs::cache::FileSource;
 use crate::process::{self, ExitStatus, Process};
+use crate::user;
 use crate::user::exec::{self, ExecError, ExecParams};
-use crate::user::{self, FileSource};
 use crate::{fs, kprintln, qemu, testrun, thread};
 use alloc::format;
 use alloc::string::String;
@@ -100,7 +101,7 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
         Some(p) => return Err(ExecPathError::Unsupported(format!("{} programs cannot run yet", p.name()))),
         None => return Err(ExecPathError::Unsupported("#! scripts are not supported yet".into())),
     }
-    let source = FileSource::new(file).ok_or(ExecPathError::Open(poly_vfs::Errno::EACCES))?;
+    let source = FileSource::of(&file);
     let image = exec::load(Arc::new(source), &ExecParams::new(argv, envp, path)).map_err(ExecPathError::Exec)?;
     let process = Arc::new(Process::new_linux(process::alloc_pid(), 0, format, traced));
     Ok(Prepared { process, image })
