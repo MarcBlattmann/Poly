@@ -37,7 +37,7 @@ pub struct Command {
 pub static COMMANDS: &[Command] = &[
     Command { name: "help", usage: "[command]", help: "list the commands, or describe one", run: help },
     Command { name: "mem", usage: "", help: "physical memory and kernel heap usage", run: mem },
-    Command { name: "ps", usage: "", help: "kernel threads and their states", run: ps },
+    Command { name: "ps", usage: "", help: "kernel threads, their states and CPUs", run: ps },
     Command { name: "lspci", usage: "", help: "PCI functions found at boot", run: lspci },
     Command { name: "disks", usage: "", help: "block devices with their cache and queue counters", run: disks },
     Command { name: "ls", usage: "[path]", help: "list a directory (default /) with modes and sizes", run: ls },
@@ -45,7 +45,7 @@ pub static COMMANDS: &[Command] = &[
     Command {
         name: "mount",
         usage: "[<disk> <path> [ro]]",
-        help: "mounted file systems, or mount a disk's ext2 volume on path",
+        help: "mounted file systems, or mount a disk's ext2/3/4 volume on path",
         run: mount,
     },
     Command { name: "umount", usage: "<path>", help: "unmount the disk mounted on path", run: umount },
@@ -171,7 +171,7 @@ fn mem(con: &mut dyn Console, args: &[String]) -> CommandResult {
 fn ps(con: &mut dyn Console, args: &[String]) -> CommandResult {
     no_args(args)?;
     let threads = thread::list();
-    out!(con, "{}{:>6}  {:<9} NAME{}", sgr::BOLD, "ID", "STATE", sgr::RESET);
+    out!(con, "{}{:>6}  {:<9} CPU  NAME{}", sgr::BOLD, "ID", "STATE", sgr::RESET);
     for t in &threads {
         let state = match t.state {
             State::Runnable => "runnable",
@@ -180,7 +180,7 @@ fn ps(con: &mut dyn Console, args: &[String]) -> CommandResult {
             State::Exited => "exited",
         };
         let name = if t.name.is_empty() { "-" } else { t.name };
-        out!(con, "{:>6}  {state:<9} {name}", format!("{}", t.id));
+        out!(con, "{:>6}  {state:<9} {:>3}  {name}", format!("{}", t.id), t.cpu);
     }
     out!(con, "{} threads (of {})", threads.len(), thread::MAX_THREADS);
     Ok(())
@@ -457,7 +457,9 @@ fn irqs(con: &mut dyn Console, args: &[String]) -> CommandResult {
             continue;
         }
         let what = match v {
-            irq::TIMER_VECTOR => "timer (scheduler tick)".into(),
+            irq::TIMER_VECTOR => "timer (scheduler tick, all CPUs)".into(),
+            irq::RESCHEDULE_VECTOR => "reschedule IPI".into(),
+            irq::TLB_VECTOR => "TLB shootdown IPI".into(),
             irq::ERROR_VECTOR => "local APIC error".into(),
             irq::SPURIOUS_VECTOR => "local APIC spurious".into(),
             irq::PIC_BASE..irq::FIRST_DEVICE_VECTOR => "8259 (spurious)".into(),
@@ -490,7 +492,8 @@ fn cpu_info(con: &mut dyn Console, args: &[String]) -> CommandResult {
             None => out!(con, "TSC       not calibrated"),
         }
     }
-    if let Some(apic) = arch::apic::interrupt_destination() {
+    // The CPU the shell runs on, whose CPUID this is.
+    if let Some(apic) = arch::apic::current_id() {
         out!(con, "APIC ID   {apic}");
     }
     // Wrap the feature list at the console's width.

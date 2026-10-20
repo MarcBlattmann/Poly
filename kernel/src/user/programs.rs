@@ -272,6 +272,30 @@ user_prog_fail_return:
     mov eax, {exit}
     syscall
     ud2
+/* Touch [RDI] again and again, reading it (RDX = 0) or storing a count
+   that goes up by one each time (RDX = 1), until [RSI] is not 0; then
+   exit with that. For the TLB shootdown tests: a translation of RDI's page
+   stays cached all along, so the access faults once the page is gone or
+   read-only only if the CPU it runs on was told. */
+    .global user_prog_touch
+user_prog_touch:
+    xor eax, eax
+1:
+    test rdx, rdx
+    jz 2f
+    inc rax
+    mov qword ptr [rdi], rax
+    jmp 3f
+2:
+    mov rcx, qword ptr [rdi]
+3:
+    mov rcx, qword ptr [rsi]
+    test rcx, rcx
+    jz 1b
+    mov rdi, rcx
+    mov eax, {exit}
+    syscall
+    ud2
 /* A place to resume at: exit 0x99. */
     .global user_prog_return_target
 user_prog_return_target:
@@ -316,6 +340,7 @@ unsafe extern "C" {
     static user_prog_return_to: u8;
     static user_prog_return_target: u8;
     static user_prog_fail_return: u8;
+    static user_prog_touch: u8;
 }
 
 /// The programs, by where they start.
@@ -339,6 +364,7 @@ pub enum Program {
     ReturnTo,
     ReturnTarget,
     FailReturn,
+    Touch,
 }
 
 impl Program {
@@ -363,6 +389,7 @@ impl Program {
             Program::ReturnTo => &raw const user_prog_return_to,
             Program::ReturnTarget => &raw const user_prog_return_target,
             Program::FailReturn => &raw const user_prog_fail_return,
+            Program::Touch => &raw const user_prog_touch,
         };
         start as u64 - (&raw const user_programs_start) as u64
     }

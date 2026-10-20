@@ -64,7 +64,19 @@ fn new_space() -> Result<Arc<AddressSpace>, &'static str> {
 }
 
 fn start_with(space: &Arc<AddressSpace>, program: Program, args: [u64; 3], hook: SyscallHook) -> TestResult<ThreadId> {
-    let entry = Entry { rip: CODE + program.offset(), rsp: STACK_TOP, args };
+    start_on_stack(space, program, args, hook, STACK_TOP)
+}
+
+/// [`start_with`] on a stack ending at `rsp`: threads of one space that run
+/// at the same time (on several CPUs) need stacks of their own.
+fn start_on_stack(
+    space: &Arc<AddressSpace>,
+    program: Program,
+    args: [u64; 3],
+    hook: SyscallHook,
+    rsp: u64,
+) -> TestResult<ThreadId> {
+    let entry = Entry { rip: CODE + program.offset(), rsp, args };
     spawn(process(), Arc::clone(space), entry, hook).map_err(|_| "could not spawn a user thread")
 }
 
@@ -123,16 +135,17 @@ fn hook(_: &Process, regs: &mut SyscallRegs) {
     }
 }
 
-/// Wait (briefly) until the space's only reference is the test's: the
-/// threads that used it have been reaped.
+/// Wait until the space's only reference is the test's: the threads that
+/// used it have been reaped. A thread that ran on another CPU is reaped
+/// once that CPU has switched away from it and taken its next scheduling
+/// step (at its next tick, if it went idle): soon, but not at once, and
+/// later if the host stalls that CPU.
 fn released(space: &Arc<AddressSpace>) -> TestResult {
-    for _ in 0..100 {
-        if Arc::strong_count(space) == 1 {
-            return Ok(());
-        }
-        thread::yield_now();
+    if thread::wait_until(10, || Arc::strong_count(space) == 1) {
+        Ok(())
+    } else {
+        Err("a user thread kept its address space after it exited")
     }
-    Err("a user thread kept its address space after it exited")
 }
 
 kernel_test! {
@@ -218,7 +231,8 @@ kernel_test! {
                 return Err("a user program did not end as expected");
             }
         }
-        if thread::state(bystander) != Some(State::Runnable) {
+        // Runnable, or running on another CPU.
+        if !matches!(thread::state(bystander), Some(State::Runnable | State::Running)) {
             return Err("a fault in one thread ended another");
         }
         write_u64(&space, FLAG, 0x5eed)?;
@@ -391,8 +405,9 @@ kernel_test! {
         write_u64(&other, DATA, 0x3333_0000)?;
         write_u64(&other, DATA + 8, 0x3333_0001)?;
         let threads = [
+            // Each on its own stack page: they may run at the same time.
             start(&space, Program::Sse, [0x1000, bases[0].0, bases[0].1])?,
-            start(&space, Program::Sse, [0x2001, bases[1].0, bases[1].1])?,
+            start_on_stack(&space, Program::Sse, [0x2001, bases[1].0, bases[1].1], hook, STACK_TOP - PAGE_SIZE)?,
             start(&other, Program::Sse, [0x3002, DATA, 0x3333_0000])?,
         ];
         for t in threads {
@@ -418,8 +433,11 @@ kernel_test! {
         // out; one that slows to a trickle misses the generous deadline.
         const TICKS: u64 = 20;
         const DEADLINE_NS: u64 = 5 * time::NANOS_PER_SEC;
+        // Both share one CPU, which the spinner must be preempted on.
+        let pin = thread::pin_current();
         let space = new_space()?;
         let t = start(&space, Program::Spin, [DATA, 0, 0])?;
+        thread::set_affinity(t, thread::CpuSet::one(pin.cpu())).map_err(|_| "could not pin the spinner")?;
         let (t0, k0) = (time::now_ns(), time::ticks());
         let mut kept_ticking = true;
         while time::ticks() < k0 + TICKS {
@@ -441,6 +459,141 @@ kernel_test! {
         }
         if thread::join(t) != Ok(0xd0e) {
             return Err("the spinning thread did not see the flag");
+        }
+        released(&space)
+    }
+}
+
+// --- TLB shootdowns ----------------------------------------------------------
+
+/// The page the shootdown tests' threads touch, and one they poll for the
+/// word that stops them.
+const TOUCHED: u64 = 0x70_3000;
+const STOP: u64 = 0x70_5000;
+/// How long a shootdown test waits for another CPU to do something. Long:
+/// the host may deschedule the emulator for a while.
+const OTHER_CPU_DEADLINE_NS: u64 = 20 * time::NANOS_PER_SEC;
+
+/// Some online CPU other than `me`, if there is one.
+fn other_cpu(me: usize) -> Option<usize> {
+    thread::online_cpus().without(thread::CpuSet::one(me)).first()
+}
+
+/// Ticks of CPU `cpu`'s own timer so far.
+fn ticks_of(cpu: usize) -> u64 {
+    crate::arch::percpu::cpu(cpu).map_or(0, |c| c.ticks().load(core::sync::atomic::Ordering::Relaxed))
+}
+
+/// Start [`Program::Touch`] on CPU `cpu`, reading [`TOUCHED`] or storing to it,
+/// and wait until it runs there with the space loaded and has been at it
+/// for a couple of that CPU's ticks: its TLB then holds TOUCHED's translation.
+fn touch_on(space: &Arc<AddressSpace>, cpu: usize, store: bool) -> TestResult<ThreadId> {
+    for page in [TOUCHED, STOP] {
+        space.map_zeroed(page, PAGE_SIZE, Prot::RW).map_err(|_| "could not map the test pages")?;
+    }
+    let t = start(space, Program::Touch, [TOUCHED, STOP, u64::from(store)])?;
+    let stop = |why| {
+        let _ = write_u64(space, STOP, 1);
+        let _ = thread::join(t);
+        Err(why)
+    };
+    if thread::set_affinity(t, thread::CpuSet::one(cpu)).is_err() {
+        return stop("could not move the thread to the other CPU");
+    }
+    let start = time::now_ns();
+    let late = || time::now_ns() - start > OTHER_CPU_DEADLINE_NS;
+    while !(thread::state(t) == Some(State::Running)
+        && thread::cpu_of(t) == Some(cpu)
+        && space.active_cpus().contains(cpu))
+    {
+        if late() {
+            return stop("the thread never ran on the other CPU");
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+    let ticks = ticks_of(cpu);
+    while ticks_of(cpu) < ticks + 2 {
+        if late() {
+            return stop("the other CPU's timer does not tick");
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+    if store && read_u64(space, TOUCHED)? == 0 {
+        return stop("the thread's stores did not arrive");
+    }
+    Ok(t)
+}
+
+/// Join thread `t`, which runs on CPU `cpu` and must fault at once: the
+/// change to its page returned only after `cpu` dropped the translation,
+/// so its next access faults, long before `cpu`'s timer ticks a few more
+/// times (counted in that CPU's ticks, which stand still while the host
+/// does not run it). If it is still running by then, stop it through
+/// [`STOP`] and report `stale`. (A CPU that was never told also drops the
+/// translation sooner or later, QEMU's emulated TLB within some tens of
+/// ticks: hence the count, not just an end.)
+fn faults_at_once(space: &Arc<AddressSpace>, t: ThreadId, cpu: usize, stale: &'static str) -> TestResult<usize> {
+    const TICKS: u64 = 4;
+    let (start, ticks) = (time::now_ns(), ticks_of(cpu));
+    loop {
+        // The ticks first: if `cpu` has ticked TICKS times and the thread
+        // is still alive after that, it ran on the old translation.
+        let now = ticks_of(cpu);
+        if !matches!(thread::state(t), Some(State::Runnable | State::Running | State::Blocked)) {
+            break;
+        }
+        if now >= ticks + TICKS || time::now_ns() - start > OTHER_CPU_DEADLINE_NS {
+            write_u64(space, STOP, 1)?;
+            let _ = thread::join(t);
+            return Err(stale);
+        }
+        thread::yield_now();
+    }
+    thread::join(t).map_err(|_| "join failed")
+}
+
+kernel_test! {
+    fn unmapping_a_page_reaches_other_cpus() -> TestResult {
+        // A thread on another CPU reads TOUCHED in a loop, its translation
+        // cached; this CPU unmaps the page. Unless the other CPU was told to
+        // drop the translation, it keeps reading the freed frame forever
+        // instead of faulting.
+        let pin = thread::pin_current();
+        let Some(other) = other_cpu(pin.cpu()) else { return Ok(()) };
+        let space = new_space()?;
+        let t = touch_on(&space, other, false)?;
+        let (sent, _) = crate::arch::tlb::stats();
+        space.unmap(TOUCHED, PAGE_SIZE).map_err(|_| "could not unmap the data page")?;
+        let code = faults_at_once(&space, t, other, "a CPU kept reading a page unmapped on another CPU")?;
+        if code != killed(PF) {
+            return Err("the reader did not die of a page fault");
+        }
+        if crate::arch::tlb::stats().0 == sent {
+            return Err("no shootdown was sent for a space loaded on another CPU");
+        }
+        released(&space)
+    }
+}
+
+kernel_test! {
+    fn write_protecting_a_page_reaches_other_cpus() -> TestResult {
+        // The same with a writer and mprotect to read-only: a stale
+        // writable translation would let its stores go on.
+        let pin = thread::pin_current();
+        let Some(other) = other_cpu(pin.cpu()) else { return Ok(()) };
+        let space = new_space()?;
+        let t = touch_on(&space, other, true)?;
+        space.protect(TOUCHED, PAGE_SIZE, Prot::READ).map_err(|_| "could not write-protect the data page")?;
+        let code = faults_at_once(&space, t, other, "a CPU kept writing a page made read-only on another CPU")?;
+        if code != killed(PF) {
+            return Err("the writer did not die of a page fault");
+        }
+        // Its last store landed before the page became read-only; nothing
+        // changes it any more.
+        let last = read_u64(&space, TOUCHED)?;
+        thread::sleep(Duration::from_millis(5));
+        if read_u64(&space, TOUCHED)? != last {
+            return Err("the page changed after the writer died");
         }
         released(&space)
     }

@@ -351,3 +351,59 @@ fn remounting_changes_a_mounts_flags() {
     env.vfs.remount(ctx, r, At::Cwd, b"/", ro).unwrap();
     assert_eq!(env.vfs.mkdir(ctx, r, At::Cwd, b"/x", 0o755), Err(Errno::EROFS));
 }
+
+#[test]
+fn mount_namespaces_are_copies_of_the_tree() {
+    let mut env = Env::new();
+    env.mkdir("/m");
+    env.mkdir("/n");
+    env.mount("/m", other_fs("/f", b"shared"), MountFlags::default());
+    env.mkdir("/m/d");
+    env.cd("/m/d").unwrap();
+    let initial = env.vfs.namespace_of(&env.ctx);
+    let mut ctx = env.ctx.clone();
+    let copy = env.vfs.copy_namespace(&mut ctx).unwrap();
+    assert_ne!(copy, initial);
+    assert_eq!(env.vfs.namespace_of(&ctx), copy);
+    assert_eq!(env.vfs.namespace_mounts(initial).len(), 2);
+    assert_eq!(env.vfs.namespace_mounts(copy).len(), 2);
+    // The working directory moved into the copy, on the same file.
+    assert_eq!(env.vfs.path_of(&ctx, ctx.cwd()).unwrap(), b"/m/d");
+    let r = &env.root;
+    let f = env.vfs.open(&ctx, r, At::Cwd, b"../f", OpenFlags::RDONLY, 0).unwrap();
+    assert_eq!(super::read_all(&f).unwrap(), b"shared");
+    drop(f);
+    // A mount in the copy is not seen from the initial namespace.
+    let id = env.vfs.mount(&ctx, r, At::Cwd, b"/n", other_fs("/g", b"copy only"), MountFlags::default()).unwrap();
+    assert_eq!(env.read("/n/g"), Err(Errno::ENOENT));
+    assert!(env.vfs.namespace_mounts(copy).iter().any(|m| m.id == id));
+    assert!(!env.vfs.namespace_mounts(initial).iter().any(|m| m.id == id));
+    assert!(env.vfs.mount_path(&ctx, id).is_ok());
+    assert_eq!(env.vfs.mount_path(&env.ctx, id), Err(Errno::ENOENT));
+    // Nor is an unmount: /m stays mounted in the initial namespace.
+    let top = env.vfs.lookup(&ctx, r, At::Cwd, b"/", true).unwrap();
+    ctx.set_cwd(r, top).unwrap();
+    env.vfs.umount(&ctx, r, At::Cwd, b"/n", false).unwrap();
+    env.vfs.umount(&ctx, r, At::Cwd, b"/m", false).unwrap();
+    assert_eq!(env.read("/m/f").unwrap(), b"shared");
+    // Entering a namespace puts root and working directory at its root.
+    let mut other = env.vfs.root_context().unwrap();
+    env.vfs.enter_namespace(&mut other, copy).unwrap();
+    assert_eq!(env.vfs.namespace_of(&other), copy);
+    assert_eq!(env.vfs.enter_namespace(&mut other, id), Err(Errno::EINVAL), "not a namespace's root");
+    // A root moved by chroot is not the namespace's root; "/" is, also
+    // when a file system is mounted over it.
+    assert!(!env.vfs.is_chrooted(&env.ctx) && !env.vfs.is_chrooted(&other));
+    let mut jail = env.vfs.root_context().unwrap();
+    jail.set_root(r, env.vfs.lookup(&jail, r, At::Cwd, b"/m", true).unwrap()).unwrap();
+    assert!(env.vfs.is_chrooted(&jail));
+    jail.set_root(r, env.vfs.lookup(&env.ctx, r, At::Cwd, b"/", true).unwrap()).unwrap();
+    assert!(!env.vfs.is_chrooted(&jail));
+    drop(jail);
+    // The initial namespace cannot be dropped; a copy can.
+    assert_eq!(env.vfs.drop_namespace(initial), Err(Errno::EBUSY));
+    drop((ctx, other));
+    env.vfs.drop_namespace(copy).unwrap();
+    assert!(env.vfs.namespace_mounts(copy).is_empty());
+    assert_eq!(env.vfs.mounts().len(), 2);
+}

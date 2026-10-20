@@ -17,7 +17,7 @@
 //! are opened and closed.
 
 use crate::format;
-use crate::source::{Owner, ProcSource, ProcessInfo};
+use crate::source::{IdMapFile, Owner, ProcSource, ProcessInfo};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_vfs::{
@@ -110,6 +110,54 @@ enum E {
     FdinfoDir,
     Mounts,
     Mountinfo,
+    NsDir,
+    UidMap,
+    GidMap,
+    Setgroups,
+}
+
+impl E {
+    /// The user namespace file it is, if it is one.
+    fn id_map(self) -> Option<IdMapFile> {
+        match self {
+            E::UidMap => Some(IdMapFile::Uid),
+            E::GidMap => Some(IdMapFile::Gid),
+            E::Setgroups => Some(IdMapFile::Setgroups),
+            _ => None,
+        }
+    }
+}
+
+/// The entries of `/proc/<pid>/ns`, in listing order: what namespaces(7)
+/// lists that Poly has. A kind's index here is what [`ProcSource`] gets.
+/// Their links' texts use the type name: `pid` for `pid_for_children`.
+pub const NS_KINDS: [&str; 7] = ["ipc", "mnt", "net", "pid", "pid_for_children", "user", "uts"];
+
+/// The index of `pid_for_children`, whose type is `pid`.
+const PID_FOR_CHILDREN: usize = 4;
+const PID_KIND: usize = 3;
+
+fn ns_type(kind: usize) -> &'static str {
+    if kind == PID_FOR_CHILDREN { NS_KINDS[PID_KIND] } else { NS_KINDS[kind] }
+}
+
+/// A link text `<type>:[<inum>]`: the type's index and the number.
+fn parse_ns_name(name: &[u8]) -> Option<(usize, u32)> {
+    let open = name.iter().position(|&b| b == b':')?;
+    let (ty, rest) = name.split_at(open);
+    let num = rest.strip_prefix(b":[")?.strip_suffix(b"]")?;
+    let kind = NS_KINDS.iter().position(|k| k.as_bytes() == ty).filter(|&k| k != PID_FOR_CHILDREN)?;
+    Some((kind, parse_number(num)?))
+}
+
+/// The namespace an open procfs file is on, if it is one of the hidden
+/// files `/proc/<pid>/ns/<kind>` links to: its inode number and kind (an
+/// index into [`NS_KINDS`], never `pid_for_children`).
+pub fn namespace_file(ino: Ino) -> Option<(u32, usize)> {
+    match Node::from_ino(ino)? {
+        Node::NsFile(inum, kind) => Some((inum, kind)),
+        _ => None,
+    }
 }
 
 /// A process directory: name, contents, permission bits.
@@ -128,6 +176,10 @@ const PID_ENTRIES: &[(&[u8], E, u16)] = &[
     (b"fdinfo", E::FdinfoDir, 0o555),
     (b"mounts", E::Mounts, 0o444),
     (b"mountinfo", E::Mountinfo, 0o444),
+    (b"ns", E::NsDir, 0o511),
+    (b"uid_map", E::UidMap, 0o644),
+    (b"gid_map", E::GidMap, 0o644),
+    (b"setgroups", E::Setgroups, 0o644),
 ];
 
 /// A node of the tree, decoded from its inode number.
@@ -139,6 +191,10 @@ enum Node {
     Entry(u32, usize),
     Fd(u32, u32),
     FdInfo(u32, u32),
+    /// `/proc/<pid>/ns/<kind>`, a link.
+    Ns(u32, usize),
+    /// What it names: a namespace (inode number, type), in no directory.
+    NsFile(u32, usize),
 }
 
 const K_ROOT: u64 = 1;
@@ -147,6 +203,9 @@ const K_PID: u64 = 3;
 const K_ENTRY: u64 = 4;
 const K_FD: u64 = 5;
 const K_FDINFO: u64 = 6;
+const K_NS: u64 = 7;
+/// The "pid" bits hold the namespace's inode number.
+const K_NSFILE: u64 = 8;
 const INDEX_MASK: u64 = (1 << 24) - 1;
 
 impl Node {
@@ -158,6 +217,8 @@ impl Node {
             Node::Entry(p, i) => (p, K_ENTRY, i as u64),
             Node::Fd(p, fd) => (p, K_FD, u64::from(fd)),
             Node::FdInfo(p, fd) => (p, K_FDINFO, u64::from(fd)),
+            Node::Ns(p, k) => (p, K_NS, k as u64),
+            Node::NsFile(inum, k) => (inum, K_NSFILE, k as u64),
         };
         (u64::from(pid) << 32) | (kind << 24) | (index & INDEX_MASK)
     }
@@ -172,6 +233,10 @@ impl Node {
             K_ENTRY if pid != 0 && (index as usize) < PID_ENTRIES.len() => Node::Entry(pid, index as usize),
             K_FD if pid != 0 => Node::Fd(pid, index as u32),
             K_FDINFO if pid != 0 => Node::FdInfo(pid, index as u32),
+            K_NS if pid != 0 && (index as usize) < NS_KINDS.len() => Node::Ns(pid, index as usize),
+            K_NSFILE if pid != 0 && (index as usize) < NS_KINDS.len() && index as usize != PID_FOR_CHILDREN => {
+                Node::NsFile(pid, index as usize)
+            }
             _ => return None,
         })
     }
@@ -246,12 +311,12 @@ impl ProcFs {
                 _ => FileType::Regular,
             },
             Node::Entry(_, i) => match PID_ENTRIES[i].1 {
-                E::FdDir | E::FdinfoDir => FileType::Directory,
+                E::FdDir | E::FdinfoDir | E::NsDir => FileType::Directory,
                 E::Exe | E::Cwd | E::Root => FileType::Symlink,
                 _ => FileType::Regular,
             },
-            Node::Fd(..) => FileType::Symlink,
-            Node::FdInfo(..) => FileType::Regular,
+            Node::Fd(..) | Node::Ns(..) => FileType::Symlink,
+            Node::FdInfo(..) | Node::NsFile(..) => FileType::Regular,
         }
     }
 
@@ -266,6 +331,8 @@ impl ProcFs {
             Node::Entry(p, _) => Node::Pid(p),
             Node::Fd(p, _) => Node::Entry(p, entry_index(E::FdDir)),
             Node::FdInfo(p, _) => Node::Entry(p, entry_index(E::FdinfoDir)),
+            Node::Ns(p, _) => Node::Entry(p, entry_index(E::NsDir)),
+            Node::NsFile(..) => Node::Root,
         }
     }
 
@@ -309,6 +376,15 @@ impl ProcFs {
                 self.owner(p)?;
                 fixed(&mut out, &mut PID_ENTRIES.iter().enumerate().map(|(i, e)| (e.0.to_vec(), Node::Entry(p, i))))
             }
+            Node::Entry(p, i) if PID_ENTRIES[i].1 == E::NsDir => {
+                self.owner(p)?;
+                fixed(
+                    &mut out,
+                    &mut (0..NS_KINDS.len())
+                        .filter(|&k| self.src.namespace(p, k).is_some())
+                        .map(|k| (NS_KINDS[k].as_bytes().to_vec(), Node::Ns(p, k))),
+                )
+            }
             Node::Entry(p, i) if matches!(PID_ENTRIES[i].1, E::FdDir | E::FdinfoDir) => {
                 self.owner(p)?;
                 let mut fds = self.src.fds(p);
@@ -334,6 +410,8 @@ impl ProcFs {
             Node::Root | Node::Global(_) => true,
             Node::Pid(p) | Node::Entry(p, _) => self.src.owner(p).is_some(),
             Node::Fd(p, fd) | Node::FdInfo(p, fd) => self.has_fd(p, fd),
+            Node::Ns(p, k) => self.src.namespace(p, k).is_some(),
+            Node::NsFile(inum, k) => self.src.namespace_exists(inum, k),
         }
     }
 
@@ -376,13 +454,25 @@ impl ProcFs {
                     E::Comm => format::line(format::comm(&info.comm)),
                     E::Mounts => format::mounts(&src.mounts(p)),
                     E::Mountinfo => format::mountinfo(&src.mounts(p)),
-                    E::Exe | E::Cwd | E::Root | E::FdDir | E::FdinfoDir => return Err(Errno::EINVAL),
+                    E::UidMap => src.id_map(p, IdMapFile::Uid),
+                    E::GidMap => src.id_map(p, IdMapFile::Gid),
+                    E::Setgroups => src.id_map(p, IdMapFile::Setgroups),
+                    E::Exe | E::Cwd | E::Root | E::FdDir | E::FdinfoDir | E::NsDir => return Err(Errno::EINVAL),
                 }
             }
             Node::FdInfo(p, fd) => format::fdinfo(&src.fd(p, fd).ok_or(Errno::ENOENT)?),
             Node::Root | Node::Pid(_) => return Err(Errno::EISDIR),
-            Node::Fd(..) => return Err(Errno::EINVAL),
+            // A namespace file has no contents (read(2) on Linux's: EINVAL).
+            Node::Fd(..) | Node::Ns(..) | Node::NsFile(..) => return Err(Errno::EINVAL),
         })
+    }
+
+    /// The writable files: a process's user namespace files.
+    fn id_map_file(node: Node) -> Option<(u32, IdMapFile)> {
+        match node {
+            Node::Entry(p, i) => PID_ENTRIES[i].1.id_map().map(|f| (p, f)),
+            _ => None,
+        }
     }
 }
 
@@ -418,6 +508,15 @@ impl FileSystem for ProcFs {
             },
             Node::Global(d) => GLOBALS.iter().position(|g| g.1 == d && g.0 == name).map(Node::Global),
             Node::Pid(p) => PID_ENTRIES.iter().position(|e| e.0 == name).map(|i| Node::Entry(p, i)),
+            Node::Entry(p, i) if PID_ENTRIES[i].1 == E::NsDir => {
+                match NS_KINDS.iter().position(|k| k.as_bytes() == name) {
+                    Some(k) => self.src.namespace(p, k).map(|_| Node::Ns(p, k)),
+                    // What a link's text names.
+                    None => parse_ns_name(name)
+                        .filter(|&(k, inum)| self.src.namespace_exists(inum, k))
+                        .map(|(k, inum)| Node::NsFile(inum, k)),
+                }
+            }
             Node::Entry(p, i) => parse_number(name)
                 .filter(|&fd| fd <= MAX_FD && self.has_fd(p, fd))
                 .map(|fd| if PID_ENTRIES[i].1 == E::FdinfoDir { Node::FdInfo(p, fd) } else { Node::Fd(p, fd) }),
@@ -431,8 +530,8 @@ impl FileSystem for ProcFs {
         let boot_time = self.src.boot_time();
         let boot = Timespec::new(boot_time as i64, 0);
         let (uid, gid, time) = match node {
-            Node::Root | Node::Global(_) => (0, 0, boot),
-            Node::Pid(p) | Node::Entry(p, _) | Node::Fd(p, _) | Node::FdInfo(p, _) => {
+            Node::Root | Node::Global(_) | Node::NsFile(..) => (0, 0, boot),
+            Node::Pid(p) | Node::Entry(p, _) | Node::Fd(p, _) | Node::FdInfo(p, _) | Node::Ns(p, _) => {
                 let info = self.owner(p)?;
                 let start = info.start_ns;
                 let time =
@@ -456,7 +555,8 @@ impl FileSystem for ProcFs {
                 Some(f) => 0o500 | if f.read { 0o400 } else { 0 } | if f.write { 0o200 } else { 0 },
                 None => 0o700,
             },
-            Node::FdInfo(..) => 0o444,
+            Node::FdInfo(..) | Node::NsFile(..) => 0o444,
+            Node::Ns(..) => 0o777,
         };
         Ok(Attr {
             ino,
@@ -533,8 +633,16 @@ impl FileSystem for ProcFs {
                 .ok_or(Errno::ENOENT)
             }
             Node::Fd(p, fd) => src.fd(p, fd).map(|f| f.target).ok_or(Errno::ENOENT),
+            Node::Ns(p, k) => {
+                let inum = src.namespace(p, k).ok_or(Errno::ENOENT)?;
+                Ok(alloc::format!("{}:[{inum}]", ns_type(k)).into_bytes())
+            }
             _ => Err(Errno::EINVAL),
         }
+    }
+
+    fn writable_file(&self, ino: Ino) -> bool {
+        Node::from_ino(ino).and_then(Self::id_map_file).is_some()
     }
 
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize> {
@@ -545,8 +653,14 @@ impl FileSystem for ProcFs {
         Ok(copy_at(&self.contents(node)?, offset, buf))
     }
 
-    fn write(&self, _: Ino, _: u64, _: &[u8]) -> Result<usize> {
-        Err(Errno::EROFS)
+    fn write(&self, ino: Ino, offset: u64, data: &[u8]) -> Result<usize> {
+        match Self::id_map_file(self.node(ino)?) {
+            Some((p, file)) => {
+                self.owner(p)?;
+                self.src.write_id_map(p, file, offset, data)
+            }
+            None => Err(Errno::EROFS),
+        }
     }
 
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()> {

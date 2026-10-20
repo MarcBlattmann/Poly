@@ -75,8 +75,8 @@ mod tests;
 
 pub use crate::arch::user::{
     AddressSpace, Efault, Entry, Fault, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, UserRegs,
-    copy_from_user, copy_to_user, fs_base, gs_base, is_user_range, set_fs_base, set_gs_base, strncpy_from_user,
-    user_frames,
+    cmpxchg_user_u32, copy_from_user, copy_to_user, fs_base, gs_base, is_user_range, set_fs_base, set_gs_base,
+    strncpy_from_user, user_frames,
 };
 pub use memory::{AnonShared, FaultError, FileRef, Memory, MemoryError, MemoryImage, PageSource};
 
@@ -181,7 +181,7 @@ fn spawn_thread(
     hook: SyscallHook,
 ) -> Result<ThreadId, SpawnError> {
     let arch = arch::user::ThreadState::new(space).ok_or(SpawnError::NoMemory)?;
-    start_thread(process, arch, memory, entry, None, hook, None).map(|(id, _)| id)
+    start_thread(process, arch, memory, entry, None, hook, None, thread::CpuSet::ALL).map(|(id, _)| id)
 }
 
 /// Start a thread of `process` in `memory` that begins with every
@@ -204,9 +204,12 @@ pub fn spawn_child(
     let space = Arc::clone(memory.space());
     let arch = arch::user::ThreadState::with_state(space, fpu, fs_base, gs_base).ok_or(SpawnError::NoMemory)?;
     let entry = Entry { rip: regs.rip, rsp: regs.rsp, args: [regs.rdi, regs.rsi, regs.rdx] };
-    start_thread(process, arch, Some(memory), entry, Some(Box::new(*regs)), hook, tid)
+    // A child inherits its creator's CPU affinity (sched_setaffinity(2)).
+    let cpus = thread::affinity(thread::current()).unwrap_or(thread::CpuSet::ALL);
+    start_thread(process, arch, Some(memory), entry, Some(Box::new(*regs)), hook, tid, cpus)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn start_thread(
     process: Arc<Process>,
     arch: arch::user::ThreadState,
@@ -215,6 +218,7 @@ fn start_thread(
     start: Option<Box<UserRegs>>,
     hook: SyscallHook,
     tid: Option<u32>,
+    cpus: thread::CpuSet,
 ) -> Result<(ThreadId, u32), SpawnError> {
     // A process that has ended takes no new threads.
     let attached = match tid {
@@ -223,6 +227,7 @@ fn start_thread(
     };
     let (tid, flags) = attached.ok_or(SpawnError::NoMemory)?;
     let attached = Arc::clone(&process);
+    let kick = Arc::clone(&flags);
     let user = Box::new(UserThread {
         process,
         hook,
@@ -236,7 +241,10 @@ fn start_thread(
         replaced: false,
         arch,
     });
-    thread::spawn_user("user", user, user_main, 0).map(|id| (id, tid)).inspect_err(|_| attached.cancel_thread(tid))
+    thread::spawn_user("user", user, user_main, 0, cpus)
+        .inspect(|id| kick.thread.store(id.to_bits() + 1, Ordering::SeqCst))
+        .map(|id| (id, tid))
+        .inspect_err(|_| attached.cancel_thread(tid))
 }
 
 impl UserThread {
@@ -418,10 +426,11 @@ pub fn end_thread(status: ExitStatus, code: usize) -> ! {
     if process.linux.is_some() {
         crate::linux::thread_exit(process, tid);
     }
-    if let Some(status) = process.detach_thread(tid, status)
-        && process.linux.is_some()
-    {
-        crate::linux::process_exit(process, status);
+    if let Some(status) = process.detach_thread(tid, status) {
+        if process.linux.is_some() {
+            crate::linux::process_exit(process, status);
+        }
+        process.ended();
     }
     thread::exit(code)
 }

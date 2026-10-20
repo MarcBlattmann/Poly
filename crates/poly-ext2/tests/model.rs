@@ -271,15 +271,33 @@ fn model_revision_0_many_groups() {
     model_run(4, fmt, MountOptions::default(), 2500);
 }
 
+#[test]
+fn model_ext4_journaled_4k() {
+    model_run(5, FormatOptions::ext4(4096, 1024), MountOptions::default(), 2500);
+}
+
+#[test]
+fn model_ext4_1k_many_groups_without_journal() {
+    let fmt = FormatOptions { blocks_per_group: Some(1024), ..FormatOptions::ext4(1024, 0) };
+    model_run(6, fmt, MountOptions::default(), 2500);
+}
+
+#[test]
+fn model_ext4_1k_journaled() {
+    model_run(7, FormatOptions::ext4(1024, 1024), MountOptions::default(), 2500);
+}
+
 // ----- corruption -----
 
 /// A volume with a bit of everything, made by the driver itself.
-fn populated(bs: u32) -> Vec<u8> {
+fn populated(bs: u32, ext4: bool) -> Vec<u8> {
     let disk = MemDisk::new(vec![0; 3 << 20], 512);
     let fmt = FormatOptions {
         block_size: bs,
-        blocks_per_group: Some(1024),
+        blocks_per_group: Some(if ext4 && bs == 1024 { 2048 } else { 1024 }),
         bytes_per_inode: 4096,
+        ext4,
+        journal_blocks: if ext4 && bs == 1024 { 1024 } else { 0 },
         ..FormatOptions::default()
     };
     poly_ext2::format(&disk, &fmt).unwrap();
@@ -363,14 +381,14 @@ fn exercise(image: Vec<u8>) {
 
 #[test]
 fn corrupted_volumes_never_panic() {
-    for bs in [1024u32, 4096] {
-        let clean = populated(bs);
+    for (bs, ext4) in [(1024u32, false), (4096, false), (1024, true), (4096, true)] {
+        let clean = populated(bs, ext4);
         // The fixed metadata of group 0 and the used part of the volume.
         let meta_end = 40 * bs as u64;
         let used_end = clean.iter().rposition(|&b| b != 0).unwrap_or(0) as u64 + 1;
         let iterations = if bs == 1024 { 300 } else { 150 };
         for iter in 0..iterations {
-            let seed = bs as u64 * 1000 + iter;
+            let seed = bs as u64 * 1000 + iter + if ext4 { 1 << 20 } else { 0 };
             let mut rng = Rng::new(seed);
             let mut img = clean.clone();
             for _ in 0..1 + rng.below(8) {
@@ -394,7 +412,7 @@ fn corrupted_volumes_never_panic() {
 
 #[test]
 fn truncated_and_garbage_devices() {
-    let clean = populated(1024);
+    let clean = populated(1024, false);
     for len in [0usize, 512, 1536, 2048, 4096, 100 << 10, 1 << 20] {
         let disk = MemDisk::new(clean[..len].to_vec(), 512);
         assert!(Ext2::mount(&disk, Ticker::new(), MountOptions::default()).is_err(), "{len} bytes");

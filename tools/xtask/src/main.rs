@@ -35,6 +35,7 @@ mod busybox;
 mod console;
 mod dynamic;
 mod ext2disk;
+mod ext4disk;
 mod font;
 mod initramfs;
 mod ktest;
@@ -61,7 +62,9 @@ const PASS_MARKER: &str = "POLY-SELFTEST: PASS";
 /// QEMU exit statuses produced by the kernel's `qemu::ExitCode`.
 const QEMU_SUCCESS: i32 = 33;
 const QEMU_FAILURE: i32 = 35;
-/// CPUs QEMU emulates; the self-test boot checks ACPI reports exactly these.
+/// CPUs QEMU emulates unless a boot asks for another number (`-smp`); the
+/// self-test boots check that ACPI reports exactly as many and that the
+/// kernel brings them all up.
 const QEMU_CPUS: u32 = 2;
 
 fn main() -> ExitCode {
@@ -161,8 +164,10 @@ fn test_disk() -> Result<PathBuf> {
     let image: Vec<u8> = (0..TEST_DISK_SECTORS).flat_map(test_disk_sector).collect();
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| format!("{}: {e}", path.display()))?;
     std::fs::write(&path, image).map_err(|e| format!("{}: {e}", path.display()))?;
-    // The ext2 test disk goes next to it (`qemu` attaches it from there).
+    // The ext2 and ext4 test disks go next to it (`qemu` attaches them
+    // from there).
     ext2disk::write_next_to(&path)?;
+    ext4disk::write_next_to(&path)?;
     Ok(path)
 }
 
@@ -241,6 +246,11 @@ fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial:
     cmd.arg("-drive")
         .arg(format!("if=none,id=ext2,format=raw,file={}", ext2.display()))
         .args(["-device", &format!("virtio-blk-pci,drive=ext2,disable-legacy=on{vectors}")]);
+    // The ext4 test disk: the fourth, `virtio3`, mounted on /ext4.
+    let ext4 = disk.with_file_name(ext4disk::FILE_NAME);
+    cmd.arg("-drive")
+        .arg(format!("if=none,id=ext4,format=raw,file={}", ext4.display()))
+        .args(["-device", &format!("virtio-blk-pci,drive=ext4,disable-legacy=on{vectors}")]);
     cmd
 }
 
@@ -807,6 +817,31 @@ fn ext2_persistence_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     Ok(())
 }
 
+/// The boot options that limit the CPUs: `poly.cpus=<n>` starts that many
+/// (the boot CPU included) and `poly.smp=off` only the boot CPU. The SMP
+/// tests run in each boot, against the CPUs that run.
+fn smp_option_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    for (option, cpus, online) in [("poly.cpus=2", 4, 2), ("poly.smp=off", QEMU_CPUS, 1)] {
+        eprintln!("==> boot test: {option} on {cpus} CPUs runs the kernel on {online}");
+        let append = format!("poly.qemu_exit poly.test=smp:: {option}");
+        let args = ["-smp".to_string(), cpus.to_string()];
+        let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &args, None, |_| {})?;
+        b.tests(&b.output)?;
+        let left_out = cpus - online;
+        let line = format!(
+            "smp: {online} of {cpus} CPUs online (0{}), {left_out} left out by poly.smp / poly.cpus",
+            if online > 1 { format!("-{}", online - 1) } else { String::new() }
+        );
+        if b.status != Some(QEMU_SUCCESS) || !b.output.contains(&line) {
+            return Err(format!(
+                "{option} on {cpus} CPUs did not run on {online} (expected \"{line}\", status {:?})",
+                b.status
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// `cargo xtask busybox-test`: the BusyBox boot test alone.
 fn busybox_test() -> Result {
     let kernel = build_kernel(false)?;
@@ -826,22 +861,30 @@ fn boot_tests() -> Result {
     // the default one lacks, so user mode is tested with and without them.
     // All but the fourth boot with the test initramfs (QEMU puts it at the
     // top of RAM, so with 2 GiB above the first GiB); the fourth has none,
-    // so the kernel must come up with an empty root as well.
+    // so the kernel must come up with an empty root as well. They run on
+    // 2, 4, 1 and 4 CPUs: every test passes with one CPU and with several.
     let initrd = programs::test_initramfs()?;
-    let configs = [(DEFAULT_MEMORY, false, None), ("2G", false, None), (DEFAULT_MEMORY, true, None)];
-    for (memory, polled, cpu) in configs.into_iter().chain([(DEFAULT_MEMORY, false, Some("max"))]) {
+    let configs = [(DEFAULT_MEMORY, false, None, QEMU_CPUS), ("2G", false, None, 4), (DEFAULT_MEMORY, true, None, 1)];
+    for (memory, polled, cpu, cpus) in configs.into_iter().chain([(DEFAULT_MEMORY, false, Some("max"), 4)]) {
         let how = if polled { "the test disk without MSI-X (polled)" } else { "the test devices" };
         let on = cpu.map_or(String::new(), |c| format!(" on -cpu {c}"));
         let initrd = cpu.is_none().then_some(initrd.as_path());
         let with = if initrd.is_some() { "the test initramfs" } else { "no initramfs" };
-        eprintln!("==> boot test: self-test passes with {memory} of RAM, {how} and {with}{on}");
+        eprintln!("==> boot test: self-test passes on {cpus} CPU(s) with {memory} of RAM, {how} and {with}{on}");
         let disk = test_disk()?;
         let devices = if polled { Devices::PolledDisk(&disk) } else { Devices::Test(&disk) };
         let mut append = format!("poly.qemu_exit {}", devices.flags());
         if initrd.is_some() {
             append = format!("{append} {}", initramfs::TEST_INITRD_FLAG);
         }
-        let b = boot_on(cpu, initrd, &kernel, &syms, memory, &append, devices)?;
+        let mut args = vec!["-smp".to_string(), cpus.to_string()];
+        if let Some(c) = cpu {
+            args.extend(["-cpu".into(), c.into()]);
+        }
+        if let Some(file) = initrd {
+            args.extend(["-initrd".into(), file.display().to_string()]);
+        }
+        let b = boot_with(&kernel, &syms, memory, &append, devices, &args, None, |_| {})?;
         if let Some(s) = ktest::parse(&b.output).summary {
             eprintln!("==> kernel tests: {} passed, {} failed, {} filtered out", s.passed, s.failed, s.filtered_out);
         }
@@ -851,11 +894,15 @@ fn boot_tests() -> Result {
             Some(s) => return Err(format!("self-test boot ({memory}) exited with status {s}")),
             None => return Err(format!("self-test boot ({memory}) timed out after {BOOT_TIMEOUT:?}")),
         }
-        let cpus = format!("acpi: CPUs: {QEMU_CPUS} enabled");
-        if !b.output.contains(&cpus) {
+        let acpi = format!("acpi: CPUs: {cpus} enabled");
+        if !b.output.contains(&acpi) {
             return Err(format!(
-                "ACPI did not report the {QEMU_CPUS} CPUs QEMU emulates with {memory} (expected \"{cpus}\")"
+                "ACPI did not report the {cpus} CPUs QEMU emulates with {memory} (expected \"{acpi}\")"
             ));
+        }
+        let online = format!("smp: {cpus} of {cpus} CPUs online");
+        if !b.output.contains(&online) {
+            return Err(format!("not all of the {cpus} CPUs came up with {memory}{on} (expected \"{online}\")"));
         }
         // The first sector of the test disk starts with "POLY", sector 0,
         // read through the block layer.
@@ -909,6 +956,8 @@ fn boot_tests() -> Result {
         }
     }
 
+    smp_option_tests(&kernel, &syms)?;
+
     // Keys pressed on the host reach the kernel through the i8042 and IRQ 1.
     eprintln!("==> boot test: keys sent through the QEMU monitor type text (US layout)");
     keyboard_boot_test(&kernel, &syms, None, &["shift-p", "o", "l", "y", "ret"], "Poly")?;
@@ -948,6 +997,7 @@ fn boot_tests() -> Result {
     net::boot_tests(&kernel, &syms)?;
     eprintln!("==> boot test: a file written to the ext2 test disk in one boot is there in the next");
     ext2_persistence_test(&kernel, &syms)?;
+    ext4disk::boot_tests(&kernel, &syms)?;
 
     // Expecting the test disk without attaching it must fail the disk
     // tests, so a boot that silently lost its disk cannot pass.

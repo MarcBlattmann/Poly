@@ -119,6 +119,8 @@ pub struct Info {
     /// makes its period one tick.
     pub apic_timer_hz: u64,
     pub apic_timer_count: u32,
+    /// The divider the count goes with.
+    pub apic_timer_divide: Divide,
 }
 
 static INFO: SetOnce<Info> = SetOnce::new();
@@ -129,9 +131,15 @@ pub fn now_ns() -> u64 {
     CLOCK.get().map_or(0, |c| c.now_ns())
 }
 
-/// Timer interrupts so far.
+/// Timer interrupts so far on the boot CPU: the kernel's tick count, at
+/// [`TICK_HZ`] whatever CPU reads it.
 pub fn ticks() -> u64 {
     TICKS.load(Ordering::Relaxed)
+}
+
+/// Timer interrupts so far on the running CPU (each CPU has its own tick).
+pub fn cpu_ticks() -> u64 {
+    super::percpu::this().ticks().load(Ordering::Relaxed)
 }
 
 pub fn info() -> Option<Info> {
@@ -151,7 +159,11 @@ pub fn tsc_conversion() -> Option<poly_irq::time::TscConversion> {
 
 /// The timer interrupt, before its EOI.
 pub(super) fn on_tick() {
-    TICKS.fetch_add(1, Ordering::Relaxed);
+    let this = super::percpu::this();
+    this.ticks().fetch_add(1, Ordering::Relaxed);
+    if this.index() == 0 {
+        TICKS.fetch_add(1, Ordering::Relaxed);
+    }
     // A narrow reference counter (32-bit HPET, 24-bit PM timer) must be
     // read at least once per wrap for the clock to extend it; reading it
     // every tick guarantees that while interrupts flow.
@@ -230,9 +242,25 @@ pub(super) fn init(platform: Option<&Platform>, features: &CpuFeatures, apic: &A
         Mhz(apic_timer.hz),
         divide.divisor()
     );
-    let info = Info { tsc_hz: tsc, reference_hz: ref_hz, apic_timer_hz: apic_timer.hz, apic_timer_count: count };
+    let info = Info {
+        tsc_hz: tsc,
+        reference_hz: ref_hz,
+        apic_timer_hz: apic_timer.hz,
+        apic_timer_count: count,
+        apic_timer_divide: divide,
+    };
     INFO.set(info).map_err(|_| "time initialised twice")?;
     Ok(())
+}
+
+/// Start an application processor's tick: its local APIC timer, periodic
+/// on [`TIMER_VECTOR`] with the boot CPU's calibration. The local APIC
+/// timers of one system count the same bus or crystal clock (SDM Vol. 3A
+/// §11.5.4), so the boot CPU's count makes a 1 ms period on every CPU.
+pub(super) fn start_ap_timer(apic: &Apic) -> Result<(), &'static str> {
+    let info = info().ok_or("time not initialised")?;
+    apic.start_timer(TIMER_VECTOR, TimerMode::Periodic, info.apic_timer_divide, info.apic_timer_count)
+        .map_err(|_| "could not start the APIC timer")
 }
 
 /// The HPET if the firmware has one that works, else the PM timer.

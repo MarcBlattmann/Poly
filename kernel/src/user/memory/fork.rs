@@ -24,6 +24,18 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+/// Syncs the TLBs for `flush` when dropped.
+struct SyncOnDrop<'a> {
+    space: &'a super::AddressSpace,
+    flush: crate::arch::user::Flush,
+}
+
+impl Drop for SyncOnDrop<'_> {
+    fn drop(&mut self) {
+        self.space.sync_tlb(core::mem::take(&mut self.flush));
+    }
+}
+
 impl Memory {
     /// A copy of this memory for a child process (fork(2): "The child
     /// process is created with a single thread ... The entire virtual
@@ -39,6 +51,10 @@ impl Memory {
             Inner { map: inner.map.clone(), parked: BTreeMap::new(), cached: BTreeMap::new(), shared: BTreeMap::new() };
         let private: Vec<(u64, u64, Prot)> =
             inner.map.regions().filter(|v| !v.is_shared()).map(|v| (v.start, v.end, v.prot)).collect();
+        // The pages made read-only below are synced with the other CPUs
+        // (which may run threads of this memory) in one shootdown, before
+        // this returns, on every path.
+        let mut sync = SyncOnDrop { space: &self.space, flush: crate::arch::user::Flush::None };
         for (start, end, prot) in private {
             let ro = page_prot(read_only(prot));
             for (page, m) in self.space.mapped_pages(start, end) {
@@ -46,7 +62,7 @@ impl Memory {
                     // SAFETY: the frame goes into an `Arc` that both
                     // memories keep in `shared` while they map it; every
                     // path that drops such an entry unmaps the page first.
-                    let Some(frame) = (unsafe { self.space.disown(page, ro) }) else { continue };
+                    let Some(frame) = (unsafe { self.space.disown(page, ro, &mut sync.flush) }) else { continue };
                     let frame = Arc::new(SharedFrame(frame));
                     inner.shared.insert(page, SharedPage { frame: Arc::clone(&frame), mapped: true });
                     map_shared_into(&space, &mut child, page, frame, ro)?;

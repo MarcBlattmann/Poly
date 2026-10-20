@@ -120,9 +120,9 @@ fn mount_checks() {
     bad[1024 + 56] = 0;
     assert_eq!(mount(&mut bad), Err(MountError::NotExt2));
     let mut bad = good.clone();
-    put32(&mut bad, 1024 + 96, 0x2 | 0x40); // filetype + extents
-    assert_eq!(mount(&mut bad), Err(MountError::IncompatFeatures(0x40)));
-    assert_eq!(MountError::IncompatFeatures(0x40).errno(), Errno::EINVAL);
+    put32(&mut bad, 1024 + 96, 0x2 | 0x10); // filetype + meta_bg
+    assert_eq!(mount(&mut bad), Err(MountError::IncompatFeatures(0x10)));
+    assert_eq!(MountError::IncompatFeatures(0x10).errno(), Errno::EINVAL);
     let mut bad = good.clone();
     put32(&mut bad, 1024 + 76, 2);
     assert_eq!(mount(&mut bad), Err(MountError::Unsupported("revision")));
@@ -141,7 +141,7 @@ fn mount_checks() {
     assert_eq!(mount(&mut bad), Err(MountError::Corrupt("group descriptor")));
     // An unknown read-only-compatible feature: mounts, read-only.
     let mut ro = good.clone();
-    put32(&mut ro, 1024 + 100, 0x1 | RO_COMPAT_LARGE_FILE | 0x400);
+    put32(&mut ro, 1024 + 100, 0x1 | RO_COMPAT_LARGE_FILE | 0x100);
     assert_eq!(mount(&mut ro), Ok(true));
     assert_eq!(mount(&mut vec![0u8; 1024]).map(|_| ()), Err(MountError::TooSmall));
 }

@@ -1,4 +1,4 @@
-//! [`FileSystem`] for [`Ext2`]: each method takes the lock, runs one
+//! [`FileSystem`] for [`Ext2`] (ext2, ext3 and ext4 volumes): each method takes the lock, runs one
 //! operation from `ops.rs` and writes back what the operation cached.
 
 use crate::{BlockIo, Ext2};
@@ -20,7 +20,7 @@ impl<D: BlockIo, L: RawLock> Ext2<D, L> {
 
 impl<D: BlockIo, L: RawLock> FileSystem for Ext2<D, L> {
     fn info(&self) -> FsInfo {
-        FsInfo { name: "ext2", read_only: self.read_only(), cache_lookups: true }
+        FsInfo { name: self.fs_type(), read_only: self.read_only(), cache_lookups: true }
     }
 
     fn root(&self) -> Ino {
@@ -169,13 +169,14 @@ impl<D: BlockIo, L: RawLock> FileSystem for Ext2<D, L> {
             }
             None => return,
         }
+        if !st.orphans.contains(&ino) {
+            return;
+        }
         drop(st);
         // The last pin of an inode without names: delete it now. Errors
-        // leave it for e2fsck.
-        let _ = self.write_op(|c| {
-            let i = c.read_inode(ino)?;
-            if i.mode != 0 && i.links == 0 && i.dtime == 0 && !c.pinned(ino) { c.evict(ino, i) } else { Ok(()) }
-        });
+        // leave it for the orphan list at the next mount (with a journal)
+        // or e2fsck.
+        let _ = self.write_op(|c| if c.pinned(ino) { Ok(()) } else { c.release_orphan(ino) });
     }
 
     fn sync(&self) -> Result<()> {

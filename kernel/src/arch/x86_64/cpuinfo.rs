@@ -6,8 +6,10 @@ use alloc::string::String;
 use core::arch::x86_64::{__cpuid, __cpuid_count};
 use poly_procfs::{CpuFeatures, CpuInfo};
 
-/// The boot CPU, as CPU number 0, running at `khz`.
-pub fn cpu_info(khz: u64) -> CpuInfo {
+/// CPU number `index` with local APIC ID `apic_id`, running at `khz`. The
+/// rest is CPUID on the CPU this runs on: the kernel runs on CPUs of one
+/// kind, so it holds for all of them.
+pub fn cpu_info(index: u32, apic_id: u32, khz: u64) -> CpuInfo {
     let id = cpu::identify();
     let max_basic = __cpuid(0).eax;
     let max_extended = __cpuid(0x8000_0000).eax;
@@ -22,7 +24,7 @@ pub fn cpu_info(khz: u64) -> CpuInfo {
         (36, 48)
     };
     CpuInfo {
-        index: 0,
+        index,
         vendor: String::from(id.vendor()),
         model_name: String::from(id.brand()),
         family: id.family,
@@ -30,9 +32,8 @@ pub fn cpu_info(khz: u64) -> CpuInfo {
         stepping: id.stepping,
         cpuid_level: max_basic,
         khz,
-        // Leaf 01H EBX: initial APIC id in bits 31:24, CLFLUSH line size in
-        // 8-byte units in bits 15:8.
-        apic_id: leaf1.ebx >> 24,
+        // Leaf 01H EBX: CLFLUSH line size in 8-byte units in bits 15:8.
+        apic_id,
         clflush: ((leaf1.ebx >> 8) & 0xff) * 8,
         phys_bits,
         virt_bits,

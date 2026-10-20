@@ -204,3 +204,15 @@ fn concurrent_readers_never_see_a_torn_snapshot() {
     }
     assert_eq!(v.read(), numbered(i));
 }
+
+#[test]
+fn the_cpu_number_method_is_kept_outside_the_seqlock() {
+    let v = Vvar::new();
+    assert_eq!(v.cpu_number(), CpuNumber::Syscall, "a zeroed page makes the system call");
+    let seq = v.sequence();
+    v.set_cpu_number(CpuNumber::Rdpid);
+    assert_eq!(v.cpu_number(), CpuNumber::Rdpid);
+    v.set_cpu_number(CpuNumber::Rdtscp);
+    assert_eq!(v.cpu_number(), CpuNumber::Rdtscp);
+    assert_eq!(v.sequence(), seq);
+}
