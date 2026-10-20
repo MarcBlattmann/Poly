@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/clone
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  clone(flags, stack, parent_tid, child_tid, tls) (x86-64 argument order)
+  creates a thread or a process. The child starts at the instruction after
+  the syscall with rax 0 and the given stack (stack 0 keeps the caller's
+  stack pointer: fork semantics with a copied address space); the caller
+  gets the child's id. The low byte of flags is the signal sent to the
+  parent at the child's exit (SIGCHLD for a normal child, 0 for a "clone
+  child" visible to wait only with __WCLONE/__WALL); legacy clone does not
+  validate it. CLONE_VM shares memory, CLONE_FILES the descriptor table
+  (without it the child gets a copy), CLONE_FS cwd/umask, CLONE_SIGHAND
+  handlers, CLONE_THREAD puts the child in the caller's thread group (same
+  getpid and getppid, own gettid; not waitable). CLONE_PARENT_SETTID stores
+  the child's tid at parent_tid (in the parent's memory), CLONE_CHILD_SETTID
+  at child_tid in the child's memory, CLONE_CHILD_CLEARTID makes the kernel
+  store 0 at child_tid (and futex-wake it) when the child exits, while its
+  memory is still shared with another process or thread. CLONE_VFORK
+  suspends the caller until the child exits or calls execve.
+returns:
+  parent: "the child's id (> 0)"
+  child: "0"
+  thread_exit: "a thread ending by exit (60) clears its child_tid word; the process continues"
+  pids: "pids, tids, pgids and sids are positive integers; their values are not specified, only their relations"
+errors:
+  thread_without_sighand: "EINVAL (CLONE_THREAD needs CLONE_SIGHAND)"
+  sighand_without_vm: "EINVAL"
+  newns_with_fs: "EINVAL (CLONE_NEWNS 0x20000 with CLONE_FS)"
+  pidfd_with_parent_settid: "EINVAL (CLONE_PIDFD 0x1000 and CLONE_PARENT_SETTID share an argument)"
+  on_error: "no child is created"
+side_effects: "A child without CLONE_FILES gets copies of the descriptors (same open files, shared offsets); numbers it opens are not in the parent's table."
+threading: "threads created with CLONE_THREAD share pid, ppid, memory and (with the usual flags) descriptors and cwd"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

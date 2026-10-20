@@ -152,13 +152,19 @@ static __attribute__((noreturn)) void exit_group(int code) {
 
 int test_main(void);
 
+/* The stack pointer at process entry: argc, argv[], NULL, envp[], NULL,
+ * then the auxiliary vector (x86-64 psABI, "Process Initialization"). */
+__attribute__((used)) static u64 *poly_initial_sp;
+
 __attribute__((used)) static void start_c(void) { exit_group(test_main()); }
 
-/* Entry point: clear the frame pointer, align the stack, run the test. */
+/* Entry point: clear the frame pointer, remember the initial stack, align
+ * the stack, run the test. */
 __asm__(".text\n"
         ".global _start\n"
         "_start:\n"
         "    xor %ebp, %ebp\n"
+        "    mov %rsp, poly_initial_sp(%rip)\n"
         "    and $-16, %rsp\n"
         "    call start_c\n"
         "    hlt\n");

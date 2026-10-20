@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/timer_gettime
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  timer_gettime(id, cur) stores the remaining time until the next expiry (0
+  when disarmed or after a one-shot expiry) and the interval as set. The
+  remaining time decreases by at least the elapsed time on the timer's
+  clock; for a CPU-time timer only while the process uses CPU, not while it
+  sleeps.
+returns:
+  success: "0"
+errors:
+  unknown_or_deleted_timer: "EINVAL"
+  bad_pointer: "EFAULT"
+side_effects: "none"
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

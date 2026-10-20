@@ -83,6 +83,8 @@ pub enum RetKind {
     Addr,
     /// A process or thread id: masked.
     Pid,
+    /// A clock reading (`time`, `times`): differs between runs, masked.
+    Time,
 }
 
 /// Six raw arguments, for calls the table does not describe.
@@ -104,7 +106,7 @@ fn known_signature(name: &str) -> Option<(&'static [ArgKind], RetKind)> {
         "readv" | "writev" => (&[Int, Ptr, Int], RetKind::Int),
         "open" => (&[CStr, Hex, Hex], RetKind::Int),
         "openat" => (&[Int, CStr, Hex, Hex], RetKind::Int),
-        "close" | "dup" | "fsync" | "fdatasync" => (&[Int], RetKind::Int),
+        "close" | "dup" | "fdatasync" => (&[Int], RetKind::Int),
         "dup2" => (&[Int, Int], RetKind::Int),
         "dup3" => (&[Int, Int, Hex], RetKind::Int),
         "stat" | "lstat" => (&[CStr, Ptr], RetKind::Int),
@@ -133,7 +135,7 @@ fn known_signature(name: &str) -> Option<(&'static [ArgKind], RetKind)> {
         "clock_gettime" | "clock_getres" => (&[Int, Ptr], RetKind::Int),
         "clock_nanosleep" => (&[Int, Hex, Ptr, Ptr], RetKind::Int),
         "gettimeofday" => (&[Ptr, Ptr], RetKind::Int),
-        "time" => (&[Ptr], RetKind::Int),
+        "time" => (&[Ptr], RetKind::Time),
         "getpid" | "getppid" | "gettid" | "fork" | "vfork" | "setsid" | "getpgrp" => (&[], RetKind::Pid),
         "getuid" | "geteuid" | "getgid" | "getegid" => (&[], RetKind::Int),
         "clone" => (&[Hex, Ptr, Ptr, Ptr, Hex], RetKind::Pid),
@@ -163,6 +165,36 @@ fn known_signature(name: &str) -> Option<(&'static [ArgKind], RetKind)> {
         "getrandom" => (&[Ptr, Int, Hex], RetKind::Int),
         "poll" => (&[Ptr, Int, Int], RetKind::Int),
         "sched_getaffinity" => (&[Pid, Int, Ptr], RetKind::Int),
+        // Calls of the app tests' programs (coreutils, grep, sed).
+        "umask" => (&[Hex], RetKind::Int),
+        "statfs" => (&[CStr, Ptr], RetKind::Int),
+        "fstatfs" => (&[Int, Ptr], RetKind::Int),
+        "mkdirat" => (&[Int, CStr, Hex], RetKind::Int),
+        "unlinkat" => (&[Int, CStr, Hex], RetKind::Int),
+        "fchmod" => (&[Int, Hex], RetKind::Int),
+        "fchmodat" => (&[Int, CStr, Hex], RetKind::Int),
+        "fchown" => (&[Int, Int, Int], RetKind::Int),
+        "utimensat" => (&[Int, CStr, Ptr, Hex], RetKind::Int),
+        "getxattr" | "lgetxattr" => (&[CStr, CStr, Ptr, Int], RetKind::Int),
+        "fgetxattr" => (&[Int, CStr, Ptr, Int], RetKind::Int),
+        "listxattr" | "llistxattr" => (&[CStr, Ptr, Int], RetKind::Int),
+        "flistxattr" => (&[Int, Ptr, Int], RetKind::Int),
+        "fsetxattr" => (&[Int, CStr, Ptr, Int, Hex], RetKind::Int),
+        "socket" => (&[Int, Hex, Int], RetKind::Int),
+        "connect" => (&[Int, Ptr, Int], RetKind::Int),
+        "fadvise64" => (&[Int, Int, Int, Int], RetKind::Int),
+        "copy_file_range" => (&[Int, Ptr, Int, Ptr, Int, Hex], RetKind::Int),
+        "ftruncate" => (&[Int, Int], RetKind::Int),
+        "renameat2" => (&[Int, CStr, Int, CStr, Hex], RetKind::Int),
+        "symlinkat" => (&[CStr, Int, CStr], RetKind::Int),
+        "fsync" | "fchdir" => (&[Int], RetKind::Int),
+        "rename" => (&[CStr, CStr], RetKind::Int),
+        // Process groups and sessions: their ids differ between runs.
+        "getpgid" | "getsid" => (&[Pid], RetKind::Pid),
+        "setpgid" => (&[Pid, Pid], RetKind::Int),
+        "waitid" => (&[Int, Pid, Ptr, Hex, Ptr], RetKind::Int),
+        // Clock readings returned as the result.
+        "times" => (&[Ptr], RetKind::Time),
         _ => return None,
     })
 }
@@ -319,5 +351,8 @@ mod tests {
         assert_eq!(signature("pread64").0.len(), 4);
         assert!(is_known_signature("mmap"));
         assert!(!is_known_signature("bpf"));
+        assert_eq!(signature("getpgid"), (&[ArgKind::Pid][..], RetKind::Pid));
+        assert_eq!(signature("time").1, RetKind::Time);
+        assert_eq!(signature("times").1, RetKind::Time);
     }
 }

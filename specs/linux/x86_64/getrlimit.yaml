@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getrlimit
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  getrlimit(resource, rlim) stores {rlim_cur, rlim_max} for resource 0..15
+  (RLIMIT_CPU, FSIZE, DATA, STACK, CORE, RSS, NPROC, NOFILE, MEMLOCK, AS,
+  LOCKS, SIGPENDING, MSGQUEUE, NICE, RTPRIO, RTTIME). Soft <= hard unless
+  hard is infinite. Values set with setrlimit or prlimit64 read back
+  exactly, including RLIM_INFINITY. A child starts with its parent's limits.
+  RLIMIT_CORE's initial hard limit is RLIM_INFINITY.
+returns:
+  success: "0"
+errors:
+  unknown_resource: "EINVAL (16, 1000, -1)"
+  bad_pointer: "EFAULT (also NULL)"
+side_effects: "none"
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

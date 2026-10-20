@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setitimer
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  setitimer(which, new, old) sets an interval timer (struct itimerval
+  {it_interval, it_value} of timevals): ITIMER_REAL (0) counts wall time and
+  raises SIGALRM (si_code SI_KERNEL 0x80), ITIMER_VIRTUAL (1) counts user
+  CPU time (SIGVTALRM), ITIMER_PROF (2) user+system CPU time (SIGPROF). A
+  zero it_value disarms. old, if given, gets the previous setting. A NULL
+  new value disarms the timer (and still returns old). ITIMER_REAL is the
+  same timer alarm uses. A periodic ITIMER_REAL is reloaded when its SIGALRM
+  is delivered (taken).
+returns:
+  success: "0"
+errors:
+  unknown_timer: "EINVAL (3, -1)"
+  bad_usec: "EINVAL (outside [0, 1e6) in value or interval)"
+  bad_pointers: "EFAULT for new or old"
+side_effects: "Pending timers are not inherited by fork children (alarm); they survive execve."
+threading: "signals a timer raises are delivered like any other; the tests keep them blocked and take them with rt_sigtimedwait"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

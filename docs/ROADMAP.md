@@ -90,7 +90,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Networking: virtio-net driver, own TCP/IP stack (IPv4, IPv6, TCP, UDP, ICMP)
 - [x] Sockets: `AF_INET`, `AF_INET6`, `AF_UNIX` (incl. fd passing), `AF_NETLINK` basics
 - [x] Linux namespaces / seccomp basics (needed by browsers' sandboxes)
-- [ ] **Milestone (proof of concept a):** a recorded trace of a simple Linux CLI app passes
+- [x] **Milestone (proof of concept a):** a recorded trace of a simple Linux CLI app passes
 - [ ] bash, coreutils, Python and a C compiler run from the persistent disk
 
 ## Phase 5: NT personality and Windows console apps

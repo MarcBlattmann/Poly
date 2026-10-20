@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/read
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  read(fd, buf, count) copies up to count bytes from the file offset into
+  buf and advances the offset by the number returned. On a regular file it
+  returns fewer bytes only at end of file, and 0 at or past end of file.
+  Bytes of buf beyond the returned count are untouched. If the buffer
+  becomes unwritable part way, read returns the bytes copied before that
+  point (a short read); only if nothing could be copied does it fail with
+  EFAULT, and then the offset does not move.
+returns:
+  regular_file: "min(count, size - offset) bytes, 0 at or past end of file"
+  count_0: "0, without touching buf or the offset"
+  nothing_to_read: "0 at end of file even when buf is an invalid pointer"
+  partly_writable_buffer: "the bytes that fit before the first unwritable page; the offset advances by that much"
+  holes: "regions never written (after a seek past the end, or from ftruncate growth) read as zero bytes"
+errors:
+  not_open_for_reading: "EBADF (O_WRONLY, O_PATH, access mode 3, closed or negative fd)"
+  directory: "EISDIR"
+  bad_buffer: "EFAULT when no byte could be stored; the offset is unchanged"
+side_effects: "Advances the shared file offset (shared by dup'ed descriptors)."
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

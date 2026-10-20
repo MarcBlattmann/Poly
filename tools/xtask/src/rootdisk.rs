@@ -36,7 +36,7 @@
 //! `target/poly-root-disk.img` is kept between runs; `--fresh-disk` makes
 //! it again); [`boot_test`] types into that bash.
 
-use crate::dynamic::{SearchPath, own_paths};
+use crate::libsearch::{SearchPath, own_paths};
 use poly_elf::{Dynamic, Elf};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};

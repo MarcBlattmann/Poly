@@ -265,6 +265,8 @@ pub fn render_arg(arg: &Arg, known_call: bool, normalize: bool) -> String {
         Arg::Opaque(_) if normalize => WILDCARD.into(),
         Arg::Opaque(v) => format!("{v:#x}"),
         Arg::Pid(v) if normalize && *v > 0 => "<pid>".into(),
+        // A process group given as -pgid (wait4, kill); -1 means "all".
+        Arg::Pid(v) if normalize && *v < -1 => "-<pid>".into(),
         Arg::Pid(v) => v.to_string(),
         Arg::Raw(s) if normalize => mask_addresses(s),
         Arg::Raw(s) => s.clone(),
@@ -281,7 +283,8 @@ pub fn render_ret(name: &str, ret: Option<i64>, normalize: bool) -> String {
         RetKind::Addr if normalize => "<addr>".into(),
         RetKind::Addr => format!("{r:#x}"),
         RetKind::Pid if normalize && r > 0 => "<pid>".into(),
-        RetKind::Pid | RetKind::Int => r.to_string(),
+        RetKind::Time if normalize => "<time>".into(),
+        RetKind::Pid | RetKind::Int | RetKind::Time => r.to_string(),
     }
 }
 
@@ -445,6 +448,34 @@ pub mod tests {
     fn renders_like_strace() {
         assert_eq!(render_bytes(b"a\"b\\\x01\t", false), "\"a\\\"b\\\\\\x01\\t\"");
         assert_eq!(render_bytes(b"abc", true), "\"abc\"...");
+    }
+
+    #[test]
+    fn normalisation_masks_clock_results_and_group_ids() {
+        let mut t = Trace::new("x", "linux", "ptrace");
+        t.events = vec![
+            call("time", vec![Arg::Ptr(0)], Some(1_700_000_000)),
+            call("times", vec![Arg::Ptr(0x7fff_0000)], Some(4_242_424)),
+            call("getpgid", vec![Arg::Pid(0)], Some(4321)),
+            call("setpgid", vec![Arg::Pid(4322), Arg::Pid(4322)], Some(0)),
+            call("wait4", vec![Arg::Pid(-4322), Arg::Ptr(0), Arg::Hex(0), Arg::Ptr(0)], Some(4323)),
+            call("wait4", vec![Arg::Pid(-1), Arg::Ptr(0), Arg::Hex(1), Arg::Ptr(0)], Some(0)),
+            call("time", vec![Arg::Ptr(8)], Some(-14)),
+        ];
+        let lines: Vec<String> = normalize(&t, &NormOptions::default()).iter().map(ToString::to_string).collect();
+        assert_eq!(
+            lines,
+            [
+                "time(NULL) = <time>",
+                "times(<ptr>) = <time>",
+                "getpgid(0) = <pid>",
+                "setpgid(<pid>, <pid>) = 0",
+                "wait4(-<pid>, NULL, 0x0, NULL) = <pid>",
+                "wait4(-1, NULL, 0x1, NULL) = 0",
+                "time(<ptr>) = -1 EFAULT",
+            ]
+        );
+        assert!(render_raw(&t).contains("time(NULL) = 1700000000"));
     }
 
     #[test]

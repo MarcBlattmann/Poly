@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/times
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  times(buf) stores the caller's user and system CPU time and those of its
+  reaped children as clock ticks (1/100 s) in struct tms (four longs), and
+  returns the number of clock ticks since an arbitrary point in the past,
+  which never decreases. NULL buf is allowed. 0.3 s of busy CPU shows in
+  tms_utime + tms_stime; a reaped CPU-busy child shows in tms_cutime +
+  tms_cstime (a zombie does not).
+returns:
+  success: "elapsed clock ticks (an arbitrary origin)"
+errors:
+  bad_pointer: "EFAULT"
+side_effects: "none"
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mremap
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  mremap(old_address, old_size, new_size, flags, new_address) resizes or
+  moves a mapping. old_address must be page aligned; sizes are rounded up to
+  whole pages. Shrinking always stays in place and unmaps the tail. Growing
+  stays in place when the pages after the mapping are free; otherwise, with
+  MREMAP_MAYMOVE (1), the mapping moves to a new address with its contents
+  (the old range is then unmapped), and without it the call fails with
+  ENOMEM. MREMAP_FIXED (2, needs MREMAP_MAYMOVE) moves it to new_address
+  exactly, replacing whatever was mapped there. old_size 0 on a MAP_SHARED
+  mapping creates a second mapping of the same pages (both views show the
+  same memory). New pages added by growing an anonymous mapping read as
+  zero.
+returns:
+  success: "the (possibly new) start address"
+  same_size: "old_address, nothing changes"
+errors:
+  unaligned_old_address: "EINVAL"
+  new_size_0: "EINVAL"
+  fixed_without_maymove: "EINVAL"
+  unknown_flags: "EINVAL (e.g. 0x40)"
+  old_size_0_on_private_mapping: "EINVAL"
+  fixed_target_overlapping_source: "EINVAL"
+  fixed_target_unaligned: "EINVAL"
+  old_range_not_mapped: "EFAULT"
+  cannot_grow_in_place_without_maymove: "ENOMEM; the mapping and its data are unchanged"
+side_effects: "Moves change the addresses of the data; pointers into the old range become invalid (unmapped)."
+threading: "the address space is shared by all threads of a process; changes are visible to every thread at once"
+ordering: []
+timing:
+  typical: "microseconds; moving does not copy data page by page visibly (contents simply appear at the new address)"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

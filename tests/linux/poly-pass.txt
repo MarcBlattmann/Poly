@@ -6,7 +6,9 @@
 # make CI green.
 #
 # Not here yet: libc-hello (glibc registers rseq, which Poly answers with
-# ENOSYS; its output and exit status already match).
+# ENOSYS; its output and exit status already match). App tests
+# (tests/linux/apps/*.app) compare in app mode, which leaves rseq out; the
+# ones not here yet are in specs/linux/FAILING.md under "spec-c (apps)".
 arch_prctl
 brk
 clock
@@ -18,3 +20,9 @@ mmap
 segv
 stderr
 uname
+app-echo
+app-grep
+app-head
+app-mkdir
+app-sed
+app-true

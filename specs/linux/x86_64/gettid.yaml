@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/gettid
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  gettid() returns the calling thread's id. For the main thread it equals
+  the pid; each thread created with CLONE_THREAD has its own id, distinct
+  from the pid and from other threads, equal to what clone returned and to
+  what CLONE_PARENT_SETTID stored. In a child process it equals the child's
+  pid.
+returns:
+  always: "the tid; never fails"
+errors:
+  none: "cannot fail"
+side_effects: "none"
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1
