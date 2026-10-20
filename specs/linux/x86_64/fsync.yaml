@@ -17,7 +17,7 @@ errors:
   bad_fd_or_o_path: "EBADF"
   not_syncable: "EINVAL for pipes and character devices such as /dev/null"
 side_effects: "none visible"
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
 ordering: []
 timing:
   typical: "fast on a RAM-backed file system; may block for storage I/O otherwise"

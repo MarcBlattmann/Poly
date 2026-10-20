@@ -20,7 +20,7 @@ side_effects: "Replaces any ITIMER_REAL setting."
 threading: "signals a timer raises are delivered like any other; the tests keep them blocked and take them with rt_sigtimedwait"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "SIGALRM no earlier than the given seconds"
 tests:
   visible: 2

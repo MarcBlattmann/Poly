@@ -22,10 +22,10 @@ errors:
   no_matching_child: "ECHILD (no children, reaped already, not a child, the caller itself, a thread, or none in the selected group)"
   bad_options: "EINVAL (e.g. 0x100)"
 side_effects: "A reaped child is gone (later waits for it: ECHILD); its CPU time is added to RUSAGE_CHILDREN and times()'s child fields."
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour unless stated"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

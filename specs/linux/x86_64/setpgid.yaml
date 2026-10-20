@@ -19,12 +19,12 @@ errors:
   negative_pgid: "EINVAL"
   group_not_in_session: "EPERM (a group that does not exist, or one in another session)"
   session_leader: "EPERM (a session leader cannot change its group)"
-  child_after_execve: "EACCES"
+  child_after_execve: "EACCES (observed; not in the tests, which cannot order the two processes then)"
 side_effects: "getpgid/getpgrp of the target change; wait4(0)/wait4(-pgid) matching follows."
 threading: "applies to the whole process"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

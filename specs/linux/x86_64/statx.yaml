@@ -27,10 +27,10 @@ errors:
   bad_dirfd: "EBADF (also a closed fd with AT_EMPTY_PATH)"
   bad_buffer: "EFAULT (also NULL)"
 side_effects: "none"
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

@@ -26,7 +26,7 @@ side_effects: "none"
 threading: "the address space is shared by all threads of a process; changes are visible to every thread at once"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

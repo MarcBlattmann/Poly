@@ -27,10 +27,10 @@ errors:
   component_not_directory: "ENOTDIR"
   bad_pointers: "EFAULT for path, argv, or an argv entry"
 side_effects: "A vfork parent waiting on this child resumes when execve succeeds."
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour unless stated"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

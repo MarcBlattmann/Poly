@@ -22,10 +22,10 @@ errors:
   bad_time: "EINVAL"
   bad_req: "EFAULT"
 side_effects: "none"
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour unless stated"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "never returns before the requested time on the given clock"
 tests:
   visible: 2

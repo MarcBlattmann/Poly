@@ -20,10 +20,10 @@ errors:
   bad_who: "EINVAL (2, -2)"
   bad_pointer: "EFAULT (also NULL)"
 side_effects: "none"
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour unless stated"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "CPU times are accurate to at least the scheduler tick (they increase within 0.3 s of busy CPU)"
 tests:
   visible: 2

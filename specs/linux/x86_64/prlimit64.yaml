@@ -25,7 +25,7 @@ side_effects: "Limits are per process and inherited by children."
 threading: "the tests run as uid 0 with no extra capabilities assumed beyond those of root in a container (CAP_SYS_RESOURCE may be missing)"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

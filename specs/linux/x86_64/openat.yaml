@@ -42,10 +42,10 @@ errors:
   o_tmpfile_on_file: "ENOTDIR"
   descriptor_limit: "EMFILE when every number below RLIMIT_NOFILE is in use"
 side_effects: "O_CREAT adds a directory entry; O_TRUNC sets the size to 0 and updates mtime/ctime. The new descriptor shares nothing with other opens of the same file (own offset, own status flags)."
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 3

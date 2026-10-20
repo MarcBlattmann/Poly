@@ -24,10 +24,10 @@ errors:
   nofile_above_nr_open: "EPERM"
   raise_hard_without_privilege: "EPERM"
 side_effects: "Existing descriptors above a lowered RLIMIT_NOFILE stay open."
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour unless stated"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

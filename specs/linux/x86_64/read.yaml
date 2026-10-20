@@ -25,10 +25,10 @@ errors:
   directory: "EISDIR"
   bad_buffer: "EFAULT when no byte could be stored; the offset is unchanged"
 side_effects: "Advances the shared file offset (shared by dup'ed descriptors)."
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

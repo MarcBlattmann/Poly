@@ -26,7 +26,7 @@ side_effects: "none beyond the timer"
 threading: "signals a timer raises are delivered like any other; the tests keep them blocked and take them with rt_sigtimedwait"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

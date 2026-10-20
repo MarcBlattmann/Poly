@@ -19,10 +19,10 @@ errors:
   working_directory_removed: "ENOENT"
   bad_buffer: "EFAULT"
 side_effects: "none"
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

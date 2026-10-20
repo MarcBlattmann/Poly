@@ -26,10 +26,10 @@ errors:
   f_dupfd_arg_out_of_range: "EINVAL for arg >= RLIMIT_NOFILE soft limit or negative"
   f_dupfd_full: "EMFILE when no number in [arg, limit) is free"
 side_effects: "F_SETFL affects every descriptor sharing the open file; F_SETFD only the one descriptor."
-threading: "no thread-specific behaviour; the descriptor table and file system state are shared by threads of a process"
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2

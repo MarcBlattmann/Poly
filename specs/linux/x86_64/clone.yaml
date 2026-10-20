@@ -38,7 +38,7 @@ side_effects: "A child without CLONE_FILES gets copies of the descriptors (same 
 threading: "threads created with CLONE_THREAD share pid, ppid, memory and (with the usual flags) descriptors and cwd"
 ordering: []
 timing:
-  typical: "microseconds; no blocking on regular files"
+  typical: "microseconds; does not block unless stated"
   guarantees: "none"
 tests:
   visible: 2
