@@ -487,7 +487,24 @@ fn polycheck(repo: &Path) -> Result<u8> {
     let summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
     let passed = |name: &str| summary.tests.iter().any(|t| t.test == name && t.verdict == Verdict::Pass);
     let expected = poly_pass_list(repo)?;
-    let regressed: Vec<&String> = expected.iter().filter(|t| !passed(t)).collect();
+    // App tests this host cannot run as the reference (no chroot allowed,
+    // a program not installed) say nothing about Poly: skipped, like the
+    // whole check where ptrace is not permitted.
+    let host_cannot = |name: &str| {
+        summary.tests.iter().any(|t| {
+            t.test == name
+                && t.verdict == Verdict::Unsupported
+                && t.reason.as_deref().is_some_and(|r| r.starts_with("reference run:") || r.starts_with("app tree:"))
+        })
+    };
+    let skipped: Vec<&str> = expected.iter().map(String::as_str).filter(|t| host_cannot(t)).collect();
+    if !skipped.is_empty() {
+        println!(
+            "pipeline polycheck: skipped on this host (its reference run is not possible): {}",
+            skipped.join(", ")
+        );
+    }
+    let regressed: Vec<&String> = expected.iter().filter(|t| !passed(t) && !host_cannot(t)).collect();
     let new: Vec<&str> = summary
         .tests
         .iter()
@@ -506,7 +523,11 @@ fn polycheck(repo: &Path) -> Result<u8> {
             run_dir.join("report.txt").display()
         ));
     }
-    println!("pipeline polycheck: the {} tests of {POLY_PASS_LIST} pass on Poly", expected.len());
+    println!(
+        "pipeline polycheck: the {} tests of {POLY_PASS_LIST} pass on Poly{}",
+        expected.len() - skipped.len(),
+        if skipped.is_empty() { String::new() } else { format!(" ({} skipped)", skipped.len()) }
+    );
     Ok(0)
 }
 
