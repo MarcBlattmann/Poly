@@ -1,0 +1,14 @@
+[package]
+name = "poly-virtio"
+description = "virtio 1.2 over PCI: transport discovery, device initialisation and split virtqueues"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+poly-pci.workspace = true

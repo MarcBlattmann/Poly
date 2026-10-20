@@ -13,6 +13,8 @@ members = [
     "crates/poly-heap",
     "crates/poly-mem",
     "crates/poly-paging",
+    "crates/poly-pci",
+    "crates/poly-virtio",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -36,6 +38,8 @@ poly-binfmt = { path = "crates/poly-binfmt" }
 poly-heap = { path = "crates/poly-heap" }
 poly-mem = { path = "crates/poly-mem" }
 poly-paging = { path = "crates/poly-paging" }
+poly-pci = { path = "crates/poly-pci" }
+poly-virtio = { path = "crates/poly-virtio" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
