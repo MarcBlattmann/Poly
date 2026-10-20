@@ -271,7 +271,10 @@ impl Vfs {
             return Err(Errno::EISDIR);
         }
         if !created {
-            if (write || flags.contains(OpenFlags::TRUNC)) && is_fs_object(attr.kind) && loc.mount.read_only_for(loc.ino) {
+            if (write || flags.contains(OpenFlags::TRUNC))
+                && is_fs_object(attr.kind)
+                && loc.mount.read_only_for(loc.ino)
+            {
                 return Err(Errno::EROFS);
             }
             let mut want = Access::NONE;

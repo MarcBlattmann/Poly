@@ -224,7 +224,8 @@ fn down_range(ns: &UserNsRef, kind: IdKind, first: u32, count: u32) -> Option<Ve
     let mut out = Vec::new();
     let (mut id, end) = (u64::from(first), u64::from(first) + u64::from(count));
     while id < end {
-        let e = map.extents.iter().find(|e| id >= u64::from(e.first) && id < u64::from(e.first) + u64::from(e.count))?;
+        let e =
+            map.extents.iter().find(|e| id >= u64::from(e.first) && id < u64::from(e.first) + u64::from(e.count))?;
         let take = (u64::from(e.first) + u64::from(e.count)).min(end) - id;
         let lower = u64::from(e.lower) + (id - u64::from(e.first));
         out.push((id as u32, lower as u32, take as u32));
@@ -331,7 +332,9 @@ pub fn parse_map(text: &[u8]) -> Result<Vec<Extent>, Errno> {
             return Err(Errno::EINVAL);
         }
     }
-    let overlaps = |a: u32, b: u32, n: u32, m: u32| u64::from(a) < u64::from(b) + u64::from(m) && u64::from(b) < u64::from(a) + u64::from(n);
+    let overlaps = |a: u32, b: u32, n: u32, m: u32| {
+        u64::from(a) < u64::from(b) + u64::from(m) && u64::from(b) < u64::from(a) + u64::from(n)
+    };
     for (i, x) in extents.iter().enumerate() {
         for y in &extents[i + 1..] {
             if overlaps(x.first, y.first, x.count, y.count) || overlaps(x.lower, y.lower, x.count, y.count) {

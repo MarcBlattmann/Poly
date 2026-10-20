@@ -58,7 +58,8 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, in the order `/proc/[pid]/ns` lists them.
-    pub const ALL: [Kind; 7] = [Kind::Ipc, Kind::Mnt, Kind::Net, Kind::Pid, Kind::PidForChildren, Kind::User, Kind::Uts];
+    pub const ALL: [Kind; 7] =
+        [Kind::Ipc, Kind::Mnt, Kind::Net, Kind::Pid, Kind::PidForChildren, Kind::User, Kind::Uts];
 
     /// The entry's name in `/proc/[pid]/ns`.
     pub const fn entry(self) -> &'static str {

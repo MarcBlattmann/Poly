@@ -218,7 +218,12 @@ fn unknown_opcodes_are_refused() {
 
 #[test]
 fn registers_move_and_return() {
-    let p = ok(&[Insn::stmt(LD | W | IMM, 77), Insn::stmt(MISC | TAX, 0), Insn::stmt(LD | W | IMM, 1), Insn::stmt(RET | X, 0)]);
+    let p = ok(&[
+        Insn::stmt(LD | W | IMM, 77),
+        Insn::stmt(MISC | TAX, 0),
+        Insn::stmt(LD | W | IMM, 1),
+        Insn::stmt(RET | X, 0),
+    ]);
     assert_eq!(p.run(&[]), 77);
     let p = ok(&[Insn::stmt(LDX | W | IMM, 78), Insn::stmt(MISC | TXA, 0), Insn::stmt(RET | A, 0)]);
     assert_eq!(p.run(&[]), 78);

@@ -18,7 +18,9 @@ pub const CALLS: &[(u64, Handler)] = &[(nr::UNSHARE, unshare), (nr::SETNS, setns
 /// UTS namespace made from it copies.
 pub fn initial_names(k: &mut dyn LinuxKernel) -> UtsNames {
     match k.admin() {
-        Some(a) => UtsNames { hostname: a.system_name(SystemName::Host), domainname: a.system_name(SystemName::Domain) },
+        Some(a) => {
+            UtsNames { hostname: a.system_name(SystemName::Host), domainname: a.system_name(SystemName::Domain) }
+        }
         None => UtsNames { hostname: k.hostname().to_vec(), domainname: k.domainname().to_vec() },
     }
 }

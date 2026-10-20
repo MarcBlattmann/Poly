@@ -343,7 +343,7 @@ fn decode(pc: usize, insn: &Insn, len: usize, rules: Rules) -> Result<Op, Error>
     Ok(match class(c) {
         LD => match c & !0x07 {
             m if m == W | ABS => {
-                if k % 4 != 0 || k >= data_bytes {
+                if !k.is_multiple_of(4) || k >= data_bytes {
                     return Err(Error::BadLoad { pc });
                 }
                 Op::LoadWord(k / 4)

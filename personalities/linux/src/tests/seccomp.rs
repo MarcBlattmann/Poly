@@ -10,11 +10,11 @@ use crate::nr;
 use crate::seccomp::abi::*;
 use crate::seccomp::{Action, Seccomp, SeccompData, precedence};
 use crate::signal::LinuxProcess;
+use alloc::vec;
+use alloc::vec::Vec;
 use poly_abi::Outcome;
 use poly_bpf::Insn;
 use poly_bpf::code::*;
-use alloc::vec;
-use alloc::vec::Vec;
 
 const PR_SET_NO_NEW_PRIVS: u64 = 38;
 
@@ -301,10 +301,7 @@ fn tsync_gives_every_thread_the_filter_unless_one_diverged() {
     let insns = for_call(nr::GETTID, SECCOMP_RET_ERRNO | 2);
     assert_eq!(install(&mut k, &insns, SECCOMP_FILTER_FLAG_TSYNC), Ok(102));
     assert_eq!(k.thread_state().seccomp, before, "nothing installed");
-    assert_eq!(
-        install(&mut k, &insns, SECCOMP_FILTER_FLAG_TSYNC | SECCOMP_FILTER_FLAG_TSYNC_ESRCH),
-        Err(Errno::ESRCH)
-    );
+    assert_eq!(install(&mut k, &insns, SECCOMP_FILTER_FLAG_TSYNC | SECCOMP_FILTER_FLAG_TSYNC_ESRCH), Err(Errno::ESRCH));
     // Thread 102 itself can synchronise the others to its tree: the
     // caller's filters are ancestors of it.
     assert_eq!(k.as_thread(102, |k| install(k, &insns, SECCOMP_FILTER_FLAG_TSYNC)), Ok(0));

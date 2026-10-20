@@ -355,7 +355,12 @@ impl Creds {
     /// rule that the file capabilities of a namespace act only on files
     /// whose owner and group are mapped in it, so it applies none.
     pub fn fs_ids(&self) -> FsIds {
-        FsIds { uid: self.fsuid, gid: self.fsgid, groups: Arc::clone(&self.groups), caps: self.vfs_caps(self.caps.effective) }
+        FsIds {
+            uid: self.fsuid,
+            gid: self.fsgid,
+            groups: Arc::clone(&self.groups),
+            caps: self.vfs_caps(self.caps.effective),
+        }
     }
 
     fn vfs_caps(&self, caps: CapSet) -> CapSet {
