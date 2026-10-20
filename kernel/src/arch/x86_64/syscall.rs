@@ -8,7 +8,7 @@
 //! TF, DF, AC (no SMAP bypass), NT and IOPL. It does *not* switch stacks.
 //! The entry stub (`syscall_entry`) therefore:
 //!
-//! 1. `swapgs`: GS base becomes this CPU's [`PerCpu`] (IA32_KERNEL_GS_BASE
+//! 1. `swapgs`: GS base becomes this CPU's per-CPU area (`percpu.rs`; IA32_KERNEL_GS_BASE
 //!    held it while user mode ran; the user's GS base goes there);
 //! 2. parks the user RSP in the per-CPU area and loads the running thread's
 //!    kernel stack top from it;
@@ -47,19 +47,15 @@
 //!
 //! # GS and the per-CPU area
 //!
-//! In ring 0, IA32_GS_BASE points at [`PERCPU`] and IA32_KERNEL_GS_BASE holds
+//! In ring 0, IA32_GS_BASE points at this CPU's area (`percpu.rs`) and IA32_KERNEL_GS_BASE holds
 //! the user's GS base; in ring 3 the two are swapped. Every way into the
 //! kernel from ring 3 swaps (`syscall_entry`, and `isr_common` when the
-//! saved CS is a ring-3 selector) and every way out swaps back. Only the
-//! assembly entry uses GS; Rust code reads [`PERCPU`] directly. That
-//! matters for the NMI and the machine check, which can arrive between
-//! `syscall` and `swapgs` or between `swapgs` and `sysretq`/`iretq`: they
-//! then see a kernel CS with the user's GS, but they run on their own IST
-//! stack (never the user's RSP) and never use GS. FSGSBASE (user-mode
-//! `wrgsbase`) stays disabled, so user mode can only set its GS base
-//! through the kernel.
-//!
-//! TODO(smp): one [`PerCpu`] per CPU, with IA32_GS_BASE pointing at each.
+//! saved CS is a ring-3 selector) and every way out swaps back. The NMI,
+//! the machine check and the double fault can arrive between `syscall`
+//! and `swapgs` or between `swapgs` and `sysretq`/`iretq`; they run on
+//! their own IST stacks (never the user's RSP) and set GS from there
+//! (`idt.rs`, `isr_paranoid`). FSGSBASE (user-mode `wrgsbase`) stays
+//! disabled, so user mode can only set its GS base through the kernel.
 
 use super::addrspace::LOWER_HALF_END;
 use super::cpu;
@@ -73,22 +69,10 @@ use poly_abi::SyscallRegs;
 /// vector: those stop at 255).
 pub const SYSCALL_VECTOR: u64 = 0x100;
 
-/// This CPU's data for the entry code, at GS base in ring 0. The assembly
-/// uses the offsets below.
-#[repr(C)]
-pub struct PerCpu {
-    /// Offset 0: top of the running thread's kernel stack, where `syscall`
-    /// switches to. Set with TSS.rsp0 on every switch to a user thread.
-    kernel_rsp: AtomicU64,
-    /// Offset 8: the user RSP while the entry builds its frame.
-    user_rsp: AtomicU64,
-}
-
-static PERCPU: PerCpu = PerCpu { kernel_rsp: AtomicU64::new(0), user_rsp: AtomicU64::new(0) };
-
-/// Set the kernel stack ring 3 enters on, by `syscall` and by interrupts.
+/// Set the kernel stack ring 3 enters this CPU on, by `syscall` and by
+/// interrupts.
 pub fn set_kernel_stack(top: u64) {
-    PERCPU.kernel_rsp.store(top, Ordering::Relaxed);
+    super::percpu::this().kernel_rsp.store(top, Ordering::Relaxed);
     super::gdt::set_kernel_stack(top);
 }
 
@@ -200,11 +184,12 @@ unsafe extern "sysv64" {
 }
 
 /// Enable `syscall` / `sysret`: IA32_EFER.SCE, the selectors, the entry
-/// point and the flag mask, and the per-CPU area at GS base.
+/// point and the flag mask, on this CPU (GS base already points at its
+/// per-CPU area).
 ///
 /// # Safety
-/// Call once on the boot CPU, after the GDT is loaded (loading a GS
-/// selector afterwards would reset the GS base).
+/// Call once on each CPU, after its GDT is loaded (loading a GS selector
+/// afterwards would reset the GS base).
 pub(super) unsafe fn init() {
     let star = (u64::from(SYSRET_BASE) << 48) | (u64::from(KERNEL_CODE) << 32);
     // SAFETY: these MSRs exist on every x86-64 CPU (SYSCALL is part of long
@@ -214,7 +199,6 @@ pub(super) unsafe fn init() {
         cpu::write_msr(cpu::MSR_STAR, star);
         cpu::write_msr(cpu::MSR_LSTAR, (&raw const syscall_entry) as u64);
         cpu::write_msr(cpu::MSR_FMASK, SYSCALL_MASK);
-        cpu::write_msr(cpu::MSR_GS_BASE, (&raw const PERCPU) as u64);
         cpu::write_msr(cpu::MSR_KERNEL_GS_BASE, 0);
         cpu::write_msr(cpu::MSR_EFER, cpu::read_msr(cpu::MSR_EFER) | cpu::EFER_SCE);
     }
@@ -257,7 +241,7 @@ impl TrapFrame {
 /// kernel from ring 3: at the top of its kernel stack, where both the
 /// `syscall` entry and the CPU (TSS.rsp0, already 16-byte aligned) put it.
 pub(super) fn user_frame() -> *mut TrapFrame {
-    let top = PERCPU.kernel_rsp.load(Ordering::Relaxed);
+    let top = super::percpu::this().kernel_rsp.load(Ordering::Relaxed);
     (top - core::mem::size_of::<TrapFrame>() as u64) as *mut TrapFrame
 }
 
@@ -290,7 +274,7 @@ extern "sysv64" fn syscall_handler(frame: *mut TrapFrame) -> bool {
     // from the frame, so both leave the same registers behind.
     frame.rcx = frame.rip;
     frame.r11 = frame.rflags;
-    let me = PERCPU.kernel_rsp.load(Ordering::Relaxed);
+    let me = super::percpu::this().kernel_rsp.load(Ordering::Relaxed);
     if FAIL_RETURN.compare_exchange(me, 0, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
         // A kernel-mode SS selector: IRETQ refuses it (RPL 0 for a return
         // to ring 3) with #GP before it changes privilege.
@@ -309,7 +293,7 @@ static FAIL_RETURN: AtomicU64 = AtomicU64::new(0);
 /// real CPUs. QEMU's TCG does not check RIP for canonicality on IRETQ, so
 /// the tests use this to reach the kernel's handling of that fault.
 pub fn make_next_return_fail() {
-    FAIL_RETURN.store(PERCPU.kernel_rsp.load(Ordering::Relaxed), Ordering::Relaxed);
+    FAIL_RETURN.store(super::percpu::this().kernel_rsp.load(Ordering::Relaxed), Ordering::Relaxed);
 }
 
 /// Where a new user thread starts and with what.

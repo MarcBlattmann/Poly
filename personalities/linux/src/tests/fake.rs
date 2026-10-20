@@ -125,6 +125,12 @@ pub struct FakeKernel {
     pub maps: Vec<MapRequest>,
     /// Every (fd, request, arg) ioctl that reached the kernel.
     pub ioctls: Vec<(i32, u32, u64)>,
+    /// The CPU the caller runs on, its yields, and each thread's affinity
+    /// (absent: CPU 0 only); the system has `cpus` CPUs.
+    pub on_cpu: u32,
+    pub yields: usize,
+    pub affinity: BTreeMap<i32, u64>,
+    pub cpus: u32,
     /// Every madvise that reached the kernel (ADR 0049).
     pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
     /// Every mprotect that reached the kernel.
@@ -174,6 +180,16 @@ pub struct FakeKernel {
     pub io: super::fileio::FakeIo,
     /// Sockets (`tests/socket.rs`; `None`: `ENOSYS`).
     pub net: Option<super::socket::FakeNet>,
+    /// seccomp state was installed (ADR 0054), and what was logged.
+    pub seccomp_on: bool,
+    pub seccomp_logged: Vec<(u64, u32)>,
+    /// Namespaces (ADR 0054): the root is not the mount namespace's; the
+    /// mount tables copied (their ids); the mount namespaces entered; what
+    /// namespace each descriptor on a `/proc/<pid>/ns` file names.
+    pub chroot: bool,
+    pub mount_copies: Vec<u32>,
+    pub entered_mounts: Vec<Option<u32>>,
+    pub ns_fds: BTreeMap<i32, (u32, crate::ns::Kind)>,
 }
 
 impl Default for FakeKernel {
@@ -205,6 +221,10 @@ impl FakeKernel {
             ioctls: Vec::new(),
             protects: Vec::new(),
             advised: Vec::new(),
+            on_cpu: 0,
+            yields: 0,
+            affinity: BTreeMap::new(),
+            cpus: 1,
             procs: BTreeMap::new(),
             notified: BTreeSet::new(),
             unblocked: BTreeSet::new(),
@@ -237,6 +257,12 @@ impl FakeKernel {
             tasks: Default::default(),
             io: Default::default(),
             net: None,
+            seccomp_on: false,
+            seccomp_logged: Vec::new(),
+            chroot: false,
+            mount_copies: Vec::new(),
+            entered_mounts: Vec::new(),
+            ns_fds: BTreeMap::new(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -776,6 +802,45 @@ impl LinuxKernel for FakeKernel {
         self.io.queued.push(pid);
     }
 
+    fn seccomp_active(&self) -> bool {
+        self.seccomp_on
+    }
+
+    fn seccomp_installed(&mut self) {
+        self.seccomp_on = true;
+    }
+
+    fn seccomp_log(&mut self, number: u64, ret: u32) {
+        self.seccomp_logged.push((number, ret));
+    }
+
+    fn pid_ns(&self) -> crate::ns::pid::PidNsRef {
+        self.procs[&self.pid].state.ns.pid.clone()
+    }
+
+    fn chrooted(&self) -> bool {
+        self.chroot
+    }
+
+    fn copy_mounts(&mut self, owner: &crate::ns::user::UserNsRef) -> Result<std::sync::Arc<crate::ns::MntNs>, Errno> {
+        let id = 1000 + self.mount_copies.len() as u32;
+        self.mount_copies.push(id);
+        Ok(crate::ns::MntNs::new(owner, id))
+    }
+
+    fn enter_mounts(&mut self, ns: &Option<std::sync::Arc<crate::ns::MntNs>>) -> Result<(), Errno> {
+        self.entered_mounts.push(ns.as_ref().map(|m| m.id()));
+        Ok(())
+    }
+
+    fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, crate::ns::Kind), Errno> {
+        match self.ns_fds.get(&fd) {
+            Some(&found) => Ok(found),
+            None if self.files.contains_key(&fd) => Err(Errno::EINVAL),
+            None => Err(Errno::EBADF),
+        }
+    }
+
     fn with_futexes(&mut self, f: &mut dyn FnMut(&mut FutexTable, &mut dyn LinuxKernel)) {
         assert!(!self.futexes_locked, "with_futexes called inside with_futexes");
         let mut table = core::mem::take(&mut self.futexes);
@@ -835,6 +900,32 @@ impl LinuxKernel for FakeKernel {
 
     fn tick_ns(&self) -> u64 {
         4_000_000
+    }
+
+    fn current_cpu(&self) -> u32 {
+        self.on_cpu
+    }
+
+    fn yield_cpu(&mut self) {
+        self.yields += 1;
+    }
+
+    fn cpu_affinity(&mut self, tid: i32) -> Result<u64, Errno> {
+        let exists = tid == self.tid || self.procs.get(&self.pid).is_some_and(|p| p.state.has_thread(tid));
+        if !exists {
+            return Err(Errno::ESRCH);
+        }
+        Ok(*self.affinity.get(&tid).unwrap_or(&1))
+    }
+
+    fn set_cpu_affinity(&mut self, tid: i32, mask: u64) -> Result<(), Errno> {
+        self.cpu_affinity(tid)?;
+        let present = if self.cpus >= 64 { u64::MAX } else { (1u64 << self.cpus) - 1 };
+        if mask & present == 0 {
+            return Err(Errno::EINVAL);
+        }
+        self.affinity.insert(tid, mask & present);
+        Ok(())
     }
 
     fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {

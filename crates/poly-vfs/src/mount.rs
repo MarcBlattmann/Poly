@@ -113,6 +113,14 @@ impl Mount {
     pub fn read_only(&self) -> bool {
         self.flags().read_only || self.sb.info.read_only
     }
+
+    /// Whether writing inode `ino` must fail with `EROFS`: as
+    /// [`read_only`](Self::read_only), but a file the file system makes
+    /// writable ([`FileSystem::writable_file`]) may be written unless the
+    /// mount is read-only.
+    pub fn read_only_for(&self, ino: Ino) -> bool {
+        self.flags().read_only || (self.sb.info.read_only && !self.sb.fs.writable_file(ino))
+    }
 }
 
 impl core::fmt::Debug for Mount {
@@ -125,6 +133,16 @@ impl core::fmt::Debug for Mount {
             .field("flags", &self.flags())
             .finish()
     }
+}
+
+/// The first mount of the tree `m` belongs to: the root of its mount
+/// namespace ([`Vfs::copy_namespace`](crate::Vfs::copy_namespace)).
+pub(crate) fn base_of(m: &Arc<Mount>) -> MountId {
+    let mut cur = m;
+    while let Some((p, _)) = &cur.parent {
+        cur = p;
+    }
+    cur.id
 }
 
 /// What [`Vfs::mounts`](crate::Vfs::mounts) reports about a mount.
@@ -271,6 +289,12 @@ impl MountTable {
     /// The topmost mount on mount point `(mount, ino)`.
     pub(crate) fn covering(&self, mount: MountId, ino: Ino) -> Option<&Arc<Mount>> {
         self.mounts.iter().rev().find(|m| matches!(&m.parent, Some((p, i)) if p.id == mount && *i == ino))
+    }
+
+    /// The mounts of the tree whose first mount is `base`, in mount order
+    /// (parents before their children).
+    pub(crate) fn tree(&self, base: MountId) -> Vec<Arc<Mount>> {
+        self.mounts.iter().filter(|m| base_of(m) == base).cloned().collect()
     }
 
     pub(crate) fn has_children(&self, mount: MountId) -> bool {

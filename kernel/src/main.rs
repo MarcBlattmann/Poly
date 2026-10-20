@@ -29,6 +29,7 @@ mod qemu;
 mod random;
 mod selftest;
 mod shell;
+mod smp;
 mod sync;
 mod syscall;
 mod terminal;
@@ -52,11 +53,13 @@ unsafe extern "C" {
 /// Called from the boot stub with the PVH start info's physical address.
 #[unsafe(no_mangle)]
 extern "C" fn kernel_entry(start_info: u64) -> ! {
+    // SAFETY: first thing on the boot CPU, interrupts are off.
+    unsafe { arch::init_boot_cpu() };
     log::init();
     kprintln!();
     kprintln!("Poly kernel {} (x86_64)", env!("CARGO_PKG_VERSION"));
 
-    // SAFETY: first thing on the boot CPU, interrupts are off.
+    // SAFETY: early on the boot CPU, after its GS base; interrupts are off.
     unsafe { arch::init() };
     kprintln!("cpu: gdt, tss and idt loaded");
 
@@ -74,12 +77,21 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     }
 
     let mut raw = boot.memory.clone();
-    // Real-mode area, BIOS data and the PVH structures live below 1 MiB.
+    // Real-mode area, BIOS data and the PVH structures live below 1 MiB,
+    // and so must the application processors' start-up code: a few pages
+    // of RAM there stay the kernel's (mapped write-back, never allocated).
+    // (No heap yet: the map is a fixed-size value.)
+    let smp_area = boot.memory.normalized().ok().and_then(|m| {
+        arch::smp::reserve_area(m.regions().iter().filter(|r| r.kind == RegionKind::Usable).map(|r| (r.start, r.end)))
+    });
+    let (low_end, high_start) = smp_area.map_or((0x10_0000, 0x10_0000), |b| (b, b + arch::smp::AREA_SIZE));
     let reserve = [
-        Region::new(0, 0x10_0000, RegionKind::Reserved),
+        Region::new(0, low_end, RegionKind::Reserved),
+        Region::new(low_end, high_start, RegionKind::Kernel),
+        Region::new(high_start, 0x10_0000, RegionKind::Reserved),
         Region::new(kernel_phys_start(), kernel_phys_end(), RegionKind::Kernel),
     ];
-    for r in reserve {
+    for r in reserve.into_iter().filter(|r| r.end > r.start) {
         raw.push(r).expect("memory map full");
     }
     let memory = raw.normalized().expect("memory map full");
@@ -123,6 +135,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     // SAFETY: the boot thread holds no lock; from here on the tick preempts it.
     unsafe { arch::cpu::enable_interrupts() };
     kprintln!("irq: interrupts enabled");
+    // The other CPUs, each joining the scheduler as it comes up.
+    smp::init(&boot);
     pci::init();
     block::init();
     keyboard::init(&boot);
@@ -174,6 +188,11 @@ fn kernel_phys_end() -> u64 {
 fn panic(info: &PanicInfo) -> ! {
     // No preemption or interrupt handlers while the report is printed.
     arch::cpu::disable_interrupts();
+    // The other CPUs stop (an NMI halts them); if one of them is reporting
+    // a panic already, this one just halts.
+    if !arch::smp::panic_stop_others() {
+        arch::cpu::halt_forever();
+    }
     log::emergency_print(format_args!("\nKERNEL PANIC: {info}\n"));
     arch::backtrace::print_for_panic();
     qemu::exit(qemu::ExitCode::Failure);

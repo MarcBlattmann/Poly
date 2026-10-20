@@ -4,8 +4,12 @@
 //!   it is held, so an interrupt handler that takes the same lock can never
 //!   find it held by the code it interrupted (which would spin forever), and
 //!   the holder is never preempted. Critical sections must be short and must
-//!   never block, yield or sleep: [`spinlocks_held`] counts the locks held
-//!   and the scheduler refuses to switch threads while it is not 0.
+//!   never block, yield or sleep: [`spinlocks_held`] counts the locks this
+//!   CPU holds and the scheduler refuses to switch threads while it is not
+//!   0. It is a real SMP lock: an atomic exchange with Acquire / Release
+//!   ordering. While a CPU spins (interrupts off) it keeps answering TLB
+//!   shootdowns (`arch::wait_hook`), so a holder that waits for this CPU's
+//!   acknowledgement cannot deadlock against it.
 //! - [`RawIrqSpinLock`] is the same lock without data, for the kernel heap
 //!   (`poly_heap::LockedHeap::with_lock`).
 //! - [`Mutex`] sleeps instead of spinning: a thread that finds it locked
@@ -24,10 +28,13 @@
 //! address space's tables, then [`FRAMES`](crate::frames::FRAMES); the
 //! scheduler's `THREADS` takes `FRAMES` only with `try_lock`, and drops the
 //! user state of exited threads (address spaces) only after unlocking.
-//! Nothing allocates while holding `FRAMES`.
-//!
-//! TODO(smp): the held-lock count is global; with several CPUs it must be
-//! per CPU (as must the scheduler's notion of "current thread").
+//! Nothing allocates while holding `FRAMES`. `THREADS` is a leaf apart
+//! from that: code holding it takes no other lock (waking threads from
+//! under another lock is fine: that lock comes first). A user address
+//! space's table lock may be held while a TLB shootdown waits for other
+//! CPUs (see `arch/x86_64/tlb.rs`); the shootdown's own lock comes after
+//! every other lock. The full order is in docs/ARCHITECTURE.md
+//! ("Synchronisation").
 
 use crate::arch::cpu::{self, InterruptsOff};
 use crate::thread::{self, ThreadId, WaitQueue};
@@ -36,14 +43,16 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
-use poly_heap::{RawLock, RawSpinLock};
+use poly_heap::RawLock;
 
-/// Spinlocks (and the heap's raw lock) held on this CPU.
-static SPINLOCKS_HELD: AtomicUsize = AtomicUsize::new(0);
+/// This CPU's count of spinlocks (and the heap's raw lock) held.
+fn held() -> &'static AtomicUsize {
+    crate::arch::percpu::this().spinlocks()
+}
 
 /// How many spinlocks this CPU holds. Their holders have interrupts off.
 pub fn spinlocks_held() -> usize {
-    SPINLOCKS_HELD.load(Ordering::Relaxed)
+    held().load(Ordering::Relaxed)
 }
 
 /// A busy-waiting lock that disables interrupts on this CPU from before it
@@ -68,6 +77,7 @@ impl<T> SpinLock<T> {
         let irq = InterruptsOff::new();
         while self.locked.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
             while self.locked.load(Ordering::Relaxed) {
+                crate::arch::wait_hook();
                 core::hint::spin_loop();
             }
         }
@@ -96,7 +106,7 @@ pub struct SpinLockGuard<'a, T> {
 
 impl<'a, T> SpinLockGuard<'a, T> {
     fn new(lock: &'a SpinLock<T>, irq: InterruptsOff) -> Self {
-        SPINLOCKS_HELD.fetch_add(1, Ordering::Relaxed);
+        held().fetch_add(1, Ordering::Relaxed);
         SpinLockGuard { lock, _irq: irq, _not_send: PhantomData }
     }
 }
@@ -118,7 +128,7 @@ impl<T> DerefMut for SpinLockGuard<'_, T> {
 
 impl<T> Drop for SpinLockGuard<'_, T> {
     fn drop(&mut self) {
-        SPINLOCKS_HELD.fetch_sub(1, Ordering::Relaxed);
+        held().fetch_sub(1, Ordering::Relaxed);
         self.lock.locked.store(false, Ordering::Release);
     }
 }
@@ -127,7 +137,7 @@ impl<T> Drop for SpinLockGuard<'_, T> {
 /// handler (or a thread that preempted the holder) may allocate.
 #[derive(Debug, Default)]
 pub struct RawIrqSpinLock {
-    lock: RawSpinLock,
+    locked: AtomicBool,
     /// Whether interrupts were on before the holder took the lock. Only the
     /// holder touches it.
     restore: AtomicBool,
@@ -135,26 +145,31 @@ pub struct RawIrqSpinLock {
 
 impl RawIrqSpinLock {
     pub const fn new() -> RawIrqSpinLock {
-        RawIrqSpinLock { lock: RawSpinLock::new(), restore: AtomicBool::new(false) }
+        RawIrqSpinLock { locked: AtomicBool::new(false), restore: AtomicBool::new(false) }
     }
 }
 
-// SAFETY: mutual exclusion comes from the inner `RawSpinLock`, which upholds
-// the same contract; the interrupt state handling does not affect it.
+// SAFETY: `locked` moves from false to true (Acquire) for exactly one
+// caller at a time, and only `unlock` (Release), called by the holder,
+// clears it; the interrupt state handling does not affect that.
 unsafe impl RawLock for RawIrqSpinLock {
     fn lock(&self) {
         let was_enabled = cpu::interrupts_enabled();
         cpu::disable_interrupts();
-        self.lock.lock();
-        SPINLOCKS_HELD.fetch_add(1, Ordering::Relaxed);
+        while self.locked.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            while self.locked.load(Ordering::Relaxed) {
+                crate::arch::wait_hook();
+                core::hint::spin_loop();
+            }
+        }
+        held().fetch_add(1, Ordering::Relaxed);
         self.restore.store(was_enabled, Ordering::Relaxed);
     }
 
     unsafe fn unlock(&self) {
         let enable = self.restore.load(Ordering::Relaxed);
-        SPINLOCKS_HELD.fetch_sub(1, Ordering::Relaxed);
-        // SAFETY: forwarded from the caller, who holds the lock.
-        unsafe { self.lock.unlock() };
+        held().fetch_sub(1, Ordering::Relaxed);
+        self.locked.store(false, Ordering::Release);
         if enable {
             // SAFETY: interrupts were on when the caller took the lock, so
             // the code that owns this CPU's interrupt state wants them on.
@@ -389,6 +404,7 @@ impl<T: core::fmt::Debug> core::fmt::Debug for SetOnce<T> {
 use crate::arch::irq;
 use crate::kernel_test;
 use crate::thread::{State, spawn, yield_now};
+
 use crate::time;
 use core::sync::atomic::Ordering::SeqCst;
 
@@ -411,6 +427,8 @@ kernel_test! {
         if !cpu::interrupts_enabled() {
             return Err("kernel tests should run with interrupts enabled");
         }
+        // On one CPU throughout: the tick counts are this CPU's.
+        let _pin = thread::pin_current();
         let (a, b) = (SpinLock::new(()), SpinLock::new(()));
         let held = spinlocks_held();
         let outer = a.lock();
@@ -426,12 +444,12 @@ kernel_test! {
             return Err("releasing the inner lock enabled interrupts while the outer one is held");
         }
         // No timer tick gets in while the lock is held, however long that is.
-        let ticks = time::ticks();
+        let ticks = time::cpu_ticks();
         let start = time::now_ns();
         while time::now_ns() - start < 5 * time::NANOS_PER_TICK {
             core::hint::spin_loop();
         }
-        if time::ticks() != ticks {
+        if time::cpu_ticks() != ticks {
             return Err("a timer interrupt arrived while a spinlock was held");
         }
         drop(outer);
@@ -439,7 +457,7 @@ kernel_test! {
             return Err("releasing the last lock did not restore interrupts");
         }
         let start = time::now_ns();
-        while time::ticks() == ticks {
+        while time::cpu_ticks() == ticks {
             if time::now_ns() - start > 1_000_000_000 {
                 return Err("the timer interrupt held back by the lock never arrived");
             }
@@ -521,9 +539,12 @@ kernel_test! {
         use poly_vfs::lock::RawLock;
         RAW_COUNTER.store(0, Ordering::Relaxed);
         RAW.lock();
-        let t = spawn(add_slowly_raw, 0).map_err(|_| "spawn failed")?;
+        // Its first attempt runs on this CPU while this thread yields.
+        let pin = thread::pin_current();
+        let t = thread::spawn_here(add_slowly_raw, 0).map_err(|_| "spawn failed")?;
         yield_now();
         let blocked = thread::state(t) == Some(State::Blocked);
+        drop(pin);
         // SAFETY: taken above by this thread.
         unsafe { RAW.unlock() };
         thread::join(t).map_err(|_| "join failed")?;
@@ -566,9 +587,13 @@ kernel_test! {
         if COUNTER.try_lock().is_some() {
             return Err("try_lock took a held mutex");
         }
-        let t = spawn(add_slowly, 0).map_err(|_| "spawn failed")?;
+        // Its first attempt runs on this CPU while this thread yields.
+        let pin = thread::pin_current();
+        let t = thread::spawn_here(add_slowly, 0).map_err(|_| "spawn failed")?;
         yield_now();
-        if thread::state(t) != Some(State::Blocked) {
+        let blocked = thread::state(t) == Some(State::Blocked);
+        drop(pin);
+        if !blocked {
             drop(guard);
             let _ = thread::join(t);
             return Err("a thread waiting for a held mutex did not block");

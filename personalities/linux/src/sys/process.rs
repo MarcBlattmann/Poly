@@ -5,6 +5,7 @@ use crate::abi::{USER_ADDRESS_LIMIT, arch_prctl as op};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::LinuxKernel;
+use crate::ns::pid::view;
 use crate::signal::deliver::with_own;
 
 /// exit(status): ends the calling thread only (_exit(2): "the raw Linux
@@ -28,39 +29,52 @@ fn pid_result(id: i32) -> SysResult {
     Ok(id as i64 as u64)
 }
 
-/// getpid(): the thread group id. getpid(2): "always successful".
+/// getpid(): the thread group id, as the caller's pid namespace sees it
+/// (pid_namespaces(7): the init of a new namespace is 1). getpid(2):
+/// "always successful".
 pub fn getpid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
-    pid_result(k.pid())
+    pid_result(view(k, k.pid()))
 }
 
 /// gettid(): the caller's thread id. gettid(2): "always successful".
 pub fn gettid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
-    pid_result(k.tid())
+    pid_result(view(k, k.tid()))
 }
 
-/// getppid(): the parent's process id.
+/// getppid(): the parent's process id; 0 for a parent outside the
+/// caller's pid namespace (getppid(2)).
 pub fn getppid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
-    pid_result(k.ppid())
+    pid_result(view(k, k.ppid()))
+}
+
+/// The calling thread's credentials, for the id getters: their ids are
+/// kernel ids, reported as its user namespace sees them (ADR 0054).
+fn creds(k: &mut dyn LinuxKernel) -> crate::cred::Creds {
+    crate::cred::current(k)
 }
 
 /// getuid(): the real user id. getuid(2): "always successful".
 pub fn getuid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
-    Ok(k.credentials().uid as u64)
+    let c = creds(k);
+    Ok(u64::from(c.uid_view(c.uid)))
 }
 
 /// geteuid(): the effective user id.
 pub fn geteuid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
-    Ok(k.credentials().euid as u64)
+    let c = creds(k);
+    Ok(u64::from(c.uid_view(c.euid)))
 }
 
 /// getgid(): the real group id. getgid(2): "always successful".
 pub fn getgid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
-    Ok(k.credentials().gid as u64)
+    let c = creds(k);
+    Ok(u64::from(c.gid_view(c.gid)))
 }
 
 /// getegid(): the effective group id.
 pub fn getegid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
-    Ok(k.credentials().egid as u64)
+    let c = creds(k);
+    Ok(u64::from(c.gid_view(c.egid)))
 }
 
 /// set_tid_address(tidptr): stores `tidptr` as the thread's
@@ -72,7 +86,7 @@ pub fn set_tid_address(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let tid = k.tid();
     let ptr = a.ptr(0);
     with_own(k, |p| p.thread_mut(tid).clear_child_tid = ptr);
-    pid_result(tid)
+    pid_result(view(k, tid))
 }
 
 /// arch_prctl(op, addr)

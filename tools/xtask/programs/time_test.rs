@@ -444,9 +444,10 @@ fn vdso_tests(sp: *const u64) {
     let mut res = Timespec::default();
     getres(CLOCK_MONOTONIC as i32, &mut res);
     check(b"vdso_clock_getres", ok && res.ns() == 1, res.ns() as i64);
-    let (mut cpu, mut node) = (7u32, 7u32);
+    // The CPU it runs on (any of them: it may move), node 0.
+    let (mut cpu, mut node) = (u32::MAX, 7u32);
     let r = getcpu(&mut cpu, &mut node, core::ptr::null_mut());
-    check(b"vdso_getcpu", r == 0 && cpu == 0 && node == 0, r);
+    check(b"vdso_getcpu", r == 0 && cpu < 64 && node == 0, r);
 
     // Setting the wall clock moves the vDSO's wall clock too, not the
     // monotonic clock; then it is put back.

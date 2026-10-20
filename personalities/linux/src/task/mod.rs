@@ -17,7 +17,7 @@ pub mod tree;
 pub mod wait;
 
 use crate::abi::SigInfo;
-use crate::abi::signal::{SA_NOCLDSTOP, SA_NOCLDWAIT, SIG_IGN, SIGCHLD};
+use crate::abi::signal::{SA_NOCLDSTOP, SA_NOCLDWAIT, SI_KERNEL, SIG_IGN, SIGCHLD, SIGKILL};
 use crate::errno::Errno;
 use crate::kernel::{LinuxKernel, Target};
 use crate::signal::deliver::{complete, with_target};
@@ -48,10 +48,36 @@ fn sigchld_of(k: &mut dyn LinuxKernel, pid: i32) -> Option<(bool, u64)> {
 
 /// Queue `info` for process `pid` from the kernel (no permission check, no
 /// protection of init: init still only acts on what it handles, since the
-/// default of `SIGCHLD` is to ignore it).
+/// default of `SIGCHLD` is to ignore it). The child `info` names (its
+/// `si_pid`, a global id) is written as `pid`'s pid namespace sees it.
 pub fn signal_process(k: &mut dyn LinuxKernel, pid: i32, info: SigInfo) {
-    if let Ok(Ok(sent)) = with_target(k, Target::Process(pid), |p, _| p.send(info, Dest::Process, false)) {
+    let sent = with_target(k, Target::Process(pid), |p, _| {
+        let mut info = info;
+        let child = crate::ns::pid::local_or_zero(&p.ns.pid, info.pid());
+        info.fields[0..4].copy_from_slice(&child.to_le_bytes());
+        p.send(info, Dest::Process, false)
+    });
+    if let Ok(Ok(sent)) = sent {
         complete(k, pid, &sent);
+    }
+}
+
+/// The init of a pid namespace ended (the calling thread's process was
+/// one): every other process in the namespace gets `SIGKILL`
+/// (pid_namespaces(7)), which nothing can block or ignore.
+fn end_namespace(k: &mut dyn LinuxKernel, pid: i32) {
+    let ns = k.pid_ns();
+    let members = crate::ns::pid::init_ended(&ns, pid);
+    for member in members {
+        let kill = with_target(k, Target::Process(member), |p, t| {
+            if t.zombie {
+                return None;
+            }
+            Some(p.send(SigInfo::new(SIGKILL, SI_KERNEL), Dest::Process, false))
+        });
+        if let Ok(Some(Ok(sent))) = kill {
+            complete(k, member, &sent);
+        }
     }
 }
 
@@ -66,17 +92,21 @@ pub fn signal_process(k: &mut dyn LinuxKernel, pid: i32, info: SigInfo) {
 pub fn process_exited(k: &mut dyn LinuxKernel, how: Termination) {
     let pid = k.pid();
     let uid = k.credentials().uid;
+    end_namespace(k, pid);
     let Ok(Some(parent)) = with_tree(k, |t| t.parent(pid)) else { return };
     let ignores = parent != 0 && sigchld_of(k, parent).is_some_and(|(ign, flags)| ign || flags & SA_NOCLDWAIT != 0);
-    let Ok(report) = with_tree(k, |t| t.exit(pid, how, ignores)) else { return };
+    let Ok(report) = with_tree(k, |t| t.exit_announced_later(pid, how, ignores)) else { return };
     if report.parent != 0 && report.exit_signal != 0 {
         let waited = Waited { pid, uid, event: ChildEvent::Ended(how) };
         signal_process(k, report.parent, wait::child_info(report.exit_signal, &waited));
     }
-    for &(child, uid, how, signal) in &report.adopted_zombies {
+    // The parent may reap it now (it is waitable only once the signal is
+    // pending, as on Linux).
+    let _ = with_tree(k, |t| t.announce(pid));
+    for &(child, uid, how, signal, adopter) in &report.adopted_zombies {
         if signal != 0 {
             let waited = Waited { pid: child, uid, event: ChildEvent::Ended(how) };
-            signal_process(k, report.adopter, wait::child_info(signal, &waited));
+            signal_process(k, adopter, wait::child_info(signal, &waited));
         }
     }
 }

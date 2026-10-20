@@ -296,6 +296,18 @@ impl Session {
     fn run(&mut self, line: &str) -> super::Result<String> {
         self.send(&format!("{line}\r"))?;
         let out = self.prompt()?;
+        // A signal that reaches the shell while it waits for input (a
+        // SIGCHLD that comes a little late, from a child that ended on
+        // another CPU) makes it start the prompt again on a new line, and
+        // the echoed line follows that prompt: drop the line break and the
+        // prompt.
+        let mut out = out.as_str();
+        while let Some(rest) = out.strip_prefix('\n') {
+            match rest.find("# ") {
+                Some(i) if rest.starts_with("root@") && !rest[..i].contains('\n') => out = &rest[i + 2..],
+                _ => break,
+            }
+        }
         // The shell echoes the line, then the command's output follows.
         Ok(out.split_once('\n').map_or(String::new(), |(_, rest)| rest.to_string()))
     }
@@ -378,10 +390,21 @@ fn session(s: &mut Session) -> super::Result {
     s.run("sleep 30 &")?;
     let out = s.run("jobs")?;
     check("jobs lists the background job", out.contains("[1]+  Running") && out.contains("sleep 30"), &out)?;
+    // The shell reports the job's end before the first prompt after it has
+    // seen the job die. With several CPUs the job may still be on its way
+    // out (on another CPU) when the shell gets back to its prompt; then the
+    // report comes before the next one, as on Linux.
     s.send("kill %1\r")?;
-    let out = s.expect("Terminated")?;
-    check("kill %1", out.contains("[1]+"), &out)?;
-    s.prompt()?;
+    let mut out = s.prompt()?;
+    for _ in 0..10 {
+        if out.contains("Terminated") {
+            break;
+        }
+        thread::sleep(Duration::from_millis(200));
+        s.send("\r")?;
+        out += &s.prompt()?;
+    }
+    check("kill %1", out.contains("[1]+") && out.contains("Terminated"), &out)?;
     let out = s.run("jobs")?;
     check("no jobs left", out.is_empty(), &out)?;
 

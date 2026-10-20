@@ -1,17 +1,30 @@
 //! The file system operations, with the `FileSystem` trait's semantics, on
 //! one locked [`Ctx`]. Every operation reads the inodes it needs, changes
 //! copies and writes them back; nothing is cached between operations except
-//! pins and the allocation state.
+//! pins, orphans and the allocation state.
 //!
 //! Write order inside an operation follows `balloc.rs`: link counts go up
 //! before a new name is written and down after a name is removed (a crash
 //! leaves a count too high, which e2fsck lowers, never too low); blocks and
-//! inodes are freed after the writes that unhook them.
+//! inodes are freed after the writes that unhook them. With a journal the
+//! whole operation is in one transaction anyway, except truncations and
+//! writes too big for one, which commit between consistent steps (a file
+//! being cut down sits on the orphan list meanwhile, so a crash in between
+//! is finished at the next mount).
+//!
+//! **Orphans.** A file whose last name goes while it is open stays until
+//! its last release; with a journal it is put on the on-disk orphan list
+//! (`s_last_orphan`, linked through `i_dtime`) in the same transaction, so
+//! a crash cannot leak it: mounting deletes what is on the list (and
+//! finishes truncations of files still linked).
 
 use crate::dir::Slot;
+use crate::extent::{Lookup, MAX_LBLK};
 use crate::inode::encode_rdev;
 use crate::layout::RO_COMPAT_LARGE_FILE;
-use crate::layout::{FAST_SYMLINK_MAX, FL_APPEND, FL_IMMUTABLE, Inode, LINK_MAX, ROOT_INO, encode_time};
+use crate::layout::{
+    FAST_SYMLINK_MAX, FL_APPEND, FL_EXTENTS, FL_IMMUTABLE, FL_INLINE_DATA, Inode, ROOT_INO, encode_time,
+};
 use crate::{BlockIo, Ctx};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -20,6 +33,8 @@ use poly_vfs::{Attr, Errno, FileType, NAME_MAX, NewNode, PERM_MASK, RenameFlags,
 /// Deepest directory nesting `rename` walks up through before deciding the
 /// volume has a loop.
 const MAX_DEPTH: usize = 1 << 16;
+/// Logical blocks a journaled truncation frees per step.
+const TRUNCATE_STEP: u64 = 8192;
 
 fn check_name(name: &[u8]) -> Result<()> {
     if name.len() > NAME_MAX {
@@ -46,10 +61,39 @@ impl Dirs {
     }
 }
 
+/// How a run of logical blocks reads.
+enum Run {
+    /// From this disk block on.
+    Data(u64),
+    /// Zeros.
+    Zeros,
+}
+
 impl<D: BlockIo> Ctx<'_, D> {
     fn touch(&self, i: &mut Inode) {
         i.mtime = self.now;
         i.ctime = self.now;
+    }
+
+    /// One more subdirectory in `d` (`dir_nlink`: past the limit, the
+    /// count becomes 1, "many").
+    fn inc_dir_links(&self, d: &mut Inode) {
+        if self.geo.dir_nlink && (d.links == 1 || d.links >= self.geo.link_max - 1) {
+            d.links = 1;
+        } else {
+            d.links = d.links.saturating_add(1);
+        }
+    }
+
+    fn dec_dir_links(&self, d: &mut Inode) {
+        if !(self.geo.dir_nlink && d.links == 1) {
+            d.links = d.links.saturating_sub(1).max(2);
+        }
+    }
+
+    /// Whether `d` may get another subdirectory.
+    fn dir_link_room(&self, d: &Inode) -> bool {
+        self.geo.dir_nlink || d.links < self.geo.link_max
     }
 
     /// A directory that may get new entries.
@@ -68,9 +112,10 @@ impl<D: BlockIo> Ctx<'_, D> {
         if !self.geo.ifmt.id_high && (uid > 0xffff || gid > 0xffff) { Err(Errno::EINVAL) } else { Ok(()) }
     }
 
-    fn new_inode(&mut self, kind: FileType, perm: u16, uid: u32, gid: u32) -> Inode {
+    fn new_inode(&mut self, ino: u32, kind: FileType, perm: u16, uid: u32, gid: u32) -> Inode {
         self.st.next_generation = self.st.next_generation.wrapping_add(1);
-        Inode {
+        let mut i = Inode {
+            ino,
             mode: kind.mode_bits() as u16 | (perm & PERM_MASK),
             uid,
             gid,
@@ -80,7 +125,11 @@ impl<D: BlockIo> Ctx<'_, D> {
             links: 1,
             generation: self.st.next_generation,
             ..Inode::default()
+        };
+        if self.geo.extents && matches!(kind, FileType::Regular | FileType::Directory) {
+            self.ext_init(&mut i);
         }
+        i
     }
 
     /// Checks that `name` can be added to `dir`.
@@ -89,6 +138,9 @@ impl<D: BlockIo> Ctx<'_, D> {
         if dir.flags & FL_IMMUTABLE != 0 {
             return Err(Errno::EPERM);
         }
+        if dir.flags & FL_INLINE_DATA != 0 {
+            return Err(Errno::EROFS);
+        }
         if self.find_entry(dir, name)?.is_some() {
             return Err(Errno::EEXIST);
         }
@@ -96,24 +148,20 @@ impl<D: BlockIo> Ctx<'_, D> {
     }
 
     /// Takes back an inode that never got a name.
-    fn abandon(&mut self, ino: u32, mut i: Inode, blocks: &[u64]) -> Result<()> {
-        i.links = 0;
-        i.dtime = encode_time(self.now, false).0;
-        self.write_inode(ino, &i)?;
-        self.free_blocks(blocks)?;
-        self.free_inode(ino, i.is_dir())
+    fn abandon(&mut self, ino: u32, i: Inode) -> Result<()> {
+        self.evict(ino, i)
     }
 
     /// Adds the entry for a just-initialised inode, or takes the inode
     /// back; then updates the directory.
-    fn link_new(&mut self, dir: u32, d: &mut Inode, name: &[u8], ino: u32, i: Inode, blocks: &[u64]) -> Result<()> {
+    fn link_new(&mut self, dir: u32, d: &mut Inode, name: &[u8], ino: u32, i: Inode) -> Result<()> {
         let kind = i.kind().unwrap_or(FileType::Regular);
         if let Err(e) = self.add_entry(d, name, ino, kind) {
-            self.abandon(ino, i, blocks)?;
+            self.abandon(ino, i)?;
             return Err(e);
         }
         if kind == FileType::Directory {
-            d.links = d.links.saturating_add(1);
+            self.inc_dir_links(d);
         }
         self.touch(d);
         self.write_inode(dir, d)
@@ -150,12 +198,12 @@ impl<D: BlockIo> Ctx<'_, D> {
         let mut d = self.live_dir(dir)?;
         self.check_new(&d, name)?;
         let ino = self.alloc_inode(dir, false)?;
-        let mut i = self.new_inode(node.kind, node.perm, node.uid, node.gid);
+        let mut i = self.new_inode(ino, node.kind, node.perm, node.uid, node.gid);
         if matches!(node.kind, FileType::CharDevice | FileType::BlockDevice) {
             encode_rdev(node.rdev, &mut i.block);
         }
         self.init_inode(ino, &i)?;
-        self.link_new(dir, &mut d, name, ino, i, &[])?;
+        self.link_new(dir, &mut d, name, ino, i)?;
         Ok(ino)
     }
 
@@ -163,27 +211,27 @@ impl<D: BlockIo> Ctx<'_, D> {
         self.check_ids(uid, gid)?;
         let mut d = self.live_dir(dir)?;
         self.check_new(&d, name)?;
-        if d.links >= LINK_MAX {
+        if !self.dir_link_room(&d) {
             return Err(Errno::EMLINK);
         }
         let ino = self.alloc_inode(dir, true)?;
-        let mut i = self.new_inode(FileType::Directory, perm, uid, gid);
-        let goal = self.group_data_goal(self.geo.group_of_inode(ino));
-        let block = match self.alloc_block(goal) {
-            Ok(b) => b,
+        let mut i = self.new_inode(ino, FileType::Directory, perm, uid, gid);
+        i.links = 2;
+        let mut goal = self.group_data_goal(self.geo.group_of_inode(ino));
+        let block = match self.bmap_alloc(&mut i, 0, &mut goal) {
+            Ok((b, _)) => b,
             Err(e) => {
-                self.abandon(ino, i, &[])?;
+                self.init_inode(ino, &i)?;
+                self.abandon(ino, i)?;
                 return Err(e);
             }
         };
-        let data = self.new_dir_block(ino, dir);
-        self.write_fresh(block, &data)?;
-        i.links = 2;
+        let mut data = self.new_dir_block(ino, dir);
+        self.write_new_dir_block(&i, block, &mut data)?;
         i.size = self.geo.bs as u64;
-        i.blocks = self.geo.spb;
-        i.block[0] = block as u32;
+        self.ind_flush()?;
         self.init_inode(ino, &i)?;
-        self.link_new(dir, &mut d, name, ino, i, &[block])?;
+        self.link_new(dir, &mut d, name, ino, i)?;
         Ok(ino)
     }
 
@@ -198,29 +246,29 @@ impl<D: BlockIo> Ctx<'_, D> {
         let mut d = self.live_dir(dir)?;
         self.check_new(&d, name)?;
         let ino = self.alloc_inode(dir, false)?;
-        let mut i = self.new_inode(FileType::Symlink, 0o777, uid, gid);
+        let mut i = self.new_inode(ino, FileType::Symlink, 0o777, uid, gid);
         i.size = target.len() as u64;
-        let mut blocks = Vec::new();
         if target.len() < FAST_SYMLINK_MAX {
             i.set_block_bytes(target);
         } else {
-            let goal = self.group_data_goal(self.geo.group_of_inode(ino));
-            let block = match self.alloc_block(goal) {
-                Ok(b) => b,
+            if self.geo.extents {
+                self.ext_init(&mut i);
+            }
+            let mut goal = self.group_data_goal(self.geo.group_of_inode(ino));
+            let block = match self.bmap_alloc(&mut i, 0, &mut goal) {
+                Ok((b, _)) => b,
                 Err(e) => {
-                    self.abandon(ino, i, &[])?;
+                    self.init_inode(ino, &i)?;
+                    self.abandon(ino, i)?;
                     return Err(e);
                 }
             };
             let mut data = vec![0u8; self.geo.bs];
             data[..target.len()].copy_from_slice(target);
             self.write_fresh(block, &data)?;
-            i.block[0] = block as u32;
-            i.blocks = self.geo.spb;
-            blocks.push(block);
         }
         self.init_inode(ino, &i)?;
-        self.link_new(dir, &mut d, name, ino, i, &blocks)?;
+        self.link_new(dir, &mut d, name, ino, i)?;
         Ok(ino)
     }
 
@@ -232,7 +280,7 @@ impl<D: BlockIo> Ctx<'_, D> {
         if t.links == 0 {
             return Err(Errno::ENOENT);
         }
-        if t.links >= LINK_MAX {
+        if t.links >= self.geo.link_max {
             return Err(Errno::EMLINK);
         }
         if t.flags & (FL_IMMUTABLE | FL_APPEND) != 0 {
@@ -291,38 +339,179 @@ impl<D: BlockIo> Ctx<'_, D> {
             return Err(Errno::EPERM);
         }
         self.remove_slot(&mut d, &slot)?;
-        d.links = d.links.saturating_sub(1).max(2);
+        self.dec_dir_links(&mut d);
         self.touch(&mut d);
         self.write_inode(dir, &d)?;
         self.drop_link(slot.entry.inode, i)
     }
 
     /// Drops one name of `ino` (a directory loses its only one), freeing it
-    /// if that was the last and nothing pins it.
+    /// if that was the last and nothing pins it (else it becomes an orphan).
     fn drop_link(&mut self, ino: u32, mut i: Inode) -> Result<()> {
         i.links = if i.is_dir() { 0 } else { i.links.saturating_sub(1) };
         i.ctime = self.now;
-        if i.links == 0 && !self.pinned(ino) { self.evict(ino, i) } else { self.write_inode(ino, &i) }
+        if i.links > 0 {
+            return self.write_inode(ino, &i);
+        }
+        if !self.pinned(ino) {
+            return self.evict(ino, i);
+        }
+        self.st.orphans.insert(ino);
+        if self.st.journal.is_some() {
+            self.orphan_add(ino, &mut i);
+        }
+        self.write_inode(ino, &i)
+    }
+
+    /// Deletes an orphan whose last pin went (or at unmount).
+    pub fn release_orphan(&mut self, ino: u32) -> Result<()> {
+        self.st.orphans.remove(&ino);
+        let i = self.read_inode(ino)?;
+        if i.mode != 0 && i.links == 0 { self.evict(ino, i) } else { Ok(()) }
+    }
+
+    // ----- the on-disk orphan list (with a journal) -----
+
+    /// Puts `ino` at the head of the orphan list (`i` written by the caller).
+    fn orphan_add(&mut self, ino: u32, i: &mut Inode) {
+        i.dtime = self.st.sb.last_orphan();
+        self.st.sb.set_last_orphan(ino);
+        self.st.meta_dirty = true;
+    }
+
+    /// Takes `ino` off the orphan list if it is on it (`i` written by the
+    /// caller).
+    fn orphan_remove(&mut self, ino: u32, i: &mut Inode) -> Result<()> {
+        let mut prev: Option<u32> = None;
+        let mut cur = self.st.sb.last_orphan();
+        for _ in 0..self.geo.inodes {
+            if cur == 0 {
+                return Ok(());
+            }
+            if cur == ino {
+                let next = i.dtime;
+                match prev {
+                    None => {
+                        self.st.sb.set_last_orphan(next);
+                        self.st.meta_dirty = true;
+                    }
+                    Some(p) => {
+                        let mut pi = self.read_inode(p)?;
+                        pi.dtime = next;
+                        self.write_inode(p, &pi)?;
+                    }
+                }
+                i.dtime = 0;
+                return Ok(());
+            }
+            prev = Some(cur);
+            cur = self.read_inode(cur)?.dtime;
+        }
+        Err(self.corrupt())
+    }
+
+    /// Mounting: deletes the orphans with no links, finishes truncating the
+    /// others. Returns how many there were.
+    pub fn process_orphans(&mut self) -> Result<u32> {
+        let mut cur = self.st.sb.last_orphan();
+        if cur == 0 {
+            return Ok(0);
+        }
+        self.st.sb.set_last_orphan(0);
+        self.st.meta_dirty = true;
+        let mut n = 0;
+        while cur != 0 && n < self.geo.inodes {
+            if self.ino(cur as u64).is_err() {
+                self.corrupt();
+                break;
+            }
+            let mut i = match self.read_inode(cur) {
+                Ok(i) => i,
+                Err(Errno::EUCLEAN | Errno::EBADMSG) => break,
+                Err(e) => return Err(e),
+            };
+            let next = i.dtime;
+            n += 1;
+            if i.mode == 0 {
+                break;
+            }
+            i.dtime = 0;
+            if i.links == 0 {
+                self.evict(cur, i)?;
+            } else {
+                let keep = i.size.div_ceil(self.geo.bs as u64);
+                if self.has_block_map(&i) {
+                    self.cut(cur, &mut i, keep)?;
+                } else {
+                    self.write_inode(cur, &i)?;
+                }
+            }
+            self.ind_flush()?;
+            self.flush_bitmaps()?;
+            cur = next;
+        }
+        Ok(n)
+    }
+
+    /// Frees the blocks of inode `ino` (`i`) from logical block `keep` on
+    /// and writes the inode. With a journal, extent-mapped files are cut in
+    /// steps from the end, committing between steps when the transaction
+    /// fills up (the inode on the orphan list meanwhile).
+    fn cut(&mut self, ino: u32, i: &mut Inode, keep: u64) -> Result<()> {
+        let stepped = self.st.journal.is_some() && i.flags & FL_EXTENTS != 0;
+        let mut end = if stepped { self.ext_end(i)? } else { keep };
+        let mut listed = false;
+        loop {
+            let from = if stepped { end.saturating_sub(TRUNCATE_STEP).max(keep) } else { keep };
+            let mut freed = Vec::new();
+            self.truncate_map(i, from, &mut freed)?;
+            self.ind_flush()?;
+            self.write_inode(ino, i)?;
+            self.free_blocks(&freed)?;
+            if from <= keep {
+                break;
+            }
+            end = from;
+            if self.journal_tight() {
+                if !listed && !self.st.orphans.contains(&ino) {
+                    self.orphan_add(ino, i);
+                    self.write_inode(ino, i)?;
+                    listed = true;
+                }
+                self.sync()?;
+            }
+        }
+        if listed {
+            self.orphan_remove(ino, i)?;
+            self.write_inode(ino, i)?;
+        }
+        Ok(())
     }
 
     /// Deletes an inode nothing names or pins: frees its blocks and itself.
     pub fn evict(&mut self, ino: u32, mut i: Inode) -> Result<()> {
         let dir = i.is_dir();
-        let mut freed = Vec::new();
-        if self.has_block_map(&i) {
-            self.truncate_map(&mut i, 0, &mut freed)?;
+        i.links = 0;
+        if self.st.journal.is_some() {
+            self.orphan_remove(ino, &mut i)?;
         }
+        if self.has_block_map(&i) {
+            self.cut(ino, &mut i, 0)?;
+        }
+        let mut freed = Vec::new();
         if i.file_acl != 0 {
             match self.release_xattr(i.file_acl) {
                 Ok(Some(b)) => freed.push(b),
                 Ok(None) | Err(Errno::EUCLEAN) => {}
                 Err(e) => return Err(e),
             }
-            i.blocks = i.blocks.saturating_sub(self.geo.spb);
+            i.blocks = i.blocks.saturating_sub(self.geo.spb as u64);
             i.file_acl = 0;
         }
-        i.links = 0;
-        i.dtime = encode_time(self.now, false).0.max(1);
+        // A deletion time below the inode count would read as an orphan
+        // list link (e2fsck takes it for one): never write one that small,
+        // whatever the clock says.
+        i.dtime = encode_time(self.now, false).0.max(self.geo.inodes.saturating_add(1));
         if i.kind() == Some(FileType::Regular) {
             i.size = 0;
         }
@@ -385,6 +574,9 @@ impl<D: BlockIo> Ctx<'_, D> {
         if (dirs.old.flags | si.flags) & (FL_IMMUTABLE | FL_APPEND) != 0 || dirs.new_dir().flags & FL_IMMUTABLE != 0 {
             return Err(Errno::EPERM);
         }
+        if (dirs.old.flags | dirs.new_dir().flags) & FL_INLINE_DATA != 0 {
+            return Err(Errno::EROFS);
+        }
         let nd = dirs.new_dir().clone();
         let dst = match self.find_entry(&nd, new_name)? {
             Some(slot) => {
@@ -414,8 +606,8 @@ impl<D: BlockIo> Ctx<'_, D> {
             }
             let moves = !same && src_dir != dst_dir;
             if moves {
-                let gaining = if src_dir { dirs.new_dir().links } else { dirs.old.links };
-                if gaining >= LINK_MAX {
+                let gaining = if src_dir { dirs.new_dir().clone() } else { dirs.old.clone() };
+                if !self.dir_link_room(&gaining) {
                     return Err(Errno::EMLINK);
                 }
             }
@@ -436,13 +628,19 @@ impl<D: BlockIo> Ctx<'_, D> {
             }
             if moves {
                 if src_dir {
-                    let n = dirs.new_dir();
-                    n.links = n.links.saturating_add(1);
-                    dirs.old.links = dirs.old.links.saturating_sub(1);
+                    let mut n = dirs.new_dir().clone();
+                    self.inc_dir_links(&mut n);
+                    *dirs.new_dir() = n;
+                    let mut o = dirs.old.clone();
+                    self.dec_dir_links(&mut o);
+                    dirs.old = o;
                 } else {
-                    dirs.old.links = dirs.old.links.saturating_add(1);
-                    let n = dirs.new_dir();
-                    n.links = n.links.saturating_sub(1);
+                    let mut o = dirs.old.clone();
+                    self.inc_dir_links(&mut o);
+                    dirs.old = o;
+                    let mut n = dirs.new_dir().clone();
+                    self.dec_dir_links(&mut n);
+                    *dirs.new_dir() = n;
                 }
             }
             si.ctime = self.now;
@@ -480,7 +678,7 @@ impl<D: BlockIo> Ctx<'_, D> {
                 Some((dst_slot.entry.inode, di))
             }
             None => {
-                if src_dir && !same && dirs.new_dir().links >= LINK_MAX {
+                if src_dir && !same && !self.dir_link_room(&dirs.new_dir().clone()) {
                     return Err(Errno::EMLINK);
                 }
                 self.add_entry(dirs.new_dir(), new_name, src, src_kind)?;
@@ -498,18 +696,26 @@ impl<D: BlockIo> Ctx<'_, D> {
         self.remove_slot(&mut dirs.old, &src_slot)?;
         if src_dir && !same {
             self.set_parent(&mut si, new_dir)?;
-            dirs.old.links = dirs.old.links.saturating_sub(1);
-            let n = dirs.new_dir();
-            n.links = n.links.saturating_add(1);
+            let mut o = dirs.old.clone();
+            self.dec_dir_links(&mut o);
+            dirs.old = o;
+            let mut n = dirs.new_dir().clone();
+            self.inc_dir_links(&mut n);
+            *dirs.new_dir() = n;
         }
         si.ctime = self.now;
         self.write_inode(src, &si)?;
         if let Some((dst_ino, di)) = replaced {
             if di.is_dir() {
-                let nd = dirs.new_dir();
-                nd.links = nd.links.saturating_sub(1);
+                let mut n = dirs.new_dir().clone();
+                self.dec_dir_links(&mut n);
+                *dirs.new_dir() = n;
             }
             self.finish_rename(old_dir, new_dir, dirs)?;
+            // The name points elsewhere on disk before the replaced inode
+            // can lose its last link (else a crash could leave the name
+            // pointing at a deleted inode).
+            self.barrier()?;
             return self.drop_link(dst_ino, di);
         }
         self.finish_rename(old_dir, new_dir, dirs)
@@ -531,6 +737,14 @@ impl<D: BlockIo> Ctx<'_, D> {
             return Err(Errno::EINVAL);
         }
         let len = i.size as usize;
+        if i.flags & FL_INLINE_DATA != 0 {
+            let mut data = self.inline_data(&i)?;
+            if len > data.len() {
+                return Err(self.corrupt());
+            }
+            data.truncate(len);
+            return Ok(data);
+        }
         if self.is_fast_symlink(&i) {
             if len >= FAST_SYMLINK_MAX {
                 return Err(self.corrupt());
@@ -555,12 +769,42 @@ impl<D: BlockIo> Ctx<'_, D> {
         }
     }
 
+    /// How logical block `lblk` reads, and for how many blocks (at most
+    /// `max`) the same way.
+    fn run(&mut self, i: &Inode, lblk: u64, max: u64) -> Result<(Run, u64)> {
+        if i.flags & FL_EXTENTS != 0 {
+            return Ok(match self.ext_lookup(i, lblk)? {
+                Lookup::Mapped(m) if m.uninit => (Run::Zeros, m.run.min(max)),
+                Lookup::Mapped(m) => (Run::Data(m.pblk), m.run.min(max)),
+                Lookup::Hole { until } => (Run::Zeros, until.saturating_sub(lblk).clamp(1, max)),
+            });
+        }
+        let Some(p) = self.bmap(i, lblk)? else { return Ok((Run::Zeros, 1)) };
+        let mut n = 1;
+        while n < max {
+            match self.bmap(i, lblk + n)? {
+                Some(q) if q == p + n => n += 1,
+                _ => break,
+            }
+        }
+        Ok((Run::Data(p), n))
+    }
+
     pub fn read(&mut self, ino: u32, offset: u64, buf: &mut [u8]) -> Result<usize> {
         let mut i = self.regular(ino)?;
         if offset >= i.size {
             return Ok(0);
         }
         let n = buf.len().min((i.size - offset).min(usize::MAX as u64) as usize);
+        if i.flags & FL_INLINE_DATA != 0 {
+            let data = self.inline_data(&i)?;
+            let end = offset as usize + n;
+            if end > data.len() {
+                return Err(self.corrupt());
+            }
+            buf[..n].copy_from_slice(&data[offset as usize..end]);
+            return Ok(n);
+        }
         let bs = self.geo.bs;
         let mut done = 0;
         while done < n {
@@ -568,23 +812,21 @@ impl<D: BlockIo> Ctx<'_, D> {
             let lblk = pos / bs as u64;
             let in_blk = (pos % bs as u64) as usize;
             let chunk = (bs - in_blk).min(n - done);
-            let phys = self.bmap(&i, lblk)?;
-            match phys {
-                None => buf[done..done + chunk].fill(0),
-                Some(p) if chunk == bs => {
-                    // Whole blocks: read a physically contiguous run at once.
-                    let mut run = 1;
-                    while done + (run + 1) * bs <= n && run < 64 {
-                        match self.bmap(&i, lblk + run as u64)? {
-                            Some(q) if q == p + run as u64 => run += 1,
-                            _ => break,
-                        }
-                    }
-                    self.disk.read(p, &mut buf[done..done + run * bs])?;
-                    done += run * bs;
-                    continue;
+            if chunk == bs {
+                // Whole blocks: a physically contiguous run at once.
+                let whole = ((n - done) / bs).min(64) as u64;
+                let (run, count) = self.run(&i, lblk, whole)?;
+                let len = count as usize * bs;
+                match run {
+                    Run::Zeros => buf[done..done + len].fill(0),
+                    Run::Data(p) => self.disk.read(p, &mut buf[done..done + len])?,
                 }
-                Some(p) => {
+                done += len;
+                continue;
+            }
+            match self.run(&i, lblk, 1)?.0 {
+                Run::Zeros => buf[done..done + chunk].fill(0),
+                Run::Data(p) => {
                     let data = self.read_block(p)?;
                     buf[done..done + chunk].copy_from_slice(&data[in_blk..in_blk + chunk]);
                 }
@@ -631,6 +873,9 @@ impl<D: BlockIo> Ctx<'_, D> {
         if i.flags & FL_IMMUTABLE != 0 || (i.flags & FL_APPEND != 0 && offset != i.size) {
             return Err(Errno::EPERM);
         }
+        if i.flags & FL_INLINE_DATA != 0 {
+            return Err(Errno::EROFS);
+        }
         if buf.is_empty() {
             return Ok(0);
         }
@@ -654,6 +899,10 @@ impl<D: BlockIo> Ctx<'_, D> {
             let pos = offset + done as u64;
             let in_blk = (pos % bs as u64) as usize;
             let chunk = (bs - in_blk).min(buf.len() - done);
+            if pos / bs as u64 >= MAX_LBLK && i.flags & FL_EXTENTS != 0 {
+                error = Some(Errno::EFBIG);
+                break;
+            }
             let (p, fresh) = match self.bmap_alloc(&mut i, pos / bs as u64, &mut goal) {
                 Ok(x) => x,
                 Err(e) => {
@@ -676,6 +925,18 @@ impl<D: BlockIo> Ctx<'_, D> {
             }
             goal = p + 1;
             done += chunk;
+            if self.journal_tight() && done < buf.len() {
+                // Too much for one transaction: what is written so far
+                // becomes durable as a consistent step.
+                let new_end = offset + done as u64;
+                if new_end > i.size {
+                    i.size = new_end;
+                    self.note_size(new_end);
+                }
+                self.ind_flush()?;
+                self.write_inode(ino, &i)?;
+                self.sync()?;
+            }
         }
         if done > 0 {
             let new_end = offset + done as u64;
@@ -686,6 +947,7 @@ impl<D: BlockIo> Ctx<'_, D> {
             self.touch(&mut i);
         }
         // Blocks allocated before a failure are attached: write them too.
+        self.ind_flush()?;
         self.write_inode(ino, &i)?;
         match error {
             Some(e) if done == 0 => Err(e),
@@ -703,7 +965,9 @@ impl<D: BlockIo> Ctx<'_, D> {
         if i.flags & FL_IMMUTABLE != 0 {
             return Err(Errno::EPERM);
         }
-        let mut freed = Vec::new();
+        if set.uid.is_some() || set.gid.is_some() {
+            self.check_ids(set.uid.unwrap_or(i.uid), set.gid.unwrap_or(i.gid))?;
+        }
         if let Some(size) = set.size {
             match i.kind() {
                 Some(FileType::Regular) => {}
@@ -716,9 +980,15 @@ impl<D: BlockIo> Ctx<'_, D> {
             if i.flags & FL_APPEND != 0 && size != i.size {
                 return Err(Errno::EPERM);
             }
+            if i.flags & FL_INLINE_DATA != 0 {
+                return Err(Errno::EROFS);
+            }
             let bs = self.geo.bs as u64;
             if size < i.size {
-                self.truncate_map(&mut i, size.div_ceil(bs), &mut freed)?;
+                i.size = size;
+                i.mtime = self.now;
+                i.ctime = self.now;
+                self.cut(ino, &mut i, size.div_ceil(bs))?;
                 self.zero_tail(&i, size)?;
             } else if size > i.size {
                 self.zero_tail(&i, i.size)?;
@@ -726,9 +996,6 @@ impl<D: BlockIo> Ctx<'_, D> {
             }
             i.size = size;
             i.mtime = self.now;
-        }
-        if set.uid.is_some() || set.gid.is_some() {
-            self.check_ids(set.uid.unwrap_or(i.uid), set.gid.unwrap_or(i.gid))?;
         }
         if let Some(perm) = set.perm {
             i.mode = (i.mode & !PERM_MASK) | (perm & PERM_MASK);
@@ -753,7 +1020,6 @@ impl<D: BlockIo> Ctx<'_, D> {
         i.ctime = set.ctime.unwrap_or(now);
         self.ind_flush()?;
         self.write_inode(ino, &i)?;
-        self.free_blocks(&freed)?;
         self.attr(ino, &i)
     }
 

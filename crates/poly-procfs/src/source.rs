@@ -3,6 +3,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use poly_vfs::Errno;
 
 /// Clock ticks per second in the files that count ticks (`/proc/stat`,
 /// `/proc/<pid>/stat`): `USER_HZ`, which `sysconf(_SC_CLK_TCK)` reports as
@@ -365,4 +366,40 @@ pub trait ProcSource: Send + Sync {
     fn boot_id(&self) -> [u8; 16];
     /// Bits of entropy the random generator holds (`entropy_avail`).
     fn entropy_avail(&self) -> u32;
+
+    /// The inode number of process `pid`'s namespace of kind `kind` (an
+    /// index into [`NS_KINDS`](crate::NS_KINDS)): what `/proc/<pid>/ns/`
+    /// shows. `None` (the default): the process has none of that kind.
+    fn namespace(&self, pid: u32, kind: usize) -> Option<u32> {
+        let _ = (pid, kind);
+        None
+    }
+
+    /// Whether a namespace of kind `kind` with inode number `inum` exists.
+    fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
+        let _ = (inum, kind);
+        false
+    }
+
+    /// The text of process `pid`'s `uid_map`, `gid_map` or `setgroups`
+    /// as the calling thread sees it (user_namespaces(7)).
+    fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {
+        let _ = (pid, file);
+        Vec::new()
+    }
+
+    /// A write of `data` at `offset` to one of those files by the calling
+    /// thread: the bytes taken, or the error. `EROFS` by default.
+    fn write_id_map(&self, pid: u32, file: IdMapFile, offset: u64, data: &[u8]) -> Result<usize, Errno> {
+        let _ = (pid, file, offset, data);
+        Err(Errno::EROFS)
+    }
+}
+
+/// The files of a process directory that set up its user namespace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdMapFile {
+    Uid,
+    Gid,
+    Setgroups,
 }

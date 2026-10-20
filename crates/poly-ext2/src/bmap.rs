@@ -10,7 +10,7 @@
 //! allocated ones as "fresh" blocks first, then existing ones through
 //! `write_meta`, which orders them after the fresh ones (see `balloc.rs`).
 
-use crate::layout::{DIND_BLOCK, IND_BLOCK, Inode, NDIR_BLOCKS, TIND_BLOCK, le32, put32};
+use crate::layout::{DIND_BLOCK, FL_EXTENTS, IND_BLOCK, Inode, NDIR_BLOCKS, TIND_BLOCK, le32, put32};
 use crate::{BlockIo, Ctx};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -97,11 +97,9 @@ impl<D: BlockIo> Ctx<'_, D> {
         for i in 0..self.ind.items.len() {
             let it = &self.ind.items[i];
             if it.dirty && it.fresh {
-                self.disk.write(it.block, &it.data)?;
+                let (block, data) = (it.block, it.data.clone());
+                self.write_fresh(block, &data)?;
                 self.ind.items[i].dirty = false;
-                if self.st.ordered {
-                    self.st.fresh_unbarriered = true;
-                }
             }
         }
         Ok(())
@@ -138,8 +136,12 @@ impl<D: BlockIo> Ctx<'_, D> {
         it.dirty = true;
     }
 
-    /// The disk block holding logical block `lblk`, `None` for a hole.
+    /// The disk block holding logical block `lblk`, `None` for a hole (or
+    /// an uninitialised extent, which reads as zeros).
     pub fn bmap(&mut self, inode: &Inode, lblk: u64) -> Result<Option<u64>> {
+        if inode.flags & FL_EXTENTS != 0 {
+            return self.ext_map(inode, lblk).map(|m| m.filter(|e| !e.uninit).map(|e| e.pblk));
+        }
         let Some(path) = map_path(lblk, self.geo.ptrs) else { return Ok(None) };
         let mut b = inode.block[path.slot] as u64;
         for level in 0..path.depth {
@@ -158,18 +160,35 @@ impl<D: BlockIo> Ctx<'_, D> {
         Ok(Some(b))
     }
 
-    fn charge(&self, inode: &mut Inode) -> Result<()> {
-        inode.blocks = inode.blocks.checked_add(self.geo.spb).ok_or(Errno::EFBIG)?;
+    pub fn charge(&self, inode: &mut Inode) -> Result<()> {
+        let max = if self.geo.ifmt.huge_file { 1u64 << 48 } else { u32::MAX as u64 };
+        match inode.blocks.checked_add(self.geo.spb as u64) {
+            Some(n) if n <= max => inode.blocks = n,
+            _ => return Err(Errno::EFBIG),
+        }
         Ok(())
+    }
+
+    /// A block for a block map: below 2^32.
+    fn alloc_mapped(&mut self, goal: u64) -> Result<u64> {
+        let b = self.alloc_block(goal.min(u32::MAX as u64))?;
+        if b > u32::MAX as u64 {
+            self.free_blocks(&[b])?;
+            return Err(Errno::EFBIG);
+        }
+        Ok(b)
     }
 
     /// The disk block for logical block `lblk`, allocated (with any
     /// indirect blocks on the way) if it is a hole; `true` if it was. New
     /// blocks go near `goal`, which moves past them.
     pub fn bmap_alloc(&mut self, inode: &mut Inode, lblk: u64, goal: &mut u64) -> Result<(u64, bool)> {
+        if inode.flags & FL_EXTENTS != 0 {
+            return self.ext_alloc(inode, lblk, goal);
+        }
         let path = map_path(lblk, self.geo.ptrs).ok_or(Errno::EFBIG)?;
         // Check the inode's block count can take what may be added.
-        if inode.blocks as u64 + (path.depth as u64 + 1) * self.geo.spb as u64 > u32::MAX as u64 {
+        if inode.blocks + (path.depth as u64 + 1) * self.geo.spb as u64 > u32::MAX as u64 {
             return Err(Errno::EFBIG);
         }
         let top = inode.block[path.slot] as u64;
@@ -180,14 +199,14 @@ impl<D: BlockIo> Ctx<'_, D> {
                 }
                 return Ok((top, false));
             }
-            let b = self.alloc_block(*goal)?;
+            let b = self.alloc_mapped(*goal)?;
             inode.block[path.slot] = b as u32;
             self.charge(inode)?;
             *goal = b + 1;
             return Ok((b, true));
         }
         let mut cur = if top == 0 {
-            let b = self.alloc_block(*goal)?;
+            let b = self.alloc_mapped(*goal)?;
             inode.block[path.slot] = b as u32;
             self.charge(inode)?;
             *goal = b + 1;
@@ -210,7 +229,7 @@ impl<D: BlockIo> Ctx<'_, D> {
                 continue;
             }
             let parent = self.ind.items[cur].block;
-            let b = self.alloc_block(*goal)?;
+            let b = self.alloc_mapped(*goal)?;
             *goal = b + 1;
             self.charge(inode)?;
             // The parent may have been written back and dropped meanwhile
@@ -232,6 +251,9 @@ impl<D: BlockIo> Ctx<'_, D> {
     /// `freed`; the caller hands them to `free_blocks` after writing the
     /// inode.
     pub fn truncate_map(&mut self, inode: &mut Inode, keep: u64, freed: &mut Vec<u64>) -> Result<()> {
+        if inode.flags & FL_EXTENTS != 0 {
+            return self.ext_truncate(inode, keep, freed);
+        }
         let p = self.geo.ptrs;
         for slot in (keep.min(NDIR_BLOCKS as u64) as usize)..NDIR_BLOCKS {
             let b = inode.block[slot] as u64;
@@ -259,7 +281,7 @@ impl<D: BlockIo> Ctx<'_, D> {
         } else {
             self.corrupt();
         }
-        inode.blocks = inode.blocks.saturating_sub(self.geo.spb);
+        inode.blocks = inode.blocks.saturating_sub(self.geo.spb as u64);
     }
 
     /// Frees the part of the subtree under indirect block `b` (`level` 1-3,

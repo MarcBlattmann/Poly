@@ -705,11 +705,12 @@ fn times_and_getrusage() {
 }
 
 #[test]
-fn getcpu_reports_cpu_and_node_zero() {
+fn getcpu_reports_the_cpu_and_node_zero() {
     let mut k = FakeKernel::new();
+    k.on_cpu = 3;
     k.poke(OUT, &[0xff; 8]);
     assert_eq!(sys(&mut k, nr::GETCPU, &[OUT, OUT + 4, 0]), Ok(0));
-    assert_eq!(k.peek(OUT, 8), [0; 8]);
+    assert_eq!(k.peek(OUT, 8), [3, 0, 0, 0, 0, 0, 0, 0]);
     assert_eq!(sys(&mut k, nr::GETCPU, &[0, 0, 0]), Ok(0));
     assert_eq!(sys(&mut k, nr::GETCPU, &[UNMAPPED, 0, 0]), Err(Errno::EFAULT));
 }

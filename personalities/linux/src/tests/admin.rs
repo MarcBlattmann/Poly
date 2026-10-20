@@ -246,7 +246,8 @@ fn without_the_service_the_calls_are_enosys() {
 fn file_system_types_and_options() {
     assert_eq!(FsType::from_name(b"tmpfs"), Ok(FsType::Tmpfs));
     assert_eq!(FsType::from_name(b"ramfs"), Ok(FsType::Tmpfs));
-    assert_eq!(FsType::from_name(b"ext4"), Err(Errno::ENODEV));
+    assert_eq!(FsType::from_name(b"ext4"), Ok(FsType::Ext2));
+    assert_eq!(FsType::from_name(b"btrfs"), Err(Errno::ENODEV));
     assert!(FsType::Ext2.needs_device() && !FsType::Proc.needs_device());
     let opts = admin::mount_options(FsType::Tmpfs, b"mode=0700,uid=5,gid=6,size=10%,nr_inodes=1k,,noswap").unwrap();
     assert_eq!(opts, RootOptions { mode: Some(0o700), uid: Some(5), gid: Some(6) });

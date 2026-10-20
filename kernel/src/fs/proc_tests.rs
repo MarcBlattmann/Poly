@@ -39,6 +39,26 @@ kernel_test! {
             crate::kprintln!("proc test: cpuinfo:\n{cpu}");
             return Err("cpuinfo lacks the processor, its flags or long mode");
         }
+        // One entry per CPU running, numbered in order.
+        let n = crate::smp::cpus_online();
+        let numbers: alloc::vec::Vec<&str> =
+            cpu.lines().filter_map(|l| l.strip_prefix("processor\t: ")).collect();
+        if numbers.len() != n || numbers.iter().enumerate().any(|(i, s)| *s != alloc::format!("{i}")) {
+            crate::kprintln!("proc test: cpuinfo:\n{cpu}");
+            return Err("cpuinfo does not list each CPU once, in order");
+        }
+        // The CPU lists in sysfs: "0" or "0-<n-1>", and a directory for each.
+        let list = if n == 1 { alloc::string::String::from("0\n") } else { alloc::format!("0-{}\n", n - 1) };
+        for name in ["online", "possible", "present"] {
+            if text(&files, &alloc::format!("/sys/devices/system/cpu/{name}"))? != list {
+                crate::kprintln!("proc test: /sys/devices/system/cpu/{name} is not {list:?}");
+                return Err("a sysfs CPU list is not the CPUs online");
+            }
+        }
+        let last = alloc::format!("/sys/devices/system/cpu/cpu{}", n - 1);
+        if files.open(last.as_bytes(), OpenFlags::RDONLY, 0).is_err() {
+            return Err("the last CPU has no sysfs directory");
+        }
         let uptime = text(&files, "/proc/uptime")?;
         let secs: f64 = uptime.split_whitespace().next().and_then(|s| s.parse().ok()).ok_or("bad uptime")?;
         if secs <= 0.0 {
@@ -48,7 +68,6 @@ kernel_test! {
             ("/proc/version", "Linux version "),
             ("/proc/sys/kernel/osrelease", "6.1.0-poly\n"),
             ("/proc/sys/kernel/random/poolsize", "4096\n"),
-            ("/sys/devices/system/cpu/possible", "0\n"),
             ("/sys/devices/virtual/mem/urandom/dev", "1:9\n"),
         ] {
             if !text(&files, path)?.starts_with(start) {
