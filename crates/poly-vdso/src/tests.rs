@@ -3,7 +3,7 @@ extern crate std;
 use super::*;
 use poly_irq::time::{Scale, mul_div};
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::vec::Vec;
 
 /// The conversion the kernel's clock uses for a counter at `hz`.
@@ -175,27 +175,32 @@ fn concurrent_readers_never_see_a_torn_snapshot() {
     let v = Arc::new(Vvar::new());
     v.publish(&numbered(0));
     let stop = Arc::new(AtomicBool::new(false));
+    // On a busy host the readers may only get the CPU late: the writer goes
+    // on until they have read a while, not for a fixed number of updates.
+    let reads = Arc::new(AtomicU64::new(0));
     let readers: Vec<_> = (0..3)
         .map(|_| {
-            let (v, stop) = (Arc::clone(&v), Arc::clone(&stop));
+            let (v, stop, reads) = (Arc::clone(&v), Arc::clone(&stop), Arc::clone(&reads));
             std::thread::spawn(move || {
-                let (mut reads, mut last) = (0u64, 0u64);
+                let mut last = 0u64;
                 while !stop.load(Ordering::Relaxed) {
                     let s = v.read();
                     assert!(consistent(&s), "torn snapshot {s:?}");
                     assert!(s.conversion.origin >= last, "an older snapshot after a newer one");
                     last = s.conversion.origin;
-                    reads += 1;
+                    reads.fetch_add(1, Ordering::Relaxed);
                 }
-                reads
             })
         })
         .collect();
-    for i in 1..200_000u64 {
+    let mut i = 0u64;
+    while i < 200_000 || reads.load(Ordering::Relaxed) < 10_000 {
+        i += 1;
         v.publish(&numbered(i));
     }
     stop.store(true, Ordering::Relaxed);
-    let reads: u64 = readers.into_iter().map(|r| r.join().unwrap()).sum();
-    assert!(reads > 0);
-    assert_eq!(v.read(), numbered(199_999));
+    for r in readers {
+        r.join().unwrap();
+    }
+    assert_eq!(v.read(), numbered(i));
 }
