@@ -8,6 +8,7 @@ resolver = "3"
 members = [
     "crates/poly-abi",
     "crates/poly-binfmt",
+    "crates/poly-heap",
     "crates/poly-mem",
     "personalities/linux",
     "personalities/nt",
@@ -27,6 +28,7 @@ rust-version = "1.97"
 [workspace.dependencies]
 poly-abi = { path = "crates/poly-abi" }
 poly-binfmt = { path = "crates/poly-binfmt" }
+poly-heap = { path = "crates/poly-heap" }
 poly-mem = { path = "crates/poly-mem" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
