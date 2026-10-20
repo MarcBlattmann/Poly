@@ -40,6 +40,12 @@ struct Stack([u8; 16 * 1024]);
 
 static mut DOUBLE_FAULT_STACK: Stack = Stack([0; 16 * 1024]);
 
+/// Address range of the double-fault IST stack.
+pub fn double_fault_stack() -> core::ops::Range<u64> {
+    let bottom = (&raw const DOUBLE_FAULT_STACK) as u64;
+    bottom..bottom + size_of::<Stack>() as u64
+}
+
 static mut TSS_SEGMENT: TaskStateSegment = TaskStateSegment {
     _reserved0: 0,
     rsp: [0; 3],

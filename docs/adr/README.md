@@ -12,6 +12,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0005](0005-license.md) | Apache-2.0 | Accepted |
 | [0006](0006-coverage-map-one-file-per-component.md) | Coverage map stored as one file per component | Accepted |
 | [0007](0007-buddy-allocator-out-of-band-metadata.md) | Buddy frame allocator with its metadata outside the memory it manages | Accepted |
+| [0008](0008-in-kernel-tests-and-backtraces.md) | In-kernel tests in a linker section; frame-pointer backtraces symbolised on the host | Accepted |
 
 ## Open decisions
 

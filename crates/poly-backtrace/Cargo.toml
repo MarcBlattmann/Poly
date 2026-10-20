@@ -1,0 +1,11 @@
+[package]
+name = "poly-backtrace"
+description = "Bounds-checked frame-pointer stack walking for kernel backtraces"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

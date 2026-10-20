@@ -23,6 +23,10 @@ name = "poly-acpi"
 version = "0.0.1"
 
 [[package]]
+name = "poly-backtrace"
+version = "0.0.1"
+
+[[package]]
 name = "poly-binfmt"
 version = "0.0.1"
 dependencies = [
@@ -89,6 +93,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc-demangle"
+version = "0.1.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -151,6 +161,9 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 [[package]]
 name = "xtask"
 version = "0.0.1"
+dependencies = [
+ "rustc-demangle",
+]
 
 [[package]]
 name = "zmij"

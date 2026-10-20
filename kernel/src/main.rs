@@ -7,6 +7,7 @@ mod acpi;
 mod arch;
 mod boot_info;
 mod frames;
+mod ktest;
 mod log;
 mod process;
 mod qemu;
@@ -78,7 +79,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     }
     acpi::init(boot.rsdp, &memory);
 
-    let ok = selftest::run(&memory);
+    let ok = selftest::run(&boot, &memory);
     if boot.has_flag("poly.selftest.page_fault") {
         selftest::trigger_page_fault();
     }
@@ -99,6 +100,7 @@ fn kernel_phys_end() -> u64 {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     log::emergency_print(format_args!("\nKERNEL PANIC: {info}\n"));
+    arch::backtrace::print_for_panic();
     qemu::exit(qemu::ExitCode::Failure);
     arch::cpu::halt_forever()
 }

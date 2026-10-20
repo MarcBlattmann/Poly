@@ -237,6 +237,7 @@ extern "C" fn exception_dispatch(frame: &mut TrapFrame) {
         v => {
             let name = EXCEPTION_NAMES.get(v as usize).copied().unwrap_or("unknown");
             let cr2 = if v == PAGE_FAULT { super::cpu::read_cr2() } else { 0 };
+            super::backtrace::set_fault_origin(frame.rip, frame.rbp);
             panic!(
                 "CPU exception {v} ({name}), error {:#x}, rip {:#x}, rsp {:#x}, cr2 {cr2:#x}\n{frame:#x?}",
                 frame.error_code, frame.rip, frame.rsp

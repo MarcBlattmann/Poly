@@ -8,6 +8,7 @@ resolver = "3"
 members = [
     "crates/poly-abi",
     "crates/poly-acpi",
+    "crates/poly-backtrace",
     "crates/poly-binfmt",
     "crates/poly-heap",
     "crates/poly-mem",
@@ -30,6 +31,7 @@ rust-version = "1.97"
 [workspace.dependencies]
 poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
+poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-heap = { path = "crates/poly-heap" }
 poly-mem = { path = "crates/poly-mem" }
@@ -37,6 +39,7 @@ poly-paging = { path = "crates/poly-paging" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
+rustc-demangle = "0.1.28"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 

@@ -35,8 +35,8 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [ ] Kernel page tables: direct map of all physical memory, drop the boot identity map
 - [ ] W^X for the kernel: text read-only + executable, data non-executable, guard pages
 - [ ] Kernel heap (slab + large allocations) so the kernel can use `alloc` (`Box`, `Vec`)
-- [ ] In-kernel test harness: unit tests that run inside QEMU and report per test
-- [ ] Symbolised kernel backtraces on panic; documented GDB workflow (`qemu -s`)
+- [x] In-kernel test harness: unit tests that run inside QEMU and report per test
+- [x] Symbolised kernel backtraces on panic; documented GDB workflow (`qemu -s`)
 - [x] ACPI table parsing (RSDP, MADT, HPET, FADT); no AML interpreter yet
 - [ ] Interrupt controllers: local APIC + I/O APIC, legacy PIC masked
 - [ ] Time: TSC calibrated against HPET, monotonic clock, APIC timer interrupts
