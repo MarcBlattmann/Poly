@@ -804,6 +804,15 @@ impl Vfs {
         table.remove_tree(mount.id)
     }
 
+    /// Where mount `id` is mounted, as an absolute path from `ctx`'s root
+    /// (what `/proc/mounts` and `mount` show). `ENOENT` if there is no such
+    /// mount or it cannot be reached from that root.
+    pub fn mount_path(&self, ctx: &FsContext, id: MountId) -> Result<Vec<u8>> {
+        let mount = self.mounts.lock().mounts.iter().find(|m| m.id == id).cloned().ok_or(Errno::ENOENT)?;
+        let root = Location { ino: mount.root, mount }.pin()?;
+        self.path_of(ctx, &root)
+    }
+
     /// Every mount, in mount order.
     pub fn mounts(&self) -> Vec<MountInfo> {
         self.mounts

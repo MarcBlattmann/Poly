@@ -11,6 +11,9 @@ pub struct BootInfo {
     /// Raw firmware memory map (not yet normalized).
     pub memory: MemoryMap,
     pub rsdp: Option<u64>,
+    /// The initial RAM disk the boot loader put in memory (QEMU's
+    /// `-initrd`): the first boot module, if there is one.
+    pub initrd: Option<Module>,
     cmdline: [u8; 512],
     cmdline_len: usize,
 }
@@ -29,7 +32,13 @@ impl BootInfo {
     /// shell runs the kernel tests without the boot's `poly.selftest.*`
     /// requests to fail or panic).
     pub fn filtered(&self, keep: impl Fn(&str) -> bool) -> BootInfo {
-        let mut copy = BootInfo { memory: self.memory.clone(), rsdp: self.rsdp, cmdline: [0; 512], cmdline_len: 0 };
+        let mut copy = BootInfo {
+            memory: self.memory.clone(),
+            rsdp: self.rsdp,
+            initrd: self.initrd,
+            cmdline: [0; 512],
+            cmdline_len: 0,
+        };
         for word in self.cmdline().split_ascii_whitespace().filter(|w| keep(w)) {
             let start = copy.cmdline_len + usize::from(copy.cmdline_len > 0);
             // Every kept word fits: it fitted in the original line.
@@ -48,6 +57,20 @@ impl BootInfo {
     }
 }
 
+/// A boot module: bytes the boot loader loaded into physical memory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Module {
+    pub phys: u64,
+    pub len: u64,
+}
+
+impl Module {
+    /// Where it ends: it lies at `[phys, end())`.
+    pub const fn end(&self) -> u64 {
+        self.phys + self.len
+    }
+}
+
 #[derive(Debug)]
 #[allow(dead_code, reason = "fields are shown through Debug in the boot panic")]
 pub enum Error {
@@ -55,6 +78,11 @@ pub enum Error {
     NoMemoryMap,
     Unmapped(u64),
     MemoryMapFull,
+    /// A module whose range wraps around the address space.
+    BadModule {
+        phys: u64,
+        len: u64,
+    },
 }
 
 /// `hvm_start_info` from Xen's public `arch-x86/hvm/start_info.h`.
@@ -71,6 +99,16 @@ struct HvmStartInfo {
     memmap_paddr: u64,
     memmap_entries: u32,
     reserved: u32,
+}
+
+/// `hvm_modlist_entry` from the same header: one module, such as the
+/// initial RAM disk QEMU passes for `-initrd`. Present in every version.
+#[repr(C)]
+struct HvmModlistEntry {
+    paddr: u64,
+    size: u64,
+    cmdline_paddr: u64,
+    reserved: u64,
 }
 
 #[repr(C)]
@@ -111,8 +149,24 @@ pub unsafe fn from_pvh(start_info: u64) -> Result<BootInfo, Error> {
             memory.push(Region::new(e.addr, end, RegionKind::from_e820(e.ty))).map_err(|_| Error::MemoryMapFull)?;
         }
 
-        let mut info =
-            BootInfo { memory, rsdp: (si.rsdp_paddr != 0).then_some(si.rsdp_paddr), cmdline: [0; 512], cmdline_len: 0 };
+        // `nr_modules` entries at `modlist_paddr`. The first is the initial
+        // RAM disk; Poly has no use for others yet. An empty one is none.
+        let mut initrd = None;
+        if si.nr_modules > 0 && si.modlist_paddr != 0 {
+            let m = &*ptr::<HvmModlistEntry>(si.modlist_paddr)?;
+            if m.paddr.checked_add(m.size).is_none() {
+                return Err(Error::BadModule { phys: m.paddr, len: m.size });
+            }
+            initrd = (m.size > 0).then_some(Module { phys: m.paddr, len: m.size });
+        }
+
+        let mut info = BootInfo {
+            memory,
+            rsdp: (si.rsdp_paddr != 0).then_some(si.rsdp_paddr),
+            initrd,
+            cmdline: [0; 512],
+            cmdline_len: 0,
+        };
         if si.cmdline_paddr != 0 {
             let src = ptr::<u8>(si.cmdline_paddr)?;
             while info.cmdline_len < info.cmdline.len() {

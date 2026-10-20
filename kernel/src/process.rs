@@ -11,6 +11,9 @@ pub struct Process {
     pub pid: u32,
     pub personality: Personality,
     pub format: binfmt::Format,
+    /// Open files, root and working directory, umask, credentials
+    /// (`fs::Files`): `/dev/console` on fds 0, 1 and 2 to start with.
+    pub files: crate::fs::Files,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -23,7 +26,7 @@ pub enum ExecError {
 impl Process {
     /// A process record for a personality and format decided elsewhere.
     pub fn new(pid: u32, personality: Personality, format: binfmt::Format) -> Process {
-        Process { pid, personality, format }
+        Process { pid, personality, format, files: crate::fs::Files::with_console() }
     }
 
     /// Create the process record for an image. Loading and mapping the
@@ -31,6 +34,6 @@ impl Process {
     pub fn from_image(pid: u32, image: &[u8]) -> Result<Process, ExecError> {
         let format = binfmt::detect(image).map_err(ExecError::Format)?;
         let personality = format.personality().ok_or(ExecError::Script)?;
-        Ok(Process { pid, personality, format })
+        Ok(Process { pid, personality, format, files: crate::fs::Files::with_console() })
     }
 }

@@ -11,7 +11,7 @@
 
 use crate::arch;
 use crate::sync::SpinLock;
-use poly_mem::{BuddyAllocator, FreeError, MAX_ORDER, MemoryMap, PAGE_SIZE, Region, RegionKind, align_up};
+use poly_mem::{BuddyAllocator, FreeError, MAX_ORDER, MemoryMap, PAGE_SIZE, RangeError, Region, RegionKind, align_up};
 
 pub static FRAMES: SpinLock<Option<BuddyAllocator<'static>>> = SpinLock::new(None);
 
@@ -23,20 +23,28 @@ pub struct Metadata {
 }
 
 /// Hand every usable frame of the normalized map `memory` to [`FRAMES`],
-/// except the pages that hold the allocator's own metadata. Returns the map
-/// the allocator was built from: `memory` with the metadata marked
-/// [`RegionKind::Kernel`].
-pub fn init(memory: &MemoryMap) -> (MemoryMap, Metadata) {
+/// except the pages that hold the allocator's own metadata. `held` is RAM
+/// that `memory` marks [`RegionKind::Kernel`] only to keep it safe until
+/// now (the initramfs): the allocator manages it too, but starts with it
+/// allocated, until [`free_range`] gives it back. Returns the map the
+/// allocator was built from: `memory` with `held` usable and the metadata
+/// marked `Kernel`.
+pub fn init(memory: &MemoryMap, held: Option<Region>) -> (MemoryMap, Metadata) {
     let mut frames = FRAMES.lock();
     assert!(frames.is_none(), "frame allocator initialised twice");
 
+    let full = match held {
+        Some(h) => memory.with_kind(h.start, h.end, RegionKind::Usable).expect("memory map full"),
+        None => memory.clone(),
+    };
     // Taking pages out of the map can only shrink the span it covers, so
     // this is enough for the final map too.
-    let words = BuddyAllocator::metadata_words(memory);
+    let words = BuddyAllocator::metadata_words(&full);
     let bytes = align_up((words * size_of::<u64>()) as u64, PAGE_SIZE);
+    // From `memory`, where the held range is not usable.
     let phys = memory.find_usable(bytes, u64::MAX).expect("no memory for frame metadata");
 
-    let mut map = memory.clone();
+    let mut map = full;
     map.push(Region::new(phys, phys + bytes, RegionKind::Kernel)).expect("memory map full");
     let map = map.normalized().expect("memory map full");
 
@@ -53,8 +61,30 @@ pub fn init(memory: &MemoryMap) -> (MemoryMap, Metadata) {
         core::ptr::write_bytes(ptr, 0, words);
         core::slice::from_raw_parts_mut(ptr, words)
     };
-    *frames = Some(BuddyAllocator::new(&map, meta).expect("metadata sized by metadata_words"));
+    let mut alloc = BuddyAllocator::new(&map, meta).expect("metadata sized by metadata_words");
+    if let Some(h) = held {
+        // Nothing has been allocated yet, and the range was usable RAM.
+        alloc.allocate_range(h.start, h.end).expect("held range is free RAM");
+    }
+    *frames = Some(alloc);
     (map, Metadata { phys, bytes })
+}
+
+/// Take the frames `[start, end)` (page aligned) wherever they are, if all
+/// are free. Give them back with [`free_range`].
+pub fn allocate_range(start: u64, end: u64) -> Result<u64, RangeError> {
+    FRAMES.lock().as_mut().ok_or(RangeError::OutOfRange)?.allocate_range(start, end)
+}
+
+/// Give back frames from [`allocate_range`], or the range [`init`] held,
+/// with the same range. Returns the free frame count before and after,
+/// read under one lock (so nothing else moved it in between).
+pub fn free_range(start: u64, end: u64) -> Result<(u64, u64), FreeError> {
+    let mut guard = FRAMES.lock();
+    let alloc = guard.as_mut().ok_or(FreeError::OutOfRange)?;
+    let before = alloc.free_frames();
+    alloc.free_range(start, end)?;
+    Ok((before, alloc.free_frames()))
 }
 
 /// Frames in the largest buddy block (4 MiB).

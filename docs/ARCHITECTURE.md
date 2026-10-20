@@ -43,7 +43,8 @@ what exists **today** and how it fits that plan.
    scheduler, reads the ACPI tables, sets up interrupts and time
    (`arch::init_interrupts`) and enables them, enumerates PCI, brings up the
    block layer (the virtio-blk disk if there is one, and a RAM disk) and the
-   PS/2 keyboard and the display (which shows the boot screen), and runs the
+   PS/2 keyboard and the display (which shows the boot screen), mounts a
+   tmpfs on `/` filled from the initramfs (see "File systems"), and runs the
    boot self-test with the timer preempting threads.
 4. With `poly.qemu_exit` on the command line, the result is reported through
    QEMU's exit status, which is how `cargo xtask test` checks it.
@@ -318,21 +319,77 @@ waits up to 30 s for keys from the host, which `cargo xtask test` types
 through the QEMU monitor (`sendkey`), with the US layout and with
 `poly.keymap=de-ch` (see [DEBUGGING.md](DEBUGGING.md)).
 
-## File systems (host-tested; not yet wired into the kernel)
+## File systems
 
-Decisions are in [ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md).
+The logic is host-tested in `poly-vfs` and `poly-cpio`
+([ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md)); `kernel/src/fs/` wires it in
+([ADR 0037](adr/0037-vfs-and-initramfs-in-the-kernel.md)).
 
 ```
-   personalities (openat, read, write, getdents64, ...)   kernel: console, exec
-          │  FdTable (per process) → Arc<OpenFile> (offset, flags) → NodeRef
+   personalities (later: openat, read, write, getdents64, ...)   kernel shell: ls, cat, mount
+          │  user memory copied by the system call layer; fs works on kernel buffers
           ▼
-   poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
-          │  FileSystem trait: lookup/create/rename/read/write/readdir by inode
+   fs::Files (on each Process)   FsContext + FdTable (sleeping mutexes) + Cred
+          │  FdTable → Arc<OpenFile> (offset, flags) → NodeRef; I/O runs unlocked
           ▼
-   Tmpfs (in poly-vfs)        later: ext2, devfs, procfs
+   fs::vfs(): poly_vfs::Vfs   path resolution, permissions (Cred), mounts, char devices
+          │  FileSystem trait: lookup/create/rename/read/write/readdir by inode   └─ /dev/console, /dev/tty → kernel log
+          ▼                                                                         /dev/null, /dev/zero, /dev/full
+   Tmpfs on /                 later: ext2, devfs, procfs
           ▲
-   poly_cpio::unpack_fs       initramfs (newc / crc) → files, links, nodes
+   poly_cpio::unpack          initramfs (PVH boot module 0, QEMU -initrd; newc / crc)
 ```
+
+- **The initramfs** is the first PVH boot module (`hvm_start_info.nr_modules`
+  / `modlist_paddr`, `hvm_modlist_entry` in Xen's public
+  `arch-x86/hvm/start_info.h`); `boot_info` keeps it as `BootInfo::initrd`.
+  Before the page tables are built, `fs::initrd::reserve` marks its pages
+  `Kernel` in the memory map, so nothing allocates them early.
+  `frames::init(memory, held)` then manages them but starts with them
+  allocated (`BuddyAllocator::allocate_range`), so the allocator spans them
+  even at the very top of RAM, where QEMU puts the archive. `fs::init` (after
+  the display, before the self-test) unpacks the archive into a tmpfs
+  mounted on `/` with `poly_cpio::unpack`, as root and with the archive's
+  owners, modes and times, and gives the pages back (`frames::free_range`).
+  Without a module `/` starts empty. Either way it then gets `/dev`, `/tmp`
+  (`01777`) and `/proc` (empty, for procfs later) and the device nodes,
+  unless the archive brought them. tmpfs times count from boot (no RTC yet).
+- **Devices**: `/dev/console` (5, 1) and `/dev/tty` (5, 0) write through
+  the kernel log's path (serial now; a UTF-8 character split across writes
+  stays whole); their reads return end of file until the TTY layer
+  (Phase 4) shares the serial input with the shell. `/dev/null`, `/dev/zero`,
+  `/dev/full` are `poly-vfs`'s. `ioctl` on them is `ENOTTY`.
+- **`fs::Files`** is a process's file state (`Process::files`): `FsContext`
+  (root, working directory, umask) and `FdTable` behind sleeping mutexes
+  (lock order: context, then table), and the `Cred` (root for now). New
+  processes get `/dev/console` on 0, 1 and 2 (one open file description).
+  The API takes kernel byte buffers and returns `Errno`s with Linux's
+  numbers: `open`/`openat`, `read`, `write`, `pread`, `pwrite`, `close`,
+  `lseek`, `dup`/`dup2`/`dup3`/`dup_from`, close-on-exec and status flags,
+  `fstat`/`statat`, `getdents` (a callback per entry), `ioctl`, `ftruncate`,
+  `fsync`, `readlinkat`, `mkdirat`, `unlinkat`, `symlinkat`, `chdir`,
+  `fchdir`, `getcwd`, `umask`, `close_on_exec`, `close_all`, `fork`. Reads
+  and writes run with no lock held, so a blocking read stalls nothing else.
+  The `Vfs` locks itself (ADR 0023); no interrupt handler enters it.
+
+```text
+boot: initramfs at 0xffcd000-0xffd7884 (43 KiB)
+fs: initramfs unpacked into /: 7 directories, 8 files (40263 bytes), 3 symbolic links, 2 device nodes, 1 hard links
+fs: initramfs: 11 pages (44 KiB) at 0xffcd000-0xffd8000 returned to the frame allocator
+fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7); 6 of 8 directories and nodes made
+```
+
+The kernel tests (`fs::*`) check, with the test initramfs `cargo xtask`
+builds (`poly.test.initrd`), every entry's type, mode, size, owner and time,
+file contents (through relative and absolute links), link targets, hard
+links sharing an inode, a device node from the archive; that the archive's
+pages came back, and on an archive written into frames taken the same way,
+that unpacking frees exactly them (interrupts off while counting); the
+memory devices and the console; descriptor rules (lowest free number, `dup`
+sharing offsets, `dup2`/`dup3`, close-on-exec kept, cleared and applied at
+exec, `fork` copies); tmpfs I/O across pages, holes, `O_APPEND`, `O_EXCL`,
+`getdents`; working directory and umask. One self-test boot has no
+initramfs.
 
 - **`poly-vfs`** (`no_std` + `alloc`): `Vfs` resolves paths as
   `path_resolution(7)` describes (`.`/`..` across mount points, 40 symbolic
@@ -563,7 +620,8 @@ services once it decodes those system calls.
 | User mode: hand-assembled ring-3 programs (`user/programs.rs`) making system calls, faulting, switching | `kernel_test!` in `user/tests.rs` | every boot; one boot on `-cpu max` (SMEP, SMAP, XSAVE/AVX) |
 | Demand paging and exec: lazily mapped memory touched from ring 3 and by user copies, frames counted on unmap and teardown, static ELF executables assembled in the kernel (`user/test_elf.rs`) that report their initial stack | `kernel_test!` in `user/memory_tests.rs`, `user/exec_tests.rs` | every boot, as above |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
-| The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
+| The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
+| File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail), the display's mode, mapping, back buffer and flush (and a boot without VGA must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi`, `poly.test.display` | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
@@ -977,7 +1035,8 @@ the screen terminal (its `ScreenConsole`, see "Screen terminal").
 - **Commands** (`shell/commands.rs`, one static table of name, usage, help
   and handler): `help`, `mem` (frames and heap), `ps` (`thread::list`),
   `lspci` (`pci::devices`, with class names from `poly_pci::ClassCode::name`),
-  `disks` (`block::disks` with cache and queue counters), `uptime`, `irq`
+  `disks` (`block::disks` with cache and queue counters), `ls`, `cat` and
+  `mount` (through `fs::Files` and `fs::vfs()`), `uptime`, `irq`
   (per-vector counts), `cpu` (CPUID: vendor, brand, family / model /
   stepping, features), `test [filter]`, `echo`, `clear`, `reboot`. An unknown
   command gets the closest command name as a suggestion.

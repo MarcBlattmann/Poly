@@ -304,3 +304,21 @@ fn lookup_cache_hits_and_is_invalidated() {
     env.mkdir("/e/sub");
     assert_ne!(env.ino("/e/sub").unwrap(), old);
 }
+
+#[test]
+fn mount_paths_name_mount_points() {
+    let env = Env::new();
+    env.mkdir("/mnt");
+    let first = env.vfs.mounts()[0].id;
+    let mnt = env.mount("/mnt", tmpfs(), MountFlags::default());
+    env.mkdir("/mnt/deep");
+    let deep = env.mount("/mnt/deep", tmpfs(), MountFlags::default());
+    // Stacked on the same point: both are named by it.
+    let stacked = env.mount("/mnt", other_fs("/f", b"x"), MountFlags::default());
+    let path = |id| env.vfs.mount_path(&env.ctx, id);
+    assert_eq!(path(first).unwrap(), b"/");
+    assert_eq!(path(mnt).unwrap(), b"/mnt");
+    assert_eq!(path(stacked).unwrap(), b"/mnt");
+    assert_eq!(path(deep).unwrap(), b"/mnt/deep");
+    assert_eq!(path(9999), Err(Errno::ENOENT));
+}

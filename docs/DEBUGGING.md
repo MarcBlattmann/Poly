@@ -54,6 +54,9 @@ unknown command 'hlep'; did you mean 'help'?
 | `ps` | every thread: id (slot.generation), state (running, runnable, blocked, exited) and name |
 | `lspci` | every PCI function: address, vendor:device, class name and code, BARs |
 | `disks` | every disk: description, size, interrupt vector or polled, write cache; cache buffers, dirty, hits, misses, read-ahead, write-backs, evictions; queue requests, merges, splits, interrupts, sleeps |
+| `ls [path]` | a directory (default `/`) sorted by name, or one file: mode, size (or device number), name, link target |
+| `cat <file>...` | the files' contents (at most 64 KiB each, so `cat /dev/zero` ends) |
+| `mount` | every mount: file system, mount point, options |
 | `uptime` | time since the clock started, ticks, threads |
 | `irq` | interrupts taken per vector with their owner (timer, serial, disk, ...), and the spurious / unhandled / 8259 / APIC error counters |
 | `cpu` | CPUID vendor, brand string, family / model / stepping, TSC rate, APIC ID, feature flags |
@@ -599,6 +602,41 @@ The kernel tests can feed the decoder without a host: `keyboard::inject`
 takes set 1 bytes as if the keyboard had sent them, and the controller's
 command 0xD2 makes it deliver a byte through IRQ 1
 (`keyboard::irq_delivers_controller_bytes`).
+
+## File systems and the initramfs
+
+`/` is a tmpfs filled from the initramfs at boot (see "File systems" in
+[ARCHITECTURE.md](ARCHITECTURE.md)). `cargo xtask run` writes a small one,
+`target/poly-initramfs.cpio` (`/etc/motd`, `/etc/hostname`,
+`/dev/console`), and passes it with `-initrd`; `--initrd=<file>` boots
+another `newc` archive instead (`find . | cpio -o -H newc > ../my.cpio`
+makes one from a directory), `--no-initrd` none. The boot log shows where
+QEMU put it, what was unpacked and that its pages went back to the frame
+allocator:
+
+```text
+boot: initramfs at 0xffd7000-0xffd7418 (2 KiB)
+fs: initramfs unpacked into /: 2 directories, 2 files (207 bytes), 0 symbolic links, 1 device nodes, 0 hard links
+fs: initramfs: 1 pages (4 KiB) at 0xffd7000-0xffd8000 returned to the frame allocator
+fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7); 6 of 8 directories and nodes made
+```
+
+Then `ls /`, `ls /dev`, `cat /etc/motd` and `mount` in the shell. Without
+an archive the log says `fs: no initramfs (no boot module); / is an empty
+tmpfs`. A damaged archive is reported by entry (`fs: initramfs: unpacking
+stopped: <name>: <errno>`, or `bad archive: ...` with the byte offset);
+everything before the damage is there. In QEMU's monitor, `xp /6c
+<address>` at the address from the boot log shows the archive's magic
+(`070701` for `newc`).
+
+The self-test boots use `target/poly-test-initramfs.cpio` (built by
+`tools/xtask/src/initramfs.rs`; every byte is fixed, so the image is the
+same on every run) with `poly.test.initrd`, which makes the `fs::` kernel
+tests check its contents; `cargo xtask run poly.test=fs::
+--initrd=target/poly-test-initramfs.cpio poly.test.initrd` runs them by
+hand. Writes to `/dev/console` (fds 0-2 of every new process) appear in
+the serial log like kernel log lines; reads from it return end of file
+until the TTY layer exists.
 
 ## Attaching a debugger
 

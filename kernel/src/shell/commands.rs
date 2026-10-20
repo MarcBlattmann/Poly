@@ -6,6 +6,7 @@ use super::{Console, TEST_CONTEXT, sgr};
 use crate::arch::{self, cpu, irq};
 use crate::block::{self, Waiting};
 use crate::frames::FRAMES;
+use crate::fs::{self, FileType};
 use crate::ktest::{self, RunError, TestEnv, When};
 use crate::pci::{self, Size};
 use crate::thread::{self, State};
@@ -38,6 +39,9 @@ pub static COMMANDS: &[Command] = &[
     Command { name: "ps", usage: "", help: "kernel threads and their states", run: ps },
     Command { name: "lspci", usage: "", help: "PCI functions found at boot", run: lspci },
     Command { name: "disks", usage: "", help: "block devices with their cache and queue counters", run: disks },
+    Command { name: "ls", usage: "[path]", help: "list a directory (default /) with modes and sizes", run: ls },
+    Command { name: "cat", usage: "<file>...", help: "print files", run: cat },
+    Command { name: "mount", usage: "", help: "mounted file systems", run: mount },
     Command { name: "uptime", usage: "", help: "time since boot and timer ticks", run: uptime },
     Command { name: "irq", usage: "", help: "interrupt counts per vector", run: irqs },
     Command { name: "cpu", usage: "", help: "processor vendor, model and features (CPUID)", run: cpu_info },
@@ -220,6 +224,117 @@ fn disks(con: &mut dyn Console, args: &[String]) -> CommandResult {
     Ok(())
 }
 
+/// `ls -l`'s mode column: the type, then `rwx` per class with the
+/// set-user-ID, set-group-ID and sticky bits folded in (`s`/`S`, `t`/`T`).
+fn mode_string(st: &fs::Stat) -> String {
+    let kind = match st.kind() {
+        Some(FileType::Directory) => 'd',
+        Some(FileType::Symlink) => 'l',
+        Some(FileType::CharDevice) => 'c',
+        Some(FileType::BlockDevice) => 'b',
+        Some(FileType::Fifo) => 'p',
+        Some(FileType::Socket) => 's',
+        Some(FileType::Regular) | None => '-',
+    };
+    let p = st.perm();
+    let mut s = String::from(kind);
+    for (shift, special, mark) in [(6, 0o4000, 's'), (3, 0o2000, 's'), (0, 0o1000, 't')] {
+        let bits = (p >> shift) & 7;
+        s.push(if bits & 4 != 0 { 'r' } else { '-' });
+        s.push(if bits & 2 != 0 { 'w' } else { '-' });
+        s.push(match (bits & 1 != 0, p & special != 0) {
+            (true, true) => mark,
+            (false, true) => mark.to_ascii_uppercase(),
+            (true, false) => 'x',
+            (false, false) => '-',
+        });
+    }
+    s
+}
+
+/// One `ls` line: mode, size (or device number), name, link target.
+fn ls_line(files: &fs::Files, path: &str, name: &str) -> String {
+    let Ok(st) = files.lstat(path.as_bytes()) else { return format!("?????????? {:>9} {name}", "?") };
+    let size = match st.kind() {
+        Some(FileType::CharDevice | FileType::BlockDevice) => format!("{}, {}", st.rdev.major, st.rdev.minor),
+        _ => format!("{}", st.size),
+    };
+    let mut line = format!("{} {size:>9} {name}", mode_string(&st));
+    if st.kind() == Some(FileType::Symlink)
+        && let Ok(target) = files.readlinkat(fs::AT_FDCWD, path.as_bytes())
+    {
+        let _ = write!(line, " -> {}", String::from_utf8_lossy(&target));
+    }
+    line
+}
+
+fn ls(con: &mut dyn Console, args: &[String]) -> CommandResult {
+    let path = match args {
+        [] => "/",
+        [p] => p.as_str(),
+        _ => return Err("takes at most one path".into()),
+    };
+    let files = fs::Files::new();
+    let st = files.stat(path.as_bytes()).or_else(|_| files.lstat(path.as_bytes()));
+    let st = st.map_err(|e| format!("{path}: {}", e.name()))?;
+    if st.kind() != Some(FileType::Directory) {
+        out!(con, "{}", ls_line(&files, path, path));
+        return Ok(());
+    }
+    let mut entries = files.read_dir(path.as_bytes()).map_err(|e| format!("{path}: {}", e.name()))?;
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    let dir = path.trim_end_matches('/');
+    for (name, _, _) in &entries {
+        let name = String::from_utf8_lossy(name);
+        out!(con, "{}", ls_line(&files, &format!("{dir}/{name}"), &name));
+    }
+    out!(con, "{} entries", entries.len());
+    Ok(())
+}
+
+/// The most `cat` prints of one file (`/dev/zero` never ends).
+const CAT_LIMIT: usize = 64 * 1024;
+
+fn cat(con: &mut dyn Console, args: &[String]) -> CommandResult {
+    if args.is_empty() {
+        return Err("needs a file".into());
+    }
+    let files = fs::Files::new();
+    for path in args {
+        let (data, more) =
+            files.read_to_end(path.as_bytes(), CAT_LIMIT).map_err(|e| format!("{path}: {}", e.name()))?;
+        let text = String::from_utf8_lossy(&data);
+        let _ = con.write_str(&text);
+        if !text.is_empty() && !text.ends_with('\n') {
+            let _ = con.write_str("\n");
+        }
+        if more {
+            out!(con, "{}(stopped after {} KiB){}", sgr::BOLD, CAT_LIMIT / 1024, sgr::RESET);
+        }
+    }
+    Ok(())
+}
+
+fn mount(con: &mut dyn Console, args: &[String]) -> CommandResult {
+    no_args(args)?;
+    let vfs = fs::vfs();
+    let ctx = vfs.root_context().map_err(|e| format!("/: {}", e.name()))?;
+    for m in vfs.mounts() {
+        let at = vfs
+            .mount_path(&ctx, m.id)
+            .map_or_else(|_| String::from("(hidden)"), |p| String::from_utf8_lossy(&p).into_owned());
+        let mut opts = String::from(if m.flags.read_only { "ro" } else { "rw" });
+        for (on, name) in [(m.flags.no_suid, "nosuid"), (m.flags.no_dev, "nodev"), (m.flags.no_exec, "noexec")] {
+            if on {
+                opts.push(',');
+                opts.push_str(name);
+            }
+        }
+        out!(con, "{} on {at} type {} ({opts})", m.fs_name, m.fs_name);
+    }
+    Ok(())
+}
+
 fn uptime(con: &mut dyn Console, args: &[String]) -> CommandResult {
     no_args(args)?;
     let ns = time::now_ns();
@@ -361,4 +476,61 @@ crate::kernel_test! {
         }
         Ok(())
     }
+}
+
+crate::kernel_test! {
+    fn ls_cat_and_mount_show_the_file_systems() -> TestResult {
+        use crate::fs::OpenFlags;
+        let files = fs::Files::new();
+        let fd = files
+            .open(b"/tmp/shell-test.txt", OpenFlags::WRONLY | OpenFlags::CREAT | OpenFlags::TRUNC, 0o640)
+            .map_err(|e| e.name())?;
+        files.write(fd, "line one\nzwei, gr\u{fc}n".as_bytes()).map_err(|e| e.name())?;
+        files.close(fd).map_err(|e| e.name())?;
+        files.symlinkat(b"shell-test.txt", fs::AT_FDCWD, b"/tmp/shell-link").map_err(|e| e.name())?;
+        let out = super::session(
+            "ls\rls /dev\rls /tmp\rcat /tmp/shell-link /tmp/shell-test.txt\rcat /nope\rmount\rls /dev/null\r",
+        );
+        let _ = files.unlinkat(fs::AT_FDCWD, b"/tmp/shell-link", 0);
+        let _ = files.unlinkat(fs::AT_FDCWD, b"/tmp/shell-test.txt", 0);
+        let check = |n: usize, what: &str, needles: &[&str]| {
+            let o = super::output_of(&out, n);
+            if needles.iter().all(|s| o.contains(s)) {
+                Ok(())
+            } else {
+                crate::kprintln!("shell: {what} printed:\n{o}");
+                Err("ls, cat or mount printed something unexpected")
+            }
+        };
+        check(0, "ls", &["drwxr-xr-x", " dev\n", "drwxrwxrwt", " tmp\n", " proc\n", " entries\n"])?;
+        check(1, "ls /dev", &["crw------- ", "5, 1 console\n", "crw-rw-rw- ", "1, 3 null\n", "1, 5 zero\n"])?;
+        check(2, "ls /tmp", &["-rw-r----- ", " 20 shell-test.txt\n", "lrwxrwxrwx ", " shell-link -> shell-test.txt\n"])?;
+        check(3, "cat", &["line one\nzwei, gr\u{fc}n\nline one\nzwei, gr\u{fc}n\n"])?;
+        check(4, "cat /nope", &["cat: /nope: ENOENT"])?;
+        check(5, "mount", &["tmpfs on / type tmpfs (rw)\n"])?;
+        check(6, "ls /dev/null", &["crw-rw-rw- ", "1, 3 /dev/null\n"])?;
+        mode_check()
+    }
+}
+
+/// Mode strings for the special bits, as `ls -l` shows them.
+fn mode_check() -> Result<(), &'static str> {
+    let stat = |mode: u32| fs::Stat {
+        dev: fs::DeviceId::default(),
+        ino: 1,
+        mode,
+        nlink: 1,
+        uid: 0,
+        gid: 0,
+        rdev: fs::DeviceId::default(),
+        size: 0,
+        blksize: 4096,
+        blocks: 0,
+        atime: Default::default(),
+        mtime: Default::default(),
+        ctime: Default::default(),
+    };
+    let cases =
+        [(0o104755, "-rwsr-xr-x"), (0o102644, "-rw-r-Sr--"), (0o041777, "drwxrwxrwt"), (0o041776, "drwxrwxrwT")];
+    if cases.iter().all(|&(mode, want)| mode_string(&stat(mode)) == want) { Ok(()) } else { Err("mode string") }
 }

@@ -37,6 +37,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0028](0028-tcp-ip-stack-in-a-crate.md) | Our own TCP/IP stack in `poly-net`: RFC-based, host-tested in a simulated network, driven by `poll(now)`, Linux errno | Accepted |
 | [0031](0031-linux-signals-and-futexes.md) | Linux signals and futexes: personality-owned state, kernel-provided blocking | Accepted |
 | [0035](0035-screen-terminal.md) | The screen terminal: a status bar and a text grid on the display, a second shell on the keyboard, the kernel log mirrored through a ring (`poly-term`) | Accepted |
+| [0037](0037-vfs-and-initramfs-in-the-kernel.md) | The VFS in the kernel: one global `Vfs` on a tmpfs root, the initramfs as PVH module 0 held by the frame allocator until unpacked, per-process `Files` behind sleeping mutexes, console reads at end of file | Accepted |
 
 ## Open decisions
 

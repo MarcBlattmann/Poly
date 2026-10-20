@@ -24,6 +24,7 @@ poly-binfmt = { path = "../crates/poly-binfmt" }
 poly-block = { path = "../crates/poly-block" }
 poly-bochs-vbe = { path = "../crates/poly-bochs-vbe" }
 poly-elf = { path = "../crates/poly-elf" }
+poly-cpio = { path = "../crates/poly-cpio" }
 poly-gfx = { path = "../crates/poly-gfx" }
 poly-heap = { path = "../crates/poly-heap" }
 poly-input = { path = "../crates/poly-input" }
@@ -34,6 +35,7 @@ poly-paging = { path = "../crates/poly-paging" }
 poly-sched = { path = "../crates/poly-sched" }
 poly-pci = { path = "../crates/poly-pci" }
 poly-term = { path = "../crates/poly-term" }
+poly-vfs = { path = "../crates/poly-vfs" }
 poly-personality-linux = { path = "../personalities/linux" }
 poly-personality-nt = { path = "../personalities/nt" }
 poly-personality-xnu = { path = "../personalities/xnu" }
