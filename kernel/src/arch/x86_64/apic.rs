@@ -267,9 +267,10 @@ fn configure_lint_nmis(apic: &Apic, platform: Option<&Platform>) -> usize {
 }
 
 /// The local APIC ID that I/O APIC routes and MSI messages target: the boot
-/// CPU's.
+/// CPU's, whichever CPU asks (reading the APIC's ID register would give the
+/// running CPU's).
 pub fn interrupt_destination() -> Option<u32> {
-    LAPIC.get().map(|a| a.id())
+    LAPIC.get().map(|_| super::percpu::boot_cpu().apic_id())
 }
 
 /// Send fixed interrupt `vector` to this CPU through the local APIC.

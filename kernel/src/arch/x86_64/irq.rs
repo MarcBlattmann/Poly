@@ -409,7 +409,29 @@ kernel_test! {
         if msi_message(3).is_some() {
             return Err("MSI message for an exception vector");
         }
-        Ok(())
+        if Some(id) != super::percpu::cpu(0).map(|c| c.apic_id()) {
+            return Err("the interrupt destination is not CPU 0's APIC ID");
+        }
+        // Asked on any CPU, the message still names the boot CPU (not the
+        // CPU asking), and each CPU's APIC reports its own ID.
+        let me = crate::thread::current();
+        let before = crate::thread::affinity(me).ok_or("no affinity")?;
+        let mut result = Ok(());
+        for cpu in super::smp::online_cpus().iter() {
+            if crate::thread::set_affinity(me, crate::thread::CpuSet::one(cpu)).is_err() {
+                result = Err("could not move to another CPU");
+                break;
+            }
+            let _irq = super::cpu::InterruptsOff::new();
+            let own = super::percpu::cpu(cpu).map(|c| c.apic_id());
+            if super::percpu::cpu_index() != cpu || apic::current_id() != own {
+                result = Err("a CPU's APIC ID is not the one its per-CPU area holds");
+            } else if msi_message(0x41) != Some(m) {
+                result = Err("an MSI message made on another CPU targets that CPU");
+            }
+        }
+        let _ = crate::thread::set_affinity(me, before);
+        result
     }
 }
 

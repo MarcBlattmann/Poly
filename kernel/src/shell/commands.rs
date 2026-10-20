@@ -492,7 +492,8 @@ fn cpu_info(con: &mut dyn Console, args: &[String]) -> CommandResult {
             None => out!(con, "TSC       not calibrated"),
         }
     }
-    if let Some(apic) = arch::apic::interrupt_destination() {
+    // The CPU the shell runs on, whose CPUID this is.
+    if let Some(apic) = arch::apic::current_id() {
         out!(con, "APIC ID   {apic}");
     }
     // Wrap the feature list at the console's width.
