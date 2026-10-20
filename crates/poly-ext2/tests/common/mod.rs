@@ -218,7 +218,11 @@ impl Tools {
         std::fs::create_dir_all(to).unwrap();
         let mut img = image.to_vec();
         let out = self.debugfs(dir, &mut img, &format!("rdump / {}\n", to.display()));
-        assert!(!out.contains("rdump: "), "rdump failed: {out}");
+        // Without root, rdump cannot give the files their owners and says so
+        // for each one; the tests compare contents and modes, not owners.
+        let errors: Vec<&str> =
+            out.lines().filter(|l| l.contains("rdump: ") && !l.contains("while changing ownership")).collect();
+        assert!(errors.is_empty(), "rdump failed: {out}");
     }
 }
 
