@@ -112,7 +112,7 @@ pub enum FsType {
     Devpts,
     /// tmpfs(5) (and `ramfs`, which Poly serves the same way).
     Tmpfs,
-    /// ext2 on a block device.
+    /// ext2, ext3 or ext4 on a block device (one driver, `poly-ext2`).
     Ext2,
 }
 
@@ -124,7 +124,7 @@ impl FsType {
             b"sysfs" => FsType::Sysfs,
             b"devpts" => FsType::Devpts,
             b"tmpfs" | b"ramfs" => FsType::Tmpfs,
-            b"ext2" => FsType::Ext2,
+            b"ext2" | b"ext3" | b"ext4" => FsType::Ext2,
             _ => return Err(Errno::ENODEV),
         })
     }

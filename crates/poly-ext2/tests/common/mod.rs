@@ -176,10 +176,15 @@ impl Tools {
     /// `mke2fs -t ext2` on a new image of `size` bytes; `args` go before the
     /// image name.
     pub fn mkfs(&self, dir: &TempDir, size: u64, args: &[&str]) -> Vec<u8> {
+        self.mkfs_type(dir, size, "ext2", args)
+    }
+
+    /// `mke2fs -t <fs_type>` (`ext4`: the host's default ext4 features).
+    pub fn mkfs_type(&self, dir: &TempDir, size: u64, fs_type: &str, args: &[&str]) -> Vec<u8> {
         let img = dir.path("mkfs.img");
         let _ = std::fs::remove_file(&img);
         std::fs::File::create(&img).unwrap().set_len(size).unwrap();
-        let out = Command::new(&self.mke2fs).args(["-q", "-F", "-t", "ext2"]).args(args).arg(&img).output().unwrap();
+        let out = Command::new(&self.mke2fs).args(["-q", "-F", "-t", fs_type]).args(args).arg(&img).output().unwrap();
         assert!(out.status.success(), "mke2fs {args:?}: {}", String::from_utf8_lossy(&out.stderr));
         std::fs::read(&img).unwrap()
     }

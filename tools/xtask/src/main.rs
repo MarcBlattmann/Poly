@@ -35,6 +35,7 @@ mod busybox;
 mod console;
 mod dynamic;
 mod ext2disk;
+mod ext4disk;
 mod font;
 mod initramfs;
 mod ktest;
@@ -161,8 +162,10 @@ fn test_disk() -> Result<PathBuf> {
     let image: Vec<u8> = (0..TEST_DISK_SECTORS).flat_map(test_disk_sector).collect();
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| format!("{}: {e}", path.display()))?;
     std::fs::write(&path, image).map_err(|e| format!("{}: {e}", path.display()))?;
-    // The ext2 test disk goes next to it (`qemu` attaches it from there).
+    // The ext2 and ext4 test disks go next to it (`qemu` attaches them
+    // from there).
     ext2disk::write_next_to(&path)?;
+    ext4disk::write_next_to(&path)?;
     Ok(path)
 }
 
@@ -241,6 +244,11 @@ fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial:
     cmd.arg("-drive")
         .arg(format!("if=none,id=ext2,format=raw,file={}", ext2.display()))
         .args(["-device", &format!("virtio-blk-pci,drive=ext2,disable-legacy=on{vectors}")]);
+    // The ext4 test disk: the fourth, `virtio3`, mounted on /ext4.
+    let ext4 = disk.with_file_name(ext4disk::FILE_NAME);
+    cmd.arg("-drive")
+        .arg(format!("if=none,id=ext4,format=raw,file={}", ext4.display()))
+        .args(["-device", &format!("virtio-blk-pci,drive=ext4,disable-legacy=on{vectors}")]);
     cmd
 }
 
@@ -948,6 +956,7 @@ fn boot_tests() -> Result {
     net::boot_tests(&kernel, &syms)?;
     eprintln!("==> boot test: a file written to the ext2 test disk in one boot is there in the next");
     ext2_persistence_test(&kernel, &syms)?;
+    ext4disk::boot_tests(&kernel, &syms)?;
 
     // Expecting the test disk without attaching it must fail the disk
     // tests, so a boot that silently lost its disk cannot pass.
