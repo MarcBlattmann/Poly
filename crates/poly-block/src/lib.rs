@@ -15,6 +15,8 @@
 //!   back on eviction or [`BufferCache::sync`], and never evicts a block
 //!   someone holds.
 //! - [`RamDisk`] is a [`BlockDevice`] over plain memory.
+//! - [`Watchdog`] gives up on a device ([`Abort`]) that stops completing
+//!   requests, so a lost request fails instead of hanging its waiter.
 //!
 //! Nothing here allocates. Tables live in storage the caller provides, so the
 //! kernel decides where they go and how big they are.
@@ -34,10 +36,12 @@ mod cache;
 mod queue;
 mod ramdisk;
 pub mod sync;
+mod watchdog;
 
 pub use cache::{Buf, BufferCache, CacheError, CacheSlot, CacheStats};
 pub use queue::{DeviceSlot, Part, QueueStats, QueueStorage, RequestQueue, RequestSlot, SetupError, Ticket};
 pub use ramdisk::{RAMDISK_COMPLETIONS, RamDisk};
+pub use watchdog::{Abort, Watchdog};
 
 use core::ptr::NonNull;
 

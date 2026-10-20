@@ -7,11 +7,57 @@
 //! RAM snoop the CPU caches, so nothing needs flushing. Ordering between the
 //! CPU and the device is the driver's job (the virtqueue code in
 //! `poly-virtio` has the fences).
+//!
+//! # Buffers the caller owns
+//!
+//! The block layer hands drivers the caller's memory, so drivers need its
+//! bus address: [`bus_address`] (and [`KernelDma`], the same for
+//! `poly-virtio-blk`). A device needs the whole buffer at consecutive bus
+//! addresses, and the kernel only knows that for the direct map, which maps
+//! physical memory linearly: a range that lies entirely inside it is
+//! physically contiguous, page boundaries or not. Everything else is
+//! refused, and the request fails with `BadBuffer` instead of the device
+//! scribbling over the wrong memory. What that means for the memory the
+//! kernel has:
+//!
+//! - **Heap** (`Box`, `Vec`): accepted. The heap's pages are runs of frames
+//!   from one buddy block each (`allocate_run`), reached through the direct
+//!   map (`heap.rs`); a large allocation is one run, and a small object lies
+//!   in one slot of one slab, which is one run too. So no heap allocation
+//!   crosses from one run into another, and every byte of one is
+//!   physically next to the one before.
+//! - **[`DmaBuffer`]s** and **thread stacks**: frames reached through the
+//!   direct map, accepted.
+//! - **The kernel image** (statics, the boot stack, which the boot code and
+//!   the in-kernel tests run on), **MMIO mappings**, holes and user
+//!   addresses: refused. The image is linear too, but drivers should not
+//!   DMA into it, and refusing keeps the rule simple: direct map or nothing.
+//!
+//! Once an IOMMU is in use, this is where bus addresses stop being physical
+//! addresses.
 
 use crate::arch;
 use crate::frames::FRAMES;
 use core::ptr::{self, NonNull};
+use poly_block::IoBuf;
 use poly_mem::{BuddyAllocator, MAX_ORDER, PAGE_SIZE};
+
+/// The bus address of the `len` bytes at CPU address `virt`, if a device
+/// can reach all of them at consecutive bus addresses: they must lie in the
+/// direct map (see the module documentation).
+pub fn bus_address(virt: u64, len: usize) -> Option<u64> {
+    arch::virt_range_to_phys(virt, len as u64)
+}
+
+/// The kernel's address translation for `poly-virtio-blk`: [`bus_address`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct KernelDma;
+
+impl poly_virtio_blk::Dma for KernelDma {
+    fn bus_address(&self, buf: IoBuf) -> Option<u64> {
+        bus_address(buf.ptr.as_ptr() as u64, buf.len)
+    }
+}
 
 /// A zeroed, physically contiguous buffer for a device, freed on drop.
 ///
@@ -125,5 +171,51 @@ crate::kernel_test! {
             }
         }
         if free() != before { Err("DMA buffer frames not freed on drop") } else { Ok(()) }
+    }
+}
+
+crate::kernel_test! {
+    fn bus_addresses_only_for_the_direct_map() -> TestResult {
+        use alloc::boxed::Box;
+        use alloc::vec;
+        let page = PAGE_SIZE as usize;
+        // A large heap allocation: one run of frames, page-aligned.
+        let buf = vec![0u8; 3 * page];
+        let base = buf.as_ptr() as u64;
+        let whole = bus_address(base, buf.len()).ok_or("a three-page heap buffer was refused")?;
+        // 512 bytes straddling the first page boundary.
+        let start = base + page as u64 - 256;
+        let bus = bus_address(start, 512).ok_or("a heap buffer crossing a page boundary was refused")?;
+        if bus != whole + page as u64 - 256
+            || bus_address(start + 256, 256) != Some(bus + 256)
+            || arch::phys_to_virt(bus) != Some(start)
+            || arch::phys_to_virt(bus + 256) != Some(start + 256)
+        {
+            return Err("bus addresses of a heap buffer are not its physical addresses");
+        }
+        // A small object lives in a slab, also direct-mapped.
+        let small = Box::new([0u8; 48]);
+        let at = small.as_ptr() as u64;
+        if bus_address(at, 48).and_then(arch::phys_to_virt) != Some(at) {
+            return Err("a small heap object has no bus address");
+        }
+        let d = DmaBuffer::new(2 * page).ok_or("out of frames")?;
+        if bus_address(d.ptr().as_ptr() as u64, d.len()) != Some(d.phys()) {
+            return Err("a DMA buffer's bus address is not its physical address");
+        }
+        // Refused: the kernel image (a static, and the boot stack the tests
+        // run on), an MMIO mapping, the lower half, the end of the address
+        // space.
+        static IMAGE: [u8; 16] = [0; 16];
+        let local = [0u8; 64];
+        let on_stack = local.as_ptr() as u64;
+        let mut refused = [IMAGE.as_ptr() as u64, arch::paging::MMIO_BASE, 0x1000, u64::MAX - 8].to_vec();
+        if on_stack >= arch::KERNEL_VMA {
+            refused.push(on_stack);
+        }
+        if refused.iter().any(|&v| bus_address(v, 16).is_some()) {
+            return Err("memory outside the direct map got a bus address");
+        }
+        Ok(())
     }
 }

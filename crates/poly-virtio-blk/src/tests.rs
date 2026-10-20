@@ -3,8 +3,8 @@
 use super::*;
 use crate::sim::{CommonRegs, DmaMemory, NotifyRegs, Seen, Sim};
 use poly_block::{
-    BlockDevice, DeviceSlot, IoBuf, IoError, Op, Part, QueueStorage, Request, RequestId, RequestQueue, RequestSlot,
-    SubmitError,
+    Abort, BlockDevice, DeviceSlot, IoBuf, IoError, Op, Part, QueueStorage, Request, RequestId, RequestQueue,
+    RequestSlot, SubmitError, Watchdog,
 };
 use poly_virtio::{Buffer, DescState, Layout, PciTransport, Region};
 extern crate std;
@@ -466,6 +466,30 @@ fn a_broken_device_is_reset_and_fails_everything() {
     let r = unsafe { drv.submit(&Request { id: RequestId(3), op: Op::Read, lba: 0, segments: &sx }) };
     assert_eq!(r, Err(SubmitError::Rejected(IoError::DeviceFailed)));
     assert_eq!(drv.device_id(), Err(IoError::DeviceFailed));
+}
+
+#[test]
+fn a_device_that_stops_answering_is_aborted() {
+    let sim = Sim::new(64, VERSION_1, 16);
+    let mut h = Harness::new(&sim, 16);
+    let mut drv = h.init();
+    // The device takes requests and never answers.
+    sim.dev().hold = true;
+    let mut w = Watchdog::new(&mut drv, 50);
+    let mut t = Tables::new(4, 2, 4);
+    let mut q = RequestQueue::new(&mut w, t.storage()).unwrap();
+    let mut buf = vec![0u8; 1024];
+    assert_eq!(q.read(0, &mut buf), Err(IoError::DeviceFailed));
+    assert_eq!(q.read(4, &mut buf), Err(IoError::DeviceFailed));
+    let _ = q.into_device();
+    assert_eq!(w.aborts(), 1);
+    assert!(drv.is_failed());
+    assert_eq!(sim.0.status.get(), poly_virtio::status::FAILED);
+    assert_eq!(drv.in_flight(), 0);
+    // Aborting a device that is already reset changes nothing.
+    let resets = sim.0.status_writes.borrow().iter().filter(|&&s| s == 0).count();
+    drv.abort();
+    assert_eq!(sim.0.status_writes.borrow().iter().filter(|&&s| s == 0).count(), resets);
 }
 
 #[test]

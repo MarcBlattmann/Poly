@@ -362,6 +362,24 @@ impl<'a> BufferCache<'a> {
         true
     }
 
+    /// Forget every block that is neither dirty nor pinned, so the next
+    /// [`BufferCache::get`] of it reads the device again: after the disk
+    /// changed behind the cache's back, or to see what really is on it.
+    /// Dirty and pinned blocks stay. Returns how many blocks were dropped.
+    pub fn invalidate(&mut self) -> usize {
+        let mut n = 0;
+        for i in 0..self.slots.len() as u32 {
+            let s = self.slots[i as usize];
+            if s.valid && !s.dirty && s.pins == 0 {
+                self.lru_unlink(i);
+                self.evict(i);
+                self.lru_push_front(i);
+                n += 1;
+            }
+        }
+        n
+    }
+
     // Internals.
 
     fn check(&self, b: &Buf) {

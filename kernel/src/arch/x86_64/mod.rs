@@ -11,7 +11,7 @@ pub mod paging;
 pub mod port;
 pub mod serial;
 
-pub use paging::{phys_range_to_virt, phys_to_virt};
+pub use paging::{phys_range_to_virt, phys_to_virt, virt_range_to_phys};
 
 /// Virtual address where physical address 0 is mapped for the kernel image
 /// (and, until [`paging::init`], for all of the first GiB).

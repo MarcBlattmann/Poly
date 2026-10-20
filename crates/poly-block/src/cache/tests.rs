@@ -137,6 +137,40 @@ fn dirty_blocks_are_written_back_on_eviction() {
 }
 
 #[test]
+fn invalidate_keeps_dirty_and_pinned_blocks() {
+    let mut mem = vec![0u8; 16 * BS];
+    let mut t = Tables::new(4, 2, 4);
+    let mut q = RequestQueue::new(RamDisk::new(&mut mem, BS as u32).unwrap(), t.storage()).unwrap();
+    let mut s = Store::new(4);
+    let mut c = s.cache();
+    for b in [0, 1] {
+        c.get(&mut q, b).map(|x| c.release(x)).unwrap();
+    }
+    let dirty = c.get(&mut q, 2).unwrap();
+    c.data_mut(&dirty).fill(0x22);
+    c.release(dirty);
+    let pinned = c.get(&mut q, 3).unwrap();
+    // The disk changes behind the cache's back.
+    q.device_mut().contents_mut()[..BS].fill(0x11);
+    assert_eq!(c.invalidate(), 2);
+    assert!(!c.is_cached(0) && !c.is_cached(1) && c.is_cached(2) && c.is_cached(3));
+    assert_eq!((c.dirty_count(), c.pinned_count()), (1, 1));
+    let misses = c.stats().misses;
+    let b = c.get(&mut q, 0).unwrap();
+    assert_eq!(c.data(&b), &[0x11; BS][..]);
+    assert_eq!(c.stats().misses, misses + 1);
+    c.release(b);
+    // Freed slots are reused before the blocks that are still cached.
+    c.get(&mut q, 5).map(|x| c.release(x)).unwrap();
+    assert!(c.is_cached(0) && c.is_cached(2) && c.is_cached(3));
+    assert_eq!(c.dirty_count(), 1);
+    c.release(pinned);
+    c.sync(&mut q).unwrap();
+    assert_eq!(c.invalidate(), 4);
+    assert_eq!(&q.device().contents()[2 * BS..3 * BS], &[0x22; BS][..]);
+}
+
+#[test]
 fn zeroed_buffers_are_not_read() {
     let mut t = Tables::new(4, 2, 4);
     let mut disk = SimDisk::new(16, BS as u32, false, 1);

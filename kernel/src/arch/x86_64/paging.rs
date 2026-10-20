@@ -209,6 +209,16 @@ pub fn phys_range_to_virt(phys: u64, len: u64) -> Option<u64> {
     }
 }
 
+/// The physical address behind `[virt, virt + len)` if all of it lies in
+/// the direct map, which maps physical memory linearly, so the range is
+/// physically contiguous too. `None` for anything else (the kernel image,
+/// MMIO, holes in the memory map) and before the direct map is in use.
+pub fn virt_range_to_phys(virt: u64, len: u64) -> Option<u64> {
+    let map = DIRECT_MAP.get()?;
+    let phys = virt.checked_sub(DIRECT_MAP_BASE).filter(|&p| p < DIRECT_MAP_SIZE)?;
+    map.covers(phys, len).then_some(phys)
+}
+
 /// Page-table memory, reached through [`phys_to_virt`].
 #[derive(Debug)]
 pub struct KernelPhysMemory;

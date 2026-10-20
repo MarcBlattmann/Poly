@@ -7,6 +7,7 @@ extern crate alloc;
 
 mod acpi;
 mod arch;
+mod block;
 mod boot_info;
 mod dma;
 mod frames;
@@ -93,7 +94,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     thread::init();
     acpi::init(boot.rsdp, &memory);
     pci::init();
-    virtio_blk::init();
+    block::init();
 
     let ok = selftest::run(&boot, &memory);
     heap::log_stats();

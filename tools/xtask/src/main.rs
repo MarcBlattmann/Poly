@@ -97,15 +97,15 @@ fn kernel_elf(release: bool) -> PathBuf {
 /// Guest RAM for `cargo xtask run` and most boot tests.
 const DEFAULT_MEMORY: &str = "256M";
 
-/// Kernel flag saying the test disk is attached; the kernel's virtio-blk
-/// tests then require it (`virtio_blk::TEST_DISK_FLAG`).
+/// Kernel flag saying the test disk is attached; the kernel's block and
+/// virtio-blk tests then require it (`block::TEST_DISK_FLAG`).
 const TEST_DISK_FLAG: &str = "poly.test.disk";
-/// Size of the test disk in 512-byte sectors (`virtio_blk::TEST_DISK_SECTORS`).
+/// Size of the test disk in 512-byte sectors (`block::TEST_DISK_SECTORS`).
 const TEST_DISK_SECTORS: u32 = 2048;
 
 /// Sector `sector` of the test disk: "POLY", the sector number (le32), then
 /// bytes that depend on the sector and the position. Must match
-/// `virtio_blk::test_pattern` in the kernel.
+/// `block::test_pattern` in the kernel.
 fn test_disk_sector(sector: u32) -> [u8; 512] {
     let mut s = [0u8; 512];
     s[..4].copy_from_slice(b"POLY");
@@ -250,7 +250,7 @@ fn boot_tests() -> Result {
 
     // 2 GiB puts RAM, and QEMU's ACPI tables, above the first GiB that the
     // boot stub maps: the direct map must reach them. Both boots have the
-    // test disk, so the virtio-blk tests read and write it.
+    // test disk, so the block layer tests read and write it.
     for memory in [DEFAULT_MEMORY, "2G"] {
         eprintln!("==> boot test: self-test passes with {memory} of RAM and the test disk");
         let disk = test_disk()?;
@@ -271,10 +271,14 @@ fn boot_tests() -> Result {
                 "ACPI did not report the {QEMU_CPUS} CPUs QEMU emulates with {memory} (expected \"{cpus}\")"
             ));
         }
-        // The first sector of the test disk starts with "POLY", sector 0.
-        let first_read = "virtio-blk: sector 0: 50 4f 4c 59 00 00 00 00";
+        // The first sector of the test disk starts with "POLY", sector 0,
+        // read through the block layer.
+        let first_read = "block: virtio0: block 0: 50 4f 4c 59 00 00 00 00";
         if !b.output.lines().any(|l| l.contains(" 1af4:1042 ")) || !b.output.contains(first_read) {
             return Err(format!("the virtio-blk test disk was not enumerated and read with {memory}"));
+        }
+        if !b.output.contains("block: ram0: RAM disk") {
+            return Err(format!("the RAM disk was not registered with {memory}"));
         }
     }
 
