@@ -42,6 +42,18 @@ SECTIONS
     . = ALIGN(4096);
     .rodata : AT(ADDR(.rodata) - KERNEL_VMA) { *(.rodata .rodata.*) } :rodata
 
+    /*
+     * In-kernel tests: one `ktest::KernelTest` record per `kernel_test!`, each
+     * in its own `.kernel_tests.<path>` input section. Sorting by name gives a
+     * stable run order; KEEP stops --gc-sections dropping the unreferenced
+     * records.
+     */
+    .kernel_tests : AT(ADDR(.kernel_tests) - KERNEL_VMA) ALIGN(8) {
+        __kernel_tests_start = .;
+        KEEP(*(SORT_BY_NAME(.kernel_tests.*)))
+        __kernel_tests_end = .;
+    } :rodata
+
     . = ALIGN(4096);
     .data : AT(ADDR(.data) - KERNEL_VMA) { *(.data .data.*) *(.got .got.*) } :data
     .bss (NOLOAD) : AT(ADDR(.bss) - KERNEL_VMA) ALIGN(16) { *(.bss .bss.*) *(COMMON) } :data

@@ -7,6 +7,10 @@ name = "poly-abi"
 version = "0.0.1"
 
 [[package]]
+name = "poly-backtrace"
+version = "0.0.1"
+
+[[package]]
 name = "poly-binfmt"
 version = "0.0.1"
 dependencies = [
@@ -18,6 +22,7 @@ name = "poly-kernel"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-backtrace",
  "poly-binfmt",
  "poly-mem",
  "poly-personality-linux",

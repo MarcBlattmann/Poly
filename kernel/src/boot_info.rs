@@ -24,6 +24,11 @@ impl BootInfo {
     pub fn has_flag(&self, flag: &str) -> bool {
         self.cmdline().split_ascii_whitespace().any(|w| w == flag)
     }
+
+    /// The value of the first `key=value` word on the command line.
+    pub fn arg(&self, key: &str) -> Option<&str> {
+        self.cmdline().split_ascii_whitespace().find_map(|w| w.strip_prefix(key)?.strip_prefix('='))
+    }
 }
 
 #[derive(Debug)]

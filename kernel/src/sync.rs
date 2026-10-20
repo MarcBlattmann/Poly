@@ -27,6 +27,12 @@ impl<T> SpinLock<T> {
         }
         SpinLockGuard { lock: self }
     }
+
+    /// Take the lock if it is free, without spinning.
+    pub fn try_lock(&self) -> Option<SpinLockGuard<'_, T>> {
+        let free = self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok();
+        free.then_some(SpinLockGuard { lock: self })
+    }
 }
 
 #[derive(Debug)]
@@ -52,5 +58,19 @@ impl<T> DerefMut for SpinLockGuard<'_, T> {
 impl<T> Drop for SpinLockGuard<'_, T> {
     fn drop(&mut self) {
         self.lock.locked.store(false, Ordering::Release);
+    }
+}
+
+crate::kernel_test! {
+    fn spinlock_excludes_until_guard_dropped() -> TestResult {
+        let lock = SpinLock::new(0u32);
+        let mut guard = lock.lock();
+        *guard += 1;
+        if lock.try_lock().is_some() {
+            return Err("lock taken twice");
+        }
+        drop(guard);
+        let guard = lock.try_lock().ok_or("dropping the guard did not release the lock")?;
+        if *guard == 1 { Ok(()) } else { Err("write through the guard was lost") }
     }
 }

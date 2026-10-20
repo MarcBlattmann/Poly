@@ -18,6 +18,7 @@ bench = false
 # or comes from the shared crates in this repo.
 [dependencies]
 poly-abi = { path = "../crates/poly-abi" }
+poly-backtrace = { path = "../crates/poly-backtrace" }
 poly-binfmt = { path = "../crates/poly-binfmt" }
 poly-mem = { path = "../crates/poly-mem" }
 poly-personality-linux = { path = "../personalities/linux" }

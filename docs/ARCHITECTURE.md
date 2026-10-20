@@ -48,10 +48,13 @@ what exists **today** and how it fits that plan.
 | Level | Where | Runs |
 |---|---|---|
 | Unit tests for pure logic | `crates/`, `personalities/`, `tools/` | `cargo test --workspace` (host) |
-| Boot self-test | `kernel/src/selftest.rs` | every boot; checked by `cargo xtask test` |
-| Negative boot tests (faults must be caught) | `poly.selftest.*` flags | `cargo xtask test` |
+| In-kernel tests (`kernel_test!`, next to the code) | `kernel/src/ktest.rs` | every boot; `cargo xtask test` reports each test |
+| Negative boot tests (faults, failures and panics must be reported, with a backtrace) | `poly.selftest.*` flags | `cargo xtask test` |
 | Conformance vs. real OS (diff runner) | `specs/` + oracle VMs | later |
 | App trace replay | recorded sessions | later |
+
+Backtraces, symbolisation and attaching gdb/lldb are described in
+[DEBUGGING.md](DEBUGGING.md).
 
 ## Memory layout (current)
 

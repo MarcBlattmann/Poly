@@ -124,6 +124,8 @@ boot_pd:        .skip 4096
 
     .section .bss.boot_stack, "aw", @nobits
     .balign 16
+    .global __boot_stack_bottom
+__boot_stack_bottom:
     .skip 64 * 1024
     .global __boot_stack_top
 __boot_stack_top:

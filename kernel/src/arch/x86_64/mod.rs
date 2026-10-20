@@ -1,6 +1,7 @@
 //! x86-64 support. Everything CPU- or board-specific lives under `arch/` so
 //! that an aarch64 port only has to add a sibling module.
 
+pub mod backtrace;
 mod boot;
 pub mod cpu;
 pub mod gdt;
