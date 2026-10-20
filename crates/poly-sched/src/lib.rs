@@ -64,6 +64,11 @@
 //! - **Affinity** ([`CpuSet`]): the CPUs a thread may run on, all of them
 //!   by default. [`Scheduler::set_affinity`] moves a queued thread; a
 //!   running one moves at its CPU's next tick (or yield).
+//! - **Draining** ([`Scheduler::drain`]): a CPU that takes no threads and
+//!   gives its own away: its queue moves to other CPUs at once, its
+//!   running thread at its next tick or yield, after which it runs only
+//!   its idle thread (the kernel parks such CPUs while one CPU must run
+//!   alone).
 //!
 //! # Switching
 //!
@@ -417,11 +422,22 @@ struct Cpu {
     /// The thread this CPU switched away from last, until the switch is
     /// complete ([`Scheduler::saved`]).
     prev: Link,
+    /// Gives its threads away and takes none ([`Scheduler::drain`]).
+    draining: bool,
 }
 
 impl Cpu {
     const ABSENT: Cpu =
-        Cpu { run: WaitQueue::new(), queued: 0, current: NONE, idle: NONE, left: 0, online: false, prev: None };
+        Cpu {
+            run: WaitQueue::new(),
+            queued: 0,
+            current: NONE,
+            idle: NONE,
+            left: 0,
+            online: false,
+            prev: None,
+            draining: false,
+        };
 
     fn exists(&self) -> bool {
         self.idle != NONE
@@ -667,7 +683,7 @@ impl<const N: usize, const C: usize> Scheduler<N, C> {
     pub fn yield_now(&mut self, cpu: usize) -> Option<Switch> {
         self.finish(cpu);
         let cur = self.cpus[cpu].current;
-        let must_move = !self.slots[cur as usize].affinity.contains(cpu);
+        let must_move = self.must_move(cpu);
         let next = match self.pick(cpu) {
             Some(next) => next,
             None if must_move => self.cpus[cpu].idle,
@@ -695,7 +711,7 @@ impl<const N: usize, const C: usize> Scheduler<N, C> {
         if self.slots[cur].idle {
             return self.has_runnable(cpu);
         }
-        if !self.slots[cur].affinity.contains(cpu) {
+        if self.must_move(cpu) {
             return true;
         }
         let c = &mut self.cpus[cpu];
@@ -715,7 +731,50 @@ impl<const N: usize, const C: usize> Scheduler<N, C> {
     /// the running thread may no longer run there.
     pub fn needs_switch(&self, cpu: usize) -> bool {
         let cur = self.cpus[cpu].current as usize;
-        if self.slots[cur].idle { self.has_runnable(cpu) } else { !self.slots[cur].affinity.contains(cpu) }
+        if self.slots[cur].idle { self.has_runnable(cpu) } else { self.must_move(cpu) }
+    }
+
+    /// Make `cpu` give its threads away and take none (`true`), or take
+    /// threads again and go back online (`false`). Draining takes the CPU
+    /// offline, moves every thread queued there to an online CPU it may run
+    /// on (one pinned to `cpu` stays, to run once it is back), and kicks
+    /// `cpu` so its running thread leaves at once.
+    pub fn drain(&mut self, cpu: usize, on: bool) -> Result<(), Error> {
+        let c = self.cpus.get_mut(cpu).filter(|c| c.exists()).ok_or(Error::NoSuchCpu)?;
+        c.draining = on;
+        c.online = !on;
+        if !on {
+            return Ok(());
+        }
+        let mut q = core::mem::take(&mut self.cpus[cpu].run);
+        self.cpus[cpu].queued = 0;
+        let mut stay = WaitQueue::new();
+        while let Some(slot) = pop(&mut self.slots, &mut q) {
+            let to = self.select_cpu(slot);
+            if to == cpu {
+                push(&mut self.slots, &mut stay, slot);
+                self.cpus[cpu].queued += 1;
+            } else {
+                self.enqueue(slot, to);
+            }
+        }
+        self.cpus[cpu].run = stay;
+        if !self.cpus[cpu].is_idle() {
+            self.kicks.insert(cpu);
+        }
+        Ok(())
+    }
+
+    /// Whether `cpu` is [draining](Self::drain).
+    pub fn is_draining(&self, cpu: usize) -> bool {
+        self.cpus[cpu].draining
+    }
+
+    /// Whether `cpu`'s running thread must leave it: not an idle thread,
+    /// and its affinity excludes the CPU or the CPU is draining.
+    fn must_move(&self, cpu: usize) -> bool {
+        let cur = &self.slots[self.cpus[cpu].current as usize];
+        !cur.idle && (self.cpus[cpu].draining || !cur.affinity.contains(cpu))
     }
 
     /// Block `cpu`'s current thread on `q` and switch to the next thread
@@ -991,7 +1050,7 @@ impl<const N: usize, const C: usize> Scheduler<N, C> {
     /// Whether `cpu` may resume `slot` now.
     fn pickable(&self, slot: u16, cpu: usize) -> bool {
         let s = &self.slots[slot as usize];
-        !s.saving && s.affinity.contains(cpu)
+        !s.saving && s.affinity.contains(cpu) && !self.cpus[cpu].draining
     }
 
     /// The first thread of `cpu`'s queue it may resume.

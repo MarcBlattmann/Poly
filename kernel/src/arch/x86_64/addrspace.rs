@@ -737,7 +737,7 @@ crate::kernel_test! {
         const BASE: u64 = 0x40_0000;
         // No other thread or interrupt handler may take frames while the
         // count is compared (the shell runs this at runtime too).
-        let _irq = cpu::InterruptsOff::new();
+        let _only = crate::smp::exclusive();
         let before = free_frames();
         let space = AddressSpace::new().map_err(|_| "no memory for an address space")?;
         space.map_zeroed(BASE, 3 * PAGE_SIZE, Prot::RW).map_err(|_| "map_zeroed failed")?;
@@ -796,8 +796,8 @@ crate::kernel_test! {
 crate::kernel_test! {
     fn mapped_frames_stay_with_their_owner() -> TestResult {
         // One frame mapped into two spaces (shared memory): both see it, and
-        // neither frees it. Interrupts off: see the test above.
-        let _irq = cpu::InterruptsOff::new();
+        // neither frees it. Alone: see the test above.
+        let _only = crate::smp::exclusive();
         let frame = FRAMES.lock().as_mut().and_then(|f| f.allocate(0)).ok_or("out of frames")?;
         let virt = paging::phys_to_virt(frame).ok_or("frame outside the direct map")? as *mut u64;
         // SAFETY: a frame this test just allocated, through the direct map.

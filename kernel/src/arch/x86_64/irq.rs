@@ -8,8 +8,7 @@
 //! 0xf0       local APIC timer: the scheduler tick (each CPU its own)
 //! 0xf1       reschedule IPI: an idle CPU got a thread, or one must move
 //! 0xf2       TLB shootdown IPI (`tlb.rs`)
-//! 0xf3       stop IPI: park until released (`smp.rs`, `smp::Exclusive`)
-//! 0xf4-0xfd  reserved
+//! 0xf3-0xfd  reserved
 //! 0xfe       local APIC error
 //! 0xff       local APIC spurious interrupt (never gets an EOI)
 //! ```
@@ -42,7 +41,6 @@ pub const LAST_DEVICE_VECTOR: u8 = 0xef;
 pub const TIMER_VECTOR: u8 = 0xf0;
 pub const RESCHEDULE_VECTOR: u8 = 0xf1;
 pub const TLB_VECTOR: u8 = 0xf2;
-pub const STOP_VECTOR: u8 = 0xf3;
 pub const ERROR_VECTOR: u8 = 0xfe;
 /// Bits 3:0 are hardwired to 1 on some older APICs, so 0xff works on all.
 pub const SPURIOUS_VECTOR: u8 = 0xff;
@@ -236,10 +234,7 @@ pub(super) fn dispatch(vector: u8) {
             super::tlb::service();
             apic::eoi();
         }
-        STOP_VECTOR => {
-            apic::eoi();
-            super::smp::park();
-        }
+
         ERROR_VECTOR => {
             let esr = apic::local_apic().map_or(0, |a| a.error_status().0);
             if ERRORS.fetch_add(1, Ordering::Relaxed) < 8 {

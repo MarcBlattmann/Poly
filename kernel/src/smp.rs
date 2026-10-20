@@ -10,7 +10,6 @@
 use crate::boot_info::BootInfo;
 
 pub use crate::arch::smp::{Exclusive, Summary, online_cpus};
-pub use poly_sched::CpuSet;
 
 /// Start the other CPUs (after interrupts and the clock are up on the boot
 /// CPU). Each joins the scheduler as it comes up.

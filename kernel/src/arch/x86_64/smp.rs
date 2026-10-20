@@ -30,14 +30,15 @@
 //!
 //! - A panic stops every other CPU with an NMI ([`panic_stop_others`]): the
 //!   handler halts them, so they neither print over the report nor go on.
-//! - [`Exclusive`] parks every other CPU in the stop IPI's handler, with
-//!   interrupts off, until it is dropped: nothing else runs meanwhile (the
-//!   old single-CPU guarantee of "interrupts off", which tests that count
-//!   frames rely on). Parked CPUs keep serving TLB shootdowns.
+//! - [`Exclusive`] drains every other CPU (its threads move away) and parks
+//!   it in its idle thread with interrupts off until it is dropped: only
+//!   one CPU runs threads meanwhile (the old single-CPU guarantee of
+//!   "interrupts off", which tests that count frames rely on). Parked CPUs
+//!   keep serving TLB shootdowns.
 
 use super::cpu::{self, InterruptsOff};
 use super::gdt::CpuTables;
-use super::irq::{RESCHEDULE_VECTOR, STOP_VECTOR};
+use super::irq::RESCHEDULE_VECTOR;
 use super::percpu::{self, MAX_CPUS, PerCpu};
 use super::{apic, paging, tlb};
 use crate::acpi::Platform;
@@ -424,49 +425,50 @@ pub(super) fn stopped_by_nmi() -> bool {
 
 /// Whoever holds the [`Exclusive`] (CPU number + 1; 0: nobody).
 static EXCLUSIVE: AtomicUsize = AtomicUsize::new(0);
-/// The other CPUs should park.
+/// The other CPUs should park once idle.
 static STOP: AtomicBool = AtomicBool::new(false);
 /// CPUs parked.
 static PARKED: AtomicUsize = AtomicUsize::new(0);
 
-/// Every other online CPU parked, and interrupts off here, until dropped.
-/// Only this CPU runs kernel code meanwhile (the parked ones answer TLB
-/// shootdowns), so a count of frames, say, cannot change under it. Take it
-/// with interrupts on and no lock held; threads parked with the other CPUs
-/// stay where they are (their locks too), so do not wait for them.
+/// Only this CPU runs threads until dropped, as on a machine with one CPU:
+/// every other online CPU is drained (its threads move to the others, in
+/// effect to this one, `thread::drain_cpu`) and then parks in its idle
+/// thread with interrupts off; this CPU's thread is pinned to it and runs
+/// with interrupts off. Threads that held locks on the other CPUs run on
+/// this one when it blocks, so waiting for them is fine. Parked CPUs keep
+/// answering TLB shootdowns. Take it with interrupts on and no spinlock
+/// held; it does not nest.
 #[derive(Debug)]
 pub struct Exclusive {
+    // Dropped in this order, after `Drop::drop` released the others.
     _irq: InterruptsOff,
+    _pin: crate::thread::Pinned,
+    others: CpuSet,
 }
 
 impl Exclusive {
     pub fn new() -> Exclusive {
         assert!(cpu::interrupts_enabled(), "Exclusive::new with interrupts off would deadlock");
         // Claimed with interrupts on: a CPU waiting here can still be
-        // parked by the holder.
-        loop {
-            let me = percpu::cpu_index() + 1;
-            if EXCLUSIVE.compare_exchange(0, me, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-                break;
-            }
+        // drained by the holder.
+        while EXCLUSIVE.compare_exchange(0, usize::MAX, Ordering::Acquire, Ordering::Relaxed).is_err() {
             core::hint::spin_loop();
         }
-        let irq = InterruptsOff::new();
-        let me = percpu::cpu_index();
-        EXCLUSIVE.store(me + 1, Ordering::Relaxed);
+        let pin = crate::thread::pin_current();
+        let me = pin.cpu();
+        EXCLUSIVE.store(me + 1, Ordering::Release);
         let mut others = online_cpus();
         others.remove(me);
         STOP.store(true, Ordering::SeqCst);
         for c in others.iter() {
-            if let Some(area) = percpu::cpu(c) {
-                apic::send_ipi(area.apic_id(), STOP_VECTOR);
-            }
+            crate::thread::drain_cpu(c, true);
         }
+        let irq = InterruptsOff::new();
         while PARKED.load(Ordering::SeqCst) < others.len() {
             tlb::service();
             core::hint::spin_loop();
         }
-        Exclusive { _irq: irq }
+        Exclusive { _irq: irq, _pin: pin, others }
     }
 }
 
@@ -483,13 +485,18 @@ impl Drop for Exclusive {
             tlb::service();
             core::hint::spin_loop();
         }
+        for c in self.others.iter() {
+            crate::thread::drain_cpu(c, false);
+        }
         EXCLUSIVE.store(0, Ordering::Release);
     }
 }
 
-/// The stop IPI's handler: park until the [`Exclusive`] is dropped.
-pub(super) fn park() {
-    if !STOP.load(Ordering::SeqCst) {
+/// Called by an idle thread with interrupts off when its CPU has nothing
+/// to run: park while an [`Exclusive`] held on another CPU wants it to.
+pub fn park_if_stopped() {
+    let me = percpu::cpu_index() + 1;
+    if !STOP.load(Ordering::SeqCst) || EXCLUSIVE.load(Ordering::Acquire) == me {
         return;
     }
     PARKED.fetch_add(1, Ordering::SeqCst);

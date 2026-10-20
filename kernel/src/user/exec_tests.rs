@@ -11,7 +11,6 @@ use super::exec::{self, ExecError, ExecParams, INITIAL_STACK, OpenInterpreter};
 use super::memory::{Kind, PAGE_SIZE};
 use super::test_elf::{self, Seen, TestElf};
 use super::*;
-use crate::arch::cpu::InterruptsOff;
 use crate::kernel_test;
 use crate::sync::Mutex;
 use alloc::vec;
@@ -96,7 +95,7 @@ fn released(memory: &Arc<Memory>) -> TestResult {
 /// Drop the last reference to `memory` and check that its frames went.
 fn tear_down(memory: Arc<Memory>) -> TestResult {
     released(&memory)?;
-    let _irq = InterruptsOff::new();
+    let _only = crate::smp::exclusive();
     let resident = memory.resident_pages();
     let before = user_frames();
     drop(memory);
@@ -329,7 +328,7 @@ kernel_test! {
         ];
         for (open, error, errno) in cases {
             for which in [TestElf::Dyn, TestElf::Interp] {
-                let _irq = InterruptsOff::new();
+                let _only = crate::smp::exclusive();
                 let before = user_frames();
                 let result = exec::load_dynamic(Arc::new(MemoryImage(which.image())), &params(), open).map(|_| ());
                 if result != Err(error) || error.linux_errno() != errno || user_frames() != before {
@@ -439,7 +438,7 @@ kernel_test! {
         for (image, params, error, errno) in cases {
             let source = Arc::new(MemoryImage(image));
             // A failed exec leaves no frame behind.
-            let _irq = InterruptsOff::new();
+            let _only = crate::smp::exclusive();
             let before = user_frames();
             let result = exec::load(source, &params).map(|_| ());
             if result != Err(error) || error.linux_errno() != errno || user_frames() != before {

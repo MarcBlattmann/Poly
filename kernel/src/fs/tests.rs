@@ -5,7 +5,6 @@
 use super::devices::Utf8Carry;
 use super::initrd::{self, Report};
 use super::*;
-use crate::arch::cpu::InterruptsOff;
 use crate::boot_info::Module;
 use crate::frames::{self, FRAMES};
 use crate::kernel_test;
@@ -182,7 +181,7 @@ kernel_test! {
         let vfs = poly_vfs::Vfs::new(fs);
         let ctx = vfs.root_context().map_err(e)?;
         let pages = align_up(archive.len() as u64, PAGE_SIZE) / PAGE_SIZE;
-        let _irq = InterruptsOff::new();
+        let _only = crate::smp::exclusive();
         let phys = frames::allocate_contiguous(pages).ok_or("no frames for the archive")?;
         frames::free_contiguous(phys, pages).map_err(|_| "free_contiguous refused its run")?;
         let (start, end) = (phys, phys + pages * PAGE_SIZE);
@@ -203,7 +202,7 @@ kernel_test! {
         // Free right now: nothing ran in between that could have taken them.
         let taken_again = frames::allocate_range(start, end);
         let freed_again = frames::free_range(start, end);
-        drop(_irq);
+        drop(_only);
         if report.error.is_some() || report.freed_frames != pages || report.free_error.is_some() {
             return Err("unpack_and_release did not unpack and free the range");
         }

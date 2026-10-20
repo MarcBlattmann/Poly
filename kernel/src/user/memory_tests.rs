@@ -20,7 +20,6 @@
 use super::memory::{Access, Kind, Layout, MapRequest, PAGE_SIZE, Placement, Prot, SegvCode};
 use super::programs::{self, Call, Program};
 use super::*;
-use crate::arch::cpu::InterruptsOff;
 use crate::kernel_test;
 use crate::sync::SpinLock;
 use alloc::vec;
@@ -105,7 +104,7 @@ fn released(memory: &Arc<Memory>) -> TestResult {
 /// resident pages' frames were freed.
 fn tear_down(memory: Arc<Memory>) -> TestResult {
     released(&memory)?;
-    let _irq = InterruptsOff::new();
+    let _only = crate::smp::exclusive();
     let resident = memory.resident_pages();
     let before = user_frames();
     drop(memory);
@@ -269,9 +268,10 @@ fn read_marker(memory: &Memory, addr: u64) -> Result<[u8; 8], FaultError> {
     memory.read(addr, &mut b).map(|()| b)
 }
 
-/// Run `op` with interrupts off and return how many user frames it freed.
+/// Run `op` alone (the other CPUs parked, interrupts off) and return how
+/// many user frames it freed.
 fn frames_freed(op: impl FnOnce() -> TestResult) -> TestResult<u64> {
-    let _irq = InterruptsOff::new();
+    let _only = crate::smp::exclusive();
     let before = user_frames();
     op()?;
     before.checked_sub(user_frames()).ok_or("an operation that frees pages took frames")

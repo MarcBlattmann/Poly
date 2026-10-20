@@ -410,8 +410,11 @@ kernel_test! {
     fn ring3_is_preempted_by_the_timer() -> TestResult {
         // The program never makes a system call until it sees the flag: the
         // timer has to take the CPU from ring 3 for this thread to run on.
+        // Both share one CPU, which the spinner must be preempted on.
+        let pin = thread::pin_current();
         let space = new_space()?;
         let t = start(&space, Program::Spin, [DATA, 0, 0])?;
+        thread::set_affinity(t, thread::CpuSet::one(pin.cpu())).map_err(|_| "could not pin the spinner")?;
         let ticks = time::ticks();
         thread::sleep(Duration::from_millis(30));
         if time::ticks() < ticks + 20 {

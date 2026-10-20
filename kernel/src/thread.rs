@@ -381,6 +381,10 @@ fn idle_main(_: usize) -> usize {
             // Nothing could ever wake a thread: report it rather than hang.
             panic!("deadlock: every thread is blocked before interrupts are set up");
         }
+        if !switched {
+            // Another CPU runs alone for a while (`smp::Exclusive`).
+            arch::smp::park_if_stopped();
+        }
         // With interrupts off, nothing can make a thread runnable here
         // between that check and the halt: whatever does is an interrupt
         // (a device, the tick, or another CPU's reschedule IPI), which then
@@ -578,6 +582,23 @@ pub fn pin_current() -> Pinned {
         before
     };
     Pinned { id, before, cpu }
+}
+
+/// Make CPU `cpu` give its threads to the other CPUs and take none
+/// (`true`, for `smp::Exclusive`), or take threads again (`false`).
+pub fn drain_cpu(cpu: usize, on: bool) {
+    let _irq = InterruptsOff::new();
+    let kicks = {
+        let mut t = THREADS.lock();
+        let _ = t.sched.drain(cpu, on);
+        let mut kicks = t.sched.take_kicks();
+        if on {
+            // Its idle thread must look again (and park).
+            kicks.insert(cpu);
+        }
+        kicks
+    };
+    kick(kicks);
 }
 
 /// The CPUs the scheduler runs threads on.
@@ -905,11 +926,18 @@ impl WaitQueue {
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
 
 /// For tests whose threads must take turns in a fixed order: the calling
-/// thread cannot be preempted while this is held (the others still can, but
-/// each starts with a fresh time slice and gives up the CPU long before it
-/// ends).
-fn no_preemption() -> InterruptsOff {
-    InterruptsOff::new()
+/// thread stays on its CPU and cannot be preempted while this is held (the
+/// others still can, but each starts with a fresh time slice and gives up
+/// the CPU long before it ends). Start the threads that take turns with it
+/// with [`spawn_here`], so they share its CPU.
+fn no_preemption() -> (Pinned, InterruptsOff) {
+    let pin = pin_current();
+    (pin, InterruptsOff::new())
+}
+
+/// [`spawn`] on the calling thread's CPU only.
+pub fn spawn_here(f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
+    spawn_on("", f, arg, CpuSet::one(this_cpu()))
 }
 
 /// Characters recorded by threads, in the order they ran.
@@ -945,8 +973,8 @@ kernel_test! {
         if current() != ThreadId::BOOT {
             return Err("tests do not run on the boot thread");
         }
-        let a = spawn(ping, b'a' as usize).map_err(|_| "spawn failed")?;
-        let b = spawn(ping, b'b' as usize).map_err(|_| "spawn failed")?;
+        let a = spawn_here(ping, b'a' as usize).map_err(|_| "spawn failed")?;
+        let b = spawn_here(ping, b'b' as usize).map_err(|_| "spawn failed")?;
         if state(a) != Some(State::Runnable) {
             return Err("a new thread is not runnable");
         }
@@ -989,8 +1017,8 @@ kernel_test! {
         if WAITERS.wake_one() || WAITERS.wake_all() != 0 {
             return Err("woke a thread on an empty queue");
         }
-        let w1 = spawn(waiter, 0).map_err(|_| "spawn failed")?;
-        let w2 = spawn(waiter, 0).map_err(|_| "spawn failed")?;
+        let w1 = spawn_here(waiter, 0).map_err(|_| "spawn failed")?;
+        let w2 = spawn_here(waiter, 0).map_err(|_| "spawn failed")?;
         let both_blocked = || state(w1) == Some(State::Blocked) && state(w2) == Some(State::Blocked);
         yield_now();
         if !both_blocked() || WOKEN.load(SeqCst) != 0 {
@@ -1088,6 +1116,8 @@ fn live_threads() -> usize {
 
 kernel_test! {
     fn exit_frees_slots_and_stacks() -> TestResult {
+        // The other CPUs parked: nothing else takes frames or slots.
+        let _only = crate::smp::exclusive();
         let (frames_before, threads_before) = (free_frames(), live_threads());
         let room = MAX_THREADS - threads_before;
         // Fill the table three times over, joining every thread each time.
@@ -1160,7 +1190,7 @@ kernel_test! {
         }
         SPINS.store(0, SeqCst);
         STOP.store(false, SeqCst);
-        let t = spawn(spinner, 0).map_err(|_| "spawn failed")?;
+        let t = spawn_here(spinner, 0).map_err(|_| "spawn failed")?;
         yield_now();
         // The spinner got a full slice, then the tick switched back here. A
         // real tick or two may land in the few instructions between the
@@ -1256,7 +1286,8 @@ kernel_test! {
         let find = |id: ThreadId| all.iter().find(|i| i.id == id);
         let listed = find(t).is_some_and(|i| i.name == "napper" && i.state == State::Blocked)
             && find(me).is_some_and(|i| i.state == State::Running && (me != ThreadId::BOOT || i.name == "boot"))
-            && find(ThreadId::IDLE).is_some_and(|i| i.name == "idle" && i.state == State::Runnable);
+            && find(ThreadId::IDLE).is_some_and(|i| i.name == "idle" && i.cpu == 0)
+            && all.iter().filter(|i| i.name.starts_with("idle")).count() == online_cpus().len();
         join(t).map_err(|_| "join failed")?;
         if !listed {
             return Err("list() did not report the threads' names and states");

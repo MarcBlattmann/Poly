@@ -254,6 +254,42 @@ fn affinity_moves_queued_threads_and_running_ones_at_the_next_tick() {
 }
 
 #[test]
+fn a_draining_cpu_gives_its_threads_away_and_takes_none() {
+    let mut s = machine::<16, 3>(3);
+    let running = s.spawn(1, CpuSet::one(1).union(CpuSet::one(0))).unwrap();
+    s.yield_now(1).unwrap();
+    // Busy CPU 0 is the only one online while two threads are queued on 1.
+    s.set_online(2, false).unwrap();
+    let queued = s.spawn(1, CpuSet::one(1).union(CpuSet::one(2))).unwrap();
+    let pinned = s.spawn(1, CpuSet::one(1)).unwrap();
+    assert_eq!(run_queue(&s, 1), [queued.slot(), pinned.slot()]);
+    s.set_online(2, true).unwrap();
+    let _ = s.take_kicks();
+    s.drain(1, true).unwrap();
+    assert!(s.is_draining(1));
+    assert!(!s.online().contains(1));
+    assert_eq!(s.cpu_of(queued), Some(2), "moved to the idle CPU");
+    assert_eq!(run_queue(&s, 1), [pinned.slot()], "a thread pinned there waits for it");
+    assert!(s.take_kicks().contains(1), "told to give its running thread away");
+    assert!(s.needs_switch(1));
+    assert!(s.tick(1));
+    let idle1 = s.idle_thread(1).unwrap();
+    assert_eq!(s.yield_now(1), Some(Switch { from: running, to: idle1 }));
+    assert_eq!(s.cpu_of(running), Some(0));
+    s.saved(1);
+    assert!(!s.has_runnable(1), "it takes nothing, not even its pinned thread");
+    assert!(!s.tick(1));
+    // Nothing new lands there.
+    let new = s.spawn(0, CpuSet::ALL).unwrap();
+    assert_ne!(s.cpu_of(new), Some(1));
+    s.drain(1, false).unwrap();
+    assert!(s.online().contains(1) && !s.is_draining(1));
+    assert!(s.has_runnable(1));
+    assert_eq!(s.yield_now(1).map(|sw| sw.to), Some(pinned));
+    assert_eq!(s.drain(7, true), Err(Error::NoSuchCpu));
+}
+
+#[test]
 fn cpu_sets_print_as_ranges() {
     let set = |bits: u64| std::format!("{}", CpuSet::from_bits(bits));
     assert_eq!(set(0), "");
@@ -438,6 +474,11 @@ fn run_random(seed: u64, steps: usize) {
                 while let Some(t) = s.unreaped() {
                     s.reap(t).unwrap();
                 }
+            }
+            98 if added > 1 => {
+                let c = 1 + rng.below(added - 1);
+                let draining = s.is_draining(c);
+                s.drain(c, !draining).unwrap();
             }
             96..=97 if added > 1 => {
                 let c = 1 + rng.below(added - 1);

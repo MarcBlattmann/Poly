@@ -404,6 +404,7 @@ impl<T: core::fmt::Debug> core::fmt::Debug for SetOnce<T> {
 use crate::arch::irq;
 use crate::kernel_test;
 use crate::thread::{State, spawn, yield_now};
+
 use crate::time;
 use core::sync::atomic::Ordering::SeqCst;
 
@@ -426,6 +427,8 @@ kernel_test! {
         if !cpu::interrupts_enabled() {
             return Err("kernel tests should run with interrupts enabled");
         }
+        // On one CPU throughout: the tick counts are this CPU's.
+        let _pin = thread::pin_current();
         let (a, b) = (SpinLock::new(()), SpinLock::new(()));
         let held = spinlocks_held();
         let outer = a.lock();
@@ -441,12 +444,12 @@ kernel_test! {
             return Err("releasing the inner lock enabled interrupts while the outer one is held");
         }
         // No timer tick gets in while the lock is held, however long that is.
-        let ticks = time::ticks();
+        let ticks = time::cpu_ticks();
         let start = time::now_ns();
         while time::now_ns() - start < 5 * time::NANOS_PER_TICK {
             core::hint::spin_loop();
         }
-        if time::ticks() != ticks {
+        if time::cpu_ticks() != ticks {
             return Err("a timer interrupt arrived while a spinlock was held");
         }
         drop(outer);
@@ -454,7 +457,7 @@ kernel_test! {
             return Err("releasing the last lock did not restore interrupts");
         }
         let start = time::now_ns();
-        while time::ticks() == ticks {
+        while time::cpu_ticks() == ticks {
             if time::now_ns() - start > 1_000_000_000 {
                 return Err("the timer interrupt held back by the lock never arrived");
             }
@@ -536,9 +539,12 @@ kernel_test! {
         use poly_vfs::lock::RawLock;
         RAW_COUNTER.store(0, Ordering::Relaxed);
         RAW.lock();
-        let t = spawn(add_slowly_raw, 0).map_err(|_| "spawn failed")?;
+        // Its first attempt runs on this CPU while this thread yields.
+        let pin = thread::pin_current();
+        let t = thread::spawn_here(add_slowly_raw, 0).map_err(|_| "spawn failed")?;
         yield_now();
         let blocked = thread::state(t) == Some(State::Blocked);
+        drop(pin);
         // SAFETY: taken above by this thread.
         unsafe { RAW.unlock() };
         thread::join(t).map_err(|_| "join failed")?;
@@ -581,9 +587,13 @@ kernel_test! {
         if COUNTER.try_lock().is_some() {
             return Err("try_lock took a held mutex");
         }
-        let t = spawn(add_slowly, 0).map_err(|_| "spawn failed")?;
+        // Its first attempt runs on this CPU while this thread yields.
+        let pin = thread::pin_current();
+        let t = thread::spawn_here(add_slowly, 0).map_err(|_| "spawn failed")?;
         yield_now();
-        if thread::state(t) != Some(State::Blocked) {
+        let blocked = thread::state(t) == Some(State::Blocked);
+        drop(pin);
+        if !blocked {
             drop(guard);
             let _ = thread::join(t);
             return Err("a thread waiting for a held mutex did not block");
