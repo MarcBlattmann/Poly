@@ -12,7 +12,8 @@ App tests (`tests/linux/apps/*.app`, the visible cases in
 `specs/linux/apps/<app>.tests/` and the held-out cases, which are counted
 here but not named), compared in app mode (docs/AGENT_PIPELINE.md, "App tests"). Run on 2026-10-20: reference
 Linux 6.18.44 (Ubuntu 24.04, coreutils 9.4, grep 3.11, sed 4.9, glibc
-2.39), Poly at main f6bf79e. Spec sheets: `specs/linux/apps/<app>.yaml`.
+2.39), Poly at main 8351e77 (106 tests: 68 pass, the 37 app cases below
+and `libc-hello` fail). Spec sheets: `specs/linux/apps/<app>.yaml`.
 
 Passing: **true** (3 of 3 cases), **echo** (7 of 7), **head** (7 of 7),
 **grep** (10 of 10), **mkdir** (7 of 7) and **sed** (8 of 9; `sed-i` fails
