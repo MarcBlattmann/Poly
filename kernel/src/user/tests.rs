@@ -64,7 +64,19 @@ fn new_space() -> Result<Arc<AddressSpace>, &'static str> {
 }
 
 fn start_with(space: &Arc<AddressSpace>, program: Program, args: [u64; 3], hook: SyscallHook) -> TestResult<ThreadId> {
-    let entry = Entry { rip: CODE + program.offset(), rsp: STACK_TOP, args };
+    start_on_stack(space, program, args, hook, STACK_TOP)
+}
+
+/// [`start_with`] on a stack ending at `rsp`: threads of one space that run
+/// at the same time (on several CPUs) need stacks of their own.
+fn start_on_stack(
+    space: &Arc<AddressSpace>,
+    program: Program,
+    args: [u64; 3],
+    hook: SyscallHook,
+    rsp: u64,
+) -> TestResult<ThreadId> {
+    let entry = Entry { rip: CODE + program.offset(), rsp, args };
     spawn(process(), Arc::clone(space), entry, hook).map_err(|_| "could not spawn a user thread")
 }
 
@@ -218,7 +230,8 @@ kernel_test! {
                 return Err("a user program did not end as expected");
             }
         }
-        if thread::state(bystander) != Some(State::Runnable) {
+        // Runnable, or running on another CPU.
+        if !matches!(thread::state(bystander), Some(State::Runnable | State::Running)) {
             return Err("a fault in one thread ended another");
         }
         write_u64(&space, FLAG, 0x5eed)?;
@@ -391,8 +404,9 @@ kernel_test! {
         write_u64(&other, DATA, 0x3333_0000)?;
         write_u64(&other, DATA + 8, 0x3333_0001)?;
         let threads = [
+            // Each on its own stack page: they may run at the same time.
             start(&space, Program::Sse, [0x1000, bases[0].0, bases[0].1])?,
-            start(&space, Program::Sse, [0x2001, bases[1].0, bases[1].1])?,
+            start_on_stack(&space, Program::Sse, [0x2001, bases[1].0, bases[1].1], hook, STACK_TOP - PAGE_SIZE)?,
             start(&other, Program::Sse, [0x3002, DATA, 0x3333_0000])?,
         ];
         for t in threads {
