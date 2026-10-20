@@ -22,6 +22,11 @@
 //! claim <id> --agent ID | release <id>           through the coverage tool
 //! role <spec|implementer> <entry> --workdir DIR --agent ID [--preset claude|opencode]
 //!      [--model M] [--generated DIR] [--revision REV] [--feedback FILE] [--dry-run]
+//! loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet]
+//!                                                the scheduler: runs the whole pipeline unattended
+//! loop status [--config FILE] [--json]           what every entry in the loop is doing
+//! loop reset <entry> [--config FILE] [--keep-branches]
+//!                                                forget an entry (e.g. after the human queue)
 //! ```
 
 mod corpus;
@@ -33,6 +38,7 @@ mod ptrace;
 mod queue;
 mod roles;
 mod runner;
+mod scheduler;
 mod sha256;
 mod store;
 mod syscalls;
@@ -612,6 +618,10 @@ fn role_cmd(repo: &Path, a: &Args) -> Result<u8> {
 fn run(args: &[String]) -> Result<u8> {
     let repo = repo_root();
     let (cmd, rest) = args.split_first().ok_or("usage: pipeline <command> (see tools/pipeline/src/main.rs)")?;
+    if cmd == "loop" {
+        // Its own options and switches.
+        return scheduler::command(&repo, rest);
+    }
     let switches = ["all", "print", "strict", "build-kernel", "replace", "allow-dirty", "json", "dry-run"];
     let a = Args::parse(rest, &switches)?;
     match cmd.as_str() {
@@ -629,7 +639,7 @@ fn run(args: &[String]) -> Result<u8> {
         "role" => role_cmd(&repo, &a),
         _ => Err(format!(
             "unknown command {cmd}; commands: build trace diff selfcheck polycheck initramfs spec tests handoff next \
-             claim release role"
+             claim release role loop"
         )),
     }
 }

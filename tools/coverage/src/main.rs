@@ -8,6 +8,7 @@
 //! coverage claim <id> --agent <agent-id>
 //! coverage release <id>
 //! coverage set-status <id> <missing|stub|green|blocked-by-design|app-provided>
+//!                     [--tests-visible N] [--tests-held-out N]   (the pipeline loop sets green with both)
 //! coverage set-status --component <os>/<layer>/<component> [--component ...] <status>
 //!                                                    (every entry of those components)
 //! coverage check
@@ -155,7 +156,7 @@ fn parse_status(s: &str) -> Result<Status, String> {
 }
 
 fn set_status(args: &[String]) -> Result<(), String> {
-    const USAGE: &str = "usage: coverage set-status <id> <status> | coverage set-status --component <os>/<layer>/<component> ... <status>";
+    const USAGE: &str = "usage: coverage set-status <id> <status> [--tests-visible N] [--tests-held-out N] | coverage set-status --component <os>/<layer>/<component> ... <status>";
     let pos = positional(args);
     let components = opts(args, "--component");
     if !components.is_empty() {
@@ -173,10 +174,20 @@ fn set_status(args: &[String]) -> Result<(), String> {
     if status == Status::Claimed {
         return Err("use `coverage claim` to claim".into());
     }
+    let count = |name: &str| -> Result<Option<u32>, String> {
+        opt(args, name).map(|n| n.parse::<u32>().map_err(|_| format!("{name} {n}: a number"))).transpose()
+    };
+    let (visible, held_out) = (count("--tests-visible")?, count("--tests-held-out")?);
     let mut c = load()?;
     let e = c.find_mut(id).ok_or_else(|| format!("no entry {id}"))?;
     e.status = status;
     e.claimed_by = None;
+    if let Some(n) = visible {
+        e.tests_visible = n;
+    }
+    if let Some(n) = held_out {
+        e.tests_held_out = n;
+    }
     save(&c)
 }
 

@@ -1,0 +1,105 @@
+#!/bin/bash
+# poly-role: the only command the pipeline loop (user `server`) may run as
+# the role users, through sudo (/etc/sudoers.d/poly-pipeline):
+#
+#   sudo -n -u polyspec /srv/poly/bin/poly-role spec sync <branch> <base>
+#   sudo -n -u polyspec /srv/poly/bin/poly-role spec run <entry> <agent> [--model M]
+#   sudo -n -u polyimpl /srv/poly/bin/poly-role implementer sync <branch> <base>
+#   sudo -n -u polyimpl /srv/poly/bin/poly-role implementer run <entry> <agent> [--model M] [--feedback FILE]
+#
+# `sync` puts the role's checkout on <branch>, starting from the hub's
+# <base> (pipeline/spec/<symbol> or pipeline/impl/<symbol>), clean. `run`
+# starts one agent session with `cargo xtask pipeline role` (Claude Code,
+# `--preset claude`, the role user's own login). The agent commits on the
+# branch; it never pushes: the loop fetches the branch from this checkout.
+#
+# setup.sh installs this file root-owned as /srv/poly/bin/poly-role. sudo
+# resets the environment; everything the role needs is set here, every
+# argument is checked, and the implementer never gets POLY_HELDOUT_DIR.
+set -euo pipefail
+umask 0027
+
+POLY=/srv/poly
+HUB=$POLY/git/poly.git
+
+die() {
+    echo "poly-role: $*" >&2
+    exit 2
+}
+
+[ $# -ge 2 ] || die "usage: poly-role <spec|implementer> <sync|run> ..."
+role=$1
+verb=$2
+shift 2
+
+case "$role" in
+spec) user=polyspec home=$POLY/spec own=pipeline/spec/ ;;
+implementer) user=polyimpl home=$POLY/impl own=pipeline/impl/ ;;
+*) die "unknown role $role" ;;
+esac
+[ "$(id -un)" = "$user" ] || die "the $role role runs as $user, not $(id -un)"
+repo=$home/repo
+
+export HOME=$home USER=$user LOGNAME=$user LANG=C.UTF-8
+export PATH=$home/.local/bin:$home/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+unset POLY_HELDOUT_DIR POLY_SPEC_AGENT_CMD POLY_IMPLEMENTER_CMD POLY_PIPELINE_CONFIG
+
+name_ok() { [[ $1 =~ ^[A-Za-z0-9._-]{1,100}$ ]]; }
+part='[A-Za-z0-9_+-][A-Za-z0-9._+-]*'
+branch_ok() { [[ $1 =~ ^pipeline/(spec|impl)/$part$ ]] && [[ $1 != *..* && $1 != *.lock ]]; }
+entry_ok() { [[ $1 =~ ^(linux|windows|macos)/(syscall|api)/$part/$part$ ]] && [[ $1 != *..* ]]; }
+
+case "$verb" in
+sync)
+    [ $# -eq 2 ] || die "usage: poly-role $role sync <branch> <base>"
+    branch=$1 base=$2
+    branch_ok "$branch" && [[ $branch == "$own"* ]] || die "the $role role cannot work on $branch"
+    branch_ok "$base" || die "bad base branch $base"
+    cd "$repo"
+    # The hub belongs to the loop's user: trust it for this command only.
+    git -c safe.directory="$HUB" fetch -q --prune --no-tags hub '+refs/heads/pipeline/*:refs/remotes/hub/pipeline/*'
+    git checkout -q -f -B "$branch" "refs/remotes/hub/$base"
+    git reset -q --hard
+    git clean -fdq
+    git log -1 --format='%H %s'
+    ;;
+run)
+    [ $# -ge 2 ] || die "usage: poly-role $role run <entry> <agent> [--model M] [--feedback FILE]"
+    entry=$1 agent=$2
+    shift 2
+    entry_ok "$entry" || die "bad entry id $entry"
+    name_ok "$agent" || die "bad agent id $agent"
+    args=(--workdir "$repo" --agent "$agent" --preset claude)
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --model)
+            [ $# -ge 2 ] && name_ok "$2" || die "bad --model"
+            args+=(--model "$2")
+            shift 2
+            ;;
+        --feedback)
+            [ "$role" = implementer ] && [ $# -ge 2 ] || die "--feedback is for the implementer"
+            f=$(realpath -e -- "$2") || die "no feedback file $2"
+            [[ $f == "$POLY/inbox/"* ]] || die "feedback must come from $POLY/inbox"
+            args+=(--feedback "$f")
+            shift 2
+            ;;
+        *) die "unknown option $1" ;;
+        esac
+    done
+    if [ "$role" = spec ]; then
+        # The spec agent observes the real OS and writes the held-out tests.
+        export POLY_HELDOUT_DIR=$POLY/heldout
+        gen=$POLY/generated/${entry##*/}
+        # A session starts from nothing: no files of an earlier attempt.
+        rm -rf -- "$gen" "${POLY_HELDOUT_DIR:?}/$entry"
+        mkdir -p -- "$gen"
+        args+=(--generated "$gen")
+    else
+        export POLY_ROLE=implementer
+    fi
+    cd "$repo"
+    exec cargo xtask pipeline role "$role" "$entry" "${args[@]}"
+    ;;
+*) die "unknown verb $verb (sync, run)" ;;
+esac
