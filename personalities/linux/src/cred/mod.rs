@@ -37,6 +37,7 @@ pub use exec::{ExecFile, S_ISGID, S_ISUID, S_IXGRP};
 
 use crate::errno::Errno;
 use crate::kernel::{Credentials, LinuxKernel};
+use crate::ns::user::{self, IdKind, UserNsRef};
 use crate::signal::deliver::with_own;
 use alloc::sync::Arc;
 
@@ -249,6 +250,10 @@ pub struct Creds {
     /// `PR_SET_NO_NEW_PRIVS`: execve(2) grants nothing (set-user-ID and
     /// set-group-ID bits are ignored). Inherited, never cleared.
     pub no_new_privs: bool,
+    /// The thread's user namespace (`None`: the initial one; ADR 0054).
+    /// The ids above are kernel ids; the capability sets are what the
+    /// thread has in this namespace ([`crate::ns::user`]).
+    pub user_ns: UserNsRef,
 }
 
 impl Default for Creds {
@@ -284,13 +289,57 @@ impl Creds {
             caps,
             keep_caps: false,
             no_new_privs: false,
+            user_ns: None,
         }
     }
 
     /// Whether the thread has `cap` in its effective set: what "privileged
-    /// (Linux: has the CAP_... capability)" means in the man pages.
+    /// (Linux: has the CAP_... capability)" means in the man pages, in the
+    /// thread's own user namespace. For a resource of another namespace
+    /// use [`crate::ns::user::ns_capable`]; for one only the initial
+    /// namespace may change, [`Creds::capable_initial`].
     pub fn capable(&self, cap: u32) -> bool {
         self.caps.effective.contains(cap)
+    }
+
+    /// `cap` in the initial user namespace: for what belongs to the whole
+    /// system (the clocks, rebooting, resource limits above the hard
+    /// ones, disks).
+    pub fn capable_initial(&self, cap: u32) -> bool {
+        crate::ns::user::ns_capable(self, &None, cap)
+    }
+
+    /// The kernel id of the namespace's user 0, if it has one: the "root"
+    /// of the rules of capabilities(7) inside the thread's namespace.
+    pub fn root_uid(&self) -> Option<u32> {
+        user::down(&self.user_ns, IdKind::Uid, 0)
+    }
+
+    fn is_root(&self, uid: u32) -> bool {
+        self.root_uid() == Some(uid)
+    }
+
+    /// Kernel user id `kid` as the thread's namespace sees it (65534
+    /// without a mapping).
+    pub fn uid_view(&self, kid: u32) -> u32 {
+        user::up_or_overflow(&self.user_ns, IdKind::Uid, kid)
+    }
+
+    /// Kernel group id `kid` as the thread's namespace sees it.
+    pub fn gid_view(&self, kid: u32) -> u32 {
+        user::up_or_overflow(&self.user_ns, IdKind::Gid, kid)
+    }
+
+    /// The kernel id of the namespace's user id `uid` (`EINVAL` without a
+    /// mapping: setuid(2) "The user ID specified in uid is not valid in
+    /// this user namespace").
+    pub fn kuid(&self, uid: u32) -> Result<u32, Errno> {
+        user::down(&self.user_ns, IdKind::Uid, uid).ok_or(Errno::EINVAL)
+    }
+
+    /// The same for a group id.
+    pub fn kgid(&self, gid: u32) -> Result<u32, Errno> {
+        user::down(&self.user_ns, IdKind::Gid, gid).ok_or(Errno::EINVAL)
     }
 
     /// Real and effective ids, as getuid(2) and friends report them.
@@ -299,9 +348,27 @@ impl Creds {
     }
 
     /// Who file permission checks see: file system ids, supplementary
-    /// groups, effective capabilities.
+    /// groups, effective capabilities. In a user namespace other than the
+    /// initial one only the capabilities the personality has checked
+    /// itself in the right namespace reach the VFS (`CAP_SYS_ADMIN` for
+    /// mounts, `CAP_SYS_CHROOT`): Poly does not yet apply capabilities(7)'s
+    /// rule that the file capabilities of a namespace act only on files
+    /// whose owner and group are mapped in it, so it applies none.
     pub fn fs_ids(&self) -> FsIds {
-        FsIds { uid: self.fsuid, gid: self.fsgid, groups: Arc::clone(&self.groups), caps: self.caps.effective }
+        FsIds {
+            uid: self.fsuid,
+            gid: self.fsgid,
+            groups: Arc::clone(&self.groups),
+            caps: self.vfs_caps(self.caps.effective),
+        }
+    }
+
+    fn vfs_caps(&self, caps: CapSet) -> CapSet {
+        if self.user_ns.is_none() {
+            caps
+        } else {
+            caps.intersection(CapSet::only(cap::SYS_ADMIN).with(cap::SYS_CHROOT))
+        }
     }
 
     /// Who access(2) checks as: "The check is done using the calling
@@ -310,7 +377,7 @@ impl Creds {
     /// capabilities rather than the set of effective capabilities; and for
     /// non-root users, the check uses an empty set of capabilities."
     pub fn access_ids(&self) -> FsIds {
-        let caps = if self.uid == 0 { self.caps.permitted } else { CapSet::EMPTY };
+        let caps = if self.is_root(self.uid) { self.vfs_caps(self.caps.permitted) } else { CapSet::EMPTY };
         FsIds { uid: self.uid, gid: self.gid, groups: Arc::clone(&self.groups), caps }
     }
 
@@ -376,6 +443,8 @@ impl Creds {
         self.euid = euid;
         self.suid = suid;
         self.fsuid = euid;
+        let root_uid = self.root_uid();
+        let root = |id: u32| root_uid == Some(id);
         let c = &mut self.caps;
         // 1. "If one or more of the real, effective, or saved set user IDs
         //    was previously 0, and as a result of the UID changes all of
@@ -384,8 +453,8 @@ impl Creds {
         //    sets" (SECBIT_KEEP_CAPS keeps the permitted set, and the
         //    effective one unless rule 2 applies; the ambient set goes
         //    either way: to be confirmed by the diff runner).
-        let was_root = old.0 == 0 || old.1 == 0 || old.2 == 0;
-        if was_root && uid != 0 && euid != 0 && suid != 0 {
+        let was_root = root(old.0) || root(old.1) || root(old.2);
+        if was_root && !root(uid) && !root(euid) && !root(suid) {
             if !self.keep_caps {
                 c.permitted = CapSet::EMPTY;
                 c.effective = CapSet::EMPTY;
@@ -394,12 +463,12 @@ impl Creds {
         }
         // 2. "If the effective user ID is changed from 0 to nonzero, then
         //    all capabilities are cleared from the effective set."
-        if old.1 == 0 && euid != 0 {
+        if root(old.1) && !root(euid) {
             c.effective = CapSet::EMPTY;
         }
         // 3. "If the effective user ID is changed from nonzero to 0, then
         //    the permitted set is copied to the effective set."
-        if old.1 != 0 && euid == 0 {
+        if !root(old.1) && root(euid) {
             c.effective = c.permitted;
         }
         // 4. The file system user id, which followed the effective one.
@@ -417,10 +486,11 @@ impl Creds {
     /// any of these capabilities that are enabled in the permitted set are
     /// enabled in the effective set."
     fn fix_fs_caps(&mut self, old_fsuid: u32) {
+        let (was, is) = (self.is_root(old_fsuid), self.is_root(self.fsuid));
         let c = &mut self.caps;
-        if old_fsuid == 0 && self.fsuid != 0 {
+        if was && !is {
             c.effective = c.effective.minus(CapSet::FS);
-        } else if old_fsuid != 0 && self.fsuid == 0 {
+        } else if !was && is {
             c.effective = c.effective.union(c.permitted.intersection(CapSet::FS));
         }
     }

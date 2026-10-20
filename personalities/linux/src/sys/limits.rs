@@ -44,7 +44,9 @@ fn prlimit(k: &mut dyn LinuxKernel, pid: i32, resource: u32, new: UserPtr, old: 
     };
     // CAP_SYS_RESOURCE, and the ids, are the calling thread's (ADR 0045).
     let me = crate::cred::current(k);
-    let privileged = me.capable(crate::cred::cap::SYS_RESOURCE);
+    // Raising a hard limit takes the machine's resources: CAP_SYS_RESOURCE
+    // in the initial user namespace (ADR 0054).
+    let privileged = me.capable_initial(crate::cred::cap::SYS_RESOURCE);
     let own = pid == 0 || pid == k.pid();
     let mut result: Result<Rlimit, Errno> = Err(Errno::ESRCH);
     k.with_process(target, &mut |p, info| {

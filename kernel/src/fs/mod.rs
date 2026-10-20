@@ -84,10 +84,23 @@ impl Clock for UptimeClock {
     }
 }
 
-/// The clock disk file systems take their timestamps from (see
-/// [`UptimeClock`]).
+/// Wall-clock timestamps (`time::realtime_ns`, the RTC at boot), for disk
+/// file systems: their files outlive the boot, and ext4's journal and
+/// e2fsck expect real times (a deletion time of a few seconds since 1970
+/// reads as an orphan list link).
+#[derive(Debug)]
+struct WallClock;
+
+impl Clock for WallClock {
+    fn now(&self) -> Timespec {
+        let ns = time::realtime_ns();
+        Timespec::new((ns / 1_000_000_000) as i64, (ns % 1_000_000_000) as u32)
+    }
+}
+
+/// The clock disk file systems take their timestamps from.
 pub(crate) fn clock() -> Arc<dyn Clock> {
-    Arc::new(UptimeClock)
+    Arc::new(WallClock)
 }
 
 /// Set up the file systems: a tmpfs on `/`, filled from the initramfs if
@@ -110,6 +123,8 @@ pub fn init(boot: &BootInfo, held: Option<Region>) {
     if VFS.set(vfs).is_err() {
         panic!("fs::init called twice");
     }
+    // Mount namespaces the personality lets go of drop their mount tables.
+    crate::linux::task::init_namespaces();
     cache::init();
     if let Some(arg) = boot.arg(disk::MOUNT_ARG) {
         disk::mount_from_cmdline(arg);

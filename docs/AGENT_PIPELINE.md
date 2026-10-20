@@ -5,7 +5,9 @@ parts are deterministic tools in this repository and which are LLM roles,
 and how to run it unattended. The rules it enforces are in
 [CLEAN_ROOM.md](../CLEAN_ROOM.md); the design decisions, including the
 interface the kernel implements for test runs, are in
-[ADR 0027](adr/0027-agent-pipeline-tools-and-test-run-protocol.md).
+[ADR 0027](adr/0027-agent-pipeline-tools-and-test-run-protocol.md); the
+scheduler that runs it all unattended is
+[ADR 0056](adr/0056-pipeline-scheduler-loop-and-home-server-deployment.md).
 
 ## The loop
 
@@ -33,9 +35,9 @@ interface the kernel implements for test runs, are in
 6. **Diff runner.** `pipeline diff --target poly` runs the corpus and the
    entry's tests (visible and held-out) on the real OS and on Poly and
    compares them per test. Green: open a PR; it merges when CI is green.
-   Red: the diff goes back to the implementer (`pipeline role implementer
-   --feedback <report>`); after about five red cycles the entry goes to a
-   human.
+   Red: the visible tests' diff goes back to the implementer (`pipeline
+   role implementer --feedback <report>`; held-out tests only as a count);
+   after five red cycles the entry goes to a human.
 7. Any app-level failure later becomes a new entry at the top of the queue.
 
 ## Deterministic tools vs. LLM roles
@@ -52,6 +54,7 @@ interface the kernel implements for test runs, are in
 | Implement | **implementer (LLM)** | `pipeline role implementer <id> ...` runs it |
 | Compare real OS and Poly | tool | `pipeline diff [--target linux\|poly]` |
 | Merge decision | CI + held-out result | PR, never a direct push |
+| All of the above, unattended | tool | `pipeline loop [--once] [--dry-run]`, `loop status`, `loop reset` |
 
 All of these are `cargo xtask pipeline <command>`; the full option list is
 at the top of `tools/pipeline/src/main.rs`. Outputs go under
@@ -221,62 +224,234 @@ limited to cargo and local git, `webfetch` denied).
 
 ## A home server running 24/7
 
-Two agent instances, one per role, with separate contexts and
-directories, and a small scheduler (a systemd timer or a shell loop):
+`pipeline loop` (ADR [0056](adr/0056-pipeline-scheduler-loop-and-home-server-deployment.md))
+runs the whole cycle unattended, entry after entry, as a systemd service.
+`tools/pipeline/deploy/` has everything to set it up.
+
+### Users, directories, channels
+
+Three OS users; nothing one role saw can reach the other through files,
+settings, memory files or session history, and the only channels are the
+inbox and git:
 
 ```
-/srv/poly/spec/        OS user `polyspec`: repository checkout, the oracle (a Linux VM, later Windows/macOS VMs),
-                       POLY_HELDOUT_DIR=/srv/poly/heldout, generated tests in /srv/poly/generated
-/srv/poly/impl/        container or OS user `polyimpl`: its own repository checkout and the hand-off inbox only;
-                       no access to /srv/poly/heldout, /srv/poly/generated or the oracle VMs, no POLY_HELDOUT_DIR
-/srv/poly/runner/      OS user `polyrun`: checkout for the diff runner, read access to the held-out store and the VMs
+/srv/poly/runner/      user `server` (has `gh` and push access): runs the loop and is the diff runner
+  repo/                  checkout of main, remotes `origin` (GitHub) and `hub`
+  work/w0, w1/           worktrees where the runner checks branches out (CI, diff, verify)
+  state/                 one state file per entry, locks, pauses, logs of every command
+  pipeline.toml          the configuration;  human-queue.md;  log/pipeline.log
+/srv/poly/git/poly.git server, world-readable bare "hub": the role checkouts fetch from it; never forced
+/srv/poly/spec/        user `polyspec` (home): repo/ (remote `hub` only), its own Claude login, rustup
+/srv/poly/impl/        user `polyimpl` (home): repo/ (remote `hub` only), its own Claude login, rustup
+/srv/poly/heldout/     polyspec:server 2750, the held-out store (POLY_HELDOUT_DIR of the spec agent and the runner)
+/srv/poly/generated/   polyspec:server 2750, the spec agent's generated tests
+/srv/poly/inbox/       server:polyimpl 2750, hand-off bundles and feedback for the implementer
+/srv/poly/bin/poly-role root, the role wrapper: the only command `server` may run as the role users
 ```
 
-One cycle per entry:
+`polyimpl` cannot read `heldout/`, `generated/`, `runner/` or `spec/` (the
+setup script checks it). The loop starts a role with
+`sudo -n -u polyspec /srv/poly/bin/poly-role spec sync|run ...` (likewise
+`polyimpl` / `implementer`); `/etc/sudoers.d/poly-pipeline` allows exactly
+that, NOPASSWD:
 
-1. `pipeline next` → `pipeline claim <id> --agent spec-1`.
-2. `pipeline role spec <id> --workdir /srv/poly/spec/repo ...`; then
-   `cargo xtask ci` and a PR for the spec and visible tests.
-3. `pipeline handoff record` (commit the log), `pipeline handoff bundle`
-   into the implementer's inbox.
-4. `pipeline role implementer <id> --workdir /srv/poly/impl/repo ...`
-   (in the implementer's container).
-5. In the runner's checkout of the implementer's branch: `cargo xtask ci`,
-   `pipeline diff --target poly --tests-dir specs/linux/x86_64/brk.tests
-   --tests-dir $POLY_HELDOUT_DIR/linux/syscall/x86_64/brk`, and
-   `pipeline handoff verify <id> --received <inbox>`.
-6. Green: PR; it merges when CI is green. Red: back to step 4 with
-   `--feedback runs/latest/report.txt`; after about five red cycles,
-   release the claim and put the entry in the human queue. Exit status 75
-   from step 2 or 4: sleep, then repeat the same step.
+```
+server ALL=(polyspec) NOPASSWD: /srv/poly/bin/poly-role spec *
+server ALL=(polyimpl) NOPASSWD: /srv/poly/bin/poly-role implementer *
+```
 
-Each role's instance keeps its own agent configuration and history (one
-OS user or container per role), so nothing one role saw can reach the
-other through settings, memory files or session history.
+sudo resets the environment; the wrapper checks every argument, sets the
+role's environment (the implementer gets `POLY_ROLE=implementer` and never
+`POLY_HELDOUT_DIR`; the spec agent gets `POLY_HELDOUT_DIR=/srv/poly/heldout`
+and an empty `/srv/poly/generated/<symbol>`), and runs `cargo xtask pipeline
+role <role> <entry> --workdir <its repo> --preset claude [--model M]
+[--feedback F]` in the role's checkout. `sync <branch> <base>` puts that
+checkout on the branch, from the hub, clean.
+
+Code moves through git only. Agents commit on their branch
+(`pipeline/spec/<symbol>`, `pipeline/impl/<symbol>`) and never push; the loop
+fetches the branch from the role's checkout and pushes it to the hub without
+`--force` (a rewritten history is refused, and the entry goes to the human
+queue). Only the loop pushes to GitHub, and never to `main`.
+
+### One cycle per entry
+
+1. **claim** (runner): `pipeline next` order, skipping entries the loop has
+   state for; on a new `pipeline/spec/<symbol>` from `origin/main`:
+   `coverage claim <id> --agent <spec agent>`, committed, pushed to the hub.
+2. **spec**: `poly-role spec sync`, `poly-role spec run` (the spec agent
+   writes the spec sheet, tests in `generated/`, runs `tests split`,
+   commits); the loop fetches and pushes the branch.
+3. **spec-check** (runner): the spec agent changed only its entry's spec
+   sheet and tests directory; the sheet, visible tests and held-out tests
+   exist; `cargo xtask ci` passes (`spec.ci`).
+4. **handoff** (runner): `pipeline handoff record` with the spec agent's head
+   as the revision, committed and pushed on the spec branch;
+   `pipeline handoff bundle` into `/srv/poly/inbox/<entry>/bundle`.
+5. **implement**: `poly-role implementer sync pipeline/impl/<symbol>` (from
+   the spec branch the first time, then from itself), `poly-role implementer
+   run [--feedback /srv/poly/inbox/<entry>/feedback-<n>.txt]`; the loop
+   fetches and pushes the branch.
+6. **verify** (runner, on the implementer's branch), in this order, before
+   anything from the branch runs: the safety checks on the session's diff;
+   `pipeline handoff verify <id> --received <bundle>` (with the held-out
+   store); `cargo xtask ci`; `pipeline diff --target poly --build-kernel
+   --tests-dir <visible> --tests-dir <held-out> --tests <their names>`.
+   Green: every visible and held-out test of the entry passes.
+   - **Red** (CI or the diff): feedback into the inbox and back to step 5.
+     The feedback has the visible tests' results in full and the held-out
+     tests only as "k of n pass"; CI output goes back as its last 80 lines
+     with every line that names or quotes a held-out test withheld. An
+     implementer session that fails or commits nothing is a red cycle too.
+     After `max_cycles` (5) red cycles: the human queue.
+   - **Red flag** (a forbidden path, added `unsafe`, `handoff verify`
+     failing, a rewritten branch): the human queue at once.
+7. **publish** (runner): the status commit (`coverage set-status <id> green
+   --tests-visible V --tests-held-out H`, `coverage readme`), the whole
+   branch checked against main once more, `coverage check` and `readme
+   --check`, pushed to the hub and GitHub, `gh pr create`, and with
+   `github.auto_merge` `gh pr merge --auto --merge` (GitHub merges once the
+   required checks pass; without auto-merge the PR waits for the owner).
+8. **awaiting-merge**: every `poll_secs` `gh pr view`: merged → done;
+   closed → the human queue; conflicting with main → **refresh**: main is
+   merged in (conflicts in the generated files, README progress,
+   `docs/progress/`, the entry's coverage file and the hand-off log, are
+   resolved by the loop; others go to the human), then verify and publish
+   again.
+
+**One PR per entry** carries the claim, the spec, the hand-off record, the
+implementation and the status change. Merge pipeline PRs with a **merge
+commit**, never squash or rebase: the hand-off log cites the spec agent's
+commit by its hash, and `handoff verify` reads the files from it.
+
+**Usage limits.** Exit status 75 from a role pauses that role until the
+reset time in the message (`...limit reached|<unix time>`, `resets 3pm
+(Europe/Berlin)`, `try again in 20 minutes`) plus two minutes, else for
+`limit_pause_secs` (30 minutes); the entry stays at its step and the session
+is retried then, without counting a red cycle. Other entries' runner steps
+go on meanwhile.
+
+**Errors** of the infrastructure (git, sudo, a tool that crashed) back off
+2, 4, ... 60 minutes; after `max_errors` in a row the entry goes to the
+human queue.
+
+**The human queue** is `/srv/poly/runner/human-queue.md`: one section per
+stopped entry with the reason, the branches (pushed to GitHub too), the
+state file and the logs. `notify.command` runs then (and when a PR is
+opened) with `POLY_EVENT`, `POLY_ENTRY`, `POLY_MESSAGE`, e.g. a `curl` to an
+ntfy topic for a push notification. `pipeline loop reset <id>` forgets an
+entry (and deletes its hub branches) so the loop takes it again.
+
+### Running the loop
+
+```sh
+cargo xtask pipeline loop [--config FILE]     # max_parallel workers, forever (the systemd service)
+cargo xtask pipeline loop --once              # drive one entry until it waits or ends, then exit
+cargo xtask pipeline loop --entry linux/syscall/x86_64/brk [--once]   # only this entry
+cargo xtask pipeline loop --dry-run           # print the commands for the next entry; changes nothing
+cargo xtask pipeline loop status [--json]     # every entry's step, cycle, PR or reason; paused roles
+cargo xtask pipeline loop reset <id> [--keep-branches]
+```
+
+The configuration is TOML, looked up as `--config`, `$POLY_PIPELINE_CONFIG`,
+`/etc/poly-pipeline.toml`, `~/.config/poly/pipeline.toml`; every key has a
+default for this layout, unknown keys are errors. The example with every
+key and its meaning is
+[`tools/pipeline/deploy/pipeline.example.toml`](../tools/pipeline/deploy/pipeline.example.toml):
+`[loop]` (`max_parallel` 1, 2 on a 4-core machine; `max_cycles` 5;
+`spec_attempts`; `max_errors`; `max_open_prs`; `entries`/`exclude` id
+prefixes; `idle_secs`, `limit_pause_secs`, `poll_secs`), `[paths]`, `[git]`,
+`[github]` (`open_prs`, `auto_merge`, `push_human_branches`), `[spec]` and
+`[implementer]` (agent id, the wrapper command, `model`, the checkout; the
+implementer's `allowed_paths`), `[safety] extra_forbidden`,
+`[notify] command`.
+
+Logs: one line per event on stdout (journald priorities under systemd) and
+in `log/pipeline.log`; every command's full output in
+`state/logs/<entry>/`. With `max_parallel = 2` one entry's spec agent and
+another's implementer can run at the same time (one session per role: one
+checkout per role), and the runner verifies in its own worktree per worker.
+`flock` locks keep two workers or two loops off the same entry; a crash or
+reboot resumes every entry at its step (each step is idempotent).
+
+### Setting up the home server
+
+On the server (Ubuntu 24.04), as an admin, from a checkout of the
+repository:
+
+```sh
+sudo apt install git gcc qemu-system-x86 curl     # what the setup script checks for
+sudo tools/pipeline/deploy/setup.sh --dry-run     # read what it would do
+sudo tools/pipeline/deploy/setup.sh               # [--runner-user server] [--repo-url URL] [--no-install-tools]
+```
+
+It is idempotent and changes nothing but: the users `polyspec` and
+`polyimpl` (system users with locked passwords, homes in `/srv/poly`),
+`/srv/poly` (directories with the owners and modes above, the wrapper, the
+clones, the hub, the configuration, rustup and Claude Code in the role
+homes), `/etc/sudoers.d/poly-pipeline` (checked with `visudo` first) and
+`/etc/systemd/system/poly-pipeline.service` (enabled, not started; `--start`
+starts it). The unit runs `cargo xtask pipeline loop` as `server` in
+`/srv/poly/runner/repo` with `Restart=always`, `Nice=10`, a low IO priority,
+`CPUQuota=300%` (3 of 4 cores), `MemoryHigh=11G`, `MemoryMax=12G`, and no
+`NoNewPrivileges` (the loop needs sudo for the wrapper).
+
+Then, once:
+
+1. Log both role users in to Claude Code with the subscription, and trust
+   their checkouts: `sudo -iu polyspec`, `cd repo && claude`, `/login`
+   (Claude account with subscription), accept "trust this folder", `/exit`,
+   `exit`; the same as `polyimpl`.
+2. Review `/srv/poly/runner/pipeline.toml`.
+3. On GitHub: allow merge commits and auto-merge; protect `main` with CI as
+   a required check.
+4. Try it: `sudo -u server -H bash -lc 'cd /srv/poly/runner/repo && cargo
+   xtask pipeline loop --dry-run'`, then `... loop --once`.
+5. `sudo systemctl start poly-pipeline`; follow it with
+   `journalctl -u poly-pipeline -f` and `cargo xtask pipeline loop status`.
+
+The runner builds and tests agent-written code (CI) as `server`, which can
+read the held-out store and push: the checks before CI (paths, no build
+scripts, no new crates) and the redacted feedback narrow that, and running
+CI and the diff as a separate user or in a container is the next hardening
+step (ADR 0056).
 
 ## Safety rules
 
+`pipeline loop` enforces these by checking, not by trusting prompts: a
+violation stops the entry and puts it in the human queue.
+
 - Only changes that are **CI-green and held-out-green** merge, and only
   through pull requests reviewed by the owner or an automated merge rule;
-  agents never push to `main` and never force-push.
+  agents never push to `main` and never force-push. (The loop opens the PR
+  only when green; agents never push at all, and the loop never forces.)
 - Agent-written code is **safe Rust only**: no `unsafe` blocks in agent
   changes (the existing kernel's `unsafe` is written and reviewed by
-  humans). Reviews reject a PR that adds `unsafe`.
+  humans). Reviews reject a PR that adds `unsafe`; the loop refuses any
+  agent diff that adds `unsafe`, `unsafe_code` or `global_asm!`, a build
+  script, a proc-macro crate, a crate from a registry, or a binary file.
 - The implementer's environment never contains the held-out store, the
   generated tests, the oracle VMs or third-party OS source; it receives
-  only the bundle. `pipeline handoff verify` runs before every merge.
+  only the bundle. `pipeline handoff verify` runs before every merge (the
+  loop runs it on every implementer session, before CI).
 - One agent id never plays both roles for an entry (`handoff record` and
   `verify` enforce it).
 - Agents do not edit `docs/ROADMAP.md`, the README progress section,
   `docs/progress/`, `coverage/` (except through `claim`/`release`) or
-  `CLEAN_ROOM.md`.
+  `CLEAN_ROOM.md`. The loop checks every agent diff against the role's
+  allowed paths (the spec agent: its entry's spec sheet and tests; the
+  implementer: `implementer.allowed_paths`) and a list of reserved files
+  (also the hand-off log, `tools/`, `tests/`, CI and agent configuration),
+  and the whole PR once more: only the loop's own status change, hand-off
+  rows of this entry and the generated progress files may come on top.
 - Anything that looks like copied code, or a file of unknown origin, stops
   the loop for that entry and goes to the human queue (CLEAN_ROOM.md, red
   flags).
 
 ## What is not built yet
 
-- The scheduler loop itself (the steps above, as a script or service).
+- Running CI and the diff of agent branches as a user without GitHub
+  credentials, or in a container (today the runner, `server`, does both).
 - `data<i>` fields and times in the kernel's `POLY-SYSCALL` records, and
   `POLY-SIGNAL` for signals a handler takes (only faults and fatal signals
   are reported).

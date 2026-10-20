@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getgid
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  getgid() returns the real group id; as root here, 0, on every call.
+  Arguments are ignored. Children and threads have the same value; unchanged
+  by execve; new files get the caller's (effective) gid as group (no set-
+  group-ID directory involved).
+returns:
+  always: "the real gid; never fails"
+errors:
+  none: "cannot fail"
+side_effects: "none"
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

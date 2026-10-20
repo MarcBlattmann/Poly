@@ -27,36 +27,74 @@ fn id_result(id: u32) -> SysResult {
     Ok(u64::from(id))
 }
 
+// The ids user space passes and gets are its user namespace's; the
+// credentials hold kernel ids (ADR 0054): an id without a mapping is
+// `EINVAL` ("not valid in this user namespace").
+
+/// An optional user id argument as a kernel id.
+fn kuid(c: &cred::Creds, raw: u32) -> Result<Option<u32>, Errno> {
+    optional_id(raw).map(|u| c.kuid(u)).transpose()
+}
+
+/// An optional group id argument as a kernel id.
+fn kgid(c: &cred::Creds, raw: u32) -> Result<Option<u32>, Errno> {
+    optional_id(raw).map(|g| c.kgid(g)).transpose()
+}
+
 /// setuid(uid): [`cred::Creds::set_uid`].
 pub fn setuid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    cred::change(k, |c| c.set_uid(a.uint(0))).map(|()| 0)
+    let raw = a.uint(0);
+    cred::change(k, |c| {
+        let uid = if raw == cred::NO_ID { raw } else { c.kuid(raw)? };
+        c.set_uid(uid)
+    })
+    .map(|()| 0)
 }
 
 /// setgid(gid): [`cred::Creds::set_gid`].
 pub fn setgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    cred::change(k, |c| c.set_gid(a.uint(0))).map(|()| 0)
+    let raw = a.uint(0);
+    cred::change(k, |c| {
+        let gid = if raw == cred::NO_ID { raw } else { c.kgid(raw)? };
+        c.set_gid(gid)
+    })
+    .map(|()| 0)
 }
 
 /// setreuid(ruid, euid), `-1` for "unchanged".
 pub fn setreuid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    cred::change(k, |c| c.set_reuid(optional_id(a.uint(0)), optional_id(a.uint(1)))).map(|()| 0)
+    cred::change(k, |c| {
+        let (r, e) = (kuid(c, a.uint(0))?, kuid(c, a.uint(1))?);
+        c.set_reuid(r, e)
+    })
+    .map(|()| 0)
 }
 
 /// setregid(rgid, egid).
 pub fn setregid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    cred::change(k, |c| c.set_regid(optional_id(a.uint(0)), optional_id(a.uint(1)))).map(|()| 0)
+    cred::change(k, |c| {
+        let (r, e) = (kgid(c, a.uint(0))?, kgid(c, a.uint(1))?);
+        c.set_regid(r, e)
+    })
+    .map(|()| 0)
 }
 
 /// setresuid(ruid, euid, suid).
 pub fn setresuid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let (r, e, s) = (optional_id(a.uint(0)), optional_id(a.uint(1)), optional_id(a.uint(2)));
-    cred::change(k, |c| c.set_resuid(r, e, s)).map(|()| 0)
+    cred::change(k, |c| {
+        let (r, e, s) = (kuid(c, a.uint(0))?, kuid(c, a.uint(1))?, kuid(c, a.uint(2))?);
+        c.set_resuid(r, e, s)
+    })
+    .map(|()| 0)
 }
 
 /// setresgid(rgid, egid, sgid).
 pub fn setresgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let (r, e, s) = (optional_id(a.uint(0)), optional_id(a.uint(1)), optional_id(a.uint(2)));
-    cred::change(k, |c| c.set_resgid(r, e, s)).map(|()| 0)
+    cred::change(k, |c| {
+        let (r, e, s) = (kgid(c, a.uint(0))?, kgid(c, a.uint(1))?, kgid(c, a.uint(2))?);
+        c.set_resgid(r, e, s)
+    })
+    .map(|()| 0)
 }
 
 /// Store three ids at three pointers, in order; `EFAULT` at the first
@@ -71,24 +109,32 @@ fn put_ids(k: &mut dyn LinuxKernel, a: &Args, ids: [u32; 3]) -> SysResult {
 /// getresuid(ruid, euid, suid).
 pub fn getresuid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let c = cred::current(k);
-    put_ids(k, a, [c.uid, c.euid, c.suid])
+    put_ids(k, a, [c.uid_view(c.uid), c.uid_view(c.euid), c.uid_view(c.suid)])
 }
 
 /// getresgid(rgid, egid, sgid).
 pub fn getresgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let c = cred::current(k);
-    put_ids(k, a, [c.gid, c.egid, c.sgid])
+    put_ids(k, a, [c.gid_view(c.gid), c.gid_view(c.egid), c.gid_view(c.sgid)])
 }
 
 /// setfsuid(fsuid): the old file system user id, whether or not it
-/// changed.
+/// changed (an id without a mapping changes nothing).
 pub fn setfsuid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    id_result(cred::change(k, |c| c.set_fsuid(a.uint(0))))
+    id_result(cred::change(k, |c| {
+        let new = c.kuid(a.uint(0)).unwrap_or(cred::NO_ID);
+        let old = c.set_fsuid(new);
+        c.uid_view(old)
+    }))
 }
 
 /// setfsgid(fsgid).
 pub fn setfsgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    id_result(cred::change(k, |c| c.set_fsgid(a.uint(0))))
+    id_result(cred::change(k, |c| {
+        let new = c.kgid(a.uint(0)).unwrap_or(cred::NO_ID);
+        let old = c.set_fsgid(new);
+        c.gid_view(old)
+    }))
 }
 
 /// getgroups(size, list): getgroups(2): "If size is zero, list is not
@@ -97,7 +143,8 @@ pub fn setfsgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// negative); `EFAULT`.
 pub fn getgroups(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let size = a.int(0);
-    let groups = cred::current(k).groups;
+    let c = cred::current(k);
+    let groups: Vec<u32> = c.groups.iter().map(|&g| c.gid_view(g)).collect();
     if size < 0 {
         return Err(Errno::EINVAL);
     }
@@ -120,12 +167,19 @@ pub fn setgroups(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if size < 0 || size as usize > NGROUPS_MAX {
         return Err(Errno::EINVAL);
     }
-    if !cred::current(k).capable(cred::cap::SETGID) {
+    let c = cred::current(k);
+    // user_namespaces(7): not until gid_map was written, never after
+    // "deny" went to /proc/[pid]/setgroups.
+    if !c.capable(cred::cap::SETGID) || !crate::ns::user::setgroups_allowed(&c.user_ns) {
         return Err(Errno::EPERM);
     }
     let mut bytes = alloc::vec![0u8; size as usize * 4];
     k.copy_from_user(a.ptr(1), &mut bytes)?;
-    let groups: Vec<u32> = bytes.chunks_exact(4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+    let groups = bytes
+        .chunks_exact(4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .map(|g| if g == cred::NO_ID { Ok(g) } else { c.kgid(g) })
+        .collect::<Result<Vec<u32>, Errno>>()?;
     cred::change(k, |c| c.set_groups(&groups)).map(|()| 0)
 }
 
@@ -160,9 +214,10 @@ pub fn capget(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if pid < 0 {
         return Err(Errno::EINVAL);
     }
-    let caps = if pid == 0 || pid == k.tid() {
+    let caps = if pid == 0 || pid == crate::ns::pid::view(k, k.tid()) {
         cred::current(k).caps
     } else {
+        let pid = crate::ns::pid::find(k, pid)?;
         with_target(k, Target::Thread(pid), |p, _| p.has_thread(pid).then(|| p.thread(pid).creds.caps))?
             .ok_or(Errno::ESRCH)?
     };
@@ -188,7 +243,7 @@ pub fn capget(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// bits of capabilities that do not exist are ignored.
 pub fn capset(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (words, pid) = cap_header(k, a.ptr(0))?;
-    if pid != 0 && pid != k.tid() {
+    if pid != 0 && pid != crate::ns::pid::view(k, k.tid()) {
         return Err(Errno::EPERM);
     }
     let mut data = [0u8; 2 * CAP_DATA_SIZE];

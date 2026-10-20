@@ -23,8 +23,9 @@ pub const FILE_NAME: &str = "poly-test-ext2.img";
 /// Size of the image.
 pub const BYTES: usize = 8 << 20;
 /// Kernel flags for a boot that has the image as its third virtio-blk
-/// device: mount it on `/mnt` and check it (`fs::disk_tests`).
-pub const KERNEL_FLAGS: &str = "poly.mount=virtio2:/mnt poly.test.ext2";
+/// device and the ext4 test disk (`ext4disk.rs`) as its fourth: mount them
+/// on `/mnt` and `/ext4` and check them (`fs::disk_tests`).
+pub const KERNEL_FLAGS: &str = "poly.mount=virtio2:/mnt,virtio3:/ext4 poly.test.ext2 poly.test.ext4";
 
 /// `/hello.txt`. Must match `HELLO` in `kernel/src/fs/disk_tests.rs`.
 pub const HELLO: &[u8] = b"Hello from ext2 on virtio-blk!\n";

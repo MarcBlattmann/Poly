@@ -56,7 +56,7 @@ unknown command 'hlep'; did you mean 'help'?
 | `disks` | every disk: description, size, interrupt vector or polled, write cache; cache buffers, dirty, hits, misses, read-ahead, write-backs, evictions; queue requests, merges, splits, interrupts, sleeps |
 | `ls [path]` | a directory (default `/`) sorted by name, or one file: mode, size (or device number), name, link target |
 | `cat <file>...` | the files' contents (at most 64 KiB each, so `cat /dev/zero` ends) |
-| `mount [<disk> <path> [ro]]` | every mount: source (the disk for a disk mount), mount point, type, options; with arguments, mount the ext2 volume on `<disk>` (`virtio2`, `ram0`, ...) on `<path>` (made if missing) |
+| `mount [<disk> <path> [ro]]` | every mount: source (the disk for a disk mount), mount point, type, options; with arguments, mount the ext2/3/4 volume on `<disk>` (`virtio2`, `ram0`, ...) on `<path>` (made if missing) |
 | `umount <path>` | unmount the disk mounted on `<path>`: written back, synced and marked clean; refused while files there are open or mapped |
 | `write <file> [words...]` | write the words and a newline to `<file>` (created or truncated) |
 | `sync` | write back every dirty cached page and sync every disk file system and disk |
@@ -437,6 +437,20 @@ hang). To check a change, boot the CI configuration many times in parallel
 next to a few busy loops (`while :; do :; done`) and count failures per
 test.
 
+With several CPUs, "nothing else runs while interrupts are off" no longer
+holds, and a thread may run on another CPU than its test. Tests that need
+the old guarantees say so: `thread::pin_current()` keeps the test on its
+CPU, `thread::spawn_here` starts a thread on the same one,
+`smp::exclusive()` parks every other CPU (for tests that count frames or
+other global totals), and `time::cpu_ticks()` counts this CPU's ticks.
+Waiting for something another CPU does (reaping a thread that ran there,
+a thread pinned there getting going) is a wait in time with a generous
+deadline (`thread::wait_until`), not a number of yields: the other CPU may
+be held off by the host for a while. Where a test must tell "late" from
+"never", count the other CPU's own ticks (`percpu::cpu(i).ticks()`), which
+stand still while the host does not run it (see the TLB shootdown tests in
+`user/tests.rs`).
+
 ## Panic backtraces
 
 The kernel is built with frame pointers, so the panic handler can walk the
@@ -562,9 +576,69 @@ add `-monitor stdio` to a hand-written QEMU command line:
   `apic_deliver_irq` trace event).
 
 `info registers` shows `RFLAGS` (bit 9, IF: interrupts enabled). In gdb,
-`print poly_kernel::arch::x86_64::time::TICKS` gives the tick count, and a
-breakpoint on `poly_kernel::arch::x86_64::irq::dispatch` stops at every
-interrupt (expect one per millisecond from the tick).
+`print poly_kernel::arch::x86_64::time::TICKS` gives the boot CPU's tick
+count, and a breakpoint on `poly_kernel::arch::x86_64::irq::dispatch`
+stops at every interrupt (expect one per millisecond from each CPU's
+tick).
+
+## Several CPUs
+
+The boot log says which CPUs came up:
+
+```text
+acpi: CPUs: 4 enabled, 0 online-capable; local APIC at 0xfee00000, 8259 PICs present
+smp: 4 of 4 CPUs online (0-3)
+```
+
+`poly.smp=off` runs on the boot CPU only, `poly.cpus=<n>` on at most `n`
+CPUs (`smp: 2 of 4 CPUs online (0-1), 2 left out by poly.smp / poly.cpus`):
+the first thing to try when a bug might be a race between CPUs. `cargo
+xtask run` uses QEMU's `-smp 2`; add `-smp <n>` to a hand-written QEMU
+command line for more. The shell's `ps` shows each thread's CPU, and the
+status bar the CPUs online.
+
+**An AP that does not start** is logged as `smp: CPU <i> (APIC ID <id>) did
+not start: ...` and left out; the boot goes on with the others.
+
+- `it never reached long mode`: no answer to INIT and SIPI; the AP never ran the trampoline's first
+  instructions, or died before it reported "started". Check the start-up
+  area: `smp: no room below 1 MiB for the start-up code` means the memory
+  map had no usable RAM there. With `-d int,cpu_reset -D qemu.log` QEMU
+  logs the INIT and the SIPI's start address (the area's page) and every
+  exception the AP takes on the way; a triple fault there resets only that
+  CPU. In gdb, `info threads` lists one thread per vCPU: `thread 2` and
+  `x/8i $pc` show where the AP is (real-mode addresses are `cs * 16 + ip`;
+  break on the area's physical address with `hbreak *0x<base>`).
+- `it reached the kernel but did not come online`: the trampoline worked and `ap_entry` ran, but
+  the AP stopped in its own set-up (page tables, GDT/TSS, APIC, timer).
+  Its own panic, if any, is in the serial log, prefixed like any panic.
+  Break on `poly_kernel::arch::x86_64::smp::ap_entry` (a hardware
+  breakpoint: the AP runs before the kernel's page tables are loaded there).
+- An AP is up but never runs anything: `ps` shows no thread ever on it. Its
+  idle loop halts until an interrupt: check its tick (`info lapic` on that
+  vCPU: the timer LVT periodic, vector 0xf0) and that reschedule IPIs
+  (vector 0xf1) arrive (`irq` in the shell counts every vector, over all
+  CPUs).
+
+**Debugging with several CPUs in gdb.** Each vCPU is a gdb thread:
+
+- `info threads` lists them (thread 1 is CPU 0); `thread <n>` switches,
+  then `bt`, `info registers` and `x` are that CPU's. `thread apply all bt`
+  shows what every CPU is doing, the first thing to look at in a hang.
+- The running CPU's per-CPU area is at its GS base: `p/x $gs_base`, then
+  `p *(poly_kernel::arch::x86_64::percpu::PerCpu *)$gs_base` (CPU number,
+  APIC ID, current thread, spinlocks held, ticks). On entry from ring 3
+  the kernel's GS base is in `KERNEL_GS_BASE` until `swapgs`.
+- Breakpoints stop the CPU that hits them; with QEMU's TCG the other vCPUs
+  stop too while gdb has control. `set scheduler-locking on` keeps `step`
+  and `next` on the current CPU.
+- A hang with every CPU spinning in `SpinLock::lock` is a lock-order
+  problem (see "Synchronisation" in ARCHITECTURE.md); one CPU waiting in
+  `tlb::shoot` means a target CPU stopped serving shootdowns: look at what
+  it runs with interrupts off.
+- A panic stops the other CPUs with an NMI, so the backtrace in the log is
+  the panicking CPU's; the others halt where they were (`thread apply all
+  bt` shows where).
 
 ## User mode
 
@@ -1140,8 +1214,11 @@ a tick shows everything as system time.
 `cargo xtask run` and the boot tests attach a third virtio-blk device,
 `target/poly-test-ext2.img` (8 MiB of ext2 with 4 KiB blocks, written by
 `tools/xtask/src/ext2disk.rs` with `poly-ext2` before every boot, the same
-bytes every time), and pass `poly.mount=virtio2:/mnt poly.test.ext2`. The
-kernel brings the disk up when the mount asks for it and logs the mount:
+bytes every time), and a fourth, `target/poly-test-ext4.img` (16 MiB of
+ext4 with a 4 MiB journal, `tools/xtask/src/ext4disk.rs`, likewise), and
+pass `poly.mount=virtio2:/mnt,virtio3:/ext4 poly.test.ext2
+poly.test.ext4`. The kernel brings the disks up when the mount asks for
+them and logs each mount:
 
 ```text
 fs: page cache of up to 16190 pages (63 MiB); writeback every 5 s
@@ -1150,9 +1227,20 @@ block: virtio2: virtio-blk 00:06.0, 16384 blocks of 512 bytes (8 MiB), write cac
 fs: virtio2 mounted on /mnt: ext2, 2048 blocks of 4096 bytes (1901 free), 1024 inodes (1008 free), read-write
 ```
 
-A volume that was not unmounted clean adds `; was not cleanly unmounted
-(run e2fsck)`. A mount that fails says why (`fs: mounting virtio2 on /mnt
-failed: not an ext2 file system`, `no such disk`, an unsupported feature).
+An ext2 volume (or ext4 without a journal) that was not unmounted clean
+adds `; was not cleanly unmounted (run e2fsck)`. A journaled one is
+consistent once its journal is replayed, which mounting does first and
+reports:
+
+```text
+fs: virtio3: journal replayed (2 transactions), 1 orphans processed
+```
+
+A mount that fails says why (`fs: mounting virtio2 on /mnt failed: not an
+ext2/3/4 file system`, `no such disk`, `unsupported incompatible features
+0x10` (here `meta_bg`), `corrupt superblock checksum`, `the journal needs
+recovery but the device is read-only`). An unknown read-only-compatible
+feature (quota, ...) or `inline_data` mounts read-only.
 `virtioN` is the N-th virtio-blk function in PCI order (`lspci` lists them;
 `virtio1` is the watchdog test's spare). In the shell:
 
@@ -1180,12 +1268,30 @@ e2fsck -fn target/poly-test-ext2.img                   # check without changing 
 debugfs -R 'ls -l /' target/poly-test-ext2.img         # list the root directory
 debugfs -R 'cat /note.txt' target/poly-test-ext2.img   # print a file
 cargo xtask run poly.test=disk_tests                   # only the disk file system tests
+dumpe2fs -h target/poly-test-ext4.img                  # features, journal, needs_recovery, orphans
+debugfs -R 'logdump -a' target/poly-test-ext4.img      # the journal's transactions (after a crash)
+debugfs -R 'ex /dir/fragmented.bin' target/poly-test-ext4.img   # an extent tree, level by level
 ```
+
+`e2fsck -fn` on an image whose journal needs replaying reports problems
+without replaying it (`-n` changes nothing); replay first, on a copy: `cp
+target/poly-test-ext4.img /tmp/x.img && e2fsck -fy /tmp/x.img`, or mount
+it with the driver. A file system that refuses to mount with `EBADMSG`
+errors in the log has a checksum mismatch: `e2fsck -fn` names the
+structure. `poly_ext2::Ext2::stats()` counts commits (`commits`), what
+mounting replayed (`replayed`) and orphans processed (`orphans`); with gdb,
+a thread stuck in `poly_kernel::sync::RawMutex` under `commit` waits for
+the disk's flush.
 
 `cargo xtask` rewrites the image before the next boot; copy it first to
 keep it. The boot test `ext2_persistence_test` writes a file in one boot,
 reboots, runs `e2fsck -fn` (skipped with a message when e2fsprogs are not
-installed) and reads the file in a second boot from the same image.
+installed) and reads the file in a second boot from the same image;
+`ext4disk::boot_tests` does the same on `/ext4`, then boots with
+`poly.test.ext4.crash` (a test writes and syncs `/ext4/committed.txt`, the
+boot ends without unmounting), checks on the host that the image needs a
+journal replay, and boots again: the mount must log the replay and the
+file must be there.
 
 Write errors at writeback (a full volume) lose the page's data and are
 reported by the next `sync` (`sync: ENOSPC`) and counted as

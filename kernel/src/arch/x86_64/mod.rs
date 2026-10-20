@@ -17,12 +17,15 @@ pub mod idt;
 pub mod irq;
 pub mod mmio;
 pub mod paging;
+pub mod percpu;
 pub mod port;
 pub mod reset;
 pub mod rtc;
 pub mod serial;
+pub mod smp;
 mod syscall;
 pub mod time;
+pub mod tlb;
 pub mod user;
 mod usercopy;
 pub mod vdso;
@@ -41,8 +44,28 @@ pub const KERNEL_VMA: u64 = 0xffff_ffff_8000_0000;
 /// [`paging::init`] switches to the direct map.
 pub const BOOT_MAPPED_PHYS: u64 = 1 << 30;
 
+pub use percpu::MAX_CPUS;
+
+/// Point GS at the boot CPU's per-CPU area: before anything else, since
+/// every lock counts itself there.
+///
 /// # Safety
 /// Call once, first thing on the boot CPU.
+pub unsafe fn init_boot_cpu() {
+    // SAFETY: forwarded from the caller.
+    unsafe { percpu::init_boot_cpu() }
+}
+
+/// What a CPU does on every turn of a loop in which it waits with
+/// interrupts off for another CPU (a spinlock, an acknowledgement):
+/// answer TLB shootdowns, so the CPU it waits for cannot be waiting for it.
+#[inline]
+pub fn wait_hook() {
+    tlb::service();
+}
+
+/// # Safety
+/// Call once, early on the boot CPU, after [`init_boot_cpu`].
 pub unsafe fn init() {
     // SAFETY: forwarded from the caller.
     unsafe {

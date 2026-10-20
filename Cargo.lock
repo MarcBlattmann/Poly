@@ -48,6 +48,10 @@ name = "poly-bochs-vbe"
 version = "0.0.1"
 
 [[package]]
+name = "poly-bpf"
+version = "0.0.1"
+
+[[package]]
 name = "poly-coverage"
 version = "0.0.1"
 dependencies = [
@@ -135,6 +139,7 @@ name = "poly-personality-linux"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-bpf",
  "poly-vfs",
 ]
 
@@ -179,6 +184,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-sched"
 version = "0.0.1"
+
+[[package]]
+name = "poly-smp"
+version = "0.0.1"
+dependencies = [
+ "poly-sched",
+]
 
 [[package]]
 name = "poly-term"

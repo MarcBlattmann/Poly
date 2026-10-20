@@ -31,7 +31,6 @@
 //! is not low), `PROT_GROWSDOWN` (applied to the given range only).
 
 use super::LinuxState;
-use crate::arch::cpu::InterruptsOff;
 use crate::fs::cache::FileSource;
 use crate::process::{self, ExitStatus, Process, ThreadFlags, Unparked};
 use crate::testrun;
@@ -149,6 +148,25 @@ impl<'a> Thread<'a> {
             return Some(Arc::clone(&self.flags));
         }
         process::find_thread(u32::try_from(tid).ok()?).map(|(_, f)| f)
+    }
+
+    /// The kernel thread of Linux thread `tid`, for sched_setaffinity(2) and
+    /// sched_getaffinity(2). Threads of another process need the caller to
+    /// have effective user id 0 (standing in for `CAP_SYS_NICE`, as the
+    /// caller's other ids are not compared yet).
+    fn sched_target(&self, tid: i32) -> Result<crate::thread::ThreadId, Errno> {
+        if tid == self.tid as i32 {
+            return Ok(crate::thread::current());
+        }
+        let (process, flags) =
+            process::find_thread(u32::try_from(tid).map_err(|_| Errno::ESRCH)?).ok_or(Errno::ESRCH)?;
+        if process.pid != self.process.pid && self.credentials().euid != 0 {
+            return Err(Errno::EPERM);
+        }
+        match flags.thread.load(Ordering::SeqCst) {
+            0 => Err(Errno::ESRCH),
+            bits => Ok(crate::thread::ThreadId::from_bits(bits - 1)),
+        }
     }
 }
 
@@ -600,16 +618,9 @@ impl LinuxKernel for Thread<'_> {
         if crate::arch::cpu::interrupts_enabled() {
             let _ = user::page_fault(addr.0, Access::Write);
         }
-        // One CPU: with interrupts off nothing else runs between the read
-        // and the write. TODO(smp): a `lock cmpxchg` with a fixup.
-        let _irq = InterruptsOff::new();
-        let mut word = [0u8; 4];
-        user::copy_from_user(&mut word, addr.0).map_err(|_| Errno::EFAULT)?;
-        let found = u32::from_le_bytes(word);
-        if found == expected {
-            user::copy_to_user(addr.0, &new.to_le_bytes()).map_err(|_| Errno::EFAULT)?;
-        }
-        Ok(found)
+        // Atomic on the user word: other threads of the process may run on
+        // other CPUs meanwhile.
+        user::cmpxchg_user_u32(addr.0, expected, new).map_err(|_| Errno::EFAULT)
     }
 
     fn exit_thread(&mut self, status: u8) {
@@ -647,6 +658,29 @@ impl LinuxKernel for Thread<'_> {
 
     fn tick_ns(&self) -> u64 {
         time::NANOS_PER_TICK
+    }
+
+    fn current_cpu(&self) -> u32 {
+        crate::thread::this_cpu() as u32
+    }
+
+    fn yield_cpu(&mut self) {
+        crate::thread::yield_now();
+    }
+
+    fn cpu_affinity(&mut self, tid: i32) -> Result<u64, Errno> {
+        let id = self.sched_target(tid)?;
+        let mask = crate::thread::affinity(id).ok_or(Errno::ESRCH)?;
+        Ok(mask.intersection(crate::thread::online_cpus()).bits())
+    }
+
+    fn set_cpu_affinity(&mut self, tid: i32, mask: u64) -> Result<(), Errno> {
+        let id = self.sched_target(tid)?;
+        let cpus = crate::thread::CpuSet::from_bits(mask).intersection(crate::thread::online_cpus());
+        if cpus.is_empty() {
+            return Err(Errno::EINVAL);
+        }
+        crate::thread::set_affinity(id, cpus).map_err(|_| Errno::ESRCH)
     }
 
     fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {
@@ -712,5 +746,55 @@ impl LinuxKernel for Thread<'_> {
 
     fn net(&mut self) -> Option<&mut dyn poly_personality_linux::net::LinuxNet> {
         Some(self)
+    }
+
+    fn seccomp_active(&self) -> bool {
+        self.linux.seccomp.load(Ordering::Relaxed)
+    }
+
+    fn seccomp_installed(&mut self) {
+        self.linux.seccomp.store(true, Ordering::SeqCst);
+    }
+
+    fn seccomp_log(&mut self, number: u64, ret: u32) {
+        let name = poly_personality_linux::table::name(number).unwrap_or("?");
+        kprintln!("seccomp: pid {} tid {} {name} (#{number}): action {ret:#010x}", self.process.pid, self.tid);
+    }
+
+    fn pid_ns(&self) -> poly_personality_linux::ns::pid::PidNsRef {
+        self.linux.with(|p| p.ns.pid.clone())
+    }
+
+    fn chrooted(&self) -> bool {
+        self.process.files.chrooted()
+    }
+
+    fn copy_mounts(
+        &mut self,
+        owner: &poly_personality_linux::ns::user::UserNsRef,
+    ) -> Result<Arc<poly_personality_linux::ns::MntNs>, Errno> {
+        super::task::release_mount_namespaces();
+        super::task::copy_mounts(&self.process.files, owner)
+    }
+
+    fn enter_mounts(&mut self, ns: &Option<Arc<poly_personality_linux::ns::MntNs>>) -> Result<(), Errno> {
+        let base = match ns {
+            Some(m) => m.id(),
+            None => {
+                let vfs = crate::fs::vfs();
+                vfs.namespace_of(&vfs.root_context().map_err(vfs_errno)?)
+            }
+        };
+        self.process.files.enter_mount_namespace(base).map_err(vfs_errno)
+    }
+
+    fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, poly_personality_linux::ns::Kind), Errno> {
+        let file = self.process.files.file(fd).map_err(vfs_errno)?;
+        if file.node().mount().fs().info().name != "proc" {
+            return Err(Errno::EINVAL);
+        }
+        let (inum, kind) = poly_procfs::namespace_file(file.node().ino()).ok_or(Errno::EINVAL)?;
+        let kind = poly_personality_linux::ns::Kind::from_index(kind as u32).ok_or(Errno::EINVAL)?;
+        Ok((inum, kind))
     }
 }

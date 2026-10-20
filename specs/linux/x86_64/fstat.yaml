@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fstat
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  fstat(fd, statbuf) fills the 144-byte x86-64 struct stat (asm/stat.h):
+  st_dev, st_ino, st_nlink (u64), st_mode, st_uid, st_gid (u32), padding,
+  st_rdev, st_size, st_blksize, st_blocks (512-byte units), then atime,
+  mtime, ctime as {sec, nsec} pairs. Values follow the file live: size after
+  writes and truncation, mode after chmod, link count after link/unlink (0
+  once unlinked).
+returns:
+  regular_file: "S_IFREG|perm, size, nlink 1, owner = creator's uid/gid, rdev 0, blksize > 0, nonzero ino; two opens of one file give the same dev/ino"
+  directory: "S_IFDIR|perm, an empty directory has nlink 2"
+  pipe: "S_IFIFO for both ends"
+  dev_null: "S_IFCHR, mode 0666, st_rdev = makedev(1, 3) = 0x103, size 0"
+  o_path_fd: "works"
+  timestamps: "nanoseconds in [0, 1e9); a new file has mtime == ctime; writes move mtime and ctime forward; chmod moves ctime only; reads change neither mtime nor ctime; times set by utimensat are reported exactly; ctime is real wall-clock time (after 2020)"
+errors:
+  bad_fd: "EBADF (closed, negative)"
+  bad_buffer: "EFAULT"
+side_effects: "none"
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

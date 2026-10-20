@@ -13,6 +13,7 @@ use crate::abi::{SigAction, SigInfo, StackT, Timespec};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::{Clock, Deadline, LinuxKernel, ProcessSelector, SigSet, Target, UserPtr, Wakeup};
+use crate::ns::pid;
 use crate::signal::deliver::{self, send, send_to_all, with_own};
 use crate::signal::restart::RestartBlock;
 
@@ -165,8 +166,13 @@ pub fn kill(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let pid = a.int(0);
     let sig = signal_number(a.int(1), true)?;
     let info = sender_info(k, sig, SI_USER);
+    // Ids are the caller's pid namespace's (ADR 0054); -1 means every
+    // process it can see but its own init and itself.
     match pid {
-        p if p > 0 => send(k, Target::Process(p), None, None, info)?,
+        p if p > 0 => {
+            let target = Target::Process(pid::find(k, p)?);
+            send(k, target, None, None, info)?
+        }
         0 => {
             let pids = k.process_ids(ProcessSelector::Group(k.pgid()));
             send_to_all(k, &pids, info)?
@@ -174,12 +180,12 @@ pub fn kill(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         -1 => {
             let me = k.pid();
             let mut pids = k.process_ids(ProcessSelector::All);
-            pids.retain(|&p| p != 1 && p != me);
+            pids.retain(|&p| p != me && !matches!(pid::view(k, p), 0 | 1));
             send_to_all(k, &pids, info)?
         }
         i32::MIN => return Err(Errno::ESRCH),
         p => {
-            let pids = k.process_ids(ProcessSelector::Group(-p));
+            let pids = k.process_ids(ProcessSelector::Group(pid::find(k, -p)?));
             send_to_all(k, &pids, info)?
         }
     }
@@ -198,6 +204,7 @@ pub fn tgkill(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     let info = sender_info(k, sig, SI_TKILL);
+    let (tgid, tid) = (pid::find(k, tgid)?, pid::find(k, tid)?);
     send(k, Target::Thread(tid), Some(tid), Some(tgid), info)?;
     Ok(0)
 }
@@ -211,6 +218,7 @@ pub fn tkill(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     let info = sender_info(k, sig, SI_TKILL);
+    let tid = pid::find(k, tid)?;
     send(k, Target::Thread(tid), Some(tid), None, info)?;
     Ok(0)
 }
@@ -224,7 +232,7 @@ fn queued_info(k: &mut dyn LinuxKernel, ptr: UserPtr, sig: u32, tgid: i32) -> Re
     let mut raw = [0; SigInfo::SIZE];
     k.copy_from_user(ptr, &mut raw)?;
     let mut info = SigInfo::from_bytes(&raw);
-    if (info.code >= 0 || info.code == SI_TKILL) && tgid != k.pid() {
+    if (info.code >= 0 || info.code == SI_TKILL) && tgid != pid::view(k, k.pid()) {
         return Err(Errno::EPERM);
     }
     info.signo = sig as i32;
@@ -238,7 +246,8 @@ pub fn rt_sigqueueinfo(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let tgid = a.int(0);
     let sig = signal_number(a.int(1), true)?;
     let info = queued_info(k, a.ptr(2), sig, tgid)?;
-    send(k, Target::Process(tgid), None, None, info)?;
+    let target = Target::Process(pid::find(k, tgid)?);
+    send(k, target, None, None, info)?;
     Ok(0)
 }
 
@@ -251,6 +260,7 @@ pub fn rt_tgsigqueueinfo(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     let info = queued_info(k, a.ptr(3), sig, tgid)?;
+    let (tgid, tid) = (pid::find(k, tgid)?, pid::find(k, tid)?);
     send(k, Target::Thread(tid), Some(tid), Some(tgid), info)?;
     Ok(0)
 }

@@ -73,6 +73,14 @@ pub trait FileSystem: Send + Sync {
     /// A symbolic link's target (`EINVAL` for anything else).
     fn readlink(&self, ino: Ino) -> Result<Vec<u8>>;
 
+    /// Whether `ino` takes writes although the file system is read-only
+    /// ([`FsInfo::read_only`]): a control file of a pseudo file system
+    /// (procfs's `uid_map`). A read-only mount still refuses them.
+    fn writable_file(&self, ino: Ino) -> bool {
+        let _ = ino;
+        false
+    }
+
     /// Reads from a regular file at `offset`; 0 at or after the end.
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize>;
 

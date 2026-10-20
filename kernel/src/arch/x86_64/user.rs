@@ -18,10 +18,10 @@
 //!   vector (`AT_HWCAP`, `AT_RANDOM`).
 
 pub use super::addrspace::{
-    AddressSpace, LOWER_HALF_END, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, user_frames,
+    AddressSpace, Flush, LOWER_HALF_END, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, user_frames,
 };
 pub use super::syscall::{Entry, enter_user, enter_user_regs, make_next_return_fail};
-pub use super::usercopy::{Efault, copy_from_user, copy_to_user, is_user_range, strncpy_from_user};
+pub use super::usercopy::{Efault, cmpxchg_user_u32, copy_from_user, copy_to_user, is_user_range, strncpy_from_user};
 
 use super::fpu::{self, FpuArea};
 use super::idt::{self, TrapFrame};
@@ -90,6 +90,69 @@ pub unsafe fn init() {
         yes_no(f.smap),
         fpu.area_size
     );
+    set_tsc_aux(0);
+}
+
+/// What [`init`] set up, on an application processor: SMEP, SMAP, PCIDs,
+/// the FPU state format, `syscall`, and IA32_TSC_AUX (its CPU number, for
+/// the vDSO's `getcpu`).
+///
+/// # Safety
+/// Once per AP, after its GDT and GS base and with the kernel PML4 (PCID
+/// 0) loaded, with interrupts off, before it runs a thread.
+pub unsafe fn init_ap() {
+    let f = features();
+    let mut cr4 = cpu::read_cr4();
+    if f.smep {
+        cr4 |= cpu::CR4_SMEP;
+    }
+    if f.smap {
+        cr4 |= cpu::CR4_SMAP;
+    }
+    // SAFETY: as in `init`; the same settings as the boot CPU's.
+    unsafe {
+        cpu::write_cr4(cr4);
+        if addrspace::pcid_enabled() {
+            addrspace::enable_pcid();
+        }
+        fpu::init_cpu();
+        syscall::init();
+    }
+    set_tsc_aux(super::percpu::cpu_index() as u32);
+}
+
+/// IA32_TSC_AUX: what RDTSCP and RDPID read (SDM Vol. 4, Table 2-2).
+const MSR_TSC_AUX: u32 = 0xc000_0103;
+
+/// How user mode can learn its CPU without a system call: RDPID
+/// (CPUID.(EAX=07H,ECX=0):ECX[22]) or RDTSCP (CPUID.80000001H:EDX[27]),
+/// both reading IA32_TSC_AUX, which holds the CPU number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CpuNumber {
+    Rdpid,
+    Rdtscp,
+    Syscall,
+}
+
+pub fn cpu_number_instruction() -> CpuNumber {
+    let rdpid = __cpuid(0).eax >= 7 && __cpuid_count(7, 0).ecx & (1 << 22) != 0;
+    let rdtscp = __cpuid(0x8000_0000).eax >= 0x8000_0001 && __cpuid(0x8000_0001).edx & (1 << 27) != 0;
+    if rdpid {
+        CpuNumber::Rdpid
+    } else if rdtscp {
+        CpuNumber::Rdtscp
+    } else {
+        CpuNumber::Syscall
+    }
+}
+
+/// Put this CPU's number in IA32_TSC_AUX, if the CPU has it.
+fn set_tsc_aux(cpu: u32) {
+    if cpu_number_instruction() != CpuNumber::Syscall {
+        // SAFETY: the MSR exists with RDTSCP or RDPID (SDM Vol. 4); it
+        // only feeds those instructions.
+        unsafe { cpu::write_msr(MSR_TSC_AUX, u64::from(cpu)) };
+    }
 }
 
 /// What a user thread carries besides its general registers (which are on
@@ -221,6 +284,8 @@ pub fn switch(from: Option<&mut ThreadState>, to: Option<&ThreadState>, to_stack
             from.fs_base = cpu::read_msr(cpu::MSR_FS_BASE);
             from.gs_base = cpu::read_msr(cpu::MSR_KERNEL_GS_BASE);
         }
+        // Its next CPU may be another one: its FPU state goes to memory.
+        from.fpu.save();
     }
     let Some(to) = to else {
         addrspace::activate_kernel();

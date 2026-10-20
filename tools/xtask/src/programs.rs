@@ -30,7 +30,9 @@
 //! - `/bin/forkexec`: `tools/xtask/programs/forkexec.rs`, no C library, as
 //!   the first process (init): fork + execve of `/bin/hello` + wait4, copy
 //!   on write, a thread with TLS joined through `CLONE_CHILD_CLEARTID` and
-//!   a futex, and an orphan adopted and reaped by init.
+//!   a futex, two threads on two CPUs waking each other with futexes and a
+//!   fork while one of them stores on the other CPU (copy on write across
+//!   CPUs; skipped on one CPU), and an orphan adopted and reaped by init.
 //!
 //! And for terminals (Phase 4, ADR 0046):
 //!
@@ -231,7 +233,9 @@ pub fn boot_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         eprintln!("==> skipped: {why}");
     }
 
-    eprintln!("==> boot test: init forks, execs, clones a thread with TLS, waits and reaps an orphan");
+    eprintln!(
+        "==> boot test: init forks, execs, clones a thread with TLS, forks across two CPUs, waits and reaps an orphan"
+    );
     let b = run_as_init(kernel, syms, &image, "forkexec", FORKEXEC_OUTPUT)?;
     if !b.output.contains(HELLO_OUTPUT.trim_end()) {
         return Err("the child of /bin/forkexec did not run /bin/hello".into());

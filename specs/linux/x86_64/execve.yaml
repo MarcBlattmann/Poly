@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/execve
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  execve(path, argv, envp) replaces the program of the calling process. On
+  success it does not return; the new program starts with a fresh stack
+  holding argc, argv and envp exactly as given (argv[0] need not equal
+  path), followed by the auxiliary vector (AT_PAGESZ 4096, AT_EXECFN = path
+  as given); the stack pointer at entry is 16-byte aligned. The process
+  keeps its pid, cwd, umask, resource limits, signal mask, pending alarm,
+  ignored signals and descriptors without FD_CLOEXEC (offsets kept);
+  descriptors with FD_CLOEXEC are closed and signals with handlers reset to
+  SIG_DFL. The old address space is gone (its mappings are unmapped, static
+  data restarts from the file's initial values).
+returns:
+  success: "does not return"
+  failure: "-errno, and the old program continues unchanged"
+errors:
+  missing: "ENOENT"
+  not_executable: "EACCES (no execute bit, or a directory)"
+  not_a_program: "ENOEXEC (an executable file that is neither ELF nor #! script)"
+  component_not_directory: "ENOTDIR"
+  bad_pointers: "EFAULT for path, argv, or an argv entry"
+side_effects: "A vfork parent waiting on this child resumes when execve succeeds."
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

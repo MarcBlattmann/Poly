@@ -11,6 +11,7 @@ use crate::abi::{SigAction, SigInfo};
 use crate::cred::{Creds, cap};
 use crate::errno::Errno;
 use crate::kernel::{FpuState, LinuxKernel, ProcessInfo, SigSet, Target, UserContext, UserPtr};
+use crate::ns::pid;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -54,7 +55,7 @@ pub fn with_target<R>(
 /// thread's, and the target thread's or the target process's
 /// ([`LinuxProcess::process_creds`]).
 pub fn may_signal(sender: &Creds, sender_sid: i32, target: &Creds, target_sid: i32, signal: u32) -> bool {
-    sender.capable(cap::KILL)
+    crate::ns::user::ns_capable(sender, &target.user_ns, cap::KILL)
         || [sender.uid, sender.euid].iter().any(|&id| id == target.uid || id == target.suid)
         || (signal == SIGCONT && sender_sid == target_sid)
 }
@@ -87,6 +88,8 @@ pub fn send(
     let creds = crate::cred::current(k);
     let sid = k.sid();
     let signal = info.signal();
+    let sender_ns = k.pid_ns();
+    let mut info = info;
     let (pid, sent) = with_target(k, target, |p, t| {
         if tgid.is_some_and(|g| g != t.pid) || thread.is_some_and(|tid| !p.has_thread(tid)) {
             return Err(Errno::ESRCH);
@@ -103,7 +106,20 @@ pub fn send(
             return Ok((t.pid, Sent::default()));
         }
         let dest = thread.map_or(Dest::Process, Dest::Thread);
-        p.send(info, dest, t.pid == 1).map(|s| (t.pid, s))
+        // The sender as the receiver's pid namespace sees it (0 from
+        // outside it), for the signals a process sends itself (ADR 0054).
+        if matches!(info.code, SI_USER | SI_TKILL) {
+            let sender = info.pid();
+            info.fields[0..4].copy_from_slice(&pid::local_or_zero(&p.ns.pid, sender).to_le_bytes());
+        }
+        // pid_namespaces(7): an init only gets the signals it handles,
+        // from its own namespace and from ancestors, but SIGKILL and
+        // SIGSTOP "are forcibly delivered when sent from an ancestor PID
+        // namespace".
+        let init = pid::local(&p.ns.pid, t.pid) == Some(crate::task::tree::INIT_PID);
+        let from_ancestor = !pid::same(&sender_ns, &p.ns.pid) && pid::is_ancestor(&sender_ns, &p.ns.pid);
+        let protect = init && !(from_ancestor && matches!(signal, SIGKILL | SIGSTOP));
+        p.send(info, dest, protect).map(|s| (t.pid, s))
     })??;
     complete(k, pid, &sent);
     Ok(())

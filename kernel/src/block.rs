@@ -1187,9 +1187,13 @@ kernel_test! {
         BURNING.store(true, SeqCst);
         BURNED.store(0, SeqCst);
         let before = d.stats();
+        // Both on this CPU, which they have to share: on different CPUs
+        // the burner would run beside the reader whether it waits with
+        // interrupts on or not.
+        let _pin = thread::pin_current();
         let (t0, ticks0) = (time::now_ns(), time::ticks());
-        let burner = thread::spawn(burn, 0).map_err(|_| "spawn failed")?;
-        let reader = thread::spawn(read_many, d as *const Disk as usize);
+        let burner = thread::spawn_here(burn, 0).map_err(|_| "spawn failed")?;
+        let reader = thread::spawn_here(read_many, d as *const Disk as usize);
         let progressed = reader.map(thread::join);
         let (t1, ticks1) = (time::now_ns(), time::ticks());
         BURNING.store(false, SeqCst);

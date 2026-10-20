@@ -807,6 +807,16 @@ fn paths(memory: &Memory, list: &[(u64, &[u8])]) -> TestResult {
     Ok(())
 }
 
+/// The user frames held before a test starts, once the threads of
+/// processes that ended earlier (other tests', which may have run on
+/// other CPUs and be reaped there a little later) are gone.
+fn frames_before() -> TestResult<u64> {
+    if !crate::thread::wait_until(DEADLINE_NS / time::NANOS_PER_SEC, || crate::thread::dying_user_threads() == 0) {
+        return Err("threads of processes that ended were not reaped");
+    }
+    Ok(user::user_frames())
+}
+
 /// Wait until every user frame the test took is free again.
 fn frames_back_to(before: u64) -> TestResult {
     let deadline = time::now_ns() + DEADLINE_NS;
@@ -823,7 +833,7 @@ fn frames_back_to(before: u64) -> TestResult {
 /// Run `program` as a fresh root process; its exit status
 /// once it and its memory are gone.
 fn run(program: *const u8, prepare: impl FnOnce(&Memory) -> TestResult) -> TestResult<ExitStatus> {
-    let before = user::user_frames();
+    let before = frames_before()?;
     let status = {
         let (process, memory) = setup(prepare)?;
         let entry = Entry { rip: at(program), rsp: memory.layout().stack_top - 64, args: [0; 3] };

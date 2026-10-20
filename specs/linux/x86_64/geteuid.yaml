@@ -1,0 +1,25 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/geteuid
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  geteuid() returns the effective user id; as root, 0, on every call.
+  Arguments are ignored. Children and threads have the same value; unchanged
+  by execve of a program without set-user-ID; new files are owned by it.
+returns:
+  always: "the effective uid; never fails"
+errors:
+  none: "cannot fail"
+side_effects: "none"
+threading: "no thread-specific behaviour unless stated"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

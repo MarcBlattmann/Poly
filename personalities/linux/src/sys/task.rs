@@ -7,9 +7,10 @@ use crate::abi::{SigInfo, USER_ADDRESS_LIMIT};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::{LinuxKernel, UserPtr, Wakeup};
-use crate::task::clone::{self, CloneArgs, CloneRequest};
+use crate::ns::pid::{find, find_or_none, view};
+use crate::task::clone::{self, CLONE_NEWUSER, CloneArgs, CloneRequest};
 use crate::task::exec::{self, ExecRequest};
-use crate::task::tree::{Poll, WaitFilter, Waited};
+use crate::task::tree::{Poll, Selector, WaitFilter, Waited};
 use crate::task::wait;
 use crate::task::with_tree;
 
@@ -20,14 +21,39 @@ fn pid_result(id: i32) -> SysResult {
     Ok(id as i64 as u64)
 }
 
+/// A global id as the caller's pid namespace sees it, as a result.
+fn seen(k: &dyn LinuxKernel, global: i32) -> SysResult {
+    pid_result(view(k, global))
+}
+
 /// Check what the kernel cannot (a TLS base must be a user address, as for
-/// arch_prctl(2): `EPERM`; to be confirmed by the diff runner) and create
-/// the child.
+/// arch_prctl(2): `EPERM`; to be confirmed by the diff runner; a new user
+/// namespace from a chroot, clone(2) `EPERM`) and create the child. Its id
+/// is reported as the caller's namespace sees it.
 fn spawn(k: &mut dyn LinuxKernel, req: &CloneRequest) -> SysResult {
     if req.tls.is_some_and(|tls| tls >= USER_ADDRESS_LIMIT) {
         return Err(Errno::EPERM);
     }
-    k.clone_task(req).and_then(pid_result)
+    if req.flags & CLONE_NEWUSER != 0 && k.chrooted() {
+        return Err(Errno::EPERM);
+    }
+    let child = k.clone_task(req)?;
+    seen(k, child)
+}
+
+/// The caller's pid as its namespace sees it (`CLONE_PARENT` from an init
+/// is `EINVAL`).
+fn own_pid(k: &dyn LinuxKernel) -> i32 {
+    view(k, k.pid())
+}
+
+/// A wait selector with the caller's ids made global.
+fn global_selector(k: &dyn LinuxKernel, s: Selector) -> Selector {
+    match s {
+        Selector::Any => Selector::Any,
+        Selector::Pid(p) => Selector::Pid(find_or_none(k, p)),
+        Selector::Group(g) => Selector::Group(find_or_none(k, g)),
+    }
 }
 
 /// fork(): clone(2) with only `SIGCHLD` (fork(2)).
@@ -44,7 +70,7 @@ pub fn vfork(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
 /// clone(flags, stack, parent_tid, child_tid, tls): the x86-64 order of
 /// the raw system call (clone(2), "C library/kernel differences").
 pub fn clone(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let req = clone::decode_clone(a.ulong(0), a.ulong(1), a.ptr(2), a.ptr(3), a.ulong(4), k.pid())?;
+    let req = clone::decode_clone(a.ulong(0), a.ulong(1), a.ptr(2), a.ptr(3), a.ulong(4), own_pid(k))?;
     spawn(k, &req)
 }
 
@@ -62,7 +88,7 @@ pub fn clone3(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         k.copy_from_user(at, &mut rest[..size - known])?;
         extra_nonzero = rest[..size - known].iter().any(|&b| b != 0);
     }
-    let req = clone::decode_clone3(&CloneArgs::from_bytes(&bytes[..known]), extra_nonzero, k.pid())?;
+    let req = clone::decode_clone3(&CloneArgs::from_bytes(&bytes[..known]), extra_nonzero, own_pid(k))?;
     spawn(k, &req)
 }
 
@@ -92,7 +118,16 @@ fn wait_for(k: &mut dyn LinuxKernel, filter: &WaitFilter, nohang: bool) -> Resul
             Poll::Ready(w) => return Ok(Some(w)),
             Poll::NoChildren => return Err(Errno::ECHILD),
             Poll::Pending if nohang => return Ok(None),
-            Poll::Pending => {
+            // A child is in the middle of ending (on another CPU): its exit
+            // signal is about to be sent, then it is waitable. Not worth a
+            // "nothing yet", even with WNOHANG, which a pending signal of
+            // the caller does not end either (it is not a blocking wait).
+            Poll::Exiting if nohang => {
+                if k.wait_tree(generation) == Wakeup::Signal {
+                    k.yield_cpu();
+                }
+            }
+            Poll::Pending | Poll::Exiting => {
                 if k.wait_tree(generation) == Wakeup::Signal {
                     return Err(Errno::RESTART_IF_SA_RESTART);
                 }
@@ -112,14 +147,15 @@ fn write_rusage(k: &mut dyn LinuxKernel, ptr: UserPtr) -> Result<(), Errno> {
 /// before the status is stored, so a bad pointer loses it (`EFAULT`; to be
 /// confirmed by the diff runner).
 pub fn wait4(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let pgid = k.pgid();
-    let (filter, nohang) = wait::wait4_filter(a.int(0), a.uint(2), pgid)?;
+    let pgid = view(k, k.pgid());
+    let (mut filter, nohang) = wait::wait4_filter(a.int(0), a.uint(2), pgid)?;
+    filter.selector = global_selector(k, filter.selector);
     let Some(w) = wait_for(k, &filter, nohang)? else { return Ok(0) };
     if !a.ptr(1).is_null() {
         k.copy_to_user(a.ptr(1), &wait::status_word(w.event).to_le_bytes())?;
     }
     write_rusage(k, a.ptr(3))?;
-    pid_result(w.pid)
+    seen(k, w.pid)
 }
 
 /// waitid(idtype, id, infop, options, rusage): 0, with the child's
@@ -127,9 +163,10 @@ pub fn wait4(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// `WNOHANG` and nothing to report, `infop` is zeroed (wait(2) tells
 /// callers to check `si_pid` for 0).
 pub fn waitid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let pgid = k.pgid();
-    let (filter, nohang) = wait::waitid_filter(a.uint(0), a.int(1), a.uint(3), pgid)?;
-    let found = wait_for(k, &filter, nohang)?;
+    let pgid = view(k, k.pgid());
+    let (mut filter, nohang) = wait::waitid_filter(a.uint(0), a.int(1), a.uint(3), pgid)?;
+    filter.selector = global_selector(k, filter.selector);
+    let found = wait_for(k, &filter, nohang)?.map(|w| Waited { pid: view(k, w.pid), ..w });
     if !a.ptr(2).is_null() {
         let info = found.map_or([0; SigInfo::SIZE], |w| wait::sigchld(&w).to_bytes());
         k.copy_to_user(a.ptr(2), &info)?;
@@ -140,32 +177,49 @@ pub fn waitid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     Ok(0)
 }
 
-/// setpgid(pid, pgid) (setpgid(2)).
+/// A process id argument where 0 means the caller: the global id, `ESRCH`
+/// for one the caller's pid namespace does not have.
+fn pid_arg(k: &dyn LinuxKernel, pid: i32) -> Result<i32, Errno> {
+    if pid <= 0 { Ok(pid) } else { find(k, pid) }
+}
+
+/// setpgid(pid, pgid) (setpgid(2)). A group the caller's namespace does
+/// not have cannot exist in its session either (`EPERM`).
 pub fn setpgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let me = k.pid();
-    with_tree(k, |t| t.setpgid(me, a.int(0), a.int(1)))??;
+    let pid = pid_arg(k, a.int(0))?;
+    let pgid = match a.int(1) {
+        g if g > 0 => find(k, g).map_err(|_| Errno::EPERM)?,
+        g => g,
+    };
+    with_tree(k, |t| t.setpgid(me, pid, pgid))??;
     Ok(0)
 }
 
 /// getpgid(pid): the process group of `pid` (0: the caller).
 pub fn getpgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let me = k.pid();
-    with_tree(k, |t| t.getpgid(me, a.int(0)))?.and_then(pid_result)
+    let pid = pid_arg(k, a.int(0))?;
+    let g = with_tree(k, |t| t.getpgid(me, pid))??;
+    seen(k, g)
 }
 
 /// getpgrp(): the caller's process group; "always successful".
 pub fn getpgrp(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
-    pid_result(k.pgid())
+    seen(k, k.pgid())
 }
 
 /// setsid(): a new session led by the caller; returns its id.
 pub fn setsid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
     let me = k.pid();
-    with_tree(k, |t| t.setsid(me))?.and_then(pid_result)
+    let s = with_tree(k, |t| t.setsid(me))??;
+    seen(k, s)
 }
 
 /// getsid(pid): the session of `pid` (0: the caller).
 pub fn getsid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let me = k.pid();
-    with_tree(k, |t| t.getsid(me, a.int(0)))?.and_then(pid_result)
+    let pid = pid_arg(k, a.int(0))?;
+    let s = with_tree(k, |t| t.getsid(me, pid))??;
+    seen(k, s)
 }

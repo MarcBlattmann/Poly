@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/write
+oracle:
+  os: "Linux 6.18.44 x86_64"
+  machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-a
+  date: 2026-10-20
+summary: >
+  write(fd, buf, count) writes count bytes at the file offset (or at end of
+  file with O_APPEND) and advances the offset. A regular file grows as
+  needed; writing after a seek past the end leaves a hole that reads as
+  zeros. If the source buffer becomes unreadable part way the bytes before
+  that point are written and their count returned; EFAULT only if nothing
+  could be read, with nothing written and the offset unchanged.
+returns:
+  regular_file: "count"
+  count_0: "0; buf is not read and the file does not change"
+  o_append: "the data lands at the current end of file whatever the offset, and the offset ends at the new end; this holds for every descriptor with O_APPEND, including one where O_APPEND was set later with F_SETFL"
+  partly_readable_buffer: "the number of bytes before the first unreadable page"
+errors:
+  not_open_for_writing: "EBADF (O_RDONLY, directory, O_PATH, closed fd)"
+  bad_buffer: "EFAULT when no byte could be read"
+side_effects: "Updates size, mtime and ctime; advances the shared offset."
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1

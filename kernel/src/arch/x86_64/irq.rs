@@ -5,15 +5,19 @@
 //! 0x00-0x1f  CPU exceptions (idt.rs)
 //! 0x20-0x2f  legacy 8259s, remapped here and masked: only a spurious IRQ 7 / 15 can arrive
 //! 0x30-0xef  devices: allocate_vector (I/O APIC routes, MSI, MSI-X)
-//! 0xf0       local APIC timer: the scheduler tick
-//! 0xf1-0xfd  reserved for IPIs (SMP)
+//! 0xf0       local APIC timer: the scheduler tick (each CPU its own)
+//! 0xf1       reschedule IPI: an idle CPU got a thread, or one must move
+//! 0xf2       TLB shootdown IPI (`tlb.rs`)
+//! 0xf3-0xfd  reserved
 //! 0xfe       local APIC error
 //! 0xff       local APIC spurious interrupt (never gets an EOI)
 //! ```
 //!
 //! The local APIC delivers the highest pending priority class (vector / 16)
 //! first, so the tick and IPIs outrank devices. Handlers never nest: every
-//! IDT entry is an interrupt gate.
+//! IDT entry is an interrupt gate. Device interrupts (I/O APIC routes, MSI)
+//! all go to the boot CPU; each CPU takes its own tick and the IPIs sent
+//! to it. Panics stop the other CPUs with an NMI (`smp.rs`).
 //!
 //! # Drivers
 //!
@@ -28,13 +32,15 @@
 
 use super::apic::{self, RouteError};
 use crate::kprintln;
-use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use poly_irq::{MsiMessage, Polarity, Trigger};
 
 pub const PIC_BASE: u8 = 0x20;
 pub const FIRST_DEVICE_VECTOR: u8 = 0x30;
 pub const LAST_DEVICE_VECTOR: u8 = 0xef;
 pub const TIMER_VECTOR: u8 = 0xf0;
+pub const RESCHEDULE_VECTOR: u8 = 0xf1;
+pub const TLB_VECTOR: u8 = 0xf2;
 pub const ERROR_VECTOR: u8 = 0xfe;
 /// Bits 3:0 are hardwired to 1 on some older APICs, so 0xff works on all.
 pub const SPURIOUS_VECTOR: u8 = 0xff;
@@ -61,12 +67,14 @@ static UNHANDLED: AtomicU64 = AtomicU64::new(0);
 static LEGACY: AtomicU64 = AtomicU64::new(0);
 /// Local APIC error interrupts.
 static ERRORS: AtomicU64 = AtomicU64::new(0);
-/// Interrupts taken on each vector (32-255; the exceptions are not counted).
-/// TODO(smp): per CPU, summed when read.
+/// Interrupts taken on each vector (32-255; the exceptions are not
+/// counted), on all CPUs together.
 static COUNTS: [AtomicU64; 256] = [const { AtomicU64::new(0) }; 256];
+
 /// Handlers running on this CPU (0 or 1: they do not nest).
-/// TODO(smp): per CPU.
-static DEPTH: AtomicUsize = AtomicUsize::new(0);
+fn depth() -> &'static AtomicUsize {
+    super::percpu::this().irq_depth()
+}
 
 /// Reserve a device vector and install `handler(data)` on it. `None` when
 /// every device vector is taken.
@@ -149,7 +157,7 @@ pub fn send_self_ipi(vector: u8) -> bool {
 /// Whether this CPU is running an interrupt handler (blocking is not
 /// allowed there). False again by the time the timer preempts a thread.
 pub fn in_interrupt() -> bool {
-    DEPTH.load(Ordering::Relaxed) != 0
+    depth().load(Ordering::Relaxed) != 0
 }
 
 /// Counters for the boot log and tests.
@@ -181,19 +189,18 @@ pub fn stats() -> Stats {
     }
 }
 
-/// Whether the interrupt being handled came from ring 3 (set by
-/// `trap_dispatch`; interrupts do not nest), for CPU-time sampling.
-static INTERRUPTED_USER: AtomicBool = AtomicBool::new(false);
-
-/// The interrupt about to be dispatched came from ring 3 (`user`) or not.
+/// The interrupt about to be dispatched on this CPU came from ring 3
+/// (`user`) or not (set by `trap_dispatch`; interrupts do not nest), for
+/// CPU-time sampling.
 pub(super) fn set_interrupted_user(user: bool) {
-    INTERRUPTED_USER.store(user, Ordering::Relaxed);
+    super::percpu::this().interrupted_user().store(user, Ordering::Relaxed);
 }
 
 /// Called by the IDT stub of every vector from 32 up, with interrupts
 /// disabled, on the interrupted thread's stack.
 pub(super) fn dispatch(vector: u8) {
-    DEPTH.fetch_add(1, Ordering::Relaxed);
+    let depth = depth();
+    depth.fetch_add(1, Ordering::Relaxed);
     COUNTS[usize::from(vector)].fetch_add(1, Ordering::Relaxed);
     match vector {
         // Not an interrupt at all: the APIC withdrew it after starting to
@@ -208,14 +215,26 @@ pub(super) fn dispatch(vector: u8) {
         }
         TIMER_VECTOR => {
             super::time::on_tick();
-            crate::cputime::tick(INTERRUPTED_USER.load(Ordering::Relaxed));
+            crate::cputime::tick(super::percpu::this().interrupted_user().load(Ordering::Relaxed));
             apic::eoi();
-            DEPTH.fetch_sub(1, Ordering::Relaxed);
+            depth.fetch_sub(1, Ordering::Relaxed);
             // After the EOI, on this thread's own stack (see preempt_tick):
             // may switch threads and return much later.
             crate::thread::on_timer_tick();
             return;
         }
+        RESCHEDULE_VECTOR => {
+            apic::eoi();
+            depth.fetch_sub(1, Ordering::Relaxed);
+            // Like the tick: the switch happens on this thread's stack.
+            crate::thread::on_reschedule();
+            return;
+        }
+        TLB_VECTOR => {
+            super::tlb::service();
+            apic::eoi();
+        }
+
         ERROR_VECTOR => {
             let esr = apic::local_apic().map_or(0, |a| a.error_status().0);
             if ERRORS.fetch_add(1, Ordering::Relaxed) < 8 {
@@ -237,7 +256,7 @@ pub(super) fn dispatch(vector: u8) {
             apic::eoi();
         }
     }
-    DEPTH.fetch_sub(1, Ordering::Relaxed);
+    depth.fetch_sub(1, Ordering::Relaxed);
 }
 
 // --- Tests ------------------------------------------------------------------
@@ -250,7 +269,7 @@ static SEEN: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
 static MISMATCHED: AtomicU64 = AtomicU64::new(0);
 
 fn note_vector(expected: usize) {
-    let me = DEPTH.load(Ordering::Relaxed);
+    let me = depth().load(Ordering::Relaxed);
     if me != 1 {
         MISMATCHED.fetch_add(1, SeqCst);
     }
@@ -390,7 +409,29 @@ kernel_test! {
         if msi_message(3).is_some() {
             return Err("MSI message for an exception vector");
         }
-        Ok(())
+        if Some(id) != super::percpu::cpu(0).map(|c| c.apic_id()) {
+            return Err("the interrupt destination is not CPU 0's APIC ID");
+        }
+        // Asked on any CPU, the message still names the boot CPU (not the
+        // CPU asking), and each CPU's APIC reports its own ID.
+        let me = crate::thread::current();
+        let before = crate::thread::affinity(me).ok_or("no affinity")?;
+        let mut result = Ok(());
+        for cpu in super::smp::online_cpus().iter() {
+            if crate::thread::set_affinity(me, crate::thread::CpuSet::one(cpu)).is_err() {
+                result = Err("could not move to another CPU");
+                break;
+            }
+            let _irq = super::cpu::InterruptsOff::new();
+            let own = super::percpu::cpu(cpu).map(|c| c.apic_id());
+            if super::percpu::cpu_index() != cpu || apic::current_id() != own {
+                result = Err("a CPU's APIC ID is not the one its per-CPU area holds");
+            } else if msi_message(0x41) != Some(m) {
+                result = Err("an MSI message made on another CPU targets that CPU");
+            }
+        }
+        let _ = crate::thread::set_affinity(me, before);
+        result
     }
 }
 

@@ -11,6 +11,7 @@ members = [
     "crates/poly-backtrace",
     "crates/poly-binfmt",
     "crates/poly-block",
+    "crates/poly-bpf",
     "crates/poly-elf",
     "crates/poly-ext2",
     "crates/poly-cpio",
@@ -31,6 +32,7 @@ members = [
     "crates/poly-random",
     "crates/poly-rtc",
     "crates/poly-sched",
+    "crates/poly-smp",
     "crates/poly-term",
     "crates/poly-tty",
     "crates/poly-unix",
@@ -62,6 +64,7 @@ poly-acpi = { path = "crates/poly-acpi" }
 poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
+poly-bpf = { path = "crates/poly-bpf" }
 poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-cpio = { path = "crates/poly-cpio" }
@@ -82,6 +85,7 @@ poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
 poly-rtc = { path = "crates/poly-rtc" }
 poly-sched = { path = "crates/poly-sched" }
+poly-smp = { path = "crates/poly-smp" }
 poly-term = { path = "crates/poly-term" }
 poly-tty = { path = "crates/poly-tty" }
 poly-unix = { path = "crates/poly-unix" }

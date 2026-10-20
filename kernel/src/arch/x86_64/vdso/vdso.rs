@@ -24,13 +24,14 @@
 #![allow(dead_code)]
 
 use core::arch::asm;
-use poly_vdso::{Snapshot, VClock, Vvar};
+use poly_vdso::{CpuNumber, Snapshot, VClock, Vvar};
 
 /// System call numbers (the x86-64 table).
 const SYS_GETTIMEOFDAY: u64 = 96;
 const SYS_TIME: u64 = 201;
 const SYS_CLOCK_GETTIME: u64 = 228;
 const SYS_CLOCK_GETRES: u64 = 229;
+const SYS_GETCPU: u64 = 309;
 
 /// `struct __kernel_timespec` (`linux/time_types.h`).
 #[repr(C)]
@@ -193,17 +194,35 @@ pub unsafe extern "C" fn __vdso_time(t: *mut i64) -> i64 {
     sec
 }
 
-/// getcpu(2): Poly runs Linux processes on one CPU and one NUMA node, so
-/// both are 0. The third argument is unused, as on Linux since 2.6.24.
+/// getcpu(2): the CPU from IA32_TSC_AUX (RDPID, else RDTSCP), which holds
+/// the CPU's number, or the system call when the CPU has neither; node 0
+/// (Poly has one NUMA node). The third argument is unused, as on Linux
+/// since 2.6.24.
 ///
 /// # Safety
 ///
 /// `cpu` and `node` must each be null or writable.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __vdso_getcpu(cpu: *mut u32, node: *mut u32, _cache: *mut u8) -> i64 {
+    let aux: u64;
+    match vvar().cpu_number() {
+        // SAFETY: the kernel only says so when the CPU has RDPID; it reads
+        // IA32_TSC_AUX into a register.
+        CpuNumber::Rdpid => unsafe { asm!("rdpid {}", out(reg) aux, options(nomem, nostack, preserves_flags)) },
+        CpuNumber::Rdtscp => {
+            let ecx: u32;
+            // SAFETY: as above, for RDTSCP: the TSC in EDX:EAX, the MSR in ECX.
+            unsafe {
+                asm!("rdtscp", out("eax") _, out("edx") _, out("ecx") ecx, options(nomem, nostack, preserves_flags))
+            };
+            aux = u64::from(ecx);
+        }
+        // SAFETY: the system call checks the pointers.
+        CpuNumber::Syscall => return unsafe { syscall2(SYS_GETCPU, cpu as u64, node as u64) },
+    }
     if !cpu.is_null() {
         // SAFETY: the caller's pointer, not null.
-        unsafe { cpu.write(0) };
+        unsafe { cpu.write(aux as u32) };
     }
     if !node.is_null() {
         // SAFETY: the caller's pointer, not null.
