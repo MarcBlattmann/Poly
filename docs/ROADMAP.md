@@ -34,7 +34,7 @@ The machinery every personality needs. Single CPU, kernel threads only.
 - [x] Physical frame allocator for all RAM (buddy allocator), host-tested
 - [ ] Kernel page tables: direct map of all physical memory, drop the boot identity map
 - [ ] W^X for the kernel: text read-only + executable, data non-executable, guard pages
-- [ ] Kernel heap (slab + large allocations) so the kernel can use `alloc` (`Box`, `Vec`)
+- [x] Kernel heap (slab + large allocations) so the kernel can use `alloc` (`Box`, `Vec`)
 - [x] In-kernel test harness: unit tests that run inside QEMU and report per test
 - [x] Symbolised kernel backtraces on panic; documented GDB workflow (`qemu -s`)
 - [x] ACPI table parsing (RSDP, MADT, HPET, FADT); no AML interpreter yet
