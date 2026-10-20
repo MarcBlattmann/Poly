@@ -1,7 +1,7 @@
 [
-{"symbol":"XInputEnable","src":["wine-spec"]},
-{"symbol":"XInputGetCapabilities","src":["wine-spec"]},
-{"symbol":"XInputGetDSoundAudioDeviceGuids","src":["wine-spec"]},
-{"symbol":"XInputGetState","src":["wine-spec"]},
-{"symbol":"XInputSetState","src":["wine-spec"]}
+{"symbol":"XInputEnable","status":"app-provided","src":["wine-spec"]},
+{"symbol":"XInputGetCapabilities","status":"app-provided","src":["wine-spec"]},
+{"symbol":"XInputGetDSoundAudioDeviceGuids","status":"app-provided","src":["wine-spec"]},
+{"symbol":"XInputGetState","status":"app-provided","src":["wine-spec"]},
+{"symbol":"XInputSetState","status":"app-provided","src":["wine-spec"]}
 ]

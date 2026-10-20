@@ -1,6 +1,6 @@
 [
-{"symbol":"DllCanUnloadNow","src":["wine-spec"]},
-{"symbol":"DllGetClassObject","src":["wine-spec"]},
-{"symbol":"DllRegisterServer","src":["wine-spec"]},
-{"symbol":"DllUnregisterServer","src":["wine-spec"]}
+{"symbol":"DllCanUnloadNow","status":"app-provided","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","status":"app-provided","src":["wine-spec"]},
+{"symbol":"DllRegisterServer","status":"app-provided","src":["wine-spec"]},
+{"symbol":"DllUnregisterServer","status":"app-provided","src":["wine-spec"]}
 ]

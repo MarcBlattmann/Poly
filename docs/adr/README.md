@@ -53,6 +53,7 @@ accepted ADR. Supersede it with a new one and link both ways.
 | [0050](0050-kernel-thread-stacks-with-guards.md) | Kernel thread stacks in a 2 MiB stack area of their own (PML4 slot 385, tables made at boot), one 32 KiB slot per thread-table slot with the stack above 16 KiB that are never mapped; overflows reported by thread name, DMA from stacks via a page-table check | Accepted |
 | [0051](0051-busybox-init-mount-and-power-off.md) | BusyBox as init: BusyBox from the host (`busybox-static`) or the pinned release built at test time, never committed; mount(2) checked in the personality (`LinuxAdmin`) and done over the VFS (new procfs/sysfs/tmpfs instances, devpts views, ext2 from `/dev/vd*` block nodes, remount in place); reboot(2) with ACPI S5 found in the DSDT without an AML interpreter; signals init waits for are kept; `poly.strace` | Accepted |
 | [0054](0054-namespaces-and-seccomp.md) | Namespaces and seccomp: credentials and the VFS keep kernel ids, the system calls translate through user namespaces' maps; capabilities relative to a user namespace (`ns_capable`, `capable_initial` for the machine's resources); namespaces other than the user namespace per process; pid namespaces number their members, init's death kills the rest; a mount namespace is a copy of the mount tree; `/proc/<pid>/ns` links resolve to hidden procfs files setns(2) takes; writable `uid_map` / `gid_map` / `setgroups`; seccomp's classic BPF in `poly-bpf`, filter chains per thread checked in the dispatcher behind a per-process flag | Accepted |
+| [0055](0055-microsoft-redistributables-run-apps-own-copies.md) | Microsoft's redistributable C++ and DirectX runtimes (`msvcp*`, versioned `msvcr*`, `vcruntime*`, `concrt`, `vcomp`, `d3dx*`, old `d3dcompiler_*`, the DirectX end-user runtime's audio and input DLLs) come from the app or its installer, never from us; Poly provides what is part of Windows (`ntdll` unwinding, `kernel32`, `ucrtbase` + `api-ms-win-crt-*`, `msvcrt`, Direct3D, DXGI, `xinput1_4`, `xaudio2_8`/`2_9`); coverage status `app-provided`, left out of the percentages; fallback: our own `vcruntime140`, then `msvcp140` subsets | Accepted |
 
 ## Open decisions
 
@@ -60,8 +61,5 @@ These are also marked ⚖️ in [ROADMAP.md](../ROADMAP.md) at the point where t
 
 - **Global menu bar vs. per-window menus.** Needed before compositor work (roadmap Phase 6).
 - **Window frames:** native per app (macOS traffic lights, Windows frames) or one neutral frame.
-- **MSVC / DirectX redistributables:** 62% of Windows entries are versioned C++
-  runtime DLLs (`msvcp*`, `msvcr*`, `vcruntime*`) that apps normally ship
-  themselves. Decide whether we reimplement them or run the app's own copies.
 - **aarch64:** port the kernel to 64-bit ARM, or stay x86-64 only. Modern Mac apps
   are increasingly arm64-only, so this decides how much of macOS is reachable.
