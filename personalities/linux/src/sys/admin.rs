@@ -14,6 +14,7 @@ use crate::cred::{self, cap};
 use crate::errno::{Errno, SysResult};
 use crate::fs::at::AT_FDCWD;
 use crate::kernel::{LinuxKernel, UserPtr};
+use crate::signal::deliver::with_own;
 use crate::sys::io::bounce;
 use crate::sys::path::{nonempty_path, path_arg};
 use crate::table::{Handler, nr};
@@ -47,6 +48,33 @@ fn admin(k: &mut dyn LinuxKernel) -> Result<&mut dyn LinuxAdmin, Errno> {
 fn require(k: &mut dyn LinuxKernel, capability: u32) -> Result<(), Errno> {
     if cred::current(k).capable(capability) { Ok(()) } else { Err(Errno::EPERM) }
 }
+
+/// `capability` in the initial user namespace: for what is the whole
+/// system's (device nodes, rebooting).
+fn require_initial(k: &mut dyn LinuxKernel, capability: u32) -> Result<(), Errno> {
+    if cred::current(k).capable_initial(capability) { Ok(()) } else { Err(Errno::EPERM) }
+}
+
+/// mount(2), umount2(2): `CAP_SYS_ADMIN` in the user namespace that owns
+/// the caller's mount namespace (mount_namespaces(7), user_namespaces(7);
+/// ADR 0054). Returns whether the caller is outside the initial user
+/// namespace, where only some file systems may be mounted.
+fn require_mount(k: &mut dyn LinuxKernel) -> Result<bool, Errno> {
+    let creds = cred::current(k);
+    let owner = with_own(k, |p| p.ns.mnt_owner());
+    if !crate::ns::user::ns_capable(&creds, &owner, cap::SYS_ADMIN) {
+        return Err(Errno::EPERM);
+    }
+    Ok(creds.user_ns.is_some())
+}
+
+/// The file systems a user namespace other than the initial one may mount
+/// (user_namespaces(7): "Holding CAP_SYS_ADMIN within the user namespace
+/// that owns a process's mount namespace allows that process to create
+/// bind mounts and mount the following types of filesystems: /proc ...,
+/// /sys ..., devpts, tmpfs, ramfs, mqueue, bpf, overlayfs" of which Poly
+/// has the first five).
+const USERNS_MOUNTABLE: &[&[u8]] = &[b"proc", b"sysfs", b"devpts", b"tmpfs", b"ramfs"];
 
 // ---- mount -------------------------------------------------------------
 
@@ -128,8 +156,14 @@ pub fn mount_request(
 /// mount(source, target, filesystemtype, mountflags, data):
 /// `CAP_SYS_ADMIN` (`EPERM`).
 pub fn mount(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    require(k, cap::SYS_ADMIN)?;
+    let in_user_ns = require_mount(k)?;
     let req = mount_request(k, a.ptr(0), a.ptr(1), a.ptr(2), a.ulong(3), a.ptr(4))?;
+    if let MountRequest::New { fstype, .. } = &req
+        && in_user_ns
+        && !USERNS_MOUNTABLE.contains(&fstype.as_slice())
+    {
+        return Err(Errno::EPERM);
+    }
     admin(k)?.mount(&req).map(|()| 0)
 }
 
@@ -146,7 +180,7 @@ pub fn umount2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if flags & mnt::EXPIRE != 0 && flags & (mnt::FORCE | mnt::DETACH) != 0 {
         return Err(Errno::EINVAL);
     }
-    require(k, cap::SYS_ADMIN)?;
+    require_mount(k)?;
     let target = nonempty_path(k, a.ptr(0))?;
     if flags & mnt::EXPIRE != 0 {
         return Err(Errno::EINVAL);
@@ -172,7 +206,7 @@ fn mknod_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, mode: u32, dev:
         // "EPERM mode requested creation of something other than a regular
         // file, FIFO (named pipe), or UNIX domain socket, and the caller is
         // not privileged (Linux: does not have the CAP_MKNOD capability)".
-        S_IFCHR | S_IFBLK => require(k, cap::MKNOD)?,
+        S_IFCHR | S_IFBLK => require_initial(k, cap::MKNOD)?,
         // "EINVAL mode requested creation of something other than a
         // regular file, device special file, FIFO or socket."
         _ => return Err(Errno::EINVAL),
@@ -213,10 +247,22 @@ fn set_name(k: &mut dyn LinuxKernel, a: &Args, which: SystemName) -> SysResult {
     if len < 0 || len as usize > NAME_MAX_LEN {
         return Err(Errno::EINVAL);
     }
-    require(k, cap::SYS_ADMIN)?;
+    // uts_namespaces(7): the names are the caller's UTS namespace's;
+    // changing them needs CAP_SYS_ADMIN in the user namespace that owns it.
+    let creds = cred::current(k);
+    let uts = with_own(k, |p| p.ns.uts.clone());
+    let owner = uts.as_ref().and_then(|u| u.owner().clone());
+    if !crate::ns::user::ns_capable(&creds, &owner, cap::SYS_ADMIN) {
+        return Err(Errno::EPERM);
+    }
     let mut name = alloc::vec![0u8; len as usize];
     k.copy_from_user(a.ptr(0), &mut name)?;
-    admin(k)?.set_system_name(which, &name).map(|()| 0)
+    match (uts, which) {
+        (Some(u), SystemName::Host) => u.set_hostname(&name),
+        (Some(u), SystemName::Domain) => u.set_domainname(&name),
+        (None, _) => return admin(k)?.set_system_name(which, &name).map(|()| 0),
+    }
+    Ok(0)
 }
 
 /// sethostname(name, len)
@@ -255,7 +301,7 @@ pub fn reboot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         cmd::POWER_OFF => Some(Reboot::PowerOff),
         _ => return Err(Errno::EINVAL),
     };
-    require(k, cap::SYS_BOOT)?;
+    require_initial(k, cap::SYS_BOOT)?;
     if cmd::RESTART2 == a.uint(2) {
         // The command string must at least be readable.
         let mut buf = bounce(256)?;

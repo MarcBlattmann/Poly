@@ -1,6 +1,7 @@
-//! Kernel tests of disk file systems and the page cache: ext2 on the RAM
-//! disk (every boot), and with `poly.test.ext2` the ext2 test disk that
-//! `cargo xtask` builds, mounted at [`TEST_MOUNT`] by `poly.mount=`.
+//! Kernel tests of disk file systems and the page cache: ext2 and ext4 on
+//! the RAM disk (every boot), and with `poly.test.ext2` / `poly.test.ext4`
+//! the ext2 and ext4 test disks that `cargo xtask` builds, mounted at
+//! [`TEST_MOUNT`] and [`TEST_EXT4_MOUNT`] by `poly.mount=`.
 
 use super::cache::{self, FileSource};
 use super::disk::{self, DiskIo};
@@ -347,5 +348,156 @@ kernel_test! {
             return Err("unmounting a directory that is not a disk mount did not fail");
         }
         Ok(())
+    }
+}
+
+// ----- ext4 (ADR 0052) -----
+
+/// Kernel flag saying the ext4 test disk is attached and mounted at
+/// [`TEST_EXT4_MOUNT`] (`cargo xtask` passes it with
+/// `poly.mount=...,virtio3:/ext4`).
+pub const TEST_EXT4_FLAG: &str = "poly.test.ext4";
+pub const TEST_EXT4_MOUNT: &str = "/ext4";
+pub const TEST_EXT4_DISK: &str = "virtio3";
+/// Kernel flag for the boot that ends without unmounting (`cargo xtask`'s
+/// journal crash test).
+const TEST_EXT4_CRASH_FLAG: &str = "poly.test.ext4.crash";
+
+/// `/hello.txt` on the ext4 test disk. Must match `tools/xtask/src/ext4disk.rs`,
+/// like the lengths and contents below.
+const HELLO4: &[u8] = b"Hello from ext4 on virtio-blk!\n";
+const BIG4_LEN: usize = 300_000;
+const FRAG_BLOCKS: usize = 200;
+
+fn big4(i: usize) -> u8 {
+    (i.wrapping_mul(7) ^ (i / 4096) ^ 0x5a) as u8
+}
+
+fn frag(n: usize, i: usize) -> u8 {
+    (n.wrapping_mul(31) ^ i.wrapping_mul(3)) as u8
+}
+
+/// The disk mount at [`TEST_EXT4_MOUNT`], when the boot has the ext4 test disk.
+fn ext4_mount(env: &TestEnv) -> core::result::Result<Option<Arc<disk::DiskMount>>, &'static str> {
+    if !env.boot.has_flag(TEST_EXT4_FLAG) {
+        return Ok(None);
+    }
+    let m = disk::mounts().into_iter().find(|m| m.path == TEST_EXT4_MOUNT);
+    let m = m.ok_or("poly.test.ext4 is set but nothing is mounted at /ext4")?;
+    if m.disk.name() != TEST_EXT4_DISK || m.ext2.fs_type() != "ext4" {
+        return Err("/ext4 is not the ext4 test disk (virtio3)");
+    }
+    Ok(Some(m))
+}
+
+kernel_test! {
+    /// The RAM disk formatted as ext4 (extents, checksums, no journal: it
+    /// is too small for one), mounted through the page cache: files written
+    /// there are on the disk for a fresh mount, which finds it clean.
+    fn ext4_on_the_ram_disk_through_the_page_cache() -> TestResult {
+        let ram = crate::block::ram().ok_or("no RAM disk")?;
+        let opts = poly_ext2::FormatOptions { bytes_per_inode: 4096, ..poly_ext2::FormatOptions::ext4(1024, 0) };
+        poly_ext2::format(&DiskIo(ram), &opts).map_err(e)?;
+        let at = scratch("/tmp", "ram-ext4");
+        disk::mount("ram0", &at, false).map_err(|_| "mounting ext4 on ram0 failed")?;
+        let f = Files::new();
+        let data = pattern(4, 5 * PAGE_SIZE + 10);
+        let result = (|| {
+            write_file(&f, &format!("{at}/file"), &data).map_err(e)?;
+            if read_file(&f, &format!("{at}/file")).map_err(e)? != data {
+                return Err("a file on ext4 read back wrong through the cache");
+            }
+            Ok(())
+        })();
+        let unmounted = disk::unmount(&at);
+        result?;
+        unmounted.map_err(|_| "unmounting ram0 failed")?;
+        let fs = poly_ext2::Ext2::mount(DiskIo(ram), clock(), poly_ext2::MountOptions::default())
+            .map_err(|_| "the unmounted ext4 volume does not mount again")?;
+        if !fs.stats().was_clean || fs.fs_type() != "ext4" {
+            return Err("unmounting did not leave a clean ext4 volume");
+        }
+        let file = fs.lookup(fs.root(), b"file").map_err(e)?;
+        let mut back = vec![0u8; data.len()];
+        if fs.read(file, 0, &mut back).map_err(e)? != data.len() || back != data {
+            return Err("the file is not on the disk");
+        }
+        fs.unmount().map_err(e)
+    }
+}
+
+kernel_test! {
+    /// The ext4 test disk's files, as `cargo xtask` wrote them (one of them
+    /// in an extent tree of depth 1), read through the VFS and the page
+    /// cache.
+    fn ext4_test_disk_is_mounted_with_its_files(env: &TestEnv) -> TestResult {
+        let Some(m) = ext4_mount(env)? else { return Ok(()) };
+        let f = Files::new();
+        if read_file(&f, "/ext4/hello.txt").map_err(e)? != HELLO4 {
+            return Err("/ext4/hello.txt has the wrong contents");
+        }
+        let big_bin = read_file(&f, "/ext4/dir/big.bin").map_err(e)?;
+        if big_bin.len() != BIG4_LEN || big_bin.iter().enumerate().any(|(i, &b)| b != big4(i)) {
+            return Err("/ext4/dir/big.bin has the wrong contents");
+        }
+        let fragmented = f.read_to_end(b"/ext4/dir/fragmented.bin", 2 << 20).map_err(e)?.0;
+        if fragmented.len() != (2 * FRAG_BLOCKS - 1) * 4096 {
+            return Err("/ext4/dir/fragmented.bin has the wrong size");
+        }
+        for (n, block) in fragmented.chunks(4096).enumerate() {
+            let want = |i: usize| if n % 2 == 0 { frag(n / 2, i) } else { 0 };
+            if block.iter().enumerate().any(|(i, &b)| b != want(i)) {
+                return Err("/ext4/dir/fragmented.bin has the wrong contents");
+            }
+        }
+        if read_file(&f, "/ext4/dir/link").map_err(e)? != HELLO4 {
+            return Err("following /ext4/dir/link does not reach hello.txt");
+        }
+        let s = m.ext2.stats();
+        if m.read_only || !s.journaled || s.errors {
+            return Err("the ext4 test disk is not mounted read-write with its journal");
+        }
+        Ok(())
+    }
+}
+
+kernel_test! {
+    /// Writing to the ext4 test disk commits journal transactions; the data
+    /// is there after unmounting and mounting it again.
+    fn ext4_test_disk_journals_and_survives_a_remount(env: &TestEnv) -> TestResult {
+        let Some(m) = ext4_mount(env)? else { return Ok(()) };
+        let f = Files::new();
+        let path = scratch(TEST_EXT4_MOUNT, "journaled");
+        let data = pattern(5, 90_000);
+        let commits = m.ext2.stats().commits;
+        write_file(&f, &path, &data).map_err(e)?;
+        disk::sync_all().map_err(e)?;
+        if m.ext2.stats().commits <= commits {
+            return Err("sync did not commit a journal transaction");
+        }
+        disk::unmount(TEST_EXT4_MOUNT).map_err(|_| "unmounting /ext4 failed (busy?)")?;
+        m.disk.lock().invalidate();
+        drop(m);
+        let again = disk::mount(TEST_EXT4_DISK, TEST_EXT4_MOUNT, false).map_err(|_| "mounting /ext4 again failed")?;
+        if !again.ext2.stats().was_clean || read_file(&f, &path).map_err(e)? != data {
+            return Err("the data did not survive unmounting the ext4 disk");
+        }
+        f.unlinkat(AT_FDCWD, path.as_bytes(), 0).map_err(e)
+    }
+}
+
+kernel_test! {
+    /// With `poly.test.ext4.crash` only: writes a file and syncs (a journal
+    /// commit), then another that is not synced; the boot then ends without
+    /// unmounting, and `cargo xtask` checks that the next mount replays.
+    fn ext4_journal_crash_writes_and_commits(env: &TestEnv) -> TestResult {
+        if !env.boot.has_flag(TEST_EXT4_CRASH_FLAG) {
+            return Ok(());
+        }
+        let Some(_m) = ext4_mount(env)? else { return Err("the crash test needs the ext4 test disk") };
+        let f = Files::new();
+        write_file(&f, "/ext4/committed.txt", b"committed before the crash\n").map_err(e)?;
+        disk::sync_all().map_err(e)?;
+        write_file(&f, "/ext4/uncommitted.txt", b"maybe").map_err(e)
     }
 }

@@ -263,7 +263,7 @@ impl Process {
     /// of it.
     pub fn cancel_thread(&self, tid: u32) {
         if let Some(linux) = &self.linux {
-            linux.remove_thread(tid);
+            linux.remove_thread(self.pid, tid);
         }
         let empty = {
             let mut t = self.threads.lock();
@@ -287,7 +287,7 @@ impl Process {
     /// and then calls [`ended`](Self::ended), which wakes its waiters.
     pub fn detach_thread(&self, tid: u32, own: ExitStatus) -> Option<ExitStatus> {
         if let Some(linux) = &self.linux {
-            linux.remove_thread(tid);
+            linux.remove_thread(self.pid, tid);
         }
         let status = {
             let mut t = self.threads.lock();

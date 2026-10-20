@@ -25,9 +25,10 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use poly_personality_linux::ns;
 use poly_procfs::{
-    CpuInfo, CpuTimes, FdInfo, KernelInfo, MapEntry, MapName, MountEntry, Owner, ProcFs, ProcSource, ProcState,
-    ProcessInfo, SignalSets, SystemInfo,
+    CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, MapEntry, MapName, MountEntry, Owner, ProcFs, ProcSource,
+    ProcState, ProcessInfo, SignalSets, SystemInfo,
 };
 use poly_vfs::{At, Cred, FileType, FsContext, MountFlags, OpenFile, Tmpfs, Vfs};
 
@@ -369,10 +370,13 @@ impl ProcSource for KernelProc {
         })
     }
 
-    fn mounts(&self, _pid: u32) -> Vec<MountEntry> {
-        let Some(ctx) = root() else { return Vec::new() };
+    fn mounts(&self, pid: u32) -> Vec<MountEntry> {
+        // The mounts of the process's mount namespace, as paths from its
+        // root (ADR 0054).
+        let Some(ctx) = find(pid).map(|p| p.files.context()).or_else(root) else { return Vec::new() };
+        let namespace = vfs().namespace_of(&ctx);
         vfs()
-            .mounts()
+            .namespace_mounts(namespace)
             .iter()
             .filter_map(|m| {
                 let at = vfs().mount_path(&ctx, m.id).ok()?;
@@ -449,18 +453,27 @@ impl ProcSource for KernelProc {
         ["sysfs", "tmpfs", "proc"]
             .iter()
             .map(|n| (String::from(*n), true))
-            .chain(core::iter::once((String::from("ext2"), false)))
+            .chain(["ext2", "ext3", "ext4"].iter().map(|n| (String::from(*n), false)))
             .collect()
     }
 
     fn kernel(&self) -> KernelInfo {
         use poly_personality_linux::sys::system::{UNAME_RELEASE, UNAME_SYSNAME, UNAME_VERSION};
+        // The names of the reader's UTS namespace (ADR 0054).
+        let uts = user::current_process().and_then(|p| p.linux.as_ref().and_then(|l| l.with(|s| s.ns.uts.clone())));
+        let (hostname, domainname) = match uts {
+            Some(u) => {
+                let n = u.names();
+                (n.hostname, n.domainname)
+            }
+            None => (crate::linux::admin::hostname(), crate::linux::admin::domainname()),
+        };
         KernelInfo {
             ostype: String::from(UNAME_SYSNAME),
             osrelease: String::from(UNAME_RELEASE),
             version: String::from(UNAME_VERSION),
-            hostname: crate::linux::admin::hostname(),
-            domainname: crate::linux::admin::domainname(),
+            hostname,
+            domainname,
         }
     }
 
@@ -477,6 +490,45 @@ impl ProcSource for KernelProc {
     fn entropy_avail(&self) -> u32 {
         random::entropy_avail()
     }
+
+    fn namespace(&self, pid: u32, kind: usize) -> Option<u32> {
+        let kind = ns::Kind::from_index(kind as u32)?;
+        let p = find(pid)?;
+        let (namespaces, user_ns) = namespaces_of(&p)?;
+        Some(namespaces.inum(kind, &user_ns))
+    }
+
+    fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
+        ns::Kind::from_index(kind as u32).is_some_and(|k| ns::lookup(inum, k).is_some())
+    }
+
+    fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {
+        let Some((_, target)) = find(pid).and_then(|p| namespaces_of(&p)) else { return Vec::new() };
+        let reader = crate::linux::cred::current_creds().and_then(|c| c.user_ns);
+        match file {
+            IdMapFile::Uid => ns::user::format_map(&target, ns::user::IdKind::Uid, &reader),
+            IdMapFile::Gid => ns::user::format_map(&target, ns::user::IdKind::Gid, &reader),
+            IdMapFile::Setgroups => ns::user::format_setgroups(&target),
+        }
+    }
+
+    fn write_id_map(&self, pid: u32, file: IdMapFile, offset: u64, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        let (_, target) = find(pid).and_then(|p| namespaces_of(&p)).ok_or(poly_vfs::Errno::ESRCH)?;
+        let writer = crate::linux::cred::current_creds().ok_or(poly_vfs::Errno::EPERM)?;
+        let written = match file {
+            IdMapFile::Uid => ns::user::write_map(&target, ns::user::IdKind::Uid, data, offset, &writer),
+            IdMapFile::Gid => ns::user::write_map(&target, ns::user::IdKind::Gid, data, offset, &writer),
+            IdMapFile::Setgroups => ns::user::write_setgroups(&target, data, offset, &writer),
+        };
+        written.map_err(|e| poly_vfs::Errno::from_code(i32::from(e.get())).unwrap_or(poly_vfs::Errno::EIO))
+    }
+}
+
+/// Process `p`'s namespaces and its main thread's user namespace (ADR
+/// 0054), if it is a Linux process.
+fn namespaces_of(p: &Process) -> Option<(ns::Namespaces, ns::user::UserNsRef)> {
+    let pid = p.pid as i32;
+    p.linux.as_ref()?.with(|s| Some((s.ns.clone(), s.process_creds(pid)?.user_ns.clone())))
 }
 
 /// Bytes per page.

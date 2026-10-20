@@ -6,6 +6,7 @@
 //! rules make them full.
 
 use super::{CapSet, Caps, Creds};
+use crate::ns::user::IdKind;
 
 /// Mode bits (UAPI `linux/stat.h`).
 pub const S_ISUID: u16 = 0o4000;
@@ -46,12 +47,15 @@ impl Creds {
     pub fn exec(&self, file: &ExecFile) -> (Creds, bool) {
         let mut new = self.clone();
         let honor = !file.nosuid && !self.no_new_privs;
+        // user_namespaces(7): the bits of a file whose owner (group) has no
+        // mapping in the caller's user namespace are ignored.
+        let mapped = |kind, id| crate::ns::user::up(&self.user_ns, kind, id).is_some();
         let mut privileged_file = false;
-        if honor && file.perm & S_ISUID != 0 {
+        if honor && file.perm & S_ISUID != 0 && mapped(IdKind::Uid, file.uid) {
             new.euid = file.uid;
             privileged_file = true;
         }
-        if honor && file.perm & S_ISGID != 0 && file.perm & S_IXGRP != 0 {
+        if honor && file.perm & S_ISGID != 0 && file.perm & S_IXGRP != 0 && mapped(IdKind::Gid, file.gid) {
             new.egid = file.gid;
             privileged_file = true;
         }
@@ -60,7 +64,7 @@ impl Creds {
         new.sgid = new.egid;
         new.fsgid = new.egid;
         new.keep_caps = false;
-        new.caps = exec_caps(&self.caps, new.uid, new.euid, privileged_file);
+        new.caps = exec_caps(&self.caps, self.root_uid(), new.uid, new.euid, privileged_file);
         let secure = new.uid != new.euid || new.gid != new.egid;
         (new, secure)
     }
@@ -83,13 +87,15 @@ impl Creds {
 /// be all ones", and "If the effective user ID of the process is 0 ...,
 /// then the file effective bit is notionally defined to be one". The ids
 /// are those after the set-user-ID change, so a set-user-ID-root program
-/// gains its capabilities.
-fn exec_caps(old: &Caps, uid: u32, euid: u32, privileged_file: bool) -> Caps {
-    let root = uid == 0 || euid == 0;
-    let file_sets = if root { CapSet::ALL } else { CapSet::EMPTY };
+/// gains its capabilities. "User ID 0" is the kernel id `root` of the
+/// thread's user namespace's user 0 (`None` when that has no mapping, so
+/// nobody there is root: user_namespaces(7)).
+fn exec_caps(old: &Caps, root: Option<u32>, uid: u32, euid: u32, privileged_file: bool) -> Caps {
+    let is_root = |id: u32| root == Some(id);
+    let file_sets = if is_root(uid) || is_root(euid) { CapSet::ALL } else { CapSet::EMPTY };
     let ambient = if privileged_file { CapSet::EMPTY } else { old.ambient };
     let permitted = old.inheritable.intersection(file_sets).union(file_sets.intersection(old.bounding)).union(ambient);
-    let effective = if euid == 0 { permitted } else { ambient };
+    let effective = if is_root(euid) { permitted } else { ambient };
     let mut caps = Caps { effective, permitted, inheritable: old.inheritable, bounding: old.bounding, ambient };
     caps.fix_ambient();
     caps

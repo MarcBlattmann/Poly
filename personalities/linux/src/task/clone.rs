@@ -13,9 +13,15 @@
 //! - `CLONE_FS` with `CLONE_NEWNS`, and `CLONE_CLEAR_SIGHAND` with
 //!   `CLONE_SIGHAND`, are `EINVAL`;
 //! - `CLONE_PARENT` from the init process (pid 1) is `EINVAL`;
-//! - namespaces (`CLONE_NEW*`), pidfds (`CLONE_PIDFD`), cgroups
-//!   (`CLONE_INTO_CGROUP`) and `set_tid` are not supported: `EINVAL`, as
-//!   clone(2) documents for a kernel built without them;
+//! - the namespace flags (`CLONE_NEWUSER`, `CLONE_NEWPID`, `CLONE_NEWNS`,
+//!   `CLONE_NEWNET`, `CLONE_NEWUTS`, `CLONE_NEWIPC`) make namespaces for
+//!   a new process ([`crate::ns`], ADR 0054) with clone(2)'s rules
+//!   ([`crate::ns::check_clone_flags`]); Poly's namespaces belong to
+//!   processes, so with `CLONE_THREAD` any of them is `EINVAL`;
+//! - cgroup and time namespaces (`CLONE_NEWCGROUP`, `CLONE_NEWTIME`),
+//!   pidfds (`CLONE_PIDFD`), cgroups (`CLONE_INTO_CGROUP`) and `set_tid`
+//!   are not supported: `EINVAL`, as clone(2) documents for a kernel built
+//!   without them;
 //! - `CLONE_DETACHED` is ignored ("this flag is ignored" since 2.6.2);
 //!   `CLONE_PTRACE`, `CLONE_UNTRACED`, `CLONE_IO` and `CLONE_SYSVSEM` are
 //!   accepted and have no effect yet (no tracing, I/O contexts or System V
@@ -196,9 +202,13 @@ fn check_flags(flags: u64, caller_pid: i32) -> Result<(), Errno> {
     if has(CLONE_CLEAR_SIGHAND) && has(CLONE_SIGHAND) {
         return Err(Errno::EINVAL);
     }
-    if has(CLONE_NAMESPACES | CLONE_NEWTIME | CLONE_PIDFD | CLONE_INTO_CGROUP) {
+    if has(CLONE_NEWCGROUP | CLONE_NEWTIME | CLONE_PIDFD | CLONE_INTO_CGROUP) {
         return Err(Errno::EINVAL);
     }
+    if has(CLONE_THREAD) && has(crate::ns::NEW_NAMESPACES) {
+        return Err(Errno::EINVAL);
+    }
+    crate::ns::check_clone_flags(flags)?;
     if has(CLONE_PARENT) && caller_pid == 1 {
         return Err(Errno::EINVAL);
     }
@@ -381,7 +391,12 @@ mod tests {
         assert_eq!(p(CLONE_SIGHAND), Some(Errno::EINVAL));
         assert_eq!(p(CLONE_VM | CLONE_THREAD), Some(Errno::EINVAL));
         assert_eq!(p(CLONE_FS | CLONE_NEWNS), Some(Errno::EINVAL));
-        assert_eq!(p(CLONE_NEWPID), Some(Errno::EINVAL));
+        assert_eq!(p(CLONE_NEWPID), None);
+        assert_eq!(p(CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC), None);
+        assert_eq!(p(CLONE_NEWCGROUP), Some(Errno::EINVAL));
+        assert_eq!(p(CLONE_NEWUSER | CLONE_FS), Some(Errno::EINVAL));
+        assert_eq!(p(CLONE_NEWIPC | CLONE_SYSVSEM), Some(Errno::EINVAL));
+        assert_eq!(p(CLONE_VM | CLONE_SIGHAND | CLONE_THREAD | CLONE_NEWUTS), Some(Errno::EINVAL));
         assert_eq!(p(CLONE_PIDFD), Some(Errno::EINVAL));
         assert_eq!(p(CLONE_DETACHED | u64::from(SIGCHLD)), None, "CLONE_DETACHED is ignored");
         assert_eq!(p(CLONE_VM | CLONE_SIGHAND), None);

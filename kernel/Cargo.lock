@@ -30,6 +30,10 @@ name = "poly-bochs-vbe"
 version = "0.0.1"
 
 [[package]]
+name = "poly-bpf"
+version = "0.0.1"
+
+[[package]]
 name = "poly-cpio"
 version = "0.0.1"
 dependencies = [
@@ -141,6 +145,7 @@ name = "poly-personality-linux"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-bpf",
 ]
 
 [[package]]

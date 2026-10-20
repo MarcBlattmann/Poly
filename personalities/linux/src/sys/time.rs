@@ -99,7 +99,8 @@ fn timers_changed(k: &mut dyn LinuxKernel) {
 
 /// `CAP_SYS_TIME` in the calling thread's effective set (ADR 0045).
 fn may_set_time(k: &mut dyn LinuxKernel) -> bool {
-    crate::cred::current(k).capable(crate::cred::cap::SYS_TIME)
+    // The clocks are the machine's (ADR 0054).
+    crate::cred::current(k).capable_initial(crate::cred::cap::SYS_TIME)
 }
 
 /// clock_getres(clockid, res): the resolution of a clock (`res` may be

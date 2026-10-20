@@ -36,6 +36,7 @@ mod fileio_tests;
 mod files;
 mod files_tests;
 pub mod net;
+mod ns_tests;
 mod services;
 pub mod signalfd;
 mod socket_tests;
@@ -53,6 +54,7 @@ use crate::user::memory::SegvCode;
 use crate::user::{self, Fault, FaultError};
 use crate::{kprintln, testrun};
 use alloc::sync::Arc;
+use core::sync::atomic::AtomicBool;
 use poly_abi::{Outcome, SyscallRegs};
 use poly_personality_linux::futex::FutexTable;
 use poly_personality_linux::signal::fault::{PageFault, fault_info};
@@ -69,6 +71,9 @@ static FUTEXES: SpinLock<FutexTable> = SpinLock::new(FutexTable::new());
 #[derive(Debug)]
 pub struct LinuxState {
     process: SpinLock<LinuxProcess>,
+    /// Some thread of the process has seccomp state (ADR 0054): the
+    /// dispatcher checks every call. Never cleared; copied to children.
+    pub(crate) seccomp: AtomicBool,
 }
 
 impl LinuxState {
@@ -77,7 +82,7 @@ impl LinuxState {
     pub fn new(pid: u32) -> LinuxState {
         // A process the kernel starts: the root of a process tree.
         task::register_root(pid);
-        LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)) }
+        LinuxState { process: SpinLock::new(LinuxProcess::new(pid as i32)), seccomp: AtomicBool::new(false) }
     }
 
     /// A thread `tid` was started (the main thread is there from the start):
@@ -96,9 +101,19 @@ impl LinuxState {
         }
     }
 
-    /// Thread `tid` has ended.
-    pub fn remove_thread(&self, tid: u32) {
-        self.process.lock().remove_thread(tid as i32);
+    /// Thread `tid` of process `pid` has ended. A thread other than the
+    /// main one gives back its numbers in its pid namespaces now; the main
+    /// thread's are the process's, kept until it is reaped
+    /// ([`task::with_tree`]).
+    pub fn remove_thread(&self, pid: u32, tid: u32) {
+        let ns = {
+            let mut p = self.process.lock();
+            p.remove_thread(tid as i32);
+            p.ns.pid.clone()
+        };
+        if tid != pid {
+            poly_personality_linux::ns::pid::detach(&ns, tid as i32);
+        }
     }
 
     /// Run `f` on the personality's state, locked. `f` must not block.

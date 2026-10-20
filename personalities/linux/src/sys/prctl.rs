@@ -69,6 +69,7 @@ fn cap_arg(v: u64) -> Result<u32, Errno> {
 /// - `PR_CAP_AMBIENT` with `IS_SET`, `RAISE`, `LOWER` (`arg4`, `arg5` 0)
 ///   and `CLEAR_ALL` (`arg3`-`arg5` 0).
 /// - `PR_GET_SECUREBITS`: only `SECBIT_KEEP_CAPS` can be set in Poly.
+/// - `PR_SET_SECCOMP` / `PR_GET_SECCOMP`: [`super::seccomp`] (ADR 0054).
 /// - `PR_SET_NAME` / `PR_GET_NAME`: the thread's name, 16 bytes with the
 ///   NUL ("silently truncated" if longer); `EFAULT`.
 pub fn prctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
@@ -102,6 +103,8 @@ pub fn prctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             Ok(u64::from(cred::current(k).no_new_privs))
         }
         PR_CAP_AMBIENT => ambient(k, a),
+        crate::seccomp::abi::PR_GET_SECCOMP => super::seccomp::prctl_get(k),
+        crate::seccomp::abi::PR_SET_SECCOMP => super::seccomp::prctl_set(k, a),
         PR_SET_NAME => {
             let mut buf = [0u8; COMM_LEN];
             let n = match k.strncpy_from_user(a.ptr(1), &mut buf) {

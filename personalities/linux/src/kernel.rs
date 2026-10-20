@@ -879,4 +879,71 @@ pub trait LinuxKernel {
     fn signal_queued(&mut self, pid: i32) {
         let _ = pid;
     }
+
+    // ---- seccomp (ADR 0054) ---------------------------------------------
+
+    /// Whether any thread of the calling process may have seccomp state
+    /// (strict mode or filters): the dispatcher runs the seccomp check
+    /// only then, so a process without filters pays one test per call.
+    /// Once [`seccomp_installed`](Self::seccomp_installed) was called for
+    /// a process this must stay true for it and for every process it
+    /// creates afterwards (filters are inherited and never removed).
+    /// The default: false (a kernel that never installs any).
+    fn seccomp_active(&self) -> bool {
+        false
+    }
+
+    /// A thread of the calling process got seccomp state: from now on
+    /// [`seccomp_active`](Self::seccomp_active) is true for the process.
+    fn seccomp_installed(&mut self) {}
+
+    /// A seccomp action worth logging (`SECCOMP_RET_LOG`, a kill, or any
+    /// action of a filter installed with `SECCOMP_FILTER_FLAG_LOG`) was
+    /// taken for system call `number`; `ret` is the filter's value. The
+    /// default logs nothing.
+    fn seccomp_log(&mut self, number: u64, ret: u32) {
+        let _ = (number, ret);
+    }
+
+    // ---- namespaces (ADR 0054) -----------------------------------------
+
+    /// The calling process's pid namespace (`None`: the initial one):
+    /// where the ids [`pid`](Self::pid), [`tid`](Self::tid) and the rest
+    /// (all global) are translated for user space ([`crate::ns::pid`]).
+    /// The default: the initial one.
+    fn pid_ns(&self) -> crate::ns::pid::PidNsRef {
+        None
+    }
+
+    /// Whether the calling process's root directory is not the root of its
+    /// mount namespace (chroot(2) moved it): unshare(2) and setns(2) of a
+    /// user namespace are then `EPERM`.
+    fn chrooted(&self) -> bool {
+        false
+    }
+
+    /// unshare(2) `CLONE_NEWNS`: a copy of the calling process's mount
+    /// table as a new mount namespace owned by `owner`, the process's root
+    /// and working directory moved to the same places in the copy. (Poly
+    /// does not lock the copied mounts as mount_namespaces(7) describes
+    /// for a less privileged namespace.) `EINVAL` by default.
+    fn copy_mounts(&mut self, owner: &crate::ns::user::UserNsRef) -> Result<alloc::sync::Arc<crate::ns::MntNs>, Errno> {
+        let _ = owner;
+        Err(Errno::EINVAL)
+    }
+
+    /// setns(2) into mount namespace `ns`: the calling process's root and
+    /// working directory become its root (setns(2)). `EINVAL` by default.
+    fn enter_mounts(&mut self, ns: &Option<alloc::sync::Arc<crate::ns::MntNs>>) -> Result<(), Errno> {
+        let _ = ns;
+        Err(Errno::EINVAL)
+    }
+
+    /// The namespace descriptor `fd` refers to (opened from
+    /// `/proc/[pid]/ns/<kind>`): its inode number and kind. `EBADF`,
+    /// `EINVAL` for another file. `EINVAL` by default.
+    fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, crate::ns::Kind), Errno> {
+        let _ = fd;
+        Err(Errno::EINVAL)
+    }
 }

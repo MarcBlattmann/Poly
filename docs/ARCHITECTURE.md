@@ -25,7 +25,7 @@ what exists **today** and how it fits that plan.
             kernel/src/user  ← user threads: ring 3, system call hook, faults, copy_*_user,
                                memory maps with demand paging (poly-vm), exec of ELF programs and their
                                interpreter, glibc's own ld.so (poly-elf)
-            file systems: VFS (poly-vfs), tmpfs root from the initramfs, ext2 disks behind the page cache (poly-pagecache)
+            file systems: VFS (poly-vfs), tmpfs root from the initramfs, ext2/ext4 disks behind the page cache (poly-pagecache)
             shared core: boot, cpu (GDT/TSS/IDT), memory map, frames, heap, threads
             SMP: every CPU started (poly-smp), per-CPU areas, run queues per CPU (poly-sched), IPIs, TLB shootdowns
             block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
@@ -465,8 +465,9 @@ through the QEMU monitor (`sendkey`), with the US layout and with
 
 The logic is host-tested in `poly-vfs` and `poly-cpio`
 ([ADR 0023](adr/0023-vfs-tmpfs-and-cpio.md)); `kernel/src/fs/` wires it in
-([ADR 0037](adr/0037-vfs-and-initramfs-in-the-kernel.md)). The ext2 driver is
-`poly-ext2` ([ADR 0032](adr/0032-ext2-driver.md)), mounted on virtio-blk disks
+([ADR 0037](adr/0037-vfs-and-initramfs-in-the-kernel.md)). The ext2/ext3/ext4
+driver is `poly-ext2` ([ADR 0032](adr/0032-ext2-driver.md), ext4 and the
+journal in [ADR 0052](adr/0052-ext4-extents-checksums-and-journal.md)), mounted on virtio-blk disks
 behind the page cache, `poly-pagecache`
 ([ADR 0040](adr/0040-page-cache-and-ext2-on-virtio-blk.md)); both host-tested.
 procfs and sysfs are `poly-procfs`, the random devices' generator
@@ -483,13 +484,14 @@ procfs and sysfs are `poly-procfs`, the random devices' generator
           │  FileSystem trait: lookup/create/rename/read/write/readdir by inode   └─ /dev/console, /dev/tty → terminals (kernel/src/tty)
           ▼                                                                         /dev/null, /dev/zero, /dev/full
    ProcFs on /proc (KernelProc), StaticFs on /sys, tmpfs on /dev/shm               /dev/random, /dev/urandom → random.rs (ChaCha20)
-   Tmpfs on /                 CachedFs on /mnt: page cache (poly-pagecache) ◀── user mappings (FileSource)
+   Tmpfs on /                 CachedFs on /mnt, /ext4: page cache (poly-pagecache) ◀── user mappings (FileSource)
           ▲                          │  fill with read-ahead / writeback (thread, sync, unmount)
    poly_cpio::unpack                 ▼
-   initramfs (PVH module 0)   poly_ext2::Ext2<DiskIo, RawMutex>        later: ext4
+   initramfs (PVH module 0)   poly_ext2::Ext2<DiskIo, RawMutex>: ext2, ext3, ext4
+                                     │  metadata → running transaction ─commit─▶ journal (jbd2), then home
                                      │  BlockIo: read/write/flush device blocks
                                      ▼
-                              block::Disk virtio2 (queue + buffer cache)
+                              block::Disk virtio2, virtio3 (queue + buffer cache)
 ```
 
 - **The initramfs** is the first PVH boot module (`hvm_start_info.nr_modules`
@@ -611,20 +613,31 @@ initramfs.
 - **`poly-cpio`**: a parser for `newc`/`crc` that never panics, a writer,
   and an unpacker into any file system through the VFS. Tested against
   archives made by GNU cpio (stored, and live if `cpio` is installed).
-- **`poly-ext2`**: ext2 (revisions 0 and 1, 1/2/4 KiB blocks, `filetype`,
-  `sparse_super`, `large_file`; unknown incompatible features refuse the
-  mount, unknown read-only ones mount read-only) over a `BlockIo` (the
-  kernel's `block::Disk`, or `CachedIo`/`DeviceIo` over `poly-block`).
-  Group-local allocation, indirect block maps with holes, directory records
-  split and merged, `format` for new volumes. Without a journal, metadata
-  writes are ordered by flushes so a crash leaves a volume e2fsck repairs
-  without shared blocks or lost names. Corrupt volumes give `EUCLEAN`,
-  never a panic. Tested against `mke2fs`/`debugfs`/`e2fsck` images, a
-  random model test against tmpfs, byte flips and simulated crashes.
+- **`poly-ext2`**: ext2, ext3 and ext4 (revisions 0 and 1, 1/2/4 KiB
+  blocks; for ext4 the features `mke2fs -t ext4` turns on by default:
+  `64bit`, `extent`, `flex_bg`, `metadata_csum`, `huge_file`, `dir_nlink`,
+  `extra_isize`, `has_journal`, plus `uninit_bg`, `sparse_super2`,
+  `metadata_csum_seed` and read-only `inline_data`; unknown incompatible
+  features refuse the mount, unknown read-only ones mount read-only) over a
+  `BlockIo` (the kernel's `block::Disk`, or `CachedIo`/`DeviceIo` over
+  `poly-block`). Group-local allocation, indirect block maps and extent
+  trees (split, merged, grown and shrunk) with holes, directory records
+  split and merged, CRC-32C checksums verified and written, indexed
+  directories read (and unindexed when changed), `format` for new ext2 and
+  ext4 volumes. With a journal, each operation's metadata goes into a
+  transaction that commits (ordered: file data first) at `sync`, when it
+  grows big and at unmount, and is written home at once; mounting replays
+  the journal and processes the orphan list. Without one, metadata writes
+  are ordered by flushes so a crash leaves a volume e2fsck repairs without
+  shared blocks or lost names. Corrupt volumes give `EUCLEAN` (bad
+  checksums `EBADMSG`), never a panic. Tested against `mke2fs`/`debugfs`/
+  `e2fsck` images, journals written by `debugfs`, random model tests
+  against tmpfs, byte flips, and simulated crashes that must be clean after
+  either replay.
   Its volume lock is a type parameter (`poly_vfs::lock::RawLock`): a
   spinlock on the host, the kernel's sleeping `sync::RawMutex` when mounted.
 - **Disk mounts** (`kernel/src/fs/disk.rs`): `fs::disk::mount(disk, path,
-  ro)` brings the disk up (`block::open`), mounts ext2 on it through
+  ro)` brings the disk up (`block::open`), mounts ext2/3/4 on it through
   `DiskIo` (the disk's buffer cache as `BlockIo`, `flush` = `Disk::sync`)
   with a `RawMutex`, registers it with the page cache and mounts the
   result on `path`, made if missing. `poly.mount=<disk>:<path>[:ro]`
@@ -665,6 +678,7 @@ initramfs.
 fs: page cache of up to 16190 pages (63 MiB); writeback every 5 s
 block: virtio2: virtio-blk 00:06.0, 16384 blocks of 512 bytes (8 MiB), write cache; queue 32 requests, cache 128 buffers (64 KiB); interrupt-driven (vector 0x32)
 fs: virtio2 mounted on /mnt: ext2, 2048 blocks of 4096 bytes (1901 free), 1024 inodes (1008 free), read-write
+fs: virtio3 mounted on /ext4: ext4, 4096 blocks of 4096 bytes (2661 free), 2048 inodes (2032 free), read-write
 ```
 
 The disk file system tests (`fs::disk_tests::*`) format the RAM disk as
@@ -675,7 +689,10 @@ ext2 and mount, write, unmount and check it in every boot; with
 and a private and a shared mapping get the same page (copied on a private
 write, written to the file through the shared one), that the writeback
 thread cleans a dirty page, and that evicting clean pages gives their
-frames back.
+frames back. The same for ext4: the RAM disk formatted as ext4 (without a
+journal: it is too small) in every boot, and with `poly.test.ext4` the ext4
+test disk on `/ext4`: its files (one in an extent tree of depth 1), a sync
+that commits a journal transaction, a remount.
 
 ## Display
 
@@ -1216,6 +1233,7 @@ services once it decodes those system calls.
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
 | Disk file systems: ext2 on the RAM disk; the ext2 test disk (made by `cargo xtask` with `poly-ext2`, attached as `virtio2`, mounted on `/mnt`): its files, writes surviving a remount, `read` and mappings sharing a page-cache page, the writeback thread, eviction freeing frames | `kernel_test!` + `poly.test.ext2`, `poly.mount=` | `cargo xtask test` |
 | Persistence: a file written through the shell on the ext2 test disk, `sync`, `reboot` (unmounted clean), `e2fsck -fn` on the image (when e2fsprogs are installed), a second boot from the same image reads it | `cargo xtask` (`ext2_persistence_test`) | `cargo xtask test` |
+| ext4: the ext4 test disk (made by `cargo xtask` with `poly-ext2`, `virtio3`, `/ext4`): its files, a journal commit, a remount; persistence across a reboot as for ext2; a boot that syncs a file and ends without unmounting, after which the image needs a replay, the next boot replays it, the file is there and `e2fsck -fn` passes | `kernel_test!` + `poly.test.ext4`, `poly.test.ext4.crash`; `cargo xtask` (`ext4disk.rs`) | `cargo xtask test` |
 | Device tests against QEMU's devices: PCI config space, MSI on `edu`, the block layer on the virtio-blk test image (interrupt-driven, and in another boot polled) and the RAM disk, the watchdog on a spare virtio-blk device (and a boot that expects the disk without one must fail), the display's mode, mapping, back buffer and flush (and a boot without VGA must fail) | `kernel_test!` + `poly.test.disk`, `poly.test.msi`, `poly.test.display` | `cargo xtask test` |
 | Networking: virtio-net on QEMU's user networking (interrupt-driven, and in another boot polled): ping to the gateway, 1 MiB TCP and UDP through echo servers on the host, a connection from the host through a port forward; `ifconfig`, `ping` and `nc` in the shell. Loopback TCP, UDP and ping in every boot | `kernel_test!` + `poly.test.net=<port>`; `cargo xtask` (`net.rs`) | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |

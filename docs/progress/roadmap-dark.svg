@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 55 of 141 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 57 of 141 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">55 / 141 milestones · 39%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">57 / 141 milestones · 40%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -168,8 +168,8 @@
 <g><title>✔ Persistent file system on virtio-blk (ext2), page cache and writeback</title>
 <rect x="578.0" y="173.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>ext4 on the persistent disk (extents, journal)</title>
-<rect x="604.4" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ ext4 on the persistent disk (extents, journal)</title>
+<rect x="604.4" y="173.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>✔ Milestone: BusyBox shell boots as init and runs interactively</title>
 <rect x="630.9" y="173.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
@@ -183,8 +183,8 @@
 <g><title>✔ Sockets: AF_INET, AF_INET6, AF_UNIX (incl. fd passing), AF_NETLINK basics</title>
 <rect x="710.2" y="173.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Linux namespaces / seccomp basics (needed by browsers' sandboxes)</title>
-<rect x="736.7" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ Linux namespaces / seccomp basics (needed by browsers' sandboxes)</title>
+<rect x="736.7" y="173.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>Milestone (proof of concept a): a recorded trace of a simple Linux CLI app passes</title>
 <rect x="763.1" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
@@ -192,7 +192,7 @@
 <g><title>bash, coreutils, Python and a C compiler run from the persistent disk</title>
 <rect x="789.6" y="173.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">13/18</text>
+<text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">15/18</text>
 <text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 5  NT personality and Windows console apps</text>
 <g><title>✔ Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed</title>
 <rect x="340.0" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
