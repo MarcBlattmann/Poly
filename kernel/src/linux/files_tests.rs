@@ -342,7 +342,7 @@ kernel_test! {
             check!(15, text(p, "/proc/filesystems").contains("nodev\tproc\n"));
             check!(16, text(p, "/proc/sys/kernel/ostype") == "Linux\n");
             check!(17, text(p, "/proc/sys/kernel/random/uuid").len() == 37);
-            check!(18, text(p, "/sys/devices/system/cpu/online") == "0\n");
+            check!(18, text(p, "/sys/devices/system/cpu/online") == alloc::format!("{}\n", crate::smp::online_cpus()));
             check!(19, text(p, "/sys/dev/char/1:9/dev") == "1:9\n");
             check!(20, readlink(p, "/sys/class/mem/null") == Ok(b"../../devices/virtual/mem/null".to_vec()));
             // A working directory inside /proc, and its path.

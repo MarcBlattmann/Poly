@@ -181,6 +181,8 @@ pub struct Summary {
     pub online: usize,
     /// Processors the MADT lists that the options or the limits left out.
     pub left_out: usize,
+    /// Processors the MADT lists that cannot be started in xAPIC mode.
+    pub unreachable: usize,
 }
 
 static SUMMARY: AtomicU64 = AtomicU64::new(0);
@@ -188,7 +190,8 @@ static SUMMARY: AtomicU64 = AtomicU64::new(0);
 /// The bring-up summary (all zero before [`start_aps`]).
 pub fn summary() -> Summary {
     let v = SUMMARY.load(Ordering::Acquire);
-    Summary { planned: (v & 0xffff) as usize, online: ((v >> 16) & 0xffff) as usize, left_out: (v >> 32) as usize }
+    let field = |i: u32| ((v >> (16 * i)) & 0xffff) as usize;
+    Summary { planned: field(0), online: field(1), left_out: field(2), unreachable: field(3) }
 }
 
 /// Start the application processors the plan chooses. Call once, on the
@@ -226,8 +229,12 @@ pub fn start_aps(platform: Option<&Platform>, smp: Option<&str>, cpus: Option<&s
         online_cpus(),
         if plan.left_out > 0 { alloc::format!(", {} left out by poly.smp / poly.cpus", plan.left_out) } else { "".into() },
     );
-    let s = Summary { planned: plan.cpus.len(), online, left_out: plan.left_out };
-    SUMMARY.store(s.planned as u64 | (s.online as u64) << 16 | (s.left_out as u64) << 32, Ordering::Release);
+    let s = Summary { planned: plan.cpus.len(), online, left_out: plan.left_out, unreachable: plan.unreachable };
+    let packed = [s.planned, s.online, s.left_out, s.unreachable]
+        .iter()
+        .enumerate()
+        .fold(0u64, |v, (i, &n)| v | (n.min(0xffff) as u64) << (16 * i));
+    SUMMARY.store(packed, Ordering::Release);
     s
 }
 

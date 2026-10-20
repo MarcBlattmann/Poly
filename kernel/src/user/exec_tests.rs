@@ -83,13 +83,11 @@ fn hook(_: &Process, regs: &mut SyscallRegs) {
 
 /// Wait until the threads that used `memory` have been reaped.
 fn released(memory: &Arc<Memory>) -> TestResult {
-    for _ in 0..1000 {
-        if Arc::strong_count(memory) == 1 {
-            return Ok(());
-        }
-        thread::yield_now();
+    if thread::wait_until(10, || Arc::strong_count(memory) == 1) {
+        Ok(())
+    } else {
+        Err("a user thread kept its memory map after it exited")
     }
-    Err("a user thread kept its memory map after it exited")
 }
 
 /// Drop the last reference to `memory` and check that its frames went.

@@ -12,7 +12,16 @@
 //!    through `%fs`, `CLONE_PARENT_SETTID` / `CLONE_CHILD_CLEARTID`; the
 //!    main thread waits on the tid word with `futex` until the exiting
 //!    thread clears it.
-//! 4. An orphan: a child forks a grandchild and ends; the grandchild is
+//! 4. Several CPUs (when `sched_getaffinity` offers two or more): the
+//!    main thread pins itself to one CPU and a thread to another
+//!    (`sched_setaffinity`, checked with `getcpu`); each wakes the other
+//!    with `futex` across the CPUs. The thread then stores to a counter
+//!    without pause while the main thread forks: the child, on the
+//!    thread's CPU, must see its copy of the counter stand still (a CPU
+//!    that kept a writable translation from before the fork would write
+//!    into the page the child shares), and its own store must stay out of
+//!    the parent's memory; the parent's counter goes on rising.
+//! 5. An orphan: a child forks a grandchild and ends; the grandchild is
 //!    adopted by init (this program: `getppid` turns 1) and init reaps it
 //!    with `wait4(-1)`. Only when the program is pid 1.
 //!
@@ -28,6 +37,10 @@ use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 const SYS_WRITE: u64 = 1;
+const SYS_SCHED_YIELD: u64 = 24;
+const SYS_SCHED_SETAFFINITY: u64 = 203;
+const SYS_SCHED_GETAFFINITY: u64 = 204;
+const SYS_GETCPU: u64 = 309;
 const SYS_FORK: u64 = 57;
 const SYS_EXECVE: u64 = 59;
 const SYS_WAIT4: u64 = 61;
@@ -47,6 +60,7 @@ const CLONE_SETTLS: u64 = 0x8_0000;
 const CLONE_PARENT_SETTID: u64 = 0x10_0000;
 const CLONE_CHILD_CLEARTID: u64 = 0x20_0000;
 const FUTEX_WAIT: u64 = 0;
+const FUTEX_WAKE: u64 = 1;
 const ECHILD: u64 = 10;
 
 /// A system call with up to six arguments; returns `rax` (`-errno` on
@@ -156,6 +170,143 @@ global_asm!(
     "ud2",
 );
 
+/// The CPUs this thread may run on (`sched_getaffinity`; 64 at most).
+fn cpus() -> u64 {
+    let mut mask = 0u64;
+    if is_err(sys(SYS_SCHED_GETAFFINITY, [0, 8, &raw mut mask as u64, 0, 0, 0])) {
+        fail(b"sched_getaffinity");
+    }
+    mask
+}
+
+/// The CPU this thread runs on (`getcpu`).
+fn getcpu() -> u64 {
+    let mut cpu = u32::MAX;
+    if is_err(sys(SYS_GETCPU, [&raw mut cpu as u64, 0, 0, 0, 0, 0])) {
+        fail(b"getcpu");
+    }
+    u64::from(cpu)
+}
+
+/// Run only on CPU `cpu` from now on.
+fn pin(cpu: u64) {
+    let mask = 1u64 << cpu;
+    if is_err(sys(SYS_SCHED_SETAFFINITY, [0, 8, &raw const mask as u64, 0, 0, 0])) {
+        fail(b"sched_setaffinity");
+    }
+    if getcpu() != cpu {
+        fail(b"getcpu after sched_setaffinity");
+    }
+}
+
+/// Wait until `word` is not 0, sleeping in `futex`.
+fn wait_for(word: &AtomicU32) {
+    while word.load(Ordering::SeqCst) == 0 {
+        // SAFETY: waits on our own word.
+        unsafe { syscall(SYS_FUTEX, [word.as_ptr() as u64, FUTEX_WAIT, 0, 0, 0, 0]) };
+    }
+}
+
+/// Set `word` to 1 and wake whoever waits on it.
+fn set_and_wake(word: &AtomicU32) {
+    word.store(1, Ordering::SeqCst);
+    sys(SYS_FUTEX, [word.as_ptr() as u64, FUTEX_WAKE, 1, 0, 0, 0]);
+}
+
+/// Step 4: the CPU the second thread runs on, its signals, the counter it
+/// stores to, the word that stops it, what the child stores, and the
+/// thread's tid word and stack.
+static OTHER_CPU: AtomicU64 = AtomicU64::new(0);
+static ON_OTHER_CPU: AtomicU32 = AtomicU32::new(0);
+static GO: AtomicU32 = AtomicU32::new(0);
+static COUNTER: AtomicU64 = AtomicU64::new(0);
+static STOP: AtomicU32 = AtomicU32::new(0);
+static CHILD_MARK: AtomicU64 = AtomicU64::new(0);
+static WRITER_TID: AtomicU32 = AtomicU32::new(0);
+static mut WRITER_STACK: Stack = Stack([0; 1024]);
+
+/// The thread of step 4: move to the other CPU, say so, wait for the go,
+/// then count until told to stop.
+extern "C" fn writer_main() -> u64 {
+    pin(OTHER_CPU.load(Ordering::SeqCst));
+    set_and_wake(&ON_OTHER_CPU);
+    wait_for(&GO);
+    while STOP.load(Ordering::Relaxed) == 0 {
+        COUNTER.fetch_add(1, Ordering::Relaxed);
+    }
+    0
+}
+
+/// Step 4; `mask` holds two CPUs or more.
+fn smp(mask: u64) {
+    let here = u64::from(mask.trailing_zeros());
+    let there = u64::from((mask & !(1 << here)).trailing_zeros());
+    pin(here);
+    OTHER_CPU.store(there, Ordering::SeqCst);
+    let flags = CLONE_VM
+        | CLONE_FS
+        | CLONE_FILES
+        | CLONE_SIGHAND
+        | CLONE_THREAD
+        | CLONE_SYSVSEM
+        | CLONE_PARENT_SETTID
+        | CLONE_CHILD_CLEARTID;
+    let stack = (&raw mut WRITER_STACK) as u64 + 1024 * 8;
+    let tid_word = WRITER_TID.as_ptr() as u64;
+    // SAFETY: the stack is used by the thread alone, the words through
+    // atomics, until it has exited.
+    let tid = unsafe { clone_thread(flags, stack, tid_word, tid_word, 0, writer_main) };
+    if is_err(tid) {
+        fail(b"clone on several CPUs");
+    }
+    // Futex wakes both ways between the two CPUs.
+    wait_for(&ON_OTHER_CPU);
+    set_and_wake(&GO);
+    while COUNTER.load(Ordering::SeqCst) == 0 {
+        core::hint::spin_loop();
+    }
+    // Fork while the thread stores on the other CPU. The child moves to
+    // that CPU and watches its copy of the counter while the thread runs
+    // there too (each yield hands it the CPU).
+    let child = fork();
+    if child == 0 {
+        pin(there);
+        let before = COUNTER.load(Ordering::SeqCst);
+        for _ in 0..5 {
+            sys(SYS_SCHED_YIELD, [0; 6]);
+        }
+        let after = COUNTER.load(Ordering::SeqCst);
+        CHILD_MARK.store(0x5eed, Ordering::SeqCst);
+        exit(if before == after { 0 } else { 3 });
+    }
+    let (_, status) = wait(child);
+    if status == 3 << 8 {
+        fail(b"copy on write with a thread storing on another CPU (the child saw the parent's stores)");
+    } else if status != 0 {
+        fail(b"the child on the other CPU");
+    }
+    if CHILD_MARK.load(Ordering::SeqCst) != 0 {
+        fail(b"copy on write across CPUs (the child's store reached the parent)");
+    }
+    let seen = COUNTER.load(Ordering::SeqCst);
+    while COUNTER.load(Ordering::SeqCst) == seen {
+        sys(SYS_SCHED_YIELD, [0; 6]);
+    }
+    STOP.store(1, Ordering::SeqCst);
+    loop {
+        let word = WRITER_TID.load(Ordering::SeqCst);
+        if word == 0 {
+            break;
+        }
+        // SAFETY: waits on our own word.
+        unsafe { syscall(SYS_FUTEX, [tid_word, FUTEX_WAIT, u64::from(word), 0, 0, 0]) };
+    }
+    // Back to every CPU for the rest.
+    if is_err(sys(SYS_SCHED_SETAFFINITY, [0, 8, &raw const mask as u64, 0, 0, 0])) {
+        fail(b"sched_setaffinity back to every CPU");
+    }
+}
+
 /// The thread of step 3: read the TLS word through `%fs`, note its tid.
 extern "C" fn thread_main() -> u64 {
     let word: u64;
@@ -238,7 +389,16 @@ extern "C" fn main() -> ! {
         fail(b"the thread's TLS or tid");
     }
 
-    // 4. An orphan comes to init (us) and init reaps it; only when this
+    // 4. Two CPUs at once, when there are.
+    let mask = cpus();
+    if mask & (1 << getcpu()) == 0 {
+        fail(b"getcpu outside the affinity mask");
+    }
+    if mask.count_ones() >= 2 {
+        smp(mask);
+    }
+
+    // 5. An orphan comes to init (us) and init reaps it; only when this
     // program is init.
     let me = sys(SYS_GETPID, [0; 6]);
     if me != 1 {

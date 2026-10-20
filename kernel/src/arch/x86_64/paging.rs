@@ -455,21 +455,19 @@ pub unsafe fn map_thread_stack(virt: u64, phys: u64, len: u64) {
 /// # Safety
 /// The caller owns the pages, as for [`map_thread_stack`], and nothing uses
 /// them any more (the thread that ran on the stack has exited and been
-/// switched away from). Other CPUs, once they run kernel code, will need a
-/// TLB shootdown here.
+/// switched away from). Every CPU drops the translations before this
+/// returns.
 pub unsafe fn unmap_thread_stack(virt: u64, len: u64) {
     let (pt, pages) = stack_pages(virt, len).expect("thread stack outside the stack area");
-    let first = pages.start;
     for i in pages {
         KernelPhysMemory.write_entry(pt, i, 0);
-        // The mapping was global: a CR3 switch would not drop it.
-        cpu::invlpg(virt + (i - first) as u64 * PAGE_SIZE);
     }
-    // Nor on the other CPUs, any of which may have run on the stack: they
-    // must drop it before its frames are reused.
+    // The mapping was global, so a CR3 switch would not drop it; and any
+    // CPU may have run on the stack: all must drop it (INVLPG drops global
+    // translations) before its frames are reused.
     let mut flush = super::tlb::Flush::None;
     flush.add_range(virt, virt + len);
-    super::tlb::shoot(super::smp::online_cpus(), super::tlb::Request { space: 0, flush });
+    super::tlb::flush_kernel(flush);
 }
 
 /// The physical address behind `[virt, virt + len)` if it lies in the

@@ -1016,6 +1016,22 @@ pub fn spawn_here(f: ThreadFn, arg: usize) -> Result<ThreadId, SpawnError> {
     spawn_on("", f, arg, CpuSet::one(this_cpu()))
 }
 
+/// Yield until `done()` holds, for up to `secs` seconds of clock time;
+/// whether it came to hold. For tests that wait for another CPU to do
+/// something (such as reaping a thread that ran there), which takes a
+/// while, and longer when the host stalls that CPU: a count of yields
+/// would be gone in no time.
+pub fn wait_until(secs: u64, mut done: impl FnMut() -> bool) -> bool {
+    let start = crate::time::now_ns();
+    while !done() {
+        if crate::time::now_ns() - start > secs * crate::time::NANOS_PER_SEC {
+            return false;
+        }
+        yield_now();
+    }
+    true
+}
+
 /// Characters recorded by threads, in the order they ran.
 struct Trace {
     buf: [u8; 32],
