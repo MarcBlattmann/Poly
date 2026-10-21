@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/access
+oracle:
+  os: "Linux 7.0.0-30-generic"
+  machine: "x86_64 host, uid 1001 (not root), umask 022, /tmp on ext4; static freestanding test programs, raw syscalls. The root-only behaviour (real vs effective ids) is from access(2) and the credentials(7) man pages; it was not observed here, as root was not available"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  access(path, mode) (syscall 21) checks whether the calling process could
+  reach path and use it with mode, without opening it. mode is F_OK (0,
+  existence only) or an OR of R_OK 4, W_OK 2, X_OK 1. The check uses the
+  real uid and real gid (plus the supplementary groups), not the effective
+  ones. It behaves as faccessat(AT_FDCWD, path, mode): relative paths start
+  at the working directory and symbolic links are always followed. Only the
+  first two arguments are used. It returns 0 when every requested access is
+  allowed and a negative errno otherwise; it never changes anything.
+returns:
+  success: "0 when the path resolves and every bit of mode is allowed (F_OK: when the path resolves)"
+  extra_arguments: "registers 3 to 6 are ignored"
+  mode_width: "mode is a 32-bit value: bits 32 to 63 of the register are ignored (0x100000004 is R_OK); bit 31 set is EINVAL"
+  relative: "a relative path starts at the working directory and follows chdir; an absolute path ignores it"
+  permission_normal_user: "permission bits are taken from exactly one class: the owner bits when the real uid owns the file (even if the group or other bits allow more: a 0077 file denies its owner R, W and X); otherwise the group bits when the real gid or a supplementary group is the file's group; otherwise the other bits. Every requested bit must be set in that class"
+  permission_root: "when the real uid is 0: R_OK and W_OK always pass; X_OK passes on a directory always (even mode 0000) and on any other file when at least one of the owner, group or other execute bits is set (0001 and 0010 pass, 0644 and 0000 fail with EACCES, /dev/null fails)"
+  real_ids: "with real uid 0 and effective uid nonzero, the root rules above apply (a 0600 root file passes R_OK|W_OK, although open would fail); with real uid nonzero and effective uid 0, the normal-user rules apply with the real uid (a 0600 root file fails R_OK with EACCES; F_OK still passes; open would succeed). The group class is chosen by the real gid: the effective gid does not count"
+  directories: "on a directory, X_OK is search permission, R_OK listing, W_OK changing entries; reaching any name needs search (x) permission on every directory on the way, read permission is not needed (a 0300 directory still lets its owner reach the names in it)"
+  links: "symbolic links are followed at the end and in the middle of the path, through chains; the target's mode is checked, never the link's 0777; a hard link shares the mode of its inode (a chmod through one name shows through the other)"
+  other_kinds: "a FIFO is checked by its mode only and is not opened (no blocking); a character device by its mode (/dev/null 0666: R_OK|W_OK pass, X_OK EACCES)"
+  path_forms: "\".\" and \"..\" work as usual (\"/..\" is \"/\"); repeated slashes count as one; a trailing slash on a directory or a link to one is fine"
+errors:
+  denied: "EACCES: a requested bit not allowed for the caller's class, or a directory on the way without search permission for the caller (normal user: a missing name under an unsearchable directory is EACCES, not ENOENT)"
+  bad_mode: "EINVAL when any bit other than R_OK|W_OK|X_OK is set in the low 32 bits (8 to 63 one by one, 0x200, 0x80000000, -1)"
+  missing: "ENOENT: a missing name (at the end or as a directory on the way); an empty path; a dangling symbolic link (also with a trailing slash)"
+  not_dir: "ENOTDIR: a non-directory (or a link to one) followed by \"/\", \".\" or more components"
+  too_long: "ENAMETOOLONG: a component over 255 bytes (255 is fine); a path of 4096 bytes or more before its NUL (4095 bytes plus the NUL is looked up)"
+  loop: "ELOOP: a symbolic link loop or a link to itself, at the end or in the middle"
+  fault: "EFAULT: a NULL, unmapped or kernel-half path pointer"
+  order: "when several problems apply, the first in this order decides: (1) mode (EINVAL, even with a NULL pointer, an empty or missing path, or an unsearchable directory); (2) the path string as a whole: EFAULT, ENAMETOOLONG for 4096+ bytes, ENOENT for empty; (3) the components left to right as the walk reaches them: a directory without search permission EACCES, a missing name or dangling link ENOENT (a later \"..\" does not undo it), a non-directory followed by more ENOTDIR, a name over 255 bytes ENAMETOOLONG (so D/nope/<256 bytes> is ENOENT, D/file/<256 bytes> ENOTDIR, D/<256 bytes>/nope ENAMETOOLONG, Unsearchable/<256 bytes> EACCES for a normal user, ENAMETOOLONG for root); (4) the permission bits of the final file, last"
+side_effects: "none: the file's stat data (times included) is unchanged after access calls; nothing is opened or created"
+threading: "no thread-specific behaviour; uses the process's working directory and real credentials at the time of the call"
+ordering: []
+timing:
+  typical: "microseconds per call; does not block"
+  guarantees: "none"
+tests:
+  visible: 8
+  held_out: 4
