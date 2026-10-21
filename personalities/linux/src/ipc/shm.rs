@@ -20,27 +20,17 @@
 //! [`LinuxKernel::shm_create`]: crate::kernel::LinuxKernel::shm_create
 
 use crate::abi::{PAGE_SIZE, page_round_up};
-use crate::cred::{Creds, cap};
 use crate::errno::Errno;
 use crate::ns::IpcNs;
 use crate::ns::lock::Mutex;
-use crate::ns::user::{UserNsRef, ns_capable};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-/// The private key (`linux/ipc.h`).
-pub const IPC_PRIVATE: i32 = 0;
-/// shmget flags (`linux/ipc.h`).
-pub const IPC_CREAT: u32 = 0o1000;
-pub const IPC_EXCL: u32 = 0o2000;
-/// shmctl commands (`linux/ipc.h`).
-pub const IPC_RMID: u32 = 0;
-pub const IPC_SET: u32 = 1;
-pub const IPC_STAT: u32 = 2;
-/// The "new layout" bit some C libraries add to the command; x86-64 has
-/// only the 64-bit layout (`linux/ipc.h`).
-pub const IPC_64: u32 = 0x0100;
+pub use super::{
+    EXEC, IPC_64, IPC_CREAT, IPC_EXCL, IPC_PRIVATE, IPC_RMID, IPC_SET, IPC_STAT, MODE_BITS, Owners, READ, WRITE, Who,
+    permits,
+};
 
 /// shmget flags (`linux/shm.h`).
 pub const SHM_HUGETLB: u32 = 0o4000;
@@ -63,13 +53,6 @@ pub const SHMALL: u64 = u64::MAX - (1 << 24);
 /// page size on x86-64).
 pub const SHMLBA: u64 = PAGE_SIZE;
 
-/// The permission bits of a mode.
-const MODE_BITS: u32 = 0o777;
-/// Access requests as [`Segment::allows`] takes them (any class will do).
-pub const READ: u32 = 4;
-pub const WRITE: u32 = 2;
-pub const EXEC: u32 = 1;
-
 /// The memory of a segment, as the kernel made it. The table holds one
 /// reference; every attachment (a mapping, in any process) is the kernel's.
 pub trait ShmMemory: Send + Sync + core::fmt::Debug {
@@ -82,35 +65,6 @@ pub trait ShmMemory: Send + Sync + core::fmt::Debug {
     fn serial(&self) -> u64;
     /// The kernel's own type behind the trait object.
     fn as_any(&self) -> &dyn core::any::Any;
-}
-
-/// Who asks: the ids and privileges the permission rules of svipc(7) use.
-#[derive(Clone, Debug)]
-pub struct Who {
-    pub euid: u32,
-    pub egid: u32,
-    pub groups: Arc<[u32]>,
-    /// `CAP_IPC_OWNER` over the namespace: every access check passes.
-    pub ipc_owner: bool,
-    /// `CAP_SYS_ADMIN` over the namespace: `IPC_SET` and `IPC_RMID` of
-    /// anyone's segment.
-    pub sys_admin: bool,
-    /// `CAP_IPC_LOCK`: `SHM_HUGETLB`.
-    pub ipc_lock: bool,
-}
-
-impl Who {
-    /// The caller with `creds` in a namespace owned by `owner`.
-    pub fn new(creds: &Creds, owner: &UserNsRef) -> Who {
-        Who {
-            euid: creds.euid,
-            egid: creds.egid,
-            groups: creds.groups.clone(),
-            ipc_owner: ns_capable(creds, owner, cap::IPC_OWNER),
-            sys_admin: ns_capable(creds, owner, cap::SYS_ADMIN),
-            ipc_lock: creds.capable(cap::IPC_LOCK),
-        }
-    }
 }
 
 /// One segment.
@@ -172,34 +126,18 @@ impl Segment {
         self.segsz.div_ceil(PAGE_SIZE)
     }
 
-    /// Whether `who` may have the access in `request` (permission bits as
-    /// in a mode, of any class): the r, w and x bits of the three classes
-    /// are merged, and each must be in the mode bits of the caller's class
-    /// (owner if its effective uid is the owner's or creator's, else group
-    /// if its effective or a supplementary gid is the owner's or creator's
-    /// group, else other). `CAP_IPC_OWNER` passes everything; a request of
-    /// nothing always passes.
-    pub fn allows(&self, who: &Who, request: u32) -> bool {
-        let r = request & MODE_BITS;
-        let wanted = (r >> 6 | r >> 3 | r) & 7;
-        if wanted == 0 || who.ipc_owner {
-            return true;
-        }
-        let mode = u32::from(self.mode);
-        let granted = if who.euid == self.uid || who.euid == self.cuid {
-            mode >> 6
-        } else if [self.gid, self.cgid].iter().any(|g| *g == who.egid || who.groups.contains(g)) {
-            mode >> 3
-        } else {
-            mode
-        } & 7;
-        wanted & !granted == 0
+    fn owners(&self) -> Owners {
+        Owners { uid: self.uid, gid: self.gid, cuid: self.cuid, cgid: self.cgid }
     }
 
-    /// Whether `who` may change or remove it (`IPC_SET`, `IPC_RMID`):
-    /// its owner, its creator, or a caller with `CAP_SYS_ADMIN`.
+    /// Whether `who` may have the access in `request` ([`permits`]).
+    pub fn allows(&self, who: &Who, request: u32) -> bool {
+        permits(&self.owners(), self.mode, who, request)
+    }
+
+    /// Whether `who` may change or remove it ([`Owners::owned_by`]).
     pub fn owned_by(&self, who: &Who) -> bool {
-        who.euid == self.uid || who.euid == self.cuid || who.sys_admin
+        self.owners().owned_by(who)
     }
 }
 

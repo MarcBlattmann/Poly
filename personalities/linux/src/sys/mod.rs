@@ -27,6 +27,7 @@ pub mod prctl;
 pub mod process;
 pub mod sched;
 pub mod seccomp;
+pub mod sem;
 pub mod sendfile;
 pub mod shm;
 pub mod signal;

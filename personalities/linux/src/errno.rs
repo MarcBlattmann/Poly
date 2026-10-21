@@ -51,6 +51,9 @@ impl Errno {
     pub const ERANGE: Errno = Errno(34);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
+    /// `EIDRM` (`asm-generic/errno.h`): "Identifier removed"; a System V
+    /// IPC object removed while a call waited on it (semop(2)).
+    pub const EIDRM: Errno = Errno(43);
     /// `ENODATA` (`asm-generic/errno.h`): "No data available"; an extended
     /// attribute that does not exist (getxattr(2)).
     pub const ENODATA: Errno = Errno(61);
@@ -156,6 +159,7 @@ impl Errno {
             34 => "ERANGE",
             36 => "ENAMETOOLONG",
             38 => "ENOSYS",
+            43 => "EIDRM",
             61 => "ENODATA",
             75 => "EOVERFLOW",
             87 => "EUSERS",
