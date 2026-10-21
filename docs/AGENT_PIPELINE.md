@@ -166,6 +166,8 @@ cargo xtask pipeline diff --target poly --baseline target/pipeline/runs/<old>/su
 cargo xtask pipeline diff --target poly --tests-dir <entry>.tests --tests-dir <held-out dir of the entry>
 cargo xtask pipeline selfcheck                  # what `cargo xtask ci` runs: Linux against Linux
 cargo xtask pipeline polycheck                  # and Poly against Linux (tests/linux/poly-pass.txt)
+cargo xtask pipeline polyrun cat-n --tests-dir specs/linux/apps/cat.tests --print
+                                                # Poly only, no reference (implementers may run it)
 ```
 
 `--tests-dir` adds an entry's test programs (visible or held-out, `.c`
