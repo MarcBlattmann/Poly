@@ -474,5 +474,64 @@ kernel_test! {
     }
 }
 
+kernel_test! {
+    /// The test init's identity (ADR 0078): the kernel arguments as the
+    /// diff runner writes them become a user's credentials without
+    /// capabilities and the umask, given to a program before it runs,
+    /// which then runs as that user to its end; bad arguments are refused.
+    fn the_test_init_runs_a_program_as_the_given_identity(env: &TestEnv) -> TestResult {
+        use crate::testinit;
+        let parsed = testinit::identity_of(Some("1000"), Some("1000"), Some("27,4,1000"), Some("0027"));
+        let id = parsed.map_err(|_| "the identity arguments were refused")?.ok_or("no identity")?;
+        if id.umask != Some(0o027) {
+            return Err("the umask argument was not read as octal");
+        }
+        let separate = testinit::identity_of(Some("1000,0,0"), None, None, None).map_err(|_| "R,E,S refused")?;
+        let separate = separate.ok_or("no identity")?.creds;
+        if (separate.uid, separate.euid, separate.suid, separate.gid) != (1000, 0, 0, 0) || separate.caps.effective.is_empty()
+        {
+            return Err("real, effective and saved ids were not taken apart (or euid 0 lost its capabilities)");
+        }
+        let refused = |u, g, gs, m| testinit::identity_of(u, g, gs, m).is_err();
+        if !refused(Some("x"), None, None, None)
+            || !refused(Some("1,2"), None, None, None)
+            || !refused(None, None, Some("4,,5"), None)
+            || !refused(None, None, None, Some("0999"))
+            || !refused(Some("4294967295"), None, None, None)
+        {
+            return Err("a bad identity argument was accepted");
+        }
+        if testinit::identity_of(None, None, None, None) != Ok(None) {
+            return Err("no arguments gave an identity");
+        }
+        if !env.boot.has_flag(fs::TEST_INITRD_FLAG) {
+            return Ok(());
+        }
+        let argv: [&[u8]; 1] = [b"/bin/hello"];
+        let prepared = program::prepare_as(b"/bin/hello", &argv, &[], false, Some(&id.creds))
+            .map_err(|_| "prepare_as /bin/hello failed")?;
+        testinit::apply(prepared.process(), &id);
+        let creds = super::cred::process_creds(prepared.process());
+        if (creds.uid, creds.euid, creds.suid, creds.fsuid) != (1000, 1000, 1000, 1000)
+            || (creds.gid, creds.egid, creds.sgid, creds.fsgid) != (1000, 1000, 1000, 1000)
+            || *creds.groups != [4, 27, 1000]
+        {
+            return Err("the program's ids or groups are not the given ones");
+        }
+        if !creds.caps.effective.is_empty() || !creds.caps.permitted.is_empty() {
+            return Err("a user other than root kept capabilities");
+        }
+        if prepared.process().files.current_umask() != 0o027 {
+            return Err("the program's umask is not the given one");
+        }
+        let process = prepared.start().map_err(|_| "starting /bin/hello failed")?;
+        expect_exit(wait(&process)?, 0, "/bin/hello as user 1000 did not exit with 0")?;
+        if super::cred::process_creds(&process).euid != 1000 {
+            return Err("the program did not run as user 1000 to its end");
+        }
+        Ok(())
+    }
+}
+
 /// Time: sleeps, timers, CPU time, the vDSO from ring 3 (ADR 0044).
 mod time_tests;

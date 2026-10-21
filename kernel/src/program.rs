@@ -105,6 +105,19 @@ impl Prepared {
 
 /// Everything [`exec_path`] does but starting the thread.
 pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Result<Prepared, ExecPathError> {
+    prepare_as(path, argv, envp, traced, None)
+}
+
+/// [`prepare`], a Linux program running as `creds` (`None`: root) from
+/// its first instruction: its thread's credentials and the ids in its
+/// auxiliary vector. The file is opened as the kernel, whoever it runs as.
+pub fn prepare_as(
+    path: &[u8],
+    argv: &[&[u8]],
+    envp: &[&[u8]],
+    traced: bool,
+    creds: Option<&poly_personality_linux::cred::Creds>,
+) -> Result<Prepared, ExecPathError> {
     let vfs = fs::vfs();
     let ctx = vfs.root_context().map_err(ExecPathError::Open)?;
     let file = vfs.open_exec(&ctx, &Cred::root(), At::Cwd, path).map_err(ExecPathError::Open)?;
@@ -153,14 +166,24 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
         let file = file.map_err(|e| ExecError::InterpreterOpen(e.code() as u16))?;
         Ok(Arc::new(FileSource::of(&file)))
     };
-    let params = ExecParams::new(argv, envp, path);
+    let mut params = ExecParams::new(argv, envp, path);
+    if let Some(c) = creds {
+        params.creds = crate::linux::cred::aux_creds(c);
+    }
     let image = exec::load_dynamic(Arc::new(source), &params, &open_interp).map_err(ExecPathError::Exec)?;
     let process = Arc::new(Process::new_linux(process::alloc_pid(), 0, format, traced));
     if let Some(linux) = &process.linux {
-        // The program's name (prctl(2) PR_GET_NAME); it runs as root.
+        // The program's name (prctl(2) PR_GET_NAME); it runs as root
+        // unless `creds` say otherwise.
         let comm = poly_personality_linux::sys::prctl::comm_from_path(path);
         let pid = process.pid as i32;
-        linux.with(|p| p.thread_mut(pid).comm = comm);
+        linux.with(|p| {
+            let t = p.thread_mut(pid);
+            t.comm = comm;
+            if let Some(c) = creds {
+                t.creds = c.clone();
+            }
+        });
     }
     fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
     Ok(Prepared::Linux { process, image })
@@ -218,7 +241,8 @@ pub fn run_init(boot: &BootInfo) -> bool {
     let Some(path) = boot.arg(testrun::INIT_ARG) else { return false };
     let traced = boot.has_flag(testrun::CAPTURE_FLAG);
     kprintln!("init: running {path}{}", if traced { " (traced)" } else { "" });
-    match run_first(path, traced) {
+    let identity = crate::testinit::identity(boot).map_err(ExecPathError::Unsupported);
+    match identity.and_then(|id| run_first(path, traced, id.as_ref())) {
         Ok((pid, status)) => {
             crate::testinit::report_output_files(boot);
             testrun::exit(pid, status, crate::nt::take_exit_status(pid));
@@ -235,15 +259,23 @@ pub fn run_init(boot: &BootInfo) -> bool {
     true
 }
 
-fn run_first(path: &str, traced: bool) -> Result<(u32, ExitStatus), ExecPathError> {
+/// The first program, as `identity` if the boot gave one (ADR 0078).
+fn run_first(
+    path: &str,
+    traced: bool,
+    identity: Option<&crate::testinit::Identity>,
+) -> Result<(u32, ExitStatus), ExecPathError> {
     let argv: [&[u8]; 1] = [path.as_bytes()];
     // A traced program runs as the child of the kernel's init (ADR 0064).
     let init = traced && crate::testinit::start();
-    let prepared = prepare(path.as_bytes(), &argv, &[], traced)?;
+    let prepared = prepare_as(path.as_bytes(), &argv, &[], traced, identity.map(|id| &id.creds))?;
     // Only a Linux program has a place in the Linux process tree.
     let init = init && prepared.process().linux.is_some();
     if init {
         crate::testinit::adopt(prepared.process());
+    }
+    if let Some(id) = identity {
+        crate::testinit::apply(prepared.process(), id);
     }
     // An NT program's full NTSTATUS goes into its POLY-EXIT record.
     if let Prepared::Nt { process, .. } = &prepared {

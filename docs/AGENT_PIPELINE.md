@@ -197,6 +197,32 @@ timing or read data carrying pids. Their exit status and output are
 still compared exactly, and a directive never strengthens the mode the
 run was given.
 
+**The same environment on both sides**
+([ADR 0078](adr/0078-test-runs-as-the-reference-user.md);
+`tools/pipeline/src/identity.rs`). A test program starts with an empty
+environment, only fds 0-2 open, in `/`, with umask 022, whatever the
+tool's caller had (the loop's systemd unit has `UMask=0027`), and as the
+user, groups and supplementary groups of whoever runs the tool: root in
+this container, `server` (uid 1000) on the home server, a normal user on
+GitHub's CI. The diff runner records that identity (`summary.json`
+`identity`, the report's last line: `test programs ran as uid 1000 gid
+1000 groups 1000 umask 0022 on both sides`) and boots Poly with it
+(`poly.test.uid=1000 poly.test.gid=1000 poly.test.groups=1000
+poly.test.umask=0022`); the kernel's test init gives the program those
+credentials (what root makes of itself with setgroups, setresgid and
+setresuid, so a user other than root has no capabilities, as on Linux)
+and umask before it runs. Root stays root. App tests run as root on both
+sides (in the reference's jail, or mapped to root in a user namespace).
+
+A test that only makes sense as root (mount, set*id to other users,
+capabilities, root passing a permission check) says so with a line
+`poly-diff: needs=root` in its header comment. Where the reference is not
+root, `pipeline diff --target poly` does not compare it: it runs it on
+Poly as root alone and passes it if it passes its own checks (exit 0),
+`self_checked` in the summary, with the reason in the report. Linux
+against Linux compares it as usual. Every other test must pass as any
+user.
+
 The ptrace tracer follows forks and clones, including children that
 leave the test's process group, and keeps job control intact: a tracee
 stopped by SIGSTOP stays stopped and its parent sees it (`WUNTRACED`).
@@ -205,7 +231,8 @@ The program starts with default signal actions and an empty signal mask.
 **Poly:** the tool builds a one-program initramfs per test, boots
 `kernel/target/x86_64-unknown-none/debug/poly-kernel` (built if missing,
 `--build-kernel` to rebuild, or `--kernel`) with
-`poly.qemu_exit poly.init=/test-binary poly.test.capture`, and turns the
+`poly.qemu_exit poly.init=/test-binary poly.test.capture` and the
+reference's identity (above), and turns the
 kernel's `POLY-*` records (ADR 0027, kernel side in ADR 0038) into a trace;
 about half a second per test. QEMU runs on KVM when `/dev/kvm` can be opened
 and on its emulator (TCG) otherwise; `POLY_QEMU_ACCEL=tcg|kvm|auto` chooses (ADR 0077).
@@ -238,7 +265,16 @@ green entry does not pass (`green entry <id>: visible test <t> fails`);
 corpus tests that newly pass are named, to be added to the list. The green
 entries come from the coverage map itself, so marking an entry green
 (`coverage set-status <id> green ...`) is what puts its tests into CI; there
-is no second list. Held-out tests are not in the repository and not on
+is no second list. The green entries' tests were verified as root, most of
+them before `needs=root` existed: where the reference is not root
+(GitHub's CI), one that differs is checked on Poly as root alone like a
+`needs=root` test (`pipeline diff --root-fallback <tests>` does the same
+by hand), and polycheck names it. A test that failed its own checks on
+the reference needs root without saying so; one that passed them while
+Poly differed is a real difference of Poly for users other than root,
+printed as a warning (today `a_linkat_dirfd`: `linkat(fd, "", ...,
+AT_EMPTY_PATH)` of a file the caller opened works on Linux 6.18 without
+`CAP_DAC_READ_SEARCH`, Poly says `ENOENT`). Held-out tests are not in the repository and not on
 GitHub, so CI cannot run them: they are checked by the runner when it
 marks an entry green (`pipeline diff --target poly` with the entry's
 visible and held-out directories; the loop's verify step) and again
@@ -514,7 +550,9 @@ queue). Only the loop pushes to GitHub, and never to `main`.
    `pipeline handoff verify <id> --received <bundle>` (with the held-out
    store); `cargo xtask ci`; `pipeline diff --target poly --build-kernel
    --tests-dir <visible> --tests-dir <held-out> --tests <their names>`.
-   Green: every visible and held-out test of the entry passes.
+   Green: every visible and held-out test of the entry passes. The tests
+   run as `server` on both sides (umask 022, not the unit's 0027), and
+   `needs=root` tests as root on Poly alone (Diff runner, above).
    - **Red** (CI or the diff): feedback into the inbox and back to step 5.
      The feedback has the visible tests' results in full and the held-out
      tests only as "k of n pass"; CI output goes back as its last 80 lines
