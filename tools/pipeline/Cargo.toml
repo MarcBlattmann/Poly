@@ -13,8 +13,13 @@ path = "src/main.rs"
 [dependencies]
 libc.workspace = true
 poly-elf.workspace = true
+poly-pe.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+# Test images for the Windows test checks (pe_writer).
+poly-personality-nt.workspace = true
 
 [lints]
 workspace = true
