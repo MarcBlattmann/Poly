@@ -732,7 +732,7 @@ crate::kernel_test! {
             for i in 0..3 {
                 let before = EDU_INTERRUPTS.load(SeqCst);
                 regs.write32(edu::IRQ_RAISE, 1 << i);
-                if !wait_until(|| EDU_INTERRUPTS.load(SeqCst) > before) {
+                if !wait_until(ARRIVAL_NS, || EDU_INTERRUPTS.load(SeqCst) > before) {
                     return Err("an interrupt the edu device raised did not arrive");
                 }
                 if EDU_STATUS.load(SeqCst) & (1 << i) == 0 {
@@ -749,7 +749,7 @@ crate::kernel_test! {
         irq.disable();
         let before = EDU_INTERRUPTS.load(SeqCst);
         regs.write32(edu::IRQ_RAISE, 1 << 7);
-        let quiet = !wait_until(|| EDU_INTERRUPTS.load(SeqCst) > before);
+        let quiet = !wait_until(QUIET_NS, || EDU_INTERRUPTS.load(SeqCst) > before);
         regs.write32(edu::IRQ_ACK, regs.read32(edu::IRQ_STATUS));
         *EDU.lock() = None;
         result?;
@@ -763,10 +763,18 @@ crate::kernel_test! {
     }
 }
 
-/// Wait up to 100 ms (with interrupts on) for something an interrupt does.
-fn wait_until(mut done: impl FnMut() -> bool) -> bool {
+/// How long the edu test waits for an interrupt to arrive. The interrupt
+/// goes to the boot CPU, which a busy host may hold off for a while when
+/// the test runs on another one; the wait ends as soon as it arrives.
+const ARRIVAL_NS: u64 = 10 * crate::time::NANOS_PER_SEC;
+/// How long it watches for an interrupt that must not come.
+const QUIET_NS: u64 = 100 * crate::time::NANOS_PER_MILLI;
+
+/// Wait up to `limit_ns` (with interrupts on) for something an interrupt
+/// does.
+fn wait_until(limit_ns: u64, mut done: impl FnMut() -> bool) -> bool {
     let start = crate::time::now_ns();
-    while crate::time::now_ns() - start < 100 * crate::time::NANOS_PER_MILLI {
+    while crate::time::now_ns() - start < limit_ns {
         if done() {
             return true;
         }

@@ -559,6 +559,9 @@ fn handle(signal: u64, handler: u64, flags: u64) -> i64 {
 }
 
 /// Work in user mode for a while, without system calls.
+/// Turns of [`spin`] in the busy-loop check.
+const BUSY_SPINS: u32 = 1000;
+
 fn spin() {
     let mut x = 1u64;
     for i in 0..20_000u64 {
@@ -674,12 +677,26 @@ fn cpu_tests() {
     let (ran, wall) = (thread1 - thread0, wall1 - wall0);
     check(b"thread_cpu_clock_advances_while_busy", ran >= wall / 10 && ran <= wall + 10 * MS, ran as i64);
     check(b"process_cpu_clock_advances_while_busy", process1 - process0 >= ran / 2, (process1 - process0) as i64);
-    // But not while it sleeps.
-    let t0 = clock(CLOCK_THREAD_CPUTIME_ID);
+    // But not while it sleeps: the clock time that passes minus the CPU
+    // time charged is the time the thread was off its CPU, most of the 50
+    // ms. Not "charged under 25 ms": a host that holds the emulator off
+    // while the thread runs (on its way to sleep or back, where every clock
+    // read is a slow device access under TCG) charges it for that, and it
+    // passes on the clock too. A thread charged for its sleep fails every
+    // attempt; such a stall spoils one now and then.
     let nap = Timespec::from_ns(50 * MS);
-    sys(SYS_NANOSLEEP, &[&raw const nap as u64, 0]);
-    let slept = clock(CLOCK_THREAD_CPUTIME_ID) - t0;
-    check(b"thread_cpu_clock_stands_still_while_asleep", slept < 25 * MS, slept as i64);
+    let (mut asleep, mut charged) = (false, 0);
+    for _ in 0..3 {
+        let (wall0, t0) = (mono(), clock(CLOCK_THREAD_CPUTIME_ID));
+        sys(SYS_NANOSLEEP, &[&raw const nap as u64, 0]);
+        let (t1, wall1) = (clock(CLOCK_THREAD_CPUTIME_ID), mono());
+        charged = t1 - t0;
+        asleep = (wall1 - wall0).saturating_sub(charged) >= 25 * MS;
+        if asleep {
+            break;
+        }
+    }
+    check(b"thread_cpu_clock_stands_still_while_asleep", asleep, charged as i64);
     // getrusage and times see the same time, mostly user time.
     let mut ru = [0i64; 18];
     let r = sys(SYS_GETRUSAGE, &[0, ru.as_mut_ptr() as u64]);
@@ -690,17 +707,19 @@ fn cpu_tests() {
         (user / 1000) as i64,
     );
     // Over the whole run the sleeps, timers and exec count as system time,
-    // so compare only what a busy loop with few system calls adds.
+    // so compare only what a busy loop adds: a fixed amount of work with no
+    // system calls at all, not even to read the clock. (Under QEMU's TCG
+    // the vDSO makes one, which reads the HPET, and on a busy host that
+    // waits for the emulator's global lock, often for milliseconds: kernel
+    // time, measured as such, that can outweigh the loop.)
     let rusage = || {
         let mut ru = [0i64; 18];
         sys(SYS_GETRUSAGE, &[0, ru.as_mut_ptr() as u64]);
         ((ru[0] * 1_000_000 + ru[1]) as u64, (ru[2] * 1_000_000 + ru[3]) as u64)
     };
-    let ((user0, system0), wall0) = (rusage(), mono());
-    while mono() - wall0 < 200 * MS {
-        for _ in 0..50 {
-            spin();
-        }
+    let (user0, system0) = rusage();
+    for _ in 0..BUSY_SPINS {
+        spin();
     }
     let (user1, system1) = rusage();
     let (busy_user, busy_system) = (user1 - user0, system1 - system0);

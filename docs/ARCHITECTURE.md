@@ -1216,7 +1216,7 @@ the CPU-time accounting, the timer thread and the vDSO.
                   │ LinuxKernel: clock, set_realtime, cpu_times, block, timers_changed
                   ▼
   kernel:     time.rs (monotonic + settable wall clock) ──publish──► vdso.rs ──► [vvar]
-              cputime.rs (per-slot run time, tick samples)
+              cputime.rs (per-slot run time, cycles per mode)
               linux/timers.rs: wake-ups by pid ──► linux-timers thread ──► time::fire ──► signals
 ```
 
@@ -1605,10 +1605,13 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   FADT names), and adds the monotonic clock since; `time::set_realtime_ns`
   moves it (never below the monotonic clock). Linux's `CLOCK_REALTIME`
   reads it. The file systems' timestamps still count from boot.
-- **CPU time** (`cputime.rs`, ADR 0044): each thread-table slot's run time,
-  measured with the monotonic clock at every context switch, split into
-  user and system time by tick samples (the tick records whether it
-  interrupted ring 3); a reaped thread's time moves to its process.
+- **CPU time** (`cputime.rs`, ADR 0044, ADR 0070): each thread-table
+  slot's run time, measured with the monotonic clock at every context
+  switch, split into user and system time in the ratio of the TSC cycles
+  it spent in each mode: every entry from ring 3 (system call, interrupt,
+  exception) and every return there (`trap_return`, SYSRET) marks a mode
+  change on its CPU (`poly_sched::cputime::Stint`, per CPU, lock-free);
+  a reaped thread's time moves to its process.
 
 ## Several CPUs (SMP)
 

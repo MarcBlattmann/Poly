@@ -258,25 +258,22 @@ kernel_test! {
             check!(3, ran >= RUN && ran <= wall);
             check!(4, sys(p, nr::CLOCK_GETTIME, &[2, ts]) == Ok(0));
             check!(5, get_timespec(ts) >= ran);
-            // getrusage: busy in the kernel, so mostly system time. The split
-            // comes from tick samples, and a busy host can merge away every
-            // tick of a short spin while the one that came in ring 3 (on the
-            // way in) survives: spin on until a tick in the kernel shows.
+            // getrusage: busy in the kernel (this callback runs inside a
+            // system call), so it is system time (the ring-3 code around
+            // the call is a few instructions).
             let ru = DATA + 0x200;
-            let stime_us = loop {
-                check!(6, sys(p, nr::GETRUSAGE, &[0, ru]) == Ok(0));
-                let mut b = [0u8; 32];
-                check!(7, user::copy_from_user(&mut b, ru).is_ok());
-                let stime_us = u64::from_le_bytes(b[16..24].try_into().unwrap()) * 1_000_000
-                    + u64::from_le_bytes(b[24..32].try_into().unwrap());
-                if stime_us > 0 || time::now_ns() - wall0 > BUDGET {
-                    break stime_us;
-                }
-                for _ in 0..1000 {
-                    core::hint::spin_loop();
-                }
+            check!(6, sys(p, nr::GETRUSAGE, &[0, ru]) == Ok(0));
+            let mut b = [0u8; 32];
+            check!(7, user::copy_from_user(&mut b, ru).is_ok());
+            let us = |at: usize| {
+                u64::from_le_bytes(b[at..at + 8].try_into().unwrap()) * 1_000_000
+                    + u64::from_le_bytes(b[at + 8..at + 16].try_into().unwrap())
             };
-            check!(8, stime_us > 0);
+            let (utime_ns, stime_ns) = (us(0) * 1000, us(16) * 1000);
+            if stime_ns < ran / 2 {
+                kprintln!("linux test: {ran} ns busy in the kernel: user {utime_ns} ns, system {stime_ns} ns");
+            }
+            check!(8, stime_ns >= ran / 2);
             0
         })?;
         expect_exit(status, 0, "CPU time checks failed")
