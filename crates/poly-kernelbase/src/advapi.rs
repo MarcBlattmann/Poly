@@ -94,6 +94,10 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
     ("GetAce", SECURITY_BASE),
     ("DeleteAce", SECURITY_BASE),
     ("FindFirstFreeAce", SECURITY_BASE),
+    // What 7-Zip's command line imports (ADR 0087).
+    ("AdjustTokenPrivileges", SECURITY_BASE),
+    ("GetFileSecurityW", SECURITY_BASE),
+    ("SetFileSecurityW", SECURITY_BASE),
 ];
 
 /// The functions `advapi32.dll` implements itself.
@@ -108,6 +112,8 @@ pub const ADVAPI32_OWN: &[&str] = &[
     "GetUserNameA",
     "LookupPrivilegeValueW",
     "LookupPrivilegeNameW",
+    // `RtlGenRandom` (ntsecapi.h): Learn names only `Advapi32.dll` (ADR 0087).
+    "SystemFunction036",
 ];
 
 /// The forwarder string of `advapi32!name` (PE format: `DLLName.FunctionName`).

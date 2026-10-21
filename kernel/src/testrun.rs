@@ -38,6 +38,10 @@ use core::fmt::Write;
 
 /// Kernel argument: the first program to run.
 pub const INIT_ARG: &str = "poly.init";
+/// Kernel argument, once per argument: the first program's arguments after
+/// its path, in order (`poly.init.arg=a poly.init.arg=t.7z`; no spaces in
+/// one; ADR 0087).
+pub const INIT_ARGV: &str = "poly.init.arg";
 /// Kernel flag: trace the first program (`POLY-SYSCALL`, `POLY-OUT`,
 /// `POLY-SIGNAL` records).
 pub const CAPTURE_FLAG: &str = "poly.test.capture";

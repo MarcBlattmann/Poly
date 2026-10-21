@@ -99,4 +99,20 @@ mod tests {
         assert_eq!(f.u32_at(ret), 64);
         assert_eq!(f.call(Service::QuerySystemInformation, &[5, buf, 64, ret]), STATUS_INVALID_INFO_CLASS);
     }
+
+    /// `NtQueryInformationProcess(ProcessTimes)` (ADR 0087): creation, exit,
+    /// kernel and user time, as the kernel reports them.
+    #[test]
+    fn process_times() {
+        let mut f = Fake::new();
+        let (buf, ret) = (f.alloc(32), f.alloc(4));
+        let me = u64::MAX; // NtCurrentProcess()
+        assert_eq!(f.call(Service::QueryInformationProcess, &[me, 4, buf, 32, ret]), STATUS_SUCCESS);
+        assert_eq!(f.u32_at(ret), 32);
+        assert_eq!(f.u64_at(buf), 0x01D9_0000_0000_0000);
+        assert_eq!(f.u64_at(buf + 8), 0, "no exit time while it runs");
+        assert_eq!((f.u64_at(buf + 16), f.u64_at(buf + 24)), (20_000, 30_000));
+        assert_eq!(f.call(Service::QueryInformationProcess, &[me, 4, buf, 16, ret]), STATUS_INFO_LENGTH_MISMATCH);
+        assert_eq!(f.call(Service::QueryInformationProcess, &[me, 9, buf, 32, ret]), STATUS_INVALID_INFO_CLASS);
+    }
 }

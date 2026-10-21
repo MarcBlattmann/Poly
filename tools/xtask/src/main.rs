@@ -46,6 +46,10 @@
 //!                       --cache-key: print the name it is cached under
 //!   win32               the same for kernelbase.dll, kernel32.dll, ucrtbase.dll, msvcrt.dll and
 //!                       the test programs (win32.rs)
+//!   win fetch-7zip      download the pinned 7-Zip 7za.exe (x64) into the cache, checked (sevenzip.rs)
+//!   win imports <exe | 7zip> [--markdown <file>] [--check]
+//!                       what a Windows program imports and what of it our DLLs lack
+//!                       (winimports.rs, ADR 0087); --check fails unless every import binds
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
@@ -66,9 +70,11 @@ mod ntdll;
 mod programs;
 mod rootdisk;
 mod screen;
+mod sevenzip;
 mod symbols;
 mod terminal;
 mod win32;
+mod winimports;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -112,6 +118,7 @@ fn main() -> ExitCode {
         Some("font") => font::run(&root(), &args[1..]),
         Some("ntdll") => ntdll::command(&args[1..]),
         Some("win32") => win32::command(&args[1..]),
+        Some("win") => sevenzip::command(&args[1..]),
         Some("dynamic-initramfs") => dynamic::command(),
         Some("busybox-initramfs") => busybox::command(),
         Some("busybox-test") => busybox_test(),
@@ -119,7 +126,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|ntdll|win32|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -1300,7 +1307,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 19] = [
+const BOOT_GROUPS: [BootGroup; 20] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1320,6 +1327,9 @@ const BOOT_GROUPS: [BootGroup; 19] = [
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
     // (rootdisk.rs).
     ("rootdisk", rootdisk::boot_test),
+    // 7-Zip's command line on the NT personality, skipped without the
+    // cached 7za.exe (sevenzip.rs, ADR 0087).
+    ("7zip", sevenzip::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1353,7 +1363,7 @@ const BOOT_GROUPS: [BootGroup; 19] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip"]),
     ("devices", &["net", "ext2", "ext4", "missing-devices", "screen", "terminal"]),
     ("faults", &["faults", "failures"]),
 ];
@@ -1602,6 +1612,10 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
     }
     if !text.contains("cargo xtask boot-tests --shard ${{ matrix.shard }}") {
         problems.push("no job runs `cargo xtask boot-tests --shard ${{ matrix.shard }}`".into());
+    }
+    // The 7zip boot test's binary is fetched and cached by version (ADR 0087).
+    if !text.contains("cargo xtask win fetch-7zip") || !text.contains(&format!("key: 7zip-{}", sevenzip::VERSION)) {
+        problems.push(format!("no job fetches 7-Zip {} into a cache keyed 7zip-{0}", sevenzip::VERSION));
     }
     if !text.contains(&format!("shard: {TCG_SHARD}")) || !text.contains("accel: tcg") {
         problems.push(format!("the matrix does not run shard {TCG_SHARD} with `accel: tcg`"));

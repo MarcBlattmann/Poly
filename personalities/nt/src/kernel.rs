@@ -255,6 +255,15 @@ pub trait NtKernel {
         1
     }
 
+    /// Process `pid`'s creation time (a `FILETIME`) and the kernel and user
+    /// CPU time it used (100 ns units), for
+    /// `NtQueryInformationProcess(ProcessTimes)` (ADR 0087); `None` when the
+    /// kernel does not know the process (all zero then).
+    fn process_times(&self, pid: poly_ntobj::ProcessId) -> Option<[u64; 3]> {
+        let _ = pid;
+        None
+    }
+
     /// Write hive file `file` (a name like `SOFTWARE`, no directory) with
     /// `data` and return once it is on disk (`NtFlushKey`, ADR 0066). A
     /// kernel with nowhere to keep it succeeds without writing.
