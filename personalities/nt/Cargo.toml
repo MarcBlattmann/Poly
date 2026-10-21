@@ -1,6 +1,6 @@
 [package]
 name = "poly-personality-nt"
-description = "NT personality: Windows NT system service ABI"
+description = "NT personality: Windows NT system service ABI, object, memory and section services"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,8 @@ rust-version.workspace = true
 
 [dependencies]
 poly-abi.workspace = true
+poly-ntobj.workspace = true
+poly-pe.workspace = true
 
 [lints]
 workspace = true

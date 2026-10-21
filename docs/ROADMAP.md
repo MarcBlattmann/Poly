@@ -97,8 +97,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 - [x] Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed
 - [ ] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds
-- [ ] NT object manager: handles, object namespace (`\??`, `\Device`, `\BaseNamedObjects`), reference counts
-- [ ] NT memory services: sections, `NtAllocateVirtualMemory`, `NtMapViewOfSection`, protections
+- [x] NT object manager: handles, object namespace (`\??`, `\Device`, `\BaseNamedObjects`), reference counts
+- [x] NT memory services: sections, `NtAllocateVirtualMemory`, `NtMapViewOfSection`, protections
 - [ ] NT processes and threads, TEB/PEB, thread contexts, APCs
 - [ ] NT synchronisation: events, mutants, semaphores, timers, `NtWaitForMultipleObjects`
 - [ ] NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O

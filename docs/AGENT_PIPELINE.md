@@ -230,8 +230,8 @@ whenever the runner re-runs the entries. Today 11 of the 12 corpus programs
 pass (`libc-hello` differs at `rseq`: Poly answers `ENOSYS`, with the same
 output and exit status); of the 11 corpus app tests, `app-true`,
 `app-echo`, `app-head`, `app-grep`, `app-sed` and `app-mkdir` pass (app
-mode; the rest are in `specs/linux/FAILING.md`); and 40 green entries bring
-64 visible tests. The spec tests take about half a minute with four jobs
+mode; the rest are in `specs/linux/FAILING.md`); and 73 green entries bring
+104 visible tests. The spec tests take about half a minute with four jobs
 (the app tests run one at a time after them). (`write` was green
 before its spec tests existed; its visible spec tests pass, its held-out
 test does not, and it is handed off like the failing entries.)

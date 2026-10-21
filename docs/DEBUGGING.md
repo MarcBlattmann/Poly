@@ -1029,6 +1029,42 @@ PIE and an `ET_EXEC` program naming a tiny interpreter of our own
 `AT_BASE`, `AT_ENTRY` and `AT_PHDR` and jumps to the program;
 `poly.test=advice` the `madvise` tests of `Memory::advise`.
 
+## NT processes (PE executables)
+
+A PE executable runs as an NT process (ADR 0063): the kernel maps its image
+section, sets up the PEB, the first TEB and the stack, and starts the entry
+point; its system calls go to `nt::syscall`. The NT state lives in
+`kernel/src/nt` behind one lock, keyed by pid.
+
+- **The service numbers are Poly's own** (`personalities/nt/src/services.rs`),
+  not Windows'. A number in `eax` at a ring-3 `syscall` is `table << 12 |
+  index` (table 0 executive, 3 Poly's); a call Poly does not implement logs
+  `syscall: pid N nt/nt #X not implemented` and returns
+  `STATUS_NOT_IMPLEMENTED` (0xC0000002), the seed of the API tracer.
+- **A test program can report through `PolyTrace`** (service `0x3000`): it
+  logs `nt: pid N PolyTrace a b c` with its three argument registers. The
+  self-built NT test PE uses it to say which step failed and with which
+  `NTSTATUS` before it ends with `NtTerminateProcess`.
+- **An unhandled fault** in an NT process is logged like any user thread
+  (`user: pid N thread T killed: ...`); structured exception handling (SEH)
+  is a later milestone, so a fault that is not a guard page kills the thread.
+  A guard-page fault that grows a thread stack is resolved silently
+  (`user::page_fault` → `nt::resolve_fault`) and the instruction retried.
+- **The ring-3 NT test** is `kernel/src/nt/test_pe.rs`, a tiny
+  position-independent PE Poly assembles itself (no Microsoft toolchain):
+  its entry creates a named event in `\BaseNamedObjects`, opens it by name,
+  duplicates and closes handles until the object is gone, queries `\`,
+  reserves/commits/protects/queries/frees memory, and maps a pagefile
+  section twice to see a write through one view in the other. It ends with
+  exit code `0x5A` on success; `kernel_test! nt_test_program_runs_from_ring3`
+  builds it, runs it and checks that code. A different exit code means a
+  step failed — the preceding `nt: ... PolyTrace 0xbadbad <step> <status>`
+  line names which.
+- **The object manager and memory services are host-tested** in
+  `personalities/nt` against a fake kernel (`cargo test -p
+  poly-personality-nt`): that is where to reproduce a status or layout bug
+  without booting, since the kernel side only maps and locks.
+
 ## Pipes, waits and event files
 
 Pipes, `poll` / `select`, `epoll` and the event files (ADR 0042) leave
