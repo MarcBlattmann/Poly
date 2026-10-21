@@ -59,13 +59,24 @@ pub enum Push {
     Rejected(String),
 }
 
+/// Whether GitHub can merge a PR into the base branch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mergeable {
+    /// No conflicts (it may still wait for CI: `blocked`, `unstable`, ...).
+    Yes,
+    /// `mergeable_state` is `dirty`: it conflicts with the base branch, so
+    /// no CI runs and auto-merge never fires.
+    Conflicting,
+    /// `mergeable` is `null`: GitHub is still computing it; look again later.
+    Unknown,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pr {
     pub url: String,
     /// OPEN, MERGED or CLOSED.
     pub state: String,
-    /// MERGEABLE, CONFLICTING or UNKNOWN.
-    pub mergeable: String,
+    pub mergeable: Mergeable,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -89,9 +100,11 @@ pub struct DiffResult {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Merge {
     UpToDate,
-    /// Main merged in (conflicts in generated files resolved); the new head.
+    /// Main merged in and committed (conflicts in generated files resolved,
+    /// the README progress section made again); the new head.
     Merged(String),
-    /// Conflicts the loop cannot resolve: these files.
+    /// Conflicts the loop does not resolve: these files (the merge is
+    /// aborted, the checkout is as before).
     Conflicts(Vec<String>),
 }
 
@@ -141,7 +154,12 @@ pub trait Ops {
     fn set_green(&mut self, slot: usize, entry: &EntryId, visible: u32, held_out: u32) -> Result<Out>;
     /// `coverage check` and `coverage readme --check`.
     fn coverage_check(&mut self, slot: usize) -> Result<Out>;
-    /// Merge the base branch into the checked-out head.
+    /// Merge the base branch into the checked-out head and commit it.
+    /// Conflicts are resolved only in generated files: README.md and
+    /// `docs/progress/` (main's version, then `coverage readme`), the
+    /// entry's coverage file (main's version, as long as main did not
+    /// change the entry itself; the caller sets the entry's status again)
+    /// and the append-only hand-off log (main's rows, then the branch's).
     fn merge_main(&mut self, slot: usize, entry: &EntryId) -> Result<Merge>;
 
     /// The role's checkout: `branch` at the hub's `base`, clean.
@@ -159,6 +177,7 @@ pub trait Ops {
     /// A clock time from a usage-limit message (`3pm`, in `tz`) as epoch seconds.
     fn resolve_clock(&mut self, time: &str, tz: Option<&str>) -> Option<u64>;
 
+    /// The newest PR from `branch` (GitHub's REST API), with its mergeability when open.
     fn pr_find(&mut self, branch: &str) -> Result<Option<Pr>>;
     fn pr_create(&mut self, branch: &str, title: &str, body: &str) -> Result<String>;
     fn pr_auto_merge(&mut self, url: &str) -> Result;
