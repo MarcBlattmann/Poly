@@ -6,11 +6,12 @@ use crate::sha256;
 use crate::syscalls::{self, ArgKind};
 use crate::trace::{Arg, Event, Exit, Syscall, Trace};
 use crate::util::{self, Result};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -47,6 +48,31 @@ pub fn run(tracer: Tracer, program: &Path, test: &str, timeout: Duration) -> Res
     };
     t.binary_sha256 = Some(sha256::hex(&util::read(program)?));
     Ok(t)
+}
+
+/// How often a run on this machine that timed out is run again
+/// ([`rerun_on_timeout`]).
+pub const TIMEOUT_RERUNS: usize = 1;
+
+/// `run`, a run of a test on this machine (the reference OS), run again
+/// while it times out, up to [`TIMEOUT_RERUNS`] times; with how many runs
+/// timed out. The reference always finishes, so a timeout is a test that
+/// hangs (a lost wake-up, a signal lost to a race with the kernel's own
+/// workers), not one that is slow: such a test passes when run again, and a
+/// larger timeout would not help (ADR 0085). The result says it was rerun,
+/// so the test can still be fixed.
+pub fn rerun_on_timeout(mut run: impl FnMut() -> Result<Trace>) -> Result<(Trace, usize)> {
+    let mut timeouts = 0;
+    loop {
+        let t = run()?;
+        if t.exit != Exit::Timeout {
+            return Ok((t, timeouts));
+        }
+        timeouts += 1;
+        if timeouts > TIMEOUT_RERUNS {
+            return Ok((t, timeouts));
+        }
+    }
 }
 
 /// Run the app test `test` in `tree` (an app test's file tree, written
@@ -103,6 +129,16 @@ fn reference(cmd: &mut Command) -> &mut Command {
     }
 }
 
+/// How long the output of a finished or killed command is waited for past
+/// its deadline: a process outside its tree may still hold the pipes.
+const OUTPUT_GRACE: Duration = Duration::from_secs(1);
+
+/// Run `cmd` with its output captured. On timeout the command's whole
+/// process tree is killed ([`kill_tree`]), not only the command: a test's
+/// child that started a session of its own (a hanging `b_ioctl_ctty`) once
+/// outlived it, kept the output pipes open and so hung this function, and
+/// spun on for hours (ADR 0085). The output is waited for until the
+/// deadline (plus [`OUTPUT_GRACE`]) at most, for the same reason.
 pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finished> {
     let start = Instant::now();
     let mut child = cmd
@@ -111,12 +147,20 @@ pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finish
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("{:?}: {e}", cmd.get_program()))?;
+    // Each reader appends to its buffer as it reads and says when its
+    // stream has ended.
     let reader = |mut r: Box<dyn Read + Send>| {
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let (done, ended) = mpsc::channel::<()>();
+        let into = Arc::clone(&buf);
         thread::spawn(move || {
-            let mut out = Vec::new();
-            let _ = r.read_to_end(&mut out);
-            out
-        })
+            let mut chunk = [0u8; 8192];
+            while let Ok(n @ 1..) = r.read(&mut chunk) {
+                into.lock().unwrap_or_else(|e| e.into_inner()).extend_from_slice(&chunk[..n]);
+            }
+            let _ = done.send(());
+        });
+        (buf, ended)
     };
     let out = reader(Box::new(child.stdout.take().unwrap()));
     let err = reader(Box::new(child.stderr.take().unwrap()));
@@ -130,6 +174,7 @@ pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finish
             };
         }
         if Instant::now() > deadline {
+            kill_tree(child.id() as libc::pid_t);
             let _ = child.kill();
             let _ = child.wait();
             break Exit::Timeout;
@@ -137,7 +182,58 @@ pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finish
         thread::sleep(Duration::from_millis(2));
     };
     let duration_ns = start.elapsed().as_nanos() as u64;
-    Ok(Finished { exit, stdout: out.join().unwrap_or_default(), stderr: err.join().unwrap_or_default(), duration_ns })
+    let output_deadline = deadline.max(Instant::now()) + OUTPUT_GRACE;
+    let collect = |(buf, ended): (Arc<Mutex<Vec<u8>>>, mpsc::Receiver<()>)| {
+        let _ = ended.recv_timeout(output_deadline.saturating_duration_since(Instant::now()));
+        std::mem::take(&mut *buf.lock().unwrap_or_else(|e| e.into_inner()))
+    };
+    Ok(Finished { exit, stdout: collect(out), stderr: collect(err), duration_ns })
+}
+
+/// The processes whose parent is in `parents`, from `/proc/<pid>/stat`.
+fn children_of(parents: &BTreeSet<libc::pid_t>) -> BTreeSet<libc::pid_t> {
+    let mut found = BTreeSet::new();
+    for entry in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
+        let Some(pid) = entry.file_name().to_str().and_then(|s| s.parse::<libc::pid_t>().ok()) else { continue };
+        let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else { continue };
+        // "pid (comm) state ppid ...": comm may contain anything, ")" too.
+        let ppid = stat.rfind(')').and_then(|i| stat[i + 1..].split_whitespace().nth(1)?.parse().ok());
+        if ppid.is_some_and(|p| parents.contains(&p)) {
+            found.insert(pid);
+        }
+    }
+    found
+}
+
+/// SIGKILL `pid` (a child of this process, not reaped yet) and every
+/// process descended from it, wherever it went (another process group,
+/// another session). The tree is stopped first, until a scan finds no new
+/// process, so nothing forks past the kill.
+fn kill_tree(pid: libc::pid_t) {
+    let mut stopped = BTreeSet::from([pid]);
+    // SAFETY: kill has no memory-safety requirements. `pid` is our
+    // unreaped child, so it cannot have been reused.
+    unsafe { libc::kill(pid, libc::SIGSTOP) };
+    // One generation per scan (a deep tree, or one that forks meanwhile,
+    // takes more), until a scan finds nothing new.
+    for _ in 0..256 {
+        let new: Vec<libc::pid_t> = children_of(&stopped).into_iter().filter(|p| !stopped.contains(p)).collect();
+        if new.is_empty() {
+            break;
+        }
+        for p in new {
+            // SAFETY: as above. `p` was just seen as a child of a stopped
+            // process of the tree: until that parent runs again (SIGKILL,
+            // below) nobody can reap it, so its pid cannot be reused.
+            unsafe { libc::kill(p, libc::SIGSTOP) };
+            stopped.insert(p);
+        }
+    }
+    for &p in &stopped {
+        // SAFETY: as above; every process of the tree is stopped, and only
+        // a parent's wait (its parent is stopped too, or is us) frees a pid.
+        unsafe { libc::kill(p, libc::SIGKILL) };
+    }
 }
 
 fn untraced(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
@@ -402,5 +498,60 @@ mod tests {
     #[test]
     fn empty_log_is_an_error() {
         assert!(parse_strace("", "x").is_err());
+    }
+
+    fn exiting(exit: Exit) -> Trace {
+        let mut t = Trace::new("t", "linux", "ptrace");
+        t.exit = exit;
+        t
+    }
+
+    /// A run that timed out is run again, once; a run that did not time
+    /// out is not (ADR 0085).
+    #[test]
+    fn a_timed_out_run_is_run_again_once() {
+        let mut exits = vec![Exit::Code(0), Exit::Timeout];
+        let (t, n) = rerun_on_timeout(|| Ok(exiting(exits.pop().unwrap()))).unwrap();
+        assert_eq!((t.exit, n, exits.len()), (Exit::Code(0), 1, 0));
+        let mut runs = 0;
+        let (t, n) = rerun_on_timeout(|| {
+            runs += 1;
+            Ok(exiting(Exit::Timeout))
+        })
+        .unwrap();
+        assert_eq!((t.exit, n, runs), (Exit::Timeout, 2, 1 + TIMEOUT_RERUNS));
+        let mut runs = 0;
+        let (t, n) = rerun_on_timeout(|| {
+            runs += 1;
+            Ok(exiting(Exit::Code(1)))
+        })
+        .unwrap();
+        assert_eq!((t.exit, n, runs), (Exit::Code(1), 0, 1));
+        assert!(rerun_on_timeout(|| Err("no".into())).is_err());
+    }
+
+    /// A timeout kills the command's whole tree: here a grandchild in a
+    /// session of its own that keeps stdout open, as the child of a hanging
+    /// `b_ioctl_ctty` did. Before, the run only killed the shell, then
+    /// waited for the output for as long as the grandchild lived.
+    #[test]
+    fn a_timeout_kills_descendants_that_left_the_session() {
+        let Some(setsid) = util::which("setsid") else { return eprintln!("skipped: no setsid(1)") };
+        let script = format!("{} sh -c 'echo $$; exec sleep 1000' & wait", setsid.display());
+        let start = Instant::now();
+        let f = run_command(Command::new("sh").args(["-c", &script]), Duration::from_millis(500)).unwrap();
+        assert_eq!(f.exit, Exit::Timeout);
+        assert!(start.elapsed() < Duration::from_secs(10), "waited for the grandchild: {:?}", start.elapsed());
+        let pid: u32 = String::from_utf8_lossy(&f.stdout).trim().parse().expect("the grandchild's pid");
+        // Killed: gone, or a zombie until init reaps it.
+        let alive = || {
+            std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                .is_ok_and(|s| s.rfind(')').is_some_and(|i| !s[i + 1..].trim_start().starts_with('Z')))
+        };
+        let until = Instant::now() + Duration::from_secs(5);
+        while alive() && Instant::now() < until {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!alive(), "the grandchild {pid} survived the timeout");
     }
 }
