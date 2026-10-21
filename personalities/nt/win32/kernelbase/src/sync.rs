@@ -401,3 +401,173 @@ pub unsafe extern "system" fn TryAcquireSRWLockExclusive(lock: *mut usize) -> u8
 pub unsafe extern "system" fn TryAcquireSRWLockShared(lock: *mut usize) -> u8 {
     sync::try_acquire_shared(word(lock)) as u8
 }
+
+// ----- condition variables ---------------------------------------------------------------------
+
+/// The deadline of a wait of `ms` milliseconds, as a "has it passed" test
+/// on the performance counter (`INFINITE` never passes).
+fn deadline(ms: u32) -> impl Fn() -> bool {
+    let (mut start, mut freq) = (0i64, 0i64);
+    // SAFETY: valid pointers.
+    unsafe { nt::NtQueryPerformanceCounter(&mut start, &mut freq) };
+    let ticks = if ms == INFINITE { None } else { Some(i128::from(ms) * i128::from(freq.max(1)) / 1000) };
+    move || {
+        let Some(t) = ticks else { return false };
+        let mut now = 0i64;
+        // SAFETY: a valid pointer.
+        unsafe { nt::NtQueryPerformanceCounter(&mut now, core::ptr::null_mut()) };
+        i128::from(now) - i128::from(start) >= t
+    }
+}
+
+/// The result of a condition-variable sleep: TRUE, or FALSE with
+/// `ERROR_TIMEOUT` (Learn).
+fn slept(woken: bool) -> i32 {
+    if woken { TRUE } else { fail(ERROR_TIMEOUT, FALSE) }
+}
+
+/// `InitializeConditionVariable`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn InitializeConditionVariable(cv: *mut usize) {
+    // SAFETY: the caller's CONDITION_VARIABLE.
+    unsafe { cv.write(0) };
+}
+
+/// `SleepConditionVariableCS`: the critical section is left while asleep
+/// and entered again before returning.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SleepConditionVariableCS(cv: *mut usize, cs: *mut CriticalSection, ms: u32) -> i32 {
+    let expired = deadline(ms);
+    let woken = sync::condition_sleep(
+        word(cv),
+        // SAFETY: the caller's critical section, which it holds.
+        &mut || unsafe {
+            nt::RtlLeaveCriticalSection(cs);
+        },
+        // SAFETY: as above.
+        &mut || unsafe {
+            nt::RtlEnterCriticalSection(cs);
+        },
+        &expired,
+        &Backoff,
+    );
+    slept(woken)
+}
+
+/// `SleepConditionVariableSRW`: `CONDITION_VARIABLE_LOCKMODE_SHARED` says
+/// the lock is held shared.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SleepConditionVariableSRW(cv: *mut usize, lock: *mut usize, ms: u32, flags: u32) -> i32 {
+    if flags & !sync::CONDITION_VARIABLE_LOCKMODE_SHARED != 0 {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    let shared = flags & sync::CONDITION_VARIABLE_LOCKMODE_SHARED != 0;
+    let expired = deadline(ms);
+    let l = word(lock);
+    let woken = sync::condition_sleep(
+        word(cv),
+        &mut || if shared { sync::release_shared(l) } else { sync::release_exclusive(l) },
+        &mut || if shared { sync::acquire_shared(l, &Backoff) } else { sync::acquire_exclusive(l, &Backoff) },
+        &expired,
+        &Backoff,
+    );
+    slept(woken)
+}
+
+/// `WakeConditionVariable`: wakes the sleepers (Poly wakes all of them,
+/// which Learn's spurious-wakeup rule allows, ADR 0079).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WakeConditionVariable(cv: *mut usize) {
+    sync::condition_wake(word(cv));
+}
+
+/// `WakeAllConditionVariable`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WakeAllConditionVariable(cv: *mut usize) {
+    sync::condition_wake(word(cv));
+}
+
+// ----- one-time initialisation -----------------------------------------------------------------
+
+/// `PINIT_ONCE_FN`.
+type InitOnceFn = unsafe extern "system" fn(*mut usize, *mut u8, *mut *mut u8) -> i32;
+
+/// `InitOnceInitialize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn InitOnceInitialize(once: *mut usize) {
+    // SAFETY: the caller's INIT_ONCE.
+    unsafe { once.write(0) };
+}
+
+/// `InitOnceExecuteOnce`: run `f` unless it has succeeded before; other
+/// callers wait while it runs. A failed `f` lets a later call try again.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn InitOnceExecuteOnce(
+    once: *mut usize,
+    f: InitOnceFn,
+    parameter: *mut u8,
+    context: *mut *mut u8,
+) -> i32 {
+    let w = word(once);
+    let ctx = match sync::once_begin(w, 0, &Backoff) {
+        Ok(sync::Begin::Done(c)) => c,
+        Ok(sync::Begin::Pending) => {
+            let mut c: *mut u8 = core::ptr::null_mut();
+            // SAFETY: the caller's callback with its documented arguments.
+            if unsafe { f(once, parameter, &mut c) } == 0 {
+                let _ = sync::once_complete(w, sync::INIT_ONCE_INIT_FAILED, 0);
+                return FALSE;
+            }
+            if let Err(e) = sync::once_complete(w, 0, c as usize) {
+                let _ = sync::once_complete(w, sync::INIT_ONCE_INIT_FAILED, 0);
+                return fail(e, FALSE);
+            }
+            c as usize
+        }
+        Ok(sync::Begin::NotDone) => return fail(ERROR_GEN_FAILURE, FALSE),
+        Err(e) => return fail(e, FALSE),
+    };
+    if !context.is_null() {
+        // SAFETY: the caller's out-pointer.
+        unsafe { context.write(ctx as *mut u8) };
+    }
+    TRUE
+}
+
+/// `InitOnceBeginInitialize` (synchronous only).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn InitOnceBeginInitialize(
+    once: *mut usize,
+    flags: u32,
+    pending: *mut i32,
+    context: *mut *mut u8,
+) -> i32 {
+    match sync::once_begin(word(once), flags, &Backoff) {
+        Ok(sync::Begin::Pending) => {
+            // SAFETY: the caller's out-pointer.
+            unsafe { pending.write(TRUE) };
+            TRUE
+        }
+        Ok(sync::Begin::Done(c)) => {
+            // SAFETY: the caller's out-pointers.
+            unsafe {
+                pending.write(FALSE);
+                if !context.is_null() {
+                    context.write(c as *mut u8);
+                }
+            }
+            TRUE
+        }
+        Ok(sync::Begin::NotDone) => fail(ERROR_GEN_FAILURE, FALSE),
+        Err(e) => fail(e, FALSE),
+    }
+}
+
+/// `InitOnceComplete`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn InitOnceComplete(once: *mut usize, flags: u32, context: *mut u8) -> i32 {
+    match sync::once_complete(word(once), flags, context as usize) {
+        Ok(()) => TRUE,
+        Err(e) => fail(e, FALSE),
+    }
+}

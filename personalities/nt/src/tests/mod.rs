@@ -14,7 +14,9 @@ mod sections;
 
 use crate::backend::{Backend, SectionSource, ViewMap, ViewSource};
 use crate::context::NtContext;
-use crate::kernel::{Apc, ClientId, NtKernel, NtTimeout, ThreadCreate, ThreadCreated, UserFault};
+use crate::kernel::{
+    Apc, ClientId, NtKernel, NtTimeout, ProcessCreate, ProcessCreated, ThreadCreate, ThreadCreated, UserFault,
+};
 use crate::pe_writer::{self, PeImage, PeSection};
 use crate::protect::HwProt;
 use crate::services::Service;
@@ -189,6 +191,15 @@ impl Backend for Mem {
                 let n = p.len();
                 (p, vec![true; n])
             }
+            SectionSource::Vfs { file } => {
+                // The fake copies the file's bytes (its views do not write
+                // back to it; the kernel's map the file's own pages).
+                let mut bytes = vec![0u8; file.stat().map(|s| s.size).unwrap_or(0) as usize];
+                let _ = file.read_at(0, &mut bytes);
+                let p = Mem::pages_of(&bytes);
+                let n = p.len();
+                (p, vec![true; n])
+            }
         };
         self.next += 1;
         self.sections.insert(self.next, FakeSection { pages, committed, deleted: false });
@@ -236,6 +247,8 @@ pub struct Fake {
     pub contexts: BTreeMap<ThreadRef, NtContext>,
     pub apcs: Vec<(ThreadRef, Apc)>,
     pub next_tid: u64,
+    /// Processes `NtCreateUserProcess` made, with their memory.
+    pub children: Vec<(NtProcess, Mem)>,
     /// Bump allocator in the scratch area.
     next: u64,
 }
@@ -274,6 +287,29 @@ impl NtKernel for Fake {
         let object = self.sys.objects.thread_object(tid).expect("thread object");
         let handle = self.sys.objects.open_by_pointer(&caller, object, req.desired_access, 0)?;
         Ok(ThreadCreated { handle, client: ClientId { process: self.proc.pid, thread: tid } })
+    }
+
+    fn create_process(&mut self, req: ProcessCreate) -> Result<ProcessCreated, NtStatus> {
+        self.next_tid += 1;
+        let (pid, tid) = (ProcessId(self.next_tid as u32), ThreadRef(self.next_tid));
+        let mut child = NtProcess::new(pid);
+        let mut mem = Mem::default();
+        let caller = self.caller();
+        let started =
+            crate::exec::start_child(&mut self.sys, &mut child, &mut mem, &req.image, &fake_ntdll(), &req.params, tid)
+                .and_then(|_| {
+                    crate::exec::child_handles(&mut self.sys, &caller, pid, tid, req.process_access, req.thread_access)
+                });
+        match started {
+            Ok((process, thread)) => {
+                self.children.push((child, mem));
+                Ok(ProcessCreated { process, thread, client: ClientId { process: pid, thread: tid } })
+            }
+            Err(e) => {
+                crate::exec::process_exit(&mut self.sys, &mut child, &mut mem);
+                Err(e)
+            }
+        }
     }
 
     fn terminate_thread(&mut self, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus> {
@@ -416,6 +452,7 @@ impl Fake {
             contexts: BTreeMap::new(),
             apcs: Vec::new(),
             next_tid: TID.0,
+            children: Vec::new(),
             next: SCRATCH,
         }
     }

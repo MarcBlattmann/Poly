@@ -156,6 +156,9 @@ pub enum Service {
     MapViewOfSection,
     /// `NtUnmapViewOfSection(ProcessHandle, BaseAddress)`.
     UnmapViewOfSection,
+    /// `NtFlushVirtualMemory(ProcessHandle, BaseAddress*, RegionSize*,
+    /// IoStatusBlock*)` (Learn: "ZwFlushVirtualMemory"; ADR 0079).
+    FlushVirtualMemory,
 
     // ----- processes and threads
     /// `NtTerminateProcess(ProcessHandle, ExitStatus)`.
@@ -186,6 +189,13 @@ pub enum Service {
     GetContextThread,
     /// `NtSetContextThread(ThreadHandle, Context*)`.
     SetContextThread,
+    /// `NtCreateUserProcess(ProcessHandle*, ThreadHandle*,
+    /// ProcessDesiredAccess, ThreadDesiredAccess, ProcessObjectAttributes*,
+    /// ThreadObjectAttributes*, ProcessFlags, ThreadFlags,
+    /// ProcessParameters*, CreateInfo*, AttributeList*)`: not in the WDK;
+    /// Poly's reading, ADR 0079 (what it uses of each argument is on
+    /// [`crate::threads::create_user_process`]).
+    CreateUserProcess,
 
     // ----- file I/O (ADR 0067; `crate::io::services`)
     /// `NtCreateFile(FileHandle*, DesiredAccess, ObjectAttributes*,
@@ -311,7 +321,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 74] = [
+pub const SERVICES: [(Service, u32, &str); 76] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -357,6 +367,7 @@ pub const SERVICES: [(Service, u32, &str); 74] = [
     (Service::OpenSection, 0x045, "NtOpenSection"),
     (Service::MapViewOfSection, 0x046, "NtMapViewOfSection"),
     (Service::UnmapViewOfSection, 0x047, "NtUnmapViewOfSection"),
+    (Service::FlushVirtualMemory, 0x048, "NtFlushVirtualMemory"),
     (Service::TerminateProcess, 0x080, "NtTerminateProcess"),
     (Service::TerminateThread, 0x081, "NtTerminateThread"),
     (Service::CreateThreadEx, 0x082, "NtCreateThreadEx"),
@@ -368,6 +379,7 @@ pub const SERVICES: [(Service, u32, &str); 74] = [
     (Service::ResumeThread, 0x088, "NtResumeThread"),
     (Service::GetContextThread, 0x089, "NtGetContextThread"),
     (Service::SetContextThread, 0x08A, "NtSetContextThread"),
+    (Service::CreateUserProcess, 0x08B, "NtCreateUserProcess"),
     (Service::CreateFile, 0x0C0, "NtCreateFile"),
     (Service::OpenFile, 0x0C1, "NtOpenFile"),
     (Service::ReadFile, 0x0C2, "NtReadFile"),

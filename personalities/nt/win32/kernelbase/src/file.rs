@@ -514,7 +514,7 @@ pub unsafe extern "system" fn MoveFileExW(from: *const u16, to: *const u16, flag
 }
 
 /// `FILE_BASIC_INFORMATION.FileAttributes` (at 32, `wdm.h`) of a path.
-fn attributes_of(win32: &[u16]) -> Result<u32, u32> {
+pub(crate) fn attributes_of(win32: &[u16]) -> Result<u32, u32> {
     let name = nt_name(win32)?;
     let oa = name.attributes();
     let mut info = [0u8; 40];
@@ -774,4 +774,82 @@ pub unsafe extern "system" fn FindClose(handle: Handle) -> i32 {
     let find = unsafe { Box::from_raw(handle as *mut Find) };
     close(find.dir);
     TRUE
+}
+
+// ----- information and times by handle (ADR 0079, second slice) --------------------------
+
+/// `FileInternalInformation` (`wdm.h`): the `IndexNumber`.
+const FILE_INTERNAL_INFORMATION: u32 = 6;
+/// `FileFsVolumeInformation` (`wdm.h`): `VolumeSerialNumber` at 8.
+const FILE_FS_VOLUME_INFORMATION: u32 = 1;
+
+/// `GetFileInformationByHandle`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetFileInformationByHandle(handle: Handle, out: *mut u8) -> i32 {
+    let (mut basic, mut standard, mut index) = ([0u8; 40], [0u8; 24], [0u8; 8]);
+    let r = query(handle, FILE_BASIC_INFORMATION, &mut basic)
+        .and_then(|()| query(handle, FILE_STANDARD_INFORMATION, &mut standard))
+        .and_then(|()| query(handle, FILE_INTERNAL_INFORMATION, &mut index));
+    if let Err(st) = r {
+        return fail_status(st, FALSE);
+    }
+    // The volume serial number: the label may follow, so ask with room.
+    let mut volume = [0u8; 128];
+    let mut iosb = IoStatusBlock::default();
+    // SAFETY: valid pointers.
+    let st = unsafe {
+        nt::NtQueryVolumeInformationFile(handle, &mut iosb, volume.as_mut_ptr(), 128, FILE_FS_VOLUME_INFORMATION)
+    };
+    let serial =
+        if st.is_success() || st.0 == 0x8000_0005 { u32::from_le_bytes(volume[8..12].try_into().unwrap()) } else { 0 };
+    let info = file::by_handle_information(&basic, &standard, u64::from_le_bytes(index), serial);
+    // SAFETY: the caller's BY_HANDLE_FILE_INFORMATION.
+    unsafe { core::ptr::copy_nonoverlapping(info.as_ptr(), out, info.len()) };
+    TRUE
+}
+
+/// Write a `FILETIME` (two `DWORD`s, possibly unaligned) if `p` is set.
+///
+/// # Safety
+/// `p` is null or writable for 8 bytes.
+unsafe fn put_time(p: *mut u8, t: u64) {
+    if !p.is_null() {
+        // SAFETY: the caller's contract.
+        unsafe { p.cast::<u64>().write_unaligned(t) };
+    }
+}
+
+/// `GetFileTime`: creation, last access, last write; each pointer may be
+/// null.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetFileTime(handle: Handle, creation: *mut u8, access: *mut u8, write: *mut u8) -> i32 {
+    let mut basic = [0u8; 40];
+    if let Err(st) = query(handle, FILE_BASIC_INFORMATION, &mut basic) {
+        return fail_status(st, FALSE);
+    }
+    let at = |o: usize| u64::from_le_bytes(basic[o..o + 8].try_into().unwrap());
+    // SAFETY: the caller's out-pointers.
+    unsafe {
+        put_time(creation, at(0));
+        put_time(access, at(8));
+        put_time(write, at(16));
+    }
+    TRUE
+}
+
+/// `SetFileTime`: a null pointer leaves that time alone.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetFileTime(
+    handle: Handle,
+    creation: *const u8,
+    access: *const u8,
+    write: *const u8,
+) -> i32 {
+    // SAFETY: the caller's FILETIMEs, read unaligned.
+    let get = |p: *const u8| (!p.is_null()).then(|| unsafe { p.cast::<u64>().read_unaligned() });
+    let info = file::set_times(get(creation), get(access), get(write));
+    match set_info(handle, FILE_BASIC_INFORMATION, &info) {
+        Ok(()) => TRUE,
+        Err(st) => fail_status(st, FALSE),
+    }
 }

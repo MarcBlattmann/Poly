@@ -26,6 +26,18 @@
 //!   which API-set contract.
 //! - [`text`]: the "copy to a caller's buffer or report the size" rule many
 //!   functions share, and ANSI (code page 1252) conversions.
+//! - [`process`]: `CreateProcessW`'s module search, environment blocks and
+//!   the process parameters `NtCreateUserProcess` takes.
+//! - [`tls`]: TLS and FLS indices and the TEB's TLS slots.
+//! - [`nls`]: code pages 1252, 437 and UTF-8, `MultiByteToWideChar`,
+//!   `WideCharToMultiByte`, `GetCPInfo`, ordinal comparison.
+//! - [`mapping`]: `CreateFileMappingW` / `MapViewOfFile` arguments as the
+//!   section services take them.
+//! - [`time`]: `FILETIME` and `SYSTEMTIME`.
+//!
+//! The second slice (ADR 0079, "Second slice") added the last five, plus
+//! condition variables and one-time initialisation in [`sync`] and
+//! `GetFileInformationByHandle` in [`file`].
 //!
 //! Sources (clean room, CLEAN_ROOM.md): Microsoft Learn's reference pages
 //! for each function, "Naming Files, Paths, and Namespaces", "File path
@@ -45,11 +57,16 @@ pub mod env;
 pub mod error;
 pub mod exports;
 pub mod file;
+pub mod mapping;
 pub mod memory;
 pub mod message;
+pub mod nls;
 pub mod path;
+pub mod process;
 pub mod sync;
 pub mod text;
+pub mod time;
+pub mod tls;
 pub mod version;
 
 pub use poly_ntobj::NtStatus;

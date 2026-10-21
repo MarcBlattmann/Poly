@@ -420,6 +420,33 @@ impl IoState {
     }
 
     /// File objects open.
+    /// The VFS file a disk file object is open on (sections of it, ADR
+    /// 0079): `STATUS_INVALID_DEVICE_REQUEST` for anything else.
+    pub fn open_file(&self, cookie: u64) -> Result<Arc<OpenFile>, NtStatus> {
+        let rec = self.files.get(&cookie).ok_or(STATUS_INVALID_HANDLE)?;
+        if rec.kind == FileType::Directory {
+            return Err(STATUS_INVALID_DEVICE_REQUEST);
+        }
+        rec.disk().and_then(|d| d.open.clone()).ok_or(STATUS_INVALID_DEVICE_REQUEST)
+    }
+
+    /// The whole contents of a disk file object, read in the calling
+    /// thread (an executable for `NtCreateUserProcess`, ADR 0079).
+    pub fn read_all(&self, cookie: u64) -> Result<Vec<u8>, NtStatus> {
+        let open = self.open_file(cookie)?;
+        let size = open.stat().map_err(status_of)?.size;
+        let mut out = alloc::vec![0u8; usize::try_from(size).map_err(|_| STATUS_NO_MEMORY)?];
+        let mut at = 0;
+        while at < out.len() {
+            match open.read_at(at as u64, &mut out[at..]).map_err(status_of)? {
+                0 => break,
+                n => at += n,
+            }
+        }
+        out.truncate(at);
+        Ok(out)
+    }
+
     pub fn file_count(&self) -> usize {
         self.files.len()
     }

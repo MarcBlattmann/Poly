@@ -312,7 +312,7 @@ pub fn open_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
 
 /// Open by name for the services that take only `ObjectAttributes`, run
 /// `f` on the file object, and close it again.
-fn with_named<K: NtKernel, R>(
+pub(crate) fn with_named<K: NtKernel, R>(
     k: &mut K,
     attrs: &Attributes,
     desired: u32,
