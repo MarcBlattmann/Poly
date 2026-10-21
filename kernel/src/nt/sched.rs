@@ -244,15 +244,17 @@ pub fn test_alert(pid: ProcessId, tid: ThreadRef) -> NtStatus {
 }
 
 /// Redirect the (current) thread to run `apc` on its way back to user mode,
-/// saving the context it interrupts for `PolyResumeApc` to restore.
+/// in `ntdll`'s `KiUserApcDispatcher` (R11 = the routine, RCX/RDX/R8 = its
+/// arguments, RSP 16-byte aligned), saving the context it interrupts for
+/// `PolyResumeApc` to restore (ADR 0065, 0071).
 fn deliver_apc(pid: ProcessId, tid: ThreadRef, apc: Apc) {
-    let Some(apc_tramp) = with(|s| s.processes.get(&pid).map(|p| p.apc_trampoline)) else { return };
+    let Some(apc_dispatcher) = with(|s| s.processes.get(&pid).map(|p| p.apc_dispatcher)) else { return };
     let regs = user::registers();
     let mut resume = regs;
     resume.rax = u64::from(STATUS_USER_APC.0);
     with(|s| s.ctl.entry(tid).or_default().apc_saved = Some(resume));
     let mut frame = regs;
-    frame.rip = apc_tramp;
+    frame.rip = apc_dispatcher;
     frame.r11 = apc.routine;
     frame.rcx = apc.arg1;
     frame.rdx = apc.arg2;

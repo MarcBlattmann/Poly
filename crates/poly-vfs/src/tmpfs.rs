@@ -562,7 +562,9 @@ impl Tmpfs {
         }
     }
 
-    fn write_locked(&self, inner: &mut Inner, ino: Ino, offset: u64, buf: &[u8]) -> Result<usize> {
+    /// Writes `buf` at `offset`; `touch` sets the modification and change
+    /// times (not for a page cache's writeback, which keeps them).
+    fn write_locked(&self, inner: &mut Inner, ino: Ino, offset: u64, buf: &[u8], touch: bool) -> Result<usize> {
         let now = self.clock.now();
         let end = offset.checked_add(buf.len() as u64).ok_or(Errno::EFBIG)?;
         if end > MAX_FILE_SIZE {
@@ -572,7 +574,7 @@ impl Tmpfs {
         self.check_space(inner, new_pages)?;
         let n = inner.node_mut(ino)?;
         file_mut(n)?.write(offset, buf);
-        if !buf.is_empty() {
+        if touch && !buf.is_empty() {
             n.mtime = now;
             n.ctime = now;
         }
@@ -923,26 +925,33 @@ impl FileSystem for Tmpfs {
 
     fn write(&self, ino: Ino, offset: u64, buf: &[u8]) -> Result<usize> {
         let mut inner = self.inner.lock();
-        self.write_locked(&mut inner, ino, offset, buf)
+        self.write_locked(&mut inner, ino, offset, buf, true)
+    }
+
+    fn write_back(&self, ino: Ino, offset: u64, buf: &[u8]) -> Result<usize> {
+        let mut inner = self.inner.lock();
+        self.write_locked(&mut inner, ino, offset, buf, false)
     }
 
     fn append(&self, ino: Ino, buf: &[u8]) -> Result<(u64, usize)> {
         let mut inner = self.inner.lock();
         let at = file(inner.node(ino)?)?.size;
-        Ok((at, self.write_locked(&mut inner, ino, at, buf)?))
+        Ok((at, self.write_locked(&mut inner, ino, at, buf, true)?))
     }
 
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()> {
         // Positions and d_off values: see `DIR_END` and `Dir::records`. A
         // batch ends with the d_off of its last record, which is where the
-        // next batch reads from.
+        // next batch reads from. A removed directory (still open) is ENOENT
+        // (getdents64(2)); one removed while listing just ends.
+        let start = pos;
         let mut pos = pos;
         loop {
             let batch: Vec<(Ino, FileType, Box<[u8]>, u64)> = {
                 let inner = self.inner.lock();
                 let Data::Dir(d) = &inner.node(dir)?.data else { return Err(Errno::ENOTDIR) };
                 if d.removed {
-                    return Ok(());
+                    return if pos == start { Err(Errno::ENOENT) } else { Ok(()) };
                 }
                 d.records(dir, pos, READDIR_BATCH)
                     .into_iter()

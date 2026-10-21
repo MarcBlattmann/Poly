@@ -1,26 +1,35 @@
 //! Starting an NT process from a PE executable, ending it, and what a CPU
 //! exception in it means.
 //!
-//! Until our `ntdll` exists the kernel starts the executable's entry point
-//! itself, so it does here what `ntdll`'s loader will later share with it:
+//! The kernel does only what `ntdll` cannot do for itself (ADR 0063,
+//! 0071): it maps the executable and our `ntdll`, makes the PEB, the first
+//! TEB and stack, and starts the first thread in `ntdll`'s
+//! `LdrInitializeThunk`, which binds the executable's imports, runs TLS
+//! callbacks and `DllMain`s and calls the entry point:
 //!
 //! 1. The process gets its handle table and a process object; its first
 //!    thread a thread object (`NtCurrentProcess()`, `NtCurrentThread()`).
-//! 2. The executable becomes an image section, mapped at its preferred base,
-//!    or, if that is taken and it has relocations, anywhere and relocated
-//!    (`poly_pe::relocate`). Imports are not bound: an executable that
-//!    imports anything is refused until `ntdll` does that.
+//! 2. The executable and `ntdll` become image sections, each mapped at its
+//!    preferred base, or, if that is taken and it has relocations,
+//!    anywhere and relocated (`poly_pe::relocate`). `ntdll` goes second
+//!    (its base, `0x7FF0_0000_0000`, is free in a new process).
 //! 3. The PEB (one page) and the first TEB (two pages) are private memory,
 //!    allocated top down. The stack is a reservation of the image's
 //!    `SizeOfStackReserve` (64 KiB at least) with `SizeOfStackCommit`
 //!    committed at its top and a guard page below that, so it grows on
 //!    demand ([`crate::vm`]).
-//! 4. The thread starts at the entry point with RSP 8 bytes below a 16-byte
-//!    boundary, as after a `call` (Learn: "x64 calling convention",
-//!    "Stack allocation"), with 32 bytes of shadow space above the
-//!    (zero) return address, and GS based at its TEB.
+//! 4. Every thread starts at `ntdll`'s `LdrInitializeThunk` (Poly's own
+//!    convention, both sides ours): RDI = its start routine, RSI = its
+//!    argument, RDX = the executable's base, RSP 8 bytes below the 16-byte
+//!    aligned top of its stack, where a zero return address ends a stack
+//!    walk (as after a `call`, Learn: "x64 calling convention"), and GS
+//!    based at its TEB. The first thread's routine is the executable's
+//!    entry point and its argument the PEB.
+//! 5. User APCs are delivered through `ntdll`'s `KiUserApcDispatcher` and
+//!    exceptions through its `KiUserExceptionDispatcher` (ADR 0065, 0068):
+//!    the kernel takes their addresses from `ntdll`'s export table.
 //!
-//! # The TEB and PEB this milestone fills in
+//! # The TEB and PEB the kernel fills in
 //!
 //! Only fields whose offsets public headers give:
 //!
@@ -32,7 +41,8 @@
 //! | `TEB.ProcessEnvironmentBlock` | TEB + 0x60 | `winternl.h` (after `Reserved1[12]`) | the PEB |
 //! | `PEB.BeingDebugged` | PEB + 0x02 | `winternl.h` | 0 |
 //!
-//! Everything else is zero; the full TEB and PEB are the next milestone's.
+//! Everything else is zero, or `ntdll`'s to fill in (`PEB.Ldr`, the TLS
+//! pointer, ADR 0071).
 
 use crate::backend::{Backend, SectionSource};
 use crate::consts::*;
@@ -55,74 +65,48 @@ pub const TEB_CLIENT_ID: u64 = 0x40;
 pub const TEB_PEB: u64 = 0x60;
 pub const PEB_BEING_DEBUGGED: u64 = 0x02;
 
-/// The per-process thread-start trampoline, until our `ntdll` provides
-/// `RtlUserThreadStart`. A thread starts here with RDI = its start routine,
-/// RSI = its argument and RSP at the top of its stack. The trampoline calls
-/// `StartRoutine(Argument)` (argument in RCX, the x64 first-argument
-/// register, Learn: "x64 calling convention") and, when it returns, ends the
-/// thread with `NtTerminateThread(NtCurrentThread, return_value)` — so the
-/// last thread returning ends the process with that code. Hand-assembled
-/// (no Microsoft toolchain):
-///
-/// ```text
-///   mov  rcx, rsi          ; Argument -> first argument
-///   sub  rsp, 0x20         ; shadow space, keep 16-byte alignment
-///   call rdi               ; StartRoutine(Argument)
-///   mov  edx, eax          ; return value -> ExitStatus
-///   mov  r10, -2           ; NtCurrentThread
-///   mov  eax, 0x81         ; NtTerminateThread
-///   syscall
-///   ud2
-/// ```
-pub const THREAD_TRAMPOLINE: [u8; 27] = [
-    0x48, 0x89, 0xF1, // mov rcx, rsi
-    0x48, 0x83, 0xEC, 0x20, // sub rsp, 0x20
-    0xFF, 0xD7, // call rdi
-    0x89, 0xC2, // mov edx, eax
-    0x49, 0xC7, 0xC2, 0xFE, 0xFF, 0xFF, 0xFF, // mov r10, -2
-    0xB8, 0x81, 0x00, 0x00, 0x00, // mov eax, 0x81
-    0x0F, 0x05, // syscall
-    0x0F, 0x0B, // ud2
-];
+/// The `ntdll` exports the kernel enters (ADR 0071).
+pub const NTDLL_THREAD_START: &[u8] = b"LdrInitializeThunk";
+pub const NTDLL_APC_DISPATCHER: &[u8] = b"KiUserApcDispatcher";
+pub const NTDLL_EXCEPTION_DISPATCHER: &[u8] = b"KiUserExceptionDispatcher";
 
-/// The per-process user-APC trampoline, our stand-in for ntdll's
-/// `KiUserApcDispatcher`. The kernel redirects an alertable thread here with
-/// R11 = the APC routine and RCX/RDX/R8 = its three arguments (RAX cannot
-/// carry it: the system-call return path forces RAX to the call's result).
-/// It calls `routine(arg1, arg2, arg3)` and then re-enters the kernel with
-/// `PolyResumeApc`, which restores the context the APC interrupted
-/// (returning `STATUS_USER_APC` from the wait). Placed at [`APC_OFFSET`] in
-/// the trampoline page:
-///
-/// ```text
-///   sub  rsp, 0x20     ; shadow space, keep 16-byte alignment
-///   call r11           ; routine(rcx, rdx, r8)
-///   mov  eax, 0x3001   ; PolyResumeApc
-///   syscall
-///   ud2
-/// ```
-pub const APC_TRAMPOLINE: [u8; 16] = [
-    0x48, 0x83, 0xEC, 0x20, // sub rsp, 0x20
-    0x41, 0xFF, 0xD3, // call r11
-    0xB8, 0x01, 0x30, 0x00, 0x00, // mov eax, 0x3001
-    0x0F, 0x05, // syscall
-    0x0F, 0x0B, // ud2
-];
+/// Where `ntdll`'s entry points are, as RVAs (read from its export table).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NtdllEntries {
+    pub thread_start: u32,
+    pub apc_dispatcher: u32,
+    pub exception_dispatcher: u32,
+}
 
-/// Where the APC trampoline sits in the trampoline page.
-pub const APC_OFFSET: u64 = 0x40;
+impl NtdllEntries {
+    /// The three exports of the `ntdll` image `image`; each must be code in
+    /// the image (not a forwarder). A DLL without them is not our `ntdll`:
+    /// `STATUS_INVALID_IMAGE_FORMAT`.
+    pub fn of(image: &ImageSection) -> Result<NtdllEntries, NtStatus> {
+        let pe = poly_pe::Pe::parse_mapped(&image.image).map_err(|_| STATUS_INVALID_IMAGE_FORMAT)?;
+        let exports = pe.exports().ok().flatten().ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
+        let rva = |name: &[u8]| match exports.by_name(name) {
+            Ok(Some(poly_pe::ExportTarget::Rva(r))) if u64::from(r) < image.size => Ok(r),
+            _ => Err(STATUS_INVALID_IMAGE_FORMAT),
+        };
+        Ok(NtdllEntries {
+            thread_start: rva(NTDLL_THREAD_START)?,
+            apc_dispatcher: rva(NTDLL_APC_DISPATCHER)?,
+            exception_dispatcher: rva(NTDLL_EXCEPTION_DISPATCHER)?,
+        })
+    }
+}
 
 /// Where a new process's first thread starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProcessStart {
-    /// The thread's starting RIP: the trampoline, which calls
-    /// [`Self::start_routine`] with [`Self::argument`].
+    /// The thread's starting RIP: `ntdll`'s `LdrInitializeThunk`, which
+    /// calls [`Self::start_routine`] with [`Self::argument`].
     pub entry: u64,
     pub rsp: u64,
-    /// The image entry point, called by the trampoline as
-    /// `start_routine(argument)`.
+    /// The image entry point, called as `start_routine(argument)`.
     pub start_routine: u64,
-    /// The argument the trampoline passes (the PEB, for the first thread).
+    /// Its argument (the PEB, for the first thread).
     pub argument: u64,
     /// The GS base.
     pub teb: u64,
@@ -130,6 +114,8 @@ pub struct ProcessStart {
     pub image_base: u64,
     /// The executable was moved from its preferred base.
     pub relocated: bool,
+    /// Where `ntdll` is mapped.
+    pub ntdll_base: u64,
     pub stack_base: u64,
     pub stack_limit: u64,
 }
@@ -137,7 +123,7 @@ pub struct ProcessStart {
 /// Where a new thread of a running process starts ([`create_thread`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ThreadStart {
-    /// The thread's starting RIP (the process's trampoline).
+    /// The thread's starting RIP (`ntdll`'s `LdrInitializeThunk`).
     pub entry: u64,
     pub rsp: u64,
     /// The user start routine, called as `start_routine(argument)`.
@@ -192,44 +178,24 @@ fn write_teb(
     b.write(teb, &tib)
 }
 
-/// Set up `proc` (new, empty) to run the PE executable `file` in its
-/// first thread `thread`; `file_object` is the executable's File object,
-/// if the kernel made one (the image section references it). `b` is the
-/// new process's memory. On failure the caller ends the process with
-/// [`process_exit`].
-pub fn start_process(
+/// Map `image` as an image section view in `proc` (at its preferred base,
+/// or relocated anywhere); `file_object`, if any, is referenced by the
+/// section. Returns the view's base and the image's preferred base.
+fn map_image(
     sys: &mut NtSystem,
     proc: &mut NtProcess,
     b: &mut dyn Backend,
-    file: &[u8],
+    image: ImageSection,
     file_object: Option<ObjectId>,
     thread: ThreadRef,
-) -> Result<ProcessStart, NtStatus> {
-    let om = &mut sys.objects;
-    om.create_process(proc.pid, None)?;
-    let pobj =
-        NewObject::Opaque { kind: ObjectType::Process, cookie: proc.pid.0.into(), signaled: Some(false), parse: false };
-    let pid_object = om.new_object(pobj, thread)?;
-    proc.object = Some(pid_object);
-    om.set_process_object(proc.pid, pid_object)?;
-
-    let image = ImageSection::from_file(file)?;
-    if image.info.directory(poly_pe::dir::IMPORT).is_some_and(|d| d.size != 0) {
-        // Binding imports is our ntdll's job.
-        return Err(STATUS_INVALID_IMAGE_FORMAT);
-    }
-    let (entry_rva, reserve, commit) = (
-        u64::from(image.info.entry_point()),
-        image.info.optional.size_of_stack_reserve,
-        image.info.optional.size_of_stack_commit,
-    );
+) -> Result<(u64, u64), NtStatus> {
     let source = SectionSource::Image(image.image.clone());
     let backing = b.create_section(&source)?;
     if let Some(f) = file_object {
         sys.objects.reference(f)?;
     }
     let protect = Protection::new(PAGE_EXECUTE_WRITECOPY, false).expect("valid");
-    let size = image.size;
+    let (size, preferred) = (image.size, image.image_base());
     let key = sys.add_section(Section {
         size,
         protect,
@@ -260,28 +226,56 @@ pub fn start_process(
     // The view holds its own reference; the section goes with the view.
     let _ = sys.objects.dereference(section_object);
     sys.reap(b);
-    let mapped = mapped?;
-    let image_base = mapped.base;
-    let preferred = sys.section(key).and_then(Section::image).map_or(image_base, ImageSection::image_base);
+    Ok((mapped?.base, preferred))
+}
+
+/// Set up `proc` (new, empty) to run the PE executable `file` in its
+/// first thread `thread`, with our `ntdll` (the DLL file `ntdll`) mapped
+/// beside it; `file_object` is the executable's File object, if the kernel
+/// made one (the image section references it). `b` is the new process's
+/// memory. On failure the caller ends the process with [`process_exit`].
+pub fn start_process(
+    sys: &mut NtSystem,
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    file: &[u8],
+    ntdll: &[u8],
+    file_object: Option<ObjectId>,
+    thread: ThreadRef,
+) -> Result<ProcessStart, NtStatus> {
+    let om = &mut sys.objects;
+    om.create_process(proc.pid, None)?;
+    let pobj =
+        NewObject::Opaque { kind: ObjectType::Process, cookie: proc.pid.0.into(), signaled: Some(false), parse: false };
+    let pid_object = om.new_object(pobj, thread)?;
+    proc.object = Some(pid_object);
+    om.set_process_object(proc.pid, pid_object)?;
+
+    let image = ImageSection::from_file(file)?;
+    let ntdll = ImageSection::from_file(ntdll)?;
+    let entries = NtdllEntries::of(&ntdll)?;
+    let (entry_rva, reserve, commit) = (
+        u64::from(image.info.entry_point()),
+        image.info.optional.size_of_stack_reserve,
+        image.info.optional.size_of_stack_commit,
+    );
+    let (image_base, preferred) = map_image(sys, proc, b, image, file_object, thread)?;
+    let (ntdll_base, _) = map_image(sys, proc, b, ntdll, None, thread)?;
+    proc.thread_start = ntdll_base + u64::from(entries.thread_start);
+    proc.apc_dispatcher = ntdll_base + u64::from(entries.apc_dispatcher);
+    proc.exception_dispatcher = ntdll_base + u64::from(entries.exception_dispatcher);
+    proc.ntdll_base = ntdll_base;
 
     let rw = PAGE_READWRITE;
     let anywhere_top = MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN;
     let (peb, _) = proc.vm.allocate(b, 0, PAGE_SIZE, 0, anywhere_top, rw)?;
     let (teb, _) = proc.vm.allocate(b, 0, TEB_SIZE, 0, anywhere_top, rw)?;
 
-    // The thread-start trampoline: one executable page, written once per
-    // process and shared by every thread (see [`THREAD_TRAMPOLINE`]).
-    let (tramp_page, _) = proc.vm.allocate(b, 0, PAGE_SIZE, 0, anywhere_top, rw)?;
-    b.write(tramp_page, &THREAD_TRAMPOLINE)?;
-    b.write(tramp_page + APC_OFFSET, &APC_TRAMPOLINE)?;
-    proc.vm.protect(b, tramp_page, PAGE_SIZE, PAGE_EXECUTE_READ)?;
-    proc.trampoline = tramp_page;
-    proc.apc_trampoline = tramp_page + APC_OFFSET;
-
     let stack = make_stack(proc, b, reserve, commit)?;
     proc.vm.set_stack(stack.alloc);
     let client = crate::kernel::ClientId { process: proc.pid, thread };
     write_teb(b, teb, peb, &stack, client)?;
+    let rsp = start_rsp(b, &stack)?;
 
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
@@ -292,19 +286,27 @@ pub fn start_process(
     proc.default_stack_reserve = reserve;
     proc.default_stack_commit = commit;
 
-    let start_routine = image_base + entry_rva;
     Ok(ProcessStart {
-        entry: tramp_page,
-        rsp: stack.top,
-        start_routine,
+        entry: proc.thread_start,
+        rsp,
+        start_routine: image_base + entry_rva,
         argument: peb,
         teb,
         peb,
         image_base,
         relocated: image_base != preferred,
+        ntdll_base,
         stack_base: stack.top,
         stack_limit: stack.limit,
     })
+}
+
+/// A thread's first RSP: the zero return address at the top of its stack
+/// (see the module documentation).
+fn start_rsp(b: &mut dyn Backend, stack: &ThreadStack) -> Result<u64, NtStatus> {
+    let rsp = stack.top - 8;
+    b.write(rsp, &0u64.to_le_bytes())?;
+    Ok(rsp)
 }
 
 /// Create a new thread in the running process `proc`, with id `thread`: its
@@ -333,6 +335,7 @@ pub fn create_thread(
     };
     let client = crate::kernel::ClientId { process: proc.pid, thread };
     write_teb(b, teb, peb_of(proc), &stack, client)?;
+    let rsp = start_rsp(b, &stack)?;
 
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
@@ -340,8 +343,8 @@ pub fn create_thread(
     proc.threads.push(NtThread { thread, object: thread_object, teb, stack: stack.alloc });
 
     Ok(ThreadStart {
-        entry: proc.trampoline,
-        rsp: stack.top,
+        entry: proc.thread_start,
+        rsp,
         start_routine: req.start_routine,
         argument: req.argument,
         teb,

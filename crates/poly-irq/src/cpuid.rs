@@ -26,6 +26,10 @@ pub struct CpuFeatures {
     /// (CPUID.80000007H:EDX[8]; SDM Vol. 3B §18.17.1 "Invariant TSC"), so it
     /// can serve as a wall-clock time base.
     pub invariant_tsc: bool,
+    /// The CPU is a virtual one: a hypervisor runs the system
+    /// (CPUID.01H:ECX[31], reserved for this use; it is 0 on real
+    /// processors).
+    pub hypervisor: bool,
 }
 
 impl CpuFeatures {
@@ -37,7 +41,18 @@ impl CpuFeatures {
             tsc_deadline: leaf1_ecx & (1 << 24) != 0,
             arat: leaf6_eax & (1 << 2) != 0,
             invariant_tsc: leaf_8000_0007_edx & (1 << 8) != 0,
+            hypervisor: leaf1_ecx & (1 << 31) != 0,
         }
+    }
+
+    /// Whether a calibrated TSC may serve as the clock: it is invariant,
+    /// or the CPU is virtual. A hypervisor gives its guests a TSC that runs
+    /// at one rate whatever the host's power states do, even where it does
+    /// not report the invariant bit, as QEMU's CPU models do not (ADR
+    /// 0072). On real processors without the bit the TSC may change rate or
+    /// stop.
+    pub const fn constant_rate_tsc(&self) -> bool {
+        self.invariant_tsc || self.hypervisor
     }
 }
 
@@ -61,18 +76,31 @@ mod tests {
     fn decodes_each_bit() {
         assert_eq!(CpuFeatures::from_cpuid(0, 0, 0, 0), CpuFeatures::default());
         let all = CpuFeatures::from_cpuid(u32::MAX, u32::MAX, u32::MAX, u32::MAX);
-        assert!(all.tsc && all.apic && all.x2apic && all.tsc_deadline && all.arat && all.invariant_tsc);
+        assert!(
+            all.tsc && all.apic && all.x2apic && all.tsc_deadline && all.arat && all.invariant_tsc && all.hypervisor
+        );
         assert!(CpuFeatures::from_cpuid(1 << 21, 0, 0, 0).x2apic);
         assert!(CpuFeatures::from_cpuid(1 << 24, 0, 0, 0).tsc_deadline);
         assert!(CpuFeatures::from_cpuid(0, 1 << 4, 0, 0).tsc);
         assert!(CpuFeatures::from_cpuid(0, 1 << 9, 0, 0).apic);
         assert!(CpuFeatures::from_cpuid(0, 0, 1 << 2, 0).arat);
         assert!(CpuFeatures::from_cpuid(0, 0, 0, 1 << 8).invariant_tsc);
+        assert!(CpuFeatures::from_cpuid(1 << 31, 0, 0, 0).hypervisor);
         // Neighbouring bits do not leak in.
         assert_eq!(
-            CpuFeatures::from_cpuid(!(1 << 21 | 1 << 24), !(1 << 4 | 1 << 9), !4, !(1 << 8)),
+            CpuFeatures::from_cpuid(!(1 << 21 | 1 << 24 | 1 << 31), !(1 << 4 | 1 << 9), !4, !(1 << 8)),
             CpuFeatures::default()
         );
+    }
+
+    #[test]
+    fn a_tsc_is_constant_rate_when_invariant_or_virtual() {
+        let real_old = CpuFeatures::from_cpuid(0, 1 << 4, 0, 0);
+        assert!(!real_old.constant_rate_tsc(), "a real CPU without the invariant bit");
+        assert!(CpuFeatures::from_cpuid(0, 1 << 4, 0, 1 << 8).constant_rate_tsc());
+        // QEMU's CPU models: the hypervisor bit, no invariant bit.
+        let qemu = CpuFeatures::from_cpuid(1 << 31, 1 << 4, 0, 0);
+        assert!(!qemu.invariant_tsc && qemu.constant_rate_tsc());
     }
 
     #[test]

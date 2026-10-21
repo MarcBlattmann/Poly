@@ -481,7 +481,17 @@ impl Vfs {
             return Err(Errno::ENAMETOOLONG);
         }
         let p = self.parent_of(ctx, cred, at, path)?;
-        let name = self.new_name(&p)?;
+        let name = match self.new_name(&p) {
+            // "file/": a name that exists used as a directory is ENOTDIR
+            // (a link to one is followed), anything else there EEXIST.
+            Err(Errno::EEXIST) if p.trailing_slash => {
+                return match self.resolve(ctx, cred, at, path, true) {
+                    Err(Errno::ENOTDIR) => Err(Errno::ENOTDIR),
+                    _ => Err(Errno::EEXIST),
+                };
+            }
+            r => r?,
+        };
         if p.trailing_slash {
             return Err(Errno::ENOENT);
         }

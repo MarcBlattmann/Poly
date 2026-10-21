@@ -33,6 +33,8 @@
 //!   root-disk           write the persistent root disk image target/poly-root-disk.img
 //!                       (the host's bash, coreutils, Python, gcc; rootdisk.rs)
 //!   root-disk-test      only the root disk boot test of `test` (rootdisk.rs)
+//!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
+//!                       cache every kernel build uses) and verify its exports (ntdll.rs)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
@@ -130,10 +132,20 @@ fn step(name: &str, cmd: &mut Command) -> Result {
     if status.success() { Ok(()) } else { Err(format!("{name} failed ({status})")) }
 }
 
+/// `cargo` run inside kernel/ (so kernel/.cargo/config.toml, target and
+/// flags, applies), with our `ntdll.dll` up to date and named in the
+/// environment for the kernel's `build.rs` to embed (ADR 0071).
+fn kernel_cargo() -> Result<Command> {
+    let dll = ntdll::ensure()?;
+    let mut cmd = cargo();
+    cmd.current_dir(kernel_dir()).env(ntdll::KERNEL_ENV, dll);
+    Ok(cmd)
+}
+
 /// Builds from inside kernel/ so kernel/.cargo/config.toml (target, flags) applies.
 fn build_kernel(release: bool) -> Result<PathBuf> {
-    let mut cmd = cargo();
-    cmd.current_dir(kernel_dir()).arg("build");
+    let mut cmd = kernel_cargo()?;
+    cmd.arg("build");
     if release {
         cmd.arg("--release");
     }
@@ -1331,7 +1343,11 @@ fn ci() -> Result {
         "clippy (host)",
         cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
     )?;
-    step("clippy (kernel)", cargo().current_dir(kernel_dir()).args(["clippy", "--", "-D", "warnings"]))?;
+    step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"]))?;
+    step(
+        "fmt (ntdll)",
+        cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
+    )?;
     eprintln!("==> font tables");
     font::run(&root(), &["--check".into()])?;
     eprintln!("==> global_asm! labels");

@@ -179,18 +179,21 @@ pub struct NtProcess {
     pub peb: u64,
     /// Where its executable is mapped.
     pub image_base: u64,
-    /// The per-process thread-start trampoline ([`crate::exec`]).
-    pub trampoline: u64,
-    /// The per-process user-APC trampoline ([`crate::exec`]).
-    pub apc_trampoline: u64,
+    /// Where every thread starts: `ntdll`'s `LdrInitializeThunk`
+    /// ([`crate::exec`], ADR 0071).
+    pub thread_start: u64,
+    /// Where user APCs are delivered: `ntdll`'s `KiUserApcDispatcher`.
+    pub apc_dispatcher: u64,
+    /// Where `ntdll` is mapped.
+    pub ntdll_base: u64,
     /// The image's stack reserve and commit, the default for new threads.
     pub default_stack_reserve: u64,
     pub default_stack_commit: u64,
     /// Its exit status once [`crate::exec::process_exit`] has run (for the
     /// kernel to report; a running process is pending).
     pub exit_status: Option<poly_ntobj::NtStatus>,
-    /// The user-mode exception dispatcher (`PolySetExceptionDispatcher`,
-    /// ADR 0068); 0 for none.
+    /// The user-mode exception dispatcher: `ntdll`'s
+    /// `KiUserExceptionDispatcher` (ADR 0068, 0071); 0 for none.
     pub exception_dispatcher: u64,
 }
 
@@ -204,8 +207,9 @@ impl NtProcess {
             exited: BTreeMap::new(),
             peb: 0,
             image_base: 0,
-            trampoline: 0,
-            apc_trampoline: 0,
+            thread_start: 0,
+            apc_dispatcher: 0,
+            ntdll_base: 0,
             default_stack_reserve: 0x1_0000,
             default_stack_commit: 0x1000,
             exit_status: None,
