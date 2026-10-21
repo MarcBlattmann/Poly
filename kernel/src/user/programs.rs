@@ -274,16 +274,18 @@ user_prog_fail_return:
     ud2
 /* Touch [RDI] again and again, reading it (RDX = 0) or storing a count
    that goes up by one each time (RDX = 1), until [RSI] is not 0; then
-   exit with that. For the TLB shootdown tests: a translation of RDI's page
+   exit with that. The count of turns is also at [RSI + 8], stored before
+   each access. For the TLB shootdown tests: a translation of RDI's page
    stays cached all along, so the access faults once the page is gone or
    read-only only if the CPU it runs on was told. */
     .global user_prog_touch
 user_prog_touch:
     xor eax, eax
 1:
+    inc rax
+    mov qword ptr [rsi + 8], rax
     test rdx, rdx
     jz 2f
-    inc rax
     mov qword ptr [rdi], rax
     jmp 3f
 2:
