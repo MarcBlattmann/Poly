@@ -561,6 +561,7 @@ fn timer_settime_and_gettime() {
     assert_eq!(sys(&mut k, nr::TIMER_SETTIME, &[9, 0, new, 0]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::TIMER_GETTIME, &[9, OUT]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::TIMER_SETTIME, &[t, 0, UNMAPPED, 0]), Err(Errno::EFAULT));
+    assert_eq!(sys(&mut k, nr::TIMER_SETTIME, &[t, 0, 0, 0]), Err(Errno::EINVAL), "a null new value");
     assert_eq!(sys(&mut k, nr::TIMER_GETTIME, &[t, UNMAPPED]), Err(Errno::EFAULT));
     put_ts(&mut k, TS + 16, 0, 1_000_000_000);
     assert_eq!(sys(&mut k, nr::TIMER_SETTIME, &[t, 0, TS, 0]), Err(Errno::EINVAL));

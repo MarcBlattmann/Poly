@@ -1073,7 +1073,10 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   (`attach_thread`: the first gets the pid as its id, later ones fresh ids
   from the pid counter) and end themselves (`user::end_thread`): the
   personality's thread-exit duties, then the last thread ends the process
-  (files closed, `ExitStatus` set, `Process::wait` returns). `exit_group`
+  (files closed, `ExitStatus` set, `Process::wait` returns). Without a
+  group exit the status is that of the thread that started to exit last
+  (`Process::thread_exiting`, recorded before its `clear_child_tid` is
+  cleared; ADR 0069). `exit_group`
   and fatal signals set a group exit; every other thread ends at its next
   return to user mode (after a system call, or after an interrupt or
   exception in ring 3, which `trap_dispatch` hands to
@@ -1083,8 +1086,8 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md),
   `linux/task.rs`). The personality decodes the calls (`task::clone`,
   `task::exec`) and keeps the rules of the process tree (`task::tree`:
-  parents, zombies, orphans to init or the kernel, process groups and
-  sessions, wait selectors); the kernel lends it the one tree behind a
+  parents, zombies, orphans to the nearest child subreaper, init or the
+  kernel, process groups and sessions, wait selectors); the kernel lends it the one tree behind a
   spinlock and does the work: `clone_task` starts a thread of the caller's
   process, or a new process with a copy-on-write copy of its memory
   (`Memory::fork`) or the same memory (`CLONE_VM`), copies of its files
@@ -1233,8 +1236,11 @@ the CPU-time accounting, the timer thread and the vDSO.
   CPU-time timer exists) by pid, with the process's state locked; the
   `linux-timers` thread sleeps until then (a tick at a time for CPU-time
   timers) and calls `time::fire`, which queues the signals (once per
-  timer; overruns counted) and re-arms periodic timers; the threads it
-  names are notified like for any signal.
+  timer) and re-arms periodic timers; the threads it names are notified
+  like for any signal. While a POSIX timer's signal is pending the timer
+  is only looked at again (at least 10 ms apart); its overruns are counted
+  from the due times when the signal is taken (`timers::signal_taken`,
+  then `count_taken`; [ADR 0069](adr/0069-timer-overruns-counted-when-taken-last-thread-status-subreapers.md)).
 - **The vDSO** (`kernel/src/arch/x86_64/vdso/vdso.rs`, built by
   `kernel/build.rs` with the pinned `rustc` and `rust-lld`, embedded as
   `arch::vdso::IMAGE`): an ELF shared object, one read-execute segment, no

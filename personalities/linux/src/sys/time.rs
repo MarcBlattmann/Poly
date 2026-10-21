@@ -477,6 +477,10 @@ fn itimerspec(left: u64, interval: u64) -> Itimerspec {
 pub fn timer_settime(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let timer = a.int(0);
     let (clock, realtime) = posix_timer(k, timer)?;
+    // A null new value is EINVAL (the spec of timer_settime), not EFAULT.
+    if a.ptr(2).is_null() {
+        return Err(Errno::EINVAL);
+    }
     let new = Itimerspec::from_bytes(&read(k, a.ptr(2))?);
     if !new.value.is_valid() || !new.interval.is_valid() {
         return Err(Errno::EINVAL);
