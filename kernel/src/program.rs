@@ -221,7 +221,7 @@ pub fn run_init(boot: &BootInfo) -> bool {
     match run_first(path, traced) {
         Ok((pid, status)) => {
             crate::testinit::report_output_files(boot);
-            testrun::exit(pid, status);
+            testrun::exit(pid, status, crate::nt::take_exit_status(pid));
             kprintln!("init: {path} (pid {pid}) ended: {status}");
         }
         Err(e) => {
@@ -244,6 +244,10 @@ fn run_first(path: &str, traced: bool) -> Result<(u32, ExitStatus), ExecPathErro
     let init = init && prepared.process().linux.is_some();
     if init {
         crate::testinit::adopt(prepared.process());
+    }
+    // An NT program's full NTSTATUS goes into its POLY-EXIT record.
+    if let Prepared::Nt { process, .. } = &prepared {
+        crate::nt::watch_exit_status(process.pid);
     }
     // The record goes out before the program's first instruction runs.
     testrun::init(path);

@@ -1,0 +1,17 @@
+# poly-wtest: the shared support library of the Windows test programs
+# (tests/windows/*.rs and specs/windows/<component>/<symbol>.tests/*.rs),
+# ADR 0075. A no_std crate for x86_64-pc-windows-msvc only; built by
+# `cargo xtask pipeline win build`, never by the host workspace (excluded
+# there). No third-party crates: core only.
+[package]
+name = "poly-wtest"
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
