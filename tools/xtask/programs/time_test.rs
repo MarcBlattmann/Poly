@@ -655,12 +655,22 @@ fn timer_tests() {
 // ---- CPU time ------------------------------------------------------------------------
 
 fn cpu_tests() {
-    // A busy thread's CPU-time clocks advance.
-    let (thread0, process0, wall0) = (clock(CLOCK_THREAD_CPUTIME_ID), clock(CLOCK_PROCESS_CPUTIME_ID), mono());
+    // A busy thread's CPU-time clocks advance. A running thread is charged
+    // for the time its CPU is held off by the host (QEMU's clock follows
+    // the host's; Linux in a VM does the same), and that can be tens of
+    // milliseconds between two readings on a loaded host. So the clock-time
+    // readings enclose the CPU-time readings (and the process's enclose
+    // the thread's): whatever passes between them is inside the interval
+    // compared against, and only an accounting error can break the bounds.
+    let wall0 = mono();
+    let process0 = clock(CLOCK_PROCESS_CPUTIME_ID);
+    let thread0 = clock(CLOCK_THREAD_CPUTIME_ID);
     while mono() - wall0 < 100 * MS {
         spin();
     }
-    let (thread1, process1, wall1) = (clock(CLOCK_THREAD_CPUTIME_ID), clock(CLOCK_PROCESS_CPUTIME_ID), mono());
+    let thread1 = clock(CLOCK_THREAD_CPUTIME_ID);
+    let process1 = clock(CLOCK_PROCESS_CPUTIME_ID);
+    let wall1 = mono();
     let (ran, wall) = (thread1 - thread0, wall1 - wall0);
     check(b"thread_cpu_clock_advances_while_busy", ran >= wall / 10 && ran <= wall + 10 * MS, ran as i64);
     check(b"process_cpu_clock_advances_while_busy", process1 - process0 >= ran / 2, (process1 - process0) as i64);
