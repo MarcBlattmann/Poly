@@ -195,13 +195,6 @@ pub fn stats() -> Stats {
     }
 }
 
-/// The interrupt about to be dispatched on this CPU came from ring 3
-/// (`user`) or not (set by `trap_dispatch`; interrupts do not nest), for
-/// CPU-time sampling.
-pub(super) fn set_interrupted_user(user: bool) {
-    super::percpu::this().interrupted_user().store(user, Ordering::Relaxed);
-}
-
 /// Deferred work: the tick asks for a preemption check.
 const PENDING_PREEMPT: u8 = 1;
 /// Deferred work: a reschedule IPI asks for a switch.
@@ -247,7 +240,6 @@ pub(super) fn dispatch(vector: u8) {
         }
         TIMER_VECTOR => {
             super::time::on_tick();
-            crate::cputime::tick(super::percpu::this().interrupted_user().load(Ordering::Relaxed));
             apic::eoi();
             crate::thread::on_timer_tick();
             // The time slice: checked after the EOI, on the thread's own

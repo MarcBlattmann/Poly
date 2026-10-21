@@ -447,9 +447,15 @@ Waiting for something another CPU does (reaping a thread that ran there,
 a thread pinned there getting going) is a wait in time with a generous
 deadline (`thread::wait_until`), not a number of yields: the other CPU may
 be held off by the host for a while. Where a test must tell "late" from
-"never", count the other CPU's own ticks (`percpu::cpu(i).ticks()`), which
-stand still while the host does not run it (see the TLB shootdown tests in
-`user/tests.rs`).
+"never", count the progress of what it waits for: the TLB shootdown tests
+in `user/tests.rs` count the turns of the thread that must fault, which
+stand still while the host does not run it. A CPU's ticks
+(`percpu::cpu(i).ticks()`) also stand still then, but they are a poor
+measure of one thread's progress: other threads on that CPU take ticks,
+and on a busy host a tick handler that waits for QEMU (every clock read
+under TCG takes its global lock) can find the next tick due as it returns,
+so several ticks go by with almost nothing else done. The same goes for
+the real ticks that land in a short stretch with interrupts on.
 
 ## Panic backtraces
 
@@ -1463,8 +1469,13 @@ A timer that does not fire: the `linux-timers` thread must exist (`ps`;
 it starts with the first timer anyone arms), and a signal with the default
 action never reaches process 1 (kill(2)'s rule for init, which timers
 follow too). CPU-time clocks only move while the thread runs; their user
-and system split comes from tick samples, so a thread that ran less than
-a tick shows everything as system time.
+and system split follows the TSC cycles spent in each mode, measured at
+every entry from and return to ring 3 (ADR 0070). Under a loaded host a
+running thread is charged for the time QEMU's vCPU is held off, mostly as
+system time: under TCG every clock read is an HPET access that waits for
+QEMU's global lock, so a system call can take tens of milliseconds.
+Tests of CPU time therefore enclose CPU-clock readings in clock-time
+readings and compare against what passed between them.
 
 ## Disk file systems and the page cache
 

@@ -277,14 +277,16 @@ kernel_test! {
         let Some(m) = test_mount(env)? else { return Ok(()) };
         let f = Files::new();
         let path = scratch(TEST_MOUNT, "writeback");
+        let before_write = cache::passes();
         write_file(&f, &path, b"written back by the thread").map_err(e)?;
         let ino = f.stat(path.as_bytes()).map_err(e)?.ino;
         let page = m.cached.cached_page(ino, 0).ok_or("the written page is not cached")?;
-        if !page.is_dirty() {
-            return Err("a written page is not dirty");
-        }
-        // Two passes started after the write: one has seen the page.
-        let start = cache::passes();
+        // Dirty, unless one of the thread's periodic passes got to it first
+        // (a busy host may hold this thread off for a while after the
+        // write): then count the passes from before the write. A page that
+        // never was dirty is never written, which the read below sees.
+        let start = if page.is_dirty() { cache::passes() } else { before_write };
+        // Two passes started after `start`: one has seen the page.
         let deadline = time::now_ns() + 30 * time::NANOS_PER_SEC;
         while cache::passes() < start + 2 {
             if time::now_ns() > deadline {
