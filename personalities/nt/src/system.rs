@@ -64,6 +64,11 @@ pub struct NtSystem {
     /// The registry, reached through the `\REGISTRY` object (ADR 0066).
     pub registry: crate::registry::NtRegistry,
 
+    /// The exit statuses of ended processes whose process object still
+    /// exists (another process holds a handle to it), for
+    /// `NtQueryInformationProcess` (`GetExitCodeProcess`, ADR 0079).
+    pub process_exits: BTreeMap<ProcessId, poly_ntobj::NtStatus>,
+
     sections: BTreeMap<u64, Section>,
     next_key: u64,
 }
@@ -94,7 +99,14 @@ impl NtSystem {
         let mut objects = ObjectManager::new();
         let mut registry = crate::registry::NtRegistry::new(reg);
         registry.install(&mut objects);
-        NtSystem { objects, io: crate::io::IoState::new(), registry, sections: BTreeMap::new(), next_key: 1 }
+        NtSystem {
+            objects,
+            io: crate::io::IoState::new(),
+            registry,
+            process_exits: BTreeMap::new(),
+            sections: BTreeMap::new(),
+            next_key: 1,
+        }
     }
 
     /// Store a section's data; returns its key (the object's cookie).
@@ -146,6 +158,9 @@ impl NtSystem {
                     self.io.file_closed(d.cookie);
                 }
                 ObjectType::Key => self.registry.object_deleted(d.cookie, &mut self.objects),
+                ObjectType::Process => {
+                    self.process_exits.remove(&ProcessId(d.cookie as u32));
+                }
                 _ => {}
             }
         }
@@ -189,8 +204,9 @@ pub struct NtProcess {
     /// The image's stack reserve and commit, the default for new threads.
     pub default_stack_reserve: u64,
     pub default_stack_commit: u64,
-    /// Its exit status once [`crate::exec::process_exit`] has run (for the
-    /// kernel to report; a running process is pending).
+    /// Its exit status, once known: the first `NtTerminateProcess` of it
+    /// sets it, else its last thread's end ([`crate::exec::thread_exit`]);
+    /// a running process is pending.
     pub exit_status: Option<poly_ntobj::NtStatus>,
     /// The user-mode exception dispatcher: `ntdll`'s
     /// `KiUserExceptionDispatcher` (ADR 0068, 0071); 0 for none.

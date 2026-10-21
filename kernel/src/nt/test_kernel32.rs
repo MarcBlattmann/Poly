@@ -6,7 +6,11 @@
 //! directories, the environment, the last error after failing calls, the
 //! heaps and virtual memory, a thread with events, a critical section and
 //! an SRW lock, mutexes and semaphores, time, the version, messages and
-//! modules, and ends through `ExitProcess` with [`PASS_CODE`]; a failed
+//! modules; and (the second slice) runs itself twice as a child process
+//! through `CreateProcessW` / `NtCreateUserProcess`, TLS and FLS, code
+//! page conversions, file mappings, condition variables, `InitOnce`, file
+//! information and times. It ends through `ExitProcess` with
+//! [`PASS_CODE`]; a failed
 //! check ends it with `0x80 + step` after printing the step to its standard
 //! output (the console).
 

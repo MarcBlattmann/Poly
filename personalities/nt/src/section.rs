@@ -59,8 +59,9 @@ pub struct CreateSection<'a> {
 /// - With a file (a File object, else `STATUS_OBJECT_TYPE_MISMATCH`): an
 ///   image is parsed from its contents (`STATUS_INVALID_IMAGE_FORMAT`); a
 ///   data section is the file's size, or `MaximumSize` if that is not
-///   larger (growing files comes with NT file I/O: `STATUS_SECTION_TOO_BIG`
-///   for now); an empty file is `STATUS_MAPPED_FILE_SIZE_ZERO`.
+///   larger; a larger one grows a file of NT file I/O opened for writing
+///   ([`io_file_section`]) and is `STATUS_SECTION_TOO_BIG` otherwise; an
+///   empty file is `STATUS_MAPPED_FILE_SIZE_ZERO`.
 /// - Named, and the name is taken: as for every object (`OBJ_OPENIF` opens
 ///   the existing section; the new one is dropped).
 pub fn create_section(
@@ -101,13 +102,18 @@ pub fn create_section(
         Some(h) => {
             let file = sys.objects.reference_by_handle(caller, h, 0, Some(ObjectType::File))?;
             let key = sys.objects.cookie(file).expect("live");
-            let made = file_section(b, key, image, req.maximum_size);
+            let made = if sys.io.file(key).is_some() {
+                io_file_section(sys, key, image, req.maximum_size, protect)
+            } else {
+                file_section(b, key, image, req.maximum_size).map(|(size, img)| (size, img, None))
+            };
             match made {
-                Ok((size, Some(img))) => {
+                Ok((size, Some(img), _)) => {
                     let source = SectionSource::Image(img.image.clone());
                     (size, SectionKind::Image { image: alloc::boxed::Box::new(img), file: Some(file) }, source)
                 }
-                Ok((size, None)) => (size, SectionKind::File { file }, SectionSource::File { file: key }),
+                Ok((size, None, Some(open))) => (size, SectionKind::File { file }, SectionSource::Vfs { file: open }),
+                Ok((size, None, None)) => (size, SectionKind::File { file }, SectionSource::File { file: key }),
                 Err(e) => {
                     let _ = sys.objects.dereference(file);
                     sys.reap(b);
@@ -149,6 +155,56 @@ fn file_section(
         None => Ok((len, None)),
     }
 }
+
+/// Size, image or VFS file of a section of a file object of NT file I/O
+/// (ADR 0067, 0079). The file object must have been opened to read its
+/// data, and to write it for a section whose protection writes shared
+/// pages (Learn: `CreateFileMappingW`'s table of `flProtect` against the
+/// file's access; `STATUS_ACCESS_DENIED`). A data section larger than a
+/// file opened for writing grows the file to its size, as Learn says
+/// ("the file on disk is increased to match"); otherwise a larger size is
+/// `STATUS_SECTION_TOO_BIG`. A data section's pages are the file's own
+/// (cached) pages: a shared view's writes are the file's contents.
+fn io_file_section(
+    sys: &mut NtSystem,
+    key: u64,
+    image: bool,
+    maximum: Option<u64>,
+    protect: Protection,
+) -> Result<SectionFile, NtStatus> {
+    use crate::io::consts::{FILE_EXECUTE, FILE_READ_DATA, FILE_WRITE_DATA};
+    let access = sys.io.file(key).ok_or(STATUS_INVALID_HANDLE)?.access;
+    if image {
+        if access & (FILE_READ_DATA | FILE_EXECUTE) == 0 {
+            return Err(STATUS_ACCESS_DENIED);
+        }
+        let img = ImageSection::from_file(&sys.io.read_all(key)?)?;
+        return Ok((img.size, Some(img), None));
+    }
+    let writes = protect.allows_shared_write();
+    if access & FILE_READ_DATA == 0 || (writes && access & FILE_WRITE_DATA == 0) {
+        return Err(STATUS_ACCESS_DENIED);
+    }
+    let open = sys.io.open_file(key)?;
+    let len = open.stat().map_err(crate::io::status_of)?.size;
+    let size = match maximum.filter(|&m| m != 0) {
+        Some(m) if m > len => {
+            if !writes || m > MAX_SECTION_SIZE {
+                return Err(STATUS_SECTION_TOO_BIG);
+            }
+            open.truncate(m).map_err(crate::io::status_of)?;
+            m
+        }
+        Some(m) => m,
+        None if len == 0 => return Err(STATUS_MAPPED_FILE_SIZE_ZERO),
+        None => len,
+    };
+    Ok((size, None, Some(open)))
+}
+
+/// A file section's size, its image if it is one, and the VFS file of a
+/// data section of NT file I/O.
+type SectionFile = (u64, Option<ImageSection>, Option<alloc::sync::Arc<poly_vfs::OpenFile>>);
 
 /// Make the pages, store the section and create its object (named or
 /// not). On failure, or when `OBJ_OPENIF` opened an existing section,

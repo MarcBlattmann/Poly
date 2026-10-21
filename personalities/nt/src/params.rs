@@ -16,7 +16,10 @@
 //! spec agent against real Windows): the environment block's address is
 //! the pointer right after the documented `CommandLine`, at + 0x80
 //! ([`PP_ENVIRONMENT`]); its size in bytes, terminators included, follows
-//! at + 0x88 ([`PP_ENVIRONMENT_SIZE`]). The structure is
+//! at + 0x88 ([`PP_ENVIRONMENT_SIZE`]); the starting current directory,
+//! a `UNICODE_STRING`, at + 0x90 ([`PP_CURRENT_DIRECTORY`], ADR 0079's
+//! second slice: `CreateProcessW` passes one; empty means the
+//! executable's directory). The structure is
 //! [`PARAMETERS_SIZE`] bytes, zero but for these fields, followed in the
 //! same allocation by the strings (each with a terminating NUL that
 //! `MaximumLength` counts) and the environment block. Our `ntdll` /
@@ -46,6 +49,8 @@ pub const PP_COMMAND_LINE: u64 = 0x70;
 pub const PP_ENVIRONMENT: u64 = 0x80;
 /// Poly's own: the environment block's size in bytes.
 pub const PP_ENVIRONMENT_SIZE: u64 = 0x88;
+/// Poly's own: the starting current directory (`UNICODE_STRING`).
+pub const PP_CURRENT_DIRECTORY: u64 = 0x90;
 /// The bytes kept for the structure (zero past the fields above).
 pub const PARAMETERS_SIZE: u64 = 0x400;
 
@@ -78,6 +83,8 @@ pub struct Parameters {
     /// A whole environment block, both terminators included
     /// ([`crate::layout::env::Block::to_utf16`]).
     pub environment: Vec<u16>,
+    /// The starting current directory (empty: the executable's).
+    pub current_dir: Vec<u16>,
 }
 
 fn put_u64(buf: &mut [u8], at: u64, v: u64) {
@@ -115,11 +122,16 @@ pub fn image(base: u64, p: &Parameters) -> Result<Vec<u8>, NtStatus> {
     let command_at = base + buf.len() as u64;
     push_wide(&mut buf, &p.command_line);
     buf.extend_from_slice(&[0, 0]);
+    align(&mut buf, 8);
+    let current_at = base + buf.len() as u64;
+    push_wide(&mut buf, &p.current_dir);
+    buf.extend_from_slice(&[0, 0]);
     align(&mut buf, 16);
     let env_at = base + buf.len() as u64;
     push_wide(&mut buf, &p.environment);
     put_string(&mut buf, PP_IMAGE_PATH_NAME, image_at, p.image_path.len())?;
     put_string(&mut buf, PP_COMMAND_LINE, command_at, p.command_line.len())?;
+    put_string(&mut buf, PP_CURRENT_DIRECTORY, current_at, p.current_dir.len())?;
     put_u64(&mut buf, PP_ENVIRONMENT, env_at);
     put_u64(&mut buf, PP_ENVIRONMENT_SIZE, (p.environment.len() * 2) as u64);
     Ok(buf)
@@ -187,7 +199,56 @@ pub fn for_program(image_path: &str, args: &[&str], environment: Vec<u16>) -> Pa
         image_path: image_path.encode_utf16().collect(),
         command_line: command_line(image_path, args).encode_utf16().collect(),
         environment,
+        current_dir: Vec::new(),
     }
+}
+
+/// The most bytes of an environment block [`read`] copies (Poly's limit;
+/// Learn: "the maximum size of a user-defined environment variable is
+/// 32,767 characters", and a block holds many).
+pub const MAX_ENVIRONMENT_BYTES: u64 = 1 << 20;
+
+/// Reads the caller's memory: `(address, buffer)`.
+pub type ReadUser<'a> = dyn FnMut(u64, &mut [u8]) -> Result<(), NtStatus> + 'a;
+
+/// The parameters a caller built in its own memory at `at`
+/// (`NtCreateUserProcess`, ADR 0079): the strings and the environment
+/// block, copied out. `read` reads the caller's memory.
+pub fn read(at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
+    let mut header = alloc::vec![0u8; (PP_CURRENT_DIRECTORY + 16) as usize];
+    read(at, &mut header)?;
+    let u64_at = |o: u64| u64::from_le_bytes(header[o as usize..][..8].try_into().expect("8 bytes"));
+    let mut string = |o: u64| -> Result<Vec<u16>, NtStatus> {
+        let len = usize::from(u16::from_le_bytes([header[o as usize], header[o as usize + 1]]));
+        let buf = u64_at(o + 8);
+        if len == 0 || buf == 0 {
+            return Ok(Vec::new());
+        }
+        if len % 2 != 0 {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        let mut b = alloc::vec![0u8; len];
+        read(buf, &mut b)?;
+        Ok(b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
+    };
+    let image_path = string(PP_IMAGE_PATH_NAME)?;
+    let command_line = string(PP_COMMAND_LINE)?;
+    let current_dir = string(PP_CURRENT_DIRECTORY)?;
+    let (env_at, env_size) = (u64_at(PP_ENVIRONMENT), u64_at(PP_ENVIRONMENT_SIZE));
+    let environment = if env_at == 0 || env_size == 0 {
+        alloc::vec![0, 0]
+    } else {
+        if env_size > MAX_ENVIRONMENT_BYTES || env_size % 2 != 0 {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        let mut b = alloc::vec![0u8; env_size as usize];
+        read(env_at, &mut b)?;
+        b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect()
+    };
+    if image_path.is_empty() {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    Ok(Parameters { image_path, command_line, environment, current_dir })
 }
 
 #[cfg(test)]
@@ -303,13 +364,24 @@ mod tests {
         // Everything else of the structure is zero.
         for (i, &byte) in img[..PARAMETERS_SIZE as usize].iter().enumerate() {
             let i = i as u64;
-            let field = [PP_IMAGE_PATH_NAME, PP_COMMAND_LINE, PP_ENVIRONMENT, PP_ENVIRONMENT_SIZE]
-                .iter()
-                .any(|&f| (f..f + 16).contains(&i) && (f != PP_ENVIRONMENT || i < f + 8));
+            let field =
+                [PP_IMAGE_PATH_NAME, PP_COMMAND_LINE, PP_ENVIRONMENT, PP_ENVIRONMENT_SIZE, PP_CURRENT_DIRECTORY]
+                    .iter()
+                    .any(|&f| (f..f + 16).contains(&i) && (f != PP_ENVIRONMENT || i < f + 8));
             if !field {
                 assert_eq!(byte, 0, "byte {i:#x}");
             }
         }
+        // The structure reads back as it was written.
+        let mut with_dir = p.clone();
+        with_dir.current_dir = "C:\\Work".encode_utf16().collect();
+        let img = image(base, &with_dir).unwrap();
+        let mut reader = |addr: u64, buf: &mut [u8]| {
+            let off = (addr - base) as usize;
+            buf.copy_from_slice(&img[off..off + buf.len()]);
+            Ok(())
+        };
+        assert_eq!(read(base, &mut reader), Ok(with_dir));
         // Too long for a UNICODE_STRING.
         let long = Parameters { image_path: alloc::vec![b'a' as u16; 40_000], ..Parameters::default() };
         assert_eq!(image(base, &long), Err(STATUS_INVALID_PARAMETER));
