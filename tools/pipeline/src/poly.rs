@@ -87,13 +87,31 @@ fn field<'a>(f: &BTreeMap<&str, &'a str>, key: &str, line: &str) -> Result<&'a s
 
 /// Parse a serial log. `Ok(None)` if the kernel never acknowledged
 /// `poly.init` (it does not support running programs).
+///
+/// Processes are numbered like the reference tracer numbers them, in the
+/// order they were created: Poly hands out pids in creation order, so the
+/// program (the first process) is the lowest pid. Numbering by first
+/// record instead goes wrong when a child's first call is written before
+/// the parent's `fork` record returns, and the program's `POLY-EXIT` then
+/// looked like a child's.
 pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
     let mut t = Trace::new(test, "poly", "poly-serial");
-    let mut pids: BTreeMap<u64, u32> = BTreeMap::new();
-    let mut index = |pid: u64| -> u32 {
-        let next = pids.len() as u32;
-        *pids.entry(pid).or_insert(next)
+    let pids: BTreeMap<u64, u32> = {
+        let mut seen: Vec<u64> = log
+            .lines()
+            .skip_while(|l| !l.contains("POLY-INIT: "))
+            .filter_map(|l| {
+                let record = &l[l.find("POLY-")?..];
+                let (tag, rest) = record.split_once(": ")?;
+                matches!(tag, "POLY-SYSCALL" | "POLY-SIGNAL" | "POLY-EXIT").then(|| fields(rest))?.get("pid").copied()
+            })
+            .filter_map(|p| number(p).ok())
+            .collect();
+        seen.sort_unstable();
+        seen.dedup();
+        seen.into_iter().enumerate().map(|(i, p)| (p, i as u32)).collect()
     };
+    let index = |pid: u64| -> u32 { pids.get(&pid).copied().unwrap_or(pids.len() as u32) };
     let (mut acknowledged, mut stdout, mut stderr) = (false, Vec::new(), Vec::new());
     for line in log.lines() {
         // Lines may carry a carriage return, or kernel log text before the
@@ -347,6 +365,22 @@ mod tests {
             panic!()
         };
         assert_eq!(r, "kernel: no ELF loader");
+    }
+
+    /// A child's first call can come out before the parent's fork returns:
+    /// the program is still process 0 and its exit is the trace's exit.
+    #[test]
+    fn processes_are_numbered_in_creation_order() {
+        let log = "POLY-INIT: exec /test-binary\n\
+            POLY-SYSCALL: pid=2 nr=105 args=0x4d2 ret=0\n\
+            POLY-SYSCALL: pid=1 nr=57 args=0x0 ret=2\n\
+            POLY-EXIT: pid=2 code=0\n\
+            POLY-SYSCALL: pid=1 nr=61 args=0x2 ret=2\n\
+            POLY-EXIT: pid=1 code=3\n";
+        let Some(Outcome::Ran(t)) = parse_serial(log, "x").unwrap() else { panic!("not run") };
+        assert_eq!(t.exit, Exit::Code(3));
+        let pids: Vec<u32> = t.syscalls().map(|c| c.pid).collect();
+        assert_eq!(pids, [1, 0, 0]);
     }
 
     /// Only a signal is a crash of the emulator; our timeout and the
