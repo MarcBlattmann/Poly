@@ -117,6 +117,10 @@ pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     {
         return r;
     }
+    // FIONREAD on a regular file, FICLONE and friends (sys::fileioctl).
+    if let Some(r) = crate::sys::fileioctl::ioctl(k, fd, request, a.ulong(2)) {
+        return r;
+    }
     let st = k.fstat(fd)?;
     if ioctl::is_terminal_request(request) && st.file_type() != mode::S_IFCHR {
         return Err(Errno::ENOTTY);

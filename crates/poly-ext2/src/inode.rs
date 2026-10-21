@@ -85,7 +85,7 @@ impl<D: BlockIo> Ctx<'_, D> {
     }
 
     /// Writes a record (its checksum set) into its inode table block.
-    fn put_inode_raw(&mut self, ino: u32, raw: &mut [u8]) -> Result<()> {
+    pub(crate) fn put_inode_raw(&mut self, ino: u32, raw: &mut [u8]) -> Result<()> {
         let (block, at) = self.inode_at(ino)?;
         if let Some(seed) = self.geo.meta_seed() {
             csum::set_inode(seed, ino, raw);
