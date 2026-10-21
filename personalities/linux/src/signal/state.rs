@@ -113,6 +113,13 @@ pub struct LinuxProcess {
     /// thread's (ADR 0054). fork(2) copies them (a child's pid namespace
     /// is its parent's `pid_for_children`); execve(2) keeps them.
     pub ns: crate::ns::Namespaces,
+    /// The kernel reports this process's signal deliveries to a tracer
+    /// (the test-run protocol, ADR 0027), as a ptrace(2)d process's are
+    /// seen at its signal-delivery-stops. Like such a process, it then
+    /// keeps an ignored signal until a thread takes it, instead of
+    /// discarding it when it is generated, so the taking is seen
+    /// ([`LinuxProcess::send`]). Inherited by fork, kept by exec.
+    pub traced: bool,
 }
 
 impl LinuxProcess {
@@ -131,6 +138,7 @@ impl LinuxProcess {
             timers: crate::time::timers::Timers::new(),
             nice: 0,
             ns: crate::ns::Namespaces::default(),
+            traced: false,
         }
     }
 
@@ -167,6 +175,7 @@ impl LinuxProcess {
             timers,
             nice: self.nice,
             ns: self.ns.for_child(),
+            traced: self.traced,
         }
     }
 
@@ -346,12 +355,16 @@ impl LinuxProcess {
             sent.continue_process = false;
             return Ok(sent);
         }
+        // An ignored signal is discarded unless it is blocked: a blocked
+        // one stays pending, with `SIG_IGN` as with a default action of
+        // ignoring (the visible test of rt_sigprocmask), until it is
+        // unblocked and dropped, or its action changes. A traced process
+        // keeps it either way, and drops it when a thread takes it.
         let ignored = match disposition(signal, &action) {
-            Disposition::Ignore => true,
-            Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => !blocked,
+            Disposition::Ignore | Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => !blocked,
             _ => false,
         };
-        if ignored {
+        if ignored && !self.traced {
             return Ok(sent);
         }
         let queue_limit = self.queue_limit;
@@ -505,10 +518,14 @@ mod tests {
         assert!(!p.send(user(SIGCHLD), Dest::Process, false).unwrap().queued);
         p.thread_mut(1).mask.insert(SIGCHLD);
         assert!(p.send(user(SIGCHLD), Dest::Process, false).unwrap().queued, "sigwaitinfo can take it");
-        // SIG_IGN: discarded even when blocked, and installing it drops
-        // what is pending.
+        // SIG_IGN: installing it drops what is pending; a blocked one is
+        // still made pending (rt_sigprocmask's visible test), an unblocked
+        // one is discarded.
         p.set_action(SIGCHLD, SigAction { handler: SIG_IGN, ..SigAction::default() });
         assert!(p.pending(1).is_empty());
+        assert!(p.send(user(SIGCHLD), Dest::Process, false).unwrap().queued);
+        p.thread_mut(1).mask = SigSet::EMPTY;
+        assert_eq!(p.dequeue(1).map(|i| i.signal()), Some(SIGCHLD));
         assert!(!p.send(user(SIGCHLD), Dest::Process, false).unwrap().queued);
         p.thread_mut(1).mask.insert(SIGTERM);
         p.send(user(SIGTERM), Dest::Thread(1), false).unwrap();

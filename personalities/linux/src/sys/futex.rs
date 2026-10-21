@@ -93,7 +93,9 @@ pub fn futex(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             let to = k.futex_key(uaddr2, private)?;
             let cmp = (cmd == FUTEX_CMP_REQUEUE).then_some(val3);
             let (woken, requeued) = futex::requeue(k, uaddr, from, to, val as usize, val2 as usize, cmp)?;
-            Ok(if cmp.is_some() { woken + requeued } else { woken } as u64)
+            // Both return the woken plus the moved waiters (futex's spec
+            // sheet).
+            Ok((woken + requeued) as u64)
         }
         FUTEX_WAKE_OP => {
             aligned(uaddr)?;

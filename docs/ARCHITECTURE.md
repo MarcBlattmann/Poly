@@ -605,8 +605,10 @@ initramfs.
   notifies, and waiters register a `Waker` on it, check again and block
   through a `Blocker` (the kernel's park / unpark). `FileObject`s are open
   files that are not on a file system, on inodes of an anonymous file
-  system no path reaches (`Vfs::anon_node`): pipes (64 KiB, `PIPE_BUF`
-  atomicity, end of file, `EPIPE`, packet mode), event counters, timers
+  system no path reaches (`Vfs::anon_node`): pipes (16 pages of 4 KiB,
+  `F_SETPIPE_SZ`, `PIPE_BUF` atomicity, end of file, `EPIPE`, packet
+  mode; a FIFO inode opens as an end of one pipe per inode, ADR 0062),
+  event counters, timers
   (expirations counted from the clock, a `TimerService` callback to wake
   waiters) and epoll sets (an interest entry is a waker that puts itself
   on the ready list; level- and edge-triggered, one-shot, nested). Their
@@ -1117,7 +1119,10 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   `poly.init=<path>` runs a program as pid 1 before the self-test and
   reports `POLY-INIT` / `POLY-EXIT`; `poly.test.capture` adds a
   `POLY-SYSCALL` record per call, `POLY-OUT` for bytes written to fds 1
-  and 2 and `POLY-SIGNAL`; with `poly.qemu_exit` QEMU exits after it. The
+  and 2 and `POLY-SIGNAL` for every signal a thread takes but `SIGKILL`
+  (what a ptrace tracer sees as a signal-delivery-stop; interrupted calls
+  are recorded with the restart number such a tracer sees; ADR 0062); with
+  `poly.qemu_exit` QEMU exits after it. The
   diff runner (`cargo xtask pipeline diff --target poly`) boots one kernel
   per corpus test this way.
 

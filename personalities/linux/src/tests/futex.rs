@@ -162,7 +162,7 @@ fn requeue_and_cmp_requeue() {
     let mut k = FakeKernel::new();
     waiting(&mut k, WORD, 1..=6, 1);
     waiting(&mut k, WORD2, [9], 1);
-    assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, op(FUTEX_REQUEUE), 1, 2, WORD2]), Ok(1), "returns the woken");
+    assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, op(FUTEX_REQUEUE), 1, 2, WORD2]), Ok(3), "returns woken + moved");
     assert_eq!(woken(&mut k), [1]);
     assert_eq!(k.futexes.waiters(key(WORD)).collect::<Vec<_>>(), [4, 5, 6]);
     assert_eq!(k.futexes.waiters(key(WORD2)).collect::<Vec<_>>(), [9, 2, 3]);
@@ -300,7 +300,7 @@ fn randomized_futex_model() {
                         }
                         !take
                     });
-                    let n = if compare { expect.len() + moved.len() } else { expect.len() };
+                    let n = expect.len() + moved.len();
                     model.extend(moved);
                     assert_eq!(r, Ok(n as u64), "seed {seed} step {step}");
                     let mut got = woken(&mut k);

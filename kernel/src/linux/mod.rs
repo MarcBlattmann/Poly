@@ -32,6 +32,7 @@ pub mod admin;
 mod admin_tests;
 pub mod cred;
 mod cred_tests;
+mod fifo;
 mod fileio_tests;
 mod files;
 mod files_tests;
@@ -170,7 +171,8 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     k.set_result(regs.rax);
     let exit = k.take_exit();
     if process.traced {
-        testrun::syscall(process.pid, number, &args, exit.is_none().then_some(regs.rax));
+        let ret = exit.is_none().then(|| Linux::traced_result(&mut k, regs.rax));
+        testrun::syscall(process.pid, number, &args, ret);
     }
     if let Some(line) = strace {
         strace::exit(line, exit.is_none().then_some(regs.rax));
@@ -212,9 +214,6 @@ pub fn fault(process: &Process, fault: &Fault) -> Leave {
     };
     let info = fault_info(fault.vector, page, fault.rip);
     k.set_fault(u64::from(fault.vector), fault.error_code, fault.address.unwrap_or(0));
-    if process.traced {
-        testrun::signal(process.pid, info.signal());
-    }
     Linux::fault_signal(&mut k, info);
     let leave = Linux::exit_to_user(&mut k).into();
     if leave == Leave::Killed {

@@ -107,7 +107,13 @@ pub fn check_kind(domain: i32, ty: u32, protocol: i32) -> Result<(Kind, NewFd), 
         return Err(Errno::EINVAL);
     }
     let family = u16::try_from(domain).ok().and_then(Family::from_linux).ok_or(Errno::EAFNOSUPPORT)?;
-    let st = SockType::from_linux(ty & abi::SOCK_TYPE_MASK).ok_or(Errno::EINVAL)?;
+    let st = match SockType::from_linux(ty & abi::SOCK_TYPE_MASK) {
+        Some(st) => st,
+        // A type number below SOCK_MAX (`linux/net.h`: 10) that Unix
+        // sockets do not have (socket's spec sheet: 9).
+        None if family == Family::Unix && ty & abi::SOCK_TYPE_MASK < 10 => return Err(Errno::ESOCKTNOSUPPORT),
+        None => return Err(Errno::EINVAL),
+    };
     let protocol = match (family, st) {
         (Family::Unix, SockType::Raw) => return Err(Errno::ESOCKTNOSUPPORT),
         // unix(7): "EPROTONOSUPPORT Passed protocol is not AF_UNIX".
@@ -191,8 +197,30 @@ fn write_addr(k: &mut dyn LinuxKernel, ptr: UserPtr, len_ptr: UserPtr, addr: &So
 /// bind(fd, addr, addrlen)
 pub fn bind(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
-    let addr = read_addr(k, a.ptr(1), a.int(2))?;
+    let mut addr = read_addr(k, a.ptr(1), a.int(2))?;
+    if addr == SockAddr::Unspec {
+        addr = unspec_bind(k, fd, a.ptr(1), a.int(2))?;
+    }
     net(k)?.bind(fd, &addr).map(|()| 0)
+}
+
+/// bind's spec sheet: `AF_UNSPEC` with `INADDR_ANY` is accepted on an
+/// `AF_INET` socket (as that address with the given port); any other
+/// address is `EAFNOSUPPORT`. Other sockets get the address as it is.
+fn unspec_bind(k: &mut dyn LinuxKernel, fd: i32, ptr: UserPtr, len: i32) -> Result<SockAddr, Errno> {
+    if net(k)?.getsockopt(fd, OptName::Domain)? != OptValue::Int(i32::from(abi::AF_INET)) {
+        return Ok(SockAddr::Unspec);
+    }
+    if (len as usize) < abi::SOCKADDR_IN_SIZE {
+        return Err(Errno::EINVAL);
+    }
+    let mut b = [0u8; abi::SOCKADDR_IN_SIZE];
+    k.copy_from_user(ptr, &mut b)?;
+    if b[4..8] != [0; 4] {
+        return Err(Errno::EAFNOSUPPORT);
+    }
+    let port = u16::from_be_bytes([b[2], b[3]]);
+    Ok(SockAddr::Inet(core::net::SocketAddrV4::new(core::net::Ipv4Addr::UNSPECIFIED, port)))
 }
 
 /// listen(fd, backlog): a backlog above `SOMAXCONN` is capped (listen(2));
@@ -227,7 +255,14 @@ fn do_accept(k: &mut dyn LinuxKernel, a: &Args, flags: u32) -> SysResult {
         let mut lb = [0u8; 4];
         k.copy_from_user(a.ptr(2), &mut lb)?;
         if i32::from_le_bytes(lb) < 0 {
-            return Err(Errno::EINVAL);
+            // A non-blocking listener with nothing waiting says so first
+            // (accept4's spec sheet).
+            let nonblock = crate::sys::path::fs(k)
+                .and_then(|fs| fs.status_flags(fd))
+                .is_ok_and(|f| f & crate::fileio::flags::O_NONBLOCK != 0);
+            let mut p = [crate::fileio::PollFd { fd, events: crate::fileio::events::POLLIN, revents: 0 }];
+            let idle = k.file_io().is_some_and(|io| io.poll(&mut p, crate::fileio::WaitTime::Poll, false) == Ok(0));
+            return Err(if nonblock && idle { Errno::EAGAIN } else { Errno::EINVAL });
         }
     }
     let r = net(k)?.accept(fd, NewFd::from_flags(flags));
@@ -398,6 +433,12 @@ fn parse_control(k: &mut dyn LinuxKernel, ptr: UserPtr, len: u64) -> Result<Cont
                     || me.capable(crate::cred::cap::SETGID);
                 if !(pid_ok && uid_ok && gid_ok) {
                     return Err(Errno::EPERM);
+                }
+                // Another process's id must name one (sendmsg's spec
+                // sheet: ESRCH).
+                if u.pid != own {
+                    let pid = crate::ns::pid::find(k, u.pid)?;
+                    crate::signal::deliver::with_target(k, Target::Process(pid), |_, _| ())?;
                 }
                 c.creds = Some(u);
             }
@@ -574,6 +615,7 @@ pub fn recvfrom(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (got, ret) = recv_data(k, fd, &iov, len, a.uint(3), 0)?;
     if a.ptr(4).0 != 0 {
         match &got.from {
+            Some(SockAddr::Unix(abi::UnixAddr::Unnamed)) => k.copy_to_user(a.ptr(5), &0u32.to_le_bytes())?,
             Some(from) => write_addr(k, a.ptr(4), a.ptr(5), from)?,
             // No address from this protocol: length 0.
             None => k.copy_to_user(a.ptr(5), &0u32.to_le_bytes())?,
@@ -629,6 +671,9 @@ fn recvmsg_one(k: &mut dyn LinuxKernel, fd: i32, msg_ptr: UserPtr, flags: u32) -
     k.copy_to_user(UserPtr(msg_ptr.0 + MsgHdr::CONTROLLEN_OFFSET), &(control.len() as u64).to_le_bytes())?;
     k.copy_to_user(UserPtr(msg_ptr.0 + MsgHdr::FLAGS_OFFSET), &out_flags.to_le_bytes())?;
     let namelen = match (&got.from, m.name) {
+        // An unnamed sender (a socketpair peer) gives namelen 0 (recvmsg's
+        // spec sheet).
+        (Some(SockAddr::Unix(abi::UnixAddr::Unnamed)), _) => 0,
         (Some(from), name) if name != 0 => {
             let bytes = from.encode();
             let n = bytes.len().min(m.namelen as usize);
@@ -713,8 +758,9 @@ fn read_timeval(k: &mut dyn LinuxKernel, ptr: UserPtr, len: u32) -> Result<u64, 
     k.copy_from_user(ptr, &mut b)?;
     let sec = i64::from_le_bytes(b[0..8].try_into().expect("8 bytes"));
     let usec = i64::from_le_bytes(b[8..16].try_into().expect("8 bytes"));
+    // setsockopt's spec sheet: EDOM for a tv_usec of a million or more.
     if !(0..1_000_000).contains(&usec) {
-        return Err(Errno::EINVAL);
+        return Err(Errno::EDOM);
     }
     if sec < 0 {
         return Ok(0);
@@ -803,8 +849,21 @@ pub fn setsockopt(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
     // ENOTSOCK / EBADF before the value is looked at.
     net(k)?.getsockopt(fd, OptName::Type)?;
+    check_level(k, fd, a.int(1))?;
     let opt = decode_opt(k, a.int(1), a.int(2), a.ptr(3), len as u32)?;
     net(k)?.setsockopt(fd, opt).map(|()| 0)
+}
+
+/// An Internet protocol's level on a Unix socket is `EOPNOTSUPP`
+/// (getsockopt's spec sheet: a TCP option on an `AF_UNIX` socket).
+fn check_level(k: &mut dyn LinuxKernel, fd: i32, level: i32) -> Result<(), Errno> {
+    if !matches!(level, abi::SOL_TCP | abi::SOL_IP | abi::SOL_IPV6) {
+        return Ok(());
+    }
+    match net(k)?.getsockopt(fd, OptName::Domain)? {
+        OptValue::Int(d) if d == i32::from(abi::AF_UNIX) => Err(Errno::EOPNOTSUPP),
+        _ => Ok(()),
+    }
 }
 
 fn opt_name(level: i32, name: i32) -> Result<OptName, Errno> {
@@ -873,6 +932,7 @@ pub fn getsockopt(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     net(k)?.getsockopt(fd, OptName::Type)?;
+    check_level(k, fd, a.int(1))?;
     let name = opt_name(a.int(1), a.int(2))?;
     let value = net(k)?.getsockopt(fd, name)?;
     let bytes = encode_value(value);

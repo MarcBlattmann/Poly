@@ -915,6 +915,14 @@ process is a signal, logged with where it happened:
 linux: pid 1 killed by signal 11 after page fault at rip 0x401012, address 0x10
 ```
 
+In a traced run every signal a thread takes is a `POLY-SIGNAL` line just
+before its handler runs (or the process stops, continues, ends, or drops
+it as ignored), never `SIGKILL`: what the Linux tracer records as
+`--- SIGx ---` (ADR 0062). A traced process keeps an ignored signal until
+a thread takes it, so `SIGCHLD` shows up after a child ends. A call a
+signal interrupted is recorded with `ret=-512` (or -513, -514, -516: the
+restart numbers a tracer sees) and appears again if it was restarted.
+
 The diff runner does all of this per corpus test:
 `cargo xtask pipeline diff --target poly [--tests brk,mmap]` boots one
 kernel per test (the debug kernel; `--build-kernel` rebuilds it), compares

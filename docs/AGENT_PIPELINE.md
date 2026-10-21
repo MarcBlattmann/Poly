@@ -562,7 +562,7 @@ violation stops the entry and puts it in the human queue.
 
 - Running CI and the diff of agent branches as a user without GitHub
   credentials, or in a container (today the runner, `server`, does both).
-- `data<i>` fields and times in the kernel's `POLY-SYSCALL` records, and
-  `POLY-SIGNAL` for signals a handler takes (only faults and fatal signals
-  are reported).
+- `data<i>` fields and times in the kernel's `POLY-SYSCALL` records.
+  (`POLY-SIGNAL` reports every signal a thread takes but `SIGKILL`, as the
+  ptrace tracer's signal-delivery-stops: ADR 0062.)
 - Windows and macOS oracles and tracers (later phases).

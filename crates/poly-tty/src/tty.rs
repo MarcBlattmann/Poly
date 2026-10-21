@@ -623,7 +623,9 @@ impl Tty {
         };
         self.queue.notify(PollEvents::ALL);
         let host = self.host();
-        if let Some(sid) = session {
+        // The session leader gets one SIGHUP (ioctl's spec sheet), also
+        // when its own group is the foreground group the signal goes to.
+        if let Some(sid) = session.filter(|&sid| pgrp != Some(sid)) {
             host.signal_process(sid, SIGHUP);
         }
         if let Some(pgrp) = pgrp {

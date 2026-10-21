@@ -44,3 +44,28 @@ fn make_pipe(k: &mut dyn LinuxKernel, pipefd: UserPtr, bits: u32) -> SysResult {
     }
     Ok(0)
 }
+
+/// The most bytes an unprivileged `F_SETPIPE_SZ` may ask for: pipe(7)'s
+/// default `/proc/sys/fs/pipe-max-size` (1048576).
+pub const PIPE_MAX_SIZE: usize = 1_048_576;
+
+/// fcntl(2)'s pipe capacity commands, `F_GETPIPE_SZ` and `F_SETPIPE_SZ`;
+/// `None` for every other command. `EINVAL` for a negative size;
+/// fcntl(2): `EPERM` above the limit without `CAP_SYS_RESOURCE`.
+pub fn fcntl_pipe_size(k: &mut dyn LinuxKernel, fd: i32, a: &Args) -> Option<SysResult> {
+    use crate::fs::fcntl::{F_GETPIPE_SZ, F_SETPIPE_SZ};
+    Some(match a.uint(1) {
+        F_GETPIPE_SZ => file_io(k).and_then(|io| io.pipe_size(fd)).map(|n| n as u64),
+        F_SETPIPE_SZ => {
+            let size = a.int(2);
+            if size < 0 {
+                return Some(Err(Errno::EINVAL));
+            }
+            if size as usize > PIPE_MAX_SIZE && !crate::cred::current(k).capable(crate::cred::cap::SYS_RESOURCE) {
+                return Some(Err(Errno::EPERM));
+            }
+            file_io(k).and_then(|io| io.set_pipe_size(fd, size as usize)).map(|n| n as u64)
+        }
+        _ => return None,
+    })
+}
