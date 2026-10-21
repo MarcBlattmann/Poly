@@ -553,7 +553,23 @@ mod tests {
             let root = reg.hive(h).root;
             reg.set_value(root, &wide("v"), poly_registry::consts::REG_DWORD, &[1, 2, 3, 4], 0).map_err(|_| "set")?;
             let first = reg.save(h);
-            save_in(dir, "T", &first).map_err(|_| "the first save failed")?;
+            save_in(dir, "T", &first).map_err(|e| {
+                // Which parts of the path exist, to tell a missing
+                // directory from a failed create.
+                let mut at = alloc::string::String::new();
+                for part in dir.split('/').filter(|p| !p.is_empty()) {
+                    at.push('/');
+                    at.push_str(part);
+                    let vfs = crate::fs::vfs();
+                    let there = vfs.root_context().is_ok_and(|ctx| {
+                        let flags = poly_vfs::OpenFlags::RDONLY | poly_vfs::OpenFlags::DIRECTORY;
+                        vfs.open(&ctx, &poly_vfs::Cred::root(), poly_vfs::At::Cwd, at.as_bytes(), flags, 0).is_ok()
+                    });
+                    crate::kprintln!("nt: registry test: {at} {}", if there { "exists" } else { "is missing" });
+                }
+                crate::kprintln!("nt: registry test: the first save failed with {e:?}");
+                "the first save failed"
+            })?;
             reg.set_value(root, &wide("w"), poly_registry::consts::REG_SZ, &[0, 0], 0).map_err(|_| "set")?;
             let second = reg.save(h);
             save_in(dir, "T", &second).map_err(|_| "the second save failed")?;
