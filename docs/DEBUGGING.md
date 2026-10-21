@@ -1050,25 +1050,43 @@ point; its system calls go to `nt::syscall`. The NT state lives in
   logs `nt: pid N PolyTrace a b c` with its three argument registers. The
   self-built NT test PE uses it to say which step failed and with which
   `NTSTATUS` before it ends with `NtTerminateProcess`.
+- **Threads start through a per-process trampoline** (ADR 0065): a new
+  thread (and the first one) begins at the trampoline, which calls its start
+  routine and, on return, ends the thread with `NtTerminateThread`; the last
+  thread ending the process gives the process its exit code. A thread's own
+  TEB, stack and thread object are in `kernel/src/nt` + `NtProcess`.
+- **Blocking waits** park on the generic process wait queue
+  (`kernel/src/nt/sched.rs`): a blocked `NtWaitFor*` registers a per-thread
+  control block, and every signalling call drains the dispatcher's wakes
+  (`drain_wakes`) and unparks the waiters. A wait stuck forever usually means
+  a `Wake` was queued but its thread had no stored flags, or a signalling
+  call did not run `drain_wakes` (it runs after every NT system call in
+  `nt::syscall`). `NtSuspendThread` parks the target in `return_to_user` with
+  its context saved for `NtGetContextThread`.
+- **User APCs** are delivered through the APC trampoline: the thread runs the
+  routine and re-enters the kernel with `PolyResumeApc` (service `0x3001`) to
+  restore the interrupted context. An APC that never returns to the wait
+  usually means the saved context (`ThreadCtl::apc_saved`) was lost.
 - **An unhandled fault** in an NT process is logged like any user thread
   (`user: pid N thread T killed: ...`); structured exception handling (SEH)
   is a later milestone, so a fault that is not a guard page kills the thread.
   A guard-page fault that grows a thread stack is resolved silently
   (`user::page_fault` → `nt::resolve_fault`) and the instruction retried.
-- **The ring-3 NT test** is `kernel/src/nt/test_pe.rs`, a tiny
-  position-independent PE Poly assembles itself (no Microsoft toolchain):
-  its entry creates a named event in `\BaseNamedObjects`, opens it by name,
-  duplicates and closes handles until the object is gone, queries `\`,
-  reserves/commits/protects/queries/frees memory, and maps a pagefile
-  section twice to see a write through one view in the other. It ends with
-  exit code `0x5A` on success; `kernel_test! nt_test_program_runs_from_ring3`
-  builds it, runs it and checks that code. A different exit code means a
-  step failed — the preceding `nt: ... PolyTrace 0xbadbad <step> <status>`
-  line names which.
-- **The object manager and memory services are host-tested** in
-  `personalities/nt` against a fake kernel (`cargo test -p
-  poly-personality-nt`): that is where to reproduce a status or layout bug
-  without booting, since the kernel side only maps and locks.
+- **The ring-3 NT tests** are `kernel/src/nt/test_pe.rs` (the object manager,
+  memory and sections) and `kernel/src/nt/test_threads.rs` (threads,
+  synchronisation, APCs, a timer and a suspended thread's context), tiny
+  position-independent PEs Poly assembles itself (no Microsoft toolchain).
+  Each ends with exit code `0x5A` on success; `kernel_test!
+  nt_test_program_runs_from_ring3` and `nt_threads_and_sync_from_ring3` build
+  them, run them and check that code. A different exit code means a step
+  failed — the preceding `nt: ... PolyTrace 0xbadbad <step> <status>` line
+  names which step and the `NTSTATUS` it saw.
+- **The object, memory, thread and synchronisation logic is host-tested** in
+  `poly-ntobj` (the dispatcher against a randomized model) and
+  `personalities/nt` against a fake kernel (`cargo test -p poly-ntobj -p
+  poly-personality-nt`): that is where to reproduce a status, layout or
+  dispatcher bug without booting, since the kernel side only maps, locks,
+  blocks and wakes.
 
 ## Pipes, waits and event files
 

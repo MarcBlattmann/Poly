@@ -199,6 +199,22 @@ pub fn spawn_nt(
     start_thread(process, arch, Some(memory), entry, None, hook, None, thread::CpuSet::ALL).map(|(id, _)| id)
 }
 
+/// Start an NT thread (see [`spawn_nt`]) with the process thread id `tid`
+/// already chosen (the kernel set up its TEB, stack and thread object under
+/// that id, `crate::nt`). Returns its kernel thread.
+pub fn spawn_nt_as(
+    process: Arc<Process>,
+    memory: Arc<Memory>,
+    entry: Entry,
+    gs_base: u64,
+    hook: SyscallHook,
+    tid: u32,
+) -> Result<ThreadId, SpawnError> {
+    let space = Arc::clone(memory.space());
+    let arch = arch::user::ThreadState::with_state(space, &[], 0, gs_base).ok_or(SpawnError::NoMemory)?;
+    start_thread(process, arch, Some(memory), entry, None, hook, Some(tid), thread::CpuSet::ALL).map(|(id, _)| id)
+}
+
 /// Start a thread of `process` in `memory` that begins with every
 /// register of `regs`, the FPU state `fpu` (an image from [`fpu_image`])
 /// and FS / GS bases `fs_base` / `gs_base`: the child of `clone` or
@@ -357,15 +373,22 @@ fn current_thread_flags() -> Option<&'static ThreadFlags> {
 /// is being ended, waits while the process is stopped, and lets the
 /// personality act on signals the thread was notified of.
 pub fn return_to_user() {
-    let Some((process, flags, _)) = current() else { return };
+    let Some((process, flags, tid)) = current() else { return };
     let notified = flags.notified.load(Ordering::SeqCst);
-    if !notified && !process.is_exiting() && !process.is_stopped() && !flags.killed.load(Ordering::SeqCst) {
+    let suspended = flags.suspended.load(Ordering::SeqCst);
+    if !notified && !suspended && !process.is_exiting() && !process.is_stopped() && !flags.killed.load(Ordering::SeqCst)
+    {
         return;
     }
     // SAFETY: the thread came from ring 3, so it holds no lock and no
     // `InterruptsOff`; its trap frame is complete. Leaving the process,
     // waiting while it is stopped and writing a signal frame may block.
     unsafe { arch::cpu::enable_interrupts() };
+    // An NT thread that was suspended parks here, with its context saved so
+    // another thread can read or change it, until it is resumed.
+    if suspended && process.personality == poly_abi::Personality::Nt {
+        crate::nt::wait_while_suspended(process.pid, tid);
+    }
     leave_if_ended(process);
     if notified && process.linux.is_some() && crate::linux::exit_to_user(process) == crate::linux::Leave::Killed {
         end_thread(ExitStatus::Exited(0), 0);
@@ -442,6 +465,12 @@ pub fn end_thread(status: ExitStatus, code: usize) -> ! {
         crate::linux::thread_exit(process, tid);
     }
     let nt_memory = (process.personality == poly_abi::Personality::Nt).then(current_memory).flatten();
+    // An NT thread's own clean-up (free its stack and TEB, signal and record
+    // its thread object) runs before it leaves its process, so a sibling
+    // that was waiting on this thread wakes and abandoned mutants are freed.
+    if let Some(memory) = &nt_memory {
+        crate::nt::thread_exit(process.pid, tid, status, memory);
+    }
     if let Some(status) = process.detach_thread(tid, status) {
         if process.linux.is_some() {
             crate::linux::process_exit(process, status);

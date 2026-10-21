@@ -15,7 +15,10 @@ fn image_is_mapped_at_its_base_with_section_protections() {
     let s = start(&mut f, &test_exe(false)).unwrap();
     assert_eq!(s.image_base, IMAGE_BASE);
     assert!(!s.relocated);
-    assert_eq!(s.entry, IMAGE_BASE + 0x1000);
+    // The thread starts at the trampoline, which calls the image entry.
+    assert_eq!(s.start_routine, IMAGE_BASE + 0x1000);
+    assert_eq!(s.argument, s.peb);
+    assert_eq!(f.proc.vm.query(s.entry).unwrap().protect, PAGE_EXECUTE_READ);
     let q = |f: &Fake, a| f.proc.vm.query(a).unwrap();
     let headers = q(&f, IMAGE_BASE);
     assert_eq!((headers.state, headers.type_, headers.protect), (MEM_COMMIT, MEM_IMAGE, PAGE_READONLY));
@@ -40,9 +43,13 @@ fn teb_peb_and_stack() {
     assert_eq!(f.u64_at(s.teb + TEB_STACK_BASE), s.stack_base);
     assert_eq!(f.u64_at(s.teb + TEB_STACK_LIMIT), s.stack_limit);
     assert_eq!(f.bytes_at(s.peb + exec::PEB_BEING_DEBUGGED, 1), [0]);
-    // RSP as after a call: 8 below a 16-byte boundary, shadow space above.
-    assert_eq!(s.rsp % 16, 8);
-    assert_eq!(s.stack_base - s.rsp, 0x28);
+    // The ClientId is the process and the first thread (its id is the pid).
+    assert_eq!(f.u64_at(s.teb + exec::TEB_CLIENT_ID), u64::from(PID.0));
+    assert_eq!(f.u64_at(s.teb + exec::TEB_CLIENT_ID + 8), TID.0);
+    // The thread starts at the stack top (16-aligned); the trampoline makes
+    // its own shadow space before calling the image entry.
+    assert_eq!(s.rsp, s.stack_base);
+    assert_eq!(s.rsp % 16, 0);
     // 256 KiB reserved, 8 KiB committed, a guard page below.
     let stack = f.proc.vm.query(s.stack_limit).unwrap();
     assert_eq!((stack.state, stack.protect, stack.region_size), (MEM_COMMIT, PAGE_READWRITE, 0x2000));
@@ -98,7 +105,7 @@ fn an_image_whose_base_is_taken_is_relocated() {
     assert!(s.relocated);
     assert_ne!(s.image_base, IMAGE_BASE);
     assert_eq!(s.image_base % 0x1_0000, 0);
-    assert_eq!(s.entry, s.image_base + 0x1000);
+    assert_eq!(s.start_routine, s.image_base + 0x1000);
     assert_eq!(f.u64_at(s.image_base + 0x2008), s.image_base + 0x1000);
     // The headers record the new base.
     assert_eq!(f.u64_at(s.image_base + 0x40 + 24 + 24), s.image_base);

@@ -145,18 +145,54 @@ pub struct NtProcess {
     /// Its process object (a pointer reference, held until it ends).
     pub object: Option<ObjectId>,
     pub threads: Vec<NtThread>,
+    /// Threads that have ended and their exit statuses, for
+    /// `NtQueryInformationThread` while a handle to them is still open.
+    pub exited: BTreeMap<ThreadRef, poly_ntobj::NtStatus>,
     /// Its PEB.
     pub peb: u64,
     /// Where its executable is mapped.
     pub image_base: u64,
+    /// The per-process thread-start trampoline ([`crate::exec`]).
+    pub trampoline: u64,
+    /// The per-process user-APC trampoline ([`crate::exec`]).
+    pub apc_trampoline: u64,
+    /// The image's stack reserve and commit, the default for new threads.
+    pub default_stack_reserve: u64,
+    pub default_stack_commit: u64,
+    /// Its exit status once [`crate::exec::process_exit`] has run (for the
+    /// kernel to report; a running process is pending).
+    pub exit_status: Option<poly_ntobj::NtStatus>,
 }
 
 impl NtProcess {
     pub fn new(pid: ProcessId) -> NtProcess {
-        NtProcess { pid, vm: VirtualMemory::new(), object: None, threads: Vec::new(), peb: 0, image_base: 0 }
+        NtProcess {
+            pid,
+            vm: VirtualMemory::new(),
+            object: None,
+            threads: Vec::new(),
+            exited: BTreeMap::new(),
+            peb: 0,
+            image_base: 0,
+            trampoline: 0,
+            apc_trampoline: 0,
+            default_stack_reserve: 0x1_0000,
+            default_stack_commit: 0x1000,
+            exit_status: None,
+        }
     }
 
     pub fn thread(&self, thread: ThreadRef) -> Option<&NtThread> {
         self.threads.iter().find(|t| t.thread == thread)
+    }
+
+    /// A thread's exit status, if it has ended (`NtQueryInformationThread`).
+    pub fn thread_exit_status(&self, thread: ThreadRef) -> Option<poly_ntobj::NtStatus> {
+        self.exited.get(&thread).copied()
+    }
+
+    /// Whether `thread` is one of this process's live threads.
+    pub fn has_live_thread(&self, thread: ThreadRef) -> bool {
+        self.threads.iter().any(|t| t.thread == thread)
     }
 }

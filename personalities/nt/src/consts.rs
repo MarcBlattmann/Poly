@@ -55,14 +55,88 @@ pub const SEC_IMAGE_NO_EXECUTE: u32 = 0x1100_0000;
 pub const VIEW_SHARE: u32 = 1;
 pub const VIEW_UNMAP: u32 = 2;
 
-// ----- process rights (`winnt.h`)
+// ----- process and thread rights (`winnt.h`)
 
 pub const PROCESS_TERMINATE: u32 = 0x0001;
+pub const PROCESS_CREATE_THREAD: u32 = 0x0002;
 pub const PROCESS_VM_OPERATION: u32 = 0x0008;
 pub const PROCESS_VM_READ: u32 = 0x0010;
 pub const PROCESS_VM_WRITE: u32 = 0x0020;
 pub const PROCESS_DUP_HANDLE: u32 = 0x0040;
 pub const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+pub const PROCESS_SUSPEND_RESUME: u32 = 0x0800;
+pub const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+
+pub const THREAD_TERMINATE: u32 = 0x0001;
+pub const THREAD_SUSPEND_RESUME: u32 = 0x0002;
+pub const THREAD_GET_CONTEXT: u32 = 0x0008;
+pub const THREAD_SET_CONTEXT: u32 = 0x0010;
+pub const THREAD_QUERY_INFORMATION: u32 = 0x0040;
+pub const THREAD_QUERY_LIMITED_INFORMATION: u32 = 0x0800;
+
+// ----- NtCreateThreadEx `CreateFlags` (Learn / `ntpsapi.h`, documented via
+// the `THREAD_CREATE_FLAGS_*` names).
+pub const THREAD_CREATE_FLAGS_CREATE_SUSPENDED: u32 = 0x0001;
+
+// ----- information classes
+
+/// `PROCESSINFOCLASS` (`winternl.h`): `ProcessBasicInformation`, the one we
+/// answer (`ProcessImageFileName` and friends are not answered yet).
+pub const PROCESS_BASIC_INFORMATION: u32 = 0;
+
+/// `THREADINFOCLASS` (`winternl.h` / `ntpsapi.h`).
+pub const THREAD_BASIC_INFORMATION: u32 = 0;
+
+/// `sizeof(PROCESS_BASIC_INFORMATION)` on x64 (`winternl.h`): `NTSTATUS
+/// ExitStatus` (0, 4 pad), `PPEB PebBaseAddress` (8), `ULONG_PTR
+/// AffinityMask` (16), `KPRIORITY BasePriority` (24, 4 pad),
+/// `ULONG_PTR UniqueProcessId` (32), `ULONG_PTR InheritedFromUniqueProcessId`
+/// (40): 48 bytes.
+pub const PROCESS_BASIC_INFORMATION_SIZE: usize = 48;
+/// `sizeof(THREAD_BASIC_INFORMATION)` on x64 (`ntpsapi.h`): `NTSTATUS
+/// ExitStatus` (0, 4 pad), `PTEB TebBaseAddress` (8), `CLIENT_ID ClientId`
+/// (16: two `HANDLE`s), `KAFFINITY AffinityMask` (32), `KPRIORITY Priority`
+/// (40), `LONG BasePriority` (44): 48 bytes.
+pub const THREAD_BASIC_INFORMATION_SIZE: usize = 48;
+
+// ----- CONTEXT (x64, `winnt.h`)
+//
+// `CONTEXT` is 1232 bytes on x64. We fill in the control and integer
+// registers (and the two segment selectors a user thread has); the legacy
+// floating-point / XMM save area and the debug registers are left for later
+// milestones (floating-point context is `CONTEXT_FLOATING_POINT`, not asked
+// for here). The field offsets are from `winnt.h`.
+
+/// `sizeof(CONTEXT)` on x64.
+pub const CONTEXT_SIZE: usize = 1232;
+/// `CONTEXT_AMD64`, the architecture bits every flag carries.
+pub const CONTEXT_AMD64: u32 = 0x0010_0000;
+/// `CONTEXT_CONTROL`: SegSs, Rsp, SegCs, Rip, EFlags.
+pub const CONTEXT_CONTROL: u32 = CONTEXT_AMD64 | 0x1;
+/// `CONTEXT_INTEGER`: Rax..R15.
+pub const CONTEXT_INTEGER: u32 = CONTEXT_AMD64 | 0x2;
+/// `CONTEXT_SEGMENTS`: SegDs, SegEs, SegFs, SegGs.
+pub const CONTEXT_SEGMENTS: u32 = CONTEXT_AMD64 | 0x4;
+/// `CONTEXT_FLOATING_POINT`: the XMM state (not filled in yet).
+pub const CONTEXT_FLOATING_POINT: u32 = CONTEXT_AMD64 | 0x8;
+/// `CONTEXT_FULL`.
+pub const CONTEXT_FULL: u32 = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT;
+
+pub const CTX_FLAGS: usize = 0x30;
+pub const CTX_SEG_CS: usize = 0x38;
+pub const CTX_SEG_SS: usize = 0x42;
+pub const CTX_EFLAGS: usize = 0x44;
+pub const CTX_RAX: usize = 0x78;
+pub const CTX_RCX: usize = 0x80;
+pub const CTX_RDX: usize = 0x88;
+pub const CTX_RBX: usize = 0x90;
+pub const CTX_RSP: usize = 0x98;
+pub const CTX_RBP: usize = 0xA0;
+pub const CTX_RSI: usize = 0xA8;
+pub const CTX_RDI: usize = 0xB0;
+pub const CTX_R8: usize = 0xB8;
+pub const CTX_R15: usize = 0xF0;
+pub const CTX_RIP: usize = 0xF8;
 
 // ----- information classes
 
