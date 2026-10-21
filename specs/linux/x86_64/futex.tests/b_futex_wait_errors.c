@@ -10,6 +10,13 @@
 static volatile unsigned word __attribute__((aligned(8)));
 static volatile unsigned pair[2] __attribute__((aligned(8)));
 
+/* A time on the same clock that is already past: half of t. */
+static struct k_timespec half_of(struct k_timespec t) {
+    i64 ns = (t.tv_sec * 1000000000L + t.tv_nsec) / 2;
+    struct k_timespec h = { ns / 1000000000L, ns % 1000000000L };
+    return h;
+}
+
 int test_main(void) {
     word = 5;
     i64 r = futex(&word, FUTEX_WAIT, 4, 0, 0, 0);
@@ -27,10 +34,12 @@ int test_main(void) {
     r = futex(&word, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, 5, &z, 0, 0);
     check("wait_zero_timeout_etimedout", r == -ETIMEDOUT, r);
 
-    /* Absolute deadline (WAIT_BITSET): in the past, and 20 ms ahead. */
+    /* Absolute deadline (WAIT_BITSET): in the past, and 20 ms ahead. The
+     * past deadline is half the clock's current value: before now, but not
+     * negative however short the uptime (a negative time is EINVAL). */
     struct k_timespec now;
     syscall2(SYS_clock_gettime, CLOCK_MONOTONIC, &now);
-    struct k_timespec past = { now.tv_sec - 1, now.tv_nsec };
+    struct k_timespec past = half_of(now);
     r = futex(&word, FUTEX_WAIT_BITSET, 5, &past, 0, FUTEX_BITSET_MATCH_ANY);
     check("bitset_past_deadline_etimedout", r == -ETIMEDOUT, r);
     struct k_timespec soon = now;
@@ -44,7 +53,7 @@ int test_main(void) {
           after.tv_sec > soon.tv_sec || (after.tv_sec == soon.tv_sec && after.tv_nsec >= soon.tv_nsec), 0);
     struct k_timespec rt;
     syscall2(SYS_clock_gettime, CLOCK_REALTIME, &rt);
-    rt.tv_sec -= 1;
+    rt = half_of(rt);
     r = futex(&word, FUTEX_WAIT_BITSET | FUTEX_CLOCK_REALTIME, 5, &rt, 0, FUTEX_BITSET_MATCH_ANY);
     check("bitset_realtime_past_etimedout", r == -ETIMEDOUT, r);
     r = futex(&word, FUTEX_WAIT_BITSET, 4, &past, 0, FUTEX_BITSET_MATCH_ANY);
