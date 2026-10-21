@@ -17,6 +17,12 @@ use poly_personality_linux::kernel::Target;
 use poly_vfs::locks::{LockKind, LockOwner};
 use poly_vfs::{Access, OpenFlags, RenameFlags, Whence};
 
+/// The VFS error for a Linux errno the personality found (both use Linux's
+/// numbers).
+fn errno_vfs(e: Errno) -> poly_vfs::Errno {
+    poly_vfs::Errno::from_code(i32::from(e.get())).unwrap_or(poly_vfs::Errno::EIO)
+}
+
 fn statfs(s: poly_vfs::FsStats) -> StatFs {
     StatFs {
         fs_type: s.magic,
@@ -216,17 +222,31 @@ impl LinuxFs for Thread<'_> {
         self.process().files.unlinkat(dirfd, path, flags).map_err(vfs_errno)
     }
 
-    fn renameat(&mut self, olddirfd: i32, old: &[u8], newdirfd: i32, new: &[u8], flags: u32) -> Result<(), Errno> {
+    fn renameat(
+        &mut self,
+        olddirfd: i32,
+        old: &[u8],
+        newdirfd: i32,
+        new: Result<&[u8], Errno>,
+        flags: u32,
+    ) -> Result<(), Errno> {
         let flags = RenameFlags::from_linux(flags).map_err(vfs_errno)?;
-        self.process().files.renameat(olddirfd, old, newdirfd, new, flags).map_err(vfs_errno)
+        self.process().files.renameat(olddirfd, old, newdirfd, new.map_err(errno_vfs), flags).map_err(vfs_errno)
     }
 
     fn symlinkat(&mut self, target: &[u8], dirfd: i32, path: &[u8]) -> Result<(), Errno> {
         self.process().files.symlinkat(target, dirfd, path).map_err(vfs_errno)
     }
 
-    fn linkat(&mut self, olddirfd: i32, old: &[u8], newdirfd: i32, new: &[u8], follow: bool) -> Result<(), Errno> {
-        self.process().files.linkat(olddirfd, old, newdirfd, new, follow).map_err(vfs_errno)
+    fn linkat(
+        &mut self,
+        olddirfd: i32,
+        old: &[u8],
+        newdirfd: i32,
+        new: Result<&[u8], Errno>,
+        follow: bool,
+    ) -> Result<(), Errno> {
+        self.process().files.linkat(olddirfd, old, newdirfd, new.map_err(errno_vfs), follow).map_err(vfs_errno)
     }
 
     fn fchmod(&mut self, fd: i32, mode: u32) -> Result<(), Errno> {

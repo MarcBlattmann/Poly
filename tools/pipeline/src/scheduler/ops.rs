@@ -102,8 +102,13 @@ pub trait Ops {
     /// The entry the following calls are for (log files), if any.
     fn set_entry(&mut self, entry: Option<&str>);
 
-    /// Bring the runner's checkout of the base branch up to date.
-    fn refresh_main(&mut self) -> Result;
+    /// Bring the runner's checkout of the base branch up to date; its head.
+    fn refresh_main(&mut self) -> Result<String>;
+    /// The paths that differ between two commits of the runner's checkout.
+    fn changed_paths(&mut self, from: &str, to: &str) -> Result<Vec<String>>;
+    /// Build the loop's own binaries (`xtask`, `pipeline`) in the runner's
+    /// checkout, as `cargo xtask` will when systemd starts the loop again.
+    fn build_self(&mut self) -> Result<Out>;
     /// Unclaimed entries, best first (`pipeline next`).
     fn queue(&mut self) -> Result<Vec<String>>;
     /// The hub's head of `branch`.

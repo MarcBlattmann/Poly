@@ -8,7 +8,8 @@ use super::cycle::{Driver, Logger, Pass, Yielded, claim_message};
 use super::ops::{DiffResult, Merge, Ops, Out, Pr, Push, Remote, SpecFiles};
 use super::real::{DryShell, RealOps};
 use super::safety::{Change, coverage_file};
-use super::state::{Step, Store};
+use super::state::{Pause, Step, Store};
+use super::update::{self, SelfUpdate};
 use crate::roles::Role;
 use crate::store::EntryId;
 use crate::util::Result;
@@ -76,6 +77,13 @@ struct World {
     committed: Vec<(String, Vec<String>)>,
     crash: Option<(String, u32)>,
     entry: Option<String>,
+    /// The runner's head after `refresh_main` (default `main0`), the paths
+    /// that differ from the built commit, and the exit status of each build.
+    main_head: Option<String>,
+    main_changes: Vec<String>,
+    builds: VecDeque<i32>,
+    /// A file written while the next agent session runs.
+    write_during_run: Option<(PathBuf, String)>,
 }
 
 fn change(path: &str, added: &[&str]) -> Change {
@@ -185,9 +193,18 @@ impl Ops for World {
     fn set_entry(&mut self, entry: Option<&str>) {
         self.entry = entry.map(String::from);
     }
-    fn refresh_main(&mut self) -> Result {
+    fn refresh_main(&mut self) -> Result<String> {
         self.call("refresh_main");
-        Ok(())
+        Ok(self.main_head.clone().unwrap_or_else(|| "main0".into()))
+    }
+    fn changed_paths(&mut self, _from: &str, _to: &str) -> Result<Vec<String>> {
+        self.call("changed_paths");
+        Ok(self.main_changes.clone())
+    }
+    fn build_self(&mut self) -> Result<Out> {
+        self.call("build_self");
+        let code = self.builds.pop_front().unwrap_or(0);
+        Ok(Out::with(code, if code == 0 { "" } else { "error[E0425]: cannot find value `x`" }))
     }
     fn queue(&mut self) -> Result<Vec<String>> {
         Ok(self.queue.clone())
@@ -325,6 +342,10 @@ impl Ops for World {
     }
     fn role_run(&mut self, role: Role, _entry: &EntryId, feedback: Option<&str>) -> Result<Out> {
         self.call(&format!("{}_run", role.name()));
+        // `loop pause` run while the session runs.
+        if let Some((path, text)) = self.write_during_run.take() {
+            crate::util::write(&path, text).unwrap();
+        }
         let run = match role {
             Role::Spec => {
                 self.spec_feedback_given.push(feedback.map(String::from));
@@ -401,14 +422,15 @@ struct Setup {
 fn setup(name: &str) -> Setup {
     let dir = std::env::temp_dir().join(format!("poly-loop-cycle-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let cfg = Config { state_dir: dir.clone(), log_file: None, ..Config::default() };
+    // No runner checkout: no deploy files to look at (update.rs).
+    let cfg = Config { state_dir: dir.clone(), log_file: None, repo: dir.join("no-repo"), ..Config::default() };
     let store = Store::new(&dir).unwrap();
     Setup { dir, cfg, store, log: Logger::new(None, true).unwrap() }
 }
 
 impl Setup {
     fn driver(&self, w: World) -> Driver<'_, World> {
-        Driver { cfg: &self.cfg, store: &self.store, log: &self.log, ops: w, name: "w0".into() }
+        Driver { cfg: &self.cfg, store: &self.store, log: &self.log, ops: w, name: "w0".into(), update: &update::OFF }
     }
 
     fn step(&self, entry: &str) -> Step {
@@ -960,7 +982,7 @@ fn the_dry_run_walks_the_whole_cycle_with_real_commands() {
     let cfg = s.cfg.clone();
     let mut ops = RealOps::new(cfg.clone(), DryShell::new(true), &s.dir.join("logs"));
     ops.queue_repo = crate::repo_root();
-    let mut d = Driver { cfg: &cfg, store: &s.store, log: &s.log, ops, name: "w0".into() };
+    let mut d = Driver { cfg: &cfg, store: &s.store, log: &s.log, ops, name: "w0".into(), update: &update::OFF };
     let (entry, y) = match d.pass(None).unwrap() {
         Pass::Worked(e, y) => (e, y),
         p => panic!("{p:?}"),
@@ -1133,4 +1155,305 @@ fn the_role_wrapper_checks_everything_and_syncs_from_the_hub() {
     assert_eq!(o.status.code(), Some(2), "{err}");
     assert!(err.contains(&format!("not {}/spec", base.display())), "{err}");
     let _ = std::fs::remove_dir_all(&base);
+}
+
+impl Setup {
+    fn driver_with<'a>(&'a self, w: World, update: &'a SelfUpdate) -> Driver<'a, World> {
+        Driver { cfg: &self.cfg, store: &self.store, log: &self.log, ops: w, name: "w0".into(), update }
+    }
+}
+
+#[test]
+fn new_loop_code_on_main_is_built_then_the_loop_stops() {
+    let s = setup("self-update");
+    let up = SelfUpdate::new("main0".into(), s.cfg.poll_secs);
+    // main moves, but only docs and the example configuration change.
+    let mut w = World::new();
+    w.main_head = Some("main1".into());
+    w.main_changes = vec!["docs/AGENT_PIPELINE.md".into(), "tools/pipeline/deploy/pipeline.example.toml".into()];
+    w.queue = vec![];
+    let mut d = s.driver_with(w, &up);
+    assert!(matches!(d.pass(None).unwrap(), Pass::Idle(_)));
+    assert!(!up.stopping());
+    assert_eq!((d.ops.count("changed_paths"), d.ops.count("build_self")), (1, 0));
+    // The same head is not looked at twice.
+    d.pass(None).unwrap();
+    assert_eq!(d.ops.count("changed_paths"), 1);
+
+    // The loop's own code changes: it is built first, then nothing new starts.
+    d.ops.main_head = Some("main2".into());
+    d.ops.main_changes = vec!["README.md".into(), "tools/pipeline/src/scheduler/cycle.rs".into()];
+    d.ops.queue = vec![BRK.into()];
+    assert!(matches!(d.pass(None).unwrap(), Pass::Idle(_)));
+    assert!(up.stopping());
+    assert_eq!(d.ops.count("build_self"), 1);
+    assert!(s.store.load_all().unwrap().is_empty(), "no entry started");
+    assert!(d.ops.notified.is_empty(), "a passing build is no news");
+    // The workers return (the loop then exits with RESTART_EXIT).
+    super::worker(&mut d, false, None).unwrap();
+}
+
+#[test]
+fn a_new_loop_that_does_not_build_keeps_the_old_one_running() {
+    let s = setup("self-update-red");
+    let up = SelfUpdate::new("main0".into(), s.cfg.poll_secs);
+    let mut w = World::new();
+    w.main_head = Some("main1".into());
+    w.main_changes = vec!["Cargo.lock".into(), "rust-toolchain.toml".into()];
+    w.builds = [101, 0].into();
+    let mut d = s.driver_with(w, &up);
+    // The build fails: the entry starts all the same, on the old code.
+    worked(d.pass(None).unwrap());
+    assert!(!up.stopping());
+    assert_eq!(d.ops.notified, ["update ", "pr linux/syscall/x86_64/brk"]);
+    assert!(d.ops.human.contains("does not build") && d.ops.human.contains("rust-toolchain.toml"), "{}", d.ops.human);
+    let failure = update::failure_file(&s.store.dir);
+    let text = super::status_text(&s.cfg, None, &s.store, &[], d.ops.now).unwrap();
+    assert!(text.contains("self-update: the loop's new code at main1 does not build (exit 101"), "{text}");
+    // Not built again for the same head, and not told twice.
+    d.pass(None).unwrap();
+    assert_eq!(d.ops.count("build_self"), 1);
+    assert_eq!(d.ops.notified.len(), 2);
+    // A fix on main: built again; it passes, and the failure is gone.
+    d.ops.main_head = Some("main2".into());
+    d.pass(None).unwrap();
+    assert_eq!(d.ops.count("build_self"), 2);
+    assert!(up.stopping() && !failure.exists());
+}
+
+#[test]
+fn the_loop_stops_between_steps_and_the_entry_resumes_there() {
+    let s = setup("self-update-steps");
+    let mut w = World::new();
+    w.impl_runs = [Run::Limit("usage limit reached".into())].into();
+    let mut d = s.driver(w);
+    assert!(matches!(worked(d.pass(None).unwrap()), Yielded::Paused("implementer", _)));
+    let mut world = d.ops;
+    world.sleep(s.cfg.limit_pause_secs);
+
+    // A stop is requested: the entry is not driven a step further.
+    let up = SelfUpdate::new("main0".into(), s.cfg.poll_secs);
+    up.stop();
+    let mut d = s.driver_with(world, &up);
+    let mut st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!(d.drive(&mut st), Yielded::Stopping(Step::Implement));
+    assert_eq!(d.pass(None).unwrap(), Pass::Idle(d.ops.now), "nothing is picked while stopping");
+    assert_eq!(d.ops.count("implementer_run"), 1);
+
+    // The new loop resumes the entry at its step.
+    let mut d = s.driver(d.ops);
+    worked(d.pass(None).unwrap());
+    assert_eq!(s.step(BRK), Step::AwaitingMerge);
+    assert_eq!(d.ops.count("implementer_run"), 2);
+}
+
+#[test]
+fn main_is_looked_at_for_updates_while_no_entry_can_start() {
+    let s = setup("self-update-busy");
+    let up = SelfUpdate::new("main0".into(), s.cfg.poll_secs);
+    let mut w = World::new();
+    w.impl_runs = [Run::Limit("usage limit reached".into())].into();
+    let mut d = s.driver_with(w, &up);
+    // brk waits for the implementer; with max_parallel 1 nothing new starts.
+    worked(d.pass(None).unwrap());
+    let fetched = d.ops.count("refresh_main");
+    d.pass(None).unwrap();
+    assert_eq!(d.ops.count("refresh_main"), fetched, "main was looked at just now");
+    d.ops.sleep(s.cfg.poll_secs);
+    d.ops.main_head = Some("main1".into());
+    d.ops.main_changes = vec!["tools/xtask/src/main.rs".into()];
+    d.pass(None).unwrap();
+    assert_eq!(d.ops.count("refresh_main"), fetched + 1);
+    assert!(up.stopping());
+}
+
+#[test]
+fn changed_deploy_files_are_told_once_until_setup_runs() {
+    let mut s = setup("deploy-notice");
+    s.cfg.repo = s.dir.join("repo");
+    s.cfg.deploy_stamp = s.dir.join("deployed.sha256");
+    let deploy = s.cfg.repo.join(update::DEPLOY_DIR);
+    crate::util::write(&deploy.join("poly-role"), "#!/bin/bash\n").unwrap();
+    let up = SelfUpdate::new("main0".into(), s.cfg.poll_secs);
+    let mut w = World::new();
+    w.queue = vec![];
+    w.main_head = Some("main1".into());
+    w.main_changes = vec!["tools/pipeline/deploy/poly-role".into()];
+    let mut d = s.driver_with(w, &up);
+    d.pass(None).unwrap();
+    assert!(!up.stopping(), "deploy files never restart the loop");
+    assert_eq!(d.ops.count("build_self"), 0);
+    assert_eq!(d.ops.notified, ["deploy "]);
+    assert!(d.ops.human.contains("deploy files changed: run sudo ") && d.ops.human.contains("setup.sh"));
+    assert!(d.ops.human.contains("changed: tools/pipeline/deploy/poly-role"), "{}", d.ops.human);
+    let text = super::status_text(&s.cfg, None, &s.store, &[], d.ops.now).unwrap();
+    assert!(text.contains("deploy files changed: run sudo "), "{text}");
+    // Once.
+    d.pass(None).unwrap();
+    assert_eq!(d.ops.notified.len(), 1);
+    // setup.sh ran: nothing in the status, the notice is forgotten.
+    let hash = update::deploy_hash(&deploy).unwrap();
+    crate::util::write(&s.cfg.deploy_stamp, format!("{hash}\n")).unwrap();
+    d.pass(None).unwrap();
+    assert!(!update::notice_file(&s.store.dir).exists());
+    let text = super::status_text(&s.cfg, None, &s.store, &[], d.ops.now).unwrap();
+    assert!(!text.contains("deploy files"), "{text}");
+    // Changed again: told again.
+    crate::util::write(&deploy.join("poly-role"), "#!/bin/bash\nexit 2\n").unwrap();
+    d.pass(None).unwrap();
+    assert_eq!(d.ops.notified.len(), 2);
+}
+
+#[test]
+fn a_usage_limit_does_not_shorten_a_pause_from_the_owner() {
+    let s = setup("limit-owner-pause");
+    let mut w = World::new();
+    w.impl_runs = [Run::Limit("usage limit reached".into())].into();
+    let mut d = s.driver(w);
+    // Up to the implementer's session (its role paused for a moment).
+    s.store.set_pause("implementer", &Pause { until: T0 + 10, reason: "test".into() }).unwrap();
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Paused("implementer", T0 + 10));
+    d.ops.sleep(20);
+    // `loop pause --role implementer --for 1d` while the session runs,
+    // which then hits a usage limit: the owner's longer pause stays.
+    let pause = Pause { until: T0 + 86_400, reason: "holiday".into() };
+    d.ops.write_during_run = Some((s.dir.join("pause-implementer.json"), serde_json::to_string(&pause).unwrap()));
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Paused("implementer", T0 + 86_400));
+    assert_eq!(d.ops.count("implementer_run"), 1);
+    assert_eq!(s.store.pause("implementer").unwrap(), Some(pause));
+    assert_eq!(s.step(BRK), Step::Implement);
+}
+
+/// `loop pause` and `loop resume` write and remove the pause files the cycle reads.
+#[test]
+fn pause_and_resume_from_the_command_line() {
+    let s = setup("pause-cli");
+    let config = s.dir.join("pipeline.toml");
+    crate::util::write(&config, format!("[paths]\nstate_dir = \"{}\"\n", s.dir.display())).unwrap();
+    let args = |v: &[&str]| -> crate::util::Args {
+        let mut all: Vec<String> = v.iter().map(|x| x.to_string()).collect();
+        all.extend(["--config".to_string(), config.display().to_string()]);
+        crate::util::Args::parse(&all, &[]).unwrap()
+    };
+    let out =
+        super::pause(&args(&["pause", "--role", "spec", "--for", "4h", "--reason", "new spec template"]), T0).unwrap();
+    assert!(out.starts_with("spec role paused until 2026-10-20 04:00:00 UTC: new spec template\n"), "{out}");
+    assert_eq!(
+        s.store.pause("spec").unwrap(),
+        Some(Pause { until: T0 + 4 * 3600, reason: "new spec template".into() })
+    );
+    assert_eq!(s.store.pause("implementer").unwrap(), None);
+    assert_eq!(s.store.paused_until("spec", T0 + 3600).unwrap(), Some(T0 + 4 * 3600));
+
+    // No --role: both; no --for: until `loop resume`.
+    let out = super::pause(&args(&["pause"]), T0).unwrap();
+    assert!(out.contains("implementer role paused until `loop resume`: paused with `loop pause`"), "{out}");
+    assert_eq!(s.store.paused_until("implementer", T0 + 365 * 86_400).unwrap(), Some(super::state::FOREVER));
+    let text = super::status_text(&s.cfg, None, &s.store, &[], T0).unwrap();
+    assert!(text.contains("spec role: paused until `loop resume`: paused with `loop pause`"), "{text}");
+
+    // The cycle honours it: brk waits before its spec session.
+    let mut d = s.driver(World::new());
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Paused("spec", super::state::FOREVER));
+    assert_eq!(d.ops.count("spec_run"), 0);
+
+    let out = super::resume(&args(&["resume", "--role", "spec"]), T0).unwrap();
+    assert!(out.starts_with("spec role resumed (it was paused until `loop resume`"), "{out}");
+    assert_eq!(s.store.pause("spec").unwrap(), None);
+    assert!(s.store.pause("implementer").unwrap().is_some());
+    let out = super::resume(&args(&["resume"]), T0).unwrap();
+    assert!(out.contains("spec role was not paused\nimplementer role resumed"), "{out}");
+    assert_eq!(s.store.pause("implementer").unwrap(), None);
+    let text = super::status_text(&s.cfg, None, &s.store, &[], T0).unwrap();
+    assert!(text.contains("spec role: ready\nimplementer role: ready"), "{text}");
+
+    for bad in [
+        &["pause", "--role", "runner"][..],
+        &["pause", "--for", "4"],
+        &["pause", "--for", "soon"],
+        &["resume", "--role", "both"],
+        &["pause", "extra"],
+    ] {
+        let a = args(bad);
+        let r = if bad[0] == "pause" { super::pause(&a, T0) } else { super::resume(&a, T0) };
+        assert!(r.is_err(), "{bad:?} was accepted");
+    }
+    // Unknown options are refused by the command itself.
+    let all: Vec<String> = ["pause", "--until", "x"].iter().map(|x| x.to_string()).collect();
+    assert!(super::command(&crate::repo_root(), &all).unwrap_err().contains("unknown option --until"));
+}
+
+/// The sudoers rule setup.sh writes, as a snapshot: the role wrapper as
+/// the role users, and four exact systemctl commands as root.
+#[test]
+fn the_sudoers_rule_is_narrow() {
+    use std::process::Command;
+    if crate::util::which("bash").is_none() {
+        eprintln!("skipped: no bash");
+        return;
+    }
+    let script = crate::util::read_string(&crate::repo_root().join("tools/pipeline/deploy/setup.sh")).unwrap();
+    let start = script.find("\nsudoers_text() {").expect("setup.sh defines sudoers_text") + 1;
+    let end = start + script[start..].find("\n}\n").unwrap() + 3;
+    let function = &script[start..end];
+    let render = |status: &str| {
+        let o = Command::new("bash")
+            .arg("-c")
+            .arg(format!("set -euo pipefail\n{function}sudoers_text"))
+            .env("RUNNER_USER", "server")
+            .env("SPEC_USER", "polyspec")
+            .env("IMPL_USER", "polyimpl")
+            .env("POLY", "/srv/poly")
+            .env("SYSTEMCTL", "/usr/bin/systemctl")
+            .env("UNIT_NAME", "poly-pipeline")
+            .env("SYSTEMCTL_STATUS", status)
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        String::from_utf8(o.stdout).unwrap()
+    };
+    let text = render("1");
+    assert_eq!(
+        text,
+        "# Written by tools/pipeline/deploy/setup.sh. The pipeline loop (server)
+# may run the role wrapper, and nothing else, as the two role users. sudo
+# resets the environment; the wrapper checks every argument.
+server ALL=(polyspec) NOPASSWD: /srv/poly/bin/poly-role spec *
+server ALL=(polyimpl) NOPASSWD: /srv/poly/bin/poly-role implementer *
+# Service control as root, these exact commands only (docs/AGENT_PIPELINE.md,
+# \"Updates and service control\").
+Cmnd_Alias POLY_PIPELINE_SERVICE = /usr/bin/systemctl start poly-pipeline, \\
+    /usr/bin/systemctl stop poly-pipeline, \\
+    /usr/bin/systemctl restart poly-pipeline, \\
+    /usr/bin/systemctl status poly-pipeline
+server ALL=(root) NOPASSWD: POLY_PIPELINE_SERVICE
+"
+    );
+    // Old systemd: no `status` (its pager would run as root).
+    let old = render("0");
+    assert!(old.contains("restart poly-pipeline\nserver ALL=(root)") && !old.contains("status"), "{old}");
+    // The unit names the loop's restart status a success.
+    assert!(script.contains("RESTART_EXIT=10\n") && script.contains("SuccessExitStatus=$RESTART_EXIT\n"));
+    assert_eq!(update::RESTART_EXIT, 10);
+    // sudo itself accepts it, where visudo is installed.
+    let visudo = ["visudo", "/usr/sbin/visudo", "/sbin/visudo"]
+        .into_iter()
+        .find(|v| Command::new(v).arg("--version").output().is_ok_and(|o| o.status.success()));
+    match visudo {
+        Some(v) => {
+            for (name, text) in [("new", &text), ("old", &old)] {
+                let f = std::env::temp_dir().join(format!("poly-sudoers-{name}-{}", std::process::id()));
+                crate::util::write(&f, text).unwrap();
+                let o = Command::new(v).args(["-c", "-q", "-f"]).arg(&f).output().unwrap();
+                let _ = std::fs::remove_file(&f);
+                assert!(
+                    o.status.success(),
+                    "visudo: {}{}",
+                    String::from_utf8_lossy(&o.stdout),
+                    String::from_utf8_lossy(&o.stderr)
+                );
+            }
+        }
+        None => eprintln!("visudo check skipped: no visudo"),
+    }
 }

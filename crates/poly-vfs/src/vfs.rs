@@ -8,7 +8,7 @@ use crate::fs::{FileSystem, NewNode, RenameFlags};
 use crate::mount::{Mount, MountFlags, MountId, MountInfo, MountTable};
 use crate::node::{FsContext, Location, NodeRef, is_fs_object};
 use crate::object::AnonFs;
-use crate::path::{Found, Last, PATH_MAX, Parent, Walk, check_path};
+use crate::path::{Found, Last, PATH_MAX, Parent, PathArg, Walk, check_path};
 use crate::sync::SpinMutex;
 use crate::{Attr, DeviceId, Errno, FileType, Ino, PERM_MASK, Result, S_ISGID, S_ISVTX, Stat};
 use alloc::collections::BTreeMap;
@@ -148,8 +148,22 @@ impl Vfs {
     }
 
     fn parent_of(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8]) -> Result<Parent> {
-        check_path(path)?;
-        self.walk(ctx, cred).parent(Self::start(ctx, at), path)
+        self.parent_arg(ctx, cred, PathArg::new(at, path))
+    }
+
+    /// Steps 1 to 3 of the order of path errors (`path.rs`) for everything
+    /// but the last name's own length: the string, the start, every
+    /// directory on the way.
+    fn dirs_of(&self, ctx: &FsContext, cred: &Cred, arg: PathArg<'_>) -> Result<Parent> {
+        let (path, at) = arg.begin()?;
+        self.walk(ctx, cred).dirs(Self::start(ctx, at), path)
+    }
+
+    /// [`dirs_of`](Self::dirs_of) and the last name's length.
+    fn parent_arg(&self, ctx: &FsContext, cred: &Cred, arg: PathArg<'_>) -> Result<Parent> {
+        let p = self.dirs_of(ctx, cred, arg)?;
+        p.check_name()?;
+        Ok(p)
     }
 
     fn resolve(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], follow: bool) -> Result<Location> {
@@ -513,19 +527,38 @@ impl Vfs {
         new: &[u8],
         follow: bool,
     ) -> Result<()> {
-        let src = self.resolve(ctx, cred, old_at, old, follow)?;
-        self.link_location(ctx, cred, src, new_at, new)
+        self.link_paths(ctx, cred, PathArg::new(old_at, old), PathArg::new(new_at, new), follow)
+    }
+
+    /// [`link`](Self::link) with each path's errors in their place
+    /// (linkat's `path_order_two_paths`): `old` is resolved completely
+    /// first (its string, start and every component, the last one
+    /// included), so any error of it wins over every error of `new`; then
+    /// `new` (string, start, components); then the new name's own errors
+    /// (`EEXIST`, ...).
+    pub fn link_paths(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        old: PathArg<'_>,
+        new: PathArg<'_>,
+        follow: bool,
+    ) -> Result<()> {
+        let (path, at) = old.begin()?;
+        let src = self.walk(ctx, cred).resolve(Self::start(ctx, at), path, follow)?;
+        self.link_location(ctx, cred, src, new)
     }
 
     /// `linkat(2)` with `AT_EMPTY_PATH`: a new name `new` for the file
     /// `src` (an open file's node), which may be an `O_TMPFILE` file that
-    /// has no name yet; another file without names is `ENOENT`.
-    pub fn link_node(&self, ctx: &FsContext, cred: &Cred, src: &NodeRef, new_at: At<'_>, new: &[u8]) -> Result<()> {
-        self.link_location(ctx, cred, src.loc().clone(), new_at, new)
+    /// has no name yet; another file without names is `ENOENT`. `new`'s
+    /// errors come after whatever the caller found out about `src`.
+    pub fn link_node(&self, ctx: &FsContext, cred: &Cred, src: &NodeRef, new: PathArg<'_>) -> Result<()> {
+        self.link_location(ctx, cred, src.loc().clone(), new)
     }
 
-    fn link_location(&self, ctx: &FsContext, cred: &Cred, src: Location, new_at: At<'_>, new: &[u8]) -> Result<()> {
-        let p = self.parent_of(ctx, cred, new_at, new)?;
+    fn link_location(&self, ctx: &FsContext, cred: &Cred, src: Location, new: PathArg<'_>) -> Result<()> {
+        let p = self.parent_arg(ctx, cred, new)?;
         let name = self.new_name(&p)?;
         if p.trailing_slash {
             return Err(Errno::ENOENT);
@@ -601,18 +634,39 @@ impl Vfs {
         new: &[u8],
         flags: RenameFlags,
     ) -> Result<()> {
+        self.rename_paths(ctx, cred, PathArg::new(old_at, old), PathArg::new(new_at, new), flags)
+    }
+
+    /// [`rename`](Self::rename) with each path's errors in their place
+    /// (renameat2's `path_order_two_paths`): the directories first, the
+    /// last names after them. (1) `old`'s string, start and every component
+    /// but the last; (2) the same for `new`; (3) `old`'s last name (over
+    /// [`NAME_MAX`](crate::NAME_MAX) bytes `ENAMETOOLONG`, missing
+    /// `ENOENT`); (4) `new`'s last name (`ENAMETOOLONG`); then the errors of
+    /// the rename itself (`EXDEV`, `EISDIR`, ...). A last component that is
+    /// `/`, `.` or `..` on either side is `EBUSY`, before (3).
+    pub fn rename_paths(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        old: PathArg<'_>,
+        new: PathArg<'_>,
+        flags: RenameFlags,
+    ) -> Result<()> {
         if flags.noreplace && flags.exchange {
             return Err(Errno::EINVAL);
         }
-        let op = self.parent_of(ctx, cred, old_at, old)?;
-        let np = self.parent_of(ctx, cred, new_at, new)?;
+        let op = self.dirs_of(ctx, cred, old)?;
+        let np = self.dirs_of(ctx, cred, new)?;
         let (Last::Name(old_name), Last::Name(new_name)) = (&op.last, &np.last) else {
             return Err(Errno::EBUSY);
         };
+        op.check_name()?;
+        let src = self.raw_child(&op.dir, old_name)?;
+        np.check_name()?;
         if !Arc::ptr_eq(&op.dir.mount, &np.dir.mount) {
             return Err(Errno::EXDEV);
         }
-        let src = self.raw_child(&op.dir, old_name)?;
         let sattr = src.attr()?;
         let dst = match self.raw_child(&np.dir, new_name) {
             Ok(d) => Some(d),
