@@ -197,8 +197,30 @@ fn write_addr(k: &mut dyn LinuxKernel, ptr: UserPtr, len_ptr: UserPtr, addr: &So
 /// bind(fd, addr, addrlen)
 pub fn bind(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
-    let addr = read_addr(k, a.ptr(1), a.int(2))?;
+    let mut addr = read_addr(k, a.ptr(1), a.int(2))?;
+    if addr == SockAddr::Unspec {
+        addr = unspec_bind(k, fd, a.ptr(1), a.int(2))?;
+    }
     net(k)?.bind(fd, &addr).map(|()| 0)
+}
+
+/// bind's spec sheet: `AF_UNSPEC` with `INADDR_ANY` is accepted on an
+/// `AF_INET` socket (as that address with the given port); any other
+/// address is `EAFNOSUPPORT`. Other sockets get the address as it is.
+fn unspec_bind(k: &mut dyn LinuxKernel, fd: i32, ptr: UserPtr, len: i32) -> Result<SockAddr, Errno> {
+    if net(k)?.getsockopt(fd, OptName::Domain)? != OptValue::Int(i32::from(abi::AF_INET)) {
+        return Ok(SockAddr::Unspec);
+    }
+    if (len as usize) < abi::SOCKADDR_IN_SIZE {
+        return Err(Errno::EINVAL);
+    }
+    let mut b = [0u8; abi::SOCKADDR_IN_SIZE];
+    k.copy_from_user(ptr, &mut b)?;
+    if b[4..8] != [0; 4] {
+        return Err(Errno::EAFNOSUPPORT);
+    }
+    let port = u16::from_be_bytes([b[2], b[3]]);
+    Ok(SockAddr::Inet(core::net::SocketAddrV4::new(core::net::Ipv4Addr::UNSPECIFIED, port)))
 }
 
 /// listen(fd, backlog): a backlog above `SOMAXCONN` is capped (listen(2));
@@ -593,6 +615,7 @@ pub fn recvfrom(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (got, ret) = recv_data(k, fd, &iov, len, a.uint(3), 0)?;
     if a.ptr(4).0 != 0 {
         match &got.from {
+            Some(SockAddr::Unix(abi::UnixAddr::Unnamed)) => k.copy_to_user(a.ptr(5), &0u32.to_le_bytes())?,
             Some(from) => write_addr(k, a.ptr(4), a.ptr(5), from)?,
             // No address from this protocol: length 0.
             None => k.copy_to_user(a.ptr(5), &0u32.to_le_bytes())?,
@@ -648,6 +671,9 @@ fn recvmsg_one(k: &mut dyn LinuxKernel, fd: i32, msg_ptr: UserPtr, flags: u32) -
     k.copy_to_user(UserPtr(msg_ptr.0 + MsgHdr::CONTROLLEN_OFFSET), &(control.len() as u64).to_le_bytes())?;
     k.copy_to_user(UserPtr(msg_ptr.0 + MsgHdr::FLAGS_OFFSET), &out_flags.to_le_bytes())?;
     let namelen = match (&got.from, m.name) {
+        // An unnamed sender (a socketpair peer) gives namelen 0 (recvmsg's
+        // spec sheet).
+        (Some(SockAddr::Unix(abi::UnixAddr::Unnamed)), _) => 0,
         (Some(from), name) if name != 0 => {
             let bytes = from.encode();
             let n = bytes.len().min(m.namelen as usize);

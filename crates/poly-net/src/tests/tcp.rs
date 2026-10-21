@@ -671,3 +671,29 @@ fn small_sends_to_a_local_peer_arrive_within_the_same_instant() {
     let got = s.a.recv_from(srv, &mut buf, crate::RecvFlags { peek: false }).unwrap();
     assert_eq!(&buf[..got.len], b"abcdef");
 }
+
+#[test]
+fn so_reuseport_shares_a_port_when_both_set_it() {
+    let mut s = Sim::new(23);
+    let any = |port| SocketAddr::new(core::net::Ipv4Addr::LOCALHOST.into(), port);
+    let a = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    let b = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    let c = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    s.a.set_reuse_port(a, true).unwrap();
+    s.a.set_reuse_port(b, true).unwrap();
+    s.a.bind(a, any(7779)).unwrap();
+    assert_eq!(s.a.bind(c, any(7779)), Err(Errno::EADDRINUSE), "c did not set it");
+    assert_eq!(s.a.bind(b, any(7779)), Ok(()));
+}
+
+#[test]
+fn shutting_a_listener_down_for_reading_stops_it() {
+    let mut s = Sim::new(24);
+    let l = s.a.socket(Domain::Inet, SockType::Stream, None).unwrap();
+    s.a.bind(l, SocketAddr::new(core::net::Ipv4Addr::LOCALHOST.into(), 7780)).unwrap();
+    s.a.listen(l, 4).unwrap();
+    assert_eq!(s.a.shutdown(l, Shutdown::Write), Ok(()));
+    assert_eq!(s.a.accept(l).err(), Some(Errno::EAGAIN), "still listening");
+    assert_eq!(s.a.shutdown(l, Shutdown::Read), Ok(()));
+    assert_eq!(s.a.accept(l).err(), Some(Errno::EINVAL));
+}

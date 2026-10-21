@@ -741,6 +741,10 @@ fn inet_setsockopt(s: &InetSocket, opt: SockOpt) -> Result<(), Errno> {
     let secs = |v: u32| Duration::from_secs(u64::from(v));
     match opt {
         SockOpt::ReuseAddr(v) => s.with(|st, h| st.set_reuse_addr(h, v)).map_err(nerr)?,
+        SockOpt::ReusePort(v) => {
+            s.with(|st, h| st.set_reuse_port(h, v)).map_err(nerr)?;
+            s.update(|st| st.options.reuse_port = v);
+        }
         SockOpt::KeepAlive(v) => {
             // The stack acts on it for TCP; every socket reads it back
             // (setsockopt's visible test: a UDP socket too).
