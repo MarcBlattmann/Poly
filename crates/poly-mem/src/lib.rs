@@ -17,7 +17,7 @@ mod stack_area;
 
 pub use buddy::{BuddyAllocator, FreeError, MAX_ORDER, MetadataTooSmall, RangeError};
 pub use direct_map::DirectMap;
-pub use stack_area::StackArea;
+pub use stack_area::{STACK_PAINT, StackArea, untouched_words};
 
 pub const PAGE_SIZE: u64 = 4096;
 

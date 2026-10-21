@@ -273,20 +273,22 @@ impl Store {
     /// A lock just released can look held for a moment: a child process
     /// another thread is starting holds a copy of every descriptor between
     /// its fork and its exec, and the `flock` lasts until the last copy is
-    /// closed. So "held" is believed only after a few short retries.
+    /// closed. So "held" is believed only after retrying for a second: on
+    /// a loaded host the window between a fork and its exec can last much
+    /// longer than a few milliseconds.
     pub fn try_lock(&self, name: &str) -> Result<Option<Lock>> {
         let (f, path) = self.lock_file(name)?;
-        for attempt in 0..5 {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        loop {
             match f.try_lock() {
                 Ok(()) => return Ok(Some(Lock { _file: f })),
-                Err(TryLockError::WouldBlock) if attempt < 4 => {
+                Err(TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
                     std::thread::sleep(std::time::Duration::from_millis(20))
                 }
                 Err(TryLockError::WouldBlock) => return Ok(None),
                 Err(TryLockError::Error(e)) => return Err(format!("{}: {e}", path.display())),
             }
         }
-        Ok(None)
     }
 
     /// Wait for the lock `name`.

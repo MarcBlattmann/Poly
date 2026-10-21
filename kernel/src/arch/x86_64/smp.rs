@@ -288,6 +288,7 @@ fn start_one(base: u64, index: usize, p: &Processor) -> Result<(), &'static str>
     let (_, stack_top) =
         crate::thread::prepare_cpu(index).map_err(|_| "no thread slot or stack for its idle thread")?;
     let area = percpu::register(index, Box::leak(Box::new(PerCpu::new())), p.apic_id);
+    super::irqstack::set_up(index, area)?;
     let setup = &AP_SETUP[index];
     setup.tables.store(Box::leak(Box::new(CpuTables::new())), Ordering::Release);
     setup.double_fault_end.store(ist_stack()?, Ordering::Release);
