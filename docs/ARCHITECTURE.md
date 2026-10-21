@@ -1446,8 +1446,9 @@ smp: 4 of 4 CPUs online (0-3)
   and left out.
 - **Per-CPU data** (`arch/x86_64/percpu.rs`): one `PerCpu` per CPU, its
   address in GS base in the kernel: at fixed offsets the `syscall` kernel
-  stack (`gs:[0]`), a user-RSP scratch slot (`gs:[8]`) and a pointer to
-  itself (`gs:[16]`); then the CPU number and APIC ID, the current thread,
+  stack (`gs:[0]`), a user-RSP scratch slot (`gs:[8]`), a pointer to
+  itself (`gs:[16]`) and the top of its interrupt stack (`gs:[24]`); then
+  the work an interrupt left for its way out, the CPU number and APIC ID, the current thread,
   the spinlock count, interrupt nesting, the tick count, the FPU owner, the
   loaded address space and its PCID table, the CPU's TSS. `percpu::this()`
   reads it. Entries from ring 3 `swapgs`; NMI, double fault and machine

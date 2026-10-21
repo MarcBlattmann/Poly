@@ -530,10 +530,13 @@ deep it was ever used can be read off it. Two kernel flags help:
   interrupt stack's:
 
   ```text
-  stacks: deepest thread stack use 11920 of 16384 bytes (thread 'user')
+  stacks: deepest thread stack use 12480 of 16384 bytes (thread 'user', started in 0xffffffff802ac2c0)
   stacks: CPU 0's interrupt stack: deepest use 1344 of 16384 bytes
   stacks: interrupts nested on an interrupt stack: 0
   ```
+
+  The address is the thread's function: `cargo xtask symbolize <addr>`
+  names it.
 
 - `poly.debug.thread_stack_kib=<n>` maps only the top `n` KiB of every
   thread stack (the rest becomes guard), so a path that goes deeper than

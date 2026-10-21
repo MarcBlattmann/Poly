@@ -289,7 +289,7 @@ impl Deepest {
     fn note(&mut self, t: &Threads, slot: usize, used: u64) {
         // The test's spinner goes deep on purpose; it is not what the record
         // is to show.
-        if used > self.bytes && t.entries[slot] != deep_spinner as usize {
+        if used > self.bytes && t.entries[slot] != deep_spinner as *const () as usize {
             *self = Deepest { bytes: used, name: t.names[slot], entry: t.entries[slot] };
         }
     }

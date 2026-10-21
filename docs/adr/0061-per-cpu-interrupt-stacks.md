@@ -11,8 +11,9 @@ the interrupt stacks) and [0053](0053-smp-per-cpu-data-scheduling-and-tlb-shootd
 
 Under heavy host load the `dyn-threads` boot test (a dynamically linked
 pthreads program as `poly.init`) once ended in a kernel stack overflow in
-the timer tick. With a load harness (40 boots at a time next to busy loops)
-it came back in about 1 boot in 15, always the same way:
+the timer tick. With a load harness (8 boots at a time next to 3 busy
+loops, on a 4-CPU host already at a load of about 7) it came back in 4 of
+60 boots, always the same way:
 
 ```text
 CPU exception 8 (double fault), rip ...on_timer_tick+0x2d, rsp 0xffffc0800003bc90, cr2 0xffffc0800003bc88
@@ -36,7 +37,7 @@ that stack), so every thread stack had to hold its deepest system call
 (`opt-level = 1`, the CI configuration):
 
 - `clone3` of a thread went 15,792 of the 16,384 bytes deep by itself
-  (measured by painting the stacks, below): `clone3` had a page-sized
+  (measured by painting the stacks, below), leaving 592 bytes: `clone3` had a page-sized
   buffer on its frame for a rarely used check (4.5 KiB frame),
   `clone_task` kept both the thread and the process branch's locals in
   one 6.6 KiB frame, and `LinuxState::add_thread` built a whole
@@ -104,11 +105,13 @@ interrupt stack into the interrupted one (`poly_backtrace::FrameWalker`
 moves between known stacks, at most twice per walk), and an overflow of
 an interrupt stack is reported as such.
 
-The stacks stay 16 KiB: with the frames above trimmed, the deepest thread
-stack use in the boot tests is RESULT, and the worst an interrupt adds is
-INTERRUPT bytes (`INTERRUPT_STACK_BUDGET`, 1 KiB, is checked by a kernel
-test). Raising the size would have hidden the next large frame instead of
-showing it.
+The stacks stay 16 KiB. With the frames above trimmed, `dyn-threads` goes
+5,048 bytes deep (was 15,792), the deepest path of the boot tests is now a
+`fork` at 12,480 bytes, and an interrupt adds 632 bytes at most (measured;
+`INTERRUPT_STACK_BUDGET`, 1 KiB, is checked by a kernel test). The
+interrupt stacks themselves stay under 3 KiB. Raising the size would have
+hidden the next large frame instead of showing it; the measurement now
+shows it.
 
 ## Consequences
 
@@ -117,7 +120,10 @@ showing it.
   `thread::interrupts_take_little_of_the_interrupted_threads_stack`
   checks that deterministically (a thread spinning with just over 1 KiB
   left is preempted, resumed and switched to while threads are reaped,
-  over and over; before this change it ran into its guard).
+  over and over; before this change it ran into its guard, in
+  `on_timer_tick`, on the first preemption).
+- The loaded harness: 0 overflows in 150 boots of `dyn-threads` (was 4 in
+  60).
 - Each CPU uses 16 KiB more memory; the area has room for 64 CPUs, the
   per-CPU table for 16.
 - `thread::preempt_tick` and `on_reschedule` are no longer called by the
