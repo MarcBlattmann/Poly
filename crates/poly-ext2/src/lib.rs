@@ -102,6 +102,7 @@ pub mod layout;
 mod ops;
 mod sync;
 mod vfs;
+mod xattr;
 
 pub use crc::{crc16, crc32c};
 pub use format::{FormatOptions, JournalOptions, format};
