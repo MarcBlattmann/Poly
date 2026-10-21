@@ -33,6 +33,9 @@
 //!   (on `poly-registry`, ADR 0066).
 //! - [`exception`]: CPU exceptions and `NtRaiseException` delivered to the
 //!   process's user-mode dispatcher, `NtContinue` (on `poly-seh`, ADR 0068).
+//! - [`layout`], [`params`]: the Windows file system layout on `C:`, the
+//!   registry values that follow it, and a new process's environment and
+//!   process parameters (ADR 0073).
 
 #![no_std]
 
@@ -47,8 +50,10 @@ pub mod exec;
 pub mod image;
 pub mod io;
 pub mod kernel;
+pub mod layout;
 pub mod memory;
 pub mod objects;
+pub mod params;
 pub mod pe_writer;
 pub mod protect;
 pub mod registry;
