@@ -1,4 +1,4 @@
-# 0079: A test program runs as the reference's user on both sides, with umask 022 in `/`; tests that need root say so
+# 0081: A test program runs as the reference's user on both sides, with umask 022 in `/`; tests that need root say so
 
 **Status:** Accepted. Amends the test-run protocol of
 [ADR 0027](0027-agent-pipeline-tools-and-test-run-protocol.md) and the test

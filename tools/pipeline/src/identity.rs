@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 /// The umask every test program starts with, on the reference and on Poly.
 pub const REFERENCE_UMASK: u32 = 0o022;
 
-/// Kernel arguments of the test-run protocol (ADR 0027, ADR 0079) that set
+/// Kernel arguments of the test-run protocol (ADR 0027, ADR 0081) that set
 /// the program's credentials and umask: `poly.test.uid=R[,E,S]`,
 /// `poly.test.gid=R[,E,S]`, `poly.test.groups=G1,G2,...`,
 /// `poly.test.umask=OCTAL`.

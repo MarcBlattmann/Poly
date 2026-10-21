@@ -20,7 +20,7 @@
 //! those files hold is the run's output, as on Linux.
 //!
 //! The program runs as the identity the diff runner's reference ran it as
-//! (ADR 0079): `poly.test.uid=R[,E,S]`, `poly.test.gid=R[,E,S]`,
+//! (ADR 0081): `poly.test.uid=R[,E,S]`, `poly.test.gid=R[,E,S]`,
 //! `poly.test.groups=G1,G2,...` and `poly.test.umask=OCTAL` give its
 //! credentials (what root makes of itself with setgroups, setresgid and
 //! setresuid: `Creds::login`, so a user other than root has no

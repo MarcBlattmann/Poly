@@ -198,7 +198,7 @@ still compared exactly, and a directive never strengthens the mode the
 run was given.
 
 **The same environment on both sides**
-([ADR 0079](adr/0079-test-runs-as-the-reference-user.md);
+([ADR 0081](adr/0081-test-runs-as-the-reference-user.md);
 `tools/pipeline/src/identity.rs`). A test program starts with an empty
 environment, only fds 0-2 open, in `/`, with umask 022, whatever the
 tool's caller had (the loop's systemd unit has `UMask=0027`), and as the

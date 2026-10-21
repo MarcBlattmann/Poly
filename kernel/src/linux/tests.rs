@@ -475,7 +475,7 @@ kernel_test! {
 }
 
 kernel_test! {
-    /// The test init's identity (ADR 0079): the kernel arguments as the
+    /// The test init's identity (ADR 0081): the kernel arguments as the
     /// diff runner writes them become a user's credentials without
     /// capabilities and the umask, given to a program before it runs,
     /// which then runs as that user to its end; bad arguments are refused.
