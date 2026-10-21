@@ -76,6 +76,17 @@ pub const KEY_READ: AccessMask = 0x0002_0019;
 pub const KEY_WRITE: AccessMask = 0x0002_0006;
 pub const KEY_EXECUTE: AccessMask = 0x0002_0019;
 
+// Access-token rights (`winnt.h`; ADR 0083). `TOKEN_READ` is
+// `STANDARD_RIGHTS_READ | TOKEN_QUERY`, `TOKEN_WRITE` is
+// `STANDARD_RIGHTS_WRITE` with the three adjust rights, `TOKEN_EXECUTE` is
+// `STANDARD_RIGHTS_EXECUTE`.
+pub const TOKEN_QUERY: AccessMask = 0x0008;
+pub const TOKEN_QUERY_SOURCE: AccessMask = 0x0010;
+pub const TOKEN_ALL_ACCESS: AccessMask = STANDARD_RIGHTS_REQUIRED | 0x1FF;
+pub const TOKEN_READ: AccessMask = 0x0002_0008;
+pub const TOKEN_WRITE: AccessMask = 0x0002_00E0;
+pub const TOKEN_EXECUTE: AccessMask = 0x0002_0000;
+
 // Process-specific rights (`winnt.h`).
 pub const PROCESS_TERMINATE: AccessMask = 0x0001;
 pub const PROCESS_CREATE_THREAD: AccessMask = 0x0002;

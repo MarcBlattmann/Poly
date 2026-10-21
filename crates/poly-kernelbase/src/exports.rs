@@ -168,14 +168,78 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetConsoleWindow", "api-ms-win-core-console-l3-2-0"),
     ("SetConsoleTitleW", "api-ms-win-core-console-l2-1-0"),
     ("GetConsoleTitleW", "api-ms-win-core-console-l2-1-0"),
+    // ----- the second slice (ADR 0079).
+    // Processes (processthreadsapi.h).
+    ("CreateProcessW", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetExitCodeProcess", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetProcessId", "api-ms-win-core-processthreads-l1-1-0"),
+    // Thread-local storage (processthreadsapi.h) and fiber-local storage
+    // (fibersapi.h).
+    ("TlsAlloc", "api-ms-win-core-processthreads-l1-1-0"),
+    ("TlsFree", "api-ms-win-core-processthreads-l1-1-0"),
+    ("TlsGetValue", "api-ms-win-core-processthreads-l1-1-0"),
+    ("TlsSetValue", "api-ms-win-core-processthreads-l1-1-0"),
+    ("FlsAlloc", "api-ms-win-core-fibers-l1-1-0"),
+    ("FlsFree", "api-ms-win-core-fibers-l1-1-0"),
+    ("FlsGetValue", "api-ms-win-core-fibers-l1-1-0"),
+    ("FlsSetValue", "api-ms-win-core-fibers-l1-1-0"),
+    // Code pages and strings (stringapiset.h, winnls.h).
+    ("MultiByteToWideChar", "api-ms-win-core-string-l1-1-0"),
+    ("WideCharToMultiByte", "api-ms-win-core-string-l1-1-0"),
+    ("CompareStringOrdinal", "api-ms-win-core-string-l1-1-0"),
+    ("GetACP", "api-ms-win-core-localization-l1-2-0"),
+    ("GetOEMCP", "api-ms-win-core-localization-l1-2-0"),
+    ("GetCPInfo", "api-ms-win-core-localization-l1-2-0"),
+    ("IsValidCodePage", "api-ms-win-core-localization-l1-2-0"),
+    // File mappings (memoryapi.h).
+    ("CreateFileMappingW", "api-ms-win-core-memory-l1-1-0"),
+    ("OpenFileMappingW", "api-ms-win-core-memory-l1-1-0"),
+    ("MapViewOfFile", "api-ms-win-core-memory-l1-1-0"),
+    ("MapViewOfFileEx", "api-ms-win-core-memory-l1-1-0"),
+    ("UnmapViewOfFile", "api-ms-win-core-memory-l1-1-0"),
+    ("FlushViewOfFile", "api-ms-win-core-memory-l1-1-0"),
+    // Condition variables and one-time initialisation (synchapi.h).
+    ("InitializeConditionVariable", "api-ms-win-core-synch-l1-2-0"),
+    ("SleepConditionVariableCS", "api-ms-win-core-synch-l1-2-0"),
+    ("SleepConditionVariableSRW", "api-ms-win-core-synch-l1-2-0"),
+    ("WakeConditionVariable", "api-ms-win-core-synch-l1-2-0"),
+    ("WakeAllConditionVariable", "api-ms-win-core-synch-l1-2-0"),
+    ("InitOnceInitialize", "api-ms-win-core-synch-l1-2-0"),
+    ("InitOnceExecuteOnce", "api-ms-win-core-synch-l1-2-0"),
+    ("InitOnceBeginInitialize", "api-ms-win-core-synch-l1-2-0"),
+    ("InitOnceComplete", "api-ms-win-core-synch-l1-2-0"),
+    // File information and times (fileapi.h, timezoneapi.h, sysinfoapi.h).
+    ("GetFileInformationByHandle", "api-ms-win-core-file-l1-1-0"),
+    ("GetFileTime", "api-ms-win-core-file-l1-1-0"),
+    ("SetFileTime", "api-ms-win-core-file-l1-1-0"),
+    ("CompareFileTime", "api-ms-win-core-file-l1-1-0"),
+    ("FileTimeToLocalFileTime", "api-ms-win-core-file-l1-1-0"),
+    ("LocalFileTimeToFileTime", "api-ms-win-core-file-l1-1-0"),
+    ("FileTimeToSystemTime", "api-ms-win-core-timezone-l1-1-0"),
+    ("SystemTimeToFileTime", "api-ms-win-core-timezone-l1-1-0"),
+    ("GetSystemTime", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetLocalTime", "api-ms-win-core-sysinfo-l1-1-0"),
 ];
 
-/// The functions `kernel32.dll` implements itself.
-pub const KERNEL32_OWN: &[&str] = &["GlobalAlloc", "GlobalFree", "GlobalSize", "GlobalLock", "GlobalUnlock"];
+/// The functions `kernel32.dll` implements itself: the global-memory
+/// functions and (second slice) the `lstr*` string functions, whose Learn
+/// pages name no API set.
+pub const KERNEL32_OWN: &[&str] = &[
+    "GlobalAlloc",
+    "GlobalFree",
+    "GlobalSize",
+    "GlobalLock",
+    "GlobalUnlock",
+    "lstrlenW",
+    "lstrlenA",
+    "lstrcmpW",
+    "lstrcmpiW",
+];
 
-/// Every function `kernelbase.dll` must export: each forwarded one.
+/// Every function `kernelbase.dll` must export: each one `kernel32` or
+/// `advapi32` forwards ([`crate::advapi`], ADR 0083).
 pub fn kernelbase_exports() -> impl Iterator<Item = &'static str> {
-    KERNEL32_FORWARDS.iter().map(|&(name, _)| name)
+    KERNEL32_FORWARDS.iter().chain(crate::advapi::ADVAPI32_FORWARDS).map(|&(name, _)| name)
 }
 
 /// The forwarder string of `kernel32!name`, as the export directory holds

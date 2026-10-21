@@ -16,6 +16,7 @@ poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
 poly-console = { path = "../../../../crates/poly-console" }
 poly-rtl = { path = "../../../../crates/poly-rtl" }
 poly-ntobj = { path = "../../../../crates/poly-ntobj" }
+poly-security = { path = "../../../../crates/poly-security" }
 
 [lints]
 workspace = true

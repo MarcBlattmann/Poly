@@ -312,9 +312,76 @@ pub fn rename_information(replace: bool, nt_target: &[u16]) -> Vec<u8> {
     b
 }
 
+/// `BY_HANDLE_FILE_INFORMATION` (`fileapi.h`, 52 bytes): `dwFileAttributes`
+/// 0, `ftCreationTime` 4, `ftLastAccessTime` 12, `ftLastWriteTime` 20,
+/// `dwVolumeSerialNumber` 28, `nFileSizeHigh` 32, `nFileSizeLow` 36,
+/// `nNumberOfLinks` 40, `nFileIndexHigh` 44, `nFileIndexLow` 48.
+pub const BY_HANDLE_FILE_INFORMATION_SIZE: usize = 52;
+
+/// `GetFileInformationByHandle` from `FILE_BASIC_INFORMATION` (`wdm.h`:
+/// the four times at 0, 8, 16, 24, `FileAttributes` at 32),
+/// `FILE_STANDARD_INFORMATION` (`EndOfFile` at 8, `NumberOfLinks` at 16),
+/// `FILE_INTERNAL_INFORMATION`'s `IndexNumber` and the volume's serial
+/// number (`FILE_FS_VOLUME_INFORMATION`).
+pub fn by_handle_information(
+    basic: &[u8; 40],
+    standard: &[u8; 24],
+    index: u64,
+    serial: u32,
+) -> [u8; BY_HANDLE_FILE_INFORMATION_SIZE] {
+    let mut out = [0u8; BY_HANDLE_FILE_INFORMATION_SIZE];
+    out[0..4].copy_from_slice(&basic[32..36]);
+    out[4..12].copy_from_slice(&basic[0..8]);
+    out[12..20].copy_from_slice(&basic[8..16]);
+    out[20..28].copy_from_slice(&basic[16..24]);
+    out[28..32].copy_from_slice(&serial.to_le_bytes());
+    out[32..36].copy_from_slice(&standard[12..16]);
+    out[36..40].copy_from_slice(&standard[8..12]);
+    out[40..44].copy_from_slice(&standard[16..20]);
+    out[44..48].copy_from_slice(&((index >> 32) as u32).to_le_bytes());
+    out[48..52].copy_from_slice(&(index as u32).to_le_bytes());
+    out
+}
+
+/// `SetFileTime`'s `FILE_BASIC_INFORMATION`: Learn: a null time pointer
+/// leaves that time alone, which the basic information says with 0; the
+/// change time and attributes are left alone too (0).
+pub fn set_times(creation: Option<u64>, access: Option<u64>, write: Option<u64>) -> [u8; 40] {
+    let mut b = [0u8; 40];
+    for (at, t) in [(0, creation), (8, access), (16, write)] {
+        b[at..at + 8].copy_from_slice(&t.unwrap_or(0).to_le_bytes());
+    }
+    b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn by_handle_information_layout() {
+        let mut basic = [0u8; 40];
+        for (i, t) in [1u64, 2, 3, 4].iter().enumerate() {
+            basic[i * 8..i * 8 + 8].copy_from_slice(&t.to_le_bytes());
+        }
+        basic[32..36].copy_from_slice(&0x20u32.to_le_bytes());
+        let mut standard = [0u8; 24];
+        standard[8..16].copy_from_slice(&0x1_0000_0005u64.to_le_bytes());
+        standard[16..20].copy_from_slice(&1u32.to_le_bytes());
+        let b = by_handle_information(&basic, &standard, 0x7_0000_0009, 0xABCD);
+        let d = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap());
+        let q = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
+        assert_eq!(d(0), 0x20);
+        assert_eq!((q(4), q(12), q(20)), (1, 2, 3));
+        assert_eq!(d(28), 0xABCD);
+        assert_eq!((d(32), d(36)), (1, 5));
+        assert_eq!(d(40), 1);
+        assert_eq!((d(44), d(48)), (7, 9));
+        let s = set_times(None, Some(5), None);
+        assert_eq!(&s[0..8], &[0; 8]);
+        assert_eq!(u64::from_le_bytes(s[8..16].try_into().unwrap()), 5);
+        assert_eq!(&s[16..40], &[0; 24]);
+    }
 
     #[test]
     fn dispositions_map() {
