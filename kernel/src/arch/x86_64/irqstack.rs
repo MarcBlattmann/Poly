@@ -156,3 +156,79 @@ unsafe extern "sysv64" fn call_on_stack(arg: *mut u8, f: usize, top: u64) {
     // heads the frame record `f`'s own frame links to.
     naked_asm!("push rbp", "mov rbp, rsp", "mov rsp, rdx", "call rsi", "mov rsp, rbp", "pop rbp", "ret")
 }
+
+// --- Tests ------------------------------------------------------------------
+
+use crate::kernel_test;
+use core::sync::atomic::Ordering::SeqCst;
+
+/// What the test handler saw: 0 nothing yet, 1 on the interrupt stack, 2
+/// elsewhere.
+static SEEN: AtomicU64 = AtomicU64::new(0);
+/// Its backtrace: frames walked, and bit 63 if the walk reached the bottom
+/// of the interrupted stack.
+static WALKED: AtomicU64 = AtomicU64::new(0);
+
+fn note_stack(_: usize) {
+    SEEN.store(if on_it() { 1 } else { 2 }, SeqCst);
+    let mut frames = 0u64;
+    let end = backtrace::walk_from_here(|_, _| frames += 1);
+    WALKED.store(frames | u64::from(end == poly_backtrace::End::Bottom) << 63, SeqCst);
+}
+
+kernel_test! {
+    fn interrupt_handlers_run_on_the_interrupt_stack() -> TestResult {
+        SEEN.store(0, SeqCst);
+        WALKED.store(0, SeqCst);
+        let v = super::irq::allocate_vector(note_stack, 0).ok_or("no free vector")?;
+        let sent = super::irq::send_self_ipi(v);
+        let start = crate::time::now_ns();
+        while sent && SEEN.load(SeqCst) == 0 && crate::time::now_ns() - start < crate::time::NANOS_PER_SEC {
+            core::hint::spin_loop();
+        }
+        super::irq::free_vector(v);
+        match SEEN.load(SeqCst) {
+            1 => {}
+            0 => return Err("the self-IPI did not arrive"),
+            _ => return Err("an interrupt handler ran on the interrupted stack"),
+        }
+        // The handler's backtrace goes on from the interrupt stack into the
+        // interrupted one, down to its bottom: past this test's frame.
+        let walked = WALKED.load(SeqCst);
+        if walked >> 63 == 0 || walked & !(1 << 63) < 4 {
+            return Err("a backtrace from a handler does not reach the bottom of the interrupted stack");
+        }
+        // Code run on the interrupt stack is there, also run_on inside
+        // run_on; back here, it is not.
+        let mut inside = (false, false);
+        {
+            let _irq = cpu::InterruptsOff::new();
+            run_on(|| {
+                inside.0 = on_it();
+                run_on(|| inside.1 = on_it());
+            });
+        }
+        if inside != (true, true) || on_it() {
+            return Err("run_on did not run its closure on the interrupt stack");
+        }
+        Ok(())
+    }
+}
+
+kernel_test! {
+    fn interrupt_stacks_have_room_to_spare() -> TestResult {
+        // Every CPU has one, and none was used more than half (whatever ran
+        // on them so far: this boot's interrupts and reaping).
+        for cpu in super::smp::online_cpus().iter() {
+            let used = used(cpu).ok_or("an online CPU has no interrupt stack")?;
+            crate::kprintln!("irq: CPU {cpu}'s interrupt stack: deepest use so far {used} of {SIZE} bytes");
+            if used == 0 || used > SIZE / 2 {
+                return Err("an interrupt stack was never used, or more than half of it");
+            }
+        }
+        if nested() != 0 {
+            return Err("an interrupt arrived on an interrupt stack (interrupts were enabled there)");
+        }
+        Ok(())
+    }
+}

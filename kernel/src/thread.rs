@@ -66,12 +66,22 @@
 //! # Preemption and sleeping
 //!
 //! Each CPU's timer interrupt calls [`on_timer_tick`] on every tick
-//! (`TICK_HZ`): it wakes the threads whose [`sleep`] has ended and the wait
-//! queues of timed waits ([`WaitQueue::wait_until_deadline`]) whose deadline
-//! has passed (one CPU does that per due deadline), then [`preempt_tick`]
-//! switches threads once that CPU's running one has used up its time slice
-//! and the CPU has another to run, its own or one it takes from a busier
-//! CPU.
+//! (`TICK_HZ`), on the CPU's interrupt stack: it wakes the threads whose
+//! [`sleep`] has ended and the wait queues of timed waits
+//! ([`WaitQueue::wait_until_deadline`]) whose deadline has passed (one CPU
+//! does that per due deadline). The interrupt's way out, back on the
+//! thread's stack, then calls [`preempt_tick`], which switches threads once
+//! that CPU's running one has used up its time slice and the CPU has
+//! another to run, its own or one it takes from a busier CPU (ADR 0061).
+//!
+//! # Stack depth
+//!
+//! Stacks are painted when allocated; the reaper records how deep each was
+//! used ([`deepest_stack`], `poly.debug.stack_report`), and
+//! `poly.debug.thread_stack_kib=<n>` maps only the top `n` KiB of each, so
+//! deep paths overflow (and are reported with a backtrace) sooner. An
+//! interrupt takes at most [`INTERRUPT_STACK_BUDGET`] of the interrupted
+//! thread's stack.
 
 use crate::arch::{self, backtrace, context, cpu, cpu::InterruptsOff, percpu};
 use crate::frames::FRAMES;
@@ -241,9 +251,13 @@ pub fn report_stacks() {
         return;
     }
     match deepest_stack() {
-        Some((bytes, name)) => {
-            crate::kprintln!("stacks: deepest thread stack use {bytes} of {} bytes (thread '{name}')", stack_limit())
-        }
+        Some(d) => crate::kprintln!(
+            "stacks: deepest thread stack use {} of {} bytes (thread '{}', started in {:#x})",
+            d.bytes,
+            stack_limit(),
+            d.name,
+            d.entry
+        ),
         None => crate::kprintln!("stacks: the thread table is locked"),
     }
     for cpu in 0..arch::percpu::count() {
@@ -257,19 +271,47 @@ pub fn report_stacks() {
     crate::kprintln!("stacks: interrupts nested on an interrupt stack: {}", arch::irqstack::nested());
 }
 
+/// The deepest use of a thread stack, and whose it was.
+#[derive(Clone, Copy, Debug)]
+pub struct Deepest {
+    pub bytes: u64,
+    pub name: &'static str,
+    /// The thread's function (`cargo xtask symbolize` names it; 0 for the
+    /// idle threads).
+    pub entry: usize,
+}
+
+impl Deepest {
+    const NONE: Deepest = Deepest { bytes: 0, name: "", entry: 0 };
+
+    /// Keep slot `slot`'s thread if its stack went `used` bytes deep, more
+    /// than the record.
+    fn note(&mut self, t: &Threads, slot: usize, used: u64) {
+        // The test's spinner goes deep on purpose; it is not what the record
+        // is to show.
+        if used > self.bytes && t.entries[slot] != deep_spinner as usize {
+            *self = Deepest { bytes: used, name: t.names[slot], entry: t.entries[slot] };
+        }
+    }
+}
+
 /// The deepest any thread stack was ever used so far (the threads
-/// running now included) and the thread's name; `None` if the thread
-/// table is locked.
-pub fn deepest_stack() -> Option<(u64, &'static str)> {
+/// running now included); `None` if the thread table is locked.
+pub fn deepest_stack() -> Option<Deepest> {
     let _irq = InterruptsOff::new();
-    let t = THREADS.try_lock()?;
+    // Other CPUs take the lock all the time, but one stopped by a panic
+    // may hold it for good: try for a while only.
+    let t = (0..1_000_000).find_map(|_| {
+        let t = THREADS.try_lock();
+        if t.is_none() {
+            core::hint::spin_loop();
+        }
+        t
+    })?;
     let mut deepest = t.deepest;
     for (slot, stack) in t.stacks.iter().enumerate() {
         if let Some(stack) = stack {
-            let used = stack.used();
-            if used > deepest.0 {
-                deepest = (used, t.names[slot]);
-            }
+            deepest.note(&t, slot, stack.used());
         }
     }
     Some(deepest)
@@ -287,8 +329,10 @@ struct Threads {
     user: [Option<Box<UserThread>>; MAX_THREADS],
     /// Each slot's thread's name, for `ps` (empty: none).
     names: [&'static str; MAX_THREADS],
-    /// The deepest a reaped thread's stack was used, and its name.
-    deepest: (u64, &'static str),
+    /// Each slot's thread function, for [`Deepest`].
+    entries: [usize; MAX_THREADS],
+    /// The deepest a reaped thread's stack was used.
+    deepest: Deepest,
     ready: bool,
 }
 
@@ -314,7 +358,8 @@ static THREADS: SpinLock<Threads> = SpinLock::new(Threads {
         names[ThreadId::IDLE.slot()] = "idle";
         names
     },
-    deepest: (0, ""),
+    entries: [0; MAX_THREADS],
+    deepest: Deepest::NONE,
     ready: false,
 });
 
@@ -393,6 +438,7 @@ pub fn prepare_cpu(cpu: usize) -> Result<(ThreadId, u64), SpawnError> {
     let stack = stack.map(&mut t, id.slot());
     t.stacks[id.slot()] = Some(stack);
     t.names[id.slot()] = IDLE_NAMES.get(cpu).copied().unwrap_or("idle");
+    t.entries[id.slot()] = 0;
     crate::cputime::started(id.slot(), None);
     crate::cputime::running(id.slot());
     Ok((id, stack.top()))
@@ -459,7 +505,12 @@ fn spawn_with(
     let _irq = InterruptsOff::new();
     // On the interrupt stack, as in `finish_switch`: threads are spawned
     // deep inside system calls (`clone`).
-    arch::irqstack::run_on(|| bury(reap(&mut THREADS.lock())));
+    arch::irqstack::run_on(|| {
+        // The table's guard must be gone before `bury` (a temporary in the
+        // same expression would live on through it).
+        let dead = reap(&mut THREADS.lock());
+        bury(dead);
+    });
     let mut t = THREADS.lock();
     assert!(t.ready, "thread::spawn before thread::init");
     let id = match t.sched.spawn(this_cpu(), cpus) {
@@ -483,6 +534,7 @@ fn spawn_with(
 /// its slot of [`STACKS`], and set it up to start in `f(arg)`.
 fn install(t: &mut Threads, id: ThreadId, stack: StackFrames, f: ThreadFn, arg: usize, user: Option<Box<UserThread>>) {
     let stack = stack.map(t, id.slot());
+    t.entries[id.slot()] = f as usize;
     // SAFETY: the stack was just allocated for this thread and is mapped;
     // `thread_start` has the signature `prepare` asks for.
     let rsp = unsafe { context::prepare(stack.top(), thread_start as *const () as usize, f as usize, arg) };
@@ -634,10 +686,9 @@ fn reap(t: &mut Threads) -> Graveyard {
             // frame allocator is busy (its holder was switched away, or is
             // another CPU), the stack is freed on a later switch or spawn.
             let Some(mut frames) = FRAMES.try_lock() else { break };
-            let used = stack.used();
-            if used > t.deepest.0 {
-                t.deepest = (used, t.names[id.slot()]);
-            }
+            let mut deepest = t.deepest;
+            deepest.note(t, id.slot(), stack.used());
+            t.deepest = deepest;
             backtrace::unregister_thread_stack(id.slot());
             let stack = stack.unmap(t);
             let alloc = frames.as_mut().expect("stacks come from the frame allocator");
@@ -1637,4 +1688,124 @@ kernel_test! {
 #[inline(never)]
 fn panic_in_thread(_: usize) -> usize {
     panic!("panic requested by poly.selftest.thread_panic");
+}
+
+/// The most of a thread's stack one interrupt may take, below wherever the
+/// thread was: the trap frame and the way out, which may switch threads
+/// (ADR 0061). The handler itself, and the clean-up after a switch, run on
+/// the CPU's interrupt stack.
+pub const INTERRUPT_STACK_BUDGET: u64 = 1024;
+
+/// Bytes of thread `id`'s stack ever used (see [`deepest_stack`]).
+pub fn stack_used_by(id: ThreadId) -> Option<u64> {
+    let _irq = InterruptsOff::new();
+    let t = THREADS.lock();
+    t.sched.state(id)?;
+    t.stacks[id.slot()].map(|s| s.used())
+}
+
+static DEEP_RSP: AtomicU64 = AtomicU64::new(0);
+static DEEP_SPINS: AtomicUsize = AtomicUsize::new(0);
+static DEEP_TURNS: AtomicUsize = AtomicUsize::new(0);
+static DEEP_STOP: AtomicBool = AtomicBool::new(false);
+
+/// Go down the stack a few hundred bytes at a time until at most a little
+/// more than `room` bytes are left above `bottom`, then spin there with
+/// interrupts on, calling nothing, until told to stop: whatever lands
+/// below that point meanwhile is the interrupts' doing.
+#[inline(never)]
+fn descend(room: u64, bottom: u64) {
+    let pad = [0u8; 256];
+    core::hint::black_box(&pad);
+    let rsp: u64;
+    // SAFETY: reads the stack pointer, nothing else.
+    unsafe { core::arch::asm!("mov {}, rsp", out(reg) rsp, options(nomem, nostack, preserves_flags)) };
+    if rsp - bottom > room + 320 {
+        descend(room, bottom);
+        // Used after the call, so the call cannot become a jump.
+        core::hint::black_box(&pad);
+        return;
+    }
+    DEEP_RSP.store(rsp, SeqCst);
+    while !DEEP_STOP.load(SeqCst) {
+        DEEP_SPINS.fetch_add(1, SeqCst);
+    }
+}
+
+/// Spins (see [`descend`]) with only [`INTERRUPT_STACK_BUDGET`] bytes and a
+/// little more of its stack left.
+fn deep_spinner(_: usize) -> usize {
+    let top = STACKS.stack(current().slot()).expect("a thread's slot has a stack").end;
+    descend(INTERRUPT_STACK_BUDGET, top - stack_limit());
+    0
+}
+
+/// Does nothing: something to reap.
+fn short_lived(_: usize) -> usize {
+    0
+}
+
+/// Takes turns with the deep spinner, counting the turns it saw it take
+/// (it gives up the CPU only when the tick preempts it), and leaves
+/// exited threads to reap, some of them on the switch back into it.
+fn churner(_: usize) -> usize {
+    let mut last = DEEP_SPINS.load(SeqCst);
+    while !DEEP_STOP.load(SeqCst) {
+        let now = DEEP_SPINS.load(SeqCst);
+        if now != last {
+            DEEP_TURNS.fetch_add(1, SeqCst);
+            last = now;
+        }
+        if let Ok(t) = spawn_here(short_lived, 0) {
+            let _ = detach(t);
+        }
+        yield_now();
+    }
+    0
+}
+
+kernel_test! {
+    /// The overflow ADR 0061 is about: a thread deep in its stack (as deep
+    /// as the clone path went) is interrupted by the tick, preempted,
+    /// resumed and switched to while exited threads are reaped, over and
+    /// over. With the handlers on the thread's stack this ran into the guard.
+    fn interrupts_take_little_of_the_interrupted_threads_stack() -> TestResult {
+        let _pin = pin_current();
+        DEEP_STOP.store(false, SeqCst);
+        DEEP_SPINS.store(0, SeqCst);
+        DEEP_TURNS.store(0, SeqCst);
+        DEEP_RSP.store(0, SeqCst);
+        let here = CpuSet::one(this_cpu());
+        let deep = spawn_on("deep-spinner", deep_spinner, 0, here).map_err(|_| "spawn failed")?;
+        let churn = match spawn_here(churner, 0) {
+            Ok(t) => t,
+            Err(_) => {
+                DEEP_STOP.store(true, SeqCst);
+                let _ = join(deep);
+                return Err("spawn failed");
+            }
+        };
+        // Each of the spinner's turns after the first ended in a preemption.
+        let preempted = wait_until(60, || DEEP_TURNS.load(SeqCst) >= 8);
+        let used = stack_used_by(deep);
+        DEEP_STOP.store(true, SeqCst);
+        let joined = join(deep).is_ok() && join(churn).is_ok();
+        if !preempted || !joined {
+            return Err("the deep spinner was not preempted again and again, or did not end");
+        }
+        let used = used.ok_or("no stack for the deep spinner")?;
+        let top = STACKS.stack(deep.slot()).ok_or("no stack slot")?.end;
+        let rsp = DEEP_RSP.load(SeqCst);
+        let room = rsp - (top - stack_limit());
+        let cost = rsp.saturating_sub(top - used);
+        crate::kprintln!(
+            "thread: interrupts took {cost} bytes of a preempted thread's stack (budget {INTERRUPT_STACK_BUDGET}, \
+             {room} left), over {} preemptions",
+            DEEP_TURNS.load(SeqCst)
+        );
+        if cost > INTERRUPT_STACK_BUDGET {
+            return Err("an interrupt takes more of the interrupted thread's stack than its budget");
+        }
+        Ok(())
+    }
 }

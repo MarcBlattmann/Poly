@@ -511,6 +511,44 @@ kernel stack overflow in thread overflow (slot 8): hit the guard below its stack
 `poly.selftest.stack_overflow` and `poly.selftest.thread_stack_overflow`
 provoke the two on purpose (the boot tests do).
 
+Interrupt handlers run on their CPU's own interrupt stack (16 KiB at
+`0xffff_c080_0020_0000` + 32 KiB per CPU, ADR 0061), so an overflow there
+reads `kernel stack overflow on CPU <n>'s interrupt stack`, and a backtrace
+taken in a handler goes on from the interrupt stack into the interrupted
+thread's stack (`irq_common+0x..` marks the step). An interrupt costs the
+interrupted thread only its trap frame and the way out (at most 1 KiB,
+`thread::INTERRUPT_STACK_BUDGET`): a thread-stack overflow with an
+interrupt on top is a system call path that is too deep by itself.
+
+### How deep do the stacks go?
+
+Every thread and interrupt stack is painted when it is allocated, so how
+deep it was ever used can be read off it. Two kernel flags help:
+
+- `poly.debug.stack_report` prints, as a test run ends (`poly.qemu_exit`,
+  also after a panic), the deepest thread stack use so far and each
+  interrupt stack's:
+
+  ```text
+  stacks: deepest thread stack use 11920 of 16384 bytes (thread 'user')
+  stacks: CPU 0's interrupt stack: deepest use 1344 of 16384 bytes
+  stacks: interrupts nested on an interrupt stack: 0
+  ```
+
+- `poly.debug.thread_stack_kib=<n>` maps only the top `n` KiB of every
+  thread stack (the rest becomes guard), so a path that goes deeper than
+  that overflows with a full backtrace of its deepest point instead of
+  passing silently. Bisect `n` to find the deepest path of a boot.
+
+To catch a rare overflow, boot the failing configuration many times in
+parallel next to a few busy loops (see "In-kernel tests" above): a tick
+that lands in the few microseconds a system call is at its deepest is what
+makes it rare. For a frame that is too large, `objdump -d` the function and
+look at the `sub $0x...,%rsp` (and the stack probe, `movq $0x0,(%rsp)`,
+for frames over a page) in its prologue; large values passed or built by
+value (`[u8; 4096]` buffers, big structs moved around at `opt-level = 1`)
+are the usual cause.
+
 Symbols come from the ELF that was built last, so symbolise before you rebuild.
 For file and line numbers, use `addr2line -f -C -i -e
 kernel/target/x86_64-unknown-none/debug/poly-kernel <addr>` (for frames after

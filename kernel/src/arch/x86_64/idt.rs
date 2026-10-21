@@ -1,11 +1,14 @@
 //! Interrupt descriptor table and CPU exception handling.
 //!
 //! Every vector enters through a small assembly stub that pushes a uniform
-//! [`TrapFrame`] and calls [`trap_dispatch`]: vectors 0-31 are CPU
-//! exceptions, handled here; 32-255 are external interrupts, IPIs and the
-//! local APIC's own (timer, error, spurious), handed to [`super::irq`]. The
-//! `syscall` entry (`syscall.rs`) builds the same frame, and every return
-//! goes through the same exit, `trap_return`.
+//! [`TrapFrame`]: vectors 0-31 are CPU exceptions, handled here by
+//! [`trap_dispatch`] on the interrupted stack; 32-255 are external
+//! interrupts, IPIs and the local APIC's own (timer, error, spurious),
+//! whose handlers ([`super::irq`]) run on the CPU's interrupt stack
+//! (`irq_common`, [`irq_entry`], `irqstack.rs`), followed by the way out
+//! back on the interrupted stack ([`irq_exit`]), where threads are
+//! switched (ADR 0061). The `syscall` entry (`syscall.rs`) builds the same
+//! frame, and every return goes through the same exit, `trap_return`.
 //!
 //! All 256 entries are interrupt gates, so the CPU clears RFLAGS.IF on entry
 //! and handlers never nest. Every gate has DPL 0, so user mode cannot raise
@@ -14,16 +17,19 @@
 //! running thread's kernel stack. Only three vectors use an IST stack: the
 //! double fault (it may come from a kernel stack overflow), and the NMI and
 //! machine check, which cannot be masked and may arrive while `syscall` is
-//! still on the user's stack. Every other handler, the timer above all, may
-//! switch threads, which needs the trap frame on the thread's own stack.
+//! still on the user's stack. Every other entry may switch threads (the
+//! timer's above all), which needs the trap frame on the thread's own
+//! stack: interrupts switch to the interrupt stack by hand, after pushing
+//! it, and back before switching threads.
 //!
 //! # Entry and exit
 //!
-//! `isr_common` executes `swapgs` when the saved CS is a ring-3 selector, so
-//! GS base points at the per-CPU area in the kernel (`syscall.rs`), clears
-//! RFLAGS.AC when SMAP is on (an interrupted user copy gets it back with its
-//! RFLAGS), and starts the kernel's frame-pointer chain at 0 when it came
-//! from ring 3 (a user RBP means nothing to the backtrace). `trap_return`
+//! `isr_common` and `irq_common` execute `swapgs` when the saved CS is a
+//! ring-3 selector, so GS base points at the per-CPU area in the kernel
+//! (`syscall.rs`), clear RFLAGS.AC when SMAP is on (an interrupted user
+//! copy gets it back with its RFLAGS), and start the kernel's frame-pointer
+//! chain at 0 when they came from ring 3 (a user RBP means nothing to the
+//! backtrace). `trap_return`
 //! pops the frame and swaps GS back when returning to ring 3.
 //!
 //! # Exceptions

@@ -1256,6 +1256,8 @@ mapping early in `kernel_entry`:
 | `0x0` – `0x7fff_ffff_ffff` | – | user half: empty in the kernel PML4 (the boot identity map is gone); each user address space has its own (below) |
 | `0xffff_8000_0000_0000` + phys | every region of the memory map, up to 64 TiB | direct map: RW, NX; RAM write-back, reserved ranges uncached; holes unmapped |
 | `0xffff_c000_0000_0000` – `+512 GiB` | device ranges | `mm::map_mmio`: uncached (PCD+PWT), NX, a gap page after each; PCI ECAM windows and BARs. `mm::map_mmio_wc`: write-combining (PWT alone, PAT entry 1), for the framebuffer |
+| `0xffff_c080_0000_0000` – `+2 MiB` | each thread's stack (buddy block) | thread stacks: slot `i` (32 KiB) holds table slot `i`'s 16 KiB stack above a 16 KiB unmapped guard; RW, NX |
+| `0xffff_c080_0020_0000` – `+2 MiB` | each CPU's interrupt stack | interrupt stacks: CPU `i`'s 16 KiB stack at the top of slot `i` (32 KiB), above an unmapped guard; RW, NX (ADR 0061) |
 | `0xffff_ffff_8000_0000` + phys | kernel image | `.text` R+X, `.rodata`/`.kernel_tests` R, `.data`/`.bss` RW+NX, stacks RW+NX |
 
 Kernel image detail (`kernel/linker.ld`, every boundary page-aligned):
@@ -1368,6 +1370,20 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   for IPIs, 0xfe APIC error, 0xff APIC spurious (never an
   EOI). Every vector has an interrupt-gate stub in `idt.rs` pushing the same
   `TrapFrame`; `arch::irq::dispatch` handles 32-255.
+- **Interrupt stacks** ([ADR 0061](adr/0061-per-cpu-interrupt-stacks.md),
+  `arch/x86_64/irqstack.rs`): each CPU has a 16 KiB interrupt stack above a
+  16 KiB unmapped guard, in its own area after the thread stacks
+  (`paging::INTERRUPT_STACKS_BASE`), its top at `gs:[24]`. Vectors 32-255
+  enter through `irq_common`: the trap frame stays where the CPU pushed it
+  (the thread's stack), the handler runs on the interrupt stack
+  (`irq_entry`), and the way out runs back on the thread's stack
+  (`irq_exit` → `irq::run_deferred`): the tick's preemption and the
+  reschedule IPI's switch, which the handlers only note, then signals on
+  a return to ring 3. An interrupt thus takes at most
+  `thread::INTERRUPT_STACK_BUDGET` (1 KiB) of the interrupted thread's
+  stack. Exceptions stay on the interrupted stack (a page fault may
+  block). `irqstack::run_on(f)` runs `f` on the interrupt stack with
+  interrupts off; the scheduler's reaping uses it.
 - **Drivers:** `arch::irq::allocate_vector(handler, data)` claims a device
   vector (lock-free; `free_vector` releases it); the handler runs as
   `handler(data)` with interrupts off, before the EOI. Point a device at the
@@ -1538,9 +1554,11 @@ every CPU, round robin per CPU, preempted by each CPU's timer. See
 - **Exit.** An exiting thread is still on its stack, so the next thread
   frees it (`finish_switch` after every switch). The table slot is freed
   once the thread is also joined or detached. Its user state is dropped
-  there too, in whatever thread switched (maybe inside the tick's
-  handler, maybe holding sleeping locks): drop code that would sleep or
-  take a lock that does not mask interrupts checks `thread::reaping()`
+  there too, in whatever thread switched (maybe on the way out of the
+  tick, maybe holding sleeping locks), but on the CPU's interrupt stack
+  (`irqstack::run_on`), not the stack of the thread switched to: drop
+  code that would sleep or take a lock that does not mask interrupts
+  checks `thread::reaping()`
   and defers that part (a `user::Memory` hands its files and page-cache
   pages to the writeback thread, `fs::cache::release_later`).
 - **Interrupts and locking.** All scheduler state for all CPUs is behind
@@ -1554,14 +1572,22 @@ every CPU, round robin per CPU, preempted by each CPU's timer. See
   returns into it; new threads start with interrupts enabled. `switch`
   panics if the thread holds a spinlock or is inside an interrupt handler.
 - **Preemption.** Each CPU's tick handler counts the tick, sends the EOI
-  and calls `thread::on_timer_tick()`: it wakes sleepers whose deadline
-  has passed (the earliest deadline is kept in an atomic, so most ticks do
-  nothing there; a CPU claims a due deadline with a compare-and-exchange,
-  so one CPU wakes it) and calls `preempt_tick()`, which switches once the
-  CPU's running thread has used its 10-tick slice and the CPU has another
-  to run, its own or one it takes from a busier CPU. This runs on the
-  interrupted thread's own stack (no IST), since the handler's frames stay
-  there while the thread is switched out.
+  and calls `thread::on_timer_tick()`, on the interrupt stack: it wakes
+  sleepers whose deadline has passed (the earliest deadline is kept in an
+  atomic, so most ticks do nothing there; a CPU claims a due deadline with
+  a compare-and-exchange, so one CPU wakes it). The way out of the
+  interrupt then calls `preempt_tick()` on the interrupted thread's own
+  stack (the trap frame stays there while the thread is switched out),
+  which switches once the CPU's running thread has used its 10-tick slice
+  and the CPU has another to run, its own or one it takes from a busier
+  CPU (ADR 0061).
+- **Stack depth.** Thread and interrupt stacks are painted when allocated
+  (`poly_mem::STACK_PAINT`), so `mm::stack_used` tells how deep one was
+  ever used; the reaper records the deepest thread stack.
+  `poly.debug.stack_report` prints it and each interrupt stack's at the
+  end of a test run, and `poly.debug.thread_stack_kib=<n>` maps only the
+  top `n` KiB of each thread stack, so deep paths overflow sooner (see
+  DEBUGGING.md).
 
 ## User mode and system calls
 

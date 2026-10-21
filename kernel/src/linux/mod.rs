@@ -97,7 +97,7 @@ impl LinuxState {
         let parent = p.thread_ids().next();
         match parent {
             Some(parent) => p.add_thread(parent, tid, true),
-            None => *p = LinuxProcess::new(tid),
+            None => first_thread(&mut *p, tid),
         }
     }
 
@@ -120,6 +120,16 @@ impl LinuxState {
     pub fn with<R>(&self, f: impl FnOnce(&mut LinuxProcess) -> R) -> R {
         f(&mut self.process.lock())
     }
+}
+
+/// A process's first thread: its personality state starts afresh. Out of
+/// line because a `LinuxProcess` is large: built in [`LinuxState::add_thread`]
+/// it took that frame to almost 3 KiB on every `clone` of a thread, the
+/// deepest path a kernel stack has (ADR 0061).
+#[cold]
+#[inline(never)]
+fn first_thread(p: &mut LinuxProcess, tid: i32) {
+    *p = LinuxProcess::new(tid);
 }
 
 /// What the thread does after the personality acted on its signals.
