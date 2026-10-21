@@ -1,8 +1,9 @@
 # Configuration of the agent pipeline loop (`cargo xtask pipeline loop`).
 #
 # Looked up in this order: --config FILE, $POLY_PIPELINE_CONFIG,
-# /etc/poly-pipeline.toml, ~/.config/poly/pipeline.toml. setup.sh installs
-# this file as /srv/poly/runner/pipeline.toml and the systemd unit points
+# /etc/poly-pipeline.toml, /srv/poly/runner/pipeline.toml,
+# ~/.config/poly/pipeline.toml. setup.sh installs this file as
+# /srv/poly/runner/pipeline.toml and the systemd unit points
 # POLY_PIPELINE_CONFIG at it. Every key is optional; the values below are
 # the defaults except where a comment says otherwise. Unknown keys are
 # errors. See docs/AGENT_PIPELINE.md and ADR 0056.
@@ -22,7 +23,9 @@ entries = []              # only ids starting with one of these, e.g. ["linux/sy
 exclude = []              # never ids starting with one of these
 idle_secs = 900           # nothing to do: look again after this long
 limit_pause_secs = 1800   # a usage limit without a reset time in the message: pause this long
-poll_secs = 600           # how often to look at a PR waiting for its merge
+poll_secs = 600           # how often to look at a PR waiting for its merge (and at main, for updates)
+self_update = true        # main changed tools/pipeline/, tools/xtask/, Cargo.lock or rust-toolchain.toml:
+                          # build the new code, let the steps in progress end, exit 10; systemd restarts it
 
 [paths]
 repo = "/srv/poly/runner/repo"         # the runner's checkout of main (user `server`)
@@ -34,6 +37,7 @@ spec_inbox = "/srv/poly/spec-inbox"    # feedback for the spec agent (the implem
 state_dir = "/srv/poly/runner/state"   # per-entry state files, locks, pauses, command logs
 log_file = "/srv/poly/runner/log/pipeline.log"   # "" for stdout (journald) only
 human_queue = "/srv/poly/runner/human-queue.md"
+deploy_stamp = "/srv/poly/bin/deployed.sha256"   # written by setup.sh: what it installed last
 
 [git]
 remote = "origin"         # GitHub, where PRs are opened

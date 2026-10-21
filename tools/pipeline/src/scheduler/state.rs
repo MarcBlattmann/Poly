@@ -7,7 +7,9 @@
 //! <state>/locks/role-<role>.lock    one agent session per role (one checkout per role)
 //! <state>/locks/slot-<n>.lock       a runner worktree in use
 //! <state>/locks/pick.lock           choosing and creating a new entry
-//! <state>/pause-<role>.json         usage limit: the role waits until then
+//! <state>/pause-<role>.json         usage limit or `loop pause`: the role waits until then
+//! <state>/deploy-notice.json        the deploy files the owner was told to install (update.rs)
+//! <state>/self-update.json          the loop's new code did not build (update.rs)
 //! <state>/logs/<key>/...            output of every command the loop ran for the entry
 //! ```
 //!
@@ -228,10 +230,20 @@ pub fn key(entry: &str) -> String {
     entry.replace('/', "__")
 }
 
+/// `<state>/pause-<role>.json`: no new session of the role before `until`
+/// (a usage limit, or `loop pause`; [`FOREVER`] until `loop resume`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Pause {
     pub until: u64,
     pub reason: String,
+}
+
+/// A pause without an end: until `loop resume`.
+pub const FOREVER: u64 = u64::MAX;
+
+/// `until 2026-10-21 18:00:00 UTC`, or `until \`loop resume\``.
+pub fn until_text(until: u64) -> String {
+    if until == FOREVER { "until `loop resume`".into() } else { format!("until {} UTC", util::format_utc(until)) }
 }
 
 /// A held lock; dropping it unlocks.
@@ -349,6 +361,16 @@ impl Store {
             &self.dir.join(format!("pause-{role}.json")),
             &(serde_json::to_string_pretty(pause).map_err(|e| e.to_string())? + "\n"),
         )
+    }
+
+    /// Remove `role`'s pause; whether there was one.
+    pub fn clear_pause(&self, role: &str) -> Result<bool> {
+        let p = self.dir.join(format!("pause-{role}.json"));
+        match std::fs::remove_file(&p) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(format!("{}: {e}", p.display())),
+        }
     }
 
     /// The time `role` may run again, if it is paused at `now`.
