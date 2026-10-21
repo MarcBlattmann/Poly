@@ -64,6 +64,65 @@ pub enum Service {
     SetEvent,
     /// `NtResetEvent(EventHandle, PreviousState*)`.
     ResetEvent,
+    /// `NtPulseEvent(EventHandle, PreviousState*)`.
+    PulseEvent,
+    /// `NtClearEvent(EventHandle)`.
+    ClearEvent,
+    /// `NtQueryEvent(EventHandle, EventInformationClass, EventInformation,
+    /// EventInformationLength, ReturnLength*)`.
+    QueryEvent,
+
+    // ----- dispatcher objects: mutants, semaphores, timers, waits, APCs
+    /// `NtCreateMutant(MutantHandle*, DesiredAccess, ObjectAttributes*,
+    /// InitialOwner)`.
+    CreateMutant,
+    /// `NtOpenMutant(MutantHandle*, DesiredAccess, ObjectAttributes*)`.
+    OpenMutant,
+    /// `NtReleaseMutant(MutantHandle, PreviousCount*)`.
+    ReleaseMutant,
+    /// `NtQueryMutant(MutantHandle, MutantInformationClass,
+    /// MutantInformation, Length, ReturnLength*)`.
+    QueryMutant,
+    /// `NtCreateSemaphore(SemaphoreHandle*, DesiredAccess,
+    /// ObjectAttributes*, InitialCount, MaximumCount)`.
+    CreateSemaphore,
+    /// `NtOpenSemaphore(SemaphoreHandle*, DesiredAccess, ObjectAttributes*)`.
+    OpenSemaphore,
+    /// `NtReleaseSemaphore(SemaphoreHandle, ReleaseCount, PreviousCount*)`.
+    ReleaseSemaphore,
+    /// `NtQuerySemaphore(SemaphoreHandle, SemaphoreInformationClass,
+    /// SemaphoreInformation, Length, ReturnLength*)`.
+    QuerySemaphore,
+    /// `NtCreateTimer(TimerHandle*, DesiredAccess, ObjectAttributes*,
+    /// TimerType)`.
+    CreateTimer,
+    /// `NtOpenTimer(TimerHandle*, DesiredAccess, ObjectAttributes*)`.
+    OpenTimer,
+    /// `NtSetTimer(TimerHandle, DueTime*, TimerApcRoutine, TimerContext,
+    /// ResumeTimer, Period, PreviousState*)`.
+    SetTimer,
+    /// `NtCancelTimer(TimerHandle, CurrentState*)`.
+    CancelTimer,
+    /// `NtQueryTimer(TimerHandle, TimerInformationClass, TimerInformation,
+    /// Length, ReturnLength*)`.
+    QueryTimer,
+    /// `NtWaitForSingleObject(Handle, Alertable, Timeout*)`.
+    WaitForSingleObject,
+    /// `NtWaitForMultipleObjects(Count, Handles[], WaitType, Alertable,
+    /// Timeout*)`.
+    WaitForMultipleObjects,
+    /// `NtSignalAndWaitForSingleObject(SignalHandle, WaitHandle, Alertable,
+    /// Timeout*)`.
+    SignalAndWaitForSingleObject,
+    /// `NtQueueApcThread(ThreadHandle, ApcRoutine, ApcArgument1,
+    /// ApcArgument2, ApcArgument3)`.
+    QueueApcThread,
+    /// `NtTestAlert()`.
+    TestAlert,
+    /// `NtDelayExecution(Alertable, DelayInterval*)`.
+    DelayExecution,
+    /// `NtYieldExecution()`.
+    YieldExecution,
 
     // ----- memory
     /// `NtAllocateVirtualMemory(ProcessHandle, BaseAddress*, ZeroBits,
@@ -98,6 +157,32 @@ pub enum Service {
     // ----- processes and threads
     /// `NtTerminateProcess(ProcessHandle, ExitStatus)`.
     TerminateProcess,
+    /// `NtTerminateThread(ThreadHandle, ExitStatus)`.
+    TerminateThread,
+    /// `NtCreateThreadEx(ThreadHandle*, DesiredAccess, ObjectAttributes*,
+    /// ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits,
+    /// StackSize, MaximumStackSize, AttributeList)`.
+    CreateThreadEx,
+    /// `NtOpenProcess(ProcessHandle*, DesiredAccess, ObjectAttributes*,
+    /// ClientId*)`.
+    OpenProcess,
+    /// `NtOpenThread(ThreadHandle*, DesiredAccess, ObjectAttributes*,
+    /// ClientId*)`.
+    OpenThread,
+    /// `NtQueryInformationProcess(ProcessHandle, ProcessInformationClass,
+    /// ProcessInformation, Length, ReturnLength*)`.
+    QueryInformationProcess,
+    /// `NtQueryInformationThread(ThreadHandle, ThreadInformationClass,
+    /// ThreadInformation, Length, ReturnLength*)`.
+    QueryInformationThread,
+    /// `NtSuspendThread(ThreadHandle, PreviousSuspendCount*)`.
+    SuspendThread,
+    /// `NtResumeThread(ThreadHandle, PreviousSuspendCount*)`.
+    ResumeThread,
+    /// `NtGetContextThread(ThreadHandle, Context*)`.
+    GetContextThread,
+    /// `NtSetContextThread(ThreadHandle, Context*)`.
+    SetContextThread,
 
     // ----- Poly
     /// `PolyTrace(a, b, c)`: logs three values on the kernel log (a test
@@ -112,7 +197,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 24] = [
+pub const SERVICES: [(Service, u32, &str); 57] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -127,6 +212,29 @@ pub const SERVICES: [(Service, u32, &str); 24] = [
     (Service::OpenEvent, 0x00B, "NtOpenEvent"),
     (Service::SetEvent, 0x00C, "NtSetEvent"),
     (Service::ResetEvent, 0x00D, "NtResetEvent"),
+    (Service::PulseEvent, 0x00E, "NtPulseEvent"),
+    (Service::ClearEvent, 0x00F, "NtClearEvent"),
+    (Service::QueryEvent, 0x010, "NtQueryEvent"),
+    (Service::CreateMutant, 0x020, "NtCreateMutant"),
+    (Service::OpenMutant, 0x021, "NtOpenMutant"),
+    (Service::ReleaseMutant, 0x022, "NtReleaseMutant"),
+    (Service::QueryMutant, 0x023, "NtQueryMutant"),
+    (Service::CreateSemaphore, 0x024, "NtCreateSemaphore"),
+    (Service::OpenSemaphore, 0x025, "NtOpenSemaphore"),
+    (Service::ReleaseSemaphore, 0x026, "NtReleaseSemaphore"),
+    (Service::QuerySemaphore, 0x027, "NtQuerySemaphore"),
+    (Service::CreateTimer, 0x028, "NtCreateTimer"),
+    (Service::OpenTimer, 0x029, "NtOpenTimer"),
+    (Service::SetTimer, 0x02A, "NtSetTimer"),
+    (Service::CancelTimer, 0x02B, "NtCancelTimer"),
+    (Service::QueryTimer, 0x02C, "NtQueryTimer"),
+    (Service::WaitForSingleObject, 0x02D, "NtWaitForSingleObject"),
+    (Service::WaitForMultipleObjects, 0x02E, "NtWaitForMultipleObjects"),
+    (Service::SignalAndWaitForSingleObject, 0x02F, "NtSignalAndWaitForSingleObject"),
+    (Service::QueueApcThread, 0x030, "NtQueueApcThread"),
+    (Service::TestAlert, 0x031, "NtTestAlert"),
+    (Service::DelayExecution, 0x032, "NtDelayExecution"),
+    (Service::YieldExecution, 0x033, "NtYieldExecution"),
     (Service::AllocateVirtualMemory, 0x040, "NtAllocateVirtualMemory"),
     (Service::FreeVirtualMemory, 0x041, "NtFreeVirtualMemory"),
     (Service::ProtectVirtualMemory, 0x042, "NtProtectVirtualMemory"),
@@ -136,6 +244,16 @@ pub const SERVICES: [(Service, u32, &str); 24] = [
     (Service::MapViewOfSection, 0x046, "NtMapViewOfSection"),
     (Service::UnmapViewOfSection, 0x047, "NtUnmapViewOfSection"),
     (Service::TerminateProcess, 0x080, "NtTerminateProcess"),
+    (Service::TerminateThread, 0x081, "NtTerminateThread"),
+    (Service::CreateThreadEx, 0x082, "NtCreateThreadEx"),
+    (Service::OpenProcess, 0x083, "NtOpenProcess"),
+    (Service::OpenThread, 0x084, "NtOpenThread"),
+    (Service::QueryInformationProcess, 0x085, "NtQueryInformationProcess"),
+    (Service::QueryInformationThread, 0x086, "NtQueryInformationThread"),
+    (Service::SuspendThread, 0x087, "NtSuspendThread"),
+    (Service::ResumeThread, 0x088, "NtResumeThread"),
+    (Service::GetContextThread, 0x089, "NtGetContextThread"),
+    (Service::SetContextThread, 0x08A, "NtSetContextThread"),
     (Service::PolyTrace, TABLE_POLY << 12, "PolyTrace"),
 ];
 
