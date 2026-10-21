@@ -127,16 +127,25 @@ fn limits() {
     let env = Env::new();
     let mut t = FdTable::with_limit(3);
     for _ in 0..3 {
+        assert_eq!(t.check_free(), Ok(()));
         t.install(file(&env), false).unwrap();
     }
+    assert_eq!(t.check_free(), Err(Errno::EMFILE));
     assert_eq!(t.install(file(&env), false), Err(Errno::EMFILE));
     assert_eq!(t.dup(0), Err(Errno::EMFILE));
     t.set_limit(2);
     // Existing descriptors above the limit stay usable.
     assert!(t.get(2).is_ok());
     t.close(1).unwrap();
+    // A free number below a lowered limit is still handed out.
+    assert_eq!(t.check_free(), Ok(()));
     assert_eq!(t.install(file(&env), false), Ok(1));
+    assert_eq!(t.check_free(), Err(Errno::EMFILE));
     assert_eq!(t.dup_from(0, 2, false), Err(Errno::EINVAL));
+    // A hole at or above the limit does not count.
+    t.close(0).unwrap();
+    t.set_limit(0);
+    assert_eq!(t.check_free(), Err(Errno::EMFILE));
 }
 
 #[test]

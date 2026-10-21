@@ -99,9 +99,15 @@ impl Files {
         if old.is_empty() {
             // AT_EMPTY_PATH (the personality passes an empty path only
             // with it): the file `olddirfd` is open on. linkat(2): it needs
-            // CAP_DAC_READ_SEARCH.
-            if !self.cred().has(poly_vfs::cap::DAC_READ_SEARCH) {
+            // CAP_DAC_READ_SEARCH, except to name an O_TMPFILE file (the
+            // spec of open: an unprivileged caller names its own).
+            let file = if olddirfd == AT_FDCWD { None } else { self.file(olddirfd).ok() };
+            let tmpfile = file.as_ref().is_some_and(|f| f.is_tmpfile());
+            if !tmpfile && !self.cred().has(poly_vfs::cap::DAC_READ_SEARCH) {
                 return Err(Errno::ENOENT);
+            }
+            if let Some(file) = file {
+                return vfs().link_file(&ctx, &self.cred(), &file, path_arg(new, &n));
             }
             let node = self.node_at(olddirfd)?;
             return vfs().link_node(&ctx, &self.cred(), &node, path_arg(new, &n));

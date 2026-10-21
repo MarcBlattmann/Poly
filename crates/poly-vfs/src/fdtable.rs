@@ -87,6 +87,13 @@ impl FdTable {
         self.entry(fd).map(|e| &e.file)
     }
 
+    /// Whether a descriptor below the limit is free (`EMFILE` if not), so
+    /// `open(2)` can fail before it looks at its path or creates anything.
+    pub fn check_free(&self) -> Result<()> {
+        let free = self.slots.iter().position(Option::is_none).unwrap_or(self.slots.len());
+        if free < self.limit { Ok(()) } else { Err(Errno::EMFILE) }
+    }
+
     /// Puts `file` at the lowest free descriptor (`EMFILE` if none is
     /// below the limit).
     pub fn install(&mut self, file: Arc<OpenFile>, cloexec: bool) -> Result<Fd> {

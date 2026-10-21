@@ -162,6 +162,8 @@ pub struct OpenFile {
     offset: SpinMutex<u64>,
     /// How `open` found it, if it did.
     origin: Option<Origin>,
+    /// Made by `O_TMPFILE | O_EXCL`: it may never get a name.
+    never_named: bool,
 }
 
 impl OpenFile {
@@ -177,12 +179,37 @@ impl OpenFile {
             | OpenFlags::NOATIME.0
             | OpenFlags::DIRECTORY.0
             | OpenFlags::NOFOLLOW.0
-            | OpenFlags::PATH.0,
+            | OpenFlags::PATH.0
+            | OpenFlags::TMPFILE.0,
     );
 
     pub(crate) fn new(node: NodeRef, kind: FileType, backend: Backend, flags: OpenFlags) -> OpenFile {
         let flags = flags.intersection(Self::KEPT);
-        OpenFile { node, kind, backend, flags: AtomicU32::new(flags.bits()), offset: SpinMutex::new(0), origin: None }
+        OpenFile {
+            node,
+            kind,
+            backend,
+            flags: AtomicU32::new(flags.bits()),
+            offset: SpinMutex::new(0),
+            origin: None,
+            never_named: false,
+        }
+    }
+
+    /// An `O_TMPFILE | O_EXCL` file: `linkat` may never give it a name.
+    pub(crate) fn unnameable(mut self) -> OpenFile {
+        self.never_named = true;
+        self
+    }
+
+    /// Whether this is an `O_TMPFILE` file (`F_GETFL` reports the flag).
+    pub fn is_tmpfile(&self) -> bool {
+        self.flags().contains(OpenFlags::TMPFILE)
+    }
+
+    /// Whether `linkat` may never name this file (`O_TMPFILE | O_EXCL`).
+    pub fn is_unnameable(&self) -> bool {
+        self.never_named
     }
 
     /// Records how `open` found the file.

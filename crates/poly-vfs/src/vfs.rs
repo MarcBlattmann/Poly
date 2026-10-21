@@ -288,7 +288,12 @@ impl Vfs {
         // the permission to do both (open(2)).
         let neither = flags.intersection(OpenFlags::ACCMODE) == OpenFlags::ACCMODE;
         let write = flags.writable() || neither;
-        if attr.kind == FileType::Directory && (write || flags.contains(OpenFlags::CREAT)) {
+        // O_TMPFILE's own bit without O_DIRECTORY is not O_TMPFILE, and
+        // on a directory it is EINVAL (the spec of open).
+        if attr.kind == FileType::Directory && flags.intersects(OpenFlags::TMPFILE.without(OpenFlags::DIRECTORY)) {
+            return Err(Errno::EINVAL);
+        }
+        if attr.kind == FileType::Directory && (write || flags.intersects(OpenFlags::CREAT | OpenFlags::TRUNC)) {
             return Err(Errno::EISDIR);
         }
         if !created {
@@ -348,10 +353,11 @@ impl Vfs {
     }
 
     /// `O_TMPFILE` (open(2)): an unnamed regular file in the directory
-    /// `path` names, open for writing (`EINVAL` without write access;
-    /// `ENOTDIR` if `path` is not a directory), with `mode & ~umask`; it
-    /// has no links and goes when closed, unless `linkat` with
-    /// `AT_EMPTY_PATH` names it.
+    /// `path` names, open for writing (`EINVAL` without write access or
+    /// with `O_CREAT`; `ENOTDIR` if `path` is not a directory), with
+    /// `mode & ~umask`; it has no links and goes when closed, unless
+    /// `linkat` with `AT_EMPTY_PATH` names it, which `O_EXCL` rules out.
+    /// `F_GETFL` reports `O_TMPFILE`.
     fn open_tmpfile(
         &self,
         ctx: &FsContext,
@@ -361,7 +367,7 @@ impl Vfs {
         flags: OpenFlags,
         mode: u16,
     ) -> Result<Arc<OpenFile>> {
-        if !flags.writable() {
+        if !flags.writable() || flags.contains(OpenFlags::CREAT) {
             return Err(Errno::EINVAL);
         }
         check_path(path)?;
@@ -374,8 +380,8 @@ impl Vfs {
         let node = NewNode { kind: FileType::Regular, perm, uid, gid, rdev: DeviceId::default() };
         let ino = dir.mount.sb.fs.create_tmpfile(dir.ino, &node)?;
         let loc = Location { mount: dir.mount.clone(), ino };
-        let flags = flags.without(OpenFlags::TMPFILE).without(OpenFlags::CREAT);
-        Ok(Arc::new(OpenFile::new(loc.pin()?, FileType::Regular, Backend::Inode, flags)))
+        let file = OpenFile::new(loc.pin()?, FileType::Regular, Backend::Inode, flags);
+        Ok(Arc::new(if flags.contains(OpenFlags::EXCL) { file.unnameable() } else { file }))
     }
 
     /// The `O_CREAT` walk: the last component is created if missing, and
@@ -396,8 +402,15 @@ impl Vfs {
             match self.child(&p.dir, name) {
                 Ok(_) if flags.contains(OpenFlags::EXCL) => return Err(Errno::EEXIST),
                 Ok(loc) => {
-                    if loc.attr()?.kind != FileType::Symlink {
-                        if p.trailing_slash && loc.attr()?.kind != FileType::Directory {
+                    let kind = loc.attr()?.kind;
+                    if kind != FileType::Symlink {
+                        // "file/" asks for a directory to be made: EISDIR
+                        // for a regular file, as for a missing name (the
+                        // spec of open).
+                        if p.trailing_slash && kind == FileType::Regular {
+                            return Err(Errno::EISDIR);
+                        }
+                        if p.trailing_slash && kind != FileType::Directory {
                             return Err(Errno::ENOTDIR);
                         }
                         return Ok(((loc, Some((p.dir, name.clone()))), false));
@@ -546,7 +559,7 @@ impl Vfs {
     ) -> Result<()> {
         let (path, at) = old.begin()?;
         let src = self.walk(ctx, cred).resolve(Self::start(ctx, at), path, follow)?;
-        self.link_location(ctx, cred, src, new)
+        self.link_location(ctx, cred, src, new, true)
     }
 
     /// `linkat(2)` with `AT_EMPTY_PATH`: a new name `new` for the file
@@ -554,10 +567,23 @@ impl Vfs {
     /// has no name yet; another file without names is `ENOENT`. `new`'s
     /// errors come after whatever the caller found out about `src`.
     pub fn link_node(&self, ctx: &FsContext, cred: &Cred, src: &NodeRef, new: PathArg<'_>) -> Result<()> {
-        self.link_location(ctx, cred, src.loc().clone(), new)
+        self.link_location(ctx, cred, src.loc().clone(), new, true)
     }
 
-    fn link_location(&self, ctx: &FsContext, cred: &Cred, src: Location, new: PathArg<'_>) -> Result<()> {
+    /// [`link_node`](Self::link_node) for the node `file` is open on; an
+    /// `O_TMPFILE | O_EXCL` file is `ENOENT`, as a file without names.
+    pub fn link_file(&self, ctx: &FsContext, cred: &Cred, file: &OpenFile, new: PathArg<'_>) -> Result<()> {
+        self.link_location(ctx, cred, file.node().loc().clone(), new, !file.is_unnameable())
+    }
+
+    fn link_location(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        src: Location,
+        new: PathArg<'_>,
+        nameable: bool,
+    ) -> Result<()> {
         let p = self.parent_arg(ctx, cred, new)?;
         let name = self.new_name(&p)?;
         if p.trailing_slash {
@@ -570,6 +596,9 @@ impl Vfs {
             return Err(Errno::EPERM);
         }
         self.may_change(cred, &p.dir)?;
+        if !nameable {
+            return Err(Errno::ENOENT);
+        }
         p.dir.mount.sb.fs.link(p.dir.ino, name, src.ino)
     }
 
