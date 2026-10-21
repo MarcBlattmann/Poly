@@ -435,11 +435,61 @@ struct Screenshot<'a> {
 /// marker has not come (the kernel does not exit QEMU in those boots).
 const STOP_MARKERS: [&str; 2] = ["POLY-SELFTEST: FAIL", "KERNEL PANIC"];
 
+/// How often a boot is retried when QEMU itself crashed before the kernel
+/// touched any device ([`crashed_before_devices`]).
+const QEMU_CRASH_RETRIES: usize = 2;
+
+/// QEMU 8.2 under TCG on a loaded host sometimes dies with SIGSEGV while
+/// the kernel scans PCI configuration space, before the first device line.
+/// A guest cannot make the emulator take a signal (a panic or triple fault
+/// ends QEMU with a status), and nothing on a disk image or the network
+/// has been touched yet, so booting again is safe. QEMU killed by a
+/// signal shows as no status without a timeout.
+fn crashed_before_devices(b: &Boot) -> bool {
+    b.status.is_none() && !b.timed_out && !b.output.lines().any(|l| l.contains("pci: 00:"))
+}
+
+/// Boot again (up to [`QEMU_CRASH_RETRIES`] times) while
+/// [`crashed_before_devices`] says QEMU died early.
+fn retry_qemu_crash(mut boot: impl FnMut() -> Result<Boot>) -> Result<Boot> {
+    let mut attempt = 0;
+    loop {
+        let b = boot()?;
+        if attempt == QEMU_CRASH_RETRIES || !crashed_before_devices(&b) {
+            return Ok(b);
+        }
+        attempt += 1;
+        eprintln!(
+            "==> QEMU died of a signal before the kernel reached any device (an emulator crash); booting again \
+             ({attempt} of {QEMU_CRASH_RETRIES})"
+        );
+    }
+}
+
 /// [`boot`] with more QEMU arguments and, optionally, a screenshot, calling
 /// `on_line` with every line of serial output (from the thread that reads it)
-/// as it arrives.
+/// as it arrives. A boot QEMU crashed early is retried ([`retry_qemu_crash`]).
 #[allow(clippy::too_many_arguments)]
 fn boot_with(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    memory: &str,
+    append: &str,
+    devices: Devices<'_>,
+    qemu_args: &[String],
+    shot: Option<Screenshot<'_>>,
+    on_line: impl FnMut(&str) + Send + 'static,
+) -> Result<Boot> {
+    let on_line = Arc::new(std::sync::Mutex::new(on_line));
+    retry_qemu_crash(|| {
+        let f = Arc::clone(&on_line);
+        let call = move |line: &str| (f.lock().unwrap_or_else(|e| e.into_inner()))(line);
+        boot_with_once(kernel, syms, memory, append, devices, qemu_args, shot, call)
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn boot_with_once(
     kernel: &Path,
     syms: &Arc<Symbols>,
     memory: &str,
@@ -621,8 +671,20 @@ fn keyboard_boot_test(
 /// into it: for each `(expect, input)` step, wait until the output (escape
 /// sequences removed) shows `expect` after what the previous step matched,
 /// then write `input`. Returns when QEMU exits, with the output stripped of
-/// escape sequences (or after [`BOOT_TIMEOUT`], with no status).
+/// escape sequences (or after [`BOOT_TIMEOUT`], with no status). A boot QEMU
+/// crashed early is retried ([`retry_qemu_crash`]).
 fn boot_typing(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    append: &str,
+    devices: Devices<'_>,
+    qemu_args: &[String],
+    steps: &[(&str, &str)],
+) -> Result<Boot> {
+    retry_qemu_crash(|| boot_typing_once(kernel, syms, append, devices, qemu_args, steps))
+}
+
+fn boot_typing_once(
     kernel: &Path,
     syms: &Arc<Symbols>,
     append: &str,
@@ -1243,4 +1305,40 @@ fn coverage(args: &[String]) -> Result {
         "coverage",
         cargo().current_dir(root()).args(["run", "--quiet", "--package", "poly-coverage", "--"]).args(args),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn boot(status: Option<i32>, timed_out: bool, output: &str) -> Boot {
+        Boot { status, output: output.into(), timed_out }
+    }
+
+    /// Only an emulator crash before any device line is retried: not a
+    /// timeout, not an exit status, not a crash after devices were set up.
+    #[test]
+    fn retries_only_early_qemu_crashes() {
+        let early = "smp: 2 of 2 CPUs online (0-1)\npci: segment 0 buses 00-ff: ECAM at 0xb0000000";
+        assert!(crashed_before_devices(&boot(None, false, early)));
+        assert!(!crashed_before_devices(&boot(None, true, early)));
+        assert!(!crashed_before_devices(&boot(Some(33), false, early)));
+        let late = format!("{early}\npci: 00:00.0 8086:29c0 class 06.00.00");
+        assert!(!crashed_before_devices(&boot(None, false, &late)));
+
+        let mut boots = 0;
+        let b = retry_qemu_crash(|| {
+            boots += 1;
+            Ok(boot(if boots < 2 { None } else { Some(33) }, false, early))
+        })
+        .unwrap();
+        assert_eq!((boots, b.status), (2, Some(33)));
+        let mut boots = 0;
+        let b = retry_qemu_crash(|| {
+            boots += 1;
+            Ok(boot(None, false, early))
+        })
+        .unwrap();
+        assert_eq!((boots, b.status), (1 + QEMU_CRASH_RETRIES, None));
+    }
 }
