@@ -206,7 +206,8 @@ The program starts with default signal actions and an empty signal mask.
 `--build-kernel` to rebuild, or `--kernel`) with
 `poly.qemu_exit poly.init=/test-binary poly.test.capture`, and turns the
 kernel's `POLY-*` records (ADR 0027, kernel side in ADR 0038) into a trace;
-about half a second per test. Records carry no `data<i>` fields yet, so
+about half a second per test. QEMU runs on KVM when `/dev/kvm` can be opened
+and on its emulator (TCG) otherwise; `POLY_QEMU_ACCEL=tcg|kvm|auto` chooses (ADR 0075). Records carry no `data<i>` fields yet, so
 pointer arguments are compared as "anything". A kernel that cannot run a
 test's file says `POLY-INIT: unsupported <reason>`, and the test is
 reported **unsupported**. QEMU itself sometimes crashes (SIGSEGV) while

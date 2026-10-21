@@ -20,7 +20,14 @@
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit
 //!   test                host unit tests + kernel boot tests in QEMU
-//!   ci                  everything CI checks: fmt, clippy, tests, coverage
+//!   boot-tests [--list] [--shard <name>]... [group...]
+//!                       the boot tests alone: all, the groups named (`selftest` is
+//!                       every `selftest-*`), or a CI shard's; --list lists them
+//!   ci [part...]        everything CI checks: fmt, clippy, tests, coverage; or the
+//!                       parts named (lint, host-tests, boot-tests, coverage,
+//!                       pipeline), as CI's parallel jobs run them
+//!                       QEMU runs on KVM when /dev/kvm is usable, else on TCG;
+//!                       POLY_QEMU_ACCEL=tcg|kvm|auto chooses (accel.rs)
 //!   symbolize [--release] [--elf <path>] [addr...]
 //!                       print the kernel function at each address; with no
 //!                       addresses, add symbols to the backtrace in a log on stdin
@@ -34,10 +41,12 @@
 //!                       (the host's bash, coreutils, Python, gcc; rootdisk.rs)
 //!   root-disk-test      only the root disk boot test of `test` (rootdisk.rs)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
-//!                       cache every kernel build uses) and verify its exports (ntdll.rs)
+//!                       cache every kernel build uses) and verify its exports (ntdll.rs);
+//!                       --cache-key: print the name it is cached under
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
+mod accel;
 mod asmlabels;
 mod busybox;
 mod conflicts;
@@ -82,12 +91,17 @@ const QEMU_CPUS: u32 = 2;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let release = args.iter().any(|a| a == "--release");
+    if let Err(e) = accel::init() {
+        eprintln!("xtask: error: {e}");
+        return ExitCode::FAILURE;
+    }
     let result = match args.first().map(String::as_str) {
         Some("build") => build_kernel(release).map(|_| ()),
         Some("run") => run(&args[1..]),
         Some("screenshot") => screenshot(&args[1..]),
         Some("test") => test(),
-        Some("ci") => ci(),
+        Some("ci") => ci(&args[1..]),
+        Some("boot-tests") => boot_tests_command(&args[1..]),
         Some("symbolize") => symbolize(&args[1..]),
         Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => pipeline(&args[1..]),
@@ -100,7 +114,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font|ntdll|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|ntdll|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -242,12 +256,14 @@ impl Devices<'_> {
     }
 }
 
-/// QEMU for `kernel`, with the serial port on `serial` (a QEMU character
-/// device) and `devices` attached. The machine has QEMU's standard VGA; add
+/// QEMU for `kernel`, on KVM when it is usable and TCG otherwise
+/// ([`accel`]: `POLY_QEMU_ACCEL`), with the serial port on `serial` (a QEMU
+/// character device) and `devices` attached. The machine has QEMU's standard VGA; add
 /// `-display none` for no window.
 fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial: &str) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
-    cmd.args(["-machine", "q35", "-m", memory, "-serial", serial, "-no-reboot"])
+    cmd.args(accel::get().qemu_args())
+        .args(["-machine", "q35", "-m", memory, "-serial", serial, "-no-reboot"])
         .args(["-smp", &QEMU_CPUS.to_string()])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
         .arg("-kernel")
@@ -399,9 +415,7 @@ fn run_disk_root(kernel: &Path, fresh: bool, gdb: bool, cmdline: &[&str]) -> Res
 
 /// `cargo xtask root-disk-test`: the root disk boot test alone.
 fn root_disk_test() -> Result {
-    let kernel = build_kernel(false)?;
-    let syms = Arc::new(Symbols::from_file(&kernel)?);
-    rootdisk::boot_test(&kernel, &syms)
+    run_boot_groups(&["rootdisk".into()])
 }
 
 /// `symbolize [--release] [--elf <path>] [addr...]`
@@ -974,123 +988,133 @@ fn smp_option_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
 
 /// `cargo xtask busybox-test`: the BusyBox boot test alone.
 fn busybox_test() -> Result {
-    let kernel = build_kernel(false)?;
-    let syms = Arc::new(Symbols::from_file(&kernel)?);
-    busybox::boot_test(&kernel, &syms)
+    run_boot_groups(&["busybox".into()])
 }
 
-fn boot_tests() -> Result {
-    let kernel = build_kernel(false)?;
-    let syms = Arc::new(Symbols::from_file(&kernel)?);
+/// A self-test boot: QEMU's RAM, the test disk polled (without MSI-X) or
+/// not, a `-cpu` model (QEMU's default one if none), and the CPUs.
+#[derive(Clone, Copy, Debug)]
+struct SelfTest {
+    memory: &'static str,
+    polled: bool,
+    cpu: Option<&'static str>,
+    cpus: u32,
+}
 
-    // 2 GiB puts RAM, and QEMU's ACPI tables, above the first GiB that the
-    // boot stub maps: the direct map must reach them. Every boot here has
-    // the test disk, so the block layer tests read and write it; the third
-    // has it without MSI-X, so the kernel must poll it. The fourth runs on
-    // QEMU's most capable CPU model, whose SMEP, SMAP and XSAVE (with AVX)
-    // the default one lacks, so user mode is tested with and without them.
-    // All but the fourth boot with the test initramfs (QEMU puts it at the
-    // top of RAM, so with 2 GiB above the first GiB); the fourth has none,
-    // so the kernel must come up with an empty root as well. They run on
-    // 2, 4, 1 and 4 CPUs: every test passes with one CPU and with several.
-    let initrd = programs::test_initramfs()?;
-    let configs = [(DEFAULT_MEMORY, false, None, QEMU_CPUS), ("2G", false, None, 4), (DEFAULT_MEMORY, true, None, 1)];
-    for (memory, polled, cpu, cpus) in configs.into_iter().chain([(DEFAULT_MEMORY, false, Some("max"), 4)]) {
-        let how = if polled { "the test disk without MSI-X (polled)" } else { "the test devices" };
-        let on = cpu.map_or(String::new(), |c| format!(" on -cpu {c}"));
-        let initrd = cpu.is_none().then_some(initrd.as_path());
-        let with = if initrd.is_some() { "the test initramfs" } else { "no initramfs" };
-        eprintln!("==> boot test: self-test passes on {cpus} CPU(s) with {memory} of RAM, {how} and {with}{on}");
-        let disk = test_disk()?;
-        let devices = if polled { Devices::PolledDisk(&disk) } else { Devices::Test(&disk) };
-        let mut append = format!("poly.qemu_exit {}", devices.flags());
-        if initrd.is_some() {
-            append = format!("{append} {}", initramfs::TEST_INITRD_FLAG);
-        }
-        let mut args = vec!["-smp".to_string(), cpus.to_string()];
-        if let Some(c) = cpu {
-            args.extend(["-cpu".into(), c.into()]);
-        }
-        if let Some(file) = initrd {
-            args.extend(["-initrd".into(), file.display().to_string()]);
-        }
-        let b = boot_with(&kernel, &syms, memory, &append, devices, &args, None, |_| {})?;
-        if let Some(s) = ktest::parse(&b.output).summary {
-            eprintln!("==> kernel tests: {} passed, {} failed, {} filtered out", s.passed, s.failed, s.filtered_out);
-        }
-        b.tests(&b.output)?;
-        match b.status {
-            Some(QEMU_SUCCESS) if b.output.contains(PASS_MARKER) => {}
-            Some(s) => return Err(format!("self-test boot ({memory}) exited with status {s}")),
-            None => return Err(format!("self-test boot ({memory}) timed out after {BOOT_TIMEOUT:?}")),
-        }
-        let acpi = format!("acpi: CPUs: {cpus} enabled");
-        if !b.output.contains(&acpi) {
-            return Err(format!(
-                "ACPI did not report the {cpus} CPUs QEMU emulates with {memory} (expected \"{acpi}\")"
-            ));
-        }
-        let online = format!("smp: {cpus} of {cpus} CPUs online");
-        if !b.output.contains(&online) {
-            return Err(format!("not all of the {cpus} CPUs came up with {memory}{on} (expected \"{online}\")"));
-        }
-        // The first sector of the test disk starts with "POLY", sector 0,
-        // read through the block layer.
-        let first_read = "block: virtio0: block 0: 50 4f 4c 59 00 00 00 00";
-        if !b.output.lines().any(|l| l.contains(" 1af4:1042 ")) || !b.output.contains(first_read) {
-            return Err(format!("the virtio-blk test disk was not enumerated and read with {memory}"));
-        }
-        if !b.output.contains("block: ram0: RAM disk") {
-            return Err(format!("the RAM disk was not registered with {memory}"));
-        }
-        let (w, h) = DEFAULT_DISPLAY;
-        let display = b.output.lines().find(|l| l.contains("display: ") && l.contains(" bytes per line;"));
-        if !display.is_some_and(|l| l.contains(&format!(" {w}x{h}x32, ")) && l.contains(" write-combining;")) {
-            return Err(format!("the display did not come up {w}x{h}, write-combining, with {memory}"));
-        }
-        // How the disk waits, as the boot log says.
-        let virtio0 = b.output.lines().find(|l| l.contains("block: virtio0: virtio-blk")).unwrap_or_default();
-        let mode_ok = if polled {
-            b.output.contains(": no MSI-X; polling") && virtio0.ends_with("; polled")
-        } else {
-            b.output.contains(": request queue on MSI-X entry 0 -> vector 0x")
-                && virtio0.contains("; interrupt-driven (vector 0x")
-        };
-        // User mode: set up (with the CPU's protections when it has them),
-        // and user threads that fault are killed with a log line while the
-        // kernel goes on.
-        let user = b.output.lines().find(|l| l.starts_with("user: syscall/sysret on;")).unwrap_or_default();
-        let protected = user.contains("SMEP: yes, SMAP: yes") && user.contains("FPU state: XSAVE");
-        if user.is_empty() || (cpu == Some("max") && !protected) {
-            return Err(format!("user mode was not set up as expected{on}: \"{user}\""));
-        }
-        if !b.output.lines().any(|l| l.starts_with("user: pid ") && l.contains(" killed: page fault (vector 14)")) {
-            return Err(format!("no user thread was reported killed by a page fault{on}"));
-        }
-        if !mode_ok {
-            let want = if polled { "polled" } else { "interrupt-driven through MSI-X" };
-            return Err(format!("the test disk was not {want} with {memory}"));
-        }
-        // The root file system: the initramfs unpacked and its pages freed,
-        // or an empty tmpfs.
-        let root_ok = if initrd.is_some() {
-            b.output.contains("fs: initramfs unpacked into /: ")
-                && b.output
-                    .lines()
-                    .any(|l| l.starts_with("fs: initramfs: ") && l.contains(" returned to the frame allocator"))
-        } else {
-            b.output.contains("fs: no initramfs (no boot module); / is an empty tmpfs")
-        };
-        if !root_ok {
-            return Err(format!("the root file system was not set up from {with} with {memory}{on}"));
-        }
+// 2 GiB puts RAM, and QEMU's ACPI tables, above the first GiB that the boot
+// stub maps: the direct map must reach them. Every self-test boot has the
+// test disk, so the block layer tests read and write it; the polled one has
+// it without MSI-X, so the kernel must poll it. `max` runs on QEMU's most
+// capable CPU model, whose SMEP, SMAP and XSAVE (with AVX) the default one
+// lacks, so user mode is tested with and without them. All but `max` boot
+// with the test initramfs (QEMU puts it at the top of RAM, so with 2 GiB
+// above the first GiB); `max` has none, so the kernel must come up with an
+// empty root as well. They run on 2, 4, 1 and 4 CPUs: every test passes
+// with one CPU and with several.
+const SELFTEST_DEFAULT: SelfTest = SelfTest { memory: DEFAULT_MEMORY, polled: false, cpu: None, cpus: QEMU_CPUS };
+const SELFTEST_2G: SelfTest = SelfTest { memory: "2G", polled: false, cpu: None, cpus: 4 };
+const SELFTEST_POLLED: SelfTest = SelfTest { memory: DEFAULT_MEMORY, polled: true, cpu: None, cpus: 1 };
+const SELFTEST_MAX: SelfTest = SelfTest { memory: DEFAULT_MEMORY, polled: false, cpu: Some("max"), cpus: 4 };
+
+/// One self-test boot ([`SelfTest`]): every kernel test passes, and the
+/// boot log shows the CPUs, disks, display, user mode and root file system
+/// set up as the configuration asks.
+fn selftest_boot(kernel: &Path, syms: &Arc<Symbols>, config: SelfTest) -> Result {
+    let SelfTest { memory, polled, cpu, cpus } = config;
+    let how = if polled { "the test disk without MSI-X (polled)" } else { "the test devices" };
+    let on = cpu.map_or(String::new(), |c| format!(" on -cpu {c}"));
+    let initrd = if cpu.is_none() { Some(programs::test_initramfs()?) } else { None };
+    let initrd = initrd.as_deref();
+    let with = if initrd.is_some() { "the test initramfs" } else { "no initramfs" };
+    eprintln!("==> boot test: self-test passes on {cpus} CPU(s) with {memory} of RAM, {how} and {with}{on}");
+    let disk = test_disk()?;
+    let devices = if polled { Devices::PolledDisk(&disk) } else { Devices::Test(&disk) };
+    let mut append = format!("poly.qemu_exit {}", devices.flags());
+    if initrd.is_some() {
+        append = format!("{append} {}", initramfs::TEST_INITRD_FLAG);
     }
+    let mut args = vec!["-smp".to_string(), cpus.to_string()];
+    if let Some(c) = cpu {
+        args.extend(["-cpu".into(), c.into()]);
+    }
+    if let Some(file) = initrd {
+        args.extend(["-initrd".into(), file.display().to_string()]);
+    }
+    let b = boot_with(kernel, syms, memory, &append, devices, &args, None, |_| {})?;
+    if let Some(s) = ktest::parse(&b.output).summary {
+        eprintln!("==> kernel tests: {} passed, {} failed, {} filtered out", s.passed, s.failed, s.filtered_out);
+    }
+    b.tests(&b.output)?;
+    match b.status {
+        Some(QEMU_SUCCESS) if b.output.contains(PASS_MARKER) => {}
+        Some(s) => return Err(format!("self-test boot ({memory}) exited with status {s}")),
+        None => return Err(format!("self-test boot ({memory}) timed out after {BOOT_TIMEOUT:?}")),
+    }
+    let acpi = format!("acpi: CPUs: {cpus} enabled");
+    if !b.output.contains(&acpi) {
+        return Err(format!("ACPI did not report the {cpus} CPUs QEMU emulates with {memory} (expected \"{acpi}\")"));
+    }
+    let online = format!("smp: {cpus} of {cpus} CPUs online");
+    if !b.output.contains(&online) {
+        return Err(format!("not all of the {cpus} CPUs came up with {memory}{on} (expected \"{online}\")"));
+    }
+    // The first sector of the test disk starts with "POLY", sector 0,
+    // read through the block layer.
+    let first_read = "block: virtio0: block 0: 50 4f 4c 59 00 00 00 00";
+    if !b.output.lines().any(|l| l.contains(" 1af4:1042 ")) || !b.output.contains(first_read) {
+        return Err(format!("the virtio-blk test disk was not enumerated and read with {memory}"));
+    }
+    if !b.output.contains("block: ram0: RAM disk") {
+        return Err(format!("the RAM disk was not registered with {memory}"));
+    }
+    let (w, h) = DEFAULT_DISPLAY;
+    let display = b.output.lines().find(|l| l.contains("display: ") && l.contains(" bytes per line;"));
+    if !display.is_some_and(|l| l.contains(&format!(" {w}x{h}x32, ")) && l.contains(" write-combining;")) {
+        return Err(format!("the display did not come up {w}x{h}, write-combining, with {memory}"));
+    }
+    // How the disk waits, as the boot log says.
+    let virtio0 = b.output.lines().find(|l| l.contains("block: virtio0: virtio-blk")).unwrap_or_default();
+    let mode_ok = if polled {
+        b.output.contains(": no MSI-X; polling") && virtio0.ends_with("; polled")
+    } else {
+        b.output.contains(": request queue on MSI-X entry 0 -> vector 0x")
+            && virtio0.contains("; interrupt-driven (vector 0x")
+    };
+    // User mode: set up (with the CPU's protections when it has them),
+    // and user threads that fault are killed with a log line while the
+    // kernel goes on.
+    let user = b.output.lines().find(|l| l.starts_with("user: syscall/sysret on;")).unwrap_or_default();
+    let protected = user.contains("SMEP: yes, SMAP: yes") && user.contains("FPU state: XSAVE");
+    if user.is_empty() || (cpu == Some("max") && !protected) {
+        return Err(format!("user mode was not set up as expected{on}: \"{user}\""));
+    }
+    if !b.output.lines().any(|l| l.starts_with("user: pid ") && l.contains(" killed: page fault (vector 14)")) {
+        return Err(format!("no user thread was reported killed by a page fault{on}"));
+    }
+    if !mode_ok {
+        let want = if polled { "polled" } else { "interrupt-driven through MSI-X" };
+        return Err(format!("the test disk was not {want} with {memory}"));
+    }
+    // The root file system: the initramfs unpacked and its pages freed,
+    // or an empty tmpfs.
+    let root_ok = if initrd.is_some() {
+        b.output.contains("fs: initramfs unpacked into /: ")
+            && b.output
+                .lines()
+                .any(|l| l.starts_with("fs: initramfs: ") && l.contains(" returned to the frame allocator"))
+    } else {
+        b.output.contains("fs: no initramfs (no boot module); / is an empty tmpfs")
+    };
+    if !root_ok {
+        return Err(format!("the root file system was not set up from {with} with {memory}{on}"));
+    }
+    Ok(())
+}
 
-    smp_option_tests(&kernel, &syms)?;
-
-    // Keys pressed on the host reach the kernel through the i8042 and IRQ 1.
+/// Keys pressed on the host reach the kernel through the i8042 and IRQ 1.
+fn keyboard_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     eprintln!("==> boot test: keys sent through the QEMU monitor type text (US layout)");
-    keyboard_boot_test(&kernel, &syms, None, &["shift-p", "o", "l", "y", "ret"], "Poly")?;
+    keyboard_boot_test(kernel, syms, None, &["shift-p", "o", "l", "y", "ret"], "Poly")?;
     // QEMU names keys by their US position: "z" is the Swiss German y, "equal"
     // the ^ dead key, "bracket_left" ü, "bracket_right" the ¨ dead key.
     eprintln!("==> boot test: keys sent through the QEMU monitor type text (Swiss German: AltGr, dead keys)");
@@ -1110,33 +1134,16 @@ fn boot_tests() -> Result {
         "spc",
         "ret",
     ];
-    keyboard_boot_test(&kernel, &syms, Some("de-ch"), &DE_CH_KEYS, "poly@\u{e2}\u{f1}\u{fc}\u{e8}\u{a8}")?;
+    keyboard_boot_test(kernel, syms, Some("de-ch"), &DE_CH_KEYS, "poly@\u{e2}\u{f1}\u{fc}\u{e8}\u{a8}")?;
+    Ok(())
+}
 
-    eprintln!("==> boot test: the shell on the serial port answers typed commands");
-    shell_test(&kernel, &syms)?;
-
-    // Static Linux hello worlds as the first process (poly.init).
-    programs::boot_tests(&kernel, &syms)?;
-    // Dynamically linked glibc programs through glibc's own ld.so (dynamic.rs).
-    dynamic::boot_tests(&kernel, &syms)?;
-    // BusyBox as init, its shell typed into on the serial console (busybox.rs).
-    busybox::boot_test(&kernel, &syms)?;
-    // bash, coreutils, Python and gcc from the persistent ext4 root disk
-    // (rootdisk.rs).
-    rootdisk::boot_test(&kernel, &syms)?;
-
-    // Networking: virtio-net on QEMU's user networking, against servers on
-    // the host (see net.rs).
-    net::boot_tests(&kernel, &syms)?;
-    eprintln!("==> boot test: a file written to the ext2 test disk in one boot is there in the next");
-    ext2_persistence_test(&kernel, &syms)?;
-    ext4disk::boot_tests(&kernel, &syms)?;
-
-    // Expecting the test disk without attaching it must fail the disk
-    // tests, so a boot that silently lost its disk cannot pass.
+/// Expecting a device without attaching it must fail its tests, so a boot
+/// that silently lost it cannot pass.
+fn missing_device_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     eprintln!("==> boot test: the disk tests fail when the test disk is missing");
     let only = format!("poly.qemu_exit poly.test=virtio_blk::device_found {TEST_DISK_FLAG}");
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &only, Devices::None)?;
+    let b = boot(kernel, syms, DEFAULT_MEMORY, &only, Devices::None)?;
     let report = ktest::parse(&b.output);
     let failed = matches!(report.failed.as_slice(), [(name, _)] if name == "virtio_blk::device_found_with_sane_bars");
     if b.status != Some(QEMU_FAILURE) || !failed {
@@ -1147,25 +1154,20 @@ fn boot_tests() -> Result {
     eprintln!("==> boot test: the display tests fail when there is no display");
     let only = format!("poly.qemu_exit poly.test=display::device_found {TEST_DISPLAY_FLAG}");
     let b =
-        boot_with(&kernel, &syms, DEFAULT_MEMORY, &only, Devices::None, &["-vga".into(), "none".into()], None, |_| {})?;
+        boot_with(kernel, syms, DEFAULT_MEMORY, &only, Devices::None, &["-vga".into(), "none".into()], None, |_| {})?;
     let report = ktest::parse(&b.output);
     let failed = matches!(report.failed.as_slice(), [(name, _)] if name == "display::device_found_and_mode_set");
     if b.status != Some(QEMU_FAILURE) || !failed {
         return Err(format!("a missing display was not reported as a failure (status {:?})", b.status));
     }
+    Ok(())
+}
 
-    // What the screen shows: a screenshot through QMP, compared pixel for
-    // pixel with the boot screen poly-gfx draws for the same size, after
-    // the display tests (which draw and must put the screen back).
-    screenshot_test(&kernel, &syms)?;
-
-    // The screen terminal: a command typed on the keyboard runs in the
-    // shell on the screen, whose output and status bar show up.
-    eprintln!("==> boot test: a command typed on the keyboard runs in the screen terminal (screenshots through QMP)");
-    terminal::boot_test(&kernel, &syms, &kernel_version()?)?;
-
+/// Faults the kernel provokes on purpose are caught and reported: page
+/// faults (W^X among them) and stack overflows, with backtraces.
+fn fault_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     eprintln!("==> boot test: page fault is caught and reported with a backtrace");
-    let b = expect_fault(&kernel, &syms, "poly.selftest.page_fault", "CPU exception 14 (page fault)")?;
+    let b = expect_fault(kernel, syms, "poly.selftest.page_fault", "CPU exception 14 (page fault)")?;
     // Frame #0 is the faulting instruction, so it must name the function.
     match b.output.lines().find_map(symbols::parse_frame) {
         Some((0, _, sym)) if sym.starts_with("poly_kernel::selftest::trigger_page_fault+0x") => {}
@@ -1177,14 +1179,14 @@ fn boot_tests() -> Result {
     // violation (the page is present), bit 1 = write, bit 4 = instruction
     // fetch. Each trigger prints the address it touches first.
     eprintln!("==> boot test: writing to kernel text is a page fault");
-    let b = expect_fault(&kernel, &syms, "poly.selftest.write_text", "CPU exception 14 (page fault), error 0x3,")?;
+    let b = expect_fault(kernel, syms, "poly.selftest.write_text", "CPU exception 14 (page fault), error 0x3,")?;
     let addr = announced(&b.output, "selftest: writing to kernel text at ")?;
     if !b.output.contains(&format!("cr2 {addr}")) {
         return Err(format!("write to kernel text faulted, but not at {addr}"));
     }
     for (flag, what) in [("poly.selftest.exec_stack", "the stack"), ("poly.selftest.exec_data", "kernel data")] {
         eprintln!("==> boot test: executing {what} is a page fault (no-execute)");
-        let b = expect_fault(&kernel, &syms, flag, "CPU exception 14 (page fault), error 0x11,")?;
+        let b = expect_fault(kernel, syms, flag, "CPU exception 14 (page fault), error 0x11,")?;
         let addr = announced(&b.output, &format!("selftest: executing {what} at "))?;
         if !b.output.contains(&format!("rip {addr},")) || !b.output.contains(&format!("cr2 {addr}")) {
             return Err(format!("executing {what} faulted, but not on the fetch at {addr}"));
@@ -1192,13 +1194,13 @@ fn boot_tests() -> Result {
     }
 
     eprintln!("==> boot test: a kernel stack overflow hits the guard page and is reported");
-    let b = expect_fault(&kernel, &syms, "poly.selftest.stack_overflow", "CPU exception 8 (double fault)")?;
+    let b = expect_fault(kernel, syms, "poly.selftest.stack_overflow", "CPU exception 8 (double fault)")?;
     if !b.output.contains("kernel stack overflow: hit the guard page below the boot stack") {
         return Err("stack overflow was not attributed to the boot stack's guard page".into());
     }
     eprintln!("==> boot test: a kernel thread's stack overflow hits its guard and is reported with the thread's name");
     let flag = "poly.selftest.thread_stack_overflow";
-    let b = expect_fault(&kernel, &syms, flag, "CPU exception 8 (double fault)")?;
+    let b = expect_fault(kernel, syms, flag, "CPU exception 8 (double fault)")?;
     if !b.output.contains("kernel stack overflow in thread overflow (slot ") {
         return Err("a thread stack overflow was not attributed to the thread's guard".into());
     }
@@ -1210,11 +1212,16 @@ fn boot_tests() -> Result {
     if !recursed {
         return Err("the thread stack overflow's backtrace does not show the recursion".into());
     }
+    Ok(())
+}
 
+/// Failing kernel tests and panics (in a test, out of memory, on kernel
+/// threads, a deadlock) are reported by name and with backtraces.
+fn failure_tests(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     // `selftest::fails_on_request` fails or panics when asked to.
     let only = "poly.qemu_exit poly.test=selftest::fails_on_request";
     eprintln!("==> boot test: a failing kernel test is reported by name");
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("{only} poly.selftest.fail"), Devices::None)?;
+    let b = boot(kernel, syms, DEFAULT_MEMORY, &format!("{only} poly.selftest.fail"), Devices::None)?;
     let report = ktest::parse(&b.output);
     let failed_alone = matches!(report.failed.as_slice(), [(name, _)] if name == "selftest::fails_on_request");
     let filtered = report.summary.is_some_and(|s| s.passed == 0 && s.filtered_out > 0);
@@ -1223,7 +1230,7 @@ fn boot_tests() -> Result {
     }
 
     eprintln!("==> boot test: a panic inside a kernel test is reported with a backtrace");
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("{only} poly.selftest.panic"), Devices::None)?;
+    let b = boot(kernel, syms, DEFAULT_MEMORY, &format!("{only} poly.selftest.panic"), Devices::None)?;
     let no_summary = ktest::parse(&b.output).summary.is_none();
     let frames: Vec<_> = b.output.lines().filter_map(symbols::parse_frame).map(|(_, _, sym)| sym).collect();
     let in_backtrace = |f: &str| frames.iter().any(|sym| sym.starts_with(f));
@@ -1236,7 +1243,7 @@ fn boot_tests() -> Result {
     // `heap::out_of_memory_on_request` asks for more than the heap can give.
     eprintln!("==> boot test: running out of heap memory panics with the size and a backtrace");
     let only = "poly.qemu_exit poly.test=heap::out_of_memory_on_request poly.selftest.oom";
-    let b = boot(&kernel, &syms, DEFAULT_MEMORY, only, Devices::None)?;
+    let b = boot(kernel, syms, DEFAULT_MEMORY, only, Devices::None)?;
     let reported = b
         .output
         .lines()
@@ -1269,7 +1276,7 @@ fn boot_tests() -> Result {
     ];
     for (what, args, message, function) in thread_panics {
         eprintln!("==> boot test: {what} is reported with a backtrace of the thread's stack");
-        let b = boot(&kernel, &syms, DEFAULT_MEMORY, &format!("poly.qemu_exit poly.test={args}"), Devices::None)?;
+        let b = boot(kernel, syms, DEFAULT_MEMORY, &format!("poly.qemu_exit poly.test={args}"), Devices::None)?;
         let frames: Vec<_> = b.output.lines().filter_map(symbols::parse_frame).map(|(_, _, sym)| sym).collect();
         let in_backtrace = |f: &str| frames.iter().any(|sym| sym.starts_with(f));
         let named = in_backtrace(function) && in_backtrace("poly_kernel::thread::thread_start+");
@@ -1278,8 +1285,143 @@ fn boot_tests() -> Result {
             return Err(format!("{what} was not reported as expected (status {:?})", b.status));
         }
     }
-    eprintln!("==> boot tests passed");
     Ok(())
+}
+
+/// A group of boot tests: its name (`cargo xtask boot-tests <name>`) and
+/// what it runs, given the kernel and its symbols.
+type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
+
+/// Every boot test, in groups, in the order `test` runs them. CI runs them
+/// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
+const BOOT_GROUPS: [BootGroup; 19] = [
+    ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
+    ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
+    ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
+    ("selftest-max", |k, s| selftest_boot(k, s, SELFTEST_MAX)),
+    ("smp", smp_option_tests),
+    ("keyboard", keyboard_tests),
+    ("shell", |k, s| {
+        eprintln!("==> boot test: the shell on the serial port answers typed commands");
+        shell_test(k, s)
+    }),
+    // Static Linux hello worlds as the first process (poly.init).
+    ("programs", programs::boot_tests),
+    // Dynamically linked glibc programs through glibc's own ld.so (dynamic.rs).
+    ("dynamic", dynamic::boot_tests),
+    // BusyBox as init, its shell typed into on the serial console (busybox.rs).
+    ("busybox", busybox::boot_test),
+    // bash, coreutils, Python and gcc from the persistent ext4 root disk
+    // (rootdisk.rs).
+    ("rootdisk", rootdisk::boot_test),
+    // Networking: virtio-net on QEMU's user networking, against servers on
+    // the host (see net.rs).
+    ("net", net::boot_tests),
+    ("ext2", |k, s| {
+        eprintln!("==> boot test: a file written to the ext2 test disk in one boot is there in the next");
+        ext2_persistence_test(k, s)
+    }),
+    ("ext4", ext4disk::boot_tests),
+    ("missing-devices", missing_device_tests),
+    // What the screen shows: a screenshot through QMP, compared pixel for
+    // pixel with the boot screen poly-gfx draws for the same size, after the
+    // display tests (which draw and must put the screen back).
+    ("screen", screenshot_test),
+    // The screen terminal: a command typed on the keyboard runs in the shell
+    // on the screen, whose output and status bar show up.
+    ("terminal", |k, s| {
+        eprintln!(
+            "==> boot test: a command typed on the keyboard runs in the screen terminal (screenshots through QMP)"
+        );
+        terminal::boot_test(k, s, &kernel_version()?)
+    }),
+    ("faults", fault_tests),
+    ("failures", failure_tests),
+];
+
+/// The boot test jobs of CI: `.github/workflows/ci.yml` runs one job per
+/// shard (`cargo xtask boot-tests --shard <name>`). Every group is in
+/// exactly one. Each job builds the kernel first (a few minutes), so a few
+/// shards of about a minute of boots each (on TCG) keep the slowest job
+/// short without many builds. `cargo xtask ci lint` checks that the
+/// workflow's matrix lists exactly these.
+const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
+    ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk"]),
+    ("devices", &["net", "ext2", "ext4", "missing-devices", "screen", "terminal"]),
+    ("faults", &["faults", "failures"]),
+];
+
+/// The groups `selectors` name, in [`BOOT_GROUPS`] order: a selector is a
+/// group's name or the part of names before a `-` (`selftest` is every
+/// `selftest-*` group).
+fn select_boot_groups(selectors: &[String]) -> Result<Vec<BootGroup>> {
+    let matches = |sel: &str, name: &str| name == sel || name.strip_prefix(sel).is_some_and(|r| r.starts_with('-'));
+    if let Some(bad) = selectors.iter().find(|sel| !BOOT_GROUPS.iter().any(|(n, _)| matches(sel, n))) {
+        let names: Vec<_> = BOOT_GROUPS.iter().map(|(n, _)| *n).collect();
+        return Err(format!("no boot test group {bad:?}; the groups are {}", names.join(", ")));
+    }
+    Ok(BOOT_GROUPS.into_iter().filter(|(n, _)| selectors.iter().any(|sel| matches(sel, n))).collect())
+}
+
+/// Build the kernel and run the boot test groups `selectors` name
+/// ([`select_boot_groups`]), saying how long each took.
+fn run_boot_groups(selectors: &[String]) -> Result {
+    let groups = select_boot_groups(selectors)?;
+    let kernel = build_kernel(false)?;
+    let syms = Arc::new(Symbols::from_file(&kernel)?);
+    let started = Instant::now();
+    let mut took = Vec::new();
+    for (name, run) in groups {
+        eprintln!("==> boot test group {name} (QEMU on {})", accel::get().name());
+        let t = Instant::now();
+        run(&kernel, &syms).map_err(|e| format!("boot test group {name}: {e}"))?;
+        took.push(format!("{name} {:.0?}", t.elapsed()));
+    }
+    eprintln!("==> boot tests passed in {:.0?} ({})", started.elapsed(), took.join(", "));
+    Ok(())
+}
+
+/// The groups of the CI shard `name`.
+fn shard_groups(name: &str) -> Result<&'static [&'static str]> {
+    CI_BOOT_SHARDS.iter().find(|(s, _)| *s == name).map(|(_, g)| *g).ok_or_else(|| {
+        let names: Vec<_> = CI_BOOT_SHARDS.iter().map(|(s, _)| *s).collect();
+        format!("no CI shard {name:?}; the shards are {}", names.join(", "))
+    })
+}
+
+/// `boot-tests [--list] [--shard <name>]... [group...]`: every boot test,
+/// or the groups named, or those of CI shards ([`CI_BOOT_SHARDS`]).
+fn boot_tests_command(args: &[String]) -> Result {
+    let mut selectors = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--list" => {
+                for (name, _) in BOOT_GROUPS {
+                    let shard = CI_BOOT_SHARDS.iter().find(|(_, g)| g.contains(&name)).map_or("-", |(s, _)| s);
+                    println!("{name:<18} CI shard {shard}");
+                }
+                return Ok(());
+            }
+            "--shard" => {
+                let groups = shard_groups(it.next().ok_or("--shard needs a name")?)?;
+                selectors.extend(groups.iter().map(|g| g.to_string()));
+            }
+            flag if flag.starts_with("--") => return Err(format!("boot-tests: unknown option {flag}")),
+            group => selectors.push(group.to_string()),
+        }
+    }
+    if selectors.is_empty() {
+        return boot_tests();
+    }
+    run_boot_groups(&selectors)
+}
+
+/// Every boot test group.
+fn boot_tests() -> Result {
+    let all: Vec<String> = BOOT_GROUPS.iter().map(|(n, _)| n.to_string()).collect();
+    run_boot_groups(&all)
 }
 
 /// Boot in a mode other than the default, take a screenshot once the
@@ -1331,12 +1473,17 @@ fn announced<'a>(output: &'a str, prefix: &str) -> Result<&'a str> {
         .ok_or_else(|| format!("the kernel did not print \"{prefix}<address>\""))
 }
 
+fn host_tests() -> Result {
+    step("host tests", cargo().current_dir(root()).args(["test", "--workspace"]))
+}
+
 fn test() -> Result {
-    step("host tests", cargo().current_dir(root()).args(["test", "--workspace"]))?;
+    host_tests()?;
     boot_tests()
 }
 
-fn ci() -> Result {
+/// Formatting, clippy and the source checks.
+fn lint() -> Result {
     step("fmt (host)", cargo().current_dir(root()).args(["fmt", "--all", "--check"]))?;
     step("fmt (kernel)", cargo().current_dir(kernel_dir()).args(["fmt", "--check"]))?;
     step(
@@ -1354,28 +1501,129 @@ fn ci() -> Result {
     asmlabels::check(&kernel_dir().join("src"))?;
     eprintln!("==> merge conflict markers");
     conflicts::check(&root())?;
-    test()?;
+    eprintln!("==> the CI workflow runs every part and boot test shard");
+    check_workflow(&root().join(WORKFLOW))
+}
+
+/// The boot tests a second time on QEMU's emulator, when the first ran on
+/// KVM: the self-test boots, so code paths only TCG takes (and TCG's own
+/// quirks) stay tested. A separate xtask, since the accelerator is chosen
+/// once per process.
+fn tcg_boot_tests() -> Result {
+    if accel::get() != accel::Accel::Kvm {
+        return Ok(());
+    }
+    let xtask = std::env::current_exe().map_err(|e| format!("the xtask binary: {e}"))?;
+    let mut cmd = Command::new(xtask);
+    cmd.args(["boot-tests", "--shard", TCG_SHARD]).env(accel::ENV, "tcg");
+    step(&format!("boot tests on TCG (shard {TCG_SHARD})"), &mut cmd)
+}
+
+/// The boot test shard CI also runs on TCG ([`tcg_boot_tests`]).
+const TCG_SHARD: &str = "selftest";
+
+/// The coverage map's checks and the pipeline loop's dry run.
+fn coverage_checks() -> Result {
     coverage(&["check".into()])?;
     coverage(&["readme".into(), "--check".into()])?;
-    // The test corpus on Linux against itself: the tracer and the diff
-    // runner must find no differences. Takes a few seconds; skips itself
-    // without a C compiler or where ptrace is not permitted.
-    pipeline(&["selfcheck".into()])?;
-    // The corpus and the visible spec tests of every green coverage entry
-    // on Poly against Linux (one QEMU boot per test, up to four at a time):
-    // the tests of tests/linux/poly-pass.txt and of the green entries must
-    // pass. Skips itself like selfcheck, and without QEMU.
-    pipeline(&["polycheck".into()])?;
     // The scheduler loop in dry-run mode: every command of one cycle for
     // the next entry, printed and pretended (ADR 0056). Runs nothing.
     pipeline(&["loop".into(), "--dry-run".into(), "--quiet".into()])
 }
 
+/// The agent pipeline's checks against the reference OS.
+fn pipeline_checks() -> Result {
+    // The test corpus on Linux against itself: the tracer and the diff
+    // runner must find no differences. Takes a few seconds; skips itself
+    // without a C compiler or where ptrace is not permitted.
+    pipeline(&["selfcheck".into()])?;
+    // The corpus and the visible spec tests of every green coverage entry
+    // on Poly against Linux (one QEMU boot per test, several at a time):
+    // the tests of tests/linux/poly-pass.txt and of the green entries must
+    // pass. Skips itself like selfcheck, and without QEMU.
+    pipeline(&["polycheck".into()])
+}
+
+/// A part of CI: its name (`cargo xtask ci <name>`) and what it runs.
+type CiPart = (&'static str, fn() -> Result);
+
+/// The parts of `cargo xtask ci`, in the order it runs them. CI on GitHub
+/// runs each as a job of its own (`cargo xtask ci <part>`), and the boot
+/// tests as one job per shard ([`CI_BOOT_SHARDS`], `boot-tests --shard`)
+/// plus the TCG run ([`tcg_boot_tests`]).
+const CI_PARTS: [CiPart; 5] = [
+    ("lint", lint),
+    ("host-tests", host_tests),
+    ("boot-tests", || boot_tests().and_then(|()| tcg_boot_tests())),
+    ("coverage", coverage_checks),
+    ("pipeline", pipeline_checks),
+];
+
+/// The GitHub Actions workflow that runs CI.
+const WORKFLOW: &str = ".github/workflows/ci.yml";
+
+/// Check that the workflow at `path` runs every part of `cargo xtask ci`
+/// (but the boot tests, which run by shard), and exactly the boot test
+/// shards of [`CI_BOOT_SHARDS`] in its matrix, a line `shard: [a, b, ...]`.
+fn check_workflow(path: &Path) -> Result {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    workflow_problems(&text).map_err(|p| format!("{}: {}", path.display(), p.join("; ")))
+}
+
+fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
+    let mut problems = Vec::new();
+    for (part, _) in CI_PARTS.iter().filter(|(p, _)| *p != "boot-tests") {
+        if !text.contains(&format!("cargo xtask ci {part}")) {
+            problems.push(format!("no job runs `cargo xtask ci {part}`"));
+        }
+    }
+    let line = text.lines().map(str::trim).find_map(|l| l.strip_prefix("shard: [")?.strip_suffix(']'));
+    match line {
+        None => problems.push("no boot test matrix line `shard: [...]`".into()),
+        Some(list) => {
+            let listed: Vec<&str> = list.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+            let want: Vec<&str> = CI_BOOT_SHARDS.iter().map(|(s, _)| *s).collect();
+            if listed != want {
+                problems.push(format!("the boot test matrix lists shards {listed:?}, xtask has {want:?}"));
+            }
+        }
+    }
+    if !text.contains("cargo xtask boot-tests --shard ${{ matrix.shard }}") {
+        problems.push("no job runs `cargo xtask boot-tests --shard ${{ matrix.shard }}`".into());
+    }
+    if !text.contains(&format!("shard: {TCG_SHARD}")) || !text.contains("accel: tcg") {
+        problems.push(format!("the matrix does not run shard {TCG_SHARD} with `accel: tcg`"));
+    }
+    if problems.is_empty() { Ok(()) } else { Err(problems) }
+}
+
+/// `ci [part...]`: every part of CI ([`CI_PARTS`]), or the ones named.
+fn ci(args: &[String]) -> Result {
+    let names: Vec<&str> = CI_PARTS.iter().map(|(n, _)| *n).collect();
+    if let Some(bad) = args.iter().find(|a| !names.contains(&a.as_str())) {
+        return Err(format!("ci: no part {bad:?}; the parts are {}", names.join(", ")));
+    }
+    let started = Instant::now();
+    let mut took = Vec::new();
+    for (name, run) in CI_PARTS.iter().filter(|(n, _)| args.is_empty() || args.iter().any(|a| a == n)) {
+        let t = Instant::now();
+        run().map_err(|e| format!("ci {name}: {e}"))?;
+        took.push(format!("{name} {:.0?}", t.elapsed()));
+    }
+    eprintln!("==> ci passed in {:.0?} ({})", started.elapsed(), took.join(", "));
+    Ok(())
+}
+
 fn pipeline(args: &[String]) -> Result {
-    step(
-        "pipeline",
-        cargo().current_dir(root()).args(["run", "--quiet", "--package", "poly-pipeline", "--"]).args(args),
-    )
+    let mut cmd = cargo();
+    cmd.current_dir(root()).args(["run", "--quiet", "--package", "poly-pipeline", "--"]).args(args);
+    // The commands that build the kernel (`--build-kernel`, or a missing
+    // one) build it as `kernel_cargo` does, with our ntdll.dll: the same
+    // kernel as the boot tests', so neither build undoes the other.
+    if matches!(args.first().map(String::as_str), Some("polycheck" | "diff" | "polyrun")) {
+        cmd.env(ntdll::KERNEL_ENV, ntdll::ensure()?);
+    }
+    step("pipeline", &mut cmd)
 }
 
 fn coverage(args: &[String]) -> Result {
@@ -1418,5 +1666,52 @@ mod tests {
         })
         .unwrap();
         assert_eq!((boots, b.status), (1 + QEMU_CRASH_RETRIES, None));
+    }
+
+    /// CI runs every boot test group exactly once, in some shard, and the
+    /// shards are named once each.
+    #[test]
+    fn every_boot_group_is_in_one_ci_shard() {
+        for (name, _) in BOOT_GROUPS {
+            let n = CI_BOOT_SHARDS.iter().filter(|(_, g)| g.contains(&name)).count();
+            assert_eq!(n, 1, "boot test group {name} is in {n} CI shards");
+        }
+        for (shard, groups) in CI_BOOT_SHARDS {
+            assert_eq!(CI_BOOT_SHARDS.iter().filter(|(s, _)| *s == shard).count(), 1, "{shard}");
+            for g in groups {
+                assert!(BOOT_GROUPS.iter().any(|(n, _)| n == g), "shard {shard} names no group {g}");
+            }
+        }
+        assert!(shard_groups(TCG_SHARD).is_ok());
+        let mut names: Vec<_> = BOOT_GROUPS.iter().map(|(n, _)| *n).collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), BOOT_GROUPS.len(), "boot test group names repeat");
+    }
+
+    #[test]
+    fn selects_boot_groups_by_name_or_prefix() {
+        let names = |sel: &[&str]| -> Vec<&str> {
+            let sel: Vec<String> = sel.iter().map(|s| s.to_string()).collect();
+            select_boot_groups(&sel).unwrap().iter().map(|(n, _)| *n).collect()
+        };
+        assert_eq!(names(&["selftest"]), ["selftest-default", "selftest-2g", "selftest-polled", "selftest-max"]);
+        // In BOOT_GROUPS order, whatever order they were asked for in.
+        assert_eq!(names(&["shell", "selftest-max", "smp"]), ["selftest-max", "smp", "shell"]);
+        assert!(select_boot_groups(&["self".into()]).is_err());
+        assert!(select_boot_groups(&["nope".into()]).is_err());
+    }
+
+    /// The workflow in the repository runs every part and shard
+    /// (`cargo xtask lint` checks it too); a matrix that lost a shard does not.
+    #[test]
+    fn the_ci_workflow_runs_every_part_and_shard() {
+        let text = std::fs::read_to_string(root().join(WORKFLOW)).unwrap();
+        workflow_problems(&text).unwrap();
+        let shards: Vec<&str> = CI_BOOT_SHARDS.iter().map(|(s, _)| *s).collect();
+        let lost = text.replace(&format!("shard: [{}]", shards.join(", ")), "shard: [selftest]");
+        assert!(workflow_problems(&lost).unwrap_err()[0].contains("the boot test matrix lists shards"));
+        let no_lint = text.replace("cargo xtask ci lint", "cargo xtask lint");
+        assert!(workflow_problems(&no_lint).unwrap_err()[0].contains("ci lint"));
     }
 }
