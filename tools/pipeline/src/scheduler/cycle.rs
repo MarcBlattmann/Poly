@@ -414,7 +414,8 @@ impl<O: Ops> Driver<'_, O> {
                     if !out.ok() {
                         return Ok(self.human(st, format!("coverage claim failed: {}", out.tail(3))));
                     }
-                    let sha = self.ops.commit(slot, &message, &[safety::coverage_file(&entry)])?;
+                    let paths = [safety::coverage_file(&entry), "README.md".into(), "docs/progress".into()];
+                    let sha = self.ops.commit(slot, &message, &paths)?;
                     if let Some(r) = self.push_hub(slot, &sha, &spec_b)? {
                         return Ok(self.human(st, r));
                     }

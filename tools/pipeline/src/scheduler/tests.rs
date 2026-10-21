@@ -4,7 +4,7 @@
 //! "process" is a new driver over the same state directory and world).
 
 use super::config::Config;
-use super::cycle::{Driver, Logger, Pass, Yielded};
+use super::cycle::{Driver, Logger, Pass, Yielded, claim_message};
 use super::ops::{DiffResult, Merge, Ops, Out, Pr, Push, Remote, SpecFiles};
 use super::real::{DryShell, RealOps};
 use super::safety::{Change, coverage_file};
@@ -63,6 +63,8 @@ struct World {
     human: String,
     notified: Vec<String>,
     calls: Vec<String>,
+    /// The message and paths of every commit the loop made itself.
+    committed: Vec<(String, Vec<String>)>,
     crash: Option<(String, u32)>,
     entry: Option<String>,
 }
@@ -193,8 +195,9 @@ impl Ops for World {
     fn subject(&mut self, _slot: usize, rev: &str) -> Result<String> {
         Ok(self.commits.get(rev).map(|c| c.subject.clone()).unwrap_or_default())
     }
-    fn commit(&mut self, slot: usize, message: &str, _paths: &[String]) -> Result<String> {
+    fn commit(&mut self, slot: usize, message: &str, paths: &[String]) -> Result<String> {
         self.call("commit");
+        self.committed.push((message.to_string(), paths.to_vec()));
         let changes = std::mem::take(&mut self.staged);
         let sha = self.new_commit(self.slots.get(&slot).cloned(), message, changes);
         self.slots.insert(slot, sha.clone());
@@ -420,6 +423,20 @@ fn order(calls: &[String]) -> Vec<&str> {
         "pr_auto_merge",
     ];
     calls.iter().map(String::as_str).filter(|c| main.contains(c)).collect()
+}
+
+#[test]
+fn the_claim_commit_carries_the_regenerated_readme() {
+    // `coverage claim` changes the counts the README progress section and
+    // graphics come from; `cargo xtask ci` on the spec branch fails if the
+    // claim commit leaves them stale (found on the home server).
+    let s = setup("claim-readme");
+    let mut d = s.driver(World::new());
+    worked(d.pass(None).unwrap());
+    let (message, paths) = &d.ops.committed[0];
+    assert_eq!(message, &claim_message(&EntryId::parse(BRK).unwrap(), &s.cfg.spec.agent));
+    assert!(paths.contains(&coverage_file(&EntryId::parse(BRK).unwrap())), "{paths:?}");
+    assert!(paths.iter().any(|p| p == "README.md") && paths.iter().any(|p| p == "docs/progress"), "{paths:?}");
 }
 
 #[test]
