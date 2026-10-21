@@ -186,8 +186,15 @@ address as `<ptr>` while `prctl(PR_SET_CHILD_SUBREAPER, 1)` compares the
 1; likewise `fcntl` (lock and owner commands), `futex` (timeout or
 `val2`), `arch_prctl` and `waitid` (`P_PIDFD`). It exits non-zero on any failure, or with
 `--baseline` only on regressions; `--strict` also fails on unsupported
-tests. A test whose reference run times out is an error, whatever the
-target did. `--tracer strace` uses strace instead of our ptrace tracer.
+tests. A reference run that times out is run once more; a test whose
+reference times out both times is an error, whatever the target did. A
+rerun that finished is compared as usual and named on the report's last
+lines (`the reference run timed out and was run again`, `summary.json`
+`reference_timeouts`): the test can hang and wants fixing
+([ADR 0085](adr/0085-reference-timeouts-are-hangs-rerun-once-kill-the-tree.md)).
+On a timeout the runner kills the program's whole process tree, also
+children that started a session of their own. `--tracer strace` uses
+strace instead of our ptrace tracer.
 
 A test can weaken the syscall comparison for itself with a line
 `poly-diff: syscalls=off` (or `names`) in its source, usually in the
