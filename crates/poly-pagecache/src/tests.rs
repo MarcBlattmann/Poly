@@ -274,6 +274,23 @@ fn writes_stay_in_the_cache_until_writeback() {
 }
 
 #[test]
+fn dirty_pages_count_as_blocks_before_writeback() {
+    let (_cache, _probe, fs) = setup(1000);
+    let ino = fs.create(fs.root(), b"f", &REG).unwrap();
+    assert_eq!(fs.getattr(ino).unwrap().blocks, 0, "empty");
+    fs.write(ino, 0, &pattern(1, PAGE_SIZE)).unwrap();
+    assert_eq!(fs.getattr(ino).unwrap().blocks, 8, "one page, not written back yet");
+    fs.writeback(None).unwrap();
+    assert_eq!(fs.getattr(ino).unwrap().blocks, 8, "the inner file system's page");
+    fs.write(ino, 0, b"again").unwrap();
+    assert_eq!(fs.getattr(ino).unwrap().blocks, 8, "rewriting a page adds nothing");
+    // A hole has no pages.
+    let hole = fs.create(fs.root(), b"h", &REG).unwrap();
+    fs.setattr(hole, &SetAttr { size: Some(10 << 20), ..SetAttr::default() }).unwrap();
+    assert_eq!(fs.getattr(hole).unwrap().blocks, 0);
+}
+
+#[test]
 fn writeback_writes_runs_of_pages_in_one_call() {
     let (cache, probe, fs) = setup(1000);
     let ino = fs.create(fs.root(), b"f", &REG).unwrap();

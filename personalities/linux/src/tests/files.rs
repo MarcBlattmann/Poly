@@ -601,6 +601,49 @@ fn stat_lstat_newfstatat_and_fstat_by_empty_path() {
     assert_eq!(sys(k, nr::STAT, &[link, UNMAPPED]), Err(Errno::EFAULT));
 }
 
+/// lstat (the spec sheet's `path_order` and `bad_buffer`): the path string
+/// is checked first, then its walk, and only a path that resolves is
+/// checked against the buffer, which an error leaves unchanged.
+#[test]
+fn lstat_checks_the_path_before_the_buffer() {
+    let mut e = env();
+    let k = &mut e.k;
+    let link = s(k, 0, b"/link");
+    let missing = s(k, 0x100, b"/dir/nope");
+    let through_file = s(k, 0x200, b"/dir/file/x");
+    let empty = s(k, 0x300, b"");
+    assert_eq!(sys(k, nr::LSTAT, &[link, scratch(OUT)]), Ok(0));
+    assert_eq!(k.peek_u32(scratch(OUT) + 24), 0o120777, "S_IFLNK | 0777");
+    assert_eq!(le_u64(&k.peek(scratch(OUT) + 48, 8)), 8, "the length of \"dir/file\"");
+    assert_eq!(sys(k, nr::LSTAT, &[missing, 0]), Err(Errno::ENOENT));
+    assert_eq!(sys(k, nr::LSTAT, &[through_file, 0]), Err(Errno::ENOTDIR));
+    assert_eq!(sys(k, nr::LSTAT, &[empty, 0]), Err(Errno::ENOENT));
+    assert_eq!(sys(k, nr::LSTAT, &[0, scratch(OUT)]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::LSTAT, &[1, scratch(OUT)]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::LSTAT, &[8, 8]), Err(Errno::EFAULT));
+    // 4096 bytes without a NUL: too long before any component is looked at.
+    let long = std::vec![b'a'; 4096];
+    k.poke(scratch(0x1000), b"/nope/");
+    k.poke(scratch(0x1006), &long[6..]);
+    k.poke(scratch(0x2000), &[0]);
+    assert_eq!(sys(k, nr::LSTAT, &[scratch(0x1000), scratch(OUT)]), Err(Errno::ENAMETOOLONG));
+
+    // Bad buffers: NULL, read-only, running into an unmapped page; 144
+    // bytes ending exactly at the end of the mapping are fine.
+    assert_eq!(sys(k, nr::LSTAT, &[link, 0]), Err(Errno::EFAULT));
+    let ro = read_only_page(k);
+    assert_eq!(sys(k, nr::LSTAT, &[link, ro]), Err(Errno::EFAULT));
+    let end = scratch(16 * 4096);
+    assert_eq!(sys(k, nr::LSTAT, &[link, end - 144]), Ok(0));
+    k.poke(end - 100, &[0xa5; 100]);
+    assert_eq!(sys(k, nr::LSTAT, &[link, end - 100]), Err(Errno::EFAULT));
+    assert_eq!(k.peek(end - 100, 100), [0xa5; 100], "the buffer is left unchanged");
+    // On a path error the buffer is not touched either.
+    k.poke(scratch(OUT), &[0x5a; 144]);
+    assert_eq!(sys(k, nr::LSTAT, &[missing, scratch(OUT)]), Err(Errno::ENOENT));
+    assert_eq!(k.peek(scratch(OUT), 144), [0x5a; 144]);
+}
+
 #[test]
 fn statx_fills_the_basic_fields_and_the_mount_id() {
     let mut e = env();

@@ -9,6 +9,7 @@ mod dirorder;
 mod fdtable;
 mod files;
 mod locks;
+mod lstat;
 mod mounts;
 mod names;
 mod objects;

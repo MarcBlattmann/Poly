@@ -275,8 +275,20 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
         self.st.inner.lookup(dir, name)
     }
 
+    /// The inner file system's attributes, but a regular file's
+    /// `st_blocks` counts at least its dirty pages: data written uses
+    /// storage (stat(2): "the number of blocks allocated to the file")
+    /// before writeback gives the inner file system its blocks.
     fn getattr(&self, ino: Ino) -> Result<Attr> {
-        self.st.inner.getattr(ino)
+        let mut attr = self.st.inner.getattr(ino)?;
+        if attr.kind == FileType::Regular {
+            let dirty = {
+                let index = self.core.index.lock();
+                index.dirty.range(self.key(ino, 0)..=self.key(ino, u64::MAX)).count() as u64
+            };
+            attr.blocks = attr.blocks.max(dirty * (PAGE / 512));
+        }
+        Ok(attr)
     }
 
     fn setattr(&self, ino: Ino, set: &SetAttr) -> Result<Attr> {
