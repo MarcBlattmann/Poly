@@ -261,7 +261,12 @@ console milestones.
   environment, opens `\??\c:\windows\SYSTEM32`, finds `System32` in its own
   case by enumerating `C:\Windows`, and creates, enumerates and deletes a
   file in its `TEMP` directory; the kernel then checks every folder exists
-  and `ProfileImagePath` was synced.
+  and `ProfileImagePath` was synced. A second `kernel_test!`
+  (`nt::layout::tests`) makes the `/nt/c`-style link to a disk-style
+  directory under `/tmp`, checks it is kept, replaces an empty directory,
+  refuses to replace a file, and that the layout made through the link
+  lands on the target (the test disks of the boot tests have no `/poly`, so
+  the boot itself keeps `C:` on `/nt/c`).
 - Edits to shared files are small and additive: `lib.rs` gains two
   modules; `kernel/src/nt/mod.rs` one call before `io::attach`, a
   `Launch` (path and arguments) with `start_with` / `spawn_pe_with` beside

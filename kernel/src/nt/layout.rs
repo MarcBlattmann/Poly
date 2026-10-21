@@ -60,25 +60,30 @@ fn mkdir_all(path: &str) -> Result<(), Errno> {
     Ok(())
 }
 
-/// Point `/nt/c` at `target` (a directory on the hive disk), unless
-/// something else is already there: an empty directory is replaced, a link
-/// to `target` kept; anything else is kept and `C:` stays on it.
-fn link_c(target: &str) -> Result<(), Errno> {
+/// Point `link` (`/nt/c`) at `target` (a directory on the hive disk),
+/// unless something else is already there: an empty directory is replaced,
+/// a link to `target` kept; anything else is kept (`EEXIST`) and `C:`
+/// stays on it.
+pub(super) fn link_c(link: &str, target: &str) -> Result<(), Errno> {
     let vfs = fs::vfs();
     let ctx = vfs.root_context()?;
     let cred = Cred::root();
     mkdir_all(target)?;
-    mkdir_all("/nt")?;
-    match vfs.lookup(&ctx, &cred, At::Cwd, C_PATH.as_bytes(), false) {
+    if let Some(cut) = link.rfind('/')
+        && cut > 0
+    {
+        mkdir_all(&link[..cut])?;
+    }
+    match vfs.lookup(&ctx, &cred, At::Cwd, link.as_bytes(), false) {
         Err(Errno::ENOENT) => {}
         Err(e) => return Err(e),
         Ok(node) => match node.kind()? {
             FileType::Symlink if node.readlink()? == target.as_bytes() => return Ok(()),
-            FileType::Directory => vfs.rmdir(&ctx, &cred, At::Cwd, C_PATH.as_bytes())?,
+            FileType::Directory => vfs.rmdir(&ctx, &cred, At::Cwd, link.as_bytes())?,
             _ => return Err(Errno::EEXIST),
         },
     }
-    vfs.symlink(&ctx, &cred, target.as_bytes(), At::Cwd, C_PATH.as_bytes())
+    vfs.symlink(&ctx, &cred, target.as_bytes(), At::Cwd, link.as_bytes())
 }
 
 /// Make the layout and sync the registry (once, as the NT state is made,
@@ -87,7 +92,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     // Where the hives live decides where C: lives.
     if let Some(hives) = super::registry::store_dir() {
         let disk_c = alloc::format!("{}/c", hives.trim_end_matches('/').trim_end_matches("/registry"));
-        if let Err(e) = link_c(&disk_c) {
+        if let Err(e) = link_c(C_PATH, &disk_c) {
             crate::kprintln!("nt: layout: {C_PATH} not linked to {disk_c} ({e:?}); C: stays on {C_PATH}");
         }
     } else if let Err(e) = mkdir_all(C_PATH) {
@@ -137,4 +142,52 @@ pub fn dos_path(path: &[u8]) -> String {
     }
     abs.extend_from_slice(path);
     layout::dos_path_of_vfs(&abs, &roots)
+}
+
+mod tests {
+    use crate::kernel_test;
+    use alloc::string::String;
+    use poly_personality_nt::io::VfsRoot;
+    use poly_personality_nt::layout::{POLY_USER, create};
+    use poly_vfs::{At, Cred, Errno, OpenFlags};
+
+    kernel_test! {
+        /// `C:` on a disk (ADR 0072): the link to the disk directory is
+        /// made, kept when right, replaces an empty directory and leaves
+        /// anything else alone; the layout made through the link lands on
+        /// the target.
+        fn nt_layout_links_c_to_the_disk_directory() -> TestResult {
+            let vfs = crate::fs::vfs();
+            let ctx = vfs.root_context().map_err(|_| "no VFS")?;
+            let cred = Cred::root();
+            let base = "/tmp/poly-layout-test";
+            let (link, target) = (alloc::format!("{base}/nt/c"), alloc::format!("{base}/disk/poly/nt/c"));
+            super::link_c(&link, &target).map_err(|_| "the first link failed")?;
+            super::link_c(&link, &target).map_err(|_| "a second link failed")?;
+            let read = vfs.readlink(&ctx, &cred, At::Cwd, link.as_bytes()).map_err(|_| "no link")?;
+            if read != target.as_bytes() {
+                return Err("the link points elsewhere");
+            }
+            let root = vfs.lookup(&ctx, &cred, At::Cwd, link.as_bytes(), true).map_err(|_| "link unresolved")?;
+            let vr = VfsRoot { vfs, ctx: vfs.root_context().map_err(|_| "no VFS")?, cred: cred.clone() };
+            let report = create::create(&vr, &root, &POLY_USER);
+            if !report.conflicts.is_empty() {
+                return Err("the layout through the link had conflicts");
+            }
+            let on_disk = alloc::format!("{target}/Windows/System32");
+            if vfs.lookup(&ctx, &cred, At::Cwd, on_disk.as_bytes(), true).is_err() {
+                return Err("the layout did not land on the disk directory");
+            }
+            // An empty directory in the way is replaced; a file is not.
+            let other: String = alloc::format!("{base}/nt/d");
+            vfs.mkdir(&ctx, &cred, At::Cwd, other.as_bytes(), 0o755).map_err(|_| "mkdir")?;
+            super::link_c(&other, &target).map_err(|_| "an empty directory was not replaced")?;
+            let file = alloc::format!("{base}/nt/e");
+            drop(vfs.open(&ctx, &cred, At::Cwd, file.as_bytes(), OpenFlags::WRONLY | OpenFlags::CREAT, 0o644).map_err(|_| "create")?);
+            if super::link_c(&file, &target) != Err(Errno::EEXIST) {
+                return Err("a file in the way was replaced");
+            }
+            Ok(())
+        }
+    }
 }
