@@ -116,7 +116,7 @@ enum Ended {
 
 /// Whether the entry's agent session has ended and only its branch is
 /// left to fetch (no session to start, so no reason to wait for the role).
-fn fetch_only(st: &EntryState) -> bool {
+pub fn fetch_only(st: &EntryState) -> bool {
     st.pending_head.is_some() || st.session.as_ref().is_some_and(|s| s.exit.is_some())
 }
 

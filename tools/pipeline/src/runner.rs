@@ -38,6 +38,8 @@ impl Tracer {
 
 /// Run `program` on the host with `tracer`.
 pub fn run(tracer: Tracer, program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
+    // Absolute: the program starts in `/` ([`reference`]).
+    let program = &util::absolute(program);
     let mut t = match tracer {
         Tracer::Ptrace => ptrace::trace(program, test, timeout)?,
         Tracer::Strace => strace(program, test, timeout)?,
@@ -84,13 +86,18 @@ pub(crate) struct Finished {
 
 /// `cmd` for a test program on the reference side: it starts with only
 /// stdin, stdout and stderr open, whatever this process inherited
-/// ([`ptrace::cloexec_from_3`]).
+/// ([`ptrace::cloexec_from_3`]), with the fixed umask
+/// ([`crate::identity::REFERENCE_UMASK`]), in `/`: as Poly's test init
+/// starts it.
 fn reference(cmd: &mut Command) -> &mut Command {
+    cmd.current_dir("/");
     // SAFETY: the hook runs in the child between fork and exec and makes
-    // only async-signal-safe calls (close_range, or getrlimit and fcntl).
+    // only async-signal-safe calls (close_range, or getrlimit and fcntl;
+    // umask).
     unsafe {
         std::os::unix::process::CommandExt::pre_exec(cmd, || {
             ptrace::cloexec_from_3();
+            crate::identity::set_reference_umask();
             Ok(())
         })
     }
