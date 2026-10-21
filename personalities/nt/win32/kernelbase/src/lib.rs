@@ -16,6 +16,7 @@ extern crate alloc;
 use poly_win32_rt as _;
 
 mod base;
+mod console;
 mod file;
 mod memory;
 mod misc;
@@ -30,12 +31,15 @@ static ALLOC: base::ProcessHeap = base::ProcessHeap;
 const DLL_PROCESS_ATTACH: u32 = 1;
 
 /// The entry point (`DllMain`): at `DLL_PROCESS_ATTACH`, the process's
-/// current directory starts as the executable's directory (ADR 0079). The
-/// standard handles are opened when first asked for.
+/// current directory starts as the executable's directory (ADR 0079), and
+/// its standard handles and console are the ones its parameters name (ADR
+/// 0080).
 #[unsafe(no_mangle)]
 pub extern "system" fn kernelbase_main(_module: *mut u8, reason: u32, _reserved: *mut u8) -> i32 {
     if reason == DLL_PROCESS_ATTACH {
         process::init_current_dir();
+        let connection = process::init_std_handles();
+        console::init(connection);
     }
     base::TRUE
 }
