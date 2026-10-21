@@ -448,6 +448,14 @@ impl LinuxKernel for Thread<'_> {
         self.memory()?.advise(addr, len, what).map_err(|e| Errno::new(e.linux_errno()).unwrap_or(Errno::EINVAL))
     }
 
+    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
+        self.memory()?.populate(addr, len, lock).map_err(|_| Errno::ENOMEM)
+    }
+
+    fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
+        self.memory()?.residency(addr, vec).map_err(|_| Errno::ENOMEM)
+    }
+
     fn brk(&self) -> u64 {
         user::current_memory().map_or(0, |m| m.brk(0))
     }

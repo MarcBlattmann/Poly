@@ -557,6 +557,23 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
+    /// mlock(2) (`lock`) or munlock(2) of `[addr, addr + len)` (both page
+    /// aligned, `len` non-zero, no overflow): `ENOMEM` if part of it is not
+    /// mapped, or, to lock, is `PROT_NONE`; locking brings every page in.
+    /// `ENOSYS` by default.
+    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
+        let _ = (addr, len, lock);
+        Err(Errno::ENOSYS)
+    }
+
+    /// mincore(2) of `[addr, addr + vec.len() pages)` (`addr` page
+    /// aligned, no overflow): `vec[i]` 1 if page `i` is resident, else 0;
+    /// `ENOMEM` if part of the range is not mapped. `ENOSYS` by default.
+    fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
+        let _ = (addr, vec);
+        Err(Errno::ENOSYS)
+    }
+
     // ---- thread state -------------------------------------------------
 
     /// The calling thread's FS segment base.
