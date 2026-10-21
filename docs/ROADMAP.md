@@ -105,7 +105,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Structured exception handling: kernel-to-user exception dispatch, unwinding (ADR 0068)
 - [x] Registry: hive storage, `NtOpenKey` family, default system hives
 - [x] Our `ntdll`: PE loader (imports, relocations, TLS, delay-load), heap, `Rtl*`, loader lock (ADR 0071)
-- [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors
+- [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors (first slice done, ADR 0079; left: `CreateProcessW` / `NtCreateUserProcess`, file mappings, TLS, NLS)
 - [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055)
 - [ ] `advapi32` basics: registry API, security descriptors, tokens (single user)
 - [ ] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles

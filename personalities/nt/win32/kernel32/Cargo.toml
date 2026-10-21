@@ -1,0 +1,21 @@
+[package]
+name = "kernel32"
+description = "Our kernel32.dll (ADR 0079): forwarders to kernelbase through API-set contracts, and the few functions kernel32 keeps"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kernel32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[build-dependencies]
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true

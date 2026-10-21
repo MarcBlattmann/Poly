@@ -1,0 +1,10 @@
+[package]
+name = "poly-win32-rt"
+description = "What every Poly Win32 module needs from a C runtime it does not have: __chkstk, _fltused, the panic handler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

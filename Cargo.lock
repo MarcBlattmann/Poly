@@ -98,6 +98,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-kernelbase"
+version = "0.0.1"
+dependencies = [
+ "poly-ldr",
+ "poly-ntobj",
+ "poly-rtl",
+]
+
+[[package]]
 name = "poly-ldr"
 version = "0.0.1"
 dependencies = [
@@ -383,6 +392,7 @@ dependencies = [
  "poly-elf",
  "poly-ext2",
  "poly-gfx",
+ "poly-kernelbase",
  "poly-pe",
  "poly-term",
  "poly-vfs",
