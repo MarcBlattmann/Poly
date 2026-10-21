@@ -278,10 +278,10 @@ pub enum Service {
     /// program reports what went wrong before it gives up). Returns
     /// `STATUS_SUCCESS`.
     PolyTrace,
-    /// `PolyResumeApc()`: the tail of the APC trampoline. After a user APC
-    /// routine returns, the kernel restores the context the thread had when
-    /// the APC interrupted it (our stand-in for `NtContinue`, until `ntdll`
-    /// provides `KiUserApcDispatcher`). Never returns to the trampoline.
+    /// `PolyResumeApc()`: the tail of `ntdll`'s `KiUserApcDispatcher`.
+    /// After a user APC routine returns, the kernel restores the context the
+    /// thread had when the APC interrupted it, which it kept (ADR 0065,
+    /// 0071). Never returns to the caller.
     PolyResumeApc,
 
     // ----- exceptions (ADR 0068)
@@ -292,10 +292,6 @@ pub enum Service {
     /// `NtContinue(ContextRecord*, TestAlert)`: not in the WDK; resume the
     /// thread with a `CONTEXT` (ADR 0068).
     Continue,
-    /// `PolySetExceptionDispatcher(Dispatcher)`: Poly's own; the process's
-    /// user-mode exception dispatcher until our `ntdll` provides
-    /// `KiUserExceptionDispatcher` (ADR 0068).
-    PolySetExceptionDispatcher,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -399,13 +395,11 @@ pub const REGISTRY_SERVICES: [(Service, u32, &str); 13] = [
     (Service::SetInformationKey, 0x10C, "NtSetInformationKey"),
 ];
 
-/// The exception services (ADR 0068): in the processes and threads group,
-/// and one of Poly's own.
-pub const EXCEPTION_SERVICES: [(Service, u32, &str); 3] = [
-    (Service::RaiseException, 0x0A0, "NtRaiseException"),
-    (Service::Continue, 0x0A1, "NtContinue"),
-    (Service::PolySetExceptionDispatcher, (TABLE_POLY << 12) | 0x010, "PolySetExceptionDispatcher"),
-];
+/// The exception services (ADR 0068), in the processes and threads group.
+/// (Poly's own `PolySetExceptionDispatcher`, 0x3010, served until the
+/// kernel mapped our `ntdll`, ADR 0071; the number stays retired.)
+pub const EXCEPTION_SERVICES: [(Service, u32, &str); 2] =
+    [(Service::RaiseException, 0x0A0, "NtRaiseException"), (Service::Continue, 0x0A1, "NtContinue")];
 
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
@@ -464,6 +458,5 @@ mod tests {
         assert!(REGISTRY_SERVICES.iter().all(|s| (0x100..0x140).contains(&s.1)));
         assert!((0xA0..0xB0).contains(&Service::RaiseException.number()));
         assert!((0xA0..0xB0).contains(&Service::Continue.number()));
-        assert_eq!(Service::PolySetExceptionDispatcher.number(), 0x3010);
     }
 }

@@ -176,18 +176,21 @@ pub unsafe extern "C" fn RtlVirtualUnwind(
     }
 }
 
-/// `KiUserExceptionDispatcher`: the kernel transfers here on a fault with
-/// RCX = `&EXCEPTION_RECORD`, RDX = `&CONTEXT` on this thread's stack (ADR
-/// 0068). Dispatch the exception; a handler that takes it resumes with
-/// `NtContinue`, otherwise it goes second-chance through `NtRaiseException`.
+/// `KiUserExceptionDispatcher`: the kernel transfers here on an exception
+/// as if it had been called as `KiUserExceptionDispatcher(record, context)`
+/// with both on this thread's stack and a zero return address (ADR 0068).
+/// The vectored handlers run first, then the frame-based handlers of the
+/// loaded modules' `.pdata`; a handler that takes it resumes with
+/// `NtContinue`, otherwise it goes second-chance through `NtRaiseException`
+/// (the kernel then ends the process with the code).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn KiUserExceptionDispatcher() -> ! {
-    let (rcx, rdx): (u64, u64);
-    // SAFETY: the kernel set RCX and RDX before entering us.
-    unsafe { core::arch::asm!("", out("rcx") rcx, out("rdx") rdx, options(nostack)) };
-    let record_ptr = rcx as *mut u8;
-    let context_ptr = rdx as *mut u8;
+pub unsafe extern "C" fn KiUserExceptionDispatcher(record_ptr: *mut u8, context_ptr: *mut u8) -> ! {
     // SAFETY: the kernel wrote a valid record and context below our RSP.
+    if unsafe { crate::veh::call_handlers(record_ptr, context_ptr) } {
+        // SAFETY: resume the context a vectored handler fixed up.
+        unsafe { syscalls::NtContinue(context_ptr, 0) };
+    }
+    // SAFETY: as above.
     let mut record = unsafe { read_record(record_ptr) };
     // SAFETY: as above.
     let mut ctx = unsafe { read_context(context_ptr) }.unwrap_or_default();
@@ -286,28 +289,29 @@ pub unsafe extern "C" fn RtlRaiseException(record: *const u8) -> ! {
     unsafe { core::arch::asm!("int 0x29", in("ecx") 2u32, options(noreturn)) }
 }
 
-/// `KiUserApcDispatcher`: entered by the kernel with the APC routine and
-/// its arguments; call it, then resume the interrupted context with
-/// `NtContinue`. The kernel places the interrupted `CONTEXT` on the stack
-/// (Poly's convention mirrors ADR 0065's trampoline).
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn KiUserApcDispatcher() -> ! {
-    let (routine, a1, a2, a3, ctx): (u64, u64, u64, u64, u64);
-    // SAFETY: the kernel set these registers (ADR 0065 APC entry).
-    unsafe {
-        core::arch::asm!(
-            "", out("rcx") a1, out("rdx") a2, out("r8") a3, out("r9") ctx, out("r11") routine,
-            options(nostack)
-        );
-    }
-    type Apc = unsafe extern "system" fn(u64, u64, u64);
-    // SAFETY: the kernel resolved `routine` to the APC routine.
-    unsafe { core::mem::transmute::<u64, Apc>(routine)(a1, a2, a3) };
-    // SAFETY: resume the interrupted context.
-    unsafe { syscalls::NtContinue(ctx as *mut u8, 0) };
-    // SAFETY: NtContinue does not return.
-    unsafe { core::arch::asm!("int 0x29", in("ecx") 2u32, options(noreturn)) }
-}
+// `KiUserApcDispatcher`: the kernel redirects an alertable thread here
+// (ADR 0065's APC entry, Poly's own convention) with R11 = the APC routine,
+// RCX/RDX/R8 = its three arguments and RSP 16-byte aligned; it keeps the
+// interrupted context itself. Call `routine(arg1, arg2, arg3)`, then
+// `PolyResumeApc`, which restores that context (the wait returns
+// `STATUS_USER_APC`). The `PolyResumeApc` stub is generated from the
+// service table with the others (`build.rs`).
+core::arch::global_asm!(
+    r#"
+    .text
+    .globl KiUserApcDispatcher
+    .p2align 4
+    .seh_proc KiUserApcDispatcher
+KiUserApcDispatcher:
+    sub rsp, 0x20
+    .seh_stackalloc 0x20
+    .seh_endprologue
+    call r11
+    call PolyResumeApc
+    int3
+    .seh_endproc
+"#
+);
 
 /// `RtlPcToFileHeader`: the base of the image containing `pc`.
 #[unsafe(no_mangle)]

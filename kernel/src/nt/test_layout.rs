@@ -4,8 +4,8 @@
 //! `ntdll`'s stubs would (ADR 0063). Every label is prefixed `ntlayout_`
 //! (all `global_asm!` blocks share one object).
 //!
-//! It starts with the PEB in RCX (the thread trampoline passes it, ADR
-//! 0065), reports a failed step with `PolyTrace(0xBADBAD, step, status)`
+//! It starts with the PEB in RCX (`ntdll` passes it to the entry point,
+//! ADR 0065, 0071), reports a failed step with `PolyTrace(0xBADBAD, step, status)`
 //! and ends with [`FAIL_CODE`], else with [`PASS_CODE`]:
 //!
 //! 1. `PEB.ProcessParameters` (PEB + 0x20) is set, its `ImagePathName` is

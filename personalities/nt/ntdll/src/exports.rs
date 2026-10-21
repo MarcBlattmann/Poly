@@ -476,7 +476,7 @@ pub unsafe extern "C" fn RtlCompareMemory(a: *const u8, b: *const u8, len: usize
 
 /// `LDR_LOCK_LOADER_LOCK` disposition: the loader lock critical section is
 /// kept in ntdll's own data.
-static LOADER_LOCK: CriticalSection = CriticalSection::new();
+pub(crate) static LOADER_LOCK: CriticalSection = CriticalSection::new();
 
 fn to_wide(s: *const UnicodeString) -> alloc::vec::Vec<u16> {
     if s.is_null() {

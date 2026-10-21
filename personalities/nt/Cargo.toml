@@ -18,3 +18,7 @@ poly-vfs.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# Test images: a stand-in for our ntdll with its three entry points.
+poly-ldr.workspace = true
