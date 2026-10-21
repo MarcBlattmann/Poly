@@ -4,10 +4,13 @@
 //! for the work. They are registered by number in [`crate::table`].
 
 pub mod admin;
+pub mod copy_range;
 pub mod cred;
 pub mod epoll;
 pub mod eventfd;
+pub mod fadvise;
 pub mod fd;
+pub mod fileioctl;
 pub mod futex;
 pub mod io;
 pub mod limits;
@@ -30,3 +33,4 @@ pub mod system;
 pub mod task;
 pub mod time;
 pub mod timerfd;
+pub mod xattr;

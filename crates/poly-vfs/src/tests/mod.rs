@@ -13,6 +13,7 @@ mod objects;
 mod path;
 mod perm;
 mod tmpfs;
+mod xattrs;
 
 use crate::*;
 use alloc::sync::Arc;
