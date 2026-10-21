@@ -42,8 +42,6 @@ fn advice_values_sort_into_what_the_kernel_does() {
         5,
         6,
         7,
-        MADV_WIPEONFORK,
-        MADV_KEEPONFORK,
         MADV_POPULATE_READ,
         MADV_POPULATE_WRITE,
         MADV_COLLAPSE,
@@ -57,6 +55,9 @@ fn advice_values_sort_into_what_the_kernel_does() {
     for r in refused {
         assert_eq!(Advice::from_raw(r), None, "{r}");
     }
+    // The fork settings (madvise's spec).
+    assert_eq!(Advice::from_raw(MADV_WIPEONFORK), Some(Advice::WipeOnFork));
+    assert_eq!(Advice::from_raw(MADV_KEEPONFORK), Some(Advice::KeepOnFork));
 }
 
 #[test]
@@ -79,7 +80,7 @@ fn bad_arguments_never_reach_the_kernel() {
     let mut k = FakeKernel::new();
     let addr = sys(&mut k, nr::MMAP, &[0, PAGE_SIZE, RW_PROT, PRIV_ANON, u64::MAX, 0]).unwrap();
     assert_eq!(madvise(&mut k, addr, PAGE_SIZE, 7), Err(Errno::EINVAL), "unknown advice");
-    assert_eq!(madvise(&mut k, addr, PAGE_SIZE, MADV_WIPEONFORK), Err(Errno::EINVAL), "not supported");
+    assert_eq!(madvise(&mut k, addr, PAGE_SIZE, 26), Err(Errno::EINVAL), "not supported");
     assert_eq!(madvise(&mut k, addr + 1, PAGE_SIZE, MADV_DONTNEED), Err(Errno::EINVAL), "unaligned");
     assert_eq!(madvise(&mut k, addr, u64::MAX, MADV_DONTNEED), Err(Errno::EINVAL), "negative length");
     assert_eq!(madvise(&mut k, u64::MAX - 4095, 8192, MADV_DONTNEED), Err(Errno::EINVAL), "wraps");

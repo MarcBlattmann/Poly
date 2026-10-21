@@ -268,6 +268,16 @@ fn queued(p: &mut LinuxProcess, dest: Dest, id: i32, signo: u32) -> Option<&mut 
     queue.find_mut(|info| from_timer(info, id, signo))
 }
 
+/// timer_delete(2) of timer `id`, which sent `signo`: its signal, if one
+/// is still queued, is never delivered (the spec of timer_delete).
+pub fn discard_queued(p: &mut LinuxProcess, id: i32, signo: u32) {
+    p.shared.remove_where(|info| from_timer(info, id, signo));
+    let tids: alloc::vec::Vec<i32> = p.thread_ids().collect();
+    for tid in tids {
+        p.thread_mut(tid).pending.remove_where(|info| from_timer(info, id, signo));
+    }
+}
+
 /// Whether timer `id`'s signal is queued anywhere in the process.
 fn is_queued(p: &LinuxProcess, id: i32, signo: u32) -> bool {
     let thread_queues = p.thread_ids().map(|tid| &p.thread(tid).pending);

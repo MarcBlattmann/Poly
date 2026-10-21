@@ -10,6 +10,7 @@ pub mod eventfd;
 pub mod fadvise;
 pub mod fd;
 pub mod fileioctl;
+pub mod fsize;
 pub mod futex;
 pub mod io;
 pub mod limits;

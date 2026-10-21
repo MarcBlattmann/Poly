@@ -172,6 +172,17 @@ pub enum Clock {
     ThreadCpuTime,
 }
 
+/// getrusage(2)'s memory counters ([`LinuxKernel::memory_counts`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemoryCounts {
+    /// The most memory resident at once, in KiB (`ru_maxrss`).
+    pub maxrss_kib: u64,
+    /// Page faults served without I/O (`ru_minflt`).
+    pub minor_faults: u64,
+    /// Page faults that needed I/O (`ru_majflt`).
+    pub major_faults: u64,
+}
+
 /// Whose CPU time [`LinuxKernel::cpu_times`] reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CpuTimesOf {
@@ -871,6 +882,13 @@ pub trait LinuxKernel {
     fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {
         let _ = of;
         None
+    }
+
+    /// getrusage(2)'s memory counters for `of` (the calling process or
+    /// thread; `Children` for its waited-for children). Zeros by default.
+    fn memory_counts(&self, of: CpuTimesOf) -> MemoryCounts {
+        let _ = of;
+        MemoryCounts::default()
     }
 
     /// The calling process's timers changed (setitimer, alarm,

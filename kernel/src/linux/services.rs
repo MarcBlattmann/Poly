@@ -444,6 +444,8 @@ impl LinuxKernel for Thread<'_> {
             Advice::DontNeed => Do::Discard,
             Advice::Free => Do::DiscardAnonymous,
             Advice::Remove => Do::FreeBacking,
+            Advice::WipeOnFork => Do::WipeOnFork(true),
+            Advice::KeepOnFork => Do::WipeOnFork(false),
         };
         self.memory()?.advise(addr, len, what).map_err(|e| Errno::new(e.linux_errno()).unwrap_or(Errno::EINVAL))
     }
@@ -744,6 +746,24 @@ impl LinuxKernel for Thread<'_> {
                 // A process record, not a thread of another process.
                 (p.pid == pid).then(|| cputime::process(&p))
             }
+        }
+    }
+
+    fn memory_counts(&self, of: CpuTimesOf) -> poly_personality_linux::kernel::MemoryCounts {
+        let (faults, peak) = match of {
+            CpuTimesOf::Children => (0, 0),
+            _ => {
+                // The memory as it is now counts as a peak too (pages the
+                // program started with, mappings populated at once).
+                let now = user::current_memory().map_or(0, |m| m.resident_pages());
+                self.process.cpu.resident(now);
+                self.process.cpu.memory_counts()
+            }
+        };
+        poly_personality_linux::kernel::MemoryCounts {
+            maxrss_kib: peak * 4,
+            minor_faults: faults,
+            major_faults: 0,
         }
     }
 

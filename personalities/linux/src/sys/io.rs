@@ -205,6 +205,8 @@ fn write_from(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> S
     if total == 0 {
         return k.write(fd, &[]).map(|n| n as u64);
     }
+    // RLIMIT_FSIZE: the write may be cut short, or refused.
+    let total = crate::sys::fsize::allowed(k, fd, None, total)?;
     let mut chunk = bounce(total.min(CHUNK as u64) as usize)?;
     let mut cursor = Cursor::new(iovs, total);
     let mut done: u64 = 0;

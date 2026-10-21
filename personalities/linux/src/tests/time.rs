@@ -346,7 +346,7 @@ fn setitimer_and_getitimer() {
     assert_eq!(sys(&mut k, nr::GETITIMER, &[u64::MAX, OUT]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::GETITIMER, &[0, UNMAPPED]), Err(Errno::EFAULT));
     assert_eq!(sys(&mut k, nr::SETITIMER, &[0, UNMAPPED, 0]), Err(Errno::EFAULT));
-    assert_eq!(sys(&mut k, nr::SETITIMER, &[0, 0, 0]), Err(Errno::EFAULT));
+    assert_eq!(sys(&mut k, nr::SETITIMER, &[0, 0, 0]), Ok(0), "a null new value disarms");
     k.poke(TS + 24, &1_000_000i64.to_le_bytes());
     assert_eq!(sys(&mut k, nr::SETITIMER, &[0, TS, 0]), Err(Errno::EINVAL), "usec out of range");
     // The new value is in place even when the old one cannot be written.

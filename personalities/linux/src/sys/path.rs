@@ -330,6 +330,7 @@ pub fn fchmod(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn truncate(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
     let len = u64::try_from(a.long(1)).map_err(|_| Errno::EINVAL)?;
+    crate::sys::fsize::check_truncate(k, len)?;
     fs(k)?.truncate(&path, len).map(|()| 0)
 }
 

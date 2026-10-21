@@ -50,6 +50,7 @@ pub fn pwrite64(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if total == 0 {
         return fs(k)?.pwrite(fd, &[], offset).map(|n| n as u64);
     }
+    let total = crate::sys::fsize::allowed(k, fd, Some(offset), total)?;
     let mut chunk = bounce(total.min(CHUNK as u64) as usize)?;
     let mut done: u64 = 0;
     while done < total {
@@ -365,6 +366,7 @@ pub fn getdents(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn ftruncate(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let len = u64::try_from(a.long(1)).map_err(|_| Errno::EINVAL)?;
+    crate::sys::fsize::check_truncate(k, len)?;
     fs(k)?.ftruncate(fd, len).map(|()| 0)
 }
 

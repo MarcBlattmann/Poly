@@ -104,6 +104,12 @@ pub struct ProcessCpu {
     system_ns: AtomicU64,
     children_user_ns: AtomicU64,
     children_system_ns: AtomicU64,
+    /// Page faults resolved without I/O (getrusage(2) `ru_minflt`; Poly
+    /// counts every resolved fault so: nothing is ever paged out).
+    minor_faults: AtomicU64,
+    /// The most pages the process's memory held at once, as seen after
+    /// its faults (`ru_maxrss`, in pages here).
+    max_resident: AtomicU64,
 }
 
 impl ProcessCpu {
@@ -121,6 +127,24 @@ impl ProcessCpu {
     pub fn add_child(&self, t: CpuTimes) {
         self.children_user_ns.fetch_add(t.user_ns, Ordering::Relaxed);
         self.children_system_ns.fetch_add(t.system_ns, Ordering::Relaxed);
+    }
+
+    /// A page fault of the process was resolved; its memory now holds
+    /// `resident` pages.
+    pub fn fault(&self, resident: u64) {
+        self.minor_faults.fetch_add(1, Ordering::Relaxed);
+        self.max_resident.fetch_max(resident, Ordering::Relaxed);
+    }
+
+    /// The memory now holds `resident` pages (a peak that came without a
+    /// fault: a mapping populated at once, the program's start).
+    pub fn resident(&self, resident: u64) {
+        self.max_resident.fetch_max(resident, Ordering::Relaxed);
+    }
+
+    /// `(minor faults, most resident pages)` so far.
+    pub fn memory_counts(&self) -> (u64, u64) {
+        (self.minor_faults.load(Ordering::Relaxed), self.max_resident.load(Ordering::Relaxed))
     }
 
     pub fn children(&self) -> CpuTimes {

@@ -358,13 +358,15 @@ pub fn getitimer(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// setitimer(which, new_value, old_value): arm (or with a zero value,
 /// disarm) an interval timer; the old setting goes to `old_value` if it
 /// is not null. setitimer(2): `EINVAL` for an unknown timer or a
-/// `tv_usec` outside 0-999999 (and Poly: negative seconds), `EFAULT`
-/// (also for a null `new_value`; to be confirmed by the diff runner). The
-/// new setting is in place before `old_value` is written.
+/// `tv_usec` outside 0-999999 (and Poly: negative seconds), `EFAULT`. A
+/// null `new_value` disarms the timer (setitimer's spec). The new setting
+/// is in place before `old_value` is written.
 pub fn setitimer(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let which = a.int(0);
     let clock = itimer_clock(which).ok_or(Errno::EINVAL)?;
-    let new = Itimerval::from_bytes(&read(k, a.ptr(1))?);
+    // A null new value disarms the timer (setitimer's spec: it returns
+    // 0 and the old value).
+    let new = if a.ptr(1).is_null() { Itimerval::default() } else { Itimerval::from_bytes(&read(k, a.ptr(1))?) };
     if !new.value.is_valid() || !new.interval.is_valid() {
         return Err(Errno::EINVAL);
     }
@@ -521,7 +523,18 @@ pub fn timer_getoverrun(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// unspecified).
 pub fn timer_delete(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let timer = a.int(0);
-    if !with_own(k, |p| p.timers.delete(timer)) {
+    let deleted = with_own(k, |p| {
+        let signo = match p.timers.get(timer).map(|t| t.notify) {
+            Some(Notify::Signal { signo, .. }) => Some(signo),
+            _ => None,
+        };
+        let deleted = p.timers.delete(timer);
+        if let Some(signo) = signo {
+            timers::discard_queued(p, timer, signo);
+        }
+        deleted
+    });
+    if !deleted {
         return Err(Errno::EINVAL);
     }
     timers_changed(k);
@@ -564,7 +577,14 @@ pub fn getrusage(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         _ => return Err(Errno::EINVAL),
     };
     let t = k.cpu_times(of).unwrap_or_default();
-    let usage = Rusage { utime: Timeval::from_nanos(t.user_ns), stime: Timeval::from_nanos(t.system_ns) };
+    let m = k.memory_counts(of);
+    let usage = Rusage {
+        utime: Timeval::from_nanos(t.user_ns),
+        stime: Timeval::from_nanos(t.system_ns),
+        maxrss: m.maxrss_kib as i64,
+        minflt: m.minor_faults as i64,
+        majflt: m.major_faults as i64,
+    };
     k.copy_to_user(a.ptr(1), &usage.to_bytes())?;
     Ok(0)
 }

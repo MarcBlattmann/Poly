@@ -537,5 +537,10 @@ pub fn current_memory() -> Option<Arc<Memory>> {
 /// copy return [`Efault`].
 pub fn page_fault(addr: u64, access: memory::Access) -> Result<(), FaultError> {
     let memory = current_memory().ok_or(FaultError::NoMemoryMap)?;
-    memory.fault(addr, access)
+    memory.fault(addr, access)?;
+    // getrusage(2): a minor fault, and perhaps a new peak of the memory.
+    if let Some(p) = current_process() {
+        p.cpu.fault(memory.resident_pages());
+    }
+    Ok(())
 }
