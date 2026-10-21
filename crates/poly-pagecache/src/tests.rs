@@ -617,3 +617,14 @@ fn ext2_behind_the_cache_keeps_the_data() {
         assert_eq!(read_all(&again, ino), data, "file {i}");
     }
 }
+
+#[test]
+fn the_end_of_a_listing_is_the_inner_file_systems() {
+    // tmpfs parks a finished listing at INT32_MAX (the getdents64 spec,
+    // `directory_order`); behind the cache too.
+    let cache = PageCache::<TestFrame>::new(4);
+    let fs: Arc<Cached> = cache.register(Arc::new(Tmpfs::new(Arc::new(FixedClock))) as Arc<dyn FileSystem>);
+    assert_eq!(fs.readdir_end(), Some(i32::MAX as u64));
+    let (_cache, _probe, probed) = setup(4);
+    assert_eq!(probed.readdir_end(), None, "a file system that does not say");
+}

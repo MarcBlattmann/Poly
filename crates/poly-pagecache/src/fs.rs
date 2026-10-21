@@ -434,6 +434,10 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
         self.st.inner.readdir(dir, pos, emit)
     }
 
+    fn readdir_end(&self) -> Option<u64> {
+        self.st.inner.readdir_end()
+    }
+
     fn open(&self, ino: Ino) -> Result<()> {
         self.st.inner.open(ino)
     }
