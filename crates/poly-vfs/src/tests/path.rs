@@ -205,6 +205,16 @@ fn name_and_path_length_limits() {
         env.vfs.mkdir(&env.ctx, &env.root, At::Cwd, alloc::format!("/{too_long}").as_bytes(), 0o755),
         Err(Errno::ENAMETOOLONG)
     );
+    // symlink (spec sheet linux/syscall/x86_64/symlinkat): a linkpath
+    // component of 255 works, 256 is ENAMETOOLONG, also as a middle
+    // component that does not exist (not ENOENT); the target's components
+    // are not looked at.
+    let sl =
+        |target: &str, path: &str| env.vfs.symlink(&env.ctx, &env.root, target.as_bytes(), At::Cwd, path.as_bytes());
+    assert_eq!(sl("x", &alloc::format!("/a/{ok}")), Ok(()));
+    assert_eq!(sl("x", &alloc::format!("/a/{too_long}")), Err(Errno::ENAMETOOLONG));
+    assert_eq!(sl("x", &alloc::format!("/a/{too_long}/x")), Err(Errno::ENAMETOOLONG));
+    assert_eq!(sl(&"t".repeat(300), "/a/long_target"), Ok(()));
 
     // PATH_MAX counts the terminating NUL: 4095 bytes is the longest path.
     let mut longest: Vec<u8> = vec![b'/'; PATH_MAX - 1];
