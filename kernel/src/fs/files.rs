@@ -115,8 +115,21 @@ impl Files {
     pub fn close(&self, fd: Fd) -> Result<()> {
         // The file is dropped after the table's lock is released.
         let file = self.fds.lock().close(fd)?;
-        drop(file);
+        self.released(alloc::vec![file]);
         Ok(())
+    }
+
+    /// The owner id of this table's record locks (fcntl(2): the process).
+    pub fn lock_owner(&self) -> usize {
+        self as *const Files as usize
+    }
+
+    /// Drop `files`, which descriptors of this table no longer hold, and
+    /// let go of the record locks on them (ADR 0059).
+    fn released(&self, files: Vec<Arc<OpenFile>>) {
+        let keys = super::locks::keys_of(&files);
+        drop(files);
+        super::locks::closed(self.lock_owner(), &keys);
     }
 
     /// `dup(2)`: the lowest free descriptor, close-on-exec clear.
@@ -133,7 +146,7 @@ impl Files {
             replaced
         };
         // A replaced file's last reference goes here, unlocked.
-        drop(replaced);
+        self.released(replaced.into_iter().collect());
         Ok(new)
     }
 
@@ -145,7 +158,7 @@ impl Files {
             fds.dup3(old, new, flags)?;
             replaced
         };
-        drop(replaced);
+        self.released(replaced.into_iter().collect());
         Ok(new)
     }
 
@@ -182,20 +195,30 @@ impl Files {
 
     /// At `execve`: close every descriptor marked close-on-exec.
     pub fn close_on_exec(&self) {
-        let closed = {
+        let closed: Vec<Arc<OpenFile>> = {
             let mut fds = self.fds.lock();
-            let before = fds.clone();
+            let closed = fds.iter().filter(|(_, _, cloexec)| *cloexec).map(|(_, f, _)| Arc::clone(f)).collect();
             fds.close_on_exec();
-            before
+            closed
         };
-        // The old table's references go unlocked.
-        drop(closed);
+        // The closed files' references go unlocked.
+        self.released(closed);
+    }
+
+    /// `close_range(2)`: close (or, with `cloexec`, mark close-on-exec)
+    /// the open descriptors from `first` to `last`.
+    pub fn close_range(&self, first: u32, last: u32, cloexec: bool) {
+        let closed = self.fds.lock().close_range(first, last, cloexec);
+        // The files' last references go unlocked.
+        self.released(closed);
     }
 
     /// At exit: close everything.
     pub fn close_all(&self) {
         let old = core::mem::take(&mut *self.fds.lock());
+        let files = old.iter().map(|(_, f, _)| Arc::clone(f)).collect();
         drop(old);
+        self.released(files);
     }
 
     // ---- I/O on descriptors (no lock held during the transfer) ------------

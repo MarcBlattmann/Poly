@@ -6,12 +6,13 @@ extern crate std;
 use super::fake::*;
 use crate::abi::{le_u64, makedev};
 use crate::fs::{
-    DirEntry, FileStatus, LinuxFs, StatFs, SysInfo, TimeChange, at::AT_FDCWD, dirent64_len, encode_dirent64, major,
-    minor, rlimit::*,
+    DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, SysInfo, TimeChange, at::AT_FDCWD, dirent64_len,
+    encode_dirent64, major, minor, rlimit::*,
 };
 use crate::kernel::Target;
 use crate::rlimit::Rlimit;
 use crate::{Errno, nr};
+use poly_vfs::locks::{LockKind, LockOwner};
 use poly_vfs::{At, Cred, FdTable, FsContext, OpenFlags, RenameFlags, Tmpfs, Vfs, Whence};
 use std::sync::{Arc, Mutex};
 use std::vec::Vec;
@@ -39,6 +40,8 @@ struct VfsFs {
     /// set_fd_limit calls.
     limits: Arc<Mutex<Vec<(Target, u64)>>>,
     synced: Arc<Mutex<u32>>,
+    /// Advisory locks, owned by process 1 or by descriptions.
+    locks: poly_vfs::locks::LockTable,
 }
 
 impl VfsFs {
@@ -56,6 +59,14 @@ impl VfsFs {
             let node = self.node(dirfd)?;
             f(&self.vfs, At::Node(&node)).map_err(errno)
         }
+    }
+
+    /// The lock table's file and owner for `fd`: process 1, or (`ofd`) the
+    /// open file description.
+    fn lock_key(&self, fd: i32, ofd: bool) -> Result<(poly_vfs::locks::FileKey, LockOwner), Errno> {
+        let file = self.fds.get(fd).map_err(errno)?;
+        let owner = if ofd { LockOwner::Description(Arc::as_ptr(file) as usize) } else { LockOwner::Process(1) };
+        Ok(((0, file.node().ino()), owner))
     }
 
     fn status(st: poly_vfs::Stat) -> FileStatus {
@@ -156,6 +167,57 @@ impl LinuxFs for VfsFs {
 
     fn set_cloexec(&mut self, fd: i32, cloexec: bool) -> Result<(), Errno> {
         self.fds.set_cloexec(fd, cloexec).map_err(errno)
+    }
+
+    fn close_range(&mut self, first: u32, last: u32, cloexec: bool) -> Result<(), Errno> {
+        self.fds.close_range(first, last, cloexec);
+        Ok(())
+    }
+
+    fn test_lock(
+        &mut self,
+        fd: i32,
+        ofd: bool,
+        write: bool,
+        start: u64,
+        end: u64,
+    ) -> Result<Option<LockHolder>, Errno> {
+        let (key, owner) = self.lock_key(fd, ofd)?;
+        let kind = if write { LockKind::Write } else { LockKind::Read };
+        Ok(self.locks.test(key, owner, kind, start, end).map(|l| LockHolder {
+            write: l.kind == LockKind::Write,
+            start: l.start,
+            end: l.end,
+            pid: l.pid,
+        }))
+    }
+
+    /// No other thread can unlock here: a conflict is `EAGAIN` even with
+    /// `wait`.
+    fn set_lock(
+        &mut self,
+        fd: i32,
+        ofd: bool,
+        write: Option<bool>,
+        start: u64,
+        end: u64,
+        _wait: bool,
+    ) -> Result<(), Errno> {
+        let (key, owner) = self.lock_key(fd, ofd)?;
+        let kind = write.map(|w| if w { LockKind::Write } else { LockKind::Read });
+        let pid = if ofd { -1 } else { 1 };
+        self.locks.set(key, owner, pid, kind, start, end).map_err(|_| Errno::EAGAIN)
+    }
+
+    fn flock(&mut self, fd: i32, exclusive: Option<bool>, _wait: bool) -> Result<(), Errno> {
+        let (key, owner) = self.lock_key(fd, true)?;
+        match exclusive {
+            Some(x) => self.locks.flock(key, owner, x).map_err(|_| Errno::EAGAIN),
+            None => {
+                self.locks.unflock(key, owner);
+                Ok(())
+            }
+        }
     }
 
     fn status_flags(&mut self, fd: i32) -> Result<u32, Errno> {
@@ -338,6 +400,7 @@ pub(super) fn env() -> Env {
         cred,
         limits: limits.clone(),
         synced: synced.clone(),
+        locks: poly_vfs::locks::LockTable::new(),
     }));
     Env { k, vfs, limits, synced }
 }
@@ -641,7 +704,8 @@ fn fcntl_commands() {
     assert_eq!(sys(k, nr::FCNTL, &[21, 1, 0]), Ok(1));
     assert_eq!(sys(k, nr::FCNTL, &[fd, 0, u64::MAX]), Err(Errno::EINVAL), "negative");
     assert_eq!(sys(k, nr::FCNTL, &[fd, 0, 5000]), Err(Errno::EINVAL), "beyond RLIMIT_NOFILE");
-    assert_eq!(sys(k, nr::FCNTL, &[fd, 5, 0]), Err(Errno::EINVAL), "F_GETLK not supported");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 5, 0]), Err(Errno::EFAULT), "F_GETLK reads a struct flock");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 8, 0]), Err(Errno::EINVAL), "F_SETOWN not supported");
     assert_eq!(sys(k, nr::FCNTL, &[99, 3, 0]), Err(Errno::EBADF));
     assert_eq!(sys(k, nr::FCNTL, &[99, 12345, 0]), Err(Errno::EBADF), "the fd is checked first");
 }

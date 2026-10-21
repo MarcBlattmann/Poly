@@ -2,7 +2,7 @@
 //!
 //! Commands:
 //!   build [--release]   build the kernel
-//!   run   [--release] [--gdb] [--no-disk] [--headless] [--busybox | --initrd=<file> | --no-initrd] [kernel args...]
+//!   run   [--release] [--gdb] [--no-disk] [--headless] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices and a virtio-net NIC on QEMU's user
 //!                       networking attached (--no-disk: without them),
@@ -12,7 +12,9 @@
 //!                       initramfs (--initrd=<file>: that cpio archive instead,
 //!                       --no-initrd: none; --busybox: BusyBox's image, booting into
 //!                       BusyBox's init and a shell on the console, see busybox.rs;
-//!                       add console=tty1 for the screen)
+//!                       add console=tty1 for the screen; --disk-root [--fresh-disk]: BusyBox's
+//!                       init mounts the root disk (made if missing) and runs its bash, see
+//!                       rootdisk.rs)
 //!   screenshot [--release] [--out <file>] [--wait <text>] [kernel args...]
 //!                       boot headless, wait for a serial line containing <text>
 //!                       (default: the self-test's verdict), save the screen to <file>
@@ -28,6 +30,9 @@
 //!                       with them and the host's ld.so and libraries (docs/DEBUGGING.md)
 //!   busybox-initramfs   write the BusyBox image (BusyBox from the host or built; busybox.rs)
 //!   busybox-test        only the BusyBox boot test of `test` (busybox.rs)
+//!   root-disk           write the persistent root disk image target/poly-root-disk.img
+//!                       (the host's bash, coreutils, Python, gcc; rootdisk.rs)
+//!   root-disk-test      only the root disk boot test of `test` (rootdisk.rs)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
@@ -42,6 +47,7 @@ mod ktest;
 mod libsearch;
 mod net;
 mod programs;
+mod rootdisk;
 mod screen;
 mod symbols;
 mod terminal;
@@ -84,9 +90,11 @@ fn main() -> ExitCode {
         Some("dynamic-initramfs") => dynamic::command(),
         Some("busybox-initramfs") => busybox::command(),
         Some("busybox-test") => busybox_test(),
+        Some("root-disk") => rootdisk::command(),
+        Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font|dynamic-initramfs|busybox-initramfs|busybox-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -266,7 +274,7 @@ fn has_desktop() -> bool {
 /// `run [--release] [--gdb] [--no-disk] [--headless] [--busybox | --initrd=<file> | --no-initrd] [kernel args...]`
 fn run(args: &[String]) -> Result {
     let (mut release, mut gdb, mut with_disk, mut window, mut cmdline) = (false, false, true, true, Vec::new());
-    let mut with_busybox = false;
+    let (mut with_busybox, mut disk_root, mut fresh_disk) = (false, false, false);
     // The default initramfs: an empty path until it is written below.
     let mut initrd = Some(PathBuf::new());
     for a in args {
@@ -277,12 +285,17 @@ fn run(args: &[String]) -> Result {
             "--headless" => window = false,
             "--no-initrd" => initrd = None,
             "--busybox" => with_busybox = true,
+            "--disk-root" => disk_root = true,
+            "--fresh-disk" => fresh_disk = true,
             flag if flag.starts_with("--initrd=") => initrd = Some(PathBuf::from(&flag["--initrd=".len()..])),
             flag if flag.starts_with("--") => return Err(format!("run: unknown option {flag}")),
             arg => cmdline.push(arg),
         }
     }
     let kernel = build_kernel(release)?;
+    if disk_root {
+        return run_disk_root(&kernel, fresh_disk, gdb, &cmdline);
+    }
     let disk = if with_disk { Some(test_disk()?) } else { None };
     let devices = disk.as_deref().map_or(Devices::None, Devices::Test);
     let flags = devices.flags();
@@ -335,6 +348,44 @@ fn run(args: &[String]) -> Result {
     eprintln!("==> boot (Ctrl-A X quits, Ctrl-A C toggles the QEMU monitor; `cargo xtask symbolize < log` symbolizes)");
     let _ = cmd.status().map_err(|e| format!("qemu: {e}"))?;
     Ok(())
+}
+
+/// `run --disk-root [--fresh-disk]`: BusyBox's init mounts the root disk
+/// (`target/poly-root-disk.img`, made if missing or with `--fresh-disk`)
+/// and runs its bash on the serial console (rootdisk.rs). No window, no
+/// test devices; the network on QEMU's user networking.
+fn run_disk_root(kernel: &Path, fresh: bool, gdb: bool, cmdline: &[&str]) -> Result {
+    let image = root().join("target").join(rootdisk::FILE_NAME);
+    if fresh || !image.exists() {
+        rootdisk::make(rootdisk::FILE_NAME)?;
+    } else {
+        eprintln!("==> the root disk {} is kept from before (--fresh-disk makes it again)", image.display());
+    }
+    let (initrd, origin) = rootdisk::write_initramfs()?.map_err(|why| format!("--disk-root: {why}"))?;
+    eprintln!(
+        "==> BusyBox from {origin}; its init mounts /dev/vda on /mnt/root and runs bash there (`poweroff` quits)"
+    );
+    let mut append = format!("{} poly.net=qemu", rootdisk::boot_args());
+    for a in cmdline {
+        append.push(' ');
+        append.push_str(a);
+    }
+    let mut cmd = qemu(kernel, rootdisk::MEMORY, &append, Devices::None, "mon:stdio");
+    cmd.args(rootdisk::drive_args(&image)).args(net::nic_args(None, false));
+    cmd.arg("-initrd").arg(&initrd).args(["-display", "none"]);
+    if gdb {
+        cmd.args(["-s", "-S"]);
+        eprintln!("==> QEMU is waiting for a debugger on localhost:1234 (see docs/DEBUGGING.md)");
+    }
+    let _ = cmd.status().map_err(|e| format!("qemu: {e}"))?;
+    Ok(())
+}
+
+/// `cargo xtask root-disk-test`: the root disk boot test alone.
+fn root_disk_test() -> Result {
+    let kernel = build_kernel(false)?;
+    let syms = Arc::new(Symbols::from_file(&kernel)?);
+    rootdisk::boot_test(&kernel, &syms)
 }
 
 /// `symbolize [--release] [--elf <path>] [addr...]`
@@ -1054,6 +1105,9 @@ fn boot_tests() -> Result {
     dynamic::boot_tests(&kernel, &syms)?;
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     busybox::boot_test(&kernel, &syms)?;
+    // bash, coreutils, Python and gcc from the persistent ext4 root disk
+    // (rootdisk.rs).
+    rootdisk::boot_test(&kernel, &syms)?;
 
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).

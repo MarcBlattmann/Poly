@@ -118,7 +118,6 @@ impl ProcessCpu {
 
     /// A child that has been waited for used `t` (it and its own waited-for
     /// children): getrusage(2) `RUSAGE_CHILDREN`.
-    #[allow(dead_code, reason = "wait4 (the processes milestone) adds what a reaped child used")]
     pub fn add_child(&self, t: CpuTimes) {
         self.children_user_ns.fetch_add(t.user_ns, Ordering::Relaxed);
         self.children_system_ns.fetch_add(t.system_ns, Ordering::Relaxed);

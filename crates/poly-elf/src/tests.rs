@@ -519,6 +519,27 @@ fn truncation_never_panics() {
     }
 }
 
+/// The headers alone parse as the whole file does, once the file's length
+/// is known; a prefix without the table or the interpreter path, or a
+/// length too short for a segment, is refused.
+#[test]
+fn a_prefix_with_the_headers_parses_like_the_file() {
+    let bytes = dynamic_pie().bytes();
+    let len = bytes.len() as u64;
+    let whole = Elf::parse(&bytes).unwrap();
+    let head = Elf::parse_prefix(&bytes[..0x300], len).unwrap();
+    assert_eq!(head.interp(), whole.interp());
+    assert_eq!(head.program_header_table(), whole.program_header_table());
+    assert_eq!(head.data().len(), 0x300);
+    let opts = LoadOptions::default();
+    let (a, b) = (LoadPlan::new(&head, &opts).unwrap(), LoadPlan::new(&whole, &opts).unwrap());
+    assert_eq!((a.entry(), a.start(), a.end(), a.brk()), (b.entry(), b.start(), b.end(), b.brk()));
+    assert_eq!(Elf::parse_prefix(&bytes[..0x210], len).err(), Some(Error::Truncated), "interpreter path cut");
+    assert_eq!(Elf::parse_prefix(&bytes[..100], len).err(), Some(Error::Truncated), "table cut");
+    assert_eq!(Elf::parse_prefix(&bytes[..0x300], 0x1fff).err(), Some(Error::Truncated), "file too short");
+    assert_eq!(Elf::parse_prefix(&bytes, len - 1).err(), Some(Error::Truncated), "more head than file");
+}
+
 /// A small deterministic generator (xorshift64*), so failures reproduce.
 struct Rng(u64);
 

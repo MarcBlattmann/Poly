@@ -122,9 +122,16 @@ fn find(pid: u32) -> Option<Arc<Process>> {
 #[derive(Debug, Default)]
 pub struct KernelProc;
 
-/// The root context paths are shown from (there is no chroot yet).
+/// The root context paths are shown from: the reading process's root
+/// directory (chroot(2): a chrooted shell reads `/proc/self/exe` as
+/// `/usr/bin/readlink`, not with the chroot's own path in front, ADR 0059),
+/// the system's for kernel threads. A file outside that root is named from
+/// the system's root.
 fn root() -> Option<FsContext> {
-    vfs().root_context().ok()
+    match user::current_process() {
+        Some(p) => Some(p.files.context()),
+        None => vfs().root_context().ok(),
+    }
 }
 
 fn with_record<R>(pid: u32, f: impl FnOnce(&Record) -> R) -> Option<R> {
