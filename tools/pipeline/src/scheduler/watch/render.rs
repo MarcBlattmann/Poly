@@ -3,6 +3,7 @@
 //! codes when wanted.
 
 use super::gather::{Activity, Row, Snapshot};
+use crate::scheduler::state::FOREVER;
 use crate::util;
 
 /// A piece of a line in one style (an SGR parameter string, "" = plain).
@@ -59,6 +60,9 @@ pub fn duration(secs: u64) -> String {
 
 /// A time of day (`14:03 UTC`), with the date when it is not today.
 pub fn clock(at: u64, now: u64) -> String {
+    if at == FOREVER {
+        return "`loop resume`".into();
+    }
     let t = util::format_utc(at);
     if at / 86_400 == now / 86_400 {
         format!("{} UTC", &t[11..16])
@@ -69,7 +73,9 @@ pub fn clock(at: u64, now: u64) -> String {
 
 /// `at` relative to `now`: "in 5m00s", "3m00s ago", "due".
 fn relative(at: u64, now: u64) -> String {
-    if at > now {
+    if at == FOREVER {
+        "no end".into()
+    } else if at > now {
         format!("in {}", duration(at - now))
     } else if now - at < 5 {
         "due".into()
@@ -194,6 +200,9 @@ pub fn render(s: &Snapshot, height: Option<usize>) -> Vec<Line> {
         span(format!("human queue {}", t.human), if t.human > 0 { RED } else { "" }),
         plain(format!("  open PRs {}  in flight {}/{}", t.open_prs, t.in_flight, s.limits.max_parallel)),
     ]);
+    for n in &s.notices {
+        head.push(vec![span(format!("NOTICE {}", one_line(n)), YELLOW)]);
+    }
     for p in &s.problems {
         head.push(vec![span(format!("! {}", one_line(p)), YELLOW)]);
     }

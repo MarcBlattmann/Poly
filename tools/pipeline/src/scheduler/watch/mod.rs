@@ -25,9 +25,6 @@ use crate::util::{Args, Result};
 use gather::{Limits, Sources};
 use std::path::PathBuf;
 
-/// Where `setup.sh` puts the configuration, used when no other is found
-/// (the systemd unit names it with `POLY_PIPELINE_CONFIG`).
-const SETUP_CONFIG: &str = "/srv/poly/runner/pipeline.toml";
 const POLY_ROOT: &str = "/srv/poly";
 /// The unit `setup.sh` installs.
 const SERVICE: &str = "poly-pipeline";
@@ -35,10 +32,8 @@ const SERVICE: &str = "poly-pipeline";
 pub const OPTIONS: &[&str] = &["config", "interval", "once", "json", "width", "lines"];
 
 pub fn command(a: &Args) -> Result<u8> {
-    let path = a.opt("config").map(PathBuf::from).or_else(Config::default_path).or_else(|| {
-        let p = PathBuf::from(SETUP_CONFIG);
-        p.is_file().then_some(p)
-    });
+    // As the loop finds it; without one, the defaults (the server layout).
+    let path = a.opt("config").map(PathBuf::from).or_else(Config::default_path);
     let cfg = match &path {
         Some(p) => Config::load(p).map_err(|e| {
             format!("{e}\n(the configuration and the state belong to the runner user: run this as `server`, e.g. sudo -u server)")
@@ -73,14 +68,21 @@ pub fn command(a: &Args) -> Result<u8> {
     };
     let limits = Limits::of(&cfg);
 
+    let snapshot = || {
+        let mut snap = gather::gather(&src, &limits, crate::util::now_secs());
+        if let Ok(Some((_, message))) = super::update::deploy_pending(&cfg) {
+            snap.notices.push(message);
+        }
+        snap
+    };
     if a.has("json") {
-        let snap = gather::gather(&src, &limits, crate::util::now_secs());
+        let snap = snapshot();
         println!("{}", serde_json::to_string_pretty(&snap).map_err(|e| e.to_string())?);
         return Ok(0);
     }
     let tty = term::is_tty(libc::STDOUT_FILENO);
     if a.has("once") || !tty {
-        let snap = gather::gather(&src, &limits, crate::util::now_secs());
+        let snap = snapshot();
         let width = width.or_else(|| term::size().map(|(w, _)| w)).unwrap_or(120).max(40);
         let color = tty && std::env::var_os("NO_COLOR").is_none();
         for line in render::render(&snap, None) {
@@ -88,15 +90,15 @@ pub fn command(a: &Args) -> Result<u8> {
         }
         return Ok(0);
     }
-    live(&src, &limits, interval, width)
+    live(snapshot, interval, width)
 }
 
-fn live(src: &Sources, limits: &Limits, interval: f64, width: Option<usize>) -> Result<u8> {
+fn live(snapshot: impl Fn() -> gather::Snapshot, interval: f64, width: Option<usize>) -> Result<u8> {
     let color = std::env::var_os("NO_COLOR").is_none();
     let mut screen = term::Screen::enter();
     let step = std::time::Duration::from_secs_f64(interval);
     loop {
-        let snap = gather::gather(src, limits, crate::util::now_secs());
+        let snap = snapshot();
         let (cols, rows) = term::size().unwrap_or((80, 24));
         let cols = width.unwrap_or(cols).max(40);
         // One column short of the edge: a character in the last column

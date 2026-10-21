@@ -392,6 +392,28 @@ fn renders_within_80_columns_and_the_terminal_height() {
 }
 
 #[test]
+fn shows_pauses_without_an_end_and_the_loops_own_notices() {
+    let f = fixture("notices");
+    let store = Store { dir: f.src.state_dir.clone() };
+    store.set_pause("spec", &Pause { until: state::FOREVER, reason: "loop pause by the owner".into() }).unwrap();
+    let failure = crate::scheduler::update::BuildFailure {
+        head: "abc".into(),
+        time: t(NOW - 60),
+        message: "the new version at abc does not build".into(),
+    };
+    util::write_json(&crate::scheduler::update::failure_file(&f.src.state_dir), &failure).unwrap();
+    let s = gather::gather(&f.src, &limits(), NOW);
+    let all: Vec<String> = render::render(&s, None).iter().map(|l| render::to_text(l, 100, false)).collect();
+    let all = all.join("\n");
+    assert!(all.contains("PAUSED spec until `loop resume` (no end): loop pause by the owner"), "{all}");
+    assert!(
+        all.contains("NOTICE self-update: the new version at abc does not build (since 2026-10-20 11:59:00 UTC)"),
+        "{all}"
+    );
+    let _ = std::fs::remove_dir_all(&f.dir);
+}
+
+#[test]
 fn parses_proc_files_log_names_and_commands() {
     assert_eq!(gather::parse_stat("42 (a (b) c) S 7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1234 9"), Some((7, 1234)));
     assert_eq!(gather::parse_stat("garbage"), None);

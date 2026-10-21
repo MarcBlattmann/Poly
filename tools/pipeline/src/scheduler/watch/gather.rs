@@ -9,8 +9,8 @@
 //! in progress (`<key>.tmp.<pid>`) are skipped as `loop status` skips them,
 //! and a file that does not parse is reported, not fatal.
 
-use super::super::cycle;
 use super::super::state::{EntryState, Pause, Step};
+use super::super::{cycle, update};
 use crate::util;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -210,6 +210,9 @@ pub struct Snapshot {
     pub log_file: Option<String>,
     pub log_tail: Vec<String>,
     pub totals: Totals,
+    /// The loop's own notices: a new version of it that does not build,
+    /// deploy files that changed (`loop status` shows the same).
+    pub notices: Vec<String>,
     /// Files that could not be read, and the like.
     pub problems: Vec<String>,
 }
@@ -221,6 +224,10 @@ const LOG_TAIL_BYTES: u64 = 64 * 1024;
 
 pub fn gather(src: &Sources, limits: &Limits, now: u64) -> Snapshot {
     let mut problems = Vec::new();
+    let mut notices = Vec::new();
+    if let Ok(f) = util::read_json::<update::BuildFailure>(&update::failure_file(&src.state_dir)) {
+        notices.push(format!("self-update: {} (since {} UTC)", f.message, f.time));
+    }
     let (states, bad) = read_states(&src.state_dir.join("entries"));
     problems.extend(bad);
 
@@ -335,6 +342,7 @@ pub fn gather(src: &Sources, limits: &Limits, now: u64) -> Snapshot {
         log_file: src.log_file.as_ref().map(|p| p.display().to_string()),
         log_tail,
         totals,
+        notices,
         problems,
     }
 }
