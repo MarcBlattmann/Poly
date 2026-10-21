@@ -7,8 +7,8 @@
 #
 # Not here yet: libc-hello (glibc registers rseq, which Poly answers with
 # ENOSYS; its output and exit status already match). App tests
-# (tests/linux/apps/*.app) compare in app mode, which leaves rseq out; the
-# ones not here yet are in specs/linux/FAILING.md under "spec-c (apps)".
+# (tests/linux/apps/*.app) compare in app mode, which leaves rseq out; any
+# not here yet are in specs/linux/FAILING.md under "spec-c (apps)".
 arch_prctl
 brk
 clock
@@ -30,3 +30,4 @@ app-cat
 app-sort
 app-wc
 app-cp
+app-ls
