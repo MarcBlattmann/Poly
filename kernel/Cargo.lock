@@ -88,6 +88,7 @@ dependencies = [
  "poly-heap",
  "poly-input",
  "poly-irq",
+ "poly-ldr",
  "poly-line",
  "poly-mem",
  "poly-net",
@@ -115,6 +116,14 @@ dependencies = [
  "poly-virtio-blk",
  "poly-virtio-net",
  "poly-vm",
+]
+
+[[package]]
+name = "poly-ldr"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+ "poly-pe",
 ]
 
 [[package]]

@@ -127,8 +127,8 @@ someone deleted.
   `C:\Windows\System`, `C:\Windows`, the current directory and `PATH`), so
   the two ADRs name the same folder (`layout::SYSTEM32`), and `Path`
   starts with it. ADR 0071 builds `ntdll.dll` as a real PE DLL (`cargo
-  xtask ntdll`); the kernel does not carry or map it yet (a follow-up).
-  When it does, it writes each of our DLLs into `System32` after making
+  xtask ntdll`), which the kernel now embeds, maps and writes here (ADR
+  0071, amended). The kernel writes each of our DLLs into `System32` after making
   the layout, with `layout::create::install_file` (here and host-tested;
   one call per DLL in `kernel/src/nt/layout.rs::prepare`), which rewrites a
   file only when its bytes differ, so a system DLL that an installer or a

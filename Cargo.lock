@@ -156,6 +156,7 @@ name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-ldr",
  "poly-ntobj",
  "poly-pe",
  "poly-registry",

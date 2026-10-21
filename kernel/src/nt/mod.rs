@@ -9,10 +9,11 @@
 //! [`Kernel::with_state`]. Section pages and minimal file objects live in
 //! [`backend::Sections`].
 //!
-//! Only our own `ntdll` will call these services with their numbers
+//! Only our own `ntdll` calls these services with their numbers
 //! ([`poly_personality_nt::Service`]); the numbering is ours and documented
-//! there. Until `ntdll` exists the kernel maps the executable's image and
-//! starts its entry point itself ([`start`]).
+//! there. The kernel maps the executable and `ntdll` ([`NTDLL`], ADR 0071)
+//! and starts the first thread in `ntdll`, which binds the executable's
+//! imports and calls its entry point ([`start`]).
 //!
 //! [ADR 0063]: ../../../docs/adr/0063-nt-processes-object-manager-and-memory.md
 
@@ -34,6 +35,15 @@ mod test_registry;
 
 pub mod layout;
 mod test_layout;
+
+mod test_ldr;
+
+/// Our `ntdll.dll` (ADR 0071), built by `cargo xtask` from
+/// `personalities/nt/ntdll` (cached by content hash) and embedded here, as
+/// Windows keeps `ntdll` in its `KnownDlls`: every process maps this copy,
+/// and the layout puts the same bytes in `C:\Windows\System32` ([`layout`]).
+/// Empty when the kernel was built without `xtask`.
+pub static NTDLL: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ntdll.dll"));
 
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
@@ -365,6 +375,10 @@ pub fn start_with(
 ) -> Result<Start, NtStatus> {
     let pid = ProcessId(process.pid);
     let thread = ThreadRef(u64::from(tid));
+    if NTDLL.is_empty() {
+        crate::kprintln!("nt: this kernel was built without ntdll.dll (build it with cargo xtask)");
+        return Err(NtStatus(0xC000_0135)); // STATUS_DLL_NOT_FOUND (ntstatus.h)
+    }
     // File I/O completions are written into this memory (ADR 0067).
     io::register(process.pid, memory);
     let started = with(|s| {
@@ -373,7 +387,7 @@ pub fn start_with(
         s.processes.insert(pid, NtProcess::new(pid));
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         let mut b = MemBackend { memory, sections: &mut s.sections };
-        let start = exec::start_process(&mut s.sys, proc, &mut b, file, None, thread).and_then(|ps| {
+        let start = exec::start_process(&mut s.sys, proc, &mut b, file, NTDLL, None, thread).and_then(|ps| {
             // The process parameters: image path, command line and
             // environment (ADR 0073).
             poly_personality_nt::params::write(proc, &mut b, ps.peb, &params)?;
@@ -381,13 +395,13 @@ pub fn start_with(
         });
         match start {
             Ok(ps) => Ok(Start {
-                // The first thread also starts at the trampoline, which calls
-                // the image entry with the PEB and ends the process cleanly
-                // when the entry returns.
+                // The first thread starts in ntdll's LdrInitializeThunk with
+                // the image entry, its argument (the PEB) and the image base
+                // (ADR 0071's start convention).
                 entry: crate::arch::user::Entry {
                     rip: ps.entry,
                     rsp: ps.rsp,
-                    args: [ps.start_routine, ps.argument, 0],
+                    args: [ps.start_routine, ps.argument, ps.image_base],
                 },
                 teb: ps.teb,
             }),
@@ -483,8 +497,9 @@ pub fn resolve_fault(pid: u32, tid: u32, memory: &Arc<Memory>, addr: u64) -> boo
 pub enum SpawnError {
     /// No memory for the address space.
     Memory,
-    /// The image is not a loadable x64 PE, or needs imports bound (our
-    /// `ntdll`, a later milestone): the `NTSTATUS`.
+    /// The image is not a loadable x64 PE (or the kernel has no `ntdll`):
+    /// the `NTSTATUS`. Imports that cannot be bound end the started process
+    /// instead, with the loader's status (ADR 0071).
     Image(NtStatus),
     /// The thread could not be started.
     Thread(thread::SpawnError),

@@ -119,10 +119,11 @@ kernel_test! {
 }
 
 kernel_test! {
-    /// Kernel-to-user exception dispatch (ADR 0068): a PE registers a
-    /// user-mode dispatcher, faults with an access violation and a
-    /// divide-by-zero, and the dispatcher inspects each `EXCEPTION_RECORD`,
-    /// fixes the `CONTEXT` up and resumes with `NtContinue`. See
+    /// Kernel-to-user exception dispatch (ADR 0068, 0071): a PE registers
+    /// a vectored handler with our `ntdll`, faults with an access violation
+    /// and a divide-by-zero; `ntdll`'s `KiUserExceptionDispatcher` calls
+    /// the handler, which inspects each `EXCEPTION_RECORD` and fixes the
+    /// `CONTEXT` up, and `ntdll` resumes it with `NtContinue`. See
     /// [`test_seh`].
     fn nt_seh_dispatch_and_continue_from_ring3() -> TestResult {
         let file = test_seh::handled_image();
@@ -147,8 +148,8 @@ kernel_test! {
 
 kernel_test! {
     /// An NT exception nobody handles ends the process with the exception
-    /// code as its exit status (ADR 0068). The PE registers no dispatcher
-    /// and writes to a null pointer.
+    /// code as its exit status (ADR 0068). The PE registers no handler and
+    /// writes to a null pointer; `ntdll` raises it second chance.
     fn nt_seh_unhandled_terminates_with_the_exception_code() -> TestResult {
         let file = test_seh::unhandled_image();
         let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| "no memory map")?);
