@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 71 of 141 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 72 of 141 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">71 / 141 milestones · 50%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">72 / 141 milestones · 51%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -98,8 +98,7 @@
 <rect x="720.8" y="113.0" width="93.2" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <text x="884.0" y="125.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">5/5</text>
-<text x="16.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#4493f8" text-anchor="start"> 3  User space and the first Linux program</text>
-<text x="328.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#4493f8" text-anchor="end">NOW</text>
+<text x="16.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 3  User space and the first Linux program</text>
 <g><title>✔ Per-process address spaces, switching on context switch (PCID where available)</title>
 <rect x="340.0" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
 </g>
@@ -127,8 +126,8 @@
 <g><title>✔ Milestone: a static Linux &quot;hello world&quot; runs and exits cleanly</title>
 <rect x="657.3" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Agent pipeline v0: Linux syscall tracer on a real Linux VM, spec agent, implementer agent</title>
-<rect x="697.0" y="143.0" width="37.7" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
+<g><title>✔ Agent pipeline v0: Linux syscall tracer on a real Linux VM, spec agent, implementer agent (first unattended loop PR: open, MarcBlattmann/Poly#28)</title>
+<rect x="697.0" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>✔ Diff runner v0: same tests on real Linux and on Poly, results compared per test</title>
 <rect x="736.7" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
@@ -136,7 +135,7 @@
 <g><title>✔ Held-out test store outside this repo; hand-off logging in specs/HANDOFF_LOG.md</title>
 <rect x="776.3" y="143.0" width="37.7" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">11/12</text>
+<text x="884.0" y="155.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">12/12</text>
 <text x="16.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 4  Linux userland</text>
 <g><title>✔ Processes and threads: clone, fork (copy-on-write), execve, exit, wait4</title>
 <rect x="340.0" y="173.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
@@ -193,12 +192,13 @@
 <rect x="789.6" y="173.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <text x="884.0" y="185.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">18/18</text>
-<text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 5  NT personality and Windows console apps</text>
+<text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#4493f8" text-anchor="start"> 5  NT personality and Windows console apps</text>
+<text x="328.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#4493f8" text-anchor="end">NOW</text>
 <g><title>✔ Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed</title>
 <rect x="340.0" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds</title>
-<rect x="365.1" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="365.1" y="203.0" width="23.1" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
 <g><title>✔ NT object manager: handles, object namespace (\??, \Device, \BaseNamedObjects), reference counts</title>
 <rect x="390.1" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>

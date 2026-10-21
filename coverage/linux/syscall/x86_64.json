@@ -199,7 +199,7 @@
 {"symbol":"name_to_handle_at","number":303,"src":["linux-syscall-tbl"]},
 {"symbol":"nanosleep","number":35,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"newfstatat","number":262,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"open","number":2,"src":["linux-syscall-tbl"]},
+{"symbol":"open","number":2,"status":"green","tests_visible":9,"tests_held_out":4,"src":["linux-syscall-tbl"]},
 {"symbol":"open_by_handle_at","number":304,"src":["linux-syscall-tbl"]},
 {"symbol":"open_tree","number":428,"src":["linux-syscall-tbl"]},
 {"symbol":"open_tree_attr","number":467,"src":["linux-syscall-tbl"]},

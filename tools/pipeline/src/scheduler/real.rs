@@ -5,7 +5,7 @@
 //! [`DryShell`], which prints the commands and pretends they succeed.
 
 use super::config::Config;
-use super::ops::{DiffResult, Merge, Ops, Out, Pr, Push, Remote, SpecFiles};
+use super::ops::{DiffResult, Merge, Mergeable, Ops, Out, Pr, Push, Remote, SpecFiles};
 use super::safety::{self, Change};
 use super::state;
 use crate::diff::{Summary, Verdict};
@@ -254,8 +254,11 @@ impl Shell for DryShell {
                 }
             }
             "gh" => match (a.first().copied(), a.get(1).copied()) {
-                (Some("pr"), Some("view")) => {
-                    Ok(Out { code: 1, text: "no pull requests found for branch".into(), log: None })
+                // No PR yet; once created, mergeable.
+                (Some("api"), Some(path)) if path.contains("/pulls?") => ok("[]"),
+                (Some("api"), Some(path)) if path.contains("/pulls/") => {
+                    ok("{\"html_url\":\"https://github.com/OWNER/REPO/pull/0\",\"number\":0,\"state\":\"open\",\
+                     \"merged\":false,\"mergeable\":true,\"mergeable_state\":\"clean\"}")
                 }
                 (Some("pr"), Some("create")) => ok("https://github.com/OWNER/REPO/pull/0\n"),
                 _ => ok(""),
@@ -433,6 +436,195 @@ impl<S: Shell> RealOps<S> {
         let dir = entry.heldout_dir(&self.cfg.heldout);
         Ok(self.shell.list(&dir)?.into_iter().filter(|f| f != store::MANIFEST).collect())
     }
+
+    /// The rest of [`Ops::merge_main`] once `git merge --no-commit` ran
+    /// (`o`) and did not find the branch up to date: resolve the conflicts
+    /// the loop may resolve, make the README progress section again, commit.
+    /// Anything but `Merged` leaves the merge to be aborted by the caller.
+    fn finish_merge(&mut self, slot: usize, entry: &EntryId, main: &str, o: &Out) -> Result<Merge> {
+        let dir = self.slot_dir(slot);
+        let conflicted = self.git_ok(&dir, &["diff", "--name-only", "--diff-filter=U"])?;
+        let files: Vec<String> = conflicted.lines().filter(|l| !l.is_empty()).map(String::from).collect();
+        if !o.ok() && files.is_empty() {
+            return Err(format!("git merge {main}: {}", o.tail(3)));
+        }
+        let coverage = safety::coverage_file(entry);
+        let mut refused = Vec::new();
+        let mut plan = Vec::new();
+        for f in &files {
+            match conflict_rule(f, &coverage) {
+                None => refused.push(f.clone()),
+                Some(Resolve::Coverage) => {
+                    // Main's version is taken only if main left this entry alone.
+                    let base = self.git(&dir, &["show", &format!(":1:{f}")])?;
+                    let theirs = self.git(&dir, &["show", &format!(":3:{f}")])?;
+                    if !base.ok() || !theirs.ok() || entry_changed(&base.text, &theirs.text, &entry.symbol) {
+                        refused.push(format!("{f} (main changed {} itself)", entry.id()));
+                    } else {
+                        plan.push((f.clone(), Resolve::Coverage));
+                    }
+                }
+                Some(rule) => plan.push((f.clone(), rule)),
+            }
+        }
+        if !refused.is_empty() {
+            return Ok(Merge::Conflicts(refused));
+        }
+        for (f, rule) in &plan {
+            match rule {
+                Resolve::Generated | Resolve::Coverage => {
+                    if self.git(&dir, &["show", &format!(":3:{f}")])?.ok() {
+                        self.git_ok(&dir, &["checkout", "--theirs", "--", f])?;
+                        self.git_ok(&dir, &["add", "--", f])?;
+                    } else {
+                        // Main removed it: `coverage readme` makes what is needed.
+                        self.git_ok(&dir, &["rm", "-q", "--", f])?;
+                    }
+                }
+                Resolve::Log => {
+                    let ours = self.git(&dir, &["show", &format!(":2:{f}")])?;
+                    let theirs = self.git(&dir, &["show", &format!(":3:{f}")])?;
+                    if !ours.ok() || !theirs.ok() {
+                        return Ok(Merge::Conflicts(vec![format!("{f} (removed on one side)")]));
+                    }
+                    self.shell.write(&dir.join(f), &union_log(&ours.text, &theirs.text))?;
+                    self.git_ok(&dir, &["add", "--", f])?;
+                }
+            }
+        }
+        // Even a merge without conflicts: a textual merge of a generated
+        // section is not what the generator makes of the merged coverage map.
+        let r = self.xtask(slot, &["coverage".into(), "readme".into()], "readme", false)?;
+        if !r.ok() {
+            return Err(format!("coverage readme after merging {main}: {}", r.tail(3)));
+        }
+        self.add(&dir, &["README.md".into(), "docs/progress".into()])?;
+        let message = merge_message(main, &super::cycle::impl_branch(entry), &plan);
+        self.git_ok(&dir, &["commit", "-q", "-m", &message])?;
+        Ok(Merge::Merged(self.git_ok(&dir, &["rev-parse", "HEAD"])?))
+    }
+
+    /// `gh api <path>` in the runner's checkout (`{owner}` and `{repo}` are
+    /// its GitHub repository), as JSON. REST, not GraphQL: GraphQL is not
+    /// available to every token.
+    fn gh_api(&mut self, path: &str) -> Result<serde_json::Value> {
+        let mut c = Cmd::new(&self.cfg.gh, &["api", path]);
+        c.cwd = Some(self.cfg.repo.clone());
+        let o = self.shell.run(&c)?;
+        if !o.ok() {
+            return Err(format!("gh api {path}: {}", o.text.trim()));
+        }
+        serde_json::from_str(&o.text).map_err(|e| format!("gh api {path}: {e}"))
+    }
+}
+
+/// How the loop resolves a conflict in one file when it merges main.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Resolve {
+    /// README.md, `docs/progress/`: main's version, then `coverage readme`.
+    Generated,
+    /// The entry's coverage file: main's version (the publish step sets the
+    /// entry's status again with `coverage set-status`).
+    Coverage,
+    /// The append-only hand-off log: main's rows, then the branch's.
+    Log,
+}
+
+/// The rule for a conflict in `path`; `None`: the owner's.
+pub fn conflict_rule(path: &str, coverage: &str) -> Option<Resolve> {
+    if path == "README.md" || path.starts_with("docs/progress/") {
+        Some(Resolve::Generated)
+    } else if path == coverage {
+        Some(Resolve::Coverage)
+    } else if path == "specs/HANDOFF_LOG.md" {
+        Some(Resolve::Log)
+    } else {
+        None
+    }
+}
+
+/// Whether `symbol`'s object differs between two versions of a coverage
+/// file (or either is not a coverage file).
+pub fn entry_changed(before: &str, after: &str, symbol: &str) -> bool {
+    let find = |text: &str| -> Option<serde_json::Value> {
+        let v: serde_json::Value = serde_json::from_str(text).ok()?;
+        Some(v.as_array()?.iter().find(|e| e.get("symbol").and_then(|s| s.as_str()) == Some(symbol))?.clone())
+    };
+    match (find(before), find(after)) {
+        (Some(b), Some(a)) => a != b,
+        _ => true,
+    }
+}
+
+/// The hand-off log after a merge: main's, then the branch's rows main lacks.
+pub fn union_log(ours: &str, theirs: &str) -> String {
+    let mut merged = theirs.to_string();
+    if !merged.ends_with('\n') {
+        merged.push('\n');
+    }
+    for row in ours.lines().filter(|l| l.starts_with("| ") && !theirs.lines().any(|t| t == *l)) {
+        merged.push_str(row);
+        merged.push('\n');
+    }
+    merged
+}
+
+/// The message of the loop's merge commit.
+pub fn merge_message(main: &str, branch: &str, resolved: &[(String, Resolve)]) -> String {
+    let mut m = format!(
+        "Merge {main} into {branch}\n\nMerged by the agent pipeline loop to keep the PR mergeable \
+         (docs/AGENT_PIPELINE.md, ADR 0086).\n"
+    );
+    if resolved.is_empty() {
+        m.push_str("No conflicts; `cargo xtask coverage readme` made the README progress section again.\n");
+        return m;
+    }
+    m.push_str("\nConflicts, all in generated or append-only files:\n");
+    for (f, rule) in resolved {
+        let how = match rule {
+            Resolve::Generated => "main's version, then `cargo xtask coverage readme`",
+            Resolve::Coverage => "main's version; the loop sets this entry's status again",
+            Resolve::Log => "main's rows, then this branch's (the log is append-only)",
+        };
+        let _ = writeln!(m, "- {f}: {how}");
+    }
+    m
+}
+
+/// `text` for a URL query value.
+fn query_value(text: &str) -> String {
+    let mut out = String::new();
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~/".contains(&b) {
+            out.push(b as char);
+        } else {
+            let _ = write!(out, "%{b:02X}");
+        }
+    }
+    out
+}
+
+/// A pull request object of GitHub's REST API. A list item has no
+/// `mergeable` (it reads as unknown); the single-PR object has it, `null`
+/// while GitHub computes it.
+pub fn parse_pr(v: &serde_json::Value) -> Result<Pr> {
+    let url = v.get("html_url").and_then(|u| u.as_str()).ok_or("a PR without html_url")?.to_string();
+    let merged =
+        v.get("merged").and_then(|m| m.as_bool()) == Some(true) || v.get("merged_at").is_some_and(|m| !m.is_null());
+    let state = match (merged, v.get("state").and_then(|s| s.as_str())) {
+        (true, _) => "MERGED",
+        (false, Some("open")) => "OPEN",
+        (false, Some("closed")) => "CLOSED",
+        (false, other) => return Err(format!("{url}: unknown PR state {other:?}")),
+    };
+    let mergeable = if v.get("mergeable_state").and_then(|s| s.as_str()) == Some("dirty") {
+        Mergeable::Conflicting
+    } else if v.get("mergeable").and_then(|m| m.as_bool()) == Some(true) {
+        Mergeable::Yes
+    } else {
+        Mergeable::Unknown
+    };
+    Ok(Pr { url, state: state.into(), mergeable })
 }
 
 fn parse_author(a: &str) -> Option<(String, String)> {
@@ -773,51 +965,20 @@ impl<S: Shell> Ops for RealOps<S> {
     fn merge_main(&mut self, slot: usize, entry: &EntryId) -> Result<Merge> {
         let dir = self.slot_dir(slot);
         let main = format!("{}/{}", self.cfg.remote, self.cfg.base_branch);
-        let o = self.git(&dir, &["merge", "--no-ff", "--no-edit", &main])?;
-        if o.ok() {
-            if o.text.contains("Already up to date") {
-                return Ok(Merge::UpToDate);
-            }
-            return Ok(Merge::Merged(self.git_ok(&dir, &["rev-parse", "HEAD"])?));
+        let up = self.git(&dir, &["merge-base", "--is-ancestor", &main, "HEAD"])?;
+        match up.code {
+            0 => return Ok(Merge::UpToDate),
+            1 => {}
+            _ => return Err(format!("git merge-base --is-ancestor {main} HEAD: {}", up.text.trim())),
         }
-        let conflicted = self.git_ok(&dir, &["diff", "--name-only", "--diff-filter=U"])?;
-        let files: Vec<String> = conflicted.lines().map(String::from).collect();
-        let coverage = safety::coverage_file(entry);
-        let generated = |f: &str| f == "README.md" || f.starts_with("docs/progress/") || f == coverage;
-        let other: Vec<String> =
-            files.iter().filter(|f| !generated(f) && *f != "specs/HANDOFF_LOG.md").cloned().collect();
-        if files.is_empty() || !other.is_empty() {
+        // Not committed yet: the README progress section is made again first.
+        let o = self.git(&dir, &["merge", "--no-ff", "--no-commit", &main])?;
+        // Whatever goes wrong from here, the checkout is left as it was.
+        let r = self.finish_merge(slot, entry, &main, &o);
+        if !matches!(r, Ok(Merge::Merged(_))) {
             let _ = self.git(&dir, &["merge", "--abort"]);
-            return Ok(Merge::Conflicts(if other.is_empty() { vec![o.tail(3)] } else { other }));
         }
-        for f in &files {
-            if generated(f) {
-                // Main's version; the status and the README are made again below and in Publish.
-                self.git_ok(&dir, &["checkout", "--theirs", "--", f])?;
-            } else {
-                // The log is append-only: main's rows, then ours that main lacks.
-                let ours = self.git_ok(&dir, &["show", &format!(":2:{f}")])?;
-                let theirs = self.git(&dir, &["show", &format!(":3:{f}")])?.text;
-                let mut merged = theirs.clone();
-                if !merged.ends_with('\n') {
-                    merged.push('\n');
-                }
-                for row in ours.lines().filter(|l| l.starts_with("| ") && !theirs.lines().any(|t| t == *l)) {
-                    merged.push_str(row);
-                    merged.push('\n');
-                }
-                self.shell.write(&dir.join(f), &merged)?;
-            }
-            self.git_ok(&dir, &["add", "--", f])?;
-        }
-        let o = self.xtask(slot, &["coverage".into(), "readme".into()], "readme", false)?;
-        if !o.ok() {
-            let _ = self.git(&dir, &["merge", "--abort"]);
-            return Err(format!("coverage readme after the merge: {}", o.tail(3)));
-        }
-        self.add(&dir, &["README.md".into(), "docs/progress".into()])?;
-        self.git_ok(&dir, &["commit", "-q", "--no-edit"])?;
-        Ok(Merge::Merged(self.git_ok(&dir, &["rev-parse", "HEAD"])?))
+        r
     }
 
     fn role_sync(&mut self, role: Role, _entry: &EntryId, branch: &str, base: &str) -> Result<Out> {
@@ -905,18 +1066,20 @@ impl<S: Shell> Ops for RealOps<S> {
     }
 
     fn pr_find(&mut self, branch: &str) -> Result<Option<Pr>> {
-        let mut c = Cmd::new(&self.cfg.gh, &["pr", "view", branch, "--json", "url,state,mergeable"]);
-        c.cwd = Some(self.cfg.repo.clone());
-        let o = self.shell.run(&c)?;
-        if !o.ok() {
-            if o.text.to_lowercase().contains("no pull requests found") {
-                return Ok(None);
-            }
-            return Err(format!("gh pr view {branch}: {}", o.text.trim()));
+        // Newest first (GitHub's default order), closed and merged ones too.
+        let list = self.gh_api(&format!(
+            "repos/{{owner}}/{{repo}}/pulls?head={{owner}}:{}&state=all&per_page=100",
+            query_value(branch)
+        ))?;
+        let Some(newest) = list.as_array().and_then(|a| a.first()).cloned() else { return Ok(None) };
+        let pr = parse_pr(&newest)?;
+        if pr.state != "OPEN" {
+            return Ok(Some(pr));
         }
-        let v: serde_json::Value = serde_json::from_str(&o.text).map_err(|e| format!("gh pr view: {e}"))?;
-        let field = |k: &str| v.get(k).and_then(|s| s.as_str()).unwrap_or_default().to_string();
-        Ok(Some(Pr { url: field("url"), state: field("state"), mergeable: field("mergeable") }))
+        // Only the single-PR object has `mergeable`; asking for it also
+        // makes GitHub compute it when it has not yet.
+        let number = newest.get("number").and_then(|n| n.as_u64()).ok_or(format!("{}: no PR number", pr.url))?;
+        parse_pr(&self.gh_api(&format!("repos/{{owner}}/{{repo}}/pulls/{number}"))?).map(Some)
     }
 
     fn pr_create(&mut self, branch: &str, title: &str, body: &str) -> Result<String> {
@@ -1203,7 +1366,46 @@ mod tests {
             "main's, made again by `coverage readme`"
         );
         assert!(ops.file_at(0, &merged, COVERAGE).unwrap().unwrap().contains("\"mmap\",\"status\":\"green\""));
+        // A merge commit of both heads, saying what the loop resolved.
+        assert_eq!(vcs(&w0, &["rev-list", "--parents", "-n", "1", &merged]).split(' ').count(), 3);
+        let message = vcs(&w0, &["log", "-1", "--format=%B", &merged]);
+        assert!(message.starts_with("Merge origin/main into pipeline/impl/brk\n"), "{message}");
+        for f in
+            ["README.md: main's version", &format!("{COVERAGE}: main's version"), "specs/HANDOFF_LOG.md: main's rows"]
+        {
+            assert!(message.contains(f), "{f}: {message}");
+        }
         assert_eq!(ops.merge_main(0, &e).unwrap(), Merge::UpToDate);
+
+        // Main changed this entry's own coverage status: the owner's.
+        util::write(&w0.join(COVERAGE), "[\n{\"symbol\":\"brk\",\"status\":\"green\",\"tests_visible\":2,\"src\":[\"t\"]},\n{\"symbol\":\"mmap\",\"status\":\"green\",\"tests_visible\":1,\"src\":[\"t\"]}\n]\n").unwrap();
+        let before = ops.commit(0, "ours", &[COVERAGE.into()]).unwrap();
+        util::write(&seed.join(COVERAGE), "[\n{\"symbol\":\"brk\",\"status\":\"partial\",\"src\":[\"t\"]},\n{\"symbol\":\"mmap\",\"status\":\"green\",\"tests_visible\":1,\"src\":[\"t\"]}\n]\n").unwrap();
+        vcs(&seed, &["commit", "-q", "-am", "brk partial"]);
+        vcs(&seed, &["push", "-q", &o, "main"]);
+        ops.prepare(0, "HEAD").unwrap();
+        assert_eq!(
+            ops.merge_main(0, &e).unwrap(),
+            Merge::Conflicts(vec![format!("{COVERAGE} (main changed linux/syscall/x86_64/brk itself)")])
+        );
+        assert_eq!(vcs(&w0, &["status", "--porcelain"]), "", "the merge was aborted");
+        assert_eq!(vcs(&w0, &["rev-parse", "HEAD"]), before);
+
+        // A merge without conflicts is committed too.
+        ops.prepare(0, "origin/main").unwrap();
+        util::write(&w0.join("ours.txt"), "x\n").unwrap();
+        ops.commit(0, "ours", &["ours.txt".into()]).unwrap();
+        util::write(&seed.join("theirs.txt"), "y\n").unwrap();
+        vcs(&seed, &["add", "theirs.txt"]);
+        vcs(&seed, &["commit", "-q", "-m", "theirs"]);
+        vcs(&seed, &["push", "-q", &o, "main"]);
+        ops.prepare(0, "HEAD").unwrap();
+        let clean = match ops.merge_main(0, &e).unwrap() {
+            Merge::Merged(h) => h,
+            m => panic!("{m:?}"),
+        };
+        assert!(vcs(&w0, &["log", "-1", "--format=%B", &clean]).contains("No conflicts"));
+        assert!(ops.file_at(0, &clean, "theirs.txt").unwrap().is_some());
 
         // A conflict in code is the owner's.
         util::write(&w0.join("src.rs"), "fn ours() {}\n").unwrap();
@@ -1215,5 +1417,52 @@ mod tests {
         assert_eq!(ops.merge_main(0, &e).unwrap(), Merge::Conflicts(vec!["src.rs".into()]));
         assert_eq!(vcs(&w0, &["status", "--porcelain"]), "", "the merge was aborted");
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn rest_pull_requests() {
+        let pr = |json: &str| parse_pr(&serde_json::from_str(json).unwrap()).unwrap();
+        let url = "\"html_url\":\"https://github.com/o/r/pull/28\"";
+        assert_eq!(
+            pr(&format!(
+                "{{{url},\"state\":\"open\",\"merged\":false,\"mergeable\":false,\"mergeable_state\":\"dirty\"}}"
+            )),
+            Pr {
+                url: "https://github.com/o/r/pull/28".into(),
+                state: "OPEN".into(),
+                mergeable: Mergeable::Conflicting
+            }
+        );
+        let p = pr(&format!("{{{url},\"state\":\"open\",\"mergeable\":true,\"mergeable_state\":\"blocked\"}}"));
+        assert_eq!(p.mergeable, Mergeable::Yes, "waiting for CI is mergeable");
+        let p = pr(&format!("{{{url},\"state\":\"open\",\"mergeable\":null,\"mergeable_state\":\"unknown\"}}"));
+        assert_eq!(p.mergeable, Mergeable::Unknown, "still being computed");
+        // A list item: no `mergeable`, `merged_at` for merged ones.
+        let p = pr(&format!("{{{url},\"state\":\"closed\",\"merged_at\":\"2026-10-21T14:00:00Z\"}}"));
+        assert_eq!((p.state.as_str(), p.mergeable), ("MERGED", Mergeable::Unknown));
+        assert_eq!(pr(&format!("{{{url},\"state\":\"closed\",\"merged_at\":null}}")).state, "CLOSED");
+        assert!(parse_pr(&serde_json::json!({"state": "open"})).is_err());
+        assert_eq!(query_value("pipeline/impl/a+b c"), "pipeline/impl/a%2Bb%20c");
+    }
+
+    #[test]
+    fn conflict_rules() {
+        let cov = "coverage/linux/syscall/x86_64.json";
+        assert_eq!(conflict_rule("README.md", cov), Some(Resolve::Generated));
+        assert_eq!(conflict_rule("docs/progress/linux.svg", cov), Some(Resolve::Generated));
+        assert_eq!(conflict_rule(cov, cov), Some(Resolve::Coverage));
+        assert_eq!(conflict_rule("specs/HANDOFF_LOG.md", cov), Some(Resolve::Log));
+        for other in
+            ["coverage/linux/syscall/arm64.json", "docs/ROADMAP.md", "personalities/linux/src/a.rs", "x/README.md"]
+        {
+            assert_eq!(conflict_rule(other, cov), None, "{other}");
+        }
+        let file = |brk: &str| format!("[\n{{\"symbol\":\"access\",\"src\":[\"t\"]}},\n{brk}\n]\n");
+        let base = file("{\"symbol\":\"brk\",\"src\":[\"t\"]}");
+        let neighbour = base.replace("\"access\",", "\"access\",\"status\":\"green\",");
+        assert!(!entry_changed(&base, &neighbour, "brk"));
+        assert!(entry_changed(&base, &file("{\"symbol\":\"brk\",\"status\":\"partial\",\"src\":[\"t\"]}"), "brk"));
+        assert!(entry_changed(&base, "not json", "brk") && entry_changed(&base, &base, "mmap"));
+        assert_eq!(union_log("h\n| a |\n| b |\n", "h\n| a |\n| c |"), "h\n| a |\n| c |\n| b |\n");
     }
 }

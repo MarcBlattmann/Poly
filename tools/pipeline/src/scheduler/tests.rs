@@ -5,7 +5,7 @@
 
 use super::config::Config;
 use super::cycle::{Driver, Logger, Pass, Yielded, claim_message};
-use super::ops::{DiffResult, Merge, Ops, Out, Pr, Push, Remote, SpecFiles};
+use super::ops::{DiffResult, Merge, Mergeable, Ops, Out, Pr, Push, Remote, SpecFiles};
 use super::real::{DryShell, RealOps};
 use super::safety::{Change, coverage_file};
 use super::state::{Pause, Step, Store};
@@ -37,6 +37,9 @@ struct Commit {
     subject: String,
     changes: Vec<Change>,
     green: bool,
+    /// A merge of main that took main's coverage file (a conflict in it):
+    /// the entry's status from before it is gone.
+    main_coverage: bool,
 }
 
 #[derive(Debug, Default)]
@@ -110,8 +113,10 @@ impl World {
             spec_files: SpecFiles { spec: true, visible: 7, held_out: 3 },
             ..World::default()
         };
-        w.commits
-            .insert("main0".into(), Commit { parent: None, subject: "main".into(), changes: vec![], green: false });
+        w.commits.insert(
+            "main0".into(),
+            Commit { parent: None, subject: "main".into(), changes: vec![], green: false, main_coverage: false },
+        );
         w
     }
 
@@ -137,8 +142,19 @@ impl World {
         self.n += 1;
         let sha = format!("c{:03}", self.n);
         let green = subject.contains(" is green ");
-        self.commits.insert(sha.clone(), Commit { parent, subject: subject.into(), changes, green });
+        self.commits
+            .insert(sha.clone(), Commit { parent, subject: subject.into(), changes, green, main_coverage: false });
         sha
+    }
+
+    /// `rev` and its ancestors whose coverage status is still in `rev`'s
+    /// coverage file (up to a merge that took main's).
+    fn status_ancestors(&self, rev: &str) -> Vec<String> {
+        let all = self.ancestors(rev);
+        match all.iter().position(|c| self.commits[c].main_coverage) {
+            Some(i) => all[..i].to_vec(),
+            None => all,
+        }
     }
 
     fn resolve(&self, rev: &str) -> Result<String> {
@@ -243,7 +259,15 @@ impl Ops for World {
         }
         match remote {
             Remote::Hub => self.hub.insert(branch.into(), sha),
-            Remote::Origin => self.origin.insert(branch.into(), sha),
+            Remote::Origin => {
+                // GitHub computes the mergeability of a PR again after a push.
+                if let Some(pr) = self.prs.get_mut(branch)
+                    && self.origin.get(branch) != Some(&sha)
+                {
+                    pr.mergeable = Mergeable::Unknown;
+                }
+                self.origin.insert(branch.into(), sha)
+            }
         };
         Ok(Push::Done)
     }
@@ -265,7 +289,7 @@ impl Ops for World {
         if path != "coverage/linux/syscall/x86_64.json" {
             return Ok(None);
         }
-        let ancestry = self.ancestors(rev);
+        let ancestry = self.status_ancestors(rev);
         let sym = self.entry.clone().unwrap_or_default().rsplit('/').next().unwrap_or_default().to_string();
         let green = ancestry.iter().any(|c| self.commits[c].green);
         let claimed = ancestry.iter().any(|c| self.commits[c].subject.starts_with("Pipeline: claim"));
@@ -327,9 +351,12 @@ impl Ops for World {
     }
     fn merge_main(&mut self, slot: usize, _entry: &EntryId) -> Result<Merge> {
         self.call("merge_main");
+        // `Merged("coverage")`: the coverage file conflicted (main's taken).
         let m = self.merges.pop_front().unwrap_or(Merge::UpToDate);
-        if let Merge::Merged(_) = m {
+        if let Merge::Merged(how) = m {
             let sha = self.new_commit(self.slots.get(&slot).cloned(), "Merge main", vec![]);
+            self.commits.get_mut(&sha).unwrap().main_coverage = how == "coverage";
+            self.slots.insert(slot, sha.clone());
             return Ok(Merge::Merged(sha));
         }
         Ok(m)
@@ -395,7 +422,7 @@ impl Ops for World {
         assert!(title.starts_with(BRK) && body.contains("merge commit"));
         self.prs_created += 1;
         let url = format!("https://github.com/o/r/pull/{}", self.prs_created);
-        self.prs.insert(branch.into(), Pr { url: url.clone(), state: "OPEN".into(), mergeable: "MERGEABLE".into() });
+        self.prs.insert(branch.into(), Pr { url: url.clone(), state: "OPEN".into(), mergeable: Mergeable::Unknown });
         Ok(url)
     }
     fn pr_auto_merge(&mut self, _url: &str) -> Result {
@@ -931,24 +958,134 @@ fn a_spec_check_failing_past_spec_cycles_goes_to_the_human_queue() {
     assert_eq!(d.ops.count("spec_run"), 1);
 }
 
+const IMPL: &str = "pipeline/impl/brk";
+
+fn set_mergeable(w: &mut World, m: Mergeable) {
+    w.prs.get_mut(IMPL).unwrap().mergeable = m;
+}
+
 #[test]
-fn conflicts_with_main_are_merged_and_verified_again() {
-    let s = setup("refresh");
+fn publish_merges_main_before_the_first_push() {
+    let s = setup("publish-merge");
+    let mut w = World::new();
+    w.merges = [Merge::Merged("coverage".into())].into();
+    let mut d = s.driver(w);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Waiting(T0 + s.cfg.poll_secs));
+    // The PR starts out with main in it; main's coverage file lost the
+    // entry's status, so the status commit sets it again on top.
+    let head = d.ops.origin[IMPL].clone();
+    let subjects: Vec<String> = d.ops.ancestors(&head).iter().rev().map(|c| d.ops.commits[c].subject.clone()).collect();
+    assert_eq!(
+        subjects[subjects.len() - 3..],
+        ["agent work", "Merge main", "Pipeline: linux/syscall/x86_64/brk is green (7 visible, 3 held-out tests)"]
+    );
+    assert_eq!((d.ops.count("merge_main"), d.ops.count("set_green"), d.ops.prs_created), (1, 1, 1));
+    let at = |name: &str| d.ops.calls.iter().position(|c| c == name).unwrap();
+    assert!(at("merge_main") < at("set_green") && at("set_green") < at("pr_create"));
+    assert_eq!(d.ops.hub[IMPL], head);
+
+    // A conflict outside the generated files at the first publish: no PR.
+    let s = setup("publish-conflict");
+    let mut w = World::new();
+    w.merges = [Merge::Conflicts(vec!["personalities/linux/src/mm.rs".into()])].into();
+    let mut d = s.driver(w);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Done(Step::Human));
+    let r = human_reason(&s);
+    assert!(r.contains("conflicts with origin/main in personalities/linux/src/mm.rs"), "{r}");
+    assert_eq!((d.ops.prs_created, d.ops.count("set_green")), (0, 0));
+}
+
+#[test]
+fn a_dirty_pr_gets_main_merged_in_and_pushed_without_force() {
+    let s = setup("dirty");
     let mut d = s.driver(World::new());
     worked(d.pass(None).unwrap());
-    d.ops.prs.get_mut("pipeline/impl/brk").unwrap().mergeable = "CONFLICTING".into();
-    d.ops.merges = [Merge::Merged(String::new())].into();
+    let first = d.ops.origin[IMPL].clone();
+    let (ci, diffs, pushes) = (d.ops.count("ci"), d.ops.count("diff"), d.ops.count("push"));
+    // Main moved; the README progress section conflicts.
+    set_mergeable(&mut d.ops, Mergeable::Conflicting);
+    d.ops.merges = [Merge::Merged("coverage".into())].into();
     d.ops.sleep(s.cfg.poll_secs);
-    worked(d.pass(None).unwrap());
-    assert_eq!(s.step(BRK), Step::AwaitingMerge);
-    assert_eq!((d.ops.count("diff"), d.ops.count("set_green"), d.ops.prs_created), (2, 1, 1));
-    assert_eq!(d.ops.count("implementer_run"), 1, "a merge of main is not an implementer session");
+    let now = d.ops.now;
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Waiting(now + s.cfg.poll_secs));
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!((st.step, st.refreshes, st.last_poll), (Step::AwaitingMerge, 1, now));
+    assert!(st.history.iter().any(|e| e.message.contains("conflicts with main (dirty)")));
+    // A fast-forward of the PR branch (hub and GitHub): the merge, then the
+    // entry's status set again on main's coverage file.
+    let head = d.ops.origin[IMPL].clone();
+    assert!(head != first && d.ops.ancestors(&head).contains(&first));
+    assert_eq!(d.ops.hub[IMPL], head);
+    let parent = d.ops.commits[&head].parent.clone().unwrap();
+    assert_eq!((d.ops.commits[&parent].subject.as_str(), d.ops.commits[&head].green), ("Merge main", true));
+    assert_eq!(d.ops.count("push"), pushes + 2, "the hub, then GitHub; nothing refused");
+    // No new PR, no agent session, no second verify: the PR's CI checks the merge.
+    assert_eq!((d.ops.prs_created, d.ops.count("implementer_run"), d.ops.count("set_green")), (1, 1, 2));
+    assert_eq!((d.ops.count("ci"), d.ops.count("diff")), (ci, diffs));
+    assert_eq!(st.pr_url.as_deref(), Some("https://github.com/o/r/pull/1"));
 
-    // Conflicts in real code go to the owner.
+    // GitHub computes the mergeability again after the push: no spin.
+    assert_eq!(d.ops.prs[IMPL].mergeable, Mergeable::Unknown);
+    assert_eq!(d.pass(None).unwrap(), Pass::Idle(now + s.cfg.poll_secs));
+    d.ops.prs.get_mut(IMPL).unwrap().state = "MERGED".into();
+    d.ops.sleep(s.cfg.poll_secs);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Done(Step::Merged));
+}
+
+#[test]
+fn a_dirty_pr_with_a_conflict_in_code_goes_to_the_human_queue() {
+    let s = setup("dirty-code");
+    let mut d = s.driver(World::new());
+    worked(d.pass(None).unwrap());
+    let first = d.ops.origin[IMPL].clone();
+    set_mergeable(&mut d.ops, Mergeable::Conflicting);
     d.ops.merges = [Merge::Conflicts(vec!["personalities/linux/src/mm.rs".into()])].into();
     d.ops.sleep(s.cfg.poll_secs);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Done(Step::Human));
+    let r = human_reason(&s);
+    assert!(r.starts_with("pipeline/impl/brk conflicts with origin/main in personalities/linux/src/mm.rs"), "{r}");
+    assert_eq!((d.ops.origin[IMPL].clone(), d.ops.hub[IMPL].clone()), (first.clone(), first));
+    assert_eq!(d.ops.notified, ["pr linux/syscall/x86_64/brk", "human linux/syscall/x86_64/brk"]);
+}
+
+#[test]
+fn a_mergeable_pr_is_left_alone() {
+    let s = setup("mergeable");
+    let mut d = s.driver(World::new());
     worked(d.pass(None).unwrap());
-    assert!(human_reason(&s).contains("conflicts with main in personalities/linux/src/mm.rs"));
+    let (merges, pushes) = (d.ops.count("merge_main"), d.ops.count("push"));
+    for m in [Mergeable::Yes, Mergeable::Unknown, Mergeable::Yes] {
+        set_mergeable(&mut d.ops, m);
+        d.ops.sleep(s.cfg.poll_secs);
+        let now = d.ops.now;
+        assert_eq!(worked(d.pass(None).unwrap()), Yielded::Waiting(now + s.cfg.poll_secs), "{m:?}");
+        // Not due again before poll_secs, whatever GitHub said.
+        let polls = d.ops.count("pr_find");
+        assert_eq!(d.pass(None).unwrap(), Pass::Idle(now + s.cfg.poll_secs));
+        assert_eq!(d.ops.count("pr_find"), polls);
+    }
+    assert_eq!((d.ops.count("merge_main"), d.ops.count("push")), (merges, pushes));
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!((st.step, st.refreshes), (Step::AwaitingMerge, 0));
+}
+
+#[test]
+fn refreshes_are_bounded() {
+    let mut s = setup("refresh-bound");
+    s.cfg.max_refresh = 2;
+    let mut d = s.driver(World::new());
+    worked(d.pass(None).unwrap());
+    for _ in 0..2 {
+        set_mergeable(&mut d.ops, Mergeable::Conflicting);
+        d.ops.merges = [Merge::Merged(String::new())].into();
+        d.ops.sleep(s.cfg.poll_secs);
+        assert!(matches!(worked(d.pass(None).unwrap()), Yielded::Waiting(_)));
+    }
+    set_mergeable(&mut d.ops, Mergeable::Conflicting);
+    d.ops.sleep(s.cfg.poll_secs);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Done(Step::Human));
+    assert_eq!(human_reason(&s), "the PR conflicted with main 2 times");
+    assert_eq!(d.ops.count("merge_main"), 3, "publish, then two refreshes");
 }
 
 #[test]
@@ -1002,6 +1139,7 @@ fn the_dry_run_walks_the_whole_cycle_with_real_commands() {
         format!("sudo -n -u polyimpl /srv/poly/bin/poly-role implementer run {entry} impl-claude-1"),
         format!("cargo xtask pipeline handoff verify {entry} --received /srv/poly/inbox/"),
         "cargo xtask pipeline diff --target poly --build-kernel --tests-dir".into(),
+        "merge-base --is-ancestor origin/main HEAD".into(),
         format!("cargo xtask coverage set-status {entry} green --tests-visible 2 --tests-held-out 1"),
         "cargo xtask coverage readme --check".into(),
         "push -q origin".into(),

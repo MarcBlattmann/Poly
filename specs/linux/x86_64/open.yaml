@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/open
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), umask 022, /tmp on ext4; static freestanding test programs, raw syscalls (number 2)"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  open(path, flags, mode) (x86-64 syscall 2) behaves exactly like
+  openat(AT_FDCWD, path, flags, mode): a relative path starts at the
+  calling process's working directory (as changed by chdir or fchdir), an
+  absolute one at the root. It opens or creates a file and returns the
+  lowest-numbered free descriptor. flags and mode are 32-bit values: the
+  upper half of each register is ignored. The access mode (flags & 3:
+  O_RDONLY 0, O_WRONLY 1, O_RDWR 2, and 3, which opens but allows neither
+  read nor write) decides whether read and write work (otherwise EBADF).
+  Every call makes a new open file with its own offset (starting at 0) and
+  its own status flags, even for a file that is already open. Unknown flag
+  bits are ignored.
+returns:
+  success: "the lowest descriptor number not in use (3 when only 0, 1, 2 are open); numbers freed by close are reused lowest first"
+  o_creat_new: "a regular file, size 0, st_nlink 1, owner the caller's effective uid and gid, mode = mode & 07777 & ~umask (bits above 07777 ignored; setuid, setgid and sticky kept when the umask allows); the umask in effect at the call is used. The returned descriptor has the requested access even if the new mode forbids it (e.g. O_WRONLY|O_CREAT with mode 0 can write)"
+  o_creat_existing: "without O_EXCL: the existing file is opened as if O_CREAT were absent; contents and mode unchanged; mode argument ignored"
+  o_excl_without_o_creat: "ignored on regular files"
+  mode_without_o_creat: "ignored"
+  o_trunc: "a regular file opened with O_TRUNC is emptied, also with O_RDONLY (needs write permission, see errors); on devices and FIFOs O_TRUNC is ignored"
+  o_append: "every write goes to the current end of the file and leaves the offset there; the offset still starts at 0 and lseek still positions reads"
+  f_getfl: "F_GETFL reports the access mode plus O_APPEND, O_NONBLOCK, O_DSYNC, O_DIRECT, O_NOATIME, O_DIRECTORY, O_NOFOLLOW, O_TMPFILE as given, and always O_LARGEFILE (0100000) on x86-64, given or not; O_CREAT, O_EXCL, O_TRUNC, O_NOCTTY, O_CLOEXEC and unknown bits are not reported. F_SETFL on one open file does not change another open of the same file"
+  o_cloexec: "sets FD_CLOEXEC on the new descriptor (F_GETFD 1); without it F_GETFD is 0"
+  directories: "a directory opens with O_RDONLY (with or without O_DIRECTORY, a trailing slash, \"/.\"); read gives EISDIR, getdents64 lists it; a descriptor for a directory that is later removed stays valid (fstat st_nlink 0)"
+  o_directory: "succeeds only on a directory"
+  symlinks: "followed in every component, relative targets resolved from the link's directory; up to 40 links in one lookup are followed. O_NOFOLLOW affects only the last component, and a trailing slash after a link to a directory still follows it"
+  o_creat_through_dangling_link: "without O_EXCL: creates the link's target (mode as for a new file), the link stays; if the target's directory is missing: ENOENT"
+  o_path: "a descriptor that only names the file: no permission on the file itself is needed; read, write and getdents64 give EBADF; fstat works; as a directory it works as an *at dirfd and for fchdir. The access mode bits and every flag except O_DIRECTORY, O_NOFOLLOW and O_CLOEXEC are ignored (O_CREAT creates nothing: ENOENT on a missing name; O_TRUNC truncates nothing); F_GETFL reports O_PATH plus O_DIRECTORY/O_NOFOLLOW if given, without O_LARGEFILE. O_PATH|O_NOFOLLOW on a symbolic link: a descriptor for the link itself (fstat S_IFLNK)"
+  o_tmpfile: "O_TMPFILE (020000000|O_DIRECTORY) with O_WRONLY or O_RDWR on a directory: an unnamed regular file in it, st_nlink 0, size 0, mode & ~umask, no new directory entry; linkat(fd, \"\", AT_FDCWD, name, AT_EMPTY_PATH) gives it a name (st_nlink 1). With O_EXCL it can never be linked: that linkat fails with ENOENT"
+  fifo: "O_RDONLY|O_NONBLOCK opens at once (read gives 0 with no writer); O_WRONLY|O_NONBLOCK opens when a reader exists; O_RDWR opens at once even without O_NONBLOCK and counts as a reader. O_CREAT and O_TRUNC on an existing FIFO change nothing"
+  devices: "/dev/null and /dev/zero open with any access mode; O_TRUNC ignored"
+  unlinked_file: "descriptors keep the file alive after unlink (st_nlink 0, contents readable); a later open of the name fails with ENOENT, and O_CREAT makes a different file"
+errors:
+  missing: "ENOENT: a missing name without O_CREAT, a missing directory component (also with O_CREAT), a dangling link without O_CREAT, an empty path (also with O_CREAT); a missing component followed by \"..\" is still ENOENT"
+  exists_with_o_excl: "EEXIST with O_CREAT|O_EXCL on any existing name: file, directory, device, or a symbolic link even if dangling (nothing is created)"
+  not_a_directory: "ENOTDIR: a non-directory used as a directory (\"file/x\", \"file/\", \"file/.\", \"file/..\", a link to a file followed by \"/\"), O_DIRECTORY on a non-directory (file, device, FIFO), O_TMPFILE on a non-directory"
+  is_a_directory: "EISDIR: a directory with O_WRONLY, O_RDWR, access mode 3, O_CREAT (without O_EXCL) or O_TRUNC; O_CREAT on a path ending in \"/\" whose last name is missing or a regular file (nothing is created)"
+  o_creat_with_o_directory: "EINVAL whether the name is new, a directory or a file; nothing is created"
+  o_tmpfile_misuse: "EINVAL for O_TMPFILE with O_RDONLY or with O_CREAT, and for the 020000000 bit without O_DIRECTORY on a directory; ENOENT on a missing directory"
+  symlink_loops: "ELOOP: O_NOFOLLOW (without O_PATH) when the last component is a link (dangling, to a directory, also with O_CREAT); a link cycle or a link to itself anywhere in the path (also with O_CREAT); more than 40 links in one lookup"
+  name_too_long: "ENAMETOOLONG: a path of 4096 bytes or more with its NUL (4095 bytes plus NUL is accepted), whatever its components; a component over 255 bytes (255 is fine) when every directory before it exists. A missing directory before an over-long name gives ENOENT instead"
+  bad_pointer: "EFAULT: NULL, a low unmapped address, or a kernel address as path"
+  permission: "EACCES for a caller without the right permission (root passes all of these): reading a file without read permission (O_RDONLY, O_RDWR, mode 3), writing without write permission (O_WRONLY, O_RDWR, mode 3, and O_TRUNC even with O_RDONLY; the file is then not truncated), creating a name in a directory without write permission, any path through a directory without search permission (even a missing name below it). O_CREAT on an existing file checks the requested access, not creation rights. A directory without write permission still gives ENOENT for a missing name without O_CREAT; a directory without search permission can itself be opened"
+  o_noatime: "allowed on one's own file (reported by F_GETFL); on a file the caller does not own, EPERM unless root (open(2) man page; not exercised by the tests)"
+  fifo_no_reader: "ENXIO for O_WRONLY|O_NONBLOCK on a FIFO with no reader"
+  descriptor_limit: "EMFILE when every number below the soft RLIMIT_NOFILE is in use; this is reported before the path is looked at (a missing name gives EMFILE, and O_CREAT creates nothing). Descriptors at or above a lowered limit stay open, and a free number below the limit is still handed out"
+  error_order: "for a single path the first problem found decides, in this order: the descriptor limit (EMFILE); the path string as a whole (EFAULT, ENAMETOOLONG for 4096 bytes or more, ENOENT for empty); then the components left to right as the walk reaches them (ENOENT, ENOTDIR, EACCES, ENAMETOOLONG for a long name, ELOOP); then problems with the last name itself (EEXIST, EISDIR, EINVAL, ENXIO, EACCES for the file's mode)"
+side_effects: "O_CREAT adds a directory entry (only on success); O_TRUNC sets a regular file's size to 0. Nothing else changes on failure. The new descriptor shares no offset or status flags with other opens of the same file, but they see one set of contents."
+threading: "no thread-specific behaviour; the descriptor table, working directory, umask and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds for files, directories and devices; does not block in the observed cases (blocking opens of a FIFO without O_NONBLOCK and without a peer were not exercised)"
+  guarantees: "none"
+tests:
+  visible: 9
+  held_out: 4
