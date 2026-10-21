@@ -80,9 +80,9 @@ pub const THREAD_CREATE_FLAGS_CREATE_SUSPENDED: u32 = 0x0001;
 
 // ----- information classes
 
-/// `PROCESSINFOCLASS` (`winternl.h`): the ones we answer.
+/// `PROCESSINFOCLASS` (`winternl.h`): `ProcessBasicInformation`, the one we
+/// answer (`ProcessImageFileName` and friends are not answered yet).
 pub const PROCESS_BASIC_INFORMATION: u32 = 0;
-/// `ProcessImageFileName` and friends are not answered yet.
 
 /// `THREADINFOCLASS` (`winternl.h` / `ntpsapi.h`).
 pub const THREAD_BASIC_INFORMATION: u32 = 0;
