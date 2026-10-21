@@ -10,10 +10,19 @@
 //! POLY-INIT: exec /test-binary              it is starting the program
 //! POLY-INIT: unsupported <reason>           it knows the flag but cannot run it
 //! POLY-SYSCALL: pid=1 nr=1 args=0x1,0x401000,0xd,0x0,0x0,0x0 ret=13 t=81234 data1=68656c6c6f
-//! POLY-OUT: fd=1 hex=68656c6c6f0a           bytes the program wrote to fd 1 or 2
+//! POLY-ENTER: pid=1 tid=1 nr=56 args=...    a call entered; its POLY-SYSCALL comes when it returns
+//! POLY-OUT: fd=1 hex=68656c6c6f0a           bytes the program wrote to its stdout (1) or stderr (2)
 //! POLY-SIGNAL: pid=1 signal=11              a signal delivered to the program
 //! POLY-EXIT: pid=1 code=0 t=91234           the program ended (or signal=N)
 //! ```
+//!
+//! `tid=` (optional on `POLY-SYSCALL`, `POLY-ENTER` and `POLY-SIGNAL`)
+//! names the thread; each thread is a task of its own in the trace, as a
+//! tracer sees it. A `POLY-ENTER` record puts the call into the trace at
+//! its entry (the kernel writes one for calls that start a task, before
+//! the task runs); the task's next `POLY-SYSCALL` of the same number
+//! completes it there. `POLY-SIGNAL` for `SIGKILL` makes no event: a
+//! tracer is never shown that signal (ptrace(2)).
 //!
 //! `ret=?` (or no `ret`) means the call did not return; `t` is nanoseconds
 //! since the program started and is optional; `data<i>=<hex>` optionally
@@ -40,6 +49,14 @@ use std::time::Duration;
 pub const INIT_PATH: &str = "/test-binary";
 /// Kernel arguments for a test run.
 pub const KERNEL_ARGS: &str = "poly.qemu_exit poly.init=/test-binary poly.test.capture";
+/// Kernel arguments of an app test run on top of [`KERNEL_ARGS`]: the
+/// files whose contents are the run's standard output and error, which
+/// the kernel reports (`POLY-OUT`) when the program has ended: the files
+/// the launcher sends them to (`apps::STDOUT_PATH`, `apps::STDERR_PATH`).
+pub fn app_output_args() -> String {
+    format!("poly.test.stdout=/{} poly.test.stderr=/{}", crate::apps::STDOUT_PATH, crate::apps::STDERR_PATH)
+}
+
 /// QEMU's exit status when the kernel reports success (`qemu::ExitCode::Success`).
 pub const QEMU_SUCCESS: i32 = 33;
 
@@ -85,6 +102,58 @@ fn field<'a>(f: &BTreeMap<&str, &'a str>, key: &str, line: &str) -> Result<&'a s
     f.get(key).copied().ok_or_else(|| format!("missing {key}= in {line:?}"))
 }
 
+/// `SIGKILL` (asm-generic/signal.h).
+const SIGKILL: i32 = 9;
+
+/// The task a record is about: its thread (`tid=`), else its process
+/// (`pid=`; records without `tid=` and the main thread, whose id is the
+/// pid). A tracer sees every thread as a task of its own.
+fn task_id<'a>(f: &BTreeMap<&str, &'a str>) -> Option<&'a str> {
+    f.get("tid").or_else(|| f.get("pid")).copied()
+}
+
+/// The call of a `POLY-SYSCALL` (`returned`) or `POLY-ENTER` record.
+fn syscall_record(f: &BTreeMap<&str, &str>, line: &str, index: impl Fn(u64) -> u32, returned: bool) -> Result<Syscall> {
+    let pid = index(number(task_id(f).ok_or_else(|| format!("missing pid= in {line:?}"))?)?);
+    let nr = number(field(f, "nr", line)?)?;
+    let mut raw = [0u64; 6];
+    let list = field(f, "args", line)?;
+    for (slot, a) in raw.iter_mut().zip(list.split(',').filter(|a| !a.is_empty())) {
+        *slot = number(a)?;
+    }
+    let mut data = BTreeMap::new();
+    for (i, &addr) in raw.iter().enumerate() {
+        if let Some(hex) = f.get(format!("data{i}").as_str()) {
+            // Strings come without their NUL; buffers are read
+            // by length, so the extra byte does not matter.
+            let mut bytes = hex_bytes(hex)?;
+            bytes.push(0);
+            data.insert(addr, bytes);
+        }
+    }
+    let ret = match f.get("ret") {
+        _ if !returned => None,
+        None | Some(&"?") => None,
+        Some(r) => Some(number(r)? as i64),
+    };
+    let name = syscalls::name(nr);
+    let mem = Data(data);
+    let mut args = trace::decode_entry(&name, &raw, &mem);
+    if let Some(r) = ret {
+        trace::decode_exit(&name, &raw, r, &mut args, &mem);
+    }
+    // Pointers whose contents the kernel did not send match anything.
+    for a in &mut args {
+        if let Arg::Unreadable(p) = *a
+            && !mem.0.contains_key(&p)
+        {
+            *a = Arg::Opaque(p);
+        }
+    }
+    let t_ns = f.get("t").map(|v| number(v)).transpose()?.unwrap_or(0);
+    Ok(Syscall { pid, nr, name, args, ret, t_ns })
+}
+
 /// Parse a serial log. `Ok(None)` if the kernel never acknowledged
 /// `poly.init` (it does not support running programs).
 ///
@@ -103,7 +172,9 @@ pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
             .filter_map(|l| {
                 let record = &l[l.find("POLY-")?..];
                 let (tag, rest) = record.split_once(": ")?;
-                matches!(tag, "POLY-SYSCALL" | "POLY-SIGNAL" | "POLY-EXIT").then(|| fields(rest))?.get("pid").copied()
+                let f =
+                    matches!(tag, "POLY-SYSCALL" | "POLY-ENTER" | "POLY-SIGNAL" | "POLY-EXIT").then(|| fields(rest))?;
+                task_id(&f)
             })
             .filter_map(|p| number(p).ok())
             .collect();
@@ -113,6 +184,9 @@ pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
     };
     let index = |pid: u64| -> u32 { pids.get(&pid).copied().unwrap_or(pids.len() as u32) };
     let (mut acknowledged, mut stdout, mut stderr) = (false, Vec::new(), Vec::new());
+    // Calls entered (`POLY-ENTER`) whose `POLY-SYSCALL` has not come yet:
+    // task index -> (event index, number).
+    let mut entered: BTreeMap<u32, (usize, u64)> = BTreeMap::new();
     for line in log.lines() {
         // Lines may carry a carriage return, or kernel log text before the
         // marker if the console interleaved them; the marker starts the record.
@@ -128,45 +202,27 @@ pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
                 acknowledged = true;
             }
             _ if !acknowledged => {}
+            "POLY-ENTER" => {
+                let f = fields(rest);
+                let call = syscall_record(&f, line, index, false)?;
+                entered.insert(call.pid, (t.events.len(), call.nr));
+                t.events.push(Event::Syscall(call));
+            }
             "POLY-SYSCALL" => {
                 let f = fields(rest);
-                let pid = index(number(field(&f, "pid", line)?)?);
-                let nr = number(field(&f, "nr", line)?)?;
-                let mut raw = [0u64; 6];
-                let list = field(&f, "args", line)?;
-                for (slot, a) in raw.iter_mut().zip(list.split(',').filter(|a| !a.is_empty())) {
-                    *slot = number(a)?;
-                }
-                let mut data = BTreeMap::new();
-                for (i, &addr) in raw.iter().enumerate() {
-                    if let Some(hex) = f.get(format!("data{i}").as_str()) {
-                        // Strings come without their NUL; buffers are read
-                        // by length, so the extra byte does not matter.
-                        let mut bytes = hex_bytes(hex)?;
-                        bytes.push(0);
-                        data.insert(addr, bytes);
+                let call = syscall_record(&f, line, index, true)?;
+                // The return of a call whose entry was recorded: the event
+                // stays where the entry put it.
+                match entered.remove(&call.pid) {
+                    Some((at, nr)) if nr == call.nr => {
+                        let t_ns = match &t.events[at] {
+                            Event::Syscall(entry) => entry.t_ns,
+                            _ => call.t_ns,
+                        };
+                        t.events[at] = Event::Syscall(Syscall { t_ns, ..call });
                     }
+                    _ => t.events.push(Event::Syscall(call)),
                 }
-                let ret = match f.get("ret") {
-                    None | Some(&"?") => None,
-                    Some(r) => Some(number(r)? as i64),
-                };
-                let name = syscalls::name(nr);
-                let mem = Data(data);
-                let mut args = trace::decode_entry(&name, &raw, &mem);
-                if let Some(r) = ret {
-                    trace::decode_exit(&name, &raw, r, &mut args, &mem);
-                }
-                // Pointers whose contents the kernel did not send match anything.
-                for a in &mut args {
-                    if let Arg::Unreadable(p) = *a
-                        && !mem.0.contains_key(&p)
-                    {
-                        *a = Arg::Opaque(p);
-                    }
-                }
-                let t_ns = f.get("t").map(|v| number(v)).transpose()?.unwrap_or(0);
-                t.events.push(Event::Syscall(Syscall { pid, nr, name, args, ret, t_ns }));
             }
             "POLY-OUT" => {
                 let f = fields(rest);
@@ -179,9 +235,14 @@ pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
             }
             "POLY-SIGNAL" => {
                 let f = fields(rest);
-                let pid = index(number(field(&f, "pid", line)?)?);
+                let pid = index(number(task_id(&f).ok_or_else(|| format!("missing pid= in {line:?}"))?)?);
                 let signal = number(field(&f, "signal", line)?)? as i32;
-                t.events.push(Event::Signal { pid, signal });
+                // A tracer never sees SIGKILL (ptrace(2): it is not
+                // delivered through a signal-delivery-stop); the process
+                // just ends. The reference trace has no event for it.
+                if signal != SIGKILL {
+                    t.events.push(Event::Signal { pid, signal });
+                }
             }
             "POLY-EXIT" => {
                 let f = fields(rest);
@@ -255,12 +316,25 @@ impl Target {
     /// initramfs and the serial log.
     pub fn run(&self, test: &str, binary: &Path, work: &Path) -> Result<(Outcome, PathBuf)> {
         let bytes = util::read(binary)?;
-        self.run_image(test, &initramfs(&bytes)?, &crate::sha256::hex(&bytes), work)
+        self.boot(test, &initramfs(&bytes)?, &crate::sha256::hex(&bytes), work, KERNEL_ARGS)
     }
 
-    /// Boot the initramfs `image`, whose `/test-binary` has the hash
-    /// `binary_sha256` (an app test's tree, `apps::Tree::cpio`).
+    /// Boot the initramfs `image` of an app test (`apps::Tree::cpio`),
+    /// whose `/test-binary` has the hash `binary_sha256`. The launcher
+    /// sends the app's output into regular files; the kernel reports what
+    /// they hold at the end ([`app_output_args`]).
     pub fn run_image(&self, test: &str, image: &[u8], binary_sha256: &str, work: &Path) -> Result<(Outcome, PathBuf)> {
+        self.boot(test, image, binary_sha256, work, &format!("{KERNEL_ARGS} {}", app_output_args()))
+    }
+
+    fn boot(
+        &self,
+        test: &str,
+        image: &[u8],
+        binary_sha256: &str,
+        work: &Path,
+        args: &str,
+    ) -> Result<(Outcome, PathBuf)> {
         let image_path = work.join(format!("{test}.initramfs.cpio"));
         util::write(&image_path, image)?;
         let image = image_path;
@@ -274,7 +348,7 @@ impl Target {
                 .arg(&self.kernel)
                 .arg("-initrd")
                 .arg(&image)
-                .args(["-append", KERNEL_ARGS]);
+                .args(["-append", args]);
             let done = runner::run_command(&mut cmd, self.timeout)
                 .map_err(|e| format!("{e} (is qemu-system-x86_64 installed?)"))?;
             let log = String::from_utf8_lossy(&done.stdout).into_owned();
@@ -381,6 +455,49 @@ mod tests {
         assert_eq!(t.exit, Exit::Code(3));
         let pids: Vec<u32> = t.syscalls().map(|c| c.pid).collect();
         assert_eq!(pids, [1, 0, 0]);
+    }
+
+    /// A call recorded at its entry (`POLY-ENTER`) keeps that place in the
+    /// trace when its `POLY-SYSCALL` comes after what the new task did;
+    /// threads (`tid=`) are tasks of their own, numbered with the
+    /// processes in creation order; SIGKILL, which a tracer never sees,
+    /// leaves no event.
+    #[test]
+    fn entered_calls_threads_and_sigkill() {
+        let log = "POLY-INIT: exec /test-binary\n\
+            POLY-ENTER: pid=2 tid=2 nr=56 args=0x4011,0x0,0x0,0x0,0x0,0x0\n\
+            POLY-SYSCALL: pid=3 tid=3 nr=39 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=3\n\
+            POLY-SIGNAL: pid=3 tid=3 signal=9\n\
+            POLY-EXIT: pid=3 signal=9\n\
+            POLY-SYSCALL: pid=2 tid=2 nr=56 args=0x4011,0x0,0x0,0x0,0x0,0x0 ret=3\n\
+            POLY-ENTER: pid=2 tid=2 nr=56 args=0x10f00,0x0,0x0,0x0,0x0,0x0\n\
+            POLY-SYSCALL: pid=2 tid=4 nr=186 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=4\n\
+            POLY-SIGNAL: pid=2 tid=4 signal=11\n\
+            POLY-SYSCALL: pid=2 tid=2 nr=56 args=0x10f00,0x0,0x0,0x0,0x0,0x0 ret=4\n\
+            POLY-SYSCALL: pid=2 nr=231 args=0x0 ret=?\n\
+            POLY-EXIT: pid=2 code=0\n";
+        let Some(Outcome::Ran(t)) = parse_serial(log, "x").unwrap() else { panic!("not run") };
+        assert_eq!(t.exit, Exit::Code(0));
+        let calls: Vec<(u32, &str, Option<i64>)> = t.syscalls().map(|c| (c.pid, c.name.as_str(), c.ret)).collect();
+        assert_eq!(
+            calls,
+            [
+                (0, "clone", Some(3)),
+                (1, "getpid", Some(3)),
+                (0, "clone", Some(4)),
+                (2, "gettid", Some(4)),
+                (0, "exit_group", None)
+            ]
+        );
+        let signals: Vec<(u32, i32)> = t
+            .events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Signal { pid, signal } => Some((*pid, *signal)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(signals, [(2, 11)]);
     }
 
     /// Only a signal is a crash of the emulator; our timeout and the

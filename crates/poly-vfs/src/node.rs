@@ -164,11 +164,8 @@ impl NodeRef {
                 return Err(Errno::EPERM);
             }
         }
-        if uid.is_none() && gid.is_none() {
-            // Setting what is already there still touches ctime in Linux;
-            // nothing observable depends on that yet.
-            return Ok(());
-        }
+        // Every successful call, even one that changes no id, clears the
+        // set-id bits below and touches ctime (as on Linux).
         let mut set = SetAttr { uid, gid, ..SetAttr::default() };
         if attr.kind != FileType::Directory {
             let mut perm = attr.perm & !S_ISUID;

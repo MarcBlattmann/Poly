@@ -18,6 +18,7 @@ mod seccomp;
 mod signal;
 mod signal_trace;
 mod socket;
+mod spec_a;
 mod startup;
 mod task;
 mod time;

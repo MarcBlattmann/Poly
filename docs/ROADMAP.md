@@ -99,8 +99,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds
 - [x] NT object manager: handles, object namespace (`\??`, `\Device`, `\BaseNamedObjects`), reference counts
 - [x] NT memory services: sections, `NtAllocateVirtualMemory`, `NtMapViewOfSection`, protections
-- [ ] NT processes and threads, TEB/PEB, thread contexts, APCs
-- [ ] NT synchronisation: events, mutants, semaphores, timers, `NtWaitForMultipleObjects`
+- [x] NT processes and threads, TEB/PEB, thread contexts, APCs (ADR 0065)
+- [x] NT synchronisation: events, mutants, semaphores, timers, `NtWaitForMultipleObjects` (ADR 0065)
 - [ ] NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O
 - [ ] Structured exception handling: kernel-to-user exception dispatch, unwinding
 - [ ] Registry: hive storage, `NtOpenKey` family, default system hives

@@ -12,7 +12,9 @@
 //! | `MADV_FREE` | [`Advice::Free`]: private anonymous memory only (`EINVAL` otherwise); Poly frees the pages at once, which the man page allows ("the kernel can free these pages") |
 //! | `MADV_REMOVE` | [`Advice::Remove`]: shared writable mappings only (`EINVAL` otherwise); no file system of Poly can free a file's range yet, so the kernel answers `EOPNOTSUPP` |
 //! | `MADV_NORMAL`, `MADV_RANDOM`, `MADV_SEQUENTIAL`, `MADV_WILLNEED`, `MADV_COLD`, `MADV_PAGEOUT`, `MADV_MERGEABLE`, `MADV_UNMERGEABLE`, `MADV_HUGEPAGE`, `MADV_NOHUGEPAGE`, `MADV_DONTDUMP`, `MADV_DODUMP`, `MADV_DONTFORK`, `MADV_DOFORK` | [`Advice::Hint`]: accepted, nothing changes (the range must be mapped). `MADV_DONTFORK` is the one that changes behaviour on Linux (the child of a fork does not get the range); Poly's child still gets a copy |
-//! | `MADV_WIPEONFORK`, `MADV_KEEPONFORK`, `MADV_POPULATE_READ`, `MADV_POPULATE_WRITE`, `MADV_COLLAPSE`, `MADV_HWPOISON`, `MADV_SOFT_OFFLINE`, `MADV_GUARD_INSTALL`, `MADV_GUARD_REMOVE`, unknown values | `EINVAL`, as on a kernel that predates them (the man page names the version each came with). `MADV_WIPEONFORK` must not be accepted without wiping: a forked child would keep, say, a random generator's state |
+//! | `MADV_WIPEONFORK` | [`Advice::WipeOnFork`]: private anonymous memory only (`EINVAL` otherwise); a child made by fork gets the range zero-filled |
+//! | `MADV_KEEPONFORK` | [`Advice::KeepOnFork`]: undoes `MADV_WIPEONFORK` |
+//! | `MADV_POPULATE_READ`, `MADV_POPULATE_WRITE`, `MADV_COLLAPSE`, `MADV_HWPOISON`, `MADV_SOFT_OFFLINE`, `MADV_GUARD_INSTALL`, `MADV_GUARD_REMOVE`, unknown values | `EINVAL`, as on a kernel that predates them (the man page names the version each came with) |
 //!
 //! Order of the checks (madvise(2) ERRORS; the order is ours, to be
 //! confirmed by the diff runner): unknown or unsupported advice, an `addr`
@@ -67,6 +69,11 @@ pub enum Advice {
     /// Free the backing store of a shared writable mapping (`EINVAL` for
     /// anything else).
     Remove,
+    /// A fork child gets the range zero-filled; private anonymous memory
+    /// only (`EINVAL` for anything else).
+    WipeOnFork,
+    /// Undo [`WipeOnFork`](Self::WipeOnFork).
+    KeepOnFork,
 }
 
 impl Advice {
@@ -77,6 +84,8 @@ impl Advice {
             MADV_DONTNEED | MADV_DONTNEED_LOCKED => Some(Advice::DontNeed),
             MADV_FREE => Some(Advice::Free),
             MADV_REMOVE => Some(Advice::Remove),
+            MADV_WIPEONFORK => Some(Advice::WipeOnFork),
+            MADV_KEEPONFORK => Some(Advice::KeepOnFork),
             MADV_NORMAL | MADV_RANDOM | MADV_SEQUENTIAL | MADV_WILLNEED | MADV_COLD | MADV_PAGEOUT | MADV_MERGEABLE
             | MADV_UNMERGEABLE | MADV_HUGEPAGE | MADV_NOHUGEPAGE | MADV_DONTDUMP | MADV_DODUMP | MADV_DONTFORK
             | MADV_DOFORK => Some(Advice::Hint),

@@ -49,8 +49,15 @@ impl Memory {
         let mut inner = self.inner.lock();
         let mut child =
             Inner { map: inner.map.clone(), parked: BTreeMap::new(), cached: BTreeMap::new(), shared: BTreeMap::new() };
-        let private: Vec<(u64, u64, Prot)> =
-            inner.map.regions().filter(|v| !v.is_shared()).map(|v| (v.start, v.end, v.prot)).collect();
+        // MADV_WIPEONFORK regions: the child's copy starts zero-filled, so
+        // their pages are not shared with it.
+        let private: Vec<(u64, u64, Prot)> = inner
+            .map
+            .regions()
+            .filter(|v| !v.is_shared() && !v.wipe_on_fork)
+            .map(|v| (v.start, v.end, v.prot))
+            .collect();
+        let wiped = |inner: &Inner, page: u64| inner.map.find(page).is_some_and(|v| v.wipe_on_fork);
         // The pages made read-only below are synced with the other CPUs
         // (which may run threads of this memory) in one shootdown, before
         // this returns, on every path.
@@ -86,11 +93,11 @@ impl Memory {
         // mapped by neither side until the region is accessible again;
         // shared frames that are parked already just get one more user.
         for (&page, s) in inner.shared.iter().filter(|(_, s)| !s.mapped) {
-            if !inner.map.find(page).is_some_and(|v| v.is_shared()) {
+            if !inner.map.find(page).is_some_and(|v| v.is_shared() || v.wipe_on_fork) {
                 child.shared.insert(page, SharedPage { frame: Arc::clone(&s.frame), mapped: false });
             }
         }
-        let parked: Vec<u64> = inner.parked.keys().copied().collect();
+        let parked: Vec<u64> = inner.parked.keys().copied().filter(|&p| !wiped(&inner, p)).collect();
         for page in parked {
             let frame = Arc::new(SharedFrame(inner.parked.remove(&page).expect("listed above")));
             inner.shared.insert(page, SharedPage { frame: Arc::clone(&frame), mapped: false });

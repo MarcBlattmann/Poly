@@ -338,8 +338,13 @@ fn notifications_signal_events_and_write_status_blocks() {
 
     // Not supported yet, or wrong.
     let iosb4 = f.alloc(16);
+    // Synchronous: the fake kernel's waits time out at once, so the request
+    // is taken back and the wait's status returned.
     let sync = f.call(Service::NotifyChangeKey, &[k, ev, 0, 0, iosb4, 1, 0, 0, 0, 0]);
-    assert_eq!(sync, STATUS_NOT_IMPLEMENTED);
+    assert_eq!(sync, STATUS_TIMEOUT);
+    assert_eq!(f.sys.registry.pending_requests(), 0);
+    let apc = f.call(Service::NotifyChangeKey, &[k, ev, 0x1000, 0, iosb4, 1, 0, 0, 0, 1]);
+    assert_eq!(apc, STATUS_NOT_IMPLEMENTED);
     assert_eq!(notify(&mut f, k, ev, iosb4, 0, false), STATUS_INVALID_PARAMETER);
     let (_, ro) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Watched", KEY_QUERY_VALUE);
     assert_eq!(notify(&mut f, ro, ev, iosb4, 1, false), STATUS_ACCESS_DENIED);

@@ -172,12 +172,16 @@ fn mremap_checks_its_flags_and_rounds_the_sizes() {
         (&[a, 4096, 4096, 5, 0], "MREMAP_DONTUNMAP"),
         (&[a + 1, 4096, 4096, 1, 0], "a misaligned address"),
         (&[a, 4096, 0, 1, 0], "a zero new size"),
-        (&[a, 0, 4096, 1, 0], "a zero old size"),
+        (&[a, 0, 4096, 0, 0], "a zero old size without MREMAP_MAYMOVE"),
     ];
     for (args, what) in bad {
         assert_eq!(sys(&mut k, nr::MREMAP, args), Err(Errno::EINVAL), "{what}");
     }
     assert_eq!(k.remapped.len(), 3, "refused calls never reach the kernel");
+    // A zero old size asks for a second mapping of a shared mapping's pages:
+    // the kernel's to do (or refuse for a private one).
+    assert_eq!(sys(&mut k, nr::MREMAP, &[a, 0, 4096, 1, 0]), Ok(a));
+    assert_eq!(k.remapped.last(), Some(&(a, 0, 4096, Remap::MayMove)));
 }
 
 // ---- msync --------------------------------------------------------------

@@ -78,6 +78,7 @@ mod advice;
 mod fork;
 mod futex;
 mod remap;
+mod residency;
 mod shared;
 
 pub use advice::Advice;

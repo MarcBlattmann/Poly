@@ -15,14 +15,15 @@
 //! `NtSetInformationKey` `KEY_SET_VALUE` (both to be confirmed by the spec
 //! agent).
 
-use super::{CreateArgs, KeyParse, key_access, key_of_handle};
+use super::{CreateArgs, KeyParse, NotifyEvent, key_access, key_of_handle};
 use crate::abi::{self, Attributes};
 use crate::kernel::NtKernel;
+use crate::kernel::NtTimeout;
 use crate::objects::return_handle;
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::status::*;
-use poly_ntobj::{Handle, NewObject, NtStatus, OBJ_OPENLINK, ObjectType};
+use poly_ntobj::{EventType, Handle, NewObject, NtStatus, OBJ_OPENLINK, ObjectType, WaitOutcome, WaitType};
 use poly_registry::consts::*;
 use poly_registry::info;
 
@@ -298,24 +299,74 @@ pub fn flush_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
 
 /// `NtNotifyChangeKey(KeyHandle, Event, ApcRoutine, ApcContext,
 /// IoStatusBlock*, CompletionFilter, WatchTree, Buffer, BufferSize,
-/// Asynchronous)`: queues the request and returns `STATUS_PENDING`
-/// (Learn). Until the kernel can block a thread in a service and deliver
-/// user APCs (the processes/threads and synchronisation milestones), a
-/// synchronous call or an APC routine is `STATUS_NOT_IMPLEMENTED`; without
-/// an event the caller learns of the change only through its I/O status
-/// block (Learn says the key handle is signalled then; Poly's key objects
-/// are not waitable yet). `Buffer` and `BufferSize` are reserved and
-/// ignored.
+/// Asynchronous)` (Learn).
+///
+/// - Asynchronous: queue the request and return `STATUS_PENDING`; the
+///   change signals `Event` (if given) and writes the I/O status block.
+///   Without an event the caller learns of the change only through the
+///   block (Learn says the key handle is signalled then; Poly's key objects
+///   are not waitable yet, to be done with the spec agent's findings).
+/// - Synchronous: wait (not alertable, no timeout) on an event of the
+///   service's own until the request completes, and return its status;
+///   `Event` and the APC arguments are ignored (Learn). Should the wait end
+///   another way, the request is taken back and the wait's status returned.
+/// - An APC routine (asynchronous) is `STATUS_NOT_IMPLEMENTED`: the block
+///   of another process is written only when that process next calls in,
+///   which could be after the APC ran.
+/// - `Buffer` and `BufferSize` are reserved and ignored.
 pub fn notify_change_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, event, apc, _apc_context, iosb, filter, subtree, _buf, _size, asynchronous] = abi::args::<K, 10>(k, regs)?;
-    if asynchronous as u8 == 0 || apc != 0 {
-        return Err(STATUS_NOT_IMPLEMENTED);
-    }
     let caller = k.caller();
-    k.with_state(|sys, _, _| {
-        super::queue_notify(sys, &caller, Handle(h), Handle(event), iosb, filter as u32, subtree as u8 != 0)
+    let (filter, subtree) = (filter as u32, subtree as u8 != 0);
+    if asynchronous as u8 != 0 {
+        if apc != 0 {
+            return Err(STATUS_NOT_IMPLEMENTED);
+        }
+        let event = if event == 0 { NotifyEvent::None } else { NotifyEvent::Handle(Handle(event)) };
+        k.with_state(|sys, _, _| super::queue_notify(sys, &caller, Handle(h), event, iosb, filter, subtree))?;
+        return Ok(STATUS_PENDING);
+    }
+    let (request, ev, wait) = k.with_state(|sys, _, _| {
+        let ev = sys
+            .objects
+            .new_object(NewObject::Event { kind: EventType::Notification, signaled: false }, caller.thread)?;
+        // The request holds one reference, this call the other.
+        sys.objects.reference(ev)?;
+        let request = match super::queue_notify(sys, &caller, Handle(h), NotifyEvent::Object(ev), iosb, filter, subtree)
+        {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = sys.objects.dereference(ev);
+                let _ = sys.objects.dereference(ev);
+                return Err(e);
+            }
+        };
+        let wait = sys.objects.wait_objects(caller.thread, &[ev], WaitType::Any, false, poly_ntobj::Timeout::Infinite);
+        Ok((request, ev, wait))
     })?;
-    Ok(STATUS_PENDING)
+    let waited = match wait {
+        Ok(WaitOutcome::Done(s)) => s,
+        Ok(WaitOutcome::Blocked(id)) => k.wait(id, NtTimeout::Infinite, false),
+        Err(e) => e,
+    };
+    let status = k.with_state(|sys, _, b| {
+        sys.registry.deliver(&mut sys.objects, Some(caller.process));
+        let status = sys.registry.completion_status(request);
+        sys.registry.cancel_request(request, &mut sys.objects);
+        let _ = sys.objects.dereference(ev);
+        sys.reap(b);
+        status
+    });
+    match status {
+        Some(s) => Ok(s),
+        // Another thread of this process wrote the block already.
+        None if waited == STATUS_WAIT_0 => {
+            let mut b = [0u8; 4];
+            abi::read(k, iosb, &mut b)?;
+            Ok(NtStatus(u32::from_le_bytes(b)))
+        }
+        None => Ok(waited),
+    }
 }
 
 /// `NtSetInformationKey(KeyHandle, KeySetInformationClass,

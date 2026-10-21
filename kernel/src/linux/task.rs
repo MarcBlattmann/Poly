@@ -176,6 +176,11 @@ fn publish(published: &AtomicU64, generation: u64) -> bool {
     published.fetch_max(generation, Ordering::SeqCst) < generation
 }
 
+/// The tree's published generation: it moves with every change.
+pub fn generation() -> u64 {
+    GENERATION.load(Ordering::SeqCst)
+}
+
 /// A process the kernel started: the root of a tree of its own (its
 /// parent is the kernel).
 pub fn register_root(pid: u32) {

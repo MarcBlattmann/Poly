@@ -172,6 +172,17 @@ pub enum Clock {
     ThreadCpuTime,
 }
 
+/// getrusage(2)'s memory counters ([`LinuxKernel::memory_counts`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemoryCounts {
+    /// The most memory resident at once, in KiB (`ru_maxrss`).
+    pub maxrss_kib: u64,
+    /// Page faults served without I/O (`ru_minflt`).
+    pub minor_faults: u64,
+    /// Page faults that needed I/O (`ru_majflt`).
+    pub major_faults: u64,
+}
+
 /// Whose CPU time [`LinuxKernel::cpu_times`] reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CpuTimesOf {
@@ -186,6 +197,10 @@ pub enum CpuTimesOf {
     /// and its own waited-for children: wait4(2)'s `rusage` (ADR 0059).
     /// Asked once per wait; `None` if the kernel does not know it.
     Reaped(i32),
+    /// Every thread of process `pid` (global), any process, a zombie too:
+    /// its CPU-time clock (clock_getcpuclockid(3)); `None` if there is no
+    /// such process.
+    OtherProcess(i32),
 }
 
 /// CPU time in nanoseconds, split into time running user code and time
@@ -557,6 +572,23 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
+    /// mlock(2) (`lock`) or munlock(2) of `[addr, addr + len)` (both page
+    /// aligned, `len` non-zero, no overflow): `ENOMEM` if part of it is not
+    /// mapped, or, to lock, is `PROT_NONE`; locking brings every page in.
+    /// `ENOSYS` by default.
+    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
+        let _ = (addr, len, lock);
+        Err(Errno::ENOSYS)
+    }
+
+    /// mincore(2) of `[addr, addr + vec.len() pages)` (`addr` page
+    /// aligned, no overflow): `vec[i]` 1 if page `i` is resident, else 0;
+    /// `ENOMEM` if part of the range is not mapped. `ENOSYS` by default.
+    fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
+        let _ = (addr, vec);
+        Err(Errno::ENOSYS)
+    }
+
     // ---- thread state -------------------------------------------------
 
     /// The calling thread's FS segment base.
@@ -850,6 +882,13 @@ pub trait LinuxKernel {
     fn cpu_times(&self, of: CpuTimesOf) -> Option<CpuTimes> {
         let _ = of;
         None
+    }
+
+    /// getrusage(2)'s memory counters for `of` (the calling process or
+    /// thread; `Children` for its waited-for children). Zeros by default.
+    fn memory_counts(&self, of: CpuTimesOf) -> MemoryCounts {
+        let _ = of;
+        MemoryCounts::default()
     }
 
     /// The calling process's timers changed (setitimer, alarm,

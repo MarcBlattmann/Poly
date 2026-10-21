@@ -25,7 +25,7 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_personality_linux::admin::{FsType, RootOptions};
-use poly_vfs::{At, Cred, DeviceId, Errno, FileSystem, FileType, FsContext, MountId, SetAttr, Tmpfs, Vfs};
+use poly_vfs::{At, Cred, DeviceId, Errno, FileSystem, FileType, FsContext, MountId, SetAttr, Vfs};
 
 /// The block major of the virtio-blk disks. Linux gives virtio-blk a
 /// dynamic major; this is Poly's fixed choice.
@@ -84,12 +84,12 @@ pub fn new_virtual(fs: FsType, root: RootOptions) -> Result<Arc<dyn FileSystem>,
         FsType::Sysfs => sysfs::build(),
         FsType::Devpts => crate::tty::new_devpts().ok_or(Errno::ENODEV)?,
         FsType::Tmpfs => {
-            let tmpfs = Arc::new(Tmpfs::new(super::clock()));
+            let tmpfs = super::memfs::new_tmpfs(super::clock());
             // tmpfs(5): the root is 01777 unless `mode` says otherwise.
             let set =
                 SetAttr { perm: Some(root.mode.unwrap_or(0o1777)), uid: root.uid, gid: root.gid, ..SetAttr::default() };
             tmpfs.setattr(tmpfs.root(), &set)?;
-            tmpfs
+            super::memfs::cached(tmpfs)
         }
         FsType::Ext2 => return Err(Errno::ENOTBLK),
     })

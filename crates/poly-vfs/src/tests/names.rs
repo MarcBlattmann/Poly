@@ -136,6 +136,25 @@ fn statfs_reports_the_file_system_and_the_mount_flags() {
 }
 
 #[test]
+fn tmpfs_limits_are_fixed_totals() {
+    let env = Env::new();
+    env.mkdir("/l");
+    let fs = Arc::new(Tmpfs::with_limits(Arc::new(TestClock::default()), 4 * 4096, 3));
+    env.vfs.mount(&env.ctx, &env.root, At::Cwd, b"/l", fs, MountFlags::default()).unwrap();
+    let stat = || env.vfs.lookup(&env.ctx, &env.root, At::Cwd, b"/l", true).unwrap().statfs().unwrap();
+    let before = stat();
+    assert_eq!((before.blocks, before.blocks_free, before.files, before.files_free), (4, 4, 3, 2));
+    env.write("/l/a", &[1u8; 5000]);
+    let during = stat();
+    assert_eq!((during.blocks, during.blocks_free, during.files, during.files_free), (4, 2, 3, 1));
+    env.write("/l/b", b"x");
+    assert_eq!(env.open("/l/c", OpenFlags::WRONLY | OpenFlags::CREAT).map(|_| ()), Err(Errno::ENOSPC), "no inode left");
+    // Without limits the inode counts are consistent too.
+    let st = env.vfs.lookup(&env.ctx, &env.root, At::Cwd, b"/", true).unwrap().statfs().unwrap();
+    assert!(st.files_free <= st.files);
+}
+
+#[test]
 fn magic_numbers_by_name() {
     assert_eq!(magic_for("tmpfs"), 0x0102_1994);
     assert_eq!(magic_for("ext2"), 0xef53);

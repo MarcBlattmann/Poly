@@ -109,6 +109,9 @@ pub struct ThreadFlags {
     /// The thread must end, though its process goes on (another thread's
     /// `execve`, [`Process::end_other_threads`]).
     pub killed: AtomicBool,
+    /// The thread is suspended (NT `NtSuspendThread`): it parks before it
+    /// next runs user code until the count reaches zero (`crate::nt`).
+    pub suspended: AtomicBool,
     /// Its kernel thread (`ThreadId::to_bits` + 1; 0 until it is known), to
     /// interrupt it when it runs on another CPU ([`ThreadFlags::kick`]).
     pub thread: AtomicU64,
@@ -545,6 +548,13 @@ pub fn find_thread(tid: u32) -> Option<(Arc<Process>, Arc<ThreadFlags>)> {
         let f = p.thread_flags(tid)?;
         Some((p, f))
     })
+}
+
+/// List `process` in the table without a thread of its own: the kernel's
+/// init of a traced test run (`testinit.rs`, ADR 0064), whose work a
+/// kernel thread does. The caller keeps it alive (the table is weak).
+pub fn register_threadless(process: &Arc<Process>) {
+    TABLE.lock().insert(process.pid, Arc::downgrade(process));
 }
 
 /// Every process in the table, by pid.

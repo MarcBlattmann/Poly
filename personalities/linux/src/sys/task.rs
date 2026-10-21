@@ -152,7 +152,8 @@ fn write_rusage(k: &mut dyn LinuxKernel, ptr: UserPtr, pid: i32) -> Result<(), E
     if ptr.is_null() {
         return Ok(());
     }
-    let usage = Rusage { utime: Timeval::from_nanos(t.user_ns), stime: Timeval::from_nanos(t.system_ns) };
+    let usage =
+        Rusage { utime: Timeval::from_nanos(t.user_ns), stime: Timeval::from_nanos(t.system_ns), ..Rusage::default() };
     k.copy_to_user(ptr, &usage.to_bytes())
 }
 

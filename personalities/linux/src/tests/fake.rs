@@ -133,6 +133,8 @@ pub struct FakeKernel {
     pub cpus: u32,
     /// Every madvise that reached the kernel (ADR 0049).
     pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
+    /// mlock (`true`) and munlock calls: address, length.
+    pub locked: Vec<(u64, u64, bool)>,
     /// mremap calls: old, old length, new length, placement.
     pub remapped: Vec<(u64, u64, u64, crate::kernel::Remap)>,
     /// msync calls: address, length, sync.
@@ -227,6 +229,7 @@ impl FakeKernel {
             ioctls: Vec::new(),
             protects: Vec::new(),
             advised: Vec::new(),
+            locked: Vec::new(),
             remapped: Vec::new(),
             synced_maps: Vec::new(),
             on_cpu: 0,
@@ -666,6 +669,27 @@ impl LinuxKernel for FakeKernel {
         })
     }
 
+    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
+        self.locked.push((addr, len, lock));
+        let pages = addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE);
+        if pages.into_iter().any(|p| !self.pages.contains_key(&p)) {
+            return Err(Errno::ENOMEM);
+        }
+        Ok(())
+    }
+
+    fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
+        for (i, byte) in vec.iter_mut().enumerate() {
+            let page = addr / PAGE_SIZE + i as u64;
+            if !self.pages.contains_key(&page) {
+                return Err(Errno::ENOMEM);
+            }
+            // Pages the fake has are all "resident".
+            *byte = 1;
+        }
+        Ok(())
+    }
+
     fn madvise(&mut self, addr: u64, len: u64, advice: crate::sys::madvise::Advice) -> Result<(), Errno> {
         self.advised.push((addr, len, advice));
         let pages = addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE);
@@ -988,6 +1012,7 @@ impl LinuxKernel for FakeKernel {
             CpuTimesOf::Process => Some(c[1]),
             CpuTimesOf::Children => Some(c[2]),
             CpuTimesOf::Reaped(_) => Some(c[2]),
+            CpuTimesOf::OtherProcess(pid) => self.procs.contains_key(&pid).then_some(CpuTimes::default()),
         }
     }
 

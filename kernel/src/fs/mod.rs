@@ -42,6 +42,7 @@ mod disk_tests;
 mod files;
 pub mod initrd;
 pub mod locks;
+pub mod memfs;
 pub mod mounts;
 pub mod poll;
 pub mod proc;
@@ -54,7 +55,7 @@ use crate::sync::SetOnce;
 use crate::{kprintln, time};
 use alloc::sync::Arc;
 use poly_mem::Region;
-use poly_vfs::{Clock, Timespec, Tmpfs, Vfs};
+use poly_vfs::{Clock, Timespec, Vfs};
 
 pub use files::{AT_REMOVEDIR, Files};
 #[allow(unused_imports, reason = "the types of the `Files` API, for the system call layer")]
@@ -72,9 +73,11 @@ pub fn vfs() -> &'static Vfs {
     VFS.get().expect("fs::vfs used before fs::init")
 }
 
-/// Timestamps for tmpfs. There is no wall clock yet (no RTC driver), so
-/// times count from boot: the first second after boot is 1970-01-01
-/// 00:00:00 UTC. Files from the initramfs keep the times in the archive.
+/// Timestamps counted from boot: the first second after boot is
+/// 1970-01-01 00:00:00 UTC (the kernel tests' own tmpfs). The memory file
+/// systems use the wall clock ([`clock`]), as ctime and mtime of new files
+/// are the time of day on Linux; files from the initramfs keep the times
+/// in the archive.
 #[derive(Debug)]
 struct UptimeClock;
 
@@ -110,13 +113,22 @@ pub(crate) fn clock() -> Arc<dyn Clock> {
 /// allocator gets back once the archive is unpacked. Call once, after the
 /// heap, the clock and interrupts are up.
 pub fn init(boot: &BootInfo, held: Option<Region>) {
-    let root = Arc::new(Tmpfs::new(Arc::new(UptimeClock)));
-    let vfs = Vfs::new(root);
-    let ctx = vfs.root_context().expect("the root of a new tmpfs");
-    match boot.initrd {
-        Some(module) => initrd::unpack(&vfs, &ctx, module, held),
-        None => kprintln!("fs: no initramfs (no boot module); / is an empty tmpfs"),
+    // The page cache first: the memory file systems are mounted behind it
+    // (`memfs`, ADR 0064).
+    cache::init();
+    let tmpfs = memfs::new_tmpfs(clock());
+    // The initramfs goes straight into the tmpfs, not through the cache
+    // (no second copy of every file while it is unpacked).
+    {
+        let unpack_vfs = Vfs::new(Arc::clone(&tmpfs) as Arc<dyn poly_vfs::FileSystem>);
+        let ctx = unpack_vfs.root_context().expect("the root of a new tmpfs");
+        match boot.initrd {
+            Some(module) => initrd::unpack(&unpack_vfs, &ctx, module, held),
+            None => kprintln!("fs: no initramfs (no boot module); / is an empty tmpfs"),
+        }
     }
+    let vfs = Vfs::new(memfs::cached(tmpfs));
+    let ctx = vfs.root_context().expect("the root of a new tmpfs");
     devices::install(&vfs, &ctx);
     mounts::make_block_nodes(&vfs, &ctx);
     proc::mount_all(&vfs, &ctx);
@@ -126,7 +138,6 @@ pub fn init(boot: &BootInfo, held: Option<Region>) {
     }
     // Mount namespaces the personality lets go of drop their mount tables.
     crate::linux::task::init_namespaces();
-    cache::init();
     if let Some(arg) = boot.arg(disk::MOUNT_ARG) {
         disk::mount_from_cmdline(arg);
     }

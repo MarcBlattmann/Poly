@@ -36,6 +36,7 @@ extern crate alloc;
 pub mod abi;
 pub mod backend;
 pub mod consts;
+pub mod context;
 pub mod exec;
 pub mod image;
 pub mod kernel;
@@ -46,14 +47,17 @@ pub mod protect;
 pub mod registry;
 pub mod section;
 pub mod services;
+pub mod sync;
 pub mod system;
+pub mod threads;
 pub mod vm;
 
 #[cfg(test)]
 mod tests;
 
 pub use backend::{Backend, SectionSource, ViewMap, ViewSource};
-pub use kernel::{NtKernel, UserFault};
+pub use context::NtContext;
+pub use kernel::{Apc, ClientId, NtKernel, NtTimeout, ThreadCreate, ThreadCreated, UserFault};
 pub use protect::HwProt;
 pub use services::Service;
 pub use system::{NtProcess, NtSystem};
@@ -147,6 +151,29 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         OpenEvent => objects::open_event(k, regs),
         SetEvent => objects::set_event(k, regs, true),
         ResetEvent => objects::set_event(k, regs, false),
+        PulseEvent => sync::pulse_event(k, regs),
+        ClearEvent => sync::clear_event(k, regs),
+        QueryEvent => sync::query_event(k, regs),
+        CreateMutant => sync::create_mutant(k, regs),
+        OpenMutant => sync::open_mutant(k, regs),
+        ReleaseMutant => sync::release_mutant(k, regs),
+        QueryMutant => sync::query_mutant(k, regs),
+        CreateSemaphore => sync::create_semaphore(k, regs),
+        OpenSemaphore => sync::open_semaphore(k, regs),
+        ReleaseSemaphore => sync::release_semaphore(k, regs),
+        QuerySemaphore => sync::query_semaphore(k, regs),
+        CreateTimer => sync::create_timer(k, regs),
+        OpenTimer => sync::open_timer(k, regs),
+        SetTimer => sync::set_timer(k, regs),
+        CancelTimer => sync::cancel_timer(k, regs),
+        QueryTimer => sync::query_timer(k, regs),
+        WaitForSingleObject => sync::wait_single(k, regs),
+        WaitForMultipleObjects => sync::wait_multiple(k, regs),
+        SignalAndWaitForSingleObject => sync::signal_and_wait(k, regs),
+        QueueApcThread => sync::queue_apc_thread(k, regs),
+        TestAlert => sync::test_alert(k, regs),
+        DelayExecution => sync::delay_execution(k, regs),
+        YieldExecution => sync::yield_execution(k, regs),
         AllocateVirtualMemory => memory::allocate(k, regs),
         FreeVirtualMemory => memory::free(k, regs),
         ProtectVirtualMemory => memory::protect(k, regs),
@@ -156,6 +183,16 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         MapViewOfSection => memory::map_view(k, regs),
         UnmapViewOfSection => memory::unmap_view(k, regs),
         TerminateProcess => memory::terminate(k, regs),
+        TerminateThread => threads::terminate_thread(k, regs),
+        CreateThreadEx => threads::create_thread_ex(k, regs),
+        OpenProcess => threads::open_process(k, regs),
+        OpenThread => threads::open_thread(k, regs),
+        QueryInformationProcess => threads::query_information_process(k, regs),
+        QueryInformationThread => threads::query_information_thread(k, regs),
+        SuspendThread => threads::suspend_thread(k, regs),
+        ResumeThread => threads::resume_thread(k, regs),
+        GetContextThread => threads::get_context_thread(k, regs),
+        SetContextThread => threads::set_context_thread(k, regs),
         CreateKey => registry::services::create_key(k, regs),
         OpenKey => registry::services::open_key(k, regs),
         OpenKeyEx => registry::services::open_key_ex(k, regs),
@@ -174,5 +211,6 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
             k.trace(values);
             Ok(poly_ntobj::status::STATUS_SUCCESS)
         }
+        PolyResumeApc => Ok(k.resume_apc()),
     }
 }

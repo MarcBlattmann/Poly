@@ -12,7 +12,8 @@ mod registry;
 mod sections;
 
 use crate::backend::{Backend, SectionSource, ViewMap, ViewSource};
-use crate::kernel::{NtKernel, UserFault};
+use crate::context::NtContext;
+use crate::kernel::{Apc, ClientId, NtKernel, NtTimeout, ThreadCreate, ThreadCreated, UserFault};
 use crate::pe_writer::{self, PeImage, PeSection};
 use crate::protect::HwProt;
 use crate::services::Service;
@@ -23,7 +24,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use poly_abi::SyscallRegs;
-use poly_ntobj::{Caller, NtStatus, ProcessId, ThreadRef};
+use poly_ntobj::status::{STATUS_NO_YIELD_PERFORMED, STATUS_SUCCESS, STATUS_TIMEOUT, STATUS_USER_APC};
+use poly_ntobj::{Caller, NtStatus, ProcessId, ThreadRef, WaitCancel, WaitId};
 use std::rc::Rc;
 
 pub const PID: ProcessId = ProcessId(7);
@@ -217,13 +219,22 @@ impl Backend for Mem {
     }
 }
 
-/// The fake kernel: one process with one thread.
+/// The fake kernel: one process with one thread. It does not run threads or
+/// a clock, so the blocking methods resolve at once (a wait that would block
+/// times out); the immediate paths and the memory/object effects are what
+/// the host tests check. Threading, blocking, suspension and APC *delivery*
+/// are proved by the ring-3 `kernel_test!` in the kernel crate.
 pub struct Fake {
     pub sys: NtSystem,
     pub proc: NtProcess,
     pub mem: Mem,
     pub terminated: Option<NtStatus>,
+    pub terminated_thread: Option<(ThreadRef, NtStatus)>,
     pub traces: Vec<[u64; 3]>,
+    pub suspend: BTreeMap<ThreadRef, u32>,
+    pub contexts: BTreeMap<ThreadRef, NtContext>,
+    pub apcs: Vec<(ThreadRef, Apc)>,
+    pub next_tid: u64,
     /// Bump allocator in the scratch area.
     next: u64,
 }
@@ -247,6 +258,90 @@ impl NtKernel for Fake {
 
     fn terminate_process(&mut self, status: NtStatus) {
         self.terminated = Some(status);
+    }
+
+    fn terminate_current_thread(&mut self, status: NtStatus) {
+        self.terminated_thread = Some((self.caller().thread, status));
+    }
+
+    fn create_thread(&mut self, req: ThreadCreate) -> Result<ThreadCreated, NtStatus> {
+        self.next_tid += 1;
+        let tid = ThreadRef(self.next_tid);
+        let start = crate::exec::create_thread(&mut self.sys, &mut self.proc, &mut self.mem, &req, tid)?;
+        let _ = start;
+        let caller = self.caller();
+        let object = self.sys.objects.thread_object(tid).expect("thread object");
+        let handle = self.sys.objects.open_by_pointer(&caller, object, req.desired_access, 0)?;
+        Ok(ThreadCreated { handle, client: ClientId { process: self.proc.pid, thread: tid } })
+    }
+
+    fn terminate_thread(&mut self, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus> {
+        crate::exec::thread_exit(&mut self.sys, &mut self.proc, &mut self.mem, thread, status);
+        Ok(())
+    }
+
+    fn suspend_thread(&mut self, thread: ThreadRef) -> Result<u32, NtStatus> {
+        let c = self.suspend.entry(thread).or_insert(0);
+        let prev = *c;
+        *c += 1;
+        Ok(prev)
+    }
+
+    fn resume_thread(&mut self, thread: ThreadRef) -> Result<u32, NtStatus> {
+        let c = self.suspend.entry(thread).or_insert(0);
+        let prev = *c;
+        *c = c.saturating_sub(1);
+        Ok(prev)
+    }
+
+    fn get_context(&mut self, thread: ThreadRef) -> Result<NtContext, NtStatus> {
+        Ok(self.contexts.get(&thread).copied().unwrap_or_default())
+    }
+
+    fn set_context(&mut self, thread: ThreadRef, ctx: &NtContext, _want: u32) -> Result<(), NtStatus> {
+        self.contexts.insert(thread, *ctx);
+        Ok(())
+    }
+
+    fn wait(&mut self, id: WaitId, _timeout: NtTimeout, _alertable: bool) -> NtStatus {
+        // No threads to wake it; a blocked wait times out at once here.
+        self.sys.objects.cancel_wait(id, WaitCancel::Timeout).unwrap_or(STATUS_TIMEOUT)
+    }
+
+    fn arm_timer(
+        &mut self,
+        timer: poly_ntobj::ObjectId,
+        _due: NtTimeout,
+        _period: u32,
+        _apc: Option<Apc>,
+    ) -> Result<bool, NtStatus> {
+        self.sys.objects.set_timer(timer)
+    }
+
+    fn disarm_timer(&mut self, timer: poly_ntobj::ObjectId) -> Result<bool, NtStatus> {
+        self.sys.objects.cancel_timer(timer)
+    }
+
+    fn queue_apc(&mut self, thread: ThreadRef, apc: Apc) -> Result<(), NtStatus> {
+        self.apcs.push((thread, apc));
+        Ok(())
+    }
+
+    fn test_alert(&mut self) -> NtStatus {
+        let me = self.caller().thread;
+        if self.apcs.iter().any(|(t, _)| *t == me) { STATUS_USER_APC } else { STATUS_SUCCESS }
+    }
+
+    fn delay(&mut self, _timeout: NtTimeout, _alertable: bool) -> NtStatus {
+        STATUS_SUCCESS
+    }
+
+    fn yield_execution(&mut self) -> NtStatus {
+        STATUS_NO_YIELD_PERFORMED
+    }
+
+    fn resume_apc(&mut self) -> NtStatus {
+        STATUS_USER_APC
     }
 
     fn trace(&mut self, values: [u64; 3]) {
@@ -288,7 +383,12 @@ impl Fake {
             proc: NtProcess::new(PID),
             mem,
             terminated: None,
+            terminated_thread: None,
             traces: Vec::new(),
+            suspend: BTreeMap::new(),
+            contexts: BTreeMap::new(),
+            apcs: Vec::new(),
+            next_tid: TID.0,
             next: SCRATCH,
         }
     }

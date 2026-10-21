@@ -198,7 +198,12 @@ pub fn mremap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if flags & (MREMAP_FIXED | MREMAP_DONTUNMAP) != 0 && flags & MREMAP_MAYMOVE == 0 {
         return Err(Errno::EINVAL);
     }
-    if !page_aligned(old) || new_size == 0 || flags & MREMAP_DONTUNMAP != 0 || old_size == 0 {
+    if !page_aligned(old) || new_size == 0 || flags & MREMAP_DONTUNMAP != 0 {
+        return Err(Errno::EINVAL);
+    }
+    // old_size 0: a second mapping of a shared mapping's pages, which
+    // needs MREMAP_MAYMOVE (mremap(2)); the kernel refuses a private one.
+    if old_size == 0 && flags & MREMAP_MAYMOVE == 0 {
         return Err(Errno::EINVAL);
     }
     let old_len = page_round_up(old_size).ok_or(Errno::EFAULT)?;

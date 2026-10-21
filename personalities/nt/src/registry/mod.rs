@@ -45,6 +45,8 @@ pub const NO_INSTANCE: u64 = u64::MAX;
 /// A queued `NtNotifyChangeKey`.
 #[derive(Clone, Copy, Debug)]
 struct Request {
+    /// The open instance it is queued on.
+    open: OpenId,
     process: ProcessId,
     /// The event to signal (a pointer reference held until then).
     event: Option<ObjectId>,
@@ -58,6 +60,8 @@ pub struct Completion {
     pub process: ProcessId,
     pub iosb: u64,
     pub status: NtStatus,
+    /// The request it completes.
+    pub request: u64,
     /// The event to signal once the block is written (`None` once it was
     /// signalled already).
     pub event: Option<ObjectId>,
@@ -126,7 +130,8 @@ impl NtRegistry {
             {
                 signal(om, e);
             }
-            self.completions.push(Completion { process: r.process, iosb: r.iosb, status: f.status, event });
+            let request = f.request;
+            self.completions.push(Completion { process: r.process, iosb: r.iosb, status: f.status, request, event });
         }
     }
 
@@ -147,6 +152,28 @@ impl NtRegistry {
         let gone: Vec<u64> = self.requests.iter().filter(|(_, r)| r.process == process).map(|(id, _)| *id).collect();
         for id in gone {
             let r = self.requests.remove(&id).expect("listed");
+            if let Some(e) = r.event {
+                let _ = om.dereference(e);
+            }
+        }
+    }
+
+    /// The status request `request` completed with, while its block is
+    /// still to be written; `None` if it is pending or already written.
+    pub fn completion_status(&self, request: u64) -> Option<NtStatus> {
+        self.completions.iter().find(|c| c.request == request).map(|c| c.status)
+    }
+
+    /// Whether request `request` is still queued.
+    pub fn is_pending(&self, request: u64) -> bool {
+        self.requests.contains_key(&request)
+    }
+
+    /// Take back a request still queued (a synchronous call whose wait
+    /// ended without it), dropping its event reference.
+    pub fn cancel_request(&mut self, request: u64, om: &mut ObjectManager) {
+        if let Some(r) = self.requests.remove(&request) {
+            self.reg.cancel_request(r.open, request);
             if let Some(e) = r.event {
                 let _ = om.dereference(e);
             }
@@ -310,39 +337,49 @@ pub fn key_of_handle(
     Ok((id, open, key))
 }
 
-/// Queue a notification for `services::notify_change_key`.
+/// The event a notification request signals.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum NotifyEvent {
+    None,
+    /// The caller's event handle.
+    Handle(Handle),
+    /// An event object the service made itself (a synchronous call), with a
+    /// pointer reference the request takes over.
+    Object(ObjectId),
+}
+
+/// Queue a notification for `services::notify_change_key`; returns the
+/// request's id.
 pub(crate) fn queue_notify(
     sys: &mut crate::system::NtSystem,
     caller: &Caller,
     h: Handle,
-    event: Handle,
+    event: NotifyEvent,
     iosb: u64,
     filter: u32,
     subtree: bool,
-) -> Result<(), NtStatus> {
+) -> Result<u64, NtStatus> {
     let (_, open, _) = key_of_handle(sys, caller, h, KEY_NOTIFY)?;
-    let event = if event == Handle::NULL {
-        None
-    } else {
-        let e = sys.objects.reference_by_handle(
-            caller,
-            event,
-            poly_ntobj::access::EVENT_MODIFY_STATE,
-            Some(ObjectType::Event),
-        )?;
-        // The I/O manager resets a request's event when the request starts
-        // (to be confirmed by the spec agent).
-        let _ = sys.objects.reset_event(e);
-        Some(e)
-    };
-    let request = Request { process: caller.process, event, iosb };
-    match sys.registry.add_request(open, request, filter, subtree) {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            if let Some(ev) = event {
-                let _ = sys.objects.dereference(ev);
-            }
-            Err(e)
+    let event = match event {
+        NotifyEvent::None => None,
+        NotifyEvent::Object(e) => Some(e),
+        NotifyEvent::Handle(eh) => {
+            let e = sys.objects.reference_by_handle(
+                caller,
+                eh,
+                poly_ntobj::access::EVENT_MODIFY_STATE,
+                Some(ObjectType::Event),
+            )?;
+            // The I/O manager resets a request's event when the request
+            // starts (to be confirmed by the spec agent).
+            let _ = sys.objects.reset_event(e);
+            Some(e)
         }
-    }
+    };
+    let request = Request { open, process: caller.process, event, iosb };
+    sys.registry.add_request(open, request, filter, subtree).inspect_err(|_| {
+        if let Some(ev) = event {
+            let _ = sys.objects.dereference(ev);
+        }
+    })
 }

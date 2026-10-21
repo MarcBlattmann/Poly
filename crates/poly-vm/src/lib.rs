@@ -302,6 +302,9 @@ pub struct Vma<F> {
     pub max_prot: Prot,
     pub kind: Kind,
     pub backing: Backing<F>,
+    /// `MADV_WIPEONFORK` (madvise(2)): a child made by fork gets the range
+    /// zero-filled instead of a copy. Private anonymous memory only.
+    pub wipe_on_fork: bool,
 }
 
 impl<F: Clone + PartialEq> Vma<F> {
@@ -350,7 +353,15 @@ impl<F: Clone + PartialEq> Vma<F> {
                 Backing::File { file: file.clone(), offset: offset + (start - self.start), shared: *shared }
             }
         };
-        Vma { start, end, prot: self.prot, max_prot: self.max_prot, kind: self.kind, backing }
+        Vma {
+            start,
+            end,
+            prot: self.prot,
+            max_prot: self.max_prot,
+            kind: self.kind,
+            backing,
+            wipe_on_fork: self.wipe_on_fork,
+        }
     }
 
     /// Whether `next` starts where `self` ends and the two describe one
@@ -360,6 +371,7 @@ impl<F: Clone + PartialEq> Vma<F> {
             && self.prot == next.prot
             && self.max_prot == next.max_prot
             && self.kind == next.kind
+            && self.wipe_on_fork == next.wipe_on_fork
             && match (&self.backing, &next.backing) {
                 (Backing::Anonymous, Backing::Anonymous) => true,
                 (
@@ -713,6 +725,7 @@ enum Op<F> {
     Remove,
     Insert(Vma<F>),
     Protect(Prot),
+    WipeOnFork(bool),
 }
 
 impl<F: Clone + PartialEq> VmMap<F> {
@@ -803,7 +816,8 @@ impl<F: Clone + PartialEq> VmMap<F> {
             }
             Placement::Hint(hint) => self.place(hint, len).ok_or(Error::NoMemory)?,
         };
-        let vma = Vma { start: addr, end: addr + len, prot, max_prot, kind: Kind::Normal, backing };
+        let vma =
+            Vma { start: addr, end: addr + len, prot, max_prot, kind: Kind::Normal, backing, wipe_on_fork: false };
         let replaced = self.rewrite(addr, addr + len, Op::Insert(vma))?;
         Ok(Mapped { addr, replaced })
     }
@@ -862,6 +876,34 @@ impl<F: Clone + PartialEq> VmMap<F> {
             return Err(Error::Access);
         }
         self.rewrite(addr, end, Op::Protect(prot)).map(|_| ())
+    }
+
+    /// `MADV_WIPEONFORK` (`on`) or `MADV_KEEPONFORK` for the mapped parts
+    /// of `[addr, addr + len)` (page aligned, `len` non-zero). Wiping is
+    /// for private anonymous memory only: any other region in the range is
+    /// [`Error::Invalid`] and nothing changes. A range with unmapped pages
+    /// is [`Error::NoMemory`], after the mapped parts got the setting.
+    pub fn set_wipe_on_fork(&mut self, addr: u64, len: u64, on: bool) -> Result<(), Error> {
+        let end = addr.checked_add(len).ok_or(Error::NoMemory)?;
+        if !is_page_aligned(addr) || !is_page_aligned(end) || len == 0 {
+            return Err(Error::Invalid);
+        }
+        let mut covered = addr;
+        let mut hole = false;
+        let mut parts = Vec::new();
+        for v in self.regions_in(addr, end) {
+            if on && !(matches!(v.backing, Backing::Anonymous)) {
+                return Err(Error::Invalid);
+            }
+            hole |= v.start > covered;
+            parts.push((v.start.max(addr), v.end.min(end)));
+            covered = v.end;
+        }
+        hole |= covered < end;
+        for (s, e) in parts {
+            self.rewrite(s, e, Op::WipeOnFork(on))?;
+        }
+        if hole { Err(Error::NoMemory) } else { Ok(()) }
     }
 
     /// Resize the mapping `[old, old + old_len)` to `new_len` bytes, moving
@@ -964,7 +1006,15 @@ impl<F: Clone + PartialEq> VmMap<F> {
         if self.regions_in(start, top).next().is_some() {
             return Err(Error::Exists);
         }
-        let vma = Vma { start, end: top, prot, max_prot: Prot::ALL, kind: Kind::Stack, backing: Backing::Anonymous };
+        let vma = Vma {
+            start,
+            end: top,
+            prot,
+            max_prot: Prot::ALL,
+            kind: Kind::Stack,
+            backing: Backing::Anonymous,
+            wipe_on_fork: false,
+        };
         self.rewrite(start, top, Op::Insert(vma))?;
         Ok(start)
     }
@@ -1025,6 +1075,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
                     max_prot: Prot::ALL,
                     kind: Kind::Heap,
                     backing: Backing::Anonymous,
+                    wipe_on_fork: false,
                 };
                 if self.rewrite(old_end, new_end, Op::Insert(vma)).is_err() {
                     return unchanged;
@@ -1224,6 +1275,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
             let inside = v.clip(v.start.max(start), v.end.min(end));
             match op {
                 Op::Protect(prot) => pieces.push(Vma { prot, ..inside }),
+                Op::WipeOnFork(wipe_on_fork) => pieces.push(Vma { wipe_on_fork, ..inside }),
                 Op::Remove | Op::Insert(_) => removed.push(inside),
             }
             if v.end > end {
