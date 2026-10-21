@@ -192,7 +192,7 @@ pub fn publish() {
     if !REPORTED.swap(true, Ordering::Relaxed) {
         let how = match s.mode {
             Mode::Tsc => "reads the TSC",
-            Mode::Syscall => "makes system calls (the clock does not read an invariant TSC)",
+            Mode::Syscall => "makes system calls (the clock does not read a constant-rate TSC)",
         };
         kprintln!("vdso: {} bytes, mapped into every Linux process; clock_gettime {how}", arch::vdso::IMAGE.len());
     }

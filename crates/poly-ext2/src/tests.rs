@@ -375,3 +375,27 @@ fn the_volume_lock_is_the_one_passed_in() {
     assert!(taken.load(Ordering::Relaxed) >= mounted + 4);
     fs.unmount().unwrap();
 }
+
+/// A directory removed while open (pinned) lists as ENOENT (getdents64(2)),
+/// and its inode goes when the last pin does.
+#[test]
+fn listing_a_removed_open_directory_is_enoent() {
+    let mut mem = formatted(1 << 20, 512, &k1());
+    let io = DeviceIo::new(RamDisk::new(&mut mem, 512).unwrap());
+    let fs = Ext2::mount(&io, clock(), MountOptions::default()).unwrap();
+    let r = fs.root();
+    let d = fs.mkdir(r, b"d", 0o755, 0, 0).unwrap();
+    fs.open(d).unwrap();
+    let mut n = 0;
+    fs.readdir(d, 0, &mut |_| {
+        n += 1;
+        true
+    })
+    .unwrap();
+    assert_eq!(n, 2, "\".\" and \"..\"");
+    fs.rmdir(r, b"d").unwrap();
+    assert_eq!(fs.readdir(d, 0, &mut |_| true), Err(Errno::ENOENT));
+    assert_eq!(fs.readdir(d, 2, &mut |_| true), Err(Errno::ENOENT));
+    fs.release(d);
+    fs.unmount().unwrap();
+}

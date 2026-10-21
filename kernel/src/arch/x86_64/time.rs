@@ -3,10 +3,12 @@
 //! monotonic clock built from the two, and the local APIC timer, calibrated
 //! against the same reference and run periodically as the scheduler tick.
 //!
-//! The clock reads the TSC only when CPUID reports it invariant and it
-//! calibrated cleanly (ADR 0013); otherwise it reads the reference timer,
-//! which is slower to read but runs at a fixed rate. QEMU's default CPU model
-//! does not report an invariant TSC, so under QEMU the clock is the HPET.
+//! The clock reads the TSC only when it runs at a constant rate (CPUID
+//! reports it invariant, or the CPU is a hypervisor's: ADR 0013, 0072) and
+//! it calibrated cleanly; otherwise it reads the reference timer, which is
+//! slower to read but runs at a fixed rate. QEMU's default CPU model does
+//! not report an invariant TSC but sets the hypervisor bit, so under QEMU
+//! the clock (and the vDSO, ADR 0044) reads the TSC too.
 //!
 //! The tick is 1 kHz ([`TICK_HZ`]): fine enough that `thread::sleep` wakes
 //! within a millisecond of its deadline and a 10-tick time slice is 10 ms,
@@ -151,7 +153,7 @@ pub fn reference() -> Option<&'static Reference> {
     CLOCK.get().map(|c| c.reference())
 }
 
-/// While the clock reads an invariant TSC: how it converts TSC readings
+/// While the clock reads the TSC: how it converts TSC readings
 /// to its nanoseconds (for the vDSO). `None` on the reference timer.
 pub fn tsc_conversion() -> Option<poly_irq::time::TscConversion> {
     CLOCK.get()?.tsc_conversion()
@@ -219,15 +221,17 @@ pub(super) fn init(platform: Option<&Platform>, features: &CpuFeatures, apic: &A
         "the local APIC timer could not be calibrated"
     })?;
 
-    let clock = MonotonicClock::new(Tsc, reference, ref_hz, tsc, features.invariant_tsc)
+    let clock = MonotonicClock::new(Tsc, reference, ref_hz, tsc, features.constant_rate_tsc())
         .map_err(|_| "no usable clock source")?;
     let tsc_clock = clock.source() == ClockSource::Tsc;
     kprintln!(
         "time: clock source {}{}",
         if tsc_clock { "TSC" } else { name },
-        if tsc_clock || !features.tsc {
+        if tsc_clock && !features.invariant_tsc {
+            " (a virtual CPU's TSC: constant rate)"
+        } else if tsc_clock || !features.tsc {
             ""
-        } else if features.invariant_tsc {
+        } else if features.constant_rate_tsc() {
             " (TSC calibration failed)"
         } else {
             " (TSC not invariant)"
@@ -417,9 +421,9 @@ crate::kernel_test! {
 }
 
 crate::kernel_test! {
-    /// The clock's TSC path, which QEMU's CPU models (no invariant TSC) do
-    /// not use at boot: a second clock that reads the TSC must count
-    /// nanoseconds at the reference's rate, and never go backwards.
+    /// The clock's TSC path, whichever source the boot chose: a second
+    /// clock that reads the TSC must count nanoseconds at the reference's
+    /// rate, and never go backwards.
     fn a_tsc_clock_agrees_with_the_reference() -> TestResult {
         let info = info().ok_or("time not initialised")?;
         let Some(tsc_hz) = info.tsc_hz else { return Ok(()) };
