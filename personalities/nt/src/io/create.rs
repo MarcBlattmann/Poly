@@ -40,7 +40,9 @@ use super::{Device, DiskFile, FileRecord, IoState, NodeKey, Target, VfsRoot, sta
 use alloc::vec::Vec;
 use core::result::Result;
 use poly_ntobj::status::*;
-use poly_ntobj::{NewObject, NtStatus, ObjectId, ObjectManager, ObjectType, ParseHook, ParseRequest, Parsed, ThreadRef};
+use poly_ntobj::{
+    NewObject, NtStatus, ObjectId, ObjectManager, ObjectType, ParseHook, ParseRequest, Parsed, ThreadRef,
+};
 use poly_vfs::{At, Errno, FileType, NodeRef, OpenFlags};
 
 /// What an `NtCreateFile` asks for, after the service checked it.

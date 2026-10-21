@@ -68,11 +68,11 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use consts::*;
+use core::result::Result;
 use info::{Facts, NT_XATTR, Stored};
 pub use irp::{Completion, Irp, IrpOp, IrpState, Work, WorkOp};
 use locks::LockTable;
 use poly_ntobj::name::wide;
-use core::result::Result;
 use poly_ntobj::status::*;
 use poly_ntobj::{
     Caller, NewObject, NoParse, NtStatus, OBJ_CASE_INSENSITIVE, OBJ_KERNEL_HANDLE, OBJ_PERMANENT, ObjectAttributes,
@@ -297,7 +297,12 @@ pub fn status_of(e: Errno) -> NtStatus {
 pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
     let mut v = alloc::vec![
         VolumeConfig { device: "PolyFs0".into(), path: b"/".to_vec(), letter: Some('Z'), label: "Poly".into() },
-        VolumeConfig { device: "PolyFs1".into(), path: SYSTEM_ROOT.to_vec(), letter: Some('C'), label: "System".into() },
+        VolumeConfig {
+            device: "PolyFs1".into(),
+            path: SYSTEM_ROOT.to_vec(),
+            letter: Some('C'),
+            label: "System".into()
+        },
     ];
     let mut paths: Vec<Vec<u8>> = vfs
         .mounts()
@@ -347,7 +352,12 @@ impl IoState {
     /// Put the file system into the object namespace: a device per volume
     /// (its root directory made if missing), the drive letters in `\??`,
     /// and `\Device\PolyPipe`. Called once, when the NT personality starts.
-    pub fn attach(&mut self, om: &mut ObjectManager, vfs: &'static Vfs, volumes: &[VolumeConfig]) -> Result<(), NtStatus> {
+    pub fn attach(
+        &mut self,
+        om: &mut ObjectManager,
+        vfs: &'static Vfs,
+        volumes: &[VolumeConfig],
+    ) -> Result<(), NtStatus> {
         if self.root.is_some() {
             return Ok(());
         }
@@ -361,7 +371,12 @@ impl IoState {
             let device = wide(&config.device);
             let mut path = wide("\\Device\\");
             path.extend_from_slice(&device);
-            add_named(om, &kernel, &path, NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true })?;
+            add_named(
+                om,
+                &kernel,
+                &path,
+                NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
+            )?;
             if let Some(letter) = config.letter {
                 let link = wide(&alloc::format!("\\??\\{letter}:"));
                 add_named(om, &kernel, &link, NewObject::SymbolicLink { target: &path })?;

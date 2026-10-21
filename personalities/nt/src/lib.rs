@@ -32,7 +32,6 @@
 //! - [`registry`]: the `\REGISTRY` key object and the registry services
 //!   (on `poly-registry`, ADR 0066).
 
-
 #![no_std]
 
 extern crate alloc;

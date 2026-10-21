@@ -357,7 +357,6 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     io::unregister(pid);
     sched::drain_wakes();
     registry::flush();
-
 }
 
 /// A page fault the memory map could not resolve, in NT process `pid`: a

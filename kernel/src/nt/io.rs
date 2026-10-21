@@ -129,8 +129,7 @@ fn worker_main(arg: usize) -> usize {
 
 /// Deliver every queued completion.
 pub(super) fn drain() {
-    loop {
-        let Some(c) = with(|s| s.sys.io.pop_completion()) else { break };
+    while let Some(c) = with(|s| s.sys.io.pop_completion()) {
         let memory = MEMORY.lock().get(&c.process.0).and_then(Weak::upgrade);
         if let Some(m) = &memory {
             if let Some((addr, data)) = &c.data {

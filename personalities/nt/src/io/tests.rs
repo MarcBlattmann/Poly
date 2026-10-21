@@ -48,13 +48,33 @@ fn setup() -> T {
 
 impl T {
     /// `NtCreateFile` of `path` (an NT path): (status, handle, information).
-    fn create(&mut self, path: &str, access: u32, share: u32, disp: u32, options: u32, attrs: u32) -> (NtStatus, u64, u64) {
+    fn create(
+        &mut self,
+        path: &str,
+        access: u32,
+        share: u32,
+        disp: u32,
+        options: u32,
+        attrs: u32,
+    ) -> (NtStatus, u64, u64) {
         let out = self.f.alloc(8);
         let iosb = self.f.alloc(16);
         let oa = self.f.attrs(path, CI);
         let s = self.f.call(
             Service::CreateFile,
-            &[out, u64::from(access), oa, iosb, 0, u64::from(attrs), u64::from(share), u64::from(disp), u64::from(options), 0, 0],
+            &[
+                out,
+                u64::from(access),
+                oa,
+                iosb,
+                0,
+                u64::from(attrs),
+                u64::from(share),
+                u64::from(disp),
+                u64::from(options),
+                0,
+                0,
+            ],
         );
         (s, self.f.u64_at(out), self.f.u64_at(iosb + 8))
     }
@@ -259,7 +279,8 @@ fn create_parameter_and_path_errors() {
     assert_eq!(t.create("\\??\\C:\\plain", RW, 0, FILE_OPEN, FILE_DIRECTORY_FILE, 0).0, STATUS_NOT_A_DIRECTORY);
     assert_eq!(t.create("\\??\\C:\\plain\\", RW, 0, FILE_OPEN, 0, 0).0, STATUS_OBJECT_NAME_INVALID);
     assert_eq!(t.create("\\??\\C:\\plain\\x", RW, 0, FILE_OPEN, 0, 0).0, STATUS_OBJECT_PATH_NOT_FOUND);
-    let (s, h, info) = t.create("\\??\\C:\\Dir", FILE_LIST_DIRECTORY | SYNCHRONIZE, 0, FILE_CREATE, FILE_DIRECTORY_FILE, 0);
+    let (s, h, info) =
+        t.create("\\??\\C:\\Dir", FILE_LIST_DIRECTORY | SYNCHRONIZE, 0, FILE_CREATE, FILE_DIRECTORY_FILE, 0);
     assert_eq!((s, info), (STATUS_SUCCESS, FILE_CREATED));
     t.close(h);
     assert!(t.exists(b"/nt/c/Dir"));
@@ -298,7 +319,8 @@ fn case_insensitive_case_preserving_lookup() {
     // A create in another case finds the file.
     assert_eq!(t.create("\\??\\C:\\mixedcase.txt", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_NAME_COLLISION);
     // Directories on the way too.
-    let (s, h, _) = t.create("\\??\\C:\\SubDir", FILE_LIST_DIRECTORY | SYNCHRONIZE, 0, FILE_CREATE, FILE_DIRECTORY_FILE, 0);
+    let (s, h, _) =
+        t.create("\\??\\C:\\SubDir", FILE_LIST_DIRECTORY | SYNCHRONIZE, 0, FILE_CREATE, FILE_DIRECTORY_FILE, 0);
     assert_eq!(s, STATUS_SUCCESS);
     t.close(h);
     let h = t.file("\\??\\C:\\subdir\\Inner.txt");
@@ -451,7 +473,8 @@ fn volume_information() {
     let h = t.file("\\??\\C:\\v");
     let buf = t.f.alloc(64);
     let iosb = t.f.alloc(16);
-    let s = t.f.call(Service::QueryVolumeInformationFile, &[h, iosb, buf, 64, u64::from(FILE_FS_ATTRIBUTE_INFORMATION)]);
+    let s =
+        t.f.call(Service::QueryVolumeInformationFile, &[h, iosb, buf, 64, u64::from(FILE_FS_ATTRIBUTE_INFORMATION)]);
     assert_eq!(s, STATUS_SUCCESS);
     assert_eq!(t.f.u32_at(buf) & FILE_CASE_PRESERVED_NAMES, FILE_CASE_PRESERVED_NAMES);
     assert_eq!(t.f.u32_at(buf) & FILE_CASE_SENSITIVE_SEARCH, 0);
@@ -484,7 +507,11 @@ fn entries(b: &[u8], class: u32) -> Vec<(String, u32)> {
             _ => (60, super::info::dir_fixed(class).unwrap()),
         };
         let len = u32::from_le_bytes(b[at + len_at..at + len_at + 4].try_into().unwrap()) as usize;
-        let attrs = if class == FILE_NAMES_INFORMATION { 0 } else { u32::from_le_bytes(b[at + 56..at + 60].try_into().unwrap()) };
+        let attrs = if class == FILE_NAMES_INFORMATION {
+            0
+        } else {
+            u32::from_le_bytes(b[at + 56..at + 60].try_into().unwrap())
+        };
         out.push((wide_str(&b[at + name_at..at + name_at + len]), attrs));
         if next == 0 {
             break;
@@ -496,7 +523,15 @@ fn entries(b: &[u8], class: u32) -> Vec<(String, u32)> {
 }
 
 impl T {
-    fn list(&mut self, h: u64, class: u32, pattern: Option<&str>, single: bool, restart: bool, len: usize) -> (NtStatus, Vec<u8>) {
+    fn list(
+        &mut self,
+        h: u64,
+        class: u32,
+        pattern: Option<&str>,
+        single: bool,
+        restart: bool,
+        len: usize,
+    ) -> (NtStatus, Vec<u8>) {
         let buf = self.f.alloc(len);
         let iosb = self.f.alloc(16);
         let name = pattern.map_or(0, |p| self.f.unicode(p));
@@ -512,8 +547,14 @@ impl T {
 #[test]
 fn directory_enumeration_with_wildcards() {
     let mut t = setup();
-    let (s, d, _) =
-        t.create("\\??\\C:\\Docs", FILE_LIST_DIRECTORY | SYNCHRONIZE, SHARE_ALL, FILE_CREATE, FILE_DIRECTORY_FILE | SYNC, 0);
+    let (s, d, _) = t.create(
+        "\\??\\C:\\Docs",
+        FILE_LIST_DIRECTORY | SYNCHRONIZE,
+        SHARE_ALL,
+        FILE_CREATE,
+        FILE_DIRECTORY_FILE | SYNC,
+        0,
+    );
     assert_eq!(s, STATUS_SUCCESS);
     for name in ["a.txt", "B.TXT", "c.log", "d.txt.bak"] {
         let h = t.file(&alloc::format!("\\??\\C:\\Docs\\{name}"));
@@ -559,10 +600,9 @@ fn directory_enumeration_with_wildcards() {
     let out = t.f.alloc(8);
     let iosb = t.f.alloc(16);
     let oa = t.f.attrs_in(root, "docs\\A.txt", CI);
-    let s = t.f.call(
-        Service::OpenFile,
-        &[out, u64::from(FILE_GENERIC_READ), oa, iosb, u64::from(SHARE_ALL), u64::from(SYNC)],
-    );
+    let s = t
+        .f
+        .call(Service::OpenFile, &[out, u64::from(FILE_GENERIC_READ), oa, iosb, u64::from(SHARE_ALL), u64::from(SYNC)]);
     assert_eq!(s, STATUS_SUCCESS);
     let rel = t.f.u64_at(out);
     let (_, b) = t.query(rel, FILE_NAME_INFORMATION, 100);
@@ -604,7 +644,14 @@ fn delete_by_disposition_delete_on_close_and_nt_delete_file() {
     t.close(h);
     assert!(!t.exists(b"/nt/c/temp.txt"));
     // Directories: only empty ones.
-    let (_, d, _) = t.create("\\??\\C:\\full", FILE_LIST_DIRECTORY | DELETE | SYNCHRONIZE, SHARE_ALL, FILE_CREATE, FILE_DIRECTORY_FILE | SYNC, 0);
+    let (_, d, _) = t.create(
+        "\\??\\C:\\full",
+        FILE_LIST_DIRECTORY | DELETE | SYNCHRONIZE,
+        SHARE_ALL,
+        FILE_CREATE,
+        FILE_DIRECTORY_FILE | SYNC,
+        0,
+    );
     let f = t.file("\\??\\C:\\full\\x");
     t.close(f);
     assert_eq!(t.set(d, FILE_DISPOSITION_INFORMATION, &[1]), STATUS_DIRECTORY_NOT_EMPTY);
@@ -659,7 +706,14 @@ fn rename_in_place_with_replace_and_by_full_path() {
     assert!(t.exists(b"/nt/c/OTHER.TXT"));
     assert!(!t.exists(b"/nt/c/Other.txt"));
     // A full path into a directory, and onto an open file.
-    let (_, d, _) = t.create("\\??\\C:\\sub", FILE_LIST_DIRECTORY | SYNCHRONIZE, SHARE_ALL, FILE_CREATE, FILE_DIRECTORY_FILE | SYNC, 0);
+    let (_, d, _) = t.create(
+        "\\??\\C:\\sub",
+        FILE_LIST_DIRECTORY | SYNCHRONIZE,
+        SHARE_ALL,
+        FILE_CREATE,
+        FILE_DIRECTORY_FILE | SYNC,
+        0,
+    );
     assert_eq!(t.set(h, FILE_RENAME_INFORMATION, &rename_info(false, 0, "\\??\\C:\\SUB\\moved.txt")), STATUS_SUCCESS);
     assert!(t.exists(b"/nt/c/sub/moved.txt"));
     let busy = t.file("\\??\\C:\\busy.txt");

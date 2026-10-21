@@ -188,7 +188,6 @@ pub enum Service {
     /// `NtSetContextThread(ThreadHandle, Context*)`.
     SetContextThread,
 
-
     // ----- file I/O (ADR 0067; `crate::io::services`)
     /// `NtCreateFile(FileHandle*, DesiredAccess, ObjectAttributes*,
     /// IoStatusBlock*, AllocationSize*, FileAttributes, ShareAccess,
@@ -275,7 +274,6 @@ pub enum Service {
     /// `NtSetInformationKey(KeyHandle, KeySetInformationClass,
     /// KeySetInformation, Length)`.
     SetInformationKey,
-
 
     // ----- Poly
     /// `PolyTrace(a, b, c)`: logs three values on the kernel log (a test

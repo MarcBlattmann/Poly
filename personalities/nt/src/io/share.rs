@@ -69,9 +69,8 @@ impl ShareAccess {
             return true;
         }
         let n = self.open_count;
-        let wanted_ok = !(r.read && self.shared_read < n
-            || r.write && self.shared_write < n
-            || r.delete && self.shared_delete < n);
+        let wanted_ok =
+            !(r.read && self.shared_read < n || r.write && self.shared_write < n || r.delete && self.shared_delete < n);
         let held_ok = !(self.readers > 0 && !r.share_read
             || self.writers > 0 && !r.share_write
             || self.deleters > 0 && !r.share_delete);

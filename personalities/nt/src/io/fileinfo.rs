@@ -13,9 +13,9 @@ use super::info::{self, HandleFacts, Stored};
 use super::names::{self, split_path};
 use super::{IoState, NodeKey, Target, status_of, walk};
 use alloc::vec::Vec;
+use core::result::Result;
 use poly_ntobj::NtStatus;
 use poly_ntobj::name::wide;
-use core::result::Result;
 use poly_ntobj::status::*;
 use poly_vfs::{At, FileType, NodeRef, RenameFlags, SetTime};
 
@@ -102,8 +102,7 @@ impl IoState {
                 ..Default::default()
             },
         };
-        let handle =
-            HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
+        let handle = HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
         let fixed = |bytes: Vec<u8>| {
             let n = bytes.len();
             InfoBytes { bytes, fixed: n }

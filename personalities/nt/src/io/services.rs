@@ -112,12 +112,8 @@ impl Notify {
         if self.event == 0 {
             return Ok(None);
         }
-        let e = sys.objects.reference_by_handle(
-            caller,
-            Handle(self.event),
-            EVENT_MODIFY_STATE,
-            Some(ObjectType::Event),
-        )?;
+        let e =
+            sys.objects.reference_by_handle(caller, Handle(self.event), EVENT_MODIFY_STATE, Some(ObjectType::Event))?;
         let _ = sys.objects.reset_event(e);
         Ok(Some(e))
     }
@@ -666,8 +662,10 @@ pub fn set_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resul
                     let (_, dir) = file_handle(sys, &caller, Handle(root), 0)?;
                     RenameTo::Relative { dir, path: name }
                 } else if name.first() == Some(&(b'\\' as u16)) {
-                    let attrs = Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE };
-                    let (volume, path) = sys.io.resolve_device_path(&mut sys.objects, &caller, &attrs.as_object_attributes())?;
+                    let attrs =
+                        Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE };
+                    let (volume, path) =
+                        sys.io.resolve_device_path(&mut sys.objects, &caller, &attrs.as_object_attributes())?;
                     RenameTo::Volume { volume, path }
                 } else {
                     RenameTo::SameDirectory(name)
@@ -760,7 +758,12 @@ pub fn lock_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
         let sync = rec.is_sync();
         let node = rec.disk().filter(|_| rec.kind != FileType::Directory).ok_or(STATUS_INVALID_DEVICE_REQUEST)?.key;
         let (offset, length) = locks::check_range(offset, length)?;
-        let lock = ByteLock { owner: LockOwner { file: file.1, key: key as u32 }, offset, length, exclusive: exclusive as u8 != 0 };
+        let lock = ByteLock {
+            owner: LockOwner { file: file.1, key: key as u32 },
+            offset,
+            length,
+            exclusive: exclusive as u8 != 0,
+        };
         match sys.io.locks.lock(node, lock) {
             Ok(()) => {
                 n.signal_done(sys, &caller, file, STATUS_SUCCESS, 0);

@@ -94,13 +94,7 @@ impl NtSystem {
         let mut objects = ObjectManager::new();
         let mut registry = crate::registry::NtRegistry::new(reg);
         registry.install(&mut objects);
-        NtSystem {
-            objects,
-            io: crate::io::IoState::new(),
-            registry,
-            sections: BTreeMap::new(),
-            next_key: 1,
-        }
+        NtSystem { objects, io: crate::io::IoState::new(), registry, sections: BTreeMap::new(), next_key: 1 }
     }
 
     /// Store a section's data; returns its key (the object's cookie).
