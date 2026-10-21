@@ -83,10 +83,8 @@ fn handle_dead_owner(k: &mut dyn LinuxKernel, addr: UserPtr, tid: i32, walk: &mu
         }
     }
     walk.marked += 1;
-    if value & FUTEX_WAITERS != 0
-        && let Ok(key) = k.futex_key(addr, false)
-    {
-        walk.woken += super::wake(k, key, 1, FUTEX_BITSET_MATCH_ANY);
+    if value & FUTEX_WAITERS != 0 {
+        walk.woken += super::kernel_wake(k, addr);
     }
 }
 
@@ -119,9 +117,8 @@ pub fn thread_exit(k: &mut dyn LinuxKernel, shares_memory: bool) -> RobustWalk {
         && !ctid.is_null()
         && k.copy_to_user(ctid, &0u32.to_le_bytes()).is_ok()
         && ctid.0.is_multiple_of(4)
-        && let Ok(key) = k.futex_key(ctid, false)
     {
-        super::wake(k, key, 1, FUTEX_BITSET_MATCH_ANY);
+        super::kernel_wake(k, ctid);
     }
     walk
 }
