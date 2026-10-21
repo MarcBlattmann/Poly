@@ -292,7 +292,7 @@ kernel_test! {
         };
         run()?;
         // Again with the vDSO computing the time from the TSC itself (which
-        // the clock does not use under QEMU's TCG).
+        // the clock does not use on a CPU without a constant-rate TSC).
         let forced = vdso::force_tsc_for_tests(true);
         let result = run();
         vdso::force_tsc_for_tests(false);

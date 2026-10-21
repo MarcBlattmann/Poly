@@ -616,7 +616,14 @@ impl<S: Shell> Ops for RealOps<S> {
 
     fn claim(&mut self, slot: usize, entry: &EntryId) -> Result<Out> {
         let args = ["coverage", "claim", &entry.id(), "--agent", &self.cfg.spec.agent].map(String::from);
-        self.xtask(slot, &args, "claim", false)
+        let o = self.xtask(slot, &args, "claim", false)?;
+        if !o.ok() {
+            return Ok(o);
+        }
+        // The claim changes the counts the README progress section and
+        // graphics are generated from; `cargo xtask ci` fails while they are
+        // stale, and the spec agent may not regenerate them.
+        self.xtask(slot, &["coverage".into(), "readme".into()], "readme", false)
     }
 
     fn ci(&mut self, slot: usize) -> Result<Out> {
@@ -840,8 +847,12 @@ impl<S: Shell> Ops for RealOps<S> {
         redact_lines(text, &names, &contents)
     }
 
-    fn write_feedback(&mut self, entry: &EntryId, cycle: u32, text: &str) -> Result<String> {
-        let path = self.cfg.inbox.join(state::key(&entry.id())).join(format!("feedback-{cycle}.txt"));
+    fn write_feedback(&mut self, role: Role, entry: &EntryId, cycle: u32, text: &str) -> Result<String> {
+        let inbox = match role {
+            Role::Spec => &self.cfg.spec_inbox,
+            Role::Implementer => &self.cfg.inbox,
+        };
+        let path = inbox.join(state::key(&entry.id())).join(format!("feedback-{cycle}.txt"));
         self.shell.write(&path, text)?;
         Ok(path.display().to_string())
     }

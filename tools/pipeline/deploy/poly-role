@@ -3,7 +3,7 @@
 # the role users, through sudo (/etc/sudoers.d/poly-pipeline):
 #
 #   sudo -n -u polyspec /srv/poly/bin/poly-role spec sync <branch> <base>
-#   sudo -n -u polyspec /srv/poly/bin/poly-role spec run <entry> <agent> [--model M]
+#   sudo -n -u polyspec /srv/poly/bin/poly-role spec run <entry> <agent> [--model M] [--feedback FILE]
 #   sudo -n -u polyimpl /srv/poly/bin/poly-role implementer sync <branch> <base>
 #   sudo -n -u polyimpl /srv/poly/bin/poly-role implementer run <entry> <agent> [--model M] [--feedback FILE]
 #
@@ -18,6 +18,10 @@
 # starts one agent session with `cargo xtask pipeline role` (Claude Code,
 # `--preset claude`, the role user's own login). The agent commits on the
 # branch; it never pushes: the loop fetches the branch from this checkout.
+# Feedback comes from the role's own inbox: $POLY/inbox (the implementer's)
+# or $POLY/spec-inbox (the spec agent's, after a failed spec check). A spec
+# session without feedback starts from nothing (the entry's generated and
+# held-out tests are removed); with feedback it continues the earlier one.
 #
 # setup.sh installs this file root-owned as /srv/poly/bin/poly-role. sudo
 # resets the environment; everything the role needs is set here, every
@@ -42,8 +46,8 @@ verb=$2
 shift 2
 
 case "$role" in
-spec) user=polyspec home=$POLY/spec own=pipeline/spec/ ;;
-implementer) user=polyimpl home=$POLY/impl own=pipeline/impl/ ;;
+spec) user=polyspec home=$POLY/spec own=pipeline/spec/ inbox=$POLY/spec-inbox ;;
+implementer) user=polyimpl home=$POLY/impl own=pipeline/impl/ inbox=$POLY/inbox ;;
 *) die "unknown role $role" ;;
 esac
 [ "$(id -un)" = "$user" ] || die "the $role role runs as $user, not $(id -un)"
@@ -85,6 +89,7 @@ run)
     entry_ok "$entry" || die "bad entry id $entry"
     name_ok "$agent" || die "bad agent id $agent"
     args=(--workdir "$repo" --agent "$agent" --preset claude)
+    feedback=
     while [ $# -gt 0 ]; do
         case "$1" in
         --model)
@@ -93,10 +98,11 @@ run)
             shift 2
             ;;
         --feedback)
-            [ "$role" = implementer ] && [ $# -ge 2 ] || die "--feedback is for the implementer"
+            [ $# -ge 2 ] || die "bad --feedback"
             f=$(realpath -e -- "$2") || die "no feedback file $2"
-            [[ $f == "$POLY/inbox/"* ]] || die "feedback must come from $POLY/inbox"
+            [[ $f == "$inbox/"* ]] || die "the $role role's feedback must come from $inbox"
             args+=(--feedback "$f")
+            feedback=1
             shift 2
             ;;
         *) die "unknown option $1" ;;
@@ -106,8 +112,12 @@ run)
         # The spec agent observes the real OS and writes the held-out tests.
         export POLY_HELDOUT_DIR=$POLY/heldout
         gen=$POLY/generated/${entry##*/}
-        # A session starts from nothing: no files of an earlier attempt.
-        rm -rf -- "$gen" "${POLY_HELDOUT_DIR:?}/$entry"
+        # A new session starts from nothing: no files of an earlier attempt.
+        # A feedback session continues the last one, whose tests the loop
+        # checked: they stay.
+        if [ -z "$feedback" ]; then
+            rm -rf -- "$gen" "${POLY_HELDOUT_DIR:?}/$entry"
+        fi
         mkdir -p -- "$gen"
         args+=(--generated "$gen")
     else

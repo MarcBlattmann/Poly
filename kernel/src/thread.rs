@@ -600,6 +600,11 @@ fn switch(sw: Switch) {
     // blocks would leave its interrupt unacknowledged.
     assert_eq!(sync::spinlocks_held(), 0, "thread {} blocks or yields while holding a spinlock", sw.from);
     assert!(!arch::irq::in_interrupt(), "thread {} blocks inside an interrupt handler", sw.from);
+    // Code run on the interrupt stack (`irqstack::run_on`: reaping in
+    // `finish_switch` and `spawn_with`) must not block either: the thread
+    // would be switched out with its frames on this CPU's interrupt stack,
+    // which the next interrupt here overwrites.
+    assert!(!arch::irqstack::on_it(), "thread {} blocks on its CPU's interrupt stack", sw.from);
     {
         let mut guard = THREADS.lock();
         let t = &mut *guard;

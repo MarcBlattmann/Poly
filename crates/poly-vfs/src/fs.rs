@@ -101,6 +101,16 @@ pub trait FileSystem: Send + Sync {
     /// [`MAX_FILE_SIZE`](crate::MAX_FILE_SIZE).
     fn write(&self, ino: Ino, offset: u64, buf: &[u8]) -> Result<usize>;
 
+    /// Writes data a page cache holds back to the file: as
+    /// [`write`](Self::write), but the file's times stay as they are. The
+    /// cache set them when the program wrote; a later change of the times
+    /// (utimensat(2), as `cp -p` does after copying) must survive the
+    /// writeback. The default is `write`, for file systems without times
+    /// of their own.
+    fn write_back(&self, ino: Ino, offset: u64, buf: &[u8]) -> Result<usize> {
+        self.write(ino, offset, buf)
+    }
+
     /// Writes at the end of the file, atomically with respect to other
     /// appends; returns the offset written at and the byte count. The
     /// default is not atomic; file systems that can should override it.
@@ -122,6 +132,14 @@ pub trait FileSystem: Send + Sync {
     /// are added and removed; an entry added or renamed meanwhile may or
     /// may not be listed (as POSIX allows).
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()>;
+
+    /// Where a directory descriptor's position goes when a listing call
+    /// finds nothing more to list (`getdents64` returns 0): `Some(end)`
+    /// moves it there (tmpfs: `INT32_MAX`, so it stays at the end until
+    /// lseek moves it), `None` leaves it where it was.
+    fn readdir_end(&self) -> Option<u64> {
+        None
+    }
 
     /// Pins `ino` so it outlives its last name (`ENOENT` if it is gone).
     fn open(&self, ino: Ino) -> Result<()> {

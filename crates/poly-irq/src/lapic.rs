@@ -920,8 +920,15 @@ mod tests {
     use crate::sim::{SimApic, SimClock, SimHpet};
     use std::vec::Vec;
 
-    const ALL: CpuFeatures =
-        CpuFeatures { tsc: true, apic: true, x2apic: true, tsc_deadline: true, arat: true, invariant_tsc: true };
+    const ALL: CpuFeatures = CpuFeatures {
+        tsc: true,
+        apic: true,
+        x2apic: true,
+        tsc_deadline: true,
+        arat: true,
+        invariant_tsc: true,
+        hypervisor: false,
+    };
 
     #[test]
     fn x2apic_msr_numbers() {

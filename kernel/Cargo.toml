@@ -50,6 +50,8 @@ poly-vfs = { path = "../crates/poly-vfs" }
 poly-personality-linux = { path = "../personalities/linux" }
 poly-ntobj = { path = "../crates/poly-ntobj" }
 poly-pe = { path = "../crates/poly-pe" }
+# The PE builder of the ring-3 loader tests (ADR 0071).
+poly-ldr = { path = "../crates/poly-ldr" }
 poly-personality-nt = { path = "../personalities/nt" }
 poly-personality-xnu = { path = "../personalities/xnu" }
 poly-virtio = { path = "../crates/poly-virtio" }

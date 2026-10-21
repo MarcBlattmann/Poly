@@ -113,6 +113,15 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     for (path, status) in &report.conflicts {
         crate::kprintln!("nt: layout: {path} cannot be made ({:#x}): something else is there", status.0);
     }
+    // Poly's own system DLLs go into System32 (rewritten only when their
+    // bytes differ, so a replaced one is restored): our ntdll (ADR 0071).
+    if !super::NTDLL.is_empty() {
+        match create::install_file(&vr, &root, "Windows\\System32", "ntdll.dll", super::NTDLL) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: ntdll.dll written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install ntdll.dll ({:#x})", e.0),
+        }
+    }
     let synced = sync::sync(&mut sys.registry.reg, &POLY_USER, super::registry::filetime_now());
     crate::kprintln!(
         "nt: C: is {}; {} folders made, {} registry values synced",

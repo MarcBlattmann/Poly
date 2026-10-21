@@ -87,6 +87,25 @@ pub struct Event {
     pub message: String,
 }
 
+/// An agent session of the entry's current step (spec or implement),
+/// recorded once its role checkout is on the branch, before the session
+/// starts, so the steps after it can resume without paying for the
+/// session again: a retry after a failed fetch, or after a crash, first
+/// fetches the role's branch and runs the agent again only when the branch
+/// has no commit beyond `base`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Session {
+    /// The branch head the session started from.
+    pub base: String,
+    /// Its exit status once it ended; `None` while it runs (or if the loop
+    /// stopped before it ended).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit: Option<i32>,
+    /// Its log, for messages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log: Option<PathBuf>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EntryState {
     pub format: String,
@@ -98,6 +117,10 @@ pub struct EntryState {
     pub cycle: u32,
     #[serde(default)]
     pub spec_attempts: u32,
+    /// Spec checks that failed and went back to the spec agent with
+    /// feedback (CI red, an incomplete spec); at most `spec_cycles`.
+    #[serde(default)]
+    pub spec_cycle: u32,
     /// Consecutive infrastructure errors (reset by every step that succeeds).
     #[serde(default)]
     pub errors: u32,
@@ -123,8 +146,15 @@ pub struct EntryState {
     /// Fetched from a role's checkout but not yet pushed to the hub.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_head: Option<String>,
+    /// The agent session of this step that ran, or was running, and
+    /// whose branch has not been fetched yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<Session>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback_file: Option<String>,
+    /// Feedback for the spec agent's next session (a failed spec check).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_feedback: Option<String>,
     /// What the implementer received (`handoff bundle`), for `handoff verify --received`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bundle_dir: Option<String>,
@@ -152,6 +182,7 @@ impl EntryState {
             step: Step::Claim,
             cycle: 0,
             spec_attempts: 0,
+            spec_cycle: 0,
             errors: 0,
             refreshes: 0,
             retry_at: 0,
@@ -162,7 +193,9 @@ impl EntryState {
             impl_base: None,
             impl_head: None,
             pending_head: None,
+            session: None,
             feedback_file: None,
+            spec_feedback: None,
             bundle_dir: None,
             tests_visible: 0,
             tests_held_out: 0,

@@ -4,28 +4,31 @@
 //!
 //! Two programs:
 //!
-//! - [`handled_image`]: registers a user-mode exception dispatcher with
-//!   `PolySetExceptionDispatcher`, triggers an access violation (a write to
-//!   a null pointer) and then an integer divide-by-zero, and for each one
-//!   the dispatcher inspects the `EXCEPTION_RECORD`, fixes the `CONTEXT` up
-//!   (a sentinel in `Rax`, `Rip` at a recovery point) and resumes with
-//!   `NtContinue`. The main code checks the record fields the dispatcher
+//! - [`handled_image`]: imports `RtlAddVectoredExceptionHandler` from our
+//!   `ntdll` and registers a vectored handler, then triggers an access
+//!   violation (a write to a null pointer) and an integer divide-by-zero.
+//!   The kernel delivers each to `ntdll`'s `KiUserExceptionDispatcher` (ADR
+//!   0068, 0071), which calls the handler with the `EXCEPTION_POINTERS`;
+//!   the handler inspects the `EXCEPTION_RECORD`, fixes the `CONTEXT` up (a
+//!   sentinel in `Rax`, `Rip` at a recovery point) and returns
+//!   `EXCEPTION_CONTINUE_EXECUTION`, so `ntdll` resumes it with
+//!   `NtContinue`. The main code checks the record fields the handler
 //!   reported and ends with [`PASS_CODE`].
-//! - [`unhandled_image`]: registers no dispatcher and writes to a null
-//!   pointer; the process must end with `STATUS_ACCESS_VIOLATION` as its
-//!   exit status (second chance / no handler, ADR 0068).
+//! - [`unhandled_image`]: registers no handler and writes to a null
+//!   pointer; `ntdll` finds no handler and raises it second chance, and the
+//!   process must end with `STATUS_ACCESS_VIOLATION` as its exit status
+//!   (ADR 0068).
 //!
-//! The dispatcher and the main thread share a fixed, page-aligned scratch
-//! region ([`SCRATCH`]) that the main thread commits first, since the
-//! dispatcher is entered fresh and the image's own data section is not
-//! writable:
+//! The handler and the main thread share a fixed, page-aligned scratch
+//! region ([`SCRATCH`]) that the main thread commits first (the image's own
+//! sections are not writable):
 //!
 //! ```text
-//!   SCRATCH + 0x00   ExceptionCode the dispatcher last saw
+//!   SCRATCH + 0x00   ExceptionCode the handler last saw
 //!   SCRATCH + 0x08   ExceptionInformation[0] (access kind)
 //!   SCRATCH + 0x10   ExceptionInformation[1] (address)
-//!   SCRATCH + 0x18   recovery RIP the dispatcher sets CONTEXT.Rip to
-//!   SCRATCH + 0x20   count of dispatcher calls
+//!   SCRATCH + 0x18   recovery RIP the handler sets CONTEXT.Rip to
+//!   SCRATCH + 0x20   count of handler calls
 //! ```
 //!
 //! Every `global_asm!` label is prefixed `ntseh_` (the CI check for
@@ -34,7 +37,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use core::arch::global_asm;
-use poly_personality_nt::pe_writer::{self, PeImage, PeSection};
+use poly_ldr::builder::{Import, PeBuilder, Section, Sym, TEXT};
 
 /// The exit status when every check passed.
 pub const PASS_CODE: u8 = 0x5A;
@@ -55,7 +58,7 @@ global_asm!(
     // ===== the "handled" program =========================================
     .global poly_nt_seh_handled
 poly_nt_seh_handled:
-    sub rsp, 0x1000
+    sub rsp, 0x1008              // 16-byte aligned for the call below
     mov rbx, rsp
     mov r13, {scratch}            // the shared scratch region
 
@@ -73,15 +76,18 @@ poly_nt_seh_handled:
     syscall
     test eax, eax
     jnz ntseh_handled_fail
-    // Zero the dispatcher-call counter.
+    // Zero the handler-call counter.
     mov qword ptr [r13+0x20], 0
 
-    // PolySetExceptionDispatcher(&dispatcher).
-    lea r10, [rip+ntseh_dispatcher]
-    mov eax, 0x3010
-    syscall
-    test eax, eax
-    jnz ntseh_handled_fail
+    // RtlAddVectoredExceptionHandler(TRUE, &handler), through the import
+    // address table slot the loader bound (its address is in the link
+    // slot below, relocated with the image).
+    mov ecx, 1
+    lea rdx, [rip+ntseh_handler]
+    mov rax, [rip+ntseh_link_veh]
+    call [rax]
+    test rax, rax
+    jz ntseh_handled_fail
 
     // ----- access violation ----------------------------------------------
     lea rax, [rip+ntseh_after_av]
@@ -89,7 +95,7 @@ poly_nt_seh_handled:
     xor eax, eax
     mov byte ptr [rax], 1        // write to null: #PF
 ntseh_after_av:
-    // The dispatcher put a sentinel in Rax.
+    // The handler put a sentinel in Rax.
     cmp rax, 0x1234
     jne ntseh_handled_fail
     mov eax, [r13+0x00]          // the code it saw
@@ -113,7 +119,7 @@ ntseh_after_div:
     mov eax, [r13+0x00]
     cmp eax, 0xC0000094          // STATUS_INTEGER_DIVIDE_BY_ZERO
     jne ntseh_handled_fail
-    // The dispatcher ran exactly twice.
+    // The handler ran exactly twice.
     mov rax, [r13+0x20]
     cmp rax, 2
     jne ntseh_handled_fail
@@ -137,29 +143,34 @@ ntseh_handled_fail:
     syscall
     ud2
 
-    // The user-mode exception dispatcher. Entered with RCX = &record,
-    // RDX = &context (and a fake return address on the stack).
+    // The vectored handler: LONG handler(EXCEPTION_POINTERS *p), p =
+    // (&record, &context) (winnt.h). Only volatile registers are used.
     .balign 16
-ntseh_dispatcher:
-    mov r13, {scratch}
-    inc qword ptr [r13+0x20]     // one more call
+ntseh_handler:
+    mov rdx, [rcx+0x08]          // ContextRecord
+    mov rcx, [rcx+0x00]          // ExceptionRecord
+    mov r8, {scratch}
+    inc qword ptr [r8+0x20]      // one more call
     // Record ExceptionCode and the two information words.
     mov eax, [rcx+0x00]
-    mov [r13+0x00], eax
+    mov [r8+0x00], eax
     mov rax, [rcx+0x20]          // ExceptionInformation[0]
-    mov [r13+0x08], rax
+    mov [r8+0x08], rax
     mov rax, [rcx+0x28]          // ExceptionInformation[1]
-    mov [r13+0x10], rax
+    mov [r8+0x10], rax
     // Fix the context up: Rax = sentinel, Rip = the recovery point.
     mov qword ptr [rdx+0x78], 0x1234   // CONTEXT.Rax
-    mov rax, [r13+0x18]
+    mov rax, [r8+0x18]
     mov [rdx+0xF8], rax                 // CONTEXT.Rip
-    // NtContinue(&context, FALSE).
-    mov r10, rdx
-    xor edx, edx
-    mov eax, 0xA1
-    syscall
-    ud2
+    mov eax, -1                  // EXCEPTION_CONTINUE_EXECUTION
+    ret
+
+    // The link slot: the address of RtlAddVectoredExceptionHandler's import
+    // address table slot, written when the image is built.
+    .balign 8
+    .global ntseh_link_veh
+ntseh_link_veh:
+    .quad 0
     .global poly_nt_seh_handled_end
 poly_nt_seh_handled_end:
 
@@ -167,8 +178,8 @@ poly_nt_seh_handled_end:
     .balign 16
     .global poly_nt_seh_unhandled
 poly_nt_seh_unhandled:
-    // No dispatcher: a write to null ends the process with the exception
-    // code as its exit status.
+    // No handler: a write to null ends the process with the exception code
+    // as its exit status.
     xor eax, eax
     mov byte ptr [rax], 1
     ud2
@@ -182,6 +193,7 @@ poly_nt_seh_unhandled_end:
 
 unsafe extern "C" {
     static poly_nt_seh_handled: u8;
+    static ntseh_link_veh: u8;
     static poly_nt_seh_handled_end: u8;
     static poly_nt_seh_unhandled: u8;
     static poly_nt_seh_unhandled_end: u8;
@@ -194,32 +206,43 @@ fn slice_between(start: &'static u8, end: &'static u8) -> &'static [u8] {
     unsafe { core::slice::from_raw_parts(start, end as usize - start as usize) }
 }
 
-fn pe(code: &[u8]) -> Vec<u8> {
-    let mut data = code.to_vec();
-    let virtual_size = data.len() as u32;
-    data.resize(data.len().max(1), 0);
-    PeImage {
+/// The executable: `code` as `.text` at RVA 0x1000 (entry at its start),
+/// importing `imports` from `ntdll.dll`; `link` is the offset in `code` of
+/// an 8-byte slot that gets the address of the first import's address
+/// table slot (relocated).
+fn pe(code: &[u8], imports: &[&str], link: Option<usize>) -> Vec<u8> {
+    let mut b = PeBuilder {
         image_base: IMAGE_BASE,
+        dll: false,
         entry: 0x1000,
-        sections: vec![PeSection { name: *b".text\0\0\0", data, virtual_size, characteristics: pe_writer::TEXT }],
-        relocations: Vec::new(),
-        fixed: false,
+        sections: vec![Section::new(".text", code.to_vec(), TEXT)],
         stack_reserve: 0x1_0000,
         stack_commit: 0x4000,
+        ..PeBuilder::default()
+    };
+    if !imports.is_empty() {
+        let symbols = imports.iter().map(|n| Sym::name(n)).collect();
+        b.imports = vec![Import { dll: "ntdll.dll".into(), symbols, ..Import::default() }];
     }
-    .write()
+    if let Some(at) = link {
+        let slot = IMAGE_BASE + u64::from(b.layout().iat[0][0]);
+        b.sections[0].data[at..at + 8].copy_from_slice(&slot.to_le_bytes());
+        b.relocations.push(0x1000 + at as u32);
+    }
+    b.write()
 }
 
 /// The PE that handles its exceptions and continues.
 pub fn handled_image() -> Vec<u8> {
     // SAFETY: the symbols bound the handled program's code.
     let code = unsafe { slice_between(&poly_nt_seh_handled, &poly_nt_seh_handled_end) };
-    pe(code)
+    let link = (&raw const ntseh_link_veh) as usize - code.as_ptr() as usize;
+    pe(code, &["RtlAddVectoredExceptionHandler"], Some(link))
 }
 
 /// The PE that leaves an exception unhandled.
 pub fn unhandled_image() -> Vec<u8> {
     // SAFETY: the symbols bound the unhandled program's code.
     let code = unsafe { slice_between(&poly_nt_seh_unhandled, &poly_nt_seh_unhandled_end) };
-    pe(code)
+    pe(code, &[], None)
 }

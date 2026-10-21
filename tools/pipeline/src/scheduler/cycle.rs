@@ -4,21 +4,25 @@
 //!
 //! ```text
 //! claim ─► spec ─► spec-check ─► handoff ─► implement ─► verify ──green──► publish ─► awaiting-merge ─► merged
-//!            ▲  (exit 75: pause)             ▲  (exit 75: pause) │                         │ conflicts
-//!            └── failed: retry ──┘           └──── red: feedback ┘ (up to max_cycles)   refresh ─► verify
+//!            ▲  (exit 75: pause) │            ▲  (exit 75: pause) │                         │ conflicts
+//!            └─ red: feedback ───┘            └──── red: feedback ┘ (up to max_cycles)   refresh ─► verify
+//!               (up to spec_cycles)
 //!   any red flag (forbidden path, unsafe, hand-off problem, history rewritten): human
 //! ```
 //!
 //! Every step is idempotent on restart: steps whose result is a pushed
 //! branch look at the hub first, a fetched head waiting to be pushed is
-//! kept in the state (`pending_head`), and an agent session interrupted by
-//! a crash is simply run again (the role checkout is reset first).
+//! kept in the state (`pending_head`), and an agent session is recorded in
+//! the state (`session`) before it starts and when it ends, so an error or
+//! a crash after it never pays for it again: the retry fetches the role's
+//! branch first, and the agent runs again (its checkout reset first) only
+//! when a session cut short left no commit.
 
 use super::config::Config;
 use super::limits::{self, Reset};
 use super::ops::{Merge, Ops, Out, Push, Remote};
 use super::safety::{self, PrCheck};
-use super::state::{self, EntryState, Lock, Pause, Step, Store};
+use super::state::{self, EntryState, Lock, Pause, Session, Step, Store};
 use crate::roles::Role;
 use crate::store::EntryId;
 use crate::util::{self, Result};
@@ -97,6 +101,22 @@ enum Next {
     Yield(Yielded),
 }
 
+/// What an agent session left on its branch.
+enum Ended {
+    /// A new head, fetched into the runner.
+    Committed(String),
+    /// No new commit; how the session ended.
+    Nothing(Out),
+    /// A usage limit: the role is paused.
+    Limit(Next),
+}
+
+/// Whether the entry's agent session has ended and only its branch is
+/// left to fetch (no session to start, so no reason to wait for the role).
+fn fetch_only(st: &EntryState) -> bool {
+    st.pending_head.is_some() || st.session.as_ref().is_some_and(|s| s.exit.is_some())
+}
+
 pub fn spec_branch(e: &EntryId) -> String {
     format!("pipeline/spec/{}", e.symbol)
 }
@@ -162,6 +182,7 @@ impl<O: Ops> Driver<'_, O> {
     fn ready_at(&self, st: &EntryState, now: u64) -> Result<u64> {
         let mut at = st.retry_at;
         if let Some(role) = st.step.role()
+            && !fetch_only(st)
             && let Some(until) = self.store.paused_until(role, now)?
         {
             at = at.max(until);
@@ -365,16 +386,120 @@ impl<O: Ops> Driver<'_, O> {
 
     /// A red cycle: feedback to the implementer, or the human queue.
     fn red(&mut self, st: &mut EntryState, entry: &EntryId, result: String, feedback: &str) -> Result<Next> {
-        st.cycle += 1;
         st.last_result = Some(result.clone());
-        if st.cycle >= self.cfg.max_cycles {
-            return Ok(self.human(st, format!("{} red cycles; last: {result}", st.cycle)));
+        let cycle = st.cycle + 1;
+        if cycle >= self.cfg.max_cycles {
+            st.cycle = cycle;
+            return Ok(self.human(st, format!("{cycle} red cycles; last: {result}")));
         }
-        let file = self.ops.write_feedback(entry, st.cycle, feedback)?;
+        // Counted once the feedback is written: a failed write is retried
+        // as an error, not counted twice.
+        let file = self.ops.write_feedback(Role::Implementer, entry, cycle, feedback)?;
+        st.cycle = cycle;
         st.feedback_file = Some(file);
         self.note(st, format!("red ({}/{}): {result}; back to the implementer", st.cycle, self.cfg.max_cycles));
         st.step = Step::Implement;
         Ok(Next::Continue)
+    }
+
+    /// A failed spec check: feedback to the spec agent, which continues
+    /// its work on its branch, or the human queue after `spec_cycles`.
+    ///
+    /// The feedback is not redacted: the spec agent wrote the held-out
+    /// tests and reads the held-out store, and CI of a spec branch runs
+    /// without it (CLEAN_ROOM.md hides the held-out tests from the
+    /// implementer only). It goes to the spec role's own inbox, which the
+    /// implementer cannot read.
+    fn spec_red(&mut self, st: &mut EntryState, entry: &EntryId, result: String, feedback: &str) -> Result<Next> {
+        st.last_result = Some(result.clone());
+        if st.spec_cycle >= self.cfg.spec_cycles {
+            let times = match st.spec_cycle + 1 {
+                1 => "once".to_string(),
+                n => format!("{n} times"),
+            };
+            return Ok(self.human(st, format!("the spec check failed {times}; last: {result}")));
+        }
+        let cycle = st.spec_cycle + 1;
+        let file = self.ops.write_feedback(Role::Spec, entry, cycle, feedback)?;
+        st.spec_cycle = cycle;
+        st.spec_feedback = Some(file);
+        self.note(st, format!("spec check red ({cycle}/{}): {result}; back to the spec agent", self.cfg.spec_cycles));
+        st.step = Step::Spec;
+        Ok(Next::Continue)
+    }
+
+    /// The agent session of this step, and the fetch of its branch.
+    ///
+    /// The session is recorded in the state once the role's checkout is on
+    /// the branch (at `base`) and again when it ends, so it is never paid
+    /// for twice: when a session is recorded (a fetch failed after it, or
+    /// the loop stopped), the role's branch is fetched first, without
+    /// touching the checkout; a commit beyond `base` is the session's
+    /// result. Only a session that did not end and left no commit runs
+    /// again, from a clean checkout. (For the spec role, a new session that
+    /// is not a feedback cycle also starts without the generated and
+    /// held-out tests of an earlier one: `poly-role spec run` removes them.)
+    #[allow(clippy::too_many_arguments)]
+    fn session(
+        &mut self,
+        st: &mut EntryState,
+        role: Role,
+        entry: &EntryId,
+        sync_base: &str,
+        base: &str,
+        feedback: Option<&str>,
+        start: String,
+    ) -> Result<Ended> {
+        let branch = match role {
+            Role::Spec => spec_branch(entry),
+            Role::Implementer => impl_branch(entry),
+        };
+        if let Some(s) = st.session.clone() {
+            let ended = s.exit.map(|code| Out { code, text: String::new(), log: s.log.clone() });
+            if let Some(out) = ended.as_ref().filter(|o| !o.ok()) {
+                st.session = None;
+                return Ok(Ended::Nothing(out.clone()));
+            }
+            let head = self.ops.role_fetch(role, &branch)?;
+            st.session = None;
+            match (head, ended) {
+                (Some(h), _) if h != s.base => {
+                    self.note(st, format!("fetched {branch} of the {} session that ran before", role.name()));
+                    return Ok(Ended::Committed(h));
+                }
+                (_, Some(out)) => return Ok(Ended::Nothing(out)),
+                (_, None) => {
+                    self.note(st, format!("the {} session cut short left no commit; it runs again", role.name()))
+                }
+            }
+        }
+        let _role = self.store.lock(&format!("role-{}", role.name()))?;
+        let sync = self.ops.role_sync(role, entry, &branch, sync_base)?;
+        if !sync.ok() {
+            return Err(format!("preparing the {} checkout failed: {}", role.name(), sync.tail(5)));
+        }
+        st.session = Some(Session { base: base.to_string(), exit: None, log: None });
+        self.save(st);
+        self.note(st, start);
+        let out = self.ops.role_run(role, entry, feedback)?;
+        if out.code == i32::from(crate::roles::LIMIT_EXIT) {
+            st.session = None;
+            return Ok(Ended::Limit(self.limit(st, role.name(), &out)?));
+        }
+        st.session = Some(Session { base: base.to_string(), exit: Some(out.code), log: out.log.clone() });
+        self.save(st);
+        if !out.ok() {
+            st.session = None;
+            return Ok(Ended::Nothing(out));
+        }
+        // An error here (git, permissions) leaves the ended session in the
+        // state: the retry fetches again and does not run the agent.
+        let head = self.ops.role_fetch(role, &branch)?;
+        st.session = None;
+        Ok(match head {
+            Some(h) if h != base => Ended::Committed(h),
+            _ => Ended::Nothing(out),
+        })
     }
 
     fn push_hub(&mut self, slot: usize, rev: &str, branch: &str) -> Result<Option<String>> {
@@ -414,7 +539,8 @@ impl<O: Ops> Driver<'_, O> {
                     if !out.ok() {
                         return Ok(self.human(st, format!("coverage claim failed: {}", out.tail(3))));
                     }
-                    let sha = self.ops.commit(slot, &message, &[safety::coverage_file(&entry)])?;
+                    let paths = [safety::coverage_file(&entry), "README.md".into(), "docs/progress".into()];
+                    let sha = self.ops.commit(slot, &message, &paths)?;
                     if let Some(r) = self.push_hub(slot, &sha, &spec_b)? {
                         return Ok(self.human(st, r));
                     }
@@ -425,28 +551,30 @@ impl<O: Ops> Driver<'_, O> {
                 Ok(Next::Continue)
             }
             Step::Spec => {
-                if let Some(until) = self.store.paused_until("spec", now)? {
+                if !fetch_only(st)
+                    && let Some(until) = self.store.paused_until("spec", now)?
+                {
                     return Ok(Next::Yield(Yielded::Paused("spec", until)));
                 }
                 let claim = st.claim_sha.clone().ok_or("no claim commit in the state")?;
                 if st.pending_head.is_none() {
-                    let _role = self.store.lock("role-spec")?;
-                    let sync = self.ops.role_sync(Role::Spec, &entry, &spec_b, &spec_b)?;
-                    if !sync.ok() {
-                        return Err(format!("preparing the spec checkout failed: {}", sync.tail(5)));
-                    }
-                    self.note(st, format!("spec agent {} starts", self.cfg.spec.agent));
-                    let out = self.ops.role_run(Role::Spec, &entry, None)?;
-                    if out.code == i32::from(crate::roles::LIMIT_EXIT) {
-                        return self.limit(st, "spec", &out);
-                    }
-                    let head = if out.ok() { self.ops.role_fetch(Role::Spec, &spec_b)? } else { None };
-                    match head {
-                        Some(h) if h != claim => {
+                    // After a failed spec check the agent continues from its own head.
+                    let base = st.spec_head.clone().unwrap_or(claim);
+                    let start = match st.spec_cycle {
+                        0 => format!("spec agent {} starts", self.cfg.spec.agent),
+                        n => format!(
+                            "spec agent {} starts (feedback {n}/{} on the spec check)",
+                            self.cfg.spec.agent, self.cfg.spec_cycles
+                        ),
+                    };
+                    let feedback = st.spec_feedback.clone();
+                    match self.session(st, Role::Spec, &entry, &spec_b, &base, feedback.as_deref(), start)? {
+                        Ended::Committed(h) => {
                             st.pending_head = Some(h);
                             self.save(st);
                         }
-                        _ => {
+                        Ended::Limit(next) => return Ok(next),
+                        Ended::Nothing(out) => {
                             st.spec_attempts += 1;
                             let why = if out.ok() {
                                 "the spec agent committed nothing".to_string()
@@ -487,22 +615,38 @@ impl<O: Ops> Driver<'_, O> {
                 }
                 let files = self.ops.spec_files(slot, &entry)?;
                 if !files.spec || files.visible == 0 || files.held_out == 0 {
-                    return Ok(self.human(
-                        st,
-                        format!(
-                            "incomplete spec: sheet {}, {} visible and {} held-out tests",
-                            if files.spec { "present" } else { "missing" },
-                            files.visible,
-                            files.held_out
-                        ),
-                    ));
+                    let result = format!(
+                        "incomplete spec: sheet {}, {} visible and {} held-out tests",
+                        if files.spec { "present" } else { "missing" },
+                        files.visible,
+                        files.held_out
+                    );
+                    let feedback = format!(
+                        "The runner's spec check found your spec incomplete: the spec sheet {} is {}, {} has {} \
+                         visible tests and the held-out store has {} held-out tests for {}. All three are needed: \
+                         write the missing parts, run `cargo xtask pipeline tests split` (with `--replace` if it \
+                         split before) and commit the spec sheet and the visible tests.\n",
+                        entry.spec_path().display(),
+                        if files.spec { "present" } else { "missing" },
+                        entry.tests_dir().display(),
+                        files.visible,
+                        files.held_out,
+                        entry.id()
+                    );
+                    return self.spec_red(st, &entry, result, &feedback);
                 }
                 st.tests_visible = files.visible;
                 st.tests_held_out = files.held_out;
                 if self.cfg.spec_ci {
                     let ci = self.ops.ci(slot)?;
                     if !ci.ok() {
-                        return Ok(self.human(st, format!("the spec branch fails `cargo xtask ci`: {}", ci.describe())));
+                        let feedback = format!(
+                            "`cargo xtask ci` failed on your spec branch on the runner (the end of its output; the \
+                             full log stays on the runner):\n\n{}\n",
+                            ci.tail(80)
+                        );
+                        let result = format!("the spec branch fails `cargo xtask ci`: {}", ci.describe());
+                        return self.spec_red(st, &entry, result, &feedback);
                     }
                 }
                 self.note(st, format!("spec checked: {} visible, {} held-out tests", files.visible, files.held_out));
@@ -539,34 +683,33 @@ impl<O: Ops> Driver<'_, O> {
                 Ok(Next::Continue)
             }
             Step::Implement => {
-                if let Some(until) = self.store.paused_until("implementer", now)? {
+                if !fetch_only(st)
+                    && let Some(until) = self.store.paused_until("implementer", now)?
+                {
                     return Ok(Next::Yield(Yielded::Paused("implementer", until)));
                 }
                 if st.pending_head.is_none() {
                     let base_branch = if self.ops.hub_head(&impl_b)?.is_some() { &impl_b } else { &spec_b };
-                    let base = self.ops.hub_head(base_branch)?.ok_or(format!("{base_branch} is not in the hub"))?;
-                    st.impl_base = Some(base.clone());
-                    self.save(st);
-                    let _role = self.store.lock("role-implementer")?;
-                    let sync = self.ops.role_sync(Role::Implementer, &entry, &impl_b, base_branch)?;
-                    if !sync.ok() {
-                        return Err(format!("preparing the implementer checkout failed: {}", sync.tail(5)));
-                    }
-                    self.note(
-                        st,
-                        format!("implementer {} starts (cycle {})", self.cfg.implementer.agent, st.cycle + 1),
-                    );
-                    let out = self.ops.role_run(Role::Implementer, &entry, st.feedback_file.as_deref())?;
-                    if out.code == i32::from(crate::roles::LIMIT_EXIT) {
-                        return self.limit(st, "implementer", &out);
-                    }
-                    let head = if out.ok() { self.ops.role_fetch(Role::Implementer, &impl_b)? } else { None };
-                    match head {
-                        Some(h) if h != base => {
+                    let base = match &st.session {
+                        // A session that ran before: its start, as recorded.
+                        Some(s) => s.base.clone(),
+                        None => {
+                            let base =
+                                self.ops.hub_head(base_branch)?.ok_or(format!("{base_branch} is not in the hub"))?;
+                            st.impl_base = Some(base.clone());
+                            self.save(st);
+                            base
+                        }
+                    };
+                    let start = format!("implementer {} starts (cycle {})", self.cfg.implementer.agent, st.cycle + 1);
+                    let feedback = st.feedback_file.clone();
+                    match self.session(st, Role::Implementer, &entry, base_branch, &base, feedback.as_deref(), start)? {
+                        Ended::Committed(h) => {
                             st.pending_head = Some(h);
                             self.save(st);
                         }
-                        _ => {
+                        Ended::Limit(next) => return Ok(next),
+                        Ended::Nothing(out) => {
                             let (result, feedback) = if out.ok() {
                                 (
                                     "the implementer committed nothing".to_string(),

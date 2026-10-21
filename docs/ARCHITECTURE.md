@@ -588,8 +588,17 @@ initramfs.
   `OpenFile` implement descriptors (`dup2`/`dup3`, close-on-exec,
   `O_APPEND`, `lseek`, `getdents` positions). Errors are `Errno` with
   Linux's values; flags take Linux's bits.
-- **tmpfs**: sparse files in 4 KiB pages, stable `readdir` positions,
-  unlinked files and removed directories live while open.
+- **tmpfs**: sparse files in 4 KiB pages, unlinked files and removed
+  directories live while open. Directories list as Linux's tmpfs does
+  (`specs/linux/x86_64/getdents64.yaml`, `directory_order`), so programs
+  that list a directory make their per-entry calls in the reference's
+  order: `.` and `..`, then the entries newest first. Each directory hands
+  out cookies 3, 4, ... to entries as they are created, linked or renamed
+  in (they go to the front); a rename over a name moves it to the front
+  with the cookie it had. `d_off` is the next entry's cookie (2147483647
+  after the last), a read from position P starts at the entry with the
+  largest cookie not above P, and a listing that has ended stays at
+  2147483647 until lseek (`FileSystem::readdir_end`).
   Directories report Linux tmpfs's size: 40 bytes plus 20 per entry.
 - **Extended attributes** ([ADR 0060](adr/0060-extended-attributes-and-file-ioctls.md),
   `poly_vfs::xattr`): `NodeRef::getxattr` and friends check the name and
@@ -1249,8 +1258,9 @@ the CPU-time accounting, the timer thread and the vDSO.
   It reads the `poly_vdso::Vvar` page right below its ELF header: a
   seqlock-protected snapshot of the clock's TSC conversion (the same
   `mult`/`shift` the kernel's clock applies), the wall clock's offset, the
-  tick and the time zone. Where the clock does not read an invariant TSC
-  the snapshot says so and the vDSO makes the system call.
+  tick and the time zone. Where the clock does not read the TSC (a real
+  CPU without an invariant TSC; a virtual CPU's TSC counts as constant
+  rate, ADR 0072) the snapshot says so and the vDSO makes the system call.
 - **Mapping:** exec maps the image (private, read-execute) and the data
   page below it (shared, read-only, never writable: a page-cache page every
   process maps, which the kernel writes through the direct map) and sets
@@ -1299,21 +1309,36 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   section is an `AnonShared` object shared by its views, an image or file
   section is a `MemoryImage` views copy privately.
 - **Processes and threads** (`personalities/nt/src/exec.rs`,
-  `kernel/src/nt`, ADR 0065). Until our `ntdll` exists the kernel maps the
-  executable's image section at its preferred base (or relocates it with
+  `kernel/src/nt`, ADR 0065, 0071). The kernel maps the executable's and our
+  `ntdll`'s image sections at their preferred bases (or relocates them with
   `poly_pe::relocate`), sets up the PEB, the first TEB and the stack with its
-  guard page. Each thread starts through a per-process trampoline that calls
-  its routine and, on return, ends the thread with `NtTerminateThread`, so the
-  last thread's return ends the process with the right code. `NtCreateThreadEx`
+  guard page, and starts every thread at `ntdll`'s `LdrInitializeThunk`
+  (below), which calls the thread's routine and, on return, ends the thread
+  with `NtTerminateThread`, so the last thread's return ends the process with
+  the right code. `NtCreateThreadEx`
   makes more threads in the process (each its own TEB, stack and thread
   object); `NtTerminateThread`, `NtOpenProcess`/`Thread` (by client id),
   `NtQueryInformationProcess`/`Thread`, `NtSuspendThread`/`ResumeThread` and
   `NtGetContextThread`/`SetContextThread` (the x64 `CONTEXT` control and
   integer registers, read from a thread parked suspended) round it out. The
   per-process NT state is keyed by pid in `kernel/src/nt`, so `process.rs`
-  only gains a `new_nt` constructor. An executable that imports anything is
-  refused until `ntdll` binds imports; cross-process creation
-  (`NtCreateUserProcess`) is left for the `ntdll` milestone.
+  only gains a `new_nt` constructor. Cross-process creation
+  (`NtCreateUserProcess`) is left for the `kernelbase` milestone.
+- **Our `ntdll`** (`personalities/nt/ntdll`, `crates/poly-ldr`,
+  `crates/poly-rtl`, [ADR 0071](adr/0071-our-ntdll-a-real-pe-dll-built-from-rust.md)):
+  a real PE DLL built from Rust for `x86_64-pc-windows-msvc` (`-Zbuild-std`,
+  `rust-lld`), built by `cargo xtask` once per source version (cached by
+  content hash, shared by the checkout's worktrees) and embedded in the
+  kernel, which also writes it to `C:\Windows\System32`. Its
+  `LdrInitializeThunk` makes the process heap, runs the host-tested loader
+  (`poly-ldr`: imports by name and ordinal, forwarders, API sets, bound and
+  delay-load imports, relocations, static TLS, `DllMain` and TLS callback
+  order, reference counts, the DLL search order from the process
+  parameters) under the loader lock, then calls the entry point;
+  `KiUserApcDispatcher` and `KiUserExceptionDispatcher` (vectored handlers,
+  then `poly-seh` over the modules' `.pdata`) are where the kernel delivers
+  APCs and exceptions. `poly-rtl` is the heap, counted strings, the status
+  table and critical sections behind the `Rtl*` exports.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →
@@ -1326,10 +1351,10 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   generic park/unpark (ADR 0053), drains the wakes after each call and wakes
   the threads, and cancels waits on timeout, alert or APC.
 - **APCs** (ADR 0065): `NtQueueApcThread` queues a user APC, delivered at an
-  alertable `NtWaitFor*`/`NtDelayExecution` or `NtTestAlert` through a
-  per-process APC trampoline that runs the routine and re-enters the kernel
-  (`PolyResumeApc`) to restore the interrupted context (our stand-in for
-  `KiUserApcDispatcher`). `NtDelayExecution` and `NtYieldExecution` round out
+  alertable `NtWaitFor*`/`NtDelayExecution` or `NtTestAlert` through
+  `ntdll`'s `KiUserApcDispatcher`, which runs the routine and re-enters the
+  kernel (`PolyResumeApc`) to restore the interrupted context the kernel
+  kept. `NtDelayExecution` and `NtYieldExecution` round out
   the dispatcher services.
 - **Structured exception handling** (`crates/poly-seh`,
   `personalities/nt/src/exception.rs`, `kernel/src/nt/exception.rs`,
@@ -1344,10 +1369,9 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   into an `EXCEPTION_RECORD` (the documented `STATUS_*` codes and
   parameters), the kernel builds a `CONTEXT` from the trap frame and FPU
   state, and both are written to the thread's user stack before it resumes
-  in the process's user-mode dispatcher; `NtContinue` restores a `CONTEXT`.
-  Until our `ntdll` provides `KiUserExceptionDispatcher`, a process names its
-  dispatcher with Poly's own `PolySetExceptionDispatcher` (as threads use the
-  trampolines of ADR 0065). An unhandled exception (no dispatcher, second
+  in the process's user-mode dispatcher, `ntdll`'s `KiUserExceptionDispatcher`
+  (ADR 0071); `NtContinue` restores a `CONTEXT`. An unhandled exception (no
+  handler, second
   chance, a fail-fast) ends the process with the exception code, after a
   `.pdata`-walked backtrace in the log.
 - **File I/O** (`personalities/nt/src/io`, `kernel/src/nt/io.rs`, ADR 0067):
