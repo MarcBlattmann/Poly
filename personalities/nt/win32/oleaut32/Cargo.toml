@@ -1,0 +1,21 @@
+[package]
+name = "oleaut32"
+description = "Our oleaut32.dll (ADR 0087): BSTRs and VARIANTs, exported at the ordinals programs import them by"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "oleaut32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[build-dependencies]
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true

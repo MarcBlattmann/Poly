@@ -69,6 +69,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oleaut32"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "poly-console"
 version = "0.0.1"
 
@@ -123,5 +131,13 @@ version = "0.0.1"
 dependencies = [
  "poly-crt",
  "poly-win32-crt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "user32"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
  "poly-win32-rt",
 ]

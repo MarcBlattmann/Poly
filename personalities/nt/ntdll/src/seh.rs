@@ -85,6 +85,11 @@ impl Handlers for CallHandlers {
         dc[32..40].copy_from_slice(&dispatch.target_ip.to_le_bytes());
         let mut ctx_bytes = context.to_bytes();
         dc[40..48].copy_from_slice(&(ctx_bytes.as_mut_ptr() as u64).to_le_bytes());
+        // LanguageHandler, HandlerData and ScopeIndex (`winnt.h`), which
+        // `__C_specific_handler` reads (ADR 0087).
+        dc[0x30..0x38].copy_from_slice(&dispatch.handler.routine.to_le_bytes());
+        dc[0x38..0x40].copy_from_slice(&dispatch.handler.data.to_le_bytes());
+        dc[0x48..0x4C].copy_from_slice(&dispatch.scope_index.to_le_bytes());
         let mut rec_bytes = record.to_bytes();
         type HandlerFn = unsafe extern "system" fn(*mut u8, u64, *mut u8, *mut u8) -> u32;
         let handler = dispatch.handler.routine;
@@ -98,6 +103,7 @@ impl Handlers for CallHandlers {
                 dc.as_mut_ptr(),
             )
         };
+        dispatch.scope_index = u32::from_le_bytes(dc[0x48..0x4C].try_into().expect("4 bytes"));
         // A handler that fixed the context up wrote into `ctx_bytes`.
         if let Some(c) = Context::from_bytes(&ctx_bytes) {
             *context = c;
@@ -249,44 +255,167 @@ pub unsafe extern "C" fn RtlUnwindEx(
     unsafe { core::arch::asm!("int 0x29", in("ecx") 2u32, options(noreturn)) }
 }
 
-/// `RtlCaptureContext`: fill `*context` with the caller's registers. A
-/// partial capture (integer and control registers), enough for an unwind
-/// to start; the legacy FP area is left zero.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlCaptureContext(context: *mut u8) {
-    let mut ctx = Context::default();
-    // SAFETY: read the caller's saved registers from this frame.
-    unsafe {
-        let rsp: u64;
-        let rbp: u64;
-        core::arch::asm!("mov {}, rsp", out(reg) rsp, options(nostack, nomem));
-        core::arch::asm!("mov {}, rbp", out(reg) rbp, options(nostack, nomem));
-        ctx.set_rsp(rsp + 8); // the caller's RSP: past our return address
-        ctx.rip = (rsp as *const u64).read(); // our return address
-        ctx.gpr[5] = rbp; // RBP
-    }
-    // SAFETY: a valid CONTEXT buffer.
-    unsafe { write_context(context, &ctx) };
+// `RtlCaptureContext(CONTEXT*)` (Learn: "Retrieves a context record in the
+// context of the caller"; ADR 0087): every integer register as it was at
+// the call, `Rsp` and `Rip` as they are after the return, the segment
+// registers, `EFlags`, `MxCsr` and the `FXSAVE` image, at `winnt.h`'s
+// offsets; `ContextFlags` is `CONTEXT_CONTROL | CONTEXT_INTEGER |
+// CONTEXT_SEGMENTS | CONTEXT_FLOATING_POINT`. The `CONTEXT` is 16-byte
+// aligned (`DECLSPEC_ALIGN(16)`), as `FXSAVE` needs. Assembly, so that no
+// prologue changes what the caller left.
+core::arch::global_asm!(
+    r#"
+    .text
+    .globl RtlCaptureContext
+    .p2align 4
+RtlCaptureContext:
+    pushfq
+    mov qword ptr [rcx + 0x78], rax
+    mov qword ptr [rcx + 0x80], rcx
+    mov qword ptr [rcx + 0x88], rdx
+    mov qword ptr [rcx + 0x90], rbx
+    mov qword ptr [rcx + 0xA0], rbp
+    mov qword ptr [rcx + 0xA8], rsi
+    mov qword ptr [rcx + 0xB0], rdi
+    mov qword ptr [rcx + 0xB8], r8
+    mov qword ptr [rcx + 0xC0], r9
+    mov qword ptr [rcx + 0xC8], r10
+    mov qword ptr [rcx + 0xD0], r11
+    mov qword ptr [rcx + 0xD8], r12
+    mov qword ptr [rcx + 0xE0], r13
+    mov qword ptr [rcx + 0xE8], r14
+    mov qword ptr [rcx + 0xF0], r15
+    mov word ptr [rcx + 0x38], cs
+    mov word ptr [rcx + 0x3A], ds
+    mov word ptr [rcx + 0x3C], es
+    mov word ptr [rcx + 0x3E], fs
+    mov word ptr [rcx + 0x40], gs
+    mov word ptr [rcx + 0x42], ss
+    fxsave [rcx + 0x100]
+    stmxcsr dword ptr [rcx + 0x34]
+    pop rax
+    mov dword ptr [rcx + 0x44], eax
+    lea rax, [rsp + 8]
+    mov qword ptr [rcx + 0x98], rax
+    mov rax, qword ptr [rsp]
+    mov qword ptr [rcx + 0xF8], rax
+    mov dword ptr [rcx + 0x30], 0x10000F
+    mov rax, qword ptr [rcx + 0x78]
+    ret
+"#
+);
+
+unsafe extern "C" {
+    fn RtlCaptureContext(context: *mut u8);
 }
 
-/// `RtlRaiseException`: capture the context and raise `*record` first
-/// chance.
+/// A `CONTEXT` buffer with the alignment `winnt.h` declares.
+#[repr(C, align(16))]
+struct ContextBuf([u8; CONTEXT_SIZE]);
+
+/// `RtlRaiseException`: raise `*record` first chance from the caller's
+/// context (ADR 0087): this function's own context (`RtlCaptureContext`)
+/// unwound one frame, so the exception address is the return address in
+/// the caller, which `ExceptionAddress` is set to, and a handler that
+/// continues execution resumes there: the call returns.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlRaiseException(record: *const u8) -> ! {
-    let mut ctx = Context::default();
-    // SAFETY: capture this frame's RSP/RIP.
-    unsafe {
-        let rsp: u64;
-        core::arch::asm!("mov {}, rsp", out(reg) rsp, options(nostack, nomem));
-        ctx.set_rsp(rsp);
-        ctx.rip = RtlRaiseException as *const () as u64;
+#[inline(never)]
+pub unsafe extern "C" fn RtlRaiseException(record: *mut u8) {
+    let mut buf = ContextBuf([0; CONTEXT_SIZE]);
+    // SAFETY: an aligned CONTEXT buffer.
+    unsafe { RtlCaptureContext(buf.0.as_mut_ptr()) };
+    let mut ctx = Context::from_bytes(&buf.0).unwrap_or_default();
+    if let Ok(Some(fe)) = Proc.function_entry(ctx.rip) {
+        let mut caller = ctx.clone();
+        if virtual_unwind(0, fe.image_base, ctx.rip, &fe.function, &mut caller, &Proc, None).is_ok() {
+            ctx = caller;
+        }
     }
+    // SAFETY: ExceptionAddress (at 16) of the caller's record.
+    unsafe { record.add(16).cast::<u64>().write_unaligned(ctx.rip) };
     let mut bytes = ctx.to_bytes();
-    // SAFETY: a valid record and context.
+    // SAFETY: a valid record and context; if a handler continues, the
+    // kernel resumes the caller's context, so this does not return here.
     unsafe { syscalls::NtRaiseException(record, bytes.as_mut_ptr(), 1) };
-    // SAFETY: if the exception was handled the kernel resumes elsewhere; a
-    // return here is a fail-fast.
+    // SAFETY: NtRaiseException only comes back on a bad argument.
     unsafe { core::arch::asm!("int 0x29", in("ecx") 2u32, options(noreturn)) }
+}
+
+// ----- __C_specific_handler (ADR 0087; `poly_seh::scope`) -----------------------------
+
+/// The program's filters, termination handlers and the unwind to an
+/// `__except` block, called with the x64 ABI.
+struct ScopeCaller {
+    image_base: u64,
+    frame: u64,
+    record: *mut u8,
+    context: *mut u8,
+    dc: *mut u8,
+}
+
+impl poly_seh::scope::ScopeCalls for ScopeCaller {
+    fn filter(&mut self, rva: u32) -> i32 {
+        // EXCEPTION_POINTERS: the record and the context (`winnt.h`).
+        let mut pointers = [self.record as u64, self.context as u64];
+        type Filter = unsafe extern "system" fn(*mut u64, u64) -> i32;
+        let f = self.image_base + u64::from(rva);
+        // SAFETY: the compiler's filter at this address, called as its
+        // handler data says.
+        unsafe { core::mem::transmute::<u64, Filter>(f)(pointers.as_mut_ptr(), self.frame) }
+    }
+
+    fn termination(&mut self, rva: u32) {
+        type Termination = unsafe extern "system" fn(u8, u64);
+        let f = self.image_base + u64::from(rva);
+        // SAFETY: as above.
+        unsafe { core::mem::transmute::<u64, Termination>(f)(1, self.frame) }
+    }
+
+    fn set_scope_index(&mut self, index: u32) {
+        // SAFETY: DISPATCHER_CONTEXT.ScopeIndex at 0x48.
+        unsafe { self.dc.add(0x48).cast::<u32>().write_unaligned(index) };
+    }
+
+    fn unwind_to(&mut self, jump_target: u32) {
+        // SAFETY: the record is valid; the return value is its code.
+        let code = unsafe { self.record.cast::<u32>().read_unaligned() };
+        let target = self.image_base + u64::from(jump_target);
+        // SAFETY: DISPATCHER_CONTEXT.ContextRecord (0x28) and HistoryTable
+        // (0x40); unwinding to the establisher frame does not return.
+        unsafe {
+            let ctx = self.dc.add(0x28).cast::<*mut u8>().read_unaligned();
+            let history = self.dc.add(0x40).cast::<*mut u8>().read_unaligned();
+            RtlUnwindEx(self.frame, target, self.record, u64::from(code), ctx, history)
+        }
+    }
+}
+
+/// `__C_specific_handler(ExceptionRecord, EstablisherFrame, ContextRecord,
+/// DispatcherContext)`: the C compiler's language-specific handler for
+/// `__try` blocks; the decisions are `poly_seh::scope`'s.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __C_specific_handler(record: *mut u8, frame: u64, context: *mut u8, dc: *mut u8) -> u32 {
+    // SAFETY: the dispatcher's DISPATCHER_CONTEXT (`winnt.h`): ControlPc 0,
+    // ImageBase 8, TargetIp 0x20, HandlerData 0x38, ScopeIndex 0x48; the
+    // record's ExceptionFlags at 4.
+    let (pc, base, target, data, index, flags) = unsafe {
+        (
+            dc.cast::<u64>().read_unaligned(),
+            dc.add(8).cast::<u64>().read_unaligned(),
+            dc.add(0x20).cast::<u64>().read_unaligned(),
+            dc.add(0x38).cast::<u64>().read_unaligned(),
+            dc.add(0x48).cast::<u32>().read_unaligned(),
+            record.add(4).cast::<u32>().read_unaligned(),
+        )
+    };
+    let Ok(table) = poly_seh::scope::read_table(&Proc, data) else { return 1 };
+    let rva = |a: u64| u32::try_from(a.wrapping_sub(base)).unwrap_or(u32::MAX);
+    let mut calls = ScopeCaller { image_base: base, frame, record, context, dc };
+    let target = if target == 0 { None } else { Some(rva(target)) };
+    match poly_seh::scope::handle(&table, flags, rva(pc), target, index, &mut calls) {
+        poly_seh::Disposition::ContinueExecution => 0,
+        _ => 1,
+    }
 }
 
 // `KiUserApcDispatcher`: the kernel redirects an alertable thread here

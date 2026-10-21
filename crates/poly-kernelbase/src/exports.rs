@@ -219,7 +219,76 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("SystemTimeToFileTime", "api-ms-win-core-timezone-l1-1-0"),
     ("GetSystemTime", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetLocalTime", "api-ms-win-core-sysinfo-l1-1-0"),
+    // ----- what 7-Zip's command line and MSVC's start-up code import (ADR
+    // 0087). The contract is the oldest version of the one each page's
+    // "APILocation" metadata names (as ADR 0083 reads advapi32's).
+    ("ResumeThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SuspendThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetProcessTimes", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetStartupInfoW", "api-ms-win-core-processthreads-l1-1-0"),
+    ("IsProcessorFeaturePresent", "api-ms-win-core-processthreads-l1-1-1"),
+    ("GetProcessAffinityMask", "api-ms-win-core-processtopology-obsolete-l1-1-0"),
+    ("SetProcessAffinityMask", "api-ms-win-core-processtopology-obsolete-l1-1-0"),
+    ("SetThreadAffinityMask", "api-ms-win-core-processtopology-obsolete-l1-1-0"),
+    ("OpenEventW", "api-ms-win-core-synch-l1-1-0"),
+    ("RaiseException", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("SetUnhandledExceptionFilter", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("UnhandledExceptionFilter", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("InitializeSListHead", "api-ms-win-core-interlocked-l1-1-0"),
+    ("InterlockedPushEntrySList", "api-ms-win-core-interlocked-l1-1-0"),
+    ("InterlockedPopEntrySList", "api-ms-win-core-interlocked-l1-1-0"),
+    ("InterlockedFlushSList", "api-ms-win-core-interlocked-l1-1-0"),
+    ("QueryDepthSList", "api-ms-win-core-interlocked-l1-1-0"),
+    ("GetModuleHandleA", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("GetLargePageMinimum", "api-ms-win-core-memory-l1-1-1"),
+    ("GlobalMemoryStatusEx", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("DeviceIoControl", "api-ms-win-core-io-l1-1-0"),
+    ("GetDiskFreeSpaceW", "api-ms-win-core-file-l1-1-0"),
+    ("GetDiskFreeSpaceExW", "api-ms-win-core-file-l1-1-0"),
+    ("GetLogicalDrives", "api-ms-win-core-file-l1-1-0"),
+    ("GetLogicalDriveStringsW", "api-ms-win-core-file-l1-1-0"),
+    ("AreFileApisANSI", "api-ms-win-core-file-l1-2-2"),
+    ("SetFileApisToANSI", "api-ms-win-core-file-l1-2-2"),
+    ("SetFileApisToOEM", "api-ms-win-core-file-l1-2-2"),
+    ("FindFirstStreamW", "api-ms-win-core-file-l1-2-2"),
+    ("FindNextStreamW", "api-ms-win-core-file-l1-2-2"),
+    ("CreateHardLinkW", "api-ms-win-core-file-l2-1-0"),
+    ("MoveFileWithProgressW", "api-ms-win-core-file-l2-1-0"),
+    ("MoveFileW", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    ("FileTimeToDosDateTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    ("DosDateTimeToFileTime", "api-ms-win-core-kernel32-legacy-l1-1-0"),
 ];
+
+/// `(function, contract)` of the `kernel32` exports that forward to our
+/// `ntdll` (ADR 0087): their pages' "APILocation" metadata names
+/// `api-ms-win-core-rtlsupport-*` and `ntdll.dll`, which Poly's API-set
+/// table gives to `ntdll` (ADR 0071).
+pub const KERNEL32_NTDLL_FORWARDS: &[(&str, &str)] = &[
+    ("RtlCaptureContext", "api-ms-win-core-rtlsupport-l1-1-0"),
+    ("RtlLookupFunctionEntry", "api-ms-win-core-rtlsupport-l1-1-0"),
+    ("RtlVirtualUnwind", "api-ms-win-core-rtlsupport-l1-1-0"),
+    ("RtlUnwindEx", "api-ms-win-core-rtlsupport-l1-1-0"),
+    ("RtlPcToFileHeader", "api-ms-win-core-rtlsupport-l1-1-0"),
+];
+
+/// The exports of our `oleaut32.dll` (ADR 0087) with the ordinals programs
+/// import them by (Visual C++'s import library binds `oleaut32` by
+/// ordinal): export-table data, from Wine's `oleaut32.spec`.
+pub const OLEAUT32_EXPORTS: &[(&str, u16)] = &[
+    ("SysAllocString", 2),
+    ("SysReAllocString", 3),
+    ("SysAllocStringLen", 4),
+    ("SysReAllocStringLen", 5),
+    ("SysFreeString", 6),
+    ("SysStringLen", 7),
+    ("VariantInit", 8),
+    ("VariantClear", 9),
+    ("VariantCopy", 10),
+];
+
+/// The exports of our `user32.dll` (ADR 0087): two string functions until
+/// windows exist (Phase 6).
+pub const USER32_EXPORTS: &[&str] = &["CharUpperW", "CharPrevExA"];
 
 /// The functions `kernel32.dll` implements itself: the global-memory
 /// functions and (second slice) the `lstr*` string functions, whose Learn
@@ -245,7 +314,11 @@ pub fn kernelbase_exports() -> impl Iterator<Item = &'static str> {
 /// The forwarder string of `kernel32!name`, as the export directory holds
 /// it (PE format: "Export Address Table": `DLLName.FunctionName`).
 pub fn forwarder(name: &str) -> Option<alloc::string::String> {
-    KERNEL32_FORWARDS.iter().find(|&&(n, _)| n == name).map(|&(n, c)| alloc::format!("{c}.{n}"))
+    KERNEL32_FORWARDS
+        .iter()
+        .chain(KERNEL32_NTDLL_FORWARDS)
+        .find(|&&(n, _)| n == name)
+        .map(|&(n, c)| alloc::format!("{c}.{n}"))
 }
 
 #[cfg(test)]
@@ -264,9 +337,24 @@ mod tests {
     }
 
     #[test]
+    fn rtlsupport_contracts_go_to_ntdll() {
+        for &(name, contract) in KERNEL32_NTDLL_FORWARDS {
+            let w: std::vec::Vec<u16> = contract.encode_utf16().collect();
+            assert_eq!(resolve(&w), ApiSet::Host("ntdll.dll"), "{name} -> {contract}");
+        }
+        assert_eq!(
+            forwarder("RtlCaptureContext").as_deref(),
+            Some("api-ms-win-core-rtlsupport-l1-1-0.RtlCaptureContext")
+        );
+        let ordinals: BTreeSet<u16> = OLEAUT32_EXPORTS.iter().map(|&(_, o)| o).collect();
+        assert_eq!(ordinals.len(), OLEAUT32_EXPORTS.len());
+    }
+
+    #[test]
     fn names_are_unique() {
         let mut seen = BTreeSet::new();
-        for name in kernelbase_exports().chain(KERNEL32_OWN.iter().copied()) {
+        let ntdll = KERNEL32_NTDLL_FORWARDS.iter().map(|&(n, _)| n);
+        for name in kernelbase_exports().chain(KERNEL32_OWN.iter().copied()).chain(ntdll) {
             assert!(seen.insert(name), "{name} listed twice");
         }
         assert_eq!(forwarder("CreateFileW").as_deref(), Some("api-ms-win-core-file-l1-1-0.CreateFileW"));

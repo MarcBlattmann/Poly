@@ -77,6 +77,11 @@ pub static UCRTBASE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ucrtbase.
 pub static MSVCRT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcrt.dll"));
 pub static CRTTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crttest.exe"));
 
+/// The first functions of `user32.dll` and `oleaut32.dll` (ADR 0087),
+/// installed in `C:\Windows\System32` by [`layout`]; empty without `xtask`.
+pub static USER32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/user32.dll"));
+pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.dll"));
+
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
 use crate::thread;
@@ -141,6 +146,9 @@ struct NtState {
     ctl: BTreeMap<ThreadRef, ThreadCtl>,
     /// Armed waitable timers, keyed by their object id (`NtSetTimer`).
     timers: BTreeMap<ObjectId, Arc<sched::NtTimer>>,
+    /// Each live process's creation time, a `FILETIME`
+    /// (`NtQueryInformationProcess(ProcessTimes)`, ADR 0087).
+    created: BTreeMap<ProcessId, u64>,
 }
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
@@ -181,6 +189,7 @@ fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
             sections: Sections::default(),
             ctl: BTreeMap::new(),
             timers: BTreeMap::new(),
+            created: BTreeMap::new(),
         };
         // The Windows folders on C: and the registry values that follow
         // them (ADR 0073), before file I/O attaches C:.
@@ -366,6 +375,12 @@ impl NtKernel for Kernel {
         crate::thread::online_cpus().len() as u32
     }
 
+    fn process_times(&self, pid: ProcessId) -> Option<[u64; 3]> {
+        let created = with(|s| s.created.get(&pid).copied())?;
+        let cpu = crate::process::find(pid.0).map(|p| crate::cputime::process(&p)).unwrap_or_default();
+        Some([created, cpu.system_ns / 100, cpu.user_ns / 100])
+    }
+
     fn save_hive(&mut self, file: &str, data: &[u8]) -> Result<(), NtStatus> {
         registry::save(file, data)
     }
@@ -507,6 +522,7 @@ fn start_params(
         poly_pe::Pe::parse(file).is_ok_and(|pe| pe.info().optional.subsystem == poly_pe::subsystem::WINDOWS_CUI);
     let started = with(|s| {
         s.processes.insert(pid, NtProcess::new(pid));
+        s.created.insert(pid, registry::filetime_now());
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         let mut b = MemBackend { memory, sections: &mut s.sections };
         let start = exec::start_process(&mut s.sys, proc, &mut b, file, NTDLL, None, thread).and_then(|ps| {
@@ -541,6 +557,7 @@ fn start_params(
                 opened,
             )),
             Err(e) => {
+                s.created.remove(&pid);
                 let mut proc = s.processes.remove(&pid).expect("just inserted");
                 let mut b = MemBackend { memory, sections: &mut s.sections };
                 exec::process_exit(&mut s.sys, &mut proc, &mut b);
@@ -644,6 +661,7 @@ pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>)
 /// objects, views and handles. Its memory itself goes with `user::Memory`.
 pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     with(|s| {
+        s.created.remove(&ProcessId(pid));
         if let Some(mut proc) = s.processes.remove(&ProcessId(pid)) {
             let mut b = MemBackend { memory, sections: &mut s.sections };
             exec::process_exit(&mut s.sys, &mut proc, &mut b);

@@ -217,6 +217,9 @@ pub fn open_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
 /// caller's own process only) and the process id are reported.
 pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
+    if class as u32 == PROCESS_TIMES {
+        return query_process_times(k, h, buf, length, ret);
+    }
     if class as u32 != PROCESS_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -300,6 +303,20 @@ pub fn set_context_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<
     ctx.read_from(&buf, want);
     k.set_context(tid, &ctx, want)?;
     Ok(STATUS_SUCCESS)
+}
+
+/// `NtQueryInformationProcess(ProcessTimes)` (ADR 0087): the creation time
+/// Poly noted when the process was made (a `FILETIME`), an exit time of 0
+/// (Poly keeps no times of ended processes), and the kernel and user CPU
+/// time the kernel counted ([`NtKernel::process_times`]), in 100 ns units.
+fn query_process_times<K: NtKernel>(k: &mut K, h: u64, buf: u64, length: u64, ret: u64) -> Result<NtStatus> {
+    let pid = process_of(k, Handle(h), PROCESS_QUERY_INFORMATION)?;
+    let [created, kernel, user] = k.process_times(pid).unwrap_or([0; 3]);
+    let mut b = [0u8; KERNEL_USER_TIMES_SIZE];
+    b[0..8].copy_from_slice(&created.to_le_bytes());
+    b[16..24].copy_from_slice(&kernel.to_le_bytes());
+    b[24..32].copy_from_slice(&user.to_le_bytes());
+    write_info(k, buf, length, ret, &b)
 }
 
 fn write_info<K: NtKernel>(k: &mut K, buf: u64, length: u64, ret: u64, info: &[u8]) -> Result<NtStatus> {

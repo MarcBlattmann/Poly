@@ -1326,7 +1326,7 @@
 {"symbol":"_CIpow","arch":["i386"],"src":["wine-spec"]},
 {"symbol":"_CIsin","arch":["i386"],"src":["wine-spec"]},
 {"symbol":"_CIsqrt","arch":["i386"],"src":["wine-spec"]},
-{"symbol":"__C_specific_handler","arch":["!i386,!arm64ec","arm64ec"],"src":["wine-spec"]},
+{"symbol":"__C_specific_handler","status":"claimed","claimed_by":"7zip","arch":["!i386,!arm64ec","arm64ec"],"src":["wine-spec"]},
 {"symbol":"__chkstk","arch":["!i386"],"src":["wine-spec"]},
 {"symbol":"__chkstk_arm64ec","arch":["arm64ec"],"src":["wine-spec"]},
 {"symbol":"__isascii","src":["wine-spec"]},

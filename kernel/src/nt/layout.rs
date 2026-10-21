@@ -123,12 +123,14 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         }
     }
     // And kernelbase.dll and kernel32.dll (ADR 0079), ucrtbase.dll and
-    // msvcrt.dll (ADR 0084).
+    // msvcrt.dll (ADR 0084), user32.dll and oleaut32.dll (ADR 0087).
     for (name, bytes) in [
         ("kernelbase.dll", super::KERNELBASE),
         ("kernel32.dll", super::KERNEL32),
         ("ucrtbase.dll", super::UCRTBASE),
         ("msvcrt.dll", super::MSVCRT),
+        ("user32.dll", super::USER32),
+        ("oleaut32.dll", super::OLEAUT32),
     ] {
         if bytes.is_empty() {
             continue;

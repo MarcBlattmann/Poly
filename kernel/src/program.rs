@@ -190,7 +190,7 @@ pub fn prepare_as(
 }
 
 /// `path` and arguments split from a command line (`run`, `poly.init`
-/// takes only a path).
+/// takes its arguments from `poly.init.arg=` words).
 pub fn split_args(path: &str, args: &[String]) -> Vec<Vec<u8>> {
     let mut argv = Vec::with_capacity(args.len() + 1);
     argv.push(path.as_bytes().to_vec());
@@ -242,7 +242,9 @@ pub fn run_init(boot: &BootInfo) -> bool {
     let traced = boot.has_flag(testrun::CAPTURE_FLAG);
     kprintln!("init: running {path}{}", if traced { " (traced)" } else { "" });
     let identity = crate::testinit::identity(boot).map_err(ExecPathError::Unsupported);
-    match identity.and_then(|id| run_first(path, traced, id.as_ref())) {
+    // Its arguments: one `poly.init.arg=` word each (ADR 0087).
+    let args: Vec<&str> = boot.args(testrun::INIT_ARGV).collect();
+    match identity.and_then(|id| run_first(path, &args, traced, id.as_ref())) {
         Ok((pid, status)) => {
             crate::testinit::report_output_files(boot);
             testrun::exit(pid, status, crate::nt::take_exit_status(pid));
@@ -259,13 +261,15 @@ pub fn run_init(boot: &BootInfo) -> bool {
     true
 }
 
-/// The first program, as `identity` if the boot gave one (ADR 0081).
+/// The first program with `args` after its path, as `identity` if the boot
+/// gave one (ADR 0081).
 fn run_first(
     path: &str,
+    args: &[&str],
     traced: bool,
     identity: Option<&crate::testinit::Identity>,
 ) -> Result<(u32, ExitStatus), ExecPathError> {
-    let argv: [&[u8]; 1] = [path.as_bytes()];
+    let argv: Vec<&[u8]> = core::iter::once(path).chain(args.iter().copied()).map(str::as_bytes).collect();
     // A traced program runs as the child of the kernel's init (ADR 0064).
     let init = traced && crate::testinit::start();
     let prepared = prepare_as(path.as_bytes(), &argv, &[], traced, identity.map(|id| &id.creds))?;
