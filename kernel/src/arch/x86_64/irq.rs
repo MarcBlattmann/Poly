@@ -19,6 +19,12 @@
 //! all go to the boot CPU; each CPU takes its own tick and the IPIs sent
 //! to it. Panics stop the other CPUs with an NMI (`smp.rs`).
 //!
+//! Handlers run on the CPU's interrupt stack (`irqstack.rs`, ADR 0061), not
+//! on the interrupted thread's. What has to happen on the thread's own
+//! stack, switching threads (the tick's preemption, the reschedule IPI),
+//! the handler only notes ([`defer`]); [`run_deferred`] does it on the way
+//! out, after the switch back.
+//!
 //! # Drivers
 //!
 //! [`allocate_vector`]`(handler, data)` reserves a device vector and installs
@@ -196,8 +202,34 @@ pub(super) fn set_interrupted_user(user: bool) {
     super::percpu::this().interrupted_user().store(user, Ordering::Relaxed);
 }
 
-/// Called by the IDT stub of every vector from 32 up, with interrupts
-/// disabled, on the interrupted thread's stack.
+/// Deferred work: the tick asks for a preemption check.
+const PENDING_PREEMPT: u8 = 1;
+/// Deferred work: a reschedule IPI asks for a switch.
+const PENDING_RESCHEDULE: u8 = 2;
+
+/// Leave `work` (`PENDING_*`) for [`run_deferred`] on this CPU.
+fn defer(work: u8) {
+    super::percpu::this().irq_pending.fetch_or(work, Ordering::Relaxed);
+}
+
+/// The way out of an interrupt, on the interrupted thread's stack with
+/// interrupts disabled, after the handler and its EOI: switch threads if
+/// the handler asked for it. May return much later, on another CPU (the
+/// thread was switched out with its trap frame); a new thread never
+/// returns through here at all.
+pub(super) fn run_deferred() {
+    let work = super::percpu::this().irq_pending.swap(0, Ordering::Relaxed);
+    if work & PENDING_PREEMPT != 0 {
+        crate::thread::preempt_tick();
+    }
+    if work & PENDING_RESCHEDULE != 0 {
+        crate::thread::on_reschedule();
+    }
+}
+
+/// Called by the interrupt entry of every vector from 32 up, with
+/// interrupts disabled, on this CPU's interrupt stack. Must not switch
+/// threads or block: what needs that is deferred to [`run_deferred`].
 pub(super) fn dispatch(vector: u8) {
     let depth = depth();
     depth.fetch_add(1, Ordering::Relaxed);
@@ -217,18 +249,14 @@ pub(super) fn dispatch(vector: u8) {
             super::time::on_tick();
             crate::cputime::tick(super::percpu::this().interrupted_user().load(Ordering::Relaxed));
             apic::eoi();
-            depth.fetch_sub(1, Ordering::Relaxed);
-            // After the EOI, on this thread's own stack (see preempt_tick):
-            // may switch threads and return much later.
             crate::thread::on_timer_tick();
-            return;
+            // The time slice: checked after the EOI, on the thread's own
+            // stack (see `thread::preempt_tick`).
+            defer(PENDING_PREEMPT);
         }
         RESCHEDULE_VECTOR => {
             apic::eoi();
-            depth.fetch_sub(1, Ordering::Relaxed);
-            // Like the tick: the switch happens on this thread's stack.
-            crate::thread::on_reschedule();
-            return;
+            defer(PENDING_RESCHEDULE);
         }
         TLB_VECTOR => {
             super::tlb::service();

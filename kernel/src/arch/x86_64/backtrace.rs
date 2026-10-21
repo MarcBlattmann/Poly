@@ -63,19 +63,33 @@ pub fn unregister_thread_stack(slot: usize) {
     THREAD_STACKS[slot].store(0, Ordering::Release);
 }
 
+/// Each CPU's interrupt stack (`irqstack.rs`), in the same format.
+static INTERRUPT_STACKS: [AtomicU64; super::MAX_CPUS] = [const { AtomicU64::new(0) }; super::MAX_CPUS];
+
+/// Let backtraces walk CPU `cpu`'s interrupt stack at `base..base + len`,
+/// which stays mapped for good.
+pub fn register_interrupt_stack(cpu: usize, base: u64, len: u64) {
+    assert!(base.is_multiple_of(PAGE) && len.is_multiple_of(PAGE), "interrupt stack not page-aligned");
+    assert!((1..PAGE).contains(&(len / PAGE)), "interrupt stack size out of range");
+    INTERRUPT_STACKS[cpu].store(base | (len / PAGE), Ordering::Release);
+}
+
+/// A registered stack's range from its word (empty for 0).
+fn range_of(word: u64) -> Range<u64> {
+    let base = word & !(PAGE - 1);
+    base..base + (word & (PAGE - 1)) * PAGE
+}
+
 /// Every stack the kernel runs on: the boot stack, the double-fault and NMI
-/// IST stacks and the registered thread stacks (empty ranges for free
-/// slots).
-fn stacks() -> [Range<u64>; 3 + THREAD_STACK_SLOTS] {
+/// IST stacks, the registered thread stacks and the CPUs' interrupt stacks
+/// (empty ranges for free slots).
+fn stacks() -> [Range<u64>; 3 + THREAD_STACK_SLOTS + super::MAX_CPUS] {
     core::array::from_fn(|i| match i {
         0 => (&raw const __boot_stack_bottom) as u64..(&raw const __boot_stack_top) as u64,
         1 => super::gdt::double_fault_stack(),
         2 => super::gdt::nmi_stack(),
-        _ => {
-            let word = THREAD_STACKS[i - 3].load(Ordering::Acquire);
-            let base = word & !(PAGE - 1);
-            base..base + (word & (PAGE - 1)) * PAGE
-        }
+        i if i < 3 + THREAD_STACK_SLOTS => range_of(THREAD_STACKS[i - 3].load(Ordering::Acquire)),
+        i => range_of(INTERRUPT_STACKS[i - 3 - THREAD_STACK_SLOTS].load(Ordering::Acquire)),
     })
 }
 
@@ -102,11 +116,13 @@ fn walk(pc: u64, fp: u64, mut f: impl FnMut(usize, u64)) -> End {
     f(0, pc);
     let read = |addr: u64| {
         // SAFETY: the walker only reads aligned words inside one of
-        // `stacks()`: the boot stack (.bss), a static, and thread stacks,
-        // which stay mapped while registered.
+        // `stacks()`: the boot stack (.bss), statics, thread stacks, which
+        // stay mapped while registered, and interrupt stacks, mapped for
+        // good.
         unsafe { (addr as *const u64).read_volatile() }
     };
-    let mut walker = FrameWalker::new(fp, &stacks(), MAX_DEPTH, read);
+    let stacks = stacks();
+    let mut walker = FrameWalker::new(fp, &stacks, MAX_DEPTH, read);
     for (n, ret) in (1..).zip(walker.by_ref()) {
         f(n, ret);
     }

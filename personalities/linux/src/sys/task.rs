@@ -82,11 +82,18 @@ pub fn clone3(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let mut bytes = [0u8; clone::CLONE_ARGS_SIZE_VER2];
     k.copy_from_user(a.ptr(0), &mut bytes[..known])?;
     let mut extra_nonzero = false;
-    if size > known {
-        let mut rest = [0u8; crate::abi::PAGE_SIZE as usize];
-        let at = a.ptr(0).offset(known as u64).ok_or(Errno::EFAULT)?;
-        k.copy_from_user(at, &mut rest[..size - known])?;
-        extra_nonzero = rest[..size - known].iter().any(|&b| b != 0);
+    // The bytes past the fields we know, up to a page: read in small pieces,
+    // not into a page-sized buffer, which would make this frame alone take
+    // a quarter of a kernel thread stack (the clone path is the deepest
+    // system call there is).
+    let mut piece = [0u8; 64];
+    let mut done = known;
+    while done < size {
+        let n = (size - done).min(piece.len());
+        let at = a.ptr(0).offset(done as u64).ok_or(Errno::EFAULT)?;
+        k.copy_from_user(at, &mut piece[..n])?;
+        extra_nonzero |= piece[..n].iter().any(|&b| b != 0);
+        done += n;
     }
     let req = clone::decode_clone3(&CloneArgs::from_bytes(&bytes[..known]), extra_nonzero, own_pid(k))?;
     spawn(k, &req)
