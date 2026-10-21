@@ -175,6 +175,8 @@ impl OpenFile {
             | OpenFlags::DIRECT.0
             | OpenFlags::LARGEFILE.0
             | OpenFlags::NOATIME.0
+            | OpenFlags::DIRECTORY.0
+            | OpenFlags::NOFOLLOW.0
             | OpenFlags::PATH.0,
     );
 
@@ -293,6 +295,8 @@ impl OpenFile {
             return Err(Errno::EBADF);
         }
         match &self.backend {
+            // Nothing to write changes nothing: not the size, not the times.
+            Backend::Inode if buf.is_empty() => Ok(0),
             Backend::Inode => {
                 let mut off = self.offset.lock();
                 if self.flags().contains(OpenFlags::APPEND) {
@@ -346,6 +350,7 @@ impl OpenFile {
             return Err(Errno::EINVAL);
         }
         match &self.backend {
+            Backend::Inode if buf.is_empty() => Ok(0),
             Backend::Inode if self.flags().contains(OpenFlags::APPEND) => {
                 self.fs().append(self.node.ino(), buf).map(|(_, n)| n)
             }

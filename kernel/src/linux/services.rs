@@ -27,7 +27,8 @@
 //! prevents by reading the word first, unlocked.
 //!
 //! Not done yet, each documented where it is: core dumps, shared mappings
-//! of files the page cache does not hold (tmpfs: `ENODEV`), `MAP_32BIT` placement (refused with `ENOMEM` when the address
+//! of files the page cache does not hold (procfs, sysfs: `ENODEV`; tmpfs is behind the cache, ADR 0064), `MAP_32BIT`
+//! placement (refused with `ENOMEM` when the address
 //! is not low), `PROT_GROWSDOWN` (applied to the given range only).
 
 use super::LinuxState;
@@ -302,11 +303,9 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn write(&mut self, fd: i32, buf: &[u8]) -> Result<usize, Errno> {
-        let n = fileio::write(self, fd, buf)?;
-        if self.process.traced && (fd == 1 || fd == 2) && n > 0 {
-            testrun::output(fd, &buf[..n.min(buf.len())]);
-        }
-        Ok(n)
+        // A traced program's output is captured by the open file it reaches
+        // (`tty::log_console_files`), not by the descriptor's number.
+        fileio::write(self, fd, buf)
     }
 
     fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
@@ -403,7 +402,26 @@ impl LinuxKernel for Thread<'_> {
             Remap::MayMove => poly_vm::RemapPlacement::MayMove,
             Remap::Fixed(at) => poly_vm::RemapPlacement::Fixed(at),
         };
-        self.memory()?.remap(old, old_len, new_len, how).map_err(memory_errno)
+        let memory = self.memory()?;
+        if old_len == 0 {
+            // mremap(2): "If the value of old_size is zero, and old_address
+            // refers to a shareable mapping ..., then mremap() will create
+            // a new mapping of the same pages." A private one is EINVAL.
+            let regions = memory.regions();
+            let v = regions.iter().find(|v| v.contains(old)).ok_or(Errno::EFAULT)?;
+            let (user::memory::Backing::File { file, shared: true, .. }, Some(offset)) =
+                (&v.backing, v.file_offset(old))
+            else {
+                return Err(Errno::EINVAL);
+            };
+            let placement = match how {
+                poly_vm::RemapPlacement::Fixed(at) => poly_vm::Placement::Fixed(at),
+                _ => poly_vm::Placement::Hint(0),
+            };
+            let req = poly_vm::MapRequest::file(new_len, v.prot, file.clone(), offset, true).at(placement);
+            return memory.map(req).map_err(memory_errno);
+        }
+        memory.remap(old, old_len, new_len, how).map_err(memory_errno)
     }
 
     fn msync(&mut self, addr: u64, len: u64, sync: bool) -> Result<(), Errno> {
@@ -452,8 +470,18 @@ impl LinuxKernel for Thread<'_> {
             Advice::DontNeed => Do::Discard,
             Advice::Free => Do::DiscardAnonymous,
             Advice::Remove => Do::FreeBacking,
+            Advice::WipeOnFork => Do::WipeOnFork(true),
+            Advice::KeepOnFork => Do::WipeOnFork(false),
         };
         self.memory()?.advise(addr, len, what).map_err(|e| Errno::new(e.linux_errno()).unwrap_or(Errno::EINVAL))
+    }
+
+    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
+        self.memory()?.populate(addr, len, lock).map_err(|_| Errno::ENOMEM)
+    }
+
+    fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
+        self.memory()?.residency(addr, vec).map_err(|_| Errno::ENOMEM)
     }
 
     fn brk(&self) -> u64 {
@@ -557,7 +585,7 @@ impl LinuxKernel for Thread<'_> {
 
     fn signal_delivered(&mut self, signal: u32) {
         if self.process.traced {
-            testrun::signal(self.process.pid, signal);
+            testrun::signal_of(self.process.pid, self.tid, signal);
         }
     }
 
@@ -751,7 +779,27 @@ impl LinuxKernel for Thread<'_> {
             CpuTimesOf::Process => Some(cputime::process(self.process)),
             CpuTimesOf::Children => Some(self.process.cpu.children()),
             CpuTimesOf::Reaped(pid) => super::task::reaped_times(u32::try_from(pid).ok()?),
+            CpuTimesOf::OtherProcess(pid) => {
+                let pid = u32::try_from(pid).ok()?;
+                let p = crate::process::find(pid).or_else(|| super::task::zombie(pid))?;
+                // A process record, not a thread of another process.
+                (p.pid == pid).then(|| cputime::process(&p))
+            }
         }
+    }
+
+    fn memory_counts(&self, of: CpuTimesOf) -> poly_personality_linux::kernel::MemoryCounts {
+        let (faults, peak) = match of {
+            CpuTimesOf::Children => (0, 0),
+            _ => {
+                // The memory as it is now counts as a peak too (pages the
+                // program started with, mappings populated at once).
+                let now = user::current_memory().map_or(0, |m| m.resident_pages());
+                self.process.cpu.resident(now);
+                self.process.cpu.memory_counts()
+            }
+        };
+        poly_personality_linux::kernel::MemoryCounts { maxrss_kib: peak * 4, minor_faults: faults, major_faults: 0 }
     }
 
     fn timers_changed(&mut self, _next: TimerWakeup) {

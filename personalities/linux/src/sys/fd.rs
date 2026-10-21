@@ -50,6 +50,7 @@ pub fn pwrite64(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if total == 0 {
         return fs(k)?.pwrite(fd, &[], offset).map(|n| n as u64);
     }
+    let total = crate::sys::fsize::allowed(k, fd, Some(offset), total)?;
     let mut chunk = bounce(total.min(CHUNK as u64) as usize)?;
     let mut done: u64 = 0;
     while done < total {
@@ -132,6 +133,8 @@ pub fn fcntl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         F_GETFD => fs.cloexec(fd).map(|c| if c { FD_CLOEXEC } else { 0 }),
         F_SETFD => fs.set_cloexec(fd, a.ulong(2) & FD_CLOEXEC != 0).map(|()| 0),
         F_GETFL => Ok(u64::from(flags)),
+        // An O_PATH descriptor's status flags cannot be set (EBADF).
+        F_SETFL if flags & crate::sys::path::O_PATH != 0 => Err(Errno::EBADF),
         F_SETFL => fs.set_status_flags(fd, a.uint(2)).map(|()| 0),
         cmd @ (F_GETLK | F_SETLK | F_SETLKW | F_OFD_GETLK | F_OFD_SETLK | F_OFD_SETLKW) => {
             record_lock(k, fd, cmd, a.ptr(2), flags)
@@ -366,6 +369,7 @@ pub fn getdents(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn ftruncate(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let len = u64::try_from(a.long(1)).map_err(|_| Errno::EINVAL)?;
+    crate::sys::fsize::check_truncate(k, len)?;
     fs(k)?.ftruncate(fd, len).map(|()| 0)
 }
 

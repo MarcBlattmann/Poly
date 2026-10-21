@@ -85,7 +85,16 @@ impl Files {
     /// with `O_TMPFILE`, which Poly does not have) is `ENOENT`.
     pub fn linkat(&self, olddirfd: Fd, old: &[u8], newdirfd: Fd, new: &[u8], follow: bool) -> Result<()> {
         if old.is_empty() {
-            return Err(Errno::ENOENT);
+            // AT_EMPTY_PATH (the personality passes an empty path only
+            // with it): the file `olddirfd` is open on. linkat(2): it needs
+            // CAP_DAC_READ_SEARCH.
+            if !self.cred().has(poly_vfs::cap::DAC_READ_SEARCH) {
+                return Err(Errno::ENOENT);
+            }
+            let node = self.node_at(olddirfd)?;
+            let n = self.start(newdirfd, new)?;
+            let ctx = self.context();
+            return vfs().link_node(&ctx, &self.cred(), &node, n.as_ref().map_or(At::Cwd, At::Node), new);
         }
         let o = self.start(olddirfd, old)?;
         let n = self.start(newdirfd, new)?;
@@ -106,9 +115,13 @@ impl Files {
         self.at(dirfd, path, |vfs, ctx, at| vfs.chmod(ctx, &self.cred(), at, path, perm, true))
     }
 
-    /// `fchmod(2)`.
+    /// `fchmod(2)`: not on an `O_PATH` descriptor (`EBADF`).
     pub fn fchmod(&self, fd: Fd, perm: u16) -> Result<()> {
-        self.file(fd)?.node().chmod(&self.cred(), perm)
+        let file = self.file(fd)?;
+        if file.is_path_only() {
+            return Err(Errno::EBADF);
+        }
+        file.node().chmod(&self.cred(), perm)
     }
 
     /// `truncate(2)`.

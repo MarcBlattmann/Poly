@@ -26,6 +26,9 @@ pub const PATH_MAX: usize = 4096;
 /// that make `open` use its mode.
 const O_CREAT: u32 = 0o100;
 const O_TMPFILE_BIT: u32 = 0o20000000;
+/// `O_LARGEFILE` and `O_PATH` (`asm-generic/fcntl.h`).
+pub const O_LARGEFILE: u32 = 0o100000;
+pub const O_PATH: u32 = 0o10000000;
 
 /// The kernel's file system services, `ENOSYS` without them.
 pub(crate) fn fs(k: &mut dyn LinuxKernel) -> Result<&mut dyn LinuxFs, Errno> {
@@ -63,6 +66,9 @@ fn open_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, flags: u32, mode
     // open(2): "The mode argument must be supplied if O_CREAT or O_TMPFILE
     // is specified in flags; if neither ... then mode is ignored."
     let mode = if flags & (O_CREAT | O_TMPFILE_BIT) != 0 { mode & 0o7777 } else { 0 };
+    // On x86-64 every open is a large-file open: F_GETFL reports
+    // O_LARGEFILE for all but O_PATH descriptors (the spec of fcntl).
+    let flags = if flags & O_PATH == 0 { flags | O_LARGEFILE } else { flags };
     fs(k)?.openat(dirfd, &path, flags, mode).map(|fd| fd as u64)
 }
 
@@ -324,6 +330,7 @@ pub fn fchmod(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn truncate(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
     let len = u64::try_from(a.long(1)).map_err(|_| Errno::EINVAL)?;
+    crate::sys::fsize::check_truncate(k, len)?;
     fs(k)?.truncate(&path, len).map(|()| 0)
 }
 

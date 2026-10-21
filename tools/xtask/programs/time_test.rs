@@ -505,7 +505,9 @@ fn sleep_tests() {
     let r = sys(SYS_CLOCK_NANOSLEEP, &[CLOCK_MONOTONIC, 0, &raw const rel as u64, 0]);
     check(b"clock_nanosleep_relative", r == 0 && mono() - t0 >= 10 * MS, r);
     let r = sys(SYS_CLOCK_NANOSLEEP, &[CLOCK_THREAD_CPUTIME_ID, 0, &raw const rel as u64, 0]);
-    check(b"clock_nanosleep_thread_cpu_clock_is_einval", r == -22, r);
+    // The thread CPU clock cannot be slept on: EOPNOTSUPP (the spec of
+    // clock_nanosleep).
+    check(b"clock_nanosleep_thread_cpu_clock_is_eopnotsupp", r == -95, r);
 }
 
 // ---- signals from timers -----------------------------------------------------------

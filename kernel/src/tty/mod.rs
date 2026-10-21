@@ -379,17 +379,62 @@ impl poly_vfs::FileObject for LogConsole {
     }
 }
 
+/// The standard output or error of a traced program: the kernel log's
+/// console, and every byte written to it is the program's output in the
+/// test-run protocol (`POLY-OUT`, ADR 0027). Output is captured by this
+/// open file, not by descriptor number: what a program writes to fd 1
+/// after `dup2` put a file there goes to that file, and a copy of fd 1
+/// on another number still reaches the output, as with the pipes a
+/// tracer gives a program on Linux.
+struct CaptureConsole {
+    console: fs::devices::Console,
+    /// 1: standard output, 2: standard error.
+    stream: i32,
+}
+
+impl poly_vfs::FileObject for CaptureConsole {
+    fn read(&self, _: &mut [u8]) -> poly_vfs::Result<usize> {
+        Ok(0)
+    }
+
+    fn write(&self, buf: &[u8]) -> poly_vfs::Result<usize> {
+        let n = poly_vfs::CharDevice::write(&self.console, 0, buf, false)?;
+        if n > 0 {
+            crate::testrun::output(self.stream, &buf[..n.min(buf.len())]);
+        }
+        Ok(n)
+    }
+
+    fn poll(&self) -> poly_vfs::PollEvents {
+        poly_vfs::PollEvents::WRITABLE
+    }
+
+    fn wait_queue(&self) -> Option<&Arc<poly_vfs::WaitQueue>> {
+        None
+    }
+}
+
 /// The files of a traced process (`poly.test.capture`): the kernel log's
-/// console on fds 0, 1 and 2 (one open file description), as every
-/// process had before terminals, so a test run does not depend on the
-/// console terminal.
+/// console, as every process had before terminals, so a test run does not
+/// depend on the console terminal: fd 0 reads end of file; fds 1 and 2
+/// are two write-only open files whose bytes are the program's standard
+/// output and error ([`CaptureConsole`]), like the two pipes of a traced
+/// program on Linux.
 pub fn log_console_files() -> Files {
     let files = Files::new();
     let object = Arc::new(LogConsole(fs::devices::Console::new()));
     let Ok(node) = fs::vfs().anon_node(FileType::CharDevice, 0o600, &files.cred()) else { return files };
     let file = Arc::new(OpenFile::on_object(node, object, OpenFlags::RDWR));
-    if files.install(file, false).is_ok() {
-        let _ = files.dup(0).and_then(|_| files.dup(0));
+    if files.install(file, false).is_err() {
+        return files;
+    }
+    for stream in [1, 2] {
+        let object = Arc::new(CaptureConsole { console: fs::devices::Console::new(), stream });
+        let Ok(node) = fs::vfs().anon_node(FileType::CharDevice, 0o600, &files.cred()) else { return files };
+        let file = Arc::new(OpenFile::on_object(node, object, OpenFlags::WRONLY));
+        if files.install(file, false).is_err() {
+            return files;
+        }
     }
     files
 }

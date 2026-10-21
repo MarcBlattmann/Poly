@@ -58,7 +58,19 @@ pub trait FileSystem: Send + Sync {
     fn symlink(&self, dir: Ino, name: &[u8], target: &[u8], uid: u32, gid: u32) -> Result<Ino>;
 
     /// Another name for `ino`, which must not be a directory (`EPERM`).
+    /// An inode without names may get one only if it was made by
+    /// [`create_tmpfile`](Self::create_tmpfile) (`ENOENT` otherwise).
     fn link(&self, dir: Ino, name: &[u8], ino: Ino) -> Result<()>;
+
+    /// `O_TMPFILE` (open(2)): a regular file in directory `dir` without a
+    /// name (`nlink` 0), freed when the last pin goes unless [`link`]
+    /// gives it a name first. `EOPNOTSUPP` by default.
+    ///
+    /// [`link`]: Self::link
+    fn create_tmpfile(&self, dir: Ino, node: &NewNode) -> Result<Ino> {
+        let _ = (dir, node);
+        Err(Errno::EOPNOTSUPP)
+    }
 
     /// Removes a non-directory name (`EISDIR` for a directory).
     fn unlink(&self, dir: Ino, name: &[u8]) -> Result<()>;

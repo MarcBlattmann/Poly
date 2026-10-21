@@ -50,6 +50,8 @@ struct Inner {
     next_ino: Ino,
     /// Data pages held by all files.
     pages: u64,
+    /// Inodes the file system may hold, if limited (`ENOSPC` beyond).
+    inode_limit: Option<u64>,
 }
 
 struct Node {
@@ -67,6 +69,9 @@ struct Node {
     data: Data,
     /// Extended attributes (`user.`, `trusted.`, `security.`).
     xattrs: Xattrs,
+    /// Made by `create_tmpfile` and never named: `link` may give it its
+    /// first name.
+    linkable: bool,
 }
 
 enum Data {
@@ -121,16 +126,24 @@ impl Dir {
 impl Tmpfs {
     /// An empty tmpfs whose root is owned by root with mode `0755`.
     pub fn new(clock: Arc<dyn Clock>) -> Tmpfs {
-        Tmpfs::build(clock, None)
+        Tmpfs::build(clock, None, None)
     }
 
     /// An empty tmpfs that holds at most `bytes` of file data (rounded down
     /// to whole pages); writes beyond fail with `ENOSPC`.
     pub fn with_limit(clock: Arc<dyn Clock>, bytes: u64) -> Tmpfs {
-        Tmpfs::build(clock, Some(bytes / PAGE))
+        Tmpfs::build(clock, Some(bytes / PAGE), None)
     }
 
-    fn build(clock: Arc<dyn Clock>, page_limit: Option<u64>) -> Tmpfs {
+    /// An empty tmpfs that holds at most `bytes` of file data and `inodes`
+    /// inodes (the root included), tmpfs(5)'s `size` and `nr_inodes`:
+    /// beyond either, writes and new files fail with `ENOSPC`. `statfs`
+    /// reports both as the totals.
+    pub fn with_limits(clock: Arc<dyn Clock>, bytes: u64, inodes: u64) -> Tmpfs {
+        Tmpfs::build(clock, Some(bytes / PAGE), Some(inodes))
+    }
+
+    fn build(clock: Arc<dyn Clock>, page_limit: Option<u64>, inode_limit: Option<u64>) -> Tmpfs {
         let now = clock.now();
         let root = Node {
             kind: FileType::Directory,
@@ -145,10 +158,11 @@ impl Tmpfs {
             pins: 0,
             xattrs: Xattrs::new(),
             data: Data::Dir(Dir::new(ROOT)),
+            linkable: false,
         };
         let mut nodes = BTreeMap::new();
         nodes.insert(ROOT, root);
-        Tmpfs { inner: SpinMutex::new(Inner { nodes, next_ino: ROOT + 1, pages: 0 }), clock, page_limit }
+        Tmpfs { inner: SpinMutex::new(Inner { nodes, next_ino: ROOT + 1, pages: 0, inode_limit }), clock, page_limit }
     }
 
     /// Inodes alive, the root included.
@@ -199,7 +213,13 @@ impl Inner {
     /// Fails with `EEXIST` if `name` exists in live directory `dir`.
     fn check_new(&self, dir: Ino, name: &[u8]) -> Result<()> {
         check_name(name)?;
-        if self.live_dir(dir)?.get(name).is_some() { Err(Errno::EEXIST) } else { Ok(()) }
+        if self.live_dir(dir)?.get(name).is_some() {
+            return Err(Errno::EEXIST);
+        }
+        match self.inode_limit {
+            Some(limit) if self.nodes.len() as u64 >= limit => Err(Errno::ENOSPC),
+            _ => Ok(()),
+        }
     }
 
     fn add(&mut self, node: Node) -> Ino {
@@ -403,6 +423,7 @@ impl Tmpfs {
             pins: 0,
             xattrs: Xattrs::new(),
             data,
+            linkable: false,
         }
     }
 
@@ -444,7 +465,9 @@ impl FileSystem for Tmpfs {
         let inner = self.inner.lock();
         let total = self.page_limit.unwrap_or(inner.pages).max(inner.pages);
         let free = total - inner.pages;
-        let files = inner.nodes.len() as u64;
+        let used = inner.nodes.len() as u64;
+        // Without a limit, as many inodes as an inode count can hold.
+        let files = inner.inode_limit.unwrap_or(u64::from(u32::MAX)).max(used);
         Ok(crate::FsStats {
             magic: crate::TMPFS_MAGIC,
             block_size: PAGE,
@@ -452,7 +475,7 @@ impl FileSystem for Tmpfs {
             blocks_free: free,
             blocks_avail: free,
             files,
-            files_free: u64::from(u32::MAX).saturating_sub(files),
+            files_free: files - used,
             name_max: crate::NAME_MAX as u64,
             fragment_size: PAGE,
             ..crate::FsStats::default()
@@ -536,6 +559,23 @@ impl FileSystem for Tmpfs {
         Ok(ino)
     }
 
+    fn create_tmpfile(&self, dir: Ino, node: &NewNode) -> Result<Ino> {
+        if node.kind != FileType::Regular {
+            return Err(Errno::EINVAL);
+        }
+        let mut n = self.new_node(FileType::Regular, node.perm, node.uid, node.gid, Data::File(Pages::default()));
+        n.nlink = 0;
+        n.linkable = true;
+        let mut inner = self.inner.lock();
+        inner.live_dir(dir)?;
+        if let Some(limit) = inner.inode_limit
+            && inner.nodes.len() as u64 >= limit
+        {
+            return Err(Errno::ENOSPC);
+        }
+        Ok(inner.add(n))
+    }
+
     fn mkdir(&self, dir: Ino, name: &[u8], perm: u16, uid: u32, gid: u32) -> Result<Ino> {
         let n = self.new_node(FileType::Directory, perm, uid, gid, Data::Dir(Dir::new(dir)));
         let now = n.ctime;
@@ -569,7 +609,7 @@ impl FileSystem for Tmpfs {
         if target.kind == FileType::Directory {
             return Err(Errno::EPERM);
         }
-        if target.nlink == 0 {
+        if target.nlink == 0 && !target.linkable {
             // An unlinked (but open) file cannot get a name back.
             return Err(Errno::ENOENT);
         }
@@ -580,6 +620,7 @@ impl FileSystem for Tmpfs {
         inner.live_dir_mut(dir)?.insert(name, ino);
         let t = inner.node_mut(ino)?;
         t.nlink += 1;
+        t.linkable = false;
         t.ctime = now;
         inner.touch_dir(dir, now);
         Ok(())

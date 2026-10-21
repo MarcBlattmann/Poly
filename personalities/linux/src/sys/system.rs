@@ -75,10 +75,16 @@ pub fn uname(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// a valid instance".
 pub const fn clock_for(clockid: i32) -> Option<Clock> {
     match clockid {
-        id::CLOCK_REALTIME | id::CLOCK_REALTIME_COARSE => Some(Clock::Realtime),
-        id::CLOCK_MONOTONIC | id::CLOCK_MONOTONIC_COARSE | id::CLOCK_MONOTONIC_RAW | id::CLOCK_BOOTTIME => {
-            Some(Clock::Monotonic)
+        // CLOCK_TAI: the wall clock plus the TAI offset, which is 0 until
+        // set (adjtimex(2) `ADJ_TAI`; Poly cannot set it).
+        id::CLOCK_REALTIME | id::CLOCK_REALTIME_COARSE | id::CLOCK_REALTIME_ALARM | id::CLOCK_TAI => {
+            Some(Clock::Realtime)
         }
+        id::CLOCK_MONOTONIC
+        | id::CLOCK_MONOTONIC_COARSE
+        | id::CLOCK_MONOTONIC_RAW
+        | id::CLOCK_BOOTTIME
+        | id::CLOCK_BOOTTIME_ALARM => Some(Clock::Monotonic),
         id::CLOCK_PROCESS_CPUTIME_ID => Some(Clock::ProcessCpuTime),
         id::CLOCK_THREAD_CPUTIME_ID => Some(Clock::ThreadCpuTime),
         _ => None,
@@ -88,8 +94,11 @@ pub const fn clock_for(clockid: i32) -> Option<Clock> {
 /// clock_gettime(clockid, tp): `EINVAL` for unsupported clocks, `EFAULT`
 /// if `tp` cannot be written.
 pub fn clock_gettime(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let clock = clock_for(a.int(0)).ok_or(Errno::EINVAL)?;
-    let now: Timespec = k.clock(clock)?;
+    // Another process's or thread's CPU-time clock (`time::cpuclock`).
+    let now: Timespec = match crate::time::cpuclock::decode(k, a.int(0)) {
+        Some(cpu) => Timespec::from_nanos(cpu?.read_ns(k)?),
+        None => k.clock(clock_for(a.int(0)).ok_or(Errno::EINVAL)?)?,
+    };
     k.copy_to_user(a.ptr(1), &now.to_bytes())?;
     Ok(0)
 }

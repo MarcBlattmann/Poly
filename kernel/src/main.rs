@@ -34,6 +34,7 @@ mod smp;
 mod sync;
 mod syscall;
 mod terminal;
+mod testinit;
 mod testrun;
 mod thread;
 mod time;

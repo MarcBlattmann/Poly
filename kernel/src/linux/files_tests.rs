@@ -289,7 +289,7 @@ kernel_test! {
             check!(7, fd == 3);
             check!(8, readlink(p, "/proc/self/fd/3") == Ok(b"/tmp/fs-test-prog".to_vec()));
             check!(9, readlink(p, "/proc/self/fd/0") == Ok(b"/dev/console".to_vec()));
-            check!(10, text(p, "/proc/self/fdinfo/3").starts_with("pos:\t0\nflags:\t02000000\nmnt_id:\t"));
+            check!(10, text(p, "/proc/self/fdinfo/3").starts_with("pos:\t0\nflags:\t02100000\nmnt_id:\t"));
             // A descriptor that does not exist yet has no entry.
             check!(11, sys(p, nr::OPENAT, &[AT_FDCWD, cstr(1, "/proc/self/fdinfo/4"), 0, 0]) == Err(Errno::ENOENT));
             let dir = sys(p, nr::OPENAT, &[AT_FDCWD, cstr(2, "/proc/self/fd"), 0o200000, 0]).map_err(|_| 16u64)?;
@@ -309,7 +309,7 @@ kernel_test! {
             check!(24, own == 4);
             check!(25, sys(p, nr::DUP2, &[own, 3]) == Ok(3));
             let n = sys(p, nr::READ, &[own, BUF, 4096]).map_err(|_| 26u64)?;
-            check!(27, String::from_utf8_lossy(&peek(BUF, n as usize)).starts_with("pos:\t0\nflags:\t00\n"));
+            check!(27, String::from_utf8_lossy(&peek(BUF, n as usize)).starts_with("pos:\t0\nflags:\t0100000\n"));
             check!(28, sys(p, nr::READ, &[own, BUF, 4096]) == Ok(0));
             Ok(())
         });
@@ -414,7 +414,7 @@ kernel_test! {
             check!(14, sys(p, nr::FTRUNCATE, &[f, 12]) == Ok(0));
             check!(15, sys(p, nr::PREAD64, &[f, BUF, 100, 9]) == Ok(3));
             check!(16, peek(BUF, 3) == b"\0he");
-            check!(17, sys(p, nr::FCNTL, &[f, 3, 0]) == Ok(0o2));
+            check!(17, sys(p, nr::FCNTL, &[f, 3, 0]) == Ok(0o100002));
             check!(18, sys(p, nr::RENAMEAT2, &[a, cstr(2, "fs-test-dir/f"), a, cstr(4, "fs-test-dir/g"), 1]) == Ok(0));
             check!(19, readlink(p, &alloc::format!("/proc/self/fd/{f}")) == Ok(b"/tmp/fs-test-dir/g".to_vec()));
             check!(20, sys(p, nr::CLOSE, &[f]) == Ok(0));

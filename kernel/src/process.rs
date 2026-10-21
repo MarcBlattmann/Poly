@@ -547,6 +547,13 @@ pub fn find_thread(tid: u32) -> Option<(Arc<Process>, Arc<ThreadFlags>)> {
     })
 }
 
+/// List `process` in the table without a thread of its own: the kernel's
+/// init of a traced test run (`testinit.rs`, ADR 0064), whose work a
+/// kernel thread does. The caller keeps it alive (the table is weak).
+pub fn register_threadless(process: &Arc<Process>) {
+    TABLE.lock().insert(process.pid, Arc::downgrade(process));
+}
+
 /// Every process in the table, by pid.
 pub fn all() -> Vec<Arc<Process>> {
     let weak: Vec<Weak<Process>> = TABLE.lock().values().cloned().collect();
