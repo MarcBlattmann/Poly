@@ -420,11 +420,31 @@ pub trait LinuxFs {
     /// unlinkat(2); `remove_dir` is `AT_REMOVEDIR` (rmdir).
     fn unlinkat(&mut self, dirfd: i32, path: &[u8], remove_dir: bool) -> Result<(), Errno>;
     /// renameat2(2): `flags` as given (`EINVAL` for unknown or conflicting
-    /// ones).
-    fn renameat(&mut self, olddirfd: i32, old: &[u8], newdirfd: i32, new: &[u8], flags: u32) -> Result<(), Errno>;
+    /// ones). `new` is the second path as copied, or why it could not be
+    /// (`EFAULT`, `ENAMETOOLONG`, `ENOENT` when empty): that error, like
+    /// a bad `newdirfd`, comes after every error of `old`'s directories
+    /// (renameat2's `path_order_two_paths`; `poly_vfs::Vfs::rename_paths`).
+    fn renameat(
+        &mut self,
+        olddirfd: i32,
+        old: &[u8],
+        newdirfd: i32,
+        new: Result<&[u8], Errno>,
+        flags: u32,
+    ) -> Result<(), Errno>;
     fn symlinkat(&mut self, target: &[u8], dirfd: i32, path: &[u8]) -> Result<(), Errno>;
     /// linkat(2); an empty `old` means `olddirfd`'s file (`AT_EMPTY_PATH`).
-    fn linkat(&mut self, olddirfd: i32, old: &[u8], newdirfd: i32, new: &[u8], follow: bool) -> Result<(), Errno>;
+    /// `new` as for [`renameat`](Self::renameat): its errors, and a bad
+    /// `newdirfd`, come after every error of `old` (linkat's
+    /// `path_order_two_paths`; `poly_vfs::Vfs::link_paths`).
+    fn linkat(
+        &mut self,
+        olddirfd: i32,
+        old: &[u8],
+        newdirfd: i32,
+        new: Result<&[u8], Errno>,
+        follow: bool,
+    ) -> Result<(), Errno>;
 
     fn fchmod(&mut self, fd: i32, mode: u32) -> Result<(), Errno>;
     fn fchmodat(&mut self, dirfd: i32, path: &[u8], mode: u32) -> Result<(), Errno>;

@@ -13,7 +13,7 @@ use crate::kernel::Target;
 use crate::rlimit::Rlimit;
 use crate::{Errno, nr};
 use poly_vfs::locks::{LockKind, LockOwner};
-use poly_vfs::{At, Cred, FdTable, FsContext, OpenFlags, RenameFlags, Tmpfs, Vfs, Whence};
+use poly_vfs::{At, Cred, FdTable, FsContext, OpenFlags, PathArg, RenameFlags, Tmpfs, Vfs, Whence};
 use std::sync::{Arc, Mutex};
 use std::vec::Vec;
 
@@ -28,6 +28,18 @@ impl poly_vfs::Clock for Clock {
 
 fn errno(e: poly_vfs::Errno) -> Errno {
     Errno::new(e as u16).unwrap()
+}
+
+fn vfs_errno(e: Errno) -> poly_vfs::Errno {
+    poly_vfs::Errno::from_code(i32::from(e.get())).unwrap()
+}
+
+/// [`VfsFs::start`] as where a relative path starts.
+fn at_of(start: &Result<Option<poly_vfs::NodeRef>, Errno>) -> poly_vfs::Result<At<'_>> {
+    match start {
+        Ok(node) => Ok(node.as_ref().map_or(At::Cwd, At::Node)),
+        Err(e) => Err(vfs_errno(*e)),
+    }
 }
 
 /// `LinuxFs` the way the kernel implements it, over a VFS, one context and
@@ -50,6 +62,12 @@ impl VfsFs {
             return Ok(self.ctx.cwd().clone());
         }
         self.fds.get(fd).map(|f| f.node().clone()).map_err(errno)
+    }
+
+    /// The node a relative path from `dirfd` starts at (`None`: the working
+    /// directory), or `EBADF`.
+    fn start(&self, dirfd: i32) -> Result<Option<poly_vfs::NodeRef>, Errno> {
+        if dirfd == AT_FDCWD { Ok(None) } else { self.node(dirfd).map(Some) }
     }
 
     fn at<R>(&self, dirfd: i32, path: &[u8], f: impl FnOnce(&Vfs, At<'_>) -> poly_vfs::Result<R>) -> Result<R, Errno> {
@@ -245,23 +263,37 @@ impl LinuxFs for VfsFs {
         }
     }
 
-    fn renameat(&mut self, olddirfd: i32, old: &[u8], newdirfd: i32, new: &[u8], flags: u32) -> Result<(), Errno> {
+    fn renameat(
+        &mut self,
+        olddirfd: i32,
+        old: &[u8],
+        newdirfd: i32,
+        new: Result<&[u8], Errno>,
+        flags: u32,
+    ) -> Result<(), Errno> {
         let flags = RenameFlags::from_linux(flags).map_err(errno)?;
-        let (o, n) = (self.node(olddirfd).ok(), self.node(newdirfd).ok());
-        let oat = if olddirfd == AT_FDCWD { At::Cwd } else { At::Node(o.as_ref().ok_or(Errno::EBADF)?) };
-        let nat = if newdirfd == AT_FDCWD { At::Cwd } else { At::Node(n.as_ref().ok_or(Errno::EBADF)?) };
-        self.vfs.rename(&self.ctx, &self.cred, oat, old, nat, new, flags).map_err(errno)
+        let (o, n) = (self.start(olddirfd), self.start(newdirfd));
+        let old = PathArg { path: Ok(old), at: at_of(&o) };
+        let new = PathArg { path: new.map_err(vfs_errno), at: at_of(&n) };
+        self.vfs.rename_paths(&self.ctx, &self.cred, old, new, flags).map_err(errno)
     }
 
     fn symlinkat(&mut self, target: &[u8], dirfd: i32, path: &[u8]) -> Result<(), Errno> {
         self.at(dirfd, path, |v, at| v.symlink(&self.ctx, &self.cred, target, at, path))
     }
 
-    fn linkat(&mut self, olddirfd: i32, old: &[u8], newdirfd: i32, new: &[u8], follow: bool) -> Result<(), Errno> {
-        let o = self.node(olddirfd).ok();
-        let oat = if olddirfd == AT_FDCWD { At::Cwd } else { At::Node(o.as_ref().ok_or(Errno::EBADF)?) };
-        let _ = newdirfd;
-        self.vfs.link(&self.ctx, &self.cred, oat, old, At::Cwd, new, follow).map_err(errno)
+    fn linkat(
+        &mut self,
+        olddirfd: i32,
+        old: &[u8],
+        newdirfd: i32,
+        new: Result<&[u8], Errno>,
+        follow: bool,
+    ) -> Result<(), Errno> {
+        let (o, n) = (self.start(olddirfd), self.start(newdirfd));
+        let old = PathArg { path: Ok(old), at: at_of(&o) };
+        let new = PathArg { path: new.map_err(vfs_errno), at: at_of(&n) };
+        self.vfs.link_paths(&self.ctx, &self.cred, old, new, follow).map_err(errno)
     }
 
     fn fchmod(&mut self, fd: i32, mode: u32) -> Result<(), Errno> {

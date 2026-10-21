@@ -24,8 +24,38 @@
 //!
 //! Walks are iterative (a symbolic link is spliced into the remaining path
 //! instead of recursing), so kernel stack use does not grow with link depth.
+//!
+//! # The order of path errors
+//!
+//! When a path has more than one problem, the first in this order decides
+//! (the spec sheets' `path_order`, the same for every call that takes a
+//! path; symlinkat's `precedence`):
+//!
+//! 1. the string as a whole: unreadable (`EFAULT`), `PATH_MAX` bytes or more
+//!    with its NUL (`ENAMETOOLONG`), empty (`ENOENT`, where that is an
+//!    error), whatever its components are;
+//! 2. for a relative path, the directory descriptor: not open (`EBADF`),
+//!    open on a non-directory (`ENOTDIR`, from the walk's first step);
+//! 3. the components from left to right as the walk reaches them, symbolic
+//!    links followed on the way. For each name the walk first needs the
+//!    directory it is in: a non-directory there is `ENOTDIR`, no search
+//!    permission `EACCES`; only then is the name itself looked at (over
+//!    [`NAME_MAX`] bytes `ENAMETOOLONG`, missing `ENOENT`). So the first
+//!    failure decides: `D/nope/<256 bytes>` is `ENOENT`, `D/file/<256
+//!    bytes>` is `ENOTDIR`, `D/<256 bytes>/nope` is `ENAMETOOLONG`, and a
+//!    `..` after a missing name or a dangling link changes nothing;
+//! 4. what the operation finds about the last name (`EEXIST`, `EISDIR`, ...).
+//!
+//! The kernel and the personality take care of 1 and 2 for one path (the
+//! string is copied first, then the descriptor looked up); a call with two
+//! paths hands the second one's string and descriptor over as a
+//! [`PathArg`], whose errors the VFS reports in their place
+//! ([`Vfs::link_paths`], [`Vfs::rename_paths`]). [`Walk::dirs`] stops before
+//! the last name's length, so that rename can check both paths' directories
+//! before either last name ([`Parent::check_name`]).
 
 use crate::cred::{Access, Cred};
+use crate::fdtable::At;
 use crate::node::Location;
 use crate::{Errno, FileType, Result, Vfs};
 use alloc::vec::Vec;
@@ -55,6 +85,47 @@ pub(crate) struct Parent {
     pub(crate) dir: Location,
     pub(crate) last: Last,
     pub(crate) trailing_slash: bool,
+}
+
+impl Parent {
+    /// The last name's own check, the step of the walk that comes after its
+    /// directory: over [`NAME_MAX`] bytes is `ENAMETOOLONG`.
+    pub(crate) fn check_name(&self) -> Result<()> {
+        match &self.last {
+            Last::Name(name) if name.len() > NAME_MAX => Err(Errno::ENAMETOOLONG),
+            _ => Ok(()),
+        }
+    }
+}
+
+/// A path argument of a system call as the caller has it, its errors not
+/// reported yet: the string, or why it could not be read (`EFAULT`,
+/// `ENAMETOOLONG`, or `ENOENT` for an empty one), and where a relative path
+/// starts, or why the directory descriptor names nothing (`EBADF`). The VFS
+/// reports these errors where they come in the order of path errors (see
+/// the module documentation): the string's first, the start's next (only
+/// for a relative path), then the walk's. For a call with two paths that is
+/// after some or all of the first path's errors.
+#[derive(Clone, Copy, Debug)]
+pub struct PathArg<'a> {
+    pub path: Result<&'a [u8]>,
+    /// Not looked at for an absolute path.
+    pub at: Result<At<'a>>,
+}
+
+impl<'a> PathArg<'a> {
+    /// A path whose string and start are known to be good.
+    pub fn new(at: At<'a>, path: &'a [u8]) -> PathArg<'a> {
+        PathArg { path: Ok(path), at: Ok(at) }
+    }
+
+    /// Steps 1 and 2 of the order: the string (also [`check_path`]'s
+    /// empty and too-long checks), then, for a relative path, the start.
+    pub(crate) fn begin(&self) -> Result<(&'a [u8], At<'a>)> {
+        let path = self.path?;
+        check_path(path)?;
+        if path.first() == Some(&b'/') { Ok((path, At::Cwd)) } else { Ok((path, self.at?)) }
+    }
 }
 
 /// A resolved location and, when it was found by name, the directory and
@@ -97,8 +168,18 @@ impl<'a> Walk<'a> {
     }
 
     /// Resolves all but the last component of `path`, starting at `start`
-    /// for a relative path.
+    /// for a relative path, and checks the last name's length.
     pub(crate) fn parent(&mut self, start: Location, path: &[u8]) -> Result<Parent> {
+        let p = self.dirs(start, path)?;
+        p.check_name()?;
+        Ok(p)
+    }
+
+    /// [`parent`](Self::parent) up to the last name: every directory on the
+    /// way, the last name's directory included (a directory the caller may
+    /// search), but not the last name's own length
+    /// ([`Parent::check_name`]).
+    pub(crate) fn dirs(&mut self, start: Location, path: &[u8]) -> Result<Parent> {
         let mut buf: Vec<u8> = path.to_vec();
         let mut pos = 0;
         let mut cur = if path.first() == Some(&b'/') { self.root_top.clone() } else { self.vfs.follow_mounts(start) };
@@ -110,15 +191,14 @@ impl<'a> Walk<'a> {
                 return Ok(Parent { dir: cur, last: Last::Root, trailing_slash: true });
             }
             let end = buf[pos..].iter().position(|&c| c == b'/').map_or(buf.len(), |i| pos + i);
-            if end - pos > NAME_MAX {
-                return Err(Errno::ENAMETOOLONG);
-            }
             let mut next = end;
             while buf.get(next) == Some(&b'/') {
                 next += 1;
             }
             // Whatever comes next is looked up in `cur`: it must be a
-            // directory we may search.
+            // directory we may search. That comes before anything about
+            // the name itself, its length included: `file/<256 bytes>` is
+            // ENOTDIR (the order of path errors, step 3).
             let attr = cur.attr()?;
             if attr.kind != FileType::Directory {
                 return Err(Errno::ENOTDIR);
@@ -133,6 +213,9 @@ impl<'a> Walk<'a> {
                     name => Last::Name(name.to_vec()),
                 };
                 return Ok(Parent { dir: cur, last, trailing_slash: end < buf.len() });
+            }
+            if comp.len() > NAME_MAX {
+                return Err(Errno::ENAMETOOLONG);
             }
             match comp {
                 b"." => {}
