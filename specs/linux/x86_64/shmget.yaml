@@ -1,0 +1,74 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/shmget               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (shmmni 4096, shmmax and shmall 18446744073692774399)"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  shmget(key, size, shmflg) (syscall 29) returns the id of a System V
+  shared memory segment, creating it when asked. Segments belong to the
+  system (the IPC namespace), not to a process: they outlive their
+  creator until removed with shmctl(IPC_RMID) and the last attachment
+  goes. The key is a 32-bit int (the upper half of the register is
+  ignored); key 0 is IPC_PRIVATE. IPC_PRIVATE always makes a new segment,
+  whatever the flags (no IPC_CREAT needed, IPC_EXCL ignored). Any other
+  key looks up the live segment with that key: none and no IPC_CREAT
+  (01000) is ENOENT; none and IPC_CREAT makes one; found with
+  IPC_CREAT|IPC_EXCL (02000) is EEXIST; IPC_EXCL without IPC_CREAT is
+  ignored. A new segment gets mode = shmflg & 0777 (other bits, such as
+  SHM_NORESERVE 010000 or unknown high bits, are accepted and not
+  stored), owner and creator uid/gid = the caller's effective uid/gid,
+  segsz = the size asked for exactly (no page rounding in segsz; an
+  attachment covers whole pages), cpid = the caller, lpid 0, nattch 0,
+  atime and dtime 0, ctime the current time; its memory reads as zeros.
+  shmget never attaches. Finding an existing segment checks the access
+  asked for in shmflg & 0777: the r, w and x bits of the three classes
+  are merged into one rwx request, and each requested bit must be
+  granted by the segment's mode for the caller's class (owner, else
+  group, else other); otherwise EACCES, unless the caller has
+  CAP_IPC_OWNER (root). Asking for 0 always passes. Size rules: making a
+  segment needs 1 <= size <= shmmax (0 or SIZE_MAX: EINVAL, nothing is
+  made); finding one needs size <= its segsz (0 is fine), else EINVAL.
+  Removing a segment (shmctl IPC_RMID) releases its key at once, even
+  while it is still attached: the key then is ENOENT and IPC_CREAT makes a
+  new segment with a different id; IPC_STAT of the old id shows key 0 and
+  SHM_DEST (01000) in the mode until the last detach, after which the
+  old id is EINVAL.
+returns:
+  success: "a non-negative int segment id; distinct among live segments; not a file descriptor (does not take an fd slot)"
+  ids: "values depend on the namespace's history and are not predictable; an id just removed is not returned by the next shmget"
+  private: "IPC_PRIVATE (key whose low 32 bits are 0): a new id every call, regardless of IPC_CREAT/IPC_EXCL"
+  existing_key: "the same id for every lookup of a live keyed segment (flags 0, IPC_CREAT, or IPC_EXCL alone)"
+  new_segment_stat: "IPC_STAT: key as given (sign kept, e.g. -7), uid=cuid=euid, gid=cgid=egid, mode=shmflg&0777, segsz=size, cpid=caller pid, lpid=0, nattch=0, atime=0, dtime=0, ctime=now (seconds)"
+  memory: "zero-filled over all pages an attachment covers; shared by every attachment of the id in every process"
+errors:
+  no_such_key: "ENOENT (2): key not in use and no IPC_CREAT; checked before size (size 0 or SIZE_MAX still ENOENT)"
+  exists: "EEXIST (17): key in use and IPC_CREAT|IPC_EXCL; reported before a size or permission problem"
+  bad_size_new: "EINVAL (22): creating with size 0 or size > shmmax (e.g. SIZE_MAX, 2^63); for IPC_PRIVATE and for IPC_CREAT of an unused key; nothing is created"
+  bad_size_existing: "EINVAL (22): key in use and size > its segsz (with or without IPC_CREAT); reported before a permission problem"
+  access: "EACCES (13): key in use and a requested access bit (merged rwx of shmflg & 0777) not granted to the caller's class; never for root (CAP_IPC_OWNER); IPC_CREAT on an existing key is checked the same way"
+  order: "for an existing key: EEXIST, then EINVAL (size), then EACCES"
+  no_memory: "ENOMEM (12): a size the system cannot account for (seen for 2^40 bytes without SHM_NORESERVE); depends on memory and overcommit, not tested"
+  limits: "ENOSPC (28): all shmmni (4096) ids in use, or the total would pass shmall; not tested (system-wide)"
+  hugetlb: "SHM_HUGETLB (04000): EPERM (1) for a caller outside the hugetlb group without CAP_IPC_LOCK on this machine; depends on huge page setup, not tested"
+side_effects: >
+  Creates a system-wide segment that persists after the creating process
+  exits (exit only detaches) until IPC_RMID plus last detach. Lookups
+  change nothing. A failed call creates nothing. No file descriptors.
+threading: "no thread-specific behaviour; segments are visible by key to every process in the IPC namespace (e.g. parent and child after fork)"
+ordering:
+  - "IPC_RMID releases the key immediately; the id stays valid (IPC_STAT, attachments) until the last detach"
+timing:
+  typical: "microseconds per call; memory is not touched at creation"
+  guarantees: "none"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests also use shmctl (IPC_STAT, IPC_RMID), shmat and shmdt
+# to observe segments. IPC_STAT needs read permission on the segment
+# (EACCES for a non-root caller on a mode 0 segment). shmget return values
+# differ between runs and systems, so the tests compare syscall names only
+# (poly-diff: syscalls=names, or off for the fork test). struct shmid64_ds
+# layout: asm-generic/shmbuf.h and asm-generic/ipcbuf.h.

@@ -7,6 +7,7 @@
 //! | `copy_*_user` | `user::copy_*_user` (demand paging, `EFAULT`) |
 //! | `write`, `read`, `close`, `fstat`, `ioctl`, file paths | the process's [`crate::fs::Files`] |
 //! | `mmap`, `munmap`, `mprotect`, `brk` | the thread's [`Memory`] (`user::current_memory`) |
+//! | System V shared memory (`shm_*`) | `super::shm`: shared mappings of a segment's pages in the thread's [`Memory`] |
 //! | FS / GS base | `user::set_fs_base` (takes effect on the return to ring 3) |
 //! | `with_process`, `process_ids` | the process table and each process's [`LinuxState`](super::LinuxState) |
 //! | `block` / `unblock`, `notify_signal` | [`process::park`], [`process::unpark`], [`process::notify`] |
@@ -44,6 +45,7 @@ use core::sync::atomic::Ordering;
 use poly_personality_linux::abi::{FileStat, Timespec, makedev};
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::futex::{FutexKey, FutexTable};
+use poly_personality_linux::ipc::shm::ShmMemory;
 use poly_personality_linux::kernel::{
     Backing, Clock, CpuTimes, CpuTimesOf, Credentials, Deadline, FpuState, LinuxKernel, MapRequest, Placement,
     ProcessInfo, ProcessSelector, Prot, RandomMode, Target, UserContext, UserPtr, Wakeup,
@@ -387,6 +389,39 @@ impl LinuxKernel for Thread<'_> {
 
     fn munmap(&mut self, addr: u64, len: u64) -> Result<(), Errno> {
         self.memory()?.unmap(addr, len).map_err(memory_errno)
+    }
+
+    fn shm_create(&mut self, len: u64) -> Result<Arc<dyn ShmMemory>, Errno> {
+        Ok(super::shm::create(len))
+    }
+
+    fn shm_attach(
+        &mut self,
+        memory: &Arc<dyn ShmMemory>,
+        addr: u64,
+        placement: Placement,
+        len: u64,
+        prot: Prot,
+    ) -> Result<u64, Errno> {
+        let placement = match placement {
+            Placement::Hint => poly_vm::Placement::Hint(addr),
+            Placement::Fixed => poly_vm::Placement::Fixed(addr),
+            Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(addr),
+        };
+        super::shm::attach(&*self.memory()?, memory.as_ref(), placement, len, vm_prot(prot))
+    }
+
+    fn shm_detach(&mut self, addr: u64) -> Result<u64, Errno> {
+        super::shm::detach(&*self.memory().map_err(|_| Errno::EINVAL)?, addr)
+    }
+
+    fn shm_detach_all(&mut self) -> Vec<u64> {
+        // This thread's reference and this one: no other process shares
+        // the memory (CLONE_VM), which keeps the attachments otherwise.
+        match user::current_memory() {
+            Some(m) if Arc::strong_count(&m) <= 2 => super::shm::detach_all(&m),
+            _ => Vec::new(),
+        }
     }
 
     fn mremap(

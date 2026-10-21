@@ -14,7 +14,9 @@ use crate::abi::{FileStat, SigAction, Timespec, signal};
 use crate::errno::Errno;
 use crate::fileio::FileIo;
 use crate::futex::{FutexKey, FutexTable};
+use crate::ipc::shm::ShmMemory;
 use crate::signal::LinuxProcess;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 /// A user-space address as the caller passed it. It is never dereferenced
@@ -587,6 +589,51 @@ pub trait LinuxKernel {
     fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
         let _ = (addr, vec);
         Err(Errno::ENOSYS)
+    }
+
+    // ---- System V shared memory (crate::ipc::shm) ---------------------
+
+    /// The memory of a new System V shared memory segment: `len` bytes (a
+    /// non-zero multiple of the page size), reading as zeros, shared by
+    /// every attachment. Nothing is attached yet. `ENOMEM` if the kernel
+    /// cannot make it (the default: no shared memory).
+    fn shm_create(&mut self, len: u64) -> Result<Arc<dyn ShmMemory>, Errno> {
+        let _ = len;
+        Err(Errno::ENOMEM)
+    }
+
+    /// Attach `memory` to the calling process (shmat(2)): map its first
+    /// `len` bytes (whole pages) shared with `prot`, at `addr` as
+    /// `placement` says ([`Placement::Hint`] with 0: anywhere). Returns
+    /// the address. `EINVAL` if a fixed placement cannot be had (with
+    /// [`Placement::FixedNoReplace`]: something is mapped there), `ENOMEM`
+    /// if there is no room.
+    fn shm_attach(
+        &mut self,
+        memory: &Arc<dyn ShmMemory>,
+        addr: u64,
+        placement: Placement,
+        len: u64,
+        prot: Prot,
+    ) -> Result<u64, Errno> {
+        let _ = (memory, addr, placement, len, prot);
+        Err(Errno::EINVAL)
+    }
+
+    /// Detach the attachment that starts at `addr` (shmdt(2)): unmap it
+    /// and return its memory's [`ShmMemory::serial`]. `EINVAL` if no
+    /// attachment starts there.
+    fn shm_detach(&mut self, addr: u64) -> Result<u64, Errno> {
+        let _ = addr;
+        Err(Errno::EINVAL)
+    }
+
+    /// Detach every attachment of the calling process (it is exiting) and
+    /// return their memories' serials, one per attachment. Nothing if its
+    /// memory is shared with another process (`CLONE_VM`), which keeps
+    /// the attachments.
+    fn shm_detach_all(&mut self) -> Vec<u64> {
+        Vec::new()
     }
 
     // ---- thread state -------------------------------------------------

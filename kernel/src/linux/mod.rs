@@ -39,6 +39,8 @@ mod files_tests;
 pub mod net;
 mod ns_tests;
 mod services;
+mod shm;
+mod shm_tests;
 pub mod signalfd;
 mod socket_tests;
 pub mod strace;
@@ -256,7 +258,11 @@ pub fn thread_exit(process: &Process, tid: u32) {
 }
 
 /// The last thread of `process` (the running thread) has left it with
-/// `status`: the process tree and the parent learn of it (`task.rs`).
+/// `status`: its System V shared memory is detached (`shm.rs`), then the
+/// process tree and the parent learn of it (`task.rs`).
 pub fn process_exit(process: &Process, status: crate::process::ExitStatus) {
+    if let Some(mut k) = Thread::current(process) {
+        Linux::process_exit(&mut k);
+    }
     task::process_exit(process, status);
 }
