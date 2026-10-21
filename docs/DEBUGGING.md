@@ -1088,6 +1088,79 @@ point; its system calls go to `nt::syscall`. The NT state lives in
   dispatcher bug without booting, since the kernel side only maps, locks,
   blocks and wakes.
 
+## NT file I/O (ADR 0067)
+
+A PE executable reaches the file system through file and device objects in
+the object namespace (`personalities/nt/src/io`, carried out by
+`kernel/src/nt/io.rs`):
+
+- **The namespace.** Each VFS mount is a device `\Device\PolyFs<N>` with a
+  parse procedure; drive letters are symbolic links in `\??`: `\??\C:` →
+  `\Device\PolyFs1` (the VFS's `/nt/c`, the NT system root), `\??\Z:` →
+  `\Device\PolyFs0` (`/`, the whole VFS), and one device per other mount.
+  So `\??\C:\Windows\win.ini` becomes `/nt/c/Windows/win.ini`. `NtCreateFile`
+  of a path Poly has not attached a volume for is `STATUS_OBJECT_PATH_NOT_FOUND`
+  (the layer is attached lazily the first time an NT process starts — before
+  `fs::init` there is nothing). Dump the devices from the shell's object
+  listing or the namespace lookups in the tests.
+- **Case.** Lookup is case-insensitive and case-preserving over the
+  case-sensitive VFS (`io::walk`): the exact name wins, else the entry equal
+  without case whose bytes are smallest (so `README` beats `Readme`), so the
+  choice is stable. `FileNameInformation` reports the on-disk case. A VFS
+  name that is not UTF-8 is shown with U+FFFD and cannot be opened by that
+  name.
+- **Share modes** (`io::share`) follow `CreateFile`'s documented table; a
+  refused open is `STATUS_SHARING_VIOLATION` and nothing on disk changes (the
+  truncation of an overwrite happens only after every check passes). An open
+  that asks for no read/write/delete access (attributes only) is not checked
+  or counted.
+- **Asynchronous I/O** (`io::irp`). A handle without `FILE_SYNCHRONOUS_IO_*`
+  is overlapped: `NtReadFile`/`NtWriteFile` make an I/O request packet queued
+  on the volume's **worker thread** (`ps` lists `nt-io` once one starts) and
+  return `STATUS_PENDING`; the worker runs the transfer with no NT lock held
+  and the request completes through the `IO_STATUS_BLOCK`, the `Event` (reset
+  when the request is made) or the file object, and the `ApcRoutine`. A
+  synchronous handle keeps a file position and the call waits on the file
+  object. A completion that never arrives usually means the worker was not
+  kicked (`io::after_call` runs after every NT system call and drains
+  completions) or the requesting process's memory was not registered
+  (`io::register`, keyed by pid). The completion writes the caller's memory
+  **before** signalling, so a waiter always sees the status block filled in.
+- **Cancellation.** `NtCancelIoFile` (the thread's requests on a handle) and
+  `NtCancelIoFileEx` (the process's, all or one) complete queued or waiting
+  requests with `STATUS_CANCELLED`; a request already running on the worker
+  finishes on its own. A thread's requests are all cancelled when it exits,
+  without their APCs. `\Device\PolyPipe\<name>` is a stand-in slow device: a
+  read with no data waits until a write to the same name feeds it, which is
+  what the cancellation test exercises.
+- **Byte-range locks** (`io::locks`) are mandatory and never merged: a read
+  overlapping another owner's exclusive lock, or a write overlapping any lock
+  that is not the owner's own exclusive one, is `STATUS_FILE_LOCK_CONFLICT`;
+  a lock that cannot be granted is `STATUS_LOCK_NOT_GRANTED` (fail-immediately)
+  or waits. They are not the POSIX `poly_vfs::locks` table, so a Linux
+  process's `fcntl` locks and an NT process's locks on one file do not see
+  each other yet.
+- **Attributes** (`io::info`): `FILE_ATTRIBUTE_READONLY` is the absence of
+  write permission (enforced by NT, since the VFS lets root write anything),
+  `DIRECTORY` and `REPARSE_POINT` come from the node type, and `HIDDEN`,
+  `SYSTEM`, `ARCHIVE` and the birth time live in the extended attribute
+  `user.poly.ntattr` (ADR 0060; a file system without xattrs keeps none).
+  Times are 100 ns since 1601.
+- **Delete** is deferred: `FileDispositionInformation` or a
+  `FILE_DELETE_ON_CLOSE` handle marks the open node, and the name goes when
+  the last file object on it closes (`IoState::file_closed`); new opens
+  meanwhile are `STATUS_DELETE_PENDING`. `NtDeleteFile` opens with `DELETE`,
+  marks and closes.
+- **The ring-3 file I/O test** is `kernel/src/nt/test_io.rs` (`kernel_test!
+  nt_file_io_from_ring3`): a self-assembled PE that creates/writes/reads a
+  file under `C:\`, opens it in another case, hits a sharing violation,
+  enumerates a directory with `*.txt`, completes overlapped reads through an
+  event and an APC, cancels a pending pipe read, hits a lock conflict and a
+  delete-on-close. It ends `0x5A` on success; a `PolyTrace 0xbadbad <step>
+  <status>` line names the failing step. The path parsing, case folding,
+  share table, locks, wildcards and info-class layouts are host-tested in
+  `cargo test -p poly-personality-nt io`.
+
 ## Pipes, waits and event files
 
 Pipes, `poll` / `select`, `epoll` and the event files (ADR 0042) leave
