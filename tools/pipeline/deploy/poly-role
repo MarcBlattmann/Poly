@@ -7,6 +7,12 @@
 #   sudo -n -u polyimpl /srv/poly/bin/poly-role implementer sync <branch> <base>
 #   sudo -n -u polyimpl /srv/poly/bin/poly-role implementer run <entry> <agent> [--model M] [--feedback FILE]
 #
+# and, once, by the owner from a terminal, to log the role in to Claude Code
+# and trust its checkout with exactly the environment the sessions get:
+#
+#   sudo -u polyspec /srv/poly/bin/poly-role spec login
+#   sudo -u polyimpl /srv/poly/bin/poly-role implementer login
+#
 # `sync` puts the role's checkout on <branch>, starting from the hub's
 # <base> (pipeline/spec/<symbol> or pipeline/impl/<symbol>), clean. `run`
 # starts one agent session with `cargo xtask pipeline role` (Claude Code,
@@ -16,6 +22,9 @@
 # setup.sh installs this file root-owned as /srv/poly/bin/poly-role. sudo
 # resets the environment; everything the role needs is set here, every
 # argument is checked, and the implementer never gets POLY_HELDOUT_DIR.
+
+# `check && check || die`: die exits, so it is never an if-then-else.
+# shellcheck disable=SC2015
 set -euo pipefail
 umask 0027
 
@@ -27,7 +36,7 @@ die() {
     exit 2
 }
 
-[ $# -ge 2 ] || die "usage: poly-role <spec|implementer> <sync|run> ..."
+[ $# -ge 2 ] || die "usage: poly-role <spec|implementer> <sync|run|login> ..."
 role=$1
 verb=$2
 shift 2
@@ -38,6 +47,12 @@ implementer) user=polyimpl home=$POLY/impl own=pipeline/impl/ ;;
 *) die "unknown role $role" ;;
 esac
 [ "$(id -un)" = "$user" ] || die "the $role role runs as $user, not $(id -un)"
+# The role's home is fixed (setup.sh creates the user with it); a passwd
+# entry that says otherwise is a user from an earlier attempt, and a Claude
+# login made with `sudo -iu` would land where the sessions never look.
+passwd_home=$(getent passwd "$user" | cut -d: -f6)
+[ "$passwd_home" = "$home" ] ||
+    die "$user's home is ${passwd_home:-unknown}, not $home: run tools/pipeline/deploy/setup.sh, it says how to fix it"
 repo=$home/repo
 
 export HOME=$home USER=$user LOGNAME=$user LANG=C.UTF-8
@@ -101,5 +116,13 @@ run)
     cd "$repo"
     exec cargo xtask pipeline role "$role" "$entry" "${args[@]}"
     ;;
-*) die "unknown verb $verb (sync, run)" ;;
+login)
+    [ $# -eq 0 ] || die "usage: poly-role $role login"
+    [ -t 0 ] && [ -t 1 ] || die "login is interactive: run it from a terminal"
+    command -v claude >/dev/null || die "no claude in $home/.local/bin: run tools/pipeline/deploy/setup.sh"
+    cd "$repo"
+    echo "poly-role: Claude Code as $user, HOME=$HOME, in $repo: /login, then trust the folder, then /exit" >&2
+    exec claude
+    ;;
+*) die "unknown verb $verb (sync, run, login)" ;;
 esac
