@@ -92,6 +92,11 @@ impl NtStatus {
             STATUS_INVALID_PARAMETER_4 => "STATUS_INVALID_PARAMETER_4",
             STATUS_INVALID_PARAMETER_5 => "STATUS_INVALID_PARAMETER_5",
             STATUS_INVALID_PARAMETER_6 => "STATUS_INVALID_PARAMETER_6",
+            STATUS_INVALID_PARAMETER_7 => "STATUS_INVALID_PARAMETER_7",
+            STATUS_INVALID_PARAMETER_8 => "STATUS_INVALID_PARAMETER_8",
+            STATUS_INVALID_PARAMETER_9 => "STATUS_INVALID_PARAMETER_9",
+            STATUS_INVALID_PARAMETER_10 => "STATUS_INVALID_PARAMETER_10",
+            STATUS_MAPPED_FILE_SIZE_ZERO => "STATUS_MAPPED_FILE_SIZE_ZERO",
             STATUS_MAPPED_ALIGNMENT => "STATUS_MAPPED_ALIGNMENT",
             NtStatus(v) if v <= STATUS_WAIT_63.0 => "STATUS_WAIT_n",
             NtStatus(v) if v >= STATUS_ABANDONED_WAIT_0.0 && v <= STATUS_ABANDONED_WAIT_63.0 => {
@@ -195,6 +200,11 @@ pub const STATUS_INVALID_PARAMETER_3: NtStatus = NtStatus(0xC000_00F1);
 pub const STATUS_INVALID_PARAMETER_4: NtStatus = NtStatus(0xC000_00F2);
 pub const STATUS_INVALID_PARAMETER_5: NtStatus = NtStatus(0xC000_00F3);
 pub const STATUS_INVALID_PARAMETER_6: NtStatus = NtStatus(0xC000_00F4);
+pub const STATUS_INVALID_PARAMETER_7: NtStatus = NtStatus(0xC000_00F5);
+pub const STATUS_INVALID_PARAMETER_8: NtStatus = NtStatus(0xC000_00F6);
+pub const STATUS_INVALID_PARAMETER_9: NtStatus = NtStatus(0xC000_00F7);
+pub const STATUS_INVALID_PARAMETER_10: NtStatus = NtStatus(0xC000_00F8);
+pub const STATUS_MAPPED_FILE_SIZE_ZERO: NtStatus = NtStatus(0xC000_011E);
 pub const STATUS_MAPPED_ALIGNMENT: NtStatus = NtStatus(0xC000_0220);
 
 #[cfg(test)]
@@ -219,6 +229,7 @@ mod tests {
         assert_eq!(NtStatus::abandoned(63), STATUS_ABANDONED_WAIT_63);
         assert_eq!(std::format!("{:?}", NtStatus::wait(3)), "STATUS_WAIT_n(0x3)");
         assert_eq!(std::format!("{}", STATUS_ACCESS_DENIED), "STATUS_ACCESS_DENIED");
-        assert_eq!(std::format!("{:?}", NtStatus(0xC000_0001)), "NTSTATUS(0xc0000001)");
+        assert_eq!(std::format!("{:?}", NtStatus(0xC000_0001)), "STATUS_UNSUCCESSFUL");
+        assert_eq!(std::format!("{:?}", NtStatus(0xC000_7777)), "NTSTATUS(0xc0007777)");
     }
 }

@@ -41,6 +41,7 @@ use crate::protect::{HwProt, Protection};
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::result::Result;
 use poly_ntobj::status::*;
 use poly_ntobj::{NtStatus, ObjectId};
 
@@ -491,7 +492,8 @@ impl VirtualMemory {
                             let at = base + i as u64 * PAGE_SIZE;
                             result = b.commit(at, n as u64 * PAGE_SIZE, prot.hw(false));
                             if result.is_ok() {
-                                self.allocation_mut(base).expect("live").pages[i..i + n].fill(PageState::Committed(prot));
+                                self.allocation_mut(base).expect("live").pages[i..i + n]
+                                    .fill(PageState::Committed(prot));
                             }
                         }
                     },
@@ -517,7 +519,7 @@ impl VirtualMemory {
                 self.section_committed(v.section, base, offset, end - start);
             }
             AllocKind::View(_) => {
-                if a.pages[first..last].iter().any(|p| *p == PageState::Reserved) {
+                if a.pages[first..last].contains(&PageState::Reserved) {
                     return Err(STATUS_CONFLICTING_ADDRESSES);
                 }
             }
@@ -644,7 +646,7 @@ impl VirtualMemory {
             PageState::Committed(p) => p.value(),
             PageState::Reserved => return Err(STATUS_NOT_COMMITTED),
         };
-        if a.pages[first..last].iter().any(|p| *p == PageState::Reserved) {
+        if a.pages[first..last].contains(&PageState::Reserved) {
             return Err(STATUS_NOT_COMMITTED);
         }
         let shared = a.shared();
@@ -748,7 +750,8 @@ impl VirtualMemory {
             // A base that is not 64 KiB-aligned would shift the view.
             return Err(STATUS_MAPPED_ALIGNMENT);
         }
-        let a = Allocation { base, size, protect: v.protect, kind: AllocKind::View(v.info), stack: false, pages: v.pages };
+        let a =
+            Allocation { base, size, protect: v.protect, kind: AllocKind::View(v.info), stack: false, pages: v.pages };
         self.allocations.insert(base, a);
         Ok(base)
     }
@@ -798,8 +801,7 @@ pub fn map_view_pages(b: &mut dyn Backend, a: &Allocation, source: &ViewSource) 
                 return;
             }
             let at = i as u64 * PAGE_SIZE;
-            let map =
-                crate::backend::ViewMap { source: source.clone(), offset: v.offset + at, prot, shared: v.shared };
+            let map = crate::backend::ViewMap { source: source.clone(), offset: v.offset + at, prot, shared: v.shared };
             result = b.map_view(a.base + at, n as u64 * PAGE_SIZE, &map);
         },
     );

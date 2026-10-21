@@ -87,4 +87,7 @@ pub trait Backend {
 
     /// A file object's whole contents (to parse an image).
     fn read_file(&mut self, file: u64) -> Result<Vec<u8>, NtStatus>;
+
+    /// A file object was deleted: the kernel lets go of what its key names.
+    fn file_deleted(&mut self, _file: u64) {}
 }

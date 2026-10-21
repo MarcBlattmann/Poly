@@ -144,7 +144,8 @@ mod tests {
 
     #[test]
     fn valid_and_invalid_values() {
-        for base in [PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE]
+        for base in
+            [PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE]
         {
             assert!(Protection::new(base, true).is_ok(), "{base:#x}");
         }
@@ -157,7 +158,10 @@ mod tests {
         assert!(Protection::new(PAGE_READWRITE | PAGE_NOCACHE, true).is_ok());
         assert!(Protection::new(PAGE_READWRITE | PAGE_WRITECOMBINE, true).is_ok());
         assert_eq!(Protection::new(PAGE_NOACCESS | PAGE_GUARD, true), Err(STATUS_INVALID_PAGE_PROTECTION));
-        assert_eq!(Protection::new(PAGE_READWRITE | PAGE_GUARD | PAGE_NOCACHE, true), Err(STATUS_INVALID_PAGE_PROTECTION));
+        assert_eq!(
+            Protection::new(PAGE_READWRITE | PAGE_GUARD | PAGE_NOCACHE, true),
+            Err(STATUS_INVALID_PAGE_PROTECTION)
+        );
         assert_eq!(
             Protection::new(PAGE_READWRITE | PAGE_NOCACHE | PAGE_WRITECOMBINE, true),
             Err(STATUS_INVALID_PAGE_PROTECTION)
