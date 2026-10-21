@@ -6,7 +6,7 @@ extern crate std;
 use super::fake::*;
 use crate::abi::{le_u64, makedev};
 use crate::fs::{
-    DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, SysInfo, TimeChange, at::AT_FDCWD, dirent64_len,
+    DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, SysInfo, TimeChange, XattrTarget, at::AT_FDCWD, dirent64_len,
     encode_dirent64, major, minor, rlimit::*,
 };
 use crate::kernel::Target;
@@ -362,6 +362,36 @@ impl LinuxFs for VfsFs {
             self.fds.set_limit(limit as usize);
         }
         Ok(())
+    }
+
+    fn getxattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<Vec<u8>, Errno> {
+        self.xattr_node(target)?.getxattr(&self.cred, name).map_err(errno)
+    }
+
+    fn setxattr(&mut self, target: XattrTarget<'_>, name: &[u8], value: &[u8], flags: u32) -> Result<(), Errno> {
+        self.xattr_node(target)?.setxattr(&self.cred, name, value, flags).map_err(errno)
+    }
+
+    fn listxattr(&mut self, target: XattrTarget<'_>) -> Result<Vec<u8>, Errno> {
+        self.xattr_node(target)?.listxattr(&self.cred).map_err(errno)
+    }
+
+    fn removexattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<(), Errno> {
+        self.xattr_node(target)?.removexattr(&self.cred, name).map_err(errno)
+    }
+}
+
+impl VfsFs {
+    fn xattr_node(&self, target: XattrTarget<'_>) -> Result<poly_vfs::NodeRef, Errno> {
+        match target {
+            XattrTarget::Path { path, follow } => {
+                self.vfs.lookup(&self.ctx, &self.cred, At::Cwd, path, follow).map_err(errno)
+            }
+            XattrTarget::Fd(fd) => {
+                let file = self.fds.get(fd).map_err(errno)?;
+                if file.is_path_only() { Err(Errno::EBADF) } else { Ok(file.node().clone()) }
+            }
+        }
     }
 }
 
@@ -909,4 +939,24 @@ fn sysinfo_encodes_struct_sysinfo() {
     assert_eq!(u16::from_le_bytes([b[80], b[81]]), 3);
     assert_eq!(u32::from_le_bytes(b[104..108].try_into().unwrap()), 1);
     assert_eq!(sys(&mut k, nr::SYSINFO, &[UNMAPPED]), Err(Errno::EFAULT));
+}
+
+#[test]
+fn fionbio_and_fioclex_work_on_any_descriptor() {
+    let mut e = env();
+    let k = &mut e.k;
+    let p = s(k, 0, b"/dir/file");
+    let fd = sys(k, nr::OPEN, &[p, 0o2, 0]).unwrap();
+    let arg = s(k, 0x100, b"");
+    k.poke(arg, &1i32.to_le_bytes());
+    assert_eq!(sys(k, nr::IOCTL, &[fd, 0x5421, arg]), Ok(0), "FIONBIO on a regular file");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o4002));
+    k.poke(arg, &0i32.to_le_bytes());
+    assert_eq!(sys(k, nr::IOCTL, &[fd, 0x5421, arg]), Ok(0));
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o2));
+    assert_eq!(sys(k, nr::IOCTL, &[fd, 0x5451, 0]), Ok(0), "FIOCLEX");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 1, 0]), Ok(1));
+    assert_eq!(sys(k, nr::IOCTL, &[fd, 0x5450, 0]), Ok(0), "FIONCLEX");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 1, 0]), Ok(0));
+    assert_eq!(sys(k, nr::IOCTL, &[99, 0x5421, arg]), Err(Errno::EBADF));
 }

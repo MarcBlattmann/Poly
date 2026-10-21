@@ -210,7 +210,12 @@ fn cap_header(k: &mut dyn LinuxKernel, hdrp: UserPtr) -> Result<(usize, i32), Er
 /// a good version only checks the header (to be confirmed by the diff
 /// runner).
 pub fn capget(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let (words, pid) = cap_header(k, a.ptr(0))?;
+    let (words, pid) = match cap_header(k, a.ptr(0)) {
+        // The probe for the preferred version: with a null `datap` it
+        // succeeds once the version is written back (capget's spec sheet).
+        Err(Errno::EINVAL) if a.ptr(1).is_null() => return Ok(0),
+        r => r?,
+    };
     if pid < 0 {
         return Err(Errno::EINVAL);
     }

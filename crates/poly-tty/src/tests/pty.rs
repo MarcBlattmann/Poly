@@ -251,7 +251,8 @@ fn closing_either_side() {
     drop(m);
     assert_eq!(
         env.host.take_signals(),
-        [(Target::Process(10), SIGHUP), (Target::Group(10), SIGHUP), (Target::Group(10), SIGCONT)]
+        [(Target::Group(10), SIGHUP), (Target::Group(10), SIGCONT)],
+        "the leader is in the foreground group: one SIGHUP"
     );
     assert_eq!(read_some(&s, 10), Ok(vec![]));
     assert_eq!(s.write(b"x"), Err(Errno::EIO));

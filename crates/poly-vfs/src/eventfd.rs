@@ -43,6 +43,10 @@ impl core::fmt::Debug for EventFd {
 }
 
 impl FileObject for EventFd {
+    fn seek_stays_at_zero(&self) -> bool {
+        true
+    }
+
     fn read(&self, buf: &mut [u8]) -> Result<usize> {
         if buf.len() < 8 {
             return Err(Errno::EINVAL);

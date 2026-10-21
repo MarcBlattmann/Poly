@@ -12,7 +12,7 @@ use crate::fs;
 use crate::process;
 use alloc::vec::Vec;
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::fs::{DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, TimeChange};
+use poly_personality_linux::fs::{DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, TimeChange, XattrTarget};
 use poly_personality_linux::kernel::Target;
 use poly_vfs::locks::{LockKind, LockOwner};
 use poly_vfs::{Access, OpenFlags, RenameFlags, Whence};
@@ -45,7 +45,8 @@ fn status(node: &poly_vfs::NodeRef) -> Result<FileStatus, Errno> {
 impl LinuxFs for Thread<'_> {
     fn openat(&mut self, dirfd: i32, path: &[u8], flags: u32, mode: u32) -> Result<i32, Errno> {
         let files = &self.process().files;
-        files.openat(dirfd, path, OpenFlags::from_bits(flags), mode as u16).map_err(vfs_errno)
+        let fd = files.openat(dirfd, path, OpenFlags::from_bits(flags), mode as u16).map_err(vfs_errno)?;
+        self.fifo_open_wait(fd)
     }
 
     fn statat(&mut self, dirfd: i32, path: &[u8], follow: bool) -> Result<FileStatus, Errno> {
@@ -105,7 +106,13 @@ impl LinuxFs for Thread<'_> {
     }
 
     fn pwrite(&mut self, fd: i32, buf: &[u8], offset: u64) -> Result<usize, Errno> {
-        self.process().files.pwrite(fd, buf, offset).map_err(vfs_errno)
+        let n = self.process().files.pwrite(fd, buf, offset).map_err(vfs_errno)?;
+        // Bytes that reach fds 1 and 2 are the program's output, whichever
+        // call wrote them (pwrite64, copy_file_range; ADR 0027).
+        if self.process().traced && (fd == 1 || fd == 2) && n > 0 {
+            crate::testrun::output(fd, &buf[..n.min(buf.len())]);
+        }
+        Ok(n)
     }
 
     fn dup(&mut self, fd: i32) -> Result<i32, Errno> {
@@ -306,6 +313,22 @@ impl LinuxFs for Thread<'_> {
             }
         }
         Ok(())
+    }
+
+    fn getxattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<Vec<u8>, Errno> {
+        super::xattr::get(self, target, name)
+    }
+
+    fn setxattr(&mut self, target: XattrTarget<'_>, name: &[u8], value: &[u8], flags: u32) -> Result<(), Errno> {
+        super::xattr::set(self, target, name, value, flags)
+    }
+
+    fn listxattr(&mut self, target: XattrTarget<'_>) -> Result<Vec<u8>, Errno> {
+        super::xattr::list(self, target)
+    }
+
+    fn removexattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<(), Errno> {
+        super::xattr::remove(self, target, name)
     }
 }
 

@@ -164,8 +164,11 @@ cargo xtask pipeline diff --target poly         # real Linux against Poly in QEM
 cargo xtask pipeline diff --tests hello,brk --syscalls names --timing-envelope 50
 cargo xtask pipeline diff --target poly --baseline target/pipeline/runs/<old>/summary.json
 cargo xtask pipeline diff --target poly --tests-dir <entry>.tests --tests-dir <held-out dir of the entry>
+cargo xtask pipeline diff --target poly --jobs 4 # four tests at a time (default 1)
 cargo xtask pipeline selfcheck                  # what `cargo xtask ci` runs: Linux against Linux
-cargo xtask pipeline polycheck                  # and Poly against Linux (tests/linux/poly-pass.txt)
+cargo xtask pipeline polycheck                  # and Poly against Linux (poly-pass.txt, green entries)
+cargo xtask pipeline polyrun cat-n --tests-dir specs/linux/apps/cat.tests --print
+                                                # Poly only, no reference (implementers may run it)
 ```
 
 `--tests-dir` adds an entry's test programs (visible or held-out, `.c`
@@ -199,14 +202,39 @@ kernel's `POLY-*` records (ADR 0027, kernel side in ADR 0038) into a trace;
 about half a second per test. Records carry no `data<i>` fields yet, so
 pointer arguments are compared as "anything". A kernel that cannot run a
 test's file says `POLY-INIT: unsupported <reason>`, and the test is
-reported **unsupported**. `pipeline polycheck` (in `cargo xtask ci`) runs
-the corpus this way and fails if a test listed in
-`tests/linux/poly-pass.txt` does not pass; tests that newly pass are named,
-to be added to the list. Today 11 of the 12 corpus programs pass;
-`libc-hello` differs at `rseq` (Poly answers `ENOSYS`), with the same
-output and exit status. Of the 11 corpus app tests, `app-true`,
+reported **unsupported**. QEMU itself sometimes crashes (SIGSEGV) while
+booting under TCG on a loaded host; a guest cannot cause that, so the boot
+is retried twice and a crash that persists is an **error** of that test
+alone (the logs of the crashed boots are kept as
+`<test>.serial.crash-<n>.log`). Processes are numbered in creation order
+on both sides (on Poly by pid, which the kernel hands out in that order),
+so the program is always process 0. `--jobs N` runs N tests at a time (the
+reference run and the Poly boot of a test stay together; the report keeps
+the corpus order).
+
+**Keeping green entries green.** `pipeline polycheck` (in `cargo xtask ci`)
+runs, on Poly against Linux, the corpus and the **visible** spec tests of
+every coverage entry whose status is `green` and that has a
+`specs/<os>/<component>/<symbol>.tests/` directory, as many at a time as
+the machine has cores (at most four). It fails if a test listed in
+`tests/linux/poly-pass.txt` does not pass, or if any visible test of a
+green entry does not pass (`green entry <id>: visible test <t> fails`);
+corpus tests that newly pass are named, to be added to the list. The green
+entries come from the coverage map itself, so marking an entry green
+(`coverage set-status <id> green ...`) is what puts its tests into CI; there
+is no second list. Held-out tests are not in the repository and not on
+GitHub, so CI cannot run them: they are checked by the runner when it
+marks an entry green (`pipeline diff --target poly` with the entry's
+visible and held-out directories; the loop's verify step) and again
+whenever the runner re-runs the entries. Today 11 of the 12 corpus programs
+pass (`libc-hello` differs at `rseq`: Poly answers `ENOSYS`, with the same
+output and exit status); of the 11 corpus app tests, `app-true`,
 `app-echo`, `app-head`, `app-grep`, `app-sed` and `app-mkdir` pass (app
-mode); the rest are in `specs/linux/FAILING.md`.
+mode; the rest are in `specs/linux/FAILING.md`); and 40 green entries bring
+64 visible tests. The spec tests take about half a minute with four jobs
+(the app tests run one at a time after them). (`write` was green
+before its spec tests existed; its visible spec tests pass, its held-out
+test does not, and it is handed off like the failing entries.)
 
 ### Held-out store and hand-off log
 
@@ -534,7 +562,7 @@ violation stops the entry and puts it in the human queue.
 
 - Running CI and the diff of agent branches as a user without GitHub
   credentials, or in a container (today the runner, `server`, does both).
-- `data<i>` fields and times in the kernel's `POLY-SYSCALL` records, and
-  `POLY-SIGNAL` for signals a handler takes (only faults and fatal signals
-  are reported).
+- `data<i>` fields and times in the kernel's `POLY-SYSCALL` records.
+  (`POLY-SIGNAL` reports every signal a thread takes but `SIGKILL`, as the
+  ptrace tracer's signal-delivery-stops: ADR 0062.)
 - Windows and macOS oracles and tracers (later phases).

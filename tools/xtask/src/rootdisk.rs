@@ -917,6 +917,12 @@ fn gcc_parts() -> Result<GccParts, String> {
     Ok(GccParts { files, links })
 }
 
+/// Whether this process runs as root (`/proc/self` belongs to its user).
+fn running_as_root() -> bool {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self").is_ok_and(|m| m.uid() == 0)
+}
+
 /// Whether `mke2fs` can be run.
 fn have_mke2fs() -> bool {
     Command::new("mke2fs").arg("-V").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok()
@@ -952,7 +958,11 @@ pub fn write_image(tree: &RootTree, image: &Path) -> Result<&'static str, String
     let _ = std::fs::remove_file(image);
     // POLY_ROOTDISK_FORMAT=poly-ext2 uses the repository's formatter even with e2fsprogs.
     let ours = std::env::var("POLY_ROOTDISK_FORMAT").is_ok_and(|v| v == "poly-ext2");
-    if !ours && have_mke2fs() {
+    // `mke2fs -d` gives every file the owner of its staged copy, and its
+    // `root_owner` option covers only the root directory: run as anyone but
+    // root (CI), the image's files would belong to that user. The
+    // repository's formatter writes them as root.
+    if !ours && have_mke2fs() && running_as_root() {
         with_mke2fs(tree, image, size, inodes)?;
         Ok("mke2fs -t ext4 -d")
     } else {

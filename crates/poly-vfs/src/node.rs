@@ -51,6 +51,11 @@ impl NodeRef {
         &self.loc.mount
     }
 
+    /// The file system the inode is on.
+    pub(crate) fn fs(&self) -> &dyn crate::FileSystem {
+        &*self.loc.mount.sb.fs
+    }
+
     pub fn ino(&self) -> Ino {
         self.loc.ino
     }

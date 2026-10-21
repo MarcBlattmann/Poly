@@ -110,11 +110,18 @@ pub fn fstat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let request = a.uint(1);
+    if let Some(r) = crate::sys::fdioctl::generic(k, fd, request, a) {
+        return r;
+    }
     // SIOCOUTQ on a socket (ADR 0048): the same number as the terminal
     // request TIOCOUTQ, so it is answered before the terminal check.
     if request == crate::net::abi::SIOCOUTQ
         && let Some(r) = crate::sys::socket::ioctl_outq(k, fd, a.ptr(2))
     {
+        return r;
+    }
+    // FIONREAD on a regular file, FICLONE and friends (sys::fileioctl).
+    if let Some(r) = crate::sys::fileioctl::ioctl(k, fd, request, a.ulong(2)) {
         return r;
     }
     let st = k.fstat(fd)?;

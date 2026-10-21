@@ -207,6 +207,9 @@ struct Entry {
     user: bool,
     domain: Domain,
     reuse_addr: bool,
+    /// `SO_REUSEPORT`: sockets that all set it may bind the same address
+    /// and port (bind's spec sheet); the first one found receives.
+    reuse_port: bool,
     sock: Sock,
     /// Readiness and queued input as [`Stack::take_changed`] last reported
     /// them.
@@ -391,6 +394,12 @@ impl Stack {
             return Some(self.now);
         }
         self.deadline(blocked)
+    }
+
+    /// Whether packets sent to this host wait for the next
+    /// [`poll`](Self::poll) (the loopback queue is not empty).
+    pub fn loopback_pending(&self) -> bool {
+        !self.loopq.is_empty()
     }
 
     /// When the stack next needs `poll`, as [`poll`](Self::poll) returns it.
@@ -1087,6 +1096,68 @@ impl Stack {
         }
     }
 
+    /// The largest IP packet towards `dst`: the device's MTU, or for a
+    /// destination on this host [`ipv4::MAX_PACKET_LEN`] (loopback carries
+    /// whole 64 KiB datagrams, as Linux's `lo` does: sendto's spec sheet,
+    /// 65507 bytes of UDP).
+    fn path_mtu(&self, dst: IpAddr) -> usize {
+        if self.is_local_addr(dst) { ipv4::MAX_PACKET_LEN } else { self.mtu }
+    }
+
+    /// [`output_ip`](Self::output_ip) for a packet to this host: built on
+    /// its own (it may be larger than a device frame) and queued for the
+    /// next [`poll`](Self::poll).
+    fn output_loop(
+        &mut self,
+        src: IpAddr,
+        dst: IpAddr,
+        protocol: u8,
+        payload: &[u8],
+        dont_fragment: bool,
+    ) -> Result<(), Errno> {
+        let packet = match (src, dst) {
+            (IpAddr::V4(s), IpAddr::V4(d)) => {
+                if 20 + payload.len() > ipv4::MAX_PACKET_LEN {
+                    return Err(Errno::EMSGSIZE);
+                }
+                let mut h = ipv4::Ipv4Header::new(s, d, protocol, self.pkt_ttl.unwrap_or(self.cfg.ttl), payload.len());
+                h.tos = self.pkt_tos;
+                h.dont_fragment = dont_fragment;
+                h.ident = self.ip_ident;
+                self.ip_ident = self.ip_ident.wrapping_add(1);
+                let mut p = vec![0u8; 20 + payload.len()];
+                ipv4::emit(&mut p, &h);
+                p[20..].copy_from_slice(payload);
+                p
+            }
+            (IpAddr::V6(s), IpAddr::V6(d)) => {
+                if payload.len() > ipv4::MAX_PACKET_LEN {
+                    return Err(Errno::EMSGSIZE);
+                }
+                let h = ipv6::Ipv6Header {
+                    traffic_class: 0,
+                    flow_label: 0,
+                    payload_len: payload.len(),
+                    next_header: protocol,
+                    hop_limit: self.pkt_ttl.unwrap_or(self.cfg.ttl),
+                    src: s,
+                    dst: d,
+                };
+                let mut p = vec![0u8; 40 + payload.len()];
+                ipv6::emit(&mut p, &h);
+                p[40..].copy_from_slice(payload);
+                p
+            }
+            _ => return Err(Errno::EAFNOSUPPORT),
+        };
+        if self.loopq.len() < LOOP_QUEUE {
+            self.loopq.push_back(packet);
+        } else {
+            self.stats.loop_dropped += 1;
+        }
+        Ok(())
+    }
+
     /// Largest TCP segment payload towards `dst`.
     fn mss_limit(&self, dst: IpAddr) -> usize {
         let ip = if dst.is_ipv4() { 20 } else { 40 };
@@ -1104,6 +1175,9 @@ impl Stack {
         dont_fragment: bool,
     ) -> Result<(), Errno> {
         let hop = self.hop(dst)?;
+        if matches!(hop, Hop::Loop) {
+            return self.output_loop(src, dst, protocol, payload, dont_fragment);
+        }
         let mut frame = core::mem::take(&mut self.frame_buf);
         let o = ethernet::HEADER_LEN;
         let (ip_len, ethertype) = match (src, dst) {
@@ -1291,13 +1365,19 @@ impl Stack {
             };
             let r = match s.proto {
                 Protocol::Udp => {
-                    let mut b = core::mem::take(&mut self.tx_buf);
+                    // A datagram larger than a device frame (to this host,
+                    // `path_mtu`) gets a buffer of its own.
+                    let need = udp::HEADER_LEN + d.data.len();
+                    let own = self.tx_buf.len() < need;
+                    let mut b = if own { vec![0u8; need] } else { core::mem::take(&mut self.tx_buf) };
                     let n = d.data.len().min(b.len() - udp::HEADER_LEN);
                     b[udp::HEADER_LEN..udp::HEADER_LEN + n].copy_from_slice(&d.data[..n]);
                     let ps = pseudo(src, d.addr.ip(), proto::UDP, udp::HEADER_LEN + n);
                     udp::emit(&mut b, local.port(), d.addr.port(), n, ps);
                     let r = self.output_ip(dev, src, d.addr.ip(), proto::UDP, &b[..udp::HEADER_LEN + n], false);
-                    self.tx_buf = b;
+                    if !own {
+                        self.tx_buf = b;
+                    }
                     r
                 }
                 _ => {
@@ -1428,6 +1508,7 @@ impl Stack {
             user: false,
             domain,
             reuse_addr: false,
+            reuse_port: false,
             sock: Sock::Tcp(Box::new(child)),
             seen: None,
         }) else {
@@ -1642,12 +1723,17 @@ impl Stack {
 
     /// Would binding `addr` conflict with an existing socket?
     fn bind_conflict(&self, me: usize, p: Protocol, addr: SocketAddr, reuse: bool) -> bool {
+        let reuse_port = |i: usize| self.sockets.get(i).and_then(Option::as_ref).is_some_and(|e| e.reuse_port);
         self.bound().any(|(i, bp, a, other_reuse, state)| {
             if i == me || bp != p || a.port() != addr.port() || a.is_ipv4() != addr.is_ipv4() {
                 return false;
             }
             let overlap = a.ip() == addr.ip() || a.ip().is_unspecified() || addr.ip().is_unspecified();
             if !overlap {
+                return false;
+            }
+            // SO_REUSEPORT on both: the port is shared.
+            if reuse_port(me) && reuse_port(i) {
                 return false;
             }
             // SO_REUSEADDR: TCP may share a port with connections that are
@@ -1689,7 +1775,15 @@ impl Stack {
             Protocol::Tcp => Sock::Tcp(Box::new(Tcb::new(self.cfg.tcp, domain.any(0), self.now))),
             _ => Sock::Dgram(DgramSocket::new(p, self.cfg.udp_recv_buffer, self.cfg.udp_send_buffer)),
         };
-        let idx = self.insert(Entry { generation: 0, user: true, domain, reuse_addr: false, sock, seen: None })?;
+        let idx = self.insert(Entry {
+            generation: 0,
+            user: true,
+            domain,
+            reuse_addr: false,
+            reuse_port: false,
+            sock,
+            seen: None,
+        })?;
         Ok(self.handle_of(idx))
     }
 
@@ -1745,8 +1839,13 @@ impl Stack {
             self.bind(h, domain.any(0))?;
         } else if t.state == TcpState::Closed {
             let (local, reuse) = (t.local, e.reuse_addr);
+            let me = h.index as usize;
+            let shared = |i: usize| {
+                [me, i].iter().all(|&j| self.sockets.get(j).and_then(Option::as_ref).is_some_and(|e| e.reuse_port))
+            };
             let listener_conflict = self.bound().any(|(i, bp, a, _, s)| {
-                i != h.index as usize
+                i != me
+                    && !shared(i)
                     && bp == Protocol::Tcp
                     && s == Some(TcpState::Listen)
                     && a.port() == local.port()
@@ -1904,6 +2003,7 @@ impl Stack {
             _ => (0, 65535),
         };
         let ip = if dst.is_ipv4() { 20 } else { 40 };
+        let mtu = mtu.max(self.path_mtu(dst.ip()));
         if data.len() > max || data.len() + overhead + ip > mtu {
             // No fragmentation of outgoing datagrams (see the crate docs).
             return Err(Errno::EMSGSIZE);
@@ -1956,9 +2056,21 @@ impl Stack {
 
     /// Shut down one or both directions (`shutdown(2)`).
     pub fn shutdown(&mut self, h: SocketHandle, how: Shutdown) -> Result<(), Errno> {
+        let idx = h.index as usize;
         match &mut self.entry(h)?.sock {
+            // A listener shut down for reading stops listening: accept is
+            // EINVAL from then on, and connections nobody accepted are reset
+            // (shutdown's and accept4's spec sheets).
+            Sock::Tcp(t) if t.state == TcpState::Listen => {
+                if matches!(how, Shutdown::Read | Shutdown::Both) {
+                    t.listen = None;
+                    t.state = TcpState::Closed;
+                    self.reset_unaccepted(idx);
+                }
+                Ok(())
+            }
             Sock::Tcp(t) => {
-                if matches!(t.state, TcpState::Closed | TcpState::Listen) {
+                if t.state == TcpState::Closed {
                     return Err(Errno::ENOTCONN);
                 }
                 if matches!(how, Shutdown::Read | Shutdown::Both) {
@@ -1996,17 +2108,7 @@ impl Stack {
             Sock::Dgram(_) => (false, true),
         };
         if was_listening {
-            // Connections nobody accepted are reset.
-            for (i, c) in self.sockets.iter_mut().enumerate() {
-                if let Some(Entry { sock: Sock::Tcp(c), .. }) = c
-                    && c.parent == Some(idx)
-                    && i != idx
-                {
-                    c.parent = None;
-                    c.orphan = true;
-                    c.abort();
-                }
-            }
+            self.reset_unaccepted(idx);
         }
         if done {
             self.free(idx);
@@ -2014,6 +2116,20 @@ impl Stack {
             self.settle(idx);
         }
         Ok(())
+    }
+
+    /// Reset the connections listener `idx` has that nobody accepted.
+    fn reset_unaccepted(&mut self, idx: usize) {
+        for (i, c) in self.sockets.iter_mut().enumerate() {
+            if let Some(Entry { sock: Sock::Tcp(c), .. }) = c
+                && c.parent == Some(idx)
+                && i != idx
+            {
+                c.parent = None;
+                c.orphan = true;
+                c.abort();
+            }
+        }
     }
 
     /// Readiness flags of a socket.
@@ -2249,6 +2365,13 @@ impl Stack {
     /// `SO_REUSEADDR`.
     pub fn set_reuse_addr(&mut self, h: SocketHandle, on: bool) -> Result<(), Errno> {
         self.entry(h)?.reuse_addr = on;
+        Ok(())
+    }
+
+    /// `SO_REUSEPORT`: share the address and port with other sockets that
+    /// set it.
+    pub fn set_reuse_port(&mut self, h: SocketHandle, on: bool) -> Result<(), Errno> {
+        self.entry(h)?.reuse_port = on;
         Ok(())
     }
 

@@ -76,6 +76,7 @@ use poly_vm::{FaultAction, PageState, VmMap};
 
 mod advice;
 mod fork;
+mod futex;
 mod remap;
 mod shared;
 
@@ -115,6 +116,14 @@ pub trait PageSource: Send + Sync {
     /// pages: mappings then map that frame instead of a copy. `None` (the
     /// default) means every mapped page is a private copy. May block.
     fn cached_page(&self, _offset: u64) -> Option<Result<CachedPage, IoError>> {
+        None
+    }
+
+    /// A number that names the object behind the source whichever
+    /// `PageSource` value maps it (a file: its device and inode), for
+    /// shared futex keys; `None` (the default): the value itself names it.
+    /// Never has the top bit set (that is where kernel addresses live).
+    fn object_id(&self) -> Option<u64> {
         None
     }
 

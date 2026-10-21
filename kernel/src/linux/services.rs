@@ -42,7 +42,7 @@ use core::cell::OnceCell;
 use core::sync::atomic::Ordering;
 use poly_personality_linux::abi::{FileStat, Timespec, makedev};
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::futex::FutexTable;
+use poly_personality_linux::futex::{FutexKey, FutexTable};
 use poly_personality_linux::kernel::{
     Backing, Clock, CpuTimes, CpuTimesOf, Credentials, Deadline, FpuState, LinuxKernel, MapRequest, Placement,
     ProcessInfo, ProcessSelector, Prot, RandomMode, Target, UserContext, UserPtr, Wakeup,
@@ -53,6 +53,7 @@ use poly_vfs::FileType;
 use poly_vm::Access;
 
 mod fileio;
+mod ptypeer;
 
 /// The running thread of a Linux process, for one system call or one
 /// return to user mode.
@@ -324,6 +325,11 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn ioctl(&mut self, fd: i32, request: u32, arg: u64) -> Result<u64, Errno> {
+        if request == poly_tty::ioctl::TIOCGPTPEER
+            && let Some(r) = self.pty_peer(fd, arg)
+        {
+            return r;
+        }
         // A terminal request interrupted (job control's SIGTTOU) restarts
         // under SA_RESTART, as on a slow device (signal(7), ADR 0046).
         self.process.files.ioctl(fd, request, arg).map_err(|e| match e {
@@ -549,6 +555,12 @@ impl LinuxKernel for Thread<'_> {
         }
     }
 
+    fn signal_delivered(&mut self, signal: u32) {
+        if self.process.traced {
+            testrun::signal(self.process.pid, signal);
+        }
+    }
+
     fn kill_process(&mut self, signal: u32, core_dump: bool) {
         // No core dumps are written, so WCOREDUMP is never reported.
         let status = ExitStatus::Signaled { signal, core: false };
@@ -558,9 +570,6 @@ impl LinuxKernel for Thread<'_> {
             // signals whose default is a core dump always are.
             if core_dump || super::strace::verbose() {
                 kprintln!("linux: pid {} killed by signal {signal}", self.process.pid);
-            }
-            if self.process.traced {
-                testrun::signal(self.process.pid, signal);
             }
         }
         self.process.group_exit(status);
@@ -650,6 +659,16 @@ impl LinuxKernel for Thread<'_> {
 
     fn address_space_id(&self) -> u64 {
         user::current_address_space().map_or(0, |s| s.root())
+    }
+
+    fn futex_key(&self, addr: UserPtr, private: bool) -> Result<FutexKey, Errno> {
+        // A shared futex in a shared mapping is the mapped object's word
+        // (futex(2)); everything else is this address space's.
+        let shared = (!private).then(user::current_memory).flatten().and_then(|m| m.shared_key(addr.0));
+        Ok(match shared {
+            Some((object, offset)) => FutexKey::Shared { object, offset },
+            None => FutexKey::Private { space: self.address_space_id(), addr: addr.0 },
+        })
     }
 
     fn futex_cmpxchg(&mut self, addr: UserPtr, expected: u32, new: u32) -> Result<u32, Errno> {

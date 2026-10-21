@@ -124,6 +124,37 @@ pub trait FileSystem: Send + Sync {
         Ok(())
     }
 
+    /// Extended attribute `name` of `ino` (the full name, namespace
+    /// prefix included; see [`crate::xattr`]): its value, `ENODATA` if the
+    /// inode has none of that name. The default is a file system that
+    /// keeps no extended attributes: `EOPNOTSUPP` for every one of these
+    /// four methods. The VFS has checked the name and the caller's
+    /// permissions.
+    fn getxattr(&self, ino: Ino, name: &[u8]) -> Result<Vec<u8>> {
+        let _ = (ino, name);
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// Sets attribute `name` of `ino` to `value` (`EEXIST` / `ENODATA` as
+    /// `how` asks, `ENOSPC` when it does not fit), and the change time.
+    fn setxattr(&self, ino: Ino, name: &[u8], value: &[u8], how: crate::xattr::SetMode) -> Result<()> {
+        let _ = (ino, name, value, how);
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// The names of `ino`'s attributes, each followed by a NUL byte.
+    fn listxattr(&self, ino: Ino) -> Result<Vec<u8>> {
+        let _ = ino;
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// Removes attribute `name` of `ino` (`ENODATA` if it has none), and
+    /// sets the change time.
+    fn removexattr(&self, ino: Ino, name: &[u8]) -> Result<()> {
+        let _ = (ino, name);
+        Err(Errno::EOPNOTSUPP)
+    }
+
     /// Space and inode counts for `statfs(2)`. The default reports a file
     /// system without blocks or inode limits; the VFS fills in the magic
     /// number from the name when this leaves it 0 (see [`FsStats`]).

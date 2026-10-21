@@ -12,6 +12,12 @@
 //!   at once or, without room, none of it (`EAGAIN`). A longer write takes
 //!   whatever fits (at least one byte) and the open file's blocking write
 //!   comes back for the rest.
+//! - Room is counted in pages of [`PIPE_PAGE`] bytes (pipe2's spec sheet):
+//!   the pipe has [`PIPE_CAPACITY`] / [`PIPE_PAGE`] of them by default
+//!   (`F_SETPIPE_SZ` changes that, [`Pipe::set_capacity`]); bytes written
+//!   fill the room left in the last page, then new pages; a page is free
+//!   again only once every byte of it was read, so a partly read page
+//!   takes no new bytes.
 //! - Packet mode (`O_DIRECT`, pipe2(2)): every write is a packet (writes
 //!   longer than `PIPE_BUF` are split into packets of `PIPE_BUF`), a read
 //!   returns at most one packet and drops what of it does not fit.
@@ -22,7 +28,7 @@
 //!   once no read end is left (poll(2)).
 
 use crate::object::FileObject;
-use crate::poll::{PollEvents, WaitQueue};
+use crate::poll::{Blocker, PollEvents, WaitQueue, Woke};
 use crate::sync::SpinMutex;
 use crate::{Errno, Result};
 use alloc::collections::VecDeque;
@@ -35,36 +41,118 @@ pub const PIPE_BUF: usize = 4096;
 /// What a pipe holds: 65536 bytes, as pipe(7) gives for Linux since 2.6.11.
 pub const PIPE_CAPACITY: usize = 65536;
 
+/// The unit a pipe's room is counted in (a page).
+pub const PIPE_PAGE: usize = 4096;
+
+/// The largest capacity [`Pipe::set_capacity`] takes (1 GiB; pipe(7)'s
+/// `/proc/sys/fs/pipe-max-size` limit applies to unprivileged callers,
+/// which the system call layer checks).
+pub const PIPE_MAX_CAPACITY: usize = 1 << 30;
+
 /// The buffer and the ends of one pipe.
 pub struct Pipe {
     state: SpinMutex<State>,
     queue: Arc<WaitQueue>,
 }
 
+/// One page of a pipe's buffer: how many bytes were written into it and
+/// how many of those are still unread.
+#[derive(Clone, Copy, Debug)]
+struct Page {
+    filled: usize,
+    left: usize,
+}
+
 struct State {
     data: VecDeque<u8>,
-    /// Packet lengths, in order, in packet mode.
-    packets: Option<VecDeque<usize>>,
+    /// The pages `data` occupies, oldest first. In packet mode each
+    /// packet has a page of its own.
+    pages: VecDeque<Page>,
+    /// How many pages the pipe may hold.
+    slots: usize,
+    packet: bool,
     readers: usize,
     writers: usize,
+    /// Read and write ends opened so far, for a FIFO open waiting for the
+    /// other side ([`PipeEnd::wait_for_peer`]).
+    read_opens: u64,
+    write_opens: u64,
+}
+
+impl State {
+    /// Bytes a write could put in now: the rest of the last page (not in
+    /// packet mode) and every free page.
+    fn room(&self) -> usize {
+        let last = match self.pages.back() {
+            Some(p) if !self.packet => PIPE_PAGE - p.filled,
+            _ => 0,
+        };
+        last + self.slots.saturating_sub(self.pages.len()) * PIPE_PAGE
+    }
+
+    /// Account for `n` bytes appended to `data`.
+    fn fill(&mut self, mut n: usize) {
+        if let Some(p) = self.pages.back_mut().filter(|_| !self.packet) {
+            let k = n.min(PIPE_PAGE - p.filled);
+            p.filled += k;
+            p.left += k;
+            n -= k;
+        }
+        while n > 0 {
+            let k = n.min(PIPE_PAGE);
+            self.pages.push_back(Page { filled: k, left: k });
+            n -= k;
+        }
+    }
+
+    /// Account for `n` bytes taken from the front of `data`.
+    fn drain(&mut self, mut n: usize) {
+        while n > 0 {
+            let Some(p) = self.pages.front_mut() else { break };
+            let k = n.min(p.left);
+            p.left -= k;
+            n -= k;
+            if p.left == 0 {
+                self.pages.pop_front();
+            }
+        }
+    }
 }
 
 impl Pipe {
     /// A new pipe and its two ends: `(read end, write end)`. `packet`:
     /// packet mode (`O_DIRECT`).
     pub fn pair(packet: bool) -> (PipeEnd, PipeEnd) {
-        let pipe = Arc::new(Pipe {
-            state: SpinMutex::new(State {
-                data: VecDeque::new(),
-                packets: packet.then(VecDeque::new),
-                readers: 0,
-                writers: 0,
-            }),
-            queue: Arc::new(WaitQueue::new()),
-        });
+        let pipe = Pipe::fifo_or_packet(packet);
         let read = PipeEnd::new(&pipe, true, false);
         let write = PipeEnd::new(&pipe, false, true);
         (read, write)
+    }
+
+    /// A pipe without ends yet, for a FIFO inode (`fifo.rs`).
+    pub fn fifo() -> Arc<Pipe> {
+        Pipe::fifo_or_packet(false)
+    }
+
+    fn fifo_or_packet(packet: bool) -> Arc<Pipe> {
+        Arc::new(Pipe {
+            state: SpinMutex::new(State {
+                data: VecDeque::new(),
+                pages: VecDeque::new(),
+                slots: PIPE_CAPACITY / PIPE_PAGE,
+                packet,
+                readers: 0,
+                writers: 0,
+                read_opens: 0,
+                write_opens: 0,
+            }),
+            queue: Arc::new(WaitQueue::new()),
+        })
+    }
+
+    /// Read ends open now.
+    pub fn readers(&self) -> usize {
+        self.state.lock().readers
     }
 
     /// Bytes in the pipe.
@@ -80,6 +168,33 @@ impl Pipe {
     pub fn queue(&self) -> &Arc<WaitQueue> {
         &self.queue
     }
+
+    /// What the pipe can hold, in bytes (`F_GETPIPE_SZ`).
+    pub fn capacity(&self) -> usize {
+        self.state.lock().slots * PIPE_PAGE
+    }
+
+    /// `F_SETPIPE_SZ`: at least `bytes`, rounded up to a power-of-two
+    /// number of pages (at least one); returns the new capacity. `EINVAL`
+    /// above [`PIPE_MAX_CAPACITY`], `EBUSY` if the pages in use would not
+    /// fit (pipe2's spec sheet).
+    pub fn set_capacity(&self, bytes: usize) -> Result<usize> {
+        if bytes > PIPE_MAX_CAPACITY {
+            return Err(Errno::EINVAL);
+        }
+        let slots = bytes.div_ceil(PIPE_PAGE).max(1).next_power_of_two();
+        let mut s = self.state.lock();
+        if s.pages.len() > slots {
+            return Err(Errno::EBUSY);
+        }
+        let grew = slots > s.slots;
+        s.slots = slots;
+        drop(s);
+        if grew {
+            self.queue.notify(PollEvents::WRITABLE);
+        }
+        Ok(slots * PIPE_PAGE)
+    }
 }
 
 impl core::fmt::Debug for Pipe {
@@ -89,7 +204,7 @@ impl core::fmt::Debug for Pipe {
             .field("len", &s.data.len())
             .field("readers", &s.readers)
             .field("writers", &s.writers)
-            .field("packet", &s.packets.is_some())
+            .field("packet", &s.packet)
             .finish()
     }
 }
@@ -108,8 +223,38 @@ impl PipeEnd {
         let mut s = pipe.state.lock();
         s.readers += usize::from(read);
         s.writers += usize::from(write);
+        s.read_opens += u64::from(read);
+        s.write_opens += u64::from(write);
         drop(s);
+        // A FIFO open waiting for this side wakes up.
+        pipe.queue.notify(PollEvents::READABLE | PollEvents::WRITABLE);
         PipeEnd { pipe: Arc::clone(pipe), read, write }
+    }
+
+    /// fifo(7): a blocking open of a FIFO for reading waits for a writer,
+    /// one for writing for a reader (an end that does both waits for
+    /// nothing): until such an end is open, or one was opened since this
+    /// one. `EINTR` if `blocker` is interrupted.
+    pub fn wait_for_peer(&self, blocker: &mut dyn Blocker) -> Result<()> {
+        if self.read && self.write {
+            return Ok(());
+        }
+        let opens = |s: &State| if self.read { s.write_opens } else { s.read_opens };
+        let start = opens(&self.pipe.state.lock());
+        let ready = || {
+            let s = self.pipe.state.lock();
+            (if self.read { s.writers } else { s.readers }) > 0 || opens(&s) != start
+        };
+        if ready() {
+            return Ok(());
+        }
+        let _registered = self.pipe.queue.register(PollEvents::READABLE | PollEvents::WRITABLE, blocker.waker());
+        while !ready() {
+            if blocker.block(None) == Woke::Interrupted {
+                return Err(Errno::EINTR);
+            }
+        }
+        Ok(())
     }
 
     pub fn pipe(&self) -> &Arc<Pipe> {
@@ -166,19 +311,18 @@ impl FileObject for PipeEnd {
         if s.data.is_empty() {
             return if s.writers == 0 { Ok(0) } else { Err(Errno::EAGAIN) };
         }
-        let n = match s.packets.as_mut().and_then(VecDeque::pop_front) {
-            Some(packet) => {
-                let n = packet.min(buf.len());
-                take(&mut s.data, &mut buf[..n]);
-                // pipe(7): "the excess bytes in the packet are discarded".
-                s.data.drain(..packet - n);
-                n
-            }
-            None => {
-                let n = s.data.len().min(buf.len());
-                take(&mut s.data, &mut buf[..n]);
-                n
-            }
+        let n = if s.packet {
+            let packet = s.pages.pop_front().map_or(0, |p| p.left);
+            let n = packet.min(buf.len());
+            take(&mut s.data, &mut buf[..n]);
+            // pipe(7): "the excess bytes in the packet are discarded".
+            s.data.drain(..packet - n);
+            n
+        } else {
+            let n = s.data.len().min(buf.len());
+            take(&mut s.data, &mut buf[..n]);
+            s.drain(n);
+            n
         };
         drop(s);
         self.pipe.queue.notify(PollEvents::WRITABLE);
@@ -199,7 +343,7 @@ impl FileObject for PipeEnd {
         if s.readers == 0 {
             return Err(Errno::EPIPE);
         }
-        let room = PIPE_CAPACITY - s.data.len();
+        let room = s.room();
         let n = if buf.len() <= PIPE_BUF {
             if room < buf.len() {
                 return Err(Errno::EAGAIN);
@@ -212,14 +356,8 @@ impl FileObject for PipeEnd {
             room.min(buf.len())
         };
         s.data.extend(&buf[..n]);
-        if let Some(packets) = s.packets.as_mut() {
-            let mut left = n;
-            while left > 0 {
-                let p = left.min(PIPE_BUF);
-                packets.push_back(p);
-                left -= p;
-            }
-        }
+        // In packet mode each packet of at most PIPE_BUF bytes takes a page.
+        s.fill(n);
         drop(s);
         self.pipe.queue.notify(PollEvents::READABLE);
         Ok(n)
@@ -237,9 +375,11 @@ impl FileObject for PipeEnd {
             }
         }
         if self.write {
+            // Without readers a write would not block (it fails with
+            // EPIPE): POLLERR and POLLOUT (poll's spec sheet).
             if s.readers == 0 {
-                events = events | PollEvents::ERR;
-            } else if PIPE_CAPACITY - s.data.len() >= PIPE_BUF {
+                events = events | PollEvents::ERR | PollEvents::WRITABLE;
+            } else if s.room() >= PIPE_BUF {
                 events = events | PollEvents::WRITABLE;
             }
         }

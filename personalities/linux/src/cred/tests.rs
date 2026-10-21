@@ -181,7 +181,7 @@ fn file_system_ids() {
 fn group_ids_and_groups() {
     let mut r = Creds::root();
     r.set_groups(&[10, 20, 10]).unwrap();
-    assert_eq!(&*r.groups, &[10, 20, 10], "kept as given");
+    assert_eq!(&*r.groups, &[10, 10, 20], "sorted, duplicates kept");
     assert_eq!(r.set_groups(&[NO_ID]), Err(Errno::EINVAL));
     assert_eq!(r.set_groups(&alloc::vec![1; NGROUPS_MAX + 1]), Err(Errno::EINVAL));
     r.set_gid(100).unwrap();

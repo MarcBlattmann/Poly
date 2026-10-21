@@ -269,7 +269,12 @@ impl Epoll {
                 .collect()
         };
         let mut out = Vec::new();
+        // The entries not looked at go back first, those reported (and
+        // still level-triggered) behind them: with a small `maxevents`
+        // every ready entry gets its turn (epoll_wait's spec sheet: round
+        // robin).
         let mut again = Vec::new();
+        let mut reported = Vec::new();
         let mut dead = false;
         for item in batch {
             if out.len() >= max {
@@ -293,9 +298,10 @@ impl Epoll {
             if event.events & EPOLLONESHOT != 0 {
                 item.disabled.store(true, Ordering::Release);
             } else if event.events & EPOLLET == 0 {
-                again.push(item);
+                reported.push(item);
             }
         }
+        again.append(&mut reported);
         let mut dropped = Vec::new();
         {
             let mut s = self.state.lock();
@@ -349,6 +355,10 @@ impl core::fmt::Debug for Epoll {
 }
 
 impl FileObject for Epoll {
+    fn seek_stays_at_zero(&self) -> bool {
+        true
+    }
+
     fn read(&self, _: &mut [u8]) -> Result<usize> {
         Err(Errno::EINVAL)
     }

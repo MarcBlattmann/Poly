@@ -500,12 +500,17 @@ impl UnixSocket {
     }
 
     /// bind(2) in the abstract namespace (`EADDRINUSE` if taken, `EINVAL`
-    /// if this socket has a name already).
+    /// if this socket has a name already; a taken name is reported first:
+    /// bind's spec sheet).
     pub fn bind_abstract(self: &Arc<Self>, name: &[u8]) -> Result<()> {
+        let taken = |n: &Names| n.abstract_names.get(name).is_some_and(|w| w.strong_count() > 0);
+        if taken(&self.ns.names.lock()) {
+            return Err(Errno::EADDRINUSE);
+        }
         self.check_bindable()?;
         {
             let mut n = self.ns.names.lock();
-            if n.abstract_names.get(name).is_some_and(|w| w.strong_count() > 0) {
+            if taken(&n) {
                 return Err(Errno::EADDRINUSE);
             }
             n.abstract_names.insert(name.to_vec(), Arc::downgrade(self));
@@ -540,9 +545,16 @@ impl UnixSocket {
     }
 
     /// bind(2) to a path: makes the socket inode (mode `0777` less the
-    /// umask, unix(7)) with `Vfs::mknod`; `EADDRINUSE` if the path exists.
+    /// umask, unix(7)) with `Vfs::mknod`; `EADDRINUSE` if the path exists,
+    /// even for a socket that has a name already (bind's spec sheet: the
+    /// socket's own path again), else `EINVAL` for that.
     pub fn bind_path(self: &Arc<Self>, vfs: &Vfs, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8]) -> Result<()> {
-        self.check_bindable()?;
+        if self.check_bindable().is_err() {
+            return match vfs.stat(ctx, cred, at, path, false) {
+                Ok(_) => Err(Errno::EADDRINUSE),
+                Err(_) => Err(Errno::EINVAL),
+            };
+        }
         let made = vfs.mknod(ctx, cred, at, path, FileType::Socket, 0o777, DeviceId::default());
         made.map_err(|e| if e == Errno::EEXIST { Errno::EADDRINUSE } else { e })?;
         let st = vfs.stat(ctx, cred, at, path, false)?;
@@ -584,17 +596,16 @@ impl UnixSocket {
 
     // ---- connections -------------------------------------------------------
 
-    /// listen(2): `EINVAL` for a connected socket, `EOPNOTSUPP` for a
-    /// datagram one. An unbound socket is autobound (Poly's choice; Linux
-    /// requires a bound socket for others to find it anyway). A listening
-    /// socket's backlog can be changed by listening again.
+    /// listen(2): `EINVAL` for a connected or an unbound socket (listen's
+    /// spec sheet), `EOPNOTSUPP` for a datagram one. A listening socket's
+    /// backlog can be changed by listening again; the queue holds
+    /// `backlog + 1` pending connections.
     pub fn listen(self: &Arc<Self>, backlog: usize, creds: Credentials) -> Result<()> {
         if !self.kind.connected_kind() {
             return Err(Errno::EOPNOTSUPP);
         }
-        let unnamed = self.state.lock().name == Address::Unnamed;
-        if unnamed {
-            self.autobind()?;
+        if self.state.lock().name == Address::Unnamed {
+            return Err(Errno::EINVAL);
         }
         let mut s = self.state.lock();
         let backlog = backlog.min(MAX_BACKLOG);
@@ -651,7 +662,7 @@ impl UnixSocket {
             let name = t.name.clone();
             let lcreds = t.creds;
             let Conn::Listening(l) = &mut t.conn else { return Err(Errno::ECONNREFUSED) };
-            if l.pending.len() >= l.backlog.max(1) {
+            if l.pending.len() > l.backlog {
                 l.connectors.push(Arc::downgrade(self));
                 return Err(Errno::EAGAIN);
             }
@@ -1035,15 +1046,12 @@ impl UnixSocket {
         peer.map_or(0, |p| p.state.lock().rx_bytes)
     }
 
-    /// shutdown(2): `ENOTCONN` for a stream or sequenced-packet socket that
-    /// is not connected. The peer sees end of file (`SHUT_WR`) or gets
-    /// `EPIPE` when it writes (`SHUT_RD`).
+    /// shutdown(2). The peer sees end of file (`SHUT_WR`) or gets `EPIPE`
+    /// when it writes (`SHUT_RD`). A socket that is not connected accepts
+    /// it too (shutdown's spec sheet: an unconnected `AF_UNIX` stream).
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
         let peer = {
             let mut s = self.state.lock();
-            if self.kind.connected_kind() && !matches!(s.conn, Conn::Connected | Conn::Disconnected) {
-                return Err(Errno::ENOTCONN);
-            }
             if matches!(how, Shutdown::Read | Shutdown::Both) {
                 s.rd_shut = true;
             }

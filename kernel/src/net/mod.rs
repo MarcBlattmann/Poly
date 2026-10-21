@@ -178,10 +178,21 @@ impl Interface {
     /// Poll the stack. Also says whether packets moved (frames in or out,
     /// packets through the stack's loopback): only then, or when a timer
     /// was due, can socket readiness have changed.
+    /// Poll the stack; packets it sends to this host are processed in the
+    /// same call (a few rounds at most), so what one socket sends over
+    /// loopback is in the receiver's queue, and acknowledged, when the
+    /// sending call returns, as on Linux (recvfrom: TCP receive returns
+    /// everything queued).
     fn poll(&mut self) -> (Option<Instant>, bool) {
         POLLS.fetch_add(1, SeqCst);
         let before = self.traffic();
-        let next = self.stack.poll(&mut self.dev, now());
+        let mut next = self.stack.poll(&mut self.dev, now());
+        for _ in 0..LOOPBACK_ROUNDS {
+            if !self.stack.loopback_pending() {
+                break;
+            }
+            next = self.stack.poll(&mut self.dev, now());
+        }
         (next, self.traffic() != before)
     }
 
@@ -203,6 +214,10 @@ pub struct Info {
     pub msix: Option<MsixVectors>,
     pub thread: Option<ThreadId>,
 }
+
+/// Extra polls one [`Interface::poll`] makes while loopback packets wait
+/// (a segment, its acknowledgement, the data Nagle held back for it).
+const LOOPBACK_ROUNDS: usize = 8;
 
 static IFACE: Mutex<Option<Interface>> = Mutex::new(None);
 static INFO: SetOnce<Info> = SetOnce::new();

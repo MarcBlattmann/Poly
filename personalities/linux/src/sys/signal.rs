@@ -60,7 +60,11 @@ pub fn rt_sigaction(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         }
         let mut raw = [0; SigAction::SIZE];
         k.copy_from_user(act, &mut raw)?;
-        Some(SigAction::from_bytes(&raw))
+        let mut new = SigAction::from_bytes(&raw);
+        // SIGKILL and SIGSTOP are silently left out of sa_mask
+        // (rt_sigaction's spec sheet: it reads back without them).
+        new.mask = SigSet(new.mask).without(SigSet::UNBLOCKABLE).0;
+        Some(new)
     };
     let old = with_own(k, |p| p.actions.get(signum));
     if !oldact.is_null() {
@@ -164,30 +168,34 @@ fn sender_info(k: &dyn LinuxKernel, signal: u32, code: i32) -> SigInfo {
 /// caller's pid and real uid.
 pub fn kill(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let pid = a.int(0);
-    let sig = signal_number(a.int(1), true)?;
-    let info = sender_info(k, sig, SI_USER);
-    // Ids are the caller's pid namespace's (ADR 0054); -1 means every
-    // process it can see but its own init and itself.
-    match pid {
+    // The target is looked up before the signal number is checked: a bad
+    // number for a missing target is ESRCH (kill's visible test). Ids are
+    // the caller's pid namespace's (ADR 0054); -1 means every process it
+    // can see but its own init and itself.
+    let pids = match pid {
         p if p > 0 => {
-            let target = Target::Process(pid::find(k, p)?);
-            send(k, target, None, None, info)?
+            let pid = pid::find(k, p)?;
+            deliver::with_target(k, Target::Process(pid), |_, _| ())?;
+            alloc::vec![pid]
         }
-        0 => {
-            let pids = k.process_ids(ProcessSelector::Group(k.pgid()));
-            send_to_all(k, &pids, info)?
-        }
+        0 => k.process_ids(ProcessSelector::Group(k.pgid())),
         -1 => {
             let me = k.pid();
             let mut pids = k.process_ids(ProcessSelector::All);
             pids.retain(|&p| p != me && !matches!(pid::view(k, p), 0 | 1));
-            send_to_all(k, &pids, info)?
+            pids
         }
         i32::MIN => return Err(Errno::ESRCH),
-        p => {
-            let pids = k.process_ids(ProcessSelector::Group(pid::find(k, -p)?));
-            send_to_all(k, &pids, info)?
-        }
+        p => k.process_ids(ProcessSelector::Group(pid::find(k, -p)?)),
+    };
+    if pids.is_empty() {
+        return Err(Errno::ESRCH);
+    }
+    let sig = signal_number(a.int(1), true)?;
+    let info = sender_info(k, sig, SI_USER);
+    match pid {
+        p if p > 0 => send(k, Target::Process(pids[0]), None, None, info)?,
+        _ => send_to_all(k, &pids, info)?,
     }
     Ok(0)
 }
@@ -228,9 +236,18 @@ pub fn tkill(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// when signalling another process: `EPERM` if `si_code` is `SI_TKILL` or
 /// not negative and the target is not the caller's own process.
 /// `si_signo` is set to `sig` (to be confirmed by the diff runner).
+/// The bytes of a caller's `siginfo_t` rt_sigqueueinfo(2) takes; the rest
+/// must be zero (`E2BIG`).
+const QUEUED_INFO_BYTES: usize = 48;
+
 fn queued_info(k: &mut dyn LinuxKernel, ptr: UserPtr, sig: u32, tgid: i32) -> Result<SigInfo, Errno> {
     let mut raw = [0; SigInfo::SIZE];
     k.copy_from_user(ptr, &mut raw)?;
+    // Only the first 48 bytes may carry anything; nothing is sent
+    // otherwise (rt_sigqueueinfo's spec sheet).
+    if raw[QUEUED_INFO_BYTES..].iter().any(|&b| b != 0) {
+        return Err(Errno::E2BIG);
+    }
     let mut info = SigInfo::from_bytes(&raw);
     if (info.code >= 0 || info.code == SI_TKILL) && tgid != pid::view(k, k.pid()) {
         return Err(Errno::EPERM);
@@ -271,12 +288,17 @@ pub fn rt_tgsigqueueinfo(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// process's pending signals that the thread blocks. `EINVAL` unless
 /// `sigsetsize` is 8 (to be confirmed by the diff runner), `EFAULT`.
 pub fn rt_sigpending(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    if a.ulong(1) != signal::SIGSET_SIZE {
+    // rt_sigpending's spec sheet: a smaller size writes only that many
+    // bytes (0 writes nothing); above 8 is EINVAL.
+    let size = a.ulong(1);
+    if size > signal::SIGSET_SIZE {
         return Err(Errno::EINVAL);
     }
     let tid = k.tid();
     let set = with_own(k, |p| p.pending(tid).intersection(p.thread(tid).mask));
-    k.copy_to_user(a.ptr(0), &set.0.to_le_bytes())?;
+    if size > 0 {
+        k.copy_to_user(a.ptr(0), &set.0.to_le_bytes()[..size as usize])?;
+    }
     Ok(0)
 }
 

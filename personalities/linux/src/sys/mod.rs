@@ -9,6 +9,8 @@ pub mod epoll;
 pub mod eventfd;
 pub mod fadvise;
 pub mod fd;
+pub mod fdioctl;
+pub mod fileioctl;
 pub mod futex;
 pub mod io;
 pub mod limits;

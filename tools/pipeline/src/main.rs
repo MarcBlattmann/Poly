@@ -8,9 +8,13 @@
 //! diff [--target linux|poly] [--tests a,b] [--tracer T] [--syscalls exact|names|off|app]
 //!      [--ignore-syscall NAME]... [--timing-envelope F] [--baseline SUMMARY] [--strict]
 //!      [--kernel ELF] [--build-kernel] [--timeout SECS] [--bin-dir DIR] [--cc CC] [--tests-dir DIR]...
-//!                                                run the corpus on the reference and a target, compare per test
+//!      [--jobs N]                                run the corpus on the reference and a target, compare per test
+//!                                                (N tests at a time; 1 by default)
 //! selfcheck                                      Linux against Linux must be clean (CI)
-//! polycheck                                      Linux against Poly: the tests of tests/linux/poly-pass.txt pass (CI)
+//! polycheck                                      Linux against Poly: the tests of tests/linux/poly-pass.txt and the
+//!                                                visible spec tests of every green entry pass (CI)
+//! polyrun <test>... [--tests-dir DIR]... [--kernel ELF] [--build-kernel] [--print]
+//!                                                run tests on Poly only (no reference): output and app-mode events
 //! initramfs <binary> --out FILE | --list FILE    write (or list) a test initramfs
 //! spec new <entry> --agent ID [--oracle-os TEXT] spec sheet skeleton from specs/TEMPLATE.yaml
 //! tests split <entry> <dir> --spec-agent ID [--ratio 0.3] [--replace]
@@ -33,6 +37,7 @@ mod apps;
 mod corpus;
 mod cpio;
 mod diff;
+mod green;
 mod handoff;
 // The host's shared libraries of a program, found as the dynamic linking
 // boot tests find them (one source for both tools).
@@ -200,6 +205,7 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
         "cc",
         "run-dir",
         "tests-dir",
+        "jobs",
     ])?;
     let target = a.opt("target").unwrap_or("linux");
     let tracer = Tracer::parse(a.opt("tracer").unwrap_or("ptrace"))?;
@@ -235,44 +241,52 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
     let run_dir = a.opt("run-dir").map_or_else(|| runs.join(format!("{}-{target}", util::now_stamp())), PathBuf::from);
     let tracer_name = a.opt("tracer").unwrap_or("ptrace");
     let mut summary = Summary::new(util::now_utc(), target, ptrace::host_system(), tracer_name, opts.syscalls);
-    let mut unsupported: Option<String> = None;
+    let jobs = match a.opt("jobs") {
+        Some(j) => {
+            j.parse::<usize>().ok().filter(|&j| j > 0).ok_or_else(|| format!("--jobs {j}: a positive number"))?
+        }
+        None => 1,
+    };
+    let ref_timeout = timeout(a, DEFAULT_TIMEOUT)?;
+    // Once the kernel says it cannot run programs, the rest is not booted.
+    let unsupported: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+    let tests: Vec<&corpus::Built> =
+        manifest.tests.iter().filter(|b| wanted.is_empty() || wanted.contains(&b.name.as_str())).collect();
 
-    for b in manifest.tests.iter().filter(|b| wanted.is_empty() || wanted.contains(&b.name.as_str())) {
+    // One test: the reference run, the target run, the comparison.
+    let run_one = |b: &&corpus::Built| -> Result<TestResult> {
         let binary = bin_dir.join(&b.binary);
         let name = b.name.as_str();
-        let reference = match runner::run(tracer, &binary, name, timeout(a, DEFAULT_TIMEOUT)?) {
+        let reference = match runner::run(tracer, &binary, name, ref_timeout) {
             Ok(t) => t,
-            Err(e) => {
-                summary.tests.push(TestResult::not_run(name, Verdict::Error, format!("reference run: {e}")));
-                continue;
-            }
+            Err(e) => return Ok(TestResult::not_run(name, Verdict::Error, format!("reference run: {e}"))),
         };
         let ref_file = format!("reference/{name}.json");
         util::write_json(&run_dir.join(&ref_file), &reference)?;
-        let target_run: Result<Trace> = match (&poly, &unsupported) {
-            (None, _) => runner::run(tracer, &binary, name, timeout(a, DEFAULT_TIMEOUT)?),
-            (Some(_), Some(reason)) => {
-                summary.tests.push(TestResult::not_run(name, Verdict::Unsupported, reason.clone()));
-                continue;
-            }
-            (Some(p), None) => match p.run(name, &binary, &run_dir.join(target)) {
-                Ok((poly::Outcome::Ran(t), _)) => Ok(t),
-                Ok((poly::Outcome::Unsupported(reason), log)) => {
-                    // The kernel cannot run programs: no point booting it for every test.
-                    let log = log.strip_prefix(&run_dir).unwrap_or(&log).display().to_string();
-                    unsupported = Some(format!("not booted: the kernel could not run {name} ({log})"));
-                    summary.tests.push(TestResult::not_run(name, Verdict::Unsupported, format!("{reason} ({log})")));
-                    continue;
+        let target_run: Result<Trace> = match &poly {
+            None => runner::run(tracer, &binary, name, ref_timeout),
+            Some(p) => {
+                if let Some(reason) = unsupported.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+                    return Ok(TestResult::not_run(name, Verdict::Unsupported, reason));
                 }
-                Err(e) => Err(e),
-            },
+                match p.run(name, &binary, &run_dir.join(target)) {
+                    Ok((poly::Outcome::Ran(t), _)) => Ok(t),
+                    Ok((poly::Outcome::Unsupported(reason), log)) => {
+                        // The kernel cannot run programs: no point booting it for every test.
+                        let log = log.strip_prefix(&run_dir).unwrap_or(&log).display().to_string();
+                        unsupported
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .get_or_insert_with(|| format!("not booted: the kernel could not run {name} ({log})"));
+                        return Ok(TestResult::not_run(name, Verdict::Unsupported, format!("{reason} ({log})")));
+                    }
+                    Err(e) => Err(e),
+                }
+            }
         };
         let target_trace = match target_run {
             Ok(t) => t,
-            Err(e) => {
-                summary.tests.push(TestResult::not_run(name, Verdict::Error, format!("target run: {e}")));
-                continue;
-            }
+            Err(e) => return Ok(TestResult::not_run(name, Verdict::Error, format!("target run: {e}"))),
         };
         let target_file = format!("{target}/{name}.json");
         util::write_json(&run_dir.join(&target_file), &target_trace)?;
@@ -282,8 +296,12 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
         }
         let mut r = TestResult::compared(name, &reference, &target_trace, &test_opts);
         r.files = vec![ref_file, target_file];
-        summary.tests.push(r);
+        Ok(r)
+    };
+    for r in util::parallel_map(&tests, jobs, run_one) {
+        summary.tests.push(r?);
     }
+    let unsupported: Option<String> = unsupported.into_inner().unwrap_or_else(|e| e.into_inner());
 
     // App tests: the same tree on both systems, compared in app mode
     // unless --syscalls says otherwise.
@@ -452,10 +470,16 @@ fn poly_pass_list(repo: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Linux against Poly over the whole corpus: every test in
-/// [`POLY_PASS_LIST`] must pass (CI). Skipped, successfully, like
-/// `selfcheck`: without a C compiler, where ptrace is not permitted,
-/// without QEMU, and for implementer agents (it runs the reference OS).
+/// Poly test runs at a time in `polycheck`: each QEMU (TCG, two vCPUs)
+/// keeps about two cores busy, and CI runners have four.
+const POLYCHECK_MAX_JOBS: usize = 4;
+
+/// Linux against Poly over the whole corpus and the visible spec tests of
+/// every green coverage entry ([`green::entries`]): every test in
+/// [`POLY_PASS_LIST`] and every such entry test must pass (CI), so a green
+/// entry stays green. Skipped, successfully, like `selfcheck`: without a C
+/// compiler, where ptrace is not permitted, without QEMU, and for
+/// implementer agents (it runs the reference OS).
 fn polycheck(repo: &Path) -> Result<u8> {
     if oracle_guard("polycheck").is_err() {
         println!("pipeline polycheck: skipped (implementer agents do not run programs on the reference OS)");
@@ -472,7 +496,9 @@ fn polycheck(repo: &Path) -> Result<u8> {
     }
     let base = repo.join("target/pipeline/polycheck");
     let bin = base.join("bin");
-    corpus::build(repo, &bin, &cc)?;
+    let green = green::entries(repo)?;
+    let dirs: Vec<PathBuf> = green.iter().map(|g| repo.join(&g.tests_dir)).collect();
+    corpus::build_with(repo, &bin, &cc, &dirs)?;
     if let Err(e) = ptrace::trace(&bin.join("hello"), "hello", DEFAULT_TIMEOUT)
         && e.contains("not permitted")
     {
@@ -480,16 +506,44 @@ fn polycheck(repo: &Path) -> Result<u8> {
         return Ok(0);
     }
     let run_dir = base.join("run");
-    let args: Vec<String> = ["--target", "poly", "--build-kernel", "--bin-dir"]
+    let _ = std::fs::remove_dir_all(&run_dir);
+    let jobs = util::default_jobs(POLYCHECK_MAX_JOBS).to_string();
+    let args: Vec<String> = ["--target", "poly", "--build-kernel", "--jobs", &jobs, "--bin-dir"]
         .iter()
         .map(|s| s.to_string())
         .chain([bin.display().to_string(), "--run-dir".into(), run_dir.display().to_string()])
         .collect();
     // Failures of tests not on the list are expected: they are reported in
-    // the table, and the list decides.
+    // the table, and the list and the green entries decide.
     diff_cmd(repo, &Args::parse(&args, &["strict", "build-kernel"])?)?;
-    let summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
-    let passed = |name: &str| summary.tests.iter().any(|t| t.test == name && t.verdict == Verdict::Pass);
+    let mut summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
+    // The spec tests were recorded as root (mount, set*id, capabilities,
+    // permission checks). Run by anyone else (GitHub's CI runs as a normal
+    // user) the reference cannot pass them, so the comparison says nothing
+    // about Poly; a green entry's test then only has to pass its own
+    // checks on Poly (they print ok / not ok and exit 0 when all pass).
+    // The full comparison runs where the reference is root.
+    let mut self_checked = Vec::new();
+    if !running_as_root() {
+        let green_tests: Vec<&str> = green.iter().flat_map(|g| g.tests.iter().map(String::as_str)).collect();
+        for t in &mut summary.tests {
+            if t.verdict == Verdict::Fail
+                && green_tests.contains(&t.test.as_str())
+                && t.target_exit.as_deref() == Some("exit 0")
+                && t.reference_exit.as_deref() != Some("exit 0")
+            {
+                t.verdict = Verdict::Pass;
+                self_checked.push(t.test.clone());
+            }
+        }
+    }
+    if !self_checked.is_empty() {
+        println!(
+            "pipeline polycheck: not root, so these green-entry tests only passed their own checks on Poly (the \
+             reference fails them without root): {}",
+            self_checked.join(", ")
+        );
+    }
     let expected = poly_pass_list(repo)?;
     // App tests this host cannot run as the reference (no chroot allowed,
     // a program not installed) say nothing about Poly: skipped, like the
@@ -508,31 +562,31 @@ fn polycheck(repo: &Path) -> Result<u8> {
             skipped.join(", ")
         );
     }
-    let regressed: Vec<&String> = expected.iter().filter(|t| !passed(t) && !host_cannot(t)).collect();
-    let new: Vec<&str> = summary
-        .tests
-        .iter()
-        .filter(|t| t.verdict == Verdict::Pass && !expected.contains(&t.test))
-        .map(|t| t.test.as_str())
-        .collect();
-    if !new.is_empty() {
-        println!("pipeline polycheck: also passing now (add them to {POLY_PASS_LIST}): {}", new.join(", "));
+    let checked: Vec<String> = expected.iter().filter(|t| !host_cannot(t)).cloned().collect();
+    let c = green::check(&summary, &checked, &green);
+    if !c.newly_passing.is_empty() {
+        println!("pipeline polycheck: also passing now (add them to {POLY_PASS_LIST}): {}", c.newly_passing.join(", "));
     }
-    if !regressed.is_empty() {
-        let names: Vec<&str> = regressed.iter().map(|s| s.as_str()).collect();
-        return Err(format!(
-            "on Poly, {} no longer pass{} (listed in {POLY_PASS_LIST}; report: {})",
-            names.join(", "),
-            if names.len() == 1 { "es" } else { "" },
-            run_dir.join("report.txt").display()
-        ));
+    let report = run_dir.join("report.txt");
+    let problems = c.problems(POLY_PASS_LIST);
+    if !problems.is_empty() {
+        return Err(format!("on Poly, {} (report: {})", problems.join("; "), report.display()));
     }
+    let entry_tests: usize = green.iter().map(|g| g.tests.len()).sum();
     println!(
-        "pipeline polycheck: the {} tests of {POLY_PASS_LIST} pass on Poly{}",
-        expected.len() - skipped.len(),
-        if skipped.is_empty() { String::new() } else { format!(" ({} skipped)", skipped.len()) }
+        "pipeline polycheck: the {} tests of {POLY_PASS_LIST}{} and the {entry_tests} visible tests of {} green \
+         entries pass on Poly",
+        checked.len(),
+        if skipped.is_empty() { String::new() } else { format!(" ({} skipped)", skipped.len()) },
+        green.len()
     );
     Ok(0)
+}
+
+/// Whether this process runs as root (`/proc/self` belongs to its user).
+fn running_as_root() -> bool {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self").is_ok_and(|m| m.uid() == 0)
 }
 
 /// The freestanding hello world makes exactly two syscalls.
@@ -543,6 +597,54 @@ fn check_hello(t: &Trace) -> Result {
         return Err(format!("unexpected hello trace: {lines:?}, stdout {:?}, {}", t.stdout, t.exit));
     }
     Ok(())
+}
+
+/// Run corpus programs and app tests on Poly only, without a reference
+/// run (so implementer agents may use it): per test the exit status,
+/// stdout, stderr and, with `--print`, the app-mode event sequence
+/// (`diff::app_events`), kept in the run directory as `<test>.txt`.
+fn polyrun(repo: &Path, a: &Args) -> Result<u8> {
+    a.only(&["kernel", "build-kernel", "timeout", "cc", "tests-dir", "print", "run-dir"])?;
+    let kernel = a.opt("kernel").map_or_else(|| poly::default_kernel(repo), PathBuf::from);
+    if a.has("build-kernel") || (a.opt("kernel").is_none() && !kernel.exists()) {
+        poly::build_kernel(repo)?;
+    }
+    let target = poly::Target { kernel, timeout: timeout(a, POLY_TIMEOUT)? };
+    let (bin_dir, manifest) = corpus_binaries(repo, a)?;
+    let runs = repo.join(RUNS_DIR);
+    let run_dir = a.opt("run-dir").map_or_else(|| runs.join(format!("{}-polyrun", util::now_stamp())), PathBuf::from);
+    if a.positional.is_empty() {
+        return Err("usage: pipeline polyrun <test>... [--tests-dir DIR]...".into());
+    }
+    for name in &a.positional {
+        let run = if let Some(app) = manifest.apps.iter().find(|t| &t.name == name) {
+            let tree = app_tree(repo, &bin_dir, &manifest, app)?;
+            target.run_image(name, &tree.cpio()?, "", &run_dir)
+        } else if let Some(b) = manifest.tests.iter().find(|t| &t.name == name) {
+            target.run(name, &bin_dir.join(&b.binary), &run_dir)
+        } else {
+            return Err(format!("no test program or app test {name}"));
+        };
+        let t = match run? {
+            (poly::Outcome::Ran(t), _) => t,
+            (poly::Outcome::Unsupported(r), _) => {
+                println!("== {name}: unsupported: {r}");
+                continue;
+            }
+        };
+        let mut text = format!("== {name}: {}\n-- stdout:\n{}-- stderr:\n{}-- events:\n", t.exit, t.stdout, t.stderr);
+        for e in diff::app_events(&t, &NormOptions::default()) {
+            text.push_str(&format!("{e}\n"));
+        }
+        util::write(&run_dir.join(format!("{name}.txt")), &text)?;
+        if a.has("print") {
+            print!("{text}");
+        } else {
+            print!("{}", text.split("-- events:").next().unwrap_or_default());
+        }
+    }
+    println!("run directory: {}", run_dir.display());
+    Ok(0)
 }
 
 fn initramfs(a: &Args) -> Result<u8> {
@@ -776,6 +878,7 @@ fn run(args: &[String]) -> Result<u8> {
         "selfcheck" => selfcheck(&repo),
         "polycheck" => polycheck(&repo),
         "initramfs" => initramfs(&a),
+        "polyrun" => polyrun(&repo, &a),
         "spec" => spec(&repo, &a),
         "tests" => tests_cmd(&repo, &a),
         "handoff" => handoff_cmd(&repo, &a),
@@ -783,7 +886,7 @@ fn run(args: &[String]) -> Result<u8> {
         "claim" | "release" => coverage_tool(&repo, args),
         "role" => role_cmd(&repo, &a),
         _ => Err(format!(
-            "unknown command {cmd}; commands: build trace diff selfcheck polycheck initramfs spec tests handoff next \
+            "unknown command {cmd}; commands: build trace diff selfcheck polycheck polyrun initramfs spec tests handoff next \
              claim release role loop"
         )),
     }

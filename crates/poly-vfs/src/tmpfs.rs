@@ -11,6 +11,7 @@
 
 use crate::fs::{Clock, DirEntry, FileSystem, FsInfo, NewNode, RenameFlags};
 use crate::sync::SpinMutex;
+use crate::xattr::{SetMode, XATTR_LIST_MAX, Xattrs};
 use crate::{Attr, DeviceId, Errno, FileType, Ino, MAX_FILE_SIZE, NAME_MAX, Result, SetAttr, SetTime, Timespec};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -22,6 +23,10 @@ use alloc::vec::Vec;
 const PAGE: u64 = 4096;
 /// The root directory's inode number.
 const ROOT: Ino = 1;
+/// A directory's size: this many bytes, plus [`DIRENT_SIZE`] per entry
+/// other than `.` and `..`.
+const DIR_SIZE: u64 = 40;
+const DIRENT_SIZE: u64 = 20;
 /// Entries copied out per round of `readdir`.
 const READDIR_BATCH: usize = 64;
 
@@ -60,6 +65,8 @@ struct Node {
     /// Pins taken by `open`.
     pins: u32,
     data: Data,
+    /// Extended attributes (`user.`, `trusted.`, `security.`).
+    xattrs: Xattrs,
 }
 
 enum Data {
@@ -136,6 +143,7 @@ impl Tmpfs {
             mtime: now,
             ctime: now,
             pins: 0,
+            xattrs: Xattrs::new(),
             data: Data::Dir(Dir::new(ROOT)),
         };
         let mut nodes = BTreeMap::new();
@@ -267,7 +275,9 @@ impl Inner {
         let (size, pages) = match &n.data {
             Data::File(p) => (p.size, p.pages.len() as u64),
             Data::Symlink(t) => (t.len() as u64, 0),
-            Data::Dir(_) => (PAGE, 0),
+            // Linux's tmpfs: 40 bytes plus 20 per entry (the spec sheet
+            // specs/linux/apps/ls.yaml, `tmpfs_sizes`); no data pages.
+            Data::Dir(d) => (DIR_SIZE + DIRENT_SIZE * d.by_name.len() as u64, 0),
             Data::None => (0, 0),
         };
         Ok(Attr {
@@ -391,6 +401,7 @@ impl Tmpfs {
             mtime: now,
             ctime: now,
             pins: 0,
+            xattrs: Xattrs::new(),
             data,
         }
     }
@@ -680,6 +691,41 @@ impl FileSystem for Tmpfs {
         }
         inner.touch_dir(old_dir, now);
         inner.touch_dir(new_dir, now);
+        Ok(())
+    }
+
+    fn getxattr(&self, ino: Ino, name: &[u8]) -> Result<Vec<u8>> {
+        self.inner.lock().node(ino)?.xattrs.get(name).map(<[u8]>::to_vec)
+    }
+
+    /// Every kind of node keeps attributes (the VFS decides which
+    /// namespaces apply to it); the names of one inode take at most
+    /// `XATTR_LIST_MAX` bytes in a list (`ENOSPC` beyond), so listxattr(2)
+    /// can always return them.
+    fn setxattr(&self, ino: Ino, name: &[u8], value: &[u8], how: SetMode) -> Result<()> {
+        let now = self.clock.now();
+        let mut inner = self.inner.lock();
+        let node = inner.node_mut(ino)?;
+        let exists = node.xattrs.get(name).is_ok();
+        how.check(exists)?;
+        if !exists && node.xattrs.list().len() + name.len() + 1 > XATTR_LIST_MAX {
+            return Err(Errno::ENOSPC);
+        }
+        node.xattrs.set(name, value, how)?;
+        node.ctime = now;
+        Ok(())
+    }
+
+    fn listxattr(&self, ino: Ino) -> Result<Vec<u8>> {
+        Ok(self.inner.lock().node(ino)?.xattrs.list())
+    }
+
+    fn removexattr(&self, ino: Ino, name: &[u8]) -> Result<()> {
+        let now = self.clock.now();
+        let mut inner = self.inner.lock();
+        let node = inner.node_mut(ino)?;
+        node.xattrs.remove(name)?;
+        node.ctime = now;
         Ok(())
     }
 

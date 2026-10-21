@@ -131,7 +131,7 @@ fn shutdown_directions() {
     // b's own writes still go; a's would fail.
     assert_eq!(send(&b, b"ok"), Ok(2));
     let fresh = UnixSocket::new(&e.ns, SocketType::Stream, ME);
-    assert_eq!(fresh.shutdown(Shutdown::Both), Err(Errno::ENOTCONN));
+    assert_eq!(fresh.shutdown(Shutdown::Both), Ok(()), "an unconnected socket accepts it");
 }
 
 #[test]
@@ -183,13 +183,14 @@ fn listen_connect_accept_on_abstract_names() {
     let c = UnixSocket::new(&e.ns, SocketType::Stream, OTHER);
     let target = e.ns.lookup_abstract(b"svc").unwrap();
     assert_eq!(c.connect(&target, OTHER), Err(Errno::ECONNREFUSED), "not listening");
-    l.listen(1, ME).unwrap();
+    l.listen(0, ME).unwrap();
     assert!(l.is_listening());
     assert_eq!(l.accept().err(), Some(Errno::EAGAIN));
     c.connect(&target, OTHER).unwrap();
     assert!(l.poll().contains(PollEvents::READABLE));
     assert_eq!(c.connect(&target, OTHER), Err(Errno::EISCONN));
-    // The backlog (1) is full: a second client waits, and is woken by accept.
+    // The queue (backlog 0 + 1) is full: a second client waits, and is
+    // woken by accept.
     let c2 = UnixSocket::new(&e.ns, SocketType::Stream, OTHER);
     assert_eq!(c2.connect(&target, OTHER), Err(Errno::EAGAIN));
     let w = Arc::new(Counter::default());
@@ -364,8 +365,9 @@ fn errors_on_the_wrong_state() {
     assert_eq!(recv(&s, 4).err(), Some(Errno::ENOTCONN));
     assert_eq!(send(&s, b"x"), Err(Errno::ENOTCONN));
     assert_eq!(s.peer_name(), Err(Errno::ENOTCONN));
+    assert_eq!(s.listen(1, ME), Err(Errno::EINVAL), "unbound");
+    s.autobind().unwrap();
     s.listen(1, ME).unwrap();
-    assert!(matches!(s.local_name(), Address::Abstract(_)), "listen autobinds");
     assert_eq!(recv(&s, 4).err(), Some(Errno::EINVAL));
     assert_eq!(s.bytes_readable(), Err(Errno::EINVAL));
     let target = UnixSocket::new(&e.ns, SocketType::Stream, ME);
