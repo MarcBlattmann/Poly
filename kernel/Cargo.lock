@@ -104,6 +104,7 @@ dependencies = [
  "poly-registry",
  "poly-rtc",
  "poly-sched",
+ "poly-seh",
  "poly-smp",
  "poly-term",
  "poly-tty",
@@ -167,6 +168,7 @@ dependencies = [
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
+ "poly-seh",
  "poly-vfs",
 ]
 
@@ -201,6 +203,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-sched"
+version = "0.0.1"
+
+[[package]]
+name = "poly-seh"
 version = "0.0.1"
 
 [[package]]
