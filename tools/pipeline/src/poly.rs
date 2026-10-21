@@ -284,12 +284,15 @@ pub fn default_kernel(root: &Path) -> PathBuf {
     root.join("kernel/target/x86_64-unknown-none/debug/poly-kernel")
 }
 
-/// Build the kernel (debug) the way `cargo xtask build` does.
+/// Build the kernel (debug) with `cargo xtask build`, which also builds
+/// (or takes from its cache) our `ntdll.dll` and has the kernel embed it
+/// (ADR 0071): a bare `cargo build` in `kernel/` makes a kernel that
+/// cannot start Windows programs.
 pub fn build_kernel(root: &Path) -> Result {
     eprintln!("==> build kernel");
     let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
-        .current_dir(root.join("kernel"))
-        .arg("build")
+        .current_dir(root)
+        .args(["xtask", "build"])
         .status()
         .map_err(|e| format!("cargo: {e}"))?;
     if status.success() { Ok(()) } else { Err(format!("kernel build failed ({status})")) }
@@ -369,6 +372,44 @@ impl Target {
         work: &Path,
         args: &str,
     ) -> Result<(Outcome, PathBuf)> {
+        let (done, log, log_path) = self.boot_log(test, image, work, args)?;
+        let outcome = match parse_serial(&log, test)? {
+            Some(Outcome::Ran(mut t)) => {
+                t.binary_sha256 = Some(binary_sha256.to_string());
+                if done.exit == Exit::Timeout {
+                    t.exit = Exit::Timeout;
+                } else if t.exit == Exit::Unknown {
+                    return Err(format!("the kernel ran {test} but did not report its exit (QEMU: {})", done.exit));
+                } else if done.exit != Exit::Code(QEMU_SUCCESS) {
+                    return Err(format!("the kernel failed after {test} ended (QEMU: {})", done.exit));
+                }
+                Outcome::Ran(t)
+            }
+            Some(u) => u,
+            None if done.exit == Exit::Timeout => {
+                Outcome::Unsupported(format!("no \"POLY-INIT:\" line within {:?}; boot timed out", self.timeout))
+            }
+            None => Outcome::Unsupported(format!(
+                "no \"POLY-INIT:\" line (QEMU {}): the kernel ignores poly.init and cannot run \
+                 programs yet",
+                done.exit
+            )),
+        };
+        Ok((outcome, log_path))
+    }
+
+    /// Boot the initramfs `image` with kernel arguments `args` and return
+    /// how QEMU ended, the serial log and where it was saved (in `work`,
+    /// named after `test`). A QEMU that crashes is booted again
+    /// ([`QEMU_CRASH_RETRIES`]). The Windows tests (`crate::windows`)
+    /// read the log themselves.
+    pub(crate) fn boot_log(
+        &self,
+        test: &str,
+        image: &[u8],
+        work: &Path,
+        args: &str,
+    ) -> Result<(runner::Finished, String, PathBuf)> {
         let image_path = work.join(format!("{test}.initramfs.cpio"));
         util::write(&image_path, image)?;
         let image = image_path;
@@ -404,29 +445,7 @@ impl Target {
                 ));
             }
         };
-        let outcome = match parse_serial(&log, test)? {
-            Some(Outcome::Ran(mut t)) => {
-                t.binary_sha256 = Some(binary_sha256.to_string());
-                if done.exit == Exit::Timeout {
-                    t.exit = Exit::Timeout;
-                } else if t.exit == Exit::Unknown {
-                    return Err(format!("the kernel ran {test} but did not report its exit (QEMU: {})", done.exit));
-                } else if done.exit != Exit::Code(QEMU_SUCCESS) {
-                    return Err(format!("the kernel failed after {test} ended (QEMU: {})", done.exit));
-                }
-                Outcome::Ran(t)
-            }
-            Some(u) => u,
-            None if done.exit == Exit::Timeout => {
-                Outcome::Unsupported(format!("no \"POLY-INIT:\" line within {:?}; boot timed out", self.timeout))
-            }
-            None => Outcome::Unsupported(format!(
-                "no \"POLY-INIT:\" line (QEMU {}): the kernel ignores poly.init and cannot run \
-                 programs yet",
-                done.exit
-            )),
-        };
-        Ok((outcome, log_path))
+        Ok((done, log, log_path))
     }
 }
 

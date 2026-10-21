@@ -31,6 +31,17 @@
 //! loop status [--config FILE] [--json]           what every entry in the loop is doing
 //! loop reset <entry> [--config FILE] [--keep-branches]
 //!                                                forget an entry (e.g. after the human queue)
+//! win build [--tests-dir DIR]... [--tests a,b] [--out DIR]
+//!                                                Windows test programs (tests/windows/*.rs, ADR 0075) into
+//!                                                target/pipeline/windows/bin/*.exe + manifest.json
+//! win bundle [--bin-dir DIR] [--out FILE] [--part-size BYTES]
+//!                                                one text file for the Windows machine (and parts of it)
+//! win unbundle <bundle part>... --out DIR        check a bundle (hashes, completeness) and unpack it
+//! win poly [--tests a,b] [--bin-dir DIR] [--kernel ELF] [--build-kernel] [--jobs N] [--out FILE]
+//!                                                run them on Poly; results in the Windows runner's format
+//! win diff --reference WIN.json [--target poly|FILE.json] [--tests a,b] [--strict] [poly options]
+//!                                                compare Windows results with Poly (or another result file)
+//! win show <results.json> [--tests a,b]          print a result file's observations
 //! ```
 
 mod apps;
@@ -54,6 +65,7 @@ mod store;
 mod syscalls;
 mod trace;
 mod util;
+mod windows;
 
 use diff::{Options, Summary, SyscallMode, TestResult, Verdict};
 use runner::Tracer;
@@ -863,6 +875,178 @@ fn role_cmd(repo: &Path, a: &Args) -> Result<u8> {
     Ok(0)
 }
 
+/// `--tests a,b` as a list.
+fn test_list(a: &Args) -> Vec<String> {
+    a.opt("tests").map(|t| t.split(',').filter(|s| !s.is_empty()).map(String::from).collect()).unwrap_or_default()
+}
+
+/// The Windows test oracle (ADR 0075): `win build|bundle|poly|diff|show`.
+fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
+    let usage = "usage: pipeline win <build|bundle|unbundle|poly|diff|show> (see tools/pipeline/src/main.rs)";
+    let (sub, rest) = a.positional.split_first().ok_or(usage)?;
+    let win = repo.join(windows::WIN_DIR);
+    let bin_dir = a.opt("bin-dir").map_or_else(|| win.join("bin"), PathBuf::from);
+    match sub.as_str() {
+        "build" => {
+            a.only(&["tests-dir", "tests", "out"])?;
+            let out = a.opt("out").map_or_else(|| win.join("bin"), PathBuf::from);
+            let extra: Vec<PathBuf> = a.all("tests-dir").into_iter().map(PathBuf::from).collect();
+            let m = windows::build(repo, &out, &extra, &test_list(a))?;
+            for t in &m.tests {
+                let imports: Vec<String> = t.imports.iter().map(|(d, n)| format!("{d}: {}", n.join(" "))).collect();
+                println!("{:<28} {:>6} bytes  {}", t.exe, t.size, imports.join("; "));
+            }
+            println!("built {} Windows test programs into {}", m.tests.len(), out.display());
+            Ok(0)
+        }
+        "bundle" => {
+            a.only(&["bin-dir", "out", "part-size"])?;
+            let m = windows::Manifest::load(&bin_dir)?;
+            let text = windows::bundle(&m, &bin_dir)?;
+            let id = windows::bundle_id(&text);
+            let out = a.opt("out").map_or_else(|| win.join(format!("bundle-{id}.txt")), PathBuf::from);
+            util::write(&out, &text)?;
+            println!("bundle {id}: {} tests, {} bytes: {}", m.tests.len(), text.len(), out.display());
+            let limit: usize = a.opt("part-size").map_or(Ok(45_000), str::parse).map_err(|_| "--part-size: bytes")?;
+            let parts = windows::split_parts(&text, limit);
+            if parts.len() > 1 {
+                for (i, p) in parts.iter().enumerate() {
+                    let path = PathBuf::from(format!("{}.part{}of{}", out.display(), i + 1, parts.len()));
+                    util::write(&path, p)?;
+                    println!("  part {}: {} bytes: {}", i + 1, p.len(), path.display());
+                }
+            }
+            Ok(0)
+        }
+        "poly" | "diff" => {
+            a.only(&[
+                "bin-dir",
+                "kernel",
+                "build-kernel",
+                "timeout",
+                "jobs",
+                "tests",
+                "out",
+                "reference",
+                "target",
+                "strict",
+            ])?;
+            let only = test_list(a);
+            let reference = match a.opt("reference") {
+                Some(path) => {
+                    oracle_guard("win diff")?;
+                    Some(windows::RunFile::load(Path::new(path))?)
+                }
+                None if sub == "diff" => return Err("win diff needs --reference <results.json from Windows>".into()),
+                None => None,
+            };
+            let run_dir = repo.join(RUNS_DIR).join(format!(
+                "{}-windows-{}",
+                util::now_stamp(),
+                if sub == "poly" { "poly" } else { "diff" }
+            ));
+            let target = match a.opt("target") {
+                Some(path) if path != "poly" => windows::RunFile::load(Path::new(path))?,
+                _ => {
+                    let kernel = a.opt("kernel").map_or_else(|| poly::default_kernel(repo), PathBuf::from);
+                    if a.has("build-kernel") || (a.opt("kernel").is_none() && !kernel.exists()) {
+                        poly::build_kernel(repo)?;
+                    }
+                    let target = poly::Target { kernel, timeout: timeout(a, POLY_TIMEOUT)? };
+                    let mut m = windows::Manifest::load(&bin_dir)?;
+                    if !only.is_empty() {
+                        m.tests.retain(|t| only.contains(&t.name));
+                    }
+                    let jobs: usize = a.opt("jobs").map_or(Ok(1), str::parse).map_err(|_| "--jobs: a number")?;
+                    let results = windows::run_poly(&target, &bin_dir, &m, &run_dir, jobs.max(1))?;
+                    util::write_json(&run_dir.join("poly.json"), &results)?;
+                    results
+                }
+            };
+            let Some(reference) = reference else {
+                for t in &target.tests {
+                    let code = t.exit_code.map_or("none".into(), |c| format!("{c:#x}"));
+                    println!(
+                        "== {} {} exit {code}{}",
+                        t.name,
+                        t.status,
+                        t.error.as_deref().map(|e| format!(": {e}")).unwrap_or_default()
+                    );
+                    print!("{}", t.output.as_deref().unwrap_or_default());
+                }
+                if let Some(out) = a.opt("out") {
+                    util::write_json(Path::new(out), &target)?;
+                }
+                println!("results: {}", run_dir.join("poly.json").display());
+                return Ok(0);
+            };
+            let summary = windows::diff(&reference, &target, &only)?;
+            let text = windows::report(&summary);
+            util::write(&run_dir.join("report.txt"), &text)?;
+            util::write_json(&run_dir.join("summary.json"), &summary)?;
+            print!("{text}");
+            println!("run directory: {}", run_dir.display());
+            let bad = [windows::Verdict::Fail, windows::Verdict::Missing, windows::Verdict::Error]
+                .iter()
+                .map(|&v| summary.count(v))
+                .sum::<usize>()
+                + if a.has("strict") { summary.count(windows::Verdict::Unsupported) } else { 0 };
+            Ok(u8::from(bad > 0))
+        }
+        "unbundle" => {
+            // What the Windows runner does with a bundle, here: check it
+            // and write its files (to verify a transfer, or to look inside).
+            a.only(&["out"])?;
+            if rest.is_empty() {
+                return Err("usage: pipeline win unbundle <bundle part>... --out DIR".into());
+            }
+            let mut text = String::new();
+            for p in rest {
+                text.push_str(&util::read_string(Path::new(p))?);
+            }
+            let (m, files) = windows::unbundle(&text)?;
+            let out = PathBuf::from(a.require("out")?);
+            for (name, bytes) in &files {
+                util::write(&out.join(name), bytes)?;
+            }
+            util::write_json(&out.join("manifest.json"), &m)?;
+            println!(
+                "bundle {}: {} files, hashes good, into {}",
+                windows::bundle_id(&text),
+                files.len(),
+                out.display()
+            );
+            Ok(0)
+        }
+        "show" => {
+            oracle_guard("win show")?;
+            a.only(&["tests"])?;
+            let [path] = rest else { return Err("usage: pipeline win show <results.json> [--tests a,b]".into()) };
+            let f = windows::RunFile::load(Path::new(path))?;
+            let only = test_list(a);
+            println!(
+                "{} {} {}",
+                f.system.name,
+                f.system.version.as_deref().unwrap_or(""),
+                f.system.build.as_deref().unwrap_or("")
+            );
+            for t in f.tests.iter().filter(|t| only.is_empty() || only.contains(&t.name)) {
+                let code = t.exit_code.map_or("none".into(), |c| format!("{c:#x}"));
+                let stable = if t.stable == Some(false) { " (NOT STABLE between runs)" } else { "" };
+                println!(
+                    "== {} {} exit {code}{stable}{}",
+                    t.name,
+                    t.status,
+                    t.error.as_deref().map(|e| format!(": {e}")).unwrap_or_default()
+                );
+                print!("{}", t.output.as_deref().unwrap_or_default());
+            }
+            Ok(0)
+        }
+        _ => Err(usage.into()),
+    }
+}
+
 fn run(args: &[String]) -> Result<u8> {
     let repo = repo_root();
     let (cmd, rest) = args.split_first().ok_or("usage: pipeline <command> (see tools/pipeline/src/main.rs)")?;
@@ -886,9 +1070,10 @@ fn run(args: &[String]) -> Result<u8> {
         "next" => next_cmd(&repo, &a),
         "claim" | "release" => coverage_tool(&repo, args),
         "role" => role_cmd(&repo, &a),
+        "win" => win_cmd(&repo, &a),
         _ => Err(format!(
             "unknown command {cmd}; commands: build trace diff selfcheck polycheck polyrun initramfs spec tests handoff next \
-             claim release role loop"
+             claim release role loop win"
         )),
     }
 }
