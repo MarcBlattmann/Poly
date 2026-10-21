@@ -12,6 +12,7 @@ use crate::cred::{Creds, cap};
 use crate::errno::Errno;
 use crate::kernel::{FpuState, LinuxKernel, ProcessInfo, SigSet, Target, UserContext, UserPtr};
 use crate::ns::pid;
+use crate::time::timers::TakenTimer;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -196,11 +197,13 @@ enum Step {
 /// `SA_RESETHAND` (sigaction(2): "Restore the signal action to the default
 /// upon entry to the signal handler"; POSIX also clears `SA_SIGINFO`).
 /// Every signal taken goes into `taken`, for
-/// [`LinuxKernel::signal_delivered`].
-fn next_step(p: &mut LinuxProcess, tid: i32, taken: &mut Vec<u32>) -> Step {
+/// [`LinuxKernel::signal_delivered`], and every POSIX timer's signal into
+/// `timers`, for [`crate::sys::time::count_taken`].
+fn next_step(p: &mut LinuxProcess, tid: i32, taken: &mut Vec<u32>, timers: &mut Vec<TakenTimer>) -> Step {
     while let Some(info) = p.dequeue(tid) {
         let signal = info.signal();
         taken.push(signal);
+        timers.extend(crate::time::timers::signal_taken(p, &info));
         let action = p.actions.get(signal);
         match disposition(signal, &action) {
             Disposition::Ignore | Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => {}
@@ -243,8 +246,18 @@ pub fn exit_to_user(k: &mut dyn LinuxKernel) -> ExitToUser {
     let tid = k.tid();
     let mut pending_restart = with_own(k, |p| p.thread_mut(tid).restart.take());
     let mut taken = Vec::new();
+    let mut timers = Vec::new();
     loop {
-        let step = with_own(k, |p| next_step(p, tid, &mut taken));
+        let mut step = with_own(k, |p| next_step(p, tid, &mut taken, &mut timers));
+        // Timer signals taken: their overrun counts are fixed now (also in
+        // the siginfo a handler gets).
+        for t in timers.drain(..) {
+            let info = match &mut step {
+                Step::Handle { info, .. } => Some(info),
+                _ => None,
+            };
+            crate::sys::time::count_taken(k, t, info);
+        }
         // ptrace(2): a signal-delivery-stop for "any signal except SIGKILL".
         for signal in taken.drain(..).filter(|&s| s != SIGKILL) {
             k.signal_delivered(signal);

@@ -25,6 +25,10 @@ mod tests;
 
 mod sched;
 
+mod exception;
+mod test_seh;
+pub use exception::{fault, last_unhandled};
+
 pub mod registry;
 mod test_registry;
 
@@ -74,6 +78,9 @@ struct ThreadCtl {
     /// The exit status `NtTerminateThread` chose for the current thread,
     /// applied when its system call returns.
     exit_status: Option<NtStatus>,
+    /// The exception the memory model chose for this thread's last
+    /// unresolved page fault, and its address (ADR 0068).
+    page_fault: Option<(u64, NtStatus)>,
 }
 
 /// The whole NT state behind one lock (ADR 0030: the object manager and
@@ -128,6 +135,14 @@ struct Kernel {
     exit: Option<NtStatus>,
     /// Set by `NtTerminateThread(NtCurrentThread)`, acted on after the call.
     exit_thread: Option<NtStatus>,
+    /// Exception dispatch's requests (ADR 0068).
+    seh: exception::Pending,
+}
+
+impl Kernel {
+    fn new(pid: ProcessId, tid: ThreadRef, memory: Arc<Memory>) -> Kernel {
+        Kernel { pid, tid, memory, exit: None, exit_thread: None, seh: exception::Pending::default() }
+    }
 }
 
 impl NtKernel for Kernel {
@@ -205,7 +220,19 @@ impl NtKernel for Kernel {
     }
 
     fn test_alert(&mut self) -> NtStatus {
-        sched::test_alert(self.pid, self.tid)
+        let status = sched::test_alert(self.pid, self.tid);
+        // After NtContinue(.., TestAlert): the APC resumes the loaded
+        // context with its own RAX, not STATUS_USER_APC (ADR 0068).
+        if status == poly_ntobj::status::STATUS_USER_APC
+            && let Some(rax) = self.seh.rax
+        {
+            with(|s| {
+                if let Some(saved) = s.ctl.get_mut(&self.tid).and_then(|c| c.apc_saved.as_mut()) {
+                    saved.rax = rax;
+                }
+            });
+        }
+        status
     }
 
     fn delay(&mut self, timeout: NtTimeout, alertable: bool) -> NtStatus {
@@ -221,7 +248,22 @@ impl NtKernel for Kernel {
     }
 
     fn resume_apc(&mut self) -> NtStatus {
+        // The interrupted context's RAX comes back in full (it may be one
+        // NtContinue loaded), not as a 32-bit status.
+        let rax = with(|s| s.ctl.get(&self.tid).and_then(|c| c.apc_saved.map(|r| r.rax)));
+        self.seh.rax = rax;
         sched::resume_apc(self.tid)
+    }
+
+    fn load_context(&mut self, ctx: &poly_seh::Context, flags: u32) -> Result<(), NtStatus> {
+        if let Some(rax) = exception::load(ctx, flags)? {
+            self.seh.rax = Some(rax);
+        }
+        Ok(())
+    }
+
+    fn unhandled_exception(&mut self, record: &poly_seh::ExceptionRecord, ctx: &poly_seh::Context) {
+        self.seh.unhandled = Some((*record, ctx.clone()));
     }
 
     fn trace(&mut self, values: [u64; 3]) {
@@ -244,8 +286,7 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         return Outcome::Handled;
     };
     let tid = user::current_tid().unwrap_or(process.pid);
-    let mut k =
-        Kernel { pid: ProcessId(process.pid), tid: ThreadRef(u64::from(tid)), memory, exit: None, exit_thread: None };
+    let mut k = Kernel::new(ProcessId(process.pid), ThreadRef(u64::from(tid)), memory);
     let outcome = poly_personality_nt::dispatch_with(&mut k, regs);
     // Any wait a signalling call satisfied: wake those threads.
     sched::drain_wakes();
@@ -255,6 +296,11 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
     } else if let Some(status) = k.exit_thread {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
+    }
+    // A context loaded by NtContinue or exception dispatch returns its
+    // RAX in full; an unhandled exception ends the process here.
+    if let Some(rax) = exception::finish(k) {
+        regs.rax = rax;
     }
     outcome
 }
@@ -366,7 +412,15 @@ pub fn resolve_fault(pid: u32, tid: u32, memory: &Arc<Memory>, addr: u64) -> boo
     with(|s| {
         let Some(proc) = s.processes.get_mut(&ProcessId(pid)) else { return false };
         let mut b = MemBackend { memory, sections: &mut s.sections };
-        matches!(exec::access_fault(proc, &mut b, ThreadRef(u64::from(tid)), addr), vm::AccessFault::StackGrown { .. })
+        let tref = ThreadRef(u64::from(tid));
+        match exec::access_fault(proc, &mut b, tref, addr) {
+            vm::AccessFault::StackGrown { .. } => true,
+            // Remembered for the exception it raises (ADR 0068).
+            vm::AccessFault::Exception(status) => {
+                s.ctl.entry(tref).or_default().page_fault = Some((addr, status));
+                false
+            }
+        }
     })
 }
 

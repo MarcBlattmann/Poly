@@ -1,0 +1,11 @@
+[package]
+name = "poly-seh"
+description = "x64 structured exception handling: .pdata function tables, UNWIND_INFO, a virtual unwinder, CONTEXT and EXCEPTION_RECORD layouts, and the two-pass dispatch and unwind walk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

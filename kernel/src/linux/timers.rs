@@ -25,6 +25,8 @@ use crate::time;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use poly_personality_linux::abi::SigInfo;
+use poly_personality_linux::time::timers::{TakenTimer, count_taken as count_taken_in};
 use poly_personality_linux::time::{TimerClock, TimerWakeup, fire};
 
 /// When each process's timers are next due.
@@ -101,6 +103,29 @@ fn timer_main(_: usize) -> usize {
             fire_process(pid);
         }
     }
+}
+
+/// A POSIX timer's signal was taken from `process` outside a system call
+/// of the personality (a signalfd read): fix its overrun count with the
+/// timer's clock read now, into `info` if that is the signal, and record
+/// when the timers are next due.
+pub fn count_taken(process: &Process, taken: TakenTimer, info: Option<&mut SigInfo>) {
+    let Some(linux) = &process.linux else { return };
+    let now = match taken.clock {
+        TimerClock::Monotonic => Some(time::now_ns()),
+        TimerClock::ProcessCpu => Some(cputime::process(process).total_ns()),
+        TimerClock::ProcessUser => Some(cputime::process(process).user_ns),
+        TimerClock::ThreadCpu(tid) => {
+            cputime::threads_of(process.pid).iter().find(|&&(t, _)| t as i32 == tid).map(|(_, times)| times.total_ns())
+        }
+    };
+    linux.with(|p| {
+        if count_taken_in(p, taken, now, info) {
+            store(process.pid, p.timers.wakeup());
+        }
+    });
+    KICKED.store(true, Ordering::SeqCst);
+    KICK.wake_all();
 }
 
 /// Fire what is due of process `pid`'s timers and notify its threads.

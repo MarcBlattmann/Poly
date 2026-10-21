@@ -19,9 +19,14 @@ use alloc::collections::{BTreeMap, VecDeque};
 /// keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FutexKey {
-    /// A word in one address space (a private futex, or a shared one in
-    /// private memory): the address space id and the user address.
+    /// A private futex (`FUTEX_PRIVATE_FLAG`): the address space id and
+    /// the user address.
     Private { space: u64, addr: u64 },
+    /// A shared futex (no `FUTEX_PRIVATE_FLAG`) in memory only one address
+    /// space maps: keyed like [`FutexKey::Private`] but never the same
+    /// futex, since a private waiter is not found by a shared wake (and the
+    /// other way round; futex's spec sheet).
+    Unshared { space: u64, addr: u64 },
     /// A word in memory several address spaces can map: the backing
     /// object's id (a file, a shared memory segment) and the offset in it.
     Shared { object: u64, offset: u64 },
