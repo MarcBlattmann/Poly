@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/shutdown
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  shutdown(fd, how) on a connected stream: SHUT_WR (1) sends end of file to
+  the peer (it reads the queued data then 0) and makes later writes EPIPE
+  with SIGPIPE, while reading still works (TCP half-close: the peer can
+  still send back); SHUT_RD (0) lets the caller read what was queued, then 0
+  without blocking; SHUT_RDWR (2) both. The peer sees POLLIN|POLLRDHUP after
+  SHUT_WR; POLLHUP when both directions are shut. Shutting down twice is
+  fine; the descriptor stays open. An unconnected AF_UNIX stream socket
+  accepts it. A listening TCP socket shut with SHUT_RD stops accepting.
+returns:
+  success: "0"
+errors:
+  bad_how: "EINVAL (22) for how above 2"
+  tcp_unconnected: "ENOTCONN (107) for an unconnected TCP socket"
+  not_socket: "ENOTSOCK (88)"
+  closed_fd: "EBADF (9)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

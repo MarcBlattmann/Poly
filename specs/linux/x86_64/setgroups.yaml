@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setgroups
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  setgroups(n, list) replaces the supplementary groups (needs CAP_SETGID);
+  getgroups(size, list) reports them in ascending order with duplicates kept
+  and returns the count; getgroups(0, NULL) returns the count only;
+  setgroups(0, NULL) clears them. Supplementary groups take part in file
+  permission checks (group bits) and are inherited across fork.
+returns:
+  setgroups: "0"
+  getgroups: "the number of groups"
+errors:
+  small_buffer: "EINVAL (22) for getgroups with a nonzero size below the count"
+  negative: "EINVAL (22) for a negative size or count, or a count above 65536"
+  permission: "EPERM (1) for setgroups without CAP_SETGID"
+  bad_pointer: "EFAULT (14)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

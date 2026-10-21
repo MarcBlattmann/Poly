@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rt_sigaction
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  rt_sigaction(sig, act, oldact, sigsetsize) sets and/or reads the action of
+  one signal. The kernel struct on x86-64 is {handler, flags, restorer,
+  mask} (8 bytes each); sigsetsize must be 8. oldact, when given, gets the
+  action as it was (initially SIG_DFL, flags 0, mask 0); a NULL act only
+  reads. SA_RESTORER is read back as part of the flags. SIGKILL and SIGSTOP
+  are silently removed from sa_mask. A handler runs on the thread with the
+  signal itself and sa_mask added to the signal mask (not the signal when
+  SA_NODEFER), and the mask is restored when it returns; with SA_NODEFER the
+  handler can be re-entered by its own signal; SA_RESETHAND sets the action
+  back to SIG_DFL on delivery (the other flags stay; the signal is still
+  blocked inside that handler unless SA_NODEFER). SA_SIGINFO handlers get
+  (signal, siginfo_t *, ucontext *): siginfo for kill has si_code SI_USER
+  (0) and the sender's pid and uid; tgkill/tkill SI_TKILL (-6);
+  rt_sigqueueinfo the caller's code and value; the ucontext holds the signal
+  mask from before the signal (uc_sigmask) and, without an alternate stack,
+  an all-zero uc_stack. On x86-64 a handler needs SA_RESTORER and a restorer
+  that calls rt_sigreturn: without SA_RESTORER the install succeeds but
+  delivery kills the process with SIGSEGV; with a NULL restorer the return
+  from the handler faults (SIGSEGV). SIG_IGN discards the signal (it is not
+  left pending), also one already pending; setting SIG_DFL for a signal
+  whose default is to ignore (SIGCHLD, SIGURG, SIGWINCH, SIGCONT) discards
+  it as well. SIGCHLD: with a SA_SIGINFO handler the info has CLD_EXITED (1)
+  or CLD_KILLED (2), the child's pid and its exit code or signal in the
+  status field; with SIG_IGN or SA_NOCLDWAIT children do not become zombies
+  and wait4 fails with ECHILD once they are gone. SA_RESTART restarts a
+  blocking read interrupted by the handler (poll and nanosleep are never
+  restarted: EINTR).
+returns:
+  success: "0; oldact (when not NULL) holds the previous action"
+  query: "act NULL: nothing changes, oldact is filled"
+  flags_read_back: "exactly as set, e.g. SA_RESTART|SA_NODEFER|SA_SIGINFO|SA_ONSTACK|SA_RESTORER"
+errors:
+  bad_signal: "EINVAL (22) for signal 0, negative, or above 64"
+  kill_or_stop: "EINVAL (22) when act is given for SIGKILL or SIGSTOP (querying them is allowed: SIG_DFL)"
+  sigsetsize: "EINVAL (22) when sigsetsize is not 8"
+  bad_pointer: "EFAULT (14) for an unreadable act or unwritable oldact"
+side_effects: "pending signals are discarded when their action becomes SIG_IGN (or SIG_DFL with an ignoring default)"
+threading: "actions are per process (shared by threads created with CLONE_SIGHAND); inherited across fork"
+ordering:
+  - "a handler installed and then the signal sent to the process itself (kill) runs before kill returns"
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
