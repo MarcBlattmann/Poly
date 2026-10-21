@@ -44,6 +44,8 @@ pub struct FakeIo {
     pub epoll_waits: Vec<(i32, usize, WaitTime)>,
     pub timers: BTreeMap<i32, (bool, ItimerSpec)>,
     pub readable: BTreeMap<i32, usize>,
+    /// The room of free pages of pipe ends (none: not a pipe).
+    pub pipe_room: BTreeMap<i32, usize>,
     /// signal_queued calls.
     pub queued: Vec<i32>,
 }
@@ -59,6 +61,7 @@ impl Default for FakeIo {
             epoll_waits: Vec::new(),
             timers: BTreeMap::new(),
             readable: BTreeMap::new(),
+            pipe_room: BTreeMap::new(),
             queued: Vec::new(),
         }
     }
@@ -206,6 +209,10 @@ impl FileIo for FakeKernel {
         let fd = if fd == -1 { self.new_fd(Kind::NullDevice) } else { fd };
         self.io.made.push(Made::SignalFd { fd, mask, new });
         Ok(fd)
+    }
+
+    fn pipe_free_room(&mut self, fd: i32) -> Result<usize, Errno> {
+        self.io.pipe_room.get(&fd).copied().ok_or(Errno::EINVAL)
     }
 }
 

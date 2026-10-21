@@ -74,7 +74,7 @@ pub fn writev(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// is closed. When this happens the writing process will also receive a
 /// SIGPIPE signal." It goes to the writing thread, with `SI_KERNEL` as its
 /// code (Poly's choice, to be confirmed by the diff runner).
-fn sigpipe_on_epipe(k: &mut dyn LinuxKernel, result: SysResult) -> SysResult {
+pub(crate) fn sigpipe_on_epipe(k: &mut dyn LinuxKernel, result: SysResult) -> SysResult {
     if result == Err(Errno::EPIPE) {
         let tid = k.tid();
         let info = SigInfo::new(SIGPIPE, SI_KERNEL);

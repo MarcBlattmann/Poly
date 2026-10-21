@@ -846,6 +846,26 @@ fn pipe_room_comes_back_a_page_at_a_time() {
 }
 
 #[test]
+fn pipe_free_room_counts_whole_pages_no_write_has_started() {
+    use crate::pipe::{PIPE_CAPACITY as CAPACITY, PIPE_PAGE as PAGE, PipeEnd};
+    let env = Env::new();
+    let (r, w) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+    let room = || w.object_as::<PipeEnd>().unwrap().pipe().free_room();
+    assert_eq!(room(), CAPACITY);
+    // 100 bytes take a page of their own.
+    assert_eq!(w.write(&[1; 100]), Ok(100));
+    assert_eq!(room(), CAPACITY - PAGE);
+    assert_eq!(w.write(&[2; CAPACITY]), Ok(CAPACITY - PAGE));
+    assert_eq!(room(), 0);
+    // A few bytes read free no page; the whole first page does.
+    let mut buf = [0u8; PAGE];
+    assert_eq!(r.read(&mut buf[..10]), Ok(10));
+    assert_eq!(room(), 0);
+    assert_eq!(r.read(&mut buf[..90]), Ok(90));
+    assert_eq!(room(), PAGE);
+}
+
+#[test]
 fn fifos_open_as_ends_of_one_pipe() {
     use crate::pipe::PipeEnd;
     let env = Env::new();

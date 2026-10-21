@@ -230,6 +230,14 @@ pub trait FileIo {
         Err(Errno::EINVAL)
     }
 
+    /// The bytes of the pages of the pipe `fd` is an end of that no write
+    /// has started yet (what sendfile(2) may put into it now). `EINVAL` if
+    /// it is not a pipe.
+    fn pipe_free_room(&mut self, fd: i32) -> Result<usize, Errno> {
+        let _ = fd;
+        Err(Errno::EINVAL)
+    }
+
     /// `F_SETPIPE_SZ`: give the pipe `fd` is an end of at least `bytes` of
     /// room, rounded up to a power-of-two number of pages; returns the new
     /// capacity. `EBUSY` if what it holds would not fit, `EINVAL` if it is

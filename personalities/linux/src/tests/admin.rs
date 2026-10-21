@@ -1,6 +1,6 @@
 //! The administration calls (mount, umount2, mknod, chroot, sethostname,
-//! setdomainname, reboot), priorities and scheduling, and sendfile (ADR
-//! 0051), against a recording [`LinuxAdmin`].
+//! setdomainname, reboot) and priorities and scheduling, against a
+//! recording [`LinuxAdmin`]. (sendfile, ADR 0051, is in `sendfile.rs`.)
 
 extern crate std;
 
@@ -331,40 +331,4 @@ fn scheduling_policies_and_affinity() {
     k.poke(mask, &[2, 0, 0, 0, 0, 0, 0, 0]);
     assert_eq!(sys(&mut k, nr::SCHED_SETAFFINITY, &[0, 8, mask]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::SCHED_YIELD, &[]), Ok(0));
-}
-
-// ---- sendfile -----------------------------------------------------------
-
-#[test]
-fn sendfile_copies_between_descriptors() {
-    let mut k = FakeKernel::new();
-    k.files.insert(5, File::new(Kind::Pipe));
-    k.files.get_mut(&5).unwrap().input = b"hello, sendfile".to_vec();
-    k.files.insert(6, File::new(Kind::Pipe));
-    assert_eq!(sys(&mut k, nr::SENDFILE, &[6, 5, 0, 5]), Ok(5));
-    assert_eq!(sys(&mut k, nr::SENDFILE, &[6, 5, 0, 1000]), Ok(10));
-    assert_eq!(k.files[&6].written, b"hello, sendfile");
-    // End of input: 0.
-    assert_eq!(sys(&mut k, nr::SENDFILE, &[6, 5, 0, 10]), Ok(0));
-    assert_eq!(sys(&mut k, nr::SENDFILE, &[6, 9, 0, 10]), Err(Errno::EBADF));
-    assert_eq!(sys(&mut k, nr::SENDFILE, &[(-1i64) as u64, 5, 0, 10]), Err(Errno::EBADF));
-    // A negative offset.
-    k.poke(DATA, &(-1i64).to_le_bytes());
-    assert_eq!(sys(&mut k, nr::SENDFILE, &[6, 5, DATA, 10]), Err(Errno::EINVAL));
-}
-
-#[test]
-fn sendfile_stops_at_a_short_write() {
-    let mut k = FakeKernel::new();
-    k.files.insert(5, File::new(Kind::Pipe));
-    k.files.get_mut(&5).unwrap().input = std::vec![7u8; 100];
-    let mut out = File::new(Kind::Pipe);
-    out.max_write = Some(30);
-    out.fail_after = Some((60, Errno::EPIPE));
-    k.files.insert(6, out);
-    // 60 bytes went out (two short writes) before the error: the count.
-    assert_eq!(sys(&mut k, nr::SENDFILE, &[6, 5, 0, 100]), Ok(60));
-    k.files.get_mut(&5).unwrap().input = std::vec![7u8; 10];
-    // The error itself when nothing went out.
-    assert_eq!(sys(&mut k, nr::SENDFILE, &[6, 5, 0, 100]), Err(Errno::EPIPE));
 }

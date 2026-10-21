@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sendfile             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: "x86_64 host, uid 1001 (not root), /tmp on the host file system; static freestanding test programs, raw syscalls"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  sendfile(out_fd, in_fd, offset, count) (syscall 40) copies up to count
+  bytes from in_fd to out_fd inside the kernel and returns how many it
+  moved. With offset NULL it reads at in_fd's file offset and advances it;
+  with an offset pointer it reads at *offset, stores the offset after the
+  last byte read back into *offset and leaves in_fd's file offset alone.
+  The bytes are written at out_fd's file offset (which advances) or into
+  the pipe/socket. in_fd must be something readable at a position (a
+  regular file; /dev/zero also works; not a directory, pipe, socket or eventfd), except that when out_fd
+  is a pipe a socket also works as in_fd. At most 0x7ffff000 bytes move per
+  call.
+returns:
+  success: "bytes moved (> 0); fewer than count at end of in_fd's file, at RLIMIT_FSIZE, or when a pipe/socket out_fd fills"
+  at_or_past_eof: "0; *offset unchanged (any offset below 2^63 past the end is fine)"
+  count_0: "0 (when the descriptors are valid and out_fd is not a full non-blocking pipe)"
+  large_count: "any count below 2^63 is accepted; the transfer stops at end of file; at most 0x7ffff000 bytes per call (a 3 GiB sparse file to /dev/null returns 0x7ffff000)"
+  regular_file_out: "a regular-file to regular-file transfer moves everything requested up to EOF in one call (200000 bytes observed); bytes overwrite in place at out_fd's offset without truncating; an out_fd offset past EOF leaves a hole of zero bytes"
+  offset_pointer: "*offset += bytes moved; in_fd's file offset untouched"
+  offset_null: "in_fd's file offset += bytes moved"
+  same_descriptor: "in_fd == out_fd (regular file, O_RDWR) is allowed. With a pointer: read at *offset, written at the file offset. With NULL: read and written at the one shared file offset (bytes land on themselves), which advances by the count once"
+  pipe_out: "bytes arrive in order. O_NONBLOCK pipe: moves what fits, a whole number of pages up to the pipe capacity (65536 for a fresh pipe with 300000 requested); once full EAGAIN. Blocking pipe with a reader: returns a positive partial count (65536 observed for 300000 requested), the caller loops"
+  socket_out: "connected AF_UNIX stream socket: the peer reads the bytes in order; non-blocking socket fills then EAGAIN"
+  socket_in: "a socket as in_fd works only when out_fd is a pipe (the queued bytes move into the pipe); to a regular file it is EINVAL"
+  dev_null_out: "returns the count (up to EOF), bytes discarded, offsets advance"
+errors:
+  bad_offset_pointer: "EFAULT if *offset cannot be read; checked first, before the descriptors (closed descriptors, count 0 or a negative count still give EFAULT); nothing moved"
+  offset_writeback_fault: "EFAULT if *offset can be read but not written (read-only memory); the bytes HAVE been moved (out_fd's offset and size advanced) and the value is unchanged"
+  bad_fd: "EBADF: either descriptor closed or negative; in_fd not open for reading (O_WRONLY, O_PATH); out_fd not open for writing (O_RDONLY, O_PATH, a directory). Also with count 0. Checked before the offset value and the count"
+  negative_offset: "EINVAL (*offset < 0), also with count 0; *offset unchanged"
+  negative_count: "EINVAL for a count with bit 63 set (e.g. -1); checked after EBADF"
+  offset_plus_count_overflow: "EINVAL if *offset + count exceeds 2^63-1 (e.g. *offset 0x7fffffffffffff00 with count 0x100 or more)"
+  offset_beyond_file_limit: "EOVERFLOW if *offset + count fits below 2^63 but *offset is beyond the largest offset the in file allows (e.g. *offset 0x7fffffffffffff00, count 0xff)"
+  out_append: "EINVAL if out_fd has O_APPEND (O_WRONLY or O_RDWR), even for count 0; nothing written"
+  in_not_positional: "EINVAL with a NULL offset for an in_fd that is a directory, pipe (also pipe to pipe), socket (unless out_fd is a pipe) or eventfd; with an offset pointer a pipe or socket in_fd is ESPIPE, a directory EINVAL. Data queued in the pipe/socket stays there"
+  pipe_full_nonblock: "EAGAIN when out_fd is an O_NONBLOCK pipe with no free page, even for count 0 (freeing a few bytes of a full pipe is not enough); *offset unchanged"
+  broken_pipe: "EPIPE when out_fd is a pipe with no readers or a stream socket whose peer is closed; SIGPIPE is raised (kills the process at its default disposition); nothing consumed, offsets unchanged"
+  file_size_limit: "RLIMIT_FSIZE on out_fd: a transfer crossing the limit stops at it and returns the partial count; one starting at the limit is EFBIG and raises SIGXFSZ (kills at default disposition); count 0 at the limit is 0"
+  error_offsets: "on every error before any byte moves, *offset and both file offsets are unchanged"
+side_effects: "Writes to out_fd (file contents, size, out file offset) and advances in_fd's file offset when offset is NULL. Signals: SIGPIPE on EPIPE, SIGXFSZ on EFBIG."
+threading: "no thread-specific behaviour; the descriptor table, offsets and file system state are shared by the threads of a process"
+ordering:
+  - "argument checks: copy-in of *offset (EFAULT) -> descriptors and their modes (EBADF) -> offset/count values and descriptor kinds (EINVAL/ESPIPE/EOVERFLOW) -> transfer -> write-back of *offset (EFAULT after the transfer)"
+timing:
+  typical: "microseconds for small transfers; a 3 GiB sparse file to /dev/null took about 0.4 s for its 0x7ffff000-byte call"
+  guarantees: "blocks only on a blocking pipe/socket out_fd with no room, until some room appears"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
