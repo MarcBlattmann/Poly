@@ -183,6 +183,9 @@ pub struct NtProcess {
     /// Its exit status once [`crate::exec::process_exit`] has run (for the
     /// kernel to report; a running process is pending).
     pub exit_status: Option<poly_ntobj::NtStatus>,
+    /// The user-mode exception dispatcher (`PolySetExceptionDispatcher`,
+    /// ADR 0068); 0 for none.
+    pub exception_dispatcher: u64,
 }
 
 impl NtProcess {
@@ -200,6 +203,7 @@ impl NtProcess {
             default_stack_reserve: 0x1_0000,
             default_stack_commit: 0x1000,
             exit_status: None,
+            exception_dispatcher: 0,
         }
     }
 

@@ -1444,6 +1444,7 @@
 </g>
 <g><title>NT services: 0 / 271 done (0.0%)</title>
 <rect x="537.4" y="498.7" width="22.5" height="21.6" fill="#e6eaef"/>
+<rect x="537.4" y="498.7" width="0.2" height="21.6" fill="#218bff"/>
 <rect x="536.4" y="497.7" width="24.5" height="23.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msasn1: 0 / 266 done (0.0%)</title>

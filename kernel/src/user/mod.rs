@@ -530,6 +530,11 @@ pub fn fault(fault: &Fault) {
             crate::linux::Leave::Killed => end_thread(ExitStatus::Exited(0), 0),
         }
     }
+    // An NT process's exception goes to its user-mode dispatcher, or ends
+    // the process with the exception code (ADR 0068).
+    if process.personality == poly_abi::Personality::Nt && crate::nt::fault(process, fault) {
+        return;
+    }
     kill_current(fault)
 }
 

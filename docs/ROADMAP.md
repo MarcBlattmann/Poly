@@ -102,7 +102,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] NT processes and threads, TEB/PEB, thread contexts, APCs (ADR 0065)
 - [x] NT synchronisation: events, mutants, semaphores, timers, `NtWaitForMultipleObjects` (ADR 0065)
 - [ ] NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O
-- [ ] Structured exception handling: kernel-to-user exception dispatch, unwinding
+- [x] Structured exception handling: kernel-to-user exception dispatch, unwinding (ADR 0068)
 - [x] Registry: hive storage, `NtOpenKey` family, default system hives
 - [ ] Our `ntdll`: PE loader (imports, relocations, TLS, delay-load), heap, `Rtl*`, loader lock
 - [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors

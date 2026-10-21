@@ -12,6 +12,7 @@ poly-abi.workspace = true
 poly-ntobj.workspace = true
 poly-pe.workspace = true
 poly-registry.workspace = true
+poly-seh.workspace = true
 
 [lints]
 workspace = true

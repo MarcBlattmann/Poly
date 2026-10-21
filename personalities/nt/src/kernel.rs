@@ -214,4 +214,25 @@ pub trait NtKernel {
         let _ = (file, data);
         Ok(())
     }
+
+    /// Make the calling thread resume user mode with the registers of `ctx`
+    /// that `flags` selects (`CONTEXT_CONTROL`, `CONTEXT_INTEGER`,
+    /// `CONTEXT_FLOATING_POINT`), once the current call or exception returns
+    /// (exception dispatch and `NtContinue`, ADR 0068). All 64 bits of RAX
+    /// come from `ctx`, not from the call's status. A kernel that cannot do
+    /// it answers `STATUS_NOT_IMPLEMENTED`.
+    fn load_context(&mut self, ctx: &poly_seh::Context, flags: u32) -> Result<(), NtStatus> {
+        let _ = (ctx, flags);
+        Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
+
+    /// An exception nobody handles (second chance, no dispatcher, a frame
+    /// that cannot be written, a fail-fast request): end the calling
+    /// process with the exception code as its exit status once the current
+    /// call or exception returns (ADR 0068). `ctx` is where it happened, for
+    /// the kernel's log.
+    fn unhandled_exception(&mut self, record: &poly_seh::ExceptionRecord, ctx: &poly_seh::Context) {
+        let _ = ctx;
+        self.terminate_process(NtStatus(record.code));
+    }
 }
