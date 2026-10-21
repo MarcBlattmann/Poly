@@ -169,9 +169,11 @@ impl Linux {
     /// Called by the kernel when the last thread of a Linux process (the
     /// calling thread) has left it, before its parent learns of it: its
     /// System V shared memory attachments are detached
-    /// ([`sys::shm::process_exit`]).
+    /// ([`sys::shm::process_exit`]) and its semaphore adjustments undone
+    /// ([`sys::sem::process_exit`]).
     pub fn process_exit(kernel: &mut dyn LinuxKernel) {
         sys::shm::process_exit(kernel);
+        sys::sem::process_exit(kernel);
     }
 
     /// Called by the kernel for a fault in user mode that becomes a signal

@@ -31,7 +31,7 @@ fn namespace(k: &mut dyn LinuxKernel) -> Option<Arc<IpcNs>> {
 }
 
 /// The caller's IPC namespace, credentials and standing in the namespace.
-fn caller(k: &mut dyn LinuxKernel) -> (Option<Arc<IpcNs>>, Creds, Who) {
+pub(crate) fn caller(k: &mut dyn LinuxKernel) -> (Option<Arc<IpcNs>>, Creds, Who) {
     let tid = k.tid();
     let (ns, creds) = with_own(k, |p| (p.ns.ipc.clone(), p.thread(tid).creds.clone()));
     let owner = ns.as_ref().and_then(|n| n.owner().clone());
@@ -39,8 +39,8 @@ fn caller(k: &mut dyn LinuxKernel) -> (Option<Arc<IpcNs>>, Creds, Who) {
     (ns, creds, who)
 }
 
-/// The wall clock in seconds, for the segment times.
-fn now(k: &dyn LinuxKernel) -> i64 {
+/// The wall clock in seconds, for the segment (and semaphore set) times.
+pub(crate) fn now(k: &dyn LinuxKernel) -> i64 {
     k.clock(Clock::Realtime).map_or(0, |t| t.sec)
 }
 

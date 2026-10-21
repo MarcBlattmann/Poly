@@ -17,7 +17,7 @@
 //!   of the mount table ([`MntNs::id`] names it), a network namespace has
 //!   only a loopback interface that is down, so its sockets reach nothing
 //!   ([`NetNs`]), an IPC namespace holds its System V shared memory
-//!   segments ([`IpcNs::shm`]). Cgroup and time namespaces are not supported: their flags are
+//!   segments and semaphore sets ([`IpcNs::shm`], [`IpcNs::sem`]). Cgroup and time namespaces are not supported: their flags are
 //!   `EINVAL`, as clone(2) and unshare(2) document for a kernel built
 //!   without them.
 //! - **Identity.** Each namespace has an inode number ([`inum`]):
@@ -174,19 +174,24 @@ impl UtsNs {
 }
 
 /// An IPC namespace (ipc_namespaces(7)): its System V shared memory
-/// segments. Poly has no System V message queues or semaphores, nor POSIX
-/// message queues, yet.
+/// segments and semaphore sets. Poly has no System V message queues, nor
+/// POSIX message queues, yet.
 #[derive(Debug)]
 pub struct IpcNs {
     common: Common,
     shm: Mutex<crate::ipc::shm::ShmTable>,
+    sem: Mutex<crate::ipc::sem::SemTable>,
 }
 
 impl IpcNs {
     /// A new, empty IPC namespace owned by `owner`, registered under its
     /// inode number.
     pub fn create(owner: &UserNsRef) -> Arc<IpcNs> {
-        let ipc = Arc::new(IpcNs { common: Common::new(owner), shm: Mutex::new(crate::ipc::shm::ShmTable::new()) });
+        let ipc = Arc::new(IpcNs {
+            common: Common::new(owner),
+            shm: Mutex::new(crate::ipc::shm::ShmTable::new()),
+            sem: Mutex::new(crate::ipc::sem::SemTable::new()),
+        });
         register(ipc.inum(), Handle::Ipc(Some(ipc.clone())));
         ipc
     }
@@ -194,6 +199,11 @@ impl IpcNs {
     /// Its shared memory segments (a new namespace has none).
     pub fn shm(&self) -> &Mutex<crate::ipc::shm::ShmTable> {
         &self.shm
+    }
+
+    /// Its semaphore sets (a new namespace has none).
+    pub fn sem(&self) -> &Mutex<crate::ipc::sem::SemTable> {
+        &self.sem
     }
 }
 
