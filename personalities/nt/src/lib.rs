@@ -26,8 +26,12 @@
 //!   stack, TEB, PEB), its end, and exceptions.
 //! - [`backend`]: what the memory model asks the kernel's memory map to do.
 //! - [`pe_writer`]: a minimal PE32+ writer for test programs.
+
 //! - [`io`]: file I/O (ADR 0067): file and device objects over the VFS,
 //!   drive letters, share modes, byte-range locks, IRP-style async I/O.
+//! - [`registry`]: the `\REGISTRY` key object and the registry services
+//!   (on `poly-registry`, ADR 0066).
+
 
 #![no_std]
 
@@ -45,6 +49,7 @@ pub mod memory;
 pub mod objects;
 pub mod pe_writer;
 pub mod protect;
+pub mod registry;
 pub mod section;
 pub mod services;
 pub mod sync;
@@ -130,6 +135,7 @@ pub fn dispatch_with<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Outcome 
     };
     let result = run(k, regs, service);
     regs.rax = u64::from(result.unwrap_or_else(|e| e).0);
+    registry::finish(k);
     Outcome::Handled
 }
 
@@ -192,6 +198,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         ResumeThread => threads::resume_thread(k, regs),
         GetContextThread => threads::get_context_thread(k, regs),
         SetContextThread => threads::set_context_thread(k, regs),
+
         CreateFile => io::services::create_file(k, regs),
         OpenFile => io::services::open_file(k, regs),
         ReadFile => io::services::read_file(k, regs),
@@ -208,6 +215,20 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         CancelIoFileEx => io::services::cancel_io_file_ex(k, regs),
         QueryAttributesFile => io::services::query_attributes_file(k, regs),
         QueryFullAttributesFile => io::services::query_full_attributes_file(k, regs),
+        CreateKey => registry::services::create_key(k, regs),
+        OpenKey => registry::services::open_key(k, regs),
+        OpenKeyEx => registry::services::open_key_ex(k, regs),
+        DeleteKey => registry::services::delete_key(k, regs),
+        DeleteValueKey => registry::services::delete_value_key(k, regs),
+        EnumerateKey => registry::services::enumerate_key(k, regs),
+        EnumerateValueKey => registry::services::enumerate_value_key(k, regs),
+        QueryKey => registry::services::query_key(k, regs),
+        QueryValueKey => registry::services::query_value_key(k, regs),
+        SetValueKey => registry::services::set_value_key(k, regs),
+        FlushKey => registry::services::flush_key(k, regs),
+        NotifyChangeKey => registry::services::notify_change_key(k, regs),
+        SetInformationKey => registry::services::set_information_key(k, regs),
+
         PolyTrace => {
             let values = abi::args::<K, 3>(k, regs)?;
             k.trace(values);

@@ -218,8 +218,8 @@
 <g><title>Structured exception handling: kernel-to-user exception dispatch, unwinding</title>
 <rect x="515.4" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<g><title>Registry: hive storage, NtOpenKey family, default system hives</title>
-<rect x="540.4" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ Registry: hive storage, NtOpenKey family, default system hives</title>
+<rect x="540.4" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>Our ntdll: PE loader (imports, relocations, TLS, delay-load), heap, Rtl*, loader lock</title>
 <rect x="565.5" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>

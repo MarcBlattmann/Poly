@@ -1081,6 +1081,21 @@ point; its system calls go to `nt::syscall`. The NT state lives in
   them, run them and check that code. A different exit code means a step
   failed — the preceding `nt: ... PolyTrace 0xbadbad <step> <status>` line
   names which step and the `NTSTATUS` it saw.
+- **The registry** (ADR 0066) logs where its hives live at the first NT
+  use: `nt: registry hives in /mnt/root/poly/nt/registry`, or `nt: registry
+  in memory (no disk with a /poly directory)` (then nothing is saved; make
+  a `/poly` directory on a writable disk, as `cargo xtask root-disk` does).
+  A hive file that does not decode logs `nt: registry: hive SOFTWARE is
+  corrupt (...); using the defaults` and is replaced at the next save; a
+  failed save logs `writing hive ... failed` and `NtFlushKey` returns
+  `STATUS_REGISTRY_IO_FAILED` (0xC000014D). The files are Poly's own format
+  (`POLYHIVE`, `crates/poly-registry/src/hive.rs`): to look inside one, decode
+  it on the host with `poly_registry::hive::decode`. A notification whose
+  `IO_STATUS_BLOCK` never changes in another process is waiting for that
+  process's next system call (completions are written there). The ring-3
+  test is `kernel/src/nt/test_registry.rs` (`cargo xtask run
+  poly.test=nt_registry`); its `PolyTrace 0xbadbad <step> <status>` names
+  the failed step as the module documentation numbers them.
 - **The object, memory, thread and synchronisation logic is host-tested** in
   `poly-ntobj` (the dispatcher against a randomized model) and
   `personalities/nt` against a fake kernel (`cargo test -p poly-ntobj -p

@@ -817,6 +817,9 @@ pub fn collect() -> Result<Contents, String> {
         ("home", 0o755),
         ("var/tmp", 0o1777),
         ("usr/local/bin", 0o755),
+        // Where the kernel keeps the NT registry's hive files (ADR 0066):
+        // a disk with a `/poly` directory holds them.
+        ("poly/nt/registry", 0o700),
     ] {
         tree.dir(dir, mode);
     }

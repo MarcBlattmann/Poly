@@ -101,6 +101,7 @@ dependencies = [
  "poly-personality-xnu",
  "poly-procfs",
  "poly-random",
+ "poly-registry",
  "poly-rtc",
  "poly-sched",
  "poly-smp",
@@ -165,6 +166,7 @@ dependencies = [
  "poly-abi",
  "poly-ntobj",
  "poly-pe",
+ "poly-registry",
  "poly-vfs",
 ]
 
@@ -185,6 +187,13 @@ dependencies = [
 [[package]]
 name = "poly-random"
 version = "0.0.1"
+
+[[package]]
+name = "poly-registry"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
 
 [[package]]
 name = "poly-rtc"

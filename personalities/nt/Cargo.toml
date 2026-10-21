@@ -11,6 +11,7 @@ rust-version.workspace = true
 poly-abi.workspace = true
 poly-ntobj.workspace = true
 poly-pe.workspace = true
+poly-registry.workspace = true
 # NT file I/O (ADR 0067) runs on the VFS.
 poly-vfs.workspace = true
 
