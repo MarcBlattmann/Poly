@@ -19,7 +19,7 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use poly_vfs::OpenFile;
-use poly_vfs::locks::{FileKey, LockKind, LockOwner, LockTable, RecordLock};
+use poly_vfs::locks::{FileKey, LockKind, LockOwner, LockTable, RecordLock, WouldBlock};
 
 static TABLE: SpinLock<LockTable> = SpinLock::new(LockTable::new());
 /// The open file descriptions that hold (or held) a lock, by owner id.
@@ -107,9 +107,9 @@ pub fn set(
     result
 }
 
-/// flock(2) on `file`: `Some(exclusive)` locks, `None` unlocks. `Err(())`
+/// flock(2) on `file`: `Some(exclusive)` locks, `None` unlocks. `Err`
 /// when another description's lock is in the way.
-pub fn flock(file: &Arc<OpenFile>, op: Option<bool>) -> Result<(), ()> {
+pub fn flock(file: &Arc<OpenFile>, op: Option<bool>) -> Result<(), WouldBlock> {
     purge();
     register(file);
     let owner = description(file);
@@ -151,4 +151,45 @@ pub fn closed(table: usize, keys: &[FileKey]) {
         changed();
     }
     purge();
+}
+
+crate::kernel_test! {
+    fn locks_go_with_a_close_and_with_the_last_description() -> TestResult {
+        use super::Files;
+        use poly_vfs::OpenFlags;
+        let path = b"/tmp/locks-test";
+        let (a, b) = (Files::new(), Files::new());
+        let fa = a.open(path, OpenFlags::RDWR | OpenFlags::CREAT, 0o644).map_err(|_| "open failed")?;
+        let fb = b.open(path, OpenFlags::RDWR, 0).map_err(|_| "open failed")?;
+        let (file_a, file_b) = (a.file(fa).map_err(|_| "no file")?, b.file(fb).map_err(|_| "no file")?);
+        let (pa, pb) = (LockOwner::Process(a.lock_owner()), LockOwner::Process(b.lock_owner()));
+        set(pa, 1, &file_a, Some(LockKind::Write), 0, 10).map_err(|_| "the first lock was refused")?;
+        if set(pb, 2, &file_b, Some(LockKind::Read), 5, 6).is_ok() {
+            return Err("two processes hold conflicting locks");
+        }
+        if test(pb, &file_b, LockKind::Read, 0, u64::MAX).map(|l| (l.pid, l.start, l.end)) != Some((1, 0, 10)) {
+            return Err("F_GETLK does not report the lock in the way");
+        }
+        // Any close of the file by the owner lets go of its locks, even of a
+        // descriptor the lock was not taken through.
+        let again = a.open(path, OpenFlags::RDONLY, 0).map_err(|_| "open failed")?;
+        a.close(again).map_err(|_| "close failed")?;
+        set(pb, 2, &file_b, Some(LockKind::Read), 5, 6).map_err(|_| "a close did not release the lock")?;
+        // flock: the description's lock goes with the description.
+        let file_key = key(&file_b);
+        drop(file_a);
+        flock(&file_b, Some(true)).map_err(|WouldBlock| "flock was refused")?;
+        drop(file_b);
+        let fa2 = a.open(path, OpenFlags::RDONLY, 0).map_err(|_| "open failed")?;
+        let file_a2 = a.file(fa2).map_err(|_| "no file")?;
+        if flock(&file_a2, Some(false)).is_ok() {
+            return Err("flock ignored another description's lock");
+        }
+        b.close_all();
+        flock(&file_a2, Some(false)).map_err(|WouldBlock| "the closed description kept its flock")?;
+        drop(file_a2);
+        a.close_all();
+        let _ = Files::new().unlinkat(poly_vfs::AT_FDCWD, path, 0);
+        if TABLE.lock().records_of(file_key, pb).is_empty() { Ok(()) } else { Err("locks outlived their owner") }
+    }
 }

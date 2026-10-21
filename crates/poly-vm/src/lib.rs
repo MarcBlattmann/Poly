@@ -383,7 +383,9 @@ impl<F: Clone + PartialEq> Vma<F> {
 fn shifted<F: Clone>(backing: &Backing<F>, by: u64) -> Backing<F> {
     match backing {
         Backing::Anonymous => Backing::Anonymous,
-        Backing::File { file, offset, shared } => Backing::File { file: file.clone(), offset: offset + by, shared: *shared },
+        Backing::File { file, offset, shared } => {
+            Backing::File { file: file.clone(), offset: offset + by, shared: *shared }
+        }
     }
 }
 
@@ -925,7 +927,8 @@ impl<F: Clone + PartialEq> VmMap<F> {
             }
             _ if grow_in_place(&next) => {
                 let grown = vma.clip(old, old_end);
-                let tail = Vma { start: old_end, end: old + new_len, backing: shifted(&grown.backing, old_len), ..grown };
+                let tail =
+                    Vma { start: old_end, end: old + new_len, backing: shifted(&grown.backing, old_len), ..grown };
                 next.rewrite(old_end, old + new_len, Op::Insert(tail))?;
                 *self = next;
                 return Ok(Remap { addr: old, moved: None, removed });

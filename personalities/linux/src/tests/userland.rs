@@ -15,7 +15,9 @@ fn reads_of_files_that_never_wait_are_whole() {
     // A user buffer that large: the fake's data area is 64 KiB, so map more.
     let buf = 0x5000_0000u64;
     k.map_range(buf, len as u64, crate::abi::prot::PROT_READ | crate::abi::prot::PROT_WRITE);
-    for (fd, kind, want) in [(5, Kind::Regular, len), (6, Kind::NullDevice, len), (7, Kind::Pipe, crate::sys::io::CHUNK)] {
+    for (fd, kind, want) in
+        [(5, Kind::Regular, len), (6, Kind::NullDevice, len), (7, Kind::Pipe, crate::sys::io::CHUNK)]
+    {
         let mut f = File::new(kind);
         f.input = (0..len).map(|i| i as u8).collect();
         k.files.insert(fd, f);

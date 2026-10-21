@@ -950,7 +950,9 @@ const MKE2FS_CONF: &str = "\
 pub fn write_image(tree: &RootTree, image: &Path) -> Result<&'static str, String> {
     let (size, inodes) = image_size(tree);
     let _ = std::fs::remove_file(image);
-    if have_mke2fs() {
+    // POLY_ROOTDISK_FORMAT=poly-ext2 uses the repository's formatter even with e2fsprogs.
+    let ours = std::env::var("POLY_ROOTDISK_FORMAT").is_ok_and(|v| v == "poly-ext2");
+    if !ours && have_mke2fs() {
         with_mke2fs(tree, image, size, inodes)?;
         Ok("mke2fs -t ext4 -d")
     } else {
@@ -1183,12 +1185,7 @@ pub fn boot_test(kernel: &Path, syms: &std::sync::Arc<crate::symbols::Symbols>) 
         return Ok(());
     }
     eprintln!("==> BusyBox from {origin}");
-    // POLY_ROOTDISK_APPEND: more kernel arguments (`poly.strace=python3.13`, ...).
-    let append = format!("{} {}", boot_args(), std::env::var("POLY_ROOTDISK_APPEND").unwrap_or_default());
-    let mut cmd = super::qemu(kernel, MEMORY, append.trim_end(), super::Devices::None, "stdio");
-    cmd.args(["-display", "none"]).args(drive_args(&image)).arg("-initrd").arg(&initrd);
-    let mut s = crate::busybox::Session::spawn(cmd, syms)?;
-    s.set_timeouts(STEP_TIMEOUT, SESSION_TIMEOUT);
+    let mut s = spawn(kernel, syms, &image, &initrd)?;
     let mut ran = BTreeSet::new();
     let result = session(&mut s, &contents.have, &mut ran);
     if result.is_err() {
@@ -1211,7 +1208,64 @@ pub fn boot_test(kernel: &Path, syms: &std::sync::Arc<crate::symbols::Symbols>) 
         }
         eprintln!("==> /root/hello, compiled on Poly, is on the image ({} bytes)", elf.len());
     }
-    Ok(())
+    // The second boot from the same image: what the first one wrote is
+    // there, and the program it compiled runs.
+    if !ran.contains(PERSIST_STEP) {
+        return Ok(());
+    }
+    eprintln!("==> boot test: a second boot from the root disk finds what the first one wrote");
+    let mut s = spawn(kernel, syms, &image, &initrd)?;
+    let result = second_boot(&mut s, ran.contains(GCC_STEP));
+    if result.is_err() {
+        let log = super::root().join("target/poly-rootdisk-boot2.log");
+        let _ = std::fs::write(&log, s.text());
+        eprintln!("==> the session's output is in {}", log.display());
+    }
+    result
+}
+
+/// QEMU booting the root disk `image` with the initramfs `initrd`, as a
+/// session typed into.
+fn spawn(
+    kernel: &Path,
+    syms: &std::sync::Arc<crate::symbols::Symbols>,
+    image: &Path,
+    initrd: &Path,
+) -> super::Result<crate::busybox::Session> {
+    // POLY_ROOTDISK_APPEND: more kernel arguments (`poly.strace=python3.13`, ...).
+    let append = format!("{} {}", boot_args(), std::env::var("POLY_ROOTDISK_APPEND").unwrap_or_default());
+    let mut cmd = super::qemu(kernel, MEMORY, append.trim_end(), super::Devices::None, "stdio");
+    cmd.args(["-display", "none"]).args(drive_args(image)).arg("-initrd").arg(initrd);
+    let mut s = crate::busybox::Session::spawn(cmd, syms)?;
+    s.set_timeouts(STEP_TIMEOUT, SESSION_TIMEOUT);
+    Ok(s)
+}
+
+/// The step that writes the file the second boot reads.
+const PERSIST_STEP: &str = "a file for the next boot, sync";
+
+/// The file the first boot writes and the second reads.
+const PERSIST_TEXT: &str = "written in the first boot";
+
+fn second_boot(s: &mut crate::busybox::Session, compiled: bool) -> super::Result {
+    s.expect("rootdisk: /dev/vda mounted on /mnt/root")?;
+    s.prompt()?;
+    let out = s.run("cat /root/persist.txt")?;
+    if out != format!("{PERSIST_TEXT}\n") {
+        return Err(format!("root disk on Poly: the second boot reads /root/persist.txt as {out:?}"));
+    }
+    if compiled {
+        let out = s.run("/root/hello again; echo \"status=$?\"")?;
+        if out != "hello from gcc on Poly, argc=2\nstatus=42\n" {
+            return Err(format!("root disk on Poly: the program compiled in the first boot printed {out:?}"));
+        }
+    }
+    s.send("poweroff\r")?;
+    s.expect("reboot: Power down.")?;
+    match s.finish()? {
+        Some(0) => Ok(()),
+        status => Err(format!("root disk on Poly: the second boot's poweroff ended QEMU with {status:?}")),
+    }
 }
 
 /// The file at `path` on the ext4 image, read with `poly-ext2` (from a
@@ -1357,7 +1411,12 @@ fn steps() -> Vec<Step> {
             "from the child; sum 500500; sqrt 1.414; child 0\nstatus=0\n",
         ),
     ];
-    steps.push(step("sync", &["coreutils"], "sync; echo synced", "synced\n"));
+    steps.push(step(
+        PERSIST_STEP,
+        &[],
+        &format!("echo '{PERSIST_TEXT}' > /root/persist.txt && sync && echo synced"),
+        "synced\n",
+    ));
     steps
 }
 
@@ -1410,6 +1469,18 @@ fn session(
         if !(step.ok)(&out) {
             eprintln!("==> FAILED: {}: {out:?}", step.what);
             failed.push(format!("{} (printed {out:?})", step.what));
+        }
+    }
+    // Ctrl-C ends bash's foreground job (exit status 128 + SIGINT).
+    if have.contains("coreutils") && only.is_none() {
+        s.send("echo started; sleep 20\r")?;
+        s.expect("started\n")?;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        s.send("\x03")?;
+        s.prompt()?;
+        let out = s.run("echo \"status=$?\"")?;
+        if out != "status=130\n" {
+            failed.push(format!("Ctrl-C in bash (printed {out:?})"));
         }
     }
     // poweroff (BusyBox's init powers off on SIGUSR2), which unmounts the

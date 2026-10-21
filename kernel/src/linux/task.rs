@@ -109,10 +109,8 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
         if let Some(waiter) = user::current_process() {
             for p in gone.iter().filter(|p| p.pid != waiter.pid) {
                 let (own, children) = (crate::cputime::process(p), p.cpu.children());
-                let t = CpuTimes {
-                    user_ns: own.user_ns + children.user_ns,
-                    system_ns: own.system_ns + children.system_ns,
-                };
+                let t =
+                    CpuTimes { user_ns: own.user_ns + children.user_ns, system_ns: own.system_ns + children.system_ns };
                 waiter.cpu.add_child(t);
                 let mut reaped = REAPED_TIMES.lock();
                 while reaped.len() >= MAX_REAPED_TIMES {

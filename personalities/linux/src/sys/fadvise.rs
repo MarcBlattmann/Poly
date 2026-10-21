@@ -36,8 +36,12 @@ pub fn fadvise64(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::ESPIPE);
     }
     match a.uint(3) {
-        POSIX_FADV_NORMAL | POSIX_FADV_RANDOM | POSIX_FADV_SEQUENTIAL | POSIX_FADV_WILLNEED
-        | POSIX_FADV_DONTNEED | POSIX_FADV_NOREUSE => Ok(0),
+        POSIX_FADV_NORMAL
+        | POSIX_FADV_RANDOM
+        | POSIX_FADV_SEQUENTIAL
+        | POSIX_FADV_WILLNEED
+        | POSIX_FADV_DONTNEED
+        | POSIX_FADV_NOREUSE => Ok(0),
         _ => Err(Errno::EINVAL),
     }
 }

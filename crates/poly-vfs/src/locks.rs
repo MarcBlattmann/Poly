@@ -68,6 +68,10 @@ impl RecordLock {
     }
 }
 
+/// A flock(2) lock is held by another open file description.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct WouldBlock;
+
 /// A flock(2) lock.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct WholeLock {
@@ -174,20 +178,22 @@ impl LockTable {
 
     /// The record locks of `owner` on `file`, in order (tests, procfs).
     pub fn records_of(&self, file: FileKey, owner: LockOwner) -> Vec<RecordLock> {
-        self.files.get(&file).map_or_else(Vec::new, |l| l.records.iter().filter(|r| r.owner == owner).copied().collect())
+        self.files
+            .get(&file)
+            .map_or_else(Vec::new, |l| l.records.iter().filter(|r| r.owner == owner).copied().collect())
     }
 
-    /// flock(2) `LOCK_SH` / `LOCK_EX`: `Err(())` if another description
+    /// flock(2) `LOCK_SH` / `LOCK_EX`: [`WouldBlock`] if another description
     /// holds a lock that conflicts, after the owner's old lock (if any)
     /// was given up.
-    pub fn flock(&mut self, file: FileKey, owner: LockOwner, exclusive: bool) -> Result<(), ()> {
+    pub fn flock(&mut self, file: FileKey, owner: LockOwner, exclusive: bool) -> Result<(), WouldBlock> {
         self.unflock(file, owner);
         let locks = self.files.entry(file).or_default();
         if locks.whole.iter().any(|w| w.owner != owner && (w.exclusive || exclusive)) {
             if locks.is_empty() {
                 self.files.remove(&file);
             }
-            return Err(());
+            return Err(WouldBlock);
         }
         locks.whole.push(WholeLock { owner, exclusive });
         Ok(())
@@ -195,9 +201,7 @@ impl LockTable {
 
     /// Whether `flock` would succeed now (it gives up the old lock first).
     pub fn flock_would_block(&self, file: FileKey, owner: LockOwner, exclusive: bool) -> bool {
-        self.files
-            .get(&file)
-            .is_some_and(|l| l.whole.iter().any(|w| w.owner != owner && (w.exclusive || exclusive)))
+        self.files.get(&file).is_some_and(|l| l.whole.iter().any(|w| w.owner != owner && (w.exclusive || exclusive)))
     }
 
     /// flock(2) `LOCK_UN`.

@@ -13,8 +13,8 @@ use crate::process;
 use alloc::vec::Vec;
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::fs::{DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, TimeChange};
-use poly_vfs::locks::{LockKind, LockOwner};
 use poly_personality_linux::kernel::Target;
+use poly_vfs::locks::{LockKind, LockOwner};
 use poly_vfs::{Access, OpenFlags, RenameFlags, Whence};
 
 fn statfs(s: poly_vfs::FsStats) -> StatFs {
@@ -134,7 +134,14 @@ impl LinuxFs for Thread<'_> {
         Ok(())
     }
 
-    fn test_lock(&mut self, fd: i32, ofd: bool, write: bool, start: u64, end: u64) -> Result<Option<LockHolder>, Errno> {
+    fn test_lock(
+        &mut self,
+        fd: i32,
+        ofd: bool,
+        write: bool,
+        start: u64,
+        end: u64,
+    ) -> Result<Option<LockHolder>, Errno> {
         let file = self.process().files.file(fd).map_err(vfs_errno)?;
         let owner = self.lock_owner(&file, ofd);
         let kind = if write { LockKind::Write } else { LockKind::Read };
@@ -146,7 +153,15 @@ impl LinuxFs for Thread<'_> {
         }))
     }
 
-    fn set_lock(&mut self, fd: i32, ofd: bool, write: Option<bool>, start: u64, end: u64, wait: bool) -> Result<(), Errno> {
+    fn set_lock(
+        &mut self,
+        fd: i32,
+        ofd: bool,
+        write: Option<bool>,
+        start: u64,
+        end: u64,
+        wait: bool,
+    ) -> Result<(), Errno> {
         let file = self.process().files.file(fd).map_err(vfs_errno)?;
         let owner = self.lock_owner(&file, ofd);
         let pid = if ofd { -1 } else { self.process().pid as i32 };

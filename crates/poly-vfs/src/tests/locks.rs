@@ -72,7 +72,7 @@ fn flock_locks_are_whole_file_and_separate_from_record_locks() {
     t.set(F, A, 10, Some(LockKind::Write), 0, END).unwrap();
     t.flock(F, d1, true).unwrap();
     assert!(t.flock_would_block(F, d2, false));
-    assert_eq!(t.flock(F, d2, false), Err(()));
+    assert_eq!(t.flock(F, d2, false), Err(WouldBlock));
     t.flock(F, d1, false).unwrap(); // converted to shared
     t.flock(F, d2, false).unwrap();
     assert!(t.flock_would_block(F, d1, true), "another shared lock");

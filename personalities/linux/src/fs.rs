@@ -375,7 +375,14 @@ pub trait LinuxFs {
     /// owner that keeps the caller from a read (`write` false) or write
     /// lock on `[start, end)` of `fd`'s file (`end` `u64::MAX`: to the end
     /// of the file), if any (ADR 0059).
-    fn test_lock(&mut self, _fd: i32, _ofd: bool, _write: bool, _start: u64, _end: u64) -> Result<Option<LockHolder>, Errno> {
+    fn test_lock(
+        &mut self,
+        _fd: i32,
+        _ofd: bool,
+        _write: bool,
+        _start: u64,
+        _end: u64,
+    ) -> Result<Option<LockHolder>, Errno> {
         Err(Errno::ENOSYS)
     }
     /// fcntl(2) `F_SETLK` / `F_SETLKW` (`ofd`: the `F_OFD_` forms): take a

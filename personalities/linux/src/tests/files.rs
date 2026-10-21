@@ -6,8 +6,8 @@ extern crate std;
 use super::fake::*;
 use crate::abi::{le_u64, makedev};
 use crate::fs::{
-    DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, SysInfo, TimeChange, at::AT_FDCWD, dirent64_len, encode_dirent64, major,
-    minor, rlimit::*,
+    DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, SysInfo, TimeChange, at::AT_FDCWD, dirent64_len,
+    encode_dirent64, major, minor, rlimit::*,
 };
 use crate::kernel::Target;
 use crate::rlimit::Rlimit;
@@ -174,7 +174,14 @@ impl LinuxFs for VfsFs {
         Ok(())
     }
 
-    fn test_lock(&mut self, fd: i32, ofd: bool, write: bool, start: u64, end: u64) -> Result<Option<LockHolder>, Errno> {
+    fn test_lock(
+        &mut self,
+        fd: i32,
+        ofd: bool,
+        write: bool,
+        start: u64,
+        end: u64,
+    ) -> Result<Option<LockHolder>, Errno> {
         let (key, owner) = self.lock_key(fd, ofd)?;
         let kind = if write { LockKind::Write } else { LockKind::Read };
         Ok(self.locks.test(key, owner, kind, start, end).map(|l| LockHolder {
@@ -187,7 +194,15 @@ impl LinuxFs for VfsFs {
 
     /// No other thread can unlock here: a conflict is `EAGAIN` even with
     /// `wait`.
-    fn set_lock(&mut self, fd: i32, ofd: bool, write: Option<bool>, start: u64, end: u64, _wait: bool) -> Result<(), Errno> {
+    fn set_lock(
+        &mut self,
+        fd: i32,
+        ofd: bool,
+        write: Option<bool>,
+        start: u64,
+        end: u64,
+        _wait: bool,
+    ) -> Result<(), Errno> {
         let (key, owner) = self.lock_key(fd, ofd)?;
         let kind = write.map(|w| if w { LockKind::Write } else { LockKind::Read });
         let pid = if ofd { -1 } else { 1 };
@@ -197,7 +212,7 @@ impl LinuxFs for VfsFs {
     fn flock(&mut self, fd: i32, exclusive: Option<bool>, _wait: bool) -> Result<(), Errno> {
         let (key, owner) = self.lock_key(fd, true)?;
         match exclusive {
-            Some(x) => self.locks.flock(key, owner, x).map_err(|()| Errno::EAGAIN),
+            Some(x) => self.locks.flock(key, owner, x).map_err(|_| Errno::EAGAIN),
             None => {
                 self.locks.unflock(key, owner);
                 Ok(())
