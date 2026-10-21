@@ -113,10 +113,7 @@ pub fn thread_exit(k: &mut dyn LinuxKernel, shares_memory: bool) -> RobustWalk {
         (core::mem::take(&mut t.robust_list), core::mem::take(&mut t.clear_child_tid))
     });
     let walk = if head.is_null() { RobustWalk::default() } else { walk_robust_list(k, head, tid) };
-    if shares_memory
-        && !ctid.is_null()
-        && k.copy_to_user(ctid, &0u32.to_le_bytes()).is_ok()
-        && ctid.0.is_multiple_of(4)
+    if shares_memory && !ctid.is_null() && k.copy_to_user(ctid, &0u32.to_le_bytes()).is_ok() && ctid.0.is_multiple_of(4)
     {
         super::kernel_wake(k, ctid);
     }
