@@ -307,7 +307,13 @@ impl NtKernel for Fake {
         self.sys.objects.cancel_wait(id, WaitCancel::Timeout).unwrap_or(STATUS_TIMEOUT)
     }
 
-    fn arm_timer(&mut self, timer: poly_ntobj::ObjectId, _due: NtTimeout, _period: u32, _apc: Option<Apc>) -> Result<bool, NtStatus> {
+    fn arm_timer(
+        &mut self,
+        timer: poly_ntobj::ObjectId,
+        _due: NtTimeout,
+        _period: u32,
+        _apc: Option<Apc>,
+    ) -> Result<bool, NtStatus> {
         self.sys.objects.set_timer(timer)
     }
 

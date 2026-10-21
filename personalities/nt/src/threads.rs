@@ -12,8 +12,8 @@ use crate::kernel::{NtKernel, ThreadCreate};
 use crate::objects::{Result, return_handle};
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::{
-    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
-    THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
+    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION, THREAD_SET_CONTEXT,
+    THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
 };
 use poly_ntobj::status::*;
 use poly_ntobj::{Handle, NtStatus, ObjectType, ProcessId, ThreadRef};
@@ -141,15 +141,9 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
         return Err(STATUS_INVALID_INFO_CLASS);
     }
     let pid = process_of(k, Handle(h), PROCESS_QUERY_INFORMATION)?;
-    let caller = k.caller();
     let (exit, peb) = k.with_state(|_sys, proc, _| {
-        if proc.pid == pid {
-            (proc.exit_status.unwrap_or(STATUS_PENDING), proc.peb)
-        } else {
-            (STATUS_PENDING, 0)
-        }
+        if proc.pid == pid { (proc.exit_status.unwrap_or(STATUS_PENDING), proc.peb) } else { (STATUS_PENDING, 0) }
     });
-    let _ = caller;
     let mut b = [0u8; PROCESS_BASIC_INFORMATION_SIZE];
     b[0..4].copy_from_slice(&exit.0.to_le_bytes());
     b[8..16].copy_from_slice(&peb.to_le_bytes());

@@ -152,9 +152,7 @@ pub fn wait(pid: ProcessId, tid: ThreadRef, id: WaitId, timeout: NtTimeout, aler
                 c.blocked = None;
                 return Next::Done(st);
             }
-            if alertable
-                && let Some(apc) = c.apcs.pop_front()
-            {
+            if alertable && let Some(apc) = c.apcs.pop_front() {
                 c.blocked = None;
                 let _ = s.sys.objects.cancel_wait(id, WaitCancel::UserApc);
                 return Next::Apc(apc);
@@ -207,9 +205,7 @@ pub fn delay(pid: ProcessId, tid: ThreadRef, timeout: NtTimeout, alertable: bool
     let Some(flags) = user::current_flags() else { return STATUS_SUCCESS };
     with(|s| s.ctl.entry(tid).or_default().flags = Some(Arc::clone(&flags)));
     loop {
-        if alertable
-            && let Some(apc) = with(|s| s.ctl.entry(tid).or_default().apcs.pop_front())
-        {
+        if alertable && let Some(apc) = with(|s| s.ctl.entry(tid).or_default().apcs.pop_front()) {
             deliver_apc(pid, tid, apc);
             return STATUS_USER_APC;
         }

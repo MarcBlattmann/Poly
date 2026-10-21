@@ -164,7 +164,13 @@ pub trait NtKernel {
     /// periodic timer) re-arms it `period_ms` later, delivering `apc` to the
     /// setting thread each time it fires. Returns the timer's previous signal
     /// state. Re-arming a set timer cancels the previous arming.
-    fn arm_timer(&mut self, timer: ObjectId, due: NtTimeout, period_ms: u32, apc: Option<Apc>) -> Result<bool, NtStatus>;
+    fn arm_timer(
+        &mut self,
+        timer: ObjectId,
+        due: NtTimeout,
+        period_ms: u32,
+        apc: Option<Apc>,
+    ) -> Result<bool, NtStatus>;
 
     /// Disarm a waitable timer (`NtCancelTimer`); returns its signal state.
     fn disarm_timer(&mut self, timer: ObjectId) -> Result<bool, NtStatus>;

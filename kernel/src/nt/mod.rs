@@ -220,13 +220,8 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         return Outcome::Handled;
     };
     let tid = user::current_tid().unwrap_or(process.pid);
-    let mut k = Kernel {
-        pid: ProcessId(process.pid),
-        tid: ThreadRef(u64::from(tid)),
-        memory,
-        exit: None,
-        exit_thread: None,
-    };
+    let mut k =
+        Kernel { pid: ProcessId(process.pid), tid: ThreadRef(u64::from(tid)), memory, exit: None, exit_thread: None };
     let outcome = poly_personality_nt::dispatch_with(&mut k, regs);
     // Any wait a signalling call satisfied: wake those threads.
     sched::drain_wakes();

@@ -376,11 +376,7 @@ pub fn return_to_user() {
     let Some((process, flags, tid)) = current() else { return };
     let notified = flags.notified.load(Ordering::SeqCst);
     let suspended = flags.suspended.load(Ordering::SeqCst);
-    if !notified
-        && !suspended
-        && !process.is_exiting()
-        && !process.is_stopped()
-        && !flags.killed.load(Ordering::SeqCst)
+    if !notified && !suspended && !process.is_exiting() && !process.is_stopped() && !flags.killed.load(Ordering::SeqCst)
     {
         return;
     }

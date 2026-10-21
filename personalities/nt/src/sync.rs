@@ -14,10 +14,10 @@ use crate::kernel::{Apc, NtKernel, NtTimeout};
 use crate::objects::{Result, return_handle};
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
-use poly_ntobj::status::*;
 use poly_ntobj::access::{
     MUTANT_QUERY_STATE, SEMAPHORE_QUERY_STATE, SYNCHRONIZE, THREAD_SET_CONTEXT, TIMER_MODIFY_STATE, TIMER_QUERY_STATE,
 };
+use poly_ntobj::status::*;
 use poly_ntobj::{EventType, Handle, NtStatus, ObjectType, WaitOutcome, WaitType};
 
 /// `(handle*, access, attributes*)`: the three arguments every create and
@@ -79,8 +79,9 @@ pub fn create_mutant<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtSta
     let (out, access, attrs) = open_args(k, regs)?;
     let initial = abi::arg(k, regs, 3)? as u8 != 0;
     let caller = k.caller();
-    let c =
-        k.with_state(|sys, _, _| sys.objects.nt_create_mutant(&caller, &attrs.as_object_attributes(), access, initial))?;
+    let c = k.with_state(|sys, _, _| {
+        sys.objects.nt_create_mutant(&caller, &attrs.as_object_attributes(), access, initial)
+    })?;
     return_handle(k, out, c.handle)?;
     Ok(c.status)
 }
@@ -267,12 +268,19 @@ pub fn wait_multiple<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtSta
 
 /// The heart of both waits: ask the dispatcher, then block in the kernel if
 /// it said so.
-fn wait<K: NtKernel>(k: &mut K, handles: &[Handle], wait_type: WaitType, alertable: bool, timeout: NtTimeout) -> Result<NtStatus> {
+fn wait<K: NtKernel>(
+    k: &mut K,
+    handles: &[Handle],
+    wait_type: WaitType,
+    alertable: bool,
+    timeout: NtTimeout,
+) -> Result<NtStatus> {
     let caller = k.caller();
     let dispatch = timeout.dispatch();
     let handles = handles.to_vec();
-    let outcome =
-        k.with_state(|sys, _, _| sys.objects.nt_wait_for_multiple_objects(&caller, &handles, wait_type, alertable, dispatch))?;
+    let outcome = k.with_state(|sys, _, _| {
+        sys.objects.nt_wait_for_multiple_objects(&caller, &handles, wait_type, alertable, dispatch)
+    })?;
     match outcome {
         WaitOutcome::Done(status) => Ok(status),
         WaitOutcome::Blocked(id) => Ok(k.wait(id, timeout, alertable)),
