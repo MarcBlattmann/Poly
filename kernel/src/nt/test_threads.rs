@@ -56,7 +56,7 @@ poly_nt_threads_code:
     mov eax, 0x40
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
     mov r14, [rsp+0x100]
     mov qword ptr [r14+0x38], 0
     mov qword ptr [r14+0x50], 0
@@ -71,7 +71,7 @@ poly_nt_threads_code:
     mov eax, 0x0A
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     // NtCreateMutant(&mutant, MUTANT_ALL_ACCESS, NULL, FALSE)
     mov r15d, 3
@@ -82,7 +82,7 @@ poly_nt_threads_code:
     mov eax, 0x20
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     // ----- 2. create child1 ----------------------------------------------
     mov r15d, 4
@@ -101,7 +101,7 @@ poly_nt_threads_code:
     mov eax, 0x82
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     // ----- 3. wait on the event, then on the child -----------------------
     mov r15d, 5
@@ -111,7 +111,7 @@ poly_nt_threads_code:
     mov eax, 0x2D
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 6
     mov r10, [r14+0x08]
@@ -120,7 +120,7 @@ poly_nt_threads_code:
     mov eax, 0x2D
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     // ----- 4. child exit code --------------------------------------------
     mov r15d, 7
@@ -132,9 +132,9 @@ poly_nt_threads_code:
     mov eax, 0x86
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
     cmp dword ptr [r14+0x58], 0x77
-    jne fail
+    jne nt_threads_fail
 
     // ----- 5. mutant abandoned -------------------------------------------
     mov r15d, 8
@@ -144,7 +144,7 @@ poly_nt_threads_code:
     mov eax, 0x2D
     syscall
     cmp eax, 0x80
-    jne fail
+    jne nt_threads_fail
     // release it (we now own it)
     mov r10, [r14+0x10]
     xor edx, edx
@@ -161,7 +161,7 @@ poly_nt_threads_code:
     mov eax, 0x24
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 10
     lea r10, [r14+0x20]
@@ -172,7 +172,7 @@ poly_nt_threads_code:
     mov eax, 0x0A
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 11
     mov rax, [r14+0x18]
@@ -187,7 +187,7 @@ poly_nt_threads_code:
     mov eax, 0x2E
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     // ----- 7. APC to self, delivered at NtTestAlert ----------------------
     mov r15d, 12
@@ -199,15 +199,15 @@ poly_nt_threads_code:
     mov eax, 0x30
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 13
     mov eax, 0x31
     syscall
     cmp eax, 0xC0
-    jne fail
+    jne nt_threads_fail
     cmp qword ptr [r14+0x50], 0xABC
-    jne fail
+    jne nt_threads_fail
 
     // ----- 8. periodic timer ---------------------------------------------
     mov r15d, 14
@@ -218,7 +218,7 @@ poly_nt_threads_code:
     mov eax, 0x28
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 15
     mov qword ptr [r14+0x48], -100000
@@ -232,7 +232,7 @@ poly_nt_threads_code:
     mov eax, 0x2A
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 16
     mov r10, [r14+0x28]
@@ -241,7 +241,7 @@ poly_nt_threads_code:
     mov eax, 0x2D
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 17
     mov r10, [r14+0x28]
@@ -250,7 +250,7 @@ poly_nt_threads_code:
     mov eax, 0x2D
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r10, [r14+0x28]
     xor edx, edx
@@ -274,7 +274,7 @@ poly_nt_threads_code:
     mov eax, 0x82
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 19
     mov r10, [r14+0x30]
@@ -282,7 +282,7 @@ poly_nt_threads_code:
     mov eax, 0x87
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov r15d, 20
     mov dword ptr [r14+0x90+0x30], 0x00100003
@@ -291,10 +291,10 @@ poly_nt_threads_code:
     mov eax, 0x89
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
     mov rax, [r14+0x90+0xF8]
     test rax, rax
-    jz fail
+    jz nt_threads_fail
 
     mov r15d, 21
     mov r10, [r14+0x30]
@@ -302,7 +302,7 @@ poly_nt_threads_code:
     mov eax, 0x88
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     mov qword ptr [r14+0x38], 1
 
@@ -313,7 +313,7 @@ poly_nt_threads_code:
     mov eax, 0x2D
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_threads_fail
 
     // ----- success -------------------------------------------------------
     mov r10, 0xC0FFEE
@@ -327,7 +327,7 @@ poly_nt_threads_code:
     syscall
     ud2
 
-fail:
+nt_threads_fail:
     mov r8d, eax
     mov rdx, r15
     mov r10, 0xBADBAD
