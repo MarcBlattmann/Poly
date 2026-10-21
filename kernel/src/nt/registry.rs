@@ -99,24 +99,31 @@ fn mkdir_all(path: &str) -> Result<(), poly_vfs::Errno> {
 /// Write `data` as `<dir>/<file>.hive`, atomically (see the module
 /// documentation).
 pub fn save_in(dir: &str, file: &str, data: &[u8]) -> Result<(), poly_vfs::Errno> {
-    mkdir_all(dir)?;
+    let step = |what: &'static str| {
+        move |e: poly_vfs::Errno| {
+            crate::kprintln!("nt: registry: saving {dir}/{file}{EXTENSION}: {what} failed: {e:?}");
+            e
+        }
+    };
+    mkdir_all(dir).map_err(step("making the directory"))?;
     let vfs = fs::vfs();
     let ctx = vfs.root_context()?;
     let cred = Cred::root();
     let path = format!("{dir}/{file}{EXTENSION}");
     let new = format!("{path}.new");
     let flags = OpenFlags::WRONLY | OpenFlags::CREAT | OpenFlags::TRUNC;
-    let f = vfs.open(&ctx, &cred, At::Cwd, new.as_bytes(), flags, 0o600)?;
+    let f = vfs.open(&ctx, &cred, At::Cwd, new.as_bytes(), flags, 0o600).map_err(step("creating the .new file"))?;
     let mut done = 0;
     while done < data.len() {
-        match f.write_at(done as u64, &data[done..])? {
+        match f.write_at(done as u64, &data[done..]).map_err(step("writing"))? {
             0 => return Err(poly_vfs::Errno::EIO),
             n => done += n,
         }
     }
-    f.sync()?;
+    f.sync().map_err(step("syncing"))?;
     drop(f);
-    vfs.rename(&ctx, &cred, At::Cwd, new.as_bytes(), At::Cwd, path.as_bytes(), RenameFlags::default())?;
+    vfs.rename(&ctx, &cred, At::Cwd, new.as_bytes(), At::Cwd, path.as_bytes(), RenameFlags::default())
+        .map_err(step("renaming"))?;
     Ok(())
 }
 
