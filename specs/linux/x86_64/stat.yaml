@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/stat
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64 (Ubuntu 24.04)"
+  machine: "home server, uid 1001 (not root), /tmp on ext4, cross-checked on tmpfs (/dev/shm); static freestanding test programs, raw syscalls; root-only behaviour from stat(2), path_resolution(7) and capabilities(7), not observed"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  stat (4) takes two arguments, a path and a pointer to the 144-byte
+  x86-64 struct stat (asm/stat.h; the same layout fstat (5) fills), and
+  fills that struct for the file the path names, following symbolic links
+  in every component including the last. It reports exactly what
+  newfstatat(AT_FDCWD, path, buf, 0) and fstat on an open descriptor of
+  the same file report, byte for byte (padding and the three trailing
+  reserved words are 0). Relative paths start at the working directory. On
+  success it returns 0 and writes exactly 144 bytes; on failure it returns
+  -errno and the buffer is left untouched. It changes nothing in the file
+  system (no timestamps move).
+returns:
+  success: "0"
+  struct: "st_dev, st_ino, st_nlink (u64); st_mode, st_uid, st_gid (u32); 4 bytes of padding = 0; st_rdev, st_size, st_blksize, st_blocks (512-byte units); atime, mtime, ctime as {sec, nsec} u64 pairs with nsec in [0, 1e9); 3 reserved words = 0. Nothing past byte 144 is written."
+  regular_file: "S_IFREG | the twelve permission bits; st_size = length in bytes (sizes past 4 GiB in full); nlink 1 for a single name; uid/gid = effective ids of the creator; st_rdev 0; st_blksize > 0; st_ino nonzero; an empty file has st_blocks 0; a sparse file (truncated longer) reports its length in st_size and far fewer blocks than size/512; written data allocates blocks (a written 4096-byte page counts at least 8)"
+  mode_bits: "st_mode holds the type and all bits set by chmod: set-user-ID 04000, set-group-ID 02000, sticky 01000 on files and directories, e.g. 07777, 07000 and 0 are reported as set; chmod ignores type bits; the umask (022 in tests) is applied at creation (create with 0777 -> 0755); a directory made inside a set-group-ID directory has the set-group-ID bit too"
+  directory: "S_IFDIR | perm; nlink = 2 + number of subdirectories; st_size > 0; an empty directory has nlink 2"
+  devices_and_special: "/dev/null: S_IFCHR | 0666, st_rdev 0x103 (1,3), size 0; /dev/zero: S_IFCHR | 0666, st_rdev 0x105 (1,5); a FIFO made by mknodat: S_IFIFO | perm, size 0, rdev 0, nlink 1; a bound AF_UNIX socket's name: S_IFSOCK | (0777 minus umask), size 0, and it stays after the socket is closed"
+  symbolic_links: "followed wherever they appear: a link's own fields are never reported (use lstat, which reports S_IFLNK | 0777, size = target length); relative targets resolve from the link's directory; \"..\" after a link to a directory goes to the parent of the link's target (physical, not textual); a link to a directory works with a trailing slash"
+  link_limit: "one lookup follows at most 40 symbolic links in total, counting links in the middle of the path and in the last component: a chain of 40 links resolves, 41 is ELOOP; a path through a 20-link chain to a directory followed by a 20-link chain resolves, followed by a 21-link chain is ELOOP"
+  path_spellings: "a directory may be named with any number of trailing slashes, a trailing \".\", repeated slashes inside; \"/..\" is \"/\"; \"..\" out of a directory reached through a link is that directory's real parent"
+  relative_paths: "start at the working directory (tests start in \"/\"); absolute paths ignore it. A removed working directory can still be stat'ed as \".\" (S_IFDIR, nlink 0) and \"..\" (its former parent); any other name inside it is ENOENT"
+  identity: "hard links share st_dev/st_ino and st_nlink counts names; rename keeps the inode and link count; a name renamed over reports the new file; names are bytes: case matters, spaces and bytes 0x01-0xff other than '/' are ordinary"
+  permission: "the file's own mode does not matter (mode 0 files and directories can be stat'ed); every directory before the last component needs search (execute) permission, read permission is not needed (a 0111 directory works); stat of the directory itself, with or without a trailing slash, needs nothing"
+  timestamps: "times set by utimensat are reported exactly (atime and mtime to the nanosecond); ctime is real wall-clock time; a new file has mtime == ctime; a write sets mtime and ctime to now (equal) and leaves atime; chmod moves ctime only (never backwards); creating a name in a directory moves the directory's mtime, not its atime; stat itself changes no timestamp"
+errors:
+  missing: "ENOENT: a missing component anywhere, an empty path, a dangling symbolic link (also with a trailing slash); a missing name followed by \"..\" is still ENOENT"
+  not_a_directory: "ENOTDIR: a non-directory (or a link to one) followed by more components, including a trailing slash, \"/.\" or \"/..\" after a file, or /dev/null/x"
+  too_long: "ENAMETOOLONG: a component of 256 bytes or more (255 is fine); a path of 4096 bytes or more with its NUL (4095 bytes plus NUL is fine, whatever its components)"
+  loop: "ELOOP: more than 40 symbolic links in one lookup (self-loops and mutual loops included, in the last component or the middle)"
+  denied: "EACCES: a non-root caller without search permission on a directory on the way (mode 0666 or 0), also when the name inside is missing, for \"dir/.\" and \"dir/..\" and deeper paths. Root (CAP_DAC_READ_SEARCH) searches any directory and gets the result of the lookup instead (stat(2), path_resolution(7); not observed here)"
+  bad_path_pointer: "EFAULT: NULL, low addresses, unmapped or PROT_NONE memory, kernel addresses (0xffff800000000000), or a string whose NUL would lie in inaccessible memory. A string ending exactly at the end of accessible memory is fine."
+  bad_buffer: "EFAULT: NULL, low, kernel, PROT_NONE or read-only buffers, and a buffer that starts in writable memory and runs into inaccessible memory (what was written to the writable part is not specified). A buffer ending exactly at the end of writable memory is fine."
+  error_order: "the path is resolved before the buffer is written: a bad path pointer is EFAULT whatever the buffer; with a bad buffer, a path that fails gives the path's error (ENOENT, ENOTDIR, ...), a path that resolves gives EFAULT. Among path problems: (1) the string as a whole (EFAULT, ENAMETOOLONG for 4096 bytes or more, ENOENT if empty), then (2) components from left to right as the walk reaches them, links followed on the way: the first that fails decides (ENOENT, ENOTDIR, EACCES, ENAMETOOLONG for a name of 256 bytes or more, ELOOP). So D/nope/<256 bytes> is ENOENT, D/file/<256 bytes> is ENOTDIR and D/<256 bytes>/nope/x is ENAMETOOLONG. The same on ext4 and tmpfs."
+side_effects: "none: no file system state or timestamp changes; on failure the buffer is not written"
+threading: "no thread-specific behaviour; the working directory and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless stated"
+  guarantees: "none"
+tests:
+  visible: 10
+  held_out: 4
