@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 61 of 141 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 63 of 141 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">61 / 141 milestones · 43%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">63 / 141 milestones · 45%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -206,11 +206,11 @@
 <g><title>✔ NT memory services: sections, NtAllocateVirtualMemory, NtMapViewOfSection, protections</title>
 <rect x="415.2" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>NT processes and threads, TEB/PEB, thread contexts, APCs</title>
-<rect x="440.2" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ NT processes and threads, TEB/PEB, thread contexts, APCs (ADR 0065)</title>
+<rect x="440.2" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>NT synchronisation: events, mutants, semaphores, timers, NtWaitForMultipleObjects</title>
-<rect x="465.3" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ NT synchronisation: events, mutants, semaphores, timers, NtWaitForMultipleObjects (ADR 0065)</title>
+<rect x="465.3" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O</title>
 <rect x="490.3" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
@@ -251,7 +251,7 @@
 <g><title>Fallback if needed: our own vcruntime140 (and msvcp140 subsets) per ADR 0055</title>
 <rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">3/19</text>
+<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">5/19</text>
 <text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>⚖️ Decide: global menu bar or per-window menus</title>
 <rect x="340.0" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>

@@ -930,11 +930,13 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   hook, `user::DEFAULT_HOOK` unless it was given another).
 - Unimplemented calls return each OS's native "not implemented" result and are
   logged. That log line is the seed of the API tracer.
-- **NT** ([ADR 0063](adr/0063-nt-processes-object-manager-and-memory.md)): a
+- **NT** ([ADR 0063](adr/0063-nt-processes-object-manager-and-memory.md),
+  [ADR 0065](adr/0065-nt-threads-synchronisation-and-apcs.md)): a
   PE process's calls go to `nt::syscall` (`Nt::dispatch_with`) when the
   kernel has set the process up; a bare record still gets
-  `STATUS_NOT_IMPLEMENTED`. The object manager, memory and section services
-  are implemented; see "NT personality".
+  `STATUS_NOT_IMPLEMENTED`. The object manager, memory and section services,
+  processes and threads, synchronisation (events, mutants, semaphores,
+  timers, waits) and user APCs are implemented; see "NT personality".
 - **Linux** ([ADR 0025](adr/0025-linux-syscall-table-and-kernel-services-trait.md)):
   `personalities/linux` has the whole x86-64 table (numbers and names
   generated from the coverage map) and handlers for the calls a static C or
@@ -1285,20 +1287,39 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   committed private memory is demand-zero anonymous memory, a pagefile
   section is an `AnonShared` object shared by its views, an image or file
   section is a `MemoryImage` views copy privately.
-- **Processes** (`personalities/nt/src/exec.rs`, `kernel/src/nt`). Until our
-  `ntdll` exists the kernel maps the executable's image section at its
-  preferred base (or relocates it with `poly_pe::relocate`), sets up the
-  PEB, the first TEB (the fields ADR 0063 lists) and the stack with its
-  guard page, and starts the thread at the entry point with GS at the TEB.
-  System calls route through the thread's hook to `nt::syscall`; the per-
-  process NT state is keyed by pid in `kernel/src/nt`, so `process.rs` only
-  gains a `new_nt` constructor. An executable that imports anything is
-  refused until `ntdll` binds imports.
-- **Dispatcher and waits** (`poly-ntobj`, ADR 0030): the crate returns
-  `Done(status)` or `Blocked(WaitId)` and queues a `Wake` for each blocked
-  wait a later call satisfies; the kernel sleeps and wakes threads, and
-  cancels waits on timeout, alert or APC. Not wired into the kernel yet (the
-  synchronisation milestone).
+- **Processes and threads** (`personalities/nt/src/exec.rs`,
+  `kernel/src/nt`, ADR 0065). Until our `ntdll` exists the kernel maps the
+  executable's image section at its preferred base (or relocates it with
+  `poly_pe::relocate`), sets up the PEB, the first TEB and the stack with its
+  guard page. Each thread starts through a per-process trampoline that calls
+  its routine and, on return, ends the thread with `NtTerminateThread`, so the
+  last thread's return ends the process with the right code. `NtCreateThreadEx`
+  makes more threads in the process (each its own TEB, stack and thread
+  object); `NtTerminateThread`, `NtOpenProcess`/`Thread` (by client id),
+  `NtQueryInformationProcess`/`Thread`, `NtSuspendThread`/`ResumeThread` and
+  `NtGetContextThread`/`SetContextThread` (the x64 `CONTEXT` control and
+  integer registers, read from a thread parked suspended) round it out. The
+  per-process NT state is keyed by pid in `kernel/src/nt`, so `process.rs`
+  only gains a `new_nt` constructor. An executable that imports anything is
+  refused until `ntdll` binds imports; cross-process creation
+  (`NtCreateUserProcess`) is left for the `ntdll` milestone.
+- **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
+  `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
+  (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →
+  `STATUS_ABANDONED_WAIT_0+n`), semaphores (limits), waitable timers (periodic,
+  absolute/relative 100 ns times, timer APCs on the kernel timer service),
+  `NtWaitForSingleObject`/`NtWaitForMultipleObjects` (WaitAll/WaitAny, up to
+  64 objects, timeouts, `STATUS_USER_APC`), and `NtSignalAndWaitForSingleObject`.
+  The crate decides (`Done(status)` or `Blocked(WaitId)`, queuing a `Wake`
+  for each blocked wait a later call satisfies); the kernel blocks on the
+  generic park/unpark (ADR 0053), drains the wakes after each call and wakes
+  the threads, and cancels waits on timeout, alert or APC.
+- **APCs** (ADR 0065): `NtQueueApcThread` queues a user APC, delivered at an
+  alertable `NtWaitFor*`/`NtDelayExecution` or `NtTestAlert` through a
+  per-process APC trampoline that runs the routine and re-enters the kernel
+  (`PolyResumeApc`) to restore the interrupted context (our stand-in for
+  `KiUserApcDispatcher`). `NtDelayExecution` and `NtYieldExecution` round out
+  the dispatcher services.
 - A `ParseHook` receives lookups that reach a device (or later a file system
   or the registry), so those own the names below them.
 
@@ -1322,6 +1343,9 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
 | Terminals on the host: the line discipline (canonical editing, echo flags, signals, flow control, `MIN` / `TIME`, input mappings, output processing), terminals against a fake host (controlling terminal, `SIGTTIN` / `SIGTTOU` / `EIO`, the ioctls, blocking reads and writes), ptys through a real VFS with threads (devpts, locking, echo, waiting for room, hangups) | `poly-tty`, `poly-personality-linux` (`task::jobs`) | `cargo test --workspace` (host) |
 | Terminals from ring 3: a pty slave reading a line a second thread types on the master (and the echo on the master), `TCGETS` / `TCSETS` and raw mode with `poll`, `epoll` and `FIONREAD`, `^C` on the master killing the foreground group with `SIGINT`, a background child writing with `TOSTOP` getting `SIGTTOU` (its handler, `EINTR`; blocked, the write goes through), `TIOCSWINSZ` sending `SIGWINCH`, the console as a terminal and `/dev/tty` after `TIOCSCTTY`, devpts nodes coming and going | `kernel_test!` in `tty/tests.rs` | every boot |
 | `/bin/ttyinit` as init on the serial console (nolibc Rust, `tools/xtask/programs/ttyinit.rs`), typed into through QEMU's stdin: a line edited with DEL and its echo, `^C` interrupting a read with `SIGINT`, single keys in raw mode | `tools/xtask/src/programs.rs` | `cargo xtask test` |
+| NT object manager, memory and sections from ring 3 (a self-assembled PE, `kernel/src/nt/test_pe.rs`): a named event created, opened, duplicated and closed to zero references; a directory queried; memory reserved/committed/protected/queried/freed; a pagefile section mapped twice with a write through one view seen through the other | `kernel_test!` `nt_test_program_runs_from_ring3` | every boot |
+| NT threads, synchronisation and APCs from ring 3 (a self-assembled multi-threaded PE, `kernel/src/nt/test_threads.rs`): `NtCreateThreadEx`, a blocking wait woken across threads, a thread exit code via `NtQueryInformationThread`, a mutant abandoned by a terminating thread (`STATUS_ABANDONED_WAIT_0`), a semaphore and event in a `WaitAll`, a user APC delivered at `NtTestAlert`, a periodic timer waited on twice, and `NtGetContextThread` on a suspended thread; the process cleaned up afterwards | `kernel_test!` `nt_threads_and_sync_from_ring3` | every boot |
+| NT dispatcher and service logic on the host: the object manager, the dispatcher against a randomized reference model (wait-any/all fairness, mutant ownership/abandonment, semaphore limits, timer ordering), and the memory/section/thread/sync service decoders against a fake kernel | `cargo test -p poly-ntobj -p poly-personality-nt` | `cargo xtask ci` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `run /bin/hello`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |
