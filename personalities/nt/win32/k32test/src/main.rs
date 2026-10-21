@@ -26,8 +26,17 @@ unsafe extern "system" {
     fn GetStdHandle(which: u32) -> Handle;
     fn WriteFile(h: Handle, buf: *const u8, len: u32, written: *mut u32, ov: *mut u8) -> i32;
     fn ReadFile(h: Handle, buf: *mut u8, len: u32, read: *mut u32, ov: *mut u8) -> i32;
-    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *const u8, disp: u32, flags: u32, t: Handle) -> Handle;
-    fn CreateFileA(name: *const u8, access: u32, share: u32, sa: *const u8, disp: u32, flags: u32, t: Handle) -> Handle;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *const u8,
+        disp: u32,
+        flags: u32,
+        t: Handle,
+    ) -> Handle;
+    fn CreateFileA(name: *const u8, access: u32, share: u32, sa: *const u8, disp: u32, flags: u32, t: Handle)
+    -> Handle;
     fn CloseHandle(h: Handle) -> i32;
     fn GetFileSize(h: Handle, high: *mut u32) -> u32;
     fn GetFileSizeEx(h: Handle, size: *mut i64) -> i32;
@@ -49,7 +58,14 @@ unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
     fn GetCurrentThread() -> Handle;
     fn GetCurrentThreadId() -> u32;
-    fn CreateThread(sa: *const u8, stack: usize, start: extern "system" fn(*mut u8) -> u32, p: *mut u8, flags: u32, id: *mut u32) -> Handle;
+    fn CreateThread(
+        sa: *const u8,
+        stack: usize,
+        start: extern "system" fn(*mut u8) -> u32,
+        p: *mut u8,
+        flags: u32,
+        id: *mut u32,
+    ) -> Handle;
     fn GetExitCodeThread(h: Handle, code: *mut u32) -> i32;
     fn Sleep(ms: u32);
     fn GetCommandLineW() -> *const u16;
@@ -105,7 +121,8 @@ unsafe extern "system" {
     fn GetVersion() -> u32;
     fn GetVersionExW(info: *mut u8) -> i32;
     fn GetSystemInfo(info: *mut u8);
-    fn FormatMessageW(flags: u32, src: *const u8, id: u32, lang: u32, buf: *mut u16, size: u32, args: *const u8) -> u32;
+    fn FormatMessageW(flags: u32, src: *const u8, id: u32, lang: u32, buf: *mut u16, size: u32, args: *const u8)
+    -> u32;
     fn IsDebuggerPresent() -> i32;
 }
 
@@ -358,15 +375,8 @@ unsafe fn files() {
         check(GetFileAttributesW(w!("k32dir")) & FILE_ATTRIBUTE_DIRECTORY != 0);
 
         // A file: create, write, size, seek, read, EOF.
-        let h = CreateFileW(
-            w!("k32dir\\a.txt"),
-            GENERIC_READ | GENERIC_WRITE,
-            0,
-            core::ptr::null(),
-            CREATE_NEW,
-            0x80,
-            0,
-        );
+        let h =
+            CreateFileW(w!("k32dir\\a.txt"), GENERIC_READ | GENERIC_WRITE, 0, core::ptr::null(), CREATE_NEW, 0x80, 0);
         check(h != INVALID_HANDLE_VALUE);
         check_error(0);
         let text = b"hello, kernel32";
@@ -461,7 +471,7 @@ unsafe fn memory() {
         let heap = GetProcessHeap();
         check(!heap.is_null());
         let p = HeapAlloc(heap, 0x8, 100);
-        check(!p.is_null() && p as usize % 16 == 0);
+        check(!p.is_null() && (p as usize).is_multiple_of(16));
         check((0..100).all(|i| *p.add(i) == 0));
         check(HeapSize(heap, 0, p) == 100);
         p.write_bytes(0xAB, 100);
@@ -487,7 +497,7 @@ unsafe fn memory() {
 
         // Virtual memory: commit, write, query, protect, release.
         let v = VirtualAlloc(core::ptr::null_mut(), 0x10000, 0x3000, 0x04);
-        check(!v.is_null() && v as usize % 0x10000 == 0);
+        check(!v.is_null() && (v as usize).is_multiple_of(0x10000));
         v.add(0x1000).write(42);
         let mut mbi = [0u8; 48];
         check(VirtualQuery(v, mbi.as_mut_ptr(), 48) == 48);

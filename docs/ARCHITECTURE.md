@@ -1339,6 +1339,15 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   then `poly-seh` over the modules' `.pdata`) are where the kernel delivers
   APCs and exceptions. `poly-rtl` is the heap, counted strings, the status
   table and critical sections behind the `Rtl*` exports.
+- **Our `kernelbase` and `kernel32`** (`personalities/nt/win32`,
+  `crates/poly-kernelbase`, [ADR 0076](adr/0076-our-kernelbase-and-kernel32.md)):
+  built like `ntdll` (one workspace, cached by content hash) and written to
+  `C:\Windows\System32`. `kernelbase.dll` implements the Win32 base API
+  (files, the environment, processes and threads, memory, synchronisation,
+  errors, time, version) over `ntdll`; `kernel32.dll` forwards most of its
+  exports to API-set contracts that `ntdll`'s loader maps to `kernelbase`.
+  The decisions (path normalisation, the environment block, argument
+  mapping, error codes, messages) are host-tested in `poly-kernelbase`.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

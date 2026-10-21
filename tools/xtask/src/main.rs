@@ -1354,7 +1354,9 @@ fn ci() -> Result {
     )?;
     step(
         "fmt (win32)",
-        cargo().args(["fmt", "--all", "--check", "--manifest-path"]).arg(root().join("personalities/nt/win32/Cargo.toml")),
+        cargo()
+            .args(["fmt", "--all", "--check", "--manifest-path"])
+            .arg(root().join("personalities/nt/win32/Cargo.toml")),
     )?;
     eprintln!("==> font tables");
     font::run(&root(), &["--check".into()])?;

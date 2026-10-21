@@ -65,7 +65,9 @@ pub unsafe extern "system" fn CreateThread(
     if !thread_id.is_null() {
         let mut info = [0u8; 48];
         // SAFETY: valid pointers.
-        let q = unsafe { nt::NtQueryInformationThread(h, THREAD_BASIC_INFORMATION, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
+        let q = unsafe {
+            nt::NtQueryInformationThread(h, THREAD_BASIC_INFORMATION, info.as_mut_ptr(), 48, core::ptr::null_mut())
+        };
         let id = if q.is_success() { u64::from_le_bytes(info[24..32].try_into().unwrap()) as u32 } else { 0 };
         // SAFETY: the caller's out-pointer.
         unsafe { thread_id.write(id) };
@@ -86,7 +88,9 @@ pub extern "system" fn ExitThread(code: u32) -> ! {
 pub unsafe extern "system" fn GetExitCodeThread(thread: Handle, code: *mut u32) -> i32 {
     let mut info = [0u8; 48];
     // SAFETY: valid pointers.
-    let st = unsafe { nt::NtQueryInformationThread(thread, THREAD_BASIC_INFORMATION, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
+    let st = unsafe {
+        nt::NtQueryInformationThread(thread, THREAD_BASIC_INFORMATION, info.as_mut_ptr(), 48, core::ptr::null_mut())
+    };
     if !st.is_success() {
         return fail_status(st, FALSE);
     }
@@ -193,7 +197,11 @@ unsafe fn create_named(
         attrs |= nt::OBJ_INHERIT;
     }
     let oa = ObjectAttributes::new(string.as_ref(), attrs);
-    let oa_ptr = if string.is_some() || attrs & nt::OBJ_INHERIT != 0 { &oa as *const ObjectAttributes } else { core::ptr::null() };
+    let oa_ptr = if string.is_some() || attrs & nt::OBJ_INHERIT != 0 {
+        &oa as *const ObjectAttributes
+    } else {
+        core::ptr::null()
+    };
     let mut h: Handle = 0;
     let st = create(&mut h, oa_ptr);
     if !st.is_success() {
@@ -208,7 +216,9 @@ unsafe fn create_named(
 pub unsafe extern "system" fn CreateEventW(security: *const u8, manual: i32, initial: i32, name: *const u16) -> Handle {
     let kind = if manual != 0 { NOTIFICATION_EVENT } else { SYNCHRONIZATION_EVENT };
     // SAFETY: valid pointers from `create_named`.
-    unsafe { create_named(name, security, |h, oa| nt::NtCreateEvent(h, EVENT_ALL_ACCESS, oa, kind, (initial != 0) as u8)) }
+    unsafe {
+        create_named(name, security, |h, oa| nt::NtCreateEvent(h, EVENT_ALL_ACCESS, oa, kind, (initial != 0) as u8))
+    }
 }
 
 /// `SetEvent`.
@@ -245,12 +255,19 @@ pub extern "system" fn ReleaseMutex(mutex: Handle) -> i32 {
 /// `CreateSemaphoreW`: Learn: `lMaximumCount` > 0 and 0 <= `lInitialCount`
 /// <= the maximum, else `ERROR_INVALID_PARAMETER`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CreateSemaphoreW(security: *const u8, initial: i32, maximum: i32, name: *const u16) -> Handle {
+pub unsafe extern "system" fn CreateSemaphoreW(
+    security: *const u8,
+    initial: i32,
+    maximum: i32,
+    name: *const u16,
+) -> Handle {
     if !sync::valid_semaphore(initial, maximum) {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
     // SAFETY: valid pointers from `create_named`.
-    unsafe { create_named(name, security, |h, oa| nt::NtCreateSemaphore(h, SEMAPHORE_ALL_ACCESS, oa, initial, maximum)) }
+    unsafe {
+        create_named(name, security, |h, oa| nt::NtCreateSemaphore(h, SEMAPHORE_ALL_ACCESS, oa, initial, maximum))
+    }
 }
 
 /// `ReleaseSemaphore`: going over the maximum is `ERROR_TOO_MANY_POSTS`.

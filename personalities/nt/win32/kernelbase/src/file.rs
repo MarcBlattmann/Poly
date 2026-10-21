@@ -130,9 +130,29 @@ unsafe fn transfer(handle: Handle, buf: *mut u8, len: u32, done: *mut u32, ov: *
     // SAFETY: the caller's buffer of `len` bytes; valid pointers.
     let mut st = unsafe {
         if write {
-            nt::NtWriteFile(handle, event, core::ptr::null(), core::ptr::null(), iosb, buf, len, offset_ptr, core::ptr::null())
+            nt::NtWriteFile(
+                handle,
+                event,
+                core::ptr::null(),
+                core::ptr::null(),
+                iosb,
+                buf,
+                len,
+                offset_ptr,
+                core::ptr::null(),
+            )
         } else {
-            nt::NtReadFile(handle, event, core::ptr::null(), core::ptr::null(), iosb, buf, len, offset_ptr, core::ptr::null())
+            nt::NtReadFile(
+                handle,
+                event,
+                core::ptr::null(),
+                core::ptr::null(),
+                iosb,
+                buf,
+                len,
+                offset_ptr,
+                core::ptr::null(),
+            )
         }
     };
     if st == nt::STATUS_PENDING {
@@ -549,7 +569,12 @@ const FILE_WRITE_ATTRIBUTES: u32 = 0x100;
 /// last component in the caller's buffer (NULL if the path ends with a
 /// separator).
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetFullPathNameW(name: *const u16, size: u32, buf: *mut u16, file_part: *mut *mut u16) -> u32 {
+pub unsafe extern "system" fn GetFullPathNameW(
+    name: *const u16,
+    size: u32,
+    buf: *mut u16,
+    file_part: *mut *mut u16,
+) -> u32 {
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, 0) };
     let (full, part) = match full_path(name) {
@@ -568,7 +593,12 @@ pub unsafe extern "system" fn GetFullPathNameW(name: *const u16, size: u32, buf:
 /// `GetFullPathNameA`: converted through UTF-16; the sizes are the ANSI
 /// string's (one byte per character in code page 1252).
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetFullPathNameA(name: *const u8, size: u32, buf: *mut u8, file_part: *mut *mut u8) -> u32 {
+pub unsafe extern "system" fn GetFullPathNameA(
+    name: *const u8,
+    size: u32,
+    buf: *mut u8,
+    file_part: *mut *mut u8,
+) -> u32 {
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { ansi_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, 0) };
     let (full, part) = match full_path(&name) {

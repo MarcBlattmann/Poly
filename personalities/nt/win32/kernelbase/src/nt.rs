@@ -204,8 +204,7 @@ unsafe extern "system" {
     pub fn RtlTryEnterCriticalSection(cs: *mut CriticalSection) -> u8;
     pub fn RtlDeleteCriticalSection(cs: *mut CriticalSection) -> NtStatus;
 
-    pub fn LdrLoadDll(path: *const u16, flags: *mut u32, name: *const UnicodeString, handle: *mut *mut u8)
-    -> NtStatus;
+    pub fn LdrLoadDll(path: *const u16, flags: *mut u32, name: *const UnicodeString, handle: *mut *mut u8) -> NtStatus;
     pub fn LdrUnloadDll(handle: *mut u8) -> NtStatus;
     pub fn LdrGetDllHandle(
         path: *const u16,

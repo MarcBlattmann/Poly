@@ -4,9 +4,9 @@
 //!
 //! The environment block and the command line are where the kernel put
 //! them (ADR 0073): `RTL_USER_PROCESS_PARAMETERS.CommandLine` (+ 0x70,
-//! `winternl.h`) and Poly's own environment pointer and size (+ 0x80,
-//! + 0x88). `SetEnvironmentVariableW` replaces the block there, so `ntdll`
-//! (the DLL search order's `Path`) sees the change too.
+//! `winternl.h`) and Poly's own environment pointer and size (offsets
+//! 0x80 and 0x88). `SetEnvironmentVariableW` replaces the block there, so
+//! `ntdll` (the DLL search order's `Path`) sees the change too.
 //!
 //! **The standard handles** (ADR 0076): a console host is a later Phase 5
 //! item; until then a process gets what every Poly process starts with on

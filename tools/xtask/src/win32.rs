@@ -35,9 +35,19 @@ pub const OUTPUTS: [&str; 3] = ["kernelbase.dll", "kernel32.dll", "k32test.exe"]
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 
-/// `cargo xtask win32`: make sure the cached modules are up to date
-/// (building them if not) and verify them.
-pub fn command(_args: &[String]) -> Result {
+/// `cargo xtask win32 [--clippy]`: make sure the cached modules are up to
+/// date (building them if not) and verify them; `--clippy` lints the
+/// workspace for the Windows target instead (into `target/win32-clippy`,
+/// deleted afterwards).
+pub fn command(args: &[String]) -> Result {
+    if args.iter().any(|a| a == "--clippy") {
+        let target = root().join("target").join("win32-clippy");
+        let mut cmd = cargo_for(&target, "clippy")?;
+        cmd.args(["--", "-D", "warnings"]);
+        let r = step("clippy (win32)", &mut cmd);
+        let _ = std::fs::remove_dir_all(&target);
+        return r;
+    }
     let dir = ensure()?;
     verify(&dir)?;
     for f in OUTPUTS {
@@ -119,13 +129,27 @@ fn prune(dir: &Path) {
 
 /// Build the workspace into `target_dir`; the directory with the outputs.
 fn build(target_dir: &Path) -> Result<PathBuf> {
+    let mut cmd = cargo_for(target_dir, "build")?;
+    step("build kernelbase.dll, kernel32.dll, k32test.exe", &mut cmd)?;
+    let out = target_dir.join("x86_64-pc-windows-msvc/release");
+    for f in OUTPUTS {
+        if !out.join(f).is_file() {
+            return Err(format!("{} was not produced", out.join(f).display()));
+        }
+    }
+    Ok(out)
+}
+
+/// `cargo <verb>` for the workspace and the Windows target, with
+/// `-Zbuild-std` from the toolchain's `rust-src` (ADR 0071).
+fn cargo_for(target_dir: &Path, verb: &str) -> Result<std::process::Command> {
     let manifest = root().join(WORKSPACE).join("Cargo.toml");
     let vendor = crate::ntdll::vendor_dir()?;
     let mut cmd = cargo();
     cmd.env("RUSTC_BOOTSTRAP", "1")
         .env("CARGO_INCREMENTAL", "0")
         .env("RUSTFLAGS", RUSTFLAGS)
-        .arg("build")
+        .arg(verb)
         .arg("--release")
         .arg("--workspace")
         .arg("--manifest-path")
@@ -139,14 +163,7 @@ fn build(target_dir: &Path) -> Result<PathBuf> {
         .arg("source.crates-io.replace-with=\"rustsrc\"")
         .arg("--config")
         .arg(format!("source.rustsrc.directory={:?}", vendor.to_string_lossy()));
-    step("build kernelbase.dll, kernel32.dll, k32test.exe", &mut cmd)?;
-    let out = target_dir.join("x86_64-pc-windows-msvc/release");
-    for f in OUTPUTS {
-        if !out.join(f).is_file() {
-            return Err(format!("{} was not produced", out.join(f).display()));
-        }
-    }
-    Ok(out)
+    Ok(cmd)
 }
 
 fn parse(bytes: &[u8]) -> Result<poly_pe::Pe<'_>> {
