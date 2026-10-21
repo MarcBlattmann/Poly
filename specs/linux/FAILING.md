@@ -8,62 +8,61 @@ follows a divergence often changes with it. Tests that pass go into
 
 ## spec-c (apps)
 
-App tests (`tests/linux/apps/*.app`, the visible cases in
-`specs/linux/apps/<app>.tests/` and the held-out cases, which are counted
-here but not named), compared in app mode (docs/AGENT_PIPELINE.md, "App tests"). Run on 2026-10-20: reference
-Linux 6.18.44 (Ubuntu 24.04, coreutils 9.4, grep 3.11, sed 4.9, glibc
-2.39), Poly at main 8351e77 (106 tests: 68 pass, the 37 app cases below
-and `libc-hello` fail). Spec sheets: `specs/linux/apps/<app>.yaml`.
+App tests (`tests/linux/apps/*.app` and the visible cases in
+`specs/linux/apps/<app>.tests/`), compared in app mode
+(docs/AGENT_PIPELINE.md, "App tests"). Only visible divergences are
+listed here. Run on 2026-10-21: reference Linux 6.18.44 (Ubuntu 24.04,
+coreutils 9.4, grep 3.11, sed 4.9, glibc 2.39), Poly at main c200c88
+under QEMU (TCG), `--tests-dir` for each of the eleven
+`specs/linux/apps/*.tests` (82 tests with the corpus: 75 pass; `libc-hello`
+fails at `rseq` by decision, ADR 0043/0049; `app-ls` and the five cases
+below fail). Spec sheets: `specs/linux/apps/<app>.yaml`.
 
-Passing: **true** (3 of 3 cases), **echo** (7 of 7), **head** (7 of 7),
-**grep** (10 of 10), **mkdir** (7 of 7) and **sed** (8 of 9; `sed-i` fails
-in its `cat` step, below); the corpus tests `app-true`, `app-echo`, `app-head`, `app-grep`, `app-sed` and
-`app-mkdir` are in `tests/linux/poly-pass.txt`. `true`, `echo` and `head`
-also match in exact mode (with only `rseq` left out).
+Passing: **true** (2 of 2 cases), **echo** (5 of 5), **head** (5 of 5),
+**grep** (7 of 7), **mkdir** (5 of 5), **cat** (6 of 6), **wc** (6 of 6),
+**sort** (6 of 6), **cp** (4 of 5; `cp-p` below), **sed** (5 of 6;
+`sed-i` below) and **ls** (3 of 6; `ls-la`, `ls-lS`, `ls-ld` below). The
+corpus tests `app-true`, `app-echo`, `app-head`, `app-grep`, `app-sed`,
+`app-mkdir`, `app-cat`, `app-sort`, `app-wc` and `app-cp` pass and are in
+`tests/linux/poly-pass.txt`; `app-ls` fails (below).
 
 Failing, by what Poly needs (first divergence, then what was seen behind
 it with that call left out):
 
-- **`fadvise64` is `ENOSYS`** (Linux: 0). First divergence of `app-cat`,
-  `app-wc`, `app-sort`, `app-cp`, every failing `cat`, `wc`, `sort` and
-  `cp` case but `cp-r` and `cp-p`, and `sed-i` (its `cat` step):
-  `reference fadvise64(3, 0, 0, 2) = ok, target fadvise64(3, 0, 0, 2) = -1 ENOSYS`
-  (advice 2 is `POSIX_FADV_SEQUENTIAL`, on a regular file and on stdin, a
-  regular file here). With it left out (`--ignore-syscall fadvise64`),
-  **wc** and **sort** pass completely (`app-wc`, `app-sort` and all 16
-  cases): `fadvise64` returning 0 is all they need.
-- **`copy_file_range` is `ENOSYS`** (Linux: the byte count, then 0 at end
-  of file). Behind `fadvise64` in `app-cat`, `app-cp`, `cat-file`,
-  `cat-dash`, `cat-stdin`, `cp-file`, `cp-overwrite`, `sed-i` and two
-  held-out cases:
-  `reference copy_file_range(3, NULL, 1, NULL, 9223372035781033984, 0x0) = ok, target ... = -1 ENOSYS`.
-  cat copies into stdout (a regular file) this way, cp into the target.
-  Note for whoever implements it: the bytes it writes to fd 1 or 2 must be
-  reported in `POLY-OUT` records like those of `write` (ADR 0027 says
-  "bytes the program wrote to fd 1 or 2"; the kernel records only `write`
-  today, `kernel/src/linux/services.rs`), or cat's output goes missing
-  from the Poly side once the call works.
-- **`ioctl(fd, FIONREAD)` on a regular file is `ENOTTY`** (Linux: 0, the
-  bytes left to read). Behind `fadvise64` in `cat-A`, `cat-n`, `cat-s`:
-  `reference ioctl(3, 0x541b, <ptr>) = ok, target ioctl(3, 0x541b, <ptr>) = -1 ENOTTY`.
-- **`ioctl(fd, FICLONE)` on tmpfs is `ENOTTY`** (Linux: `EOPNOTSUPP`). First
-  divergence of `cp-r`:
-  `reference [p1] ioctl(4, 0x40049409, <ptr>) = -1 EOPNOTSUPP, target [p1] ioctl(4, 0x40049409, <ptr>) = -1 ENOTTY`;
-  every cp case makes this call before copying.
-- **tmpfs directory sizes**: Poly reports `st_size` 4096 for a directory of
-  the initramfs; Linux's tmpfs reports 40 plus 20 per entry (60 for one
-  entry, 140 for five, 200 for eight), `st_blocks` 0. First divergence of
-  `app-ls`, `ls-la`, `ls-ld`, `ls-lS` and one held-out case:
-  `stdout line 2: reference "drwxr-xr-x 3 root root 140 Nov 14  2023 .\n", target "drwxr-xr-x 3 root root 4096 Nov 14  2023 .\n"`.
-- **extended attribute calls are `ENOSYS`**: `lgetxattr` and `listxattr`
-  (in `app-ls`, `ls-la`, `ls-ld`, `ls-lS`, `cp-p`), `flistxattr`
-  (`cp-p`), `fgetxattr` and `fsetxattr` (`sed-i`). Linux's tmpfs answers
-  `lgetxattr(path, "security.selinux")` and `fgetxattr(fd,
-  "system.posix_acl_access")` with `ENODATA`, `listxattr`/`flistxattr` with
-  0 and `fsetxattr(fd, "system.posix_acl_access", 28 bytes)` with 0. With
-  `ENOSYS`, ls prints `ls: <name>: Function not implemented` on stderr for
-  every file it lists in long format; first divergence of `cp-p`:
-  `stderr line 1: reference <end of output>, target "ls: copy.sh: Function not implemented\n"`.
+- **Directory entry order.** Linux's tmpfs returns a directory's entries
+  newest first: for `ls-la`, `dangling`, `link`, `sub`, `.hidden`,
+  `big.txt`, `run.sh`, `empty`, `notes.txt`, the reverse of the order the
+  test defines them in. Poly returns them in another order, by all signs
+  the opposite one: its `readlink` calls for the two symbolic links come
+  after the last two `statx` calls (Poly's records carry no
+  `getdents64` contents, so this is inferred from the call order). `ls -l`
+  sorts what it prints, so stdout, stderr and the exit status match; the
+  per-file calls come in another order. First divergence of `app-ls`,
+  `ls-la` and `ls-lS`:
+  `reference readlink("tree/dangling", <ptr>, 15) = ok, target listxattr(*, <ptr>, 152) = ok`
+  (`app-ls`: `readlink("tree/link", <ptr>, 10)`).
+- **Times set with `futimens` do not stick.** `cp -p` copies with
+  `copy_file_range`, then sets the copy's times with
+  `utimensat(4, NULL, <ptr>, 0)` and its mode with `fchmod`; Poly answers
+  every call as Linux does (the whole `cp` process matches), but the `ls -l`
+  step then shows the time of the copy instead of the source's
+  modification time (2023-11-14 22:13:20 UTC). First divergence of `cp-p`:
+  `stdout line 1: reference "-rwxr-x--- 1 root root 10 Nov 14  2023 copy.sh\n", target "-rwxr-x--- 1 root root 10 Oct 21 07:44 copy.sh\n"`.
+- **`clock_gettime` is a system call on Poly under TCG.** Linux answers
+  it in the vDSO (no syscall in the trace); Poly's vDSO makes the system
+  call when the kernel's clock is not the TSC, which is the case under
+  QEMU's TCG (ADR 0044, `Mode::Syscall`), so the call shows up in Poly's
+  trace only. `ls -l` reads the time once to decide between year and time
+  of day, and sed's temporary file name uses `CLOCK_MONOTONIC`. First
+  divergence of `ls-ld`:
+  `reference write(1, "drwxr-xr-x 2 root root 60 Nov 14  2023 tree/..., 48) = ok, target clock_gettime(0, <ptr>) = ok`
+  and of `sed-i`:
+  `reference [p1] openat(-100, "./sed0hx2pL", 0xc2, 0x180) = 4, target [p1] clock_gettime(1, <ptr>) = ok`.
+  With it left out (`--ignore-syscall clock_gettime`) both pass
+  completely, and `cp-p` and the `ls` cases above still fail as described.
+  This is a property of the test machine rather than of a call Poly
+  answers wrongly; it can be fixed in the kernel (the vDSO's clock under
+  TCG) or by leaving the vDSO's calls out of app mode as `rseq` is.
 
 Not caused by Poly, handled by the tooling (docs/AGENT_PIPELINE.md, "App
 tests"): `rseq` (`ENOSYS` by decision, ADR 0043/0049) is left out of app

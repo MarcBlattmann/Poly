@@ -20,6 +20,7 @@ members = [
     "crates/poly-heap",
     "crates/poly-input",
     "crates/poly-irq",
+    "crates/poly-ldr",
     "crates/poly-line",
     "crates/poly-mem",
     "crates/poly-ntobj",
@@ -32,6 +33,7 @@ members = [
     "crates/poly-random",
     "crates/poly-registry",
     "crates/poly-rtc",
+    "crates/poly-rtl",
     "crates/poly-sched",
     "crates/poly-seh",
     "crates/poly-smp",
@@ -51,7 +53,7 @@ members = [
     "tools/pipeline",
     "tools/xtask",
 ]
-exclude = ["kernel"]
+exclude = ["kernel", "personalities/nt/ntdll"]
 
 [workspace.package]
 version = "0.0.1"
@@ -75,6 +77,7 @@ poly-gfx = { path = "crates/poly-gfx" }
 poly-heap = { path = "crates/poly-heap" }
 poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
+poly-ldr = { path = "crates/poly-ldr" }
 poly-line = { path = "crates/poly-line" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
@@ -87,6 +90,7 @@ poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
 poly-registry = { path = "crates/poly-registry" }
 poly-rtc = { path = "crates/poly-rtc" }
+poly-rtl = { path = "crates/poly-rtl" }
 poly-sched = { path = "crates/poly-sched" }
 poly-seh = { path = "crates/poly-seh" }
 poly-smp = { path = "crates/poly-smp" }

@@ -1,0 +1,14 @@
+[package]
+name = "poly-rtl"
+description = "The NT run-time library our ntdll exports: the heap, counted strings and code page 1252, NTSTATUS to Win32 error mapping, critical sections, the reported version"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-ntobj = { workspace = true }
+
+[lints]
+workspace = true

@@ -98,6 +98,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-ldr"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+ "poly-pe",
+]
+
+[[package]]
 name = "poly-line"
 version = "0.0.1"
 
@@ -193,6 +201,13 @@ dependencies = [
 [[package]]
 name = "poly-rtc"
 version = "0.0.1"
+
+[[package]]
+name = "poly-rtl"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
 
 [[package]]
 name = "poly-sched"
@@ -365,6 +380,7 @@ dependencies = [
  "poly-elf",
  "poly-ext2",
  "poly-gfx",
+ "poly-pe",
  "poly-term",
  "poly-vfs",
  "rustc-demangle",
