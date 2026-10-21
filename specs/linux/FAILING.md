@@ -70,3 +70,42 @@ tests"): `rseq` (`ENOSYS` by decision, ADR 0043/0049) is left out of app
 mode; the reference hides SSE4.2 from glibc (`GLIBC_TUNABLES`) so ld.so
 searches libraries as on QEMU's CPU, gets an empty `/sys` and a
 `/proc/filesystems` without `selinuxfs`, as a kernel without SELinux.
+
+## spec-d (getdents64 order on tmpfs)
+
+The tmpfs directory order of `linux/syscall/x86_64/getdents64`
+(`specs/linux/x86_64/getdents64.yaml`, section `directory_order`), handed
+to impl-3. Run on 2026-10-21: `cargo xtask pipeline diff --target poly
+--build-kernel --tests-dir specs/linux/x86_64/getdents64.tests --tests-dir
+<held-out dir>`, reference Linux 6.18.44, Poly at 8460f5f (main merged).
+12 tests: the two older visible ones (`a_getdents64_list`,
+`a_getdents64_small`, which check names as a set) pass; the six new
+visible ones and all 4 held-out ones fail.
+
+Poly lists a tmpfs directory (here `/dev/shm`) in creation order, oldest
+first, with d_off values going up along the listing; Linux lists newest
+first (renamed entries at the front) with each record's d_off the next
+entry's cookie. First divergence of each visible test (the stdout line;
+the syscall divergence is the `write` of that line's check result):
+
+- `d_getdents64_tmpfs_creation_order`: `stdout line 5: reference
+  "created: . .. dd yy bb zz aa xx cc mm\n", target "created: . .. mm cc
+  xx aa zz bb yy dd\n"`.
+- `d_getdents64_tmpfs_multi_call`: `stdout line 5: reference "one_call: .
+  .. dd yy bb zz aa xx cc mm\n", target "one_call: . .. mm cc xx aa zz bb
+  yy dd\n"` (the record-per-call counts and the EINVAL for a buffer too
+  small for the next record pass where the next record is the same).
+- `d_getdents64_tmpfs_rename`: `stdout line 6: reference "created: . .. e
+  d c b a\n", target "created: . .. a b c d e\n"`.
+- `d_getdents64_tmpfs_resume`: `stdout line 5: reference "first: . .. h\n",
+  target "first: . .. a\n"`.
+- `d_getdents64_tmpfs_forty`: `stdout line 5: reference "all40: . .. f39
+  f38 ... f00\n", target "all40: . .. f00 f01 ... f39\n"`.
+- `d_getdents64_tmpfs_lseek` (syscalls compared by name): `stdout line 5:
+  reference "listing: . .. f e d c b a\n", target "listing: . .. a b c d e
+  f\n"`. Seeking to a returned d_off already reads the next record on
+  Poly (`lseek_d_off_reads_next`, `position_is_last_d_off` pass); the
+  other failed checks follow from the order: a new entry goes last on
+  Poly, so ".." keeps its d_off (`d_off_kept_after_create`) and the old
+  last record's d_off now leads to it (`end_position_0`: 24, one record,
+  where on Linux it is the end, 2147483647, and stays 0).
