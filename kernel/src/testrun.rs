@@ -9,7 +9,7 @@
 //! POLY-ENTER: pid=2 tid=2 nr=56 args=...           clone/fork/vfork/clone3 entered (before the child runs)
 //! POLY-OUT: fd=1 hex=68656c6c6f0a                  bytes that reached its stdout (1) or stderr (2)
 //! POLY-SIGNAL: pid=2 tid=3 signal=11               a signal taken for delivery (not SIGKILL)
-//! POLY-EXIT: pid=2 code=0                          it ended (or signal=N)
+//! POLY-EXIT: pid=2 code=0                          it ended (or signal=N); an NT program adds ntstatus=0x...
 //! ```
 //!
 //! With `poly.test.capture` the program runs as the child of the kernel's
@@ -124,14 +124,19 @@ pub fn output(fd: i32, bytes: &[u8]) {
     }
 }
 
-/// `POLY-EXIT`: process `pid` ended with `status`.
-pub fn exit(pid: u32, status: ExitStatus) {
-    let how = match status {
+/// `POLY-EXIT`: process `pid` ended with `status`; an NT process also
+/// with its full `NTSTATUS` (`ntstatus=0x...`, ADR 0075), of which `code`
+/// is the low 8 bits.
+pub fn exit(pid: u32, status: ExitStatus, ntstatus: Option<u32>) {
+    let mut how = match status {
         ExitStatus::Exited(code) => format!("code={code}"),
         ExitStatus::Signaled { signal, .. } => format!("signal={signal}"),
         // Only bare processes fault without a signal; report it as the
         // SIGSEGV it would be.
         ExitStatus::Faulted(_) => format!("signal={}", crate::linux::SIGSEGV),
     };
+    if let Some(s) = ntstatus {
+        let _ = write!(how, " ntstatus={s:#x}");
+    }
     record(&format!("POLY-EXIT: pid={pid} {how}\n"));
 }
