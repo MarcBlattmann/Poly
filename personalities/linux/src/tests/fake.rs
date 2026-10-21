@@ -652,7 +652,12 @@ impl LinuxKernel for FakeKernel {
             return Err(Errno::EINVAL);
         }
         self.unmap_range(addr, len);
+        super::shm::unmapped(self, addr, len);
         Ok(())
+    }
+
+    fn shm_mapped(&mut self, addr: u64, len: u64) -> Vec<u64> {
+        super::shm::mapped(self, addr, len)
     }
 
     fn shm_create(&mut self, len: u64) -> Result<alloc::sync::Arc<dyn crate::ipc::shm::ShmMemory>, Errno> {

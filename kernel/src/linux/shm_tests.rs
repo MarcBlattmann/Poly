@@ -119,3 +119,47 @@ kernel_test! {
         frames_reach(before)
     }
 }
+
+kernel_test! {
+    fn sysv_shared_memory_attachments_unmap_place_and_protect_as_shmat_says() -> TestResult {
+        let m = Memory::new(Layout::default()).map_err(|_| "no memory map")?;
+        let seg = shm::create(3 * P);
+        let attach = |placement, prot| shm::attach(&m, seg.as_ref(), placement, 3 * P, prot);
+        if attach(Placement::FixedNoReplace(0), Prot::RW) != Err(Errno::EPERM) {
+            return Err("an attachment below the lowest address is not EPERM");
+        }
+        let end = poly_vm::USER_END;
+        if attach(Placement::FixedNoReplace(end - P), Prot::RW) != Err(Errno::ENOMEM)
+            || attach(Placement::Fixed(0xffff_8000_0000_0000), Prot::READ) != Err(Errno::ENOMEM)
+        {
+            return Err("an attachment past the end of user space is not ENOMEM");
+        }
+        let a = attach(Placement::Hint(0), Prot::RW).map_err(|_| "attach failed")?;
+        let ro = attach(Placement::Hint(0), Prot::READ).map_err(|_| "attach failed")?;
+        if m.protect(a, 3 * P, Prot::RW | Prot::EXEC).is_err() {
+            return Err("a read-write attachment cannot be made executable");
+        }
+        if m.protect(ro, P, Prot::NONE).is_err() || m.protect(ro, P, Prot::READ).is_err() {
+            return Err("a read-only attachment cannot go to PROT_NONE and back");
+        }
+        if shm::mapped(&m, a + P, P) != [seg.serial()] || !shm::mapped(&m, a + 3 * P, P).is_empty() {
+            return Err("the attachments in a range are wrong");
+        }
+        m.unmap(a, P).map_err(|_| "munmap failed")?;
+        write(&m, a + 2 * P, &[5])?;
+        let mut one = [0u8; 1];
+        read(&m, ro + 2 * P, &mut one)?;
+        if seg.attachments() != 2 || one != [5] {
+            return Err("a partly unmapped attachment is not attached any more");
+        }
+        if shm::detach(&m, a) != Err(Errno::EINVAL) {
+            return Err("shmdt where an attachment no longer starts is not EINVAL");
+        }
+        m.unmap(a + P, 2 * P).map_err(|_| "munmap failed")?;
+        if seg.attachments() != 1 {
+            return Err("unmapping all of an attachment does not detach it");
+        }
+        shm::detach(&m, ro).map_err(|_| "shmdt failed")?;
+        Ok(())
+    }
+}

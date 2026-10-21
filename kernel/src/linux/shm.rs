@@ -80,8 +80,9 @@ pub fn create(len: u64) -> Arc<dyn ShmMemory> {
 
 /// Attach `segment` to `memory`: its first `len` bytes, shared, with
 /// `prot` (and never more than that, but for `PROT_EXEC`), at
-/// `placement`. A fixed placement that cannot be had is `EINVAL`
-/// (shmat(2)), no room `ENOMEM`.
+/// `placement`. A fixed placement over a mapping is `EINVAL` (shmat(2)),
+/// one below the lowest mappable address `EPERM` (as mmap(2)), no room or
+/// a range past the end of user space `ENOMEM`.
 pub fn attach(
     memory: &Memory,
     segment: &dyn ShmMemory,
@@ -95,9 +96,17 @@ pub fn attach(
     let req = poly_vm::MapRequest::file(len, prot, FileRef::new(source), 0, true).with_max_prot(max).at(placement);
     memory.map(req).map_err(|e| match e {
         MemoryError::OutOfMemory => Errno::ENOMEM,
-        MemoryError::Vm(e) if e.linux_errno() == 12 => Errno::ENOMEM,
+        MemoryError::Vm(poly_vm::Error::NoMemory) => Errno::ENOMEM,
+        MemoryError::Vm(poly_vm::Error::Permission) => Errno::EPERM,
         _ => Errno::EINVAL,
     })
+}
+
+/// The serials of the attachments in `memory` with pages in
+/// `[addr, addr + len)`, one per attachment.
+pub fn mapped(memory: &Memory, addr: u64, len: u64) -> Vec<u64> {
+    let end = addr.saturating_add(len);
+    attachments(memory).into_iter().filter(|a| a.0 < end && addr < a.1).map(|a| a.2).collect()
 }
 
 /// The attachments of `memory`: start, end and serial of each run of

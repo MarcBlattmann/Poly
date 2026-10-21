@@ -135,6 +135,8 @@ pub fn mmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// "all pages containing a part of the indicated range are unmapped", so
 /// the length is rounded up to pages; a range that wraps around is
 /// `EINVAL` ("we don't like addr, length"). Unmapped holes are not errors.
+/// Unmapping pages of System V shared memory attachments is recorded in
+/// their segments ([`crate::sys::shm::unmapped`]).
 pub fn munmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let addr = a.ulong(0);
     let length = a.ulong(1);
@@ -143,7 +145,12 @@ pub fn munmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
     let len = page_round_up(length).ok_or(Errno::EINVAL)?;
     addr.checked_add(len).ok_or(Errno::EINVAL)?;
-    k.munmap(addr, len).map(|()| 0)
+    let shm = k.shm_mapped(addr, len);
+    k.munmap(addr, len)?;
+    if !shm.is_empty() {
+        crate::sys::shm::unmapped(k, &shm);
+    }
+    Ok(0)
 }
 
 /// mprotect(addr, size, prot)
