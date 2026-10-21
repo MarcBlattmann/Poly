@@ -1,32 +1,35 @@
-//! Extended attributes (xattr(7)): getxattr(2), setxattr(2),
-//! listxattr(2), removexattr(2) and their `l` and `f` forms (ADR 0059; GNU
-//! `ls -l` asks for ACLs and security labels, `cp -a` copies attributes).
+//! Extended attributes (xattr(7)): getxattr(2), lgetxattr, fgetxattr,
+//! setxattr(2), lsetxattr, fsetxattr, listxattr(2), llistxattr,
+//! flistxattr, removexattr(2), lremovexattr, fremovexattr.
 //!
-//! No file system of Poly stores extended attributes yet, so every call
-//! that names a file that exists answers as the manual pages say for a file
-//! system without them: "ENOTSUP Extended attributes are not supported by
-//! the filesystem, or are disabled". The file is looked up first, so a
-//! missing one is `ENOENT` (`EBADF` for a descriptor that is not open), as
-//! for stat(2); the `l` forms do not follow a final symbolic link. The
-//! name is checked before the answer: an empty name, or one longer than
-//! `XATTR_NAME_MAX` (255) bytes, is `ERANGE` ("the size of name is too
-//! large"; the empty name is Poly's choice, to be confirmed by the diff
-//! runner); `setxattr` with flags other than `XATTR_CREATE` and
-//! `XATTR_REPLACE` (`linux/xattr.h`), or both, is `EINVAL`.
+//! The personality copies the arguments in and the results out and checks
+//! what the man pages say about sizes; the kernel ([`LinuxFs::getxattr`]
+//! and friends, over `poly_vfs::xattr`) checks namespaces and permissions
+//! and keeps the attributes.
+//!
+//! - A **name** is a NUL-terminated string of 1 to `XATTR_NAME_MAX` (255)
+//!   bytes; an empty or longer one is `ERANGE` ("the size of name ...
+//!   exceeds a filesystem-specific limit").
+//! - **getxattr** with `size` 0 returns the value's size without copying
+//!   ("an empty buffer of size zero can be passed in order to obtain the
+//!   current size of the named extended attribute"); a value larger than
+//!   `size` is `ERANGE`. The same for **listxattr** and its name list.
+//! - **setxattr**: `flags` other than `XATTR_CREATE` and `XATTR_REPLACE`,
+//!   or both (ADR 0059's choice, to be confirmed by the diff runner), are
+//!   `EINVAL`, a value of more than `XATTR_SIZE_MAX` (64 KiB) bytes is
+//!   `E2BIG`; a `size` of 0 sets an empty value (`value` is then not read).
+//! - The path calls resolve from the working directory (an empty path is
+//!   `ENOENT`); the `l` calls do not follow a final symbolic link; the `f`
+//!   calls take a descriptor (`EBADF` for a negative one).
 
-use crate::abi::MAX_RW_COUNT;
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
-use crate::fs::at::AT_FDCWD;
+use crate::fs::XattrTarget;
 use crate::kernel::{LinuxKernel, UserPtr};
+use crate::sys::io::bounce;
 use crate::sys::path::{fs, nonempty_path};
 use crate::table::{Handler, nr};
-
-/// `XATTR_NAME_MAX` (`linux/limits.h`).
-pub const XATTR_NAME_MAX: usize = 255;
-/// setxattr(2) flags (`linux/xattr.h`).
-pub const XATTR_CREATE: u32 = 0x1;
-pub const XATTR_REPLACE: u32 = 0x2;
+use alloc::vec::Vec;
 
 /// The calls of this module, for [`crate::table::GROUPS`].
 pub const CALLS: &[(u64, Handler)] = &[
@@ -44,114 +47,171 @@ pub const CALLS: &[(u64, Handler)] = &[
     (nr::FREMOVEXATTR, fremovexattr),
 ];
 
-/// Which file a call is about.
-enum Subject {
+/// Limits (UAPI `linux/limits.h`).
+pub const XATTR_NAME_MAX: usize = 255;
+pub const XATTR_SIZE_MAX: u64 = 65536;
+pub const XATTR_LIST_MAX: u64 = 65536;
+/// setxattr(2) flags (UAPI `linux/xattr.h`).
+pub const XATTR_CREATE: u32 = 0x1;
+pub const XATTR_REPLACE: u32 = 0x2;
+
+/// Which file: argument 0 as a path or a descriptor.
+#[derive(Clone, Copy)]
+enum By {
     Path { follow: bool },
     Fd,
 }
 
-/// Look the file up (its existence is all that matters).
-fn find(k: &mut dyn LinuxKernel, a: &Args, subject: Subject) -> Result<(), Errno> {
-    match subject {
-        Subject::Path { follow } => {
-            let path = nonempty_path(k, a.ptr(0))?;
-            fs(k)?.statat(AT_FDCWD, &path, follow).map(|_| ())
+/// The target in argument 0, owned (a path is copied in).
+enum Owned {
+    Path(Vec<u8>, bool),
+    Fd(i32),
+}
+
+impl Owned {
+    fn load(k: &dyn LinuxKernel, a: &Args, by: By) -> Result<Owned, Errno> {
+        match by {
+            By::Path { follow } => Ok(Owned::Path(nonempty_path(k, a.ptr(0))?, follow)),
+            By::Fd if a.fd(0) < 0 => Err(Errno::EBADF),
+            By::Fd => Ok(Owned::Fd(a.fd(0))),
         }
-        Subject::Fd => {
-            let fd = a.fd(0);
-            if fd < 0 {
-                return Err(Errno::EBADF);
-            }
-            k.fstat(fd).map(|_| ())
+    }
+
+    fn target(&self) -> XattrTarget<'_> {
+        match self {
+            Owned::Path(p, follow) => XattrTarget::Path { path: p, follow: *follow },
+            Owned::Fd(fd) => XattrTarget::Fd(*fd),
         }
     }
 }
 
-/// The attribute name at `p`: `ERANGE` when empty or too long.
-fn check_name(k: &dyn LinuxKernel, p: UserPtr) -> Result<(), Errno> {
-    let mut buf = [0u8; XATTR_NAME_MAX + 1];
-    let n = k.strncpy_from_user(p, &mut buf).map_err(|e| if e == Errno::ENAMETOOLONG { Errno::ERANGE } else { e })?;
-    if n == 0 || n > XATTR_NAME_MAX { Err(Errno::ERANGE) } else { Ok(()) }
+/// An attribute name: 1 to [`XATTR_NAME_MAX`] bytes before the NUL.
+fn name_arg(k: &dyn LinuxKernel, p: UserPtr) -> Result<Vec<u8>, Errno> {
+    let mut buf = bounce(XATTR_NAME_MAX + 1)?;
+    let n = match k.strncpy_from_user(p, &mut buf) {
+        Err(Errno::ENAMETOOLONG) => return Err(Errno::ERANGE),
+        r => r?,
+    };
+    if n == 0 {
+        return Err(Errno::ERANGE);
+    }
+    buf.truncate(n);
+    Ok(buf)
 }
 
-fn get(k: &mut dyn LinuxKernel, a: &Args, subject: Subject) -> SysResult {
-    find(k, a, subject)?;
-    check_name(k, a.ptr(1))?;
-    Err(Errno::EOPNOTSUPP)
+/// Copy `data` out to a caller's buffer of `size` bytes as getxattr(2)
+/// and listxattr(2) do; returns its length.
+fn reply(k: &mut dyn LinuxKernel, data: &[u8], buf: UserPtr, size: u64, max: u64) -> SysResult {
+    let len = data.len() as u64;
+    if len > max {
+        return Err(Errno::E2BIG);
+    }
+    if size == 0 {
+        return Ok(len);
+    }
+    if len > size {
+        return Err(Errno::ERANGE);
+    }
+    k.copy_to_user(buf, data)?;
+    Ok(len)
 }
 
-fn set(k: &mut dyn LinuxKernel, a: &Args, subject: Subject) -> SysResult {
+fn set(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
+    let target = Owned::load(k, a, by)?;
     let flags = a.uint(4);
     if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 || flags == XATTR_CREATE | XATTR_REPLACE {
         return Err(Errno::EINVAL);
     }
-    if a.ulong(3) > MAX_RW_COUNT {
+    let name = name_arg(k, a.ptr(1))?;
+    let size = a.ulong(3);
+    if size > XATTR_SIZE_MAX {
         return Err(Errno::E2BIG);
     }
-    get(k, a, subject)
+    let mut value = bounce(size as usize)?;
+    if size > 0 {
+        k.copy_from_user(a.ptr(2), &mut value)?;
+    }
+    fs(k)?.setxattr(target.target(), &name, &value, flags).map(|()| 0)
 }
 
-fn list(k: &mut dyn LinuxKernel, a: &Args, subject: Subject) -> SysResult {
-    find(k, a, subject)?;
-    Err(Errno::EOPNOTSUPP)
+fn get(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
+    let target = Owned::load(k, a, by)?;
+    let name = name_arg(k, a.ptr(1))?;
+    let value = fs(k)?.getxattr(target.target(), &name)?;
+    reply(k, &value, a.ptr(2), a.ulong(3), XATTR_SIZE_MAX)
 }
 
-/// getxattr(path, name, value, size)
-pub fn getxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    get(k, a, Subject::Path { follow: true })
+fn list(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
+    let target = Owned::load(k, a, by)?;
+    let names = fs(k)?.listxattr(target.target())?;
+    reply(k, &names, a.ptr(1), a.ulong(2), XATTR_LIST_MAX)
 }
 
-/// lgetxattr(path, name, value, size)
-pub fn lgetxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    get(k, a, Subject::Path { follow: false })
+fn remove(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
+    let target = Owned::load(k, a, by)?;
+    let name = name_arg(k, a.ptr(1))?;
+    fs(k)?.removexattr(target.target(), &name).map(|()| 0)
 }
 
-/// fgetxattr(fd, name, value, size)
-pub fn fgetxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    get(k, a, Subject::Fd)
-}
+const FOLLOW: By = By::Path { follow: true };
+const NOFOLLOW: By = By::Path { follow: false };
 
 /// setxattr(path, name, value, size, flags)
 pub fn setxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    set(k, a, Subject::Path { follow: true })
+    set(k, a, FOLLOW)
 }
 
 /// lsetxattr(path, name, value, size, flags)
 pub fn lsetxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    set(k, a, Subject::Path { follow: false })
+    set(k, a, NOFOLLOW)
 }
 
 /// fsetxattr(fd, name, value, size, flags)
 pub fn fsetxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    set(k, a, Subject::Fd)
+    set(k, a, By::Fd)
+}
+
+/// getxattr(path, name, value, size)
+pub fn getxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    get(k, a, FOLLOW)
+}
+
+/// lgetxattr(path, name, value, size)
+pub fn lgetxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    get(k, a, NOFOLLOW)
+}
+
+/// fgetxattr(fd, name, value, size)
+pub fn fgetxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    get(k, a, By::Fd)
 }
 
 /// listxattr(path, list, size)
 pub fn listxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    list(k, a, Subject::Path { follow: true })
+    list(k, a, FOLLOW)
 }
 
 /// llistxattr(path, list, size)
 pub fn llistxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    list(k, a, Subject::Path { follow: false })
+    list(k, a, NOFOLLOW)
 }
 
 /// flistxattr(fd, list, size)
 pub fn flistxattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    list(k, a, Subject::Fd)
+    list(k, a, By::Fd)
 }
 
 /// removexattr(path, name)
 pub fn removexattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    get(k, a, Subject::Path { follow: true })
+    remove(k, a, FOLLOW)
 }
 
 /// lremovexattr(path, name)
 pub fn lremovexattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    get(k, a, Subject::Path { follow: false })
+    remove(k, a, NOFOLLOW)
 }
 
 /// fremovexattr(fd, name)
 pub fn fremovexattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    get(k, a, Subject::Fd)
+    remove(k, a, By::Fd)
 }

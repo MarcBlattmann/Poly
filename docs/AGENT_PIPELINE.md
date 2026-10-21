@@ -167,6 +167,8 @@ cargo xtask pipeline diff --target poly --tests-dir <entry>.tests --tests-dir <h
 cargo xtask pipeline diff --target poly --jobs 4 # four tests at a time (default 1)
 cargo xtask pipeline selfcheck                  # what `cargo xtask ci` runs: Linux against Linux
 cargo xtask pipeline polycheck                  # and Poly against Linux (poly-pass.txt, green entries)
+cargo xtask pipeline polyrun cat-n --tests-dir specs/linux/apps/cat.tests --print
+                                                # Poly only, no reference (implementers may run it)
 ```
 
 `--tests-dir` adds an entry's test programs (visible or held-out, `.c`

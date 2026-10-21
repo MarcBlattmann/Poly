@@ -13,6 +13,8 @@
 //! selfcheck                                      Linux against Linux must be clean (CI)
 //! polycheck                                      Linux against Poly: the tests of tests/linux/poly-pass.txt and the
 //!                                                visible spec tests of every green entry pass (CI)
+//! polyrun <test>... [--tests-dir DIR]... [--kernel ELF] [--build-kernel] [--print]
+//!                                                run tests on Poly only (no reference): output and app-mode events
 //! initramfs <binary> --out FILE | --list FILE    write (or list) a test initramfs
 //! spec new <entry> --agent ID [--oracle-os TEXT] spec sheet skeleton from specs/TEMPLATE.yaml
 //! tests split <entry> <dir> --spec-agent ID [--ratio 0.3] [--replace]
@@ -564,6 +566,54 @@ fn check_hello(t: &Trace) -> Result {
     Ok(())
 }
 
+/// Run corpus programs and app tests on Poly only, without a reference
+/// run (so implementer agents may use it): per test the exit status,
+/// stdout, stderr and, with `--print`, the app-mode event sequence
+/// (`diff::app_events`), kept in the run directory as `<test>.txt`.
+fn polyrun(repo: &Path, a: &Args) -> Result<u8> {
+    a.only(&["kernel", "build-kernel", "timeout", "cc", "tests-dir", "print", "run-dir"])?;
+    let kernel = a.opt("kernel").map_or_else(|| poly::default_kernel(repo), PathBuf::from);
+    if a.has("build-kernel") || (a.opt("kernel").is_none() && !kernel.exists()) {
+        poly::build_kernel(repo)?;
+    }
+    let target = poly::Target { kernel, timeout: timeout(a, POLY_TIMEOUT)? };
+    let (bin_dir, manifest) = corpus_binaries(repo, a)?;
+    let runs = repo.join(RUNS_DIR);
+    let run_dir = a.opt("run-dir").map_or_else(|| runs.join(format!("{}-polyrun", util::now_stamp())), PathBuf::from);
+    if a.positional.is_empty() {
+        return Err("usage: pipeline polyrun <test>... [--tests-dir DIR]...".into());
+    }
+    for name in &a.positional {
+        let run = if let Some(app) = manifest.apps.iter().find(|t| &t.name == name) {
+            let tree = app_tree(repo, &bin_dir, &manifest, app)?;
+            target.run_image(name, &tree.cpio()?, "", &run_dir)
+        } else if let Some(b) = manifest.tests.iter().find(|t| &t.name == name) {
+            target.run(name, &bin_dir.join(&b.binary), &run_dir)
+        } else {
+            return Err(format!("no test program or app test {name}"));
+        };
+        let t = match run? {
+            (poly::Outcome::Ran(t), _) => t,
+            (poly::Outcome::Unsupported(r), _) => {
+                println!("== {name}: unsupported: {r}");
+                continue;
+            }
+        };
+        let mut text = format!("== {name}: {}\n-- stdout:\n{}-- stderr:\n{}-- events:\n", t.exit, t.stdout, t.stderr);
+        for e in diff::app_events(&t, &NormOptions::default()) {
+            text.push_str(&format!("{e}\n"));
+        }
+        util::write(&run_dir.join(format!("{name}.txt")), &text)?;
+        if a.has("print") {
+            print!("{text}");
+        } else {
+            print!("{}", text.split("-- events:").next().unwrap_or_default());
+        }
+    }
+    println!("run directory: {}", run_dir.display());
+    Ok(0)
+}
+
 fn initramfs(a: &Args) -> Result<u8> {
     a.only(&["out", "list"])?;
     if let Some(file) = a.opt("list") {
@@ -795,6 +845,7 @@ fn run(args: &[String]) -> Result<u8> {
         "selfcheck" => selfcheck(&repo),
         "polycheck" => polycheck(&repo),
         "initramfs" => initramfs(&a),
+        "polyrun" => polyrun(&repo, &a),
         "spec" => spec(&repo, &a),
         "tests" => tests_cmd(&repo, &a),
         "handoff" => handoff_cmd(&repo, &a),
@@ -802,7 +853,7 @@ fn run(args: &[String]) -> Result<u8> {
         "claim" | "release" => coverage_tool(&repo, args),
         "role" => role_cmd(&repo, &a),
         _ => Err(format!(
-            "unknown command {cmd}; commands: build trace diff selfcheck polycheck initramfs spec tests handoff next \
+            "unknown command {cmd}; commands: build trace diff selfcheck polycheck polyrun initramfs spec tests handoff next \
              claim release role loop"
         )),
     }

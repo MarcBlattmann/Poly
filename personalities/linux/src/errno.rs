@@ -51,6 +51,9 @@ impl Errno {
     pub const ERANGE: Errno = Errno(34);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
+    /// `ENODATA` (`asm-generic/errno.h`): "No data available"; an extended
+    /// attribute that does not exist (getxattr(2)).
+    pub const ENODATA: Errno = Errno(61);
     pub const EOVERFLOW: Errno = Errno(75);
     /// `EUSERS` (`asm-generic/errno.h`): "Too many users"; user
     /// namespaces nested too deep (clone(2), unshare(2)).
@@ -153,6 +156,7 @@ impl Errno {
             34 => "ERANGE",
             36 => "ENAMETOOLONG",
             38 => "ENOSYS",
+            61 => "ENODATA",
             75 => "EOVERFLOW",
             87 => "EUSERS",
             95 => "EOPNOTSUPP",
