@@ -170,6 +170,22 @@ fn syscall_record(f: &BTreeMap<&str, &str>, line: &str, index: impl Fn(u64) -> u
 /// record instead goes wrong when a child's first call is written before
 /// the parent's `fork` record returns, and the program's `POLY-EXIT` then
 /// looked like a child's.
+/// The kernel's panic message in a serial log, if it panicked: the text
+/// after `KERNEL PANIC:` and the line after it (where the message goes
+/// when the location ends the first line), without the backtrace.
+pub fn kernel_panic(log: &str) -> Option<String> {
+    let mut lines = log.lines().map(|l| l.trim_end_matches('\r'));
+    let first = lines.find_map(|l| l.find("KERNEL PANIC:").map(|at| l[at + "KERNEL PANIC:".len()..].trim()))?;
+    let mut message = first.to_string();
+    if let Some(next) = lines.next().map(str::trim).filter(|n| !n.is_empty() && *n != "backtrace:") {
+        if !message.is_empty() {
+            message.push(' ');
+        }
+        message.push_str(next);
+    }
+    Some(message)
+}
+
 pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
     let mut t = Trace::new(test, "poly", "poly-serial");
     let pids: BTreeMap<u64, u32> = {
@@ -399,6 +415,16 @@ impl Target {
                 Outcome::Ran(t)
             }
             Some(u) => u,
+            // A crash before the program ran is this boot's failure, not a
+            // kernel that cannot run programs: the next boot may well work,
+            // so the other tests still run.
+            None if let Some(panic) = kernel_panic(&log) => {
+                return Err(format!(
+                    "the kernel panicked before it ran {test}: {panic} (QEMU {}; {})",
+                    done.exit,
+                    log_path.display()
+                ));
+            }
             None if done.exit == Exit::Timeout => {
                 Outcome::Unsupported(format!("no \"POLY-INIT:\" line within {:?}; boot timed out", self.timeout))
             }
@@ -525,6 +551,27 @@ mod tests {
             panic!()
         };
         assert_eq!(r, "kernel: no ELF loader");
+    }
+
+    /// A panic during boot (the APIC timer calibration on a busy KVM host,
+    /// once) is told apart from a kernel without `poly.init`.
+    #[test]
+    fn a_kernel_panic_is_found_in_the_log() {
+        let log = "time: APIC timer calibration failed: Inconsistent\r\n\
+            \r\n\
+            KERNEL PANIC: panicked at src/main.rs:136:9:\r\n\
+            interrupt and timer setup failed: the local APIC timer could not be calibrated\r\n\
+            backtrace:\r\n  #0 0xffffffff802eedae\r\n";
+        assert_eq!(
+            kernel_panic(log).as_deref(),
+            Some(
+                "panicked at src/main.rs:136:9: interrupt and timer setup failed: the local APIC timer could not be \
+                 calibrated"
+            )
+        );
+        assert_eq!(kernel_panic("KERNEL PANIC: oops\nbacktrace:\n").as_deref(), Some("oops"));
+        assert_eq!(kernel_panic("KERNEL PANIC: at the end").as_deref(), Some("at the end"));
+        assert_eq!(kernel_panic("boot: cmdline \"...\"\nPOLY-SELFTEST: PASS\n"), None);
     }
 
     /// A child's first call can come out before the parent's fork returns:
