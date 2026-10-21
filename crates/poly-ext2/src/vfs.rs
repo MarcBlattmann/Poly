@@ -105,6 +105,34 @@ impl<D: BlockIo, L: RawLock> FileSystem for Ext2<D, L> {
         })
     }
 
+    fn getxattr(&self, ino: Ino, name: &[u8]) -> Result<Vec<u8>> {
+        self.read_op(|c| {
+            let ino = c.ino(ino)?;
+            c.xattr_get(ino, name)
+        })
+    }
+
+    fn setxattr(&self, ino: Ino, name: &[u8], value: &[u8], how: poly_vfs::xattr::SetMode) -> Result<()> {
+        self.write_op(|c| {
+            let ino = c.ino(ino)?;
+            c.xattr_set(ino, name, Some(value), how)
+        })
+    }
+
+    fn listxattr(&self, ino: Ino) -> Result<Vec<u8>> {
+        self.read_op(|c| {
+            let ino = c.ino(ino)?;
+            c.xattr_list(ino)
+        })
+    }
+
+    fn removexattr(&self, ino: Ino, name: &[u8]) -> Result<()> {
+        self.write_op(|c| {
+            let ino = c.ino(ino)?;
+            c.xattr_set(ino, name, None, poly_vfs::xattr::SetMode::default())
+        })
+    }
+
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize> {
         self.access_op(|c| {
             let ino = c.ino(ino)?;

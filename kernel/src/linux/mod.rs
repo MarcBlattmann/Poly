@@ -46,6 +46,8 @@ pub mod task;
 mod task_tests;
 mod tests;
 pub mod timers;
+mod xattr;
+mod xattr_tests;
 
 pub use services::Thread;
 

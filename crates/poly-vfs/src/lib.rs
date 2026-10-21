@@ -88,6 +88,7 @@ mod sync;
 pub mod timerfd;
 mod tmpfs;
 mod vfs;
+pub mod xattr;
 
 pub use cred::{Access, CapSet, Cred, cap};
 pub use device::CharDevice;

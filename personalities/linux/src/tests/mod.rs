@@ -5,6 +5,7 @@ mod admin;
 mod cred;
 mod fake;
 mod fileio;
+mod fileops;
 mod files;
 mod futex;
 mod io;

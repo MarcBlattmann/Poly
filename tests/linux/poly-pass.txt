@@ -26,3 +26,7 @@ app-head
 app-mkdir
 app-sed
 app-true
+app-cat
+app-sort
+app-wc
+app-cp

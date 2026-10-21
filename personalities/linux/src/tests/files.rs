@@ -6,7 +6,7 @@ extern crate std;
 use super::fake::*;
 use crate::abi::{le_u64, makedev};
 use crate::fs::{
-    DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, SysInfo, TimeChange, at::AT_FDCWD, dirent64_len,
+    DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, SysInfo, TimeChange, XattrTarget, at::AT_FDCWD, dirent64_len,
     encode_dirent64, major, minor, rlimit::*,
 };
 use crate::kernel::Target;
@@ -362,6 +362,36 @@ impl LinuxFs for VfsFs {
             self.fds.set_limit(limit as usize);
         }
         Ok(())
+    }
+
+    fn getxattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<Vec<u8>, Errno> {
+        self.xattr_node(target)?.getxattr(&self.cred, name).map_err(errno)
+    }
+
+    fn setxattr(&mut self, target: XattrTarget<'_>, name: &[u8], value: &[u8], flags: u32) -> Result<(), Errno> {
+        self.xattr_node(target)?.setxattr(&self.cred, name, value, flags).map_err(errno)
+    }
+
+    fn listxattr(&mut self, target: XattrTarget<'_>) -> Result<Vec<u8>, Errno> {
+        self.xattr_node(target)?.listxattr(&self.cred).map_err(errno)
+    }
+
+    fn removexattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<(), Errno> {
+        self.xattr_node(target)?.removexattr(&self.cred, name).map_err(errno)
+    }
+}
+
+impl VfsFs {
+    fn xattr_node(&self, target: XattrTarget<'_>) -> Result<poly_vfs::NodeRef, Errno> {
+        match target {
+            XattrTarget::Path { path, follow } => {
+                self.vfs.lookup(&self.ctx, &self.cred, At::Cwd, path, follow).map_err(errno)
+            }
+            XattrTarget::Fd(fd) => {
+                let file = self.fds.get(fd).map_err(errno)?;
+                if file.is_path_only() { Err(Errno::EBADF) } else { Ok(file.node().clone()) }
+            }
+        }
     }
 }
 

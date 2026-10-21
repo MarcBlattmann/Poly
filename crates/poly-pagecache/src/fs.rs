@@ -363,6 +363,25 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
         self.st.inner.readlink(ino)
     }
 
+    // Extended attributes are metadata: they pass through.
+    fn getxattr(&self, ino: Ino, name: &[u8]) -> Result<Vec<u8>> {
+        self.st.inner.getxattr(ino, name)
+    }
+
+    fn setxattr(&self, ino: Ino, name: &[u8], value: &[u8], how: poly_vfs::xattr::SetMode) -> Result<()> {
+        self.changed();
+        self.st.inner.setxattr(ino, name, value, how)
+    }
+
+    fn listxattr(&self, ino: Ino) -> Result<Vec<u8>> {
+        self.st.inner.listxattr(ino)
+    }
+
+    fn removexattr(&self, ino: Ino, name: &[u8]) -> Result<()> {
+        self.changed();
+        self.st.inner.removexattr(ino, name)
+    }
+
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize> {
         let lock = self.core.inode_lock(self.st.id, ino);
         let _held = lock.lock();

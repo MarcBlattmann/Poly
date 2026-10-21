@@ -590,6 +590,15 @@ initramfs.
   Linux's values; flags take Linux's bits.
 - **tmpfs**: sparse files in 4 KiB pages, stable `readdir` positions,
   unlinked files and removed directories live while open.
+  Directories report Linux tmpfs's size: 40 bytes plus 20 per entry.
+- **Extended attributes** ([ADR 0060](adr/0060-extended-attributes-and-file-ioctls.md),
+  `poly_vfs::xattr`): `NodeRef::getxattr` and friends check the name and
+  the xattr(7) permissions of its namespace; file systems store them
+  (`FileSystem::getxattr`/`setxattr`/`listxattr`/`removexattr`,
+  `EOPNOTSUPP` by default): tmpfs in a map per inode, ext2/3/4 in the
+  inode's extra space and an attribute block (`poly-ext2/src/xattr.rs`),
+  the page cache passes them through. A minimal POSIX access ACL becomes
+  the permission bits; other ACLs are `EOPNOTSUPP`.
 - **Readiness and file objects** ([ADR 0042](adr/0042-readiness-pipes-poll-epoll-and-event-files.md)):
   every open file reports `PollEvents` (Linux's `POLL*` / `EPOLL*` bits);
   one whose readiness changes has a `WaitQueue` that whoever changes it

@@ -116,7 +116,9 @@ fn flock_takes_whole_file_locks_per_description() {
 // ---- extended attributes ------------------------------------------------
 
 #[test]
-fn xattrs_are_not_supported_on_files_that_exist() {
+fn xattrs_on_files_that_exist() {
+    // tmpfs keeps attributes: none at first (ENODATA, an empty list), as
+    // ls(1) expects; set, read, removed (tests/fileops.rs has more).
     let mut e = super::files::env();
     let k = &mut e.k;
     let file = super::files::s(k, 0, b"/dir/file");
@@ -126,27 +128,26 @@ fn xattrs_are_not_supported_on_files_that_exist() {
     let empty = super::files::s(k, 0x100, b"");
     let long = super::files::s(k, 0x200, &[b'a'; 300]);
     let out = scratch(0x400);
-    const NOTSUP: Errno = Errno::EOPNOTSUPP;
     for nr in [nr::GETXATTR, nr::LGETXATTR] {
-        assert_eq!(sys(k, nr, &[file, name, out, 64]), Err(NOTSUP));
-        assert_eq!(sys(k, nr, &[link, name, out, 64]), Err(NOTSUP));
+        assert_eq!(sys(k, nr, &[file, name, out, 64]), Err(Errno::ENODATA));
+        assert_eq!(sys(k, nr, &[link, name, out, 64]), Err(Errno::ENODATA));
         assert_eq!(sys(k, nr, &[missing, name, out, 64]), Err(Errno::ENOENT));
         assert_eq!(sys(k, nr, &[file, empty, out, 64]), Err(Errno::ERANGE));
         assert_eq!(sys(k, nr, &[file, long, out, 64]), Err(Errno::ERANGE));
     }
     for nr in [nr::LISTXATTR, nr::LLISTXATTR] {
-        assert_eq!(sys(k, nr, &[file, out, 64]), Err(NOTSUP));
+        assert_eq!(sys(k, nr, &[file, out, 64]), Ok(0));
         assert_eq!(sys(k, nr, &[missing, out, 64]), Err(Errno::ENOENT));
     }
-    assert_eq!(sys(k, nr::SETXATTR, &[file, name, out, 4, 0]), Err(NOTSUP));
+    assert_eq!(sys(k, nr::SETXATTR, &[file, name, out, 4, 0]), Ok(0));
     assert_eq!(sys(k, nr::SETXATTR, &[file, name, out, 4, 3]), Err(Errno::EINVAL), "both flags");
     assert_eq!(sys(k, nr::SETXATTR, &[file, name, out, 4, 8]), Err(Errno::EINVAL), "an unknown flag");
-    assert_eq!(sys(k, nr::REMOVEXATTR, &[file, name]), Err(NOTSUP));
+    assert_eq!(sys(k, nr::REMOVEXATTR, &[file, name]), Ok(0));
     let fd = sys(k, nr::OPEN, &[file, 0, 0]).unwrap();
-    assert_eq!(sys(k, nr::FGETXATTR, &[fd, name, out, 64]), Err(NOTSUP));
-    assert_eq!(sys(k, nr::FLISTXATTR, &[fd, out, 64]), Err(NOTSUP));
-    assert_eq!(sys(k, nr::FSETXATTR, &[fd, name, out, 4, 1]), Err(NOTSUP));
-    assert_eq!(sys(k, nr::FREMOVEXATTR, &[fd, name]), Err(NOTSUP));
+    assert_eq!(sys(k, nr::FGETXATTR, &[fd, name, out, 64]), Err(Errno::ENODATA));
+    assert_eq!(sys(k, nr::FLISTXATTR, &[fd, out, 64]), Ok(0));
+    assert_eq!(sys(k, nr::FSETXATTR, &[fd, name, out, 4, 1]), Ok(0));
+    assert_eq!(sys(k, nr::FREMOVEXATTR, &[fd, name]), Ok(0));
     assert_eq!(sys(k, nr::FGETXATTR, &[99, name, out, 64]), Err(Errno::EBADF));
 }
 
