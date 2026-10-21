@@ -380,6 +380,7 @@ dependencies = [
  "poly-elf",
  "poly-ext2",
  "poly-gfx",
+ "poly-pe",
  "poly-term",
  "poly-vfs",
  "rustc-demangle",
