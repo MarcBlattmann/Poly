@@ -919,6 +919,11 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   hook, `user::DEFAULT_HOOK` unless it was given another).
 - Unimplemented calls return each OS's native "not implemented" result and are
   logged. That log line is the seed of the API tracer.
+- **NT** ([ADR 0063](adr/0063-nt-processes-object-manager-and-memory.md)): a
+  PE process's calls go to `nt::syscall` (`Nt::dispatch_with`) when the
+  kernel has set the process up; a bare record still gets
+  `STATUS_NOT_IMPLEMENTED`. The object manager, memory and section services
+  are implemented; see "NT personality".
 - **Linux** ([ADR 0025](adr/0025-linux-syscall-table-and-kernel-services-trait.md)):
   `personalities/linux` has the whole x86-64 table (numbers and names
   generated from the coverage map) and handlers for the calls a static C or
@@ -1225,28 +1230,63 @@ the CPU-time accounting, the timer thread and the vDSO.
   process maps, which the kernel writes through the direct map) and sets
   `AT_SYSINFO_EHDR`.
 
-## NT object manager (logic only, not wired yet)
+## NT personality
 
-`crates/poly-ntobj` is what the NT object and synchronisation services do,
-without the machine ([ADR 0030](adr/0030-nt-object-manager-and-dispatcher-in-a-crate.md)).
-The kernel does not use it yet; the NT personality will call its `nt_*`
-services once it decodes those system calls.
+A PE executable (`poly-binfmt`) runs as an NT process. The hardware-free
+logic is in two host-tested crates, and the kernel wires them together in
+`kernel/src/nt` ([ADR 0063](adr/0063-nt-processes-object-manager-and-memory.md)),
+behind one lock (ADR 0030). The NT **system service numbers are Poly's own**
+(`personalities/nt/src/services.rs`): Windows renumbers its services with
+every build and only `ntdll` calls them, so Poly numbers them itself and
+keeps them stable, in `ntdll`'s x64 layout `table << 12 | index` (table 0
+executive: `0x00` object manager, `0x40` memory, `0x80` processes; table 3
+Poly's own, for `PolyTrace`). Everything comes from public Microsoft
+documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
+"to be confirmed by the spec agent" and listed in ADRs 0030 and 0063.
 
-- `ObjectManager` holds every object (directories, symbolic links, events,
-  mutants, semaphores, timers, and opaque sections, files, processes,
-  threads, keys and devices the kernel fills in), the namespace (`\`, `\??`,
-  `\GLOBAL??`, `\Device`, `\BaseNamedObjects`, `\Sessions`, `\KernelObjects`),
-  one handle table per process plus a kernel table, and the blocked waits.
-- Handle count and pointer count per object; temporary names go with the
+- **Object manager** (`crates/poly-ntobj`, ADR 0030). `ObjectManager` holds
+  every object (directories, symbolic links, events, mutants, semaphores,
+  timers, and opaque sections, files, processes, threads, keys and devices
+  the kernel fills in), the namespace (`\`, `\??`, `\GLOBAL??`, `\Device`,
+  `\BaseNamedObjects`, `\KnownDlls`, `\Sessions`, `\KernelObjects`), one
+  handle table per process plus a kernel table, and the blocked waits.
+  Handle count and pointer count per object; temporary names go with the
   last handle, objects with the last reference. Handles are multiples of 4
   with the tag bits ignored; `-1`/`-2` are the current process and thread.
-- Waits: the crate returns `Done(status)` or `Blocked(WaitId)` and queues a
-  `Wake` for each blocked wait a later call satisfies; the kernel sleeps and
-  wakes threads, and cancels waits on timeout, alert or APC.
+  `NtClose`, `NtDuplicateObject`, `NtQueryObject`
+  (basic/name/type), `NtCreate`/`OpenDirectoryObject`,
+  `NtQueryDirectoryObject`, `NtCreate`/`Open`/`QuerySymbolicLinkObject` and
+  the event services are decoded in `personalities/nt/src/objects.rs`.
+- **Memory and sections** (`personalities/nt/src/vm.rs`, `section.rs`,
+  `image.rs`, `protect.rs`). An NT process's address space is allocations
+  (reserved 64 KiB-aligned ranges) of 4 KiB pages, each reserved or
+  committed with a `PAGE_*` protection; `NtAllocateVirtualMemory`
+  (reserve/commit, top-down, zero bits), `NtFreeVirtualMemory`
+  (release/decommit), `NtProtectVirtualMemory` (guard pages grow stacks),
+  `NtQueryVirtualMemory` (`MemoryBasicInformation`), `NtCreateSection`
+  (pagefile-, data-file- and image-backed, the last through `poly-pe`'s load
+  plan, ADR 0029), `NtOpenSection`, `NtMapViewOfSection` and
+  `NtUnmapViewOfSection`. The model decides; the kernel's `MemBackend`
+  (`kernel/src/nt/backend.rs`) carries it out on `user::Memory` (ADR 0036):
+  committed private memory is demand-zero anonymous memory, a pagefile
+  section is an `AnonShared` object shared by its views, an image or file
+  section is a `MemoryImage` views copy privately.
+- **Processes** (`personalities/nt/src/exec.rs`, `kernel/src/nt`). Until our
+  `ntdll` exists the kernel maps the executable's image section at its
+  preferred base (or relocates it with `poly_pe::relocate`), sets up the
+  PEB, the first TEB (the fields ADR 0063 lists) and the stack with its
+  guard page, and starts the thread at the entry point with GS at the TEB.
+  System calls route through the thread's hook to `nt::syscall`; the per-
+  process NT state is keyed by pid in `kernel/src/nt`, so `process.rs` only
+  gains a `new_nt` constructor. An executable that imports anything is
+  refused until `ntdll` binds imports.
+- **Dispatcher and waits** (`poly-ntobj`, ADR 0030): the crate returns
+  `Done(status)` or `Blocked(WaitId)` and queues a `Wake` for each blocked
+  wait a later call satisfies; the kernel sleeps and wakes threads, and
+  cancels waits on timeout, alert or APC. Not wired into the kernel yet (the
+  synchronisation milestone).
 - A `ParseHook` receives lookups that reach a device (or later a file system
   or the registry), so those own the names below them.
-- Behaviour public documentation does not settle is marked "to be confirmed
-  by the spec agent against real Windows" in the code; ADR 0030 lists it.
 
 ## Testing strategy
 
