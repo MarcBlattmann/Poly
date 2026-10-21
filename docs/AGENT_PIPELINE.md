@@ -494,31 +494,69 @@ reboot resumes every entry at its step (each step is idempotent).
 ### Setting up the home server
 
 On the server (Ubuntu 24.04), as an admin, from a checkout of the
-repository:
+repository. The runner user (`server`) needs rustup and `gh auth login`
+first. The packages are what the setup script checks for: what `cargo
+xtask ci` needs (QEMU for the boot tests, a static BusyBox for the BusyBox
+and root-disk boots, e2fsprogs for the ext2/ext4 images, the static C
+library for the `-static` test programs) and the tools the script uses:
 
 ```sh
-sudo apt install git gcc qemu-system-x86 curl     # what the setup script checks for
-sudo tools/pipeline/deploy/setup.sh --dry-run     # read what it would do
+sudo apt install git gcc libc6-dev qemu-system-x86 busybox-static e2fsprogs python3 curl
+tools/pipeline/deploy/setup.sh --dry-run          # read what it would do (no root needed; with sudo it sees more)
 sudo tools/pipeline/deploy/setup.sh               # [--runner-user server] [--repo-url URL] [--no-install-tools]
 ```
 
 It is idempotent and changes nothing but: the users `polyspec` and
-`polyimpl` (system users with locked passwords, homes in `/srv/poly`),
-`/srv/poly` (directories with the owners and modes above, the wrapper, the
-clones, the hub, the configuration, rustup and Claude Code in the role
-homes), `/etc/sudoers.d/poly-pipeline` (checked with `visudo` first) and
+`polyimpl` (system users with locked passwords and their own groups, homes
+`/srv/poly/spec` and `/srv/poly/impl`), `/srv/poly` (directories with the
+owners and modes above, the wrapper, the clones, the hub, the
+configuration; rustup, the toolchain `rust-toolchain.toml` pins and Claude
+Code in the role homes), the pinned toolchain in `server`'s rustup,
+`/etc/sudoers.d/poly-pipeline` (checked with `visudo` first) and
 `/etc/systemd/system/poly-pipeline.service` (enabled, not started; `--start`
-starts it). The unit runs `cargo xtask pipeline loop` as `server` in
-`/srv/poly/runner/repo` with `Restart=always`, `Nice=10`, a low IO priority,
-`CPUQuota=300%` (3 of 4 cores), `MemoryHigh=11G`, `MemoryMax=12G`, and no
-`NoNewPrivileges` (the loop needs sudo for the wrapper).
+starts it). The toolchain is installed explicitly (`rustup toolchain
+install` in the checkout, then checked with `RUSTUP_AUTO_INSTALL=0`), not
+by rustup's deprecated install on first use. The unit runs `cargo xtask
+pipeline loop` as `server` in `/srv/poly/runner/repo` with
+`Restart=always`, `Nice=10`, a low IO priority, `CPUQuota=300%` (3 of 4
+cores), `MemoryHigh=11G`, `MemoryMax=12G`, and no `NoNewPrivileges` (the
+loop needs sudo for the wrapper).
+
+Before it changes anything, the script checks the packages, `server`'s
+cargo (it must be rustup's) and the role users. Each role's home is fixed:
+`setup.sh`, `poly-role` (which refuses to run when the passwd entry says
+otherwise), `pipeline.toml` and the Claude Code logins all use
+`/srv/poly/spec` and `/srv/poly/impl`. A user left from an earlier attempt
+stops the script, with nothing changed, and it prints the commands that
+fix it; the script never moves, deletes or re-owns an existing user's
+files itself:
+
+- home elsewhere (e.g. `/home/polyspec`): `sudo usermod -d /srv/poly/spec
+  polyspec` when `/srv/poly/spec` exists already (this moves nothing;
+  `usermod -m` refuses an existing directory and rewrites the passwd entry
+  anyway), else `sudo usermod -d /srv/poly/spec -m polyspec` (moves the
+  old home);
+- another primary group: `sudo usermod -g polyspec polyspec`;
+- `polyimpl` in any group but its own: `sudo gpasswd -d polyimpl <group>`;
+- files in a role home that are not the role user's (`chown -R`), or a
+  `repo/` that is not a git checkout (`rm -rf` it; it is cloned again).
+
+Entries of `/srv/poly` it did not make (an old `mirror.git`) and extra
+groups of `polyspec` are only warnings. `--dry-run` goes through the same
+checks and then prints every command instead of running it; it works as an
+ordinary user, but then it cannot see into the role homes or the sudoers
+file and shows them as missing.
 
 Then, once:
 
 1. Log both role users in to Claude Code with the subscription, and trust
-   their checkouts: `sudo -iu polyspec`, `cd repo && claude`, `/login`
-   (Claude account with subscription), accept "trust this folder", `/exit`,
-   `exit`; the same as `polyimpl`.
+   their checkouts. `poly-role <role> login` starts `claude` with exactly
+   the environment the sessions get (`HOME=/srv/poly/spec`, its `PATH`, in
+   `repo/`), so the login lands where the agent reads it:
+   `sudo -u polyspec /srv/poly/bin/poly-role spec login`, `/login` (Claude
+   account with subscription), accept "trust this folder", `/exit`; the
+   same with `sudo -u polyimpl /srv/poly/bin/poly-role implementer login`.
+   (`login` needs a terminal; the loop never uses it.)
 2. Review `/srv/poly/runner/pipeline.toml`.
 3. On GitHub: allow merge commits and auto-merge; protect `main` with CI as
    a required check.
