@@ -579,7 +579,10 @@ initramfs.
 
 - **`poly-vfs`** (`no_std` + `alloc`): `Vfs` resolves paths as
   `path_resolution(7)` describes (`.`/`..` across mount points, 40 symbolic
-  links then `ELOOP`, trailing slashes, `ENAMETOOLONG`), checks permissions
+  links then `ELOOP`, trailing slashes, `ENAMETOOLONG`; when a path has
+  several problems the first in one order decides, the same for every call:
+  [ADR 0076](adr/0076-one-order-of-path-errors.md), `PathArg` for the second
+  path of linkat and renameat2), checks permissions
   from a `Cred` (ids, groups and a capability set: `CAP_DAC_OVERRIDE`,
   `CAP_DAC_READ_SEARCH`, `CAP_FOWNER`, `CAP_CHOWN`, `CAP_FSETID`,
   `CAP_MKNOD`, ...; the sticky bit, set-group-ID directories, set-id bits

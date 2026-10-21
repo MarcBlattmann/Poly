@@ -130,13 +130,13 @@ fn open_flag_rules() {
     let t = env.open("/d", OpenFlags::RDWR | OpenFlags::TMPFILE).unwrap();
     assert_eq!(t.write(b"tmp"), Ok(3));
     assert_eq!(t.node().attr().unwrap().nlink, 0, "no name");
-    env.vfs.link_node(&env.ctx, &env.root, t.node(), At::Cwd, b"/d/named").unwrap();
+    env.vfs.link_node(&env.ctx, &env.root, t.node(), PathArg::new(At::Cwd, b"/d/named")).unwrap();
     assert_eq!(env.stat("/d/named").unwrap().size, 3);
     assert_eq!(env.stat("/d/named").unwrap().nlink, 1);
     // A file that lost its last name cannot get one back.
     let f = env.open("/f", OpenFlags::RDONLY).unwrap();
     env.vfs.unlink(&env.ctx, &env.root, At::Cwd, b"/f").unwrap();
-    assert_eq!(env.vfs.link_node(&env.ctx, &env.root, f.node(), At::Cwd, b"/f2"), Err(Errno::ENOENT));
+    assert_eq!(env.vfs.link_node(&env.ctx, &env.root, f.node(), PathArg::new(At::Cwd, b"/f2")), Err(Errno::ENOENT));
     let d = env.open("/d", OpenFlags::RDONLY).unwrap();
     assert_eq!(d.read(&mut [0u8; 4]), Err(Errno::EISDIR));
     // The new file's mode is masked by the umask (022).

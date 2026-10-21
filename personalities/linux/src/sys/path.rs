@@ -8,7 +8,10 @@
 //! bytes with the NUL: `ENAMETOOLONG` beyond, `EFAULT` for a bad pointer,
 //! `ENOENT` for an empty path unless `AT_EMPTY_PATH` allows it) and calls
 //! the kernel's [`LinuxFs`]. The order of the checks: flags (`EINVAL`),
-//! then the paths in argument order, then the kernel.
+//! then the paths in argument order, then the kernel; for linkat and
+//! renameat2 the second path's string errors are handed to the kernel,
+//! which reports them in their place after the first path's walk (the
+//! order of path errors, `poly_vfs`'s `path.rs`).
 
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
@@ -191,8 +194,10 @@ fn link_common(
         return Err(Errno::EINVAL);
     }
     let old = maybe_empty_path(k, old, flags & AT_EMPTY_PATH)?;
-    let new = nonempty_path(k, new)?;
-    fs(k)?.linkat(olddirfd, &old, newdirfd, &new, flags & AT_SYMLINK_FOLLOW != 0).map(|()| 0)
+    // newpath's string errors come after every error of oldpath, which the
+    // kernel finds (linkat's path_order_two_paths).
+    let new = nonempty_path(k, new);
+    fs(k)?.linkat(olddirfd, &old, newdirfd, new.as_deref().map_err(|&e| e), flags & AT_SYMLINK_FOLLOW != 0).map(|()| 0)
 }
 
 /// linkat(olddirfd, oldpath, newdirfd, newpath, flags)
@@ -283,8 +288,10 @@ fn rename_common(
     flags: u32,
 ) -> SysResult {
     let old = nonempty_path(k, old)?;
-    let new = nonempty_path(k, new)?;
-    fs(k)?.renameat(olddirfd, &old, newdirfd, &new, flags).map(|()| 0)
+    // newpath's string errors come after oldpath's directories, which the
+    // kernel walks (renameat2's path_order_two_paths).
+    let new = nonempty_path(k, new);
+    fs(k)?.renameat(olddirfd, &old, newdirfd, new.as_deref().map_err(|&e| e), flags).map(|()| 0)
 }
 
 /// renameat2(olddirfd, oldpath, newdirfd, newpath, flags)
