@@ -1,0 +1,95 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/msgsnd               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (/proc/sys/kernel/msgmax 8192, msgmnb 16384, msgmni 32000)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  msgsnd(msqid, msgp, msgsz, msgflg) (syscall 69) appends one message to
+  a System V message queue and returns 0. msgp points at a struct msgbuf:
+  an 8-byte signed mtype followed by msgsz bytes of text; both are copied
+  at the call (the caller's buffer may change or go away afterwards, and
+  may be read-only). mtype must be >= 1 and is kept as a full 64-bit
+  value; msgsz is a full 64-bit size from 0 to msgmax (8192). msqid and
+  msgflg are 32-bit ints (upper register halves ignored); the only msgflg
+  bit that matters is IPC_NOWAIT (04000). The caller needs write
+  permission on the queue. A message fits when, after adding it, the
+  queue's text bytes (cbytes) are <= qbytes and its message count (qnum)
+  is <= qbytes as well. If it does not fit, IPC_NOWAIT gives EAGAIN;
+  otherwise the caller sleeps until it fits (then it is queued and the
+  call returns 0), the queue is removed (EIDRM) or a signal with a
+  handler arrives (EINTR, never restarted). If a process is sleeping in
+  msgrcv for a matching type with a large enough buffer, the message is
+  handed to it directly and never shows in the queue. Success sets the
+  queue's lspid to the sender's pid and stime to the current time.
+returns:
+  success: "0; the message is at the tail of the queue (FIFO with the other messages); qnum +1, cbytes +msgsz (the 8-byte mtype is not counted)"
+  copy: "type and text are copied when the call is made: msgrcv returns the original bytes and the exact 64-bit mtype even if the buffer was changed after the call; a buffer in read-only memory works"
+  sizes: "msgsz 0..8192 accepted (0 is an empty text and still counts as a message); msgsz is not truncated: 8193, 2^32, 2^32+1, 2^63, (size_t)-1 are all EINVAL"
+  mtype: "1..LONG_MAX accepted and returned unchanged (2^32+1 is not confused with 1); 0 and any negative value are EINVAL"
+  id_width: "only the low 32 bits of msqid count (id | k<<32 is the same queue)"
+  flag_width: "msgflg bits other than IPC_NOWAIT are ignored (MSG_NOERROR, MSG_EXCEPT, unknown bits 0x7fff0000, the upper 32 bits of the register); upper bits never stand in for IPC_NOWAIT"
+  fit_rule: "a message fits when cbytes + msgsz <= qbytes and qnum + 1 <= qbytes. Default qbytes 16384: two 8192-byte messages fill it, one more byte is EAGAIN, an empty message still fits. qbytes 20: twenty empty messages fit, the 21st is EAGAIN. qbytes 0: nothing fits. msgsz > qbytes never fits, even in an empty queue (EAGAIN with IPC_NOWAIT, sleeps otherwise)"
+  qbytes_changes: "IPC_SET of qbytes applies to the next send at once; lowering it below what is queued keeps the messages and makes every send EAGAIN; raising it wakes sleeping senders that now fit"
+  handover: "if a receiver sleeps in msgrcv for a type this message matches, with a buffer of >= msgsz or MSG_NOERROR, the message goes to that receiver: right after msgsnd returns, qnum and cbytes are unchanged (0 on an empty queue), lspid is the sender, lrpid the receiver, rtime and stime are set. A sleeping receiver for another type does not take it (it is queued). A sleeping receiver with too small a buffer and no MSG_NOERROR gets E2BIG and the message is queued"
+errors:
+  fault_mtype: "EFAULT (14): the 8 bytes of mtype at msgp are not readable (NULL, low address, non-canonical or kernel-half address, an mtype straddling into an inaccessible page); also with msgsz 0; checked before everything else (beats an oversize msgsz, a negative, unknown or removed msqid)"
+  size_or_negative_id: "EINVAL (22): msgsz > 8192 (msgmax) or msqid negative; checked right after reading mtype, before the mtype value and the text"
+  type: "EINVAL (22): mtype < 1; checked after msgsz/negative id, before the text is read and before the id is looked up"
+  fault_text: "EFAULT (14): some of the msgsz text bytes after mtype are not readable (e.g. the text runs into a PROT_NONE page; ending exactly at the page boundary is fine); checked before the id lookup (an unknown or removed non-negative id with a bad text is EFAULT) and before the permission check"
+  bad_id: "EINVAL (22): msqid (low 32 bits) not a live queue: never handed out or removed (a call that does not sleep never sees EIDRM); with or without IPC_NOWAIT"
+  access: "EACCES (13): the caller lacks write permission for its class (owner when euid equals the queue's uid or cuid, else group, else other): for the owner only the owner w bit counts (0200/0222/0600 allow; 0400, 0100, 0, 0022, 0577 refuse). Mode changes by IPC_SET take effect for the next call. Checked before room in the queue (a full read-only queue is EACCES, also without IPC_NOWAIT). A caller with CAP_IPC_OWNER (root) is never refused, even for mode 0 or a queue owned by another user"
+  would_block: "EAGAIN (11): the message does not fit and IPC_NOWAIT is set"
+  removed_while_sleeping: "EIDRM (43): the queue was removed (IPC_RMID) while the caller slept; every sleeping sender gets it"
+  interrupted: "EINTR (4): a signal with a handler arrived while sleeping; the handler runs; never restarted, even with SA_RESTART. An ignored signal (SIG_IGN), and SIGSTOP followed by SIGCONT, do not end the sleep (the call later succeeds normally)"
+  order: "EFAULT (mtype), EINVAL (msgsz > msgmax or msqid < 0), EINVAL (mtype < 1), EFAULT (text), EINVAL (unknown/removed id), EACCES, then EAGAIN or sleep"
+  no_memory: "ENOMEM (12): no memory for the message copy; not tested"
+side_effects: >
+  On success: the message is added to the queue (or handed to a waiting
+  receiver), lspid = caller's pid, stime = current CLOCK_REALTIME seconds.
+  msgsnd never changes ctime, lrpid or rtime (except that a direct
+  hand-over to a sleeping receiver sets lrpid and rtime as that receive
+  does). A failed call (any error, including EAGAIN, EINTR and EIDRM)
+  queues nothing and changes no field (qnum, cbytes, lspid, stime, ctime).
+  While a sender sleeps none of its message is queued and nothing about
+  it is visible in IPC_STAT; when it finally fits, it is queued by the
+  sleeper itself and lspid is the sleeper's pid. A queue's messages and
+  limits are system-wide (IPC namespace): a child's send is seen by the
+  parent and vice versa.
+threading: >
+  Queues are visible to every process in the IPC namespace. A woken
+  sender completes its own send after it is scheduled: right after the
+  msgrcv (or IPC_SET) that made room returns, the sleeper's message may
+  not be in the queue yet; it appears shortly after, and the sender's
+  call returns 0. Senders that sleep do not reserve room: a later
+  IPC_NOWAIT send that fits succeeds while others sleep.
+ordering:
+  - "messages are appended in the order the successful sends complete; msgrcv with type 0 returns them in that order"
+  - "when room is made, every sleeping sender whose message now fits may proceed; sleepers that fit race and are queued in no guaranteed order (observed both A-before-B and B-before-A for senders that went to sleep A first)"
+  - "no head-of-line blocking: a sleeper whose message still does not fit keeps sleeping while a later, smaller sleeper that fits proceeds (qbytes 10, 5 free: an 8-byte sleeper waits, a 2-byte one that slept later goes)"
+  - "room for two of three equal sleepers lets exactly two through; the third goes when more room is made"
+timing:
+  typical: "microseconds per non-sleeping call; a woken sender returns within milliseconds of the call that made room"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: the tests also use msgget (68: IPC_PRIVATE queues), msgctl (71:
+# IPC_STAT, IPC_SET of mode/qbytes/uid/gid, IPC_RMID) and msgrcv (70) to
+# observe queues, plus fork, signals and mmap/mprotect for bad buffers.
+# Observed about those as far as the tests rely on it: a new queue has
+# qbytes 16384, qnum/cbytes/lspid/lrpid/stime/rtime 0; IPC_STAT needs read
+# permission; the owner may lower qbytes (even to 0) and raise it up to
+# msgmnb (16384), above that is EPERM for a non-root caller; msgrcv with
+# IPC_NOWAIT on no matching message is ENOMSG (42). Root behaviour (the
+# CAP_IPC_OWNER bypass) was taken from msgsnd(2)/ipc(7); the oracle's user
+# is not root, so the needs=root test was not run on the reference.
+# The pipeline tracer could not exec test programs in the spec agent's
+# sandbox on 2026-10-22, so the behaviour was observed by running the
+# test programs directly on the oracle kernel. Queue ids differ between
+# runs, so single-process tests compare syscall names only (poly-diff:
+# syscalls=names), multi-process ones only output (syscalls=off).
+# struct msgbuf: linux/msg.h; struct msqid64_ds: asm-generic/msgbuf.h and
+# asm-generic/ipcbuf.h; constants: linux/ipc.h, linux/msg.h.
