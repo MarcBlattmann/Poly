@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 use poly_kernelbase::error::*;
 use poly_kernelbase::message::{self, *};
+use poly_kernelbase::time;
 use poly_kernelbase::version::{self, Compat};
 
 /// `GetLastError`.
@@ -91,6 +92,92 @@ pub unsafe extern "system" fn GetSystemTimeAsFileTime(out: *mut u64) {
 pub unsafe extern "system" fn GetSystemTimePreciseAsFileTime(out: *mut u64) {
     // SAFETY: as above.
     unsafe { GetSystemTimeAsFileTime(out) }
+}
+
+// ----- calendar times (ADR 0079, second slice; `poly_kernelbase::time`) -------------------
+
+fn now() -> u64 {
+    let mut t = 0i64;
+    // SAFETY: a valid pointer.
+    unsafe { nt::NtQuerySystemTime(&mut t) };
+    t as u64
+}
+
+/// Write a `SYSTEMTIME` (16 bytes) for `ft`.
+///
+/// # Safety
+/// `out` is writable for 16 bytes.
+unsafe fn put_system_time(out: *mut u8, ft: u64) -> bool {
+    match time::to_system_time(ft) {
+        Some(st) => {
+            let b = st.to_bytes();
+            // SAFETY: the caller's contract.
+            unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), out, 16) };
+            true
+        }
+        None => false,
+    }
+}
+
+/// `GetSystemTime`: the current UTC time.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetSystemTime(out: *mut u8) {
+    // SAFETY: the caller's SYSTEMTIME.
+    unsafe { put_system_time(out, now()) };
+}
+
+/// `GetLocalTime`: Poly's local time is UTC (`poly_kernelbase::time`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetLocalTime(out: *mut u8) {
+    // SAFETY: the caller's SYSTEMTIME.
+    unsafe { put_system_time(out, time::to_local(now())) };
+}
+
+/// `FileTimeToSystemTime`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn FileTimeToSystemTime(ft: *const u8, out: *mut u8) -> i32 {
+    // SAFETY: the caller's FILETIME (unaligned) and SYSTEMTIME.
+    let ok = unsafe { put_system_time(out, ft.cast::<u64>().read_unaligned()) };
+    if ok { TRUE } else { fail(ERROR_INVALID_PARAMETER, FALSE) }
+}
+
+/// `SystemTimeToFileTime`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SystemTimeToFileTime(st: *const u8, out: *mut u8) -> i32 {
+    let mut b = [0u8; 16];
+    // SAFETY: the caller's SYSTEMTIME.
+    unsafe { core::ptr::copy_nonoverlapping(st, b.as_mut_ptr(), 16) };
+    match time::to_file_time(&time::SystemTime::from_bytes(&b)) {
+        Some(ft) => {
+            // SAFETY: the caller's FILETIME.
+            unsafe { out.cast::<u64>().write_unaligned(ft) };
+            TRUE
+        }
+        None => fail(ERROR_INVALID_PARAMETER, FALSE),
+    }
+}
+
+/// `CompareFileTime`: -1, 0 or 1.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CompareFileTime(a: *const u8, b: *const u8) -> i32 {
+    // SAFETY: the caller's FILETIMEs.
+    unsafe { time::compare(a.cast::<u64>().read_unaligned(), b.cast::<u64>().read_unaligned()) }
+}
+
+/// `FileTimeToLocalFileTime`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn FileTimeToLocalFileTime(ft: *const u8, out: *mut u8) -> i32 {
+    // SAFETY: the caller's FILETIMEs.
+    unsafe { out.cast::<u64>().write_unaligned(time::to_local(ft.cast::<u64>().read_unaligned())) };
+    TRUE
+}
+
+/// `LocalFileTimeToFileTime`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn LocalFileTimeToFileTime(ft: *const u8, out: *mut u8) -> i32 {
+    // SAFETY: the caller's FILETIMEs.
+    unsafe { out.cast::<u64>().write_unaligned(time::from_local(ft.cast::<u64>().read_unaligned())) };
+    TRUE
 }
 
 // ----- the version and the system ---------------------------------------------------------

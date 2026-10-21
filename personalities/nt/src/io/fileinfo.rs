@@ -85,7 +85,7 @@ impl IoState {
                 p.extend_from_slice(name);
                 p
             }
-            None => Vec::new(),
+            _ => Vec::new(),
         }
     }
 
@@ -101,6 +101,10 @@ impl IoState {
                 attributes: FILE_ATTRIBUTE_NORMAL,
                 ..Default::default()
             },
+            // A console or an inherited file: nothing on a volume (ADR 0080).
+            Target::Console(_) | Target::Host(_) => {
+                info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() }
+            }
         };
         let handle = HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
         let fixed = |bytes: Vec<u8>| {
@@ -299,10 +303,21 @@ impl IoState {
         let fixed = |bytes: Vec<u8>, fixed: usize| InfoBytes { bytes, fixed };
         let disk = match &rec.target {
             Target::Disk(d) => Some(d),
-            Target::Pipe(_) => None,
+            _ => None,
         };
         if class == FILE_FS_DEVICE_INFORMATION {
-            let kind = if disk.is_some() { FILE_DEVICE_DISK } else { FILE_DEVICE_NAMED_PIPE };
+            // A console is FILE_DEVICE_CONSOLE (GetFileType: FILE_TYPE_CHAR);
+            // an inherited file is what its node is (ADR 0080).
+            let kind = match &rec.target {
+                Target::Disk(_) => FILE_DEVICE_DISK,
+                Target::Pipe(_) => FILE_DEVICE_NAMED_PIPE,
+                Target::Console(_) => poly_console::ioctl::FILE_DEVICE_CONSOLE,
+                Target::Host(open) => match open.kind() {
+                    poly_vfs::FileType::Regular | poly_vfs::FileType::Directory => FILE_DEVICE_DISK,
+                    poly_vfs::FileType::Fifo | poly_vfs::FileType::Socket => FILE_DEVICE_NAMED_PIPE,
+                    _ => FILE_DEVICE_UNKNOWN,
+                },
+            };
             let mut b = kind.to_le_bytes().to_vec();
             b.extend_from_slice(&0x20u32.to_le_bytes()); // FILE_DEVICE_IS_MOUNTED
             return Ok(fixed(b, 8));

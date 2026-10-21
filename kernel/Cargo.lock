@@ -34,6 +34,10 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-console"
+version = "0.0.1"
+
+[[package]]
 name = "poly-cpio"
 version = "0.0.1"
 dependencies = [
@@ -174,9 +178,11 @@ name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-console",
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
+ "poly-security",
  "poly-seh",
  "poly-vfs",
 ]
@@ -213,6 +219,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-sched"
 version = "0.0.1"
+
+[[package]]
+name = "poly-security"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
 
 [[package]]
 name = "poly-seh"

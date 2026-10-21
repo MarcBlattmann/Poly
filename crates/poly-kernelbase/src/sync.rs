@@ -148,6 +148,127 @@ pub fn release_shared(word: &AtomicUsize) {
     word.fetch_sub(srw::READER, Ordering::Release);
 }
 
+// ----- condition variables -----------------------------------------------------
+
+/// A `CONDITION_VARIABLE` is one pointer-sized word, zero when initialised
+/// (`CONDITION_VARIABLE_INIT`, `winnt.h`). Poly's encoding (the structure
+/// is opaque): a count of wakes. A sleeper notes the count, releases its
+/// lock and waits until the count moves or its time runs out; both wake
+/// functions move it, so `WakeConditionVariable` may wake more than one
+/// thread, which Learn allows ("Condition variables are subject to
+/// spurious wakeups ... and stolen wakeups"). Waiters back off like the SRW
+/// lock's (ADR 0079).
+pub fn condition_sleep(
+    word: &AtomicUsize,
+    release: &mut dyn FnMut(),
+    acquire: &mut dyn FnMut(),
+    expired: &dyn Fn() -> bool,
+    p: &dyn Pause,
+) -> bool {
+    let seen = word.load(Ordering::Acquire);
+    release();
+    let mut attempt = 0;
+    let woken = loop {
+        if word.load(Ordering::Acquire) != seen {
+            break true;
+        }
+        if expired() {
+            break false;
+        }
+        p.pause(attempt);
+        attempt = attempt.saturating_add(1);
+    };
+    acquire();
+    woken
+}
+
+/// `WakeConditionVariable` and `WakeAllConditionVariable`.
+pub fn condition_wake(word: &AtomicUsize) {
+    word.fetch_add(1, Ordering::Release);
+}
+
+/// `CONDITION_VARIABLE_LOCKMODE_SHARED` (`winbase.h`).
+pub const CONDITION_VARIABLE_LOCKMODE_SHARED: u32 = 0x1;
+
+// ----- one-time initialisation ---------------------------------------------------
+
+/// `INIT_ONCE_CHECK_ONLY`, `INIT_ONCE_ASYNC`, `INIT_ONCE_INIT_FAILED`,
+/// `INIT_ONCE_CTX_RESERVED_BITS` (`winbase.h`).
+pub const INIT_ONCE_CHECK_ONLY: u32 = 0x1;
+pub const INIT_ONCE_ASYNC: u32 = 0x2;
+pub const INIT_ONCE_INIT_FAILED: u32 = 0x4;
+pub const INIT_ONCE_CTX_RESERVED_BITS: u32 = 2;
+
+/// An `INIT_ONCE` is one pointer-sized word, zero when initialised
+/// (`INIT_ONCE_STATIC_INIT`). Poly's encoding: bit 0 an initialisation is
+/// running, bit 1 it is done; once done, the bits above the
+/// `INIT_ONCE_CTX_RESERVED_BITS` hold the context (Learn: "the low
+/// INIT_ONCE_CTX_RESERVED_BITS bits of the context must be zero").
+pub mod once {
+    pub const RUNNING: usize = 1;
+    pub const DONE: usize = 2;
+}
+
+/// What `InitOnceBeginInitialize` found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Begin {
+    /// Done before: the stored context.
+    Done(usize),
+    /// The caller must initialise (it now owns the run).
+    Pending,
+    /// `INIT_ONCE_CHECK_ONLY` and not done: the function fails (Learn);
+    /// Poly reports `ERROR_GEN_FAILURE` (to be confirmed by the spec
+    /// agent).
+    NotDone,
+}
+
+/// `InitOnceBeginInitialize` (synchronous): wait while another thread
+/// runs the initialisation. Asynchronous initialisation is not supported
+/// (`flags` with `INIT_ONCE_ASYNC`: `Err(ERROR_INVALID_PARAMETER)`, to be
+/// confirmed against what Windows supports).
+pub fn once_begin(word: &AtomicUsize, flags: u32, p: &dyn Pause) -> Result<Begin, u32> {
+    if flags & !(INIT_ONCE_CHECK_ONLY | INIT_ONCE_ASYNC) != 0 || flags & INIT_ONCE_ASYNC != 0 {
+        return Err(crate::error::ERROR_INVALID_PARAMETER);
+    }
+    let mut attempt = 0;
+    loop {
+        let s = word.load(Ordering::Acquire);
+        if s & once::DONE != 0 {
+            return Ok(Begin::Done(s & !3));
+        }
+        if flags & INIT_ONCE_CHECK_ONLY != 0 {
+            return Ok(Begin::NotDone);
+        }
+        if s & once::RUNNING == 0
+            && word.compare_exchange(s, once::RUNNING, Ordering::Acquire, Ordering::Relaxed).is_ok()
+        {
+            return Ok(Begin::Pending);
+        }
+        p.pause(attempt);
+        attempt = attempt.saturating_add(1);
+    }
+}
+
+/// `InitOnceComplete` (synchronous) by the thread running the
+/// initialisation: done with `context` (its low bits must be clear), or,
+/// with `INIT_ONCE_INIT_FAILED`, back to not started. Not running is
+/// `ERROR_GEN_FAILURE`; bad flags or context `ERROR_INVALID_PARAMETER`.
+pub fn once_complete(word: &AtomicUsize, flags: u32, context: usize) -> Result<(), u32> {
+    use crate::error::*;
+    if flags & !(INIT_ONCE_INIT_FAILED | INIT_ONCE_ASYNC) != 0 || flags & INIT_ONCE_ASYNC != 0 {
+        return Err(ERROR_INVALID_PARAMETER);
+    }
+    let failed = flags & INIT_ONCE_INIT_FAILED != 0;
+    if context & 3 != 0 || (failed && context != 0) {
+        return Err(ERROR_INVALID_PARAMETER);
+    }
+    if word.load(Ordering::Acquire) & (once::RUNNING | once::DONE) != once::RUNNING {
+        return Err(ERROR_GEN_FAILURE);
+    }
+    word.store(if failed { 0 } else { context | once::DONE }, Ordering::Release);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,6 +342,81 @@ mod tests {
         assert!(try_acquire_exclusive(&w));
         release_exclusive(&w);
         assert_eq!(w.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn init_once_runs_once() {
+        let w = AtomicUsize::new(0);
+        assert_eq!(once_begin(&w, INIT_ONCE_CHECK_ONLY, &Yield), Ok(Begin::NotDone));
+        assert_eq!(once_complete(&w, 0, 0x100), Err(ERROR_GEN_FAILURE));
+        assert_eq!(once_begin(&w, 0, &Yield), Ok(Begin::Pending));
+        // A failed run lets the next caller try again.
+        assert_eq!(once_complete(&w, INIT_ONCE_INIT_FAILED, 0), Ok(()));
+        assert_eq!(once_begin(&w, 0, &Yield), Ok(Begin::Pending));
+        assert_eq!(once_complete(&w, 0, 0x101), Err(ERROR_INVALID_PARAMETER));
+        assert_eq!(once_complete(&w, 0, 0x100), Ok(()));
+        assert_eq!(once_begin(&w, 0, &Yield), Ok(Begin::Done(0x100)));
+        assert_eq!(once_begin(&w, INIT_ONCE_CHECK_ONLY, &Yield), Ok(Begin::Done(0x100)));
+        assert_eq!(once_complete(&w, 0, 0), Err(ERROR_GEN_FAILURE));
+        assert_eq!(once_begin(&w, INIT_ONCE_ASYNC, &Yield), Err(ERROR_INVALID_PARAMETER));
+        // Concurrent callers: one runs, the others wait for its context.
+        let w = Arc::new(AtomicUsize::new(0));
+        let runs = Arc::new(AtomicU64::new(0));
+        let threads: std::vec::Vec<_> = (0..4)
+            .map(|_| {
+                let (w, runs) = (w.clone(), runs.clone());
+                std::thread::spawn(move || match once_begin(&w, 0, &Yield).unwrap() {
+                    Begin::Pending => {
+                        runs.fetch_add(1, Ordering::SeqCst);
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                        once_complete(&w, 0, 0x40).unwrap();
+                        0x40
+                    }
+                    Begin::Done(c) => c,
+                    Begin::NotDone => unreachable!(),
+                })
+            })
+            .collect();
+        for t in threads {
+            assert_eq!(t.join().unwrap(), 0x40);
+        }
+        assert_eq!(runs.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn condition_variables_wake_and_time_out() {
+        let cv = AtomicUsize::new(0);
+        let (mut released, mut acquired) = (0, 0);
+        // Nobody wakes it: the timeout ends the sleep, the lock comes back.
+        let woke = condition_sleep(&cv, &mut || released += 1, &mut || acquired += 1, &|| true, &Yield);
+        assert!(!woke);
+        assert_eq!((released, acquired), (1, 1));
+        let cv = Arc::new(AtomicUsize::new(0));
+        let lock = Arc::new(AtomicUsize::new(0));
+        let ready = Arc::new(AtomicU64::new(0));
+        let sleeper = {
+            let (cv, lock, ready) = (cv.clone(), lock.clone(), ready.clone());
+            std::thread::spawn(move || {
+                acquire_exclusive(&lock, &Yield);
+                while ready.load(Ordering::SeqCst) == 0 {
+                    let woke = condition_sleep(
+                        &cv,
+                        &mut || release_exclusive(&lock),
+                        &mut || acquire_exclusive(&lock, &Yield),
+                        &|| false,
+                        &Yield,
+                    );
+                    assert!(woke);
+                }
+                release_exclusive(&lock);
+            })
+        };
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        acquire_exclusive(&lock, &Yield);
+        ready.store(1, Ordering::SeqCst);
+        condition_wake(&cv);
+        release_exclusive(&lock);
+        sleeper.join().unwrap();
     }
 
     #[test]

@@ -237,3 +237,196 @@ are the kernel's side. `ntdll`'s stubs come from the table automatically.
   `kernel32` in `kernel32.dll` and `kernelbase.dll`, plus the three new
   `ntdll` services; they turn green when the Windows oracle and held-out
   tests exist.
+
+## Second slice: processes, TLS, code pages, file mappings
+
+**Status:** Accepted. Same sources and method as above, plus Learn's pages
+of every function below, "Thread Local Storage", "Fiber Local Storage",
+"Code Page Identifiers", "File Mapping", "Creating Named Shared Memory",
+"File Times", "Condition Variables", "One-Time Initialization", and the
+public headers `processthreadsapi.h`, `fibersapi.h`, `stringapiset.h`,
+`winnls.h`, `memoryapi.h`, `synchapi.h`, `timezoneapi.h`, `minwinbase.h`
+for constants and layouts. The code page tables are the public charts
+(Unicode Consortium `CP1252.TXT` and `CP437.TXT`).
+
+### Processes: `CreateProcessW` over `NtCreateUserProcess`
+
+- **`kernelbase` decides what runs** (`poly_kernelbase::process`, host
+  tested): `lpApplicationName` is taken as it is (made a full path, never
+  searched, no extension added); otherwise the command line's first token,
+  quoted or tried at each space in turn (Learn's `c:\program files\sub
+  dir\program name` example), gets `.exe` when it has no extension and no
+  path, and a name without a path is searched for in the application's
+  directory, the current directory, `System32`, `System`, the Windows
+  directory and `PATH`. Not found is `ERROR_FILE_NOT_FOUND`.
+- **The child's parameters** are built by `kernelbase` in its own memory
+  as an `RTL_USER_PROCESS_PARAMETERS`: `ImagePathName` (+ 0x60) and
+  `CommandLine` (+ 0x70) where `winternl.h` puts them, Poly's own
+  environment pointer and size (+ 0x80, + 0x88, ADR 0073) and, new, Poly's
+  own **current directory** `UNICODE_STRING` at + 0x90. `lpEnvironment`
+  NULL gives the creator's block; a given block is ANSI unless
+  `CREATE_UNICODE_ENVIRONMENT`. `lpCurrentDirectory` NULL gives the
+  creator's. A new process's `kernelbase` starts in the directory its
+  parameters name, else (a process the kernel started) the executable's.
+- **`NtCreateUserProcess`** (new service `0x08B`; the WDK does not
+  document it, and `PS_CREATE_INFO` / `PS_ATTRIBUTE_LIST` are in no public
+  header, so Poly uses only what it can define itself): its eleven
+  arguments are the commonly known shape, but Poly reads only the two
+  handle out-pointers, the two desired accesses (0 = all), `ThreadFlags`
+  and `ProcessParameters`. The kernel turns `ImagePathName` into an NT
+  name (`X:\...` → `\??\X:\...`, `\\?\` → `\??\`), opens it for execute
+  and read as the caller (so a missing file is the usual
+  `STATUS_OBJECT_NAME_NOT_FOUND`), reads it, and asks the kernel
+  (`NtKernel::create_process`, a default method) for the process: a new
+  address space, the image and our `ntdll` mapped, PEB, TEB, stack and the
+  copied parameters (`exec::start_child`), handles to the process and its
+  first thread opened **in the creator's table before the thread runs**
+  (`exec::child_handles`), then the thread started at
+  `LdrInitializeThunk` like any process (ADR 0071). The client id is read
+  back with `NtQueryInformationProcess` / `NtQueryInformationThread`.
+- **Exit statuses.** `NtProcess::exit_status` is now set: by the first
+  `NtTerminateProcess` of the process, else by its last thread's end.
+  When a process ends, `NtSystem::process_exits` keeps its status while
+  its process object lives (another process holds a handle), and
+  `NtQueryInformationProcess(ProcessBasicInformation)` of another process
+  reports it (`STATUS_PENDING`, i.e. `STILL_ACTIVE`, while it runs);
+  the entry goes when the object is deleted (`NtSystem::reap`). The
+  process object is signalled at exit (already so), which is what
+  `WaitForSingleObject` on the handle waits for.
+- **Not yet:** `CREATE_SUSPENDED` (`STATUS_NOT_SUPPORTED` /
+  `ERROR_NOT_SUPPORTED`: resuming another process's thread needs
+  cross-process suspension), handle inheritance (`bInheritHandles` is
+  ignored; a child gets the console like every Poly NT process),
+  `STARTUPINFO`'s fields, security attributes, `CreateProcessA`, process
+  names in the object namespace, `TerminateProcess` of another process.
+
+### Thread-local and fiber-local storage
+
+TLS values live where `winternl.h` puts them: `TEB.TlsSlots[64]` at
+TEB + 0x1480 and `TlsExpansionSlots` at TEB + 0x1780 (1,024 more, from the
+process heap on a thread's first store; Learn: 1,088 indices).
+`kernelbase` tracks the TEBs of the process's threads through its
+`DllMain` (`DLL_PROCESS_ATTACH`, `DLL_THREAD_ATTACH`/`DETACH`, which our
+`ntdll` sends) so `TlsFree` zeroes the index in every thread and a reused
+index starts at zero. `TlsGetValue` clears the last error on success
+(Learn). FLS: no fibers yet, so FLS values are per thread, kept by
+`kernelbase`; a thread's callbacks run at its `DLL_THREAD_DETACH`,
+`FlsFree` runs the index's callback for every thread's non-null value.
+
+### Code pages and strings
+
+`poly_kernelbase::nls`: code pages 1252 (`CP_ACP`, `CP_THREAD_ACP`), 437
+(`CP_OEMCP`, "OEM United States") and UTF-8; `MultiByteToWideChar` and
+`WideCharToMultiByte` with their documented flag checks
+(`ERROR_INVALID_FLAGS`), the `-1` length convention, the size query and
+`ERROR_INSUFFICIENT_BUFFER`, `MB_ERR_INVALID_CHARS` /
+`WC_ERR_INVALID_CHARS` (`ERROR_NO_UNICODE_TRANSLATION`), U+FFFD for
+invalid input otherwise, the default character and `lpUsedDefaultChar`
+for the single-byte pages; `GetACP` (1252), `GetOEMCP` (437),
+`GetCPInfo`, `IsValidCodePage`, `CompareStringOrdinal` (upcased with the
+object manager's table for `bIgnoreCase`). `lstrlenW`, `lstrlenA`,
+`lstrcmpW`, `lstrcmpiW` are `kernel32`'s own (their Learn pages name no
+API set), compared ordinally.
+
+### File mappings
+
+`CreateFileMappingW`, `OpenFileMappingW`, `MapViewOfFile(Ex)`,
+`UnmapViewOfFile`, `FlushViewOfFile` over the section services
+(`poly_kernelbase::mapping` splits `flProtect` into the page protection
+and `SEC_*` attributes, maps `FILE_MAP_*` to a view protection, checks the
+64 KiB offset alignment: `ERROR_MAPPED_ALIGNMENT`). What the NT side
+gained:
+
+- **Sections of files of NT file I/O** (ADR 0067's file objects; until
+  now only ADR 0063's minimal file objects could back a section). The
+  file object must have been opened to read its data, and to write it for
+  a section that writes shared pages (`STATUS_ACCESS_DENIED`, Learn's
+  table of `flProtect` against the file's access). A writable section
+  larger than the file grows the file (Learn: "the file on disk is
+  increased"); otherwise a larger size is `STATUS_SECTION_TOO_BIG`. A data
+  section's pages are the VFS file's own (`SectionSource::Vfs`: the
+  kernel maps it with the `FileSource` a shared `mmap(2)` uses, so on a
+  cached file system the views share the page cache's pages and a write
+  through a view is the file's contents, seen by `ReadFile`).
+- **`NtFlushVirtualMemory`** (new service `0x048`): checks that the range
+  is in one view (`STATUS_NOT_MAPPED_VIEW`), rounds it to pages and
+  returns it. The data is already in the file's cached pages; the page
+  cache's writeback puts it on disk.
+
+### Condition variables, one-time initialisation, file information, times
+
+- A `CONDITION_VARIABLE` is a wake count: a sleeper notes it, releases
+  its critical section or SRW lock, waits (the SRW lock's back-off) until
+  it moves or the timeout passes (`ERROR_TIMEOUT`), and takes the lock
+  again. Both wake functions move it, so `WakeConditionVariable` may wake
+  every sleeper, which Learn's "spurious wakeups" allow.
+- `INIT_ONCE`: bit 0 running, bit 1 done, the context above the two
+  reserved bits. `InitOnceExecuteOnce`, `InitOnceBeginInitialize`,
+  `InitOnceComplete` (synchronous only: `INIT_ONCE_ASYNC` is
+  `ERROR_INVALID_PARAMETER`), `InitOnceInitialize`. A failed callback lets
+  the next caller try again.
+- `GetFileInformationByHandle` from the basic, standard and internal
+  information and the volume's serial number; `GetFileTime`,
+  `SetFileTime` (a null time is left alone); `FileTimeToSystemTime`,
+  `SystemTimeToFileTime` (the Gregorian calendar from 1601, fields
+  checked), `CompareFileTime`, `GetSystemTime`, `GetLocalTime`,
+  `FileTimeToLocalFileTime`, `LocalFileTimeToFileTime`: Poly's local time
+  is UTC until time zones exist.
+
+### To be confirmed by the spec agent (second slice)
+
+1. Every new forwarder's contract (as above): especially the condition
+   variable and `InitOnce*` functions (ours: `api-ms-win-core-synch-l1-2-0`),
+   `FileTimeToSystemTime`/`SystemTimeToFileTime`
+   (`api-ms-win-core-timezone-l1-1-0`), and that the `lstr*` functions
+   stay in `kernel32`.
+2. `CreateProcessW`: the search order for a command line whose first
+   token has a path but no extension (ours: no `.exe` added, as Learn
+   says); what an empty environment block may look like; the error for a
+   directory given as the program (ours: `ERROR_ACCESS_DENIED`).
+3. `TlsGetValue` of an in-range index that is not allocated (ours: its
+   slot, no error); `FlsGetValue` clearing the last error (ours: yes);
+   when FLS callbacks run, and `FLS_MAXIMUM_AVAILABLE` (ours: 4080).
+4. Code pages: best fit (ours: none, the default character), the five
+   undefined 1252 bytes under `MB_ERR_INVALID_CHARS` (ours: valid, C1
+   controls), how many U+FFFD an invalid UTF-8 sequence gives (ours: one
+   per maximal invalid subpart), `lstrcmp(i)W`'s order (ours: ordinal, not
+   the locale's linguistic sort).
+5. `InitOnceBeginInitialize` with `INIT_ONCE_CHECK_ONLY` before completion
+   (ours: FALSE, `ERROR_GEN_FAILURE`).
+6. `FlushViewOfFile` (ours: returns once the range is checked, without
+   waiting for the disk); `NtFlushVirtualMemory`'s `IoStatusBlock`.
+7. The local time zone of the oracle machine (ours: UTC).
+
+### Consequences (second slice)
+
+- Host tests: `cargo test -p poly-kernelbase` (`nls`, `tls`, `process`,
+  `mapping`, `time`, condition variables and `InitOnce` in `sync`, file
+  information in `file`), `cargo test -p poly-personality-nt` (a child
+  created through the service with its parameters read back, exit status
+  and waits, the failure cases, sections of files that map their contents
+  and grow them, `NtFlushVirtualMemory`).
+- The ring-3 test (`k32test.exe`) runs itself twice as a child: once with
+  an explicit environment, current directory and quoted command line,
+  once found by search with what it inherits, and checks
+  `GetExitCodeProcess` (`STILL_ACTIVE`, then the full 32-bit code),
+  `GetProcessId` and the waits; plus TLS (expansion slots, another
+  thread, reuse), FLS callbacks, conversions, mappings of a file (grown,
+  written through a view, read back with `ReadFile`) and of the paging
+  file (named, two views), condition variables with a thread, `InitOnce`,
+  file information and times.
+- Shared files changed (additively): the service table and dispatch, two
+  `NtKernel` methods' neighbours (`create_process` is a default method),
+  `NtSystem` (`process_exits`), `params` (the current directory),
+  `SectionSource` (`Vfs`), the kernel's `start_with` (now over
+  `start_params`), `backend.rs`, and `KERNEL32_FORWARDS` / `KERNEL32_OWN`.
+- **Left** of `kernelbase`/`kernel32` after this slice: `CREATE_SUSPENDED`
+  and handle inheritance in `CreateProcessW`, `CreateProcessA`, the other
+  ANSI variants, overlapped I/O completion ports, thread pools and fibers,
+  double-byte code pages, locales (`GetLocaleInfoEx`, linguistic
+  `CompareStringEx`), time zones, console functions (with the console
+  host, ADR 0080), module resources, `GetFileInformationByHandleEx`, and
+  the rarer exports in the coverage map.
+- The new entries are claimed by `kernel32-2` in `kernel32.dll` and
+  `kernelbase.dll`, plus `NtCreateUserProcess` and `NtFlushVirtualMemory`
+  (and their `Zw` names) in `ntdll.dll`.

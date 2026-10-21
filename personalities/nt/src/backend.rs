@@ -25,8 +25,12 @@ pub enum SectionSource {
     /// copies of its pages.
     Image(Arc<[u8]>),
     /// The pages of a file object (a data file mapping), by the kernel's
-    /// key for the file.
+    /// key for the file (the minimal file objects of ADR 0063).
     File { file: u64 },
+    /// The pages of a VFS file a file object of NT file I/O is open on (a
+    /// data file mapping, ADR 0079): its cached pages, so a shared view's
+    /// writes are the file's contents.
+    Vfs { file: Arc<poly_vfs::OpenFile> },
 }
 
 /// Where the pages of a view come from.

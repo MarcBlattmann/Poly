@@ -44,7 +44,7 @@
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
-//!   win32               the same for kernelbase.dll, kernel32.dll and k32test.exe (win32.rs)
+//!   win32               the same for kernelbase.dll, kernel32.dll, k32test.exe and contest.exe (win32.rs)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 

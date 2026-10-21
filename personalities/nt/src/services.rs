@@ -15,6 +15,7 @@
 //! | 0, executive | `0x0C0`–`0x0FF` | file I/O (ADR 0067) |
 //! | 0, executive | `0x100`–`0x13F` | registry ([`REGISTRY_SERVICES`], ADR 0066) |
 //! | 0, executive | `0x140`–`0x17F` | time and system information ([`SYSINFO_SERVICES`], ADR 0079) |
+//! | 0, executive | `0x180`–`0x1BF` | security: access tokens ([`SECURITY_SERVICES`], ADR 0083) |
 //! | 1, win32k | | none yet (Phase 7) |
 //! | 3, Poly | `0x000`–`0x0FF` | Poly's own services, for its tests and tools; never called by `ntdll` (except `0x010`–`0x01F`, which stand in for what the kernel will learn from our `ntdll`'s exports, ADR 0068) |
 //!
@@ -156,6 +157,9 @@ pub enum Service {
     MapViewOfSection,
     /// `NtUnmapViewOfSection(ProcessHandle, BaseAddress)`.
     UnmapViewOfSection,
+    /// `NtFlushVirtualMemory(ProcessHandle, BaseAddress*, RegionSize*,
+    /// IoStatusBlock*)` (Learn: "ZwFlushVirtualMemory"; ADR 0079).
+    FlushVirtualMemory,
 
     // ----- processes and threads
     /// `NtTerminateProcess(ProcessHandle, ExitStatus)`.
@@ -186,6 +190,13 @@ pub enum Service {
     GetContextThread,
     /// `NtSetContextThread(ThreadHandle, Context*)`.
     SetContextThread,
+    /// `NtCreateUserProcess(ProcessHandle*, ThreadHandle*,
+    /// ProcessDesiredAccess, ThreadDesiredAccess, ProcessObjectAttributes*,
+    /// ThreadObjectAttributes*, ProcessFlags, ThreadFlags,
+    /// ProcessParameters*, CreateInfo*, AttributeList*)`: not in the WDK;
+    /// Poly's reading, ADR 0079 (what it uses of each argument is on
+    /// [`crate::threads::create_user_process`]).
+    CreateUserProcess,
 
     // ----- file I/O (ADR 0067; `crate::io::services`)
     /// `NtCreateFile(FileHandle*, DesiredAccess, ObjectAttributes*,
@@ -303,6 +314,26 @@ pub enum Service {
     /// `NtQuerySystemInformation(SystemInformationClass, SystemInformation,
     /// SystemInformationLength, ReturnLength*)` (Learn, `winternl.h`).
     QuerySystemInformation,
+    /// `NtDeviceIoControlFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, IoControlCode, InputBuffer, InputBufferLength,
+    /// OutputBuffer, OutputBufferLength)` (ADR 0080: console handles).
+    DeviceIoControlFile,
+
+    // ----- security (ADR 0083)
+    /// `NtOpenProcessToken(ProcessHandle, DesiredAccess, TokenHandle*)`.
+    OpenProcessToken,
+    /// `NtOpenProcessTokenEx(ProcessHandle, DesiredAccess,
+    /// HandleAttributes, TokenHandle*)`.
+    OpenProcessTokenEx,
+    /// `NtOpenThreadToken(ThreadHandle, DesiredAccess, OpenAsSelf,
+    /// TokenHandle*)`.
+    OpenThreadToken,
+    /// `NtOpenThreadTokenEx(ThreadHandle, DesiredAccess, OpenAsSelf,
+    /// HandleAttributes, TokenHandle*)`.
+    OpenThreadTokenEx,
+    /// `NtQueryInformationToken(TokenHandle, TokenInformationClass,
+    /// TokenInformation, TokenInformationLength, ReturnLength*)`.
+    QueryInformationToken,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -311,7 +342,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 74] = [
+pub const SERVICES: [(Service, u32, &str); 76] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -357,6 +388,7 @@ pub const SERVICES: [(Service, u32, &str); 74] = [
     (Service::OpenSection, 0x045, "NtOpenSection"),
     (Service::MapViewOfSection, 0x046, "NtMapViewOfSection"),
     (Service::UnmapViewOfSection, 0x047, "NtUnmapViewOfSection"),
+    (Service::FlushVirtualMemory, 0x048, "NtFlushVirtualMemory"),
     (Service::TerminateProcess, 0x080, "NtTerminateProcess"),
     (Service::TerminateThread, 0x081, "NtTerminateThread"),
     (Service::CreateThreadEx, 0x082, "NtCreateThreadEx"),
@@ -368,6 +400,7 @@ pub const SERVICES: [(Service, u32, &str); 74] = [
     (Service::ResumeThread, 0x088, "NtResumeThread"),
     (Service::GetContextThread, 0x089, "NtGetContextThread"),
     (Service::SetContextThread, 0x08A, "NtSetContextThread"),
+    (Service::CreateUserProcess, 0x08B, "NtCreateUserProcess"),
     (Service::CreateFile, 0x0C0, "NtCreateFile"),
     (Service::OpenFile, 0x0C1, "NtOpenFile"),
     (Service::ReadFile, 0x0C2, "NtReadFile"),
@@ -419,9 +452,27 @@ pub const SYSINFO_SERVICES: [(Service, u32, &str); 3] = [
     (Service::QuerySystemInformation, 0x142, "NtQuerySystemInformation"),
 ];
 
+/// Device control, in the file I/O group (ADR 0080).
+pub const DEVICE_SERVICES: [(Service, u32, &str); 1] = [(Service::DeviceIoControlFile, 0x0D0, "NtDeviceIoControlFile")];
+
+/// Access tokens (ADR 0083).
+pub const SECURITY_SERVICES: [(Service, u32, &str); 5] = [
+    (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
+    (Service::OpenProcessTokenEx, 0x181, "NtOpenProcessTokenEx"),
+    (Service::OpenThreadToken, 0x182, "NtOpenThreadToken"),
+    (Service::OpenThreadTokenEx, 0x183, "NtOpenThreadTokenEx"),
+    (Service::QueryInformationToken, 0x184, "NtQueryInformationToken"),
+];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
-    SERVICES.iter().chain(REGISTRY_SERVICES.iter()).chain(EXCEPTION_SERVICES.iter()).chain(SYSINFO_SERVICES.iter())
+    SERVICES
+        .iter()
+        .chain(REGISTRY_SERVICES.iter())
+        .chain(EXCEPTION_SERVICES.iter())
+        .chain(SYSINFO_SERVICES.iter())
+        .chain(DEVICE_SERVICES.iter())
+        .chain(SECURITY_SERVICES.iter())
 }
 
 impl Service {
@@ -477,5 +528,7 @@ mod tests {
         assert!((0xA0..0xB0).contains(&Service::RaiseException.number()));
         assert!((0xA0..0xB0).contains(&Service::Continue.number()));
         assert!(SYSINFO_SERVICES.iter().all(|s| (0x140..0x180).contains(&s.1)));
+        assert!(DEVICE_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
+        assert!(SECURITY_SERVICES.iter().all(|s| (0x180..0x1C0).contains(&s.1)));
     }
 }

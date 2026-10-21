@@ -6,8 +6,12 @@
 //! - A pagefile section's pages are an [`AnonShared`] object, so every
 //!   view (shared, in any process) maps the same frames; a copy-on-write
 //!   view gets private copies that the first write forks.
-//! - An image or data-file section's pages are bytes the kernel holds
-//!   (`MemoryImage`): views are always private copies.
+//! - An image section's pages, and those of a minimal file object of ADR
+//!   0063, are bytes the kernel holds (`MemoryImage`): views are private
+//!   copies.
+//! - A data section of a file of NT file I/O maps the file itself
+//!   (`FileSource`, the page cache's pages on a cached file system): a
+//!   shared view writes the file (ADR 0079).
 //! - Committed private memory is demand-zero anonymous memory; a guard
 //!   page is committed `PROT_NONE` and made accessible when it fires.
 
@@ -118,6 +122,9 @@ impl Backend for MemBackend<'_> {
                 let bytes = self.sections.files.get(file).ok_or(STATUS_UNSUCCESSFUL)?;
                 Arc::new(MemoryImage(Arc::clone(bytes)))
             }
+            // A file of NT file I/O: its own (cached) pages, as a shared
+            // mmap(2) of it maps them (ADR 0079).
+            SectionSource::Vfs { file } => Arc::new(crate::fs::cache::FileSource::of(file)),
         };
         self.sections.next += 1;
         let id = self.sections.next;

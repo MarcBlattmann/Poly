@@ -91,6 +91,48 @@ pub extern "system" fn GlobalUnlock(_mem: *mut u8) -> i32 {
     0
 }
 
+// ----- the `lstr*` functions (ADR 0079, second slice) ---------------------------------------
+
+/// A NUL-terminated argument; null is treated as empty (Learn: `lstrlenW`
+/// "If lpString is NULL, the function returns 0").
+///
+/// # Safety
+/// `p` is null or a NUL-terminated UTF-16 string.
+unsafe fn wide<'a>(p: *const u16) -> &'a [u16] {
+    // SAFETY: the caller's contract.
+    if p.is_null() { &[] } else { unsafe { poly_kernelbase::text::wide_at(p) } }
+}
+
+/// `lstrlenW`: the length in characters, without the NUL.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrlenW(s: *const u16) -> i32 {
+    // SAFETY: the caller's string.
+    unsafe { wide(s) }.len() as i32
+}
+
+/// `lstrlenA`: the length in bytes, without the NUL.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrlenA(s: *const u8) -> i32 {
+    // SAFETY: the caller's string.
+    if s.is_null() { 0 } else { unsafe { poly_kernelbase::text::strlen(s) as i32 } }
+}
+
+/// `lstrcmpW`: negative, zero or positive; Poly compares ordinally
+/// (`poly_kernelbase::nls::lstrcmp`, to be confirmed against the user
+/// locale's linguistic order).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcmpW(a: *const u16, b: *const u16) -> i32 {
+    // SAFETY: the caller's strings.
+    unsafe { poly_kernelbase::nls::lstrcmp(wide(a), wide(b), false) }
+}
+
+/// `lstrcmpiW`: as `lstrcmpW` without case.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcmpiW(a: *const u16, b: *const u16) -> i32 {
+    // SAFETY: the caller's strings.
+    unsafe { poly_kernelbase::nls::lstrcmp(wide(a), wide(b), true) }
+}
+
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]
 pub extern "system" fn kernel32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
