@@ -67,8 +67,6 @@ pub struct PerCpu {
     spinlocks: AtomicUsize,
     /// Interrupt handlers running (0 or 1: they do not nest).
     irq_depth: AtomicUsize,
-    /// The interrupt being handled came from ring 3.
-    interrupted_user: AtomicBool,
     /// The scheduler is dropping reaped threads' state here (`thread`).
     reaping: AtomicBool,
     /// Timer ticks this CPU took.
@@ -101,7 +99,6 @@ impl PerCpu {
             current: AtomicU64::new(0),
             spinlocks: AtomicUsize::new(0),
             irq_depth: AtomicUsize::new(0),
-            interrupted_user: AtomicBool::new(false),
             reaping: AtomicBool::new(false),
             ticks: AtomicU64::new(0),
             fpu_owner: AtomicPtr::new(core::ptr::null_mut()),
@@ -136,10 +133,6 @@ impl PerCpu {
 
     pub fn irq_depth(&self) -> &AtomicUsize {
         &self.irq_depth
-    }
-
-    pub fn interrupted_user(&self) -> &AtomicBool {
-        &self.interrupted_user
     }
 
     pub fn reaping(&self) -> &AtomicBool {
