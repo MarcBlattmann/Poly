@@ -307,6 +307,14 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
         Ok(ino)
     }
 
+    fn create_tmpfile(&self, dir: Ino, node: &NewNode) -> Result<Ino> {
+        self.changed();
+        let _ns = self.st.ns.lock();
+        let ino = self.st.inner.create_tmpfile(dir, node)?;
+        self.discard_inode(ino);
+        Ok(ino)
+    }
+
     fn mkdir(&self, dir: Ino, name: &[u8], perm: u16, uid: u32, gid: u32) -> Result<Ino> {
         self.changed();
         let _ns = self.st.ns.lock();

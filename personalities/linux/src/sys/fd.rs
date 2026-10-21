@@ -129,6 +129,8 @@ pub fn fcntl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         F_GETFD => fs.cloexec(fd).map(|c| if c { FD_CLOEXEC } else { 0 }),
         F_SETFD => fs.set_cloexec(fd, a.ulong(2) & FD_CLOEXEC != 0).map(|()| 0),
         F_GETFL => Ok(u64::from(flags)),
+        // An O_PATH descriptor's status flags cannot be set (EBADF).
+        F_SETFL if flags & crate::sys::path::O_PATH != 0 => Err(Errno::EBADF),
         F_SETFL => fs.set_status_flags(fd, a.uint(2)).map(|()| 0),
         cmd @ (F_GETLK | F_SETLK | F_SETLKW | F_OFD_GETLK | F_OFD_SETLK | F_OFD_SETLKW) => {
             record_lock(k, fd, cmd, a.ptr(2), flags)

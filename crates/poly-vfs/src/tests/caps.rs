@@ -177,12 +177,16 @@ fn chown_needs_cap_chown_and_chmod_keeps_setgid_with_cap_fsetid() {
     // Root without CAP_FSETID loses it too.
     node.chmod(&root_without(&[cap::FSETID]), 0o2755).unwrap();
     assert_eq!(env.perm("/f"), 0o755);
-    // Setting the ids the file already has is no change: nothing cleared.
+    // Setting the ids the file already has is allowed, and like every
+    // successful chown clears the set-id bits (the spec of fchownat).
     node.chmod(&env.root, 0o6755).unwrap();
     let st = env.stat("/f").unwrap();
     node.chown(&env.root, Some(st.uid), Some(st.gid)).unwrap();
+    assert_eq!(env.perm("/f"), 0o755);
+    node.chmod(&env.root, 0o6755).unwrap();
     node.chown(&bob(), Some(st.uid), None).unwrap();
-    assert_eq!(env.perm("/f"), 0o6755);
+    node.chown(&bob(), None, None).unwrap();
+    assert_eq!(env.perm("/f"), 0o755);
     assert_eq!(node.chown(&alice(), Some(st.uid), None), Err(Errno::EPERM), "not the owner");
 }
 

@@ -69,6 +69,9 @@ struct Node {
     data: Data,
     /// Extended attributes (`user.`, `trusted.`, `security.`).
     xattrs: Xattrs,
+    /// Made by `create_tmpfile` and never named: `link` may give it its
+    /// first name.
+    linkable: bool,
 }
 
 enum Data {
@@ -155,6 +158,7 @@ impl Tmpfs {
             pins: 0,
             xattrs: Xattrs::new(),
             data: Data::Dir(Dir::new(ROOT)),
+            linkable: false,
         };
         let mut nodes = BTreeMap::new();
         nodes.insert(ROOT, root);
@@ -419,6 +423,7 @@ impl Tmpfs {
             pins: 0,
             xattrs: Xattrs::new(),
             data,
+            linkable: false,
         }
     }
 
@@ -554,6 +559,23 @@ impl FileSystem for Tmpfs {
         Ok(ino)
     }
 
+    fn create_tmpfile(&self, dir: Ino, node: &NewNode) -> Result<Ino> {
+        if node.kind != FileType::Regular {
+            return Err(Errno::EINVAL);
+        }
+        let mut n = self.new_node(FileType::Regular, node.perm, node.uid, node.gid, Data::File(Pages::default()));
+        n.nlink = 0;
+        n.linkable = true;
+        let mut inner = self.inner.lock();
+        inner.live_dir(dir)?;
+        if let Some(limit) = inner.inode_limit
+            && inner.nodes.len() as u64 >= limit
+        {
+            return Err(Errno::ENOSPC);
+        }
+        Ok(inner.add(n))
+    }
+
     fn mkdir(&self, dir: Ino, name: &[u8], perm: u16, uid: u32, gid: u32) -> Result<Ino> {
         let n = self.new_node(FileType::Directory, perm, uid, gid, Data::Dir(Dir::new(dir)));
         let now = n.ctime;
@@ -587,7 +609,7 @@ impl FileSystem for Tmpfs {
         if target.kind == FileType::Directory {
             return Err(Errno::EPERM);
         }
-        if target.nlink == 0 {
+        if target.nlink == 0 && !target.linkable {
             // An unlinked (but open) file cannot get a name back.
             return Err(Errno::ENOENT);
         }
@@ -598,6 +620,7 @@ impl FileSystem for Tmpfs {
         inner.live_dir_mut(dir)?.insert(name, ino);
         let t = inner.node_mut(ino)?;
         t.nlink += 1;
+        t.linkable = false;
         t.ctime = now;
         inner.touch_dir(dir, now);
         Ok(())

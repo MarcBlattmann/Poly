@@ -723,9 +723,10 @@ fn fcntl_commands() {
     let k = &mut e.k;
     let p = s(k, 0, b"/dir/file");
     let fd = sys(k, nr::OPEN, &[p, 0o2002, 0]).unwrap();
-    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o2002), "F_GETFL: O_RDWR | O_APPEND");
+    // Every open on x86-64 is a large-file open (O_LARGEFILE, 0o100000).
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o102002), "F_GETFL: O_RDWR | O_APPEND | O_LARGEFILE");
     assert_eq!(sys(k, nr::FCNTL, &[fd, 4, 0o4000]), Ok(0), "F_SETFL O_NONBLOCK");
-    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o4002), "O_APPEND cleared, access mode kept");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o104002), "O_APPEND cleared, access mode kept");
     assert_eq!(sys(k, nr::FCNTL, &[fd, 2, 1]), Ok(0), "F_SETFD FD_CLOEXEC");
     assert_eq!(sys(k, nr::FCNTL, &[fd, 1, 0]), Ok(1));
     assert_eq!(sys(k, nr::FCNTL, &[fd, 0, 20]), Ok(20), "F_DUPFD");

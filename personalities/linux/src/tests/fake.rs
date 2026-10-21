@@ -981,6 +981,7 @@ impl LinuxKernel for FakeKernel {
             CpuTimesOf::Process => Some(c[1]),
             CpuTimesOf::Children => Some(c[2]),
             CpuTimesOf::Reaped(_) => Some(c[2]),
+            CpuTimesOf::OtherProcess(pid) => self.procs.contains_key(&pid).then_some(CpuTimes::default()),
         }
     }
 

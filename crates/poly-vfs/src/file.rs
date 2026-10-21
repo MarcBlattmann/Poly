@@ -175,6 +175,8 @@ impl OpenFile {
             | OpenFlags::DIRECT.0
             | OpenFlags::LARGEFILE.0
             | OpenFlags::NOATIME.0
+            | OpenFlags::DIRECTORY.0
+            | OpenFlags::NOFOLLOW.0
             | OpenFlags::PATH.0,
     );
 

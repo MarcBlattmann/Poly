@@ -262,9 +262,12 @@ fn clock_nanosleep_absolute_and_relative() {
     assert_eq!(k.deadlines.last(), Some(&Some(d)));
     // Errors.
     let call = |k: &mut FakeKernel, clock: i32| sys(k, nr::CLOCK_NANOSLEEP, &[clock as u64, 0, TS, 0]);
-    assert_eq!(call(&mut k, id::CLOCK_THREAD_CPUTIME_ID), Err(Errno::EINVAL));
+    assert_eq!(call(&mut k, id::CLOCK_THREAD_CPUTIME_ID), Err(Errno::EOPNOTSUPP));
+    assert_eq!(call(&mut k, id::CLOCK_MONOTONIC_RAW), Err(Errno::EOPNOTSUPP));
     assert_eq!(call(&mut k, 77), Err(Errno::EINVAL));
-    assert_eq!(call(&mut k, id::CLOCK_PROCESS_CPUTIME_ID), Err(Errno::EOPNOTSUPP));
+    assert_eq!(call(&mut k, -1), Err(Errno::EINVAL));
+    // The fake kernel does not account CPU time.
+    assert_eq!(call(&mut k, id::CLOCK_PROCESS_CPUTIME_ID), Err(Errno::EINVAL));
     let t = put_ts(&mut k, TS, 0, 2_000_000_000);
     assert_eq!(sys(&mut k, nr::CLOCK_NANOSLEEP, &[1, 0, t, 0]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::CLOCK_NANOSLEEP, &[1, 0, UNMAPPED, 0]), Err(Errno::EFAULT));
@@ -472,15 +475,24 @@ fn timer_create_ids_and_notifications() {
     assert_eq!(notify(p, 2), Notify::None);
     assert_eq!(notify(p, 3), Notify::Signal { signo: SIGUSR1, value: 7, thread: Some(101) });
     assert!(p.timers.get(1).unwrap().realtime && !p.timers.get(0).unwrap().realtime);
-    // A deleted id is used again.
+    // Ids go up: a deleted one is not given out again at once.
     assert_eq!(sys(&mut k, nr::TIMER_DELETE, &[1]), Ok(0));
-    assert_eq!(create(&mut k, id::CLOCK_MONOTONIC, 0), Ok(1));
-    assert_eq!(sys(&mut k, nr::TIMER_DELETE, &[1]), Ok(0));
+    assert_eq!(create(&mut k, id::CLOCK_MONOTONIC, 0), Ok(4));
+    assert_eq!(sys(&mut k, nr::TIMER_DELETE, &[4]), Ok(0));
     assert_eq!(sys(&mut k, nr::TIMER_DELETE, &[1]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::TIMER_DELETE, &[u64::MAX]), Err(Errno::EINVAL));
     // Errors.
-    for clock in [id::CLOCK_MONOTONIC_RAW, id::CLOCK_REALTIME_COARSE, 8, 11, 99, -2] {
+    for clock in [99, -2] {
         assert_eq!(create(&mut k, clock, 0), Err(Errno::EINVAL), "clock {clock}");
+    }
+    // Clocks that exist but cannot drive a timer.
+    for clock in [id::CLOCK_MONOTONIC_RAW, id::CLOCK_REALTIME_COARSE] {
+        assert_eq!(create(&mut k, clock, 0), Err(Errno::EOPNOTSUPP), "clock {clock}");
+    }
+    // CLOCK_REALTIME_ALARM and CLOCK_TAI time timers (timer_create's spec).
+    for clock in [8, 11] {
+        let t = create(&mut k, clock, 0).unwrap();
+        assert_eq!(sys(&mut k, nr::TIMER_DELETE, &[t as u64]), Ok(0), "clock {clock}");
     }
     assert_eq!(create(&mut k, id::CLOCK_PROCESS_CPUTIME_ID, 0), Err(Errno::EINVAL), "CPU time not accounted");
     for (notify, signo, tid) in [(SIGEV_THREAD, SIGALRM as i32, 0), (3, 10, 0), (SIGEV_SIGNAL, 0, 0), (0, 65, 0)] {
@@ -492,7 +504,8 @@ fn timer_create_ids_and_notifications() {
     assert_eq!(sys(&mut k, nr::TIMER_CREATE, &[1, UNMAPPED, OUT2]), Err(Errno::EFAULT));
     // The id cannot be written: no timer is left behind.
     assert_eq!(sys(&mut k, nr::TIMER_CREATE, &[1, 0, UNMAPPED]), Err(Errno::EFAULT));
-    assert_eq!(create(&mut k, id::CLOCK_MONOTONIC, 0), Ok(1));
+    let next = create(&mut k, id::CLOCK_MONOTONIC, 0).unwrap();
+    assert!(k.me().timers.get(next - 1).is_none(), "the timer whose id could not be written is gone");
     // CPU-time clocks, where accounted; the thread clock is the caller's.
     k.cpu = Some([CpuTimes::default(); 3]);
     let t = create(&mut k, id::CLOCK_THREAD_CPUTIME_ID, 0).unwrap();
