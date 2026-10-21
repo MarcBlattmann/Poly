@@ -60,6 +60,7 @@ pub mod registry;
 pub mod section;
 pub mod services;
 pub mod sync;
+pub mod sysinfo;
 pub mod system;
 pub mod threads;
 pub mod vm;
@@ -244,5 +245,8 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         PolyResumeApc => Ok(k.resume_apc()),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
+        QuerySystemTime => sysinfo::query_system_time(k, regs),
+        QueryPerformanceCounter => sysinfo::query_performance_counter(k, regs),
+        QuerySystemInformation => sysinfo::query_system_information(k, regs),
     }
 }

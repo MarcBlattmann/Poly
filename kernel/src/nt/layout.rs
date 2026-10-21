@@ -122,6 +122,17 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Err(e) => crate::kprintln!("nt: layout: cannot install ntdll.dll ({:#x})", e.0),
         }
     }
+    // And kernelbase.dll and kernel32.dll (ADR 0079).
+    for (name, bytes) in [("kernelbase.dll", super::KERNELBASE), ("kernel32.dll", super::KERNEL32)] {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_file(&vr, &root, "Windows\\System32", name, bytes) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
+        }
+    }
     let synced = sync::sync(&mut sys.registry.reg, &POLY_USER, super::registry::filetime_now());
     crate::kprintln!(
         "nt: C: is {}; {} folders made, {} registry values synced",
