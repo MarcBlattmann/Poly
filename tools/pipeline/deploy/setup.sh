@@ -64,7 +64,7 @@ ROLES=("$SPEC_USER:$SPEC_HOME:spec agent:spec" "$IMPL_USER:$IMPL_HOME:implemente
 SUDOERS=/etc/sudoers.d/poly-pipeline
 UNIT=/etc/systemd/system/poly-pipeline.service
 # What setup.sh makes in $POLY; anything else there is from somewhere else.
-KNOWN_ENTRIES=" bin git runner inbox spec impl heldout generated lost+found "
+KNOWN_ENTRIES=" bin git runner inbox spec-inbox spec impl heldout generated lost+found "
 
 say() { printf '==> %s\n' "$*"; }
 warn() { printf '    warning: %s\n' "$*"; }
@@ -293,6 +293,7 @@ dirs=(
     "$POLY/runner/state $RUNNER_USER $RUNNER_GROUP 0750"
     "$POLY/runner/log $RUNNER_USER $RUNNER_GROUP 0750"
     "$POLY/inbox $RUNNER_USER $IMPL_USER 2750"
+    "$POLY/spec-inbox $RUNNER_USER $SPEC_USER 2750"
     "$SPEC_HOME $SPEC_USER $RUNNER_GROUP 2750"
     "$IMPL_HOME $IMPL_USER $RUNNER_GROUP 2750"
     "$POLY/heldout $SPEC_USER $RUNNER_GROUP 2750"
@@ -454,10 +455,11 @@ if [ "$DRY" = 0 ]; then
         [ "$(getent passwd "$name" | cut -d: -f6)" = "$home" ] || die "$name's home is not $home"
     done
     if sudo -u "$IMPL_USER" test -r "$POLY/heldout" || sudo -u "$IMPL_USER" test -r "$POLY/generated" ||
-        sudo -u "$IMPL_USER" test -r "$POLY/runner" || sudo -u "$IMPL_USER" test -r "$SPEC_HOME"; then
-        die "$IMPL_USER can read the held-out store, the generated tests, the runner or the spec agent's home"
+        sudo -u "$IMPL_USER" test -r "$POLY/runner" || sudo -u "$IMPL_USER" test -r "$SPEC_HOME" ||
+        sudo -u "$IMPL_USER" test -r "$POLY/spec-inbox"; then
+        die "$IMPL_USER can read the held-out store, the generated tests, the runner, the spec agent's home or inbox"
     fi
-    echo "    $IMPL_USER cannot read $POLY/heldout, generated, runner or spec: good"
+    echo "    $IMPL_USER cannot read $POLY/heldout, generated, runner, spec or spec-inbox: good"
     sudo -u "$RUNNER_USER" sudo -n -l -u "$IMPL_USER" "$POLY/bin/poly-role" implementer sync x y >/dev/null ||
         die "$RUNNER_USER cannot run the implementer wrapper through sudo"
     sudo -u "$RUNNER_USER" sudo -n -l -u "$SPEC_USER" "$POLY/bin/poly-role" spec sync x y >/dev/null ||

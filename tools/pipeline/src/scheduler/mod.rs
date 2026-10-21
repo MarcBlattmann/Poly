@@ -210,11 +210,16 @@ fn status(a: &Args) -> Result<u8> {
             _ => s.last_result.clone().unwrap_or_default(),
         };
         println!(
-            "{:<40} {:<15} cycle {}/{} {}{}  {}",
+            "{:<40} {:<15} cycle {}/{}{} {}{}  {}",
             s.entry,
             s.step.name(),
             s.cycle,
             cfg.max_cycles,
+            if s.spec_cycle > 0 {
+                format!(" (spec check {}/{})", s.spec_cycle, cfg.spec_cycles)
+            } else {
+                String::new()
+            },
             s.updated,
             if running { " (running)" } else { "" },
             detail
