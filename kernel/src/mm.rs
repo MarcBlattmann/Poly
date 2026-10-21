@@ -29,6 +29,31 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     unsafe { arch::paging::init(memory) }
 }
 
+/// Fill `[start, start + len)` with [`poly_mem::STACK_PAINT`].
+///
+/// # Safety
+/// The range is mapped, writable, 8-byte aligned and not in use.
+pub unsafe fn paint_stack(start: u64, len: u64) {
+    for i in 0..len / 8 {
+        // SAFETY: inside the range the caller vouches for.
+        unsafe { ((start + 8 * i) as *mut u64).write_volatile(poly_mem::STACK_PAINT) };
+    }
+}
+
+/// The bytes of the painted stack `[start, start + len)` ever used: from
+/// its top down to the lowest word that lost its paint.
+///
+/// # Safety
+/// The range is mapped and 8-byte aligned. It may be in use (by another
+/// CPU, even): the words are read one at a time, volatile.
+pub unsafe fn stack_used(start: u64, len: u64) -> u64 {
+    // SAFETY: inside the range the caller vouches for.
+    let untouched = poly_mem::untouched_words((len / 8) as usize, |i| unsafe {
+        ((start + 8 * i as u64) as *const u64).read_volatile()
+    });
+    len - 8 * untouched as u64
+}
+
 crate::kernel_test! {
     fn direct_map_covers_all_ram(env: &TestEnv) -> TestResult {
         use crate::frames::FRAMES;

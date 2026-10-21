@@ -148,7 +148,7 @@ impl StackFrames {
         let virt = arch::phys_to_virt(phys).expect("thread stacks come from RAM in the direct map");
         // SAFETY: the block was just allocated for this stack and nothing
         // else refers to it; the direct map maps it read-write.
-        unsafe { paint(virt, STACK_SIZE) };
+        unsafe { mm::paint_stack(virt, STACK_SIZE) };
         Ok(StackFrames { phys })
     }
 
@@ -197,7 +197,7 @@ impl Stack {
     fn used(&self) -> u64 {
         // SAFETY: the stack's top `usable` bytes are mapped while its
         // thread exists, and only read here.
-        unsafe { used(self.top() - self.usable, self.usable) }
+        unsafe { mm::stack_used(self.top() - self.usable, self.usable) }
     }
 
     /// Unmap the stack of a reaped thread; its frames can be freed then.
@@ -208,31 +208,6 @@ impl Stack {
         unsafe { mm::unmap_thread_stack(self.top() - self.usable, self.usable) };
         StackFrames { phys: self.phys }
     }
-}
-
-/// Fill `[start, start + len)` with [`poly_mem::STACK_PAINT`].
-///
-/// # Safety
-/// The range is mapped, writable, 8-byte aligned and not in use.
-pub(crate) unsafe fn paint(start: u64, len: u64) {
-    for i in 0..len / 8 {
-        // SAFETY: inside the range the caller vouches for.
-        unsafe { ((start + 8 * i) as *mut u64).write_volatile(poly_mem::STACK_PAINT) };
-    }
-}
-
-/// The bytes of the painted stack `[start, start + len)` ever used: from
-/// its top down to the lowest word that lost its paint.
-///
-/// # Safety
-/// The range is mapped and 8-byte aligned. It may be in use (by another
-/// CPU, even): the words are read one at a time, volatile.
-pub(crate) unsafe fn used(start: u64, len: u64) -> u64 {
-    // SAFETY: inside the range the caller vouches for.
-    let untouched = poly_mem::untouched_words((len / 8) as usize, |i| unsafe {
-        ((start + 8 * i as u64) as *const u64).read_volatile()
-    });
-    len - 8 * untouched as u64
 }
 
 /// Bytes of each thread stack that are mapped: [`STACK_SIZE`], or less with
@@ -271,6 +246,15 @@ pub fn report_stacks() {
         }
         None => crate::kprintln!("stacks: the thread table is locked"),
     }
+    for cpu in 0..arch::percpu::count() {
+        if let Some(bytes) = arch::irqstack::used(cpu) {
+            crate::kprintln!(
+                "stacks: CPU {cpu}'s interrupt stack: deepest use {bytes} of {} bytes",
+                arch::irqstack::SIZE
+            );
+        }
+    }
+    crate::kprintln!("stacks: interrupts nested on an interrupt stack: {}", arch::irqstack::nested());
 }
 
 /// The deepest any thread stack was ever used so far (the threads
@@ -473,8 +457,9 @@ fn spawn_with(
 ) -> Result<ThreadId, SpawnError> {
     let stack = StackFrames::allocate()?;
     let _irq = InterruptsOff::new();
-    let dead = reap(&mut THREADS.lock());
-    bury(dead);
+    // On the interrupt stack, as in `finish_switch`: threads are spawned
+    // deep inside system calls (`clone`).
+    arch::irqstack::run_on(|| bury(reap(&mut THREADS.lock())));
     let mut t = THREADS.lock();
     assert!(t.ready, "thread::spawn before thread::init");
     let id = match t.sched.spawn(this_cpu(), cpus) {
@@ -586,17 +571,23 @@ fn switch(sw: Switch) {
 /// Runs on the thread just switched in (on the CPU that switched to it),
 /// first thing: the switch is complete, so the thread switched away from
 /// may run elsewhere now; reap what can be reaped.
+///
+/// On this CPU's interrupt stack (ADR 0061): the thread switched to may be
+/// one resumed deep inside a system call, or on its way out of an
+/// interrupt, and dropping an address space takes a fair amount of stack.
 fn finish_switch() {
-    let (dead, kicks) = {
-        let mut t = THREADS.lock();
-        t.sched.saved(this_cpu());
-        let dead = reap(&mut t);
-        (dead, t.sched.take_kicks())
-    };
-    kick(kicks);
-    // THREADS is unlocked again: freeing address spaces may take a while
-    // and takes the frame allocator and the heap.
-    bury(dead);
+    arch::irqstack::run_on(|| {
+        let (dead, kicks) = {
+            let mut t = THREADS.lock();
+            t.sched.saved(this_cpu());
+            let dead = reap(&mut t);
+            (dead, t.sched.take_kicks())
+        };
+        kick(kicks);
+        // THREADS is unlocked again: freeing address spaces may take a
+        // while and takes the frame allocator and the heap.
+        bury(dead);
+    });
 }
 
 /// Drop the user state [`reap`] took out. This runs in whichever thread
@@ -909,21 +900,23 @@ pub fn detach(id: ThreadId) -> Result<(), Error> {
     THREADS.lock().sched.detach(id)
 }
 
-/// Timer interrupt entry point: account one tick to this CPU's running
+/// Timer interrupt exit point: account one tick to this CPU's running
 /// thread and, if its time slice is used up and the CPU has another thread
 /// to run, switch to that thread. Returns whether it switched (once this
 /// thread runs again).
 ///
-/// The timer handler must call it:
+/// The way out of the timer interrupt calls it (`irq::run_deferred`):
 /// - with interrupts disabled, as they are inside an interrupt gate;
 /// - after acknowledging the interrupt (EOI): the thread switched to may run
 ///   for a long time before this returns, and a new thread never returns
 ///   through this handler at all;
-/// - on the interrupted thread's own kernel stack, not an IST stack. The
-///   handler's frames and the trap frame stay on that stack while the thread
-///   is switched out; when it is resumed this returns and the handler
-///   returns with `iretq` as usual (on whichever CPU resumed it). An IST
-///   stack would be overwritten by the next interrupt in the meantime.
+/// - on the interrupted thread's own kernel stack, not the CPU's interrupt
+///   stack or an IST stack, which the next interrupt would reuse while the
+///   thread is switched out. The trap frame stays on the thread's stack;
+///   when it is resumed this returns and the interrupt returns with `iretq`
+///   as usual (on whichever CPU resumed it). The handler's own work ran on
+///   the interrupt stack before, so this is all an interrupt adds to the
+///   thread's stack (ADR 0061).
 ///
 /// The interrupted thread may have been anywhere except inside a
 /// spinlock's critical section (`THREADS` included): spinlocks keep
@@ -940,15 +933,14 @@ pub fn preempt_tick() -> bool {
     sw.map(switch).is_some()
 }
 
-/// Called by the timer interrupt handler on every tick, under the same rules
-/// as [`preempt_tick`]: wake the sleepers whose time is up, then account the
-/// tick (and maybe switch threads).
-pub fn on_timer_tick() -> bool {
+/// Called by the timer interrupt handler on every tick, on the interrupt
+/// stack: wake the sleepers whose time is up. The handler's way out then
+/// accounts the tick ([`preempt_tick`]).
+pub fn on_timer_tick() {
     wake_sleepers();
-    preempt_tick()
 }
 
-/// The reschedule IPI's handler (same rules as [`preempt_tick`]): switch if
+/// The reschedule IPI's way out (same rules as [`preempt_tick`]): switch if
 /// this CPU is idle and got a thread to run, or its running thread may no
 /// longer run here.
 pub fn on_reschedule() {
@@ -1000,6 +992,14 @@ fn wake_sleepers() {
     if next == u64::MAX || now < next || NEXT_WAKE.compare_exchange(next, u64::MAX, SeqCst, SeqCst).is_err() {
         return;
     }
+    wake_due(now);
+}
+
+/// The part of [`wake_sleepers`] for when a deadline is due: out of line,
+/// so the tick's frame stays small when none is (most ticks).
+#[cold]
+#[inline(never)]
+fn wake_due(now: u64) {
     let _irq = InterruptsOff::new();
     let kicks = {
         let mut t = THREADS.lock();

@@ -9,12 +9,14 @@
 //! interrupts off (the scheduler only switches threads from interrupts,
 //! yields and blocks).
 //!
-//! The first three words are for the assembly entry paths (`syscall.rs`):
+//! The first four words are for the assembly entry paths (`syscall.rs`,
+//! `idt.rs`):
 //!
 //! ```text
 //! gs:[0]   kernel stack top of the running thread (syscall switches to it)
 //! gs:[8]   the user RSP while the syscall entry builds its frame
 //! gs:[16]  this area's own address
+//! gs:[24]  top of this CPU's interrupt stack, 0 until it has one (irqstack.rs)
 //! ```
 //!
 //! GS holds the user's base in ring 3; every entry from ring 3 swaps it
@@ -29,7 +31,7 @@
 
 use super::cpu;
 use core::arch::asm;
-use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 /// Most CPUs the kernel runs on (the scheduler's table has room for this
 /// many idle threads).
@@ -38,7 +40,7 @@ pub const MAX_CPUS: usize = 16;
 /// PCIDs per CPU (12 bits would allow 4096; 256 is plenty).
 pub const PCIDS: usize = 256;
 
-/// One CPU's data. `#[repr(C)]`: the assembly uses the first three fields.
+/// One CPU's data. `#[repr(C)]`: the assembly uses the first four fields.
 #[repr(C)]
 #[derive(Debug)]
 pub struct PerCpu {
@@ -49,6 +51,12 @@ pub struct PerCpu {
     pub(super) user_rsp: AtomicU64,
     /// Offset 16: the address of this area.
     this: AtomicU64,
+    /// Offset 24: the top of this CPU's interrupt stack, which the entry of
+    /// every external interrupt and IPI switches to; 0 until it is set up.
+    pub(super) interrupt_stack: AtomicU64,
+    /// Work an interrupt handler left for the way out, back on the
+    /// interrupted thread's stack (`irq::PENDING_*` bits).
+    pub(super) irq_pending: AtomicU8,
     /// The CPU's number: 0 for the boot CPU, then in start-up order.
     index: AtomicUsize,
     /// Its local APIC ID.
@@ -86,6 +94,8 @@ impl PerCpu {
             kernel_rsp: AtomicU64::new(0),
             user_rsp: AtomicU64::new(0),
             this: AtomicU64::new(0),
+            interrupt_stack: AtomicU64::new(0),
+            irq_pending: AtomicU8::new(0),
             index: AtomicUsize::new(0),
             apic_id: AtomicU32::new(0),
             current: AtomicU64::new(0),
@@ -146,6 +156,10 @@ impl Default for PerCpu {
         PerCpu::new()
     }
 }
+
+/// Offset of [`PerCpu::interrupt_stack`], for the interrupt entry.
+pub(super) const INTERRUPT_STACK_OFFSET: usize = core::mem::offset_of!(PerCpu, interrupt_stack);
+const _: () = assert!(INTERRUPT_STACK_OFFSET == 24);
 
 /// The boot CPU's area.
 static BSP: PerCpu = PerCpu::new();

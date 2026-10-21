@@ -196,7 +196,7 @@ irq_stubs:
     .balign 16
     pushq $0
     pushq $irq_stub_vector
-    jmp isr_common
+    jmp irq_common
     .set irq_stub_vector, irq_stub_vector + 1
     .endr
     .balign 16
@@ -234,6 +234,59 @@ isr_common:
 3:
     cld
     call {dispatch}
+    jmp trap_return
+
+    /* External interrupts and IPIs: the same frame, on the stack the CPU
+       put it (the interrupted thread's), but the handler runs on this
+       CPU's interrupt stack (gs:[24], 0 until it has one; irqstack.rs).
+       rbx (saved in the frame, preserved by the calls) keeps the frame's
+       address. Then back on the thread's stack for the way out, which may
+       switch threads or deliver a signal. An interrupt that finds the CPU
+       on its interrupt stack already stays there. */
+irq_common:
+    testb $3, 24(%rsp)          /* saved CS: from ring 3? */
+    jz 1f
+    swapgs
+1:
+    push %rax
+    push %rbx
+    push %rcx
+    push %rdx
+    push %rsi
+    push %rdi
+    push %rbp
+    push %r8
+    push %r9
+    push %r10
+    push %r11
+    push %r12
+    push %r13
+    push %r14
+    push %r15
+    cmpb $0, {smap}(%rip)
+    je 2f
+    clac
+2:
+    testb $3, 144(%rsp)         /* saved CS, now above 15 registers */
+    jz 3f
+    xor %ebp, %ebp
+3:
+    cld
+    mov %rsp, %rbx
+    mov %gs:{irq_stack}, %rax
+    test %rax, %rax
+    jz 4f
+    mov %rax, %rcx
+    sub %rsp, %rcx              /* top - rsp: at most the size if on it */
+    cmp ${irq_stack_size}, %rcx
+    jbe 4f
+    mov %rax, %rsp
+4:
+    mov %rbx, %rdi
+    call {irq_entry}
+    mov %rbx, %rsp
+    mov %rbx, %rdi
+    call {irq_exit}
 
     /* The one way out of the kernel to an interrupted context or to ring 3
        (the syscall entry and enter_user_frame jump here too): rsp points
@@ -337,6 +390,10 @@ isr_stub_table:
     .endr
 "#,
     dispatch = sym trap_dispatch,
+    irq_entry = sym irq_entry,
+    irq_exit = sym irq_exit,
+    irq_stack = const super::percpu::INTERRUPT_STACK_OFFSET,
+    irq_stack_size = const super::irqstack::SIZE,
     smap = sym super::usercopy::SMAP,
     options(att_syntax)
 );
@@ -442,14 +499,7 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
     if vector == NMI && super::smp::stopped_by_nmi() {
         super::cpu::halt_forever();
     }
-    if vector >= u64::from(FIRST_INTERRUPT_VECTOR) {
-        super::irq::set_interrupted_user(from_user);
-        super::irq::dispatch(vector as u8);
-        if from_user {
-            crate::user::return_to_user();
-        }
-        return;
-    }
+    debug_assert!(vector < u64::from(FIRST_INTERRUPT_VECTOR), "interrupts enter through irq_common");
     // An NMI or machine check that happens to arrive in ring 3 is not the
     // thread's doing (and runs on an IST stack): it is handled, or not, as
     // in ring 0.
@@ -482,7 +532,9 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
             let cr2 = if v == PAGE_FAULT || v == DOUBLE_FAULT { super::cpu::read_cr2() } else { 0 };
             let overflow = StackOverflow([cr2, frame.rsp].into_iter().find_map(|addr| {
                 let fixed = super::paging::stack_guard_hit(addr).map(Guard::Fixed);
-                fixed.or_else(|| crate::thread::stack_guard_hit(addr).map(Guard::Thread))
+                fixed
+                    .or_else(|| crate::thread::stack_guard_hit(addr).map(Guard::Thread))
+                    .or_else(|| super::irqstack::guard_hit(addr).map(Guard::Interrupt))
             }));
             super::backtrace::set_fault_origin(frame.rip, frame.rbp);
             panic!(
@@ -493,6 +545,35 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
     }
 }
 
+/// Called by `irq_common` for an external interrupt or IPI, on this CPU's
+/// interrupt stack (`irqstack.rs`) with interrupts disabled: the handler's
+/// part, which must not switch threads or block.
+extern "C" fn irq_entry(frame: *mut TrapFrame) {
+    // SAFETY: the stub passes the complete frame it just pushed; nothing
+    // else refers to it during these reads.
+    let (vector, from_user) = unsafe { ((*frame).vector, (*frame).in_user_mode()) };
+    super::irqstack::note_entry(frame as u64);
+    super::irq::set_interrupted_user(from_user);
+    super::irq::dispatch(vector as u8);
+}
+
+/// Called by `irq_common` after [`irq_entry`], back on the interrupted
+/// stack (the thread's), interrupts still disabled: what the handler left
+/// for the way out (a preemption, a reschedule), then a return to ring 3
+/// gets its signals. Not if the interrupt arrived on the interrupt stack:
+/// that stack cannot be switched away from.
+extern "C" fn irq_exit(frame: *mut TrapFrame) {
+    // SAFETY: as in `irq_entry`; the frame is on this stack, below the code
+    // that was interrupted.
+    let from_user = unsafe { (*frame).in_user_mode() };
+    if !super::irqstack::holds(frame as u64) {
+        super::irq::run_deferred();
+    }
+    if from_user {
+        crate::user::return_to_user();
+    }
+}
+
 /// A stack guard a fault hit.
 enum Guard {
     /// The guard page below one of the stacks in the kernel image (boot,
@@ -500,6 +581,8 @@ enum Guard {
     Fixed(&'static str),
     /// The guard below a kernel thread's stack.
     Thread(crate::thread::Overflowed),
+    /// The guard below a CPU's interrupt stack, by CPU number.
+    Interrupt(usize),
 }
 
 /// Names the stack whose guard a fault hit, if any.
@@ -513,6 +596,9 @@ impl core::fmt::Display for StackOverflow {
             }
             Some(Guard::Thread(thread)) => {
                 write!(f, "\nkernel stack overflow in thread {thread}: hit the guard below its stack")
+            }
+            Some(Guard::Interrupt(cpu)) => {
+                write!(f, "\nkernel stack overflow on CPU {cpu}'s interrupt stack: hit the guard below it")
             }
             None => Ok(()),
         }
