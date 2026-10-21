@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lstat                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4, the same tests repeated on tmpfs (/dev/shm); static freestanding test programs, raw syscalls"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  lstat(path, statbuf) is system call 6. It fills the 144-byte x86-64
+  struct stat (asm/stat.h; the same layout and contents as stat (4), fstat
+  (5) and newfstatat (262)) for path and returns 0. It is exactly
+  newfstatat(AT_FDCWD, path, statbuf, AT_SYMLINK_NOFOLLOW): when the last
+  name of the path is a symbolic link, the link itself is reported, not
+  its target. Symbolic links in earlier components are followed as usual,
+  and a trailing slash (or a trailing "/." ) after a link makes the link be
+  followed too. Relative paths start at the working directory. Needs no
+  permission on the file itself, only search (x) on every directory walked.
+returns:
+  success: "0, and the 144 bytes of statbuf are written (the byte after it is not touched); on any error the buffer is left unchanged"
+  struct_fields: "st_dev, st_ino, st_nlink, st_mode (type | permission bits incl. 04000/02000/01000), st_uid, st_gid, st_rdev, st_size, st_blksize, st_blocks (512-byte units), then atime, mtime, ctime as seconds + nanoseconds (nanoseconds < 1e9); the 4-byte padding after st_gid and the three trailing reserved longs are 0"
+  symbolic_link: "S_IFLNK | 0777 whatever the umask (chmod through the link changes the target, the link stays 0777); st_size = byte length of the target text without NUL (1 to 4095; a 6-character UTF-8 string of 5 bytes reports 5); its own st_ino, the same st_dev as its directory; st_nlink 1 (2 after a hard link to the link itself, which is still S_IFLNK); st_uid/st_gid = the creator's effective uid/gid; st_rdev 0; its own timestamps (utimensat with AT_SYMLINK_NOFOLLOW sets them; the target's times are separate)"
+  dangling_or_looping_link: "0 and S_IFLNK: lstat never resolves the last link, so a link to a missing target, a link to itself and a two-link loop are all reported as links"
+  link_followed_when: "the link is not the last component (D/link/f), or a trailing slash or \"/.\" follows it (D/link/ and D/link/. report the target directory; D/link/.. is the parent of the target, not of the link). A chain link -> link -> dir: lstat(chain) is the first link; lstat(chain/) is the final directory"
+  regular_file: "S_IFREG | perms (as created through the umask, or set by chmod); st_size = bytes; st_nlink = number of names; mode 000 still answers"
+  directory: "S_IFDIR | perms; st_nlink = 2 + number of subdirectories (regular files do not count; rmdir of a subdirectory lowers it); a trailing slash is allowed; a directory without permissions can itself be lstat'ed (only its parent needs x)"
+  fifo: "S_IFIFO | perms (mknodat), size 0, nlink 1"
+  socket: "a bound AF_UNIX socket's name: S_IFSOCK | (0777 & ~umask), size 0; stays S_IFSOCK after the socket is closed"
+  char_device: "/dev/null: S_IFCHR | 0666, st_rdev = (1 << 8) | 3, size 0"
+  root: "\"/\", \"//\", \"/..\" and \"/../../..\" all report the root directory (same st_ino and st_dev)"
+  slashes: "repeated slashes count as one (D//sub///inner// is D/sub/inner); a path of \"/./././...\" up to 4095 bytes plus NUL resolves"
+  hard_links: "all names of a file share st_ino and st_dev; st_nlink counts them and drops on unlink"
+  size_and_blocks: "st_size follows writes, ftruncate and truncate; st_blocks is 0 for an empty file and for a file that is only a hole (truncate to 10 MiB), at least 8 after writing 4096 bytes; st_blksize > 0"
+  relative_paths: "relative to the working directory: \"/\" at start (\".\" is the root, \"tmp/...\" works), the new directory after chdir; \"./l\" and \"sub/../l\" still report the link l itself"
+  removed_working_directory: "after rmdir of the working directory, lstat(\".\") is 0 with S_IFDIR and st_nlink 0, lstat(\"..\") is 0 and reports the former parent, any other name in it is ENOENT"
+errors:
+  missing: "ENOENT (2): a missing last name, a missing directory on the way, the empty path \"\""
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components, a trailing slash or \"/.\" after a regular file or FIFO, a trailing slash after a link to a file"
+  dangling_link_not_last: "ENOENT: D/dangling/ and D/dangling/x"
+  loop_not_last: "ELOOP (40): a looping link followed by a trailing slash or more components (D/a/, D/a/x, D/self/x)"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more (255 is fine); a path of 4096 bytes or more counting its NUL (4095 + NUL is fine)"
+  search_permission: "EACCES (13): a directory on the way without x for the caller, even when it has r (0600), and whether or not the next name exists; x alone (0100) is enough. Root passes this check (the names are then found, or ENOENT)"
+  bad_path_pointer: "EFAULT (14): NULL, address 1, a kernel address"
+  bad_buffer: "EFAULT: NULL, a read-only page, or 144 bytes that run into an unmapped page (144 bytes ending exactly at the end of a mapping are fine)"
+  path_order: "when a path has more than one problem, the first in this order decides: (1) the string as a whole: unreadable EFAULT, 4096 bytes or more ENAMETOOLONG, empty ENOENT, whatever its components are; (2) the components from left to right as the walk reaches them, links followed on the way: missing or dangling ENOENT (a later \"..\" does not undo it), a non-directory followed by more ENOTDIR, a loop ELOOP, no search permission EACCES, a name over 255 bytes ENAMETOOLONG. So D/nope/<256 bytes>, D/nope/../<256 bytes> are ENOENT, D/f/<256 bytes> is ENOTDIR, D/loop/<256 bytes> is ELOOP, D/<256 bytes>/nope is ENAMETOOLONG. (3) Only a path that resolves is checked against the buffer: a missing path or ENOTDIR with a NULL buffer reports the path error, not EFAULT; an unreadable path with an unreadable buffer is EFAULT. The same on ext4 and tmpfs."
+side_effects: "none: no timestamp of the link, its target or any directory changes (repeated lstat calls see identical atime and ctime)"
+threading: "no thread-specific behaviour; the working directory used for relative paths is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
