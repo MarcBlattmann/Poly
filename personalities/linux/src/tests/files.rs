@@ -550,6 +550,57 @@ fn stat_lstat_newfstatat_and_fstat_by_empty_path() {
 }
 
 #[test]
+fn stat_writes_144_bytes_and_resolves_the_path_first() {
+    let mut e = env();
+    let k = &mut e.k;
+    let file = s(k, 0, b"/dir/file");
+    let out = scratch(OUT);
+    k.poke(out, &[0xa5; 200]);
+    assert_eq!(sys(k, nr::STAT, &[file, out]), Ok(0));
+    assert_eq!(k.peek(out + 144, 56), [0xa5; 56], "nothing past the struct");
+    assert_eq!(k.peek(out + 132, 12), [0; 12], "the reserved words");
+    assert_eq!(k.peek(out + 36, 4), [0; 4], "the padding after st_gid");
+    let by_at = k.peek(out, 144);
+    assert_eq!(sys(k, nr::NEWFSTATAT, &[AT, file, out, 0]), Ok(0));
+    assert_eq!(k.peek(out, 144), by_at, "the same bytes as newfstatat");
+    // A failed call writes nothing.
+    let missing = s(k, 0x100, b"/dir/nope");
+    k.poke(out, &[0xa5; 200]);
+    assert_eq!(sys(k, nr::STAT, &[missing, out]), Err(Errno::ENOENT));
+    assert_eq!(k.peek(out, 200), [0xa5; 200]);
+    // The path's errors come before the buffer's.
+    let not_dir = s(k, 0x200, b"/dir/file/x");
+    assert_eq!(sys(k, nr::STAT, &[missing, 0]), Err(Errno::ENOENT));
+    assert_eq!(sys(k, nr::STAT, &[not_dir, 0]), Err(Errno::ENOTDIR));
+    assert_eq!(sys(k, nr::STAT, &[0, 0]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::STAT, &[file, 0]), Err(Errno::EFAULT));
+    let read_only = read_only_page(k);
+    assert_eq!(sys(k, nr::STAT, &[file, read_only]), Err(Errno::EFAULT));
+    // A buffer ending at the end of writable memory is fine; one running
+    // past it is EFAULT.
+    let end = DATA + 16 * crate::abi::PAGE_SIZE;
+    assert_eq!(sys(k, nr::STAT, &[file, end - 144]), Ok(0));
+    assert_eq!(k.peek(end - 144, 144), by_at);
+    assert_eq!(sys(k, nr::STAT, &[file, end - 72]), Err(Errno::EFAULT));
+    // A path ending right at the end of readable memory is fine; one whose
+    // NUL would lie past it is EFAULT.
+    k.poke(end - 5, b"/dir\0");
+    assert_eq!(sys(k, nr::STAT, &[end - 5, out]), Ok(0));
+    k.poke(end - 4, b"/dir");
+    assert_eq!(sys(k, nr::STAT, &[end - 4, out]), Err(Errno::EFAULT));
+    // Empty paths and paths of 4096 bytes with the NUL.
+    let empty = s(k, 0x300, b"");
+    assert_eq!(sys(k, nr::STAT, &[empty, out]), Err(Errno::ENOENT));
+    let mut long = std::vec![b'/'; 4093];
+    long.extend_from_slice(b"dir");
+    long.push(0);
+    k.poke(scratch(0x1000), &long[1..]);
+    assert_eq!(sys(k, nr::STAT, &[scratch(0x1000), out]), Ok(0), "4095 bytes and the NUL");
+    k.poke(scratch(0x1000), &long);
+    assert_eq!(sys(k, nr::STAT, &[scratch(0x1000), out]), Err(Errno::ENAMETOOLONG));
+}
+
+#[test]
 fn statx_fills_the_basic_fields_and_the_mount_id() {
     let mut e = env();
     let k = &mut e.k;
