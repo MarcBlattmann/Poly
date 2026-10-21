@@ -423,7 +423,8 @@ impl Fake {
     /// A process started from [`test_exe`].
     pub fn new() -> Fake {
         let mut f = Fake::bare();
-        crate::exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, &test_exe(false), &fake_ntdll(), None, TID).expect("starts");
+        crate::exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, &test_exe(false), &fake_ntdll(), None, TID)
+            .expect("starts");
         f
     }
 

@@ -689,7 +689,11 @@ pub fn dll_image() -> (Vec<u8>, u64) {
             export("PolyLdrLogPtr", 2, code.rva(&raw const ldrdll_log_ptr)),
             export("PolyLdrTlsValue", 3, code.rva(&raw const ldrdll_tls_value)),
         ],
-        imports: vec![Import { dll: "ntdll.dll".into(), symbols: vec![Sym::name("NtTerminateProcess")], ..Import::default() }],
+        imports: vec![Import {
+            dll: "ntdll.dll".into(),
+            symbols: vec![Sym::name("NtTerminateProcess")],
+            ..Import::default()
+        }],
         tls: Some(Tls {
             template: [DLL_TLS.to_le_bytes(), [0; 8]].concat(),
             zero_fill: 16,
@@ -717,7 +721,11 @@ pub fn delay_dll_image() -> Vec<u8> {
         sections: vec![Section::new(".text", code.bytes.clone(), TEXT)],
         export_name: "polydly.dll".into(),
         exports: vec![export("PolyDelayed", 1, code.rva(&raw const ldrdly_delayed))],
-        imports: vec![Import { dll: "polyldr.dll".into(), symbols: vec![Sym::name("PolyLdrLog")], ..Import::default() }],
+        imports: vec![Import {
+            dll: "polyldr.dll".into(),
+            symbols: vec![Sym::name("PolyLdrLog")],
+            ..Import::default()
+        }],
         ..PeBuilder::default()
     };
     let lay = b.layout();

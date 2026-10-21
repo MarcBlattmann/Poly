@@ -416,7 +416,8 @@ fn flush_and_reload_keeps_non_volatile_keys_only() {
         .collect();
     let mut g = Fake::bare();
     g.sys = NtSystem::with_registry(NtSystem::default_registry(0, &mut |n: &str| files.get(n).cloned()));
-    crate::exec::start_process(&mut g.sys, &mut g.proc, &mut g.mem, &test_exe(false), &fake_ntdll(), None, TID).expect("starts");
+    crate::exec::start_process(&mut g.sys, &mut g.proc, &mut g.mem, &test_exe(false), &fake_ntdll(), None, TID)
+        .expect("starts");
     let k2 = open_ok(&mut g, "\\Registry\\Machine\\SOFTWARE\\Kept");
     let (s, _, b) = query_value(&mut g, k2, "V", KEY_VALUE_PARTIAL_INFORMATION, 64);
     assert_eq!(s, STATUS_SUCCESS);

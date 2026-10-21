@@ -497,8 +497,9 @@ pub fn resolve_fault(pid: u32, tid: u32, memory: &Arc<Memory>, addr: u64) -> boo
 pub enum SpawnError {
     /// No memory for the address space.
     Memory,
-    /// The image is not a loadable x64 PE, or needs imports bound (our
-    /// `ntdll`, a later milestone): the `NTSTATUS`.
+    /// The image is not a loadable x64 PE (or the kernel has no `ntdll`):
+    /// the `NTSTATUS`. Imports that cannot be bound end the started process
+    /// instead, with the loader's status (ADR 0071).
     Image(NtStatus),
     /// The thread could not be started.
     Thread(thread::SpawnError),

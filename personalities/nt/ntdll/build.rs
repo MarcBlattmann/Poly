@@ -29,7 +29,8 @@ fn main() {
         if name.starts_with("Poly") {
             assert!(!seen.contains(&name), "duplicate service name {name}");
             seen.push(name.clone());
-            writeln!(asm, ".globl {name}\n{name}:\n    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n").unwrap();
+            writeln!(asm, ".globl {name}\n{name}:\n    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n")
+                .unwrap();
             continue;
         }
         if !name.starts_with("Nt") {

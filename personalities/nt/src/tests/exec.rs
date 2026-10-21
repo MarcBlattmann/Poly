@@ -204,8 +204,7 @@ fn ntdll_whose_base_is_taken_is_relocated() {
 fn a_dll_without_the_entry_points_is_not_our_ntdll() {
     use poly_ldr::builder::{PeBuilder, Section, TEXT};
     let mut f = Fake::bare();
-    let other =
-        PeBuilder { sections: vec![Section::new(".text", vec![0xC3], TEXT)], ..PeBuilder::default() }.write();
+    let other = PeBuilder { sections: vec![Section::new(".text", vec![0xC3], TEXT)], ..PeBuilder::default() }.write();
     let r = exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, &test_exe(false), &other, None, TID);
     assert_eq!(r, Err(STATUS_INVALID_IMAGE_FORMAT));
 }
