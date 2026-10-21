@@ -132,8 +132,12 @@ Ubuntu) or builds the pinned release.
 cargo xtask run     # boot the kernel in QEMU (Ctrl-A X to quit)
 cargo xtask run --busybox   # boot into BusyBox's init and shell (`poweroff` quits; add console=tty1 for the screen)
 cargo xtask test    # host unit tests + boot tests in QEMU
-cargo xtask ci      # everything CI checks
+cargo xtask boot-tests --list   # the boot test groups; `boot-tests <group>` runs some
+cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one part)
 ```
+
+QEMU runs on KVM when `/dev/kvm` is usable (much faster) and on its
+emulator (TCG) otherwise; `POLY_QEMU_ACCEL=tcg` forces the emulator.
 
 ## Repository layout
 
