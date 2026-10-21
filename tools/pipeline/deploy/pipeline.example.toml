@@ -16,7 +16,9 @@ spec_cycles = 2           # failed spec checks (CI red, incomplete spec) sent ba
                           # with feedback before the human queue (0: straight to the human queue)
 max_errors = 8            # infrastructure errors in a row before the human queue
 max_open_prs = 10         # no new entries while this many pipeline PRs wait for a merge
-max_refresh = 3           # merges of main into a conflicting PR before the human queue
+max_refresh = 10          # merges of main into a PR GitHub reports dirty before the human queue
+                          # (each merged pipeline PR makes the other open ones conflict in README.md:
+                          # keep it at least max_open_prs)
 os = "linux"              # the work queue: `pipeline next --os linux --layer syscall`
 layer = "syscall"
 entries = []              # only ids starting with one of these, e.g. ["linux/syscall/x86_64/"]

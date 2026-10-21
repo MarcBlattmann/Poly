@@ -114,6 +114,10 @@ impl LinuxFs for VfsFs {
         self.fds.install(file, flags.contains(OpenFlags::CLOEXEC)).map_err(errno)
     }
 
+    fn check_fd_free(&mut self) -> Result<(), Errno> {
+        self.fds.check_free().map_err(errno)
+    }
+
     fn statat(&mut self, dirfd: i32, path: &[u8], follow: bool) -> Result<FileStatus, Errno> {
         if path.is_empty() {
             return Ok(Self::status(self.node(dirfd)?.stat().map_err(errno)?));
@@ -522,6 +526,54 @@ fn paths_are_checked() {
     assert_eq!(sys(k, nr::OPEN, &[scratch(0), 0, 0]), Err(Errno::ENAMETOOLONG));
     let missing = s(k, 0, b"/nope");
     assert_eq!(sys(k, nr::OPEN, &[missing, 0, 0]), Err(Errno::ENOENT));
+}
+
+#[test]
+fn open_reports_the_descriptor_limit_before_the_path() {
+    let mut e = env();
+    let k = &mut e.k;
+    // 0-2 are open: a soft limit of 3 leaves no number free.
+    k.poke(scratch(0), &Rlimit { cur: 3, max: 4096 }.to_bytes());
+    assert_eq!(sys(k, nr::PRLIMIT64, &[0, u64::from(RLIMIT_NOFILE), scratch(0), 0]), Ok(0));
+    let new = s(k, 0x100, b"/dir/new");
+    let empty = s(k, 0x200, b"");
+    let long = std::vec![b'a'; 5000];
+    k.poke(scratch(0x300), &long);
+    assert_eq!(sys(k, nr::OPEN, &[new, 0o102, 0o644]), Err(Errno::EMFILE), "O_CREAT creates nothing");
+    assert_eq!(sys(k, nr::OPEN, &[UNMAPPED, 0, 0]), Err(Errno::EMFILE), "before EFAULT");
+    assert_eq!(sys(k, nr::OPEN, &[empty, 0, 0]), Err(Errno::EMFILE), "before ENOENT");
+    assert_eq!(sys(k, nr::OPEN, &[scratch(0x300), 0, 0]), Err(Errno::EMFILE), "before ENAMETOOLONG");
+    assert_eq!(sys(k, nr::OPENAT, &[AT, new, 0o102, 0o644]), Err(Errno::EMFILE));
+    let st = e.vfs.stat(&e.vfs.root_context().unwrap(), &Cred::root(), At::Cwd, b"/dir/new", true);
+    assert_eq!(st.map(|_| ()), Err(poly_vfs::Errno::ENOENT));
+    // One more number and the same open works.
+    let k = &mut e.k;
+    k.poke(scratch(0), &Rlimit { cur: 4, max: 4096 }.to_bytes());
+    assert_eq!(sys(k, nr::PRLIMIT64, &[0, u64::from(RLIMIT_NOFILE), scratch(0), 0]), Ok(0));
+    assert_eq!(sys(k, nr::OPEN, &[new, 0o102, 0o644]), Ok(3));
+    assert_eq!(sys(k, nr::OPEN, &[new, 0, 0]), Err(Errno::EMFILE));
+}
+
+#[test]
+fn open_flags_and_mode_are_32_bit() {
+    let mut e = env();
+    let k = &mut e.k;
+    let f = s(k, 0, b"/dir/file");
+    // The upper half of the flags register is ignored: O_RDWR.
+    let fd = sys(k, nr::OPEN, &[f, 0xffff_ffff_0000_0002, 0]).unwrap();
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o100002), "F_GETFL: O_RDWR | O_LARGEFILE");
+    // Unknown flag bits are ignored too.
+    let fd = sys(k, nr::OPEN, &[f, 0x4000_0000, 0]).unwrap();
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o100000));
+    // The upper half of mode and bits above 07777 are ignored.
+    let g = s(k, 0x100, b"/dir/g");
+    sys(k, nr::OPEN, &[g, 0o301, (0x1234_5678 << 32) | 0o600]).unwrap();
+    let h = s(k, 0x200, b"/dir/h");
+    sys(k, nr::OPEN, &[h, 0o101, 0o170644]).unwrap();
+    let ctx = e.vfs.root_context().unwrap();
+    let mode = |p: &[u8]| e.vfs.stat(&ctx, &Cred::root(), At::Cwd, p, true).unwrap().mode;
+    assert_eq!(mode(b"/dir/g"), 0o100600);
+    assert_eq!(mode(b"/dir/h"), 0o100644);
 }
 
 #[test]

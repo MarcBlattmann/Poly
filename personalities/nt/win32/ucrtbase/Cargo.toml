@@ -1,0 +1,19 @@
+[package]
+name = "ucrtbase"
+description = "Our ucrtbase.dll (ADR 0084): the Universal C Runtime, reached through the api-ms-win-crt-* API sets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ucrtbase"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-crt = { path = "../crt" }
+poly-crt = { path = "../../../../crates/poly-crt" }
+
+[lints]
+workspace = true

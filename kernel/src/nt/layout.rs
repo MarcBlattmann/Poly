@@ -122,8 +122,14 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Err(e) => crate::kprintln!("nt: layout: cannot install ntdll.dll ({:#x})", e.0),
         }
     }
-    // And kernelbase.dll and kernel32.dll (ADR 0079).
-    for (name, bytes) in [("kernelbase.dll", super::KERNELBASE), ("kernel32.dll", super::KERNEL32)] {
+    // And kernelbase.dll and kernel32.dll (ADR 0079), ucrtbase.dll and
+    // msvcrt.dll (ADR 0084).
+    for (name, bytes) in [
+        ("kernelbase.dll", super::KERNELBASE),
+        ("kernel32.dll", super::KERNEL32),
+        ("ucrtbase.dll", super::UCRTBASE),
+        ("msvcrt.dll", super::MSVCRT),
+    ] {
         if bytes.is_empty() {
             continue;
         }

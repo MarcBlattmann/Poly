@@ -68,6 +68,15 @@ pub static ADVAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/advapi32.
 /// The program the advapi32 ring-3 test runs (`test_advapi32`).
 pub static A32TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/a32test.exe"));
 
+mod test_crt;
+
+/// Our C runtime, `ucrtbase.dll` and `msvcrt.dll` (ADR 0084), installed in
+/// `C:\Windows\System32` beside `kernel32` by [`layout`]; and the program the
+/// C runtime ring-3 test runs (`test_crt`).
+pub static UCRTBASE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ucrtbase.dll"));
+pub static MSVCRT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcrt.dll"));
+pub static CRTTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crttest.exe"));
+
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
 use crate::thread;

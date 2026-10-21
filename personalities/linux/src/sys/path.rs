@@ -7,7 +7,8 @@
 //! Each handler checks its flags, copies the path (at most `PATH_MAX`
 //! bytes with the NUL: `ENAMETOOLONG` beyond, `EFAULT` for a bad pointer,
 //! `ENOENT` for an empty path unless `AT_EMPTY_PATH` allows it) and calls
-//! the kernel's [`LinuxFs`]. The order of the checks: flags (`EINVAL`),
+//! the kernel's [`LinuxFs`]; the open calls check the descriptor limit
+//! (`EMFILE`) before anything else. The order of the checks: flags (`EINVAL`),
 //! then the paths in argument order, then the kernel; for linkat and
 //! renameat2 the second path's string errors are handed to the kernel,
 //! which reports them in their place after the first path's walk (the
@@ -65,6 +66,9 @@ fn maybe_empty_path(k: &dyn LinuxKernel, p: UserPtr, flags: u32) -> Result<Vec<u
 // ---- open --------------------------------------------------------------
 
 fn open_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, flags: u32, mode: u32) -> SysResult {
+    // The descriptor limit comes first: with no number free, even a bad
+    // path is EMFILE and O_CREAT creates nothing (the spec of open).
+    fs(k)?.check_fd_free()?;
     let path = nonempty_path(k, p)?;
     // open(2): "The mode argument must be supplied if O_CREAT or O_TMPFILE
     // is specified in flags; if neither ... then mode is ignored."

@@ -55,6 +55,10 @@ impl LinuxFs for Thread<'_> {
         self.fifo_open_wait(fd)
     }
 
+    fn check_fd_free(&mut self) -> Result<(), Errno> {
+        self.process().files.check_fd_free().map_err(vfs_errno)
+    }
+
     fn statat(&mut self, dirfd: i32, path: &[u8], follow: bool) -> Result<FileStatus, Errno> {
         let files = &self.process().files;
         let node = if path.is_empty() {

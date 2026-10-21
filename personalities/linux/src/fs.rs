@@ -329,6 +329,10 @@ pub trait LinuxFs {
     /// the permission bits for a new file. Returns the new descriptor.
     fn openat(&mut self, dirfd: i32, path: &[u8], flags: u32, mode: u32) -> Result<i32, Errno>;
 
+    /// `EMFILE` when every descriptor below the soft `RLIMIT_NOFILE` is in
+    /// use: open(2) reports it before it looks at the path.
+    fn check_fd_free(&mut self) -> Result<(), Errno>;
+
     /// stat(2) of `path`; an empty `path` means the file `dirfd` is open
     /// on (`AT_EMPTY_PATH`; the working directory for `AT_FDCWD`).
     fn statat(&mut self, dirfd: i32, path: &[u8], follow: bool) -> Result<FileStatus, Errno>;

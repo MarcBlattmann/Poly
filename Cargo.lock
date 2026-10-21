@@ -71,6 +71,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-crt"
+version = "0.0.1"
+dependencies = [
+ "poly-rtl",
+]
+
+[[package]]
 name = "poly-elf"
 version = "0.0.1"
 
@@ -403,6 +410,7 @@ version = "0.0.1"
 dependencies = [
  "poly-block",
  "poly-cpio",
+ "poly-crt",
  "poly-elf",
  "poly-ext2",
  "poly-gfx",
