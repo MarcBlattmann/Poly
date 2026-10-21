@@ -200,7 +200,7 @@ fn read_buf(mem: &dyn Memory, addr: u64, len: u64) -> Arg {
 /// Decode the arguments of syscall `name` at entry, reading strings and
 /// input buffers from `mem`.
 pub fn decode_entry(name: &str, raw: &[u64; 6], mem: &dyn Memory) -> Vec<Arg> {
-    let (kinds, _) = syscalls::signature(name);
+    let (kinds, _) = syscalls::call_signature(name, raw);
     kinds
         .iter()
         .enumerate()
@@ -221,7 +221,7 @@ pub fn decode_entry(name: &str, raw: &[u64; 6], mem: &dyn Memory) -> Vec<Arg> {
 
 /// Fill in output buffers once the call returned `ret`.
 pub fn decode_exit(name: &str, raw: &[u64; 6], ret: i64, args: &mut [Arg], mem: &dyn Memory) {
-    let (kinds, _) = syscalls::signature(name);
+    let (kinds, _) = syscalls::call_signature(name, raw);
     for (i, kind) in kinds.iter().enumerate() {
         if *kind == ArgKind::OutBuf && ret > 0 && raw[i] != 0 {
             args[i] = read_buf(mem, raw[i], ret as u64);
@@ -273,13 +273,13 @@ pub fn render_arg(arg: &Arg, known_call: bool, normalize: bool) -> String {
     }
 }
 
-/// The return value of `name`, normalised or as recorded.
-pub fn render_ret(name: &str, ret: Option<i64>, normalize: bool) -> String {
+/// A return value of kind `kind`, normalised or as recorded.
+pub fn render_ret(kind: RetKind, ret: Option<i64>, normalize: bool) -> String {
     let Some(r) = ret else { return "?".into() };
     if syscalls::is_error(r) {
         return format!("-1 {}", syscalls::errno_name(-r));
     }
-    match syscalls::signature(name).1 {
+    match kind {
         RetKind::Addr if normalize => "<addr>".into(),
         RetKind::Addr => format!("{r:#x}"),
         RetKind::Pid if normalize && r > 0 => "<pid>".into(),
@@ -338,13 +338,29 @@ pub struct NormOptions {
     pub ignore: BTreeSet<String>,
 }
 
+/// The raw values behind decoded arguments, as far as they are numbers:
+/// enough to pick a multiplexed call's signature again (its option or
+/// command argument is always one).
+fn raw_values(args: &[Arg]) -> [u64; 6] {
+    let mut raw = [0u64; 6];
+    for (slot, a) in raw.iter_mut().zip(args) {
+        *slot = match *a {
+            Arg::Int(v) | Arg::Pid(v) => v as u64,
+            Arg::Hex(v) | Arg::Ptr(v) | Arg::Unreadable(v) | Arg::Opaque(v) => v,
+            Arg::Str(_) | Arg::Raw(_) => 0,
+        };
+    }
+    raw
+}
+
 pub fn normalize_call(c: &Syscall, normalize: bool) -> NormCall {
     let known = syscalls::is_known_signature(&c.name);
+    let (_, ret_kind) = syscalls::call_signature(&c.name, &raw_values(&c.args));
     NormCall {
         pid: c.pid,
         name: c.name.clone(),
         args: c.args.iter().map(|a| render_arg(a, known, normalize)).collect(),
-        ret: render_ret(&c.name, c.ret, normalize),
+        ret: render_ret(ret_kind, c.ret, normalize),
     }
 }
 
@@ -571,6 +587,41 @@ pub mod tests {
         let ignore = NormOptions { ignore: BTreeSet::from(["getpid".to_string()]) };
         assert_eq!(normalize(&t, &ignore).len(), 8);
         assert!(render_raw(&t).contains("brk(0x40000000) = 0x40000000"));
+    }
+
+    /// Two runs that pass different stack addresses to a prctl option
+    /// writing through arg2 compare equal; an option whose arg2 is an
+    /// integer still compares it. Likewise fcntl's owner pid.
+    #[test]
+    fn multiplexed_calls_mask_by_option() {
+        let mem = Regions(BTreeMap::new());
+        let norm = |name: &str, raw: [u64; 6], ret: i64| {
+            let args = decode_entry(name, &raw, &mem);
+            let c = Syscall {
+                pid: 0,
+                nr: syscalls::number(name).unwrap(),
+                name: name.into(),
+                args,
+                ret: Some(ret),
+                t_ns: 0,
+            };
+            normalize_call(&c, true)
+        };
+        // PR_GET_CHILD_SUBREAPER, two stack addresses 160 bytes apart.
+        let linux = norm("prctl", [37, 0x7ffc_9a3e_1f40, 0, 0, 0, 0], 0);
+        let poly = norm("prctl", [37, 0x7fff_ffff_ee60 - 160, 0, 0, 0, 0], 0);
+        assert_eq!(linux.to_string(), "prctl(37, <ptr>, 0x0, 0x0, 0x0) = 0");
+        assert!(linux.matches(&poly, false));
+        assert_eq!(norm("prctl", [37, 0, 0, 0, 0, 0], -14).to_string(), "prctl(37, NULL, 0x0, 0x0, 0x0) = -1 EFAULT");
+        // PR_SET_CHILD_SUBREAPER: 1 and 0 are different calls.
+        let set = norm("prctl", [36, 1, 0, 0, 0, 0], 0);
+        assert_eq!(set.to_string(), "prctl(36, 0x1, 0x0, 0x0, 0x0) = 0");
+        assert!(!set.matches(&norm("prctl", [36, 0, 0, 0, 0, 0], 0), false));
+        // F_SETOWN with the caller's pid, F_GETOWN returning it, F_GETFL without its unused argument.
+        assert_eq!(norm("fcntl", [3, 8, 4321, 0, 0, 0], 0).to_string(), "fcntl(3, 8, <pid>) = 0");
+        assert_eq!(norm("fcntl", [3, 9, 0x7ffd_0000, 0, 0, 0], 4321).to_string(), "fcntl(3, 9) = <pid>");
+        assert_eq!(norm("fcntl", [3, 3, 0x7ffd_0000, 0, 0, 0], 2).to_string(), "fcntl(3, 3) = 2");
+        assert_eq!(norm("fcntl", [3, 6, 0x7ffd_0000, 0, 0, 0], 0).to_string(), "fcntl(3, 6, <ptr>) = 0");
     }
 
     #[test]
