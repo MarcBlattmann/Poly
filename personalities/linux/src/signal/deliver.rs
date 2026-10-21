@@ -345,7 +345,13 @@ fn setup_frame(
         info,
         with_siginfo: action.flags & SA_SIGINFO != 0,
         mask: saved_mask,
-        stack: altstack.report(rsp),
+        // Without an alternate stack uc_stack is all zero (rt_sigaction's
+        // spec sheet), not sigaltstack(2)'s SS_DISABLE.
+        stack: if altstack.is_enabled() {
+            altstack.report(rsp)
+        } else {
+            crate::abi::StackT { sp: 0, flags: 0, size: 0 }
+        },
         restorer: action.restorer,
         fpu: FpuState { image: &image, xfeatures },
     };

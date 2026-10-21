@@ -60,7 +60,11 @@ pub fn rt_sigaction(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         }
         let mut raw = [0; SigAction::SIZE];
         k.copy_from_user(act, &mut raw)?;
-        Some(SigAction::from_bytes(&raw))
+        let mut new = SigAction::from_bytes(&raw);
+        // SIGKILL and SIGSTOP are silently left out of sa_mask
+        // (rt_sigaction's spec sheet: it reads back without them).
+        new.mask = SigSet(new.mask).without(SigSet::UNBLOCKABLE).0;
+        Some(new)
     };
     let old = with_own(k, |p| p.actions.get(signum));
     if !oldact.is_null() {
@@ -284,12 +288,17 @@ pub fn rt_tgsigqueueinfo(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// process's pending signals that the thread blocks. `EINVAL` unless
 /// `sigsetsize` is 8 (to be confirmed by the diff runner), `EFAULT`.
 pub fn rt_sigpending(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    if a.ulong(1) != signal::SIGSET_SIZE {
+    // rt_sigpending's spec sheet: a smaller size writes only that many
+    // bytes (0 writes nothing); above 8 is EINVAL.
+    let size = a.ulong(1);
+    if size > signal::SIGSET_SIZE {
         return Err(Errno::EINVAL);
     }
     let tid = k.tid();
     let set = with_own(k, |p| p.pending(tid).intersection(p.thread(tid).mask));
-    k.copy_to_user(a.ptr(0), &set.0.to_le_bytes())?;
+    if size > 0 {
+        k.copy_to_user(a.ptr(0), &set.0.to_le_bytes()[..size as usize])?;
+    }
     Ok(0)
 }
 
