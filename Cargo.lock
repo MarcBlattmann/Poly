@@ -152,6 +152,7 @@ dependencies = [
  "poly-pe",
  "poly-registry",
  "poly-seh",
+ "poly-vfs",
 ]
 
 [[package]]

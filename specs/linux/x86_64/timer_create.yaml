@@ -5,11 +5,10 @@ oracle:
   os: "Linux 6.18.44 x86_64"
   machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
   observed_by: spec-a
-  date: 2026-10-20
+  date: 2026-10-21
 summary: >
   timer_create(clock, sevp, timerid) creates a disarmed POSIX timer and
-  stores its id (int). Ids start at 0 in a new process and are handed out in
-  increasing order; a deleted id is not given out again at once. Clocks:
+  stores its id (int); which ids are given out is under behaviour. Clocks:
   CLOCK_REALTIME, MONOTONIC, BOOTTIME, PROCESS_CPUTIME_ID, THREAD_CPUTIME_ID
   (and TAI, *_ALARM). struct sigevent (64 bytes): sigev_value (8),
   sigev_signo, sigev_notify, then the thread id for SIGEV_THREAD_ID (4).
@@ -19,6 +18,32 @@ summary: >
   16, 20, 24). SIGEV_THREAD_ID (4) | SIGEV_SIGNAL targets a thread of the
   caller. A NULL sevp means SIGEV_SIGNAL with SIGALRM and the timer id as
   value.
+behaviour:
+  ids: >
+    timer_create(2) promises only that an id "is unique within the process,
+    until the timer is deleted". Linux gives out more than that, observed on
+    the oracle and required here, because the ids show in the system calls
+    that take them (timer_settime, timer_gettime, timer_getoverrun,
+    timer_delete), which the diff runner compares. Ids are per process. A new
+    process gets 0 for its first timer; that includes the child of fork,
+    which inherits no timers (timer_create(2), NOTES). Each successful call
+    gets the next id up from the previous successful call's id (0, 1, 2, ...)
+    as long as no call failed in between. A deleted timer's id is not given
+    out again by the following calls: after creating 0 to 5 and deleting all
+    six, the next timer gets 6.
+  failed_calls: >
+    A failed call creates no timer, also when it fails only when storing the
+    id (EFAULT for timerid): afterwards no unused id is valid for
+    timer_getoverrun, timer_settime, timer_gettime or timer_delete.
+  unspecified: >
+    Whether a failed call uses up an id is unspecified (the man page says
+    nothing about it, and no program can rely on it), and no test depends on
+    it: an implementation may do either. On the oracle an unknown clock,
+    CLOCK_MONOTONIC_RAW and an unreadable sevp leave the next id as it was,
+    while an invalid sigev_notify, sigev_signo or thread id, and an
+    unwritable timerid, use one up. Also unspecified: the ids after execve
+    (which deletes all timers; Linux goes on counting from where the old
+    program stopped), and what happens when the ids reach INT_MAX.
 returns:
   success: "0"
 errors:

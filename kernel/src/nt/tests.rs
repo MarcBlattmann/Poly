@@ -2,7 +2,7 @@
 //! from ring 3 and drives the NT object, memory and section services
 //! through real `syscall` instructions.
 
-use super::{test_pe, test_seh, test_threads};
+use super::{test_io, test_pe, test_seh, test_threads};
 use crate::kernel_test;
 use crate::process::Process;
 use crate::thread;
@@ -68,6 +68,51 @@ kernel_test! {
         }
         if super::is_nt_process(pid) {
             return Err("the NT process state was not cleaned up");
+        }
+        Ok(())
+    }
+}
+
+kernel_test! {
+    /// Build the NT file I/O test PE and run it from ring 3 (ADR 0067): it
+    /// creates, writes, reads and closes a file under `C:\`, opens it in a
+    /// different case, hits a sharing violation, enumerates a directory with
+    /// a wildcard, completes overlapped reads through an event and an APC,
+    /// cancels a pending read on a pipe device, hits a byte-range lock
+    /// conflict, and deletes a file on close. See [`test_io`].
+    fn nt_file_io_from_ring3() -> TestResult {
+        // The file I/O layer needs the VFS and its `/nt/c` system root.
+        if crate::fs::vfs().root_context().is_err() {
+            return Err("no VFS for NT file I/O");
+        }
+        let file = test_io::image();
+        let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| "no memory map")?);
+        let pid = crate::process::alloc_pid();
+        let process = Arc::new(Process::new_nt(pid, FORMAT, false));
+
+        let start = super::start(&process, &memory, &file, pid).map_err(|_| "the NT loader rejected the test PE")?;
+        if !super::io::registered(pid) {
+            return Err("the NT process memory was not registered for file I/O");
+        }
+        let tid = user::spawn_nt(Arc::clone(&process), Arc::clone(&memory), start.entry, start.teb, user::DEFAULT_HOOK)
+            .map_err(|_| "could not start the NT thread")?;
+        let code = thread::join(tid).map_err(|_| "join failed")?;
+        if code != test_io::PASS_CODE as usize {
+            crate::kprintln!("nt: the file I/O test ended with {code:#x}, not {:#x}", test_io::PASS_CODE);
+            return Err("the NT file I/O test did not pass every check");
+        }
+        if !thread::wait_until(10, || Arc::strong_count(&memory) == 1) {
+            return Err("the NT process kept its memory after it exited");
+        }
+        if super::is_nt_process(pid) {
+            return Err("the NT process state was not cleaned up");
+        }
+        if super::io::registered(pid) {
+            return Err("the NT file I/O state was not cleaned up");
+        }
+        let (pending, _files) = super::io::stats();
+        if pending != 0 {
+            return Err("I/O requests were left pending after the process exited");
         }
         Ok(())
     }

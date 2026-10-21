@@ -17,6 +17,8 @@
 //! [ADR 0063]: ../../../docs/adr/0063-nt-processes-object-manager-and-memory.md
 
 mod backend;
+mod io;
+mod test_io;
 mod test_pe;
 mod test_threads;
 mod tests;
@@ -98,12 +100,18 @@ static STATE: Mutex<Option<NtState>> = Mutex::new(None);
 
 fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
     let mut guard = STATE.lock();
-    let state = guard.get_or_insert_with(|| NtState {
-        sys: registry::boot_system(),
-        processes: BTreeMap::new(),
-        sections: Sections::default(),
-        ctl: BTreeMap::new(),
-        timers: BTreeMap::new(),
+
+    let state = guard.get_or_insert_with(|| {
+        let mut state = NtState {
+            sys: registry::boot_system(),
+            processes: BTreeMap::new(),
+            sections: Sections::default(),
+            ctl: BTreeMap::new(),
+            timers: BTreeMap::new(),
+        };
+        // File I/O: the VFS's volumes and drive letters (ADR 0067).
+        io::attach(&mut state.sys);
+        state
     });
     f(state)
 }
@@ -282,6 +290,8 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let outcome = poly_personality_nt::dispatch_with(&mut k, regs);
     // Any wait a signalling call satisfied: wake those threads.
     sched::drain_wakes();
+    // File I/O requests it queued or completed (ADR 0067).
+    io::after_call();
     if let Some(status) = k.exit {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
     } else if let Some(status) = k.exit_thread {
@@ -309,7 +319,9 @@ pub struct Start {
 pub fn start(process: &Arc<Process>, memory: &Arc<Memory>, file: &[u8], tid: u32) -> Result<Start, NtStatus> {
     let pid = ProcessId(process.pid);
     let thread = ThreadRef(u64::from(tid));
-    with(|s| {
+    // File I/O completions are written into this memory (ADR 0067).
+    io::register(process.pid, memory);
+    let started = with(|s| {
         s.processes.insert(pid, NtProcess::new(pid));
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         let mut b = MemBackend { memory, sections: &mut s.sections };
@@ -334,7 +346,11 @@ pub fn start(process: &Arc<Process>, memory: &Arc<Memory>, file: &[u8], tid: u32
                 Err(e)
             }
         }
-    })
+    });
+    if started.is_err() {
+        io::unregister(process.pid);
+    }
+    started
 }
 
 pub use sched::wait_while_suspended;
@@ -363,8 +379,11 @@ pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>)
         let mut b = MemBackend { memory, sections: &mut s.sections };
         exec::thread_exit(&mut s.sys, proc, &mut b, tref, nt_status);
         s.ctl.remove(&tref);
+        // Its pending I/O requests are cancelled (ADR 0067).
+        s.sys.io.cancel_thread(tref);
     });
     sched::drain_wakes();
+    io::drain();
 }
 
 /// The NT process `pid` has ended (its last thread is going): drop its
@@ -378,6 +397,10 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
         // Its registry notifications go too (ADR 0066).
         s.sys.registry.process_ended(ProcessId(pid), &mut s.sys.objects);
     });
+
+    // Its file objects closed with its handles: deliver the cancellations.
+    io::drain();
+    io::unregister(pid);
     sched::drain_wakes();
     registry::flush();
 }
