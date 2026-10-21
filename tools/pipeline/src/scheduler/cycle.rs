@@ -23,6 +23,7 @@ use super::limits::{self, Reset};
 use super::ops::{Merge, Ops, Out, Push, Remote};
 use super::safety::{self, PrCheck};
 use super::state::{self, EntryState, Lock, Pause, Session, Step, Store};
+use super::update::{self, SelfUpdate};
 use crate::roles::Role;
 use crate::store::EntryId;
 use crate::util::{self, Result};
@@ -87,6 +88,8 @@ pub enum Yielded {
     Retry(u64),
     /// Merged or in the human queue.
     Done(Step),
+    /// The loop stops to run its new code; the entry resumes at this step.
+    Stopping(Step),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,8 +110,8 @@ enum Ended {
     Committed(String),
     /// No new commit; how the session ended.
     Nothing(Out),
-    /// A usage limit: the role is paused.
-    Limit(Next),
+    /// No session: a usage limit paused the role, or the loop is stopping.
+    Yield(Next),
 }
 
 /// Whether the entry's agent session has ended and only its branch is
@@ -164,6 +167,8 @@ pub struct Driver<'a, O: Ops> {
     pub ops: O,
     /// Worker name for the log (`w0`, ...).
     pub name: String,
+    /// Shared by the workers: self-update, and the request to stop.
+    pub update: &'a SelfUpdate,
 }
 
 impl<O: Ops> Driver<'_, O> {
@@ -203,6 +208,9 @@ impl<O: Ops> Driver<'_, O> {
     fn pick(&mut self, only: Option<&str>) -> Result<std::result::Result<(EntryState, Lock), u64>> {
         let _pick = self.store.lock("pick")?;
         let now = self.ops.now();
+        if self.update.stopping() {
+            return Ok(Err(now));
+        }
         let mut states = self.store.load_all()?;
         states.sort_by(|a, b| a.created.cmp(&b.created).then_with(|| a.entry.cmp(&b.entry)));
         // The earliest time an entry in progress can move.
@@ -228,11 +236,20 @@ impl<O: Ops> Driver<'_, O> {
         let in_flight = states.iter().filter(|s| !s.step.terminal() && s.step != Step::AwaitingMerge).count();
         let open_prs = states.iter().filter(|s| s.step == Step::AwaitingMerge).count();
         if in_flight >= self.cfg.max_parallel || open_prs >= self.cfg.max_open_prs {
-            // No new entries: wake when one in progress can move.
+            // No new entries, but main is looked at now and then for
+            // updates of the loop itself (a failure waits for the next look).
+            if self.update.due(now)
+                && let Err(e) = self.refresh_main(now)
+            {
+                self.log.log(4, &self.name, &format!("looking at main for updates: {e}"));
+            }
+            // Wake when one in progress can move.
             return Ok(Err(if ready == u64::MAX { idle } else { ready }));
         }
-        self.ops.set_entry(None);
-        self.ops.refresh_main()?;
+        self.refresh_main(now)?;
+        if self.update.stopping() {
+            return Ok(Err(now));
+        }
         for id in self.ops.queue()? {
             if only.is_some_and(|o| o != id) || !self.wanted(&id) || states.iter().any(|s| s.entry == id) {
                 continue;
@@ -249,6 +266,117 @@ impl<O: Ops> Driver<'_, O> {
             return Ok(Ok((st, lock)));
         }
         Ok(Err(ready.min(idle)))
+    }
+
+    /// Fast-forward the runner's checkout; then see whether that changed
+    /// the loop's own code or its deploy files (module [`update`]).
+    fn refresh_main(&mut self, now: u64) -> Result {
+        self.update.mark_refreshed(now);
+        self.ops.set_entry(None);
+        let head = self.ops.refresh_main()?;
+        let mut deploy_changes = Vec::new();
+        if self.update.enabled() && head != self.update.built() && self.update.first_look(&head) {
+            match self.ops.changed_paths(self.update.built(), &head) {
+                Ok(paths) => {
+                    let changes = update::classify(&paths);
+                    deploy_changes = changes.deploy;
+                    if !changes.restart.is_empty() {
+                        self.rebuild(&head, &changes.restart, now);
+                    }
+                }
+                Err(e) => self.log.log(4, &self.name, &format!("what changed on main: {e}")),
+            }
+        }
+        self.deploy_check(&deploy_changes, now);
+        Ok(())
+    }
+
+    /// The loop's own code changed: build it, and stop once that passes.
+    fn rebuild(&mut self, head: &str, paths: &[String], now: u64) {
+        let short = &head[..head.len().min(12)];
+        self.log.log(
+            6,
+            &self.name,
+            &format!("main at {short} changes the loop's own code ({}); building it", update::list(paths)),
+        );
+        let failure = update::failure_file(&self.store.dir);
+        let out = self.ops.build_self();
+        if let Ok(o) = &out
+            && o.ok()
+        {
+            let _ = std::fs::remove_file(&failure);
+            self.update.stop();
+            self.log.log(
+                6,
+                &self.name,
+                &format!(
+                    "the new code builds: no new steps; the loop exits ({}) once the steps in progress end, \
+                     and systemd starts it again with the new code",
+                    update::RESTART_EXIT
+                ),
+            );
+            return;
+        }
+        let what = match &out {
+            Ok(o) => format!("{}: {}", o.describe(), o.tail(3).trim()),
+            Err(e) => e.clone(),
+        };
+        let hint = if paths.iter().any(|p| p == "rust-toolchain.toml") {
+            " (rust-toolchain.toml changed: setup.sh installs the toolchain it pins)"
+        } else {
+            ""
+        };
+        let message = format!(
+            "the loop's new code at {short} does not build ({what}){hint}; the loop keeps running the code \
+             it started with and builds again when main moves"
+        );
+        self.log.log(3, &self.name, &message);
+        let record = update::BuildFailure { head: head.into(), time: util::format_utc(now), message: message.clone() };
+        if let Err(e) = util::write_json(&failure, &record) {
+            self.log.log(3, &self.name, &format!("cannot record the failed build: {e}"));
+        }
+        let text = format!("\n## {} the loop's new code does not build\n\n- {message}\n", util::format_utc(now));
+        self.tell("update", &text, &message);
+    }
+
+    /// Tell the owner, once per change, when the deploy files of the
+    /// runner's checkout are not what setup.sh installed.
+    fn deploy_check(&mut self, changed: &[String], now: u64) {
+        let file = update::notice_file(&self.store.dir);
+        let pending = match update::deploy_pending(self.cfg) {
+            Ok(p) => p,
+            Err(e) => return self.log.log(4, &self.name, &format!("checking the deploy files: {e}")),
+        };
+        let Some((hash, message)) = pending else {
+            let _ = std::fs::remove_file(&file);
+            return;
+        };
+        let told: Option<update::DeployNotice> = util::read_json(&file).ok();
+        if told.is_some_and(|t| t.hash == hash) {
+            return;
+        }
+        self.log.log(4, &self.name, &message);
+        let files = if changed.is_empty() { String::new() } else { format!("\n- changed: {}", changed.join(", ")) };
+        let text = format!(
+            "\n## {} deploy files changed\n\n- {message}{files}\n- the loop applies no deploy change itself \
+             (they need root); `cargo xtask pipeline loop status` shows this until setup.sh has run\n",
+            util::format_utc(now)
+        );
+        self.tell("deploy", &text, &message);
+        let notice = update::DeployNotice { hash, time: util::format_utc(now) };
+        if let Err(e) = util::write_json(&file, &notice) {
+            self.log.log(3, &self.name, &format!("cannot record the deploy notice: {e}"));
+        }
+    }
+
+    /// The human queue and the notify command, for the loop itself (no entry).
+    fn tell(&mut self, event: &str, text: &str, message: &str) {
+        if let Err(e) = self.ops.append_human_queue(text) {
+            self.log.log(3, &self.name, &format!("cannot write the human queue: {e}"));
+        }
+        if let Err(e) = self.ops.notify(event, "", message) {
+            self.log.log(4, &self.name, &format!("notify: {e}"));
+        }
     }
 
     /// One scheduling decision: drive an entry until it yields, or say
@@ -273,6 +401,10 @@ impl<O: Ops> Driver<'_, O> {
 
     pub fn drive(&mut self, st: &mut EntryState) -> Yielded {
         loop {
+            // Between steps (the state is saved): every step resumes from it.
+            if self.update.stopping() {
+                return Yielded::Stopping(st.step);
+            }
             match self.step(st) {
                 Ok(Next::Continue) => {
                     st.errors = 0;
@@ -378,6 +510,11 @@ impl<O: Ops> Driver<'_, O> {
             None => None,
         };
         let until = limits::retry_time(now, resolved, self.cfg.limit_pause_secs);
+        // A longer pause (`loop pause`) set while the session ran stays.
+        if let Some(p) = self.store.pause(role)?.filter(|p| p.until > until) {
+            self.note(st, format!("the {role} role hit a usage limit; it stays paused {}", state::until_text(p.until)));
+            return Ok(Next::Yield(Yielded::Paused(role, p.until)));
+        }
         let reason = format!("usage limit ({})", out.tail(1).trim());
         self.store.set_pause(role, &Pause { until, reason })?;
         self.note(st, format!("the {role} role hit a usage limit; paused until {} UTC", util::format_utc(until)));
@@ -474,6 +611,11 @@ impl<O: Ops> Driver<'_, O> {
             }
         }
         let _role = self.store.lock(&format!("role-{}", role.name()))?;
+        // The wait for the role may have been long: no new session when the
+        // loop is about to restart.
+        if self.update.stopping() {
+            return Ok(Ended::Yield(Next::Yield(Yielded::Stopping(st.step))));
+        }
         let sync = self.ops.role_sync(role, entry, &branch, sync_base)?;
         if !sync.ok() {
             return Err(format!("preparing the {} checkout failed: {}", role.name(), sync.tail(5)));
@@ -484,7 +626,7 @@ impl<O: Ops> Driver<'_, O> {
         let out = self.ops.role_run(role, entry, feedback)?;
         if out.code == i32::from(crate::roles::LIMIT_EXIT) {
             st.session = None;
-            return Ok(Ended::Limit(self.limit(st, role.name(), &out)?));
+            return Ok(Ended::Yield(self.limit(st, role.name(), &out)?));
         }
         st.session = Some(Session { base: base.to_string(), exit: Some(out.code), log: out.log.clone() });
         self.save(st);
@@ -573,7 +715,7 @@ impl<O: Ops> Driver<'_, O> {
                             st.pending_head = Some(h);
                             self.save(st);
                         }
-                        Ended::Limit(next) => return Ok(next),
+                        Ended::Yield(next) => return Ok(next),
                         Ended::Nothing(out) => {
                             st.spec_attempts += 1;
                             let why = if out.ok() {
@@ -708,7 +850,7 @@ impl<O: Ops> Driver<'_, O> {
                             st.pending_head = Some(h);
                             self.save(st);
                         }
-                        Ended::Limit(next) => return Ok(next),
+                        Ended::Yield(next) => return Ok(next),
                         Ended::Nothing(out) => {
                             let (result, feedback) = if out.ok() {
                                 (

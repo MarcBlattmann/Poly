@@ -6,7 +6,15 @@ use super::Files;
 use crate::fs::vfs;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use poly_vfs::{AT_FDCWD, Access, At, Cred, Errno, Fd, FsContext, FsStats, NodeRef, OpenFile, RenameFlags, Result};
+use poly_vfs::{
+    AT_FDCWD, Access, At, Cred, Errno, Fd, FsContext, FsStats, NodeRef, OpenFile, PathArg, RenameFlags, Result,
+};
+
+/// A path and where it starts ([`Files::start`]) as a [`PathArg`]: their
+/// errors are left to the VFS, which reports them in their place.
+fn path_arg<'a>(path: Result<&'a [u8]>, start: &'a Result<Option<NodeRef>>) -> PathArg<'a> {
+    PathArg { path, at: start.as_ref().map(|s| s.as_ref().map_or(At::Cwd, At::Node)).map_err(|e| *e) }
+}
 
 impl Files {
     /// A copy of the context: root, working directory, umask.
@@ -65,25 +73,29 @@ impl Files {
         self.at(dirfd, path, |vfs, ctx, at| vfs.access(ctx, cred, at, path, want, follow))
     }
 
-    /// `renameat2(2)`.
-    pub fn renameat(&self, olddirfd: Fd, old: &[u8], newdirfd: Fd, new: &[u8], flags: RenameFlags) -> Result<()> {
-        let o = self.start(olddirfd, old)?;
-        let n = self.start(newdirfd, new)?;
+    /// `renameat2(2)`. `new` is the second path or why the caller could
+    /// not read it; that error and a bad `newdirfd` come in their place in
+    /// the order of path errors ([`poly_vfs::Vfs::rename_paths`]).
+    pub fn renameat(
+        &self,
+        olddirfd: Fd,
+        old: &[u8],
+        newdirfd: Fd,
+        new: Result<&[u8]>,
+        flags: RenameFlags,
+    ) -> Result<()> {
+        let o = self.start(olddirfd, old);
+        let n = new.and_then(|new| self.start(newdirfd, new));
         let ctx = self.context();
-        vfs().rename(
-            &ctx,
-            &self.cred(),
-            o.as_ref().map_or(At::Cwd, At::Node),
-            old,
-            n.as_ref().map_or(At::Cwd, At::Node),
-            new,
-            flags,
-        )
+        vfs().rename_paths(&ctx, &self.cred(), path_arg(Ok(old), &o), path_arg(new, &n), flags)
     }
 
-    /// `linkat(2)`. An empty `old` (`AT_EMPTY_PATH`, meant for files made
-    /// with `O_TMPFILE`, which Poly does not have) is `ENOENT`.
-    pub fn linkat(&self, olddirfd: Fd, old: &[u8], newdirfd: Fd, new: &[u8], follow: bool) -> Result<()> {
+    /// `linkat(2)`, `new` as for [`renameat`](Self::renameat): every error
+    /// of `old` comes first ([`poly_vfs::Vfs::link_paths`]). An empty `old`
+    /// (`AT_EMPTY_PATH`) names the file `olddirfd` is open on.
+    pub fn linkat(&self, olddirfd: Fd, old: &[u8], newdirfd: Fd, new: Result<&[u8]>, follow: bool) -> Result<()> {
+        let n = new.and_then(|new| self.start(newdirfd, new));
+        let ctx = self.context();
         if old.is_empty() {
             // AT_EMPTY_PATH (the personality passes an empty path only
             // with it): the file `olddirfd` is open on. linkat(2): it needs
@@ -92,22 +104,10 @@ impl Files {
                 return Err(Errno::ENOENT);
             }
             let node = self.node_at(olddirfd)?;
-            let n = self.start(newdirfd, new)?;
-            let ctx = self.context();
-            return vfs().link_node(&ctx, &self.cred(), &node, n.as_ref().map_or(At::Cwd, At::Node), new);
+            return vfs().link_node(&ctx, &self.cred(), &node, path_arg(new, &n));
         }
-        let o = self.start(olddirfd, old)?;
-        let n = self.start(newdirfd, new)?;
-        let ctx = self.context();
-        vfs().link(
-            &ctx,
-            &self.cred(),
-            o.as_ref().map_or(At::Cwd, At::Node),
-            old,
-            n.as_ref().map_or(At::Cwd, At::Node),
-            new,
-            follow,
-        )
+        let o = self.start(olddirfd, old);
+        vfs().link_paths(&ctx, &self.cred(), path_arg(Ok(old), &o), path_arg(new, &n), follow)
     }
 
     /// `fchmodat(2)` (following links: the system call has no flags).
