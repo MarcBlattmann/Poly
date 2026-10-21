@@ -190,6 +190,23 @@ impl CalibrationConfig {
             tolerance_ppm: 500,
         }
     }
+
+    /// What [`calibrate_with_retries`] tries, in order: the standard
+    /// settings twice, then a tolerance ten times looser (5000 ppm), then
+    /// that tolerance over windows five times longer (50 ms), which a
+    /// bracket of the same width disturbs five times less.
+    ///
+    /// The looser attempts are for hypervisors on which reading a device's
+    /// counter is a VM exit: under KVM, reading the local APIC timer or the
+    /// HPET takes microseconds (more on a busy host, or nested), which can
+    /// widen every bracket past the standard 5 us.
+    pub const fn retries(reference_hz: u64) -> [CalibrationConfig; 4] {
+        let strict = CalibrationConfig::for_reference(reference_hz);
+        let loose = CalibrationConfig { tolerance_ppm: 5_000, ..strict };
+        let window = strict.window.saturating_mul(5);
+        let long = CalibrationConfig { window, max_spins: window.saturating_mul(64).saturating_add(100_000), ..loose };
+        [strict, strict, loose, long]
+    }
 }
 
 /// Result of [`calibrate`].
@@ -218,6 +235,62 @@ pub enum CalibrationError {
     TargetStuck,
     /// No majority of the measurements agreed within the tolerance.
     Inconsistent,
+}
+
+/// One measurement [`calibrate_report`] took.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Sample {
+    /// The rate it measured.
+    pub hz: u64,
+    /// How far off its reads could be, in ppm of what it measured.
+    pub uncertainty_ppm: u64,
+    /// Whether its brackets were tight enough for it to be used.
+    pub tight: bool,
+}
+
+/// Every measurement of one [`calibrate_report`] run, for the log line of a
+/// calibration that failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CalibrationReport {
+    pub config: CalibrationConfig,
+    samples: [Sample; MAX_SAMPLES],
+    taken: usize,
+}
+
+impl CalibrationReport {
+    pub const fn new(config: CalibrationConfig) -> CalibrationReport {
+        CalibrationReport {
+            config,
+            samples: [Sample { hz: 0, uncertainty_ppm: 0, tight: false }; MAX_SAMPLES],
+            taken: 0,
+        }
+    }
+
+    pub fn samples(&self) -> &[Sample] {
+        &self.samples[..self.taken]
+    }
+
+    fn push(&mut self, s: Sample) {
+        if self.taken < MAX_SAMPLES {
+            self.samples[self.taken] = s;
+            self.taken += 1;
+        }
+    }
+}
+
+/// `tolerance 500 ppm, window 1000000 ticks: 62499120 Hz +-120 ppm, 62510000 Hz +-9000 ppm (wide)`
+impl core::fmt::Display for CalibrationReport {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "tolerance {} ppm, window {} ticks:", self.config.tolerance_ppm, self.config.window)?;
+        if self.taken == 0 {
+            return write!(f, " no measurement");
+        }
+        for (i, s) in self.samples().iter().enumerate() {
+            let sep = if i == 0 { " " } else { ", " };
+            write!(f, "{sep}{} Hz +-{} ppm{}", s.hz, s.uncertainty_ppm, if s.tight { "" } else { " (wide)" })?;
+        }
+        Ok(())
+    }
 }
 
 /// One target / reference / target reading triple.
@@ -266,6 +339,28 @@ pub fn calibrate<T: Counter, R: Counter>(
     reference_hz: u64,
     config: &CalibrationConfig,
 ) -> Result<Calibration, CalibrationError> {
+    calibrate_report(target, reference, reference_hz, config).0
+}
+
+/// [`calibrate`], and every measurement it took.
+pub fn calibrate_report<T: Counter, R: Counter>(
+    target: &T,
+    reference: &R,
+    reference_hz: u64,
+    config: &CalibrationConfig,
+) -> (Result<Calibration, CalibrationError>, CalibrationReport) {
+    let mut report = CalibrationReport::new(*config);
+    let result = calibrate_into(target, reference, reference_hz, config, &mut report);
+    (result, report)
+}
+
+fn calibrate_into<T: Counter, R: Counter>(
+    target: &T,
+    reference: &R,
+    reference_hz: u64,
+    config: &CalibrationConfig,
+    report: &mut CalibrationReport,
+) -> Result<Calibration, CalibrationError> {
     let (tbits, rbits) = (target.bits(), reference.bits());
     if reference_hz == 0
         || config.samples == 0
@@ -295,10 +390,14 @@ pub fn calibrate<T: Counter, R: Counter>(
             return Err(CalibrationError::TargetStuck);
         }
         let uncertainty = (start.width as u128 + end.width as u128) / 2;
-        if uncertainty * 1_000_000 > ticks as u128 * tolerance {
+        let measured = mul_div(ticks, reference_hz, ref_ticks);
+        let tight = uncertainty * 1_000_000 <= ticks as u128 * tolerance;
+        let uncertainty_ppm = (uncertainty * 1_000_000 / ticks as u128).min(u64::MAX as u128) as u64;
+        report.push(Sample { hz: measured, uncertainty_ppm, tight });
+        if !tight {
             continue;
         }
-        hz[n] = mul_div(ticks, reference_hz, ref_ticks);
+        hz[n] = measured;
         n += 1;
     }
     let hz = &mut hz[..n];
@@ -321,6 +420,41 @@ pub fn calibrate<T: Counter, R: Counter>(
     }
     let mean = (sum / used as u128) as u64;
     Ok(Calibration { hz: mean, used, taken: config.samples, spread_ppm: mul_div(max - min, 1_000_000, mean) })
+}
+
+/// What [`calibrate_with_retries`] found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Retried {
+    pub result: Result<Calibration, CalibrationError>,
+    /// Attempts made, 1 to 4 (see [`CalibrationConfig::retries`]).
+    pub attempts: usize,
+    /// The measurements of the last attempt.
+    pub report: CalibrationReport,
+}
+
+/// Calibrate with each of [`CalibrationConfig::retries`] in turn until the
+/// measurements agree: `measure` runs one calibration (normally
+/// [`calibrate_report`]) with the configuration it is given. Any error but
+/// [`CalibrationError::Inconsistent`] ends it at once: measuring longer or
+/// more loosely cannot fix a counter that is stuck, or a bad configuration.
+pub fn calibrate_with_retries(
+    reference_hz: u64,
+    mut measure: impl FnMut(&CalibrationConfig) -> (Result<Calibration, CalibrationError>, CalibrationReport),
+) -> Retried {
+    let configs = CalibrationConfig::retries(reference_hz);
+    let mut last = Retried {
+        result: Err(CalibrationError::Inconsistent),
+        attempts: 0,
+        report: CalibrationReport::new(configs[0]),
+    };
+    for config in &configs {
+        let (result, report) = measure(config);
+        last = Retried { result, attempts: last.attempts + 1, report };
+        if result != Err(CalibrationError::Inconsistent) {
+            break;
+        }
+    }
+    last
 }
 
 /// Which counter a [`MonotonicClock`] reads.
@@ -680,6 +814,84 @@ mod tests {
         let h = hpet(&clock, true);
         let hz = h.capabilities().frequency_hz();
         assert_eq!(calibrate(&tsc, &h, hz, &CalibrationConfig::for_reference(hz)), Err(CalibrationError::Inconsistent));
+    }
+
+    #[test]
+    fn the_report_lists_every_measurement() {
+        let clock = SimClock::new(9).read_cost(500_000, 0).stalls(1, 50_000_000);
+        let tsc = FakeTsc::new(&clock, TSC_HZ);
+        let h = hpet(&clock, true);
+        let hz = h.capabilities().frequency_hz();
+        let config = CalibrationConfig::for_reference(hz);
+        let (result, report) = calibrate_report(&tsc, &h, hz, &config);
+        assert_eq!(result, Err(CalibrationError::Inconsistent));
+        assert_eq!(report.config, config);
+        assert_eq!(report.samples().len(), 6);
+        // 50 us brackets on a 10 ms window: about 5000 ppm each, all wide.
+        assert!(
+            report.samples().iter().all(|s| !s.tight && (4_000..20_000).contains(&s.uncertainty_ppm)),
+            "{report:?}"
+        );
+        let line = std::format!("{report}");
+        assert!(line.starts_with("tolerance 500 ppm, window "), "{line}");
+        assert_eq!(line.matches("(wide)").count(), 6, "{line}");
+
+        // A clean run reports its measurements as tight.
+        let clock = SimClock::new(9).read_cost(500_000, 0);
+        let tsc = FakeTsc::new(&clock, TSC_HZ);
+        let h = hpet(&clock, true);
+        let (result, report) = calibrate_report(&tsc, &h, hz, &config);
+        let cal = result.unwrap();
+        assert!(report.samples().iter().all(|s| s.tight && s.hz.abs_diff(cal.hz) < TSC_HZ / 10_000));
+        assert_eq!(
+            std::format!("{}", CalibrationReport::new(config)),
+            std::format!("tolerance 500 ppm, window {} ticks: no measurement", hz / 100)
+        );
+    }
+
+    #[test]
+    fn retries_loosen_and_lengthen_until_the_measurements_agree() {
+        let configs = CalibrationConfig::retries(10_000_000);
+        assert_eq!(configs[0], CalibrationConfig::for_reference(10_000_000));
+        assert_eq!(configs[0], configs[1]);
+        assert_eq!((configs[2].tolerance_ppm, configs[2].window), (5_000, configs[0].window));
+        assert_eq!((configs[3].tolerance_ppm, configs[3].window), (5_000, 5 * configs[0].window));
+        assert!(configs[3].max_spins > configs[3].window);
+
+        // Reference reads that take 20 us (an HPET read that exits to the
+        // VMM of a busy host): 2000 ppm brackets on 10 ms windows, too wide
+        // for the standard tolerance, fine for the loose one.
+        // 120 us reads (12000 ppm) need the long windows (2400 ppm).
+        for (read_us, attempts) in [(0, 1), (20, 3), (120, 4)] {
+            let clock = SimClock::new(17).read_cost(30_000, 20_000);
+            let tsc = FakeTsc::new(&clock, TSC_HZ);
+            // 32 bits wide: one register read per counter read.
+            let sim = SimHpet::new(&clock, false);
+            sim.set_read_cost_ps(read_us * 1_000_000);
+            let h = crate::Hpet::new(&sim).unwrap();
+            h.enable();
+            let hz = h.capabilities().frequency_hz();
+            let r = calibrate_with_retries(hz, |cfg| calibrate_report(&tsc, &h, hz, cfg));
+            let cal = r.result.unwrap_or_else(|e| panic!("{read_us} us reads: {e:?}: {}", r.report));
+            assert_eq!(r.attempts, attempts, "{read_us} us reads");
+            assert_eq!(r.report.config, CalibrationConfig::retries(hz)[attempts - 1]);
+            let err_ppm = mul_div(cal.hz.abs_diff(TSC_HZ), 1_000_000, TSC_HZ);
+            assert!(err_ppm < 200, "{read_us} us reads: {cal:?} off by {err_ppm} ppm");
+        }
+
+        // Other errors end it at once; so does running out of attempts.
+        let clock = SimClock::new(1).read_cost(1000, 0);
+        let tsc = FakeTsc::new(&clock, TSC_HZ);
+        let r = calibrate_with_retries(1_000_000, |cfg| {
+            calibrate_report(&tsc, &Stuck(5), 1_000_000, &CalibrationConfig { max_spins: 1000, ..*cfg })
+        });
+        assert_eq!((r.result, r.attempts), (Err(CalibrationError::ReferenceStuck), 1));
+        let mut calls = 0;
+        let r = calibrate_with_retries(1_000_000, |cfg| {
+            calls += 1;
+            (Err(CalibrationError::Inconsistent), CalibrationReport::new(*cfg))
+        });
+        assert_eq!((r.result, r.attempts, calls), (Err(CalibrationError::Inconsistent), 4, 4));
     }
 
     #[test]

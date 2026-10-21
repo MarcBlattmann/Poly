@@ -13,7 +13,9 @@
 //! ```
 //!
 //! With `poly.test.capture` the program runs as the child of the kernel's
-//! init, pid 1 (`testinit.rs`, ADR 0064), so it is pid 2. Output is
+//! init, pid 1 (`testinit.rs`, ADR 0064), so it is pid 2; as the user,
+//! groups and umask `poly.test.uid`, `poly.test.gid`, `poly.test.groups`
+//! and `poly.test.umask` give (the diff runner's reference's, ADR 0081). Output is
 //! captured by open file: fds 1 and 2 start as two console files whose
 //! bytes are reported (`tty::log_console_files`), wherever they are
 //! duplicated to; `poly.test.stdout=<path>` / `poly.test.stderr=<path>`

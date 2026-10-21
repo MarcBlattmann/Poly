@@ -275,6 +275,23 @@ impl Creds {
         Creds::with_ids(uid, gid, Caps::NONE)
     }
 
+    /// What root becomes when it gives a program another identity the way
+    /// login(1) or a service manager does: setgroups(2) with `groups`,
+    /// then setresgid(2) with `gids` and setresuid(2) with `uids` (real,
+    /// effective, saved). So an effective uid other than 0 loses every
+    /// capability (capabilities(7), "Effect of user ID changes on
+    /// capabilities"), and root stays root. `EINVAL` for an id of `-1`.
+    pub fn login(uids: [u32; 3], gids: [u32; 3], groups: &[u32]) -> Result<Creds, Errno> {
+        if uids.contains(&NO_ID) || gids.contains(&NO_ID) {
+            return Err(Errno::EINVAL);
+        }
+        let mut c = Creds::root();
+        c.set_groups(groups)?;
+        c.set_resgid(Some(gids[0]), Some(gids[1]), Some(gids[2]))?;
+        c.set_resuid(Some(uids[0]), Some(uids[1]), Some(uids[2]))?;
+        Ok(c)
+    }
+
     fn with_ids(uid: u32, gid: u32, caps: Caps) -> Creds {
         Creds {
             uid,

@@ -3,7 +3,13 @@
 //! trace.
 //!
 //! The kernel interface is specified in ADR 0027 (the "test-run protocol").
-//! Kernel command line: `poly.qemu_exit poly.init=/test-binary poly.test.capture`.
+//! Kernel command line: `poly.qemu_exit poly.init=/test-binary poly.test.capture`,
+//! plus for a corpus or spec test the identity the reference ran it as
+//! (`poly.test.uid=1000 poly.test.gid=1000 poly.test.groups=27,1000
+//! poly.test.umask=0022`, [`Identity::kernel_args`]), which the kernel's
+//! test init gives the program before it runs. App tests run as root on
+//! both sides (the reference's launcher is root in its jail, or mapped to
+//! root in a user namespace), so they get none.
 //! With `poly.test.capture` the kernel writes, each on a line of its own:
 //!
 //! ```text
@@ -36,6 +42,7 @@
 //! `POLY-INIT`: the test is then reported as unsupported.
 
 use crate::cpio;
+use crate::identity::Identity;
 use crate::runner;
 use crate::syscalls;
 use crate::trace::{self, Arg, Event, Exit, Memory, Syscall, Trace};
@@ -163,6 +170,22 @@ fn syscall_record(f: &BTreeMap<&str, &str>, line: &str, index: impl Fn(u64) -> u
 /// record instead goes wrong when a child's first call is written before
 /// the parent's `fork` record returns, and the program's `POLY-EXIT` then
 /// looked like a child's.
+/// The kernel's panic message in a serial log, if it panicked: the text
+/// after `KERNEL PANIC:` and the line after it (where the message goes
+/// when the location ends the first line), without the backtrace.
+pub fn kernel_panic(log: &str) -> Option<String> {
+    let mut lines = log.lines().map(|l| l.trim_end_matches('\r'));
+    let first = lines.find_map(|l| l.find("KERNEL PANIC:").map(|at| l[at + "KERNEL PANIC:".len()..].trim()))?;
+    let mut message = first.to_string();
+    if let Some(next) = lines.next().map(str::trim).filter(|n| !n.is_empty() && *n != "backtrace:") {
+        if !message.is_empty() {
+            message.push(' ');
+        }
+        message.push_str(next);
+    }
+    Some(message)
+}
+
 pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
     let mut t = Trace::new(test, "poly", "poly-serial");
     let pids: BTreeMap<u64, u32> = {
@@ -348,12 +371,18 @@ pub struct Target {
     pub timeout: Duration,
 }
 
+/// The most bytes of a kernel command line Poly keeps (`BootInfo`'s
+/// buffer); a longer one would be cut off without a word.
+pub const CMDLINE_MAX: usize = 511;
+
 impl Target {
-    /// Boot `binary` as `/test-binary`. Files go into `work`: the
-    /// initramfs and the serial log.
-    pub fn run(&self, test: &str, binary: &Path, work: &Path) -> Result<(Outcome, PathBuf)> {
+    /// Boot `binary` as `/test-binary`, run as `identity` (the reference's
+    /// ids and umask: `identity.rs`). Files go into `work`: the initramfs
+    /// and the serial log.
+    pub fn run_as(&self, test: &str, binary: &Path, identity: &Identity, work: &Path) -> Result<(Outcome, PathBuf)> {
         let bytes = util::read(binary)?;
-        self.boot(test, &initramfs(&bytes)?, &crate::sha256::hex(&bytes), work, KERNEL_ARGS)
+        let args = format!("{KERNEL_ARGS} {}", identity.kernel_args());
+        self.boot(test, &initramfs(&bytes)?, &crate::sha256::hex(&bytes), work, &args)
     }
 
     /// Boot the initramfs `image` of an app test (`apps::Tree::cpio`),
@@ -386,6 +415,16 @@ impl Target {
                 Outcome::Ran(t)
             }
             Some(u) => u,
+            // A crash before the program ran is this boot's failure, not a
+            // kernel that cannot run programs: the next boot may well work,
+            // so the other tests still run.
+            None if let Some(panic) = kernel_panic(&log) => {
+                return Err(format!(
+                    "the kernel panicked before it ran {test}: {panic} (QEMU {}; {})",
+                    done.exit,
+                    log_path.display()
+                ));
+            }
             None if done.exit == Exit::Timeout => {
                 Outcome::Unsupported(format!("no \"POLY-INIT:\" line within {:?}; boot timed out", self.timeout))
             }
@@ -410,6 +449,12 @@ impl Target {
         work: &Path,
         args: &str,
     ) -> Result<(runner::Finished, String, PathBuf)> {
+        if args.len() > CMDLINE_MAX {
+            return Err(format!(
+                "the kernel command line for {test} is {} bytes, more than Poly keeps ({CMDLINE_MAX}): {args}",
+                args.len()
+            ));
+        }
         let image_path = work.join(format!("{test}.initramfs.cpio"));
         util::write(&image_path, image)?;
         let image = image_path;
@@ -508,6 +553,27 @@ mod tests {
         assert_eq!(r, "kernel: no ELF loader");
     }
 
+    /// A panic during boot (the APIC timer calibration on a busy KVM host,
+    /// once) is told apart from a kernel without `poly.init`.
+    #[test]
+    fn a_kernel_panic_is_found_in_the_log() {
+        let log = "time: APIC timer calibration failed: Inconsistent\r\n\
+            \r\n\
+            KERNEL PANIC: panicked at src/main.rs:136:9:\r\n\
+            interrupt and timer setup failed: the local APIC timer could not be calibrated\r\n\
+            backtrace:\r\n  #0 0xffffffff802eedae\r\n";
+        assert_eq!(
+            kernel_panic(log).as_deref(),
+            Some(
+                "panicked at src/main.rs:136:9: interrupt and timer setup failed: the local APIC timer could not be \
+                 calibrated"
+            )
+        );
+        assert_eq!(kernel_panic("KERNEL PANIC: oops\nbacktrace:\n").as_deref(), Some("oops"));
+        assert_eq!(kernel_panic("KERNEL PANIC: at the end").as_deref(), Some("at the end"));
+        assert_eq!(kernel_panic("boot: cmdline \"...\"\nPOLY-SELFTEST: PASS\n"), None);
+    }
+
     /// A child's first call can come out before the parent's fork returns:
     /// the program is still process 0 and its exit is the trace's exit.
     #[test]
@@ -582,6 +648,19 @@ mod tests {
         assert!(parse_serial("POLY-INIT: exec /t\nPOLY-SYSCALL: pid=1 args=0x1\n", "x").is_err());
         assert!(parse_serial("POLY-INIT: exec /t\nPOLY-OUT: fd=1 hex=abc\n", "x").is_err());
         assert!(parse_serial("POLY-INIT: exec /t\nPOLY-EXIT: pid=1\n", "x").is_err());
+    }
+
+    /// A command line Poly would cut off is refused before QEMU starts.
+    #[test]
+    fn an_overlong_command_line_is_refused() {
+        let t = Target { kernel: PathBuf::from("/nonexistent"), timeout: Duration::from_secs(1) };
+        let work = std::env::temp_dir().join(format!("poly-cmdline-{}", std::process::id()));
+        let groups: Vec<u32> = (100_000..100_100).collect();
+        let id = Identity { uid: [1000; 3], gid: [1000; 3], groups, umask: 0o022 };
+        let args = format!("{KERNEL_ARGS} {}", id.kernel_args());
+        let Err(e) = t.boot_log("x", b"", &work, &args) else { panic!("booted with {} bytes", args.len()) };
+        assert!(e.contains("more than Poly keeps"), "{e}");
+        assert!(!work.join("x.initramfs.cpio").exists());
     }
 
     #[test]

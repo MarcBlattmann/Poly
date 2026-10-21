@@ -4,6 +4,7 @@
 //! ```text
 //! loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet]
 //! loop status [--config FILE] [--json]
+//! loop watch [--config FILE] [--interval SECS] [--once] [--json] [--width N] [--lines N]
 //! loop pause [--role spec|implementer|all] [--for 4h] [--reason TEXT] [--config FILE]
 //! loop resume [--role spec|implementer|all] [--config FILE]
 //! loop reset <entry> [--config FILE] [--keep-branches]
@@ -20,6 +21,7 @@
 //! with [`update::RESTART_EXIT`] once the steps in progress end, for
 //! systemd to start the new code ([`update`]). `pause` and `resume` write
 //! and remove the pause files the cycle reads before an agent session.
+//! `watch` is a live, read-only dashboard of all of it ([`watch`]).
 
 pub mod config;
 pub mod cycle;
@@ -29,6 +31,7 @@ pub mod real;
 pub mod safety;
 pub mod state;
 pub mod update;
+pub mod watch;
 
 #[cfg(test)]
 mod tests;
@@ -44,6 +47,7 @@ use update::SelfUpdate;
 
 pub const USAGE: &str = "usage: pipeline loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet] | \
                          loop status [--config FILE] [--json] | \
+                         loop watch [--config FILE] [--interval SECS] [--once] [--json] [--width N] [--lines N] | \
                          loop pause [--role spec|implementer|all] [--for 4h] [--reason TEXT] [--config FILE] | \
                          loop resume [--role spec|implementer|all] [--config FILE] | \
                          loop reset <entry> [--config FILE] [--keep-branches]";
@@ -74,6 +78,10 @@ pub fn command(repo: &Path, args: &[String]) -> Result<u8> {
         Some("status") => {
             a.only(&["config", "json"])?;
             status(&a)
+        }
+        Some("watch") => {
+            a.only(watch::OPTIONS)?;
+            watch::command(&a)
         }
         Some("pause") => {
             a.only(&["config", "role", "for", "reason"])?;
