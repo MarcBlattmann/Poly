@@ -7,7 +7,8 @@ and how to run it unattended. The rules it enforces are in
 interface the kernel implements for test runs, are in
 [ADR 0027](adr/0027-agent-pipeline-tools-and-test-run-protocol.md); the
 scheduler that runs it all unattended is
-[ADR 0056](adr/0056-pipeline-scheduler-loop-and-home-server-deployment.md).
+[ADR 0056](adr/0056-pipeline-scheduler-loop-and-home-server-deployment.md)
+(amended by [ADR 0074](adr/0074-pipeline-sessions-paid-once-and-spec-feedback-cycles.md)).
 
 ## The loop
 
@@ -367,11 +368,12 @@ inbox and git:
 /srv/poly/heldout/     polyspec:server 2750, the held-out store (POLY_HELDOUT_DIR of the spec agent and the runner)
 /srv/poly/generated/   polyspec:server 2750, the spec agent's generated tests
 /srv/poly/inbox/       server:polyimpl 2750, hand-off bundles and feedback for the implementer
+/srv/poly/spec-inbox/  server:polyspec 2750, feedback for the spec agent (a failed spec check)
 /srv/poly/bin/poly-role root, the role wrapper: the only command `server` may run as the role users
 ```
 
-`polyimpl` cannot read `heldout/`, `generated/`, `runner/` or `spec/` (the
-setup script checks it). The loop starts a role with
+`polyimpl` cannot read `heldout/`, `generated/`, `runner/`, `spec/` or
+`spec-inbox/` (the setup script checks it). The loop starts a role with
 `sudo -n -u polyspec /srv/poly/bin/poly-role spec sync|run ...` (likewise
 `polyimpl` / `implementer`); `/etc/sudoers.d/poly-pipeline` allows exactly
 that, NOPASSWD:
@@ -384,10 +386,13 @@ server ALL=(polyimpl) NOPASSWD: /srv/poly/bin/poly-role implementer *
 sudo resets the environment; the wrapper checks every argument, sets the
 role's environment (the implementer gets `POLY_ROLE=implementer` and never
 `POLY_HELDOUT_DIR`; the spec agent gets `POLY_HELDOUT_DIR=/srv/poly/heldout`
-and an empty `/srv/poly/generated/<symbol>`), and runs `cargo xtask pipeline
-role <role> <entry> --workdir <its repo> --preset claude [--model M]
-[--feedback F]` in the role's checkout. `sync <branch> <base>` puts that
-checkout on the branch, from the hub, clean.
+and an empty `/srv/poly/generated/<symbol>`, its held-out directory removed
+too, unless the session is a feedback session, which continues the last
+one with its tests), and runs `cargo xtask pipeline role <role> <entry>
+--workdir <its repo> --preset claude [--model M] [--feedback F]` in the
+role's checkout; feedback is taken only from the role's own inbox
+(`inbox/` for the implementer, `spec-inbox/` for the spec agent). `sync
+<branch> <base>` puts that checkout on the branch, from the hub, clean.
 
 Code moves through git only. Agents commit on their branch
 (`pipeline/spec/<symbol>`, `pipeline/impl/<symbol>`) and never push; the loop
@@ -402,10 +407,23 @@ queue). Only the loop pushes to GitHub, and never to `main`.
    `coverage claim <id> --agent <spec agent>`, committed, pushed to the hub.
 2. **spec**: `poly-role spec sync`, `poly-role spec run` (the spec agent
    writes the spec sheet, tests in `generated/`, runs `tests split`,
-   commits); the loop fetches and pushes the branch.
+   commits); the loop fetches and pushes the branch. A session that fails
+   or commits nothing is tried again, up to `spec_attempts` (2) sessions.
 3. **spec-check** (runner): the spec agent changed only its entry's spec
    sheet and tests directory; the sheet, visible tests and held-out tests
    exist; `cargo xtask ci` passes (`spec.ci`).
+   - **Red** (CI fails, or the sheet, the visible or the held-out tests are
+     missing): feedback into `/srv/poly/spec-inbox/<entry>/feedback-<n>.txt`
+     and back to step 2, `poly-role spec run --feedback` on the spec branch
+     as it is: the session continues the last one (its commits, generated
+     and held-out tests stay) and commits a fix on top. The feedback is CI's
+     last 80 lines, not redacted: the spec agent wrote the held-out tests and
+     reads the held-out store, CI of a spec branch runs without it, and the
+     spec inbox is not readable by the implementer. After `spec_cycles` (2)
+     feedback sessions, the next failed check sends the entry to the human
+     queue (`spec_cycles = 0`: at once).
+   - **Red flag** (a path outside the entry's spec sheet and tests): the
+     human queue at once.
 4. **handoff** (runner): `pipeline handoff record` with the spec agent's head
    as the revision, committed and pushed on the spec branch;
    `pipeline handoff bundle` into `/srv/poly/inbox/<entry>/bundle`.
@@ -456,6 +474,18 @@ go on meanwhile.
 2, 4, ... 60 minutes; after `max_errors` in a row the entry goes to the
 human queue.
 
+**An agent session is paid for once.** The state records a session
+(`session`: the branch head it starts from) once the role's checkout is
+synced, and its exit status when it ends. If anything after it fails (the
+fetch of its branch from the role checkout, say git's "dubious ownership"),
+or the loop stops, the retry fetches the role's branch first and neither
+syncs the checkout nor starts the agent: a commit beyond the session's
+start is its result, and an ended session without one counts as "committed
+nothing". Only a session the loop never saw end, and that left no commit,
+runs again (from a clean checkout; for the spec agent a new session also
+removes that entry's generated and held-out tests, a feedback session
+does not). A role paused by a usage limit does not hold up such a fetch.
+
 **The human queue** is `/srv/poly/runner/human-queue.md`: one section per
 stopped entry with the reason, the branches (pushed to GitHub too), the
 state file and the logs. `notify.command` runs then (and when a PR is
@@ -480,8 +510,9 @@ default for this layout, unknown keys are errors. The example with every
 key and its meaning is
 [`tools/pipeline/deploy/pipeline.example.toml`](../tools/pipeline/deploy/pipeline.example.toml):
 `[loop]` (`max_parallel` 1, 2 on a 4-core machine; `max_cycles` 5;
-`spec_attempts`; `max_errors`; `max_open_prs`; `entries`/`exclude` id
-prefixes; `idle_secs`, `limit_pause_secs`, `poll_secs`), `[paths]`, `[git]`,
+`spec_attempts`; `spec_cycles` 2; `max_errors`; `max_open_prs`;
+`entries`/`exclude` id prefixes; `idle_secs`, `limit_pause_secs`,
+`poll_secs`), `[paths]` (with `spec_inbox`), `[git]`,
 `[github]` (`open_prs`, `auto_merge`, `push_human_branches`), `[spec]` and
 `[implementer]` (agent id, the wrapper command, `model`, the checkout; the
 implementer's `allowed_paths`), `[safety] extra_forbidden`,
@@ -493,7 +524,8 @@ in `log/pipeline.log`; every command's full output in
 another's implementer can run at the same time (one session per role: one
 checkout per role), and the runner verifies in its own worktree per worker.
 `flock` locks keep two workers or two loops off the same entry; a crash or
-reboot resumes every entry at its step (each step is idempotent).
+reboot resumes every entry at its step (each step is idempotent, and an
+agent session that ended is never run again, see above).
 
 ### Setting up the home server
 
@@ -568,6 +600,12 @@ Then, once:
    xtask pipeline loop --dry-run'`, then `... loop --once`.
 5. `sudo systemctl start poly-pipeline`; follow it with
    `journalctl -u poly-pipeline -f` and `cargo xtask pipeline loop status`.
+
+After an update that changes `tools/pipeline/deploy/` (the wrapper, a new
+directory), pull the runner's checkout and run `sudo
+tools/pipeline/deploy/setup.sh` again: the installed wrapper and the
+directories under `/srv/poly` come from it. It keeps `pipeline.toml`;
+compare that with the example for new keys (every key has a default).
 
 The runner builds and tests agent-written code (CI) as `server`, which can
 read the held-out store and push: the checks before CI (paths, no build

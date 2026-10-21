@@ -840,8 +840,12 @@ impl<S: Shell> Ops for RealOps<S> {
         redact_lines(text, &names, &contents)
     }
 
-    fn write_feedback(&mut self, entry: &EntryId, cycle: u32, text: &str) -> Result<String> {
-        let path = self.cfg.inbox.join(state::key(&entry.id())).join(format!("feedback-{cycle}.txt"));
+    fn write_feedback(&mut self, role: Role, entry: &EntryId, cycle: u32, text: &str) -> Result<String> {
+        let inbox = match role {
+            Role::Spec => &self.cfg.spec_inbox,
+            Role::Implementer => &self.cfg.inbox,
+        };
+        let path = inbox.join(state::key(&entry.id())).join(format!("feedback-{cycle}.txt"));
         self.shell.write(&path, text)?;
         Ok(path.display().to_string())
     }

@@ -147,8 +147,9 @@ pub trait Ops {
 
     /// `text` without anything that could reveal a held-out test.
     fn redact(&mut self, entry: &EntryId, text: &str) -> String;
-    /// Write feedback for the implementer's next session; the file.
-    fn write_feedback(&mut self, entry: &EntryId, cycle: u32, text: &str) -> Result<String>;
+    /// Write feedback for the role's next session into that role's inbox
+    /// (the implementer's, or the spec agent's own); the file.
+    fn write_feedback(&mut self, role: Role, entry: &EntryId, cycle: u32, text: &str) -> Result<String>;
     /// A clock time from a usage-limit message (`3pm`, in `tz`) as epoch seconds.
     fn resolve_clock(&mut self, time: &str, tz: Option<&str>) -> Option<u64>;
 

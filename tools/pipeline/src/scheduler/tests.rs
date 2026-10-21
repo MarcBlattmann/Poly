@@ -58,8 +58,17 @@ struct World {
     spec_files: SpecFiles,
     prs: BTreeMap<String, Pr>,
     prs_created: u32,
+    /// Feedback written, with the role it is for.
     feedback: Vec<String>,
+    feedback_roles: Vec<Role>,
     feedback_given: Vec<Option<String>>,
+    spec_feedback_given: Vec<Option<String>>,
+    /// Role fetches that fail (an infrastructure error such as git's
+    /// "dubious ownership"), per role name: how many more.
+    fetch_errors: BTreeMap<String, u32>,
+    /// Spec sessions that started from nothing (`poly-role spec run`
+    /// without feedback removes the generated and held-out tests).
+    heldout_wiped: u32,
     human: String,
     notified: Vec<String>,
     calls: Vec<String>,
@@ -314,7 +323,13 @@ impl Ops for World {
     fn role_run(&mut self, role: Role, _entry: &EntryId, feedback: Option<&str>) -> Result<Out> {
         self.call(&format!("{}_run", role.name()));
         let run = match role {
-            Role::Spec => self.spec_runs.pop_front().unwrap_or_else(good_spec),
+            Role::Spec => {
+                self.spec_feedback_given.push(feedback.map(String::from));
+                if feedback.is_none() {
+                    self.heldout_wiped += 1;
+                }
+                self.spec_runs.pop_front().unwrap_or_else(good_spec)
+            }
             Role::Implementer => {
                 self.feedback_given.push(feedback.map(String::from));
                 self.impl_runs.pop_front().unwrap_or_else(good_impl)
@@ -324,14 +339,24 @@ impl Ops for World {
     }
     fn role_fetch(&mut self, role: Role, _branch: &str) -> Result<Option<String>> {
         self.call(&format!("{}_fetch", role.name()));
+        if let Some(n) = self.fetch_errors.get_mut(role.name())
+            && *n > 0
+        {
+            *n -= 1;
+            return Err("git fetch: fatal: detected dubious ownership in repository".into());
+        }
         Ok(self.roles.get(&format!("{}:{}", role.name(), self.entry.clone().unwrap_or_default())).cloned())
     }
     fn redact(&mut self, _entry: &EntryId, text: &str) -> String {
         text.lines().filter(|l| !l.contains("SECRET")).collect::<Vec<_>>().join("\n")
     }
-    fn write_feedback(&mut self, _entry: &EntryId, cycle: u32, text: &str) -> Result<String> {
+    fn write_feedback(&mut self, role: Role, _entry: &EntryId, cycle: u32, text: &str) -> Result<String> {
         self.feedback.push(text.to_string());
-        Ok(format!("/srv/poly/inbox/brk/feedback-{cycle}.txt"))
+        self.feedback_roles.push(role);
+        Ok(match role {
+            Role::Spec => format!("/srv/poly/spec-inbox/brk/feedback-{cycle}.txt"),
+            Role::Implementer => format!("/srv/poly/inbox/brk/feedback-{cycle}.txt"),
+        })
     }
     fn resolve_clock(&mut self, time: &str, _tz: Option<&str>) -> Option<u64> {
         assert_eq!(time, "3pm");
@@ -556,17 +581,35 @@ fn crash(d: &mut Driver<'_, World>) {
 
 #[test]
 fn a_crash_resumes_at_the_right_step() {
-    // After the implementer session, before its branch was fetched: run it again.
+    // After the implementer session, before its branch was fetched: fetch
+    // it, the session is not run again.
     let s = setup("crash1");
     let mut w = World::new();
     w.crash = Some(("implementer_fetch".into(), 1));
     let mut d = s.driver(w);
     crash(&mut d);
-    assert_eq!(s.step(BRK), Step::Implement);
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!((st.step, st.session.as_ref().and_then(|s| s.exit)), (Step::Implement, Some(0)));
     let mut d = s.driver(d.ops);
     worked(d.pass(None).unwrap());
     assert_eq!(s.step(BRK), Step::AwaitingMerge);
-    assert_eq!((d.ops.count("spec_run"), d.ops.count("implementer_run"), d.ops.count("claim")), (1, 2, 1));
+    assert_eq!((d.ops.count("spec_run"), d.ops.count("implementer_run"), d.ops.count("claim")), (1, 1, 1));
+    assert_eq!(d.ops.count("implementer_sync"), 1, "the checkout with the agent's commit was not reset");
+
+    // While the spec session ran (it never got going): no commit beyond its
+    // start, so it runs again, from a clean checkout.
+    let s = setup("crash-spec-run");
+    let mut w = World::new();
+    w.crash = Some(("spec_run".into(), 1));
+    let mut d = s.driver(w);
+    crash(&mut d);
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!((st.step, st.session.as_ref().map(|s| s.exit)), (Step::Spec, Some(None)));
+    let mut d = s.driver(d.ops);
+    worked(d.pass(None).unwrap());
+    assert_eq!(s.step(BRK), Step::AwaitingMerge);
+    assert_eq!((d.ops.count("spec_sync"), d.ops.count("spec_run"), d.ops.count("spec_fetch")), (2, 2, 2));
+    assert_eq!(s.store.load(BRK).unwrap().unwrap().spec_attempts, 0, "a crash is not a failed attempt");
 
     // After the spec was fetched (the 2nd push is the spec branch): no new spec session.
     let s = setup("crash2");
@@ -722,6 +765,131 @@ fn infrastructure_errors_back_off_and_retry() {
     worked(d.pass(None).unwrap());
     assert_eq!(s.step(BRK), Step::AwaitingMerge);
     assert_eq!(s.store.load(BRK).unwrap().unwrap().errors, 0);
+}
+
+/// The subjects of a hub branch, oldest first.
+fn subjects(w: &World, branch: &str) -> Vec<String> {
+    w.ancestors(&w.hub[branch]).iter().rev().map(|c| w.commits[c].subject.clone()).collect()
+}
+
+#[test]
+fn a_failed_fetch_after_a_spec_session_does_not_run_it_again() {
+    let s = setup("spec-fetch");
+    let mut w = World::new();
+    w.fetch_errors.insert("spec".into(), 2);
+    let mut d = s.driver(w);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Retry(T0 + 120));
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!((st.step, st.errors, st.spec_attempts), (Step::Spec, 1, 0), "an error, not a failed attempt");
+    assert_eq!(st.session.as_ref().map(|s| (s.base.as_str(), s.exit)), Some(("c001", Some(0))));
+    let agent_commit = d.ops.roles["spec:linux/syscall/x86_64/brk"].clone();
+    // The second fetch fails too; the third works.
+    d.ops.sleep(120);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Retry(T0 + 120 + 240));
+    d.ops.sleep(240);
+    worked(d.pass(None).unwrap());
+    assert_eq!(s.step(BRK), Step::AwaitingMerge);
+    // One session, one sync (the checkout with the commit was never reset),
+    // and the generated and held-out tests were removed only before it.
+    assert_eq!((d.ops.count("spec_sync"), d.ops.count("spec_run"), d.ops.count("spec_fetch")), (1, 1, 3));
+    assert_eq!(d.ops.heldout_wiped, 1);
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!((st.spec_head.as_deref(), st.session.as_ref()), (Some(agent_commit.as_str()), None));
+    assert!(d.ops.ancestors(&d.ops.hub["pipeline/spec/brk"]).contains(&agent_commit));
+}
+
+#[test]
+fn a_failed_fetch_after_an_implementer_session_does_not_run_it_again() {
+    let s = setup("impl-fetch");
+    let mut w = World::new();
+    w.fetch_errors.insert("implementer".into(), 1);
+    let mut d = s.driver(w);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Retry(T0 + 120));
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!((st.step, st.errors, st.cycle), (Step::Implement, 1, 0), "an error, not a red cycle");
+    let agent_commit = d.ops.roles["implementer:linux/syscall/x86_64/brk"].clone();
+    // A usage limit of the implementer role meanwhile does not hold up a fetch.
+    s.store.set_pause("implementer", &super::state::Pause { until: T0 + 99_999, reason: "limit".into() }).unwrap();
+    d.ops.sleep(120);
+    worked(d.pass(None).unwrap());
+    assert_eq!(s.step(BRK), Step::AwaitingMerge);
+    assert_eq!((d.ops.count("implementer_sync"), d.ops.count("implementer_run")), (1, 1));
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert!(d.ops.ancestors(st.impl_head.as_ref().unwrap()).contains(&agent_commit));
+    assert_eq!(st.cycle, 0);
+}
+
+#[test]
+fn a_failed_spec_check_goes_back_to_the_spec_agent_with_feedback() {
+    let s = setup("spec-red");
+    let mut w = World::new();
+    w.ci = [Ok(1), Ok(0), Ok(0)].into(); // spec check (red), spec check again, verify
+    let mut d = s.driver(w);
+    worked(d.pass(None).unwrap());
+    let st = s.store.load(BRK).unwrap().unwrap();
+    assert_eq!((st.step, st.spec_cycle, st.cycle, st.spec_attempts), (Step::AwaitingMerge, 1, 0, 0));
+    assert_eq!(
+        order(&d.ops.calls),
+        [
+            "claim",
+            "spec_run",
+            "ci",
+            "spec_run",
+            "ci",
+            "handoff_record",
+            "handoff_bundle",
+            "implementer_run",
+            "handoff_verify",
+            "ci",
+            "diff",
+            "set_green",
+            "pr_create",
+            "pr_auto_merge"
+        ]
+    );
+    // The second session got the CI output in its own inbox and continued
+    // its work: its generated and held-out tests were kept.
+    assert_eq!(d.ops.spec_feedback_given, [None, Some("/srv/poly/spec-inbox/brk/feedback-1.txt".into())]);
+    assert_eq!(d.ops.heldout_wiped, 1);
+    assert_eq!(d.ops.feedback_roles, [Role::Spec]);
+    assert!(d.ops.feedback[0].contains("cargo xtask ci") && d.ops.feedback[0].contains("1 test failed"));
+    // The implementer never saw any of it.
+    assert_eq!(d.ops.feedback_given, [None]);
+    // Both spec sessions' commits are on the branch, before the hand-off.
+    assert_eq!(
+        subjects(&d.ops, "pipeline/spec/brk"),
+        [
+            "main",
+            "Pipeline: claim linux/syscall/x86_64/brk for spec-claude-1",
+            "agent work",
+            "agent work",
+            "Pipeline: hand off linux/syscall/x86_64/brk from spec-claude-1 to impl-claude-1"
+        ]
+    );
+}
+
+#[test]
+fn a_spec_check_failing_past_spec_cycles_goes_to_the_human_queue() {
+    let s = setup("spec-red-human");
+    let mut w = World::new();
+    w.ci = [Ok(1), Ok(1), Ok(1)].into();
+    let mut d = s.driver(w);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Done(Step::Human));
+    let r = human_reason(&s);
+    assert!(r.starts_with("the spec check failed 3 times; last: the spec branch fails `cargo xtask ci`"), "{r}");
+    assert_eq!((d.ops.count("spec_run"), d.ops.count("ci"), d.ops.count("handoff_record")), (3, 3, 0));
+    assert_eq!(s.store.load(BRK).unwrap().unwrap().spec_cycle, 2);
+    assert_eq!(d.ops.notified, ["human linux/syscall/x86_64/brk"]);
+
+    // spec_cycles = 0: the human queue at once, as before.
+    let mut s = setup("spec-red-none");
+    s.cfg.spec_cycles = 0;
+    let mut w = World::new();
+    w.ci = [Ok(1)].into();
+    let mut d = s.driver(w);
+    assert_eq!(worked(d.pass(None).unwrap()), Yielded::Done(Step::Human));
+    assert!(human_reason(&s).starts_with("the spec check failed once; last: the spec branch fails"));
+    assert_eq!(d.ops.count("spec_run"), 1);
 }
 
 #[test]
@@ -899,6 +1067,19 @@ fn the_role_wrapper_checks_everything_and_syncs_from_the_hub() {
     assert!(out.contains(&format!("POLY_HELDOUT_DIR={}/heldout", base.display())), "{out}");
     assert!(out.contains(&format!("--generated {}/generated/brk", base.display())));
     assert!(!base.join("heldout/linux/syscall/x86_64/brk").exists() && base.join("generated/brk").is_dir());
+    // A spec feedback session (after a failed spec check) continues: the
+    // generated and held-out tests stay, the feedback comes from its own inbox.
+    let held = base.join("heldout/linux/syscall/x86_64/brk/brk_secret.c");
+    let generated = base.join("generated/brk/brk_grow.c");
+    crate::util::write(&held, "int x;").unwrap();
+    crate::util::write(&generated, "int y;").unwrap();
+    let sfb = base.join("spec-inbox/linux__syscall__x86_64__brk/feedback-1.txt");
+    crate::util::write(&sfb, "ci red").unwrap();
+    let sfbs = sfb.display().to_string();
+    let (code, out) = run(&["spec", "run", BRK, "spec-1", "--feedback", &sfbs]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains(&format!("--feedback {sfbs}")) && out.contains("--generated"), "{out}");
+    assert!(held.is_file() && generated.is_file(), "a feedback session keeps the tests");
 
     let outside = base.join("elsewhere.txt");
     crate::util::write(&outside, "x").unwrap();
@@ -913,6 +1094,8 @@ fn the_role_wrapper_checks_everything_and_syncs_from_the_hub() {
         vec!["implementer", "run", BRK, "impl-1", "--model", "o;pus"],
         vec!["implementer", "run", BRK, "impl-1", "--feedback", &outside],
         vec!["spec", "run", BRK, "spec-1", "--feedback", &fbs],
+        vec!["implementer", "run", BRK, "impl-1", "--feedback", &sfbs],
+        vec!["spec", "run", BRK, "spec-1", "--feedback"],
         vec!["implementer", "run", BRK, "impl-1", "--other", "x"],
         vec!["implementer", "push", "pipeline/impl/brk"],
         vec!["root", "run", BRK, "x"],
