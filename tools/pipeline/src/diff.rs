@@ -139,8 +139,7 @@ const FD_RESULTS: &[&str] = &[
 pub const APP_DROPPED_CALLS: &[&str] = &["rseq"];
 
 /// Signals app mode leaves out: `SIGCHLD`, whose place in the parent's
-/// sequence depends on when the child ends, and which Poly's test-run
-/// protocol does not report (it reports faults and fatal signals).
+/// sequence depends on when the child ends.
 pub const APP_DROPPED_SIGNALS: &[&str] = &["--- SIGCHLD ---"];
 
 /// Longest argument shown in app mode (arguments are not compared there).
