@@ -145,7 +145,7 @@ fn width(machine: u16, kind: u8) -> Option<usize> {
         (_, reloc_kind::ABSOLUTE) => Some(0),
         (machine::AMD64 | machine::ARM64 | machine::I386, reloc_kind::HIGHLOW) => Some(4),
         (machine::AMD64 | machine::ARM64, reloc_kind::DIR64) => Some(8),
-        (machine::I386, reloc_kind::HIGH | reloc_kind::LOW) => Some(2),
+        (machine::I386, reloc_kind::HIGH | reloc_kind::LOW | reloc_kind::HIGHADJ) => Some(2),
         _ => None,
     }
 }
@@ -158,7 +158,11 @@ fn width(machine: u16, kind: u8) -> Option<usize> {
 /// `image` is laid out in memory (see [`crate::LoadPlan::map_into`]); the
 /// relocation table is read from it. Supported types: `ABSOLUTE` (skipped),
 /// `HIGHLOW` and `DIR64` for x64 and ARM64, and `ABSOLUTE`, `HIGH`, `LOW`,
-/// `HIGHLOW` for x86. Any other type fails the call with
+/// `HIGHLOW` and `HIGHADJ` for x86. `HIGHADJ` takes two slots (spec: "The
+/// low 16 bits of the 32-bit value are stored in the 16-bit word that
+/// follows this base relocation"): the 32-bit value made of the field and
+/// that word gets the difference, and the field its new high half, so a
+/// carry out of the low half reaches it. Any other type fails the call with
 /// [`Error::UnsupportedRelocation`] before anything is written: the table
 /// is checked in full first. Additions wrap, as on the hardware.
 pub fn relocate(image: &mut [u8], info: &ImageInfo, new_base: u64) -> Result<RelocStats, Error> {
@@ -191,10 +195,15 @@ pub fn relocate(image: &mut [u8], info: &ImageInfo, new_base: u64) -> Result<Rel
         if end > image.len() {
             return Err(Error::BadRva(d.virtual_address));
         }
-        // Pass 1: every entry is a type we apply, inside the image.
+        // Pass 1: every entry is a type we apply, inside the image, and a
+        // HIGHADJ has its second slot.
         for block in RelocBlocks::new(&image[start..end]) {
-            for r in block?.entries() {
+            let mut entries = block?.entries();
+            while let Some(r) = entries.next() {
                 check(image.len(), machine, r)?;
+                if r.kind == reloc_kind::HIGHADJ && entries.next().is_none() {
+                    return Err(Error::Malformed("HIGHADJ without its low half"));
+                }
             }
         }
         // Pass 2: apply. The table is read back from `image` as we go (an
@@ -202,14 +211,25 @@ pub fn relocate(image: &mut [u8], info: &ImageInfo, new_base: u64) -> Result<Rel
         // again; that can only fail on such a self-modifying table.
         let mut pos = start;
         while let Some(b) = block_at(&image[..end], pos)? {
-            for i in 0..b.count {
+            let mut i = 0;
+            while i < b.count {
                 let entry = u16_at(image, b.entries + 2 * i).ok_or(Error::Truncated)?;
+                i += 1;
                 let r = decode(b.page_rva, entry);
                 let at = r.rva as usize;
                 let ok = match (check(image.len(), machine, r)?, r.kind) {
                     (0, _) => {
                         stats.skipped += 1;
                         continue;
+                    }
+                    (_, reloc_kind::HIGHADJ) => {
+                        let low =
+                            u16_at(image, b.entries + 2 * i).ok_or(Error::Malformed("HIGHADJ without its low half"))?;
+                        i += 1;
+                        u16_at(image, at).and_then(|high| {
+                            let full = (u32::from(high) << 16 | u32::from(low)).wrapping_add(delta as u32);
+                            put_u16(image, at, (full >> 16) as u16)
+                        })
                     }
                     (_, reloc_kind::DIR64) => u64_at(image, at).and_then(|v| put_u64(image, at, v.wrapping_add(delta))),
                     (_, reloc_kind::HIGHLOW) => {

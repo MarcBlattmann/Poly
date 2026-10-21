@@ -1,0 +1,35 @@
+# Our ntdll.dll: a real PE DLL built from Rust for a Windows target (ADR
+# 0071). Its own workspace, because it builds only for
+# x86_64-pc-windows-msvc with -Zbuild-std; the kernel's build.rs drives it.
+# No third-party crates: only this repo's host-tested logic and core/alloc.
+[workspace]
+
+[package]
+name = "ntdll"
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+name = "ntdll"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-ldr = { path = "../../../crates/poly-ldr" }
+poly-rtl = { path = "../../../crates/poly-rtl" }
+poly-seh = { path = "../../../crates/poly-seh" }
+poly-pe = { path = "../../../crates/poly-pe" }
+poly-ntobj = { path = "../../../crates/poly-ntobj" }
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+[profile.dev]
+panic = "abort"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

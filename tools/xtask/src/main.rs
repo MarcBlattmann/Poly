@@ -48,6 +48,7 @@ mod initramfs;
 mod ktest;
 mod libsearch;
 mod net;
+mod ntdll;
 mod programs;
 mod rootdisk;
 mod screen;
@@ -89,6 +90,7 @@ fn main() -> ExitCode {
         Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => pipeline(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
+        Some("ntdll") => ntdll::command(&args[1..]),
         Some("dynamic-initramfs") => dynamic::command(),
         Some("busybox-initramfs") => busybox::command(),
         Some("busybox-test") => busybox_test(),
@@ -96,7 +98,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|ci|symbolize|coverage|pipeline|font|ntdll|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }

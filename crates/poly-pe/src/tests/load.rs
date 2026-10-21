@@ -374,6 +374,55 @@ fn relocate_x86_high_low_highlow() {
 }
 
 #[test]
+fn relocate_x86_highadj_uses_its_second_slot() {
+    use reloc_kind::*;
+    // One block: HIGHADJ at 0x1000 with low half 0xF000, then a HIGHLOW.
+    let mut table = Vec::new();
+    put32(&mut table, 0, 0x1000);
+    put32(&mut table, 4, 16);
+    put16(&mut table, 8, u16::from(HIGHADJ) << 12);
+    put16(&mut table, 10, 0xF000);
+    put16(&mut table, 12, (u16::from(HIGHLOW) << 12) | 0x008);
+    put16(&mut table, 14, 0);
+    let mut b = PeBuilder::new(Bits::Pe32);
+    b.machine = machine::I386;
+    let mut d = Vec::new();
+    put16(&mut d, 0, 0x1234);
+    put32(&mut d, 8, 0x5000_0000);
+    b.section(".data", DATA, d, None);
+    let len = table.len() as u32;
+    let r = b.section(".reloc", RDATA, table.clone(), None);
+    b.dir(dir::BASERELOC, r, len);
+    let f = b.build();
+    let info = *Pe::parse(&f).unwrap().info();
+    let mut image = map(&f);
+    let delta = 0x0001_2000u32; // low half 0xF000 + 0x2000 carries into the high half
+    let stats = relocate(&mut image, &info, info.image_base() + u64::from(delta)).unwrap();
+    assert_eq!(stats.applied, 2);
+    let u16_at = |b: &[u8], at: usize| u16::from_le_bytes(b[at..at + 2].try_into().unwrap());
+    assert_eq!(u16_at(&image, 0x1000), 0x1234 + 0x0001 + 1);
+    assert_eq!(u32::from_le_bytes(image[0x1008..0x100c].try_into().unwrap()), 0x5000_0000 + delta);
+
+    // A HIGHADJ in the block's last slot has no low half: nothing is written.
+    let mut b = PeBuilder::new(Bits::Pe32);
+    b.machine = machine::I386;
+    b.section(".data", DATA, vec![0; 16], None);
+    let table = relocs(&[(0x1000, HIGHLOW), (0x1004, HIGHADJ)]);
+    let len = table.len() as u32;
+    let r = b.section(".reloc", RDATA, table, None);
+    b.dir(dir::BASERELOC, r, len);
+    let f = b.build();
+    let info = *Pe::parse(&f).unwrap().info();
+    let mut image = map(&f);
+    let before = image.clone();
+    assert_eq!(
+        relocate(&mut image, &info, info.image_base() + 0x1_0000).unwrap_err(),
+        Error::Malformed("HIGHADJ without its low half")
+    );
+    assert!(image == before);
+}
+
+#[test]
 fn relocate_rejects_unknown_types_for_x64_before_writing() {
     use reloc_kind::*;
     for kind in [HIGH, LOW, HIGHADJ, 5, 6, 7, 8, 9, 11, 15] {
