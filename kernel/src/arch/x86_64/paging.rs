@@ -807,9 +807,12 @@ crate::kernel_test! {
             Ok(_) => return Err("a buffer on a thread stack got the wrong bus address"),
             Err(_) => return Err("join failed"),
         }
-        // Joined, so reaped: the stack is unmapped and its frames are free.
+        // Joined: the stack is unmapped once the thread's last CPU has saved
+        // it and reaped it (ADR 0053), which on several CPUs can come a
+        // little after the join returns.
         let stack = crate::thread::STACKS.stack(slot).ok_or("no stack slot")?;
-        if stack.step_by(PAGE_SIZE as usize).any(|page| translate(page).is_ok()) {
+        let mapped = || stack.clone().step_by(PAGE_SIZE as usize).any(|page| translate(page).is_ok());
+        if !crate::thread::wait_until(5, || !mapped()) {
             return Err("a reaped thread's stack is still mapped");
         }
         Ok(())

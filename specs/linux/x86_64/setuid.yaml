@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setuid
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  setuid(uid): with CAP_SETUID it sets real, effective and saved uid (and
+  the filesystem uid) alike, so from root it cannot be undone; without it
+  only the effective uid, and only to the real or saved uid. Afterwards
+  files are created with that uid, root-only files are refused (EACCES), and
+  kill of a process of another uid is EPERM.
+returns:
+  success: "0"
+errors:
+  permission: "EPERM (1) without CAP_SETUID for any other uid (including 0 after dropping root)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

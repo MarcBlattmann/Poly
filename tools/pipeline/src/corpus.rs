@@ -93,6 +93,29 @@ pub struct Built {
     /// File name in the output directory.
     pub binary: String,
     pub binary_sha256: String,
+    /// The test's own syscall comparison mode (`poly-diff: syscalls=MODE`
+    /// in its source), for programs whose syscall sequence depends on
+    /// scheduling; see [`syscalls_directive`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub syscalls: Option<String>,
+}
+
+/// The directive a test program may carry in its source, on a line of its
+/// own (usually a comment): `poly-diff: syscalls=off` (or `names`). Tests
+/// with more than one task interleave their syscalls, retry calls or get
+/// results that depend on scheduling, so their syscall sequence cannot be
+/// compared; their exit status and output still are. The mode only ever
+/// weakens the run's (`--syscalls`), never strengthens it.
+pub fn syscalls_directive(source: &str) -> Result<Option<String>> {
+    for line in source.lines() {
+        let Some((_, rest)) = line.split_once("poly-diff:") else { continue };
+        let word = rest.split_whitespace().next().unwrap_or_default();
+        return match word.strip_prefix("syscalls=") {
+            Some(mode @ ("exact" | "names" | "off")) => Ok(Some(mode.to_string())),
+            _ => Err(format!("poly-diff directive {:?}: expected syscalls=exact|names|off", line.trim())),
+        };
+    }
+    Ok(None)
 }
 
 /// An app test of the corpus or of an entry's tests directory.
@@ -275,13 +298,17 @@ fn compile(root: &Path, out: &Path, cc: &str, p: &Program) -> Result<std::result
     if !result.status.success() {
         return Ok(Err(String::from_utf8_lossy(&result.stderr).trim().to_string()));
     }
+    let source = util::read(&root.join(&p.source))?;
+    let syscalls =
+        syscalls_directive(&String::from_utf8_lossy(&source)).map_err(|e| format!("{}: {e}", p.source.display()))?;
     Ok(Ok(Built {
         name: p.name.clone(),
         kind: if p.libc { "libc" } else { "freestanding" }.into(),
         source: p.source.to_string_lossy().into_owned(),
-        source_sha256: sha256::hex(&util::read(&root.join(&p.source))?),
+        source_sha256: sha256::hex(&source),
         binary: p.name.clone(),
         binary_sha256: sha256::hex(&util::read(&binary)?),
+        syscalls,
     }))
 }
 
@@ -302,6 +329,16 @@ mod tests {
         }
         assert!(programs.iter().find(|p| p.name == "libc-hello").unwrap().libc);
         assert_eq!(programs[0].source, Path::new("tests/linux/arch_prctl.c"));
+    }
+
+    #[test]
+    fn syscalls_directive_is_read_from_the_source() {
+        assert_eq!(syscalls_directive("int x;\n").unwrap(), None);
+        let src = "/* Two processes.\n * poly-diff: syscalls=off (scheduling decides the order)\n */\n";
+        assert_eq!(syscalls_directive(src).unwrap().as_deref(), Some("off"));
+        assert_eq!(syscalls_directive("// poly-diff: syscalls=names\n").unwrap().as_deref(), Some("names"));
+        assert!(syscalls_directive("// poly-diff: syscalls=loose\n").is_err());
+        assert!(syscalls_directive("// poly-diff: off\n").is_err());
     }
 
     /// Two builds with the same compiler give the same bytes.

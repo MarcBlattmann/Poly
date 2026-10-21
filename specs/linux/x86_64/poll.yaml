@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/poll
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  poll(fds, nfds, timeout_ms) fills revents of each pollfd and returns how
+  many have nonzero revents (a closed descriptor's POLLNVAL counts;
+  duplicate entries count each). revents only has the requested bits plus
+  POLLERR, POLLHUP and POLLNVAL, which are always reported: an empty pipe
+  read end is not ready, a write end with space is POLLOUT, data gives
+  POLLIN (POLLRDNORM/POLLWRNORM only when asked); a read end whose writers
+  are gone is POLLHUP (POLLIN|POLLHUP while data remains); a write end whose
+  readers are gone is POLLERR (with POLLOUT if asked). A negative fd is
+  skipped (revents 0). revents is always overwritten. Timeout 0 returns at
+  once, a positive timeout after at least that many ms, negative waits
+  forever; nfds 0 with a timeout is a sleep and the array is not read. A
+  handled signal ends the wait with EINTR (not restarted even with
+  SA_RESTART); data from another process ends it early.
+returns:
+  success: "number of entries with nonzero revents (0 on timeout)"
+errors:
+  interrupted: "EINTR (4)"
+  bad_array: "EFAULT (14) when nfds > 0 and the array is unreadable"
+  too_many: "EINVAL (22) when nfds exceeds RLIMIT_NOFILE"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "a timeout of T returns after T plus scheduling delay"
+  guarantees: "never returns 0 before the timeout has elapsed"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

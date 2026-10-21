@@ -217,14 +217,14 @@ pub fn load_dynamic(
     open_interp: OpenInterpreter<'_>,
 ) -> Result<Image, ExecError> {
     let copy;
-    let bytes = match file.contents() {
-        Some(bytes) => bytes,
+    let elf = match file.contents() {
+        Some(bytes) => Elf::parse(bytes),
         None => {
-            copy = read_all(&*file)?;
-            &copy[..]
+            copy = read_headers(&*file)?;
+            Elf::parse_prefix(&copy, file.len())
         }
-    };
-    let elf = Elf::parse(bytes).map_err(ExecError::Elf)?;
+    }
+    .map_err(ExecError::Elf)?;
     // About 1.6 KiB: planned in place on the heap, never on the 16 KiB
     // kernel stack (exec runs deep: a shell command, or a system call).
     let mut plan = empty_plan();
@@ -237,14 +237,14 @@ pub fn load_dynamic(
     let interp_copy;
     let interp_elf = match &interp_file {
         Some(f) => {
-            let bytes = match f.contents() {
-                Some(bytes) => bytes,
+            let ielf = match f.contents() {
+                Some(bytes) => Elf::parse(bytes),
                 None => {
-                    interp_copy = read_all(&**f)?;
-                    &interp_copy[..]
+                    interp_copy = read_headers(&**f)?;
+                    Elf::parse_prefix(&interp_copy, f.len())
                 }
-            };
-            let ielf = Elf::parse(bytes).map_err(ExecError::BadInterpreter)?;
+            }
+            .map_err(ExecError::BadInterpreter)?;
             poly_elf::check_interpreter(&ielf).map_err(ExecError::BadInterpreter)?;
             Some(ielf)
         }
@@ -396,20 +396,40 @@ fn vm_prot(p: poly_elf::Prot) -> Prot {
     prot
 }
 
-/// The whole of a source that is not in memory, to parse its headers.
-fn read_all(file: &dyn PageSource) -> Result<Vec<u8>, ExecError> {
+/// How much of a file [`read_headers`] reads first, then next: the ELF
+/// header and program header table (and the interpreter's path) are at
+/// its start in every linker's output, so one page is nearly always
+/// enough.
+const HEADER_READS: [u64; 2] = [poly_vm::PAGE_SIZE, 64 << 10];
+
+/// The first bytes of a source that is not in memory, enough to parse its
+/// headers (`Elf::parse_prefix`): a page, more if the program header table
+/// or the interpreter's path lies further in, the whole file at most
+/// ([`MAX_FILE_COPY`]). The segments are mapped from the file, never read
+/// here: a 30 MiB compiler is not copied into the kernel heap at every exec.
+fn read_headers(file: &dyn PageSource) -> Result<Vec<u8>, ExecError> {
     let len = file.len();
-    if len > MAX_FILE_COPY {
-        return Err(ExecError::Memory(MemoryError::OutOfMemory));
+    for want in HEADER_READS.into_iter().chain([len.min(MAX_FILE_COPY)]) {
+        let n = want.min(len);
+        let buf = read_prefix(file, n)?;
+        match Elf::parse_prefix(&buf, len) {
+            Err(poly_elf::Error::Truncated) if n < len && n < MAX_FILE_COPY => continue,
+            _ => return Ok(buf),
+        }
     }
+    Err(ExecError::Memory(MemoryError::OutOfMemory))
+}
+
+/// The first `n` bytes of `file`.
+fn read_prefix(file: &dyn PageSource, n: u64) -> Result<Vec<u8>, ExecError> {
     let mut buf = Vec::new();
-    buf.try_reserve_exact(len as usize).map_err(|_| ExecError::Memory(MemoryError::OutOfMemory))?;
-    buf.resize(len as usize, 0);
+    buf.try_reserve_exact(n as usize).map_err(|_| ExecError::Memory(MemoryError::OutOfMemory))?;
+    buf.resize(n as usize, 0);
     let mut done = 0;
     while done < buf.len() {
         match file.read_at(done as u64, &mut buf[done..]) {
             Ok(0) | Err(_) => return Err(ExecError::Io),
-            Ok(n) => done += n,
+            Ok(k) => done += k,
         }
     }
     Ok(buf)

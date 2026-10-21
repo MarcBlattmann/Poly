@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/recvmsg
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  recvmsg(fd, msghdr, flags) scatters one message over the iovec entries in
+  order; a datagram longer than the buffers is cut, the rest dropped, and
+  MSG_TRUNC set in msg_flags; msg_name gets the sender (namelen 0 for an
+  unnamed socketpair peer); with no control buffer controllen comes back 0.
+  SCM_RIGHTS descriptors arrive as new descriptors (lowest free) for the
+  same open files, without FD_CLOEXEC unless MSG_CMSG_CLOEXEC; the header
+  has cmsg_len 16 + 4 per descriptor and controllen the space used; a
+  control buffer too small sets MSG_CTRUNC and installs only the descriptors
+  that fit; the sender may close its copies right after sendmsg. With
+  SO_PASSCRED each AF_UNIX message carries SCM_CREDENTIALS (cmsg_len 28)
+  with the sender's pid, uid and gid.
+returns:
+  success: "bytes received; msg_flags, namelen and controllen updated"
+errors:
+  empty: "EAGAIN (11) with MSG_DONTWAIT"
+  bad_iovec: "EFAULT (14) for an unwritable iovec or msghdr"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

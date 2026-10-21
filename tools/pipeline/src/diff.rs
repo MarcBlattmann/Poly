@@ -16,7 +16,7 @@
 //!
 //! [`App`]: SyscallMode::App
 
-use crate::trace::{NormCall, NormOptions, Trace, normalize};
+use crate::trace::{Exit, NormCall, NormOptions, Trace, normalize};
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -45,6 +45,20 @@ impl SyscallMode {
             "app" => Ok(SyscallMode::App),
             _ => Err(format!("unknown syscall mode {s} (exact, names, off, app)")),
         }
+    }
+
+    /// The weaker of two modes: a test's own directive can relax the run's
+    /// mode, never tighten it.
+    pub fn weaker(self, other: SyscallMode) -> SyscallMode {
+        // App and Names are equally strong for this purpose (neither
+        // compares less than the other in every respect); a tie keeps the
+        // run's mode.
+        let rank = |m: SyscallMode| match m {
+            SyscallMode::Exact => 0,
+            SyscallMode::Names | SyscallMode::App => 1,
+            SyscallMode::Off => 2,
+        };
+        if rank(other) > rank(self) { other } else { self }
     }
 }
 
@@ -301,10 +315,19 @@ impl TestResult {
 
     pub fn compared(test: &str, reference: &Trace, target: &Trace, opts: &Options) -> TestResult {
         let comparison = compare(reference, target, opts);
+        // The reference always finishes: if it did not, the test or the
+        // tracer is broken, whatever the target did.
+        let (verdict, reason) = if reference.exit == Exit::Timeout {
+            (Verdict::Error, Some("the reference run timed out (a broken test, or the tracer)".to_string()))
+        } else if comparison.mismatches.is_empty() {
+            (Verdict::Pass, None)
+        } else {
+            (Verdict::Fail, None)
+        };
         TestResult {
             test: test.into(),
-            verdict: if comparison.mismatches.is_empty() { Verdict::Pass } else { Verdict::Fail },
-            reason: None,
+            verdict,
+            reason,
             reference_exit: Some(reference.exit.to_string()),
             target_exit: Some(target.exit.to_string()),
             reference_syscalls: reference.syscalls().count(),
@@ -438,6 +461,15 @@ mod tests {
     }
 
     #[test]
+    fn a_directive_only_weakens_the_mode() {
+        use SyscallMode::*;
+        assert_eq!(Exact.weaker(Off), Off);
+        assert_eq!(Off.weaker(Exact), Off);
+        assert_eq!(Names.weaker(Exact), Names);
+        assert_eq!(Exact.weaker(Names), Names);
+    }
+
+    #[test]
     fn identical_runs_pass() {
         let a = hello("hello, world\n", 13);
         let mut b = a.clone();
@@ -488,6 +520,19 @@ mod tests {
             ]
         );
         assert!(!c.syscalls_compared);
+    }
+
+    #[test]
+    fn a_reference_timeout_is_an_error_even_when_the_target_agrees() {
+        let mut a = hello("x", 1);
+        a.exit = Exit::Timeout;
+        let b = a.clone();
+        let r = TestResult::compared("t", &a, &b, &Options::default());
+        assert_eq!(r.verdict, Verdict::Error);
+        assert!(r.reason.unwrap().contains("timed out"));
+        let mut c = hello("x", 1);
+        c.exit = Exit::Timeout;
+        assert_eq!(TestResult::compared("t", &hello("x", 1), &c, &Options::default()).verdict, Verdict::Fail);
     }
 
     #[test]

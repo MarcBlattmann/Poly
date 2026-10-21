@@ -382,11 +382,53 @@ pub const BUSYBOX_APPLETS: &[(&str, &[&str])] = &[
 /// with a link to it for every applet ([`BUSYBOX_APPLETS`]; `/sbin/init`
 /// among them) and the files BusyBox's init and shell read.
 pub fn busybox_image(busybox: &[u8]) -> Vec<u8> {
+    busybox_image_with(busybox, INITTAB, &[])
+}
+
+/// `/etc/inittab` of the root disk image ([`disk_root_image`]): after
+/// `rcS`, `rootdisk` mounts the disk; the console's shell is the disk's
+/// bash, chrooted.
+pub const DISK_ROOT_INITTAB: &str = "\
+# BusyBox init(8) table for Poly's root disk (tools/xtask/src/rootdisk.rs)
+::sysinit:/etc/init.d/rcS
+::sysinit:/etc/init.d/rootdisk
+::respawn:/bin/cttyhack /sbin/chroot /mnt/root /bin/bash -l
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/umount -a -r
+";
+
+/// `/etc/init.d/rootdisk`: mount the root disk (the first virtio-blk
+/// disk) on `/mnt/root` and bind the kernel's file systems into it.
+pub const ROOTDISK_SCRIPT: &str = "\
+#!/bin/sh
+# Run once by init at boot, after rcS (/etc/inittab).
+mkdir -p /mnt/root
+if ! mount -t ext4 /dev/vda /mnt/root; then
+    echo \"rootdisk: cannot mount /dev/vda on /mnt/root\"
+    exit 1
+fi
+for d in dev dev/pts dev/shm proc sys tmp; do
+    mkdir -p /mnt/root/$d && mount -o bind /$d /mnt/root/$d
+done
+echo \"rootdisk: /dev/vda mounted on /mnt/root\"
+";
+
+/// The BusyBox image booting into the root disk's bash (`cargo xtask run
+/// --disk-root`, the root disk boot test; `rootdisk.rs`).
+pub fn disk_root_image(busybox: &[u8]) -> Vec<u8> {
+    busybox_image_with(busybox, DISK_ROOT_INITTAB, &[("etc/init.d/rootdisk", ROOTDISK_SCRIPT)])
+}
+
+/// [`busybox_image`] with another `/etc/inittab` and more scripts in it.
+fn busybox_image_with(busybox: &[u8], inittab: &str, scripts: &[(&str, &str)]) -> Vec<u8> {
     let mut w = writer();
     base(&mut w);
-    w.file(b"etc/inittab", 0o644, INITTAB.as_bytes());
+    w.file(b"etc/inittab", 0o644, inittab.as_bytes());
     w.dir(b"etc/init.d", 0o755);
     w.file(b"etc/init.d/rcS", 0o755, RCS.as_bytes());
+    for (path, text) in scripts {
+        w.file(path.as_bytes(), 0o755, text.as_bytes());
+    }
     w.file(b"etc/profile", 0o644, PROFILE.as_bytes());
     w.file(b"etc/fstab", 0o644, FSTAB.as_bytes());
     w.file(b"etc/shells", 0o644, b"/bin/sh\n/bin/ash\n");

@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/bind
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  bind(fd, addr, len) names a socket. AF_UNIX: a path creates a socket file
+  (mode bits S_IFSOCK); the path must not exist, even as a stale socket file
+  of a closed socket (unlink it first); an abstract name (leading NUL,
+  length counts exactly) uses no file and must be unique; a shorter abstract
+  name is another name; the name is freed when the socket closes; len 2
+  (family only) autobinds. AF_INET: port 0 picks a free ephemeral port
+  (getsockname shows it); an address and port already bound is EADDRINUSE
+  unless both sockets set SO_REUSEPORT; TCP and UDP ports are separate;
+  AF_UNSPEC with INADDR_ANY is accepted. A socket can be bound once.
+returns:
+  success: "0"
+errors:
+  in_use: "EADDRINUSE (98): name taken (AF_UNIX path existing, including the socket's own; abstract name; INET port)"
+  rebind: "EINVAL (22) for a socket already bound, when the new name is free"
+  unix_missing_dir: "ENOENT (2)"
+  unix_wrong_family: "EINVAL (22) for a non-AF_UNIX address on an AF_UNIX socket"
+  inet_wrong_family: "EAFNOSUPPORT (97)"
+  length: "EINVAL (22) for len below 2 (AF_UNIX) or 16 (AF_INET), or above the struct size"
+  foreign_address: "EADDRNOTAVAIL (99) for an address not on this host"
+  bad_pointer: "EFAULT (14)"
+  not_socket: "ENOTSOCK (88)"
+  closed_fd: "EBADF (9)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
