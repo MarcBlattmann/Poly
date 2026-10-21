@@ -353,7 +353,15 @@ impl<F: Clone + PartialEq> Vma<F> {
                 Backing::File { file: file.clone(), offset: offset + (start - self.start), shared: *shared }
             }
         };
-        Vma { start, end, prot: self.prot, max_prot: self.max_prot, kind: self.kind, backing, wipe_on_fork: self.wipe_on_fork }
+        Vma {
+            start,
+            end,
+            prot: self.prot,
+            max_prot: self.max_prot,
+            kind: self.kind,
+            backing,
+            wipe_on_fork: self.wipe_on_fork,
+        }
     }
 
     /// Whether `next` starts where `self` ends and the two describe one
@@ -808,7 +816,8 @@ impl<F: Clone + PartialEq> VmMap<F> {
             }
             Placement::Hint(hint) => self.place(hint, len).ok_or(Error::NoMemory)?,
         };
-        let vma = Vma { start: addr, end: addr + len, prot, max_prot, kind: Kind::Normal, backing, wipe_on_fork: false };
+        let vma =
+            Vma { start: addr, end: addr + len, prot, max_prot, kind: Kind::Normal, backing, wipe_on_fork: false };
         let replaced = self.rewrite(addr, addr + len, Op::Insert(vma))?;
         Ok(Mapped { addr, replaced })
     }

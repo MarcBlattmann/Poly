@@ -887,20 +887,25 @@ cargo xtask run --headless --no-disk --initrd=target/prog.cpio poly.qemu_exit po
 `poly.init=<path>` runs the program as pid 1 right after the file systems
 are up, before the self-test, and logs how it ended; with `poly.qemu_exit`
 QEMU exits after it (status 33 whatever the program's status). With
-`poly.test.capture` every system call is a `POLY-SYSCALL` line (number, the
-six argument registers, the result in decimal, `ret=?` for `exit_group`),
-and the bytes written to fds 1 and 2 come again as hex in `POLY-OUT`
-lines, as the diff runner reads them (ADR 0027):
+`poly.test.capture` the program is pid 2, the child of a kernel init (pid 1,
+which reaps it and orphans; ADR 0064), every system call is a
+`POLY-SYSCALL` line (process and thread, number, the six argument
+registers, the result in decimal, `ret=?` for `exit_group`; `clone`,
+`fork`, `vfork` and `clone3` also get a `POLY-ENTER` line before the child
+exists), and the bytes that reach the program's standard output and error
+(the capture files it starts with on fds 1 and 2, wherever they are
+duplicated) come again as hex in `POLY-OUT` lines, as the diff runner reads
+them (ADR 0027):
 
 ```text
 init: running /test-binary (traced)
 POLY-INIT: exec /test-binary
-POLY-SYSCALL: pid=1 nr=334 args=0x4b2ca0,0x20,0x0,0x53053053,0x0,0x4a8480 ret=-38
-syscall: pid 1 linux/linux #334 rseq not implemented
-POLY-SYSCALL: pid=1 nr=1 args=0x1,0x4b33d0,0xd,0x4b31b0,0x1,0x7 ret=13
-POLY-SYSCALL: pid=1 nr=231 args=0x0,0xffffffffffffffc0,0xe7,0x4b31b0,0x1,0x7 ret=?
-POLY-EXIT: pid=1 code=0
-init: /test-binary (pid 1) ended: exit status 0
+POLY-SYSCALL: pid=2 tid=2 nr=334 args=0x4b2ca0,0x20,0x0,0x53053053,0x0,0x4a8480 ret=-38
+syscall: pid 2 linux/linux #334 rseq not implemented
+POLY-SYSCALL: pid=2 tid=2 nr=1 args=0x1,0x4b33d0,0xd,0x4b31b0,0x1,0x7 ret=13
+POLY-SYSCALL: pid=2 tid=2 nr=231 args=0x0,0xffffffffffffffc0,0xe7,0x4b31b0,0x1,0x7 ret=?
+POLY-EXIT: pid=2 code=0
+init: /test-binary (pid 2) ended: exit status 0
 ```
 
 A file that cannot run says why: `POLY-INIT: unsupported /bin/x: ENOENT`,

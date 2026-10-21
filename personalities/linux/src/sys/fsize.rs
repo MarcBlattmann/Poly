@@ -9,9 +9,9 @@
 //! - ftruncate and truncate past the limit fail with `EFBIG`, without a
 //!   signal (the spec of setrlimit names only the writes).
 
+use crate::abi::SigInfo;
 use crate::abi::mode;
 use crate::abi::signal::SI_KERNEL;
-use crate::abi::SigInfo;
 use crate::errno::Errno;
 use crate::fs::rlimit::{RLIM_INFINITY, RLIMIT_FSIZE};
 use crate::kernel::{LinuxKernel, Target};

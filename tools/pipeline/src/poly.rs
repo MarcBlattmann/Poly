@@ -172,7 +172,8 @@ pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
             .filter_map(|l| {
                 let record = &l[l.find("POLY-")?..];
                 let (tag, rest) = record.split_once(": ")?;
-                let f = matches!(tag, "POLY-SYSCALL" | "POLY-ENTER" | "POLY-SIGNAL" | "POLY-EXIT").then(|| fields(rest))?;
+                let f =
+                    matches!(tag, "POLY-SYSCALL" | "POLY-ENTER" | "POLY-SIGNAL" | "POLY-EXIT").then(|| fields(rest))?;
                 task_id(&f)
             })
             .filter_map(|p| number(p).ok())
@@ -326,7 +327,14 @@ impl Target {
         self.boot(test, image, binary_sha256, work, &format!("{KERNEL_ARGS} {}", app_output_args()))
     }
 
-    fn boot(&self, test: &str, image: &[u8], binary_sha256: &str, work: &Path, args: &str) -> Result<(Outcome, PathBuf)> {
+    fn boot(
+        &self,
+        test: &str,
+        image: &[u8],
+        binary_sha256: &str,
+        work: &Path,
+        args: &str,
+    ) -> Result<(Outcome, PathBuf)> {
         let image_path = work.join(format!("{test}.initramfs.cpio"));
         util::write(&image_path, image)?;
         let image = image_path;
@@ -470,11 +478,16 @@ mod tests {
             POLY-EXIT: pid=2 code=0\n";
         let Some(Outcome::Ran(t)) = parse_serial(log, "x").unwrap() else { panic!("not run") };
         assert_eq!(t.exit, Exit::Code(0));
-        let calls: Vec<(u32, &str, Option<i64>)> =
-            t.syscalls().map(|c| (c.pid, c.name.as_str(), c.ret)).collect();
+        let calls: Vec<(u32, &str, Option<i64>)> = t.syscalls().map(|c| (c.pid, c.name.as_str(), c.ret)).collect();
         assert_eq!(
             calls,
-            [(0, "clone", Some(3)), (1, "getpid", Some(3)), (0, "clone", Some(4)), (2, "gettid", Some(4)), (0, "exit_group", None)]
+            [
+                (0, "clone", Some(3)),
+                (1, "getpid", Some(3)),
+                (0, "clone", Some(4)),
+                (2, "gettid", Some(4)),
+                (0, "exit_group", None)
+            ]
         );
         let signals: Vec<(u32, i32)> = t
             .events

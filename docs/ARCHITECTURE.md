@@ -1123,22 +1123,26 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
 - **The first program and the test-run protocol** (ADR 0027).
   `poly.init=<path>` runs a program as pid 1 before the self-test and
   reports `POLY-INIT` / `POLY-EXIT`; `poly.test.capture` adds a
-  `POLY-SYSCALL` record per call, `POLY-OUT` for bytes written to fds 1
-  and 2 and `POLY-SIGNAL` for every signal a thread takes but `SIGKILL`
+  `POLY-SYSCALL` record per call (with the thread, `tid=`; calls that
+  start a task also get a `POLY-ENTER` record at their entry),
+  `POLY-OUT` for bytes that reach the program's standard output and error
+  (two capture files on fds 1 and 2, followed wherever they are
+  duplicated) and `POLY-SIGNAL` for every signal a thread takes but `SIGKILL`
   (what a ptrace tracer sees as a signal-delivery-stop; interrupted calls
-  are recorded with the restart number such a tracer sees; ADR 0062); with
-  `poly.qemu_exit` QEMU exits after it. The
+  are recorded with the restart number such a tracer sees; ADR 0062), and
+  runs the program as pid 2, the child of a kernel init (`testinit.rs`,
+  ADR 0064); with `poly.qemu_exit` QEMU exits after it. The
   diff runner (`cargo xtask pipeline diff --target poly`) boots one kernel
   per corpus test this way.
 
 ```text
 init: running /test-binary (traced)
 POLY-INIT: exec /test-binary
-POLY-SYSCALL: pid=1 nr=12 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=2109440
+POLY-SYSCALL: pid=2 tid=2 nr=12 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=2109440
 POLY-OUT: fd=1 hex=48656c6c6f2c20776f726c64210a
-POLY-SYSCALL: pid=1 nr=1 args=0x1,0x20019f,0xe,0x0,0x0,0x0 ret=14
-POLY-SYSCALL: pid=1 nr=231 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=?
-POLY-EXIT: pid=1 code=0
+POLY-SYSCALL: pid=2 tid=2 nr=1 args=0x1,0x20019f,0xe,0x0,0x0,0x0 ret=14
+POLY-SYSCALL: pid=2 tid=2 nr=231 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=?
+POLY-EXIT: pid=2 code=0
 ```
 
 ## BusyBox as init

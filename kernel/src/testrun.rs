@@ -124,7 +124,6 @@ pub fn output(fd: i32, bytes: &[u8]) {
     }
 }
 
-
 /// `POLY-EXIT`: process `pid` ended with `status`.
 pub fn exit(pid: u32, status: ExitStatus) {
     let how = match status {

@@ -113,8 +113,7 @@ pub fn clock_getres(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         cpu?;
     } else {
         let clock = clock_for(clockid).ok_or(Errno::EINVAL)?;
-        if matches!(clock, Clock::ProcessCpuTime | Clock::ThreadCpuTime) && k.cpu_times(CpuTimesOf::Process).is_none()
-        {
+        if matches!(clock, Clock::ProcessCpuTime | Clock::ThreadCpuTime) && k.cpu_times(CpuTimesOf::Process).is_none() {
             return Err(Errno::EINVAL);
         }
     }

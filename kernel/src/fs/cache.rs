@@ -17,9 +17,10 @@
 //!   data is durable within a few seconds. `sync` and unmounting do the
 //!   same at once.
 //! - **Mappings.** [`FileSource`] is a VFS file as a `user::PageSource`.
-//!   On a disk file system it hands out the cache's pages, so a mapping
-//!   and `read`/`write` share one frame, and `MAP_SHARED` works; elsewhere
-//!   (tmpfs) it reads private copies as before.
+//!   On a disk file system or a tmpfs (which is behind the cache too,
+//!   `memfs`, ADR 0064) it hands out the cache's pages, so a mapping and
+//!   `read`/`write` share one frame, and `MAP_SHARED` works; elsewhere
+//!   (procfs, sysfs) it reads private copies as before.
 
 use super::disk;
 use crate::arch;

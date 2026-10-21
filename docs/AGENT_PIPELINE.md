@@ -123,7 +123,8 @@ code in `tools/pipeline/src/apps.rs`). A test is a JSON file:
   systems, so programs buffer and probe the same way), runs every step
   but the last as a child it waits for and the last one with `execve` in
   its place. On Linux the run's output is what those files hold; on Poly
-  it is what `POLY-OUT` reports for fds 1 and 2.
+  too: the kernel reports their contents (`poly.test.stdout=`,
+  `poly.test.stderr=`) in `POLY-OUT` records when the program has ended.
 - **Fixed environment:** `PATH=/bin HOME=/work LANG=C TZ=UTC
   GLIBC_TUNABLES=glibc.cpu.hwcaps=-SSE4_2`, plus the test's `env`. The
   tunable hides SSE4.2 from glibc, so its dynamic linker does not search
@@ -206,9 +207,15 @@ reported **unsupported**. QEMU itself sometimes crashes (SIGSEGV) while
 booting under TCG on a loaded host; a guest cannot cause that, so the boot
 is retried twice and a crash that persists is an **error** of that test
 alone (the logs of the crashed boots are kept as
-`<test>.serial.crash-<n>.log`). Processes are numbered in creation order
-on both sides (on Poly by pid, which the kernel hands out in that order),
-so the program is always process 0. `--jobs N` runs N tests at a time (the
+`<test>.serial.crash-<n>.log`). Processes and threads are numbered in
+creation order on both sides (on Poly by thread id, `tid=`, which the
+kernel hands out in that order), so the program is always task 0; on Poly
+it runs as pid 2, the child of a kernel init (ADR 0064), as under the
+tracer it is the tracer's child. The kernel writes a `POLY-ENTER` record
+when `clone`, `fork`, `vfork` or `clone3` is entered, so the call stands
+before the child's calls as in a ptrace trace, and takes the program's
+output from the files it started with on fds 1 and 2, wherever they are
+duplicated (an app test's output files are reported at the end). `--jobs N` runs N tests at a time (the
 reference run and the Poly boot of a test stay together; the report keeps
 the corpus order).
 

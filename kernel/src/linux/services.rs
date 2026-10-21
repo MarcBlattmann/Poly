@@ -27,7 +27,8 @@
 //! prevents by reading the word first, unlocked.
 //!
 //! Not done yet, each documented where it is: core dumps, shared mappings
-//! of files the page cache does not hold (tmpfs: `ENODEV`), `MAP_32BIT` placement (refused with `ENOMEM` when the address
+//! of files the page cache does not hold (procfs, sysfs: `ENODEV`; tmpfs is behind the cache, ADR 0064), `MAP_32BIT`
+//! placement (refused with `ENOMEM` when the address
 //! is not low), `PROT_GROWSDOWN` (applied to the given range only).
 
 use super::LinuxState;
@@ -408,7 +409,8 @@ impl LinuxKernel for Thread<'_> {
             // a new mapping of the same pages." A private one is EINVAL.
             let regions = memory.regions();
             let v = regions.iter().find(|v| v.contains(old)).ok_or(Errno::EFAULT)?;
-            let (user::memory::Backing::File { file, shared: true, .. }, Some(offset)) = (&v.backing, v.file_offset(old))
+            let (user::memory::Backing::File { file, shared: true, .. }, Some(offset)) =
+                (&v.backing, v.file_offset(old))
             else {
                 return Err(Errno::EINVAL);
             };
@@ -797,11 +799,7 @@ impl LinuxKernel for Thread<'_> {
                 self.process.cpu.memory_counts()
             }
         };
-        poly_personality_linux::kernel::MemoryCounts {
-            maxrss_kib: peak * 4,
-            minor_faults: faults,
-            major_faults: 0,
-        }
+        poly_personality_linux::kernel::MemoryCounts { maxrss_kib: peak * 4, minor_faults: faults, major_faults: 0 }
     }
 
     fn timers_changed(&mut self, _next: TimerWakeup) {
