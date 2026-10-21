@@ -1,0 +1,126 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/semctl               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (kernel.sem = 32000 1024000000 500 32000); initial IPC namespace shared with other processes"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  semctl(semid, semnum, cmd, arg) (syscall 66) controls a System V
+  semaphore set made by semget. semid, semnum and cmd are 32-bit ints
+  (the upper half of each register is ignored); arg is one register used
+  as an int value (SETVAL: its low 32 bits as a signed int) or as a
+  full 64-bit user pointer (IPC_STAT, IPC_SET, GETALL, SETALL, IPC_INFO,
+  SEM_INFO, SEM_STAT, SEM_STAT_ANY). On x86-64 the struct layouts are the
+  64-bit ones always: cmd values with IPC_64 (0x100) set are EINVAL.
+  Commands: IPC_RMID (0) removes the set; IPC_SET (1) sets uid, gid and
+  mode; IPC_STAT (2) copies out struct semid64_ds; IPC_INFO (3) and
+  SEM_INFO (19) copy out struct seminfo; GETPID (11), GETVAL (12),
+  GETNCNT (14), GETZCNT (15) return one semaphore's last-changer pid,
+  value, count of processes waiting for an increase, count waiting for
+  zero; GETALL (13) and SETALL (17) copy all values out or in as an
+  array of nsems unsigned shorts; SETVAL (16) sets one value; SEM_STAT
+  (18) and SEM_STAT_ANY (20) take a slot index instead of an id and
+  return that slot's id. Any other cmd (4..10, 21 and up, negative) is
+  EINVAL. semnum matters only for GETPID, GETVAL, GETNCNT, GETZCNT and
+  SETVAL, where it must be 0..nsems-1 (EINVAL otherwise); everywhere
+  else it is ignored. Values range 0..32767 (SEMVMX). Successful
+  commands return 0 except the GET* reads (the value asked for),
+  IPC_INFO/SEM_INFO (the highest slot index in use) and
+  SEM_STAT/SEM_STAT_ANY (the id).
+returns:
+  ipc_rmid: "0; the set is gone at once: every later command on the id is EINVAL (including a second IPC_RMID); semnum and arg are ignored; processes blocked in semop on the set wake with EIDRM"
+  ipc_stat: >
+    0; writes exactly 104 bytes (struct semid64_ds), nothing past them:
+    key (0 for IPC_PRIVATE), uid, gid, cuid, cgid, mode (low 9 bits),
+    seq (unchanged by IPC_SET), otime (0 until a semop succeeds; semctl
+    never sets it), ctime, nsems; the pad and reserved words are 0.
+    Repeated calls give identical bytes. semnum ignored.
+  ipc_set: >
+    0; reads only uid, gid and mode from the struct (other fields, even
+    garbage, are ignored; key, cuid, cgid, nsems, otime, seq unchanged);
+    stores mode & 0777 (07640 becomes 0640); any uid/gid the namespace can
+    map may be given, including ones the caller is not (the owner gave
+    the set to uid 12345 / gid 54321 as non-root and, staying creator,
+    kept full control); uid or gid (unsigned)-1 is EINVAL and nothing
+    changes; sets ctime to the current time. semnum ignored.
+  getval: "the value (0 for a new set)"
+  setval: "0; the value becomes the low 32 bits of arg as a signed int (2^32+5 sets 5; 0x8000000000000007 sets 7); other semaphores untouched"
+  getall: "0; writes exactly nsems unsigned shorts to arg (nothing after them); semnum ignored; works for large sets (400 tested)"
+  setall: "0; reads nsems unsigned shorts from arg and sets every value; if any is > 32767 the call is ERANGE and no value changes; semnum ignored"
+  getpid: "pid (thread-group id) of the last process that changed that semaphore: 0 for a new set; SETVAL sets it to the caller for that semaphore only; SETALL for all semaphores; a successful semop to the operating process; reads (GETVAL, GETALL, IPC_STAT) and failed calls leave it; it still names a process after that process exits"
+  getncnt: "number of processes blocked in semop waiting for this semaphore to grow (a decrement that cannot proceed); 0 when none"
+  getzcnt: "number of processes blocked in semop waiting for this semaphore to become 0"
+  ipc_info: >
+    the highest slot index in use in the namespace (>= 0); writes exactly
+    40 bytes (struct seminfo) holding the limits: semmni 32000, semmsl
+    32000, semmns 1024000000, semopm 500 (from kernel.sem defaults),
+    semmap = semmnu = semmns, semume 500, semusz 20, semvmx 32767, semaem
+    32767. semid is ignored unless negative (a removed or unused id is
+    fine); semnum ignored.
+  sem_info: "same as IPC_INFO, except semusz = number of sets in use and semaem = total number of semaphores in those sets (namespace-wide)"
+  sem_stat: >
+    takes a slot index in place of semid: returns the id of the set in
+    that slot and fills struct semid64_ds as IPC_STAT does. Scanning
+    indexes 0..(IPC_INFO/SEM_INFO result) finds every live set exactly
+    once. Observed: a set's slot is its id modulo 32768 (the index is
+    taken modulo 32768, so passing the id itself also works); ids are
+    slot + 32768 * seq. SEM_STAT needs read permission; SEM_STAT_ANY
+    does not.
+errors:
+  bad_cmd: "EINVAL (22): unknown cmd (4..10, 21, 99, -1, any cmd | IPC_64)"
+  negative_semid: "EINVAL (22): semid < 0, for every cmd (also IPC_INFO/SEM_INFO), before any other check"
+  no_such_set: "EINVAL (22): id not live (never made or removed); EIDRM is not returned by semctl itself"
+  bad_semnum: "EINVAL (22): GETVAL, SETVAL, GETPID, GETNCNT, GETZCNT with semnum < 0 or >= nsems"
+  range: "ERANGE (34): SETVAL with a value < 0 or > 32767; SETALL with any element > 32767 (nothing changes)"
+  fault: "EFAULT (14): NULL, unmapped or partly unmapped (array running into an unmapped page) pointer for IPC_STAT, IPC_SET, GETALL, SETALL, IPC_INFO, SEM_INFO, SEM_STAT, SEM_STAT_ANY; a failed SETALL or IPC_SET changes nothing"
+  access: >
+    EACCES (13): the caller's class bits do not grant the access: read
+    for IPC_STAT, SEM_STAT, GETVAL, GETALL, GETPID, GETNCNT, GETZCNT;
+    write (alter) for SETVAL, SETALL. The class is owner if euid equals
+    the set's uid or cuid, else group if egid (or a supplementary group)
+    equals gid, else other; only that class's bits count (an owner with
+    mode 0077 is denied). Execute bits grant nothing. Without
+    CAP_IPC_OWNER (not observed as root here; man page: root bypasses).
+  not_owner: "EPERM (1): IPC_SET or IPC_RMID by a caller who is neither uid nor cuid of the set and lacks CAP_SYS_ADMIN (man page; not observable as a single non-root user, not tested). The owner needs no mode bits for IPC_SET, IPC_RMID (a mode 0 set can be changed and removed)."
+  order: >
+    semid < 0 first (EINVAL). IPC_SET: copies the struct in first
+    (EFAULT even for a removed id), then lookup (EINVAL). SETVAL: value
+    range first (ERANGE even for a removed id or bad semnum), then
+    lookup, then semnum (EINVAL), then permission (EACCES).
+    GETVAL/GETPID/GETNCNT/GETZCNT: lookup, then permission (EACCES even
+    with a bad semnum), then semnum. IPC_STAT, GETALL, SETALL: lookup
+    (EINVAL beats EFAULT), then permission (EACCES beats EFAULT and
+    ERANGE), then the user copy (EFAULT), then for SETALL the range check.
+side_effects: >
+  SETVAL and SETALL clear every process's pending SEM_UNDO adjustment for
+  the semaphores they set (a process that raised a semaphore with
+  SEM_UNDO and exits after a SETVAL leaves the value SETVAL stored; the
+  adjustment of semaphores not set stays and is applied on exit).
+  SETVAL and SETALL wake blocked semop callers whose operation can now
+  proceed (they complete, consuming the value, and become the GETPID
+  process); waiters that still cannot proceed stay blocked. SETVAL (even
+  to the current value), SETALL and IPC_SET set ctime to the current
+  time in seconds; reads, IPC_STAT and failed calls do not touch ctime;
+  no semctl touches otime. IPC_RMID wakes all waiters with EIDRM and
+  frees the slot. No file descriptors are involved.
+threading: "no thread-specific behaviour; sets are namespace-wide, visible to every process (parent and child after fork see the same values)"
+ordering:
+  - "IPC_RMID takes effect before it returns: a waiter's semop returns EIDRM and the id is EINVAL for every later call"
+  - "a waiter woken by SETVAL/SETALL completes its semop shortly after the call, not necessarily before semctl returns (tests poll GETNCNT/GETZCNT or wait for the child)"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none; ctime has one-second resolution"
+tests:
+  visible: 11  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: the tests also use semget and semop (and fork, mmap) to set up
+# and observe sets. struct semid64_ds layout: asm/sembuf.h (x86-64) with
+# struct ipc64_perm from asm-generic/ipcbuf.h; struct seminfo and the
+# command numbers from linux/sem.h and linux/ipc.h. Ids and slot indexes
+# differ between runs, so the tests compare syscall names only
+# (poly-diff: syscalls=names), or nothing for tests that fork and block.
+# Not tested: other users and root (needs a second uid; this oracle was a
+# single non-root user), SEM_UNDO interaction with IPC_RMID, the
+# kernel.sem limits other than their defaults.
