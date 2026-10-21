@@ -92,6 +92,18 @@ unsafe extern "system" {
         class: u32,
     ) -> NtStatus;
     pub fn NtFlushBuffersFile(handle: Handle, iosb: *mut IoStatusBlock) -> NtStatus;
+    pub fn NtDeviceIoControlFile(
+        handle: Handle,
+        event: Handle,
+        apc: *const u8,
+        apc_context: *const u8,
+        iosb: *mut IoStatusBlock,
+        code: u32,
+        input: *const u8,
+        input_len: u32,
+        output: *mut u8,
+        output_len: u32,
+    ) -> NtStatus;
 
     pub fn NtCreateEvent(
         handle: *mut Handle,

@@ -1351,6 +1351,18 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   exports to API-set contracts that `ntdll`'s loader maps to `kernelbase`.
   The decisions (path normalisation, the environment block, argument
   mapping, error codes, messages) are host-tested in `poly-kernelbase`.
+- **The console host** (`crates/poly-console`, `personalities/nt/src/console`,
+  `kernel/src/nt/console.rs`, [ADR 0080](adr/0080-console-host.md)): a
+  Windows console is an object of the NT personality backed by one of
+  Poly's terminals; its handles are file objects on `\Device\PolyConsole`
+  (`NtReadFile`/`NtWriteFile` in the console code pages, everything else
+  `NtDeviceIoControlFile` with Poly's codes). `poly-console` holds the
+  modes, code pages, cooked line editing, terminal input as key events and
+  the screen buffer that mirrors itself to the terminal as VT bytes. A
+  console program started on a terminal gets that terminal's console;
+  descriptors that are not terminals become ordinary file handles; the
+  handles go into the process parameters. Ctrl+C starts a thread at
+  `kernelbase`'s control routine in each attached process.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

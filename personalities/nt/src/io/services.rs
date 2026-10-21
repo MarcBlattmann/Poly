@@ -60,7 +60,7 @@ pub const MAX_CAPTURED_WRITE: usize = 16 << 20;
 /// A file handle: its object and the object's cookie. The handle must have
 /// `required` access. A file object the file I/O layer did not make (the
 /// minimal ones of ADR 0063) is `STATUS_INVALID_DEVICE_REQUEST`.
-fn file_handle(sys: &mut NtSystem, caller: &Caller, h: Handle, required: u32) -> Result<(ObjectId, u64)> {
+pub(crate) fn file_handle(sys: &mut NtSystem, caller: &Caller, h: Handle, required: u32) -> Result<(ObjectId, u64)> {
     let id = sys.objects.object_by_handle(caller, h, required, Some(ObjectType::File))?;
     let cookie = sys.objects.cookie(id).ok_or(STATUS_INVALID_HANDLE)?;
     if sys.io.file(cookie).is_none() {
@@ -82,11 +82,11 @@ fn require_any(sys: &NtSystem, caller: &Caller, h: Handle, any: u32) -> Result<u
 /// The `Event`, `ApcRoutine`, `ApcContext` and `IoStatusBlock` arguments
 /// every asynchronous service starts with.
 #[derive(Clone, Copy, Debug)]
-struct Notify {
-    event: u64,
-    apc_routine: u64,
-    apc_context: u64,
-    iosb: u64,
+pub(crate) struct Notify {
+    pub(crate) event: u64,
+    pub(crate) apc_routine: u64,
+    pub(crate) apc_context: u64,
+    pub(crate) iosb: u64,
 }
 
 impl Notify {
@@ -100,7 +100,7 @@ impl Notify {
     }
 
     /// Check the event handle now (so a bad one fails before any work).
-    fn check_event(&self, sys: &NtSystem, caller: &Caller) -> Result<()> {
+    pub(crate) fn check_event(&self, sys: &NtSystem, caller: &Caller) -> Result<()> {
         if self.event != 0 {
             sys.objects.object_by_handle(caller, Handle(self.event), EVENT_MODIFY_STATE, Some(ObjectType::Event))?;
         }
@@ -119,7 +119,14 @@ impl Notify {
     }
 
     /// The request a call makes.
-    fn irp(&self, sys: &mut NtSystem, caller: &Caller, file: (ObjectId, u64), sync: bool, op: IrpOp) -> Result<Irp> {
+    pub(crate) fn irp(
+        &self,
+        sys: &mut NtSystem,
+        caller: &Caller,
+        file: (ObjectId, u64),
+        sync: bool,
+        op: IrpOp,
+    ) -> Result<Irp> {
         let event = self.take_event(sys, caller)?;
         let _ = sys.objects.set_signaled(file.0, false);
         Ok(Irp {
@@ -140,7 +147,14 @@ impl Notify {
     /// A call that finished in the calling thread: set its event and queue
     /// its APC like a completed request (its status block is written by the
     /// service itself).
-    fn signal_done(&self, sys: &mut NtSystem, caller: &Caller, file: (ObjectId, u64), status: NtStatus, info: u64) {
+    pub(crate) fn signal_done(
+        &self,
+        sys: &mut NtSystem,
+        caller: &Caller,
+        file: (ObjectId, u64),
+        status: NtStatus,
+        info: u64,
+    ) {
         if self.event == 0 && self.apc_routine == 0 {
             return;
         }
@@ -152,7 +166,7 @@ impl Notify {
     }
 }
 
-fn write_iosb<K: NtKernel>(k: &mut K, iosb: u64, status: NtStatus, info: u64) -> Result<()> {
+pub(crate) fn write_iosb<K: NtKernel>(k: &mut K, iosb: u64, status: NtStatus, info: u64) -> Result<()> {
     abi::write(k, iosb, &iosb_bytes(status, info))
 }
 
@@ -162,7 +176,7 @@ fn read_offset<K: NtKernel>(k: &mut K, ptr: u64) -> Result<Option<i64>> {
 }
 
 /// Wait for synchronous request `irp` on file object `obj` to complete.
-fn wait_sync<K: NtKernel>(k: &mut K, obj: ObjectId, irp: u64) -> (NtStatus, u64) {
+pub(crate) fn wait_sync<K: NtKernel>(k: &mut K, obj: ObjectId, irp: u64) -> (NtStatus, u64) {
     let caller = k.caller();
     loop {
         let step = k.with_state(|sys, _, _| {
@@ -199,12 +213,15 @@ fn wait_sync<K: NtKernel>(k: &mut K, obj: ObjectId, irp: u64) -> (NtStatus, u64)
     }
 }
 
+/// A read at `offset` (or at the stream's own position). Nothing to read
+/// yet from a pipe or device of Poly's own (an inherited standard handle,
+/// ADR 0080) is `STATUS_PENDING`, which the caller waits out.
 fn read_at(open: &OpenFile, offset: u64, buf: &mut [u8]) -> Result<usize> {
     match open.read_at(offset, buf) {
         Err(Errno::ESPIPE) => open.read(buf),
         r => r,
     }
-    .map_err(status_of)
+    .map_err(|e| if e == Errno::EAGAIN { STATUS_PENDING } else { status_of(e) })
 }
 
 fn write_at(open: &OpenFile, offset: u64, buf: &[u8]) -> Result<usize> {
@@ -400,6 +417,21 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
                     Some(id) => Plan::Pending { irp: id, file: file.0, sync },
                 })
             }
+            // A console input handle: a read in the input code page (ADR 0080).
+            Target::Console(t) => {
+                let t = *t;
+                let t = sys.io.console_target(file.1).map(|_| t)?;
+                if t.kind != crate::console::ConsoleKind::Input {
+                    return Err(STATUS_INVALID_HANDLE);
+                }
+                let irp = n.irp(sys, &caller, file, sync, IrpOp::Read { offset: 0, len, buf, key })?;
+                let wait = crate::console::Wait::Text { unicode: false, max: len, buf };
+                Ok(match sys.io.console_read(t.console, irp, wait)? {
+                    None => Plan::Done(STATUS_SUCCESS),
+                    Some(id) => Plan::Pending { irp: id, file: file.0, sync },
+                })
+            }
+            Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: false }),
             Target::Disk(d) => {
                 if rec.kind == FileType::Directory {
                     return Err(STATUS_INVALID_DEVICE_REQUEST);
@@ -429,7 +461,19 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             let mut total = 0usize;
             while total < len {
                 let want = chunk.len().min(len - total);
-                let got = read_at(&open, offset + total as u64, &mut chunk[..want])?;
+                let got = match read_at(&open, offset + total as u64, &mut chunk[..want]) {
+                    // A stream with nothing yet: wait for the first bytes,
+                    // return what came once some did.
+                    Err(STATUS_PENDING) if total == 0 => {
+                        let s = k.delay(crate::kernel::NtTimeout::Relative(10_000), false);
+                        if s != STATUS_SUCCESS && s != poly_ntobj::status::STATUS_TIMEOUT {
+                            return Err(s);
+                        }
+                        continue;
+                    }
+                    Err(STATUS_PENDING) => break,
+                    r => r?,
+                };
                 if got == 0 {
                     break;
                 }
@@ -471,7 +515,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
     let whole = k.with_state(|sys, _, _| -> Result<bool> {
         let (_, cookie) = file_handle(sys, &caller, Handle(h), 0)?;
         let rec = sys.io.file(cookie).expect("checked");
-        Ok(!rec.is_sync() || matches!(rec.target, Target::Pipe(_)))
+        Ok(!rec.is_sync() || matches!(rec.target, Target::Pipe(_) | Target::Console(_)))
     })?;
     let captured = if whole {
         if len > MAX_CAPTURED_WRITE {
@@ -497,6 +541,21 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
                 n.signal_done(sys, &caller, file, STATUS_SUCCESS, written);
                 Ok(Plan::Done(STATUS_SUCCESS))
             }
+            // A console output handle: text in the output code page (ADR 0080).
+            Target::Console(t) => {
+                let t = *t;
+                let t = sys.io.console_target(file.1).map(|_| t)?;
+                if t.kind != crate::console::ConsoleKind::Output {
+                    return Err(STATUS_INVALID_HANDLE);
+                }
+                let data = captured.unwrap_or_default();
+                let written = sys.io.console_write_bytes(t.console, &data)?;
+                n.signal_done(sys, &caller, file, STATUS_SUCCESS, written);
+                Ok(Plan::Done(STATUS_SUCCESS))
+            }
+            // Written at its end: a redirected output shared by two handles
+            // (`2>&1`) interleaves rather than overwrites.
+            Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: true }),
             Target::Disk(d) => {
                 if rec.kind == FileType::Directory {
                     return Err(STATUS_INVALID_DEVICE_REQUEST);

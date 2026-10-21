@@ -1,0 +1,13 @@
+[package]
+name = "poly-console"
+description = "The Windows console without the machine (ADR 0080): modes, code pages, the screen buffer and its VT output, terminal input as key events, cooked-mode line editing, the console's ioctl protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

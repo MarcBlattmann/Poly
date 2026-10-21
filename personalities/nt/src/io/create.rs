@@ -95,10 +95,14 @@ impl CreateHook<'_> {
             ObjectType::Device => match self.io.device(r.cookie) {
                 Some(Device::Volume(v)) => Start::Volume(v),
                 Some(Device::Pipe) => Start::Pipe,
+                Some(Device::Console) => return self.open_console(om, r, None),
                 None => return Err(STATUS_OBJECT_PATH_NOT_FOUND),
             },
             ObjectType::File => {
                 let rec = self.io.file(r.cookie).ok_or(STATUS_INVALID_HANDLE)?;
+                if let super::Target::Console(t) = rec.target {
+                    return self.open_console(om, r, Some(t));
+                }
                 let d = rec.disk().ok_or(STATUS_INVALID_PARAMETER)?;
                 if rec.kind != FileType::Directory {
                     return Err(STATUS_NOT_A_DIRECTORY);
@@ -115,6 +119,24 @@ impl CreateHook<'_> {
             }
             Start::Dir { volume, node, path } => self.open_disk(om, volume, &node, &path, r.remaining),
         }
+    }
+
+    /// Below `\Device\PolyConsole`, or relative to a console handle (ADR
+    /// 0080, [`crate::console`]).
+    fn open_console(
+        &mut self,
+        om: &mut ObjectManager,
+        r: &ParseRequest<'_>,
+        relative: Option<crate::console::ConsoleTarget>,
+    ) -> Result<ObjectId, NtStatus> {
+        if self.params.options & FILE_DIRECTORY_FILE != 0 {
+            return Err(STATUS_NOT_A_DIRECTORY);
+        }
+        let (object, cookie) =
+            self.io.open_console(om, r.caller.as_ref(), self.thread, &self.params, relative, r.remaining)?;
+        self.information = FILE_OPENED;
+        self.made = Some(cookie);
+        Ok(object)
     }
 
     fn open_pipe(&mut self, om: &mut ObjectManager, remaining: &[u16]) -> Result<ObjectId, NtStatus> {

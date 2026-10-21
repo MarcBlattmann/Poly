@@ -54,6 +54,26 @@ pub const PP_CURRENT_DIRECTORY: u64 = 0x90;
 /// The bytes kept for the structure (zero past the fields above).
 pub const PARAMETERS_SIZE: u64 = 0x400;
 
+/// Poly's own (ADR 0080): the console connection handle (0: none) in the
+/// first pointer of `winternl.h`'s `Reserved2[10]` (+ 0x10), and the three
+/// standard handles (input, output, error) in its third to fifth
+/// (+ 0x20, + 0x28, + 0x30). `winternl.h` names none of them; to be
+/// confirmed by the spec agent against real Windows.
+pub const PP_CONSOLE_HANDLE: u64 = 0x10;
+pub const PP_STANDARD_INPUT: u64 = 0x20;
+pub const PP_STANDARD_OUTPUT: u64 = 0x28;
+pub const PP_STANDARD_ERROR: u64 = 0x30;
+
+/// Put a process's console connection and standard handles into its
+/// parameters at `base` (what [`write`] returned).
+pub fn write_handles(b: &mut dyn Backend, base: u64, console: u64, std: [u64; 3]) -> Result<(), NtStatus> {
+    b.write(base + PP_CONSOLE_HANDLE, &console.to_le_bytes())?;
+    for (i, h) in std.iter().enumerate() {
+        b.write(base + PP_STANDARD_INPUT + 8 * i as u64, &h.to_le_bytes())?;
+    }
+    Ok(())
+}
+
 /// A process's parameters.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Parameters {
