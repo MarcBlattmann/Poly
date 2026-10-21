@@ -855,15 +855,23 @@ crate::kernel_test! {
         let base = unsafe { cpu::read_msr(cpu::MSR_APIC_BASE) } & poly_paging::ADDR_MASK;
         let lapic = crate::mm::map_mmio(base, PAGE_SIZE).ok_or("could not map the local APIC")?;
         check(lapic)?;
-        // SAFETY: `lapic` maps the local APIC's register page, uncached.
-        // Offset 0x30 is the read-only Local APIC Version Register (SDM
-        // Vol. 3A, "Local APIC Version Register"); reading it has no effect.
-        let version = unsafe { ((lapic + 0x30) as *const u32).read_volatile() };
-        kprintln!("paging: local APIC at {base:#x} mapped at {lapic:#x}, version register {version:#x}");
-        // Bits 7:0 are 1XH for an integrated APIC; bits 23:16 hold the
-        // number of LVT entries minus one, which is at least 3.
-        if version & 0xf0 != 0x10 || (version >> 16) & 0xff < 3 {
-            return Err("local APIC version register does not look like an APIC");
+        // In x2APIC mode (KVM gives QEMU's CPU models x2APIC; TCG's do not
+        // have it) the registers are MSRs and the page answers no reads: SDM
+        // Vol. 3A §11.12.1.2 makes MMIO accesses behave as for a globally
+        // disabled xAPIC, and KVM reads them as all ones. Its contents can
+        // only be checked in xAPIC mode; the HPET below is read either way.
+        if !super::apic::is_x2apic() {
+            // SAFETY: `lapic` maps the local APIC's register page, uncached,
+            // and the APIC is in xAPIC mode, so the page holds its registers.
+            // Offset 0x30 is the read-only Local APIC Version Register (SDM
+            // Vol. 3A, "Local APIC Version Register"); reading it has no effect.
+            let version = unsafe { ((lapic + 0x30) as *const u32).read_volatile() };
+            kprintln!("paging: local APIC at {base:#x} mapped at {lapic:#x}, version register {version:#x}");
+            // Bits 7:0 are 1XH for an integrated APIC; bits 23:16 hold the
+            // number of LVT entries minus one, which is at least 3.
+            if version & 0xf0 != 0x10 || (version >> 16) & 0xff < 3 {
+                return Err("local APIC version register does not look like an APIC");
+            }
         }
 
         // The other device ranges drivers will need (QEMU q35 addresses, as
@@ -875,6 +883,24 @@ crate::kernel_test! {
             check(virt + align_up(len, PAGE_SIZE) - PAGE_SIZE)?;
             if translate(virt)?.phys != phys {
                 return Err("MMIO mapping points at the wrong address");
+            }
+            if phys == 0xfed0_0000 && crate::acpi::platform().and_then(|p| p.hpet) == Some(phys) {
+                // SAFETY: `virt` maps the HPET's register block (the ACPI
+                // tables put it here), uncached. Offset 0 is its read-only
+                // General Capabilities and ID register (IA-PC HPET 1.0a
+                // §2.3.4); reading it has no effect. Two 32-bit reads, the
+                // access size every HPET (and QEMU's) supports.
+                let caps = unsafe {
+                    u64::from((virt as *const u32).read_volatile())
+                        | u64::from(((virt + 4) as *const u32).read_volatile()) << 32
+                };
+                kprintln!("paging: HPET at {phys:#x} mapped at {virt:#x}, capabilities {caps:#x}");
+                // A revision ID that is not 0, and a period in femtoseconds
+                // of at most 100 ns (§2.3.4: 0x05F5E100).
+                let period_fs = caps >> 32;
+                if caps & 0xff == 0 || period_fs == 0 || period_fs > 0x05f5_e100 {
+                    return Err("HPET capabilities register does not look like an HPET");
+                }
             }
         }
 

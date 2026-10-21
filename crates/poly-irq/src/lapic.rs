@@ -15,7 +15,9 @@
 use core::hint::spin_loop;
 use core::sync::atomic::{Ordering, fence};
 
-use crate::time::{Calibration, CalibrationConfig, CalibrationError, Counter, calibrate, mul_div};
+use crate::time::{
+    Calibration, CalibrationConfig, CalibrationError, CalibrationReport, Counter, calibrate_report, mul_div,
+};
 use crate::{CpuFeatures, DeliveryMode, Mmio, Msr, Polarity, Trigger};
 
 /// Register offsets in the xAPIC page (table 11-1). The x2APIC MSR for each
@@ -876,14 +878,29 @@ impl<R: ApicRegisters> LocalApic<R> {
         divide: Divide,
         config: &CalibrationConfig,
     ) -> Result<Calibration, CalibrationError> {
+        self.calibrate_timer_report(reference, reference_hz, divide, config).0
+    }
+
+    /// [`LocalApic::calibrate_timer`], and the measurements it took.
+    ///
+    /// The reference can be any counter of known rate: the HPET or PM
+    /// timer, or a TSC already calibrated against one. Under a hypervisor
+    /// the TSC is the better one, since reading it is not a VM exit.
+    pub fn calibrate_timer_report<C: Counter>(
+        &self,
+        reference: &C,
+        reference_hz: u64,
+        divide: Divide,
+        config: &CalibrationConfig,
+    ) -> (Result<Calibration, CalibrationError>, CalibrationReport) {
         self.set_timer_divide(divide);
         let lvt = Lvt::masked().with_vector(0xff).with_timer_mode(TimerMode::OneShot);
         self.regs.write(reg::LVT_TIMER, lvt.bits());
         self.regs.write(reg::TIMER_INITIAL, u32::MAX);
-        let result = calibrate(&ApicTimerCounter(self), reference, reference_hz, config);
+        let (result, report) = calibrate_report(&ApicTimerCounter(self), reference, reference_hz, config);
         let expired = self.timer_current_count() == 0;
         self.stop_timer();
-        if expired { Err(CalibrationError::TargetStuck) } else { result }
+        (if expired { Err(CalibrationError::TargetStuck) } else { result }, report)
     }
 }
 
@@ -1269,6 +1286,47 @@ mod tests {
             assert!(apic.lvt(LvtReg::Timer).unwrap().is_masked());
             assert_eq!(timer_count_for(cal.hz, 1_000_000), Some((cal.hz / 1000) as u32));
         }
+    }
+
+    #[test]
+    fn timer_calibrates_against_the_tsc_where_device_reads_exit() {
+        // Like KVM: reading the timer's current count is a VM exit (2 us),
+        // reading the HPET one to user space (3 us per register, three per
+        // 64-bit counter read); reading the TSC costs nothing much. Against
+        // the HPET each bracket is about 11 us, too wide for the standard
+        // tolerance; against a calibrated TSC it is the 2 us of one exit.
+        const TSC_HZ: u64 = 2_445_428_000;
+        let clock = SimClock::new(23).read_cost(20_000, 20_000);
+        let sim = SimApic::new(&clock, 0, 0x0005_0014);
+        sim.set_timer_read_cost_ps(2_000_000);
+        let hpet_sim = SimHpet::new(&clock, true);
+        hpet_sim.set_read_cost_ps(3_000_000);
+        let hpet = crate::Hpet::new(&hpet_sim).unwrap();
+        hpet.enable();
+        let hz = hpet.capabilities().frequency_hz();
+        let tsc = crate::sim::FakeTsc::new(&clock, TSC_HZ);
+        enable_x2apic(&&sim, &ALL).unwrap();
+        let apic = LocalApic::new(X2Apic(&sim), &ALL);
+        let strict = CalibrationConfig::for_reference(hz);
+
+        let (result, report) = apic.calibrate_timer_report(&hpet, hz, Divide::By16, &strict);
+        assert_eq!(result, Err(CalibrationError::Inconsistent), "{report}");
+        assert!(report.samples().iter().all(|s| !s.tight), "{report}");
+
+        let strict = CalibrationConfig::for_reference(TSC_HZ);
+        let cal = apic.calibrate_timer(&tsc, TSC_HZ, Divide::By16, &strict).unwrap();
+        let expected = 1_000_000_000 / 16;
+        let err_ppm = mul_div(cal.hz.abs_diff(expected), 1_000_000, expected);
+        assert!(err_ppm < 100, "{cal:?}");
+        assert_eq!(cal.used, cal.taken);
+        assert_eq!(apic.timer_initial_count(), 0);
+
+        // Against the HPET the retries get there too, with looser settings.
+        let r =
+            crate::time::calibrate_with_retries(hz, |cfg| apic.calibrate_timer_report(&hpet, hz, Divide::By16, cfg));
+        let cal = r.result.unwrap();
+        assert!(r.attempts > 2, "{r:?}");
+        assert!(mul_div(cal.hz.abs_diff(expected), 1_000_000, expected) < 1000, "{cal:?}");
     }
 
     #[test]

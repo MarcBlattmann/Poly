@@ -28,8 +28,8 @@ use crate::sync::SetOnce;
 use core::fmt;
 use core::sync::atomic::{AtomicU64, Ordering};
 use poly_irq::lapic::{TimerMode, timer_count_for};
-use poly_irq::time::{ClockSource, NANOS_PER_SEC, calibrate, mask};
-use poly_irq::{Calibration, CalibrationConfig, CalibrationError, Counter, CpuFeatures, Divide, Hpet, MonotonicClock};
+use poly_irq::time::{ClockSource, NANOS_PER_SEC, calibrate_report, calibrate_with_retries, mask};
+use poly_irq::{Calibration, CalibrationError, Counter, CpuFeatures, Divide, Hpet, MonotonicClock};
 
 /// Scheduler ticks per second.
 pub const TICK_HZ: u64 = 1000;
@@ -184,20 +184,22 @@ pub(super) fn init(platform: Option<&Platform>, features: &CpuFeatures, apic: &A
     let name = reference.name();
 
     let tsc = if features.tsc {
-        match calibrate_with_retries(ref_hz, |cfg| calibrate(&Tsc, &reference, ref_hz, cfg)) {
+        let r = calibrate_with_retries(ref_hz, |cfg| calibrate_report(&Tsc, &reference, ref_hz, cfg));
+        match r.result {
             Ok(c) => {
                 kprintln!(
-                    "time: TSC {}, calibrated against the {name} ({} of {} measurements, spread {} ppm), invariant: {}",
+                    "time: TSC {}, calibrated against the {name} ({} of {} measurements, spread {} ppm{}), invariant: {}",
                     Mhz(c.hz),
                     c.used,
                     c.taken,
                     c.spread_ppm,
+                    Attempts(r.attempts),
                     if features.invariant_tsc { "yes" } else { "no" }
                 );
                 Some(c.hz)
             }
             Err(e) => {
-                kprintln!("time: TSC calibration against the {name} failed: {e:?}");
+                kprintln!("time: TSC calibration against the {name} failed: {e:?}; last attempt {}", r.report);
                 None
             }
         }
@@ -205,21 +207,15 @@ pub(super) fn init(platform: Option<&Platform>, features: &CpuFeatures, apic: &A
         None
     };
 
-    // The APIC timer counts down from u32::MAX during calibration; divide
-    // its input clock until that lasts the whole measurement.
-    let mut apic_timer = Err(CalibrationError::TargetStuck);
-    let mut divide = Divide::By16;
-    for d in [Divide::By16, Divide::By128] {
-        divide = d;
-        apic_timer = calibrate_with_retries(ref_hz, |cfg| apic.calibrate_timer(&reference, ref_hz, d, cfg));
-        if apic_timer != Err(CalibrationError::TargetStuck) {
-            break;
-        }
-    }
-    let apic_timer = apic_timer.map_err(|e| {
-        kprintln!("time: APIC timer calibration failed: {e:?}");
-        "the local APIC timer could not be calibrated"
-    })?;
+    // The APIC timer, against the TSC when it can serve as a reference,
+    // else (or if that fails) against the reference timer. Under KVM every
+    // read of the timer's count is a VM exit and every HPET read one to
+    // QEMU in user space: brackets with an HPET read in them can be too
+    // wide to use, while a TSC read costs nothing extra.
+    let against_tsc = features.tsc_reference_hz(tsc).and_then(|hz| calibrate_apic_timer(apic, &Tsc, hz, "TSC"));
+    let (apic_timer, divide, attempts, against) = against_tsc
+        .or_else(|| calibrate_apic_timer(apic, &reference, ref_hz, name))
+        .ok_or("the local APIC timer could not be calibrated")?;
 
     let clock = MonotonicClock::new(Tsc, reference, ref_hz, tsc, features.constant_rate_tsc())
         .map_err(|_| "no usable clock source")?;
@@ -242,9 +238,11 @@ pub(super) fn init(platform: Option<&Platform>, features: &CpuFeatures, apic: &A
     let count = timer_count_for(apic_timer.hz, NANOS_PER_TICK).ok_or("APIC timer too fast or slow for the tick")?;
     apic.start_timer(TIMER_VECTOR, TimerMode::Periodic, divide, count).map_err(|_| "could not start the APIC timer")?;
     kprintln!(
-        "time: APIC timer {} (input clock / {}), periodic tick {TICK_HZ} Hz on vector {TIMER_VECTOR:#x}",
+        "time: APIC timer {} (input clock / {}, calibrated against the {against}{}), periodic tick {TICK_HZ} Hz \
+         on vector {TIMER_VECTOR:#x}",
         Mhz(apic_timer.hz),
-        divide.divisor()
+        divide.divisor(),
+        Attempts(attempts),
     );
     let info = Info {
         tsc_hz: tsc,
@@ -297,23 +295,42 @@ fn reference_timer(platform: Option<&Platform>) -> Result<Reference, &'static st
     Ok(Reference::PmTimer(PmTimer { port, bits: bits.into() }))
 }
 
-/// Calibrate with the standard settings; if the measurements disagree
-/// (an emulator or a busy host can stall one), try again, then once more
-/// with a looser tolerance.
-fn calibrate_with_retries(
+/// Calibrate the local APIC timer against `reference` (counting at
+/// `reference_hz`, called `name` in the log), with retries
+/// ([`calibrate_with_retries`]): its rate, the divider it goes with, the
+/// attempts it took and `name`. The timer counts down from `u32::MAX` while
+/// it is measured; its input clock is divided until that lasts the whole
+/// measurement. `None` (logged, with the last attempt's measurements) if
+/// it could not be calibrated.
+fn calibrate_apic_timer<C: Counter>(
+    apic: &Apic,
+    reference: &C,
     reference_hz: u64,
-    mut measure: impl FnMut(&CalibrationConfig) -> Result<Calibration, CalibrationError>,
-) -> Result<Calibration, CalibrationError> {
-    let strict = CalibrationConfig::for_reference(reference_hz);
-    let loose = CalibrationConfig { tolerance_ppm: 5_000, ..strict };
-    let mut result = Err(CalibrationError::Inconsistent);
-    for config in [strict, strict, loose] {
-        result = measure(&config);
-        if result != Err(CalibrationError::Inconsistent) {
-            break;
+    name: &'static str,
+) -> Option<(Calibration, Divide, usize, &'static str)> {
+    for divide in [Divide::By16, Divide::By128] {
+        let r = calibrate_with_retries(reference_hz, |cfg| {
+            apic.calibrate_timer_report(reference, reference_hz, divide, cfg)
+        });
+        match r.result {
+            Ok(c) => return Some((c, divide, r.attempts, name)),
+            Err(CalibrationError::TargetStuck) if divide != Divide::By128 => {}
+            Err(e) => {
+                kprintln!("time: APIC timer calibration against the {name} failed: {e:?}; last attempt {}", r.report);
+                return None;
+            }
         }
     }
-    result
+    None
+}
+
+/// `", attempt N"` for a calibration that needed retries ([`poly_irq::CalibrationConfig::retries`]).
+struct Attempts(usize);
+
+impl fmt::Display for Attempts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0 > 1 { write!(f, ", attempt {}", self.0) } else { Ok(()) }
+    }
 }
 
 /// A frequency for the boot log.
@@ -400,9 +417,12 @@ fn measure_against_reference(counter: &impl Counter) -> Result<u64, &'static str
     let info = info().ok_or("time not initialised")?;
     let reference = reference().ok_or("no reference timer")?;
     let _irq = cpu::InterruptsOff::new();
-    calibrate_with_retries(info.reference_hz, |cfg| calibrate(counter, reference, info.reference_hz, cfg))
-        .map(|c| c.hz)
-        .map_err(|_| "measurements against the reference disagree")
+    let r =
+        calibrate_with_retries(info.reference_hz, |cfg| calibrate_report(counter, reference, info.reference_hz, cfg));
+    r.result.map(|c| c.hz).map_err(|e| {
+        crate::kprintln!("time: measuring against the {} failed: {e:?}; last attempt {}", reference.name(), r.report);
+        "measurements against the reference disagree"
+    })
 }
 
 crate::kernel_test! {
@@ -460,8 +480,11 @@ crate::kernel_test! {
         };
         let pm = PmTimer { port, bits: bits.into() };
         let _irq = cpu::InterruptsOff::new();
-        let c = calibrate_with_retries(PM_TIMER_HZ, |cfg| calibrate(&Tsc, &pm, PM_TIMER_HZ, cfg))
-            .map_err(|_| "the TSC could not be calibrated against the PM timer")?;
+        let r = calibrate_with_retries(PM_TIMER_HZ, |cfg| calibrate_report(&Tsc, &pm, PM_TIMER_HZ, cfg));
+        let c = r.result.map_err(|e| {
+            crate::kprintln!("time: TSC against the PM timer: {e:?}; last attempt {}", r.report);
+            "the TSC could not be calibrated against the PM timer"
+        })?;
         if c.hz.abs_diff(tsc_hz) > tsc_hz / 200 {
             crate::kprintln!("time: TSC {} against the PM timer, {} against the HPET", Mhz(c.hz), Mhz(tsc_hz));
             return Err("the PM timer and the HPET disagree");
@@ -491,28 +514,37 @@ crate::kernel_test! {
         if period_ns.abs_diff(NANOS_PER_TICK) > NANOS_PER_TICK / 100 {
             return Err("the APIC timer's period is not one tick");
         }
-        // Count-down rate over half a period, against the reference. Both
-        // reads of a pair are bracketed by reference reads; pairs the host
-        // stretched (or that span a reload) are retried.
+        // Count-down rate over half a period, against the TSC when the
+        // clock reads it (reading it is never a VM exit, so under KVM a
+        // bracket is just the exit that reads the timer's count), else
+        // against the reference timer. Both reads of a pair are bracketed
+        // by reads of that counter; pairs the host stretched (or that span
+        // a reload) are retried.
         let reference = reference().ok_or("no reference timer")?;
-        let (hz, bits) = (info.reference_hz, reference.bits());
+        let (against, hz, name): (&dyn Counter, u64, &str) = match (tsc_conversion(), info.tsc_hz) {
+            (Some(_), Some(tsc_hz)) => (&Tsc, tsc_hz, "TSC"),
+            _ => (reference, info.reference_hz, reference.name()),
+        };
+        let bits = against.bits();
         let read = || {
-            let r0 = reference.read();
+            let r0 = against.read();
             let c = apic.timer_current_count();
-            let r1 = reference.read();
+            let r1 = against.read();
             (r0.wrapping_add(delta(r0, r1, bits) / 2), c, delta(r0, r1, bits))
         };
         let half_period = hz / TICK_HZ / 2;
+        let mut narrowest = u64::MAX;
         for _ in 0..50 {
             let _irq = cpu::InterruptsOff::new();
             let (r0, c0, w0) = read();
-            while delta(r0, reference.read(), bits) < half_period {
+            while delta(r0, against.read(), bits) < half_period {
                 core::hint::spin_loop();
             }
             let (r1, c1, w1) = read();
             let elapsed = delta(r0, r1, bits);
             // Brackets within 2% of the window, and less than a period apart.
             if (w0 + w1) * 50 > elapsed || elapsed >= 2 * half_period {
+                narrowest = narrowest.min(w0 + w1);
                 continue;
             }
             // A countdown that reloads from `initial` at 0.
@@ -524,6 +556,12 @@ crate::kernel_test! {
             }
             return Ok(());
         }
+        crate::kprintln!(
+            "time: APIC timer against the {name}: every measurement disturbed; narrowest pair of brackets {} ns \
+             (at most {} ns allowed)",
+            poly_irq::time::mul_div(narrowest, NANOS_PER_SEC, hz),
+            NANOS_PER_TICK / 2 / 50
+        );
         Err("could not measure the APIC timer: every measurement was disturbed")
     }
 }
