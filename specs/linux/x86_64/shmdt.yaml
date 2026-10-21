@@ -1,0 +1,71 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/shmdt                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4-level paging (user space ends at 0x7ffffffff000); tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  shmdt(shmaddr) (syscall 67) detaches the System V shared memory
+  attachment whose start (the address of the segment's offset 0, as
+  returned by shmat) is shmaddr, a full 64-bit address. It returns 0 and
+  unmaps every page of that attachment (the segment size rounded up to
+  4096), lowers the segment's nattch, sets lpid to the caller's pid and
+  dtime to the current time. The segment and its contents survive (a later
+  shmat sees the same bytes) unless it was marked for removal (IPC_RMID)
+  and this was its last attachment: then it is destroyed and its id is
+  invalid from then on. No permission check is made. The attachment is
+  identified by where its offset 0 is or would be, not by what is mapped
+  at shmaddr: if the first pages of an attachment were munmapped (even if
+  something else was mapped there since), shmdt of the original attach
+  address still detaches what is left of it, while the start of the
+  remaining piece is not an attach address. When the attachment was cut
+  into several pieces (mprotect of part of it, munmap of a middle page)
+  one shmdt removes every remaining piece of it inside
+  [shmaddr, shmaddr + rounded size) and nothing else: neither other
+  mappings put in its holes, nor neighbouring attachments (of the same or
+  another segment). Any shmaddr that is not such a start is EINVAL and
+  changes nothing.
+returns:
+  success: "0"
+  unmapped: "every remaining page of the attachment is unmapped (a touch is SIGSEGV; mincore ENOMEM); the range is free again (shmat there without SHM_REMAP, or mmap MAP_FIXED_NOREPLACE, works)"
+  contents: "the segment keeps its bytes; a new attachment reads what was written through the detached one"
+  other_attachments: "other attachments of the same segment (same or another process, adjacent or not) stay mapped and shared; only the one at shmaddr goes"
+  stat_after: "IPC_STAT: nattch lowered by the number of pieces removed (see nattch_pieces), lpid = caller's pid, dtime = now (seconds, CLOCK_REALTIME); atime, ctime, segsz, cpid, uid, cuid, gid, mode unchanged"
+  nattch_pieces: "nattch counts pieces of attachments, not shmat calls: an attachment split by mprotect of a middle page counts 3, and still 3 after the protection is put back (pieces do not join again); munmap of a whole piece lowers it by 1; a fork copies count too; shmdt removing all pieces brings that attachment's share to 0"
+  head_unmapped: "first k pages of an attachment munmapped (k >= 1): shmdt(original start) returns 0 and removes the rest; shmdt(original start + j pages), 0 < j, is EINVAL; a mapping placed at the original start meanwhile is not touched"
+  hole_refilled: "middle page munmapped and an anonymous mapping put there: shmdt(start) removes the attachment's first and last pages and leaves the anonymous page and its contents"
+  remapped: "after shmat(B, addr, SHM_REMAP) over an attachment of A at addr, A's attachment is gone already (A's nattch 0) and shmdt(addr) detaches B"
+  mremap_moved: "an attachment moved whole by mremap (MREMAP_MAYMOVE | MREMAP_FIXED) is detached by its new start; the old start is EINVAL"
+  removed_segment: "segment marked with IPC_RMID: while attachments remain IPC_STAT works (key 0, SHM_DEST 01000 in mode, nattch the attachments left); the shmdt that removes the last attachment destroys it: IPC_STAT, shmat and IPC_RMID by its id are EINVAL afterwards"
+errors:
+  not_attach_start: "EINVAL (22): shmaddr is 0; not page aligned (also inside an attachment); a later page of an attachment (also the start of a piece split off by mprotect, and the start of what is left after munmap of the head); the start of an ordinary private or shared anonymous mapping; free address space; an address already detached (second shmdt of the same address, also after IPC_RMID destroyed the segment); an attach address with bit 32 flipped or bit 63 set"
+  out_of_range: "EINVAL (22): 0x7ffffffff000 (end of user space), 0x800000000000 (non-canonical), 0xffff800000000000 (kernel half), all ones; never EFAULT or ENOMEM"
+  permissions: "none: shmdt works on any attachment whatever the segment's mode now is (mode 0 set by IPC_SET after attaching), SHM_RDONLY attachments too, for any user"
+  failure_effects: "a failed shmdt changes nothing: mappings, nattch, dtime and lpid stay as they were"
+side_effects: >
+  Unmaps the attachment's pages from the caller's address space (brk and
+  other mappings unchanged) and updates the segment's nattch, lpid and
+  dtime; may destroy a segment marked for removal. In a forked child,
+  shmdt detaches only the child's copy: the parent's attachment stays and
+  sees what the child wrote before detaching; nattch drops by the child's
+  share. Exit and execve detach implicitly (see shmat).
+threading: "the mapping disappears for all threads of the process at once; no other thread-specific behaviour"
+ordering:
+  - "nattch, lpid and dtime are updated when shmdt returns"
+  - "a segment marked with IPC_RMID is destroyed by the shmdt (or munmap, exit) that removes its last attachment, not earlier"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: the tests also use shmget, shmat, shmctl (IPC_STAT, IPC_SET,
+# IPC_RMID), mmap, munmap, mprotect, mremap, mincore (to see whether a page
+# is mapped) and fork. Attach addresses vary between runs and systems, so
+# single-process tests compare syscall names only (poly-diff:
+# syscalls=names); tests that fork use syscalls=off. IPC_STAT needs read
+# permission on the segment (EACCES for mode 0 unless root). struct
+# shmid64_ds layout: asm-generic/shmbuf.h and asm-generic/ipcbuf.h; flag
+# values: linux/shm.h and linux/ipc.h.
