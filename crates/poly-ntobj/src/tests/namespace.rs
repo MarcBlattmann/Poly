@@ -21,7 +21,7 @@ fn well_known_directories_and_links_exist() {
     }
     let root: Vec<String> =
         om.directory_entries(om.root()).unwrap().into_iter().map(|(n, _)| String::from_utf16(&n).unwrap()).collect();
-    for name in ["??", "BaseNamedObjects", "Device", "DosDevices", "GLOBAL??", "KernelObjects", "Sessions"] {
+    for name in ["??", "BaseNamedObjects", "Device", "DosDevices", "GLOBAL??", "KernelObjects", "KnownDlls", "Sessions"] {
         assert!(root.iter().any(|n| n == name), "{name} in {root:?}");
     }
 }

@@ -46,6 +46,8 @@ poly-tty = { path = "../crates/poly-tty" }
 poly-unix = { path = "../crates/poly-unix" }
 poly-vfs = { path = "../crates/poly-vfs" }
 poly-personality-linux = { path = "../personalities/linux" }
+poly-ntobj = { path = "../crates/poly-ntobj" }
+poly-pe = { path = "../crates/poly-pe" }
 poly-personality-nt = { path = "../personalities/nt" }
 poly-personality-xnu = { path = "../personalities/xnu" }
 poly-virtio = { path = "../crates/poly-virtio" }
