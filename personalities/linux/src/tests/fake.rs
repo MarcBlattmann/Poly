@@ -637,6 +637,8 @@ impl LinuxKernel for FakeKernel {
                 }
             }
         };
+        // A fixed mapping replaces pieces of attachments there.
+        super::shm::unmapped(self, addr, r.len);
         self.map_range(addr, r.len, r.prot.0);
         if let Some(data) = file_data {
             for (i, b) in data.iter().enumerate() {

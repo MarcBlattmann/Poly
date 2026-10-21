@@ -17,16 +17,18 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-/// The fake's attachments: address, memory, length.
+/// The fake's attachments, piece by piece (each counts as an attachment):
+/// start, memory, end and offset in the segment.
 #[derive(Default)]
 pub struct FakeShm {
-    pub attached: BTreeMap<u64, (Arc<dyn ShmMemory>, u64)>,
+    pub attached: BTreeMap<u64, (Arc<dyn ShmMemory>, u64, u64)>,
     serials: u64,
 }
 
 #[derive(Debug)]
 struct Memory {
     serial: u64,
+    len: u64,
     attachments: AtomicU64,
 }
 
@@ -49,7 +51,7 @@ fn memory(m: &Arc<dyn ShmMemory>) -> &Memory {
 pub fn create(k: &mut FakeKernel, len: u64) -> Result<Arc<dyn ShmMemory>, Errno> {
     assert!(len > 0 && len.is_multiple_of(PAGE_SIZE), "whole pages: {len}");
     k.shm.serials += 1;
-    Ok(Arc::new(Memory { serial: k.shm.serials, attachments: AtomicU64::new(0) }))
+    Ok(Arc::new(Memory { serial: k.shm.serials, len, attachments: AtomicU64::new(0) }))
 }
 
 pub fn attach(
@@ -71,45 +73,58 @@ pub fn attach(
     };
     let at = LinuxKernel::mmap(k, &r).map_err(|e| if e == Errno::EEXIST { Errno::EINVAL } else { e })?;
     memory(m).attachments.fetch_add(1, Ordering::Relaxed);
-    k.shm.attached.insert(at, (m.clone(), len));
+    k.shm.attached.insert(at, (m.clone(), at + len, 0));
     Ok(at)
 }
 
-pub fn detach(k: &mut FakeKernel, addr: u64) -> Result<u64, Errno> {
-    let (m, len) = k.shm.attached.remove(&addr).ok_or(Errno::EINVAL)?;
-    LinuxKernel::munmap(k, addr, len)?;
-    memory(&m).attachments.fetch_sub(1, Ordering::Relaxed);
-    Ok(m.serial())
+/// The pieces, as the kernel describes them to the personality.
+fn pieces(k: &FakeKernel) -> Vec<ShmPiece> {
+    let piece = |(start, (m, end, offset)): (&u64, &(Arc<dyn ShmMemory>, u64, u64))| ShmPiece {
+        start: *start,
+        end: *end,
+        offset: *offset,
+        serial: m.serial(),
+        len: memory(m).len,
+    };
+    k.shm.attached.iter().map(piece).collect()
 }
 
-/// The attachments with pages in `[addr, addr + len)`: address and length.
-fn overlapping(k: &FakeKernel, addr: u64, len: u64) -> Vec<(u64, u64)> {
-    let end = addr + len;
-    k.shm.attached.iter().filter(|(a, (_, l))| **a < end && addr < *a + *l).map(|(a, (_, l))| (*a, *l)).collect()
+pub fn detach(k: &mut FakeKernel, addr: u64) -> Result<u64, Errno> {
+    let (serial, ranges) = attachment_at(&pieces(k), addr).ok_or(Errno::EINVAL)?;
+    for (start, end) in ranges {
+        LinuxKernel::munmap(k, start, end - start)?;
+    }
+    Ok(serial)
 }
 
 pub fn mapped(k: &mut FakeKernel, addr: u64, len: u64) -> Vec<u64> {
-    overlapping(k, addr, len).iter().map(|(a, _)| k.shm.attached[a].0.serial()).collect()
+    attachments_in(&pieces(k), addr, len)
 }
 
-/// munmap took `[addr, addr + len)`: attachments it covered are gone, the
-/// others keep the span of what is left of them.
+/// munmap took `[addr, addr + len)`: pieces it covered are gone, the
+/// others keep what is left of them (one piece on each side of a hole).
 pub fn unmapped(k: &mut FakeKernel, addr: u64, len: u64) {
     let end = addr + len;
-    for (a, l) in overlapping(k, addr, len) {
-        let (m, _) = k.shm.attached.remove(&a).unwrap();
-        let (start, stop) = (if a < addr { a } else { end }, if a + l > end { a + l } else { addr });
-        if start < stop {
-            k.shm.attached.insert(start, (m, stop - start));
-        } else {
-            memory(&m).attachments.fetch_sub(1, Ordering::Relaxed);
+    for p in pieces(k).into_iter().filter(|p| p.start < end && addr < p.end) {
+        let (m, _, _) = k.shm.attached.remove(&p.start).unwrap();
+        memory(&m).attachments.fetch_sub(1, Ordering::Relaxed);
+        if p.start < addr {
+            memory(&m).attachments.fetch_add(1, Ordering::Relaxed);
+            k.shm.attached.insert(p.start, (m.clone(), addr, p.offset));
+        }
+        if end < p.end {
+            memory(&m).attachments.fetch_add(1, Ordering::Relaxed);
+            k.shm.attached.insert(end, (m, p.end, p.offset + (end - p.start)));
         }
     }
 }
 
 pub fn detach_all(k: &mut FakeKernel) -> Vec<u64> {
-    let addrs: Vec<u64> = k.shm.attached.keys().copied().collect();
-    addrs.into_iter().map(|a| detach(k, a).unwrap()).collect()
+    let all = pieces(k);
+    for p in &all {
+        LinuxKernel::munmap(k, p.start, p.end - p.start).unwrap();
+    }
+    attachments_in(&all, 0, u64::MAX)
 }
 
 /// A fake process in an IPC namespace of its own (euid 1001, egid 2001,
@@ -587,4 +602,182 @@ fn munmap_of_an_attachment_is_recorded() {
     let ds = stat(&mut k, other).unwrap();
     assert_eq!((ds.nattch, ds.dtime), (1, 0), "an attachment outside the range is not touched");
     shmdt(&mut k, keep).unwrap();
+}
+
+// ---- shmdt(2) (`specs/linux/x86_64/shmdt.yaml` and its visible tests) ----
+
+const P: u64 = PAGE_SIZE;
+
+fn is_mapped(k: &FakeKernel, addr: u64) -> bool {
+    k.pages.contains_key(&(addr / P))
+}
+
+/// An anonymous private mapping at `addr` exactly (`MAP_FIXED`), or
+/// anywhere with 0.
+fn anon(k: &mut FakeKernel, addr: u64, shared: bool) -> u64 {
+    let r = MapRequest {
+        addr,
+        len: P,
+        prot: Prot(prot::PROT_READ | prot::PROT_WRITE),
+        placement: if addr == 0 { Placement::Hint } else { Placement::Fixed },
+        shared,
+        backing: Backing::Anonymous,
+        hints: MapHints::default(),
+    };
+    LinuxKernel::mmap(k, &r).unwrap()
+}
+
+#[test]
+fn shmdt_removes_every_rounded_page_and_the_segment_lives_on() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 5000, 0o600).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 1);
+    assert!(is_mapped(&k, a) && is_mapped(&k, a + P));
+    assert_eq!(shmdt(&mut k, a), Ok(0));
+    assert!(!is_mapped(&k, a) && !is_mapped(&k, a + P));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 0);
+    let b = shmat(&mut k, id, 0, SHM_RDONLY).unwrap();
+    assert_eq!(shmdt(&mut k, b), Ok(0), "read-only attachments too");
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 0);
+    assert_eq!(rm(&mut k, id), Ok(0));
+}
+
+#[test]
+fn shmdt_of_anything_but_an_attach_address_is_einval_and_changes_nothing() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 3 * P, 0o600).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    let private = anon(&mut k, 0, false);
+    let shared = anon(&mut k, 0, true);
+    k.realtime.sec += 7;
+    let before = stat(&mut k, id).unwrap();
+    let addrs = [
+        0,
+        a + 1,
+        a + 2048,
+        a + P,
+        a + 2 * P,
+        a - P,
+        private,
+        shared,
+        a + 1000 * P,
+        0x7fff_ffff_f000,
+        0x8000_0000_0000,
+        0xffff_8000_0000_0000,
+        u64::MAX,
+        a ^ (1 << 32),
+        a | (1 << 63),
+    ];
+    for addr in addrs {
+        assert_eq!(shmdt(&mut k, addr), Err(Errno::EINVAL), "{addr:#x}");
+    }
+    assert_eq!(stat(&mut k, id).unwrap(), before, "nattch, dtime and lpid as they were");
+    assert!(is_mapped(&k, a) && is_mapped(&k, a + 2 * P) && is_mapped(&k, private) && is_mapped(&k, shared));
+    assert_eq!(shmdt(&mut k, a), Ok(0));
+    assert_eq!(shmdt(&mut k, a), Err(Errno::EINVAL), "already detached");
+}
+
+#[test]
+fn shmdt_records_dtime_and_lpid_only() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, P, 0o640).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    let b = shmat(&mut k, id, 0, 0).unwrap();
+    let before = stat(&mut k, id).unwrap();
+    assert_eq!(before.dtime, 0);
+    k.realtime.sec += 10;
+    assert_eq!(shmdt(&mut k, a), Ok(0));
+    let after = stat(&mut k, id).unwrap();
+    let expected = ShmidDs { nattch: 1, dtime: k.realtime.sec, lpid: 100, ..before };
+    assert_eq!(after, expected);
+    // No permission check: mode 0 does not stop a detach.
+    let ds = ShmidDs { uid: 1001, gid: 2001, mode: 0, ..ShmidDs::default() };
+    k.copy_to_user(UserPtr(BUF), &ds.to_bytes()).unwrap();
+    assert_eq!(sys(&mut k, nr::SHMCTL, &[id as u64, u64::from(IPC_SET), BUF]), Ok(0));
+    assert_eq!(shmdt(&mut k, b), Ok(0));
+    assert!(!is_mapped(&k, b));
+    rm(&mut k, id).unwrap();
+}
+
+#[test]
+fn shmdt_of_the_last_attachment_destroys_a_removed_segment() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0x5d70_0001, P, 0o600 | IPC_CREAT as i64).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    let b = shmat(&mut k, id, 0, 0).unwrap();
+    rm(&mut k, id).unwrap();
+    assert_eq!(shmdt(&mut k, a), Ok(0));
+    let ds = stat(&mut k, id).unwrap();
+    assert_eq!((ds.nattch, ds.key, ds.mode & SHM_DEST), (1, 0, SHM_DEST));
+    assert_eq!(shmdt(&mut k, b), Ok(0));
+    assert_eq!(stat(&mut k, id), Err(Errno::EINVAL));
+    assert_eq!(shmat(&mut k, id, 0, 0), Err(Errno::EINVAL));
+    assert_eq!(rm(&mut k, id), Err(Errno::EINVAL));
+    assert_eq!(shmdt(&mut k, b), Err(Errno::EINVAL));
+    assert!(!is_mapped(&k, a) && !is_mapped(&k, b));
+}
+
+#[test]
+fn shmdt_finds_an_attachment_by_where_its_offset_zero_was() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 3 * P, 0o600).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    assert_eq!(sys(&mut k, nr::MUNMAP, &[a, P]), Ok(0));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 1);
+    assert_eq!(shmdt(&mut k, a + P), Err(Errno::EINVAL), "the start of what is left");
+    assert_eq!(shmdt(&mut k, a - P), Err(Errno::EINVAL));
+    assert!(is_mapped(&k, a + P) && is_mapped(&k, a + 2 * P));
+    assert_eq!(shmdt(&mut k, a), Ok(0));
+    assert!(!is_mapped(&k, a + P) && !is_mapped(&k, a + 2 * P));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 0);
+
+    // Something else mapped at the old start meanwhile stays.
+    let b = shmat(&mut k, id, 0, 0).unwrap();
+    sys(&mut k, nr::MUNMAP, &[b, P]).unwrap();
+    assert_eq!(anon(&mut k, b, false), b);
+    assert_eq!(shmdt(&mut k, b), Ok(0));
+    assert!(is_mapped(&k, b) && !is_mapped(&k, b + P) && !is_mapped(&k, b + 2 * P));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 0);
+    sys(&mut k, nr::MUNMAP, &[b, P]).unwrap();
+
+    // Two pages gone.
+    let c = shmat(&mut k, id, 0, 0).unwrap();
+    sys(&mut k, nr::MUNMAP, &[c, 2 * P]).unwrap();
+    assert_eq!(shmdt(&mut k, c + P), Err(Errno::EINVAL));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 1);
+    assert_eq!(shmdt(&mut k, c), Ok(0));
+    assert!(!is_mapped(&k, c + 2 * P));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 0);
+}
+
+#[test]
+fn shmdt_leaves_what_fills_a_hole_and_neighbours_alone() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 3 * P, 0o600).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    let next = shmat(&mut k, id, a + 3 * P, 0).unwrap();
+    sys(&mut k, nr::MUNMAP, &[a + P, P]).unwrap();
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 3, "pieces count");
+    assert_eq!(anon(&mut k, a + P, false), a + P);
+    assert_eq!(shmdt(&mut k, a), Ok(0));
+    assert!(!is_mapped(&k, a) && is_mapped(&k, a + P) && !is_mapped(&k, a + 2 * P));
+    assert!(is_mapped(&k, next) && is_mapped(&k, next + 2 * P));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 1);
+    assert_eq!(shmdt(&mut k, next), Ok(0));
+}
+
+#[test]
+fn shmdt_after_shm_remap_detaches_the_new_segment() {
+    let mut k = fresh();
+    let ida = shmget(&mut k, 0, P, 0o600).unwrap();
+    let idb = shmget(&mut k, 0, P, 0o600).unwrap();
+    let a = shmat(&mut k, ida, 0, 0).unwrap();
+    assert_eq!(shmat(&mut k, idb, a, SHM_REMAP), Ok(a));
+    assert_eq!(stat(&mut k, ida).unwrap().nattch, 0);
+    assert_eq!(stat(&mut k, idb).unwrap().nattch, 1);
+    assert_eq!(shmdt(&mut k, a), Ok(0));
+    assert_eq!(stat(&mut k, idb).unwrap().nattch, 0);
+    assert!(!is_mapped(&k, a));
+    assert_eq!(shmdt(&mut k, a), Err(Errno::EINVAL));
 }

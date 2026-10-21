@@ -185,10 +185,14 @@ pub fn unmapped(k: &mut dyn LinuxKernel, serials: &[u64]) {
 
 /// shmdt(shmaddr)
 ///
-/// shmdt(2): `shmaddr` must be where an attachment starts (`EINVAL`
-/// otherwise, a misaligned address too); the attachment is unmapped and
-/// `shm_dtime` and `shm_lpid` record it. A removed segment goes with its
-/// last attachment.
+/// shmdt(2): `shmaddr` must be where an attachment starts: where its
+/// segment's offset 0 is, or was before its first pages were unmapped
+/// (`EINVAL` otherwise, a misaligned address too, with nothing changed).
+/// Every piece of that attachment still mapped in `[shmaddr, shmaddr +
+/// size)` is unmapped ([`crate::ipc::shm::attachment_at`]), whatever
+/// fills its holes and the attachments next to it stay; no permission is
+/// checked. `shm_dtime` and `shm_lpid` record it, and a removed segment
+/// goes with its last attachment.
 pub fn shmdt(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let addr = a.ulong(0);
     if !addr.is_multiple_of(PAGE_SIZE) {

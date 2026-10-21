@@ -152,14 +152,79 @@ kernel_test! {
         if seg.attachments() != 2 || one != [5] {
             return Err("a partly unmapped attachment is not attached any more");
         }
-        if shm::detach(&m, a) != Err(Errno::EINVAL) {
-            return Err("shmdt where an attachment no longer starts is not EINVAL");
+        if shm::detach(&m, a + P) != Err(Errno::EINVAL) {
+            return Err("shmdt of the start of what is left of an attachment is not EINVAL");
         }
         m.unmap(a + P, 2 * P).map_err(|_| "munmap failed")?;
         if seg.attachments() != 1 {
             return Err("unmapping all of an attachment does not detach it");
         }
         shm::detach(&m, ro).map_err(|_| "shmdt failed")?;
+        Ok(())
+    }
+}
+
+kernel_test! {
+    fn shmdt_finds_an_attachment_by_its_offset_zero_and_removes_only_its_pieces() -> TestResult {
+        let m = Memory::new(Layout::default()).map_err(|_| "no memory map")?;
+        let seg = shm::create(3 * P);
+        let attach = |placement| shm::attach(&m, seg.as_ref(), placement, 3 * P, Prot::RW);
+        let mut one = [0u8; 1];
+
+        // The head unmapped and refilled by anonymous memory.
+        let a = attach(Placement::Hint(0)).map_err(|_| "attach failed")?;
+        m.unmap(a, P).map_err(|_| "munmap failed")?;
+        m.map_anonymous(Placement::Fixed(a), P, Prot::RW).map_err(|_| "mmap failed")?;
+        if shm::detach(&m, a + P) != Err(Errno::EINVAL) {
+            return Err("the start of what is left is an attach address");
+        }
+        if shm::detach(&m, a) != Ok(seg.serial()) || seg.attachments() != 0 {
+            return Err("shmdt of the original start does not detach the rest");
+        }
+        if m.read(a, &mut one).is_err() || m.read(a + P, &mut one).is_ok() {
+            return Err("shmdt removed the wrong pages");
+        }
+        m.unmap(a, P).map_err(|_| "munmap failed")?;
+
+        // A middle page refilled, the same segment attached right after.
+        let b = attach(Placement::Hint(0)).map_err(|_| "attach failed")?;
+        let next = attach(Placement::FixedNoReplace(b + 3 * P)).map_err(|_| "attach failed")?;
+        m.unmap(b + P, P).map_err(|_| "munmap failed")?;
+        m.map_anonymous(Placement::Fixed(b + P), P, Prot::RW).map_err(|_| "mmap failed")?;
+        write(&m, b + P, &[9])?;
+        shm::detach(&m, b).map_err(|_| "shmdt failed")?;
+        read(&m, b + P, &mut one)?;
+        if one != [9] || m.read(b, &mut one).is_ok() || m.read(b + 2 * P, &mut one).is_ok() {
+            return Err("shmdt touched what was put in the attachment's hole");
+        }
+        if seg.attachments() != 1 || m.read(next, &mut one).is_err() {
+            return Err("shmdt removed the neighbouring attachment");
+        }
+        shm::detach(&m, next).map_err(|_| "shmdt failed")?;
+        m.unmap(b + P, P).map_err(|_| "munmap failed")?;
+
+        // Split by mprotect: one shmdt takes every piece.
+        let c = attach(Placement::Hint(0)).map_err(|_| "attach failed")?;
+        m.protect(c + P, P, Prot::READ).map_err(|_| "mprotect failed")?;
+        if shm::detach(&m, c + P) != Err(Errno::EINVAL) {
+            return Err("the start of a piece is an attach address");
+        }
+        shm::detach(&m, c).map_err(|_| "shmdt failed")?;
+        if seg.attachments() != 0 || !shm::mapped(&m, c, 3 * P).is_empty() {
+            return Err("shmdt left pieces of a split attachment");
+        }
+
+        // Moved whole by mremap: the new start, not the old.
+        let d = attach(Placement::Hint(0)).map_err(|_| "attach failed")?;
+        let to = d + 16 * P;
+        let moved = m.remap(d, 3 * P, 3 * P, poly_vm::RemapPlacement::Fixed(to)).map_err(|_| "mremap failed")?;
+        if moved != to || shm::detach(&m, d) != Err(Errno::EINVAL) {
+            return Err("the old start of a moved attachment is an attach address");
+        }
+        shm::detach(&m, to).map_err(|_| "shmdt of the new start failed")?;
+        if seg.attachments() != 0 {
+            return Err("the moved attachment is still attached");
+        }
         Ok(())
     }
 }

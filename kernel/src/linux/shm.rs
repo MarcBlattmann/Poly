@@ -17,7 +17,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::ipc::shm::ShmMemory;
+use poly_personality_linux::ipc::shm::{ShmMemory, ShmPiece, attachment_at, attachments_in};
 
 /// The serial of the next segment's memory.
 static SERIALS: AtomicU64 = AtomicU64::new(1);
@@ -105,41 +105,38 @@ pub fn attach(
 /// The serials of the attachments in `memory` with pages in
 /// `[addr, addr + len)`, one per attachment.
 pub fn mapped(memory: &Memory, addr: u64, len: u64) -> Vec<u64> {
-    let end = addr.saturating_add(len);
-    attachments(memory).into_iter().filter(|a| a.0 < end && addr < a.1).map(|a| a.2).collect()
+    attachments_in(&pieces(memory), addr, len)
 }
 
-/// The attachments of `memory`: start, end and serial of each run of
-/// adjacent regions mapping one segment's pages in order.
-fn attachments(memory: &Memory) -> Vec<(u64, u64, u64)> {
-    let mut out: Vec<(u64, u64, u64)> = Vec::new();
-    let mut next_offset = 0;
+/// The regions of `memory` that map segments' pages, in address order.
+fn pieces(memory: &Memory) -> Vec<ShmPiece> {
+    let mut out = Vec::new();
     for v in memory.regions() {
         let Backing::File { file, offset, shared: true } = &v.backing else { continue };
-        let Some(serial) = file.source().sysv_shm() else { continue };
-        match out.last_mut() {
-            Some(last) if last.1 == v.start && last.2 == serial && *offset == next_offset => last.1 = v.end,
-            _ => out.push((v.start, v.end, serial)),
-        }
-        next_offset = offset + v.size();
+        let source = file.source();
+        let Some(serial) = source.sysv_shm() else { continue };
+        out.push(ShmPiece { start: v.start, end: v.end, offset: *offset, serial, len: source.len() });
     }
     out
 }
 
-/// shmdt(2): unmap the attachment that starts at `addr` and return its
-/// segment's serial; `EINVAL` if none starts there.
+/// shmdt(2): unmap every piece of the attachment whose offset 0 is (or
+/// was) at `addr` ([`attachment_at`]) and return its segment's serial;
+/// `EINVAL` if there is none.
 pub fn detach(memory: &Memory, addr: u64) -> Result<u64, Errno> {
-    let (start, end, serial) = attachments(memory).into_iter().find(|a| a.0 == addr).ok_or(Errno::EINVAL)?;
-    memory.unmap(start, end - start).map_err(|_| Errno::EINVAL)?;
+    let (serial, ranges) = attachment_at(&pieces(memory), addr).ok_or(Errno::EINVAL)?;
+    for (start, end) in ranges {
+        memory.unmap(start, end - start).map_err(|_| Errno::EINVAL)?;
+    }
     Ok(serial)
 }
 
 /// Unmap every attachment of `memory` (its process is exiting); their
 /// serials.
 pub fn detach_all(memory: &Memory) -> Vec<u64> {
-    let all = attachments(memory);
-    for (start, end, _) in &all {
-        let _ = memory.unmap(*start, end - start);
+    let all = pieces(memory);
+    for p in &all {
+        let _ = memory.unmap(p.start, p.end - p.start);
     }
-    all.into_iter().map(|a| a.2).collect()
+    attachments_in(&all, 0, u64::MAX)
 }

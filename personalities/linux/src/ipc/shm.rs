@@ -364,6 +364,60 @@ pub fn with_table<R>(ns: &Option<Arc<IpcNs>>, f: impl FnOnce(&mut ShmTable) -> R
     }
 }
 
+/// One mapping of a segment's pages in a process, as the kernel sees its
+/// memory map: `[start, end)` maps the segment's bytes from `offset` on.
+/// An attachment is one piece until `mprotect`, `munmap` or a fork cuts
+/// it; each piece counts as an attachment in `shm_nattch`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShmPiece {
+    pub start: u64,
+    pub end: u64,
+    pub offset: u64,
+    /// The segment's [`ShmMemory::serial`].
+    pub serial: u64,
+    /// The segment's size in whole pages' bytes.
+    pub len: u64,
+}
+
+impl ShmPiece {
+    /// Where the segment's offset 0 is (or was, before it was unmapped)
+    /// in the attachment this piece belongs to: its attach address.
+    pub fn origin(&self) -> Option<u64> {
+        self.start.checked_sub(self.offset)
+    }
+}
+
+/// shmdt(2): the attachment whose offset 0 is (or was) at `addr`, among
+/// `pieces` (the process's, in address order): its serial and the ranges
+/// of every piece of it still mapped in `[addr, addr + segment size)`.
+/// Mappings in its holes and other attachments, of the same segment too,
+/// are not its pieces. `None` if no attachment starts at `addr`: the start
+/// of a piece split off or left after its head was unmapped is not one.
+pub fn attachment_at(pieces: &[ShmPiece], addr: u64) -> Option<(u64, Vec<(u64, u64)>)> {
+    let first = pieces.iter().find(|p| p.origin() == Some(addr))?;
+    let end = addr.saturating_add(first.len);
+    let ranges = pieces
+        .iter()
+        .filter(|p| p.serial == first.serial && p.origin() == Some(addr) && p.end <= end)
+        .map(|p| (p.start, p.end))
+        .collect();
+    Some((first.serial, ranges))
+}
+
+/// The attachments among `pieces` with pages in `[addr, addr + len)`: one
+/// serial per attachment (pieces with one origin and segment are one).
+pub fn attachments_in(pieces: &[ShmPiece], addr: u64, len: u64) -> Vec<u64> {
+    let end = addr.saturating_add(len);
+    let mut seen: Vec<(Option<u64>, u64)> = Vec::new();
+    for p in pieces.iter().filter(|p| p.start < end && addr < p.end) {
+        let key = (p.origin(), p.serial);
+        if !seen.contains(&key) {
+            seen.push(key);
+        }
+    }
+    seen.into_iter().map(|(_, serial)| serial).collect()
+}
+
 /// `struct shmid64_ds` on x86-64 (`asm-generic/shmbuf.h`, with `struct
 /// ipc64_perm` from `asm-generic/ipcbuf.h`): what `IPC_STAT` writes and
 /// `IPC_SET` reads. Ids and pids as the caller sees them.
@@ -666,5 +720,72 @@ mod tests {
         assert_eq!(&b[80..84], &9i32.to_ne_bytes());
         assert_eq!(&b[88..96], &11u64.to_ne_bytes());
         assert_eq!(ShmidDs::perm_from_bytes(&b), (1, 2, 0o1600));
+    }
+
+    const P: u64 = PAGE_SIZE;
+
+    /// A piece of segment `serial` (`pages` pages long) at `start`, from
+    /// page `page` of it, `n` pages long.
+    fn piece(serial: u64, pages: u64, start: u64, page: u64, n: u64) -> ShmPiece {
+        ShmPiece { start, end: start + n * P, offset: page * P, serial, len: pages * P }
+    }
+
+    #[test]
+    fn detach_whole_and_split_attachments() {
+        let a = 0x10_0000;
+        // mprotect of pages 1 and 3 cut a 4-page attachment in four.
+        let pieces = [
+            piece(1, 4, a, 0, 1),
+            piece(1, 4, a + P, 1, 1),
+            piece(1, 4, a + 2 * P, 2, 1),
+            piece(1, 4, a + 3 * P, 3, 1),
+        ];
+        let all = alloc::vec![(a, a + P), (a + P, a + 2 * P), (a + 2 * P, a + 3 * P), (a + 3 * P, a + 4 * P)];
+        assert_eq!(attachment_at(&pieces, a), Some((1, all)));
+        for not_start in [a + P, a + 3 * P, a + 1, a - P, 0, a ^ (1 << 32), a | (1 << 63), u64::MAX, 0x7fff_ffff_f000] {
+            assert_eq!(attachment_at(&pieces, not_start), None, "{not_start:#x}");
+        }
+        assert_eq!(attachment_at(&[], a), None);
+    }
+
+    #[test]
+    fn detach_by_where_offset_zero_was() {
+        let a = 0x10_0000;
+        // The first page unmapped: what is left still belongs to `a`.
+        let rest = [piece(1, 3, a + P, 1, 2)];
+        assert_eq!(attachment_at(&rest, a), Some((1, alloc::vec![(a + P, a + 3 * P)])));
+        assert_eq!(attachment_at(&rest, a + P), None, "the start of what is left");
+        // The first two pages gone.
+        let tail = [piece(1, 3, a + 2 * P, 2, 1)];
+        assert_eq!(attachment_at(&tail, a + P), None);
+        assert_eq!(attachment_at(&tail, a), Some((1, alloc::vec![(a + 2 * P, a + 3 * P)])));
+        // Moved whole by mremap: the new start.
+        let moved = [piece(1, 3, 0x50_0000, 0, 3)];
+        assert_eq!(attachment_at(&moved, 0x50_0000), Some((1, alloc::vec![(0x50_0000, 0x50_0000 + 3 * P)])));
+        assert_eq!(attachment_at(&moved, a), None);
+        // A piece whose offset is beyond its address has no origin.
+        assert_eq!(attachment_at(&[piece(1, 3, P, 2, 1)], 0), None);
+    }
+
+    #[test]
+    fn detach_leaves_holes_and_neighbours_alone() {
+        let a = 0x10_0000;
+        // Middle page of a 3-page attachment unmapped (whatever is in the
+        // hole now is not a piece of a segment); the same segment attached
+        // right after it and another segment right before it.
+        let pieces = [
+            piece(2, 1, a - P, 0, 1),
+            piece(1, 3, a, 0, 1),
+            piece(1, 3, a + 2 * P, 2, 1),
+            piece(1, 3, a + 3 * P, 0, 3),
+        ];
+        assert_eq!(attachment_at(&pieces, a), Some((1, alloc::vec![(a, a + P), (a + 2 * P, a + 3 * P)])));
+        assert_eq!(attachment_at(&pieces, a + 3 * P), Some((1, alloc::vec![(a + 3 * P, a + 6 * P)])));
+        assert_eq!(attachment_at(&pieces, a - P), Some((2, alloc::vec![(a - P, a)])));
+        assert_eq!(attachment_at(&pieces, a + P), None, "the hole");
+        // Attachments in a range: one serial per attachment.
+        assert_eq!(attachments_in(&pieces, a, 3 * P), [1]);
+        assert_eq!(attachments_in(&pieces, a - P, 5 * P), [2, 1, 1]);
+        assert!(attachments_in(&pieces, a + P, P).is_empty());
     }
 }
