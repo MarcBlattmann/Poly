@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "contest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "k32test"
 version = "0.0.1"
 dependencies = [
@@ -21,11 +28,16 @@ dependencies = [
 name = "kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-console",
  "poly-kernelbase",
  "poly-ntobj",
  "poly-rtl",
  "poly-win32-rt",
 ]
+
+[[package]]
+name = "poly-console"
+version = "0.0.1"
 
 [[package]]
 name = "poly-kernelbase"

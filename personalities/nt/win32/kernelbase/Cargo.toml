@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 [dependencies]
 poly-win32-rt = { path = "../rt" }
 poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+poly-console = { path = "../../../../crates/poly-console" }
 poly-rtl = { path = "../../../../crates/poly-rtl" }
 poly-ntobj = { path = "../../../../crates/poly-ntobj" }
 

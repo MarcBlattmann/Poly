@@ -35,6 +35,10 @@ pub unsafe extern "system" fn CreateFileW(
     let _ = template;
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, INVALID_HANDLE_VALUE) };
+    // CONIN$, CONOUT$, CON: the console's buffers (ADR 0080).
+    if let Some(h) = crate::console::create_file_console(name, access) {
+        return h;
+    }
     let c = match file::create(access, disposition, flags) {
         Ok(c) => c,
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
