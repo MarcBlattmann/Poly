@@ -39,11 +39,12 @@ pub enum Step {
     Implement,
     /// The runner checks the implementer's branch: safety, hand-off, CI, diff.
     Verify,
-    /// Green: status update, final checks, push, PR.
+    /// Green: main merged in, status update, final checks, push, PR.
     Publish,
     /// The PR waits for CI and the merge.
     AwaitingMerge,
-    /// The PR conflicts with main: merge main in, then verify again.
+    /// GitHub reports the PR `dirty` (it conflicts with main): counted
+    /// against `max_refresh`, then publish again, which merges main in.
     Refresh,
     /// Done: the PR was merged (or, without PRs, the branch was pushed).
     Merged,

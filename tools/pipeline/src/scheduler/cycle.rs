@@ -4,11 +4,17 @@
 //!
 //! ```text
 //! claim ─► spec ─► spec-check ─► handoff ─► implement ─► verify ──green──► publish ─► awaiting-merge ─► merged
-//!            ▲  (exit 75: pause) │            ▲  (exit 75: pause) │                         │ conflicts
-//!            └─ red: feedback ───┘            └──── red: feedback ┘ (up to max_cycles)   refresh ─► verify
-//!               (up to spec_cycles)
-//!   any red flag (forbidden path, unsafe, hand-off problem, history rewritten): human
+//!            ▲  (exit 75: pause) │            ▲  (exit 75: pause) │            ▲            │ dirty
+//!            └─ red: feedback ───┘            └──── red: feedback ┘            └─ refresh ◄─┘ (up to max_refresh)
+//!               (up to spec_cycles)                (up to max_cycles)
+//!   any red flag (forbidden path, unsafe, hand-off problem, history rewritten,
+//!   a conflict with main outside the generated files): human
 //! ```
+//!
+//! Publish merges main into the branch before it pushes, so a PR starts
+//! out mergeable; when GitHub reports it `dirty` later (main moved: every
+//! status change regenerates README.md), refresh sends it through publish
+//! again, which merges main in once more (ADR 0086).
 //!
 //! Every step is idempotent on restart: steps whose result is a pushed
 //! branch look at the hub first, a fetched head waiting to be pushed is
@@ -20,7 +26,7 @@
 
 use super::config::Config;
 use super::limits::{self, Reset};
-use super::ops::{Merge, Ops, Out, Push, Remote};
+use super::ops::{Merge, Mergeable, Ops, Out, Push, Remote};
 use super::safety::{self, PrCheck};
 use super::state::{self, EntryState, Lock, Pause, Session, Step, Store};
 use super::update::{self, SelfUpdate};
@@ -928,6 +934,26 @@ impl<O: Ops> Driver<'_, O> {
             Step::Publish => {
                 let (slot, _l) = self.slot()?;
                 let mut head = self.ops.prepare(slot, &format!("hub/{impl_b}"))?;
+                // Main first, so the PR is mergeable when it is pushed: no CI
+                // runs on a PR that conflicts, and auto-merge never fires.
+                match self.ops.merge_main(slot, &entry)? {
+                    Merge::UpToDate => {}
+                    Merge::Merged(h) => {
+                        self.note(st, format!("merged {} into {impl_b}", self.base()));
+                        head = h;
+                    }
+                    Merge::Conflicts(files) => {
+                        return Ok(self.human(
+                            st,
+                            format!(
+                                "{impl_b} conflicts with {} in {} (the loop resolves conflicts only in README.md, \
+                                 docs/progress/, the entry's coverage status and the hand-off log)",
+                                self.base(),
+                                files.join(", ")
+                            ),
+                        ));
+                    }
+                }
                 let coverage = safety::coverage_file(&entry);
                 if !green_in(self.ops.file_at(slot, &head, &coverage)?.as_deref(), &entry.symbol) {
                     let out = self.ops.set_green(slot, &entry, st.tests_visible, st.tests_held_out)?;
@@ -1009,39 +1035,32 @@ impl<O: Ops> Driver<'_, O> {
                     Some(pr) if pr.state == "CLOSED" => {
                         Ok(self.human(st, format!("{} was closed without merging", pr.url)))
                     }
-                    Some(pr) if pr.mergeable == "CONFLICTING" => {
-                        self.note(st, format!("{} conflicts with {}", pr.url, self.cfg.base_branch));
-                        st.step = Step::Refresh;
-                        Ok(Next::Continue)
-                    }
-                    Some(_) => Ok(Next::Yield(Yielded::Waiting(now + self.cfg.poll_secs))),
+                    Some(pr) => match pr.mergeable {
+                        Mergeable::Conflicting => {
+                            self.note(st, format!("{} conflicts with {} (dirty)", pr.url, self.cfg.base_branch));
+                            st.step = Step::Refresh;
+                            Ok(Next::Continue)
+                        }
+                        // Mergeable (CI may still run), or GitHub is still
+                        // computing it (`mergeable: null`): look again at
+                        // the next poll, never at once.
+                        Mergeable::Yes | Mergeable::Unknown => {
+                            Ok(Next::Yield(Yielded::Waiting(now + self.cfg.poll_secs)))
+                        }
+                    },
                 }
             }
             Step::Refresh => {
+                // Publish again: it merges main in (the generated files made
+                // again), checks the whole PR once more and pushes, never
+                // forced. The runner does not verify again: the PR's CI on
+                // GitHub runs on the merge (ADR 0086).
                 st.refreshes += 1;
                 if st.refreshes > self.cfg.max_refresh {
                     return Ok(self.human(st, format!("the PR conflicted with main {} times", st.refreshes - 1)));
                 }
-                let (slot, _l) = self.slot()?;
-                self.ops.prepare(slot, &format!("hub/{impl_b}"))?;
-                let head = match self.ops.merge_main(slot, &entry)? {
-                    Merge::Conflicts(files) => {
-                        return Ok(self.human(st, format!("conflicts with main in {}", files.join(", "))));
-                    }
-                    Merge::UpToDate => {
-                        self.note(st, "already up to date with main");
-                        st.step = Step::AwaitingMerge;
-                        return Ok(Next::Continue);
-                    }
-                    Merge::Merged(head) => head,
-                };
-                if let Some(r) = self.push_hub(slot, &head, &impl_b)? {
-                    return Ok(self.human(st, r));
-                }
-                st.impl_base = Some(head.clone());
-                st.impl_head = Some(head);
-                self.note(st, format!("merged {} in; verifying again", self.cfg.base_branch));
-                st.step = Step::Verify;
+                self.note(st, format!("merging {} in ({}/{})", self.base(), st.refreshes, self.cfg.max_refresh));
+                st.step = Step::Publish;
                 Ok(Next::Continue)
             }
             Step::Merged | Step::Human => Ok(Next::Yield(Yielded::Done(st.step))),
