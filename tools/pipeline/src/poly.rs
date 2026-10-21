@@ -284,12 +284,15 @@ pub fn default_kernel(root: &Path) -> PathBuf {
     root.join("kernel/target/x86_64-unknown-none/debug/poly-kernel")
 }
 
-/// Build the kernel (debug) the way `cargo xtask build` does.
+/// Build the kernel (debug) with `cargo xtask build`, which also builds
+/// (or takes from its cache) our `ntdll.dll` and has the kernel embed it
+/// (ADR 0071): a bare `cargo build` in `kernel/` makes a kernel that
+/// cannot start Windows programs.
 pub fn build_kernel(root: &Path) -> Result {
     eprintln!("==> build kernel");
     let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
-        .current_dir(root.join("kernel"))
-        .arg("build")
+        .current_dir(root)
+        .args(["xtask", "build"])
         .status()
         .map_err(|e| format!("cargo: {e}"))?;
     if status.success() { Ok(()) } else { Err(format!("kernel build failed ({status})")) }
@@ -305,6 +308,38 @@ pub const QEMU_CRASH_RETRIES: usize = 2;
 /// QEMU ended by a signal it was not sent by us.
 pub fn qemu_crashed(exit: &Exit) -> bool {
     matches!(exit, Exit::Signal(_))
+}
+
+/// The environment variable that chooses QEMU's accelerator, as for
+/// xtask's boot tests (`tools/xtask/src/accel.rs`).
+pub const ACCEL_ENV: &str = "POLY_QEMU_ACCEL";
+
+/// QEMU's accelerator (`-accel`) for `POLY_QEMU_ACCEL=<var>` (None: unset),
+/// given whether `/dev/kvm` can be opened: `kvm` when it can unless
+/// `tcg` is asked for; `kvm` asked for without it is an error.
+pub fn choose_accel(var: Option<&str>, kvm: Result) -> Result<&'static str> {
+    match var.map(str::trim) {
+        None | Some("" | "auto") => Ok(if kvm.is_ok() { "kvm" } else { "tcg" }),
+        Some("tcg") => Ok("tcg"),
+        Some("kvm") => kvm.map(|()| "kvm").map_err(|e| format!("{ACCEL_ENV}=kvm, but KVM is not usable: {e}")),
+        Some(other) => Err(format!("{ACCEL_ENV}={other}: expected kvm, tcg or auto")),
+    }
+}
+
+/// The accelerator QEMU runs on here ([`choose_accel`]), chosen once.
+pub fn accel() -> Result<&'static str> {
+    static CHOSEN: std::sync::OnceLock<Result<&'static str>> = std::sync::OnceLock::new();
+    CHOSEN
+        .get_or_init(|| {
+            let kvm = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("/dev/kvm")
+                .map(drop)
+                .map_err(|e| format!("/dev/kvm: {e}"));
+            choose_accel(std::env::var(ACCEL_ENV).ok().as_deref(), kvm)
+        })
+        .clone()
 }
 
 #[derive(Debug)]
@@ -337,6 +372,44 @@ impl Target {
         work: &Path,
         args: &str,
     ) -> Result<(Outcome, PathBuf)> {
+        let (done, log, log_path) = self.boot_log(test, image, work, args)?;
+        let outcome = match parse_serial(&log, test)? {
+            Some(Outcome::Ran(mut t)) => {
+                t.binary_sha256 = Some(binary_sha256.to_string());
+                if done.exit == Exit::Timeout {
+                    t.exit = Exit::Timeout;
+                } else if t.exit == Exit::Unknown {
+                    return Err(format!("the kernel ran {test} but did not report its exit (QEMU: {})", done.exit));
+                } else if done.exit != Exit::Code(QEMU_SUCCESS) {
+                    return Err(format!("the kernel failed after {test} ended (QEMU: {})", done.exit));
+                }
+                Outcome::Ran(t)
+            }
+            Some(u) => u,
+            None if done.exit == Exit::Timeout => {
+                Outcome::Unsupported(format!("no \"POLY-INIT:\" line within {:?}; boot timed out", self.timeout))
+            }
+            None => Outcome::Unsupported(format!(
+                "no \"POLY-INIT:\" line (QEMU {}): the kernel ignores poly.init and cannot run \
+                 programs yet",
+                done.exit
+            )),
+        };
+        Ok((outcome, log_path))
+    }
+
+    /// Boot the initramfs `image` with kernel arguments `args` and return
+    /// how QEMU ended, the serial log and where it was saved (in `work`,
+    /// named after `test`). A QEMU that crashes is booted again
+    /// ([`QEMU_CRASH_RETRIES`]). The Windows tests (`crate::windows`)
+    /// read the log themselves.
+    pub(crate) fn boot_log(
+        &self,
+        test: &str,
+        image: &[u8],
+        work: &Path,
+        args: &str,
+    ) -> Result<(runner::Finished, String, PathBuf)> {
         let image_path = work.join(format!("{test}.initramfs.cpio"));
         util::write(&image_path, image)?;
         let image = image_path;
@@ -344,7 +417,8 @@ impl Target {
         let mut attempt = 0;
         let (done, log) = loop {
             let mut cmd = Command::new("qemu-system-x86_64");
-            cmd.args(["-machine", "q35", "-m", "256M", "-smp", "2", "-display", "none", "-serial", "stdio"])
+            cmd.args(["-accel", accel()?])
+                .args(["-machine", "q35", "-m", "256M", "-smp", "2", "-display", "none", "-serial", "stdio"])
                 .args(["-no-reboot", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
                 .arg("-kernel")
                 .arg(&self.kernel)
@@ -371,29 +445,7 @@ impl Target {
                 ));
             }
         };
-        let outcome = match parse_serial(&log, test)? {
-            Some(Outcome::Ran(mut t)) => {
-                t.binary_sha256 = Some(binary_sha256.to_string());
-                if done.exit == Exit::Timeout {
-                    t.exit = Exit::Timeout;
-                } else if t.exit == Exit::Unknown {
-                    return Err(format!("the kernel ran {test} but did not report its exit (QEMU: {})", done.exit));
-                } else if done.exit != Exit::Code(QEMU_SUCCESS) {
-                    return Err(format!("the kernel failed after {test} ended (QEMU: {})", done.exit));
-                }
-                Outcome::Ran(t)
-            }
-            Some(u) => u,
-            None if done.exit == Exit::Timeout => {
-                Outcome::Unsupported(format!("no \"POLY-INIT:\" line within {:?}; boot timed out", self.timeout))
-            }
-            None => Outcome::Unsupported(format!(
-                "no \"POLY-INIT:\" line (QEMU {}): the kernel ignores poly.init and cannot run \
-                 programs yet",
-                done.exit
-            )),
-        };
-        Ok((outcome, log_path))
+        Ok((done, log, log_path))
     }
 }
 
@@ -413,6 +465,19 @@ mod tests {
         POLY-SIGNAL: pid=7 signal=11\n\
         POLY-SYSCALL: pid=7 nr=231 args=0x0 ret=?\n\
         POLY-EXIT: pid=7 code=0 t=99\n";
+
+    #[test]
+    fn chooses_kvm_when_usable_unless_told_otherwise() {
+        let no = || Err("/dev/kvm: No such file or directory".to_string());
+        for var in [None, Some(""), Some("auto")] {
+            assert_eq!(choose_accel(var, Ok(())), Ok("kvm"));
+            assert_eq!(choose_accel(var, no()), Ok("tcg"));
+        }
+        assert_eq!(choose_accel(Some("tcg"), Ok(())), Ok("tcg"));
+        assert_eq!(choose_accel(Some("kvm"), Ok(())), Ok("kvm"));
+        assert!(choose_accel(Some("kvm"), no()).is_err());
+        assert!(choose_accel(Some("whpx"), Ok(())).is_err());
+    }
 
     #[test]
     fn parses_the_protocol() {

@@ -56,6 +56,7 @@ scheduler that runs it all unattended is
 | Compare real OS and Poly | tool | `pipeline diff [--target linux\|poly]` |
 | Merge decision | CI + held-out result | PR, never a direct push |
 | All of the above, unattended | tool | `pipeline loop [--once] [--dry-run]`, `loop status`, `loop reset` |
+| Windows tests: build, bundle, run on Poly, compare | tool | `pipeline win build\|bundle\|poly\|diff\|show` (runner on the PC: `poly-oracle.ps1`) |
 
 All of these are `cargo xtask pipeline <command>`; the full option list is
 at the top of `tools/pipeline/src/main.rs`. Outputs go under
@@ -206,7 +207,9 @@ The program starts with default signal actions and an empty signal mask.
 `--build-kernel` to rebuild, or `--kernel`) with
 `poly.qemu_exit poly.init=/test-binary poly.test.capture`, and turns the
 kernel's `POLY-*` records (ADR 0027, kernel side in ADR 0038) into a trace;
-about half a second per test. Records carry no `data<i>` fields yet, so
+about half a second per test. QEMU runs on KVM when `/dev/kvm` can be opened
+and on its emulator (TCG) otherwise; `POLY_QEMU_ACCEL=tcg|kvm|auto` chooses (ADR 0077).
+Records carry no `data<i>` fields yet, so
 pointer arguments are compared as "anything". A kernel that cannot run a
 test's file says `POLY-INIT: unsupported <reason>`, and the test is
 reported **unsupported**. QEMU itself sometimes crashes (SIGSEGV) while
@@ -241,9 +244,8 @@ marks an entry green (`pipeline diff --target poly` with the entry's
 visible and held-out directories; the loop's verify step) and again
 whenever the runner re-runs the entries. Today 11 of the 12 corpus programs
 pass (`libc-hello` differs at `rseq`: Poly answers `ENOSYS`, with the same
-output and exit status); of the 11 corpus app tests, all but `app-ls` pass
-(app mode; `app-ls` is in `specs/linux/FAILING.md`); and 137 green entries
-bring 235 visible tests. The spec tests take about a minute with four jobs
+output and exit status); all 11 corpus app tests pass (app mode); and 139
+green entries bring 245 visible tests. The spec tests take about a minute with four jobs
 (the app tests run one at a time after them). (`write` was green
 before its spec tests existed; its visible and held-out spec tests pass
 since the runner's third pass.)
@@ -268,6 +270,82 @@ files, spec agent, revision). `verify` proves from git that each logged
 file had the logged content at the logged revision, that no agent had both
 roles for an entry, and that no held-out content is in the log, under
 `specs/`, or in what the implementer received, whatever the file is called.
+
+## Windows test oracle
+
+The real Windows is the owner's Windows 11 PC, reached through a Claude Code
+session on it; nothing is installed there. Test programs are built here, run
+there by a PowerShell script and on Poly in QEMU, and the results compared
+([ADR 0075](adr/0075-windows-test-oracle.md); code in
+`tools/pipeline/src/windows.rs`, runner `tools/pipeline/windows/poly-oracle.ps1`).
+
+**A test** is one Rust file, `#![no_std]` + `#![no_main]`, in
+`tests/windows/` (the corpus) or `specs/windows/<component>/<symbol>.tests/`,
+named in lower case (`nt_file_rw.rs`). It declares what it calls from
+Learn's prototypes with `#[link(name = "ntdll", kind = "raw-dylib")]` (or
+`kernel32`, which Poly does not have yet), and uses the support crate
+`poly-wtest` (`tests/windows/support`): `poly_wtest::main!(test)`, then
+`t.check(name, cond, got)`, `t.expect(name, got, want)`,
+`t.expect_status(name, status, want)`, `t.value(name, v)`, the `ntstatus.h` /
+`winnt.h` / `winternl.h` constants, `ObjectAttributes`, `IoStatusBlock`,
+`utf16!("...")` and `path_beside_image(name)` for a file in the test's own
+directory (on Windows a fresh scratch directory per run). Observations go
+into `poly-test.out` beside the executable, one line each, in the Linux
+corpus's format; the exit code is 0 (all passed), 1 (a check failed), 2 (no
+output file) or 3 (panic). Never print addresses, handles or times: every
+test runs twice on Windows and must give the same bytes.
+
+```sh
+cargo xtask pipeline win build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/windows/bin/*.exe, manifest.json
+cargo xtask pipeline win bundle                     # target/pipeline/windows/bundle-<id>.txt (+ .partNofM over 45 KB)
+cargo xtask pipeline win unbundle <bundle> --out DIR   # check a bundle (what the PC will do)
+cargo xtask pipeline win poly [--build-kernel] [--jobs 3]   # run them on Poly; poly.json in the run directory
+cargo xtask pipeline win show <results.json>        # the observations in a result file
+cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel] [--target <file.json>]
+```
+
+`win build` cross-compiles with the pinned toolchain (`-Zbuild-std` from
+`rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and
+refuses an executable that imports from another DLL, by ordinal, or
+delay-loaded. `win diff` compares per test the 32-bit exit code, the
+observation file, stdout and stderr; a reference that timed out, did not
+start or was not the same on both runs is an **error**, a test Poly cannot
+start is **unsupported**. `win show` and `win diff` read real Windows'
+observations, so implementers may not run them.
+
+**One round on the PC** (the coordinator relays; the session there uses Git
+Bash). Here:
+
+```sh
+cargo xtask pipeline win build && cargo xtask pipeline win bundle
+# -> bundle <id>: N tests, B bytes: target/pipeline/windows/bundle-<id>.txt
+```
+
+Send the session on the PC the bundle file's text, to be saved unchanged as
+`~/poly-oracle/bundle-<id>.txt` (several parts: each as its own file), then
+these commands:
+
+```sh
+git -C ~/poly pull --ff-only || git clone https://github.com/MarcBlattmann/Poly.git ~/poly
+cd ~/poly-oracle
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../poly/tools/pipeline/windows/poly-oracle.ps1 \
+    -Bundle bundle-<id>.txt -Out results-<id>.json
+cat results-<id>.json
+```
+
+(`-Bundle a.part1of2,a.part2of2` for parts; `-Tests name1,name2` for a
+subset; `-Runs`, `-TimeoutSeconds`.) The execution policy is bypassed for
+that one process only; the runner works in `%TEMP%\poly-oracle` and writes
+nothing else. Save the printed JSON here as
+`target/pipeline/windows/results/windows-<id>.json` and compare:
+
+```sh
+cargo xtask pipeline win diff --reference target/pipeline/windows/results/windows-<id>.json --build-kernel
+```
+
+Compare with the executables of that bundle (the build is reproducible, so
+rebuilding unchanged sources gives the same files; the diff reports
+different executables as an error).
 
 ## Running the LLM roles
 
@@ -652,4 +730,8 @@ violation stops the entry and puts it in the human queue.
 - `data<i>` fields and times in the kernel's `POLY-SYSCALL` records.
   (`POLY-SIGNAL` reports every signal a thread takes but `SIGKILL`, as the
   ptrace tracer's signal-delivery-stops: ADR 0062.)
-- Windows and macOS oracles and tracers (later phases).
+- A Windows API tracer and the Windows workflow in the pipeline (`tests
+  split` and `handoff` for `.rs` tests and recorded Windows results, a
+  `win polycheck` in CI against recorded references, the loop's Windows
+  steps): ADR 0075 says what they need. The macOS oracle and tracer (later
+  phases).

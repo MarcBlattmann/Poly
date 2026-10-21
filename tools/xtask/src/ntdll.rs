@@ -86,6 +86,12 @@ const REQUIRED: &[&str] = &[
 /// `cargo xtask ntdll [--out <path>]`: make sure the cached DLL is up to
 /// date (building it if not), verify it, and optionally copy it.
 pub fn command(args: &[String]) -> Result {
+    // The name the DLL is cached under, a hash of its inputs (CI keys its
+    // cache of `target/ntdll-cache` with it).
+    if args.iter().any(|a| a == "--cache-key") {
+        println!("ntdll-{:016x}", hash_inputs(&root())?);
+        return Ok(());
+    }
     let out = opt(args, "--out");
     let dll = ensure()?;
     if let Some(dest) = out {

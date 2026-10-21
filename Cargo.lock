@@ -186,6 +186,8 @@ version = "0.0.1"
 dependencies = [
  "libc",
  "poly-elf",
+ "poly-pe",
+ "poly-personality-nt",
  "serde",
  "serde_json",
 ]

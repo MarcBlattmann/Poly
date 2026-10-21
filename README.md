@@ -68,7 +68,7 @@ kernel, and all three share one core. More detail in
 
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 69 of 141 milestones" src="docs/progress/badge-roadmap.svg"></a>
-  <img alt="Linux API coverage: 39.5%" src="docs/progress/badge-linux.svg">
+  <img alt="Linux API coverage: 40.0%" src="docs/progress/badge-linux.svg">
   <img alt="Windows API coverage: 0.0%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
@@ -94,13 +94,13 @@ kernel, and all three share one core. More detail in
 
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
-| Linux | 39.5% | n/a | 0 / 0 |
+| Linux | 40.0% | n/a | 0 / 0 |
 | Windows | 0.0% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | Blocked | App-provided |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| Linux | syscalls | 370 | 146 | 0 | 3 | 221 | 0 | 0 |
+| Linux | syscalls | 370 | 148 | 0 | 1 | 221 | 0 | 0 |
 | Linux | user-mode API | runs unchanged (glibc, Mesa, GTK, Qt) | | | | | | |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 2 | 1,809 | 0 | 0 |
 | Windows | user-mode DLL exports | 130,147 | 0 | 0 | 322 | 56,549 | 0 | 73,276 |
@@ -132,8 +132,12 @@ Ubuntu) or builds the pinned release.
 cargo xtask run     # boot the kernel in QEMU (Ctrl-A X to quit)
 cargo xtask run --busybox   # boot into BusyBox's init and shell (`poweroff` quits; add console=tty1 for the screen)
 cargo xtask test    # host unit tests + boot tests in QEMU
-cargo xtask ci      # everything CI checks
+cargo xtask boot-tests --list   # the boot test groups; `boot-tests <group>` runs some
+cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one part)
 ```
+
+QEMU runs on KVM when `/dev/kvm` is usable (much faster) and on its
+emulator (TCG) otherwise; `POLY_QEMU_ACCEL=tcg` forces the emulator.
 
 ## Repository layout
 

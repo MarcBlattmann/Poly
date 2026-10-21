@@ -124,6 +124,32 @@ struct NtState {
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
 
+/// The full `NTSTATUS` the processes the test-run protocol watches ended
+/// with ([`watch_exit_status`]; the process's own `ExitStatus` keeps only
+/// its low 8 bits): `(status, final)`, final once `NtTerminateProcess`
+/// set it, so the threads that end after it do not change it (ADR 0075).
+static EXIT_WATCH: Mutex<BTreeMap<u32, Option<(u32, bool)>>> = Mutex::new(BTreeMap::new());
+
+/// Remember the `NTSTATUS` NT process `pid` will end with, for
+/// [`take_exit_status`] (the `poly.init` program: `POLY-EXIT ntstatus=`).
+pub fn watch_exit_status(pid: u32) {
+    EXIT_WATCH.lock().insert(pid, None);
+}
+
+/// The `NTSTATUS` a watched process ended with, once (`None` if it is not
+/// watched or no status was recorded).
+pub fn take_exit_status(pid: u32) -> Option<u32> {
+    EXIT_WATCH.lock().remove(&pid).flatten().map(|(status, _)| status)
+}
+
+fn note_exit_status(pid: u32, status: NtStatus, by_process: bool) {
+    if let Some(slot) = EXIT_WATCH.lock().get_mut(&pid)
+        && !matches!(slot, Some((_, true)))
+    {
+        *slot = Some((status.0, by_process));
+    }
+}
+
 fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
     let mut guard = STATE.lock();
 
@@ -197,6 +223,7 @@ impl NtKernel for Kernel {
     }
 
     fn terminate_process(&mut self, status: NtStatus) {
+        note_exit_status(self.pid.0, status, true);
         self.exit = Some(status);
     }
 
@@ -456,9 +483,9 @@ fn exit_to_nt(status: ExitStatus) -> NtStatus {
 /// detaches from its process.
 pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>) {
     let tref = ThreadRef(u64::from(tid));
-    with(|s| {
+    let ended = with(|s| {
         if !s.processes.contains_key(&ProcessId(pid)) {
-            return;
+            return None;
         }
         let nt_status = s.ctl.get(&tref).and_then(|c| c.exit_status).unwrap_or_else(|| exit_to_nt(status));
         let proc = s.processes.get_mut(&ProcessId(pid)).expect("checked");
@@ -467,7 +494,13 @@ pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>)
         s.ctl.remove(&tref);
         // Its pending I/O requests are cancelled (ADR 0067).
         s.sys.io.cancel_thread(tref);
+        Some(nt_status)
     });
+    // The last thread's status is the process's, unless NtTerminateProcess
+    // gave one.
+    if let Some(nt_status) = ended {
+        note_exit_status(pid, nt_status, false);
+    }
     sched::drain_wakes();
     io::drain();
 }

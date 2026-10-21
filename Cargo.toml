@@ -54,7 +54,7 @@ members = [
     "tools/pipeline",
     "tools/xtask",
 ]
-exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32"]
+exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support"]
 
 [workspace.package]
 version = "0.0.1"
