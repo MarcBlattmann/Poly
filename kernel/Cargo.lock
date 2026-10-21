@@ -91,9 +91,11 @@ dependencies = [
  "poly-line",
  "poly-mem",
  "poly-net",
+ "poly-ntobj",
  "poly-pagecache",
  "poly-paging",
  "poly-pci",
+ "poly-pe",
  "poly-personality-linux",
  "poly-personality-nt",
  "poly-personality-xnu",
@@ -126,6 +128,10 @@ name = "poly-net"
 version = "0.0.1"
 
 [[package]]
+name = "poly-ntobj"
+version = "0.0.1"
+
+[[package]]
 name = "poly-pagecache"
 version = "0.0.1"
 dependencies = [
@@ -141,6 +147,10 @@ name = "poly-pci"
 version = "0.0.1"
 
 [[package]]
+name = "poly-pe"
+version = "0.0.1"
+
+[[package]]
 name = "poly-personality-linux"
 version = "0.0.1"
 dependencies = [
@@ -153,6 +163,8 @@ name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-ntobj",
+ "poly-pe",
 ]
 
 [[package]]

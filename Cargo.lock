@@ -148,6 +148,8 @@ name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-ntobj",
+ "poly-pe",
 ]
 
 [[package]]
