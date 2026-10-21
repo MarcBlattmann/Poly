@@ -62,6 +62,13 @@ pub trait CharDevice: Send + Sync {
     fn open(&self, _flags: OpenFlags) -> Result<Option<Arc<dyn CharDevice>>> {
         Ok(None)
     }
+
+    /// For a pseudo-terminal master: the number of its slave
+    /// (`/dev/pts/<n>`), which `TIOCGPTPEER` opens. `None` for every
+    /// other device.
+    fn pty_index(&self) -> Option<u32> {
+        None
+    }
 }
 
 /// `/dev/null` (1, 3).

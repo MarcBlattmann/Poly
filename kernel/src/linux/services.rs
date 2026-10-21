@@ -53,6 +53,7 @@ use poly_vfs::FileType;
 use poly_vm::Access;
 
 mod fileio;
+mod ptypeer;
 
 /// The running thread of a Linux process, for one system call or one
 /// return to user mode.
@@ -324,6 +325,11 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn ioctl(&mut self, fd: i32, request: u32, arg: u64) -> Result<u64, Errno> {
+        if request == poly_tty::ioctl::TIOCGPTPEER
+            && let Some(r) = self.pty_peer(fd, arg)
+        {
+            return r;
+        }
         // A terminal request interrupted (job control's SIGTTOU) restarts
         // under SA_RESTART, as on a slow device (signal(7), ADR 0046).
         self.process.files.ioctl(fd, request, arg).map_err(|e| match e {
