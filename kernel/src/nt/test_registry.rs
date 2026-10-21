@@ -553,10 +553,16 @@ mod tests {
             let root = reg.hive(h).root;
             reg.set_value(root, &wide("v"), poly_registry::consts::REG_DWORD, &[1, 2, 3, 4], 0).map_err(|_| "set")?;
             let first = reg.save(h);
-            save_in(dir, "T", &first).map_err(|_| "the first save failed")?;
+            save_in(dir, "T", &first).map_err(|e| {
+                crate::kprintln!("nt: registry test: the first save: {e:?}");
+                "the first save failed"
+            })?;
             reg.set_value(root, &wide("w"), poly_registry::consts::REG_SZ, &[0, 0], 0).map_err(|_| "set")?;
             let second = reg.save(h);
-            save_in(dir, "T", &second).map_err(|_| "the second save failed")?;
+            save_in(dir, "T", &second).map_err(|e| {
+                crate::kprintln!("nt: registry test: the second save: {e:?}");
+                "the second save failed"
+            })?;
             let back = load_in(dir, "T").ok_or("the hive file is not there")?;
             if back != second {
                 return Err("the hive file came back different");

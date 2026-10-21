@@ -72,6 +72,10 @@ struct Probe {
     reads: AtomicUsize,
     writes: AtomicUsize,
     fail_writes: AtomicBool,
+    /// The next data write first unlinks `/f` from the inner file system:
+    /// what another thread's `unlink` does while a writeback of `f` holds
+    /// its inode lock (the inner unlink runs under the namespace lock only).
+    unlink_f_on_write: AtomicBool,
 }
 
 impl Probe {
@@ -81,6 +85,7 @@ impl Probe {
             reads: AtomicUsize::new(0),
             writes: AtomicUsize::new(0),
             fail_writes: AtomicBool::new(false),
+            unlink_f_on_write: AtomicBool::new(false),
         })
     }
 
@@ -148,6 +153,9 @@ impl FileSystem for Probe {
     fn write(&self, ino: Ino, offset: u64, buf: &[u8]) -> poly_vfs::Result<usize> {
         if self.fail_writes.load(Ordering::Relaxed) {
             return Err(Errno::ENOSPC);
+        }
+        if self.unlink_f_on_write.swap(false, Ordering::Relaxed) {
+            self.fs.unlink(self.fs.root(), b"f").unwrap();
         }
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.fs.write(ino, offset, buf)
@@ -458,6 +466,61 @@ fn writeback_errors_reach_sync_once() {
     assert_eq!(fs.sync().unwrap_err(), Errno::ENOSPC);
     assert_eq!(fs.sync(), Ok(()));
     assert_eq!(cache.stats().write_errors, 1);
+}
+
+/// A file deleted while its pages are being written back: its data does
+/// not matter any more, so that is no error for the file system's next
+/// `sync` (which once failed an unrelated file's fsync with `ENOENT`).
+#[test]
+fn a_file_deleted_during_its_writeback_is_no_error() {
+    let (cache, probe, fs) = setup(1000);
+    let before = live();
+    let ino = fs.create(fs.root(), b"f", &REG).unwrap();
+    fs.write(ino, 0, &[7; 3 * PAGE_SIZE]).unwrap();
+    probe.unlink_f_on_write.store(true, Ordering::Relaxed);
+    // The writeback thread writes `f` back as it goes.
+    assert_eq!(cache.writeback_all(), Ok(0));
+    assert_eq!(fs.page_counts(), (0, 0), "the deleted file's pages are gone");
+    assert_eq!(live(), before);
+    // Another file's fsync (a sync of the whole file system) is clean.
+    let g = fs.create(fs.root(), b"g", &REG).unwrap();
+    fs.write(g, 0, b"kept").unwrap();
+    assert_eq!(fs.sync(), Ok(()));
+    assert_eq!(probe.contents(g), b"kept");
+    assert_eq!(cache.stats().write_errors, 0);
+    // The same through sync itself.
+    let f = fs.create(fs.root(), b"f", &REG).unwrap();
+    fs.write(f, 0, b"gone").unwrap();
+    probe.unlink_f_on_write.store(true, Ordering::Relaxed);
+    assert_eq!(fs.sync(), Ok(()));
+    assert!(fs.cached_page(f, 0).is_none());
+}
+
+/// Files created, written and deleted while the writeback thread runs:
+/// no writeback error ever reaches `sync`.
+#[test]
+fn deleting_files_during_writeback_leaves_no_error() {
+    let (cache, _probe, fs) = setup(1000);
+    let stop = Arc::new(AtomicBool::new(false));
+    let writeback = {
+        let (cache, stop) = (cache.clone(), Arc::clone(&stop));
+        thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                let _ = cache.writeback_all();
+            }
+        })
+    };
+    for i in 0..2000u32 {
+        let name = [b'a' + (i % 4) as u8];
+        let ino = fs.create(fs.root(), &name, &REG).unwrap();
+        fs.write(ino, 0, &pattern(i as u8, 2 * PAGE_SIZE + 100)).unwrap();
+        fs.unlink(fs.root(), &name).unwrap();
+    }
+    stop.store(true, Ordering::Relaxed);
+    writeback.join().unwrap();
+    assert_eq!(fs.sync(), Ok(()));
+    assert_eq!(cache.stats().write_errors, 0);
+    assert_eq!(fs.page_counts(), (0, 0));
 }
 
 #[test]

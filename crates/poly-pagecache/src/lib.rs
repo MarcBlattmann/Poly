@@ -529,6 +529,16 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
                     written += run;
                     self.c.written.fetch_add(run as u64, Relaxed);
                 }
+                // Deleted while being written back: an unlink, a rename
+                // over it or its last release deletes the inode under the
+                // namespace lock only, then waits for this inode lock to
+                // drop the pages. Its data does not matter any more, so
+                // that is no error for the next `sync`. The number cannot
+                // be reused meanwhile (creating takes the namespace lock).
+                Err(_) if matches!(st.inner.getattr(ino), Err(Errno::ENOENT)) => {
+                    self.discard(st.id, ino, 0);
+                    return Ok(written);
+                }
                 Err(e) => {
                     self.c.write_errors.fetch_add(run as u64, Relaxed);
                     if result.is_ok() {

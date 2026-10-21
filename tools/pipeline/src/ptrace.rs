@@ -393,7 +393,7 @@ fn trace_with(program: &[u8], argv0: &str, test: &str, jail: Option<Jail>, timeo
         start,
         events: Vec::new(),
         procs: BTreeMap::new(),
-        next_index: 0,
+        numbers: TaskNumbers::default(),
         exit: Exit::Unknown,
         live: Arc::clone(&live),
     };
@@ -417,31 +417,72 @@ fn trace_with(program: &[u8], argv0: &str, test: &str, jail: Option<Jail>, timeo
     Ok(t)
 }
 
+/// Task numbers in creation order, the same however the host schedules
+/// the tracer and its tracees.
+///
+/// A new task shows up twice: in its creator's fork, vfork or clone event
+/// stop, and in its own first stop (a seized tracee's attach stop), in
+/// either order. It may even run and exit before the tracer takes its
+/// creator's event. The number goes with whichever comes first; the other
+/// is recognised and never numbers the task again (a late event once gave
+/// short-lived children a second, empty number and shifted every later
+/// one). Both come before the creator can make its next task, so a
+/// creator's tasks are numbered in the order it made them.
+#[derive(Debug, Default)]
+struct TaskNumbers {
+    next: u32,
+    /// Tasks numbered at their own first stop whose creator's event has
+    /// not been taken yet. They may have exited meanwhile.
+    awaiting_event: BTreeSet<libc::pid_t>,
+}
+
+impl TaskNumbers {
+    fn take(&mut self) -> u32 {
+        self.next += 1;
+        self.next - 1
+    }
+
+    /// The test program: 0.
+    fn first(&mut self) -> u32 {
+        self.take()
+    }
+
+    /// A stop of `pid`, which has a number already if `known`: the number
+    /// of a new task whose first stop came before its creator's event.
+    fn stopped(&mut self, pid: libc::pid_t, known: bool) -> Option<u32> {
+        if known {
+            return None;
+        }
+        self.awaiting_event.insert(pid);
+        Some(self.take())
+    }
+
+    /// A creator's event names its new task `pid`: the task's number if
+    /// this came before the task's own first stop.
+    fn created(&mut self, pid: libc::pid_t, known: bool) -> Option<u32> {
+        if self.awaiting_event.remove(&pid) || known {
+            return None;
+        }
+        Some(self.take())
+    }
+}
+
 struct Tracer {
     start: Instant,
     events: Vec<Event>,
     procs: BTreeMap<libc::pid_t, Proc>,
-    next_index: u32,
+    numbers: TaskNumbers,
     exit: Exit,
     /// Tracees not reaped yet, for the watchdog.
     live: Arc<Mutex<BTreeSet<libc::pid_t>>>,
 }
 
 impl Tracer {
-    fn add(&mut self, pid: libc::pid_t, started: bool) {
-        if !self.procs.contains_key(&pid) {
-            let p = Proc {
-                index: self.next_index,
-                mem: ProcMem::open(pid),
-                in_syscall: false,
-                pending: None,
-                started,
-                skip_exec_exit: false,
-            };
-            self.next_index += 1;
-            self.procs.insert(pid, p);
-            self.live.lock().unwrap_or_else(|e| e.into_inner()).insert(pid);
-        }
+    /// Trace task `pid` as number `index` from now on.
+    fn add(&mut self, pid: libc::pid_t, index: u32, started: bool) {
+        let p = Proc { index, mem: ProcMem::open(pid), in_syscall: false, pending: None, started, skip_exec_exit: false };
+        self.procs.insert(pid, p);
+        self.live.lock().unwrap_or_else(|e| e.into_inner()).insert(pid);
     }
 
     fn run(&mut self, pid: libc::pid_t) -> Result {
@@ -473,7 +514,8 @@ impl Tracer {
                  --tracer strace or --tracer none"
             )
         })?;
-        self.add(pid, false);
+        let first = self.numbers.first();
+        self.add(pid, first, false);
         // SAFETY: kill has no memory-safety requirements; `pid` is our
         // child, not yet reaped.
         unsafe { libc::kill(pid, libc::SIGCONT) };
@@ -503,9 +545,11 @@ impl Tracer {
             if !libc::WIFSTOPPED(status) {
                 continue;
             }
-            // A stop of a process not seen yet: a new child whose attach
-            // stop arrived before its parent's fork event.
-            self.add(wpid, true);
+            // A stop of a task not seen yet: a new child whose attach stop
+            // came before its creator's event.
+            if let Some(index) = self.numbers.stopped(wpid, self.procs.contains_key(&wpid)) {
+                self.add(wpid, index, true);
+            }
             let sig = libc::WSTOPSIG(status);
             let event = status >> 16;
             let started = self.procs[&wpid].started;
@@ -527,7 +571,10 @@ impl Tracer {
                 match event {
                     libc::PTRACE_EVENT_FORK | libc::PTRACE_EVENT_VFORK | libc::PTRACE_EVENT_CLONE => {
                         if let Ok(child) = event_msg(wpid) {
-                            self.add(child as libc::pid_t, true);
+                            let child = child as libc::pid_t;
+                            if let Some(index) = self.numbers.created(child, self.procs.contains_key(&child)) {
+                                self.add(child, index, true);
+                            }
                         }
                     }
                     // The address space was replaced: reopen its memory.
@@ -650,6 +697,101 @@ mod tests {
             .filter_map(|e| if let Event::Syscall(c) = e { Some(c.name.as_str()) } else { None })
             .collect();
         assert!(names.contains(&"setpgid") && names.contains(&"wait4"), "{names:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every order in which a new task's two notifications and its exit
+    /// can reach the tracer gives it one number.
+    #[test]
+    fn task_numbers_whichever_notification_comes_first() {
+        let mut n = TaskNumbers::default();
+        assert_eq!(n.first(), 0);
+        // The event first, then the child's first stop.
+        assert_eq!(n.created(101, false), Some(1));
+        assert_eq!(n.stopped(101, true), None);
+        // The child's first stop first, then the event.
+        assert_eq!(n.stopped(102, false), Some(2));
+        assert_eq!(n.created(102, true), None);
+        // The child's first stop, its whole life and its exit (no longer
+        // known), then the event.
+        assert_eq!(n.stopped(103, false), Some(3));
+        assert_eq!(n.created(103, false), None);
+        // The next task gets the next number, and nothing is left waiting.
+        assert_eq!(n.created(104, false), Some(4));
+        assert!(n.awaiting_event.is_empty());
+    }
+
+    /// Build `source` (corpus format) as `name` in a fresh directory.
+    fn build(name: &str, source: &str) -> Option<(PathBuf, PathBuf)> {
+        let cc = corpus::compiler(None);
+        if corpus::compiler_version(&cc).is_err() {
+            eprintln!("skipped: no C compiler");
+            return None;
+        }
+        let dir = std::env::temp_dir().join(format!("poly-ptrace-{name}-{}", std::process::id()));
+        let (src, binary) = (dir.join(format!("{name}.c")), dir.join(name));
+        util::write(&src, source).unwrap();
+        let built = std::process::Command::new(&cc)
+            .args(corpus::FREESTANDING_FLAGS)
+            .arg("-o")
+            .arg(&binary)
+            .arg(&src)
+            .current_dir(crate::repo_root())
+            .status()
+            .unwrap();
+        assert!(built.success());
+        Some((dir, binary))
+    }
+
+    /// Children that exit at once, forked by a process that is itself a
+    /// child of the test program: the tracer often sees such a child's
+    /// first stop, and even its exit, before its parent's fork event. Every
+    /// task still gets exactly one number, in creation order: 0 the
+    /// program, 1 its child, 2.. the grandchildren, and each has events.
+    #[test]
+    fn a_child_that_exits_before_its_fork_event_is_numbered_once() {
+        const CHILDREN: u32 = 40;
+        let source = format!(
+            "#include \"poly_ipc.h\"\n\
+             int test_main(void) {{\n\
+                 i64 pid = fork();\n\
+                 if (pid == 0) {{\n\
+                     for (int i = 0; i < {CHILDREN}; i++) {{\n\
+                         i64 c = fork();\n\
+                         if (c == 0) exit_group(0);\n\
+                         if (wait_exit(c) != 0) exit_group(20);\n\
+                     }}\n\
+                     exit_group(0);\n\
+                 }}\n\
+                 return wait_exit(pid);\n\
+             }}\n"
+        );
+        let Some((dir, binary)) = build("quickchildren", &source) else { return };
+        // Several runs: which notification comes first is up to the host.
+        for _ in 0..5 {
+            let t = trace(&binary, "quickchildren", Duration::from_secs(20)).unwrap();
+            assert_eq!(t.exit, Exit::Code(0), "stdout: {}", t.stdout);
+            let mut seen = BTreeSet::new();
+            for e in &t.events {
+                seen.insert(match e {
+                    Event::Syscall(c) => c.pid,
+                    Event::Signal { pid, .. } => *pid,
+                });
+            }
+            let want: BTreeSet<u32> = (0..CHILDREN + 2).collect();
+            assert_eq!(seen, want, "task numbers with events");
+            // Each grandchild's only call is exit_group, in its own number.
+            let exits: Vec<u32> = t
+                .events
+                .iter()
+                .filter_map(|e| match e {
+                    Event::Syscall(c) if c.name == "exit_group" && c.pid >= 2 => Some(c.pid),
+                    _ => None,
+                })
+                .collect();
+            let order: Vec<u32> = (2..CHILDREN + 2).collect();
+            assert_eq!(exits[..CHILDREN as usize], order[..], "grandchildren in creation order");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
