@@ -532,7 +532,7 @@ Every thread and interrupt stack is painted when it is allocated, so how
 deep it was ever used can be read off it. Two kernel flags help:
 
 - `poly.debug.stack_report` prints, as a test run ends (`poly.qemu_exit`,
-  also after a panic), the deepest thread stack use so far and each
+  also after a panic) or the machine powers off (`poweroff`), the deepest thread stack use so far and each
   interrupt stack's:
 
   ```text
@@ -685,7 +685,21 @@ not start: ...` and left out; the boot goes on with the others.
   it runs with interrupts off.
 - A panic stops the other CPUs with an NMI, so the backtrace in the log is
   the panicking CPU's; the others halt where they were (`thread apply all
-  bt` shows where).
+  bt` shows where). A second panic on the CPU that is reporting one (a
+  fault while it formats the report, say on a corrupt or nearly full
+  stack) is printed too, once, as `KERNEL PANIC while reporting a panic:`
+  with its own backtrace; before, the report just stopped mid-line.
+- A kernel `ret` to a data address or to `0xffffffffffffffff`, with `rsp`
+  on a CPU's interrupt stack (`0xffff_c080_002x_xxxx`), means frames on that
+  stack were overwritten while still in use: code run there
+  (`irqstack::run_on`: reaping in `thread::finish_switch` and
+  `spawn_with`) blocked and the next interrupt reused the stack. Switching
+  away while on the interrupt stack now panics at once (`thread ... blocks
+  on its CPU's interrupt stack`) with the backtrace of what blocked. The
+  usual culprit is a drop during reaping that reaches a sleeping file
+  system lock; such drops go to the writeback thread
+  (`fs::cache::release_later`), which must get the reference itself, not a
+  copy (a copy it drops first leaves the original to be dropped in place).
 
 ## User mode
 

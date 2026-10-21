@@ -37,6 +37,9 @@ pub fn prepare_shutdown(out: &mut dyn Write) {
 /// if the firmware describes it (QEMU then exits), else halt.
 pub fn power_off(out: &mut dyn Write) -> ! {
     prepare_shutdown(out);
+    // With `poly.debug.stack_report`, how deep the stacks went (as a test
+    // run's end reports it).
+    crate::thread::report_stacks();
     if let Some(off) = acpi::platform().and_then(|p| p.soft_off) {
         let _ = writeln!(
             out,

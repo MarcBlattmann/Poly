@@ -122,7 +122,9 @@ pub const fn exit_code(status: ExitStatus) -> usize {
 /// thread: kept in the thread table, dropped when the thread is reaped.
 #[derive(Debug)]
 pub struct UserThread {
-    process: Arc<Process>,
+    /// Always there until the thread state is dropped, whose `Drop` moves
+    /// it out ([`UserThread::process_arc`] for the rest).
+    process: Option<Arc<Process>>,
     hook: SyscallHook,
     entry: Entry,
     /// Every register to start with, instead of `entry` (a child of
@@ -260,7 +262,7 @@ fn start_thread(
     let attached = Arc::clone(&process);
     let kick = Arc::clone(&flags);
     let user = Box::new(UserThread {
-        process,
+        process: Some(process),
         hook,
         entry,
         start,
@@ -281,12 +283,17 @@ fn start_thread(
 impl UserThread {
     /// Its process id and thread id (CPU-time accounting, ADR 0044).
     pub(crate) fn cpu_owner(&self) -> (u32, u32) {
-        (self.process.pid, self.tid)
+        (self.process_arc().pid, self.tid)
     }
 
     /// Its process.
     pub(crate) fn process(&self) -> &Process {
-        &self.process
+        self.process_arc()
+    }
+
+    /// Its process, as the reference the thread holds.
+    fn process_arc(&self) -> &Arc<Process> {
+        self.process.as_ref().expect("a user thread holds its process until it is dropped")
     }
 }
 
@@ -297,9 +304,16 @@ impl Drop for UserThread {
         // reference, dropping it there would let go of its file system
         // context (inodes, maybe on a disk mount, whose locks sleep): the
         // writeback thread drops it instead. Its open files were closed by
-        // its last thread already (`Process::detach_thread`).
-        if thread::reaping() {
-            crate::fs::cache::release_later(Box::new(Arc::clone(&self.process)));
+        // its last thread already (`Process::detach_thread`). The reference
+        // itself goes there, not a copy: with a copy, the writeback thread
+        // (on another CPU) could drop its copy first and leave this one the
+        // last, dropped here after all, which then sleeps on a file system
+        // lock while on the interrupt stack (`thread::finish_switch`).
+        let process = self.process.take();
+        if thread::reaping()
+            && let Some(process) = process
+        {
+            crate::fs::cache::release_later(Box::new(process));
         }
     }
 }
@@ -322,7 +336,7 @@ fn user_main(_: usize) -> usize {
 /// runs, with its flags and thread id. Nothing is cloned, so a thread that
 /// ends itself while holding these leaks nothing.
 fn current() -> Option<(&'static Process, &'static ThreadFlags, u32)> {
-    let (process, flags, tid) = thread::with_current_user(|u| (Arc::as_ptr(&u.process), Arc::as_ptr(&u.flags), u.tid))?;
+    let (process, flags, tid) = thread::with_current_user(|u| (Arc::as_ptr(u.process_arc()), Arc::as_ptr(&u.flags), u.tid))?;
     // SAFETY: the `UserThread` holding both `Arc`s stays in the thread table,
     // unchanged, until this thread has exited and been reaped, so the
     // pointees outlive every use of these references, which are only used
@@ -558,7 +572,7 @@ pub fn kill_current(fault: &Fault) -> ! {
 
 /// The process of the running thread, if it is a user thread.
 pub fn current_process() -> Option<Arc<Process>> {
-    thread::with_current_user(|u| Arc::clone(&u.process))
+    thread::with_current_user(|u| Arc::clone(u.process_arc()))
 }
 
 /// The running user thread's system call hook (what its `clone`
