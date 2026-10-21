@@ -441,8 +441,7 @@ pub fn end_thread(status: ExitStatus, code: usize) -> ! {
     if process.linux.is_some() {
         crate::linux::thread_exit(process, tid);
     }
-    let nt_memory =
-        (process.personality == poly_abi::Personality::Nt).then(current_memory).flatten();
+    let nt_memory = (process.personality == poly_abi::Personality::Nt).then(current_memory).flatten();
     if let Some(status) = process.detach_thread(tid, status) {
         if process.linux.is_some() {
             crate::linux::process_exit(process, status);

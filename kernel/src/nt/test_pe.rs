@@ -383,12 +383,7 @@ pub fn image() -> Vec<u8> {
     PeImage {
         image_base: IMAGE_BASE,
         entry: 0x1000,
-        sections: vec![PeSection {
-            name: *b".text\0\0\0",
-            data,
-            virtual_size,
-            characteristics: pe_writer::TEXT,
-        }],
+        sections: vec![PeSection { name: *b".text\0\0\0", data, virtual_size, characteristics: pe_writer::TEXT }],
         relocations: Vec::new(),
         fixed: false,
         stack_reserve: 0x1_0000,

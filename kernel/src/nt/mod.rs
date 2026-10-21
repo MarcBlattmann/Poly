@@ -134,7 +134,9 @@ pub fn start(process: &Arc<Process>, memory: &Arc<Memory>, file: &[u8], tid: u32
         let mut b = MemBackend { memory, sections: &mut s.sections };
         let start = exec::start_process(&mut s.sys, proc, &mut b, file, None, thread);
         match start {
-            Ok(ps) => Ok(Start { entry: crate::arch::user::Entry { rip: ps.entry, rsp: ps.rsp, args: [0; 3] }, teb: ps.teb }),
+            Ok(ps) => {
+                Ok(Start { entry: crate::arch::user::Entry { rip: ps.entry, rsp: ps.rsp, args: [0; 3] }, teb: ps.teb })
+            }
             Err(e) => {
                 let proc = s.processes.remove(&pid).expect("just inserted");
                 let mut proc = proc;
