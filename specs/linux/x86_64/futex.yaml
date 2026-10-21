@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/futex
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  futex(uaddr, op, val, timeout_or_val2, uaddr2, val3) on a 4-byte aligned
+  word. FUTEX_WAIT (0): if *uaddr != val fail with EAGAIN, else sleep until
+  woken (returns 0), until the relative timeout passes (ETIMEDOUT), or a
+  handled signal arrives. FUTEX_WAIT_BITSET (9): the same with an absolute
+  CLOCK_MONOTONIC deadline (CLOCK_REALTIME with FUTEX_CLOCK_REALTIME, 256)
+  and a bitset in val3; a deadline in the past times out at once (the value
+  is checked first). FUTEX_WAKE (1) wakes up to val waiters and returns how
+  many; FUTEX_WAKE_BITSET (10) only those whose bitset overlaps val3 (plain
+  WAIT/WAKE use all bits). FUTEX_REQUEUE (3) wakes val and moves up to val2
+  (the timeout argument as a number) waiters to uaddr2, returning the number
+  moved plus woken; FUTEX_CMP_REQUEUE (4) does so only if *uaddr == val3
+  (else EAGAIN) and returns woken + moved. FUTEX_WAKE_OP (5) applies the
+  operation in val3 to *uaddr2 (SET, ADD, OR, ANDN, XOR; OPARG_SHIFT makes
+  the argument 1<<oparg; the 12-bit argument is sign-extended), wakes val
+  waiters on uaddr and, if the comparison of the old *uaddr2 holds (EQ NE LT
+  LE GT GE), val2 waiters on uaddr2; returns the total woken.
+  FUTEX_PRIVATE_FLAG (128) gives the same results within a process; a
+  private waiter is not found by a shared wake. Shared futexes work between
+  processes on MAP_SHARED memory. CLONE_CHILD_CLEARTID zeroes the tid word
+  and does a FUTEX_WAKE on it when the thread exits.
+returns:
+  wait: "0 when woken"
+  wake: "the number of waiters woken (0 with none)"
+  requeue: "woken + moved"
+  wake_op: "the number woken on both words"
+errors:
+  value_mismatch: "EAGAIN (11) for WAIT/WAIT_BITSET when *uaddr != val, and CMP_REQUEUE when *uaddr != val3"
+  timeout: "ETIMEDOUT (110)"
+  misaligned: "EINVAL (22) for an address not aligned to 4"
+  bad_address: "EFAULT (14) for an unmapped uaddr or uaddr2, or timeout pointer"
+  bad_timeout: "EINVAL (22) for tv_nsec out of range or a negative time"
+  zero_bitset: "EINVAL (22) for WAIT_BITSET or WAKE_BITSET with val3 0"
+  negative_counts: "EINVAL (22) for CMP_REQUEUE with a negative wake or requeue count"
+  unknown_op: "ENOSYS (38) for an unknown op, FUTEX_FD (2), FUTEX_CLOCK_REALTIME with WAKE, or an unknown WAKE_OP op or cmp code"
+side_effects: "none"
+threading: "waiters may be threads or processes; wake order among waiters is not specified"
+ordering: []
+timing:
+  typical: "a relative timeout of T returns after at least T"
+  guarantees: "a waiter is never woken by a wake on another word, or by a bitset wake that does not overlap"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

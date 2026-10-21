@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getpeername
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  getpeername(fd, addr, len) writes the connected peer's address. For TCP
+  each side reports the other's address and port, also after the peer
+  closed; for AF_UNIX streams the client reports the listener's name and the
+  server side the client's (unnamed: len 2); a socketpair end reports an
+  unnamed peer, also after it closed. A connected datagram socket reports
+  the address it was connected to (changing on reconnect; AF_UNSPEC
+  dissolves it).
+returns:
+  success: "0"
+errors:
+  not_connected: "ENOTCONN (107) for unconnected stream or datagram sockets and listeners"
+  not_socket: "ENOTSOCK (88)"
+  negative_length: "EINVAL (22)"
+  bad_pointer: "EFAULT (14)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rt_sigsuspend
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  rt_sigsuspend(mask, sigsetsize) replaces the signal mask with mask and
+  waits until a signal runs a handler (or ends the process); then the old
+  mask is restored and the call fails with EINTR (after the handler ran,
+  which saw the suspend mask plus its own signal). A signal that is already
+  pending and not blocked by mask ends it at once; signals still blocked by
+  mask stay pending. A signal whose action is SIG_IGN does not end it (an
+  ignored pending signal is dropped). The wake-up can come from a timer,
+  another process or the caller's own pending signals.
+returns:
+  interrupted: "-1 EINTR (4), always, after the handler; the old mask is back"
+errors:
+  sigsetsize: "EINVAL (22) when sigsetsize is not 8 (the mask is unchanged)"
+  bad_pointer: "EFAULT (14) for an unreadable mask"
+side_effects: "none"
+threading: "acts on the calling thread"
+ordering: []
+timing:
+  typical: "returns as soon as the signal is handled"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sigaltstack
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  sigaltstack(ss, old) sets and/or reads the thread's alternate signal
+  stack, a stack_t {ss_sp, ss_flags, ss_size}. Initially it is disabled:
+  flags SS_DISABLE (2), sp 0, size 0. A stack of at least MINSIGSTKSZ (2048)
+  bytes is accepted and read back with flags 0; SS_DISABLE turns it off (sp
+  and size then read as 0). SS_ONSTACK as a requested flag is accepted and
+  reads back as 0. Handlers installed with SA_ONSTACK run on it (other
+  handlers on the normal stack); inside such a handler sigaltstack reports
+  SS_ONSTACK (1) and refuses changes; a nested SA_ONSTACK signal runs
+  further down the same alternate stack; the handler's uc_stack describes
+  it. A stack overflow SIGSEGV can be handled there; without an alternate
+  stack the overflow kills the process. It is inherited across fork, and
+  rt_sigreturn restores it from uc_stack (an edited uc_stack changes it).
+returns:
+  success: "0; old (when not NULL) holds the previous setting"
+errors:
+  too_small: "ENOMEM (12) for a size below 2048; the old stack stays"
+  bad_flags: "EINVAL (22) for flags other than 0, SS_ONSTACK, SS_DISABLE"
+  on_stack: "EPERM (1) when changing it while running on it"
+  bad_pointer: "EFAULT (14) for an unreadable ss or unwritable old"
+side_effects: "none"
+threading: "per thread"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

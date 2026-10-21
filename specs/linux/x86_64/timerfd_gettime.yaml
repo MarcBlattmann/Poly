@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/timerfd_gettime
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  timerfd_gettime(fd, cur) writes {interval, value}: value is the time left
+  to the next expiration (counting down; an absolute deadline is reported as
+  time left; for a periodic timer always within one interval), interval as
+  set. An expired one-shot timer reads all zero (even before its count is
+  read); a disarmed timer zero; a setting with value 0 and a nonzero
+  interval is not armed (never expires) but reports the interval. The
+  setting is shared by dup and survives fork.
+returns:
+  success: "0"
+errors:
+  not_timerfd: "EINVAL (22)"
+  closed_fd: "EBADF (9)"
+  bad_pointer: "EFAULT (14)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
