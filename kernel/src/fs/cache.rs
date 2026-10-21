@@ -165,6 +165,7 @@ fn writeback_main(_: usize) -> usize {
         KICKED.store(false, Ordering::SeqCst);
         release_now();
         disk::writeback_pass();
+        super::memfs::writeback_pass();
         relieve_memory_pressure();
         PASSES.fetch_add(1, Ordering::SeqCst);
     }
@@ -206,7 +207,8 @@ impl core::fmt::Debug for FileSource {
 impl FileSource {
     /// The file `node` names.
     pub fn new(node: NodeRef) -> FileSource {
-        let cached = disk::cached_fs_of(node.mount().fs());
+        let fs = node.mount().fs();
+        let cached = disk::cached_fs_of(fs).or_else(|| super::memfs::cached_fs_of(fs));
         FileSource { node, cached, file: None }
     }
 
