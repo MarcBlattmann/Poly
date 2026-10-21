@@ -97,7 +97,7 @@ impl LinuxState {
         let parent = p.thread_ids().next();
         match parent {
             Some(parent) => p.add_thread(parent, tid, true),
-            None => first_thread(&mut *p, tid),
+            None => first_thread(&mut p, tid),
         }
     }
 
