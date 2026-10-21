@@ -452,6 +452,9 @@ pub fn end_thread(status: ExitStatus, code: usize) -> ! {
         }
         process.ended();
     }
+    // `thread::exit` never returns, so drop this reference now: it must not
+    // outlive the thread (the NT memory map is freed with the last one).
+    drop(nt_memory);
     thread::exit(code)
 }
 
