@@ -816,6 +816,39 @@ fn names_change() {
     assert_eq!(sys(k, nr::SYMLINK, &[empty, sl]), Err(Errno::ENOENT));
 }
 
+/// linkat and renameat2: the second path's string errors (an unreadable
+/// pointer, PATH_MAX bytes or more, empty) and a bad newdirfd come after
+/// the first path's errors (the spec sheets' `path_order_two_paths`).
+#[test]
+fn second_path_errors_come_in_their_place() {
+    let mut e = env();
+    let k = &mut e.k;
+    let missing = s(k, 0, b"/dir/missing");
+    let nope = s(k, 0x100, b"/dir/nope/x");
+    let file = s(k, 0x200, b"/dir/file");
+    let rel = s(k, 0x300, b"x");
+    let empty = s(k, 0x400, b"");
+    let too_long = s(k, 0x1000, &[b'/'; crate::sys::path::PATH_MAX]);
+    let bad_fd = 99;
+    for new in [UNMAPPED, too_long, empty] {
+        assert_eq!(sys(k, nr::LINKAT, &[AT, missing, AT, new, 0]), Err(Errno::ENOENT), "oldpath first");
+        assert_eq!(sys(k, nr::RENAMEAT2, &[AT, nope, AT, new, 0]), Err(Errno::ENOENT), "old's directories first");
+    }
+    assert_eq!(sys(k, nr::LINKAT, &[AT, missing, bad_fd, rel, 0]), Err(Errno::ENOENT));
+    assert_eq!(sys(k, nr::RENAMEAT2, &[AT, nope, bad_fd, rel, 0]), Err(Errno::ENOENT));
+    // Then the second path's own errors, in their order.
+    assert_eq!(sys(k, nr::LINKAT, &[AT, file, bad_fd, UNMAPPED, 0]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::LINKAT, &[AT, file, bad_fd, too_long, 0]), Err(Errno::ENAMETOOLONG));
+    assert_eq!(sys(k, nr::LINKAT, &[AT, file, bad_fd, empty, 0]), Err(Errno::ENOENT));
+    assert_eq!(sys(k, nr::LINKAT, &[AT, file, bad_fd, rel, 0]), Err(Errno::EBADF));
+    assert_eq!(sys(k, nr::RENAMEAT2, &[AT, missing, AT, too_long, 0]), Err(Errno::ENAMETOOLONG));
+    assert_eq!(sys(k, nr::RENAMEAT2, &[AT, missing, bad_fd, rel, 0]), Err(Errno::EBADF));
+    assert_eq!(sys(k, nr::RENAMEAT2, &[AT, missing, AT, rel, 0]), Err(Errno::ENOENT));
+    // The first path's string errors still come before everything.
+    assert_eq!(sys(k, nr::LINKAT, &[AT, UNMAPPED, bad_fd, UNMAPPED, 0]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::RENAMEAT2, &[AT, empty, bad_fd, UNMAPPED, 0]), Err(Errno::ENOENT));
+}
+
 #[test]
 fn modes_sizes_and_sync() {
     let mut e = env();
