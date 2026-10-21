@@ -181,6 +181,9 @@ pub struct Config {
     pub max_parallel: usize,
     pub max_cycles: u32,
     pub spec_attempts: u32,
+    /// Failed spec checks (CI red, an incomplete spec) that go back to the
+    /// spec agent with feedback before the entry goes to the human queue.
+    pub spec_cycles: u32,
     /// Consecutive infrastructure errors on one entry before a human gets it.
     pub max_errors: u32,
     /// No new entries while this many pipeline PRs wait for a merge.
@@ -202,6 +205,8 @@ pub struct Config {
     pub hub: PathBuf,
     pub heldout: PathBuf,
     pub inbox: PathBuf,
+    /// Feedback for the spec agent (readable by the spec role only).
+    pub spec_inbox: PathBuf,
     pub state_dir: PathBuf,
     pub log_file: Option<PathBuf>,
     pub human_queue: PathBuf,
@@ -242,6 +247,7 @@ impl Default for Config {
             max_parallel: 1,
             max_cycles: 5,
             spec_attempts: 2,
+            spec_cycles: 2,
             max_errors: 8,
             max_open_prs: 10,
             max_refresh: 3,
@@ -257,6 +263,7 @@ impl Default for Config {
             hub: "/srv/poly/git/poly.git".into(),
             heldout: "/srv/poly/heldout".into(),
             inbox: "/srv/poly/inbox".into(),
+            spec_inbox: "/srv/poly/spec-inbox".into(),
             state_dir: "/srv/poly/runner/state".into(),
             log_file: Some("/srv/poly/runner/log/pipeline.log".into()),
             human_queue: "/srv/poly/runner/human-queue.md".into(),
@@ -370,6 +377,7 @@ impl Config {
         k.int("loop.max_parallel", &mut c.max_parallel)?;
         k.int("loop.max_cycles", &mut c.max_cycles)?;
         k.int("loop.spec_attempts", &mut c.spec_attempts)?;
+        k.int("loop.spec_cycles", &mut c.spec_cycles)?;
         k.int("loop.max_errors", &mut c.max_errors)?;
         k.int("loop.max_open_prs", &mut c.max_open_prs)?;
         k.int("loop.max_refresh", &mut c.max_refresh)?;
@@ -385,6 +393,7 @@ impl Config {
         k.path("paths.hub", &mut c.hub)?;
         k.path("paths.heldout", &mut c.heldout)?;
         k.path("paths.inbox", &mut c.inbox)?;
+        k.path("paths.spec_inbox", &mut c.spec_inbox)?;
         k.path("paths.state_dir", &mut c.state_dir)?;
         let mut log = c.log_file.as_ref().map(|p| p.display().to_string());
         k.opt_str("paths.log_file", &mut log)?;
@@ -462,19 +471,26 @@ impl Config {
         if util::is_inside(&self.heldout, &self.repo) || util::is_inside(&self.repo, &self.heldout) {
             return Err("the held-out store overlaps the runner's repository".into());
         }
+        // The spec agent's feedback is never where the implementer can read it.
+        for (name, p) in [("inbox", &self.inbox), ("implementer.repo", &self.implementer.repo)] {
+            if util::is_inside(p, &self.spec_inbox) || util::is_inside(&self.spec_inbox, p) {
+                return Err(format!("paths.spec_inbox {} overlaps {name} {}", self.spec_inbox.display(), p.display()));
+            }
+        }
         Ok(())
     }
 
     /// Lines for `loop status`.
     pub fn describe(&self) -> String {
         format!(
-            "runner {} (hub {}), state {}, held-out {}, max_parallel {}, max_cycles {}, PRs {}{}",
+            "runner {} (hub {}), state {}, held-out {}, max_parallel {}, max_cycles {}, spec_cycles {}, PRs {}{}",
             self.repo.display(),
             self.hub.display(),
             self.state_dir.display(),
             self.heldout.display(),
             self.max_parallel,
             self.max_cycles,
+            self.spec_cycles,
             if self.open_prs { "on" } else { "off" },
             if self.open_prs && self.auto_merge { " with auto-merge" } else { "" }
         )
@@ -515,7 +531,7 @@ mod tests {
     fn config_defaults_and_overrides() {
         let c = Config::parse("").unwrap();
         assert_eq!(c, Config::default());
-        assert_eq!(c.max_cycles, 5);
+        assert_eq!((c.max_cycles, c.spec_cycles), (5, 2));
         let c = Config::parse(
             "[loop]\nmax_parallel = 2\nentries = [\"linux/syscall/x86_64/\"]\n[spec]\nagent = \"spec-qwen-1\"\n\
              model = \"opus\"\n[implementer]\ncommand = [\"/bin/true\"]\n[github]\nauto_merge = false\n\
@@ -538,6 +554,7 @@ mod tests {
         assert!(Config::parse("[spec]\nagent = \"impl-claude-1\"\n").unwrap_err().contains("must differ"));
         assert!(Config::parse("[paths]\nrepo = \"relative\"\n").unwrap_err().contains("absolute"));
         assert!(Config::parse("[paths]\ninbox = \"/srv/poly/heldout/inbox\"\n").unwrap_err().contains("overlaps"));
+        assert!(Config::parse("[paths]\nspec_inbox = \"/srv/poly/inbox/spec\"\n").unwrap_err().contains("spec_inbox"));
         assert!(Config::parse("[spec]\nagent = \"a b\"\n").is_err());
         assert!(Config::parse("[loop]\nmax_parallel = 0\n").is_err());
     }
@@ -547,6 +564,7 @@ mod tests {
         let text = util::read_string(&crate::repo_root().join("tools/pipeline/deploy/pipeline.example.toml")).unwrap();
         let c = Config::parse(&text).unwrap();
         assert_eq!(c.max_parallel, 2);
+        assert_eq!((c.spec_cycles, c.spec_inbox.to_str()), (2, Some("/srv/poly/spec-inbox")));
         assert_eq!(c.spec.command[..4], ["sudo", "-n", "-u", "polyspec"]);
         assert_eq!(c.implementer.command[..4], ["sudo", "-n", "-u", "polyimpl"]);
     }

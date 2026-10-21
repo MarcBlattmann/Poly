@@ -168,7 +168,17 @@ pub fn prompt(req: &Request<'_>) -> String {
         .replace("{generated}", &generated)
         .replace("{revision}", req.revision.unwrap_or("HEAD"));
     if let Some(f) = &req.feedback {
-        text.push_str("\nThe diff runner found these differences in your previous attempt; fix them:\n\n");
+        text.push_str(match req.role {
+            // The scheduler's spec check failed: the agent continues its own work.
+            Role::Spec => {
+                "\nThis session continues your previous one, whose branch failed the runner's spec check. \
+                 Your commits, the generated tests and the held-out tests are as you left them: do not start \
+                 over (the skeleton exists already). Fix what the check found, below; if you change tests, \
+                 change them in the generated directory and run `tests split` again with `--replace`. Then \
+                 commit on the current branch.\n\n"
+            }
+            Role::Implementer => "\nThe diff runner found these differences in your previous attempt; fix them:\n\n",
+        });
         text.push_str(f);
         text.push('\n');
     }
@@ -304,6 +314,13 @@ mod tests {
         assert!(p.ends_with("exit: reference exit 0, target exit 1\n"));
         let s = prompt(&request(Role::Spec, &e, Path::new("."), "true"));
         assert!(s.contains("SPEC AGENT") && s.contains("OUTSIDE the repository"));
+        assert!(!s.contains("continues your previous one"));
+        // A failed spec check: the spec agent continues its own work.
+        let mut req = request(Role::Spec, &e, Path::new("."), "true");
+        req.feedback = Some("`cargo xtask ci` failed".into());
+        let s = prompt(&req);
+        assert!(s.contains("continues your previous one") && s.contains("--replace") && !s.contains("diff runner"));
+        assert!(s.ends_with("`cargo xtask ci` failed\n"));
     }
 
     #[test]
