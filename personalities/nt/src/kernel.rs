@@ -186,6 +186,11 @@ pub trait NtKernel {
     /// if another thread ran, else `STATUS_NO_YIELD_PERFORMED`.
     fn yield_execution(&mut self) -> NtStatus;
 
+    /// The tail of the APC trampoline (`PolyResumeApc`): restore the context
+    /// the calling thread had when the APC interrupted it, and return the
+    /// status that context's wait should see (`STATUS_USER_APC`).
+    fn resume_apc(&mut self) -> NtStatus;
+
     /// Log three values for a test program (`PolyTrace`).
     fn trace(&mut self, values: [u64; 3]);
 }

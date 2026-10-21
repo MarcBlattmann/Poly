@@ -194,5 +194,6 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
             k.trace(values);
             Ok(poly_ntobj::status::STATUS_SUCCESS)
         }
+        PolyResumeApc => Ok(k.resume_apc()),
     }
 }

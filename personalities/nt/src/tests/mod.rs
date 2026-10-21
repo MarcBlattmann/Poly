@@ -333,6 +333,10 @@ impl NtKernel for Fake {
         STATUS_NO_YIELD_PERFORMED
     }
 
+    fn resume_apc(&mut self) -> NtStatus {
+        STATUS_USER_APC
+    }
+
     fn trace(&mut self, values: [u64; 3]) {
         self.traces.push(values);
     }

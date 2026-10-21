@@ -109,6 +109,9 @@ pub struct ThreadFlags {
     /// The thread must end, though its process goes on (another thread's
     /// `execve`, [`Process::end_other_threads`]).
     pub killed: AtomicBool,
+    /// The thread is suspended (NT `NtSuspendThread`): it parks before it
+    /// next runs user code until the count reaches zero (`crate::nt`).
+    pub suspended: AtomicBool,
     /// Its kernel thread (`ThreadId::to_bits` + 1; 0 until it is known), to
     /// interrupt it when it runs on another CPU ([`ThreadFlags::kick`]).
     pub thread: AtomicU64,

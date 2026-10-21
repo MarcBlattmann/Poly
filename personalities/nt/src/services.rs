@@ -189,6 +189,11 @@ pub enum Service {
     /// program reports what went wrong before it gives up). Returns
     /// `STATUS_SUCCESS`.
     PolyTrace,
+    /// `PolyResumeApc()`: the tail of the APC trampoline. After a user APC
+    /// routine returns, the kernel restores the context the thread had when
+    /// the APC interrupted it (our stand-in for `NtContinue`, until `ntdll`
+    /// provides `KiUserApcDispatcher`). Never returns to the trampoline.
+    PolyResumeApc,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -197,7 +202,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 57] = [
+pub const SERVICES: [(Service, u32, &str); 58] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -255,6 +260,7 @@ pub const SERVICES: [(Service, u32, &str); 57] = [
     (Service::GetContextThread, 0x089, "NtGetContextThread"),
     (Service::SetContextThread, 0x08A, "NtSetContextThread"),
     (Service::PolyTrace, TABLE_POLY << 12, "PolyTrace"),
+    (Service::PolyResumeApc, (TABLE_POLY << 12) | 1, "PolyResumeApc"),
 ];
 
 impl Service {

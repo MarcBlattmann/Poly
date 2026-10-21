@@ -154,6 +154,8 @@ pub struct NtProcess {
     pub image_base: u64,
     /// The per-process thread-start trampoline ([`crate::exec`]).
     pub trampoline: u64,
+    /// The per-process user-APC trampoline ([`crate::exec`]).
+    pub apc_trampoline: u64,
     /// The image's stack reserve and commit, the default for new threads.
     pub default_stack_reserve: u64,
     pub default_stack_commit: u64,
@@ -173,6 +175,7 @@ impl NtProcess {
             peb: 0,
             image_base: 0,
             trampoline: 0,
+            apc_trampoline: 0,
             default_stack_reserve: 0x1_0000,
             default_stack_commit: 0x1000,
             exit_status: None,

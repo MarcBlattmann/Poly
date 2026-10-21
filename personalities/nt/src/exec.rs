@@ -85,6 +85,33 @@ pub const THREAD_TRAMPOLINE: [u8; 27] = [
     0x0F, 0x0B, // ud2
 ];
 
+/// The per-process user-APC trampoline, our stand-in for ntdll's
+/// `KiUserApcDispatcher`. The kernel redirects an alertable thread here with
+/// R11 = the APC routine and RCX/RDX/R8 = its three arguments (RAX cannot
+/// carry it: the system-call return path forces RAX to the call's result).
+/// It calls `routine(arg1, arg2, arg3)` and then re-enters the kernel with
+/// `PolyResumeApc`, which restores the context the APC interrupted
+/// (returning `STATUS_USER_APC` from the wait). Placed at [`APC_OFFSET`] in
+/// the trampoline page:
+///
+/// ```text
+///   sub  rsp, 0x20     ; shadow space, keep 16-byte alignment
+///   call r11           ; routine(rcx, rdx, r8)
+///   mov  eax, 0x3001   ; PolyResumeApc
+///   syscall
+///   ud2
+/// ```
+pub const APC_TRAMPOLINE: [u8; 16] = [
+    0x48, 0x83, 0xEC, 0x20, // sub rsp, 0x20
+    0x41, 0xFF, 0xD3, // call r11
+    0xB8, 0x01, 0x30, 0x00, 0x00, // mov eax, 0x3001
+    0x0F, 0x05, // syscall
+    0x0F, 0x0B, // ud2
+];
+
+/// Where the APC trampoline sits in the trampoline page.
+pub const APC_OFFSET: u64 = 0x40;
+
 /// Where a new process's first thread starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProcessStart {
@@ -246,8 +273,10 @@ pub fn start_process(
     // process and shared by every thread (see [`THREAD_TRAMPOLINE`]).
     let (tramp_page, _) = proc.vm.allocate(b, 0, PAGE_SIZE, 0, anywhere_top, rw)?;
     b.write(tramp_page, &THREAD_TRAMPOLINE)?;
+    b.write(tramp_page + APC_OFFSET, &APC_TRAMPOLINE)?;
     proc.vm.protect(b, tramp_page, PAGE_SIZE, PAGE_EXECUTE_READ)?;
     proc.trampoline = tramp_page;
+    proc.apc_trampoline = tramp_page + APC_OFFSET;
 
     let stack = make_stack(proc, b, reserve, commit)?;
     proc.vm.set_stack(stack.alloc);
