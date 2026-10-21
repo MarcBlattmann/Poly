@@ -68,7 +68,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] ELF loader for static binaries: segments, initial stack, auxiliary vector
 - [x] First Linux syscalls: `write`, `exit_group`, `brk`, `mmap`, `munmap`, `arch_prctl`
 - [x] **Milestone:** a static Linux "hello world" runs and exits cleanly
-- [ ] Agent pipeline v0: Linux syscall tracer on a real Linux VM, spec agent, implementer agent
+- [x] Agent pipeline v0: Linux syscall tracer on a real Linux VM, spec agent, implementer agent (first unattended loop PR: `open`, MarcBlattmann/Poly#28)
 - [x] Diff runner v0: same tests on real Linux and on Poly, results compared per test
 - [x] Held-out test store outside this repo; hand-off logging in `specs/HANDOFF_LOG.md`
 
