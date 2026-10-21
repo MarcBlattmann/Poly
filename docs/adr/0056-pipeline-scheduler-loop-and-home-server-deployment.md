@@ -3,7 +3,11 @@
 **Status:** Accepted. Builds on [0027](0027-agent-pipeline-tools-and-test-run-protocol.md)
 (the deterministic pipeline tools and the role commands) and implements the
 "scheduler loop" it left to the owner. The workflow is in
-[AGENT_PIPELINE.md](../AGENT_PIPELINE.md).
+[AGENT_PIPELINE.md](../AGENT_PIPELINE.md). Amended by
+[0074](0074-pipeline-sessions-paid-once-and-spec-feedback-cycles.md): an
+agent session is recorded in the state and never run again once it ended
+(a retry fetches its branch), and a failed spec check goes back to the
+spec agent with feedback up to `spec_cycles` times.
 
 ## Context
 
