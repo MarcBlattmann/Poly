@@ -70,9 +70,13 @@ fn errors_come_back_as_negative_errno() {
 #[test]
 fn every_implemented_call_reports_handled() {
     // Arguments that make each call fail early or do nothing harmful: the
-    // point is the outcome, not the result.
+    // point is the outcome, not the result. Calls that wait whatever their
+    // arguments (pause) are woken by a signal.
     for (number, _) in crate::table::implemented() {
         let mut k = FakeKernel::new();
+        k.meanwhile(|k| {
+            sys(k, nr::KILL, &[100, crate::abi::signal::SIGUSR1 as u64]).unwrap();
+        });
         let (outcome, _) = call(&mut k, number, &[u64::MAX, 0, 0, 0, u64::MAX, 0]);
         assert_eq!(outcome, Outcome::Handled, "{:?}", crate::table::name(number));
     }

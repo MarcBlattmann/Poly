@@ -1,7 +1,7 @@
 //! Signals end to end against the fake kernel: generation (kill, tgkill,
 //! tkill, rt_sigqueueinfo), delivery on the way back to user mode
 //! (order, masks, default actions, frames, alternate stacks), rt_sigreturn,
-//! rt_sigpending, rt_sigsuspend, rt_sigtimedwait, and restarts.
+//! rt_sigpending, rt_sigsuspend, pause, rt_sigtimedwait, and restarts.
 
 extern crate std;
 
@@ -611,6 +611,96 @@ fn rt_sigsuspend_restarts_after_a_stop() {
     assert_eq!(k.stops, [SIGTSTP]);
     assert_eq!((ctx.rip, ctx.rax), (SYSCALL_RIP - 2, nr::RT_SIGSUSPEND), "no handler ran: called again");
     assert_eq!(k.mask(), SigSet::only(SIGINT), "the old mask is back meanwhile");
+}
+
+#[test]
+fn pause_waits_for_a_handler_and_keeps_the_mask() {
+    let mut k = FakeKernel::new();
+    k.add_thread(101);
+    install(&mut k, SIGALRM, SA_RESTART, SigSet::only(SIGHUP));
+    k.poke(ARG, &SigAction { handler: SIG_IGN, ..Default::default() }.to_bytes());
+    sys(&mut k, nr::RT_SIGACTION, &[SIGINT as u64, ARG, 0, 8]).unwrap();
+    let original = set(&[SIGUSR2, SIGTERM]);
+    set_mask(&mut k, original);
+    // Blocked, ignored, ignored by default: none of them ends it.
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| {
+            for sig in [SIGUSR2, SIGTERM, SIGINT, SIGCHLD, SIGURG, SIGWINCH, SIGCONT] {
+                sys(k, nr::TGKILL, &[100, 100, sig as u64]).unwrap();
+            }
+        });
+    });
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGALRM as u64]).unwrap());
+    });
+    // Whatever is in the argument registers is ignored.
+    let (exit, _) = run(&mut k, nr::PAUSE, &[UNMAPPED, 1, 2, 3, 4, 5]);
+    assert_eq!(exit, ExitToUser::Return);
+    assert_eq!(handling(&k), Some(SIGALRM));
+    let uc = frame_uc(&k);
+    assert_eq!(uc.mask, original, "pause does not touch the mask");
+    assert_eq!(Errno::from_rax(uc.regs.rax), Some(Errno::EINTR));
+    assert_eq!(uc.regs.rip, SYSCALL_RIP, "SA_RESTART does not restart it");
+    assert_eq!(k.mask(), original.union(set(&[SIGALRM, SIGHUP])), "caller's mask, the signal and sa_mask");
+    handler_returns(&mut k);
+    assert_eq!(k.mask(), original);
+    assert_eq!(k.me().pending(100), set(&[SIGUSR2, SIGTERM]), "blocked signals stay pending");
+}
+
+#[test]
+fn pause_waits_for_the_next_signal_not_an_earlier_one() {
+    let mut k = FakeKernel::new();
+    k.add_thread(101);
+    install(&mut k, SIGUSR1, 0, SigSet::EMPTY);
+    install(&mut k, SIGALRM, 0, SigSet::EMPTY);
+    run(&mut k, nr::KILL, &[100, SIGUSR1 as u64]);
+    assert_eq!(handling(&k), Some(SIGUSR1));
+    handler_returns(&mut k);
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGALRM as u64]).unwrap());
+    });
+    run(&mut k, nr::PAUSE, &[]);
+    assert_eq!(k.blocks, 1, "the earlier SIGUSR1 did not end it");
+    assert_eq!(handling(&k), Some(SIGALRM));
+    assert_eq!(Errno::from_rax(frame_uc(&k).regs.rax), Some(Errno::EINTR));
+}
+
+#[test]
+fn pause_goes_on_after_a_stop() {
+    let mut k = FakeKernel::new();
+    k.add_thread(101);
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGSTOP as u64]).unwrap());
+    });
+    let (_, ctx) = run(&mut k, nr::PAUSE, &[]);
+    assert_eq!(k.stops, [SIGSTOP]);
+    assert_eq!((ctx.rip, ctx.rax), (SYSCALL_RIP - 2, nr::PAUSE), "no handler ran: called again");
+}
+
+#[test]
+fn pause_ends_with_the_process() {
+    let mut k = FakeKernel::new();
+    k.add_thread(101);
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGTERM as u64]).unwrap());
+    });
+    assert_eq!(run(&mut k, nr::PAUSE, &[]).0, ExitToUser::Killed);
+    assert_eq!(k.exit, Some(Exit::Signal(SIGTERM, false)));
+
+    // With every signal blocked, SIGTERM stays pending; SIGKILL still kills.
+    let mut k = FakeKernel::new();
+    k.add_thread(101);
+    set_mask(&mut k, SigSet(!0));
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGTERM as u64]).unwrap());
+    });
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGKILL as u64]).unwrap());
+    });
+    assert_eq!(run(&mut k, nr::PAUSE, &[]).0, ExitToUser::Killed);
+    assert_eq!(k.blocks, 1, "the blocked SIGTERM did not wake it");
+    assert!(k.me().pending(100).contains(SIGTERM));
+    assert_eq!(k.exit, Some(Exit::Signal(SIGKILL, false)));
 }
 
 #[test]

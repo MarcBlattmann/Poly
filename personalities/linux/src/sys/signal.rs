@@ -1,7 +1,7 @@
 //! Signal system calls: rt_sigaction(2), rt_sigprocmask(2), sigaltstack(2),
 //! rt_sigreturn(2), kill(2), tkill / tgkill(2), rt_sigqueueinfo /
 //! rt_tgsigqueueinfo(2), rt_sigpending(2), rt_sigtimedwait(2),
-//! rt_sigsuspend(2), restart_syscall(2).
+//! rt_sigsuspend(2), pause(2), restart_syscall(2).
 //!
 //! The state lives in the kernel's [`crate::signal::LinuxProcess`]; the
 //! logic in [`crate::signal`]. Where the man pages list errors without an
@@ -321,6 +321,25 @@ pub fn rt_sigsuspend(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         t.saved_mask.get_or_insert(t.mask);
         t.mask = mask;
     });
+    loop {
+        k.clear_signal_notification();
+        if with_own(k, |p| p.has_deliverable(tid)) {
+            return Err(Errno::RESTART_IF_NO_HANDLER);
+        }
+        k.block(None);
+    }
+}
+
+/// pause(): pause(2) "causes the calling process (or thread) to sleep
+/// until a signal is delivered that either terminates the process or
+/// causes the invocation of a signal-catching function"; it "returns only
+/// when a signal was caught and the signal-catching function returned",
+/// with `EINTR`. No arguments are read and the mask is left as it is, so
+/// blocked signals stay pending without waking it. A signal that needs no
+/// handler (a stop and `SIGCONT`) starts the call over, and `SA_RESTART`
+/// does not restart it once a handler ran.
+pub fn pause(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
+    let tid = k.tid();
     loop {
         k.clear_signal_notification();
         if with_own(k, |p| p.has_deliverable(tid)) {
