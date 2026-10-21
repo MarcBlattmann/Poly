@@ -219,7 +219,7 @@ pub mod acl {
     /// users or groups, entries in tag order and named ones by id without
     /// duplicates, no unknown tags or permission bits. `EINVAL` otherwise.
     pub fn parse(value: &[u8]) -> Result<Summary> {
-        if value.len() < HEADER || (value.len() - HEADER) % ENTRY != 0 {
+        if value.len() < HEADER || !(value.len() - HEADER).is_multiple_of(ENTRY) {
             return Err(Errno::EINVAL);
         }
         let version = u32::from_le_bytes([value[0], value[1], value[2], value[3]]);
