@@ -269,6 +269,36 @@ fn kill_all(pgid: libc::pid_t, live: &Mutex<BTreeSet<libc::pid_t>>) {
     }
 }
 
+/// In a child about to exec a test program: mark every descriptor from 3
+/// up close-on-exec, so the program starts with only stdin, stdout and
+/// stderr, whatever its caller had open (a lock file a CI runner inherited
+/// once shifted every descriptor the tests opened by one). Close-on-exec
+/// rather than closed, so a descriptor the parent needs up to the exec
+/// itself (std's exec error pipe) keeps working. Only async-signal-safe
+/// calls. Never call it in the tool's own process.
+pub(crate) fn cloexec_from_3() {
+    // SAFETY: close_range(2) with CLOSE_RANGE_CLOEXEC only sets descriptor
+    // flags; it touches no memory.
+    let r = unsafe { libc::syscall(libc::SYS_close_range, 3u32, u32::MAX, libc::CLOSE_RANGE_CLOEXEC) };
+    if r == 0 {
+        return;
+    }
+    // A kernel before 5.11: one by one, up to the descriptor limit.
+    // SAFETY: `lim` is a valid rlimit for getrlimit to fill.
+    let mut lim: libc::rlimit = unsafe { std::mem::zeroed() };
+    // SAFETY: as above.
+    let max = if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) } == 0 {
+        lim.rlim_cur.min(1 << 20) as libc::c_int
+    } else {
+        1024
+    };
+    for fd in 3..max {
+        // SAFETY: F_SETFD on a descriptor that may not be open (EBADF,
+        // ignored) only sets its flags.
+        unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) };
+    }
+}
+
 /// Everything the child needs, prepared before fork: after fork the child
 /// may only make async-signal-safe calls, so nothing is allocated there.
 struct ChildSetup {
@@ -286,8 +316,8 @@ struct ChildSetup {
 /// (`PTRACE_SEIZE`), exec. Never returns.
 fn child(s: &ChildSetup) -> ! {
     // SAFETY: only async-signal-safe calls (setpgid, the jail's, dup2,
-    // personality, signal, sigemptyset, sigprocmask, getpid, kill, execve,
-    // _exit) on descriptors, a stack sigset_t and strings prepared before
+    // close_range or getrlimit and fcntl, personality, signal, sigemptyset,
+    // sigprocmask, getpid, kill, execve, _exit) on descriptors, a stack sigset_t and strings prepared before
     // fork; the argv/envp arrays are NULL-terminated and their strings
     // outlive the call.
     unsafe {
@@ -300,6 +330,7 @@ fn child(s: &ChildSetup) -> ! {
         if libc::dup2(s.stdin, 0) < 0 || libc::dup2(s.stdout, 1) < 0 || libc::dup2(s.stderr, 2) < 0 {
             libc::_exit(CHILD_SETUP_FAILED);
         }
+        cloexec_from_3();
         let current = libc::personality(0xffff_ffff);
         if current >= 0 {
             libc::personality(current as libc::c_ulong | ADDR_NO_RANDOMIZE);
@@ -720,6 +751,36 @@ mod tests {
         // The next task gets the next number, and nothing is left waiting.
         assert_eq!(n.created(104, false), Some(4));
         assert!(n.awaiting_event.is_empty());
+    }
+
+    /// A descriptor this process inherited without close-on-exec (a CI
+    /// runner's lock file) does not reach the test program, under any
+    /// tracer: its first new descriptor is 3, as from a shell.
+    #[test]
+    fn test_programs_do_not_inherit_the_callers_descriptors() {
+        let source = "#include \"poly_ipc.h\"\nint test_main(void) { return (int)syscall1(SYS_dup, 0); }\n";
+        let Some((dir, binary)) = build("firstfd", source) else { return };
+        // SAFETY: dup returns a new descriptor (without FD_CLOEXEC) that
+        // this test owns and closes below.
+        let leaked = unsafe { libc::dup(0) };
+        assert!(leaked >= 3);
+        // SAFETY: a second one, so even fd 3 may be taken here: the
+        // program's dup must still give 3.
+        let leaked2 = unsafe { libc::dup(0) };
+        let mut tracers = vec![crate::runner::Tracer::Ptrace, crate::runner::Tracer::None];
+        if util::which("strace").is_some() {
+            tracers.push(crate::runner::Tracer::Strace);
+        }
+        for tracer in tracers {
+            let t = crate::runner::run(tracer, &binary, "firstfd", Duration::from_secs(20)).unwrap();
+            assert_eq!(t.exit, Exit::Code(3), "{tracer:?}");
+        }
+        // SAFETY: both are ours, closed once.
+        unsafe {
+            libc::close(leaked);
+            libc::close(leaked2);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Build `source` (corpus format) as `name` in a fresh directory.

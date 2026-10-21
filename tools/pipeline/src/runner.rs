@@ -82,6 +82,20 @@ pub(crate) struct Finished {
     pub duration_ns: u64,
 }
 
+/// `cmd` for a test program on the reference side: it starts with only
+/// stdin, stdout and stderr open, whatever this process inherited
+/// ([`ptrace::cloexec_from_3`]).
+fn reference(cmd: &mut Command) -> &mut Command {
+    // SAFETY: the hook runs in the child between fork and exec and makes
+    // only async-signal-safe calls (close_range, or getrlimit and fcntl).
+    unsafe {
+        std::os::unix::process::CommandExt::pre_exec(cmd, || {
+            ptrace::cloexec_from_3();
+            Ok(())
+        })
+    }
+}
+
 pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finished> {
     let start = Instant::now();
     let mut child = cmd
@@ -120,7 +134,7 @@ pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finish
 }
 
 fn untraced(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
-    let f = run_command(Command::new(program).env_clear(), timeout)?;
+    let f = run_command(reference(Command::new(program).env_clear()), timeout)?;
     let mut t = Trace::new(test, &ptrace::host_system(), "none");
     t.exit = f.exit;
     t.stdout = String::from_utf8_lossy(&f.stdout).into_owned();
@@ -137,12 +151,14 @@ fn strace(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
     // -q: no attach/detach chatter (exit lines stay); -X raw: numbers, not constant names;
     // -s: whole strings. The program gets an empty environment.
     let f = run_command(
-        Command::new(strace)
-            .args(["-f", "-q", "-X", "raw", "-s", "4096", "-o"])
-            .arg(&log)
-            .arg("--")
-            .arg(program)
-            .env_clear(),
+        reference(
+            Command::new(strace)
+                .args(["-f", "-q", "-X", "raw", "-s", "4096", "-o"])
+                .arg(&log)
+                .arg("--")
+                .arg(program)
+                .env_clear(),
+        ),
         timeout,
     )?;
     let text = util::read_string(&log);
