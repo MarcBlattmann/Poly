@@ -232,6 +232,19 @@ impl ObjectManager {
         Ok(())
     }
 
+    /// The process object `NtCurrentProcess()` means in `process`, if it was
+    /// set ([`Self::set_process_object`]). Used by `NtOpenProcess` by client
+    /// id: the kernel maps the pid to its process and asks for its object.
+    pub fn process_object(&self, process: ProcessId) -> Option<ObjectId> {
+        self.processes.get(&process).and_then(|r| r.object).filter(|&o| self.is_alive(o))
+    }
+
+    /// The thread object of `thread`, if it was set
+    /// ([`Self::set_thread_object`]). Used by `NtOpenThread` by client id.
+    pub fn thread_object(&self, thread: ThreadRef) -> Option<ObjectId> {
+        self.threads.get(&thread).copied().filter(|&o| self.is_alive(o))
+    }
+
     /// Open handles in a process's table.
     pub fn process_handle_count(&self, process: ProcessId) -> Option<usize> {
         self.processes.get(&process).map(|r| r.table.len())

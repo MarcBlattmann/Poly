@@ -76,11 +76,37 @@ pub const KEY_READ: AccessMask = 0x0002_0019;
 pub const KEY_WRITE: AccessMask = 0x0002_0006;
 pub const KEY_EXECUTE: AccessMask = 0x0002_0019;
 
+// Process-specific rights (`winnt.h`).
+pub const PROCESS_TERMINATE: AccessMask = 0x0001;
+pub const PROCESS_CREATE_THREAD: AccessMask = 0x0002;
+pub const PROCESS_SET_SESSIONID: AccessMask = 0x0004;
+pub const PROCESS_VM_OPERATION: AccessMask = 0x0008;
+pub const PROCESS_VM_READ: AccessMask = 0x0010;
+pub const PROCESS_VM_WRITE: AccessMask = 0x0020;
 /// `PROCESS_DUP_HANDLE`: what the kernel checks on the process handles it
 /// passes to [`crate::ObjectManager::nt_duplicate_object`] (DuplicateHandle on Learn).
 pub const PROCESS_DUP_HANDLE: AccessMask = 0x0040;
+pub const PROCESS_CREATE_PROCESS: AccessMask = 0x0080;
+pub const PROCESS_SET_QUOTA: AccessMask = 0x0100;
+pub const PROCESS_SET_INFORMATION: AccessMask = 0x0200;
+pub const PROCESS_QUERY_INFORMATION: AccessMask = 0x0400;
+pub const PROCESS_SUSPEND_RESUME: AccessMask = 0x0800;
+pub const PROCESS_QUERY_LIMITED_INFORMATION: AccessMask = 0x1000;
 /// `PROCESS_ALL_ACCESS` for Windows Vista and later.
 pub const PROCESS_ALL_ACCESS: AccessMask = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF;
+
+// Thread-specific rights (`winnt.h`).
+pub const THREAD_TERMINATE: AccessMask = 0x0001;
+pub const THREAD_SUSPEND_RESUME: AccessMask = 0x0002;
+pub const THREAD_GET_CONTEXT: AccessMask = 0x0008;
+pub const THREAD_SET_CONTEXT: AccessMask = 0x0010;
+pub const THREAD_SET_INFORMATION: AccessMask = 0x0020;
+pub const THREAD_QUERY_INFORMATION: AccessMask = 0x0040;
+pub const THREAD_SET_THREAD_TOKEN: AccessMask = 0x0080;
+pub const THREAD_IMPERSONATE: AccessMask = 0x0100;
+pub const THREAD_DIRECT_IMPERSONATION: AccessMask = 0x0200;
+pub const THREAD_SET_LIMITED_INFORMATION: AccessMask = 0x0400;
+pub const THREAD_QUERY_LIMITED_INFORMATION: AccessMask = 0x0800;
 /// `THREAD_ALL_ACCESS` for Windows Vista and later.
 pub const THREAD_ALL_ACCESS: AccessMask = STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF;
 
