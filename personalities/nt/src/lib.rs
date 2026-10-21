@@ -26,6 +26,9 @@
 //!   stack, TEB, PEB), its end, and exceptions.
 //! - [`backend`]: what the memory model asks the kernel's memory map to do.
 //! - [`pe_writer`]: a minimal PE32+ writer for test programs.
+
+//! - [`io`]: file I/O (ADR 0067): file and device objects over the VFS,
+//!   drive letters, share modes, byte-range locks, IRP-style async I/O.
 //! - [`registry`]: the `\REGISTRY` key object and the registry services
 //!   (on `poly-registry`, ADR 0066).
 
@@ -39,6 +42,7 @@ pub mod consts;
 pub mod context;
 pub mod exec;
 pub mod image;
+pub mod io;
 pub mod kernel;
 pub mod memory;
 pub mod objects;
@@ -193,6 +197,23 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         ResumeThread => threads::resume_thread(k, regs),
         GetContextThread => threads::get_context_thread(k, regs),
         SetContextThread => threads::set_context_thread(k, regs),
+
+        CreateFile => io::services::create_file(k, regs),
+        OpenFile => io::services::open_file(k, regs),
+        ReadFile => io::services::read_file(k, regs),
+        WriteFile => io::services::write_file(k, regs),
+        QueryInformationFile => io::services::query_information_file(k, regs),
+        SetInformationFile => io::services::set_information_file(k, regs),
+        QueryDirectoryFile => io::services::query_directory_file(k, regs),
+        QueryVolumeInformationFile => io::services::query_volume_information_file(k, regs),
+        FlushBuffersFile => io::services::flush_buffers_file(k, regs),
+        LockFile => io::services::lock_file(k, regs),
+        UnlockFile => io::services::unlock_file(k, regs),
+        DeleteFile => io::services::delete_file(k, regs),
+        CancelIoFile => io::services::cancel_io_file(k, regs),
+        CancelIoFileEx => io::services::cancel_io_file_ex(k, regs),
+        QueryAttributesFile => io::services::query_attributes_file(k, regs),
+        QueryFullAttributesFile => io::services::query_full_attributes_file(k, regs),
         CreateKey => registry::services::create_key(k, regs),
         OpenKey => registry::services::open_key(k, regs),
         OpenKeyEx => registry::services::open_key_ex(k, regs),
@@ -206,6 +227,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         FlushKey => registry::services::flush_key(k, regs),
         NotifyChangeKey => registry::services::notify_change_key(k, regs),
         SetInformationKey => registry::services::set_information_key(k, regs),
+
         PolyTrace => {
             let values = abi::args::<K, 3>(k, regs)?;
             k.trace(values);

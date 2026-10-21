@@ -1325,8 +1325,30 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   (`PolyResumeApc`) to restore the interrupted context (our stand-in for
   `KiUserApcDispatcher`). `NtDelayExecution` and `NtYieldExecution` round out
   the dispatcher services.
-- A `ParseHook` receives lookups that reach a device (or later a file
-  system), so those own the names below them; the registry is the first.
+- **File I/O** (`personalities/nt/src/io`, `kernel/src/nt/io.rs`, ADR 0067):
+  each VFS mount is a device `\Device\PolyFs<N>` with a `ParseHook`, reached
+  through drive-letter links in `\??` (`\??\C:` → `/nt/c`, the NT system
+  root; `\??\Z:` → `/`, the whole VFS). `NtCreateFile`/`NtOpenFile` walk the
+  VFS case-insensitively but case-preservingly, apply the create
+  dispositions, options, share modes (the documented sharing table,
+  `STATUS_SHARING_VIOLATION`) and `FILE_ATTRIBUTE_*` (readonly ↔ write
+  permission; hidden/system/archive as the xattr `user.poly.ntattr`, ADR
+  0060; times in 100 ns since 1601), and make a file object.
+  `NtReadFile`/`NtWriteFile` do synchronous I/O with a file position or
+  explicit offset and append; or, on an asynchronous handle, queue an I/O
+  request packet to a per-device worker thread and return `STATUS_PENDING`,
+  completing through the `IO_STATUS_BLOCK`, an `Event` and/or an APC, and
+  cancellable with `NtCancelIoFile` (`STATUS_CANCELLED`). `NtQueryDirectoryFile`
+  enumerates with `* ?` wildcards and the documented information classes;
+  `NtLockFile`/`NtUnlockFile` are mandatory byte-range locks
+  (`STATUS_FILE_LOCK_CONFLICT`, `STATUS_LOCK_NOT_GRANTED`); deletion is
+  deferred (`FileDispositionInformation`, `FILE_DELETE_ON_CLOSE`,
+  `NtDeleteFile`); rename is `FileRenameInformation`. The logic is host-tested
+  over a real tmpfs; the kernel runs the workers and delivers completions.
+  `\Device\PolyPipe` is a stand-in slow byte-stream device; I/O completion
+  ports are deferred.
+- A `ParseHook` receives lookups that reach a device, a file system or the
+  registry, so those own the names below them.
 - **Registry** (`crates/poly-registry`, `personalities/nt/src/registry`,
   `kernel/src/nt/registry.rs`, [ADR 0066](adr/0066-nt-registry-hives-in-polys-own-format.md)).
   `\REGISTRY` is a permanent `Key` parse object; a walk reaching it hands
@@ -1350,6 +1372,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   at NT process exit and before shutdown. Default hives (`HKLM\SYSTEM`,
   `HKLM\SOFTWARE`, `HKU\.DEFAULT`, Poly's user) are made at the first boot
   without files; ADR 0066 lists every value and its source.
+>>>>>>> main
 
 ## Testing strategy
 
