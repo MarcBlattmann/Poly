@@ -44,7 +44,7 @@
 {"symbol":"eventfd2","number":290,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"execve","number":59,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"execveat","number":322,"src":["linux-syscall-tbl"]},
-{"symbol":"exit","number":60,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
+{"symbol":"exit","number":60,"status":"claimed","claimed_by":"spec-a","src":["linux-syscall-tbl"]},
 {"symbol":"exit_group","number":231,"status":"green","tests_visible":10,"src":["linux-syscall-tbl"]},
 {"symbol":"faccessat","number":269,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"faccessat2","number":439,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
