@@ -13,6 +13,7 @@ mod mounts;
 mod names;
 mod objects;
 mod path;
+mod path_order;
 mod perm;
 mod tmpfs;
 mod xattrs;
