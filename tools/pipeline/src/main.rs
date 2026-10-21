@@ -29,6 +29,8 @@
 //! loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet]
 //!                                                the scheduler: runs the whole pipeline unattended
 //! loop status [--config FILE] [--json]           what every entry in the loop is doing
+//! loop watch [--config FILE] [--interval SECS] [--once] [--json] [--width N] [--lines N]
+//!                                                live read-only dashboard (q quits)
 //! loop reset <entry> [--config FILE] [--keep-branches]
 //!                                                forget an entry (e.g. after the human queue)
 //! win build [--tests-dir DIR]... [--tests a,b] [--out DIR]

@@ -4,6 +4,7 @@
 //! ```text
 //! loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet]
 //! loop status [--config FILE] [--json]
+//! loop watch [--config FILE] [--interval SECS] [--once] [--json] [--width N] [--lines N]
 //! loop reset <entry> [--config FILE] [--keep-branches]
 //! ```
 //!
@@ -14,6 +15,7 @@
 //! one entry until it waits or ends, then exits; `--entry` restricts the
 //! loop to one entry; `--dry-run` prints every command the cycle would run
 //! for the next entry, pretending each succeeds, and changes nothing.
+//! `watch` is a live, read-only dashboard of all of it ([`watch`]).
 
 pub mod config;
 pub mod cycle;
@@ -22,6 +24,7 @@ pub mod ops;
 pub mod real;
 pub mod safety;
 pub mod state;
+pub mod watch;
 
 #[cfg(test)]
 mod tests;
@@ -34,7 +37,9 @@ use state::{Step, Store};
 use std::path::{Path, PathBuf};
 
 pub const USAGE: &str = "usage: pipeline loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet] | \
-                         loop status [--config FILE] [--json] | loop reset <entry> [--config FILE] [--keep-branches]";
+                         loop status [--config FILE] [--json] | \
+                         loop watch [--config FILE] [--interval SECS] [--once] [--json] [--width N] [--lines N] | \
+                         loop reset <entry> [--config FILE] [--keep-branches]";
 
 fn load_config(a: &Args, dry_run: bool) -> Result<(Config, Option<PathBuf>)> {
     let path = a.opt("config").map(PathBuf::from).or_else(Config::default_path);
@@ -57,6 +62,10 @@ pub fn command(repo: &Path, args: &[String]) -> Result<u8> {
         Some("status") => {
             a.only(&["config", "json"])?;
             status(&a)
+        }
+        Some("watch") => {
+            a.only(watch::OPTIONS)?;
+            watch::command(&a)
         }
         Some("reset") => {
             a.only(&["config", "keep-branches"])?;

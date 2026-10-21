@@ -492,4 +492,5 @@ Done. One-time steps left for you (docs/AGENT_PIPELINE.md, "Setting up the home 
              sudo -u $RUNNER_USER -H bash -lc 'cd $POLY/runner/repo && cargo xtask pipeline loop --once'
  5. Start:   sudo systemctl start poly-pipeline;  journalctl -u poly-pipeline -f
     Status:  sudo -u $RUNNER_USER -H bash -lc 'cd $POLY/runner/repo && cargo xtask pipeline loop status'
+    Watch:   sudo -u $RUNNER_USER -H bash -lc 'cd $POLY/runner/repo && cargo xtask pipeline loop watch'   (q quits)
 EOF
