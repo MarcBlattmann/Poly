@@ -235,16 +235,17 @@ fn readdir_resumes_and_survives_changes() {
         if n == 0 {
             break;
         }
-        // Remove an entry already listed and one not yet listed partway.
+        // Remove an entry already listed and one not yet listed partway
+        // (newest first: f199 down to f153 are listed by then).
         if seen.len() == 49 {
-            env.vfs.unlink(&env.ctx, &env.root, At::Cwd, b"/d/f010").unwrap();
+            env.vfs.unlink(&env.ctx, &env.root, At::Cwd, b"/d/f180").unwrap();
             env.vfs.unlink(&env.ctx, &env.root, At::Cwd, b"/d/f150").unwrap();
         }
     }
     assert_eq!(seen[0], ".");
     assert_eq!(seen[1], "..");
     assert_eq!(seen.len(), 2 + 199, "every entry once, the removed unlisted one never");
-    assert!(seen.contains(&String::from("f010")));
+    assert!(seen.contains(&String::from("f180")));
     assert!(!seen.contains(&String::from("f150")));
     let mut sorted = seen.clone();
     sorted.sort();
