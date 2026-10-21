@@ -310,6 +310,38 @@ pub fn qemu_crashed(exit: &Exit) -> bool {
     matches!(exit, Exit::Signal(_))
 }
 
+/// The environment variable that chooses QEMU's accelerator, as for
+/// xtask's boot tests (`tools/xtask/src/accel.rs`).
+pub const ACCEL_ENV: &str = "POLY_QEMU_ACCEL";
+
+/// QEMU's accelerator (`-accel`) for `POLY_QEMU_ACCEL=<var>` (None: unset),
+/// given whether `/dev/kvm` can be opened: `kvm` when it can unless
+/// `tcg` is asked for; `kvm` asked for without it is an error.
+pub fn choose_accel(var: Option<&str>, kvm: Result) -> Result<&'static str> {
+    match var.map(str::trim) {
+        None | Some("" | "auto") => Ok(if kvm.is_ok() { "kvm" } else { "tcg" }),
+        Some("tcg") => Ok("tcg"),
+        Some("kvm") => kvm.map(|()| "kvm").map_err(|e| format!("{ACCEL_ENV}=kvm, but KVM is not usable: {e}")),
+        Some(other) => Err(format!("{ACCEL_ENV}={other}: expected kvm, tcg or auto")),
+    }
+}
+
+/// The accelerator QEMU runs on here ([`choose_accel`]), chosen once.
+pub fn accel() -> Result<&'static str> {
+    static CHOSEN: std::sync::OnceLock<Result<&'static str>> = std::sync::OnceLock::new();
+    CHOSEN
+        .get_or_init(|| {
+            let kvm = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("/dev/kvm")
+                .map(drop)
+                .map_err(|e| format!("/dev/kvm: {e}"));
+            choose_accel(std::env::var(ACCEL_ENV).ok().as_deref(), kvm)
+        })
+        .clone()
+}
+
 #[derive(Debug)]
 pub struct Target {
     pub kernel: PathBuf,
@@ -385,7 +417,8 @@ impl Target {
         let mut attempt = 0;
         let (done, log) = loop {
             let mut cmd = Command::new("qemu-system-x86_64");
-            cmd.args(["-machine", "q35", "-m", "256M", "-smp", "2", "-display", "none", "-serial", "stdio"])
+            cmd.args(["-accel", accel()?])
+                .args(["-machine", "q35", "-m", "256M", "-smp", "2", "-display", "none", "-serial", "stdio"])
                 .args(["-no-reboot", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
                 .arg("-kernel")
                 .arg(&self.kernel)
@@ -432,6 +465,19 @@ mod tests {
         POLY-SIGNAL: pid=7 signal=11\n\
         POLY-SYSCALL: pid=7 nr=231 args=0x0 ret=?\n\
         POLY-EXIT: pid=7 code=0 t=99\n";
+
+    #[test]
+    fn chooses_kvm_when_usable_unless_told_otherwise() {
+        let no = || Err("/dev/kvm: No such file or directory".to_string());
+        for var in [None, Some(""), Some("auto")] {
+            assert_eq!(choose_accel(var, Ok(())), Ok("kvm"));
+            assert_eq!(choose_accel(var, no()), Ok("tcg"));
+        }
+        assert_eq!(choose_accel(Some("tcg"), Ok(())), Ok("tcg"));
+        assert_eq!(choose_accel(Some("kvm"), Ok(())), Ok("kvm"));
+        assert!(choose_accel(Some("kvm"), no()).is_err());
+        assert!(choose_accel(Some("whpx"), Ok(())).is_err());
+    }
 
     #[test]
     fn parses_the_protocol() {
