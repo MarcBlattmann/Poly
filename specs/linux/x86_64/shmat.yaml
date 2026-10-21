@@ -1,0 +1,83 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/shmat                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4-level paging (user space ends at 0x7ffffffff000); tests run as a normal user (uid 1001, no capabilities), umask 022; vm.mmap_min_addr 65536; default IPC limits"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  shmat(shmid, shmaddr, shmflg) (syscall 30) maps a System V shared
+  memory segment (made by shmget) into the caller's address space and
+  returns the start address. shmid and shmflg are 32-bit ints (bits 32-63
+  of the registers are ignored); shmaddr is a full 64-bit address. The
+  attachment covers the segment's size rounded up to whole pages (4096),
+  is a shared mapping (all attachments of the id, in any process, see the
+  same bytes) and reads as the segment's current contents. Flags:
+  SHM_RDONLY (010000) maps it read-only, otherwise read-write; SHM_RND
+  (020000) rounds an unaligned shmaddr down to SHMLBA (4096 on x86-64);
+  SHM_REMAP (040000) lets a given shmaddr replace existing mappings;
+  SHM_EXEC (0100000) maps it executable as well. Unknown flag bits are
+  ignored. shmaddr NULL (0): the system picks a free page-aligned address
+  (top-down like mmap; not predictable) and SHM_RND is ignored. shmaddr
+  non-zero: it must be page aligned unless SHM_RND is given (EINVAL
+  otherwise); after rounding the segment goes exactly there, and the range
+  [addr, addr + rounded size) must not meet an existing mapping unless
+  SHM_REMAP is given (EINVAL otherwise); with SHM_REMAP the old mappings in
+  that range are replaced, pages outside it are untouched. SHM_REMAP with a
+  NULL address (also one that SHM_RND rounds down to 0) is EINVAL. Access
+  check on the segment's mode for the caller's class (owner if the
+  caller's euid is the segment's uid or cuid, else group, else other; only
+  that class's bits count): read-write needs r and w, SHM_RDONLY needs r,
+  SHM_EXEC also needs x; missing bits are EACCES unless the caller has
+  CAP_IPC_OWNER (root). A successful attach increments nattch, sets lpid to
+  the caller's pid and atime to the current time (seconds); ctime, dtime
+  and segsz do not change. A failed attach changes nothing. A segment
+  marked for removal (IPC_RMID) can still be attached by id while it has
+  attachments; once the last goes the id is EINVAL.
+returns:
+  success: "the attach address (a positive, page-aligned user address); the exact address given (after SHM_RND rounding) when shmaddr is non-zero"
+  null_addr: "a free page-aligned address chosen by the system; every attach makes a new attachment at a distinct, non-overlapping address, even for the same id in the same process"
+  size: "the attachment spans the segment's segsz rounded up to 4096 (a 1-byte segment gives a full, zeroed, usable page; the byte past the last page is not mapped: SIGSEGV)"
+  memory: "shared with every other attachment of the id (any process, any flags): a write through one is seen at once through all others"
+  protection: "SHM_RDONLY: read-only (a write kills the writer with SIGSEGV; mprotect to add PROT_WRITE is EACCES; PROT_NONE and back to PROT_READ are allowed); otherwise read-write (mprotect may also add PROT_EXEC); SHM_EXEC: also executable (code written through any attachment runs); without SHM_EXEC jumping into it is SIGSEGV"
+  stat_after: "IPC_STAT: nattch +1 per attachment (SHM_RDONLY ones too), lpid = caller's pid, atime = now (seconds, CLOCK_REALTIME); ctime, dtime, segsz unchanged"
+  removed_segment: "after IPC_RMID while still attached: attach by id works (nattch goes up; IPC_STAT shows key 0, SHM_DEST 01000 in mode, permission bits kept); after the last detach the id is EINVAL"
+  high_bits: "shmid | (1 << 32) attaches shmid; flag bits above 31 are ignored (e.g. (1 << 32) | SHM_RDONLY is SHM_RDONLY); unknown low flag bits (0x1000000, 0x40000000) are ignored"
+errors:
+  bad_address_form: "EINVAL (22): shmaddr not page aligned and no SHM_RND; SHM_REMAP with shmaddr 0, or with SHM_RND rounding shmaddr (1..4095) down to 0. Checked first: wins over a bad id and over EACCES"
+  bad_id: "EINVAL (22): no live segment with this id (negative, never used, or removed with no attachment left); checked after the address form, before access and placement"
+  access: "EACCES (13): the caller's class lacks r (any attach), w (attach without SHM_RDONLY) or x (SHM_EXEC) in the segment's mode; not for root (CAP_IPC_OWNER); checked before placement (wins over ENOMEM and overlap EINVAL)"
+  overlap: "EINVAL (22): non-zero shmaddr, no SHM_REMAP, and some page of [addr, addr + rounded size) is already mapped (overlap at the start or only at a later page)"
+  out_of_range: "ENOMEM (12): the range does not fit below the end of user space 0x7ffffffff000 (start at or above it, kernel half, non-canonical), with or without SHM_REMAP/SHM_RDONLY; a segment larger than the free address space (seen for 2^47 bytes with a NULL address) also ENOMEM"
+  wraparound: "addr + rounded size reaching or passing 2^64 (e.g. an 8192-byte segment at 0xffffffffffffe000, or SHM_RND of 0xffffffffffffffff): EINVAL without SHM_REMAP, ENOMEM with SHM_REMAP"
+  low_address: "EPERM (1): a fixed address below vm.mmap_min_addr (65536 here; also SHM_RND rounding to 0 without SHM_REMAP) for a caller without CAP_SYS_RAWIO; root may map there. Depends on the sysctl, not tested"
+  removed_race: "EIDRM (43): documented for an id removed during the call; not reproducible, not tested"
+  order: "address form (EINVAL) > id (EINVAL) > access (EACCES) > placement (ENOMEM, EPERM, overlap EINVAL)"
+side_effects: >
+  Adds a shared mapping to the caller's address space (brk unchanged) and
+  updates the segment's nattch, lpid and atime. The attachment is an
+  ordinary shared mapping otherwise: fork copies it (the child's copy
+  counts in nattch, nattch is 2 in the child right after fork); exit and
+  execve detach it (on exit lpid becomes the exiting pid, dtime is set);
+  munmap of part of it keeps the segment attached (nattch unchanged; Linux
+  also sets dtime and lpid then), munmap of all of it detaches it (nattch
+  down, dtime set, lpid the caller) and shmdt of that address is then
+  EINVAL. SHM_REMAP discards the contents of the mappings it replaces.
+threading: "the new mapping is visible to all threads of the process at once; no other thread-specific behaviour"
+ordering:
+  - "nattch counts the new attachment as soon as shmat returns; a child's inherited copy counts from fork until it exits or detaches"
+  - "IPC_RMID with attachments left keeps the id attachable until the last detach (Linux-specific; POSIX leaves it open)"
+timing:
+  typical: "microseconds per call; pages are not touched at attach"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests also use shmget, shmctl (IPC_STAT, IPC_RMID), shmdt,
+# mmap, munmap, mprotect and fork. Attach addresses vary between runs and
+# systems, so single-process tests compare syscall names only
+# (poly-diff: syscalls=names); tests that fork use syscalls=off. Root
+# (CAP_IPC_OWNER) passes every permission check; the tests expect that
+# when euid is 0. struct shmid64_ds layout: asm-generic/shmbuf.h and
+# asm-generic/ipcbuf.h; flag values: linux/shm.h; SHMLBA: asm/shmparam.h.

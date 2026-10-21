@@ -628,6 +628,14 @@ pub trait LinuxKernel {
         Err(Errno::EINVAL)
     }
 
+    /// The memories' [`ShmMemory::serial`]s of the calling process's
+    /// attachments that have pages in `[addr, addr + len)`, one per
+    /// attachment (munmap(2) is about to unmap them).
+    fn shm_mapped(&mut self, addr: u64, len: u64) -> Vec<u64> {
+        let _ = (addr, len);
+        Vec::new()
+    }
+
     /// Detach every attachment of the calling process (it is exiting) and
     /// return their memories' serials, one per attachment. Nothing if its
     /// memory is shared with another process (`CLONE_VM`), which keeps

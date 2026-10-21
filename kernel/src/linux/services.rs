@@ -415,6 +415,10 @@ impl LinuxKernel for Thread<'_> {
         super::shm::detach(&*self.memory().map_err(|_| Errno::EINVAL)?, addr)
     }
 
+    fn shm_mapped(&mut self, addr: u64, len: u64) -> Vec<u64> {
+        self.memory().map_or_else(|_| Vec::new(), |m| super::shm::mapped(&m, addr, len))
+    }
+
     fn shm_detach_all(&mut self) -> Vec<u64> {
         // This thread's reference and this one: no other process shares
         // the memory (CLONE_VM), which keeps the attachments otherwise.
