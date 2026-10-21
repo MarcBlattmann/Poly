@@ -103,7 +103,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] NT synchronisation: events, mutants, semaphores, timers, `NtWaitForMultipleObjects` (ADR 0065)
 - [ ] NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O
 - [ ] Structured exception handling: kernel-to-user exception dispatch, unwinding
-- [ ] Registry: hive storage, `NtOpenKey` family, default system hives
+- [x] Registry: hive storage, `NtOpenKey` family, default system hives
 - [ ] Our `ntdll`: PE loader (imports, relocations, TLS, delay-load), heap, `Rtl*`, loader lock
 - [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors
 - [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055)

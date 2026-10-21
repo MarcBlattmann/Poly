@@ -23,6 +23,9 @@ mod tests;
 
 mod sched;
 
+pub mod registry;
+mod test_registry;
+
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
 use crate::thread;
@@ -89,13 +92,18 @@ static STATE: Mutex<Option<NtState>> = Mutex::new(None);
 fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
     let mut guard = STATE.lock();
     let state = guard.get_or_insert_with(|| NtState {
-        sys: NtSystem::new(),
+        sys: registry::boot_system(),
         processes: BTreeMap::new(),
         sections: Sections::default(),
         ctl: BTreeMap::new(),
         timers: BTreeMap::new(),
     });
     f(state)
+}
+
+/// Run `f` on the NT state if the first NT use made it already.
+fn with_existing<R>(f: impl FnOnce(&mut NtState) -> R) -> Option<R> {
+    STATE.lock().as_mut().map(f)
 }
 
 /// Whether `pid` is an NT process the kernel has set up.
@@ -211,6 +219,14 @@ impl NtKernel for Kernel {
     fn trace(&mut self, values: [u64; 3]) {
         crate::kprintln!("nt: pid {} PolyTrace {:#x} {:#x} {:#x}", self.pid.0, values[0], values[1], values[2]);
     }
+
+    fn system_time(&self) -> u64 {
+        registry::filetime_now()
+    }
+
+    fn save_hive(&mut self, file: &str, data: &[u8]) -> Result<(), NtStatus> {
+        registry::save(file, data)
+    }
 }
 
 /// Route an NT process's system call (its `SyscallHook`).
@@ -313,7 +329,11 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
             let mut b = MemBackend { memory, sections: &mut s.sections };
             exec::process_exit(&mut s.sys, &mut proc, &mut b);
         }
+        // Its registry notifications go too (ADR 0066).
+        s.sys.registry.process_ended(ProcessId(pid), &mut s.sys.objects);
     });
+    sched::drain_wakes();
+    registry::flush();
 }
 
 /// A page fault the memory map could not resolve, in NT process `pid`: a
