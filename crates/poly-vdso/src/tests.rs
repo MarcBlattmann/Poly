@@ -94,7 +94,10 @@ fn clock_ids() {
     assert_eq!(VClock::from_id(CLOCK_BOOTTIME), Some(VClock::Monotonic));
     assert_eq!(VClock::from_id(CLOCK_REALTIME_COARSE), Some(VClock::RealtimeCoarse));
     assert_eq!(VClock::from_id(CLOCK_MONOTONIC_COARSE), Some(VClock::MonotonicCoarse));
-    for id in [CLOCK_PROCESS_CPUTIME_ID, CLOCK_THREAD_CPUTIME_ID, 8, 11, 16, -1, -6, i32::MAX] {
+    // TAI is the wall clock (offset 0), as the system call reads it.
+    assert_eq!(VClock::from_id(CLOCK_TAI), Some(VClock::Realtime));
+    // The alarm clocks (8, 9) and CPU-time clocks go to the system call.
+    for id in [CLOCK_PROCESS_CPUTIME_ID, CLOCK_THREAD_CPUTIME_ID, 8, 9, 10, 12, 16, -1, -6, i32::MAX] {
         assert_eq!(VClock::from_id(id), None, "id {id} goes to the system call");
     }
 }

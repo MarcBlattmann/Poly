@@ -1,9 +1,10 @@
 //! The x86-64 side of the vDSO (ADR 0044): the image `build.rs` builds
 //! from `vdso/vdso.rs`, and the TSC conversion it reads the clock with.
 //!
-//! The vDSO reads the TSC itself only while the kernel's clock does: an
-//! invariant, calibrated TSC (ADR 0013). Otherwise (QEMU's TCG, whose CPU
-//! models do not report an invariant TSC) it makes the system call.
+//! The vDSO reads the TSC itself only while the kernel's clock does: a
+//! calibrated TSC that runs at a constant rate (invariant, or a virtual
+//! CPU's, as under QEMU: ADR 0013, 0072). Otherwise it makes the system
+//! call.
 
 use super::cpu::{self, InterruptsOff};
 use poly_irq::time::Scale;

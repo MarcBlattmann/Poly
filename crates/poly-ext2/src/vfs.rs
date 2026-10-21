@@ -147,6 +147,13 @@ impl<D: BlockIo, L: RawLock> FileSystem for Ext2<D, L> {
         })
     }
 
+    fn write_back(&self, ino: Ino, offset: u64, buf: &[u8]) -> Result<usize> {
+        self.write_op(|c| {
+            let ino = c.ino(ino)?;
+            c.write_back(ino, offset, buf)
+        })
+    }
+
     fn append(&self, ino: Ino, buf: &[u8]) -> Result<(u64, usize)> {
         self.write_op(|c| {
             let ino = c.ino(ino)?;

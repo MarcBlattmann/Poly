@@ -602,11 +602,12 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
     }
 }
 
-/// Write all of `buf` at `offset` of `ino`.
+/// Write all of `buf` at `offset` of `ino`, back from the cache (the
+/// times stay as they are).
 fn write_all(fs: &dyn FileSystem, ino: Ino, offset: u64, buf: &[u8]) -> Result<()> {
     let mut done = 0;
     while done < buf.len() {
-        match fs.write(ino, offset + done as u64, &buf[done..])? {
+        match fs.write_back(ino, offset + done as u64, &buf[done..])? {
             0 => return Err(Errno::EIO),
             n => done += n,
         }

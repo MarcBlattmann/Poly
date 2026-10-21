@@ -869,6 +869,17 @@ impl<D: BlockIo> Ctx<'_, D> {
     }
 
     pub fn write(&mut self, ino: u32, offset: u64, buf: &[u8]) -> Result<usize> {
+        self.write_data(ino, offset, buf, true)
+    }
+
+    /// `write` for a page cache's writeback: the times stay as they are.
+    pub fn write_back(&mut self, ino: u32, offset: u64, buf: &[u8]) -> Result<usize> {
+        self.write_data(ino, offset, buf, false)
+    }
+
+    /// Writes `buf` at `offset`; `touch` sets the modification and change
+    /// times.
+    fn write_data(&mut self, ino: u32, offset: u64, buf: &[u8], touch: bool) -> Result<usize> {
         let mut i = self.regular(ino)?;
         if i.flags & FL_IMMUTABLE != 0 || (i.flags & FL_APPEND != 0 && offset != i.size) {
             return Err(Errno::EPERM);
@@ -944,7 +955,9 @@ impl<D: BlockIo> Ctx<'_, D> {
                 i.size = new_end;
                 self.note_size(new_end);
             }
-            self.touch(&mut i);
+            if touch {
+                self.touch(&mut i);
+            }
         }
         // Blocks allocated before a failure are attached: write them too.
         self.ind_flush()?;

@@ -56,6 +56,7 @@ pub mod clock {
     pub const CLOCK_REALTIME_COARSE: i32 = 5;
     pub const CLOCK_MONOTONIC_COARSE: i32 = 6;
     pub const CLOCK_BOOTTIME: i32 = 7;
+    pub const CLOCK_TAI: i32 = 11;
 }
 
 /// How the vDSO reads the time.
@@ -139,6 +140,7 @@ pub struct Snapshot {
 /// call.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VClock {
+    /// Also `CLOCK_TAI` (Poly's TAI offset is 0, as the system call has it).
     Realtime,
     RealtimeCoarse,
     /// Also `CLOCK_MONOTONIC_RAW` (Poly never slews its clock) and
@@ -150,7 +152,7 @@ pub enum VClock {
 impl VClock {
     pub const fn from_id(id: i32) -> Option<VClock> {
         match id {
-            clock::CLOCK_REALTIME => Some(VClock::Realtime),
+            clock::CLOCK_REALTIME | clock::CLOCK_TAI => Some(VClock::Realtime),
             clock::CLOCK_REALTIME_COARSE => Some(VClock::RealtimeCoarse),
             clock::CLOCK_MONOTONIC | clock::CLOCK_MONOTONIC_RAW | clock::CLOCK_BOOTTIME => Some(VClock::Monotonic),
             clock::CLOCK_MONOTONIC_COARSE => Some(VClock::MonotonicCoarse),

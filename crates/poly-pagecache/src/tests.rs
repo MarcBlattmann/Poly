@@ -60,6 +60,15 @@ impl Drop for TestFrame {
 
 struct FixedClock;
 
+/// A clock one second further on at every reading.
+struct TickingClock(AtomicUsize);
+
+impl Clock for TickingClock {
+    fn now(&self) -> Timespec {
+        Timespec::new(1_800_000_000 + self.0.fetch_add(1, Ordering::Relaxed) as i64, 0)
+    }
+}
+
 impl Clock for FixedClock {
     fn now(&self) -> Timespec {
         Timespec::new(1_700_000_000, 0)
@@ -95,6 +104,18 @@ impl Probe {
 
     fn writes(&self) -> usize {
         self.writes.load(Ordering::Relaxed)
+    }
+
+    /// Counts a data write, or fails it; unlinks the name set to vanish.
+    fn before_write(&self) -> poly_vfs::Result<()> {
+        if self.fail_writes.load(Ordering::Relaxed) {
+            return Err(Errno::ENOSPC);
+        }
+        if let Some(name) = self.vanish.lock().unwrap().take() {
+            self.fs.unlink(self.fs.root(), name).unwrap();
+        }
+        self.writes.fetch_add(1, Ordering::Relaxed);
+        Ok(())
     }
 
     /// What the inner file system holds, past the cache.
@@ -151,14 +172,12 @@ impl FileSystem for Probe {
         self.fs.read(ino, offset, buf)
     }
     fn write(&self, ino: Ino, offset: u64, buf: &[u8]) -> poly_vfs::Result<usize> {
-        if self.fail_writes.load(Ordering::Relaxed) {
-            return Err(Errno::ENOSPC);
-        }
-        if let Some(name) = self.vanish.lock().unwrap().take() {
-            self.fs.unlink(self.fs.root(), name).unwrap();
-        }
-        self.writes.fetch_add(1, Ordering::Relaxed);
+        self.before_write()?;
         self.fs.write(ino, offset, buf)
+    }
+    fn write_back(&self, ino: Ino, offset: u64, buf: &[u8]) -> poly_vfs::Result<usize> {
+        self.before_write()?;
+        self.fs.write_back(ino, offset, buf)
     }
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> poly_vfs::Result<()> {
         self.fs.readdir(dir, pos, emit)
@@ -615,5 +634,44 @@ fn ext2_behind_the_cache_keeps_the_data() {
     for (i, data) in files {
         let ino = again.lookup(dir, &[b'f', b'0' + i as u8]).unwrap();
         assert_eq!(read_all(&again, ino), data, "file {i}");
+    }
+}
+
+/// Times set after a write (utimensat(2), as `cp -p` does once it has
+/// copied) survive the writeback of that write's pages, on tmpfs and ext2:
+/// the cache sets the times when the program writes, the writeback leaves
+/// them alone.
+#[test]
+fn writeback_keeps_times_set_after_the_write() {
+    use poly_block::RamDisk;
+    use poly_ext2::{DeviceIo, Ext2, FormatOptions, MountOptions};
+    use poly_vfs::SetTime;
+
+    let tmpfs: Arc<dyn FileSystem> = Arc::new(Tmpfs::new(Arc::new(TickingClock(AtomicUsize::new(0)))));
+    let mem: &'static mut [u8] = Box::leak(vec![0u8; 4 << 20].into_boxed_slice());
+    let io = Arc::new(DeviceIo::new(RamDisk::new(mem, 512).unwrap()));
+    poly_ext2::format(&*io, &FormatOptions::default()).unwrap();
+    let clock = Arc::new(TickingClock(AtomicUsize::new(0)));
+    let ext2: Arc<dyn FileSystem> = Arc::new(Ext2::mount(io, clock, MountOptions::default()).unwrap());
+    for inner in [tmpfs, ext2] {
+        let name = inner.info().name;
+        let cache: PageCache<TestFrame> = PageCache::new(64);
+        let fs = cache.register(inner);
+        let ino = fs.create(fs.root(), b"copy", &REG).unwrap();
+        fs.write(ino, 0, &pattern(3, 3 * PAGE_SIZE + 10)).unwrap();
+        let written = fs.getattr(ino).unwrap();
+        let old = Timespec::new(1_700_000_000, 123);
+        let set = SetAttr { atime: Some(SetTime::At(old)), mtime: Some(SetTime::At(old)), ..SetAttr::default() };
+        let after = fs.setattr(ino, &set).unwrap();
+        assert_eq!((after.atime, after.mtime), (old, old), "{name}");
+        assert!(fs.writeback(None).unwrap() > 0, "{name}");
+        fs.sync().unwrap();
+        let attr = fs.getattr(ino).unwrap();
+        assert_eq!((attr.atime, attr.mtime, attr.ctime), (old, old, after.ctime), "{name}: times kept");
+        assert_eq!(attr.size, written.size, "{name}");
+        assert_eq!(read_all(&*fs, ino), pattern(3, 3 * PAGE_SIZE + 10), "{name}");
+        // A plain write still sets the modification time.
+        fs.write(ino, 0, b"x").unwrap();
+        assert!(fs.getattr(ino).unwrap().mtime > old, "{name}");
     }
 }
