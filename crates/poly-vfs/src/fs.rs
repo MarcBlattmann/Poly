@@ -123,6 +123,14 @@ pub trait FileSystem: Send + Sync {
     /// may not be listed (as POSIX allows).
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()>;
 
+    /// Where a directory descriptor's position goes when a listing call
+    /// finds nothing more to list (`getdents64` returns 0): `Some(end)`
+    /// moves it there (tmpfs: `INT32_MAX`, so it stays at the end until
+    /// lseek moves it), `None` leaves it where it was.
+    fn readdir_end(&self) -> Option<u64> {
+        None
+    }
+
     /// Pins `ino` so it outlives its last name (`ENOENT` if it is gone).
     fn open(&self, ino: Ino) -> Result<()> {
         self.getattr(ino).map(|_| ())

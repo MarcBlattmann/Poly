@@ -2,9 +2,17 @@
 //!
 //! Regular files are sparse: data lives in 4 KiB pages allocated when first
 //! written, so a hole (from seeking past the end, or growing a file with
-//! `truncate`) costs nothing and reads as zeros. Directory entries carry a
-//! sequence number in insertion order, which is what `readdir` positions
-//! are made of, so a listing continues correctly while entries come and go.
+//! `truncate`) costs nothing and reads as zeros.
+//!
+//! Directories list as Linux's tmpfs does (the spec sheet
+//! `specs/linux/x86_64/getdents64.yaml`, `directory_order`): `.` and `..`,
+//! then the entries newest first. An entry that is created, linked or
+//! renamed in goes to the front of the list with a new *cookie* from the
+//! directory's counter (3, 4, ...; never reused until the counter wraps);
+//! a rename over an existing name puts that name at the front with the
+//! cookie it had. A record's `d_off` is the cookie of the entry after it
+//! (2147483647 after the last one), and reading from a position starts at
+//! the entry with the largest cookie not above it, in list order.
 //!
 //! Everything sits behind one lock per file system. `readdir` copies a batch
 //! of entries out and calls the VFS's callback with the lock released.
@@ -29,6 +37,18 @@ const DIR_SIZE: u64 = 40;
 const DIRENT_SIZE: u64 = 20;
 /// Entries copied out per round of `readdir`.
 const READDIR_BATCH: usize = 64;
+
+/// Directory positions (`d_off` values and the offsets lseek sets): `.` is
+/// at 0, `..` at 1, the front of the list at 2, and the end is
+/// `INT32_MAX`; every other entry is at its cookie.
+const POS_DOTDOT: u64 = 1;
+const POS_FRONT: u64 = 2;
+/// The end of a listing.
+pub const DIR_END: u64 = i32::MAX as u64;
+/// The cookies a directory hands out, in order (then from the lowest free
+/// one at or above the first, once the counter has passed the last).
+const FIRST_COOKIE: u64 = 3;
+const LAST_COOKIE: u64 = DIR_END - 1;
 
 /// An in-memory file system.
 pub struct Tmpfs {
@@ -88,38 +108,142 @@ struct Pages {
     pages: BTreeMap<u64, Box<[u8]>>,
 }
 
+/// A directory entry.
+#[derive(Clone, Copy)]
+struct Entry {
+    ino: Ino,
+    /// Its position (see [`DIR_END`]).
+    cookie: u64,
+    /// Its place in the list: the larger, the nearer the front.
+    stamp: u64,
+}
+
 struct Dir {
     parent: Ino,
-    /// Name → (sequence number, inode).
-    by_name: BTreeMap<Box<[u8]>, (u64, Ino)>,
-    /// Sequence number → name: the listing order.
-    by_seq: BTreeMap<u64, Box<[u8]>>,
-    next_seq: u64,
+    by_name: BTreeMap<Box<[u8]>, Entry>,
+    /// Stamp → name: the list, front (newest) last.
+    by_stamp: BTreeMap<u64, Box<[u8]>>,
+    /// Cookie → stamp, to find where a position reads from.
+    by_cookie: BTreeMap<u64, u64>,
+    /// The cookie the next added entry gets, if free.
+    next_cookie: u64,
+    next_stamp: u64,
     /// Removed with `rmdir`; lives on while pinned, empty and closed to
     /// new entries.
     removed: bool,
 }
 
+/// One record of a listing: inode, name and `d_off`.
+type Record = (Ino, Box<[u8]>, u64);
+
 impl Dir {
     fn new(parent: Ino) -> Dir {
-        Dir { parent, by_name: BTreeMap::new(), by_seq: BTreeMap::new(), next_seq: 0, removed: false }
+        Dir {
+            parent,
+            by_name: BTreeMap::new(),
+            by_stamp: BTreeMap::new(),
+            by_cookie: BTreeMap::new(),
+            next_cookie: FIRST_COOKIE,
+            next_stamp: 0,
+            removed: false,
+        }
     }
 
     fn get(&self, name: &[u8]) -> Option<Ino> {
-        self.by_name.get(name).map(|&(_, ino)| ino)
+        self.by_name.get(name).map(|e| e.ino)
     }
 
+    /// Whether a cookie is free for another entry (`ENOSPC` otherwise:
+    /// only with 2^31 - 4 entries in the directory).
+    fn has_room(&self) -> bool {
+        (self.by_cookie.len() as u64) <= LAST_COOKIE - FIRST_COOKIE
+    }
+
+    /// The next cookie: the counter's value, and once the counter has
+    /// passed [`LAST_COOKIE`] the lowest free one from where it is on
+    /// (starting over at [`FIRST_COOKIE`]). Needs [`Dir::has_room`].
+    fn new_cookie(&mut self) -> u64 {
+        let mut c = self.next_cookie;
+        loop {
+            if c > LAST_COOKIE {
+                c = FIRST_COOKIE;
+            }
+            if !self.by_cookie.contains_key(&c) {
+                break;
+            }
+            c += 1;
+        }
+        self.next_cookie = c + 1;
+        c
+    }
+
+    fn new_stamp(&mut self) -> u64 {
+        self.next_stamp += 1;
+        self.next_stamp
+    }
+
+    /// Adds `name` at the front with a new cookie.
     fn insert(&mut self, name: &[u8], ino: Ino) {
-        let seq = self.next_seq;
-        self.next_seq += 1;
-        self.by_name.insert(name.into(), (seq, ino));
-        self.by_seq.insert(seq, name.into());
+        let cookie = self.new_cookie();
+        let stamp = self.new_stamp();
+        self.by_name.insert(name.into(), Entry { ino, cookie, stamp });
+        self.by_stamp.insert(stamp, name.into());
+        self.by_cookie.insert(cookie, stamp);
+    }
+
+    /// Points the existing `name` at `ino` and moves it to the front; it
+    /// keeps its cookie (rename over a name, `RENAME_EXCHANGE`).
+    fn replace(&mut self, name: &[u8], ino: Ino) {
+        let stamp = self.new_stamp();
+        if let Some(e) = self.by_name.get_mut(name) {
+            if let Some(n) = self.by_stamp.remove(&e.stamp) {
+                self.by_stamp.insert(stamp, n);
+            }
+            self.by_cookie.insert(e.cookie, stamp);
+            e.ino = ino;
+            e.stamp = stamp;
+        }
     }
 
     fn remove(&mut self, name: &[u8]) -> Option<Ino> {
-        let (seq, ino) = self.by_name.remove(name)?;
-        self.by_seq.remove(&seq);
-        Some(ino)
+        let e = self.by_name.remove(name)?;
+        self.by_stamp.remove(&e.stamp);
+        self.by_cookie.remove(&e.cookie);
+        Some(e.ino)
+    }
+
+    /// The cookie of the entry at `stamp`.
+    fn cookie_at(&self, stamp: u64) -> u64 {
+        self.by_stamp.get(&stamp).and_then(|n| self.by_name.get(n)).map_or(DIR_END, |e| e.cookie)
+    }
+
+    /// Up to `max` records of the listing from position `pos` (directory
+    /// `me`), each with its `d_off`: the position of the record after it.
+    fn records(&self, me: Ino, pos: u64, max: usize) -> Vec<Record> {
+        let mut out = Vec::new();
+        let front = self.by_stamp.last_key_value().map(|(&s, _)| s);
+        let start = match pos {
+            0 | POS_DOTDOT => {
+                if pos == 0 {
+                    out.push((me, (*b".").into(), POS_DOTDOT));
+                }
+                out.push((self.parent, (*b"..").into(), front.map_or(DIR_END, |s| self.cookie_at(s))));
+                front
+            }
+            POS_FRONT => front,
+            DIR_END => None,
+            // The entry with the largest cookie not above the position (so
+            // above the end, the largest), else the front.
+            _ => self.by_cookie.range(..=pos).next_back().map(|(_, &s)| s).or(front),
+        };
+        let Some(start) = start else { return out };
+        let mut list = self.by_stamp.range(..=start).rev().peekable();
+        while out.len() < max {
+            let Some((_, name)) = list.next() else { break };
+            let next = list.peek().map_or(DIR_END, |&(&s, _)| self.cookie_at(s));
+            out.push((self.by_name.get(name).map_or(0, |e| e.ino), name.clone(), next));
+        }
+        out
     }
 }
 
@@ -213,8 +337,12 @@ impl Inner {
     /// Fails with `EEXIST` if `name` exists in live directory `dir`.
     fn check_new(&self, dir: Ino, name: &[u8]) -> Result<()> {
         check_name(name)?;
-        if self.live_dir(dir)?.get(name).is_some() {
+        let d = self.live_dir(dir)?;
+        if d.get(name).is_some() {
             return Err(Errno::EEXIST);
+        }
+        if !d.has_room() {
+            return Err(Errno::ENOSPC);
         }
         match self.inode_limit {
             Some(limit) if self.nodes.len() as u64 >= limit => Err(Errno::ENOSPC),
@@ -675,10 +803,10 @@ impl FileSystem for Tmpfs {
             if src == dst {
                 return Ok(());
             }
-            inner.live_dir_mut(old_dir)?.remove(old_name);
-            inner.live_dir_mut(new_dir)?.remove(new_name);
-            inner.live_dir_mut(old_dir)?.insert(old_name, dst);
-            inner.live_dir_mut(new_dir)?.insert(new_name, src);
+            // Each name keeps its cookie; both go to the front, the new
+            // name first.
+            inner.live_dir_mut(old_dir)?.replace(old_name, dst);
+            inner.live_dir_mut(new_dir)?.replace(new_name, src);
             if old_dir != new_dir && src_dir != dst_dir {
                 // One directory changes parent: link counts follow it.
                 let delta = if src_dir { 1 } else { -1 };
@@ -714,14 +842,21 @@ impl FileSystem for Tmpfs {
                 (true, true) if !inner.is_empty_dir(dst) => return Err(Errno::ENOTEMPTY),
                 _ => {}
             }
-            inner.live_dir_mut(new_dir)?.remove(new_name);
+            // The name goes to the front with the cookie it had.
+            inner.live_dir_mut(old_dir)?.remove(old_name);
+            inner.live_dir_mut(new_dir)?.replace(new_name, src);
             if dst_dir {
                 inner.adjust_nlink(new_dir, -1);
             }
             inner.drop_link(dst, now);
+        } else {
+            if old_dir != new_dir && !inner.live_dir(new_dir)?.has_room() {
+                return Err(Errno::ENOSPC);
+            }
+            // A new name: at the front with a new cookie.
+            inner.live_dir_mut(old_dir)?.remove(old_name);
+            inner.live_dir_mut(new_dir)?.insert(new_name, src);
         }
-        inner.live_dir_mut(old_dir)?.remove(old_name);
-        inner.live_dir_mut(new_dir)?.insert(new_name, src);
         if src_dir && old_dir != new_dir {
             inner.set_parent(src, new_dir);
             inner.adjust_nlink(old_dir, -1);
@@ -798,45 +933,43 @@ impl FileSystem for Tmpfs {
     }
 
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()> {
-        // Positions: 0 is ".", 1 is "..", then entry with sequence number s
-        // sits at s + 2 (and says the next one is at s + 3).
+        // Positions and d_off values: see `DIR_END` and `Dir::records`. A
+        // batch ends with the d_off of its last record, which is where the
+        // next batch reads from.
         let mut pos = pos;
         loop {
-            let mut batch: Vec<(Ino, FileType, Box<[u8]>, u64)> = Vec::new();
-            {
+            let batch: Vec<(Ino, FileType, Box<[u8]>, u64)> = {
                 let inner = self.inner.lock();
                 let Data::Dir(d) = &inner.node(dir)?.data else { return Err(Errno::ENOTDIR) };
                 if d.removed {
                     return Ok(());
                 }
-                if pos == 0 {
-                    batch.push((dir, FileType::Directory, (*b".").into(), 1));
-                }
-                if pos <= 1 {
-                    batch.push((d.parent, FileType::Directory, (*b"..").into(), 2));
-                }
-                for (&seq, name) in d.by_seq.range(pos.saturating_sub(2)..) {
-                    if batch.len() >= READDIR_BATCH {
-                        break;
-                    }
-                    let ino = d.get(name).unwrap_or(0);
-                    let kind = inner.nodes.get(&ino).map_or(FileType::Regular, |n| n.kind);
-                    batch.push((ino, kind, name.clone(), seq + 3));
-                }
-            }
+                d.records(dir, pos, READDIR_BATCH)
+                    .into_iter()
+                    .map(|(ino, name, next)| {
+                        let kind = inner.nodes.get(&ino).map_or(FileType::Regular, |n| n.kind);
+                        (ino, kind, name, next)
+                    })
+                    .collect()
+            };
             let Some(last) = batch.last() else { return Ok(()) };
-            let full = batch.len() >= READDIR_BATCH;
             let next_pos = last.3;
             for (ino, kind, name, next) in &batch {
                 if !emit(&DirEntry { ino: *ino, kind: *kind, name, next: *next }) {
                     return Ok(());
                 }
             }
-            if !full {
+            if batch.len() < READDIR_BATCH || next_pos == DIR_END {
                 return Ok(());
             }
             pos = next_pos;
         }
+    }
+
+    /// A listing that has ended stays at [`DIR_END`] (and returns nothing)
+    /// until lseek moves it, even if entries are added.
+    fn readdir_end(&self) -> Option<u64> {
+        Some(DIR_END)
     }
 
     fn open(&self, ino: Ino) -> Result<()> {
@@ -852,5 +985,58 @@ impl FileSystem for Tmpfs {
             n.pins = n.pins.saturating_sub(1);
         }
         inner.maybe_free(ino);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cookie(d: &Dir, name: &[u8]) -> u64 {
+        d.by_name[name].cookie
+    }
+
+    fn names(recs: &[Record]) -> Vec<&[u8]> {
+        recs.iter().map(|r| &r.1[..]).collect()
+    }
+
+    /// Cookies count up from 3; once the counter has passed the last one
+    /// (2147483646) it goes on from the lowest free cookie at or above 3.
+    #[test]
+    fn cookies_wrap_to_the_lowest_free_one() {
+        let mut d = Dir::new(ROOT);
+        for n in [b"x", b"y", b"z"] {
+            d.insert(n, 10);
+        }
+        assert_eq!((cookie(&d, b"x"), cookie(&d, b"y"), cookie(&d, b"z")), (3, 4, 5));
+        d.remove(b"y");
+        d.next_cookie = LAST_COOKIE;
+        for n in [b"p", b"q", b"r", b"s"] {
+            d.insert(n, 10);
+        }
+        assert_eq!(cookie(&d, b"p"), 2147483646);
+        assert_eq!(cookie(&d, b"q"), 4, "3 is taken: the lowest free one");
+        assert_eq!(cookie(&d, b"r"), 6, "5 is taken");
+        assert_eq!(cookie(&d, b"s"), 7);
+        // Still newest first, and positions find entries by cookie.
+        let all = d.records(ROOT, 0, 64);
+        let want: [&[u8]; 8] = [b".", b"..", b"s", b"r", b"q", b"p", b"z", b"x"];
+        assert_eq!(names(&all), want);
+        assert_eq!(all.iter().map(|r| r.2).collect::<Vec<_>>(), [1, 7, 6, 4, 2147483646, 5, 3, DIR_END]);
+        let want: [&[u8]; 5] = [b"r", b"q", b"p", b"z", b"x"];
+        assert_eq!(names(&d.records(ROOT, 6, 64)), want);
+        assert!(d.has_room());
+    }
+
+    #[test]
+    fn records_stop_at_max_with_the_next_cookie() {
+        let mut d = Dir::new(ROOT);
+        for n in [b"a", b"b", b"c"] {
+            d.insert(n, 10);
+        }
+        let r = d.records(7, 0, 3);
+        assert_eq!(r.iter().map(|r| (r.0, r.2)).collect::<Vec<_>>(), [(7, 1), (ROOT, 5), (10, 4)]);
+        assert_eq!(d.records(7, 4, 1).iter().map(|r| r.2).collect::<Vec<_>>(), [3]);
+        assert!(d.records(7, DIR_END, 64).is_empty());
     }
 }
