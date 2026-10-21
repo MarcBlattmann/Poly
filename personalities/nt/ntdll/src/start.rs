@@ -36,10 +36,11 @@ LdrInitializeThunk:
     mov rcx, rdi
     mov r8, rdx
     mov rdx, rsi
-    call ntdll_thread_init
+    call {init}
     int3
     .seh_endproc
-"#
+"#,
+    init = sym ntdll_thread_init,
 );
 
 /// Whether the process has been initialised (the first thread did it).
@@ -47,7 +48,6 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Where `LdrInitializeThunk` goes: initialise the process (first thread)
 /// or the thread, then run the thread's routine.
-#[unsafe(no_mangle)]
 unsafe extern "C" fn ntdll_thread_init(routine: u64, argument: u64, exe_base: u64) -> ! {
     let teb = lock::teb();
     if STARTED.swap(true, Ordering::AcqRel) {
