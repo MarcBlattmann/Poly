@@ -621,12 +621,14 @@ impl Vfs {
             return Err(Errno::EBUSY);
         }
         if let Some(dattr) = &dattr {
+            // RENAME_NOREPLACE: an existing target, even the source's own
+            // name or another link of it, is EEXIST (the spec of renameat2).
+            if flags.noreplace {
+                return Err(Errno::EEXIST);
+            }
             if dattr.ino == sattr.ino {
                 // Two names of one inode (or the same name): nothing to do.
                 return Ok(());
-            }
-            if flags.noreplace {
-                return Err(Errno::EEXIST);
             }
             if !flags.exchange {
                 if src_dir && !dst_dir {

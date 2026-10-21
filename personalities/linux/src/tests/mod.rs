@@ -13,6 +13,7 @@ mod madvise;
 mod mem;
 mod ns;
 mod process;
+mod process_ids;
 mod sched;
 mod seccomp;
 mod signal;
