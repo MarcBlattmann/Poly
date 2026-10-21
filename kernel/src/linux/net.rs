@@ -207,11 +207,8 @@ impl Thread<'_> {
     }
 
     fn inet_send(&self, s: &InetSocket, nonblock: bool, msg: &SendMsg<'_>) -> Result<usize, Errno> {
-        if !msg.rights.is_empty() || msg.creds.is_some() {
-            // SCM_RIGHTS / SCM_CREDENTIALS mean nothing to an Internet
-            // socket (Poly's answer, to be confirmed by the diff runner).
-            return Err(Errno::EINVAL);
-        }
+        // SCM_RIGHTS / SCM_CREDENTIALS mean nothing to an Internet socket:
+        // accepted and ignored, the data is sent (sendmsg's spec sheet).
         let to = match &msg.to {
             None => None,
             // A connected stream ignores the destination (sendto(2)).
@@ -235,6 +232,9 @@ impl Thread<'_> {
                     }
                 }
                 Err(_) if done > 0 => return Ok(done),
+                // A TCP socket that never connected: EPIPE (sendto's spec
+                // sheet), as for one whose connection is gone.
+                Err(Errno::ENOTCONN) => return Err(Errno::EPIPE),
                 Err(e) => return Err(e),
             }
         }
@@ -540,6 +540,12 @@ impl LinuxNet for Thread<'_> {
                 let sock = Arc::clone(u.socket());
                 let to = match &msg.to {
                     None => None,
+                    // A stream or sequenced-packet socket never looks an
+                    // address up (sendto's spec sheet: EISCONN on a
+                    // connected AF_UNIX stream, whatever the address).
+                    Some(_) if sock.kind() != SocketType::Datagram => {
+                        return Err(if sock.is_connected() { Errno::EISCONN } else { Errno::EOPNOTSUPP });
+                    }
                     Some(a) => Some(self.unix_target(a)?),
                 };
                 let mut rights = Vec::with_capacity(msg.rights.len());
@@ -735,7 +741,14 @@ fn inet_setsockopt(s: &InetSocket, opt: SockOpt) -> Result<(), Errno> {
     let secs = |v: u32| Duration::from_secs(u64::from(v));
     match opt {
         SockOpt::ReuseAddr(v) => s.with(|st, h| st.set_reuse_addr(h, v)).map_err(nerr)?,
-        SockOpt::KeepAlive(v) => s.with(|st, h| st.set_keepalive(h, v)).map_err(nerr)?,
+        SockOpt::KeepAlive(v) => {
+            // The stack acts on it for TCP; every socket reads it back
+            // (setsockopt's visible test: a UDP socket too).
+            if tcp {
+                s.with(|st, h| st.set_keepalive(h, v)).map_err(nerr)?;
+            }
+            s.update(|st| st.options.keepalive = v);
+        }
         SockOpt::Broadcast(v) => s.with(|st, h| st.set_broadcast(h, v)).map_err(nerr)?,
         SockOpt::SndBuf(v) => {
             // A connected TCP socket keeps its buffers (the stack sizes
@@ -803,7 +816,7 @@ fn inet_getsockopt(s: &InetSocket, name: OptName) -> Result<OptValue, Errno> {
         OptName::AcceptConn => bool_opt(st.listening),
         OptName::PeerCred => OptValue::Ucred(NO_CREDS),
         OptName::ReuseAddr => bool_opt(flags.reuse_addr),
-        OptName::KeepAlive => bool_opt(flags.keepalive),
+        OptName::KeepAlive => bool_opt(st.options.keepalive),
         OptName::Broadcast => bool_opt(flags.broadcast),
         OptName::SndBuf | OptName::RcvBuf => {
             let (snd, rcv) = s.with(|x, h| x.buffer_sizes(h)).map_err(nerr)?;

@@ -592,7 +592,7 @@ fn options_are_decoded_and_encoded() {
     tv[8..].copy_from_slice(&500_000i64.to_le_bytes());
     assert_eq!(set(&mut k, abi::SOL_SOCKET, abi::SO_RCVTIMEO, &tv), Ok(0));
     tv[8..].copy_from_slice(&1_000_000i64.to_le_bytes());
-    assert_eq!(set(&mut k, abi::SOL_SOCKET, abi::SO_SNDTIMEO, &tv), Err(Errno::EINVAL));
+    assert_eq!(set(&mut k, abi::SOL_SOCKET, abi::SO_SNDTIMEO, &tv), Err(Errno::EDOM));
     assert_eq!(set(&mut k, abi::SOL_SOCKET, abi::SO_LINGER, &[1, 0, 0, 0, 0, 0, 0, 0]), Ok(0));
     assert_eq!(set(&mut k, abi::SOL_TCP, abi::TCP_KEEPIDLE, &0i32.to_le_bytes()), Err(Errno::EINVAL));
     assert_eq!(set(&mut k, abi::SOL_TCP, abi::TCP_NODELAY, &[1, 0]), Err(Errno::EINVAL), "short optlen");

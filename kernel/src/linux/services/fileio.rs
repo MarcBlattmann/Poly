@@ -31,7 +31,7 @@ use poly_personality_linux::fileio::{EpollEvent, EpollOp, FileIo, ItimerSpec, Ne
 use poly_personality_linux::kernel::{Clock, SigSet};
 use poly_vfs::epoll::{self, Epoll};
 use poly_vfs::eventfd::EventFd;
-use poly_vfs::pipe::Pipe;
+use poly_vfs::pipe::{Pipe, PipeEnd};
 use poly_vfs::poll::{PollEntry, PollTarget};
 use poly_vfs::timerfd::{TimerClock, TimerFd, TimerSpec};
 use poly_vfs::{FileObject, PollEvents, Timeout};
@@ -245,5 +245,15 @@ impl FileIo for Thread<'_> {
             return Ok(fd);
         }
         self.install_object(Arc::new(SignalFd::new(mask)), FileType::Regular, OpenFlags::RDWR, new)
+    }
+
+    fn pipe_size(&mut self, fd: i32) -> Result<usize, Errno> {
+        let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
+        Ok(end.pipe().capacity())
+    }
+
+    fn set_pipe_size(&mut self, fd: i32, bytes: usize) -> Result<usize, Errno> {
+        let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
+        end.pipe().set_capacity(bytes).map_err(vfs_errno)
     }
 }

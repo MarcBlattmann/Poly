@@ -112,8 +112,13 @@ fn capget_and_capset() {
     let mut k = root();
     // An unknown version: EINVAL, the preferred version written back.
     header(&mut k, 0, 0);
-    assert_eq!(sys(&mut k, nr::CAPGET, &[P, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::CAPGET, &[P, P + 16]), Err(Errno::EINVAL));
     assert_eq!(k.peek_u32(P), CAPABILITY_VERSION_3);
+    // The probe with a null data pointer succeeds.
+    header(&mut k, 0, 0);
+    assert_eq!(sys(&mut k, nr::CAPGET, &[P, 0]), Ok(0));
+    assert_eq!(k.peek_u32(P), CAPABILITY_VERSION_3);
+    header(&mut k, CAPABILITY_VERSION_3, 0);
     // Version 3: two structs, low words first.
     assert_eq!(sys(&mut k, nr::CAPGET, &[P, P + 16]), Ok(0));
     assert_eq!(k.peek(P + 16, 24), data([[u32::MAX, u32::MAX, 0], [0x1ff, 0x1ff, 0]]));

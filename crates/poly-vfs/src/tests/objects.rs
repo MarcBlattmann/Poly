@@ -150,7 +150,7 @@ fn pipe_without_readers_is_epipe() {
     assert!(w.poll().contains(PollEvents::WRITABLE));
     drop(r);
     assert_eq!(w.write(b"x"), Err(Errno::EPIPE));
-    assert_eq!(w.poll(), PollEvents::ERR, "poll(2): POLLERR once the read end is closed");
+    assert_eq!(w.poll(), PollEvents::ERR | PollEvents::WRITABLE, "POLLERR (and POLLOUT) once the read end is closed");
     let mut blocker = TestBlocker::default();
     assert_eq!(w.write_wait(b"x", &mut blocker), Err(Errno::EPIPE));
 }
@@ -806,4 +806,26 @@ fn devices_and_objects_without_a_queue_are_always_ready() {
     let (ep, _) = epoll_file(&env);
     ep.ctl(EpollOp::Add, 3, &null, ev(PollEvents::IN, 0, 1)).unwrap();
     assert_eq!(wait_now(&ep, 2).len(), 1);
+}
+
+#[test]
+fn pipe_room_comes_back_a_page_at_a_time() {
+    use crate::pipe::{PIPE_CAPACITY as CAPACITY, PIPE_PAGE as PAGE};
+    let env = Env::new();
+    let (r, w) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+    let big = vec![7u8; 70_000];
+    let mut buf = vec![0u8; 70_000];
+    assert_eq!(w.write(&big), Ok(CAPACITY));
+    assert_eq!(w.write(b"x"), Err(Errno::EAGAIN));
+    assert_eq!(r.read(&mut buf[..100]), Ok(100));
+    assert_eq!(w.write(&big[..50]), Err(Errno::EAGAIN), "a partly read page takes nothing");
+    assert!(!w.poll().contains(PollEvents::WRITABLE));
+    assert_eq!(r.read(&mut buf[..PAGE - 100]), Ok(PAGE - 100));
+    assert!(w.poll().contains(PollEvents::WRITABLE));
+    assert_eq!(w.write(&big[..PAGE]), Ok(PAGE));
+    assert_eq!(w.write(b"x"), Err(Errno::EAGAIN));
+    while r.read(&mut buf).is_ok_and(|n| n > 0) {}
+    // The rest of the last page, then nothing: a long write is partial.
+    assert_eq!(w.write(&big[..CAPACITY - 1000]), Ok(CAPACITY - 1000));
+    assert_eq!(w.write(&big[..5000]), Ok(1000));
 }

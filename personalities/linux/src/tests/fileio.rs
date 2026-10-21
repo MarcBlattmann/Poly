@@ -464,9 +464,10 @@ fn select_errors_and_timeouts() {
     assert_eq!(fdset_read(&k, ARG), 1 << 7, "sets unchanged on an error");
     assert_eq!(sys(&mut k, nr::SELECT, &[u64::MAX, 0, 0, 0, 0]), Err(Errno::EINVAL), "nfds -1");
     assert_eq!(sys(&mut k, nr::SELECT, &[1025, 0, 0, 0, 0]), Err(Errno::EINVAL));
-    // timeval { 0, 1000000 } is invalid.
+    // timeval { 0, -1 } is invalid; a million microseconds or more is
+    // normalised.
     k.poke(BUF, &0u64.to_le_bytes());
-    k.poke(BUF + 8, &1_000_000u64.to_le_bytes());
+    k.poke(BUF + 8, &(-1i64).to_le_bytes());
     assert_eq!(sys(&mut k, nr::SELECT, &[0, 0, 0, 0, BUF]), Err(Errno::EINVAL));
     // 2.25 s; 1 s passes; nothing ready: 0, sets cleared, 1.25 s left.
     k.poke(BUF + 8, &250_000u64.to_le_bytes());

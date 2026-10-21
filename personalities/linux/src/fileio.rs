@@ -215,6 +215,22 @@ pub trait FileIo {
     /// Reading it takes the reading thread's pending signals of the mask
     /// (signalfd(2)), encoded by [`crate::sys::signalfd::siginfo_bytes`].
     fn signalfd(&mut self, fd: i32, mask: SigSet, new: NewFd) -> Result<i32, Errno>;
+
+    /// `F_GETPIPE_SZ`: the capacity of the pipe `fd` is an end of, in
+    /// bytes. `EINVAL` if it is not a pipe.
+    fn pipe_size(&mut self, fd: i32) -> Result<usize, Errno> {
+        let _ = fd;
+        Err(Errno::EINVAL)
+    }
+
+    /// `F_SETPIPE_SZ`: give the pipe `fd` is an end of at least `bytes` of
+    /// room, rounded up to a power-of-two number of pages; returns the new
+    /// capacity. `EBUSY` if what it holds would not fit, `EINVAL` if it is
+    /// not a pipe.
+    fn set_pipe_size(&mut self, fd: i32, bytes: usize) -> Result<usize, Errno> {
+        let _ = (fd, bytes);
+        Err(Errno::EINVAL)
+    }
 }
 
 /// The deadline `timeout` after now on `clock`.

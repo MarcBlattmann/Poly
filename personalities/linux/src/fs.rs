@@ -42,6 +42,9 @@ pub mod fcntl {
     pub const F_SETFL: u32 = 4;
     /// `F_LINUX_SPECIFIC_BASE + 6`.
     pub const F_DUPFD_CLOEXEC: u32 = 1030;
+    /// `F_LINUX_SPECIFIC_BASE + 7` and `+ 8`: a pipe's capacity.
+    pub const F_SETPIPE_SZ: u32 = 1031;
+    pub const F_GETPIPE_SZ: u32 = 1032;
     /// The close-on-exec descriptor flag.
     pub const FD_CLOEXEC: u64 = 1;
     /// `O_CLOEXEC`, the only flag dup3(2) takes.
