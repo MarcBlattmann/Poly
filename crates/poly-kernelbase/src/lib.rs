@@ -39,6 +39,12 @@
 //!   section services take them.
 //! - [`time`]: `FILETIME` and `SYSTEMTIME`.
 //!
+//! What 7-Zip's command line needs (ADR 0087) added [`cpu`]
+//! (`IsProcessorFeaturePresent`), [`slist`] (interlocked lists),
+//! [`system`] (memory status, drives, disk space, affinity), [`oleaut`]
+//! (`BSTR`s and `VARIANT`s of our `oleaut32`, and `user32`'s two string
+//! functions) and the MS-DOS dates in [`time`].
+//!
 //! The second slice (ADR 0079, "Second slice") added the last five, plus
 //! condition variables and one-time initialisation in [`sync`] and
 //! `GetFileInformationByHandle` in [`file`].
@@ -58,6 +64,7 @@
 extern crate alloc;
 
 pub mod advapi;
+pub mod cpu;
 pub mod env;
 pub mod error;
 pub mod exports;
@@ -66,10 +73,13 @@ pub mod mapping;
 pub mod memory;
 pub mod message;
 pub mod nls;
+pub mod oleaut;
 pub mod path;
 pub mod process;
 pub mod registry;
+pub mod slist;
 pub mod sync;
+pub mod system;
 pub mod text;
 pub mod time;
 pub mod tls;

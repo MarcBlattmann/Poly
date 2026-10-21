@@ -27,7 +27,7 @@ fn embed_win32() {
         println!("cargo:warning={WIN32_ENV} is not set: this kernel has no kernel32.dll (build with `cargo xtask`)");
     }
     // advapi32.dll and a32test.exe: ADR 0083; ucrtbase.dll, msvcrt.dll and
-    // crttest.exe: ADR 0084.
+    // crttest.exe: ADR 0084; user32.dll and oleaut32.dll: ADR 0087.
     for name in [
         "kernelbase.dll",
         "kernel32.dll",
@@ -38,6 +38,9 @@ fn embed_win32() {
         "ucrtbase.dll",
         "msvcrt.dll",
         "crttest.exe",
+        // ADR 0087.
+        "user32.dll",
+        "oleaut32.dll",
     ] {
         match &dir {
             Some(d) => {

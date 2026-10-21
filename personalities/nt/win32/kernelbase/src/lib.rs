@@ -21,17 +21,21 @@ use poly_win32_rt as _;
 
 mod base;
 mod console;
+mod except;
 mod file;
+mod legacy;
 mod mapping;
 mod memory;
 mod misc;
 mod nls;
 mod nt;
+mod privilege;
 mod process;
 mod registry;
 mod security;
 mod spawn;
 mod sync;
+mod system;
 mod tls;
 
 #[global_allocator]

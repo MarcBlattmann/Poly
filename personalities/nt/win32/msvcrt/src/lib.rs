@@ -250,6 +250,63 @@ pub extern "C" fn cxx_terminate() -> ! {
     startup::terminate()
 }
 
+// ----- C++ exceptions and RTTI: the stubs 7-Zip's command line needs (ADR 0087) ---------
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn RaiseException(code: u32, flags: u32, count: u32, args: *const usize);
+    fn RtlPcToFileHeader(pc: *const u8, base: *mut *mut u8) -> *mut u8;
+}
+
+/// The exception code of a C++ `throw` (Raymond Chen, "Decoding the
+/// parameters of a thrown C++ exception (0xE06D7363)", The Old New Thing,
+/// Microsoft Dev Blogs, 2010-07-30).
+const CXX_EXCEPTION: u32 = 0xE06D_7363;
+/// `EXCEPTION_NONCONTINUABLE` (`winnt.h`): a `throw` does not return.
+const EXCEPTION_NONCONTINUABLE: u32 = 1;
+
+/// `_CxxThrowException(object, throw_info)`: raise the C++ exception with
+/// the four parameters the article describes for 64-bit Windows: an
+/// internal value (which it does not give; Poly passes 0), the thrown
+/// object, its throw information, and the base of the module that threw
+/// (whose image the throw information's offsets are relative to).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn _CxxThrowException(object: *mut u8, throw_info: *const u8) -> ! {
+    let mut base = core::ptr::null_mut();
+    // SAFETY: a lookup without preconditions.
+    unsafe { RtlPcToFileHeader(throw_info, &mut base) };
+    let args = [0, object as usize, throw_info as usize, base as usize];
+    // SAFETY: four arguments.
+    unsafe { RaiseException(CXX_EXCEPTION, EXCEPTION_NONCONTINUABLE, 4, args.as_ptr()) };
+    // A noncontinuable exception does not come back.
+    poly_win32_rt::fail_fast(7)
+}
+
+/// `EXCEPTION_DISPOSITION`'s `ExceptionContinueSearch` (`excpt.h`).
+const EXCEPTION_CONTINUE_SEARCH: u32 = 1;
+
+/// `__CxxFrameHandler`, the language-specific handler of functions with
+/// C++ `try`/`catch` or objects to destroy: a stub (ADR 0087). Poly does
+/// not implement C++ exception handling (its tables are the compiler's,
+/// documented nowhere public), so no `catch` takes an exception and no
+/// destructor runs while one unwinds: every C++ exception goes on unhandled
+/// and ends the process with `0xE06D7363`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __CxxFrameHandler(
+    _record: *mut u8,
+    _frame: u64,
+    _context: *mut u8,
+    _dispatch: *mut u8,
+) -> u32 {
+    EXCEPTION_CONTINUE_SEARCH
+}
+
+/// `type_info::~type_info()`: `typeinfo.h`'s `type_info` keeps a cached
+/// undecorated name after its virtual table, which `type_info::name`
+/// allocates; Poly's runtime never makes one, so there is nothing to free.
+#[unsafe(export_name = "??1type_info@@UEAA@XZ")]
+pub extern "C" fn type_info_destructor(_this: *mut u8) {}
+
 #[unsafe(export_name = "?set_terminate@@YAP6AXXZP6AXXZ@Z")]
 pub extern "C" fn cxx_set_terminate(h: usize) -> usize {
     poly_win32_crt::misc::set_terminate(h)

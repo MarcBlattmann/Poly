@@ -55,6 +55,11 @@ impl BootInfo {
     pub fn arg(&self, key: &str) -> Option<&str> {
         self.cmdline().split_ascii_whitespace().find_map(|w| w.strip_prefix(key)?.strip_prefix('='))
     }
+
+    /// The values of every `key=value` word on the command line, in order.
+    pub fn args<'a>(&'a self, key: &'a str) -> impl Iterator<Item = &'a str> + 'a {
+        self.cmdline().split_ascii_whitespace().filter_map(move |w| w.strip_prefix(key)?.strip_prefix('='))
+    }
 }
 
 /// A boot module: bytes the boot loader loaded into physical memory.

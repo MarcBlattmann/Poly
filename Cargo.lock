@@ -415,10 +415,12 @@ dependencies = [
  "poly-ext2",
  "poly-gfx",
  "poly-kernelbase",
+ "poly-ldr",
  "poly-pe",
  "poly-term",
  "poly-vfs",
  "rustc-demangle",
+ "serde_json",
 ]
 
 [[package]]

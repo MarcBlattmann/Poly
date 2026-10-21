@@ -1,0 +1,18 @@
+[package]
+name = "user32"
+description = "Our user32.dll (ADR 0087): its first string functions; windows come with Phase 6"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "user32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true

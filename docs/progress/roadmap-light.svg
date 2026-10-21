@@ -239,7 +239,7 @@
 <g><title>✔ Windows file system layout: C:\Windows, System32, Program Files, user profile (ADR 0073)</title>
 <rect x="690.7" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace</title>
+<g><title>Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; left: the recording on Windows, C++ exception handling)</title>
 <rect x="715.8" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Winsock (ws2_32) on our sockets; winhttp / wininet basics</title>

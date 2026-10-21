@@ -144,6 +144,40 @@ pub fn compare(a: u64, b: u64) -> i32 {
     }
 }
 
+/// `FileTimeToDosDateTime` (ADR 0087): the MS-DOS date (bits 0-4 the day,
+/// 5-8 the month, 9-15 the year since 1980) and time (bits 0-4 the second
+/// divided by 2, 5-10 the minute, 11-15 the hour) of `ft`, as Learn's
+/// page packs them; `None` outside 1980-01-01 to 2107-12-31 (Learn: "this
+/// conversion fails"). The odd second and the milliseconds are dropped.
+pub fn to_dos_date_time(ft: u64) -> Option<(u16, u16)> {
+    let st = to_system_time(ft)?;
+    if !(1980..=2107).contains(&st.year) {
+        return None;
+    }
+    let date = ((st.year - 1980) << 9) | (st.month << 5) | st.day;
+    let time = (st.hour << 11) | (st.minute << 5) | (st.second / 2);
+    Some((date, time))
+}
+
+/// `DosDateTimeToFileTime` (ADR 0087): the `FILETIME` of an MS-DOS date and
+/// time (packed as [`to_dos_date_time`] says). A field outside the ranges
+/// Learn gives (day 1-31 of the month's length, month 1-12, hour 0-23,
+/// minute 0-59, second 0-58) is `None` (Poly's reading: the page lists the
+/// ranges but not the failure; to be confirmed by the spec agent).
+pub fn from_dos_date_time(date: u16, time: u16) -> Option<u64> {
+    let st = SystemTime {
+        year: 1980 + (date >> 9),
+        month: (date >> 5) & 0xF,
+        day_of_week: 0,
+        day: date & 0x1F,
+        hour: time >> 11,
+        minute: (time >> 5) & 0x3F,
+        second: (time & 0x1F) * 2,
+        milliseconds: 0,
+    };
+    to_file_time(&st)
+}
+
 /// The local time of a UTC `FILETIME` (see the module documentation).
 pub fn to_local(utc: u64) -> u64 {
     utc
@@ -197,5 +231,29 @@ mod tests {
         assert_eq!(compare(1, 2), -1);
         assert_eq!(compare(2, 2), 0);
         assert_eq!(compare(3, 2), 1);
+    }
+
+    #[test]
+    fn dos_dates_and_times() {
+        // 2023-10-21 13:45:31.5 → day 21, month 10, year 43; 13:45:30.
+        let ft = to_file_time(&st(2023, 10, 21, 13, 45, 31, 500)).unwrap();
+        let (date, time) = to_dos_date_time(ft).unwrap();
+        assert_eq!(date, (43 << 9) | (10 << 5) | 21);
+        assert_eq!(time, (13 << 11) | (45 << 5) | 15);
+        assert_eq!(from_dos_date_time(date, time), to_file_time(&st(2023, 10, 21, 13, 45, 30, 0)));
+        // The range ends.
+        let first = to_file_time(&st(1980, 1, 1, 0, 0, 0, 0)).unwrap();
+        assert_eq!(to_dos_date_time(first), Some((0x21, 0)));
+        assert_eq!(to_dos_date_time(first - 1), None);
+        let last = to_file_time(&st(2107, 12, 31, 23, 59, 59, 999)).unwrap();
+        assert_eq!(to_dos_date_time(last), Some(((127 << 9) | (12 << 5) | 31, (23 << 11) | (59 << 5) | 29)));
+        assert_eq!(to_dos_date_time(last + 10_000), None);
+        assert_eq!(from_dos_date_time(0x21, 0), Some(first));
+        // Fields out of range.
+        assert_eq!(from_dos_date_time(0, 0), None, "day and month 0");
+        assert_eq!(from_dos_date_time((43 << 9) | (2 << 5) | 29, 0), None, "2023-02-29");
+        assert_eq!(from_dos_date_time(0x21, 24 << 11), None, "hour 24");
+        assert_eq!(from_dos_date_time(0x21, 60 << 5), None, "minute 60");
+        assert_eq!(from_dos_date_time(0x21, 30), None, "second 60");
     }
 }

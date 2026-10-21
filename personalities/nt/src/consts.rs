@@ -83,6 +83,11 @@ pub const THREAD_CREATE_FLAGS_CREATE_SUSPENDED: u32 = 0x0001;
 /// `PROCESSINFOCLASS` (`winternl.h`): `ProcessBasicInformation`, the one we
 /// answer (`ProcessImageFileName` and friends are not answered yet).
 pub const PROCESS_BASIC_INFORMATION: u32 = 0;
+/// `ProcessTimes` (`ntddk.h`'s `PROCESSINFOCLASS`): `KERNEL_USER_TIMES`,
+/// the creation, exit, kernel and user times as four `LARGE_INTEGER`s
+/// (ADR 0087).
+pub const PROCESS_TIMES: u32 = 4;
+pub const KERNEL_USER_TIMES_SIZE: usize = 32;
 
 /// `THREADINFOCLASS` (`winternl.h` / `ntpsapi.h`).
 pub const THREAD_BASIC_INFORMATION: u32 = 0;
