@@ -17,6 +17,7 @@
 //! | `\??\Z:` | `\Device\PolyFs0` | `/`, the whole host-visible VFS |
 //! | (none) | `\Device\PolyFs2`... | every other VFS mount, by mount point |
 //! | (none) | `\Device\PolyPipe` | Poly's loopback byte pipes (below) |
+//! | (none) | `\Device\PolyConsole` | the consoles ([`crate::console`], ADR 0080) |
 //!
 //! So `\??\C:\Windows\win.ini` reaches `\Device\PolyFs1` through the link
 //! and becomes `/nt/c/Windows/win.ini` (in whatever case it has on disk).
@@ -139,6 +140,8 @@ pub struct Volume {
 pub enum Device {
     Volume(usize),
     Pipe,
+    /// `\Device\PolyConsole` (ADR 0080, [`crate::console`]).
+    Console,
 }
 
 /// A file object's target on a volume.
@@ -162,6 +165,11 @@ pub enum Target {
     Disk(DiskFile),
     /// A `\Device\PolyPipe` stream, by its upcased name.
     Pipe(Vec<u16>),
+    /// A console handle (ADR 0080).
+    Console(crate::console::ConsoleTarget),
+    /// An open file of Poly's own a process was started with (a
+    /// redirected standard handle, ADR 0080): read and written as it is.
+    Host(Arc<OpenFile>),
 }
 
 /// The kernel's data for one file object.
@@ -194,14 +202,14 @@ impl FileRecord {
     pub fn disk(&self) -> Option<&DiskFile> {
         match &self.target {
             Target::Disk(d) => Some(d),
-            Target::Pipe(_) => None,
+            _ => None,
         }
     }
 
     pub fn disk_mut(&mut self) -> Option<&mut DiskFile> {
         match &mut self.target {
             Target::Disk(d) => Some(d),
-            Target::Pipe(_) => None,
+            _ => None,
         }
     }
 }
@@ -243,6 +251,8 @@ pub struct IoState {
     pub(crate) kicks: BTreeSet<u32>,
     pub(crate) completions: VecDeque<Completion>,
     pub(crate) sync_done: BTreeMap<u64, (NtStatus, u64)>,
+    /// The consoles (ADR 0080).
+    pub(crate) consoles: crate::console::Consoles,
     next_cookie: u64,
     pub(crate) next_irp: u64,
 }
@@ -334,6 +344,7 @@ impl IoState {
             kicks: BTreeSet::new(),
             completions: VecDeque::new(),
             sync_done: BTreeMap::new(),
+            consoles: crate::console::Consoles::default(),
             next_cookie: COOKIE_BASE,
             next_irp: 1,
         }
@@ -399,6 +410,14 @@ impl IoState {
             NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
         )?;
         self.devices.insert(cookie, Device::Pipe);
+        let cookie = self.cookie();
+        add_named(
+            om,
+            &kernel,
+            &wide(poly_console::ioctl::DEVICE),
+            NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
+        )?;
+        self.add_console_device(cookie);
         self.root = Some(VfsRoot { vfs, ctx, cred });
         Ok(())
     }
@@ -480,6 +499,8 @@ impl IoState {
         self.cancel_where(|irp| irp.file == cookie, true);
         let rec = self.files.remove(&cookie).expect("checked");
         match rec.target {
+            Target::Console(t) => self.console_file_closed(cookie, t),
+            Target::Host(_) => {}
             Target::Pipe(key) => {
                 if let Some(p) = self.pipes.get_mut(&key) {
                     p.opens -= 1;

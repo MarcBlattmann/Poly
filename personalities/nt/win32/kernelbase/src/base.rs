@@ -136,6 +136,12 @@ pub struct State {
     /// The environment block `kernelbase` allocated last (freed when
     /// replaced); null while the kernel's original is in use.
     pub env_alloc: *mut u16,
+    /// The console connection (0: no console), ADR 0080.
+    pub console: Handle,
+    /// The console the process started on (`AttachConsole(ATTACH_PARENT_PROCESS)`).
+    pub parent_console: u32,
+    /// `SetConsoleCtrlHandler`'s list.
+    pub ctrl: poly_console::ctrl::CtrlHandlers,
 }
 
 struct Shared {
@@ -148,7 +154,14 @@ unsafe impl Sync for Shared {}
 
 static SHARED: Shared = Shared {
     lock: CriticalSection::new(),
-    state: UnsafeCell::new(State { current_dir: Vec::new(), std: [0; 3], env_alloc: core::ptr::null_mut() }),
+    state: UnsafeCell::new(State {
+        current_dir: Vec::new(),
+        std: [0; 3],
+        env_alloc: core::ptr::null_mut(),
+        console: 0,
+        parent_console: 0,
+        ctrl: poly_console::ctrl::CtrlHandlers::new(),
+    }),
 };
 
 /// Run `f` with the process state, under the process lock (a recursive

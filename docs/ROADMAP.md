@@ -108,7 +108,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors (first slice done, ADR 0079; left: `CreateProcessW` / `NtCreateUserProcess`, file mappings, TLS, NLS)
 - [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055)
 - [x] `advapi32` basics: registry API, security descriptors, tokens (single user) (ADR 0083)
-- [ ] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles
+- [x] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles (ADR 0080)
 - [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0073)
 - [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace
 - [ ] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics

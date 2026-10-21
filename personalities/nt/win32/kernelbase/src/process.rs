@@ -8,13 +8,10 @@
 //! 0x80 and 0x88). `SetEnvironmentVariableW` replaces the block there, so
 //! `ntdll` (the DLL search order's `Path`) sees the change too.
 //!
-//! **The standard handles** (ADR 0079): a console host is a later Phase 5
-//! item; until then a process gets what every Poly process starts with on
-//! descriptors 0, 1 and 2, the system console: `\??\Z:\dev\console`
-//! (`Z:` is the whole VFS, ADR 0067), opened on first use, for reading
-//! (input) and writing (output and error). If it cannot be opened the
-//! handle is NULL, which Learn allows ("If an application does not have
-//! associated standard handles ... the return value is NULL").
+//! **The standard handles** (ADR 0080): what the process parameters hold
+//! when the process starts — console handles for a program started on a
+//! terminal, ordinary file handles for redirected ones (the console host,
+//! `console.rs`).
 
 use crate::base::*;
 use crate::nt::{self, Handle};
@@ -271,60 +268,34 @@ fn std_index(which: u32) -> Option<usize> {
     }
 }
 
-/// Open the console for one standard handle (ADR 0079).
-fn open_console(write: bool) -> Handle {
-    use poly_kernelbase::file::*;
-    let name = NtName::new(poly_kernelbase::wide("\\??\\Z:\\dev\\console"));
-    let oa = name.attributes();
-    let mut h: Handle = 0;
-    let mut iosb = nt::IoStatusBlock::default();
-    let access = if write { GENERIC_WRITE } else { GENERIC_READ };
-    // SAFETY: valid pointers.
-    let st = unsafe {
-        nt::NtCreateFile(
-            &mut h,
-            access | SYNCHRONIZE | FILE_READ_ATTRIBUTES,
-            &oa,
-            &mut iosb,
-            core::ptr::null(),
-            0,
-            3,
-            FILE_OPEN,
-            FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE,
-            core::ptr::null(),
-            0,
-        )
-    };
-    if st.is_success() { h } else { 0 }
-}
+/// Poly's own places of the console connection and the standard handles
+/// in `RTL_USER_PROCESS_PARAMETERS` (ADR 0080: `winternl.h`'s
+/// `Reserved2[0]`, `[2]`, `[3]`, `[4]`).
+const PP_CONSOLE_HANDLE: u64 = 0x10;
+const PP_STANDARD_INPUT: u64 = 0x20;
 
-static STD_OPENED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-
-/// The standard handles, opened on first use.
-fn std_handles() -> [Handle; 3] {
-    if !STD_OPENED.load(Ordering::Acquire) {
-        let opened = [open_console(false), open_console(true), open_console(true)];
-        let keep = with_state(|s| {
-            if STD_OPENED.swap(true, Ordering::AcqRel) {
-                false
-            } else {
-                for (slot, h) in s.std.iter_mut().zip(opened) {
-                    if *slot == 0 {
-                        *slot = h;
-                    } else if h != 0 {
-                        close(h);
-                    }
-                }
-                true
-            }
-        });
-        if !keep {
-            for h in opened.into_iter().filter(|&h| h != 0) {
-                close(h);
-            }
-        }
+/// At `DLL_PROCESS_ATTACH`: the standard handles and the console
+/// connection the kernel (or the creating process) put in the parameters
+/// (ADR 0080). A NULL standard handle stays NULL, which Learn allows ("If
+/// an application does not have associated standard handles ... the
+/// return value is NULL").
+pub fn init_std_handles() -> Handle {
+    let pp = parameters();
+    if pp == 0 {
+        return 0;
     }
-    with_state(|s| s.std)
+    // SAFETY: the parameters are mapped and hold these pointer-sized slots.
+    let (console, std) = unsafe {
+        let console = ((pp + PP_CONSOLE_HANDLE) as *const isize).read();
+        let std: [Handle; 3] =
+            core::array::from_fn(|i| ((pp + PP_STANDARD_INPUT + 8 * i as u64) as *const isize).read());
+        (console, std)
+    };
+    with_state(|s| {
+        s.std = std;
+        s.console = console;
+    });
+    console
 }
 
 /// `GetStdHandle`: an unknown selector is `INVALID_HANDLE_VALUE` with
@@ -332,7 +303,7 @@ fn std_handles() -> [Handle; 3] {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetStdHandle(which: u32) -> Handle {
     match std_index(which) {
-        Some(i) => std_handles()[i],
+        Some(i) => with_state(|s| s.std[i]),
         None => fail(ERROR_INVALID_HANDLE, INVALID_HANDLE_VALUE),
     }
 }
@@ -342,7 +313,6 @@ pub extern "system" fn GetStdHandle(which: u32) -> Handle {
 pub extern "system" fn SetStdHandle(which: u32, handle: Handle) -> i32 {
     match std_index(which) {
         Some(i) => {
-            let _ = std_handles();
             with_state(|s| s.std[i] = handle);
             TRUE
         }

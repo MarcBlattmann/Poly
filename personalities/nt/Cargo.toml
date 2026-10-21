@@ -9,6 +9,8 @@ rust-version.workspace = true
 
 [dependencies]
 poly-abi.workspace = true
+# The console host's logic (ADR 0080).
+poly-console.workspace = true
 poly-ntobj.workspace = true
 poly-pe.workspace = true
 poly-registry.workspace = true

@@ -43,6 +43,7 @@ extern crate alloc;
 
 pub mod abi;
 pub mod backend;
+pub mod console;
 pub mod consts;
 pub mod context;
 pub mod exception;
@@ -249,6 +250,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         QuerySystemTime => sysinfo::query_system_time(k, regs),
         QueryPerformanceCounter => sysinfo::query_performance_counter(k, regs),
         QuerySystemInformation => sysinfo::query_system_information(k, regs),
+        DeviceIoControlFile => console::services::device_io_control_file(k, regs),
         OpenProcessToken => security::open_process_token_service(k, regs),
         OpenProcessTokenEx => security::open_process_token_ex(k, regs),
         OpenThreadToken | OpenThreadTokenEx => security::open_thread_token(k, regs),

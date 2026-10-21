@@ -27,7 +27,7 @@ fn embed_win32() {
         println!("cargo:warning={WIN32_ENV} is not set: this kernel has no kernel32.dll (build with `cargo xtask`)");
     }
     // advapi32.dll and a32test.exe: ADR 0083.
-    for name in ["kernelbase.dll", "kernel32.dll", "k32test.exe", "advapi32.dll", "a32test.exe"] {
+    for name in ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe", "advapi32.dll", "a32test.exe"] {
         match &dir {
             Some(d) => {
                 let path = d.join(name);

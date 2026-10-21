@@ -32,7 +32,8 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 5] = ["kernelbase.dll", "kernel32.dll", "k32test.exe", "advapi32.dll", "a32test.exe"];
+pub const OUTPUTS: [&str; 6] =
+    ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe", "advapi32.dll", "a32test.exe"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 
@@ -69,6 +70,7 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/kernelbase",
             "personalities/nt/win32/kernel32",
             "personalities/nt/win32/k32test",
+            "personalities/nt/win32/contest",
             "personalities/nt/win32/advapi32",
             "personalities/nt/win32/a32test",
         ],
@@ -133,7 +135,7 @@ fn prune(dir: &Path) {
 /// Build the workspace into `target_dir`; the directory with the outputs.
 fn build(target_dir: &Path) -> Result<PathBuf> {
     let mut cmd = cargo_for(target_dir, "build")?;
-    step("build kernelbase.dll, kernel32.dll, advapi32.dll, k32test.exe, a32test.exe", &mut cmd)?;
+    step("build kernelbase.dll, kernel32.dll, advapi32.dll, k32test.exe, contest.exe, a32test.exe", &mut cmd)?;
     let out = target_dir.join("x86_64-pc-windows-msvc/release");
     for f in OUTPUTS {
         if !out.join(f).is_file() {
@@ -217,7 +219,9 @@ fn verify(dir: &Path) -> Result {
             other => return Err(format!("kernel32!{name} should be code, is {other:?}")),
         }
     }
+    // The test programs (ADR 0079, 0080, 0083).
     verify_exe(dir, "k32test.exe", &["kernel32.dll"])?;
+    verify_exe(dir, "contest.exe", &["kernel32.dll"])?;
     verify_advapi32(dir)?;
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])
 }

@@ -304,6 +304,10 @@ pub enum Service {
     /// `NtQuerySystemInformation(SystemInformationClass, SystemInformation,
     /// SystemInformationLength, ReturnLength*)` (Learn, `winternl.h`).
     QuerySystemInformation,
+    /// `NtDeviceIoControlFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, IoControlCode, InputBuffer, InputBufferLength,
+    /// OutputBuffer, OutputBufferLength)` (ADR 0080: console handles).
+    DeviceIoControlFile,
 
     // ----- security (ADR 0083)
     /// `NtOpenProcessToken(ProcessHandle, DesiredAccess, TokenHandle*)`.
@@ -436,6 +440,9 @@ pub const SYSINFO_SERVICES: [(Service, u32, &str); 3] = [
     (Service::QuerySystemInformation, 0x142, "NtQuerySystemInformation"),
 ];
 
+/// Device control, in the file I/O group (ADR 0080).
+pub const DEVICE_SERVICES: [(Service, u32, &str); 1] = [(Service::DeviceIoControlFile, 0x0D0, "NtDeviceIoControlFile")];
+
 /// Access tokens (ADR 0083).
 pub const SECURITY_SERVICES: [(Service, u32, &str); 5] = [
     (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
@@ -452,6 +459,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(REGISTRY_SERVICES.iter())
         .chain(EXCEPTION_SERVICES.iter())
         .chain(SYSINFO_SERVICES.iter())
+        .chain(DEVICE_SERVICES.iter())
         .chain(SECURITY_SERVICES.iter())
 }
 
@@ -508,6 +516,7 @@ mod tests {
         assert!((0xA0..0xB0).contains(&Service::RaiseException.number()));
         assert!((0xA0..0xB0).contains(&Service::Continue.number()));
         assert!(SYSINFO_SERVICES.iter().all(|s| (0x140..0x180).contains(&s.1)));
+        assert!(DEVICE_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
         assert!(SECURITY_SERVICES.iter().all(|s| (0x180..0x1C0).contains(&s.1)));
     }
 }
