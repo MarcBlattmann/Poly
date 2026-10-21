@@ -1,0 +1,106 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/shmctl               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (shmmni 4096, shmmax and shmall 18446744073692774399); RLIMIT_MEMLOCK soft limit about 2 GB"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  shmctl(shmid, cmd, buf) (syscall 31) inspects and controls System V
+  shared memory segments made by shmget. shmid and cmd are 32-bit ints
+  (the upper halves of the registers are ignored). A negative shmid or a
+  negative cmd is EINVAL for every command, as is any cmd other than
+  IPC_RMID 0, IPC_SET 1, IPC_STAT 2, IPC_INFO 3, SHM_LOCK 11, SHM_UNLOCK
+  12, SHM_STAT 13, SHM_INFO 14 and SHM_STAT_ANY 15 (on x86-64 the IPC_64
+  flag 0x100 is not accepted: IPC_STAT|0x100 is EINVAL). A segment id
+  is seq * 32768 + slot: the slot is a small index (0..32767) and seq is
+  the value IPC_STAT reports in shm_perm.seq. The id commands (IPC_STAT,
+  IPC_SET, IPC_RMID, SHM_LOCK, SHM_UNLOCK) need the full id of a live
+  segment; an id with a free slot or the wrong seq is EINVAL. The slot
+  commands (SHM_STAT, SHM_STAT_ANY) use only the low 15 bits of shmid
+  and return the full id of the segment there. The info commands
+  (IPC_INFO, SHM_INFO) ignore shmid (beyond the sign check) and return
+  the highest slot in use. All other successful calls return 0.
+  IPC_STAT copies a struct shmid64_ds (112 bytes; nothing past it is
+  written): key (0 once removed or for IPC_PRIVATE), uid, gid (owner),
+  cuid, cgid (creator), mode (the 9 permission bits plus SHM_DEST 01000
+  and SHM_LOCKED 02000, a 32-bit field with high bits 0), seq, segsz (as
+  passed to shmget), atime, dtime, ctime (wall clock seconds), cpid,
+  lpid, nattch; padding and unused fields are 0. IPC_STAT and SHM_STAT
+  need read permission: the caller's class is owner if its euid equals
+  uid or cuid, else group if its egid or a supplementary group equals
+  gid, else other; only that class's 0400/0040/0004 bit counts (write
+  or execute bits do not grant it); EACCES otherwise unless the caller
+  has CAP_IPC_OWNER (root). SHM_STAT_ANY needs no permission. IPC_SET
+  reads uid, gid and mode from the buffer (every other field is
+  ignored), stores uid, gid and mode & 0777 (SHM_DEST and SHM_LOCKED are
+  kept), and sets ctime to now; a uid or gid of 0xffffffff is EINVAL; any
+  other uid/gid is accepted, so an owner may give the segment away. IPC_SET,
+  IPC_RMID, SHM_LOCK and SHM_UNLOCK need the caller's euid to equal uid
+  or cuid (no mode bits needed), else EPERM unless privileged (root).
+  IPC_RMID ignores buf; an unattached segment is destroyed at once (its
+  id is then EINVAL everywhere and its slot empty); an attached one gets
+  SHM_DEST, key 0 and a free key, keeps working (stat, set, lock, rmid
+  again, even shmat) and is destroyed when its last attachment goes.
+  SHM_LOCK sets SHM_LOCKED, SHM_UNLOCK clears it; both ignore buf, are
+  idempotent and do not change ctime. Without CAP_IPC_LOCK, SHM_LOCK is
+  EPERM when RLIMIT_MEMLOCK is 0 and ENOMEM when the segment (whole
+  pages) would take the caller's locked shared memory over the limit.
+returns:
+  id_commands: "IPC_STAT, IPC_SET, IPC_RMID, SHM_LOCK, SHM_UNLOCK: 0"
+  slot_commands: "SHM_STAT, SHM_STAT_ANY: the full id (seq * 32768 + slot) of the segment in slot shmid & 0x7fff; shmid 5*32768+slot or the id itself work the same; the buffer is filled exactly as IPC_STAT of that id fills it"
+  info_commands: "IPC_INFO, SHM_INFO: the highest slot index in use (>= slot of every live segment, < 32768); both give the same value at the same moment"
+  stat_new_segment: "key as given to shmget (0 for IPC_PRIVATE), uid=cuid=creator euid, gid=cgid=creator egid, mode=shmget flags & 0777, seq = id >> 15, segsz as asked, atime 0, dtime 0, ctime = creation second, cpid = creator pid, lpid 0, nattch 0, __unused fields 0"
+  stat_after_shmat: "nattch +1 per attachment (two in one process count 2), atime = now, lpid = caller; ctime unchanged"
+  stat_after_shmdt: "nattch -1, dtime = now, lpid = caller"
+  stat_after_fork: "fork adds one attachment per attached mapping (nattch +1) without changing atime or lpid; a process's exit detaches (nattch -1, dtime set, lpid = the exiting process)"
+  stat_after_rmid_attached: "key 0, mode has SHM_DEST (01000) besides the permission bits, everything else as before"
+  stat_locked: "mode has SHM_LOCKED (02000) after SHM_LOCK, cleared by SHM_UNLOCK; IPC_SET keeps it"
+  ipc_info_buffer: "struct shminfo64 (72 bytes): shmmax 0xfffffffffeffffff, shmmin 1, shmmni 4096, shmseg 4096, shmall 0xfffffffffeffffff (pages), four __unused 0 (the defaults; the /proc/sys/kernel values)"
+  shm_info_buffer: "struct shm_info (48 bytes): used_ids = number of live segments (int, then 4 bytes of 0 padding), shm_tot = sum over segments of segsz rounded up to pages, shm_rss = resident pages (touched pages; stay after detach until the segment goes), shm_swp 0, swap_attempts 0, swap_successes 0"
+errors:
+  bad_cmd: "EINVAL (22): cmd not one of 0,1,2,3,11,12,13,14,15 (e.g. 4, 10, 16, 99, -1, IPC_STAT|IPC_64); checked whatever shmid is"
+  negative_id: "EINVAL (22): shmid < 0, for every cmd including IPC_INFO/SHM_INFO; before any buffer access"
+  no_such_id: "EINVAL (22): id commands on an id whose slot is empty or whose seq does not match (id + 32768 of a live id), or on a destroyed segment; slot commands on an empty slot"
+  efault: "EFAULT (14): IPC_STAT, SHM_STAT, SHM_STAT_ANY, IPC_INFO, SHM_INFO with an unwritable buf; IPC_SET with an unreadable buf. IPC_RMID, SHM_LOCK, SHM_UNLOCK never touch buf"
+  read_permission: "EACCES (13): IPC_STAT or SHM_STAT without read permission in the caller's class (not for root)"
+  not_owner: "EPERM (1): IPC_SET, IPC_RMID, SHM_LOCK, SHM_UNLOCK by a caller whose euid is neither uid nor cuid, without privilege"
+  bad_ids_in_set: "EINVAL (22): IPC_SET with uid or gid 0xffffffff; nothing is changed"
+  memlock_zero: "EPERM (1): SHM_LOCK without CAP_IPC_LOCK while RLIMIT_MEMLOCK is 0 (SHM_UNLOCK still works)"
+  memlock_exceeded: "ENOMEM (12): SHM_LOCK without CAP_IPC_LOCK when the segment's pages would exceed RLIMIT_MEMLOCK (e.g. 3 pages, limit 4096 bytes); the segment stays unlocked"
+  order: "negative shmid / bad cmd first. IPC_SET: buffer read (EFAULT) before the id lookup (EINVAL) and before the owner check (EPERM). IPC_STAT: id lookup (EINVAL) before permission (EACCES) before buffer write (EFAULT). SHM_LOCK: id lookup (EINVAL) before the RLIMIT_MEMLOCK checks"
+  eidrm: "EIDRM (43): documented for a removed id; not observable in single-threaded use (a removed id is EINVAL), not tested"
+  eoverflow: "EOVERFLOW: not possible with the 64-bit layout, not tested"
+side_effects: >
+  IPC_SET changes owner uid/gid and permission bits and ctime. IPC_RMID
+  frees the key at once (shmget of that key: ENOENT; IPC_CREAT makes a
+  new segment with a different id) and destroys the segment at once or
+  at its last detach; its memory stays readable and shared through the
+  remaining attachments until then. SHM_LOCK/SHM_UNLOCK change only the
+  SHM_LOCKED bit as far as shmctl shows. IPC_STAT, SHM_STAT*, IPC_INFO
+  and SHM_INFO change nothing. Failed calls change nothing.
+threading: "no thread-specific behaviour; segments belong to the IPC namespace, so a change by one process (IPC_SET, IPC_RMID) is seen by every other process at once"
+ordering:
+  - "IPC_RMID of an attached segment: SHM_DEST and key 0 at once; destroyed (id EINVAL, slot empty) right after the last shmdt or exit of an attached process"
+  - "atime/lpid are set by shmat, dtime/lpid by shmdt and by exit; fork changes only nattch"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none; times in the stat buffer are whole wall clock (CLOCK_REALTIME) seconds taken at the event"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests also use shmget, shmat, shmdt, fork, prlimit64 and
+# set*id to set up and observe segments. Ids differ between runs, so the
+# tests compare syscall names only (poly-diff: syscalls=names, or off for
+# two processes). Tests about permission checks switch root to nobody
+# (65534) first so every user sees the same results; c_shmctl_root needs
+# root (privileged reads and other users' EPERM/EACCES) and could not be run
+# against the reference here: the machine has no root, and AppArmor strips
+# capabilities in unprivileged user namespaces. Its expectations follow
+# shmctl(2) and capabilities(7). c_shmctl_info compares system-wide
+# SHM_INFO counts before and after, so it assumes no other process
+# creates or removes segments meanwhile. Layouts: struct shmid64_ds and
+# shminfo64 in asm-generic/shmbuf.h, struct ipc64_perm in
+# asm-generic/ipcbuf.h (mode is 32 bits on x86-64), struct shm_info and
+# command numbers in linux/shm.h and linux/ipc.h.
