@@ -600,9 +600,16 @@ fn getdents64_lists_in_pieces_and_resumes() {
     assert_eq!(first[0].2, 4, "DT_DIR");
     let n = sys(k, nr::GETDENTS64, &[fd, scratch(OUT), 4096]).unwrap();
     let rest = dirents(&k.peek(scratch(OUT), n as usize));
-    assert_eq!(rest.iter().map(|e| e.3.as_slice()).collect::<Vec<_>>(), [&b"sub"[..], b"file"]);
-    assert_eq!(rest[1].2, 8, "DT_REG");
+    // tmpfs lists newest first (the getdents64 spec, `directory_order`):
+    // the file was made after the directory.
+    assert_eq!(rest.iter().map(|e| e.3.as_slice()).collect::<Vec<_>>(), [&b"file"[..], b"sub"]);
+    assert_eq!(rest[0].2, 8, "DT_REG");
+    // d_off: "." 1, ".." the first entry's cookie, the last INT32_MAX.
+    assert_eq!(first[0].1, 1);
+    assert_eq!(first[1].1, rest[0].1 + 1, "file's cookie is one above sub's");
+    assert_eq!(rest[1].1, i32::MAX as u64);
     assert_eq!(sys(k, nr::GETDENTS64, &[fd, scratch(OUT), 4096]), Ok(0), "the end");
+    assert_eq!(sys(k, nr::LSEEK, &[fd, 0, 1]), Ok(i32::MAX as u64), "SEEK_CUR at the end");
     // Seeking back to a d_off continues after that entry.
     assert_eq!(sys(k, nr::LSEEK, &[fd, first[0].1, 0]), Ok(first[0].1));
     let n = sys(k, nr::GETDENTS64, &[fd, scratch(OUT), 4096]).unwrap();

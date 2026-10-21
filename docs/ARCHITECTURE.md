@@ -588,8 +588,17 @@ initramfs.
   `OpenFile` implement descriptors (`dup2`/`dup3`, close-on-exec,
   `O_APPEND`, `lseek`, `getdents` positions). Errors are `Errno` with
   Linux's values; flags take Linux's bits.
-- **tmpfs**: sparse files in 4 KiB pages, stable `readdir` positions,
-  unlinked files and removed directories live while open.
+- **tmpfs**: sparse files in 4 KiB pages, unlinked files and removed
+  directories live while open. Directories list as Linux's tmpfs does
+  (`specs/linux/x86_64/getdents64.yaml`, `directory_order`), so programs
+  that list a directory make their per-entry calls in the reference's
+  order: `.` and `..`, then the entries newest first. Each directory hands
+  out cookies 3, 4, ... to entries as they are created, linked or renamed
+  in (they go to the front); a rename over a name moves it to the front
+  with the cookie it had. `d_off` is the next entry's cookie (2147483647
+  after the last), a read from position P starts at the entry with the
+  largest cookie not above P, and a listing that has ended stays at
+  2147483647 until lseek (`FileSystem::readdir_end`).
   Directories report Linux tmpfs's size: 40 bytes plus 20 per entry.
 - **Extended attributes** ([ADR 0060](adr/0060-extended-attributes-and-file-ioctls.md),
   `poly_vfs::xattr`): `NodeRef::getxattr` and friends check the name and

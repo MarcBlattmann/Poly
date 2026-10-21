@@ -309,8 +309,14 @@ if [ ! -d "$POLY/runner/repo/.git" ]; then
     as "$RUNNER_USER" git clone -q "$REPO_URL" "$POLY/runner/repo"
 fi
 if [ ! -d "$POLY/git/poly.git" ]; then
-    as "$RUNNER_USER" git init -q --bare "$POLY/git/poly.git"
+    as "$RUNNER_USER" git init -q --bare --shared=all "$POLY/git/poly.git"
 fi
+# The role users fetch from the hub but are not in its group, so every file
+# git writes there must stay world-readable. The loop pushes under the unit's
+# UMask=0027, which would hide new refs and objects from them; git applies
+# core.sharedRepository to what it writes instead (the chmod below covers
+# what is already there, e.g. a hub made before this setting).
+as "$RUNNER_USER" git -C "$POLY/git/poly.git" config core.sharedRepository all
 # The hub has main only (git init's default branch may be master): clones
 # of it check main out.
 as "$RUNNER_USER" git -C "$POLY/git/poly.git" symbolic-ref HEAD refs/heads/main

@@ -361,9 +361,11 @@ impl OpenFile {
         }
     }
 
-    /// `lseek(2)`; returns the new offset. Directories accept `SEEK_SET` to
-    /// a position a listing reported and `SEEK_CUR`; data/hole seeking
-    /// treats the whole file as data.
+    /// `lseek(2)`; returns the new offset. Directories accept `SEEK_SET` and
+    /// `SEEK_CUR` to any position from 0 up (the file system decides what a
+    /// listing reads from it), `SEEK_END`, `SEEK_DATA` and `SEEK_HOLE` are
+    /// `EINVAL`; data/hole seeking treats the whole file as data. A failed
+    /// seek leaves the offset alone.
     pub fn seek(&self, offset: i64, whence: Whence) -> Result<u64> {
         let size = match &self.backend {
             Backend::Path => return Err(Errno::EBADF),
@@ -410,6 +412,7 @@ impl OpenFile {
         }
         let mut off = self.offset.lock();
         let mut accepted = 0;
+        let mut refused = false;
         let mut next = *off;
         let r = self.fs().readdir(self.node.ino(), *off, &mut |e| {
             if emit(e) {
@@ -417,9 +420,14 @@ impl OpenFile {
                 next = e.next;
                 true
             } else {
+                refused = true;
                 false
             }
         });
+        if r.is_ok() && accepted == 0 && !refused {
+            // The end: the file system may park the position there.
+            next = self.fs().readdir_end().unwrap_or(next);
+        }
         *off = next;
         r.map(|()| accepted)
     }

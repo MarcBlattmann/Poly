@@ -177,7 +177,12 @@ files in the corpus format, or `.app` app tests) to the run.
 
 Per test it compares the exit status, stdout and stderr exactly and the
 syscall sequence after masking addresses, pids and times; the first
-divergence is printed. It exits non-zero on any failure, or with
+divergence is printed. Arguments are typed by the call's signature
+(`tools/pipeline/src/syscalls.rs`), and for multiplexed calls by their
+option or command too: `prctl(PR_GET_CHILD_SUBREAPER, &x)` compares its
+address as `<ptr>` while `prctl(PR_SET_CHILD_SUBREAPER, 1)` compares the
+1; likewise `fcntl` (lock and owner commands), `futex` (timeout or
+`val2`), `arch_prctl` and `waitid` (`P_PIDFD`). It exits non-zero on any failure, or with
 `--baseline` only on regressions; `--strict` also fails on unsupported
 tests. A test whose reference run times out is an error, whatever the
 target did. `--tracer strace` uses strace instead of our ptrace tracer.
@@ -356,7 +361,7 @@ inbox and git:
   work/w0, w1/           worktrees where the runner checks branches out (CI, diff, verify)
   state/                 one state file per entry, locks, pauses, logs of every command
   pipeline.toml          the configuration;  human-queue.md;  log/pipeline.log
-/srv/poly/git/poly.git server, world-readable bare "hub": the role checkouts fetch from it; never forced
+/srv/poly/git/poly.git server, world-readable bare "hub" (core.sharedRepository=all, so refs the loop pushes under UMask=0027 stay readable): the role checkouts fetch from it; never forced
 /srv/poly/spec/        user `polyspec` (home): repo/ (remote `hub` only), its own Claude login, rustup
 /srv/poly/impl/        user `polyimpl` (home): repo/ (remote `hub` only), its own Claude login, rustup
 /srv/poly/heldout/     polyspec:server 2750, the held-out store (POLY_HELDOUT_DIR of the spec agent and the runner)

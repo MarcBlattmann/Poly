@@ -14,7 +14,9 @@ summary: >
   up to a multiple of 8. Every entry, including "." and "..", is returned
   exactly once per pass, in an unspecified order; then 0. It returns as many
   whole records as fit. lseek(fd, 0, SEEK_SET) restarts the listing; a
-  following call resumes after the last record returned.
+  following call resumes after the last record returned. The order, the
+  d_off values and what changes between calls do depend on the file
+  system: for tmpfs (and ext4) they are in `directory_order` below.
 returns:
   success: "bytes of whole records stored (a 24-byte buffer returns one 24-byte record per call)"
   end_of_directory: "0, repeatedly"
@@ -33,6 +35,189 @@ ordering: []
 timing:
   typical: "microseconds; does not block unless stated"
   guarantees: "none"
+directory_order:
+  # Added by spec-d: the order getdents64 returns entries in, what d_off
+  # holds, and what lseek to a d_off does, per file system. The d_* tests
+  # (on the tmpfs at /dev/shm) print the names in the order returned and
+  # each record's d_off as its rank among the listing's d_off values
+  # ("d_off: 1 9 8 ... 10"), not the raw numbers.
+  oracle:
+    os: "Linux 6.18.44-fc-v140 x86_64"
+    machine: >
+      Firecracker VM, uid 0; tmpfs at /dev/shm (the tests' directories);
+      ext4 on 64 MiB loop images made with mkfs.ext4 (e2fsprogs 1.47)
+      defaults (dir_index on) and with -O ^dir_index, observed with probe
+      programs only (the tests cannot make an ext4 file system: they have
+      no formatter, and the Poly test machine has no ext4 volume)
+    observed_by: spec-d
+    date: 2026-10-21
+  why: >
+    App tests run on a tmpfs on the reference (docs/AGENT_PIPELINE.md, "App
+    tests"), and Linux's initramfs is a tmpfs too, so programs that list a
+    directory (ls -la, cp -r) make their per-entry calls in tmpfs order;
+    Poly's initramfs and /dev/shm must give the same order for the traces
+    to match.
+  tmpfs:
+    positions: >
+      A directory position (the file offset that lseek sets and reports,
+      and every d_off) is a number. 0 is the start ("."), 1 is "..", 2 is
+      the first entry of the directory's list, 2147483647 (INT32_MAX) is
+      the end. Every other entry has a cookie of its own: each directory
+      has a counter that starts at 3 and goes up by one each time an entry
+      is added to that directory; the new entry gets the counter's value.
+      Cookies are not reused while the counter goes up (observed: removing
+      entries does not give their cookies back; creating 40 entries,
+      removing 20 and creating 5 gave the 5 new ones 43..47). Directories
+      have separate counters (a new subdirectory's first entry gets 3). The
+      counter wrapping at 2147483646 was not observed (it would take 2^31
+      additions); per the Linux source, read for behaviour, it then goes on
+      from the lowest free cookie at or above 3.
+    added_entries: >
+      An entry is added (goes to the FRONT of the list, with the next
+      cookie) when it is created by any call (open/openat with O_CREAT,
+      mkdir, mknod, symlink, link: files, directories, symbolic links,
+      hard links alike), and when it is renamed to a name that does not
+      exist in the directory, from the same directory (a new cookie; the
+      old name's entry is removed) or from another one. So a directory
+      that is only added to lists newest first: created "mm cc xx aa zz bb
+      yy dd" in that order, it lists ". .. dd yy bb zz aa xx cc mm". The
+      name does not matter: unlink a name and create it again and it is a
+      new entry at the front with a new cookie (also when the old file was
+      still open); a failed lookup (stat ENOENT) of a name before it is
+      created changes nothing.
+    removed_entries: >
+      unlink, rmdir and rename out of the directory remove the entry from
+      the list; the others keep their places and cookies.
+    rename_over: >
+      rename(a, b) where b exists (b replaced): the entry now called b is
+      at the FRONT of the list but keeps the cookie b had (no new cookie is
+      used); a is gone. So the list order can then differ from the cookie
+      order: v w x y z created (cookies 3..7), rename(w, y) lists ". .. y
+      z x v" with y's cookie (6) below z's (7). The same when a comes from
+      another directory.
+    rename_exchange: >
+      renameat2(a, b, RENAME_EXCHANGE) in one directory: both names go to
+      the front, b first, then a, then the rest in their order; each NAME
+      keeps its cookie (the entry now named b has the cookie b had).
+    rename_no_op: >
+      rename(x, x), and rename between two hard links of the same file in
+      the directory (rename(c, c_link)), return 0 and change nothing: both
+      links stay, order and cookies unchanged.
+    listing: >
+      From position 0: ".", "..", then the list from the front (newest
+      first), then the end. "." and ".." always come first, never among
+      the other entries.
+    d_off: >
+      d_off of the "." record is 1. d_off of ".." is the cookie of the
+      entry at the front of the list (2147483647 if the directory is
+      empty). d_off of any other record is the cookie of the entry after
+      it in the list, and 2147483647 for the last one. So in a directory
+      only added to, d_off values go down along the listing: ". .. dd yy
+      ... mm" has d_off 1, 10, 9, ..., 3, 2147483647. The values do not
+      depend on the buffer size or on how many calls the listing takes,
+      and stay the same while other entries come and go, except the d_off
+      of the record just before an added or removed entry (".." when the
+      entry is at the front). After a call, the position (lseek(fd, 0,
+      SEEK_CUR)) is the d_off of the last record it returned.
+    reading_from_a_position: >
+      A call reads from the position: 0 from "."; 1 from ".."; 2 from the
+      front of the list; 2147483647 returns 0 (end). Any other value P:
+      the entry with the largest cookie not above P, and from it onwards in
+      LIST order; if every cookie is above P (or the list is empty), from
+      the front; values above 2147483647 start at the entry with the
+      largest cookie. A call stores as many whole records as fit and the
+      position becomes the d_off of the last one, so the next call starts
+      with the next record. Changes are made between calls (a call is not
+      interleaved with a change).
+    consequences_for_changes_between_calls: >
+      With the position on entry N (the next one to return): an entry
+      created or renamed into the directory goes to the front, which this
+      pass has left, so it is not returned (it is returned if only "." has
+      been read, since ".." is followed by the front; not once ".." has
+      been read). An entry not yet returned that is removed is not
+      returned; if it was N, the listing goes on with the entry of the next
+      lower cookie, in a plain list the entry after N (". .. h g" read, f
+      removed: "e d c b a"). An entry already returned that is removed
+      changes nothing. An entry not yet returned that is renamed (to a new
+      name or over another entry) has moved to the front and is not
+      returned in this pass; an entry renamed over one not yet returned
+      makes that one disappear from the pass too. Where the list order is
+      not the cookie order (after rename over), the next lower cookie can
+      be an entry already returned, and the listing returns entries again:
+      with ". .. y z x v" above (y has cookie 6, z 7), ". .. y" read (the
+      position is z's cookie), z removed: the largest cookie not above 7
+      is y's, so the rest is "y x v". If the entry with the largest cookie
+      not above the position is the one at the front, the listing starts
+      over: k l m n created (3..6), rename(l, k) lists ". .. k n m" (k has
+      3); ". .. k n" read, m removed: no cookie but k's (3) is at or below
+      5, so the rest is "k n", then 0.
+    end_of_directory: >
+      Once a call has returned 0 (position 2147483647), further calls
+      return 0 even after entries are added, until lseek moves the
+      position (lseek(fd, 0, SEEK_SET) and a new listing shows everything,
+      the new entries first). Every descriptor has its own position; a
+      descriptor opened before entries were added lists them (it reads the
+      list as it is at the call).
+    lseek: >
+      SEEK_SET and SEEK_CUR set any position from 0 up (no check that it
+      is a d_off; reading interprets it as above) and return it; a
+      negative result is EINVAL, SEEK_END (and SEEK_DATA, SEEK_HOLE) are
+      EINVAL; the position is unchanged after an error. lseek to the d_off
+      of any record returned then reads the record that followed it (none
+      after the last); lseek to a remembered position (telldir/seekdir)
+      gives the same rest of the listing while nothing changes.
+    buffer_sizes: >
+      Records with names of up to 4 bytes are 24 bytes: a 24..47-byte
+      buffer returns one per call, 48..71 two, 72 three. A buffer too small
+      for the next record (23 bytes for a 24-byte one, 48 for a 56-byte
+      one) is EINVAL also in the middle of a listing, and the position does
+      not move (a bigger buffer then returns that record).
+  ext4_dir_index:
+    # Observed only; no tests (see oracle.machine).
+    order: >
+      Hash order: entries in increasing order of a hash of the name, keyed
+      with the file system's own hash seed (the superblock's s_hash_seed,
+      random per mkfs, with s_def_hash_version, half_md4 by default; the
+      ext4 disk-layout documentation, "Hash Tree Directories", describes
+      them). So the order is neither creation nor name order, and differs
+      between two file systems with the same names. In a directory of one
+      block (not yet indexed) "." and ".." are hashed like any name and
+      appear anywhere among the entries; in an indexed directory (more
+      than one block) they come first.
+    d_off: >
+      A 63-bit cookie from the hash of the NEXT entry (". .." in an indexed
+      directory: 4294967296 for "."); the last record's is
+      9223372036854775807 (end; also what SEEK_END returns). An entry keeps
+      its place and cookie while others are added or removed; a renamed
+      entry moves to its new name's hash place; rename over keeps the
+      target name's place.
+    reading_from_a_position: >
+      From the first entry whose hash cookie is at or above the position
+      (0..small values: the first entry); entries added behind the position
+      are returned in the same pass if their hash is above it; after the
+      end, 0 until lseek.
+  ext4_linear:
+    # mkfs.ext4 -O ^dir_index. Observed only; no tests.
+    order: >
+      Physical order in the directory's blocks: "." (byte 0) and ".."
+      (byte 12) first, then the records as stored. A new entry goes into
+      the first gap big enough from the start of the directory (a removed
+      record's space is merged into the record before it), else at the
+      end; so after removals new names fill old places (40 files, every
+      other one removed, 5 created: the 5 take the first five gaps).
+      rename to a new name stores a new record (first fit) and removes the
+      old one; rename over an existing name keeps the target's record in
+      place; RENAME_EXCHANGE leaves both names in place.
+    d_off: >
+      The byte offset of the next record in the directory (12, 24, 36,
+      ...); for the last record of a block the next block's offset; the end
+      is the directory size (4096 for one block; also what SEEK_END
+      returns).
+    reading_from_a_position: >
+      From the first record that starts at or after the position (lseek 1,
+      2 or 3: ".."); beyond the directory's size, 0; lseek to
+      9223372036854775807 is EINVAL. Records added behind the position
+      (into gaps or at the end) are returned in the same pass.
 tests:
-  visible: 2
-  held_out: 1
+  visible: 8
+  held_out: 4
