@@ -1,5 +1,7 @@
 /* symlinkat: the new name is relative to the directory descriptor; the
- * target text is resolved later, relative to the link's own directory. */
+ * target text is resolved later, relative to the link's own directory. A
+ * bad or non-directory dirfd is reported before any component of the
+ * linkpath is looked at (an empty linkpath before the dirfd). */
 #include "a_sys.h"
 
 #define D "/tmp/a_symlinkat_dirfd"
@@ -37,8 +39,16 @@ int test_main(void) {
     expect("loop_lstat_ok", a_lstat_path(D "/sub/la", &st), 0);
     i64 ffd = a_open(D "/t", O_RDONLY, 0);
     expect("file_dirfd_enotdir", syscall3(SYS_symlinkat, "x", ffd, "y"), -ENOTDIR);
+    /* dirfd is checked before the components of a relative linkpath. */
+    char long_name[257];
+    for (int i = 0; i < 256; i++) long_name[i] = 'n';
+    long_name[256] = 0;
+    expect("file_dirfd_before_long_name_enotdir", syscall3(SYS_symlinkat, "x", ffd, long_name), -ENOTDIR);
     a_close(ffd);
     expect("bad_dirfd_ebadf", syscall3(SYS_symlinkat, "x", 99, "y"), -EBADF);
+    expect("bad_dirfd_before_long_name_ebadf", syscall3(SYS_symlinkat, "x", 99, long_name), -EBADF);
+    expect("bad_dirfd_before_missing_dir_ebadf", syscall3(SYS_symlinkat, "x", 99, "no/y"), -EBADF);
+    expect("empty_linkpath_before_bad_dirfd_enoent", syscall3(SYS_symlinkat, "x", 99, ""), -ENOENT);
     a_close(dfd);
     const char *names[] = {D "/sub/l", D "/sub/up", D "/sub/l2", D "/sub/l3", D "/sub/la", D "/sub/lb",
                            D "/sub/t", D "/t"};

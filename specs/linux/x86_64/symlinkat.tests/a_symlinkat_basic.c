@@ -3,7 +3,10 @@
  * limits, in characters without the terminating NUL: a target or a
  * linkpath of up to 4095 characters works and 4096 is ENAMETOOLONG; a
  * linkpath component of 256 characters is ENAMETOOLONG (255 works), a
- * target component of any length is fine. */
+ * target component of any length is fine. When several errors apply: the
+ * target first, then the linkpath's length, then its components from left
+ * to right, the first that fails deciding (a missing directory before a
+ * 256-character name is ENOENT, a file before one ENOTDIR). */
 #include "a_sys.h"
 
 #define D "/tmp/a_symlinkat_basic"
@@ -52,6 +55,45 @@ static void lengths(void) {
     expect("name_256_enametoolong", syscall3(SYS_symlinkat, "x", AT_FDCWD, path_of(23 + 256, 256)), -ENAMETOOLONG);
 }
 
+/* lng = D "/" a (256 characters of 'n') b: a and b may be empty. */
+static const char *around_256(const char *a, const char *b) {
+    int p = 0;
+    for (const char *d = D "/"; *d; d++) lng[p++] = *d;
+    for (; *a; a++) lng[p++] = *a;
+    for (int i = 0; i < 256; i++) lng[p++] = 'n';
+    for (; *b; b++) lng[p++] = *b;
+    lng[p] = 0;
+    return lng;
+}
+
+/* Which error wins when a linkpath has more than one problem. */
+static void precedence(void) {
+    expect("missing_dir_before_long_name_enoent", syscall3(SYS_symlinkat, "x", AT_FDCWD, around_256("no/", "/x")),
+           -ENOENT);
+    expect("missing_parent_of_long_last_enoent", syscall3(SYS_symlinkat, "x", AT_FDCWD, around_256("no/", "")),
+           -ENOENT);
+    expect("missing_dirs_before_long_last_enoent",
+           syscall3(SYS_symlinkat, "x", AT_FDCWD, around_256("no/no2/", "")), -ENOENT);
+    expect("file_before_long_name_enotdir", syscall3(SYS_symlinkat, "x", AT_FDCWD, around_256("f/", "")), -ENOTDIR);
+    expect("file_before_long_middle_enotdir", syscall3(SYS_symlinkat, "x", AT_FDCWD, around_256("f/", "/x")),
+           -ENOTDIR);
+    expect("long_name_before_missing_dir_enametoolong",
+           syscall3(SYS_symlinkat, "x", AT_FDCWD, around_256("", "/no/x")), -ENAMETOOLONG);
+    /* The whole length is checked before any component is looked up:
+     * D "/./././..." with its first "." made "N", a directory that does
+     * not exist. */
+    path_of(4096, 201);
+    lng[23] = 'N';
+    expect("linkpath_4096_missing_dir_enametoolong", syscall3(SYS_symlinkat, "x", AT_FDCWD, lng), -ENAMETOOLONG);
+    /* The target is checked before the linkpath. */
+    for (int i = 0; i < 4096; i++) big[i] = 'a';
+    big[4096] = 0;
+    expect("target_4096_before_missing_dir", syscall3(SYS_symlinkat, big, AT_FDCWD, D "/no/x"), -ENAMETOOLONG);
+    expect("empty_target_before_missing_dir", syscall3(SYS_symlinkat, "", AT_FDCWD, D "/no/x"), -ENOENT);
+    expect("empty_target_before_eexist", syscall3(SYS_symlinkat, "", AT_FDCWD, D "/f"), -ENOENT);
+    expect("bad_target_before_long_name", syscall3(SYS_symlinkat, (const char *)8, AT_FDCWD, big), -EFAULT);
+}
+
 int test_main(void) {
     struct a_stat st;
     expect("setup_mkdir", a_mkdir(D, 0700), 0);
@@ -75,6 +117,7 @@ int test_main(void) {
     expect("bad_target_efault", syscall3(SYS_symlinkat, (const char *)8, AT_FDCWD, D "/bad"), -EFAULT);
     expect("bad_name_efault", syscall3(SYS_symlinkat, "x", AT_FDCWD, (const char *)8), -EFAULT);
     lengths();
+    precedence();
     expect("lstat_symlink", a_lstat_path(D "/abs", &st), 0);
     expect("symlink_mode", st.st_mode, S_IFLNK | 0777);
     expect("symlink_nlink", st.st_nlink, 1);
