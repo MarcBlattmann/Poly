@@ -72,7 +72,7 @@ pub enum Prepared {
     /// A Linux ELF: its process record and loaded image.
     Linux { process: Arc<Process>, image: exec::Image },
     /// A PE executable: its process record and bytes, started by `crate::nt`.
-    Nt { process: Arc<Process>, file: Vec<u8> },
+    Nt { process: Arc<Process>, file: Vec<u8>, launch: crate::nt::Launch },
 }
 
 impl Prepared {
@@ -94,8 +94,8 @@ impl Prepared {
                 let _ = thread::detach(tid);
                 Ok(process)
             }
-            Prepared::Nt { process, file } => {
-                crate::nt::spawn_pe(&process, &file, user::DEFAULT_HOOK)
+            Prepared::Nt { process, file, launch } => {
+                crate::nt::spawn_pe_with(&process, &file, user::DEFAULT_HOOK, &launch)
                     .map_err(|e| ExecPathError::Unsupported(format!("PE executable could not start: {e:?}")))?;
                 Ok(process)
             }
@@ -139,7 +139,9 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
                 }
             }
             let process = Arc::new(Process::new_nt(process::alloc_pid(), format, traced));
-            return Ok(Prepared::Nt { process, file: file_bytes });
+            // Its DOS path and arguments go into its process parameters.
+            let launch = crate::nt::Launch::of(path, argv);
+            return Ok(Prepared::Nt { process, file: file_bytes, launch });
         }
         Some(p) => return Err(ExecPathError::Unsupported(format!("{} programs cannot run yet", p.name()))),
         None => return Err(ExecPathError::Unsupported("#! scripts are not supported yet".into())),
