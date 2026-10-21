@@ -1,6 +1,7 @@
 //! Build our Win32 modules above `ntdll` (ADR 0079) — `kernelbase.dll`,
 //! `kernel32.dll` and the test program `k32test.exe`, plus `advapi32.dll`
-//! and its test program `a32test.exe` (ADR 0083) — and check them.
+//! and its test program `a32test.exe` (ADR 0083), the C runtime (ADR 0084),
+//! `user32.dll` and `oleaut32.dll` (ADR 0087) — and check them.
 //!
 //! They are one Cargo workspace, `personalities/nt/win32`, built the way
 //! `ntdll` is (ADR 0071, `ntdll.rs`): `no_std` Rust for
@@ -32,7 +33,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 9] = [
+pub const OUTPUTS: [&str; 11] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -42,6 +43,8 @@ pub const OUTPUTS: [&str; 9] = [
     "ucrtbase.dll",
     "msvcrt.dll",
     "crttest.exe",
+    "user32.dll",
+    "oleaut32.dll",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -86,6 +89,8 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/ucrtbase",
             "personalities/nt/win32/msvcrt",
             "personalities/nt/win32/crttest",
+            "personalities/nt/win32/user32",
+            "personalities/nt/win32/oleaut32",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -219,7 +224,7 @@ fn verify(dir: &Path) -> Result {
     let k32 = read(&dir.join("kernel32.dll"))?;
     let k32 = parse(&k32)?;
     let k32_exports = k32.exports().map_err(|e| format!("kernel32 exports: {e:?}"))?.ok_or("kernel32: no exports")?;
-    for &(name, _) in KERNEL32_FORWARDS {
+    for &(name, _) in KERNEL32_FORWARDS.iter().chain(poly_kernelbase::exports::KERNEL32_NTDLL_FORWARDS) {
         let want = forwarder(name).unwrap_or_default();
         match k32_exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))? {
             Some(ExportTarget::Forwarder(f)) if f.raw == want.as_bytes() => {}
@@ -237,7 +242,35 @@ fn verify(dir: &Path) -> Result {
     verify_exe(dir, "contest.exe", &["kernel32.dll"])?;
     verify_advapi32(dir)?;
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])?;
-    verify_crt(dir)
+    verify_crt(dir)?;
+    verify_user32_oleaut32(dir)
+}
+
+/// `user32` exports its functions by name; `oleaut32` exports each of its
+/// functions at its Windows ordinal, the way programs import them (ADR
+/// 0087).
+fn verify_user32_oleaut32(dir: &Path) -> Result {
+    use poly_kernelbase::exports::{OLEAUT32_EXPORTS, USER32_EXPORTS};
+    use poly_pe::ExportTarget;
+    let bytes = read(&dir.join("user32.dll"))?;
+    let dll = parse(&bytes)?;
+    let exports = dll.exports().map_err(|e| format!("user32 exports: {e:?}"))?.ok_or("user32: no exports")?;
+    for name in USER32_EXPORTS {
+        if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+            return Err(format!("user32.dll lacks {name}"));
+        }
+    }
+    let bytes = read(&dir.join("oleaut32.dll"))?;
+    let dll = parse(&bytes)?;
+    let exports = dll.exports().map_err(|e| format!("oleaut32 exports: {e:?}"))?.ok_or("oleaut32: no exports")?;
+    for &(name, ordinal) in OLEAUT32_EXPORTS {
+        let by_name = exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?;
+        let by_ordinal = exports.by_ordinal(u32::from(ordinal)).map_err(|e| format!("{e:?}"))?;
+        if by_name.is_none() || by_name != by_ordinal {
+            return Err(format!("oleaut32.dll does not export {name} at ordinal {ordinal}"));
+        }
+    }
+    Ok(())
 }
 
 /// An executable that imports only from `allowed`.

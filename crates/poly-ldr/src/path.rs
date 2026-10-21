@@ -38,6 +38,7 @@ pub const KNOWN_DLLS: &[&str] = &[
     "gdi32.dll",
     "ws2_32.dll",
     "ole32.dll",
+    "oleaut32.dll",
     "shell32.dll",
     "combase.dll",
 ];

@@ -33,6 +33,9 @@
 //!   called through a trait, so the walks are tested on the host and our
 //!   `ntdll` will call real code through the same trait.
 //!
+//! - [`scope`]: `__C_specific_handler`'s scope table and decisions (ADR
+//!   0087).
+//!
 //! The crate never touches memory itself: everything it reads (unwind data,
 //! code bytes, the stack) goes through [`Memory`], which the kernel
 //! implements with its user-copy routines and the tests with byte maps. No
@@ -49,6 +52,7 @@ pub mod dispatch;
 pub mod info;
 pub mod pdata;
 pub mod record;
+pub mod scope;
 pub mod unwind;
 
 #[cfg(test)]

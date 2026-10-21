@@ -74,6 +74,7 @@ const REQUIRED: &[&str] = &[
     "RtlUnwindEx",
     "RtlCaptureContext",
     "RtlRaiseException",
+    "__C_specific_handler",
     // System-call stubs (both decorations).
     "NtClose",
     "NtAllocateVirtualMemory",

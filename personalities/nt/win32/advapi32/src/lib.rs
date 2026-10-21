@@ -25,6 +25,17 @@ unsafe extern "system" {
     fn RegDeleteKeyExW(hkey: Handle, sub: *const u16, sam: u32, reserved: u32) -> u32;
     fn RegDeleteKeyExA(hkey: Handle, sub: *const u8, sam: u32, reserved: u32) -> u32;
     fn GetTokenInformation(token: Handle, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> i32;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        security: *const u8,
+        disposition: u32,
+        flags: u32,
+        template: Handle,
+    ) -> Handle;
+    fn ReadFile(file: Handle, buf: *mut u8, len: u32, read: *mut u32, overlapped: *mut u8) -> i32;
+    fn CloseHandle(handle: Handle) -> i32;
 }
 
 /// `poly-security` uses `alloc`, so the DLL needs an allocator: the
@@ -359,6 +370,40 @@ pub unsafe extern "system" fn LookupPrivilegeNameW(
         count.write(n.len() as u32);
     }
     TRUE
+}
+
+// ----- RtlGenRandom (ADR 0087) ------------------------------------------------------------
+
+/// `SystemFunction036`, Learn's `RtlGenRandom` (`ntsecapi.h`: "This
+/// function has no associated import library"; exported by
+/// `Advapi32.dll` under this name): fill the buffer with random bytes.
+/// Poly's are the kernel's random device, `/dev/urandom` (`Z:` is the
+/// whole VFS, ADR 0067); TRUE when the buffer was filled.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SystemFunction036(buffer: *mut u8, length: u32) -> u8 {
+    if length == 0 {
+        return 1;
+    }
+    let path: Vec<u16> = "Z:\\dev\\urandom".encode_utf16().chain([0]).collect();
+    // GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING (`winnt.h`, `fileapi.h`).
+    // SAFETY: a NUL-terminated name; no security attributes or template.
+    let h = unsafe { CreateFileW(path.as_ptr(), 0x8000_0000, 3, core::ptr::null(), 3, 0, 0) };
+    if h == -1 {
+        return 0;
+    }
+    let mut done = 0u32;
+    while done < length {
+        let mut n = 0u32;
+        // SAFETY: the caller's buffer of `length` bytes; reads go past `done`.
+        let ok = unsafe { ReadFile(h, buffer.add(done as usize), length - done, &mut n, core::ptr::null_mut()) };
+        if ok == FALSE || n == 0 {
+            break;
+        }
+        done += n;
+    }
+    // SAFETY: our handle.
+    unsafe { CloseHandle(h) };
+    u8::from(done == length)
 }
 
 /// The entry point (`DllMain`): nothing to set up.

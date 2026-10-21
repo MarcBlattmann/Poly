@@ -262,7 +262,7 @@ pub unsafe extern "system" fn GetVersionExW(info: *mut u8) -> i32 {
 }
 
 /// The processor count (`NtQuerySystemInformation(SystemBasicInformation)`).
-fn processors() -> u32 {
+pub(crate) fn processors() -> u32 {
     let mut info = [0u8; 64];
     // SAFETY: a valid buffer of the class's size.
     let st = unsafe { nt::NtQuerySystemInformation(0, info.as_mut_ptr(), 64, core::ptr::null_mut()) };

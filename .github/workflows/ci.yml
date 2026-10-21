@@ -114,6 +114,18 @@ jobs:
         with:
           path: target/ntdll-cache
           key: ${{ steps.ntdll.outputs.key }}
+      # 7-Zip's 7za.exe for the `7zip` boot test (ADR 0087): downloaded and
+      # checked against its pinned SHA-256 by xtask, kept in a cache by
+      # version. If the download fails the boot test skips, with a warning.
+      - name: 7-Zip's cache
+        if: matrix.shard == 'userland'
+        uses: actions/cache@v4
+        with:
+          path: target/7zip
+          key: 7zip-26.05
+      - name: Fetch 7-Zip (the 7zip boot test)
+        if: matrix.shard == 'userland'
+        run: cargo xtask win fetch-7zip || echo "::warning::could not fetch 7-Zip; the 7zip boot test is skipped"
       - run: cargo xtask boot-tests --shard ${{ matrix.shard }}
       - name: Keep the boot logs
         if: failure()

@@ -258,6 +258,11 @@ impl NtKernel for Fake {
         self.mem.read(addr, buf)
     }
 
+    fn process_times(&self, pid: ProcessId) -> Option<[u64; 3]> {
+        // A creation time, kernel and user time for the test's own process.
+        (pid == self.proc.pid).then_some([0x01D9_0000_0000_0000, 20_000, 30_000])
+    }
+
     fn write_user(&mut self, addr: u64, data: &[u8]) -> Result<(), UserFault> {
         self.mem.write_bytes(addr, data)
     }

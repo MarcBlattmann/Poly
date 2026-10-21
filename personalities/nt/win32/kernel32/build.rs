@@ -5,7 +5,9 @@
 
 fn main() {
     println!("cargo:rerun-if-changed=../../../../crates/poly-kernelbase/src/exports.rs");
-    for &(name, contract) in poly_kernelbase::exports::KERNEL32_FORWARDS {
+    // ADR 0087: the `api-ms-win-core-rtlsupport` functions go to `ntdll`.
+    let ntdll = poly_kernelbase::exports::KERNEL32_NTDLL_FORWARDS;
+    for &(name, contract) in poly_kernelbase::exports::KERNEL32_FORWARDS.iter().chain(ntdll) {
         println!("cargo:rustc-link-arg=/EXPORT:{name}={contract}.{name}");
     }
     println!("cargo:rustc-link-arg=/ENTRY:kernel32_main");
