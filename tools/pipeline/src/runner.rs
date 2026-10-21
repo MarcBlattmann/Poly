@@ -155,8 +155,13 @@ pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finish
         let into = Arc::clone(&buf);
         thread::spawn(move || {
             let mut chunk = [0u8; 8192];
-            while let Ok(n @ 1..) = r.read(&mut chunk) {
-                into.lock().unwrap_or_else(|e| e.into_inner()).extend_from_slice(&chunk[..n]);
+            loop {
+                match r.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(n) => into.lock().unwrap_or_else(|e| e.into_inner()).extend_from_slice(&chunk[..n]),
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(_) => break,
+                }
             }
             let _ = done.send(());
         });
