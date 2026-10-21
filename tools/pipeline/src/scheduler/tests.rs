@@ -835,8 +835,13 @@ fn the_role_wrapper_checks_everything_and_syncs_from_the_hub() {
         .replace("user=polyspec", &format!("user={me}"))
         .replace("user=polyimpl", &format!("user={me}"))
         .replace("exec cargo xtask pipeline role", "env; echo ARGS:");
+    // With this user's real passwd entry: its home is not the role's.
+    let wrong_home = base.join("poly-role-wrong-home");
+    crate::util::write(&wrong_home, &script).unwrap();
+    let passwd_home = r#"getent passwd "$user" | cut -d: -f6"#;
+    assert!(script.contains(passwd_home));
     let wrapper = base.join("poly-role");
-    crate::util::write(&wrapper, script).unwrap();
+    crate::util::write(&wrapper, script.replace(passwd_home, r#"echo "$home""#)).unwrap();
     let vcs = |dir: &std::path::Path, args: &[&str]| {
         let ok = Command::new("git")
             .args(["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"])
@@ -915,5 +920,17 @@ fn the_role_wrapper_checks_everything_and_syncs_from_the_hub() {
         let (code, out) = run(&bad);
         assert_eq!(code, 2, "{bad:?} was accepted: {out}");
     }
+    // `login` takes no arguments and wants a terminal.
+    let (code, out) = run(&["spec", "login"]);
+    assert!(code == 2 && out.contains("interactive"), "{out}");
+    assert_eq!(run(&["spec", "login", "x"]).0, 2);
+    // A role user whose passwd home is not the role's home (a user from an
+    // earlier attempt): refused before anything runs.
+    let o =
+        Command::new("bash").arg(&wrong_home).args(["spec", "sync", "pipeline/spec/brk", "pipeline/spec/brk"]).output();
+    let o = o.unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(2), "{err}");
+    assert!(err.contains(&format!("not {}/spec", base.display())), "{err}");
     let _ = std::fs::remove_dir_all(&base);
 }
