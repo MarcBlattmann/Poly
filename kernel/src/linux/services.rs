@@ -401,7 +401,25 @@ impl LinuxKernel for Thread<'_> {
             Remap::MayMove => poly_vm::RemapPlacement::MayMove,
             Remap::Fixed(at) => poly_vm::RemapPlacement::Fixed(at),
         };
-        self.memory()?.remap(old, old_len, new_len, how).map_err(memory_errno)
+        let memory = self.memory()?;
+        if old_len == 0 {
+            // mremap(2): "If the value of old_size is zero, and old_address
+            // refers to a shareable mapping ..., then mremap() will create
+            // a new mapping of the same pages." A private one is EINVAL.
+            let regions = memory.regions();
+            let v = regions.iter().find(|v| v.contains(old)).ok_or(Errno::EFAULT)?;
+            let (user::memory::Backing::File { file, shared: true, .. }, Some(offset)) = (&v.backing, v.file_offset(old))
+            else {
+                return Err(Errno::EINVAL);
+            };
+            let placement = match how {
+                poly_vm::RemapPlacement::Fixed(at) => poly_vm::Placement::Fixed(at),
+                _ => poly_vm::Placement::Hint(0),
+            };
+            let req = poly_vm::MapRequest::file(new_len, v.prot, file.clone(), offset, true).at(placement);
+            return memory.map(req).map_err(memory_errno);
+        }
+        memory.remap(old, old_len, new_len, how).map_err(memory_errno)
     }
 
     fn msync(&mut self, addr: u64, len: u64, sync: bool) -> Result<(), Errno> {
