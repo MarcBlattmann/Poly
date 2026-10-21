@@ -207,12 +207,14 @@ fn rmdir_of_an_open_directory() {
     rmdir(&env, "/d").unwrap();
     assert_eq!(d.stat().unwrap().nlink, 0);
     let mut n = 0;
-    d.read_dir(&mut |_| {
+    let r = d.read_dir(&mut |_| {
         n += 1;
         true
-    })
-    .unwrap();
+    });
+    assert_eq!(r, Err(Errno::ENOENT), "a removed directory is ENOENT (getdents64(2))");
     assert_eq!(n, 0, "a removed directory lists nothing");
+    d.seek(0, Whence::Set).unwrap();
+    assert_eq!(d.read_dir(&mut |_| true), Err(Errno::ENOENT), "also from the start");
     assert_eq!(env.fs.inode_count(), inodes);
     drop(d);
     assert_eq!(env.fs.inode_count(), inodes - 1);

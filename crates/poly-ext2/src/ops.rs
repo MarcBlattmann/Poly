@@ -1042,8 +1042,9 @@ impl<D: BlockIo> Ctx<'_, D> {
         if !d.is_dir() {
             return Err(Errno::ENOTDIR);
         }
+        // Removed but still open (getdents64(2): ENOENT).
         if d.links == 0 {
-            return Ok(Vec::new());
+            return Err(Errno::ENOENT);
         }
         self.list_dir(&d, pos, max)
     }

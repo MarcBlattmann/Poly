@@ -162,12 +162,17 @@ impl<D: BlockIo, L: RawLock> FileSystem for Ext2<D, L> {
     }
 
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()> {
+        let start = pos;
         let mut pos = pos;
         loop {
-            let batch = self.read_op(|c| {
+            let batch = match self.read_op(|c| {
                 let dir = c.ino(dir)?;
                 c.readdir(dir, pos, READDIR_BATCH)
-            })?;
+            }) {
+                // Removed while this call listed it: what was listed stands.
+                Err(Errno::ENOENT) if pos != start => return Ok(()),
+                r => r?,
+            };
             let full = batch.len() >= READDIR_BATCH;
             for (ino, kind, name, next) in &batch {
                 if !emit(&DirEntry { ino: *ino as Ino, kind: *kind, name, next: *next }) {

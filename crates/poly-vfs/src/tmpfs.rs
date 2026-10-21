@@ -807,6 +807,9 @@ impl FileSystem for Tmpfs {
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()> {
         // Positions: 0 is ".", 1 is "..", then entry with sequence number s
         // sits at s + 2 (and says the next one is at s + 3).
+        // A removed directory (still open) is ENOENT (getdents64(2)); one
+        // removed while listing just ends.
+        let start = pos;
         let mut pos = pos;
         loop {
             let mut batch: Vec<(Ino, FileType, Box<[u8]>, u64)> = Vec::new();
@@ -814,7 +817,7 @@ impl FileSystem for Tmpfs {
                 let inner = self.inner.lock();
                 let Data::Dir(d) = &inner.node(dir)?.data else { return Err(Errno::ENOTDIR) };
                 if d.removed {
-                    return Ok(());
+                    return if pos == start { Err(Errno::ENOENT) } else { Ok(()) };
                 }
                 if pos == 0 {
                     batch.push((dir, FileType::Directory, (*b".").into(), 1));

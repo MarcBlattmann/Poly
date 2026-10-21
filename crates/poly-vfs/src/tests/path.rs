@@ -92,6 +92,18 @@ fn trailing_slashes() {
     // symlink / mknod / link onto a name with a slash: ENOENT.
     assert_eq!(env.vfs.symlink(&env.ctx, &env.root, b"/top", At::Cwd, b"/sl/"), Err(Errno::ENOENT));
     assert_eq!(env.vfs.link(&env.ctx, &env.root, At::Cwd, b"/top", At::Cwd, b"/hl/", false), Err(Errno::ENOENT));
+    // symlink onto an existing file with a slash: the file is used as a
+    // directory, ENOTDIR (spec sheet linux/syscall/x86_64/symlinkat), also
+    // through a link to it; a directory (or a link to one) is EEXIST.
+    let sl = |path: &[u8]| env.vfs.symlink(&env.ctx, &env.root, b"x", At::Cwd, path);
+    assert_eq!(sl(b"/top/"), Err(Errno::ENOTDIR));
+    assert_eq!(sl(b"/top//"), Err(Errno::ENOTDIR));
+    assert_eq!(sl(b"/top"), Err(Errno::EEXIST));
+    env.symlink("top", "/to_top");
+    env.symlink("a", "/to_a");
+    assert_eq!(sl(b"/to_top/"), Err(Errno::ENOTDIR));
+    assert_eq!(sl(b"/to_a/"), Err(Errno::EEXIST));
+    assert_eq!(sl(b"/a/"), Err(Errno::EEXIST));
 }
 
 #[test]
@@ -225,7 +237,8 @@ fn getcwd_and_chdir() {
     assert_eq!(env.vfs.getcwd(&env.ctx), Err(Errno::ENOENT));
     assert_eq!(env.stat(".").unwrap().nlink, 0);
     assert_eq!(env.open("new", OpenFlags::WRONLY | OpenFlags::CREAT).map(|_| ()), Err(Errno::ENOENT));
-    assert_eq!(env.ls("."), Vec::<String>::new());
+    let dot = env.open(".", OpenFlags::RDONLY | OpenFlags::DIRECTORY).unwrap();
+    assert_eq!(dot.read_dir(&mut |_| true), Err(Errno::ENOENT), "listing it: getdents64(2) ENOENT");
     env.cd("..").unwrap();
     assert_eq!(env.cwd(), b"/");
 }
