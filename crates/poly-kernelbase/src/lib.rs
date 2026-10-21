@@ -26,6 +26,10 @@
 //!   which API-set contract.
 //! - [`text`]: the "copy to a caller's buffer or report the size" rule many
 //!   functions share, and ANSI (code page 1252) conversions.
+//! - [`registry`]: the registry API's predefined keys, buffer rules, type
+//!   restrictions and conversions (ADR 0083).
+//! - [`advapi`]: which functions `advapi32` forwards to `kernelbase`, by
+//!   which API-set contract (ADR 0083).
 //! - [`process`]: `CreateProcessW`'s module search, environment blocks and
 //!   the process parameters `NtCreateUserProcess` takes.
 //! - [`tls`]: TLS and FLS indices and the TEB's TLS slots.
@@ -53,6 +57,7 @@
 
 extern crate alloc;
 
+pub mod advapi;
 pub mod env;
 pub mod error;
 pub mod exports;
@@ -63,6 +68,7 @@ pub mod message;
 pub mod nls;
 pub mod path;
 pub mod process;
+pub mod registry;
 pub mod sync;
 pub mod text;
 pub mod time;

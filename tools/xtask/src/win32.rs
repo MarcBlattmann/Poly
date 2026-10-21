@@ -1,5 +1,6 @@
 //! Build our Win32 modules above `ntdll` (ADR 0079) — `kernelbase.dll`,
-//! `kernel32.dll` and the test program `k32test.exe` — and check them.
+//! `kernel32.dll` and the test program `k32test.exe`, plus `advapi32.dll`
+//! and its test program `a32test.exe` (ADR 0083) — and check them.
 //!
 //! They are one Cargo workspace, `personalities/nt/win32`, built the way
 //! `ntdll` is (ADR 0071, `ntdll.rs`): `no_std` Rust for
@@ -31,7 +32,8 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 4] = ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe"];
+pub const OUTPUTS: [&str; 6] =
+    ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe", "advapi32.dll", "a32test.exe"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 
@@ -69,6 +71,8 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/kernel32",
             "personalities/nt/win32/k32test",
             "personalities/nt/win32/contest",
+            "personalities/nt/win32/advapi32",
+            "personalities/nt/win32/a32test",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -131,7 +135,7 @@ fn prune(dir: &Path) {
 /// Build the workspace into `target_dir`; the directory with the outputs.
 fn build(target_dir: &Path) -> Result<PathBuf> {
     let mut cmd = cargo_for(target_dir, "build")?;
-    step("build kernelbase.dll, kernel32.dll, k32test.exe, contest.exe", &mut cmd)?;
+    step("build kernelbase.dll, kernel32.dll, advapi32.dll, k32test.exe, contest.exe, a32test.exe", &mut cmd)?;
     let out = target_dir.join("x86_64-pc-windows-msvc/release");
     for f in OUTPUTS {
         if !out.join(f).is_file() {
@@ -215,21 +219,51 @@ fn verify(dir: &Path) -> Result {
             other => return Err(format!("kernel32!{name} should be code, is {other:?}")),
         }
     }
-    // The test programs (ADR 0079, 0080).
-    for program in ["k32test.exe", "contest.exe"] {
-        let exe = read(&dir.join(program))?;
-        let exe = parse(&exe)?;
-        if exe.info().is_dll() {
-            return Err(format!("{program} is a DLL"));
+    // The test programs (ADR 0079, 0080, 0083).
+    verify_exe(dir, "k32test.exe", &["kernel32.dll"])?;
+    verify_exe(dir, "contest.exe", &["kernel32.dll"])?;
+    verify_advapi32(dir)?;
+    verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])
+}
+
+/// An executable that imports only from `allowed`.
+fn verify_exe(dir: &Path, file: &str, allowed: &[&str]) -> Result {
+    let exe = read(&dir.join(file))?;
+    let exe = parse(&exe)?;
+    if exe.info().is_dll() {
+        return Err(format!("{file} is a DLL"));
+    }
+    let imports =
+        exe.imports().map_err(|e| format!("{file} imports: {e:?}"))?.ok_or(format!("{file} imports nothing"))?;
+    for d in imports {
+        let d = d.map_err(|e| format!("{e:?}"))?;
+        let name = d.dll_name().map_err(|e| format!("{e:?}"))?;
+        if !allowed.iter().any(|a| name.eq_ignore_ascii_case(a.as_bytes())) {
+            return Err(format!("{file} imports {}", String::from_utf8_lossy(name)));
         }
-        let imports =
-            exe.imports().map_err(|e| format!("{program} imports: {e:?}"))?.ok_or("a test program imports nothing")?;
-        for d in imports {
-            let d = d.map_err(|e| format!("{e:?}"))?;
-            let name = d.dll_name().map_err(|e| format!("{e:?}"))?;
-            if !name.eq_ignore_ascii_case(b"kernel32.dll") {
-                return Err(format!("{program} imports {}", String::from_utf8_lossy(name)));
-            }
+    }
+    Ok(())
+}
+
+/// `advapi32` forwards each of its `kernelbase` functions to its API-set
+/// contract and exports its own as code (ADR 0083).
+fn verify_advapi32(dir: &Path) -> Result {
+    use poly_kernelbase::advapi::{ADVAPI32_FORWARDS, ADVAPI32_OWN, forwarder};
+    use poly_pe::ExportTarget;
+    let dll = read(&dir.join("advapi32.dll"))?;
+    let dll = parse(&dll)?;
+    let exports = dll.exports().map_err(|e| format!("advapi32 exports: {e:?}"))?.ok_or("advapi32: no exports")?;
+    for &(name, _) in ADVAPI32_FORWARDS {
+        let want = forwarder(name).unwrap_or_default();
+        match exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))? {
+            Some(ExportTarget::Forwarder(f)) if f.raw == want.as_bytes() => {}
+            other => return Err(format!("advapi32!{name} should forward to {want}, is {other:?}")),
+        }
+    }
+    for name in ADVAPI32_OWN {
+        match exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))? {
+            Some(ExportTarget::Rva(_)) => {}
+            other => return Err(format!("advapi32!{name} should be code, is {other:?}")),
         }
     }
     Ok(())

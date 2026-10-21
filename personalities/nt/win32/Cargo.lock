@@ -3,6 +3,22 @@
 version = 4
 
 [[package]]
+name = "a32test"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "advapi32"
+version = "0.0.1"
+dependencies = [
+ "poly-kernelbase",
+ "poly-security",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "contest"
 version = "0.0.1"
 dependencies = [
@@ -32,6 +48,7 @@ dependencies = [
  "poly-kernelbase",
  "poly-ntobj",
  "poly-rtl",
+ "poly-security",
  "poly-win32-rt",
 ]
 
@@ -53,6 +70,13 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-rtl"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
+
+[[package]]
+name = "poly-security"
 version = "0.0.1"
 dependencies = [
  "poly-ntobj",

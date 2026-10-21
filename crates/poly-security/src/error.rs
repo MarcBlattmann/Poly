@@ -1,0 +1,19 @@
+//! The Win32 error codes the security functions report (`winerror.h`).
+
+pub const ERROR_SUCCESS: u32 = 0;
+pub const ERROR_NOT_ENOUGH_MEMORY: u32 = 8;
+pub const ERROR_INVALID_PARAMETER: u32 = 87;
+pub const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+pub const ERROR_INVALID_FLAGS: u32 = 1004;
+pub const ERROR_NO_TOKEN: u32 = 1008;
+pub const ERROR_UNKNOWN_REVISION: u32 = 1305;
+pub const ERROR_REVISION_MISMATCH: u32 = 1306;
+pub const ERROR_INVALID_OWNER: u32 = 1307;
+pub const ERROR_INVALID_PRIMARY_GROUP: u32 = 1308;
+pub const ERROR_NO_SUCH_LOGON_SESSION: u32 = 1312;
+pub const ERROR_NONE_MAPPED: u32 = 1332;
+pub const ERROR_INVALID_ACL: u32 = 1336;
+pub const ERROR_INVALID_SID: u32 = 1337;
+pub const ERROR_INVALID_SECURITY_DESCR: u32 = 1338;
+pub const ERROR_ALLOTTED_SPACE_EXCEEDED: u32 = 1344;
+pub const ERROR_BAD_DESCRIPTOR_FORMAT: u32 = 1361;

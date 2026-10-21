@@ -60,6 +60,14 @@ pub static K32TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/k32test.ex
 /// The program the console ring-3 test runs (`test_console`, ADR 0080).
 pub static CONTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/contest.exe"));
 
+mod test_advapi32;
+
+/// Our `advapi32.dll` (ADR 0083), built with the other Win32 modules and
+/// written to `C:\Windows\System32` by [`layout`]; empty without `xtask`.
+pub static ADVAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/advapi32.dll"));
+/// The program the advapi32 ring-3 test runs (`test_advapi32`).
+pub static A32TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/a32test.exe"));
+
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
 use crate::thread;

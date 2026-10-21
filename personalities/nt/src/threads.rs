@@ -20,7 +20,7 @@ use poly_ntobj::{Handle, NtStatus, ObjectType, ProcessId, ThreadRef};
 
 /// Resolve a thread handle to its thread id (the object's cookie), checking
 /// `access`. `NtCurrentThread()` is the caller's own thread.
-fn thread_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ThreadRef> {
+pub(crate) fn thread_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ThreadRef> {
     if h == Handle::CURRENT_THREAD {
         return Ok(k.caller().thread);
     }
@@ -33,7 +33,7 @@ fn thread_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ThreadRef
 
 /// Resolve a process handle to its process id. `NtCurrentProcess()` is the
 /// caller's own process; a null handle is `STATUS_INVALID_HANDLE`.
-fn process_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ProcessId> {
+pub(crate) fn process_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ProcessId> {
     if h == Handle::CURRENT_PROCESS {
         return Ok(k.caller().process);
     }

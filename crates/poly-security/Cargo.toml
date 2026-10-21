@@ -1,0 +1,18 @@
+[package]
+name = "poly-security"
+description = "Windows security data for one user: SIDs and their strings, ACLs, security descriptors, and the single user's access token as TOKEN_* structures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-ntobj = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# The single user's SID and name must match the default hives' (ADR 0066).
+poly-registry = { workspace = true }
