@@ -169,8 +169,7 @@ fn link_resolves_its_old_path_completely_first() {
         env.vfs.link_paths(&env.ctx, &env.root, PathArg::new(At::Cwd, old.as_bytes()), new, false)
     };
     let too_long = vec![b'/'; PATH_MAX];
-    let bad_strings: [Result<&[u8]>; 4] =
-        [Err(Errno::EFAULT), Err(Errno::ENAMETOOLONG), Ok(b""), Ok(&too_long)];
+    let bad_strings: [Result<&[u8]>; 4] = [Err(Errno::EFAULT), Err(Errno::ENAMETOOLONG), Ok(b""), Ok(&too_long)];
     // Any error of oldpath wins over every error of newpath: its string,
     // its start, the components of its directories and its last name.
     for new in bad_strings {
