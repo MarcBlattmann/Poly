@@ -44,6 +44,7 @@
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
+//!   win32               the same for kernelbase.dll, kernel32.dll and k32test.exe (win32.rs)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
@@ -66,6 +67,7 @@ mod rootdisk;
 mod screen;
 mod symbols;
 mod terminal;
+mod win32;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -108,6 +110,7 @@ fn main() -> ExitCode {
         Some("pipeline") => return pipeline_command(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
         Some("ntdll") => ntdll::command(&args[1..]),
+        Some("win32") => win32::command(&args[1..]),
         Some("dynamic-initramfs") => dynamic::command(),
         Some("busybox-initramfs") => busybox::command(),
         Some("busybox-test") => busybox_test(),
@@ -115,7 +118,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|ntdll|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|ntdll|win32|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -152,8 +155,9 @@ fn step(name: &str, cmd: &mut Command) -> Result {
 /// environment for the kernel's `build.rs` to embed (ADR 0071).
 fn kernel_cargo() -> Result<Command> {
     let dll = ntdll::ensure()?;
+    let win32 = win32::ensure()?;
     let mut cmd = cargo();
-    cmd.current_dir(kernel_dir()).env(ntdll::KERNEL_ENV, dll);
+    cmd.current_dir(kernel_dir()).env(ntdll::KERNEL_ENV, dll).env(win32::KERNEL_ENV, win32);
     Ok(cmd)
 }
 
@@ -1496,6 +1500,12 @@ fn lint() -> Result {
         "fmt (ntdll)",
         cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
     )?;
+    step(
+        "fmt (win32)",
+        cargo()
+            .args(["fmt", "--all", "--check", "--manifest-path"])
+            .arg(root().join("personalities/nt/win32/Cargo.toml")),
+    )?;
     eprintln!("==> font tables");
     font::run(&root(), &["--check".into()])?;
     eprintln!("==> global_asm! labels");
@@ -1623,6 +1633,7 @@ fn pipeline(args: &[String]) -> Result {
     // kernel as the boot tests', so neither build undoes the other.
     if matches!(args.first().map(String::as_str), Some("polycheck" | "diff" | "polyrun")) {
         cmd.env(ntdll::KERNEL_ENV, ntdll::ensure()?);
+        cmd.env(win32::KERNEL_ENV, win32::ensure()?);
     }
     step("pipeline", &mut cmd)
 }

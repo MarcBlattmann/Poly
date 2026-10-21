@@ -136,7 +136,7 @@ pub fn ensure() -> Result<PathBuf> {
 
 /// The cache directory: in the main checkout's `target/` (shared by its
 /// worktrees), else in this checkout's.
-fn cache_dir(root: &Path) -> PathBuf {
+pub(crate) fn cache_dir(root: &Path) -> PathBuf {
     let common = Command::new("git")
         .current_dir(root)
         .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
@@ -168,9 +168,16 @@ fn prune(dir: &Path) {
 /// ones, or `workspace = true` ones the root manifest maps to a path), the
 /// service table and the toolchain pin.
 pub fn inputs(root: &Path) -> Result<Vec<PathBuf>> {
+    inputs_from(root, &["personalities/nt/ntdll"], &["personalities/nt/src/services.rs", "rust-toolchain.toml"])
+}
+
+/// The files of the crates `start` and every crate they reach through path
+/// dependencies, plus the `extra` files that exist (relative to `root`,
+/// sorted). Also used for our other Windows modules (`win32.rs`, ADR 0079).
+pub(crate) fn inputs_from(root: &Path, start: &[&str], extra: &[&str]) -> Result<Vec<PathBuf>> {
     let workspace = std::fs::read_to_string(root.join("Cargo.toml")).map_err(|e| format!("Cargo.toml: {e}"))?;
     let mut crates: Vec<PathBuf> = Vec::new();
-    let mut todo = vec![PathBuf::from("personalities/nt/ntdll")];
+    let mut todo: Vec<PathBuf> = start.iter().map(PathBuf::from).collect();
     while let Some(dir) = todo.pop() {
         if crates.contains(&dir) {
             continue;
@@ -183,7 +190,7 @@ pub fn inputs(root: &Path) -> Result<Vec<PathBuf>> {
         }
         crates.push(dir);
     }
-    let mut files = vec![PathBuf::from("personalities/nt/src/services.rs"), PathBuf::from("rust-toolchain.toml")];
+    let mut files: Vec<PathBuf> = extra.iter().map(PathBuf::from).filter(|f| root.join(f).is_file()).collect();
     for c in &crates {
         walk(root, c, &mut files)?;
     }
@@ -259,6 +266,11 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result {
 
 /// FNV-1a over the build flags and every input's path and bytes.
 fn hash_inputs(root: &Path) -> Result<u64> {
+    hash_files(root, RUSTFLAGS, &inputs(root)?)
+}
+
+/// FNV-1a over `flags` and every file's path and bytes.
+pub(crate) fn hash_files(root: &Path, flags: &str, files: &[PathBuf]) -> Result<u64> {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     let mut eat = |bytes: &[u8]| {
         for &b in bytes.iter().chain(&[0xFF]) {
@@ -266,17 +278,17 @@ fn hash_inputs(root: &Path) -> Result<u64> {
             h = h.wrapping_mul(0x0100_0000_01b3);
         }
     };
-    eat(RUSTFLAGS.as_bytes());
-    for f in inputs(root)? {
+    eat(flags.as_bytes());
+    for f in files {
         eat(f.to_string_lossy().as_bytes());
-        eat(&std::fs::read(root.join(&f)).map_err(|e| format!("{}: {e}", f.display()))?);
+        eat(&std::fs::read(root.join(f)).map_err(|e| format!("{}: {e}", f.display()))?);
     }
     Ok(h)
 }
 
 /// The toolchain's `rust-src` vendored-dependency directory
 /// (`<sysroot>/lib/rustlib/src/rust/library/vendor`).
-fn vendor_dir() -> Result<PathBuf> {
+pub(crate) fn vendor_dir() -> Result<PathBuf> {
     let out = Command::new("rustc").args(["--print", "sysroot"]).output().map_err(|e| format!("rustc: {e}"))?;
     let sysroot = String::from_utf8_lossy(&out.stdout).trim().to_string();
     let dir = PathBuf::from(sysroot).join("lib/rustlib/src/rust/library/vendor");

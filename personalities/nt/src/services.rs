@@ -14,6 +14,7 @@
 //! | 0, executive | `0x080`–`0x0BF` | processes and threads; `0x0A0`–`0x0AF` exceptions ([`EXCEPTION_SERVICES`], ADR 0068) |
 //! | 0, executive | `0x0C0`–`0x0FF` | file I/O (ADR 0067) |
 //! | 0, executive | `0x100`–`0x13F` | registry ([`REGISTRY_SERVICES`], ADR 0066) |
+//! | 0, executive | `0x140`–`0x17F` | time and system information ([`SYSINFO_SERVICES`], ADR 0079) |
 //! | 1, win32k | | none yet (Phase 7) |
 //! | 3, Poly | `0x000`–`0x0FF` | Poly's own services, for its tests and tools; never called by `ntdll` (except `0x010`–`0x01F`, which stand in for what the kernel will learn from our `ntdll`'s exports, ADR 0068) |
 //!
@@ -292,6 +293,16 @@ pub enum Service {
     /// `NtContinue(ContextRecord*, TestAlert)`: not in the WDK; resume the
     /// thread with a `CONTEXT` (ADR 0068).
     Continue,
+
+    // ----- time and system information (ADR 0079)
+    /// `NtQuerySystemTime(SystemTime*)` (Learn, `winternl.h`).
+    QuerySystemTime,
+    /// `NtQueryPerformanceCounter(PerformanceCounter*,
+    /// PerformanceFrequency*)` (Learn).
+    QueryPerformanceCounter,
+    /// `NtQuerySystemInformation(SystemInformationClass, SystemInformation,
+    /// SystemInformationLength, ReturnLength*)` (Learn, `winternl.h`).
+    QuerySystemInformation,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -401,9 +412,16 @@ pub const REGISTRY_SERVICES: [(Service, u32, &str); 13] = [
 pub const EXCEPTION_SERVICES: [(Service, u32, &str); 2] =
     [(Service::RaiseException, 0x0A0, "NtRaiseException"), (Service::Continue, 0x0A1, "NtContinue")];
 
+/// Time and system information (ADR 0079).
+pub const SYSINFO_SERVICES: [(Service, u32, &str); 3] = [
+    (Service::QuerySystemTime, 0x140, "NtQuerySystemTime"),
+    (Service::QueryPerformanceCounter, 0x141, "NtQueryPerformanceCounter"),
+    (Service::QuerySystemInformation, 0x142, "NtQuerySystemInformation"),
+];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
-    SERVICES.iter().chain(REGISTRY_SERVICES.iter()).chain(EXCEPTION_SERVICES.iter())
+    SERVICES.iter().chain(REGISTRY_SERVICES.iter()).chain(EXCEPTION_SERVICES.iter()).chain(SYSINFO_SERVICES.iter())
 }
 
 impl Service {
@@ -458,5 +476,6 @@ mod tests {
         assert!(REGISTRY_SERVICES.iter().all(|s| (0x100..0x140).contains(&s.1)));
         assert!((0xA0..0xB0).contains(&Service::RaiseException.number()));
         assert!((0xA0..0xB0).contains(&Service::Continue.number()));
+        assert!(SYSINFO_SERVICES.iter().all(|s| (0x140..0x180).contains(&s.1)));
     }
 }

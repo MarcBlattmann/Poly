@@ -45,6 +45,17 @@ mod test_ldr;
 /// Empty when the kernel was built without `xtask`.
 pub static NTDLL: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ntdll.dll"));
 
+mod test_kernel32;
+
+/// Our `kernelbase.dll` and `kernel32.dll` (ADR 0079), built by `cargo
+/// xtask` from `personalities/nt/win32` and written to
+/// `C:\Windows\System32` by [`layout`], where the loader finds them as
+/// known DLLs. Empty when the kernel was built without `xtask`.
+pub static KERNELBASE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/kernelbase.dll"));
+pub static KERNEL32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/kernel32.dll"));
+/// The program the kernel32 ring-3 test runs (`test_kernel32`).
+pub static K32TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/k32test.exe"));
+
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
 use crate::thread;
@@ -317,6 +328,14 @@ impl NtKernel for Kernel {
 
     fn system_time(&self) -> u64 {
         registry::filetime_now()
+    }
+
+    fn monotonic_100ns(&self) -> u64 {
+        crate::time::now_ns() / 100
+    }
+
+    fn processor_count(&self) -> u32 {
+        crate::thread::online_cpus().len() as u32
     }
 
     fn save_hive(&mut self, file: &str, data: &[u8]) -> Result<(), NtStatus> {

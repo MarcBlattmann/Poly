@@ -224,7 +224,7 @@
 <g><title>✔ Our ntdll: PE loader (imports, relocations, TLS, delay-load), heap, Rtl*, loader lock (ADR 0071)</title>
 <rect x="565.5" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Our kernelbase / kernel32: files, processes, threads, memory, synchronisation, errors</title>
+<g><title>Our kernelbase / kernel32: files, processes, threads, memory, synchronisation, errors (first slice done, ADR 0079; left: CreateProcessW / NtCreateUserProcess, file mappings, TLS, NLS)</title>
 <rect x="590.5" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>C runtime: ucrtbase + api-ms-win-crt-* and msvcrt (versioned runtimes come with the apps, ADR 0055)</title>
