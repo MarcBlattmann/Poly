@@ -166,10 +166,13 @@ fn timeval_timeout(k: &mut dyn LinuxKernel, ptr: UserPtr) -> Result<(WaitTime, O
     k.copy_from_user(ptr, &mut raw)?;
     let sec = crate::abi::le_u64(&raw[..8]) as i64;
     let usec = crate::abi::le_u64(&raw[8..]) as i64;
-    if !(0..1_000_000).contains(&usec) {
+    // A tv_usec of a million or more is normalised, a negative one is
+    // EINVAL (select's spec sheet).
+    if usec < 0 || sec < 0 {
         return Err(Errno::EINVAL);
     }
-    timeout_from(k, Timespec { sec, nsec: usec * 1000 })
+    let sec = sec.saturating_add(usec / 1_000_000);
+    timeout_from(k, Timespec { sec, nsec: usec % 1_000_000 * 1000 })
 }
 
 /// Write the time left to `deadline` to the timeout at `ptr`, as a

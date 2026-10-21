@@ -11,8 +11,11 @@
 //! frame, and every return goes through the same exit, `trap_return`.
 //!
 //! All 256 entries are interrupt gates, so the CPU clears RFLAGS.IF on entry
-//! and handlers never nest. Every gate has DPL 0, so user mode cannot raise
-//! any vector with `INT n` (or `INT3`): that is a #GP, which kills it. An
+//! and handlers never nest. Every gate but the breakpoint's has DPL 0, so
+//! user mode cannot raise any vector with `INT n`: that is a #GP, which
+//! kills it. `INT3` (vector 3, DPL 3) is a breakpoint trap that becomes
+//! `SIGTRAP` (rt_sigreturn's spec sheet: `SI_KERNEL`, trapno 3, `rip` after
+//! the instruction). An
 //! interrupt or exception in ring 3 makes the CPU switch to TSS.rsp0, the
 //! running thread's kernel stack. Only three vectors use an IST stack: the
 //! double fault (it may come from a kernel stack overflow), and the NMI and
@@ -444,12 +447,13 @@ impl IdtEntry {
     const MISSING: IdtEntry =
         IdtEntry { offset_low: 0, selector: 0, ist: 0, type_attr: 0, offset_mid: 0, offset_high: 0, _zero: 0 };
 
-    fn interrupt_gate(handler: u64, ist: u8) -> IdtEntry {
+    /// `dpl`: the lowest privilege that may raise it with `INT n` (0 or 3).
+    fn interrupt_gate(handler: u64, ist: u8, dpl: u8) -> IdtEntry {
         IdtEntry {
             offset_low: handler as u16,
             selector: KERNEL_CODE,
             ist,
-            type_attr: 0x8e, // present, DPL 0, 64-bit interrupt gate
+            type_attr: 0x8e | (dpl & 3) << 5, // present, DPL, 64-bit interrupt gate
             offset_mid: (handler >> 16) as u16,
             offset_high: (handler >> 32) as u32,
             _zero: 0,
@@ -482,12 +486,13 @@ pub unsafe fn init() {
                 NMI | MACHINE_CHECK => NMI_IST,
                 _ => 0,
             };
-            idt.add(vector).write(IdtEntry::interrupt_gate(stub, ist));
+            let dpl = if vector as u64 == BREAKPOINT { 3 } else { 0 };
+            idt.add(vector).write(IdtEntry::interrupt_gate(stub, ist, dpl));
         }
         let stubs_len = (&raw const irq_stubs_end) as u64 - (&raw const irq_stubs) as u64;
         assert_eq!(stubs_len, IRQ_STUB_SIZE * (256 - u64::from(FIRST_INTERRUPT_VECTOR)), "irq stubs misassembled");
         for vector in FIRST_INTERRUPT_VECTOR..=u8::MAX {
-            idt.add(vector.into()).write(IdtEntry::interrupt_gate(irq_stub(vector), 0));
+            idt.add(vector.into()).write(IdtEntry::interrupt_gate(irq_stub(vector), 0, 0));
         }
         let ptr = DescriptorTablePointer { limit: (size_of::<[IdtEntry; 256]>() - 1) as u16, base: idt as u64 };
         asm!("lidt [{}]", in(reg) &ptr, options(readonly, nostack, preserves_flags));

@@ -231,6 +231,14 @@ impl PageSource for FileSource {
         self.node.mount().fs().read(self.node.ino(), offset, buf).map_err(|_| IoError)
     }
 
+    /// The file's device and inode number: every mapping of the file
+    /// names the same futexes (63 bits; inodes above 2^39 may collide).
+    fn object_id(&self) -> Option<u64> {
+        let st = self.node.stat().ok()?;
+        let dev = (u64::from(st.dev.major) << 12 | u64::from(st.dev.minor)) & 0xff_ffff;
+        Some(dev << 39 | (st.ino & ((1 << 39) - 1)))
+    }
+
     fn file(&self) -> Option<&Arc<poly_vfs::OpenFile>> {
         self.file.as_ref()
     }

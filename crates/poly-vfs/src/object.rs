@@ -51,6 +51,13 @@ pub trait FileObject: Any + Send + Sync {
     fn timeouts(&self) -> (Option<u64>, Option<u64>) {
         (None, None)
     }
+
+    /// Whether `lseek(2)` succeeds without moving (returning 0) instead of
+    /// failing with `ESPIPE`: event counters and epoll sets do so (their
+    /// spec sheets), pipes and sockets do not.
+    fn seek_stays_at_zero(&self) -> bool {
+        false
+    }
 }
 
 /// The inode number of the anonymous file system's root directory.

@@ -68,6 +68,23 @@ pub enum Decision {
     Eintr,
 }
 
+/// The number a tracer of a Linux process sees at the exit of a call
+/// interrupted this way (it is not a user errno: the program sees the
+/// call restarted, or `EINTR`): ERESTARTSYS (512) for
+/// [`RestartPolicy::IfSaRestart`], ERESTARTNOINTR (513) for
+/// [`RestartPolicy::Always`], ERESTARTNOHAND (514) for
+/// [`RestartPolicy::IfNoHandler`], ERESTART_RESTARTBLOCK (516) with a
+/// [`RestartBlock`]; the diff runner reads them so
+/// (`tools/pipeline/src/trace.rs`).
+pub const fn traced_errno(r: &PendingRestart) -> i64 {
+    match (r.policy, r.with_block) {
+        (_, true) => 516,
+        (RestartPolicy::IfSaRestart, false) => 512,
+        (RestartPolicy::Always, false) => 513,
+        (RestartPolicy::IfNoHandler, false) => 514,
+    }
+}
+
 /// The policy behind an internal restart code; `None` for every other
 /// errno. The flag says whether the call restarts with a [`RestartBlock`].
 pub const fn policy_of(errno: Errno) -> Option<(RestartPolicy, bool)> {

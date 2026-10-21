@@ -389,3 +389,22 @@ fn table_limit() {
     assert_eq!(om.nt_close(&c, Handle(top.0 + 4)), Err(STATUS_INVALID_HANDLE));
     om.nt_close(&c, ev.handle).unwrap();
 }
+
+#[test]
+fn open_by_pointer_gives_a_handle_to_a_kernel_object() {
+    let (mut om, c) = setup();
+    let file = om
+        .new_object(NewObject::Opaque { kind: ObjectType::File, cookie: 7, signaled: None, parse: false }, T1)
+        .unwrap();
+    let h = om.open_by_pointer(&c, file, GENERIC_READ, 0).unwrap();
+    assert_eq!(om.object_by_handle(&c, h, 0, Some(ObjectType::File)), Ok(file));
+    assert_eq!(om.granted_access(&c, h), Ok(FILE_GENERIC_READ));
+    assert_eq!(om.handle_count(file), Some(1));
+    // The kernel's reference and the handle's.
+    assert_eq!(om.pointer_count(file), Some(2));
+    om.dereference(file).unwrap();
+    om.close(&c, h).unwrap();
+    assert!(!om.is_alive(file));
+    assert_eq!(om.pop_deleted().map(|d| d.cookie), Some(7));
+    assert_eq!(om.open_by_pointer(&c, file, 0, 0), Err(STATUS_INVALID_PARAMETER));
+}

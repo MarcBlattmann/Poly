@@ -66,6 +66,9 @@ pub struct ObjectManager {
 /// - `\` the root, `\Device`, `\BaseNamedObjects`, `\Sessions` (empty, a
 ///   placeholder for per-session namespaces), `\GLOBAL??`, `\KernelObjects`
 ///   (Learn: "CreateMemoryResourceNotification" names objects there).
+/// - `\KnownDlls`: the directory of preloaded system DLL sections (Learn:
+///   "Dynamic-Link Library Search Order", known DLLs); empty until our
+///   `ntdll` and `smss` fill it.
 /// - `\??` is a plain directory for now. On Windows it is the caller's
 ///   DOS-devices directory, searched before `\GLOBAL??` (Learn: "Local and
 ///   Global MS-DOS Device Names"); that per-session lookup comes with
@@ -74,8 +77,8 @@ pub struct ObjectManager {
 ///   and `\BaseNamedObjects\Local` → `\BaseNamedObjects`, so the `Global\`
 ///   and `Local\` prefixes of "Kernel object namespaces" (Learn) work while
 ///   there is one session. To be confirmed by the spec agent.
-pub const WELL_KNOWN_DIRECTORIES: [&str; 6] =
-    ["\\??", "\\GLOBAL??", "\\Device", "\\BaseNamedObjects", "\\Sessions", "\\KernelObjects"];
+pub const WELL_KNOWN_DIRECTORIES: [&str; 7] =
+    ["\\??", "\\GLOBAL??", "\\Device", "\\BaseNamedObjects", "\\Sessions", "\\KernelObjects", "\\KnownDlls"];
 
 /// The symbolic links every namespace starts with: (link, target).
 pub const WELL_KNOWN_LINKS: [(&str, &str); 3] = [

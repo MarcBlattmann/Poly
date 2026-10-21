@@ -174,10 +174,21 @@ impl Process {
     /// signals. `traced`: it reports what it does on the serial port
     /// (ADR 0027).
     pub fn new_linux(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
-        let linux = Some(LinuxState::new(pid));
+        let linux = LinuxState::new(pid);
+        // Its signals are seen as a tracer sees them (ADR 0027); children inherit it.
+        linux.with(|p| p.traced = traced);
+        let linux = Some(linux);
         // A traced test run keeps the kernel log's console (ADR 0046).
         let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
         Process::with_state(pid, ppid, Personality::Linux, format, linux, traced, files)
+    }
+
+    /// An NT process for a PE executable (`crate::nt`): no Linux state (its
+    /// system calls go to the NT personality), the console on fds 0, 1 and
+    /// 2. Its per-process NT state lives in `crate::nt`, keyed by pid.
+    pub fn new_nt(pid: u32, format: binfmt::Format, traced: bool) -> Process {
+        let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
+        Process::with_state(pid, 0, Personality::Nt, format, None, traced, files)
     }
 
     /// A Linux process made by `fork` / `clone` (`linux::task`): its files

@@ -1113,7 +1113,13 @@ impl Tcb {
                 self.process_fin(now);
             }
             self.unacked_bytes += n + extra;
-            if had_gap || self.unacked_bytes >= 2 * self.rcv_mss {
+            // A peer on this host is acknowledged at once: the data a
+            // sender's Nagle holds back for the acknowledgement then
+            // follows in the same poll, so small writes over loopback are
+            // all in the receiver's queue when the writes return (Linux
+            // does that: recvfrom's spec sheet).
+            let local = self.remote.ip().is_loopback() || self.remote.ip() == self.local.ip();
+            if had_gap || local || self.unacked_bytes >= 2 * self.rcv_mss {
                 self.ack_now = true;
             } else if self.delack_at.is_none() {
                 self.delack_at = Some(now + self.cfg.delayed_ack);

@@ -115,6 +115,9 @@ pub fn dup3(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// as fcntl(2) says for "cmd is not recognized by this kernel".
 pub fn fcntl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
+    if let Some(r) = crate::sys::pipe::fcntl_pipe_size(k, fd, a) {
+        return r;
+    }
     let fs = fs(k)?;
     let flags = fs.status_flags(fd)?;
     match a.uint(1) {
