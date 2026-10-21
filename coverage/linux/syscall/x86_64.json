@@ -312,7 +312,7 @@
 {"symbol":"setxattrat","number":463,"src":["linux-syscall-tbl"]},
 {"symbol":"shmat","number":30,"status":"green","tests_visible":10,"tests_held_out":4,"src":["linux-syscall-tbl"]},
 {"symbol":"shmctl","number":31,"src":["linux-syscall-tbl"]},
-{"symbol":"shmdt","number":67,"src":["linux-syscall-tbl"]},
+{"symbol":"shmdt","number":67,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"shmget","number":29,"status":"green","tests_visible":8,"tests_held_out":4,"src":["linux-syscall-tbl"]},
 {"symbol":"shutdown","number":48,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"sigaltstack","number":131,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
