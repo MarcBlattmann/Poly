@@ -122,8 +122,8 @@ shows it.
   left is preempted, resumed and switched to while threads are reaped,
   over and over; before this change it ran into its guard, in
   `on_timer_tick`, on the first preemption).
-- The loaded harness: 0 overflows in 150 boots of `dyn-threads` (was 4 in
-  60).
+- The loaded harness: 0 overflows in 400 boots of `dyn-threads` (300 on 2
+  CPUs, 100 on 4; was 4 in 60).
 - Each CPU uses 16 KiB more memory; the area has room for 64 CPUs, the
   per-CPU table for 16.
 - `thread::preempt_tick` and `on_reschedule` are no longer called by the
