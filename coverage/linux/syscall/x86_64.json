@@ -189,7 +189,7 @@
 {"symbol":"mremap","number":25,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"mseal","number":462,"src":["linux-syscall-tbl"]},
 {"symbol":"msgctl","number":71,"src":["linux-syscall-tbl"]},
-{"symbol":"msgget","number":68,"src":["linux-syscall-tbl"]},
+{"symbol":"msgget","number":68,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"msgrcv","number":70,"src":["linux-syscall-tbl"]},
 {"symbol":"msgsnd","number":69,"src":["linux-syscall-tbl"]},
 {"symbol":"msync","number":26,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
