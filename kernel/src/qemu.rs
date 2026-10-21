@@ -26,6 +26,7 @@ pub fn enable() {
 /// Exit QEMU if enabled; otherwise return.
 pub fn exit(code: ExitCode) {
     if ENABLED.load(Ordering::Relaxed) {
+        crate::thread::report_stacks();
         // SAFETY: only reached when booted under QEMU with the exit device.
         unsafe { outl(PORT, code as u32) }
     }

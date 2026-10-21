@@ -138,9 +138,17 @@ struct StackFrames {
 
 impl StackFrames {
     fn allocate() -> Result<StackFrames, SpawnError> {
-        let mut frames = FRAMES.lock();
-        let alloc = frames.as_mut().ok_or(SpawnError::NoMemory)?;
-        let phys = alloc.allocate(STACK_ORDER).ok_or(SpawnError::NoMemory)?;
+        let phys = {
+            let mut frames = FRAMES.lock();
+            let alloc = frames.as_mut().ok_or(SpawnError::NoMemory)?;
+            alloc.allocate(STACK_ORDER).ok_or(SpawnError::NoMemory)?
+        };
+        // Painted through the direct map before anything runs on it, so
+        // the reaper can tell how deep the thread ever went (`Stack::used`).
+        let virt = arch::phys_to_virt(phys).expect("thread stacks come from RAM in the direct map");
+        // SAFETY: the block was just allocated for this stack and nothing
+        // else refers to it; the direct map maps it read-write.
+        unsafe { paint(virt, STACK_SIZE) };
         Ok(StackFrames { phys })
     }
 
@@ -155,12 +163,17 @@ impl StackFrames {
     /// [`THREADS`] makes the caller the slot's only user.
     fn map(self, _threads: &mut Threads, slot: usize) -> Stack {
         let virt = STACKS.stack(slot).expect("thread slot outside the stack area").start;
+        // Only the top `usable` bytes with `poly.debug.thread_stack_kib`;
+        // the frames below stay unmapped, an extra guard.
+        let usable = stack_limit();
+        let skip = STACK_SIZE - usable;
         // SAFETY: a slot's stack pages are mapped when its thread is
         // installed and unmapped when that thread is reaped, both with
         // THREADS locked, which the caller holds; so they are unmapped now
         // and nobody else touches them. The frames are ours until `unmap`.
-        unsafe { mm::map_thread_stack(virt, self.phys, STACK_SIZE) };
-        Stack { phys: self.phys, virt }
+        unsafe { mm::map_thread_stack(virt + skip, self.phys + skip, usable) };
+        backtrace::register_thread_stack(slot, virt + skip, usable);
+        Stack { phys: self.phys, virt, usable }
     }
 }
 
@@ -169,6 +182,9 @@ impl StackFrames {
 struct Stack {
     phys: u64,
     virt: u64,
+    /// Bytes mapped, at the top: [`STACK_SIZE`] unless shrunk for
+    /// debugging ([`stack_limit`]).
+    usable: u64,
 }
 
 impl Stack {
@@ -176,14 +192,103 @@ impl Stack {
         self.virt + STACK_SIZE
     }
 
+    /// The bytes of this stack that were ever in use, read off the paint
+    /// (it must be mapped).
+    fn used(&self) -> u64 {
+        // SAFETY: the stack's top `usable` bytes are mapped while its
+        // thread exists, and only read here.
+        unsafe { used(self.top() - self.usable, self.usable) }
+    }
+
     /// Unmap the stack of a reaped thread; its frames can be freed then.
     fn unmap(self, _threads: &mut Threads) -> StackFrames {
         // SAFETY: the caller holds THREADS, so owns the slot's pages (see
         // `map`), and the thread is reaped: it was switched away from for
         // good, and nothing points into its stack any more.
-        unsafe { mm::unmap_thread_stack(self.virt, STACK_SIZE) };
+        unsafe { mm::unmap_thread_stack(self.top() - self.usable, self.usable) };
         StackFrames { phys: self.phys }
     }
+}
+
+/// Fill `[start, start + len)` with [`poly_mem::STACK_PAINT`].
+///
+/// # Safety
+/// The range is mapped, writable, 8-byte aligned and not in use.
+pub(crate) unsafe fn paint(start: u64, len: u64) {
+    for i in 0..len / 8 {
+        // SAFETY: inside the range the caller vouches for.
+        unsafe { ((start + 8 * i) as *mut u64).write_volatile(poly_mem::STACK_PAINT) };
+    }
+}
+
+/// The bytes of the painted stack `[start, start + len)` ever used: from
+/// its top down to the lowest word that lost its paint.
+///
+/// # Safety
+/// The range is mapped and 8-byte aligned. It may be in use (by another
+/// CPU, even): the words are read one at a time, volatile.
+pub(crate) unsafe fn used(start: u64, len: u64) -> u64 {
+    // SAFETY: inside the range the caller vouches for.
+    let untouched = poly_mem::untouched_words((len / 8) as usize, |i| unsafe {
+        ((start + 8 * i as u64) as *const u64).read_volatile()
+    });
+    len - 8 * untouched as u64
+}
+
+/// Bytes of each thread stack that are mapped: [`STACK_SIZE`], or less with
+/// `poly.debug.thread_stack_kib=<n>`, which leaves the rest of the stack
+/// unmapped so that paths running deep show up as overflows sooner.
+static STACK_LIMIT: AtomicU64 = AtomicU64::new(STACK_SIZE);
+
+fn stack_limit() -> u64 {
+    STACK_LIMIT.load(SeqCst)
+}
+
+/// Apply `poly.debug.thread_stack_kib=<n>` (whole pages, 4 KiB up to
+/// [`STACK_SIZE`]) to the threads made from now on. Call at boot, before
+/// spawning anything.
+pub fn configure(boot: &crate::boot_info::BootInfo) {
+    REPORT.store(boot.has_flag("poly.debug.stack_report"), SeqCst);
+    let Some(kib) = boot.arg("poly.debug.thread_stack_kib").and_then(|v| v.parse::<u64>().ok()) else { return };
+    let bytes = (kib << 10).clamp(4096, STACK_SIZE) & !4095;
+    STACK_LIMIT.store(bytes, SeqCst);
+    crate::kprintln!("thread: debugging: new threads get only the top {} KiB of their stacks", bytes >> 10);
+}
+
+/// Set by `poly.debug.stack_report`: [`report_stacks`] prints.
+static REPORT: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// With `poly.debug.stack_report`, print how deep the thread stacks and
+/// the interrupt stacks were used (a test run calls this as it ends, also
+/// after a panic, so it does not wait for the thread table).
+pub fn report_stacks() {
+    if !REPORT.load(SeqCst) {
+        return;
+    }
+    match deepest_stack() {
+        Some((bytes, name)) => {
+            crate::kprintln!("stacks: deepest thread stack use {bytes} of {} bytes (thread '{name}')", stack_limit())
+        }
+        None => crate::kprintln!("stacks: the thread table is locked"),
+    }
+}
+
+/// The deepest any thread stack was ever used so far (the threads
+/// running now included) and the thread's name; `None` if the thread
+/// table is locked.
+pub fn deepest_stack() -> Option<(u64, &'static str)> {
+    let _irq = InterruptsOff::new();
+    let t = THREADS.try_lock()?;
+    let mut deepest = t.deepest;
+    for (slot, stack) in t.stacks.iter().enumerate() {
+        if let Some(stack) = stack {
+            let used = stack.used();
+            if used > deepest.0 {
+                deepest = (used, t.names[slot]);
+            }
+        }
+    }
+    Some(deepest)
 }
 
 struct Threads {
@@ -198,6 +303,8 @@ struct Threads {
     user: [Option<Box<UserThread>>; MAX_THREADS],
     /// Each slot's thread's name, for `ps` (empty: none).
     names: [&'static str; MAX_THREADS],
+    /// The deepest a reaped thread's stack was used, and its name.
+    deepest: (u64, &'static str),
     ready: bool,
 }
 
@@ -223,6 +330,7 @@ static THREADS: SpinLock<Threads> = SpinLock::new(Threads {
         names[ThreadId::IDLE.slot()] = "idle";
         names
     },
+    deepest: (0, ""),
     ready: false,
 });
 
@@ -299,7 +407,6 @@ pub fn prepare_cpu(cpu: usize) -> Result<(ThreadId, u64), SpawnError> {
         }
     };
     let stack = stack.map(&mut t, id.slot());
-    backtrace::register_thread_stack(id.slot(), stack.virt, STACK_SIZE);
     t.stacks[id.slot()] = Some(stack);
     t.names[id.slot()] = IDLE_NAMES.get(cpu).copied().unwrap_or("idle");
     crate::cputime::started(id.slot(), None);
@@ -396,7 +503,6 @@ fn install(t: &mut Threads, id: ThreadId, stack: StackFrames, f: ThreadFn, arg: 
     let rsp = unsafe { context::prepare(stack.top(), thread_start as *const () as usize, f as usize, arg) };
     // SAFETY: the slot's thread has not run yet (see `SavedRsp`).
     unsafe { *SAVED_RSP.0[id.slot()].get() = rsp };
-    backtrace::register_thread_stack(id.slot(), stack.virt, STACK_SIZE);
     t.stacks[id.slot()] = Some(stack);
     crate::cputime::started(id.slot(), user.as_deref().map(UserThread::cpu_owner));
     t.user[id.slot()] = user;
@@ -537,6 +643,10 @@ fn reap(t: &mut Threads) -> Graveyard {
             // frame allocator is busy (its holder was switched away, or is
             // another CPU), the stack is freed on a later switch or spawn.
             let Some(mut frames) = FRAMES.try_lock() else { break };
+            let used = stack.used();
+            if used > t.deepest.0 {
+                t.deepest = (used, t.names[id.slot()]);
+            }
             backtrace::unregister_thread_stack(id.slot());
             let stack = stack.unmap(t);
             let alloc = frames.as_mut().expect("stacks come from the frame allocator");
@@ -737,7 +847,13 @@ impl core::fmt::Display for Overflowed {
 /// overflow of that thread's stack. Called from the fault handler, so it
 /// only looks the name up if the thread table is free.
 pub fn stack_guard_hit(addr: u64) -> Option<Overflowed> {
-    let slot = STACKS.guard_hit(addr)?;
+    // Below the guard proper, the part of a stack that
+    // `poly.debug.thread_stack_kib` left unmapped.
+    let shrunk = |a: u64| {
+        let slot = STACKS.stack_holding(a, 0)?;
+        (a < STACKS.stack(slot)?.end - stack_limit()).then_some(slot)
+    };
+    let slot = STACKS.guard_hit(addr).or_else(|| shrunk(addr))?;
     let name = THREADS.try_lock().map(|t| t.names[slot]).filter(|n| !n.is_empty());
     Some(Overflowed { slot, name })
 }
