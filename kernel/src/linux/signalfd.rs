@@ -84,7 +84,16 @@ impl FileObject for SignalFd {
         let mask = self.mask();
         let mut n = 0;
         while n + SIGNALFD_SIGINFO_SIZE <= buf.len() {
-            let Some(Some(info)) = Self::with_reader(|p, tid| p.dequeue_from(tid, mask)) else { break };
+            let taken = Self::with_reader(|p, tid| {
+                let info = p.dequeue_from(tid, mask)?;
+                let timer = poly_personality_linux::time::timers::signal_taken(p, &info);
+                Some((info, timer))
+            });
+            let Some(Some((mut info, timer))) = taken else { break };
+            // A POSIX timer's signal: its overrun count is fixed now.
+            if let (Some(t), Some(process)) = (timer, user::current_process()) {
+                super::timers::count_taken(&process, t, Some(&mut info));
+            }
             buf[n..n + SIGNALFD_SIGINFO_SIZE].copy_from_slice(&siginfo_bytes(&info));
             n += SIGNALFD_SIGINFO_SIZE;
         }

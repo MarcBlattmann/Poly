@@ -25,8 +25,10 @@
 //!   to the init process of their PID namespace"), and an init whose
 //!   parent ends to the reaper of its parent's namespace: each process
 //!   has a reaper ([`ProcessTree::set_reaper`]), and when that one has
-//!   ended too, its own reaper counts (ADR 0054). (A "subreaper",
-//!   prctl(2), is not supported.)
+//!   ended too, its own reaper counts (ADR 0054). A "child subreaper"
+//!   (prctl(2) `PR_SET_CHILD_SUBREAPER`) takes init's place for the
+//!   orphans among its descendants in its namespace: the nearest one still
+//!   living adopts them ([`ProcessTree::set_subreaper`]).
 //! - **Process groups and sessions.** A child starts in its creator's
 //!   group and session (fork(2)); setpgid(2) and setsid(2) change them
 //!   by the man pages' rules.
@@ -89,6 +91,9 @@ struct Node {
     /// Who adopts it when its parent ends (the init of its pid namespace;
     /// [`INIT_PID`] by default).
     reaper: i32,
+    /// It is a "child subreaper" (prctl(2) `PR_SET_CHILD_SUBREAPER`): it
+    /// adopts the orphans among its descendants.
+    subreaper: bool,
 }
 
 /// Which children a wait looks at.
@@ -266,6 +271,41 @@ impl ProcessTree {
         }
     }
 
+    /// Mark `pid` as a child subreaper or not (prctl(2)
+    /// `PR_SET_CHILD_SUBREAPER`: "not inherited by children created by
+    /// fork(2) and clone(2)", "preserved across execve(2)").
+    pub fn set_subreaper(&mut self, pid: i32, on: bool) {
+        if let Some(n) = self.nodes.get_mut(&pid) {
+            n.subreaper = on;
+        }
+    }
+
+    /// Whether `pid` is a child subreaper (`PR_GET_CHILD_SUBREAPER`).
+    pub fn is_subreaper(&self, pid: i32) -> bool {
+        self.nodes.get(&pid).is_some_and(|n| n.subreaper)
+    }
+
+    /// The nearest still living ancestor of `exiting` that is a child
+    /// subreaper, below `child`'s reaper (the init of its pid namespace,
+    /// which a subreaper outside the namespace cannot take the place of):
+    /// prctl(2), "reparented to the nearest still living ancestor
+    /// subreaper".
+    fn subreaper_for(&self, child: i32, exiting: i32) -> Option<i32> {
+        let reaper = self.nodes.get(&child).map_or(INIT_PID, |n| n.reaper);
+        let mut a = self.nodes.get(&exiting)?.parent;
+        for _ in 0..=self.nodes.len() {
+            if a <= 0 || a == reaper || a == INIT_PID {
+                return None;
+            }
+            let n = self.nodes.get(&a)?;
+            if n.subreaper && n.zombie.is_none() {
+                return Some(a);
+            }
+            a = n.parent;
+        }
+        None
+    }
+
     /// `pid` called execve(2).
     pub fn exec(&mut self, pid: i32) {
         if let Some(n) = self.nodes.get_mut(&pid) {
@@ -345,7 +385,7 @@ impl ProcessTree {
         report.exit_signal = node.exit_signal;
         report.adopter = self.adopter(pid);
         for child in children {
-            let adopter = self.adopter_of(child, pid);
+            let adopter = self.subreaper_for(child, pid).unwrap_or_else(|| self.adopter_of(child, pid));
             let Some(c) = self.nodes.get_mut(&child) else { continue };
             c.parent = adopter;
             if let Some(how) = c.zombie {
@@ -531,6 +571,7 @@ impl Node {
             report: None,
             execed: false,
             reaper: INIT_PID,
+            subreaper: false,
         }
     }
 }
@@ -655,6 +696,61 @@ mod tests {
         assert_eq!(t.parent(12), Some(0));
         t.exit(12, Termination::Exited(0), false);
         assert_eq!(t.take_reaped(), [12], "the kernel reaps at once");
+    }
+
+    #[test]
+    fn orphans_go_to_the_nearest_living_subreaper() {
+        // init (1) - 10 (subreaper) - 11 (subreaper) - 12 - 13.
+        let mut t = ProcessTree::new();
+        t.insert_root(1, 0);
+        t.insert_child(1, 1, 10, SIGCHLD, 0);
+        t.insert_child(10, 10, 11, SIGCHLD, 0);
+        t.insert_child(11, 11, 12, SIGCHLD, 0);
+        t.insert_child(12, 12, 13, SIGCHLD, 0);
+        t.set_subreaper(10, true);
+        t.set_subreaper(11, true);
+        assert!(t.is_subreaper(11) && !t.is_subreaper(12));
+        t.exit(12, Termination::Exited(0), false);
+        assert_eq!(t.parent(13), Some(11), "the nearest one");
+        assert_eq!(t.children(11), [12, 13]);
+        // 11 ends: its children go to 10, the next subreaper up.
+        t.exit(13, Termination::Exited(5), false);
+        let r = t.exit(11, Termination::Exited(0), false);
+        assert_eq!(
+            r.adopted_zombies,
+            [(12, 0, Termination::Exited(0), SIGCHLD, 10), (13, 0, Termination::Exited(5), SIGCHLD, 10)]
+        );
+        assert_eq!((t.parent(12), t.parent(13)), (Some(10), Some(10)));
+        // A subreaper that is a zombie itself, or unmarked, adopts nothing.
+        let mut t = ProcessTree::new();
+        t.insert_root(1, 0);
+        t.insert_child(1, 1, 10, SIGCHLD, 0);
+        t.insert_child(10, 10, 11, SIGCHLD, 0);
+        t.insert_child(11, 11, 12, SIGCHLD, 0);
+        t.set_subreaper(10, true);
+        t.set_subreaper(10, false);
+        t.exit(11, Termination::Exited(0), false);
+        assert_eq!(t.parent(12), Some(1));
+        // The mark is not inherited.
+        t.set_subreaper(12, true);
+        t.insert_child(12, 12, 14, SIGCHLD, 0);
+        assert!(!t.is_subreaper(14));
+    }
+
+    #[test]
+    fn a_subreaper_outside_a_pid_namespace_does_not_adopt_from_it() {
+        // 10 (subreaper) - 11 (init of a namespace) - 12 - 13.
+        let mut t = ProcessTree::new();
+        t.insert_root(1, 0);
+        t.insert_child(1, 1, 10, SIGCHLD, 0);
+        t.insert_child(10, 10, 11, SIGCHLD, 0);
+        t.insert_child(11, 11, 12, SIGCHLD, 0);
+        t.insert_child(12, 12, 13, SIGCHLD, 0);
+        t.set_subreaper(10, true);
+        t.set_reaper(12, 11);
+        t.set_reaper(13, 11);
+        t.exit(12, Termination::Exited(0), false);
+        assert_eq!(t.parent(13), Some(11), "the namespace's init");
     }
 
     #[test]

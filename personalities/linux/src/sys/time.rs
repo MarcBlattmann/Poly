@@ -27,7 +27,7 @@
 //! handler says what Poly does, to be confirmed by the diff runner.
 
 use crate::abi::signal::NSIG;
-use crate::abi::{Timespec, clock as id};
+use crate::abi::{SigInfo, Timespec, clock as id};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::{Clock, CpuTimesOf, Deadline, LinuxKernel, UserPtr, Wakeup};
@@ -95,6 +95,17 @@ fn timer_clock_now(k: &dyn LinuxKernel, clock: TimerClock) -> Result<u64, Errno>
 fn timers_changed(k: &mut dyn LinuxKernel) {
     let next = with_own(k, |p| p.timers.wakeup());
     k.timers_changed(next);
+}
+
+/// A POSIX timer's signal was taken by the calling thread
+/// ([`timers::signal_taken`]): fix its overrun count with the timer's clock
+/// read now, into `info` if that is the signal (timer_getoverrun(2),
+/// `si_overrun`), and tell the kernel when to look at the timers next.
+pub(crate) fn count_taken(k: &mut dyn LinuxKernel, taken: timers::TakenTimer, info: Option<&mut SigInfo>) {
+    let now = timer_clock_now(k, taken.clock).ok();
+    if with_own(k, |p| timers::count_taken(p, taken, now, info)) {
+        timers_changed(k);
+    }
 }
 
 /// `CAP_SYS_TIME` in the calling thread's effective set (ADR 0045).
@@ -486,8 +497,13 @@ pub fn timer_settime(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let interval = timespec_ns(new.interval);
     let old = with_own(k, |p| {
         let t = p.timers.get_mut(timer)?;
-        let old = t.remaining(now);
+        let old = t.left(now);
         t.arm(deadline, interval);
+        // A signal of the timer still pending is not delivered anymore
+        // (the spec of timer_settime).
+        if let Notify::Signal { signo, .. } = t.notify {
+            timers::discard_queued(p, timer, signo);
+        }
         Some(old)
     })
     .ok_or(Errno::EINVAL)?;
@@ -504,7 +520,7 @@ pub fn timer_gettime(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let timer = a.int(0);
     let (clock, _) = posix_timer(k, timer)?;
     let now = timer_clock_now(k, clock)?;
-    let (left, interval) = with_own(k, |p| p.timers.get(timer).map(|t| t.remaining(now))).ok_or(Errno::EINVAL)?;
+    let (left, interval) = with_own(k, |p| p.timers.get(timer).map(|t| t.left(now))).ok_or(Errno::EINVAL)?;
     k.copy_to_user(a.ptr(1), &itimerspec(left, interval).to_bytes())?;
     Ok(0)
 }

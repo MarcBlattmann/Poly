@@ -362,7 +362,7 @@ pub fn rt_sigtimedwait(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         Some(t)
     };
     let tid = k.tid();
-    let got = match with_own(k, |p| p.dequeue_from(tid, set)) {
+    let got = match with_own(k, |p| take_from(p, tid, set)) {
         Some(info) => Ok(info),
         None if timeout.is_some_and(Timespec::is_zero) => Err(Errno::EAGAIN),
         None => {
@@ -386,10 +386,27 @@ pub fn rt_sigtimedwait(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             got
         }
     }?;
+    let (mut got, timer) = got;
+    if let Some(t) = timer {
+        crate::sys::time::count_taken(k, t, Some(&mut got));
+    }
     if !a.ptr(1).is_null() {
         k.copy_to_user(a.ptr(1), &got.to_bytes())?;
     }
     Ok(got.signal() as u64)
+}
+
+/// Take the next pending signal of `set` for `tid`, and whether it was a
+/// POSIX timer's (whose overrun count is fixed next:
+/// [`crate::sys::time::count_taken`]).
+fn take_from(
+    p: &mut crate::signal::LinuxProcess,
+    tid: i32,
+    set: SigSet,
+) -> Option<(SigInfo, Option<crate::time::timers::TakenTimer>)> {
+    let info = p.dequeue_from(tid, set)?;
+    let timer = crate::time::timers::signal_taken(p, &info);
+    Some((info, timer))
 }
 
 fn wait_for_signal(
@@ -397,10 +414,10 @@ fn wait_for_signal(
     tid: i32,
     set: SigSet,
     deadline: Option<Deadline>,
-) -> Result<SigInfo, Errno> {
+) -> Result<(SigInfo, Option<crate::time::timers::TakenTimer>), Errno> {
     loop {
         k.clear_signal_notification();
-        let state = with_own(k, |p| match p.dequeue_from(tid, set) {
+        let state = with_own(k, |p| match take_from(p, tid, set) {
             Some(info) => Some(Ok(info)),
             None if p.has_deliverable(tid) => Some(Err(Errno::EINTR)),
             None => None,

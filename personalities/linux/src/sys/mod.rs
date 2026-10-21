@@ -31,6 +31,7 @@ pub mod sendfile;
 pub mod signal;
 pub mod signalfd;
 pub mod socket;
+pub mod subreaper;
 pub mod system;
 pub mod task;
 pub mod time;

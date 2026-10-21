@@ -575,39 +575,143 @@ fn timer_fields(info: &SigInfo) -> (i32, u32, u64) {
     (int(0), int(4) as u32, info.value())
 }
 
+const WAIT_SET: u64 = DATA + 0x900;
+const ZERO_TS: u64 = DATA + 0x940;
+const WAIT_INFO: u64 = DATA + 0xa00;
+
+/// Take pending `sig` with rt_sigtimedwait (polling) when the fake's
+/// monotonic clock reads `at`: its siginfo.
+fn take_at(k: &mut FakeKernel, at: u64, sig: u32) -> SigInfo {
+    set_mono(k, at);
+    k.poke(WAIT_SET, &SigSet::only(sig).0.to_le_bytes());
+    put_ts(k, ZERO_TS, 0, 0);
+    assert_eq!(sys(k, nr::RT_SIGTIMEDWAIT, &[WAIT_SET, WAIT_INFO, ZERO_TS, 8]), Ok(sig as u64));
+    SigInfo::from_bytes(&k.peek(WAIT_INFO, 128).try_into().unwrap())
+}
+
+/// A blocked `SIGRTMIN` timer (value 0x5151) on `CLOCK_MONOTONIC`, armed to
+/// expire after `value` and every `interval`.
+fn blocked_periodic_timer(k: &mut FakeKernel, value: u64, interval: u64) -> i32 {
+    k.me().thread_mut(100).mask = SigSet::only(SIGRTMIN);
+    let ev = sigevent(k, SIGEV_SIGNAL, SIGRTMIN as i32, 0x5151, 0);
+    let t = create(k, 1, ev).unwrap();
+    let new = itimerspec(k, TS, value, interval);
+    sys(k, nr::TIMER_SETTIME, &[t as u64, 0, new, 0]).unwrap();
+    t
+}
+
 #[test]
 fn posix_timers_fire_and_count_overruns() {
     let mut k = FakeKernel::new();
-    install(&mut k, SIGRTMIN, SA_SIGINFO);
     let now = mono(&k);
-    let ev = sigevent(&mut k, SIGEV_SIGNAL, SIGRTMIN as i32, 0x5151, 0);
-    let t = create(&mut k, 1, ev).unwrap();
-    let new = itimerspec(&mut k, TS, SEC, SEC);
-    sys(&mut k, nr::TIMER_SETTIME, &[t as u64, 0, new, 0]).unwrap();
+    let t = blocked_periodic_timer(&mut k, SEC, SEC);
     let p = k.me();
-    // Due: one signal, overrun 0.
+    // Due: one signal (blocked: no thread to notify).
     let fired = fire(p, &always(now + SEC), false);
-    assert_eq!((fired.expired, fired.notify.as_slice()), (1, &[100][..]));
-    assert_eq!(fired.next.monotonic, Some(now + 2 * SEC));
-    // Two more expirations, then 2.5 periods late, while the signal is
-    // still pending: no second signal, the overrun grows.
+    assert_eq!((fired.expired, fired.notify.len()), (1, 0));
+    assert_eq!(fired.next.monotonic, Some(now + 2 * SEC), "looked at again an interval later");
+    // While it is pending the later expiries queue nothing.
     fire(p, &always(now + 2 * SEC), false);
     fire(p, &always(now + 5 * SEC + SEC / 2), false);
     assert_eq!(p.shared.len(), 1, "queued once");
-    assert_eq!(timers::overrun(p, t), Some(0), "the previous notification's count while one is pending");
-    let info = p.dequeue(100).unwrap();
+    assert_eq!(timers::overrun(p, t), Some(0), "nothing taken yet");
+    // Taken at 5.5 s: the expiries at 2, 3, 4 and 5 s are overruns, also
+    // those no timer thread got round to (counted from their due times).
+    let info = take_at(&mut k, now + 5 * SEC + SEC / 2, SIGRTMIN);
     assert_eq!((info.signal(), info.code), (SIGRTMIN, SI_TIMER));
     assert_eq!(timer_fields(&info), (t, 4, 0x5151));
-    assert_eq!(timers::overrun(p, t), Some(4), "delivered: its count");
-    // Due again: a new signal with overrun 0.
-    fire(p, &always(now + 6 * SEC), false);
-    assert_eq!(timer_fields(&p.dequeue(100).unwrap()), (t, 0, 0x5151));
+    assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[t as u64]), Ok(4), "taken: its count");
+    assert_eq!(k.timer_wakeups.last().unwrap().monotonic, Some(now + 6 * SEC), "goes on after the take");
+    // Due again: a new signal; the count stays until it is taken.
+    fire(k.me(), &always(now + 6 * SEC), false);
+    assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[t as u64]), Ok(4), "fixed until the next is taken");
+    assert_eq!(timer_fields(&take_at(&mut k, now + 6 * SEC, SIGRTMIN)), (t, 0, 0x5151));
     assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[t as u64]), Ok(0));
     assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[77]), Err(Errno::EINVAL));
-    // Late by several periods with nothing pending: overrun at once.
+    // Fired late by several periods with nothing pending: those count too.
     fire(k.me(), &always(now + 9 * SEC), false);
-    assert_eq!(timer_fields(&k.me().dequeue(100).unwrap()).1, 2);
+    assert_eq!(timer_fields(&take_at(&mut k, now + 9 * SEC, SIGRTMIN)).1, 2);
     assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[t as u64]), Ok(2));
+    // Re-arming resets the count and drops the pending signal.
+    fire(k.me(), &always(now + 10 * SEC), false);
+    assert!(k.me().shared.contains(SIGRTMIN));
+    let new = itimerspec(&mut k, TS, SEC, SEC);
+    sys(&mut k, nr::TIMER_SETTIME, &[t as u64, 0, new, 0]).unwrap();
+    assert!(k.me().shared.is_empty(), "the stale signal is not delivered");
+    assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[t as u64]), Ok(0));
+}
+
+#[test]
+fn overruns_stop_at_delaytimer_max_without_firing_each_expiry() {
+    let mut k = FakeKernel::new();
+    let now = mono(&k);
+    let t = blocked_periodic_timer(&mut k, 1, 1);
+    let fired = fire(k.me(), &always(now + 1), false);
+    assert_eq!(fired.expired, 1);
+    // A 1 ns timer whose signal is pending is looked at every 10 ms, not
+    // every nanosecond.
+    assert_eq!(fired.next.monotonic, Some(now + 1 + timers::PENDING_RECHECK_NS));
+    let fired = fire(k.me(), &always(now + SEC), false);
+    assert_eq!((fired.expired, fired.next.monotonic), (0, Some(now + SEC + timers::PENDING_RECHECK_NS)));
+    let info = take_at(&mut k, now + 5 * SEC / 2, SIGRTMIN);
+    assert_eq!(timer_fields(&info).1, DELAYTIMER_MAX);
+    assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[t as u64]), Ok(DELAYTIMER_MAX as u64));
+    let zero = itimerspec(&mut k, TS, 0, 0);
+    sys(&mut k, nr::TIMER_SETTIME, &[t as u64, 0, zero, 0]).unwrap();
+    assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[t as u64]), Ok(0), "disarming resets it");
+}
+
+#[test]
+fn a_timer_signal_taken_by_a_handler_carries_its_count() {
+    let mut k = FakeKernel::new();
+    install(&mut k, SIGRTMIN, SA_SIGINFO);
+    let now = mono(&k);
+    let t = blocked_periodic_timer(&mut k, SEC, SEC / 2);
+    fire(k.me(), &always(now + SEC), false);
+    // Unblocked and delivered at 2.2 s: expiries at 1.5 and 2 s missed.
+    k.me().thread_mut(100).mask = SigSet::EMPTY;
+    set_mono(&mut k, now + 2 * SEC + SEC / 5);
+    assert_eq!(crate::signal::deliver::exit_to_user(&mut k), ExitToUser::Return);
+    let info = SigInfo::from_bytes(&k.peek(k.ctx.rsi, 128).try_into().unwrap());
+    assert_eq!(timer_fields(&info), (t, 2, 0x5151), "the handler's siginfo");
+    assert_eq!(sys(&mut k, nr::TIMER_GETOVERRUN, &[t as u64]), Ok(2));
+}
+
+#[test]
+fn a_discarded_timer_signal_lets_the_timer_go_on() {
+    let mut k = FakeKernel::new();
+    let now = mono(&k);
+    let t = blocked_periodic_timer(&mut k, SEC, SEC);
+    fire(k.me(), &always(now + SEC), false);
+    // The pending signal is discarded (as SIG_IGN would); the next look
+    // notices.
+    k.me().discard(SigSet::only(SIGRTMIN));
+    let fired = fire(k.me(), &always(now + 2 * SEC), false);
+    assert_eq!(fired.expired, 1, "fires again");
+    assert!(k.me().shared.contains(SIGRTMIN));
+    assert_eq!(timer_fields(&take_at(&mut k, now + 2 * SEC, SIGRTMIN)), (t, 0, 0x5151));
+}
+
+#[test]
+fn timer_gettime_of_due_timers() {
+    let mut k = FakeKernel::new();
+    let now = mono(&k);
+    let ev = sigevent(&mut k, SIGEV_NONE, 0, 0, 0);
+    let t = create(&mut k, 1, ev).unwrap() as u64;
+    // An absolute time in the past: expired at once, before any timer
+    // thread looked.
+    let past = itimerspec(&mut k, TS, now / 2, 0);
+    sys(&mut k, nr::TIMER_SETTIME, &[t, TIMER_ABSTIME as u64, past, 0]).unwrap();
+    sys(&mut k, nr::TIMER_GETTIME, &[t, OUT]).unwrap();
+    assert_eq!(read_itimerspec(&k, OUT), Itimerspec::default());
+    // A periodic timer with expiries due but not fired: the time to the
+    // next one to come.
+    let periodic = itimerspec(&mut k, TS, SEC, SEC);
+    sys(&mut k, nr::TIMER_SETTIME, &[t, 0, periodic, 0]).unwrap();
+    set_mono(&mut k, now + 3 * SEC + SEC / 4);
+    sys(&mut k, nr::TIMER_GETTIME, &[t, OUT]).unwrap();
+    let cur = read_itimerspec(&k, OUT);
+    assert_eq!((timespec_ns(cur.value), timespec_ns(cur.interval)), (3 * SEC / 4, SEC));
 }
 
 #[test]

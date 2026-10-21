@@ -139,6 +139,10 @@ struct Threads {
     started: u32,
     /// The status [`Process::group_exit`] asked for (the first one wins).
     group_exit: Option<ExitStatus>,
+    /// The own status of the thread that started to exit last
+    /// ([`Process::thread_exiting`]): the process's status without a group
+    /// exit.
+    last_exiting: Option<ExitStatus>,
     /// Set when the last thread has gone.
     status: Option<ExitStatus>,
 }
@@ -313,7 +317,7 @@ impl Process {
                 EVENTS.wake_all();
                 return None;
             }
-            let status = t.group_exit.unwrap_or(own);
+            let status = t.group_exit.or(t.last_exiting).unwrap_or(own);
             t.status = Some(status);
             status
         };
@@ -325,6 +329,20 @@ impl Process {
             }
         }
         Some(status)
+    }
+
+    /// Thread `tid` starts to exit with `own`, before its last duties
+    /// (clearing its `clear_child_tid` word, which another thread may be
+    /// watching) and before [`detach_thread`](Self::detach_thread). The
+    /// process's status, unless a group exit chose one, is that of the
+    /// thread that started to exit last (the spec of exit: "the process
+    /// ends when its last thread exits, and wait4 then reports the last
+    /// thread's code"), whichever thread happens to detach last.
+    pub fn thread_exiting(&self, tid: u32, own: ExitStatus) {
+        let mut t = self.threads.lock();
+        if t.live.iter().any(|(id, _)| *id == tid) {
+            t.last_exiting = Some(own);
+        }
     }
 
     /// The process's exit is complete (after [`detach_thread`] and the

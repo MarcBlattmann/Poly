@@ -462,6 +462,9 @@ pub fn reset_fpu() {
 pub fn end_thread(status: ExitStatus, code: usize) -> ! {
     let (process, _, tid) = current().expect("end_thread on a kernel thread");
     if process.linux.is_some() {
+        // Before the thread-exit duties: a thread that sees this one's
+        // clear_child_tid word cleared and then exits must be the last one.
+        process.thread_exiting(tid, status);
         crate::linux::thread_exit(process, tid);
     }
     let nt_memory = (process.personality == poly_abi::Personality::Nt).then(current_memory).flatten();
