@@ -1,0 +1,76 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/msgget               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (/proc/sys/kernel/msgmni 32000, msgmnb 16384, msgmax 8192)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  msgget(key, msgflg) (syscall 68) returns the id of a System V message
+  queue, creating it when asked. Queues belong to the system (the IPC
+  namespace), not to a process: they outlive their creator until removed
+  with msgctl(IPC_RMID). key and msgflg are 32-bit ints (the upper half
+  of each register is ignored); key 0 is IPC_PRIVATE. IPC_PRIVATE always
+  makes a new queue, whatever the flags (no IPC_CREAT needed, IPC_EXCL
+  ignored, no permission check). Any other key looks up the live queue
+  with that key: none and no IPC_CREAT (01000) is ENOENT; none and
+  IPC_CREAT makes one; found with IPC_CREAT|IPC_EXCL (02000) is EEXIST;
+  IPC_EXCL without IPC_CREAT is ignored. A new queue gets mode =
+  msgflg & 0777 (all other bits, such as IPC_NOWAIT, set-id/sticky bits
+  or unknown high bits, are accepted and not stored), owner and creator
+  uid/gid = the caller's effective uid/gid, no messages (qnum 0, cbytes
+  0), qbytes = the system default msgmnb (16384), lspid, lrpid, stime and
+  rtime 0, and ctime the current time. Finding an existing queue (also
+  with IPC_CREAT) changes nothing about it and checks the access asked
+  for in msgflg & 0777: the r, w and x bits of the three classes are
+  merged into one rwx request, and each requested bit must be granted by
+  the queue's current mode for the caller's class (owner if the caller's
+  euid is the queue's uid or cuid, else group, else other); otherwise
+  EACCES, unless the caller has CAP_IPC_OWNER (root). Asking for 0
+  always passes. Removing a queue (msgctl IPC_RMID) releases its key at
+  once: the key is then ENOENT and IPC_CREAT makes a new, empty queue
+  with a different id; the old id is EINVAL for msgctl and msgsnd.
+returns:
+  success: "a non-negative int queue id; distinct among live queues; not a file descriptor (does not take an fd slot)"
+  ids: "values depend on the namespace's history and are not predictable (small numbers here); an id just removed is not returned by the next msgget"
+  private: "IPC_PRIVATE (key whose low 32 bits are 0, e.g. 1<<32): a new id every call, regardless of IPC_CREAT/IPC_EXCL and of mode bits (mode 0 is fine)"
+  existing_key: "the same id for every lookup of a live keyed queue (flags 0, IPC_CREAT, or IPC_EXCL alone)"
+  key_width: "key | (any upper 32 bits) addresses the same queue as key; a negative key (e.g. -7) is an ordinary key, found by its sign- or zero-extended register value"
+  flag_width: "the upper 32 bits of msgflg are ignored; msgflg -1 means IPC_CREAT|IPC_EXCL|0777 (creates with mode 0777 on an unused key, EEXIST on a used one)"
+  new_queue_stat: "IPC_STAT: key as given (sign kept), uid=cuid=euid, gid=cgid=egid, mode=msgflg&0777, qnum=0, cbytes=0, qbytes=16384 (msgmnb), lspid=0, lrpid=0, stime=0, rtime=0, ctime=current CLOCK_REALTIME seconds"
+  lookup_no_change: "a lookup (with or without IPC_CREAT, any mode bits) leaves mode, ctime and everything else of the queue unchanged"
+errors:
+  no_such_key: "ENOENT (2): key not in use and no IPC_CREAT (also with IPC_EXCL alone and with any mode bits)"
+  exists: "EEXIST (17): key in use and IPC_CREAT|IPC_EXCL; reported before a permission problem (a mode 0 queue asked for 0600 with IPC_CREAT|IPC_EXCL is EEXIST)"
+  access: "EACCES (13): key in use and a requested access bit (merged rwx of msgflg & 0777) not granted to the caller's class by the queue's current mode (IPC_SET changes take effect for the next msgget). Examples as owner: mode 0400 grants requests 0400, 0040, 0004, 0444, 0; refuses 0600, 0200, 0002, 0100, 0001. Mode 0066 refuses 0004 and 0040 to its owner. Mode 0700 grants 0777 and 0111. IPC_CREAT on an existing key is checked the same way. Never for a caller with CAP_IPC_OWNER (root): root finds a mode 0 queue asking for 0777"
+  order: "for an existing key: EEXIST, then EACCES; for an unused key: ENOENT (no permission check), or creation"
+  limits: "ENOSPC (28): msgmni (32000) queues already exist in the namespace; not tested (system-wide)"
+  no_memory: "ENOMEM (12): no memory for a new queue; not tested"
+side_effects: >
+  Creates a system-wide queue that persists after the creating process
+  exits, until IPC_RMID. Lookups change nothing (no ctime update). A
+  failed call creates nothing. No file descriptors. A queue id addresses
+  exactly one queue: a message sent on one id appears only there.
+threading: "no thread-specific behaviour; queues are visible by key and by id to every process in the IPC namespace (e.g. parent and child after fork, both ways); a queue created by a child that has exited is still found by key"
+ordering:
+  - "IPC_RMID releases the key immediately; the old id is invalid (EINVAL) right away, and a new queue for the key starts empty"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests also use msgctl (71: IPC_STAT, IPC_SET, IPC_RMID),
+# msgsnd (69) and msgrcv (70) with IPC_NOWAIT to observe queues. IPC_STAT
+# needs read permission on the queue (EACCES for a non-root caller on a
+# mode 0 queue); IPC_SET by the owner changes the mode; msgsnd records the
+# sender as lspid; msgrcv with IPC_NOWAIT on an empty queue is ENOMSG
+# (42). The raw msgctl command numbers are used without IPC_64 (on
+# x86-64 the 64-bit layout is always used). Queue ids differ between runs
+# and systems, so the tests compare syscall names only (poly-diff:
+# syscalls=names, or off for the fork test). Root behaviour (the
+# CAP_IPC_OWNER bypass) was taken from msgget(2)/ipc(7) and is checked by
+# a needs=root test; it was not observable as the oracle's user.
+# struct msqid64_ds layout: asm-generic/msgbuf.h and
+# asm-generic/ipcbuf.h; constants: linux/ipc.h, linux/msg.h.
