@@ -12,7 +12,10 @@
 //! | 0, executive | `0x000`–`0x03F` | object manager: handles, directories, symbolic links, events |
 //! | 0, executive | `0x040`–`0x07F` | memory: virtual memory, sections, views |
 //! | 0, executive | `0x080`–`0x0BF` | processes and threads |
+
+//! | 0, executive | `0x0C0`–`0x0FF` | file I/O (ADR 0067) |
 //! | 0, executive | `0x100`–`0x13F` | registry ([`REGISTRY_SERVICES`], ADR 0066) |
+
 //! | 1, win32k | | none yet (Phase 7) |
 //! | 3, Poly | `0x000`–`0x0FF` | Poly's own services, for its tests and tools; never called by `ntdll` |
 //!
@@ -185,6 +188,55 @@ pub enum Service {
     /// `NtSetContextThread(ThreadHandle, Context*)`.
     SetContextThread,
 
+    // ----- file I/O (ADR 0067; `crate::io::services`)
+    /// `NtCreateFile(FileHandle*, DesiredAccess, ObjectAttributes*,
+    /// IoStatusBlock*, AllocationSize*, FileAttributes, ShareAccess,
+    /// CreateDisposition, CreateOptions, EaBuffer, EaLength)`.
+    CreateFile,
+    /// `NtOpenFile(FileHandle*, DesiredAccess, ObjectAttributes*,
+    /// IoStatusBlock*, ShareAccess, OpenOptions)`.
+    OpenFile,
+    /// `NtReadFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, Buffer, Length, ByteOffset*, Key*)`.
+    ReadFile,
+    /// `NtWriteFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, Buffer, Length, ByteOffset*, Key*)`.
+    WriteFile,
+    /// `NtQueryInformationFile(FileHandle, IoStatusBlock*, FileInformation,
+    /// Length, FileInformationClass)`.
+    QueryInformationFile,
+    /// `NtSetInformationFile(FileHandle, IoStatusBlock*, FileInformation,
+    /// Length, FileInformationClass)`.
+    SetInformationFile,
+    /// `NtQueryDirectoryFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, FileInformation, Length, FileInformationClass,
+    /// ReturnSingleEntry, FileName*, RestartScan)`.
+    QueryDirectoryFile,
+    /// `NtQueryVolumeInformationFile(FileHandle, IoStatusBlock*,
+    /// FsInformation, Length, FsInformationClass)`.
+    QueryVolumeInformationFile,
+    /// `NtFlushBuffersFile(FileHandle, IoStatusBlock*)`.
+    FlushBuffersFile,
+    /// `NtLockFile(FileHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, ByteOffset*, Length*, Key, FailImmediately,
+    /// ExclusiveLock)`.
+    LockFile,
+    /// `NtUnlockFile(FileHandle, IoStatusBlock*, ByteOffset*, Length*, Key)`.
+    UnlockFile,
+    /// `NtDeleteFile(ObjectAttributes*)`.
+    DeleteFile,
+    /// `NtCancelIoFile(FileHandle, IoStatusBlock*)`.
+    CancelIoFile,
+    /// `NtCancelIoFileEx(FileHandle, IoRequestToCancel*, IoStatusBlock*)`
+    /// (the WDK does not document it; the parameters are `CancelIoEx`'s
+    /// with the caller's status block added, as in `NtCancelIoFile`).
+    CancelIoFileEx,
+    /// `NtQueryAttributesFile(ObjectAttributes*, FileInformation*)`
+    /// (`FILE_BASIC_INFORMATION`).
+    QueryAttributesFile,
+    /// `NtQueryFullAttributesFile(ObjectAttributes*, FileInformation*)`
+    /// (`FILE_NETWORK_OPEN_INFORMATION`).
+    QueryFullAttributesFile,
     // ----- registry (ADR 0066)
     /// `NtCreateKey(KeyHandle*, DesiredAccess, ObjectAttributes*,
     /// TitleIndex, Class*, CreateOptions, Disposition*)`.
@@ -241,7 +293,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 58] = [
+pub const SERVICES: [(Service, u32, &str); 74] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -298,6 +350,22 @@ pub const SERVICES: [(Service, u32, &str); 58] = [
     (Service::ResumeThread, 0x088, "NtResumeThread"),
     (Service::GetContextThread, 0x089, "NtGetContextThread"),
     (Service::SetContextThread, 0x08A, "NtSetContextThread"),
+    (Service::CreateFile, 0x0C0, "NtCreateFile"),
+    (Service::OpenFile, 0x0C1, "NtOpenFile"),
+    (Service::ReadFile, 0x0C2, "NtReadFile"),
+    (Service::WriteFile, 0x0C3, "NtWriteFile"),
+    (Service::QueryInformationFile, 0x0C4, "NtQueryInformationFile"),
+    (Service::SetInformationFile, 0x0C5, "NtSetInformationFile"),
+    (Service::QueryDirectoryFile, 0x0C6, "NtQueryDirectoryFile"),
+    (Service::QueryVolumeInformationFile, 0x0C7, "NtQueryVolumeInformationFile"),
+    (Service::FlushBuffersFile, 0x0C8, "NtFlushBuffersFile"),
+    (Service::LockFile, 0x0C9, "NtLockFile"),
+    (Service::UnlockFile, 0x0CA, "NtUnlockFile"),
+    (Service::DeleteFile, 0x0CB, "NtDeleteFile"),
+    (Service::CancelIoFile, 0x0CC, "NtCancelIoFile"),
+    (Service::CancelIoFileEx, 0x0CD, "NtCancelIoFileEx"),
+    (Service::QueryAttributesFile, 0x0CE, "NtQueryAttributesFile"),
+    (Service::QueryFullAttributesFile, 0x0CF, "NtQueryFullAttributesFile"),
     (Service::PolyTrace, TABLE_POLY << 12, "PolyTrace"),
     (Service::PolyResumeApc, (TABLE_POLY << 12) | 1, "PolyResumeApc"),
 ];
@@ -371,6 +439,8 @@ mod tests {
         assert!(Service::QueryObject.number() < 0x40);
         assert!((0x40..0x80).contains(&Service::MapViewOfSection.number()));
         assert!((0x80..0xC0).contains(&Service::TerminateProcess.number()));
+        assert!((0xC0..0x100).contains(&Service::CreateFile.number()));
+        assert!((0xC0..0x100).contains(&Service::QueryFullAttributesFile.number()));
         assert_eq!(Service::PolyTrace.number() >> 12, TABLE_POLY);
         assert!(REGISTRY_SERVICES.iter().all(|s| (0x100..0x140).contains(&s.1)));
     }

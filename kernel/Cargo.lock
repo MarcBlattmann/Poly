@@ -167,6 +167,7 @@ dependencies = [
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
+ "poly-vfs",
 ]
 
 [[package]]
