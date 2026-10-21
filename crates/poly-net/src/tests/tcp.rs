@@ -640,3 +640,34 @@ fn loopback_connection_and_own_address() {
     }
     assert_eq!(s.frames[0], 0, "loopback traffic never reaches the device");
 }
+
+#[test]
+fn small_sends_to_a_local_peer_arrive_within_the_same_instant() {
+    // A peer on this host is acknowledged at once, so Nagle does not hold
+    // the next small segment back: polling while loopback packets wait
+    // (what the kernel's interface does) leaves every byte in the
+    // receiver's queue without the clock moving.
+    let mut s = Sim::new(22);
+    let l = s.a.socket(Domain::Inet, SockType::Stream, None).unwrap();
+    s.a.bind(l, SocketAddr::new(core::net::Ipv4Addr::UNSPECIFIED.into(), 7778)).unwrap();
+    s.a.listen(l, 1).unwrap();
+    let c = s.a.socket(Domain::Inet, SockType::Stream, None).unwrap();
+    let _ = s.a.connect(c, SocketAddr::new(core::net::Ipv4Addr::LOCALHOST.into(), 7778));
+    let mut acc = None;
+    assert!(s.run_until(Duration::from_secs(2), |s| {
+        acc = acc.or(s.a.accept(l).ok());
+        acc.is_some()
+    }));
+    let (srv, _) = acc.unwrap();
+    let now = s.now;
+    for part in [&b"ab"[..], b"cd", b"ef"] {
+        assert_eq!(s.a.send_to(c, part, None), Ok(2));
+        s.a.poll(&mut s.da, now);
+        while s.a.loopback_pending() {
+            s.a.poll(&mut s.da, now);
+        }
+    }
+    let mut buf = [0u8; 16];
+    let got = s.a.recv_from(srv, &mut buf, crate::RecvFlags { peek: false }).unwrap();
+    assert_eq!(&buf[..got.len], b"abcdef");
+}

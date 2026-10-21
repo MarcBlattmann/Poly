@@ -393,6 +393,12 @@ impl Stack {
         self.deadline(blocked)
     }
 
+    /// Whether packets sent to this host wait for the next
+    /// [`poll`](Self::poll) (the loopback queue is not empty).
+    pub fn loopback_pending(&self) -> bool {
+        !self.loopq.is_empty()
+    }
+
     /// When the stack next needs `poll`, as [`poll`](Self::poll) returns it.
     pub fn poll_at(&self) -> Option<Instant> {
         if !self.loopq.is_empty() {
