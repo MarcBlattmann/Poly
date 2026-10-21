@@ -72,10 +72,11 @@ impl Memory {
                 || inner.shared.contains_key(&page)
                 || inner.cached.contains_key(&page)
                 || self.space.translate(page).is_some();
-            if !resident && let Some(v) = inner.map.find(page) {
-                if let (Backing::File { file, .. }, Some(offset)) = (&v.backing, v.file_offset(page)) {
-                    resident = file.source().shareable() && offset < file.source().len().min(file.limit());
-                }
+            if !resident
+                && let Some(v) = inner.map.find(page)
+                && let (Backing::File { file, .. }, Some(offset)) = (&v.backing, v.file_offset(page))
+            {
+                resident = file.source().shareable() && offset < file.source().len().min(file.limit());
             }
             *byte = u8::from(resident);
         }
