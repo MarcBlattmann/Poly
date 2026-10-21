@@ -300,6 +300,15 @@ pub struct TestResult {
     /// reference did not run as root.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub self_checked: bool,
+    /// Reference runs that timed out: each was run again, up to
+    /// `runner::TIMEOUT_RERUNS` times (ADR 0085). Above that many, the
+    /// last one timed out too.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub reference_timeouts: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 impl TestResult {
@@ -316,6 +325,7 @@ impl TestResult {
             syscall_mode: None,
             files: Vec::new(),
             self_checked: false,
+            reference_timeouts: 0,
         }
     }
 
@@ -357,7 +367,19 @@ impl TestResult {
             syscall_mode: None,
             files: Vec::new(),
             self_checked: false,
+            reference_timeouts: 0,
         }
+    }
+
+    /// Record that `n` reference runs timed out: before the one compared
+    /// here, or, where that one timed out too, including it.
+    pub fn with_reference_timeouts(mut self, n: usize) -> TestResult {
+        self.reference_timeouts = n;
+        if n > 1 && self.verdict == Verdict::Error && self.reference_exit.as_deref() == Some("timeout") {
+            self.reason =
+                Some(format!("the reference run timed out {n} times in a row (a broken test, or the tracer)"));
+        }
+        self
     }
 }
 
@@ -467,6 +489,19 @@ impl Summary {
         }
         if !self.regressions.is_empty() {
             let _ = writeln!(out, "regressions against the baseline: {}", self.regressions.join(", "));
+        }
+        let rerun: Vec<&str> = self
+            .tests
+            .iter()
+            .filter(|t| t.reference_timeouts > 0 && t.reference_exit.as_deref() != Some("timeout"))
+            .map(|t| t.test.as_str())
+            .collect();
+        if !rerun.is_empty() {
+            let _ = writeln!(
+                out,
+                "the reference run timed out and was run again (a test that can hang, ADR 0085): {}",
+                rerun.join(", ")
+            );
         }
         out
     }
@@ -585,6 +620,30 @@ mod tests {
         let mut c = hello("x", 1);
         c.exit = Exit::Timeout;
         assert_eq!(TestResult::compared("t", &hello("x", 1), &c, &Options::default()).verdict, Verdict::Fail);
+    }
+
+    /// A reference that timed out and passed when run again is compared as
+    /// usual, and the report names it; one that timed out every time is an
+    /// error that says so (ADR 0085).
+    #[test]
+    fn reference_reruns_after_a_timeout_are_reported() {
+        let a = hello("x", 1);
+        let rerun = TestResult::compared("ctty", &a, &a.clone(), &Options::default()).with_reference_timeouts(1);
+        assert_eq!((rerun.verdict, rerun.reason.as_deref(), rerun.reference_timeouts), (Verdict::Pass, None, 1));
+        let mut hung = a.clone();
+        hung.exit = Exit::Timeout;
+        let twice = TestResult::compared("hangs", &hung, &a, &Options::default()).with_reference_timeouts(2);
+        assert_eq!(twice.verdict, Verdict::Error);
+        assert!(twice.reason.as_deref().unwrap().contains("timed out 2 times in a row"), "{twice:?}");
+        let mut s = Summary::new("now".into(), "poly", "linux".into(), "ptrace", SyscallMode::Exact);
+        s.tests = vec![rerun, twice, TestResult::compared("plain", &a, &a.clone(), &Options::default())];
+        s.finish(None);
+        let table = s.table();
+        assert!(table.contains("timed out and was run again (a test that can hang, ADR 0085): ctty\n"), "{table}");
+        let back: Summary = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back, s);
+        // Not written when zero, so older summaries read the same.
+        assert!(!serde_json::to_string(&s.tests[2]).unwrap().contains("reference_timeouts"));
     }
 
     #[test]

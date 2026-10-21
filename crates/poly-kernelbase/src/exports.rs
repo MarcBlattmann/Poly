@@ -236,9 +236,10 @@ pub const KERNEL32_OWN: &[&str] = &[
     "lstrcmpiW",
 ];
 
-/// Every function `kernelbase.dll` must export: each forwarded one.
+/// Every function `kernelbase.dll` must export: each one `kernel32` or
+/// `advapi32` forwards ([`crate::advapi`], ADR 0083).
 pub fn kernelbase_exports() -> impl Iterator<Item = &'static str> {
-    KERNEL32_FORWARDS.iter().map(|&(name, _)| name)
+    KERNEL32_FORWARDS.iter().chain(crate::advapi::ADVAPI32_FORWARDS).map(|&(name, _)| name)
 }
 
 /// The forwarder string of `kernel32!name`, as the export directory holds

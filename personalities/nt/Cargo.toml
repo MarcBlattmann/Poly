@@ -14,6 +14,7 @@ poly-console.workspace = true
 poly-ntobj.workspace = true
 poly-pe.workspace = true
 poly-registry.workspace = true
+poly-security.workspace = true
 poly-seh.workspace = true
 # NT file I/O (ADR 0067) runs on the VFS.
 poly-vfs.workspace = true

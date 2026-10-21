@@ -4,6 +4,10 @@
 //! like `ntdll`; `kernel32.dll` forwards most of its exports here through
 //! API-set contracts (`poly_kernelbase::exports`).
 //!
+//! It also holds the registry, token, SID, ACL and security-descriptor
+//! functions `advapi32.dll` forwards here (ADR 0083: `registry`,
+//! `security`).
+//!
 //! Every export follows its Learn reference page; what a page leaves open
 //! is decided, and host-tested, in `crates/poly-kernelbase`. This crate is
 //! the glue: argument conversion, the `Nt*` / `Rtl*` / `Ldr*` calls, and
@@ -24,6 +28,8 @@ mod misc;
 mod nls;
 mod nt;
 mod process;
+mod registry;
+mod security;
 mod spawn;
 mod sync;
 mod tls;
