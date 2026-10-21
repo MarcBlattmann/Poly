@@ -256,6 +256,11 @@ impl FileIo for Thread<'_> {
         Ok(end.pipe().capacity())
     }
 
+    fn pipe_free_room(&mut self, fd: i32) -> Result<usize, Errno> {
+        let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
+        Ok(end.pipe().free_room())
+    }
+
     fn set_pipe_size(&mut self, fd: i32, bytes: usize) -> Result<usize, Errno> {
         let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
         end.pipe().set_capacity(bytes).map_err(vfs_errno)

@@ -190,6 +190,13 @@ impl Pipe {
         self.state.lock().slots * PIPE_PAGE
     }
 
+    /// The bytes of the pages no write has started yet: what a transfer
+    /// that fills whole pages, like sendfile(2) into a pipe, may put in now
+    /// (a partly filled or partly read page counts as taken).
+    pub fn free_room(&self) -> usize {
+        self.state.lock().free_pages() * PIPE_PAGE
+    }
+
     /// `F_SETPIPE_SZ`: at least `bytes`, rounded up to a power-of-two
     /// number of pages (at least one); returns the new capacity. `EINVAL`
     /// above [`PIPE_MAX_CAPACITY`], `EBUSY` if the pages in use would not
