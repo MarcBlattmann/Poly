@@ -38,6 +38,7 @@
 
 mod asmlabels;
 mod busybox;
+mod conflicts;
 mod console;
 mod dynamic;
 mod ext2disk;
@@ -1335,6 +1336,8 @@ fn ci() -> Result {
     font::run(&root(), &["--check".into()])?;
     eprintln!("==> global_asm! labels");
     asmlabels::check(&kernel_dir().join("src"))?;
+    eprintln!("==> merge conflict markers");
+    conflicts::check(&root())?;
     test()?;
     coverage(&["check".into()])?;
     coverage(&["readme".into(), "--check".into()])?;

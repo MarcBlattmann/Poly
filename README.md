@@ -9,8 +9,11 @@ There is no Wine and no Linux underneath. The user-mode Windows DLLs and macOS
 frameworks are reimplemented **clean-room** by AI agents that work from specs
 verified against the real OS.
 
-> **Status: foundation.** The kernel boots in QEMU, routes system calls by
-> personality and tests itself on every boot. No app runs yet. See the
+> **Status: early.** The kernel boots in QEMU on several cores and runs real
+> Linux command-line programs: `cat`, `cp`, `grep`, `sed`, `sort`, `wc` and
+> others match their recorded traces from real Linux. The Windows personality
+> is being built (object manager, memory, processes, registry, files and
+> exceptions so far); no Windows or macOS app runs yet. See the
 > [roadmap](docs/ROADMAP.md).
 
 ## How it fits together
@@ -65,7 +68,7 @@ kernel, and all three share one core. More detail in
 
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 67 of 141 milestones" src="docs/progress/badge-roadmap.svg"></a>
-  <img alt="Linux API coverage: 36.2%" src="docs/progress/badge-linux.svg">
+  <img alt="Linux API coverage: 39.5%" src="docs/progress/badge-linux.svg">
   <img alt="Windows API coverage: 0.0%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
@@ -91,13 +94,13 @@ kernel, and all three share one core. More detail in
 
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
-| Linux | 36.2% | n/a | 0 / 0 |
+| Linux | 39.5% | n/a | 0 / 0 |
 | Windows | 0.0% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | Blocked | App-provided |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| Linux | syscalls | 370 | 134 | 0 | 15 | 221 | 0 | 0 |
+| Linux | syscalls | 370 | 146 | 0 | 3 | 221 | 0 | 0 |
 | Linux | user-mode API | runs unchanged (glibc, Mesa, GTK, Qt) | | | | | | |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 2 | 1,809 | 0 | 0 |
 | Windows | user-mode DLL exports | 130,147 | 0 | 0 | 88 | 56,783 | 0 | 73,276 |
@@ -156,6 +159,16 @@ cargo xtask ci      # everything CI checks
    goes back to the implementer, and after about 5 rounds to a human.
 
 The rules that keep this legally clean are in **[CLEAN_ROOM.md](CLEAN_ROOM.md)**.
+
+## Contributing
+
+Contributions are welcome, from people and from their AI agents, under the
+same clean-room rules the project's own agents follow. Each contributor takes
+one role per component, **spec writer** (observes the real OS, writes specs and
+tests) or **implementer** (works only from specs and visible tests), never both.
+What you have read before matters too: for example, someone who has studied
+Wine or ReactOS source cannot implement Windows parts. Start with
+**[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## Roadmap
 
