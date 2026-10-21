@@ -9,7 +9,7 @@
 //! maximum-width field (`FORMAT_MESSAGE_MAX_WIDTH_MASK`: ordinary line
 //! breaks in the text become spaces, `%n` breaks stay).
 //!
-//! Choices to be confirmed by the spec agent (ADR 0078): a width other
+//! Choices to be confirmed by the spec agent (ADR 0079): a width other
 //! than 0 or `MAX_WIDTH_MASK` does not wrap lines (treated as 0); with
 //! `FORMAT_MESSAGE_IGNORE_INSERTS` the whole text is copied unchanged; a
 //! language other than neutral or an English one is

@@ -8,7 +8,7 @@
 //! 0x80 and 0x88). `SetEnvironmentVariableW` replaces the block there, so
 //! `ntdll` (the DLL search order's `Path`) sees the change too.
 //!
-//! **The standard handles** (ADR 0078): a console host is a later Phase 5
+//! **The standard handles** (ADR 0079): a console host is a later Phase 5
 //! item; until then a process gets what every Poly process starts with on
 //! descriptors 0, 1 and 2, the system console: `\??\Z:\dev\console`
 //! (`Z:` is the whole VFS, ADR 0067), opened on first use, for reading
@@ -201,7 +201,7 @@ pub fn image_path() -> Vec<u16> {
 
 // ----- the current directory ------------------------------------------------------------
 
-/// The initial current directory: the executable's directory (ADR 0078:
+/// The initial current directory: the executable's directory (ADR 0079:
 /// Poly does not yet pass a starting directory to a new process).
 pub fn init_current_dir() {
     let img = image_path();
@@ -271,7 +271,7 @@ fn std_index(which: u32) -> Option<usize> {
     }
 }
 
-/// Open the console for one standard handle (ADR 0078).
+/// Open the console for one standard handle (ADR 0079).
 fn open_console(write: bool) -> Handle {
     use poly_kernelbase::file::*;
     let name = NtName::new(poly_kernelbase::wide("\\??\\Z:\\dev\\console"));
@@ -477,7 +477,7 @@ pub unsafe extern "system" fn GetModuleFileNameW(module: *mut u8, buf: *mut u16,
 /// `LoadLibraryExW`: `LdrLoadDll`. A name with a relative path is made
 /// absolute against the current directory first. The data-file and
 /// search-path flags are not supported yet (Poly loads the module as an
-/// image either way, ADR 0078).
+/// image either way, ADR 0079).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, flags: u32) -> *mut u8 {
     let _ = (file, flags);

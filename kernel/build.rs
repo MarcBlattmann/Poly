@@ -11,7 +11,7 @@ fn main() {
 }
 
 /// Where `cargo xtask` names the directory with our `kernelbase.dll`,
-/// `kernel32.dll` and the test program `k32test.exe` (ADR 0078), cached by
+/// `kernel32.dll` and the test program `k32test.exe` (ADR 0079), cached by
 /// content hash like `ntdll` (`tools/xtask/src/win32.rs`).
 const WIN32_ENV: &str = "POLY_WIN32_DIR";
 

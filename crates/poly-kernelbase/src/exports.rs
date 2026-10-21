@@ -1,4 +1,4 @@
-//! Which functions `kernel32.dll` forwards, and where (ADR 0078).
+//! Which functions `kernel32.dll` forwards, and where (ADR 0079).
 //!
 //! Since Windows 7 most of `kernel32`'s functions are implemented in
 //! `kernelbase` and reached through API-set contracts (Learn: "Windows API

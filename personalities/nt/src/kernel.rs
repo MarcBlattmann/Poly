@@ -208,14 +208,14 @@ pub trait NtKernel {
     }
 
     /// The time since boot in 100 ns units, never going backwards
-    /// (`NtQueryPerformanceCounter`, ADR 0078). A kernel without a clock
+    /// (`NtQueryPerformanceCounter`, ADR 0079). A kernel without a clock
     /// answers 0.
     fn monotonic_100ns(&self) -> u64 {
         0
     }
 
     /// The number of processors programs are told about
-    /// (`NtQuerySystemInformation(SystemBasicInformation)`, ADR 0078).
+    /// (`NtQuerySystemInformation(SystemBasicInformation)`, ADR 0079).
     fn processor_count(&self) -> u32 {
         1
     }

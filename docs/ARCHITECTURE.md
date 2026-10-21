@@ -1343,7 +1343,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   APCs and exceptions. `poly-rtl` is the heap, counted strings, the status
   table and critical sections behind the `Rtl*` exports.
 - **Our `kernelbase` and `kernel32`** (`personalities/nt/win32`,
-  `crates/poly-kernelbase`, [ADR 0078](adr/0078-our-kernelbase-and-kernel32.md)):
+  `crates/poly-kernelbase`, [ADR 0079](adr/0079-our-kernelbase-and-kernel32.md)):
   built like `ntdll` (one workspace, cached by content hash) and written to
   `C:\Windows\System32`. `kernelbase.dll` implements the Win32 base API
   (files, the environment, processes and threads, memory, synchronisation,

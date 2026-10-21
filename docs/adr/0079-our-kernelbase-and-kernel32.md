@@ -1,4 +1,4 @@
-# 0078: Our `kernelbase` and `kernel32`: real PE DLLs from Rust over our `ntdll`, `kernel32` forwarding through API sets
+# 0079: Our `kernelbase` and `kernel32`: real PE DLLs from Rust over our `ntdll`, `kernel32` forwarding through API sets
 
 **Status:** Accepted. Builds on [ADR 0071](0071-our-ntdll-a-real-pe-dll-built-from-rust.md)
 (our `ntdll`: a real PE DLL built from Rust, its loader and API-set table,

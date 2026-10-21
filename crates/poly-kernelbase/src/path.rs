@@ -8,7 +8,7 @@
 //! `GetFullPathNameW` and `GetTempPathW` pages. The `\??\` form is the
 //! object-manager name of the DOS devices directory (ADR 0067).
 //!
-//! Choices to be confirmed by the spec agent (ADR 0078): an empty path is
+//! Choices to be confirmed by the spec agent (ADR 0079): an empty path is
 //! `ERROR_INVALID_NAME`; `\??\` given to a Win32 function is passed through
 //! like `\\?\`; a legacy device name is recognised only as the whole last
 //! segment, optionally followed by an extension.

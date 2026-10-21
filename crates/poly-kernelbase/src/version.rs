@@ -11,7 +11,7 @@
 //!
 //! Build numbers for the older versions Poly reports to unmanifested
 //! programs (9200 for 6.2, 9600 for 6.3) are the released builds of those
-//! versions (to be confirmed by the spec agent, ADR 0078).
+//! versions (to be confirmed by the spec agent, ADR 0079).
 
 use crate::error::ERROR_INSUFFICIENT_BUFFER;
 

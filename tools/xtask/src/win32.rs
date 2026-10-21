@@ -1,4 +1,4 @@
-//! Build our Win32 modules above `ntdll` (ADR 0078) — `kernelbase.dll`,
+//! Build our Win32 modules above `ntdll` (ADR 0079) — `kernelbase.dll`,
 //! `kernel32.dll` and the test program `k32test.exe` — and check them.
 //!
 //! They are one Cargo workspace, `personalities/nt/win32`, built the way

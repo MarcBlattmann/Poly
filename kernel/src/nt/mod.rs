@@ -47,7 +47,7 @@ pub static NTDLL: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ntdll.dll"))
 
 mod test_kernel32;
 
-/// Our `kernelbase.dll` and `kernel32.dll` (ADR 0078), built by `cargo
+/// Our `kernelbase.dll` and `kernel32.dll` (ADR 0079), built by `cargo
 /// xtask` from `personalities/nt/win32` and written to
 /// `C:\Windows\System32` by [`layout`], where the loader finds them as
 /// known DLLs. Empty when the kernel was built without `xtask`.

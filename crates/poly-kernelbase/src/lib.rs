@@ -1,4 +1,4 @@
-//! The logic of our `kernelbase.dll` and `kernel32.dll` (ADR 0078), as
+//! The logic of our `kernelbase.dll` and `kernel32.dll` (ADR 0079), as
 //! host-tested code.
 //!
 //! The DLLs themselves (`personalities/nt/win32`) are thin: each export
@@ -35,7 +35,7 @@
 //! the public SDK headers (`winerror.h`, `winbase.h`, `winnt.h`,
 //! `minwinbase.h`, `fileapi.h`, `sysinfoapi.h`, `ntifs.h`, `winternl.h`).
 //! Where they leave a behaviour open the code says what it picks ("to be
-//! confirmed by the spec agent", ADR 0078).
+//! confirmed by the spec agent", ADR 0079).
 
 #![no_std]
 

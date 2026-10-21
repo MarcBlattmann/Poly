@@ -1,4 +1,4 @@
-//! `k32test.exe` (ADR 0078): the program the kernel's ring-3 test
+//! `k32test.exe` (ADR 0079): the program the kernel's ring-3 test
 //! `nt_kernel32_program_runs_through_forwarders_to_kernelbase` runs. It
 //! imports only from `kernel32.dll`, so every call goes through
 //! `kernel32`'s API-set forwarders to `kernelbase`, and checks the

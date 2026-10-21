@@ -1,4 +1,4 @@
-//! Time and system information (ADR 0078): the services our `kernelbase`
+//! Time and system information (ADR 0079): the services our `kernelbase`
 //! needs for `GetSystemTimeAsFileTime`, `GetTickCount(64)`,
 //! `QueryPerformanceCounter`/`Frequency` and `GetSystemInfo`.
 //!

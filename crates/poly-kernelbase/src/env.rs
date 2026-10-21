@@ -8,7 +8,7 @@
 //! environment block must be sorted alphabetically by name. The sort is
 //! case-insensitive, Unicode order, without regard to locale").
 //!
-//! Choices to be confirmed by the spec agent (ADR 0078): deleting a
+//! Choices to be confirmed by the spec agent (ADR 0079): deleting a
 //! variable that does not exist succeeds; a name that is empty or has a
 //! `=` after its first character is `ERROR_INVALID_PARAMETER`.
 
