@@ -1,5 +1,5 @@
 //! Host tests of the layout table, its creation on a real tmpfs, the
-//! registry sync and the default environment (ADR 0072).
+//! registry sync and the default environment (ADR 0073).
 
 extern crate std;
 

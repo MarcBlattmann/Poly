@@ -1,4 +1,4 @@
-//! The Windows file system layout Poly presents on `C:` ([ADR 0072]): the
+//! The Windows file system layout Poly presents on `C:` ([ADR 0073]): the
 //! folders, which known folder, environment variable and registry value
 //! name each one, making them on the VFS, keeping the registry in step with
 //! them, and the environment block a new NT process gets.
@@ -21,7 +21,7 @@
 //! The process parameters that carry the environment into a process are
 //! [`crate::params`].
 //!
-//! [ADR 0072]: ../../../../docs/adr/0072-windows-file-system-layout.md
+//! [ADR 0073]: ../../../../docs/adr/0073-windows-file-system-layout.md
 
 pub mod create;
 pub mod env;
@@ -39,7 +39,7 @@ pub const SYSTEM_DRIVE: &str = "C:";
 /// `%SystemRoot%` / `%windir%`, `FOLDERID_Windows`.
 pub const SYSTEM_ROOT: &str = "C:\\Windows";
 /// `FOLDERID_System`: where Poly's own system DLLs live, the loader's
-/// system directory (ADR 0071's search order, ADR 0072).
+/// system directory (ADR 0071's search order, ADR 0073).
 pub const SYSTEM32: &str = "C:\\Windows\\System32";
 /// `%ProgramFiles%`, `FOLDERID_ProgramFiles`.
 pub const PROGRAM_FILES: &str = "C:\\Program Files";
@@ -153,7 +153,7 @@ const fn hidden(mut f: Folder) -> Folder {
 
 /// Every folder of the layout, parents before children. Paths and names
 /// are Learn's (see the module documentation); which ones Poly makes at
-/// all is ADR 0072's choice.
+/// all is ADR 0073's choice.
 pub const FOLDERS: &[Folder] = &[
     // The Windows directory.
     with_env(drive("Windows", Some("FOLDERID_Windows")), &["SystemRoot", "windir"]),

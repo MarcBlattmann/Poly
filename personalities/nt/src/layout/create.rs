@@ -1,4 +1,4 @@
-//! Making the layout on the VFS, idempotently (ADR 0072).
+//! Making the layout on the VFS, idempotently (ADR 0073).
 //!
 //! [`create`] walks every folder of [`super::FOLDERS`] from the directory
 //! behind `C:` one component at a time, the way an NT open does (ADR 0067,

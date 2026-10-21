@@ -35,7 +35,7 @@
 //!   process's user-mode dispatcher, `NtContinue` (on `poly-seh`, ADR 0068).
 //! - [`layout`], [`params`]: the Windows file system layout on `C:`, the
 //!   registry values that follow it, and a new process's environment and
-//!   process parameters (ADR 0072).
+//!   process parameters (ADR 0073).
 
 #![no_std]
 

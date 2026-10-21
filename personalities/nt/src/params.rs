@@ -1,6 +1,6 @@
 //! A new NT process's parameters: `PEB.ProcessParameters`, an
 //! `RTL_USER_PROCESS_PARAMETERS` with the image path, the command line and
-//! the environment block (ADR 0072; ADR 0071 writes the same for processes
+//! the environment block (ADR 0073; ADR 0071 writes the same for processes
 //! started through our `ntdll`).
 //!
 //! What public headers give (`winternl.h`, x64):

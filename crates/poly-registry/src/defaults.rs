@@ -20,7 +20,7 @@
 //!
 //! The values that name folders (`ProgramFilesDir`, `SystemRoot`, the
 //! environment's paths, the user's profile) must agree with the Windows
-//! file system layout of ADR 0072 (`poly_personality_nt::layout`), whose
+//! file system layout of ADR 0073 (`poly_personality_nt::layout`), whose
 //! sync adds the rest (`ProfileList`, `Shell Folders`) at every boot and
 //! whose host tests check that these agree.
 

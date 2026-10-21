@@ -109,7 +109,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055)
 - [ ] `advapi32` basics: registry API, security descriptors, tokens (single user)
 - [ ] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles
-- [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0072)
+- [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0073)
 - [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace
 - [ ] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics
 - [ ] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app)

@@ -1,4 +1,4 @@
-# 0072: The Windows file system layout: `C:` on the hive disk, a host-tested layout table, the registry kept in step, and a default environment in the process parameters
+# 0073: The Windows file system layout: `C:` on the hive disk, a host-tested layout table, the registry kept in step, and a default environment in the process parameters
 
 **Status:** Accepted. Builds on [ADR 0067](0067-nt-file-io.md) (NT file I/O:
 `\??\C:` is the VFS directory `/nt/c`, case-insensitive lookup over the
@@ -7,8 +7,9 @@ case-sensitive VFS, NT attributes in `user.poly.ntattr`),
 default hives, Poly's single user `S-1-5-21-0-0-0-1000`, where hive files
 live), [ADR 0065](0065-nt-threads-synchronisation-and-apcs.md) (the first
 thread gets the PEB as its argument), [ADR 0055](0055-microsoft-redistributables-run-apps-own-copies.md)
-(apps bring their own Microsoft runtimes) and the `ntdll` milestone's ADR
-0071 (our `ntdll` and its DLL search order, being written alongside).
+(apps bring their own Microsoft runtimes) and
+[ADR 0071](0071-our-ntdll-a-real-pe-dll-built-from-rust.md) (our `ntdll`, a
+real PE DLL built from `personalities/nt/ntdll`, and its DLL search order).
 
 ## Context
 
@@ -122,17 +123,19 @@ someone deleted.
 - **`C:\Windows\System32` holds Poly's own system DLLs** (`ntdll`,
   `kernelbase`, `kernel32`, `ucrtbase`, ... as they are written). It is the
   loader's system directory in ADR 0071's search order (known DLLs from
-  `System32`, then the application's directory, `System32`, `System`,
-  `Windows`, the current directory and `PATH`), and `Path` starts with it.
-  Our DLLs are built into the kernel (ADR 0071 embeds `ntdll`, the
-  counterpart of Windows' `KnownDlls`); once that lands, the kernel also
-  writes each one into `System32` after making the layout, with
-  `layout::create::install_file` (here and host-tested; one call per DLL
-  in `kernel/src/nt/layout.rs::prepare`), which rewrites a file only when
-  its bytes differ, so a system DLL that an installer or a user
-  replaced is restored at the next boot (Poly's small "resource
-  protection"). The known DLLs are always loaded from the kernel's copy, so
-  a changed file there never runs.
+  `System32`, then the application's directory, `C:\Windows\System32`,
+  `C:\Windows\System`, `C:\Windows`, the current directory and `PATH`), so
+  the two ADRs name the same folder (`layout::SYSTEM32`), and `Path`
+  starts with it. ADR 0071 builds `ntdll.dll` as a real PE DLL (`cargo
+  xtask ntdll`); the kernel does not carry or map it yet (a follow-up).
+  When it does, it writes each of our DLLs into `System32` after making
+  the layout, with `layout::create::install_file` (here and host-tested;
+  one call per DLL in `kernel/src/nt/layout.rs::prepare`), which rewrites a
+  file only when its bytes differ, so a system DLL that an installer or a
+  user replaced is restored at the next boot (Poly's small "resource
+  protection"). `C:\Windows\System` is not made: Learn lists it in the
+  search order for 16-bit-era DLLs, and a missing directory there is
+  simply skipped.
 - **Applications go in `C:\Program Files\<App>`** with their own DLLs and
   the Microsoft runtimes they ship ("app-local", ADR 0055), found first by
   the application-directory step of the search order.

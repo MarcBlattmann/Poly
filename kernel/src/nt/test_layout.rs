@@ -1,5 +1,5 @@
 //! A self-assembled ring-3 PE that checks the Windows file system layout
-//! from inside an NT process (ADR 0072). No Microsoft toolchain or DLLs:
+//! from inside an NT process (ADR 0073). No Microsoft toolchain or DLLs:
 //! the code is position-independent and makes the NT system calls the way
 //! `ntdll`'s stubs would (ADR 0063). Every label is prefixed `ntlayout_`
 //! (all `global_asm!` blocks share one object).
@@ -9,7 +9,7 @@
 //! and ends with [`FAIL_CODE`], else with [`PASS_CODE`]:
 //!
 //! 1. `PEB.ProcessParameters` (PEB + 0x20) is set, its `ImagePathName` is
-//!    not empty and it has an environment block (+ 0x80, ADR 0072).
+//!    not empty and it has an environment block (+ 0x80, ADR 0073).
 //! 2. The block has `TEMP=`; its value becomes the NT path `\??\<TEMP>`.
 //! 3. `NtOpenFile` of `\??\c:\windows\SYSTEM32` as a directory (any case).
 //! 4. `C:\Windows` enumerated with `NtQueryDirectoryFile` and the pattern
@@ -388,7 +388,7 @@ mod tests {
     }
 
     kernel_test! {
-        /// The Windows layout from ring 3 (ADR 0072): an NT process reads
+        /// The Windows layout from ring 3 (ADR 0073): an NT process reads
         /// TEMP from its PEB's environment, opens `C:\Windows\System32`,
         /// enumerates `C:\Windows`, and creates, finds and deletes a file
         /// in its TEMP directory. Then the kernel checks the folders, the

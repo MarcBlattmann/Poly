@@ -1,4 +1,4 @@
-//! The environment a new NT process gets (ADR 0072), and the environment
+//! The environment a new NT process gets (ADR 0073), and the environment
 //! block format (Learn: "Environment Variables", "Changing Environment
 //! Variables", `CreateProcessW`'s `lpEnvironment`,
 //! `ExpandEnvironmentStringsW`).

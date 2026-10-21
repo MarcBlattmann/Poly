@@ -1,4 +1,4 @@
-//! The kernel's side of the Windows file system layout ([ADR 0072]).
+//! The kernel's side of the Windows file system layout ([ADR 0073]).
 //!
 //! The table, the case-insensitive creation, the registry sync and the
 //! environment block are `poly_personality_nt::layout` (host-tested); this
@@ -16,7 +16,7 @@
 //!   use of a boot; then the registry values that must agree with them are
 //!   synced (written only where they differ).
 //!
-//! [ADR 0072]: ../../../docs/adr/0072-windows-file-system-layout.md
+//! [ADR 0073]: ../../../docs/adr/0073-windows-file-system-layout.md
 
 use crate::fs;
 use crate::sync::Mutex;
@@ -152,7 +152,7 @@ mod tests {
     use poly_vfs::{At, Cred, Errno, OpenFlags};
 
     kernel_test! {
-        /// `C:` on a disk (ADR 0072): the link to the disk directory is
+        /// `C:` on a disk (ADR 0073): the link to the disk directory is
         /// made, kept when right, replaces an empty directory and leaves
         /// anything else alone; the layout made through the link lands on
         /// the target.

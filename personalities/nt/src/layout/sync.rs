@@ -1,4 +1,4 @@
-//! The registry values that must agree with the layout (ADR 0072).
+//! The registry values that must agree with the layout (ADR 0073).
 //!
 //! The default hives (`poly_registry::defaults`, ADR 0066) already hold
 //! most of them; [`sync`] runs at every boot after the hives are loaded and

@@ -115,7 +115,7 @@ fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
             timers: BTreeMap::new(),
         };
         // The Windows folders on C: and the registry values that follow
-        // them (ADR 0072), before file I/O attaches C:.
+        // them (ADR 0073), before file I/O attaches C:.
         layout::prepare(&mut state.sys);
         // File I/O: the VFS's volumes and drive letters (ADR 0067).
         io::attach(&mut state.sys);
@@ -322,7 +322,7 @@ pub struct Start {
 
 /// How an NT process was started: its executable's DOS path and its
 /// arguments (after the program name), for its process parameters
-/// (ADR 0072).
+/// (ADR 0073).
 #[derive(Clone, Debug, Default)]
 pub struct Launch {
     pub image_path: String,
@@ -355,7 +355,7 @@ pub fn start(process: &Arc<Process>, memory: &Arc<Memory>, file: &[u8], tid: u32
 }
 
 /// [`start`] with the executable's path and arguments, which go into the
-/// process parameters with the default environment (ADR 0072).
+/// process parameters with the default environment (ADR 0073).
 pub fn start_with(
     process: &Arc<Process>,
     memory: &Arc<Memory>,
@@ -375,7 +375,7 @@ pub fn start_with(
         let mut b = MemBackend { memory, sections: &mut s.sections };
         let start = exec::start_process(&mut s.sys, proc, &mut b, file, None, thread).and_then(|ps| {
             // The process parameters: image path, command line and
-            // environment (ADR 0072).
+            // environment (ADR 0073).
             poly_personality_nt::params::write(proc, &mut b, ps.peb, &params)?;
             Ok(ps)
         });
@@ -493,7 +493,7 @@ pub enum SpawnError {
 /// Start the PE executable `file` in the already-made NT process
 /// `process`, its first thread running the entry point. Returns `process`.
 /// `launch` names it and gives its arguments (its process parameters,
-/// ADR 0072).
+/// ADR 0073).
 pub fn spawn_pe_with(
     process: &Arc<Process>,
     file: &[u8],
