@@ -110,6 +110,9 @@ pub fn fstat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let request = a.uint(1);
+    if let Some(r) = crate::sys::fdioctl::generic(k, fd, request, a) {
+        return r;
+    }
     // SIOCOUTQ on a socket (ADR 0048): the same number as the terminal
     // request TIOCOUTQ, so it is answered before the terminal check.
     if request == crate::net::abi::SIOCOUTQ
