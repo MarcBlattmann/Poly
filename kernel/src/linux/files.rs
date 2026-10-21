@@ -44,7 +44,8 @@ fn status(node: &poly_vfs::NodeRef) -> Result<FileStatus, Errno> {
 impl LinuxFs for Thread<'_> {
     fn openat(&mut self, dirfd: i32, path: &[u8], flags: u32, mode: u32) -> Result<i32, Errno> {
         let files = &self.process().files;
-        files.openat(dirfd, path, OpenFlags::from_bits(flags), mode as u16).map_err(vfs_errno)
+        let fd = files.openat(dirfd, path, OpenFlags::from_bits(flags), mode as u16).map_err(vfs_errno)?;
+        self.fifo_open_wait(fd)
     }
 
     fn statat(&mut self, dirfd: i32, path: &[u8], follow: bool) -> Result<FileStatus, Errno> {

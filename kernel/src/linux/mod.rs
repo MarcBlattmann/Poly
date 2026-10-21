@@ -32,6 +32,7 @@ pub mod admin;
 mod admin_tests;
 pub mod cred;
 mod cred_tests;
+mod fifo;
 mod fileio_tests;
 mod files;
 mod files_tests;

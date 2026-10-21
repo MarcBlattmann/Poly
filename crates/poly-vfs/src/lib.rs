@@ -73,6 +73,7 @@ pub mod epoll;
 mod errno;
 pub mod eventfd;
 mod fdtable;
+mod fifo;
 mod file;
 mod fs;
 pub mod lock;

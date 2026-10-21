@@ -28,7 +28,7 @@
 //!   once no read end is left (poll(2)).
 
 use crate::object::FileObject;
-use crate::poll::{PollEvents, WaitQueue};
+use crate::poll::{Blocker, PollEvents, WaitQueue, Woke};
 use crate::sync::SpinMutex;
 use crate::{Errno, Result};
 use alloc::collections::VecDeque;
@@ -73,6 +73,10 @@ struct State {
     packet: bool,
     readers: usize,
     writers: usize,
+    /// Read and write ends opened so far, for a FIFO open waiting for the
+    /// other side ([`PipeEnd::wait_for_peer`]).
+    read_opens: u64,
+    write_opens: u64,
 }
 
 impl State {
@@ -119,7 +123,19 @@ impl Pipe {
     /// A new pipe and its two ends: `(read end, write end)`. `packet`:
     /// packet mode (`O_DIRECT`).
     pub fn pair(packet: bool) -> (PipeEnd, PipeEnd) {
-        let pipe = Arc::new(Pipe {
+        let pipe = Pipe::fifo_or_packet(packet);
+        let read = PipeEnd::new(&pipe, true, false);
+        let write = PipeEnd::new(&pipe, false, true);
+        (read, write)
+    }
+
+    /// A pipe without ends yet, for a FIFO inode (`fifo.rs`).
+    pub fn fifo() -> Arc<Pipe> {
+        Pipe::fifo_or_packet(false)
+    }
+
+    fn fifo_or_packet(packet: bool) -> Arc<Pipe> {
+        Arc::new(Pipe {
             state: SpinMutex::new(State {
                 data: VecDeque::new(),
                 pages: VecDeque::new(),
@@ -127,12 +143,16 @@ impl Pipe {
                 packet,
                 readers: 0,
                 writers: 0,
+                read_opens: 0,
+                write_opens: 0,
             }),
             queue: Arc::new(WaitQueue::new()),
-        });
-        let read = PipeEnd::new(&pipe, true, false);
-        let write = PipeEnd::new(&pipe, false, true);
-        (read, write)
+        })
+    }
+
+    /// Read ends open now.
+    pub fn readers(&self) -> usize {
+        self.state.lock().readers
     }
 
     /// Bytes in the pipe.
@@ -203,8 +223,38 @@ impl PipeEnd {
         let mut s = pipe.state.lock();
         s.readers += usize::from(read);
         s.writers += usize::from(write);
+        s.read_opens += u64::from(read);
+        s.write_opens += u64::from(write);
         drop(s);
+        // A FIFO open waiting for this side wakes up.
+        pipe.queue.notify(PollEvents::READABLE | PollEvents::WRITABLE);
         PipeEnd { pipe: Arc::clone(pipe), read, write }
+    }
+
+    /// fifo(7): a blocking open of a FIFO for reading waits for a writer,
+    /// one for writing for a reader (an end that does both waits for
+    /// nothing): until such an end is open, or one was opened since this
+    /// one. `EINTR` if `blocker` is interrupted.
+    pub fn wait_for_peer(&self, blocker: &mut dyn Blocker) -> Result<()> {
+        if self.read && self.write {
+            return Ok(());
+        }
+        let opens = |s: &State| if self.read { s.write_opens } else { s.read_opens };
+        let start = opens(&self.pipe.state.lock());
+        let ready = || {
+            let s = self.pipe.state.lock();
+            (if self.read { s.writers } else { s.readers }) > 0 || opens(&s) != start
+        };
+        if ready() {
+            return Ok(());
+        }
+        let _registered = self.pipe.queue.register(PollEvents::READABLE | PollEvents::WRITABLE, blocker.waker());
+        while !ready() {
+            if blocker.block(None) == Woke::Interrupted {
+                return Err(Errno::EINTR);
+            }
+        }
+        Ok(())
     }
 
     pub fn pipe(&self) -> &Arc<Pipe> {

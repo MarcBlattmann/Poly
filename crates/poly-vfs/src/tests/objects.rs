@@ -829,3 +829,68 @@ fn pipe_room_comes_back_a_page_at_a_time() {
     assert_eq!(w.write(&big[..CAPACITY - 1000]), Ok(CAPACITY - 1000));
     assert_eq!(w.write(&big[..5000]), Ok(1000));
 }
+
+#[test]
+fn fifos_open_as_ends_of_one_pipe() {
+    use crate::pipe::PipeEnd;
+    let env = Env::new();
+    env.vfs.mknod(&env.ctx, &env.root, At::Cwd, b"/f", FileType::Fifo, 0o600, DeviceId::default()).unwrap();
+    let nb = OpenFlags::NONBLOCK;
+    assert_eq!(env.open("/f", OpenFlags::WRONLY | nb).err(), Some(Errno::ENXIO), "no reader");
+    let r = env.open("/f", OpenFlags::RDONLY | nb).unwrap();
+    assert_eq!(r.kind(), FileType::Fifo);
+    let mut buf = [0u8; 8];
+    assert_eq!(r.read(&mut buf), Ok(0), "no writer yet: end of file");
+    let w = env.open("/f", OpenFlags::WRONLY | nb).unwrap();
+    assert_eq!(r.read(&mut buf), Err(Errno::EAGAIN));
+    assert_eq!(w.write(b"fifo"), Ok(4));
+    assert_eq!(r.read(&mut buf), Ok(4));
+    assert_eq!(&buf[..4], b"fifo");
+    assert_eq!(r.seek(0, Whence::Set), Err(Errno::ESPIPE));
+    // A blocking open for writing finds the reader at once.
+    let w2 = env.open("/f", OpenFlags::WRONLY).unwrap();
+    let mut blocker = TestBlocker::default();
+    assert_eq!(w2.object_as::<PipeEnd>().unwrap().wait_for_peer(&mut blocker), Ok(()));
+    assert_eq!(blocker.blocks(), 0);
+    drop((w, w2));
+    assert_eq!(r.read(&mut buf), Ok(0), "end of file once the writers are gone");
+    drop(r);
+    // O_RDWR is both ends; with every end closed the data is gone.
+    let rw = env.open("/f", OpenFlags::RDWR).unwrap();
+    assert_eq!(rw.write(b"z"), Ok(1));
+    assert_eq!(rw.read(&mut buf), Ok(1));
+    assert_eq!(rw.write(b"left"), Ok(4));
+    drop(rw);
+    let r = env.open("/f", OpenFlags::RDONLY | nb).unwrap();
+    assert_eq!(r.read(&mut buf), Ok(0));
+}
+
+#[test]
+fn a_blocking_fifo_open_waits_for_the_other_side() {
+    use crate::pipe::PipeEnd;
+    let env = Arc::new(Env::new());
+    env.vfs.mknod(&env.ctx, &env.root, At::Cwd, b"/f", FileType::Fifo, 0o600, DeviceId::default()).unwrap();
+    let r = env.open("/f", OpenFlags::RDONLY).unwrap();
+    let end = r.object_as::<PipeEnd>().unwrap();
+    let mut blocker = TestBlocker::default();
+    let opener = {
+        let env = Arc::clone(&env);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(20));
+            env.open("/f", OpenFlags::WRONLY).unwrap()
+        })
+    };
+    assert_eq!(end.wait_for_peer(&mut blocker), Ok(()));
+    let _w = opener.join().unwrap();
+    // Interrupted: EINTR.
+    env.vfs.mknod(&env.ctx, &env.root, At::Cwd, b"/h", FileType::Fifo, 0o600, DeviceId::default()).unwrap();
+    let lone = env.open("/h", OpenFlags::RDONLY).unwrap();
+    let mut blocker = TestBlocker::default();
+    let signal = blocker.interrupter();
+    let t = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(20));
+        signal.set(|f| f.interrupted = true);
+    });
+    assert_eq!(lone.object_as::<PipeEnd>().unwrap().wait_for_peer(&mut blocker), Err(Errno::EINTR));
+    t.join().unwrap();
+}

@@ -273,8 +273,8 @@ fn readdir_reports_types_and_inodes() {
     assert_eq!(FileType::Regular.dirent_type(), 8);
     assert_eq!(FileType::Directory.dirent_type(), 4);
     assert_eq!(FileType::Symlink.dirent_type(), 10);
-    // A FIFO cannot be opened before pipes exist.
-    assert_eq!(env.open("/d/fifo", OpenFlags::RDONLY).map(|_| ()), Err(Errno::ENXIO));
+    // A FIFO opens as a pipe end (`fifo.rs`).
+    assert_eq!(env.open("/d/fifo", OpenFlags::RDONLY).map(|f| f.kind()), Ok(FileType::Fifo));
 }
 
 #[test]
