@@ -157,7 +157,7 @@
 {"symbol":"lsm_get_self_attr","number":459,"src":["linux-syscall-tbl"]},
 {"symbol":"lsm_list_modules","number":461,"src":["linux-syscall-tbl"]},
 {"symbol":"lsm_set_self_attr","number":460,"src":["linux-syscall-tbl"]},
-{"symbol":"lstat","number":6,"src":["linux-syscall-tbl"]},
+{"symbol":"lstat","number":6,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"madvise","number":28,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"map_shadow_stack","number":453,"src":["linux-syscall-tbl"]},
 {"symbol":"mbind","number":237,"src":["linux-syscall-tbl"]},
