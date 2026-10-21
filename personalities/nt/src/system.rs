@@ -59,6 +59,8 @@ impl Section {
 #[derive(Debug)]
 pub struct NtSystem {
     pub objects: ObjectManager,
+    /// The registry, reached through the `\REGISTRY` object (ADR 0066).
+    pub registry: crate::registry::NtRegistry,
     sections: BTreeMap<u64, Section>,
     next_key: u64,
 }
@@ -71,7 +73,25 @@ impl Default for NtSystem {
 
 impl NtSystem {
     pub fn new() -> NtSystem {
-        NtSystem { objects: ObjectManager::new(), sections: BTreeMap::new(), next_key: 1 }
+        Self::with_registry(Self::default_registry(0, &mut |_| None))
+    }
+
+    /// The registry with the default hives (ADR 0066): each loaded from the
+    /// hive file `load` returns for its name, else made afresh, at `now`
+    /// (a `FILETIME`). A corrupt file is replaced by the defaults
+    /// (`poly_registry::defaults::install`).
+    pub fn default_registry(now: u64, load: &mut dyn FnMut(&str) -> Option<Vec<u8>>) -> poly_registry::Registry {
+        let mut reg = poly_registry::Registry::new();
+        poly_registry::defaults::install(&mut reg, now, load).expect("the default hives fit an empty registry");
+        reg
+    }
+
+    /// A namespace with `reg` mounted at `\REGISTRY`.
+    pub fn with_registry(reg: poly_registry::Registry) -> NtSystem {
+        let mut objects = ObjectManager::new();
+        let mut registry = crate::registry::NtRegistry::new(reg);
+        registry.install(&mut objects);
+        NtSystem { objects, registry, sections: BTreeMap::new(), next_key: 1 }
     }
 
     /// Store a section's data; returns its key (the object's cookie).
@@ -119,6 +139,7 @@ impl NtSystem {
             match d.kind {
                 ObjectType::Section => self.remove_section(d.cookie, b),
                 ObjectType::File => b.file_deleted(d.cookie),
+                ObjectType::Key => self.registry.object_deleted(d.cookie, &mut self.objects),
                 _ => {}
             }
         }

@@ -23,6 +23,8 @@ pub fn reboot(out: &mut dyn Write) -> ! {
 /// disk's cache is written back. A power-off (once ACPI sleep states can
 /// be entered) calls this too.
 pub fn prepare_shutdown(out: &mut dyn Write) {
+    // The NT registry's unsaved hives first, while the disks are mounted.
+    crate::nt::registry::flush();
     fs::disk::shutdown(out);
     for d in block::disks() {
         if let Err(e) = d.sync() {

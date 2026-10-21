@@ -1259,10 +1259,11 @@ behind one lock (ADR 0030). The NT **system service numbers are Poly's own**
 (`personalities/nt/src/services.rs`): Windows renumbers its services with
 every build and only `ntdll` calls them, so Poly numbers them itself and
 keeps them stable, in `ntdll`'s x64 layout `table << 12 | index` (table 0
-executive: `0x00` object manager, `0x40` memory, `0x80` processes; table 3
+executive: `0x00` object manager, `0x40` memory, `0x80` processes, `0x100`
+registry; table 3
 Poly's own, for `PolyTrace`). Everything comes from public Microsoft
 documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
-"to be confirmed by the spec agent" and listed in ADRs 0030 and 0063.
+"to be confirmed by the spec agent" and listed in ADRs 0030, 0063 and 0066.
 
 - **Object manager** (`crates/poly-ntobj`, ADR 0030). `ObjectManager` holds
   every object (directories, symbolic links, events, mutants, semaphores,
@@ -1324,8 +1325,31 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   (`PolyResumeApc`) to restore the interrupted context (our stand-in for
   `KiUserApcDispatcher`). `NtDelayExecution` and `NtYieldExecution` round out
   the dispatcher services.
-- A `ParseHook` receives lookups that reach a device (or later a file system
-  or the registry), so those own the names below them.
+- A `ParseHook` receives lookups that reach a device (or later a file
+  system), so those own the names below them; the registry is the first.
+- **Registry** (`crates/poly-registry`, `personalities/nt/src/registry`,
+  `kernel/src/nt/registry.rs`, [ADR 0066](adr/0066-nt-registry-hives-in-polys-own-format.md)).
+  `\REGISTRY` is a permanent `Key` parse object; a walk reaching it hands
+  the rest of the path to the registry's parse hook, which answers with a
+  new `Key` object per open (its cookie an open instance), creates the last
+  component for `NtCreateKey`, or reparses at a symbolic-link key's target
+  (`HKLM\SYSTEM\CurrentControlSet` is one). Key objects are parse objects
+  too, so key handles serve as `RootDirectory`. Services `0x100`–`0x10C`:
+  `NtCreateKey`, `NtOpenKey(Ex)`, `NtDeleteKey`, `NtDeleteValueKey`,
+  `NtEnumerateKey`, `NtEnumerateValueKey`, `NtQueryKey`, `NtQueryValueKey`,
+  `NtSetValueKey`, `NtFlushKey`, `NtNotifyChangeKey` and
+  `NtSetInformationKey`, with every documented information class and the
+  `STATUS_BUFFER_OVERFLOW` / `STATUS_BUFFER_TOO_SMALL` rule. Case-insensitive,
+  case-preserving names; volatile keys; single-user access (only the
+  handle's granted access is checked). Notifications signal an event and
+  write the `IO_STATUS_BLOCK` (queued per process, written after its next
+  service). Hives are **Poly's own versioned snapshot format** (`POLYHIVE`
+  1.0 with a CRC-32), not Microsoft's undocumented one, kept in
+  `<disk>/poly/nt/registry/<NAME>.hive` on the first writable disk with a
+  `/poly` directory (else in memory), written atomically by `NtFlushKey`,
+  at NT process exit and before shutdown. Default hives (`HKLM\SYSTEM`,
+  `HKLM\SOFTWARE`, `HKU\.DEFAULT`, Poly's user) are made at the first boot
+  without files; ADR 0066 lists every value and its source.
 
 ## Testing strategy
 
@@ -1349,6 +1373,8 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
 | `/bin/ttyinit` as init on the serial console (nolibc Rust, `tools/xtask/programs/ttyinit.rs`), typed into through QEMU's stdin: a line edited with DEL and its echo, `^C` interrupting a read with `SIGINT`, single keys in raw mode | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | NT object manager, memory and sections from ring 3 (a self-assembled PE, `kernel/src/nt/test_pe.rs`): a named event created, opened, duplicated and closed to zero references; a directory queried; memory reserved/committed/protected/queried/freed; a pagefile section mapped twice with a write through one view seen through the other | `kernel_test!` `nt_test_program_runs_from_ring3` | every boot |
 | NT threads, synchronisation and APCs from ring 3 (a self-assembled multi-threaded PE, `kernel/src/nt/test_threads.rs`): `NtCreateThreadEx`, a blocking wait woken across threads, a thread exit code via `NtQueryInformationThread`, a mutant abandoned by a terminating thread (`STATUS_ABANDONED_WAIT_0`), a semaphore and event in a `WaitAll`, a user APC delivered at `NtTestAlert`, a periodic timer waited on twice, and `NtGetContextThread` on a suspended thread; the process cleaned up afterwards | `kernel_test!` `nt_threads_and_sync_from_ring3` | every boot |
+| NT registry from ring 3 (a self-assembled PE, `kernel/src/nt/test_registry.rs`): a key created under `\Registry\Machine\SOFTWARE`, `REG_SZ`/`REG_DWORD`/`REG_QWORD`/`REG_BINARY` values set, enumerated and queried (with `STATUS_BUFFER_OVERFLOW`), the default `ProductName` read, a value read through the `CurrentControlSet` link, a notification signalling an event, the key deleted; a hive file round trip through the VFS | `kernel_test!` `nt_registry_program_runs_from_ring3`, `nt_registry_hive_files_round_trip` | every boot |
+| NT registry logic on the host: keys, values, volatile keys, links, deletion while open, enumeration order, every information class and buffer status, notifications and their filters, the hive format (round trip, every truncation and bit flip refused), the default hives and their reload; the registry services against the fake kernel | `cargo test -p poly-registry -p poly-personality-nt` | `cargo xtask ci` |
 | NT dispatcher and service logic on the host: the object manager, the dispatcher against a randomized reference model (wait-any/all fairness, mutant ownership/abandonment, semaphore limits, timer ordering), and the memory/section/thread/sync service decoders against a fake kernel | `cargo test -p poly-ntobj -p poly-personality-nt` | `cargo xtask ci` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `run /bin/hello`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
