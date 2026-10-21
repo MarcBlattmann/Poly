@@ -47,10 +47,10 @@ impl CpuFeatures {
 
     /// Whether a calibrated TSC may serve as the clock: it is invariant,
     /// or the CPU is virtual. A hypervisor gives its guests a TSC that runs
-    /// at one rate whatever the host's power states do (QEMU's TCG reads
-    /// the host's counter for it, KVM scales and offsets the host's), even
-    /// where it does not report the invariant bit (ADR 0072). On real
-    /// processors without the bit the TSC may change rate or stop.
+    /// at one rate whatever the host's power states do, even where it does
+    /// not report the invariant bit, as QEMU's CPU models do not (ADR
+    /// 0072). On real processors without the bit the TSC may change rate or
+    /// stop.
     pub const fn constant_rate_tsc(&self) -> bool {
         self.invariant_tsc || self.hypervisor
     }

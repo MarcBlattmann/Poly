@@ -591,7 +591,7 @@ apic: local APIC id 0 version 0x14, xAPIC mode at 0xfee00000, 6 LVT entries, spu
 apic: I/O APIC 0 at 0xfec00000: version 0x20, GSI 0-23, all masked
 time: HPET at 0xfed00000: 100.000 MHz, 64-bit counter, 3 timers
 time: TSC 2699.992 MHz, calibrated against the HPET (5 of 6 measurements, spread 14 ppm), invariant: no
-time: clock source HPET (TSC not invariant)
+time: clock source TSC (a virtual CPU's TSC: constant rate)
 time: APIC timer 62.499 MHz (input clock / 16), periodic tick 1000 Hz on vector 0xf0
 irq: interrupts enabled
 ```
@@ -1432,11 +1432,14 @@ The first exec sets the vDSO up and says how `clock_gettime` works in
 user mode (ADR 0044):
 
 ```text
-vdso: 3552 bytes, mapped into every Linux process; clock_gettime makes system calls (the clock does not read an invariant TSC)
+vdso: 3616 bytes, mapped into every Linux process; clock_gettime reads the TSC
 ```
 
-"makes system calls" is the normal case under QEMU's TCG (no invariant
-TSC); with KVM on a host with an invariant TSC it says "reads the TSC".
+"reads the TSC" is the normal case, under QEMU too: QEMU's CPU models do
+not report an invariant TSC but set the hypervisor bit, and a virtual
+CPU's TSC counts as constant rate (ADR 0072). On a real CPU without an
+invariant TSC the clock reads the HPET and the line says "makes system
+calls (the clock does not read a constant-rate TSC)".
 The image is `kernel/target/x86_64-unknown-none/<profile>/build/poly-kernel-*/out/vdso.so`:
 `readelf -lrdW --dyn-syms -V` shows its one `PT_LOAD`, the five
 `__vdso_*@@LINUX_2.6` symbols and no relocations (`build.rs` refuses the
