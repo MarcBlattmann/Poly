@@ -345,7 +345,7 @@
 {"symbol":"timer_settime","number":223,"status":"claimed","claimed_by":"spec-a","src":["linux-syscall-tbl"]},
 {"symbol":"timerfd_create","number":283,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"timerfd_gettime","number":287,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"timerfd_settime","number":286,"status":"claimed","claimed_by":"spec-b","src":["linux-syscall-tbl"]},
+{"symbol":"timerfd_settime","number":286,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"times","number":100,"status":"claimed","claimed_by":"spec-a","src":["linux-syscall-tbl"]},
 {"symbol":"tkill","number":200,"src":["linux-syscall-tbl"]},
 {"symbol":"truncate","number":76,"src":["linux-syscall-tbl"]},
