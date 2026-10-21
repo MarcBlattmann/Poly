@@ -99,8 +99,35 @@ fn stat_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, buf: UserPtr, fl
     }
     let path = maybe_empty_path(k, p, flags)?;
     let st = fs(k)?.statat(dirfd, &path, flags & AT_SYMLINK_NOFOLLOW == 0)?;
-    k.copy_to_user(buf, &st.stat.to_bytes())?;
+    copy_whole_to_user(k, buf, &st.stat.to_bytes())?;
     Ok(0)
+}
+
+/// Copy `src` to `dst` all or nothing: a buffer that runs into an
+/// unmapped or read-only page is `EFAULT` with its writable start left as
+/// it was (the stat calls' spec: "on any error the buffer is left
+/// unchanged").
+fn copy_whole_to_user(k: &mut dyn LinuxKernel, dst: UserPtr, src: &[u8]) -> Result<(), Errno> {
+    // What a partial copy could overwrite: the readable start of the buffer.
+    let mut old = alloc::vec![0u8; src.len()];
+    let saved = if k.copy_from_user(dst, &mut old).is_ok() {
+        src.len()
+    } else {
+        let mut n = 0;
+        while n < src.len()
+            && let Some(p) = dst.offset(n as u64)
+            && k.copy_from_user(p, &mut old[n..n + 1]).is_ok()
+        {
+            n += 1;
+        }
+        n
+    };
+    let r = k.copy_to_user(dst, src);
+    if r.is_err() && saved > 0 {
+        // Writing the old bytes back stops at the same fault.
+        let _ = k.copy_to_user(dst, &old[..saved]);
+    }
+    r
 }
 
 /// newfstatat(dirfd, pathname, statbuf, flags)
