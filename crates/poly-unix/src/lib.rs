@@ -504,13 +504,13 @@ impl UnixSocket {
     /// bind's spec sheet).
     pub fn bind_abstract(self: &Arc<Self>, name: &[u8]) -> Result<()> {
         let taken = |n: &Names| n.abstract_names.get(name).is_some_and(|w| w.strong_count() > 0);
-        if taken(&*self.ns.names.lock()) {
+        if taken(&self.ns.names.lock()) {
             return Err(Errno::EADDRINUSE);
         }
         self.check_bindable()?;
         {
             let mut n = self.ns.names.lock();
-            if taken(&*n) {
+            if taken(&n) {
                 return Err(Errno::EADDRINUSE);
             }
             n.abstract_names.insert(name.to_vec(), Arc::downgrade(self));
