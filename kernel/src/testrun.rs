@@ -7,7 +7,7 @@
 //! POLY-INIT: unsupported <reason>                  it cannot run
 //! POLY-SYSCALL: pid=1 nr=1 args=0x1,0x401000,0xd,0x0,0x0,0x0 ret=13
 //! POLY-OUT: fd=1 hex=68656c6c6f0a                  bytes it wrote to fd 1 or 2
-//! POLY-SIGNAL: pid=1 signal=11                     a signal acted on (a fault, or a fatal one)
+//! POLY-SIGNAL: pid=1 signal=11                     a signal taken for delivery (not SIGKILL)
 //! POLY-EXIT: pid=1 code=0                          it ended (or signal=N)
 //! ```
 //!
@@ -79,7 +79,13 @@ pub fn output(fd: i32, bytes: &[u8]) {
     }
 }
 
-/// `POLY-SIGNAL`: process `pid` acts on `signal`.
+/// `POLY-SIGNAL`: a thread of process `pid` took `signal` to act on it
+/// (a handler, a stop, a continue, the end of the process, or dropping it
+/// as ignored), as a ptrace(2) tracer sees a signal-delivery-stop: never
+/// for `SIGKILL`, nor for a signal rt_sigtimedwait(2) or a signal file
+/// takes. A system call a signal interrupted is reported with the result
+/// a tracer sees (`ret=-512` and the like for one awaiting its restart
+/// decision; `Linux::traced_result`).
 pub fn signal(pid: u32, signal: u32) {
     record(&format!("POLY-SIGNAL: pid={pid} signal={signal}\n"));
 }

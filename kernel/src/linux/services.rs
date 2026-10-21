@@ -506,6 +506,12 @@ impl LinuxKernel for Thread<'_> {
         }
     }
 
+    fn signal_delivered(&mut self, signal: u32) {
+        if self.process.traced {
+            testrun::signal(self.process.pid, signal);
+        }
+    }
+
     fn kill_process(&mut self, signal: u32, core_dump: bool) {
         // No core dumps are written, so WCOREDUMP is never reported.
         let status = ExitStatus::Signaled { signal, core: false };
@@ -515,9 +521,6 @@ impl LinuxKernel for Thread<'_> {
             // signals whose default is a core dump always are.
             if core_dump || super::strace::verbose() {
                 kprintln!("linux: pid {} killed by signal {signal}", self.process.pid);
-            }
-            if self.process.traced {
-                testrun::signal(self.process.pid, signal);
             }
         }
         self.process.group_exit(status);

@@ -172,6 +172,20 @@ impl Linux {
     pub fn fault_signal(kernel: &mut dyn LinuxKernel, info: abi::SigInfo) {
         signal::force_signal(kernel, info);
     }
+
+    /// The result to report to a tracer (the test-run protocol, ADR 0027)
+    /// for the system call that just left `rax`: a call interrupted for a
+    /// restart decision shows the number ptrace(2) shows at its exit
+    /// ([`signal::restart::traced_errno`]), which the program never sees;
+    /// every other result as it is.
+    pub fn traced_result(kernel: &mut dyn LinuxKernel, rax: u64) -> u64 {
+        if rax != Errno::EINTR.to_rax() {
+            return rax;
+        }
+        let tid = kernel.tid();
+        let pending = signal::deliver::with_own(kernel, |p| p.thread(tid).restart);
+        pending.map_or(rax, |r| signal::restart::traced_errno(&r).wrapping_neg() as u64)
+    }
 }
 
 impl SyscallDispatch for Linux {

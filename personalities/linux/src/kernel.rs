@@ -880,6 +880,16 @@ pub trait LinuxKernel {
         let _ = pid;
     }
 
+    /// The calling thread took `signal` from its pending signals to act on
+    /// it (run its handler, stop, continue, end the process or drop it as
+    /// ignored), never `SIGKILL`: what ptrace(2) shows a tracer as a
+    /// signal-delivery-stop. A signal rt_sigtimedwait(2) or a signal file
+    /// takes is not delivered. The kernel reports it for traced processes
+    /// (`POLY-SIGNAL`, ADR 0027).
+    fn signal_delivered(&mut self, signal: u32) {
+        let _ = signal;
+    }
+
     // ---- seccomp (ADR 0054) ---------------------------------------------
 
     /// Whether any thread of the calling process may have seccomp state

@@ -174,7 +174,10 @@ impl Process {
     /// signals. `traced`: it reports what it does on the serial port
     /// (ADR 0027).
     pub fn new_linux(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
-        let linux = Some(LinuxState::new(pid));
+        let linux = LinuxState::new(pid);
+        // Its signals are seen as a tracer sees them (ADR 0027); children inherit it.
+        linux.with(|p| p.traced = traced);
+        let linux = Some(linux);
         // A traced test run keeps the kernel log's console (ADR 0046).
         let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
         Process::with_state(pid, ppid, Personality::Linux, format, linux, traced, files)

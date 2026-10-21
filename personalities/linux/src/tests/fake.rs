@@ -161,6 +161,8 @@ pub struct FakeKernel {
     /// stop_process calls (signal), and the pids continue_process got.
     pub stops: Vec<u32>,
     pub continued: Vec<i32>,
+    /// The signals signal_delivered reported, in order.
+    pub delivered: Vec<u32>,
     /// The file system services (`None`: `ENOSYS`), and what sysinfo
     /// reports.
     pub fs: Option<Box<dyn crate::fs::LinuxFs>>,
@@ -248,6 +250,7 @@ impl FakeKernel {
             futexes_locked: false,
             stops: Vec::new(),
             continued: Vec::new(),
+            delivered: Vec::new(),
             fs: None,
             sysinfo: None,
             admin: None,
@@ -741,6 +744,10 @@ impl LinuxKernel for FakeKernel {
 
     fn kill_process(&mut self, signal: u32, core_dump: bool) {
         self.exit = Some(Exit::Signal(signal, core_dump));
+    }
+
+    fn signal_delivered(&mut self, signal: u32) {
+        self.delivered.push(signal);
     }
 
     fn user_context(&self) -> UserContext {

@@ -195,9 +195,12 @@ enum Step {
 /// dropped. A handled one resets to `SIG_DFL` first if it has
 /// `SA_RESETHAND` (sigaction(2): "Restore the signal action to the default
 /// upon entry to the signal handler"; POSIX also clears `SA_SIGINFO`).
-fn next_step(p: &mut LinuxProcess, tid: i32) -> Step {
+/// Every signal taken goes into `taken`, for
+/// [`LinuxKernel::signal_delivered`].
+fn next_step(p: &mut LinuxProcess, tid: i32, taken: &mut Vec<u32>) -> Step {
     while let Some(info) = p.dequeue(tid) {
         let signal = info.signal();
+        taken.push(signal);
         let action = p.actions.get(signal);
         match disposition(signal, &action) {
             Disposition::Ignore | Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => {}
@@ -239,8 +242,14 @@ pub fn exit_to_user(k: &mut dyn LinuxKernel) -> ExitToUser {
     k.clear_signal_notification();
     let tid = k.tid();
     let mut pending_restart = with_own(k, |p| p.thread_mut(tid).restart.take());
+    let mut taken = Vec::new();
     loop {
-        match with_own(k, |p| next_step(p, tid)) {
+        let step = with_own(k, |p| next_step(p, tid, &mut taken));
+        // ptrace(2): a signal-delivery-stop for "any signal except SIGKILL".
+        for signal in taken.drain(..).filter(|&s| s != SIGKILL) {
+            k.signal_delivered(signal);
+        }
+        match step {
             Step::None => {
                 if let Some(r) = pending_restart.take() {
                     let mut ctx = k.user_context();
