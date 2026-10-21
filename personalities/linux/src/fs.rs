@@ -418,4 +418,42 @@ pub trait LinuxFs {
     /// The soft `RLIMIT_NOFILE` of process `target` changed: descriptors
     /// from `limit` on can no longer be opened there.
     fn set_fd_limit(&mut self, target: Target, limit: u64) -> Result<(), Errno>;
+
+    /// getxattr(2) family: the value of extended attribute `name` (checked
+    /// to be 1 to 255 bytes) of `target`. The kernel checks the namespace
+    /// and permissions (xattr(7)): `ENODATA`, `EOPNOTSUPP`, `EACCES`, ...
+    /// The defaults are a kernel without extended attributes (`ENOSYS`).
+    fn getxattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<Vec<u8>, Errno> {
+        let _ = (target, name);
+        Err(Errno::ENOSYS)
+    }
+
+    /// setxattr(2) family; `flags` as the caller gave them.
+    fn setxattr(&mut self, target: XattrTarget<'_>, name: &[u8], value: &[u8], flags: u32) -> Result<(), Errno> {
+        let _ = (target, name, value, flags);
+        Err(Errno::ENOSYS)
+    }
+
+    /// listxattr(2) family: the names the caller may see, each followed by
+    /// a NUL.
+    fn listxattr(&mut self, target: XattrTarget<'_>) -> Result<Vec<u8>, Errno> {
+        let _ = target;
+        Err(Errno::ENOSYS)
+    }
+
+    /// removexattr(2) family.
+    fn removexattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<(), Errno> {
+        let _ = (target, name);
+        Err(Errno::ENOSYS)
+    }
+}
+
+/// The file an extended attribute call is about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum XattrTarget<'a> {
+    /// A path from the working directory (not empty); `follow`: a final
+    /// symbolic link is followed (`getxattr`, not `lgetxattr`).
+    Path { path: &'a [u8], follow: bool },
+    /// An open descriptor (`fgetxattr`); `EBADF` for an `O_PATH` one.
+    Fd(i32),
 }
