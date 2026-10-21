@@ -1580,8 +1580,14 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   entry and the LINT inputs the MADT wires to NMI; spurious vector 0xff);
   every I/O APIC from the MADT mapped with all inputs masked, ISA routes
   from the interrupt source overrides; the HPET mapped, its timers stopped,
-  started (the ACPI PM timer if there is no HPET); the TSC and the local
-  APIC timer calibrated against it; the monotonic clock; the APIC timer
+  started (the ACPI PM timer if there is no HPET); the TSC calibrated
+  against it, then the local APIC timer against the TSC when that runs at a
+  constant rate (reading it is never a VM exit; under KVM reading the HPET
+  is one to QEMU, and brackets with it in are too wide), else against the
+  reference timer; each calibration retried, looser and then over longer
+  windows, while its measurements disagree
+  (`poly_irq::time::calibrate_with_retries`; a failure logs every
+  measurement of the last attempt); the monotonic clock; the APIC timer
   started periodic at `TICK_HZ` = 1000 on vector 0xf0. Then `kernel_entry`
   enables interrupts.
 - **Hardware access** for `poly-irq`: `arch/x86_64/mmio.rs` (`MmioRegion`,

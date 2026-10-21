@@ -75,13 +75,10 @@ jobs:
         # Exactly xtask's CI_BOOT_SHARDS (`cargo xtask ci lint` checks);
         # `cargo xtask boot-tests --list` shows which groups each runs.
         shard: [selftest, userland, devices, faults]
-        # TCG only until the kernel runs correctly under KVM (x2APIC, APIC
-        # timer calibration and the test-run boots failed there on the first
-        # KVM run; see ADR 0077). Back to [auto] plus a TCG self-test then.
-        accel: [tcg]
+        accel: [auto]
         include:
           # The self-test boots on TCG too, so paths only the emulator takes
-          # (and its quirks) stay tested (a no-op while accel is [tcg]).
+          # (and its quirks) stay tested.
           - shard: selftest
             accel: tcg
     env:
@@ -147,9 +144,6 @@ jobs:
     name: pipeline (selfcheck, polycheck)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      # TCG until the kernel runs correctly under KVM (see the boot job).
-      POLY_QEMU_ACCEL: tcg
     steps:
       - uses: actions/checkout@v4
       - name: Install QEMU and a static BusyBox

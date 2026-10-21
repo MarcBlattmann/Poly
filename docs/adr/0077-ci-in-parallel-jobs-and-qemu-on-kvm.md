@@ -93,3 +93,35 @@ tests' (and embeds our ntdll).
   remaining time and is the next step if CI needs to be faster still.
 - A runner without `/dev/kvm` still passes, on TCG, with a warning in the run's
   annotations.
+
+## The first KVM run
+
+The first run on GitHub's runners (nested KVM) failed in three places, all
+from what KVM does differently, none from emulation speed:
+
+- **x2APIC.** The kernel already ran the local APIC in x2APIC mode when the
+  CPU has it, which it does under KVM. A self-test still read the APIC's
+  version register through the xAPIC page, which reads as all ones in
+  x2APIC mode (`0xffffffff`). It reads the page only in xAPIC mode now and
+  checks the HPET's capabilities register through `map_mmio` either way.
+- **APIC timer calibration.** It measured the timer against the HPET,
+  bracketing each HPET read with two reads of the timer's count. Under KVM
+  each of those is a VM exit (the HPET's three, for a 64-bit counter, go to
+  QEMU in user space), so brackets came out wider than the 5 us the
+  standard tolerance allows; on a busy runner (polycheck boots four guests
+  at once) the looser retry failed too, and the boot panicked ("the local
+  APIC timer could not be calibrated"). The timer is now calibrated against
+  the TSC when the TSC runs at a constant rate (`CpuFeatures::
+  tsc_reference_hz`): reading it is not an exit, so a bracket is one exit
+  wide. Every calibration retries with `CalibrationConfig::retries`
+  (standard twice, 5000 ppm, then 5000 ppm over 50 ms windows) and logs
+  each measurement of its last attempt when it fails. The tick test
+  measures the timer against the TSC too.
+- **Polycheck.** That panic, in the `mmap` boot, counted as "the kernel
+  cannot run programs", so the pipeline booted none of the other tests. A
+  panic before the program ran is now that test's error (with the panic
+  message), and the other tests still boot.
+
+The SIGSEGV after a page fault at `0x10` in the self-test's log is the
+negative test `bad_pointers_give_efault_and_faults_give_sigsegv`, on TCG
+as well.
