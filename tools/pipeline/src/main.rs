@@ -237,6 +237,7 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
             if a.has("build-kernel") || (a.opt("kernel").is_none() && !kernel.exists()) {
                 poly::build_kernel(repo)?;
             }
+            eprintln!("pipeline: QEMU on {} ({}=tcg|kvm|auto chooses)", poly::accel()?, poly::ACCEL_ENV);
             Some(poly::Target { kernel, timeout: timeout(a, POLY_TIMEOUT)? })
         }
         t => return Err(format!("unknown target {t} (linux, poly)")),

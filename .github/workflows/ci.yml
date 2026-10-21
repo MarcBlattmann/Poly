@@ -1,24 +1,202 @@
 name: CI
 
+# What `cargo xtask ci` runs, split into jobs that run in parallel (ADR 0077):
+# lint, host tests, the boot tests in shards, the coverage checks and the
+# agent pipeline's checks, each `cargo xtask ci <part>` or
+# `cargo xtask boot-tests --shard <shard>`. The last job, `ci`, passes only if
+# every other job passed: it is the required status check, so keep its name.
+#
+# QEMU runs on KVM (xtask uses /dev/kvm when it can open it, after the
+# "Let QEMU use KVM" step); one boot job runs the self-test boots on QEMU's
+# emulator (TCG) as well.
+
 on:
   push:
     branches: [main]
   pull_request:
 
+# A newer push to a pull request cancels the run of the older one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
 jobs:
-  ci:
+  lint:
+    name: lint (fmt, clippy, source checks)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Install QEMU and a static BusyBox (the BusyBox boot test)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static
       - name: Install Rust (version from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: lint
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             .
             kernel
-      - name: cargo xtask ci
-        run: cargo xtask ci
+      # The kernel embeds our ntdll.dll; xtask caches it in target/ntdll-cache
+      # under a hash of its inputs. This job saves it, the others restore it.
+      - name: ntdll.dll's cache key
+        id: ntdll
+        run: echo "key=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: target/ntdll-cache
+          key: ${{ steps.ntdll.outputs.key }}
+      - run: cargo xtask ci lint
+
+  host-tests:
+    name: host tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: host-tests
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo xtask ci host-tests
+
+  boot:
+    name: boot (${{ matrix.shard }}, ${{ matrix.accel }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # Exactly xtask's CI_BOOT_SHARDS (`cargo xtask ci lint` checks);
+        # `cargo xtask boot-tests --list` shows which groups each runs.
+        shard: [selftest, userland, devices, faults]
+        accel: [auto]
+        include:
+          # The self-test boots on TCG too, so paths only the emulator takes
+          # (and its quirks) stay tested.
+          - shard: selftest
+            accel: tcg
+    env:
+      POLY_QEMU_ACCEL: ${{ matrix.accel }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install QEMU and a static BusyBox (the BusyBox and root disk boots)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static
+      - name: Let QEMU use KVM
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            sudo udevadm settle
+            ls -l /dev/kvm
+          else
+            echo "::warning::no /dev/kvm on this runner: QEMU runs on TCG (several times slower)"
+          fi
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: boot
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 'selftest' && matrix.accel == 'auto' }}
+          workspaces: |
+            .
+            kernel
+      - name: ntdll.dll's cache key
+        id: ntdll
+        run: echo "key=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        with:
+          path: target/ntdll-cache
+          key: ${{ steps.ntdll.outputs.key }}
+      - run: cargo xtask boot-tests --shard ${{ matrix.shard }}
+      - name: Keep the boot logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-logs-${{ matrix.shard }}-${{ matrix.accel }}
+          path: |
+            target/*.log
+            target/*.ppm
+          if-no-files-found: ignore
+          retention-days: 7
+
+  coverage:
+    name: coverage (map, README, pipeline loop dry run)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: coverage
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo xtask ci coverage
+
+  pipeline:
+    name: pipeline (selfcheck, polycheck)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install QEMU and a static BusyBox
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static
+      - name: Let QEMU use KVM
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            sudo udevadm settle
+            ls -l /dev/kvm
+          else
+            echo "::warning::no /dev/kvm on this runner: QEMU runs on TCG (several times slower)"
+          fi
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pipeline
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            .
+            kernel
+      - name: ntdll.dll's cache key
+        id: ntdll
+        run: echo "key=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        with:
+          path: target/ntdll-cache
+          key: ${{ steps.ntdll.outputs.key }}
+      - run: cargo xtask ci pipeline
+      - name: Keep the polycheck report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: polycheck-run
+          path: target/pipeline/polycheck/run
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The required status check. `always()`: it runs, and fails, when a job it
+  # needs failed or was cancelled (a skipped required check would count as
+  # passing).
+  ci:
+    if: always()
+    needs: [lint, host-tests, boot, coverage, pipeline]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every CI job passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'to_entries | all(.value.result == "success")' > /dev/null
