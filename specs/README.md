@@ -15,7 +15,7 @@ run on a real Windows PC (`tests/windows/support`, ADR 0075).
 **Who a Linux test runs as.** A test runs as whatever user runs the
 pipeline: root in some environments, a normal user in others (the home
 server's runner, GitHub's CI), with the same user and groups on Poly
-(ADR 0078). It always starts with umask 022, in `/`, with an empty
+(ADR 0079). It always starts with umask 022, in `/`, with an empty
 environment and only fds 0-2 open. So a test must pass as any user: do not
 assume uid 0, a particular uid, or that permission checks are bypassed, and
 use absolute paths (under `/tmp`). A test that only makes sense as root

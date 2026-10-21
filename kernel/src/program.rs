@@ -259,7 +259,7 @@ pub fn run_init(boot: &BootInfo) -> bool {
     true
 }
 
-/// The first program, as `identity` if the boot gave one (ADR 0078).
+/// The first program, as `identity` if the boot gave one (ADR 0079).
 fn run_first(
     path: &str,
     traced: bool,
