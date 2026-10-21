@@ -180,20 +180,7 @@ impl Segment {
     /// group, else other). `CAP_IPC_OWNER` passes everything; a request of
     /// nothing always passes.
     pub fn allows(&self, who: &Who, request: u32) -> bool {
-        let r = request & MODE_BITS;
-        let wanted = (r >> 6 | r >> 3 | r) & 7;
-        if wanted == 0 || who.ipc_owner {
-            return true;
-        }
-        let mode = u32::from(self.mode);
-        let granted = if who.euid == self.uid || who.euid == self.cuid {
-            mode >> 6
-        } else if [self.gid, self.cgid].iter().any(|g| *g == who.egid || who.groups.contains(g)) {
-            mode >> 3
-        } else {
-            mode
-        } & 7;
-        wanted & !granted == 0
+        super::allows(self.mode, (self.uid, self.cuid), (self.gid, self.cgid), who, request)
     }
 
     /// Whether `who` may change or remove it (`IPC_SET`, `IPC_RMID`):

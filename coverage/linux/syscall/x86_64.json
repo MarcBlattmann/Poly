@@ -279,7 +279,7 @@
 {"symbol":"select","number":23,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"semctl","number":66,"src":["linux-syscall-tbl"]},
 {"symbol":"semget","number":64,"src":["linux-syscall-tbl"]},
-{"symbol":"semop","number":65,"src":["linux-syscall-tbl"]},
+{"symbol":"semop","number":65,"status":"green","tests_visible":10,"tests_held_out":4,"src":["linux-syscall-tbl"]},
 {"symbol":"semtimedop","number":220,"src":["linux-syscall-tbl"]},
 {"symbol":"sendfile","number":40,"status":"green","tests_visible":10,"tests_held_out":5,"src":["linux-syscall-tbl"]},
 {"symbol":"sendmmsg","number":307,"src":["linux-syscall-tbl"]},

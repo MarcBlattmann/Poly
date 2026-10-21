@@ -1,0 +1,110 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/semop                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (/proc/sys/kernel/sem: semmsl 32000, semmns 1024000000, semopm 500, semmni 32000)"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  semop(semid, sops, nsops) (syscall 65) applies an array of operations
+  to the semaphores of a System V semaphore set, all at once or not at
+  all, and returns 0. Each element is a 6-byte struct sembuf {u16
+  sem_num; s16 sem_op; s16 sem_flg}. sem_op > 0 adds to the value;
+  sem_op < 0 subtracts |sem_op| if the value is at least that; sem_op 0
+  waits for the value to be 0. Operations apply in array order against
+  the values as changed by the earlier operations of the same call
+  (+1 then -1 on a zero semaphore succeeds; the same semaphore may
+  appear any number of times). A semaphore value is always 0..32767
+  (SEMVMX). If some operation cannot proceed, nothing of the call is
+  applied: when that first operation (in array order) that cannot
+  proceed would take a value above 32767, or its SEM_UNDO adjustment out
+  of range, the call fails with ERANGE; when it would have to wait and
+  has IPC_NOWAIT (04000) in its own sem_flg, EAGAIN; otherwise the
+  caller sleeps until the whole array can be applied at once, the set is
+  removed (EIDRM), or a signal interrupts it (EINTR). Sem_flg bits other
+  than IPC_NOWAIT and SEM_UNDO (0x1000) are ignored. On success every
+  semaphore the call names (also by a sem_op 0) gets sempid = caller's
+  pid, and the set's sem_otime becomes the current time. SEM_UNDO
+  operations also keep a per-process, per-semaphore adjustment
+  (semadj, minus the sum of the process's SEM_UNDO sem_ops), which is
+  added back to the semaphore when the process exits. Arguments: semid
+  is a 32-bit int (upper half of the register ignored); nsops is taken
+  as a 32-bit unsigned count (upper half ignored).
+returns:
+  success: "0, after all operations were applied atomically"
+  in_order: "operations see the values left by the earlier operations of the same call; e.g. [{s,+1},{s,-1,NOWAIT}] on a 0 semaphore succeeds, [{s,-1,NOWAIT},{s,+1}] is EAGAIN; [{0,-3},{0,0,NOWAIT}] on value 3 succeeds"
+  limits: "values 0..32767 reachable; sem_op from -32768 to 32767 accepted; sem_op -32768 can never be met (EAGAIN with IPC_NOWAIT, sleeps otherwise)"
+  nsops_max: "500 operations (SEMOPM default, third field of /proc/sys/kernel/sem) accepted in one call"
+  nsops_width: "only the low 32 bits of nsops count: 2^32+1 means 1 operation; 2^32 means 0 (EINVAL); SIZE_MAX means 0xffffffff (E2BIG)"
+  semid_width: "only the low 32 bits of semid count (id | 1<<32 addresses set id)"
+  sempid: "after success: semctl GETPID of every semaphore named in sops (any sem_op, including 0 and net-zero pairs) is the caller's pid; semaphores not named keep theirs (0 in a new set); a failed call changes none"
+  otime: "after success: IPC_STAT sem_otime = current CLOCK_REALTIME seconds; 0 in a new set; a failed call leaves it; semop never changes sem_ctime"
+  read_only_sops: "sops is only read: an array in read-only memory works"
+errors:
+  nsops_zero: "EINVAL (22): nsops (low 32 bits) is 0; checked first, before E2BIG, EFAULT and the id (bad id or NULL sops still EINVAL)"
+  too_many: "E2BIG (7): nsops > 500; checked before the array is read and the id looked up (NULL sops or bad id still E2BIG)"
+  fault: "EFAULT (14): any byte of the nsops*6 bytes at sops unreadable (NULL, low address, non-canonical, array running into an unmapped page); checked before the id (bad or removed id with NULL sops is EFAULT); nothing applied"
+  bad_id: "EINVAL (22): semid negative, never handed out, or of a removed set (a call that does not sleep never sees EIDRM)"
+  sem_num: "EFBIG (27): some operation's sem_num >= nsems of the set (e.g. nsems or 65535); all elements are checked before anything else about the operations, so it beats an earlier ERANGE/EAGAIN in the array and EACCES; reported after a bad id"
+  access: "EACCES (13): if any sem_op is non-zero the caller needs alter permission (w) and nothing more; if all are 0 it needs read permission (r). The caller's class decides (owner if euid is the set's uid or cuid, else group, else other): owner bits only for the owner, group/other bits do not help it, x grants nothing. Checked after EFBIG and before any operation is tried (beats EAGAIN/ERANGE). Never for a caller with CAP_IPC_OWNER (root)"
+  range: "ERANGE (34): the first operation that cannot proceed would make the value > 32767, or (SEM_UNDO) the process's adjustment for that semaphore leave -32768..32767; with or without IPC_NOWAIT; nothing applied"
+  would_wait: "EAGAIN (11): the first operation that cannot proceed would have to wait (decrement > value, or 0 on a non-zero value) and has IPC_NOWAIT in its own sem_flg; IPC_NOWAIT on other operations of the array does not matter"
+  first_failing_wins: "between ERANGE and EAGAIN the first failing operation in array order decides: [ERANGE op, EAGAIN op] is ERANGE, [EAGAIN op, ERANGE op] is EAGAIN"
+  removed_while_sleeping: "EIDRM (43): the set was removed (IPC_RMID) while the caller slept"
+  interrupted: "EINTR (4): a signal with a handler arrived while sleeping; never restarted, even with SA_RESTART; a stop (SIGSTOP) followed by SIGCONT while sleeping also ends the call with EINTR; an ignored signal (SIG_IGN) or SIGCONT to a non-stopped sleeper does not end the sleep"
+  order: "EINVAL (nsops 0), E2BIG, EFAULT, EINVAL (id), EFBIG, EACCES, then per operation in array order ERANGE / EAGAIN / sleep"
+  no_memory: "ENOMEM (12): no memory for SEM_UNDO bookkeeping; not tested"
+side_effects: >
+  Success changes semaphore values, sempid of the named semaphores and
+  sem_otime; a failure changes nothing (no partial application, no
+  adjustment change). SEM_UNDO: each successful SEM_UNDO operation
+  subtracts its sem_op from the caller's adjustment for that semaphore
+  (operations without SEM_UNDO leave it). At process exit each
+  adjustment is added to its semaphore; the result is clamped to
+  0..32767 instead of failing (value 1 with adjustment -5 becomes 0;
+  value 32767 with adjustment +10 stays 32767), and the exit sets
+  sempid to the exiting pid. semctl SETVAL (by any process) clears every
+  process's adjustment for that semaphore. A fork child starts with no
+  adjustments (the parent's are not inherited; the child's exit undoes
+  only its own). Sleeping callers are counted: semctl GETNCNT counts
+  sleepers whose blocking operation is a decrement, GETZCNT those whose
+  blocking operation is a wait-for-zero; a sleeper is counted only on
+  the semaphore of the first operation of its array that cannot
+  proceed, and moves to the next blocking one when that becomes
+  possible; it leaves the count when woken, interrupted, stopped,
+  killed or when the set is removed. While a call sleeps none of its
+  operations is applied (an earlier satisfiable decrement in the same
+  array does not hold the value).
+threading: >
+  Semaphore sets are system-wide (the IPC namespace), visible to every
+  process; adjustments are per process. A wake-up is completed by the
+  waker: when a semop (or exit undo) makes a sleeper's whole array
+  possible, the sleeper's operations are applied before the waking call
+  returns (right after a +1 to a semaphore with one -1 sleeper, GETVAL
+  is already 0 and GETNCNT 0) and sempid is the sleeper's pid.
+ordering:
+  - "sleepers asking for the same decrement on one semaphore are served in the order they went to sleep"
+  - "a later sleeper whose request can be met proceeds even if an earlier one cannot (-2 sleeping, then -1 sleeping, +1: the -1 sleeper proceeds, the -2 keeps sleeping)"
+  - "one increment can satisfy several sleepers (+3 with two -1 sleepers leaves 1)"
+  - "a decrement to 0 wakes wait-for-zero sleepers; at 1 they keep sleeping"
+timing:
+  typical: "microseconds per non-sleeping call; a woken sleeper returns within milliseconds of the waking call"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests also use semget (64) to make IPC_PRIVATE sets, semctl
+# (66: GETVAL, SETVAL, GETPID, GETNCNT, GETZCNT, IPC_STAT, IPC_SET,
+# IPC_RMID) to observe them, and fork, signals and futex gates. Observed
+# about those calls as far as the tests depend on it: a new set has all
+# values, sempid and sem_otime 0; SETVAL accepts 0..32767 (ERANGE
+# otherwise), sets sempid to the caller and needs alter permission;
+# GETVAL needs read permission. semtimedop (220) is the same call with a
+# timeout: an expired timeout is EAGAIN; a timeout with tv_nsec >= 10^9
+# or a negative tv_sec is EINVAL even when no sleep is needed; it is a
+# separate entry and not tested here. Set ids differ between runs, so
+# single-process tests compare syscall names only (poly-diff:
+# syscalls=names), multi-process ones only output (syscalls=off).
+# struct sembuf: linux/sem.h; struct semid64_ds: asm-generic/sembuf.h
+# and asm-generic/ipcbuf.h; constants: linux/ipc.h, linux/sem.h.
