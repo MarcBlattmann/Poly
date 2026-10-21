@@ -31,6 +31,8 @@
 //!                                                the scheduler: runs the whole pipeline unattended
 //!                                                (exit 10: stopped to run its new code; update.rs)
 //! loop status [--config FILE] [--json]           what every entry in the loop is doing
+//! loop watch [--config FILE] [--interval SECS] [--once] [--json] [--width N] [--lines N]
+//!                                                live read-only dashboard (q quits)
 //! loop pause [--role spec|implementer|all] [--for 4h] [--reason TEXT] [--config FILE]
 //!                                                no new agent sessions of the role(s) until then
 //! loop resume [--role spec|implementer|all] [--config FILE]

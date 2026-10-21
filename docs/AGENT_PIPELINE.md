@@ -633,6 +633,7 @@ cargo xtask pipeline loop --once              # drive one entry until it waits o
 cargo xtask pipeline loop --entry linux/syscall/x86_64/brk [--once]   # only this entry
 cargo xtask pipeline loop --dry-run           # print the commands for the next entry; changes nothing
 cargo xtask pipeline loop status [--json]     # every entry's step, cycle, PR or reason; paused roles; notices
+cargo xtask pipeline loop watch [--once|--json]   # live dashboard (below, "Watching the loop")
 cargo xtask pipeline loop pause [--role spec|implementer|all] [--for 4h] [--reason TEXT]
 cargo xtask pipeline loop resume [--role spec|implementer|all]
 cargo xtask pipeline loop reset <id> [--keep-branches]
@@ -674,6 +675,99 @@ checkout per role), and the runner verifies in its own worktree per worker.
 `flock` locks keep two workers or two loops off the same entry; a crash or
 reboot resumes every entry at its step (each step is idempotent, and an
 agent session that ended is never run again, see above).
+
+### Watching the loop
+
+`loop watch` is a live dashboard for a plain terminal of 80 columns or
+more (over SSH too): it redraws every 2 seconds on the alternate screen,
+`q` or Ctrl-C quits and puts the terminal back (so do SIGTERM and a
+dropped connection), `r` redraws at once. On the server, as the runner
+user (the state, the log and the configuration are `server`'s, mode
+0750/0640; no root needed), in one line to keep as an alias:
+
+```sh
+alias polywatch="sudo -u server -H bash -lc 'cd /srv/poly/runner/repo && exec cargo xtask pipeline loop watch'"
+```
+
+From another machine in one go (`-t`: a terminal, for the keys and for
+sudo's password): `ssh -t homeserver "sudo -u server -H bash -lc 'cd
+/srv/poly/runner/repo && exec cargo xtask pipeline loop watch'"`.
+
+`cargo xtask` builds the tool first when the runner's checkout moved on
+(the loop fast-forwards it to main); `sudo -u server
+/srv/poly/runner/repo/target/debug/pipeline loop watch` starts at once
+with the binary the last build left. Options:
+`--interval SECS` (2), `--config FILE` (else found as the loop finds
+it), `--lines N` of the log (8), `--width N`;
+`--once` prints one snapshot as plain text and exits (colours only on a
+terminal; also what you get when stdout is not a terminal), for a quick
+look or a log: `ssh homeserver "sudo -u server ... loop watch --once"`;
+`--json` prints the snapshot as JSON.
+
+```
+POLY PIPELINE  srv  2026-10-21 11:04:29 UTC   q quits, r refreshes
+service active  loop pid 5766 up 3d04h  max_parallel 2
+config /srv/poly/runner/pipeline.toml  state /srv/poly/runner/state
+load 6.83 7.91 9.69  mem 14.2G/15.7G free  disk 112G/450G free on /srv/poly
+PAUSED spec until 11:52 UTC (in 48m20s): usage limit (... resets 12pm (Europe/Berlin))
+done today 2 (31 in all)  human queue 1  open PRs 1  in flight 3/2
+
+ENTRIES (linux/syscall/x86_64/...)
+  ENTRY        STEP       CYCLE ERR  IN STEP NOTE
+* brk          implement  2/5   0/8  20m50s  running in w0
+* mmap         verify     0/5   1/8  5m20s   running in w1
+  rt_sigaction spec       s1/2  2/8  1h05m   error back-off, retry in 7m00s (11:
+  openat       waiting    0/5   0/8  1h01m   github.com/marcbl/poly/pull/212, ch
+  chdir        human      5/5   0/8  1h08m   5 red cycles; last: 2 of 6 held-out
+  getpid       done       0/5   0/8  -       github.com/marcbl/poly/pull/205
+
+ACTIVITY
+  w0  brk          implementer session 20m40s  pid 5768
+                   claude pid 5770 as polyimpl up 20m38s; log written 3s ago
+  w1  mmap         CI 4m36s  pid 5769
+                   log written 0s ago
+
+LOG /srv/poly/runner/log/pipeline.log
+10:43:49 w0 brk: [implement] implementer session starts (feedback-2.txt)
+10:54:29 w1 rt_sigaction: [spec] error: git fetch: dubious ownership
+...
+```
+
+- **Header**: `systemctl is-active poly-pipeline` ("unknown" without
+  systemd), the `pipeline loop` process and its uptime, load, available
+  memory and the free space of `/srv/poly` (or of the state directory's
+  file system; red under 10%), roles paused (a usage limit or `loop
+  pause`) with the time they resume, the loop's notices as `loop status`
+  shows them (deploy files changed, a new version that does not build),
+  and the totals: merged today (UTC), the human queue,
+  the PRs the state knows to be open (no GitHub request), entries in flight
+  against `max_parallel`.
+- **Entries**: in flight first (`*`: a worker holds its lock now), then
+  the human queue and what was merged in the last 24 hours. STEP is the
+  state's step, with `waiting` for a PR waiting for its merge and `done`
+  for merged; CYCLE is red cycles of `max_cycles` (`sN/M`: spec checks
+  of `spec_cycles`); ERR infrastructure errors in a row of `max_errors`;
+  IN STEP the time since the entry reached the step (from its history).
+  NOTE: the PR, why it is in the human queue, the worker, or what it waits
+  for (error back-off, a paused role, the next PR check).
+- **Activity**: what each worker runs right now: the loop's child
+  processes (an agent session through `poly-role` with the Claude Code
+  process under it, its user and age; CI; the diff run; a `git` or `gh`
+  command), each with its entry (from its arguments or from the command
+  log it writes in `state/logs/<entry>/`) and how long ago that log was
+  last written. The worker (`w0`, ...) comes from the log. Where the
+  process list does not show the loop (another PID namespace, `hidepid`),
+  the newest command log of each locked entry stands in, marked `~`.
+- **Log**: the last lines of `log_file` (`log/pipeline.log`).
+
+It only reads: the entry states (written by an atomic rename, so a file is
+whole or not there; a `.tmp` file of a write in progress is skipped, a
+file that does not parse is shown as a problem), the pause files, the
+log, the command logs' names and times, and `/proc` (the process list,
+`/proc/locks` for the loop's `flock` locks, load and memory). It writes
+nothing and holds no lock; only where `/proc/locks` cannot be read does it
+probe each lock file for an instant on a read-only descriptor (the loop
+retries a lock for a second, so that never holds it up).
 
 ### Setting up the home server
 
