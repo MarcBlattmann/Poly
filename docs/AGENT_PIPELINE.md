@@ -624,8 +624,9 @@ sudo's password): `ssh -t homeserver "sudo -u server -H bash -lc 'cd
 /srv/poly/runner/repo && exec cargo xtask pipeline loop watch'"`.
 
 `cargo xtask` builds the tool first when the runner's checkout moved on
-(the loop fast-forwards it to main); `/srv/poly/runner/repo/target/debug/pipeline
-loop watch` starts at once with the binary the last build left. Options:
+(the loop fast-forwards it to main); `sudo -u server
+/srv/poly/runner/repo/target/debug/pipeline loop watch` starts at once
+with the binary the last build left. Options:
 `--interval SECS` (2), `--config FILE` (else as for the loop, then
 `/srv/poly/runner/pipeline.toml`), `--lines N` of the log (8), `--width N`;
 `--once` prints one snapshot as plain text and exits (colours only on a

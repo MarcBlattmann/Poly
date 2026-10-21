@@ -28,6 +28,7 @@ use std::path::PathBuf;
 /// Where `setup.sh` puts the configuration, used when no other is found
 /// (the systemd unit names it with `POLY_PIPELINE_CONFIG`).
 const SETUP_CONFIG: &str = "/srv/poly/runner/pipeline.toml";
+const POLY_ROOT: &str = "/srv/poly";
 /// The unit `setup.sh` installs.
 const SERVICE: &str = "poly-pipeline";
 
@@ -56,11 +57,8 @@ pub fn command(a: &Args) -> Result<u8> {
     let width = number("width")?;
     let log_lines = number("lines")?.unwrap_or(8);
 
-    let disk_path = ["/srv/poly"]
-        .iter()
-        .map(PathBuf::from)
-        .find(|p| cfg.state_dir.starts_with(p) && p.is_dir())
-        .unwrap_or_else(|| cfg.state_dir.clone());
+    // The pipeline's file system (`/srv/poly` in the server layout).
+    let disk_path = if cfg.state_dir.starts_with(POLY_ROOT) { PathBuf::from(POLY_ROOT) } else { cfg.state_dir.clone() };
     let src = Sources {
         state_dir: cfg.state_dir.clone(),
         log_file: cfg.log_file.clone(),
