@@ -64,7 +64,9 @@ pub fn fault_info(vector: u8, page: Option<(u64, PageFault)>, rip: u64) -> SigIn
         X87_FLOATING_POINT | SIMD_FLOATING_POINT => SigInfo::fault(SIGFPE, SI_KERNEL, rip),
         INVALID_OPCODE => SigInfo::fault(SIGILL, ILL_ILLOPN, rip),
         DEBUG => SigInfo::fault(SIGTRAP, TRAP_TRACE, rip),
-        BREAKPOINT => SigInfo::fault(SIGTRAP, TRAP_BRKPT, rip),
+        // `int3` is the kernel's SIGTRAP (rt_sigreturn's spec sheet:
+        // SI_KERNEL; `rip` after the instruction, trapno 3).
+        BREAKPOINT => SigInfo::new(SIGTRAP, SI_KERNEL),
         ALIGNMENT_CHECK => SigInfo::fault(SIGBUS, BUS_ADRALN, 0),
         // A page fault without a reason (no memory map): unmapped.
         PAGE_FAULT => SigInfo::fault(SIGSEGV, SEGV_MAPERR, 0),
