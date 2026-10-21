@@ -32,7 +32,8 @@
 //!                       print the kernel function at each address; with no
 //!                       addresses, add symbols to the backtrace in a log on stdin
 //!   coverage <args>     run the coverage tool (see tools/coverage)
-//!   pipeline <args>     run the agent pipeline tool (see tools/pipeline, docs/AGENT_PIPELINE.md)
+//!   pipeline <args>     run the agent pipeline tool (see tools/pipeline, docs/AGENT_PIPELINE.md);
+//!                       exits with the tool's own status (75: a usage limit, 10: the loop restarts)
 //!   dynamic-initramfs   build the dynamically linked test programs and an initramfs
 //!                       with them and the host's ld.so and libraries (docs/DEBUGGING.md)
 //!   busybox-initramfs   write the BusyBox image (BusyBox from the host or built; busybox.rs)
@@ -106,7 +107,7 @@ fn main() -> ExitCode {
         Some("boot-tests") => boot_tests_command(&args[1..]),
         Some("symbolize") => symbolize(&args[1..]),
         Some("coverage") => coverage(&args[1..]),
-        Some("pipeline") => pipeline(&args[1..]),
+        Some("pipeline") => return pipeline_command(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
         Some("ntdll") => ntdll::command(&args[1..]),
         Some("win32") => win32::command(&args[1..]),
@@ -1635,6 +1636,26 @@ fn pipeline(args: &[String]) -> Result {
         cmd.env(win32::KERNEL_ENV, win32::ensure()?);
     }
     step("pipeline", &mut cmd)
+}
+
+/// `cargo xtask pipeline ...` exits with the tool's own status: callers
+/// act on it (the scheduler on 75, a role's usage limit, from `pipeline
+/// role`; systemd on 10, the loop stopping to run its new code).
+fn pipeline_command(args: &[String]) -> ExitCode {
+    let status =
+        cargo().current_dir(root()).args(["run", "--quiet", "--package", "poly-pipeline", "--"]).args(args).status();
+    match status {
+        Ok(s) => exit_code(s.code()),
+        Err(e) => {
+            eprintln!("xtask: error: pipeline: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// A child's exit status as ours (killed by a signal: failure).
+fn exit_code(code: Option<i32>) -> ExitCode {
+    code.and_then(|c| u8::try_from(c).ok()).map_or(ExitCode::FAILURE, ExitCode::from)
 }
 
 fn coverage(args: &[String]) -> Result {
