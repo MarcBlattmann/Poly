@@ -30,6 +30,8 @@
 //!
 //! - A panic stops every other CPU with an NMI ([`panic_stop_others`]): the
 //!   handler halts them, so they neither print over the report nor go on.
+//!   A second panic on the reporting CPU (a fault while it formats the
+//!   report) is reported too, once.
 //! - [`Exclusive`] drains every other CPU (its threads move away) and parks
 //!   it in its idle thread with interrupts off until it is dropped: only
 //!   one CPU runs threads meanwhile (the old single-CPU guarantee of
@@ -419,24 +421,42 @@ pub fn send_reschedule(index: usize) {
 
 // --- Stopping CPUs ---------------------------------------------------------------
 
-/// Set by the first CPU that panics.
-static PANICKING: AtomicBool = AtomicBool::new(false);
+/// The number + 1 of the first CPU that panicked (0: none yet).
+static PANICKING: AtomicUsize = AtomicUsize::new(0);
+/// Panics on that CPU while it reported the first one.
+static NESTED_PANICS: AtomicUsize = AtomicUsize::new(0);
 
-/// A panic on this CPU: stop the others with an NMI. False if another CPU
-/// is panicking already (this one should just halt).
-pub fn panic_stop_others() -> bool {
-    if PANICKING.swap(true, Ordering::AcqRel) {
-        return false;
+/// Who reports a panic ([`panic_stop_others`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PanicRole {
+    /// The first panic: this CPU reports it, the others are stopped.
+    First,
+    /// A panic on the CPU that is reporting one (a fault while formatting
+    /// the report, such as its stack running into the guard): report this
+    /// one too, or nothing would say why the report stopped.
+    Nested,
+    /// Another CPU reports, or this CPU's nested report failed too: halt.
+    Halt,
+}
+
+/// A panic on this CPU: stop the others with an NMI.
+pub fn panic_stop_others() -> PanicRole {
+    let me = super::percpu::cpu_index() + 1;
+    match PANICKING.compare_exchange(0, me, Ordering::AcqRel, Ordering::Acquire) {
+        Ok(_) => {
+            if online_cpus().len() > 1 {
+                apic::send_nmi_to_others();
+            }
+            PanicRole::First
+        }
+        Err(cpu) if cpu == me && NESTED_PANICS.fetch_add(1, Ordering::AcqRel) == 0 => PanicRole::Nested,
+        Err(_) => PanicRole::Halt,
     }
-    if online_cpus().len() > 1 {
-        apic::send_nmi_to_others();
-    }
-    true
 }
 
 /// An NMI: whether it is the panic's stop request (the CPU halts).
 pub(super) fn stopped_by_nmi() -> bool {
-    PANICKING.load(Ordering::Acquire)
+    PANICKING.load(Ordering::Acquire) != 0
 }
 
 /// Whoever holds the [`Exclusive`] (CPU number + 1; 0: nobody).

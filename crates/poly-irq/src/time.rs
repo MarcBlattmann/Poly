@@ -372,8 +372,9 @@ pub struct MonotonicClock<T, R> {
 
 impl<T: Counter, R: Counter> MonotonicClock<T, R> {
     /// `tsc_hz` is the calibrated TSC rate (`None` if calibration failed).
-    /// The TSC is used only if `invariant_tsc` (from
-    /// [`crate::CpuFeatures::invariant_tsc`]) and `tsc_hz` is known.
+    /// The TSC is used only if `invariant_tsc` (the TSC runs at a constant
+    /// rate: [`crate::CpuFeatures::constant_rate_tsc`]) and `tsc_hz` is
+    /// known.
     pub fn new(
         tsc: T,
         reference: R,

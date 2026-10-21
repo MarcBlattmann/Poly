@@ -1258,8 +1258,9 @@ the CPU-time accounting, the timer thread and the vDSO.
   It reads the `poly_vdso::Vvar` page right below its ELF header: a
   seqlock-protected snapshot of the clock's TSC conversion (the same
   `mult`/`shift` the kernel's clock applies), the wall clock's offset, the
-  tick and the time zone. Where the clock does not read an invariant TSC
-  the snapshot says so and the vDSO makes the system call.
+  tick and the time zone. Where the clock does not read the TSC (a real
+  CPU without an invariant TSC; a virtual CPU's TSC counts as constant
+  rate, ADR 0072) the snapshot says so and the vDSO makes the system call.
 - **Mapping:** exec maps the image (private, read-execute) and the data
   page below it (shared, read-only, never writable: a page-cache page every
   process maps, which the kernel writes through the direct map) and sets

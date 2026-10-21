@@ -192,11 +192,16 @@ fn panic(info: &PanicInfo) -> ! {
     // No preemption or interrupt handlers while the report is printed.
     arch::cpu::disable_interrupts();
     // The other CPUs stop (an NMI halts them); if one of them is reporting
-    // a panic already, this one just halts.
-    if !arch::smp::panic_stop_others() {
-        arch::cpu::halt_forever();
+    // a panic already, this one just halts. A panic while this CPU reports
+    // one (say its stack ran into the guard while formatting) is reported
+    // as well: otherwise the report would just stop.
+    match arch::smp::panic_stop_others() {
+        arch::smp::PanicRole::First => log::emergency_print(format_args!("\nKERNEL PANIC: {info}\n")),
+        arch::smp::PanicRole::Nested => {
+            log::emergency_print(format_args!("\nKERNEL PANIC while reporting a panic: {info}\n"));
+        }
+        arch::smp::PanicRole::Halt => arch::cpu::halt_forever(),
     }
-    log::emergency_print(format_args!("\nKERNEL PANIC: {info}\n"));
     arch::backtrace::print_for_panic();
     qemu::exit(qemu::ExitCode::Failure);
     arch::cpu::halt_forever()
