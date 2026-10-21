@@ -49,10 +49,12 @@ pub enum ObjectType {
     Thread,
     Key,
     Device,
+    /// An access token (ADR 0083).
+    Token,
 }
 
 impl ObjectType {
-    pub const ALL: [ObjectType; 12] = [
+    pub const ALL: [ObjectType; 13] = [
         ObjectType::Directory,
         ObjectType::SymbolicLink,
         ObjectType::Event,
@@ -65,6 +67,7 @@ impl ObjectType {
         ObjectType::Thread,
         ObjectType::Key,
         ObjectType::Device,
+        ObjectType::Token,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -81,6 +84,7 @@ impl ObjectType {
             ObjectType::Thread => "Thread",
             ObjectType::Key => "Key",
             ObjectType::Device => "Device",
+            ObjectType::Token => "Token",
         }
     }
 
@@ -94,6 +98,7 @@ impl ObjectType {
                 | ObjectType::Thread
                 | ObjectType::Key
                 | ObjectType::Device
+                | ObjectType::Token
         )
     }
 
@@ -144,6 +149,7 @@ impl ObjectType {
             ObjectType::Key => (KEY_READ, KEY_WRITE, KEY_EXECUTE, KEY_ALL_ACCESS),
             ObjectType::Process => (R, W, X | SYNCHRONIZE, PROCESS_ALL_ACCESS),
             ObjectType::Thread => (R, W, X | SYNCHRONIZE, THREAD_ALL_ACCESS),
+            ObjectType::Token => (TOKEN_READ, TOKEN_WRITE, TOKEN_EXECUTE, TOKEN_ALL_ACCESS),
         };
         GenericMapping { read, write, execute, all }
     }

@@ -1351,6 +1351,13 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   exports to API-set contracts that `ntdll`'s loader maps to `kernelbase`.
   The decisions (path normalisation, the environment block, argument
   mapping, error codes, messages) are host-tested in `poly-kernelbase`.
+- **Our `advapi32`** (`personalities/nt/win32/advapi32`, `crates/poly-security`,
+  [ADR 0083](adr/0083-advapi32-registry-tokens-and-security-for-one-user.md)):
+  the registry API and the token, SID, ACL and security-descriptor functions
+  are `kernelbase`'s; `advapi32.dll` forwards them through API-set contracts
+  and keeps the SDDL SID strings and `GetUserNameW`. Tokens are `Token`
+  objects from the kernel's token services; every process has the single
+  user's elevated token. Descriptors are stored and returned, not enforced.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

@@ -15,6 +15,7 @@ poly-win32-rt = { path = "../rt" }
 poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
 poly-rtl = { path = "../../../../crates/poly-rtl" }
 poly-ntobj = { path = "../../../../crates/poly-ntobj" }
+poly-security = { path = "../../../../crates/poly-security" }
 
 [lints]
 workspace = true

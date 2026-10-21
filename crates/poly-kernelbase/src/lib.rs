@@ -26,6 +26,10 @@
 //!   which API-set contract.
 //! - [`text`]: the "copy to a caller's buffer or report the size" rule many
 //!   functions share, and ANSI (code page 1252) conversions.
+//! - [`registry`]: the registry API's predefined keys, buffer rules, type
+//!   restrictions and conversions (ADR 0083).
+//! - [`advapi`]: which functions `advapi32` forwards to `kernelbase`, by
+//!   which API-set contract (ADR 0083).
 //!
 //! Sources (clean room, CLEAN_ROOM.md): Microsoft Learn's reference pages
 //! for each function, "Naming Files, Paths, and Namespaces", "File path
@@ -41,6 +45,7 @@
 
 extern crate alloc;
 
+pub mod advapi;
 pub mod env;
 pub mod error;
 pub mod exports;
@@ -48,6 +53,7 @@ pub mod file;
 pub mod memory;
 pub mod message;
 pub mod path;
+pub mod registry;
 pub mod sync;
 pub mod text;
 pub mod version;

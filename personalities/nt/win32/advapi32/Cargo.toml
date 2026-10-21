@@ -1,0 +1,21 @@
+[package]
+name = "advapi32"
+description = "Our advapi32.dll (ADR 0083): forwarders to kernelbase through API-set contracts for the registry, token and security functions, and the few functions advapi32 keeps"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "advapi32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-security = { path = "../../../../crates/poly-security" }
+
+[build-dependencies]
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true

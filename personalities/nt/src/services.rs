@@ -15,6 +15,7 @@
 //! | 0, executive | `0x0C0`–`0x0FF` | file I/O (ADR 0067) |
 //! | 0, executive | `0x100`–`0x13F` | registry ([`REGISTRY_SERVICES`], ADR 0066) |
 //! | 0, executive | `0x140`–`0x17F` | time and system information ([`SYSINFO_SERVICES`], ADR 0079) |
+//! | 0, executive | `0x180`–`0x1BF` | security: access tokens ([`SECURITY_SERVICES`], ADR 0083) |
 //! | 1, win32k | | none yet (Phase 7) |
 //! | 3, Poly | `0x000`–`0x0FF` | Poly's own services, for its tests and tools; never called by `ntdll` (except `0x010`–`0x01F`, which stand in for what the kernel will learn from our `ntdll`'s exports, ADR 0068) |
 //!
@@ -303,6 +304,22 @@ pub enum Service {
     /// `NtQuerySystemInformation(SystemInformationClass, SystemInformation,
     /// SystemInformationLength, ReturnLength*)` (Learn, `winternl.h`).
     QuerySystemInformation,
+
+    // ----- security (ADR 0083)
+    /// `NtOpenProcessToken(ProcessHandle, DesiredAccess, TokenHandle*)`.
+    OpenProcessToken,
+    /// `NtOpenProcessTokenEx(ProcessHandle, DesiredAccess,
+    /// HandleAttributes, TokenHandle*)`.
+    OpenProcessTokenEx,
+    /// `NtOpenThreadToken(ThreadHandle, DesiredAccess, OpenAsSelf,
+    /// TokenHandle*)`.
+    OpenThreadToken,
+    /// `NtOpenThreadTokenEx(ThreadHandle, DesiredAccess, OpenAsSelf,
+    /// HandleAttributes, TokenHandle*)`.
+    OpenThreadTokenEx,
+    /// `NtQueryInformationToken(TokenHandle, TokenInformationClass,
+    /// TokenInformation, TokenInformationLength, ReturnLength*)`.
+    QueryInformationToken,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -419,9 +436,23 @@ pub const SYSINFO_SERVICES: [(Service, u32, &str); 3] = [
     (Service::QuerySystemInformation, 0x142, "NtQuerySystemInformation"),
 ];
 
+/// Access tokens (ADR 0083).
+pub const SECURITY_SERVICES: [(Service, u32, &str); 5] = [
+    (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
+    (Service::OpenProcessTokenEx, 0x181, "NtOpenProcessTokenEx"),
+    (Service::OpenThreadToken, 0x182, "NtOpenThreadToken"),
+    (Service::OpenThreadTokenEx, 0x183, "NtOpenThreadTokenEx"),
+    (Service::QueryInformationToken, 0x184, "NtQueryInformationToken"),
+];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
-    SERVICES.iter().chain(REGISTRY_SERVICES.iter()).chain(EXCEPTION_SERVICES.iter()).chain(SYSINFO_SERVICES.iter())
+    SERVICES
+        .iter()
+        .chain(REGISTRY_SERVICES.iter())
+        .chain(EXCEPTION_SERVICES.iter())
+        .chain(SYSINFO_SERVICES.iter())
+        .chain(SECURITY_SERVICES.iter())
 }
 
 impl Service {
@@ -477,5 +508,6 @@ mod tests {
         assert!((0xA0..0xB0).contains(&Service::RaiseException.number()));
         assert!((0xA0..0xB0).contains(&Service::Continue.number()));
         assert!(SYSINFO_SERVICES.iter().all(|s| (0x140..0x180).contains(&s.1)));
+        assert!(SECURITY_SERVICES.iter().all(|s| (0x180..0x1C0).contains(&s.1)));
     }
 }

@@ -177,6 +177,7 @@ dependencies = [
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
+ "poly-security",
  "poly-seh",
  "poly-vfs",
 ]
@@ -213,6 +214,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-sched"
 version = "0.0.1"
+
+[[package]]
+name = "poly-security"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
 
 [[package]]
 name = "poly-seh"
