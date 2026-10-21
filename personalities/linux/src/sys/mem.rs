@@ -1,4 +1,4 @@
-//! Memory: mmap(2), munmap(2), mprotect(2), brk(2).
+//! Memory: mmap(2), munmap(2), mprotect(2), mremap(2), msync(2), brk(2).
 //!
 //! The personality validates arguments as the man pages describe and turns
 //! them into a [`MapRequest`] or a page-aligned range; the kernel's VMA
@@ -9,7 +9,7 @@
 use crate::abi::{map, page_aligned, page_round_up, prot};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
-use crate::kernel::{Backing, LinuxKernel, MapHints, MapRequest, Placement, Prot};
+use crate::kernel::{Backing, LinuxKernel, MapHints, MapRequest, Placement, Prot, Remap};
 
 /// Flags `MAP_SHARED_VALIDATE` accepts: every flag mmap(2) documents.
 /// Anything else fails with `EOPNOTSUPP` under `MAP_SHARED_VALIDATE` and is
@@ -171,6 +171,77 @@ pub fn mprotect(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let len = page_round_up(size).ok_or(Errno::ENOMEM)?;
     addr.checked_add(len).ok_or(Errno::ENOMEM)?;
     k.mprotect(addr, len, Prot(prot_bits)).map(|()| 0)
+}
+
+/// mremap(2) flags (`linux/mman.h`).
+pub const MREMAP_MAYMOVE: u32 = 1;
+pub const MREMAP_FIXED: u32 = 2;
+pub const MREMAP_DONTUNMAP: u32 = 4;
+
+/// mremap(old_address, old_size, new_size, flags, new_address) (ADR 0059;
+/// the C library's `realloc` of large blocks, Python's `mmap.resize`).
+///
+/// mremap(2) ERRORS, checked in this order (ours, to be confirmed by the
+/// diff runner): unknown flags, `MREMAP_FIXED` or `MREMAP_DONTUNMAP`
+/// without `MREMAP_MAYMOVE`, a misaligned `old_address` or a zero
+/// `new_size` (`EINVAL`). `MREMAP_DONTUNMAP` (Linux 5.7) is `EINVAL`, as
+/// on a kernel that predates it: leaving the old range mapped but empty is
+/// behaviour Poly lacks. An `old_size` of 0 asks for a second mapping of
+/// the same shared pages, which Poly cannot make (`EINVAL`). The sizes are
+/// rounded up to pages; the kernel checks the range (`EFAULT`), the
+/// destination (`EINVAL`) and the room (`ENOMEM`).
+pub fn mremap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let (old, old_size, new_size, flags, new_addr) = (a.ulong(0), a.ulong(1), a.ulong(2), a.uint(3), a.ulong(4));
+    if flags & !(MREMAP_MAYMOVE | MREMAP_FIXED | MREMAP_DONTUNMAP) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    if flags & (MREMAP_FIXED | MREMAP_DONTUNMAP) != 0 && flags & MREMAP_MAYMOVE == 0 {
+        return Err(Errno::EINVAL);
+    }
+    if !page_aligned(old) || new_size == 0 || flags & MREMAP_DONTUNMAP != 0 || old_size == 0 {
+        return Err(Errno::EINVAL);
+    }
+    let old_len = page_round_up(old_size).ok_or(Errno::EFAULT)?;
+    let new_len = page_round_up(new_size).ok_or(Errno::ENOMEM)?;
+    let to = if flags & MREMAP_FIXED != 0 {
+        Remap::Fixed(new_addr)
+    } else if flags & MREMAP_MAYMOVE != 0 {
+        Remap::MayMove
+    } else {
+        Remap::InPlace
+    };
+    k.mremap(old, old_len, new_len, to)
+}
+
+/// msync(2) flags (`asm-generic/mman-common.h`).
+pub const MS_ASYNC: u32 = 1;
+pub const MS_INVALIDATE: u32 = 2;
+pub const MS_SYNC: u32 = 4;
+
+/// msync(addr, length, flags) (ADR 0059; Python's `mmap.flush`).
+///
+/// msync(2): `EINVAL` if `addr` is not page aligned, `flags` has unknown
+/// bits or both `MS_SYNC` and `MS_ASYNC`; `ENOMEM` if part of the range is
+/// not mapped (the kernel checks). The length is rounded up to pages; a
+/// zero length succeeds. `MS_SYNC` writes the files of shared mappings in
+/// the range to their disks before returning; `MS_ASYNC` has nothing to
+/// start (the page cache writes dirty pages back on its own, and every
+/// mapping of a file shares its pages), nor has `MS_INVALIDATE` (no other
+/// copies of the pages exist).
+pub fn msync(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let (addr, length, flags) = (a.ulong(0), a.ulong(1), a.uint(2));
+    if !page_aligned(addr) || flags & !(MS_ASYNC | MS_INVALIDATE | MS_SYNC) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    if flags & MS_SYNC != 0 && flags & MS_ASYNC != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let len = page_round_up(length).ok_or(Errno::ENOMEM)?;
+    addr.checked_add(len).ok_or(Errno::ENOMEM)?;
+    if len == 0 {
+        return Ok(0);
+    }
+    k.msync(addr, len, flags & MS_SYNC != 0).map(|()| 0)
 }
 
 /// brk(addr)

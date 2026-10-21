@@ -103,9 +103,10 @@ pub struct SetMode {
 }
 
 impl SetMode {
-    /// From setxattr(2)'s `flags`; other bits are `EINVAL`.
+    /// From setxattr(2)'s `flags`; other bits, or both flags, are
+    /// `EINVAL` (the Linux personality's choice, ADR 0059).
     pub fn from_linux(flags: u32) -> Result<SetMode> {
-        if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 {
+        if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 || flags == XATTR_CREATE | XATTR_REPLACE {
             return Err(Errno::EINVAL);
         }
         Ok(SetMode { create: flags & XATTR_CREATE != 0, replace: flags & XATTR_REPLACE != 0 })
@@ -422,10 +423,7 @@ mod tests {
         assert_eq!(x.set(b"user.a", b"2", SetMode::from_linux(XATTR_CREATE).unwrap()), Err(Errno::EEXIST));
         assert_eq!(x.set(b"user.a", b"3", SetMode::from_linux(XATTR_REPLACE).unwrap()), Ok(()));
         assert_eq!(x.get(b"user.a"), Ok(&b"3"[..]));
-        // Both flags: always fails, one way or the other.
-        let both = SetMode::from_linux(XATTR_CREATE | XATTR_REPLACE).unwrap();
-        assert_eq!(x.set(b"user.a", b"4", both), Err(Errno::EEXIST));
-        assert_eq!(x.set(b"user.b", b"4", both), Err(Errno::ENODATA));
+        assert_eq!(SetMode::from_linux(XATTR_CREATE | XATTR_REPLACE), Err(Errno::EINVAL));
         x.set(b"security.z", b"", SetMode::default()).unwrap();
         assert_eq!(x.list(), b"security.z\0user.a\0");
         assert_eq!(x.get(b"security.z"), Ok(&b""[..]));

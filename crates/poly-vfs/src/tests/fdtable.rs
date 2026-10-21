@@ -157,3 +157,25 @@ fn dirfd_resolution() {
     let at = t.at_for(f, b"y").unwrap();
     assert_eq!(env.vfs.stat(&env.ctx, &env.root, at, b"y", true), Err(Errno::ENOTDIR));
 }
+
+#[test]
+fn close_range_closes_or_marks_a_range() {
+    let env = Env::new();
+    let mut t = FdTable::new();
+    for _ in 0..8 {
+        t.install(file(&env), false).unwrap();
+    }
+    t.close(4).unwrap();
+    // Marking: 2..=3 and 5 get close-on-exec, nothing closes.
+    assert!(t.close_range(2, 5, true).is_empty());
+    let flags: Vec<(Fd, bool)> = t.iter().map(|(fd, _, c)| (fd, c)).collect();
+    assert_eq!(flags, [(0, false), (1, false), (2, true), (3, true), (5, true), (6, false), (7, false)]);
+    // Closing 3 to "all": the files come back to the caller.
+    assert_eq!(t.close_range(3, u32::MAX, false).len(), 4);
+    assert_eq!(t.iter().map(|(fd, _, _)| fd).collect::<Vec<_>>(), [0, 1, 2]);
+    assert_eq!(t.install(file(&env), false), Ok(3), "the table shrank");
+    // A range past the end, and a range of one.
+    assert!(t.close_range(10, 20, false).is_empty());
+    assert_eq!(t.close_range(1, 1, false).len(), 1);
+    assert_eq!(t.iter().map(|(fd, _, _)| fd).collect::<Vec<_>>(), [0, 2, 3]);
+}

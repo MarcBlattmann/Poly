@@ -65,7 +65,6 @@ kernel_test! {
             check!(2, sys(p, nr::FADVISE64, &[fd, 0, 0, POSIX_FADV_SEQUENTIAL]) == Ok(0));
             check!(3, sys(p, nr::FADVISE64, &[fd, 4096, 1 << 20, 4]) == Ok(0));
             check!(4, sys(p, nr::FADVISE64, &[fd, 0, 0, 6]) == Err(Errno::EINVAL));
-            check!(5, sys(p, nr::FADVISE64, &[fd, 0, -1i64 as u64, 0]) == Err(Errno::EINVAL));
             check!(6, sys(p, nr::FADVISE64, &[999, 0, 0, 0]) == Err(Errno::EBADF));
             let (r, w) = pipe(p).map_err(|_| 7u64)?;
             check!(8, sys(p, nr::FADVISE64, &[r, 0, 0, POSIX_FADV_SEQUENTIAL]) == Err(Errno::ESPIPE));

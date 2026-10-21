@@ -4,7 +4,6 @@
 //! for the work. They are registered by number in [`crate::table`].
 
 pub mod admin;
-pub mod copy_range;
 pub mod cred;
 pub mod epoll;
 pub mod eventfd;

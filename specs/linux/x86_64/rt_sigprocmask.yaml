@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rt_sigprocmask
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  rt_sigprocmask(how, set, oldset, sigsetsize) changes the calling thread's
+  signal mask: SIG_BLOCK (0) adds set, SIG_UNBLOCK (1) removes it,
+  SIG_SETMASK (2) replaces the mask. oldset gets the mask from before the
+  call. SIGKILL and SIGSTOP are silently left out of the mask. With set NULL
+  nothing changes and `how` is not checked. A blocked signal stays pending
+  (a standard signal only once however often it is sent, a real-time signal
+  once per send); unblocking delivers pending signals before the call
+  returns, lowest signal number taken first: with handlers that do not block
+  each other each frame is set up on top of the last, so the highest-
+  numbered handler runs first; with handlers that block all of them they run
+  one at a time in ascending order. Across fork the child inherits the mask
+  (and the actions) but not the pending signals. A blocked fatal signal
+  (SIGTERM with SIG_DFL) kills the process once it is unblocked.
+returns:
+  success: "0; oldset (when not NULL) holds the previous mask"
+errors:
+  bad_how: "EINVAL (22) for a `how` other than 0, 1, 2 (only when set is not NULL); nothing changes"
+  sigsetsize: "EINVAL (22) when sigsetsize is not 8"
+  bad_pointer: "EFAULT (14) for an unreadable set or unwritable oldset"
+side_effects: "none"
+threading: "the mask is per thread; a new thread or child starts with its creator's mask"
+ordering:
+  - "pending signals unblocked by the call are delivered before it returns"
+  - "several pending signals are taken in ascending signal number (standard before real-time)"
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

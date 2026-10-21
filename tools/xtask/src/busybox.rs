@@ -197,7 +197,7 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(600);
 /// A boot with the serial port on QEMU's standard input and output, typed
 /// into like a terminal: [`Session::expect`] waits for text, [`Session::run`]
 /// types a command line and returns what it printed before the next prompt.
-struct Session {
+pub(crate) struct Session {
     child: std::process::Child,
     stdin: std::process::ChildStdin,
     /// Everything QEMU wrote, raw.
@@ -208,13 +208,22 @@ struct Session {
     printed: usize,
     syms: Arc<Symbols>,
     started: Instant,
+    /// How long one step may take ([`STEP_TIMEOUT`] unless changed).
+    step_timeout: Duration,
+    /// How long the whole session may take ([`SESSION_TIMEOUT`] unless changed).
+    session_timeout: Duration,
 }
 
 impl Session {
     fn start(kernel: &Path, syms: &Arc<Symbols>, append: &str, disk: &Path, image: &Path) -> super::Result<Session> {
-        let mut child = super::qemu(kernel, super::DEFAULT_MEMORY, append, super::Devices::Test(disk), "stdio")
-            .args(["-display", "none", "-initrd"])
-            .arg(image)
+        let mut cmd = super::qemu(kernel, super::DEFAULT_MEMORY, append, super::Devices::Test(disk), "stdio");
+        cmd.args(["-display", "none", "-initrd"]).arg(image);
+        Session::spawn(cmd, syms)
+    }
+
+    /// Start `cmd` (QEMU with the serial port on `stdio`) as a session.
+    pub(crate) fn spawn(mut cmd: Command, syms: &Arc<Symbols>) -> super::Result<Session> {
+        let mut child = cmd
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -229,11 +238,28 @@ impl Session {
                 sink.lock().unwrap().extend_from_slice(&buf[..n]);
             }
         });
-        Ok(Session { child, stdin, raw, mark: 0, printed: 0, syms: Arc::clone(syms), started: Instant::now() })
+        let started = Instant::now();
+        let (step_timeout, session_timeout) = (STEP_TIMEOUT, SESSION_TIMEOUT);
+        Ok(Session {
+            child,
+            stdin,
+            raw,
+            mark: 0,
+            printed: 0,
+            syms: Arc::clone(syms),
+            started,
+            step_timeout,
+            session_timeout,
+        })
+    }
+
+    /// Allow `step` per step and `session` for the whole session.
+    pub(crate) fn set_timeouts(&mut self, step: Duration, session: Duration) {
+        (self.step_timeout, self.session_timeout) = (step, session);
     }
 
     /// The output so far without escape sequences and carriage returns.
-    fn text(&mut self) -> String {
+    pub(crate) fn text(&mut self) -> String {
         let raw = self.raw.lock().unwrap().clone();
         let upto = match std::str::from_utf8(&raw) {
             Err(e) if e.error_len().is_none() => e.valid_up_to(),
@@ -251,7 +277,7 @@ impl Session {
     /// returns where its match ends); move the mark there and return the
     /// text up to it.
     fn wait(&mut self, what: &str, found: impl Fn(&str) -> Option<usize>) -> super::Result<String> {
-        let deadline = Instant::now() + STEP_TIMEOUT;
+        let deadline = Instant::now() + self.step_timeout;
         loop {
             let text = self.text();
             if let Some(end) = found(&text[self.mark..]) {
@@ -262,7 +288,7 @@ impl Session {
             if let Ok(Some(status)) = self.child.try_wait() {
                 return Err(format!("QEMU exited ({status}) while waiting for {what}"));
             }
-            if Instant::now() > deadline || self.started.elapsed() > SESSION_TIMEOUT {
+            if Instant::now() > deadline || self.started.elapsed() > self.session_timeout {
                 let last = super::ktest::last_line(&text[self.mark..]).to_string();
                 return Err(format!("timed out waiting for {what} (last line: {last:?})"));
             }
@@ -271,13 +297,13 @@ impl Session {
     }
 
     /// Wait for `needle`.
-    fn expect(&mut self, needle: &str) -> super::Result<String> {
+    pub(crate) fn expect(&mut self, needle: &str) -> super::Result<String> {
         self.wait(&format!("{needle:?}"), |t| t.find(needle).map(|i| i + needle.len()))
     }
 
     /// Wait for the shell's prompt (`root@<host>:<dir># ` at the end of
     /// the output so far); returns the text before it.
-    fn prompt(&mut self) -> super::Result<String> {
+    pub(crate) fn prompt(&mut self) -> super::Result<String> {
         let got = self.wait("the shell's prompt", |t| {
             let start = t.rfind('\n').map_or(0, |i| i + 1);
             let last = &t[start..];
@@ -287,13 +313,13 @@ impl Session {
         Ok(got[..start].to_string())
     }
 
-    fn send(&mut self, bytes: &str) -> super::Result {
+    pub(crate) fn send(&mut self, bytes: &str) -> super::Result {
         self.stdin.write_all(bytes.as_bytes()).and_then(|()| self.stdin.flush()).map_err(|e| format!("qemu stdin: {e}"))
     }
 
     /// Type `line` and Enter at the prompt and return what the command
     /// printed (the echoed line left out).
-    fn run(&mut self, line: &str) -> super::Result<String> {
+    pub(crate) fn run(&mut self, line: &str) -> super::Result<String> {
         self.send(&format!("{line}\r"))?;
         let out = self.prompt()?;
         // A signal that reaches the shell while it waits for input (a
@@ -313,8 +339,8 @@ impl Session {
     }
 
     /// Wait for QEMU to exit; its status.
-    fn finish(&mut self) -> super::Result<Option<i32>> {
-        let deadline = Instant::now() + STEP_TIMEOUT;
+    pub(crate) fn finish(&mut self) -> super::Result<Option<i32>> {
+        let deadline = Instant::now() + self.step_timeout;
         loop {
             if let Some(s) = self.child.try_wait().map_err(|e| e.to_string())? {
                 thread::sleep(Duration::from_millis(100));

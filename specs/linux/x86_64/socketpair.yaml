@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/socketpair
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  socketpair(AF_UNIX, type, protocol, sv) makes two connected unnamed
+  sockets (the two lowest free fds), both ways. Stream pairs have no message
+  boundaries; datagram and seqpacket pairs keep them (a seqpacket record
+  longer than the buffer is cut, the rest dropped). getsockname and
+  getpeername report only the family (length 2); SO_PEERCRED is the creating
+  process. SOCK_NONBLOCK and SOCK_CLOEXEC apply to both. Stream: after the
+  peer closes, reads return the rest then 0; writes are EPIPE with SIGPIPE
+  (MSG_NOSIGNAL: no signal); MSG_PEEK leaves data queued; MSG_WAITALL waits
+  for the full count; FIONREAD counts queued bytes; a nonblocking writer
+  fills the buffer then gets EAGAIN. Datagram: after the peer closes, reads
+  are EAGAIN (no EOF) and writes ECONNREFUSED; seqpacket reads 0 at EOF.
+returns:
+  success: "0"
+errors:
+  inet: "EOPNOTSUPP (95) for AF_INET"
+  family: "EAFNOSUPPORT (97) for an unknown family"
+  protocol: "EPROTONOSUPPORT (93) for a protocol other than 0 or 1"
+  bad_array: "EFAULT (14); no descriptors are left open"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

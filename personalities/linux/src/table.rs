@@ -33,6 +33,8 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::MMAP, mem::mmap),
     (nr::MPROTECT, mem::mprotect),
     (nr::MUNMAP, mem::munmap),
+    (nr::MREMAP, mem::mremap),
+    (nr::MSYNC, mem::msync),
     (nr::BRK, mem::brk),
     (nr::RT_SIGACTION, signal::rt_sigaction),
     (nr::RT_SIGPROCMASK, signal::rt_sigprocmask),
@@ -175,6 +177,8 @@ pub const FILE_SYSTEM: &[(u64, Handler)] = &[
     (nr::RENAMEAT2, path::renameat2),
     (nr::STATX, path::statx),
     (nr::FACCESSAT2, path::faccessat2),
+    (nr::CLOSE_RANGE, fd::close_range),
+    (nr::FLOCK, fd::flock),
 ];
 /// [`IMPLEMENTED`] and the lists subsystems keep next to their handlers
 /// (ADR 0044: time; ADR 0043: file systems, [`FILE_SYSTEM`]; ADR 0049:
@@ -192,7 +196,6 @@ pub const GROUPS: &[&[(u64, Handler)]] = &[
     crate::sys::seccomp::CALLS,
     crate::sys::ns::CALLS,
     crate::sys::fadvise::CALLS,
-    crate::sys::copy_range::CALLS,
     crate::sys::xattr::CALLS,
 ];
 
@@ -355,6 +358,8 @@ mod tests {
             "writev",
             "pipe",
             "select",
+            "mremap",
+            "msync",
             "getpid",
             "clone",
             "fork",

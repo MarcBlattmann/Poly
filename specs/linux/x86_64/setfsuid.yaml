@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setfsuid
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  setfsuid(uid) and setfsgid(gid) set the filesystem uid/gid used for file
+  access checks and the owner of new files, and always return the previous
+  value (they never fail with an error; -1 only reads). As root any value is
+  taken; without privilege only the real, effective, saved or current
+  filesystem id, other values are ignored (the old value is still returned).
+  The filesystem id is reset to the effective id by every effective id
+  change. Moving the fsuid away from 0 drops the filesystem capabilities
+  (such as CAP_DAC_OVERRIDE) from the effective set, so root files with mode
+  0600 are refused (EACCES); back at 0 they open again.
+returns:
+  success: "the previous filesystem id"
+errors:
+  none: "no error cases observed"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

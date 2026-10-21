@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rt_sigpending
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  rt_sigpending(set, sigsetsize) writes the signals that are pending and
+  blocked for the calling thread: those sent to the thread plus those sent
+  to the process. A signal whose handler can run is never seen pending; a
+  blocked signal whose action is SIG_IGN is made pending but dropped when
+  unblocked. A real-time signal queued several times stays in the set until
+  the last entry is taken. sigsetsize may be smaller than 8: only that many
+  bytes are written (0 writes nothing); a process-directed signal stays
+  pending after the thread that could see it exits.
+returns:
+  success: "0; the set is written (sigsetsize bytes)"
+errors:
+  sigsetsize: "EINVAL (22) when sigsetsize is above 8"
+  bad_pointer: "EFAULT (14) for an unwritable set"
+side_effects: "none"
+threading: "per thread: thread-directed signals show only in their thread; process-directed ones in every thread"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

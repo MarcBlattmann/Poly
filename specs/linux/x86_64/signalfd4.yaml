@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/signalfd4
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  signalfd4(fd, mask, sigsetsize, flags) makes (fd -1) or updates (fd an
+  existing signalfd) a descriptor reading the caller's pending signals of
+  mask, which should be blocked. Each read returns whole 128-byte
+  signalfd_siginfo records (as many as fit and are pending): ssi_signo,
+  ssi_code (SI_USER, SI_QUEUE, CLD_EXITED...), ssi_pid, ssi_uid, ssi_status
+  for SIGCHLD (the exit code), ssi_int and ssi_ptr for a queued value.
+  Lowest signal first; a queued real-time signal gives one record per entry.
+  Reading takes the signal (it is no longer pending and no handler runs).
+  Signals outside the mask are not read and stay pending; SIGKILL and
+  SIGSTOP in the mask are ignored. It is readable (poll and epoll POLLIN)
+  while a matching signal is pending; a blocking read waits for one. The
+  descriptor is O_RDWR (SFD_NONBLOCK, SFD_CLOEXEC); it reads the signals of
+  the process that reads it (a child that inherited it reads its own).
+  Unblocked signals go to their handlers as usual.
+returns:
+  create: "a new descriptor"
+  update: "fd"
+  read: "a multiple of 128"
+errors:
+  nothing_pending: "EAGAIN (11) with SFD_NONBLOCK"
+  small_buffer: "EINVAL (22) for a read of under 128 bytes (the signal stays pending)"
+  bad_flags: "EINVAL (22)"
+  sigsetsize: "EINVAL (22) when not 8"
+  bad_mask: "EFAULT (14)"
+  not_signalfd: "EINVAL (22) when fd is open but not a signalfd"
+  closed_fd: "EBADF (9)"
+  write: "EINVAL (22)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering:
+  - "several pending signals are read lowest number first"
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -7,6 +7,7 @@ mod caps;
 mod devices;
 mod fdtable;
 mod files;
+mod locks;
 mod mounts;
 mod names;
 mod objects;

@@ -14,8 +14,9 @@
 //!   ("an empty buffer of size zero can be passed in order to obtain the
 //!   current size of the named extended attribute"); a value larger than
 //!   `size` is `ERANGE`. The same for **listxattr** and its name list.
-//! - **setxattr**: `flags` other than `XATTR_CREATE` and `XATTR_REPLACE`
-//!   are `EINVAL`, a value of more than `XATTR_SIZE_MAX` (64 KiB) bytes is
+//! - **setxattr**: `flags` other than `XATTR_CREATE` and `XATTR_REPLACE`,
+//!   or both (ADR 0059's choice, to be confirmed by the diff runner), are
+//!   `EINVAL`, a value of more than `XATTR_SIZE_MAX` (64 KiB) bytes is
 //!   `E2BIG`; a `size` of 0 sets an empty value (`value` is then not read).
 //! - The path calls resolve from the working directory (an empty path is
 //!   `ENOENT`); the `l` calls do not follow a final symbolic link; the `f`
@@ -118,7 +119,7 @@ fn reply(k: &mut dyn LinuxKernel, data: &[u8], buf: UserPtr, size: u64, max: u64
 fn set(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
     let target = Owned::load(k, a, by)?;
     let flags = a.uint(4);
-    if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 {
+    if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 || flags == XATTR_CREATE | XATTR_REPLACE {
         return Err(Errno::EINVAL);
     }
     let name = name_arg(k, a.ptr(1))?;

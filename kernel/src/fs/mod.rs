@@ -41,6 +41,7 @@ pub mod disk;
 mod disk_tests;
 mod files;
 pub mod initrd;
+pub mod locks;
 pub mod mounts;
 pub mod poll;
 pub mod proc;
