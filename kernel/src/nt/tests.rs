@@ -73,7 +73,6 @@ kernel_test! {
     }
 }
 
-
 kernel_test! {
     /// Kernel-to-user exception dispatch (ADR 0068): a PE registers a
     /// user-mode dispatcher, faults with an access violation and a

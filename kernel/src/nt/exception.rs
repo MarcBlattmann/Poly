@@ -75,7 +75,8 @@ fn current_context() -> Context {
         rip: r.rip,
         ..Context::default()
     };
-    c.gpr = [r.rax, r.rcx, r.rdx, r.rbx, r.rsp, r.rbp, r.rsi, r.rdi, r.r8, r.r9, r.r10, r.r11, r.r12, r.r13, r.r14, r.r15];
+    c.gpr =
+        [r.rax, r.rcx, r.rdx, r.rbx, r.rsp, r.rbp, r.rsi, r.rdi, r.r8, r.r9, r.r10, r.r11, r.r12, r.r13, r.r14, r.r15];
     if let Some((image, _)) = user::fpu_image()
         && image.len() >= FLT_SAVE_SIZE
     {
