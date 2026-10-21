@@ -50,6 +50,13 @@ struct Worker {
 
 static WORKERS: Mutex<BTreeMap<u32, Arc<Worker>>> = Mutex::new(BTreeMap::new());
 
+/// Held across one whole [`drain`]: a completion another thread popped is
+/// delivered (memory written, signalled) before a later drainer returns, so
+/// a system call that completed a request (a cancel, a pipe write) returns
+/// to user mode only after its status block is written. Taken before the
+/// NT lock and never while holding it.
+static DRAINING: Mutex<()> = Mutex::new(());
+
 /// Put the VFS into the NT namespace (`\Device\PolyFs<N>`, `\??\C:`,
 /// `\??\Z:`, `\Device\PolyPipe`). Called once, when the NT state is made.
 pub(super) fn attach(sys: &mut NtSystem) {
@@ -129,6 +136,7 @@ fn worker_main(arg: usize) -> usize {
 
 /// Deliver every queued completion.
 pub(super) fn drain() {
+    let _serial = DRAINING.lock();
     while let Some(c) = with(|s| s.sys.io.pop_completion()) {
         let memory = MEMORY.lock().get(&c.process.0).and_then(Weak::upgrade);
         if let Some(m) = &memory {
