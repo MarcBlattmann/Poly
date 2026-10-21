@@ -161,6 +161,57 @@ unsafe extern "system" {
         returned: *mut usize,
     ) -> NtStatus;
 
+    pub fn NtCreateSection(
+        handle: *mut Handle,
+        access: u32,
+        attributes: *const ObjectAttributes,
+        maximum_size: *const i64,
+        protect: u32,
+        allocation: u32,
+        file: Handle,
+    ) -> NtStatus;
+    pub fn NtOpenSection(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
+    pub fn NtMapViewOfSection(
+        section: Handle,
+        process: Handle,
+        base: *mut *mut u8,
+        zero_bits: usize,
+        commit: usize,
+        offset: *mut i64,
+        size: *mut usize,
+        inherit: u32,
+        allocation: u32,
+        protect: u32,
+    ) -> NtStatus;
+    pub fn NtUnmapViewOfSection(process: Handle, base: *const u8) -> NtStatus;
+    pub fn NtFlushVirtualMemory(
+        process: Handle,
+        base: *mut *mut u8,
+        size: *mut usize,
+        iosb: *mut IoStatusBlock,
+    ) -> NtStatus;
+
+    pub fn NtCreateUserProcess(
+        process: *mut Handle,
+        thread: *mut Handle,
+        process_access: u32,
+        thread_access: u32,
+        process_attributes: *const ObjectAttributes,
+        thread_attributes: *const ObjectAttributes,
+        process_flags: u32,
+        thread_flags: u32,
+        parameters: *const u8,
+        create_info: *mut u8,
+        attribute_list: *const u8,
+    ) -> NtStatus;
+    pub fn NtQueryInformationProcess(
+        handle: Handle,
+        class: u32,
+        info: *mut u8,
+        length: u32,
+        returned: *mut u32,
+    ) -> NtStatus;
+
     pub fn NtCreateThreadEx(
         handle: *mut Handle,
         access: u32,

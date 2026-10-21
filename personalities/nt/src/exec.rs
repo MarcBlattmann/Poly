@@ -301,6 +301,47 @@ pub fn start_process(
     })
 }
 
+/// [`start_process`] for a process another one creates
+/// (`NtCreateUserProcess`, ADR 0079), with its process parameters
+/// ([`crate::params::write`]). On failure the caller ends the process
+/// with [`process_exit`].
+#[allow(clippy::too_many_arguments)] // what a new process is made of
+pub fn start_child(
+    sys: &mut NtSystem,
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    file: &[u8],
+    ntdll: &[u8],
+    params: &crate::params::Parameters,
+    thread: ThreadRef,
+) -> Result<ProcessStart, NtStatus> {
+    let ps = start_process(sys, proc, b, file, ntdll, None, thread)?;
+    crate::params::write(proc, b, ps.peb, params)?;
+    Ok(ps)
+}
+
+/// Handles in `caller`'s table to the new process `pid` and its first
+/// thread `thread`, with the given access (`NtCreateUserProcess`).
+pub fn child_handles(
+    sys: &mut NtSystem,
+    caller: &poly_ntobj::Caller,
+    pid: poly_ntobj::ProcessId,
+    thread: ThreadRef,
+    process_access: u32,
+    thread_access: u32,
+) -> Result<(Handle, Handle), NtStatus> {
+    let p = sys.objects.process_object(pid).ok_or(STATUS_INVALID_CID)?;
+    let t = sys.objects.thread_object(thread).ok_or(STATUS_INVALID_CID)?;
+    let ph = sys.objects.open_by_pointer(caller, p, process_access, 0)?;
+    match sys.objects.open_by_pointer(caller, t, thread_access, 0) {
+        Ok(th) => Ok((ph, th)),
+        Err(e) => {
+            let _ = sys.objects.close(caller, ph);
+            Err(e)
+        }
+    }
+}
+
 /// A thread's first RSP: the zero return address at the top of its stack
 /// (see the module documentation).
 fn start_rsp(b: &mut dyn Backend, stack: &ThreadStack) -> Result<u64, NtStatus> {
@@ -384,6 +425,9 @@ pub fn thread_exit(
     proc.vm.free(b, t.stack, 0, MEM_RELEASE).ok();
     proc.vm.free(b, t.teb, 0, MEM_RELEASE).ok();
     sys.reap(b);
+    if proc.threads.is_empty() {
+        proc.exit_status.get_or_insert(status);
+    }
     proc.threads.is_empty()
 }
 
@@ -404,6 +448,9 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
     }
     let _ = sys.objects.destroy_process(proc.pid);
     if let Some(p) = proc.object.take() {
+        // Kept while a handle keeps the object (`GetExitCodeProcess`);
+        // `NtSystem::reap` forgets it with the object.
+        sys.process_exits.insert(proc.pid, proc.exit_status.unwrap_or(STATUS_SUCCESS));
         let _ = sys.objects.set_signaled(p, true);
         let _ = sys.objects.dereference(p);
     }

@@ -50,6 +50,12 @@ pub fn env_var(name: &[u16]) -> Option<Vec<u16>> {
     with_state(|_| unsafe { env::get(block(), name).map(<[u16]>::to_vec) })
 }
 
+/// A copy of the whole environment block (a child's, `CreateProcessW`).
+pub fn env_block() -> Vec<u16> {
+    // SAFETY: under the lock; copied out before it is released.
+    with_state(|_| unsafe { block().to_vec() })
+}
+
 /// Replace the block with `new` (in the process heap).
 fn set_block(state: &mut State, new: &[u16]) -> bool {
     let pp = parameters();
@@ -198,9 +204,22 @@ pub fn image_path() -> Vec<u16> {
 
 // ----- the current directory ------------------------------------------------------------
 
-/// The initial current directory: the executable's directory (ADR 0079:
-/// Poly does not yet pass a starting directory to a new process).
+/// Poly's own: the starting current directory in the process parameters
+/// (`UNICODE_STRING`, ADR 0079, `poly_kernelbase::process`).
+const PP_CURRENT_DIRECTORY: u64 = poly_kernelbase::process::PP_CURRENT_DIRECTORY as u64;
+
+/// The initial current directory: the one the creator passed
+/// (`CreateProcessW`'s `lpCurrentDirectory`, or the creator's own), else
+/// the executable's directory (a process the kernel started, ADR 0079).
 pub fn init_current_dir() {
+    let pp = parameters();
+    // SAFETY: the parameters' UNICODE_STRING (zero if not set).
+    let given = if pp == 0 { Vec::new() } else { unsafe { unicode_at(pp + PP_CURRENT_DIRECTORY).to_vec() } };
+    if !given.is_empty() {
+        let dir = poly_kernelbase::path::as_current_dir(&given);
+        with_state(|s| s.current_dir = dir);
+        return;
+    }
     let img = image_path();
     let dir = match img.iter().rposition(|&c| c == u16::from(b'\\')) {
         Some(i) => poly_kernelbase::path::as_current_dir(&img[..=i]),

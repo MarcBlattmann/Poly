@@ -243,6 +243,13 @@ impl NtKernel for Kernel {
         sched::create_thread(self.pid, self.tid, &self.memory, req)
     }
 
+    fn create_process(
+        &mut self,
+        req: poly_personality_nt::ProcessCreate,
+    ) -> Result<poly_personality_nt::ProcessCreated, NtStatus> {
+        create_process(self.caller(), req)
+    }
+
     fn terminate_thread(&mut self, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus> {
         sched::terminate_other(self.pid, thread, status)
     }
@@ -439,6 +446,37 @@ pub fn start_with_std(
     launch: &Launch,
     sources: &[console::StdSource; 3],
 ) -> Result<Start, NtStatus> {
+    let params = with(|s| {
+        let args: Vec<&str> = launch.args.iter().map(String::as_str).collect();
+        poly_personality_nt::params::for_program(&launch.image_path, &args, layout::environment(&s.sys))
+    });
+    start_params(process, memory, file, tid, &params, sources, None).map(|(start, _)| start)
+}
+
+/// Who gets handles to a new process and its first thread, with which
+/// access (`NtCreateUserProcess`, ADR 0079).
+struct HandlesFor {
+    caller: Caller,
+    process_access: u32,
+    thread_access: u32,
+}
+
+/// Handles to a new process and its first thread.
+type ChildHandles = (poly_ntobj::Handle, poly_ntobj::Handle);
+
+/// Set up `process` to run `file` with the process parameters `params`
+/// (ADR 0073) and the standard handles `sources` (ADR 0080); with
+/// `handles`, also open handles to its process and first thread for the
+/// creator, before anything runs (ADR 0079).
+fn start_params(
+    process: &Arc<Process>,
+    memory: &Arc<Memory>,
+    file: &[u8],
+    tid: u32,
+    params: &poly_personality_nt::params::Parameters,
+    sources: &[console::StdSource; 3],
+    handles: Option<&HandlesFor>,
+) -> Result<(Start, Option<ChildHandles>), NtStatus> {
     let pid = ProcessId(process.pid);
     let thread = ThreadRef(u64::from(tid));
     if NTDLL.is_empty() {
@@ -451,35 +489,42 @@ pub fn start_with_std(
     let console_app =
         poly_pe::Pe::parse(file).is_ok_and(|pe| pe.info().optional.subsystem == poly_pe::subsystem::WINDOWS_CUI);
     let started = with(|s| {
-        let args: Vec<&str> = launch.args.iter().map(String::as_str).collect();
-        let params = poly_personality_nt::params::for_program(&launch.image_path, &args, layout::environment(&s.sys));
         s.processes.insert(pid, NtProcess::new(pid));
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         let mut b = MemBackend { memory, sections: &mut s.sections };
         let start = exec::start_process(&mut s.sys, proc, &mut b, file, NTDLL, None, thread).and_then(|ps| {
-            // The process parameters: image path, command line and
-            // environment (ADR 0073).
-            let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, &params)?;
+            // The process parameters: image path, command line,
+            // environment and current directory (ADR 0073, 0079).
+            let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, params)?;
             // Its console and standard handles (ADR 0080).
             let (connection, std) = console::setup(&mut s.sys, &mut b, pid, thread, console_app, sources)?;
             poly_personality_nt::params::write_handles(&mut b, base, connection, std)?;
-            Ok(ps)
+            // Handles for its creator (NtCreateUserProcess, ADR 0079).
+            let opened = match handles {
+                Some(h) => {
+                    Some(exec::child_handles(&mut s.sys, &h.caller, pid, thread, h.process_access, h.thread_access)?)
+                }
+                None => None,
+            };
+            Ok((ps, opened))
         });
         match start {
-            Ok(ps) => Ok(Start {
-                // The first thread starts in ntdll's LdrInitializeThunk with
-                // the image entry, its argument (the PEB) and the image base
-                // (ADR 0071's start convention).
-                entry: crate::arch::user::Entry {
-                    rip: ps.entry,
-                    rsp: ps.rsp,
-                    args: [ps.start_routine, ps.argument, ps.image_base],
+            Ok((ps, opened)) => Ok((
+                Start {
+                    // The first thread starts in ntdll's LdrInitializeThunk
+                    // with the image entry, its argument (the PEB) and the
+                    // image base (ADR 0071's start convention).
+                    entry: crate::arch::user::Entry {
+                        rip: ps.entry,
+                        rsp: ps.rsp,
+                        args: [ps.start_routine, ps.argument, ps.image_base],
+                    },
+                    teb: ps.teb,
                 },
-                teb: ps.teb,
-            }),
+                opened,
+            )),
             Err(e) => {
-                let proc = s.processes.remove(&pid).expect("just inserted");
-                let mut proc = proc;
+                let mut proc = s.processes.remove(&pid).expect("just inserted");
                 let mut b = MemBackend { memory, sections: &mut s.sections };
                 exec::process_exit(&mut s.sys, &mut proc, &mut b);
                 Err(e)
@@ -490,6 +535,53 @@ pub fn start_with_std(
         io::unregister(process.pid);
     }
     started
+}
+
+/// `NtCreateUserProcess` (ADR 0079): a new NT process running `req.image`
+/// with `req.params`, the creator's console and standard handles, handles
+/// to it and its first thread in the creator's table, and its first thread
+/// started.
+fn create_process(
+    creator: Caller,
+    req: poly_personality_nt::ProcessCreate,
+) -> Result<poly_personality_nt::ProcessCreated, NtStatus> {
+    use crate::user::memory::Layout;
+    use poly_binfmt::{Arch, Bits, Format};
+    let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| poly_ntobj::status::STATUS_NO_MEMORY)?);
+    let creator_process = user::current_process();
+    let traced = creator_process.as_ref().is_some_and(|p| p.traced);
+    // The child shares its creator's console: its standard handles come
+    // from the creator's descriptors 0-2 (ADR 0080; handle inheritance
+    // proper is not supported yet, ADR 0079).
+    let sources = match &creator_process {
+        Some(p) => console::std_sources(p),
+        None => [console::StdSource::None, console::StdSource::None, console::StdSource::None],
+    };
+    let pid = crate::process::alloc_pid();
+    let format = Format::Pe { bits: Bits::B64, arch: Arch::X86_64 };
+    let process = Arc::new(Process::new_nt(pid, format, traced));
+    let want = HandlesFor { caller: creator, process_access: req.process_access, thread_access: req.thread_access };
+    let (start, handles) = start_params(&process, &memory, &req.image, pid, &req.params, &sources, Some(&want))?;
+    let (ph, th) = handles.expect("asked for");
+    match user::spawn_nt(Arc::clone(&process), Arc::clone(&memory), start.entry, start.teb, user::DEFAULT_HOOK) {
+        Ok(kthread) => {
+            // The creator waits on the process object, not the thread.
+            let _ = thread::detach(kthread);
+            Ok(poly_personality_nt::ProcessCreated {
+                process: ph,
+                thread: th,
+                client: poly_personality_nt::ClientId { process: ProcessId(pid), thread: ThreadRef(u64::from(pid)) },
+            })
+        }
+        Err(_) => {
+            with(|s| {
+                let _ = s.sys.objects.close(&creator, ph);
+                let _ = s.sys.objects.close(&creator, th);
+            });
+            process_exit(pid, &memory);
+            Err(poly_ntobj::status::STATUS_NO_MEMORY)
+        }
+    }
 }
 
 pub use sched::wait_while_suspended;

@@ -18,28 +18,41 @@ use poly_win32_rt as _;
 mod base;
 mod console;
 mod file;
+mod mapping;
 mod memory;
 mod misc;
+mod nls;
 mod nt;
 mod process;
+mod spawn;
 mod sync;
+mod tls;
 
 #[global_allocator]
 static ALLOC: base::ProcessHeap = base::ProcessHeap;
 
-/// `DLL_PROCESS_ATTACH` (`winnt.h`).
+/// `DLL_PROCESS_ATTACH`, `DLL_THREAD_ATTACH`, `DLL_THREAD_DETACH`
+/// (`winnt.h`).
 const DLL_PROCESS_ATTACH: u32 = 1;
+const DLL_THREAD_ATTACH: u32 = 2;
+const DLL_THREAD_DETACH: u32 = 3;
 
 /// The entry point (`DllMain`): at `DLL_PROCESS_ATTACH`, the process's
-/// current directory starts as the executable's directory (ADR 0079), and
-/// its standard handles and console are the ones its parameters name (ADR
-/// 0080).
+/// current directory starts as its parameters say, else the executable's
+/// directory (ADR 0079), and its standard handles and console are the ones
+/// its parameters name (ADR 0080). Every thread is noted for TLS (`tls`).
 #[unsafe(no_mangle)]
 pub extern "system" fn kernelbase_main(_module: *mut u8, reason: u32, _reserved: *mut u8) -> i32 {
-    if reason == DLL_PROCESS_ATTACH {
-        process::init_current_dir();
-        let connection = process::init_std_handles();
-        console::init(connection);
+    match reason {
+        DLL_PROCESS_ATTACH => {
+            process::init_current_dir();
+            let connection = process::init_std_handles();
+            console::init(connection);
+            tls::thread_attach();
+        }
+        DLL_THREAD_ATTACH => tls::thread_attach(),
+        DLL_THREAD_DETACH => tls::thread_detach(),
+        _ => {}
     }
     base::TRUE
 }
