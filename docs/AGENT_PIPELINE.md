@@ -207,7 +207,9 @@ The program starts with default signal actions and an empty signal mask.
 `--build-kernel` to rebuild, or `--kernel`) with
 `poly.qemu_exit poly.init=/test-binary poly.test.capture`, and turns the
 kernel's `POLY-*` records (ADR 0027, kernel side in ADR 0038) into a trace;
-about half a second per test. Records carry no `data<i>` fields yet, so
+about half a second per test. QEMU runs on KVM when `/dev/kvm` can be opened
+and on its emulator (TCG) otherwise; `POLY_QEMU_ACCEL=tcg|kvm|auto` chooses (ADR 0077).
+Records carry no `data<i>` fields yet, so
 pointer arguments are compared as "anything". A kernel that cannot run a
 test's file says `POLY-INIT: unsupported <reason>`, and the test is
 reported **unsupported**. QEMU itself sometimes crashes (SIGSEGV) while
@@ -242,9 +244,8 @@ marks an entry green (`pipeline diff --target poly` with the entry's
 visible and held-out directories; the loop's verify step) and again
 whenever the runner re-runs the entries. Today 11 of the 12 corpus programs
 pass (`libc-hello` differs at `rseq`: Poly answers `ENOSYS`, with the same
-output and exit status); of the 11 corpus app tests, all but `app-ls` pass
-(app mode; `app-ls` is in `specs/linux/FAILING.md`); and 137 green entries
-bring 235 visible tests. The spec tests take about a minute with four jobs
+output and exit status); all 11 corpus app tests pass (app mode); and 139
+green entries bring 245 visible tests. The spec tests take about a minute with four jobs
 (the app tests run one at a time after them). (`write` was green
 before its spec tests existed; its visible and held-out spec tests pass
 since the runner's third pass.)
