@@ -1355,8 +1355,12 @@ kernel_test! {
         if join(short) != Ok(0) {
             return Err("the short timed wait did not time out");
         }
-        sleep(Duration::from_millis(5));
-        if state(long) != Some(State::Blocked) {
+        // The long one was woken with the queue and must go back to sleep,
+        // not end. It may run on another CPU, which a busy host can hold
+        // off for a while (or it may not have started yet): wait for it to
+        // block, and fail only if its wait ended instead.
+        let back_asleep = wait_until(10, || matches!(state(long), Some(State::Blocked | State::Exited)));
+        if !back_asleep || state(long) != Some(State::Blocked) {
             return Err("waking the queue for one deadline ended another thread's wait");
         }
         TIMED_TOKENS.store(1, SeqCst);
@@ -1438,11 +1442,14 @@ kernel_test! {
 
 static SPINS: AtomicUsize = AtomicUsize::new(0);
 static STOP: AtomicBool = AtomicBool::new(false);
+/// The spinner's CPU's tick count once it held the real tick off.
+static SPINNER_TICKS: AtomicU64 = AtomicU64::new(0);
 
 /// Stands in for the timer: calls `preempt_tick` until told to stop, with
 /// the real tick held off.
 fn spinner(_: usize) -> usize {
     let _irq = InterruptsOff::new();
+    SPINNER_TICKS.store(time::cpu_ticks(), SeqCst);
     while !STOP.load(SeqCst) {
         SPINS.fetch_add(1, SeqCst);
         preempt_tick();
@@ -1453,25 +1460,40 @@ fn spinner(_: usize) -> usize {
 kernel_test! {
     fn preempt_tick_switches_after_a_time_slice() -> TestResult {
         let _irq = no_preemption();
+        // A lone thread just gets a new slice. Asked under the scheduler's
+        // lock as `preempt_tick` asks: with several CPUs a thread queued on
+        // another one may be taken over at any time (a busy host holds that
+        // CPU off), and then a switch is right.
         for _ in 0..2 * TIME_SLICE_TICKS {
-            if preempt_tick() {
+            let mut t = THREADS.lock();
+            let cpu = this_cpu();
+            if !t.sched.has_runnable(cpu) && t.sched.tick(cpu) {
                 return Err("preempted with nobody else to run");
             }
         }
         SPINS.store(0, SeqCst);
         STOP.store(false, SeqCst);
         let t = spawn_here(spinner, 0).map_err(|_| "spawn failed")?;
+        // Interrupts are off here and pinned to this CPU: its tick count
+        // moves only once the spinner (or a thread that ran before it)
+        // turns them on.
+        let ticks = time::cpu_ticks();
         yield_now();
-        // The spinner got a full slice, then the tick switched back here. A
-        // real tick or two may land in the few instructions between the
-        // spinner's start (interrupts on) and its `InterruptsOff`.
+        // The spinner got a full slice, then the tick switched back here.
+        // Real ticks may land between the spinner's start (interrupts on)
+        // and its `InterruptsOff`, and use up part of its slice: on a busy
+        // host several, since a tick whose handler waits for the host that
+        // long finds the next one due when it returns.
         let spins = SPINS.load(SeqCst);
+        let real = SPINNER_TICKS.load(SeqCst).saturating_sub(ticks) as usize;
         // Stopped either way: a spinner left running would hold this CPU
         // with interrupts off for the rest of the boot.
         STOP.store(true, SeqCst);
         let joined = join(t);
-        if !(TIME_SLICE_TICKS as usize - 2..=TIME_SLICE_TICKS as usize).contains(&spins) {
-            crate::kprintln!("thread: the spinner ran {spins} ticks of a {TIME_SLICE_TICKS}-tick slice");
+        if spins > TIME_SLICE_TICKS as usize || spins + real < TIME_SLICE_TICKS as usize {
+            crate::kprintln!(
+                "thread: the spinner ran {spins} ticks of a {TIME_SLICE_TICKS}-tick slice ({real} real ticks first)"
+            );
             return Err("not preempted after one time slice");
         }
         joined.map(|_| ()).map_err(|_| "spinner did not finish")

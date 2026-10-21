@@ -8,6 +8,9 @@
 restarts), [0036](0036-demand-paging-and-exec.md) and
 [0040](0040-page-cache-and-ext2-on-virtio-blk.md) (memory maps, page-cache
 pages in mappings) and [0038](0038-linux-processes-in-the-kernel-and-the-first-program.md).
+Amended by [0070](0070-cpu-time-split-by-measured-mode-changes.md): the
+user / system split comes from the cycles measured in each mode, not from
+tick samples.
 
 ## Context
 
@@ -103,7 +106,8 @@ too. Effective uid 0 stands in for `CAP_SYS_TIME`.
 **CPU time per thread in the scheduler.** `kernel/src/cputime.rs` measures
 how long each thread-table slot ran with the monotonic clock at every
 context switch, and splits it into user and system time in the ratio of
-tick samples (the tick records whether it interrupted ring 3). A slot
+tick samples (the tick records whether it interrupted ring 3; replaced by
+measured mode changes in ADR 0070). A slot
 knows its user thread's process and thread id; when a thread is reaped its
 time moves to its `Process` (`ProcessCpu`), which also has room for
 waited-for children (`add_child`, for `wait4` to fill in when it reaps a child). `CLOCK_THREAD_CPUTIME_ID`,
@@ -171,7 +175,7 @@ yet fired timer reporting 1 ns left, the 4096-timer limit.
   wake absolute wall-clock sleeps early; Linux does both. Wait queues
   that need it can be added when a program depends on it.
 - The CPU-time split is sampled: a thread that ran less than a tick shows
-  all of its time as system time. `getrusage` fills only the two times;
+  all of its time as system time. (ADR 0070 measures it instead.) `getrusage` fills only the two times;
   the counters stay 0. The children's times stay 0 until `wait4` adds a
   reaped child's time (`ProcessCpu::add_child`).
 - While any process has a CPU-time timer armed, the timer thread runs once

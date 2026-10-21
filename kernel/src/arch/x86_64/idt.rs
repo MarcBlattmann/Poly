@@ -302,6 +302,17 @@ irq_common:
        at a TrapFrame. */
     .global trap_return
 trap_return:
+    testb $3, 144(%rsp)         /* CS to return to: ring 3? */
+    jz 5f
+    /* The thread's time counts as user time from here (cputime.rs), with
+       interrupts off until the IRETQ. Every register comes from the
+       frame below, so the call may clobber any; rbx keeps the frame. */
+    cli
+    mov %rsp, %rbx
+    and $-16, %rsp
+    call {returning_to_user}
+    mov %rbx, %rsp
+5:
     pop %r15
     pop %r14
     pop %r13
@@ -401,6 +412,7 @@ isr_stub_table:
     dispatch = sym trap_dispatch,
     irq_entry = sym irq_entry,
     irq_exit = sym irq_exit,
+    returning_to_user = sym returning_to_user,
     irq_stack = const super::percpu::INTERRUPT_STACK_OFFSET,
     irq_stack_size = const super::irqstack::SIZE,
     smap = sym super::usercopy::SMAP,
@@ -515,6 +527,7 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
     // thread's doing (and runs on an IST stack): it is handled, or not, as
     // in ring 0.
     if from_user && !matches!(vector, NMI | MACHINE_CHECK | DOUBLE_FAULT) {
+        crate::cputime::entered_kernel();
         // Returns only if the thread goes on: a page fault was resolved and
         // the instruction is retried, or a signal handler runs next.
         // SAFETY: as above; the handler gets a copy.
@@ -564,7 +577,9 @@ extern "C" fn irq_entry(frame: *mut TrapFrame) {
     // else refers to it during these reads.
     let (vector, from_user) = unsafe { ((*frame).vector, (*frame).in_user_mode()) };
     super::irqstack::note_entry(frame as u64);
-    super::irq::set_interrupted_user(from_user);
+    if from_user {
+        crate::cputime::entered_kernel();
+    }
     super::irq::dispatch(vector as u8);
 }
 
@@ -583,6 +598,12 @@ extern "C" fn irq_exit(frame: *mut TrapFrame) {
     if from_user {
         crate::user::return_to_user();
     }
+}
+
+/// Called by `trap_return` on every return to ring 3, with interrupts off
+/// from here to the IRETQ: the thread's time is user time from now on.
+extern "C" fn returning_to_user() {
+    crate::cputime::returning_to_user();
 }
 
 /// A stack guard a fault hit.

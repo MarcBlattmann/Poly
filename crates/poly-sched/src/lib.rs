@@ -110,10 +110,18 @@
 //! that). The slot is freed when the thread is both reaped and either joined
 //! ([`Scheduler::join`] collects its exit code) or detached
 //! ([`Scheduler::detach`]: nobody will join it).
+//!
+//! # CPU time
+//!
+//! [`cputime`] has the arithmetic of the kernel's per-thread CPU time:
+//! each CPU's record of the time its running thread spends in user mode
+//! and in the kernel, and the user / system split that never goes down.
 
 #![no_std]
 
 use core::fmt;
+
+pub mod cputime;
 
 /// Slot index type; `N` is at most `u16::MAX`.
 type Link = Option<u16>;
