@@ -334,10 +334,12 @@ fn diff_with(repo: &Path, a: &Args, root_fallback: &[String]) -> Result<u8> {
             }
             return root_self_check(p, name, &binary, &run_dir, &not_root);
         }
-        let reference = match runner::run(tracer, &binary, name, ref_timeout) {
-            Ok(t) => t,
-            Err(e) => return Ok(TestResult::not_run(name, Verdict::Error, format!("reference run: {e}"))),
-        };
+        // A reference run that timed out is run again (ADR 0085).
+        let (reference, ref_timeouts) =
+            match runner::rerun_on_timeout(|| runner::run(tracer, &binary, name, ref_timeout)) {
+                Ok(r) => r,
+                Err(e) => return Ok(TestResult::not_run(name, Verdict::Error, format!("reference run: {e}"))),
+            };
         let ref_file = format!("reference/{name}.json");
         util::write_json(&run_dir.join(&ref_file), &reference)?;
         let target_run: Result<Trace> = match &poly {
@@ -371,7 +373,8 @@ fn diff_with(repo: &Path, a: &Args, root_fallback: &[String]) -> Result<u8> {
         if let Some(mode) = &b.syscalls {
             test_opts.syscalls = opts.syscalls.weaker(SyscallMode::parse(mode)?);
         }
-        let mut r = TestResult::compared(name, &reference, &target_trace, &test_opts);
+        let mut r =
+            TestResult::compared(name, &reference, &target_trace, &test_opts).with_reference_timeouts(ref_timeouts);
         r.files = vec![ref_file, target_file];
         if let Some(p) = &poly
             && r.verdict == Verdict::Fail
@@ -393,6 +396,7 @@ fn diff_with(repo: &Path, a: &Args, root_fallback: &[String]) -> Result<u8> {
             checked.reference_exit = r.reference_exit;
             checked.reference_syscalls = r.reference_syscalls;
             checked.comparison = r.comparison;
+            checked.reference_timeouts = r.reference_timeouts;
             return Ok(checked);
         }
         Ok(r)
@@ -424,22 +428,24 @@ fn diff_with(repo: &Path, a: &Args, root_fallback: &[String]) -> Result<u8> {
             summary.tests.push(TestResult::not_run(name, Verdict::Unsupported, reason.clone()));
             continue;
         }
-        let reference = match host_app_run(tracer, &tree, name, timeout(a, DEFAULT_TIMEOUT)?) {
-            Ok(t) => t,
-            Err(e) => {
-                let unsupported = e.contains("not permitted") || e.contains("ptrace tracer only");
-                if unsupported {
-                    no_jail = Some(format!("reference run: {e}"));
+        let app_timeout = timeout(a, DEFAULT_TIMEOUT)?;
+        let (reference, ref_timeouts) =
+            match runner::rerun_on_timeout(|| host_app_run(tracer, &tree, name, app_timeout)) {
+                Ok(r) => r,
+                Err(e) => {
+                    let unsupported = e.contains("not permitted") || e.contains("ptrace tracer only");
+                    if unsupported {
+                        no_jail = Some(format!("reference run: {e}"));
+                    }
+                    let verdict = if unsupported { Verdict::Unsupported } else { Verdict::Error };
+                    summary.tests.push(TestResult::not_run(name, verdict, format!("reference run: {e}")));
+                    continue;
                 }
-                let verdict = if unsupported { Verdict::Unsupported } else { Verdict::Error };
-                summary.tests.push(TestResult::not_run(name, verdict, format!("reference run: {e}")));
-                continue;
-            }
-        };
+            };
         let ref_file = format!("reference/{name}.json");
         util::write_json(&run_dir.join(&ref_file), &reference)?;
         let target_run: Result<Trace> = match (&poly, &unsupported) {
-            (None, _) => host_app_run(tracer, &tree, name, timeout(a, DEFAULT_TIMEOUT)?),
+            (None, _) => host_app_run(tracer, &tree, name, app_timeout),
             (Some(_), Some(reason)) => {
                 summary.tests.push(TestResult::not_run(name, Verdict::Unsupported, reason.clone()));
                 continue;
@@ -470,7 +476,8 @@ fn diff_with(repo: &Path, a: &Args, root_fallback: &[String]) -> Result<u8> {
         };
         let target_file = format!("{target}/{name}.json");
         util::write_json(&run_dir.join(&target_file), &target_trace)?;
-        let mut r = TestResult::compared(name, &reference, &target_trace, &app_opts);
+        let mut r =
+            TestResult::compared(name, &reference, &target_trace, &app_opts).with_reference_timeouts(ref_timeouts);
         r.files = vec![ref_file, target_file];
         r.syscall_mode = Some(app_opts.syscalls);
         summary.tests.push(r);
