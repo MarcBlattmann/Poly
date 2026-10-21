@@ -306,9 +306,16 @@ pub fn parse_strace(text: &str, test: &str) -> Result<Trace> {
             continue;
         }
         let ret = strace_ret(call[close + 1..].trim_start().trim_start_matches("= "));
-        let (kinds, _) = syscalls::signature(&name);
+        let texts = split_args(&call[open + 1..close]);
+        // A multiplexed call's argument kinds follow its option or command
+        // argument, which `-X raw` prints as a number.
+        let mut raw = [0u64; 6];
+        for (slot, a) in raw.iter_mut().zip(&texts) {
+            *slot = parse_number(a).map_or(0, |v| v as u64);
+        }
+        let (kinds, _) = syscalls::call_signature(&name, &raw);
         let known = syscalls::is_known_signature(&name);
-        let args = split_args(&call[open + 1..close])
+        let args = texts
             .iter()
             .enumerate()
             .map(|(i, a)| strace_arg(a, if known { kinds.get(i).copied() } else { None }))
@@ -370,6 +377,19 @@ mod tests {
     #[test]
     fn splits_nested_arguments() {
         assert_eq!(split_args(r#"1, {a=1, b=[2, 3]}, "x,\"y", NULL"#), ["1", "{a=1, b=[2, 3]}", r#""x,\"y""#, "NULL"]);
+    }
+
+    /// strace prints what a prctl option writes through arg2 (`[0]`): a
+    /// pointer by the option, so it compares like our tracer's `<ptr>`.
+    #[test]
+    fn strace_multiplexed_calls_are_typed_by_option() {
+        let log = "7711  prctl(0x25, [0])                  = 0\n\
+                   7711  prctl(0x24, 0x1)                  = 0\n\
+                   7711  fcntl(3, 0x9)                     = 7711\n\
+                   7711  exit_group(0)                     = ?\n";
+        let t = parse_strace(log, "x").unwrap();
+        let lines: Vec<String> = normalize(&t, &NormOptions::default()).iter().map(ToString::to_string).collect();
+        assert_eq!(lines, ["prctl(37, <ptr>) = 0", "prctl(36, 0x1) = 0", "fcntl(3, 9) = <pid>", "exit_group(0) = ?"]);
     }
 
     #[test]
