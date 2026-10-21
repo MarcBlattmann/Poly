@@ -74,7 +74,87 @@ skipped where there is none. Toolchain: the host's `cc` (gcc 13 here;
 clang works too, set `CC`), flags in `tools/pipeline/src/corpus.rs`;
 `target/pipeline/bin/manifest.json` records the compiler version and the
 hash of every source and binary. Two builds with the same compiler give
-the same bytes (tested).
+the same bytes (tested). `tests/linux/apps/*.app` are app tests, below.
+
+### App tests
+
+An app test runs an unchanged, dynamically linked program of this
+machine (GNU coreutils, grep, sed, ...) with fixed arguments, stdin,
+environment and files, on real Linux and on Poly, and compares the runs
+like a corpus test ([ADR 0057](adr/0057-app-tests-host-programs-in-one-tree.md);
+code in `tools/pipeline/src/apps.rs`). A test is a JSON file:
+
+```json
+{
+  "description": "cp(1) copies a file; cat(1) shows the copy",
+  "steps": [["cp", "src.txt", "dst.txt"], ["cat", "dst.txt"]],
+  "stdin": "optional",
+  "env": ["OPTIONAL=extra"],
+  "files": [{"path": "src.txt", "text": "copied content\n"},
+            {"path": "sub", "dir": true}, {"path": "run.sh", "text": "...", "mode": "755"},
+            {"path": "link", "symlink": "src.txt"}]
+}
+```
+
+- **One file tree for both systems.** The tool builds it from the
+  definition: the launcher `tests/linux/apps/launch.c` (freestanding, like
+  the corpus) as `/test-binary`, its configuration and stdin in
+  `/poly-app/`, the programs in `/bin` (from the host's `/usr/bin`,
+  `/bin`, `/usr/sbin`, `/sbin`), their interpreter and the shared libraries
+  they need at their host paths (found as the dynamic linking boot tests
+  find them, `tools/xtask/src/libsearch.rs`, shared by both tools),
+  `/etc/passwd` and `/etc/group` with only root, empty `/dev`, `/proc`,
+  `/sys` and `/tmp`, and the test's files under `/work`. Everything is
+  root's, with fixed modes and the modification time 2023-11-14 22:13:20
+  UTC (so `ls -l` shows the year on every system). The run directory
+  keeps a listing with hashes (`trees/<test>.txt`).
+- **Poly** boots the tree as its initramfs (`poly.init=/test-binary`);
+  **Linux** gets it written to a tmpfs (`/dev/shm`, or
+  `$POLY_APP_TREE_DIR`; an initramfs is a tmpfs on Linux too) and the
+  tracer starts the launcher chrooted into it, in a mount namespace of its
+  own with the host's `/dev` and `/proc` bound in. That needs root, or
+  unprivileged user namespaces (the caller is then mapped to root); where
+  neither is allowed, app tests are reported **unsupported**. Only the
+  ptrace tracer runs them.
+- **The launcher** (the kernel's `poly.init` takes no arguments) reads
+  `/poly-app/launch`, sets umask 022, changes to `/work`, takes stdin from
+  `/poly-app/stdin` and sends stdout and stderr into the regular files
+  `/poly-app/stdout` and `/poly-app/stderr` (the same kind of file on both
+  systems, so programs buffer and probe the same way), runs every step
+  but the last as a child it waits for and the last one with `execve` in
+  its place. On Linux the run's output is what those files hold; on Poly
+  it is what `POLY-OUT` reports for fds 1 and 2.
+- **Fixed environment:** `PATH=/bin HOME=/work LANG=C TZ=UTC
+  GLIBC_TUNABLES=glibc.cpu.hwcaps=-SSE4_2`, plus the test's `env`. The
+  tunable hides SSE4.2 from glibc, so its dynamic linker does not search
+  `glibc-hwcaps/x86-64-v2..v4` directories on a newer host CPU: the search
+  is the one QEMU's default CPU (under which Poly runs) gets.
+- **Host configuration that is not the program's:** the reference's
+  `/sys` stays empty, and a copy of the host's `/proc/filesystems`
+  without `selinuxfs` is bound over the real one: Poly is a Linux without
+  SELinux, and libselinux (linked by ls, cp, mkdir, sed) probes for it.
+- **App mode** (`--syscalls app`, the default for app tests; `--syscalls`
+  overrides it): exit status, stdout and stderr byte for byte, and per
+  process (each process's own order, so a parent waiting for its child
+  does not depend on scheduling) the sequence of syscall names with result
+  classes: `ok`, `-1 ERRNO`, `?` (no return), or the descriptor for calls
+  that return one; consecutive events of the same name and class are
+  collapsed into one (a read loop over a host file of another size, a
+  signal action set for many signals); `rseq` (`ENOSYS` on Poly by
+  decision, ADR 0043/0049) and `SIGCHLD` are left out. Arguments are shown
+  in the report but not compared: an unchanged program's arguments are its
+  own, and where they follow from the system (a read size after a short
+  read of `/proc/self/maps`) they are not about Poly.
+
+Linux against Linux is clean for every app test, also with four runs in
+parallel under load. The corpus has one per program (`app-true`,
+`app-echo`, `app-cat`, `app-wc`, `app-sort`, `app-head`, `app-ls`,
+`app-cp`, `app-mkdir`, `app-grep`, `app-sed`); each program's entry
+`linux/api/apps/<program>` has its spec sheet and visible cases in
+`specs/linux/apps/` and held-out cases in the store, and what fails on
+Poly is in `specs/linux/FAILING.md`. To trace one: `cargo xtask pipeline
+trace app-ls --print`. A QEMU that dies by a signal (an emulator crash
+seen under load) is booted once more.
 
 ### Diff runner
 
@@ -89,7 +169,7 @@ cargo xtask pipeline polycheck                  # and Poly against Linux (tests/
 ```
 
 `--tests-dir` adds an entry's test programs (visible or held-out, `.c`
-files in the corpus format) to the run.
+files in the corpus format, or `.app` app tests) to the run.
 
 Per test it compares the exit status, stdout and stderr exactly and the
 syscall sequence after masking addresses, pids and times; the first
@@ -124,7 +204,9 @@ the corpus this way and fails if a test listed in
 `tests/linux/poly-pass.txt` does not pass; tests that newly pass are named,
 to be added to the list. Today 11 of the 12 corpus programs pass;
 `libc-hello` differs at `rseq` (Poly answers `ENOSYS`), with the same
-output and exit status.
+output and exit status. Of the 11 corpus app tests, `app-true`,
+`app-echo`, `app-head`, `app-grep`, `app-sed` and `app-mkdir` pass (app
+mode); the rest are in `specs/linux/FAILING.md`.
 
 ### Held-out store and hand-off log
 

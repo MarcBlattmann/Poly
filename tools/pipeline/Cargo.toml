@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 libc.workspace = true
+poly-elf.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

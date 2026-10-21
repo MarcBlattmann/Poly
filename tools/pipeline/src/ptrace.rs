@@ -8,6 +8,14 @@
 //! without a tracer: a stopped tracee stays stopped (`PTRACE_LISTEN`) and
 //! its parent sees the stop and the continue.
 //!
+//! App tests (`apps.rs`) run their launcher chrooted into the test's file
+//! tree, in a mount namespace of its own with the host's `/dev` and
+//! `/proc` bound in ([`trace_in`]); as root directly, otherwise in a user
+//! namespace that maps the caller to root. The tree's `/sys` stays empty:
+//! the host's describes its own devices and security modules (a
+//! `/sys/fs/selinux` that C libraries probe for), which say nothing about
+//! the program.
+//!
 //! The trace starts after `execve` of the test program has succeeded, so
 //! its first event is the program's own first syscall, which is also where
 //! a Poly trace starts (the kernel loads the program; nobody calls execve).
@@ -25,7 +33,7 @@ use std::io::{self, Read};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::FileExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -35,6 +43,7 @@ use std::time::{Duration, Instant};
 /// Exit statuses the child uses when it fails before running the program.
 const CHILD_SETUP_FAILED: i32 = 124;
 const CHILD_EXEC_FAILED: i32 = 127;
+const CHILD_JAIL_FAILED: i32 = 123;
 
 /// `personality(2)` flag: no address space randomisation, so raw traces of
 /// two runs are identical (normalised traces are anyway).
@@ -151,6 +160,83 @@ fn wait_pid(pid: libc::pid_t, flags: libc::c_int) -> io::Result<(libc::pid_t, li
     }
 }
 
+/// A chroot for the program, prepared before fork.
+struct Jail {
+    root: CString,
+    /// (host directory, where it goes in the tree), bound recursively.
+    binds: Vec<(CString, CString)>,
+    /// (host file, the file of the tree it is bound over), after `binds`.
+    overlays: Vec<(CString, CString)>,
+    /// Without root: (file, contents) for the new user namespace's maps.
+    maps: Option<Vec<(CString, CString)>>,
+}
+
+impl Jail {
+    fn new(root: &Path, overlays: &[(PathBuf, String)]) -> Result<Jail> {
+        let c = |s: &[u8]| CString::new(s).map_err(|e| e.to_string());
+        let mut binds = Vec::new();
+        for dir in ["dev", "proc"] {
+            binds.push((c(format!("/{dir}").as_bytes())?, c(root.join(dir).as_os_str().as_bytes())?));
+        }
+        let overlays = overlays
+            .iter()
+            .map(|(from, to)| Ok((c(from.as_os_str().as_bytes())?, c(root.join(to).as_os_str().as_bytes())?)))
+            .collect::<Result<Vec<_>>>()?;
+        // SAFETY: geteuid and getegid cannot fail and touch no memory.
+        let (uid, gid) = unsafe { (libc::geteuid(), libc::getegid()) };
+        let maps = (uid != 0).then(|| {
+            vec![
+                (c(b"/proc/self/setgroups").unwrap(), c(b"deny").unwrap()),
+                (c(b"/proc/self/uid_map").unwrap(), c(format!("0 {uid} 1\n").as_bytes()).unwrap()),
+                (c(b"/proc/self/gid_map").unwrap(), c(format!("0 {gid} 1\n").as_bytes()).unwrap()),
+            ]
+        });
+        Ok(Jail { root: c(root.as_os_str().as_bytes())?, binds, overlays, maps })
+    }
+
+    /// Enter the jail (in the child, before exec): new namespaces, the
+    /// binds, chroot. Whether it worked.
+    ///
+    /// # Safety
+    ///
+    /// Only async-signal-safe calls on strings prepared before fork; call
+    /// it only in the child of a fork.
+    unsafe fn enter(&self) -> bool {
+        let none = std::ptr::null::<libc::c_char>();
+        // SAFETY: the caller is the forked child; every pointer is a
+        // NUL-terminated string of `self` or NULL where mount(2) allows it.
+        unsafe {
+            let flags = if self.maps.is_some() { libc::CLONE_NEWUSER | libc::CLONE_NEWNS } else { libc::CLONE_NEWNS };
+            if libc::unshare(flags) < 0 {
+                return false;
+            }
+            for (file, text) in self.maps.iter().flatten() {
+                let fd = libc::open(file.as_ptr(), libc::O_WRONLY);
+                let len = text.as_bytes().len();
+                if fd < 0 || libc::write(fd, text.as_ptr().cast(), len) != len as isize {
+                    return false;
+                }
+                libc::close(fd);
+            }
+            // Private first, so nothing bound below reaches the host's namespace.
+            if libc::mount(none, c"/".as_ptr(), none, libc::MS_REC | libc::MS_PRIVATE, std::ptr::null()) < 0 {
+                return false;
+            }
+            for (from, to) in &self.binds {
+                if libc::mount(from.as_ptr(), to.as_ptr(), none, libc::MS_BIND | libc::MS_REC, std::ptr::null()) < 0 {
+                    return false;
+                }
+            }
+            for (from, to) in &self.overlays {
+                if libc::mount(from.as_ptr(), to.as_ptr(), none, libc::MS_BIND, std::ptr::null()) < 0 {
+                    return false;
+                }
+            }
+            libc::chroot(self.root.as_ptr()) == 0 && libc::chdir(c"/".as_ptr()) == 0
+        }
+    }
+}
+
 /// `waitpid(-1)` for the children and tracees of the calling thread only
 /// (`__WNOTHREAD`), retried on EINTR. A tracee can leave the test's process
 /// group (setpgid, setsid), so waiting for the group would miss its stops;
@@ -192,17 +278,25 @@ struct ChildSetup {
     stdin: libc::c_int,
     stdout: libc::c_int,
     stderr: libc::c_int,
+    jail: Option<Jail>,
 }
 
-/// The child half of `fork`: own process group, standard streams, stop
-/// until the tracer has seized it (`PTRACE_SEIZE`), exec. Never returns.
+/// The child half of `fork`: own process group, the jail if any, standard
+/// streams, default signal state, stop until the tracer has seized it
+/// (`PTRACE_SEIZE`), exec. Never returns.
 fn child(s: &ChildSetup) -> ! {
-    // SAFETY: only async-signal-safe calls (setpgid, dup2, personality,
-    // signal, sigemptyset, sigprocmask, getpid, kill, execve, _exit) on
-    // descriptors, a stack sigset_t and strings prepared before fork; the
-    // argv/envp arrays are NULL-terminated and their strings outlive the call.
+    // SAFETY: only async-signal-safe calls (setpgid, the jail's, dup2,
+    // personality, signal, sigemptyset, sigprocmask, getpid, kill, execve,
+    // _exit) on descriptors, a stack sigset_t and strings prepared before
+    // fork; the argv/envp arrays are NULL-terminated and their strings
+    // outlive the call.
     unsafe {
         libc::setpgid(0, 0);
+        if let Some(jail) = &s.jail
+            && !jail.enter()
+        {
+            libc::_exit(CHILD_JAIL_FAILED);
+        }
         if libc::dup2(s.stdin, 0) < 0 || libc::dup2(s.stdout, 1) < 0 || libc::dup2(s.stderr, 2) < 0 {
             libc::_exit(CHILD_SETUP_FAILED);
         }
@@ -233,8 +327,26 @@ fn read_all(fd: OwnedFd) -> thread::JoinHandle<Vec<u8>> {
 
 /// Run `program` under the tracer. `test` names the trace (and is argv[0]).
 pub fn trace(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
-    let path = CString::new(program.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
-    let argv0 = CString::new(test).map_err(|e| e.to_string())?;
+    trace_with(program.as_os_str().as_bytes(), test, test, None, timeout)
+}
+
+/// Run `program` (a path inside `root`, which is also its argv[0])
+/// chrooted into `root`, under the tracer. `overlays` are host files bound
+/// over files of the tree (paths relative to `root`) once the host's
+/// `/dev` and `/proc` are bound in. `test` names the trace.
+pub fn trace_in(
+    root: &Path,
+    overlays: &[(PathBuf, String)],
+    program: &str,
+    test: &str,
+    timeout: Duration,
+) -> Result<Trace> {
+    trace_with(program.as_bytes(), program, test, Some(Jail::new(root, overlays)?), timeout)
+}
+
+fn trace_with(program: &[u8], argv0: &str, test: &str, jail: Option<Jail>, timeout: Duration) -> Result<Trace> {
+    let path = CString::new(program).map_err(|e| e.to_string())?;
+    let argv0 = CString::new(argv0).map_err(|e| e.to_string())?;
     let devnull = File::open("/dev/null").map_err(|e| format!("/dev/null: {e}"))?;
     let (out_r, out_w) = pipe()?;
     let (err_r, err_w) = pipe()?;
@@ -245,6 +357,7 @@ pub fn trace(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
         stdin: devnull.as_raw_fd(),
         stdout: out_w.as_raw_fd(),
         stderr: err_w.as_raw_fd(),
+        jail,
     };
 
     let start = Instant::now();
@@ -339,6 +452,9 @@ impl Tracer {
         if libc::WIFEXITED(status) {
             return Err(match libc::WEXITSTATUS(status) {
                 CHILD_SETUP_FAILED => "the test program's standard streams could not be set up".into(),
+                CHILD_JAIL_FAILED => "the chroot for app tests is not permitted here (it needs root, or \
+                                      unprivileged user namespaces)"
+                    .into(),
                 code => format!("the test program exited with {code} before it was traced"),
             });
         }

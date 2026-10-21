@@ -162,6 +162,7 @@ name = "poly-pipeline"
 version = "0.0.1"
 dependencies = [
  "libc",
+ "poly-elf",
  "serde",
  "serde_json",
 ]

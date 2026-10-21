@@ -47,6 +47,33 @@ pub fn run(tracer: Tracer, program: &Path, test: &str, timeout: Duration) -> Res
     Ok(t)
 }
 
+/// Run the app test `test` in `tree` (an app test's file tree, written
+/// with `apps::Tree::materialise`): its launcher chrooted into it. The
+/// trace's stdout and stderr are what the launcher wrote to its own, then
+/// what the programs wrote to `/poly-app/stdout` and `/poly-app/stderr`.
+/// `overlays`: see `ptrace::trace_in`.
+pub fn run_app(
+    tracer: Tracer,
+    tree: &Path,
+    overlays: &[(std::path::PathBuf, String)],
+    test: &str,
+    timeout: Duration,
+) -> Result<Trace> {
+    let mut t = match tracer {
+        Tracer::Ptrace => ptrace::trace_in(tree, overlays, crate::poly::INIT_PATH, test, timeout)?,
+        Tracer::Strace | Tracer::None => {
+            return Err("app tests run under the ptrace tracer only (--tracer ptrace)".into());
+        }
+    };
+    for (stream, file) in [(&mut t.stdout, crate::apps::STDOUT_PATH), (&mut t.stderr, crate::apps::STDERR_PATH)] {
+        if let Ok(bytes) = std::fs::read(tree.join(file)) {
+            stream.push_str(&String::from_utf8_lossy(&bytes));
+        }
+    }
+    t.binary_sha256 = Some(sha256::hex(&util::read(&tree.join(crate::poly::INIT_PATH.trim_start_matches('/')))?));
+    Ok(t)
+}
+
 /// Output and status of a command run with a timeout.
 pub(crate) struct Finished {
     pub exit: Exit,

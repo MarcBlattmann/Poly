@@ -7,6 +7,14 @@
 //! after it usually follows from it. Time is compared only as an envelope:
 //! with `--timing-envelope F` the target may take at most F times as long
 //! as the reference (plus 50 ms), and only when both sides measured it.
+//!
+//! App tests (`apps.rs`) compare their syscalls in the looser [`App`]
+//! mode ([`app_events`]): an unchanged program's C library start-up and
+//! its reads of host files (`/proc/mounts`, `/proc/self/maps`) depend on
+//! the system in ways that do not change what the program does, so only
+//! the shape of each process's sequence is compared.
+//!
+//! [`App`]: SyscallMode::App
 
 use crate::trace::{Exit, NormCall, NormOptions, Trace, normalize};
 use crate::util::Result;
@@ -23,6 +31,9 @@ pub enum SyscallMode {
     Names,
     /// Not compared.
     Off,
+    /// Per process: names and result classes, repeats collapsed; for app
+    /// tests ([`app_events`]).
+    App,
 }
 
 impl SyscallMode {
@@ -31,16 +42,20 @@ impl SyscallMode {
             "exact" => Ok(SyscallMode::Exact),
             "names" => Ok(SyscallMode::Names),
             "off" => Ok(SyscallMode::Off),
-            _ => Err(format!("unknown syscall mode {s} (exact, names, off)")),
+            "app" => Ok(SyscallMode::App),
+            _ => Err(format!("unknown syscall mode {s} (exact, names, off, app)")),
         }
     }
 
     /// The weaker of two modes: a test's own directive can relax the run's
     /// mode, never tighten it.
     pub fn weaker(self, other: SyscallMode) -> SyscallMode {
+        // App and Names are equally strong for this purpose (neither
+        // compares less than the other in every respect); a tie keeps the
+        // run's mode.
         let rank = |m: SyscallMode| match m {
             SyscallMode::Exact => 0,
-            SyscallMode::Names => 1,
+            SyscallMode::Names | SyscallMode::App => 1,
             SyscallMode::Off => 2,
         };
         if rank(other) > rank(self) { other } else { self }
@@ -74,9 +89,18 @@ pub struct Divergence {
 
 /// First divergence of `target` from `reference`, if any.
 pub fn first_divergence(reference: &[NormCall], target: &[NormCall], names_only: bool) -> Option<Divergence> {
+    first_divergence_by(reference, target, |a, b| a.matches(b, names_only))
+}
+
+/// First divergence where `same` says two events differ.
+fn first_divergence_by(
+    reference: &[NormCall],
+    target: &[NormCall],
+    same: impl Fn(&NormCall, &NormCall) -> bool,
+) -> Option<Divergence> {
     let n = reference.len().max(target.len());
     let index = (0..n).find(|&i| match (reference.get(i), target.get(i)) {
-        (Some(a), Some(b)) => !a.matches(b, names_only),
+        (Some(a), Some(b)) => !same(a, b),
         _ => true,
     })?;
     Some(Divergence {
@@ -85,6 +109,79 @@ pub fn first_divergence(reference: &[NormCall], target: &[NormCall], names_only:
         target: target.get(index).map(ToString::to_string),
         context: reference[index.saturating_sub(3)..index].iter().map(ToString::to_string).collect(),
     })
+}
+
+/// Calls whose result is a file descriptor: app mode compares it exactly
+/// (which descriptor a call gets is the lowest free one, open(2)).
+const FD_RESULTS: &[&str] = &[
+    "open",
+    "openat",
+    "openat2",
+    "creat",
+    "dup",
+    "dup2",
+    "dup3",
+    "socket",
+    "accept",
+    "accept4",
+    "eventfd2",
+    "epoll_create1",
+    "memfd_create",
+    "inotify_init1",
+    "signalfd4",
+    "timerfd_create",
+    "pidfd_open",
+];
+
+/// Calls app mode leaves out: `rseq`, which Poly answers with `ENOSYS` by
+/// decision (ADR 0043, ADR 0049) and after which a C library behaves the
+/// same either way.
+pub const APP_DROPPED_CALLS: &[&str] = &["rseq"];
+
+/// Signals app mode leaves out: `SIGCHLD`, whose place in the parent's
+/// sequence depends on when the child ends, and which Poly's test-run
+/// protocol does not report (it reports faults and fatal signals).
+pub const APP_DROPPED_SIGNALS: &[&str] = &["--- SIGCHLD ---"];
+
+/// Longest argument shown in app mode (arguments are not compared there).
+const APP_ARG_WIDTH: usize = 48;
+
+/// The event sequence app mode compares:
+///
+/// 1. each process's events in its own order, process 0 first (so the
+///    interleaving of a parent waiting for a child does not matter);
+/// 2. without [`APP_DROPPED_CALLS`] and [`APP_DROPPED_SIGNALS`];
+/// 3. each call reduced to its name and result class: `ok`, `-1 ERRNO`,
+///    `?` (did not return) or, for calls returning a descriptor, the
+///    descriptor; arguments are kept for the report only;
+/// 4. consecutive events of the same process, name and class collapsed
+///    into one (a read loop over a file of another size, the same signal
+///    action set for many signals).
+pub fn app_events(trace: &Trace, norm: &NormOptions) -> Vec<NormCall> {
+    let mut events: Vec<NormCall> = normalize(trace, norm)
+        .into_iter()
+        .filter(|e| !APP_DROPPED_CALLS.contains(&e.name.as_str()) && !APP_DROPPED_SIGNALS.contains(&e.name.as_str()))
+        .map(|mut e| {
+            if !e.ret.is_empty() && e.ret != "?" && !e.ret.starts_with("-1 ") && !FD_RESULTS.contains(&e.name.as_str())
+            {
+                e.ret = "ok".into();
+            }
+            for a in &mut e.args {
+                if a.chars().count() > APP_ARG_WIDTH {
+                    *a = format!("{}...", a.chars().take(APP_ARG_WIDTH - 3).collect::<String>());
+                }
+            }
+            e
+        })
+        .collect();
+    events.sort_by_key(|e| e.pid);
+    events.dedup_by(|b, a| app_same(a, b));
+    events
+}
+
+/// Equal in app mode: process, name and result class.
+fn app_same(a: &NormCall, b: &NormCall) -> bool {
+    a.pid == b.pid && a.name == b.name && a.ret == b.ret
 }
 
 /// First line where two outputs differ: (1-based line, reference, target).
@@ -123,8 +220,13 @@ pub fn compare(reference: &Trace, target: &Trace, opts: &Options) -> Comparison 
     let traced = reference.tracer != "none" && target.tracer != "none";
     if opts.syscalls != SyscallMode::Off && traced {
         c.syscalls_compared = true;
-        let (r, t) = (normalize(reference, &opts.norm), normalize(target, &opts.norm));
-        if let Some(d) = first_divergence(&r, &t, opts.syscalls == SyscallMode::Names) {
+        let divergence = if opts.syscalls == SyscallMode::App {
+            first_divergence_by(&app_events(reference, &opts.norm), &app_events(target, &opts.norm), app_same)
+        } else {
+            let (r, t) = (normalize(reference, &opts.norm), normalize(target, &opts.norm));
+            first_divergence(&r, &t, opts.syscalls == SyscallMode::Names)
+        };
+        if let Some(d) = divergence {
             c.mismatches.push(format!(
                 "syscalls differ at event {}: reference {}, target {}",
                 d.index,
@@ -187,6 +289,9 @@ pub struct TestResult {
     pub target_syscalls: usize,
     #[serde(default)]
     pub comparison: Comparison,
+    /// The syscall mode of this test, where it is not the run's (app tests).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub syscall_mode: Option<SyscallMode>,
     /// Trace files, relative to the run directory.
     #[serde(default)]
     pub files: Vec<String>,
@@ -203,6 +308,7 @@ impl TestResult {
             reference_syscalls: 0,
             target_syscalls: 0,
             comparison: Comparison::default(),
+            syscall_mode: None,
             files: Vec::new(),
         }
     }
@@ -227,6 +333,7 @@ impl TestResult {
             reference_syscalls: reference.syscalls().count(),
             target_syscalls: target.syscalls().count(),
             comparison,
+            syscall_mode: None,
             files: Vec::new(),
         }
     }
@@ -458,6 +565,71 @@ mod tests {
         a.events.insert(2, Event::Signal { pid: 0, signal: 11 });
         let d = compare(&a, &b, &Options::default()).first_divergence.unwrap();
         assert_eq!(d.reference.as_deref(), Some("--- SIGSEGV ---"));
+    }
+
+    fn app_trace(pid1_first: bool, reads: usize, rseq: i64) -> Trace {
+        let mut t = Trace::new("app", "linux", "ptrace");
+        t.exit = Exit::Code(0);
+        let mut ev = vec![
+            call("rseq", vec![Arg::Ptr(1), Arg::Int(32), Arg::Hex(0), Arg::Hex(0x5305_3053)], Some(rseq)),
+            call(
+                "openat",
+                vec![Arg::Int(-100), Arg::Str("\"/proc/mounts\"".into()), Arg::Hex(0), Arg::Hex(0)],
+                Some(3),
+            ),
+        ];
+        for i in 0..reads {
+            ev.push(call("read", vec![Arg::Int(3), Arg::Ptr(1), Arg::Int(1024 - i as i64)], Some(100)));
+        }
+        ev.push(call("read", vec![Arg::Int(3), Arg::Ptr(1), Arg::Int(1024)], Some(0)));
+        let mut child = call("execve", vec![Arg::Str("\"/bin/cat\"".into()), Arg::Ptr(1), Arg::Ptr(1)], Some(0));
+        if let Event::Syscall(c) = &mut child {
+            c.pid = 1;
+        }
+        let wait = call("wait4", vec![Arg::Pid(5), Arg::Ptr(0), Arg::Hex(0), Arg::Ptr(0)], Some(5));
+        if pid1_first {
+            ev.extend([child, Event::Signal { pid: 0, signal: 17 }, wait]);
+        } else {
+            ev.extend([wait, child]);
+        }
+        ev.push(call("exit_group", vec![Arg::Int(0)], None));
+        t.events = ev;
+        t
+    }
+
+    #[test]
+    fn app_mode_compares_the_shape_per_process() {
+        let a = app_trace(true, 3, 0);
+        let b = app_trace(false, 1, -38);
+        let app = Options { syscalls: SyscallMode::App, ..Options::default() };
+        assert!(compare(&a, &b, &app).mismatches.is_empty(), "{:?}", compare(&a, &b, &app));
+        assert!(!compare(&a, &b, &Options::default()).mismatches.is_empty(), "exact mode sees it");
+        let lines: Vec<String> = app_events(&a, &NormOptions::default()).iter().map(ToString::to_string).collect();
+        assert_eq!(
+            lines,
+            [
+                "openat(-100, \"/proc/mounts\", 0x0, 0x0) = 3",
+                "read(3, <ptr>, 1024) = ok",
+                "wait4(<pid>, NULL, 0x0, NULL) = ok",
+                "exit_group(0) = ?",
+                "[p1] execve(\"/bin/cat\", <ptr>, <ptr>) = ok",
+            ]
+        );
+        // Another descriptor, or an error instead of success, is a divergence.
+        let mut c = app_trace(true, 1, 0);
+        if let Event::Syscall(s) = &mut c.events[1] {
+            s.ret = Some(4);
+        }
+        let d = compare(&a, &c, &app).first_divergence.unwrap();
+        assert_eq!(d.target.as_deref(), Some("openat(-100, \"/proc/mounts\", 0x0, 0x0) = 4"));
+        if let Event::Syscall(s) = &mut c.events[1] {
+            s.ret = Some(3);
+        }
+        if let Event::Syscall(s) = &mut c.events[2] {
+            s.ret = Some(-2);
+        }
+        let d = compare(&a, &c, &app).first_divergence.unwrap();
+        assert_eq!((d.index, d.target.as_deref()), (1, Some("read(3, <ptr>, 1024) = -1 ENOENT")));
     }
 
     fn summary(verdicts: &[(&str, Verdict)]) -> Summary {
