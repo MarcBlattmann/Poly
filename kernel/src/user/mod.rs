@@ -336,7 +336,8 @@ fn user_main(_: usize) -> usize {
 /// runs, with its flags and thread id. Nothing is cloned, so a thread that
 /// ends itself while holding these leaks nothing.
 fn current() -> Option<(&'static Process, &'static ThreadFlags, u32)> {
-    let (process, flags, tid) = thread::with_current_user(|u| (Arc::as_ptr(u.process_arc()), Arc::as_ptr(&u.flags), u.tid))?;
+    let (process, flags, tid) =
+        thread::with_current_user(|u| (Arc::as_ptr(u.process_arc()), Arc::as_ptr(&u.flags), u.tid))?;
     // SAFETY: the `UserThread` holding both `Arc`s stays in the thread table,
     // unchanged, until this thread has exited and been reaped, so the
     // pointees outlive every use of these references, which are only used
