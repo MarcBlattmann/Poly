@@ -1,4 +1,4 @@
-# 0076: The pipeline loop updates itself; deploy changes are announced, not applied; narrow sudo for the service
+# 0078: The pipeline loop updates itself; deploy changes are announced, not applied; narrow sudo for the service
 
 **Status:** Accepted. Amends [0056](0056-pipeline-scheduler-loop-and-home-server-deployment.md)
 (how the loop on the home server gets new code, and what `server` may run

@@ -8,6 +8,7 @@
 agent session is recorded in the state and never run again once it ended
 (a retry fetches its branch), and a failed spec check goes back to the
 spec agent with feedback up to `spec_cycles` times.
+CI's QEMU acceleration: see [ADR 0077](0077-ci-in-parallel-jobs-and-qemu-on-kvm.md).
 
 ## Context
 
