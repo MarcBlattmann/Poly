@@ -519,9 +519,10 @@ fn polycheck(repo: &Path) -> Result<u8> {
     let mut summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
     // The spec tests were recorded as root (mount, set*id, capabilities,
     // permission checks). Run by anyone else (GitHub's CI runs as a normal
-    // user) the reference cannot pass them, so the comparison says nothing
-    // about Poly; a green entry's test then only has to pass its own
-    // checks on Poly (they print ok / not ok and exit 0 when all pass).
+    // user) the reference fails them or traces other ids (getuid() = 1001),
+    // so the comparison says nothing about Poly; a green entry's test then
+    // only has to pass its own checks on Poly (they print ok / not ok and
+    // exit 0 when all pass).
     // The full comparison runs where the reference is root.
     let mut self_checked = Vec::new();
     if !running_as_root() {
@@ -530,7 +531,6 @@ fn polycheck(repo: &Path) -> Result<u8> {
             if t.verdict == Verdict::Fail
                 && green_tests.contains(&t.test.as_str())
                 && t.target_exit.as_deref() == Some("exit 0")
-                && t.reference_exit.as_deref() != Some("exit 0")
             {
                 t.verdict = Verdict::Pass;
                 self_checked.push(t.test.clone());
@@ -539,8 +539,8 @@ fn polycheck(repo: &Path) -> Result<u8> {
     }
     if !self_checked.is_empty() {
         println!(
-            "pipeline polycheck: not root, so these green-entry tests only passed their own checks on Poly (the \
-             reference fails them without root): {}",
+            "pipeline polycheck: not root, so these green-entry tests only passed their own checks on Poly (they \
+             were recorded as root): {}",
             self_checked.join(", ")
         );
     }
