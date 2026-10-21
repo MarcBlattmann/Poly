@@ -9,7 +9,7 @@
 //! guest's TSC is the host's (the kernel treats a hypervisor's TSC as
 //! constant-rate either way, ADR 0072); `-cpu max` under KVM is the host
 //! CPU's feature set, under TCG everything TCG emulates. CI runs the
-//! self-test boots under TCG as well (ADR 0075), so code paths only one of
+//! self-test boots under TCG as well (ADR 0077), so code paths only one of
 //! them takes stay tested.
 
 use std::sync::{Once, OnceLock};

@@ -1,4 +1,4 @@
-# 0075: CI in parallel jobs, QEMU on KVM where it can, the self-test boots on TCG too
+# 0077: CI in parallel jobs, QEMU on KVM where it can, the self-test boots on TCG too
 
 **Status:** Accepted. Changes how CI runs, not what it checks; amends the CI
 part of [0056](0056-pipeline-scheduler-loop-and-home-server-deployment.md)

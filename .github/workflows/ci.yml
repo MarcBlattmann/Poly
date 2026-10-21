@@ -1,6 +1,6 @@
 name: CI
 
-# What `cargo xtask ci` runs, split into jobs that run in parallel (ADR 0075):
+# What `cargo xtask ci` runs, split into jobs that run in parallel (ADR 0077):
 # lint, host tests, the boot tests in shards, the coverage checks and the
 # agent pipeline's checks, each `cargo xtask ci <part>` or
 # `cargo xtask boot-tests --shard <shard>`. The last job, `ci`, passes only if
