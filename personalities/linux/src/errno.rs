@@ -51,8 +51,11 @@ impl Errno {
     pub const ERANGE: Errno = Errno(34);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
+    /// `ENOMSG` (`asm-generic/errno.h`): "No message of desired type";
+    /// msgrcv(2) with `IPC_NOWAIT` and no matching message.
+    pub const ENOMSG: Errno = Errno(42);
     /// `EIDRM` (`asm-generic/errno.h`): "Identifier removed"; a System V
-    /// semaphore set removed while semop(2) slept on it.
+    /// semaphore set or message queue removed while a call slept on it.
     pub const EIDRM: Errno = Errno(43);
     /// `ENODATA` (`asm-generic/errno.h`): "No data available"; an extended
     /// attribute that does not exist (getxattr(2)).
@@ -159,6 +162,7 @@ impl Errno {
             34 => "ERANGE",
             36 => "ENAMETOOLONG",
             38 => "ENOSYS",
+            42 => "ENOMSG",
             43 => "EIDRM",
             61 => "ENODATA",
             75 => "EOVERFLOW",

@@ -11,6 +11,7 @@ mod futex;
 mod io;
 mod madvise;
 mod mem;
+mod msg;
 mod ns;
 mod process;
 mod process_ids;

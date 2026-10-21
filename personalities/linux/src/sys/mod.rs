@@ -18,6 +18,7 @@ pub mod limits;
 pub mod madvise;
 pub mod mem;
 pub mod mlock;
+pub mod msg;
 pub mod ns;
 pub mod path;
 pub mod perm;
