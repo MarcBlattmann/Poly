@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/epoll_ctl
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  epoll_ctl(epfd, op, fd, event) changes an interest list. EPOLL_CTL_ADD (1)
+  registers fd with event {events (u32), data (u64)} (the struct is packed:
+  12 bytes); EPOLL_CTL_MOD (3) replaces events and data (and re-checks
+  readiness: data already there is reported again for EPOLLET);
+  EPOLL_CTL_DEL (2) removes it (event ignored, may be NULL). Registrations
+  are keyed by the open file and descriptor number: closing the last
+  descriptor of the file removes it, while a dup keeps it alive (but the
+  dup's number is not a key: DEL on it is ENOENT). EPOLLERR and EPOLLHUP are
+  reported even when not asked for. Epoll instances can watch each other
+  (the outer reports EPOLLIN while the inner has a ready event).
+returns:
+  success: "0"
+errors:
+  exists: "EEXIST (17) for ADD of a registered fd"
+  not_registered: "ENOENT (2) for MOD or DEL of an unregistered fd"
+  unsupported_file: "EPERM (1) for a regular file"
+  self: "EINVAL (22) for adding the epoll fd to itself"
+  loop: "ELOOP (40) when the addition would make a cycle of epoll instances"
+  bad_fd: "EBADF (9) for a closed epfd or fd"
+  not_epoll: "EINVAL (22) when epfd is not an epoll instance"
+  bad_op: "EINVAL (22) for an unknown op"
+  bad_event: "EFAULT (14) for an unreadable event (ADD/MOD)"
+  exclusive_mod: "EINVAL (22) for MOD with EPOLLEXCLUSIVE (ADD with it is fine)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

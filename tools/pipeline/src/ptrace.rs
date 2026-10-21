@@ -4,6 +4,10 @@
 //! reads the registers and decodes the arguments, following forks and
 //! clones. Signals are recorded and passed on.
 //!
+//! Tracees are attached with `PTRACE_SEIZE`, so job control works as
+//! without a tracer: a stopped tracee stays stopped (`PTRACE_LISTEN`) and
+//! its parent sees the stop and the continue.
+//!
 //! App tests (`apps.rs`) run their launcher chrooted into the test's file
 //! tree, in a mount namespace of its own with the host's `/dev` and
 //! `/proc` bound in ([`trace_in`]); as root directly, otherwise in a user
@@ -38,7 +42,6 @@ use std::time::{Duration, Instant};
 
 /// Exit statuses the child uses when it fails before running the program.
 const CHILD_SETUP_FAILED: i32 = 124;
-const CHILD_TRACEME_FAILED: i32 = 125;
 const CHILD_EXEC_FAILED: i32 = 127;
 const CHILD_JAIL_FAILED: i32 = 123;
 
@@ -93,8 +96,11 @@ struct Proc {
     in_syscall: bool,
     /// The event of the syscall it is in, and its raw arguments.
     pending: Option<(usize, [u64; 6])>,
-    /// Newly attached: its first SIGSTOP is the attach stop, not a signal.
-    fresh: bool,
+    /// Running the test program: false for the first process until its
+    /// execve succeeds (what it does before is the tracer's setup).
+    started: bool,
+    /// The next syscall stop is the exit of that execve: not recorded.
+    skip_exec_exit: bool,
 }
 
 fn os_error(what: &str) -> String {
@@ -137,12 +143,13 @@ fn event_msg(pid: libc::pid_t) -> io::Result<u64> {
     if r < 0 { Err(io::Error::last_os_error()) } else { Ok(msg) }
 }
 
-/// `waitpid` for `pid` (negative: a process group), retried on EINTR.
-fn wait(pid: libc::pid_t) -> io::Result<(libc::pid_t, libc::c_int)> {
+/// `waitpid` for one `pid` with `flags` (plus `__WALL`), retried on EINTR.
+/// With WNOHANG it returns pid 0 when nothing happened.
+fn wait_pid(pid: libc::pid_t, flags: libc::c_int) -> io::Result<(libc::pid_t, libc::c_int)> {
     loop {
         let mut status = 0;
         // SAFETY: `status` is a valid int for waitpid to fill.
-        let r = unsafe { libc::waitpid(pid, &mut status, libc::__WALL) };
+        let r = unsafe { libc::waitpid(pid, &mut status, flags | libc::__WALL) };
         if r >= 0 {
             return Ok((r, status));
         }
@@ -275,12 +282,14 @@ struct ChildSetup {
 }
 
 /// The child half of `fork`: own process group, the jail if any, standard
-/// streams, ask to be traced, exec. Never returns.
+/// streams, default signal state, stop until the tracer has seized it
+/// (`PTRACE_SEIZE`), exec. Never returns.
 fn child(s: &ChildSetup) -> ! {
     // SAFETY: only async-signal-safe calls (setpgid, the jail's, dup2,
-    // personality, ptrace, execve, _exit) on descriptors and strings
-    // prepared before fork; the argv/envp arrays are NULL-terminated and
-    // their strings outlive the call.
+    // personality, signal, sigemptyset, sigprocmask, getpid, kill, execve,
+    // _exit) on descriptors, a stack sigset_t and strings prepared before
+    // fork; the argv/envp arrays are NULL-terminated and their strings
+    // outlive the call.
     unsafe {
         libc::setpgid(0, 0);
         if let Some(jail) = &s.jail
@@ -295,10 +304,14 @@ fn child(s: &ChildSetup) -> ! {
         if current >= 0 {
             libc::personality(current as libc::c_ulong | ADDR_NO_RANDOMIZE);
         }
-        let none = std::ptr::null_mut::<libc::c_void>();
-        if libc::ptrace(libc::PTRACE_TRACEME, 0, none, none) < 0 {
-            libc::_exit(CHILD_TRACEME_FAILED);
-        }
+        // The program starts as from a shell: default signal actions and an
+        // empty mask. The Rust runtime ignores SIGPIPE, and an ignored
+        // signal stays ignored across execve.
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        let mut none: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut none);
+        libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut());
+        libc::kill(libc::getpid(), libc::SIGSTOP);
         libc::execve(s.path.as_ptr(), s.argv.as_ptr(), s.envp.as_ptr());
         libc::_exit(CHILD_EXEC_FAILED);
     }
@@ -415,9 +428,16 @@ struct Tracer {
 }
 
 impl Tracer {
-    fn add(&mut self, pid: libc::pid_t, fresh: bool) {
+    fn add(&mut self, pid: libc::pid_t, started: bool) {
         if !self.procs.contains_key(&pid) {
-            let p = Proc { index: self.next_index, mem: ProcMem::open(pid), in_syscall: false, pending: None, fresh };
+            let p = Proc {
+                index: self.next_index,
+                mem: ProcMem::open(pid),
+                in_syscall: false,
+                pending: None,
+                started,
+                skip_exec_exit: false,
+            };
             self.next_index += 1;
             self.procs.insert(pid, p);
             self.live.lock().unwrap_or_else(|e| e.into_inner()).insert(pid);
@@ -425,21 +445,20 @@ impl Tracer {
     }
 
     fn run(&mut self, pid: libc::pid_t) -> Result {
-        // First stop: the SIGTRAP after a successful execve.
-        let (_, status) = wait(pid).map_err(|e| format!("waitpid: {e}"))?;
+        // The child stops itself before execve; seize it there, so the
+        // tracer sees job-control stops as such (PTRACE_EVENT_STOP) and
+        // can leave a stopped tracee stopped (PTRACE_LISTEN).
+        let (_, status) = wait_pid(pid, libc::WUNTRACED).map_err(|e| format!("waitpid: {e}"))?;
         if libc::WIFEXITED(status) {
             return Err(match libc::WEXITSTATUS(status) {
-                CHILD_TRACEME_FAILED => "ptrace(PTRACE_TRACEME) is not permitted here (container seccomp or \
-                                         Yama policy?); use --tracer strace or --tracer none"
-                    .into(),
-                CHILD_EXEC_FAILED => "the test program could not be executed".into(),
+                CHILD_SETUP_FAILED => "the test program's standard streams could not be set up".into(),
                 CHILD_JAIL_FAILED => "the chroot for app tests is not permitted here (it needs root, or \
                                       unprivileged user namespaces)"
                     .into(),
                 code => format!("the test program exited with {code} before it was traced"),
             });
         }
-        if !libc::WIFSTOPPED(status) || libc::WSTOPSIG(status) != libc::SIGTRAP {
+        if !libc::WIFSTOPPED(status) || libc::WSTOPSIG(status) != libc::SIGSTOP {
             return Err(format!("unexpected first stop of the tracee (status {status:#x})"));
         }
         let options = libc::PTRACE_O_TRACESYSGOOD
@@ -448,9 +467,16 @@ impl Tracer {
             | libc::PTRACE_O_TRACEFORK
             | libc::PTRACE_O_TRACEVFORK
             | libc::PTRACE_O_TRACEEXEC;
-        ptrace(libc::PTRACE_SETOPTIONS, pid, options as usize).map_err(|e| format!("PTRACE_SETOPTIONS: {e}"))?;
+        ptrace(libc::PTRACE_SEIZE, pid, options as usize).map_err(|e| {
+            format!(
+                "PTRACE_SEIZE: {e} (ptrace is not permitted here: container seccomp or Yama policy?); use \
+                 --tracer strace or --tracer none"
+            )
+        })?;
         self.add(pid, false);
-        ptrace(libc::PTRACE_SYSCALL, pid, 0).map_err(|e| format!("PTRACE_SYSCALL: {e}"))?;
+        // SAFETY: kill has no memory-safety requirements; `pid` is our
+        // child, not yet reaped.
+        unsafe { libc::kill(pid, libc::SIGCONT) };
 
         while !self.procs.is_empty() {
             let (wpid, status) = match wait_any() {
@@ -463,6 +489,9 @@ impl Tracer {
                 if let Some(p) = self.procs.remove(&wpid)
                     && p.index == 0
                 {
+                    if !p.started && libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == CHILD_EXEC_FAILED {
+                        return Err("the test program could not be executed".into());
+                    }
                     self.exit = if libc::WIFEXITED(status) {
                         Exit::Code(libc::WEXITSTATUS(status))
                     } else {
@@ -479,9 +508,21 @@ impl Tracer {
             self.add(wpid, true);
             let sig = libc::WSTOPSIG(status);
             let event = status >> 16;
+            let started = self.procs[&wpid].started;
             let mut inject = 0;
             if sig == libc::SIGTRAP | 0x80 {
-                self.syscall_stop(wpid)?;
+                if started {
+                    self.syscall_stop(wpid)?;
+                }
+            } else if event == libc::PTRACE_EVENT_STOP {
+                if matches!(sig, libc::SIGSTOP | libc::SIGTSTP | libc::SIGTTIN | libc::SIGTTOU) {
+                    // A group-stop: the tracee stays stopped (its parent
+                    // sees it with WUNTRACED) until SIGCONT or SIGKILL.
+                    let _ = ptrace(libc::PTRACE_LISTEN, wpid, 0);
+                    continue;
+                }
+                // The first stop of a new tracee, or the end of a
+                // group-stop: it runs on.
             } else if sig == libc::SIGTRAP && event != 0 {
                 match event {
                     libc::PTRACE_EVENT_FORK | libc::PTRACE_EVENT_VFORK | libc::PTRACE_EVENT_CLONE => {
@@ -490,18 +531,25 @@ impl Tracer {
                         }
                     }
                     // The address space was replaced: reopen its memory.
+                    // The first process's execve starts the test program.
                     libc::PTRACE_EVENT_EXEC => {
                         if let Some(p) = self.procs.get_mut(&wpid) {
                             p.mem = ProcMem::open(wpid);
+                            if !p.started {
+                                p.started = true;
+                                p.skip_exec_exit = true;
+                            }
                         }
                     }
                     _ => {}
                 }
-            } else if sig == libc::SIGSTOP && self.procs.get(&wpid).is_some_and(|p| p.fresh) {
-                self.procs.get_mut(&wpid).unwrap().fresh = false;
             } else {
-                let index = self.procs[&wpid].index;
-                self.events.push(Event::Signal { pid: index, signal: sig });
+                // A signal: recorded once the program runs (before, it is
+                // the tracer's own SIGCONT), and passed on.
+                if started {
+                    let index = self.procs[&wpid].index;
+                    self.events.push(Event::Signal { pid: index, signal: sig });
+                }
                 inject = sig as usize;
             }
             // ESRCH: it died in the meantime; its exit status comes next.
@@ -519,6 +567,12 @@ impl Tracer {
         };
         let t_ns = self.start.elapsed().as_nanos() as u64;
         let p = self.procs.get_mut(&pid).unwrap();
+        if p.skip_exec_exit {
+            p.skip_exec_exit = false;
+            if regs.orig_rax == libc::SYS_execve as u64 {
+                return Ok(());
+            }
+        }
         if !p.in_syscall {
             let raw = [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9];
             let nr = regs.orig_rax;
@@ -538,5 +592,64 @@ impl Tracer {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::corpus;
+    use crate::util;
+
+    /// A child that leaves the process group, stops and is continued, and a
+    /// child killed by SIGPIPE: the program sees what it would see without
+    /// a tracer, and the run neither hangs nor leaves processes behind.
+    #[test]
+    fn job_control_and_process_groups_work_under_the_tracer() {
+        let cc = corpus::compiler(None);
+        if corpus::compiler_version(&cc).is_err() {
+            eprintln!("skipped: no C compiler");
+            return;
+        }
+        let root = crate::repo_root();
+        let dir = std::env::temp_dir().join(format!("poly-ptrace-test-{}", std::process::id()));
+        let source = dir.join("jobctl.c");
+        let binary = dir.join("jobctl");
+        util::write(
+            &source,
+            "#include \"poly_ipc.h\"\n\
+             int test_main(void) {\n\
+                 i64 pid = fork();\n\
+                 if (pid == 0) { syscall2(SYS_setpgid, 0, 0); raise_sig(SIGSTOP); exit_group(3); }\n\
+                 int st = 0;\n\
+                 if (syscall4(SYS_wait4, pid, &st, 2, 0) != pid || (st & 0xff) != 0x7f) return 10;\n\
+                 syscall2(SYS_kill, pid, SIGCONT);\n\
+                 if (wait_exit(pid) != 3) return 11;\n\
+                 pid = fork();\n\
+                 if (pid == 0) { raise_sig(SIGPIPE); exit_group(4); }\n\
+                 st = wait_status(pid);\n\
+                 if (!W_SIGNALED(st) || W_TERMSIG(st) != SIGPIPE) return 12;\n\
+                 return 0;\n\
+             }\n",
+        )
+        .unwrap();
+        let built = std::process::Command::new(&cc)
+            .args(corpus::FREESTANDING_FLAGS)
+            .arg("-o")
+            .arg(&binary)
+            .arg(&source)
+            .current_dir(&root)
+            .status()
+            .unwrap();
+        assert!(built.success());
+        let t = trace(&binary, "jobctl", Duration::from_secs(20)).unwrap();
+        assert_eq!(t.exit, Exit::Code(0), "stdout: {}", t.stdout);
+        let names: Vec<&str> = t
+            .events
+            .iter()
+            .filter_map(|e| if let Event::Syscall(c) = e { Some(c.name.as_str()) } else { None })
+            .collect();
+        assert!(names.contains(&"setpgid") && names.contains(&"wait4"), "{names:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

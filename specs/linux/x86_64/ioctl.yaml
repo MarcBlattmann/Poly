@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ioctl
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  ioctl on terminals (pseudo-terminals from /dev/ptmx). A new master is
+  locked (TIOCGPTLCK 1; TIOCGPTPEER is EIO) until TIOCSPTLCK 0; TIOCGPTN
+  gives its number; TIOCGPTPEER(flags) opens the slave. TCGETS works on both
+  ends: a new slave has ICANON, ECHO, ISIG, OPOST|ONLCR, ICRNL, VEOF ^D;
+  TCSETS changes it. Canonical mode: the slave reads nothing until a
+  newline, then the whole line; the master reads the echo with \n as \r\n;
+  VERASE removes the previous character; output \n from the slave reaches
+  the master as \r\n (unchanged without OPOST). Raw (no ICANON, VMIN 1,
+  VTIME 0): bytes at once, no echo. TIOCGWINSZ starts 0x0, TIOCSWINSZ on
+  either end is seen on the other and, when the size changes, sends SIGWINCH
+  to the foreground group. FIONBIO sets and clears O_NONBLOCK; FIONREAD
+  counts bytes waiting. Controlling terminal: a session leader without one
+  takes the slave with TIOCSCTTY, /dev/tty then opens; TIOCGSID and
+  TIOCGPGRP report session and foreground group; the interrupt character on
+  the master sends SIGINT to the foreground group; closing the last master
+  hangs up: slave reads end (0 or EIO) and the session leader gets SIGHUP.
+returns:
+  success: "0 (TIOCGPTPEER: a new descriptor)"
+errors:
+  not_a_tty: "ENOTTY (25) for terminal requests on a pipe and for unknown requests"
+  locked: "EIO (5) for TIOCGPTPEER on a locked master"
+  ctty_not_leader: "EPERM (1) for TIOCSCTTY by a process that is not a session leader"
+  foreign_group: "EPERM (1) for TIOCSPGRP to a group of another session"
+  bad_pointer: "EFAULT (14)"
+  closed_fd: "EBADF (9)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/timerfd_settime
+oracle:
+  os: "Linux 6.18.44 (x86-64)"
+  machine: "cloud VM (KVM), x86-64; tests run as root in the initial user namespace, no seccomp"
+  observed_by: spec-b
+  date: 2026-10-20
+summary: >
+  timerfd_settime(fd, flags, new, old) arms the timer with {interval,
+  value}: value is the first expiration (relative, or an absolute time on
+  the timer's clock with TFD_TIMER_ABSTIME, where a past deadline expires at
+  once), interval the period after it (0: one-shot). old, when given, gets
+  the previous setting (time left and interval); old may be the same struct
+  as new (new is used first). A zero value disarms. Arming or disarming
+  discards an expiration count not yet read. A periodic timer counts every
+  interval passed since the last read.
+returns:
+  success: "0"
+errors:
+  bad_time: "EINVAL (22) for tv_nsec outside 0..999999999 or a negative value or interval"
+  bad_flags: "EINVAL (22) for unknown flags"
+  bad_pointer: "EFAULT (14) for an unreadable new"
+  not_timerfd: "EINVAL (22)"
+  closed_fd: "EBADF (9)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "expiration within a few ms of the requested time"
+  guarantees: "never expires before the requested time"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
