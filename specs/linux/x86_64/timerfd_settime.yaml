@@ -9,8 +9,10 @@ oracle:
 summary: >
   timerfd_settime(fd, flags, new, old) arms the timer with {interval,
   value}: value is the first expiration (relative, or an absolute time on
-  the timer's clock with TFD_TIMER_ABSTIME, where a past deadline expires at
-  once), interval the period after it (0: one-shot). old, when given, gets
+  the timer's clock with TFD_TIMER_ABSTIME, where a past deadline, any
+  non-negative time below the clock's current value however short the
+  uptime, expires at once with a count of 1; a negative one is EINVAL),
+  interval the period after it (0: one-shot). old, when given, gets
   the previous setting (time left and interval); old may be the same struct
   as new (new is used first). A zero value disarms. Arming or disarming
   discards an expiration count not yet read. A periodic timer counts every
