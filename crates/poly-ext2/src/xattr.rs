@@ -493,7 +493,8 @@ mod tests {
     fn acls_in_ext4_form() {
         // Owner rwx, user 1000 r-x, group r-x, mask r-x, other none.
         let mut disk = 1u32.to_le_bytes().to_vec();
-        for (tag, perm, id) in [(1u16, 7u16, None), (2, 5, Some(1000u32)), (4, 5, None), (0x10, 5, None), (0x20, 0, None)]
+        for (tag, perm, id) in
+            [(1u16, 7u16, None), (2, 5, Some(1000u32)), (4, 5, None), (0x10, 5, None), (0x20, 0, None)]
         {
             disk.extend_from_slice(&tag.to_le_bytes());
             disk.extend_from_slice(&perm.to_le_bytes());

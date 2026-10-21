@@ -10,8 +10,8 @@
 //! of entries out and calls the VFS's callback with the lock released.
 
 use crate::fs::{Clock, DirEntry, FileSystem, FsInfo, NewNode, RenameFlags};
-use crate::xattr::{SetMode, XATTR_LIST_MAX, Xattrs};
 use crate::sync::SpinMutex;
+use crate::xattr::{SetMode, XATTR_LIST_MAX, Xattrs};
 use crate::{Attr, DeviceId, Errno, FileType, Ino, MAX_FILE_SIZE, NAME_MAX, Result, SetAttr, SetTime, Timespec};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;

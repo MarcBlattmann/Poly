@@ -24,8 +24,10 @@
 //!    an `loff_t`;
 //! 5. `EINVAL` when both are the same file and the ranges overlap (the
 //!    source range counted up to the end of the file);
-//! 6. `EXDEV` for files on different file systems of different types
-//!    ("the source and target filesystems are not of the same type").
+//! 6. `EXDEV` for files on different file systems (devices): "not on the
+//!    same filesystem, and the source and target filesystems are not of
+//!    the same type, or do not support cross-filesystem copy" — no file
+//!    system of Poly supports a cross-filesystem copy, whatever its type.
 //!
 //! A length of 0, or a source offset at or past the end of the file,
 //! copies nothing and returns 0. At most [`MAX_RW_COUNT`] bytes are copied
@@ -117,10 +119,7 @@ pub fn copy_file_range(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     if src.status.stat.dev != dst.status.stat.dev {
-        let f = fs(k)?;
-        if f.fstatfs(src.fd)?.fs_type != f.fstatfs(dst.fd)?.fs_type {
-            return Err(Errno::EXDEV);
-        }
+        return Err(Errno::EXDEV);
     }
     let (done, result) = copy(fs(k)?, &src, &dst, len);
     // The offsets move by what was copied, also when an error ended it.

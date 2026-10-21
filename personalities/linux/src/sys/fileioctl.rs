@@ -14,9 +14,8 @@
 //!   support reflinking either file descriptor"), which is what tells cp(1)
 //!   to copy the data instead. Before that, in this order: `EBADF` for a
 //!   source that is not open for reading or a destination that is not open
-//!   for writing (or is append-only); `EXDEV` for files on different
-//!   mounts; `EISDIR` for a directory; `EINVAL` for a device, FIFO or
-//!   socket.
+//!   for writing (or is append-only); `EISDIR` for a directory; `EINVAL`
+//!   for a device, FIFO or socket; `EXDEV` for files on different mounts.
 
 use crate::abi::mode;
 use crate::errno::{Errno, SysResult};
@@ -109,11 +108,11 @@ fn clone_check(k: &mut dyn LinuxKernel, src: i32, dest: i32) -> SysResult {
         return Err(Errno::EBADF);
     }
     let (s, d) = (f.statat(src, b"", true)?, f.statat(dest, b"", true)?);
+    regular(s.stat.file_type())?;
+    regular(d.stat.file_type())?;
     if s.mount_id != d.mount_id {
         return Err(Errno::EXDEV);
     }
-    regular(s.stat.file_type())?;
-    regular(d.stat.file_type())?;
     Err(Errno::EOPNOTSUPP)
 }
 
