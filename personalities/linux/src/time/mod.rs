@@ -7,6 +7,7 @@
 //!   through [`timers::fire`].
 
 pub mod abi;
+pub mod cpuclock;
 pub mod timers;
 
 pub use timers::{Fired, Notify, Timer, TimerClock, TimerWakeup, Timers, fire};

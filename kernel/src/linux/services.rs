@@ -738,6 +738,12 @@ impl LinuxKernel for Thread<'_> {
             CpuTimesOf::Process => Some(cputime::process(self.process)),
             CpuTimesOf::Children => Some(self.process.cpu.children()),
             CpuTimesOf::Reaped(pid) => super::task::reaped_times(u32::try_from(pid).ok()?),
+            CpuTimesOf::OtherProcess(pid) => {
+                let pid = u32::try_from(pid).ok()?;
+                let p = crate::process::find(pid).or_else(|| super::task::zombie(pid))?;
+                // A process record, not a thread of another process.
+                (p.pid == pid).then(|| cputime::process(&p))
+            }
         }
     }
 

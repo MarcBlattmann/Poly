@@ -186,6 +186,10 @@ pub enum CpuTimesOf {
     /// and its own waited-for children: wait4(2)'s `rusage` (ADR 0059).
     /// Asked once per wait; `None` if the kernel does not know it.
     Reaped(i32),
+    /// Every thread of process `pid` (global), any process, a zombie too:
+    /// its CPU-time clock (clock_getcpuclockid(3)); `None` if there is no
+    /// such process.
+    OtherProcess(i32),
 }
 
 /// CPU time in nanoseconds, split into time running user code and time

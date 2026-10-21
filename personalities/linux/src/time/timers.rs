@@ -149,6 +149,10 @@ pub struct TimerWakeup {
 pub struct Timers {
     itimers: [Timer; 3],
     posix: BTreeMap<i32, Timer>,
+    /// Where the search for the next POSIX timer id starts: ids are handed
+    /// out in increasing order, so a deleted one is not given out again at
+    /// once (wrapping around after `i32::MAX`).
+    next_id: i32,
 }
 
 impl Default for Timers {
@@ -172,6 +176,7 @@ impl Timers {
                 itimer(TimerClock::ProcessCpu, ITIMER_PROF as usize),
             ],
             posix: BTreeMap::new(),
+            next_id: 0,
         }
     }
 
@@ -189,7 +194,11 @@ impl Timers {
         if self.posix.len() >= MAX_POSIX_TIMERS {
             return Err(Errno::EAGAIN);
         }
-        let id = (0..).find(|id| !self.posix.contains_key(id)).expect("fewer timers than ids");
+        let id = (self.next_id..=i32::MAX)
+            .chain(0..self.next_id)
+            .find(|id| !self.posix.contains_key(id))
+            .expect("fewer timers than ids");
+        self.next_id = id.checked_add(1).unwrap_or(0);
         let notify = notify.unwrap_or(Notify::Signal { signo: SIGALRM, value: id as u64, thread: None });
         self.posix.insert(id, Timer::new(clock, notify));
         Ok(id)
@@ -217,6 +226,7 @@ impl Timers {
     /// execve(2): the POSIX timers go, the interval timers stay.
     pub fn exec(&mut self) {
         self.posix.clear();
+        self.next_id = 0;
     }
 
     /// When the kernel must look at the timers next.
