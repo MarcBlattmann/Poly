@@ -1,0 +1,15 @@
+[package]
+name = "poly-ldr"
+description = "The NT loader our ntdll runs: mapping, relocations, imports (names, ordinals, forwarders, API sets, bound, delay-load), TLS, DllMain order, reference counts, the search order and the PEB loader lists"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-pe = { workspace = true }
+poly-ntobj = { workspace = true }
+
+[lints]
+workspace = true
