@@ -141,6 +141,13 @@ pub trait PageSource: Send + Sync {
         None
     }
 
+    /// The serial of the System V shared memory segment the source is
+    /// (`linux::shm`): its mappings are attachments, which shmdt(2) and
+    /// exit detach. `None` (the default) for everything else.
+    fn sysv_shm(&self) -> Option<u64> {
+        None
+    }
+
     /// The open file behind the source, if it is a VFS file: what
     /// `/proc/<pid>/maps` names the mapping by (ADR 0043).
     fn file(&self) -> Option<&alloc::sync::Arc<poly_vfs::OpenFile>> {

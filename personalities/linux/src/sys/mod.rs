@@ -28,6 +28,7 @@ pub mod process;
 pub mod sched;
 pub mod seccomp;
 pub mod sendfile;
+pub mod shm;
 pub mod signal;
 pub mod signalfd;
 pub mod socket;

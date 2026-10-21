@@ -198,6 +198,8 @@ pub struct FakeKernel {
     pub mount_copies: Vec<u32>,
     pub entered_mounts: Vec<Option<u32>>,
     pub ns_fds: BTreeMap<i32, (u32, crate::ns::Kind)>,
+    /// System V shared memory attachments (`tests/shm.rs`).
+    pub shm: super::shm::FakeShm,
 }
 
 impl Default for FakeKernel {
@@ -275,6 +277,7 @@ impl FakeKernel {
             mount_copies: Vec::new(),
             entered_mounts: Vec::new(),
             ns_fds: BTreeMap::new(),
+            shm: Default::default(),
         };
         k.files.insert(0, File::new(Kind::Tty));
         k.files.insert(1, File::new(Kind::Pipe));
@@ -650,6 +653,29 @@ impl LinuxKernel for FakeKernel {
         }
         self.unmap_range(addr, len);
         Ok(())
+    }
+
+    fn shm_create(&mut self, len: u64) -> Result<alloc::sync::Arc<dyn crate::ipc::shm::ShmMemory>, Errno> {
+        super::shm::create(self, len)
+    }
+
+    fn shm_attach(
+        &mut self,
+        memory: &alloc::sync::Arc<dyn crate::ipc::shm::ShmMemory>,
+        addr: u64,
+        placement: Placement,
+        len: u64,
+        prot: Prot,
+    ) -> Result<u64, Errno> {
+        super::shm::attach(self, memory, addr, placement, len, prot)
+    }
+
+    fn shm_detach(&mut self, addr: u64) -> Result<u64, Errno> {
+        super::shm::detach(self, addr)
+    }
+
+    fn shm_detach_all(&mut self) -> Vec<u64> {
+        super::shm::detach_all(self)
     }
 
     fn msync(&mut self, addr: u64, len: u64, sync: bool) -> Result<(), Errno> {

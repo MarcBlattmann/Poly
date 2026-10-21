@@ -45,6 +45,8 @@
 //!   (ADR 0054).
 //! - [`ns`]: namespaces (user, pid, mount, network, UTS, IPC) and the
 //!   rules of clone(2), unshare(2) and setns(2) about them (ADR 0054).
+//! - [`ipc`]: System V shared memory segments, one table per IPC
+//!   namespace.
 //! - [`net`]: what the socket calls need from the kernel
 //!   ([`net::LinuxNet`]), socket structures and `NETLINK_ROUTE` (ADR 0048).
 //!
@@ -65,6 +67,7 @@ pub mod errno;
 pub mod fileio;
 pub mod fs;
 pub mod futex;
+pub mod ipc;
 pub mod kernel;
 pub mod net;
 pub mod ns;
@@ -161,6 +164,14 @@ impl Linux {
     /// its [`LinuxProcess`].
     pub fn thread_exit(kernel: &mut dyn LinuxKernel, shares_memory: bool) {
         futex::thread_exit(kernel, shares_memory);
+    }
+
+    /// Called by the kernel when the last thread of a Linux process (the
+    /// calling thread) has left it, before its parent learns of it: its
+    /// System V shared memory attachments are detached
+    /// ([`sys::shm::process_exit`]).
+    pub fn process_exit(kernel: &mut dyn LinuxKernel) {
+        sys::shm::process_exit(kernel);
     }
 
     /// Called by the kernel for a fault in user mode that becomes a signal

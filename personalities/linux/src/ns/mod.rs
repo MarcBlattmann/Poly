@@ -16,8 +16,8 @@
 //!   kernel holds what the others stand for: a mount namespace is a copy
 //!   of the mount table ([`MntNs::id`] names it), a network namespace has
 //!   only a loopback interface that is down, so its sockets reach nothing
-//!   ([`NetNs`]), an IPC namespace is empty (Poly has no System V IPC
-//!   yet). Cgroup and time namespaces are not supported: their flags are
+//!   ([`NetNs`]), an IPC namespace holds its System V shared memory
+//!   segments ([`IpcNs::shm`]). Cgroup and time namespaces are not supported: their flags are
 //!   `EINVAL`, as clone(2) and unshare(2) document for a kernel built
 //!   without them.
 //! - **Identity.** Each namespace has an inode number ([`inum`]):
@@ -173,11 +173,28 @@ impl UtsNs {
     }
 }
 
-/// An IPC namespace (ipc_namespaces(7)). Poly has no System V IPC or POSIX
-/// message queues yet, so it holds nothing.
+/// An IPC namespace (ipc_namespaces(7)): its System V shared memory
+/// segments. Poly has no System V message queues or semaphores, nor POSIX
+/// message queues, yet.
 #[derive(Debug)]
 pub struct IpcNs {
     common: Common,
+    shm: Mutex<crate::ipc::shm::ShmTable>,
+}
+
+impl IpcNs {
+    /// A new, empty IPC namespace owned by `owner`, registered under its
+    /// inode number.
+    pub fn create(owner: &UserNsRef) -> Arc<IpcNs> {
+        let ipc = Arc::new(IpcNs { common: Common::new(owner), shm: Mutex::new(crate::ipc::shm::ShmTable::new()) });
+        register(ipc.inum(), Handle::Ipc(Some(ipc.clone())));
+        ipc
+    }
+
+    /// Its shared memory segments (a new namespace has none).
+    pub fn shm(&self) -> &Mutex<crate::ipc::shm::ShmTable> {
+        &self.shm
+    }
 }
 
 /// A network namespace (network_namespaces(7)): a new one has only a
@@ -490,9 +507,7 @@ pub fn make(
         n.uts = Some(uts);
     }
     if flags & CLONE_NEWIPC != 0 {
-        let ipc = Arc::new(IpcNs { common: Common::new(&owner) });
-        register(ipc.inum(), Handle::Ipc(Some(ipc.clone())));
-        n.ipc = Some(ipc);
+        n.ipc = Some(IpcNs::create(&owner));
     }
     if flags & CLONE_NEWNET != 0 {
         let net = Arc::new(NetNs { common: Common::new(&owner) });
