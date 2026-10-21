@@ -17,6 +17,7 @@ mod sched;
 mod seccomp;
 mod signal;
 mod signal_trace;
+mod spec_a;
 mod socket;
 mod startup;
 mod task;
