@@ -820,6 +820,9 @@ pub fn collect() -> Result<Contents, String> {
         // Where the kernel keeps the NT registry's hive files (ADR 0066):
         // a disk with a `/poly` directory holds them.
         ("poly/nt/registry", 0o700),
+        // The Windows drive C: beside them (ADR 0072): the kernel makes the
+        // Windows folders in it and links /nt/c to it.
+        ("poly/nt/c", 0o755),
     ] {
         tree.dir(dir, mode);
     }

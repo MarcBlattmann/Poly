@@ -17,6 +17,12 @@
 //! Volatile keys are made at every boot ([`volatile_keys`]):
 //! `HKLM\HARDWARE`, the `HKLM\SYSTEM\CurrentControlSet` symbolic link to
 //! `ControlSet001`, and the user's `Volatile Environment`.
+//!
+//! The values that name folders (`ProgramFilesDir`, `SystemRoot`, the
+//! environment's paths, the user's profile) must agree with the Windows
+//! file system layout of ADR 0072 (`poly_personality_nt::layout`), whose
+//! sync adds the rest (`ProfileList`, `Shell Folders`) at every boot and
+//! whose host tests check that these agree.
 
 use crate::consts::*;
 use crate::hive;

@@ -233,13 +233,14 @@ fn apply_key(b: &mut Block, reg: &Registry, start: KeyId, path: &str, append_pat
         let name = String::from_utf16_lossy(&v.name);
         let raw = text_of(&v.data);
         let value = if v.kind == REG_EXPAND_SZ { b.expand(&raw) } else { raw };
-        if append_path && same_name(&name, "Path") {
-            if let Some(old) = b.get("Path").filter(|p| !p.is_empty()) {
-                let joined =
-                    if old.ends_with(';') { alloc::format!("{old}{value}") } else { alloc::format!("{old};{value}") };
-                b.set(&name, &joined);
-                continue;
-            }
+        if append_path
+            && same_name(&name, "Path")
+            && let Some(old) = b.get("Path").filter(|p| !p.is_empty())
+        {
+            let joined =
+                if old.ends_with(';') { alloc::format!("{old}{value}") } else { alloc::format!("{old};{value}") };
+            b.set(&name, &joined);
+            continue;
         }
         b.set(&name, &value);
     }

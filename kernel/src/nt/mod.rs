@@ -32,11 +32,16 @@ pub use exception::{fault, last_unhandled};
 pub mod registry;
 mod test_registry;
 
+pub mod layout;
+mod test_layout;
+
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
 use crate::thread;
 use crate::user::{self, Memory};
 use alloc::collections::{BTreeMap, VecDeque};
+use alloc::string::String;
+use alloc::vec::Vec;
 use alloc::sync::Arc;
 use backend::{MemBackend, Sections};
 use poly_abi::{Outcome, SyscallRegs};
@@ -109,6 +114,9 @@ fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
             ctl: BTreeMap::new(),
             timers: BTreeMap::new(),
         };
+        // The Windows folders on C: and the registry values that follow
+        // them (ADR 0072), before file I/O attaches C:.
+        layout::prepare(&mut state.sys);
         // File I/O: the VFS's volumes and drive letters (ADR 0067).
         io::attach(&mut state.sys);
         state
@@ -312,20 +320,65 @@ pub struct Start {
     pub teb: u64,
 }
 
+/// How an NT process was started: its executable's DOS path and its
+/// arguments (after the program name), for its process parameters
+/// (ADR 0072).
+#[derive(Clone, Debug, Default)]
+pub struct Launch {
+    pub image_path: String,
+    pub args: Vec<String>,
+}
+
+impl Launch {
+    /// The launch of the executable at VFS path `path` with `argv`
+    /// (`argv[0]`, the program name, is replaced by the DOS path).
+    pub fn of(path: &[u8], argv: &[&[u8]]) -> Launch {
+        Launch {
+            image_path: layout::dos_path(path),
+            args: argv.iter().skip(1).map(|a| String::from_utf8_lossy(a).into_owned()).collect(),
+        }
+    }
+
+    /// An image the kernel built itself (a test) has no file; it is named
+    /// as if it were in `System32`.
+    fn unnamed() -> Launch {
+        Launch { image_path: "C:\\Windows\\System32\\poly-image.exe".into(), args: Vec::new() }
+    }
+}
+
 /// Set up `process` (already made with [`Process::new`] and personality
 /// `Nt`) to run the PE image `file` in `memory`, as its first thread `tid`.
 /// Returns where to start it. The caller spawns the thread with
 /// [`user::spawn_nt`] and [`DEFAULT_HOOK`](user::DEFAULT_HOOK).
 pub fn start(process: &Arc<Process>, memory: &Arc<Memory>, file: &[u8], tid: u32) -> Result<Start, NtStatus> {
+    start_with(process, memory, file, tid, &Launch::unnamed())
+}
+
+/// [`start`] with the executable's path and arguments, which go into the
+/// process parameters with the default environment (ADR 0072).
+pub fn start_with(
+    process: &Arc<Process>,
+    memory: &Arc<Memory>,
+    file: &[u8],
+    tid: u32,
+    launch: &Launch,
+) -> Result<Start, NtStatus> {
     let pid = ProcessId(process.pid);
     let thread = ThreadRef(u64::from(tid));
     // File I/O completions are written into this memory (ADR 0067).
     io::register(process.pid, memory);
     let started = with(|s| {
+        let args: Vec<&str> = launch.args.iter().map(String::as_str).collect();
+        let params = poly_personality_nt::params::for_program(&launch.image_path, &args, layout::environment(&s.sys));
         s.processes.insert(pid, NtProcess::new(pid));
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         let mut b = MemBackend { memory, sections: &mut s.sections };
-        let start = exec::start_process(&mut s.sys, proc, &mut b, file, None, thread);
+        let start = exec::start_process(&mut s.sys, proc, &mut b, file, None, thread).and_then(|ps| {
+            // The process parameters: image path, command line and
+            // environment (ADR 0072).
+            poly_personality_nt::params::write(proc, &mut b, ps.peb, &params)?;
+            Ok(ps)
+        });
         match start {
             Ok(ps) => Ok(Start {
                 // The first thread also starts at the trampoline, which calls
@@ -439,11 +492,18 @@ pub enum SpawnError {
 
 /// Start the PE executable `file` in the already-made NT process
 /// `process`, its first thread running the entry point. Returns `process`.
-pub fn spawn_pe(process: &Arc<Process>, file: &[u8], hook: user::SyscallHook) -> Result<(), SpawnError> {
+/// `launch` names it and gives its arguments (its process parameters,
+/// ADR 0072).
+pub fn spawn_pe_with(
+    process: &Arc<Process>,
+    file: &[u8],
+    hook: user::SyscallHook,
+    launch: &Launch,
+) -> Result<(), SpawnError> {
     use crate::user::memory::Layout;
     let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| SpawnError::Memory)?);
     let pid = process.pid;
-    let start = start(process, &memory, file, pid).map_err(SpawnError::Image)?;
+    let start = start_with(process, &memory, file, pid, launch).map_err(SpawnError::Image)?;
     match user::spawn_nt(Arc::clone(process), Arc::clone(&memory), start.entry, start.teb, hook) {
         Ok(tid) => {
             let _ = thread::detach(tid);
