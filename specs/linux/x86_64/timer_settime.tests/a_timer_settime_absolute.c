@@ -18,7 +18,12 @@ int test_main(void) {
     syscall2(SYS_timer_gettime, id, &cur);
     check("remaining_is_relative", ns(cur.it_value) > 4000000000L && ns(cur.it_value) <= 5000000000L,
           ns(cur.it_value));
-    struct a_itimerspec past = {{0, 0}, {1, 0}};
+    /* A time in the past: half of the clock's current reading. It is before
+     * now however long the machine has been up (a fixed time such as 1 s is
+     * not past yet right after boot), and not zero (zero would disarm). */
+    syscall2(SYS_clock_gettime, CLOCK_MONOTONIC, &now);
+    i64 half = ns(now) / 2;
+    struct a_itimerspec past = {{0, 0}, {half / 1000000000L, half % 1000000000L}};
     expect("arm_in_past", syscall4(SYS_timer_settime, id, TIMER_ABSTIME, &past, 0), 0);
     syscall2(SYS_timer_gettime, id, &cur);
     expect("past_expired_at_once", ns(cur.it_value), 0);
