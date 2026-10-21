@@ -518,12 +518,44 @@ impl<S: Shell> Ops for RealOps<S> {
         self.entry = entry.map(String::from);
     }
 
-    fn refresh_main(&mut self) -> Result {
+    fn refresh_main(&mut self) -> Result<String> {
         let repo = self.cfg.repo.clone();
         let (remote, base) = (self.cfg.remote.clone(), self.cfg.base_branch.clone());
         self.git_ok(&repo, &["fetch", "--prune", "--no-tags", &remote])?;
         self.git_ok(&repo, &["merge", "--ff-only", "-q", &format!("{remote}/{base}")])?;
-        Ok(())
+        self.git_ok(&repo, &["rev-parse", "HEAD"])
+    }
+
+    fn changed_paths(&mut self, from: &str, to: &str) -> Result<Vec<String>> {
+        let repo = self.cfg.repo.clone();
+        let out = self.git_ok(&repo, &["diff", "--name-only", "--no-renames", from, to])?;
+        Ok(out.lines().filter(|l| !l.is_empty()).map(String::from).collect())
+    }
+
+    fn build_self(&mut self) -> Result<Out> {
+        // One package at a time, as `cargo xtask` (xtask) and its `cargo run
+        // --package poly-pipeline` build them: built together, shared
+        // dependencies could get other features, and the start after the
+        // restart would build everything again.
+        let mut last = Out::default();
+        for package in ["xtask", "poly-pipeline"] {
+            let mut c = Cmd {
+                program: self.cfg.cargo.clone(),
+                args: ["build", "--quiet", "--package", package].iter().map(|s| s.to_string()).collect(),
+                cwd: Some(self.cfg.repo.clone()),
+                ..Cmd::default()
+            };
+            // rustup names the toolchain it runs us with in the environment;
+            // without that, the checkout's rust-toolchain.toml picks it, as it
+            // will when systemd starts the loop again.
+            c.env_remove.extend(["RUSTUP_TOOLCHAIN".to_string(), store::HELDOUT_ENV.to_string()]);
+            c.log = Some(self.log_file(&format!("build-{package}")));
+            last = self.shell.run(&c)?;
+            if !last.ok() {
+                break;
+            }
+        }
+        Ok(last)
     }
 
     fn queue(&mut self) -> Result<Vec<String>> {

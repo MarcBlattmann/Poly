@@ -55,7 +55,7 @@ scheduler that runs it all unattended is
 | Implement | **implementer (LLM)** | `pipeline role implementer <id> ...` runs it |
 | Compare real OS and Poly | tool | `pipeline diff [--target linux\|poly]` |
 | Merge decision | CI + held-out result | PR, never a direct push |
-| All of the above, unattended | tool | `pipeline loop [--once] [--dry-run]`, `loop status`, `loop reset` |
+| All of the above, unattended | tool | `pipeline loop [--once] [--dry-run]`, `loop status`, `loop pause\|resume`, `loop reset` |
 | Windows tests: build, bundle, run on Poly, compare | tool | `pipeline win build\|bundle\|poly\|diff\|show` (runner on the PC: `poly-oracle.ps1`) |
 
 All of these are `cargo xtask pipeline <command>`; the full option list is
@@ -431,7 +431,8 @@ use an API key. Subscriptions have **usage limits** that reset in windows
 (a rolling 5-hour window and a weekly limit). `pipeline role` looks for
 "usage limit", "limit reached", "rate limit", "too many requests" or
 "quota exceeded" in the agent's output (override with
-`POLY_LIMIT_PATTERNS='a|b'`) and then exits with status **75**: the
+`POLY_LIMIT_PATTERNS='a|b'`) and then exits with status **75**
+(`cargo xtask pipeline` passes the tool's exit status on): the
 scheduler pauses that role and retries later (for example every 30
 minutes, or at the reset time the message gives) instead of counting a
 red cycle. Work already committed on the branch is kept; the retry starts
@@ -484,18 +485,31 @@ inbox and git:
 /srv/poly/inbox/       server:polyimpl 2750, hand-off bundles and feedback for the implementer
 /srv/poly/spec-inbox/  server:polyspec 2750, feedback for the spec agent (a failed spec check)
 /srv/poly/bin/poly-role root, the role wrapper: the only command `server` may run as the role users
+/srv/poly/bin/deployed.sha256  root, the fingerprint of the deploy files setup.sh installed last
 ```
 
 `polyimpl` cannot read `heldout/`, `generated/`, `runner/`, `spec/` or
 `spec-inbox/` (the setup script checks it). The loop starts a role with
 `sudo -n -u polyspec /srv/poly/bin/poly-role spec sync|run ...` (likewise
 `polyimpl` / `implementer`); `/etc/sudoers.d/poly-pipeline` allows exactly
-that, NOPASSWD:
+that, and four `systemctl` commands for the service, NOPASSWD:
 
 ```
 server ALL=(polyspec) NOPASSWD: /srv/poly/bin/poly-role spec *
 server ALL=(polyimpl) NOPASSWD: /srv/poly/bin/poly-role implementer *
+Cmnd_Alias POLY_PIPELINE_SERVICE = /usr/bin/systemctl start poly-pipeline, \
+    /usr/bin/systemctl stop poly-pipeline, \
+    /usr/bin/systemctl restart poly-pipeline, \
+    /usr/bin/systemctl status poly-pipeline
+server ALL=(root) NOPASSWD: POLY_PIPELINE_SERVICE
 ```
+
+The last two lines let `server` control the service without a password,
+and nothing else as root: sudo matches those four commands exactly (no
+other arguments, no other unit; `poly-pipeline.service` spelled out does
+not match). `status` is left out on systemd older than 247, which starts
+its pager as root without secure mode under sudo (CVE-2023-26604); newer
+systemd runs `less` in secure mode there, so the pager cannot open a shell.
 
 sudo resets the environment; the wrapper checks every argument, sets the
 role's environment (the implementer gets `POLY_ROLE=implementer` and never
@@ -606,7 +620,9 @@ does not). A role paused by a usage limit does not hold up such a fetch.
 stopped entry with the reason, the branches (pushed to GitHub too), the
 state file and the logs. `notify.command` runs then (and when a PR is
 opened) with `POLY_EVENT`, `POLY_ENTRY`, `POLY_MESSAGE`, e.g. a `curl` to an
-ntfy topic for a push notification. `pipeline loop reset <id>` forgets an
+ntfy topic for a push notification; also with `POLY_EVENT=deploy` and
+`update` and an empty `POLY_ENTRY` for the loop's own notices (see "Updates
+and service control"). `pipeline loop reset <id>` forgets an
 entry (and deletes its hub branches) so the loop takes it again.
 
 ### Running the loop
@@ -616,19 +632,35 @@ cargo xtask pipeline loop [--config FILE]     # max_parallel workers, forever (t
 cargo xtask pipeline loop --once              # drive one entry until it waits or ends, then exit
 cargo xtask pipeline loop --entry linux/syscall/x86_64/brk [--once]   # only this entry
 cargo xtask pipeline loop --dry-run           # print the commands for the next entry; changes nothing
-cargo xtask pipeline loop status [--json]     # every entry's step, cycle, PR or reason; paused roles
+cargo xtask pipeline loop status [--json]     # every entry's step, cycle, PR or reason; paused roles; notices
+cargo xtask pipeline loop pause [--role spec|implementer|all] [--for 4h] [--reason TEXT]
+cargo xtask pipeline loop resume [--role spec|implementer|all]
 cargo xtask pipeline loop reset <id> [--keep-branches]
 ```
 
+`loop pause` writes the pause file the cycle reads before every agent
+session (`state/pause-<role>.json`, `{until, reason}`, the same file a usage
+limit writes): no new session of that role starts until then, or until
+`loop resume` without `--for` (`--role` defaults to both, `--for` takes
+`30m`, `4h`, `2d`, `1h30m`). A session that is running finishes, and the
+runner's own steps (CI, diff, PRs) go on; `sudo systemctl stop
+poly-pipeline` stops everything. A usage limit hit during an owner's
+longer pause does not shorten it. `loop resume` removes the file (a usage
+limit's too); the loop starts the next session within `idle_secs`.
+`loop status` lists both roles with their pauses.
+
 The configuration is TOML, looked up as `--config`, `$POLY_PIPELINE_CONFIG`,
-`/etc/poly-pipeline.toml`, `~/.config/poly/pipeline.toml`; every key has a
+`/etc/poly-pipeline.toml`, `/srv/poly/runner/pipeline.toml` (where setup.sh
+installs it, so `loop status` and `loop pause` find it without
+`--config`), `~/.config/poly/pipeline.toml`; every key has a
 default for this layout, unknown keys are errors. The example with every
 key and its meaning is
 [`tools/pipeline/deploy/pipeline.example.toml`](../tools/pipeline/deploy/pipeline.example.toml):
 `[loop]` (`max_parallel` 1, 2 on a 4-core machine; `max_cycles` 5;
 `spec_attempts`; `spec_cycles` 2; `max_errors`; `max_open_prs`;
 `entries`/`exclude` id prefixes; `idle_secs`, `limit_pause_secs`,
-`poll_secs`), `[paths]` (with `spec_inbox`), `[git]`,
+`poll_secs`; `self_update`), `[paths]` (with `spec_inbox`,
+`deploy_stamp`), `[git]`,
 `[github]` (`open_prs`, `auto_merge`, `push_human_branches`), `[spec]` and
 `[implementer]` (agent id, the wrapper command, `model`, the checkout; the
 implementer's `allowed_paths`), `[safety] extra_forbidden`,
@@ -666,11 +698,13 @@ configuration; rustup, the toolchain `rust-toolchain.toml` pins and Claude
 Code in the role homes), the pinned toolchain in `server`'s rustup,
 `/etc/sudoers.d/poly-pipeline` (checked with `visudo` first) and
 `/etc/systemd/system/poly-pipeline.service` (enabled, not started; `--start`
-starts it). The toolchain is installed explicitly (`rustup toolchain
+starts it), and last the fingerprint of the deploy files in
+`/srv/poly/bin/deployed.sha256`. The toolchain is installed explicitly (`rustup toolchain
 install` in the checkout, then checked with `RUSTUP_AUTO_INSTALL=0`), not
 by rustup's deprecated install on first use. The unit runs `cargo xtask
 pipeline loop` as `server` in `/srv/poly/runner/repo` with
-`Restart=always`, `Nice=10`, a low IO priority, `CPUQuota=300%` (3 of 4
+`Restart=always`, `SuccessExitStatus=10` (the self-update exit, see
+below), `Nice=10`, a low IO priority, `CPUQuota=300%` (3 of 4
 cores), `MemoryHigh=11G`, `MemoryMax=12G`, and no `NoNewPrivileges` (the
 loop needs sudo for the wrapper).
 
@@ -717,11 +751,50 @@ Then, once:
 5. `sudo systemctl start poly-pipeline`; follow it with
    `journalctl -u poly-pipeline -f` and `cargo xtask pipeline loop status`.
 
-After an update that changes `tools/pipeline/deploy/` (the wrapper, a new
-directory), pull the runner's checkout and run `sudo
-tools/pipeline/deploy/setup.sh` again: the installed wrapper and the
-directories under `/srv/poly` come from it. It keeps `pipeline.toml`;
-compare that with the example for new keys (every key has a default).
+### Updates and service control
+
+Routine operation needs no commands. The loop fast-forwards
+`/srv/poly/runner/repo` to `origin/main` before it picks an entry, and at
+least every `poll_secs` while none can start
+(`tools/pipeline/src/scheduler/update.rs`):
+
+- **The loop's own code** (`tools/pipeline/` but `deploy/`,
+  `tools/xtask/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`,
+  `.cargo/config.toml`) changed since the commit it was started from: it
+  builds the new code first (`cargo build -p xtask`, then `-p
+  poly-pipeline`, in the checkout, logged under `state/logs/loop/`). If
+  that passes, it starts nothing new, lets every step in progress end (an
+  agent session runs to its end; every step resumes from its state), and
+  exits with status **10**. The unit lists 10 in `SuccessExitStatus=`, and
+  `Restart=always` starts `cargo xtask pipeline loop` again after
+  `RestartSec=60`, which runs the new code (built already). If the build
+  fails, the loop does not exit: it keeps running the code it started
+  with, logs the error, writes it to the human queue, runs the notify
+  command (`POLY_EVENT=update`) once, shows it in `loop status`, and builds
+  again when main moves. So a broken main never makes systemd spin. Other
+  changes (the crates, the kernel, the coverage map) do not restart the
+  loop: the tools that use them run as `cargo xtask ...` in the runner's
+  worktrees, built from the branch every time.
+- **The deploy files** (`tools/pipeline/deploy/`: the wrapper, `setup.sh`
+  with the sudoers rule and the unit; not the example configuration)
+  need root and are never applied by the loop. `setup.sh` records the
+  fingerprint of what it installed in `/srv/poly/bin/deployed.sha256`
+  (`[paths] deploy_stamp`); while the runner's checkout has other deploy
+  files, `loop status` shows `deploy files changed: run sudo
+  /srv/poly/runner/repo/tools/pipeline/deploy/setup.sh`, and the loop logs
+  it, writes it to the human queue and runs the notify command
+  (`POLY_EVENT=deploy`) once per change. Running `setup.sh` again clears
+  it. A changed unit applies when the loop next starts (its next
+  self-update, or `sudo systemctl restart poly-pipeline`, which stops the
+  steps in progress; they resume from their state). `setup.sh` keeps
+  `pipeline.toml`; compare it with the example for new keys (every key
+  has a default).
+
+`loop.self_update = false` turns the restart off; it is off anyway for
+`--once`, `--dry-run` and a loop that does not run from `paths.repo`.
+For the service itself, `server` may run `sudo systemctl
+start|stop|restart|status poly-pipeline` without a password (the sudoers
+rule above), and nothing else as root.
 
 The runner builds and tests agent-written code (CI) as `server`, which can
 read the held-out store and push: the checks before CI (paths, no build
