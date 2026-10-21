@@ -166,6 +166,10 @@ impl CreateHook<'_> {
     ) -> Result<ObjectId, NtStatus> {
         let p = self.params;
         let (parts, trailing) = split_path(remaining)?;
+        // The whole name is checked before anything is looked up.
+        for part in &parts {
+            names::check_component(part)?;
+        }
         let follow = p.options & FILE_OPEN_REPARSE_POINT == 0;
         let vr = self.io.vfs()?;
         let found = walk::resolve(vr, start, start_path, &parts, follow)?;

@@ -142,7 +142,7 @@ mod tests {
         assert!(!allowed((R, SR), (RW, SR | SW)));
         // First: GENERIC_READ, FILE_SHARE_WRITE.
         assert!(!allowed((R, SW), (R, SW)));
-        assert!(allowed((R, SW), (W, SW)));
+        assert!(!allowed((R, SW), (W, SW)));
         assert!(allowed((R, SW), (W, SR | SW)));
         assert!(!allowed((R, SW), (RW, SR | SW)));
         // First: GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE.
