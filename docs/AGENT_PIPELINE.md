@@ -204,7 +204,9 @@ reported **unsupported**. QEMU itself sometimes crashes (SIGSEGV) while
 booting under TCG on a loaded host; a guest cannot cause that, so the boot
 is retried twice and a crash that persists is an **error** of that test
 alone (the logs of the crashed boots are kept as
-`<test>.serial.crash-<n>.log`). `--jobs N` runs N tests at a time (the
+`<test>.serial.crash-<n>.log`). Processes are numbered in creation order
+on both sides (on Poly by pid, which the kernel hands out in that order),
+so the program is always process 0. `--jobs N` runs N tests at a time (the
 reference run and the Poly boot of a test stay together; the report keeps
 the corpus order).
 
