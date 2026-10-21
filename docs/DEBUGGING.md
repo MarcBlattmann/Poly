@@ -598,9 +598,17 @@ apic: I/O APIC 0 at 0xfec00000: version 0x20, GSI 0-23, all masked
 time: HPET at 0xfed00000: 100.000 MHz, 64-bit counter, 3 timers
 time: TSC 2699.992 MHz, calibrated against the HPET (5 of 6 measurements, spread 14 ppm), invariant: no
 time: clock source TSC (a virtual CPU's TSC: constant rate)
-time: APIC timer 62.499 MHz (input clock / 16), periodic tick 1000 Hz on vector 0xf0
+time: APIC timer 62.499 MHz (input clock / 16, calibrated against the TSC), periodic tick 1000 Hz on vector 0xf0
 irq: interrupts enabled
 ```
+
+Under KVM (`POLY_QEMU_ACCEL`, ADR 0077) the APIC line says `x2APIC mode`
+instead: QEMU gives its CPU models x2APIC there, and the xAPIC page at
+0xfee00000 then reads as all ones. A calibration that needed retries says
+`, attempt N` in its line (see `CalibrationConfig::retries`); one that
+failed prints the measurements of its last attempt, each as `<rate> Hz
++-<ppm>`, `(wide)` where the reads bracketing it took too long (a VM exit
+on a busy host, a descheduled vCPU).
 
 An interrupt on a vector without a handler prints `irq: interrupt on vector
 0x..., which has no handler` (the first few times) and is acknowledged; an
