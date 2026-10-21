@@ -247,6 +247,10 @@ impl FileIo for Thread<'_> {
         self.install_object(Arc::new(SignalFd::new(mask)), FileType::Regular, OpenFlags::RDWR, new)
     }
 
+    fn is_object(&mut self, fd: i32) -> Result<bool, Errno> {
+        Ok(self.file(fd)?.object().is_some())
+    }
+
     fn pipe_size(&mut self, fd: i32) -> Result<usize, Errno> {
         let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
         Ok(end.pipe().capacity())

@@ -1,7 +1,10 @@
 //! The ioctl(2) requests every descriptor answers, whatever its file:
 //! `FIONBIO` (set or clear `O_NONBLOCK` from an int argument; ioctl's
 //! spec sheet: on a pty slave too), `FIOCLEX` / `FIONCLEX` (set or clear
-//! close-on-exec). Request numbers from `asm-generic/ioctls.h`.
+//! close-on-exec). And `FIONREAD` on a file object that holds no byte
+//! stream (an event counter, timer, signal or epoll file) is `ENOTTY`
+//! (eventfd's spec sheet), before anything takes it for a regular file.
+//! Request numbers from `asm-generic/ioctls.h`.
 
 use crate::args::Args;
 use crate::errno::SysResult;
@@ -18,8 +21,15 @@ pub fn generic(k: &mut dyn LinuxKernel, fd: i32, request: u32, a: &Args) -> Opti
     Some(match request {
         FIONBIO => fionbio(k, fd, a),
         FIOCLEX | FIONCLEX => fs(k).and_then(|fs| fs.set_cloexec(fd, request == FIOCLEX)).map(|()| 0),
+        crate::abi::ioctl::FIONREAD if streamless_object(k, fd) => Err(crate::errno::Errno::ENOTTY),
         _ => return None,
     })
+}
+
+/// A file object whose kernel knows no byte count for it.
+fn streamless_object(k: &mut dyn LinuxKernel, fd: i32) -> bool {
+    let Some(io) = k.file_io() else { return false };
+    io.is_object(fd).unwrap_or(false) && io.bytes_readable(fd).is_ok_and(|n| n.is_none())
 }
 
 fn fionbio(k: &mut dyn LinuxKernel, fd: i32, a: &Args) -> SysResult {

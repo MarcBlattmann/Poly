@@ -216,6 +216,13 @@ pub trait FileIo {
     /// (signalfd(2)), encoded by [`crate::sys::signalfd::siginfo_bytes`].
     fn signalfd(&mut self, fd: i32, mask: SigSet, new: NewFd) -> Result<i32, Errno>;
 
+    /// Whether `fd` is a file object (a pipe, socket, event counter, timer,
+    /// signal or epoll file) rather than a file of a file system.
+    fn is_object(&mut self, fd: i32) -> Result<bool, Errno> {
+        let _ = fd;
+        Ok(false)
+    }
+
     /// `F_GETPIPE_SZ`: the capacity of the pipe `fd` is an end of, in
     /// bytes. `EINVAL` if it is not a pipe.
     fn pipe_size(&mut self, fd: i32) -> Result<usize, Errno> {
