@@ -188,10 +188,13 @@ pub fn for_program(image_path: &str, args: &[&str], environment: Vec<u16>) -> Pa
 /// 32,767 characters", and a block holds many).
 pub const MAX_ENVIRONMENT_BYTES: u64 = 1 << 20;
 
+/// Reads the caller's memory: `(address, buffer)`.
+pub type ReadUser<'a> = dyn FnMut(u64, &mut [u8]) -> Result<(), NtStatus> + 'a;
+
 /// The parameters a caller built in its own memory at `at`
 /// (`NtCreateUserProcess`, ADR 0079): the strings and the environment
-/// block, copied out. A `read` reads the caller's memory.
-pub fn read(at: u64, read: &mut dyn FnMut(u64, &mut [u8]) -> Result<(), NtStatus>) -> Result<Parameters, NtStatus> {
+/// block, copied out. `read` reads the caller's memory.
+pub fn read(at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
     let mut header = alloc::vec![0u8; (PP_CURRENT_DIRECTORY + 16) as usize];
     read(at, &mut header)?;
     let u64_at = |o: u64| u64::from_le_bytes(header[o as usize..][..8].try_into().expect("8 bytes"));

@@ -58,7 +58,7 @@ impl SystemTime {
 }
 
 fn is_leap(y: u64) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
 }
 
 fn days_in_month(y: u64, m: u64) -> u64 {
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn round_trips_and_validation() {
-        for ft in (0..200).map(|i: u64| i * 0x0123_4567_89AB_CD % (i64::MAX as u64 / 4)) {
+        for ft in (0..200).map(|i: u64| i * 0x0001_2345_6789_ABCD % (i64::MAX as u64 / 4)) {
             let s = to_system_time(ft).unwrap();
             assert_eq!(to_file_time(&s), Some(ft - ft % 10_000), "{ft}");
         }

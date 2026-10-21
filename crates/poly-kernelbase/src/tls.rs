@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(slot(1087), Some(Slot::Expansion(1023)));
         assert_eq!(slot(1088), None);
         // The 64 slots end before the expansion pointer.
-        assert!(TEB_TLS_SLOTS + 64 * 8 <= TEB_TLS_EXPANSION_SLOTS);
+        const { assert!(TEB_TLS_SLOTS + 64 * 8 <= TEB_TLS_EXPANSION_SLOTS) };
     }
 
     #[test]
