@@ -6,6 +6,32 @@ fn main() {
     println!("cargo:rustc-link-arg-bins=-T{dir}/linker.ld");
     println!("cargo:rerun-if-changed=linker.ld");
     build_vdso(Path::new(&dir));
+    embed_ntdll();
+}
+
+/// Where `cargo xtask` names our `ntdll.dll` (ADR 0071): built once per
+/// source version and cached by content hash (`tools/xtask/src/ntdll.rs`),
+/// so the kernel build itself never runs the `-Zbuild-std` compile.
+const NTDLL_ENV: &str = "POLY_NTDLL_DLL";
+
+/// Copy our `ntdll.dll` to `$OUT_DIR/ntdll.dll`, which the kernel embeds
+/// (`nt::ntdll`). A build without `xtask` (a bare `cargo build` in
+/// `kernel/`) gets an empty file and a warning: that kernel boots, but
+/// cannot start Windows programs.
+fn embed_ntdll() {
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("ntdll.dll");
+    println!("cargo:rerun-if-env-changed={NTDLL_ENV}");
+    match std::env::var_os(NTDLL_ENV) {
+        Some(path) => {
+            let path = PathBuf::from(path);
+            println!("cargo:rerun-if-changed={}", path.display());
+            std::fs::copy(&path, &out).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        }
+        None => {
+            println!("cargo:warning={NTDLL_ENV} is not set: this kernel has no ntdll.dll (build with `cargo xtask`)");
+            std::fs::write(&out, []).expect("write an empty ntdll.dll");
+        }
+    }
 }
 
 /// The vDSO's source, linker script and version script, and the crate it

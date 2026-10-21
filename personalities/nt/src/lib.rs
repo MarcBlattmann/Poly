@@ -244,6 +244,5 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         PolyResumeApc => Ok(k.resume_apc()),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
-        PolySetExceptionDispatcher => exception::set_exception_dispatcher(k, regs),
     }
 }

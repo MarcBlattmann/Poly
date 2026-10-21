@@ -1,6 +1,5 @@
 //! Exception dispatch (ADR 0068): CPU exceptions classified, the dispatcher
-//! frame written to the user stack, `NtRaiseException`, `NtContinue` and
-//! `PolySetExceptionDispatcher`.
+//! frame written to the user stack, `NtRaiseException` and `NtContinue`.
 //!
 //! [`SehFake`] wraps the shared [`Fake`] and records what the services ask
 //! of the kernel's exception side (`load_context`, `unhandled_exception`).
@@ -394,19 +393,6 @@ fn undeliverable_exceptions_end_the_process_with_their_code() {
     assert!(matches!(dispatch_fault(&mut k, &f, &mut c), FaultOutcome::Unhandled(_)));
     assert!(k.loaded.is_empty());
     assert_eq!(k.f.terminated, Some(NtStatus(STATUS_INTEGER_DIVIDE_BY_ZERO)));
-}
-
-#[test]
-fn set_exception_dispatcher_service() {
-    let mut k = SehFake::new(0);
-    assert_eq!(k.call(Service::PolySetExceptionDispatcher, &[DISPATCHER]), STATUS_SUCCESS);
-    assert_eq!(k.f.proc.exception_dispatcher, DISPATCHER);
-    for bad in [0x10, crate::vm::ADDRESS_END, u64::MAX] {
-        assert_eq!(k.call(Service::PolySetExceptionDispatcher, &[bad]), STATUS_INVALID_PARAMETER);
-    }
-    assert_eq!(k.f.proc.exception_dispatcher, DISPATCHER);
-    assert_eq!(k.call(Service::PolySetExceptionDispatcher, &[0]), STATUS_SUCCESS);
-    assert_eq!(k.f.proc.exception_dispatcher, 0);
 }
 
 #[test]

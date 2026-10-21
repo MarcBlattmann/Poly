@@ -352,6 +352,32 @@ impl NtKernel for Fake {
 
 pub const IMAGE_BASE: u64 = 0x1_4000_0000;
 
+/// Where the stand-in `ntdll` goes (our `ntdll`'s preferred base).
+pub const NTDLL_BASE: u64 = 0x7FF0_0000_0000;
+/// The RVAs of its three entry points.
+pub const NTDLL_THREAD_START: u32 = 0x1000;
+pub const NTDLL_APC: u32 = 0x1010;
+pub const NTDLL_EXCEPTION: u32 = 0x1020;
+
+/// A stand-in for our `ntdll` (ADR 0071): a DLL exporting the three entry
+/// points the kernel enters, with `int3`s for code.
+pub fn fake_ntdll() -> Vec<u8> {
+    use poly_ldr::builder::{Export, PeBuilder, Section, TEXT, Target};
+    let export = |name: &str, ordinal, rva| Export { name: Some(name.into()), ordinal, target: Target::Rva(rva) };
+    PeBuilder {
+        image_base: NTDLL_BASE,
+        sections: vec![Section::new(".text", vec![0xCC; 0x30], TEXT)],
+        export_name: "ntdll.dll".into(),
+        exports: vec![
+            export("LdrInitializeThunk", 1, NTDLL_THREAD_START),
+            export("KiUserApcDispatcher", 2, NTDLL_APC),
+            export("KiUserExceptionDispatcher", 3, NTDLL_EXCEPTION),
+        ],
+        ..PeBuilder::default()
+    }
+    .write()
+}
+
 /// A small relocatable executable: `.text` (one `ret`), `.data` with an
 /// absolute pointer to `.text` at RVA 0x2008, 0x1800 bytes in memory.
 pub fn test_exe(fixed: bool) -> Vec<u8> {
@@ -397,7 +423,7 @@ impl Fake {
     /// A process started from [`test_exe`].
     pub fn new() -> Fake {
         let mut f = Fake::bare();
-        crate::exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, &test_exe(false), None, TID).expect("starts");
+        crate::exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, &test_exe(false), &fake_ntdll(), None, TID).expect("starts");
         f
     }
 

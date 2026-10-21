@@ -6,7 +6,7 @@ use poly_ntobj::ObjectType;
 use poly_ntobj::status::*;
 
 fn start(f: &mut Fake, file: &[u8]) -> core::result::Result<exec::ProcessStart, NtStatus> {
-    exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, file, None, TID)
+    exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, file, &fake_ntdll(), None, TID)
 }
 
 #[test]
@@ -15,9 +15,10 @@ fn image_is_mapped_at_its_base_with_section_protections() {
     let s = start(&mut f, &test_exe(false)).unwrap();
     assert_eq!(s.image_base, IMAGE_BASE);
     assert!(!s.relocated);
-    // The thread starts at the trampoline, which calls the image entry.
+    // The thread starts in ntdll, which calls the image entry.
     assert_eq!(s.start_routine, IMAGE_BASE + 0x1000);
     assert_eq!(s.argument, s.peb);
+    assert_eq!(s.entry, NTDLL_BASE + u64::from(NTDLL_THREAD_START));
     assert_eq!(f.proc.vm.query(s.entry).unwrap().protect, PAGE_EXECUTE_READ);
     let q = |f: &Fake, a| f.proc.vm.query(a).unwrap();
     let headers = q(&f, IMAGE_BASE);
@@ -46,10 +47,11 @@ fn teb_peb_and_stack() {
     // The ClientId is the process and the first thread (its id is the pid).
     assert_eq!(f.u64_at(s.teb + exec::TEB_CLIENT_ID), u64::from(PID.0));
     assert_eq!(f.u64_at(s.teb + exec::TEB_CLIENT_ID + 8), TID.0);
-    // The thread starts at the stack top (16-aligned); the trampoline makes
-    // its own shadow space before calling the image entry.
-    assert_eq!(s.rsp, s.stack_base);
-    assert_eq!(s.rsp % 16, 0);
+    // The thread starts 8 bytes below the (16-aligned) stack top, as after
+    // a call, at a zero return address that ends a stack walk.
+    assert_eq!(s.rsp, s.stack_base - 8);
+    assert_eq!(s.stack_base % 16, 0);
+    assert_eq!(f.u64_at(s.rsp), 0);
     // 256 KiB reserved, 8 KiB committed, a guard page below.
     let stack = f.proc.vm.query(s.stack_limit).unwrap();
     assert_eq!((stack.state, stack.protect, stack.region_size), (MEM_COMMIT, PAGE_READWRITE, 0x2000));
@@ -127,8 +129,9 @@ fn not_an_image() {
 #[test]
 fn process_and_thread_objects_and_exit() {
     let mut f = Fake::new();
+    // The executable's and ntdll's image sections.
     let before_sections = f.mem.live_sections();
-    assert_eq!(before_sections, 1);
+    assert_eq!(before_sections, 2);
     let p = f.proc.object.unwrap();
     assert_eq!(f.sys.objects.object_type(p), Some(ObjectType::Process));
     assert_eq!(f.sys.objects.cookie(p), Some(u64::from(PID.0)));
@@ -170,4 +173,56 @@ fn unknown_services_are_not_implemented() {
         poly_abi::Outcome::Unimplemented { table: "nt", number: 0x7ff }
     );
     assert_eq!(regs.rax, 0xC000_0002);
+}
+
+#[test]
+fn ntdll_is_mapped_and_entered() {
+    let mut f = Fake::bare();
+    let s = start(&mut f, &test_exe(false)).unwrap();
+    assert_eq!(s.ntdll_base, NTDLL_BASE);
+    let headers = f.proc.vm.query(NTDLL_BASE).unwrap();
+    assert_eq!((headers.state, headers.type_, headers.protect), (MEM_COMMIT, MEM_IMAGE, PAGE_READONLY));
+    assert_eq!(f.proc.vm.query(NTDLL_BASE + 0x1000).unwrap().protect, PAGE_EXECUTE_READ);
+    // Threads, APCs and exceptions enter its exports.
+    assert_eq!(f.proc.thread_start, NTDLL_BASE + u64::from(NTDLL_THREAD_START));
+    assert_eq!(f.proc.apc_dispatcher, NTDLL_BASE + u64::from(NTDLL_APC));
+    assert_eq!(f.proc.exception_dispatcher, NTDLL_BASE + u64::from(NTDLL_EXCEPTION));
+    assert_eq!(f.proc.ntdll_base, NTDLL_BASE);
+}
+
+#[test]
+fn ntdll_whose_base_is_taken_is_relocated() {
+    let mut f = Fake::bare();
+    f.proc.vm.allocate(&mut f.mem, NTDLL_BASE, 0x1000, 0, MEM_RESERVE, PAGE_READWRITE).unwrap();
+    let s = start(&mut f, &test_exe(false)).unwrap();
+    assert_ne!(s.ntdll_base, NTDLL_BASE);
+    assert_eq!(s.entry, s.ntdll_base + u64::from(NTDLL_THREAD_START));
+    assert_eq!(f.proc.exception_dispatcher, s.ntdll_base + u64::from(NTDLL_EXCEPTION));
+}
+
+#[test]
+fn a_dll_without_the_entry_points_is_not_our_ntdll() {
+    use poly_ldr::builder::{PeBuilder, Section, TEXT};
+    let mut f = Fake::bare();
+    let other =
+        PeBuilder { sections: vec![Section::new(".text", vec![0xC3], TEXT)], ..PeBuilder::default() }.write();
+    let r = exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, &test_exe(false), &other, None, TID);
+    assert_eq!(r, Err(STATUS_INVALID_IMAGE_FORMAT));
+}
+
+#[test]
+fn an_executable_with_imports_starts_ntdll_binds_them() {
+    use poly_ldr::builder::{Import, PeBuilder, Section, Sym, TEXT};
+    let exe = PeBuilder {
+        image_base: IMAGE_BASE,
+        dll: false,
+        entry: 0x1000,
+        sections: vec![Section::new(".text", vec![0xC3], TEXT)],
+        imports: vec![Import { dll: "ntdll.dll".into(), symbols: vec![Sym::name("NtClose")], ..Import::default() }],
+        ..PeBuilder::default()
+    }
+    .write();
+    let mut f = Fake::bare();
+    let s = start(&mut f, &exe).unwrap();
+    assert_eq!(s.start_routine, IMAGE_BASE + 0x1000);
 }

@@ -1,17 +1,17 @@
 //! Kernel-to-user exception dispatch (ADR 0068): what a CPU exception in an
 //! NT thread means, how it reaches the process's user-mode exception
 //! dispatcher, and the services around it (`NtRaiseException`,
-//! `NtContinue`, `PolySetExceptionDispatcher`).
+//! `NtContinue`).
 //!
 //! On Windows the kernel hands an exception to `ntdll`'s
 //! `KiUserExceptionDispatcher`, which walks the stack (`RtlDispatchException`)
 //! and either resumes a context (`NtContinue`) or raises the exception again
 //! as unhandled (`NtRaiseException` with `FirstChance` false), and an
 //! unhandled exception ends the process with the exception code as its
-//! exit status. Until our `ntdll` exists, a process names its dispatcher
-//! itself with Poly's own service `PolySetExceptionDispatcher`; once the
-//! kernel maps our `ntdll`, it will take the address of its
-//! `KiUserExceptionDispatcher` export instead.
+//! exit status. Poly does the same: the kernel maps our `ntdll` into every
+//! process and takes the address of its `KiUserExceptionDispatcher` export
+//! (ADR 0071; before that, a process named its dispatcher itself with
+//! Poly's own `PolySetExceptionDispatcher`, now retired).
 //!
 //! # What the dispatcher is entered with (Poly's convention, ADR 0068)
 //!
@@ -415,19 +415,6 @@ pub fn continue_context<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<Nt
     if test_alert as u8 != 0 {
         k.test_alert();
     }
-    Ok(STATUS_SUCCESS)
-}
-
-/// `PolySetExceptionDispatcher(Dispatcher)`: name the calling process's
-/// user-mode exception dispatcher (0: none; exceptions then end the
-/// process). Poly's own service until our `ntdll` provides
-/// `KiUserExceptionDispatcher` (ADR 0068).
-pub fn set_exception_dispatcher<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
-    let [dispatcher] = abi::args::<K, 1>(k, regs)?;
-    if dispatcher >= ADDRESS_END || (dispatcher != 0 && dispatcher < 0x1_0000) {
-        return Err(STATUS_INVALID_PARAMETER);
-    }
-    k.with_state(|_, proc, _| proc.exception_dispatcher = dispatcher);
     Ok(STATUS_SUCCESS)
 }
 
