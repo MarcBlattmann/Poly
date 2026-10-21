@@ -1,0 +1,74 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/semget               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (kernel.sem = semmsl 32000, semmns 1024000000, semopm 500, semmni 32000)"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  semget(key, nsems, semflg) (syscall 64) returns the id of a System V
+  semaphore set, creating it when asked. Sets belong to the system (the
+  IPC namespace), not to a process: they outlive their creator until
+  removed with semctl(IPC_RMID), which takes effect at once. All three
+  arguments are 32-bit ints (the upper half of each register is
+  ignored); key 0 is IPC_PRIVATE. First, nsems < 0 or nsems > semmsl
+  (32000) is EINVAL, before the key is looked at. IPC_PRIVATE always
+  makes a new set, whatever the flags (no IPC_CREAT needed, IPC_EXCL
+  ignored). Any other key looks up the live set with that key: none and
+  no IPC_CREAT (01000) is ENOENT; none and IPC_CREAT makes one; found with
+  IPC_CREAT|IPC_EXCL (02000) is EEXIST; IPC_EXCL without IPC_CREAT is
+  ignored. Making a set needs nsems >= 1 (0 is EINVAL, nothing made). A
+  new set gets mode = semflg & 0777 (other bits accepted, not stored),
+  owner and creator uid/gid = the caller's effective uid/gid, nsems as
+  asked, otime 0, ctime the current time; every semaphore starts with
+  value 0, sempid 0 and no waiters. Finding an existing set needs
+  nsems <= its number of semaphores (0 is fine), else EINVAL; then
+  checks the access asked for in semflg & 0777: the r, w and x bits of
+  the three classes are merged into one rwx request, and each requested
+  bit must be granted by the set's mode for the caller's class (owner,
+  else group, else other); otherwise EACCES, unless the caller has
+  CAP_IPC_OWNER (root). Asking for 0 always passes.
+returns:
+  success: "a non-negative int set id; distinct among live sets; not a file descriptor (does not take an fd slot)"
+  ids: "values depend on the namespace's history and are not predictable (seen both as 0, 1, 2... and as 32768+n); an id just removed is not returned by the next semget"
+  private: "IPC_PRIVATE (key whose low 32 bits are 0, e.g. 2^32): a new id every call, regardless of IPC_CREAT/IPC_EXCL; IPC_STAT shows key 0"
+  existing_key: "the same id for every lookup of a live keyed set (flags 0, IPC_CREAT, or IPC_EXCL alone) with 0 <= nsems <= its size"
+  new_set_stat: "IPC_STAT: key as given (sign kept, e.g. -7), uid=cuid=euid, gid=cgid=egid, mode=semflg&0777, nsems as asked, otime=0, ctime=now (seconds), padding and reserved words 0"
+  new_set_values: "GETALL all zeros; GETVAL, GETPID, GETNCNT, GETZCNT 0 for every index 0..nsems-1; a decrement with IPC_NOWAIT is EAGAIN, a wait-for-zero completes at once"
+  width: "key, nsems and semflg use only the low 32 bits of their registers: nsems 2^32+2 makes 2 semaphores, 2^32 is 0 (EINVAL when creating), 0xffffffff is -1 (EINVAL)"
+errors:
+  bad_nsems: "EINVAL (22): nsems < 0 or > semmsl (32000), checked first: before ENOENT for an unused key and before EEXIST for a used one; for any key"
+  no_such_key: "ENOENT (2): key not in use and no IPC_CREAT (nsems 0..semmsl)"
+  zero_nsems_new: "EINVAL (22): creating (IPC_PRIVATE, or IPC_CREAT of an unused key) with nsems 0; nothing is created"
+  exists: "EEXIST (17): key in use and IPC_CREAT|IPC_EXCL (nsems in range); reported before a too-many-semaphores or permission problem"
+  bad_nsems_existing: "EINVAL (22): key in use and nsems > its number of semaphores (with or without IPC_CREAT); reported before a permission problem"
+  access: "EACCES (13): key in use and a requested access bit (merged rwx of semflg & 0777) not granted to the caller's class; never for root (CAP_IPC_OWNER); IPC_CREAT on an existing key is checked the same way"
+  order: "EINVAL (nsems range), then ENOENT / EINVAL (nsems 0 on create); for an existing key: EEXIST, then EINVAL (nsems > size), then EACCES"
+  limits: "ENOSPC (28): semmni sets in use or the semaphore total would pass semmns; not tested (system-wide)"
+  no_memory: "ENOMEM (12): no memory for the set; not tested"
+side_effects: >
+  Creates a system-wide set that persists after the creating process
+  exits, until IPC_RMID (immediate: the key is free again at once, the old
+  id is then EINVAL for semctl, and IPC_CREAT makes a new set with a new
+  id and fresh zero values). Lookups change nothing. A failed call creates
+  nothing. No file descriptors.
+threading: "no thread-specific behaviour; sets are visible by key to every process in the IPC namespace (e.g. parent and child after fork), and values set by one process are seen by all"
+ordering:
+  - "nsems range check precedes key lookup"
+  - "IPC_RMID removes the set and frees its key immediately"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests also use semctl (IPC_STAT, IPC_RMID, GETVAL, GETALL,
+# GETPID, GETNCNT, GETZCNT, SETVAL) and semop to observe sets. IPC_STAT and
+# the GET commands need read permission on the set (EACCES for a non-root
+# caller on a mode 0 set); SETVAL needs write permission and sets the
+# semaphore's sempid to the caller. semget return values differ between
+# runs and systems, so the tests compare syscall names only (poly-diff:
+# syscalls=names, or off for the fork test). struct semid64_ds layout:
+# asm/sembuf.h (x86-64) and asm-generic/ipcbuf.h; struct sembuf and
+# command numbers: linux/sem.h; IPC flags: linux/ipc.h.
