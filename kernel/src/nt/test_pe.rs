@@ -66,7 +66,7 @@ poly_nt_test_code:
     mov eax, 0x0A
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
 
     // NtOpenEvent(&OUT_H2, EVENT_ALL_ACCESS, &OA)
     mov r15d, 2
@@ -76,7 +76,7 @@ poly_nt_test_code:
     mov eax, 0x0B
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
 
     // NtDuplicateObject(-1, OUT_H2, -1, &OUT_DUP, 0, 0, DUPLICATE_SAME_ACCESS)
     mov r15d, 3
@@ -90,7 +90,7 @@ poly_nt_test_code:
     mov eax, 0x01
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
 
     // NtClose each of the three handles.
     mov r15d, 4
@@ -98,17 +98,17 @@ poly_nt_test_code:
     mov eax, 0
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
     mov r10, [rbx+0x208]
     mov eax, 0
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
     mov r10, [rbx+0x210]
     mov eax, 0
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
 
     // NtOpenEvent again: the object is gone (STATUS_OBJECT_NAME_NOT_FOUND).
     mov r15d, 5
@@ -118,7 +118,7 @@ poly_nt_test_code:
     mov eax, 0x0B
     syscall
     cmp eax, 0xC0000034
-    jne fail
+    jne nt_pe_fail
 
     // ----- 2. directory ---------------------------------------------------
     mov r15d, 6
@@ -134,7 +134,7 @@ poly_nt_test_code:
     mov eax, 0x05
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
     // NtQueryDirectoryObject(OUT_H, &QBUF, 0x100, TRUE, TRUE, &QCTX, &QRET)
     mov r15d, 7
     mov qword ptr [rbx+0x2F0], 0
@@ -150,7 +150,7 @@ poly_nt_test_code:
     mov eax, 0x06
     syscall
     test eax, eax
-    js fail
+    js nt_pe_fail
     // Close the directory handle.
     mov r10, [rbx+0x200]
     mov eax, 0
@@ -170,7 +170,7 @@ poly_nt_test_code:
     mov eax, 0x40
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
     mov r12, [rbx+0x260]
     mov rax, 0x1122334455667788
     mov [r12], rax
@@ -188,9 +188,9 @@ poly_nt_test_code:
     mov eax, 0x42
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
     cmp dword ptr [rbx+0x280], 4
-    jne fail
+    jne nt_pe_fail
 
     // NtQueryVirtualMemory(-1, base, MemoryBasicInformation, &MBI, 48, &ret)
     mov r15d, 10
@@ -204,11 +204,11 @@ poly_nt_test_code:
     mov eax, 0x43
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
     cmp dword ptr [rbx+0x290+32], 0x1000
-    jne fail
+    jne nt_pe_fail
     cmp dword ptr [rbx+0x290+36], 2
-    jne fail
+    jne nt_pe_fail
 
     // NtFreeVirtualMemory(-1, &BASE, &SIZE2=0, MEM_RELEASE)
     mov r15d, 11
@@ -221,7 +221,7 @@ poly_nt_test_code:
     mov eax, 0x41
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
 
     // ----- 4. section mapped twice ---------------------------------------
     mov r15d, 12
@@ -238,7 +238,7 @@ poly_nt_test_code:
     mov eax, 0x44
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
 
     // NtMapViewOfSection view 1.
     mov r15d, 13
@@ -258,7 +258,7 @@ poly_nt_test_code:
     mov eax, 0x46
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
 
     // NtMapViewOfSection view 2.
     mov r15d, 14
@@ -278,7 +278,7 @@ poly_nt_test_code:
     mov eax, 0x46
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
 
     // Write through view 1, read through view 2.
     mov r15d, 15
@@ -287,7 +287,7 @@ poly_nt_test_code:
     mov rax, 0xCAFEF00DD00DFEED
     mov [r13+0x40], rax
     cmp [r14+0x40], rax
-    jne fail
+    jne nt_pe_fail
 
     // Unmap both views.
     mov r15d, 16
@@ -296,13 +296,13 @@ poly_nt_test_code:
     mov eax, 0x47
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
     mov r10, -1
     mov rdx, [rbx+0x2D0]
     mov eax, 0x47
     syscall
     test eax, eax
-    jnz fail
+    jnz nt_pe_fail
     // Close the section handle.
     mov r10, [rbx+0x200]
     mov eax, 0
@@ -330,7 +330,7 @@ build_oa:
     mov qword ptr [rbx+0x248], 0
     ret
 
-fail:
+nt_pe_fail:
     // PolyTrace(0xBADBAD, step, status); then terminate with FAIL_CODE.
     mov r8d, eax
     mov rdx, r15

@@ -36,6 +36,7 @@
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
+mod asmlabels;
 mod busybox;
 mod console;
 mod dynamic;
@@ -1330,6 +1331,8 @@ fn ci() -> Result {
     step("clippy (kernel)", cargo().current_dir(kernel_dir()).args(["clippy", "--", "-D", "warnings"]))?;
     eprintln!("==> font tables");
     font::run(&root(), &["--check".into()])?;
+    eprintln!("==> global_asm! labels");
+    asmlabels::check(&kernel_dir().join("src"))?;
     test()?;
     coverage(&["check".into()])?;
     coverage(&["readme".into(), "--check".into()])?;
