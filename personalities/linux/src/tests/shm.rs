@@ -82,6 +82,31 @@ pub fn detach(k: &mut FakeKernel, addr: u64) -> Result<u64, Errno> {
     Ok(m.serial())
 }
 
+/// The attachments with pages in `[addr, addr + len)`: address and length.
+fn overlapping(k: &FakeKernel, addr: u64, len: u64) -> Vec<(u64, u64)> {
+    let end = addr + len;
+    k.shm.attached.iter().filter(|(a, (_, l))| **a < end && addr < *a + *l).map(|(a, (_, l))| (*a, *l)).collect()
+}
+
+pub fn mapped(k: &mut FakeKernel, addr: u64, len: u64) -> Vec<u64> {
+    overlapping(k, addr, len).iter().map(|(a, _)| k.shm.attached[a].0.serial()).collect()
+}
+
+/// munmap took `[addr, addr + len)`: attachments it covered are gone, the
+/// others keep the span of what is left of them.
+pub fn unmapped(k: &mut FakeKernel, addr: u64, len: u64) {
+    let end = addr + len;
+    for (a, l) in overlapping(k, addr, len) {
+        let (m, _) = k.shm.attached.remove(&a).unwrap();
+        let (start, stop) = (if a < addr { a } else { end }, if a + l > end { a + l } else { addr });
+        if start < stop {
+            k.shm.attached.insert(start, (m, stop - start));
+        } else {
+            memory(&m).attachments.fetch_sub(1, Ordering::Relaxed);
+        }
+    }
+}
+
 pub fn detach_all(k: &mut FakeKernel) -> Vec<u64> {
     let addrs: Vec<u64> = k.shm.attached.keys().copied().collect();
     addrs.into_iter().map(|a| detach(k, a).unwrap()).collect()
@@ -388,4 +413,178 @@ fn namespaces_have_their_own_segments() {
     k.me().ns.ipc = Some(IpcNs::create(&None));
     assert_eq!(shmget(&mut k, 0x5200_0001, 0, 0), Err(Errno::ENOENT));
     assert_eq!(stat(&mut k, id), Err(Errno::EINVAL));
+}
+
+// ---- shmat (specs/linux/x86_64/shmat.yaml and its visible tests) ----------
+
+#[test]
+fn shmat_error_order() {
+    for root in [false, true] {
+        let mut k = fresh();
+        if root {
+            *k.creds_mut() = Creds::root();
+        }
+        let none = shmget(&mut k, 0, 4096, 0).unwrap();
+        let ok = shmget(&mut k, 0, 4096, 0o600).unwrap();
+        let gone = shmget(&mut k, 0, 4096, 0o600).unwrap();
+        rm(&mut k, gone).unwrap();
+        let hole = 0x6000_0000;
+        assert_eq!(shmat(&mut k, none, hole + 1, 0), Err(Errno::EINVAL), "unaligned before access");
+        assert_eq!(shmat(&mut k, none, 0, SHM_REMAP), Err(Errno::EINVAL), "SHM_REMAP without an address");
+        assert_eq!(shmat(&mut k, gone, hole + 1, 0), Err(Errno::EINVAL));
+        assert_eq!(shmat(&mut k, gone, 0xffff_8000_0000_0000, 0), Err(Errno::EINVAL), "id before range");
+        assert_eq!(shmat(&mut k, -5, USER_END, SHM_RDONLY), Err(Errno::EINVAL));
+        let denied = |placement| if root { Err(placement) } else { Err(Errno::EACCES) };
+        assert_eq!(shmat(&mut k, none, 0xffff_8000_0000_0000, 0), denied(Errno::ENOMEM), "access before range");
+        let a = shmat(&mut k, ok, 0, 0).unwrap();
+        assert_eq!(shmat(&mut k, none, a, SHM_RDONLY), denied(Errno::EINVAL), "access before overlap");
+        assert_eq!(shmat(&mut k, ok, a, 0), Err(Errno::EINVAL), "overlap");
+        assert_eq!(shmat(&mut k, ok, USER_END, 0), Err(Errno::ENOMEM), "past user space");
+        assert_eq!(shmat(&mut k, ok, USER_END, SHM_REMAP | SHM_RDONLY), Err(Errno::ENOMEM));
+        let ds = stat(&mut k, none).map(|d| (d.nattch, d.atime, d.lpid));
+        assert_eq!(ds, if root { Ok((0, 0, 0)) } else { Err(Errno::EACCES) }, "a failed attach changes nothing");
+    }
+}
+
+#[test]
+fn shmat_remap_rounding_and_wraparound() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 4097, 0o600).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    assert_eq!(shmat(&mut k, id, a + PAGE_SIZE, 0), Err(Errno::EINVAL), "overlap at a later page");
+    let m = 0x6000_0000;
+    let anon = MapRequest {
+        addr: m,
+        len: 4 * PAGE_SIZE,
+        prot: Prot(prot::PROT_READ | prot::PROT_WRITE),
+        placement: Placement::FixedNoReplace,
+        shared: false,
+        backing: Backing::Anonymous,
+        hints: MapHints::default(),
+    };
+    LinuxKernel::mmap(&mut k, &anon).unwrap();
+    assert_eq!(shmat(&mut k, id, m - PAGE_SIZE, SHM_RDONLY), Err(Errno::EINVAL), "tail overlap");
+    assert_eq!(shmat(&mut k, id, m, SHM_REMAP), Ok(m));
+    assert_eq!(k.maps.last().unwrap().placement, Placement::Fixed);
+    assert_eq!(shmat(&mut k, id, m + 2 * PAGE_SIZE + 5, SHM_REMAP | SHM_RND), Ok(m + 2 * PAGE_SIZE));
+    for addr in [100, 4095] {
+        assert_eq!(shmat(&mut k, id, addr, SHM_REMAP | SHM_RND), Err(Errno::EINVAL), "rounded to 0");
+    }
+    assert_eq!(shmat(&mut k, id, 100, SHM_RND), Err(Errno::EPERM), "below vm.mmap_min_addr");
+    let big = shmget(&mut k, 0, 8192, 0o600).unwrap();
+    let top = 0xffff_ffff_ffff_e000;
+    assert_eq!(shmat(&mut k, big, top, 0), Err(Errno::EINVAL), "wraps");
+    assert_eq!(shmat(&mut k, big, top, SHM_REMAP), Err(Errno::ENOMEM));
+    assert_eq!(shmat(&mut k, id, u64::MAX, SHM_RND), Err(Errno::EINVAL));
+    assert_eq!(shmat(&mut k, id, u64::MAX, SHM_RND | SHM_REMAP), Err(Errno::ENOMEM));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 3);
+    assert_eq!(stat(&mut k, big).unwrap().nattch, 0);
+}
+
+#[test]
+fn shmat_ignores_high_and_unknown_bits() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 8192, 0o600).unwrap();
+    let rw = Prot(prot::PROT_READ | prot::PROT_WRITE);
+    assert!(sys(&mut k, nr::SHMAT, &[id as u64 | 1 << 32, 0, 0]).is_ok());
+    assert!(sys(&mut k, nr::SHMAT, &[id as u64, 0, 0x100_0000 | 0x4000_0000]).is_ok());
+    assert_eq!(k.maps.last().unwrap().prot, rw);
+    assert!(sys(&mut k, nr::SHMAT, &[id as u64, 0, 1 << 32 | u64::from(SHM_RDONLY)]).is_ok());
+    assert_eq!(k.maps.last().unwrap().prot, Prot(prot::PROT_READ));
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 3);
+}
+
+#[test]
+fn shmat_permissions_by_class() {
+    for root in [false, true] {
+        let mut k = fresh();
+        if root {
+            *k.creds_mut() = Creds::root();
+        }
+        let denied = if root { Ok(()) } else { Err(Errno::EACCES) };
+        let mut try_at = |mode: i64, flags: u32| {
+            let id = shmget(&mut k, 0, 100, mode).unwrap();
+            let r = shmat(&mut k, id, 0, flags).map(|a| {
+                shmdt(&mut k, a).unwrap();
+            });
+            rm(&mut k, id).unwrap();
+            r
+        };
+        let (ro, ex) = (SHM_RDONLY, SHM_EXEC);
+        for (mode, flags, allowed) in [
+            (0o600, 0, true),
+            (0o600, ro, true),
+            (0o600, ex, false),
+            (0o600, ex | ro, false),
+            (0o400, 0, false),
+            (0o400, ro, true),
+            (0o200, 0, false),
+            (0o200, ro, false),
+            (0, ro, false),
+            (0o077, 0, false),
+            (0o077, ro, false),
+            (0o700, ex, true),
+            (0o700, ex | ro, true),
+            (0o500, ex | ro, true),
+            (0o500, ex, false),
+            (0o300, ex, false),
+        ] {
+            assert_eq!(try_at(mode, flags), if allowed { Ok(()) } else { denied }, "mode {mode:o} flags {flags:o}");
+        }
+    }
+}
+
+#[test]
+fn shmat_records_the_attach() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 100, 0o600).unwrap();
+    let ds = stat(&mut k, id).unwrap();
+    assert_eq!((ds.atime, ds.lpid, ds.nattch), (0, 0, 0));
+    let ctime = ds.ctime;
+    k.realtime.sec += 2;
+    shmat(&mut k, id, 0, 0).unwrap();
+    shmat(&mut k, id, 0, SHM_RDONLY).unwrap();
+    let ds = stat(&mut k, id).unwrap();
+    assert_eq!((ds.nattch, ds.lpid, ds.atime), (2, 100, k.realtime.sec));
+    assert_eq!((ds.ctime, ds.dtime, ds.segsz), (ctime, 0, 100));
+    assert_eq!(k.maps.last().unwrap().len, PAGE_SIZE, "whole pages");
+}
+
+#[test]
+fn removed_segment_can_be_attached_while_attached() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0x5a00_0001, 4096, 0o600 | (IPC_CREAT | IPC_EXCL) as i64).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    rm(&mut k, id).unwrap();
+    let b = shmat(&mut k, id, 0, 0).unwrap();
+    let c = shmat(&mut k, id, 0, SHM_RDONLY).unwrap();
+    let ds = stat(&mut k, id).unwrap();
+    assert_eq!((ds.nattch, ds.key, ds.mode), (3, 0, SHM_DEST | 0o600));
+    shmdt(&mut k, a).unwrap();
+    shmdt(&mut k, c).unwrap();
+    assert_eq!(stat(&mut k, id).unwrap().nattch, 1);
+    shmdt(&mut k, b).unwrap();
+    assert_eq!(stat(&mut k, id), Err(Errno::EINVAL));
+    assert_eq!(shmat(&mut k, id, 0, 0), Err(Errno::EINVAL));
+}
+
+#[test]
+fn munmap_of_an_attachment_is_recorded() {
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 3 * PAGE_SIZE, 0o600).unwrap();
+    let other = shmget(&mut k, 0, 100, 0o600).unwrap();
+    let keep = shmat(&mut k, other, 0, 0).unwrap();
+    let a = shmat(&mut k, id, 0, 0).unwrap();
+    k.realtime.sec += 3;
+    assert_eq!(sys(&mut k, nr::MUNMAP, &[a, PAGE_SIZE]), Ok(0));
+    let ds = stat(&mut k, id).unwrap();
+    assert_eq!((ds.nattch, ds.dtime, ds.lpid), (1, k.realtime.sec, 100), "partly unmapped, still attached");
+    k.realtime.sec += 3;
+    assert_eq!(sys(&mut k, nr::MUNMAP, &[a + PAGE_SIZE, 2 * PAGE_SIZE]), Ok(0));
+    let ds = stat(&mut k, id).unwrap();
+    assert_eq!((ds.nattch, ds.dtime, ds.lpid), (0, k.realtime.sec, 100), "all unmapped: detached");
+    assert_eq!(shmdt(&mut k, a), Err(Errno::EINVAL));
+    let ds = stat(&mut k, other).unwrap();
+    assert_eq!((ds.nattch, ds.dtime), (1, 0), "an attachment outside the range is not touched");
+    shmdt(&mut k, keep).unwrap();
 }

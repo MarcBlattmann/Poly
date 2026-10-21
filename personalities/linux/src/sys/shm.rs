@@ -93,33 +93,35 @@ pub fn shmget(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 
 /// shmat(shmid, shmaddr, shmflg)
 ///
-/// shmat(2): `shmaddr` 0 lets the kernel choose (with `SHM_REMAP` that is
-/// `EINVAL`); otherwise it is rounded down to `SHMLBA` with `SHM_RND` or
-/// must be a multiple of it (`EINVAL`), and the attachment goes exactly
-/// there: over what is mapped with `SHM_REMAP`, else only into a free
-/// range (`EINVAL` if it is not). Then the id must name a segment
-/// (`EINVAL`; a removed one that is still attached may be attached
-/// again) whose mode grants read, and write unless `SHM_RDONLY`, and
-/// execute with `SHM_EXEC` (`EACCES`, unless `CAP_IPC_OWNER`). The
-/// attachment covers the segment's whole pages; `shm_atime` and
-/// `shm_lpid` record it.
+/// shmat(2): `shmaddr` 0 lets the kernel choose; otherwise it is rounded
+/// down to `SHMLBA` with `SHM_RND` or must be a multiple of it (`EINVAL`),
+/// and the attachment goes exactly there: over what is mapped with
+/// `SHM_REMAP`, else only into a free range (`EINVAL` if it is not).
+/// `SHM_REMAP` without an address (also one `SHM_RND` rounds down to 0)
+/// is `EINVAL`. Then the id must name a segment (`EINVAL`; a removed one
+/// that is still attached may be attached again) whose mode grants read,
+/// and write unless `SHM_RDONLY`, and execute with `SHM_EXEC` (`EACCES`,
+/// unless `CAP_IPC_OWNER`). Last the placement: a range that wraps past
+/// the top of the address space is `EINVAL` (`ENOMEM` with `SHM_REMAP`),
+/// one past the end of user space `ENOMEM`, one below `vm.mmap_min_addr`
+/// `EPERM`. The attachment covers the segment's whole pages; `shm_atime`
+/// and `shm_lpid` record it.
 pub fn shmat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (id, addr, flags) = (a.int(0), a.ulong(1), a.uint(2));
+    let remap = flags & SHM_REMAP != 0;
+    let fixed = if remap { Placement::Fixed } else { Placement::FixedNoReplace };
     let (at, placement) = if addr == 0 {
-        if flags & SHM_REMAP != 0 {
-            return Err(Errno::EINVAL);
-        }
         (0, Placement::Hint)
+    } else if flags & SHM_RND != 0 {
+        (addr & !(SHMLBA - 1), fixed)
+    } else if !addr.is_multiple_of(SHMLBA) {
+        return Err(Errno::EINVAL);
     } else {
-        let at = if flags & SHM_RND != 0 {
-            addr & !(SHMLBA - 1)
-        } else if !addr.is_multiple_of(SHMLBA) {
-            return Err(Errno::EINVAL);
-        } else {
-            addr
-        };
-        (at, if flags & SHM_REMAP != 0 { Placement::Fixed } else { Placement::FixedNoReplace })
+        (addr, fixed)
     };
+    if remap && at == 0 {
+        return Err(Errno::EINVAL);
+    }
     let (mut access, mut bits) = (READ, prot::PROT_READ);
     if flags & SHM_RDONLY == 0 {
         access |= WRITE;
@@ -142,6 +144,9 @@ pub fn shmat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     });
     drop(dead);
     let (memory, len) = found?;
+    if placement != Placement::Hint && at.checked_add(len).is_none() {
+        return Err(if remap { Errno::ENOMEM } else { Errno::EINVAL });
+    }
     let addr = k.shm_attach(&memory, at, placement, len, Prot(bits))?;
     let serial = memory.serial();
     with_table(&ns, |t| {
@@ -167,6 +172,15 @@ fn detached(ns: &Option<Arc<IpcNs>>, serials: &[u64], pid: i32, now: i64) {
         t.purge()
     });
     drop(dead);
+}
+
+/// munmap(2) took pages of attachments of the memories `serials` (one per
+/// attachment it touched): `shm_dtime` and `shm_lpid` record it, and a
+/// removed segment goes with its last attachment.
+pub fn unmapped(k: &mut dyn LinuxKernel, serials: &[u64]) {
+    let ns = namespace(k);
+    let (pid, now) = (k.pid(), now(k));
+    detached(&ns, serials, pid, now);
 }
 
 /// shmdt(shmaddr)
