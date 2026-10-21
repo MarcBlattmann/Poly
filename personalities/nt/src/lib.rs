@@ -31,6 +31,8 @@
 //!   drive letters, share modes, byte-range locks, IRP-style async I/O.
 //! - [`registry`]: the `\REGISTRY` key object and the registry services
 //!   (on `poly-registry`, ADR 0066).
+//! - [`exception`]: CPU exceptions and `NtRaiseException` delivered to the
+//!   process's user-mode dispatcher, `NtContinue` (on `poly-seh`, ADR 0068).
 
 #![no_std]
 
@@ -40,6 +42,7 @@ pub mod abi;
 pub mod backend;
 pub mod consts;
 pub mod context;
+pub mod exception;
 pub mod exec;
 pub mod image;
 pub mod io;
@@ -234,5 +237,8 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
             Ok(poly_ntobj::status::STATUS_SUCCESS)
         }
         PolyResumeApc => Ok(k.resume_apc()),
+        RaiseException => exception::raise_exception(k, regs),
+        Continue => exception::continue_context(k, regs),
+        PolySetExceptionDispatcher => exception::set_exception_dispatcher(k, regs),
     }
 }

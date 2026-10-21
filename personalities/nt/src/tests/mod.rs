@@ -5,6 +5,7 @@
 
 extern crate std;
 
+mod exceptions;
 mod exec;
 mod memory;
 mod objects;

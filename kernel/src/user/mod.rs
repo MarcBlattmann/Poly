@@ -462,6 +462,9 @@ pub fn reset_fpu() {
 pub fn end_thread(status: ExitStatus, code: usize) -> ! {
     let (process, _, tid) = current().expect("end_thread on a kernel thread");
     if process.linux.is_some() {
+        // Before the thread-exit duties: a thread that sees this one's
+        // clear_child_tid word cleared and then exits must be the last one.
+        process.thread_exiting(tid, status);
         crate::linux::thread_exit(process, tid);
     }
     let nt_memory = (process.personality == poly_abi::Personality::Nt).then(current_memory).flatten();
@@ -529,6 +532,11 @@ pub fn fault(fault: &Fault) {
             crate::linux::Leave::Return => return,
             crate::linux::Leave::Killed => end_thread(ExitStatus::Exited(0), 0),
         }
+    }
+    // An NT process's exception goes to its user-mode dispatcher, or ends
+    // the process with the exception code (ADR 0068).
+    if process.personality == poly_abi::Personality::Nt && crate::nt::fault(process, fault) {
+        return;
     }
     kill_current(fault)
 }

@@ -174,6 +174,16 @@ impl PeImage {
     }
 }
 
+/// Set data directory `index` (`poly_pe::dir::*`) of an image file
+/// [`PeImage::write`] made, e.g. the exception directory of a test program
+/// that carries its own `.pdata` (PE Format: the data directories follow
+/// the optional header's Windows-specific fields, at offset 112 in PE32+).
+pub fn set_directory(file: &mut [u8], index: usize, rva: u32, size: u32) {
+    let dir = PE_OFFSET + 4 + 20 + 112 + index * 8;
+    file[dir..dir + 4].copy_from_slice(&rva.to_le_bytes());
+    file[dir + 4..dir + 8].copy_from_slice(&size.to_le_bytes());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +223,15 @@ mod tests {
         let slot = u64::from_le_bytes(moved[0x2008..0x2010].try_into().unwrap());
         assert_eq!(slot, 0x2_0000_1000);
         assert_eq!(&img.image[0x2008..0x2010], &0x1_4000_1000u64.to_le_bytes());
+    }
+
+    #[test]
+    fn directories_can_be_set_after_writing() {
+        let mut file = sample(true).write();
+        set_directory(&mut file, poly_pe::dir::EXCEPTION, 0x1100, 24);
+        let pe = poly_pe::Pe::parse(&file).unwrap();
+        let d = pe.info().directory(poly_pe::dir::EXCEPTION).unwrap();
+        assert_eq!((d.virtual_address, d.size), (0x1100, 24));
     }
 
     #[test]

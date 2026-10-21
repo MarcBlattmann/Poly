@@ -69,16 +69,20 @@ library source was read and nothing was run on Linux.
   without a reader are `ENXIO`. A blocking open waits in the kernel
   (`linux/fifo.rs`, `PipeEnd::wait_for_peer` with the thread's blocker),
   restarted under `SA_RESTART`. The VFS stays free of blocking.
-- **Pipe room is counted in pages** of 4096 bytes (16 by default): writes
-  fill the rest of the last page, then new pages; a page is free again
-  once every byte of it was read. `F_SETPIPE_SZ` rounds up to a power of
+- **Pipe room is counted in pages** of 4096 bytes (16 by default): a
+  write puts the part of it that is not whole pages (its length modulo
+  4096) into the last page if all of that part fits there, the rest into
+  new pages (amended after the runner's third pass, below); a page is free
+  again once every byte of it was read. `F_SETPIPE_SZ` rounds up to a power of
   two pages, refuses to go below the pages in use (`EBUSY`), and above
   1 MiB needs `CAP_SYS_RESOURCE` (`EPERM`).
 - **Shared futex keys**: a futex without `FUTEX_PRIVATE_FLAG` in a
   `MAP_SHARED` mapping is `Shared { object, offset }`: the object is the
   mapped `PageSource` (a file by device and inode, `PageSource::object_id`;
   shared anonymous memory by its one `AnonShared` object, which fork
-  shares), the offset its offset in it. Everything else stays private.
+  shares), the offset its offset in it. Everything else is keyed by
+  address space and address, a shared futex there as `Unshared`, apart
+  from the private futex at the same address (amended, below).
 - **Loopback TCP completes within the sending call**: the interface polls
   the stack again while looped packets wait (at most 8 rounds), and a TCP
   peer on this host is acknowledged at once instead of after the delayed
@@ -105,3 +109,30 @@ library source was read and nothing was run on Linux.
   restart). Untraced processes are unchanged.
 - Loopback sends do the receiver's work in the sender's call; a burst over
   loopback holds the interface lock a little longer.
+
+## Amendments after the runner's third pass
+
+- **Pipe pages.** A 5000-byte write into a pipe holding 15 full pages
+  and one with 1000 bytes free takes 904 bytes on the reference
+  (`b_pipe2_capacity`), not the 1000 Poly took by filling the last page
+  first: only the write's length modulo a page joins the last page, and
+  only if all of it fits. Writes of at most `PIPE_BUF` stay all or
+  nothing (a page's worth never joins), and a blocking write's later
+  rounds always start new pages, as one write on the reference does.
+- **Private and shared futexes are apart** (futex's spec sheet: "a
+  private waiter is not found by a shared wake"). The personality gives a
+  shared futex in private memory `FutexKey::Unshared`
+  (`poly_personality_linux::futex::key`). The kernel's own wakes
+  (`clear_child_tid`, a dead owner's robust locks) are shared wakes, as
+  set_tid_address(2) describes, and take a private waiter when no shared
+  one is there. Every operation reads its words first: `EFAULT` for an
+  unmapped `uaddr` or `uaddr2` also in `FUTEX_WAKE` and the requeues.
+- **A hang-up signals before it shows.** Closing a pty master sent
+  `SIGHUP` after marking the slave hung up and waking its readers; a
+  reader on another CPU could read end of file and exit before taking the
+  signal (`b_ioctl_ctty`, 1 run in 6). `Tty::hangup` now sends the
+  signals first.
+- **`/tmp` in a test's initramfs is 1777.** The diff runner's spec-test
+  image made it 0755, so a test that gave up root could not create files
+  there on Poly (the reference's `/tmp` is sticky and world-writable, and
+  the app tests' tree already was).

@@ -124,6 +124,8 @@ pub fn prctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             k.copy_to_user(a.ptr(1), &comm)?;
             Ok(0)
         }
+        super::subreaper::PR_SET_CHILD_SUBREAPER => super::subreaper::set(k, arg2),
+        super::subreaper::PR_GET_CHILD_SUBREAPER => super::subreaper::get(k, a.ptr(1)),
         _ => Err(Errno::EINVAL),
     }
 }

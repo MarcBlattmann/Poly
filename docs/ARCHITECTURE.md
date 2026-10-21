@@ -1073,7 +1073,10 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   (`attach_thread`: the first gets the pid as its id, later ones fresh ids
   from the pid counter) and end themselves (`user::end_thread`): the
   personality's thread-exit duties, then the last thread ends the process
-  (files closed, `ExitStatus` set, `Process::wait` returns). `exit_group`
+  (files closed, `ExitStatus` set, `Process::wait` returns). Without a
+  group exit the status is that of the thread that started to exit last
+  (`Process::thread_exiting`, recorded before its `clear_child_tid` is
+  cleared; ADR 0069). `exit_group`
   and fatal signals set a group exit; every other thread ends at its next
   return to user mode (after a system call, or after an interrupt or
   exception in ring 3, which `trap_dispatch` hands to
@@ -1083,8 +1086,8 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md),
   `linux/task.rs`). The personality decodes the calls (`task::clone`,
   `task::exec`) and keeps the rules of the process tree (`task::tree`:
-  parents, zombies, orphans to init or the kernel, process groups and
-  sessions, wait selectors); the kernel lends it the one tree behind a
+  parents, zombies, orphans to the nearest child subreaper, init or the
+  kernel, process groups and sessions, wait selectors); the kernel lends it the one tree behind a
   spinlock and does the work: `clone_task` starts a thread of the caller's
   process, or a new process with a copy-on-write copy of its memory
   (`Memory::fork`) or the same memory (`CLONE_VM`), copies of its files
@@ -1233,8 +1236,11 @@ the CPU-time accounting, the timer thread and the vDSO.
   CPU-time timer exists) by pid, with the process's state locked; the
   `linux-timers` thread sleeps until then (a tick at a time for CPU-time
   timers) and calls `time::fire`, which queues the signals (once per
-  timer; overruns counted) and re-arms periodic timers; the threads it
-  names are notified like for any signal.
+  timer) and re-arms periodic timers; the threads it names are notified
+  like for any signal. While a POSIX timer's signal is pending the timer
+  is only looked at again (at least 10 ms apart); its overruns are counted
+  from the due times when the signal is taken (`timers::signal_taken`,
+  then `count_taken`; [ADR 0069](adr/0069-timer-overruns-counted-when-taken-last-thread-status-subreapers.md)).
 - **The vDSO** (`kernel/src/arch/x86_64/vdso/vdso.rs`, built by
   `kernel/build.rs` with the pinned `rustc` and `rust-lld`, embedded as
   `arch::vdso::IMAGE`): an ELF shared object, one read-execute segment, no
@@ -1325,6 +1331,25 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   (`PolyResumeApc`) to restore the interrupted context (our stand-in for
   `KiUserApcDispatcher`). `NtDelayExecution` and `NtYieldExecution` round out
   the dispatcher services.
+- **Structured exception handling** (`crates/poly-seh`,
+  `personalities/nt/src/exception.rs`, `kernel/src/nt/exception.rs`,
+  [ADR 0068](adr/0068-nt-structured-exception-handling-and-x64-unwinding.md)).
+  `poly-seh` is the hardware-free x64 SEH logic: parsing `.pdata`
+  `RUNTIME_FUNCTION` tables and `UNWIND_INFO` (every `UWOP_*`, chained info,
+  handlers), a virtual unwinder (`RtlVirtualUnwind` over a `CONTEXT`),
+  function-entry lookup by binary search, and the two dispatch passes
+  (`RtlDispatchException`, `RtlUnwindEx`) plus a stack walk — all host-tested,
+  never panicking on malformed input. When an NT thread faults (any CPU
+  exception) or calls `NtRaiseException`, the service layer classifies it
+  into an `EXCEPTION_RECORD` (the documented `STATUS_*` codes and
+  parameters), the kernel builds a `CONTEXT` from the trap frame and FPU
+  state, and both are written to the thread's user stack before it resumes
+  in the process's user-mode dispatcher; `NtContinue` restores a `CONTEXT`.
+  Until our `ntdll` provides `KiUserExceptionDispatcher`, a process names its
+  dispatcher with Poly's own `PolySetExceptionDispatcher` (as threads use the
+  trampolines of ADR 0065). An unhandled exception (no dispatcher, second
+  chance, a fail-fast) ends the process with the exception code, after a
+  `.pdata`-walked backtrace in the log.
 - **File I/O** (`personalities/nt/src/io`, `kernel/src/nt/io.rs`, ADR 0067):
   each VFS mount is a device `\Device\PolyFs<N>` with a `ParseHook`, reached
   through drive-letter links in `\??` (`\??\C:` → `/nt/c`, the NT system
@@ -1372,7 +1397,6 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   at NT process exit and before shutdown. Default hives (`HKLM\SYSTEM`,
   `HKLM\SOFTWARE`, `HKU\.DEFAULT`, Poly's user) are made at the first boot
   without files; ADR 0066 lists every value and its source.
->>>>>>> main
 
 ## Testing strategy
 
@@ -1396,6 +1420,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
 | `/bin/ttyinit` as init on the serial console (nolibc Rust, `tools/xtask/programs/ttyinit.rs`), typed into through QEMU's stdin: a line edited with DEL and its echo, `^C` interrupting a read with `SIGINT`, single keys in raw mode | `tools/xtask/src/programs.rs` | `cargo xtask test` |
 | NT object manager, memory and sections from ring 3 (a self-assembled PE, `kernel/src/nt/test_pe.rs`): a named event created, opened, duplicated and closed to zero references; a directory queried; memory reserved/committed/protected/queried/freed; a pagefile section mapped twice with a write through one view seen through the other | `kernel_test!` `nt_test_program_runs_from_ring3` | every boot |
 | NT threads, synchronisation and APCs from ring 3 (a self-assembled multi-threaded PE, `kernel/src/nt/test_threads.rs`): `NtCreateThreadEx`, a blocking wait woken across threads, a thread exit code via `NtQueryInformationThread`, a mutant abandoned by a terminating thread (`STATUS_ABANDONED_WAIT_0`), a semaphore and event in a `WaitAll`, a user APC delivered at `NtTestAlert`, a periodic timer waited on twice, and `NtGetContextThread` on a suspended thread; the process cleaned up afterwards | `kernel_test!` `nt_threads_and_sync_from_ring3` | every boot |
+| NT structured exception handling from ring 3 (self-assembled PEs, `kernel/src/nt/test_seh.rs`, ADR 0068): a process registers a user-mode dispatcher, takes an access violation and a divide-by-zero, the dispatcher inspects each `EXCEPTION_RECORD`, fixes the `CONTEXT` up and resumes with `NtContinue`; a second process leaves an exception unhandled and ends with `STATUS_ACCESS_VIOLATION` | `kernel_test!` `nt_seh_dispatch_and_continue_from_ring3`, `nt_seh_unhandled_terminates_with_the_exception_code` | every boot |
 | NT registry from ring 3 (a self-assembled PE, `kernel/src/nt/test_registry.rs`): a key created under `\Registry\Machine\SOFTWARE`, `REG_SZ`/`REG_DWORD`/`REG_QWORD`/`REG_BINARY` values set, enumerated and queried (with `STATUS_BUFFER_OVERFLOW`), the default `ProductName` read, a value read through the `CurrentControlSet` link, a notification signalling an event, the key deleted; a hive file round trip through the VFS | `kernel_test!` `nt_registry_program_runs_from_ring3`, `nt_registry_hive_files_round_trip` | every boot |
 | NT registry logic on the host: keys, values, volatile keys, links, deletion while open, enumeration order, every information class and buffer status, notifications and their filters, the hive format (round trip, every truncation and bit flip refused), the default hives and their reload; the registry services against the fake kernel | `cargo test -p poly-registry -p poly-personality-nt` | `cargo xtask ci` |
 | NT dispatcher and service logic on the host: the object manager, the dispatcher against a randomized reference model (wait-any/all fairness, mutant ownership/abandonment, semaphore limits, timer ordering), and the memory/section/thread/sync service decoders against a fake kernel | `cargo test -p poly-ntobj -p poly-personality-nt` | `cargo xtask ci` |
