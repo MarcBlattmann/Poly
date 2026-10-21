@@ -575,18 +575,48 @@ queue). Only the loop pushes to GitHub, and never to `main`.
      After `max_cycles` (5) red cycles: the human queue.
    - **Red flag** (a forbidden path, added `unsafe`, `handoff verify`
      failing, a rewritten branch): the human queue at once.
-7. **publish** (runner): the status commit (`coverage set-status <id> green
-   --tests-visible V --tests-held-out H`, `coverage readme`), the whole
-   branch checked against main once more, `coverage check` and `readme
-   --check`, pushed to the hub and GitHub, `gh pr create`, and with
+7. **publish** (runner): `origin/main` merged into the branch first, so the
+   PR starts out mergeable (below, "Keeping PRs mergeable"); the status
+   commit (`coverage set-status <id> green --tests-visible V
+   --tests-held-out H`, `coverage readme`) unless the branch already has
+   it; the whole branch checked against main once more, `coverage check`
+   and `readme --check`; pushed to the hub and GitHub (never forced);
+   `gh pr create` unless the branch has an open PR, and with
    `github.auto_merge` `gh pr merge --auto --merge` (GitHub merges once the
    required checks pass; without auto-merge the PR waits for the owner).
-8. **awaiting-merge**: every `poll_secs` `gh pr view`: merged → done;
-   closed → the human queue; conflicting with main → **refresh**: main is
-   merged in (conflicts in the generated files, README progress,
-   `docs/progress/`, the entry's coverage file and the hand-off log, are
-   resolved by the loop; others go to the human), then verify and publish
-   again.
+8. **awaiting-merge**: every `poll_secs` the PR through GitHub's REST API
+   (`gh api repos/{owner}/{repo}/pulls?head=<owner>:<branch>&state=all`,
+   then `.../pulls/<n>`; no GraphQL): merged → done; closed → the human
+   queue; `mergeable_state` `dirty` (it conflicts with main) →
+   **refresh**: counted, then publish again, which merges main in; after
+   `max_refresh` (10) refreshes, the human queue. Mergeable, or
+   `mergeable: null` (GitHub still computing it): look again after
+   `poll_secs`.
+
+**Keeping PRs mergeable** (ADR 0086). Every status change regenerates
+README.md's progress section and `docs/progress/`, so once one pipeline PR
+merges, every other open one conflicts with main, gets no CI run and never
+auto-merges. The loop merges main into the branch in its runner worktree
+(`git merge --no-ff --no-commit origin/main`) before the first push and
+whenever GitHub reports the PR `dirty`, and resolves conflicts only in
+generated and append-only files:
+
+| Conflict in | Resolution |
+|---|---|
+| `README.md`, `docs/progress/*` | main's version, then `cargo xtask coverage readme` |
+| the entry's coverage file | main's version, unless main changed this entry's own object; publish then sets the entry's status again (`coverage set-status`) in the status commit |
+| `specs/HANDOFF_LOG.md` | main's rows, then the branch's rows main lacks |
+| any other file, or main changed this entry's coverage object | the merge is aborted; the human queue, with the files named |
+
+`coverage readme` runs after every merge, and the merge commit (`Merge
+origin/main into pipeline/impl/<symbol>`) lists what was resolved and how.
+Then publish checks the whole PR as for the first push and pushes without
+force: a fast-forward of the branch, on the hub and on GitHub. The runner
+does not verify again: the PR's CI runs on the merge (its `pipeline
+polycheck` includes the entry's visible tests); the held-out tests are not
+run again. Do not fix a pipeline PR by hand: a commit pushed to its branch
+on GitHub is not in the hub, and the loop's next push of the branch is then
+refused (not a fast-forward) and the entry goes to the human queue.
 
 **One PR per entry** carries the claim, the spec, the hand-off record, the
 implementation and the status change. Merge pipeline PRs with a **merge

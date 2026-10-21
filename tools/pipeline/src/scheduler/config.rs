@@ -189,7 +189,9 @@ pub struct Config {
     pub max_errors: u32,
     /// No new entries while this many pipeline PRs wait for a merge.
     pub max_open_prs: usize,
-    /// Merges of main into a conflicting PR before a human gets it.
+    /// Merges of main into a PR GitHub reports `dirty` before a human gets
+    /// it. Each merge of a pipeline PR makes the other open ones conflict
+    /// in README.md, so this should be at least `max_open_prs`.
     pub max_refresh: u32,
     pub os: String,
     pub layer: String,
@@ -259,7 +261,7 @@ impl Default for Config {
             spec_cycles: 2,
             max_errors: 8,
             max_open_prs: 10,
-            max_refresh: 3,
+            max_refresh: 10,
             os: "linux".into(),
             layer: "syscall".into(),
             entries: Vec::new(),
