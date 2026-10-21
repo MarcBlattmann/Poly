@@ -19,6 +19,7 @@ mod socket;
 mod startup;
 mod task;
 mod time;
+mod userland;
 
 use crate::{ENOSYS, Errno, Linux, err, nr};
 use fake::{FakeKernel, call, sys};

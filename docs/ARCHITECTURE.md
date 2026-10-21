@@ -1007,6 +1007,17 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   the kernel's part is `net::LinuxNet` (`LinuxKernel::net`,
   `kernel/src/linux/net.rs`). `NETLINK_ROUTE` replies are built by
   `net::netlink`.
+- **What userland programs needed**
+  ([ADR 0059](adr/0059-bash-coreutils-python-gcc-from-the-persistent-disk.md)):
+  `mremap` and `msync` (`sys/mem.rs`, `LinuxKernel::mremap` / `msync`),
+  fcntl's `F_GETLK` / `F_SETLK` / `F_SETLKW` / `F_OFD_*` and `flock`
+  (`sys/fd.rs`; the range decoded from `struct flock`, the locks kept by
+  the kernel through `LinuxFs::test_lock`, `set_lock`, `flock`),
+  `close_range`, `copy_file_range` (`sys/sendfile.rs`), `fadvise64`
+  (`sys/fadvise.rs`), the twelve `*xattr` calls (`sys/xattr.rs`,
+  `EOPNOTSUPP` for files that exist), the reaped child's CPU time in
+  `wait4` / `waitid` (`CpuTimesOf::Reaped`); `read` of a regular file or a
+  memory device returns all that was asked.
 - **Pipes, waits and event files**
   ([ADR 0042](adr/0042-readiness-pipes-poll-epoll-and-event-files.md)):
   `pipe`, `pipe2`, `poll`, `ppoll`, `select`, `pselect6`, `epoll_create`,
@@ -1133,6 +1144,35 @@ Signals to init that it blocks or waits for stay pending (kill(2)'s
 "only signals it has handlers for" applies to the others), which is how
 BusyBox's init receives them.
 
+## The persistent root disk: bash, coreutils, Python, gcc
+
+[ADR 0059](adr/0059-bash-coreutils-python-gcc-from-the-persistent-disk.md).
+`cargo xtask root-disk` writes `target/poly-root-disk.img`, an ext4 volume
+holding the host's own bash, GNU coreutils, grep, sed, Python 3 with its
+standard library and gcc with `cc1`, `as`, `ld`, the start files and the
+headers a C program includes, plus every shared object they need
+(`tools/xtask/src/rootdisk.rs`; nothing of it is committed). `cargo xtask
+run --disk-root` boots it:
+
+```text
+ initramfs (BusyBox, initramfs::disk_root_image)        /dev/vda: the root disk (ext4, page cache)
+ /sbin/init ── rcS ── /etc/init.d/rootdisk: mount -t ext4 /dev/vda /mnt/root,
+   │                   bind /dev /dev/pts /dev/shm /proc /sys /tmp into it
+   └─ respawn: cttyhack chroot /mnt/root /bin/bash -l      (the disk's /etc/profile, PS1 root@poly:~#)
+        └─ bash: coreutils, python3, gcc ...; poweroff = kill -USR2 1 (/usr/local/sbin/poweroff)
+```
+
+The image is kept between interactive runs (`--fresh-disk` makes it
+again), so what a session writes is there the next time. What the
+programs needed from the kernel (ADR 0059): `mremap` (`VmMap::remap` in
+`poly-vm`, pages moved by `user/memory/remap.rs`), `msync`, fcntl record
+and open file description locks and flock (`poly_vfs::locks`, one table
+in `fs/locks.rs` released by `fs::Files`' close paths), `close_range`,
+`copy_file_range`, `fadvise64`, the `*xattr` calls (`EOPNOTSUPP`),
+children's CPU time for `wait4` and `getrusage`, whole reads of regular
+files and memory devices, exec parsing only the ELF headers
+(`Elf::parse_prefix`), and `/proc` paths seen from the reader's root.
+
 ## Time, timers and the vDSO
 
 [ADR 0044](adr/0044-time-syscalls-timers-and-the-vdso.md). The personality
@@ -1239,6 +1279,7 @@ services once it decodes those system calls.
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
+| The persistent root disk (made by `cargo xtask` from the host's programs, ext4, booted through BusyBox's init and a chroot into its bash): coreutils pipelines under `bash -c`, job control and Ctrl-C, file work on the disk, 32 MiB through `dd`; Python scripts (stdlib modules, `subprocess`, threads, `mmap` resized and flushed, a growing buffer through `mremap`, record locks and flock across processes, SQLite, signals, the terminal's size, children's CPU time, `posix_spawn`); gcc compiling and linking programs onto the disk and running them; `e2fsck -fn` and the program read back on the host; a second boot finds what the first wrote. Lock table and remap kernel tests | `tools/xtask/src/rootdisk.rs`, `kernel_test!` in `fs/locks.rs`, `user/memory/remap.rs` | `cargo xtask test` (alone: `cargo xtask root-disk-test`) |
 | Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff [--target poly]`; in `cargo xtask ci`: Linux against Linux (`selfcheck`) and Poly against Linux for the tests in `tests/linux/poly-pass.txt` (`polycheck`) |
 | App trace replay | recorded sessions | later |
 
@@ -1720,10 +1761,18 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   the caller's `open_interp` (the VFS for `program.rs` and `execve`):
   reserved in free space for its footprint, mapped there, `AT_BASE` set to
   its bias, the thread started at its entry (ADR 0049); `exec::load` has
-  no opener and refuses such programs.
+  no opener and refuses such programs. A file not in memory is parsed
+  from its first bytes only (`Elf::parse_prefix`: a page, more if the
+  headers lie further in); its segments are mapped, never read (ADR 0059).
 - **Advice.** `Memory::advise` (madvise(2), `user/memory/advice.rs`) drops
   the pages of a range like an unmap does but keeps the regions, so the
   next access finds zeros or the file's (or shared object's) contents.
+- **Remapping.** `Memory::remap` (mremap(2), `user/memory/remap.rs`, ADR
+  0059): `VmMap::remap` decides (shrink, grow in place, move to a hole or
+  to a fixed address) and the pages move without copies: own frames are
+  re-mapped at the new address with their rights, parked and shared
+  frames are filed under it, page-cache pages are let go and fault in
+  again.
 
 | User virtual (after exec) | What |
 |---|---|
