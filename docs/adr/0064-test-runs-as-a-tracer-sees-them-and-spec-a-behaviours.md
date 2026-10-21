@@ -44,13 +44,17 @@ Linux system was run or traced.
 - `POLY-SIGNAL` for `SIGKILL` makes no event in the parser (a tracer never sees
   it; ADR 0062 stopped the kernel writing it too).
 - **A kernel init.** With `poly.test.capture` the kernel makes pid 1 an init
-  without threads of its own (`testinit.rs`): a root of the process tree whose
-  work the booting kernel thread does. The program becomes its child (exit
-  signal `SIGCHLD`, init's session) in a process group of its own, as under the
-  tracer, which starts the program in its own group. The init reaps every child it
-  gets, the program and the orphans. It is not a process record (`kill(1, ...)`
-  finds nothing). Untraced `poly.init` runs (BusyBox as init, the boot tests) are
-  unchanged: the program is pid 1.
+  (`testinit.rs`): a Linux process record, listed in the process table
+  (`process::register_threadless`) and the root of the process tree, named
+  `init`, with no user thread: the booting kernel thread does its work. Lookups
+  by pid find it (`kill(1, 0)`, `getpgid(1)`, `getsid(1)`, `/proc/1`,
+  `SCM_CREDENTIALS` with pid 1), and signals sent to it follow init's rule
+  (kill(2): only signals it handles are delivered; it handles none). The program
+  becomes its child (exit signal `SIGCHLD`, init's session) in a process group of
+  its own, as under the tracer, which starts the program in its own group. The
+  init reaps every child it gets, the program and the orphans. Untraced
+  `poly.init` runs (BusyBox as init, the boot tests) are unchanged: the program
+  is pid 1.
 - **Output by open file.** A traced process starts with fd 0 on the log console
   (reads end of file) and fds 1 and 2 on two write-only capture files whose bytes
   are written to the console and reported as `POLY-OUT fd=1` / `fd=2`

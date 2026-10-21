@@ -4,11 +4,15 @@
 //! Linux is a child of the tracer, so it gets a parent (`getppid` is not
 //! 0), a session it does not lead and a process group of its own.
 //!
-//! The init is pid 1 in the process tree with no threads of its own: the
-//! kernel thread that started the program does its work. It waits for the
-//! program and reaps every child it has, the program and the orphans the
-//! tree gives it (an init reaps its children, as wait(2) describes for
-//! orphans). It is not a process record, so `kill(1, ...)` finds nothing.
+//! The init is a Linux process record, pid 1, listed in the process table
+//! and the root of the process tree, with no user thread of its own: the
+//! kernel thread that started the program does its work. So lookups by
+//! pid find it (`kill(1, 0)`, `getpgid(1)`, `getsid(1)`, `/proc/1`,
+//! `SCM_CREDENTIALS` naming pid 1), and signals sent to it follow init's
+//! rule (kill(2): only those it has a handler for are delivered; it has
+//! none, so they are dropped). It waits for the program and reaps every
+//! child it has, the program and the orphans the tree gives it (an init
+//! reaps its children, as wait(2) describes for orphans).
 //!
 //! At the end the kernel also reports the output a test run asked for by
 //! file (`poly.test.stdout=<path>`, `poly.test.stderr=<path>`): the app
@@ -18,7 +22,9 @@
 use crate::boot_info::BootInfo;
 use crate::linux::task;
 use crate::process::{self, ExitStatus, Process};
+use crate::sync::SpinLock;
 use crate::{kprintln, testrun};
+use alloc::sync::Arc;
 use poly_personality_linux::abi::signal::SIGCHLD;
 use poly_personality_linux::task::tree::{Clones, Poll, Selector, WaitFilter};
 
@@ -33,22 +39,35 @@ pub const STDERR_FILE_ARG: &str = "poly.test.stderr";
 /// The most bytes reported from each of those files.
 const OUTPUT_FILE_LIMIT: usize = 16 << 20;
 
-/// Make the init: pid 1 in the process tree, the root of its own session
-/// and process group. Returns false (no init) if pid 1 was taken already.
+/// The init's process record, kept alive for the run (the process table
+/// holds it weakly).
+static INIT: SpinLock<Option<Arc<Process>>> = SpinLock::new(None);
+
+/// Reserve pid 1 for the init. Returns false (no init) if pid 1 was taken
+/// already.
 pub fn start() -> bool {
     let pid = process::alloc_pid();
     if pid != INIT_PID {
         kprintln!("init: pid {pid}, not {INIT_PID}: the program runs without the kernel's init");
         return false;
     }
-    task::with_tree(|t| t.insert_root(INIT_PID as i32, 0));
     true
 }
 
-/// `program`, not started yet, becomes the init's child, as fork(2) would
-/// make it (exit signal `SIGCHLD`, the init's session), in a process group
-/// of its own (setpgid(2) by the init before the program runs).
+/// Make the init (a Linux process of `program`'s format, root of its own
+/// session and process group, named `init`, with the console on fds 0-2),
+/// and make `program`, not started yet, its child, as fork(2) would make it
+/// (exit signal `SIGCHLD`, the init's session), in a process group of its
+/// own (setpgid(2) by the init before the program runs).
 pub fn adopt(program: &Process) {
+    // `LinuxState::new` makes pid 1 a root of the process tree.
+    let record = Arc::new(Process::new_linux(INIT_PID, 0, program.format, false));
+    if let Some(linux) = &record.linux {
+        let comm = poly_personality_linux::sys::prctl::comm_from_path(b"init");
+        linux.with(|p| p.thread_mut(INIT_PID as i32).comm = comm);
+    }
+    process::register_threadless(&record);
+    *INIT.lock() = Some(record);
     let pid = program.pid as i32;
     let init = INIT_PID as i32;
     task::with_tree(|t| {
