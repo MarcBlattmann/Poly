@@ -480,7 +480,8 @@ struct Tracer {
 impl Tracer {
     /// Trace task `pid` as number `index` from now on.
     fn add(&mut self, pid: libc::pid_t, index: u32, started: bool) {
-        let p = Proc { index, mem: ProcMem::open(pid), in_syscall: false, pending: None, started, skip_exec_exit: false };
+        let p =
+            Proc { index, mem: ProcMem::open(pid), in_syscall: false, pending: None, started, skip_exec_exit: false };
         self.procs.insert(pid, p);
         self.live.lock().unwrap_or_else(|e| e.into_inner()).insert(pid);
     }
