@@ -5,13 +5,23 @@ oracle:
   os: "Linux 6.18.44 x86_64"
   machine: "Firecracker VM, uid 0, /tmp on ext4; static freestanding test programs, raw syscalls"
   observed_by: spec-a
-  date: 2026-10-20
+  date: 2026-10-21
 summary: >
-  time(tloc) returns the seconds of CLOCK_REALTIME (between clock_gettime
-  seconds read before and after; after 2020) and, if tloc is not NULL,
-  stores the same value there. It advances by about one per second.
+  time(tloc) returns the seconds of CLOCK_REALTIME_COARSE, the wall clock
+  as of the last timer tick (between the seconds of CLOCK_REALTIME_COARSE
+  read before and after; after 2020) and, if tloc is not NULL, stores the
+  same value there. It advances by about one per second. Because the
+  coarse clock lags CLOCK_REALTIME by up to about one tick
+  (clock_getres(CLOCK_REALTIME_COARSE), 4 ms here; lags up to 6.3 ms were
+  observed), just after a second boundary time() can return one less than
+  the seconds of a CLOCK_REALTIME reading taken just before it (9767 of
+  2000000 calls in a tight loop); it is never below that minus one and
+  never above the seconds of a CLOCK_REALTIME reading taken after it.
+  time(2) only says "seconds since the Epoch" and clock_gettime(2)
+  describes CLOCK_REALTIME_COARSE as "a faster but less precise version
+  of CLOCK_REALTIME"; that time() follows the coarse clock is observed.
 returns:
-  success: "seconds since the epoch"
+  success: "seconds since the epoch (the seconds of CLOCK_REALTIME_COARSE)"
 errors:
   bad_pointer: "EFAULT (also a read-only page; nothing is stored)"
 side_effects: "none"

@@ -1,12 +1,56 @@
 /* symlinkat: the target text is stored as given (relative, absolute,
- * dangling); the name must not exist; an empty target is ENOENT. */
+ * dangling); the name must not exist; an empty target is ENOENT. Length
+ * limits, in characters without the terminating NUL: a target or a
+ * linkpath of up to 4095 characters works and 4096 is ENAMETOOLONG; a
+ * linkpath component of 256 characters is ENAMETOOLONG (255 works), a
+ * target component of any length is fine. */
 #include "a_sys.h"
 
 #define D "/tmp/a_symlinkat_basic"
 
 static char buf[256];
+static char lng[4200], big[4200];
 
 static i64 rl(const char *p) { return syscall4(SYS_readlinkat, AT_FDCWD, p, buf, sizeof buf); }
+
+/* lng = n characters of 'a', one component (no slash). */
+static const char *text_of(int n) {
+    for (int i = 0; i < n; i++) lng[i] = 'a';
+    lng[n] = 0;
+    return lng;
+}
+
+/* lng = D "/", then "./" repeated, then a last component of `last`
+ * characters of 'l': n characters in all (n - str_len(D "/") - last even). */
+static const char *path_of(int n, int last) {
+    int p = 0;
+    for (const char *d = D "/"; *d; d++) lng[p++] = *d;
+    while (p < n - last) {
+        lng[p++] = '.';
+        lng[p++] = '/';
+    }
+    for (int i = 0; i < last; i++) lng[p++] = 'l';
+    lng[p] = 0;
+    return lng;
+}
+
+static void lengths(void) {
+    expect("target_4095_ok", syscall3(SYS_symlinkat, text_of(4095), AT_FDCWD, D "/long"), 0);
+    expect("target_4095_kept", syscall4(SYS_readlinkat, AT_FDCWD, D "/long", big, sizeof big), 4095);
+    check("target_4095_text", mem_eq(big, lng, 4095), 0);
+    expect("cleanup_long", a_unlink(D "/long"), 0);
+    expect("target_4096_enametoolong", syscall3(SYS_symlinkat, text_of(4096), AT_FDCWD, D "/long"), -ENAMETOOLONG);
+    expect("target_component_300_ok", syscall3(SYS_symlinkat, text_of(300), AT_FDCWD, D "/long"), 0);
+    expect("cleanup_long_component", a_unlink(D "/long"), 0);
+    /* str_len(D "/") is 23, so a last component of 200 leaves an even
+     * number of characters for the "./" parts at 4095, and 201 at 4096. */
+    expect("linkpath_4095_ok", syscall3(SYS_symlinkat, "x", AT_FDCWD, path_of(4095, 200)), 0);
+    expect("cleanup_linkpath_4095", a_unlink(lng), 0);
+    expect("linkpath_4096_enametoolong", syscall3(SYS_symlinkat, "x", AT_FDCWD, path_of(4096, 201)), -ENAMETOOLONG);
+    expect("name_255_ok", syscall3(SYS_symlinkat, "x", AT_FDCWD, path_of(23 + 255, 255)), 0);
+    expect("cleanup_name_255", a_unlink(lng), 0);
+    expect("name_256_enametoolong", syscall3(SYS_symlinkat, "x", AT_FDCWD, path_of(23 + 256, 256)), -ENAMETOOLONG);
+}
 
 int test_main(void) {
     struct a_stat st;
@@ -30,6 +74,7 @@ int test_main(void) {
     expect("parent_is_file_enotdir", syscall3(SYS_symlinkat, "x", AT_FDCWD, D "/f/l"), -ENOTDIR);
     expect("bad_target_efault", syscall3(SYS_symlinkat, (const char *)8, AT_FDCWD, D "/bad"), -EFAULT);
     expect("bad_name_efault", syscall3(SYS_symlinkat, "x", AT_FDCWD, (const char *)8), -EFAULT);
+    lengths();
     expect("lstat_symlink", a_lstat_path(D "/abs", &st), 0);
     expect("symlink_mode", st.st_mode, S_IFLNK | 0777);
     expect("symlink_nlink", st.st_nlink, 1);
