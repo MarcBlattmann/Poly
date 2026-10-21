@@ -30,6 +30,7 @@ members = [
     "crates/poly-pe",
     "crates/poly-procfs",
     "crates/poly-random",
+    "crates/poly-registry",
     "crates/poly-rtc",
     "crates/poly-sched",
     "crates/poly-smp",
@@ -83,6 +84,7 @@ poly-pci = { path = "crates/poly-pci" }
 poly-pe = { path = "crates/poly-pe" }
 poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
+poly-registry = { path = "crates/poly-registry" }
 poly-rtc = { path = "crates/poly-rtc" }
 poly-sched = { path = "crates/poly-sched" }
 poly-smp = { path = "crates/poly-smp" }
