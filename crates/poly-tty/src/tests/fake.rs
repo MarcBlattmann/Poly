@@ -45,6 +45,9 @@ pub struct FakeHost {
     blocked: Mutex<Vec<Arc<TestWaker>>>,
     /// Threads in `block` now.
     pub blocking: Arc<AtomicUsize>,
+    /// Called after each signal is recorded (to look at a terminal at
+    /// the moment a signal is sent).
+    pub on_signal: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,11 +67,18 @@ impl FakeHost {
             memory: Mutex::new(vec![0; USER_LEN]),
             blocked: Mutex::new(Vec::new()),
             blocking: Arc::new(AtomicUsize::new(0)),
+            on_signal: Mutex::new(None),
         })
     }
 
     pub fn ttys(self: &Arc<Self>) -> Arc<Ttys> {
         Ttys::new(self.clone())
+    }
+
+    fn signal_sent(&self) {
+        if let Some(f) = self.on_signal.lock().unwrap().as_ref() {
+            f();
+        }
     }
 
     pub fn take_signals(&self) -> Vec<(Target, u32)> {
@@ -118,10 +128,12 @@ impl Host for FakeHost {
 
     fn signal_group(&self, pgid: i32, signal: u32) {
         self.signals.lock().unwrap().push((Target::Group(pgid), signal));
+        self.signal_sent();
     }
 
     fn signal_process(&self, pid: i32, signal: u32) {
         self.signals.lock().unwrap().push((Target::Process(pid), signal));
+        self.signal_sent();
     }
 
     fn session_of_group(&self, pgid: i32) -> Option<i32> {

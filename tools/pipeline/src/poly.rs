@@ -268,11 +268,13 @@ pub fn parse_serial(log: &str, test: &str) -> Result<Option<Outcome>> {
 }
 
 /// The initramfs for one test: `/test-binary` plus the directories a
-/// program expects to exist.
+/// program expects to exist. `/tmp` is sticky and writable by everyone, as
+/// on the reference machine (hier(7)) and in the app tests' tree, so a
+/// test that gave up root can still make files there.
 pub fn initramfs(binary: &[u8]) -> Result<Vec<u8>> {
     cpio::write(&[
         cpio::Entry::dir("dev"),
-        cpio::Entry::dir("tmp"),
+        cpio::Entry::dir_mode("tmp", 0o1777),
         cpio::Entry::file(INIT_PATH.trim_start_matches('/'), 0o755, binary.to_vec()),
     ])
 }
@@ -522,6 +524,7 @@ mod tests {
         let entries = cpio::read(&initramfs(b"\x7fELF").unwrap()).unwrap();
         let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(names, ["dev", "tmp", "test-binary"]);
+        assert_eq!(entries[1].mode, cpio::S_IFDIR | 0o1777);
         assert_eq!(entries[2].mode, cpio::S_IFREG | 0o755);
     }
 }

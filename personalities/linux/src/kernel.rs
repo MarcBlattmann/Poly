@@ -719,8 +719,9 @@ pub trait LinuxKernel {
     /// futexes are keyed by address space and address. A shared futex in
     /// memory other processes can map is keyed by the object and offset,
     /// so every mapping of it finds the same waiters; in private memory it
-    /// gets the same key as the private futex. `EFAULT` if `addr` is not
-    /// mapped.
+    /// gets the same key as the private futex here, which the personality
+    /// then tells apart ([`crate::futex::key`]: `FutexKey::Unshared`).
+    /// The personality reads the word first, which is its `EFAULT` check.
     ///
     /// The default treats all memory as private, which is right until the
     /// kernel has shared mappings.

@@ -608,20 +608,22 @@ impl Tty {
     /// and `SIGCONT`, the session loses the terminal; reads return end of
     /// file from now on, writes `EIO` (POSIX "Modem Disconnect"; who gets
     /// which signal is Poly's choice, to be confirmed by the diff runner).
+    ///
+    /// The signals are sent before the hang-up shows: a reader that sees
+    /// end of file has its `SIGHUP` pending already, so it takes it on the
+    /// way out of that read (ioctl's `b_ioctl_ctty` counts it right after
+    /// the read returns), and a blocked reader is interrupted by the
+    /// signal first and reads end of file when it tries again.
     pub fn hangup(&self) {
         let (session, pgrp) = {
             let mut sessions = self.ttys.sessions.lock();
             let mut st = self.state.lock();
-            st.hung_up = true;
-            let mut fx = Effects::default();
-            st.ldisc.flush_input(&mut fx);
             let session = st.session.take();
             if let Some(sid) = session {
                 sessions.ctty.remove(&sid);
             }
             (session, st.pgrp.take())
         };
-        self.queue.notify(PollEvents::ALL);
         let host = self.host();
         // The session leader gets one SIGHUP (ioctl's spec sheet), also
         // when its own group is the foreground group the signal goes to.
@@ -632,6 +634,13 @@ impl Tty {
             host.signal_group(pgrp, SIGHUP);
             host.signal_group(pgrp, SIGCONT);
         }
+        {
+            let mut st = self.state.lock();
+            st.hung_up = true;
+            let mut fx = Effects::default();
+            st.ldisc.flush_input(&mut fx);
+        }
+        self.queue.notify(PollEvents::ALL);
     }
 
     // ---- attributes --------------------------------------------------------------

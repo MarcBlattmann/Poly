@@ -14,18 +14,20 @@
 //!   comes back for the rest.
 //! - Room is counted in pages of [`PIPE_PAGE`] bytes (pipe2's spec sheet):
 //!   the pipe has [`PIPE_CAPACITY`] / [`PIPE_PAGE`] of them by default
-//!   (`F_SETPIPE_SZ` changes that, [`Pipe::set_capacity`]); bytes written
-//!   fill the room left in the last page, then new pages; a page is free
-//!   again only once every byte of it was read, so a partly read page
-//!   takes no new bytes.
+//!   (`F_SETPIPE_SZ` changes that, [`Pipe::set_capacity`]). A write puts
+//!   the part of it that is not whole pages (its length modulo
+//!   [`PIPE_PAGE`]) into the last page if all of that part fits there, and
+//!   the rest into new pages of at most a page each; a page is free again
+//!   only once every byte of it was read, so a partly read page takes no
+//!   new bytes. (A 5000-byte write into 15 full pages and one with 1000
+//!   bytes free takes 904 bytes: pipe2's visible test.)
 //! - Packet mode (`O_DIRECT`, pipe2(2)): every write is a packet (writes
 //!   longer than `PIPE_BUF` are split into packets of `PIPE_BUF`), a read
 //!   returns at most one packet and drops what of it does not fit.
 //! - Readiness: a read end is readable while there is data and hung up
-//!   (`POLLHUP`) without write ends; a write end is writable while
-//!   `PIPE_BUF` bytes fit (so a write of that size would not block; Poly's
-//!   threshold, to be confirmed by the diff runner) and reports `POLLERR`
-//!   once no read end is left (poll(2)).
+//!   (`POLLHUP`) without write ends; a write end is writable while a page
+//!   is free (so a write of `PIPE_BUF` bytes would not block) and reports
+//!   `POLLERR` once no read end is left (poll(2)).
 
 use crate::object::FileObject;
 use crate::poll::{Blocker, PollEvents, WaitQueue, Woke};
@@ -80,24 +82,38 @@ struct State {
 }
 
 impl State {
-    /// Bytes a write could put in now: the rest of the last page (not in
-    /// packet mode) and every free page.
-    fn room(&self) -> usize {
-        let last = match self.pages.back() {
-            Some(p) if !self.packet => PIPE_PAGE - p.filled,
-            _ => 0,
-        };
-        last + self.slots.saturating_sub(self.pages.len()) * PIPE_PAGE
+    /// Pages a write could start now.
+    fn free_pages(&self) -> usize {
+        self.slots.saturating_sub(self.pages.len())
     }
 
-    /// Account for `n` bytes appended to `data`.
-    fn fill(&mut self, mut n: usize) {
-        if let Some(p) = self.pages.back_mut().filter(|_| !self.packet) {
-            let k = n.min(PIPE_PAGE - p.filled);
-            p.filled += k;
-            p.left += k;
-            n -= k;
+    /// How many of a `len`-byte write's bytes go into the last page: the
+    /// part that is not whole pages (`len` modulo a page), if all of it
+    /// fits there; else none (and never in packet mode).
+    fn merge(&self, len: usize) -> usize {
+        let tail = len % PIPE_PAGE;
+        match self.pages.back() {
+            Some(p) if !self.packet && tail > 0 && p.filled + tail <= PIPE_PAGE => tail,
+            _ => 0,
         }
+    }
+
+    /// How many bytes of a `len`-byte write go in now: [`merge`](Self::merge)
+    /// into the last page, then whole free pages.
+    fn fits(&self, len: usize) -> usize {
+        let merge = self.merge(len);
+        merge + (len - merge).min(self.free_pages() * PIPE_PAGE)
+    }
+
+    /// Account for `n` bytes of a `len`-byte write appended to `data`
+    /// (`n` from [`fits`](Self::fits)).
+    fn fill(&mut self, len: usize, n: usize) {
+        let merge = self.merge(len).min(n);
+        if let Some(p) = self.pages.back_mut().filter(|_| merge > 0) {
+            p.filled += merge;
+            p.left += merge;
+        }
+        let mut n = n - merge;
         while n > 0 {
             let k = n.min(PIPE_PAGE);
             self.pages.push_back(Page { filled: k, left: k });
@@ -343,21 +359,14 @@ impl FileObject for PipeEnd {
         if s.readers == 0 {
             return Err(Errno::EPIPE);
         }
-        let room = s.room();
-        let n = if buf.len() <= PIPE_BUF {
-            if room < buf.len() {
-                return Err(Errno::EAGAIN);
-            }
-            buf.len()
-        } else {
-            if room == 0 {
-                return Err(Errno::EAGAIN);
-            }
-            room.min(buf.len())
-        };
+        let n = s.fits(buf.len());
+        // At most PIPE_BUF bytes: all or nothing; more: whatever fits.
+        if n == 0 || (buf.len() <= PIPE_BUF && n < buf.len()) {
+            return Err(Errno::EAGAIN);
+        }
         s.data.extend(&buf[..n]);
         // In packet mode each packet of at most PIPE_BUF bytes takes a page.
-        s.fill(n);
+        s.fill(buf.len(), n);
         drop(s);
         self.pipe.queue.notify(PollEvents::READABLE);
         Ok(n)
@@ -379,7 +388,7 @@ impl FileObject for PipeEnd {
             // EPIPE): POLLERR and POLLOUT (poll's spec sheet).
             if s.readers == 0 {
                 events = events | PollEvents::ERR | PollEvents::WRITABLE;
-            } else if s.room() >= PIPE_BUF {
+            } else if s.free_pages() > 0 {
                 events = events | PollEvents::WRITABLE;
             }
         }

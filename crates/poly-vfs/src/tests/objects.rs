@@ -165,12 +165,14 @@ fn pipe_writes_up_to_pipe_buf_are_atomic() {
     assert!(!w.poll().intersects(PollEvents::WRITABLE), "a PIPE_BUF write would block");
     assert_eq!(w.write(&[2u8; PIPE_BUF]), Err(Errno::EAGAIN), "all or nothing");
     assert_eq!(w.write(&[2u8; 10]), Ok(10));
-    // A longer write takes what fits.
-    assert_eq!(w.write(&[3u8; PIPE_BUF + 1]), Ok(PIPE_BUF - 11));
-    assert_eq!(r.bytes_readable(), Some(PIPE_CAPACITY));
-    assert_eq!(w.write(&[3u8; PIPE_BUF + 1]), Err(Errno::EAGAIN), "full");
+    // A longer write takes what fits: its odd byte goes into the last page,
+    // its whole page finds no free page.
+    assert_eq!(w.write(&[3u8; PIPE_BUF + 1]), Ok(1));
+    assert_eq!(r.bytes_readable(), Some(big.len() + 11));
+    // Its odd part does not fit into the last page: it needs a page.
+    assert_eq!(w.write(&[3u8; PIPE_BUF * 2 - 1]), Err(Errno::EAGAIN), "full");
     let mut buf = vec![0u8; PIPE_CAPACITY];
-    assert_eq!(r.read(&mut buf), Ok(PIPE_CAPACITY));
+    assert_eq!(r.read(&mut buf), Ok(big.len() + 11));
     assert!(w.poll().contains(PollEvents::WRITABLE));
 }
 
@@ -825,9 +827,22 @@ fn pipe_room_comes_back_a_page_at_a_time() {
     assert_eq!(w.write(&big[..PAGE]), Ok(PAGE));
     assert_eq!(w.write(b"x"), Err(Errno::EAGAIN));
     while r.read(&mut buf).is_ok_and(|n| n > 0) {}
-    // The rest of the last page, then nothing: a long write is partial.
+    // 15 full pages and one with 1000 bytes free: of a 5000-byte write the
+    // 904 bytes that are not a whole page fit into the last page, the whole
+    // page that is left finds no free one (pipe2's b_pipe2_capacity).
     assert_eq!(w.write(&big[..CAPACITY - 1000]), Ok(CAPACITY - 1000));
-    assert_eq!(w.write(&big[..5000]), Ok(1000));
+    assert_eq!(w.write(&big[..5000]), Ok(904));
+    assert_eq!(w.write(&big[..5000]), Err(Errno::EAGAIN), "96 bytes free, 904 do not fit");
+    assert_eq!(w.write(&big[..96]), Ok(96));
+    assert_eq!(r.bytes_readable(), Some(CAPACITY));
+    while r.read(&mut buf).is_ok_and(|n| n > 0) {}
+    // A page's worth never joins the last page; a smaller part does, so
+    // pages need not be full: 100 + 4096 bytes take two pages.
+    assert_eq!(w.write(&big[..100]), Ok(100));
+    assert_eq!(w.write(&big[..PAGE]), Ok(PAGE));
+    assert_eq!(w.write(&big), Ok(CAPACITY - 2 * PAGE), "14 pages left");
+    assert_eq!(w.write(b"x"), Err(Errno::EAGAIN));
+    assert_eq!(r.bytes_readable(), Some(CAPACITY - PAGE + 100));
 }
 
 #[test]
