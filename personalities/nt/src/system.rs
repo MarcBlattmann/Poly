@@ -59,6 +59,8 @@ impl Section {
 #[derive(Debug)]
 pub struct NtSystem {
     pub objects: ObjectManager,
+    /// File I/O: volumes, file objects, share access, locks, IRPs (ADR 0067).
+    pub io: crate::io::IoState,
     sections: BTreeMap<u64, Section>,
     next_key: u64,
 }
@@ -71,7 +73,7 @@ impl Default for NtSystem {
 
 impl NtSystem {
     pub fn new() -> NtSystem {
-        NtSystem { objects: ObjectManager::new(), sections: BTreeMap::new(), next_key: 1 }
+        NtSystem { objects: ObjectManager::new(), io: crate::io::IoState::new(), sections: BTreeMap::new(), next_key: 1 }
     }
 
     /// Store a section's data; returns its key (the object's cookie).
@@ -118,7 +120,10 @@ impl NtSystem {
         while let Some(d) = self.objects.pop_deleted() {
             match d.kind {
                 ObjectType::Section => self.remove_section(d.cookie, b),
-                ObjectType::File => b.file_deleted(d.cookie),
+                ObjectType::File => {
+                    b.file_deleted(d.cookie);
+                    self.io.file_closed(d.cookie);
+                }
                 _ => {}
             }
         }

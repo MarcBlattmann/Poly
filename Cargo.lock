@@ -150,6 +150,7 @@ dependencies = [
  "poly-abi",
  "poly-ntobj",
  "poly-pe",
+ "poly-vfs",
 ]
 
 [[package]]
