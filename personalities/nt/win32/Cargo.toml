@@ -2,11 +2,12 @@
 # real PE DLLs built from Rust for x86_64-pc-windows-msvc like ntdll (ADR
 # 0071), plus k32test.exe and contest.exe (ADR 0080), the programs the
 # kernel's ring-3 tests run. One workspace, so `cargo xtask` builds
-# core/alloc for the Windows target once for all of them. No third-party
-# crates: only this repo's host-tested logic and core/alloc.
+# core/alloc for the Windows target once for all of them. advapi32.dll
+# and a32test.exe (ADR 0083) are built here too. No third-party crates:
+# only this repo's host-tested logic and core/alloc.
 [workspace]
 resolver = "3"
-members = ["rt", "kernelbase", "kernel32", "k32test", "contest"]
+members = ["rt", "kernelbase", "kernel32", "k32test", "contest", "advapi32", "a32test"]
 
 [workspace.package]
 version = "0.0.1"

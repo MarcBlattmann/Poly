@@ -37,6 +37,7 @@ members = [
     "crates/poly-rtc",
     "crates/poly-rtl",
     "crates/poly-sched",
+    "crates/poly-security",
     "crates/poly-seh",
     "crates/poly-smp",
     "crates/poly-term",
@@ -96,6 +97,7 @@ poly-registry = { path = "crates/poly-registry" }
 poly-rtc = { path = "crates/poly-rtc" }
 poly-rtl = { path = "crates/poly-rtl" }
 poly-sched = { path = "crates/poly-sched" }
+poly-security = { path = "crates/poly-security" }
 poly-seh = { path = "crates/poly-seh" }
 poly-smp = { path = "crates/poly-smp" }
 poly-term = { path = "crates/poly-term" }

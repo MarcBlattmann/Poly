@@ -133,6 +133,14 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
         }
     }
+    // And advapi32.dll (ADR 0083).
+    if !super::ADVAPI32.is_empty() {
+        match create::install_file(&vr, &root, "Windows\\System32", "advapi32.dll", super::ADVAPI32) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: advapi32.dll written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install advapi32.dll ({:#x})", e.0),
+        }
+    }
     let synced = sync::sync(&mut sys.registry.reg, &POLY_USER, super::registry::filetime_now());
     crate::kprintln!(
         "nt: C: is {}; {} folders made, {} registry values synced",

@@ -187,6 +187,45 @@ pub fn unmap_view<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
     Ok(STATUS_SUCCESS)
 }
 
+/// `NtFlushVirtualMemory(ProcessHandle, BaseAddress*, RegionSize*,
+/// IoStatusBlock*)` (not in the WDK; Poly's reading of `FlushViewOfFile`
+/// with the address and size by reference, rounded to pages and written
+/// back, as in `NtProtectVirtualMemory`, ADR 0079). The range must be in
+/// one view (`STATUS_NOT_MAPPED_VIEW`); a size of 0 runs to the end of the
+/// view. A shared view of a file maps the file's cached pages, so what was
+/// written is the file's contents already; the page cache's writeback puts
+/// it on disk (Poly does not force it out here, to be confirmed by the
+/// spec agent what Windows waits for).
+pub fn flush<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [process, base_ptr, size_ptr, iosb] = abi::args::<K, 4>(k, regs)?;
+    let addr = abi::read_u64(k, base_ptr)?;
+    let size = abi::read_u64(k, size_ptr)?;
+    let caller = k.caller();
+    let (base, len) = k.with_state(|sys, proc, _| {
+        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+        let a = proc.vm.allocation(addr).filter(|a| a.view().is_some()).ok_or(STATUS_NOT_MAPPED_VIEW)?;
+        let start = addr & !(crate::vm::PAGE_SIZE - 1);
+        let end = if size == 0 {
+            a.base + a.size
+        } else {
+            crate::vm::page_up(addr.checked_add(size).ok_or(STATUS_INVALID_PARAMETER)?)
+                .ok_or(STATUS_INVALID_PARAMETER)?
+        };
+        if end > a.base + a.size {
+            return Err(STATUS_NOT_MAPPED_VIEW);
+        }
+        Ok((start, end - start))
+    })?;
+    abi::write_u64(k, base_ptr, base)?;
+    abi::write_u64(k, size_ptr, len)?;
+    if iosb != 0 {
+        let mut b = [0u8; 16];
+        b[8..16].copy_from_slice(&len.to_le_bytes());
+        abi::write(k, iosb, &b)?;
+    }
+    Ok(STATUS_SUCCESS)
+}
+
 /// `NtTerminateProcess`. `NtCurrentProcess()` (or a handle to the caller's
 /// own process with `PROCESS_TERMINATE`) ends the calling process with
 /// `ExitStatus` once the call returns. A null handle ends every other
@@ -198,7 +237,13 @@ pub fn terminate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
         return Ok(STATUS_SUCCESS);
     }
     let caller = k.caller();
-    k.with_state(|sys, proc, _| own_process(sys, proc, &caller, Handle(process), PROCESS_TERMINATE))?;
-    k.terminate_process(NtStatus(status as u32));
+    let status = NtStatus(status as u32);
+    k.with_state(|sys, proc, _| {
+        own_process(sys, proc, &caller, Handle(process), PROCESS_TERMINATE)?;
+        // The first termination's status is the process's (ADR 0079).
+        proc.exit_status.get_or_insert(status);
+        Ok::<(), NtStatus>(())
+    })?;
+    k.terminate_process(status);
     Ok(STATUS_SUCCESS)
 }

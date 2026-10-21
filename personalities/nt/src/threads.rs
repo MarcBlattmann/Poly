@@ -20,7 +20,7 @@ use poly_ntobj::{Handle, NtStatus, ObjectType, ProcessId, ThreadRef};
 
 /// Resolve a thread handle to its thread id (the object's cookie), checking
 /// `access`. `NtCurrentThread()` is the caller's own thread.
-fn thread_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ThreadRef> {
+pub(crate) fn thread_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ThreadRef> {
     if h == Handle::CURRENT_THREAD {
         return Ok(k.caller().thread);
     }
@@ -33,7 +33,7 @@ fn thread_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ThreadRef
 
 /// Resolve a process handle to its process id. `NtCurrentProcess()` is the
 /// caller's own process; a null handle is `STATUS_INVALID_HANDLE`.
-fn process_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ProcessId> {
+pub(crate) fn process_of<K: NtKernel>(k: &mut K, h: Handle, access: u32) -> Result<ProcessId> {
     if h == Handle::CURRENT_PROCESS {
         return Ok(k.caller().process);
     }
@@ -75,6 +75,86 @@ pub fn create_thread_ex<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<Nt
     };
     let created = k.create_thread(req)?;
     return_handle(k, out, created.handle)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// The NT name of an executable's DOS path (`ImagePathName`): a full
+/// drive path `X:\...` becomes `\??\X:\...`, a `\\?\` path keeps its
+/// rest under `\??\`, and an NT path stays. Anything else (a relative
+/// path, UNC) is `STATUS_OBJECT_PATH_SYNTAX_BAD`: `kernelbase` always
+/// passes a full path (ADR 0079).
+pub fn image_nt_name(dos: &[u16]) -> Result<alloc::vec::Vec<u16>> {
+    let w = |s: &str| s.encode_utf16().collect::<alloc::vec::Vec<u16>>();
+    let is_sep = |c: u16| c == u16::from(b'\\') || c == u16::from(b'/');
+    if dos.starts_with(&w("\\??\\")) {
+        return Ok(dos.to_vec());
+    }
+    let mut out = w("\\??\\");
+    if dos.starts_with(&w("\\\\?\\")) {
+        out.extend_from_slice(&dos[4..]);
+        return Ok(out);
+    }
+    let letter = dos.first().is_some_and(|&c| c < 0x80 && (c as u8).is_ascii_alphabetic());
+    if dos.len() >= 3 && letter && dos[1] == u16::from(b':') && is_sep(dos[2]) {
+        out.extend(dos.iter().map(|&c| if c == u16::from(b'/') { u16::from(b'\\') } else { c }));
+        return Ok(out);
+    }
+    Err(STATUS_OBJECT_PATH_SYNTAX_BAD)
+}
+
+/// `NtCreateUserProcess(ProcessHandle*, ThreadHandle*, ProcessDesiredAccess,
+/// ThreadDesiredAccess, ProcessObjectAttributes*, ThreadObjectAttributes*,
+/// ProcessFlags, ThreadFlags, ProcessParameters*, CreateInfo*,
+/// AttributeList*)`, as Poly reads it (ADR 0079; the WDK does not document
+/// it, and the `PS_CREATE_INFO` / `PS_ATTRIBUTE_LIST` structures are in no
+/// public header):
+///
+/// - `ProcessParameters` (required, `STATUS_INVALID_PARAMETER`) is an
+///   `RTL_USER_PROCESS_PARAMETERS` in the caller's memory
+///   ([`crate::params::read`]): its `ImagePathName` names the executable
+///   ([`image_nt_name`]), which is opened for execute and read; its
+///   command line, environment and current directory go to the child.
+/// - A `ThreadFlags` with `THREAD_CREATE_FLAGS_CREATE_SUSPENDED` is
+///   `STATUS_NOT_SUPPORTED` for now (resuming another process's thread
+///   is a later item). The object attributes, `ProcessFlags`, `CreateInfo`
+///   and `AttributeList` are not used: the new process is unnamed, inherits
+///   no handles, and its client id is read back with
+///   `NtQueryInformationProcess` / `NtQueryInformationThread`.
+/// - Desired access 0 means all access.
+pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    use crate::io::consts::*;
+    let process_out = abi::arg(k, regs, 0)?;
+    let thread_out = abi::arg(k, regs, 1)?;
+    let process_access = abi::arg(k, regs, 2)? as u32;
+    let thread_access = abi::arg(k, regs, 3)? as u32;
+    let thread_flags = abi::arg(k, regs, 7)? as u32;
+    let params_at = abi::arg(k, regs, 8)?;
+    if params_at == 0 || process_out == 0 || thread_out == 0 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    if thread_flags & THREAD_CREATE_FLAGS_CREATE_SUSPENDED != 0 {
+        return Err(STATUS_NOT_SUPPORTED);
+    }
+    let params = crate::params::read(params_at, &mut |addr, buf| abi::read(k, addr, buf))?;
+    let name = image_nt_name(&params.image_path)?;
+    let attrs = abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE };
+    let image = crate::io::services::with_named(
+        k,
+        &attrs,
+        FILE_EXECUTE | FILE_READ_DATA | SYNCHRONIZE,
+        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+        |sys, cookie| sys.io.read_all(cookie),
+    )?;
+    let all = |a: u32, all: u32| if a == 0 { all } else { a };
+    let req = crate::kernel::ProcessCreate {
+        image,
+        params,
+        process_access: all(process_access, poly_ntobj::access::PROCESS_ALL_ACCESS),
+        thread_access: all(thread_access, poly_ntobj::access::THREAD_ALL_ACCESS),
+    };
+    let created = k.create_process(req)?;
+    return_handle(k, process_out, created.process)?;
+    return_handle(k, thread_out, created.thread)?;
     Ok(STATUS_SUCCESS)
 }
 
@@ -132,17 +212,22 @@ pub fn open_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
 }
 
 /// `NtQueryInformationProcess(ProcessBasicInformation)`. ExitStatus is
-/// `STATUS_PENDING` for a running process; the PEB base and the process id
-/// are reported. Querying an exited *child* process's status needs
-/// cross-process creation (left for the ntdll milestone).
+/// `STATUS_PENDING` for a running process and its exit status once it has
+/// ended ([`crate::system::NtSystem::process_exits`]); the PEB base (of the
+/// caller's own process only) and the process id are reported.
 pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
     if class as u32 != PROCESS_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
     let pid = process_of(k, Handle(h), PROCESS_QUERY_INFORMATION)?;
-    let (exit, peb) = k.with_state(|_sys, proc, _| {
-        if proc.pid == pid { (proc.exit_status.unwrap_or(STATUS_PENDING), proc.peb) } else { (STATUS_PENDING, 0) }
+    let (exit, peb) = k.with_state(|sys, proc, _| {
+        if proc.pid == pid {
+            (proc.exit_status.unwrap_or(STATUS_PENDING), proc.peb)
+        } else {
+            // Another process: its exit status once it has ended (ADR 0079).
+            (sys.process_exits.get(&pid).copied().unwrap_or(STATUS_PENDING), 0)
+        }
     });
     let mut b = [0u8; PROCESS_BASIC_INFORMATION_SIZE];
     b[0..4].copy_from_slice(&exit.0.to_le_bytes());

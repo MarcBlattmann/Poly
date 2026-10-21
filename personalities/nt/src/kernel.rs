@@ -99,6 +99,28 @@ pub struct ThreadCreated {
     pub client: ClientId,
 }
 
+/// A request to create a process (`NtCreateUserProcess`, ADR 0079), once
+/// the service has decoded it: the executable's bytes (opened and read
+/// from the image path for the caller) and the new process's parameters.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProcessCreate {
+    pub image: alloc::vec::Vec<u8>,
+    pub params: crate::params::Parameters,
+    /// The access the handles to the new process and its first thread are
+    /// opened with.
+    pub process_access: u32,
+    pub thread_access: u32,
+}
+
+/// What [`NtKernel::create_process`] produced: handles in the caller's
+/// table to the new process and its first thread, and its client id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProcessCreated {
+    pub process: poly_ntobj::Handle,
+    pub thread: poly_ntobj::Handle,
+    pub client: ClientId,
+}
+
 /// The calling thread's view of the kernel.
 pub trait NtKernel {
     /// Copy from the caller's memory.
@@ -130,6 +152,19 @@ pub trait NtKernel {
     /// object, starts it in ring 3 (suspended if asked) and returns a handle
     /// to it. Cross-process creation is `STATUS_NOT_IMPLEMENTED` for now.
     fn create_thread(&mut self, req: ThreadCreate) -> Result<ThreadCreated, NtStatus>;
+
+    /// Create a process running `req.image` (`NtCreateUserProcess`): a new
+    /// address space with the image, our `ntdll`, its PEB, TEB, stack and
+    /// `req.params` ([`crate::exec::start_process`],
+    /// [`crate::params::write`]), handles to its process and thread
+    /// objects in the caller's table (opened before it runs, so a child
+    /// that ends at once is still there to wait for), then its first
+    /// thread started at `LdrInitializeThunk`. A kernel that cannot
+    /// answers `STATUS_NOT_IMPLEMENTED`.
+    fn create_process(&mut self, req: ProcessCreate) -> Result<ProcessCreated, NtStatus> {
+        let _ = req;
+        Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
 
     /// End another thread of this process (`NtTerminateThread` of a thread
     /// that is not the caller). `None` means it is already gone.

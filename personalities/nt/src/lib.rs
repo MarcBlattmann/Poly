@@ -59,6 +59,7 @@ pub mod pe_writer;
 pub mod protect;
 pub mod registry;
 pub mod section;
+pub mod security;
 pub mod services;
 pub mod sync;
 pub mod sysinfo;
@@ -71,7 +72,9 @@ mod tests;
 
 pub use backend::{Backend, SectionSource, ViewMap, ViewSource};
 pub use context::NtContext;
-pub use kernel::{Apc, ClientId, NtKernel, NtTimeout, ThreadCreate, ThreadCreated, UserFault};
+pub use kernel::{
+    Apc, ClientId, NtKernel, NtTimeout, ProcessCreate, ProcessCreated, ThreadCreate, ThreadCreated, UserFault,
+};
 pub use protect::HwProt;
 pub use services::Service;
 pub use system::{NtProcess, NtSystem};
@@ -196,9 +199,11 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         OpenSection => memory::open_section(k, regs),
         MapViewOfSection => memory::map_view(k, regs),
         UnmapViewOfSection => memory::unmap_view(k, regs),
+        FlushVirtualMemory => memory::flush(k, regs),
         TerminateProcess => memory::terminate(k, regs),
         TerminateThread => threads::terminate_thread(k, regs),
         CreateThreadEx => threads::create_thread_ex(k, regs),
+        CreateUserProcess => threads::create_user_process(k, regs),
         OpenProcess => threads::open_process(k, regs),
         OpenThread => threads::open_thread(k, regs),
         QueryInformationProcess => threads::query_information_process(k, regs),
@@ -250,5 +255,9 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         QueryPerformanceCounter => sysinfo::query_performance_counter(k, regs),
         QuerySystemInformation => sysinfo::query_system_information(k, regs),
         DeviceIoControlFile => console::services::device_io_control_file(k, regs),
+        OpenProcessToken => security::open_process_token_service(k, regs),
+        OpenProcessTokenEx => security::open_process_token_ex(k, regs),
+        OpenThreadToken | OpenThreadTokenEx => security::open_thread_token(k, regs),
+        QueryInformationToken => security::query_information_token(k, regs),
     }
 }
