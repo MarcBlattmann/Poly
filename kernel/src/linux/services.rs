@@ -301,11 +301,9 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn write(&mut self, fd: i32, buf: &[u8]) -> Result<usize, Errno> {
-        let n = fileio::write(self, fd, buf)?;
-        if self.process.traced && (fd == 1 || fd == 2) && n > 0 {
-            testrun::output(fd, &buf[..n.min(buf.len())]);
-        }
-        Ok(n)
+        // A traced program's output is captured by the open file it reaches
+        // (`tty::log_console_files`), not by the descriptor's number.
+        fileio::write(self, fd, buf)
     }
 
     fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
@@ -560,7 +558,7 @@ impl LinuxKernel for Thread<'_> {
                 kprintln!("linux: pid {} killed by signal {signal}", self.process.pid);
             }
             if self.process.traced {
-                testrun::signal(self.process.pid, signal);
+                testrun::signal_of(self.process.pid, self.tid, signal);
             }
         }
         self.process.group_exit(status);

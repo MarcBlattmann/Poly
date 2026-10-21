@@ -165,12 +165,16 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let number = regs.rax;
     let args = [regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9];
     let strace = strace::enter(process, number, &args);
+    let tid = k.tid;
+    if process.traced && testrun::starts_task(number) {
+        testrun::enter(process.pid, tid, number, &args);
+    }
     k.enter_syscall(number);
     let outcome = Linux::dispatch_with(&mut k, regs);
     k.set_result(regs.rax);
     let exit = k.take_exit();
     if process.traced {
-        testrun::syscall(process.pid, number, &args, exit.is_none().then_some(regs.rax));
+        testrun::syscall_of(process.pid, tid, number, &args, exit.is_none().then_some(regs.rax));
     }
     if let Some(line) = strace {
         strace::exit(line, exit.is_none().then_some(regs.rax));
@@ -213,7 +217,7 @@ pub fn fault(process: &Process, fault: &Fault) -> Leave {
     let info = fault_info(fault.vector, page, fault.rip);
     k.set_fault(u64::from(fault.vector), fault.error_code, fault.address.unwrap_or(0));
     if process.traced {
-        testrun::signal(process.pid, info.signal());
+        testrun::signal_of(process.pid, k.tid, info.signal());
     }
     Linux::fault_signal(&mut k, info);
     let leave = Linux::exit_to_user(&mut k).into();

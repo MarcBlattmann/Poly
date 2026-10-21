@@ -181,6 +181,7 @@ pub fn run_init(boot: &BootInfo) -> bool {
     kprintln!("init: running {path}{}", if traced { " (traced)" } else { "" });
     match run_first(path, traced) {
         Ok((pid, status)) => {
+            crate::testinit::report_output_files(boot);
             testrun::exit(pid, status);
             kprintln!("init: {path} (pid {pid}) ended: {status}");
         }
@@ -197,9 +198,15 @@ pub fn run_init(boot: &BootInfo) -> bool {
 
 fn run_first(path: &str, traced: bool) -> Result<(u32, ExitStatus), ExecPathError> {
     let argv: [&[u8]; 1] = [path.as_bytes()];
+    // A traced program runs as the child of the kernel's init (ADR 0064).
+    let init = traced && crate::testinit::start();
     let prepared = prepare(path.as_bytes(), &argv, &[], traced)?;
+    if init {
+        crate::testinit::adopt(&prepared.process);
+    }
     // The record goes out before the program's first instruction runs.
     testrun::init(path);
     let process = prepared.start()?;
-    Ok((process.pid, process.wait()))
+    let status = if init { crate::testinit::wait(&process) } else { process.wait() };
+    Ok((process.pid, status))
 }
