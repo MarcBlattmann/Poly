@@ -342,6 +342,15 @@ for r in "${ROLES[@]}"; do
     if [ -n "${remotes// /}" ] && [ "$remotes" != "hub " ]; then
         warn "$home/repo has remotes other than hub: $remotes"
     fi
+    # The loop (the runner user) fetches the role's commits from this
+    # checkout, which another user owns. `-c safe.directory` on the fetch is
+    # not enough: the upload-pack that git starts in the checkout checks
+    # ownership again and refuses ("dubious ownership"). So the runner names
+    # both paths safe in its own configuration, once.
+    for p in "$home/repo" "$home/repo/.git"; do
+        peek "$RUNNER_USER" git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$p" ||
+            as "$RUNNER_USER" git config --global --add safe.directory "$p"
+    done
 done
 
 if [ "$INSTALL_TOOLS" = 1 ]; then

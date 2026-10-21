@@ -120,7 +120,8 @@ pub trait Ops {
     fn merge_base(&mut self, slot: usize, a: &str, b: &str) -> Result<String>;
     fn file_at(&mut self, slot: usize, rev: &str, path: &str) -> Result<Option<String>>;
 
-    /// `coverage claim <entry> --agent <spec agent>`.
+    /// `coverage claim <entry> --agent <spec agent>`, then `coverage readme`
+    /// (the claim changes what the README progress section is made from).
     fn claim(&mut self, slot: usize, entry: &EntryId) -> Result<Out>;
     /// `cargo xtask ci`.
     fn ci(&mut self, slot: usize) -> Result<Out>;
