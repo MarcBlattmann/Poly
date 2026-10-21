@@ -51,6 +51,9 @@ impl Errno {
     pub const ERANGE: Errno = Errno(34);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
+    /// `ELOOP` (`asm-generic/errno.h`): "Too many symbolic links
+    /// encountered" while resolving a path.
+    pub const ELOOP: Errno = Errno(40);
     /// `ENODATA` (`asm-generic/errno.h`): "No data available"; an extended
     /// attribute that does not exist (getxattr(2)).
     pub const ENODATA: Errno = Errno(61);

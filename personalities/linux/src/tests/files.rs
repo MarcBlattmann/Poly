@@ -442,6 +442,12 @@ pub(super) struct Env {
 /// ("contents"), `/dir/sub/`, `/link` -> `dir/file`; descriptors 0-2 are
 /// not open in the VFS table (the fake's own read/write files stay).
 pub(super) fn env() -> Env {
+    env_as(Cred::root())
+}
+
+/// [`env`] with the system calls checked as `cred` (the set-up is done as
+/// root).
+pub(super) fn env_as(caller: Cred) -> Env {
     let vfs = Arc::new(Vfs::new(Arc::new(Tmpfs::new(Arc::new(Clock)))));
     let ctx = vfs.root_context().unwrap();
     let cred = Cred::root();
@@ -463,7 +469,7 @@ pub(super) fn env() -> Env {
         vfs: vfs.clone(),
         ctx,
         fds,
-        cred,
+        cred: caller,
         limits: limits.clone(),
         synced: synced.clone(),
         locks: poly_vfs::locks::LockTable::new(),

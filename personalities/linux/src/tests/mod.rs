@@ -1,6 +1,7 @@
 //! Host tests of the dispatcher and every implemented system call, against
 //! [`fake::FakeKernel`].
 
+mod access;
 mod admin;
 mod cred;
 mod fake;

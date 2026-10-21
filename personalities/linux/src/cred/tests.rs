@@ -293,6 +293,14 @@ fn access_uses_the_real_ids() {
     r.set_caps(CapSet::EMPTY, CapSet::only(cap::DAC_OVERRIDE), CapSet::EMPTY).unwrap();
     assert_eq!(r.access_ids().caps, CapSet::only(cap::DAC_OVERRIDE));
     assert_eq!(r.fs_ids().caps, CapSet::EMPTY);
+    // Real root, effective nobody: access still has root's rules; the
+    // effective gid does not count.
+    let mut n = Creds::root();
+    n.set_resgid(None, Some(4321), None).unwrap();
+    n.set_resuid(None, Some(65534), None).unwrap();
+    assert_eq!(n.fs_ids().caps, CapSet::EMPTY);
+    let a = n.access_ids();
+    assert_eq!((a.uid, a.gid, a.caps), (0, 0, CapSet::ALL));
 }
 
 #[test]
