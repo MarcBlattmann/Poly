@@ -42,7 +42,7 @@ use core::cell::OnceCell;
 use core::sync::atomic::Ordering;
 use poly_personality_linux::abi::{FileStat, Timespec, makedev};
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::futex::FutexTable;
+use poly_personality_linux::futex::{FutexKey, FutexTable};
 use poly_personality_linux::kernel::{
     Backing, Clock, CpuTimes, CpuTimesOf, Credentials, Deadline, FpuState, LinuxKernel, MapRequest, Placement,
     ProcessInfo, ProcessSelector, Prot, RandomMode, Target, UserContext, UserPtr, Wakeup,
@@ -610,6 +610,16 @@ impl LinuxKernel for Thread<'_> {
 
     fn address_space_id(&self) -> u64 {
         user::current_address_space().map_or(0, |s| s.root())
+    }
+
+    fn futex_key(&self, addr: UserPtr, private: bool) -> Result<FutexKey, Errno> {
+        // A shared futex in a shared mapping is the mapped object's word
+        // (futex(2)); everything else is this address space's.
+        let shared = (!private).then(user::current_memory).flatten().and_then(|m| m.shared_key(addr.0));
+        Ok(match shared {
+            Some((object, offset)) => FutexKey::Shared { object, offset },
+            None => FutexKey::Private { space: self.address_space_id(), addr: addr.0 },
+        })
     }
 
     fn futex_cmpxchg(&mut self, addr: UserPtr, expected: u32, new: u32) -> Result<u32, Errno> {
