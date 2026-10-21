@@ -10,6 +10,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crttest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "k32test"
 version = "0.0.1"
 dependencies = [
@@ -36,8 +43,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "msvcrt"
+version = "0.0.1"
+dependencies = [
+ "poly-crt",
+ "poly-win32-crt",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "poly-console"
 version = "0.0.1"
+
+[[package]]
+name = "poly-crt"
+version = "0.0.1"
+dependencies = [
+ "poly-rtl",
+]
 
 [[package]]
 name = "poly-kernelbase"
@@ -59,5 +82,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-win32-crt"
+version = "0.0.1"
+dependencies = [
+ "poly-crt",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "poly-win32-rt"
 version = "0.0.1"
+
+[[package]]
+name = "ucrtbase"
+version = "0.0.1"
+dependencies = [
+ "poly-crt",
+ "poly-win32-crt",
+ "poly-win32-rt",
+]

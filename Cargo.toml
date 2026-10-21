@@ -13,6 +13,7 @@ members = [
     "crates/poly-block",
     "crates/poly-bpf",
     "crates/poly-console",
+    "crates/poly-crt",
     "crates/poly-elf",
     "crates/poly-ext2",
     "crates/poly-cpio",
@@ -72,6 +73,7 @@ poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
 poly-bpf = { path = "crates/poly-bpf" }
 poly-console = { path = "crates/poly-console" }
+poly-crt = { path = "crates/poly-crt" }
 poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-cpio = { path = "crates/poly-cpio" }

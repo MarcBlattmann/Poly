@@ -6,7 +6,7 @@
 # crates: only this repo's host-tested logic and core/alloc.
 [workspace]
 resolver = "3"
-members = ["rt", "kernelbase", "kernel32", "k32test", "contest"]
+members = ["rt", "kernelbase", "kernel32", "k32test", "contest", "crt", "ucrtbase", "msvcrt", "crttest"]
 
 [workspace.package]
 version = "0.0.1"

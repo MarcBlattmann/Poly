@@ -106,7 +106,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Registry: hive storage, `NtOpenKey` family, default system hives
 - [x] Our `ntdll`: PE loader (imports, relocations, TLS, delay-load), heap, `Rtl*`, loader lock (ADR 0071)
 - [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors (first and second slices done, ADR 0079: processes, TLS/FLS, code pages, file mappings, condition variables; left: `CREATE_SUSPENDED` and handle inheritance in `CreateProcessW`)
-- [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055)
+- [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055) (first slice done, ADR 0084; left: C++ exceptions in `msvcrt` (`_CxxThrowException`, `__CxxFrameHandler3`), `setjmp`/`longjmp`, transcendental math, locales other than "C" and multibyte code pages, wildcard `argv`, `_findfirst`/`_spawn`/`system`/`_dup`/`_pipe`, console I/O (`_getch`, `_cprintf`), positional `printf`)
 - [ ] `advapi32` basics: registry API, security descriptors, tokens (single user)
 - [x] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles (ADR 0080)
 - [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0073)

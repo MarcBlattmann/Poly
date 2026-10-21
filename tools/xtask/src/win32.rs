@@ -31,7 +31,8 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 4] = ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe"];
+pub const OUTPUTS: [&str; 7] =
+    ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe", "ucrtbase.dll", "msvcrt.dll", "crttest.exe"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 
@@ -69,6 +70,10 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/kernel32",
             "personalities/nt/win32/k32test",
             "personalities/nt/win32/contest",
+            "personalities/nt/win32/crt",
+            "personalities/nt/win32/ucrtbase",
+            "personalities/nt/win32/msvcrt",
+            "personalities/nt/win32/crttest",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -131,7 +136,7 @@ fn prune(dir: &Path) {
 /// Build the workspace into `target_dir`; the directory with the outputs.
 fn build(target_dir: &Path) -> Result<PathBuf> {
     let mut cmd = cargo_for(target_dir, "build")?;
-    step("build kernelbase.dll, kernel32.dll, k32test.exe, contest.exe", &mut cmd)?;
+    step("build kernelbase.dll, kernel32.dll, ucrtbase.dll, msvcrt.dll and the test programs", &mut cmd)?;
     let out = target_dir.join("x86_64-pc-windows-msvc/release");
     for f in OUTPUTS {
         if !out.join(f).is_file() {
@@ -230,6 +235,54 @@ fn verify(dir: &Path) -> Result {
             if !name.eq_ignore_ascii_case(b"kernel32.dll") {
                 return Err(format!("{program} imports {}", String::from_utf8_lossy(name)));
             }
+        }
+    }
+    verify_crt(dir)
+}
+
+/// The C runtime (ADR 0084): `ucrtbase.dll` exports what MSVC's start-up
+/// code imports, `msvcrt.dll` its classic start-up interface; every export
+/// of each is a name the coverage map lists for that DLL (so nothing of
+/// one leaks into the other); `crttest.exe` imports the UCRT through
+/// `api-ms-win-crt-*` names (and `kernel32.dll`) only.
+fn verify_crt(dir: &Path) -> Result {
+    use poly_crt::exports::{MSVCRT_STARTUP, UCRT_STARTUP};
+    for (dll, required) in [("ucrtbase.dll", UCRT_STARTUP), ("msvcrt.dll", MSVCRT_STARTUP)] {
+        let bytes = read(&dir.join(dll))?;
+        let pe = parse(&bytes)?;
+        let exports = pe.exports().map_err(|e| format!("{dll} exports: {e:?}"))?.ok_or(format!("{dll}: no exports"))?;
+        for name in required {
+            if exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?.is_none() {
+                return Err(format!("{dll} lacks {name}"));
+            }
+        }
+        let listed = std::fs::read_to_string(root().join("coverage/windows/api").join(format!("{dll}.json")))
+            .map_err(|e| format!("the coverage list of {dll}: {e}"))?;
+        let mut stray = Vec::new();
+        for e in exports.names() {
+            let (name, _) = e.map_err(|e| format!("{dll}: {e:?}"))?;
+            let name = String::from_utf8_lossy(name);
+            // The entry point and `_fltused` are Poly's own (ADR 0071, 0079).
+            if name == "_fltused" || name.ends_with("_main") {
+                continue;
+            }
+            if !listed.contains(&format!("\"symbol\":\"{name}\"")) {
+                stray.push(name.into_owned());
+            }
+        }
+        if !stray.is_empty() {
+            return Err(format!("{dll} exports names it does not have on Windows: {}", stray.join(", ")));
+        }
+    }
+    let exe = read(&dir.join("crttest.exe"))?;
+    let exe = parse(&exe)?;
+    let imports =
+        exe.imports().map_err(|e| format!("crttest.exe imports: {e:?}"))?.ok_or("crttest.exe imports nothing")?;
+    for d in imports {
+        let d = d.map_err(|e| format!("{e:?}"))?;
+        let name = d.dll_name().map_err(|e| format!("{e:?}"))?.to_ascii_lowercase();
+        if !(name.starts_with(b"api-ms-win-crt-") || name == b"kernel32.dll") {
+            return Err(format!("crttest.exe imports {}", String::from_utf8_lossy(&name)));
         }
     }
     Ok(())

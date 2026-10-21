@@ -26,7 +26,9 @@ fn embed_win32() {
     if dir.is_none() {
         println!("cargo:warning={WIN32_ENV} is not set: this kernel has no kernel32.dll (build with `cargo xtask`)");
     }
-    for name in ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe"] {
+    for name in
+        ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe", "ucrtbase.dll", "msvcrt.dll", "crttest.exe"]
+    {
         match &dir {
             Some(d) => {
                 let path = d.join(name);
