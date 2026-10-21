@@ -158,6 +158,17 @@ impl FileStatus {
     }
 }
 
+/// A record lock [`LinuxFs::test_lock`] found in the way: write or read,
+/// its range `[start, end)` (`end` `u64::MAX`: to the end of the file) and
+/// the owning process (-1 for an open file description's lock).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LockHolder {
+    pub write: bool,
+    pub start: u64,
+    pub end: u64,
+    pub pid: i32,
+}
+
 /// `struct statfs` (`asm-generic/statfs.h`, x86-64: every field a
 /// `long`, `f_fsid` two `int`s).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -358,6 +369,45 @@ pub trait LinuxFs {
     /// `F_GETFD` / `F_SETFD`.
     fn cloexec(&mut self, fd: i32) -> Result<bool, Errno>;
     fn set_cloexec(&mut self, fd: i32, cloexec: bool) -> Result<(), Errno>;
+    /// close_range(2): close (with `cloexec`: mark close-on-exec) the open
+    /// descriptors from `first` to `last`, both included (ADR 0059).
+    fn close_range(&mut self, _first: u32, _last: u32, _cloexec: bool) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+    /// fcntl(2) `F_GETLK` (`ofd`: `F_OFD_GETLK`): the lock of another
+    /// owner that keeps the caller from a read (`write` false) or write
+    /// lock on `[start, end)` of `fd`'s file (`end` `u64::MAX`: to the end
+    /// of the file), if any (ADR 0059).
+    fn test_lock(
+        &mut self,
+        _fd: i32,
+        _ofd: bool,
+        _write: bool,
+        _start: u64,
+        _end: u64,
+    ) -> Result<Option<LockHolder>, Errno> {
+        Err(Errno::ENOSYS)
+    }
+    /// fcntl(2) `F_SETLK` / `F_SETLKW` (`ofd`: the `F_OFD_` forms): take a
+    /// read or write lock (`Some(write)`) on the range, or unlock it
+    /// (`None`). A conflict is `EAGAIN` without `wait`; with it the call
+    /// waits, and a signal ends the wait with `RESTART_IF_SA_RESTART`.
+    fn set_lock(
+        &mut self,
+        _fd: i32,
+        _ofd: bool,
+        _write: Option<bool>,
+        _start: u64,
+        _end: u64,
+        _wait: bool,
+    ) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+    /// flock(2): a shared or exclusive lock (`Some(exclusive)`) on `fd`'s
+    /// file, or unlock (`None`); a conflict as for [`set_lock`](Self::set_lock).
+    fn flock(&mut self, _fd: i32, _exclusive: Option<bool>, _wait: bool) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
     /// `F_GETFL` / `F_SETFL` (only `O_APPEND`, `O_ASYNC`, `O_DIRECT`,
     /// `O_NOATIME`, `O_NONBLOCK` change).
     fn status_flags(&mut self, fd: i32) -> Result<u32, Errno>;

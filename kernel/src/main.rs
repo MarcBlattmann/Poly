@@ -126,6 +126,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
         );
     }
     thread::init();
+    thread::configure(&boot);
     acpi::init(boot.rsdp, &memory);
     // SAFETY: once, on the boot CPU with interrupts still off, after the
     // heap, the scheduler and the ACPI tables.

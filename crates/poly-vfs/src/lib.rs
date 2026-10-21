@@ -77,6 +77,7 @@ mod fifo;
 mod file;
 mod fs;
 pub mod lock;
+pub mod locks;
 mod mount;
 mod node;
 mod object;

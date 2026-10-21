@@ -133,6 +133,10 @@ pub struct FakeKernel {
     pub cpus: u32,
     /// Every madvise that reached the kernel (ADR 0049).
     pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
+    /// mremap calls: old, old length, new length, placement.
+    pub remapped: Vec<(u64, u64, u64, crate::kernel::Remap)>,
+    /// msync calls: address, length, sync.
+    pub synced_maps: Vec<(u64, u64, bool)>,
     /// Every mprotect that reached the kernel.
     pub protects: Vec<(u64, u64, Prot)>,
     /// Every process, by pid.
@@ -223,6 +227,8 @@ impl FakeKernel {
             ioctls: Vec::new(),
             protects: Vec::new(),
             advised: Vec::new(),
+            remapped: Vec::new(),
+            synced_maps: Vec::new(),
             on_cpu: 0,
             yields: 0,
             affinity: BTreeMap::new(),
@@ -497,6 +503,15 @@ impl LinuxKernel for FakeKernel {
     }
 
     fn write(&mut self, fd: i32, buf: &[u8]) -> Result<usize, Errno> {
+        if !self.files.contains_key(&fd)
+            && let Some(fs) = self.fs.as_mut()
+        {
+            // A descriptor of the VFS-backed file system (tests/files.rs).
+            let at = fs.lseek(fd, 0, 1)?;
+            let n = fs.pwrite(fd, buf, at)?;
+            fs.lseek(fd, n as i64, 1)?;
+            return Ok(n);
+        }
         let f = self.files.get_mut(&fd).ok_or(Errno::EBADF)?;
         if !f.writable {
             return Err(Errno::EBADF);
@@ -512,6 +527,14 @@ impl LinuxKernel for FakeKernel {
     }
 
     fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
+        if !self.files.contains_key(&fd)
+            && let Some(fs) = self.fs.as_mut()
+        {
+            let at = fs.lseek(fd, 0, 1)?;
+            let n = fs.pread(fd, buf, at)?;
+            fs.lseek(fd, n as i64, 1)?;
+            return Ok(n);
+        }
         let f = self.files.get_mut(&fd).ok_or(Errno::EBADF)?;
         if !f.readable {
             return Err(Errno::EBADF);
@@ -527,6 +550,11 @@ impl LinuxKernel for FakeKernel {
     }
 
     fn fstat(&mut self, fd: i32) -> Result<FileStat, Errno> {
+        if !self.files.contains_key(&fd)
+            && let Some(fs) = self.fs.as_mut()
+        {
+            return fs.statat(fd, b"", true).map(|s| s.stat);
+        }
         let f = self.files.get(&fd).ok_or(Errno::EBADF)?;
         let (kind, rdev) = match f.kind {
             Kind::Pipe => (mode::S_IFIFO | 0o600, 0),
@@ -619,6 +647,23 @@ impl LinuxKernel for FakeKernel {
         }
         self.unmap_range(addr, len);
         Ok(())
+    }
+
+    fn msync(&mut self, addr: u64, len: u64, sync: bool) -> Result<(), Errno> {
+        self.synced_maps.push((addr, len, sync));
+        let pages = addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE);
+        if pages.into_iter().any(|p| !self.pages.contains_key(&p)) {
+            return Err(Errno::ENOMEM);
+        }
+        Ok(())
+    }
+
+    fn mremap(&mut self, old: u64, old_len: u64, new_len: u64, to: crate::kernel::Remap) -> Result<u64, Errno> {
+        self.remapped.push((old, old_len, new_len, to));
+        Ok(match to {
+            crate::kernel::Remap::Fixed(at) => at,
+            _ => old,
+        })
     }
 
     fn madvise(&mut self, addr: u64, len: u64, advice: crate::sys::madvise::Advice) -> Result<(), Errno> {
@@ -942,6 +987,7 @@ impl LinuxKernel for FakeKernel {
             CpuTimesOf::Thread(tid) => self.procs[&self.pid].state.has_thread(tid).then_some(CpuTimes::default()),
             CpuTimesOf::Process => Some(c[1]),
             CpuTimesOf::Children => Some(c[2]),
+            CpuTimesOf::Reaped(_) => Some(c[2]),
         }
     }
 

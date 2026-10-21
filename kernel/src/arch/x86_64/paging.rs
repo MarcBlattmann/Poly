@@ -14,6 +14,7 @@
 //! | [`DIRECT_MAP_BASE`] + phys | up to 64 TiB | direct map: every region of the memory map, read-write, no-execute |
 //! | [`MMIO_BASE`] | 512 GiB | device memory from [`map_mmio`] (uncached) and [`map_mmio_wc`] (write-combining), no-execute |
 //! | [`THREAD_STACKS_BASE`] | 2 MiB | kernel thread stacks from [`map_thread_stack`], read-write, no-execute, each above unmapped guard pages |
+//! | [`INTERRUPT_STACKS_BASE`] | 2 MiB | each CPU's interrupt stack (`irqstack.rs`), mapped the same way |
 //! | [`KERNEL_VMA`] + phys | image | kernel image, per-section permissions (see `kernel/linker.ld`) |
 //!
 //! Every kernel mapping is global (CR4.PGE, when the CPU has it), so it
@@ -22,8 +23,9 @@
 //! every PML4 entry the kernel will ever use is made here, at boot, and
 //! never changes afterwards: the direct map's, the kernel image's, an empty
 //! PDPT for the MMIO window, which [`map_mmio`] fills later, and the tables
-//! of the thread stack area down to its one page table, whose entries
-//! [`map_thread_stack`] and [`unmap_thread_stack`] set and clear.
+//! of the stack areas (thread stacks, interrupt stacks) down to their page
+//! tables, one each, whose entries [`map_thread_stack`] and
+//! [`unmap_thread_stack`] set and clear.
 //!
 //! The direct map covers the regions of the memory map, not the holes between
 //! them (see [`poly_mem::DirectMap`]), so [`phys_to_virt`] answers `None` for a
@@ -97,6 +99,14 @@ pub const THREAD_STACKS_BASE: u64 = 0xffff_c080_0000_0000;
 /// Size of the thread stack area: what one page table maps, so its tables
 /// are made once at boot and the area never needs another one.
 pub const THREAD_STACKS_SIZE: u64 = (ENTRIES as u64) * PAGE_SIZE;
+
+/// Start of the interrupt stack area, right after the thread stacks and
+/// mapped the same way, by a page table of its own: each CPU's interrupt
+/// stack above an unmapped guard (ADR 0061).
+pub const INTERRUPT_STACKS_BASE: u64 = THREAD_STACKS_BASE + THREAD_STACKS_SIZE;
+
+/// Size of the interrupt stack area: one page table's worth.
+pub const INTERRUPT_STACKS_SIZE: u64 = (ENTRIES as u64) * PAGE_SIZE;
 
 /// PCD | PWT: uncached (UC): PAT entry 3, which is UC at power-on (SDM
 /// Vol. 3A §11.12.3, Table 11-11) and which [`init`] leaves alone.
@@ -406,19 +416,27 @@ pub(super) unsafe fn init_ap() {
 /// PML4 slot of the MMIO window.
 const MMIO_SLOT: usize = ((MMIO_BASE >> 39) & 0x1ff) as usize;
 
-/// Physical address of the page table that maps the thread stack area
-/// ([`THREAD_STACKS_BASE`]); 0 before [`init`].
-static STACKS_PT: AtomicU64 = AtomicU64::new(0);
+/// Physical addresses of the page tables that map the thread stack area
+/// ([`THREAD_STACKS_BASE`]) and the interrupt stack area right after it
+/// ([`INTERRUPT_STACKS_BASE`]); 0 before [`init`].
+static STACKS_PT: [AtomicU64; 2] = [const { AtomicU64::new(0) }; 2];
 
 const _: () =
     assert!(THREAD_STACKS_BASE.is_multiple_of(THREAD_STACKS_SIZE), "the stack area needs a page table of its own");
-const _: () = assert!(THREAD_STACKS_BASE >= MMIO_BASE + MMIO_SIZE && THREAD_STACKS_BASE < KERNEL_VMA);
+const _: () = assert!(THREAD_STACKS_SIZE == INTERRUPT_STACKS_SIZE, "one page table per stack area");
+const _: () = assert!(
+    (THREAD_STACKS_BASE >> 21) & 0x1ff < 0x1ff,
+    "both stack areas need to share one page directory (consecutive entries)"
+);
+const _: () = assert!(THREAD_STACKS_BASE >= MMIO_BASE + MMIO_SIZE && INTERRUPT_STACKS_BASE < KERNEL_VMA);
 
-/// The stack area's page-table entry indices for `[virt, virt + len)`, if
-/// that is whole pages inside the area and the area is set up.
+/// The page table and its entry indices for `[virt, virt + len)`, if that
+/// is whole pages inside one of the stack areas and the areas are set up.
 fn stack_pages(virt: u64, len: u64) -> Option<(u64, core::ops::Range<usize>)> {
-    let pt = STACKS_PT.load(Ordering::Acquire);
     let offset = virt.checked_sub(THREAD_STACKS_BASE)?;
+    let area = usize::try_from(offset / THREAD_STACKS_SIZE).ok().filter(|&a| a < STACKS_PT.len())?;
+    let pt = STACKS_PT[area].load(Ordering::Acquire);
+    let offset = offset % THREAD_STACKS_SIZE;
     let end = offset.checked_add(len)?;
     let whole = offset.is_multiple_of(PAGE_SIZE) && len.is_multiple_of(PAGE_SIZE);
     (pt != 0 && whole && end <= THREAD_STACKS_SIZE)
@@ -426,13 +444,15 @@ fn stack_pages(virt: u64, len: u64) -> Option<(u64, core::ops::Range<usize>)> {
 }
 
 /// Map the `len` bytes of physical memory at `phys` (whole frames, which
-/// must be RAM) at `virt` in the thread stack area: read-write, no-execute.
+/// must be RAM) at `virt` in the thread or interrupt stack area:
+/// read-write, no-execute.
 ///
 /// # Safety
 /// The pages at `[virt, virt + len)` must be unmapped and owned by the
 /// caller: no other code maps or unmaps them meanwhile (`thread` gives each
-/// thread slot its own part of the area, under its scheduler lock). The
-/// frames must stay allocated until [`unmap_thread_stack`].
+/// thread slot its own part of the area, under its scheduler lock; each
+/// CPU's interrupt stack is mapped once, before the CPU takes interrupts).
+/// The frames must stay allocated until [`unmap_thread_stack`].
 pub unsafe fn map_thread_stack(virt: u64, phys: u64, len: u64) {
     let (pt, pages) = stack_pages(virt, len).expect("thread stack outside the stack area");
     assert!(phys.is_multiple_of(PAGE_SIZE), "thread stack frames not page-aligned");
@@ -542,6 +562,7 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     let stacks_pdpt = link(root, index(3));
     let stacks_pd = link(stacks_pdpt, index(2));
     let stacks_pt = link(stacks_pd, index(1));
+    let interrupt_stacks_pt = link(stacks_pd, index(1) + 1);
 
     let mapped: u64 = direct.spans().iter().map(Region::len).sum();
     let (spans, end) = (direct.spans().len(), direct.end());
@@ -554,7 +575,8 @@ pub unsafe fn init(memory: &MemoryMap) -> MemoryMap {
     // map exactly `direct` at DIRECT_MAP_BASE.
     unsafe { DIRECT_MAP.activate(direct) };
     KERNEL_ROOT.store(tables.root(), Ordering::Release);
-    STACKS_PT.store(stacks_pt, Ordering::Release);
+    STACKS_PT[0].store(stacks_pt, Ordering::Release);
+    STACKS_PT[1].store(interrupt_stacks_pt, Ordering::Release);
     if features.pge {
         // SAFETY: CPUID says the CPU has global pages; enabling them changes
         // no translation.
@@ -785,9 +807,12 @@ crate::kernel_test! {
             Ok(_) => return Err("a buffer on a thread stack got the wrong bus address"),
             Err(_) => return Err("join failed"),
         }
-        // Joined, so reaped: the stack is unmapped and its frames are free.
+        // Joined: the stack is unmapped once the thread's last CPU has saved
+        // it and reaped it (ADR 0053), which on several CPUs can come a
+        // little after the join returns.
         let stack = crate::thread::STACKS.stack(slot).ok_or("no stack slot")?;
-        if stack.step_by(PAGE_SIZE as usize).any(|page| translate(page).is_ok()) {
+        let mapped = || stack.clone().step_by(PAGE_SIZE as usize).any(|page| translate(page).is_ok());
+        if !crate::thread::wait_until(5, || !mapped()) {
             return Err("a reaped thread's stack is still mapped");
         }
         Ok(())

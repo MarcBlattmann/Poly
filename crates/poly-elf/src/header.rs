@@ -219,6 +219,19 @@ pub struct Elf<'a> {
 impl<'a> Elf<'a> {
     /// Validates `data`, the whole executable file.
     pub fn parse(data: &'a [u8]) -> Result<Elf<'a>, Error> {
+        Elf::parse_prefix(data, data.len() as u64)
+    }
+
+    /// Validates an executable file of `file_len` bytes from `head`, its
+    /// first bytes: the header, the program header table and the
+    /// `PT_INTERP` path must lie in `head` ([`Error::Truncated`] if not:
+    /// read more), the `PT_LOAD` segments' contents only inside the file.
+    /// What a loader needs, without reading the whole file;
+    /// [`data`](Self::data) is then `head`.
+    pub fn parse_prefix(data: &'a [u8], file_len: u64) -> Result<Elf<'a>, Error> {
+        if data.len() as u64 > file_len {
+            return Err(Error::Truncated);
+        }
         if data.get(..4) != Some(b"\x7fELF") {
             return Err(Error::NotElf);
         }
@@ -292,7 +305,7 @@ impl<'a> Elf<'a> {
         for ph in elf.program_headers() {
             match ph.p_type {
                 PT_LOAD => {
-                    check_load(data, &ph, prev_load.as_ref())?;
+                    check_load(file_len, &ph, prev_load.as_ref())?;
                     elf.load_count += 1;
                     if elf.load_count > MAX_LOAD_SEGMENTS {
                         return Err(Error::TooManyLoadSegments);
@@ -483,7 +496,7 @@ const fn valid_align(align: u64) -> bool {
 }
 
 /// Validates one `PT_LOAD` segment against the file and the previous one.
-fn check_load(data: &[u8], ph: &ProgramHeader, prev: Option<&ProgramHeader>) -> Result<(), Error> {
+fn check_load(file_len: u64, ph: &ProgramHeader, prev: Option<&ProgramHeader>) -> Result<(), Error> {
     if ph.filesz > ph.memsz {
         return Err(Error::FileSizeExceedsMemSize);
     }
@@ -496,7 +509,7 @@ fn check_load(data: &[u8], ph: &ProgramHeader, prev: Option<&ProgramHeader>) -> 
         return Err(Error::MisalignedSegment);
     }
     let file_end = ph.offset.checked_add(ph.filesz).ok_or(Error::AddressOverflow)?;
-    if file_end > data.len() as u64 {
+    if file_end > file_len {
         return Err(Error::Truncated);
     }
     // The end must leave room for rounding up to a page.

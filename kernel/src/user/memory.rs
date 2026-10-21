@@ -77,6 +77,7 @@ use poly_vm::{FaultAction, PageState, VmMap};
 mod advice;
 mod fork;
 mod futex;
+mod remap;
 mod shared;
 
 pub use advice::Advice;

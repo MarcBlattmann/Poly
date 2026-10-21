@@ -1007,6 +1007,17 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   the kernel's part is `net::LinuxNet` (`LinuxKernel::net`,
   `kernel/src/linux/net.rs`). `NETLINK_ROUTE` replies are built by
   `net::netlink`.
+- **What userland programs needed**
+  ([ADR 0059](adr/0059-bash-coreutils-python-gcc-from-the-persistent-disk.md)):
+  `mremap` and `msync` (`sys/mem.rs`, `LinuxKernel::mremap` / `msync`),
+  fcntl's `F_GETLK` / `F_SETLK` / `F_SETLKW` / `F_OFD_*` and `flock`
+  (`sys/fd.rs`; the range decoded from `struct flock`, the locks kept by
+  the kernel through `LinuxFs::test_lock`, `set_lock`, `flock`),
+  `close_range`, `copy_file_range` (`sys/sendfile.rs`), `fadvise64`
+  (`sys/fadvise.rs`), the twelve `*xattr` calls (`sys/xattr.rs`,
+  `EOPNOTSUPP` for files that exist), the reaped child's CPU time in
+  `wait4` / `waitid` (`CpuTimesOf::Reaped`); `read` of a regular file or a
+  memory device returns all that was asked.
 - **Pipes, waits and event files**
   ([ADR 0042](adr/0042-readiness-pipes-poll-epoll-and-event-files.md)):
   `pipe`, `pipe2`, `poll`, `ppoll`, `select`, `pselect6`, `epoll_create`,
@@ -1133,6 +1144,35 @@ Signals to init that it blocks or waits for stay pending (kill(2)'s
 "only signals it has handlers for" applies to the others), which is how
 BusyBox's init receives them.
 
+## The persistent root disk: bash, coreutils, Python, gcc
+
+[ADR 0059](adr/0059-bash-coreutils-python-gcc-from-the-persistent-disk.md).
+`cargo xtask root-disk` writes `target/poly-root-disk.img`, an ext4 volume
+holding the host's own bash, GNU coreutils, grep, sed, Python 3 with its
+standard library and gcc with `cc1`, `as`, `ld`, the start files and the
+headers a C program includes, plus every shared object they need
+(`tools/xtask/src/rootdisk.rs`; nothing of it is committed). `cargo xtask
+run --disk-root` boots it:
+
+```text
+ initramfs (BusyBox, initramfs::disk_root_image)        /dev/vda: the root disk (ext4, page cache)
+ /sbin/init ── rcS ── /etc/init.d/rootdisk: mount -t ext4 /dev/vda /mnt/root,
+   │                   bind /dev /dev/pts /dev/shm /proc /sys /tmp into it
+   └─ respawn: cttyhack chroot /mnt/root /bin/bash -l      (the disk's /etc/profile, PS1 root@poly:~#)
+        └─ bash: coreutils, python3, gcc ...; poweroff = kill -USR2 1 (/usr/local/sbin/poweroff)
+```
+
+The image is kept between interactive runs (`--fresh-disk` makes it
+again), so what a session writes is there the next time. What the
+programs needed from the kernel (ADR 0059): `mremap` (`VmMap::remap` in
+`poly-vm`, pages moved by `user/memory/remap.rs`), `msync`, fcntl record
+and open file description locks and flock (`poly_vfs::locks`, one table
+in `fs/locks.rs` released by `fs::Files`' close paths), `close_range`,
+`copy_file_range`, `fadvise64`, the `*xattr` calls (`EOPNOTSUPP`),
+children's CPU time for `wait4` and `getrusage`, whole reads of regular
+files and memory devices, exec parsing only the ELF headers
+(`Elf::parse_prefix`), and `/proc` paths seen from the reader's root.
+
 ## Time, timers and the vDSO
 
 [ADR 0044](adr/0044-time-syscalls-timers-and-the-vdso.md). The personality
@@ -1239,6 +1279,7 @@ services once it decodes those system calls.
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
+| The persistent root disk (made by `cargo xtask` from the host's programs, ext4, booted through BusyBox's init and a chroot into its bash): coreutils pipelines under `bash -c`, job control and Ctrl-C, file work on the disk, 32 MiB through `dd`; Python scripts (stdlib modules, `subprocess`, threads, `mmap` resized and flushed, a growing buffer through `mremap`, record locks and flock across processes, SQLite, signals, the terminal's size, children's CPU time, `posix_spawn`); gcc compiling and linking programs onto the disk and running them; `e2fsck -fn` and the program read back on the host; a second boot finds what the first wrote. Lock table and remap kernel tests | `tools/xtask/src/rootdisk.rs`, `kernel_test!` in `fs/locks.rs`, `user/memory/remap.rs` | `cargo xtask test` (alone: `cargo xtask root-disk-test`) |
 | Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff [--target poly]`; in `cargo xtask ci`: Linux against Linux (`selfcheck`) and Poly against Linux for the tests in `tests/linux/poly-pass.txt` (`polycheck`) |
 | App trace replay | recorded sessions | later |
 
@@ -1256,6 +1297,8 @@ mapping early in `kernel_entry`:
 | `0x0` – `0x7fff_ffff_ffff` | – | user half: empty in the kernel PML4 (the boot identity map is gone); each user address space has its own (below) |
 | `0xffff_8000_0000_0000` + phys | every region of the memory map, up to 64 TiB | direct map: RW, NX; RAM write-back, reserved ranges uncached; holes unmapped |
 | `0xffff_c000_0000_0000` – `+512 GiB` | device ranges | `mm::map_mmio`: uncached (PCD+PWT), NX, a gap page after each; PCI ECAM windows and BARs. `mm::map_mmio_wc`: write-combining (PWT alone, PAT entry 1), for the framebuffer |
+| `0xffff_c080_0000_0000` – `+2 MiB` | each thread's stack (buddy block) | thread stacks: slot `i` (32 KiB) holds table slot `i`'s 16 KiB stack above a 16 KiB unmapped guard; RW, NX |
+| `0xffff_c080_0020_0000` – `+2 MiB` | each CPU's interrupt stack | interrupt stacks: CPU `i`'s 16 KiB stack at the top of slot `i` (32 KiB), above an unmapped guard; RW, NX (ADR 0061) |
 | `0xffff_ffff_8000_0000` + phys | kernel image | `.text` R+X, `.rodata`/`.kernel_tests` R, `.data`/`.bss` RW+NX, stacks RW+NX |
 
 Kernel image detail (`kernel/linker.ld`, every boundary page-aligned):
@@ -1368,6 +1411,20 @@ wires them up ([ADR 0016](adr/0016-interrupt-dispatch-tick-and-kernel-locks.md))
   for IPIs, 0xfe APIC error, 0xff APIC spurious (never an
   EOI). Every vector has an interrupt-gate stub in `idt.rs` pushing the same
   `TrapFrame`; `arch::irq::dispatch` handles 32-255.
+- **Interrupt stacks** ([ADR 0061](adr/0061-per-cpu-interrupt-stacks.md),
+  `arch/x86_64/irqstack.rs`): each CPU has a 16 KiB interrupt stack above a
+  16 KiB unmapped guard, in its own area after the thread stacks
+  (`paging::INTERRUPT_STACKS_BASE`), its top at `gs:[24]`. Vectors 32-255
+  enter through `irq_common`: the trap frame stays where the CPU pushed it
+  (the thread's stack), the handler runs on the interrupt stack
+  (`irq_entry`), and the way out runs back on the thread's stack
+  (`irq_exit` → `irq::run_deferred`): the tick's preemption and the
+  reschedule IPI's switch, which the handlers only note, then signals on
+  a return to ring 3. An interrupt thus takes at most
+  `thread::INTERRUPT_STACK_BUDGET` (1 KiB) of the interrupted thread's
+  stack. Exceptions stay on the interrupted stack (a page fault may
+  block). `irqstack::run_on(f)` runs `f` on the interrupt stack with
+  interrupts off; the scheduler's reaping uses it.
 - **Drivers:** `arch::irq::allocate_vector(handler, data)` claims a device
   vector (lock-free; `free_vector` releases it); the handler runs as
   `handler(data)` with interrupts off, before the EOI. Point a device at the
@@ -1430,8 +1487,9 @@ smp: 4 of 4 CPUs online (0-3)
   and left out.
 - **Per-CPU data** (`arch/x86_64/percpu.rs`): one `PerCpu` per CPU, its
   address in GS base in the kernel: at fixed offsets the `syscall` kernel
-  stack (`gs:[0]`), a user-RSP scratch slot (`gs:[8]`) and a pointer to
-  itself (`gs:[16]`); then the CPU number and APIC ID, the current thread,
+  stack (`gs:[0]`), a user-RSP scratch slot (`gs:[8]`), a pointer to
+  itself (`gs:[16]`) and the top of its interrupt stack (`gs:[24]`); then
+  the work an interrupt left for its way out, the CPU number and APIC ID, the current thread,
   the spinlock count, interrupt nesting, the tick count, the FPU owner, the
   loaded address space and its PCID table, the CPU's TSS. `percpu::this()`
   reads it. Entries from ring 3 `swapgs`; NMI, double fault and machine
@@ -1538,9 +1596,11 @@ every CPU, round robin per CPU, preempted by each CPU's timer. See
 - **Exit.** An exiting thread is still on its stack, so the next thread
   frees it (`finish_switch` after every switch). The table slot is freed
   once the thread is also joined or detached. Its user state is dropped
-  there too, in whatever thread switched (maybe inside the tick's
-  handler, maybe holding sleeping locks): drop code that would sleep or
-  take a lock that does not mask interrupts checks `thread::reaping()`
+  there too, in whatever thread switched (maybe on the way out of the
+  tick, maybe holding sleeping locks), but on the CPU's interrupt stack
+  (`irqstack::run_on`), not the stack of the thread switched to: drop
+  code that would sleep or take a lock that does not mask interrupts
+  checks `thread::reaping()`
   and defers that part (a `user::Memory` hands its files and page-cache
   pages to the writeback thread, `fs::cache::release_later`).
 - **Interrupts and locking.** All scheduler state for all CPUs is behind
@@ -1554,14 +1614,22 @@ every CPU, round robin per CPU, preempted by each CPU's timer. See
   returns into it; new threads start with interrupts enabled. `switch`
   panics if the thread holds a spinlock or is inside an interrupt handler.
 - **Preemption.** Each CPU's tick handler counts the tick, sends the EOI
-  and calls `thread::on_timer_tick()`: it wakes sleepers whose deadline
-  has passed (the earliest deadline is kept in an atomic, so most ticks do
-  nothing there; a CPU claims a due deadline with a compare-and-exchange,
-  so one CPU wakes it) and calls `preempt_tick()`, which switches once the
-  CPU's running thread has used its 10-tick slice and the CPU has another
-  to run, its own or one it takes from a busier CPU. This runs on the
-  interrupted thread's own stack (no IST), since the handler's frames stay
-  there while the thread is switched out.
+  and calls `thread::on_timer_tick()`, on the interrupt stack: it wakes
+  sleepers whose deadline has passed (the earliest deadline is kept in an
+  atomic, so most ticks do nothing there; a CPU claims a due deadline with
+  a compare-and-exchange, so one CPU wakes it). The way out of the
+  interrupt then calls `preempt_tick()` on the interrupted thread's own
+  stack (the trap frame stays there while the thread is switched out),
+  which switches once the CPU's running thread has used its 10-tick slice
+  and the CPU has another to run, its own or one it takes from a busier
+  CPU (ADR 0061).
+- **Stack depth.** Thread and interrupt stacks are painted when allocated
+  (`poly_mem::STACK_PAINT`), so `mm::stack_used` tells how deep one was
+  ever used; the reaper records the deepest thread stack.
+  `poly.debug.stack_report` prints it and each interrupt stack's at the
+  end of a test run, and `poly.debug.thread_stack_kib=<n>` maps only the
+  top `n` KiB of each thread stack, so deep paths overflow sooner (see
+  DEBUGGING.md).
 
 ## User mode and system calls
 
@@ -1720,10 +1788,18 @@ logic `poly-elf` ([ADR 0024](adr/0024-elf-loader.md)).
   the caller's `open_interp` (the VFS for `program.rs` and `execve`):
   reserved in free space for its footprint, mapped there, `AT_BASE` set to
   its bias, the thread started at its entry (ADR 0049); `exec::load` has
-  no opener and refuses such programs.
+  no opener and refuses such programs. A file not in memory is parsed
+  from its first bytes only (`Elf::parse_prefix`: a page, more if the
+  headers lie further in); its segments are mapped, never read (ADR 0059).
 - **Advice.** `Memory::advise` (madvise(2), `user/memory/advice.rs`) drops
   the pages of a range like an unmap does but keeps the regions, so the
   next access finds zeros or the file's (or shared object's) contents.
+- **Remapping.** `Memory::remap` (mremap(2), `user/memory/remap.rs`, ADR
+  0059): `VmMap::remap` decides (shrink, grow in place, move to a hole or
+  to a fixed address) and the pages move without copies: own frames are
+  re-mapped at the new address with their rights, parked and shared
+  frames are filed under it, page-cache pages are let go and fault in
+  again.
 
 | User virtual (after exec) | What |
 |---|---|

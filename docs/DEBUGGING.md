@@ -511,6 +511,47 @@ kernel stack overflow in thread overflow (slot 8): hit the guard below its stack
 `poly.selftest.stack_overflow` and `poly.selftest.thread_stack_overflow`
 provoke the two on purpose (the boot tests do).
 
+Interrupt handlers run on their CPU's own interrupt stack (16 KiB at
+`0xffff_c080_0020_0000` + 32 KiB per CPU, ADR 0061), so an overflow there
+reads `kernel stack overflow on CPU <n>'s interrupt stack`, and a backtrace
+taken in a handler goes on from the interrupt stack into the interrupted
+thread's stack (`irq_common+0x..` marks the step). An interrupt costs the
+interrupted thread only its trap frame and the way out (at most 1 KiB,
+`thread::INTERRUPT_STACK_BUDGET`): a thread-stack overflow with an
+interrupt on top is a system call path that is too deep by itself.
+
+### How deep do the stacks go?
+
+Every thread and interrupt stack is painted when it is allocated, so how
+deep it was ever used can be read off it. Two kernel flags help:
+
+- `poly.debug.stack_report` prints, as a test run ends (`poly.qemu_exit`,
+  also after a panic), the deepest thread stack use so far and each
+  interrupt stack's:
+
+  ```text
+  stacks: deepest thread stack use 12480 of 16384 bytes (thread 'user', started in 0xffffffff802ac2c0)
+  stacks: CPU 0's interrupt stack: deepest use 1344 of 16384 bytes
+  stacks: interrupts nested on an interrupt stack: 0
+  ```
+
+  The address is the thread's function: `cargo xtask symbolize <addr>`
+  names it.
+
+- `poly.debug.thread_stack_kib=<n>` maps only the top `n` KiB of every
+  thread stack (the rest becomes guard), so a path that goes deeper than
+  that overflows with a full backtrace of its deepest point instead of
+  passing silently. Bisect `n` to find the deepest path of a boot.
+
+To catch a rare overflow, boot the failing configuration many times in
+parallel next to a few busy loops (see "In-kernel tests" above): a tick
+that lands in the few microseconds a system call is at its deepest is what
+makes it rare. For a frame that is too large, `objdump -d` the function and
+look at the `sub $0x...,%rsp` (and the stack probe, `movq $0x0,(%rsp)`,
+for frames over a page) in its prologue; large values passed or built by
+value (`[u8; 4096]` buffers, big structs moved around at `opt-level = 1`)
+are the usual cause.
+
 Symbols come from the ELF that was built last, so symbolise before you rebuild.
 For file and line numbers, use `addr2line -f -C -i -e
 kernel/target/x86_64-unknown-none/debug/poly-kernel <addr>` (for frames after
@@ -1171,6 +1212,64 @@ and waits for each prompt (90 s per step); when a step fails it names the
 step and the output, and writes the whole session (escape sequences
 removed) to `target/poly-busybox-boot.log`. It is skipped with the reason
 when no BusyBox could be found or built.
+
+## The root disk: bash, coreutils, Python, gcc
+
+The host's bash, coreutils, grep, sed, Python 3 and gcc on an ext4 disk,
+booted through BusyBox's init and a chroot (ADR 0059):
+
+```sh
+cargo xtask root-disk                    # write target/poly-root-disk.img afresh (prints its path)
+cargo xtask run --disk-root              # boot it: bash on the serial console (the image is kept)
+cargo xtask run --disk-root --fresh-disk # make the image again first
+cargo xtask root-disk-test               # the boot test alone (its own image, poly-root-disk-test.img)
+```
+
+The image is made from the host's files (nothing is run on the host to
+find them); a program the host lacks is left out with a `note:` line and
+the boot test skips the steps that need it. The boot shows `rootdisk:
+/dev/vda mounted on /mnt/root` and the disk's bash prompt `root@poly:~# `.
+Inside, `poweroff` and `reboot` are scripts in `/usr/local/sbin` that
+signal init (pid 1, outside the chroot); Ctrl-A X always works. Mounts in
+`/proc/mounts` show the system's paths (`/mnt/root`, ...), not the
+chroot's. Without e2fsprogs (or with `POLY_ROOTDISK_FORMAT=poly-ext2`) the
+image is written by `poly-ext2` instead of `mke2fs -d`.
+
+After a boot the image can be read on the host: `debugfs -R 'ls -l /root'
+target/poly-root-disk.img`, `e2fsck -fn target/poly-root-disk.img` (the
+image must have been unmounted: `poweroff`, not Ctrl-A X).
+
+**The boot test** types one command line per step into the disk's bash
+and compares the output exactly; it reports every failing step at the end
+(`==> FAILED: <step>: <output>` as it goes) and writes the session to
+`target/poly-rootdisk-boot.log` (`poly-rootdisk-boot2.log` for the second
+boot). Two switches help with one program:
+
+```sh
+POLY_ROOTDISK_STEPS=poly-test-sys cargo xtask root-disk-test   # only steps whose name has this text
+POLY_ROOTDISK_APPEND=poly.strace=python3 cargo xtask root-disk-test   # more kernel arguments
+```
+
+`strace:` lines (and the kernel's `syscall:`, `fs:` and `linux:` lines) are
+taken out of each step's output, so a traced run still checks it; the
+trace is in the log. Any `not implemented` line but `rseq` fails the test.
+What earlier failures looked like, and where to look:
+
+- `bash: /usr/bin/python3: Cannot allocate memory` or gcc's `cannot execute
+  '.../cc1': execv: Cannot allocate memory`: exec could not get kernel
+  memory for the file (it reads only the ELF headers now,
+  `Elf::parse_prefix`); `ENOMEM` from `mmap` with plenty of RAM free is a
+  region map limit (`VmMap::remap`, `place`).
+- `OSError: [Errno 38] Function not implemented` from Python: a call
+  without a handler; the `syscall: ... not implemented` line names it.
+- A program that hangs in a lock: `F_SETLKW` and blocking `flock` wait for
+  `fs::locks::generation()` to move; locks go on every close of a
+  descriptor of the file by the owning process and when a description is
+  released (`fs::locks::closed`). A lock that never goes usually means a
+  descriptor is still open somewhere (a child that inherited it).
+- `dd` or a reader that sees short reads of a regular file or
+  `/dev/zero`: reads of those return all that was asked
+  (`sys::io::read_into`); pipes and terminals give what is there.
 
 ## Time, timers and the vDSO
 

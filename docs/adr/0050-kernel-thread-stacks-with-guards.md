@@ -1,7 +1,10 @@
 # 0050: Kernel thread stacks in a stack area of their own, above unmapped guards
 
 **Status:** Accepted. Amends [0010](0010-kernel-address-space.md) (a new
-region in the kernel address space; thread stacks get guards too).
+region in the kernel address space; thread stacks get guards too). Amended
+by [0061](0061-per-cpu-interrupt-stacks.md): a second 2 MiB area right
+after this one holds each CPU's interrupt stack, and stacks are painted to
+measure their depth.
 
 ## Context
 

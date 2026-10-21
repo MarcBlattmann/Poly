@@ -12,8 +12,9 @@ use crate::fs;
 use crate::process;
 use alloc::vec::Vec;
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::fs::{DirEntry, FileStatus, LinuxFs, StatFs, TimeChange};
+use poly_personality_linux::fs::{DirEntry, FileStatus, LinuxFs, LockHolder, StatFs, TimeChange};
 use poly_personality_linux::kernel::Target;
+use poly_vfs::locks::{LockKind, LockOwner};
 use poly_vfs::{Access, OpenFlags, RenameFlags, Whence};
 
 fn statfs(s: poly_vfs::FsStats) -> StatFs {
@@ -127,6 +128,69 @@ impl LinuxFs for Thread<'_> {
 
     fn set_cloexec(&mut self, fd: i32, cloexec: bool) -> Result<(), Errno> {
         self.process().files.set_cloexec(fd, cloexec).map_err(vfs_errno)
+    }
+
+    fn close_range(&mut self, first: u32, last: u32, cloexec: bool) -> Result<(), Errno> {
+        self.process().files.close_range(first, last, cloexec);
+        Ok(())
+    }
+
+    fn test_lock(
+        &mut self,
+        fd: i32,
+        ofd: bool,
+        write: bool,
+        start: u64,
+        end: u64,
+    ) -> Result<Option<LockHolder>, Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        let owner = self.lock_owner(&file, ofd);
+        let kind = if write { LockKind::Write } else { LockKind::Read };
+        Ok(fs::locks::test(owner, &file, kind, start, end).map(|l| LockHolder {
+            write: l.kind == LockKind::Write,
+            start: l.start,
+            end: l.end,
+            pid: l.pid,
+        }))
+    }
+
+    fn set_lock(
+        &mut self,
+        fd: i32,
+        ofd: bool,
+        write: Option<bool>,
+        start: u64,
+        end: u64,
+        wait: bool,
+    ) -> Result<(), Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        let owner = self.lock_owner(&file, ofd);
+        let pid = if ofd { -1 } else { self.process().pid as i32 };
+        let kind = write.map(|w| if w { LockKind::Write } else { LockKind::Read });
+        loop {
+            let generation = fs::locks::generation();
+            if fs::locks::set(owner, pid, &file, kind, start, end).is_ok() {
+                return Ok(());
+            }
+            if !wait {
+                return Err(Errno::EAGAIN);
+            }
+            self.wait_for_locks(generation)?;
+        }
+    }
+
+    fn flock(&mut self, fd: i32, exclusive: Option<bool>, wait: bool) -> Result<(), Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        loop {
+            let generation = fs::locks::generation();
+            if fs::locks::flock(&file, exclusive).is_ok() {
+                return Ok(());
+            }
+            if !wait {
+                return Err(Errno::EAGAIN);
+            }
+            self.wait_for_locks(generation)?;
+        }
     }
 
     fn status_flags(&mut self, fd: i32) -> Result<u32, Errno> {
@@ -243,6 +307,27 @@ impl LinuxFs for Thread<'_> {
             }
         }
         Ok(())
+    }
+}
+
+impl Thread<'_> {
+    /// Who owns a lock this thread takes on `file`: its process (the
+    /// descriptor table's id), or the open file description (`ofd`).
+    fn lock_owner(&self, file: &alloc::sync::Arc<poly_vfs::OpenFile>, ofd: bool) -> LockOwner {
+        if ofd { fs::locks::description(file) } else { LockOwner::Process(self.process().files.lock_owner()) }
+    }
+
+    /// Wait until a lock goes (the lock generation moves from
+    /// `generation`), or a signal, a kill or the process's exit ends the
+    /// wait: `RESTART_IF_SA_RESTART` (signal(7): file lock waits are
+    /// restarted under `SA_RESTART`).
+    fn wait_for_locks(&self, generation: u64) -> Result<(), Errno> {
+        use core::sync::atomic::Ordering;
+        let (flags, process) = (&self.flags, self.process());
+        let interrupted =
+            || flags.notified.load(Ordering::SeqCst) || flags.killed.load(Ordering::SeqCst) || process.is_exiting();
+        process::wait_event(|| fs::locks::generation() != generation || interrupted());
+        if fs::locks::generation() != generation { Ok(()) } else { Err(Errno::RESTART_IF_SA_RESTART) }
     }
 }
 

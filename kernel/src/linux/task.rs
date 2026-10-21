@@ -53,7 +53,7 @@ use poly_abi::Personality;
 use poly_personality_linux::abi::SigAction;
 use poly_personality_linux::abi::signal::{NSIG, SIG_DFL, SIG_IGN, SIGSEGV};
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::kernel::{LinuxKernel, Wakeup};
+use poly_personality_linux::kernel::{CpuTimes, LinuxKernel, Wakeup};
 use poly_personality_linux::ns::pid as pid_ns;
 use poly_personality_linux::ns::user::UserNsRef;
 use poly_personality_linux::ns::{self, UtsNames};
@@ -101,6 +101,24 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
             let mut zombies = ZOMBIES.lock();
             reaped.iter().filter_map(|&pid| zombies.remove(&(pid as u32))).collect()
         };
+        // A child the running process waited for: what it used (and its
+        // own waited-for children) counts as the waiter's children's time
+        // (getrusage(2) `RUSAGE_CHILDREN`) and is wait4(2)'s `rusage`. A
+        // process reaped as it ends (its parent ignores SIGCHLD) was not
+        // waited for.
+        if let Some(waiter) = user::current_process() {
+            for p in gone.iter().filter(|p| p.pid != waiter.pid) {
+                let (own, children) = (crate::cputime::process(p), p.cpu.children());
+                let t =
+                    CpuTimes { user_ns: own.user_ns + children.user_ns, system_ns: own.system_ns + children.system_ns };
+                waiter.cpu.add_child(t);
+                let mut reaped = REAPED_TIMES.lock();
+                while reaped.len() >= MAX_REAPED_TIMES {
+                    reaped.pop_first();
+                }
+                reaped.insert(p.pid, t);
+            }
+        }
         // A reaped process's numbers in its pid namespaces are free again
         // (ADR 0054).
         for p in &gone {
@@ -114,6 +132,18 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
         release_mount_namespaces();
     }
     r
+}
+
+/// What children that were just waited for used, by pid, until the
+/// waiter's wait4(2) reads it ([`reaped_times`]); at most
+/// [`MAX_REAPED_TIMES`], the oldest pids go first.
+static REAPED_TIMES: SpinLock<BTreeMap<u32, CpuTimes>> = SpinLock::new(BTreeMap::new());
+const MAX_REAPED_TIMES: usize = 64;
+
+/// `LinuxKernel::cpu_times(CpuTimesOf::Reaped(pid))`: what the child
+/// `pid` the caller just waited for used, once.
+pub fn reaped_times(pid: u32) -> Option<CpuTimes> {
+    REAPED_TIMES.lock().remove(&pid)
 }
 
 /// Mount namespaces whose last process left them, to be dropped where no
@@ -234,79 +264,92 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
     let clear_child_tid = req.clear_child_tid.unwrap_or_default();
     // Ids are stored as each side sees them (ADR 0054).
     let own_ns = k.linux.with(|p| p.ns.pid.clone());
+    // Each kind of child in a frame of its own: the process's needs a
+    // few KiB of large values (its memory map, its personality state),
+    // which a thread's clone, deep in a thread stack, need not pay for.
     let tid = if req.thread() {
-        let tid = process::alloc_pid();
-        pid_ns::attach(&own_ns, tid as i32, false)?;
-        k.linux.with(|p| {
-            p.add_thread(k.tid as i32, tid as i32, req.drops_altstack());
-            p.thread_mut(tid as i32).clear_child_tid = clear_child_tid;
-        });
-        let seen = pid_ns::local_or_zero(&own_ns, tid as i32);
-        store_tids(k, req, seen, seen, None);
-        let done = req.vfork_wait().then(|| vfork_register(tid));
-        let started = user::spawn_child(process, memory, &regs, &fpu, fs_base, gs_base, hook, Some(tid));
-        if started.is_err() {
-            k.linux.remove_thread(k.process.pid, tid);
-            VFORKS.lock().remove(&tid);
-            return Err(Errno::EAGAIN);
-        }
-        start(started, done, k)?;
-        tid
-    } else {
-        let names = if req.flags & CLONE_NEWUTS != 0 { initial_names(k) } else { UtsNames::default() };
-        let pid = process::alloc_pid();
-        let files = k.process.files.fork();
-        let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
-        // The namespaces clone(2) asks for (the checks are done): made for
-        // the child, its mount namespace a copy for its own files.
-        let new = req.flags & ns::NEW_NAMESPACES;
-        if new != 0 {
-            let (mut n, mut c) = linux.with(|p| (p.ns.clone(), p.thread(pid as i32).creds.clone()));
-            ns::make(&mut n, &mut c, new, true, names, &mut |owner| copy_mounts(&files, owner))?;
-            linux.with(|p| {
-                p.ns = n;
-                p.thread_mut(pid as i32).creds = c;
+        out_of_line(move || -> Result<u32, Errno> {
+            let tid = process::alloc_pid();
+            pid_ns::attach(&own_ns, tid as i32, false)?;
+            k.linux.with(|p| {
+                p.add_thread(k.tid as i32, tid as i32, req.drops_altstack());
+                p.thread_mut(tid as i32).clear_child_tid = clear_child_tid;
             });
-        }
-        let child_ns = linux.with(|p| p.ns.pid.clone());
-        pid_ns::attach(&child_ns, pid as i32, true)?;
-        let memory = if req.shares_memory() {
-            memory
-        } else {
-            match memory.fork() {
-                Ok(m) => Arc::new(m),
-                Err(_) => {
-                    pid_ns::detach(&child_ns, pid as i32);
-                    return Err(Errno::ENOMEM);
-                }
+            let seen = pid_ns::local_or_zero(&own_ns, tid as i32);
+            store_tids(k, req, seen, seen, None);
+            let done = req.vfork_wait().then(|| vfork_register(tid));
+            let started = user::spawn_child(process, memory, &regs, &fpu, fs_base, gs_base, hook, Some(tid));
+            if started.is_err() {
+                k.linux.remove_thread(k.process.pid, tid);
+                VFORKS.lock().remove(&tid);
+                return Err(Errno::EAGAIN);
             }
-        };
-        crate::fs::proc::record_fork(k.process.pid, pid, &memory);
-        linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
-        let child = Process::new_linux_child(pid, k.process.pid, k.process.format, k.process.traced, files, linux);
-        let me = k.process.pid as i32;
-        let uid = k.credentials().uid;
-        let reaper = pid_ns::reaper_of_new(&child_ns, pid as i32);
-        with_tree(|t| {
-            let parent = if req.sibling() { t.parent(me).unwrap_or(0) } else { me };
-            t.insert_child(me, parent, pid as i32, req.exit_signal, uid);
-            t.set_reaper(pid as i32, reaper);
-        });
-        let (parent_sees, child_sees) =
-            (pid_ns::local_or_zero(&own_ns, pid as i32), pid_ns::local_or_zero(&child_ns, pid as i32));
-        store_tids(k, req, parent_sees, child_sees, (!req.shares_memory()).then_some(&memory));
-        let done = req.vfork_wait().then(|| vfork_register(pid));
-        let started = user::spawn_child(Arc::new(child), memory, &regs, &fpu, fs_base, gs_base, hook, None);
-        if started.is_err() {
-            with_tree(|t| t.remove(pid as i32));
-            pid_ns::detach(&child_ns, pid as i32);
-            VFORKS.lock().remove(&pid);
-            return Err(Errno::EAGAIN);
-        }
-        start(started, done, k)?;
-        pid
+            start(started, done, k)?;
+            Ok(tid)
+        })?
+    } else {
+        out_of_line(move || -> Result<u32, Errno> {
+            let names = if req.flags & CLONE_NEWUTS != 0 { initial_names(k) } else { UtsNames::default() };
+            let pid = process::alloc_pid();
+            let files = k.process.files.fork();
+            let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
+            // The namespaces clone(2) asks for (the checks are done): made for
+            // the child, its mount namespace a copy for its own files.
+            let new = req.flags & ns::NEW_NAMESPACES;
+            if new != 0 {
+                let (mut n, mut c) = linux.with(|p| (p.ns.clone(), p.thread(pid as i32).creds.clone()));
+                ns::make(&mut n, &mut c, new, true, names, &mut |owner| copy_mounts(&files, owner))?;
+                linux.with(|p| {
+                    p.ns = n;
+                    p.thread_mut(pid as i32).creds = c;
+                });
+            }
+            let child_ns = linux.with(|p| p.ns.pid.clone());
+            pid_ns::attach(&child_ns, pid as i32, true)?;
+            let memory = if req.shares_memory() {
+                memory
+            } else {
+                match memory.fork() {
+                    Ok(m) => Arc::new(m),
+                    Err(_) => {
+                        pid_ns::detach(&child_ns, pid as i32);
+                        return Err(Errno::ENOMEM);
+                    }
+                }
+            };
+            crate::fs::proc::record_fork(k.process.pid, pid, &memory);
+            linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
+            let child = Process::new_linux_child(pid, k.process.pid, k.process.format, k.process.traced, files, linux);
+            let me = k.process.pid as i32;
+            let uid = k.credentials().uid;
+            let reaper = pid_ns::reaper_of_new(&child_ns, pid as i32);
+            with_tree(|t| {
+                let parent = if req.sibling() { t.parent(me).unwrap_or(0) } else { me };
+                t.insert_child(me, parent, pid as i32, req.exit_signal, uid);
+                t.set_reaper(pid as i32, reaper);
+            });
+            let (parent_sees, child_sees) =
+                (pid_ns::local_or_zero(&own_ns, pid as i32), pid_ns::local_or_zero(&child_ns, pid as i32));
+            store_tids(k, req, parent_sees, child_sees, (!req.shares_memory()).then_some(&memory));
+            let done = req.vfork_wait().then(|| vfork_register(pid));
+            let started = user::spawn_child(Arc::new(child), memory, &regs, &fpu, fs_base, gs_base, hook, None);
+            if started.is_err() {
+                with_tree(|t| t.remove(pid as i32));
+                pid_ns::detach(&child_ns, pid as i32);
+                VFORKS.lock().remove(&pid);
+                return Err(Errno::EAGAIN);
+            }
+            start(started, done, k)?;
+            Ok(pid)
+        })?
     };
     Ok(tid as i32)
+}
+
+/// Run `f` in a frame of its own, not its caller's.
+#[inline(never)]
+fn out_of_line<R>(f: impl FnOnce() -> R) -> R {
+    f()
 }
 
 /// A copy of `files`' mount namespace, which `files` moves to, as the

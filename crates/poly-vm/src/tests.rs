@@ -808,3 +808,88 @@ fn a_cloned_map_is_independent() {
     assert_eq!(m.find(MIN).unwrap().start, MIN);
     assert_eq!(child.find(MIN), None);
 }
+
+// ----------------------------------------------------------------- remap --
+
+#[test]
+fn remap_shrinks_and_grows_in_place() {
+    let mut m = map_with(small());
+    let a = MIN + 100 * P;
+    fixed(&mut m, a, 4, Prot::RW);
+    // Shrinking removes the end.
+    let r = m.remap(a, 4 * P, 2 * P + 1, RemapPlacement::InPlace).unwrap();
+    assert_eq!((r.addr, r.moved), (a, None));
+    assert_eq!(r.removed, [anon_vma(a + 3 * P, a + 4 * P, Prot::RW)], "2 pages and a byte keep 3 pages");
+    // Growing into the free space after it, even without MayMove.
+    let r = m.remap(a, 3 * P, 8 * P, RemapPlacement::InPlace).unwrap();
+    assert_eq!((r.addr, r.moved, r.removed.len()), (a, None, 0));
+    assert_eq!(spans(&m), [(a, a + 8 * P, Prot::RW)]);
+    // A file mapping that grows continues the file.
+    let f = MIN + 300 * P;
+    m.map(file(2 * P, Prot::READ, 7, 4 * P, false, Placement::Fixed(f))).unwrap();
+    m.remap(f, 2 * P, 3 * P, RemapPlacement::MayMove).unwrap();
+    assert_eq!(m.find(f).unwrap(), &file_vma(f, f + 3 * P, Prot::READ, 7, 4 * P, false));
+    assert_eq!(m.find(f + 2 * P).unwrap().file_offset(f + 2 * P), Some(6 * P));
+}
+
+#[test]
+fn remap_moves_when_it_cannot_grow_and_may() {
+    let mut m = map_with(small());
+    let a = MIN + 100 * P;
+    fixed(&mut m, a, 2, Prot::RW);
+    fixed(&mut m, a + 2 * P, 1, Prot::READ); // in the way
+    assert_eq!(m.remap(a, 2 * P, 4 * P, RemapPlacement::InPlace), Err(Error::NoMemory));
+    let r = m.remap(a, 2 * P, 4 * P, RemapPlacement::MayMove).unwrap();
+    let to = r.addr;
+    assert_ne!(to, a);
+    assert_eq!(r.moved, Some(Move { from: a, to, len: 2 * P }));
+    assert!(r.removed.is_empty());
+    assert_eq!(m.find(a), None, "the old place is free");
+    assert_eq!(m.find(to).unwrap(), &anon_vma(to, to + 4 * P, Prot::RW));
+    // Part of a region moves; the rest stays.
+    let b = MIN + 400 * P;
+    fixed(&mut m, b, 6, Prot::RW);
+    let r = m.remap(b + 2 * P, 2 * P, 5 * P, RemapPlacement::MayMove).unwrap();
+    assert_eq!(r.moved.map(|mv| (mv.from, mv.len)), Some((b + 2 * P, 2 * P)));
+    assert_eq!(m.find(b).unwrap().end, b + 2 * P);
+    assert_eq!(m.find(b + 4 * P).unwrap().start, b + 4 * P);
+    assert_eq!(m.find(b + 2 * P), None);
+}
+
+#[test]
+fn remap_to_a_fixed_address_replaces_what_is_there() {
+    let mut m = map_with(small());
+    let (a, to) = (MIN + 100 * P, MIN + 200 * P);
+    m.map(file(3 * P, Prot::RW, 9, 0, true, Placement::Fixed(a))).unwrap();
+    fixed(&mut m, to, 1, Prot::READ);
+    let r = m.remap(a, 3 * P, 2 * P, RemapPlacement::Fixed(to)).unwrap();
+    assert_eq!(r.addr, to);
+    assert_eq!(r.moved, Some(Move { from: a, to, len: 2 * P }));
+    // The old end (shrunk away) and the page at the destination.
+    assert_eq!(r.removed, [file_vma(a + 2 * P, a + 3 * P, Prot::RW, 9, 2 * P, true), anon_vma(to, to + P, Prot::READ)]);
+    assert_eq!(spans(&m), [(to, to + 2 * P, Prot::RW)]);
+    assert!(m.find(to).unwrap().is_shared());
+}
+
+#[test]
+fn remap_errors_change_nothing() {
+    let mut m = map_with(small());
+    let a = MIN + 100 * P;
+    fixed(&mut m, a, 4, Prot::RW);
+    fixed(&mut m, a + 4 * P, 1, Prot::READ);
+    let before = spans(&m);
+    let e = |m: &mut Map, old, ol, nl, how| m.remap(old, ol, nl, how).err();
+    assert_eq!(e(&mut m, a + 1, P, P, RemapPlacement::MayMove), Some(Error::Invalid), "misaligned");
+    assert_eq!(e(&mut m, a, P, 0, RemapPlacement::MayMove), Some(Error::Invalid), "zero new length");
+    assert_eq!(e(&mut m, a, 0, P, RemapPlacement::MayMove), Some(Error::Invalid), "zero old length");
+    assert_eq!(e(&mut m, a, 5 * P, 6 * P, RemapPlacement::MayMove), Some(Error::Fault), "two regions");
+    assert_eq!(e(&mut m, MIN + 900 * P, P, 2 * P, RemapPlacement::MayMove), Some(Error::Fault), "nothing there");
+    assert_eq!(e(&mut m, a, 2 * P, 2 * P, RemapPlacement::Fixed(a + P)), Some(Error::Invalid), "overlap");
+    assert_eq!(e(&mut m, a, P, P, RemapPlacement::Fixed(a + 10 * P + 1)), Some(Error::Invalid), "misaligned target");
+    assert_eq!(e(&mut m, a, P, 2 * P, RemapPlacement::Fixed(MAX - P)), Some(Error::NoMemory), "past the end");
+    assert_eq!(e(&mut m, a, P, 2000 * P, RemapPlacement::MayMove), Some(Error::NoMemory), "no hole");
+    assert_eq!(spans(&m), before);
+    // The stack is not remapped.
+    let stack = m.setup_stack(4 * P, Prot::RW).unwrap();
+    assert_eq!(e(&mut m, stack, P, 2 * P, RemapPlacement::MayMove), Some(Error::Fault));
+}
