@@ -50,10 +50,13 @@ int test_main(void) {
     r = read(nb, &n, 8);
     check("disarm_discards_count", r == -EAGAIN, r);
 
-    /* Absolute deadline in the past: expires at once. */
+    /* Absolute deadline in the past: expires at once. The deadline is half
+     * the clock's current value: before now, but not negative however short
+     * the uptime (a negative time is EINVAL). */
     struct k_timespec now;
     syscall2(SYS_clock_gettime, CLOCK_MONOTONIC, &now);
-    struct k_itimerspec past = { { 0, 0 }, { now.tv_sec - 1, now.tv_nsec } };
+    i64 half = (now.tv_sec * 1000000000L + now.tv_nsec) / 2;
+    struct k_itimerspec past = { { 0, 0 }, { half / 1000000000L, half % 1000000000L } };
     r = syscall4(SYS_timerfd_settime, nb, TFD_TIMER_ABSTIME, &past, 0);
     check("abstime_ok", r == 0, r);
     r = read(nb, &n, 8);

@@ -12,8 +12,10 @@ summary: >
   woken (returns 0), until the relative timeout passes (ETIMEDOUT), or a
   handled signal arrives. FUTEX_WAIT_BITSET (9): the same with an absolute
   CLOCK_MONOTONIC deadline (CLOCK_REALTIME with FUTEX_CLOCK_REALTIME, 256)
-  and a bitset in val3; a deadline in the past times out at once (the value
-  is checked first). FUTEX_WAKE (1) wakes up to val waiters and returns how
+  and a bitset in val3; a deadline in the past (any non-negative time below
+  the clock's current value, however short the uptime) times out at once
+  (the value is checked first); a negative deadline is EINVAL, checked
+  before the value. FUTEX_WAKE (1) wakes up to val waiters and returns how
   many; FUTEX_WAKE_BITSET (10) only those whose bitset overlaps val3 (plain
   WAIT/WAKE use all bits). FUTEX_REQUEUE (3) wakes val and moves up to val2
   (the timeout argument as a number) waiters to uaddr2, returning the number
