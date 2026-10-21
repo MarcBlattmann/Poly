@@ -21,6 +21,7 @@ mod linux;
 mod log;
 mod mm;
 mod net;
+mod nt;
 mod pci;
 mod power;
 mod process;

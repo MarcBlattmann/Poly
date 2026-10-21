@@ -184,6 +184,21 @@ fn spawn_thread(
     start_thread(process, arch, memory, entry, None, hook, None, thread::CpuSet::ALL).map(|(id, _)| id)
 }
 
+/// Start a thread of `process` in `memory` at `entry` with GS based at
+/// `gs_base`: an NT thread, whose TEB is reached through GS
+/// (`NtCurrentTeb` reads `gs:[0x30]`). Otherwise as [`spawn_in`].
+pub fn spawn_nt(
+    process: Arc<Process>,
+    memory: Arc<Memory>,
+    entry: Entry,
+    gs_base: u64,
+    hook: SyscallHook,
+) -> Result<ThreadId, SpawnError> {
+    let space = Arc::clone(memory.space());
+    let arch = arch::user::ThreadState::with_state(space, &[], 0, gs_base).ok_or(SpawnError::NoMemory)?;
+    start_thread(process, arch, Some(memory), entry, None, hook, None, thread::CpuSet::ALL).map(|(id, _)| id)
+}
+
 /// Start a thread of `process` in `memory` that begins with every
 /// register of `regs`, the FPU state `fpu` (an image from [`fpu_image`])
 /// and FS / GS bases `fs_base` / `gs_base`: the child of `clone` or
@@ -426,9 +441,14 @@ pub fn end_thread(status: ExitStatus, code: usize) -> ! {
     if process.linux.is_some() {
         crate::linux::thread_exit(process, tid);
     }
+    let nt_memory =
+        (process.personality == poly_abi::Personality::Nt).then(current_memory).flatten();
     if let Some(status) = process.detach_thread(tid, status) {
         if process.linux.is_some() {
             crate::linux::process_exit(process, status);
+        }
+        if let Some(memory) = &nt_memory {
+            crate::nt::process_exit(process.pid, memory);
         }
         process.ended();
     }
@@ -537,5 +557,18 @@ pub fn current_memory() -> Option<Arc<Memory>> {
 /// copy return [`Efault`].
 pub fn page_fault(addr: u64, access: memory::Access) -> Result<(), FaultError> {
     let memory = current_memory().ok_or(FaultError::NoMemoryMap)?;
-    memory.fault(addr, access)
+    match memory.fault(addr, access) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            // An NT process's guard page may fire here (a stack grows): the
+            // personality commits the page and the instruction retries.
+            if let Some((process, _, tid)) = current()
+                && process.personality == poly_abi::Personality::Nt
+                && crate::nt::resolve_fault(process.pid, tid, &memory, addr)
+            {
+                return Ok(());
+            }
+            Err(e)
+        }
+    }
 }
