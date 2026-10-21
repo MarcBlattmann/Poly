@@ -40,7 +40,7 @@
 {"symbol":"epoll_pwait","number":281,"status":"claimed","claimed_by":"spec-b","src":["linux-syscall-tbl"]},
 {"symbol":"epoll_pwait2","number":441,"src":["linux-syscall-tbl"]},
 {"symbol":"epoll_wait","number":232,"status":"claimed","claimed_by":"spec-b","src":["linux-syscall-tbl"]},
-{"symbol":"eventfd","number":284,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
+{"symbol":"eventfd","number":284,"status":"claimed","claimed_by":"spec-b","src":["linux-syscall-tbl"]},
 {"symbol":"eventfd2","number":290,"status":"claimed","claimed_by":"spec-b","src":["linux-syscall-tbl"]},
 {"symbol":"execve","number":59,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"execveat","number":322,"src":["linux-syscall-tbl"]},
