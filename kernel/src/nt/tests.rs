@@ -2,7 +2,7 @@
 //! from ring 3 and drives the NT object, memory and section services
 //! through real `syscall` instructions.
 
-use super::test_pe;
+use super::{test_pe, test_threads};
 use crate::kernel_test;
 use crate::process::Process;
 use crate::thread;
@@ -34,6 +34,35 @@ kernel_test! {
         }
 
         // Its process left the table and its memory is the only reference.
+        if !thread::wait_until(10, || Arc::strong_count(&memory) == 1) {
+            return Err("the NT process kept its memory after it exited");
+        }
+        if super::is_nt_process(pid) {
+            return Err("the NT process state was not cleaned up");
+        }
+        Ok(())
+    }
+}
+
+kernel_test! {
+    /// Build the NT threads/synchronisation test PE and run it from ring 3:
+    /// it creates threads, blocks on and is woken through events, a mutant it
+    /// abandons, a semaphore in a wait-all, a user APC, a periodic timer, and
+    /// reads a suspended thread's context. See [`test_threads`].
+    fn nt_threads_and_sync_from_ring3() -> TestResult {
+        let file = test_threads::image();
+        let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| "no memory map")?);
+        let pid = crate::process::alloc_pid();
+        let process = Arc::new(Process::new_nt(pid, FORMAT, false));
+
+        let start = super::start(&process, &memory, &file, pid).map_err(|_| "the NT loader rejected the test PE")?;
+        let tid = user::spawn_nt(Arc::clone(&process), Arc::clone(&memory), start.entry, start.teb, user::DEFAULT_HOOK)
+            .map_err(|_| "could not start the NT thread")?;
+        let code = thread::join(tid).map_err(|_| "join failed")?;
+        if code != test_threads::PASS_CODE as usize {
+            crate::kprintln!("nt: the threads test ended with {code:#x}, not {:#x}", test_threads::PASS_CODE);
+            return Err("the NT threads/sync test did not pass every check");
+        }
         if !thread::wait_until(10, || Arc::strong_count(&memory) == 1) {
             return Err("the NT process kept its memory after it exited");
         }

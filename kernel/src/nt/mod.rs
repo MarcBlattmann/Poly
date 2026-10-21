@@ -18,6 +18,7 @@
 
 mod backend;
 mod test_pe;
+mod test_threads;
 mod tests;
 
 mod sched;
