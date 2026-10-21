@@ -529,6 +529,13 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
                     written += run;
                     self.c.written.fetch_add(run as u64, Relaxed);
                 }
+                // Deleted after the size was read (an unlink does not take
+                // the inode lock): as above, its data does not matter any
+                // more, and it is no error for whoever syncs next.
+                Err(Errno::ENOENT) if matches!(st.inner.getattr(ino), Err(Errno::ENOENT)) => {
+                    self.discard(st.id, ino, 0);
+                    return Ok(written);
+                }
                 Err(e) => {
                     self.c.write_errors.fetch_add(run as u64, Relaxed);
                     if result.is_ok() {
