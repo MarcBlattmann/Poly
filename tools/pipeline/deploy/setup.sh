@@ -15,8 +15,12 @@
 #     Claude Code in the role users' homes unless --no-install-tools)
 #   - the pinned Rust toolchain in the runner user's rustup (not without
 #     --no-install-tools)
-#   - /etc/sudoers.d/poly-pipeline (checked with visudo before it is installed)
+#   - /etc/sudoers.d/poly-pipeline (checked with visudo before it is installed):
+#     the role wrapper as the role users, and `systemctl start|stop|restart|status
+#     poly-pipeline` as root, for the runner user, without a password
 #   - /etc/systemd/system/poly-pipeline.service (enabled, started only with --start)
+#   - /srv/poly/bin/deployed.sha256, the fingerprint of the deploy files it
+#     installed: the loop tells the owner when the checkout has newer ones
 #
 # Before it changes anything it checks the packages and users it needs; a
 # user from an earlier attempt (another home, another primary group) stops
@@ -62,7 +66,13 @@ IMPL_HOME=$POLY/impl
 # user:home:what:role (the role is poly-role's first argument)
 ROLES=("$SPEC_USER:$SPEC_HOME:spec agent:spec" "$IMPL_USER:$IMPL_HOME:implementer agent:implementer")
 SUDOERS=/etc/sudoers.d/poly-pipeline
-UNIT=/etc/systemd/system/poly-pipeline.service
+UNIT_NAME=poly-pipeline
+UNIT=/etc/systemd/system/$UNIT_NAME.service
+SYSTEMCTL=/usr/bin/systemctl
+# What setup.sh installed last (update.rs in tools/pipeline/src/scheduler reads it).
+STAMP=$POLY/bin/deployed.sha256
+# The loop's exit status when it stops to run its new code (update::RESTART_EXIT).
+RESTART_EXIT=10
 # What setup.sh makes in $POLY; anything else there is from somewhere else.
 KNOWN_ENTRIES=" bin git runner inbox spec-inbox spec impl heldout generated lost+found "
 
@@ -106,6 +116,38 @@ die() {
 problems=()
 problem() { problems+=("$*"); }
 
+# The fingerprint of the deploy files in $1 (all but the example
+# configuration, which setup.sh never overwrites). Must match deploy_hash
+# in tools/pipeline/src/scheduler/update.rs (a test runs this function).
+deploy_hash() {
+    (cd "$1" && find . -type f ! -name pipeline.example.toml -printf '%P\0' | LC_ALL=C sort -z |
+        xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1)
+}
+
+# The sudoers rule. A test in tools/pipeline/src/scheduler/tests.rs runs
+# this function and compares the text with a snapshot. The service control
+# commands match exactly: sudo allows no other arguments, no other unit.
+# SYSTEMCTL_STATUS=0 leaves `status` out (systemd before 247 starts its
+# pager as root without secure mode under sudo, CVE-2023-26604).
+sudoers_text() {
+    local status=
+    [ "$SYSTEMCTL_STATUS" = 0 ] || status=", \\
+    $SYSTEMCTL status $UNIT_NAME"
+    cat <<EOF
+# Written by tools/pipeline/deploy/setup.sh. The pipeline loop ($RUNNER_USER)
+# may run the role wrapper, and nothing else, as the two role users. sudo
+# resets the environment; the wrapper checks every argument.
+$RUNNER_USER ALL=($SPEC_USER) NOPASSWD: $POLY/bin/poly-role spec *
+$RUNNER_USER ALL=($IMPL_USER) NOPASSWD: $POLY/bin/poly-role implementer *
+# Service control as root, these exact commands only (docs/AGENT_PIPELINE.md,
+# "Updates and service control").
+Cmnd_Alias POLY_PIPELINE_SERVICE = $SYSTEMCTL start $UNIT_NAME, \\
+    $SYSTEMCTL stop $UNIT_NAME, \\
+    $SYSTEMCTL restart $UNIT_NAME$status
+$RUNNER_USER ALL=(root) NOPASSWD: POLY_PIPELINE_SERVICE
+EOF
+}
+
 ROOT=0
 [ "$(id -u)" = 0 ] && ROOT=1
 if [ "$ROOT" = 0 ]; then
@@ -132,6 +174,7 @@ for cmd_pkg in git:git gcc:gcc qemu-system-x86_64:qemu-system-x86 mke2fs:e2fspro
     command -v "${cmd_pkg%%:*}" >/dev/null || need "${cmd_pkg#*:}"
 done
 [ -e /usr/lib/x86_64-linux-gnu/libc.a ] || need libc6-dev
+[ -x "$SYSTEMCTL" ] || need systemd
 # /bin/busybox from the `busybox` package is dynamically linked: no use.
 if ! dpkg-query -W -f='${db:Status-Status}' busybox-static 2>/dev/null | grep -qx installed; then
     need busybox-static
@@ -387,13 +430,13 @@ fi
 say "sudoers rule $SUDOERS"
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
-cat >"$tmp" <<EOF
-# Written by tools/pipeline/deploy/setup.sh. The pipeline loop ($RUNNER_USER)
-# may run the role wrapper, and nothing else, as the two role users. sudo
-# resets the environment; the wrapper checks every argument.
-$RUNNER_USER ALL=($SPEC_USER) NOPASSWD: $POLY/bin/poly-role spec *
-$RUNNER_USER ALL=($IMPL_USER) NOPASSWD: $POLY/bin/poly-role implementer *
-EOF
+SYSTEMD_VERSION=$("$SYSTEMCTL" --version | awk 'NR == 1 { print $2 + 0 }')
+SYSTEMCTL_STATUS=1
+if [ "${SYSTEMD_VERSION:-0}" -lt 247 ]; then
+    SYSTEMCTL_STATUS=0
+    warn "systemd $SYSTEMD_VERSION is older than 247: no \`sudo systemctl status $UNIT_NAME\` (its pager would run as root)"
+fi
+sudoers_text >"$tmp"
 visudo -cqf "$tmp" || die "the generated sudoers rule does not validate"
 [ "$DRY" = 0 ] || sed "s/^/      | /" "$tmp"
 if ! cmp -s "$tmp" "$SUDOERS" 2>/dev/null; then
@@ -419,6 +462,9 @@ Environment=POLY_PIPELINE_CONFIG=$POLY/runner/pipeline.toml
 Environment=PATH=$(dirname "$CARGO"):$RUNNER_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=CARGO_BUILD_JOBS=3
 ExecStart=$CARGO xtask pipeline loop
+# The loop exits $RESTART_EXIT when main changed its own code and the new code
+# builds: not a failure; Restart= starts it again, and cargo runs the new code.
+SuccessExitStatus=$RESTART_EXIT
 Restart=always
 RestartSec=60
 TimeoutStopSec=60
@@ -442,6 +488,10 @@ EOF
 if ! cmp -s "$tmp" "$UNIT" 2>/dev/null; then
     run install -o root -g root -m 0644 "$tmp" "$UNIT"
     run systemctl daemon-reload
+    if [ "$START" = 0 ] && systemctl is-active -q "$UNIT_NAME" 2>/dev/null; then
+        warn "the running loop keeps the old unit until it starts again (its next self-update, or
+    sudo systemctl restart $UNIT_NAME, which stops the steps in progress; they resume from their state)"
+    fi
 fi
 run systemctl enable -q poly-pipeline.service
 if [ "$START" = 1 ]; then
@@ -465,9 +515,19 @@ if [ "$DRY" = 0 ]; then
     sudo -u "$RUNNER_USER" sudo -n -l -u "$SPEC_USER" "$POLY/bin/poly-role" spec sync x y >/dev/null ||
         die "$RUNNER_USER cannot run the spec wrapper through sudo"
     echo "    $RUNNER_USER may run the role wrapper as $SPEC_USER and $IMPL_USER: good"
+    sudo -u "$RUNNER_USER" sudo -n -l "$SYSTEMCTL" restart "$UNIT_NAME" >/dev/null ||
+        die "$RUNNER_USER cannot run systemctl restart $UNIT_NAME through sudo"
+    echo "    $RUNNER_USER may start, stop and restart $UNIT_NAME without a password: good"
 else
     echo "    (not in a dry run)"
 fi
+
+say "deploy fingerprint $STAMP"
+# Last: only a complete install is recorded. The loop compares it with the
+# deploy files of its checkout and tells the owner when they differ.
+deploy_hash "$HERE" >"$tmp"
+[ "$DRY" = 0 ] || sed "s/^/      | /" "$tmp"
+cmp -s "$tmp" "$STAMP" 2>/dev/null || run install -o root -g root -m 0644 "$tmp" "$STAMP"
 
 if [ "$DRY" = 1 ]; then
     echo
@@ -492,4 +552,9 @@ Done. One-time steps left for you (docs/AGENT_PIPELINE.md, "Setting up the home 
              sudo -u $RUNNER_USER -H bash -lc 'cd $POLY/runner/repo && cargo xtask pipeline loop --once'
  5. Start:   sudo systemctl start poly-pipeline;  journalctl -u poly-pipeline -f
     Status:  sudo -u $RUNNER_USER -H bash -lc 'cd $POLY/runner/repo && cargo xtask pipeline loop status'
+
+Routine operation needs no commands: the loop restarts itself with new code from main. As $RUNNER_USER:
+    cargo xtask pipeline loop pause [--role spec|implementer] [--for 4h] [--reason ...];  loop resume
+    sudo systemctl start|stop|restart|status $UNIT_NAME      (no password)
+When deploy files change, \`loop status\` and the human queue say so: run this script again.
 EOF
