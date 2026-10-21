@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pause                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: "x86-64; tests run as uid 1001 (not root), umask 022; static freestanding test programs, raw syscalls; observed both under the ptrace tracer and untraced"
+  observed_by: spec-claude-1
+  date: 2026-10-21
+summary: >
+  pause() (syscall 34, no arguments) puts the calling thread to sleep until
+  a signal arrives that either runs a user handler or ends the process.
+  Once a handler has run, pause fails with EINTR. It never returns
+  anything else and never succeeds. Unlike rt_sigsuspend it does not touch
+  the signal mask: blocked signals stay pending and do not wake it, and the
+  mask after the call is the mask before it. Signals that are ignored, either
+  explicitly (SIG_IGN) or by default (SIGCHLD, SIGURG, SIGWINCH, and SIGCONT
+  at SIG_DFL), do not end it. Being stopped (SIGSTOP) and continued again
+  does not end it either. A signal whose default action ends the process
+  (SIGTERM, SIGUSR1, ... at SIG_DFL, and SIGKILL always) ends the process
+  while it waits, and pause never returns. A signal that was handled before
+  pause was entered does not count: pause waits for the next one.
+  Whatever is in the argument registers is ignored.
+returns:
+  handler_ran: "-1 EINTR (4), after the handler has returned; exactly one wake-up per call"
+  sa_restart: "SA_RESTART on the waking signal makes no difference: still -1 EINTR, pause is not restarted"
+  never: "no success return; pause does not return while no handler runs"
+errors:
+  eintr: "EINTR (4): a signal handler ran. This is the only result"
+  none_other: "no argument checks (extra register values are ignored), so no EFAULT/EINVAL"
+wakeups:
+  ends_pause:
+    - "an unblocked signal with a user handler (from a timer, another process, or SIGCONT with a handler installed, also when it continues a stopped process)"
+    - "a signal whose action ends the process: the process ends (wait status shows that signal); pause does not return"
+    - "SIGKILL, even with every signal blocked"
+  does_not_end_pause:
+    - "a blocked signal: it stays pending (rt_sigpending shows it) and its handler does not run during pause; it is delivered when later unblocked"
+    - "a blocked signal whose default action would end the process (e.g. SIGTERM with all signals blocked): it stays pending, the process keeps waiting"
+    - "signals at SIG_IGN"
+    - "signals ignored by default at SIG_DFL: SIGCHLD, SIGURG, SIGWINCH, SIGCONT"
+    - "SIGSTOP followed by SIGCONT at SIG_DFL: the process stops (the parent's wait4 with WUNTRACED reports a stop by SIGSTOP), then after SIGCONT it goes on waiting in pause"
+    - "a signal raised and handled before pause was called"
+side_effects: "none. The signal mask is unchanged. The handler runs with the caller's mask plus its own signal plus its sa_mask, as for any delivery."
+threading: "suspends the calling thread only (the tests use single-threaded processes)"
+ordering:
+  - "the handler runs before pause returns EINTR"
+  - "under ptrace a tracer sees the wait interrupted with ERESTARTNOHAND (514) whenever a signal reaches the task; when no handler ran (ignored signal, stop/continue), pause goes on transparently and is not seen to return by the program"
+timing:
+  typical: "returns within milliseconds of the handler's signal; no CPU used while waiting"
+  guarantees: "never returns before a handler has run, e.g. not before a pending ITIMER_REAL fires (observed: 100 ms timer -> pause returned after >= 100 ms)"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
