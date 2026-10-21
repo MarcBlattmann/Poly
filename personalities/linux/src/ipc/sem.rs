@@ -3,7 +3,8 @@
 //!
 //! A set belongs to its IPC namespace: it lives in the namespace's
 //! [`SemTable`] from semget(2) until semctl(`IPC_RMID`), which removes it
-//! at once. Each set sits in a slot (`0..SEMMNI`); its id is the slot
+//! at once. Each set sits in a slot (`0..SEMMNI`, handed out in turn
+//! rather than lowest free first); its id is the slot
 //! plus [`SEQ_MULTIPLIER`] times a sequence number counted up with every
 //! set made, so an id names one set only and a removed id stays invalid.
 //!
@@ -259,20 +260,32 @@ impl SemInfo {
 }
 
 /// The sets of one IPC namespace, by slot.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SemTable {
     slots: Vec<Option<SemSet>>,
     /// The sequence number the next set gets.
     next_seq: u16,
+    /// Where the search for the next set's slot starts. Slots are handed
+    /// out in turn, after the one given last (wrapping at [`SEMMNI`]), not
+    /// lowest free first, so a scan from index 0 meets empty slots below
+    /// the newest sets, as on the oracle. It starts past slot 0, as in a
+    /// namespace that has been used before (the oracle's shared one).
+    next_slot: usize,
     /// `SEM_UNDO` adjustments: by (global pid, set id), one per semaphore.
     undo: BTreeMap<(i32, i32), Vec<i32>>,
     /// Results for blocked semop(2) callers, by thread id.
     results: BTreeMap<i32, Result<(), Errno>>,
 }
 
+impl Default for SemTable {
+    fn default() -> SemTable {
+        SemTable::new()
+    }
+}
+
 impl SemTable {
     pub const fn new() -> SemTable {
-        SemTable { slots: Vec::new(), next_seq: 0, undo: BTreeMap::new(), results: BTreeMap::new() }
+        SemTable { slots: Vec::new(), next_seq: 0, next_slot: 1, undo: BTreeMap::new(), results: BTreeMap::new() }
     }
 
     fn slot_of(id: i32) -> Option<usize> {
@@ -394,13 +407,14 @@ impl SemTable {
         if self.len() >= SEMMNI || self.total_sems() + nsems as usize > SEMMNS as usize {
             return Err(Errno::ENOSPC);
         }
-        let slot = match self.slots.iter().position(Option::is_none) {
-            Some(free) => free,
-            None => {
-                self.slots.push(None);
-                self.slots.len() - 1
-            }
-        };
+        let slot = (0..SEMMNI)
+            .map(|i| (self.next_slot + i) % SEMMNI)
+            .find(|&i| self.slots.get(i).is_none_or(Option::is_none))
+            .expect("fewer than SEMMNI sets");
+        if self.slots.len() <= slot {
+            self.slots.resize_with(slot + 1, || None);
+        }
+        self.next_slot = (slot + 1) % SEMMNI;
         let mut set = SemSet::new(key, nsems as usize, flags, who, now);
         set.seq = self.next_seq;
         self.next_seq = self.next_seq.wrapping_add(1);
@@ -738,15 +752,16 @@ mod tests {
         let me = user(1001, 1001);
         let a = t.semget(IPC_PRIVATE, 3, 0o640, &me, 5).unwrap();
         let b = t.semget(IPC_PRIVATE, 2, 0, &me, 5).unwrap();
-        assert_eq!((a % SEQ_MULTIPLIER, b % SEQ_MULTIPLIER), (0, 1));
+        assert_eq!((a % SEQ_MULTIPLIER, b % SEQ_MULTIPLIER), (1, 2));
         assert_ne!(a, b);
-        assert_eq!(t.by_index(1).map(|(id, _)| id), Some(b));
+        assert!(t.by_index(0).is_none(), "a scan from 0 meets an empty slot first");
+        assert_eq!(t.by_index(2).map(|(id, _)| id), Some(b));
         assert_eq!(t.by_index(b).map(|(id, _)| id), Some(b), "the id itself is an index too");
-        assert_eq!(t.max_index(), 1);
+        assert_eq!(t.max_index(), 2);
         t.remove(a);
         assert!(t.set(a).is_none());
         let c = t.semget(IPC_PRIVATE, 1, 0o600, &me, 5).unwrap();
-        assert_eq!(c % SEQ_MULTIPLIER, 0, "the lowest free slot");
+        assert_eq!(c % SEQ_MULTIPLIER, 3, "the slot after the last one given, not the freed one");
         assert_ne!(c, a);
         assert!(t.set(a).is_none(), "the old id names nothing");
         assert!(t.set(-1).is_none() && t.by_index(-1).is_none());
