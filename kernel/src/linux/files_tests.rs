@@ -309,7 +309,7 @@ kernel_test! {
             check!(24, own == 4);
             check!(25, sys(p, nr::DUP2, &[own, 3]) == Ok(3));
             let n = sys(p, nr::READ, &[own, BUF, 4096]).map_err(|_| 26u64)?;
-            check!(27, String::from_utf8_lossy(&peek(BUF, n as usize)).starts_with("pos:\t0\nflags:\t00\n"));
+            check!(27, String::from_utf8_lossy(&peek(BUF, n as usize)).starts_with("pos:\t0\nflags:\t0100000\n"));
             check!(28, sys(p, nr::READ, &[own, BUF, 4096]) == Ok(0));
             Ok(())
         });
