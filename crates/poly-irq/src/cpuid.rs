@@ -54,6 +54,19 @@ impl CpuFeatures {
     pub const fn constant_rate_tsc(&self) -> bool {
         self.invariant_tsc || self.hypervisor
     }
+
+    /// The rate of a TSC calibrated at `tsc_hz` (`None`: not calibrated) if
+    /// it can be the reference other timers are calibrated against: it
+    /// exists and runs at a constant rate ([`CpuFeatures::constant_rate_tsc`]).
+    /// Reading it costs a few cycles and is never a VM exit, unlike
+    /// reading the HPET or the PM timer, so measurements against it are
+    /// tight even under a hypervisor.
+    pub const fn tsc_reference_hz(&self, tsc_hz: Option<u64>) -> Option<u64> {
+        match tsc_hz {
+            Some(hz) if hz > 0 && self.tsc && self.constant_rate_tsc() => Some(hz),
+            _ => None,
+        }
+    }
 }
 
 /// The nominal TSC frequency from CPUID leaf 15H ("Time Stamp Counter and
@@ -101,6 +114,20 @@ mod tests {
         // QEMU's CPU models: the hypervisor bit, no invariant bit.
         let qemu = CpuFeatures::from_cpuid(1 << 31, 1 << 4, 0, 0);
         assert!(!qemu.invariant_tsc && qemu.constant_rate_tsc());
+    }
+
+    #[test]
+    fn a_calibrated_constant_rate_tsc_is_a_reference() {
+        let qemu = CpuFeatures::from_cpuid(1 << 31, 1 << 4, 0, 0);
+        assert_eq!(qemu.tsc_reference_hz(Some(2_445_428_000)), Some(2_445_428_000));
+        assert_eq!(qemu.tsc_reference_hz(None), None, "calibration failed");
+        assert_eq!(qemu.tsc_reference_hz(Some(0)), None);
+        let real_old = CpuFeatures::from_cpuid(0, 1 << 4, 0, 0);
+        assert_eq!(real_old.tsc_reference_hz(Some(2_000_000_000)), None, "its rate may change");
+        let invariant = CpuFeatures::from_cpuid(0, 1 << 4, 0, 1 << 8);
+        assert_eq!(invariant.tsc_reference_hz(Some(2_000_000_000)), Some(2_000_000_000));
+        let no_tsc = CpuFeatures::from_cpuid(1 << 31, 0, 0, 1 << 8);
+        assert_eq!(no_tsc.tsc_reference_hz(Some(2_000_000_000)), None);
     }
 
     #[test]

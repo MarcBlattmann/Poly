@@ -1,6 +1,8 @@
 //! A minimal system call tracer on ptrace(2): it starts the test program
 //! with an empty environment, stdin on /dev/null and stdout/stderr on
-//! pipes, stops it at every syscall entry and exit (`PTRACE_SYSCALL`),
+//! pipes, in `/` with umask 022 (as Poly's test init starts it; the user
+//! is the caller's, which the diff runner gives Poly: `identity.rs`),
+//! stops it at every syscall entry and exit (`PTRACE_SYSCALL`),
 //! reads the registers and decodes the arguments, following forks and
 //! clones. Signals are recorded and passed on.
 //!
@@ -316,7 +318,7 @@ struct ChildSetup {
 /// (`PTRACE_SEIZE`), exec. Never returns.
 fn child(s: &ChildSetup) -> ! {
     // SAFETY: only async-signal-safe calls (setpgid, the jail's, dup2,
-    // close_range or getrlimit and fcntl, personality, signal, sigemptyset,
+    // close_range or getrlimit and fcntl, umask, chdir, personality, signal, sigemptyset,
     // sigprocmask, getpid, kill, execve, _exit) on descriptors, a stack sigset_t and strings prepared before
     // fork; the argv/envp arrays are NULL-terminated and their strings
     // outlive the call.
@@ -331,6 +333,13 @@ fn child(s: &ChildSetup) -> ! {
             libc::_exit(CHILD_SETUP_FAILED);
         }
         cloexec_from_3();
+        // The same umask on every machine, whatever the caller had (a
+        // systemd unit's UMask=0027), and `/` as the working directory
+        // (the jail's root for an app test): as Poly's test init starts it.
+        crate::identity::set_reference_umask();
+        if libc::chdir(c"/".as_ptr()) < 0 {
+            libc::_exit(CHILD_SETUP_FAILED);
+        }
         let current = libc::personality(0xffff_ffff);
         if current >= 0 {
             libc::personality(current as libc::c_ulong | ADDR_NO_RANDOMIZE);
@@ -358,6 +367,8 @@ fn read_all(fd: OwnedFd) -> thread::JoinHandle<Vec<u8>> {
 
 /// Run `program` under the tracer. `test` names the trace (and is argv[0]).
 pub fn trace(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
+    // Absolute: the child changes to `/` before it runs the program.
+    let program = crate::util::absolute(program);
     trace_with(program.as_os_str().as_bytes(), test, test, None, timeout)
 }
 
@@ -779,6 +790,41 @@ mod tests {
         unsafe {
             libc::close(leaked);
             libc::close(leaked2);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Whatever umask this process has (a systemd unit's UMask=0027), the
+    /// test program starts with 022 under every tracer, as on Poly
+    /// (`identity.rs`), and in `/` wherever the tool runs.
+    #[test]
+    fn test_programs_start_with_the_fixed_umask_in_the_root_directory() {
+        // umask(0) (95) returns the old mask; getcwd (79) gives "/" and
+        // its length with the NUL, else 100 more.
+        let source = "#include \"poly_ipc.h\"\n\
+                      int test_main(void) {\n\
+                          char buf[64];\n\
+                          i64 n = syscall2(79, (i64)buf, sizeof buf);\n\
+                          int cwd_ok = n == 2 && buf[0] == '/';\n\
+                          return (int)syscall1(95, 0) + (cwd_ok ? 0 : 100);\n\
+                      }\n";
+        let Some((dir, binary)) = build("umask0", source) else { return };
+        // SAFETY: umask only sets this process's mask; it is put back
+        // below. Files other tests make meanwhile get 0640 instead of
+        // 0644, which their owner can read all the same.
+        let old = unsafe { libc::umask(0o027) };
+        let mut tracers = vec![crate::runner::Tracer::Ptrace, crate::runner::Tracer::None];
+        if util::which("strace").is_some() {
+            tracers.push(crate::runner::Tracer::Strace);
+        }
+        let exits: Vec<Exit> = tracers
+            .iter()
+            .map(|&tracer| crate::runner::run(tracer, &binary, "umask0", Duration::from_secs(20)).unwrap().exit)
+            .collect();
+        // SAFETY: as above.
+        unsafe { libc::umask(old) };
+        for (tracer, exit) in tracers.iter().zip(exits) {
+            assert_eq!(exit, Exit::Code(crate::identity::REFERENCE_UMASK as i32), "{tracer:?}");
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

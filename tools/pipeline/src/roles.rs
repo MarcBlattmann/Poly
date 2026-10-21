@@ -111,7 +111,12 @@ Goal: describe the observable behaviour of {entry} on the real OS, as a spec she
    No code, no internals.
 3. Write test programs (in the style of tests/linux/: freestanding C, machine-readable
    `ok`/`not ok` lines) into {generated}, which is OUTSIDE the repository. Write enough for a
-   30% held-out share to matter (10 or more).
+   30% held-out share to matter (10 or more). Tests run as whatever user runs the pipeline
+   (root here, a normal user elsewhere; the same user on Poly), with umask 022, in `/`, with
+   an empty environment: they must pass as any user (no uid 0 assumed, absolute paths under
+   /tmp). A test that only makes sense as root says `poly-diff: needs=root` on a line of its
+   header comment (specs/README.md); it is then checked on Poly as root where the
+   reference is not root.
 4. `cargo xtask pipeline tests split {entry} {generated} --spec-agent {agent}` keeps about 30%
    held out (outside the repository) and copies the rest to {tests}.
 5. Commit the spec sheet and visible tests on the current branch (do not create or switch

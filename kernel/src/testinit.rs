@@ -18,15 +18,104 @@
 //! file (`poly.test.stdout=<path>`, `poly.test.stderr=<path>`): the app
 //! tests' launcher sends the app's output into regular files, and what
 //! those files hold is the run's output, as on Linux.
+//!
+//! The program runs as the identity the diff runner's reference ran it as
+//! (ADR 0081): `poly.test.uid=R[,E,S]`, `poly.test.gid=R[,E,S]`,
+//! `poly.test.groups=G1,G2,...` and `poly.test.umask=OCTAL` give its
+//! credentials (what root makes of itself with setgroups, setresgid and
+//! setresuid: `Creds::login`, so a user other than root has no
+//! capabilities) and its umask before its first instruction runs. The
+//! init gets the same credentials: on Linux the program's parent is the
+//! tracer, which runs as the same user. Without them the program runs as
+//! root with umask 022.
 
 use crate::boot_info::BootInfo;
 use crate::linux::task;
 use crate::process::{self, ExitStatus, Process};
 use crate::sync::SpinLock;
 use crate::{kprintln, testrun};
+use alloc::format;
+use alloc::string::String;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use poly_personality_linux::abi::signal::SIGCHLD;
+use poly_personality_linux::cred::Creds;
 use poly_personality_linux::task::tree::{Clones, Poll, Selector, WaitFilter};
+
+/// Kernel arguments: the program's user ids, group ids, supplementary
+/// groups and umask (see the module docs).
+pub const UID_ARG: &str = "poly.test.uid";
+pub const GID_ARG: &str = "poly.test.gid";
+pub const GROUPS_ARG: &str = "poly.test.groups";
+pub const UMASK_ARG: &str = "poly.test.umask";
+
+/// Who the first program runs as.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Identity {
+    pub creds: Creds,
+    /// `None`: the default, 022.
+    pub umask: Option<u16>,
+}
+
+/// `R` or `R,E,S`.
+fn id_triple(s: &str) -> Option<[u32; 3]> {
+    let ids: Vec<u32> = s.split(',').map(|v| v.parse().ok()).collect::<Option<_>>()?;
+    match ids.as_slice() {
+        [id] => Some([*id; 3]),
+        [r, e, s] => Some([*r, *e, *s]),
+        _ => None,
+    }
+}
+
+/// The identity the kernel arguments give the first program (`uid`,
+/// `gid`, `groups`, `umask`: the values of [`UID_ARG`] ...), `None` if
+/// they give none: an absent id is 0, absent groups none.
+pub fn identity_of(
+    uid: Option<&str>,
+    gid: Option<&str>,
+    groups: Option<&str>,
+    umask: Option<&str>,
+) -> Result<Option<Identity>, String> {
+    if uid.is_none() && gid.is_none() && groups.is_none() && umask.is_none() {
+        return Ok(None);
+    }
+    let bad = |arg: &str, v: &str| format!("bad {arg}={v}");
+    let uids = uid.map_or(Some([0; 3]), id_triple).ok_or_else(|| bad(UID_ARG, uid.unwrap_or("")))?;
+    let gids = gid.map_or(Some([0; 3]), id_triple).ok_or_else(|| bad(GID_ARG, gid.unwrap_or("")))?;
+    let list: Vec<u32> = match groups {
+        None | Some("") => Vec::new(),
+        Some(g) => g.split(',').map(|v| v.parse().ok()).collect::<Option<_>>().ok_or_else(|| bad(GROUPS_ARG, g))?,
+    };
+    let umask = match umask {
+        None => None,
+        Some(m) => Some(u16::from_str_radix(m, 8).ok().filter(|m| *m <= 0o777).ok_or_else(|| bad(UMASK_ARG, m))?),
+    };
+    let creds = Creds::login(uids, gids, &list).map_err(|e| format!("credentials refused: {e:?}"))?;
+    Ok(Some(Identity { creds, umask }))
+}
+
+/// [`identity_of`] the boot's command line.
+pub fn identity(boot: &BootInfo) -> Result<Option<Identity>, String> {
+    identity_of(boot.arg(UID_ARG), boot.arg(GID_ARG), boot.arg(GROUPS_ARG), boot.arg(UMASK_ARG))
+}
+
+/// Give `program` (prepared, not started) and the init, if there is one,
+/// `id`'s credentials, and `program` its umask.
+pub fn apply(program: &Process, id: &Identity) {
+    let set = |p: &Process, tid: u32| {
+        if let Some(linux) = &p.linux {
+            linux.with(|s| s.thread_mut(tid as i32).creds = id.creds.clone());
+        }
+    };
+    set(program, program.pid);
+    let init = INIT.lock().clone();
+    if let Some(init) = init {
+        set(&init, INIT_PID);
+    }
+    if let Some(mask) = id.umask {
+        program.files.umask(mask);
+    }
+}
 
 /// The init's pid.
 pub const INIT_PID: u32 = 1;

@@ -15,7 +15,9 @@
 use core::hint::spin_loop;
 use core::sync::atomic::{Ordering, fence};
 
-use crate::time::{Calibration, CalibrationConfig, CalibrationError, Counter, calibrate, mul_div};
+use crate::time::{
+    Calibration, CalibrationConfig, CalibrationError, CalibrationReport, Counter, calibrate_report, mul_div,
+};
 use crate::{CpuFeatures, DeliveryMode, Mmio, Msr, Polarity, Trigger};
 
 /// Register offsets in the xAPIC page (table 11-1). The x2APIC MSR for each
@@ -876,14 +878,29 @@ impl<R: ApicRegisters> LocalApic<R> {
         divide: Divide,
         config: &CalibrationConfig,
     ) -> Result<Calibration, CalibrationError> {
+        self.calibrate_timer_report(reference, reference_hz, divide, config).0
+    }
+
+    /// [`LocalApic::calibrate_timer`], and the measurements it took.
+    ///
+    /// The reference can be any counter of known rate: the HPET or PM
+    /// timer, or a TSC already calibrated against one. Under a hypervisor
+    /// the TSC is the better one, since reading it is not a VM exit.
+    pub fn calibrate_timer_report<C: Counter>(
+        &self,
+        reference: &C,
+        reference_hz: u64,
+        divide: Divide,
+        config: &CalibrationConfig,
+    ) -> (Result<Calibration, CalibrationError>, CalibrationReport) {
         self.set_timer_divide(divide);
         let lvt = Lvt::masked().with_vector(0xff).with_timer_mode(TimerMode::OneShot);
         self.regs.write(reg::LVT_TIMER, lvt.bits());
         self.regs.write(reg::TIMER_INITIAL, u32::MAX);
-        let result = calibrate(&ApicTimerCounter(self), reference, reference_hz, config);
+        let (result, report) = calibrate_report(&ApicTimerCounter(self), reference, reference_hz, config);
         let expired = self.timer_current_count() == 0;
         self.stop_timer();
-        if expired { Err(CalibrationError::TargetStuck) } else { result }
+        (if expired { Err(CalibrationError::TargetStuck) } else { result }, report)
     }
 }
 
@@ -899,6 +916,128 @@ impl<R: ApicRegisters> Counter for ApicTimerCounter<'_, R> {
 
     fn bits(&self) -> u32 {
         32
+    }
+}
+
+/// One way [`LocalApic::measure_periodic_rate`] measures: a window of
+/// `window_permille` thousandths of the timer's period, kept only if the
+/// reads bracketing the timer's two count reads took at most
+/// `max_brackets_permille` thousandths of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PeriodicWindow {
+    pub window_permille: u64,
+    pub max_brackets_permille: u64,
+}
+
+/// What [`LocalApic::measure_periodic_rate`] tries, in order: half a period
+/// with brackets of at most 2% (a few microseconds at a 1 ms period), most
+/// of a period with up to 5%, then four and a half periods with up to 5%
+/// (225 us at 1 ms: a KVM guest on a busy or nested host can take 15 us
+/// for one read of the count, which is an exit to the hypervisor).
+pub const PERIODIC_WINDOWS: [PeriodicWindow; 3] = [
+    PeriodicWindow { window_permille: 500, max_brackets_permille: 20 },
+    PeriodicWindow { window_permille: 850, max_brackets_permille: 50 },
+    PeriodicWindow { window_permille: 4500, max_brackets_permille: 50 },
+];
+
+/// What [`LocalApic::measure_periodic_rate`] measured.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PeriodicRate {
+    /// The timer's count-down rate.
+    pub hz: u64,
+    /// How far off it can be from the bracketing alone, in ppm: compare
+    /// with a tolerance of this plus whatever the check allows.
+    pub uncertainty_ppm: u64,
+    /// The [`PERIODIC_WINDOWS`] entry that measured it, from 1.
+    pub attempt: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PeriodicRateError {
+    /// The timer is not running periodically (initial count 0, or no
+    /// expected rate to size the windows with).
+    NotRunning,
+    /// The reference did not advance by a window within its spin budget.
+    ReferenceStuck,
+    /// Every measurement's brackets were too wide; the narrowest pair of
+    /// brackets seen, in reference ticks.
+    Disturbed { narrowest: u64 },
+}
+
+impl<R: ApicRegisters> LocalApic<R> {
+    /// The rate a running periodic timer counts down at, measured against
+    /// `reference` (counting at `reference_hz`) with each of
+    /// [`PERIODIC_WINDOWS`] in turn, `tries` times each, until one
+    /// measurement's brackets are narrow enough. `guard` is called before
+    /// each measurement and its value dropped after it (the kernel disables
+    /// interrupts with it).
+    ///
+    /// Each read of the count is bracketed by two reads of the reference.
+    /// The count reloads from the initial count at 0, so a window only shows
+    /// the count modulo the period; the whole periods in it are those that
+    /// bring the count closest to what `expected_hz` (the calibrated rate)
+    /// predicts. Over a window shorter than half a period that changes
+    /// nothing; over `n` periods it hides rate errors near multiples of
+    /// `1 / n` (22% for the longest window), which a rate check of a few
+    /// percent still tells apart from small errors.
+    pub fn measure_periodic_rate<C: Counter, G>(
+        &self,
+        reference: &C,
+        reference_hz: u64,
+        expected_hz: u64,
+        tries: usize,
+        mut guard: impl FnMut() -> G,
+    ) -> Result<PeriodicRate, PeriodicRateError> {
+        use crate::time::delta;
+        let initial = u64::from(self.timer_initial_count());
+        if initial == 0 || expected_hz == 0 || reference_hz == 0 {
+            return Err(PeriodicRateError::NotRunning);
+        }
+        let bits = reference.bits();
+        let period = mul_div(initial, reference_hz, expected_hz);
+        let read = || {
+            let r0 = reference.read();
+            let c = u64::from(self.timer_current_count());
+            let r1 = reference.read();
+            let width = delta(r0, r1, bits);
+            (r0.wrapping_add(width / 2), c, width)
+        };
+        let mut narrowest = u64::MAX;
+        for (i, w) in PERIODIC_WINDOWS.iter().enumerate() {
+            let window = mul_div(period, w.window_permille, 1000).max(1);
+            let max_spins = window.saturating_mul(64).saturating_add(100_000);
+            for _ in 0..tries {
+                let _guard = guard();
+                let (r0, c0, w0) = read();
+                let mut spins = 0u64;
+                while delta(r0, reference.read(), bits) < window {
+                    spins += 1;
+                    if spins >= max_spins {
+                        return Err(PeriodicRateError::ReferenceStuck);
+                    }
+                    spin_loop();
+                }
+                let (r1, c1, w1) = read();
+                let elapsed = delta(r0, r1, bits);
+                let brackets = w0 + w1;
+                if elapsed == 0 || brackets.saturating_mul(1000) > elapsed.saturating_mul(w.max_brackets_permille) {
+                    narrowest = narrowest.min(brackets);
+                    continue;
+                }
+                // Counted down within the last period, then the whole
+                // periods that bring it closest to the expected count.
+                let phase = (c0 + initial - c1 % initial) % initial;
+                let expected = mul_div(elapsed, expected_hz, reference_hz);
+                let periods = (expected + initial / 2).saturating_sub(phase) / initial;
+                let counted = phase + periods * initial;
+                return Ok(PeriodicRate {
+                    hz: mul_div(counted, reference_hz, elapsed),
+                    uncertainty_ppm: mul_div(brackets, 1_000_000, elapsed),
+                    attempt: i + 1,
+                });
+            }
+        }
+        Err(PeriodicRateError::Disturbed { narrowest })
     }
 }
 
@@ -1269,6 +1408,99 @@ mod tests {
             assert!(apic.lvt(LvtReg::Timer).unwrap().is_masked());
             assert_eq!(timer_count_for(cal.hz, 1_000_000), Some((cal.hz / 1000) as u32));
         }
+    }
+
+    #[test]
+    fn timer_calibrates_against_the_tsc_where_device_reads_exit() {
+        // Like KVM: reading the timer's current count is a VM exit (2 us),
+        // reading the HPET one to user space (3 us per register, three per
+        // 64-bit counter read); reading the TSC costs nothing much. Against
+        // the HPET each bracket is about 11 us, too wide for the standard
+        // tolerance; against a calibrated TSC it is the 2 us of one exit.
+        const TSC_HZ: u64 = 2_445_428_000;
+        let clock = SimClock::new(23).read_cost(20_000, 20_000);
+        let sim = SimApic::new(&clock, 0, 0x0005_0014);
+        sim.set_timer_read_cost_ps(2_000_000);
+        let hpet_sim = SimHpet::new(&clock, true);
+        hpet_sim.set_read_cost_ps(3_000_000);
+        let hpet = crate::Hpet::new(&hpet_sim).unwrap();
+        hpet.enable();
+        let hz = hpet.capabilities().frequency_hz();
+        let tsc = crate::sim::FakeTsc::new(&clock, TSC_HZ);
+        enable_x2apic(&&sim, &ALL).unwrap();
+        let apic = LocalApic::new(X2Apic(&sim), &ALL);
+        let strict = CalibrationConfig::for_reference(hz);
+
+        let (result, report) = apic.calibrate_timer_report(&hpet, hz, Divide::By16, &strict);
+        assert_eq!(result, Err(CalibrationError::Inconsistent), "{report}");
+        assert!(report.samples().iter().all(|s| !s.tight), "{report}");
+
+        let strict = CalibrationConfig::for_reference(TSC_HZ);
+        let cal = apic.calibrate_timer(&tsc, TSC_HZ, Divide::By16, &strict).unwrap();
+        let expected = 1_000_000_000 / 16;
+        let err_ppm = mul_div(cal.hz.abs_diff(expected), 1_000_000, expected);
+        assert!(err_ppm < 100, "{cal:?}");
+        assert_eq!(cal.used, cal.taken);
+        assert_eq!(apic.timer_initial_count(), 0);
+
+        // Against the HPET the retries get there too, with looser settings.
+        let r =
+            crate::time::calibrate_with_retries(hz, |cfg| apic.calibrate_timer_report(&hpet, hz, Divide::By16, cfg));
+        let cal = r.result.unwrap();
+        assert!(r.attempts > 2, "{r:?}");
+        assert!(mul_div(cal.hz.abs_diff(expected), 1_000_000, expected) < 1000, "{cal:?}");
+    }
+
+    #[test]
+    fn periodic_rate_is_measured_however_slow_the_count_reads() {
+        // A 1 ms tick: 62.5 MHz (divide 16), initial count 62500, measured
+        // against a TSC. Each read of the count costs `read_us` on top:
+        // 0 (TCG), 7 us (the 14.8 us pair seen on KVM with -cpu max), 30 us.
+        const TSC_HZ: u64 = 2_596_197_000;
+        const HZ: u64 = 62_500_000;
+        for (read_us, attempt) in [(0, 1), (7, 2), (30, 3)] {
+            let clock = SimClock::new(31).read_cost(20_000, 10_000);
+            let sim = SimApic::new(&clock, 0, 0x0005_0014);
+            sim.set_timer_read_cost_ps(read_us * 1_000_000);
+            enable_x2apic(&&sim, &ALL).unwrap();
+            let apic = LocalApic::new(X2Apic(&sim), &ALL);
+            apic.start_timer(0xf0, TimerMode::Periodic, Divide::By16, 62_500).unwrap();
+            let tsc = crate::sim::FakeTsc::new(&clock, TSC_HZ);
+            let mut guards = 0;
+            let rate = apic.measure_periodic_rate(&tsc, TSC_HZ, HZ, 5, || guards += 1).unwrap();
+            assert_eq!(rate.attempt, attempt, "{read_us} us: {rate:?}");
+            assert!(guards >= attempt, "one guard per measurement");
+            let err_ppm = mul_div(rate.hz.abs_diff(HZ), 1_000_000, HZ);
+            assert!(err_ppm <= rate.uncertainty_ppm + 100, "{read_us} us: {rate:?} off by {err_ppm} ppm");
+            assert!(rate.uncertainty_ppm <= 50_000, "{rate:?}");
+
+            // A calibration 10% off shows as a rate 10% away from it, even
+            // over the windows of several periods.
+            let off = apic.measure_periodic_rate(&tsc, TSC_HZ, HZ * 11 / 10, 5, || ()).unwrap();
+            let err_ppm = mul_div(off.hz.abs_diff(HZ), 1_000_000, HZ);
+            assert!(err_ppm <= off.uncertainty_ppm + 100, "{read_us} us: {off:?} off by {err_ppm} ppm");
+        }
+
+        // Reads too slow for every window: disturbed, with the narrowest
+        // pair of brackets (two 300 us reads, in TSC ticks) reported.
+        let clock = SimClock::new(31).read_cost(20_000, 0);
+        let sim = SimApic::new(&clock, 0, 0x0005_0014);
+        sim.set_timer_read_cost_ps(300_000_000);
+        let apic = LocalApic::new(XApic(&sim), &ALL);
+        let tsc = crate::sim::FakeTsc::new(&clock, TSC_HZ);
+        assert_eq!(apic.measure_periodic_rate(&tsc, TSC_HZ, HZ, 2, || ()), Err(PeriodicRateError::NotRunning));
+        apic.start_timer(0xf0, TimerMode::Periodic, Divide::By16, 62_500).unwrap();
+        match apic.measure_periodic_rate(&tsc, TSC_HZ, HZ, 2, || ()) {
+            Err(PeriodicRateError::Disturbed { narrowest }) => {
+                let ns = mul_div(narrowest, 1_000_000_000, TSC_HZ);
+                assert!((600_000..601_000).contains(&ns), "{ns} ns");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(
+            apic.measure_periodic_rate(&crate::sim::Stuck(3), 1_000_000, HZ, 2, || ()),
+            Err(PeriodicRateError::ReferenceStuck)
+        );
     }
 
     #[test]

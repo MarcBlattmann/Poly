@@ -455,6 +455,7 @@ pub struct SimApic<'a> {
     pending_errors: Cell<u32>,
     timer_start_ps: Cell<u64>,
     deadline: Cell<u64>,
+    timer_read_cost_ps: Cell<u64>,
 }
 
 fn idx(offset: u16) -> usize {
@@ -494,7 +495,14 @@ impl<'a> SimApic<'a> {
             pending_errors: Cell::new(0),
             timer_start_ps: Cell::new(0),
             deadline: Cell::new(0),
+            timer_read_cost_ps: Cell::new(0),
         }
+    }
+
+    /// Reading the current count also takes `ps` (on top of the clock's
+    /// read cost), like a read that exits to a hypervisor.
+    pub fn set_timer_read_cost_ps(&self, ps: u64) {
+        self.timer_read_cost_ps.set(ps);
     }
 
     pub fn set_apic_base(&self, v: u64) {
@@ -584,6 +592,7 @@ impl<'a> SimApic<'a> {
             reg::TIMER_CURRENT => {
                 let v = self.current_count();
                 self.clock.read_done();
+                self.clock.advance_ps(self.timer_read_cost_ps.get());
                 v
             }
             reg::PPR => self.get(reg::TPR),
