@@ -1,0 +1,15 @@
+[package]
+name = "poly-kernelbase"
+description = "The logic of our kernelbase.dll and kernel32.dll: DOS paths, the environment block, Win32 argument checks and conversions, error codes and messages, the reported version"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-ntobj = { workspace = true }
+poly-rtl = { workspace = true }
+
+[lints]
+workspace = true

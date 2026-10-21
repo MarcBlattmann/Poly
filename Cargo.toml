@@ -20,6 +20,7 @@ members = [
     "crates/poly-heap",
     "crates/poly-input",
     "crates/poly-irq",
+    "crates/poly-kernelbase",
     "crates/poly-ldr",
     "crates/poly-line",
     "crates/poly-mem",
@@ -77,6 +78,7 @@ poly-gfx = { path = "crates/poly-gfx" }
 poly-heap = { path = "crates/poly-heap" }
 poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
+poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
 poly-line = { path = "crates/poly-line" }
 poly-mem = { path = "crates/poly-mem" }
