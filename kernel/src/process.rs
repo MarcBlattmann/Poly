@@ -109,6 +109,9 @@ pub struct ThreadFlags {
     /// The thread must end, though its process goes on (another thread's
     /// `execve`, [`Process::end_other_threads`]).
     pub killed: AtomicBool,
+    /// The thread is suspended (NT `NtSuspendThread`): it parks before it
+    /// next runs user code until the count reaches zero (`crate::nt`).
+    pub suspended: AtomicBool,
     /// Its kernel thread (`ThreadId::to_bits` + 1; 0 until it is known), to
     /// interrupt it when it runs on another CPU ([`ThreadFlags::kick`]).
     pub thread: AtomicU64,
@@ -136,6 +139,10 @@ struct Threads {
     started: u32,
     /// The status [`Process::group_exit`] asked for (the first one wins).
     group_exit: Option<ExitStatus>,
+    /// The own status of the thread that started to exit last
+    /// ([`Process::thread_exiting`]): the process's status without a group
+    /// exit.
+    last_exiting: Option<ExitStatus>,
     /// Set when the last thread has gone.
     status: Option<ExitStatus>,
 }
@@ -174,10 +181,21 @@ impl Process {
     /// signals. `traced`: it reports what it does on the serial port
     /// (ADR 0027).
     pub fn new_linux(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
-        let linux = Some(LinuxState::new(pid));
+        let linux = LinuxState::new(pid);
+        // Its signals are seen as a tracer sees them (ADR 0027); children inherit it.
+        linux.with(|p| p.traced = traced);
+        let linux = Some(linux);
         // A traced test run keeps the kernel log's console (ADR 0046).
         let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
         Process::with_state(pid, ppid, Personality::Linux, format, linux, traced, files)
+    }
+
+    /// An NT process for a PE executable (`crate::nt`): no Linux state (its
+    /// system calls go to the NT personality), the console on fds 0, 1 and
+    /// 2. Its per-process NT state lives in `crate::nt`, keyed by pid.
+    pub fn new_nt(pid: u32, format: binfmt::Format, traced: bool) -> Process {
+        let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
+        Process::with_state(pid, 0, Personality::Nt, format, None, traced, files)
     }
 
     /// A Linux process made by `fork` / `clone` (`linux::task`): its files
@@ -299,7 +317,7 @@ impl Process {
                 EVENTS.wake_all();
                 return None;
             }
-            let status = t.group_exit.unwrap_or(own);
+            let status = t.group_exit.or(t.last_exiting).unwrap_or(own);
             t.status = Some(status);
             status
         };
@@ -311,6 +329,20 @@ impl Process {
             }
         }
         Some(status)
+    }
+
+    /// Thread `tid` starts to exit with `own`, before its last duties
+    /// (clearing its `clear_child_tid` word, which another thread may be
+    /// watching) and before [`detach_thread`](Self::detach_thread). The
+    /// process's status, unless a group exit chose one, is that of the
+    /// thread that started to exit last (the spec of exit: "the process
+    /// ends when its last thread exits, and wait4 then reports the last
+    /// thread's code"), whichever thread happens to detach last.
+    pub fn thread_exiting(&self, tid: u32, own: ExitStatus) {
+        let mut t = self.threads.lock();
+        if t.live.iter().any(|(id, _)| *id == tid) {
+            t.last_exiting = Some(own);
+        }
     }
 
     /// The process's exit is complete (after [`detach_thread`] and the
@@ -534,6 +566,13 @@ pub fn find_thread(tid: u32) -> Option<(Arc<Process>, Arc<ThreadFlags>)> {
         let f = p.thread_flags(tid)?;
         Some((p, f))
     })
+}
+
+/// List `process` in the table without a thread of its own: the kernel's
+/// init of a traced test run (`testinit.rs`, ADR 0064), whose work a
+/// kernel thread does. The caller keeps it alive (the table is weak).
+pub fn register_threadless(process: &Arc<Process>) {
+    TABLE.lock().insert(process.pid, Arc::downgrade(process));
 }
 
 /// Every process in the table, by pid.

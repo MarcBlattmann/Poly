@@ -235,6 +235,26 @@ impl ObjectManager {
         Ok(id)
     }
 
+    /// `ObOpenObjectByPointer` (Learn) for kernel code: a handle to the live
+    /// object `id` in `caller`'s table (or the kernel table, for a
+    /// kernel-mode caller with `OBJ_KERNEL_HANDLE`), with `desired` access
+    /// mapped and checked as for an open. Used to hand a process a handle
+    /// the kernel made the object for (a file object, later the standard
+    /// handles). A dead id is `STATUS_INVALID_PARAMETER`.
+    pub fn open_by_pointer(
+        &mut self,
+        caller: &Caller,
+        id: ObjectId,
+        desired: AccessMask,
+        attributes: u32,
+    ) -> Result<Handle> {
+        Self::check_attributes(attributes)?;
+        if !self.is_alive(id) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        self.open_existing(caller, id, desired, attributes)
+    }
+
     /// Open a named object (`NtOpenEvent`, `NtOpenDirectoryObject`, ...).
     ///
     /// - The name is required: none (or empty without a root directory) is

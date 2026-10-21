@@ -542,7 +542,12 @@ fn rt_sigpending_reports_blocked_pending_signals() {
     sys(&mut k, nr::TGKILL, &[100, 101, SIGUSR2 as u64]).unwrap();
     assert_eq!(sys(&mut k, nr::RT_SIGPENDING, &[ARG, 8]), Ok(0));
     assert_eq!(k.peek_u64(ARG), SigSet::only(SIGUSR1).0, "the process's, not another thread's");
-    assert_eq!(sys(&mut k, nr::RT_SIGPENDING, &[ARG, 4]), Err(Errno::EINVAL));
+    // A smaller size writes that many bytes; above 8 is EINVAL.
+    k.poke(ARG, &[0xee; 8]);
+    assert_eq!(sys(&mut k, nr::RT_SIGPENDING, &[ARG, 4]), Ok(0));
+    assert_eq!(k.peek(ARG, 8), [&SigSet::only(SIGUSR1).0.to_le_bytes()[..4], &[0xee; 4]].concat());
+    assert_eq!(sys(&mut k, nr::RT_SIGPENDING, &[UNMAPPED, 0]), Ok(0), "0 writes nothing");
+    assert_eq!(sys(&mut k, nr::RT_SIGPENDING, &[ARG, 9]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::RT_SIGPENDING, &[UNMAPPED, 8]), Err(Errno::EFAULT));
 }
 

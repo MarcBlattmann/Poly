@@ -184,6 +184,37 @@ fn spawn_thread(
     start_thread(process, arch, memory, entry, None, hook, None, thread::CpuSet::ALL).map(|(id, _)| id)
 }
 
+/// Start a thread of `process` in `memory` at `entry` with GS based at
+/// `gs_base`: an NT thread, whose TEB is reached through GS
+/// (`NtCurrentTeb` reads `gs:[0x30]`). Otherwise as [`spawn_in`].
+pub fn spawn_nt(
+    process: Arc<Process>,
+    memory: Arc<Memory>,
+    entry: Entry,
+    gs_base: u64,
+    hook: SyscallHook,
+) -> Result<ThreadId, SpawnError> {
+    let space = Arc::clone(memory.space());
+    let arch = arch::user::ThreadState::with_state(space, &[], 0, gs_base).ok_or(SpawnError::NoMemory)?;
+    start_thread(process, arch, Some(memory), entry, None, hook, None, thread::CpuSet::ALL).map(|(id, _)| id)
+}
+
+/// Start an NT thread (see [`spawn_nt`]) with the process thread id `tid`
+/// already chosen (the kernel set up its TEB, stack and thread object under
+/// that id, `crate::nt`). Returns its kernel thread.
+pub fn spawn_nt_as(
+    process: Arc<Process>,
+    memory: Arc<Memory>,
+    entry: Entry,
+    gs_base: u64,
+    hook: SyscallHook,
+    tid: u32,
+) -> Result<ThreadId, SpawnError> {
+    let space = Arc::clone(memory.space());
+    let arch = arch::user::ThreadState::with_state(space, &[], 0, gs_base).ok_or(SpawnError::NoMemory)?;
+    start_thread(process, arch, Some(memory), entry, None, hook, Some(tid), thread::CpuSet::ALL).map(|(id, _)| id)
+}
+
 /// Start a thread of `process` in `memory` that begins with every
 /// register of `regs`, the FPU state `fpu` (an image from [`fpu_image`])
 /// and FS / GS bases `fs_base` / `gs_base`: the child of `clone` or
@@ -342,15 +373,22 @@ fn current_thread_flags() -> Option<&'static ThreadFlags> {
 /// is being ended, waits while the process is stopped, and lets the
 /// personality act on signals the thread was notified of.
 pub fn return_to_user() {
-    let Some((process, flags, _)) = current() else { return };
+    let Some((process, flags, tid)) = current() else { return };
     let notified = flags.notified.load(Ordering::SeqCst);
-    if !notified && !process.is_exiting() && !process.is_stopped() && !flags.killed.load(Ordering::SeqCst) {
+    let suspended = flags.suspended.load(Ordering::SeqCst);
+    if !notified && !suspended && !process.is_exiting() && !process.is_stopped() && !flags.killed.load(Ordering::SeqCst)
+    {
         return;
     }
     // SAFETY: the thread came from ring 3, so it holds no lock and no
     // `InterruptsOff`; its trap frame is complete. Leaving the process,
     // waiting while it is stopped and writing a signal frame may block.
     unsafe { arch::cpu::enable_interrupts() };
+    // An NT thread that was suspended parks here, with its context saved so
+    // another thread can read or change it, until it is resumed.
+    if suspended && process.personality == poly_abi::Personality::Nt {
+        crate::nt::wait_while_suspended(process.pid, tid);
+    }
     leave_if_ended(process);
     if notified && process.linux.is_some() && crate::linux::exit_to_user(process) == crate::linux::Leave::Killed {
         end_thread(ExitStatus::Exited(0), 0);
@@ -424,14 +462,30 @@ pub fn reset_fpu() {
 pub fn end_thread(status: ExitStatus, code: usize) -> ! {
     let (process, _, tid) = current().expect("end_thread on a kernel thread");
     if process.linux.is_some() {
+        // Before the thread-exit duties: a thread that sees this one's
+        // clear_child_tid word cleared and then exits must be the last one.
+        process.thread_exiting(tid, status);
         crate::linux::thread_exit(process, tid);
+    }
+    let nt_memory = (process.personality == poly_abi::Personality::Nt).then(current_memory).flatten();
+    // An NT thread's own clean-up (free its stack and TEB, signal and record
+    // its thread object) runs before it leaves its process, so a sibling
+    // that was waiting on this thread wakes and abandoned mutants are freed.
+    if let Some(memory) = &nt_memory {
+        crate::nt::thread_exit(process.pid, tid, status, memory);
     }
     if let Some(status) = process.detach_thread(tid, status) {
         if process.linux.is_some() {
             crate::linux::process_exit(process, status);
         }
+        if let Some(memory) = &nt_memory {
+            crate::nt::process_exit(process.pid, memory);
+        }
         process.ended();
     }
+    // `thread::exit` never returns, so drop this reference now: it must not
+    // outlive the thread (the NT memory map is freed with the last one).
+    drop(nt_memory);
     thread::exit(code)
 }
 
@@ -478,6 +532,11 @@ pub fn fault(fault: &Fault) {
             crate::linux::Leave::Return => return,
             crate::linux::Leave::Killed => end_thread(ExitStatus::Exited(0), 0),
         }
+    }
+    // An NT process's exception goes to its user-mode dispatcher, or ends
+    // the process with the exception code (ADR 0068).
+    if process.personality == poly_abi::Personality::Nt && crate::nt::fault(process, fault) {
+        return;
     }
     kill_current(fault)
 }
@@ -537,5 +596,25 @@ pub fn current_memory() -> Option<Arc<Memory>> {
 /// copy return [`Efault`].
 pub fn page_fault(addr: u64, access: memory::Access) -> Result<(), FaultError> {
     let memory = current_memory().ok_or(FaultError::NoMemoryMap)?;
-    memory.fault(addr, access)
+    match memory.fault(addr, access) {
+        Ok(()) => {
+            // getrusage(2): a minor fault, and perhaps a new peak of the
+            // memory.
+            if let Some(p) = current_process() {
+                p.cpu.fault(memory.resident_pages());
+            }
+            Ok(())
+        }
+        Err(e) => {
+            // An NT process's guard page may fire here (a stack grows): the
+            // personality commits the page and the instruction retries.
+            if let Some((process, _, tid)) = current()
+                && process.personality == poly_abi::Personality::Nt
+                && crate::nt::resolve_fault(process.pid, tid, &memory, addr)
+            {
+                return Ok(());
+            }
+            Err(e)
+        }
+    }
 }

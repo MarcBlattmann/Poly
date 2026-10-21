@@ -17,6 +17,7 @@ use poly_vfs::{
     At, Clock, Cred, DeviceId, Errno, FileType, FsContext, MountFlags, OpenFile, OpenFlags, PollEvents, Timespec,
     Tmpfs, Vfs,
 };
+use std::sync::Mutex;
 use std::thread;
 
 struct Epoch;
@@ -248,10 +249,21 @@ fn closing_either_side() {
     assert_eq!(env.host.peek_int(USER), 10);
     assert_eq!(m.ioctl(TIOCGSID, USER), Ok(0), "also through the master");
     env.host.take_signals();
+    // The signals go out before the hang-up shows: a reader that sees end
+    // of file already has its SIGHUP pending.
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    {
+        let (s, seen) = (Arc::clone(&s), Arc::clone(&seen));
+        *env.host.on_signal.lock().unwrap() =
+            Some(Box::new(move || seen.lock().unwrap().push(s.poll().contains(PollEvents::HUP))));
+    }
     drop(m);
+    *env.host.on_signal.lock().unwrap() = None;
+    assert_eq!(*seen.lock().unwrap(), [false, false], "not hung up while the signals are sent");
     assert_eq!(
         env.host.take_signals(),
-        [(Target::Process(10), SIGHUP), (Target::Group(10), SIGHUP), (Target::Group(10), SIGCONT)]
+        [(Target::Group(10), SIGHUP), (Target::Group(10), SIGCONT)],
+        "the leader is in the foreground group: one SIGHUP"
     );
     assert_eq!(read_some(&s, 10), Ok(vec![]));
     assert_eq!(s.write(b"x"), Err(Errno::EIO));

@@ -30,7 +30,7 @@ use poly_procfs::{
     CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, MapEntry, MapName, MountEntry, Owner, ProcFs, ProcSource,
     ProcState, ProcessInfo, SignalSets, SystemInfo,
 };
-use poly_vfs::{At, Cred, FileType, FsContext, MountFlags, OpenFile, Tmpfs, Vfs};
+use poly_vfs::{At, Cred, FileType, FsContext, MountFlags, OpenFile, Vfs};
 
 /// What the kernel remembers about the program a process runs.
 #[derive(Clone)]
@@ -579,7 +579,7 @@ pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
     let mounts: [(&[u8], Arc<dyn poly_vfs::FileSystem>); 3] = [
         (b"/proc", new_procfs()),
         (b"/sys", super::sysfs::build()),
-        (b"/dev/shm", Arc::new(Tmpfs::new(super::clock()))),
+        (b"/dev/shm", super::memfs::cached(super::memfs::new_tmpfs(super::clock()))),
     ];
     let mut ok = 0;
     for (path, fs) in mounts {

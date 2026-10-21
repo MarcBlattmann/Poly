@@ -51,14 +51,23 @@ fn sigchld_of(k: &mut dyn LinuxKernel, pid: i32) -> Option<(bool, u64)> {
 /// default of `SIGCHLD` is to ignore it). The child `info` names (its
 /// `si_pid`, a global id) is written as `pid`'s pid namespace sees it.
 pub fn signal_process(k: &mut dyn LinuxKernel, pid: i32, info: SigInfo) {
+    if let Some(sent) = queue_signal(k, pid, info) {
+        complete(k, pid, &sent);
+    }
+}
+
+/// The queueing half of [`signal_process`]: the signal is pending, but
+/// nobody was told yet ([`complete`] does that).
+fn queue_signal(k: &mut dyn LinuxKernel, pid: i32, info: SigInfo) -> Option<crate::signal::state::Sent> {
     let sent = with_target(k, Target::Process(pid), |p, _| {
         let mut info = info;
         let child = crate::ns::pid::local_or_zero(&p.ns.pid, info.pid());
         info.fields[0..4].copy_from_slice(&child.to_le_bytes());
         p.send(info, Dest::Process, false)
     });
-    if let Ok(Ok(sent)) = sent {
-        complete(k, pid, &sent);
+    match sent {
+        Ok(Ok(sent)) => Some(sent),
+        _ => None,
     }
 }
 
@@ -96,13 +105,20 @@ pub fn process_exited(k: &mut dyn LinuxKernel, how: Termination) {
     let Ok(Some(parent)) = with_tree(k, |t| t.parent(pid)) else { return };
     let ignores = parent != 0 && sigchld_of(k, parent).is_some_and(|(ign, flags)| ign || flags & SA_NOCLDWAIT != 0);
     let Ok(report) = with_tree(k, |t| t.exit_announced_later(pid, how, ignores)) else { return };
+    let mut sent = None;
     if report.parent != 0 && report.exit_signal != 0 {
         let waited = Waited { pid, uid, event: ChildEvent::Ended(how) };
-        signal_process(k, report.parent, wait::child_info(report.exit_signal, &waited));
+        sent = queue_signal(k, report.parent, wait::child_info(report.exit_signal, &waited));
     }
     // The parent may reap it now (it is waitable only once the signal is
-    // pending, as on Linux).
+    // pending, as on Linux). Its threads hear of the signal after that,
+    // so a parent waiting in wait4 finds the child instead of being
+    // interrupted: the call returns it and the signal is taken after it,
+    // in that order (as a tracer of a Linux process sees it).
     let _ = with_tree(k, |t| t.announce(pid));
+    if let Some(sent) = sent {
+        complete(k, report.parent, &sent);
+    }
     for &(child, uid, how, signal, adopter) in &report.adopted_zombies {
         if signal != 0 {
             let waited = Waited { pid: child, uid, event: ChildEvent::Ended(how) };

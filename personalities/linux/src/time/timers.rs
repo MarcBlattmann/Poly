@@ -86,25 +86,67 @@ pub struct Timer {
     /// A `CLOCK_REALTIME` timer: an absolute time given to timer_settime
     /// is a wall-clock time.
     pub realtime: bool,
-    /// Expirations beyond the first since the timer's signal was queued.
+    /// The overrun count fixed when the timer's last signal was taken
+    /// (timer_getoverrun(2)); 0 after arming.
     overrun: u32,
-    /// The overrun count of the signal delivered before the one pending.
-    last_overrun: u32,
+    /// The POSIX timer's signal is pending ([`fire`] queued it). Its
+    /// `deadline` then stays at the first expiry after the one that queued
+    /// it, even once that is past: the expiries while the signal is pending
+    /// are counted when it is taken ([`count_taken`]), not one by one.
+    signal_pending: bool,
+    /// The pending signal has been dequeued and its count is being fixed
+    /// ([`signal_taken`], then [`count_taken`]).
+    taking: bool,
+    /// While the signal is pending: when [`fire`] looks at the timer again
+    /// (on its clock), to notice a signal that went without being taken
+    /// (discarded when its action became `SIG_IGN`, say).
+    recheck: u64,
 }
+
+/// While a POSIX timer's signal is pending, [`fire`] looks at the timer
+/// this often (or once an interval, if that is longer): 10 ms. The
+/// expiries in between cost nothing, however short the interval.
+pub const PENDING_RECHECK_NS: u64 = 10_000_000;
 
 impl Timer {
     pub const fn new(clock: TimerClock, notify: Notify) -> Timer {
-        Timer { clock, deadline: None, interval: 0, notify, realtime: false, overrun: 0, last_overrun: 0 }
+        Timer {
+            clock,
+            deadline: None,
+            interval: 0,
+            notify,
+            realtime: false,
+            overrun: 0,
+            signal_pending: false,
+            taking: false,
+            recheck: 0,
+        }
     }
 
     /// Arm the timer to expire at `deadline` (on its clock) and every
     /// `interval` after that, or disarm it (`None`; the interval is then
-    /// dropped too). Overrun counts start again.
+    /// dropped too). The overrun count starts again; a POSIX timer's
+    /// pending signal is the caller's to discard ([`discard_queued`]).
     pub fn arm(&mut self, deadline: Option<u64>, interval: u64) {
         self.deadline = deadline;
         self.interval = if deadline.is_some() { interval } else { 0 };
         self.overrun = 0;
-        self.last_overrun = 0;
+        self.signal_pending = false;
+        self.taking = false;
+    }
+
+    /// `(time left, interval)` at `now`, as timer_gettime(2) reports it
+    /// for a POSIX timer: the time to the next expiry that is still to come
+    /// (a periodic timer whose expiries are due but not fired yet counts on
+    /// from them), 0 for a one-shot timer whose time has come (an absolute
+    /// time in the past "expires at once").
+    pub fn left(&self, now: u64) -> (u64, u64) {
+        match self.deadline {
+            Some(d) if now < d => (d - now, self.interval),
+            Some(d) if self.interval > 0 => (self.interval - (now - d) % self.interval, self.interval),
+            Some(_) => (0, 0),
+            None => (0, 0),
+        }
     }
 
     /// `(time left, interval)` at `now`, as timer_gettime(2) and
@@ -149,6 +191,10 @@ pub struct TimerWakeup {
 pub struct Timers {
     itimers: [Timer; 3],
     posix: BTreeMap<i32, Timer>,
+    /// Where the search for the next POSIX timer id starts: ids are handed
+    /// out in increasing order, so a deleted one is not given out again at
+    /// once (wrapping around after `i32::MAX`).
+    next_id: i32,
 }
 
 impl Default for Timers {
@@ -172,6 +218,7 @@ impl Timers {
                 itimer(TimerClock::ProcessCpu, ITIMER_PROF as usize),
             ],
             posix: BTreeMap::new(),
+            next_id: 0,
         }
     }
 
@@ -189,7 +236,11 @@ impl Timers {
         if self.posix.len() >= MAX_POSIX_TIMERS {
             return Err(Errno::EAGAIN);
         }
-        let id = (0..).find(|id| !self.posix.contains_key(id)).expect("fewer timers than ids");
+        let id = (self.next_id..=i32::MAX)
+            .chain(0..self.next_id)
+            .find(|id| !self.posix.contains_key(id))
+            .expect("fewer timers than ids");
+        self.next_id = id.checked_add(1).unwrap_or(0);
         let notify = notify.unwrap_or(Notify::Signal { signo: SIGALRM, value: id as u64, thread: None });
         self.posix.insert(id, Timer::new(clock, notify));
         Ok(id)
@@ -217,6 +268,7 @@ impl Timers {
     /// execve(2): the POSIX timers go, the interval timers stay.
     pub fn exec(&mut self) {
         self.posix.clear();
+        self.next_id = 0;
     }
 
     /// When the kernel must look at the timers next.
@@ -224,6 +276,8 @@ impl Timers {
         let mut w = TimerWakeup::default();
         for t in self.itimers.iter().chain(self.posix.values()) {
             let Some(d) = t.deadline else { continue };
+            // A timer whose signal is pending is only looked at again.
+            let d = if t.signal_pending { t.recheck } else { d };
             if t.clock.is_cpu() {
                 w.cpu = true;
             } else {
@@ -258,22 +312,88 @@ fn queued(p: &mut LinuxProcess, dest: Dest, id: i32, signo: u32) -> Option<&mut 
     queue.find_mut(|info| from_timer(info, id, signo))
 }
 
+/// timer_delete(2) of timer `id`, which sent `signo`: its signal, if one
+/// is still queued, is never delivered (the spec of timer_delete).
+pub fn discard_queued(p: &mut LinuxProcess, id: i32, signo: u32) {
+    p.shared.remove_where(|info| from_timer(info, id, signo));
+    let tids: alloc::vec::Vec<i32> = p.thread_ids().collect();
+    for tid in tids {
+        p.thread_mut(tid).pending.remove_where(|info| from_timer(info, id, signo));
+    }
+}
+
 /// Whether timer `id`'s signal is queued anywhere in the process.
 fn is_queued(p: &LinuxProcess, id: i32, signo: u32) -> bool {
     let thread_queues = p.thread_ids().map(|tid| &p.thread(tid).pending);
     core::iter::once(&p.shared).chain(thread_queues).any(|q| q.iter().any(|info| from_timer(info, id, signo)))
 }
 
-/// timer_getoverrun(2) for timer `id`: the overrun count of its last
-/// delivered (or still pending) expiry notification, at most
-/// [`DELAYTIMER_MAX`]. `None` if there is no such timer.
+/// timer_getoverrun(2) for timer `id`: the overrun count fixed when its
+/// last signal was taken (0 if none was since it was armed; it stays so
+/// while the next signal is pending), at most [`DELAYTIMER_MAX`]. `None`
+/// if there is no such timer.
 pub fn overrun(p: &LinuxProcess, id: i32) -> Option<u32> {
-    let t = p.timers.get(id)?;
-    let pending = match t.notify {
-        Notify::Signal { signo, .. } => is_queued(p, id, signo),
-        Notify::None => false,
+    p.timers.get(id).map(|t| t.overrun)
+}
+
+/// A POSIX timer's signal that was just taken: its overrun count is fixed
+/// by [`count_taken`] with the time on [`clock`](Self::clock).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TakenTimer {
+    pub id: i32,
+    signo: u32,
+    pub clock: TimerClock,
+}
+
+/// `info` was just dequeued (with the process's state locked, in the same
+/// hold). If it is the pending signal of a POSIX timer, the timer waits
+/// for [`count_taken`] (until then [`fire`] leaves it alone): the caller
+/// reads the timer's clock and calls that, which fixes the count. Every
+/// path that takes signals for a thread does this; one that does not
+/// (a plain [`LinuxProcess::dequeue`]) only loses the count, as if the
+/// signal had been discarded.
+pub fn signal_taken(p: &mut LinuxProcess, info: &SigInfo) -> Option<TakenTimer> {
+    if info.code != SI_TIMER {
+        return None;
+    }
+    let id = i32::from_le_bytes(info.fields[0..4].try_into().expect("4 bytes"));
+    let t = p.timers.get_mut(id)?;
+    let Notify::Signal { signo, .. } = t.notify else { return None };
+    if signo != info.signal() || !t.signal_pending {
+        return None;
+    }
+    t.taking = true;
+    Some(TakenTimer { id, signo, clock: t.clock })
+}
+
+/// The signal of [`signal_taken`] was taken at `now` on the timer's clock
+/// (`None`: the clock is gone): fix the overrun count, the expiries due
+/// from the one after the expiry that queued the signal up to `now`
+/// (at most [`DELAYTIMER_MAX`]), the spec of timer_getoverrun. It goes
+/// into `info` (`si_overrun`) if that is the signal, and a periodic timer
+/// goes on from its first expiry after `now`. Returns whether the timer's
+/// next expiry changed (the caller tells the kernel: [`Timers::wakeup`]).
+pub fn count_taken(p: &mut LinuxProcess, taken: TakenTimer, now: Option<u64>, info: Option<&mut SigInfo>) -> bool {
+    let Some(t) = p.timers.get_mut(taken.id) else { return false };
+    if !t.taking || !matches!(t.notify, Notify::Signal { signo, .. } if signo == taken.signo) {
+        // Re-armed, or deleted and made again, in between: nothing counts.
+        return false;
+    }
+    t.taking = false;
+    t.signal_pending = false;
+    let due = match (now, t.deadline) {
+        (Some(now), Some(d)) if t.interval > 0 && now >= d => (now - d) / t.interval + 1,
+        _ => 0,
     };
-    Some(if pending { t.last_overrun } else { t.overrun })
+    if due > 0 {
+        let d = t.deadline.expect("due");
+        t.deadline = Some(d.saturating_add(due.saturating_mul(t.interval)));
+    }
+    t.overrun = u32::try_from(due).unwrap_or(u32::MAX).min(DELAYTIMER_MAX);
+    if let Some(info) = info.filter(|i| from_timer(i, taken.id, taken.signo)) {
+        info.fields[4..8].copy_from_slice(&t.overrun.to_le_bytes());
+    }
+    true
 }
 
 /// What [`fire`] asks of the kernel.
@@ -321,33 +441,54 @@ pub fn fire(p: &mut LinuxProcess, now: &dyn Fn(TimerClock) -> Option<u64>, is_in
     let ids: Vec<i32> = p.timers.ids().collect();
     for id in ids {
         let t = p.timers.get_mut(id).expect("listed");
-        let Some(n) = now(t.clock).map(|now| t.expire(now)) else { continue };
-        if n == 0 {
-            continue;
+        let Some(at) = now(t.clock) else { continue };
+        let (clock_now, interval) = (at, t.interval);
+        if let Notify::Signal { signo, .. } = t.notify
+            && t.signal_pending
+        {
+            let taking = t.taking;
+            if taking || is_queued(p, id, signo) {
+                // Still pending (or being taken): look again later.
+                let t = p.timers.get_mut(id).expect("listed");
+                t.recheck = clock_now.saturating_add(interval.max(PENDING_RECHECK_NS));
+                continue;
+            }
+            // The signal went without being taken: go on as if it had
+            // never been queued.
+            p.timers.get_mut(id).expect("listed").signal_pending = false;
         }
+        let t = p.timers.get_mut(id).expect("listed");
+        let Some(first) = t.deadline.filter(|&d| d <= clock_now) else { continue };
         out.expired += 1;
-        let Notify::Signal { signo, value, thread } = t.notify else { continue };
-        let missed = u32::try_from(n - 1).unwrap_or(u32::MAX);
+        let Notify::Signal { signo, value, thread } = t.notify else {
+            t.expire(clock_now);
+            continue;
+        };
         let dest = match thread {
             Some(tid) if p.has_thread(tid) => Dest::Thread(tid),
             _ => Dest::Process,
         };
-        if queued(p, dest, id, signo).is_some() {
-            // Still pending: one more overrun (or several) on top.
-            let t = p.timers.get_mut(id).expect("listed");
-            t.overrun = t.overrun.saturating_add(missed).saturating_add(1).min(DELAYTIMER_MAX);
-            let overrun = t.overrun;
-            if let Some(info) = queued(p, dest, id, signo) {
-                info.fields[4..8].copy_from_slice(&overrun.to_le_bytes());
+        // At most one signal of a timer is queued (timer_getoverrun(2)).
+        let already = queued(p, dest, id, signo).is_some();
+        if !already {
+            // The count goes in when the signal is taken (count_taken).
+            let info = timer_siginfo(signo, id, 0, value);
+            if let Ok(sent) = p.send(info, dest, is_init) {
+                out.sent(sent);
             }
-            continue;
         }
+        let pending = queued(p, dest, id, signo).is_some();
         let t = p.timers.get_mut(id).expect("listed");
-        t.last_overrun = t.overrun;
-        t.overrun = missed.min(DELAYTIMER_MAX);
-        let info = timer_siginfo(signo, id, t.overrun, value);
-        if let Ok(sent) = p.send(info, dest, is_init) {
-            out.sent(sent);
+        if pending {
+            // The expiries after `first` are counted when the signal is
+            // taken: the deadline waits at the next one.
+            t.signal_pending = true;
+            t.taking = false;
+            t.deadline = (t.interval > 0).then(|| first.saturating_add(t.interval));
+            t.recheck = clock_now.saturating_add(t.interval.max(PENDING_RECHECK_NS));
+        } else {
+            // Not queued (ignored, or init's rule): the expiries are gone.
+            t.expire(clock_now);
         }
     }
     out.next = p.timers.wakeup();

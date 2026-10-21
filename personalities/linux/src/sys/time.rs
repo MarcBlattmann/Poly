@@ -27,7 +27,7 @@
 //! handler says what Poly does, to be confirmed by the diff runner.
 
 use crate::abi::signal::NSIG;
-use crate::abi::{Timespec, clock as id};
+use crate::abi::{SigInfo, Timespec, clock as id};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::{Clock, CpuTimesOf, Deadline, LinuxKernel, UserPtr, Wakeup};
@@ -97,6 +97,17 @@ fn timers_changed(k: &mut dyn LinuxKernel) {
     k.timers_changed(next);
 }
 
+/// A POSIX timer's signal was taken by the calling thread
+/// ([`timers::signal_taken`]): fix its overrun count with the timer's clock
+/// read now, into `info` if that is the signal (timer_getoverrun(2),
+/// `si_overrun`), and tell the kernel when to look at the timers next.
+pub(crate) fn count_taken(k: &mut dyn LinuxKernel, taken: timers::TakenTimer, info: Option<&mut SigInfo>) {
+    let now = timer_clock_now(k, taken.clock).ok();
+    if with_own(k, |p| timers::count_taken(p, taken, now, info)) {
+        timers_changed(k);
+    }
+}
+
 /// `CAP_SYS_TIME` in the calling thread's effective set (ADR 0045).
 fn may_set_time(k: &mut dyn LinuxKernel) -> bool {
     // The clocks are the machine's (ADR 0054).
@@ -108,9 +119,14 @@ fn may_set_time(k: &mut dyn LinuxKernel) -> bool {
 /// coarse ones. `EINVAL` for an unknown clock, `EFAULT`.
 pub fn clock_getres(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let clockid = a.int(0);
-    let clock = clock_for(clockid).ok_or(Errno::EINVAL)?;
-    if matches!(clock, Clock::ProcessCpuTime | Clock::ThreadCpuTime) && k.cpu_times(CpuTimesOf::Process).is_none() {
-        return Err(Errno::EINVAL);
+    if let Some(cpu) = crate::time::cpuclock::decode(k, clockid) {
+        // A CPU-time clock named by id: 1 ns, like the caller's own.
+        cpu?;
+    } else {
+        let clock = clock_for(clockid).ok_or(Errno::EINVAL)?;
+        if matches!(clock, Clock::ProcessCpuTime | Clock::ThreadCpuTime) && k.cpu_times(CpuTimesOf::Process).is_none() {
+            return Err(Errno::EINVAL);
+        }
     }
     let res = match clockid {
         id::CLOCK_REALTIME_COARSE | id::CLOCK_MONOTONIC_COARSE => k.tick_ns(),
@@ -248,14 +264,23 @@ pub fn nanosleep(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// confirmed by the diff runner); `EINVAL` for a `request` out of range,
 /// `EFAULT`, `EINTR`. Other `flags` bits are ignored.
 pub fn clock_nanosleep(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let clock = match a.int(0) {
-        id::CLOCK_REALTIME => Clock::Realtime,
-        id::CLOCK_MONOTONIC | id::CLOCK_BOOTTIME => Clock::Monotonic,
-        id::CLOCK_PROCESS_CPUTIME_ID
+    use crate::time::cpuclock::{Counts, CpuClock, decode};
+    let cpu = |of| CpuClock { of, counts: Counts::All };
+    let clockid = a.int(0);
+    let clock = match clockid {
+        // CLOCK_TAI is the wall clock (its offset is 0, `clock_for`).
+        id::CLOCK_REALTIME | id::CLOCK_TAI | id::CLOCK_REALTIME_ALARM => Clock::Realtime,
+        id::CLOCK_MONOTONIC | id::CLOCK_BOOTTIME | id::CLOCK_BOOTTIME_ALARM => Clock::Monotonic,
+        id::CLOCK_PROCESS_CPUTIME_ID => return cpu_sleep(k, a, cpu(CpuTimesOf::Process)),
+        id::CLOCK_THREAD_CPUTIME_ID
         | id::CLOCK_MONOTONIC_RAW
         | id::CLOCK_REALTIME_COARSE
         | id::CLOCK_MONOTONIC_COARSE => return Err(Errno::EOPNOTSUPP),
-        _ => return Err(Errno::EINVAL),
+        // Another process's CPU-time clock; a thread's cannot be slept on.
+        _ => match decode(k, clockid) {
+            Some(Ok(c)) if !matches!(c.of, CpuTimesOf::Thread(_)) => return cpu_sleep(k, a, c),
+            _ => return Err(Errno::EINVAL),
+        },
     };
     let request = read_timespec(k, a.ptr(2))?;
     if !request.is_valid() {
@@ -266,6 +291,34 @@ pub fn clock_nanosleep(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
     let at = k.clock(Clock::Monotonic)?.saturating_add(request);
     sleep(k, Deadline { clock: Clock::Monotonic, at }, Some(a.ptr(3)))
+}
+
+/// clock_nanosleep(2) on a CPU-time clock: until the clock reaches the
+/// requested time (`TIMER_ABSTIME`) or has advanced by it, looking once a
+/// tick. A handler interrupts it with `EINTR` and, for a relative sleep,
+/// the CPU time left in `remain`.
+fn cpu_sleep(k: &mut dyn LinuxKernel, a: &Args, clock: crate::time::cpuclock::CpuClock) -> SysResult {
+    let request = read_timespec(k, a.ptr(2))?;
+    if !request.is_valid() {
+        return Err(Errno::EINVAL);
+    }
+    let absolute = a.uint(1) & TIMER_ABSTIME != 0;
+    let start = clock.read_ns(k)?;
+    let target = if absolute { timespec_ns(request) } else { start.saturating_add(timespec_ns(request)) };
+    loop {
+        let now = clock.read_ns(k)?;
+        if now >= target {
+            return Ok(0);
+        }
+        let at = k.clock(Clock::Monotonic)?.saturating_add(Timespec::from_nanos(k.tick_ns()));
+        if k.block(Some(Deadline { clock: Clock::Monotonic, at })) == Wakeup::Signal {
+            let rem = a.ptr(3);
+            if !absolute && !rem.is_null() {
+                k.copy_to_user(rem, &Timespec::from_nanos(target - now).to_bytes())?;
+            }
+            return Err(Errno::RESTART_IF_NO_HANDLER);
+        }
+    }
 }
 
 /// The clock of interval timer `which`.
@@ -315,13 +368,15 @@ pub fn getitimer(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// setitimer(which, new_value, old_value): arm (or with a zero value,
 /// disarm) an interval timer; the old setting goes to `old_value` if it
 /// is not null. setitimer(2): `EINVAL` for an unknown timer or a
-/// `tv_usec` outside 0-999999 (and Poly: negative seconds), `EFAULT`
-/// (also for a null `new_value`; to be confirmed by the diff runner). The
-/// new setting is in place before `old_value` is written.
+/// `tv_usec` outside 0-999999 (and Poly: negative seconds), `EFAULT`. A
+/// null `new_value` disarms the timer (setitimer's spec). The new setting
+/// is in place before `old_value` is written.
 pub fn setitimer(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let which = a.int(0);
     let clock = itimer_clock(which).ok_or(Errno::EINVAL)?;
-    let new = Itimerval::from_bytes(&read(k, a.ptr(1))?);
+    // A null new value disarms the timer (setitimer's spec: it returns
+    // 0 and the old value).
+    let new = if a.ptr(1).is_null() { Itimerval::default() } else { Itimerval::from_bytes(&read(k, a.ptr(1))?) };
     if !new.value.is_valid() || !new.interval.is_valid() {
         return Err(Errno::EINVAL);
     }
@@ -352,9 +407,18 @@ pub fn setitimer(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn timer_create(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let clockid = a.int(0);
     let clock = match clockid {
-        id::CLOCK_REALTIME | id::CLOCK_MONOTONIC | id::CLOCK_BOOTTIME => TimerClock::Monotonic,
+        id::CLOCK_REALTIME
+        | id::CLOCK_MONOTONIC
+        | id::CLOCK_BOOTTIME
+        | id::CLOCK_TAI
+        | id::CLOCK_REALTIME_ALARM
+        | id::CLOCK_BOOTTIME_ALARM => TimerClock::Monotonic,
         id::CLOCK_PROCESS_CPUTIME_ID => TimerClock::ProcessCpu,
         id::CLOCK_THREAD_CPUTIME_ID => TimerClock::ThreadCpu(k.tid()),
+        // Clocks that exist but cannot drive a timer (timer_create(2)).
+        id::CLOCK_MONOTONIC_RAW | id::CLOCK_REALTIME_COARSE | id::CLOCK_MONOTONIC_COARSE => {
+            return Err(Errno::EOPNOTSUPP);
+        }
         _ => return Err(Errno::EINVAL),
     };
     if clock.is_cpu() && k.cpu_times(CpuTimesOf::Process).is_none() {
@@ -382,7 +446,7 @@ pub fn timer_create(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             _ => return Err(Errno::EINVAL),
         })
     };
-    let realtime = clockid == id::CLOCK_REALTIME;
+    let realtime = matches!(clockid, id::CLOCK_REALTIME | id::CLOCK_TAI | id::CLOCK_REALTIME_ALARM);
     let timer = with_own(k, |p| {
         let timer = p.timers.create(clock, notify)?;
         p.timers.get_mut(timer).expect("just created").realtime = realtime;
@@ -413,6 +477,10 @@ fn itimerspec(left: u64, interval: u64) -> Itimerspec {
 pub fn timer_settime(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let timer = a.int(0);
     let (clock, realtime) = posix_timer(k, timer)?;
+    // A null new value is EINVAL (the spec of timer_settime), not EFAULT.
+    if a.ptr(2).is_null() {
+        return Err(Errno::EINVAL);
+    }
     let new = Itimerspec::from_bytes(&read(k, a.ptr(2))?);
     if !new.value.is_valid() || !new.interval.is_valid() {
         return Err(Errno::EINVAL);
@@ -433,8 +501,13 @@ pub fn timer_settime(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let interval = timespec_ns(new.interval);
     let old = with_own(k, |p| {
         let t = p.timers.get_mut(timer)?;
-        let old = t.remaining(now);
+        let old = t.left(now);
         t.arm(deadline, interval);
+        // A signal of the timer still pending is not delivered anymore
+        // (the spec of timer_settime).
+        if let Notify::Signal { signo, .. } = t.notify {
+            timers::discard_queued(p, timer, signo);
+        }
         Some(old)
     })
     .ok_or(Errno::EINVAL)?;
@@ -451,7 +524,7 @@ pub fn timer_gettime(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let timer = a.int(0);
     let (clock, _) = posix_timer(k, timer)?;
     let now = timer_clock_now(k, clock)?;
-    let (left, interval) = with_own(k, |p| p.timers.get(timer).map(|t| t.remaining(now))).ok_or(Errno::EINVAL)?;
+    let (left, interval) = with_own(k, |p| p.timers.get(timer).map(|t| t.left(now))).ok_or(Errno::EINVAL)?;
     k.copy_to_user(a.ptr(1), &itimerspec(left, interval).to_bytes())?;
     Ok(0)
 }
@@ -469,7 +542,18 @@ pub fn timer_getoverrun(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// unspecified).
 pub fn timer_delete(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let timer = a.int(0);
-    if !with_own(k, |p| p.timers.delete(timer)) {
+    let deleted = with_own(k, |p| {
+        let signo = match p.timers.get(timer).map(|t| t.notify) {
+            Some(Notify::Signal { signo, .. }) => Some(signo),
+            _ => None,
+        };
+        let deleted = p.timers.delete(timer);
+        if let Some(signo) = signo {
+            timers::discard_queued(p, timer, signo);
+        }
+        deleted
+    });
+    if !deleted {
         return Err(Errno::EINVAL);
     }
     timers_changed(k);
@@ -512,7 +596,14 @@ pub fn getrusage(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         _ => return Err(Errno::EINVAL),
     };
     let t = k.cpu_times(of).unwrap_or_default();
-    let usage = Rusage { utime: Timeval::from_nanos(t.user_ns), stime: Timeval::from_nanos(t.system_ns) };
+    let m = k.memory_counts(of);
+    let usage = Rusage {
+        utime: Timeval::from_nanos(t.user_ns),
+        stime: Timeval::from_nanos(t.system_ns),
+        maxrss: m.maxrss_kib as i64,
+        minflt: m.minor_faults as i64,
+        majflt: m.major_faults as i64,
+    };
     k.copy_to_user(a.ptr(1), &usage.to_bytes())?;
     Ok(0)
 }

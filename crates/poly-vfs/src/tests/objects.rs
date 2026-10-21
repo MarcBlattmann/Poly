@@ -150,7 +150,7 @@ fn pipe_without_readers_is_epipe() {
     assert!(w.poll().contains(PollEvents::WRITABLE));
     drop(r);
     assert_eq!(w.write(b"x"), Err(Errno::EPIPE));
-    assert_eq!(w.poll(), PollEvents::ERR, "poll(2): POLLERR once the read end is closed");
+    assert_eq!(w.poll(), PollEvents::ERR | PollEvents::WRITABLE, "POLLERR (and POLLOUT) once the read end is closed");
     let mut blocker = TestBlocker::default();
     assert_eq!(w.write_wait(b"x", &mut blocker), Err(Errno::EPIPE));
 }
@@ -165,12 +165,14 @@ fn pipe_writes_up_to_pipe_buf_are_atomic() {
     assert!(!w.poll().intersects(PollEvents::WRITABLE), "a PIPE_BUF write would block");
     assert_eq!(w.write(&[2u8; PIPE_BUF]), Err(Errno::EAGAIN), "all or nothing");
     assert_eq!(w.write(&[2u8; 10]), Ok(10));
-    // A longer write takes what fits.
-    assert_eq!(w.write(&[3u8; PIPE_BUF + 1]), Ok(PIPE_BUF - 11));
-    assert_eq!(r.bytes_readable(), Some(PIPE_CAPACITY));
-    assert_eq!(w.write(&[3u8; PIPE_BUF + 1]), Err(Errno::EAGAIN), "full");
+    // A longer write takes what fits: its odd byte goes into the last page,
+    // its whole page finds no free page.
+    assert_eq!(w.write(&[3u8; PIPE_BUF + 1]), Ok(1));
+    assert_eq!(r.bytes_readable(), Some(big.len() + 11));
+    // Its odd part does not fit into the last page: it needs a page.
+    assert_eq!(w.write(&[3u8; PIPE_BUF * 2 - 1]), Err(Errno::EAGAIN), "full");
     let mut buf = vec![0u8; PIPE_CAPACITY];
-    assert_eq!(r.read(&mut buf), Ok(PIPE_CAPACITY));
+    assert_eq!(r.read(&mut buf), Ok(big.len() + 11));
     assert!(w.poll().contains(PollEvents::WRITABLE));
 }
 
@@ -806,4 +808,104 @@ fn devices_and_objects_without_a_queue_are_always_ready() {
     let (ep, _) = epoll_file(&env);
     ep.ctl(EpollOp::Add, 3, &null, ev(PollEvents::IN, 0, 1)).unwrap();
     assert_eq!(wait_now(&ep, 2).len(), 1);
+}
+
+#[test]
+fn pipe_room_comes_back_a_page_at_a_time() {
+    use crate::pipe::{PIPE_CAPACITY as CAPACITY, PIPE_PAGE as PAGE};
+    let env = Env::new();
+    let (r, w) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+    let big = vec![7u8; 70_000];
+    let mut buf = vec![0u8; 70_000];
+    assert_eq!(w.write(&big), Ok(CAPACITY));
+    assert_eq!(w.write(b"x"), Err(Errno::EAGAIN));
+    assert_eq!(r.read(&mut buf[..100]), Ok(100));
+    assert_eq!(w.write(&big[..50]), Err(Errno::EAGAIN), "a partly read page takes nothing");
+    assert!(!w.poll().contains(PollEvents::WRITABLE));
+    assert_eq!(r.read(&mut buf[..PAGE - 100]), Ok(PAGE - 100));
+    assert!(w.poll().contains(PollEvents::WRITABLE));
+    assert_eq!(w.write(&big[..PAGE]), Ok(PAGE));
+    assert_eq!(w.write(b"x"), Err(Errno::EAGAIN));
+    while r.read(&mut buf).is_ok_and(|n| n > 0) {}
+    // 15 full pages and one with 1000 bytes free: of a 5000-byte write the
+    // 904 bytes that are not a whole page fit into the last page, the whole
+    // page that is left finds no free one (pipe2's b_pipe2_capacity).
+    assert_eq!(w.write(&big[..CAPACITY - 1000]), Ok(CAPACITY - 1000));
+    assert_eq!(w.write(&big[..5000]), Ok(904));
+    assert_eq!(w.write(&big[..5000]), Err(Errno::EAGAIN), "96 bytes free, 904 do not fit");
+    assert_eq!(w.write(&big[..96]), Ok(96));
+    assert_eq!(r.bytes_readable(), Some(CAPACITY));
+    while r.read(&mut buf).is_ok_and(|n| n > 0) {}
+    // A page's worth never joins the last page; a smaller part does, so
+    // pages need not be full: 100 + 4096 bytes take two pages.
+    assert_eq!(w.write(&big[..100]), Ok(100));
+    assert_eq!(w.write(&big[..PAGE]), Ok(PAGE));
+    assert_eq!(w.write(&big), Ok(CAPACITY - 2 * PAGE), "14 pages left");
+    assert_eq!(w.write(b"x"), Err(Errno::EAGAIN));
+    assert_eq!(r.bytes_readable(), Some(CAPACITY - PAGE + 100));
+}
+
+#[test]
+fn fifos_open_as_ends_of_one_pipe() {
+    use crate::pipe::PipeEnd;
+    let env = Env::new();
+    env.vfs.mknod(&env.ctx, &env.root, At::Cwd, b"/f", FileType::Fifo, 0o600, DeviceId::default()).unwrap();
+    let nb = OpenFlags::NONBLOCK;
+    assert_eq!(env.open("/f", OpenFlags::WRONLY | nb).err(), Some(Errno::ENXIO), "no reader");
+    let r = env.open("/f", OpenFlags::RDONLY | nb).unwrap();
+    assert_eq!(r.kind(), FileType::Fifo);
+    let mut buf = [0u8; 8];
+    assert_eq!(r.read(&mut buf), Ok(0), "no writer yet: end of file");
+    let w = env.open("/f", OpenFlags::WRONLY | nb).unwrap();
+    assert_eq!(r.read(&mut buf), Err(Errno::EAGAIN));
+    assert_eq!(w.write(b"fifo"), Ok(4));
+    assert_eq!(r.read(&mut buf), Ok(4));
+    assert_eq!(&buf[..4], b"fifo");
+    assert_eq!(r.seek(0, Whence::Set), Err(Errno::ESPIPE));
+    // A blocking open for writing finds the reader at once.
+    let w2 = env.open("/f", OpenFlags::WRONLY).unwrap();
+    let mut blocker = TestBlocker::default();
+    assert_eq!(w2.object_as::<PipeEnd>().unwrap().wait_for_peer(&mut blocker), Ok(()));
+    assert_eq!(blocker.blocks(), 0);
+    drop((w, w2));
+    assert_eq!(r.read(&mut buf), Ok(0), "end of file once the writers are gone");
+    drop(r);
+    // O_RDWR is both ends; with every end closed the data is gone.
+    let rw = env.open("/f", OpenFlags::RDWR).unwrap();
+    assert_eq!(rw.write(b"z"), Ok(1));
+    assert_eq!(rw.read(&mut buf), Ok(1));
+    assert_eq!(rw.write(b"left"), Ok(4));
+    drop(rw);
+    let r = env.open("/f", OpenFlags::RDONLY | nb).unwrap();
+    assert_eq!(r.read(&mut buf), Ok(0));
+}
+
+#[test]
+fn a_blocking_fifo_open_waits_for_the_other_side() {
+    use crate::pipe::PipeEnd;
+    let env = Arc::new(Env::new());
+    env.vfs.mknod(&env.ctx, &env.root, At::Cwd, b"/f", FileType::Fifo, 0o600, DeviceId::default()).unwrap();
+    let r = env.open("/f", OpenFlags::RDONLY).unwrap();
+    let end = r.object_as::<PipeEnd>().unwrap();
+    let mut blocker = TestBlocker::default();
+    let opener = {
+        let env = Arc::clone(&env);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(20));
+            env.open("/f", OpenFlags::WRONLY).unwrap()
+        })
+    };
+    assert_eq!(end.wait_for_peer(&mut blocker), Ok(()));
+    let _w = opener.join().unwrap();
+    // Interrupted: EINTR.
+    env.vfs.mknod(&env.ctx, &env.root, At::Cwd, b"/h", FileType::Fifo, 0o600, DeviceId::default()).unwrap();
+    let lone = env.open("/h", OpenFlags::RDONLY).unwrap();
+    let mut blocker = TestBlocker::default();
+    let signal = blocker.interrupter();
+    let t = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(20));
+        signal.set(|f| f.interrupted = true);
+    });
+    assert_eq!(lone.object_as::<PipeEnd>().unwrap().wait_for_peer(&mut blocker), Err(Errno::EINTR));
+    t.join().unwrap();
 }

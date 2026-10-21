@@ -172,6 +172,17 @@ pub enum Clock {
     ThreadCpuTime,
 }
 
+/// getrusage(2)'s memory counters ([`LinuxKernel::memory_counts`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemoryCounts {
+    /// The most memory resident at once, in KiB (`ru_maxrss`).
+    pub maxrss_kib: u64,
+    /// Page faults served without I/O (`ru_minflt`).
+    pub minor_faults: u64,
+    /// Page faults that needed I/O (`ru_majflt`).
+    pub major_faults: u64,
+}
+
 /// Whose CPU time [`LinuxKernel::cpu_times`] reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CpuTimesOf {
@@ -186,6 +197,10 @@ pub enum CpuTimesOf {
     /// and its own waited-for children: wait4(2)'s `rusage` (ADR 0059).
     /// Asked once per wait; `None` if the kernel does not know it.
     Reaped(i32),
+    /// Every thread of process `pid` (global), any process, a zombie too:
+    /// its CPU-time clock (clock_getcpuclockid(3)); `None` if there is no
+    /// such process.
+    OtherProcess(i32),
 }
 
 /// CPU time in nanoseconds, split into time running user code and time
@@ -557,6 +572,23 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
+    /// mlock(2) (`lock`) or munlock(2) of `[addr, addr + len)` (both page
+    /// aligned, `len` non-zero, no overflow): `ENOMEM` if part of it is not
+    /// mapped, or, to lock, is `PROT_NONE`; locking brings every page in.
+    /// `ENOSYS` by default.
+    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
+        let _ = (addr, len, lock);
+        Err(Errno::ENOSYS)
+    }
+
+    /// mincore(2) of `[addr, addr + vec.len() pages)` (`addr` page
+    /// aligned, no overflow): `vec[i]` 1 if page `i` is resident, else 0;
+    /// `ENOMEM` if part of the range is not mapped. `ENOSYS` by default.
+    fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
+        let _ = (addr, vec);
+        Err(Errno::ENOSYS)
+    }
+
     // ---- thread state -------------------------------------------------
 
     /// The calling thread's FS segment base.
@@ -687,8 +719,9 @@ pub trait LinuxKernel {
     /// futexes are keyed by address space and address. A shared futex in
     /// memory other processes can map is keyed by the object and offset,
     /// so every mapping of it finds the same waiters; in private memory it
-    /// gets the same key as the private futex. `EFAULT` if `addr` is not
-    /// mapped.
+    /// gets the same key as the private futex here, which the personality
+    /// then tells apart ([`crate::futex::key`]: `FutexKey::Unshared`).
+    /// The personality reads the word first, which is its `EFAULT` check.
     ///
     /// The default treats all memory as private, which is right until the
     /// kernel has shared mappings.
@@ -852,6 +885,13 @@ pub trait LinuxKernel {
         None
     }
 
+    /// getrusage(2)'s memory counters for `of` (the calling process or
+    /// thread; `Children` for its waited-for children). Zeros by default.
+    fn memory_counts(&self, of: CpuTimesOf) -> MemoryCounts {
+        let _ = of;
+        MemoryCounts::default()
+    }
+
     /// The calling process's timers changed (setitimer, alarm,
     /// timer_settime, ...): `next` says when they must next be looked at.
     /// When that time comes the kernel calls [`crate::time::fire`] on the
@@ -914,6 +954,16 @@ pub trait LinuxKernel {
     /// a signal file (signalfd(2)).
     fn signal_queued(&mut self, pid: i32) {
         let _ = pid;
+    }
+
+    /// The calling thread took `signal` from its pending signals to act on
+    /// it (run its handler, stop, continue, end the process or drop it as
+    /// ignored), never `SIGKILL`: what ptrace(2) shows a tracer as a
+    /// signal-delivery-stop. A signal rt_sigtimedwait(2) or a signal file
+    /// takes is not delivered. The kernel reports it for traced processes
+    /// (`POLY-SIGNAL`, ADR 0027).
+    fn signal_delivered(&mut self, signal: u32) {
+        let _ = signal;
     }
 
     // ---- seccomp (ADR 0054) ---------------------------------------------

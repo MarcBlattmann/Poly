@@ -723,9 +723,10 @@ fn fcntl_commands() {
     let k = &mut e.k;
     let p = s(k, 0, b"/dir/file");
     let fd = sys(k, nr::OPEN, &[p, 0o2002, 0]).unwrap();
-    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o2002), "F_GETFL: O_RDWR | O_APPEND");
+    // Every open on x86-64 is a large-file open (O_LARGEFILE, 0o100000).
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o102002), "F_GETFL: O_RDWR | O_APPEND | O_LARGEFILE");
     assert_eq!(sys(k, nr::FCNTL, &[fd, 4, 0o4000]), Ok(0), "F_SETFL O_NONBLOCK");
-    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o4002), "O_APPEND cleared, access mode kept");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o104002), "O_APPEND cleared, access mode kept");
     assert_eq!(sys(k, nr::FCNTL, &[fd, 2, 1]), Ok(0), "F_SETFD FD_CLOEXEC");
     assert_eq!(sys(k, nr::FCNTL, &[fd, 1, 0]), Ok(1));
     assert_eq!(sys(k, nr::FCNTL, &[fd, 0, 20]), Ok(20), "F_DUPFD");
@@ -939,4 +940,25 @@ fn sysinfo_encodes_struct_sysinfo() {
     assert_eq!(u16::from_le_bytes([b[80], b[81]]), 3);
     assert_eq!(u32::from_le_bytes(b[104..108].try_into().unwrap()), 1);
     assert_eq!(sys(&mut k, nr::SYSINFO, &[UNMAPPED]), Err(Errno::EFAULT));
+}
+
+#[test]
+fn fionbio_and_fioclex_work_on_any_descriptor() {
+    let mut e = env();
+    let k = &mut e.k;
+    let p = s(k, 0, b"/dir/file");
+    let fd = sys(k, nr::OPEN, &[p, 0o2, 0]).unwrap();
+    let arg = s(k, 0x100, b"");
+    k.poke(arg, &1i32.to_le_bytes());
+    assert_eq!(sys(k, nr::IOCTL, &[fd, 0x5421, arg]), Ok(0), "FIONBIO on a regular file");
+    // (O_LARGEFILE, 0o100000: every x86-64 open.)
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o104002));
+    k.poke(arg, &0i32.to_le_bytes());
+    assert_eq!(sys(k, nr::IOCTL, &[fd, 0x5421, arg]), Ok(0));
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 3, 0]), Ok(0o100002));
+    assert_eq!(sys(k, nr::IOCTL, &[fd, 0x5451, 0]), Ok(0), "FIOCLEX");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 1, 0]), Ok(1));
+    assert_eq!(sys(k, nr::IOCTL, &[fd, 0x5450, 0]), Ok(0), "FIONCLEX");
+    assert_eq!(sys(k, nr::FCNTL, &[fd, 1, 0]), Ok(0));
+    assert_eq!(sys(k, nr::IOCTL, &[99, 0x5421, arg]), Err(Errno::EBADF));
 }

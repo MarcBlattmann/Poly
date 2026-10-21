@@ -408,13 +408,15 @@ kernel_test! {
             // st_mode at offset 24 of struct stat: a FIFO.
             check!(6, sys(p, nr::FSTAT, &[r, DATA + 0x400]) == Ok(0));
             check!(7, peek_u32(DATA + 0x400 + 24) & 0o170000 == 0o010000);
-            // Fill it: 64 KiB, then EAGAIN, also for one byte.
-            // Writes above PIPE_BUF take what fits.
+            // Fill it: 64 KiB, then EAGAIN, also for one byte. 4086 bytes
+            // join the first page's 10; page-sized writes take a page each
+            // (pipe2's spec sheet).
             let mut total = 10;
-            while let Ok(n) = sys(p, nr::WRITE, &[w, DATA + 0x1000, 4097]) {
-                total += n;
+            for len in core::iter::once(4096 - 10).chain([4096; 15]) {
+                total += sys(p, nr::WRITE, &[w, DATA + 0x1000, len]).unwrap_or(0);
             }
             check!(8, total == 65536);
+            check!(8, sys(p, nr::WRITE, &[w, DATA + 0x1000, 4097]) == Err(Errno::EAGAIN));
             check!(9, sys(p, nr::WRITE, &[w, DATA + 0x1000, 1]) == Err(Errno::EAGAIN));
             check!(10, sys(p, nr::PIPE2, &[DATA, 0o200]) == Err(Errno::EINVAL));
             check!(11, sys(p, nr::MMAP, &[0, 4096, 1, 2, r, 0]) == Err(Errno::ENODEV));

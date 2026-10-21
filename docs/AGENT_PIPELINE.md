@@ -123,7 +123,8 @@ code in `tools/pipeline/src/apps.rs`). A test is a JSON file:
   systems, so programs buffer and probe the same way), runs every step
   but the last as a child it waits for and the last one with `execve` in
   its place. On Linux the run's output is what those files hold; on Poly
-  it is what `POLY-OUT` reports for fds 1 and 2.
+  too: the kernel reports their contents (`poly.test.stdout=`,
+  `poly.test.stderr=`) in `POLY-OUT` records when the program has ended.
 - **Fixed environment:** `PATH=/bin HOME=/work LANG=C TZ=UTC
   GLIBC_TUNABLES=glibc.cpu.hwcaps=-SSE4_2`, plus the test's `env`. The
   tunable hides SSE4.2 from glibc, so its dynamic linker does not search
@@ -164,8 +165,9 @@ cargo xtask pipeline diff --target poly         # real Linux against Poly in QEM
 cargo xtask pipeline diff --tests hello,brk --syscalls names --timing-envelope 50
 cargo xtask pipeline diff --target poly --baseline target/pipeline/runs/<old>/summary.json
 cargo xtask pipeline diff --target poly --tests-dir <entry>.tests --tests-dir <held-out dir of the entry>
+cargo xtask pipeline diff --target poly --jobs 4 # four tests at a time (default 1)
 cargo xtask pipeline selfcheck                  # what `cargo xtask ci` runs: Linux against Linux
-cargo xtask pipeline polycheck                  # and Poly against Linux (tests/linux/poly-pass.txt)
+cargo xtask pipeline polycheck                  # and Poly against Linux (poly-pass.txt, green entries)
 cargo xtask pipeline polyrun cat-n --tests-dir specs/linux/apps/cat.tests --print
                                                 # Poly only, no reference (implementers may run it)
 ```
@@ -201,14 +203,44 @@ kernel's `POLY-*` records (ADR 0027, kernel side in ADR 0038) into a trace;
 about half a second per test. Records carry no `data<i>` fields yet, so
 pointer arguments are compared as "anything". A kernel that cannot run a
 test's file says `POLY-INIT: unsupported <reason>`, and the test is
-reported **unsupported**. `pipeline polycheck` (in `cargo xtask ci`) runs
-the corpus this way and fails if a test listed in
-`tests/linux/poly-pass.txt` does not pass; tests that newly pass are named,
-to be added to the list. Today 11 of the 12 corpus programs pass;
-`libc-hello` differs at `rseq` (Poly answers `ENOSYS`), with the same
-output and exit status. Of the 11 corpus app tests, `app-true`,
-`app-echo`, `app-head`, `app-grep`, `app-sed` and `app-mkdir` pass (app
-mode); the rest are in `specs/linux/FAILING.md`.
+reported **unsupported**. QEMU itself sometimes crashes (SIGSEGV) while
+booting under TCG on a loaded host; a guest cannot cause that, so the boot
+is retried twice and a crash that persists is an **error** of that test
+alone (the logs of the crashed boots are kept as
+`<test>.serial.crash-<n>.log`). Processes and threads are numbered in
+creation order on both sides (on Poly by thread id, `tid=`, which the
+kernel hands out in that order), so the program is always task 0; on Poly
+it runs as pid 2, the child of a kernel init (ADR 0064), as under the
+tracer it is the tracer's child. The kernel writes a `POLY-ENTER` record
+when `clone`, `fork`, `vfork` or `clone3` is entered, so the call stands
+before the child's calls as in a ptrace trace, and takes the program's
+output from the files it started with on fds 1 and 2, wherever they are
+duplicated (an app test's output files are reported at the end). `--jobs N` runs N tests at a time (the
+reference run and the Poly boot of a test stay together; the report keeps
+the corpus order).
+
+**Keeping green entries green.** `pipeline polycheck` (in `cargo xtask ci`)
+runs, on Poly against Linux, the corpus and the **visible** spec tests of
+every coverage entry whose status is `green` and that has a
+`specs/<os>/<component>/<symbol>.tests/` directory, as many at a time as
+the machine has cores (at most four). It fails if a test listed in
+`tests/linux/poly-pass.txt` does not pass, or if any visible test of a
+green entry does not pass (`green entry <id>: visible test <t> fails`);
+corpus tests that newly pass are named, to be added to the list. The green
+entries come from the coverage map itself, so marking an entry green
+(`coverage set-status <id> green ...`) is what puts its tests into CI; there
+is no second list. Held-out tests are not in the repository and not on
+GitHub, so CI cannot run them: they are checked by the runner when it
+marks an entry green (`pipeline diff --target poly` with the entry's
+visible and held-out directories; the loop's verify step) and again
+whenever the runner re-runs the entries. Today 11 of the 12 corpus programs
+pass (`libc-hello` differs at `rseq`: Poly answers `ENOSYS`, with the same
+output and exit status); of the 11 corpus app tests, all but `app-ls` pass
+(app mode; `app-ls` is in `specs/linux/FAILING.md`); and 125 green entries
+bring 210 visible tests. The spec tests take about a minute with four jobs
+(the app tests run one at a time after them). (`write` was green
+before its spec tests existed; its visible and held-out spec tests pass
+since the runner's third pass.)
 
 ### Held-out store and hand-off log
 
@@ -461,31 +493,69 @@ reboot resumes every entry at its step (each step is idempotent).
 ### Setting up the home server
 
 On the server (Ubuntu 24.04), as an admin, from a checkout of the
-repository:
+repository. The runner user (`server`) needs rustup and `gh auth login`
+first. The packages are what the setup script checks for: what `cargo
+xtask ci` needs (QEMU for the boot tests, a static BusyBox for the BusyBox
+and root-disk boots, e2fsprogs for the ext2/ext4 images, the static C
+library for the `-static` test programs) and the tools the script uses:
 
 ```sh
-sudo apt install git gcc qemu-system-x86 curl     # what the setup script checks for
-sudo tools/pipeline/deploy/setup.sh --dry-run     # read what it would do
+sudo apt install git gcc libc6-dev qemu-system-x86 busybox-static e2fsprogs python3 curl
+tools/pipeline/deploy/setup.sh --dry-run          # read what it would do (no root needed; with sudo it sees more)
 sudo tools/pipeline/deploy/setup.sh               # [--runner-user server] [--repo-url URL] [--no-install-tools]
 ```
 
 It is idempotent and changes nothing but: the users `polyspec` and
-`polyimpl` (system users with locked passwords, homes in `/srv/poly`),
-`/srv/poly` (directories with the owners and modes above, the wrapper, the
-clones, the hub, the configuration, rustup and Claude Code in the role
-homes), `/etc/sudoers.d/poly-pipeline` (checked with `visudo` first) and
+`polyimpl` (system users with locked passwords and their own groups, homes
+`/srv/poly/spec` and `/srv/poly/impl`), `/srv/poly` (directories with the
+owners and modes above, the wrapper, the clones, the hub, the
+configuration; rustup, the toolchain `rust-toolchain.toml` pins and Claude
+Code in the role homes), the pinned toolchain in `server`'s rustup,
+`/etc/sudoers.d/poly-pipeline` (checked with `visudo` first) and
 `/etc/systemd/system/poly-pipeline.service` (enabled, not started; `--start`
-starts it). The unit runs `cargo xtask pipeline loop` as `server` in
-`/srv/poly/runner/repo` with `Restart=always`, `Nice=10`, a low IO priority,
-`CPUQuota=300%` (3 of 4 cores), `MemoryHigh=11G`, `MemoryMax=12G`, and no
-`NoNewPrivileges` (the loop needs sudo for the wrapper).
+starts it). The toolchain is installed explicitly (`rustup toolchain
+install` in the checkout, then checked with `RUSTUP_AUTO_INSTALL=0`), not
+by rustup's deprecated install on first use. The unit runs `cargo xtask
+pipeline loop` as `server` in `/srv/poly/runner/repo` with
+`Restart=always`, `Nice=10`, a low IO priority, `CPUQuota=300%` (3 of 4
+cores), `MemoryHigh=11G`, `MemoryMax=12G`, and no `NoNewPrivileges` (the
+loop needs sudo for the wrapper).
+
+Before it changes anything, the script checks the packages, `server`'s
+cargo (it must be rustup's) and the role users. Each role's home is fixed:
+`setup.sh`, `poly-role` (which refuses to run when the passwd entry says
+otherwise), `pipeline.toml` and the Claude Code logins all use
+`/srv/poly/spec` and `/srv/poly/impl`. A user left from an earlier attempt
+stops the script, with nothing changed, and it prints the commands that
+fix it; the script never moves, deletes or re-owns an existing user's
+files itself:
+
+- home elsewhere (e.g. `/home/polyspec`): `sudo usermod -d /srv/poly/spec
+  polyspec` when `/srv/poly/spec` exists already (this moves nothing;
+  `usermod -m` refuses an existing directory and rewrites the passwd entry
+  anyway), else `sudo usermod -d /srv/poly/spec -m polyspec` (moves the
+  old home);
+- another primary group: `sudo usermod -g polyspec polyspec`;
+- `polyimpl` in any group but its own: `sudo gpasswd -d polyimpl <group>`;
+- files in a role home that are not the role user's (`chown -R`), or a
+  `repo/` that is not a git checkout (`rm -rf` it; it is cloned again).
+
+Entries of `/srv/poly` it did not make (an old `mirror.git`) and extra
+groups of `polyspec` are only warnings. `--dry-run` goes through the same
+checks and then prints every command instead of running it; it works as an
+ordinary user, but then it cannot see into the role homes or the sudoers
+file and shows them as missing.
 
 Then, once:
 
 1. Log both role users in to Claude Code with the subscription, and trust
-   their checkouts: `sudo -iu polyspec`, `cd repo && claude`, `/login`
-   (Claude account with subscription), accept "trust this folder", `/exit`,
-   `exit`; the same as `polyimpl`.
+   their checkouts. `poly-role <role> login` starts `claude` with exactly
+   the environment the sessions get (`HOME=/srv/poly/spec`, its `PATH`, in
+   `repo/`), so the login lands where the agent reads it:
+   `sudo -u polyspec /srv/poly/bin/poly-role spec login`, `/login` (Claude
+   account with subscription), accept "trust this folder", `/exit`; the
+   same with `sudo -u polyimpl /srv/poly/bin/poly-role implementer login`.
+   (`login` needs a terminal; the loop never uses it.)
 2. Review `/srv/poly/runner/pipeline.toml`.
 3. On GitHub: allow merge commits and auto-merge; protect `main` with CI as
    a required check.
@@ -536,7 +606,7 @@ violation stops the entry and puts it in the human queue.
 
 - Running CI and the diff of agent branches as a user without GitHub
   credentials, or in a container (today the runner, `server`, does both).
-- `data<i>` fields and times in the kernel's `POLY-SYSCALL` records, and
-  `POLY-SIGNAL` for signals a handler takes (only faults and fatal signals
-  are reported).
+- `data<i>` fields and times in the kernel's `POLY-SYSCALL` records.
+  (`POLY-SIGNAL` reports every signal a thread takes but `SIGKILL`, as the
+  ptrace tracer's signal-delivery-stops: ADR 0062.)
 - Windows and macOS oracles and tracers (later phases).

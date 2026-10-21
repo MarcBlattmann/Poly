@@ -887,20 +887,25 @@ cargo xtask run --headless --no-disk --initrd=target/prog.cpio poly.qemu_exit po
 `poly.init=<path>` runs the program as pid 1 right after the file systems
 are up, before the self-test, and logs how it ended; with `poly.qemu_exit`
 QEMU exits after it (status 33 whatever the program's status). With
-`poly.test.capture` every system call is a `POLY-SYSCALL` line (number, the
-six argument registers, the result in decimal, `ret=?` for `exit_group`),
-and the bytes written to fds 1 and 2 come again as hex in `POLY-OUT`
-lines, as the diff runner reads them (ADR 0027):
+`poly.test.capture` the program is pid 2, the child of a kernel init (pid 1,
+which reaps it and orphans; ADR 0064), every system call is a
+`POLY-SYSCALL` line (process and thread, number, the six argument
+registers, the result in decimal, `ret=?` for `exit_group`; `clone`,
+`fork`, `vfork` and `clone3` also get a `POLY-ENTER` line before the child
+exists), and the bytes that reach the program's standard output and error
+(the capture files it starts with on fds 1 and 2, wherever they are
+duplicated) come again as hex in `POLY-OUT` lines, as the diff runner reads
+them (ADR 0027):
 
 ```text
 init: running /test-binary (traced)
 POLY-INIT: exec /test-binary
-POLY-SYSCALL: pid=1 nr=334 args=0x4b2ca0,0x20,0x0,0x53053053,0x0,0x4a8480 ret=-38
-syscall: pid 1 linux/linux #334 rseq not implemented
-POLY-SYSCALL: pid=1 nr=1 args=0x1,0x4b33d0,0xd,0x4b31b0,0x1,0x7 ret=13
-POLY-SYSCALL: pid=1 nr=231 args=0x0,0xffffffffffffffc0,0xe7,0x4b31b0,0x1,0x7 ret=?
-POLY-EXIT: pid=1 code=0
-init: /test-binary (pid 1) ended: exit status 0
+POLY-SYSCALL: pid=2 tid=2 nr=334 args=0x4b2ca0,0x20,0x0,0x53053053,0x0,0x4a8480 ret=-38
+syscall: pid 2 linux/linux #334 rseq not implemented
+POLY-SYSCALL: pid=2 tid=2 nr=1 args=0x1,0x4b33d0,0xd,0x4b31b0,0x1,0x7 ret=13
+POLY-SYSCALL: pid=2 tid=2 nr=231 args=0x0,0xffffffffffffffc0,0xe7,0x4b31b0,0x1,0x7 ret=?
+POLY-EXIT: pid=2 code=0
+init: /test-binary (pid 2) ended: exit status 0
 ```
 
 A file that cannot run says why: `POLY-INIT: unsupported /bin/x: ENOENT`,
@@ -914,6 +919,14 @@ process is a signal, logged with where it happened:
 ```text
 linux: pid 1 killed by signal 11 after page fault at rip 0x401012, address 0x10
 ```
+
+In a traced run every signal a thread takes is a `POLY-SIGNAL` line just
+before its handler runs (or the process stops, continues, ends, or drops
+it as ignored), never `SIGKILL`: what the Linux tracer records as
+`--- SIGx ---` (ADR 0062). A traced process keeps an ignored signal until
+a thread takes it, so `SIGCHLD` shows up after a child ends. A call a
+signal interrupted is recorded with `ret=-512` (or -513, -514, -516: the
+restart numbers a tracer sees) and appears again if it was restarted.
 
 The diff runner does all of this per corpus test:
 `cargo xtask pipeline diff --target poly [--tests brk,mmap]` boots one
@@ -1020,6 +1033,148 @@ PIE and an `ET_EXEC` program naming a tiny interpreter of our own
 (`user/test_elf.rs`, `TestElf::Ld`), which reports its load address,
 `AT_BASE`, `AT_ENTRY` and `AT_PHDR` and jumps to the program;
 `poly.test=advice` the `madvise` tests of `Memory::advise`.
+
+## NT processes (PE executables)
+
+A PE executable runs as an NT process (ADR 0063): the kernel maps its image
+section, sets up the PEB, the first TEB and the stack, and starts the entry
+point; its system calls go to `nt::syscall`. The NT state lives in
+`kernel/src/nt` behind one lock, keyed by pid.
+
+- **The service numbers are Poly's own** (`personalities/nt/src/services.rs`),
+  not Windows'. A number in `eax` at a ring-3 `syscall` is `table << 12 |
+  index` (table 0 executive, 3 Poly's); a call Poly does not implement logs
+  `syscall: pid N nt/nt #X not implemented` and returns
+  `STATUS_NOT_IMPLEMENTED` (0xC0000002), the seed of the API tracer.
+- **A test program can report through `PolyTrace`** (service `0x3000`): it
+  logs `nt: pid N PolyTrace a b c` with its three argument registers. The
+  self-built NT test PE uses it to say which step failed and with which
+  `NTSTATUS` before it ends with `NtTerminateProcess`.
+- **Threads start through a per-process trampoline** (ADR 0065): a new
+  thread (and the first one) begins at the trampoline, which calls its start
+  routine and, on return, ends the thread with `NtTerminateThread`; the last
+  thread ending the process gives the process its exit code. A thread's own
+  TEB, stack and thread object are in `kernel/src/nt` + `NtProcess`.
+- **Blocking waits** park on the generic process wait queue
+  (`kernel/src/nt/sched.rs`): a blocked `NtWaitFor*` registers a per-thread
+  control block, and every signalling call drains the dispatcher's wakes
+  (`drain_wakes`) and unparks the waiters. A wait stuck forever usually means
+  a `Wake` was queued but its thread had no stored flags, or a signalling
+  call did not run `drain_wakes` (it runs after every NT system call in
+  `nt::syscall`). `NtSuspendThread` parks the target in `return_to_user` with
+  its context saved for `NtGetContextThread`.
+- **User APCs** are delivered through the APC trampoline: the thread runs the
+  routine and re-enters the kernel with `PolyResumeApc` (service `0x3001`) to
+  restore the interrupted context. An APC that never returns to the wait
+  usually means the saved context (`ThreadCtl::apc_saved`) was lost.
+- **An unhandled fault** in an NT process is logged like any user thread
+  (`user: pid N thread T killed: ...`); structured exception handling (SEH)
+  is a later milestone, so a fault that is not a guard page kills the thread.
+  A guard-page fault that grows a thread stack is resolved silently
+  (`user::page_fault` → `nt::resolve_fault`) and the instruction retried.
+- **The ring-3 NT tests** are `kernel/src/nt/test_pe.rs` (the object manager,
+  memory and sections) and `kernel/src/nt/test_threads.rs` (threads,
+  synchronisation, APCs, a timer and a suspended thread's context), tiny
+  position-independent PEs Poly assembles itself (no Microsoft toolchain).
+  Each ends with exit code `0x5A` on success; `kernel_test!
+  nt_test_program_runs_from_ring3` and `nt_threads_and_sync_from_ring3` build
+  them, run them and check that code. A different exit code means a step
+  failed — the preceding `nt: ... PolyTrace 0xbadbad <step> <status>` line
+  names which step and the `NTSTATUS` it saw.
+- **The registry** (ADR 0066) logs where its hives live at the first NT
+  use: `nt: registry hives in /mnt/root/poly/nt/registry`, or `nt: registry
+  in memory (no disk with a /poly directory)` (then nothing is saved; make
+  a `/poly` directory on a writable disk, as `cargo xtask root-disk` does).
+  A hive file that does not decode logs `nt: registry: hive SOFTWARE is
+  corrupt (...); using the defaults` and is replaced at the next save; a
+  failed save logs `writing hive ... failed` and `NtFlushKey` returns
+  `STATUS_REGISTRY_IO_FAILED` (0xC000014D). The files are Poly's own format
+  (`POLYHIVE`, `crates/poly-registry/src/hive.rs`): to look inside one, decode
+  it on the host with `poly_registry::hive::decode`. A notification whose
+  `IO_STATUS_BLOCK` never changes in another process is waiting for that
+  process's next system call (completions are written there). The ring-3
+  test is `kernel/src/nt/test_registry.rs` (`cargo xtask run
+  poly.test=nt_registry`); its `PolyTrace 0xbadbad <step> <status>` names
+  the failed step as the module documentation numbers them.
+- **The object, memory, thread and synchronisation logic is host-tested** in
+  `poly-ntobj` (the dispatcher against a randomized model) and
+  `personalities/nt` against a fake kernel (`cargo test -p poly-ntobj -p
+  poly-personality-nt`): that is where to reproduce a status, layout or
+  dispatcher bug without booting, since the kernel side only maps, locks,
+  blocks and wakes.
+
+## NT file I/O (ADR 0067)
+
+A PE executable reaches the file system through file and device objects in
+the object namespace (`personalities/nt/src/io`, carried out by
+`kernel/src/nt/io.rs`):
+
+- **The namespace.** Each VFS mount is a device `\Device\PolyFs<N>` with a
+  parse procedure; drive letters are symbolic links in `\??`: `\??\C:` →
+  `\Device\PolyFs1` (the VFS's `/nt/c`, the NT system root), `\??\Z:` →
+  `\Device\PolyFs0` (`/`, the whole VFS), and one device per other mount.
+  So `\??\C:\Windows\win.ini` becomes `/nt/c/Windows/win.ini`. `NtCreateFile`
+  of a path Poly has not attached a volume for is `STATUS_OBJECT_PATH_NOT_FOUND`
+  (the layer is attached lazily the first time an NT process starts — before
+  `fs::init` there is nothing). Dump the devices from the shell's object
+  listing or the namespace lookups in the tests.
+- **Case.** Lookup is case-insensitive and case-preserving over the
+  case-sensitive VFS (`io::walk`): the exact name wins, else the entry equal
+  without case whose bytes are smallest (so `README` beats `Readme`), so the
+  choice is stable. `FileNameInformation` reports the on-disk case. A VFS
+  name that is not UTF-8 is shown with U+FFFD and cannot be opened by that
+  name.
+- **Share modes** (`io::share`) follow `CreateFile`'s documented table; a
+  refused open is `STATUS_SHARING_VIOLATION` and nothing on disk changes (the
+  truncation of an overwrite happens only after every check passes). An open
+  that asks for no read/write/delete access (attributes only) is not checked
+  or counted.
+- **Asynchronous I/O** (`io::irp`). A handle without `FILE_SYNCHRONOUS_IO_*`
+  is overlapped: `NtReadFile`/`NtWriteFile` make an I/O request packet queued
+  on the volume's **worker thread** (`ps` lists `nt-io` once one starts) and
+  return `STATUS_PENDING`; the worker runs the transfer with no NT lock held
+  and the request completes through the `IO_STATUS_BLOCK`, the `Event` (reset
+  when the request is made) or the file object, and the `ApcRoutine`. A
+  synchronous handle keeps a file position and the call waits on the file
+  object. A completion that never arrives usually means the worker was not
+  kicked (`io::after_call` runs after every NT system call and drains
+  completions) or the requesting process's memory was not registered
+  (`io::register`, keyed by pid). The completion writes the caller's memory
+  **before** signalling, so a waiter always sees the status block filled in.
+- **Cancellation.** `NtCancelIoFile` (the thread's requests on a handle) and
+  `NtCancelIoFileEx` (the process's, all or one) complete queued or waiting
+  requests with `STATUS_CANCELLED`; a request already running on the worker
+  finishes on its own. A thread's requests are all cancelled when it exits,
+  without their APCs. `\Device\PolyPipe\<name>` is a stand-in slow device: a
+  read with no data waits until a write to the same name feeds it, which is
+  what the cancellation test exercises.
+- **Byte-range locks** (`io::locks`) are mandatory and never merged: a read
+  overlapping another owner's exclusive lock, or a write overlapping any lock
+  that is not the owner's own exclusive one, is `STATUS_FILE_LOCK_CONFLICT`;
+  a lock that cannot be granted is `STATUS_LOCK_NOT_GRANTED` (fail-immediately)
+  or waits. They are not the POSIX `poly_vfs::locks` table, so a Linux
+  process's `fcntl` locks and an NT process's locks on one file do not see
+  each other yet.
+- **Attributes** (`io::info`): `FILE_ATTRIBUTE_READONLY` is the absence of
+  write permission (enforced by NT, since the VFS lets root write anything),
+  `DIRECTORY` and `REPARSE_POINT` come from the node type, and `HIDDEN`,
+  `SYSTEM`, `ARCHIVE` and the birth time live in the extended attribute
+  `user.poly.ntattr` (ADR 0060; a file system without xattrs keeps none).
+  Times are 100 ns since 1601.
+- **Delete** is deferred: `FileDispositionInformation` or a
+  `FILE_DELETE_ON_CLOSE` handle marks the open node, and the name goes when
+  the last file object on it closes (`IoState::file_closed`); new opens
+  meanwhile are `STATUS_DELETE_PENDING`. `NtDeleteFile` opens with `DELETE`,
+  marks and closes.
+- **The ring-3 file I/O test** is `kernel/src/nt/test_io.rs` (`kernel_test!
+  nt_file_io_from_ring3`): a self-assembled PE that creates/writes/reads a
+  file under `C:\`, opens it in another case, hits a sharing violation,
+  enumerates a directory with `*.txt`, completes overlapped reads through an
+  event and an APC, cancels a pending pipe read, hits a lock conflict and a
+  delete-on-close. It ends `0x5A` on success; a `PolyTrace 0xbadbad <step>
+  <status>` line names the failing step. The path parsing, case folding,
+  share table, locks, wildcards and info-class layouts are host-tested in
+  `cargo test -p poly-personality-nt io`.
 
 ## Pipes, waits and event files
 

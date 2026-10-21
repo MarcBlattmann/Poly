@@ -68,20 +68,38 @@ pub fn exec_path(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> R
 }
 
 /// A program loaded by [`prepare`], not started yet.
-#[derive(Debug)]
-pub struct Prepared {
-    process: Arc<Process>,
-    image: exec::Image,
+pub enum Prepared {
+    /// A Linux ELF: its process record and loaded image.
+    Linux { process: Arc<Process>, image: exec::Image },
+    /// A PE executable: its process record and bytes, started by `crate::nt`.
+    Nt { process: Arc<Process>, file: Vec<u8> },
 }
 
 impl Prepared {
+    /// The process record, already made (its files can be set up before
+    /// [`start`](Self::start)).
+    pub fn process(&self) -> &Arc<Process> {
+        match self {
+            Prepared::Linux { process, .. } | Prepared::Nt { process, .. } => process,
+        }
+    }
+
     /// Start the program's first thread; returns its process.
     pub fn start(self) -> Result<Arc<Process>, ExecPathError> {
-        let tid = user::spawn_in(Arc::clone(&self.process), self.image.memory, self.image.entry, user::DEFAULT_HOOK)
-            .map_err(|e| ExecPathError::Exec(ExecError::Spawn(e)))?;
-        // Nobody joins the thread: the process is what callers wait for.
-        let _ = thread::detach(tid);
-        Ok(self.process)
+        match self {
+            Prepared::Linux { process, image } => {
+                let tid = user::spawn_in(Arc::clone(&process), image.memory, image.entry, user::DEFAULT_HOOK)
+                    .map_err(|e| ExecPathError::Exec(ExecError::Spawn(e)))?;
+                // Nobody joins the thread: the process is what callers wait for.
+                let _ = thread::detach(tid);
+                Ok(process)
+            }
+            Prepared::Nt { process, file } => {
+                crate::nt::spawn_pe(&process, &file, user::DEFAULT_HOOK)
+                    .map_err(|e| ExecPathError::Unsupported(format!("PE executable could not start: {e:?}")))?;
+                Ok(process)
+            }
+        }
     }
 }
 
@@ -104,6 +122,25 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
         .map_err(|_| ExecPathError::Unsupported("not an executable Poly knows (no ELF, PE or Mach-O header)".into()))?;
     match format.personality() {
         Some(Personality::Linux) => {}
+        Some(Personality::Nt) => {
+            // Read the whole image; the NT loader maps it as a section.
+            let mut file_bytes = header;
+            file_bytes.truncate(len);
+            loop {
+                let at = file_bytes.len();
+                file_bytes.resize(at + HEADER_BYTES, 0);
+                match file.read_at(at as u64, &mut file_bytes[at..]) {
+                    Ok(0) => {
+                        file_bytes.truncate(at);
+                        break;
+                    }
+                    Ok(n) => file_bytes.truncate(at + n),
+                    Err(e) => return Err(ExecPathError::Open(e)),
+                }
+            }
+            let process = Arc::new(Process::new_nt(process::alloc_pid(), format, traced));
+            return Ok(Prepared::Nt { process, file: file_bytes });
+        }
         Some(p) => return Err(ExecPathError::Unsupported(format!("{} programs cannot run yet", p.name()))),
         None => return Err(ExecPathError::Unsupported("#! scripts are not supported yet".into())),
     }
@@ -124,7 +161,7 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
         linux.with(|p| p.thread_mut(pid).comm = comm);
     }
     fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
-    Ok(Prepared { process, image })
+    Ok(Prepared::Linux { process, image })
 }
 
 /// `path` and arguments split from a command line (`run`, `poly.init`
@@ -153,7 +190,7 @@ pub fn run_on(
     let envp: Vec<&[u8]> = envp.iter().map(String::as_bytes).collect();
     let prepared = prepare(path.as_bytes(), &argv, &envp, false)?;
     if let Some(tty) = terminal {
-        let files = &prepared.process.files;
+        let files = &prepared.process().files;
         for fd in 0..3 {
             let _ = files.close(fd);
         }
@@ -181,6 +218,7 @@ pub fn run_init(boot: &BootInfo) -> bool {
     kprintln!("init: running {path}{}", if traced { " (traced)" } else { "" });
     match run_first(path, traced) {
         Ok((pid, status)) => {
+            crate::testinit::report_output_files(boot);
             testrun::exit(pid, status);
             kprintln!("init: {path} (pid {pid}) ended: {status}");
         }
@@ -197,9 +235,17 @@ pub fn run_init(boot: &BootInfo) -> bool {
 
 fn run_first(path: &str, traced: bool) -> Result<(u32, ExitStatus), ExecPathError> {
     let argv: [&[u8]; 1] = [path.as_bytes()];
+    // A traced program runs as the child of the kernel's init (ADR 0064).
+    let init = traced && crate::testinit::start();
     let prepared = prepare(path.as_bytes(), &argv, &[], traced)?;
+    // Only a Linux program has a place in the Linux process tree.
+    let init = init && prepared.process().linux.is_some();
+    if init {
+        crate::testinit::adopt(prepared.process());
+    }
     // The record goes out before the program's first instruction runs.
     testrun::init(path);
     let process = prepared.start()?;
-    Ok((process.pid, process.wait()))
+    let status = if init { crate::testinit::wait(&process) } else { process.wait() };
+    Ok((process.pid, status))
 }

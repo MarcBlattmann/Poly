@@ -194,11 +194,15 @@ impl Tms {
 
 /// `struct rusage` (`linux/resource.h`): `ru_utime` and `ru_stime` (two
 /// timevals), then fourteen `long`s from `ru_maxrss` to `ru_nivcsw`; 144
-/// bytes. Poly fills in the times; the counters stay 0 for now.
+/// bytes. Poly fills in the times, `ru_maxrss` (KiB), `ru_minflt` and
+/// `ru_majflt`; the other counters stay 0.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rusage {
     pub utime: Timeval,
     pub stime: Timeval,
+    pub maxrss: i64,
+    pub minflt: i64,
+    pub majflt: i64,
 }
 
 impl Rusage {
@@ -208,6 +212,9 @@ impl Rusage {
         let mut b = [0; Self::SIZE];
         b[0..16].copy_from_slice(&self.utime.to_bytes());
         b[16..32].copy_from_slice(&self.stime.to_bytes());
+        b[32..40].copy_from_slice(&self.maxrss.to_le_bytes());
+        b[64..72].copy_from_slice(&self.minflt.to_le_bytes());
+        b[72..80].copy_from_slice(&self.majflt.to_le_bytes());
         b
     }
 }
@@ -261,7 +268,8 @@ mod tests {
         assert_eq!(Timezone::from_bytes(&tz.to_bytes()), tz);
         let tms = Tms { utime: 1, stime: 2, cutime: 3, cstime: 4 }.to_bytes();
         assert_eq!(&tms[24..32], &4i64.to_le_bytes());
-        let ru = Rusage { utime: Timeval { sec: 1, usec: 5 }, stime: Timeval { sec: 2, usec: 6 } }.to_bytes();
+        let ru = Rusage { utime: Timeval { sec: 1, usec: 5 }, stime: Timeval { sec: 2, usec: 6 }, ..Rusage::default() }
+            .to_bytes();
         assert_eq!((&ru[0..8], &ru[24..32]), (&1i64.to_le_bytes()[..], &6i64.to_le_bytes()[..]));
         assert!(ru[32..].iter().all(|&x| x == 0));
     }

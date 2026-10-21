@@ -209,8 +209,14 @@ fn le_sec(k: &FakeKernel) -> u64 {
 #[test]
 fn clock_gettime_errors() {
     let mut k = FakeKernel::new();
-    for id in [8u64, 9, 10, 11, 12, u64::MAX, (-6i64) as u64] {
+    // -6 is the caller's process CPU-time clock by id, which the fake does
+    // not account; -1 a thread clock of type 3, which does not exist.
+    for id in [10u64, 12, u64::MAX, (-6i64) as u64] {
         assert_eq!(sys(&mut k, nr::CLOCK_GETTIME, &[id, scratch(0)]), Err(Errno::EINVAL), "clock {id}");
+    }
+    // CLOCK_REALTIME_ALARM, CLOCK_BOOTTIME_ALARM and CLOCK_TAI read.
+    for id in [8u64, 9, 11] {
+        assert_eq!(sys(&mut k, nr::CLOCK_GETTIME, &[id, scratch(0)]), Ok(0), "clock {id}");
     }
     assert_eq!(clock_for(clock::CLOCK_PROCESS_CPUTIME_ID), Some(crate::kernel::Clock::ProcessCpuTime));
     let cpu = clock::CLOCK_THREAD_CPUTIME_ID as u64;

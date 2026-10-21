@@ -93,7 +93,11 @@ fn access_modes_are_enforced_per_description() {
     assert_eq!(ro.truncate(0), Err(Errno::EINVAL));
     let wo = env.open("/f", OpenFlags::WRONLY).unwrap();
     assert_eq!(wo.read(&mut [0u8; 4]), Err(Errno::EBADF));
-    assert_eq!(env.open("/f", OpenFlags::from_bits(3)).map(|_| ()), Err(Errno::EINVAL));
+    // Access mode 3 (open(2)): opens, but neither reads nor writes.
+    let neither = env.open("/f", OpenFlags::from_bits(3)).unwrap();
+    assert_eq!(neither.read(&mut [0u8; 4]), Err(Errno::EBADF));
+    assert_eq!(neither.write(b"x"), Err(Errno::EBADF));
+    assert_eq!(env.open("/", OpenFlags::from_bits(3)).map(|_| ()), Err(Errno::EISDIR), "a directory");
 }
 
 #[test]
@@ -119,7 +123,20 @@ fn open_flag_rules() {
         Err(Errno::EINVAL)
     );
     assert_eq!(env.open("/", OpenFlags::RDONLY | OpenFlags::CREAT).map(|_| ()), Err(Errno::EISDIR));
-    assert_eq!(env.open("/g", OpenFlags::RDWR | OpenFlags::TMPFILE).map(|_| ()), Err(Errno::EOPNOTSUPP));
+    // O_TMPFILE names a directory: an unnamed file in it.
+    assert_eq!(env.open("/g", OpenFlags::RDWR | OpenFlags::TMPFILE).map(|_| ()), Err(Errno::ENOENT));
+    assert_eq!(env.open("/f", OpenFlags::RDWR | OpenFlags::TMPFILE).map(|_| ()), Err(Errno::ENOTDIR));
+    assert_eq!(env.open("/d", OpenFlags::RDONLY | OpenFlags::TMPFILE).map(|_| ()), Err(Errno::EINVAL));
+    let t = env.open("/d", OpenFlags::RDWR | OpenFlags::TMPFILE).unwrap();
+    assert_eq!(t.write(b"tmp"), Ok(3));
+    assert_eq!(t.node().attr().unwrap().nlink, 0, "no name");
+    env.vfs.link_node(&env.ctx, &env.root, t.node(), At::Cwd, b"/d/named").unwrap();
+    assert_eq!(env.stat("/d/named").unwrap().size, 3);
+    assert_eq!(env.stat("/d/named").unwrap().nlink, 1);
+    // A file that lost its last name cannot get one back.
+    let f = env.open("/f", OpenFlags::RDONLY).unwrap();
+    env.vfs.unlink(&env.ctx, &env.root, At::Cwd, b"/f").unwrap();
+    assert_eq!(env.vfs.link_node(&env.ctx, &env.root, f.node(), At::Cwd, b"/f2"), Err(Errno::ENOENT));
     let d = env.open("/d", OpenFlags::RDONLY).unwrap();
     assert_eq!(d.read(&mut [0u8; 4]), Err(Errno::EISDIR));
     // The new file's mode is masked by the umask (022).
@@ -273,8 +290,8 @@ fn readdir_reports_types_and_inodes() {
     assert_eq!(FileType::Regular.dirent_type(), 8);
     assert_eq!(FileType::Directory.dirent_type(), 4);
     assert_eq!(FileType::Symlink.dirent_type(), 10);
-    // A FIFO cannot be opened before pipes exist.
-    assert_eq!(env.open("/d/fifo", OpenFlags::RDONLY).map(|_| ()), Err(Errno::ENXIO));
+    // A FIFO opens as a pipe end (`fifo.rs`).
+    assert_eq!(env.open("/d/fifo", OpenFlags::RDONLY).map(|f| f.kind()), Ok(FileType::Fifo));
 }
 
 #[test]

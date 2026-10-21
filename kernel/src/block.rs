@@ -1191,19 +1191,23 @@ kernel_test! {
         // the burner would run beside the reader whether it waits with
         // interrupts on or not.
         let _pin = thread::pin_current();
-        let (t0, ticks0) = (time::now_ns(), time::ticks());
+        // This CPU's ticks: they end the burner's time slices. Not the boot
+        // CPU's (`time::ticks`), which a busy host can hold off for longer
+        // than this one, merging more of its ticks.
+        let (t0, ticks0) = (time::now_ns(), time::cpu_ticks());
         let burner = thread::spawn_here(burn, 0).map_err(|_| "spawn failed")?;
         let reader = thread::spawn_here(read_many, d as *const Disk as usize);
         let progressed = reader.map(thread::join);
-        let (t1, ticks1) = (time::now_ns(), time::ticks());
+        let (t1, ticks1) = (time::now_ns(), time::cpu_ticks());
         BURNING.store(false, SeqCst);
         thread::join(burner).map_err(|_| "join failed")?;
         let progressed = progressed.map_err(|_| "spawn failed")?.map_err(|_| "join failed")?;
         let after = d.stats();
         let ms = (t1 - t0) / time::NANOS_PER_MILLI;
         kprintln!(
-            "block: {}: reads in {ms} ms beside a CPU-bound thread: it ran during {progressed} of them; {} ticks, {} sleeps, {} interrupts",
+            "block: {}: reads in {ms} ms beside a CPU-bound thread on CPU {}: it ran during {progressed} of them; {} ticks, {} sleeps, {} interrupts",
             d.name(),
+            thread::this_cpu(),
             ticks1 - ticks0,
             after.sleeps - before.sleeps,
             after.interrupts - before.interrupts,

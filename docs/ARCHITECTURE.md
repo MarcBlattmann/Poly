@@ -605,8 +605,10 @@ initramfs.
   notifies, and waiters register a `Waker` on it, check again and block
   through a `Blocker` (the kernel's park / unpark). `FileObject`s are open
   files that are not on a file system, on inodes of an anonymous file
-  system no path reaches (`Vfs::anon_node`): pipes (64 KiB, `PIPE_BUF`
-  atomicity, end of file, `EPIPE`, packet mode), event counters, timers
+  system no path reaches (`Vfs::anon_node`): pipes (16 pages of 4 KiB,
+  `F_SETPIPE_SZ`, `PIPE_BUF` atomicity, end of file, `EPIPE`, packet
+  mode; a FIFO inode opens as an end of one pipe per inode, ADR 0062),
+  event counters, timers
   (expirations counted from the clock, a `TimerService` callback to wake
   waiters) and epoll sets (an interest entry is a waker that puts itself
   on the ready list; level- and edge-triggered, one-shot, nested). Their
@@ -928,6 +930,13 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   hook, `user::DEFAULT_HOOK` unless it was given another).
 - Unimplemented calls return each OS's native "not implemented" result and are
   logged. That log line is the seed of the API tracer.
+- **NT** ([ADR 0063](adr/0063-nt-processes-object-manager-and-memory.md),
+  [ADR 0065](adr/0065-nt-threads-synchronisation-and-apcs.md)): a
+  PE process's calls go to `nt::syscall` (`Nt::dispatch_with`) when the
+  kernel has set the process up; a bare record still gets
+  `STATUS_NOT_IMPLEMENTED`. The object manager, memory and section services,
+  processes and threads, synchronisation (events, mutants, semaphores,
+  timers, waits) and user APCs are implemented; see "NT personality".
 - **Linux** ([ADR 0025](adr/0025-linux-syscall-table-and-kernel-services-trait.md)):
   `personalities/linux` has the whole x86-64 table (numbers and names
   generated from the coverage map) and handlers for the calls a static C or
@@ -1064,7 +1073,10 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   (`attach_thread`: the first gets the pid as its id, later ones fresh ids
   from the pid counter) and end themselves (`user::end_thread`): the
   personality's thread-exit duties, then the last thread ends the process
-  (files closed, `ExitStatus` set, `Process::wait` returns). `exit_group`
+  (files closed, `ExitStatus` set, `Process::wait` returns). Without a
+  group exit the status is that of the thread that started to exit last
+  (`Process::thread_exiting`, recorded before its `clear_child_tid` is
+  cleared; ADR 0069). `exit_group`
   and fatal signals set a group exit; every other thread ends at its next
   return to user mode (after a system call, or after an interrupt or
   exception in ring 3, which `trap_dispatch` hands to
@@ -1074,8 +1086,8 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   ([ADR 0041](adr/0041-processes-threads-fork-exec-wait.md),
   `linux/task.rs`). The personality decodes the calls (`task::clone`,
   `task::exec`) and keeps the rules of the process tree (`task::tree`:
-  parents, zombies, orphans to init or the kernel, process groups and
-  sessions, wait selectors); the kernel lends it the one tree behind a
+  parents, zombies, orphans to the nearest child subreaper, init or the
+  kernel, process groups and sessions, wait selectors); the kernel lends it the one tree behind a
   spinlock and does the work: `clone_task` starts a thread of the caller's
   process, or a new process with a copy-on-write copy of its memory
   (`Memory::fork`) or the same memory (`CLONE_VM`), copies of its files
@@ -1116,19 +1128,26 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
 - **The first program and the test-run protocol** (ADR 0027).
   `poly.init=<path>` runs a program as pid 1 before the self-test and
   reports `POLY-INIT` / `POLY-EXIT`; `poly.test.capture` adds a
-  `POLY-SYSCALL` record per call, `POLY-OUT` for bytes written to fds 1
-  and 2 and `POLY-SIGNAL`; with `poly.qemu_exit` QEMU exits after it. The
+  `POLY-SYSCALL` record per call (with the thread, `tid=`; calls that
+  start a task also get a `POLY-ENTER` record at their entry),
+  `POLY-OUT` for bytes that reach the program's standard output and error
+  (two capture files on fds 1 and 2, followed wherever they are
+  duplicated) and `POLY-SIGNAL` for every signal a thread takes but `SIGKILL`
+  (what a ptrace tracer sees as a signal-delivery-stop; interrupted calls
+  are recorded with the restart number such a tracer sees; ADR 0062), and
+  runs the program as pid 2, the child of a kernel init (`testinit.rs`,
+  ADR 0064); with `poly.qemu_exit` QEMU exits after it. The
   diff runner (`cargo xtask pipeline diff --target poly`) boots one kernel
   per corpus test this way.
 
 ```text
 init: running /test-binary (traced)
 POLY-INIT: exec /test-binary
-POLY-SYSCALL: pid=1 nr=12 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=2109440
+POLY-SYSCALL: pid=2 tid=2 nr=12 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=2109440
 POLY-OUT: fd=1 hex=48656c6c6f2c20776f726c64210a
-POLY-SYSCALL: pid=1 nr=1 args=0x1,0x20019f,0xe,0x0,0x0,0x0 ret=14
-POLY-SYSCALL: pid=1 nr=231 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=?
-POLY-EXIT: pid=1 code=0
+POLY-SYSCALL: pid=2 tid=2 nr=1 args=0x1,0x20019f,0xe,0x0,0x0,0x0 ret=14
+POLY-SYSCALL: pid=2 tid=2 nr=231 args=0x0,0x0,0x0,0x0,0x0,0x0 ret=?
+POLY-EXIT: pid=2 code=0
 ```
 
 ## BusyBox as init
@@ -1217,8 +1236,11 @@ the CPU-time accounting, the timer thread and the vDSO.
   CPU-time timer exists) by pid, with the process's state locked; the
   `linux-timers` thread sleeps until then (a tick at a time for CPU-time
   timers) and calls `time::fire`, which queues the signals (once per
-  timer; overruns counted) and re-arms periodic timers; the threads it
-  names are notified like for any signal.
+  timer) and re-arms periodic timers; the threads it names are notified
+  like for any signal. While a POSIX timer's signal is pending the timer
+  is only looked at again (at least 10 ms apart); its overruns are counted
+  from the due times when the signal is taken (`timers::signal_taken`,
+  then `count_taken`; [ADR 0069](adr/0069-timer-overruns-counted-when-taken-last-thread-status-subreapers.md)).
 - **The vDSO** (`kernel/src/arch/x86_64/vdso/vdso.rs`, built by
   `kernel/build.rs` with the pinned `rustc` and `rust-lld`, embedded as
   `arch::vdso::IMAGE`): an ELF shared object, one read-execute segment, no
@@ -1234,28 +1256,147 @@ the CPU-time accounting, the timer thread and the vDSO.
   process maps, which the kernel writes through the direct map) and sets
   `AT_SYSINFO_EHDR`.
 
-## NT object manager (logic only, not wired yet)
+## NT personality
 
-`crates/poly-ntobj` is what the NT object and synchronisation services do,
-without the machine ([ADR 0030](adr/0030-nt-object-manager-and-dispatcher-in-a-crate.md)).
-The kernel does not use it yet; the NT personality will call its `nt_*`
-services once it decodes those system calls.
+A PE executable (`poly-binfmt`) runs as an NT process. The hardware-free
+logic is in two host-tested crates, and the kernel wires them together in
+`kernel/src/nt` ([ADR 0063](adr/0063-nt-processes-object-manager-and-memory.md)),
+behind one lock (ADR 0030). The NT **system service numbers are Poly's own**
+(`personalities/nt/src/services.rs`): Windows renumbers its services with
+every build and only `ntdll` calls them, so Poly numbers them itself and
+keeps them stable, in `ntdll`'s x64 layout `table << 12 | index` (table 0
+executive: `0x00` object manager, `0x40` memory, `0x80` processes, `0x100`
+registry; table 3
+Poly's own, for `PolyTrace`). Everything comes from public Microsoft
+documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
+"to be confirmed by the spec agent" and listed in ADRs 0030, 0063 and 0066.
 
-- `ObjectManager` holds every object (directories, symbolic links, events,
-  mutants, semaphores, timers, and opaque sections, files, processes,
-  threads, keys and devices the kernel fills in), the namespace (`\`, `\??`,
-  `\GLOBAL??`, `\Device`, `\BaseNamedObjects`, `\Sessions`, `\KernelObjects`),
-  one handle table per process plus a kernel table, and the blocked waits.
-- Handle count and pointer count per object; temporary names go with the
+- **Object manager** (`crates/poly-ntobj`, ADR 0030). `ObjectManager` holds
+  every object (directories, symbolic links, events, mutants, semaphores,
+  timers, and opaque sections, files, processes, threads, keys and devices
+  the kernel fills in), the namespace (`\`, `\??`, `\GLOBAL??`, `\Device`,
+  `\BaseNamedObjects`, `\KnownDlls`, `\Sessions`, `\KernelObjects`), one
+  handle table per process plus a kernel table, and the blocked waits.
+  Handle count and pointer count per object; temporary names go with the
   last handle, objects with the last reference. Handles are multiples of 4
   with the tag bits ignored; `-1`/`-2` are the current process and thread.
-- Waits: the crate returns `Done(status)` or `Blocked(WaitId)` and queues a
-  `Wake` for each blocked wait a later call satisfies; the kernel sleeps and
-  wakes threads, and cancels waits on timeout, alert or APC.
-- A `ParseHook` receives lookups that reach a device (or later a file system
-  or the registry), so those own the names below them.
-- Behaviour public documentation does not settle is marked "to be confirmed
-  by the spec agent against real Windows" in the code; ADR 0030 lists it.
+  `NtClose`, `NtDuplicateObject`, `NtQueryObject`
+  (basic/name/type), `NtCreate`/`OpenDirectoryObject`,
+  `NtQueryDirectoryObject`, `NtCreate`/`Open`/`QuerySymbolicLinkObject` and
+  the event services are decoded in `personalities/nt/src/objects.rs`.
+- **Memory and sections** (`personalities/nt/src/vm.rs`, `section.rs`,
+  `image.rs`, `protect.rs`). An NT process's address space is allocations
+  (reserved 64 KiB-aligned ranges) of 4 KiB pages, each reserved or
+  committed with a `PAGE_*` protection; `NtAllocateVirtualMemory`
+  (reserve/commit, top-down, zero bits), `NtFreeVirtualMemory`
+  (release/decommit), `NtProtectVirtualMemory` (guard pages grow stacks),
+  `NtQueryVirtualMemory` (`MemoryBasicInformation`), `NtCreateSection`
+  (pagefile-, data-file- and image-backed, the last through `poly-pe`'s load
+  plan, ADR 0029), `NtOpenSection`, `NtMapViewOfSection` and
+  `NtUnmapViewOfSection`. The model decides; the kernel's `MemBackend`
+  (`kernel/src/nt/backend.rs`) carries it out on `user::Memory` (ADR 0036):
+  committed private memory is demand-zero anonymous memory, a pagefile
+  section is an `AnonShared` object shared by its views, an image or file
+  section is a `MemoryImage` views copy privately.
+- **Processes and threads** (`personalities/nt/src/exec.rs`,
+  `kernel/src/nt`, ADR 0065). Until our `ntdll` exists the kernel maps the
+  executable's image section at its preferred base (or relocates it with
+  `poly_pe::relocate`), sets up the PEB, the first TEB and the stack with its
+  guard page. Each thread starts through a per-process trampoline that calls
+  its routine and, on return, ends the thread with `NtTerminateThread`, so the
+  last thread's return ends the process with the right code. `NtCreateThreadEx`
+  makes more threads in the process (each its own TEB, stack and thread
+  object); `NtTerminateThread`, `NtOpenProcess`/`Thread` (by client id),
+  `NtQueryInformationProcess`/`Thread`, `NtSuspendThread`/`ResumeThread` and
+  `NtGetContextThread`/`SetContextThread` (the x64 `CONTEXT` control and
+  integer registers, read from a thread parked suspended) round it out. The
+  per-process NT state is keyed by pid in `kernel/src/nt`, so `process.rs`
+  only gains a `new_nt` constructor. An executable that imports anything is
+  refused until `ntdll` binds imports; cross-process creation
+  (`NtCreateUserProcess`) is left for the `ntdll` milestone.
+- **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
+  `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
+  (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →
+  `STATUS_ABANDONED_WAIT_0+n`), semaphores (limits), waitable timers (periodic,
+  absolute/relative 100 ns times, timer APCs on the kernel timer service),
+  `NtWaitForSingleObject`/`NtWaitForMultipleObjects` (WaitAll/WaitAny, up to
+  64 objects, timeouts, `STATUS_USER_APC`), and `NtSignalAndWaitForSingleObject`.
+  The crate decides (`Done(status)` or `Blocked(WaitId)`, queuing a `Wake`
+  for each blocked wait a later call satisfies); the kernel blocks on the
+  generic park/unpark (ADR 0053), drains the wakes after each call and wakes
+  the threads, and cancels waits on timeout, alert or APC.
+- **APCs** (ADR 0065): `NtQueueApcThread` queues a user APC, delivered at an
+  alertable `NtWaitFor*`/`NtDelayExecution` or `NtTestAlert` through a
+  per-process APC trampoline that runs the routine and re-enters the kernel
+  (`PolyResumeApc`) to restore the interrupted context (our stand-in for
+  `KiUserApcDispatcher`). `NtDelayExecution` and `NtYieldExecution` round out
+  the dispatcher services.
+- **Structured exception handling** (`crates/poly-seh`,
+  `personalities/nt/src/exception.rs`, `kernel/src/nt/exception.rs`,
+  [ADR 0068](adr/0068-nt-structured-exception-handling-and-x64-unwinding.md)).
+  `poly-seh` is the hardware-free x64 SEH logic: parsing `.pdata`
+  `RUNTIME_FUNCTION` tables and `UNWIND_INFO` (every `UWOP_*`, chained info,
+  handlers), a virtual unwinder (`RtlVirtualUnwind` over a `CONTEXT`),
+  function-entry lookup by binary search, and the two dispatch passes
+  (`RtlDispatchException`, `RtlUnwindEx`) plus a stack walk — all host-tested,
+  never panicking on malformed input. When an NT thread faults (any CPU
+  exception) or calls `NtRaiseException`, the service layer classifies it
+  into an `EXCEPTION_RECORD` (the documented `STATUS_*` codes and
+  parameters), the kernel builds a `CONTEXT` from the trap frame and FPU
+  state, and both are written to the thread's user stack before it resumes
+  in the process's user-mode dispatcher; `NtContinue` restores a `CONTEXT`.
+  Until our `ntdll` provides `KiUserExceptionDispatcher`, a process names its
+  dispatcher with Poly's own `PolySetExceptionDispatcher` (as threads use the
+  trampolines of ADR 0065). An unhandled exception (no dispatcher, second
+  chance, a fail-fast) ends the process with the exception code, after a
+  `.pdata`-walked backtrace in the log.
+- **File I/O** (`personalities/nt/src/io`, `kernel/src/nt/io.rs`, ADR 0067):
+  each VFS mount is a device `\Device\PolyFs<N>` with a `ParseHook`, reached
+  through drive-letter links in `\??` (`\??\C:` → `/nt/c`, the NT system
+  root; `\??\Z:` → `/`, the whole VFS). `NtCreateFile`/`NtOpenFile` walk the
+  VFS case-insensitively but case-preservingly, apply the create
+  dispositions, options, share modes (the documented sharing table,
+  `STATUS_SHARING_VIOLATION`) and `FILE_ATTRIBUTE_*` (readonly ↔ write
+  permission; hidden/system/archive as the xattr `user.poly.ntattr`, ADR
+  0060; times in 100 ns since 1601), and make a file object.
+  `NtReadFile`/`NtWriteFile` do synchronous I/O with a file position or
+  explicit offset and append; or, on an asynchronous handle, queue an I/O
+  request packet to a per-device worker thread and return `STATUS_PENDING`,
+  completing through the `IO_STATUS_BLOCK`, an `Event` and/or an APC, and
+  cancellable with `NtCancelIoFile` (`STATUS_CANCELLED`). `NtQueryDirectoryFile`
+  enumerates with `* ?` wildcards and the documented information classes;
+  `NtLockFile`/`NtUnlockFile` are mandatory byte-range locks
+  (`STATUS_FILE_LOCK_CONFLICT`, `STATUS_LOCK_NOT_GRANTED`); deletion is
+  deferred (`FileDispositionInformation`, `FILE_DELETE_ON_CLOSE`,
+  `NtDeleteFile`); rename is `FileRenameInformation`. The logic is host-tested
+  over a real tmpfs; the kernel runs the workers and delivers completions.
+  `\Device\PolyPipe` is a stand-in slow byte-stream device; I/O completion
+  ports are deferred.
+- A `ParseHook` receives lookups that reach a device, a file system or the
+  registry, so those own the names below them.
+- **Registry** (`crates/poly-registry`, `personalities/nt/src/registry`,
+  `kernel/src/nt/registry.rs`, [ADR 0066](adr/0066-nt-registry-hives-in-polys-own-format.md)).
+  `\REGISTRY` is a permanent `Key` parse object; a walk reaching it hands
+  the rest of the path to the registry's parse hook, which answers with a
+  new `Key` object per open (its cookie an open instance), creates the last
+  component for `NtCreateKey`, or reparses at a symbolic-link key's target
+  (`HKLM\SYSTEM\CurrentControlSet` is one). Key objects are parse objects
+  too, so key handles serve as `RootDirectory`. Services `0x100`–`0x10C`:
+  `NtCreateKey`, `NtOpenKey(Ex)`, `NtDeleteKey`, `NtDeleteValueKey`,
+  `NtEnumerateKey`, `NtEnumerateValueKey`, `NtQueryKey`, `NtQueryValueKey`,
+  `NtSetValueKey`, `NtFlushKey`, `NtNotifyChangeKey` and
+  `NtSetInformationKey`, with every documented information class and the
+  `STATUS_BUFFER_OVERFLOW` / `STATUS_BUFFER_TOO_SMALL` rule. Case-insensitive,
+  case-preserving names; volatile keys; single-user access (only the
+  handle's granted access is checked). Notifications signal an event and
+  write the `IO_STATUS_BLOCK` (queued per process, written after its next
+  service). Hives are **Poly's own versioned snapshot format** (`POLYHIVE`
+  1.0 with a CRC-32), not Microsoft's undocumented one, kept in
+  `<disk>/poly/nt/registry/<NAME>.hive` on the first writable disk with a
+  `/poly` directory (else in memory), written atomically by `NtFlushKey`,
+  at NT process exit and before shutdown. Default hives (`HKLM\SYSTEM`,
+  `HKLM\SOFTWARE`, `HKU\.DEFAULT`, Poly's user) are made at the first boot
+  without files; ADR 0066 lists every value and its source.
 
 ## Testing strategy
 
@@ -1277,6 +1418,12 @@ services once it decodes those system calls.
 | Terminals on the host: the line discipline (canonical editing, echo flags, signals, flow control, `MIN` / `TIME`, input mappings, output processing), terminals against a fake host (controlling terminal, `SIGTTIN` / `SIGTTOU` / `EIO`, the ioctls, blocking reads and writes), ptys through a real VFS with threads (devpts, locking, echo, waiting for room, hangups) | `poly-tty`, `poly-personality-linux` (`task::jobs`) | `cargo test --workspace` (host) |
 | Terminals from ring 3: a pty slave reading a line a second thread types on the master (and the echo on the master), `TCGETS` / `TCSETS` and raw mode with `poll`, `epoll` and `FIONREAD`, `^C` on the master killing the foreground group with `SIGINT`, a background child writing with `TOSTOP` getting `SIGTTOU` (its handler, `EINTR`; blocked, the write goes through), `TIOCSWINSZ` sending `SIGWINCH`, the console as a terminal and `/dev/tty` after `TIOCSCTTY`, devpts nodes coming and going | `kernel_test!` in `tty/tests.rs` | every boot |
 | `/bin/ttyinit` as init on the serial console (nolibc Rust, `tools/xtask/programs/ttyinit.rs`), typed into through QEMU's stdin: a line edited with DEL and its echo, `^C` interrupting a read with `SIGINT`, single keys in raw mode | `tools/xtask/src/programs.rs` | `cargo xtask test` |
+| NT object manager, memory and sections from ring 3 (a self-assembled PE, `kernel/src/nt/test_pe.rs`): a named event created, opened, duplicated and closed to zero references; a directory queried; memory reserved/committed/protected/queried/freed; a pagefile section mapped twice with a write through one view seen through the other | `kernel_test!` `nt_test_program_runs_from_ring3` | every boot |
+| NT threads, synchronisation and APCs from ring 3 (a self-assembled multi-threaded PE, `kernel/src/nt/test_threads.rs`): `NtCreateThreadEx`, a blocking wait woken across threads, a thread exit code via `NtQueryInformationThread`, a mutant abandoned by a terminating thread (`STATUS_ABANDONED_WAIT_0`), a semaphore and event in a `WaitAll`, a user APC delivered at `NtTestAlert`, a periodic timer waited on twice, and `NtGetContextThread` on a suspended thread; the process cleaned up afterwards | `kernel_test!` `nt_threads_and_sync_from_ring3` | every boot |
+| NT structured exception handling from ring 3 (self-assembled PEs, `kernel/src/nt/test_seh.rs`, ADR 0068): a process registers a user-mode dispatcher, takes an access violation and a divide-by-zero, the dispatcher inspects each `EXCEPTION_RECORD`, fixes the `CONTEXT` up and resumes with `NtContinue`; a second process leaves an exception unhandled and ends with `STATUS_ACCESS_VIOLATION` | `kernel_test!` `nt_seh_dispatch_and_continue_from_ring3`, `nt_seh_unhandled_terminates_with_the_exception_code` | every boot |
+| NT registry from ring 3 (a self-assembled PE, `kernel/src/nt/test_registry.rs`): a key created under `\Registry\Machine\SOFTWARE`, `REG_SZ`/`REG_DWORD`/`REG_QWORD`/`REG_BINARY` values set, enumerated and queried (with `STATUS_BUFFER_OVERFLOW`), the default `ProductName` read, a value read through the `CurrentControlSet` link, a notification signalling an event, the key deleted; a hive file round trip through the VFS | `kernel_test!` `nt_registry_program_runs_from_ring3`, `nt_registry_hive_files_round_trip` | every boot |
+| NT registry logic on the host: keys, values, volatile keys, links, deletion while open, enumeration order, every information class and buffer status, notifications and their filters, the hive format (round trip, every truncation and bit flip refused), the default hives and their reload; the registry services against the fake kernel | `cargo test -p poly-registry -p poly-personality-nt` | `cargo xtask ci` |
+| NT dispatcher and service logic on the host: the object manager, the dispatcher against a randomized reference model (wait-any/all fairness, mutant ownership/abandonment, semaphore limits, timer ordering), and the memory/section/thread/sync service decoders against a fake kernel | `cargo test -p poly-ntobj -p poly-personality-nt` | `cargo xtask ci` |
 | Negative boot tests (faults, failures and panics must be reported, with a backtrace): unmapped access, write to text, execute stack/data, stack overflow | `poly.selftest.*` flags | `cargo xtask test` |
 | The shell over the serial port: `help`, `uptime`, `lspci`, an unknown command, Tab and cursor keys, `test`, `ls` and `cat` on the initramfs, `run /bin/hello`, `reboot` | `poly.shell`, QEMU's stdin | `cargo xtask test` |
 | File systems: the test initramfs (built by `cargo xtask` with `poly-cpio`, passed with `-initrd`) unpacked under `/`, its frames freed; devices, descriptors, tmpfs I/O; one boot without an initramfs | `kernel_test!` + `poly.test.initrd` | `cargo xtask test` |

@@ -100,6 +100,11 @@ fn renameat2_flags() {
     let noreplace = RenameFlags { noreplace: true, ..RenameFlags::default() };
     let exchange = RenameFlags { exchange: true, ..RenameFlags::default() };
     assert_eq!(rename_flags(&env, "/a", "/d/b", noreplace), Err(Errno::EEXIST));
+    assert_eq!(rename_flags(&env, "/a", "/a", noreplace), Err(Errno::EEXIST), "also onto itself");
+    env.vfs.link(&env.ctx, &env.root, At::Cwd, b"/a", At::Cwd, b"/a2", false).unwrap();
+    assert_eq!(rename_flags(&env, "/a", "/a2", noreplace), Err(Errno::EEXIST), "and onto its own hard link");
+    unlink(&env, "/a2").unwrap();
+    rename_flags(&env, "/a", "/a", exchange).unwrap();
     rename_flags(&env, "/a", "/d/c", noreplace).unwrap();
     rename_flags(&env, "/d/c", "/a", noreplace).unwrap();
     // Exchange two files.

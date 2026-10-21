@@ -224,9 +224,51 @@ pub fn shell_quote(s: &str) -> String {
     }
 }
 
+/// `f` over every item on up to `jobs` threads (at least one); the results
+/// come back in the items' order. Threads take the next item when they
+/// finish one, so a slow item does not hold up the rest.
+pub fn parallel_map<T: Sync, R: Send>(items: &[T], jobs: usize, f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let next = AtomicUsize::new(0);
+    let results: Vec<Mutex<Option<R>>> = items.iter().map(|_| Mutex::new(None)).collect();
+    std::thread::scope(|s| {
+        for _ in 0..jobs.clamp(1, items.len().max(1)) {
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(item) = items.get(i) else { break };
+                    let r = f(item);
+                    *results[i].lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+                }
+            });
+        }
+    });
+    results.into_iter().map(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()).expect("every item ran")).collect()
+}
+
+/// A default for `--jobs`: the machine's cores, at most `max`.
+pub fn default_jobs(max: usize) -> usize {
+    std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, max.max(1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parallel_map_keeps_the_order() {
+        let items: Vec<u64> = (0..50).collect();
+        for jobs in [0, 1, 3, 64] {
+            let out = parallel_map(&items, jobs, |i| {
+                std::thread::sleep(std::time::Duration::from_micros((50 - i) * 20));
+                i * 2
+            });
+            assert_eq!(out, items.iter().map(|i| i * 2).collect::<Vec<_>>());
+        }
+        assert!(parallel_map(&[] as &[u8], 4, |b| *b).is_empty());
+        assert!((1..=4).contains(&default_jobs(4)));
+    }
 
     #[test]
     fn utc_formatting() {

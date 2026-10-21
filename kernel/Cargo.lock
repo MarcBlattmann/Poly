@@ -91,16 +91,20 @@ dependencies = [
  "poly-line",
  "poly-mem",
  "poly-net",
+ "poly-ntobj",
  "poly-pagecache",
  "poly-paging",
  "poly-pci",
+ "poly-pe",
  "poly-personality-linux",
  "poly-personality-nt",
  "poly-personality-xnu",
  "poly-procfs",
  "poly-random",
+ "poly-registry",
  "poly-rtc",
  "poly-sched",
+ "poly-seh",
  "poly-smp",
  "poly-term",
  "poly-tty",
@@ -126,6 +130,10 @@ name = "poly-net"
 version = "0.0.1"
 
 [[package]]
+name = "poly-ntobj"
+version = "0.0.1"
+
+[[package]]
 name = "poly-pagecache"
 version = "0.0.1"
 dependencies = [
@@ -141,6 +149,10 @@ name = "poly-pci"
 version = "0.0.1"
 
 [[package]]
+name = "poly-pe"
+version = "0.0.1"
+
+[[package]]
 name = "poly-personality-linux"
 version = "0.0.1"
 dependencies = [
@@ -153,6 +165,11 @@ name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-ntobj",
+ "poly-pe",
+ "poly-registry",
+ "poly-seh",
+ "poly-vfs",
 ]
 
 [[package]]
@@ -174,11 +191,22 @@ name = "poly-random"
 version = "0.0.1"
 
 [[package]]
+name = "poly-registry"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
+
+[[package]]
 name = "poly-rtc"
 version = "0.0.1"
 
 [[package]]
 name = "poly-sched"
+version = "0.0.1"
+
+[[package]]
+name = "poly-seh"
 version = "0.0.1"
 
 [[package]]

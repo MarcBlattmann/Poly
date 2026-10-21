@@ -231,3 +231,21 @@ fn loopback_udp() {
     assert_eq!(s.a.stats().icmp_out, 1, "port unreachable for 54, delivered locally");
     assert_eq!(s.frames, [0, 0]);
 }
+
+#[test]
+fn loopback_carries_a_whole_64k_datagram() {
+    let mut s = Sim::new(25);
+    let lo = |port| SocketAddr::new(core::net::Ipv4Addr::LOCALHOST.into(), port);
+    let a = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    let b = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    s.a.bind(b, lo(7781)).unwrap();
+    let data = super::pattern(65507, 3);
+    assert_eq!(s.a.send_to(a, &data, Some(lo(7781))), Ok(65507));
+    assert_eq!(s.a.send_to(a, &[0u8; 65508], Some(lo(7781))), Err(Errno::EMSGSIZE));
+    s.run_for(Duration::from_millis(1));
+    let mut buf = vec![0u8; 70000];
+    let got = s.a.recv_from(b, &mut buf, crate::RecvFlags { peek: false }).unwrap();
+    assert_eq!(got.len, 65507);
+    assert!(buf[..65507] == data[..]);
+    assert_eq!(s.frames[0], 0, "never on the device");
+}

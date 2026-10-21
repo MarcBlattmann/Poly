@@ -26,6 +26,8 @@ pub struct Vfs {
     /// The inodes of file objects (pipes, event files, epoll sets), on a
     /// mount no path reaches (`object.rs`).
     anon: (Arc<AnonFs>, Arc<Mount>),
+    /// The pipes of open FIFO inodes (`fifo.rs`).
+    fifos: crate::fifo::Fifos,
 }
 
 impl core::fmt::Debug for Vfs {
@@ -50,7 +52,12 @@ impl Vfs {
         let anon_info = anon_fs.info();
         let anon_sb = table.superblock(anon_fs.clone(), anon_info);
         let anon_mount = table.detached(anon_sb, anon_fs.root());
-        Vfs { mounts: SpinMutex::new(table), devices: SpinMutex::new(BTreeMap::new()), anon: (anon_fs, anon_mount) }
+        Vfs {
+            mounts: SpinMutex::new(table),
+            devices: SpinMutex::new(BTreeMap::new()),
+            anon: (anon_fs, anon_mount),
+            fifos: crate::fifo::Fifos::default(),
+        }
     }
 
     /// A new inode for a file object (`kind` and `perm` as `fstat` will
@@ -230,11 +237,8 @@ impl Vfs {
         if flags.contains(OpenFlags::PATH) {
             flags = flags.intersection(OpenFlags::PATH | OpenFlags::DIRECTORY | OpenFlags::NOFOLLOW);
         } else {
-            if flags.intersection(OpenFlags::ACCMODE) == OpenFlags::ACCMODE {
-                return Err(Errno::EINVAL);
-            }
             if flags.contains(OpenFlags::TMPFILE) {
-                return Err(Errno::EOPNOTSUPP);
+                return self.open_tmpfile(ctx, cred, at, path, flags, mode);
             }
             if flags.contains(OpenFlags::CREAT) && flags.contains(OpenFlags::DIRECTORY) {
                 return Err(Errno::EINVAL);
@@ -266,7 +270,10 @@ impl Vfs {
         if path_only {
             return Ok(Arc::new(OpenFile::new(loc.pin()?, attr.kind, Backend::Path, flags).with_origin(origin)));
         }
-        let write = flags.writable();
+        // Access mode 3 opens for neither reading nor writing, but needs
+        // the permission to do both (open(2)).
+        let neither = flags.intersection(OpenFlags::ACCMODE) == OpenFlags::ACCMODE;
+        let write = flags.writable() || neither;
         if attr.kind == FileType::Directory && (write || flags.contains(OpenFlags::CREAT)) {
             return Err(Errno::EISDIR);
         }
@@ -278,7 +285,7 @@ impl Vfs {
                 return Err(Errno::EROFS);
             }
             let mut want = Access::NONE;
-            if flags.readable() {
+            if flags.readable() || neither {
                 want = want | Access::READ;
             }
             if write || flags.contains(OpenFlags::TRUNC) {
@@ -302,11 +309,17 @@ impl Vfs {
                 // A device may open as another one (`CharDevice::open`).
                 Backend::Device(dev.open(flags)?.unwrap_or(dev))
             }
-            // Block devices are reached through the block layer, opening a
-            // FIFO (a `pipe::Pipe` per node, blocking opens) comes with the
-            // path-based file calls (ADR 0042), and a socket's name cannot
-            // be opened (`open(2)`: ENXIO).
-            FileType::BlockDevice | FileType::Fifo | FileType::Socket | FileType::Symlink => {
+            // A FIFO opens as an end of the inode's pipe (`fifo.rs`; a
+            // blocking open waits in the caller, `PipeEnd::wait_for_peer`).
+            FileType::Fifo => {
+                let fs = Arc::as_ptr(loc.mount.fs()) as *const () as usize;
+                let (read, write) = (flags.readable(), flags.writable());
+                let end = self.fifos.open(fs, loc.ino, read, write, flags.contains(OpenFlags::NONBLOCK))?;
+                Backend::Object(Arc::new(end))
+            }
+            // Block devices are reached through the block layer, and a
+            // socket's name cannot be opened (`open(2)`: ENXIO).
+            FileType::BlockDevice | FileType::Socket | FileType::Symlink => {
                 return Err(Errno::ENXIO);
             }
         };
@@ -318,6 +331,37 @@ impl Vfs {
             }
         }
         Ok(Arc::new(OpenFile::new(node, attr.kind, backend, flags).with_origin(origin)))
+    }
+
+    /// `O_TMPFILE` (open(2)): an unnamed regular file in the directory
+    /// `path` names, open for writing (`EINVAL` without write access;
+    /// `ENOTDIR` if `path` is not a directory), with `mode & ~umask`; it
+    /// has no links and goes when closed, unless `linkat` with
+    /// `AT_EMPTY_PATH` names it.
+    fn open_tmpfile(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        flags: OpenFlags,
+        mode: u16,
+    ) -> Result<Arc<OpenFile>> {
+        if !flags.writable() {
+            return Err(Errno::EINVAL);
+        }
+        check_path(path)?;
+        let dir = self.walk(ctx, cred).resolve(Self::start(ctx, at), path, true)?;
+        if dir.attr()?.kind != FileType::Directory {
+            return Err(Errno::ENOTDIR);
+        }
+        let dir_attr = self.may_change(cred, &dir)?;
+        let (uid, gid, perm) = Self::new_owner(cred, &dir_attr, mode & !ctx.umask, false);
+        let node = NewNode { kind: FileType::Regular, perm, uid, gid, rdev: DeviceId::default() };
+        let ino = dir.mount.sb.fs.create_tmpfile(dir.ino, &node)?;
+        let loc = Location { mount: dir.mount.clone(), ino };
+        let flags = flags.without(OpenFlags::TMPFILE).without(OpenFlags::CREAT);
+        Ok(Arc::new(OpenFile::new(loc.pin()?, FileType::Regular, Backend::Inode, flags)))
     }
 
     /// The `O_CREAT` walk: the last component is created if missing, and
@@ -460,6 +504,17 @@ impl Vfs {
         follow: bool,
     ) -> Result<()> {
         let src = self.resolve(ctx, cred, old_at, old, follow)?;
+        self.link_location(ctx, cred, src, new_at, new)
+    }
+
+    /// `linkat(2)` with `AT_EMPTY_PATH`: a new name `new` for the file
+    /// `src` (an open file's node), which may be an `O_TMPFILE` file that
+    /// has no name yet; another file without names is `ENOENT`.
+    pub fn link_node(&self, ctx: &FsContext, cred: &Cred, src: &NodeRef, new_at: At<'_>, new: &[u8]) -> Result<()> {
+        self.link_location(ctx, cred, src.loc().clone(), new_at, new)
+    }
+
+    fn link_location(&self, ctx: &FsContext, cred: &Cred, src: Location, new_at: At<'_>, new: &[u8]) -> Result<()> {
         let p = self.parent_of(ctx, cred, new_at, new)?;
         let name = self.new_name(&p)?;
         if p.trailing_slash {
@@ -566,12 +621,14 @@ impl Vfs {
             return Err(Errno::EBUSY);
         }
         if let Some(dattr) = &dattr {
+            // RENAME_NOREPLACE: an existing target, even the source's own
+            // name or another link of it, is EEXIST (the spec of renameat2).
+            if flags.noreplace {
+                return Err(Errno::EEXIST);
+            }
             if dattr.ino == sattr.ino {
                 // Two names of one inode (or the same name): nothing to do.
                 return Ok(());
-            }
-            if flags.noreplace {
-                return Err(Errno::EEXIST);
             }
             if !flags.exchange {
                 if src_dir && !dst_dir {

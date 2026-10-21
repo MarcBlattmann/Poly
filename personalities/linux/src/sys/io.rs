@@ -10,7 +10,7 @@
 //! may transfer fewer bytes than asked, which read(2) and write(2) allow.
 
 use crate::abi::signal::{SI_KERNEL, SIGPIPE};
-use crate::abi::{FileStat, IOV_MAX, Iovec, MAX_RW_COUNT, SigInfo, ioctl, mode};
+use crate::abi::{FileStat, IOV_MAX, Iovec, MAX_RW_COUNT, PAGE_SIZE, SigInfo, ioctl, mode};
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::{LinuxKernel, Target, UserPtr};
@@ -110,6 +110,9 @@ pub fn fstat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let request = a.uint(1);
+    if let Some(r) = crate::sys::fdioctl::generic(k, fd, request, a) {
+        return r;
+    }
     // SIOCOUTQ on a socket (ADR 0048): the same number as the terminal
     // request TIOCOUTQ, so it is answered before the terminal check.
     if request == crate::net::abi::SIOCOUTQ
@@ -205,23 +208,36 @@ fn write_from(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> S
     if total == 0 {
         return k.write(fd, &[]).map(|n| n as u64);
     }
+    // RLIMIT_FSIZE: the write may be cut short, or refused.
+    let total = crate::sys::fsize::allowed(k, fd, None, total)?;
     let mut chunk = bounce(total.min(CHUNK as u64) as usize)?;
     let mut cursor = Cursor::new(iovs, total);
     let mut done: u64 = 0;
     while done < total {
         let want = (total - done).min(CHUNK as u64) as usize;
         let mut filled = 0;
-        let mut fault = None;
+        let mut fault = false;
         while filled < want {
             let (at, n) = cursor.next((want - filled) as u64).expect("iovecs cover the total");
-            if let Err(e) = k.copy_from_user(at, &mut chunk[filled..filled + n as usize]) {
-                fault = Some(e);
+            let got = copy_in_partial(k, at, &mut chunk[filled..filled + n as usize]);
+            filled += got;
+            if got < n as usize {
+                fault = true;
                 break;
             }
-            filled += n as usize;
         }
-        if let Some(e) = fault {
-            return if done == 0 { Err(e) } else { Ok(done) };
+        if fault {
+            // The bytes before the first one that cannot be read are
+            // written (writev(2) with a bad second buffer writes the first);
+            // with none, the call fails with EFAULT.
+            if filled == 0 {
+                return if done == 0 { Err(Errno::EFAULT) } else { Ok(done) };
+            }
+            return match k.write(fd, &chunk[..filled]) {
+                Ok(n) => Ok(done + n.min(filled) as u64),
+                Err(e) if done == 0 => Err(e),
+                Err(_) => Ok(done),
+            };
         }
         match k.write(fd, &chunk[..want]) {
             Ok(n) => {
@@ -262,10 +278,15 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
         let mut copied = 0;
         while copied < n {
             let Some((at, len)) = cursor.next((n - copied) as u64) else { break };
-            if let Err(e) = k.copy_to_user(at, &buf[copied..copied + len as usize]) {
-                return if done == 0 && copied == 0 { Err(e) } else { Ok(done + copied as u64) };
+            let got = copy_out_partial(k, at, &buf[copied..copied + len as usize]);
+            copied += got;
+            if got < len as usize {
+                // The bytes read but not delivered were not read, as far
+                // as the file's offset goes (read(2) returns the bytes it
+                // copied; with none, EFAULT and the offset is unchanged).
+                unread(k, fd, (n - copied) as u64);
+                return if done == 0 && copied == 0 { Err(Errno::EFAULT) } else { Ok(done + copied as u64) };
             }
-            copied += len as usize;
         }
         done += n as u64;
         if n < want || done >= total || !*whole.get_or_insert_with(|| reads_whole(k, fd)) {
@@ -274,6 +295,57 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
     }
     Ok(done)
 }
+
+/// Copy `buf` to user memory at `at`: all of it, or page by page up to
+/// the first page that cannot be written. Returns the bytes copied.
+pub(crate) fn copy_out_partial(k: &mut dyn LinuxKernel, at: UserPtr, buf: &[u8]) -> usize {
+    if k.copy_to_user(at, buf).is_ok() {
+        return buf.len();
+    }
+    let mut done = 0;
+    while done < buf.len() {
+        let addr = at.0.wrapping_add(done as u64);
+        let n = ((PAGE_SIZE - addr % PAGE_SIZE) as usize).min(buf.len() - done);
+        if k.copy_to_user(UserPtr(addr), &buf[done..done + n]).is_err() {
+            break;
+        }
+        done += n;
+    }
+    done
+}
+
+/// Copy user memory at `at` into `buf`: all of it, or page by page up to
+/// the first page that cannot be read. Returns the bytes copied.
+pub(crate) fn copy_in_partial(k: &mut dyn LinuxKernel, at: UserPtr, buf: &mut [u8]) -> usize {
+    if k.copy_from_user(at, buf).is_ok() {
+        return buf.len();
+    }
+    let mut done = 0;
+    while done < buf.len() {
+        let addr = at.0.wrapping_add(done as u64);
+        let n = ((PAGE_SIZE - addr % PAGE_SIZE) as usize).min(buf.len() - done);
+        if k.copy_from_user(UserPtr(addr), &mut buf[done..done + n]).is_err() {
+            break;
+        }
+        done += n;
+    }
+    done
+}
+
+/// `bytes` read from `fd` could not be delivered: move a file's offset
+/// back over them (a regular file or memory device; for a pipe or a
+/// terminal they are gone).
+fn unread(k: &mut dyn LinuxKernel, fd: i32, bytes: u64) {
+    if bytes == 0 || !reads_whole(k, fd) {
+        return;
+    }
+    if let Ok(fs) = crate::sys::path::fs(k) {
+        let _ = fs.lseek(fd, -(bytes as i64), SEEK_CUR);
+    }
+}
+
+/// `SEEK_CUR` (`linux/fs.h`).
+const SEEK_CUR: u32 = 1;
 
 /// Whether reads of `fd` never wait, so a read may go on after a full
 /// chunk: a regular file, or a memory device (major 1: `/dev/null`,

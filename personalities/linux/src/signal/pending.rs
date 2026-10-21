@@ -74,6 +74,25 @@ impl SigQueue {
         Some(info)
     }
 
+    /// Discard the entries `f` picks; returns how many went.
+    pub fn remove_where(&mut self, f: impl Fn(&SigInfo) -> bool) -> usize {
+        let before = self.entries.len();
+        let mut gone = SigSet::EMPTY;
+        self.entries.retain(|e| {
+            let keep = !f(e);
+            if !keep {
+                gone.insert(e.signal());
+            }
+            keep
+        });
+        for signal in 1..=crate::abi::signal::NSIG {
+            if gone.contains(signal) && !self.entries.iter().any(|e| e.signal() == signal) {
+                self.set.remove(signal);
+            }
+        }
+        before - self.entries.len()
+    }
+
     /// Discard every instance of the signals in `signals`.
     pub fn discard(&mut self, signals: SigSet) {
         self.entries.retain(|e| !signals.contains(e.signal()));

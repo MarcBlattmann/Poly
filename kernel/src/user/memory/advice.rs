@@ -26,6 +26,10 @@ pub enum Advice {
     /// ([`AdviceError::WrongKind`] for other regions,
     /// [`AdviceError::Unsupported`] for those).
     FreeBacking,
+    /// `MADV_WIPEONFORK` (`true`): a child made by [`Memory::fork`] gets the
+    /// range zero-filled; private anonymous memory only
+    /// ([`AdviceError::WrongKind`]). `false`: `MADV_KEEPONFORK`.
+    WipeOnFork(bool),
 }
 
 /// Why [`Memory::advise`] failed.
@@ -72,6 +76,13 @@ impl Memory {
             })
             .collect();
         let anonymous = |v: &Vma<super::FileRef>| matches!(v.backing, Backing::Anonymous);
+        if let Advice::WipeOnFork(on) = advice {
+            return match inner.map.set_wipe_on_fork(addr, len, on) {
+                Ok(()) => Ok(()),
+                Err(poly_vm::Error::Invalid) => Err(AdviceError::WrongKind),
+                Err(_) => Err(AdviceError::NotMapped),
+            };
+        }
         match advice {
             Advice::Keep => {}
             Advice::Discard => self.release(&mut inner, &parts),
@@ -81,6 +92,7 @@ impl Memory {
                 }
                 self.release(&mut inner, &parts);
             }
+            Advice::WipeOnFork(_) => unreachable!("handled above"),
             Advice::FreeBacking => {
                 let shared_writable = |v: &Vma<super::FileRef>| v.is_shared() && v.prot.contains(Prot::WRITE);
                 if !parts.iter().all(shared_writable) {

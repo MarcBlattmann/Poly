@@ -17,9 +17,10 @@
 //!   data is durable within a few seconds. `sync` and unmounting do the
 //!   same at once.
 //! - **Mappings.** [`FileSource`] is a VFS file as a `user::PageSource`.
-//!   On a disk file system it hands out the cache's pages, so a mapping
-//!   and `read`/`write` share one frame, and `MAP_SHARED` works; elsewhere
-//!   (tmpfs) it reads private copies as before.
+//!   On a disk file system or a tmpfs (which is behind the cache too,
+//!   `memfs`, ADR 0064) it hands out the cache's pages, so a mapping and
+//!   `read`/`write` share one frame, and `MAP_SHARED` works; elsewhere
+//!   (procfs, sysfs) it reads private copies as before.
 
 use super::disk;
 use crate::arch;
@@ -165,6 +166,7 @@ fn writeback_main(_: usize) -> usize {
         KICKED.store(false, Ordering::SeqCst);
         release_now();
         disk::writeback_pass();
+        super::memfs::writeback_pass();
         relieve_memory_pressure();
         PASSES.fetch_add(1, Ordering::SeqCst);
     }
@@ -206,7 +208,8 @@ impl core::fmt::Debug for FileSource {
 impl FileSource {
     /// The file `node` names.
     pub fn new(node: NodeRef) -> FileSource {
-        let cached = disk::cached_fs_of(node.mount().fs());
+        let fs = node.mount().fs();
+        let cached = disk::cached_fs_of(fs).or_else(|| super::memfs::cached_fs_of(fs));
         FileSource { node, cached, file: None }
     }
 
@@ -227,6 +230,14 @@ impl PageSource for FileSource {
 
     fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, IoError> {
         self.node.mount().fs().read(self.node.ino(), offset, buf).map_err(|_| IoError)
+    }
+
+    /// The file's device and inode number: every mapping of the file
+    /// names the same futexes (63 bits; inodes above 2^39 may collide).
+    fn object_id(&self) -> Option<u64> {
+        let st = self.node.stat().ok()?;
+        let dev = (u64::from(st.dev.major) << 12 | u64::from(st.dev.minor)) & 0xff_ffff;
+        Some(dev << 39 | (st.ino & ((1 << 39) - 1)))
     }
 
     fn file(&self) -> Option<&Arc<poly_vfs::OpenFile>> {

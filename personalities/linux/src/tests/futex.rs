@@ -162,7 +162,7 @@ fn requeue_and_cmp_requeue() {
     let mut k = FakeKernel::new();
     waiting(&mut k, WORD, 1..=6, 1);
     waiting(&mut k, WORD2, [9], 1);
-    assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, op(FUTEX_REQUEUE), 1, 2, WORD2]), Ok(1), "returns the woken");
+    assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, op(FUTEX_REQUEUE), 1, 2, WORD2]), Ok(3), "returns woken + moved");
     assert_eq!(woken(&mut k), [1]);
     assert_eq!(k.futexes.waiters(key(WORD)).collect::<Vec<_>>(), [4, 5, 6]);
     assert_eq!(k.futexes.waiters(key(WORD2)).collect::<Vec<_>>(), [9, 2, 3]);
@@ -209,9 +209,31 @@ fn private_futexes_are_per_address_space() {
     let mut k = FakeKernel::new();
     k.futexes.enqueue(FutexKey::Private { space: 200, addr: WORD }, 7, u32::MAX);
     assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, op(FUTEX_WAKE), 9]), Ok(0));
-    assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, FUTEX_WAKE as u64, 9]), Ok(0), "shared: same key in private memory");
+    assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, FUTEX_WAKE as u64, 9]), Ok(0));
+    // A private waiter is not found by a shared wake on the same word, nor
+    // a shared waiter by a private one (futex's spec sheet).
     waiting(&mut k, WORD, [8], u32::MAX);
+    k.futexes.enqueue(FutexKey::Unshared { space: 100, addr: WORD }, 9, u32::MAX);
     assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, FUTEX_WAKE as u64, 9]), Ok(1));
+    assert_eq!(woken(&mut k), [9], "the shared waiter");
+    assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, FUTEX_WAKE as u64, 9]), Ok(0), "the private waiter stays");
+    assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, op(FUTEX_WAKE), 9]), Ok(1));
+    assert_eq!(woken(&mut k), [8]);
+}
+
+#[test]
+fn unmapped_words_are_efault_for_every_operation() {
+    let mut k = FakeKernel::new();
+    let none = 0x7fff_ffff;
+    for flags in [0, PRIVATE] {
+        let f = |cmd: u32| cmd as u64 | flags;
+        assert_eq!(sys(&mut k, nr::FUTEX, &[UNMAPPED, f(FUTEX_WAKE), 1]), Err(Errno::EFAULT));
+        assert_eq!(sys(&mut k, nr::FUTEX, &[UNMAPPED, f(FUTEX_WAKE_BITSET), 1, 0, 0, 1]), Err(Errno::EFAULT));
+        assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, f(FUTEX_REQUEUE), 1, none, UNMAPPED]), Err(Errno::EFAULT));
+        assert_eq!(sys(&mut k, nr::FUTEX, &[UNMAPPED, f(FUTEX_REQUEUE), 1, none, WORD]), Err(Errno::EFAULT));
+        assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, f(FUTEX_CMP_REQUEUE), 1, none, UNMAPPED, 0]), Err(Errno::EFAULT));
+        assert_eq!(sys(&mut k, nr::FUTEX, &[WORD, f(FUTEX_REQUEUE), 1, none, WORD2]), Ok(0), "both mapped");
+    }
 }
 
 /// A deterministic generator (xorshift64*).
@@ -300,7 +322,7 @@ fn randomized_futex_model() {
                         }
                         !take
                     });
-                    let n = if compare { expect.len() + moved.len() } else { expect.len() };
+                    let n = expect.len() + moved.len();
                     model.extend(moved);
                     assert_eq!(r, Ok(n as u64), "seed {seed} step {step}");
                     let mut got = woken(&mut k);

@@ -12,6 +12,7 @@ use crate::cred::{Creds, cap};
 use crate::errno::Errno;
 use crate::kernel::{FpuState, LinuxKernel, ProcessInfo, SigSet, Target, UserContext, UserPtr};
 use crate::ns::pid;
+use crate::time::timers::TakenTimer;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -195,9 +196,14 @@ enum Step {
 /// dropped. A handled one resets to `SIG_DFL` first if it has
 /// `SA_RESETHAND` (sigaction(2): "Restore the signal action to the default
 /// upon entry to the signal handler"; POSIX also clears `SA_SIGINFO`).
-fn next_step(p: &mut LinuxProcess, tid: i32) -> Step {
+/// Every signal taken goes into `taken`, for
+/// [`LinuxKernel::signal_delivered`], and every POSIX timer's signal into
+/// `timers`, for [`crate::sys::time::count_taken`].
+fn next_step(p: &mut LinuxProcess, tid: i32, taken: &mut Vec<u32>, timers: &mut Vec<TakenTimer>) -> Step {
     while let Some(info) = p.dequeue(tid) {
         let signal = info.signal();
+        taken.push(signal);
+        timers.extend(crate::time::timers::signal_taken(p, &info));
         let action = p.actions.get(signal);
         match disposition(signal, &action) {
             Disposition::Ignore | Disposition::Default(DefaultAction::Ignore | DefaultAction::Continue) => {}
@@ -239,8 +245,24 @@ pub fn exit_to_user(k: &mut dyn LinuxKernel) -> ExitToUser {
     k.clear_signal_notification();
     let tid = k.tid();
     let mut pending_restart = with_own(k, |p| p.thread_mut(tid).restart.take());
+    let mut taken = Vec::new();
+    let mut timers = Vec::new();
     loop {
-        match with_own(k, |p| next_step(p, tid)) {
+        let mut step = with_own(k, |p| next_step(p, tid, &mut taken, &mut timers));
+        // Timer signals taken: their overrun counts are fixed now (also in
+        // the siginfo a handler gets).
+        for t in timers.drain(..) {
+            let info = match &mut step {
+                Step::Handle { info, .. } => Some(info),
+                _ => None,
+            };
+            crate::sys::time::count_taken(k, t, info);
+        }
+        // ptrace(2): a signal-delivery-stop for "any signal except SIGKILL".
+        for signal in taken.drain(..).filter(|&s| s != SIGKILL) {
+            k.signal_delivered(signal);
+        }
+        match step {
             Step::None => {
                 if let Some(r) = pending_restart.take() {
                     let mut ctx = k.user_context();
@@ -336,7 +358,13 @@ fn setup_frame(
         info,
         with_siginfo: action.flags & SA_SIGINFO != 0,
         mask: saved_mask,
-        stack: altstack.report(rsp),
+        // Without an alternate stack uc_stack is all zero (rt_sigaction's
+        // spec sheet), not sigaltstack(2)'s SS_DISABLE.
+        stack: if altstack.is_enabled() {
+            altstack.report(rsp)
+        } else {
+            crate::abi::StackT { sp: 0, flags: 0, size: 0 }
+        },
         restorer: action.restorer,
         fpu: FpuState { image: &image, xfeatures },
     };

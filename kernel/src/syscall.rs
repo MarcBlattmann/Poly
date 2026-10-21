@@ -14,6 +14,7 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let outcome = match process.personality {
         Personality::Linux if process.linux.is_some() => crate::linux::syscall(process, regs),
         Personality::Linux => Linux::dispatch(regs),
+        Personality::Nt if crate::nt::is_nt_process(process.pid) => crate::nt::syscall(process, regs),
         Personality::Nt => Nt::dispatch(regs),
         Personality::Xnu => Xnu::dispatch(regs),
     };

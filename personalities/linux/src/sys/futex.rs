@@ -80,7 +80,7 @@ pub fn futex(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
                 return Err(Errno::EINVAL);
             }
             aligned(uaddr)?;
-            let key = k.futex_key(uaddr, private)?;
+            let key = futex::key(k, uaddr, private)?;
             Ok(futex::wake(k, key, count(val as i32), bitset) as u64)
         }
         FUTEX_REQUEUE | FUTEX_CMP_REQUEUE => {
@@ -89,18 +89,20 @@ pub fn futex(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             if (val as i32) < 0 || val2 < 0 {
                 return Err(Errno::EINVAL);
             }
-            let from = k.futex_key(uaddr, private)?;
-            let to = k.futex_key(uaddr2, private)?;
+            let from = futex::key(k, uaddr, private)?;
+            let to = futex::key(k, uaddr2, private)?;
             let cmp = (cmd == FUTEX_CMP_REQUEUE).then_some(val3);
             let (woken, requeued) = futex::requeue(k, uaddr, from, to, val as usize, val2 as usize, cmp)?;
-            Ok(if cmp.is_some() { woken + requeued } else { woken } as u64)
+            // Both return the woken plus the moved waiters (futex's spec
+            // sheet).
+            Ok((woken + requeued) as u64)
         }
         FUTEX_WAKE_OP => {
             aligned(uaddr)?;
             aligned(uaddr2)?;
             let op = WakeOp::decode(val3)?;
-            let key1 = k.futex_key(uaddr, private)?;
-            let key2 = k.futex_key(uaddr2, private)?;
+            let key1 = futex::key(k, uaddr, private)?;
+            let key2 = futex::key(k, uaddr2, private)?;
             Ok(futex::wake_op(k, key1, uaddr2, key2, count(val as i32), count(val2), op)? as u64)
         }
         _ => Err(Errno::ENOSYS),
@@ -143,7 +145,7 @@ pub fn wait_with_restart(
     deadline: Option<Deadline>,
     with_block: bool,
 ) -> SysResult {
-    let key = k.futex_key(uaddr, private)?;
+    let key = futex::key(k, uaddr, private)?;
     match futex::wait(k, uaddr, key, val, bitset, deadline) {
         Ok(()) => Ok(0),
         Err(WaitError::Errno(e)) => Err(e),

@@ -5,11 +5,19 @@
 //! ```text
 //! POLY-INIT: exec /test-binary                     the program starts
 //! POLY-INIT: unsupported <reason>                  it cannot run
-//! POLY-SYSCALL: pid=1 nr=1 args=0x1,0x401000,0xd,0x0,0x0,0x0 ret=13
-//! POLY-OUT: fd=1 hex=68656c6c6f0a                  bytes it wrote to fd 1 or 2
-//! POLY-SIGNAL: pid=1 signal=11                     a signal acted on (a fault, or a fatal one)
-//! POLY-EXIT: pid=1 code=0                          it ended (or signal=N)
+//! POLY-SYSCALL: pid=2 tid=2 nr=1 args=0x1,0x401000,0xd,0x0,0x0,0x0 ret=13
+//! POLY-ENTER: pid=2 tid=2 nr=56 args=...           clone/fork/vfork/clone3 entered (before the child runs)
+//! POLY-OUT: fd=1 hex=68656c6c6f0a                  bytes that reached its stdout (1) or stderr (2)
+//! POLY-SIGNAL: pid=2 tid=3 signal=11               a signal taken for delivery (not SIGKILL)
+//! POLY-EXIT: pid=2 code=0                          it ended (or signal=N)
 //! ```
+//!
+//! With `poly.test.capture` the program runs as the child of the kernel's
+//! init, pid 1 (`testinit.rs`, ADR 0064), so it is pid 2. Output is
+//! captured by open file: fds 1 and 2 start as two console files whose
+//! bytes are reported (`tty::log_console_files`), wherever they are
+//! duplicated to; `poly.test.stdout=<path>` / `poly.test.stderr=<path>`
+//! also report a file's contents when the program has ended.
 //!
 //! `POLY-INIT` and `POLY-EXIT` are written whenever `poly.init` runs a
 //! program; the others only for processes marked traced, which the first
@@ -49,14 +57,14 @@ pub fn unsupported(reason: &str) {
     record(&format!("POLY-INIT: unsupported {reason}\n"));
 }
 
-/// `POLY-SYSCALL`: call `nr` with `args` returned `ret` (`None`: it did
-/// not return, like `exit_group`).
-pub fn syscall(pid: u32, nr: u64, args: &[u64; 6], ret: Option<u64>) {
-    let mut line = String::with_capacity(128);
-    let _ = write!(line, "POLY-SYSCALL: pid={pid} nr={nr} args=");
-    for (i, a) in args.iter().enumerate() {
-        let _ = write!(line, "{}{a:#x}", if i == 0 { "" } else { "," });
-    }
+/// `POLY-SYSCALL`: thread `tid` of process `pid` made call `nr` with
+/// `args`, which returned `ret` (`None`: it did not return, like
+/// `exit_group`). The `tid=` field lets the diff runner tell a process's
+/// threads apart (a tracer sees each thread as a task of its own).
+pub fn syscall_of(pid: u32, tid: u32, nr: u64, args: &[u64; 6], ret: Option<u64>) {
+    let mut line = String::with_capacity(136);
+    let _ = write!(line, "POLY-SYSCALL: pid={pid} tid={tid} nr={nr} args=");
+    push_args(&mut line, args);
     match ret {
         Some(r) => {
             let _ = writeln!(line, " ret={}", r as i64);
@@ -64,6 +72,43 @@ pub fn syscall(pid: u32, nr: u64, args: &[u64; 6], ret: Option<u64>) {
         None => line.push_str(" ret=?\n"),
     }
     record(&line);
+}
+
+/// `POLY-ENTER`: thread `tid` of process `pid` has entered call `nr`, whose
+/// `POLY-SYSCALL` record comes when it returns. Written for the calls that
+/// start another task (`clone`, `fork`, `vfork`, `clone3`) before the task
+/// exists, so the trace has the call where a tracer sees it: at its entry,
+/// before anything the new task does.
+pub fn enter(pid: u32, tid: u32, nr: u64, args: &[u64; 6]) {
+    let mut line = String::with_capacity(128);
+    let _ = write!(line, "POLY-ENTER: pid={pid} tid={tid} nr={nr} args=");
+    push_args(&mut line, args);
+    line.push('\n');
+    record(&line);
+}
+
+/// Whether call `nr` starts another task, so its [`enter`] record goes out
+/// first: `clone`, `fork`, `vfork`, `clone3`.
+pub fn starts_task(nr: u64) -> bool {
+    use poly_personality_linux::nr;
+    matches!(nr, nr::CLONE | nr::FORK | nr::VFORK | nr::CLONE3)
+}
+
+fn push_args(line: &mut String, args: &[u64; 6]) {
+    for (i, a) in args.iter().enumerate() {
+        let _ = write!(line, "{}{a:#x}", if i == 0 { "" } else { "," });
+    }
+}
+
+/// `POLY-SIGNAL`: thread `tid` of process `pid` took `signal` to act on it
+/// (a handler, a stop, a continue, the end of the process, or dropping it
+/// as ignored), as a ptrace(2) tracer sees a signal-delivery-stop: never
+/// for `SIGKILL`, nor for a signal rt_sigtimedwait(2) or a signal file
+/// takes. A system call a signal interrupted is reported with the result
+/// a tracer sees (`ret=-512` and the like for one awaiting its restart
+/// decision; `Linux::traced_result`).
+pub fn signal_of(pid: u32, tid: u32, signal: u32) {
+    record(&format!("POLY-SIGNAL: pid={pid} tid={tid} signal={signal}\n"));
 }
 
 /// `POLY-OUT` records for `bytes` written to `fd` (1 or 2).
@@ -77,11 +122,6 @@ pub fn output(fd: i32, bytes: &[u8]) {
         line.push('\n');
         record(&line);
     }
-}
-
-/// `POLY-SIGNAL`: process `pid` acts on `signal`.
-pub fn signal(pid: u32, signal: u32) {
-    record(&format!("POLY-SIGNAL: pid={pid} signal={signal}\n"));
 }
 
 /// `POLY-EXIT`: process `pid` ended with `status`.

@@ -41,6 +41,9 @@ pub const TCSETSW2: u32 = 0x402C_542C;
 pub const TCSETSF2: u32 = 0x402C_542D;
 /// `_IOR('T', 0x30, unsigned int)`: the pty number of a master.
 pub const TIOCGPTN: u32 = 0x8004_5430;
+/// `TIOCGPTPEER`, `_IO('T', 0x41)`: open the master's slave
+/// (`asm-generic/ioctls.h`).
+pub const TIOCGPTPEER: u32 = 0x5441;
 /// `_IOW('T', 0x31, int)`: lock or unlock the slave of a master.
 pub const TIOCSPTLCK: u32 = 0x4004_5431;
 /// `_IOW('T', 0x36, int)`: send a signal to the slave's foreground group.

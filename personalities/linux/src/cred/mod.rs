@@ -555,7 +555,11 @@ impl Creds {
         if !self.capable(cap::SETGID) {
             return Err(Errno::EPERM);
         }
-        self.groups = Arc::from(groups);
+        // getgroups(2) reports them in ascending order, duplicates kept
+        // (setgroups' spec sheet).
+        let mut sorted = groups.to_vec();
+        sorted.sort_unstable();
+        self.groups = Arc::from(sorted);
         Ok(())
     }
 

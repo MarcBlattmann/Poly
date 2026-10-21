@@ -152,7 +152,8 @@ fn write_rusage(k: &mut dyn LinuxKernel, ptr: UserPtr, pid: i32) -> Result<(), E
     if ptr.is_null() {
         return Ok(());
     }
-    let usage = Rusage { utime: Timeval::from_nanos(t.user_ns), stime: Timeval::from_nanos(t.system_ns) };
+    let usage =
+        Rusage { utime: Timeval::from_nanos(t.user_ns), stime: Timeval::from_nanos(t.system_ns), ..Rusage::default() };
     k.copy_to_user(ptr, &usage.to_bytes())
 }
 
@@ -215,6 +216,7 @@ pub fn setpgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 pub fn getpgid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let me = k.pid();
     let pid = pid_arg(k, a.int(0))?;
+    let pid = thread_group_of(k, pid);
     let g = with_tree(k, |t| t.getpgid(me, pid))??;
     seen(k, g)
 }
@@ -235,6 +237,20 @@ pub fn setsid(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
 pub fn getsid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let me = k.pid();
     let pid = pid_arg(k, a.int(0))?;
+    let pid = thread_group_of(k, pid);
     let s = with_tree(k, |t| t.getsid(me, pid))??;
     seen(k, s)
+}
+
+/// The process of thread `pid` (a global id; a process's own id, 0 and
+/// negative ids stay as they are): getpgid and getsid of a thread id
+/// answer for its process (the spec sheets of getpgid and getsid). A
+/// zombie has no threads left and is found by its pid.
+fn thread_group_of(k: &mut dyn LinuxKernel, pid: i32) -> i32 {
+    if pid <= 0 {
+        return pid;
+    }
+    let mut tgid = pid;
+    let _ = k.with_process(crate::kernel::Target::Thread(pid), &mut |_, info| tgid = info.pid);
+    tgid
 }

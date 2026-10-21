@@ -72,6 +72,10 @@ struct Probe {
     reads: AtomicUsize,
     writes: AtomicUsize,
     fail_writes: AtomicBool,
+    /// A name in the root unlinked (past the cache) just before the next
+    /// write: a file deleted while writeback is between its size check and
+    /// its write.
+    vanish: std::sync::Mutex<Option<&'static [u8]>>,
 }
 
 impl Probe {
@@ -81,6 +85,7 @@ impl Probe {
             reads: AtomicUsize::new(0),
             writes: AtomicUsize::new(0),
             fail_writes: AtomicBool::new(false),
+            vanish: std::sync::Mutex::new(None),
         })
     }
 
@@ -148,6 +153,9 @@ impl FileSystem for Probe {
     fn write(&self, ino: Ino, offset: u64, buf: &[u8]) -> poly_vfs::Result<usize> {
         if self.fail_writes.load(Ordering::Relaxed) {
             return Err(Errno::ENOSPC);
+        }
+        if let Some(name) = self.vanish.lock().unwrap().take() {
+            self.fs.unlink(self.fs.root(), name).unwrap();
         }
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.fs.write(ino, offset, buf)
@@ -429,6 +437,24 @@ fn unlinked_files_lose_their_pages() {
     fs.release(ino);
     assert_eq!(fs.page_counts(), (0, 0));
     assert_eq!(live(), before);
+}
+
+#[test]
+fn a_file_deleted_during_writeback_is_no_sync_error() {
+    let (_cache, probe, fs) = setup(1000);
+    let gone = fs.create(fs.root(), b"gone", &REG).unwrap();
+    let kept = fs.create(fs.root(), b"kept", &REG).unwrap();
+    fs.write(gone, 0, &[1; 2 * PAGE_SIZE]).unwrap();
+    fs.write(kept, 0, b"kept").unwrap();
+    // Writeback takes the inodes in order: `gone` is unlinked after its
+    // size was read, just before its pages are written.
+    assert!(gone < kept);
+    *probe.vanish.lock().unwrap() = Some(b"gone");
+    assert_eq!(fs.sync(), Ok(()));
+    assert_eq!(probe.contents(kept), b"kept");
+    assert_eq!(fs.page_counts(), (1, 0), "the deleted file's pages are dropped");
+    // Nothing is left over for the next sync either.
+    assert_eq!(fs.sync(), Ok(()));
 }
 
 #[test]

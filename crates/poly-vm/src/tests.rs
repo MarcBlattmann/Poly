@@ -51,7 +51,7 @@ fn spans(m: &Map) -> Vec<(u64, u64, Prot)> {
 }
 
 fn region(start: u64, end: u64, prot: Prot, kind: Kind, backing: Backing<u32>) -> Vma<u32> {
-    Vma { start, end, prot, max_prot: Prot::ALL, kind, backing }
+    Vma { start, end, prot, max_prot: Prot::ALL, kind, backing, wipe_on_fork: false }
 }
 
 fn anon_vma(start: u64, end: u64, prot: Prot) -> Vma<u32> {
@@ -796,6 +796,24 @@ fn regions_in_lists_overlaps() {
     assert_eq!(starts(MIN + 5 * P, MIN + 5 * P), [] as [u64; 0]);
     assert_eq!(starts(MIN + 4 * P, MIN + 4 * P), [] as [u64; 0]);
     assert_eq!(starts(0, u64::MAX), [MIN, MIN + 3 * P, MIN + 6 * P]);
+}
+
+#[test]
+fn wipe_on_fork_splits_and_merges_back() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 4, Prot::RW);
+    m.set_wipe_on_fork(MIN + P, P, true).unwrap();
+    let wiped: Vec<(u64, bool)> = m.regions().map(|v| (v.start, v.wipe_on_fork)).collect();
+    assert_eq!(wiped, [(MIN, false), (MIN + P, true), (MIN + 2 * P, false)]);
+    m.set_wipe_on_fork(MIN, 4 * P, false).unwrap();
+    assert_eq!(m.region_count(), 1, "keep-on-fork merges the pieces again");
+    // Only private anonymous memory may be wiped; a hole is ENOMEM after
+    // the mapped part got it.
+    m.map(file(P, Prot::RW, 7, 0, true, Placement::Fixed(MIN + 8 * P))).unwrap();
+    assert_eq!(m.set_wipe_on_fork(MIN + 8 * P, P, true), Err(Error::Invalid));
+    assert_eq!(m.set_wipe_on_fork(MIN + 3 * P, 2 * P, true), Err(Error::NoMemory));
+    assert!(m.find(MIN + 3 * P).unwrap().wipe_on_fork);
+    assert_eq!(m.set_wipe_on_fork(MIN + 8 * P, P, false), Ok(()), "keeping is fine for any mapping");
 }
 
 #[test]

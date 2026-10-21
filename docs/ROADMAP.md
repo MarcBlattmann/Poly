@@ -76,7 +76,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 - [x] Processes and threads: `clone`, `fork` (copy-on-write), `execve`, `exit`, `wait4`
 - [x] Thread-local storage, `futex`, robust futex lists, `set_tid_address`
-- [ ] Signals: delivery, handlers, `sigaltstack`, `rt_sigreturn`, process groups
+- [x] Signals: delivery, handlers, `sigaltstack`, `rt_sigreturn`, process groups
 - [x] Pipes, `poll` / `select`, `epoll`, `eventfd`, `timerfd`, `signalfd`
 - [x] Time syscalls and a vDSO (`clock_gettime` without a syscall)
 - [x] Dynamic linking: glibc's own `ld.so` loads shared libraries unchanged
@@ -97,13 +97,13 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 - [x] Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed
 - [ ] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds
-- [ ] NT object manager: handles, object namespace (`\??`, `\Device`, `\BaseNamedObjects`), reference counts
-- [ ] NT memory services: sections, `NtAllocateVirtualMemory`, `NtMapViewOfSection`, protections
-- [ ] NT processes and threads, TEB/PEB, thread contexts, APCs
-- [ ] NT synchronisation: events, mutants, semaphores, timers, `NtWaitForMultipleObjects`
-- [ ] NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O
-- [ ] Structured exception handling: kernel-to-user exception dispatch, unwinding
-- [ ] Registry: hive storage, `NtOpenKey` family, default system hives
+- [x] NT object manager: handles, object namespace (`\??`, `\Device`, `\BaseNamedObjects`), reference counts
+- [x] NT memory services: sections, `NtAllocateVirtualMemory`, `NtMapViewOfSection`, protections
+- [x] NT processes and threads, TEB/PEB, thread contexts, APCs (ADR 0065)
+- [x] NT synchronisation: events, mutants, semaphores, timers, `NtWaitForMultipleObjects` (ADR 0065)
+- [x] NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O (ADR 0067)
+- [x] Structured exception handling: kernel-to-user exception dispatch, unwinding (ADR 0068)
+- [x] Registry: hive storage, `NtOpenKey` family, default system hives
 - [ ] Our `ntdll`: PE loader (imports, relocations, TLS, delay-load), heap, `Rtl*`, loader lock
 - [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors
 - [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055)

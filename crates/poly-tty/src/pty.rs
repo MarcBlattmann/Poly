@@ -350,6 +350,10 @@ impl PtyMaster {
 }
 
 impl CharDevice for PtyMaster {
+    fn pty_index(&self) -> Option<u32> {
+        Some(self.pair.index)
+    }
+
     fn read(&self, _: u64, buf: &mut [u8], nonblock: bool) -> Result<usize> {
         if buf.is_empty() {
             return Ok(0);

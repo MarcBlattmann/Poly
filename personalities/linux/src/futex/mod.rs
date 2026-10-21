@@ -43,6 +43,33 @@ pub fn with_futexes<R>(k: &mut dyn LinuxKernel, f: impl FnOnce(&mut FutexTable, 
     out.expect("with_futexes ran the closure")
 }
 
+/// The key of the 4-byte aligned futex word at `addr` for an operation
+/// with (`private`) or without `FUTEX_PRIVATE_FLAG`: the kernel's
+/// [`LinuxKernel::futex_key`], with a shared futex in private memory made
+/// [`FutexKey::Unshared`] so it never meets the private futex at the same
+/// address. `EFAULT` if the word cannot be read (futex's spec sheet:
+/// "EFAULT for an unmapped uaddr or uaddr2").
+pub fn key(k: &mut dyn LinuxKernel, addr: UserPtr, private: bool) -> Result<FutexKey, Errno> {
+    k.futex_load(addr)?;
+    Ok(match k.futex_key(addr, private)? {
+        FutexKey::Private { space, addr } if !private => FutexKey::Unshared { space, addr },
+        key => key,
+    })
+}
+
+/// The kernel's own `FUTEX_WAKE` of one waiter on the word at `addr`
+/// (`clear_child_tid`, a robust lock whose owner died): a shared wake, as
+/// set_tid_address(2) has it; when no shared waiter is there, a private
+/// one is taken instead, so a thread library that waits on the word with
+/// `FUTEX_PRIVATE_FLAG` is not left waiting. Errors are ignored.
+pub fn kernel_wake(k: &mut dyn LinuxKernel, addr: UserPtr) -> usize {
+    let mut n = key(k, addr, false).map_or(0, |key| wake(k, key, 1, FUTEX_BITSET_MATCH_ANY));
+    if n == 0 {
+        n = key(k, addr, true).map_or(0, |key| wake(k, key, 1, FUTEX_BITSET_MATCH_ANY));
+    }
+    n
+}
+
 /// How a wait ended, short of a wake.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WaitError {
