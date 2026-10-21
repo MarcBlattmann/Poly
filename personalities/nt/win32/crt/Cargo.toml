@@ -1,0 +1,14 @@
+[package]
+name = "poly-win32-crt"
+description = "Our C runtime's process side (ADR 0084): heap, descriptors, streams, startup and exit, shared by ucrtbase.dll and msvcrt.dll"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-crt = { path = "../../../../crates/poly-crt" }
+
+[lints]
+workspace = true
