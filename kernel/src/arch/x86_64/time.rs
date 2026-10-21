@@ -499,7 +499,6 @@ crate::kernel_test! {
     /// periodic on the tick vector, reloads with the calibrated count, and
     /// counts down at the calibrated rate.
     fn apic_timer_period_is_one_tick() -> TestResult {
-        use poly_irq::time::delta;
         let info = info().ok_or("time not initialised")?;
         let apic = apic::local_apic().ok_or("no local APIC")?;
         let lvt = apic.lvt(poly_irq::LvtReg::Timer).map_err(|_| "no timer LVT entry")?;
@@ -514,54 +513,51 @@ crate::kernel_test! {
         if period_ns.abs_diff(NANOS_PER_TICK) > NANOS_PER_TICK / 100 {
             return Err("the APIC timer's period is not one tick");
         }
-        // Count-down rate over half a period, against the TSC when the
-        // clock reads it (reading it is never a VM exit, so under KVM a
-        // bracket is just the exit that reads the timer's count), else
-        // against the reference timer. Both reads of a pair are bracketed
-        // by reads of that counter; pairs the host stretched (or that span
-        // a reload) are retried.
+        // The count-down rate, against the TSC when the clock reads it
+        // (reading it is never a VM exit, so under KVM a bracket is just
+        // the exit that reads the timer's count), else against the reference
+        // timer; over longer windows with looser brackets when the reads are
+        // slow (poly_irq::lapic::PERIODIC_WINDOWS: a count read on KVM with
+        // -cpu max has taken 7 us). The check allows 5% plus what the
+        // brackets leave uncertain.
+        use poly_irq::lapic::{PERIODIC_WINDOWS, PeriodicRateError};
         let reference = reference().ok_or("no reference timer")?;
         let (against, hz, name): (&dyn Counter, u64, &str) = match (tsc_conversion(), info.tsc_hz) {
             (Some(_), Some(tsc_hz)) => (&Tsc, tsc_hz, "TSC"),
             _ => (reference, info.reference_hz, reference.name()),
         };
-        let bits = against.bits();
-        let read = || {
-            let r0 = against.read();
-            let c = apic.timer_current_count();
-            let r1 = against.read();
-            (r0.wrapping_add(delta(r0, r1, bits) / 2), c, delta(r0, r1, bits))
-        };
-        let half_period = hz / TICK_HZ / 2;
-        let mut narrowest = u64::MAX;
-        for _ in 0..50 {
-            let _irq = cpu::InterruptsOff::new();
-            let (r0, c0, w0) = read();
-            while delta(r0, against.read(), bits) < half_period {
-                core::hint::spin_loop();
+        let expected = info.apic_timer_hz;
+        match apic.measure_periodic_rate(&against, hz, expected, 20, cpu::InterruptsOff::new) {
+            Ok(rate) => {
+                let allowed = expected / 20 + poly_irq::time::mul_div(expected, rate.uncertainty_ppm, 1_000_000);
+                if rate.attempt > 1 {
+                    crate::kprintln!(
+                        "time: APIC timer against the {name}: {} Hz +-{} ppm (windows of {} per mille of a period)",
+                        rate.hz,
+                        rate.uncertainty_ppm,
+                        PERIODIC_WINDOWS[rate.attempt - 1].window_permille
+                    );
+                }
+                if rate.hz.abs_diff(expected) > allowed {
+                    crate::kprintln!(
+                        "time: APIC timer counts at {} Hz +-{} ppm, calibrated {expected} Hz",
+                        rate.hz,
+                        rate.uncertainty_ppm
+                    );
+                    return Err("the APIC timer does not count at its calibrated rate");
+                }
+                Ok(())
             }
-            let (r1, c1, w1) = read();
-            let elapsed = delta(r0, r1, bits);
-            // Brackets within 2% of the window, and less than a period apart.
-            if (w0 + w1) * 50 > elapsed || elapsed >= 2 * half_period {
-                narrowest = narrowest.min(w0 + w1);
-                continue;
+            Err(PeriodicRateError::Disturbed { narrowest }) => {
+                crate::kprintln!(
+                    "time: APIC timer against the {name}: every measurement disturbed; narrowest pair of brackets \
+                     {} ns",
+                    poly_irq::time::mul_div(narrowest, NANOS_PER_SEC, hz)
+                );
+                Err("could not measure the APIC timer: every measurement was disturbed")
             }
-            // A countdown that reloads from `initial` at 0.
-            let counted = (u64::from(c0) + u64::from(initial) - u64::from(c1)) % u64::from(initial);
-            let rate = poly_irq::time::mul_div(counted, hz, elapsed);
-            if rate.abs_diff(info.apic_timer_hz) > info.apic_timer_hz / 20 {
-                crate::kprintln!("time: APIC timer counts at {rate} Hz, calibrated {} Hz", info.apic_timer_hz);
-                return Err("the APIC timer does not count at its calibrated rate");
-            }
-            return Ok(());
+            Err(PeriodicRateError::ReferenceStuck) => Err("the reference counter does not advance"),
+            Err(PeriodicRateError::NotRunning) => Err("the APIC timer is not running"),
         }
-        crate::kprintln!(
-            "time: APIC timer against the {name}: every measurement disturbed; narrowest pair of brackets {} ns \
-             (at most {} ns allowed)",
-            poly_irq::time::mul_div(narrowest, NANOS_PER_SEC, hz),
-            NANOS_PER_TICK / 2 / 50
-        );
-        Err("could not measure the APIC timer: every measurement was disturbed")
     }
 }

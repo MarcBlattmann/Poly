@@ -116,7 +116,13 @@ from what KVM does differently, none from emulation speed:
   wide. Every calibration retries with `CalibrationConfig::retries`
   (standard twice, 5000 ppm, then 5000 ppm over 50 ms windows) and logs
   each measurement of its last attempt when it fails. The tick test
-  measures the timer against the TSC too.
+  measures the timer against the TSC too, with a ladder of its own
+  (`LocalApic::measure_periodic_rate`, `PERIODIC_WINDOWS`: half a period
+  with brackets up to 2%, most of a period up to 5%, four and a half
+  periods up to 5%) and a tolerance of 5% plus the brackets' uncertainty:
+  with `-cpu max` on KVM one read of the count took about 7 us (a pair of
+  brackets 15 us, over the 10 us half a period allowed), and the
+  calibration there needed its looser third attempt.
 - **Polycheck.** That panic, in the `mmap` boot, counted as "the kernel
   cannot run programs", so the pipeline booted none of the other tests. A
   panic before the program ran is now that test's error (with the panic
