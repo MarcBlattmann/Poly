@@ -16,6 +16,7 @@ mod process;
 mod process_ids;
 mod sched;
 mod seccomp;
+mod sem;
 mod sendfile;
 mod shm;
 mod signal;

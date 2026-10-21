@@ -1,5 +1,6 @@
-//! System V IPC (svipc(7)): the objects of an IPC namespace. Only shared
-//! memory so far ([`shm`]); message queues and semaphore sets are not
+//! System V IPC (svipc(7)): the objects of an IPC namespace. Shared
+//! memory ([`shm`]) and semaphore sets ([`sem`]); message queues are not
 //! implemented.
 
+pub mod sem;
 pub mod shm;
