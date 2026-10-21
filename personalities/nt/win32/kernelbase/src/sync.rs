@@ -335,7 +335,7 @@ pub unsafe extern "system" fn DeleteCriticalSection(cs: *mut CriticalSection) {
 
 /// How a thread waits for an SRW lock: spin briefly, then yield, then sleep
 /// a millisecond at a time (Poly's first SRW lock has no wait queue, ADR
-/// 0076).
+/// 0078).
 struct Backoff;
 
 impl Pause for Backoff {

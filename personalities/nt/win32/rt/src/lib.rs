@@ -1,4 +1,4 @@
-//! The bits of a C runtime every Poly Win32 module needs (ADR 0076), since
+//! The bits of a C runtime every Poly Win32 module needs (ADR 0078), since
 //! they link with `/NODEFAULTLIB`:
 //!
 //! - `__chkstk`, the MSVC x64 stack probe the compiler calls before a frame

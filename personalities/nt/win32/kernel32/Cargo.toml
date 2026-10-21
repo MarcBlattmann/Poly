@@ -1,6 +1,6 @@
 [package]
 name = "kernel32"
-description = "Our kernel32.dll (ADR 0076): forwarders to kernelbase through API-set contracts, and the few functions kernel32 keeps"
+description = "Our kernel32.dll (ADR 0078): forwarders to kernelbase through API-set contracts, and the few functions kernel32 keeps"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1632,6 +1632,7 @@ fn pipeline(args: &[String]) -> Result {
     // kernel as the boot tests', so neither build undoes the other.
     if matches!(args.first().map(String::as_str), Some("polycheck" | "diff" | "polyrun")) {
         cmd.env(ntdll::KERNEL_ENV, ntdll::ensure()?);
+        cmd.env(win32::KERNEL_ENV, win32::ensure()?);
     }
     step("pipeline", &mut cmd)
 }

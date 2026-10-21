@@ -1,4 +1,4 @@
-//! Our `kernel32` end to end (ADR 0076): `k32test.exe`, a program built
+//! Our `kernel32` end to end (ADR 0078): `k32test.exe`, a program built
 //! from Rust like our DLLs (`personalities/nt/win32/k32test`), imports
 //! only from `kernel32.dll`. Its imports reach `kernelbase.dll` through
 //! `kernel32`'s API-set forwarders, which our `ntdll`'s loader resolves;
@@ -35,7 +35,7 @@ mod tests {
 
     kernel_test! {
         /// A program that imports from our `kernel32.dll` runs end to end
-        /// (ADR 0076): see [`super`].
+        /// (ADR 0078): see [`super`].
         fn nt_kernel32_program_runs_through_forwarders_to_kernelbase() -> TestResult {
             if crate::fs::vfs().root_context().is_err() {
                 return Err("no VFS for the kernel32 test");

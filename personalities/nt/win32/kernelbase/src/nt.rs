@@ -1,4 +1,4 @@
-//! What `kernelbase` imports from our `ntdll` (ADR 0071, 0076), and the
+//! What `kernelbase` imports from our `ntdll` (ADR 0071, 0078), and the
 //! NT structures it passes: `UNICODE_STRING`, `OBJECT_ATTRIBUTES`
 //! (`ntdef.h`), `IO_STATUS_BLOCK` (`wdm.h`).
 //!

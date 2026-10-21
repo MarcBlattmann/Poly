@@ -6,7 +6,7 @@
 //! *moveable* block (`LMEM_MOVEABLE`, `GMEM_MOVEABLE`) is a fixed block in
 //! Poly: its handle is its address, so `LocalLock` returns the handle and
 //! `LocalHandle` the pointer (Poly's choice; Learn only promises that a
-//! locked moveable block does not move, ADR 0076).
+//! locked moveable block does not move, ADR 0078).
 
 use crate::error::ERROR_INVALID_PARAMETER;
 

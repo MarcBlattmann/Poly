@@ -1,6 +1,6 @@
 [package]
 name = "kernelbase"
-description = "Our kernelbase.dll (ADR 0076): the Win32 base API on top of our ntdll"
+description = "Our kernelbase.dll (ADR 0078): the Win32 base API on top of our ntdll"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

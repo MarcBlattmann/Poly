@@ -173,7 +173,7 @@ pub fn inputs(root: &Path) -> Result<Vec<PathBuf>> {
 
 /// The files of the crates `start` and every crate they reach through path
 /// dependencies, plus the `extra` files that exist (relative to `root`,
-/// sorted). Also used for our other Windows modules (`win32.rs`, ADR 0076).
+/// sorted). Also used for our other Windows modules (`win32.rs`, ADR 0078).
 pub(crate) fn inputs_from(root: &Path, start: &[&str], extra: &[&str]) -> Result<Vec<PathBuf>> {
     let workspace = std::fs::read_to_string(root.join("Cargo.toml")).map_err(|e| format!("Cargo.toml: {e}"))?;
     let mut crates: Vec<PathBuf> = Vec::new();

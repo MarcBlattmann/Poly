@@ -1,4 +1,4 @@
-//! Our `kernel32.dll` (ADR 0076). Most of its exports are forwarders to
+//! Our `kernel32.dll` (ADR 0078). Most of its exports are forwarders to
 //! `kernelbase` through API-set contracts (written by `build.rs` from
 //! `poly_kernelbase::exports::KERNEL32_FORWARDS`), as on Windows since
 //! Windows 7. What it implements itself are the functions whose Learn

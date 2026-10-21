@@ -60,7 +60,7 @@ pub const SEMAPHORE_ALL_ACCESS: u32 = 0x1F_0003;
 /// The object-manager name of a named kernel object (Learn: "Kernel object
 /// namespaces"). Poly has one session, so the `Global\` and `Local\`
 /// namespaces are both `\BaseNamedObjects` (to be confirmed by the spec
-/// agent against a single-session Windows, ADR 0076). An empty name means
+/// agent against a single-session Windows, ADR 0078). An empty name means
 /// an unnamed object (`None`).
 pub fn object_name(name: &[u16]) -> Option<Vec<u16>> {
     if name.is_empty() {

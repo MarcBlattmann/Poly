@@ -1,5 +1,5 @@
 //! `k32test.exe`'s entry point and subsystem: no C runtime, so the entry is
-//! our own `k32test_main` (ADR 0076).
+//! our own `k32test_main` (ADR 0078).
 
 fn main() {
     println!("cargo:rustc-link-arg=/ENTRY:k32test_main");

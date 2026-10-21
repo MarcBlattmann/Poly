@@ -744,7 +744,7 @@ fn find_of(handle: Handle) -> Option<&'static mut Find> {
         return None;
     }
     // SAFETY: a find handle is the address of a boxed `Find` (Poly's own
-    // representation, ADR 0076); a program that passes anything else gets
+    // representation, ADR 0078); a program that passes anything else gets
     // undefined behaviour as on Windows.
     Some(unsafe { &mut *(handle as *mut Find) })
 }

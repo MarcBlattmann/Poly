@@ -1,4 +1,4 @@
-//! `kernel32.dll`'s export forwarders (ADR 0076): one `/EXPORT:Name=
+//! `kernel32.dll`'s export forwarders (ADR 0078): one `/EXPORT:Name=
 //! contract.Name` per row of `poly_kernelbase::exports::KERNEL32_FORWARDS`
 //! (lld-link writes an export whose target names another DLL as a
 //! forwarder string, as the PE format describes), and its entry point.

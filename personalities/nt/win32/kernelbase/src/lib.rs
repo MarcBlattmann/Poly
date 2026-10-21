@@ -1,4 +1,4 @@
-//! Our `kernelbase.dll` (ADR 0076): the Win32 base API — files, processes
+//! Our `kernelbase.dll` (ADR 0078): the Win32 base API — files, processes
 //! and threads, memory, synchronisation, errors — on top of our `ntdll`
 //! (ADR 0071). A real PE DLL built from Rust for `x86_64-pc-windows-msvc`
 //! like `ntdll`; `kernel32.dll` forwards most of its exports here through
@@ -30,7 +30,7 @@ static ALLOC: base::ProcessHeap = base::ProcessHeap;
 const DLL_PROCESS_ATTACH: u32 = 1;
 
 /// The entry point (`DllMain`): at `DLL_PROCESS_ATTACH`, the process's
-/// current directory starts as the executable's directory (ADR 0076). The
+/// current directory starts as the executable's directory (ADR 0078). The
 /// standard handles are opened when first asked for.
 #[unsafe(no_mangle)]
 pub extern "system" fn kernelbase_main(_module: *mut u8, reason: u32, _reserved: *mut u8) -> i32 {
