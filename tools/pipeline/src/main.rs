@@ -8,8 +8,9 @@
 //! diff [--target linux|poly] [--tests a,b] [--tracer T] [--syscalls exact|names|off|app]
 //!      [--ignore-syscall NAME]... [--timing-envelope F] [--baseline SUMMARY] [--strict]
 //!      [--kernel ELF] [--build-kernel] [--timeout SECS] [--bin-dir DIR] [--cc CC] [--tests-dir DIR]...
-//!      [--jobs N]                                run the corpus on the reference and a target, compare per test
-//!                                                (N tests at a time; 1 by default)
+//!      [--jobs N] [--root-fallback a,b]          run the corpus on the reference and a target, compare per test
+//!                                                (N tests at a time; 1 by default); as the user running it,
+//!                                                tests that need root are checked on Poly as root alone
 //! selfcheck                                      Linux against Linux must be clean (CI)
 //! polycheck                                      Linux against Poly: the tests of tests/linux/poly-pass.txt and the
 //!                                                visible spec tests of every green entry pass (CI)
@@ -56,6 +57,7 @@ mod cpio;
 mod diff;
 mod green;
 mod handoff;
+mod identity;
 // The host's shared libraries of a program, found as the dynamic linking
 // boot tests find them (one source for both tools).
 #[path = "../../xtask/src/libsearch.rs"]
@@ -206,6 +208,44 @@ fn link_latest(runs: &Path, run: &Path) {
 }
 
 fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
+    // `--root-fallback a,b`: what polycheck does for green-entry tests
+    // (see diff_with), to reproduce a polycheck run by hand.
+    let fallback: Vec<String> =
+        a.opt("root-fallback").map(|t| t.split(',').map(String::from).collect()).unwrap_or_default();
+    diff_with(repo, a, &fallback)
+}
+
+/// A test that needs root, run on Poly as root alone because the
+/// reference is not root ([`TestResult::self_checked`]): the boot's files
+/// go into `poly-root/` of the run directory.
+fn root_self_check(p: &poly::Target, name: &str, binary: &Path, run_dir: &Path, why: &str) -> Result<TestResult> {
+    let work = run_dir.join("poly-root");
+    match p.run_as(name, binary, &identity::Identity::root(), &work) {
+        Ok((poly::Outcome::Ran(t), _)) => {
+            let file = format!("poly-root/{name}.json");
+            util::write_json(&run_dir.join(&file), &t)?;
+            let mut r = TestResult::self_checked(name, &t, why);
+            r.files = vec![file];
+            Ok(r)
+        }
+        Ok((poly::Outcome::Unsupported(reason), _)) => Ok(TestResult::not_run(name, Verdict::Unsupported, reason)),
+        Err(e) => Ok(TestResult::not_run(name, Verdict::Error, format!("target run as root: {e}"))),
+    }
+}
+
+/// What a fallback's reason says when the reference passed its own checks
+/// as a user other than root and Poly, run as the same user, differed: a
+/// difference Poly has for such users, which only a run as one shows.
+const DIFFERS_AS_USER: &str = "the reference passes it and Poly differs (a difference for users other than root)";
+
+/// `pipeline diff`. Test programs run as whoever runs this tool on both
+/// sides (`identity.rs`). `root_fallback` names tests recorded as root
+/// that do not say so (`polycheck`'s green-entry tests): where the
+/// reference is not root and such a test fails the comparison, it is
+/// checked on Poly as root alone, like a test that says `poly-diff:
+/// needs=root`; the reason tells a test that failed its own checks on the
+/// reference (it needs root) from one that passed them ([`DIFFERS_AS_USER`]).
+fn diff_with(repo: &Path, a: &Args, root_fallback: &[String]) -> Result<u8> {
     oracle_guard("diff")?;
     a.only(&[
         "target",
@@ -224,6 +264,7 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
         "run-dir",
         "tests-dir",
         "jobs",
+        "root-fallback",
     ])?;
     let target = a.opt("target").unwrap_or("linux");
     let tracer = Tracer::parse(a.opt("tracer").unwrap_or("ptrace"))?;
@@ -260,6 +301,11 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
     let run_dir = a.opt("run-dir").map_or_else(|| runs.join(format!("{}-{target}", util::now_stamp())), PathBuf::from);
     let tracer_name = a.opt("tracer").unwrap_or("ptrace");
     let mut summary = Summary::new(util::now_utc(), target, ptrace::host_system(), tracer_name, opts.syscalls);
+    // Who the reference runs the programs as: this process's ids (and the
+    // fixed umask); Poly runs them as the same.
+    let identity = identity::Identity::current();
+    summary.identity = Some(identity.clone());
+    let not_root = format!("needs root; the reference runs as {}", identity.describe());
     let jobs = match a.opt("jobs") {
         Some(j) => {
             j.parse::<usize>().ok().filter(|&j| j > 0).ok_or_else(|| format!("--jobs {j}: a positive number"))?
@@ -276,6 +322,18 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
     let run_one = |b: &&corpus::Built| -> Result<TestResult> {
         let binary = bin_dir.join(&b.binary);
         let name = b.name.as_str();
+        // A test that needs root says nothing about Poly when compared with
+        // a reference that is not root: Poly checks it as root alone.
+        // (Linux against Linux compares it as usual: both sides are alike.)
+        if let Some(p) = &poly
+            && b.needs_root
+            && !identity.is_root()
+        {
+            if let Some(reason) = unsupported.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+                return Ok(TestResult::not_run(name, Verdict::Unsupported, reason));
+            }
+            return root_self_check(p, name, &binary, &run_dir, &not_root);
+        }
         let reference = match runner::run(tracer, &binary, name, ref_timeout) {
             Ok(t) => t,
             Err(e) => return Ok(TestResult::not_run(name, Verdict::Error, format!("reference run: {e}"))),
@@ -288,7 +346,7 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
                 if let Some(reason) = unsupported.lock().unwrap_or_else(|e| e.into_inner()).clone() {
                     return Ok(TestResult::not_run(name, Verdict::Unsupported, reason));
                 }
-                match p.run(name, &binary, &run_dir.join(target)) {
+                match p.run_as(name, &binary, &identity, &run_dir.join(target)) {
                     Ok((poly::Outcome::Ran(t), _)) => Ok(t),
                     Ok((poly::Outcome::Unsupported(reason), log)) => {
                         // The kernel cannot run programs: no point booting it for every test.
@@ -315,6 +373,28 @@ fn diff_cmd(repo: &Path, a: &Args) -> Result<u8> {
         }
         let mut r = TestResult::compared(name, &reference, &target_trace, &test_opts);
         r.files = vec![ref_file, target_file];
+        if let Some(p) = &poly
+            && r.verdict == Verdict::Fail
+            && !identity.is_root()
+            && root_fallback.iter().any(|t| t == name)
+        {
+            let why = if reference.exit == trace::Exit::Code(0) {
+                format!("recorded as root; {DIFFERS_AS_USER} as {}", identity.describe())
+            } else {
+                format!(
+                    "recorded as root; the reference runs as {} and fails its own checks ({})",
+                    identity.describe(),
+                    reference.exit
+                )
+            };
+            let mut checked = root_self_check(p, name, &binary, &run_dir, &why)?;
+            // The comparison as that user stays in the summary.
+            checked.files.splice(0..0, r.files);
+            checked.reference_exit = r.reference_exit;
+            checked.reference_syscalls = r.reference_syscalls;
+            checked.comparison = r.comparison;
+            return Ok(checked);
+        }
         Ok(r)
     };
     for r in util::parallel_map(&tests, jobs, run_one) {
@@ -534,33 +614,37 @@ fn polycheck(repo: &Path) -> Result<u8> {
         .collect();
     // Failures of tests not on the list are expected: they are reported in
     // the table, and the list and the green entries decide.
-    diff_cmd(repo, &Args::parse(&args, &["strict", "build-kernel"])?)?;
-    let mut summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
-    // The spec tests were recorded as root (mount, set*id, capabilities,
-    // permission checks). Run by anyone else (GitHub's CI runs as a normal
-    // user) the reference fails them or traces other ids (getuid() = 1001),
-    // so the comparison says nothing about Poly; a green entry's test then
-    // only has to pass its own checks on Poly (they print ok / not ok and
-    // exit 0 when all pass).
-    // The full comparison runs where the reference is root.
-    let mut self_checked = Vec::new();
-    if !running_as_root() {
-        let green_tests: Vec<&str> = green.iter().flat_map(|g| g.tests.iter().map(String::as_str)).collect();
-        for t in &mut summary.tests {
-            if t.verdict == Verdict::Fail
-                && green_tests.contains(&t.test.as_str())
-                && t.target_exit.as_deref() == Some("exit 0")
-            {
-                t.verdict = Verdict::Pass;
-                self_checked.push(t.test.clone());
-            }
-        }
-    }
-    if !self_checked.is_empty() {
+    //
+    // Test programs run as whoever runs this on both sides (identity.rs),
+    // so a normal user's run (GitHub's CI) compares like root's. Tests that
+    // need root say so (`poly-diff: needs=root`) and are checked on Poly as
+    // root alone there. The green entries' tests were verified as root,
+    // most before that directive existed: one that differs where the
+    // reference is not root is checked the same way (the fallback of
+    // diff_with), and named below. The full comparison of every test runs
+    // where the reference is root.
+    let green_tests: Vec<String> = green.iter().flat_map(|g| g.tests.iter().cloned()).collect();
+    diff_with(repo, &Args::parse(&args, &["strict", "build-kernel"])?, &green_tests)?;
+    let summary: Summary = util::read_json(&run_dir.join("summary.json"))?;
+    let (as_user, need_root): (Vec<&TestResult>, Vec<&TestResult>) = summary
+        .tests
+        .iter()
+        .filter(|t| t.self_checked)
+        .partition(|t| t.reason.as_deref().is_some_and(|r| r.contains(DIFFERS_AS_USER)));
+    let names = |l: &[&TestResult]| l.iter().map(|t| t.test.as_str()).collect::<Vec<_>>().join(", ");
+    if !need_root.is_empty() {
         println!(
-            "pipeline polycheck: not root, so these green-entry tests only passed their own checks on Poly (they \
-             were recorded as root): {}",
-            self_checked.join(", ")
+            "pipeline polycheck: the reference is not root, so these tests that need root were checked on Poly as \
+             root alone (not compared): {}",
+            names(&need_root)
+        );
+    }
+    if !as_user.is_empty() {
+        println!(
+            "pipeline polycheck: warning: these green-entry tests pass on the reference as {} but Poly differs as \
+             that user (checked on Poly as root alone; the report has the difference): {}",
+            summary.identity.as_ref().map_or_else(String::new, identity::Identity::describe),
+            names(&as_user)
         );
     }
     let expected = poly_pass_list(repo)?;
@@ -602,12 +686,6 @@ fn polycheck(repo: &Path) -> Result<u8> {
     Ok(0)
 }
 
-/// Whether this process runs as root (`/proc/self` belongs to its user).
-fn running_as_root() -> bool {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::metadata("/proc/self").is_ok_and(|m| m.uid() == 0)
-}
-
 /// The freestanding hello world makes exactly two syscalls.
 fn check_hello(t: &Trace) -> Result {
     let lines: Vec<String> = trace::normalize(t, &NormOptions::default()).iter().map(ToString::to_string).collect();
@@ -640,7 +718,10 @@ fn polyrun(repo: &Path, a: &Args) -> Result<u8> {
             let tree = app_tree(repo, &bin_dir, &manifest, app)?;
             target.run_image(name, &tree.cpio()?, "", &run_dir)
         } else if let Some(b) = manifest.tests.iter().find(|t| &t.name == name) {
-            target.run(name, &bin_dir.join(&b.binary), &run_dir)
+            // As `diff` would run it here: as this process's user, or as
+            // root for a test that needs root.
+            let id = if b.needs_root { identity::Identity::root() } else { identity::Identity::current() };
+            target.run_as(name, &bin_dir.join(&b.binary), &id, &run_dir)
         } else {
             return Err(format!("no test program or app test {name}"));
         };

@@ -16,6 +16,7 @@
 //!
 //! [`App`]: SyscallMode::App
 
+use crate::identity::Identity;
 use crate::trace::{Exit, NormCall, NormOptions, Trace, normalize};
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
@@ -294,6 +295,11 @@ pub struct TestResult {
     /// Trace files, relative to the run directory.
     #[serde(default)]
     pub files: Vec<String>,
+    /// Not compared with the reference but checked on the target as root
+    /// alone ([`TestResult::self_checked`]): the test needs root and the
+    /// reference did not run as root.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub self_checked: bool,
 }
 
 impl TestResult {
@@ -309,7 +315,23 @@ impl TestResult {
             comparison: Comparison::default(),
             syscall_mode: None,
             files: Vec::new(),
+            self_checked: false,
         }
+    }
+
+    /// A test that needs root, where the reference is not root: run on
+    /// the target as root alone, it passes if it passes its own checks
+    /// (exit status 0; the corpus format's tests print `ok` / `not ok` and
+    /// exit 0 when every check passed). `why` says why it was not compared.
+    pub fn self_checked(test: &str, target: &Trace, why: &str) -> TestResult {
+        let passed = target.exit == Exit::Code(0);
+        let verdict = if passed { Verdict::Pass } else { Verdict::Fail };
+        let outcome = if passed { "passed its own checks" } else { "FAILED its own checks" };
+        let mut r = TestResult::not_run(test, verdict, format!("{why}; not compared: {outcome} on the target as root"));
+        r.target_exit = Some(target.exit.to_string());
+        r.target_syscalls = target.syscalls().count();
+        r.self_checked = true;
+        r
     }
 
     pub fn compared(test: &str, reference: &Trace, target: &Trace, opts: &Options) -> TestResult {
@@ -334,6 +356,7 @@ impl TestResult {
             comparison,
             syscall_mode: None,
             files: Vec::new(),
+            self_checked: false,
         }
     }
 }
@@ -351,6 +374,10 @@ pub struct Summary {
     /// Tests that passed in the baseline and do not pass now.
     #[serde(default)]
     pub regressions: Vec<String>,
+    /// Who the reference ran the test programs as, and the target too
+    /// (`identity.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<Identity>,
 }
 
 impl Summary {
@@ -365,6 +392,7 @@ impl Summary {
             totals: BTreeMap::new(),
             tests: Vec::new(),
             regressions: Vec::new(),
+            identity: None,
         }
     }
 
@@ -434,6 +462,9 @@ impl Summary {
         }
         let totals: Vec<String> = self.totals.iter().map(|(k, v)| format!("{v} {k}")).collect();
         let _ = writeln!(out, "\n{} vs {} ({}): {}", self.target, self.reference, self.tracer, totals.join(", "));
+        if let Some(id) = &self.identity {
+            let _ = writeln!(out, "test programs ran as {} on both sides", id.describe());
+        }
         if !self.regressions.is_empty() {
             let _ = writeln!(out, "regressions against the baseline: {}", self.regressions.join(", "));
         }
@@ -477,6 +508,28 @@ mod tests {
         let r = TestResult::compared("hello", &a, &b, &Options::default());
         assert_eq!(r.verdict, Verdict::Pass, "{:?}", r.comparison);
         assert_eq!((r.reference_syscalls, r.target_syscalls), (3, 3));
+    }
+
+    /// A test checked on the target alone passes on exit 0 and fails
+    /// otherwise, says why it was not compared, and the summary shows who
+    /// the programs ran as.
+    #[test]
+    fn self_checked_tests_pass_on_their_own_checks() {
+        let mut t = hello("hello, world\n", 13);
+        let r = TestResult::self_checked("mount_root", &t, "needs root, the reference runs as uid 1000");
+        assert_eq!((r.verdict, r.self_checked, r.target_exit.as_deref()), (Verdict::Pass, true, Some("exit 0")));
+        assert!(r.reason.as_deref().unwrap().contains("passed its own checks on the target as root"), "{r:?}");
+        t.exit = Exit::Code(1);
+        let r = TestResult::self_checked("mount_root", &t, "needs root");
+        assert_eq!(r.verdict, Verdict::Fail);
+        let mut s = Summary::new("now".into(), "poly", "linux".into(), "ptrace", SyscallMode::Exact);
+        s.identity = Some(Identity { uid: [1000; 3], gid: [1000; 3], groups: vec![1000], umask: 0o022 });
+        s.tests.push(r);
+        s.finish(None);
+        assert!(s.failed(false, false));
+        assert!(s.table().contains("ran as uid 1000 gid 1000 groups 1000 umask 0022 on both sides"), "{}", s.table());
+        let back: Summary = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back, s);
     }
 
     #[test]

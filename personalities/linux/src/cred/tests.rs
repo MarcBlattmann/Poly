@@ -21,6 +21,27 @@ fn creds(r: u32, e: u32, s: u32) -> Creds {
     c
 }
 
+/// A login from root: groups, then group ids, then user ids; a user
+/// without capabilities, root with all of them.
+#[test]
+fn login_sets_groups_gids_and_uids_from_root() {
+    let c = Creds::login([ALICE; 3], [100; 3], &[27, 4, ALICE]).unwrap();
+    assert_eq!((ids(&c), gids(&c)), ([ALICE; 4], [100; 4]));
+    assert_eq!(&*c.groups, &[4, 27, ALICE]);
+    assert_eq!(c.caps, Caps::NONE, "a user other than root has no capabilities");
+    assert!(!c.capable(cap::DAC_OVERRIDE) && !c.capable(cap::SETUID));
+    assert_eq!(c.fs_ids().caps, CapSet::EMPTY);
+    // Real, effective and saved ids apart: a set-user-ID-root program's.
+    let c = Creds::login([ALICE, 0, 0], [100, 100, 100], &[]).unwrap();
+    assert_eq!(ids(&c), [ALICE, 0, 0, 0]);
+    assert!(c.capable(cap::SETUID), "effective uid 0 keeps root's capabilities");
+    let root = Creds::login([0; 3], [0; 3], &[0]).unwrap();
+    assert_eq!(root.caps, Caps::ROOT);
+    assert_eq!(&*root.groups, &[0]);
+    assert_eq!(Creds::login([NO_ID; 3], [0; 3], &[]), Err(Errno::EINVAL));
+    assert_eq!(Creds::login([ALICE; 3], [0; 3], &[NO_ID]), Err(Errno::EINVAL));
+}
+
 #[test]
 fn root_and_user() {
     let root = Creds::root();
