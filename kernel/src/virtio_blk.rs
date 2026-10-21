@@ -460,6 +460,9 @@ kernel_test! {
 
 /// How long the lost-request test lets the watchdog wait.
 const LOST_LIMIT_NS: u64 = 200 * time::NANOS_PER_MILLI;
+/// How long the tests wait for something another CPU does (handle an
+/// interrupt, run a thread), which a busy host may hold off for a while.
+const OTHER_CPU_DEADLINE_NS: u64 = 10 * time::NANOS_PER_SEC;
 
 /// Thread body: read block 1 from the disk at address `disk` past the
 /// cache. Exit code 0: success, 1: `DeviceFailed`, 2: another error.
@@ -533,6 +536,14 @@ kernel_test! {
 /// QEMU's null device can finish a request while it is being notified, and
 /// the reader then finds its result when it runs the queue.)
 fn masked_entry_holds_back(disk: &'static block::Disk, msix: &MsixVectors, vector: u8) -> TestResult {
+    // The read may have returned before its interrupt was handled: the
+    // reader collects a completion it finds when it runs the queue, while
+    // the interrupt goes to the boot CPU, which a busy host may hold off for
+    // a while. It must come, though, before anything below counts them.
+    let start = time::now_ns();
+    while disk.stats().interrupts == 0 && time::now_ns() - start < OTHER_CPU_DEADLINE_NS {
+        thread::sleep(core::time::Duration::from_millis(1));
+    }
     if disk.stats().interrupts == 0 || msix.is_function_masked() {
         return Err("the spare device's read finished without an interrupt");
     }
@@ -574,9 +585,14 @@ fn lost_request(disk: &'static block::Disk, interrupt_driven: bool) -> TestResul
     let sleeps = disk.stats().sleeps;
     let start = time::now_ns();
     let reader = thread::spawn(read_block_one, disk as *const block::Disk as usize).map_err(|_| "spawn failed")?;
-    // An interrupt-driven reader sleeps meanwhile; it does not spin.
+    // An interrupt-driven reader sleeps meanwhile; it does not spin. Watch
+    // it until it does or is done: on a busy host it may get going only
+    // well after it was spawned (it runs on whichever CPU had room).
     let mut blocked = false;
-    while !blocked && time::now_ns() - start < LOST_LIMIT_NS / 2 {
+    while !blocked
+        && thread::state(reader) != Some(thread::State::Exited)
+        && time::now_ns() - start < OTHER_CPU_DEADLINE_NS
+    {
         thread::sleep(core::time::Duration::from_millis(1));
         blocked = thread::state(reader) == Some(thread::State::Blocked);
     }

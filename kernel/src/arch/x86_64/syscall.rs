@@ -250,6 +250,18 @@ pub(super) fn user_frame() -> *mut TrapFrame {
 /// frame comes as a raw pointer: the system call may rewrite it through
 /// [`user_frame`] (`user::set_registers`).
 extern "sysv64" fn syscall_handler(frame: *mut TrapFrame) -> bool {
+    crate::cputime::entered_kernel();
+    let sysret = system_call(frame);
+    // The IRETQ path tells the CPU-time accounting in `trap_return`.
+    if sysret {
+        crate::cputime::returning_to_user();
+    }
+    sysret
+}
+
+/// The system call itself, for [`syscall_handler`]: whether to leave with
+/// SYSRET.
+fn system_call(frame: *mut TrapFrame) -> bool {
     // SAFETY: the entry stub passes the complete frame it pushed; nothing
     // else refers to it during this read.
     let mut regs = unsafe { (*frame).syscall_regs() };

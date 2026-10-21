@@ -467,9 +467,10 @@ kernel_test! {
 // --- TLB shootdowns ----------------------------------------------------------
 
 /// The page the shootdown tests' threads touch, and one they poll for the
-/// word that stops them.
+/// word that stops them; they count their turns in the word after it.
 const TOUCHED: u64 = 0x70_3000;
 const STOP: u64 = 0x70_5000;
+const TURNS: u64 = STOP + 8;
 /// How long a shootdown test waits for another CPU to do something. Long:
 /// the host may deschedule the emulator for a while.
 const OTHER_CPU_DEADLINE_NS: u64 = 20 * time::NANOS_PER_SEC;
@@ -486,7 +487,8 @@ fn ticks_of(cpu: usize) -> u64 {
 
 /// Start [`Program::Touch`] on CPU `cpu`, reading [`TOUCHED`] or storing to it,
 /// and wait until it runs there with the space loaded and has been at it
-/// for a couple of that CPU's ticks: its TLB then holds TOUCHED's translation.
+/// for a couple of that CPU's ticks and of its own turns: that CPU's TLB
+/// then holds TOUCHED's translation.
 fn touch_on(space: &Arc<AddressSpace>, cpu: usize, store: bool) -> TestResult<ThreadId> {
     for page in [TOUCHED, STOP] {
         space.map_zeroed(page, PAGE_SIZE, Prot::RW).map_err(|_| "could not map the test pages")?;
@@ -518,31 +520,39 @@ fn touch_on(space: &Arc<AddressSpace>, cpu: usize, store: bool) -> TestResult<Th
         }
         thread::sleep(Duration::from_millis(1));
     }
+    // And it goes round there: TOUCHED's translation is in that CPU's TLB.
+    let turns = read_u64(space, TURNS)?;
+    while read_u64(space, TURNS)? < turns + 2 {
+        if late() {
+            return stop("the thread made no progress on the other CPU");
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
     if store && read_u64(space, TOUCHED)? == 0 {
         return stop("the thread's stores did not arrive");
     }
     Ok(t)
 }
 
-/// Join thread `t`, which runs on CPU `cpu` and must fault at once: the
-/// change to its page returned only after `cpu` dropped the translation,
-/// so its next access faults, long before `cpu`'s timer ticks a few more
-/// times (counted in that CPU's ticks, which stand still while the host
-/// does not run it). If it is still running by then, stop it through
-/// [`STOP`] and report `stale`. (A CPU that was never told also drops the
-/// translation sooner or later, QEMU's emulated TLB within some tens of
-/// ticks: hence the count, not just an end.)
-fn faults_at_once(space: &Arc<AddressSpace>, t: ThreadId, cpu: usize, stale: &'static str) -> TestResult<usize> {
-    const TICKS: u64 = 4;
-    let (start, ticks) = (time::now_ns(), ticks_of(cpu));
+/// Join thread `t`, which runs on another CPU and must fault at once: the
+/// change to its page returned only after that CPU dropped the
+/// translation, so the thread's next access faults. It counts its turns
+/// ([`TURNS`], before each access), and on the old translation it would
+/// go on counting: if it is still alive after many more turns, stop it
+/// through [`STOP`] and report `stale`. Counted in its own turns, not in
+/// time or in its CPU's ticks: a busy host holds that CPU off for a while,
+/// and while the thread is on its way out other threads there take ticks
+/// (so does a tick handler that waits for the host past the next tick).
+fn faults_at_once(space: &Arc<AddressSpace>, t: ThreadId, stale: &'static str) -> TestResult<usize> {
+    const MORE_TURNS: u64 = 1000;
+    let (start, turns) = (time::now_ns(), read_u64(space, TURNS)?);
     loop {
-        // The ticks first: if `cpu` has ticked TICKS times and the thread
-        // is still alive after that, it ran on the old translation.
-        let now = ticks_of(cpu);
+        // Alive first: if it is alive after counting on, it ran on the old
+        // translation.
         if !matches!(thread::state(t), Some(State::Runnable | State::Running | State::Blocked)) {
             break;
         }
-        if now >= ticks + TICKS || time::now_ns() - start > OTHER_CPU_DEADLINE_NS {
+        if read_u64(space, TURNS)? > turns + MORE_TURNS || time::now_ns() - start > OTHER_CPU_DEADLINE_NS {
             write_u64(space, STOP, 1)?;
             let _ = thread::join(t);
             return Err(stale);
@@ -564,7 +574,7 @@ kernel_test! {
         let t = touch_on(&space, other, false)?;
         let (sent, _) = crate::arch::tlb::stats();
         space.unmap(TOUCHED, PAGE_SIZE).map_err(|_| "could not unmap the data page")?;
-        let code = faults_at_once(&space, t, other, "a CPU kept reading a page unmapped on another CPU")?;
+        let code = faults_at_once(&space, t, "a CPU kept reading a page unmapped on another CPU")?;
         if code != killed(PF) {
             return Err("the reader did not die of a page fault");
         }
@@ -584,7 +594,7 @@ kernel_test! {
         let space = new_space()?;
         let t = touch_on(&space, other, true)?;
         space.protect(TOUCHED, PAGE_SIZE, Prot::READ).map_err(|_| "could not write-protect the data page")?;
-        let code = faults_at_once(&space, t, other, "a CPU kept writing a page made read-only on another CPU")?;
+        let code = faults_at_once(&space, t, "a CPU kept writing a page made read-only on another CPU")?;
         if code != killed(PF) {
             return Err("the writer did not die of a page fault");
         }
