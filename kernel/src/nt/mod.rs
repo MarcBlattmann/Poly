@@ -18,7 +18,9 @@
 //! [ADR 0063]: ../../../docs/adr/0063-nt-processes-object-manager-and-memory.md
 
 mod backend;
+pub mod console;
 mod io;
+mod test_console;
 mod test_io;
 mod test_pe;
 mod test_threads;
@@ -55,6 +57,8 @@ pub static KERNELBASE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/kernelb
 pub static KERNEL32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/kernel32.dll"));
 /// The program the kernel32 ring-3 test runs (`test_kernel32`).
 pub static K32TEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/k32test.exe"));
+/// The program the console ring-3 test runs (`test_console`, ADR 0080).
+pub static CONTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/contest.exe"));
 
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
@@ -356,6 +360,8 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     sched::drain_wakes();
     // File I/O requests it queued or completed (ADR 0067).
     io::after_call();
+    // Console output and events (ADR 0080).
+    console::drive();
     if let Some(status) = k.exit {
         let _ = user::request_exit(ExitStatus::Exited(status.0 as u8));
     } else if let Some(status) = k.exit_thread {
@@ -419,6 +425,20 @@ pub fn start_with(
     tid: u32,
     launch: &Launch,
 ) -> Result<Start, NtStatus> {
+    // Its standard handles come from its descriptors 0-2 (ADR 0080).
+    let sources = console::std_sources(process);
+    start_with_std(process, memory, file, tid, launch, &sources)
+}
+
+/// [`start_with`] with the sources of the standard handles given.
+pub fn start_with_std(
+    process: &Arc<Process>,
+    memory: &Arc<Memory>,
+    file: &[u8],
+    tid: u32,
+    launch: &Launch,
+    sources: &[console::StdSource; 3],
+) -> Result<Start, NtStatus> {
     let pid = ProcessId(process.pid);
     let thread = ThreadRef(u64::from(tid));
     if NTDLL.is_empty() {
@@ -427,6 +447,9 @@ pub fn start_with(
     }
     // File I/O completions are written into this memory (ADR 0067).
     io::register(process.pid, memory);
+    // A console program gets a console (ADR 0080).
+    let console_app =
+        poly_pe::Pe::parse(file).is_ok_and(|pe| pe.info().optional.subsystem == poly_pe::subsystem::WINDOWS_CUI);
     let started = with(|s| {
         let args: Vec<&str> = launch.args.iter().map(String::as_str).collect();
         let params = poly_personality_nt::params::for_program(&launch.image_path, &args, layout::environment(&s.sys));
@@ -436,7 +459,10 @@ pub fn start_with(
         let start = exec::start_process(&mut s.sys, proc, &mut b, file, NTDLL, None, thread).and_then(|ps| {
             // The process parameters: image path, command line and
             // environment (ADR 0073).
-            poly_personality_nt::params::write(proc, &mut b, ps.peb, &params)?;
+            let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, &params)?;
+            // Its console and standard handles (ADR 0080).
+            let (connection, std) = console::setup(&mut s.sys, &mut b, pid, thread, console_app, sources)?;
+            poly_personality_nt::params::write_handles(&mut b, base, connection, std)?;
             Ok(ps)
         });
         match start {
@@ -519,6 +545,8 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
 
     // Its file objects closed with its handles: deliver the cancellations.
     io::drain();
+    // Its console handles too: a console it was the last on closes.
+    console::drive();
     io::unregister(pid);
     sched::drain_wakes();
     registry::flush();

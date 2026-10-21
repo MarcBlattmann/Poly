@@ -31,7 +31,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 3] = ["kernelbase.dll", "kernel32.dll", "k32test.exe"];
+pub const OUTPUTS: [&str; 4] = ["kernelbase.dll", "kernel32.dll", "k32test.exe", "contest.exe"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 
@@ -68,6 +68,7 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/kernelbase",
             "personalities/nt/win32/kernel32",
             "personalities/nt/win32/k32test",
+            "personalities/nt/win32/contest",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -130,7 +131,7 @@ fn prune(dir: &Path) {
 /// Build the workspace into `target_dir`; the directory with the outputs.
 fn build(target_dir: &Path) -> Result<PathBuf> {
     let mut cmd = cargo_for(target_dir, "build")?;
-    step("build kernelbase.dll, kernel32.dll, k32test.exe", &mut cmd)?;
+    step("build kernelbase.dll, kernel32.dll, k32test.exe, contest.exe", &mut cmd)?;
     let out = target_dir.join("x86_64-pc-windows-msvc/release");
     for f in OUTPUTS {
         if !out.join(f).is_file() {
@@ -214,17 +215,21 @@ fn verify(dir: &Path) -> Result {
             other => return Err(format!("kernel32!{name} should be code, is {other:?}")),
         }
     }
-    let exe = read(&dir.join("k32test.exe"))?;
-    let exe = parse(&exe)?;
-    if exe.info().is_dll() {
-        return Err("k32test.exe is a DLL".into());
-    }
-    let imports = exe.imports().map_err(|e| format!("k32test imports: {e:?}"))?.ok_or("k32test.exe imports nothing")?;
-    for d in imports {
-        let d = d.map_err(|e| format!("{e:?}"))?;
-        let name = d.dll_name().map_err(|e| format!("{e:?}"))?;
-        if !name.eq_ignore_ascii_case(b"kernel32.dll") {
-            return Err(format!("k32test.exe imports {}", String::from_utf8_lossy(name)));
+    // The test programs (ADR 0079, 0080).
+    for program in ["k32test.exe", "contest.exe"] {
+        let exe = read(&dir.join(program))?;
+        let exe = parse(&exe)?;
+        if exe.info().is_dll() {
+            return Err(format!("{program} is a DLL"));
+        }
+        let imports =
+            exe.imports().map_err(|e| format!("{program} imports: {e:?}"))?.ok_or("a test program imports nothing")?;
+        for d in imports {
+            let d = d.map_err(|e| format!("{e:?}"))?;
+            let name = d.dll_name().map_err(|e| format!("{e:?}"))?;
+            if !name.eq_ignore_ascii_case(b"kernel32.dll") {
+                return Err(format!("{program} imports {}", String::from_utf8_lossy(name)));
+            }
         }
     }
     Ok(())

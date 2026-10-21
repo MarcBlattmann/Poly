@@ -73,6 +73,12 @@ pub(super) fn register(pid: u32, memory: &Arc<Memory>) {
     MEMORY.lock().insert(pid, Arc::downgrade(memory));
 }
 
+/// NT process `pid`'s memory, while it runs (the console host starts
+/// control-handler threads in it, ADR 0080).
+pub(super) fn memory_of(pid: u32) -> Option<Arc<Memory>> {
+    MEMORY.lock().get(&pid).and_then(Weak::upgrade)
+}
+
 /// NT process `pid` has ended.
 pub(super) fn unregister(pid: u32) {
     MEMORY.lock().remove(&pid);

@@ -177,6 +177,8 @@ pub const FILE_FS_FULL_SIZE_INFORMATION: u32 = 7;
 /// `FILE_DEVICE_DISK` and `FILE_DEVICE_NAMED_PIPE` (`DEVICE_TYPE`, `wdm.h`).
 pub const FILE_DEVICE_DISK: u32 = 0x0000_0007;
 pub const FILE_DEVICE_NAMED_PIPE: u32 = 0x0000_0011;
+/// `FILE_DEVICE_UNKNOWN` (`wdm.h`): an inherited character device.
+pub const FILE_DEVICE_UNKNOWN: u32 = 0x0000_0022;
 
 /// `FileSystemAttributes` bits (`winnt.h`): what our volumes report.
 pub const FILE_CASE_SENSITIVE_SEARCH: u32 = 0x0000_0001;
