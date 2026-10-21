@@ -29,8 +29,8 @@
 //! (`syscall.rs`), clear RFLAGS.AC when SMAP is on (an interrupted user
 //! copy gets it back with its RFLAGS), and start the kernel's frame-pointer
 //! chain at 0 when they came from ring 3 (a user RBP means nothing to the
-//! backtrace). `trap_return`
-//! pops the frame and swaps GS back when returning to ring 3.
+//! backtrace). `trap_return` pops the frame and swaps GS back when
+//! returning to ring 3.
 //!
 //! # Exceptions
 //!
