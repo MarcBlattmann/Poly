@@ -12,6 +12,7 @@
 //! | 0, executive | `0x000`–`0x03F` | object manager: handles, directories, symbolic links, events |
 //! | 0, executive | `0x040`–`0x07F` | memory: virtual memory, sections, views |
 //! | 0, executive | `0x080`–`0x0BF` | processes and threads |
+//! | 0, executive | `0x100`–`0x13F` | registry ([`REGISTRY_SERVICES`], ADR 0066) |
 //! | 1, win32k | | none yet (Phase 7) |
 //! | 3, Poly | `0x000`–`0x0FF` | Poly's own services, for its tests and tools; never called by `ntdll` |
 //!
@@ -99,6 +100,44 @@ pub enum Service {
     /// `NtTerminateProcess(ProcessHandle, ExitStatus)`.
     TerminateProcess,
 
+    // ----- registry (ADR 0066)
+    /// `NtCreateKey(KeyHandle*, DesiredAccess, ObjectAttributes*,
+    /// TitleIndex, Class*, CreateOptions, Disposition*)`.
+    CreateKey,
+    /// `NtOpenKey(KeyHandle*, DesiredAccess, ObjectAttributes*)`.
+    OpenKey,
+    /// `NtOpenKeyEx(KeyHandle*, DesiredAccess, ObjectAttributes*,
+    /// OpenOptions)`.
+    OpenKeyEx,
+    /// `NtDeleteKey(KeyHandle)`.
+    DeleteKey,
+    /// `NtDeleteValueKey(KeyHandle, ValueName*)`.
+    DeleteValueKey,
+    /// `NtEnumerateKey(KeyHandle, Index, KeyInformationClass,
+    /// KeyInformation, Length, ResultLength*)`.
+    EnumerateKey,
+    /// `NtEnumerateValueKey(KeyHandle, Index, KeyValueInformationClass,
+    /// KeyValueInformation, Length, ResultLength*)`.
+    EnumerateValueKey,
+    /// `NtQueryKey(KeyHandle, KeyInformationClass, KeyInformation, Length,
+    /// ResultLength*)`.
+    QueryKey,
+    /// `NtQueryValueKey(KeyHandle, ValueName*, KeyValueInformationClass,
+    /// KeyValueInformation, Length, ResultLength*)`.
+    QueryValueKey,
+    /// `NtSetValueKey(KeyHandle, ValueName*, TitleIndex, Type, Data*,
+    /// DataSize)`.
+    SetValueKey,
+    /// `NtFlushKey(KeyHandle)`.
+    FlushKey,
+    /// `NtNotifyChangeKey(KeyHandle, Event, ApcRoutine, ApcContext,
+    /// IoStatusBlock*, CompletionFilter, WatchTree, Buffer, BufferSize,
+    /// Asynchronous)`.
+    NotifyChangeKey,
+    /// `NtSetInformationKey(KeyHandle, KeySetInformationClass,
+    /// KeySetInformation, Length)`.
+    SetInformationKey,
+
     // ----- Poly
     /// `PolyTrace(a, b, c)`: logs three values on the kernel log (a test
     /// program reports what went wrong before it gives up). Returns
@@ -139,22 +178,45 @@ pub const SERVICES: [(Service, u32, &str); 24] = [
     (Service::PolyTrace, TABLE_POLY << 12, "PolyTrace"),
 ];
 
+/// The registry services (ADR 0066), kept in their own table so the
+/// groups grow independently; [`all`] chains every table.
+pub const REGISTRY_SERVICES: [(Service, u32, &str); 13] = [
+    (Service::CreateKey, 0x100, "NtCreateKey"),
+    (Service::OpenKey, 0x101, "NtOpenKey"),
+    (Service::OpenKeyEx, 0x102, "NtOpenKeyEx"),
+    (Service::DeleteKey, 0x103, "NtDeleteKey"),
+    (Service::DeleteValueKey, 0x104, "NtDeleteValueKey"),
+    (Service::EnumerateKey, 0x105, "NtEnumerateKey"),
+    (Service::EnumerateValueKey, 0x106, "NtEnumerateValueKey"),
+    (Service::QueryKey, 0x107, "NtQueryKey"),
+    (Service::QueryValueKey, 0x108, "NtQueryValueKey"),
+    (Service::SetValueKey, 0x109, "NtSetValueKey"),
+    (Service::FlushKey, 0x10A, "NtFlushKey"),
+    (Service::NotifyChangeKey, 0x10B, "NtNotifyChangeKey"),
+    (Service::SetInformationKey, 0x10C, "NtSetInformationKey"),
+];
+
+/// Every service Poly implements, from every table.
+pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
+    SERVICES.iter().chain(REGISTRY_SERVICES.iter())
+}
+
 impl Service {
     /// The service number `ntdll` puts in `eax`.
     pub fn number(self) -> u32 {
-        SERVICES.iter().find(|(s, _, _)| *s == self).map(|&(_, n, _)| n).expect("every service is in SERVICES")
+        all().find(|(s, _, _)| *s == self).map(|&(_, n, _)| n).expect("every service is in a table")
     }
 
     /// The exported name (`NtClose`).
     pub fn name(self) -> &'static str {
-        SERVICES.iter().find(|(s, _, _)| *s == self).map(|&(_, _, n)| n).expect("every service is in SERVICES")
+        all().find(|(s, _, _)| *s == self).map(|&(_, _, n)| n).expect("every service is in a table")
     }
 
     /// The service a number selects, if Poly implements it. Only the low 14
     /// bits count (table and index), as on Windows.
     pub fn from_number(number: u32) -> Option<Service> {
         let number = number & 0x3fff;
-        SERVICES.iter().find(|&&(_, n, _)| n == number).map(|&(s, _, _)| s)
+        all().find(|&&(_, n, _)| n == number).map(|&(s, _, _)| s)
     }
 }
 
@@ -166,11 +228,11 @@ mod tests {
 
     #[test]
     fn numbers_and_names_are_unique_and_round_trip() {
-        let numbers: HashSet<u32> = SERVICES.iter().map(|s| s.1).collect();
-        let names: HashSet<&str> = SERVICES.iter().map(|s| s.2).collect();
-        assert_eq!(numbers.len(), SERVICES.len());
-        assert_eq!(names.len(), SERVICES.len());
-        for (s, n, name) in SERVICES {
+        let numbers: HashSet<u32> = all().map(|s| s.1).collect();
+        let names: HashSet<&str> = all().map(|s| s.2).collect();
+        assert_eq!(numbers.len(), all().count());
+        assert_eq!(names.len(), all().count());
+        for &(s, n, name) in all() {
             assert_eq!(Service::from_number(n), Some(s));
             assert_eq!(s.number(), n);
             assert_eq!(s.name(), name);
@@ -186,5 +248,6 @@ mod tests {
         assert!((0x40..0x80).contains(&Service::MapViewOfSection.number()));
         assert!((0x80..0xC0).contains(&Service::TerminateProcess.number()));
         assert_eq!(Service::PolyTrace.number() >> 12, TABLE_POLY);
+        assert!(REGISTRY_SERVICES.iter().all(|s| (0x100..0x140).contains(&s.1)));
     }
 }

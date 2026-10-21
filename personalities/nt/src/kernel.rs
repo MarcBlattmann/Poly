@@ -34,4 +34,19 @@ pub trait NtKernel {
 
     /// Log three values for a test program (`PolyTrace`).
     fn trace(&mut self, values: [u64; 3]);
+
+    /// The system time as a `FILETIME` (100 ns since 1601-01-01 UTC), for
+    /// registry last-write times (ADR 0066). A kernel without a clock
+    /// answers 0.
+    fn system_time(&self) -> u64 {
+        0
+    }
+
+    /// Write hive file `file` (a name like `SOFTWARE`, no directory) with
+    /// `data` and return once it is on disk (`NtFlushKey`, ADR 0066). A
+    /// kernel with nowhere to keep it succeeds without writing.
+    fn save_hive(&mut self, file: &str, data: &[u8]) -> Result<(), NtStatus> {
+        let _ = (file, data);
+        Ok(())
+    }
 }

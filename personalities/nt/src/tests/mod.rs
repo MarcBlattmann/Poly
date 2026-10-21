@@ -8,6 +8,7 @@ extern crate std;
 mod exec;
 mod memory;
 mod objects;
+mod registry;
 mod sections;
 
 use crate::backend::{Backend, SectionSource, ViewMap, ViewSource};
