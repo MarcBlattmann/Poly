@@ -122,6 +122,7 @@ fn console_for(sys: &mut NtSystem, tty: Option<&Arc<Tty>>) -> u32 {
 /// standard handles: `(console connection, [input, output, error])`, the
 /// values for its process parameters. `console_app`: the image's subsystem
 /// is `IMAGE_SUBSYSTEM_WINDOWS_CUI`.
+#[inline(never)]
 pub(super) fn setup(
     sys: &mut NtSystem,
     b: &mut dyn Backend,
@@ -190,6 +191,7 @@ fn send(tty: &Tty, bytes: &[u8]) {
 }
 
 /// Send the consoles' output to their terminals and act on their events.
+#[inline(never)]
 pub(super) fn drive() {
     let (outputs, events) = with(|s| (s.sys.io.take_console_output(), s.sys.io.take_console_events()));
     if outputs.is_empty() && events.is_empty() {
@@ -234,6 +236,7 @@ pub(super) fn drive() {
 }
 
 /// Put console `id`'s terminal in raw mode and start its reader.
+#[inline(never)]
 fn start_input(id: u32) {
     let mut links = LINKS.lock();
     let Some(link) = links.get_mut(&id) else { return };
@@ -286,6 +289,7 @@ fn reader_main(arg: usize) -> usize {
 const THREAD_ALL_ACCESS: u32 = 0x001F_FFFF;
 
 /// Run `routine(event)` on a new thread of NT process `process`.
+#[inline(never)]
 fn ctrl_thread(process: ProcessId, routine: u64, event: u32) {
     let Some(memory) = io::memory_of(process.0) else { return };
     let creator = ThreadRef(u64::from(process.0));

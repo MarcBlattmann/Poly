@@ -110,7 +110,7 @@ pub enum ConsoleEvent {
 /// Every console.
 #[derive(Debug, Default)]
 pub struct Consoles {
-    map: BTreeMap<u32, ConsoleEntry>,
+    map: BTreeMap<u32, alloc::boxed::Box<ConsoleEntry>>,
     next_id: u32,
     events: VecDeque<ConsoleEvent>,
 }
@@ -150,7 +150,7 @@ impl IoState {
             waiting: VecDeque::new(),
             input_wanted: false,
         };
-        c.map.insert(id, entry);
+        c.map.insert(id, alloc::boxed::Box::new(entry));
         id
     }
 
@@ -435,6 +435,7 @@ impl IoState {
 
     /// File object `cookie` on a console went: a connection detaches its
     /// process, and the last one closes the console.
+    #[inline(never)]
     pub(crate) fn console_file_closed(&mut self, cookie: u64, t: ConsoleTarget) {
         if t.kind != ConsoleKind::Connection {
             return;
