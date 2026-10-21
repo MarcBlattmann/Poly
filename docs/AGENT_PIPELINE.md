@@ -356,7 +356,7 @@ inbox and git:
   work/w0, w1/           worktrees where the runner checks branches out (CI, diff, verify)
   state/                 one state file per entry, locks, pauses, logs of every command
   pipeline.toml          the configuration;  human-queue.md;  log/pipeline.log
-/srv/poly/git/poly.git server, world-readable bare "hub": the role checkouts fetch from it; never forced
+/srv/poly/git/poly.git server, world-readable bare "hub" (core.sharedRepository=all, so refs the loop pushes under UMask=0027 stay readable): the role checkouts fetch from it; never forced
 /srv/poly/spec/        user `polyspec` (home): repo/ (remote `hub` only), its own Claude login, rustup
 /srv/poly/impl/        user `polyimpl` (home): repo/ (remote `hub` only), its own Claude login, rustup
 /srv/poly/heldout/     polyspec:server 2750, the held-out store (POLY_HELDOUT_DIR of the spec agent and the runner)
