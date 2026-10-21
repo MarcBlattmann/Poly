@@ -15,6 +15,12 @@
 //! frame pointer before it reads through it: it must lie inside one of the
 //! known stacks, be aligned, and move strictly towards the stack base. The
 //! walk is also bounded in depth, so a cycle cannot hang the panic path.
+//!
+//! A chain may go on from one known stack to another a few times
+//! ([`MAX_STACK_SWITCHES`]): an interrupt handler runs on its CPU's
+//! interrupt stack, and its chain leads back into the interrupted thread's
+//! stack. Such a step may go either way in addresses (each stack is checked
+//! on its own).
 
 #![no_std]
 
@@ -47,28 +53,35 @@ impl End {
     }
 }
 
+/// How many times one walk may move from a known stack to another.
+pub const MAX_STACK_SWITCHES: usize = 2;
+
 /// Iterator over the return addresses on a frame-pointer chain, innermost
 /// first. Call [`FrameWalker::end`] afterwards to learn why it stopped.
 #[derive(Debug)]
-pub struct FrameWalker<R> {
+pub struct FrameWalker<'a, R> {
     fp: u64,
+    stacks: &'a [Range<u64>],
     stack: Option<Range<u64>>,
+    switches: usize,
     remaining: usize,
     read: R,
     end: Option<End>,
 }
 
-impl<R: FnMut(u64) -> u64> FrameWalker<R> {
+impl<'a, R: FnMut(u64) -> u64> FrameWalker<'a, R> {
     /// Walk the chain starting at frame pointer `fp`, yielding at most
     /// `max_depth` return addresses.
     ///
-    /// The walk stays on whichever of `stacks` contains `fp`. `read` loads one
+    /// The walk starts on whichever of `stacks` contains `fp` and moves to
+    /// another of them only where a caller's frame pointer lies outside the
+    /// current one (at most [`MAX_STACK_SWITCHES`] times). `read` loads one
     /// word; it is only ever called with an 8-byte-aligned address `a` where
-    /// `a..a + 8` lies inside that stack, so the caller can make it a plain
-    /// memory read as long as every range in `stacks` is mapped.
-    pub fn new(fp: u64, stacks: &[Range<u64>], max_depth: usize, read: R) -> Self {
+    /// `a..a + 8` lies inside one of `stacks`, so the caller can make it a
+    /// plain memory read as long as every range in `stacks` is mapped.
+    pub fn new(fp: u64, stacks: &'a [Range<u64>], max_depth: usize, read: R) -> Self {
         let stack = stacks.iter().find(|s| s.contains(&fp)).cloned();
-        FrameWalker { fp, stack, remaining: max_depth, read, end: None }
+        FrameWalker { fp, stacks, stack, switches: 0, remaining: max_depth, read, end: None }
     }
 
     /// Why the walk stopped, once the iterator has returned `None`.
@@ -95,7 +108,7 @@ impl<R: FnMut(u64) -> u64> FrameWalker<R> {
     }
 }
 
-impl<R: FnMut(u64) -> u64> Iterator for FrameWalker<R> {
+impl<R: FnMut(u64) -> u64> Iterator for FrameWalker<'_, R> {
     type Item = u64;
 
     fn next(&mut self) -> Option<u64> {
@@ -112,9 +125,19 @@ impl<R: FnMut(u64) -> u64> Iterator for FrameWalker<R> {
             self.end = Some(End::Bottom);
             return None;
         }
-        // Stacks grow down, so callers' frames sit at higher addresses. The
-        // return address read from this frame is still good; stop after it.
-        if caller_fp != 0 && caller_fp <= self.fp {
+        let here = self.stack.clone().unwrap_or_default();
+        let elsewhere = (caller_fp != 0 && !here.contains(&caller_fp) && self.switches < MAX_STACK_SWITCHES)
+            .then(|| self.stacks.iter().find(|s| **s != here && s.contains(&caller_fp)).cloned())
+            .flatten();
+        if let Some(next) = elsewhere {
+            // The chain goes on on another stack (an interrupt stack's
+            // handler leading back to the interrupted thread).
+            self.stack = Some(next);
+            self.switches += 1;
+        } else if caller_fp != 0 && caller_fp <= self.fp {
+            // Stacks grow down, so callers' frames sit at higher addresses.
+            // The return address read from this frame is still good; stop
+            // after it.
             self.end = Some(End::NotIncreasing);
         }
         self.fp = caller_fp;
@@ -232,10 +255,61 @@ mod tests {
         let mut s = Stack::new(16);
         let inner = s.frame(2, 0, 0x1001);
         let range = s.range();
-        let mut w = FrameWalker::new(inner, &[other, range], 8, |a| s.words[((a - BASE) / 8) as usize]);
+        let stacks = [other, range];
+        let mut w = FrameWalker::new(inner, &stacks, 8, |a| s.words[((a - BASE) / 8) as usize]);
         assert_eq!(w.next(), Some(0x1001));
         assert_eq!(w.next(), None);
         assert_eq!(w.end(), Some(End::Bottom));
+    }
+
+    #[test]
+    fn a_chain_may_go_on_on_another_known_stack() {
+        // An interrupt stack (`irq`, at higher addresses) whose handler's
+        // frame leads into a thread stack (`s`).
+        let mut s = Stack::new(16);
+        let outer = s.frame(10, 0, 0x2002);
+        let inner = s.frame(4, outer, 0x2001);
+        let irq_base = BASE + 0x10_0000;
+        let irq = irq_base..irq_base + 16 * 8;
+        let handler = irq_base + 8 * 6;
+        let walk = |caller: u64, irq_first: bool| {
+            let mut irq_words = [0u64; 16];
+            irq_words[6] = caller;
+            irq_words[7] = 0x3001;
+            let read = |a: u64| {
+                if irq.contains(&a) {
+                    irq_words[((a - irq_base) / 8) as usize]
+                } else {
+                    s.words[((a - BASE) / 8) as usize]
+                }
+            };
+            let stacks = if irq_first { [irq.clone(), s.range()] } else { [s.range(), irq.clone()] };
+            let mut w = FrameWalker::new(handler, &stacks, 8, read);
+            let frames: std::vec::Vec<u64> = w.by_ref().collect();
+            (frames, w.end())
+        };
+        assert_eq!(walk(inner, false), (std::vec![0x3001, 0x2001, 0x2002], Some(End::Bottom)));
+        // The order of the stacks does not matter.
+        assert_eq!(walk(inner, true), (std::vec![0x3001, 0x2001, 0x2002], Some(End::Bottom)));
+        // A frame pointer on no known stack still ends the walk.
+        assert_eq!(walk(0x9000, false), (std::vec![0x3001], Some(End::NotIncreasing)));
+    }
+
+    #[test]
+    fn stack_switches_are_bounded() {
+        // Two stacks whose records point at each other forever.
+        let a_base = BASE;
+        let b_base = BASE + 0x1000;
+        let (a, b) = (a_base..a_base + 64, b_base..b_base + 64);
+        let read = |addr: u64| match addr {
+            x if x == a_base => b_base,
+            x if x == b_base => a_base,
+            _ => 0x4000,
+        };
+        let stacks = [a, b];
+        let mut w = FrameWalker::new(a_base, &stacks, 32, read);
+        assert_eq!(w.by_ref().count(), MAX_STACK_SWITCHES + 1);
+        assert_eq!(w.end(), Some(End::OutsideStack));
     }
 
     #[test]

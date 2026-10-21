@@ -83,11 +83,42 @@ impl StackArea {
     }
 }
 
+/// What every word of a kernel stack holds before the stack is first used
+/// ("POLYSTAK"), so that how deep it was ever used can be read off it later
+/// ([`untouched_words`]).
+pub const STACK_PAINT: u64 = 0x4b41_5453_594c_4f50;
+
+/// How many of a painted stack's `words` words, counted from its lowest
+/// address up, still hold [`STACK_PAINT`]: stacks grow down, so everything
+/// above the first word that differs was in use at some point. `read(i)`
+/// returns word `i` (0 is the lowest). A word that happens to equal the
+/// paint is counted as untouched, so this can only err towards less use,
+/// by at most the words of unlucky data right at the high-water mark.
+pub fn untouched_words(words: usize, mut read: impl FnMut(usize) -> u64) -> usize {
+    (0..words).find(|&i| read(i) != STACK_PAINT).unwrap_or(words)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const BASE: u64 = 0xffff_c080_0000_0000;
+
+    #[test]
+    fn untouched_words_count_the_paint_from_the_bottom() {
+        let mut stack = [STACK_PAINT; 16];
+        assert_eq!(untouched_words(16, |i| stack[i]), 16);
+        stack[15] = 0; // the top word: used
+        assert_eq!(untouched_words(16, |i| stack[i]), 15);
+        stack[9] = 7;
+        assert_eq!(untouched_words(16, |i| stack[i]), 9);
+        // Paint left over above the high-water mark does not count.
+        stack[3] = 1;
+        assert_eq!(untouched_words(16, |i| stack[i]), 3);
+        stack[0] = 1;
+        assert_eq!(untouched_words(16, |i| stack[i]), 0);
+        assert_eq!(untouched_words(0, |_| unreachable!()), 0);
+    }
     const AREA: StackArea = StackArea::new(BASE, 0x8000, 0x4000, 64);
 
     #[test]

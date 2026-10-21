@@ -4,7 +4,9 @@
 (the scheduler gets CPUs), [0016](0016-interrupt-dispatch-tick-and-kernel-locks.md)
 ("interrupts off" no longer excludes other CPUs; a tick per CPU) and
 [0022](0022-user-mode-address-spaces-and-system-calls.md) (address spaces
-track the CPUs that have them loaded).
+track the CPUs that have them loaded). Amended by
+[0061](0061-per-cpu-interrupt-stacks.md): `gs:[24]` holds the CPU's
+interrupt stack.
 
 ## Context
 

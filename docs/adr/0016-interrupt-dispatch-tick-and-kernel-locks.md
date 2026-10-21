@@ -2,7 +2,10 @@
 
 **Status:** Accepted. Amends [0012](0012-scheduler-policy-in-a-crate-context-switch-in-the-kernel.md):
 the idle thread halts instead of reporting a deadlock once interrupts are
-set up; a self-deadlock on a `Mutex` is reported instead.
+set up; a self-deadlock on a `Mutex` is reported instead. Amended by
+[0061](0061-per-cpu-interrupt-stacks.md): handlers run on a per-CPU
+interrupt stack, and the tick's preemption happens on the way out, back on
+the interrupted thread's stack.
 
 ## Context
 

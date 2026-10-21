@@ -15,6 +15,7 @@ pub mod gdt;
 pub mod i8042;
 pub mod idt;
 pub mod irq;
+pub mod irqstack;
 pub mod mmio;
 pub mod paging;
 pub mod percpu;
@@ -106,6 +107,7 @@ pub fn irq_features() -> CpuFeatures {
 /// `thread::init` (the tick preempts threads) and with the ACPI tables read.
 pub unsafe fn init_interrupts(platform: Option<&Platform>) -> Result<(), &'static str> {
     assert!(!cpu::interrupts_enabled(), "interrupt setup with interrupts enabled");
+    irqstack::set_up(0, percpu::boot_cpu())?;
     let features = irq_features();
     if platform.is_none_or(|p| p.has_8259) {
         apic::init_pic();
