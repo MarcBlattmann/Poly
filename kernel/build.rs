@@ -7,6 +7,35 @@ fn main() {
     println!("cargo:rerun-if-changed=linker.ld");
     build_vdso(Path::new(&dir));
     embed_ntdll();
+    embed_win32();
+}
+
+/// Where `cargo xtask` names the directory with our `kernelbase.dll`,
+/// `kernel32.dll` and the test program `k32test.exe` (ADR 0076), cached by
+/// content hash like `ntdll` (`tools/xtask/src/win32.rs`).
+const WIN32_ENV: &str = "POLY_WIN32_DIR";
+
+/// Copy the Win32 modules to `$OUT_DIR`, which the kernel embeds
+/// (`nt::KERNELBASE`, `nt::KERNEL32`, `nt::K32TEST`). Without `xtask` they
+/// are empty files: that kernel starts Windows programs that need only
+/// `ntdll`.
+fn embed_win32() {
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    println!("cargo:rerun-if-env-changed={WIN32_ENV}");
+    let dir = std::env::var_os(WIN32_ENV).map(PathBuf::from);
+    if dir.is_none() {
+        println!("cargo:warning={WIN32_ENV} is not set: this kernel has no kernel32.dll (build with `cargo xtask`)");
+    }
+    for name in ["kernelbase.dll", "kernel32.dll", "k32test.exe"] {
+        match &dir {
+            Some(d) => {
+                let path = d.join(name);
+                println!("cargo:rerun-if-changed={}", path.display());
+                std::fs::copy(&path, out.join(name)).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            }
+            None => std::fs::write(out.join(name), []).expect("write an empty module"),
+        }
+    }
 }
 
 /// Where `cargo xtask` names our `ntdll.dll` (ADR 0071): built once per

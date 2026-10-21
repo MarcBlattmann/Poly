@@ -207,6 +207,19 @@ pub trait NtKernel {
         0
     }
 
+    /// The time since boot in 100 ns units, never going backwards
+    /// (`NtQueryPerformanceCounter`, ADR 0076). A kernel without a clock
+    /// answers 0.
+    fn monotonic_100ns(&self) -> u64 {
+        0
+    }
+
+    /// The number of processors programs are told about
+    /// (`NtQuerySystemInformation(SystemBasicInformation)`, ADR 0076).
+    fn processor_count(&self) -> u32 {
+        1
+    }
+
     /// Write hive file `file` (a name like `SOFTWARE`, no directory) with
     /// `data` and return once it is on disk (`NtFlushKey`, ADR 0066). A
     /// kernel with nowhere to keep it succeeds without writing.

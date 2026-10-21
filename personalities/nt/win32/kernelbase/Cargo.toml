@@ -1,0 +1,20 @@
+[package]
+name = "kernelbase"
+description = "Our kernelbase.dll (ADR 0076): the Win32 base API on top of our ntdll"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kernelbase"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+poly-rtl = { path = "../../../../crates/poly-rtl" }
+poly-ntobj = { path = "../../../../crates/poly-ntobj" }
+
+[lints]
+workspace = true

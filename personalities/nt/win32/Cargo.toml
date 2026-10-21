@@ -1,0 +1,27 @@
+# Our Win32 DLLs above ntdll (ADR 0076): kernelbase.dll and kernel32.dll,
+# real PE DLLs built from Rust for x86_64-pc-windows-msvc like ntdll (ADR
+# 0071), plus k32test.exe, the program the kernel's ring-3 test runs. One
+# workspace, so `cargo xtask` builds core/alloc for the Windows target once
+# for all of them. No third-party crates: only this repo's host-tested
+# logic and core/alloc.
+[workspace]
+resolver = "3"
+members = ["rt", "kernelbase", "kernel32", "k32test"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+[profile.dev]
+panic = "abort"

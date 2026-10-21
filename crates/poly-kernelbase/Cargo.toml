@@ -13,3 +13,6 @@ poly-rtl = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+poly-ldr = { workspace = true }

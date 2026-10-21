@@ -1,0 +1,19 @@
+[package]
+name = "k32test"
+description = "The program the kernel's kernel32 ring-3 test runs (ADR 0076): imports only from kernel32.dll"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "k32test"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

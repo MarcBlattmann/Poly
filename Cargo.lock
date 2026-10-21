@@ -101,6 +101,7 @@ dependencies = [
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-ldr",
  "poly-ntobj",
  "poly-rtl",
 ]
@@ -389,6 +390,7 @@ dependencies = [
  "poly-elf",
  "poly-ext2",
  "poly-gfx",
+ "poly-kernelbase",
  "poly-pe",
  "poly-term",
  "poly-vfs",

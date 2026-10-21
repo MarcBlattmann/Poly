@@ -22,6 +22,8 @@
 //! - [`message`]: `FormatMessageW` for system messages and its inserts.
 //! - [`version`]: `GetVersion`/`GetVersionExW` and the manifest rule,
 //!   `SYSTEM_INFO`.
+//! - [`exports`]: which functions `kernel32` forwards to `kernelbase`, by
+//!   which API-set contract.
 //! - [`text`]: the "copy to a caller's buffer or report the size" rule many
 //!   functions share, and ANSI (code page 1252) conversions.
 //!
@@ -41,6 +43,7 @@ extern crate alloc;
 
 pub mod env;
 pub mod error;
+pub mod exports;
 pub mod file;
 pub mod memory;
 pub mod message;

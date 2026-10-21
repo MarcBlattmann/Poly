@@ -11,6 +11,7 @@ poly-cpio.workspace = true
 poly-elf.workspace = true
 poly-ext2.workspace = true
 poly-gfx.workspace = true
+poly-kernelbase.workspace = true
 poly-pe.workspace = true
 poly-term.workspace = true
 poly-vfs.workspace = true

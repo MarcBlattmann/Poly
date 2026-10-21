@@ -1,0 +1,214 @@
+//! Build our Win32 modules above `ntdll` (ADR 0076) — `kernelbase.dll`,
+//! `kernel32.dll` and the test program `k32test.exe` — and check them.
+//!
+//! They are one Cargo workspace, `personalities/nt/win32`, built the way
+//! `ntdll` is (ADR 0071, `ntdll.rs`): `no_std` Rust for
+//! `x86_64-pc-windows-msvc`, `-Zbuild-std` from the toolchain's `rust-src`,
+//! linked by `rust-lld` in its `lld-link` flavour. One `cargo build`
+//! compiles `core`/`alloc` for the target once for all three.
+//!
+//! # Delivery: built once per source version, cached by content hash
+//!
+//! As for `ntdll`: [`ensure`] hashes everything the modules are built from
+//! (the four crates, the repo crates they reach through path dependencies,
+//! the workspace manifest and lock file, the toolchain pin and the flags)
+//! and looks for `win32-<hash>/` in the cache next to `ntdll`'s (`<main
+//! checkout>/target/win32-cache`, shared by every worktree). Only a miss
+//! builds (about 40 s and 150 MB of build-std artifacts, deleted
+//! afterwards unless `POLY_WIN32_KEEP_BUILD=1`); the three files (~150 KB)
+//! stay. The kernel's `build.rs` embeds them from the directory
+//! `POLY_WIN32_DIR` names, which [`crate::kernel_cargo`] sets.
+
+use crate::{Result, cargo, root, step};
+use std::path::{Path, PathBuf};
+
+/// The build's flags, part of the cache key. Entry points and subsystems
+/// come from each crate's `build.rs`.
+const RUSTFLAGS: &str = "-Clinker=rust-lld -Clinker-flavor=lld-link -Clink-arg=/NODEFAULTLIB";
+/// The environment variable that gives the kernel's `build.rs` the
+/// directory with the three modules.
+pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
+/// The workspace.
+const WORKSPACE: &str = "personalities/nt/win32";
+/// What the build produces (in the target's release directory).
+pub const OUTPUTS: [&str; 3] = ["kernelbase.dll", "kernel32.dll", "k32test.exe"];
+/// Cached versions kept.
+const CACHE_KEEP: usize = 6;
+
+/// `cargo xtask win32`: make sure the cached modules are up to date
+/// (building them if not) and verify them.
+pub fn command(_args: &[String]) -> Result {
+    let dir = ensure()?;
+    verify(&dir)?;
+    for f in OUTPUTS {
+        let p = dir.join(f);
+        eprintln!("{}: {} bytes", p.display(), std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0));
+    }
+    Ok(())
+}
+
+/// The directory with the up-to-date modules: from the cache, or built,
+/// verified and cached.
+pub fn ensure() -> Result<PathBuf> {
+    let root = root();
+    let files = crate::ntdll::inputs_from(
+        &root,
+        &[
+            "personalities/nt/win32/rt",
+            "personalities/nt/win32/kernelbase",
+            "personalities/nt/win32/kernel32",
+            "personalities/nt/win32/k32test",
+        ],
+        &[
+            "personalities/nt/win32/Cargo.toml",
+            "personalities/nt/win32/Cargo.lock",
+            "personalities/nt/src/services.rs",
+            "rust-toolchain.toml",
+        ],
+    )?;
+    let key = crate::ntdll::hash_files(&root, RUSTFLAGS, &files)?;
+    let cache = cache_dir(&root);
+    let cached = cache.join(format!("win32-{key:016x}"));
+    if OUTPUTS.iter().all(|f| cached.join(f).is_file()) {
+        return Ok(cached);
+    }
+    let target = root.join("target").join("win32");
+    let started = std::time::Instant::now();
+    let built = build(&target)?;
+    verify(&built)?;
+    std::fs::create_dir_all(&cache).map_err(|e| format!("{}: {e}", cache.display()))?;
+    // Fill a private directory and rename it, so a parallel worktree never
+    // sees half a set.
+    let tmp = cache.join(format!(".win32-{key:016x}.{}.tmp", std::process::id()));
+    std::fs::create_dir_all(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    for f in OUTPUTS {
+        std::fs::copy(built.join(f), tmp.join(f)).map_err(|e| format!("{f}: {e}"))?;
+    }
+    if std::fs::rename(&tmp, &cached).is_err() {
+        // Another worktree cached the same version first.
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+    if std::env::var_os("POLY_WIN32_KEEP_BUILD").is_none() {
+        let _ = std::fs::remove_dir_all(&target);
+    }
+    prune(&cache);
+    eprintln!("==> Win32 modules built in {:.0?}, cached as {}", started.elapsed(), cached.display());
+    Ok(cached)
+}
+
+/// `win32-cache`, beside `ntdll`'s cache.
+fn cache_dir(root: &Path) -> PathBuf {
+    let ntdll = crate::ntdll::cache_dir(root);
+    ntdll.parent().map_or_else(|| root.join("target"), Path::to_path_buf).join("win32-cache")
+}
+
+/// Keep the [`CACHE_KEEP`] newest versions.
+fn prune(dir: &Path) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let mut sets: Vec<(std::time::SystemTime, PathBuf)> = rd
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().starts_with("win32-"))
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .collect();
+    sets.sort();
+    let excess = sets.len().saturating_sub(CACHE_KEEP);
+    for (_, p) in sets.into_iter().take(excess) {
+        let _ = std::fs::remove_dir_all(p);
+    }
+}
+
+/// Build the workspace into `target_dir`; the directory with the outputs.
+fn build(target_dir: &Path) -> Result<PathBuf> {
+    let manifest = root().join(WORKSPACE).join("Cargo.toml");
+    let vendor = crate::ntdll::vendor_dir()?;
+    let mut cmd = cargo();
+    cmd.env("RUSTC_BOOTSTRAP", "1")
+        .env("CARGO_INCREMENTAL", "0")
+        .env("RUSTFLAGS", RUSTFLAGS)
+        .arg("build")
+        .arg("--release")
+        .arg("--workspace")
+        .arg("--manifest-path")
+        .arg(&manifest)
+        .args(["-Zbuild-std=core,alloc,compiler_builtins", "-Zbuild-std-features=compiler-builtins-mem"])
+        .args(["--target", "x86_64-pc-windows-msvc"])
+        .arg("--target-dir")
+        .arg(target_dir)
+        .arg("--offline")
+        .arg("--config")
+        .arg("source.crates-io.replace-with=\"rustsrc\"")
+        .arg("--config")
+        .arg(format!("source.rustsrc.directory={:?}", vendor.to_string_lossy()));
+    step("build kernelbase.dll, kernel32.dll, k32test.exe", &mut cmd)?;
+    let out = target_dir.join("x86_64-pc-windows-msvc/release");
+    for f in OUTPUTS {
+        if !out.join(f).is_file() {
+            return Err(format!("{} was not produced", out.join(f).display()));
+        }
+    }
+    Ok(out)
+}
+
+fn parse(bytes: &[u8]) -> Result<poly_pe::Pe<'_>> {
+    let pe = poly_pe::Pe::parse(bytes).map_err(|e| format!("not a PE: {e:?}"))?;
+    if pe.info().machine() != poly_pe::machine::AMD64 || pe.info().bits() != poly_pe::Bits::Pe32Plus {
+        return Err("not an x64 PE32+ image".into());
+    }
+    Ok(pe)
+}
+
+fn read(path: &Path) -> Result<Vec<u8>> {
+    std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))
+}
+
+/// Check the three modules: `kernelbase` exports every function `kernel32`
+/// forwards, as code; `kernel32` forwards each to its API-set contract and
+/// exports its own functions as code; `k32test.exe` is an executable that
+/// imports from `kernel32.dll` only.
+fn verify(dir: &Path) -> Result {
+    use poly_kernelbase::exports::{KERNEL32_FORWARDS, KERNEL32_OWN, forwarder, kernelbase_exports};
+    use poly_pe::ExportTarget;
+    let kb = read(&dir.join("kernelbase.dll"))?;
+    let kb = parse(&kb)?;
+    let kb_exports = kb.exports().map_err(|e| format!("kernelbase exports: {e:?}"))?.ok_or("kernelbase: no exports")?;
+    let mut missing = Vec::new();
+    for name in kernelbase_exports() {
+        match kb_exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))? {
+            Some(ExportTarget::Rva(rva)) if rva < kb.info().size_of_image() => {}
+            _ => missing.push(name),
+        }
+    }
+    if !missing.is_empty() {
+        return Err(format!("kernelbase.dll lacks exports: {}", missing.join(", ")));
+    }
+    let k32 = read(&dir.join("kernel32.dll"))?;
+    let k32 = parse(&k32)?;
+    let k32_exports = k32.exports().map_err(|e| format!("kernel32 exports: {e:?}"))?.ok_or("kernel32: no exports")?;
+    for &(name, _) in KERNEL32_FORWARDS {
+        let want = forwarder(name).unwrap_or_default();
+        match k32_exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))? {
+            Some(ExportTarget::Forwarder(f)) if f.raw == want.as_bytes() => {}
+            other => return Err(format!("kernel32!{name} should forward to {want}, is {other:?}")),
+        }
+    }
+    for name in KERNEL32_OWN {
+        match k32_exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))? {
+            Some(ExportTarget::Rva(_)) => {}
+            other => return Err(format!("kernel32!{name} should be code, is {other:?}")),
+        }
+    }
+    let exe = read(&dir.join("k32test.exe"))?;
+    let exe = parse(&exe)?;
+    if exe.info().is_dll() {
+        return Err("k32test.exe is a DLL".into());
+    }
+    let imports = exe.imports().map_err(|e| format!("k32test imports: {e:?}"))?.ok_or("k32test.exe imports nothing")?;
+    for d in imports {
+        let d = d.map_err(|e| format!("{e:?}"))?;
+        let name = d.dll_name().map_err(|e| format!("{e:?}"))?;
+        if !name.eq_ignore_ascii_case(b"kernel32.dll") {
+            return Err(format!("k32test.exe imports {}", String::from_utf8_lossy(name)));
+        }
+    }
+    Ok(())
+}
