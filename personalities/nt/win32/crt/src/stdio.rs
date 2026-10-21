@@ -355,8 +355,9 @@ fn get_byte(s: &mut Stream) -> Option<u8> {
     let b = raw(s, false)?;
     if text && !had_unget {
         if b == 0x1A {
+            // The end until a seek: leave the Ctrl+Z to be seen again.
             s.eof = true;
-            s.unget.push(b);
+            s.rpos -= 1;
             return None;
         }
         if b == b'\r' && raw(s, true) == Some(b'\n') {
@@ -664,6 +665,7 @@ pub unsafe extern "C" fn fgets(buf: *mut u8, n: i32, f: *mut File) -> *mut u8 {
         if !narrow_ok(s) || !begin_read(s) {
             return core::ptr::null_mut();
         }
+        let had_error = s.error;
         let mut i = 0usize;
         while i + 1 < n as usize {
             let Some(b) = get_byte(s) else { break };
@@ -674,7 +676,7 @@ pub unsafe extern "C" fn fgets(buf: *mut u8, n: i32, f: *mut File) -> *mut u8 {
                 break;
             }
         }
-        if i == 0 && n > 1 || s.error {
+        if (i == 0 && n > 1) || (s.error && !had_error) {
             return core::ptr::null_mut();
         }
         // SAFETY: i < n.
@@ -839,6 +841,7 @@ pub unsafe extern "C" fn fgetws(buf: *mut u16, n: i32, f: *mut File) -> *mut u16
         if !begin_read(s) {
             return core::ptr::null_mut();
         }
+        let had_error = s.error;
         let mut i = 0usize;
         while i + 1 < n as usize {
             let Some(c) = get_wide(s) else { break };
@@ -849,7 +852,7 @@ pub unsafe extern "C" fn fgetws(buf: *mut u16, n: i32, f: *mut File) -> *mut u16
                 break;
             }
         }
-        if i == 0 && n > 1 || s.error {
+        if (i == 0 && n > 1) || (s.error && !had_error) {
             return core::ptr::null_mut();
         }
         // SAFETY: i < n.
@@ -961,7 +964,7 @@ pub unsafe extern "C" fn fsetpos(f: *mut File, pos: *const i64) -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn feof(f: *mut File) -> i32 {
-    with(f, 0, |s| i32::from(s.eof && s.unget.is_empty() && s.rpos >= s.buf.len()) * 0x10)
+    with(f, 0, |s| i32::from(s.eof && s.unget.is_empty() && s.wunget.is_empty()) * 0x10)
 }
 
 #[unsafe(no_mangle)]

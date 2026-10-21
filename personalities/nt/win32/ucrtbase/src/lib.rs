@@ -20,8 +20,8 @@ use poly_win32_rt as _;
 
 /// `DllMain`.
 #[unsafe(no_mangle)]
-pub extern "system" fn ucrtbase_main(_module: *mut u8, reason: u32, _reserved: *mut u8) -> i32 {
-    poly_win32_crt::dll_main(reason)
+pub extern "system" fn ucrtbase_main(_module: *mut u8, reason: u32, reserved: *mut u8) -> i32 {
+    poly_win32_crt::dll_main(reason, !reserved.is_null())
 }
 
 // ----- functions of the shared runtime only the UCRT exports ------------------------------

@@ -39,7 +39,12 @@ pub const DLL_THREAD_DETACH: u32 = 3;
 
 /// The DLLs' entry point's work. A DLL that binds its own data
 /// ([`startup::bind`], [`stdio::bind_iob`]) does so before calling this.
-pub fn dll_main(reason: u32) -> i32 {
+/// `terminating`: `DllMain`'s `lpReserved` is non-NULL at
+/// `DLL_PROCESS_DETACH`, the process is ending (Learn, "DllMain entry
+/// point"). Streams are written when the DLL is unloaded, not when the
+/// process ends without `exit` (other threads may hold their locks; Poly's
+/// reading of what the runtime does, to be confirmed).
+pub fn dll_main(reason: u32, terminating: bool) -> i32 {
     match reason {
         DLL_PROCESS_ATTACH => {
             global::init_tls();
@@ -48,7 +53,7 @@ pub fn dll_main(reason: u32) -> i32 {
             stdio::init();
         }
         DLL_THREAD_DETACH => global::thread_detach(),
-        DLL_PROCESS_DETACH => {
+        DLL_PROCESS_DETACH if !terminating => {
             stdio::flush_all();
         }
         _ => {}

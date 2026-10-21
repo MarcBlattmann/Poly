@@ -84,7 +84,7 @@ pub static _sys_nerr: Global<i32> = Global::new(43);
 /// `DllMain`: bind the exported data as the runtime's variables, then start
 /// the runtime.
 #[unsafe(no_mangle)]
-pub extern "system" fn msvcrt_main(_module: *mut u8, reason: u32, _reserved: *mut u8) -> i32 {
+pub extern "system" fn msvcrt_main(_module: *mut u8, reason: u32, reserved: *mut u8) -> i32 {
     if reason == poly_win32_crt::DLL_PROCESS_ATTACH {
         // SAFETY: process attach, before anything reads the cells.
         unsafe { *_fmode.get() = poly_crt::fmode::O_TEXT };
@@ -110,7 +110,7 @@ pub extern "system" fn msvcrt_main(_module: *mut u8, reason: u32, _reserved: *mu
             *slot = poly_win32_crt::strings::strerror(i as i32);
         }
     }
-    poly_win32_crt::dll_main(reason)
+    poly_win32_crt::dll_main(reason, !reserved.is_null())
 }
 
 // ----- the classic start-up interface ------------------------------------------------------

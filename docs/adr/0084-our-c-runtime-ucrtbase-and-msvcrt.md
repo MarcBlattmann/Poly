@@ -164,9 +164,12 @@ program's tables. `exit` calls the thread-local destructor callback
 (`_register_thread_local_exe_atexit_callback`), the `atexit`/`_onexit`/
 `_crt_atexit` functions last first, writes every stream, and ends the
 process; `_cexit` does the same without ending it; `_exit` ends at once;
-`_execute_onexit_table` runs a module's table last first. Each DLL's
-`DLL_PROCESS_DETACH` writes its streams as well (a program that ends with
-`ExitProcess`).
+`_execute_onexit_table` runs a module's table last first. A DLL unloaded
+with `FreeLibrary` writes its streams at `DLL_PROCESS_DETACH`; at process
+termination (`lpReserved` non-NULL) it does not, so output still buffered
+when a program calls `ExitProcess` without `exit` is lost (Poly's choice,
+to be confirmed: another thread may hold a stream's lock then). In text
+mode a Ctrl+Z stays the end of the stream until a seek.
 
 ### Errors, handlers, signals
 
