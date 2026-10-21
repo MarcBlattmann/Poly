@@ -117,6 +117,10 @@ fn open_flag_rules() {
     assert_eq!(env.open("/d", OpenFlags::WRONLY).map(|_| ()), Err(Errno::EISDIR));
     assert_eq!(env.open("/d", OpenFlags::RDWR).map(|_| ()), Err(Errno::EISDIR));
     assert_eq!(env.open("/d", OpenFlags::RDONLY | OpenFlags::CREAT).map(|_| ()), Err(Errno::EISDIR));
+    assert_eq!(env.open("/d", OpenFlags::RDONLY | OpenFlags::TRUNC).map(|_| ()), Err(Errno::EISDIR));
+    // "file/" with O_CREAT asks for a directory: EISDIR, as for a missing name.
+    assert_eq!(env.open("/f/", OpenFlags::RDWR | OpenFlags::CREAT).map(|_| ()), Err(Errno::EISDIR));
+    assert_eq!(env.open("/f/", OpenFlags::RDONLY).map(|_| ()), Err(Errno::ENOTDIR));
     assert_eq!(env.open("/f", OpenFlags::RDONLY | OpenFlags::DIRECTORY).map(|_| ()), Err(Errno::ENOTDIR));
     assert_eq!(
         env.open("/g", OpenFlags::RDONLY | OpenFlags::DIRECTORY | OpenFlags::CREAT).map(|_| ()),
@@ -127,12 +131,29 @@ fn open_flag_rules() {
     assert_eq!(env.open("/g", OpenFlags::RDWR | OpenFlags::TMPFILE).map(|_| ()), Err(Errno::ENOENT));
     assert_eq!(env.open("/f", OpenFlags::RDWR | OpenFlags::TMPFILE).map(|_| ()), Err(Errno::ENOTDIR));
     assert_eq!(env.open("/d", OpenFlags::RDONLY | OpenFlags::TMPFILE).map(|_| ()), Err(Errno::EINVAL));
+    let tmp_creat = OpenFlags::RDWR | OpenFlags::TMPFILE | OpenFlags::CREAT;
+    assert_eq!(env.open("/d", tmp_creat).map(|_| ()), Err(Errno::EINVAL));
+    // The O_TMPFILE bit without O_DIRECTORY is not O_TMPFILE: on a directory, EINVAL.
+    let bit = OpenFlags::TMPFILE.without(OpenFlags::DIRECTORY);
+    assert_eq!(env.open("/d", OpenFlags::RDWR | bit).map(|_| ()), Err(Errno::EINVAL));
     let t = env.open("/d", OpenFlags::RDWR | OpenFlags::TMPFILE).unwrap();
+    assert_eq!(t.flags(), OpenFlags::RDWR | OpenFlags::TMPFILE, "F_GETFL reports O_TMPFILE");
+    assert!(t.is_tmpfile() && !t.is_unnameable());
     assert_eq!(t.write(b"tmp"), Ok(3));
     assert_eq!(t.node().attr().unwrap().nlink, 0, "no name");
     env.vfs.link_node(&env.ctx, &env.root, t.node(), PathArg::new(At::Cwd, b"/d/named")).unwrap();
     assert_eq!(env.stat("/d/named").unwrap().size, 3);
     assert_eq!(env.stat("/d/named").unwrap().nlink, 1);
+    // linkat on the open file does the same; with O_EXCL never.
+    let u = env.open("/d", OpenFlags::WRONLY | OpenFlags::TMPFILE).unwrap();
+    env.vfs.link_file(&env.ctx, &env.root, &u, PathArg::new(At::Cwd, b"/d/named2")).unwrap();
+    assert_eq!(env.stat("/d/named2").unwrap().nlink, 1);
+    let x = env.open("/d", OpenFlags::RDWR | OpenFlags::TMPFILE | OpenFlags::EXCL).unwrap();
+    assert!(x.is_unnameable());
+    assert_eq!(x.flags(), OpenFlags::RDWR | OpenFlags::TMPFILE, "O_EXCL is not reported");
+    let never = PathArg::new(At::Cwd, b"/d/never");
+    assert_eq!(env.vfs.link_file(&env.ctx, &env.root, &x, never), Err(Errno::ENOENT));
+    assert_eq!(env.stat("/d/never").map(|_| ()), Err(Errno::ENOENT));
     // A file that lost its last name cannot get one back.
     let f = env.open("/f", OpenFlags::RDONLY).unwrap();
     env.vfs.unlink(&env.ctx, &env.root, At::Cwd, b"/f").unwrap();

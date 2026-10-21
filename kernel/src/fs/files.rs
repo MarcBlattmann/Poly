@@ -312,6 +312,11 @@ impl Files {
         self.openat(AT_FDCWD, path, flags, mode)
     }
 
+    /// `EMFILE` when no descriptor below the limit is free.
+    pub fn check_fd_free(&self) -> Result<()> {
+        self.fds.lock().check_free()
+    }
+
     /// `openat(2)`: opens `path` and puts it at the lowest free descriptor,
     /// close-on-exec if `flags` has `O_CLOEXEC`. `mode` (masked by the
     /// umask) is used when `O_CREAT` makes the file.
