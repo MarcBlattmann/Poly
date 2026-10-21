@@ -28,9 +28,13 @@
 //!      [--model M] [--generated DIR] [--revision REV] [--feedback FILE] [--dry-run]
 //! loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet]
 //!                                                the scheduler: runs the whole pipeline unattended
+//!                                                (exit 10: stopped to run its new code; update.rs)
 //! loop status [--config FILE] [--json]           what every entry in the loop is doing
 //! loop watch [--config FILE] [--interval SECS] [--once] [--json] [--width N] [--lines N]
 //!                                                live read-only dashboard (q quits)
+//! loop pause [--role spec|implementer|all] [--for 4h] [--reason TEXT] [--config FILE]
+//!                                                no new agent sessions of the role(s) until then
+//! loop resume [--role spec|implementer|all] [--config FILE]
 //! loop reset <entry> [--config FILE] [--keep-branches]
 //!                                                forget an entry (e.g. after the human queue)
 //! win build [--tests-dir DIR]... [--tests a,b] [--out DIR]

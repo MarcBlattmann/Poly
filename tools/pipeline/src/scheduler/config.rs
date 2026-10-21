@@ -1,7 +1,8 @@
 //! The scheduler's configuration file (TOML).
 //!
 //! Looked up in this order: `--config FILE`, `$POLY_PIPELINE_CONFIG`,
-//! `/etc/poly-pipeline.toml`, `~/.config/poly/pipeline.toml`. Every key has
+//! `/etc/poly-pipeline.toml`, `/srv/poly/runner/pipeline.toml` (where
+//! setup.sh installs it), `~/.config/poly/pipeline.toml`. Every key has
 //! a default suited to the home server layout under `/srv/poly`
 //! (docs/AGENT_PIPELINE.md); an example with every key is
 //! `tools/pipeline/deploy/pipeline.example.toml`. Unknown keys are errors,
@@ -199,6 +200,9 @@ pub struct Config {
     pub idle_secs: u64,
     pub limit_pause_secs: u64,
     pub poll_secs: u64,
+    /// Restart with the new code when main changes the loop's own files
+    /// (only when the loop runs from `repo`, as the systemd unit does).
+    pub self_update: bool,
 
     pub repo: PathBuf,
     pub worktrees: PathBuf,
@@ -210,6 +214,8 @@ pub struct Config {
     pub state_dir: PathBuf,
     pub log_file: Option<PathBuf>,
     pub human_queue: PathBuf,
+    /// The fingerprint of the deploy files setup.sh installed last.
+    pub deploy_stamp: PathBuf,
 
     pub remote: String,
     pub base_branch: String,
@@ -237,6 +243,9 @@ pub struct Config {
 pub const DEFAULT_IMPLEMENTER_PATHS: &[&str] =
     &["personalities/", "crates/", "kernel/src/", "Cargo.toml", "Cargo.lock", "kernel/Cargo.toml", "kernel/Cargo.lock"];
 
+/// Where setup.sh installs the configuration.
+pub const INSTALLED: &str = "/srv/poly/runner/pipeline.toml";
+
 fn role_command(user: &str, role: &str) -> Vec<String> {
     ["sudo", "-n", "-u", user, "/srv/poly/bin/poly-role", role].iter().map(|s| s.to_string()).collect()
 }
@@ -258,6 +267,7 @@ impl Default for Config {
             idle_secs: 900,
             limit_pause_secs: 1800,
             poll_secs: 600,
+            self_update: true,
             repo: "/srv/poly/runner/repo".into(),
             worktrees: "/srv/poly/runner/work".into(),
             hub: "/srv/poly/git/poly.git".into(),
@@ -267,6 +277,7 @@ impl Default for Config {
             state_dir: "/srv/poly/runner/state".into(),
             log_file: Some("/srv/poly/runner/log/pipeline.log".into()),
             human_queue: "/srv/poly/runner/human-queue.md".into(),
+            deploy_stamp: "/srv/poly/bin/deployed.sha256".into(),
             remote: "origin".into(),
             base_branch: "main".into(),
             author: None,
@@ -388,6 +399,7 @@ impl Config {
         k.int("loop.idle_secs", &mut c.idle_secs)?;
         k.int("loop.limit_pause_secs", &mut c.limit_pause_secs)?;
         k.int("loop.poll_secs", &mut c.poll_secs)?;
+        k.bool("loop.self_update", &mut c.self_update)?;
         k.path("paths.repo", &mut c.repo)?;
         k.path("paths.worktrees", &mut c.worktrees)?;
         k.path("paths.hub", &mut c.hub)?;
@@ -399,6 +411,7 @@ impl Config {
         k.opt_str("paths.log_file", &mut log)?;
         c.log_file = log.map(PathBuf::from);
         k.path("paths.human_queue", &mut c.human_queue)?;
+        k.path("paths.deploy_stamp", &mut c.deploy_stamp)?;
         k.str("git.remote", &mut c.remote)?;
         k.str("git.base_branch", &mut c.base_branch)?;
         k.opt_str("git.author", &mut c.author)?;
@@ -426,12 +439,14 @@ impl Config {
 
     /// The configuration file to use when none is given: the first that
     /// exists of `$POLY_PIPELINE_CONFIG`, `/etc/poly-pipeline.toml`,
-    /// `~/.config/poly/pipeline.toml`.
+    /// `/srv/poly/runner/pipeline.toml`, `~/.config/poly/pipeline.toml`.
     pub fn default_path() -> Option<PathBuf> {
         if let Some(p) = std::env::var_os("POLY_PIPELINE_CONFIG").filter(|p| !p.is_empty()) {
             return Some(PathBuf::from(p));
         }
-        let mut candidates = vec![PathBuf::from("/etc/poly-pipeline.toml")];
+        // The second is where setup.sh installs it: `loop status` and
+        // `loop pause` work there without naming it.
+        let mut candidates = vec![PathBuf::from("/etc/poly-pipeline.toml"), PathBuf::from(INSTALLED)];
         if let Some(home) = std::env::var_os("HOME") {
             candidates.push(PathBuf::from(home).join(".config/poly/pipeline.toml"));
         }
@@ -567,5 +582,7 @@ mod tests {
         assert_eq!((c.spec_cycles, c.spec_inbox.to_str()), (2, Some("/srv/poly/spec-inbox")));
         assert_eq!(c.spec.command[..4], ["sudo", "-n", "-u", "polyspec"]);
         assert_eq!(c.implementer.command[..4], ["sudo", "-n", "-u", "polyimpl"]);
+        assert!(c.self_update && c.deploy_stamp.to_str() == Some("/srv/poly/bin/deployed.sha256"));
+        assert!(Config::parse("[loop]\nself_update = false\n").is_ok_and(|c| !c.self_update));
     }
 }
