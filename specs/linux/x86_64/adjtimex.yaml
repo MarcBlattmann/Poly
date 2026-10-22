@@ -1,0 +1,119 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/adjtimex             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; clock disciplined by an NTP daemon (status STA_PLL|STA_NANO, state TIME_OK); tests run as a normal user (uid 1001, no capabilities), umask 022; root behaviour from adjtimex(2)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  adjtimex(buf) (syscall 159) reads, and with CAP_SYS_TIME optionally
+  sets, the kernel's NTP clock-discipline parameters. buf points to a
+  208-byte struct timex (<linux/timex.h>, x86-64 offsets): u32 modes @0;
+  long offset @8, freq @16, maxerror @24, esterror @32; int status @40;
+  long constant @48, precision @56, tolerance @64; struct timeval time
+  @72 (tv_sec @72, tv_usec @80); long tick @88, ppsfreq @96, jitter
+  @104; int shift @112; long stabil @120, jitcnt @128, calcnt @136,
+  errcnt @144, stbcnt @152; int tai @160; 44 spare bytes @164..207.
+  The call needs all 208 bytes readable and writable (else EFAULT,
+  before anything else), checks modes, and on success overwrites every
+  field except modes, the alignment holes (@4, @44, @116) and the spare
+  bytes, which keep the caller's bytes; it returns the clock state.
+  The parameters are system-wide: every process (a forked child too)
+  reads the same values. modes 0 is a pure read and is allowed for
+  anyone. Any modes value with both the ADJ_OFFSET_SINGLESHOT bits
+  (0x8001) and ADJ_OFFSET_READONLY (0x2000) set, i.e. containing
+  ADJ_OFFSET_SS_READ 0xa001, is also a read for anyone, whatever other
+  bits are set (0xa003, 0xe001, 0xa0ff, 0x1a001, 0x8000a001 all read),
+  unless ADJ_SETOFFSET (0x0100) is among them; it reads like modes 0
+  except that offset gets the adjustment still outstanding from an
+  earlier adjtime()-style ADJ_OFFSET_SINGLESHOT (in microseconds; 0
+  when none is pending). Everything else sets parameters and needs
+  CAP_SYS_TIME in the effective set.
+returns:
+  success: >
+    the clock state, 0..5: TIME_OK 0 (synchronised, no leap second
+    pending), TIME_INS 1, TIME_DEL 2, TIME_OOP 3, TIME_WAIT 4,
+    TIME_ERROR 5. TIME_ERROR whenever status has STA_UNSYNC (0x40) or
+    STA_CLOCKERR (0x1000) set (or an inconsistent PPS combination, see
+    adjtimex(2)); TIME_OK only when none of STA_UNSYNC, STA_CLOCKERR,
+    STA_INS (0x10), STA_DEL (0x20) is set. A set call usually returns the
+    state from before its own change.
+  fields_read: >
+    status: bits within 0xffff; the read-only PPS bits STA_PPSSIGNAL
+    0x100, STA_PPSJITTER 0x200, STA_PPSWANDER 0x400, STA_PPSERROR 0x800
+    clear (no PPS source). STA_NANO (0x2000) selects the unit of offset,
+    jitter and time.tv_usec: nanoseconds when set, microseconds when
+    clear. time: CLOCK_REALTIME at the call (between clock_gettime
+    readings before and after, the sub-second part truncated to the
+    unit), tv_usec 0..999999999 (nano) or 0..999999 (micro); successive
+    reads never go backwards and advance with the clock. precision 1.
+    tolerance 32768000 (500 ppm in 2^-16 ppm). tick 9000..11000 us per
+    1/100 s tick, 10000 unless set. constant 0..10. freq within
+    +-32768000. offset within +-0.5 s in the current unit. maxerror and
+    esterror 0..16000000 us. tai >= 0 (0 unless set). ppsfreq, jitter,
+    shift, stabil, jitcnt, calcnt, errcnt, stbcnt 0. tick, precision,
+    tolerance stay the same across reads while nobody sets them.
+  undisciplined_clock: >
+    a clock no NTP daemon has touched (Linux right after boot, and Poly)
+    reads status STA_UNSYNC (0x40, so STA_NANO clear: microseconds),
+    state TIME_ERROR 5, offset 0, freq 0, maxerror and esterror 16000000,
+    constant 2, tick 10000, tai 0, plus the fixed values above. The
+    observed host instead had an NTP daemon: status 0x2001
+    (STA_PLL|STA_NANO), state 0, constant 7, nonzero offset and freq;
+    tests therefore check only the ranges and relations above.
+  ss_read: >
+    modes ADJ_OFFSET_SS_READ (0xa001): same state and same fields as a
+    modes 0 read, offset 0 when no single-shot adjustment is pending;
+    also allowed with no capabilities at all.
+  privileged_set: >
+    (root, from adjtimex(2); not observed here) with CAP_SYS_TIME the
+    bits ADJ_OFFSET 0x1, ADJ_FREQUENCY 0x2, ADJ_MAXERROR 0x4,
+    ADJ_ESTERROR 0x8, ADJ_STATUS 0x10, ADJ_TIMECONST 0x20, ADJ_TAI 0x80,
+    ADJ_SETOFFSET 0x100, ADJ_MICRO 0x1000, ADJ_NANO 0x2000, ADJ_TICK
+    0x4000 set the matching parameter from buf and then the whole struct
+    is filled as for a read; ADJ_TICK with the current tick value is
+    accepted and reads back unchanged. ADJ_OFFSET_SINGLESHOT (0x8001)
+    starts an adjtime()-style adjustment of offset microseconds and
+    returns the previous outstanding one in offset.
+errors:
+  bad_buffer: >
+    EFAULT when any of the 208 bytes is not readable and writable: NULL,
+    address 1, a kernel address, a buffer whose last byte or last 8 bytes
+    (or everything after modes) lie on an inaccessible page, or a
+    read-only buffer. Checked before modes is looked at: also EFAULT for
+    modes 0, 0xa001, an EPERM mode and an EINVAL mode. The buffer is not
+    changed. A buffer ending exactly at the end of accessible memory works.
+  adjtime_without_singleshot: >
+    EINVAL when the ADJ_ADJTIME bit 0x8000 is set but bit 0x0001 is not
+    (0x8000, 0x8002, 0xa000, 0xc000, 0x8100, 0xfffe), for any user,
+    before the permission check. Buffer unchanged.
+  not_permitted: >
+    EPERM without CAP_SYS_TIME (any normal user; root after emptying its
+    capability sets with capset) for every other nonzero modes: each
+    single bit 0x1..0x4000, 0x7fff, 0x10000, 0x80000000, 0x2001,
+    ADJ_OFFSET_SINGLESHOT 0x8001 and 0x8003 (no read-only bit), and a
+    read-only single-shot mode that includes ADJ_SETOFFSET (0xa101). The
+    permission error comes before value checks (ADJ_TICK with tick 1 is
+    EPERM). Buffer unchanged.
+  bad_tick: >
+    (root) EINVAL for ADJ_TICK with tick outside 9000..11000 (8999,
+    11001); nothing changes.
+  bad_setoffset: >
+    (root) EINVAL for ADJ_SETOFFSET with time.tv_usec negative, or
+    1000000 or more in microsecond mode (1e9 or more with ADJ_NANO);
+    nothing changes.
+side_effects: >
+  modes 0 and the read-only single-shot modes change nothing. A
+  successful set (root only) changes system-wide clock parameters seen
+  by every process. A failed call changes nothing, in the kernel or in
+  the buffer.
+threading: "system-wide state; every process and thread reads the same parameters"
+ordering:
+  - "EFAULT (whole buffer readable and writable) before EINVAL for ADJ_ADJTIME without bit 0x0001, before EPERM, before value checks (tick, SETOFFSET)"
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
