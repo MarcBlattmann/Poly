@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setfsgid             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04, x86-64)"
+  machine: "bare-metal home server, x86-64; tests observed as a normal user (uid 1001), initial user namespace. Root-only cases are taken from setfsgid(2) and credentials(7) and marked poly-diff: needs=root"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  setfsgid(gid) (syscall 123) sets the filesystem gid: the group used for
+  file permission checks and as the group of newly created files (in a
+  directory without set-group-ID). It never fails: the return value is
+  always the filesystem gid from before the call, whether or not the value
+  was taken. The filesystem gid starts out equal to the effective gid, and
+  every change of the effective gid (setgid, setregid, setresgid) sets it to
+  the new effective gid again. Changes of the uids (setresuid, setfsuid) do
+  not touch it. A forked child inherits it, and after that parent and child
+  change theirs independently. The argument is a 32-bit unsigned gid. The
+  upper half of the 64-bit register is ignored. 0xffffffff (in the low 32
+  bits) is not a gid: it changes nothing, so setfsgid(-1) only reads the
+  current value.
+returns:
+  always: "the previous filesystem gid, zero-extended from 32 bits (gid 0xfffffffe comes back as 4294967294, 0x80000000 as 2147483648; never negative)"
+  minus_one: "low 32 bits 0xffffffff (e.g. -1, or 0x12345678ffffffff): returns the current filesystem gid and changes nothing"
+  with_cap_setgid: "(effective uid 0) any other gid is taken, including 0 and 0xfffffffe"
+  without_cap_setgid: "the gid is taken only if it equals the current real, effective or saved gid, or the current filesystem gid. Otherwise it is ignored silently: the old value is returned and stays. A filesystem gid that a privileged caller set to some other value may be kept (set again) after privilege is dropped. Once it moves away from that value it cannot come back"
+  ids_untouched: "real, effective and saved gids (getresgid, getgid, getegid) never change"
+errors:
+  none: "no error is ever returned; a refused value is not reported (no EPERM, no EINVAL)"
+side_effects: >
+  New files get the filesystem gid as their group (not the effective gid,
+  when the two differ). Group permission checks on files use the filesystem
+  gid. For example, with the filesystem uid off 0 and no supplementary groups,
+  a file of mode 0040 owned by group G opens O_RDONLY only while the filesystem gid
+  is G (EACCES otherwise), and never opens O_WRONLY (EACCES).
+threading: "inherited across fork; per process after that: a change in the child is not seen by the parent, or the other way round (thread-level behaviour not specified here)"
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "a few microseconds per call; no blocking"
+  guarantees: "none"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
