@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getpriority          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities, RLIMIT_NICE 0), umask 022; the runner's processes start at nice 10. Root-only behaviour (lowering the nice value) from getpriority(2)/setpriority(2) and sched(7)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  getpriority(which, who) (syscall 140) returns a scheduling nice value
+  translated to 20 - nice, so the result is 1 (nice 19, lowest
+  priority) .. 40 (nice -20, highest priority) and never negative: a
+  negative return is always -errno (the C library converts it back to
+  -20..19; the raw syscall does not). which selects what who names:
+  PRIO_PROCESS (0) a thread id (who 0: the calling thread), PRIO_PGRP
+  (1) a process group id (who 0: the caller's process group), PRIO_USER
+  (2) a real user id (who 0: the caller's real uid). For PRIO_PGRP and
+  PRIO_USER the result is the highest value (lowest nice) among all
+  matching threads. Both which and who are 32-bit ints: the upper half
+  of each register is ignored. No permission is needed to read any
+  thread's value. The nice value is per thread, starts at the
+  creator's value (fork, clone of a thread), survives execve, and is
+  the one set by setpriority (141), sched_setattr or kept across
+  sched_setscheduler policy changes between SCHED_OTHER, SCHED_BATCH
+  and SCHED_IDLE.
+returns:
+  value: "20 - nice of the selected thread(s): nice n gives 20 - n; nice 19 gives 1, nice 0 gives 20, nice -20 gives 40"
+  process: "PRIO_PROCESS, who 0: the calling thread; who = a tid: that thread (any process, no permission check); who = a pid: that process's main thread only (not the best thread of the process)"
+  pgrp: "PRIO_PGRP: the highest value over every thread of every member of the group (who 0: the caller's group). Members in other groups (after setpgid) are not counted. A zombie member (exited, not yet reaped) still counts with the nice value it had; a reaped one does not"
+  user: "PRIO_USER: the highest value over every thread whose real uid is who (who 0: caller's real uid; who 0 and who = getuid() give the same result). Other processes of the user, and on Linux kernel threads for uid 0, count too, so the result is at least the value of each of the caller's own threads"
+  zombie: "PRIO_PROCESS on the pid of an exited, unreaped child returns the nice value it had at exit"
+  after_set: "a value written by setpriority (also clamped: nice > 19 becomes 19, < -20 becomes -20) is returned at once, by who 0 and by the pid"
+  inheritance: "fork: the child starts with the parent's nice value; a new thread with its creator's; later changes in one do not touch the other; execve keeps the value"
+  sched: "sched_setattr(SCHED_OTHER, sched_nice n) makes getpriority return 20 - n; switching to SCHED_BATCH (3) or SCHED_IDLE (5) with sched_setscheduler leaves the returned value unchanged"
+  which_width: "only the low 32 bits of which count: (1<<32)|0 is PRIO_PROCESS, 0xffffffff00000002 is PRIO_USER, (1<<32)|3 and 0xffffffff are EINVAL"
+  who_width: "only the low 32 bits of who count: 1<<32 is who 0 (the caller), (x<<32)|pid is pid, 0xffffffff is -1 (ESRCH)"
+errors:
+  bad_which: "EINVAL (22): which (low 32 bits) is not 0, 1 or 2 (3, 4, -1, INT_MAX, INT_MIN); checked before who is looked up (bad which with a who that names nothing is still EINVAL)"
+  no_match: "ESRCH (3): no thread matches: PRIO_PROCESS with a tid that does not exist (0x7fffffff, a reaped child, a thread that has ended and gone), PRIO_PGRP with an id that is no process group (also the pid of a process that is not a group leader, and a group whose members are all gone), PRIO_USER with a uid that has no thread (e.g. 4000000); who -1 (and INT_MIN for PRIO_PROCESS) is ESRCH for every which"
+  never: "getpriority never fails with EPERM or EACCES (those are setpriority's)"
+side_effects: none
+threading: >
+  The nice value is a per-thread attribute: threads of one process can
+  have different values; getpriority(PRIO_PROCESS, 0) in a thread
+  returns that thread's own value, and its tid can be used from any
+  thread or process. A thread that has ended is ESRCH once it is gone
+  (it may still be visible for a moment after its CLONE_CHILD_CLEARTID
+  word was cleared). Reads are consistent with any completed
+  setpriority, from any thread or process.
+ordering: []
+timing:
+  typical: "well under 10 µs for PRIO_PROCESS; PRIO_PGRP and PRIO_USER grow with the number of threads scanned"
+  guarantees: none
+tests:
+  visible: 10
+  held_out: 4
