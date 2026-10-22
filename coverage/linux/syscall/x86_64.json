@@ -219,7 +219,7 @@
 {"symbol":"pkey_mprotect","number":329,"src":["linux-syscall-tbl"]},
 {"symbol":"poll","number":7,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"ppoll","number":271,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"prctl","number":157,"src":["linux-syscall-tbl"]},
+{"symbol":"prctl","number":157,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"pread64","number":17,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"preadv","number":295,"src":["linux-syscall-tbl"]},
 {"symbol":"preadv2","number":327,"src":["linux-syscall-tbl"]},
