@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/utime
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4; static freestanding test programs, raw syscalls; root-only rules from utime(2)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  utime(path, times) (x86_64 syscall 132) sets the access time and the
+  modification time of the file named by path. times points to two signed
+  64-bit seconds values, actime then modtime (struct utimbuf, 16 bytes,
+  utime.h). Explicit times are stored as whole seconds: both nanosecond
+  fields become 0. atime and mtime are independent (either may be the
+  larger), and any value in the 32-bit signed range is stored exactly,
+  including 0 and negative values. A NULL times sets atime and mtime to the
+  current time. ctime always becomes the current time on success. The path
+  is resolved like stat(2): symbolic links are followed (also the last one),
+  so the target's times change and the link's own times do not. Works the
+  same on regular files, directories and FIFOs (a FIFO is not opened, the
+  call does not block). File content, size, mode, link count and the
+  times of the containing directory are not changed.
+returns:
+  success: "0"
+  explicit_times: "atime = actime, mtime = modtime, both with tv_nsec 0 (any nanoseconds set earlier, e.g. by utimensat, are dropped); the values seen by stat through any name of the inode (hard links) and by fstat on descriptors opened earlier"
+  null_times: "atime, mtime and ctime are all set to one and the same current time, to the nanosecond (atime == mtime == ctime, seconds and nanoseconds)"
+  range: "every value in [-2^31, 2^31-1] is stored exactly (checked: 0, -1, -86400, -2^31, 2^31-1, 3000000000). Values far outside that range are clamped to what the file system can store (ext4 here: 2^63-1 read back as 15032385535, -2^63+1 as -2147483648); tests do not depend on clamping"
+  repeat: "each call replaces both times; the last call wins; setting the same values again still succeeds and still updates ctime"
+  write_afterwards: "a later write(2) moves mtime to the current time and leaves atime alone, as usual"
+errors:
+  bad_times_pointer: "EFAULT when the 16 bytes of times cannot be read (unmapped, kernel address, or the second field on an unmapped page); 16 bytes ending exactly at the end of a mapped page are fine. The file is left unchanged (times and ctime)"
+  times_before_path: "the times are read before the path is looked at: a bad times pointer gives EFAULT even when the path is missing (ENOENT), empty, goes through a missing directory, or through a directory without search permission (EACCES)"
+  bad_path_pointer: "EFAULT for a NULL or unreadable path, also with a NULL times"
+  missing: "ENOENT for a missing name or missing directory in the path, an empty path, or a dangling symbolic link (with or without times)"
+  not_a_directory: "ENOTDIR when a non-directory is followed by more components, including a trailing slash after a regular file (D/f/ and D/f/x). A trailing slash, \".\" or \"..\" after a directory (or after a link to one) is fine"
+  name_too_long: "ENAMETOOLONG for a component over 255 bytes, and for a path of 4096 bytes or more before its NUL; 4095 bytes resolve (\"/.\" padding counts toward the length)"
+  loop: "ELOOP for a symbolic link loop, as the last name or inside the path"
+  search_permission: "EACCES when a directory on the path does not grant search (x) permission to the caller (root is not subject to this); even when the name below it is missing"
+  null_times_permission: "times NULL: allowed for the file's owner (whatever the file's mode, even 0000 or 0444), for anyone with write permission on the file, and for root; otherwise EACCES"
+  explicit_times_permission: "times not NULL: allowed only for the file's owner (whatever the mode) and root (CAP_FOWNER); anyone else gets EPERM, even with write permission on the file"
+  read_only_fs: "EROFS on a read-only file system (from utime(2); not tested)"
+  immutable_append_only: "an immutable file cannot have its times changed; an append-only file only accepts NULL times (from utime(2); EPERM; not tested)"
+  path_order: "path errors follow the same order as stat and utimensat: the path string itself (EFAULT, ENAMETOOLONG, empty ENOENT), then the components left to right (ENOENT, ENOTDIR, ENAMETOOLONG for a long component, EACCES for search permission, ELOOP), then the permission checks on the file itself (EACCES/EPERM). A bad times pointer comes before all of these"
+side_effects: "on success ctime is set to the current wall-clock time; on any error nothing changes (atime, mtime and ctime all kept)"
+threading: "no thread-specific behaviour; the file system state is shared by all threads and processes"
+ordering: []
+timing:
+  typical: "microseconds; never blocks (also not on a FIFO)"
+  guarantees: "the current time used for NULL times and for ctime lies between CLOCK_REALTIME readings taken before and after the call (to the second; file timestamps may trail CLOCK_REALTIME by up to a clock tick, so a test allows one second before)"
+tests:
+  visible: 8
+  held_out: 4
