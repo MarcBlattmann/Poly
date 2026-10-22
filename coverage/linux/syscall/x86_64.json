@@ -102,7 +102,7 @@
 {"symbol":"getppid","number":110,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"getpriority","number":140,"src":["linux-syscall-tbl"]},
 {"symbol":"getrandom","number":318,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
-{"symbol":"getresgid","number":120,"src":["linux-syscall-tbl"]},
+{"symbol":"getresgid","number":120,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"getresuid","number":118,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"getrlimit","number":97,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"getrusage","number":98,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
