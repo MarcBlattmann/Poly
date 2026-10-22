@@ -5,7 +5,7 @@
 {"symbol":"access","number":21,"src":["linux-syscall-tbl"]},
 {"symbol":"acct","number":163,"src":["linux-syscall-tbl"]},
 {"symbol":"add_key","number":248,"src":["linux-syscall-tbl"]},
-{"symbol":"adjtimex","number":159,"src":["linux-syscall-tbl"]},
+{"symbol":"adjtimex","number":159,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"alarm","number":37,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"arch_prctl","number":158,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
 {"symbol":"bind","number":49,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
