@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sysfs                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; 33 file system types registered (/proc/filesystems has 33 lines, first sysfs, tmpfs, bdev, proc); static freestanding test programs, raw syscalls"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sysfs(option, arg1, arg2) (syscall 139, obsolete System V call)
+  answers questions about the kernel's table of registered file system
+  types, the same table /proc/filesystems lists, in the same order.
+  Option 1: arg1 points to a NUL-terminated type name; returns its
+  0-based index in the table. Option 2: arg1 is an index, arg2 a buffer;
+  writes that type's name and its NUL (and nothing else) to the buffer
+  and returns 0. Option 3: returns the number of types; arg1 and arg2 are
+  ignored. Any other option is EINVAL. The option is a 32-bit int and
+  the option-2 index a 32-bit unsigned int: the upper half of their
+  registers is ignored. Any user may call it; it needs no privilege, the
+  table is the same for every process, and a lookup never loads a file
+  system module. Index i and name N correspond exactly when option 2 of
+  i writes N and option 1 of N returns i; names are unique, non-empty,
+  printable ASCII without spaces (e.g. "proc", "tmpfs", "ext4"). On Poly
+  the table must list the types Poly knows (at least proc and tmpfs),
+  in the order and with the names /proc/filesystems shows.
+returns:
+  option_1: "index (0 .. count-1) of the type whose name equals the string exactly (case-sensitive, no trimming); arg2 ignored"
+  option_2: "0; the buffer holds name + NUL (strlen+1 bytes written; bytes before the buffer and after the NUL keep their values, so a shorter name written over a longer one leaves the longer one's tail after the NUL); a buffer that ends exactly at the NUL right before an inaccessible page works; args 3..6 ignored"
+  option_3: "the number of registered types (>= 1; 33 on the oracle); stable from call to call; all other arguments ignored, even unreadable pointers"
+  order: "index order is /proc/filesystems line order: the name at index i is the text after the tab on line i (the line's \"nodev\" marker is not part of the name), and the count is its number of lines"
+  option_width: "only the low 32 bits of option count, as a whole: 1|(1<<32) is option 1, 3|(0x7fff<<40) is option 3; 0x80000003, 1<<32 (=0) and (1<<32)|4 are EINVAL"
+  index_width: "only the low 32 bits of the option-2 index count: 1<<32 is index 0, (1<<32)|count is EINVAL; -1 is 0xffffffff (EINVAL)"
+  read_only_name: "option 1 only reads the name: a string in read-only memory works"
+errors:
+  bad_option: "EINVAL (22): option (low 32 bits) not 1, 2 or 3 (0, 4, 5, 100, -1, -3, 0x80000003); decided before any argument is looked at (NULL or unreadable pointers still EINVAL)"
+  unknown_name: "EINVAL (22): option 1 with a string that is not exactly a registered name: unknown names, \"\" (empty is EINVAL, not ENOENT), other case (\"PROC\", \"Proc\"), a prefix (\"pro\"), leading/trailing space, trailing slash, a leading tab, \"nodev\", \".\"; not a module name either (\"xfs\" when xfs is not registered is EINVAL and the count does not change)"
+  name_fault: "EFAULT (14): option 1 and a byte of the name before its NUL (within its first 4096 bytes) is unreadable: NULL, low addresses, kernel or non-canonical addresses, a name running into an inaccessible page"
+  name_too_long: "EINVAL (22), never ENAMETOOLONG: option 1 reads at most 4096 bytes of the name; a name of 4095 or more characters is EINVAL; if the first 4096 bytes contain no NUL the result is EINVAL even when byte 4097 is unreadable, while a NUL-less run of 4095 or fewer bytes followed by an unreadable byte is EFAULT"
+  bad_index: "EINVAL (22): option 2 with an index (low 32 bits, unsigned) >= count (count, count+1, count+1000, 0x7fffffff, 0x80000000, 0xffffffff); checked before the buffer: NULL, unwritable or read-only buffers with a bad index are EINVAL and the buffer is not touched"
+  buf_fault: "EFAULT (14): option 2 with a valid index and a buffer whose name+NUL bytes are not all writable: NULL, low addresses, kernel addresses, a read-only page (also string literals), a buffer whose name or NUL would land on an inaccessible page. The bytes that fit before the fault may have been written (on the oracle the leading bytes were); tests do not check them"
+  order: "option, then (option 1) the name read (EFAULT / EINVAL for no NUL within 4096 bytes) then the lookup (EINVAL); (option 2) the index (EINVAL) then the buffer write (EFAULT)"
+side_effects: "none apart from option 2's write of name + NUL into the buffer; no module is loaded, the table does not change"
+threading: "no thread-specific behaviour; a forked child sees the same count, indexes and names"
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
