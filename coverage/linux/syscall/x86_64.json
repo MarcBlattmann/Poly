@@ -30,7 +30,7 @@
 {"symbol":"connect","number":42,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"copy_file_range","number":326,"src":["linux-syscall-tbl"]},
 {"symbol":"creat","number":85,"src":["linux-syscall-tbl"]},
-{"symbol":"delete_module","number":176,"src":["linux-syscall-tbl"]},
+{"symbol":"delete_module","number":176,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"dup","number":32,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"dup2","number":33,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"dup3","number":292,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
