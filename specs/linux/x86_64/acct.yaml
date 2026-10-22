@@ -1,0 +1,99 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/acct                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64), CONFIG_BSD_PROCESS_ACCT=y, CONFIG_BSD_PROCESS_ACCT_V3=y"
+  machine: >
+    home server, x86-64; tests run as a normal user (uid 1001, no
+    capabilities), umask 022. The unprivileged behaviour (every call
+    EPERM) was observed by running and tracing the tests. Root could not
+    be observed on this host: the privileged behaviour below comes from
+    acct(2), acct(5), proc(5) and linux/acct.h, and the root tests encode
+    it (they run as root on Poly, and are compared wherever the
+    reference runs as root).
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  acct(filename) (syscall 163) switches BSD process accounting on or off
+  for the caller's pid namespace and returns 0. The very first thing it
+  checks is CAP_SYS_PACCT (20) in the caller's effective set: without it
+  every call is EPERM (1), whatever the argument (NULL, a valid file, a
+  missing file, a directory, "", a bad pointer, a name that is too long);
+  nothing is looked up or changed. With the capability, acct(NULL) switches
+  accounting off (0, also when it already is off). acct(path) opens path
+  once, for writing in append mode, without creating it and following
+  symlinks, with the caller's normal file permissions (root without
+  CAP_DAC_OVERRIDE needs write permission on the file and search
+  permission on the directories); the path must name a regular file. From
+  then on every process of that pid namespace that ends (its last thread
+  exits) appends one 64-byte record (struct acct_v3, linux/acct.h and
+  acct(5)) to that open file, before the process can be reaped by its
+  parent; records are in order of termination. The open file is what
+  counts: renaming the file later does not matter. Turning accounting off
+  or switching it to another file first appends one last record to the
+  old file, describing the process that called acct (written before acct
+  returns); switching it on writes nothing. Bytes already in the file
+  (and bytes others write to it meanwhile) are kept: records always go at
+  the current end. A pid namespace's accounting is separate: a process
+  that is pid 1 of a new pid namespace starts with accounting off there
+  and turning it on there records only processes of that namespace.
+returns:
+  success: "0, for acct(NULL) (also when accounting is already off) and for acct(path) that switched it on or to a new file"
+  record_layout: >
+    64 bytes, little-endian, struct acct_v3: byte 0 ac_flag; byte 1
+    ac_version = 3; u16 ac_tty at 2; u32 at 4 ac_exitcode, 8 ac_uid, 12
+    ac_gid, 16 ac_pid, 20 ac_ppid, 24 ac_btime; IEEE float ac_etime at 28;
+    eight comp_t (u16) at 32..47: ac_utime, ac_stime, ac_mem, ac_io,
+    ac_rw, ac_minflt, ac_majflt, ac_swaps; ac_comm[16] at 48. Unused
+    bytes are 0.
+  ac_flag: >
+    AFORK (0x01) when the process forked and never exec'd; AXSIG (0x10)
+    when a signal killed it (clear for exit/exit_group). ACORE (0x08) for
+    a core dump. ASU (0x02) is not checked by the tests.
+  ac_exitcode: "the wait status: exit_group(7) gives 0x700, SIGKILL gives 9"
+  ac_tty: "0 when the process has no controlling terminal (e.g. after setsid)"
+  ac_uid_gid: "real uid and gid when the process ended (a changed effective id alone does not show)"
+  ac_pid_ppid: >
+    tgid and parent tgid as numbered in the pid namespace whose accounting
+    writes the record: the first child of pid 1 in a fresh namespace is
+    pid 2 with ppid 1; a parent outside that namespace shows as 0.
+  ac_btime: "process start, seconds since the Epoch (wall clock), within a couple of seconds"
+  ac_etime: "elapsed time since the process started, as a float in units of 1/100 s (300 ms sleep gives about 30)"
+  ac_utime_stime: "user and system CPU time in 1/100 s, comp_t (13-bit mantissa, 3-bit base-8 exponent: value = (c & 0x1fff) << (3 * (c >> 13)))"
+  ac_comm: "command name at exit (as set by exec or PR_SET_NAME), at most 15 bytes, NUL-padded to 16"
+  closing_record: >
+    acct(NULL) with accounting on, and acct(other) with accounting on,
+    first append a record about the calling process (still running): its
+    ac_pid (1 for pid 1 of the namespace), ac_ppid, ac_uid, ac_gid,
+    ac_comm, ac_version 3; it is in the file when acct returns.
+errors:
+  no_privilege: "EPERM (1) without CAP_SYS_PACCT in the effective set; checked before anything else, also for NULL, bad pointers and bad paths"
+  bad_pointer: "EFAULT (14)"
+  empty_name: "ENOENT (2)"
+  missing: "ENOENT (2); the file is never created"
+  not_a_directory: "ENOTDIR (20) for a path through a regular file"
+  symlink_loop: "ELOOP (40)"
+  name_too_long: "ENAMETOOLONG (36) for 4096 bytes before the NUL"
+  directory: "EISDIR (21), also for /"
+  not_regular: "EACCES (13) for a non-regular file that can be opened (character device node, also through a symlink)"
+  permission: "EACCES (13) without write permission on the file or search permission on a directory (when CAP_DAC_OVERRIDE is not effective)"
+  read_only_fs: "EROFS (30) for a file on a read-only mount"
+  after_failure: "a failed call changes nothing: accounting stays as it was"
+side_effects: >
+  While on, one record per ended process of the namespace is appended to
+  the file. The file is held open by the kernel until accounting is
+  switched off or to another file (or the pid namespace ends). Accounting
+  is suspended while free space on the file's filesystem is low
+  (/proc/sys/kernel/acct: resume at 4 %, suspend at 2 %, checked every
+  30 s); the tests never get near that.
+threading: "a multithreaded process gives one record, when its last thread exits"
+ordering:
+  - "a process's record is in the file before its parent's wait4 for it returns"
+  - "records are in order of termination; a child that ends before its parent comes first"
+  - "the closing record of acct(NULL) / acct(other) is the old file's last record and is written before acct returns"
+timing:
+  typical: "microseconds per call; a record write per ended process"
+  guarantees: "none"
+tests:
+  visible: 13  # count in <symbol>.tests/
+  held_out: 6  # count kept by the diff runner
