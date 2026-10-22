@@ -1,0 +1,81 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/modify_ldt           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64, CONFIG_MODIFY_LDT_SYSCALL=y)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  modify_ldt(func, ptr, bytecount) (syscall 154) reads or writes the
+  calling address space's local descriptor table (LDT): up to 8192
+  (LDT_ENTRIES) 8-byte segment descriptors, entry i reachable from user
+  code through selector i<<3 | 4 (TI) | RPL. func is a 32-bit int (upper
+  half of the register ignored): 0 reads the table, 1 writes one entry
+  in the old mode, 0x11 writes one entry in the new mode, 2 reads the
+  "default LDT" (always zero bytes); any other value is ENOSYS. A write
+  takes a 16-byte struct user_desc {u32 entry_number; u32 base_addr;
+  u32 limit; u32 flags} (asm/ldt.h; flags bits from bit 0: seg_32bit,
+  contents (2 bits), read_exec_only, limit_in_pages, seg_not_present,
+  useable, lm; higher bits ignored), and bytecount must be exactly 16.
+  A process starts without an LDT; the first successful write (even one
+  that only clears an entry) creates one, which then exists for the life
+  of the address space. The result is a 32-bit int: 0 for writes, the
+  byte count for reads; errors come back in %rax zero-extended from 32
+  bits (EINVAL is 0x00000000ffffffea, not -22 sign-extended), so a
+  caller treating rax as a 64-bit signed value sees a large positive
+  number.
+returns:
+  write: "0 (func 1 and 0x11)"
+  read0_no_ldt: "func 0 in a process that never wrote its LDT returns 0 for any ptr and count (NULL, unmapped, count 0 or huge) and writes nothing"
+  read0_with_ldt: "func 0 returns min(count, 65536) and fills that many bytes at ptr with the table viewed as 8192 descriptors of 8 bytes indexed by entry number; entries never written (or cleared) are 8 zero bytes; a count that is not a multiple of 8 ends with a partial descriptor; nothing past the returned count is written; count 0 returns 0 (NULL ptr fine)"
+  read2: "func 2 returns min(count, 128) and fills that many bytes with zeros, with or without an LDT; never shows the process's table"
+  descriptor_format: >
+    the 8 bytes read back for a written entry (little-endian u64):
+    bits 0-15 limit bits 0-15; bits 16-39 base bits 0-23; bits 40-43
+    type = 1 (accessed, always set) | 2 if read_exec_only is 0
+    (writable data / readable code) | contents<<2; bit 44 = 1
+    (code/data); bits 45-46 DPL = 3; bit 47 present = !seg_not_present;
+    bits 48-51 limit bits 16-19; bit 52 AVL = useable with func 0x11,
+    always 0 with func 1; bit 53 (long mode) always 0, lm is ignored;
+    bit 54 = seg_32bit; bit 55 = limit_in_pages; bits 56-63 base bits
+    24-31. Limit bits above 19 are dropped. Examples: base 0x1000 limit
+    0xfff seg_32bit -> 0x0040f30010000fff; base 0x12345678 limit
+    0xabcde seg_32bit contents 2 -> 0x124afb345678bcde; base 0 limit 0
+    all flags 0 with func 0x11 -> 0x0000f30000000000
+  contents: "0 data, 1 expand-down data, 2 code, 3 conforming code (only with func 0x11 and seg_not_present 1)"
+  sixteen_bit: "seg_32bit 0 (16-bit segments) is accepted with both funcs"
+  empty: "a user_desc with read_exec_only 1 and seg_not_present 1 and everything else 0 (lm and bits above it ignored) clears the entry to 8 zero bytes, with func 1 or 0x11, also an entry never written; base 1, useable, seg_32bit or contents set make it not empty (a not-present descriptor is stored)"
+  old_mode_clear: "func 1 with base_addr 0 and limit 0 clears the entry whatever the other flags (seg_32bit, contents 2, pages, useable); func 0x11 stores an ordinary descriptor with base and limit 0 instead"
+  rewrite: "writing an entry again replaces it; other entries are untouched"
+  cpu_view: "the CPU uses the table at once: for selector entry<<3|7, lar gives descriptor bits 40-55 in bits 8-23 (e.g. 0x40f300), lsl the byte limit (limit<<12|0xfff with limit_in_pages), verr/verw follow readable/writable, and the selector loads into %ds/%es; not-present entries still pass lar; cleared and never-written entries and indexes past the table fail lar/lsl; loading does not change the descriptor read back"
+errors:
+  unknown_func: "ENOSYS (38; rax 0xffffffda): low 32 bits of func not 0, 1, 2 or 0x11 (e.g. 3, 0x10, 0x12, 0x101, 0x7fffffff, -1, 0x80000000); checked first, before the pointer"
+  bad_count: "EINVAL (22): write with bytecount != 16, all 64 bits compared (0, 15, 17, 16 | 1<<32, ~0 are EINVAL); checked before the pointer (NULL with a bad count is EINVAL)"
+  write_fault: "EFAULT (14): any of the 16 bytes of the user_desc unreadable (NULL, 0x1000, non-canonical, kernel address, PROT_NONE, struct running into an unmapped page); a read-only struct is fine; checked before the entry number and contents"
+  bad_entry: "EINVAL (22): entry_number >= 8192 (unsigned: 8192, 8193, 0x80000007, 0xffffffff), even when the descriptor would be empty"
+  conforming: "EINVAL (22): contents 3 with func 1 (even with base 0 and limit 0, i.e. this check comes before the old-mode clear) or with seg_not_present 0"
+  read_fault: "EFAULT (14): func 0 with an LDT, or func 2, when any of the min(count, clamp) bytes at ptr is not writable (NULL with count > 0, read-only page, buffer running into a read-only or unmapped page, huge count over a short mapping); a buffer exactly as long as the clamped count works"
+  no_change: "a failed write changes nothing: the entry keeps its old value, and a failed first write creates no LDT"
+  result_width: "every error is returned as a 32-bit negative int zero-extended into %rax (0x00000000ffffffea EINVAL, 0x00000000fffffff2 EFAULT, 0x00000000ffffffda ENOSYS)"
+  order: "ENOSYS (func), then for writes EINVAL (count), EFAULT (struct), EINVAL (entry number), EINVAL (conforming); for reads only EFAULT (func 0 without an LDT never fails)"
+  no_memory: "ENOMEM (12): no memory for the table; not tested"
+side_effects: >
+  A successful write creates the address space's LDT if it had none and
+  sets one entry (or clears it); func 0 then returns the clamped count
+  instead of 0, also after every entry has been cleared again. The LDT
+  belongs to the address space: processes sharing it (CLONE_VM) share
+  one table both ways; fork gives the child a copy (a child of a
+  process without an LDT has none; the child's writes, new entries and
+  rewrites, do not reach the parent); execve gives a new address space
+  without an LDT (func 0 returns 0, old selectors fail lar), and the new
+  program can create one again. Reads have no side effects. No
+  privilege is needed for any function.
+threading: "one table per address space, shared by all threads and CLONE_VM processes; a write is visible to them when it returns"
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "< 50µs per call; a full 65536-byte read is a memory copy"
+  guarantees: none
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
