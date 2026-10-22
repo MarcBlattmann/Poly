@@ -166,7 +166,7 @@
 {"symbol":"memfd_secret","number":447,"src":["linux-syscall-tbl"]},
 {"symbol":"migrate_pages","number":256,"src":["linux-syscall-tbl"]},
 {"symbol":"mincore","number":27,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"mkdir","number":83,"src":["linux-syscall-tbl"]},
+{"symbol":"mkdir","number":83,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"mkdirat","number":258,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"mknod","number":133,"src":["linux-syscall-tbl"]},
 {"symbol":"mknodat","number":259,"src":["linux-syscall-tbl"]},
