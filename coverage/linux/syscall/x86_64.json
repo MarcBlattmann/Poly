@@ -172,7 +172,7 @@
 {"symbol":"mknodat","number":259,"src":["linux-syscall-tbl"]},
 {"symbol":"mlock","number":149,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"mlock2","number":325,"src":["linux-syscall-tbl"]},
-{"symbol":"mlockall","number":151,"src":["linux-syscall-tbl"]},
+{"symbol":"mlockall","number":151,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"mmap","number":9,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
 {"symbol":"modify_ldt","number":154,"src":["linux-syscall-tbl"]},
 {"symbol":"mount","number":165,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
