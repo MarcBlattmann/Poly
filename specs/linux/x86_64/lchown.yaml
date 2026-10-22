@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lchown               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, /tmp on ext4; tests run as a normal user (uid 1001, gid 1002, no supplementary groups, no capabilities), umask 022, static freestanding programs, raw syscalls. Root behaviour (b_ tests) could not be observed here (no root, and user-namespace root has no capabilities on this host); it is taken from chown(2), the root-observed fchownat spec (specs/linux/x86_64/fchownat.yaml) and the non-root observations, which it mirrors"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  lchown(path, owner, group) (syscall 94) sets the owner and group of the
+  file named by path and returns 0. It is chown (92) except that a
+  symbolic link in the last component is not followed: the link itself
+  gets the ids (links have their own uid, gid and ctime; mode stays
+  0777). It is the same as fchownat(AT_FDCWD, path, owner, group,
+  AT_SYMLINK_NOFOLLOW). Each id is the low 32 bits of its argument (higher
+  bits are ignored); 0xffffffff (-1) leaves that id as it is. A trailing
+  slash on the last component makes it a directory lookup, so "link/"
+  follows the link and acts on the directory it names. Without privilege
+  (CAP_CHOWN) the caller must own the file (file system uid = file uid)
+  to name any id: the uid may only be its own, the gid only its file
+  system gid or a supplementary group; anything else is EPERM. Root may
+  set any uid and gid up to 2^32-2 on any file. -1 for both ids is
+  allowed for anyone who can reach the file, owner or not, unless set-ID
+  bits must be cleared (below). A successful call on anything but a
+  directory clears the set-user-ID bit, and clears the set-group-ID bit
+  when group execute is set (set-group-ID without group execute stays);
+  this happens for every caller, root included, and even with -1 for
+  both ids. The sticky bit and the permission bits stay; directories keep
+  all their bits. A non-owner without CAP_FOWNER calling with -1, -1 on a
+  file whose bits would have to be cleared gets EPERM.
+returns:
+  success: "0, for any file type (regular, directory, FIFO, socket, symbolic link, dangling or looping symbolic link)"
+  ids: "only the low 32 bits of each argument count: (1<<32)|uid is uid, any value whose low 32 bits are 0xffffffff is -1; each id is set independently (uid only, gid only, both, neither)"
+  last_symlink: "not followed: the link's own uid/gid/ctime change, the target is not looked at (a dangling link, a link to itself or a link to a file of another user all work as the caller's own link). Symbolic links in earlier components are followed as usual"
+  trailing_slash: "\"x/\" (or \"x//\", \"x/.\") must be a directory: a link to a directory is followed and the directory changes, the link not; a link to a file or a file: ENOTDIR; a dangling link or missing name: ENOENT; a self loop: ELOOP"
+  relative: "relative paths start at the working directory (chdir/fchdir); \".\" and \"..\" work; \"..\" at \"/\" stays at \"/\"; a removed working directory finds no names (ENOENT) but \"..\" from it still works"
+  permissions_on_file: "none needed on the file itself (mode 0 works for its owner)"
+  inode: "ownership belongs to the inode: hard links and open descriptors see the change; open descriptors keep working"
+  privilege: "without CAP_CHOWN: owner (file system uid equal to the file's uid) may pass its own uid and/or its file system gid or a supplementary group id; a different uid, a group it is not in, or any id (even the file's current one, e.g. lchown(\"/\", 0, 0) by a non-root caller) on a file it does not own: EPERM. With CAP_CHOWN (root): any uid/gid 0..4294967294 on any file"
+  set_id_bits: "after a successful call on a non-directory (regular file, FIFO, socket): S_ISUID cleared; S_ISGID cleared if S_IXGRP is set, kept otherwise; S_ISVTX and rwx bits kept. Examples: 04755 -> 0755, 06755 -> 0755, 06745 -> 02745, 02775 -> 0775, 02644 -> 02644, 07777 -> 01777, 07767 -> 03767, 01755 -> 01755. Directories: all bits kept (07777 stays 07777). Symbolic links stay 0777. Root is treated the same"
+errors:
+  EPERM: "ownership rules above broken; also a non-owner without CAP_FOWNER passing -1, -1 on a file with S_ISUID, or S_ISGID together with S_IXGRP (observed on root's 04755 and 02755 files); -1, -1 on another user's plain file (e.g. \"/\", 0644 files) is 0. An EPERM changes nothing: ids, mode bits and ctime stay"
+  EACCES: "search (x) permission missing on a directory on the way (read permission is not needed); root passes"
+  ENOENT: "missing component, dangling link in a middle component or with a trailing slash, empty path; \"missing/..\" is still ENOENT"
+  ENOTDIR: "a non-directory (or a link to one) used as a directory, including a trailing slash after a file or file link and \"file/..\""
+  ENAMETOOLONG: "a component over 255 bytes (255 is fine), or a path of 4096 bytes or more including its NUL (4095 bytes of '/' plus NUL is fine)"
+  ELOOP: "more than 40 symbolic links followed in one lookup (middle components and trailing-slash last components, counted across the whole path, absolute and relative targets alike: a chain of 40 resolves, 41 does not); a link loop in a middle component"
+  EFAULT: "path pointer unreadable (NULL, 1, kernel addresses)"
+  EROFS: "on a read-only file system, even with -1, -1 and even for a non-owner (observed on squashfs): EROFS comes before EPERM"
+  order: "the path string first (EFAULT, then length ENAMETOOLONG, empty ENOENT), then the components left to right as the walk reaches them (missing ENOENT, non-directory ENOTDIR, name over 255 bytes ENAMETOOLONG, no search permission EACCES, too many links ELOOP), the first failing one decides: D/nope/<256 bytes> is ENOENT, D/f/<256 bytes> ENOTDIR, D/<256 bytes>/nope ENAMETOOLONG, D/closed/nope EACCES (non-root). Then read-only file system EROFS, then the ownership rules EPERM. Path errors win whatever the ids are"
+side_effects: "on success the ctime is set to the current time (also for -1, -1 and for a non-owner's -1, -1 on a plain file); atime, mtime, size and link count stay; the parent directory is not touched; set-ID bits as above. A failing call changes nothing."
+threading: "no thread-specific behaviour; uses the process's working directory and the calling thread's credentials (file system uid/gid, supplementary groups)"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
