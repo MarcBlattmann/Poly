@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_getparam       # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    x86_64 host, uid 1001 without capabilities, RLIMIT_RTPRIO 0/0, started at
+    nice 10; static freestanding test programs, raw syscalls. Real-time
+    values (SCHED_FIFO/SCHED_RR priorities, their inheritance over fork) and
+    reading across users as root come from sched_getparam(2),
+    sched_setscheduler(2) and sched(7) and are covered by needs=root tests.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sched_getparam(pid, param) (syscall 143) stores the scheduling priority
+  of the thread named by pid into *param (struct sched_param: a single
+  4-byte int, sched_priority) and returns 0. pid 0 means the calling
+  thread; a pid is a thread id (tid), so the pid of a process names its
+  main thread and the tid of any other thread names that thread. pid is a
+  32-bit int: the upper 32 bits of the register are ignored. The value is
+  0 for SCHED_OTHER (0), SCHED_BATCH (3) and SCHED_IDLE (5) threads, and
+  the real-time priority 1..99 for SCHED_FIFO (1) and SCHED_RR (2)
+  threads. No permission is needed: any existing thread may be read.
+returns:
+  success: "0, with *param set"
+  self: "pid 0, the caller's pid and the caller's tid all name the caller; under SCHED_OTHER the int becomes 0 whatever it held before (0x55555555, -1, 99, INT_MAX, INT_MIN), any number of times"
+  normal_policies: "SCHED_OTHER, SCHED_BATCH, SCHED_IDLE, with or without SCHED_RESET_ON_FORK (0x40000000), at any nice value: 0"
+  real_time: "SCHED_FIFO or SCHED_RR: the priority last set by sched_setscheduler or sched_setparam (10, 99, 1, 7, 50); a failed sched_setparam leaves it unchanged; after switching back to SCHED_OTHER: 0"
+  fork: "a child forked by a SCHED_FIFO/SCHED_RR process reports the parent's priority for itself; if the parent had SCHED_RESET_ON_FORK set the child is SCHED_OTHER and reports 0 while the parent keeps its priority"
+  other_process: "a live child, the parent, pid 1 (owned by root): found, value as above (0 for SCHED_OTHER)"
+  other_user: "no permission check: an unprivileged process (uid 65534) reads a root process's real-time priority, and pid 1 is readable as uid 1001"
+  zombie: "a child that has exited but is not yet reaped is still found and reports its priority (0, or its inherited real-time priority)"
+  other_thread: "the tid of another thread of the process reports that thread's value; a worker thread may read its own with pid 0 or its tid and the main thread's with the process's pid"
+  pid_width: "pid is taken as a 32-bit int: 0x100000000 means 0 (the caller), (N | 0x500000000) means N, 0xffffffff, 0x1ffffffff and 0x80000000 are negative (EINVAL), 0x17fffffff means 0x7fffffff (ESRCH)"
+  write_width: "exactly 4 bytes are written at param, at any alignment (aligned and odd addresses); the bytes around them keep their values; the last 4 bytes of a page followed by an unmapped page work"
+errors:
+  null_param: "param NULL: EINVAL (22), whatever pid is (0, own pid, a pid that does not exist, a negative pid)"
+  negative_pid: "pid < 0 as a 32-bit int (-1, -2, INT_MIN, -getpid()): EINVAL (22), even with an unusable pointer (address 1, a kernel address)"
+  no_such_thread: "no thread has that id (0x7fffffff, 0x3fffffff, 4194304, a reaped child): ESRCH (3), even with an unusable pointer (address 1, a kernel address, a read-only page)"
+  bad_pointer: "pid exists but param is not writable (address 1, the kernel address 0xffff800000000000, the vsyscall page 0xffffffffff600000, the non-canonical 0x0000800000000000, an unmapped page, a read-only page, a PROT_NONE page, 4 bytes starting 2 bytes before an unmapped page): EFAULT (14)"
+  check_order: >
+    1. param NULL or pid < 0 -> EINVAL; 2. pid not found -> ESRCH;
+    3. param not writable -> EFAULT. So a negative pid with a bad pointer
+    is EINVAL, a missing pid with NULL is EINVAL and a missing pid with a
+    bad pointer is ESRCH. (sched_setparam differs: there EFAULT comes
+    before ESRCH.)
+  untouched_on_error: "after EINVAL or ESRCH the caller's int keeps its previous value. After EFAULT on a range that is only partly writable, what (if anything) was written to the writable part is not specified; tests do not look at it"
+side_effects: >
+  None. The call only reads: the target's policy, SCHED_RESET_ON_FORK flag,
+  priority and nice value (getpriority) are the same afterwards.
+threading: >
+  Per thread: pid 0 is the calling thread, a tid names that thread only.
+  Changing a worker thread's policy (to SCHED_BATCH) leaves the main
+  thread's alone; both still read 0.
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+notes: >
+  Tests also use sched_setscheduler (144), sched_getscheduler (145),
+  sched_setparam (142), getpriority (140), setpriority (141), setresuid
+  (117), setresgid (119), waitid (247) and wait4 (61) to set up and observe
+  the target. An unprivileged thread may switch to SCHED_IDLE but may not
+  clear SCHED_RESET_ON_FORK once set (EPERM), so the non-root test keeps the
+  flag. The needs=root tests could not be run on the oracle host (no root
+  there) and follow the documented rules above.
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
