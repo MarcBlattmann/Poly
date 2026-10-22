@@ -1,0 +1,111 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/prctl                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022, under the pipeline's ptrace tracer"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  prctl(option, arg2, arg3, arg4, arg5) (syscall 157) reads or changes one
+  attribute of the calling thread or process, chosen by option. Only the
+  low 32 bits of option count (1<<32 | 3 is option 3). Unknown options
+  are EINVAL. Unless noted, GET options return the value as the result,
+  SET options return 0, a SET with an invalid value is EINVAL and changes
+  nothing, and unused arguments are ignored. Some options store an int
+  (or 8 bytes) at the user pointer arg2 instead and return 0; those fail
+  with EFAULT when the pointer is not writable. This sheet covers the
+  options listed under `returns` (constants from linux/prctl.h); options
+  not listed are not specified here, except that the ones under
+  errors.other_arch are EINVAL on x86-64.
+returns:
+  PR_SET_PDEATHSIG (1): "arg2 0..64 sets the parent-death signal (0 = none); anything else, also with bits above 31 set (1<<32 | 9), is EINVAL; args 3-5 ignored"
+  PR_GET_PDEATHSIG (2): "stores the signal as an int at arg2, returns 0; 0 at program start"
+  PR_GET_DUMPABLE (3): "returns 0 or 1 (1 for a normally started program); args ignored"
+  PR_SET_DUMPABLE (4): "arg2 0 or 1; any other value (2, -1, 1<<32) EINVAL; args 3-5 ignored"
+  PR_GET_KEEPCAPS (7): "returns 0 or 1 (0 at start); args ignored"
+  PR_SET_KEEPCAPS (8): "arg2 0 or 1, else EINVAL; args 3-5 ignored. keepcaps is the same flag as SECBIT_KEEP_CAPS (0x10) in PR_GET_SECUREBITS"
+  PR_GET_TIMING (13): "returns 0 (PR_TIMING_STATISTICAL)"
+  PR_SET_TIMING (14): "arg2 0 accepted (returns 0); anything else, including PR_TIMING_TIMESTAMP (1), EINVAL"
+  PR_SET_NAME (15): "sets the calling thread's name from the NUL-terminated string at arg2, reading at most 15 bytes (a longer string is cut to its first 15 bytes; a 15-byte run without NUL is fine). Any bytes allowed, empty name allowed. args 3-5 ignored"
+  PR_GET_NAME (16): "writes exactly 16 bytes at arg2: the name followed by NUL bytes up to byte 15; nothing after them. args 3-5 ignored. /proc/self/comm reads as the name plus a newline"
+  PR_GET_SECCOMP (21): "returns the seccomp mode, 0 for a normal process (after strict mode the call itself is fatal, see side_effects)"
+  PR_SET_SECCOMP (22): "arg2 1 (SECCOMP_MODE_STRICT) returns 0 and enters strict mode (arg3 ignored); 2 (filter) with arg3 NULL is EFAULT whether or not no_new_privs is set; 0, 3 and other modes EINVAL. Filter programs are not specified here"
+  PR_CAPBSET_READ (23): "returns 1 if capability arg2 is in the bounding set, else 0; valid capabilities are 0..40 (CAP_LAST_CAP = CAP_CHECKPOINT_RESTORE); 41, 63, -1, 1<<32 are EINVAL"
+  PR_CAPBSET_DROP (24): "without CAP_SETPCAP: EPERM, also for an invalid capability (41); nothing dropped"
+  PR_GET_TSC (25): "stores PR_TSC_ENABLE (1) or PR_TSC_SIGSEGV (2) as an int at arg2, returns 0; 1 at start"
+  PR_SET_TSC (26): "arg2 1 or 2, else (0, 3, -1) EINVAL. In mode 2 the rdtsc instruction (and rdtscp, seen on the oracle CPU) raises SIGSEGV in that thread; mode 1 makes it work again"
+  PR_GET_SECUREBITS (27): "returns the securebits (0 for a normal process; 0x10 while keepcaps is set)"
+  PR_SET_SECUREBITS (28): "without CAP_SETPCAP: EPERM"
+  PR_SET_TIMERSLACK (29): "arg2 is the thread's timer slack in ns, any non-zero 64-bit unsigned value (1, 1<<40, ULONG_MAX); 0 restores the thread's default slack; args 3-5 ignored"
+  PR_GET_TIMERSLACK (30): "returns the slack as the result (ULONG_MAX comes back as -1); args ignored. A started program has 50000 (and that is its default)"
+  PR_TASK_PERF_EVENTS_DISABLE (31): "returns 0"
+  PR_TASK_PERF_EVENTS_ENABLE (32): "returns 0"
+  PR_MCE_KILL (33): "arg2 PR_MCE_KILL_CLEAR (0) with args 3-5 zero resets to default; arg2 PR_MCE_KILL_SET (1) with arg3 PR_MCE_KILL_LATE (0), _EARLY (1) or _DEFAULT (2) and args 4-5 zero sets it; any other arg2, arg3 (3) or non-zero unused argument EINVAL"
+  PR_MCE_KILL_GET (34): "returns the policy: 2 (PR_MCE_KILL_DEFAULT) at start or after CLEAR or SET DEFAULT, else 0 or 1 as set; args 2-5 must be 0 (else EINVAL)"
+  PR_SET_CHILD_SUBREAPER (36): "any non-zero arg2 (5, -1, even 1<<32) turns the flag on, 0 off"
+  PR_GET_CHILD_SUBREAPER (37): "stores 0 or 1 as an int at arg2, returns 0; 0 at start"
+  PR_SET_NO_NEW_PRIVS (38): "arg2 must be exactly 1 (not 0, 2, 1<<32|1) and args 3-5 zero, else EINVAL; any user may set it; it can never be cleared; setting it again returns 0"
+  PR_GET_NO_NEW_PRIVS (39): "returns 0 or 1; args 2-5 must be zero, else EINVAL"
+  PR_GET_TID_ADDRESS (40): "stores 8 bytes at arg2: the thread's clear-child-tid address (from set_tid_address or CLONE_CHILD_CLEARTID), 0 if none (a started program has none; set_tid_address(NULL) makes it 0 again); returns 0"
+  PR_SET_THP_DISABLE (41): "any non-zero arg2 disables transparent huge pages for the process, 0 re-enables; args 3-5 must be zero, else EINVAL"
+  PR_GET_THP_DISABLE (42): "returns 0 or 1; args 2-5 must be zero, else EINVAL"
+  PR_CAP_AMBIENT (47): "arg2 sub-operation: IS_SET (1) returns 0/1 for capability arg3 (args 4-5 must be 0); RAISE (2) of a capability not both permitted and inheritable is EPERM; LOWER (3) returns 0; CLEAR_ALL (4) returns 0 and needs args 3-5 zero; other sub-operations (0, 5) EINVAL; an invalid capability (41) is EINVAL, also for RAISE (checked before EPERM)"
+  PR_SET_VMA (0x53564d41): "arg2 must be PR_SET_VMA_ANON_NAME (0), else EINVAL. Names the private anonymous memory from arg3 (page aligned, else EINVAL) for arg4 bytes (rounded up to pages; 0 returns 0 and does nothing) with the string at arg5: at most 79 bytes, printable characters except [ ] \\ $ ` (else EINVAL). /proc/self/maps shows the range (split from its neighbours as needed) with \"[anon:<name>]\" at the end of the line; an empty string is a name too (\"[anon:]\"), arg5 NULL removes the name (line ends in \"0 \")"
+  PR_GET_AUXV (0x41555856): "copies the process's auxiliary vector (the one on its initial stack, 16-byte pairs up to AT_NULL, then zero bytes) to arg2, at most arg3 bytes, and returns the size of the whole area, 448 bytes on this x86-64 kernel, whatever arg3 is; arg3 0 copies nothing (arg2 may be NULL)"
+errors:
+  unknown_option: "EINVAL (22): option (low 32 bits) not known: 0, 1000, 0x7fffffff, -1; also 1<<32 | 1000"
+  other_arch: "EINVAL (22) on x86-64, nothing written to arg2: PR_GET_UNALIGN (5), PR_SET_UNALIGN (6), PR_GET_FPEMU (9), PR_SET_FPEMU (10), PR_GET_FPEXC (11), PR_SET_FPEXC (12), PR_GET_ENDIAN (19), PR_SET_ENDIAN (20), PR_MPX_ENABLE_MANAGEMENT (43), PR_MPX_DISABLE_MANAGEMENT (44), PR_SET_FP_MODE (45), PR_GET_FP_MODE (46), PR_GET_TAGGED_ADDR_CTRL (56)"
+  bad_value: "EINVAL (22): see each option under returns; a failed SET changes nothing"
+  fault: "EFAULT (14): PR_SET_NAME when a byte it must read (up to the NUL, at most 15) is unreadable (NULL; 14 bytes with no NUL before an unmapped page); PR_GET_NAME when any of the 16 bytes is not writable (NULL, read-only data, fewer than 16 bytes before an unmapped page); PR_GET_PDEATHSIG, PR_GET_TSC, PR_GET_CHILD_SUBREAPER, PR_GET_TID_ADDRESS with arg2 NULL or read-only; PR_SET_SECCOMP mode 2 with arg3 NULL; PR_SET_VMA with an unreadable name; PR_GET_AUXV when arg2 cannot take the copy (NULL with arg3 64). A failed call changes nothing (the name stays)"
+  permission: "EPERM (1): PR_CAPBSET_DROP and PR_SET_SECUREBITS without CAP_SETPCAP; PR_CAP_AMBIENT RAISE of a capability not in both the permitted and inheritable sets"
+  no_mapping: "ENOMEM (12): PR_SET_VMA range not entirely mapped (runs into an unmapped page)"
+  vma_kind: "EINVAL (22): PR_SET_VMA on memory that is not private anonymous (e.g. the program's .bss mapping on the oracle)"
+  extra_args: "EINVAL (22) for non-zero unused arguments only where noted: PR_GET_NO_NEW_PRIVS, PR_SET_NO_NEW_PRIVS, PR_MCE_KILL, PR_MCE_KILL_GET, PR_SET/GET_THP_DISABLE, PR_CAP_AMBIENT, PR_GET_AUXV (arg4 or arg5). All other options here ignore them"
+side_effects: >
+  Scope of each setting. Per thread (another thread of the process does
+  not see the change): name, timer slack, no_new_privs, keepcaps, TSC
+  mode, machine-check kill policy, parent-death signal, clear-child-tid
+  address. Per process (one thread's change is seen by all): dumpable,
+  THP-disable, child-subreaper, the auxiliary vector. A new thread starts
+  with its creator's name and timer slack. fork: the child gets copies
+  of name, dumpable, keepcaps, TSC mode, timer slack, MCE policy,
+  no_new_privs and THP-disable; its parent-death signal and
+  child-subreaper are 0; its default timer slack is the parent's current
+  slack at the fork (PR_SET_TIMERSLACK 0 in the child goes back to that).
+  execve of an ordinary file (no set-id): the name becomes the last
+  component of the path passed to execve, cut to 15 bytes; dumpable
+  becomes 1, keepcaps 0; parent-death signal, child-subreaper,
+  no_new_privs, THP-disable, TSC mode, timer slack and MCE policy are
+  kept. Parent-death signal: when the thread that created the process
+  (with fork) exits, the process is sent the signal set with
+  PR_SET_PDEATHSIG (with the default action, it dies of it); this
+  happens even if that thread was not the main thread and the rest of
+  its process lives on. Child subreaper: a process whose parent exits is
+  re-parented to its nearest living ancestor that has the flag set: its
+  getppid() becomes that ancestor's pid, which can wait4 for it (also
+  with pid -1) and gets its exit status. Strict seccomp: afterwards only
+  read, write, exit (60) and rt_sigreturn are allowed; any other system
+  call (getpid, exit_group, prctl itself) kills the process with SIGKILL
+  before having any effect; read of a bad fd still just fails. TSC
+  SIGSEGV mode: rdtsc in that thread raises SIGSEGV (default action:
+  process killed by SIGSEGV). no_new_privs only changes the outcome of
+  later execve of set-id files and seccomp filter installs (not tested).
+threading: "see side_effects for which settings are per thread and which per process"
+ordering: []
+timing:
+  typical: "microseconds per call; a parent-death signal arrives within milliseconds of the parent's exit"
+  guarantees: none
+tests:
+  visible: 13  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: not covered (behaviour not specified by this sheet): seccomp
+# filter mode, PR_SET_MM and other root-only options, PR_SET_PTRACER
+# (Yama; returned 0 on the oracle), PR_GET/SET_SPECULATION_CTRL
+# (CPU dependent), PR_SCHED_CORE (ENODEV here), PR_SET/GET_IO_FLUSHER
+# (EPERM unprivileged), PR_SET/GET_MDWE, PR_SET/GET_MEMORY_MERGE, shadow
+# stack and syscall user dispatch options. Writing /proc/self/comm sets
+# the name too (bytes as written, a trailing newline is kept); the tests
+# only read it. Tests that start several processes or threads compare
+# output only (poly-diff: syscalls=off). Constants: linux/prctl.h,
+# linux/capability.h, linux/securebits.h, linux/seccomp.h.
