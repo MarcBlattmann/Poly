@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setdomainname        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities, no usable user namespaces), umask 022. Root-only behaviour (a successful call) comes from setdomainname(2) (getdomainname(2) page), uts_namespaces(7) and reading the kernel for behaviour; it is covered by needs=root tests that run in a private UTS namespace. It matches sethostname (specs/linux/x86_64/sethostname.yaml) field for field, with the domainname field in place of nodename"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  setdomainname(name, len) (syscall 171) sets the NIS domain name of the
+  calling process's UTS namespace to the len bytes at name and returns 0.
+  The caller needs CAP_SYS_ADMIN in its effective set (in the user
+  namespace that owns the UTS namespace); without it the call fails with
+  EPERM before any argument is looked at. len is a 32-bit signed int
+  (upper half of the register ignored) and must be 0..64
+  (__NEW_UTS_LEN), else EINVAL. Exactly len bytes are read; no
+  terminating NUL is needed and nothing past len is read. If any of those
+  bytes cannot be read, EFAULT and the name is unchanged. The bytes are
+  stored verbatim (no validation: any byte value, including NUL, is
+  accepted) in the 65-byte domainname, and every byte from len to 64
+  becomes NUL. The new name is what uname(2) reports as domainname (all
+  65 bytes, so bytes after an embedded NUL are visible there) and what
+  /proc/sys/kernel/domainname shows (up to the first NUL, then a
+  newline), for every process in the same UTS namespace, at once. The
+  host name (nodename) is a separate value and is never touched.
+returns:
+  success: "0"
+  name_used: "exactly the first len bytes: (\"abcdef\", 3) sets \"abc\"; a 5-byte name ending right before an inaccessible page works with len 5"
+  max_len: "len 64 succeeds: domainname is the 64 bytes followed by a NUL (the man page's \"64 bytes including the terminating null byte\" is off by one: 64 bytes plus the NUL fit)"
+  empty: "len 0 succeeds and sets the empty name (domainname is 65 NUL bytes); the name pointer is not read, so NULL or an unmapped address with len 0 also succeed"
+  len_width: "only the low 32 bits of len count, as a signed int: (1<<32)|4 is 4 (sets 4 bytes), 1<<32 is 0 (empty name), (1<<32)|65 is 65 (EINVAL)"
+  bytes: "stored byte for byte: 0xff, 0x01, '/', ' ', '\\n', '.', 0x7f are all accepted; an embedded NUL is kept with the bytes after it (\"ab\\0cd\", 5 gives domainname bytes a b NUL c d, then NULs); a leading NUL is kept too"
+  tail: "bytes len..64 of domainname are always NUL afterwards: a shorter name after a longer one leaves nothing of the old one"
+  read_only_name: "name is only read: a string in read-only memory works"
+  same_name: "setting the current name again succeeds (no change)"
+errors:
+  no_privilege: "EPERM (1): CAP_SYS_ADMIN not in the caller's effective set (a normal user; root after capset removed it, even if it is still permitted; euid 0 alone does not help). Checked first: with EPERM due, a len of 65, 4096, -1 or 0x80000000, a zero len, and a NULL or unmapped name are all EPERM, never EINVAL or EFAULT. Nothing changes (uname domainname and /proc/sys/kernel/domainname read the same before and after)"
+  bad_len: "EINVAL (22): len (as a 32-bit signed int) negative or > 64: 65, 66, 255, 4096, -1, 0x80000000, 0xffffffff. Checked after EPERM and before the name is read (NULL with len 65 or -1 is EINVAL). Nothing changes"
+  fault: "EFAULT (14): some byte of the len bytes at name cannot be read: NULL or a low address, an unmapped page, a PROT_NONE page, a kernel address (0xffffffff81000000), a non-canonical address (0x0000800000000000), or a name whose last bytes run into an inaccessible page. The name is unchanged (no partial copy)"
+  order: "EPERM, then EINVAL (len), then EFAULT (name)"
+side_effects: >
+  On success the domainname of the caller's UTS namespace is replaced. It
+  is seen at once by every process in that namespace (a forked child
+  shares its parent's namespace: each sees the name the other set). A
+  process in a different UTS namespace is not affected; a namespace made
+  with unshare(CLONE_NEWUTS) or clone(CLONE_NEWUTS) starts with a copy of
+  its creator's domain name and later changes in either one are not seen
+  by the other. No other uname field changes (sysname, nodename, release,
+  version, machine), and sethostname does not change the domain name
+  either. /proc/sys/kernel/domainname then reads the name up to its first
+  NUL followed by "\n" ("proc-domain\n"; the empty name reads "\n";
+  "ab\0cd" reads "ab\n"; a 64-byte name reads 65 bytes, the name and
+  "\n"). /proc/sys/kernel/hostname is unaffected. A failed call changes
+  nothing. There is no system call that reads the domain name back on
+  x86-64; uname(2) is the way. (Without any setdomainname the oracle's
+  domain name is "(none)", but tests must not rely on the starting
+  value.)
+threading: "the domain name is per UTS namespace, not per thread or process: a change is seen by all threads and processes sharing the namespace"
+ordering: []
+timing:
+  typical: "a few microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
