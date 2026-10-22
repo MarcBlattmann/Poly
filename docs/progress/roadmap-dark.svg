@@ -197,7 +197,7 @@
 <g><title>✔ Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed</title>
 <rect x="340.0" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds</title>
+<g><title>Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds (oracle runs on the owner's Windows PC instead of a VM, ADR 0075; first run: Poly matches Windows on all 29 checks; left: API tracer, Wine conformance tests as spec seeds)</title>
 <rect x="365.1" y="203.0" width="23.1" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
 <g><title>✔ NT object manager: handles, object namespace (\??, \Device, \BaseNamedObjects), reference counts</title>
