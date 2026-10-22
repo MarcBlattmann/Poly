@@ -1,0 +1,87 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/syslog
+oracle:
+  os: "Linux 7.0.0-30-generic (x86-64)"
+  machine: >
+    x86-64 host; tests ran as an unprivileged user (uid 1001, no capabilities)
+    with /proc/sys/kernel/dmesg_restrict = 1 and /proc/sys/kernel/printk =
+    "4 4 1 7". Privileged behaviour (the needs=root tests) could not be
+    observed on this oracle; it is taken from syslog(2) and from reading how
+    Linux behaves, and is checked by those tests on Poly as root.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  syslog(type, bufp, len) (number 103; glibc klogctl) controls the kernel
+  log buffer. type and len are C ints: only the low 32 bits of each
+  register count (len 0x100000000 is 0; type 0x100000001 is 1). Actions:
+  0 CLOSE and 1 OPEN do nothing; 2 READ waits for unread log bytes and
+  consumes up to len of them (what /proc/kmsg reads); 3 READ_ALL copies the
+  newest whole records that fit into len bytes without consuming anything;
+  4 READ_CLEAR is READ_ALL followed by CLEAR; 5 CLEAR makes later
+  READ_ALL/READ_CLEAR start after the current end (READ and SIZE_UNREAD are
+  unaffected); 6 CONSOLE_OFF saves the console level (first field of
+  /proc/sys/kernel/printk) unless one is already saved and sets it to the
+  minimum console level (third field); 7 CONSOLE_ON restores the saved
+  level, if any, and forgets it; 8 CONSOLE_LEVEL sets the console level to
+  len (1..8; a value below the minimum level is raised to it) and forgets
+  any saved level; 9 SIZE_UNREAD returns the bytes READ could still
+  consume; 10 SIZE_BUFFER returns the log buffer size. Arguments not used by
+  an action are ignored (any pointer, any length).
+  Permission comes first, before any argument check: a caller needs
+  CAP_SYSLOG or CAP_SYS_ADMIN in its effective set (the uid itself does not
+  matter: uid 0 with neither effective gets EPERM), except that READ_ALL
+  (3) and SIZE_BUFFER (10) are open to everyone while
+  /proc/sys/kernel/dmesg_restrict is 0. Without permission every action,
+  including CLOSE, OPEN and unknown types, and including calls with bad
+  arguments, fails with EPERM, never blocks and writes nothing. On the
+  oracle (dmesg_restrict 1) every call by an unprivileged process was EPERM.
+  Record format returned by READ, READ_ALL and READ_CLEAR: text lines, each
+  "<N>" (N decimal, facility * 8 + level) then, when printk timestamps are
+  on, "[seconds.micros] ", then the message and "\n"; a multi-line message
+  gives one such prefixed line per line. Nothing is NUL-terminated.
+returns:
+  close_open: "0"
+  read: "bytes read (> 0), after waiting for unread bytes; len 0 returns 0 at once"
+  read_all: >
+    bytes copied, 0 <= n <= len: the newest records that fit, whole records
+    only (a len smaller than the newest record gives 0); nothing written
+    past n; len 0 returns 0
+  read_clear: "as read_all, then clears"
+  clear_console_off_console_on_console_level: "0"
+  size_unread: "bytes still unread by READ, 0 <= n <= SIZE_BUFFER"
+  size_buffer: "log buffer size in bytes: a power of two, >= 4096, constant"
+errors:
+  no_permission: >
+    EPERM (1), for every type (also 0, 1, unknown and negative types) and
+    whatever the other arguments, when the effective set has neither
+    CAP_SYSLOG nor CAP_SYS_ADMIN; types 3 and 10 are exempt only while
+    dmesg_restrict is 0
+  bad_type: "EINVAL (22) for any type outside 0..10 (11, 99, -1, INT_MAX, INT_MIN), when permitted"
+  read_null_or_negative: >
+    EINVAL (22) for types 2, 3, 4 with a NULL bufp (even with len 0) or a
+    negative len; checked before the len 0 shortcut
+  read_bad_buffer: >
+    EFAULT (14) for types 2, 3, 4 when bufp..bufp+len is not a user address
+    range (e.g. kernel half); returned before READ waits and before
+    READ_CLEAR clears. READ_ALL into unmapped user memory is also EFAULT,
+    once a record is copied
+  console_level_range: "EINVAL (22) for type 8 with len < 1 or > 8 (0, 9, 10, -1, INT_MIN); level unchanged"
+  interrupted: "READ waiting for data and interrupted by a signal: EINTR/restart (ERESTARTSYS internally)"
+  order: "EPERM, then type check, then per-action argument checks (NULL/negative, then len 0, then address range)"
+side_effects: >
+  READ consumes what it returns (SIZE_UNREAD falls). READ_CLEAR and CLEAR
+  hide all current records from later READ_ALL/READ_CLEAR. CONSOLE_OFF,
+  CONSOLE_ON and CONSOLE_LEVEL change the console level visible as the
+  first field of /proc/sys/kernel/printk: e.g. "4 4 1 7" -> OFF -> "1 4 1 7"
+  -> ON -> "4 4 1 7"; OFF then LEVEL 4 then ON leaves 4 (LEVEL forgets the
+  saved level). READ_ALL, SIZE_UNREAD, SIZE_BUFFER, OPEN and CLOSE change
+  nothing. Failed calls change nothing.
+threading: "the log and the console level are system-wide; concurrent readers of READ share and race for the unread bytes"
+ordering: []
+timing:
+  typical: "microseconds for all actions except READ, which blocks until log data is unread"
+  guarantees: "EPERM and argument errors return at once (no blocking)"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
