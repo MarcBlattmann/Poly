@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/chroot
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host as uid 1001 (no capabilities, no user namespaces), /tmp on ext4; static freestanding test programs, raw syscalls. Error results observed directly; the results of a successful chroot (root only) come from chroot(2), getcwd(3), path_resolution(7) and the documented behaviour of the kernel, and the root-only tests were checked to fail cleanly (no hang, nothing left in /tmp) as non-root"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  chroot(path) (syscall 161) makes the directory named by path the root
+  directory of the calling process: from then on absolute paths, absolute
+  symbolic link targets and ".." at the root are resolved against it.
+  It changes nothing else: the current directory stays where it was
+  (possibly outside the new root), open descriptors stay open and keep
+  referring to what they referred to, and other processes (the parent
+  included) keep their root. The path is resolved like chdir's (relative
+  to the current directory, links followed, the target must be a
+  directory the caller may search); only after that does the call check
+  for CAP_SYS_CHROOT in the effective set and fail with EPERM without it.
+  The root is inherited by children created afterwards and kept across
+  execve. Repeated calls nest: each path is resolved from the current
+  root and current directory.
+returns:
+  success: "0; the calling process's root directory is now path's directory"
+  root_resolution: "absolute paths start at the new root; \"..\" of the new root (reached by any walk, from \"/\", the current directory or a link target) is the new root itself, so absolute paths and \"..\" from inside never leave it; names that exist only outside are ENOENT"
+  current_directory: "unchanged. When it is outside the new root, relative paths still work from it, \"..\" walks up from it past the new root (the root only stops a walk that reaches the root directory itself), and getcwd returns \"(unreachable)\" followed by the directory's full path from the real root (for example \"(unreachable)/\" when it was the old \"/\", length 15 with the NUL). chdir(\"/\") moves it into the new root, getcwd then gives \"/\""
+  escape: "chroot(\".\") with the current directory outside the root makes that directory the root (so a process that may chroot can move its root back up)"
+  descriptors: "not closed or changed. A directory descriptor opened before the call still resolves relative names from its directory, and \"..\" from it climbs above the new root; absolute names given with it still start at the new root. fchdir to such a descriptor puts the current directory outside the new root"
+  symlinks: "chroot follows symbolic links in every component, including the last (a link to a directory makes that directory the root). After the call, an absolute link target starts at the new root and \"..\" in a target stops there; the link text itself is unchanged"
+  nesting: "chroot inside a chroot resolves the new path from the current root (absolute) or the current directory (relative), so roots nest; chroot(\"/\") or chroot(\".\") at the root changes nothing visible"
+  inheritance: "fork children created afterwards have the new root; execve keeps it (the program path given to execve is resolved in the new root). The parent and any other process keep their own root"
+  mode_0_as_root: "with full root capabilities a directory of mode 0 may be the target (the permission override covers the search check)"
+errors:
+  privilege: "EPERM (1) when the effective capability set lacks CAP_SYS_CHROOT (18). Clearing just that bit from the effective set is enough to get EPERM; raising it again (still permitted) makes chroot work. With CAP_SYS_CHROOT as the only capability, chroot works but search permission is checked in full (mode 0 EACCES, mode 0100 enough)"
+  not_found: "ENOENT (2): missing name, empty string, dangling symbolic link (or a chain ending in one), missing directory in the middle (a later \"..\" does not undo it: D/nope/.. is ENOENT)"
+  not_a_directory: "ENOTDIR (20): a regular file (also with a trailing slash, \"/.\" or \"/..\" after it), a file used as a directory in the middle, a symbolic link to a file"
+  search_permission: "EACCES (13): search (execute) permission missing on a directory of the path prefix, or on the target directory itself (modes 0, 0400, 0200, 0644 all EACCES; 0100 passes). Inside a directory that may not be searched, \".\", \"..\" and missing names are EACCES too"
+  bad_pointer: "EFAULT (14): NULL, a low address, an unmapped page, a string that runs into an unmapped page before its NUL. A string ending right before an unmapped page is read normally"
+  name_too_long: "ENAMETOOLONG (36): a path of 4096 bytes or more before its NUL, whatever it contains; 4095 bytes is resolved. A single component of more than 255 bytes (255 is an ordinary name)"
+  loop: "ELOOP (40): more than 40 symbolic links followed in one resolution (a chain of 40 links resolves, 41 is ELOOP), a link to itself, two links pointing at each other, with or without a trailing slash, at the end or in the middle"
+  order: "the path string first (EFAULT, then ENAMETOOLONG for the whole length), then components left to right as the walk reaches them, each failing with ENOENT, ENOTDIR, EACCES (searching a directory), ENAMETOOLONG (a long name, only when every directory before it exists) or ELOOP; then search permission on the target directory itself (EACCES); only then the privilege check (EPERM). So a caller without CAP_SYS_CHROOT sees the path errors, not EPERM, for a bad path"
+  no_change_on_error: "a failed chroot leaves the root directory and the current directory unchanged"
+side_effects: "Changes the root directory of the calling process only (every thread sharing its file system information, CLONE_FS, sees the change; a fork child does not share it). Nothing is opened, closed or moved."
+threading: "the root directory is part of the file system information shared by threads created with CLONE_FS; no other thread-specific behaviour"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10
+  held_out: 5
