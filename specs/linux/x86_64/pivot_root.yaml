@@ -1,0 +1,106 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pivot_root           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: >
+    home server, x86-64; observed as a normal user (uid 1001, no
+    capabilities, no unprivileged user namespaces), umask 022. Everything
+    under "unprivileged" below was observed. Behaviour that needs
+    CAP_SYS_ADMIN could not be observed on this host and is taken from the
+    pivot_root(2) man page (man-pages 6.x); it is marked "(man page)".
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  pivot_root(new_root, put_old) (syscall 155, two path pointers, no flags)
+  changes the root mount of the caller's mount namespace: the mount at
+  new_root becomes the root mount and the old root mount is moved to
+  put_old, which must be at or below new_root. Returns 0. Every process or
+  thread of the namespace whose root directory or current directory was
+  the old root directory gets the new root instead; other current
+  directories stay as they are (one elsewhere on the old root is then seen
+  below put_old). Mounts keep their place within their trees: a mount below
+  the old root is afterwards below put_old, a mount below new_root is
+  afterwards below "/". The old root can then be removed with
+  umount2(put_old, MNT_DETACH). new_root and put_old may be the same
+  directory: with the current directory at the new root's mount point,
+  pivot_root(".", ".") and then umount2(".", MNT_DETACH) leave the new root
+  alone at "/".
+
+  Order of checks (observed): new_root is resolved first, then put_old,
+  and only then is the privilege checked. So without CAP_SYS_ADMIN a path
+  error is still reported as the path error (ENOENT, ENOTDIR, EFAULT,
+  ELOOP, ENAMETOOLONG, EACCES), and EPERM only when both arguments resolve
+  to directories. When both arguments are bad, new_root's error is the one
+  returned. Both paths are resolved like stat(2) (relative to the current
+  directory, following symlinks also in the last component) and must end
+  at a directory. The remaining checks (man page) need CAP_SYS_ADMIN in
+  the effective set and come after these.
+returns:
+  success: "0 (man page; observed tests as root check it)"
+  unprivileged: >
+    observed: -EPERM for any two arguments that both resolve to
+    directories, including ("/", "/"), (".", "."), a put_old outside
+    new_root, symlinks to directories; nothing changes (root directory,
+    current directory, mounts)
+errors:
+  new_root_lookup: >
+    observed, before the privilege check, for new_root: ENOENT (2) for a
+    missing name, a missing parent, a dangling symlink or the empty string
+    ""; ENOTDIR (20) for a regular file, a symlink to a file, "file/" and
+    "file/x"; EFAULT (14) for NULL or an unmapped pointer; ELOOP (40) for a
+    symlink loop; ENAMETOOLONG (36) for a path of 4096 bytes or more before
+    its NUL, or a component longer than 255 bytes (255 is fine); EACCES
+    (13) when a directory on the way lacks search permission (a directory
+    of mode 0 itself still resolves)
+  put_old_lookup: "observed: the same errors for put_old, checked after new_root resolved"
+  both_bad: >
+    observed: new_root's error wins: (missing, file) ENOENT, (missing, bad
+    pointer) ENOENT, (file, missing) ENOTDIR, (file, bad pointer) ENOTDIR,
+    (bad pointer, missing) EFAULT, (NULL, NULL) EFAULT
+  permission: >
+    EPERM (1) without CAP_SYS_ADMIN in the effective set (observed for a
+    caller with no capabilities; root that removed only CAP_SYS_ADMIN
+    from its effective set gets it too, and succeeds once it is back)
+  busy: "EBUSY (16) when new_root or put_old is on the current root mount; covers new_root \"/\" (man page)"
+  not_mount_point: "EINVAL (22) when new_root is not a mount point, e.g. a plain directory inside some other mount (man page)"
+  not_below: "EINVAL (22) when put_old is not at or below new_root (another mount, or reached with \"..\" out of new_root) (man page)"
+  shared: >
+    EINVAL (22) when the mount new_root is mounted on is MS_SHARED, or
+    put_old is a mount point that is MS_SHARED (man page; the man page also
+    lists new_root's own mount being shared and the current root's parent
+    mount being shared). Tests make every mount private first.
+  root_not_mount_point: "EINVAL (22) when the caller's root directory is not a mount point, e.g. after chroot(2) into a plain directory (man page; not tested)"
+  rootfs: >
+    EINVAL (22) when the current root is the initial ramfs (rootfs) mount,
+    which can never be pivoted (man page; not tested). The root tests
+    expect the root they start in (after unshare(CLONE_NEWNS)) to be an
+    ordinary mount that can be pivoted.
+side_effects: >
+  On success (man page): the root mount of the namespace changes; the old
+  root mount, with everything mounted below it, is attached at put_old;
+  root and current directories of all processes of the namespace that
+  were the old root directory become the new root. The caller's own
+  current directory elsewhere is not changed (follow with chdir("/")).
+  Open files keep working. On failure nothing changes (observed for the
+  unprivileged errors).
+threading: "acts on the whole mount namespace: other threads and processes in it are moved too (man page)"
+ordering:
+  - "new_root path lookup, then put_old path lookup, then the CAP_SYS_ADMIN check (observed), then the mount checks (man page)"
+test_notes: >
+  Unprivileged tests first empty all three capability sets with capset
+  (allowed for any user), so root and a normal user see the same
+  results, and no test can ever pivot the runner's root. Tests marked
+  needs=root run every pivot in a forked child that first calls
+  unshare(CLONE_NEWNS) (syscall 272, flag 0x00020000) and
+  mount("none", "/", NULL, MS_REC | MS_PRIVATE, NULL), and bails out
+  without pivoting when either fails; so those tests also need unshare
+  of the mount namespace, recursive propagation changes (MS_PRIVATE,
+  MS_SHARED), tmpfs mounts, umount2 and capget/capset. The namespace,
+  with its mounts, goes away when its last process exits.
+timing:
+  typical: "microseconds (unprivileged error paths: about the cost of the path lookups)"
+  guarantees: "none"
+tests:
+  visible: 12  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
