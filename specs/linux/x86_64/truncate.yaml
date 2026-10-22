@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/truncate
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4, /dev/shm tmpfs; static freestanding test programs, raw syscalls, also under the pipeline's ptrace tracer"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  truncate(path, length) (syscall 76; rdi = path, rsi = length as a signed
+  64-bit value) sets the size of the regular file named by path to length
+  bytes and returns 0. Shrinking discards the data past the new end for good;
+  growing adds bytes that read as zeros (a later grow after a shrink shows
+  zeros, not the old data). The path is looked up like open's: relative to the
+  working directory, every symbolic link followed, also in the last component
+  (the link's target changes, the link itself does not); nothing is ever
+  created. No file descriptor is needed: the file may be open anywhere, also
+  read-only. On success the file's mtime and ctime are set to the current time
+  (the same value for both), also when length equals the current size; atime
+  is not touched. A successful call by a caller without CAP_FSETID clears the
+  set-user-ID bit, and the set-group-ID bit if group execute is set as well,
+  also when the size does not change; other mode bits stay. ftruncate (77)
+  does the same through a descriptor.
+returns:
+  success: "0"
+  shrink: "size becomes length; bytes before it are kept, bytes after it are gone"
+  grow: "size becomes length; bytes from the old end up to length read as 0; a file far larger than its data (e.g. 4 GiB + 5 bytes) is fine: the exact size is reported, reads at the end return 0"
+  same_size: "0; nothing but mtime/ctime (and suid/sgid clearing) changes"
+  open_descriptors: "every open description of the file sees the new size immediately; their file offsets do not move. A read at an offset past the new end returns 0; a write there leaves a hole that reads as zeros; an O_APPEND write goes to the new end"
+errors:
+  negative_length: "EINVAL (any length with the top bit set, e.g. -1 or INT64_MIN), checked before the path is even read: a missing path, a directory, a FIFO, NULL or another unreadable pointer, an over-long path, a running program file all give EINVAL with a negative length"
+  bad_pointer: "EFAULT for an unreadable path pointer (NULL, 8, a kernel address)"
+  empty_path: "ENOENT"
+  missing: "ENOENT for a missing last name or directory on the way, a dangling symbolic link; nothing is created"
+  not_a_directory: "ENOTDIR when a regular file (or a link to one) is used as a directory: \"file/x\", \"file/\", \"file/.\""
+  name_too_long: "ENAMETOOLONG for a component of 256 bytes or more, or a path of 4096 bytes or more including its NUL; 255-byte names and 4095-byte paths are looked up normally"
+  loop: "ELOOP for a symbolic link loop (a link to itself), in the last component or on the way"
+  search_permission: "EACCES when a directory on the way may not be searched (no x for the caller), also when the name in it does not exist"
+  directory: "EISDIR for a directory (\"dir\", \"dir/\", \"dir/.\", \"dir/..\", \"/\", a link to a directory), whatever its mode and whatever the length (if not negative)"
+  not_regular: "EINVAL for any other non-regular file (FIFO, character device such as /dev/null), also when its mode grants no write permission"
+  write_permission: "EACCES when the caller may not write the file (mode 0444 or 0 for its owner, or for another user only \"other\" bits counting); also for a length equal to the current size. Read permission is not needed (0222 works). The directory's own write permission does not matter."
+  text_busy: "ETXTBSY when the file is a program some process is running (execve'd), for any non-negative length including its current size; works again once that process has ended"
+  file_size_limit: "EFBIG when length is greater than both the current size and the caller's RLIMIT_FSIZE soft limit; the caller is then also sent SIGXFSZ (default action: terminate with core; pending if blocked; nothing if ignored). Shrinking, or keeping the size, is allowed whatever the limit, also from above it; growing up to exactly the limit is allowed; with a limit of 0 only length 0 or shrinking works."
+  file_system_maximum: "EFBIG when length is beyond the largest file the file system supports (ext4 with 4 KiB blocks: 2^44 - 1 and more, also INT64_MAX). On tmpfs every non-negative length up to INT64_MAX is accepted. Tests do not depend on this."
+  order: "When several problems apply, the first in this order decides: (1) negative length EINVAL; (2) the path string as a whole (EFAULT, ENAMETOOLONG for 4096+ bytes, empty ENOENT); (3) the walk, components left to right (ENOENT, ENOTDIR, ENAMETOOLONG for a long component, EACCES for search, ELOOP), as for ftruncate's truncate_path_order; (4) EISDIR for a directory; (5) EINVAL for another non-regular file; (6) EACCES for missing write permission; (7) ETXTBSY; (8) EFBIG (RLIMIT_FSIZE or file system maximum). So a read-only file truncated past RLIMIT_FSIZE is EACCES (no SIGXFSZ), a running program truncated past it is ETXTBSY."
+side_effects: "On success: size, mtime and ctime change (also for an unchanged size), suid/sgid cleared as in the summary. On any error nothing changes: size, data, mode and all timestamps stay. Nothing is created; symbolic links themselves never change. SIGXFSZ on EFBIG from RLIMIT_FSIZE only."
+threading: "no thread-specific behaviour; the working directory and RLIMIT_FSIZE are the process's"
+ordering: []
+timing:
+  typical: "microseconds; growing to gigabytes takes no longer than a few bytes (no data is written)"
+  guarantees: "none; does not block"
+tests:
+  visible: 9
+  held_out: 4
