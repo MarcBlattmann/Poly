@@ -334,7 +334,7 @@
 {"symbol":"syncfs","number":306,"src":["linux-syscall-tbl"]},
 {"symbol":"sysfs","number":139,"src":["linux-syscall-tbl"]},
 {"symbol":"sysinfo","number":99,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"syslog","number":103,"src":["linux-syscall-tbl"]},
+{"symbol":"syslog","number":103,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"tee","number":276,"src":["linux-syscall-tbl"]},
 {"symbol":"tgkill","number":234,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"time","number":201,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
