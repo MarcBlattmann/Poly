@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rmdir                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, /tmp on ext4; tests run as a normal user (uid 1001, gid 1002, no capabilities), umask 022, static freestanding programs, raw syscalls, also under the pipeline's ptrace tracer. Root's results (permission checks passed, the sticky-bit rule for other users, EBUSY on a mount point) are from rmdir(2), path_resolution(7), capabilities(7) and mount(2), not observed here (unprivileged user namespaces have no capabilities on this machine)."
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  rmdir(path) (syscall 84) removes an empty directory and returns 0. It
+  behaves as unlinkat(AT_FDCWD, path, AT_REMOVEDIR): a relative path starts
+  at the working directory. Empty means holding nothing but "." and "..";
+  any other entry (file, hidden file, subdirectory, symbolic link, FIFO,
+  hard link) gives ENOTEMPTY. The name is gone at once and can be reused;
+  the parent's link count drops by one. The last name is never followed if
+  it is a symbolic link (ENOTDIR, also with a trailing slash); symbolic
+  links on the way are followed. A last component "." is EINVAL, ".." is
+  ENOTEMPTY, "/" is EBUSY. The directory's own mode does not matter; the
+  caller needs write and search permission on the parent, and in a sticky
+  parent must own the directory or the parent (root excepted). Descriptors
+  and working directories still on the removed directory stay valid but
+  it behaves as dead: link count 0, no entries, nothing can be created in
+  it.
+returns:
+  success: "0; the name is gone at once (stat, open, a second rmdir: ENOENT) and can be made again as a directory or a file"
+  parent_nlink: "the parent's link count drops by one per directory removed; a failed rmdir changes no link count"
+  empty: "only \".\" and \"..\" may remain; a directory emptied by unlink/rmdir of its entries can be removed; a file that was unlinked but is still open does not count; the directory's own mode (0, 0555, 01777) does not matter"
+  trailing_slashes: "allowed on a directory (\"D/a/\", \"D/a///\"); repeated slashes anywhere count as one; \"//\" at the start is \"/\""
+  dots_on_the_way: "\".\" components stay put, \"..\" goes to the parent (at \"/\" it stays at \"/\"): \"D/./e\", \"D/g/../f\", \"/../../tmp/D/h\" work"
+  relative: "relative paths start at the working directory (\"d\", \"./d\", \"../D/d\"); an absolute path ignores it"
+  symlinks_on_the_way: "followed (relative, absolute, followed by \"./\"): rmdir(\"link/sub\") removes sub in the link's target"
+  open_descriptor: "removing a directory that is open succeeds; the descriptor (also an O_PATH one) stays valid: fstat shows the same inode, a directory, st_nlink 0; getdents64 on it fails with ENOENT; openat O_CREAT, mkdirat and symlinkat relative to it fail with ENOENT; a missing name relative to it ENOENT; \".\" relative to it stats the dead directory (nlink 0); \"..\" relative to it is the old parent; unlinkat(fd, \".\", AT_REMOVEDIR) EINVAL. A new directory made under the old name is a different directory (nlink 2) and the old descriptor still sees the dead one."
+  working_directory: "removing the working directory (by any name) succeeds; the process stays there: getcwd ENOENT, stat(\".\") works with st_nlink 0, rmdir(\".\") EINVAL, rmdir(\"..\") ENOTEMPTY, creating a file or directory relative to it ENOENT, a missing name ENOENT, \"../y\" still reaches the old parent and chdir(\"..\") works (getcwd then gives the parent). The same holds for another process whose working directory it was."
+  mount_point_contents: "directories inside a mounted file system are removed as usual"
+errors:
+  not_empty: "ENOTEMPTY for any entry besides \".\" and \"..\" (names like \".hidden\", \"...\", \"..x\" count), for a last component \"..\" (\"D/e/..\", \"D/e/../\", \"..\", \"/..\", \"/../..\", \"/tmp/..\"); nothing is removed. Linux never gives EEXIST here."
+  not_directory: "ENOTDIR: a regular file or FIFO, with or without a trailing slash; a symbolic link as the last name of any kind (to a directory, relative or absolute, to a file, dangling, a link to itself), with or without trailing slashes; the link and its target are left alone and a dangling target is not created. Also a non-directory on the way: \"D/f/x\", \"D/f/x/y\", \"D/f/.\", \"D/f/..\", \"D/f/../d\", \"D/lfile/x\""
+  dot: "EINVAL: last component \".\": \"D/e/.\", \"D/e/./\", \"D/e/.//\", \".\", \"./\", \"/.\", also a mount point's \"m/.\" and \".\" in a removed working directory"
+  root: "EBUSY: \"/\", \"//\", \"///\" (a path of only slashes)"
+  mount_point: "EBUSY (root only, from rmdir(2), not observed): the directory is a mount point, whether the mounted file system is empty or not and whether the covered directory is empty or not; with a trailing slash too. After umount it is removed normally (ENOTEMPTY first if the covered directory had entries)."
+  missing: "ENOENT: a missing last name (also with a trailing slash, also a second rmdir of the same name), a missing directory on the way (also when a later \"..\" would leave it: \"D/nope/../d\"; also \"D/nope/.\" and \"D/nope/..\"), a dangling symbolic link on the way (\"D/dang/x\", \"D/dang/.\"), an empty path"
+  loop: "ELOOP: a symbolic link loop on the way (\"D/la/x\" with la -> lb -> la, also \"D/la/.\"); as the last name a looping link is ENOTDIR"
+  name_too_long: "ENAMETOOLONG: a last name or a name on the way of 256 bytes or more (255 works, also with a trailing slash), or a path of 4096 bytes or more counting its NUL (4095 bytes plus NUL works, padded with \"./\")"
+  fault: "EFAULT: path NULL, address 1, an unmapped page, a non-canonical high address, or a string that runs into an unmapped page before its NUL; nothing is removed. A string whose NUL is the last byte of a mapped page works."
+  permission: "EACCES (non-root callers): no write or no search permission on the parent (0555, 0111, 0666, 0 parents), or no search permission on a directory on the way; read permission is not needed (0333 parent works). In a searchable but not writable parent: missing name ENOENT, missing directory on the way ENOENT, \".\" EINVAL, \"..\" ENOTEMPTY, but an existing name of any kind (empty or non-empty directory, regular file) EACCES; a writable subdirectory of it works normally. In a parent without search permission every name (existing, missing, \".\", \"..\", a file, anything beyond) is EACCES. Root passes these checks and gets the result that applies otherwise (0, ENOTEMPTY, ENOTDIR, ENOENT, EINVAL)."
+  sticky: "EPERM (root only to set up, from rmdir(2), not observed): in a parent with S_ISVTX that the caller may write, a caller that owns neither the directory nor the parent and is not root; also for a non-empty directory (EPERM before ENOTEMPTY). Without write permission on the parent EACCES comes first; a missing name stays ENOENT. Owning the directory or owning the parent is enough; a world-writable parent without the sticky bit lets anyone remove an empty directory in it. Root may remove anything."
+  order: "the first applicable of: (1) the path string as a whole: unreadable EFAULT, 4096 bytes or more with its NUL ENAMETOOLONG (even under a missing directory), empty ENOENT; (2) the components before the last from left to right as the walk reaches them, symbolic links followed: a missing name or dangling link ENOENT, a non-directory followed by more ENOTDIR, no search permission EACCES, a name over 255 bytes ENAMETOOLONG, a link loop ELOOP; so D/nope/f/x ENOENT, D/f/nope/x ENOTDIR, D/la/nope/x ELOOP, D/nope/<256> and D/nope/<256>/x ENOENT, D/f/<256> ENOTDIR, D/<256>/nope/x ENAMETOOLONG; (3) the kind of last component: \".\" EINVAL, \"..\" ENOTEMPTY, \"/\" EBUSY (before write permission on the parent); (4) the last name: over 255 bytes ENAMETOOLONG, missing ENOENT, then (for an existing name) no write permission on the parent EACCES, then the sticky rule EPERM, then not a directory (or a symbolic link) ENOTDIR, then a mount point EBUSY, then not empty ENOTEMPTY."
+  other_documented: "EROFS (read-only file system), EBUSY for the caller's root directory, EIO are listed in rmdir(2) and not exercised by the tests"
+side_effects: "One entry removed from the parent. On success the parent's mtime and ctime move to the time of the call (equal to each other, between a coarse clock reading before the call and a precise one after it); the parent's atime does not change. A failed rmdir (ENOTEMPTY, ENOENT, ENOTDIR, EINVAL, ...) changes nothing: no entry, no times, no link counts, siblings untouched."
+threading: "Concurrent rmdir of the same empty directory from several processes: exactly one gets 0, every other one ENOENT, and it is gone. Concurrent rmdir of different directories in one parent all succeed and the parent's link count drops by one for each. The working directory is per process (shared by threads made with CLONE_FS)."
+ordering: []
+timing:
+  typical: "microseconds per call on a local file system; does not block unless the file system does"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
