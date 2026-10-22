@@ -1,0 +1,94 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/swapon               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    home server, x86-64; tests run as a normal user (uid 1001, no
+    capabilities), umask 022. Root-only behaviour (everything past the
+    CAP_SYS_ADMIN check) comes from swapon(2), mkswap(8) and the kernel's
+    documented behaviour, and is covered by needs=root tests whose
+    scaffolding was checked on Poly as root.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  swapon(path, swapflags) (syscall 167) starts swapping to the regular file
+  or block device at path, which must hold a swap header (see mkswap(8)).
+  Only a caller with CAP_SYS_ADMIN in its effective set may do it.
+  swapflags is a 32-bit int (bits 32-63 of the register are ignored). The
+  valid bits are the priority SWAP_FLAG_PRIO_MASK (0x7fff), SWAP_FLAG_PREFER
+  (0x8000), SWAP_FLAG_DISCARD (0x10000), SWAP_FLAG_DISCARD_ONCE (0x20000)
+  and SWAP_FLAG_DISCARD_PAGES (0x40000) (sys/swap.h, linux/swap.h); a
+  priority without SWAP_FLAG_PREFER is accepted. The checks run in this
+  order, and the first one that fails decides the error:
+  1. flags: any bit outside 0x7ffff is EINVAL, for every caller and every
+     path, even NULL or a bad pointer;
+  2. privilege: without CAP_SYS_ADMIN, EPERM; the path is not looked at
+     (no EFAULT, ENOENT, ENOTDIR, ELOOP or ENAMETOOLONG; nothing created);
+  3. the path is copied and opened for reading and writing (following
+     symlinks, relative to the cwd), with open's errors;
+  4. the opened object must be a regular file or a block device, else
+     EINVAL;
+  5. the first 4096-byte page must hold a usable swap header, else EINVAL;
+  6. the file system must support swap files (tmpfs does not: EINVAL).
+  The swap header (mkswap(8) layout, little-endian on x86-64): the
+  signature "SWAPSPACE2" in bytes 4086-4095, version (u32) at byte 1024,
+  last_page (u32) at 1028, nr_badpages (u32) at 1032. The old signature
+  "SWAP-SPACE", any version other than 1, and last_page 0 are EINVAL.
+  Since Poly has nowhere to swap to, nothing in the tests reaches a
+  successful swapon; every refused call has no side effects.
+returns:
+  success: "0 (the area is in use as swap; listed in /proc/swaps)"
+  failure: "-errno; the target file is not modified, not created, and no file descriptor is consumed"
+errors:
+  bad_flags: >
+    EINVAL (22) for any bit 19-31 set in the low 32 bits of swapflags
+    (alone, mixed with valid bits, or -1). Checked first: also for callers
+    without CAP_SYS_ADMIN and for NULL, bad-pointer, empty, missing,
+    directory and device paths. Bits 32-63 are ignored (0x100000000 and
+    0xffffffff00000000 behave like 0).
+  no_privilege: >
+    EPERM (1) without CAP_SYS_ADMIN in the effective set (a normal user,
+    root after capset emptied the sets, root with only CAP_SYS_ADMIN
+    cleared from the effective set), whatever the path: missing file,
+    directory, regular file, /dev/null, NULL, empty string, bad or kernel
+    pointer, symlink loop, path through a file, trailing slash on a file,
+    4096-byte name, relative missing name.
+  too_many_areas: "EPERM (1) when the maximum number of swap areas is already in use (swapon(2) NOTES); not tested"
+  bad_pointer: "EFAULT (14) for NULL or an unmapped path pointer (privileged caller)"
+  empty_path: "ENOENT (2) for \"\" (privileged caller)"
+  missing: "ENOENT (2) for a missing file, a relative missing name, or a symlink to a missing file"
+  not_dir: "ENOTDIR (20) for a path through a regular file or a trailing slash after a regular file"
+  loop: "ELOOP (40) for a symlink loop"
+  name_too_long: "ENAMETOOLONG (36) for a path of 4096 bytes before the NUL"
+  directory: "EISDIR (21) for a directory, also reached through a symlink, also on a read-only mount (the target is opened for writing)"
+  socket: "ENXIO (6) for a unix-domain socket file (it cannot be opened)"
+  read_only: "EROFS (30) for a regular file on a read-only mount, even for root; the same file after remounting read-write gets to the header check"
+  not_regular: "EINVAL (22) for an object that opens but is neither a regular file nor a block device: a character device (/dev/null), a FIFO"
+  no_signature: >
+    EINVAL (22) for a regular file without "SWAPSPACE2" at bytes
+    4086-4095: all zeros, text, a file shorter than a page (100 bytes);
+    flags (valid ones such as SWAP_FLAG_PREFER or SWAP_FLAG_DISCARD) do
+    not change this.
+  bad_header: "EINVAL (22) for the old signature \"SWAP-SPACE\", version 0, version 2, or version 1 with last_page 0"
+  unsupported_fs: "EINVAL (22) for a file on tmpfs, even with a well-formed header (version 1, last_page 15, no bad pages, 16 pages long)"
+  busy: "EBUSY (16) when path is already in use as a swap area (swapon(2)); not tested"
+  no_memory: "ENOMEM (12) when memory is short (swapon(2)); not tested"
+side_effects: >
+  On failure none: the target keeps its size, mode and bytes (swapon never
+  writes the header), a missing target is not created, and no file
+  descriptor stays open (the next open gets the lowest free number). On
+  success the area is added to the system-wide swap list (/proc/swaps)
+  until swapoff(2).
+threading: "no thread-specific behaviour; the privilege check uses the calling thread's effective capabilities"
+ordering:
+  - "invalid flag bits (EINVAL) before the privilege check (EPERM)"
+  - "privilege check (EPERM) before any path lookup or pointer access"
+  - "path lookup and open errors (EFAULT, ENOENT, ENOTDIR, ELOOP, ENAMETOOLONG, EISDIR, ENXIO, EROFS) before the file-type check (EINVAL)"
+  - "file-type check before the swap header check, before the file-system support check (all EINVAL)"
+timing:
+  typical: "refused calls (EINVAL for flags, EPERM): microseconds, no I/O"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
