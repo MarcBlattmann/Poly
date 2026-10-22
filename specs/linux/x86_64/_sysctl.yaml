@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/_sysctl              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022, directly and under the pipeline's ptrace tracer"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  _sysctl(args) (syscall 156) was the binary interface for reading and
+  writing kernel parameters through a struct __sysctl_args {int *name;
+  int nlen; void *oldval; size_t *oldlenp; void *newval; size_t newlen;
+  unsigned long __unused[4]} (linux/sysctl.h, 80 bytes). It was removed
+  in Linux 5.5 (man 2 sysctl); on the oracle kernel the number is still
+  reserved but the call does nothing and always fails with ENOSYS (38),
+  whatever is in any of the six argument registers. It never reads or
+  writes caller memory, so no argument value can produce EFAULT, EINVAL,
+  ENOTDIR, EPERM or EACCES (the errors the man page lists for old
+  kernels), and it raises no signal. The parameters it used to reach
+  are available through /proc/sys and other calls (uname,
+  sethostname), which this call does not affect.
+returns:
+  always: "-1 with errno ENOSYS (raw result -38), for every argument value; never 0"
+  args_pointer: "NULL, 1, 4096, a just-unmapped page, a PROT_READ-only or PROT_NONE page, a misaligned stack address, non-canonical 0xdead000000000000, kernel-half 0xffffffff81000000 and all ones: all ENOSYS"
+  contents_ignored: "a valid struct with any nlen (0, -1, 1, 2, 10 = CTL_MAXNAME, 11, 16, INT_MAX, INT_MIN), any name vector (existing {CTL_KERN 1, KERN_OSTYPE 1}, {1, KERN_OSRELEASE 2}, {CTL_VM 2, 1}; never existing {0,0}, {9999,1}, {-1,-1}), *oldlenp 0, NULL oldlenp with oldval set, or newval with newlen SIZE_MAX: all ENOSYS"
+  other_registers: "rsi, rdx, r10, r8, r9 are ignored (all ones in every register is still ENOSYS)"
+  repeatable: "1000 calls in a row all ENOSYS; nothing builds up between calls"
+  registers_after: "rdi, rsi, rdx, r10, r8, r9 hold the same values after the call as before; only rax (result), rcx and r11 (used by the syscall instruction) change, as for any system call"
+errors:
+  removed: "ENOSYS (38): every call"
+  no_fault: "never EFAULT, even for an unreadable or NULL args pointer, an unreadable name vector or a read-only oldval/oldlenp"
+  no_permission_errors: "never EPERM/EACCES: a write request (newval) to kern.hostname or kern.domainname is ENOSYS for any user (root on the oracle would get ENOSYS too, since the call does not exist)"
+  no_lookup_errors: "never ENOTDIR or EINVAL for unknown names or bad nlen"
+side_effects: >
+  None. Caller memory is left exactly as it was: the oldval buffer keeps
+  its bytes, *oldlenp keeps its value (also when 0), and the struct and
+  name vector are not modified. A write request changes no kernel
+  parameter: uname's nodename and domainname are the same before and
+  after. No signal is generated (with every signal blocked, nothing is
+  pending afterwards) and the process continues normally; the next
+  system call works as usual. No log or other state visible to the
+  caller.
+threading: >
+  No state at all: the result is ENOSYS in the main process, in a fork
+  child and in a child sharing memory (CLONE_VM), independent of
+  anything other threads do.
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "returns immediately, comparable to getpid (well under 10µs per call; 1000 calls take a few ms or less)"
+  guarantees: "never blocks or sleeps"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
