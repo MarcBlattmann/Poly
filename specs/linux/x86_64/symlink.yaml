@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/symlink
+oracle:
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04) x86_64"
+  machine: "physical host, non-root user (uid 1001), /tmp on ext4; static freestanding test programs, raw syscalls, umask 022, cwd /, empty environment"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  symlink(target, linkpath) (syscall 88) creates a symbolic link named
+  linkpath whose text is target. It behaves exactly like
+  symlinkat(target, AT_FDCWD, linkpath): a relative linkpath is resolved
+  from the working directory. The text is stored byte for byte and never
+  resolved at creation: relative, absolute, dangling, repeated slashes,
+  dots, any non-NUL bytes. readlink returns exactly the text. The link has
+  type S_IFLNK, mode 0777 whatever the umask, nlink 1, size = text length,
+  owner = the caller's effective uid and gid. Relative text is resolved
+  when the link is followed, from the directory holding the link (not the
+  caller's working directory), so it keeps working when that directory is
+  renamed. Links in the middle of linkpath are followed; the last
+  component of linkpath is never followed.
+returns:
+  success: "0"
+  arguments: "rdi = target (NUL-terminated string), rsi = linkpath (NUL-terminated string); other registers ignored"
+  new_link: "lstat: st_mode S_IFLNK | 0777 (umask 0, 022, 077 and 0777 alike; the umask is not changed), st_nlink 1, st_size = length of the text, st_uid/st_gid = effective uid/gid of the caller; its atime, mtime and ctime are equal to each other and not older than the parent directory's ctime before the call. getdents64 lists it as DT_LNK"
+  text: "kept exactly as given, including \"a//b/./c/\", \"///\", trailing slashes, newlines and bytes 0x01 and 0xff; readlink returns the same bytes and length"
+  resolution_of_text: "when followed: absolute text from the root (\"/\" and \"///\" are the root); relative text from the directory holding the link (\".\" is that directory, \"..\" its parent, \"../f\" a sibling of it). After the holding directory is renamed, relative text still resolves from the link's new place and absolute text points where it always did"
+  cwd: "a relative linkpath (\"l\", \"./l\", \"sub/l\", \"../l\") starts at the working directory; an absolute one ignores it. If the working directory has been removed, a relative linkpath is ENOENT (an absolute one still works)"
+  following_in_linkpath: "links in non-final components are followed: through a link to a directory (relative or absolute text) the new link is made in that directory; \"ldir/../top\" makes top in the parent of the link's target directory. At most 40 links are followed in one lookup: a directory reached through 40 chained links works, 41 is ELOOP (the same limit as open: opening a chain of 40 links works, 41 is ELOOP)"
+  final_component: "never followed: an existing link of any kind (including a dangling one or a link to a directory, with or without a trailing slash) is EEXIST; nothing is created at the dangling link's target or inside the linked directory"
+  later_use: "stat/open follow the link; a dangling link: stat and open ENOENT, lstat succeeds. open O_CREAT through a dangling link creates its target (mode from open, less the umask) and leaves the link a link; through a dangling link whose target directory is missing: ENOENT. O_CREAT|O_EXCL on a link (resolved or dangling): EEXIST. O_NOFOLLOW on a link: ELOOP; O_PATH|O_NOFOLLOW opens the link itself (fstat shows S_IFLNK|0777). O_DIRECTORY through a link to a directory works, through a link to a file ENOTDIR. O_TRUNC through a link truncates the target, the link's size is unchanged"
+  removal: "unlink removes the link and leaves the target; rmdir on a link to a directory is ENOTDIR; rename moves the link with its text; linkat without AT_SYMLINK_FOLLOW makes a second name for the link itself (the link's nlink becomes 2, the target's stays 1). Removing the target leaves the link dangling; a new file under the target name is found again through the link"
+errors:
+  name_exists: "EEXIST for any existing name: regular file, directory, symbolic link (dangling or not, to a directory or not), with or without a trailing slash (\"f/\" for an existing file is EEXIST, not ENOTDIR), \".\", \"..\", \"sub/..\" and \"/\". The existing object is unchanged"
+  empty_target: "ENOENT"
+  empty_linkpath: "ENOENT"
+  missing_component: "ENOENT for a missing directory anywhere in linkpath (\"no/l\", \"no/no2/l\"; \"no/../l\" is ENOENT too: a later \"..\" does not undo it); through a dangling link: ENOENT"
+  trailing_slash_new_name: "a linkpath naming a new entry with a trailing slash (\"new/\"): ENOENT, nothing created"
+  not_a_directory: "ENOTDIR when a regular file (or a link to one) is used as a directory: \"f/l\", \"f/a/b\", \"f/.\", \"lfile/x\""
+  loop: "ELOOP when following links in linkpath loops (a link to itself) or needs more than 40 links"
+  target_too_long: "lengths in characters, not counting the NUL: a target of up to 4095 characters is stored whole (readlink returns 4095, st_size 4095); 4096 or more is ENAMETOOLONG. A component of the target may be any length (300 characters works): the text is not resolved"
+  linkpath_too_long: "a linkpath of up to 4095 characters works (counted on the string as given, \"./\" repeats included); 4096 or more is ENAMETOOLONG, even when an early component does not exist. A linkpath component of 255 characters works; 256 or more is ENAMETOOLONG"
+  bad_pointer: "EFAULT for an unreadable target or linkpath pointer"
+  permission: "EACCES without write and search permission on the parent directory (mode 0555 directory), or without search permission on any directory on the way (mode 0666 directory: \"nox/x\", \"nox/sub/x\", \"nox/no/x\" and an existing \"nox/f\" are all EACCES). A caller with root privileges is not refused (observed only as a non-root user; root bypassing directory permission checks is the documented behaviour). An existing name in a directory the caller may search but not write is EEXIST, a missing directory below it ENOENT"
+  precedence: "the first that applies decides: (1) the target: unreadable EFAULT, empty ENOENT, 4096 characters or more ENAMETOOLONG; (2) the linkpath string: unreadable EFAULT, empty ENOENT, 4096 characters or more ENAMETOOLONG; (3) the components of linkpath from left to right as the walk reaches them: missing ENOENT, non-directory ENOTDIR, no search permission EACCES, too many links ELOOP, a name of 256 characters or more ENAMETOOLONG; (4) the last name exists: EEXIST; (5) no write permission on the parent: EACCES. So symlink(\"\", bad pointer) is ENOENT, symlink(<4096 characters>, bad pointer) is ENAMETOOLONG, symlink(bad pointer, \"\") is EFAULT, symlink(\"\", existing) is ENOENT, symlink(\"x\", \"no/f\") is ENOENT and symlink(\"x\", \"ro/f\") with f existing in a read-only directory is EEXIST"
+  failed_call: "creates nothing and does not change the parent directory's times"
+side_effects: "Adds one directory entry to the parent of linkpath. The parent's mtime and ctime are updated to the same new value; its atime and link count are unchanged. The target (if it exists) is not touched: its atime, mtime, ctime and nlink stay as they were."
+threading: "no thread-specific behaviour; the working directory and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds on a local file system; does not block"
+  guarantees: "none"
+tests:
+  visible: 8
+  held_out: 4
