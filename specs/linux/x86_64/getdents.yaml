@@ -1,0 +1,79 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getdents
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: >
+    Host machine, uid 1001 (not root); / and /tmp on ext4 (dir_index), /dev/shm
+    on tmpfs; static freestanding test programs, raw syscalls, also run
+    through `pipeline diff --target linux`
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  getdents(fd, buf, count) is the original directory-reading call (x86-64
+  number 78). It reads entries of the directory open on fd into buf as
+  packed struct linux_dirent records (getdents(2)): d_ino (u64, nonzero, the
+  inode number lstat/stat reports for that name), d_off (u64, the position
+  cookie after this record), d_reclen (u16), then d_name starting at byte 18,
+  NUL-terminated, and d_type in the record's LAST byte (byte d_reclen - 1).
+  d_reclen is 18 + strlen(name) + 2 rounded up to a multiple of 8 (24 for
+  names of 1..4 bytes, 32 for 5..12, 40 for 13..20, 280 for a 255-byte
+  name), which is the same length getdents64 gives the same entry. The bytes
+  between the name's NUL and the type byte are unspecified (not always zero
+  on ext4; never check them). Apart from the record format, getdents behaves
+  exactly as getdents64 (specs/linux/x86_64/getdents64.yaml, including its
+  directory_order section): the same entries, order, d_ino, d_off and
+  d_type, and the two calls share the descriptor's position, so they can be
+  mixed on one descriptor. Every entry, "." and ".." included, is returned
+  once per pass, then 0.
+arguments:
+  fd: "taken as a 32-bit unsigned value: bits 32..63 of the register are ignored (fd | 0x100000000 is fd)"
+  count: >
+    taken as a 32-bit unsigned value: bits 32..63 are ignored (0x100000018 is
+    24, 0x100000000 is 0). A count of 0x80000000 or more (as a 32-bit value;
+    -1 included) acts as a buffer too small for any record: EINVAL while a
+    record is pending, 0 at the end of the directory. 0x7fffffff is valid.
+returns:
+  success: "number of bytes of whole records stored; as many whole records as fit in count bytes, never a partial record, never more than count"
+  end_of_directory: "0, again on every further call, until lseek moves the position; at the end nothing is written, so count 0 or 1, count >= 0x80000000 and a NULL or unmapped buffer also return 0"
+  empty_directory: "48 bytes: \".\" and \"..\", both DT_DIR, 24 bytes each; then 0"
+  d_type: "last byte of the record: DT_DIR 4 (\".\", \"..\", subdirectories), DT_REG 8 (files, hard links), DT_LNK 10 (symbolic links, dangling too), DT_FIFO 1, DT_SOCK 12 (bound Unix socket), DT_CHR 2; on ext4 and tmpfs never DT_UNKNOWN"
+  d_ino: "the inode number stat reports for the name; \".\" is the directory itself, \"..\" its parent (a subdirectory entry's d_ino equals that subdirectory's \".\" d_ino); \".\" of / is the root's"
+  d_off: "as getdents64: a file-system cookie, the position after this record; on tmpfs 1 for \".\", then creation cookies 3, 4, ... and 2147483647 for the last record; on ext4 a 63-bit hash cookie, 9223372036854775807 for the last record"
+  position: "after a successful call, lseek(fd, 0, SEEK_CUR) is the d_off of the last record returned; lseek to a d_off makes the next call start with the record after it; lseek(fd, 0, SEEK_SET) starts over"
+  order: "unspecified in general, file-system dependent; on tmpfs \".\", \"..\", then newest entry first (getdents64 directory_order.tmpfs); on ext4 with dir_index hash order, \".\" and \"..\" anywhere in a one-block directory"
+  partial_buffer_fault: >
+    If the buffer is writable only for its first part (the rest is an
+    inaccessible page), the records that fit entirely in the writable part
+    are stored and their byte count returned (24 writable bytes: 24; 40: 24;
+    50: 48 with 24-byte records); the position is after the last stored one,
+    so the next call returns the record that did not fit. If not even the
+    first record can be written: EFAULT.
+  changes: "after a rewind the listing shows names created since (files, directories, symlinks, hard links), not names unlinked/removed, and a renamed entry only under its new name with the same d_ino; a descriptor opened before the changes sees them"
+  sharing: "the position belongs to the open file description: dup()ed descriptors share it, a second open() has its own; a dup keeps working after the original is closed"
+  open_flags: "a directory opened O_RDONLY without O_DIRECTORY works the same as with it"
+errors:
+  # Order of checks, observed: fd (EBADF) first, then not-a-directory
+  # (ENOTDIR), then removed directory (ENOENT), then buffer size (EINVAL),
+  # then writing the buffer (EFAULT). Size and buffer are only checked when a
+  # record is pending (at the end: 0, no error).
+  bad_fd: "EBADF (9): closed, -1, 1000000, 0x7fffffff, and an O_PATH descriptor of a directory; also with count 0 or a NULL buffer"
+  not_a_directory: "ENOTDIR (20): regular file (O_RDONLY or O_RDWR), /dev/null, both ends of a pipe, a socket; also with count 0 or a NULL buffer; the file's offset does not move"
+  directory_removed_while_open: "ENOENT (2) after rmdir of the open directory, on ext4 and tmpfs, also mid-listing, after a rewind, with count 0 or a NULL buffer; a directory renamed while open is still listed"
+  buffer_too_small: "EINVAL (22) when the next record does not fit in count (0, 1 or 23 for a 24-byte record; 279 for a 280-byte record; count >= 0x80000000), at the start and in the middle of a listing"
+  bad_buffer: "EFAULT (14) for NULL, an unmapped low address (0x1000), a kernel address (0xffff800000000000), a non-canonical address, a read-only mapping, when a record is pending and the buffer is big enough; with count too small for the record, EINVAL comes first"
+  position_after_error: >
+    On tmpfs an EINVAL or EFAULT leaves the position unchanged (a bigger or
+    good buffer then returns the same record). On ext4 the same in the middle
+    of a listing; at position 0 a failed call may move the position from 0 to
+    the first entry's cookie, which still returns the same records (no entry
+    is skipped) - so tests check positions after errors on tmpfs only.
+side_effects: "Advances the directory position of the open file description (shared with getdents64 and lseek). Nothing else; no timestamps checked."
+threading: "no thread-specific behaviour; the descriptor table, positions and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 12
+  held_out: 5
