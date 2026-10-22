@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fchmod               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: "x86_64 host, uid 1001 gid 1002 (not root, one group), umask 022; /tmp on ext4, /dev/shm on tmpfs; static freestanding test programs, raw syscalls. Root behaviour (marked 'root:') is from chmod(2) and was not observed on this machine."
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  fchmod(fd, mode) (syscall 91) sets the permission bits of the file open
+  on fd to exactly mode & 07777 and returns 0. Only the low 12 bits of
+  mode count: file type bits, bits above 07777 and the upper half of the
+  register are ignored (mode -1 means 07777). The umask does not apply.
+  fd is a 32-bit value (the upper half of the register is ignored). The
+  change is to the file, not to the descriptor: every name and every open
+  of the file sees it at once, and access checks from then on use it;
+  descriptors already open keep their access (also after a drop to 0).
+  The descriptor's access mode does not matter (read-only, write-only,
+  append, O_CLOEXEC, a dup all work), and neither do the file's current
+  permission bits: only ownership does. The caller must own the file
+  (root: any file). Set-user-ID and sticky bits are kept as given (the
+  sticky bit also on a regular file). Set-group-ID is kept when the
+  file's group is the caller's effective gid or one of its supplementary
+  groups (root: always); otherwise it is silently dropped and the call
+  still returns 0. Works on regular files, directories, unlinked files
+  and removed directories still open, pipes (both ends are one file),
+  FIFOs, UNIX sockets, memfds and tmpfs files; type bits never change.
+returns:
+  success: "0"
+  mode_applied: "new mode = type bits unchanged | (mode & 07777), except a set-group-ID bit dropped as described in the summary"
+  same_mode: "0 as well; setting the mode it already has still counts as a change (ctime updates)"
+  unlinked: "a descriptor of a file with no name left (nlink 0) or of a removed directory: 0, fstat shows the new mode"
+  pipe: "both ends of a pipe show the new mode (S_IFIFO kept); fchmod through either end works"
+  socket_memfd_fifo_tmpfs: "0; S_IFSOCK, S_IFREG (memfd) and S_IFIFO kept"
+errors:
+  bad_fd: "EBADF: fd not open (negative as a 32-bit value, never opened, closed, beyond the table such as 99, 1000000, 0x7fffffff; 0xffffffff is -1)"
+  o_path_fd: "EBADF: a descriptor opened with O_PATH (of a file, a directory, or a symbolic link itself with O_NOFOLLOW)"
+  not_owner: "EPERM when the caller is not the file's owner (and not root), even when the descriptor is open for writing, the file is world-writable (/dev/null), or the mode would not change; e.g. / and /dev/null owned by root"
+  anon_inode: "EOPNOTSUPP for a descriptor of an anonymous inode: eventfd, epoll, timerfd (any mode, also 0); observed as a non-owner (these inodes belong to root), so this comes before the ownership check"
+  procfs: "EPERM for /proc files and directories, also those the caller owns (e.g. /proc/self/status, /proc/self)"
+  read_only_fs: "EROFS for a file on a read-only mount; observed on a root-owned file of a read-only mount as a non-owner, so EROFS comes before EPERM"
+  order: "EBADF (fd not open or O_PATH) first; then EROFS; then EOPNOTSUPP / EPERM. A failed call changes neither the mode nor ctime."
+side_effects: "the file's ctime becomes the current time (also when the mode is unchanged); mtime, atime, size, link count and contents stay the same. No effect on the descriptor itself (offset, flags) or on access already granted to open descriptors."
+threading: "no thread-specific behaviour; the descriptor table and the file are shared by the threads of a process"
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "microseconds; never blocks"
+  guarantees: "the new mode is visible to every later stat/fstat/access check of any process as soon as the call returns"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
