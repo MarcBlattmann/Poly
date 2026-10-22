@@ -294,7 +294,7 @@
 {"symbol":"setfsuid","number":122,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setgid","number":106,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setgroups","number":116,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"sethostname","number":170,"src":["linux-syscall-tbl"]},
+{"symbol":"sethostname","number":170,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"setitimer","number":38,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setns","number":308,"src":["linux-syscall-tbl"]},
 {"symbol":"setpgid","number":109,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
