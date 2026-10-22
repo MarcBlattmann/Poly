@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/unlink
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4; static freestanding test programs, raw syscalls; root behaviour from unlink(2) only (see errors.sticky and errors.permission)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  unlink(path) (system call 87, one argument) removes one name of a
+  non-directory: a regular file, a symbolic link (the link itself, never its
+  target, also when dangling or pointing at itself), a FIFO, a socket file or
+  a device node. The file itself lives on while other names or open
+  descriptors or mappings remain: st_nlink of the remaining names and of
+  open descriptors drops by one (to 0 when the last name goes), reads,
+  writes, ftruncate and shared mappings keep working, and a new file created
+  under the same name is a separate file (new inode). The name no longer
+  appears in directory listings, and stat/lstat/open of it give ENOENT. A
+  bound UNIX socket stays bound after its file is removed (getsockname still
+  reports the path) and the path can be bound again. unlink behaves exactly
+  like unlinkat(AT_FDCWD, path, 0).
+returns:
+  success: "0; nothing is returned through memory"
+  relative_paths: "start at the working directory (\"name\", \"./name\", \"sub/../name\", and from / also \"tmp/...\"); a working directory that has been removed holds nothing: unlink(\"x\") there is ENOENT"
+  slashes: "repeated slashes inside a path are ignored (D//f is D/f); see errors.trailing_slash for a slash at the end"
+  last_component_not_followed: "a symbolic link as the last component is removed itself; links in earlier components are followed (unlink(\"linktodir/f\") removes the file in the directory the link points to)"
+errors:
+  directory: "EISDIR for a directory, empty or not, also spelled \"dir/\", \"dir//\", \"dir/.\", \"dir/..\", \"/\", \".\" or \"..\"; the directory is left in place"
+  directory_vs_permission: "for a directory named by an ordinary last name (not \".\", \"..\" or \"/\"), a parent without write permission for the caller gives EACCES rather than EISDIR (observed as non-root: unlink(\"/tmp\") and unlink of a directory inside a 0555 directory are EACCES); \".\", \"..\" and \"/\" are EISDIR whatever the permissions"
+  trailing_slash: "a trailing slash does not make the last name be followed: an existing non-directory, a symbolic link of any kind included (to a file, to a directory, dangling), is ENOTDIR (also \"file/.\"); a missing name ENOENT; a directory EISDIR. Nothing is removed."
+  missing: "ENOENT for a missing last name (also a second unlink of the same name) and for a missing or dangling-link earlier component"
+  empty_path: "ENOENT"
+  bad_pointer: "EFAULT for an unreadable path pointer (NULL, -1)"
+  not_a_directory: "ENOTDIR when a non-directory (or a symbolic link to one) is followed by more components"
+  loop: "ELOOP when following earlier components meets too many symbolic links (e.g. two links pointing at each other used as a directory); a looping link as the last component is simply removed"
+  name_too_long: "ENAMETOOLONG for a component over 255 bytes (255 is fine); ENAMETOOLONG for a path of 4096 bytes or more counting its NUL (4095 bytes of text is fine, even if made mostly of slashes)"
+  permission: "the caller needs write and search permission on the parent directory and search permission on every directory before it; the file's own mode and owner do not matter (a mode 0000 or 0444 file in a writable directory is removed). EACCES when the parent is not writable (0555), not searchable (0666) or only searchable (0111), and when an earlier directory is not searchable. A missing search permission is reported before a missing name (EACCES for \"nox/nope\"), but a missing name in a searchable, read-only directory is ENOENT. Per unlink(2) (not observed here), root (CAP_DAC_OVERRIDE) passes these checks."
+  sticky: "per unlink(2), not observed on this oracle (needs other users): in a directory with the sticky bit (S_ISVTX) a caller without CAP_FOWNER may remove a name only if it owns the file or the directory, else EPERM"
+  other: "EBUSY for a mount point, EROFS on a read-only file system, EPERM for an immutable or append-only file or a file system that does not allow unlinking (unlink(2); not observed)"
+  path_order: "when a path has more than one problem, the first in this order decides: (1) the path string as a whole: an unreadable pointer EFAULT, 4096 bytes or more with its NUL ENAMETOOLONG, empty ENOENT, whatever its components are; (2) the components from left to right as the walk reaches them, symbolic links followed on the way: the first that fails decides, missing search permission EACCES, a missing name or a dangling link ENOENT, a non-directory followed by more components ENOTDIR, a name over 255 bytes ENAMETOOLONG. So D/nope/<256 bytes> is ENOENT, D/file/<256 bytes> is ENOTDIR, D/<256 bytes>/nope/x is ENAMETOOLONG; (3) the last name: \".\", \"..\" or \"/\" EISDIR; then a missing name ENOENT (or ENOTDIR/ENOENT with a trailing slash, as above); then the parent's permissions EACCES (and the sticky rule EPERM); then a directory EISDIR. A failed call changes nothing."
+side_effects: "The parent directory's mtime and ctime are set to the current time (a failed unlink leaves them). The file's ctime is updated when it keeps other names; its atime and mtime are unchanged. The directory's link count is unchanged (only non-directories are removed). Once its last name is gone and nothing holds it open or mapped, the file's storage is released."
+threading: "no thread-specific behaviour; the file system state is shared by all threads and processes"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 9
+  held_out: 4
