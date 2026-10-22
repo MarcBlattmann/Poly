@@ -229,7 +229,7 @@
 {"symbol":"process_vm_readv","number":310,"src":["linux-syscall-tbl"]},
 {"symbol":"process_vm_writev","number":311,"src":["linux-syscall-tbl"]},
 {"symbol":"pselect6","number":270,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"ptrace","number":101,"src":["linux-syscall-tbl"]},
+{"symbol":"ptrace","number":101,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"pwrite64","number":18,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"pwritev","number":296,"src":["linux-syscall-tbl"]},
 {"symbol":"pwritev2","number":328,"src":["linux-syscall-tbl"]},
