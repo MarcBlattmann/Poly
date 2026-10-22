@@ -114,7 +114,7 @@
 {"symbol":"getuid","number":102,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"getxattr","number":191,"src":["linux-syscall-tbl"]},
 {"symbol":"getxattrat","number":464,"src":["linux-syscall-tbl"]},
-{"symbol":"init_module","number":175,"src":["linux-syscall-tbl"]},
+{"symbol":"init_module","number":175,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"inotify_add_watch","number":254,"src":["linux-syscall-tbl"]},
 {"symbol":"inotify_init","number":253,"src":["linux-syscall-tbl"]},
 {"symbol":"inotify_init1","number":294,"src":["linux-syscall-tbl"]},
