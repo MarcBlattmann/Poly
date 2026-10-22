@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/vhangup
+oracle:
+  os: "Linux 7.0.0-30-generic"
+  machine: "Ubuntu 24.04 host, uid 1001 (not root, no capabilities); devpts mounted, /dev/ptmx usable by any user; static freestanding test programs, raw syscalls, pty pairs from /dev/ptmx + TIOCGPTPEER. Privileged behaviour from vhangup(2) and the documented tty hang-up semantics (the same ones a master close produces, see the ioctl spec's ctty test), not observed here."
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  vhangup() (syscall 153, no arguments: whatever is in the argument
+  registers is ignored) simulates a hang-up of the calling process's
+  controlling terminal. It requires CAP_SYS_TTY_CONFIG in the caller's
+  effective capability set; root has it, other users do not. Without it
+  the call fails with EPERM and nothing at all happens, whether or not
+  the caller has a controlling terminal, is a session leader, or is a
+  thread or a non-leader member of the session. With it the call
+  returns 0: if the caller has no controlling terminal nothing happens;
+  otherwise that terminal is hung up exactly as if its line had dropped:
+  every open file description of it (however opened: the pty slave,
+  further slave descriptors, /dev/tty) becomes hung up, the terminal
+  stops being the controlling terminal of every process of its session,
+  and the session leader is sent SIGHUP and then SIGCONT.
+returns:
+  success: "0 when the caller has CAP_SYS_TTY_CONFIG in its effective set, with or without a controlling terminal; argument register contents are ignored"
+  repeated: "calling again succeeds again (0 privileged, EPERM unprivileged); after a hang-up the caller has no controlling terminal, so a second privileged call does nothing and sends no signal"
+errors:
+  no_capability: "EPERM (-1 errno 1) for any caller without CAP_SYS_TTY_CONFIG in the effective set: every non-root user, root after dropping uid to a normal user, root that dropped only that capability from its effective set (still permitted). Checked first: no other effect at all."
+side_effects: >
+  Unprivileged (EPERM): none. The controlling terminal stays: /dev/tty
+  still opens, TIOCGSID still reports the session, the slave and /dev/tty
+  descriptors keep their flags and work both ways with the master, poll
+  on the slave reports only POLLOUT, no SIGHUP or SIGCONT is generated (a
+  leader with SIGHUP at its default action keeps running), session and
+  process group are unchanged.
+
+  Privileged, with a controlling terminal: on every descriptor that refers
+  to the hung-up terminal, read returns 0 (end of file, without blocking),
+  write fails with EIO, ioctl (e.g. TIOCGSID) fails with EIO, poll
+  reports POLLHUP; close still succeeds. Descriptors of other files are
+  untouched. Every process of the session, the caller included, has no
+  controlling terminal afterwards: open("/dev/tty") is ENXIO. The session
+  leader (the caller itself when it is the leader, otherwise the leader
+  of its session) is sent SIGHUP and SIGCONT; with SIGHUP at its default
+  action the leader is killed by signal 1 (a leader calling vhangup on
+  itself dies before the call returns to it); when blocked both are left
+  pending. Privileged, without a controlling terminal: nothing happens,
+  no signal.
+threading: >
+  Per process: a second thread of the process gets the same result (EPERM
+  unprivileged). The terminal acted on is the one of the calling process's
+  session, whichever thread calls.
+ordering:
+  - "Privileged with a terminal: the descriptors are hung up and the terminal released before the call returns; SIGHUP and SIGCONT are generated for the session leader during the call."
+timing:
+  typical: "microseconds"
+  guarantees: "never blocks"
+tests:
+  visible: 9
+  held_out: 4

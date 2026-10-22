@@ -1,0 +1,68 @@
+/* vhangup as root from a member of the session that is not its leader:
+ * 0; the terminal is hung up for the whole session: the member and the
+ * leader both lose it (/dev/tty ENXIO), the leader gets SIGHUP and
+ * SIGCONT, the leader's slave descriptor reads 0.
+ * poly-diff: needs=root (CAP_SYS_TTY_CONFIG)
+ */
+#include "poly_ipc.h"
+
+#define SYS_vhangup 153
+#define CLONE_VFORK 0x00004000
+
+static void expect(const char *name, i64 got, i64 want) { check(name, got == want, got); }
+
+/* fork with the parent suspended until the child has ended. */
+static i64 fork_sync(void) { return syscall2(SYS_clone, CLONE_VFORK | SIGCHLD, 0); }
+
+/* Run `body` in a child that leads a new session (no controlling
+ * terminal); its output and exit status are the test's. */
+static int in_session(int (*body)(void)) {
+    u64 chld = 1UL << (SIGCHLD - 1);
+    syscall4(SYS_rt_sigprocmask, SIG_BLOCK, &chld, 0, 8);
+    i64 pid = fork_sync();
+    if (pid == 0) exit_group(syscall0(SYS_setsid) > 0 ? body() : 99);
+    int code = wait_exit(pid);
+    return code < 0 ? 1 : code;
+}
+
+/* Open a pty pair; *slave gets the slave side (not yet anyone's
+ * controlling terminal). Returns the master, or -errno. */
+static int open_pty(int *slave) {
+    int m = (int)syscall4(SYS_openat, AT_FDCWD, "/dev/ptmx", O_RDWR | O_NOCTTY, 0);
+    if (m < 0) return m;
+    int zero = 0;
+    syscall3(SYS_ioctl, m, TIOCSPTLCK, &zero);
+    *slave = (int)syscall3(SYS_ioctl, m, TIOCGPTPEER, O_RDWR | O_NOCTTY);
+    return m;
+}
+
+#define HUPCONT ((1UL << (SIGHUP - 1)) | (1UL << (SIGCONT - 1)))
+
+static int body(void) {
+    sig_mask(SIG_BLOCK, HUPCONT, 0);
+    int s = -1;
+    int m = open_pty(&s);
+    check("pty", m >= 0 && s >= 0, m);
+    expect("tiocsctty", syscall3(SYS_ioctl, s, TIOCSCTTY, 0), 0);
+    i64 pid = fork_sync();
+    if (pid == 0) {
+        int code = 0;
+        if (syscall0(SYS_vhangup) != 0) exit_group(7); /* not hung up: the reads would block */
+        if (syscall4(SYS_openat, AT_FDCWD, "/dev/tty", O_RDWR | O_NOCTTY, 0) != -ENXIO) code |= 2;
+        char b[4];
+        if (read(s, b, sizeof b) != 0) code |= 4;
+        exit_group(code);
+    }
+    int code = wait_exit(pid);
+    check("member_vhangup_ok", code >= 0 && !(code & 1), code);
+    if (code & 1) return finish();
+    check("member_lost_terminal", code >= 0 && !(code & 2), code);
+    check("member_slave_eof", code >= 0 && !(code & 4), code);
+    expect("leader_sighup_sigcont", (i64)(sig_pending() & HUPCONT), (i64)HUPCONT);
+    expect("leader_lost_terminal", syscall4(SYS_openat, AT_FDCWD, "/dev/tty", O_RDWR | O_NOCTTY, 0), -ENXIO);
+    char b[4];
+    expect("leader_slave_eof", read(s, b, sizeof b), 0);
+    return finish();
+}
+
+int test_main(void) { return in_session(body); }
