@@ -1,0 +1,129 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_setscheduler   # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    x86_64 host, uid 1001 without capabilities, RLIMIT_RTPRIO 0/0,
+    RLIMIT_NICE 0/0, started at nice 10; kernel built with sched_ext
+    (disabled). Static freestanding test programs, raw syscalls. Root-only
+    behaviour (real-time policies, other users, RLIMIT_RTPRIO and
+    RLIMIT_NICE allowances, SCHED_RESET_ON_FORK on real-time parents) comes
+    from sched_setscheduler(2) and sched(7) and is covered by needs=root
+    tests.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sched_setscheduler(pid, policy, param) (syscall 144) sets both the
+  scheduling policy and the priority (struct sched_param: a single 4-byte
+  int, sched_priority) of the thread named by pid. pid 0 means the calling
+  thread. A pid is a thread id (tid): the pid of a process names its main
+  thread, and the tid of any other thread names that thread alone. pid and
+  policy are 32-bit ints, so the upper 32 bits of their registers are
+  ignored. Policies: SCHED_OTHER (0), SCHED_FIFO (1), SCHED_RR (2),
+  SCHED_BATCH (3) and SCHED_IDLE (5). SCHED_RESET_ON_FORK (0x40000000) may
+  be ORed in. SCHED_OTHER, SCHED_BATCH and SCHED_IDLE accept only priority
+  0; SCHED_FIFO and SCHED_RR accept only 1..99. Returns 0 on success, never
+  the previous policy.
+returns:
+  success: "0 (also when the policy and priority are what they already were)"
+  normal_policies: "SCHED_OTHER, SCHED_BATCH and SCHED_IDLE with priority 0 work for any caller on itself; sched_getscheduler then reports the new policy and sched_getparam reports 0"
+  self: "pid 0, getpid() and gettid() all name the calling (main) thread"
+  other_process: "a process of the same user (e.g. a child): its policy changes, the caller's does not; the child sees the new policy itself"
+  zombie: "a child that has exited but is not yet reaped is still found: a valid call returns 0 and sched_getscheduler on it shows the new policy"
+  other_thread: "the tid of another thread of the process: only that thread changes"
+  arg_width: >
+    pid and policy are taken as 32-bit ints: pid 0x100000000 is 0 (the
+    caller), pid | 0x500000000 is pid, pid 0xffffffff is -1 (EINVAL), pid
+    0x17fffffff is 0x7fffffff (ESRCH); policy 0x100000003 is SCHED_BATCH,
+    0xffffffff00000000 is SCHED_OTHER, 0xffffffff and 0x80000000 are
+    negative (EINVAL), 0x200000008 is 8 (EINVAL).
+  param_read: "only the 4-byte sched_priority is read: a param in the last 4 bytes of a page followed by an unmapped page works"
+  reset_on_fork: >
+    policy | SCHED_RESET_ON_FORK succeeds for any caller and any valid
+    policy; sched_getscheduler then returns policy | 0x40000000. Setting
+    the flag again, or with another normal policy, keeps it. A later call
+    without the flag clears it, but only for a privileged caller (see
+    errors.reset_on_fork_clear).
+  real_time_privileged: >
+    a caller with CAP_SYS_NICE (root) may set SCHED_FIFO or SCHED_RR with
+    priority 1..99 on itself; sched_getparam then reports that priority.
+    It may switch between FIFO and RR and back to a normal policy (priority
+    0 again), and it may clear SCHED_RESET_ON_FORK.
+  real_time_rlimit: >
+    without CAP_SYS_NICE, real-time changes of the target are allowed when
+    the new priority is at most the larger of the target's current
+    real-time priority and its RLIMIT_RTPRIO soft limit. Switching to a
+    real-time policy different from the current one also needs a nonzero
+    RLIMIT_RTPRIO. With limit 30: OTHER->FIFO 30 ok, FIFO 31 EPERM,
+    FIFO 30->RR 20 ok, RR 31 EPERM. With the limit lowered to 0 while at
+    RR 20: RR 10 ok, RR 10 again ok, RR 11 EPERM, FIFO 5 EPERM, BATCH ok,
+    then FIFO 1 EPERM.
+  idle_leave_rlimit: >
+    without CAP_SYS_NICE, a SCHED_IDLE thread may move to another policy
+    only when its RLIMIT_NICE soft limit allows its current nice value
+    (20 - nice <= RLIMIT_NICE). At nice 0, limit 20 allows it and limit 10
+    does not; after raising nice to 10, limit 10 allows it. Staying
+    SCHED_IDLE (also adding SCHED_RESET_ON_FORK) is always allowed.
+errors:
+  negative_policy: "policy < 0 as a 32-bit int (-1, INT_MIN, 0xffffffff): EINVAL (22), before every other check (even with pid < 0, param NULL, an unreadable param or a pid that does not exist)"
+  null_param: "param NULL: EINVAL (22), whatever pid and (non-negative) policy are"
+  negative_pid: "pid < 0 as a 32-bit int: EINVAL (22), even with param NULL, an unreadable param or an unknown policy"
+  bad_pointer: "param not readable (address 1, the kernel address 0xffff800000000000, the non-canonical 0x0000800000000000, an unmapped page, a PROT_NONE page, 4 bytes straddling into an unmapped page): EFAULT (14)"
+  no_such_thread: "no thread has that id (0x7fffffff, 4194304, a reaped child): ESRCH (3), even with an unknown policy or an invalid priority"
+  unknown_policy: >
+    any policy other than 0, 1, 2, 3, 5 (and 7, see notes), with or
+    without SCHED_RESET_ON_FORK: EINVAL (22). This includes 4, 6
+    (SCHED_DEADLINE, which only sched_setattr can set), 8, 100, and flag
+    bits other than 0x40000000 (0x10000000, 0x20000000, 0x60000000).
+  invalid_priority: >
+    EINVAL (22) for every caller: priority != 0 with SCHED_OTHER,
+    SCHED_BATCH or SCHED_IDLE (1, -1, 99, INT_MAX, INT_MIN), or priority
+    outside 1..99 with SCHED_FIFO or SCHED_RR (0, 100, -1, INT_MAX).
+  real_time_unprivileged: "caller without CAP_SYS_NICE, RLIMIT_RTPRIO 0, target not real-time: SCHED_FIFO or SCHED_RR with a valid priority (1, 50, 99) is EPERM (1)"
+  idle_leave: "caller without CAP_SYS_NICE, target SCHED_IDLE, RLIMIT_NICE 0: SCHED_OTHER, SCHED_BATCH, SCHED_FIFO 5 are EPERM (1); invalid arguments are still EINVAL"
+  reset_on_fork_clear: "caller without CAP_SYS_NICE, target has SCHED_RESET_ON_FORK set, policy given without the flag: EPERM (1), even for a normal policy on itself"
+  other_user: "caller without CAP_SYS_NICE whose effective uid matches neither the real nor the effective uid of the target: EPERM (1). The caller's real uid does not count. Seen on pid 1 as uid 1001 for SCHED_OTHER 0, SCHED_BATCH 0, SCHED_IDLE 0, SCHED_OTHER | SCHED_RESET_ON_FORK and SCHED_FIFO 50"
+  check_order: >
+    1. policy < 0 -> EINVAL; 2. pid < 0 or param NULL -> EINVAL; 3. param
+    unreadable -> EFAULT; 4. pid not found -> ESRCH; 5. unknown policy ->
+    EINVAL; 6. priority invalid for the policy -> EINVAL; 7. permission ->
+    EPERM. So another user's process with an unknown policy, a bad
+    priority or SCHED_FIFO 0 is EINVAL, not EPERM, and a missing pid with a
+    bad priority is ESRCH.
+  failure_has_no_effect: "a failed call changes nothing: policy, priority, SCHED_RESET_ON_FORK and nice stay as they were"
+side_effects: >
+  Sets the target thread's policy, priority and SCHED_RESET_ON_FORK flag.
+  The nice value is kept: switching between SCHED_OTHER, SCHED_BATCH and
+  SCHED_IDLE (and failed calls) leave getpriority unchanged, and a root
+  thread at nice -5 is still at -5 after a FIFO -> OTHER round trip.
+  Fork: a child inherits its parent's policy and priority (SCHED_BATCH,
+  SCHED_IDLE, SCHED_RR 1). It does not inherit the SCHED_RESET_ON_FORK
+  flag: the child sees the bare policy and may switch policy freely. If
+  the parent had the flag set, a real-time parent's child starts as
+  SCHED_OTHER with priority 0, and a child of a parent with negative nice
+  starts at nice 0. SCHED_BATCH and SCHED_IDLE are kept in the child even
+  then. The parent keeps its own settings.
+threading: >
+  Per thread: pid 0 is the calling thread, a tid names that thread only.
+  Changing another thread does not change the caller; a thread changing
+  itself with pid 0 does not change the main thread. A thread created
+  later starts with the policy of the thread that created it. Threads of
+  one process are always of the same user, so there is no EPERM for other
+  users between them.
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+notes: >
+  Policy 7 (SCHED_EXT) was accepted by the oracle kernel, which has
+  sched_ext built in. It is configuration-dependent and no test uses it. An
+  implementation without sched_ext rejects it with EINVAL. Tests also use
+  sched_getscheduler (145), sched_getparam (143), getpriority (140, which
+  returns 20 - nice), setpriority (141), setrlimit (160) and setresuid
+  (117). Some non-root tests check the privileged outcome when euid is 0,
+  so they pass as any user. The needs=root tests could not be run on the
+  oracle host (no root there) and follow the documented rules above.
+tests:
+  visible: 12  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
