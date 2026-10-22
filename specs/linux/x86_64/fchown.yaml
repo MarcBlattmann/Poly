@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fchown
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 / gid 1002 (one group, no privilege), /tmp on ext4, /dev on devtmpfs; static freestanding test programs, raw syscalls. Root behaviour as observed for fchownat (specs/linux/x86_64/fchownat.yaml, uid 0) and chown(2)."
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  fchown(fd, uid, gid) (syscall 93) sets the owner and group of the file
+  open on fd. All three arguments are 32-bit values: the upper half of each
+  register is ignored. An id of 0xffffffff (so also a 64-bit -1) leaves that
+  id unchanged. It acts on the file, not the descriptor: the descriptor may
+  be open read-only or write-only, the file's permission bits do not matter,
+  and the result is seen through every descriptor, hard link and path of the
+  file, also for a file already unlinked. On success the change time is
+  updated and, on a regular file, set-user-ID is cleared and set-group-ID is
+  cleared when group execute is set; this happens on every successful call,
+  even with -1 for both ids or ids equal to the current ones.
+returns:
+  success: "0"
+  both_ids_minus_one: "always 0 on a descriptor that allows fchown at all, for any caller, also on a file the caller does not own (e.g. root's / or /dev/null): ids stay, the change time is updated, set-ID bits are cleared as below"
+  owner_without_privilege: "the file's owner may name its own uid (or -1) as uid, and as gid its effective gid, one of its supplementary groups, or -1; 0 is returned and the ids are set (if equal to the current ones nothing visible changes but the change time and set-ID bits)"
+  root: "may set any uid and gid from 0 to 0xfffffffe, on any file, each separately with -1 for the other"
+  regular_file_mode_bits: "after every successful call: set-user-ID (04000) cleared; set-group-ID (02000) cleared if group execute (00010) is set, kept otherwise; sticky and permission bits kept. Examples: 06755->0755, 06745->02745, 04700->0700, 02710->0710, 02701->02701, 07777->01777, 07070->01070, 06644->02644. The same for root, for a memfd and for an unlinked file."
+  directory_mode_bits: "kept unchanged, set-user-ID, set-group-ID and sticky included (07777 stays 07777)"
+  pipes_sockets_memfd: "a pipe end, a Unix socket and a memfd belong to the creating process's euid/egid (as fstat shows); fchown on them follows the same rules as on a file (-1/-1 and own ids: 0; another uid: EPERM without privilege)"
+  descriptor_width: "fd is 32-bit: (1 << 32) | fd acts on fd; 0xffffffff is -1, i.e. EBADF"
+  id_width: "(1 << 32) | id and 0xffffffff00000000 | id mean id; 0x1ffffffff means unchanged"
+errors:
+  bad_fd: "EBADF: fd not open, closed, negative (-1, -100), 0x7fffffff, or open with O_PATH (file or directory). EBADF comes before any check of the ids."
+  anonymous_inode: "EOPNOTSUPP (95) on eventfd, epoll, timerfd and inotify descriptors, whatever the ids (also -1/-1 and the caller's own ids)"
+  foreign_uid: "EPERM without privilege: on its own file the owner gets EPERM for any uid other than -1 and its own (including 0 and 0xfffffffe), also when the gid part alone would be allowed"
+  foreign_gid: "EPERM without privilege: a gid that is neither the effective gid nor a supplementary group (including 0), also when the uid part alone would be allowed"
+  not_owner: "EPERM without privilege when either id is not -1 on a file the caller does not own, even when the id named equals the file's current id or the caller's own id, and whatever the descriptor's access mode"
+  on_error: "nothing changes: ids, mode bits (set-ID bits stay) and the change time are as before"
+  order: "EBADF (bad or O_PATH descriptor) first; then EOPNOTSUPP for anonymous inodes; then EPERM for the ids"
+side_effects: "On success: the change time (ctime) is set to the current time; modification and access times stay; mode bits as under returns. On failure: none."
+threading: "no thread-specific behaviour; the descriptor table is shared by the threads of a process, the file by everyone who has it open"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 8
+  held_out: 4
