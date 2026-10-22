@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/readlink             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, /tmp on ext4; tests run as a normal user (uid 1001, no capabilities), umask 022, cwd /, empty environment; static freestanding test programs, raw syscalls"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  readlink(path, buf, bufsiz) (syscall 89, three arguments) copies the text
+  of the symbolic link named by path into buf and returns the number of
+  bytes copied. No NUL is appended and the bytes of buf after the copied
+  ones are left as they were. If the text is longer than bufsiz, only the
+  first bufsiz bytes are copied and bufsiz is returned; that is not an
+  error. The last component of path is never followed (a link to a link
+  returns the first link's own text, a dangling link or a link in a loop
+  still has text to read); symbolic links earlier in the path are followed.
+  The text is returned exactly as stored, byte for byte, never resolved or
+  normalised. Procfs magic links (/proc/self/exe, /proc/self/fd/N) belong
+  to procfs and are not covered here. It behaves as readlinkat(AT_FDCWD, path, buf, bufsiz): a
+  relative path starts at the working directory.
+returns:
+  success: "min(text length, bufsiz); exactly that many bytes of buf are written, the rest of buf is untouched; a bufsiz larger than the real buffer is fine as long as the text fits in it"
+  bufsiz_type: "bufsiz is a 32-bit int: only the low 32 bits of the register count (0x100000003 behaves as 3, 0x100000000 as 0, 0x1ffffffff as -1)"
+  text: "any bytes except NUL, 1 to 4095 bytes long (a 4095-byte text comes back whole); \"/\", \"..\", repeated slashes, spaces, newlines and bytes 0x01-0xff are returned unchanged"
+  st_size: "lstat's st_size of a link equals the length readlink returns"
+  last_component: "not followed: a link to a link gives the first link's text; a dangling link gives its text; a link that is part of a loop (a -> b -> a, or self -> self) gives its text"
+  trailing_slash: "a trailing \"/\" (or \"/.\") after a link makes it followed like a directory: to a directory EINVAL (not a link), to a file ENOTDIR, dangling ENOENT, a loop ELOOP"
+  intermediate_links: "followed, also several levels deep and through \"..\" (D/l1/../l2 with l1 -> l2 -> sub is looked up as D/sub/../l2)"
+  changes: "always the current state: after a rename over a link, only the new link's text; a renamed link (or a link in a renamed directory) keeps its text under the new name and the old name is ENOENT; a hard link to a symbolic link (linkat without AT_SYMLINK_FOLLOW) reads the same text; after unlink ENOENT while another hard link still reads"
+  permissions: "search (x) permission is needed on every directory walked; read permission on the directory holding the link is not needed (a 0311 directory works); the link's own mode is never checked"
+errors:
+  bufsiz_not_positive: "EINVAL when bufsiz (as int) is 0 or negative. This check comes before everything else: before the path pointer is read (an unreadable path gives EINVAL, not EFAULT), before the lookup (a missing path gives EINVAL, not ENOENT) and before the buffer"
+  not_a_symlink: "EINVAL for anything else: regular files (any mode, also 0000), directories (\"/\", \"/tmp\", \"D/.\", \"D/sub/..\", \"D/sub/\"), FIFOs, character devices (/dev/null); nothing is written to buf"
+  missing: "ENOENT for a missing last name or a missing directory in the path (\"D/nodir/../l\" is ENOENT too: \"..\" does not undo it), a dangling link in the middle of the path, and the empty path \"\""
+  not_a_directory: "ENOTDIR when a regular file (or a link to one) is used as a directory, including a trailing slash after a file"
+  eacces: "EACCES when the caller lacks search permission on a directory of the path (also when reached through a link, and also when the name inside it does not exist). Root (CAP_DAC_READ_SEARCH) passes that check and gets the ordinary result"
+  eloop: "ELOOP when walking through a symbolic link loop (\"a/x\", \"a/\" with a -> b -> a) or when more than 40 links are followed in one lookup: a chain of 40 links to a directory followed with a trailing slash works, 41 is ELOOP"
+  enametoolong: "a component of more than 255 bytes (255 is fine), or a path of 4096 bytes or more with its NUL (4095 is looked up)"
+  efault_path: "EFAULT for an unreadable path pointer (NULL, low addresses, kernel addresses)"
+  efault_buf: "EFAULT when the text cannot be written to buf: NULL, low or kernel addresses, a read-only mapping (it stays unchanged), or a buffer that runs into an unmapped page before the text ends (the bytes before the hole are written with the start of the text, then EFAULT: 4 bytes before the hole get \"0123\" of \"0123456789\"). A buffer that ends at an unmapped page is fine when the text (or bufsiz) stops before the hole"
+  path_order: "when a path has more than one problem: bufsiz first (above); then the path string as a whole (unreadable EFAULT, too long ENAMETOOLONG, empty ENOENT); then the components left to right as the walk reaches them, links followed on the way, the first failure deciding (missing ENOENT, non-directory ENOTDIR, no search permission EACCES, name over 255 bytes ENAMETOOLONG, loop ELOOP); then whether the last name is a link (EINVAL); the buffer is written last, so a missing path or a non-link with a bad buf gives ENOENT or EINVAL, not EFAULT"
+side_effects: "none: no file, link or directory changes; buf beyond the returned length is not written; on an error other than a buffer that runs into an unmapped page, nothing is written to buf (checked for EINVAL cases and a read-only buffer)"
+threading: "no thread-specific behaviour; the working directory used for relative paths is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
