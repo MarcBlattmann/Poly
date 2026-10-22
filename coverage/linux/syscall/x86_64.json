@@ -306,7 +306,7 @@
 {"symbol":"setrlimit","number":160,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setsid","number":112,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setsockopt","number":54,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"settimeofday","number":164,"src":["linux-syscall-tbl"]},
+{"symbol":"settimeofday","number":164,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"setuid","number":105,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setxattr","number":188,"src":["linux-syscall-tbl"]},
 {"symbol":"setxattrat","number":463,"src":["linux-syscall-tbl"]},
