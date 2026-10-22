@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sync                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, /tmp on ext4 (SSD); tests run as a normal user (uid 1001, no capabilities), umask 022, in /, empty environment; static freestanding test programs, raw syscalls, run directly and under the pipeline's ptrace tracer"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sync() (syscall 162) writes all cached file data and file system
+  metadata of every mounted file system to storage and returns 0. It
+  takes no arguments: whatever is in the argument registers (0, -1,
+  wild or kernel pointers, any 64-bit values) is ignored and never read.
+  It never fails: there is no error return, no privilege is needed (a
+  process with every capability dropped gets 0), and it works with no
+  descriptors open at all. On Linux it returns only once the writes are
+  done (man 2 sync: the same guarantee as fsync on every file), but on a
+  RAM-backed file system there is nothing to wait for and a plain
+  immediate 0 is a correct implementation. Nothing a process can see
+  through the file system API changes: file contents, sizes, link
+  counts, inode numbers, the three timestamps, directory entries,
+  symlinks, modes, and data stored through MAP_SHARED mappings all read
+  back exactly as before the call.
+returns:
+  always: "0, for every call, with any register contents in the six argument registers"
+  repeated: "0 every time; any number of calls in a row (50+ observed) or from several processes at once"
+  no_open_fds: "0 in a process that has closed 0, 1 and 2 (write to fd 1 then gives EBADF, as expected)"
+  no_capabilities: "0 after capset(v3) has emptied the effective, permitted and inheritable sets"
+errors:
+  none: "sync() has no error return (man 2 sync: 'always successful'); never -EFAULT for bad 'arguments', never -EINTR, never -EPERM"
+side_effects: >
+  Pending writes reach storage; nothing else observable. Open files keep
+  their contents, size, offset, inode number, link count and atime/mtime/
+  ctime (sync does not touch timestamps). An open but unlinked file
+  stays readable through its descriptor with st_nlink 0, and its name
+  stays gone. A dirty MAP_SHARED file mapping stays mapped and writable,
+  pread() sees every byte stored through it before and after the call,
+  and the file size does not change. Directory changes made just before
+  (mkdir, chmod, rename of files and of a directory, symlink, ftruncate
+  growing a sparse file) all remain as made. Process state is untouched:
+  umask, working directory, pid, signal mask, pending signals (a blocked
+  pending SIGUSR1 stays pending and can be collected afterwards) and the
+  descriptor table (lowest free fd is unchanged).
+threading: >
+  Callable from any task: a fork child, a CLONE_VM child and the parent
+  all get 0. Several processes calling sync() at the same time, while
+  another writes a file, all get 0 and none blocks indefinitely.
+ordering:
+  - "Writes and metadata changes made before sync() by any process are visible afterwards exactly as made (no reordering, nothing lost or duplicated)"
+timing:                                       # envelopes, never exact values
+  typical: "0.2-16 ms on the oracle with little dirty data; well under 10 s after writing 4 MiB to ext4. Grows with the amount of dirty data system-wide; may block for storage I/O"
+  guarantees: "none beyond returning; tests only require the call to finish within 10 s"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
