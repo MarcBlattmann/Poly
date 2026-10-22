@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/chmod
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, normal user (uid 1001, no capabilities), /tmp on ext4; static freestanding test programs, raw syscalls. Root behaviour from man 2 chmod and the fchmodat sheet (observed as root), not re-observed here"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  chmod(path, mode) (system call 90, two arguments) sets the 12 permission
+  bits (07777: set-user-ID 04000, set-group-ID 02000, sticky 01000 and
+  rwx for owner, group, other) of the file path names, following symbolic
+  links in every component including the last. It behaves as
+  fchmodat(AT_FDCWD, path, mode): a relative path starts at the working
+  directory. The new bits are exactly mode & 07777: the umask does not
+  apply, file type bits (0170000) in mode are ignored and the file keeps
+  its type, bits above 0177777 are ignored (mode -1 sets 07777). Works the
+  same on regular files, directories, FIFOs and socket nodes. Only the
+  file's owner (effective uid equal to the file's uid) or root may change
+  the mode; the file's own mode and write permission on its directory do
+  not matter. For a caller that is not root, set-group-ID is silently
+  cleared (no error) when the file's group is neither the caller's
+  effective gid nor one of its supplementary groups; set-user-ID and sticky
+  are kept, sticky also on regular files and FIFOs. Root keeps all 12 bits
+  on any file. The change is immediate for every hard link and every open
+  descriptor of the file (fstat shows it); descriptors opened before keep
+  their access, later opens and access checks use the new mode.
+returns:
+  success: "0, also when the mode does not change"
+  bits: "new mode = (old type bits) | (mode & 07777); umask ignored; mode values 0, 07777, S_IFDIR|0640 (-> 0640, type unchanged), 0xffff0000|0444 (-> 0444), -1 (-> 07777) all succeed"
+  directories: "same rules; sticky and set-group-ID are kept on a directory the caller owns in its own group; D/, D//, D/. and D/sub/.. name directories as usual"
+  symlinks: "followed, up to 40 links in total over the whole walk (a chain of 40 to the file works; 41 is ELOOP; a link in a directory component counts toward the same 40). The link itself always stays mode 0777; there is no way to chmod a link through this call"
+  set_group_id_dropped: "caller not root, file's group not its egid nor a supplementary group: 0 is returned and the set-group-ID bit is cleared from the result, both on files and directories (02755 -> 0755, 07777 -> 05777, 03775 -> 01775). Observed with a file whose group came from a set-group-ID parent directory"
+  set_group_id_kept: "caller's egid or any supplementary group equals the file's group, or the caller is root"
+errors:
+  not_owner: "EPERM when the caller is not root and its effective uid (not the real uid) differs from the file's owner; the mode is not touched, even when the requested mode equals the current one. A normal user gets EPERM for chmod(\"/\", ...) and chmod(\"/tmp\", ...)"
+  search: "EACCES (caller not root) when a directory on the path lacks search (execute) permission for the caller; read and write permission on directories are not needed (a directory of mode 0100 or 0500 is enough). The last component itself needs no permission bits at all (an owner may chmod a file of mode 0000 or a directory of mode 0000/0600)"
+  dangling_link: "ENOENT; the link is untouched"
+  loop: "ELOOP for a link loop (also a link to itself) and for more than 40 links"
+  path: "missing component or empty path: ENOENT; a non-directory used as a directory, including a trailing slash or /. after a file or after a link to a file: ENOTDIR; a component over 255 bytes: ENAMETOOLONG (255 is fine); a path string of 4096 bytes or more, not counting its NUL: ENAMETOOLONG (4095 bytes plus NUL is fine); an unreadable path pointer (NULL, 1, a kernel address, or a string running into an inaccessible page before its NUL): EFAULT. A string whose NUL is the last byte of a readable page works"
+  path_order: "when a path has more than one problem the first in this order decides: (1) the path string as a whole: unreadable EFAULT, 4096 bytes or more ENAMETOOLONG, empty ENOENT, whatever its components are; (2) the components from left to right as the walk reaches them, links followed on the way: a directory without search permission EACCES (normal user only) before anything about the names after it (missing, over 255 bytes, a file used as a directory); a missing name or a dangling link ENOENT (a later \"..\" does not undo it); a non-directory followed by more components ENOTDIR; a name over 255 bytes ENAMETOOLONG; so D/nope/<256 bytes> is ENOENT, D/file/<256 bytes> ENOTDIR, D/<256 bytes>/nope ENAMETOOLONG, D/closed/nope EACCES for a normal user and ENOENT for root; (3) only when the file is found: ownership, EPERM. A missing name in a directory the caller does not own is ENOENT, not EPERM"
+side_effects: "ctime of the file becomes the current time (also when the mode does not change); mtime, atime, size, contents, inode number and link count do not change; the directory's mtime and ctime do not change. A failed chmod changes nothing."
+threading: "no thread-specific behaviour; the file system state is shared by the threads of a process (the credentials used are those of the calling thread)"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 8
+  held_out: 4
