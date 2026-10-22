@@ -290,7 +290,7 @@
 {"symbol":"set_robust_list","number":273,"src":["linux-syscall-tbl"]},
 {"symbol":"set_tid_address","number":218,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setdomainname","number":171,"src":["linux-syscall-tbl"]},
-{"symbol":"setfsgid","number":123,"src":["linux-syscall-tbl"]},
+{"symbol":"setfsgid","number":123,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"setfsuid","number":122,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setgid","number":106,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setgroups","number":116,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
