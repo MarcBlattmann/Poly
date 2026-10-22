@@ -1,0 +1,89 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_getscheduler   # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    x86_64 host, uid 1001 without capabilities, RLIMIT_RTPRIO 0/0,
+    RLIMIT_NICE 0/0, started at nice 10; kernel built with sched_ext
+    (disabled). Static freestanding test programs, raw syscalls. Real-time
+    policies (SCHED_FIFO/SCHED_RR), their inheritance over fork and reading
+    across users as root come from sched_getscheduler(2),
+    sched_setscheduler(2) and sched(7) and are covered by needs=root tests.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sched_getscheduler(pid) (syscall 145) returns the scheduling policy of
+  the thread named by pid as the syscall's return value: SCHED_OTHER (0),
+  SCHED_FIFO (1), SCHED_RR (2), SCHED_BATCH (3), SCHED_IDLE (5) (and
+  SCHED_DEADLINE (6) for threads set up with sched_setattr), with
+  SCHED_RESET_ON_FORK (0x40000000) ORed in while that flag is set on the
+  thread. pid 0 means the calling thread. A pid is a thread id (tid): the
+  pid of a process names its main thread and the tid of any other thread
+  names that thread. pid is a 32-bit int: the upper 32 bits of the
+  register are ignored. Only the first argument is read. No permission is
+  needed: any existing thread may be read.
+returns:
+  success: "the policy, a non-negative value; nothing is written to memory"
+  self: "pid 0, the caller's pid and the caller's tid all name the caller; a fresh test process is SCHED_OTHER (0), any number of times"
+  set_policy: >
+    the policy last set by sched_setscheduler on that thread: SCHED_BATCH
+    3, SCHED_OTHER 0 again, SCHED_IDLE 5; setting the same policy again
+    keeps it; a failed sched_setscheduler (EINVAL for priority 1 with
+    SCHED_OTHER, policy 4, SCHED_FIFO 100; EPERM for SCHED_FIFO 1 without
+    privilege) leaves the value as it was
+  reset_on_fork: >
+    with SCHED_RESET_ON_FORK set the value is policy | 0x40000000:
+    0x40000000 (SCHED_OTHER), 0x40000003 (SCHED_BATCH), 0x40000005
+    (SCHED_IDLE), 0x40000001 (SCHED_FIFO), 0x40000002 (SCHED_RR). After a
+    privileged caller sets the policy without the flag, the flag is gone
+    from the value.
+  real_time: "SCHED_FIFO 1 and SCHED_RR 2 (set by a privileged caller), whatever the priority; back to 0 after switching to SCHED_OTHER"
+  fork: >
+    a forked child reports its parent's policy for itself (SCHED_BATCH,
+    SCHED_FIFO) but never the SCHED_RESET_ON_FORK flag: a child of a
+    SCHED_BATCH | RESET_ON_FORK parent reports 3; a child of a real-time
+    parent with the flag reports 0 (SCHED_OTHER). The parent keeps its own
+    value, flag included. A child's own change does not change the parent.
+  other_process: "a live child, the parent, pid 1 (owned by root, read as uid 1001): found, each reports its own policy (flag included)"
+  other_user: "no permission check: a process that switched to uid/gid 65534 reads its root parent's SCHED_FIFO, and the root parent reads the child"
+  zombie: "a child that has exited but is not yet reaped is still found and reports the policy it had at exit (e.g. 0x40000005 after the child set SCHED_IDLE | RESET_ON_FORK), also after waitid with WNOWAIT"
+  other_thread: "the tid of another thread of the process reports that thread's policy; a worker may read itself with pid 0 or its tid and the main thread with the process's pid"
+  pid_width: "pid is taken as a 32-bit int: 0x100000000 and 0xabcd00000000 mean 0 (the caller), pid | 0x500000000 and pid | 0xffffffff00000000 mean pid; 0xffffffff, 0x80000000 and 0x1ffffffff are negative (EINVAL); 0x17fffffff means 0x7fffffff (ESRCH)"
+  extra_args: "the other five argument registers are ignored (junk there gives the same result)"
+errors:
+  negative_pid: "pid < 0 as a 32-bit int (-1, -2, -getpid(), INT_MIN): EINVAL (22)"
+  no_such_thread: "no thread has that id (0x7fffffff, 0x3fffffff, 4194304, a reaped child, the tid of a thread that has ended): ESRCH (3)"
+  check_order: "1. pid < 0 -> EINVAL; 2. pid not found -> ESRCH"
+side_effects: >
+  None. The call only reads: the target's policy, flag, priority and nice
+  value (getpriority) are the same afterwards.
+threading: >
+  Per thread: pid 0 is the calling thread, a tid names that thread only. A
+  worker that switches itself to SCHED_IDLE changes only its own value;
+  the main thread still reports its own (SCHED_BATCH), read by either
+  thread. A new thread starts with the policy of the thread that created
+  it, without SCHED_RESET_ON_FORK (created by a SCHED_BATCH | RESET_ON_FORK
+  thread it reports 3; created by a SCHED_IDLE thread it reports 5); the
+  creator keeps its flag. Once a thread has ended (its CLONE_CHILD_CLEARTID
+  word cleared) its tid is ESRCH; it may still be found for a very short
+  moment after the word is cleared.
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+notes: >
+  Policy 7 (SCHED_EXT) exists on the oracle kernel (sched_ext built in) but
+  is configuration-dependent; no test uses it. SCHED_DEADLINE (6) can only
+  be set with sched_setattr (314), which needs privilege; it is listed from
+  sched(7) and not tested. Tests also use sched_setscheduler (144),
+  getpriority (140), setresuid (117), setresgid (119), waitid (247) and
+  wait4 (61) to set up and observe the target. An unprivileged thread may
+  enter SCHED_IDLE but not leave it (RLIMIT_NICE 0) and may not clear
+  SCHED_RESET_ON_FORK once set (EPERM), so the non-root tests do those in
+  child processes or threads, or keep the flag. The needs=root tests could
+  not be run on the oracle host (no root there) and follow the documented
+  rules above.
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
