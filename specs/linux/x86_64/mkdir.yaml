@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mkdir                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, /tmp on ext4; tests run as a normal user (uid 1001, gid 1002, no capabilities), umask 022, static freestanding programs, raw syscalls. Root's results (permission checks passed, chown of a parent to another group) are from mkdir(2), path_resolution(7) and capabilities(7), not observed here."
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  mkdir(path, mode) (syscall 83) creates a new, empty directory at path
+  and returns 0. It behaves as mkdirat(AT_FDCWD, path, mode): a relative
+  path starts at the working directory. The new directory's permission
+  bits are (mode & 0777 & ~umask), plus the sticky bit (01000) if mode
+  has it (the umask never removes it). Set-user-ID (04000) is always
+  dropped; set-group-ID (02000) in mode is dropped, but a directory made
+  inside a set-group-ID parent is itself set-group-ID whatever mode says.
+  File type bits in mode are ignored and only the low 16 bits of the
+  argument count (0x10000|0777 means 0777; -1 means 07777, giving 01755
+  under umask 022). The new directory has link count 2, owner the
+  caller's effective uid, group the caller's effective gid, or the
+  parent's group when the parent is set-group-ID; it is on the parent's
+  device and its ".." is the parent. It lists only "." and "..". The
+  parent's link count goes up by one. The last name is never followed if
+  it is a symbolic link; symbolic links on the way are followed.
+returns:
+  success: "0; the directory exists at once and can be entered, listed (only \".\" and \"..\"), opened with O_DIRECTORY and filled"
+  mode: "S_IFDIR | (mode & 0777 & ~umask) | (mode & 01000); examples under umask 022: 0777 -> 0755, 01777 -> 01755, 04777 -> 0755, 02777 -> 0755, 07777 -> 01755, 0644 -> 0644, 0 -> 0; under umask 0777: 01777 -> 01000; S_IFREG|0750 -> 0750; 0x10000|0777 -> 0755; 0xffffffffffff0700 -> 0700"
+  setgid_parent: "inside a directory with S_ISGID: the new directory gets S_ISGID (mode 0700 -> 02700, 05777 -> 03755 under umask 022) and the parent's group; this carries on to its subdirectories. Clearing the parent's bit affects later children only."
+  owner: "uid = caller's effective uid; gid = caller's effective gid (or the set-group-ID parent's gid)"
+  nlink: "new directory 2 (3 once it has one subdirectory); parent +1 per subdirectory made, -1 per rmdir; files do not count; a failed mkdir changes nothing"
+  dotdot: "the new directory's \"..\" has the parent's inode and device"
+  umask: "the umask in force at the call; mkdir does not change it"
+  path_spelling: "trailing slashes on the new name are allowed (\"D/a/\", \"D/b///\"); repeated slashes count as one; \"//\" or \"///\" at the start is \"/\"; \".\" components stay put; \"..\" goes to the parent, at \"/\" it stays at \"/\"; \"..\" after a symbolic link goes to the parent of the link's target"
+  relative: "relative paths start at the working directory; an absolute path ignores it"
+  symlinks: "symbolic links on the way (relative, absolute, chains, links whose target has \"..\") are followed and the directory is made in their target; the last name is never followed, with or without a trailing slash (EEXIST); a dangling link's target is not created"
+errors:
+  exists: "EEXIST for any existing last name of any kind, with or without trailing slashes: directory, regular file, symbolic link to a directory or to a file, dangling link, link loop, \".\", \"..\", \"/\", \"/..\", \"/../tmp\", \"D/sub/..\", \"D/sub/../sub\". The existing object is left as it was."
+  missing: "ENOENT: a missing directory on the way (also when a later \"..\" would leave it: \"D/no/../x\"), a dangling link on the way, an empty path, a new name followed by \"/.\" or \"/..\" (\"D/k/.\", \"D/k/..\", \"D/k/./\" with k missing), a new name in a working directory that has been removed (\".\" there is still EEXIST, \"../x\" still works)"
+  not_directory: "ENOTDIR: a regular file, or a symbolic link to one, used as a directory on the way (\"D/f/x\", \"D/f/x/y\", \"D/lf/x\"), also \"D/f/.\" and \"D/f/..\"; but \"D/f/\" and \"D/f//\" are EEXIST"
+  loop: "ELOOP: a symbolic link loop on the way (two links naming each other, or a link naming itself), when followed; as the last name it is EEXIST"
+  name_too_long: "ENAMETOOLONG: a name of 256 bytes or more (255 works; also with a trailing slash), or a path of 4096 bytes or more counting its NUL (4095 bytes plus NUL works, even made of \"./\" pairs)"
+  fault: "EFAULT: path NULL, a small address such as 1, an unmapped page, or a string that runs into an unmapped page before its NUL; a string whose NUL is the last byte of a mapped page works"
+  permission: "EACCES (non-root callers): no write or no search permission on the parent, or no search permission on a directory on the way; read permission is not needed (0333 parent works, 0111 parent: EACCES). The new directory's own mode is irrelevant to its creation, but a mode-0 directory cannot be used on the way (EACCES); it can still be removed by rmdir. Root passes all these checks (the calls succeed or give the other error that applies)."
+  order: "the first applicable of: (1) the path string as a whole: unreadable EFAULT, 4096 bytes or more with its NUL ENAMETOOLONG (even under a missing directory), empty ENOENT; (2) the components from left to right as the walk reaches them, symbolic links on the way followed: a missing name or dangling link ENOENT, a non-directory followed by more ENOTDIR, no search permission EACCES, a name over 255 bytes ENAMETOOLONG, a link loop ELOOP; so D/no/<256 bytes> and D/no/../<256> are ENOENT, D/f/<256> ENOTDIR, D/<256>/no/x ENAMETOOLONG, D/unsearchable/<anything> EACCES (an existing name, \".\", a missing directory, a long name alike); (3) the last name: over 255 bytes ENAMETOOLONG (also in a parent without write permission), then exists EEXIST (also \".\" in a parent without write permission), then no write permission on the parent EACCES. In a searchable but not writable parent: existing name EEXIST, \"no/x\" ENOENT, new name EACCES."
+  other_documented: "EROFS (read-only file system), ENOSPC, EDQUOT, EMLINK, EPERM (file system without directory support) are listed in mkdir(2) and not exercised by the tests"
+side_effects: "One new directory entry in the parent. The new directory's atime, mtime and ctime are equal and lie between a coarse clock reading before the call and a precise one after it. The parent's mtime and ctime move to the same window and equal each other; the parent's atime does not change. A failed mkdir changes nothing (no entry, no times, no link counts)."
+threading: "Concurrent mkdir of the same new name from several processes: exactly one gets 0, all others EEXIST, one directory results. Concurrent mkdir of different names in one parent all succeed. The working directory and umask are per process (shared by threads made with CLONE_FS)."
+ordering: []
+timing:
+  typical: "microseconds per call on a local file system; does not block unless the file system does"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
