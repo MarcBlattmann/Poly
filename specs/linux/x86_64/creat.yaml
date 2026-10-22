@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/creat
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), umask 022, /tmp on ext4; static freestanding test programs, raw syscalls (number 85)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  creat(path, mode) (x86-64 syscall 85, two arguments) behaves exactly like
+  open(path, O_CREAT|O_WRONLY|O_TRUNC, mode), i.e. openat(AT_FDCWD, ...)
+  with those flags (see open.yaml for the shared rules): a relative path
+  starts at the working directory (as changed by chdir or fchdir), an
+  absolute one at the root. A missing last name is created as a regular
+  file; an existing file is opened and, if it is a regular file, emptied.
+  It returns the lowest-numbered free descriptor, open for writing only.
+  mode is a 32-bit value: the upper half of the register is ignored.
+returns:
+  success: "the lowest descriptor number not in use (3 when only 0, 1, 2 are open); numbers freed by close are reused lowest first"
+  open_file: "a new open file every call, with its own offset starting at 0; F_GETFL gives O_WRONLY|O_LARGEFILE (0100001), exactly what open with O_CREAT|O_WRONLY|O_TRUNC gives; F_GETFD gives 0 (no FD_CLOEXEC); read gives EBADF, write works. F_SETFL on one creat descriptor does not affect another"
+  new_file: "a regular file, size 0, st_nlink 1, owner the caller's effective uid and gid, mode = mode & 07777 & ~umask (bits above 07777 ignored; setuid, setgid and sticky kept when the umask allows), using the umask in effect at the call. The descriptor can write even if the new mode forbids it (mode 0, or umask 0777)"
+  existing_regular_file: "the same inode is opened and truncated to size 0; mode, owner and link count unchanged, the mode argument ignored. Other descriptors for the file see size 0 but keep their offsets (a write at an offset past the end leaves a hole and extends the size). Through a hard link, the file shared by every name is emptied"
+  existing_special_file: "/dev/null opens for writing (truncation ignored, still a character device). A FIFO with a reader opens for writing (its type and mode unchanged) and data already in the FIFO is not discarded"
+  symlinks: "followed in every component, relative targets resolved from the link's directory: through a link to a file the target is opened and emptied and the link stays; a dangling link creates its target (mode as for a new file) and the link stays; a link to a directory as a component works"
+  after_unlink: "a name whose file was unlinked is new: creat makes a different inode; descriptors for the old file keep it (st_nlink 0, contents readable)"
+  timestamps: "truncating an existing file sets its mtime to now (also when it was already empty) and leaves atime alone; existing names do not change the directory's mtime; creating a new name updates the directory's mtime; a failed call changes no timestamps"
+errors:
+  missing: "ENOENT: a missing directory component (also when followed by \"..\"), an empty path, a dangling link whose target's directory is missing, a relative path whose working directory has been removed"
+  not_a_directory: "ENOTDIR: a non-directory used as a directory component (\"file/x\", \"file/.\", \"file/..\")"
+  is_a_directory: "EISDIR: the name is an existing directory (\"/\", \"/tmp\", \".\", \"..\", \"dir/\", \"dir/.\", a link to a directory); a path ending in \"/\" whose last name is missing or a regular file. Nothing is created or truncated"
+  symlink_loops: "ELOOP: a link cycle or a link to itself, as the last component or in the middle of the path"
+  name_too_long: "ENAMETOOLONG: a path of 4096 bytes or more with its NUL (4095 plus NUL is looked up normally), a component over 255 bytes (255 is fine) when the directories before it exist"
+  bad_pointer: "EFAULT: NULL, a low unmapped address, or a kernel address as path"
+  permission: "EACCES for a caller without the right permission (root passes all of these): an existing file without write permission (it is then not truncated); a new name in a directory without write permission (nothing created); any path through a directory without search permission (an existing file, a new name, or a missing name deeper below it). Write permission on the file alone is enough (no read permission needed), and an existing writable file in a read-only directory is opened and emptied"
+  descriptor_limit: "EMFILE when every number below the soft RLIMIT_NOFILE is in use; reported before the path is looked at (a missing directory or a NULL path also give EMFILE; nothing is created and no existing file is truncated). After a close, the freed number is handed out"
+  text_busy: "ETXTBSY for a file being executed (open(2) man page; not exercised by the tests)"
+  error_order: "as for open: the descriptor limit (EMFILE) first, then the path string as a whole (EFAULT, ENAMETOOLONG, ENOENT for empty), then the components left to right (ENOENT, ENOTDIR, EACCES, ENAMETOOLONG, ELOOP), then the last name itself (EISDIR, EACCES for the file's mode)"
+side_effects: "On success a new name gets a directory entry, or an existing regular file is truncated to 0. Nothing changes on failure. Writes to a FIFO or /dev/null go where they normally go."
+threading: "no thread-specific behaviour; the descriptor table, working directory, umask and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds for files and devices; does not block in the observed cases (creat on a FIFO without a reader blocks until one opens, as for open with O_WRONLY; not exercised)"
+  guarantees: "none"
+tests:
+  visible: 9
+  held_out: 4
