@@ -1,0 +1,120 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ptrace               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; Yama ptrace_scope 1 (only descendants may be attached; every test traces its own descendants)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  ptrace(request, pid, addr, data) (syscall 101) lets a tracer observe and
+  control a tracee: stop it, read and write its memory and registers,
+  stop it at syscalls, signals and process events, and decide which
+  signals it gets. This is the raw syscall: PEEK requests store the word
+  at *data and return 0 (not the word). A tracee is attached by
+  PTRACE_TRACEME (the caller's parent becomes its tracer), PTRACE_ATTACH
+  (sends SIGSTOP) or PTRACE_SEIZE (no stop), and stays attached until
+  PTRACE_DETACH, its death, or the tracer's exit. A tracee enters a
+  "ptrace stop" for: every signal it is about to receive except SIGKILL
+  (signal-delivery-stop: wait status (sig<<8)|0x7f; the tracer decides
+  with the resume request's data which signal, if any, is delivered);
+  group-stops; syscall entry/exit stops (PTRACE_SYSCALL, PTRACE_SYSEMU);
+  single steps; and event stops enabled by options (status
+  (event<<16)|(SIGTRAP<<8)|0x7f). The tracer learns of each stop through
+  wait4/waitid (no WUNTRACED needed; __WALL for threads; it need not be
+  the parent) and SIGCHLD (si_code CLD_TRAPPED, si_status the stop's
+  signal). Only while the tracee is in a ptrace stop do the other
+  requests work; on a running tracee or any other process they fail with
+  ESRCH. Resuming requests (CONT, SYSCALL, SYSEMU, SINGLESTEP, DETACH,
+  LISTEN) take a signal to deliver in data (0 = none, 1..64, else EIO).
+  The arguments addr and data are full 64-bit values. Struct layouts:
+  struct user_regs_struct (27 words, 216 bytes, order r15 r14 r13 r12 rbp
+  rbx r11 r10 r9 r8 rax rcx rdx rsi rdi orig_rax rip cs eflags rsp ss
+  fs_base gs_base ds es fs gs), struct user (928 bytes, u_debugreg[8] at
+  848), struct ptrace_syscall_info, the 512-byte FXSAVE area; constants
+  from linux/ptrace.h and asm/ptrace-abi.h.
+returns:
+  traceme: "PTRACE_TRACEME (0): 0; pid, addr, data ignored; the parent is the tracer from then on (the caller does not stop)"
+  attach: "PTRACE_ATTACH (16): 0 at once; the tracee is sent SIGSTOP and the tracer sees a SIGSTOP stop (status 0x137f, siginfo si_code SI_KERNEL 0x80, si_pid 0); a child already stopped by job control is attached and its SIGSTOP stop can be waited for at once (WNOHANG)"
+  seize: "PTRACE_SEIZE (0x4206): 0; addr must be 0; data = options; the tracee does not stop; it enables PTRACE_INTERRUPT, PTRACE_LISTEN and PTRACE_EVENT_STOP reporting of group-stops"
+  interrupt: "PTRACE_INTERRUPT (0x4207), seized tracee only: 0; a running tracee stops with status (PTRACE_EVENT_STOP<<16)|(SIGTRAP<<8)|0x7f (0x80057f), siginfo SIGTRAP with si_code (PTRACE_EVENT_STOP<<8)|SIGTRAP (0x8005); on a tracee already in such a stop it also returns 0 and the next resume ends in another such stop at once"
+  listen: "PTRACE_LISTEN (0x4208), seized tracee in a PTRACE_EVENT_STOP stop: 0; the tracee stays stopped but is no longer in a ptrace stop (requests ESRCH, nothing to wait for); when SIGCONT ends the group-stop it reports a PTRACE_EVENT_STOP/SIGTRAP stop (0x80057f), and resuming that reaches the SIGCONT signal-delivery-stop"
+  cont: "PTRACE_CONT (7): 0; resumes; data 0 discards the signal of a signal-delivery-stop, data n delivers signal n instead (another signal than the one stopped for is allowed); in an event or syscall stop a non-zero data is delivered as a signal"
+  detach: "PTRACE_DETACH (17): 0; the tracee resumes untraced (data: signal to deliver, e.g. SIGUSR1 kills it by default action); it can be attached again; a detached process is ESRCH for further requests"
+  kill: "PTRACE_KILL (8): 0, the tracee dies by SIGKILL; works on a stopped and on a running tracee (and returns 0 on a traced zombie)"
+  peek: "PTRACE_PEEKTEXT/PEEKDATA (1/2): 0 and the 8 bytes at addr (any byte alignment, little-endian) stored at *data; TEXT and DATA are the same; reads memory the tracee may not read itself: read-only data, PROT_READ and PROT_NONE private anonymous mappings"
+  poke: "PTRACE_POKETEXT/POKEDATA (4/5): 0; writes the 8 bytes of data at addr (any alignment) into the tracee's own memory (not the tracer's copy after fork), also into read-only data, code, PROT_READ and PROT_NONE mappings; the tracee sees the new bytes"
+  peekuser: "PTRACE_PEEKUSR (3): 0 and the word of struct user at offset addr (8-aligned, 0..920): offsets 0..208 are the registers, equal to PTRACE_GETREGS; 216..840 read 0; 848..904 the debug registers (DR7 0 and DR0-3 0 in a process that never set them; DR6 reads 0xffff0ff0); 912, 920 read 0"
+  pokeuser: "PTRACE_POKEUSR (6): 0; sets one register (offsets 0..208) or debug register (848..904); a changed register is seen by GETREGS and by the tracee when it resumes"
+  getregs: "PTRACE_GETREGS (12): 0, 216 bytes at data (addr ignored); at a stop for a signal the tracee sent itself with the syscall instruction: orig_rax = that syscall's number, rax = its result, rdi/rsi... its arguments, rip = the instruction after syscall, rcx = rip, cs 0x33, ss 0x2b, eflags with IF (0x200) and bit 1 set; other registers as the program left them"
+  setregs: "PTRACE_SETREGS (13): 0; the tracee resumes with those registers (e.g. a changed rax becomes the result of the syscall it stopped after; a changed callee-saved register is seen by its code); eflags: only the user-changeable flags take effect"
+  regset: "PTRACE_GETREGSET (0x4204) with addr = NT_PRSTATUS (1) or NT_PRFPREG (2) and data = struct iovec: 0; fills min(iov_len, size) bytes (216 for NT_PRSTATUS, same content as GETREGS; 512 for NT_PRFPREG, same as GETFPREGS) and sets iov_len to that; iov_len 0 gives 0 bytes; PTRACE_SETREGSET (0x4205) writes the same way"
+  fpregs: "PTRACE_GETFPREGS (14): 0, the 512-byte FXSAVE image (x87 control word 0x037f at offset 0 and MXCSR 0x1f80 at offset 24 in a process that never changed them); PTRACE_SETFPREGS (15): 0, the tracee runs on with that state (an MXCSR of 0x7f80 is what stmxcsr then shows)"
+  arch_prctl: "PTRACE_ARCH_PRCTL (30) with data = ARCH_GET_FS (0x1003) and addr = pointer: 0, the tracee's fs base stored there (equal to fs_base of GETREGS)"
+  getsiginfo: "PTRACE_GETSIGINFO (0x4202): 0, the 128-byte siginfo of the current stop: of the signal for a signal-delivery-stop (kill: SI_USER and the sender's pid; tkill: SI_TKILL -6; the attach SIGSTOP: SI_KERNEL; the exec SIGTRAP: SI_USER with the tracee's own pid; int3: SIGTRAP SI_KERNEL; single step: SIGTRAP TRAP_TRACE 2 with si_addr = the next instruction); for a syscall stop SIGTRAP with si_code SIGTRAP|0x80 (with TRACESYSGOOD) or SIGTRAP; for an event stop SIGTRAP with si_code (event<<8)|SIGTRAP; for a seized group-stop the stopping signal with si_code (PTRACE_EVENT_STOP<<8)|sig"
+  setsiginfo: "PTRACE_SETSIGINFO (0x4203): 0; replaces the siginfo of the signal stopped for; if that signal is then delivered (CONT with it), an SA_SIGINFO handler gets the new si_code and si_pid"
+  sigmask: "PTRACE_GETSIGMASK/SETSIGMASK (0x420a/0x420b), addr = 8 (sizeof sigset), data = pointer: 0; read/set the tracee's blocked set (the tracee's own sigprocmask then shows it); SIGKILL and SIGSTOP are dropped from a set mask"
+  geteventmsg: "PTRACE_GETEVENTMSG (0x4201): 0 and an unsigned long at data: after FORK/VFORK/CLONE events the new task's id, after EXEC the former thread id (the pid of a single-threaded process), after VFORK_DONE the child's pid, after EXIT the wait status the exit will have; 0 at other stops of a new tracee"
+  syscall_info: "PTRACE_GET_SYSCALL_INFO (0x420e), addr = buffer size, data = buffer: returns the full size of the information (80 at a syscall entry stop, 33 at an exit stop, 24 at any other stop) and copies at most addr bytes (addr 0 copies nothing and never faults); op 1 entry / 2 exit / 0 none at byte 0, arch AUDIT_ARCH_X86_64 0xc000003e at 4, rip at 8, rsp at 16; entry: nr at 24 and six arguments at 32; exit: s64 result at 24 and is_error (1 for -4095..-1) at 32"
+  setoptions: "PTRACE_SETOPTIONS (0x4200): 0; data replaces all options (0 clears them)"
+  syscall_stops: "PTRACE_SYSCALL (24) resumes to the next syscall entry, then to that call's exit; status (SIGTRAP|0x80)<<8|0x7f (0x857f) with PTRACE_O_TRACESYSGOOD, 0x57f without; at the entry orig_rax = number, rax = -ENOSYS (-38), arguments in rdi rsi rdx r10 r8 r9; at the exit rax = result. Setting orig_rax at the entry to -1 skips the call (the tracee gets -ENOSYS unless rax is set at the exit stop), to another number runs that call instead; setting rax at the exit stop changes the result the tracee gets. exit_group has an entry stop but no exit stop (the next wait reports the exit)"
+  sysemu: "PTRACE_SYSEMU (31): like PTRACE_SYSCALL but stops only at syscall entries and never runs the call (no side effect, no exit stop, even for write or exit_group); the tracee gets the rax it is resumed with (-ENOSYS unless changed)"
+  singlestep: "PTRACE_SINGLESTEP (9): runs one instruction, then a SIGTRAP stop (status 0x57f, si_code TRAP_TRACE) with rip at the next instruction and the instruction's effects done; resuming from a signal-delivery-stop of a signal sent with the syscall instruction steps the instruction after that syscall"
+  breakpoint: "an int3 (0xcc) poked into code: the tracee stops with SIGTRAP (si_code SI_KERNEL), rip one past the int3; restoring the byte, setting rip back and PTRACE_CONT with 0 runs the original instruction as if nothing happened"
+  exec: "a successful execve of a tracee without PTRACE_O_TRACEEXEC: a SIGTRAP signal-delivery-stop after the new program is loaded (si_code SI_USER, si_pid = tracee's pid, orig_rax 59, rax 0, rip = new entry point); with PTRACE_O_TRACEEXEC a PTRACE_EVENT_EXEC stop (0x4057f) instead. A failing execve has no stop"
+  exit_event: "PTRACE_O_TRACEEXIT: the exiting tracee stops in a PTRACE_EVENT_EXIT stop (0x6057f) in its exit_group (orig_rax 231), its memory still readable, event message = the coming wait status; after a resume it dies and is reported with that status"
+  fork_events: "PTRACE_O_TRACEFORK/TRACEVFORK/TRACECLONE (2/4/8): a fork/vfork/clone by the tracee gives an event stop (0x1057f / 0x2057f / 0x3057f) in the tracee; the new task is traced with the same options (its own forks are traced too) and starts in a SIGSTOP stop (0x137f, si_code SI_USER) under TRACEME/ATTACH, in a PTRACE_EVENT_STOP stop (0x80057f) under SEIZE; a traced thread's stops and exit are waited for by tid with __WALL, its exit reported as exited(0). PTRACE_O_TRACEVFORKDONE (0x20): a PTRACE_EVENT_VFORK_DONE stop (0x5057f) in the parent when the vfork child exits or execs. Without the option, children of a tracee are not traced (ESRCH)"
+  options_bits: "valid options: TRACESYSGOOD 0x1, TRACEFORK 0x2, TRACEVFORK 0x4, TRACECLONE 0x8, TRACEEXEC 0x10, TRACEVFORKDONE 0x20, TRACEEXIT 0x40, TRACESECCOMP 0x80, EXITKILL 0x100000, SUSPEND_SECCOMP 0x200000 (needs CAP_SYS_ADMIN: EPERM for a normal user)"
+  exitkill: "PTRACE_O_EXITKILL (0x100000): when the tracer exits, each tracee with this option gets SIGKILL (its waiter sees killed by 9); without it, the tracer's exit detaches its tracees: one in a ptrace stop runs on, one running keeps running"
+  wait: "a tracer waits for its tracees' stops with wait4 without WUNTRACED (a non-child tracee too, e.g. a grandchild); a non-child tracee's death is reported to the tracer and also to the real parent (which reaps it); when the tracer is the parent the exit is reported once"
+  signals_in_stops: "an ignored signal still gives a signal-delivery-stop; a blocked one gives none until it is unblocked; SIGKILL never stops: kill(tracee, SIGKILL) of a stopped tracee kills it at once"
+errors:
+  esrch: "ESRCH (3): every request but TRACEME, ATTACH, SEIZE and KILL on a pid that is not a tracee of the caller in a ptrace stop: no such pid, pid 0, pid -1, the caller itself, pid 1, an own untraced child, a running tracee, a LISTENing tracee, a zombie tracee, a reaped one. PTRACE_KILL is ESRCH for a process the caller does not trace. ATTACH/SEIZE of a pid that does not exist (or 0). The pid is checked before the request number"
+  eperm: "EPERM (1): ATTACH/SEIZE of the caller itself, of a process already traced (also by the caller), of a zombie; TRACEME by a process already traced; (not tested: attaching a process the caller may not trace, e.g. under Yama 1 a non-descendant, or another user's process without CAP_SYS_PTRACE; options needing CAP_SYS_ADMIN)"
+  eio: "EIO (5): unknown request number on a stopped tracee; resume signal > 64 or negative (CONT, SYSCALL, DETACH ...); PEEKUSR offset not 8-aligned or outside 0..920 (negative too); POKEUSR outside the registers and debug registers (216..840, 912, 920) or unaligned; an invalid selector (cs 0x1234) or non-canonical fs_base/gs_base in POKEUSR or SETREGS; INTERRUPT or LISTEN on a tracee not attached with SEIZE; LISTEN outside a PTRACE_EVENT_STOP stop (e.g. in a signal-delivery-stop of a seized tracee); SEIZE with addr != 0 or an unknown option bit; PEEK/POKE of a word not wholly mapped (NULL, unmapped page, a word running into an unmapped page, non-canonical address). A POKE running into an unmapped page has written the mapped bytes before it"
+  einval: "EINVAL (22): SETOPTIONS with an unknown option bit (bit 30, 31, 32 ...); GETSIGMASK/SETSIGMASK with addr != 8; GETREGSET/SETREGSET of an unknown note type, or with iov_len not a multiple of 8 (4, 12, 220); SETFPREGS with reserved MXCSR bits set; GETSIGINFO in a group-stop of a tracee attached with ATTACH (not SEIZE); PTRACE_ARCH_PRCTL with an unknown code"
+  efault: "EFAULT (14): the data pointer of PEEK*/GETREGS/SETREGS/GETFPREGS/GETSIGINFO/SETSIGINFO/GETEVENTMSG/GETSIGMASK/GET_SYSCALL_INFO (with addr > 0) is bad; the iovec of GETREGSET or its buffer is bad"
+  failure_is_harmless: "a failed request changes nothing: the tracee stays in its stop with the same registers and memory"
+side_effects: >
+  Attaching makes the tracer receive the tracee's stop notifications and
+  SIGCHLD (CLD_TRAPPED) for every ptrace stop; the real parent keeps
+  getting the tracee's death. PTRACE_ATTACH sends SIGSTOP. While traced,
+  every signal but SIGKILL first stops the tracee and is delivered only
+  if the tracer passes it on (also signals the tracee ignores). execve of
+  a tracee without TRACEEXEC sends it SIGTRAP. Pokes and register writes
+  change the tracee as it runs on; a poke changes only the tracee's copy
+  of the memory. The tracer's exit detaches its tracees (they run on) or,
+  with EXITKILL, kills them. Detaching leaves no trace.
+threading: >
+  Tracing is per thread: each thread of a traced process is its own
+  tracee (CLONE events attach new threads); requests name a tid; a
+  tracer waits for a thread with __WALL. The tracer is a thread too; in
+  these tests it is single-threaded.
+ordering:
+  - "a stop is visible to wait (and SIGCHLD queued) before the tracer's next request on it can succeed; the tracee does not run between the stop and the resume"
+  - "ATTACH returns before the SIGSTOP stop; the stop is then waited for"
+  - "PTRACE_EVENT_FORK/VFORK/CLONE in the parent comes before (or with) the new task's first stop; both are reported independently"
+  - "PTRACE_EVENT_EXIT comes before the exit status; a non-child tracee's death is reported to the tracer, and the real parent reaps it once the tracer has collected it"
+  - "syscall stops alternate entry, exit, entry, exit for each call (exit_group has only an entry)"
+  - "PTRACE_EVENT_EXEC (or the exec SIGTRAP) comes after the new program is in place"
+timing:
+  typical: "microseconds per request; a stop is reported within milliseconds of the resume that leads to it"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the reference runs every test program under its own ptrace tracer
+# that follows forks; inside it no process of the test could be traced
+# again (TRACEME and ATTACH would fail with EPERM). So every test does its
+# work in a process created with clone(CLONE_UNTRACED|SIGCHLD) (stack 0,
+# fork-like), which a tracer following forks does not follow, and returns
+# that process's exit code. The reference therefore sees only the outer
+# process's syscalls, so the tests compare output and exit status only
+# (poly-diff: syscalls=off). On Poly CLONE_UNTRACED is accepted and has no
+# other effect. struct user_regs_struct and struct user: sys/user.h;
+# struct ptrace_syscall_info, requests, options and events: linux/ptrace.h
+# and asm/ptrace-abi.h; NT_*: linux/elf.h; AUDIT_ARCH_X86_64:
+# linux/audit.h. Not tested: PTRACE_PEEKSIGINFO, PTRACE_SECCOMP_*,
+# PTRACE_GET_RSEQ_CONFIGURATION, PTRACE_SYSEMU_SINGLESTEP,
+# PTRACE_GETFPXREGS, debug registers that fire, multi-threaded tracers,
+# permission checks across users (needs root and other users).
