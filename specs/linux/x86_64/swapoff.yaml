@@ -1,0 +1,93 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/swapoff              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    home server, x86-64; tests run as a normal user (uid 1001, no
+    capabilities), umask 022. Root-only behaviour (everything past the
+    CAP_SYS_ADMIN check) comes from swapon(2)/swapoff(8) and the kernel's
+    documented behaviour, and is covered by needs=root tests whose
+    scaffolding was checked on Poly as root.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  swapoff(path) (syscall 168) stops swapping to the regular file or block
+  device at path, which must be an active swap area (one enabled by
+  swapon(2), listed in /proc/swaps). It takes one argument; the other
+  argument registers are ignored. Only a caller with CAP_SYS_ADMIN in its
+  effective set may do it. The checks run in this order, and the first
+  one that fails decides the error:
+  1. privilege: without CAP_SYS_ADMIN, EPERM; the path is not looked at
+     (no EFAULT, ENOENT, ENOTDIR, ELOOP or ENAMETOOLONG; nothing created);
+  2. the path is copied and opened for reading and writing (following
+     symlinks, relative to the cwd, with the caller's own permission
+     checks), with open's errors;
+  3. the opened object must be an active swap area, else EINVAL. Any
+     object that opens is accepted up to this point (regular file of any
+     content, character device, FIFO), so for everything that is not in
+     use as swap the result is EINVAL.
+  A refused call has no side effects. Since Poly has nowhere to swap to
+  (swapon never succeeds there), no test reaches a successful swapoff.
+returns:
+  success: >
+    0: the area's pages are brought back into memory, it is removed from
+    the system-wide swap list (/proc/swaps) and may be swapped on again;
+    the file itself is not modified.
+  failure: "-errno; the target is not modified, not created, and no file descriptor is consumed"
+errors:
+  no_privilege: >
+    EPERM (1) without CAP_SYS_ADMIN in the effective set (a normal user,
+    root after capset emptied the sets, root with only CAP_SYS_ADMIN
+    cleared from the effective set, a fork child of such a process),
+    whatever the path: regular file, file with a swap signature,
+    directory, /dev/null, missing file, NULL, empty string, bad or kernel
+    pointer, symlink loop, path through a file, trailing slash on a file,
+    4096-byte name, relative missing name; whatever is in argument
+    registers 2-6.
+  bad_pointer: "EFAULT (14) for NULL or an unmapped path pointer (privileged caller)"
+  empty_path: "ENOENT (2) for \"\" (privileged caller)"
+  missing: "ENOENT (2) for a missing file, a relative missing name, or a symlink to a missing file"
+  not_dir: "ENOTDIR (20) for a path through a regular file or a trailing slash after a regular file"
+  loop: "ELOOP (40) for a symlink loop"
+  name_too_long: "ENAMETOOLONG (36) for a path of 4096 bytes before the NUL"
+  directory: >
+    EISDIR (21) for a directory ("/", "/tmp", "/tmp/", a relative "tmp", a
+    directory of mode 0000, a symlink to a directory, a directory on a
+    read-only mount): the target is opened for writing.
+  socket: "ENXIO (6) for a unix-domain socket file (bound or no longer listening), also through a symlink"
+  read_only: >
+    EROFS (30) for a regular file on a read-only mount (also through a
+    symlink), even for root; the same file after remounting read-write is
+    EINVAL.
+  access: >
+    EACCES (13) when the caller's own permissions do not allow opening
+    for reading and writing: a root process that kept only CAP_SYS_ADMIN
+    (no CAP_DAC_OVERRIDE or CAP_DAC_READ_SEARCH) gets EACCES for its own
+    file of mode 0444 or 0000 and for a file inside a directory of mode
+    0000, but EINVAL for its own 0644 file and /dev/null. With all
+    capabilities root gets EINVAL for all of them.
+  not_swap: >
+    EINVAL (22) for anything that opens for reading and writing but is
+    not an active swap area: an empty regular file, a file of zeros, a
+    file with a well-formed swap signature ("SWAPSPACE2" at bytes
+    4086-4095, version 1) that was never enabled or whose swapon failed,
+    the same through a symlink or a relative path, a root-owned file of
+    mode 0000 (with CAP_DAC_OVERRIDE), /dev/null, a FIFO. Repeated calls
+    keep giving EINVAL.
+  no_memory: "ENOMEM (12) when the area's pages cannot be brought back into memory (swapoff(8)); not tested"
+side_effects: >
+  On failure none: the target keeps its size, mode and bytes, a missing
+  target is not created, and no file descriptor stays open (the next
+  open gets the lowest free number, also after many failed calls). On
+  success the area leaves the system-wide swap list (/proc/swaps).
+threading: "no thread-specific behaviour; the privilege check uses the calling thread's effective capabilities (inherited by fork children)"
+ordering:
+  - "privilege check (EPERM) before any path lookup or pointer access"
+  - "path copy and lookup errors (EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES) and open errors (EISDIR, ENXIO, EROFS, EACCES) before the swap-area check (EINVAL)"
+timing:
+  typical: "refused calls (EPERM, open errors, EINVAL for a non-swap target): microseconds, no I/O"
+  guarantees: "none; a successful swapoff may take as long as reading every swapped-out page back"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
