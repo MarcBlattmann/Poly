@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ioperm               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; kernel lockdown active in integrity mode (/sys/kernel/security/lockdown), so root behaviour comes from ioperm(2) and capabilities(7), not observation"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  ioperm(from, num, turn_on) (syscall 173) sets or clears the calling
+  thread's permission to use the x86 I/O ports from .. from+num-1 with the
+  user-mode port instructions (in, out, ins, outs). from and num are
+  unsigned 64-bit; turn_on is a 32-bit int (only the low 32 bits of the
+  register count; any non-zero value means enable). The range must be
+  non-empty and lie within ports 0..65535 (from+num <= 65536, without
+  wrapping past 2^64), else EINVAL; this is checked first. Enabling
+  (turn_on non-zero) needs CAP_SYS_RAWIO, else EPERM; disabling needs no
+  privilege and always succeeds for a valid range, also when nothing was
+  ever enabled. Returns 0 on success. Ports for which the thread has no
+  permission (by default: all of them) cannot be accessed: a port
+  instruction then raises a general protection fault, delivered as
+  SIGSEGV.
+returns:
+  success: "0"
+  disable: "turn_on 0 (low 32 bits) with a valid range returns 0 for any caller, with or without capabilities, whether or not any port was enabled before, any number of times (e.g. (0x80,1), (0,65536), (65535,1), (0,1), (0x3ff,0x401))"
+  enable_privileged: "turn_on non-zero with a valid range returns 0 for a caller with CAP_SYS_RAWIO (root) when the kernel is not in lockdown; from then on the thread may use exactly the ports of the range (others keep faulting); enabled ranges add up across calls, a later disable clears just its own range (a disable covering more than was enabled is fine)"
+  range_bounds: "valid: num >= 1 and from + num <= 65536 computed without wrap-around; e.g. (0,65536), (65535,1), (0x8000,0x8000) accepted"
+  turn_on_width: "only the low 32 bits of turn_on count: 2^32 and 0xffffffff00000000 mean 0 (disable); 2^32+1, 2, -1, 0x80000000 mean enable"
+errors:
+  invalid_range: "EINVAL (22): num is 0 (whatever from and turn_on are, also (0,0,0)); from + num > 65536 (e.g. (0,65537), (65535,2), (65536,1), (0x8000,0x8001), (2^32,1), (0x80,2^32+1)); or from + num wraps past 2^64 (e.g. (1,2^64-1), (2^64-1,1), (2^64-1,2), (0x80,2^64-0x80), (2^63,2^63), (0,2^64-1))"
+  not_permitted: "EPERM (1): turn_on non-zero and the caller lacks CAP_SYS_RAWIO (any non-root user; root after dropping its capabilities with capset). Also for root when the kernel is in lockdown (integrity or confidentiality mode), as on the oracle machine"
+  order: "EINVAL (range) is checked before EPERM: an invalid range with turn_on non-zero is EINVAL even without capabilities"
+  no_memory: "ENOMEM (12): no memory to record the permissions on the first enable; not tested"
+side_effects: >
+  A failed call changes nothing. Without permission for a port, every
+  port instruction that touches it faults: in and out, with an immediate
+  port or the port in dx, byte, word and dword sizes (observed for ports
+  0, 0x80, 0x3f8, 0xffff). The fault is a general protection fault:
+  SIGSEGV with si_code SI_KERNEL (0x80) and si_addr 0; the ucontext's
+  sigcontext has trapno 13 and err 0, and the saved rip is the address of
+  the faulting instruction (the instruction did not run; a handler may
+  move rip past it and continue; each new attempt faults again). With the
+  default SIGSEGV action the process is killed by SIGSEGV (wait status 11
+  when it is not dumpable, so no core is written). A failed enable (EPERM,
+  EINVAL) leaves the ports faulting, and so does a successful disable.
+  With permission (root, no lockdown), in/out on the enabled ports run
+  normally without a fault; disabling the range makes them fault again.
+threading: >
+  The permission is per thread. A thread or process created by clone or
+  fork starts with a copy of its creator's port permissions (observable
+  only as root: a fork child of a thread that enabled port 0x80 may read
+  it); execve keeps them (ioperm(2)). Changes after creation affect only
+  the calling thread.
+ordering: []
+timing:
+  typical: "a few microseconds or less per call; no blocking"
+  guarantees: "never sleeps"
+tests:
+  visible: 8
+  held_out: 4
