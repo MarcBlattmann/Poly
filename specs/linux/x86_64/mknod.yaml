@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mknod
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "home server, uid 1001 (not root, no capabilities), /tmp on ext4; static freestanding test programs, raw syscalls (number 133). Root-only behaviour (device nodes with a device number) from mknod(2), makedev(3) and the sibling stat/statx specs, not observed"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  mknod(path, mode, dev) creates a file system node named path, relative to
+  the working directory if path is relative. The file type in mode picks the
+  kind: 0 or S_IFREG an empty regular file, S_IFIFO a named pipe, S_IFSOCK a
+  socket node (no socket is bound to it), S_IFCHR / S_IFBLK a character /
+  block device with device number dev. Only the low 16 bits of mode count
+  (type and permission bits); the permission bits become mode & 07777 &
+  ~umask, so set-user-ID, set-group-ID and sticky bits are kept. dev counts
+  only for device types, and only its low 32 bits (makedev(3) layout: major
+  in bits 8-19, minor in bits 0-7 and 20-31). The node has nlink 1, size 0,
+  the caller's effective uid, and the caller's effective gid (or the
+  directory's gid when the directory is set-group-ID). It never follows a
+  symbolic link in the last component and never replaces anything.
+returns:
+  success: "0"
+  regular: "type 0 or S_IFREG: S_IFREG | (mode & 07777 & ~umask), size 0, nlink 1, st_rdev 0 whatever dev is (dev may be any 64-bit value); an ordinary file afterwards (open, write, read work)"
+  fifo: "S_IFIFO: a named pipe, st_rdev 0 whatever dev is, size 0 (also while data is buffered). Behaves as a FIFO: a nonblocking O_WRONLY open with no reader fails ENXIO; with a reader open, data written is read back; read on an empty pipe with no writer returns 0, with a writer EAGAIN (O_NONBLOCK); O_RDWR open works"
+  socket: "S_IFSOCK: a socket node, st_rdev 0 whatever dev is, size 0. open O_RDONLY/O_WRONLY fails ENXIO, O_PATH works (fstat shows S_IFSOCK); connect of an AF_UNIX stream socket to it fails ECONNREFUSED; bind to its path fails EADDRINUSE"
+  char_0_0: "S_IFCHR with device number 0:0 (dev whose low 32 bits are 0, e.g. 0, 0x100000000, 0xffffffff00000000) may be made by ANY user, privileged or not: S_IFCHR | perms, st_rdev 0. Opening it O_RDONLY or O_WRONLY fails ENXIO; O_PATH works"
+  devices: "S_IFCHR with any other device number, and S_IFBLK with any device number including 0:0, need privilege (CAP_MKNOD; root has it). Made by root: st_rdev = the low 32 bits of dev unchanged (0x103 -> 0x103, 0x801 -> 0x801, 0x500000103 -> 0x103); statx reports stx_rdev_major = bits 8-19, stx_rdev_minor = bits 0-7 | bits 20-31 shifted down by 12 (dev 0x45612378 -> major 0x123, minor 0x45678); permission bits as for other types (set-user-ID kept)"
+  mode_bits: "permissions = mode & 07777 & ~umask: umask 022 and 07777 -> 07755; umask 0777 and 06777 -> 06000; umask 07777 and 01777 -> 01000 (umask holds only 0777 bits); mode 0 -> S_IFREG with no permission bits. Applies the same to regular files, FIFOs, sockets and devices"
+  high_mode_bits: "bits of mode above bit 15 are ignored: 0x10000 | S_IFIFO | 0644 makes a FIFO 0644, 0x7fff0000 | 0640 a regular file 0640; -1 and 0xffff mean type 0170000 (EINVAL)"
+  owner: "st_uid = effective uid; st_gid = effective gid, or the parent's gid when the parent directory has S_ISGID (the new node does not get S_ISGID from the directory)"
+  relative: "relative paths start at the working directory; \".\", \"..\", repeated slashes and symbolic links to directories in non-final components work as in any path"
+  listing: "the new name shows in getdents64 with d_type DT_REG, DT_FIFO, DT_SOCK, DT_CHR or DT_BLK"
+errors:
+  bad_type: "EINVAL when the file type (mode & 0170000, of the low 16 bits) is none of 0, S_IFREG, S_IFIFO, S_IFSOCK, S_IFCHR, S_IFBLK, S_IFDIR: S_IFLNK, 0170000, 0030000, 0050000, 0070000, 0110000, 0130000, 0150000, 0160000. Nothing is created"
+  dir_type: "EPERM for S_IFDIR (with or without permission bits), for any caller. Nothing is created"
+  device_privilege: "EPERM for an unprivileged caller making S_IFBLK (any dev) or S_IFCHR with a dev whose low 32 bits are not 0; nothing is created"
+  exists: "EEXIST when the last component names anything that exists: regular file, directory, FIFO, socket, device, a symbolic link of any kind (dangling, looping or to a directory; never followed, the link target is not created), \".\", \"..\", \"/\", or an existing name followed by a trailing slash. The existing object is unchanged"
+  trailing_slash: "a trailing slash after a name that does not exist: ENOENT (for every type, also S_IFCHR); nothing is created"
+  path: "missing directory component, a component that is a dangling symbolic link, or empty path: ENOENT; a non-directory used as a directory: ENOTDIR; a component over 255 bytes: ENAMETOOLONG (255 is fine); a path of 4096 bytes or more without its NUL: ENAMETOOLONG (4095 bytes resolve); unreadable or NULL path pointer: EFAULT; too many symbolic links while resolving the directory part: ELOOP"
+  permission: "EACCES (not root) when the parent directory lacks write or search permission or a directory above lacks search permission; write+search without read (0333) is enough. Root (CAP_DAC_OVERRIDE) passes these checks. An existing name in a directory without write permission is still EEXIST"
+  order: "(1) the file type, before the path is read at all: EINVAL for a bad type, EPERM for S_IFDIR, even with a NULL/unreadable pointer, an empty path, an existing name, a missing parent, a too-long name or \"/\"; (2) the path: EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES while walking, as for other path calls; (3) the last name: EEXIST if it exists, ENOENT for a trailing slash on a new name, both also in a directory without write permission; then EACCES for no write permission on the parent; (4) last, the device privilege: EPERM for S_IFCHR/S_IFBLK only after all of the above passed (an existing name gives EEXIST, a missing parent ENOENT, a bad pointer EFAULT, a long name ENAMETOOLONG, a file used as directory ENOTDIR, an unwritable parent EACCES)"
+side_effects: "On success the parent directory's mtime and ctime are set to the current time and its link count is unchanged; the new node's atime, mtime and ctime are equal, later than the parent's previous mtime and not later than its new one. A failed call (EEXIST, EINVAL, EPERM, ...) changes no timestamps and creates nothing."
+threading: "no thread-specific behaviour; the working directory and umask are per process (shared by its threads)"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 9
+  held_out: 4
