@@ -1,0 +1,82 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_setparam       # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    x86_64 host, uid 1001 without capabilities, RLIMIT_RTPRIO 0/0, started at
+    nice 10; static freestanding test programs, raw syscalls. Root-only
+    behaviour (real-time policies, EPERM between users, RLIMIT_RTPRIO) comes
+    from sched_setparam(2), sched_setscheduler(2) and sched(7) and is
+    covered by needs=root tests.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sched_setparam(pid, param) (syscall 142) sets the scheduling priority
+  (struct sched_param: a single 4-byte int, sched_priority) of the thread
+  named by pid, keeping its current scheduling policy. pid 0 means the
+  calling thread; a pid is a thread id (tid), so the pid of a process names
+  its main thread and the tid of any other thread names that thread alone.
+  pid is a 32-bit int: the upper 32 bits of the register are ignored.
+  Which priorities are valid depends on the target's current policy:
+  SCHED_OTHER (0), SCHED_BATCH (3) and SCHED_IDLE (5) accept only 0;
+  SCHED_FIFO (1) and SCHED_RR (2) accept 1..99. Returns 0 on success.
+returns:
+  success: "0"
+  self: "pid 0, the caller's pid and the caller's tid all name the caller; priority 0 under SCHED_OTHER returns 0, any number of times"
+  other_process: "a live child of the same user: 0 (priority 0 under SCHED_OTHER)"
+  zombie: "a child that has exited but is not yet reaped is still found: priority 0 returns 0, priority 1 is EINVAL"
+  other_thread: "the tid of another thread of the process: acts on that thread only"
+  pid_width: "pid is taken as a 32-bit int: 0x100000000 means 0 (the caller), (N | 0x500000000) means N, 0x1ffffffff and 0xffffffff mean -1 (EINVAL), 0x17fffffff means 0x7fffffff (ESRCH)"
+  param_read: "only the 4-byte sched_priority is read: a param in the last 4 bytes of a page followed by an unmapped page works"
+  policy_kept: "the policy is never changed: SCHED_BATCH, SCHED_IDLE, SCHED_FIFO and SCHED_RR threads keep their policy; sched_getscheduler after the call reports the same value"
+  reset_on_fork_kept: "a SCHED_RESET_ON_FORK flag (0x40000000) set with sched_setscheduler stays set: sched_getscheduler still returns policy | 0x40000000"
+  rt_priority: "under SCHED_FIFO or SCHED_RR the new priority (1..99) is what sched_getparam returns afterwards"
+  idle: "an unprivileged SCHED_IDLE thread (which may not leave SCHED_IDLE when RLIMIT_NICE does not allow it) may still call sched_setparam with priority 0: returns 0, stays SCHED_IDLE"
+errors:
+  null_param: "param NULL: EINVAL (22), whatever pid is (even a pid that does not exist)"
+  negative_pid: "pid < 0 as a 32-bit int (-1, INT_MIN, -getpid()): EINVAL (22), even with param NULL or an unreadable pointer"
+  bad_pointer: "param not readable (address 1, a kernel address 0xffff800000000000, the non-canonical 0x0000800000000000, an unmapped page, a PROT_NONE page, 4 bytes straddling into an unmapped page): EFAULT (14)"
+  no_such_thread: "no thread has that id (0x7fffffff, 0x3fffffff, 4194304, a reaped child): ESRCH (3)"
+  invalid_priority_normal: "target is SCHED_OTHER, SCHED_BATCH or SCHED_IDLE and sched_priority != 0 (1, -1, 50, 99, 100, INT_MAX, INT_MIN): EINVAL (22)"
+  invalid_priority_rt: "target is SCHED_FIFO or SCHED_RR and sched_priority outside 1..99 (0, 100, -1): EINVAL (22)"
+  other_user: "caller without CAP_SYS_NICE whose effective uid matches neither the real nor the effective uid of the target: EPERM (1) (seen on pid 1 as uid 1001)"
+  rt_raise_unprivileged: >
+    caller without CAP_SYS_NICE, target SCHED_FIFO/SCHED_RR: a new priority
+    greater than both the target's current priority and its RLIMIT_RTPRIO
+    soft limit is EPERM (1). Lowering, keeping the same priority, or raising
+    up to RLIMIT_RTPRIO is allowed (FIFO 50 with limit 30: 40 ok, 40 ok,
+    45 EPERM, 20 ok, 30 ok, 31 EPERM).
+  check_order: >
+    1. pid < 0 or param NULL -> EINVAL; 2. param unreadable -> EFAULT;
+    3. pid not found -> ESRCH (so a missing pid with priority 5 is ESRCH,
+    and a missing pid with a bad pointer is EFAULT); 4. priority invalid for
+    the target's policy -> EINVAL (so another user's process with priority 5
+    is EINVAL, not EPERM); 5. permission -> EPERM.
+  failure_has_no_effect: "a failed call changes nothing: policy, priority, SCHED_RESET_ON_FORK and nice stay as they were"
+side_effects: >
+  Sets the target thread's scheduling priority (only observable for
+  SCHED_FIFO/SCHED_RR, via sched_getparam). It does not change the policy,
+  the SCHED_RESET_ON_FORK flag or the nice value (a thread at nice N under
+  SCHED_OTHER or SCHED_BATCH is still at nice N afterwards, as reported by
+  getpriority). Under SCHED_OTHER/BATCH/IDLE a successful call is a no-op
+  as far as any getter can see.
+threading: >
+  Per thread: pid 0 is the calling thread, a tid names that thread only.
+  Setting another thread's parameters does not affect the caller (a main
+  thread stays SCHED_OTHER while its SCHED_BATCH worker is targeted).
+  Threads of one process are always of the same user, so no EPERM between
+  them.
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+notes: >
+  Tests also use sched_setscheduler (144), sched_getscheduler (145),
+  sched_getparam (143), getpriority (140), setpriority (141), setresuid
+  (117) and setrlimit (160) to set up and observe the policy, priority and
+  nice value. The needs=root tests could not be run on the oracle host (no
+  root there) and follow the documented rules above.
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
