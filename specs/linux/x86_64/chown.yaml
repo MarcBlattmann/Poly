@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/chown                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, /tmp on ext4; static freestanding test programs, raw syscalls; run as a normal user (uid 1001, gid 1002, no supplementary groups, no capabilities), umask 022. Root behaviour (needs=root test, the root branches of the other tests) from the man page and agrees with the fchownat sheet, which was observed as root"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  chown(path, uid, gid) (syscall 92) sets the owner and group of the file
+  named by path and returns 0. Symbolic links are followed in every
+  component, including the last (lchown and fchownat with
+  AT_SYMLINK_NOFOLLOW act on a link itself). uid and gid are 32-bit
+  values: the upper half of each register is ignored, and 0xffffffff
+  (-1) leaves that id unchanged. Permission: root (CAP_CHOWN) may set any
+  ids from 0 to 0xfffffffe. Any other caller must own the file to name
+  any id; as the owner it may set the uid only to its own uid and the
+  gid only to its effective gid or one of its supplementary groups;
+  anything else is EPERM. With -1 for both ids no id is named, and the
+  call succeeds for any caller, owner or not, unless it has to clear a
+  set-user-ID / set-group-ID bit of a file the caller does not own (then
+  EPERM). On every successful call on a file that is not a directory
+  (regular file, FIFO, ...), even with -1 for both ids or with the ids
+  the file already has, and for root as for anyone: the set-user-ID bit
+  is cleared, whether or not any execute bit is set; the set-group-ID
+  bit is cleared if group execute is set and kept if it is not; the
+  sticky bit and the permission bits stay. A directory keeps all of its
+  mode bits. Only search (execute) permission on the directories of the
+  path is needed: write permission on the parent and the file's own
+  permission bits do not matter.
+returns:
+  success: "0"
+  minus_one: "uid or gid 0xffffffff (low 32 bits) leaves that id as it is; -1 for both is a successful call that changes no id but still clears mode bits and sets ctime"
+  id_width: "only the low 32 bits of uid and gid count: (1<<32)|0xffffffff is -1, (1<<32)|N is N"
+  owner_own_ids: "the owner (not root) may name its own euid as uid and its egid (or a supplementary group) as gid, with or without the other id -1"
+  not_owner_noop: "chown(path, -1, -1) on a file the caller does not own (e.g. \"/\" owned by root) succeeds and updates its ctime, if the file has neither set-user-ID nor (set-group-ID with group execute)"
+  root_ids: "root may set uid and gid to anything from 0 to 0xfffffffe, on any file, and passes search checks on the way (a path through a mode-0 directory works)"
+  follows_links: "a symbolic link as last component is followed: the target's owner, group and mode bits change, the link's do not; links in earlier components are followed too; up to 40 links in a row are followed"
+  object: "chown acts on the file, not the name: every hard link and every open descriptor (fstat) sees the result; an open descriptor does not prevent the call"
+  path_forms: "a directory path may end in \"/\", \"/.\" or contain \"..\" and repeated slashes; \"/..\" is \"/\"; a path of 4095 bytes (+ NUL) works"
+errors:
+  not_permitted: "EPERM (1): caller is not root and either (a) names a uid (not -1) other than its euid, (b) names a gid (not -1) that is not its egid or one of its supplementary groups, (c) names any id (even its own euid or the file's current owner/group) on a file it does not own, or (d) names no id on a file it does not own whose set-user-ID bit (or set-group-ID with group execute) would have to be cleared. Nothing changes: ids, mode bits and ctime stay"
+  search: "EACCES (13): a directory of the path lacks search permission for a caller that is not root, also when the name below it does not exist"
+  path: "missing component or empty path: ENOENT; a non-directory used as a directory (including a trailing slash or \"/.\" after a file): ENOTDIR; a component over 255 bytes or a path of 4096 bytes or more with its NUL: ENAMETOOLONG; an unreadable path pointer (NULL, low address, non-canonical): EFAULT; a link loop or more than 40 links in a row: ELOOP"
+  dangling_link: "ENOENT (2): the last component is a symbolic link to a missing name"
+  path_order: "when a path has more than one problem, the first in this order decides: (1) the path string as a whole: an unreadable pointer EFAULT, 4096 bytes or more with its NUL ENAMETOOLONG, empty ENOENT, whatever its components are; (2) the components from left to right as the walk reaches them, symbolic links followed on the way: the first that fails decides, a directory without search permission EACCES, a missing name or a dangling link ENOENT, a non-directory (or a link to one) followed by more components ENOTDIR, a name over 255 bytes ENAMETOOLONG. So D/nope/<256 bytes> is ENOENT, D/file/<256 bytes> is ENOTDIR, D/<256 bytes> is ENAMETOOLONG. (3) EPERM comes only after the file was found: chown(D/nope, other uid, -1) is ENOENT"
+  read_only_fs: "EROFS (30): the file is on a read-only file system; not tested"
+  io: "EIO, ENOMEM: as for any path walk; not tested"
+side_effects: >
+  On success: the named ids change; the file's ctime is set to the
+  current time (also with -1 for both ids or unchanged ids); mtime,
+  atime, size and contents stay; mode bits change only as described in
+  the summary (set-user-ID and set-group-ID-with-group-execute cleared on
+  non-directories). A failed call changes nothing, ctime included.
+threading: "no thread-specific behaviour; credentials used are the caller's effective uid, effective gid and supplementary groups at the time of the call"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
