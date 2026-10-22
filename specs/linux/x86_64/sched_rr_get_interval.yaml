@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_rr_get_interval # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic x86_64 (Ubuntu 24.04 HWE), CONFIG_HZ=1000, 4 CPUs"
+  machine: "home server, uid 1001 (non-root), static freestanding test programs, raw syscalls; root-only behaviour (SCHED_FIFO/SCHED_RR) from sched_rr_get_interval(2), sched(7) and Linux source read for behaviour"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sched_rr_get_interval(pid, tp) (x86-64 syscall 148) writes into the
+  struct timespec at tp (16 bytes: i64 tv_sec, i64 tv_nsec) the round-robin
+  time quantum of the task identified by pid, and returns 0. pid is a
+  32-bit value (pid_t): bits 32-63 of the register are ignored. pid 0 means
+  the calling thread; a positive pid may name any process or thread (a tid)
+  in the caller's pid namespace, including a zombie that has not been
+  reaped. No permission check is made: any user may query any task,
+  including root-owned ones. The value depends on the target's scheduling
+  policy: SCHED_RR gives the round-robin quantum (100 ms by default,
+  /proc/sys/kernel/sched_rr_timeslice_ms; independent of the RR priority);
+  SCHED_FIFO gives {0, 0}; the fair policies (SCHED_OTHER, SCHED_BATCH,
+  SCHED_IDLE) give a small time slice, always tv_sec 0 and 0 <= tv_nsec <
+  1e9 (may be 0; on the oracle a running task reads {0, 2000000}, a sleeping
+  task usually {0, 0}).
+returns:
+  success: "0; *tp holds a normalised timespec (tv_sec >= 0, 0 <= tv_nsec < 1000000000)"
+  sched_rr: "{0, 100000000} with the default 100 ms quantum, for any RR priority 1..99, for self and for another task (also a blocked one)"
+  sched_fifo: "{0, 0}"
+  fair_policies: >
+    SCHED_OTHER, SCHED_BATCH, SCHED_IDLE: tv_sec 0, 0 <= tv_nsec < 1e9.
+    The calling thread asking again with nothing changed gets the same
+    value; pid 0, getpid(), gettid() and 0xffffffff00000000|getpid() all
+    give the same value for the caller; threads of one process that are all
+    running read the same value for each other. The value for another
+    fair task may depend on whether it is runnable (0 is common for a
+    sleeping task or a zombie), so tests only rely on the range.
+  pid_width: "pid is truncated to 32 bits: 0x100000000 and 0x8000000000000000 mean pid 0 (the caller); 0x1ffffffff and 0xfffffffe are negative (EINVAL)"
+  bytes_written: "exactly 16 bytes at tp (no alignment needed); bytes around them are untouched"
+  zombie: "an exited, not yet reaped child is still found: 0 and a fair-range value"
+errors:
+  negative_pid: "EINVAL (22) when the low 32 bits of pid are negative (-1, -2, INT_MIN); *tp untouched"
+  no_such_task: "ESRCH (3) when no task has that pid (a reaped child, 0x7fffffff); *tp untouched"
+  bad_pointer: >
+    EFAULT (14) when the 16 bytes at tp are not all writable: NULL, a low
+    address, a kernel or non-canonical address, a read-only page, a
+    PROT_NONE page, a buffer running from a writable page into an
+    unwritable one. On a partial-write EFAULT the writable part may or may
+    not have been written (the oracle wrote tv_sec); do not rely on it.
+  precedence: "EINVAL (negative pid) before ESRCH (lookup) before EFAULT (pointer): a bad pointer with a negative pid gives EINVAL, with a missing pid ESRCH"
+  enosys: "never on this kernel"
+side_effects: "none: the call only reads scheduling state; the target's policy, priority and time slice are unchanged"
+threading: >
+  pid may be a thread id; any thread may query itself (pid 0 or its tid),
+  other threads of its process and any other task. Fork children inherit
+  the parent's policy and so its interval (SCHED_RR child also reads
+  100 ms), unless the parent set SCHED_RESET_ON_FORK, in which case the
+  child is SCHED_OTHER and reads a fair-range value.
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
