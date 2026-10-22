@@ -1,0 +1,94 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/msgctl               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (/proc/sys/kernel msgmax 8192, msgmnb 16384, msgmni 32000). Root behaviour (needs=root test) from msgctl(2) and reading Linux for behaviour: root could not be observed here (unprivileged user namespaces get no capabilities on this host)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  msgctl(msqid, cmd, buf) (syscall 71) controls System V message queues.
+  cmd IPC_STAT (2) copies the queue's struct msqid64_ds (120 bytes) to
+  buf and returns 0; IPC_SET (1) reads a struct msqid64_ds from buf and
+  takes from it only uid, gid, the 0777 bits of mode and qbytes, sets
+  ctime to now and returns 0; IPC_RMID (0) removes the queue at once
+  (buf ignored), discards its messages, wakes every sleeper on it with
+  EIDRM and returns 0. IPC_INFO (3) and MSG_INFO (12) ignore msqid
+  (unless negative), write a 32-byte struct msginfo to buf (limits, or
+  for MSG_INFO usage counts in three fields) and return the highest
+  queue index in use. MSG_STAT (11) and MSG_STAT_ANY (13) take a queue
+  index instead of an id, fill buf like IPC_STAT and return the queue's
+  full id; MSG_STAT_ANY skips the read-permission check. Every other
+  command is EINVAL; on x86-64 there is no IPC_64 (0x100) flag: or-ing it
+  into a command makes it EINVAL. Only the low 32 bits of msqid and of
+  cmd count (both are ints). A queue id is seq * 32768 + index (index
+  0..32767 in the low 15 bits), the seq also shown in the perm.seq field;
+  an id whose seq does not match the queue at its index, of a removed
+  queue or never handed out, is EINVAL (msgctl never returns EIDRM).
+returns:
+  ipc_stat: "0; all 120 bytes written: key (0 for IPC_PRIVATE), uid, gid, cuid, cgid, mode (only 0777 bits), seq (id >> 15), stime, rtime, ctime, cbytes (text bytes queued, mtype not counted), qnum, qbytes, lspid, lrpid; pad1, pad2, pad3, unused1, unused2, unused4, unused5 written as 0. IPC_STAT changes nothing (two calls give identical bytes)"
+  new_queue: "uid=cuid=creator's euid, gid=cgid=creator's egid, mode = msgflg & 0777, qnum 0, cbytes 0, qbytes 16384 (msgmnb), lspid/lrpid 0, stime/rtime 0, ctime the creation time"
+  counters: "after msgsnd: qnum+1, cbytes+size, lspid = sender's pid, stime = now; after msgrcv: qnum-1, cbytes-size, lrpid = receiver's pid, rtime = now; failed msgsnd/msgrcv change nothing; msgsnd/msgrcv never change ctime"
+  ipc_set: "0; applies uid, gid, mode & 0777 and qbytes from buf; key, cuid, cgid, seq, times, qnum, cbytes, lspid, lrpid in buf ignored; sets ctime = current CLOCK_REALTIME seconds even when nothing changes; never touches the queued messages. All or nothing: on any error nothing of buf is applied"
+  ipc_set_owner: "the owner may give the queue to any uid and gid (e.g. 4242, or 0); the creator (cuid) keeps owner rights after giving it away and may take it back"
+  qbytes: "only the low 32 bits (unsigned) of the 64-bit qbytes field count: 2^32 sets 0, 2^32+5 sets 5, 2^63 sets 0, (7<<40)|16384 sets 16384. 0..16384 (msgmnb) accepted from anyone; larger values (16385, 0x80000000, 0xffffffff, all-ones) need CAP_SYS_RESOURCE, else EPERM"
+  qbytes_effect: "qbytes is the capacity msgsnd honours: a message fits while cbytes + size <= qbytes and qnum + 1 <= qbytes (qbytes 3: at most 3 messages even of size 0; qbytes 0: nothing fits). Lowering it below what is queued keeps all messages; raising it wakes senders sleeping for room, which then complete"
+  ipc_rmid: "0; the id is dead at once (IPC_STAT, IPC_SET, IPC_RMID, msgsnd, msgrcv on it: EINVAL); messages gone; the key is free (msgget without IPC_CREAT: ENOENT; IPC_CREAT|IPC_EXCL makes a new empty queue with a different id); buf is not looked at (a junk pointer such as 1 is fine)"
+  ipc_info: "highest queue index in use in the IPC namespace (0..32767; at least the caller's own queue's index). struct msginfo, 32 bytes (7 ints and a u16, then 2 padding bytes): msgpool 512000, msgmap 16384, msgmax 8192, msgmnb 16384, msgmni 32000, msgssz 16, msgtql 16384, msgseg 65535 (with default limits); bytes past 32 untouched"
+  msg_info: "same return value and struct as IPC_INFO, msgmax/msgmnb/msgmni/msgssz/msgseg the same limits, but msgpool = number of queues in use, msgmap = number of messages queued, msgtql = text bytes queued, over all queues of the IPC namespace"
+  msg_stat: "the queue's full id (seq * 32768 + index); buf filled byte for byte as IPC_STAT would. The index argument counts by its low 15 bits only: the full id, or index | (n << 15), works too"
+  msg_stat_any: "as MSG_STAT, without the read-permission check"
+  arg_width: "msqid and cmd are 32-bit ints: id | (1 << 32) addresses the queue id; cmd | (any << 32) is cmd; 0xffffffff as id is -1 (EINVAL)"
+errors:
+  negative_id: "EINVAL (22): msqid (low 32 bits) negative, for every command including IPC_INFO and MSG_INFO; checked first, before the command and any buffer (bad cmd or NULL buf still EINVAL)"
+  bad_cmd: "EINVAL (22): cmd not one of 0, 1, 2, 3, 11, 12, 13 (e.g. -1, 4..10, 14..20, 100, 0x7fffffff, IPC_STAT|0x100, IPC_RMID|0x100, IPC_INFO|0x100); nothing changes"
+  bad_id: "EINVAL (22): no queue with this id (never handed out, removed, or right index with another seq) for IPC_STAT, IPC_SET, IPC_RMID; for MSG_STAT/MSG_STAT_ANY no queue at that index"
+  set_fault: "EFAULT (14): IPC_SET reads all 120 bytes of buf before anything else: NULL, a low address, or a buffer whose last 8 bytes are unmapped is EFAULT, also with a positive id that does not exist and (root test) from a non-owner; nothing applied. A buffer in read-only memory is fine"
+  stat_fault: "EFAULT (14): IPC_STAT/MSG_STAT/MSG_STAT_ANY write 120 bytes, IPC_INFO/MSG_INFO 32: NULL, a low address, read-only memory, or a buffer running into an unmapped page (STAT: last 8 bytes; INFO: 28 or 30 bytes before the page end) is EFAULT. For the STAT commands the id/index lookup (EINVAL) and the read check (EACCES) come first: bad id with NULL is EINVAL, no read permission with NULL is EACCES"
+  access: "EACCES (13): IPC_STAT and MSG_STAT need read permission (r) in the caller's class: owner if euid is the queue's uid or cuid, else group if the caller is in the queue's gid or cgid, else other. Only that class's bits count (mode 0044 or 0077 does not let the owner read; with group class, other's r does not help); w and x grant no read. MSG_STAT_ANY, IPC_SET, IPC_RMID, IPC_INFO, MSG_INFO need no permission bits. Never for a caller with CAP_IPC_OWNER (root)"
+  not_owner: "EPERM (1): IPC_SET or IPC_RMID by a caller whose euid is neither the queue's uid nor its cuid and who lacks CAP_SYS_ADMIN, whatever the mode (even 0666); checked after the buffer is read (IPC_SET NULL: EFAULT) and after the id lookup"
+  qbytes_too_big: "EPERM (1): IPC_SET with qbytes (low 32 bits) > msgmnb (16384) and no CAP_SYS_RESOURCE; reported before an invalid uid/gid; nothing applied"
+  bad_owner: "EINVAL (22): IPC_SET with uid or gid (u32) 0xffffffff (not a valid id); nothing applied"
+  order_ipc_set: "EINVAL (negative id), EINVAL (bad cmd), EFAULT (buf), EINVAL (no such queue), EPERM (not owner), EPERM (qbytes), EINVAL (uid/gid)"
+  order_ipc_stat: "EINVAL (negative id), EINVAL (bad cmd), EINVAL (no such queue/index), EACCES (MSG_STAT_ANY: none), EFAULT"
+  order_info: "EINVAL (negative id), EINVAL (bad cmd), EFAULT"
+side_effects: >
+  IPC_STAT, MSG_STAT, MSG_STAT_ANY, IPC_INFO and MSG_INFO change nothing.
+  IPC_SET changes uid, gid, mode, qbytes and ctime (and nothing else; on
+  error nothing). Raising qbytes wakes senders waiting for room; those
+  that now fit complete. IPC_RMID removes the queue and its messages,
+  frees its key and wakes every process sleeping in msgsnd or msgrcv on
+  it: each such call returns EIDRM (43). Queue ids of removed queues are
+  not handed out again right away (a new queue for the same key gets a
+  different id).
+threading: >
+  Message queues are system-wide (the IPC namespace), visible to every
+  process: counts from IPC_INFO/MSG_INFO and the highest index include
+  other processes' queues. IPC_RMID takes effect before it returns; the
+  woken sleepers return EIDRM afterwards (within milliseconds).
+ordering:
+  - "IPC_RMID with two receivers and one sender asleep: the removal returns 0 and all three sleepers return EIDRM"
+  - "a sender asleep for room completes after IPC_SET raises qbytes enough; before that the queue shows it has not sent (qnum, cbytes unchanged)"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none; a woken sleeper returns within milliseconds of the waking IPC_SET or IPC_RMID"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: the tests also use msgget (68) to make queues (IPC_PRIVATE or a
+# key of their own made from the pid), msgsnd (69) and msgrcv (70) to fill
+# and drain them (IPC_NOWAIT where nothing should block), fork, futex
+# gates and a shared page for multi-process tests. As far as the tests
+# depend on them: msgsnd needs mtype > 0 (0 is EINVAL); msgrcv on an
+# empty queue with IPC_NOWAIT is ENOMSG; on a removed id both are EINVAL.
+# Queue ids differ between runs, so single-process tests compare syscall
+# names only (poly-diff: syscalls=names), multi-process ones only output
+# (syscalls=off). The root test (poly-diff: needs=root) has a child drop
+# to uid/gid 65534 (setgroups 0, setresgid, setresuid) and checks the
+# not-owner/other/group cases and root's CAP_IPC_OWNER, CAP_SYS_ADMIN and
+# CAP_SYS_RESOURCE overrides. Root behaviour was not observable here; it
+# follows msgctl(2) ("EPERM ... without CAP_SYS_RESOURCE", CAP_IPC_OWNER,
+# CAP_SYS_ADMIN) and was confirmed by reading Linux for behaviour only.
+# struct msqid64_ds: asm-generic/msgbuf.h and asm-generic/ipcbuf.h
+# (struct ipc64_perm); struct msginfo and the MSG_* commands: linux/msg.h;
+# IPC_* constants: linux/ipc.h; syscall numbers: asm/unistd_64.h.
