@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ustat                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic x86_64 (Ubuntu 24.04)"
+  machine: "home server, uid 1001 (not root), / and /tmp on ext4 (8:2), /dev/shm on tmpfs, /proc on proc; static freestanding test programs, raw syscalls"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  ustat(dev, ubuf) (syscall 136) reports free space of the file system
+  whose device number is `dev` into a 32-byte struct ustat (linux/types.h,
+  x86-64): bytes 0-3 f_tfree (signed 32-bit, the file system's free block
+  count, i.e. statfs f_bfree, not f_bavail, in f_bsize units), bytes 4-7
+  padding, bytes 8-15 f_tinode (unsigned 64-bit, free inodes, i.e. statfs
+  f_ffree), bytes 16-21 f_fname and 22-27 f_fpack (always all zero), bytes
+  28-31 padding. On success all 32 bytes are written, padding as zero,
+  whatever the buffer held; nothing after byte 32 is written; the buffer
+  needs no alignment. `dev` is the st_dev that stat/fstat report for any
+  file on that file system (major 8 minor 2 is 0x802; small anonymous
+  devices such as 0:25 are just the minor), so every file, directory and
+  descriptor on one file system gives the same answer. Only the low 32
+  bits of the argument count: bits 32-63 are ignored (dev | 1<<32 and
+  dev | 0xffffffff00000000 behave as dev; 0xffffffff00000000 behaves as
+  0). Any file system the kernel has is accepted, also ones mounted
+  nowhere: the st_dev of a pipe, a socket or an eventfd works, with the
+  counts fstatfs gives for that descriptor. Counts are live: on tmpfs
+  creating a file lowers f_tinode, writing data lowers f_tfree, unlinking
+  raises both again; the counts are those of the whole file system, so
+  other processes move them too (tests compare against statfs taken just
+  before and after, repeated until the two agree). Observed values: proc,
+  sysfs and devpts report 0 and 0 (all 32 bytes zero); pipe, socket and
+  eventfd file systems report what fstatfs reports (0 here). Device
+  numbers that no file system has, including 0, a character device's
+  st_rdev such as /dev/null (1:3) and 0xffffffff, fail with EINVAL.
+returns:
+  success: "0, the 32 bytes at ubuf written as described"
+  f_tfree: "free blocks (statfs f_bfree) stored in 32 signed bits"
+  f_tinode: "free inodes (statfs f_ffree)"
+  names_and_padding: "zero"
+errors:
+  unknown_device: "EINVAL; the buffer is not written"
+  bad_buffer: "EFAULT for a NULL, read-only, PROT_NONE or kernel-half pointer with a valid device. When the buffer runs from writable memory into an unwritable page, the call still fails with EFAULT and the writable leading bytes may already have been written (observed: the 8 bytes before the unwritable page were written); tests do not check this."
+  order: "the device is checked first: an unknown device with an unwritable buffer is EINVAL, not EFAULT"
+side_effects: "none; the file system is not changed"
+threading: "no thread-specific behaviour"
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
