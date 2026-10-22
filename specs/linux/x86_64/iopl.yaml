@@ -1,0 +1,61 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/iopl                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64), CONFIG_X86_IOPL_IOPERM=y"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022. Behaviour that needs CAP_SYS_RAWIO (levels 1-3 actually set, port access granted, inheritance) could not be run here; it is taken from iopl(2) and from reading the Linux source for behaviour, and its tests are needs=root"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  iopl(level) (syscall 172) sets the calling thread's I/O privilege level
+  to 0..3 and returns 0. Since Linux 5.5 this is an emulation: the level
+  is only a per-thread number, and level 3 grants user-mode access to all
+  65536 I/O ports (in/out/ins/outs in every width, immediate or %dx port)
+  while levels 0, 1 and 2 grant none. Nothing else changes: EFLAGS.IOPL
+  (bits 12-13) always reads 0, IF stays set, and cli/sti raise SIGSEGV at
+  every level. level is a 32-bit unsigned value (upper half of the
+  register ignored); a value above 3 is EINVAL. Setting the current level
+  again or a lower one always succeeds, without privilege; raising it
+  needs CAP_SYS_RAWIO, else EPERM. A thread without access that executes a
+  port I/O instruction (or, at any level, cli/sti) gets a forced SIGSEGV
+  with si_code SI_KERNEL (0x80) and si_addr 0, sigcontext trapno 13 (#GP)
+  and err 0; the instruction is not executed (ins writes nothing).
+returns:
+  success: "0"
+  same_level: "0 for level == current level, with or without CAP_SYS_RAWIO (iopl(0) in a fresh process, any user, any number of times; iopl(3) at level 3 after dropping all capabilities)"
+  lower: "0 for any level below the current one, with or without CAP_SYS_RAWIO (3 -> 2 -> 0 after dropping all capabilities)"
+  raise_privileged: "0 with CAP_SYS_RAWIO for any 0..3 (0 -> 1 -> 2 -> 3, 3 -> 1 -> 3 ...)"
+  level_width: "only the low 32 bits of level count: 1<<32 and 0xffffffff00000000 are level 0 (0); (1<<32)|3 is level 3; (1<<32)|4 and 0x80000000ffffffff are EINVAL"
+  port_access: "level 3: in/out with imm8 or %dx port, 8/16/32 bits, ins/outs, ports 0x0000..0xffff all run without a signal. Levels 0, 1, 2: every one of them raises SIGSEGV. Access follows the current level immediately: after lowering 3 -> 2/1/0 the next port instruction faults; after raising to 3 again it works"
+  eflags: "pushf shows IOPL (bits 12-13) = 0 and IF (bit 9) = 1 at every level, also at level 3; popf that tries to set IOPL to 3 or clear IF is silently ignored (no signal, flags unchanged)"
+  initial: "every process starts at level 0 (no port access)"
+errors:
+  invalid_level: "EINVAL (22): level (low 32 bits) > 3: 4, 5, 7, 8, 16, 0x7fffffff, 0x80000000, 0xfffffffe, 0xffffffff (-1); for every caller, root included"
+  no_privilege: "EPERM (1): level (1..3) above the current level without CAP_SYS_RAWIO (normal users; root after dropping capabilities)"
+  order: "EINVAL is checked before EPERM: an unprivileged caller gets EINVAL for 4 or -1, never EPERM"
+  failed_call: "a failed call (EINVAL or EPERM) leaves the level and the port access unchanged"
+  unimplemented: "ENOSYS: only on kernels built without iopl/ioperm support; not the case on the oracle and not expected of Poly"
+side_effects: >
+  Only the calling thread's level (and so its port access) changes.
+  Port I/O without access, and cli/sti at any level: SIGSEGV is delivered
+  to the faulting thread before the instruction completes (rip still at
+  the instruction; a handler that advances rip resumes after it). The
+  signal is forced: with SIGSEGV blocked or set to SIG_IGN the process is
+  killed by SIGSEGV at the instruction (wait4 sees WTERMSIG 11); with the
+  default action likewise. siginfo: si_signo 11, si_code SI_KERNEL (0x80),
+  si_addr 0; sigcontext trapno 13, err 0.
+threading: >
+  The level is per thread. A new thread (clone with CLONE_THREAD) and a
+  fork child start with the level of the creating thread (after iopl(3)
+  they have port access without calling iopl); afterwards each changes
+  its own only: a child or thread lowering to 0 does not affect its
+  creator, and a thread raising to 3 does not give access to the others.
+  Behaviour across execve is not specified here (not observed; no test
+  depends on it).
+ordering: []
+timing:
+  typical: "microseconds; port access granted by level 3 takes effect for the very next instruction"
+  guarantees: "none"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
