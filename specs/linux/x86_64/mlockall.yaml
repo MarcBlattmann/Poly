@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mlockall
+oracle:
+  os: "Linux 7.0.0-30-generic"
+  machine: "Ubuntu 24.04 host, uid 1001 (not root), RLIMIT_MEMLOCK about 2 GiB soft and hard; /tmp on a local disk; static freestanding test programs, raw syscalls, mincore to see residency. Root behaviour from mlockall(2), not observed."
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  mlockall(flags) locks the whole address space of the calling process.
+  flags is a 32-bit int (the upper 32 bits of the register are ignored)
+  made of MCL_CURRENT (1), MCL_FUTURE (2) and MCL_ONFAULT (4).
+  MCL_CURRENT locks every existing mapping and populates its pages at once
+  (mincore reports every page resident, contents unchanged; read-only and
+  file mappings too); PROT_NONE mappings are accepted but not populated,
+  and become populated as soon as mprotect makes them accessible.
+  MCL_FUTURE makes every later mapping of the address space locked and
+  populated when it is created: mmap (anonymous and file, private and
+  shared), brk growth, mremap growth, mappings made by any thread or
+  CLONE_VM task; PROT_NONE ones once mprotect makes them accessible.
+  MCL_ONFAULT, with either of the others, locks without populating: pages
+  become resident only as they are touched. Every successful call replaces
+  the process's MCL_FUTURE setting: a call without MCL_FUTURE turns it off,
+  a call with MCL_FUTURE | MCL_ONFAULT makes future mappings lock-on-fault,
+  a failed call changes nothing. munlock of a range does not turn
+  MCL_FUTURE off. A later call with MCL_CURRENT without MCL_ONFAULT
+  populates mappings that were locked on fault or made earlier. A locked
+  mapping stays locked when mremap grows or moves it (the new pages are
+  populated). Neither the locks nor MCL_FUTURE are inherited by a fork
+  child (its new mappings are not populated; it may call mlockall itself);
+  execve clears both. Calling again with the same flags succeeds.
+returns:
+  success: "0"
+  flags_valid: "any of 1, 2, 3, 5, 6, 7 in the low 32 bits; e.g. 0x100000001 is accepted as MCL_CURRENT"
+  locked_pages_and_madvise: "MADV_DONTNEED on a locked page is EINVAL; after munlock it succeeds"
+errors:
+  flags_zero_or_onfault_alone: "EINVAL (0, MCL_ONFAULT alone, 0x100000000)"
+  unknown_flag_bit: "EINVAL (any bit other than 1, 2, 4 in the low 32 bits, e.g. 8, MCL_CURRENT|8, MCL_FUTURE|0x10, 0x80000001, -1); checked before any permission or limit check"
+  unprivileged_rlimit_memlock_zero: "EPERM for every valid flag combination when the RLIMIT_MEMLOCK soft limit is 0 and the caller is not privileged"
+  unprivileged_current_over_limit: "ENOMEM when MCL_CURRENT is set and the total size of the address space (all mappings, PROT_NONE and unpopulated ones included, not just what would be locked) is larger than the RLIMIT_MEMLOCK soft limit; with MCL_ONFAULT too. Nothing changes (MCL_FUTURE setting kept)."
+  unprivileged_future_alone: "MCL_FUTURE (with or without MCL_ONFAULT) is not checked against the current size: succeeds under a non-zero limit even when the address space is larger"
+  privileged: "root (CAP_IPC_LOCK) gets no EPERM/ENOMEM/EAGAIN from RLIMIT_MEMLOCK at all (man page)"
+side_effects: >
+  With MCL_FUTURE set, for an unprivileged caller, each new mapping (mmap
+  of any protection, PROT_NONE and MCL_ONFAULT included; brk growth) is
+  refused when the memory already locked plus the new mapping would exceed
+  the RLIMIT_MEMLOCK soft limit: mmap fails with EAGAIN, brk returns the
+  old break. Up to the limit exactly is allowed (64 pages limit: 32 + 32
+  pages fit, one more page is EAGAIN). munlock of a locked range makes
+  room again. Pages populated by MCL_CURRENT / MCL_FUTURE read as before
+  (zero for fresh anonymous memory, file contents for file mappings).
+  munmap of locked memory works as usual.
+threading: >
+  The locks and the MCL_FUTURE setting belong to the address space: a
+  mapping made by another thread or CLONE_VM task after MCL_FUTURE is
+  populated too.
+ordering: []
+timing:
+  typical: "microseconds for a small process; populating takes time proportional to the pages faulted in"
+  guarantees: "none; the call does not block on anything but populating memory"
+tests:
+  visible: 9
+  held_out: 4
