@@ -269,7 +269,7 @@
 {"symbol":"sched_getattr","number":315,"src":["linux-syscall-tbl"]},
 {"symbol":"sched_getparam","number":143,"src":["linux-syscall-tbl"]},
 {"symbol":"sched_getscheduler","number":145,"src":["linux-syscall-tbl"]},
-{"symbol":"sched_rr_get_interval","number":148,"src":["linux-syscall-tbl"]},
+{"symbol":"sched_rr_get_interval","number":148,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"sched_setaffinity","number":203,"src":["linux-syscall-tbl"]},
 {"symbol":"sched_setattr","number":314,"src":["linux-syscall-tbl"]},
 {"symbol":"sched_setparam","number":142,"src":["linux-syscall-tbl"]},
