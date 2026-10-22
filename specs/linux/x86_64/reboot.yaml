@@ -1,0 +1,89 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/reboot               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (x86-64)"
+  machine: >
+    home server, x86-64; observed as uid 1001 with no capabilities (all EPERM
+    cases, run and traced). The behaviour with CAP_SYS_BOOT is taken from
+    reboot(2) and pid_namespaces(7) (man-pages 6.7) and is only ever exercised
+    inside a fresh, non-initial pid namespace; it could not be run here.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  reboot(magic1, magic2, op, arg) is syscall 169. The magics and op are 32-bit
+  ints: only the low 32 bits of each register count (a sign-extended
+  0xfee1dead is the same as 0x00000000fee1dead). The caller must have
+  CAP_SYS_BOOT in its effective set; without it, every call is EPERM,
+  whatever the magics, op or arg. With it, magic1 must be 0xfee1dead and
+  magic2 one of 0x28121969, 0x05121996, 0x16041998 or 0x20112000, otherwise
+  EINVAL. Op values (linux/reboot.h): CAD_OFF 0, CAD_ON 0x89abcdef, HALT
+  0xcdef0123, POWER_OFF 0x4321fedc, RESTART 0x01234567, RESTART2 0xa1b2c3d4
+  (arg is a NUL-terminated command string), SW_SUSPEND 0xd000fce1, KEXEC
+  0x45584543. In the initial pid namespace these act on the machine: CAD_ON
+  and CAD_OFF set what Ctrl-Alt-Del does and return 0, and
+  HALT/POWER_OFF/RESTART/RESTART2 stop or restart the machine and do not
+  return. In any other pid namespace, reboot never touches the machine: it
+  "reboots" the caller's pid namespace. RESTART and RESTART2 end the
+  namespace with SIGHUP, HALT and POWER_OFF with SIGINT, and every other op is
+  EINVAL. Tests never run reboot with CAP_SYS_BOOT outside a fresh pid
+  namespace.
+returns:
+  no_privilege: "-1 EPERM (1); nothing happens and the caller continues"
+  pid_ns_restart: >
+    RESTART or RESTART2 in a non-initial pid namespace: the call does not
+    return. Every process in the namespace ends, including the caller, its
+    init (pid 1) and any other processes. The parent of the namespace's init
+    gets wait status exactly 1 (killed by SIGHUP, no core flag).
+  pid_ns_halt: >
+    HALT or POWER_OFF in a non-initial pid namespace: the same, but the wait
+    status is exactly 2 (killed by SIGINT).
+  pid_ns_caller: >
+    The caller need not be the namespace's init. If a child of pid 1 calls
+    it, the call does not return in that child, and pid 1 dies while blocked
+    (for example in wait4) without returning to user space.
+  pid_ns_status_not_a_signal: >
+    The SIGHUP/SIGINT in the status is not a signal sent to init. It is
+    reported even if init ignores SIGHUP and SIGINT and blocks every signal.
+  cad_on_cad_off_initial_ns: "0 (initial pid namespace only)"
+errors:
+  eperm: >
+    EPERM (1) if CAP_SYS_BOOT is not in the effective set. This check comes
+    first: before the magics (bad magics give EPERM, not EINVAL), before the
+    op (unknown ops give EPERM), and before arg is read (RESTART2 with a NULL,
+    bad or unmapped arg gives EPERM, not EFAULT). An arg buffer is never
+    written. A forked child of a process with no capabilities also gets EPERM.
+    If root removes only CAP_SYS_BOOT from its effective set, it gets EPERM;
+    once the bit is put back, the call works again.
+  einval_magic: >
+    EINVAL (22) with CAP_SYS_BOOT if magic1 is not 0xfee1dead or magic2 is not
+    one of the four accepted values. This includes swapped magics, magic2 ==
+    magic1, all zero, and 0x28121970. It applies to any op, RESTART included,
+    and nothing happens.
+  einval_op_pid_ns: >
+    EINVAL (22) in a non-initial pid namespace (with valid magics) for every op
+    except RESTART, RESTART2, HALT and POWER_OFF: CAD_ON, CAD_OFF, KEXEC,
+    SW_SUSPEND and unknown values such as 0x77 or 0xffffffff. Nothing changes
+    and the caller continues. An op whose low 32 bits are unknown is EINVAL
+    even if its high 32 bits hold RESTART.
+  einval_op_initial_ns: "EINVAL (22) for unknown op values (initial namespace)"
+  efault: >
+    EFAULT (14) for RESTART2 in the initial namespace if the command string
+    cannot be read (reboot(2)). In a non-initial pid namespace the string is
+    never read: a NULL or unmapped arg still ends the namespace with SIGHUP.
+side_effects: >
+  In a non-initial pid namespace, RESTART/RESTART2/HALT/POWER_OFF end every
+  process in that namespace (pipe write ends they held are closed, so a
+  reader outside sees end of file). Nothing outside the namespace is
+  affected, and the machine keeps running. A refused call (EPERM or EINVAL)
+  has no side effects.
+threading: "no thread-specific behaviour observed"
+ordering:
+  - "checks: CAP_SYS_BOOT (EPERM), then magics (EINVAL), then the pid-namespace op handling (EINVAL or end of namespace), then reading arg (EFAULT, initial namespace only)"
+  - "the parent of a rebooted pid namespace's init gets its wait status only once every process in the namespace has gone"
+timing:                                       # envelopes, never exact values
+  typical: "refused calls: microseconds; a pid-namespace reboot completes as fast as killing the namespace's processes"
+  guarantees: "none"
+tests:
+  visible: 12  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
