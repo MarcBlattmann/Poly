@@ -1,0 +1,78 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getresgid            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    x86-64 host, initial user namespace, tests run as uid 1001 gid 1002
+    (not root), static freestanding test programs, raw syscalls. Root-only
+    behaviour (needs=root tests) follows getresgid(2), setresgid(2),
+    setregid(2), setgid(2), setfsgid(2) and execve(2) and could not be
+    observed on this host.
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  getresgid(rgid, egid, sgid) (syscall 120) stores the calling thread's
+  real, effective and saved set-group-ID, each as a 4-byte unsigned value
+  (gid_t) at the address given, and returns 0. The real id equals what
+  getgid returns and the effective id what getegid returns. In a freshly
+  executed program without the set-group-ID bit the saved id equals the
+  effective id. Any user may call it; it needs no privilege and changes
+  nothing. Arguments 4 to 6 are ignored.
+returns:
+  success: "0; all three ids stored"
+  values: "real = getgid(), effective = getegid(); saved = effective right after execve"
+  width: >
+    exactly 4 bytes per id, little-endian, at the exact address (no
+    alignment needed); bytes around it are untouched (in a u64 slot only
+    the low 4 bytes change)
+  store_order: >
+    real first, then effective, then saved. The pointers may be equal or
+    overlap: with one pointer for all three the value left is the saved id;
+    with overlapping slots each later store overwrites the bytes it shares
+    with earlier ones
+  stable: "repeated calls give the same ids until a set*gid call changes them"
+  after_noop_sets: >
+    setresgid(-1,-1,-1), setresgid with the current ids, setregid(-1,-1),
+    setgid(current egid) and setfsgid(current egid) all succeed for any user
+    and leave the three ids as they were (setfsgid returns the previous fs
+    gid, which equals the effective gid)
+  after_privileged_sets: >
+    (root) setresgid sets each id, -1 keeps it; setgid by a privileged
+    caller sets all three; setregid(r, e) also sets saved to the new
+    effective id when r is not -1, or when e is not -1 and differs from the
+    real id it had before the call (setregid(-1, e) with e equal to the
+    real id keeps saved); setfsgid changes none of the three. Large ids
+    (e.g. 100000, 200000, 300000) are reported as set
+errors:
+  bad_pointer: >
+    EFAULT (14) when any of the three addresses cannot be written: NULL,
+    low unmapped addresses such as 8, an unmapped or munmapped page, a
+    PROT_READ or PROT_NONE mapping, the program's own code, kernel
+    addresses, non-canonical addresses (0x0000800000000000), the top of
+    memory, the vsyscall page (0xffffffffff600000)
+  partial_store: >
+    on EFAULT the call stops at the first bad slot in order real,
+    effective, saved: slots before it hold their id, the bad one and slots
+    after it are not written (NULL egid: rgid written, sgid untouched)
+  page_edge: >
+    a slot ending exactly at the end of a writable page works; a slot that
+    crosses into an unmapped page by 1 to 3 bytes is EFAULT and its bytes
+    in the writable page are left unchanged (nothing of it is written)
+  no_other_errors: "no other errors; the ids are never changed by a failing call"
+side_effects: "none; the process's ids are unchanged by any getresgid call, failing or not"
+threading: >
+  credentials belong to each thread: a thread that changes its ids with the
+  raw setresgid syscall sees the new ids in getresgid while other threads
+  still see the old ones; a new thread or child process (fork, vfork)
+  starts with its creator's current ids. A child's changes never reach its
+  parent
+ordering:
+  - "stores happen in order real, effective, saved"
+  - "execve without a set-group-ID file: real and effective kept, saved set to the effective id"
+timing:                                       # envelopes, never exact values
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
