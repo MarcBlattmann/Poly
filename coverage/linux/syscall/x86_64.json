@@ -352,7 +352,7 @@
 {"symbol":"umask","number":95,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"umount2","number":166,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"uname","number":63,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
-{"symbol":"unlink","number":87,"src":["linux-syscall-tbl"]},
+{"symbol":"unlink","number":87,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"unlinkat","number":263,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"unshare","number":272,"src":["linux-syscall-tbl"]},
 {"symbol":"uprobe","number":336,"src":["linux-syscall-tbl"]},
