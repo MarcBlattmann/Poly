@@ -348,7 +348,7 @@
 {"symbol":"timerfd_settime","number":286,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"times","number":100,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"tkill","number":200,"src":["linux-syscall-tbl"]},
-{"symbol":"truncate","number":76,"src":["linux-syscall-tbl"]},
+{"symbol":"truncate","number":76,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"umask","number":95,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"umount2","number":166,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"uname","number":63,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
