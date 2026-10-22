@@ -1,5 +1,5 @@
 [
-{"symbol":"_sysctl","number":156,"src":["linux-syscall-tbl"]},
+{"symbol":"_sysctl","number":156,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"accept","number":43,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"accept4","number":288,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"access","number":21,"src":["linux-syscall-tbl"]},
