@@ -143,7 +143,7 @@
 {"symbol":"landlock_restrict_self","number":446,"src":["linux-syscall-tbl"]},
 {"symbol":"lchown","number":94,"src":["linux-syscall-tbl"]},
 {"symbol":"lgetxattr","number":192,"src":["linux-syscall-tbl"]},
-{"symbol":"link","number":86,"src":["linux-syscall-tbl"]},
+{"symbol":"link","number":86,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"linkat","number":265,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"listen","number":50,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"listmount","number":458,"src":["linux-syscall-tbl"]},
