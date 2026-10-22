@@ -88,7 +88,7 @@
 {"symbol":"get_robust_list","number":274,"src":["linux-syscall-tbl"]},
 {"symbol":"getcpu","number":309,"src":["linux-syscall-tbl"]},
 {"symbol":"getcwd","number":79,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"getdents","number":78,"src":["linux-syscall-tbl"]},
+{"symbol":"getdents","number":78,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"getdents64","number":217,"status":"green","tests_visible":8,"tests_held_out":4,"src":["linux-syscall-tbl"]},
 {"symbol":"getegid","number":108,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"geteuid","number":107,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
