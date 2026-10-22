@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setpriority          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities, RLIMIT_NICE 0 soft and hard), umask 022. Raising, clamping, EINVAL, ESRCH, EACCES and EPERM (against root's processes) were observed; root-only behaviour (lowering with CAP_SYS_NICE or RLIMIT_NICE, EPERM between other users) is from setpriority(2), getrlimit(2) and sched(7)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  setpriority(which, who, nice) (syscall 141) sets the scheduling nice
+  value of the threads named by which and who and returns 0, or -errno.
+  which selects what who names, as for getpriority (140): PRIO_PROCESS
+  (0) a thread id (who 0: the calling thread; a pid names that
+  process's main thread only), PRIO_PGRP (1) a process group (who 0: the
+  caller's group), every thread of every member, PRIO_USER (2) a real
+  user id (who 0: the caller's real uid), every thread with that real
+  uid. which, who and nice are 32-bit ints: the upper half of each
+  register is ignored. The nice value is clamped to -20..19 and then
+  written. getpriority reads it back as 20 - nice. Lowering a thread's
+  nice value (raising its priority) needs CAP_SYS_NICE or a high enough
+  RLIMIT_NICE; changing another user's thread needs a matching
+  effective uid or CAP_SYS_NICE. With several targets, every target
+  that may be changed is changed, even when the call fails because of
+  others.
+returns:
+  success: "0 when at least one thread matched and none was refused; the new value is seen at once by getpriority (by who 0, by pid or tid, by PRIO_PGRP) from any thread or process"
+  same_value: "setting the value a thread already has is 0 (also without privilege, also at 19)"
+  clamp: "nice above 19 is 19 (20, 100, INT_MAX all give getpriority 1); below -20 is -20 (-21, -100, INT_MIN): a lowering, so EACCES without privilege and getpriority 40 with it"
+  nice_width: "only the low 32 bits of nice count, as a signed int: (5<<32)|n is n, 0x100000000+n is n, 0xffffffff is -1, 0xffffffff00000013 is 19"
+  process: "PRIO_PROCESS sets one thread: who 0 the calling thread, who = a tid that thread (also from another thread or process), who = a pid that process's main thread; the other threads of that process keep their values"
+  pgrp: "PRIO_PGRP sets every thread of every process in the group, the caller included when it is a member; processes that moved to another group (setpgid) are not touched"
+  user: "PRIO_USER sets every thread whose real uid is who (who 0: the caller's real uid), in every process of that user"
+  partial: "PRIO_PGRP / PRIO_USER: threads that may be changed are changed even when another thread is refused; the call then returns the refusal (EACCES or EPERM) and the refused threads keep their values (e.g. a group of nice n, n+1 and n+6 set to n+3 without privilege: EACCES, the first two become n+3, the third stays n+6)"
+  zombie: "a child that has exited but is not reaped is found by PRIO_PROCESS: raising it is 0 and getpriority returns the new value, lowering is EACCES; after it is reaped its pid is ESRCH"
+  inheritance: "a forked child and a new thread start with their creator's value at that moment; execve keeps it; later changes in one do not touch the other"
+  sched: "the value set is the sched_nice that sched_getattr reports; setpriority works the same under SCHED_OTHER, SCHED_BATCH (3) and SCHED_IDLE (5), and does not change the policy"
+  which_width: "only the low 32 bits of which count: (1<<32)|0 is PRIO_PROCESS, 0xffffffff00000001 PRIO_PGRP, 0xffffffff00000002 PRIO_USER; (1<<32)|3 and 0xffffffff are EINVAL"
+  who_width: "only the low 32 bits of who count: 5<<32 is who 0 (the caller), (5<<32)|0x7fffffff and 0xffffffff (-1) name nobody (ESRCH)"
+errors:
+  bad_which: "EINVAL (22): which (low 32 bits) is not 0, 1 or 2 (3, 4, -1, INT_MAX, INT_MIN); checked first: a who that names nothing and a lowering nice value are still EINVAL; nothing changes"
+  no_match: "ESRCH (3): no thread matches: PRIO_PROCESS with a tid that does not exist (0x7fffffff, -1, INT_MIN, a reaped child), PRIO_PGRP with an id that is no process group (also the pid of a process that is not a group leader, and a group whose members are all gone), PRIO_USER with a uid that has no thread (e.g. 4000000) or -1; ESRCH comes before any check of the nice value or of permission"
+  other_user: "EPERM (1): a matching thread belongs to another user: the caller's effective uid equals neither the target's real uid nor its effective uid, and the caller has no CAP_SYS_NICE (a caller whose real uid equals the target's uid is not enough). Checked before EACCES: raising and lowering another user's thread are both EPERM. Root (CAP_SYS_NICE) may change any thread"
+  lowering: "EACCES (13): the clamped value is lower than the target thread's current one and the caller may not lower it: no CAP_SYS_NICE and 20 - value is above the RLIMIT_NICE soft limit of the target's process (tested with the caller as its own target; RLIMIT_NICE 0 allows no lowering at all; RLIMIT_NICE 25 allows down to nice -5, -6 is EACCES). Going back down to the starting nice value after a raise is a lowering too: an unprivileged thread cannot undo its own raise. The value is left unchanged"
+  several: "with several targets (PRIO_PGRP, PRIO_USER) the call fails if any matching thread is refused (EPERM or EACCES), after changing the others; which error is returned when both kinds occur depends on the order threads are visited and is not specified"
+side_effects: "the nice value of the named threads (as described under returns); nothing else: the scheduling policy, rt priority and other attributes are unchanged"
+threading: >
+  The nice value is a per-thread attribute. PRIO_PROCESS 0 in a thread
+  sets only that thread; another thread's tid sets that thread; a pid
+  sets only the main thread. PRIO_PGRP and PRIO_USER set every thread
+  of the matching processes, and refuse thread by thread (one thread
+  of a process can be set while another is refused). A change is seen
+  by any thread or process reading with getpriority once setpriority
+  has returned.
+ordering: []
+timing:
+  typical: "well under 10 µs for PRIO_PROCESS; PRIO_PGRP and PRIO_USER grow with the number of threads they visit"
+  guarantees: none
+tests:
+  visible: 9
+  held_out: 4
