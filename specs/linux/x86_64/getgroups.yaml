@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getgroups            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    x86-64 host, tests run as an unprivileged user (uid 1001, one supplementary
+    group) in the initial user namespace; static freestanding test programs, raw
+    syscalls. Not root here: the root-only cases (setgroups first) come from
+    getgroups(2), setgroups(2) and credentials(7) and from reading the kernel's
+    behaviour, and were not run on this machine
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  getgroups(size, list) (syscall 115) reports the calling thread's supplementary
+  group ids as 32-bit unsigned gids. The size argument is a C int: only its low
+  32 bits count, read as signed. size 0 returns the number of groups and does
+  not look at list at all (NULL or any bad pointer is fine, nothing is written).
+  A size of at least the count writes exactly `count` gids at the start of list,
+  leaves everything after them alone and returns the count; any size up to
+  INT_MAX is accepted, the buffer only has to hold the count. The list is in
+  ascending unsigned order, duplicates kept, exactly as the last setgroups set
+  it (after sorting); neither the real nor the effective gid is added to it.
+  Needs no privilege. The list is inherited by fork and is per thread at the
+  system call level.
+returns:
+  size_zero: "the number of supplementary groups (0..65536); list is ignored and never written"
+  size_at_least_count: "the count; the first count entries of list hold the gids, the rest are untouched"
+  no_groups: "0 for every size >= 0, list never written, so a bad or NULL list is not an error"
+  order: "ascending by unsigned value (0 first, 4294967294 last), duplicates kept"
+  large_size: "any size from count up to 2147483647 (also above 65536) works like an exact size"
+  repeatable: "the same count and list on every call until the groups change"
+errors:
+  negative_size: "EINVAL (22) when the low 32 bits of size, as a signed int, are negative (-1, INT_MIN, 0xffffffff); checked before list, so a NULL or bad list still gives EINVAL; nothing written"
+  size_too_small: "EINVAL (22) for 0 < size < count; nothing written"
+  bad_pointer: "EFAULT (14) when size >= count > 0 and list is not writable for count gids: NULL, a low address, an unmapped, PROT_NONE or read-only page, a kernel address"
+  size_upper_bits: "bits 32..63 of size are ignored: 0x100000000 is size 0 (count query, list ignored), 0x100010000 is size 65536, 0xffffffff00000000 is size 0"
+side_effects: "none; getgroups changes nothing"
+threading: >
+  Credentials are per thread at the system call level: a raw setgroups in one
+  thread changes what getgroups returns in that thread only, and a later raw
+  setgroups in another thread does not change it either. Threads that have not
+  changed their groups see the same list as the thread that created them. A
+  forked child starts with the parent's list; later changes in either process
+  are not seen by the other.
+privilege: >
+  None. After root sets a list and drops to uid/gid 65534 (setresgid then
+  setresuid) the list is unchanged and still readable; setgroups is then EPERM.
+  setgid/setregid/setresgid calls that keep the caller's gids leave the list
+  exactly as it was.
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 11  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
