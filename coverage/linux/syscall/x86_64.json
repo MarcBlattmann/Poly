@@ -16,7 +16,7 @@
 {"symbol":"capset","number":126,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"chdir","number":80,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"chmod","number":90,"src":["linux-syscall-tbl"]},
-{"symbol":"chown","number":92,"src":["linux-syscall-tbl"]},
+{"symbol":"chown","number":92,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"chroot","number":161,"src":["linux-syscall-tbl"]},
 {"symbol":"clock_adjtime","number":305,"src":["linux-syscall-tbl"]},
 {"symbol":"clock_getres","number":229,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
