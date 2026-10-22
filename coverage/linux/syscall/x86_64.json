@@ -240,7 +240,7 @@
 {"symbol":"readlink","number":89,"src":["linux-syscall-tbl"]},
 {"symbol":"readlinkat","number":267,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"readv","number":19,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"reboot","number":169,"src":["linux-syscall-tbl"]},
+{"symbol":"reboot","number":169,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"recvfrom","number":45,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"recvmmsg","number":299,"src":["linux-syscall-tbl"]},
 {"symbol":"recvmsg","number":47,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
