@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fdatasync            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, / and /tmp on ext4, /dev on devtmpfs, /dev/shm on tmpfs; tests run as a normal user (uid 1001, no capabilities), umask 022, in /, empty environment; static freestanding test programs, raw syscalls"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  fdatasync(fd) (syscall 75) flushes a file's data, and the metadata
+  needed to read that data back, to storage, and returns 0. The caller
+  sees no change: contents, size, file offset, mode, link count and the
+  access, modification and change times are the same before and after.
+  It works on any descriptor opened on a regular file or directory
+  (read-only, write-only, append, O_DSYNC, O_NONBLOCK, O_TMPFILE,
+  memfd), also after the file was unlinked, truncated, made mode 0 or
+  written through a shared mapping, and on a directory removed while
+  open. Descriptors that are not open, or are O_PATH descriptors, give
+  EBADF; descriptors whose object cannot be synced (pipes, sockets,
+  character devices, eventfd, epoll, timerfd, signalfd, inotify, files and
+  directories in /proc) give EINVAL. fd is a 32-bit unsigned int: the
+  upper half of the register is ignored. Results are the same as
+  fsync(2) (syscall 74) for every kind of descriptor tested.
+returns:
+  success: "0"
+  regular_file: "0 for any access mode (O_RDONLY, O_WRONLY, O_RDWR) and with O_APPEND, O_DSYNC, O_NONBLOCK, O_CLOEXEC; empty or not; an O_TMPFILE file; a memfd"
+  directory: "0 for a directory opened O_RDONLY|O_DIRECTORY: /, /tmp, /dev, a new directory, one with entries, one removed (rmdir) while the descriptor is open"
+  after_changes: "0 after many writes (megabytes), ftruncate growth and shrink, a store through a MAP_SHARED mapping (the stored byte then reads back with pread), fchmod to 0 (no permission check: an open descriptor suffices), unlink while open (st_nlink 0)"
+  shared_descriptors: "0 through a dup, an F_DUPFD copy at a high number (500), the copy after the original is closed, and a fork child's inherited copy"
+  repeated: "calling it again right away returns 0 again"
+  fd_width: "only the low 32 bits of fd count: fd | 1<<32 and fd | 0xffffffff00000000 act as fd (0 for a file, EINVAL for a pipe); 0xffffffff is just an unused number (EBADF); same for fsync"
+  same_as_fsync: "fsync gives the same result as fdatasync for files, directories, pipes, /dev/null, O_PATH and closed descriptors"
+errors:
+  bad_fd: "EBADF (9): fd (low 32 bits) is not an open descriptor: -1 (0xffffffff), 77 when unused, 1000000, 0x7fffffff, a just-closed descriptor"
+  o_path: "EBADF (9): an O_PATH descriptor, whatever it names (regular file, directory, symbolic link opened O_PATH|O_NOFOLLOW, /dev/null); EBADF wins over the EINVAL the object would give"
+  not_syncable: "EINVAL (22): the object cannot be synced: either end of a pipe (with or without data, after the other end closed, O_NONBLOCK); sockets (Unix stream/datagram socketpair, unconnected AF_INET TCP and UDP); character devices (/dev/null, /dev/zero, /dev/urandom, any access mode); eventfd, epoll, timerfd, signalfd, inotify descriptors; /proc files (/proc/self/status) and directories (/proc, /proc/self/fd). Data queued in a pipe is untouched"
+  io: "EIO (5): an earlier write-back of the file failed; not tested"
+  no_space: "ENOSPC (28) / EDQUOT (122): no room to write the data back; not tested"
+  read_only_fs: "EROFS (30) is listed by the man page for special files; not observed (special files gave EINVAL)"
+  order: "EBADF (not open, O_PATH) is decided before EINVAL (object kind)"
+  untested_kinds: "observed but not in the tests: sysfs regular files 0, sysfs directories EINVAL, tmpfs files and directories (/dev/shm) 0"
+side_effects: >
+  None the caller can see. The data written so far (by write or through
+  a shared mapping) stays readable through this and other descriptors;
+  size, offset, mode, link count and atime/mtime/ctime are unchanged (a
+  20 ms pause before the call shows no timestamp update). Data in pipes
+  is not consumed. The descriptor stays open and usable.
+threading: >
+  No thread-specific behaviour. Descriptors are shared by the threads of
+  a process; a fork child's inherited copy works the same as the
+  parent's, and the parent's copy still works after the child's call.
+ordering: []
+timing:
+  typical: "a few hundred microseconds when nothing is dirty; tens of milliseconds after 16 MiB of fresh writes on ext4 (storage-bound); immediate on in-memory file systems"
+  guarantees: "none; may block for storage I/O. The test checks no timing"
+tests:
+  visible: 10
+  held_out: 4
