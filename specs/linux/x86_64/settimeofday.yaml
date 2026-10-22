@@ -1,0 +1,96 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/settimeofday         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; root behaviour from settimeofday(2), not observed here"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  settimeofday(tv, tz) (syscall 164) sets CLOCK_REALTIME from tv and/or
+  the kernel time zone from tz; it needs CAP_SYS_TIME in the effective
+  set. tv points to a 16-byte struct timeval {i64 tv_sec @0, i64 tv_usec
+  @8} (<linux/time.h>), tz to an 8-byte struct timezone {i32
+  tz_minuteswest @0, i32 tz_dsttime @4}. Either pointer may be NULL (that
+  part is not set); NULL, NULL is allowed. Both are only read, never
+  written. Argument checks come in a fixed order, and most of them come
+  before the permission check, so a normal user sees EFAULT and EINVAL
+  for bad arguments and EPERM only for well-formed calls (see ordering).
+  A process without CAP_SYS_TIME (any normal user; root after emptying
+  its capability sets with capset) gets EPERM for every well-formed call
+  and nothing changes.
+returns:
+  success: "0 (only with CAP_SYS_TIME)"
+  set_time: >
+    (root) tv given: CLOCK_REALTIME becomes tv (microsecond precision)
+    and then keeps running from there; gettimeofday and
+    clock_gettime(CLOCK_REALTIME) show it at once, for every process.
+    CLOCK_MONOTONIC does not jump. Setting the time just read keeps the
+    realtime-monotonic offset (within a fraction of a second); setting 2 s
+    ahead moves CLOCK_REALTIME forward by 2 s.
+  set_time_zone: >
+    (root) tz given: tz_minuteswest must be within -900..900 (15 hours)
+    and is stored with tz_dsttime as given (any value, never checked);
+    gettimeofday's tz then reads back exactly these two values, for every
+    process. The time zone is applied before the time: when tv is then
+    rejected for being earlier than CLOCK_MONOTONIC (see errors), the new
+    time zone has still been stored.
+  null_null: "(root) 0, nothing changes; without CAP_SYS_TIME EPERM"
+  warp_clock: >
+    (root, from settimeofday(2)) the very first call after boot that has
+    tv NULL and a tz with nonzero tz_minuteswest also shifts
+    CLOCK_REALTIME by that many minutes (the hardware clock is assumed to
+    be local time). Later calls, or calls with tv, never do. Not tested.
+errors:
+  bad_tv: >
+    EFAULT when any of the 16 tv bytes is not readable: address 1, a
+    kernel address, an unmapped page, tv_usec on an inaccessible page
+    (tv_sec readable). Checked first, also with a NULL or bad tz. A
+    read-only tv, or one ending exactly at the end of accessible memory,
+    is fine.
+  bad_tz: >
+    EFAULT when tz is not NULL and any of its 8 bytes is not readable
+    (address 1, a kernel address, the last 4 bytes on an inaccessible
+    page), also with tv NULL; checked before the permission check. A
+    read-only tz, or one ending at the end of accessible memory, is fine.
+  bad_usec: >
+    EINVAL for anyone when tv_usec (the whole 64-bit field) is outside
+    0..999999: -1, 1000000, 1000001, 2^32 + 5, INT64_MIN, INT64_MAX.
+    Values below 0 or above 1000000 are rejected before tz is read;
+    exactly 1000000 only after tz is read (see ordering).
+  bad_sec: >
+    EINVAL for anyone when tv_sec is negative or is 8277292036 or more
+    (2^63 ns in seconds, 9223372036, less 30 years of 365 days); 0, 1 and
+    8277292035 (also with tv_usec 999999) pass this check. Checked after
+    tz is read, before the permission check.
+  not_permitted: >
+    EPERM without CAP_SYS_TIME for every call that passed the checks
+    above: NULL/NULL, tv only, tz only, both; tv_sec 0; any tz values
+    (tz_minuteswest 901, -901, INT_MIN and any tz_dsttime are EPERM, not
+    EINVAL: the time zone range is only checked after the permission).
+    A forked child gets the same results as its parent.
+  bad_minuteswest: >
+    (root) EINVAL when tz_minuteswest is above 900 or below -900 (901,
+    -901, INT_MIN); then neither the time zone nor the time in tv is
+    changed.
+  before_monotonic: >
+    (root, settimeofday(2) "since Linux 4.3") EINVAL when tv is earlier
+    than the current CLOCK_MONOTONIC value (tv_sec 0, or CLOCK_MONOTONIC
+    seconds minus 1); the clock stays as it was, but a valid tz in the
+    same call has already been stored.
+side_effects: >
+  A successful call (root only) changes system-wide state: the realtime
+  clock and/or the kernel time zone seen by every process. Failed calls
+  change nothing (the realtime-monotonic offset and gettimeofday's time
+  zone stay the same), except the before_monotonic case above, where tz
+  is stored. Caller memory is never written.
+threading: "system-wide state; every process and thread sees the same clock and time zone"
+ordering:
+  - "tv readable (EFAULT), then tv_usec below 0 or above 1000000 (EINVAL), then tz readable (EFAULT), then tv_usec == 1000000 and the tv_sec range (EINVAL), then CAP_SYS_TIME (EPERM), then (root) tz_minuteswest range (EINVAL), then the time zone is stored, then (root) tv earlier than CLOCK_MONOTONIC (EINVAL), then the time is set"
+  - "so with an unreadable tz: tv_usec -1 or 1000001 gives EINVAL; tv_usec 1000000, tv_sec -1 or tv_sec 8277292036 give EFAULT"
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
