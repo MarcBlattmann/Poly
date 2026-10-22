@@ -1,0 +1,87 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/flock                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; /tmp on ext4; static freestanding test programs, raw syscalls"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  flock(fd, operation) (syscall 73) places or removes an advisory
+  whole-file lock and returns 0. operation is LOCK_SH (1, shared),
+  LOCK_EX (2, exclusive) or LOCK_UN (8, unlock), optionally ORed with
+  LOCK_NB (4, do not sleep). A lock belongs to the open file description
+  the descriptor refers to (not to the descriptor and not to the
+  process): descriptors made by dup/dup2/fcntl(F_DUPFD) and descriptors
+  inherited over fork share it, and each separate open() of the file is
+  a separate holder, also within one process. What is locked is the
+  file (inode), whatever path or hard link it was opened by. Any number
+  of open files may hold LOCK_SH at once; LOCK_EX excludes every other
+  open file's lock of either kind. A conflicting request sleeps until it
+  can be granted, or with LOCK_NB fails with EAGAIN. Asking for the kind
+  already held is a no-op; asking for the other kind converts the lock,
+  but not atomically: the held lock is given up first, so a conversion
+  that fails (EAGAIN, EINTR) leaves the open file with no lock. The lock
+  is released by LOCK_UN through any descriptor of the open file, or
+  when the last descriptor of the open file is closed (also by process
+  exit or death). flock locks are independent of fcntl/POSIX record
+  locks. Advisory only: read, write and open are never affected.
+  Arguments: fd is a 32-bit unsigned int and operation a 32-bit unsigned
+  int; the upper halves of both registers are ignored.
+returns:
+  success: "0 for LOCK_SH, LOCK_EX and LOCK_UN, with or without LOCK_NB (operation values 1, 2, 8, 5, 6, 12)"
+  unlock_without_lock: "LOCK_UN (or LOCK_UN|LOCK_NB) on an open file that holds no lock is 0 and has no effect on other open files' locks"
+  same_kind_again: "asking again for the kind already held (LOCK_SH on LOCK_SH, LOCK_EX on LOCK_EX, with or without LOCK_NB) is 0 and changes nothing, even while other open files wait"
+  access_mode: "the open file's access mode does not matter: O_RDONLY and O_WRONLY files take LOCK_SH and LOCK_EX alike"
+  lock_mand: "any operation with bit 32 (LOCK_MAND) set returns 0 and does nothing at all: no lock taken or released, no other bit checked, the descriptor not checked (closed, negative and O_PATH descriptors give 0 too). Operation -1 (all bits set; also 0xffffffff in the low half) is such an operation. LOCK_MAND|LOCK_SH on a file another open file holds LOCK_EX returns 0 at once"
+  file_kinds: "regular files, directories (opened O_RDONLY|O_DIRECTORY), /dev/null, /proc files, pipes, sockets and memfds can all be locked; both ends of one pipe are one file (a lock on the read end conflicts with one on the write end); the two ends of a socketpair are two files; two memfds are two files; all eventfds share one file (a LOCK_EX on one eventfd makes LOCK_EX|LOCK_NB on another EAGAIN)"
+  unlinked: "a file keeps its locks after its last name is removed and stays lockable through open descriptors; a new file created at the same path is a different file with no locks"
+  width: "only the low 32 bits of fd and of operation count: fd | 1<<32 is fd; (1<<32)|LOCK_EX is LOCK_EX; 1<<32 alone is operation 0 (EINVAL)"
+errors:
+  bad_operation: "EINVAL (22): with bit 32 clear, operation minus the LOCK_NB bit is not exactly 1, 2 or 8: 0, 3 (SH|EX), 4 (LOCK_NB alone), 7, 9, 10, 11, 16, 16|LOCK_SH, 24, LOCK_READ (64), LOCK_WRITE (128), 64|LOCK_SH, 256, 256|LOCK_SH, ... A failed call takes and releases nothing"
+  bad_fd: "EBADF (9): fd not open, negative, AT_FDCWD (-100), or an O_PATH descriptor"
+  would_block: "EAGAIN (11, also EWOULDBLOCK): LOCK_NB and the request conflicts with a lock of another open file; nothing else changes, except that a conversion attempt has already dropped the lock it held (see summary)"
+  interrupted: "EINTR (4): a signal with a handler installed without SA_RESTART arrived while sleeping; the request is not granted and a lock the open file held before a conversion attempt is gone. With SA_RESTART the handler runs and the call goes on sleeping, returning 0 when granted. An ignored signal (SIG_IGN) does not end the sleep"
+  order: "EINVAL for the operation is checked before the descriptor: a bad operation on a closed, negative or O_PATH descriptor is EINVAL; LOCK_MAND (bit 32) beats both"
+  no_memory: "ENOLCK (37): no memory for a new lock; not tested"
+side_effects: >
+  Locks are released by LOCK_UN through any descriptor sharing the open
+  file (also from another process that inherited it over fork: the
+  child's LOCK_UN releases the parent's lock), and when the last
+  descriptor of the open file is closed: by close, by dup2/dup3 onto it,
+  by process exit or by being killed (SIGKILL). Closing one of several
+  descriptors of the open file keeps the lock. A lock taken by a child
+  through an inherited descriptor outlives the child as long as the
+  parent keeps its descriptor. flock locks and fcntl record locks
+  (F_SETLK, F_SETLKW, OFD locks) never conflict with or release each
+  other: an open file may hold LOCK_EX and a whole-file F_WRLCK at once,
+  and another process sees each kind conflict only with its own kind.
+  Releasing a lock (LOCK_UN, close, exit, or giving it up at the start
+  of a conversion) wakes sleeping requests that can now be granted. No
+  deadlock detection: a process sleeping for a lock held by its own
+  other open file (or by itself through a descriptor a child shares)
+  sleeps until a signal ends the sleep; flock never returns EDEADLK.
+threading: >
+  Locks are per open file description, so threads of a process (sharing
+  the descriptor table) share every lock through the same descriptor,
+  and a thread's open() of the file is a separate holder like another
+  process's. No thread-specific behaviour.
+ordering:
+  - "LOCK_EX -> LOCK_SH conversion (and LOCK_UN, or close of the holder's last descriptor) wakes every sleeping LOCK_SH request at once; they all hold LOCK_SH afterwards"
+  - "a sleeping LOCK_EX request does not keep new LOCK_SH requests out: while it sleeps behind a shared holder, LOCK_SH|LOCK_NB from another open file succeeds (no writer preference); the LOCK_EX sleeper is granted only when no lock is left"
+  - "a sleeping LOCK_SH -> LOCK_EX conversion is granted once the other shared holders have unlocked"
+timing:
+  typical: "about 1 microsecond per uncontended call (LOCK_EX + LOCK_UN pair ~2.6 us); a sleeper returns within ~100 us of the release that grants it"
+  guarantees: "none; a blocking request sleeps without limit (no timeout)"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: constants from asm-generic/fcntl.h (LOCK_SH 1, LOCK_EX 2,
+# LOCK_NB 4, LOCK_UN 8, LOCK_MAND 32, LOCK_READ 64, LOCK_WRITE 128,
+# O_PATH 010000000) and asm-generic/errno-base.h / errno.h. The tests also
+# use openat, dup, dup2, link, unlink, pipe, socketpair, memfd_create,
+# fcntl (F_SETLK with struct flock: short l_type, short l_whence, then
+# 64-bit l_start, l_len, 32-bit l_pid), fork, wait4, kill, alarm,
+# rt_sigaction and futex gates on a shared page. Multi-process tests
+# compare output only (poly-diff: syscalls=off). Observed on ext4 only;
+# network file systems are not covered.
