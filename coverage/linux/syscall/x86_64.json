@@ -358,7 +358,7 @@
 {"symbol":"uprobe","number":336,"src":["linux-syscall-tbl"]},
 {"symbol":"uretprobe","number":335,"src":["linux-syscall-tbl"]},
 {"symbol":"userfaultfd","number":323,"src":["linux-syscall-tbl"]},
-{"symbol":"ustat","number":136,"src":["linux-syscall-tbl"]},
+{"symbol":"ustat","number":136,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"utime","number":132,"src":["linux-syscall-tbl"]},
 {"symbol":"utimensat","number":280,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"utimes","number":235,"src":["linux-syscall-tbl"]},
