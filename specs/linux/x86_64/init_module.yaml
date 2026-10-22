@@ -1,0 +1,78 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/init_module          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; CONFIG_MODULES=y, module signatures enforced (/sys/module/module/parameters/sig_enforce = Y), lockdown=integrity, /proc/sys/kernel/modules_disabled = 0"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  init_module(module_image, len, param_values) (syscall 175) loads a
+  kernel module from an ELF image of len bytes in the caller's memory,
+  with param_values a NUL-terminated string of space-separated module
+  parameters ("name[=value[,value...]]"), and returns 0 once the module's
+  init function has succeeded. It needs CAP_SYS_MODULE in the caller's
+  effective capability set (in the initial user namespace). Without it the
+  call fails with EPERM (raw return -1) before any argument is looked at:
+  the length, the image pointer, the parameter pointer and the other
+  argument registers make no difference, nothing of the caller's memory
+  is read or written, and nothing changes in the system. This is the only
+  behaviour a normal user ever sees, and it is what any caller sees after
+  emptying its effective set with capset. With CAP_SYS_MODULE the checks
+  continue in this order: an image shorter than an ELF header (64 bytes)
+  is ENOEXEC, without reading the image or the parameters; then the whole
+  image is copied in (EFAULT if any byte of it is unreadable); then the
+  image's signature is checked before its ELF contents. Arguments are
+  three: module_image (pointer), len (unsigned 64-bit, used whole),
+  param_values (pointer). glibc has no wrapper; the call is made with
+  syscall(2).
+returns:
+  success: "0, after the module was loaded and its init function returned 0 (needs CAP_SYS_MODULE and a valid, correctly signed module for the running kernel; not observed)"
+  without_privilege: "-1 EPERM for every argument combination: NULL/0/NULL, an image starting like an x86-64 ELF object of any length (0, 1, 63, 64, 8192), lengths 2^31 .. 2^64-1, any parameter string, any values in r10/r8/r9"
+  repeatable: "the same EPERM on every call; the call has no lasting effect, so repeating it changes nothing"
+errors:
+  no_capability: "EPERM (1): CAP_SYS_MODULE not in the effective set. Only the effective set counts: a root caller that removed CAP_SYS_MODULE from its effective set but kept it permitted gets EPERM, and gets past the check again after raising it back. Other capabilities do not help (every capability except CAP_SYS_MODULE effective: EPERM) and are not needed (only CAP_SYS_MODULE effective: past the check). Checked first, before everything below"
+  eperm_before_length: "without the capability, lengths below 64 are EPERM, never ENOEXEC"
+  eperm_before_image: "without the capability, an unreadable image (NULL, low address such as 0x1000, unmapped page, PROT_NONE page, a range running into an unmapped page, non-canonical 0x8000000000000000, kernel address 0xffffffff81000000, 0xfffffffffffff000) is EPERM, never EFAULT; no signal"
+  eperm_before_size: "without the capability, huge lengths (0x80000000, 0xffffffff, 2^32, 2^32+64, 2^40, 2^63, 2^64-1) are EPERM, never ENOMEM, and return at once"
+  eperm_before_params: "without the capability, param_values NULL, 1, non-canonical, unmapped, PROT_NONE, without NUL before an unmapped page, or 12 KiB long is EPERM, never EFAULT or E2BIG"
+  modules_disabled: "EPERM (1) also for a caller with CAP_SYS_MODULE when /proc/sys/kernel/modules_disabled is 1 (man page; not tested, setting it is irreversible)"
+  short_image: "ENOEXEC (8): with CAP_SYS_MODULE, len < 64 (0 through 63). Checked before the image and param_values are read: NULL, unmapped or non-canonical image pointers and a bad param_values pointer with such a length are still ENOEXEC"
+  unreadable_image: "EFAULT (14): with CAP_SYS_MODULE and len >= 64, any byte of the len bytes at module_image unreadable (NULL, unmapped page, PROT_NONE page, last byte in an unmapped page, non-canonical address). Checked before param_values is read (a bad param_values pointer does not change it)"
+  no_memory: "ENOMEM (12): with CAP_SYS_MODULE, no memory for a copy of len bytes (e.g. absurd lengths); not tested"
+  signature: "with CAP_SYS_MODULE and a readable image of 64 bytes or more, the signature is checked before the ELF contents. On the oracle (signatures enforced) an image without a valid appended module signature is rejected with EKEYREJECTED (129), whatever its contents; a kernel that does not enforce signatures goes on to the ELF checks instead (ENOEXEC for something that is not a valid ELF object for this architecture, EINVAL for inconsistencies or a bad param_values, EEXIST for a module of a name already loaded, or the init function's error). From source reading for behaviour; not observed (needs root) and not tested"
+  order: "EPERM (no CAP_SYS_MODULE or modules disabled), ENOEXEC (len < 64), ENOMEM, EFAULT (image), signature check (EKEYREJECTED on the oracle), then ELF and parameter checks"
+side_effects: >
+  A failed call has no effect: the image and parameter buffers keep their
+  bytes, read-only image and parameter memory works (no write to it, no
+  signal) and stays usable, and no module is loaded. On EPERM without
+  the capability nothing is read either (unreadable pointers raise no
+  signal). The result does not depend on pending signals: with a blocked
+  pending SIGUSR1 the call still returns EPERM (never EINTR), the signal
+  stays pending and its handler runs once when unblocked; with nothing
+  pending no handler runs. A successful load (not observed) adds the
+  module to /proc/modules and /sys/module.
+threading: >
+  The privilege is per task and inherited: a fork child and a thread
+  (CLONE_THREAD) of a caller without CAP_SYS_MODULE get EPERM too, and
+  the caller's results are the same before, during and after another
+  task's call.
+ordering: []
+timing:
+  typical: "about 1 µs per call that fails with EPERM (oracle: ~1.1 µs); 2000 calls together well under a second"
+  guarantees: "the EPERM, ENOEXEC and EFAULT failures never sleep or wait"
+tests:
+  visible: 11  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: every any-user test first empties all three capability sets with
+# capset (version 3, 0x20080522; the effective-only test keeps the
+# permitted and inheritable sets) and checks with capget that the
+# effective set is 0, so a root runner sees the same EPERM as a normal
+# user and can never load anything. Tests marked needs=root (ENOEXEC,
+# EFAULT, which capability counts) only pass lengths below 64 or
+# unreadable images, which can never load a module. Only the image's
+# start resembles an ELF header (linux/elf.h: ELFMAG, ELFCLASS64 2,
+# ELFDATA2LSB 1, EV_CURRENT 1, ET_REL 1, EM_X86_64 62); 64 is
+# sizeof(Elf64_Ehdr). CAP_SYS_MODULE is 16 (linux/capability.h).
+# finit_module (313), the same load from a file descriptor, is a separate
+# entry and not covered here.
