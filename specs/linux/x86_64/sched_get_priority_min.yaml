@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_get_priority_min # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), nice 10; static freestanding test programs, raw syscalls (number 147)"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sched_get_priority_min(policy) returns the lowest static priority that the
+  scheduling policy accepts. It is a pure lookup on a fixed table: it takes no
+  pointer, has no side effects, needs no privilege and gives the same answer
+  in every process and thread whatever the caller's own policy, nice value or
+  user. Only the low 32 bits of the argument register are used (the argument
+  is a C int); the other five argument registers are ignored.
+returns:
+  SCHED_OTHER (0): "0"
+  SCHED_FIFO (1): "1"
+  SCHED_RR (2): "1"
+  SCHED_BATCH (3): "0"
+  SCHED_IDLE (5): "0"
+  SCHED_DEADLINE (6): "0"
+  relation_to_max: >
+    for every valid policy the result is <= sched_get_priority_max(policy)
+    (146); for SCHED_FIFO and SCHED_RR the range 1..99 spans more than the 32
+    POSIX requires
+  argument_width: >
+    the policy is the low 32 bits of the register, as a signed int:
+    0x1_0000_0001 and 0xffffffff_00000001 both act as SCHED_FIFO (result 1),
+    0x1_0000_0000 as SCHED_OTHER (0); 0x1_ffffffff is -1 (EINVAL)
+  extra_arguments: "ignored; any values in arguments 2-6 give the same result"
+  repeat: "the same policy always gives the same result"
+  policy_7: >
+    SCHED_EXT (7) returned 0 on the oracle (kernel built with sched_ext); it is
+    not covered by tests, an implementation without it may return EINVAL
+errors:
+  unknown_policy: >
+    -EINVAL (22) for any other low-32-bit value: e.g. 4, 8, 9, 10, 16, 257,
+    INT_MAX, -1, -2, INT_MIN, INT_MIN + 1
+  reset_on_fork_flag: >
+    -EINVAL (22) when SCHED_RESET_ON_FORK (0x40000000) is set, alone or OR-ed
+    into any valid policy; the flag is not stripped by this call
+  no_other_errors: "no EPERM, EFAULT or ESRCH: there is no pid or pointer argument"
+  after_error: "a failed call leaves nothing behind; the next valid call succeeds"
+side_effects: "none"
+threading: >
+  no thread or process state involved: forked children, CLONE_VM children
+  and processes that switched themselves to SCHED_BATCH or SCHED_IDLE get
+  identical answers
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "well under a microsecond to a few microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
