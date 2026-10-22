@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_get_priority_max # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: "x86_64 host, uid 1001 (not root); static freestanding test programs, raw syscalls (number 146), run directly and under the pipeline tracer"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  sched_get_priority_max(policy) (x86-64 system call 146) returns the highest
+  static priority usable with the scheduling policy `policy`: 99 for
+  SCHED_FIFO (1) and SCHED_RR (2), 0 for SCHED_OTHER (0), SCHED_BATCH (3),
+  SCHED_IDLE (5) and SCHED_DEADLINE (6). Any other value fails with EINVAL.
+  The answer is a fixed table: it does not depend on the caller's uid,
+  capabilities, own scheduling policy, nice value, process or thread, and
+  never changes between calls. `policy` is a C int: only the low 32 bits of
+  the first argument register count (sign-extended as a 32-bit value); the
+  other five argument registers are ignored.
+returns:
+  SCHED_OTHER_0: "0"
+  SCHED_FIFO_1: "99"
+  SCHED_RR_2: "99 (same as SCHED_FIFO)"
+  SCHED_BATCH_3: "0"
+  SCHED_IDLE_5: "0"
+  SCHED_DEADLINE_6: "0"
+  policy_7: >
+    Kernel-configuration dependent (SCHED_EXT): the oracle kernel has it and
+    returns 0, a kernel without it returns EINVAL. Not tested; either answer
+    is acceptable.
+  upper_32_bits: >
+    ignored: 0x1_00000001 and 0xffffffff_00000002 return 99,
+    0x80000000_00000000 and 0x12345678_00000003 return 0,
+    0x1_00000004 returns EINVAL
+  extra_arguments: "ignored (arguments 2-6 may hold any value)"
+errors:
+  EINVAL_22: >
+    policy (low 32 bits, as a signed int) is not one of 0, 1, 2, 3, 5, 6
+    (or 7 where SCHED_EXT exists). Observed for 4 (the gap between
+    SCHED_BATCH and SCHED_IDLE), 8, 9, 10, 16, 31, 32, 64, 100, 255, 256,
+    1000, 65536, 0x7fffffff, -1, -2, -100, INT_MIN (0x80000000) and
+    0xffffffff.
+  reset_on_fork_flag: >
+    SCHED_RESET_ON_FORK (0x40000000) is not stripped here: the bit alone or
+    ORed with any valid policy (0, 1, 2, 3, 5, 6) gives EINVAL.
+  no_other_errors: "no EPERM, EFAULT or ESRCH: the call takes no pointer or pid and needs no privilege"
+side_effects: "none: the caller's scheduling policy, priority and nice value are unchanged"
+threading: "same answers in every thread and in child processes; safe to call concurrently"
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "well under a microsecond to a few microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
