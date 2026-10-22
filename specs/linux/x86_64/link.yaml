@@ -1,0 +1,83 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/link                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; /tmp on ext4, /dev/shm a separate tmpfs; fs.protected_hardlinks = 1; static freestanding test programs, raw syscalls"
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  link(oldpath, newpath) (syscall 86) gives an existing file one more
+  name: newpath becomes a directory entry for the same inode as oldpath
+  (same st_dev and st_ino, same contents, mode and owner; a write through
+  one name is seen through the other) and the inode's st_nlink goes up by
+  one. It behaves as linkat(AT_FDCWD, oldpath, AT_FDCWD, newpath, 0):
+  relative names start at the working directory, each name separately.
+  oldpath is not followed if it is a symbolic link: the new name is a
+  second name of the symbolic link itself (S_IFLNK, same inode and target
+  text), also for a dangling link, a link to a directory or a link that
+  is part of a loop. Symbolic links in the directory components of either
+  name are followed. Any non-directory can be linked (regular file,
+  FIFO, symbolic link; a file of mode 0 that the caller owns; a file that
+  is open). Both names must be on the same mount. newpath must not exist
+  in any form. Removing one name later leaves the others intact.
+returns:
+  success: "0; the new name exists, st_nlink of the inode (seen by stat of any name and fstat of an open descriptor) is one higher"
+  relative: "relative oldpath and newpath are resolved from the working directory; \".\" and \"..\" components work as usual"
+  symlink_source: "a symbolic link as oldpath is linked itself, never its target: lstat of the new name is S_IFLNK with the link's inode, readlink gives the same text, st_nlink of the symbolic link becomes 2, the target's st_nlink is unchanged"
+  path_lengths: "a last component of 255 bytes works; a path string of 4095 bytes (4096 with its NUL) is still resolved normally"
+errors:
+  exists: "EEXIST (17): newpath names anything that exists: a regular file (also oldpath itself or another name of the same inode), a directory (also with a trailing slash, \".\", \"..\", \"/\"), a symbolic link (a dangling one is not followed and its target is not created)"
+  source_missing: "ENOENT (2): oldpath does not exist, a directory on its way is missing, or oldpath is empty"
+  source_directory: "EPERM (1): oldpath is a directory (also \"dir/\", \"dir/.\", \"dir/..\", \"/\", and a symbolic link to a directory followed by a trailing slash)"
+  source_not_dir: "ENOTDIR (20): a regular file used as a directory in oldpath, including a trailing slash or \"/.\" after a file"
+  target_dir_missing: "ENOENT (2): a directory on the way to newpath is missing, newpath is empty, or newpath ends in a slash (or \"/.\") after a name that does not exist"
+  target_not_dir: "ENOTDIR (20): a regular file used as a directory in newpath"
+  removed_directory: "ENOENT (2): newpath in a directory that has been removed (e.g. a relative name while the working directory has been rmdir'd); oldpath relative to a removed working directory is ENOENT too, while \"..\" from it still works"
+  cross_device: "EXDEV (18): oldpath and newpath on different mounts (e.g. /tmp and /dev/shm), either way round"
+  access: "EACCES (13): no write or search permission on newpath's directory, or no search permission on a directory on the way to either name; root (CAP_DAC_OVERRIDE) passes these checks"
+  protected_hardlinks: "EPERM (1): with fs.protected_hardlinks = 1, a caller that is not the file's owner and lacks CAP_FOWNER may only link a regular file it can both read and write (and that is not set-user-ID, nor set-group-ID with group execute); e.g. a normal user linking root's /etc/passwd (mode 0644) on the same mount gets EPERM; root succeeds. Not in the tests (needs a file owned by another user)"
+  loop: "ELOOP (40): too many symbolic links while resolving a directory component of either name (e.g. two links pointing at each other, or a link to itself, used as a directory, also with a trailing slash on oldpath)"
+  name_too_long: "ENAMETOOLONG (36): a component of either name over 255 bytes (reported only when every directory before it exists), or a path string of 4096 bytes or more (4097 with its NUL)"
+  fault: "EFAULT (14): oldpath or newpath points to unreadable memory (NULL, address 1, the top page)"
+  too_many_links: "EMLINK (31): the inode already has the file system's maximum number of names (ext4: 65000; tmpfs has no practical limit); not in the tests"
+  no_space: "ENOSPC (28) / EDQUOT (122): no room for the new directory entry; EROFS (30): read-only mount; EIO (5): I/O error; not in the tests"
+  path_order: "each path on its own follows the same rule as the other path calls: (1) the string: unreadable EFAULT, 4096 bytes or more ENAMETOOLONG, empty ENOENT; (2) components left to right as the walk reaches them, symbolic links followed: missing or dangling ENOENT, a non-directory followed by more components ENOTDIR, a name over 255 bytes ENAMETOOLONG, a loop ELOOP, no search permission EACCES"
+  path_order_two_paths: >
+    The first applicable error in this order is reported:
+    (1) oldpath completely: its string, every component, and its last name
+    must exist (EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES);
+    so a missing oldpath is ENOENT even when newpath is NULL, too long or
+    already exists.
+    (2) newpath: its string and its directory components (EFAULT,
+    ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES for search), and a trailing
+    slash on a name that does not exist (ENOENT).
+    (3) the new name exists: EEXIST.
+    (4) different mounts: EXDEV.
+    (5) protected_hardlinks: EPERM.
+    (6) write/search permission on newpath's directory: EACCES.
+    (7) oldpath is a directory: EPERM.
+    So a directory as oldpath with an existing new name is EEXIST, with a
+    missing new directory ENOENT, with a NULL newpath EFAULT, across mounts
+    EXDEV, into an unwritable directory EACCES (non-root); only otherwise
+    EPERM. A file into an unwritable directory with a new name that exists
+    is EEXIST.
+side_effects: >
+  On success: a new directory entry; st_nlink of the inode +1; the
+  inode's ctime moves forward (its mtime, atime, size and contents do not
+  change); newpath's directory gets new mtime and ctime (its st_nlink is
+  unchanged); oldpath's directory, if different, is not touched. A failed
+  call changes nothing: no entry, no link count or time changes.
+threading: "no thread-specific behaviour; the working directory and file system state are shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block unless the file system has to do I/O"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests use mkdirat, openat, newfstatat (stat/lstat), readlink,
+# symlink, unlinkat, chmod, chdir, mknodat (FIFO), nanosleep and fstat to
+# set up and observe. /dev/shm must exist and be a different mount from
+# /tmp for the EXDEV test. The permission test checks EACCES for a normal
+# user and success (or EPERM for a directory) for root.
