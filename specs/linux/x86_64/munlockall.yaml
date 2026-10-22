@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/munlockall           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: "Ubuntu 24.04 host, uid 1001 (not root), RLIMIT_MEMLOCK about 2 GiB soft and hard; /tmp on a local disk; static freestanding test programs, raw syscalls, mincore to see residency and MADV_DONTNEED (EINVAL on locked pages) to see locking. Root behaviour from mlock(2), not observed."
+  observed_by: spec-claude-1
+  date: 2026-10-22
+summary: >
+  munlockall() unlocks every page of the calling process's address space
+  and turns off the MCL_FUTURE setting made by mlockall (with or without
+  MCL_ONFAULT). It takes no arguments: whatever is in the argument
+  registers is ignored. It unlocks everything however it was locked:
+  mlockall(MCL_CURRENT), mlock of whole or partial mappings,
+  mlock2(MLOCK_ONFAULT), on anonymous and file mappings, across several
+  mappings. Unlocking does not evict anything: pages that were resident
+  stay resident (mincore), contents are kept, data written through a
+  shared file mapping stays in the file. After it, mappings made later
+  (mmap, brk growth) are not populated (only touched pages become
+  resident), mremap growth of a formerly locked mapping does not populate
+  the new pages, and MADV_DONTNEED on the formerly locked pages succeeds
+  (a private anonymous page then reads zero). The process can lock again
+  afterwards: mlockall(MCL_CURRENT) populates mappings made in between,
+  mlock populates its range, mlockall(MCL_FUTURE) works again. Calling it
+  with nothing locked, or twice in a row, succeeds.
+returns:
+  success: "0, always (also with nothing locked, twice in a row, with junk in the argument registers)"
+errors:
+  none_observed: "no error case: it succeeds for an unprivileged caller and with the RLIMIT_MEMLOCK soft limit at 0 (where mlockall itself is EPERM for an unprivileged caller)"
+side_effects: >
+  All locked memory of the process is given back to its RLIMIT_MEMLOCK
+  allowance: an unprivileged caller that had locked up to the limit (a
+  further mlock is ENOMEM) can lock the same amount again afterwards. With
+  MCL_FUTURE turned off, mappings and brk growth that were refused with
+  EAGAIN (unprivileged, over RLIMIT_MEMLOCK while MCL_FUTURE was on) are
+  allowed again. Pages stay resident; nothing is written back or freed.
+threading: >
+  Locks and the MCL_FUTURE setting belong to the address space: munlockall
+  called by another task sharing it (CLONE_VM) unlocks this task's pages
+  and turns MCL_FUTURE off for every task. In a fork child (which has its
+  own address space and inherited no locks) it succeeds and acts on the
+  child alone: the parent's pages stay locked and its MCL_FUTURE stays on.
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "microseconds for a small process"
+  guarantees: "none; does not block"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
