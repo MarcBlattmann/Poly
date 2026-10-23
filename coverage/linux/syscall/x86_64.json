@@ -58,7 +58,7 @@
 {"symbol":"fchmodat2","number":452,"src":["linux-syscall-tbl"]},
 {"symbol":"fchown","number":93,"src":["linux-syscall-tbl"]},
 {"symbol":"fchownat","number":260,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"fchroot","number":472,"src":["linux-syscall-tbl"]},
+{"symbol":"fchroot","number":472,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"fcntl","number":72,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"fdatasync","number":75,"src":["linux-syscall-tbl"]},
 {"symbol":"fgetxattr","number":193,"src":["linux-syscall-tbl"]},
