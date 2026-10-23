@@ -1,0 +1,106 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_setaffinity    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    x86_64 host with 4 CPUs (possible and online 0-3, start mask 0xf), uid
+    1001 without capabilities; static freestanding test programs, raw
+    syscalls. Root-only behaviour (uid rules between users, CAP_SYS_NICE)
+    comes from sched_setaffinity(2) and is covered by needs=root tests; the
+    ordering of permission against the mask checks was observed as non-root
+    on root-owned kernel threads. Poly's test VM has 2 CPUs: no test
+    depends on the CPU count.
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  sched_setaffinity(pid, len, mask) (syscall 203) sets the CPU affinity
+  mask of the thread named by pid: the set of CPUs it may run on. mask
+  points to a bit mask in little-endian unsigned-long words, bit N = CPU
+  N. pid 0 means the calling thread; a pid is a thread id (tid), so the
+  pid of a process names its main thread and the tid of another thread
+  names that thread only. pid is a 32-bit int (upper 32 bits of the
+  register ignored); len is a 32-bit unsigned int (upper 32 bits ignored).
+  The mask stored is the request intersected with the CPUs the thread may
+  use (the online CPUs, less any cpuset restriction); it must not be
+  empty. Returns 0 on success. The kernel's own mask is 8 bytes on systems
+  with up to 64 possible CPUs (sched_getaffinity returns 8), and only that
+  many bytes are ever read.
+returns:
+  success: "0"
+  self: "pid 0, the caller's pid and the caller's tid all name the calling (single-threaded) process; the same mask may be set any number of times"
+  stored_mask: "sched_getaffinity afterwards reports exactly the requested CPUs that exist (a one-CPU mask gives that bit alone; two CPUs give both bits)"
+  all_ones: "a mask of all ones (8 bytes, or 128 bytes of 0xff) is accepted and stores every usable CPU: sched_getaffinity then returns the same mask as at program start"
+  extra_bits: "bits for CPUs the system does not have (e.g. bit 62, 63) are dropped silently when at least one usable CPU is also named: lowest CPU | bit 63 stores the lowest CPU alone"
+  bytes_read: >
+    min(len, 8) bytes are read from mask (8 = the kernel mask size). A
+    shorter len reads the first len bytes and treats the rest as zero (len 1
+    with all ones names CPUs 0-7, len 3 CPUs 0-23, len 4 CPUs 0-31; len 4
+    works for 4 readable bytes before an unmapped page). A longer len reads
+    8 bytes only: a mask in the last 8 bytes of a page followed by an
+    unmapped page works with len 16, 128, 4096, 0x80000000 and 0xffffffff;
+    with a 16-byte buffer the second word is ignored entirely.
+  len_width: "len is taken as 32 bits: 0x100000000 is 0 (EINVAL), 0x100000008 is 8, -1 is 0xffffffff (reads 8 bytes, succeeds)"
+  pid_width: "pid is a 32-bit int: 0x100000000 means 0 (the caller), (pid | 0x500000000) means pid, 0x1ffffffff means -1 (ESRCH)"
+  mask_not_written: "the caller's buffer is only read, never modified"
+  other_process: "a live child of the same user, named by its pid: returns 0; the child then sees the new mask with pid 0; the caller's own mask is unchanged"
+  zombie: "a child that has exited but is not yet reaped is still found: a valid mask returns 0 and sched_getaffinity(pid) reports it; an empty mask is EINVAL, NULL EFAULT"
+  other_thread: "the tid of another thread of the process: changes that thread's mask only (the main thread, by 0 or getpid(), keeps its own); pid 0 inside a thread names that thread"
+  privileged: "a caller with CAP_SYS_NICE (root) may set the mask of a process of any user"
+errors:
+  bad_pointer: >
+    mask not readable for the bytes read (NULL, address 1, a kernel address
+    0xffff800000000000, the non-canonical 0x0000800000000000, an unmapped
+    page, a PROT_NONE page, 8 (or 5) bytes starting 4 bytes before an
+    unmapped page): EFAULT (14). With len 0 nothing is read, so NULL or
+    address 1 with len 0 is EINVAL, not EFAULT.
+  empty_mask: >
+    no usable CPU named: EINVAL (22). Cases: all-zero mask (8 or 16
+    bytes, or 3 zero bytes with len 3), only CPUs the system does not have
+    (bit 63 alone), a CPU named only past the first 8 bytes (len 16, word 0
+    zero, word 1 = 1), len 0 (with any pointer, even NULL), len
+    0x100000000. Also for a child process or a zombie.
+  no_such_thread: "no thread has that id (0x7fffffff, 0x3fffffff, 4194304, a reaped child) or the pid is negative as a 32-bit int (-1, INT_MIN, 0x1ffffffff): ESRCH (3). Negative pids are ESRCH, not EINVAL."
+  other_user: >
+    caller without CAP_SYS_NICE whose effective uid equals neither the real
+    nor the effective uid of the target: EPERM (1). The caller's real uid
+    does not count (caller ruid 1000 / euid 3000 against a target with ruid
+    1000 / euid 2000 is EPERM; caller euid 1000 or euid 2000 succeeds,
+    whatever its real uid). Root that has dropped CAP_SYS_NICE from its
+    effective set is EPERM for a target of another uid (seen on root-owned
+    kernel threads as uid 1001; needs=root tests for the rest).
+  no_setaffinity_threads: "kernel threads bound to one CPU (ksoftirqd/N) refuse any change: EINVAL (22) even for a valid mask, and before the permission check (non-root gets EINVAL, not EPERM). Spec only: user programs cannot make such threads."
+  check_order: >
+    1. mask unreadable -> EFAULT (so a missing or negative pid with a NULL
+    mask is EFAULT); 2. pid not found / negative -> ESRCH (so a missing pid
+    with an empty mask or len 0 is ESRCH); 3. permission -> EPERM (so
+    another user's process with an empty mask, len 0, or only bit 63 is
+    EPERM, not EINVAL); 4. no usable CPU in the mask -> EINVAL.
+  failure_has_no_effect: "a failed call (EFAULT, ESRCH, EPERM, EINVAL) leaves every mask as it was"
+side_effects: >
+  Sets the target thread's affinity mask, observable with sched_getaffinity
+  (syscall 204: returns the number of bytes written, 8 here, for a buffer of
+  8 or more bytes in multiples of 8). If the target runs on a CPU outside
+  the new mask it is moved: for the caller itself this has happened by the
+  time the call returns (getcpu right after setting a one-CPU mask reports
+  that CPU, every time). A child made by fork or clone starts with its
+  parent's mask (a new thread with its creator's); a child changing its own
+  mask does not change the parent's. The mask survives execve.
+threading: >
+  Per thread: pid 0 is the calling thread, a tid names that thread only.
+  Threads of one process are of the same user, so no EPERM between them.
+ordering: []
+timing:
+  typical: "microseconds; never blocks (a migration of the caller completes before the call returns)"
+  guarantees: "none"
+notes: >
+  Tests use sched_getaffinity (204) with a 128-byte buffer to observe the
+  mask, getcpu (309) to see migration, and setresuid (117), capget (125)
+  and capset (126) in the needs=root tests. Tests never assume a CPU
+  count: they use the lowest and highest CPU of the start mask (the same
+  CPU when there is only one). The needs=root tests could not be run on
+  the oracle host (no root there) and follow the documented rules above;
+  their scaffolding ran on Poly as root (polyrun).
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
