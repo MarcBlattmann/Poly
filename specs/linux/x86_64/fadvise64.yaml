@@ -1,0 +1,85 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fadvise64
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "home server, uid 1001 (not root), /tmp on ext4; every test rerun with its files on tmpfs (/dev/shm) with identical results; static freestanding test programs, raw syscalls, direct and under the pipeline tracer"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  fadvise64(fd, offset, len, advice) is system call 221 on x86-64 (the C
+  library's posix_fadvise). It tells the kernel how the caller expects to
+  access a range of an open file; the advice is a hint and never changes
+  what any later call returns. fd and advice are 32-bit ints (the upper
+  half of their registers is ignored); offset and len are signed 64-bit.
+  The range is [offset, offset + len), len 0 meaning "to the end of the
+  file". Valid advice: POSIX_FADV_NORMAL 0, RANDOM 1, SEQUENTIAL 2,
+  WILLNEED 3, DONTNEED 4, NOREUSE 5 (linux/fadvise.h, x86-64 values). On
+  success the result is 0. Checks happen in this order: the descriptor
+  (EBADF), then pipe/FIFO (ESPIPE), then len and advice (EINVAL). Any
+  other open descriptor (regular file, directory, character device,
+  eventfd, epoll, socket) accepts every valid advice with any range,
+  including ranges past the end of the file, on an empty file, not page
+  aligned, with a negative offset, or with offset + len overflowing.
+returns:
+  success: "0 for advice 0..5 on any open descriptor that is not a pipe or FIFO"
+  range: >
+    Any offset is accepted, including negative ones (-1, -4096, INT64_MIN)
+    and offsets far past the end of the file; any len >= 0 is accepted
+    (0 = to the end of the file; INT64_MAX and offset + len overflowing
+    are fine). Partial pages and unaligned ranges are fine.
+  descriptors_accepted: >
+    regular files (opened O_RDONLY, O_WRONLY or O_RDWR, O_APPEND, dup'd,
+    inherited across fork, or of an unlinked file), directories (including
+    "/"), /dev/null, /dev/zero, eventfd, epoll, AF_UNIX sockets (both ends
+    of a socketpair). No access mode is needed.
+  int_arguments: >
+    fd and advice are truncated to their low 32 bits and taken as signed:
+    fd | (1 << 32) is fd; fd 0x1ffffffff is -1 (EBADF); advice
+    0x100000003 is WILLNEED (0) and 0x100000009 is 9 (EINVAL); advice
+    0xffffffff is -1 (EINVAL). offset and len use all 64 bits: len
+    0x8000000000000001 is negative (EINVAL), len 0xffffffff and 0x100000000
+    are positive (0).
+errors:
+  bad_fd: >
+    EBADF for a descriptor that is not open (-1, AT_FDCWD, a closed or
+    never-opened number) and for an O_PATH descriptor (of a file or of a
+    FIFO). EBADF is reported before every other error (bad advice,
+    negative len).
+  pipe_or_fifo: >
+    ESPIPE for either end of a pipe and for an opened FIFO (O_RDWR, or
+    O_RDONLY|O_NONBLOCK), for every advice and every range. ESPIPE comes
+    before EINVAL: a bad advice or a negative len on a pipe is ESPIPE.
+    Sockets are NOT ESPIPE (they succeed).
+  negative_len: "EINVAL for len < 0 (any advice, also INT64_MIN), on every descriptor kind that is not a pipe/FIFO"
+  bad_advice: "EINVAL for any advice outside 0..5 after truncation to int (6, 7, 8, 9, 99, 100, -1, INT32_MIN)"
+side_effects: >
+  None that a program can observe through results. The file's data,
+  size, blocks, mode, link count and atime/mtime/ctime (stat) are
+  unchanged by every advice, including WILLNEED (which does not count as
+  an access for atime) and DONTNEED; the directory's stat is unchanged
+  too. The file offset is not moved. DONTNEED never loses data: clean
+  data, data just written and not synced, and data written through a
+  MAP_SHARED mapping that is still mapped all read back the same through
+  read/pread and through the mapping. After RANDOM, SEQUENTIAL, NOREUSE,
+  WILLNEED, DONTNEED or NORMAL, forward reads, backward preads and
+  unaligned preads return exactly the file's bytes. (On real Linux the
+  advice may start or drop page-cache readahead and evict clean cached
+  pages; only residency, e.g. via mincore of a mapping, can show this and
+  it differs by filesystem - tmpfs ignores the advice - so it is not
+  part of this spec.) The advice does not affect the descriptor or the
+  file otherwise: the descriptor keeps working (reads, writes,
+  getdents64) afterwards.
+threading: >
+  No shared state is observable. A forked child may advise an inherited
+  descriptor (results as in the parent); its DONTNEED does not change what
+  the parent reads, and closing the child's copy leaves the parent's
+  descriptor usable.
+ordering:
+  - "EBADF (descriptor not open, or O_PATH) before ESPIPE (pipe/FIFO) before EINVAL (negative len or bad advice)"
+timing:
+  typical: "microseconds; WILLNEED starts reading asynchronously and does not wait for it"
+  guarantees: "none; the call returns without waiting for WILLNEED reads to finish (man 2 posix_fadvise: a nonblocking read)"
+tests:
+  visible: 10
+  held_out: 4
