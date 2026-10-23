@@ -122,7 +122,7 @@
 {"symbol":"io_cancel","number":210,"src":["linux-syscall-tbl"]},
 {"symbol":"io_destroy","number":207,"src":["linux-syscall-tbl"]},
 {"symbol":"io_getevents","number":208,"src":["linux-syscall-tbl"]},
-{"symbol":"io_pgetevents","number":333,"src":["linux-syscall-tbl"]},
+{"symbol":"io_pgetevents","number":333,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"io_setup","number":206,"src":["linux-syscall-tbl"]},
 {"symbol":"io_submit","number":209,"src":["linux-syscall-tbl"]},
 {"symbol":"io_uring_enter","number":426,"src":["linux-syscall-tbl"]},
