@@ -1,0 +1,119 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/restart_syscall      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022, directly and under the pipeline's ptrace tracer"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  restart_syscall() (syscall 219, no arguments; whatever the argument
+  registers hold is ignored) continues the last "time-adjusted
+  restartable" call of the calling thread, if there is one, and returns
+  what that call returns; otherwise it returns -EINTR (4). The
+  restartable calls are nanosleep (35), clock_nanosleep (230) with a
+  relative time, poll (7) (with or without a timeout), and futex (202)
+  FUTEX_WAIT / FUTEX_WAIT_BITSET with a timeout. Such a call, interrupted
+  by a signal, leaves a "pending restart" in its thread that remembers
+  the call's arguments and its ORIGINAL deadline (start + timeout, on the
+  call's clock), so a restart does not start the timeout again: it ends
+  at the original deadline, also counting any time the process spent
+  stopped. The kernel uses this itself: when such a call is interrupted
+  by a stop signal (SIGSTOP, SIGTSTP, SIGTTIN) and the process is later
+  continued by SIGCONT without a SIGCONT handler, or by a signal that
+  has no handler (only seen under ptrace, see notes), the call is
+  resumed through restart_syscall and the program just sees the original
+  call return normally at its original deadline. When the interrupting
+  signal runs a handler, the interrupted call returns -EINTR to the
+  program (SA_RESTART makes no difference for these calls) and the
+  pending restart stays while the handler runs: restart_syscall called
+  from inside the handler resumes the interrupted call. Returning from
+  the handler (rt_sigreturn) drops the pending restart.
+returns:
+  nothing_pending: "-EINTR at once, with no other effect: in a fresh process or a new thread (CLONE_THREAD), with any argument register values (0, 1..6, all ones), on every repeated call, after a nanosleep or poll that completed normally, in a handler for a signal that interrupted no system call, and after any handler has returned"
+  nanosleep_in_handler: "nanosleep(400 ms) interrupted at 100 ms by a handled signal returns -EINTR with rem = time left at the interruption (about 300 ms); restart_syscall inside the handler sleeps until the ORIGINAL end (about 400 ms after the nanosleep began) and returns 0; called again in the same handler (deadline passed) it returns 0 at once; the in-handler restart does not rewrite rem; same with SA_RESTART on the handler and with rem NULL"
+  clock_nanosleep_in_handler: "relative clock_nanosleep (flags 0) on CLOCK_MONOTONIC, CLOCK_REALTIME or CLOCK_BOOTTIME: like nanosleep (call -EINTR, rem = time left at the interruption, restart returns 0 at the original end on the same clock)"
+  clock_nanosleep_abstime: "clock_nanosleep with TIMER_ABSTIME leaves nothing pending: restart_syscall in the handler of the signal that interrupted it is -EINTR at once"
+  poll_in_handler: "poll(fds, n, 400) interrupted by a handled signal returns -EINTR; restart_syscall inside the handler polls the same array (same address and count, re-read) until the original deadline: nothing ready -> 0 at the original end, revents of every entry rewritten to 0; a descriptor the handler made ready -> the ready count (1) at once, revents written (POLLIN); called again after the deadline -> 0 at once. poll with timeout -1 is restartable too: the restart waits with no timeout"
+  futex_in_handler: "FUTEX_WAIT with a relative timeout (also with FUTEX_PRIVATE_FLAG) or FUTEX_WAIT_BITSET with an absolute CLOCK_MONOTONIC timeout, interrupted by a handled signal, returns -EINTR; restart_syscall inside the handler waits again on the same word with the same expected value and bitset: word changed meanwhile -> -EAGAIN at once; else sleeps until the original deadline -> -ETIMEDOUT. After a futex restart there is nothing pending any more: a second restart_syscall is -EINTR"
+  untimed_futex: "FUTEX_WAIT without timeout leaves nothing pending (restart_syscall in the handler -EINTR)"
+  replaced_by_later_call: "the pending restart is per thread and is the most recent restartable call: a nanosleep made inside the handler (even one that completes) replaces it, so restart_syscall after it is -EINTR. Calls that are not restartable (e.g. ppoll in the handler) leave it alone"
+  not_restartable: "a handler interrupting any other blocking call (read of an empty pipe, pause, rt_sigsuspend, ppoll, select, pselect6, epoll_wait, rt_sigtimedwait) finds nothing pending: restart_syscall there is -EINTR at once"
+  fork_in_handler: "observed, not tested: a child forked inside such a handler inherits the pending restart (its restart_syscall resumes the parent's interrupted nanosleep until the original deadline and returns 0)"
+errors:
+  eintr: "EINTR (4): nothing to restart (see nothing_pending); restart_syscall has no other error of its own. Otherwise its result and errno are exactly those of the resumed call (nanosleep/clock_nanosleep 0 or -EINTR, poll a count or -EINTR, futex 0 / -EAGAIN / -ETIMEDOUT / -EINTR)"
+side_effects: >
+  restart_syscall itself changes nothing when nothing is pending (no
+  signal mask change, nothing written). When it resumes a call it has
+  that call's effects (poll writes revents). Stop and continue, with no
+  SIGCONT handler (observable through the original calls; under ptrace
+  the tracer sees the call end and a restart_syscall (219) entered with
+  the original call's argument registers after the continue):
+  - nanosleep / relative clock_nanosleep (CLOCK_MONOTONIC, CLOCK_REALTIME):
+    returns 0 at the ORIGINAL end; stopped at 100 ms and continued at
+    300 ms, a 400 ms sleep ends at about 400 ms, not 600. Continued after
+    the original end (at 700 ms) it returns 0 right after the continue.
+    The stop writes rem (the time left when it stopped, about 300 ms)
+    even though the call then returns 0; with several stops rem holds
+    the time left at the last stop. A NULL rem works the same.
+  - clock_nanosleep TIMER_ABSTIME: 0 at the absolute time (no
+    restart_syscall needed; the call is simply repeated).
+  - poll (timed): nothing ready -> 0 at the original end (revents 0); a
+    pipe written while the poller is stopped -> 1 with POLLIN right
+    after the continue; poll(-1) likewise returns 1 after the continue.
+  - FUTEX_WAIT timed: a stopped waiter is not on the futex: FUTEX_WAKE
+    sent while it is stopped wakes nobody (returns 0) and the wake is
+    lost; after the continue the wait goes on until the original
+    deadline (-ETIMEDOUT). If the word changed while stopped, -EAGAIN
+    right after the continue. An untimed FUTEX_WAIT is restarted too
+    (not through restart_syscall): a wake while stopped returns 0, the
+    waiter keeps waiting after the continue and a later FUTEX_WAKE wakes
+    it (1; the waiter returns 0).
+  - SIGSTOP, SIGTSTP and SIGTTIN (default action stop; the process group
+    must not be orphaned for the last two) behave alike; two stop/continue
+    cycles still end at the original deadline.
+  - With a SIGCONT handler (also SA_RESTART): the stopped nanosleep,
+    relative clock_nanosleep, poll or timed FUTEX_WAIT returns -EINTR
+    right after the continue and the handler runs once; nanosleep's rem
+    then holds the time that was left when the process STOPPED (about
+    300 ms of 400 stopped at 100 ms and continued at 300), not at the
+    continue.
+  - Contrast (calls that do not use restart_syscall): ppoll, select and
+    pselect6 are restarted with the time left at the stop, written back
+    into their timeout argument, so the stopped time does NOT count (400
+    ms timeout, stopped 100..300 ms: returns 0 at about 600 ms; the
+    timeout argument reads 0 afterwards). epoll_wait (400 ms) is not
+    restarted: -EINTR right after the continue.
+  Signals that do not reach a handler (default-ignored SIGURG and
+  SIGWINCH, SIGUSR1 set to SIG_IGN, a blocked SIGUSR2 with a handler),
+  sent by POSIX timers during nanosleep, poll or a timed FUTEX_WAIT, do
+  not shorten the call: it returns 0 / 0 / -ETIMEDOUT after its full
+  time; the blocked signal stays pending (once) and its handler runs on
+  unblocking.
+threading: >
+  The pending restart is per thread: a new thread has none (-EINTR). A
+  thread's restart_syscall only ever resumes that thread's own call.
+ordering:
+  - "a handled signal interrupting a restartable call: the call is ended (its rem written), the handler runs (restart_syscall usable there), then rt_sigreturn drops the pending restart and the original call returns -EINTR"
+  - "stop then continue without a SIGCONT handler: the call is ended at the stop (rem written), and resumed after the continue against its original deadline"
+timing:
+  typical: "a restart ends within a few ms after the original deadline (at most ~2 ms late on the oracle); nothing-pending calls return in microseconds"
+  guarantees: "a resumed sleep never ends before the original deadline (start + timeout on the call's clock); a restart whose deadline has passed returns at once"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: under ptrace (the pipeline's tracer) any signal reaching the
+# tracee, including default-ignored ones, interrupts these calls and the
+# kernel restarts them through restart_syscall, which writes nanosleep's
+# rem and leaves a pending restart behind (a direct run leaves rem
+# untouched and nothing pending). The tests therefore never check rem
+# after an ignored signal, and never call restart_syscall directly after
+# such a signal. The visible traces show an interrupted restartable call
+# as returning EINTR followed by restart_syscall(...) = <the call's
+# result>; multi-process and timer tests compare output only
+# (poly-diff: syscalls=off). Other calls used by the tests: setitimer
+# (ITIMER_REAL), timer_create/timer_settime/timer_delete (SIGEV_SIGNAL),
+# fork, wait4 (WUNTRACED|WNOHANG), kill, setpgid, rt_sigaction,
+# rt_sigprocmask, rt_sigpending, pipe2, epoll_create1/epoll_ctl.
+# Constants: asm/unistd_64.h (219), asm-generic/errno-base.h,
+# linux/futex.h, linux/time.h (TIMER_ABSTIME), asm-generic/poll.h.
