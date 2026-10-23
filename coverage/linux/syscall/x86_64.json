@@ -48,7 +48,7 @@
 {"symbol":"exit_group","number":231,"status":"green","tests_visible":10,"src":["linux-syscall-tbl"]},
 {"symbol":"faccessat","number":269,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"faccessat2","number":439,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"fadvise64","number":221,"src":["linux-syscall-tbl"]},
+{"symbol":"fadvise64","number":221,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"fallocate","number":285,"src":["linux-syscall-tbl"]},
 {"symbol":"fanotify_init","number":300,"src":["linux-syscall-tbl"]},
 {"symbol":"fanotify_mark","number":301,"src":["linux-syscall-tbl"]},
