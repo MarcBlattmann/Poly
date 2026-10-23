@@ -1,0 +1,85 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_getevents         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022; /tmp on ext4, file tests repeated on tmpfs (/dev/shm) with the same results"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  io_getevents(ctx_id, min_nr, nr, events, timeout) (syscall 208) takes
+  completed asynchronous I/O requests off the completion ring of a context
+  made by io_setup (206) and copies them, oldest first, into the caller's
+  array of 32-byte struct io_event records (linux/aio_abi.h: u64 data =
+  the iocb's aio_data, u64 obj = the iocb's user address, s64 res = the
+  request's result, s64 res2 = 0 in everything observed). It returns how
+  many records it wrote (0..nr). It waits until at least min_nr events
+  have been taken, the timeout (a relative struct timespec, NULL = no
+  limit) runs out, a signal handler runs, or the context is destroyed.
+  Events are taken as they arrive, so a call that ends early still
+  returns (and consumes) what it has collected. min_nr and nr are full
+  signed 64-bit values. The ring is the shared mapping at address ctx_id:
+  a 32-byte header of eight 32-bit words (word 0 the context's index,
+  word 1 the slot count N, word 2 head, word 3 tail, word 4 magic
+  0xa10a10a1, 5 = 1, 6 = 0, 7 = 32) followed by N io_event slots; the
+  kernel appends at tail, and io_getevents reads from the head word the
+  caller's memory currently holds and writes the new head back.
+returns:
+  count: "number of io_event records written to events, 0 <= count <= nr; with min_nr > 0 it is >= min_nr unless the timeout ran out or a signal handler ran"
+  order: "completion order (for writes completed during io_submit: submission order, also across the ring's end)"
+  record: "data = aio_data of the iocb, obj = address of the iocb as passed to io_submit, res = result (bytes written for IOCB_CMD_PWRITE; poll mask for IOCB_CMD_POLL, e.g. POLLIN|POLLRDNORM = 0x41 for a readable pipe asked for POLLIN), res2 = 0"
+  partial: "with more events ready than nr, exactly nr are returned and the rest stay queued for the next call; records past the returned count in the caller's array are not touched"
+  empty_ring: "nothing ready: min_nr 0 returns 0 at once (any timeout, also NULL); a timeout of {0, 0} returns 0 at once whatever min_nr is"
+  nr_zero: "min_nr 0 and nr 0: returns 0 at once and consumes nothing, even with events ready, a NULL events pointer or a NULL timeout"
+  events_buffer_unused: "when there is nothing to copy the events pointer is never touched: a bad pointer (8, NULL) still gives 0"
+  min_nr_wait: "min_nr 2 with one event ready: with a {0, 0} timeout returns 1 at once; with a 50 ms timeout returns 1 after the timeout (the event is consumed then: a following call finds nothing); with a NULL timeout waits for the second completion and returns 2"
+  big_values: "min_nr = nr = 2^32 is valid (returns what is ready); nr = 2^63-1 is valid; min_nr = nr = 2^63-1 with a {0, 0} timeout returns 0"
+  ring_head: "after a call, header word 2 (head) equals the slot after the last record returned (modulo N); with everything taken head == tail (word 3). N for io_setup(4) is 127 here; at most N-1 completions are held at once and one call returns all of them, across the ring's end"
+  read_only_ring: "a ring the caller made PROT_READ still works: io_getevents returns the events and the head word moves"
+  timeout_values: "The timeout is relative and read once; it is never written back. It is not range-checked: tv_nsec 1000000000 waits one second, {0, 1500000000} 1.5 s. {0, 1} returns at once. A NEGATIVE total ({-1, 0}, {0, -1}, {-1, 999999999}, {0, -1000000000}) and a huge one (tv_sec 2^62 or 2^63-1) never expire: the call waits like a NULL timeout (returns when events arrive, EINTR on a signal; observed waiting at least 3 s)."
+errors:
+  timeout_efault: "EFAULT (14): timeout points to unreadable memory (1, or a timespec running into an unmapped page). Checked FIRST: before the context, min_nr, nr and events (io_getevents(0, -1, -1, 1, 1) is EFAULT); also with min_nr 0, nr 0"
+  bad_context: "EINVAL (22): ctx_id is not a live context of the caller's address space: 0, 1, handle+32, the handle with bit 32 flipped, an ordinary page holding a copy of a ring header, a destroyed handle, a parent's handle in a fork child. The lookup reads header word 0 at ctx_id from the caller's memory: if that word was changed to another index it is EINVAL (and works again once restored); if the ring's first page is PROT_NONE it is EINVAL (not EFAULT)"
+  bad_counts: "EINVAL (22): min_nr < 0, nr < 0, or min_nr > nr (e.g. 2/1, 1/0, 2^32+1/1). Nothing is consumed. A bad context and bad counts together is EINVAL; a bad timeout pointer wins over both (EFAULT)"
+  events_efault: "EFAULT (14): events are ready but the events array cannot take them (bad pointer, NULL, read-only page, or the records would run into an unmapped page). Nothing is consumed: head stays and a later call with a good array gets all the events. (Bytes of the first record may already have been written into the part of the array that is mapped.)"
+  eintr: "EINTR (4): a signal handler ran while waiting and no event had been collected yet. Never restarted, even with SA_RESTART and with time left on the timeout. If at least one event had been collected the call returns that count instead"
+  destroyed_while_waiting: "EINVAL (22): the context was destroyed (io_destroy by another task sharing the address space) while the call was waiting with no event collected"
+side_effects: >
+  Returned events are removed from the ring (head word advances); the
+  caller's events array gets one record per returned event and nothing
+  else. The caller may move the head word itself (as libaio does to reap
+  events in user space): io_getevents starts at whatever head the
+  caller's ring memory holds. Moving head forward skips events, setting
+  it equal to the tail word leaves nothing, and moving it back returns
+  the records still in those slots again (observed: head 4 set back to 1
+  gave the three old records again). A head value >= N is taken modulo N.
+  No other state changes; a failing call consumes nothing.
+threading: >
+  Contexts belong to the address space. Any task sharing it (CLONE_VM)
+  may call io_getevents on a context another task made, and may block in
+  it; an event is delivered to one caller only. When another task
+  destroys the context, a waiter with nothing collected wakes with
+  EINVAL. A fork child (own memory) has a copy of the ring mapping (it
+  can read the header, tail included) but no context: io_getevents with
+  the parent's handle is EINVAL there and does not consume the parent's
+  events; a context the child makes itself works normally.
+ordering:
+  - "argument checks: timeout pointer (EFAULT) first, then the context (EINVAL), then min_nr/nr (EINVAL); the events pointer is only used when there is something to copy"
+  - "events are consumed as they are collected while waiting; a call ended by its timeout or a signal returns those already collected"
+  - "within one call records are in completion order, oldest first"
+timing:
+  typical: "events already completed: returns in microseconds. A blocked call wakes within about a millisecond of the completion (pipe write -> poll request done). A timeout of 50 ms returned after 50 ms, 1 s after 1000 ms"
+  guarantees: "the timeout never expires early (man 2 io_getevents); no upper bound beyond scheduling"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: the tests make contexts with io_setup (206) and produce events with
+# io_submit (209): IOCB_CMD_PWRITE (1) on a file under /tmp (completes during
+# io_submit, res = nbytes) and IOCB_CMD_POLL (5) with aio_buf = POLLIN on an
+# empty pipe (completes when something writes to the pipe). Layouts and
+# constants: linux/aio_abi.h (struct iocb, struct io_event, IOCB_CMD_*),
+# asm-generic/poll.h (POLLIN 0x1, POLLRDNORM 0x40), asm/unistd_64.h. The ring
+# header layout is user-visible memory (libaio reads it), not a UAPI header.
+# Tests with a second process (CLONE_VM waker/destroyer/waiter) compare
+# output only (poly-diff: syscalls=off). Timing checks are lower bounds
+# ("waited at least 50 ms") plus loose upper bounds of seconds.
