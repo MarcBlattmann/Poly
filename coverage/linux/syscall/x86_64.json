@@ -163,7 +163,7 @@
 {"symbol":"mbind","number":237,"src":["linux-syscall-tbl"]},
 {"symbol":"membarrier","number":324,"src":["linux-syscall-tbl"]},
 {"symbol":"memfd_create","number":319,"src":["linux-syscall-tbl"]},
-{"symbol":"memfd_secret","number":447,"src":["linux-syscall-tbl"]},
+{"symbol":"memfd_secret","number":447,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"migrate_pages","number":256,"src":["linux-syscall-tbl"]},
 {"symbol":"mincore","number":27,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"mkdir","number":83,"src":["linux-syscall-tbl"]},
