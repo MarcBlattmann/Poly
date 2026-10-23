@@ -210,7 +210,7 @@
 {"symbol":"personality","number":135,"src":["linux-syscall-tbl"]},
 {"symbol":"pidfd_getfd","number":438,"src":["linux-syscall-tbl"]},
 {"symbol":"pidfd_open","number":434,"src":["linux-syscall-tbl"]},
-{"symbol":"pidfd_send_signal","number":424,"src":["linux-syscall-tbl"]},
+{"symbol":"pidfd_send_signal","number":424,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"pipe","number":22,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"pipe2","number":293,"status":"green","tests_visible":3,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"pivot_root","number":155,"src":["linux-syscall-tbl"]},
