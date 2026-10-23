@@ -1,0 +1,92 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_setup             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022; fs.aio-max-nr 65536 (default), fs.aio-nr 0 before the tests"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  io_setup(nr_events, ctx_idp) (syscall 206) creates an asynchronous I/O
+  context able to hold nr_events requests and returns 0, writing the
+  context's handle (a 64-bit aio_context_t) to *ctx_idp. nr_events is a
+  32-bit unsigned count (the upper half of the register is ignored);
+  ctx_idp points to a u64 that must hold 0 on entry (any byte alignment).
+  The handle is the page-aligned user address of a ring the call maps
+  into the caller's address space: a shared, readable and writable
+  mapping shown in /proc/self/maps as "rw-s", offset 0, named
+  "/[aio] (deleted)". The ring starts with a 32-byte header of eight
+  32-bit words: context index, number of event slots, head (0), tail (0),
+  magic 0xa10a10a1, compat features 1, incompat features 0, header
+  length 32; the rest is zero-filled 32-byte event slots. The ring is
+  big enough for 2 * max(nr_events, 4 * number of possible CPUs) + 2
+  slots, rounded up to whole 4096-byte pages, and the slot count in the
+  header is (pages * 4096 - 32) / 32. The context belongs to the address
+  space: every task sharing it (CLONE_VM) can use or destroy it; a fork
+  child gets a copy of the ring mapping (same shared pages) but not the
+  context. io_destroy(handle) (207) ends a context and removes its
+  ring. System-wide, the nr_events values (as asked) of all live
+  contexts add up to at most fs.aio-max-nr (default 65536).
+returns:
+  success: "0; *ctx_idp = handle (non-zero, page-aligned, below 0x800000000000); nothing else changes in the caller's memory (the 8 bytes only)"
+  handle: "the start address of the ring mapping; io_destroy(handle) then returns 0 once, EINVAL after; io_destroy(0) or of handle+1 is EINVAL"
+  header: "word 0 index, 1 slot count, 2 head 0, 3 tail 0, 4 magic 0xa10a10a1, 5 compat 1, 6 incompat 0, 7 header length 32; slots zero"
+  slot_count: "(pages*4096-32)/32 with pages = ceil((32 + 32*(2*max(nr, 4*CPUs) + 2)) / 4096); observed (any machine with < 16 CPUs): nr 1 or 2 -> 127 (1 page), 126 -> 255 (2 pages), 127 -> 383 (3 pages), 1000 -> 2047 (16 pages), 4096 -> 8319 (65 pages), 32767 or 32768 -> 65663, 40000 -> 80127"
+  mapping: "/proc/self/maps line starting at the handle, size = pages*4096, perms rw-s, offset 00000000, name '/[aio] (deleted)' (device and inode are those of an internal file); gone after io_destroy"
+  index: "header word 0 is the context's index in the address space: 0, 1, 2, ... in creation order; a new context takes the lowest index freed by io_destroy (a context ended by munmap may keep its index busy for a while; not tested)"
+  distinct: "live contexts have different handles and non-overlapping rings; a freed ring's address may be handed out again to the next context"
+  nr_width: "only the low 32 bits of nr_events count: (1<<32)+1 is 1, 1<<32 is 0 (EINVAL)"
+errors:
+  fault: "EFAULT (14): the 8 bytes at ctx_idp are not readable (NULL, low address, non-canonical or kernel address, PROT_NONE, straddling into an unreadable page); checked FIRST, before every nr_events check (nr 0, too large, over the limit all still EFAULT)"
+  not_zero: "EINVAL (22): *ctx_idp is not 0 (1, all ones, a live handle); the value is left as it was; checked right after the read, before the nr_events checks (a non-zero value with nr 65537 or 0x80000000 is EINVAL, not EAGAIN)"
+  nr_zero: "EINVAL (22): nr_events (low 32 bits) is 0"
+  too_large: "EINVAL (22): 2*nr_events taken modulo 2^32 is above 0x800000; i.e. 0x400001..0x7fffffff and 0x80400001..0xffffffff; checked before the aio-max-nr limit"
+  over_limit: "EAGAIN (11): nr_events plus the nr_events of all live contexts on the system exceeds fs.aio-max-nr (65536). Values that pass the size check because the doubling wraps (0x80000000..0x80400000) are EAGAIN; so is 65537..0x400000 on its own. With one 40000 context alive, 30000 more is EAGAIN and 25536 is fine; the limit counts nr_events as asked (four contexts of 1 plus one of 65532 fit), not the ring's slot count"
+  not_writable: "EFAULT (14): *ctx_idp readable and 0 but not writable (read-only page, .rodata); checked after the size and limit checks (a read-only 0 with nr 0x400001 is EINVAL, with 65537 EAGAIN, with a read-only 1 EINVAL); the context is undone: no ring mapping remains, its nr_events is free again, the value stays 0"
+  no_memory: "ENOMEM (12): the ring mapping does not fit (e.g. RLIMIT_AS below current use); *ctx_idp stays 0; works again once the limit is raised"
+  order: "EFAULT (read), EINVAL (non-zero value), EINVAL (nr 0 / too large), EAGAIN (limit), ENOMEM (mapping), EFAULT (write)"
+  untouched_on_error: "*ctx_idp is never written when the call fails"
+side_effects: >
+  A new shared rw mapping (the ring) in the caller's address space, and
+  the context's nr_events added to the system-wide count
+  (/proc/sys/fs/aio-nr) until io_destroy. The ring is ordinary memory to
+  the caller: it may read and write all of it (even the slot count and
+  magic) and io_destroy still returns 0; mprotect to PROT_READ and back
+  to PROT_READ|PROT_WRITE works, any request including PROT_EXEC is
+  EACCES. munmap of the whole ring ends the context (io_destroy of the
+  handle is then EINVAL); munmap of part of a multi-page ring does not
+  (io_destroy still 0). mremap of the whole ring to another address
+  (MREMAP_MAYMOVE|MREMAP_FIXED) moves the context: the new address is the
+  handle (io_destroy 0) and the old one is EINVAL; the header moves with
+  it. A context ended by munmap kept its share of fs.aio-nr after the
+  munmap (observed, not tested). Process exit ends all its contexts.
+threading: >
+  Contexts belong to the address space (mm), not to a task: a CLONE_VM
+  child can io_destroy a context made by its parent and the parent can
+  use one made by the child; indexes are shared. A fork child (own
+  address space) inherits the ring mapping (same physical pages: writes
+  by either side are seen by the other) but no contexts: io_destroy of
+  the parent's handle in the child is EINVAL, the child's own first
+  context gets index 0, and the child unmapping its copy does not affect
+  the parent's context.
+ordering: []
+timing:
+  typical: "microseconds (a page-table mapping per call); larger nr_events map more pages"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: the tests use io_destroy (207) to end contexts and as the way to
+# check that a handle is (still) valid: io_destroy of a live handle
+# returns 0 and removes its ring, of anything else EINVAL. They also read
+# /proc/self/maps and use mmap/munmap/mremap/mprotect/getrlimit/setrlimit,
+# fork (clone CLONE_VFORK) and CLONE_VM children. a_io_setup_max_nr
+# fills fs.aio-max-nr and so assumes no other process holds AIO contexts
+# while it runs; the other tests stay well below the limit. CPU-count
+# dependence: only nr_events below 4*CPUs is affected (the ring for nr 1
+# is one page on any machine with fewer than 16 CPUs). The ring header
+# layout is an observation of user-visible memory (libaio reads it); it is
+# not in the UAPI headers. aio_context_t: linux/aio_abi.h. Maps lines
+# hold addresses and inode numbers, so the tests reading them compare
+# syscall names only (poly-diff: syscalls=names); the fork and CLONE_VM
+# tests compare output only (syscalls=off).
