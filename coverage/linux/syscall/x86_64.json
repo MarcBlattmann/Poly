@@ -323,7 +323,7 @@
 {"symbol":"splice","number":275,"src":["linux-syscall-tbl"]},
 {"symbol":"stat","number":4,"src":["linux-syscall-tbl"]},
 {"symbol":"statfs","number":137,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"statmount","number":457,"src":["linux-syscall-tbl"]},
+{"symbol":"statmount","number":457,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"statx","number":332,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"swapoff","number":168,"src":["linux-syscall-tbl"]},
 {"symbol":"swapon","number":167,"src":["linux-syscall-tbl"]},
