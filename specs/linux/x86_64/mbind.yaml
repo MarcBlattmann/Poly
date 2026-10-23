@@ -1,0 +1,81 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mbind                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs, ONE memory node (node 0; /sys/devices/system/node/online and possible are both \"0\"), CONFIG_NUMA=y with node numbers up to 1023 (CONFIG_NODES_SHIFT=10); tests run as a normal user (uid 1001, no capabilities), umask 022; /tmp on ext4 (file mappings also checked on tmpfs: same results); static freestanding test programs, raw syscalls, run directly and under the ptrace tracer (same results)"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  mbind(addr, len, mode, nodemask, maxnode, flags) (syscall 237) sets the
+  NUMA memory policy of the pages [addr, addr+len) of the calling
+  process's address space and returns 0. The policy is a mode
+  (MPOL_DEFAULT 0, MPOL_PREFERRED 1, MPOL_BIND 2, MPOL_INTERLEAVE 3,
+  MPOL_LOCAL 4, MPOL_PREFERRED_MANY 5, MPOL_WEIGHTED_INTERLEAVE 6), plus
+  optional mode flags or-ed into mode (MPOL_F_STATIC_NODES 1<<15,
+  MPOL_F_RELATIVE_NODES 1<<14, MPOL_F_NUMA_BALANCING 1<<13), plus a set of
+  nodes. The nodes come from the bitmap at nodemask: bit n of the 8-byte
+  little-endian words is node n, and bits 0 .. maxnode-2 are used (maxnode
+  is one more than the number of bits). MPOL_DEFAULT removes the range's
+  own policy again. flags may hold MPOL_MF_STRICT (1), MPOL_MF_MOVE (2)
+  and MPOL_MF_MOVE_ALL (4, needs CAP_SYS_NICE). The policy belongs to the
+  address range (the mapping): a later mbind on part of a range changes
+  only that part, unmapping drops it, a fork child inherits it, and all
+  threads of the process see it. mbind never changes the data in the
+  range. Everything below is for a machine with exactly one memory node,
+  node 0, which is what the tests assume: Poly must present node 0 as the
+  only online node with memory, and node numbers 0..1023 as the valid
+  range. The policy a page has is observable with
+  get_mempolicy(&mode, nodemask, maxnode, addr, MPOL_F_ADDR (2)) and in
+  /proc/self/maps (each run of pages with one policy is its own mapping
+  line); the tests use both.
+returns:
+  success: "0"
+  modes_accepted: "with valid nodes every mode 0..6 succeeds on any mapped memory: private or shared anonymous, PROT_NONE, private or shared file mappings (ext4 and tmpfs), a range spanning mappings with different protections; pages may be unwritten, read or written"
+  mode_width: "mode is a 32-bit int: bits 32..63 of the register are ignored ((1<<32)|2 is MPOL_BIND; (0xff<<40)|7 is mode 7, EINVAL)"
+  flags_width: "flags is a 32-bit unsigned int: bits 32..63 are ignored (1<<32 is 0; (1<<32)|4 is MOVE_ALL)"
+  maxnode: "bits 0..maxnode-2 of the nodemask are used: maxnode 1 is the empty set (nothing read), maxnode 2 means node 0 only (bit 1 ignored), maxnode 3 also sees node 1. A NULL nodemask is the empty set whatever maxnode is (0, 65, 2^40, 2^64-1 all fine). A non-NULL nodemask with maxnode 0 is EINVAL (for every mode). Largest accepted maxnode is 32769 (one page of bits plus one); 32770 and above are EINVAL"
+  nodemask_read: "ceil((maxnode-1)/64) whole 8-byte words are read from nodemask (none if maxnode <= 1 or nodemask is NULL); a 4-byte mask right before an unmapped page is EFAULT even with maxnode 2; words past those are never read; a read-only mask is fine"
+  high_nodes: "valid node numbers are 0..1023. With maxnode <= 1025 nothing past bit maxnode-2 is looked at. With maxnode >= 1026 every bit from 1024 up in ALL words read must be 0, including bits past maxnode-2 in the last word (maxnode 1026: bits 1024..1087 checked, 1088 not read; maxnode 1090: bits 1024..1151), else EINVAL; this holds for every mode (also MPOL_DEFAULT and RELATIVE) and before the len 0 shortcut"
+  nodes_per_mode: "MPOL_DEFAULT: empty set required (non-empty EINVAL, also with a STATIC/RELATIVE flag). MPOL_LOCAL: empty set required (an all-zero mask is fine). MPOL_PREFERRED: empty set (= local allocation) or a set with an online node. MPOL_BIND, INTERLEAVE, PREFERRED_MANY, WEIGHTED_INTERLEAVE: non-empty set required. Without mode flags (and with MPOL_F_STATIC_NODES) the set must contain at least one online node (here node 0): {1}, {2}, {63}, {512}, {1023} are EINVAL, {0,1} is fine. With MPOL_F_RELATIVE_NODES any non-empty set is fine ({1}, {63}, {512}, {1023} alone succeed: node numbers are taken relative to the allowed nodes and wrap around)"
+  mode_flags_allowed: "MPOL_F_STATIC_NODES or MPOL_F_RELATIVE_NODES (not both) with PREFERRED (non-empty), BIND, INTERLEAVE, PREFERRED_MANY, WEIGHTED_INTERLEAVE, and with MPOL_DEFAULT (empty set; the flag is then dropped, the page reads back as plain MPOL_DEFAULT). MPOL_F_NUMA_BALANCING only with MPOL_BIND or MPOL_PREFERRED_MANY (also together with STATIC or RELATIVE)"
+  len: "len is rounded up to whole pages (len 1 = one page; a range ending 1 byte into the next mapping covers that mapping's first page too). If the rounded length is 0 the call returns 0 at once without looking at the range or the nodes: len 0 (any aligned addr, also 0 or unmapped), and len >= 2^64-4095, which wraps to 0 when rounded up (len 2^64-1 returns 0)"
+  readback: "get_mempolicy(MPOL_F_ADDR) of a page in the range reports: mode = the mode with its mode flags (e.g. MPOL_BIND|MPOL_F_STATIC_NODES = 32770, MPOL_BIND|MPOL_F_NUMA_BALANCING = 8194); nodes for BIND, INTERLEAVE, PREFERRED_MANY, WEIGHTED_INTERLEAVE = the given nodes that are online ({0,1} gives {0}); for PREFERRED = the first online given node; with MPOL_F_STATIC_NODES or MPOL_F_RELATIVE_NODES = the nodemask exactly as given ({0,1} stays {0,1}, {1} stays {1}). MPOL_PREFERRED with the empty set reads back as MPOL_LOCAL (4) with no nodes; MPOL_LOCAL as 4 with no nodes; MPOL_DEFAULT and never-set pages as 0 with no nodes"
+  partial_ranges: "only pages in the range change: a page next to the range keeps its policy; a later call on part of an earlier range replaces the policy of that part only"
+  vma_split: "in /proc/self/maps a run of pages with its own policy is its own line: mbind on the middle of a mapping makes 3 lines; neighbouring pages with the same policy (same mode, flags and nodes) share one line, also when set by separate calls; MPOL_PREFERRED with no nodes and MPOL_LOCAL count as the same policy; setting a page to the policy it already has changes nothing; MPOL_DEFAULT over the whole mapping joins it back into one line; a failed call does not split"
+  holes_default: "MPOL_DEFAULT (with or without a mode flag, STRICT or MOVE) skips unmapped pages in the range (at its start, middle or end) and resets every mapped page in it; it is EFAULT only when the range holds no mapped page at all"
+errors:
+  bad_mode: "EINVAL (22): mode number (bits 0..12 after removing the flag bits) >= 7; any bit of the low 32 other than the mode number and bits 13..15 (e.g. 1<<8, 1<<12, 1<<16, 1<<31); MPOL_F_STATIC_NODES and MPOL_F_RELATIVE_NODES together (also with MPOL_DEFAULT); MPOL_F_NUMA_BALANCING with a mode other than BIND or PREFERRED_MANY. Checked first: before the nodemask is read, before flags, EPERM, the address and the len 0 shortcut (a bad mode with len 0 and an unaligned addr is EINVAL)"
+  maxnode_too_big: "EINVAL: non-NULL nodemask and maxnode 0 or maxnode > 32769; checked before the nodemask is read and before flags/EPERM"
+  nodemask_fault: "EFAULT (14): a word of the nodemask that has to be read is unreadable (NULL with maxnode >= 2 is NOT a fault: NULL means empty; low addresses like 8, PROT_NONE, unmapped, non-canonical, kernel addresses are). After the mode and maxnode checks, before flags, EPERM, address checks and the len 0 shortcut"
+  high_node_bits: "EINVAL: a bit >= 1024 set in the words read (see returns.high_nodes); after the read, before flags/EPERM"
+  bad_flags: "EINVAL: any flags bit (low 32) other than 1, 2, 4 (8, 0x10, 0x40, 1<<31). Checked after the nodemask is read (bad flags with an unreadable nodemask is EFAULT) and before EPERM (8|4 and 0x80000004 are EINVAL)"
+  move_all: "EPERM (1): MPOL_MF_MOVE_ALL (alone or with STRICT/MOVE, any mode) without CAP_SYS_NICE. After the mode, nodemask and flags checks; before the address alignment, the wrap check, the len 0 shortcut, the node checks and the range checks. With CAP_SYS_NICE (root) MOVE_ALL is accepted like MOVE (tests drop all capabilities with capset first, so they never see that)"
+  unaligned: "EINVAL: addr not a multiple of 4096 (also with len 0); after EPERM"
+  wraps: "EINVAL: the page-rounded end is below addr (len 2^64-4096 from a user address; addr 0xfffffffffffff000 with len 4095 or 4096); for every mode including MPOL_DEFAULT; after the alignment check, before the len 0 shortcut can apply (a len that rounds to exactly 0 is the shortcut, not this error)"
+  bad_nodes: "EINVAL: the node set does not fit the mode (returns.nodes_per_mode), or a STATIC/RELATIVE flag on MPOL_LOCAL or on MPOL_PREFERRED with the empty set; checked after the len 0 shortcut (so len 0 with these is 0) and before the range is looked at (a range of only unmapped pages with bad nodes is EINVAL)"
+  unmapped: "EFAULT: for every mode except MPOL_DEFAULT, any page of the range not mapped (addr 0, unmapped pages before/inside/after mappings, non-canonical addresses, kernel addresses, 0xffffffffffffe000); nothing in the range changes (pages before the hole keep their old policy). For MPOL_DEFAULT only a range with no mapped page at all"
+  strict: "EIO (5): MPOL_MF_STRICT without MPOL_MF_MOVE and some page of the range that is already present (written; for shared anonymous memory written too; unwritten and only-read private anonymous pages do not count) is on a node outside the new policy's nodes. Here every page is on node 0, so: MPOL_LOCAL and MPOL_PREFERRED with the empty set give EIO for a written page (they name no node); with MPOL_F_RELATIVE_NODES the nodes are taken as given, so a set without node 0 gives EIO; any policy whose nodes include node 0 passes; MPOL_DEFAULT is never checked. With MPOL_MF_MOVE (STRICT|MOVE) the same calls succeed. After the range checks; on EIO nothing in the range changes"
+  special_mapping: "EINVAL: a range reaching into a special kernel mapping such as [vvar]; the mapped pages before it may already have been changed. Layout-dependent; not tested"
+  no_memory: "ENOMEM: no kernel memory; not tested"
+  order: "mode EINVAL > maxnode EINVAL > nodemask EFAULT > node bits >= 1024 EINVAL > flags EINVAL > MOVE_ALL EPERM > addr alignment EINVAL > wrap EINVAL > len rounds to 0: return 0 > nodes-for-mode EINVAL > unmapped EFAULT > STRICT EIO"
+side_effects: >
+  On success the pages of the range get the new policy (MPOL_DEFAULT:
+  no own policy); this shows in get_mempolicy(MPOL_F_ADDR) and in how
+  /proc/self/maps splits and joins lines (returns.vma_split). Page
+  contents never change, also with MPOL_MF_MOVE/STRICT. The policy stays
+  with the address range: munmap drops it (mapping the same address again
+  gives MPOL_DEFAULT); fork children inherit every page's policy, and a
+  child's mbind does not change the parent's. A failed call changes
+  nothing (except the special-mapping case under errors). With one node,
+  policies change no other observable thing (all memory comes from node 0).
+threading: >
+  Policies belong to the address space: a CLONE_VM thread or process
+  sees the policy another one set at once. Not a blocking call.
+ordering: []
+timing:
+  typical: "microseconds per call; MPOL_MF_MOVE on one node moves nothing"
+  guarantees: "none; never blocks waiting for another task"
+tests:
+  visible: 10
+  held_out: 4
