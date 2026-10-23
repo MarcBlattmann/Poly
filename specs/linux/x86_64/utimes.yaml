@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/utimes
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4, also checked on tmpfs (/dev/shm); static freestanding test programs, raw syscalls; root-only rules from utimes(2)/utime(2)"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  utimes(path, times) (x86_64 syscall 235) sets the access time and the
+  modification time of the file named by path. times points to two struct
+  timeval (sys/time.h; 16 bytes each, 32 bytes in all): times[0] is the new
+  atime, times[1] the new mtime, each a signed 64-bit seconds value and a
+  signed 64-bit microseconds value. Microseconds are stored as nanoseconds
+  (usec * 1000). atime and mtime are independent (either may be the larger),
+  and any seconds value in the 32-bit signed range is stored exactly,
+  including 0 and negative values. A NULL times sets atime and mtime to the
+  current time. ctime always becomes the current time on success. The path
+  is resolved like stat(2): symbolic links are followed (also the last one),
+  so the target's times change and the link's own times do not. Works the
+  same on regular files, directories and FIFOs (a FIFO is not opened, the
+  call does not block). File content, size, mode, link count and the times
+  of the containing directory are not changed. Results are the same on ext4
+  and tmpfs.
+returns:
+  success: "0"
+  explicit_times: "atime = times[0].tv_sec with nanoseconds times[0].tv_usec * 1000, mtime = times[1].tv_sec with nanoseconds times[1].tv_usec * 1000 (usec 0 gives nanoseconds 0, so any nanoseconds set earlier, e.g. by utimensat, are dropped; 999999 gives 999999000); the values seen by stat through any name of the inode (hard links) and by fstat on descriptors opened earlier"
+  null_times: "atime, mtime and ctime are all set to one and the same current time, to the nanosecond (atime == mtime == ctime, seconds and nanoseconds)"
+  range: "every seconds value in [-2^31, 2^31-1] is stored exactly, and values beyond 2^31 such as 3000000000 and 4000000000 too (checked: 0, -1, -86400, -2^31 with usec 0, 2^31-1 with usec 999999). Values far outside that range are clamped to what the file system can store, and the clamping differs by file system (ext4 here: 2^63-1 read back as 15032385535; a time at the file system's lower limit may lose its nanoseconds); tests do not depend on clamping"
+  repeat: "each call replaces both times; the last call wins; setting the same values again still succeeds and still updates ctime"
+  write_afterwards: "a later write(2) moves mtime to the current time and leaves atime alone, as usual"
+errors:
+  bad_usec: "EINVAL when either tv_usec is outside [0, 999999], compared as a full signed 64-bit value (-1, 1000000, 999999999, 2^32, 2^32+5 and -2^63 are all EINVAL). The UTIME_NOW ((1<<30)-1) and UTIME_OMIT ((1<<30)-2) numbers have no special meaning in utimes: as microseconds they are simply out of range, EINVAL. The file is left unchanged (times and ctime)"
+  bad_times_pointer: "EFAULT when the 32 bytes of times cannot be read (unmapped, kernel address, the second timeval or only its last 8 bytes on an unmapped page); 32 bytes ending exactly at the end of a mapped page are fine. The file is left unchanged (times and ctime)"
+  times_before_path: "the times are read and their microseconds checked before the path is looked at: a bad times pointer gives EFAULT, and an out-of-range tv_usec gives EINVAL, even when the path pointer is NULL or unreadable, the path is empty, missing, goes through a missing directory or a non-directory, has a component over 255 bytes, is a symbolic link loop, or goes through a directory without search permission, and even when the caller would not be allowed to change the file's times (EPERM/EACCES)"
+  bad_path_pointer: "EFAULT for a NULL or unreadable path (with valid times or with NULL times)"
+  missing: "ENOENT for a missing name or missing directory in the path, an empty path, or a dangling symbolic link (with or without times)"
+  not_a_directory: "ENOTDIR when a non-directory is followed by more components, including a trailing slash after a regular file (D/f/ and D/f/x). A trailing slash, \".\" or \"..\" after a directory (or after a link to one) is fine"
+  name_too_long: "ENAMETOOLONG for a component over 255 bytes, and for a path of 4096 bytes or more before its NUL; 4095 bytes resolve (\"/.\" padding counts toward the length)"
+  loop: "ELOOP for a symbolic link loop, as the last name or inside the path"
+  search_permission: "EACCES when a directory on the path does not grant search (x) permission to the caller (root is not subject to this); even when the name below it is missing"
+  null_times_permission: "times NULL: allowed for the file's owner (whatever the file's mode, even 0000 or 0444), for anyone with write permission on the file, and for root; otherwise EACCES"
+  explicit_times_permission: "times not NULL: allowed only for the file's owner (whatever the mode) and root (CAP_FOWNER); anyone else gets EPERM, even with write permission on the file"
+  read_only_fs: "EROFS on a read-only file system (from utimes(2); not tested)"
+  immutable_append_only: "an immutable file cannot have its times changed; an append-only file only accepts NULL times (from utime(2); EPERM; not tested)"
+  path_order: "first the times (EFAULT, then EINVAL for tv_usec); then the path, in the same order as stat and utimensat: the path string itself (EFAULT, ENAMETOOLONG, empty ENOENT), then the components left to right (ENOENT, ENOTDIR, ENAMETOOLONG for a long component, EACCES for search permission, ELOOP), then the permission checks on the file itself (EACCES/EPERM)"
+side_effects: "on success ctime is set to the current wall-clock time; on any error nothing changes (atime, mtime and ctime all kept)"
+threading: "no thread-specific behaviour; the file system state is shared by all threads and processes"
+ordering: []
+timing:
+  typical: "microseconds; never blocks (also not on a FIFO)"
+  guarantees: "the current time used for NULL times and for ctime lies between CLOCK_REALTIME readings taken before and after the call (to the second; file timestamps may trail CLOCK_REALTIME by up to a clock tick, so a test allows one second before)"
+tests:
+  visible: 10
+  held_out: 4
