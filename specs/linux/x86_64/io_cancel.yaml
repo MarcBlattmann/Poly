@@ -1,0 +1,75 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_cancel            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022; /tmp on ext4"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  io_cancel(ctx_id, iocb, result) (syscall 210) asks to cancel a request
+  that was queued with io_submit (209) on the AIO context ctx_id (made by
+  io_setup 206) and is still pending. The request is identified by the
+  iocb's user address (the pointer given to io_submit, which is also the
+  event's obj field) together with its aio_key field (struct iocb in
+  linux/aio_abi.h: u32 aio_key at byte offset 8), which must be 0, the
+  value io_submit writes there. On this kernel the only requests that stay
+  pending, and so the only ones that can be cancelled, are IOCB_CMD_POLL
+  (5) requests whose fd was not ready; file reads/writes, fsyncs and
+  ready polls complete inside io_submit. A successful cancel returns
+  EINPROGRESS (115), never 0: the request ends and its completion event
+  (data = aio_data from submit time, obj = iocb address, res = 0,
+  res2 = 0) is put into the context's completion ring shortly afterwards,
+  to be reaped with io_getevents (208) like any other event. The third
+  argument (struct io_event *result) is ignored: never read, never
+  written, not checked. (The man page's "returns 0 and copies the event to
+  result" and "EAGAIN if not cancelled" do not describe this kernel.)
+returns:
+  cancelled: "-EINPROGRESS (115) for a pending POLL request found on ctx_id. Exactly one event follows for it: data = the aio_data it was submitted with, obj = the iocb address, res = 0, res2 = 0"
+  event_delivery: "the event is NOT necessarily in the ring when io_cancel returns (an immediate io_getevents with a zero timeout may find nothing); it arrives within a few milliseconds and wakes io_getevents callers waiting on the context. Tests wait for it with a timeout"
+  after_cancel: "the request is gone: a second io_cancel of the same iocb is EINVAL, its fd becoming ready later produces no further event"
+  resfd: "a cancelled request with IOCB_FLAG_RESFD (1) increments its eventfd by 1 when its event is delivered, as on normal completion"
+  result_arg: "result (third argument) is ignored: NULL, an unmapped address (8) or a buffer all behave the same; a buffer is left unchanged, also on errors"
+  matching: "a request is found by iocb address only (plus aio_key == 0): other fields of the caller's iocb (aio_data, opcode, fd, buffer, offset, aio_reserved2, flags, rw_flags) may have been changed after io_submit and the cancel still works; the event carries the submit-time aio_data. An identical copy of the iocb at another address is not found (EINVAL)"
+  duplicates: "if the same iocb address was submitted several times and the requests are pending, each io_cancel cancels one of them, the oldest submitted first (its aio_data is in the first event); once all are cancelled, EINVAL"
+  closed_fd: "closing the polled fd does not end a pending POLL request; it can still be cancelled (EINPROGRESS, event res 0)"
+  read_only_iocb: "the iocb need only be readable: a pending request whose iocb page was made PROT_READ can be cancelled"
+errors:
+  efault: "EFAULT (14): the 4-byte aio_key at iocb + 8 cannot be read (iocb NULL, address 8, PROT_NONE page, key in an unmapped page, kernel address 0xffff800000000000, non-canonical 0x0000800000000000). Checked FIRST, before the key value and the context (also EFAULT with ctx_id 0). Only the key is read: an iocb whose key is readable but whose remaining bytes are in an unmapped page is not EFAULT"
+  bad_key: "EINVAL (22): aio_key != 0 (1, 0x80000000, 0xffffffff); also with ctx_id 0. Nothing happens; the request stays pending and can be cancelled once the key is 0 again"
+  bad_context: "EINVAL: ctx_id is not a live context of the caller's address space: 0, 1, ~0, handle + 32, a destroyed handle, the parent's handle used in a fork child"
+  wrong_context: "EINVAL: the request is pending on a different live context of the same process than ctx_id; it stays pending on its own context"
+  not_pending: "EINVAL: no pending request with that iocb address on ctx_id. This covers an iocb never submitted, a request already cancelled, a POLL request that completed at once at submit (fd ready) even while its event is still unreaped, a pending POLL that completed because its fd became ready, any PREAD/PWRITE/FSYNC on a regular file (done inside io_submit), and requests of a context ended by io_destroy"
+  no_eagain: "EAGAIN was not observed (the man page's 'not cancelled' error): an uncancellable or finished request gives EINVAL"
+side_effects: >
+  A successful cancel ends the pending request: its fd is no longer
+  polled, one event (res 0) is added to the context's completion ring and,
+  for IOCB_FLAG_RESFD, its eventfd is incremented by 1. The request keeps
+  its place in the context's capacity until that event is reaped, like any
+  completed request. The caller's iocb and the result buffer are not
+  written. A failed io_cancel changes nothing.
+threading: >
+  Contexts belong to the address space. A process sharing it (CLONE_VM)
+  may cancel a request another task submitted (EINPROGRESS), and the
+  event wakes a task blocked in io_getevents on that context well before
+  its timeout. A fork child (own memory) gets EINVAL for the parent's
+  handle and the parent's request stays pending; requests on a context
+  the child made itself can be cancelled by the child.
+ordering:
+  - "checks: read aio_key (EFAULT), aio_key == 0 (EINVAL), the context (EINVAL), then the pending request on it (EINVAL if none)"
+  - "the cancelled request's event is delivered after io_cancel returns or around then; it is never lost and never duplicated"
+  - "several cancels in a row give one event each; their order in the ring relative to each other is not guaranteed"
+timing:
+  typical: "io_cancel itself returns in microseconds; the cancelled event was always in the ring within ~1 ms (observed 0 ms at millisecond resolution, but not yet at a zero-timeout io_getevents done right after the call)"
+  guarantees: none
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests make contexts with io_setup (206), submit with
+# io_submit (209), reap events with io_getevents (208) and use eventfd2
+# (290). Layouts and constants: linux/aio_abi.h (struct iocb, struct
+# io_event, IOCB_CMD_POLL, IOCB_CMD_PWRITE, IOCB_FLAG_RESFD),
+# asm-generic/poll.h (POLLIN, POLLOUT), asm-generic/errno.h (EINPROGRESS
+# 115), asm/unistd_64.h. Cancelled events are waited for with a 1 s
+# io_getevents timeout. The CLONE_VM waiter test compares output only
+# (poly-diff: syscalls=off).
