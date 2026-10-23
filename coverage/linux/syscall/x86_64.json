@@ -118,7 +118,7 @@
 {"symbol":"inotify_add_watch","number":254,"src":["linux-syscall-tbl"]},
 {"symbol":"inotify_init","number":253,"src":["linux-syscall-tbl"]},
 {"symbol":"inotify_init1","number":294,"src":["linux-syscall-tbl"]},
-{"symbol":"inotify_rm_watch","number":255,"src":["linux-syscall-tbl"]},
+{"symbol":"inotify_rm_watch","number":255,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"io_cancel","number":210,"src":["linux-syscall-tbl"]},
 {"symbol":"io_destroy","number":207,"src":["linux-syscall-tbl"]},
 {"symbol":"io_getevents","number":208,"src":["linux-syscall-tbl"]},
