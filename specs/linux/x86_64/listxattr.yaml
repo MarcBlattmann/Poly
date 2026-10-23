@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/listxattr
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks), /dev/shm on tmpfs (results identical on both except list order and the 64 KiB case, both noted below); static freestanding test programs, raw syscalls. Root-only behaviour (trusted.* and security.* names) from xattr(7), listxattr(2) and reading the kernel for behaviour."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  listxattr(path, list, size) (194) returns the names of the extended
+  attributes of the file at `path`, following symbolic links, as a list of
+  NUL-terminated names written back to back into the buffer `list` of
+  `size` bytes, and returns the list's length in bytes (sum of the name
+  lengths plus one NUL per name; 0 when there are no names). llistxattr
+  (195) is the same but does not follow a final symbolic link;
+  flistxattr(fd, list, size) (196) works on an open descriptor. With size
+  0 nothing is copied and the call returns the length the list needs, so
+  callers can size their buffer first. Each name appears exactly once,
+  byte for byte as it was set (the setxattr family, 188-190), whatever the
+  value's length (zero-length values are listed). The list belongs to the
+  inode: hard links, a renamed file and open descriptors (also of an
+  unlinked file or removed directory) list the same names. Listing needs
+  no permission on the file itself.
+returns:
+  success: "the list's length in bytes; 0 for no names. The list is the names, each followed by one NUL byte, with nothing between them and nothing after the last NUL. Only the list's bytes are written, the rest of the buffer is untouched."
+  order: "unspecified and filesystem dependent; callers and tests must not rely on it. Observed: ext4 not insertion order and not sorted (user.a, user.zz, user.b, user.A, user.c, user.aaaa... after inserting a, zz, b, A, aaaa..., c); tmpfs in descending byte order of the names (user.zz, user.c, user.b, user.aaaa..., user.a, user.A); a directory with both ACLs lists the two in opposite orders on the two filesystems. A removed and re-added name keeps no particular position."
+  size: "size_t, compared in full. 0: return the needed length, copy nothing, the buffer pointer is not used (NULL or unmapped is fine). Smaller than the list (even by one byte): ERANGE, nothing written. Equal or larger: the list is copied to the start of the buffer and its length returned. Sizes above 65536 (65537, 2^32, 2^32 + 1, SIZE_MAX) are accepted and act as a 65536-byte buffer (no error by themselves)."
+  large_lists: "the list can exceed 65536 bytes only where the filesystem holds that many names (tmpfs did: 400 names of 248 bytes, a 99600-byte list; ext4 here runs out of space for names at about 4 KiB, ENOSPC from setxattr). Then size 0 still returns the full length (99600), a size of 65536 or more is E2BIG, a smaller nonzero size ERANGE."
+  buffer: "only the list's bytes must be writable: a buffer ending exactly at an unmapped page works with a larger size argument. A buffer that is NULL, unmapped, or runs into an unmapped page before the list ends: EFAULT (bytes before the fault may already be written). With an empty list the buffer is never used (0 even for NULL or unmapped with a nonzero size)."
+  which_names: "user.* names on regular files and directories (other file types cannot have them: setxattr of user.* on a FIFO or symbolic link is EPERM, so their lists are empty for a normal user). system.posix_acl_access when a file or directory has a stored access ACL, system.posix_acl_default when a directory has a default ACL. An ACL with only owner, group and other entries is not stored (it only sets the mode), so it is not listed. New files in a directory with a default ACL inherit an access ACL, new subdirectories both. security.* names are listed for everyone. trusted.* names are listed only for a caller with CAP_SYS_ADMIN and are left out of the list and its length otherwise. Fresh files, directories, FIFOs, /dev/null, /proc files have no visible names on the oracle (no SELinux): 0."
+  permission: "no permission on the file itself: the owner lists a 0000 file, a 0000 directory, and through flistxattr an O_WRONLY descriptor of a 0200 file. Only search permission on the directories on the path is needed (a file in a 0300 directory is listed; a file in a 0644 or 0000 directory EACCES)."
+  llistxattr: "a final symbolic link is not followed: a link (live, dangling or looping) lists its own names, which for a normal user is always empty (0, also with size 0 or an unmapped buffer). Root can give a link trusted.* (and security.*) attributes; llistxattr lists trusted.* ones only with CAP_SYS_ADMIN. Links in earlier components are followed, and so is a link with a trailing slash (to a directory: the directory's list; to a file: ENOTDIR; dangling: ENOENT). On files and directories it is listxattr."
+  flistxattr: "any open descriptor of a file or directory, whatever its access mode (O_RDONLY, O_WRONLY, O_RDWR, O_DIRECTORY). An unlinked open file and a removed open directory keep their list. O_PATH, closed, never opened and negative descriptors and AT_FDCWD (-100): EBADF (unlike the f*getxattr calls, AT_FDCWD is not accepted here)."
+  special_descriptors: "pipes, eventfds and memfds: 0. Every socket (unix stream and datagram, socketpair, IPv4/IPv6, netlink) lists exactly \"system.sockprotoname\" (21 bytes with the NUL): size 0 gives 21, a size of 20 or less ERANGE. A unix socket's bound path in the filesystem is an ordinary filesystem object with an empty list; listxattr through /proc/self/fd/N of a socket lists system.sockprotoname (the magic link leads to the socket), llistxattr of that /proc link 0."
+  path: "absolute or relative to the working directory; \".\", \"..\", a trailing slash on a directory work; symbolic links are followed by listxattr (the target's list)."
+errors:
+  path: "unreadable pointer (NULL, low address) EFAULT; empty path, missing file or component, dangling final link (listxattr) ENOENT; a file used as a directory or a trailing slash after a file ENOTDIR; a component of 256 bytes or more or a path of 4096 bytes before its NUL ENAMETOOLONG (4095 resolves); symbolic link loop ELOOP (listxattr; llistxattr lists the link itself); search permission missing on a directory on the way EACCES"
+  fd: "EBADF"
+  size: "ERANGE (nonzero size smaller than the list); E2BIG (list longer than 65536 bytes and size 65536 or more)"
+  buffer: "EFAULT"
+  order: "first the path walk (getting all path errors above) or the descriptor (EBADF), then the size (ERANGE, even with a NULL or unmapped buffer), then the buffer (EFAULT). So a missing path with an unmapped buffer is ENOENT, flistxattr(999, unmapped) EBADF, size 1 with a NULL buffer and a 7-byte list ERANGE, a NULL buffer with SIZE_MAX EFAULT."
+side_effects: "none: mode, size, link count, contents, atime, mtime and ctime of the file (and of its directory) are unchanged by successful, size-0 and failed calls; the buffer beyond the list's length is never written, and nothing is written on ERANGE."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all links, descriptors and processes"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10
+  held_out: 5
