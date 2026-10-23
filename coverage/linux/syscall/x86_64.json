@@ -248,7 +248,7 @@
 {"symbol":"removexattr","number":197,"src":["linux-syscall-tbl"]},
 {"symbol":"removexattrat","number":466,"src":["linux-syscall-tbl"]},
 {"symbol":"rename","number":82,"src":["linux-syscall-tbl"]},
-{"symbol":"renameat","number":264,"src":["linux-syscall-tbl"]},
+{"symbol":"renameat","number":264,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"renameat2","number":316,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"request_key","number":249,"src":["linux-syscall-tbl"]},
 {"symbol":"restart_syscall","number":219,"src":["linux-syscall-tbl"]},
