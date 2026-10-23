@@ -1,0 +1,93 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_destroy           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022; fs.aio-max-nr 65536 (default), fs.aio-nr 0 before the tests"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  io_destroy(ctx_id) (syscall 207) ends an asynchronous I/O context made
+  by io_setup (206) and returns 0. ctx_id is the full 64-bit handle
+  io_setup wrote, which is the start address of the context's ring: a
+  shared rw mapping in the caller's address space whose first 32-byte
+  header holds eight 32-bit words (word 0 the context's index in the
+  address space, 0, 1, 2, ... lowest free first; word 1 slot count;
+  words 2-3 head and tail; word 4 magic 0xa10a10a1; 5 compat features 1;
+  6 incompat 0; 7 header length 32). io_destroy finds the context
+  through the caller's memory: it reads word 0 at address ctx_id and
+  succeeds only if a context of this address space has that index AND
+  its ring's current address is exactly ctx_id. On success the context
+  is gone, its ring mapping (all of its pages still mapped) is removed
+  from the caller's address space, its index is free for the next
+  io_setup, and its nr_events go back to the system-wide fs.aio-max-nr
+  budget. Requests still in flight are cancelled or waited for first.
+  Every failure is EINVAL and changes nothing.
+returns:
+  success: "0, exactly once per context; any later io_destroy of the same value is EINVAL (unless a new context's ring has since been put at that address)"
+  ring_removed: "after 0 every page of the ring that was still mapped is unmapped (mincore ENOMEM on each, the range can be mapped again with MAP_FIXED_NOREPLACE); pages the caller had already munmapped stay unmapped; pages it made PROT_NONE or PROT_READ go too"
+  index_freed: "the index (header word 0) is free again: the next io_setup takes the lowest free index (contexts 0..3, destroy 2 then 0: next ones get 0, 2, then 4)"
+  quota_freed: "the context's nr_events (as asked at io_setup) leave the system-wide count: with one 65536 context alive io_setup(1) is EAGAIN, after its io_destroy a 65536 context can be made again (repeatedly)"
+  other_contexts: "untouched: their rings, headers and handles stay valid; contexts may be destroyed in any order (40 contexts, odd ones first then even ones backwards: each 0 once, EINVAL repeated)"
+  header_contents: "only word 0 matters: the caller may overwrite words 1..7 (slot count, magic, ...) and io_destroy still returns 0"
+errors:
+  not_a_context: "EINVAL (22): no live context of this address space has its ring at exactly ctx_id: 0, 1, 4096, all ones, handle+1, handle+32, a later page of a multi-page ring, the handle with bit 32 flipped or bit 63 set, a stack page, an ordinary page holding a copy of a ring header, a handle already destroyed. All 64 bits count."
+  index_word_wrong: "EINVAL (22): the ring is in place but its header word 0 no longer holds the context's own index (another live context's index, an unused index, 0xffffffff); the context stays alive and io_destroy succeeds once word 0 is restored"
+  unreadable: "EINVAL (22), not EFAULT: the 4 bytes at ctx_id cannot be read (ring's first page PROT_NONE, or nothing mapped there); the context stays alive. A read-only first page is fine, and so is a PROT_NONE later page"
+  efault: "never observed: man 2 io_destroy lists EFAULT, but unreadable handles give EINVAL"
+  other_address_space: "EINVAL (22): in a fork child, the parent's handle (the child has a copy of the ring mapping but no context); this does not affect the parent's context"
+  untouched_on_error: "a failing io_destroy changes nothing: the context, its ring mapping, index and quota stay as they were"
+side_effects: >
+  The ring mapping disappears from the caller's address space and the
+  context's nr_events are released from fs.aio-nr. munmap of the ring
+  does NOT end a context: the context, its index and its share of
+  fs.aio-max-nr stay (a new io_setup gets the next index; a 65536
+  context munmapped still makes io_setup(1) EAGAIN) until io_destroy or
+  process exit. While nothing readable is at the handle, io_destroy of it
+  is EINVAL; once readable memory is there again (fresh anonymous memory,
+  or a PROT_NONE page made read/write) holding the old index in its first
+  word, io_destroy of the handle returns 0, unmaps that memory (one page
+  observed) and frees the index. A ring moved whole with mremap
+  (MREMAP_MAYMOVE|MREMAP_FIXED) moves the handle: io_destroy of the old
+  address is EINVAL, of the new one 0 (and the moved ring is unmapped).
+  Partial munmap of a multi-page ring leaves the context alive and
+  io_destroy of the handle 0. Process exit ends all of its contexts and
+  releases their fs.aio-nr share. Not covered by the tests (they need
+  io_submit/io_getevents): with an IOCB_CMD_POLL request pending on an
+  empty pipe io_destroy returns 0 (the request is cancelled, no event
+  remains to collect), and a CLONE_VM task blocked in io_getevents on the
+  context wakes up with EINVAL when another task destroys it.
+threading: >
+  Contexts belong to the address space: any task sharing it (CLONE_VM)
+  may destroy a context another made; the ring disappears for all of
+  them and a later io_destroy by any of them is EINVAL. A fork child has
+  its own address space with a copy of the parent's ring mapping (same
+  shared pages) and no contexts: its io_destroy of a parent handle is
+  EINVAL, and when the parent destroys its context while the child lives
+  only the parent's mapping is removed; the child's copy stays mapped and
+  readable (magic still there). The child's first own context gets
+  index 0 and the child may destroy it.
+ordering:
+  - "the lookup reads header word 0 from user memory first; unreadable memory or a wrong index is EINVAL before anything else"
+  - "pending requests are cancelled or completed before io_destroy returns; tasks blocked in io_getevents on the context are woken (EINVAL)"
+timing:
+  typical: "a successful io_destroy blocks for several milliseconds even with nothing pending (about 8-12 ms observed here, a grace period); a failing one returns in microseconds"
+  guarantees: "none; with requests in flight io_destroy waits for those that cannot be cancelled"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests use io_setup (206) to make contexts and check the
+# result through the caller's memory: mincore (ENOMEM = unmapped), the
+# header words, mmap MAP_FIXED_NOREPLACE, mprotect, munmap, mremap; fork
+# (raw clone SIGCHLD with pipes, and CLONE_VFORK) and CLONE_VM children.
+# None uses io_submit or io_getevents. a_io_destroy_frees_quota takes the
+# whole fs.aio-max-nr budget (65536) and so assumes no other process
+# holds AIO contexts while it runs; the other tests stay far below it
+# (at most 40 contexts of 2 events, or one of 1000). The 1000-event ring
+# is 16 pages on any machine with fewer than 256 CPUs. The ring header
+# layout is user-visible memory (libaio reads it), not a UAPI header;
+# aio_context_t: linux/aio_abi.h. Fork and CLONE_VM tests compare output
+# only (poly-diff: syscalls=off). An io_setup spec written earlier says
+# munmap of the whole ring "ends the context"; the closer observation
+# here is that the context survives, it just cannot be found while its
+# first page is unreadable.
