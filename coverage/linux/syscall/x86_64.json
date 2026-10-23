@@ -138,7 +138,7 @@
 {"symbol":"kexec_load","number":246,"src":["linux-syscall-tbl"]},
 {"symbol":"keyctl","number":250,"src":["linux-syscall-tbl"]},
 {"symbol":"kill","number":62,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"landlock_add_rule","number":445,"src":["linux-syscall-tbl"]},
+{"symbol":"landlock_add_rule","number":445,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"landlock_create_ruleset","number":444,"src":["linux-syscall-tbl"]},
 {"symbol":"landlock_restrict_self","number":446,"src":["linux-syscall-tbl"]},
 {"symbol":"lchown","number":94,"src":["linux-syscall-tbl"]},
