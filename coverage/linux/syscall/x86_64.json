@@ -81,7 +81,7 @@
 {"symbol":"futex","number":202,"status":"green","tests_visible":3,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"futex_requeue","number":456,"src":["linux-syscall-tbl"]},
 {"symbol":"futex_wait","number":455,"src":["linux-syscall-tbl"]},
-{"symbol":"futex_waitv","number":449,"src":["linux-syscall-tbl"]},
+{"symbol":"futex_waitv","number":449,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"futex_wake","number":454,"src":["linux-syscall-tbl"]},
 {"symbol":"futimesat","number":261,"src":["linux-syscall-tbl"]},
 {"symbol":"get_mempolicy","number":239,"src":["linux-syscall-tbl"]},
