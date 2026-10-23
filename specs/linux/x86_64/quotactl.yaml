@@ -1,0 +1,93 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/quotactl             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64; CONFIG_QUOTA=y, CONFIG_QUOTACTL=y, CONFIG_TMPFS_QUOTA=y)"
+  machine: "home server, x86-64, root file system ext4 on /dev/sda2 with quotas off; observed as a normal user (uid 1001, no capabilities), umask 022, cwd /. Root-only behaviour (block device nodes made with mknod, tmpfs quotas) comes from the man page quotactl(2) and linux/quota.h, not from a root run"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  quotactl(cmd, special, id, addr) (syscall 179) queries and changes
+  disk quotas of the file system mounted from the block device named by
+  the path name `special`. cmd is a 32-bit value (bits 32-63 of the
+  register are ignored) built as QCMD(subcmd, type) = (subcmd << 8) |
+  type: the low byte is the quota type (USRQUOTA 0, GRPQUOTA 1, PRJQUOTA
+  2), the upper 24 bits the subcommand (Q_SYNC 0x800001, Q_QUOTAON
+  0x800002, Q_QUOTAOFF 0x800003, Q_GETFMT 0x800004, Q_GETINFO 0x800005,
+  Q_SETINFO 0x800006, Q_GETQUOTA 0x800007, Q_SETQUOTA 0x800008,
+  Q_GETNEXTQUOTA 0x800009; XFS-style Q_X* = ('X' << 8) + n, n 1..9, all
+  from linux/quota.h and linux/dqblk_xfs.h). id is a 32-bit user, group
+  or project id (upper half ignored). Returns 0 on success. The checks
+  run in a fixed order: the type first (EINVAL for 3..255); then a NULL
+  special (only Q_SYNC accepts it: it syncs every file system with
+  quotas on and returns 0; anything else is ENODEV); then the special is
+  resolved as a path name (EFAULT, ENOENT, ENOTDIR, ELOOP, ENAMETOOLONG,
+  EACCES), must be a block device (ENOTBLK) on a mount that allows
+  devices (EACCES on nodev), and its device number must belong to a
+  mounted file system (ENODEV); then a file system without any quota
+  support is ENOSYS and a type that file system does not support at all
+  EINVAL; only after all that come the privilege check (EPERM) and the
+  subcommand itself (unknown subcommands: EPERM without CAP_SYS_ADMIN).
+  No argument but special is read before that point: in particular
+  Q_QUOTAON's addr (quota file path) is never the reported problem while
+  the special is bad. Without CAP_SYS_ADMIN a caller may use Q_SYNC,
+  Q_GETFMT, Q_GETINFO, Q_XGETQSTAT(V), Q_XQUOTASYNC, and Q_GETQUOTA /
+  Q_XGETQUOTA for its own effective uid (USRQUOTA) or a group it is in
+  (GRPQUOTA); everything else (on/off, set, Q_GETNEXTQUOTA, project
+  quotas, other ids, unknown subcommands) is EPERM. On a file system
+  where the quota type is not turned on, the query subcommands give
+  ESRCH. tmpfs mounted with the "usrquota" (and/or "grpquota") option
+  has quotas on from the start, format QFMT_SHMEM (5), reachable through
+  a block device node carrying the tmpfs's st_dev.
+returns:
+  success: "0"
+  sync_all: "Q_SYNC with special NULL: 0 for types 0, 1 and 2, for any caller (no capability needed), whatever id and addr are (junk id, address 1 or a kernel address as addr are fine: nothing is read or written)"
+  cmd_width: "only the low 32 bits of cmd count: 0xffffffff80000100 and 0x1234567880000100 act as QCMD(Q_SYNC, 0); 0x1234567880000103 is type 3 (EINVAL)"
+  id_width: "only the low 32 bits of id count (observed: Q_GETQUOTA of own uid | 1 << 32 behaves as own uid)"
+  getfmt: "Q_GETFMT writes the format id as a 4-byte value at addr; tmpfs with usrquota: 5 (QFMT_SHMEM) for USRQUOTA"
+  getquota: "Q_GETQUOTA fills a 72-byte struct if_dqblk (linux/quota.h: u64 dqb_bhardlimit, dqb_bsoftlimit (1 KiB blocks), dqb_curspace (bytes), dqb_ihardlimit, dqb_isoftlimit, dqb_curinodes, dqb_btime, dqb_itime; u32 dqb_valid; 4 bytes padding) with dqb_valid = QIF_ALL (0x3f); an id with no usage and no limits reads all zeros"
+  setquota: "Q_SETQUOTA (CAP_SYS_ADMIN) reads a struct if_dqblk and changes only the groups dqb_valid names (QIF_BLIMITS 1: both block limits; QIF_SPACE 2; QIF_ILIMITS 4: both inode limits; QIF_INODES 8; QIF_BTIME 16; QIF_ITIME 32); a later Q_GETQUOTA returns the stored limits unchanged (bhard 100, bsoft 50, ihard 7, isoft 5 come back as set)"
+  getnextquota: "Q_GETNEXTQUOTA (CAP_SYS_ADMIN) fills a struct if_nextdqblk (if_dqblk with u32 dqb_id in place of the padding) for the lowest id >= id that has a quota entry; dqb_id names it"
+  getinfo: "Q_GETINFO fills a 24-byte struct if_dqinfo (u64 dqi_bgrace, dqi_igrace; u32 dqi_flags, dqi_valid) with dqi_valid = IIF_ALL (7); id ignored"
+  usage: "usage is per owner: a tmpfs file of 8192 bytes chowned to a uid makes that uid's dqb_curinodes 1 and dqb_curspace at least 8192"
+  ext4_quota_off: "observed on the ext4 root with quotas off, as a normal user: Q_SYNC 0; Q_XQUOTASYNC 0; Q_GETFMT and Q_GETINFO ESRCH for all three types (even with addr 1: nothing is written); Q_GETQUOTA ESRCH for own uid (USRQUOTA) and own gid (GRPQUOTA), EPERM for other ids and for PRJQUOTA; Q_XGETQUOTA the same (ESRCH own uid); Q_XGETQSTAT ENOSYS; Q_XGETQSTATV ENOSYS with qs_version 1, EINVAL with any other version, EFAULT with addr 1; Q_QUOTAON (any addr, even missing or unreadable), Q_QUOTAOFF, Q_SETINFO, Q_SETQUOTA, Q_GETNEXTQUOTA, Q_XQUOTAON, Q_XQUOTARM, Q_XGETNEXTQUOTA and unknown subcommands (also cmd 0) EPERM"
+errors:
+  bad_type: "EINVAL (22): type (cmd & 0xff) is 3..255; checked first, before a NULL, unreadable or missing special and before the subcommand (unknown subcommand with type 3 is EINVAL)"
+  null_special: "ENODEV (19): special NULL with any subcommand other than Q_SYNC (Q_GETFMT, Q_QUOTAON even with a bad addr, Q_XQUOTASYNC, cmd 0, unknown subcommands)"
+  special_fault: "EFAULT (14): special not readable (address 1, a kernel address, a PROT_NONE page, a name that runs into an unreadable page before its NUL); same for every subcommand, including Q_SYNC with a non-NULL special"
+  special_missing: "ENOENT (2): special names nothing (missing file or directory on the way, empty string \"\", dangling symbolic link)"
+  special_notdir: "ENOTDIR (20): a non-directory used as a directory (\"file/\", \"file/x\", \"/dev/null/\")"
+  special_loop: "ELOOP (40): symbolic link loop"
+  special_too_long: "ENAMETOOLONG (36): a component over 255 bytes, or a name of 4096 bytes or more before its NUL (4095 bytes is looked up normally); a name with no NUL within 4096 readable bytes is ENAMETOOLONG"
+  special_search: "EACCES (13): search permission missing on a directory of the path (caller without CAP_DAC_OVERRIDE / CAP_DAC_READ_SEARCH), for existing and missing final entries alike; read permission on the special itself is never needed (a mode 000 regular file is ENOTBLK)"
+  not_block_device: "ENOTBLK (15): special exists but is not a block device after following symbolic links (character device, directory, \"/\", regular file, FIFO, link to /dev/null); relative names resolve from the cwd; reported before the subcommand is examined (unknown subcommands and Q_SYNC get it too)"
+  nodev_mount: "EACCES (13): special is a block device node on a file system mounted nodev (MS_NODEV), whatever its device number and the subcommand"
+  no_file_system: "ENODEV (19): special is a block device node whose number no mounted file system has (e.g. major 4095 minor 1048575, mknod dev 0xffffffff, or major 4095 minor 0), for every subcommand, with or without capabilities; a bad type is still EINVAL first"
+  no_quota_support: "ENOSYS (38): the file system has no quota support at all (squashfs on /dev/loop0 observed; procfs; tmpfs mounted without quota options, reached through a block node carrying its st_dev); for every subcommand, known or unknown, decided before the privilege check (no EPERM even without capabilities); a bad type is still EINVAL first"
+  type_not_supported: "EINVAL (22): the file system supports quotas but not this type at all (tmpfs: PRJQUOTA); before the privilege check"
+  not_permitted: "EPERM (1): caller lacks CAP_SYS_ADMIN for a subcommand that needs it (see summary; unknown subcommands included); checked after ENOSYS/EINVAL above and before the subcommand runs, so a bad addr is not reported (Q_GETQUOTA of another id with addr 1: EPERM)"
+  quota_off: "ESRCH (3): the subcommand needs quotas of this type turned on and they are not (ext4 without quotas: Q_GETFMT, Q_GETINFO, Q_GETQUOTA, Q_XGETQUOTA; tmpfs mounted with usrquota only: Q_GETFMT / Q_GETQUOTA for GRPQUOTA); reported before addr is touched (addr 1 still ESRCH)"
+  no_next_id: "ESRCH (3): Q_GETNEXTQUOTA / Q_XGETNEXTQUOTA found no id >= id with a quota entry (man page; not tested)"
+  addr_fault: "EFAULT (14): addr not readable/writable for a subcommand that uses it, once all earlier checks passed (Q_XGETQSTATV with addr 1 on ext4)"
+  quotaon: "Q_QUOTAON with a bad quota file path (addr) is only reported after the special and the privilege check passed (ENOENT / EFAULT for addr then); EBUSY if quotas are already on; ESRCH for an unknown format id; EACCES if the quota file is not a regular file or is on another file system (man page; not tested)"
+  setquota_range: "ERANGE (34): Q_SETQUOTA limits out of range for the quota format (man page; not tested)"
+  order: "EINVAL (type) -> ENODEV (NULL special, not Q_SYNC) / Q_SYNC-all -> path errors on special (EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES) -> ENOTBLK -> EACCES (nodev mount) -> ENODEV (no file system) -> ENOSYS (no quota support) -> EINVAL (type unsupported by the file system) -> EPERM -> subcommand (unknown: EINVAL for a privileged caller; ESRCH quota off; EFAULT addr; ...)"
+side_effects: >
+  Queries change nothing. Q_SETQUOTA / Q_SETINFO change the stored
+  limits, usage or grace times for later queries and for enforcement;
+  Q_QUOTAON / Q_QUOTAOFF turn accounting and enforcement on or off for
+  the type; Q_SYNC writes quota usage to disk (no visible change). A
+  failed call changes nothing. Creating a file or chowning one changes
+  the owner's dqb_curinodes / dqb_curspace on a file system with quotas
+  on (a chown moves the file's usage to the new owner).
+threading: >
+  Quota state is per file system and shared by every process and mount
+  namespace that sees it; calls from several threads are serialized
+  per file system and each sees a consistent state.
+ordering: []
+timing:
+  typical: "argument and path errors: a few µs; Q_SYNC with NULL special on a system without active quotas: < 50 µs"
+  guarantees: "none; Q_SYNC and Q_QUOTAON/OFF may block for disk I/O on file systems with quota files"
+tests:
+  visible: 9
+  held_out: 4
