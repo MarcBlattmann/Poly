@@ -154,7 +154,7 @@
 {"symbol":"lremovexattr","number":198,"src":["linux-syscall-tbl"]},
 {"symbol":"lseek","number":8,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"lsetxattr","number":189,"src":["linux-syscall-tbl"]},
-{"symbol":"lsm_get_self_attr","number":459,"src":["linux-syscall-tbl"]},
+{"symbol":"lsm_get_self_attr","number":459,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"lsm_list_modules","number":461,"src":["linux-syscall-tbl"]},
 {"symbol":"lsm_set_self_attr","number":460,"src":["linux-syscall-tbl"]},
 {"symbol":"lstat","number":6,"status":"green","tests_visible":10,"tests_held_out":4,"src":["linux-syscall-tbl"]},
