@@ -9,7 +9,7 @@
 {"symbol":"alarm","number":37,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"arch_prctl","number":158,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
 {"symbol":"bind","number":49,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"bpf","number":321,"src":["linux-syscall-tbl"]},
+{"symbol":"bpf","number":321,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"brk","number":12,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
 {"symbol":"cachestat","number":451,"src":["linux-syscall-tbl"]},
 {"symbol":"capget","number":125,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
