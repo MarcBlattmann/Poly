@@ -146,7 +146,7 @@
 {"symbol":"link","number":86,"src":["linux-syscall-tbl"]},
 {"symbol":"linkat","number":265,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"listen","number":50,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"listmount","number":458,"src":["linux-syscall-tbl"]},
+{"symbol":"listmount","number":458,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"listns","number":470,"src":["linux-syscall-tbl"]},
 {"symbol":"listxattr","number":194,"src":["linux-syscall-tbl"]},
 {"symbol":"listxattrat","number":465,"src":["linux-syscall-tbl"]},
