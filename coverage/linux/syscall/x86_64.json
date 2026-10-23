@@ -51,7 +51,7 @@
 {"symbol":"fadvise64","number":221,"src":["linux-syscall-tbl"]},
 {"symbol":"fallocate","number":285,"src":["linux-syscall-tbl"]},
 {"symbol":"fanotify_init","number":300,"src":["linux-syscall-tbl"]},
-{"symbol":"fanotify_mark","number":301,"src":["linux-syscall-tbl"]},
+{"symbol":"fanotify_mark","number":301,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"fchdir","number":81,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"fchmod","number":91,"src":["linux-syscall-tbl"]},
 {"symbol":"fchmodat","number":268,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
