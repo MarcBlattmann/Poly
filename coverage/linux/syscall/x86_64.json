@@ -176,7 +176,7 @@
 {"symbol":"mmap","number":9,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
 {"symbol":"modify_ldt","number":154,"src":["linux-syscall-tbl"]},
 {"symbol":"mount","number":165,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"mount_setattr","number":442,"src":["linux-syscall-tbl"]},
+{"symbol":"mount_setattr","number":442,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"move_mount","number":429,"src":["linux-syscall-tbl"]},
 {"symbol":"move_pages","number":279,"src":["linux-syscall-tbl"]},
 {"symbol":"mprotect","number":10,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
