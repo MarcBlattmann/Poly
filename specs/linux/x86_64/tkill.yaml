@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/tkill
+oracle:
+  os: "Linux 7.0.0-30-generic"
+  machine: "x86-64 host; observed as a normal user (uid 1001), no seccomp. Root-only permission rules from kill(2)/tkill(2) man pages, run as root on Poly"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  tkill(tid, sig) (syscall 200) sends signal sig to the single thread whose
+  thread id is tid, in any process: unlike tgkill there is no thread-group
+  check. tid and sig are ints: the upper 32 bits of each register are
+  ignored. The main thread's tid equals the pid. Signal 0 sends nothing and
+  only does the existence, signal-number and permission checks. The signal
+  is directed at that thread: if the thread does not block it, its handler
+  runs on that thread (a signal a thread sends to itself is handled before
+  tkill returns); if the thread blocks it, it is pending for that thread only
+  (other threads' rt_sigpending do not show it) and is taken when that thread
+  unblocks it. The receiver's siginfo has si_signo = sig, si_errno 0, si_code
+  SI_TKILL (-6), si_pid = the sender's process id (thread group id, also when
+  a non-main thread sends) and si_uid = the sender's real uid. Standard
+  signals (1-31) do not queue: a second send while one is pending is merged.
+  Real-time signals (32-64) queue: each send is delivered once, each with
+  SI_TKILL. Disposition effects are the process-wide ones: a signal whose
+  default action terminates (SIGTERM, SIGUSR1, ...) ends the whole process
+  even when sent to a non-main thread; SIGKILL kills at once even if every
+  signal is blocked; SIGSTOP stops the process and SIGCONT continues it.
+  A signal that is ignored (SIG_IGN, or default-ignore like SIGCHLD, SIGURG,
+  SIGWINCH) and not blocked is discarded; an ignored signal that is blocked
+  stays pending until unblocked (then it is discarded). A blocked fatal
+  signal stays pending and kills when it is unblocked.
+returns:
+  success: "0, also when the signal is blocked, ignored or discarded by the target"
+  zombie: "0 for an exited but not yet reaped process (signal 0 or a real signal, which has no effect; its exit status is unchanged)"
+  exiting_thread: "a thread that just exited (its CLONE_CHILD_CLEARTID word already cleared) can still answer 0 for a short time; it then becomes ESRCH"
+errors:
+  bad_tid: "EINVAL (22) when tid (as an int) is 0 or negative, whatever the signal (also an invalid one); checked first"
+  no_thread: "ESRCH (3) when no thread has that tid (reaped child, exited thread, tid above pid_max or 0x7fffffff); this is checked before the signal number, so an invalid signal to a missing thread is ESRCH"
+  bad_signal: "EINVAL (22) for a signal (as an int) below 0 or above 64, for an existing target; nothing is sent; checked before permission"
+  permission: >
+    EPERM (1) when the caller lacks CAP_KILL and neither its real nor its
+    effective uid equals the target's real or saved set-user-ID (the target's
+    effective uid and the caller's saved uid do not count); also for signal
+    0 and for a signal the target blocks. Exception: SIGCONT is allowed to
+    any process in the caller's session. Root that dropped CAP_KILL (capset
+    to 0) is checked like any uid. As a normal user, tkill(1, 0) is EPERM
+    and tkill(1, 65) is EINVAL.
+  order: "tid <= 0 EINVAL, then no such thread ESRCH, then signal number EINVAL, then permission EPERM"
+side_effects: "the signal is made pending for the target thread (or acted on: handler, stop, continue, terminate, discard)"
+threading: "thread-directed: only the named thread takes the signal; other threads of its process never see it pending; tkill may name a thread of any process"
+ordering:
+  - "a signal a thread sends to itself and does not block runs its handler before tkill returns"
+  - "a signal pending on a thread that blocks it runs when that thread unblocks it, before the unblocking rt_sigprocmask returns"
+  - "a terminating signal sent to a stopped process acts once it is continued"
+timing:
+  typical: "microseconds; no measurable cost beyond a syscall"
+  guarantees: "none; an exited thread's tid may stay valid for a few milliseconds after its tid word is cleared"
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
