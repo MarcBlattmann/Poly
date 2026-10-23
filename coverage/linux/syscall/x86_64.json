@@ -206,7 +206,7 @@
 {"symbol":"openat","number":257,"status":"green","tests_visible":3,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"openat2","number":437,"src":["linux-syscall-tbl"]},
 {"symbol":"pause","number":34,"src":["linux-syscall-tbl"]},
-{"symbol":"perf_event_open","number":298,"src":["linux-syscall-tbl"]},
+{"symbol":"perf_event_open","number":298,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"personality","number":135,"src":["linux-syscall-tbl"]},
 {"symbol":"pidfd_getfd","number":438,"src":["linux-syscall-tbl"]},
 {"symbol":"pidfd_open","number":434,"src":["linux-syscall-tbl"]},
