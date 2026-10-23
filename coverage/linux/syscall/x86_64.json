@@ -182,7 +182,7 @@
 {"symbol":"mprotect","number":10,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
 {"symbol":"mq_getsetattr","number":245,"src":["linux-syscall-tbl"]},
 {"symbol":"mq_notify","number":244,"src":["linux-syscall-tbl"]},
-{"symbol":"mq_open","number":240,"src":["linux-syscall-tbl"]},
+{"symbol":"mq_open","number":240,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"mq_timedreceive","number":243,"src":["linux-syscall-tbl"]},
 {"symbol":"mq_timedsend","number":242,"src":["linux-syscall-tbl"]},
 {"symbol":"mq_unlink","number":241,"src":["linux-syscall-tbl"]},
