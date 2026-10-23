@@ -159,7 +159,7 @@
 {"symbol":"lsm_set_self_attr","number":460,"src":["linux-syscall-tbl"]},
 {"symbol":"lstat","number":6,"status":"green","tests_visible":10,"tests_held_out":4,"src":["linux-syscall-tbl"]},
 {"symbol":"madvise","number":28,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"map_shadow_stack","number":453,"src":["linux-syscall-tbl"]},
+{"symbol":"map_shadow_stack","number":453,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"mbind","number":237,"src":["linux-syscall-tbl"]},
 {"symbol":"membarrier","number":324,"src":["linux-syscall-tbl"]},
 {"symbol":"memfd_create","number":319,"src":["linux-syscall-tbl"]},
