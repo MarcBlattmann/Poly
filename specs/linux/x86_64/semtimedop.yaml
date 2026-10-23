@@ -1,0 +1,90 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/semtimedop           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022; default IPC limits (/proc/sys/kernel/sem: semmsl 32000, semmns 1024000000, semopm 500, semmni 32000)"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  semtimedop(semid, sops, nsops, timeout) (syscall 220) is semop (65)
+  with an optional relative timeout: timeout points to a struct
+  timespec {i64 tv_sec; i64 tv_nsec} (16 bytes, only read, never
+  written). With timeout NULL the call behaves exactly like semop (see
+  specs/linux/x86_64/semop.yaml: atomic all-or-nothing application in
+  array order, values 0..32767, IPC_NOWAIT, SEM_UNDO, sempid, sem_otime,
+  semncnt/semzcnt, wake-ups completed by the waker, EINTR never
+  restarted). With a timeout, everything is the same except: (1) the
+  timespec is read first, and an unreadable one is EFAULT before any
+  other check; (2) it must be valid (0 <= tv_nsec <= 999999999 as a
+  64-bit value, tv_sec >= 0), else EINVAL, even when no operation would
+  have to sleep; (3) a call that would sleep sleeps at most for the
+  timeout, measured from the start of the call, and then fails with
+  EAGAIN with nothing applied. A timeout of {0,0} makes every would-be
+  sleep fail at once with EAGAIN (like IPC_NOWAIT on every operation).
+  A call that needs no sleep succeeds at once whatever its (valid)
+  timeout. A huge timeout (tv_sec up to 2^63-1) is accepted and sleeps
+  like no timeout.
+returns:
+  success: "0, after all operations were applied atomically (as semop)"
+  null_timeout: "timeout NULL: exactly semop's behaviour, the timeout is not checked"
+  no_sleep_needed: "a valid timeout of any length ({0,0}, {0,999999999}, {2^63-1,999999999}) does not delay a call whose operations can all proceed; it returns 0 at once"
+  woken_before_timeout: "a timed sleeper whose operations become possible before the timeout returns 0; as with semop, the waking call applies them before it returns and sempid is the sleeper's pid"
+  timespec_unchanged: "the timespec is never written: unchanged after success, EAGAIN (timeout) and EINTR; a timespec in read-only memory works"
+  widths: "as semop: only the low 32 bits of semid and of nsops count (nsops 2^32+1 = 1 operation, 2^32 = 0 -> EINVAL); the timeout pointer is a full 64-bit address"
+  sempid_otime: "as semop: success sets sempid of every named semaphore (sem_op 0 included) to the caller and sem_otime to the current CLOCK_REALTIME seconds; sem_ctime unchanged; a failed call (timeout included) changes neither"
+errors:
+  timeout_fault: "EFAULT (14): any of the 16 bytes at timeout unreadable (low address such as 1 or 8, non-canonical, PROT_NONE, running into an unmapped page); reported before every other check: beats nsops 0, nsops > 500, NULL sops, a negative or unknown id; nothing applied"
+  nsops_zero: "EINVAL (22): nsops (low 32 bits) is 0 (after the timeout EFAULT check; indistinguishable from an invalid timeout, both EINVAL)"
+  too_many: "E2BIG (7): nsops > 500; beats an invalid timeout, NULL sops and a bad id"
+  sops_fault: "EFAULT (14): the nsops*6 bytes at sops unreadable; beats an invalid timeout and a bad id"
+  timeout_invalid: "EINVAL (22): tv_nsec < 0, tv_nsec > 999999999 (the whole 64-bit field: 2^32 is invalid) or tv_sec < 0; checked after E2BIG and the sops EFAULT, before the id lookup, EFBIG, EACCES, ERANGE and EAGAIN; given even when the operations could all proceed, with IPC_NOWAIT, or would sleep (no sleep happens); nothing applied"
+  bad_id: "EINVAL (22): semid negative, never handed out, or of a removed set (as semop)"
+  sem_num: "EFBIG (27): as semop, after the timeout checks"
+  access: "EACCES (13): as semop (alter permission for non-zero sem_op, read for all-zero), after the timeout checks"
+  range: "ERANGE (34): as semop; with or without a timeout, never delayed by it"
+  would_wait_nowait: "EAGAIN (11): as semop, the first operation that cannot proceed has IPC_NOWAIT: at once, whatever the timeout"
+  timed_out: "EAGAIN (11): the call had to sleep and the timeout passed (or was {0,0} / {0,1}); nothing of the call applied, including earlier operations of the array that could proceed; the caller left semncnt/semzcnt; no SEM_UNDO adjustment recorded"
+  removed_while_sleeping: "EIDRM (43): the set was removed while the caller slept, at once, before the timeout"
+  interrupted: "EINTR (4): a signal with a handler arrived while sleeping (never restarted, even with SA_RESTART); also SIGSTOP followed by SIGCONT while sleeping; the timespec is left unchanged (the remaining time is not reported)"
+  order: "EFAULT (timeout), EINVAL (nsops 0), E2BIG, EFAULT (sops), EINVAL (timeout values), EINVAL (id), EFBIG, EACCES, then per operation in array order ERANGE / EAGAIN (IPC_NOWAIT) / sleep, ending in success, EAGAIN (timeout), EIDRM or EINTR"
+  no_memory: "ENOMEM (12): no memory for SEM_UNDO bookkeeping; not tested"
+side_effects: >
+  As semop: success changes the semaphore values, sempid of the named
+  semaphores and sem_otime, and records SEM_UNDO adjustments (undone at
+  process exit, clamped to 0..32767); any failure, including a timeout,
+  changes nothing and records no adjustment (the exit of a process whose
+  only SEM_UNDO call timed out leaves the value alone). While sleeping
+  the caller counts in semncnt (decrement) or semzcnt (wait-for-zero) of
+  the semaphore of the first operation of its array that cannot proceed,
+  and moves on to the next blocking one when that one becomes possible
+  (still without applying anything); it leaves the count when it times
+  out, is woken, interrupted, stopped or when the set is removed.
+threading: >
+  Sets are system-wide (IPC namespace); every process may sleep on them
+  with its own timeout. The timeouts of different sleepers are
+  independent: a sleeper with a short timeout times out on its own while
+  others on the same semaphore keep sleeping and are later woken
+  normally.
+ordering:
+  - "the timeout starts with the call: a sleeper that moved from its first blocking operation to a later one part-way still times out when the original timeout ends (1 s timeout, first operation made possible after 0.4 s: EAGAIN after about 1 s, not 1.4 s)"
+  - "sleepers are served as for semop (same-size decrements in the order they went to sleep; a later sleeper whose request can be met goes first)"
+timing:
+  typical: "microseconds for calls that do not sleep; a timed-out call returns about 0.1 ms after its timeout (1 ms timeout: ~1.07 ms, 100 ms: ~100.1 ms, 1.5 s: ~1.5001 s); a woken sleeper returns within milliseconds of the waking call"
+  guarantees: "a timed-out call never returns before the requested time has passed (resolution well below 1 ms, no rounding up to scheduler ticks seen); how much later is not bounded"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: the tests also use semget (64) to make IPC_PRIVATE sets, semop
+# (65) and semctl (66: GETVAL, SETVAL, GETPID, GETNCNT, GETZCNT,
+# IPC_STAT, IPC_RMID) to set up and observe them, plus fork, signals and
+# clock_gettime(CLOCK_MONOTONIC) to measure the sleeps. Under ptrace a
+# signal set to SIG_IGN also ends a timed sleep with EINTR (a direct run
+# keeps sleeping and times out): the tests do not send ignored signals
+# to sleepers, and only child processes sleep while the parent forks.
+# Set ids differ between runs, so single-process tests compare syscall
+# names only (poly-diff: syscalls=names), multi-process ones only output
+# (syscalls=off).
+# struct sembuf: linux/sem.h; struct timespec (64-bit): linux/time_types.h
+# (__kernel_timespec); struct semid64_ds: asm-generic/sembuf.h and
+# asm-generic/ipcbuf.h; constants: linux/ipc.h, linux/sem.h.
