@@ -1,0 +1,99 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/remap_file_pages     # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022; test files on the tmpfs at /dev/shm (Poly's /tmp and /dev/shm are tmpfs too); vm.max_map_count 1048576"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  remap_file_pages(addr, size, prot, pgoff, flags) (syscall 216,
+  deprecated) makes the pages [addr, addr+size) of an existing shared
+  mapping show the pages of the same file (memory object) starting at
+  page offset pgoff, and returns 0. addr and size are each rounded down
+  to a multiple of 4096 on their own (addr+100 with size 4096 remaps
+  the one page holding addr+100). prot must be 0. flags is ignored. The
+  effect is exactly as if the range had been mapped again with
+  mmap(rounded addr, rounded size, P, MAP_SHARED|MAP_FIXED, <the same
+  open file>, pgoff*4096), where P is the read/write/exec protection
+  the mapping has at addr: the range becomes a mapping of its own (its
+  own line in /proc/self/maps, with offset pgoff*4096) that replaces the
+  old pages, and neighbouring pieces that end up in linear file order
+  with the same protection join into one mapping again. The same file
+  page may be shown at several addresses; they are all the same memory
+  and the file's page itself (writes through any of them are seen
+  through the others, by read/pread on the file and by other mappings
+  of it, and vice versa). The range may span several mappings only if
+  they follow each other without a gap, all map the same open file
+  and all have the same protection and flags. The memory must be
+  shared AND writable-capable: MAP_SHARED of a file opened for writing
+  (O_RDWR), MAP_SHARED|MAP_ANONYMOUS, MAP_SHARED of /dev/zero opened
+  O_RDWR, or a System V shared memory segment attached without
+  SHM_RDONLY. A MAP_SHARED mapping of a file opened O_RDONLY (even
+  /dev/zero), a SHM_RDONLY segment, and any private mapping are EINVAL,
+  whatever their protection. Arguments are full 64-bit values (no
+  truncation of size, prot, pgoff).
+returns:
+  success: "0"
+  contents: "after the call, page i of the rounded range shows file page pgoff+i; pages outside the range are unchanged (8-page file 'ABCDEFGH', remap(m, 4096, 0, 3, 0) -> 'DBCDEFGH'; then remap(m+5p, 2p, 0, 0) -> 'DBCDEABH')"
+  linear_again: "remapping pages to their original linear offsets restores them; remap(m, whole length, 0, 0, 0) puts every page back"
+  same_place: "remapping a page to the offset it already shows succeeds and changes nothing"
+  addr_rounding: "addr is rounded down to its page: any address inside a page (offset 1, 100, 2048, 4095) remaps from that page's start"
+  size_rounding: "size is rounded down to whole pages independently of addr: 4097 remaps 1 page, 3*4096-1 remaps 2; m+1 with size 2*4096+4000 remaps pages 0 and 1"
+  protection: "the new pages keep the protection the mapping had at addr: read-only stays read-only (a write faults with SIGSEGV; mprotect to read-write afterwards succeeds when the file is open read-write); PROT_NONE stays inaccessible (SIGSEGV) until mprotect"
+  write_through: "a write through a remapped page changes file page pgoff (pread at pgoff*4096 sees it); pwrite to that file page shows through every address mapping it; file pages no longer mapped anywhere in the range are not visible there"
+  maps_view: "/proc/self/maps: the range is its own line, same file, perms 'rw-s' (or the original perms), offset pgoff*4096; the rest of the old mapping keeps its offsets (8 pages, remap first to 5: '1 page off 5; 7 pages off 1'; then pages 3-4 to 0: '1@5; 2@1; 2@0; 3@5'); after remapping everything linear again it is one line, offset 0"
+  shared_anon: "MAP_SHARED|MAP_ANONYMOUS, /dev/zero (O_RDWR, MAP_SHARED) and System V segments (shmat without SHM_RDONLY) work: pgoff counts pages of that shared memory object (4-page anonymous region a,b,c,d: remap(sa, 2p, 0, 2) -> c,d,c,d, and pages 0 and 2 are the same memory)"
+  past_eof: "pgoff at or past the end of the file is accepted (0); touching such a page raises SIGBUS, exactly like a shared mapping past EOF; once the file grows to cover the page it reads as zeros and writes reach the file. Shared anonymous memory and segments have their creation size as 'file size' (pgoff 2 of a 2-page MAP_SHARED|MAP_ANONYMOUS region: 0, then SIGBUS on access)"
+  pgoff_range: "any pgoff whose page range ends at or below the file system's largest file offset is accepted: on tmpfs up to page (2^51)-2 for one page ((2^51)-3 for two pages); 2^32, 2^40 also fine"
+  flags_ignored: "flags is ignored: 0, MAP_NONBLOCK (0x10000), MAP_PRIVATE|MAP_ANONYMOUS, MAP_FIXED_NOREPLACE, MAP_POPULATE|MAP_SHARED, 0xffffffff and ~0 all behave like 0 (the result stays a shared mapping of the same file; a private mapping is still EINVAL)"
+  locked: "pages of an mlock'ed mapping stay locked after the call (VmLck in /proc/self/status unchanged: 16 kB before and after remapping 2 of 4 locked pages); remapping pages of an unlocked mapping locks nothing"
+  fork: "a fork child inherits the rearranged pages and shares them with the parent (writes by either are seen by both)"
+  fresh_mapping: "the remapped range is a new mapping: madvise flags of the old pages do not carry over (after MADV_DONTFORK on the whole mapping, a remapped page IS present in a fork child, while untouched pages are not: SIGSEGV in the child)"
+  fd_closed: "works after the fd used for mmap was closed (the mapping keeps the file)"
+errors:
+  prot: "EINVAL (22): prot != 0 (any bit, including bits above 31); checked first: prot 1 with addr 0, size 0 and pgoff ~0 is EINVAL too"
+  size_small: "EINVAL (22): size rounded down is 0 (size 0..4095)"
+  wrap: "EINVAL (22): rounded addr + rounded size wraps past 2^64 (addr -4096, size 8192; size ~0 from a user address)"
+  pgoff_wrap: "EINVAL (22): pgoff + number of pages wraps past 2^64 (pgoff ~0 with one page, ~0-1 with two pages)"
+  no_mapping: "EINVAL (22): no mapping at the rounded addr (NULL, an unmapped hole, 0x800000000000, 0xffff800000000000)"
+  not_shared: "EINVAL (22): the mapping at addr is private (MAP_PRIVATE file or anonymous), the stack, the vDSO, or a MAP_SHARED mapping that cannot be written through its file: file or /dev/zero opened O_RDONLY, System V segment attached SHM_RDONLY (even though /proc/self/maps shows these as 'r--s')"
+  span: "EINVAL (22): the range runs past the end of the mapping at addr into a gap, into a mapping of another file (or another anonymous shared object), or into a mapping with other protection or flags (one page made read-only by mprotect); separate mmaps of the SAME file with the same protection next to each other are fine, whatever their offsets"
+  too_large: "EINVAL (22): size running far past the mapping (2^47, 2^32+4096, 9 pages of an 8-page mapping)"
+  eoverflow: "EOVERFLOW (75): the page range would end beyond the file system's largest file offset; on tmpfs a range reaching past byte 2^63-4096-1: pgoff 2^51-1 or 2^51 or 2^63 or ~0-1 with one page, 2^51-2 with two pages. Only reported for an otherwise valid call (unmapped or private addr with such a pgoff is EINVAL)"
+  order: "EINVAL (prot), EINVAL (size/wrap), EINVAL (pgoff wrap), EINVAL (mapping missing, not shared, span), then EOVERFLOW; all but the last are the same errno"
+  unchanged_on_error: "every failure leaves the mapping and its contents exactly as before (no partial remap)"
+  no_memory: "ENOMEM (12): would exceed the mapping-count limit (vm.max_map_count) when the range splits a mapping; not reached at 70000 single-page remaps here (limit 1048576); not tested"
+  interrupted: "EINTR (4) possible only for a fatal signal while waiting for the address-space lock; not observable"
+side_effects: >
+  Replaces the page-to-file mapping of the range as described (the old
+  pages of the range are unmapped, the file itself is not changed). The
+  new pages are populated (faulted in) at once unless MAP_NONBLOCK is
+  in flags; this is not observable through contents and is not tested.
+  The kernel logs a one-time deprecation warning to its log (not
+  visible to the caller). The file size is not changed.
+threading: >
+  Acts on the whole process's address space: other threads (CLONE_VM)
+  see the new arrangement at once. Fork children made afterwards inherit
+  it; children made before keep their own copy of the old arrangement
+  (their own address space) but still share the file pages.
+ordering: []
+timing:
+  typical: "about 8-15 µs per call for a one-page remap on tmpfs (includes faulting the page in)"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: the tests build their memory with mmap (MAP_SHARED of a
+# /dev/shm file created and unlinked at once, MAP_SHARED|MAP_ANONYMOUS,
+# /dev/zero), shmget/shmat/shmctl(IPC_RMID), mprotect, munmap, madvise
+# (MADV_DONTFORK), mlock/munlock, ftruncate, pread64/pwrite64, msync,
+# and observe faults in CLONE_VFORK children (SIGSEGV 11, SIGBUS 7 via
+# wait4). /proc/self/maps lines are parsed for page counts, perms and
+# offsets only; /proc/self/status for VmLck. The ext4 root file system
+# here also accepted pgoff 2^40, so the exact EOVERFLOW limit depends on
+# the file system; tests only check it on tmpfs. Tests reading /proc
+# text or using System V segment ids compare syscall names only
+# (poly-diff: syscalls=names). Constants: asm/unistd_64.h,
+# asm-generic/mman-common.h (MAP_NONBLOCK 0x10000), asm-generic/errno.h
+# (EOVERFLOW 75).
