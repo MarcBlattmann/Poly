@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fgetxattr            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks) and every test rerun with its directory on tmpfs (/dev/shm) with identical results; static freestanding test programs, raw syscalls, run directly and under the pipeline tracer. Root-only behaviour (trusted.* with CAP_SYS_ADMIN, DAC override) from xattr(7) and getxattr(2), not observed."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  fgetxattr(fd, name, value, size) (193) reads the extended attribute
+  `name` of the file open on descriptor `fd` into the buffer `value` of
+  `size` bytes and returns the value's length. It behaves like getxattr
+  (191) on the inode behind the descriptor: same name, size, buffer and
+  namespace rules and the same permission checks, with the descriptor in
+  place of the path walk. The descriptor's access mode does not matter
+  (O_RDONLY, O_WRONLY, O_RDWR, O_APPEND, O_DIRECTORY all read); permission
+  comes from the file's mode bits at the time of the call. O_PATH
+  descriptors are EBADF. fd is an int (only the low 32 bits count), and
+  AT_FDCWD (-100) reads the current working directory. The value comes back
+  byte for byte as set (NUL bytes included, no NUL added) at the start of
+  the buffer; the rest of the buffer is untouched. Size 0 returns the length
+  and copies nothing. Attributes belong to the inode, so an open descriptor
+  always sees the current set (changes made by path, by another descriptor
+  or a hard link show at once), also after the file is renamed or unlinked
+  or an open directory is removed.
+returns:
+  success: "the value's length (0 to 65536); 0 for an empty value (nothing copied)"
+  size: "size_t, compared in full. 0: return the length, copy nothing, the buffer pointer is not used (NULL or unmapped is fine). Smaller than the value: ERANGE, nothing copied (also with a NULL buffer). Equal or larger: the value is copied to the start of the buffer, the bytes after it are not written (a shorter replacement value leaves the old bytes past its end in a reused buffer). Sizes above 65536 (65537, 2^32, 2^32 + 1, SIZE_MAX) act as a large buffer, never E2BIG."
+  buffer: "only the value's bytes must be writable: a buffer ending exactly where its mapping ends works even with a larger size. NULL, a low address such as 8, an unmapped page, or a buffer running into an unmapped page before the value ends: EFAULT. The buffer is only used when the attribute exists and fits (missing attribute with a NULL buffer: ENODATA)."
+  descriptor: "any open descriptor of a regular file or directory, whatever its access mode: O_RDONLY, O_WRONLY, O_RDWR, O_RDWR|O_APPEND, O_DIRECTORY or a plain O_RDONLY open of a directory, a dup'd descriptor (also after the original is closed), one inherited by a forked child, one opened through a symbolic link (reads the target), a file renamed or unlinked while open, a directory removed while open, an O_TMPFILE file (no user.* attributes until fsetxattr gives it some), a memfd (a regular file in every respect: user.* ENODATA until set, \"user.\" and \"security.\" EINVAL, unknown prefixes and system.x EOPNOTSUPP, trusted.* without CAP_SYS_ADMIN, security.* and both ACL names ENODATA). Only the low 32 bits of fd count: fd + 2^32 and fd | 0xffffffff00000000 are fd; 0xffffff9c is AT_FDCWD."
+  at_fdcwd: "fd AT_FDCWD (-100) reads the calling process's current working directory like a descriptor of it: its own attributes (not its parent's), \"user.\" EINVAL, unknown prefix EOPNOTSUPP, trusted.* without CAP_SYS_ADMIN ENODATA, a working directory without read permission (0311) EACCES for user.* and unknown prefixes (without CAP_DAC_OVERRIDE / CAP_DAC_READ_SEARCH), and a working directory that has been removed still reads its attributes. Other negative values (-1, -99, -101) are EBADF."
+  names: "1 to 255 bytes including the prefix (255 works: ENODATA when absent); empty or 256 bytes and more: ERANGE; unreadable (NULL, address 1, address 8): EFAULT. Names are compared exactly (\"user.A\" and \"user.lon\" are not \"user.a\" / \"user.long\"). Known prefixes: user., trusted., security., system. at the very start in lower case. Unknown or missing prefix (\"foo.a\"): EOPNOTSUPP; unknown system.* names (\"system.x\"): EOPNOTSUPP; \"user.\" and \"security.\" alone on a regular file or directory EINVAL; \"trusted.\" alone EINVAL with CAP_SYS_ADMIN, ENODATA without."
+  user_namespace: "regular files and directories: needs read permission by the file's current mode bits, not by the descriptor: a file opened O_RDWR and then fchmod'ed to 0200 or 0000 is EACCES (for existing and missing names, for \"user.\", with size 0), after fchmod 0400 it reads again; the owner of a 0044 file is EACCES (owner bits decide); a 0200 file opened O_WRONLY is EACCES. The parent directory's mode does not matter once the file is open (parent 0000: reads). Root passes through CAP_DAC_OVERRIDE (reads a 0000 file); a caller without capabilities does not. On everything else (pipe ends, UNIX sockets, an opened FIFO, /dev/null, eventfd, epoll): ENODATA for every user.* name including \"user.\", without looking at the buffer. On a /proc/self file: EOPNOTSUPP."
+  trusted_namespace: "without CAP_SYS_ADMIN: ENODATA for every trusted.* name (\"trusted.\" too), whatever the mode (0200, 0000) or file type (pipes, sockets, FIFO, /dev/null, eventfd, epoll, memfd, /proc files), and before any buffer check. With CAP_SYS_ADMIN: read like user.* through any descriptor of a regular file or directory (O_RDONLY, O_WRONLY, O_DIRECTORY, AT_FDCWD), whatever the mode; missing ENODATA, short buffer ERANGE (xattr(7), not observed)."
+  security_namespace: "no read-permission check. Regular files, directories, memfds, opened FIFOs, /dev/null: not set ENODATA (also with mode 0200 or 0000), \"security.\" EINVAL. Pipe ends, eventfd and epoll: EOPNOTSUPP, \"security.\" too. UNIX sockets: security.a EOPNOTSUPP, \"security.\" EINVAL. /proc files: EOPNOTSUPP."
+  system_namespace: "system.posix_acl_access (files, directories) and system.posix_acl_default (directories) read back a stored ACL in the xattr layout of linux/posix_acl_xattr.h: u32 version 2, then 8-byte entries {u16 tag, u16 perm, u32 id}, little endian, sorted by tag; ids of USER_OBJ, GROUP_OBJ, MASK and OTHER read 0xffffffff (tags from linux/posix_acl.h: USER_OBJ 1, USER 2, GROUP_OBJ 4, GROUP 8, MASK 0x10, OTHER 0x20). A 5-entry ACL is 44 bytes, a 3-entry default ACL 28; size 0 gives the length, a shorter buffer ERANGE. No read permission needed (readable at mode 0000). A chmod rewrites the stored ACL: USER_OBJ to the owner bits, MASK to the group bits, OTHER to the other bits (named entries unchanged). Not stored: ENODATA (also system.posix_acl_default on a regular file, an opened FIFO, /dev/null, a memfd, and the access ACL of a directory that only has a default one). Pipes, sockets, eventfd, epoll, /proc files: EOPNOTSUPP. Other system.* names: EOPNOTSUPP everywhere."
+  unknown_namespace: "names without a known prefix: on regular files and directories read permission first (EACCES when the mode denies it, also through AT_FDCWD), then EOPNOTSUPP; pipes, sockets, opened FIFOs, /dev/null, memfds, /proc files EOPNOTSUPP. (eventfd/epoll descriptors are EACCES for a non-root caller, so their unknown-prefix result depends on the user: not specified.)"
+errors:
+  name: "EFAULT (unreadable), ERANGE (empty or 256+ bytes), EOPNOTSUPP (unknown prefix, unknown system.*), EINVAL (\"user.\" / \"security.\" on a file or directory, \"trusted.\" with CAP_SYS_ADMIN, \"security.\" on a socket)"
+  descriptor: "EBADF: negative other than AT_FDCWD (-1, -99, -101), not open (closed, never opened, 999, 0x7fffffff, closed fd + 2^32), or an O_PATH descriptor (of a file, a directory opened O_PATH|O_DIRECTORY, a FIFO, a symbolic link opened O_PATH|O_NOFOLLOW), also with trusted.* or an unknown prefix"
+  missing: "ENODATA: no such attribute; trusted.* without CAP_SYS_ADMIN; user.* on a non-regular non-directory"
+  permission: "EACCES: no read permission by the current mode bits, for user.* and unknown prefixes on regular files and directories (including AT_FDCWD)"
+  size: "ERANGE (size smaller than the value)"
+  buffer: "EFAULT"
+  order: "when several problems exist, the first in this list decides: (1) the name: EFAULT, then empty or too long ERANGE (fd -1 with a 256-byte name: ERANGE; with address 8: EFAULT); (2) the descriptor EBADF (bad number or O_PATH), before unknown prefixes, \"user.\", trusted.*, system.*, size and buffer; (3) trusted.* without CAP_SYS_ADMIN, user.* on a non-regular non-directory: ENODATA; (4) read permission EACCES (user.* and unknown prefixes; not trusted.*, security.*, system.*), before EOPNOTSUPP, EINVAL for \"user.\", ENODATA, ERANGE and EFAULT; (5) unknown prefix or unknown system.* EOPNOTSUPP, empty suffix (\"user.\", \"security.\") EINVAL; (6) the attribute is missing: ENODATA; (7) size smaller than the value: ERANGE (even with a NULL or unmapped buffer); (8) the buffer EFAULT. Examples on a 0200 file without capabilities: \"foo.a\", \"user.\", a missing user.b, a short or NULL buffer all EACCES, \"\" ERANGE, \"trusted.a\" with a bad buffer and \"trusted.\" ENODATA, \"system.x\" EOPNOTSUPP, \"security.\" EINVAL. On a readable file: \"foo.a\" or \"user.\" with a NULL buffer EOPNOTSUPP / EINVAL, a missing name with a bad buffer ENODATA, a 4-byte value with a bad buffer and size 3 ERANGE, with size 4 EFAULT."
+side_effects: "none: mode, size, contents, atime, mtime and ctime are unchanged by successful and failed calls (ERANGE, ENODATA, EOPNOTSUPP, EFAULT included); the buffer beyond the value's length is never written, and nothing is written on ERANGE, ENODATA, EACCES or size 0."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all links, descriptors and processes (a forked child reading through an inherited descriptor sees the same values)"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 11  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
