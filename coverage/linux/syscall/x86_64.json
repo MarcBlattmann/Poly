@@ -285,7 +285,7 @@
 {"symbol":"sendmmsg","number":307,"src":["linux-syscall-tbl"]},
 {"symbol":"sendmsg","number":46,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"sendto","number":44,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"set_mempolicy","number":238,"src":["linux-syscall-tbl"]},
+{"symbol":"set_mempolicy","number":238,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"set_mempolicy_home_node","number":450,"src":["linux-syscall-tbl"]},
 {"symbol":"set_robust_list","number":273,"src":["linux-syscall-tbl"]},
 {"symbol":"set_tid_address","number":218,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
