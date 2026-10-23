@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/llistxattr
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks), /dev/shm on tmpfs; every test gave identical results on both (only the list order differs, which no test relies on). Static freestanding test programs, raw syscalls. Root-only behaviour (trusted.* names on symbolic links) from xattr(7), listxattr(2) and reading the kernel for behaviour."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  llistxattr(path, list, size) (195) returns the names of the extended
+  attributes of the file at `path` as NUL-terminated names written back to
+  back into the buffer `list` of `size` bytes, and returns the list's
+  length in bytes (sum of the name lengths plus one NUL per name; 0 when
+  there are no names). It is listxattr (194) except that a final symbolic
+  link is not followed: the link itself is listed. A normal user can never
+  give a symbolic link attributes (lsetxattr of user.* on a link is EPERM),
+  so for such a caller every link lists as empty (0). On regular files,
+  directories and other non-link files it gives exactly what listxattr
+  gives. With size 0 nothing is copied and the needed length is returned.
+  The list belongs to the inode; listing needs no permission on the file
+  itself, only search permission on the directories on the way.
+returns:
+  success: "the list's length in bytes; 0 for no names. The list is the names, each followed by one NUL byte, nothing between them and nothing after the last NUL. Each name appears exactly once, byte for byte as set (zero-length values are listed; replacing a value does not duplicate the name; removed names are gone). Only the list's bytes are written, the rest of the buffer is untouched."
+  order: "unspecified and filesystem dependent; callers and tests must not rely on it (ext4 and tmpfs gave different orders for the same names; tmpfs lists in descending byte order)."
+  size: "size_t, compared in full. 0: return the needed length, copy nothing, the buffer pointer is not used (NULL or unmapped is fine). Nonzero and smaller than the list (even by one byte): ERANGE, nothing written. Equal or larger: the list is copied to the start of the buffer and its length returned. Sizes above 65536 (65537, 2^32, 2^32 + 1, SIZE_MAX) are accepted and act as a 65536-byte buffer. A list longer than 65536 bytes (possible on tmpfs, not on ext4 which runs out of room for names at about 4 KiB) gives its full length for size 0, E2BIG for a size of 65536 or more and ERANGE for a smaller nonzero size."
+  buffer: "only the list's bytes must be writable: a buffer that ends exactly at an unmapped page works with a larger size. A NULL or unmapped buffer, or one that runs into an unmapped page before the list ends: EFAULT. With an empty list the buffer is never used (0 for a NULL or unmapped buffer with any size)."
+  final_symlink: "not followed: the link's own list is returned. Live links (relative or absolute target, to a file or a directory, to another link), dangling links, self-looping links, a hard link to a symbolic link, a renamed link: all 0 for a caller without CAP_SYS_ADMIN, whatever the size and buffer (size 0, size 1, NULL, unmapped, SIZE_MAX with NULL all give 0, never ERANGE or EFAULT). The target's names never appear. listxattr on the same path lists the target (ENOENT for a dangling link, ELOOP for a looping one)."
+  symlink_attributes_root: "with CAP_SYS_ADMIN a link (also a dangling one) can be given trusted.* attributes with lsetxattr; llistxattr lists them (size 0 gives their length, a short size ERANGE), separate from the target's names. Without CAP_SYS_ADMIN trusted.* names are left out of the list and its length, so such a link lists as 0. user.* on a link is EPERM to set even for root."
+  trailing_slash: "a final link followed by \"/\" or \"/.\" IS followed: a link to a directory (also through a chain of links) lists the directory's names; to a file ENOTDIR; dangling ENOENT; looping ELOOP."
+  intermediate_links: "links before the last component are always followed (\"link_to_dir/f\" lists f; \"link_to_file/x\" ENOTDIR; \"dangling/x\" ENOENT; \"loop/x\" ELOOP). At most 40 links may be followed during one lookup: a chain of 40 links used as \"c40/\" or \"c40/f\" resolves, 41 links is ELOOP. The last link of any chain without a trailing slash is not followed, so it lists as 0 even when following it would be ELOOP."
+  which_names: "regular files and directories: user.* names; system.posix_acl_access when an access ACL is stored, system.posix_acl_default when a directory has a default ACL (a new subdirectory of such a directory inherits both; an ACL with only owner, group and other entries is not stored and not listed); security.* names for everyone; trusted.* names only with CAP_SYS_ADMIN. Fresh files and directories, FIFOs, /dev/null and a bound unix socket's path have no visible names on the oracle (no SELinux): 0."
+  proc_links: "/proc/self/fd/N, /proc/self/exe and /proc/self/cwd are symbolic links, so llistxattr lists the link itself: 0, also for the fd of a file with user.* names and for a socket's fd (where listxattr follows the link and gives the file's names or \"system.sockprotoname\"). \"/proc/self/fd/N/\" for a directory descriptor follows the link and lists the directory's names."
+  permission: "no permission on the file itself: a 0000 file and a 0000 directory are listed by their owner. Search permission is needed on every directory on the path: a file, a link or a missing name in a 0644 or 0000 directory is EACCES; in a 0300 directory (search, no read) it works. A link that points into an unsearchable directory still lists itself (0); its trailing-slash form needs the search and is EACCES."
+  path: "absolute or relative to the working directory; \".\", \"..\" work; \".\" as the path lists the working directory."
+errors:
+  path: "NULL or unmapped path pointer EFAULT; empty path, missing file or component, a dangling link followed by \"/\" or a later component ENOENT; a regular file (or a link to one) followed by \"/\", \"/.\" or a further component ENOTDIR; a component of 256 bytes or more, or a path of 4096 bytes before its NUL, ENAMETOOLONG (4095 bytes resolve); more than 40 links followed, or a looping link that must be followed, ELOOP; missing search permission on a directory on the way EACCES"
+  size: "ERANGE (nonzero size smaller than the list); E2BIG (list longer than 65536 bytes and size 65536 or more)"
+  buffer: "EFAULT"
+  order: "first the whole path lookup (all path errors, even with size 0, size 1 or an unmapped buffer), then the size (ERANGE, even with a NULL or unmapped buffer), then the buffer (EFAULT). An empty list returns 0 before either is looked at."
+side_effects: "none: lstat of the link, stat of the file and of its directory (mode, size, link count, atime, mtime, ctime) are unchanged by successful, size-0, ERANGE, EFAULT and failed calls; nothing beyond the list's length is written, nothing at all on ERANGE."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all hard links and processes"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10
+  held_out: 4
