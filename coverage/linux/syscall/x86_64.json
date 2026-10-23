@@ -62,7 +62,7 @@
 {"symbol":"fcntl","number":72,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"fdatasync","number":75,"src":["linux-syscall-tbl"]},
 {"symbol":"fgetxattr","number":193,"src":["linux-syscall-tbl"]},
-{"symbol":"file_getattr","number":468,"src":["linux-syscall-tbl"]},
+{"symbol":"file_getattr","number":468,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"file_setattr","number":469,"src":["linux-syscall-tbl"]},
 {"symbol":"finit_module","number":313,"src":["linux-syscall-tbl"]},
 {"symbol":"flistxattr","number":196,"src":["linux-syscall-tbl"]},
