@@ -26,7 +26,7 @@
 {"symbol":"clone","number":56,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"clone3","number":435,"src":["linux-syscall-tbl"]},
 {"symbol":"close","number":3,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"close_range","number":436,"src":["linux-syscall-tbl"]},
+{"symbol":"close_range","number":436,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"connect","number":42,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"copy_file_range","number":326,"src":["linux-syscall-tbl"]},
 {"symbol":"creat","number":85,"src":["linux-syscall-tbl"]},
