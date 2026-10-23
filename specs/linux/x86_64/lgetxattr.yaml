@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lgetxattr
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks) and every test rerun on tmpfs (/dev/shm) with identical results; static freestanding test programs, raw syscalls. Root-only behaviour (trusted.* on a symbolic link, DAC override) from xattr(7), getxattr(2) and setxattr(2), not observed."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  lgetxattr(path, name, value, size) (192) reads the extended attribute
+  `name` of the file at `path` into the buffer `value` of `size` bytes and
+  returns the value's length, like getxattr (191), except that a final
+  symbolic link is not followed: the call reads the link itself. Links in
+  earlier components are followed, and so is a link followed by a
+  trailing slash or "/." (the directory it names is read). On regular
+  files and directories lgetxattr and getxattr behave the same. A link
+  carries no user.* attributes and no ACLs, so a caller without
+  CAP_SYS_ADMIN sees nothing on a link (ENODATA for user.*, trusted.*,
+  security.* names; EOPNOTSUPP for the ACL names); only trusted.*
+  attributes put on a link with privilege (lsetxattr, 189) can be read
+  from it. The value comes back byte for byte as it was set (NUL bytes
+  included, no NUL added); only the value's bytes are written, the rest of
+  the buffer is untouched. With size 0 nothing is copied and the length is
+  returned. A name the file does not have is ENODATA. Attributes belong to
+  the inode: hard links and renames keep them.
+returns:
+  success: "the value's length (0 to 65536); 0 for an empty value"
+  size: "size_t, compared in full. 0: return the length, copy nothing, the buffer pointer is not used (NULL or unmapped is fine). Smaller than the value: ERANGE, nothing copied. Equal or larger: the value is copied to the start of the buffer and its length returned. Sizes above 65536 (65537, 2^32, 2^32 + 2, SIZE_MAX) are accepted and act as a large buffer (no E2BIG). A zero-length value returns 0 for any size and any pointer."
+  buffer: "only the value's bytes must be writable: a buffer ending exactly at an unmapped page works even with a larger size argument. A buffer that is NULL, unmapped, or runs into an unmapped page before the value ends: EFAULT. The buffer is only used when the attribute exists and fits."
+  names: "1 to 255 bytes including the prefix, any bytes after it (\"user..\", \"user. \"). Empty name or 256 bytes or more: ERANGE; unreadable name: EFAULT (on files and links alike). Names are case-sensitive and compared in full (\"user.a\", \"user.A\", \"user.a0\" are three attributes; \"user.n\" does not match \"user.n0\"). Known prefixes (lower case, at the very start): user., trusted., security., system. Unknown or missing prefix (\"plain\", \"user\", \"USER.a\", \".user.a\", \"foo.bar\") and unknown system.* names (\"system.x\", \"system.\"): EOPNOTSUPP. \"user.\" alone: EINVAL on files and directories (ENODATA on a link). \"security.\" alone: EINVAL on every file type, links included. \"trusted.\": ENODATA without CAP_SYS_ADMIN."
+  symbolic_link: "a final symbolic link (live with a relative or absolute target, to a file or a directory, dangling, looping, the target of `self -> .`, or a second hard link to the same symlink) is the object read, and its target (whatever its mode, even 0000) does not matter. Without CAP_SYS_ADMIN: user.* (also \"user.\"), trusted.* (also \"trusted.\"), security.* (security.a, security.capability, ...) ENODATA; \"security.\" EINVAL; system.posix_acl_access and system.posix_acl_default EOPNOTSUPP (on files they would be ENODATA when unset); other system.* names and unknown prefixes EOPNOTSUPP (a link's permission bits always allow reading, so no EACCES); empty or 256+ byte name ERANGE. The size and buffer are not looked at for these results: size 0, size 1, a NULL or unmapped buffer give the same errors. getxattr on the same path reads the target instead (or fails with ENOENT for a dangling and ELOOP for a looping link). With CAP_SYS_ADMIN, trusted.* attributes set on the link with lsetxattr (live or dangling link) read back from the link only: size 0 gives the length, a short buffer ERANGE; the target's trusted.* attributes are separate and getxattr through the link reads the target's (xattr(7), not observed)."
+  path_walk: "links before the final component are followed (\"ls/g\" with ls -> sub reads sub/g; chains \"ls2 -> ls -> sub\", absolute targets, \"self/f\" and \"self/self/ls/g\" with self -> \".\"). A final link reached through followed links is still not followed (\"ls/lf\" with sub/lf -> ../f: the link, ENODATA). A trailing slash or \"/.\" after a link to a directory follows it and reads the directory; \"ls/..\" is the directory's parent. After a link to a file a trailing slash, \"/.\", \"/..\" or a further component is ENOTDIR; after a dangling link ENOENT; after a looping link ELOOP. Paths are absolute or relative to the working directory; \".\", \"./f\", \"sub/..\", doubled slashes and a trailing slash on a directory work."
+  user_namespace: "on regular files and directories: needs read permission on the file by its mode (owner bits for the owner: a 0044 file is EACCES for its owner; 0200 and 0000 EACCES; 0444 and 0400 work); a directory without read permission is EACCES itself (also with a trailing slash) while its entries are still reachable through search permission. EACCES comes before ENODATA and before EINVAL for \"user.\", also with size 0. Root (CAP_DAC_OVERRIDE / CAP_DAC_READ_SEARCH) reads 0000 files (getxattr(2)). On anything else (symbolic link, FIFO, UNIX socket file, character device such as /dev/null): always ENODATA, also for \"user.\" and with no read permission."
+  trusted_namespace: "without CAP_SYS_ADMIN: ENODATA for every trusted.* name, whatever the mode or file type, even when the attribute exists. With it: read like user.* (also on symbolic links, see symbolic_link)."
+  security_namespace: "no read-permission check (a 0200 file gives the same as a readable one). Not set: ENODATA, on files, directories, links, FIFOs, sockets and devices. \"security.\": EINVAL everywhere."
+  system_namespace: "system.posix_acl_access (files and directories) and system.posix_acl_default (directories) read back a stored POSIX ACL in the xattr format it was set in: 4-byte header with version 2, then 8-byte entries {u16 tag, u16 permissions, u32 id}, little endian (linux/posix_acl_xattr.h); size 0 gives its length, a short buffer ERANGE. No read permission needed. No ACL stored: ENODATA (on files, directories, FIFOs, sockets, devices). An ACL with only owner, group and other entries is not stored (it only sets the mode): ENODATA afterwards. A chmod rewrites the stored ACL's owner and mask entries to the new mode bits. A directory's default and access ACLs are separate. On a symbolic link both names are EOPNOTSUPP even when the target has ACLs; \"dirlink/\" reads the directory's. Other system.* names EOPNOTSUPP."
+  unknown_namespace: "on files and directories read permission is checked first (EACCES on an unreadable file, directory or 0000 FIFO), then EOPNOTSUPP. On a symbolic link always EOPNOTSUPP."
+  path: "absolute or relative to the working directory, see path_walk."
+errors:
+  name: "EFAULT (unreadable), ERANGE (empty or 256+ bytes), EOPNOTSUPP (unknown prefix, unknown system.*), EINVAL (\"user.\" on a file or directory, \"security.\" on anything)"
+  missing: "ENODATA: no such attribute; trusted.* without CAP_SYS_ADMIN; user.* and security.* on a symbolic link or other non-regular non-directory"
+  not_supported: "EOPNOTSUPP: unknown prefix, unknown system.* name, either ACL name on a symbolic link"
+  size: "ERANGE (buffer smaller than the value)"
+  buffer: "EFAULT"
+  path: "unreadable pointer EFAULT; empty path, missing file or component, \"x/..\" under a missing x, dangling link followed by a slash or a further component ENOENT; a file used as a directory or a trailing slash, \"/.\" or \"/..\" after a file or a link to one ENOTDIR; a component of 256+ bytes (255 is looked up) or a path of 4096 bytes before its NUL ENAMETOOLONG (4095 bytes resolve); a looping link in a followed position ELOOP; search permission missing on a directory on the way EACCES (also when the final component is a link, missing, or the name is trusted.* or unknown). A dangling or looping FINAL link is not an error."
+  permission: "EACCES (no read permission, for user.* and unknown prefixes on files and directories)"
+  order: "when several problems exist, the first in this list decides: (1) the name: EFAULT, then empty or too long ERANGE; (2) the path walk (EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES); (3) trusted.* without CAP_SYS_ADMIN, user.* on a symbolic link or other non-regular non-directory: ENODATA; ACL names on a symbolic link: EOPNOTSUPP; (4) read permission EACCES (user.* and unknown prefixes on files and directories); (5) unknown prefix or unknown system.* EOPNOTSUPP, empty suffix (\"user.\", \"security.\") EINVAL; (6) the attribute is missing: ENODATA; (7) size smaller than the value: ERANGE (even with a NULL or unmapped buffer); (8) the buffer EFAULT. Examples: a missing path with \"foo.bar\", \"user.\" or \"security.\" is ENOENT; an unreadable path with \"foo.bar\" EFAULT, with \"\" ERANGE; \"dangling/\" with \"foo.bar\" ENOENT; on a link: \"user.\" ENODATA, \"security.\" with an unmapped buffer EINVAL, \"foo.bar\" EOPNOTSUPP, user.a with size 1 or an unmapped buffer ENODATA; on a file: \"user.\" with an unmapped buffer EINVAL, a missing name with size 1 or an unmapped buffer ENODATA, a 5-byte value with size 4 and a NULL buffer ERANGE."
+side_effects: "none: the file's mode, size, contents, atime, mtime and ctime are unchanged by successful and failed calls; a symbolic link read with lgetxattr keeps its own atime, mtime and ctime and stays a link. The buffer beyond the value's length is never written, and nothing is written on ERANGE or ENODATA."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all links and processes"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 9
+  held_out: 4
