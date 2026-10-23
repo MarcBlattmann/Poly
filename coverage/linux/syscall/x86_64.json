@@ -134,7 +134,7 @@
 {"symbol":"ioprio_get","number":252,"src":["linux-syscall-tbl"]},
 {"symbol":"ioprio_set","number":251,"src":["linux-syscall-tbl"]},
 {"symbol":"kcmp","number":312,"src":["linux-syscall-tbl"]},
-{"symbol":"kexec_file_load","number":320,"src":["linux-syscall-tbl"]},
+{"symbol":"kexec_file_load","number":320,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"kexec_load","number":246,"src":["linux-syscall-tbl"]},
 {"symbol":"keyctl","number":250,"src":["linux-syscall-tbl"]},
 {"symbol":"kill","number":62,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
