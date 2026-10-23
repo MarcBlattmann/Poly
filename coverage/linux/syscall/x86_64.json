@@ -216,7 +216,7 @@
 {"symbol":"pivot_root","number":155,"src":["linux-syscall-tbl"]},
 {"symbol":"pkey_alloc","number":330,"src":["linux-syscall-tbl"]},
 {"symbol":"pkey_free","number":331,"src":["linux-syscall-tbl"]},
-{"symbol":"pkey_mprotect","number":329,"src":["linux-syscall-tbl"]},
+{"symbol":"pkey_mprotect","number":329,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"poll","number":7,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"ppoll","number":271,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"prctl","number":157,"src":["linux-syscall-tbl"]},
