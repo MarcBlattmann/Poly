@@ -125,7 +125,7 @@
 {"symbol":"io_pgetevents","number":333,"src":["linux-syscall-tbl"]},
 {"symbol":"io_setup","number":206,"src":["linux-syscall-tbl"]},
 {"symbol":"io_submit","number":209,"src":["linux-syscall-tbl"]},
-{"symbol":"io_uring_enter","number":426,"src":["linux-syscall-tbl"]},
+{"symbol":"io_uring_enter","number":426,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"io_uring_register","number":427,"src":["linux-syscall-tbl"]},
 {"symbol":"io_uring_setup","number":425,"src":["linux-syscall-tbl"]},
 {"symbol":"ioctl","number":16,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
