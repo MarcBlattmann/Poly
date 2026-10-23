@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lremovexattr         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks), every test also rerun on tmpfs (/dev/shm) with identical results; static freestanding test programs, raw syscalls, also under the pipeline tracer. Root-only behaviour (trusted.* on a symbolic link with CAP_SYS_ADMIN) from xattr(7), removexattr(2) and the sibling lsetxattr/lgetxattr sheets, not observed; the root test's scaffolding was run on Poly as root."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  lremovexattr(path, name) (198) removes the extended attribute `name`
+  from the file at `path` like removexattr (197), except that a symbolic
+  link as the LAST component is not followed: the link itself is the
+  object. Links earlier in the path are followed, and a trailing "/" or
+  "/." after a link makes the lookup follow it. On anything that is not a
+  final symbolic link the results are those of removexattr: 0 when the
+  attribute was there and is now gone, ENODATA for a name the file does
+  not have (so a second removal is ENODATA); only the named attribute
+  goes, names are exact and case-sensitive; afterwards getxattr gives
+  ENODATA, listxattr no longer lists it and the name can be set again.
+  A symbolic link can hold no user.* attribute and no POSIX ACL, so on a
+  link user.* is EPERM, the ACL names EOPNOTSUPP, and only a caller with
+  CAP_SYS_ADMIN can have (and remove) trusted.* attributes there. The
+  target of the link is never touched.
+returns:
+  success: "0"
+  missing: "ENODATA (61) for a name the object does not have (user.* on a file or directory, trusted.* for a caller with CAP_SYS_ADMIN, also on a link). Not for POSIX ACLs on files: see acl."
+  names: "the name is read up to its NUL, at most 256 bytes. Empty name: ERANGE. 1 to 255 bytes (prefix included) is a valid length; 256 bytes or more without a NUL: ERANGE, also when the bytes after the first 256 are unmapped. NULL or unreadable name, or a name that runs into an unmapped page before a NUL within its first 255 bytes: EFAULT; a name whose NUL is the last byte before an unmapped page works. Known prefixes: user., trusted., security., system. (lower case, at the very start). Unknown or missing prefix (\"plain\", \"user\", \"USER.x\", \".user.x\", \"foo.bar\"): EOPNOTSUPP on a writable object. \"user.\" (prefix and nothing else): EINVAL on a file or directory; \"trusted.\" for a caller with CAP_SYS_ADMIN: EINVAL (also on a link). Unknown system.* names (\"system.x\", \"system.\"): EOPNOTSUPP. Any bytes after the prefix form an ordinary name (\"user..\", \"user. /\\x01\\xff\")."
+  symbolic_link: "a final symbolic link (live, relative, pointing at a directory or a FIFO, dangling, pointing at itself, the last of a chain of 41, or /proc/self/fd/N, /proc/self/exe, /proc/self/cwd) is the object: user.* (any name, also \"user.\", also a 255-byte one) EPERM, also for root; trusted.* and security.* (also \"trusted.\", \"security.\", \"security.selinux\", \"security.capability\") EPERM without CAP_SYS_ADMIN; system.posix_acl_access and system.posix_acl_default EOPNOTSUPP (where a FIFO or a file without an ACL returns 0); unknown system.* names and unknown prefixes EOPNOTSUPP; empty or 256+ byte name ERANGE. The mode of the target does not matter (a link to a 0444 file: EPERM for user.*, EOPNOTSUPP for an unknown prefix). The target's attributes and ACL stay. With CAP_SYS_ADMIN, a trusted.* attribute put on the link with lsetxattr is removed from the link only (0, then ENODATA; the target's attribute of the same name stays), on a dangling link too (xattr(7), not observed)."
+  proc_links: "/proc/self/fd/N, /proc/self/exe and /proc/self/cwd are final symbolic links as above. For an unknown prefix the link's own permission counts: the link of a read-only descriptor gives EACCES (also with all capabilities dropped as root), the link of a read-write descriptor, /proc/self/exe and /proc/self/cwd EOPNOTSUPP. \"/proc/self/cwd/.\" reaches the working directory. The open file keeps its attributes, also when it has been unlinked."
+  user_namespace: "on files and directories as removexattr: user.* attributes exist only on regular files and directories; on a FIFO, a UNIX socket file or /dev/null any user.* name (also \"user.\") is EPERM, for root too. Removal needs write permission by the mode bits: a 0444 file or 0555 directory gives EACCES whether the name exists or not, and the attribute stays; a 0200 file works; root passes through CAP_DAC_OVERRIDE, a caller with all capabilities dropped does not. Ownership is not needed. On a sticky directory only its owner (or CAP_FOWNER) may remove: the owner may, others EPERM."
+  trusted_namespace: "trusted.* (and \"trusted.\") without CAP_SYS_ADMIN: EPERM on any object, read-only or not, existing or not. With it: 0 when present, ENODATA when missing, on files, directories and links."
+  security_namespace: "security.* (also \"security.\") without CAP_SYS_ADMIN: EPERM, before the write-permission check. Not observed with privilege."
+  unknown_namespace: "names without a known prefix need write permission on the object first: a 0444 file, a 0555 directory or the /proc/self/fd link of a read-only descriptor give EACCES; a writable file, FIFO, socket, any ordinary symbolic link: EOPNOTSUPP."
+  acl: "on files and directories as removexattr: system.posix_acl_access / system.posix_acl_default need ownership, not write permission (the owner removes the ACL of its own 0444 file). Removing an existing ACL returns 0 and leaves the mode bits unchanged (the group bits keep the old mask value); removing an ACL that is not there also returns 0, not ENODATA (a second removal, a default ACL on a regular file, either ACL on a directory without one, on a FIFO). After a directory's default ACL is removed, new entries get no ACL. On a final symbolic link both names are EOPNOTSUPP and the target keeps its ACL."
+  path: "absolute or relative to the working directory; \".\", \"..\", repeated slashes work. Links before the last component are followed; a trailing slash or \"/.\" after a final link follows it (a link to a directory then reaches the directory). A chain of 40 links followed with a trailing slash resolves, 41 is ELOOP; without the slash the 41st link itself is the object."
+errors:
+  name: "EFAULT (NULL, unreadable), ERANGE (empty, 256+ bytes), EOPNOTSUPP (unknown prefix, unknown system.*), EINVAL (\"user.\" on a file or directory; \"trusted.\" with CAP_SYS_ADMIN)"
+  path: "NULL or unreadable path EFAULT; empty path ENOENT; missing file or missing directory on the way ENOENT; a non-directory used as a directory, a trailing slash after a file or after a link to a file ENOTDIR; a trailing slash after a dangling link ENOENT, after a self-loop ELOOP; a component of 256 bytes or a path of 4096 bytes before its NUL ENAMETOOLONG (255 and 4095 are looked up); more than 40 links followed ELOOP; missing search permission on a directory on the way EACCES. A dangling or looping final link is not an error by itself (it is the object)."
+  missing: "ENODATA"
+  permission: "EACCES (no write permission for user.* and unknown prefixes, incl. the /proc/self/fd link of a read-only descriptor for unknown prefixes); EPERM (user.* on a symbolic link or other non-regular non-directory, user.* on another user's sticky directory, trusted.*/security.* without CAP_SYS_ADMIN, ACLs of a file the caller does not own, immutable or append-only files per xattr(7))"
+  order: "when several problems exist, the first in this list decides: (1) the name: EFAULT, then empty or too long ERANGE (even with an unreadable, empty, missing or unsearchable path, and on a link); (2) the path walk (EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES for search permission); (3) unknown system.* names EOPNOTSUPP, ACL names on a link EOPNOTSUPP; (4) trusted.* and security.* without CAP_SYS_ADMIN EPERM, user.* on a link or other non-regular non-directory EPERM, user.* on another user's sticky directory EPERM, ACLs on a file the caller does not own EPERM; (5) write permission EACCES (user.* and unknown prefixes); (6) unknown prefix EOPNOTSUPP, \"user.\" EINVAL; (7) ENODATA. Examples: a missing path with \"foo.bar\", \"user.\", \"trusted.a\", \"system.x\" or an ACL name is ENOENT; an unsearchable directory before a link is EACCES for any valid name; on a link \"\" is ERANGE but \"user.\" EPERM; on a 0444 file \"system.x\" is EOPNOTSUPP, \"trusted.a\" and \"security.a\" EPERM, \"foo.bar\", \"user.\" and a missing user.* name EACCES; on a read-only descriptor's /proc link \"system.x\" EOPNOTSUPP, \"trusted.a\" EPERM, \"foo.bar\" EACCES."
+side_effects: "a successful removal moves the change time (ctime) of the object forward; mode, size, link count, inode, mtime and contents do not change. A failed call changes nothing: ENODATA, EOPNOTSUPP, EACCES on a file leave its ctime alone; EPERM / EOPNOTSUPP on a symbolic link leave both the link's and the target's ctime alone. Removing an ACL that is not there may or may not move ctime depending on the filesystem (see removexattr), so it is not specified."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all hard links, descriptors and processes"
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
