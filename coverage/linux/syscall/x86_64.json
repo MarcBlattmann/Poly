@@ -225,7 +225,7 @@
 {"symbol":"preadv2","number":327,"src":["linux-syscall-tbl"]},
 {"symbol":"prlimit64","number":302,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"process_madvise","number":440,"src":["linux-syscall-tbl"]},
-{"symbol":"process_mrelease","number":448,"src":["linux-syscall-tbl"]},
+{"symbol":"process_mrelease","number":448,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"process_vm_readv","number":310,"src":["linux-syscall-tbl"]},
 {"symbol":"process_vm_writev","number":311,"src":["linux-syscall-tbl"]},
 {"symbol":"pselect6","number":270,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
