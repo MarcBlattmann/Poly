@@ -354,7 +354,7 @@
 {"symbol":"uname","number":63,"status":"green","tests_visible":1,"src":["linux-syscall-tbl"]},
 {"symbol":"unlink","number":87,"src":["linux-syscall-tbl"]},
 {"symbol":"unlinkat","number":263,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"unshare","number":272,"src":["linux-syscall-tbl"]},
+{"symbol":"unshare","number":272,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"uprobe","number":336,"src":["linux-syscall-tbl"]},
 {"symbol":"uretprobe","number":335,"src":["linux-syscall-tbl"]},
 {"symbol":"userfaultfd","number":323,"src":["linux-syscall-tbl"]},
