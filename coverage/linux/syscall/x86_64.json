@@ -73,7 +73,7 @@
 {"symbol":"fsetxattr","number":190,"src":["linux-syscall-tbl"]},
 {"symbol":"fsmount","number":432,"src":["linux-syscall-tbl"]},
 {"symbol":"fsopen","number":430,"src":["linux-syscall-tbl"]},
-{"symbol":"fspick","number":433,"src":["linux-syscall-tbl"]},
+{"symbol":"fspick","number":433,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"fstat","number":5,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"fstatfs","number":138,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"fsync","number":74,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
