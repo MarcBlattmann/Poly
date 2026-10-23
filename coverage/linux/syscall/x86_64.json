@@ -244,7 +244,7 @@
 {"symbol":"recvfrom","number":45,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"recvmmsg","number":299,"src":["linux-syscall-tbl"]},
 {"symbol":"recvmsg","number":47,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"remap_file_pages","number":216,"src":["linux-syscall-tbl"]},
+{"symbol":"remap_file_pages","number":216,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"removexattr","number":197,"src":["linux-syscall-tbl"]},
 {"symbol":"removexattrat","number":466,"src":["linux-syscall-tbl"]},
 {"symbol":"rename","number":82,"src":["linux-syscall-tbl"]},
