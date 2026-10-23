@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getxattr
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks), /dev/shm on tmpfs (all results identical on both); static freestanding test programs, raw syscalls. Root-only behaviour (trusted.* and security.* read back with privilege, permission override) from xattr(7), getxattr(2) and reading the kernel for behaviour."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  getxattr(path, name, value, size) (191) reads the extended attribute
+  `name` of the file at `path`, following symbolic links, into the buffer
+  `value` of `size` bytes and returns the value's length in bytes.
+  lgetxattr (192) is the same but does not follow a final symbolic link;
+  fgetxattr(fd, name, value, size) (193) works on an open descriptor. The
+  value comes back byte for byte as it was set by the setxattr family
+  (188-190), NUL bytes included and with no NUL added; only the value's
+  bytes are written, the rest of the buffer is untouched. With size 0
+  nothing is copied and the call just returns the length, so callers can
+  size their buffer first. Attributes belong to the inode: every hard link,
+  a renamed file and an unlinked but still open file read the same ones;
+  each name is a separate attribute and names are compared exactly (case
+  and length). A name the file does not have is ENODATA.
+returns:
+  success: "the value's length (0 to 65536); 0 for an empty value"
+  size: "size_t, compared in full. 0: return the length, copy nothing, the buffer pointer is not used (NULL or unmapped is fine). Smaller than the value: ERANGE, nothing copied. Equal or larger: the value is copied to the start of the buffer and its length returned. Sizes above 65536 (65537, 2^32, 2^32 + 2, SIZE_MAX) are accepted and act as a large buffer (no E2BIG). A zero-length value returns 0 for any size and any pointer."
+  buffer: "only the value's bytes must be writable: a buffer ending exactly at an unmapped page works even with a larger size argument. A buffer that is NULL, unmapped, or runs into an unmapped page before the value ends: EFAULT (the bytes before the fault may already be written). The buffer is only used when the attribute exists and fits."
+  names: "1 to 255 bytes including the prefix, any bytes after it (\"user..\", \"user. \", 0xff, 0x01, spaces, '/'). Empty name or 256 bytes or more: ERANGE; unreadable name: EFAULT. Known prefixes (lower case, at the very start): user., trusted., security., system. Unknown or missing prefix (\"plain\", \"user\", \"USER.a\", \".user.a\", \"foo.bar\"): EOPNOTSUPP. Unknown system.* names (\"system.x\", \"system.\"): EOPNOTSUPP. \"user.\" and \"security.\" with nothing after the prefix: EINVAL. \"trusted.\": EINVAL with CAP_SYS_ADMIN, ENODATA without (like every trusted.* name)."
+  user_namespace: "on regular files and directories: needs read permission on the file by its mode (owner bits for the owner: a 0044 file is EACCES for its owner), not by how a descriptor was opened (an O_WRONLY descriptor of a 0644 file reads; of a 0200 file EACCES). EACCES comes before ENODATA and before EINVAL for \"user.\". Root (CAP_DAC_OVERRIDE / CAP_DAC_READ_SEARCH) reads 0000 files and other users' 0600 files. On anything else (FIFO, socket, pipe, character device, a symbolic link through lgetxattr): always ENODATA, also for \"user.\" and with no read permission."
+  trusted_namespace: "with CAP_SYS_ADMIN: read like user.* (root on its own files). Without it: ENODATA for every trusted.* name, even when the attribute exists, whatever the mode or file type."
+  security_namespace: "no read-permission check: an unreadable (0000) file gives the same as a readable one. Readable by anyone (a value set by root is read back after all capabilities are dropped). Not set: ENODATA, also on FIFOs; pipes and sockets EOPNOTSUPP. \"security.\": EINVAL."
+  system_namespace: "system.posix_acl_access (files and directories) and system.posix_acl_default (directories) read back a stored POSIX ACL in the xattr format it is set in: 4-byte header with version 2, then 8-byte entries {u16 tag, u16 permissions, u32 id}, little endian (linux/posix_acl_xattr.h); size 0 gives its length, a short buffer ERANGE. No read permission needed. No ACL stored: ENODATA (also system.posix_acl_default on a file). An ACL with only owner, group and other entries is not stored (it only sets the mode): ENODATA afterwards. A chmod rewrites the stored ACL's owner and mask entries to the new mode bits. A directory's default and access ACLs are separate. Other system.* names EOPNOTSUPP."
+  unknown_namespace: "needs read permission first (EACCES on an unreadable file or 0000 FIFO), then EOPNOTSUPP."
+  lgetxattr: "a final symbolic link is not followed: user.* on a link (live, dangling or looping) is ENODATA, an unknown prefix EOPNOTSUPP. Links in earlier components are followed, and so is a link with a trailing slash (to a directory: reads the directory; to a file: ENOTDIR). On files and directories it is getxattr."
+  fgetxattr: "any open descriptor of a file or directory, whatever its access mode (O_RDONLY, O_WRONLY, O_RDWR, O_DIRECTORY); permission from the file's mode. An unlinked open file keeps its attributes. O_PATH, closed, never opened and negative descriptors: EBADF. AT_FDCWD (-100) is accepted and reads the working directory's attributes. Pipes and sockets: user.* ENODATA, unknown prefixes and security.* EOPNOTSUPP."
+  path: "absolute or relative to the working directory; \".\", \"..\", a trailing slash on a directory work; symbolic links are followed (getxattr reads the target)."
+errors:
+  name: "EFAULT (unreadable), ERANGE (empty or 256+ bytes), EOPNOTSUPP (unknown prefix, unknown system.*), EINVAL (\"user.\", \"security.\", \"trusted.\" with privilege)"
+  missing: "ENODATA: no such attribute, trusted.* without CAP_SYS_ADMIN, user.* on a non-regular non-directory"
+  size: "ERANGE (buffer smaller than the value)"
+  buffer: "EFAULT"
+  path: "unreadable pointer EFAULT; empty path, missing file or component, dangling final link (getxattr) ENOENT; a file used as a directory or a trailing slash after a file ENOTDIR; a component over 255 bytes or a path of 4096 bytes before its NUL ENAMETOOLONG (4095 resolves); symbolic link loop ELOOP (getxattr); search permission missing on a directory on the way EACCES"
+  fd: "EBADF"
+  permission: "EACCES (no read permission, for user.* on files and directories and for unknown prefixes)"
+  order: "when several problems exist, the first in this list decides: (1) the name: EFAULT, empty ERANGE, too long ERANGE; (2) for getxattr/lgetxattr the path walk (EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES), for fgetxattr the descriptor EBADF; (3) trusted.* without CAP_SYS_ADMIN and user.* on a non-regular non-directory: ENODATA; (4) read permission EACCES (user.* and unknown prefixes; not trusted.*, security.*, system.*); (5) unknown prefix or unknown system.* EOPNOTSUPP, empty suffix EINVAL; (6) the attribute is missing: ENODATA; (7) size smaller than the value: ERANGE (even with a NULL or unmapped buffer); (8) the buffer EFAULT. So a missing path with name \"foo.bar\" or \"user.\" is ENOENT, fgetxattr(999, \"user.\") is EBADF, a missing attribute with an unmapped buffer is ENODATA, \"user.\" on a 0200 file EACCES, on a FIFO ENODATA."
+side_effects: "none: mode, size, contents, atime, mtime and ctime are unchanged by successful and failed calls; the buffer beyond the value's length is never written, and nothing is written on ERANGE or ENODATA."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all links, descriptors and processes"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10
+  held_out: 4
