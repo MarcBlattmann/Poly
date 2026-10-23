@@ -24,7 +24,7 @@
 {"symbol":"clock_nanosleep","number":230,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"clock_settime","number":227,"src":["linux-syscall-tbl"]},
 {"symbol":"clone","number":56,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"clone3","number":435,"src":["linux-syscall-tbl"]},
+{"symbol":"clone3","number":435,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"close","number":3,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"close_range","number":436,"src":["linux-syscall-tbl"]},
 {"symbol":"connect","number":42,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
