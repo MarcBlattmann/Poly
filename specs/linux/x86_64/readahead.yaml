@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/readahead            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; /tmp on ext4, /dev/shm tmpfs; tests run as a normal user (uid 1001), umask 022"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  readahead(fd, offset, count) (syscall 187) asks the kernel to bring the
+  bytes [offset, offset+count) of the file open on fd into the page
+  cache, so later reads do not wait for the disk, and returns 0. It is a
+  hint: it never reads beyond the end of the file, never changes the
+  file (data, size), and leaves the file offset of the open file
+  description alone. Only the open descriptor matters (not the path, the
+  mode bits or whether the file is still linked). The descriptor must be
+  open for reading (else EBADF) and refer to a regular file (or a block
+  device); anything else open for reading (directory, pipe, socket,
+  character device, eventfd) is EINVAL. count is a size_t that must fit
+  in a signed 64-bit length (count >= 2^63 is EINVAL); offset is not
+  checked at all (negative, past EOF, offset+count overflowing all give
+  0). fd is a 32-bit int: the upper half of the register is ignored.
+returns:
+  success: "0"
+  regular_file: "0 for any regular file open with O_RDONLY or O_RDWR (O_APPEND, O_NONBLOCK, O_CLOEXEC, O_NOATIME, F_SETFL O_NONBLOCK make no difference), on any filesystem seen (ext4, tmpfs incl. memfd and O_TMPFILE files, /proc and /sys files)"
+  count_range: "count 0 .. 2^63-1 accepted (0 is fine, at any offset); e.g. count 0x7fffffffffffffff at offset 0 or 5 returns 0"
+  offset_any: "offset is never checked: -1, -4096, INT64_MIN, at EOF, far past EOF (2^40), INT64_MAX, and offset+count overflowing 2^63 all return 0"
+  empty_file: "0 on an empty file (size stays 0)"
+  fd_only: "0 after the file was chmod 000, renamed or unlinked while open; 0 on dup / F_DUPFD_CLOEXEC copies, also after the original fd is closed"
+  file_offset: "the file offset (lseek SEEK_CUR) of the descriptor is unchanged; a following read() continues where it was"
+  fd_width: "only the low 32 bits of fd count: fd | 1<<32 addresses fd; 0xffffffff is -1 (EBADF)"
+errors:
+  bad_fd: "EBADF (9): fd not open (negative, -100, never opened, closed, 1<<30, 0xffffffff)"
+  not_readable: "EBADF (9): fd open without read access: O_WRONLY (with or without O_APPEND) files and /dev/null, the write end of a pipe, O_PATH descriptors of files and directories"
+  wrong_type: "EINVAL (22): fd open for reading but not a regular file or block device: directory (incl. / and /tmp), pipe read end, AF_UNIX socket, character device (/dev/null, /dev/zero), eventfd; independent of offset and count (count 0 too)"
+  bad_count: "EINVAL (22): count >= 2^63 (as a signed 64-bit value negative: -1, -4096, 0x8000000000000000) on a readable regular file"
+  order: "EBADF (not open / not readable) first, then EINVAL for the file type, then EINVAL for count; e.g. O_WRONLY fd with count -1 is EBADF, pipe write end with count -1 is EBADF, directory with count -1 is EINVAL"
+side_effects: >
+  The requested pages of the file (whole pages, offset rounded down,
+  end rounded up, clipped at EOF) are brought into the page cache:
+  afterwards mincore on a MAP_SHARED mapping of the range reports them
+  resident, and reads/mappings give the file's data. Nothing else
+  changes: not the file data, not its size (also for ranges past EOF),
+  not the file offset, not pipe contents (EINVAL on a pipe consumes
+  nothing). Access time updates were not examined.
+threading: "No shared state beyond the page cache; safe to call concurrently on any descriptors."
+ordering: []
+timing:
+  typical: "returns in microseconds for small cached files; it starts the I/O and normally returns before it completes"
+  guarantees: "none: may block while reading filesystem metadata needed to locate the blocks (man page); a later read may still have to wait for the disk if pages were evicted"
+tests:
+  visible: 8
+  held_out: 4
