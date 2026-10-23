@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/removexattr
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks), /dev/shm on tmpfs (every test run on both, same results); static freestanding test programs, raw syscalls, also under the pipeline tracer. Root-only behaviour (trusted.* with CAP_SYS_ADMIN, permission override, other users' files) from xattr(7), removexattr(2) and the sibling setxattr/getxattr sheets."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  removexattr(path, name) (197) removes the extended attribute `name` from
+  the file at `path`, following symbolic links (lremovexattr 198 and
+  fremovexattr 199 are separate entries). It returns 0 when the attribute
+  was there and is now gone; a name that does not exist is ENODATA (so a
+  second removal of the same name is ENODATA). Only the named attribute
+  goes: other attributes and their values stay, names are exact and
+  case-sensitive ("user.k" does not touch "user.K" or "user.k0").
+  Attributes belong to the inode: removing through one hard link, a
+  symbolic link, a new name after rename, or /proc/self/fd/N of an
+  unlinked open file removes it for all of them. After removal getxattr
+  gives ENODATA, listxattr no longer lists the name (the list shrinks by
+  the name and its NUL), and the same name can be created again (also with
+  XATTR_CREATE).
+returns:
+  success: "0"
+  missing: "ENODATA (61) for a name the file does not have (user.*, and trusted.* for a caller with CAP_SYS_ADMIN). Not for POSIX ACLs: see acl."
+  names: "the name is read up to its NUL, at most 256 bytes. Empty name: ERANGE. 1 to 255 bytes (prefix included) is a valid length; 256 bytes or more without a NUL: ERANGE, also when the bytes after the first 256 are unmapped. NULL or unreadable name, or a name that runs into an unmapped page before a NUL within its first 255 bytes: EFAULT; a name whose NUL is the last byte before an unmapped page works. Known prefixes: user., trusted., security., system. (lower case, at the very start). Unknown or missing prefix (\"plain\", \"user\", \"USER.x\", \".user.x\", \"foo.bar\"): EOPNOTSUPP. \"user.\" (known prefix, nothing after it): EINVAL; \"trusted.\" for a caller with CAP_SYS_ADMIN: EINVAL. Unknown system.* names (\"system.x\", \"system.\"): EOPNOTSUPP. Any bytes after the prefix form an ordinary name (\"user..\", \"user. /\\x01\\xff\")."
+  user_namespace: "user.* attributes exist only on regular files and directories: on a FIFO, socket or device (/dev/null) any user.* name (also \"user.\") is EPERM, for root too, read-only or not. Removal needs write permission on the file by its mode: EACCES otherwise (0444 file, 0555 directory, a read-only /proc file), whether the name exists or not, and the attribute stays; a 0200 file works; root passes through CAP_DAC_OVERRIDE. Ownership is not needed (another user's 0666 file works). On a sticky directory only its owner or a caller with CAP_FOWNER may remove: others EPERM (/tmp itself as non-root: EPERM); the owner may."
+  trusted_namespace: "trusted.* (and \"trusted.\") without CAP_SYS_ADMIN: EPERM, on any file type, read-only or not, existing or not. With it: like user.* (0 when present, ENODATA when missing)."
+  security_namespace: "security.* (also \"security.\", \"security.selinux\", \"security.capability\") without CAP_SYS_ADMIN: EPERM, before the write-permission check. Not observed with privilege."
+  unknown_namespace: "names without a known prefix need write permission first: a non-writable file or FIFO gives EACCES, a writable one (regular file, FIFO, /dev/null) EOPNOTSUPP."
+  acl: "system.posix_acl_access and system.posix_acl_default: removal needs ownership of the file (or CAP_FOWNER), not write permission: the owner removes the ACL of its own 0444 file; anyone else gets EPERM (another user's 0644 or 0666 file). Removing an ACL that is not there returns 0, not ENODATA (a second removal, a default ACL on a regular file, an ACL on a FIFO). Removing an access ACL leaves the mode bits unchanged (the group bits keep the old mask value). After removing a directory's default ACL, new entries get no ACL and their mode from the umask; entries created earlier keep their ACL."
+  path: "absolute or relative to the working directory; \".\", \"..\", repeated slashes and a trailing slash on a directory work; symbolic links are followed anywhere (the attribute is removed from the target). A chain of 40 links resolves, 41 is ELOOP. /proc/self/fd/N reaches the open file even when it is unlinked."
+errors:
+  name: "EFAULT (NULL, unreadable), ERANGE (empty, 256+ bytes), EOPNOTSUPP (unknown prefix, unknown system.*), EINVAL (\"user.\"; \"trusted.\" with CAP_SYS_ADMIN)"
+  path: "NULL or unreadable path EFAULT; empty path or missing component ENOENT; dangling final link ENOENT; a non-directory used as a directory or a trailing slash after a file (or after a link to a file) ENOTDIR; a component over 255 bytes, or 4096 bytes before the NUL, ENAMETOOLONG (4095 resolves); link loop or more than 40 links ELOOP; missing search permission on a directory on the way EACCES"
+  missing: "ENODATA"
+  permission: "EACCES (no write permission for user.* or unknown prefixes), EPERM (user.* on a non-regular non-directory, user.* on another user's sticky directory, trusted.*/security.* without CAP_SYS_ADMIN, ACLs of a file the caller does not own, immutable or append-only files per xattr(7))"
+  order: "when several problems exist, the first in this list decides: (1) the name: EFAULT, empty ERANGE, too long ERANGE (even with an unreadable, empty, missing or unsearchable path); (2) the path walk (EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES for search permission); (3) unknown system.* names EOPNOTSUPP (even on a read-only file); (4) trusted.* and security.* without CAP_SYS_ADMIN EPERM, user.* on a non-regular non-directory EPERM, user.* on another user's sticky directory EPERM, ACLs on a file the caller does not own EPERM; (5) write permission EACCES (user.* and unknown prefixes); (6) unknown prefix EOPNOTSUPP, \"user.\" EINVAL; (7) ENODATA for a missing name. So a missing path with name \"foo.bar\", \"user.\", \"system.x\" or \"trusted.a\" is ENOENT; \"user.\" on a FIFO is EPERM, on a read-only file EACCES; a missing user.* name on a read-only file is EACCES; trusted.* on a read-only file EPERM."
+side_effects: "a successful removal of a user.* (or trusted.*) attribute moves the change time (ctime) forward; mode, size, link count, inode, mtime and contents do not change. A failed call (ENODATA, EACCES, EOPNOTSUPP, ...) changes nothing, ctime included. Removing an existing ACL also moves ctime; removing an ACL that is not there may or may not (ext4: no, tmpfs: yes), so it is not specified. The space of a removed attribute is free again (ext4 with ~4 KiB per inode: after a removal a value that hit ENOSPC fits)."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all links, descriptors and processes"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 9
+  held_out: 4
