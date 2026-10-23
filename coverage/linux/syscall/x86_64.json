@@ -68,7 +68,7 @@
 {"symbol":"flistxattr","number":196,"src":["linux-syscall-tbl"]},
 {"symbol":"flock","number":73,"src":["linux-syscall-tbl"]},
 {"symbol":"fork","number":57,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"fremovexattr","number":199,"src":["linux-syscall-tbl"]},
+{"symbol":"fremovexattr","number":199,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"fsconfig","number":431,"src":["linux-syscall-tbl"]},
 {"symbol":"fsetxattr","number":190,"src":["linux-syscall-tbl"]},
 {"symbol":"fsmount","number":432,"src":["linux-syscall-tbl"]},
