@@ -1,0 +1,97 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_submit            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022; /tmp on ext4, all tests repeated on tmpfs (/dev/shm) with the same results"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  io_submit(ctx_id, nr, iocbpp) (syscall 209) queues nr asynchronous I/O
+  requests on a context made by io_setup (206). iocbpp is an array of nr
+  pointers to 64-byte struct iocb records (linux/aio_abi.h: u64 aio_data,
+  u32 aio_key, u32 aio_rw_flags, u16 aio_lio_opcode, s16 aio_reqprio,
+  u32 aio_fildes, u64 aio_buf, u64 aio_nbytes, s64 aio_offset,
+  u64 aio_reserved2, u32 aio_flags, u32 aio_resfd). The requests are taken
+  in array order; the call returns how many were submitted, or, when the
+  very first one cannot be submitted, that request's error. Each submitted
+  request later produces exactly one completion event (struct io_event,
+  read with io_getevents 208) with data = aio_data, obj = the iocb's user
+  address as found in the array, res = the result (a byte count, 0, a poll
+  mask, or a negative errno), res2 = 0. Opcodes: IOCB_CMD_PREAD 0,
+  PWRITE 1, FSYNC 2, FDSYNC 3, POLL 5, PREADV 7, PWRITEV 8 (4 and NOOP 6
+  are rejected). Reads and writes use aio_offset as the file position
+  (like pread/pwrite: the fd's own offset never moves) and aio_buf /
+  aio_nbytes as buffer and length, or as iovec array and entry count for
+  the vector forms. On regular files, /dev/zero, /dev/null and on
+  readable/writable pipes the work is done synchronously inside
+  io_submit: its event is already in the ring when io_submit returns.
+returns:
+  count: "number of requests submitted, 1..nr, in array order; the call stops at the first request that cannot be submitted (later entries are not looked at, even if they are bad pointers)"
+  nr_zero: "nr 0 with a live context returns 0 without reading iocbpp (a NULL or bad pointer is fine)"
+  huge_nr: "nr larger than the context can take is not an error (2^62 observed): the call submits what fits and returns that count"
+  same_iocb_twice: "the same iocb pointer may appear more than once in one call: each occurrence is a separate request with its own event"
+  key_field: "aio_key is written back as 0 in the caller's iocb once the request has passed the aio_reserved2 and fd checks (even if a later check then rejects it); a request rejected for aio_reserved2 or its fd keeps its aio_key. A nonzero aio_key on input is not an error. If the iocb is read-only so the write fails, the request is EFAULT and nothing is done"
+  pwrite_res: "res = bytes written (the whole length on a regular file); writing past the end extends the file, leaving zero bytes in the hole; length 0 gives res 0 and changes nothing"
+  pread_res: "res = bytes read: short at end of file, 0 at or past end of file and for length 0. /dev/zero fills the buffer with zeros (res = length); /dev/null reads give 0 and writes res = length"
+  vector_res: "PREADV/PWRITEV: aio_buf points to struct iovec[aio_nbytes] (u64 base, u64 len); segments are used in order (zero-length segments allowed), res = total bytes; 0 entries gives res 0. A write whose second segment buffer is unreadable writes the first segment and res = its length"
+  bad_buffer: "a buffer the process cannot access (e.g. address 8) is NOT an io_submit error: the request is submitted and its event has res -EFAULT (14); a write then writes nothing (content and size unchanged when the offset is inside the file)"
+  fsync_res: "FSYNC/FDSYNC on a regular file (also one opened O_RDONLY) and on a directory: res 0"
+  poll_res: "POLL: aio_buf (low 32 bits) is the poll event mask asked for. If the fd is ready now the request completes at once with res = the ready events among those asked (POLLIN 0x1 on a pipe with data or on a regular file, POLLOUT 0x4 on a pipe's write end). Otherwise it stays pending and completes when the fd becomes ready (res then includes POLLIN for a pipe that got data; POLLIN|POLLRDNORM = 0x41 was seen). An empty mask (0) never completes"
+  append: "on an fd opened O_APPEND, writes go to the end of the file whatever aio_offset is; RWF_APPEND (0x10) in aio_rw_flags does the same on an ordinary fd"
+  rw_flags: "RWF_HIPRI 1, RWF_DSYNC 2, RWF_SYNC 4 and RWF_APPEND 0x10 are accepted for reads/writes on a regular file and the write proceeds normally. An unknown bit (0x80000000) is EOPNOTSUPP (95) from io_submit. (RWF_NOWAIT 8 is filesystem-dependent here: tmpfs rejected a write with EOPNOTSUPP at submit, ext4 accepted it and completed it with res -EOPNOTSUPP; not tested)"
+  pipes: "on pipes aio_offset is ignored (any value works). A read on an empty O_NONBLOCK pipe is submitted and its event has res -EAGAIN (11). A read on an empty blocking pipe makes io_submit itself block until data arrives (observed ~100 ms until another process wrote); the event is ready when io_submit returns. (A read on an eventfd with count 0 likewise blocks in io_submit)"
+  flags_ignored: "unknown aio_flags bits (4, 0x80) are ignored; aio_reqprio is ignored unless IOCB_FLAG_IOPRIO (2) is set"
+  ioprio: "with IOCB_FLAG_IOPRIO, aio_reqprio is an I/O priority (class << 13 | level): best-effort (class 2) levels 0..7 accepted; class 4 or 0xffff is EINVAL; the real-time class (1) is EPERM for an unprivileged caller (not tested: user-dependent)"
+  resfd: "with IOCB_FLAG_RESFD (1), the eventfd aio_resfd is incremented by 1 per completion of that request, also when its res is an error; requests without the flag leave it alone; several requests may share one eventfd"
+  capacity: "a context holds only a limited number of requests whose events have not been reaped (pending or completed-but-unreaped count the same). The limit is at least io_setup's nr and depends on the CPU count (here with 4 CPUs: nr 1..8 -> 126, 100 -> 240, 256 -> 624). A call that asks for more submits what fits and returns that count; one-by-one submission reaches the same limit. With the context full, io_submit returns EAGAIN (11) and does nothing; after reaping with io_getevents it accepts requests again"
+errors:
+  nr_negative: "EINVAL (22): nr < 0 (any negative 64-bit value), checked before the context"
+  bad_context: "EINVAL (22): ctx_id is not a live context of the caller's address space (0, 1, handle + 32, a destroyed handle, the parent's handle in a fork child). Checked before iocbpp is read, and also when nr is 0"
+  array_efault: "EFAULT (14): iocbpp unreadable, an entry NULL or pointing to unreadable memory, an iocb that runs into an unmapped page, or an iocb in read-only memory (aio_key cannot be written). As the first request: the call returns EFAULT; later: the count so far"
+  reserved: "EINVAL: aio_reserved2 != 0 (checked first in an iocb, before the fd)"
+  bad_fd: "EBADF (9): aio_fildes not open (99, -1), not open for the direction (PWRITE on O_RDONLY, PREAD on O_WRONLY), or an O_PATH fd. Checked before the opcode, offset and per-opcode fields"
+  bad_resfd: "IOCB_FLAG_RESFD: EBADF if aio_resfd is not open, EINVAL if it is open but not an eventfd; checked after aio_fildes and before aio_reqprio"
+  bad_opcode: "EINVAL: aio_lio_opcode 4, 6 (NOOP), 9, 100, 0xffff"
+  bad_offset_length: "EINVAL: PREAD/PWRITE with aio_offset < 0, or aio_nbytes >= 2^63 (as a signed 64-bit value negative). (A huge but positive length is address-dependent: it read the file normally in one run and gave res -EFAULT under ptrace; not tested)"
+  read_dir: "EINVAL: PREAD on a directory fd"
+  vector: "PREADV/PWRITEV: iovec array unreadable EFAULT; more than 1024 entries EINVAL; a segment length with the top bit set EINVAL"
+  fsync: "FSYNC/FDSYNC: EINVAL if aio_buf, aio_nbytes, aio_offset or aio_rw_flags is nonzero, or if the file has no sync support (pipe ends, /dev/null)"
+  poll: "POLL: EINVAL if aio_nbytes, aio_offset or aio_rw_flags is nonzero, or aio_buf has bits above 31 set"
+  rw_flags: "EOPNOTSUPP (95): unknown aio_rw_flags bit on a read/write"
+  full: "EAGAIN (11): the context cannot take another request (see returns.capacity)"
+  rejected_effects: "a request rejected by io_submit makes no event, does not touch the file and does not signal its eventfd"
+side_effects: >
+  Each submitted request performs its I/O (file data written/read at
+  aio_offset, file size extended by writes past the end) and adds one
+  event to the context's completion ring; IOCB_FLAG_RESFD requests also
+  add 1 to their eventfd on completion. aio_key in the caller's iocb is
+  set to 0 (see returns.key_field). The fd's file offset is never used or
+  moved (except that O_APPEND/RWF_APPEND writes go to the end).
+  Nothing else changes; requests not submitted have no effect.
+threading: >
+  Contexts belong to the address space: a process sharing it (CLONE_VM)
+  can submit to a context another task made, and any of them can reap the
+  event. A fork child (own memory) cannot use the parent's handle
+  (EINVAL, nothing reaches the parent's context) but can make and use its
+  own context.
+ordering:
+  - "call checks: nr < 0 (EINVAL), then the context (EINVAL), then nr == 0 returns 0, then the requests in array order"
+  - "per request: read the pointer and the iocb (EFAULT), aio_reserved2 (EINVAL), aio_fildes (EBADF), aio_resfd (EBADF/EINVAL), write aio_key = 0 (EFAULT), then priority, opcode and per-opcode field checks (EINVAL/EFAULT/EOPNOTSUPP)"
+  - "the context-full check (EAGAIN) applies per request: a call stops with the count so far when the context fills"
+  - "events of requests that complete during io_submit appear in submission order"
+timing:
+  typical: "file, /dev/zero, /dev/null and ready-pipe requests finish inside io_submit in microseconds; a blocking empty-pipe read keeps io_submit waiting until data arrives (observed ~100 ms, i.e. until the writer wrote)"
+  guarantees: none
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+# Notes: the tests make contexts with io_setup (206) and reap events with
+# io_getevents (208), eventfds with eventfd2 (290). Layouts and constants:
+# linux/aio_abi.h (struct iocb, struct io_event, IOCB_CMD_*, IOCB_FLAG_RESFD,
+# IOCB_FLAG_IOPRIO), linux/fs.h (RWF_*), linux/ioprio.h (class << 13),
+# asm-generic/poll.h (POLLIN, POLLOUT), asm/unistd_64.h. File tests use
+# /tmp (ext4 on the oracle, tmpfs on Poly); all were also run against
+# tmpfs with identical results. The capacity test compares output only
+# (poly-diff: syscalls=off) because the limit depends on the CPU count; the
+# blocking-pipe test uses a CLONE_VM writer (syscalls=off).
