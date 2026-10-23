@@ -1,0 +1,107 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/clock_settime        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64, 4 CPUs; tests run as a normal user (uid 1001, no capabilities), umask 022; auxiliary clocks 16..23 disabled (the boot default); root behaviour from clock_settime(2), not observed here"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  clock_settime(clockid, tp) (syscall 227) sets a clock to the time in tp,
+  a 16-byte struct timespec {i64 tv_sec @0, i64 tv_nsec @8}
+  (<linux/time.h>), which is only read, never written. clockid is a
+  32-bit int: the upper 32 bits of the register are ignored
+  (0x1_00000000 is CLOCK_REALTIME, 0xffffffff_00000001 CLOCK_MONOTONIC).
+  The only clock that can really be set is CLOCK_REALTIME (0), and only
+  with CAP_SYS_TIME in the effective set; every other kind of id fails,
+  each with its own error and check order (see errors and ordering).
+  Clock id kinds: 0 CLOCK_REALTIME; 1..15 the other system clocks and
+  unused ids; 16..23 the auxiliary clocks; 24 and up unused; negative
+  ids are CPU-time clocks ((~pid << 3) | type, type 0..2 for a process,
+  4..6 for a thread, pid 0 = the caller) or, with low 3 bits 3,
+  descriptor clocks ((~fd << 3) | 3).
+returns:
+  success: "0 (only CLOCK_REALTIME, only with CAP_SYS_TIME)"
+  set_realtime: >
+    (root) CLOCK_REALTIME becomes tp (nanosecond precision: a time set
+    with tv_nsec 500000000 reads back with that fraction plus the time
+    since) and then keeps running from there; clock_gettime(CLOCK_REALTIME)
+    and gettimeofday show it at once, for every process. CLOCK_MONOTONIC
+    does not jump. Setting the time just read keeps the realtime-monotonic
+    offset (within a fraction of a second); setting 2 s ahead moves
+    CLOCK_REALTIME forward by 2 s.
+errors:
+  realtime_bad_tp: >
+    CLOCK_REALTIME: EFAULT when any of the 16 tp bytes is not readable:
+    NULL, address 1, a kernel address, a PROT_NONE or unmapped page,
+    tv_nsec on an inaccessible page (tv_sec readable). A read-only tp, or
+    one ending exactly at the end of accessible memory, is fine.
+  realtime_bad_time: >
+    CLOCK_REALTIME: EINVAL for anyone when tv_nsec (all 64 bits) is
+    outside 0..999999999 (-1, 1000000000, 1000000001, 2^32 + 5,
+    INT64_MIN, INT64_MAX) or tv_sec is negative or 8277292036 or more
+    (2^63 ns in seconds, 9223372036, less 30 years of 365 days; also
+    INT64_MAX). tv_sec 0, 1 and 8277292035 with tv_nsec 999999999 pass
+    this check.
+  realtime_not_permitted: >
+    CLOCK_REALTIME: EPERM without CAP_SYS_TIME for every tp that passed
+    the checks above, including tv_sec 0 and the current time (a normal
+    user; root after emptying its capability sets with capset). Nothing
+    changes.
+  realtime_before_monotonic: >
+    (root, clock_settime(2) "since Linux 4.3") EINVAL when tp is earlier
+    than the current CLOCK_MONOTONIC value (tv_sec 0, or the monotonic
+    seconds minus 1); the clock stays as it was.
+  not_settable: >
+    EINVAL for anyone, without reading tp (NULL, address 1 and a bad
+    tv_nsec also give EINVAL), for ids 1..15 (CLOCK_MONOTONIC, the
+    CPU-time shorthands CLOCK_PROCESS_CPUTIME_ID 2 and
+    CLOCK_THREAD_CPUTIME_ID 3, CLOCK_MONOTONIC_RAW, the two coarse
+    clocks, CLOCK_BOOTTIME, the two alarm clocks, 10, CLOCK_TAI, 12..15)
+    and for 24, 100, INT_MAX. Root too.
+  aux_clock_disabled: >
+    ids 16..23 (auxiliary clocks), while disabled: tp is read first
+    (EFAULT as for CLOCK_REALTIME), then checked like CLOCK_REALTIME's
+    (EINVAL for a bad tv_nsec, a negative tv_sec, tv_sec 8277292036 or
+    more), then ENODEV for a well-formed tp (tv_sec 0 included). How an
+    enabled auxiliary clock behaves is not covered (enabling one needs
+    root and sysfs).
+  cpu_clock: >
+    CPU-time clocks can never be set. tp is read first (EFAULT). Then:
+    the caller's own process clock (pid 0 or its own pid, types 0, 1, 2),
+    its own thread clocks (tid 0, its own tid, or the tid of another
+    thread of its process, types 4, 5, 6), and the process clock of
+    another existing process (a child, also a zombie child not reaped
+    yet, or a process owned by another user) are EPERM, also for root and
+    whatever the time values are (tv_nsec 1000000000 or tv_sec -1 are
+    still EPERM). EINVAL instead for: a pid/tid that does not exist (also
+    a reaped child), a thread clock of a thread in another process (a
+    child's thread clock), a process clock named by the tid of a thread
+    that is not the process leader, type 7.
+  descriptor_clock: >
+    ids with low 3 bits 3 (descriptor clocks, including INT_MIN): tp is
+    read first (EFAULT); then EINVAL when the descriptor is not open
+    (closed, huge) or is not a clock device (regular file, /proc file,
+    stdin). clock_settime(2) adds EACCES when a clock device was opened
+    without write permission, and device-specific errors (ENODEV,
+    EOPNOTSUPP); not observed here (no clock device a normal user can
+    open), not tested.
+side_effects: >
+  A successful call (root, CLOCK_REALTIME only) changes the system-wide
+  realtime clock seen by every process. Failed calls change nothing: the
+  realtime-monotonic offset stays the same, CLOCK_MONOTONIC and the
+  CPU-time clocks keep running. tp is never written. A forked child gets
+  the same results as its parent.
+threading: "system-wide state; every process and thread sees the same clock"
+ordering:
+  - "CLOCK_REALTIME: tp readable (EFAULT), then tv_nsec/tv_sec range (EINVAL), then CAP_SYS_TIME (EPERM), then (root) not earlier than CLOCK_MONOTONIC (EINVAL), then the clock is set"
+  - "ids 1..15 and 24 and up: EINVAL before tp is read"
+  - "aux ids 16..23 (disabled): EFAULT, then EINVAL for the time values, then ENODEV"
+  - "negative ids: EFAULT first, then the id (EINVAL for a missing pid/tid, a bad type, a non-clock descriptor); a valid CPU clock is then EPERM without looking at the time values"
+  - "without CAP_SYS_TIME, tv_sec 0 on CLOCK_REALTIME is EPERM (the monotonic check comes after the permission check)"
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
