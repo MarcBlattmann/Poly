@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setxattr
+oracle:
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks), /dev/shm on tmpfs; static freestanding test programs, raw syscalls. Root-only behaviour (trusted.* with CAP_SYS_ADMIN, permission override) from xattr(7) and setxattr(2)."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  setxattr(path, name, value, size, flags) (188) sets the extended attribute
+  `name` of the file at `path` to the `size` bytes at `value`, following
+  symbolic links. lsetxattr (189) is the same but does not follow a final
+  symbolic link; fsetxattr(fd, name, value, size, flags) (190) works on an
+  open descriptor. The value is stored byte for byte (NUL bytes included);
+  a zero-length value is allowed and `value` may then be NULL. With flags 0
+  the attribute is created or its value replaced. Attributes belong to the
+  inode: every hard link sees them, a rename keeps them, an unlinked but open
+  file still takes them. Names on one inode are independent and
+  case-sensitive ("user.k" and "user.k0" are different attributes). The
+  getxattr family (191-193) reads them back, listxattr (194) gives the
+  names, each with its NUL.
+returns:
+  success: "0"
+  flags: "only the low 32 bits count (flags is an int; 0x100000000 acts as 0, 0x100000001 as XATTR_CREATE). 0: create or replace. XATTR_CREATE (1): EEXIST if the name exists. XATTR_REPLACE (2): ENODATA if it does not. Both (3): EEXIST if it exists, ENODATA if not (never succeeds). Any other bit set (4, 8, 5, 0x80000000, -1): EINVAL."
+  names: "1 to 255 bytes including the prefix; any bytes after the prefix are allowed (spaces, '/', '.', 0x01, 0xff; \"user..\" and \"user. \" are valid). Known prefixes: user., trusted., security., system. (lower case, at the very start). Empty name: ERANGE; 256 bytes or more: ERANGE, also when the name is unterminated and the first 256 bytes are readable; a name that becomes unreadable within its first 256 bytes: EFAULT. Unknown or missing prefix (\"plain\", \"user\" without dot, \"USER.x\", \".user.x\", \"foo.bar\"): EOPNOTSUPP. A known prefix with nothing after it (\"user.\", \"trusted.\" for a caller allowed to use trusted.*): EINVAL. Unknown system.* names (\"system.x\", \"system.\"): EOPNOTSUPP. system.posix_acl_access with a value that is not a valid ACL: EINVAL."
+  value: "size 0 to 65536 is accepted by the call; more than 65536 (65537, 2^32, SIZE_MAX: size_t compared in full): E2BIG. A value that cannot be read in full (NULL with size > 0, an unmapped address, a buffer running into an unmapped page): EFAULT; a buffer ending exactly at an unmapped page works. How much a file system then stores differs: tmpfs stores a 65536-byte value; ext4 with 4 KiB blocks and no ea_inode feature fits only about 4 KiB of attributes per inode (more: ENOSPC). Values of a few hundred bytes, up to about 1000 bytes in total per inode, fit everywhere."
+  user_namespace: "user.* attributes exist only on regular files and directories: a FIFO, a socket, a pipe, a character device (/dev/null) or a symbolic link (lsetxattr) gives EPERM, also for root. They need write permission on the file by its mode (not by the descriptor's access mode): EACCES otherwise; root passes through CAP_DAC_OVERRIDE. Ownership is not needed (another user's 0666 file works). On a sticky directory only the owner (or a caller with CAP_FOWNER) may set them, others EPERM, even with write permission (/tmp itself as non-root: EPERM)."
+  trusted_namespace: "trusted.* needs CAP_SYS_ADMIN, else EPERM (also for \"trusted.\", on read-only files, on FIFOs and on symbolic links). With it, it behaves like user.* flags-wise; root may set trusted.* on its files."
+  security_namespace: "security.* without CAP_SYS_ADMIN: EPERM, before the write-permission check (a 0444 file is EPERM, not EACCES), also for \"security.\". Not observed with privilege."
+  unknown_namespace: "names without a known prefix need write permission first: a non-writable file gives EACCES, a writable one (including FIFOs, sockets and symbolic links, mode 0777) EOPNOTSUPP."
+  lsetxattr: "a final symbolic link is not followed; links in earlier components are, and so is a trailing slash after a link to a directory (it then sets on the directory; after a link to a file: ENOTDIR). On a link itself (live, dangling or looping): user.* and \"user.\" EPERM, trusted.* EPERM without CAP_SYS_ADMIN, unknown prefix EOPNOTSUPP. On files and directories it is setxattr."
+  fsetxattr: "any open descriptor of a regular file or directory works whatever its access mode (O_RDONLY, O_WRONLY, O_RDWR, O_DIRECTORY); permission comes from the file's mode (a 0444 file opened O_RDONLY: EACCES). O_PATH, closed, unopened and negative descriptors: EBADF. Pipes and sockets: user.* EPERM; a socket with an unknown prefix: EOPNOTSUPP."
+  path: "absolute or relative to the working directory; \".\", \"..\" and a trailing slash on a directory work; symbolic links are followed (the attribute lands on the target; the link has none afterwards, lgetxattr ENODATA)."
+errors:
+  flags: "EINVAL"
+  name: "EFAULT (unreadable), ERANGE (empty or 256+ bytes), EOPNOTSUPP (unknown prefix, unknown system.*), EINVAL (empty suffix)"
+  size: "E2BIG (> 65536)"
+  value: "EFAULT"
+  path: "unreadable pointer EFAULT; empty path or missing component ENOENT; a non-directory used as a directory or a trailing slash after a file ENOTDIR; a component over 255 bytes or a path of 4096 bytes before its NUL ENAMETOOLONG; symbolic link loop ELOOP; dangling final link ENOENT (setxattr); search permission missing on a directory on the way EACCES"
+  fd: "EBADF"
+  exists: "EEXIST (XATTR_CREATE), ENODATA (XATTR_REPLACE)"
+  permission: "EACCES (no write permission), EPERM (user.* on a non-regular non-directory, user.* on another user's sticky directory, trusted.*/security.* without CAP_SYS_ADMIN, immutable or append-only files per setxattr(2))"
+  space: "ENOSPC / EDQUOT when the file system has no room (ext4: about 4 KiB per inode)"
+  order: "when several problems exist, the first in this list decides: (1) flags EINVAL; (2) the name: EFAULT, empty ERANGE, too long ERANGE; (3) size E2BIG; (4) the value EFAULT; (5) for setxattr/lsetxattr the path walk (EFAULT, ENAMETOOLONG, ENOENT, ENOTDIR, ELOOP, EACCES), for fsetxattr the descriptor EBADF; (6) system.* names: unknown EOPNOTSUPP, bad ACL EINVAL (even on a read-only file); (7) trusted.* and security.* without CAP_SYS_ADMIN EPERM, user.* on a non-regular non-directory EPERM, user.* on another user's sticky directory EPERM; (8) write permission EACCES (user.* and unknown prefixes); (9) unknown prefix EOPNOTSUPP, empty suffix after a known prefix (\"user.\") EINVAL; (10) EEXIST / ENODATA from the flags. So a missing path with name \"foo.bar\", \"user.\" or \"trusted.a\" is ENOENT; \"user.\" on a FIFO is EPERM, on a read-only file EACCES; XATTR_REPLACE of a missing name on a read-only file is EACCES."
+side_effects: "a successful set (new or replaced attribute) moves the change time (ctime) forward; mode, size, contents, mtime and atime do not change. A failed call changes nothing: the attribute and ctime stay as they were."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all links, descriptors and processes"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10
+  held_out: 4
