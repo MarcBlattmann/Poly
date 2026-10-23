@@ -1,0 +1,94 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_getaffinity    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic"
+  machine: >
+    x86_64 host with 4 CPUs (possible and online 0-3, start mask 0xf), uid
+    1001 without capabilities; static freestanding test programs, raw
+    syscalls. Reading masks of other users' processes was observed on
+    root-owned processes (pid 1, kthreadd) as uid 1001; the needs=root test
+    covers the reverse direction. Poly's test VM has 2 CPUs: no test
+    depends on the CPU count.
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  sched_getaffinity(pid, len, mask) (syscall 204) writes the CPU affinity
+  mask of the thread named by pid into the caller's buffer and returns the
+  number of bytes written. The mask is little-endian unsigned-long words,
+  bit N = CPU N, and holds the CPUs the thread may run on (only CPUs that
+  are online). pid 0 means the calling thread; a pid is a thread id (tid),
+  so the pid of a process names its main thread and the tid of another
+  thread names that thread. pid is a 32-bit int (upper 32 bits of the
+  register ignored); len is a 32-bit unsigned int (upper 32 bits ignored).
+  The kernel's mask is 8 bytes on systems with up to 64 possible CPUs: the
+  call returns 8 and writes exactly 8 bytes for any valid len of 8 or more.
+returns:
+  success: "8 (the size of the kernel mask, min(len, 8) with len a valid multiple of 8 >= 8)"
+  written: >
+    exactly 8 bytes at mask; any bytes of the buffer after them keep their
+    contents (len 16, 24, 64, 128, 512, 4096, 0x7ffffff8 all write 8 bytes
+    only, even when len is larger than the buffer). 8 writable bytes are
+    enough: a buffer in the last 8 bytes of a page followed by an unmapped
+    page works with len 16 and 4096. The buffer needs no alignment.
+  contents: >
+    never empty; the CPU the caller runs on (getcpu) is always in its own
+    mask; at program start it is every online CPU unless the parent
+    restricted it. Asking again without a change gives the same mask.
+  after_setaffinity: >
+    the mask sched_setaffinity stored: a one-CPU request gives that bit
+    alone, two CPUs give both bits, bits for CPUs the system does not have
+    (bit 63) are not reported, a mask of all ones gives back the start mask.
+    A failed sched_setaffinity leaves the reported mask as it was.
+  pid_forms: "pid 0, getpid() and gettid() give the same mask in a single-threaded process; 0x100000000 means 0, pid | 0x500000000 means pid, 0x1ffffffff means -1 (ESRCH)"
+  len_width: >
+    len is 32 bits, and its size in bits (len * 8) is also taken modulo
+    2^32: 0x100000008 and -8 (0xfffffff8) and 0x20000008 return 8;
+    0x100000000 (0), 0x100000001 (1), -1 (0xffffffff) are EINVAL; lengths
+    whose bit count wraps to 0 (0x20000000, 0x40000000, 0x80000000,
+    0xe0000000) are EINVAL as too small.
+  other_process: "a process of the same user by its pid: its mask (a forked child starts with its parent's; a mask set on it by pid reads back by pid and, in the child, by pid 0)"
+  zombie: "a child that has exited but is not yet reaped can still be read (its last mask)"
+  other_thread: "a tid reads that thread's mask only; pid 0 inside a thread reads the calling thread; a new thread starts with its creator's mask"
+  no_permission_check: >
+    any caller may read any thread's mask, whatever the users involved and
+    with every capability dropped: uid 1001 reads root's pid 1 and kernel
+    threads, a uid 65534 process reads a root process (needs=root test).
+    There is no EPERM case.
+errors:
+  bad_len: "len (as 32 bits) not a multiple of 8, or 0, or a multiple of 2^29 (bit count wraps to 0): EINVAL (22). Cases: 0, 1, 4, 7, 9, 12, 15, 17, 100, 0xffffffff, 0x100000000, 0x80000000. Nothing is written."
+  no_such_thread: "no thread has that id (0x7fffffff, 0x3fffffff, 4194304, a reaped child) or the pid is negative as a 32-bit int (-1, -2, INT_MIN, 0x1ffffffff): ESRCH (3). Negative pids are ESRCH, not EINVAL. Nothing is written."
+  bad_pointer: >
+    the 8 bytes at mask are not writable: EFAULT (14). Cases: NULL (also
+    with len 128), address 1, kernel address 0xffff800000000000,
+    non-canonical 0x0000800000000000, the program's code, a read-only page,
+    a PROT_NONE page, an unmapped page, a buffer starting 4 bytes before an
+    unmapped page. Read-only and PROT_NONE pages keep their contents. When
+    the buffer is writable only in part, the writable part may or may not
+    have been written (Linux writes it): not specified.
+  check_order: >
+    1. len -> EINVAL (so a missing or negative pid with len 0, 7, 9 or
+    0x100000000 is EINVAL, and so is NULL with len 0 or 7); 2. pid not
+    found / negative -> ESRCH (so a missing or negative pid with a NULL or
+    kernel-address buffer is ESRCH); 3. buffer not writable -> EFAULT.
+  failure_has_no_effect: "a failed call writes nothing to the buffer (except possibly a partly writable buffer on EFAULT) and changes no state; the next valid call works"
+side_effects: none (reads only; the buffer gets 8 bytes)
+threading: >
+  Per thread: pid 0 is the calling thread, a tid names that thread only,
+  the process's pid names its main thread.
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: "none"
+notes: >
+  Tests use sched_setaffinity (203) to change masks, getcpu (309) to check
+  the current CPU is in the mask, capget/capset (125/126) to drop
+  capabilities and setresuid (117) in the needs=root test. Tests never
+  print masks or assume a CPU count: they compare masks against each other
+  and use the lowest and highest CPU of the start mask. The needs=root
+  test could not be run on the oracle host (no root there); its scaffolding
+  ran on Poly as root (polyrun), where at the time a uid 65534 process got
+  EPERM reading a root process's mask (Linux: allowed, as above).
+tests:
+  visible: 9  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
