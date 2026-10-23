@@ -253,7 +253,7 @@
 {"symbol":"request_key","number":249,"src":["linux-syscall-tbl"]},
 {"symbol":"restart_syscall","number":219,"src":["linux-syscall-tbl"]},
 {"symbol":"rmdir","number":84,"src":["linux-syscall-tbl"]},
-{"symbol":"rseq","number":334,"src":["linux-syscall-tbl"]},
+{"symbol":"rseq","number":334,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"rseq_slice_yield","number":471,"src":["linux-syscall-tbl"]},
 {"symbol":"rt_sigaction","number":13,"status":"green","tests_visible":4,"tests_held_out":2,"src":["linux-syscall-tbl"]},
 {"symbol":"rt_sigpending","number":127,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
