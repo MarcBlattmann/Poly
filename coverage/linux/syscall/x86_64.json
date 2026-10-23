@@ -169,7 +169,7 @@
 {"symbol":"mkdir","number":83,"src":["linux-syscall-tbl"]},
 {"symbol":"mkdirat","number":258,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"mknod","number":133,"src":["linux-syscall-tbl"]},
-{"symbol":"mknodat","number":259,"src":["linux-syscall-tbl"]},
+{"symbol":"mknodat","number":259,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"mlock","number":149,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"mlock2","number":325,"src":["linux-syscall-tbl"]},
 {"symbol":"mlockall","number":151,"src":["linux-syscall-tbl"]},
