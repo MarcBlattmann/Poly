@@ -185,7 +185,7 @@
 {"symbol":"mq_open","number":240,"src":["linux-syscall-tbl"]},
 {"symbol":"mq_timedreceive","number":243,"src":["linux-syscall-tbl"]},
 {"symbol":"mq_timedsend","number":242,"src":["linux-syscall-tbl"]},
-{"symbol":"mq_unlink","number":241,"src":["linux-syscall-tbl"]},
+{"symbol":"mq_unlink","number":241,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"mremap","number":25,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"mseal","number":462,"src":["linux-syscall-tbl"]},
 {"symbol":"msgctl","number":71,"src":["linux-syscall-tbl"]},
