@@ -262,7 +262,7 @@
 {"symbol":"rt_sigreturn","number":15,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"rt_sigsuspend","number":130,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"rt_sigtimedwait","number":128,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"rt_tgsigqueueinfo","number":297,"src":["linux-syscall-tbl"]},
+{"symbol":"rt_tgsigqueueinfo","number":297,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"sched_get_priority_max","number":146,"src":["linux-syscall-tbl"]},
 {"symbol":"sched_get_priority_min","number":147,"src":["linux-syscall-tbl"]},
 {"symbol":"sched_getaffinity","number":204,"src":["linux-syscall-tbl"]},
