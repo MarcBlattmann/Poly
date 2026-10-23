@@ -330,7 +330,7 @@
 {"symbol":"symlink","number":88,"src":["linux-syscall-tbl"]},
 {"symbol":"symlinkat","number":266,"status":"claimed","claimed_by":"spec-a","src":["linux-syscall-tbl"]},
 {"symbol":"sync","number":162,"src":["linux-syscall-tbl"]},
-{"symbol":"sync_file_range","number":277,"src":["linux-syscall-tbl"]},
+{"symbol":"sync_file_range","number":277,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"syncfs","number":306,"src":["linux-syscall-tbl"]},
 {"symbol":"sysfs","number":139,"src":["linux-syscall-tbl"]},
 {"symbol":"sysinfo","number":99,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
