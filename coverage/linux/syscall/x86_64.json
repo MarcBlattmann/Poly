@@ -233,7 +233,7 @@
 {"symbol":"pwrite64","number":18,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"pwritev","number":296,"src":["linux-syscall-tbl"]},
 {"symbol":"pwritev2","number":328,"src":["linux-syscall-tbl"]},
-{"symbol":"quotactl","number":179,"src":["linux-syscall-tbl"]},
+{"symbol":"quotactl","number":179,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"quotactl_fd","number":443,"src":["linux-syscall-tbl"]},
 {"symbol":"read","number":0,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"readahead","number":187,"src":["linux-syscall-tbl"]},
