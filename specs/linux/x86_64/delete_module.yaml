@@ -1,0 +1,79 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/delete_module        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic (Ubuntu 24.04 HWE kernel, x86-64)"
+  machine: "home server, x86-64; tests run as a normal user (uid 1001, no capabilities), umask 022; CONFIG_MODULES=y, CONFIG_MODULE_UNLOAD=y, CONFIG_MODULE_FORCE_UNLOAD not set, /proc/sys/kernel/modules_disabled = 0, about 160 modules loaded"
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  delete_module(name, flags) (syscall 176) unloads the loaded kernel
+  module called name (a NUL-terminated string in the caller's memory) and
+  returns 0. flags is an unsigned 32-bit value (the upper 32 bits of the
+  register are ignored; flags is declared unsigned int); the man page's
+  O_NONBLOCK (0x800, always passed by rmmod) and O_TRUNC (0x200, "force") are the only bits with a meaning,
+  and unknown bits are never rejected. It needs CAP_SYS_MODULE in the
+  caller's effective capability set (in the initial user namespace).
+  Without it the call fails with EPERM (raw return -1) before any argument
+  is looked at: the name pointer, the flags and the other argument
+  registers make no difference, nothing of the caller's memory is read or
+  written, and nothing changes in the system. This is the only behaviour a
+  normal user ever sees, and it is what any caller sees after emptying its
+  effective set with capset. With CAP_SYS_MODULE the name is read up to
+  its NUL but never more than 55 bytes (longer names are cut to their
+  first 55 bytes), EFAULT if a byte that has to be read is unreadable;
+  then the module is looked up by that name, ENOENT if no module has it.
+  Arguments are two: name (pointer), flags (unsigned int). glibc has no
+  wrapper; the call is made with syscall(2).
+returns:
+  success: "0, after the module's exit function ran and the module was removed from /proc/modules and /sys/module (needs CAP_SYS_MODULE and an unused loaded module; not observed)"
+  without_privilege: "-1 EPERM for every argument combination: an unknown name, the empty name, a one-letter name, an unreadable name pointer of any kind, flags 0, O_NONBLOCK, O_TRUNC, O_NONBLOCK|O_TRUNC, 0xffffffff, upper register bits set, any values in rdx/r10/r8/r9"
+  repeatable: "the same EPERM on every call; a failed call has no lasting effect, so repeating it changes nothing"
+errors:
+  no_capability: "EPERM (1): CAP_SYS_MODULE not in the effective set. Only the effective set counts: a caller that empties its effective set but keeps its permitted set gets EPERM; a root caller that removed CAP_SYS_MODULE from its effective set but kept it permitted gets EPERM, and gets past the check again after raising it back. Other capabilities do not help (every capability except CAP_SYS_MODULE effective: EPERM) and are not needed (only CAP_SYS_MODULE effective: past the check). Checked first, before everything below"
+  eperm_before_name: "without the capability, an unreadable name (NULL, 1, low address 0x1000, unmapped page, PROT_NONE page, a string running into an unmapped page without a NUL, non-canonical 0x8000000000000000, kernel address 0xffffffff81000000, 0xfffffffffffff000) is EPERM, never EFAULT; no signal"
+  eperm_before_lookup: "without the capability, names no module has (and the empty name) are EPERM, never ENOENT"
+  modules_disabled: "EPERM (1) also for a caller with CAP_SYS_MODULE when /proc/sys/kernel/modules_disabled is 1 (man page; not tested, setting it is irreversible)"
+  bad_name: "EFAULT (14): with CAP_SYS_MODULE, a byte of the name that has to be read (up to and including the NUL, at most 55 bytes) is unreadable: NULL, an unmapped page, a PROT_NONE page, a non-canonical or kernel address, a string of 54 bytes or fewer with no NUL before an unmapped page. Same for every flags value"
+  name_length: "with CAP_SYS_MODULE, at most 55 bytes are read: 55 (or 56) non-NUL bytes directly before an unmapped page are not EFAULT but are looked up (ENOENT for a name no module has). Names of 55, 56 and 4095 bytes are looked up by their first 55 bytes; no ENAMETOOLONG or EINVAL for long names"
+  no_such_module: "ENOENT (2): with CAP_SYS_MODULE, no loaded module has that name. The empty name, a one-letter name and names with spaces, '/' or tabs are ENOENT too. The flags are not checked before the lookup: 0, O_NONBLOCK, O_TRUNC, both and 0xffffffff all give ENOENT"
+  in_use_by_modules: "EWOULDBLOCK (11, = EAGAIN): other loaded modules depend on it (their /proc/modules 'used by' list names it). Man page and source reading; not tested (needs a real module)"
+  not_live: "EBUSY (16): the module is still initializing or already being removed (/proc/modules state 'Loading' or 'Unloading'). Man page; not tested"
+  no_exit_function: "EBUSY (16): the module has an init function but no exit function. O_TRUNC bypasses this only on kernels built with forced unloading (not the oracle: there O_TRUNC changes nothing). Man page; not tested"
+  refcount: "EWOULDBLOCK (11): the module's reference count is not zero (e.g. a device it drives is open). On current kernels the call never waits for the count to drop, with or without O_NONBLOCK (the man page's blocking mode for flags without O_NONBLOCK is gone); only O_TRUNC on a kernel with forced unloading removes it anyway. Source reading for behaviour; not tested"
+  order: "EPERM (no CAP_SYS_MODULE or modules disabled), EFAULT (name), ENOENT (lookup), EWOULDBLOCK (other modules depend on it), EBUSY (not live), EBUSY (no exit function, unless forced), EWOULDBLOCK (in use, unless forced)"
+side_effects: >
+  A failed call has no effect: the name buffer keeps its bytes, a name in
+  read-only memory works (no write to it, no signal) and stays readable,
+  and no module is unloaded. On EPERM without the capability nothing is
+  read either (unreadable pointers raise no signal). The result does not
+  depend on pending signals: with a blocked pending SIGUSR1 the call still
+  returns EPERM (never EINTR), the signal stays pending and its handler
+  runs once when unblocked; with nothing pending no handler runs. A
+  successful unload (not observed) runs the module's exit function and
+  removes it from /proc/modules and /sys/module; a forced one (O_TRUNC,
+  kernels with forced unloading) taints the kernel.
+threading: >
+  The privilege is per task and inherited: a fork child and a thread
+  (CLONE_THREAD) of a caller without CAP_SYS_MODULE get EPERM too, and
+  the caller's results are the same before, during and after another
+  task's call.
+ordering: []
+timing:
+  typical: "about 1 µs per call that fails with EPERM; 2000 calls together well under a second"
+  guarantees: "the EPERM, EFAULT and ENOENT failures never sleep or wait"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+# Notes: every any-user test first empties all three capability sets with
+# capset (version 3, 0x20080522; the effective-only test keeps the
+# permitted and inheritable sets) and checks with capget that the
+# effective set is 0, so a root runner sees the same EPERM as a normal
+# user and can never unload anything. Tests marked needs=root only pass
+# unreadable names or names no module has ("poly_no_such_module_q7",
+# runs of one letter), so they can never unload a module. O_NONBLOCK and
+# O_TRUNC are from asm-generic/fcntl.h, CAP_SYS_MODULE is 16
+# (linux/capability.h). The 55-byte name limit (a module name holds at
+# most 55 characters plus its NUL) and the never-waiting refcount
+# behaviour come from source reading for behaviour; the root tests check
+# the limit. init_module (175) and finit_module (313) are separate entries.
