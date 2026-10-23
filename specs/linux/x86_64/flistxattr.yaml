@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/flistxattr           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks) and every test rerun with its directory on tmpfs (/dev/shm) with identical results (only the list order differs, which no test relies on); static freestanding test programs, raw syscalls, run directly and under the pipeline tracer. Root-only behaviour (trusted.* names with and without CAP_SYS_ADMIN) from xattr(7) and listxattr(2), not observed."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  flistxattr(fd, list, size) (196) returns the names of the extended
+  attributes of the file open on descriptor `fd` as NUL-terminated names
+  written back to back into the buffer `list` of `size` bytes, and returns
+  the list's length in bytes (sum of the name lengths plus one NUL per
+  name; 0 when there are no names). It is listxattr (194) with the
+  descriptor in place of the path walk: same list contents, size and buffer
+  rules. With size 0 nothing is copied and the needed length is returned.
+  Any open descriptor works whatever its access mode; O_PATH descriptors,
+  descriptors that are not open, and every negative value including
+  AT_FDCWD (-100) are EBADF (flistxattr does not accept AT_FDCWD, unlike
+  fgetxattr). fd is an int: only its low 32 bits count. The list belongs to
+  the inode, so a descriptor always sees the current names, also after the
+  file is renamed or unlinked or an open directory is removed. Listing
+  needs no permission on the file.
+returns:
+  success: "the list's length in bytes; 0 for no names. The list is the names, each followed by one NUL byte, nothing between them and nothing after the last NUL. Each name appears exactly once, byte for byte as set (zero-length values are listed; replacing a value does not duplicate or move the name out of the list; removed names are gone). Only the list's bytes are written, the rest of the buffer is untouched."
+  order: "unspecified and filesystem dependent; callers and tests must not rely on it (ext4 and tmpfs gave different orders for the same names; tmpfs lists in descending byte order)."
+  size: "size_t, compared in full. 0: return the needed length, copy nothing, the buffer pointer is not used (NULL or unmapped is fine). Nonzero and smaller than the list (even by one byte, also size 1): ERANGE, nothing written, also with a NULL or unmapped buffer. Equal or larger: the list is copied to the start of the buffer and its length returned. Sizes above 65536 (65537, 2^32, 2^32 + 1, SIZE_MAX) are accepted and act as a 65536-byte buffer."
+  large_lists: "a list longer than 65536 bytes is only possible where the filesystem holds that many names (tmpfs: 400 names of 247 bytes give a 99200-byte list; ext4 here runs out of room for names at about 4 KiB, ENOSPC from fsetxattr). Then size 0 returns the full length, a size of 65536 or more is E2BIG (even with a NULL buffer), a smaller nonzero size ERANGE."
+  buffer: "only the list's bytes must be writable: a buffer that ends exactly at an unmapped page works with a larger size. A NULL buffer (also with the exact size or SIZE_MAX), a low address such as 8, an unmapped page, or a buffer running into an unmapped page before the list ends: EFAULT (bytes before the fault may already be written). With an empty list the buffer is never used (0 for a NULL or unmapped buffer with any size, SIZE_MAX included)."
+  descriptor: "any open descriptor of a regular file or directory: O_RDONLY, O_WRONLY, O_RDWR, O_WRONLY|O_APPEND, a directory opened O_DIRECTORY or plain O_RDONLY, a dup'd descriptor (also after the original is closed), one inherited by a forked child, one opened through a symbolic link (lists the target), a reopen through /proc/self/fd/N (lists the same file), an unlinked open file (keeps its names and can get more with fsetxattr), a removed open directory (keeps its names), an O_TMPFILE file (0 until fsetxattr gives it a name)."
+  fd_bits: "only the low 32 bits of fd count, read as a signed int: fd + 2^32, fd + 7 * 2^32 and fd | 0xffffffff00000000 are fd; a closed fd + 2^32 is EBADF; 0xffffff9c (AT_FDCWD in the low bits) and 0x80000000 are negative: EBADF."
+  which_names: "user.* names on regular files and directories (set through the descriptor or by path, through a hard link or another descriptor: all show at once). system.posix_acl_access (24 bytes with its NUL) when a file or directory has a stored access ACL, system.posix_acl_default (25 bytes) when a directory has a default ACL; a new subdirectory of a directory with a default ACL inherits it (and is listed with it); an ACL with only owner, group and other entries is not stored (it only sets the mode), so it is not listed; a removed ACL is gone. security.* names are listed for everyone. trusted.* names are listed only for a caller with CAP_SYS_ADMIN and are left out of the list and its length otherwise (size 0 gives the shorter length, ERANGE is judged against it). Fresh files and directories have no visible names on the oracle (no SELinux): 0."
+  special_descriptors: "pipe ends, eventfd, epoll, timerfd, signalfd, inotify and pidfd descriptors, an opened FIFO, /dev/null, /dev/zero, /proc files and directories (/proc/self/status, /proc/self, /proc/meminfo), /sys directories: 0, without using the buffer (size 0, NULL or unmapped buffers give 0). A memfd is a regular file: 0 until fsetxattr gives it a user.* name, then that name is listed. Every socket (unix stream and datagram, both ends of a socketpair, IPv4 TCP and UDP, IPv6, netlink) lists exactly \"system.sockprotoname\" (21 bytes with its NUL): size 0 gives 21, a nonzero size of 20 or less ERANGE, 21 or more copies it, a NULL buffer with size 21 EFAULT. A bound unix socket keeps listing that one name (also after its path is unlinked); fsetxattr of user.* or security.* on a socket or FIFO is EPERM, so their lists never grow."
+  permission: "no permission is needed: the owner lists a file fchmod'ed to 0000 after opening, a 0200 file opened O_WRONLY, a directory fchmod'ed to 0000, and a file whose parent directory became 0000 after the open."
+errors:
+  fd: "EBADF: negative (-1, -99, AT_FDCWD -100, -101, 0x80000000 as an int), not open (closed, never opened, 999, 0x7fffffff, closed fd + 2^32), or an O_PATH descriptor (of a file, a directory opened O_PATH|O_DIRECTORY, a FIFO, a unix socket's bound path, a symbolic link opened O_PATH|O_NOFOLLOW)"
+  size: "ERANGE (nonzero size smaller than the list); E2BIG (list longer than 65536 bytes and size 65536 or more)"
+  buffer: "EFAULT"
+  order: "first the descriptor (EBADF, even with size 0, size 1, a NULL or unmapped buffer), then the list length against the size (ERANGE, E2BIG; even with a NULL or unmapped buffer), then the buffer (EFAULT). An empty list returns 0 before the size or buffer are looked at; size 0 returns the length without looking at the buffer."
+side_effects: "none: mode, size, link count, atime, mtime and ctime of the file (fstat through the descriptor) and of its directory are unchanged by successful, size-0, ERANGE and EFAULT calls; the file's contents and offset are unchanged; nothing beyond the list's length is written, nothing at all on ERANGE or size 0."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all links, descriptors and processes (a forked child listing through an inherited descriptor sees the same names, and a name it adds is listed by the parent)"
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 10  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
