@@ -309,7 +309,7 @@
 {"symbol":"settimeofday","number":164,"src":["linux-syscall-tbl"]},
 {"symbol":"setuid","number":105,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"setxattr","number":188,"src":["linux-syscall-tbl"]},
-{"symbol":"setxattrat","number":463,"src":["linux-syscall-tbl"]},
+{"symbol":"setxattrat","number":463,"status":"claimed","claimed_by":"spec-claude-1","src":["linux-syscall-tbl"]},
 {"symbol":"shmat","number":30,"status":"green","tests_visible":10,"tests_held_out":4,"src":["linux-syscall-tbl"]},
 {"symbol":"shmctl","number":31,"src":["linux-syscall-tbl"]},
 {"symbol":"shmdt","number":67,"src":["linux-syscall-tbl"]},
