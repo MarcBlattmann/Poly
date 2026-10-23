@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fremovexattr         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 7.0.0-30-generic x86_64"
+  machine: "host, uid 1001 (not root), /tmp on ext4 (4 KiB blocks), every test also rerun on tmpfs (/dev/shm) with identical results; static freestanding test programs, raw syscalls, also under the pipeline tracer. Root-only behaviour (trusted.* with CAP_SYS_ADMIN, CAP_DAC_OVERRIDE) from xattr(7), removexattr(2) and the sibling removexattr/fsetxattr sheets, not observed on Linux; the root test was run on Poly as root."
+  observed_by: spec-claude-1
+  date: 2026-10-23
+summary: >
+  fremovexattr(fd, name) (199) removes the extended attribute `name` from
+  the file open on descriptor `fd`. It behaves like removexattr (197) on
+  the inode behind the descriptor: same name rules, namespaces and
+  permission checks, but no path is looked up. It returns 0 when the
+  attribute was there and is now gone; a name the file does not have is
+  ENODATA (so a second removal is ENODATA). Only the named attribute goes:
+  other attributes and their values stay, names are exact and
+  case-sensitive. The descriptor's access mode does not matter (O_RDONLY
+  works); permission comes from the file's mode bits at the time of the
+  call. O_PATH descriptors are EBADF, and unlike fsetxattr / fgetxattr on
+  this kernel, AT_FDCWD (-100) is EBADF too (the working directory is not
+  touched). fd is an int: only its low 32 bits count. Attributes belong to
+  the inode: removing through any descriptor (dup'd, inherited, opened via
+  a symbolic link, reopened through /proc/self/fd/N) is seen at once
+  through every other descriptor, hard link and path, and unlinked open
+  files, O_TMPFILE files and removed open directories work as well.
+returns:
+  success: "0"
+  missing: "ENODATA (61) for a name the file does not have (user.*; trusted.* for a caller with CAP_SYS_ADMIN). Not for POSIX ACLs: see acl."
+  descriptor: "any open descriptor of a regular file or directory, whatever its access mode (O_RDONLY, O_WRONLY, O_RDWR, O_WRONLY|O_APPEND, O_RDONLY|O_DIRECTORY): a dup'd descriptor (also after the original is closed), one inherited by a forked child (the parent sees the removal), one opened through a symbolic link (removes the target's attribute), a reopen through /proc/self/fd/N, a file unlinked while open, an O_TMPFILE file, a directory removed while open, a memfd (a regular file). Since no path is walked, a file whose parent directory became mode 0000 after the open still has its attribute removed."
+  fd_bits: "only the low 32 bits of fd count, read as a signed int: fd + 2^32 and fd | 0xffffffff00000000 are fd; a closed fd + 2^32 is EBADF; 0xffffff9c (AT_FDCWD in the low bits) is EBADF."
+  names: "the name is read up to its NUL, at most 256 bytes. Empty name: ERANGE. 1 to 255 bytes (prefix included) is a valid length (a 255-byte name is set and removed); 256 bytes or more without a NUL: ERANGE, also when the bytes after the first 256 are unmapped. NULL or unreadable name, or a name that runs into an unmapped page before a NUL within its first 255 bytes: EFAULT; a name whose NUL is the last byte before an unmapped page works. Known prefixes: user., trusted., security., system. (lower case, at the very start). Unknown or missing prefix (\"plain\", \"user\", \"USER.a\", \".user.a\", \"foo.bar\"): EOPNOTSUPP on a writable object. \"user.\" (prefix and nothing else): EINVAL on a writable file or directory; \"trusted.\" for a caller with CAP_SYS_ADMIN: EINVAL. Unknown system.* names (\"system.x\", \"system.\"): EOPNOTSUPP. Any bytes after the prefix form an ordinary name (\"user..\", \"user. /\\x01\\xff\"); a name differing in one byte is a different name (ENODATA)."
+  user_namespace: "user.* attributes exist only on regular files and directories: on pipe ends, UNIX sockets, an opened FIFO, /dev/null, eventfd and epoll descriptors any user.* name (also \"user.\") is EPERM, for root too. Removal needs write permission on the file by its CURRENT mode bits, checked at call time, not at open time: a file opened O_RDWR and then fchmod'ed to 0444 or 0000 is EACCES (the attribute stays), fchmod'ed to 0200 it works; a 0555 directory is EACCES; whether the name exists does not matter (a missing name on a read-only file is EACCES, not ENODATA). Root passes through CAP_DAC_OVERRIDE (0444 file: 0); a caller with all capabilities dropped does not (EACCES). Ownership is not needed. On a sticky directory only its owner (or CAP_FOWNER) may remove: a descriptor of /tmp as non-root gives EPERM for user.*."
+  trusted_namespace: "trusted.* (and \"trusted.\") without CAP_SYS_ADMIN: EPERM on any descriptor type (file, read-only or not, pipe, /dev/null, eventfd), existing or not. With it: 0 when present, ENODATA when missing, through any descriptor of a regular file or directory including O_RDONLY of a 0444 file; \"trusted.\" EINVAL."
+  security_namespace: "security.* (also \"security.\", \"security.capability\") without CAP_SYS_ADMIN: EPERM, before the write-permission check (a 0444 file: EPERM; also on pipes and sockets). Not observed with privilege."
+  unknown_namespace: "names without a known prefix need write permission first: a 0444 regular file opened O_RDONLY gives EACCES; a writable file, a pipe end (read or write end), a UNIX socket, an opened FIFO, /dev/null (opened O_RDONLY or O_RDWR) or a memfd: EOPNOTSUPP."
+  sockets: "every socket lists system.sockprotoname (flistxattr), but it cannot be removed: EOPNOTSUPP, and it stays listed. Other system.* names and both ACL names on a socket: EOPNOTSUPP."
+  acl: "system.posix_acl_access / system.posix_acl_default need ownership of the file (or CAP_FOWNER), not write permission: the owner removes the access ACL of its own file opened O_RDONLY after fchmod to 0444 or 0000. Removing an existing ACL returns 0, fgetxattr then gives ENODATA and flistxattr no longer lists it; the mode bits are unchanged (a 0444 file stays 0444). Removing an ACL that is not there also returns 0, not ENODATA: a second removal, a default ACL on a regular file, an access ACL on a directory without one, either name on an opened FIFO. A directory's default ACL is removed the same way (0, then ENODATA, then 0 again); entries created afterwards get no ACL. On pipes and sockets both ACL names are EOPNOTSUPP."
+  proc_and_special: "observed as non-root, user-dependent, not in tests: /proc/self/status opened O_RDONLY (mode 0444) gives EACCES for user.* and unknown prefixes, EPERM for trusted.*, EOPNOTSUPP for the ACL names; a /proc/self directory descriptor gives EPERM for user.* and unknown prefixes."
+errors:
+  name: "EFAULT (NULL, unreadable), ERANGE (empty, 256+ bytes), EOPNOTSUPP (unknown prefix, unknown system.*), EINVAL (\"user.\" on a writable file or directory; \"trusted.\" with CAP_SYS_ADMIN)"
+  descriptor: "EBADF: negative (-1, -99, AT_FDCWD -100, -101, 0xffffff9c), not open (closed, never opened, 900, 0x7fffffff, closed fd + 2^32), or an O_PATH descriptor (of a file, a directory opened O_PATH|O_DIRECTORY, a symbolic link opened O_PATH|O_NOFOLLOW), whatever the (well-formed) name, trusted.* and ACL names included"
+  missing: "ENODATA"
+  permission: "EACCES (no write permission by the current mode for user.* and unknown prefixes); EPERM (user.* on a non-regular non-directory: pipe, socket, FIFO, device, eventfd, epoll; user.* on another user's sticky directory; trusted.*/security.* without CAP_SYS_ADMIN; ACLs of a file the caller does not own; immutable or append-only files per xattr(7))"
+  not_supported: "EOPNOTSUPP (unknown prefix on a writable object or a non-regular file, unknown system.* name, system.sockprotoname, ACL names on pipes and sockets)"
+  order: "when several problems exist, the first in this list decides: (1) the name: EFAULT, then empty or too long ERANGE; (2) the descriptor EBADF (bad number, AT_FDCWD, O_PATH); (3) unknown system.* names EOPNOTSUPP, ACL names on pipes and sockets EOPNOTSUPP; (4) trusted.* and security.* without CAP_SYS_ADMIN EPERM, user.* on a non-regular non-directory EPERM, user.* on another user's sticky directory EPERM, ACLs on a file the caller does not own EPERM; (5) write permission EACCES (user.* and unknown prefixes); (6) unknown prefix EOPNOTSUPP, \"user.\" EINVAL; (7) ENODATA. Examples: fd -1 or an O_PATH descriptor with an empty or 256-byte name ERANGE, with a NULL or unreadable name EFAULT, but with \"foo.a\", \"user.\", \"system.x\", \"trusted.a\" or an ACL name EBADF; on a 0444 file \"system.x\" EOPNOTSUPP, \"trusted.a\" and \"security.a\" EPERM, \"user.\", \"foo.a\", an existing and a missing user.* name EACCES, a missing ACL 0; on a writable file \"foo.a\" EOPNOTSUPP, \"user.\" EINVAL, \"trusted.a\" EPERM, a missing user.* name ENODATA; on a pipe \"user.\" EPERM, \"foo.a\" EOPNOTSUPP."
+side_effects: "a successful removal moves the change time (ctime) of the inode forward; mode, size, link count, inode number, mtime and contents do not change, and the directory holding the file is untouched (its ctime and mtime stay). A failed call changes nothing, ctime included (ENODATA, EOPNOTSUPP, EACCES, EBADF through an O_PATH descriptor of the same file); a refused removal leaves the attribute and its value in place. Removing an ACL that is not there may or may not move ctime depending on the filesystem (see removexattr), so it is not specified."
+threading: "no thread-specific behaviour; attributes are per inode and shared by all links, descriptors and processes (a forked child removing through an inherited descriptor is seen by the parent)"
+ordering: []                                  # observable ordering of events/callbacks, if any
+timing:                                       # envelopes, never exact values
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
