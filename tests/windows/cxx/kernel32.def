@@ -1,0 +1,13 @@
+; Import names of kernel32.dll that the C++ Windows test programs may use
+; (tests/windows/cxx/poly_wtest.h). Names from Microsoft Learn's reference
+; pages; `win build` makes the import library from this file.
+LIBRARY kernel32.dll
+EXPORTS
+    CloseHandle
+    CreateFileW
+    ExitProcess
+    GetModuleFileNameW
+    GetModuleHandleW
+    RaiseException
+    SetUnhandledExceptionFilter
+    WriteFile

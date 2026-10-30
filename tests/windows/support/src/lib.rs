@@ -401,6 +401,179 @@ fn write_raw(bytes: &[u8]) {
     }
 }
 
+/// Write `bytes` into the observation file as they are (no line end
+/// added): for programs whose observations are not checks, such as the
+/// 7-Zip scenario driver (ADR 0088).
+pub fn write_output(bytes: &[u8]) {
+    write_raw(bytes);
+}
+
+/// SHA-256 (FIPS 180-4, "Secure Hash Standard"), fed in pieces.
+#[derive(Clone, Debug)]
+pub struct Sha256 {
+    state: [u32; 8],
+    block: [u8; 64],
+    used: usize,
+    total: u64,
+}
+
+/// FIPS 180-4 section 4.2.2: the first 32 bits of the fractional parts of
+/// the cube roots of the first 64 primes.
+const SHA256_K: [u32; 64] = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
+    0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8,
+    0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819,
+    0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+    0xc67178f2,
+];
+
+impl Sha256 {
+    /// FIPS 180-4 section 5.3.3: the initial hash value.
+    pub const fn new() -> Sha256 {
+        Sha256 {
+            state: [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+            ],
+            block: [0; 64],
+            used: 0,
+            total: 0,
+        }
+    }
+
+    fn compress(&mut self) {
+        let mut w = [0u32; 64];
+        for (i, word) in w.iter_mut().take(16).enumerate() {
+            *word = u32::from_be_bytes([
+                self.block[4 * i],
+                self.block[4 * i + 1],
+                self.block[4 * i + 2],
+                self.block[4 * i + 3],
+            ]);
+        }
+        for i in 16..64 {
+            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16].wrapping_add(s0).wrapping_add(w[i - 7]).wrapping_add(s1);
+        }
+        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = self.state;
+        for i in 0..64 {
+            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+            let ch = (e & f) ^ (!e & g);
+            let t1 = h.wrapping_add(s1).wrapping_add(ch).wrapping_add(SHA256_K[i]).wrapping_add(w[i]);
+            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+            let maj = (a & b) ^ (a & c) ^ (b & c);
+            let t2 = s0.wrapping_add(maj);
+            h = g;
+            g = f;
+            f = e;
+            e = d.wrapping_add(t1);
+            d = c;
+            c = b;
+            b = a;
+            a = t1.wrapping_add(t2);
+        }
+        for (s, v) in self.state.iter_mut().zip([a, b, c, d, e, f, g, h]) {
+            *s = s.wrapping_add(v);
+        }
+    }
+
+    pub fn update(&mut self, mut data: &[u8]) {
+        self.total = self.total.wrapping_add(data.len() as u64);
+        while !data.is_empty() {
+            let n = (64 - self.used).min(data.len());
+            self.block[self.used..self.used + n].copy_from_slice(&data[..n]);
+            self.used += n;
+            data = &data[n..];
+            if self.used == 64 {
+                self.compress();
+                self.used = 0;
+            }
+        }
+    }
+
+    /// The digest (FIPS 180-4 section 5.1.1's padding, then the state).
+    pub fn finish(mut self) -> [u8; 32] {
+        let bits = self.total.wrapping_mul(8);
+        self.update(&[0x80]);
+        while self.used != 56 {
+            self.update(&[0]);
+        }
+        self.update(&bits.to_be_bytes());
+        let mut out = [0u8; 32];
+        for (i, s) in self.state.iter().enumerate() {
+            out[4 * i..4 * i + 4].copy_from_slice(&s.to_be_bytes());
+        }
+        out
+    }
+}
+
+impl Default for Sha256 {
+    fn default() -> Self {
+        Sha256::new()
+    }
+}
+
+/// The RFC 4648 base64 alphabet.
+const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Base64 (RFC 4648, with padding) written into the observation file as
+/// the input arrives, so a large input needs no buffer of its size.
+#[derive(Debug)]
+pub struct Base64Writer {
+    pending: [u8; 3],
+    held: usize,
+    out: [u8; 256],
+    len: usize,
+}
+
+impl Base64Writer {
+    pub const fn new() -> Base64Writer {
+        Base64Writer { pending: [0; 3], held: 0, out: [0; 256], len: 0 }
+    }
+
+    fn emit(&mut self, group: [u8; 3], n: usize) {
+        if self.len + 4 > self.out.len() {
+            write_raw(&self.out[..self.len]);
+            self.len = 0;
+        }
+        let v = u32::from(group[0]) << 16 | u32::from(group[1]) << 8 | u32::from(group[2]);
+        for i in 0..4 {
+            self.out[self.len + i] = if i <= n { BASE64[(v >> (18 - 6 * i) & 63) as usize] } else { b'=' };
+        }
+        self.len += 4;
+    }
+
+    pub fn update(&mut self, data: &[u8]) {
+        for &b in data {
+            self.pending[self.held] = b;
+            self.held += 1;
+            if self.held == 3 {
+                self.emit(self.pending, 3);
+                self.held = 0;
+            }
+        }
+    }
+
+    /// The last group, padded, and everything still buffered.
+    pub fn finish(mut self) {
+        if self.held > 0 {
+            let mut g = [0u8; 3];
+            g[..self.held].copy_from_slice(&self.pending[..self.held]);
+            self.emit(g, self.held);
+        }
+        write_raw(&self.out[..self.len]);
+    }
+}
+
+impl Default for Base64Writer {
+    fn default() -> Self {
+        Base64Writer::new()
+    }
+}
+
 /// End the process with `code` (`NtTerminateProcess` on itself).
 pub fn exit(code: u32) -> ! {
     let handle = OUTPUT.swap(core::ptr::null_mut(), Ordering::Relaxed);

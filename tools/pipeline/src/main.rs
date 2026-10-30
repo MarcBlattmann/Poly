@@ -18,22 +18,32 @@
 //!                                                run tests on Poly only (no reference): output and app-mode events
 //! initramfs <binary> --out FILE | --list FILE    write (or list) a test initramfs
 //! spec new <entry> --agent ID [--oracle-os TEXT] spec sheet skeleton from specs/TEMPLATE.yaml
-//! tests split <entry> <dir> --spec-agent ID [--ratio 0.3] [--replace]
+//! tests split <entry> <dir> --spec-agent ID [--ratio 0.3] [--replace] [--windows-results WIN.json]
 //!                                                visible tests into specs/, held-out ones outside the repo
+//!                                                (a Windows entry: .rs/.cpp tests only; its Windows results
+//!                                                split beside them as windows.json, ADR 0098)
 //! handoff record <entry> --spec-agent A --implementer B [--allow-dirty]
-//! handoff bundle <entry> --out DIR               what the implementer receives
+//! handoff bundle <entry>... --out DIR            what the implementer receives (one or more entries)
 //! handoff verify [<entry>] [--received DIR]      prove the hand-offs (and no leaks)
 //! win build [--tests-dir DIR]... [--tests a,b] [--out DIR]
-//!                                                Windows test programs (tests/windows/*.rs, ADR 0075) into
+//!                                                Windows test programs (tests/windows/*.rs, ADR 0075, and
+//!                                                *.cpp, ADR 0098) into
 //!                                                target/pipeline/windows/bin/*.exe + manifest.json
-//! win bundle [--bin-dir DIR] [--out FILE] [--part-size BYTES]
-//!                                                one text file for the Windows machine (and parts of it)
+//! win bundle [--bin-dir DIR] [--out FILE] [--part-size BYTES] [--data-dir DIR]
+//!                                                one text file for the Windows machine (and parts of it);
+//!                                                with the tests' data files, DIR/<test>/<file> (ADR 0088)
 //! win unbundle <bundle part>... --out DIR        check a bundle (hashes, completeness) and unpack it
 //! win poly [--tests a,b] [--bin-dir DIR] [--kernel ELF] [--build-kernel] [--jobs N] [--out FILE]
 //!                                                run them on Poly; results in the Windows runner's format
 //! win diff --reference WIN.json [--target poly|FILE.json] [--tests a,b] [--strict] [poly options]
 //!                                                compare Windows results with Poly (or another result file)
 //! win show <results.json> [--tests a,b]          print a result file's observations
+//! win scenario poly [--bin-dir DIR] [--data-dir DIR] [--tests a,b] [--kernel ELF] [--build-kernel]
+//!                   [--timeout SECS] [--out FILE]
+//!                                                run scenario drivers (ADR 0088) on Poly with their data files
+//! win scenario diff --reference WIN.json [--target poly|FILE.json] [--markdown FILE] [poly options]
+//!                                                compare scenario runs step by step (exit 1 unless all pass)
+//! win scenario show <results.json> [--tests a,b] a scenario run, step by step, outputs as text
 //! ```
 
 mod apps;
@@ -50,11 +60,13 @@ mod libsearch;
 mod poly;
 mod ptrace;
 mod runner;
+mod scenario;
 mod sha256;
 mod store;
 mod syscalls;
 mod trace;
 mod util;
+mod wincxx;
 mod windows;
 
 use diff::{Options, Summary, SyscallMode, TestResult, Verdict};
@@ -74,6 +86,8 @@ pub const RUNS_DIR: &str = "target/pipeline/runs";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Booting Poly under QEMU (TCG) takes longer than running on the host.
 const POLY_TIMEOUT: Duration = Duration::from_secs(120);
+/// A scenario driver runs a program many times in one boot (ADR 0088).
+const SCENARIO_TIMEOUT: Duration = Duration::from_secs(900);
 
 pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2).unwrap().to_path_buf()
@@ -780,16 +794,32 @@ fn spec(repo: &Path, a: &Args) -> Result<u8> {
 
 fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
     oracle_guard("tests")?;
-    a.only(&["spec-agent", "ratio", "replace"])?;
+    a.only(&["spec-agent", "ratio", "replace", "windows-results"])?;
     let [sub, id, generated] = a.positional.as_slice() else {
-        return Err(
-            "usage: pipeline tests split <entry> <generated-dir> --spec-agent ID [--ratio 0.3] [--replace]".into()
-        );
+        return Err("usage: pipeline tests split <entry> <generated-dir> --spec-agent ID [--ratio 0.3] [--replace] \
+                    [--windows-results RESULTS.json]"
+            .into());
     };
     if sub != "split" {
         return Err(format!("unknown tests command {sub}"));
     }
     let entry = EntryId::parse(id)?;
+    // A Windows entry (ADR 0098): test sources only, and the Windows
+    // results, if given, checked before anything is written.
+    let results = match a.opt("windows-results") {
+        Some(_) if entry.os != "windows" => return Err("--windows-results is for Windows entries".into()),
+        Some(path) => Some(windows::RunFile::load(Path::new(path))?),
+        None => None,
+    };
+    if entry.os == "windows" {
+        let files: Vec<String> =
+            util::files_under(Path::new(generated))?.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        windows::check_split_files(&files)?;
+        if let Some(r) = &results {
+            let names: Vec<String> = files.iter().map(|f| windows::test_name(f)).collect();
+            windows::split_results(r, &names, &[])?;
+        }
+    }
     let heldout = store::heldout_root(repo)?;
     let ratio = a.opt("ratio").unwrap_or("0.3").parse::<f64>().map_err(|e| format!("--ratio: {e}"))?;
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).unwrap_or_else(|_| "unknown".into());
@@ -802,6 +832,21 @@ fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
         replace: a.has("replace"),
     };
     let s = store::split_tests(repo, &heldout, &req)?;
+    if let Some(r) = &results {
+        let names = |files: &[String]| files.iter().map(|f| windows::test_name(f)).collect::<Vec<_>>();
+        let (visible, held) = windows::split_results(r, &names(&s.visible), &names(&s.held_out))?;
+        let v = repo.join(entry.tests_dir()).join(windows::RECORDED_RESULTS);
+        let h = entry.heldout_dir(&heldout).join(windows::RECORDED_RESULTS);
+        util::write_json(&v, &visible)?;
+        util::write_json(&h, &held)?;
+        println!(
+            "recorded Windows results: {} ({} tests), {} ({} tests)",
+            v.display(),
+            visible.tests.len(),
+            h.display(),
+            held.tests.len()
+        );
+    }
     println!(
         "{}: {} visible in {}, {} held out in {} (manifest {})",
         entry.id(),
@@ -844,12 +889,14 @@ fn handoff_cmd(repo: &Path, a: &Args) -> Result<u8> {
             Ok(0)
         }
         Some("bundle") => {
-            let [_, id] = a.positional.as_slice() else {
-                return Err("usage: pipeline handoff bundle <entry> --out DIR".into());
-            };
+            let ids: Vec<&str> = a.positional[1..].iter().map(String::as_str).collect();
+            if ids.is_empty() {
+                return Err("usage: pipeline handoff bundle <entry>... --out DIR".into());
+            }
             let out = PathBuf::from(a.require("out")?);
-            let r = handoff::bundle(repo, id, &out, heldout_if_present(repo)?.as_deref())?;
-            println!("{} files of the {} hand-off at {} in {}", r.files.len(), r.entry, r.revision, out.display());
+            for r in handoff::bundle_many(repo, &ids, &out, heldout_if_present(repo)?.as_deref())? {
+                println!("{} files of the {} hand-off at {} in {}", r.files.len(), r.entry, r.revision, out.display());
+            }
             Ok(0)
         }
         Some("verify") => {
@@ -900,9 +947,16 @@ fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
             Ok(0)
         }
         "bundle" => {
-            a.only(&["bin-dir", "out", "part-size"])?;
+            a.only(&["bin-dir", "out", "part-size", "data-dir"])?;
             let m = windows::Manifest::load(&bin_dir)?;
-            let text = windows::bundle(&m, &bin_dir)?;
+            let data = match a.opt("data-dir") {
+                Some(d) => windows::data_files(&m, Path::new(d))?,
+                None => Vec::new(),
+            };
+            for (test, name, bytes) in &data {
+                println!("data {test}/{name}: {} bytes", bytes.len());
+            }
+            let text = windows::bundle_with_data(&m, &bin_dir, &data)?;
             let id = windows::bundle_id(&text);
             let out = a.opt("out").map_or_else(|| win.join(format!("bundle-{id}.txt")), PathBuf::from);
             util::write(&out, &text)?;
@@ -1004,16 +1058,20 @@ fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
             for p in rest {
                 text.push_str(&util::read_string(Path::new(p))?);
             }
-            let (m, files) = windows::unbundle(&text)?;
+            let (m, files, data) = windows::unbundle_all(&text)?;
             let out = PathBuf::from(a.require("out")?);
             for (name, bytes) in &files {
                 util::write(&out.join(name), bytes)?;
             }
+            for (test, name, bytes) in &data {
+                util::write(&out.join("data").join(test).join(name), bytes)?;
+            }
             util::write_json(&out.join("manifest.json"), &m)?;
             println!(
-                "bundle {}: {} files, hashes good, into {}",
+                "bundle {}: {} files and {} data files, hashes good, into {}",
                 windows::bundle_id(&text),
                 files.len(),
+                data.len(),
                 out.display()
             );
             Ok(0)
@@ -1042,6 +1100,131 @@ fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
                 print!("{}", t.output.as_deref().unwrap_or_default());
             }
             Ok(0)
+        }
+        "scenario" => win_scenario(repo, a, rest, &bin_dir),
+        _ => Err(usage.into()),
+    }
+}
+
+/// `win scenario poly|diff|show` (ADR 0088): scenario drivers, which run
+/// an unchanged application step by step, on Poly and compared with a
+/// Windows recording step by step.
+fn win_scenario(repo: &Path, a: &Args, rest: &[String], bin_dir: &Path) -> Result<u8> {
+    let usage = "usage: pipeline win scenario <poly|diff|show> (see tools/pipeline/src/main.rs)";
+    let (sub, rest) = rest.split_first().ok_or(usage)?;
+    let only = test_list(a);
+    match sub.as_str() {
+        "show" => {
+            oracle_guard("win scenario show")?;
+            a.only(&["tests"])?;
+            let [path] = rest else {
+                return Err("usage: pipeline win scenario show <results.json> [--tests a,b]".into());
+            };
+            let f = windows::RunFile::load(Path::new(path))?;
+            for t in scenario::scenario_tests(&f).into_iter().filter(|t| only.is_empty() || only.contains(&t.name)) {
+                let bytes = windows::unbase64(t.output_b64.as_deref().unwrap_or_default())?;
+                println!("== {} on {} (status {}, stable {:?})", t.name, f.system.name, t.status, t.stable);
+                print!("{}", scenario::show(&scenario::parse(&bytes)?));
+            }
+            Ok(0)
+        }
+        "poly" | "diff" => {
+            a.only(&[
+                "bin-dir",
+                "data-dir",
+                "kernel",
+                "build-kernel",
+                "timeout",
+                "tests",
+                "out",
+                "reference",
+                "target",
+                "markdown",
+            ])?;
+            let reference = match a.opt("reference") {
+                Some(path) => {
+                    oracle_guard("win scenario diff")?;
+                    Some((path.to_string(), windows::RunFile::load(Path::new(path))?))
+                }
+                None if sub == "diff" => {
+                    return Err("win scenario diff needs --reference <results.json from Windows>".into());
+                }
+                None => None,
+            };
+            let run_dir = repo.join(RUNS_DIR).join(format!("{}-scenario-{sub}", util::now_stamp()));
+            let target = match a.opt("target") {
+                Some(path) if path != "poly" => windows::RunFile::load(Path::new(path))?,
+                _ => {
+                    let kernel = a.opt("kernel").map_or_else(|| poly::default_kernel(repo), PathBuf::from);
+                    if a.has("build-kernel") || (a.opt("kernel").is_none() && !kernel.exists()) {
+                        poly::build_kernel(repo)?;
+                    }
+                    let target = poly::Target { kernel, timeout: timeout(a, SCENARIO_TIMEOUT)? };
+                    let mut m = windows::Manifest::load(bin_dir)?;
+                    // The scenarios: the tests the reference has as scenarios, or those named.
+                    let wanted: Vec<String> = match (&reference, only.is_empty()) {
+                        (_, false) => only.clone(),
+                        (Some((_, r)), true) => scenario::scenario_tests(r).iter().map(|t| t.name.clone()).collect(),
+                        (None, true) => {
+                            m.tests.iter().filter(|t| t.name.ends_with("_scenario")).map(|t| t.name.clone()).collect()
+                        }
+                    };
+                    m.tests.retain(|t| wanted.contains(&t.name));
+                    if m.tests.is_empty() {
+                        return Err(format!(
+                            "no scenario drivers to run in {} (build them: win build)",
+                            bin_dir.display()
+                        ));
+                    }
+                    let data_dir = a.opt("data-dir").map_or_else(|| repo.join(scenario::DATA_DIR), PathBuf::from);
+                    let results = scenario::run_poly(&target, bin_dir, &m, &data_dir, &run_dir)?;
+                    util::write_json(&run_dir.join("poly.json"), &results)?;
+                    results
+                }
+            };
+            if let Some(out) = a.opt("out") {
+                util::write_json(Path::new(out), &target)?;
+            }
+            let Some((reference_path, reference)) = reference else {
+                for t in &target.tests {
+                    let code = t.exit_code.map_or("none".into(), |c| format!("{c:#x}"));
+                    println!(
+                        "== {} {} exit {code}{}",
+                        t.name,
+                        t.status,
+                        t.error.as_deref().map(|e| format!(": {e}")).unwrap_or_default()
+                    );
+                    let bytes = windows::unbase64(t.output_b64.as_deref().unwrap_or_default())?;
+                    if scenario::is_scenario(&bytes) {
+                        print!("{}", scenario::show(&scenario::parse(&bytes)?));
+                    }
+                }
+                println!("results: {}", run_dir.join("poly.json").display());
+                return Ok(0);
+            };
+            let mut all_passed = true;
+            let mut reports = Vec::new();
+            for r in scenario::scenario_tests(&reference) {
+                if !only.is_empty() && !only.contains(&r.name) {
+                    continue;
+                }
+                let report = scenario::compare(r, target.test(&r.name), (&reference.system, &target.system))?;
+                all_passed &= report.passed();
+                let text = scenario::report_text(&report);
+                print!("{text}");
+                util::write(&run_dir.join(format!("{}.report.txt", r.name)), &text)?;
+                if let Some(md) = a.opt("markdown") {
+                    let shown = Path::new(&reference_path).strip_prefix(repo).unwrap_or(Path::new(&reference_path));
+                    util::write(Path::new(md), scenario::report_markdown(&report, &shown.to_string_lossy()))?;
+                }
+                reports.push(report);
+            }
+            if reports.is_empty() {
+                return Err("the reference has no scenario runs".into());
+            }
+            util::write_json(&run_dir.join("summary.json"), &reports)?;
+            println!("run directory: {}", run_dir.display());
+            Ok(u8::from(!all_passed))
         }
         _ => Err(usage.into()),
     }

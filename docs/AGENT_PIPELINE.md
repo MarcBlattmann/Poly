@@ -351,6 +351,26 @@ start or was not the same on both runs is an **error**, a test Poly cannot
 start is **unsupported**. `win show` and `win diff` read real Windows'
 observations, so implementers may not run them.
 
+**C++ tests** ([ADR 0098](adr/0098-cpp-windows-tests-and-the-cpp-exception-spec.md)):
+a test may also be one `.cpp` file, for what Rust cannot do (C++
+exceptions through `msvcrt.dll`). `win build` compiles it with `clang++
+--target=x86_64-pc-windows-msvc -ffreestanding -nostdlib -fcxx-exceptions`
+and links it with `lld-link` against import libraries made by
+`llvm-dlltool` from `tests/windows/cxx/{kernel32,msvcrt}.def`; it includes
+`tests/windows/cxx/poly_wtest.h` (the same observation file and lines as
+`poly-wtest`, `POLY_TEST_MAIN(fn)`) and may import from `msvcrt.dll` too.
+A line `// poly-cxx: handler=__CxxFrameHandler magic=0x19930520
+ehflags=0 cflags=-fasync-exceptions` rewrites clang's exception tables the
+way older compilers write them (see `tools/pipeline/src/wincxx.rs`).
+
+**Splitting a Windows entry's tests**: `pipeline tests split <entry> <dir>
+--spec-agent A --windows-results <results.json from the PC>` accepts only
+`.rs`/`.cpp` test files, checks that every test ran on Windows with the
+same result on every run, and writes the visible tests' results to
+`<symbol>.tests/windows.json` and the held-out tests' to the store, beside
+the tests (`win diff --reference <symbol>.tests/windows.json` compares Poly
+with them without the PC). The hand-off works as for Linux entries.
+
 **One round on the PC** (the coordinator relays; the session there uses Git
 Bash). Here:
 
@@ -385,6 +405,25 @@ Compare with the executables of that bundle (the build is reproducible, so
 rebuilding unchanged sources gives the same files; the diff reports
 different executables as an error).
 
+**Scenario drivers** ([ADR 0088](adr/0088-7-zip-scenario-driver.md)): a
+test that runs an unchanged application step by step and records each
+step (exit code, stdout and stderr bytes, every file with size, SHA-256,
+time and attributes) in a `poly-scenario/1` observation file. The first is
+`tests/windows/sevenzip_scenario.rs` (15 runs of the pinned `7za.exe`). Its
+data file `7za.exe` travels beside it: `win bundle --data-dir DIR` adds
+`DIR/<test>/<file>` as `data` lines, which `poly-oracle.ps1` puts beside
+the test (or `-TestsDir ... -DataDir DIR` on the PC). Its Windows recording
+is committed as `tests/windows/oracle/sevenzip_scenario.windows.json`.
+
+```sh
+cargo xtask win 7zip-diff [--markdown docs/windows/7zip-recording.md]   # build, run on Poly, compare per step
+cargo xtask pipeline win scenario show tests/windows/oracle/sevenzip_scenario.windows.json   # what Windows did
+cargo xtask pipeline win scenario poly --bin-dir DIR [--data-dir DIR]  # Poly only
+# on the PC, to record again (after the driver or the support crate changed):
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../poly/tools/pipeline/windows/poly-oracle.ps1 \
+    -Bundle bundle-<id>.txt -Tests sevenzip_scenario -TestTimeouts sevenzip_scenario=300 -Out results.json
+```
+
 ## Safety rules
 
 Reviewers check these on every agent PR; a violation stops the entry
@@ -414,7 +453,7 @@ Reviewers check these on every agent PR; a violation stops the entry
 - `data<i>` fields and times in the kernel's `POLY-SYSCALL` records.
   (`POLY-SIGNAL` reports every signal a thread takes but `SIGKILL`, as the
   ptrace tracer's signal-delivery-stops: ADR 0062.)
-- A Windows API tracer and the Windows workflow in the pipeline (`tests
-  split` and `handoff` for `.rs` tests and recorded Windows results, a
-  `win polycheck` in CI against recorded references): ADR 0075 says what they need. The macOS oracle and tracer (later
-  phases).
+- A Windows API tracer and a `win polycheck` in CI against the recorded
+  references (`tests split` and `handoff` for Windows tests and their
+  recorded results exist since ADR 0098): ADR 0075 says what they need.
+  The macOS oracle and tracer (later phases).
