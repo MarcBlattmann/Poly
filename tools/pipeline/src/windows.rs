@@ -384,18 +384,31 @@ pub fn unbase64(text: &str) -> Result<Vec<u8>> {
 // ---------------------------------------------------------------------------
 // The bundle: what travels to the Windows machine.
 
-/// The bundle text of `manifest` and the executables in `dir`:
+/// A test's data file in a bundle: test, file name, bytes (ADR 0088).
+pub type DataFile = (String, String, Vec<u8>);
+
+/// A data file name: one path component of plain characters.
+pub fn valid_data_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+}
+
+/// The bundle text of `manifest`, the executables in `dir` and the tests'
+/// data files:
 ///
 /// ```text
 /// poly-winbundle/1
 /// manifest <base64 of manifest.json>
 /// file <name>.exe <sha256> <base64>
-/// end <files>
+/// data <test> <name> <sha256> <base64>     (ADR 0088; any number, after the executables)
+/// end <files and data files>
 /// ```
 ///
 /// Line based so a long bundle can be cut into parts at line ends and the
-/// parts concatenated again; every file carries its hash.
-pub fn bundle(manifest: &Manifest, dir: &Path) -> Result<String> {
+/// parts concatenated again; every file carries its hash. The runner puts
+/// a test's data files beside it before it runs.
+pub fn bundle_with_data(manifest: &Manifest, dir: &Path, data: &[DataFile]) -> Result<String> {
     let json = serde_json::to_string(manifest).map_err(|e| e.to_string())?;
     let mut s = format!("{BUNDLE_FORMAT}\nmanifest {}\n", base64(json.as_bytes()));
     for t in &manifest.tests {
@@ -405,8 +418,40 @@ pub fn bundle(manifest: &Manifest, dir: &Path) -> Result<String> {
         }
         s.push_str(&format!("file {} {} {}\n", t.exe, t.exe_sha256, base64(&bytes)));
     }
-    s.push_str(&format!("end {}\n", manifest.tests.len()));
+    for (test, name, bytes) in data {
+        if !manifest.tests.iter().any(|t| &t.name == test) {
+            return Err(format!("data file {name} for {test}, which is not in the bundle"));
+        }
+        if !valid_data_name(name) {
+            return Err(format!("data file name {name:?}: letters, digits, _ . - only"));
+        }
+        s.push_str(&format!("data {test} {name} {} {}\n", sha256::hex(bytes), base64(bytes)));
+    }
+    s.push_str(&format!("end {}\n", manifest.tests.len() + data.len()));
     Ok(s)
+}
+
+/// The data files of the tests in `manifest` under `data_dir`
+/// (`<data_dir>/<test>/<file>`), sorted.
+pub fn data_files(manifest: &Manifest, data_dir: &Path) -> Result<Vec<DataFile>> {
+    let mut out = Vec::new();
+    for t in &manifest.tests {
+        let dir = data_dir.join(&t.name);
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let mut names: Vec<PathBuf> = Vec::new();
+        for e in entries {
+            let path = e.map_err(|e| e.to_string())?.path();
+            if path.is_file() {
+                names.push(path);
+            }
+        }
+        names.sort();
+        for path in names {
+            let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            out.push((t.name.clone(), name, util::read(&path)?));
+        }
+    }
+    Ok(out)
 }
 
 /// The bundle's id: the first 12 hex digits of its SHA-256.
@@ -418,13 +463,13 @@ pub fn bundle_id(text: &str) -> String {
 pub type NamedFile = (String, Vec<u8>);
 
 /// Read a bundle back (what the PowerShell runner does): the manifest's
-/// JSON and every file, hashes checked.
-pub fn unbundle(text: &str) -> Result<(Manifest, Vec<NamedFile>)> {
+/// JSON, every file and every data file, hashes checked.
+pub fn unbundle_all(text: &str) -> Result<(Manifest, Vec<NamedFile>, Vec<DataFile>)> {
     let mut lines = text.lines().map(|l| l.trim_end_matches('\r')).filter(|l| !l.is_empty());
     if lines.next() != Some(BUNDLE_FORMAT) {
         return Err(format!("not a {BUNDLE_FORMAT} bundle"));
     }
-    let (mut manifest, mut files, mut ended) = (None, Vec::new(), false);
+    let (mut manifest, mut files, mut data, mut ended) = (None, Vec::new(), Vec::<DataFile>::new(), false);
     for line in lines {
         if ended {
             return Err("text after the end line".into());
@@ -442,9 +487,19 @@ pub fn unbundle(text: &str) -> Result<(Manifest, Vec<NamedFile>)> {
                 }
                 files.push((name.to_string(), bytes));
             }
+            ["data", test, name, hash, b] => {
+                if !valid_name(test) || !valid_data_name(name) {
+                    return Err(format!("bad data line for {test}/{name}"));
+                }
+                let bytes = unbase64(b)?;
+                if sha256::hex(&bytes) != *hash {
+                    return Err(format!("{test}/{name}: hash mismatch (damaged in transfer?)"));
+                }
+                data.push((test.to_string(), name.to_string(), bytes));
+            }
             ["end", n] => {
-                if n.parse::<usize>().ok() != Some(files.len()) {
-                    return Err(format!("the end line says {n} files, the bundle has {}", files.len()));
+                if n.parse::<usize>().ok() != Some(files.len() + data.len()) {
+                    return Err(format!("the end line says {n} files, the bundle has {}", files.len() + data.len()));
                 }
                 ended = true;
             }
@@ -454,7 +509,7 @@ pub fn unbundle(text: &str) -> Result<(Manifest, Vec<NamedFile>)> {
     if !ended {
         return Err("no end line: the bundle is incomplete".into());
     }
-    Ok((manifest.ok_or("no manifest line")?, files))
+    Ok((manifest.ok_or("no manifest line")?, files, data))
 }
 
 /// Cut `text` into parts of at most `limit` bytes at line ends (a line
@@ -527,6 +582,10 @@ pub struct RunResult {
     pub stable: Option<bool>,
     #[serde(default)]
     pub ms: Option<u64>,
+    /// Poly: what the kernel said about the run (unhandled exceptions,
+    /// unimplemented calls), for the scenario reports (ADR 0088).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
 }
 
 /// A result file (`poly-winrun/1`).
@@ -1072,10 +1131,10 @@ mod tests {
             });
         }
         let m = Manifest { format: BUILD_FORMAT.into(), rustc: "rustc 1.97.0".into(), revision: None, tests };
-        let text = bundle(&m, &dir).unwrap();
+        let text = bundle_with_data(&m, &dir, &[]).unwrap();
         assert!(text.starts_with("poly-winbundle/1\nmanifest "));
         assert!(text.ends_with("end 2\n"));
-        let (back, got) = unbundle(&text).unwrap();
+        let (back, got, _) = unbundle_all(&text).unwrap();
         assert_eq!(back, m);
         assert_eq!(got, files.iter().map(|(n, b)| (n.to_string(), b.clone())).collect::<Vec<_>>());
         assert_eq!(bundle_id(&text).len(), 12);
@@ -1085,13 +1144,24 @@ mod tests {
         assert_eq!(parts.concat(), text);
         assert!(parts.iter().all(|p| p.ends_with('\n')));
         // Windows line ends after a copy through an editor are fine.
-        assert!(unbundle(&text.replace('\n', "\r\n")).is_ok());
+        assert!(unbundle_all(&text.replace('\n', "\r\n")).is_ok());
 
-        assert!(unbundle(&text[..text.len() - 6]).unwrap_err().contains("incomplete"));
+        // Data files travel with their test and count in the end line.
+        let data = vec![("a".to_string(), "7za.exe".to_string(), vec![7u8; 10])];
+        let with = bundle_with_data(&m, &dir, &data).unwrap();
+        assert!(with.contains("\ndata a 7za.exe ") && with.ends_with("end 3\n"));
+        let (_, got2, back_data) = unbundle_all(&with).unwrap();
+        assert_eq!((got2.len(), back_data), (2, data));
+        assert!(bundle_with_data(&m, &dir, &[("zz".into(), "x".into(), vec![])]).unwrap_err().contains("not in"));
+        assert!(bundle_with_data(&m, &dir, &[("a".into(), "../x".into(), vec![])]).is_err());
+        assert!(unbundle_all(&with.replace(&sha256::hex(&[7u8; 10]), &"0".repeat(64))).is_err());
+        assert!(valid_data_name("7za.exe") && valid_data_name("hello.txt") && !valid_data_name(".x"));
+
+        assert!(unbundle_all(&text[..text.len() - 6]).unwrap_err().contains("incomplete"));
         let damaged = text.replace("AQID", "AQIE");
-        assert!(unbundle(&damaged).unwrap_err().contains("hash mismatch"));
+        assert!(unbundle_all(&damaged).unwrap_err().contains("hash mismatch"));
         util::write(&dir.join("a.exe"), [9u8]).unwrap();
-        assert!(bundle(&m, &dir).unwrap_err().contains("changed"));
+        assert!(bundle_with_data(&m, &dir, &[]).unwrap_err().contains("changed"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
