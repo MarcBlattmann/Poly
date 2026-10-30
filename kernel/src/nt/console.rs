@@ -118,10 +118,24 @@ fn console_for(sys: &mut NtSystem, tty: Option<&Arc<Tty>>) -> u32 {
     id
 }
 
+/// What a process made by another one (`CreateProcessW`, ADR 0089) gets
+/// besides its creator's descriptors: the standard handles the creator
+/// chose (`STARTF_USESTDHANDLES`: values in the child's table, inherited)
+/// and the creator's console (shared when no terminal says otherwise:
+/// Learn, "Creation of a Console": a console process inherits its parent's
+/// console).
+#[derive(Clone, Copy, Default)]
+pub(super) struct FromCreator {
+    pub given: Option<[u64; 3]>,
+    pub console: Option<u32>,
+}
+
 /// Give NT process `pid` (its first thread `thread`) its console and
 /// standard handles: `(console connection, [input, output, error])`, the
 /// values for its process parameters. `console_app`: the image's subsystem
-/// is `IMAGE_SUBSYSTEM_WINDOWS_CUI`.
+/// is `IMAGE_SUBSYSTEM_WINDOWS_CUI`. The standard handles opened here are
+/// inheritable (ADR 0089: as a shell's redirections are), so a program
+/// can pass its own on to a child.
 #[inline(never)]
 pub(super) fn setup(
     sys: &mut NtSystem,
@@ -130,31 +144,41 @@ pub(super) fn setup(
     thread: ThreadRef,
     console_app: bool,
     sources: &[StdSource; 3],
+    creator: FromCreator,
 ) -> Result<(u64, [u64; 3]), NtStatus> {
     let caller = Caller::user(pid, thread);
     let mut std = [0u64; 3];
     let mut connection = 0u64;
+    let given = |i: usize| creator.given.map(|g| g[i]);
+    let inheritable = poly_ntobj::HandleFlags { inherit: true, protect_from_close: false };
     if console_app {
         let tty = sources.iter().find_map(|s| match s {
             StdSource::Terminal(t) => Some(t),
             _ => None,
         });
-        let id = console_for(sys, tty);
+        let id = match (tty, creator.console) {
+            (None, Some(id)) if sys.io.console(id).is_some() => id,
+            _ => console_for(sys, tty),
+        };
         let handles = poly_personality_nt::console::open_for_process(sys, b, &caller, id)?;
         connection = handles[0].0;
         for (i, source) in sources.iter().enumerate() {
-            if !matches!(source, StdSource::File(_)) {
+            if given(i).is_none() && !matches!(source, StdSource::File(_)) {
                 std[i] = handles[i + 1].0;
+                let _ = sys.objects.set_handle_flags(&caller, handles[i + 1], inheritable);
             } else {
-                // Redirected: the console's handle is not needed.
+                // Redirected or chosen by the creator: not needed.
                 let _ = sys.objects.close(&caller, handles[i + 1]);
             }
         }
     }
     for (i, source) in sources.iter().enumerate() {
-        if let StdSource::File(open) = source {
+        if let Some(h) = given(i) {
+            std[i] = h;
+        } else if let StdSource::File(open) = source {
             let access = if i == 0 { FILE_GENERIC_READ } else { FILE_GENERIC_WRITE };
             let h: Handle = sys.io.open_host_file(&mut sys.objects, &caller, Arc::clone(open), access)?;
+            let _ = sys.objects.set_handle_flags(&caller, h, inheritable);
             std[i] = h.0;
         }
     }

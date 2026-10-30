@@ -23,6 +23,7 @@ mod base;
 mod console;
 mod except;
 mod file;
+mod handles;
 mod legacy;
 mod mapping;
 mod memory;

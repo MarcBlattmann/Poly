@@ -12,6 +12,8 @@
 
 use poly_win32_rt as _;
 
+extern crate alloc;
+
 #[link(name = "kernelbase", kind = "raw-dylib")]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
@@ -20,8 +22,8 @@ unsafe extern "system" {
     fn SetLastError(error: u32);
 }
 
-/// `poly-kernelbase` links `alloc`, so the DLL needs an allocator, though
-/// `kernel32` itself never allocates from Rust: the process heap, through
+/// `poly-kernelbase` links `alloc`, so the DLL needs an allocator (and
+/// `GetStartupInfoA` keeps its ANSI strings in it): the process heap, through
 /// `kernelbase`'s local-memory functions (16-byte aligned blocks).
 struct LocalHeap;
 
@@ -131,6 +133,46 @@ pub unsafe extern "system" fn lstrcmpW(a: *const u16, b: *const u16) -> i32 {
 pub unsafe extern "system" fn lstrcmpiW(a: *const u16, b: *const u16) -> i32 {
     // SAFETY: the caller's strings.
     unsafe { poly_kernelbase::nls::lstrcmp(wide(a), wide(b), true) }
+}
+
+#[link(name = "kernelbase", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetStartupInfoW(info: *mut u8);
+}
+
+/// `GetStartupInfoA`: `GetStartupInfoW`'s structure (`STARTUPINFOA` has
+/// the same layout, `processthreadsapi.h`) with `lpReserved`, `lpDesktop`
+/// and `lpTitle` in the ANSI code page, converted once and kept for the
+/// life of the process (ADR 0089).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetStartupInfoA(info: *mut u8) {
+    use core::sync::atomic::{AtomicPtr, Ordering};
+    use poly_kernelbase::process::{SI_DESKTOP, SI_RESERVED, SI_TITLE, STARTUPINFO_SIZE};
+    static ANSI: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
+    let mut p = ANSI.load(Ordering::Acquire);
+    if p.is_null() {
+        let mut si = alloc::boxed::Box::new([0u8; STARTUPINFO_SIZE]);
+        // SAFETY: a STARTUPINFOW-sized buffer.
+        unsafe { GetStartupInfoW(si.as_mut_ptr()) };
+        for field in [SI_RESERVED, SI_DESKTOP, SI_TITLE] {
+            let w = u64::from_le_bytes(si[field..field + 8].try_into().unwrap()) as *const u16;
+            if w.is_null() {
+                continue;
+            }
+            // SAFETY: a NUL-terminated string in the process parameters.
+            let mut a = poly_kernelbase::text::to_ansi(unsafe { poly_kernelbase::text::wide_at(w) });
+            a.push(0);
+            let at = alloc::boxed::Box::leak(a.into_boxed_slice()).as_ptr() as u64;
+            si[field..field + 8].copy_from_slice(&at.to_le_bytes());
+        }
+        let leaked = alloc::boxed::Box::leak(si).as_mut_ptr();
+        p = match ANSI.compare_exchange(core::ptr::null_mut(), leaked, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => leaked,
+            Err(other) => other,
+        };
+    }
+    // SAFETY: the caller's STARTUPINFOA; `p` holds one.
+    unsafe { core::ptr::copy_nonoverlapping(p, info, STARTUPINFO_SIZE) };
 }
 
 /// The entry point (`DllMain`): nothing to set up.

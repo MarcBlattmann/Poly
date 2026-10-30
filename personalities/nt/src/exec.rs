@@ -243,8 +243,26 @@ pub fn start_process(
     file_object: Option<ObjectId>,
     thread: ThreadRef,
 ) -> Result<ProcessStart, NtStatus> {
+    start_process_from(sys, proc, b, file, ntdll, file_object, thread, None)
+}
+
+/// [`start_process`] for a process whose handle table starts with the
+/// inheritable handles of `inherit_from` at the same values (ADR 0089:
+/// `CreateProcessW`'s `bInheritHandles`; Learn: "Handle Inheritance"),
+/// before any other handle of the new process is made.
+#[allow(clippy::too_many_arguments)] // what a new process is made of
+pub fn start_process_from(
+    sys: &mut NtSystem,
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    file: &[u8],
+    ntdll: &[u8],
+    file_object: Option<ObjectId>,
+    thread: ThreadRef,
+    inherit_from: Option<poly_ntobj::ProcessId>,
+) -> Result<ProcessStart, NtStatus> {
     let om = &mut sys.objects;
-    om.create_process(proc.pid, None)?;
+    om.create_process(proc.pid, inherit_from)?;
     let pobj =
         NewObject::Opaque { kind: ObjectType::Process, cookie: proc.pid.0.into(), signaled: Some(false), parse: false };
     let pid_object = om.new_object(pobj, thread)?;
@@ -303,8 +321,9 @@ pub fn start_process(
 
 /// [`start_process`] for a process another one creates
 /// (`NtCreateUserProcess`, ADR 0079), with its process parameters
-/// ([`crate::params::write`]). On failure the caller ends the process
-/// with [`process_exit`].
+/// ([`crate::params::write`]) and, with `inherit_from`, its creator's
+/// inheritable handles ([`start_process_from`], ADR 0089). On failure the
+/// caller ends the process with [`process_exit`].
 #[allow(clippy::too_many_arguments)] // what a new process is made of
 pub fn start_child(
     sys: &mut NtSystem,
@@ -314,8 +333,9 @@ pub fn start_child(
     ntdll: &[u8],
     params: &crate::params::Parameters,
     thread: ThreadRef,
+    inherit_from: Option<poly_ntobj::ProcessId>,
 ) -> Result<ProcessStart, NtStatus> {
-    let ps = start_process(sys, proc, b, file, ntdll, None, thread)?;
+    let ps = start_process_from(sys, proc, b, file, ntdll, None, thread, inherit_from)?;
     crate::params::write(proc, b, ps.peb, params)?;
     Ok(ps)
 }
