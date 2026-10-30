@@ -18,13 +18,16 @@
 //!                                                run tests on Poly only (no reference): output and app-mode events
 //! initramfs <binary> --out FILE | --list FILE    write (or list) a test initramfs
 //! spec new <entry> --agent ID [--oracle-os TEXT] spec sheet skeleton from specs/TEMPLATE.yaml
-//! tests split <entry> <dir> --spec-agent ID [--ratio 0.3] [--replace]
+//! tests split <entry> <dir> --spec-agent ID [--ratio 0.3] [--replace] [--windows-results WIN.json]
 //!                                                visible tests into specs/, held-out ones outside the repo
+//!                                                (a Windows entry: .rs/.cpp tests only; its Windows results
+//!                                                split beside them as windows.json, ADR 0098)
 //! handoff record <entry> --spec-agent A --implementer B [--allow-dirty]
-//! handoff bundle <entry> --out DIR               what the implementer receives
+//! handoff bundle <entry>... --out DIR            what the implementer receives (one or more entries)
 //! handoff verify [<entry>] [--received DIR]      prove the hand-offs (and no leaks)
 //! win build [--tests-dir DIR]... [--tests a,b] [--out DIR]
-//!                                                Windows test programs (tests/windows/*.rs, ADR 0075) into
+//!                                                Windows test programs (tests/windows/*.rs, ADR 0075, and
+//!                                                *.cpp, ADR 0098) into
 //!                                                target/pipeline/windows/bin/*.exe + manifest.json
 //! win bundle [--bin-dir DIR] [--out FILE] [--part-size BYTES] [--data-dir DIR]
 //!                                                one text file for the Windows machine (and parts of it);
@@ -63,6 +66,7 @@ mod store;
 mod syscalls;
 mod trace;
 mod util;
+mod wincxx;
 mod windows;
 
 use diff::{Options, Summary, SyscallMode, TestResult, Verdict};
@@ -790,16 +794,32 @@ fn spec(repo: &Path, a: &Args) -> Result<u8> {
 
 fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
     oracle_guard("tests")?;
-    a.only(&["spec-agent", "ratio", "replace"])?;
+    a.only(&["spec-agent", "ratio", "replace", "windows-results"])?;
     let [sub, id, generated] = a.positional.as_slice() else {
-        return Err(
-            "usage: pipeline tests split <entry> <generated-dir> --spec-agent ID [--ratio 0.3] [--replace]".into()
-        );
+        return Err("usage: pipeline tests split <entry> <generated-dir> --spec-agent ID [--ratio 0.3] [--replace] \
+                    [--windows-results RESULTS.json]"
+            .into());
     };
     if sub != "split" {
         return Err(format!("unknown tests command {sub}"));
     }
     let entry = EntryId::parse(id)?;
+    // A Windows entry (ADR 0098): test sources only, and the Windows
+    // results, if given, checked before anything is written.
+    let results = match a.opt("windows-results") {
+        Some(_) if entry.os != "windows" => return Err("--windows-results is for Windows entries".into()),
+        Some(path) => Some(windows::RunFile::load(Path::new(path))?),
+        None => None,
+    };
+    if entry.os == "windows" {
+        let files: Vec<String> =
+            util::files_under(Path::new(generated))?.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        windows::check_split_files(&files)?;
+        if let Some(r) = &results {
+            let names: Vec<String> = files.iter().map(|f| windows::test_name(f)).collect();
+            windows::split_results(r, &names, &[])?;
+        }
+    }
     let heldout = store::heldout_root(repo)?;
     let ratio = a.opt("ratio").unwrap_or("0.3").parse::<f64>().map_err(|e| format!("--ratio: {e}"))?;
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).unwrap_or_else(|_| "unknown".into());
@@ -812,6 +832,21 @@ fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
         replace: a.has("replace"),
     };
     let s = store::split_tests(repo, &heldout, &req)?;
+    if let Some(r) = &results {
+        let names = |files: &[String]| files.iter().map(|f| windows::test_name(f)).collect::<Vec<_>>();
+        let (visible, held) = windows::split_results(r, &names(&s.visible), &names(&s.held_out))?;
+        let v = repo.join(entry.tests_dir()).join(windows::RECORDED_RESULTS);
+        let h = entry.heldout_dir(&heldout).join(windows::RECORDED_RESULTS);
+        util::write_json(&v, &visible)?;
+        util::write_json(&h, &held)?;
+        println!(
+            "recorded Windows results: {} ({} tests), {} ({} tests)",
+            v.display(),
+            visible.tests.len(),
+            h.display(),
+            held.tests.len()
+        );
+    }
     println!(
         "{}: {} visible in {}, {} held out in {} (manifest {})",
         entry.id(),
@@ -854,12 +889,14 @@ fn handoff_cmd(repo: &Path, a: &Args) -> Result<u8> {
             Ok(0)
         }
         Some("bundle") => {
-            let [_, id] = a.positional.as_slice() else {
-                return Err("usage: pipeline handoff bundle <entry> --out DIR".into());
-            };
+            let ids: Vec<&str> = a.positional[1..].iter().map(String::as_str).collect();
+            if ids.is_empty() {
+                return Err("usage: pipeline handoff bundle <entry>... --out DIR".into());
+            }
             let out = PathBuf::from(a.require("out")?);
-            let r = handoff::bundle(repo, id, &out, heldout_if_present(repo)?.as_deref())?;
-            println!("{} files of the {} hand-off at {} in {}", r.files.len(), r.entry, r.revision, out.display());
+            for r in handoff::bundle_many(repo, &ids, &out, heldout_if_present(repo)?.as_deref())? {
+                println!("{} files of the {} hand-off at {} in {}", r.files.len(), r.entry, r.revision, out.display());
+            }
             Ok(0)
         }
         Some("verify") => {

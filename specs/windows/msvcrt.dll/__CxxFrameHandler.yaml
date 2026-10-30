@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/msvcrt.dll/__CxxFrameHandler  # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64; the same results byte for byte on Windows 11 Enterprise 25H2 (build 26200.9448)"
+  machine: "homeserver2, the owner's home PC (real hardware, Defender only, ACP 1252, OEM 850), whose results are recorded in windows.json; also the owner's work PC during the exploration; the system's own C:\\Windows\\System32\\msvcrt.dll; tests built by clang 18 with their tables rewritten to name __CxxFrameHandler and older magic numbers (a `// poly-cxx:` line, ADR 0098), run by tools/pipeline/windows/poly-oracle.ps1, three runs each, all identical"
+  observed_by: spec-cxxeh
+  date: 2026-10-30
+sources: >
+  As __CxxFrameHandler3.yaml (handed over together with this sheet and
+  _CxxThrowException.yaml): observations of our own programs on the
+  machine above; layouts from LLVM's WinException.cpp and clang's
+  MicrosoftCXXABI.cpp; Learn's "x64 exception handling"; winnt.h. The
+  magic numbers 0x19930520/21/22 and which fields each has are also how
+  Wine's dlls/msvcrt reads them (behaviour only). 7-Zip's 7za.exe (x64)
+  imports __CxxFrameHandler from msvcrt.dll (docs/windows/7zip-gaps.md);
+  which magic its tables carry was not looked at.
+summary: >
+  __CxxFrameHandler is the older name of the same x64 language-specific
+  C++ exception handler: everything in __CxxFrameHandler3.yaml (interface,
+  layouts, matching, copying, unwinding, rethrow, nesting, SEH interplay,
+  terminate cases) holds for it unchanged; the observed behaviour of
+  __CxxFrameHandler and __CxxFrameHandler3 is the same for every magic
+  number. Programs built by older compilers name it, with FuncInfo magic
+  0x19930520 (oldest layout), 0x19930521 (adds ESTypeList) or 0x19930522
+  (adds EHFlags). What depends on the magic number is only which FuncInfo
+  fields exist: a field the layout does not have is not read, whatever
+  bytes follow the structure.
+interface:
+  signature: "EXCEPTION_DISPOSITION __CxxFrameHandler(EXCEPTION_RECORD* record, ULONG64 establisher_frame, CONTEXT* context, DISPATCHER_CONTEXT* dispatch); HandlerData as for __CxxFrameHandler3 (a u32 offset of the FuncInfo from dispatch->ImageBase)"
+  same_as: "__CxxFrameHandler3.yaml: interface, data_layouts, rules, errors, ordering"
+data_layouts:
+  FuncInfo_0x19930520: "MagicNumber, MaxState, UnwindMap, NumTryBlocks, TryBlockMap, IPMapEntries, IPToStateMap, UnwindHelp (x64 always has UnwindHelp); 32 bytes; no ESTypeList, no EHFlags"
+  FuncInfo_0x19930521: "the 0x19930520 fields, then ESTypeList (rva; 0 = none); 36 bytes; no EHFlags"
+  FuncInfo_0x19930522: "the 0x19930521 fields, then EHFlags (0x1 synchronous only, 0x4 noexcept); 40 bytes"
+  other_tables: "UnwindMapEntry, TryBlockMapEntry, HandlerType (20 bytes with ParentFrameOffset), IPToStateMapEntry, TypeDescriptor, ThrowInfo, CatchableTypeArray, CatchableType: the same for every magic number (__CxxFrameHandler3.yaml)"
+rules:
+  all_magics: "with 0x19930520, 0x19930521 and 0x19930522: catch by type in clause order (int not long), by value (copy before the unwind, catch object then exception object destroyed), by reference (no copy), catch(...), unwinding three frames innermost first (a held-out test, cxx1_v21_basic, cxx1_v22_basic); base classes by reference and by value, a base at a non-zero offset, pointers adjusted to a base and to void*, a const pointee not taken by a non-const clause (cxx1_v20_hierarchy, cxx1_v22_hierarchy); rethrow, a throw in a catch block, an enclosing try block, a try block in a catch block (cxx1_v20_nesting, cxx1_v21_nesting); 150 frames in one throw, 500 throws in a loop (a held-out test)"
+  flags_only_with_0x19930522: "EHFlags exists only from 0x19930522. With 0x19930520 or 0x19930521 the word after the structure is not read: a 1 there does not make the frame synchronous-only (a non-C++ exception taken by an outer __except unwinds the frame with its destructors: held-out tests), a 5 there does not make it noexcept (the exception is caught normally: cxx1_v21_flags_ignored)"
+  synchronous_flag: "0x19930522 with EHFlags bit 0x1: a non-C++ exception is ignored by the frame, also in the unwind (no destructors) (a held-out test)"
+  catch_all_adjective: "catch(...) with adjective 0x40 never takes a non-C++ exception, with any magic number (held-out tests); without 0x40 and with EHFlags 0 (clang -fasync-exceptions, /EHa) it does, after the inner frames were unwound (cxx1_v22_seh_async)"
+  noexcept_flag: "0x19930522 with EHFlags bit 0x4 and no matching clause in the frame: terminate() during the search, nothing unwound (cxx1_v22_noexcept_flag)"
+  esTypeList: "ESTypeList (0x19930521+) is 0 in every observed program; a non-zero dynamic exception specification was not observed"
+errors:
+  terminate_destructor: "an exception leaving a destructor during an unwind: terminate(), nothing else unwound (cxx1_v20_terminate_dtor)"
+  unhandled: "no clause takes it: the top-level filter sees code 0xE06D7363 before any unwind; terminate() is not called (cxx1_v22_unhandled)"
+  bad_magic: "a magic number outside 0x19930520..0x19930522: not observed"
+side_effects: "as __CxxFrameHandler3.yaml"
+threading: "as __CxxFrameHandler3.yaml"
+ordering:
+  - "as __CxxFrameHandler3.yaml"
+timing:                                       # envelopes, never exact values
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: none
+tests:
+  visible: 11  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
+building_tests: >
+  As __CxxFrameHandler3.yaml. Every test here has a `// poly-cxx:` line:
+  handler=__CxxFrameHandler renames the handler of every function,
+  magic= and ehflags= replace the FuncInfo fields, cflags=-fasync-exceptions
+  makes clang emit EH flags 0 and catch(...) without adjective 0x40. Today
+  on Poly every one of them fails: Poly's __CxxFrameHandler continues
+  every search, so the first throw ends the process with 0xE06D7363.
