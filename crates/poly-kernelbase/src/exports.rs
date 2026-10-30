@@ -173,6 +173,12 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("CreateProcessW", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetExitCodeProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetProcessId", "api-ms-win-core-processthreads-l1-1-0"),
+    // CreateProcessW's handle inheritance and STARTUPINFO (ADR 0089;
+    // processthreadsapi.h, handleapi.h).
+    ("CreateProcessA", "api-ms-win-core-processthreads-l1-1-0"),
+    ("DuplicateHandle", "api-ms-win-core-handle-l1-1-0"),
+    ("GetHandleInformation", "api-ms-win-core-handle-l1-1-0"),
+    ("SetHandleInformation", "api-ms-win-core-handle-l1-1-0"),
     // Thread-local storage (processthreadsapi.h) and fiber-local storage
     // (fibersapi.h).
     ("TlsAlloc", "api-ms-win-core-processthreads-l1-1-0"),
@@ -303,6 +309,9 @@ pub const KERNEL32_OWN: &[&str] = &[
     "lstrlenA",
     "lstrcmpW",
     "lstrcmpiW",
+    // ADR 0089: `kernelbase` exports no `GetStartupInfoA` (the coverage
+    // map's export lists), so `kernel32` converts `GetStartupInfoW`'s.
+    "GetStartupInfoA",
 ];
 
 /// Every function `kernelbase.dll` must export: each one `kernel32` or

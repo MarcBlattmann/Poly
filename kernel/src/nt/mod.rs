@@ -127,6 +127,9 @@ struct ThreadCtl {
     /// A thread created `CREATE_SUSPENDED` whose ring-3 start is deferred
     /// until it is resumed: (entry, teb).
     deferred_start: Option<(user::Entry, u64)>,
+    /// For a new process's first thread created suspended (ADR 0089): the
+    /// process and memory it starts in when resumed.
+    deferred_process: Option<(Arc<Process>, Arc<Memory>)>,
     /// The exit status `NtTerminateThread` chose for the current thread,
     /// applied when its system call returns.
     exit_status: Option<NtStatus>,
@@ -486,11 +489,13 @@ pub fn start_with_std(
 }
 
 /// Who gets handles to a new process and its first thread, with which
-/// access (`NtCreateUserProcess`, ADR 0079).
+/// access (`NtCreateUserProcess`, ADR 0079), and whether the new process
+/// inherits that creator's inheritable handles (ADR 0089).
 struct HandlesFor {
     caller: Caller,
     process_access: u32,
     thread_access: u32,
+    inherit_handles: bool,
 }
 
 /// Handles to a new process and its first thread.
@@ -499,7 +504,9 @@ type ChildHandles = (poly_ntobj::Handle, poly_ntobj::Handle);
 /// Set up `process` to run `file` with the process parameters `params`
 /// (ADR 0073) and the standard handles `sources` (ADR 0080); with
 /// `handles`, also open handles to its process and first thread for the
-/// creator, before anything runs (ADR 0079).
+/// creator, before anything runs (ADR 0079), give it the creator's
+/// inheritable handles first if asked, the creator's console, and the
+/// standard handles the creator chose (ADR 0089).
 fn start_params(
     process: &Arc<Process>,
     memory: &Arc<Memory>,
@@ -525,12 +532,19 @@ fn start_params(
         s.created.insert(pid, registry::filetime_now());
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         let mut b = MemBackend { memory, sections: &mut s.sections };
-        let start = exec::start_process(&mut s.sys, proc, &mut b, file, NTDLL, None, thread).and_then(|ps| {
+        // Its creator's inheritable handles, before any other (ADR 0089).
+        let inherit_from = handles.filter(|h| h.inherit_handles).map(|h| h.caller.process);
+        let creator = console::FromCreator {
+            given: params.given_std_handles(),
+            console: handles.and_then(|h| s.sys.io.console_of_process(h.caller.process)),
+        };
+        let start = exec::start_process_from(&mut s.sys, proc, &mut b, file, NTDLL, None, thread, inherit_from);
+        let start = start.and_then(|ps| {
             // The process parameters: image path, command line,
             // environment and current directory (ADR 0073, 0079).
             let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, params)?;
-            // Its console and standard handles (ADR 0080).
-            let (connection, std) = console::setup(&mut s.sys, &mut b, pid, thread, console_app, sources)?;
+            // Its console and standard handles (ADR 0080, 0089).
+            let (connection, std) = console::setup(&mut s.sys, &mut b, pid, thread, console_app, sources, creator)?;
             poly_personality_nt::params::write_handles(&mut b, base, connection, std)?;
             // Handles for its creator (NtCreateUserProcess, ADR 0079).
             let opened = match handles {
@@ -572,9 +586,10 @@ fn start_params(
 }
 
 /// `NtCreateUserProcess` (ADR 0079): a new NT process running `req.image`
-/// with `req.params`, the creator's console and standard handles, handles
-/// to it and its first thread in the creator's table, and its first thread
-/// started.
+/// with `req.params`, the creator's console and standard handles (or those
+/// it chose) and, if asked, its inheritable handles (ADR 0089), handles to
+/// it and its first thread in the creator's table, and its first thread
+/// started — or left suspended until `NtResumeThread` (ADR 0089).
 fn create_process(
     creator: Caller,
     req: poly_personality_nt::ProcessCreate,
@@ -584,9 +599,9 @@ fn create_process(
     let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| poly_ntobj::status::STATUS_NO_MEMORY)?);
     let creator_process = user::current_process();
     let traced = creator_process.as_ref().is_some_and(|p| p.traced);
-    // The child shares its creator's console: its standard handles come
-    // from the creator's descriptors 0-2 (ADR 0080; handle inheritance
-    // proper is not supported yet, ADR 0079).
+    // The child shares its creator's console: the standard handles it
+    // does not get from its creator come from the creator's descriptors
+    // 0-2 (ADR 0080), else from the creator's console (ADR 0089).
     let sources = match &creator_process {
         Some(p) => console::std_sources(p),
         None => [console::StdSource::None, console::StdSource::None, console::StdSource::None],
@@ -594,25 +609,54 @@ fn create_process(
     let pid = crate::process::alloc_pid();
     let format = Format::Pe { bits: Bits::B64, arch: Arch::X86_64 };
     let process = Arc::new(Process::new_nt(pid, format, traced));
-    let want = HandlesFor { caller: creator, process_access: req.process_access, thread_access: req.thread_access };
+    let want = HandlesFor {
+        caller: creator,
+        process_access: req.process_access,
+        thread_access: req.thread_access,
+        inherit_handles: req.inherit_handles,
+    };
     let (start, handles) = start_params(&process, &memory, &req.image, pid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
-    match user::spawn_nt(Arc::clone(&process), Arc::clone(&memory), start.entry, start.teb, user::DEFAULT_HOOK) {
-        Ok(kthread) => {
-            // The creator waits on the process object, not the thread.
-            let _ = thread::detach(kthread);
-            Ok(poly_personality_nt::ProcessCreated {
-                process: ph,
-                thread: th,
-                client: poly_personality_nt::ClientId { process: ProcessId(pid), thread: ThreadRef(u64::from(pid)) },
-            })
-        }
-        Err(_) => {
+    let first = ThreadRef(u64::from(pid));
+    let created = poly_personality_nt::ProcessCreated {
+        process: ph,
+        thread: th,
+        client: poly_personality_nt::ClientId { process: ProcessId(pid), thread: first },
+    };
+    if req.suspended {
+        // CREATE_SUSPENDED (ADR 0089): the first thread starts when its
+        // suspend count drops to zero (`sched::resume`).
+        with(|s| {
+            let c = s.ctl.entry(first).or_default();
+            c.suspend_count = 1;
+            c.deferred_start = Some((start.entry, start.teb));
+            c.deferred_process = Some((process, memory));
+        });
+        return Ok(created);
+    }
+    match start_first_thread(&process, &memory, &start) {
+        Ok(()) => Ok(created),
+        Err(e) => {
             with(|s| {
                 let _ = s.sys.objects.close(&creator, ph);
                 let _ = s.sys.objects.close(&creator, th);
             });
-            process_exit(pid, &memory);
+            Err(e)
+        }
+    }
+}
+
+/// Start a new NT process's first thread in ring 3 at `start`; if it
+/// cannot start, the process ends.
+pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, start: &Start) -> Result<(), NtStatus> {
+    match user::spawn_nt(Arc::clone(process), Arc::clone(memory), start.entry, start.teb, user::DEFAULT_HOOK) {
+        Ok(kthread) => {
+            // The creator waits on the process object, not the thread.
+            let _ = thread::detach(kthread);
+            Ok(())
+        }
+        Err(_) => {
+            process_exit(process.pid, memory);
             Err(poly_ntobj::status::STATUS_NO_MEMORY)
         }
     }

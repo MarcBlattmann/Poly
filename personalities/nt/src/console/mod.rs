@@ -195,6 +195,12 @@ impl IoState {
         v
     }
 
+    /// The console `process` is attached to (the first, if several), for
+    /// a child it creates (ADR 0089).
+    pub fn console_of_process(&self, process: ProcessId) -> Option<u32> {
+        self.consoles.map.iter().find(|(_, e)| e.connections.values().any(|a| a.process == process)).map(|(&id, _)| id)
+    }
+
     /// Bytes from console `id`'s terminal: decoded into input, control
     /// events raised, waiting reads retried.
     pub fn console_input(&mut self, id: u32, bytes: &[u8]) {

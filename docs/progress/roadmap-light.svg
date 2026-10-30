@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 72 of 141 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 73 of 141 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">72 / 141 milestones · 51%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">73 / 141 milestones · 52%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -224,8 +224,8 @@
 <g><title>✔ Our ntdll: PE loader (imports, relocations, TLS, delay-load), heap, Rtl*, loader lock (ADR 0071)</title>
 <rect x="565.5" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Our kernelbase / kernel32: files, processes, threads, memory, synchronisation, errors (first and second slices done, ADR 0079: processes, TLS/FLS, code pages, file mappings, condition variables; left: CREATE_SUSPENDED and handle inheritance in CreateProcessW)</title>
-<rect x="590.5" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Our kernelbase / kernel32: files, processes, threads, memory, synchronisation, errors (ADR 0079: two slices, processes, TLS/FLS, code pages, file mappings, condition variables; ADR 0089: handle inheritance, STARTUPINFO and its standard handles, CREATE_SUSPENDED in CreateProcessW)</title>
+<rect x="590.5" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>C runtime: ucrtbase + api-ms-win-crt-* and msvcrt (versioned runtimes come with the apps, ADR 0055) (first slice done, ADR 0084; left: C++ exceptions in msvcrt (_CxxThrowException, __CxxFrameHandler3), setjmp/longjmp, transcendental math, locales other than &quot;C&quot; and multibyte code pages, wildcard argv, _findfirst/_spawn/system/_dup/_pipe, console I/O (_getch, _cprintf), positional printf)</title>
 <rect x="615.6" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
@@ -251,7 +251,7 @@
 <g><title>Fallback if needed: our own vcruntime140 (and msvcp140 subsets) per ADR 0055</title>
 <rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">12/19</text>
+<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">13/19</text>
 <text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>⚖️ Decide: global menu bar or per-window menus</title>
 <rect x="340.0" y="233.0" width="34.6" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
