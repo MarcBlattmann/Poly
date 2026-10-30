@@ -8,7 +8,7 @@
 //! coverage claim <id> --agent <agent-id>
 //! coverage release <id>
 //! coverage set-status <id> <missing|stub|green|blocked-by-design|app-provided>
-//!                     [--tests-visible N] [--tests-held-out N]   (the pipeline loop sets green with both)
+//!                     [--tests-visible N] [--tests-held-out N]
 //! coverage set-status --component <os>/<layer>/<component> [--component ...] <status>
 //!                                                    (every entry of those components)
 //! coverage check

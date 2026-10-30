@@ -3,7 +3,7 @@
 //! On the reference side a test program inherits the user and group ids
 //! and supplementary groups of whoever runs the pipeline tool: root in
 //! some environments (a container), a normal user in others (GitHub's CI
-//! runner, the home server's `server`). Poly's test init starts the
+//! runner). Poly's test init starts the
 //! program as root unless told otherwise, so without care a test that
 //! calls `getuid()` or meets a permission check diverges before any
 //! behaviour is compared. So the reference's ids are recorded

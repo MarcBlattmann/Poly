@@ -33,7 +33,7 @@
 //!                       addresses, add symbols to the backtrace in a log on stdin
 //!   coverage <args>     run the coverage tool (see tools/coverage)
 //!   pipeline <args>     run the agent pipeline tool (see tools/pipeline, docs/AGENT_PIPELINE.md);
-//!                       exits with the tool's own status (75: a usage limit, 10: the loop restarts)
+//!                       exits with the tool's own status
 //!   dynamic-initramfs   build the dynamically linked test programs and an initramfs
 //!                       with them and the host's ld.so and libraries (docs/DEBUGGING.md)
 //!   busybox-initramfs   write the BusyBox image (BusyBox from the host or built; busybox.rs)
@@ -1544,13 +1544,10 @@ fn tcg_boot_tests() -> Result {
 /// The boot test shard CI also runs on TCG ([`tcg_boot_tests`]).
 const TCG_SHARD: &str = "selftest";
 
-/// The coverage map's checks and the pipeline loop's dry run.
+/// The coverage map's checks.
 fn coverage_checks() -> Result {
     coverage(&["check".into()])?;
-    coverage(&["readme".into(), "--check".into()])?;
-    // The scheduler loop in dry-run mode: every command of one cycle for
-    // the next entry, printed and pretended (ADR 0056). Runs nothing.
-    pipeline(&["loop".into(), "--dry-run".into(), "--quiet".into()])
+    coverage(&["readme".into(), "--check".into()])
 }
 
 /// The agent pipeline's checks against the reference OS.
@@ -1654,8 +1651,7 @@ fn pipeline(args: &[String]) -> Result {
 }
 
 /// `cargo xtask pipeline ...` exits with the tool's own status: callers
-/// act on it (the scheduler on 75, a role's usage limit, from `pipeline
-/// role`; systemd on 10, the loop stopping to run its new code).
+/// act on it (`diff` exits 1 when a test fails).
 fn pipeline_command(args: &[String]) -> ExitCode {
     let status =
         cargo().current_dir(root()).args(["run", "--quiet", "--package", "poly-pipeline", "--"]).args(args).status();
