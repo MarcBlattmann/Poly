@@ -1,6 +1,6 @@
 [
-{"symbol":"CreateAssemblyCache","src":["wine-spec"]},
-{"symbol":"CreateAssemblyNameObject","src":["wine-spec"]},
-{"symbol":"SxsLookupClrGuid","src":["wine-spec"]},
-{"symbol":"SxspGenerateManifestPathOnAssemblyIdentity","src":["wine-spec"]}
+{"symbol":"CreateAssemblyCache","src":["wine-spec"],"seeds":["wine:sxs/tests/cache.c:test_QueryAssemblyInfo"]},
+{"symbol":"CreateAssemblyNameObject","src":["wine-spec"],"seeds":["wine:sxs/tests/name.c:test_CreateAssemblyNameObject","wine:sxs/tests/name.c:test_display_name"]},
+{"symbol":"SxsLookupClrGuid","src":["wine-spec"],"seeds":["wine:sxs/tests/sxs.c:test_SxsLookupClrGuid","wine:sxs/tests/sxs.c:run_test"]},
+{"symbol":"SxspGenerateManifestPathOnAssemblyIdentity","src":["wine-spec"],"seeds":["wine:sxs/tests/name.c:test_manifest_path"]}
 ]

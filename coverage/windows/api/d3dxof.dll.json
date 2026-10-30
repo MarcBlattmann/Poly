@@ -1,5 +1,5 @@
 [
-{"symbol":"DirectXFileCreate","src":["wine-spec"]},
+{"symbol":"DirectXFileCreate","src":["wine-spec"],"seeds":["wine:d3dxof/tests/d3dxof.c:test_CreateEnumObject","wine:d3dxof/tests/d3dxof.c:test_complex_object","wine:d3dxof/tests/d3dxof.c:test_compressed_files","wine:d3dxof/tests/d3dxof.c:test_file_types","wine:d3dxof/tests/d3dxof.c:test_refcount","wine:d3dxof/tests/d3dxof.c:test_standard_templates","wine:d3dxof/tests/d3dxof.c:test_syntax_semicolon_comma","wine:d3dxof/tests/d3dxof.c:test_templates"]},
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},

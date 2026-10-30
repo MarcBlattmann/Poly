@@ -44,7 +44,7 @@
 //! win scenario diff --reference WIN.json [--target poly|FILE.json] [--markdown FILE] [poly options]
 //!                                                compare scenario runs step by step (exit 1 unless all pass)
 //! win scenario show <results.json> [--tests a,b] a scenario run, step by step, outputs as text
-//! win remote [prepare|finish] --host H [--tests a,b] [--tests-dir DIR]... [--runner-arg ARG]...
+//! win remote [prepare|finish] --host H [--tests a,b] [--tests-dir DIR]... [--data-dir DIR] [--runner-arg ARG]...
 //!            [--remote-dir DIR] [--stage DIR] [--record] [--diff] [poly options]
 //!                                                the Windows oracle machine over SSH (ADR 0097): build, bundle,
 //!                                                run there, fetch results.json; record it as the reference,

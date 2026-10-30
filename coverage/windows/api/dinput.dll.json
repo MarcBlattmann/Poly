@@ -1,7 +1,7 @@
 [
-{"symbol":"DirectInputCreateA","src":["wine-spec"]},
-{"symbol":"DirectInputCreateEx","src":["wine-spec"]},
-{"symbol":"DirectInputCreateW","src":["wine-spec"]},
+{"symbol":"DirectInputCreateA","src":["wine-spec"],"seeds":["wine:dinput/tests/dinput.c:test_DirectInputJoyConfig8"]},
+{"symbol":"DirectInputCreateEx","src":["wine-spec"],"seeds":["wine:dinput/tests/dinput.c:test_DirectInputCreateEx","wine:dinput/tests/force_feedback.c:check_dinput_devices","wine:dinput/tests/hid.c:dinput_test_create_device","wine:dinput/tests/joystick8.c:check_dinput_devices"]},
+{"symbol":"DirectInputCreateW","src":["wine-spec"],"seeds":["wine:dinput/tests/dinput.c:test_DirectInputCreate","wine:dinput/tests/device8.c:create_dinput_device"]},
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},

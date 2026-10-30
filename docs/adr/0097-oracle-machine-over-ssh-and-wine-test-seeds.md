@@ -77,7 +77,8 @@ Three steps; the one-step form runs all three, the script runs 1 and 3
 through `POLY_RUN` (the container) and 2 itself:
 
 1. **`win remote prepare --host H`** builds the tests (`win build`, with
-   `--tests`, `--tests-dir`) and bundles them (`win bundle`) into a **stage
+   `--tests`, `--tests-dir`; Rust and, per ADR 0098, C++ tests) and bundles
+   them (`win bundle`, with `--data-dir` for ADR 0088's data files) into a **stage
    directory**, `.oracle-remote/<host>/`: `bundle-<id>.txt`,
    `manifest.json`, a copy of `poly-oracle.ps1` (so runner and tools always
    match; the machine needs no clone of the repository), `plan.json`
@@ -116,14 +117,16 @@ through `POLY_RUN` (the container) and 2 itself:
    - **`--diff`** runs Poly on exactly the bundle's executables (unpacked
      from the stage, hashes checked) and compares, as `win diff` (same
      report, `summary.json`, exit status; `--kernel`, `--build-kernel`,
-     `--jobs`, `--timeout`, `--strict`).
+     `--jobs`, `--timeout`, `--strict`). Tests with data files are scenario
+     drivers and are left to `win scenario diff` (ADR 0088), which compares
+     them step by step; `finish` names the command.
 
 Host names, the remote directory and runner arguments are checked before
 they reach a command line (letters, digits and a few punctuation marks; no
 `..`). `--runner-arg` passes arguments to `poly-oracle.ps1` (`--runner-arg
--Runs --runner-arg 3`); with ADR 0088's runner, `--runner-arg -TestTimeouts
---runner-arg sevenzip_scenario=300`, and data files travel inside the bundle
-as its `data` lines. `win remote` and `win remote finish` read Windows'
+-Runs --runner-arg 3`; for ADR 0088's driver `--data-dir DIR --runner-arg
+-TestTimeouts --runner-arg sevenzip_scenario=300`: its data files travel
+inside the bundle as `data` lines). `win remote` and `win remote finish` read Windows'
 observations, so they refuse `POLY_ROLE=implementer` like `win diff`;
 `prepare` does not observe anything.
 
@@ -133,14 +136,26 @@ takes an executable away, the runner reports that test as `error` (`could
 not copy it` / `could not start`), `finish` shows it, exits 1 and does not
 record it; an exclusion stays the owner's decision (ADR 0075).
 
-**First run** (2026-10-30): the three corpus tests, bundle
-`325151b04f88`, ran on `homeserver2` (build 26200.9711) with exit code 0,
-stable over two runs, no Defender interference; `--diff` against Poly
-(revision `8ce384f`) passed all three (`nt_query_system_time` included: our
-`ntdll` exports `NtQuerySystemTime` since ADR 0075 was written). The results
-are recorded in `tests/windows/oracle/`. A test program's reference names
-its executable's hash, and the build is reproducible, so a change to a test
-or to `poly-wtest` needs a new recording (`--record` again).
+**First runs** (2026-10-30), on `homeserver2` (build 26200.9711), no
+Defender interference:
+
+- The three NT corpus tests (`nt_file_rw`, `nt_query_system_time`,
+  `nt_virtual_memory`; bundle `66486cf140c5`, built after ADR 0088's
+  `poly-wtest` changes) ran with exit code 0, stable over two runs;
+  `--diff` against Poly passed all three (`nt_query_system_time` included:
+  our `ntdll` exports `NtQuerySystemTime` since ADR 0075 was written). They
+  are recorded as `tests/windows/oracle/<test>.windows.json`.
+- Two of ADR 0098's C++ tests (`_CxxThrowException.tests/cxxthrow_record`,
+  `cxxthrow_handmade`; bundle `ddc97e24042b`) ran with exit code 0 and are
+  byte for byte the references recorded on the other PC (`win diff
+  --target` of the two result files: 2 pass), so the machine's differences
+  (edition, processors) do not show in them.
+- `sevenzip_scenario` was not re-recorded: its committed reference is ADR
+  0088's.
+
+A test program's reference names its executable's hash, and the build is
+reproducible, so a change to a test or to its support library needs a new
+recording (`--record` again).
 
 ## Decision 3: Wine's conformance tests as name-only seeds in the coverage map
 

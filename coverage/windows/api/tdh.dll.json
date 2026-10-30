@@ -8,7 +8,7 @@
 {"symbol":"TdhEnumerateManifestProviderEvents","src":["wine-spec"]},
 {"symbol":"TdhEnumerateProviderFieldInformation","src":["wine-spec"]},
 {"symbol":"TdhEnumerateProviderFilters","src":["wine-spec"]},
-{"symbol":"TdhEnumerateProviders","src":["wine-spec"]},
+{"symbol":"TdhEnumerateProviders","src":["wine-spec"],"seeds":["wine:tdh/tests/tdh.c:test_providers"]},
 {"symbol":"TdhEnumerateRemoteWBEMProviderFieldInformation","src":["wine-spec"]},
 {"symbol":"TdhEnumerateRemoteWBEMProviders","src":["wine-spec"]},
 {"symbol":"TdhFormatProperty","src":["wine-spec"]},

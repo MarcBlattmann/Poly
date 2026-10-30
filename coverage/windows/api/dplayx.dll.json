@@ -1,8 +1,8 @@
 [
 {"symbol":"DirectPlayCreate","src":["wine-spec"]},
 {"symbol":"DirectPlayEnumerate","src":["wine-spec"]},
-{"symbol":"DirectPlayEnumerateA","src":["wine-spec"]},
-{"symbol":"DirectPlayEnumerateW","src":["wine-spec"]},
+{"symbol":"DirectPlayEnumerateA","src":["wine-spec"],"seeds":["wine:dplayx/tests/dplayx.c:test_EnumerateProviders"]},
+{"symbol":"DirectPlayEnumerateW","src":["wine-spec"],"seeds":["wine:dplayx/tests/dplayx.c:test_EnumerateProviders"]},
 {"symbol":"DirectPlayLobbyCreateA","src":["wine-spec"]},
 {"symbol":"DirectPlayLobbyCreateW","src":["wine-spec"]},
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},

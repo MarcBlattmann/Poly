@@ -1,7 +1,7 @@
 [
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
-{"symbol":"DllInstall","src":["wine-spec"]},
+{"symbol":"DllInstall","src":["wine-spec"],"seeds":["wine:scrobj/tests/scrobj.c:register_script_object"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]}
 ]

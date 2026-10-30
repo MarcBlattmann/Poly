@@ -23,7 +23,7 @@
 {"symbol":"RasEnumConnectionsA","src":["wine-spec"]},
 {"symbol":"RasEnumConnectionsW","src":["wine-spec"]},
 {"symbol":"RasEnumConnectionsWow","src":["wine-spec"]},
-{"symbol":"RasEnumDevicesA","src":["wine-spec"]},
+{"symbol":"RasEnumDevicesA","src":["wine-spec"],"seeds":["wine:rasapi32/tests/rasapi.c:test_rasenum"]},
 {"symbol":"RasEnumDevicesW","src":["wine-spec"]},
 {"symbol":"RasEnumEntriesA","src":["wine-spec"]},
 {"symbol":"RasEnumEntriesW","src":["wine-spec"]},

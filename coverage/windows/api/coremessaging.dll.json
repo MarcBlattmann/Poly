@@ -16,7 +16,7 @@
 {"symbol":"CoreUIOpenExisting","src":["wine-spec"]},
 {"symbol":"CoreUIRouteToTestRegistrar","src":["wine-spec"]},
 {"symbol":"CoreUIUninitializeTestService","src":["wine-spec"]},
-{"symbol":"CreateDispatcherQueueController","src":["wine-spec"]},
+{"symbol":"CreateDispatcherQueueController","src":["wine-spec"],"seeds":["wine:coremessaging/tests/coremessaging.c:test_CreateDispatcherQueueController","wine:coremessaging/tests/coremessaging.c:check_create_dispatcher_queue_controller_"]},
 {"symbol":"CreateDispatcherQueueForCurrentThread","src":["wine-spec"]},
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},
 {"symbol":"DllGetActivationFactory","src":["wine-spec"]},

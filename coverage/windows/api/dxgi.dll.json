@@ -1,7 +1,7 @@
 [
-{"symbol":"CreateDXGIFactory","src":["wine-spec"]},
-{"symbol":"CreateDXGIFactory1","src":["wine-spec"]},
-{"symbol":"CreateDXGIFactory2","src":["wine-spec"]},
+{"symbol":"CreateDXGIFactory","src":["wine-spec"],"seeds":["wine:dxgi/tests/dxgi.c:test_factory_check_feature_support","wine:dxgi/tests/dxgi.c:test_object_wrapping","wine:dxgi/tests/dxgi.c:test_window_association","wine:dxgi/tests/dxgi.c:test_adapter_luid","wine:dxgi/tests/dxgi.c:test_output_desc","wine:dxgi/tests/dxgi.c:test_create_factory","wine:dxgi/tests/dxgi.c:test_multi_adapter","wine:dxgi/tests/dxgi.c:get_factory_"]},
+{"symbol":"CreateDXGIFactory1","src":["wine-spec"],"seeds":["wine:dxgi/tests/dxgi.c:test_create_factory"]},
+{"symbol":"CreateDXGIFactory2","src":["wine-spec"],"seeds":["wine:dxgi/tests/dxgi.c:test_enum_warp_adapter","wine:dxgi/tests/dxgi.c:test_adapter_luid","wine:dxgi/tests/dxgi.c:test_create_factory"]},
 {"symbol":"DXGID3D10CreateDevice","src":["wine-spec"]},
 {"symbol":"DXGID3D10RegisterLayers","src":["wine-spec"]},
 {"symbol":"DXGIGetDebugInterface1","src":["wine-spec"]}

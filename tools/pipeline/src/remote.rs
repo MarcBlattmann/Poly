@@ -180,7 +180,15 @@ fn prepare(repo: &Path, a: &Args, stage: &Path) -> Result<Plan> {
     let extra: Vec<PathBuf> = a.all("tests-dir").into_iter().map(PathBuf::from).collect();
     let bin = repo.join(windows::WIN_DIR).join("bin");
     let m = windows::build(repo, &bin, &extra, &crate::test_list(a))?;
-    let text = windows::bundle(&m, &bin)?;
+    // Data files travel in the bundle (ADR 0088): `<data-dir>/<test>/<file>`.
+    let data = match a.opt("data-dir") {
+        Some(d) => windows::data_files(&m, Path::new(d))?,
+        None => Vec::new(),
+    };
+    for (test, name, bytes) in &data {
+        println!("data {test}/{name}: {} bytes", bytes.len());
+    }
+    let text = windows::bundle_with_data(&m, &bin, &data)?;
     let id = windows::bundle_id(&text);
     if stage.exists() {
         std::fs::remove_dir_all(stage).map_err(|e| format!("{}: {e}", stage.display()))?;
@@ -357,12 +365,22 @@ fn finish(repo: &Path, a: &Args, stage: &Path) -> Result<u8> {
         return Ok(u8::from(results.tests.iter().any(|t| unusable(t).is_some())));
     }
     // Poly runs exactly the executables Windows ran: the stage's bundle
-    // (whose hashes `unbundle` checks).
+    // (whose hashes `unbundle_all` checks). Tests with data files are
+    // scenario drivers, compared step by step by `win scenario diff`.
     let text = util::read_string(&stage.join(&plan.bundle))?;
-    let (bm, files) = windows::unbundle(&text)?;
+    let (mut bm, files, data) = windows::unbundle_all(&text)?;
     let bin = stage.join("bin");
     for (name, bytes) in &files {
         util::write(&bin.join(name), bytes)?;
+    }
+    let with_data: Vec<String> =
+        bm.tests.iter().filter(|t| data.iter().any(|d| d.0 == t.name)).map(|t| t.name.clone()).collect();
+    for name in &with_data {
+        println!("not compared here: {name} has data files; use `win scenario diff --reference {}`", keep.display());
+    }
+    bm.tests.retain(|t| !with_data.contains(&t.name));
+    if bm.tests.is_empty() {
+        return Ok(0);
     }
     util::write_json(&bin.join("manifest.json"), &bm)?;
     let kernel = a.opt("kernel").map_or_else(|| poly::default_kernel(repo), PathBuf::from);
@@ -374,7 +392,8 @@ fn finish(repo: &Path, a: &Args, stage: &Path) -> Result<u8> {
     let run_dir = repo.join(crate::RUNS_DIR).join(format!("{}-windows-remote", util::now_stamp()));
     let poly_results = windows::run_poly(&target, &bin, &bm, &run_dir, jobs.max(1))?;
     util::write_json(&run_dir.join("poly.json"), &poly_results)?;
-    let summary = windows::diff(&results, &poly_results, &[])?;
+    let compared: Vec<String> = bm.tests.iter().map(|t| t.name.clone()).collect();
+    let summary = windows::diff(&results, &poly_results, &compared)?;
     let text = windows::report(&summary);
     util::write(&run_dir.join("report.txt"), &text)?;
     util::write_json(&run_dir.join("summary.json"), &summary)?;
@@ -394,6 +413,7 @@ const OPTIONS: &[&str] = &[
     "runner-arg",
     "tests",
     "tests-dir",
+    "data-dir",
     "stage",
     "record",
     "diff",
@@ -548,6 +568,7 @@ mod tests {
             format: windows::BUILD_FORMAT.into(),
             rustc: String::new(),
             revision: None,
+            clang: None,
             tests: vec![built("a", "aa", "tests/windows/a.rs"), built("b", "bb", "tests/windows/b.rs")],
         };
         let r = RunFile::parse(results_json().as_bytes()).unwrap();
