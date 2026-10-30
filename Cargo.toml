@@ -24,6 +24,7 @@ members = [
     "crates/poly-irq",
     "crates/poly-kernelbase",
     "crates/poly-ldr",
+    "crates/poly-libm",
     "crates/poly-line",
     "crates/poly-mem",
     "crates/poly-ntobj",
@@ -85,6 +86,7 @@ poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
 poly-ldr = { path = "crates/poly-ldr" }
+poly-libm = { path = "crates/poly-libm" }
 poly-line = { path = "crates/poly-line" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
