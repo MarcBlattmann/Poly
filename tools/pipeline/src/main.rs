@@ -23,21 +23,6 @@
 //! handoff record <entry> --spec-agent A --implementer B [--allow-dirty]
 //! handoff bundle <entry> --out DIR               what the implementer receives
 //! handoff verify [<entry>] [--received DIR]      prove the hand-offs (and no leaks)
-//! next [--os linux] [--layer syscall] [--limit N] [--trace FILE]... [--json]
-//! claim <id> --agent ID | release <id>           through the coverage tool
-//! role <spec|implementer> <entry> --workdir DIR --agent ID [--preset claude|opencode]
-//!      [--model M] [--generated DIR] [--revision REV] [--feedback FILE] [--dry-run]
-//! loop [--config FILE] [--once] [--entry ID] [--dry-run] [--quiet]
-//!                                                the scheduler: runs the whole pipeline unattended
-//!                                                (exit 10: stopped to run its new code; update.rs)
-//! loop status [--config FILE] [--json]           what every entry in the loop is doing
-//! loop watch [--config FILE] [--interval SECS] [--once] [--json] [--width N] [--lines N]
-//!                                                live read-only dashboard (q quits)
-//! loop pause [--role spec|implementer|all] [--for 4h] [--reason TEXT] [--config FILE]
-//!                                                no new agent sessions of the role(s) until then
-//! loop resume [--role spec|implementer|all] [--config FILE]
-//! loop reset <entry> [--config FILE] [--keep-branches]
-//!                                                forget an entry (e.g. after the human queue)
 //! win build [--tests-dir DIR]... [--tests a,b] [--out DIR]
 //!                                                Windows test programs (tests/windows/*.rs, ADR 0075) into
 //!                                                target/pipeline/windows/bin/*.exe + manifest.json
@@ -64,10 +49,7 @@ mod identity;
 mod libsearch;
 mod poly;
 mod ptrace;
-mod queue;
-mod roles;
 mod runner;
-mod scheduler;
 mod sha256;
 mod store;
 mod syscalls;
@@ -88,7 +70,6 @@ use util::{Args, Result};
 pub const BIN_DIR: &str = "target/pipeline/bin";
 pub const TRACES_DIR: &str = "target/pipeline/traces";
 pub const RUNS_DIR: &str = "target/pipeline/runs";
-pub const ROLES_DIR: &str = "target/pipeline/roles";
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Booting Poly under QEMU (TCG) takes longer than running on the host.
@@ -106,7 +87,7 @@ fn timeout(a: &Args, default: Duration) -> Result<Duration> {
 }
 
 /// Commands that observe the real OS. An implementer agent must never run
-/// them (CLEAN_ROOM.md): `pipeline role` sets POLY_ROLE for the agent.
+/// them (CLEAN_ROOM.md): an implementer's environment sets POLY_ROLE=implementer.
 fn oracle_guard(command: &str) -> Result {
     if std::env::var("POLY_ROLE").is_ok_and(|r| r == "implementer") {
         return Err(format!(
@@ -894,81 +875,6 @@ fn handoff_cmd(repo: &Path, a: &Args) -> Result<u8> {
     }
 }
 
-fn next_cmd(repo: &Path, a: &Args) -> Result<u8> {
-    a.only(&["os", "layer", "limit", "trace", "json"])?;
-    let files: Vec<PathBuf> = match a.all("trace") {
-        t if t.is_empty() => queue::default_traces(repo),
-        t => t.into_iter().map(PathBuf::from).collect(),
-    };
-    let traces: Vec<Trace> = files.iter().map(|f| util::read_json(f)).collect::<Result<_>>()?;
-    let limit = a.opt("limit").unwrap_or("10").parse::<usize>().map_err(|e| format!("--limit: {e}"))?;
-    let items = queue::next(repo, a.opt("os").unwrap_or("linux"), a.opt("layer").unwrap_or("syscall"), &traces)?;
-    let items = &items[..limit.min(items.len())];
-    if a.has("json") {
-        println!("{}", serde_json::to_string_pretty(items).map_err(|e| e.to_string())?);
-        return Ok(0);
-    }
-    if traces.is_empty() {
-        eprintln!("note: no startup traces; run `cargo xtask pipeline trace hello libc-hello` for first-use order");
-    }
-    for (i, it) in items.iter().enumerate() {
-        let first = it.first_use.map_or("-".into(), |f| f.to_string());
-        println!("{:>3}  {:<45} weight {:<6} first use {:<4} {}", i + 1, it.id, it.weight, first, it.status);
-    }
-    Ok(0)
-}
-
-fn coverage_tool(repo: &Path, args: &[String]) -> Result<u8> {
-    let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
-        .current_dir(repo)
-        .args(["run", "--quiet", "--package", "poly-coverage", "--"])
-        .args(args)
-        .status()
-        .map_err(|e| format!("cargo: {e}"))?;
-    Ok(if status.success() { 0 } else { 1 })
-}
-
-fn role_cmd(repo: &Path, a: &Args) -> Result<u8> {
-    a.only(&["workdir", "agent", "preset", "model", "generated", "revision", "feedback", "dry-run"])?;
-    let [role, id] = a.positional.as_slice() else {
-        return Err("usage: pipeline role <spec|implementer> <entry> --workdir DIR --agent ID ...".into());
-    };
-    let role = roles::Role::parse(role)?;
-    let entry = EntryId::parse(id)?;
-    let command = match (std::env::var(role.env_var()), a.opt("preset")) {
-        (_, Some(p)) => roles::preset(p, role, a.opt("model"))?,
-        (Ok(c), None) if !c.is_empty() => c,
-        _ => return Err(format!("set {} or pass --preset claude|opencode", role.env_var())),
-    };
-    let revision = match (role, a.opt("revision")) {
-        (_, Some(r)) => Some(r.to_string()),
-        (roles::Role::Implementer, None) => Some(handoff::latest(repo, &entry.id())?.revision),
-        (roles::Role::Spec, None) => None,
-    };
-    let feedback = a.opt("feedback").map(|f| util::read_string(Path::new(f))).transpose()?;
-    let req = roles::Request {
-        role,
-        entry: &entry,
-        agent: a.require("agent")?,
-        workdir: Path::new(a.require("workdir")?),
-        command: &command,
-        generated: a.opt("generated").map(Path::new),
-        revision: revision.as_deref(),
-        feedback,
-        dry_run: a.has("dry-run"),
-    };
-    let out = roles::run(repo, &repo.join(ROLES_DIR), &req)?;
-    if out.limit_reached {
-        eprintln!("usage limit reached: pause this role and run it again later (log: {})", out.log.display());
-        return Ok(roles::LIMIT_EXIT);
-    }
-    if !out.success {
-        eprintln!("the {} agent failed (log: {})", role.name(), out.log.display());
-        return Ok(1);
-    }
-    Ok(0)
-}
-
 /// `--tests a,b` as a list.
 fn test_list(a: &Args) -> Vec<String> {
     a.opt("tests").map(|t| t.split(',').filter(|s| !s.is_empty()).map(String::from).collect()).unwrap_or_default()
@@ -1144,11 +1050,7 @@ fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
 fn run(args: &[String]) -> Result<u8> {
     let repo = repo_root();
     let (cmd, rest) = args.split_first().ok_or("usage: pipeline <command> (see tools/pipeline/src/main.rs)")?;
-    if cmd == "loop" {
-        // Its own options and switches.
-        return scheduler::command(&repo, rest);
-    }
-    let switches = ["all", "print", "strict", "build-kernel", "replace", "allow-dirty", "json", "dry-run"];
+    let switches = ["all", "print", "strict", "build-kernel", "replace", "allow-dirty"];
     let a = Args::parse(rest, &switches)?;
     match cmd.as_str() {
         "build" => build(&repo, &a),
@@ -1161,13 +1063,9 @@ fn run(args: &[String]) -> Result<u8> {
         "spec" => spec(&repo, &a),
         "tests" => tests_cmd(&repo, &a),
         "handoff" => handoff_cmd(&repo, &a),
-        "next" => next_cmd(&repo, &a),
-        "claim" | "release" => coverage_tool(&repo, args),
-        "role" => role_cmd(&repo, &a),
         "win" => win_cmd(&repo, &a),
         _ => Err(format!(
-            "unknown command {cmd}; commands: build trace diff selfcheck polycheck polyrun initramfs spec tests handoff next \
-             claim release role loop win"
+            "unknown command {cmd}; commands: build trace diff selfcheck polycheck polyrun initramfs spec tests handoff win"
         )),
     }
 }

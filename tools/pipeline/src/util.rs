@@ -81,33 +81,6 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (year, month, day)
 }
 
-/// (year, month, day) to days since 1970-01-01: the inverse of
-/// [`civil_from_days`].
-fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
-    let y = if month <= 2 { year - 1 } else { year };
-    let era = y.div_euclid(400);
-    let yoe = y.rem_euclid(400);
-    let mp = i64::from((month + 9) % 12);
-    let doy = (153 * mp + 2) / 5 + i64::from(day) - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
-}
-
-/// `YYYY-MM-DD HH:MM:SS` (UTC, as [`format_utc`] writes it) as seconds
-/// since the epoch; `None` if it is not in that form.
-pub fn parse_utc(text: &str) -> Option<u64> {
-    let (date, time) = text.trim().split_once(' ')?;
-    let mut d = date.splitn(3, '-').map(|p| p.parse::<u32>().ok());
-    let (y, mo, da) = (d.next()??, d.next()??, d.next()??);
-    let mut t = time.splitn(3, ':').map(|p| p.parse::<u64>().ok());
-    let (h, mi, s) = (t.next()??, t.next()??, t.next()??);
-    if !(1..=12).contains(&mo) || !(1..=31).contains(&da) || h > 23 || mi > 59 || s > 60 {
-        return None;
-    }
-    let days = u64::try_from(days_from_civil(i64::from(y), mo, da)).ok()?;
-    Some(days * 86_400 + h * 3600 + mi * 60 + s)
-}
-
 /// `secs` since the epoch as `YYYY-MM-DD HH:MM:SS` (UTC).
 pub fn format_utc(secs: u64) -> String {
     let (y, mo, d) = civil_from_days((secs / 86_400) as i64);
@@ -242,15 +215,6 @@ pub fn which(program: &str) -> Option<PathBuf> {
     std::env::split_paths(&path).map(|d| d.join(program)).find(|p| p.is_file())
 }
 
-/// Quote `s` for a POSIX shell.
-pub fn shell_quote(s: &str) -> String {
-    if !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_./=:,+@%".contains(&b)) {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
-}
-
 /// `f` over every item on up to `jobs` threads (at least one); the results
 /// come back in the items' order. Threads take the next item when they
 /// finish one, so a slow item does not hold up the rest.
@@ -302,11 +266,6 @@ mod tests {
         assert_eq!(format_utc(0), "1970-01-01 00:00:00");
         assert_eq!(format_utc(951_782_400), "2000-02-29 00:00:00");
         assert_eq!(format_utc(1_792_454_400 + 3661), "2026-10-20 01:01:01");
-        for secs in [0, 951_782_400, 951_868_799, 1_792_454_400 + 3661, 4_102_444_800] {
-            assert_eq!(parse_utc(&format_utc(secs)), Some(secs));
-        }
-        assert_eq!(parse_utc("2026-13-01 00:00:00"), None);
-        assert_eq!(parse_utc("yesterday"), None);
     }
 
     #[test]
@@ -326,12 +285,5 @@ mod tests {
     fn inside_resolves_dots() {
         assert!(is_inside(Path::new("/a/b/../b/c"), Path::new("/a/b")));
         assert!(!is_inside(Path::new("/a/b/../c"), Path::new("/a/b")));
-    }
-
-    #[test]
-    fn quoting() {
-        assert_eq!(shell_quote("plain/path.txt"), "plain/path.txt");
-        assert_eq!(shell_quote("it's"), "'it'\\''s'");
-        assert_eq!(shell_quote(""), "''");
     }
 }

@@ -139,7 +139,7 @@ jobs:
           retention-days: 7
 
   coverage:
-    name: coverage (map, README, pipeline loop dry run)
+    name: coverage (map, README)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

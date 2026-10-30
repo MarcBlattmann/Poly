@@ -63,12 +63,12 @@ The goal is visual fidelity, not a unified theme: each app should look the same 
 
 ## 4. Agent pipeline
 
-1. **Target apps** → **call tracer** logs every API they call → **work queue** ranked by usage.
+1. **Target apps** → **call tracer** logs every API they call → entries ranked by usage.
 2. **Spec agent** probes the real OS in a VM and writes a spec sheet plus tests. Split tests ~70% visible / ~30% held out.
 3. **Implementer agent** sees only the spec and visible tests, writes the implementation.
 4. **Diff runner** executes the same tests on the real OS VM and on our build, compares results (visual output per the visual fidelity rules below).
-5. **Green** → merge, rerun all app-level tests. **Red** → diff goes back to implementer. After ~5 red cycles, escalate to a human queue.
-6. Any app-level failure becomes a new work item at the top of the queue.
+5. **Green** → merge, rerun all app-level tests. **Red** → diff goes back to implementer.
+6. Any app-level failure becomes a new entry.
 
 ### Spec sheet format (per function)
 
