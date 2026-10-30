@@ -1,0 +1,126 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/msvcrt.dll/__CxxFrameHandler3 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64; the same results byte for byte on Windows 11 Enterprise 25H2 (build 26200.9448)"
+  machine: "homeserver2, the owner's home PC (real hardware, Defender only, ACP 1252, OEM 850), whose results are recorded in windows.json; also the owner's work PC during the exploration; the system's own C:\\Windows\\System32\\msvcrt.dll; tests built by clang 18 (x86_64-pc-windows-msvc, freestanding, no C runtime of their own) and run by tools/pipeline/windows/poly-oracle.ps1, three runs each, all identical"
+  observed_by: spec-cxxeh
+  date: 2026-10-30
+sources: >
+  Observations of our own test programs on the machine above (the tests
+  of this entry and of __CxxFrameHandler and _CxxThrowException, handed
+  over together). Data layouts as the compiler writes them, from LLVM
+  (Apache-2.0 with LLVM exception): llvm/lib/CodeGen/AsmPrinter/WinException.cpp
+  (emitCXXFrameHandler3Table: FuncInfo, UnwindMapEntry, TryBlockMapEntry,
+  HandlerType, IPToStateMapEntry, the EH flags), clang/lib/CodeGen/MicrosoftCXXABI.cpp
+  (ThrowInfo, CatchableTypeArray, CatchableType, catch adjectives,
+  getCatchAllTypeInfo), llvm/lib/Target/X86/X86FrameLowering.cpp (funclet
+  entry: RDX is the parent's establisher frame, homed at [RSP+16];
+  getWinEHParentFrameOffset; UnwindHelp set to -2 on entry). Microsoft
+  Learn, "x64 exception handling" (language-specific handler signature,
+  DISPATCHER_CONTEXT, the establisher frame, RtlUnwindEx) and winnt.h
+  (EXCEPTION_RECORD, the EXCEPTION_* flags, DISPATCHER_CONTEXT). Wine's
+  dlls/msvcrt (LGPL; read for behaviour only, nothing copied) for which
+  questions to ask and for the funclet registers (below). No Microsoft
+  binary was disassembled or debugged.
+summary: >
+  __CxxFrameHandler3 is the x64 language-specific exception handler
+  (Learn: "x64 exception handling", EXCEPTION_ROUTINE) that every function
+  with C++ try/catch or with objects to destroy names in its UNWIND_INFO.
+  The dispatcher calls it as handler(ExceptionRecord, EstablisherFrame,
+  ContextRecord, DispatcherContext) for that function's frame (and for each
+  of its funclets' frames) twice per exception: during the search
+  (ExceptionFlags without EXCEPTION_UNWINDING 0x2) and during the unwind
+  (with it). DispatcherContext->HandlerData points at a 32-bit offset from
+  DispatcherContext->ImageBase to the function's FuncInfo (below). During
+  the search it looks for a catch clause of the function that takes a C++
+  exception (code 0xE06D7363, raised by _CxxThrowException); if none, it
+  returns ExceptionContinueSearch (1). If one does, it does not return: it
+  makes the catch object, unwinds every frame below to this one (their
+  handlers run their destructors), unwinds this frame to the try block,
+  calls the catch block (a funclet), destroys the exception object and
+  resumes the function at the address the catch block returned. During
+  the unwind it runs the function's unwind actions (destructors) from the
+  frame's current state down to the target state and returns
+  ExceptionContinueSearch. Non-C++ exceptions and std::terminate cases
+  follow the rules below. All observed rules hold for FuncInfo magic
+  0x19930520, 0x19930521 and 0x19930522 alike, through __CxxFrameHandler3
+  and __CxxFrameHandler (see __CxxFrameHandler.yaml for what differs by
+  magic number: only the fields that exist).
+interface:
+  signature: "EXCEPTION_DISPOSITION __CxxFrameHandler3(EXCEPTION_RECORD* record, ULONG64 establisher_frame, CONTEXT* context, DISPATCHER_CONTEXT* dispatch); the x64 calling convention"
+  handler_data: "dispatch->HandlerData points at a u32: the FuncInfo's offset from dispatch->ImageBase (clang writes it right after the handler's address in UNWIND_INFO, as `$cppxdata$<function>@IMGREL`)"
+  funclets: "catch blocks and unwind actions are separate functions (funclets) with their own RUNTIME_FUNCTION and UNWIND_INFO, which name the same handler and the same FuncInfo as their parent function; the IP-to-state map covers their code too"
+  establisher_frame: "Learn's definition: the function's frame base (RSP after the prolog, or the frame register minus 16*FrameOffset); every frame offset below (UnwindHelp, CatchObjOffset) is from the parent function's establisher frame"
+  funclet_entry: "a funclet is called with RDX = the establisher frame of the parent function (for a catch block nested in a catch block too: the outermost function's frame); clang's funclets read nothing else. Wine also passes RCX = the funclet's address and R8D = 0x100 (meaning unknown); doing the same is the safe choice for funclets of other compilers (not observable with clang)"
+  funclet_return: "a catch funclet returns in RAX the address in the parent function where execution goes on after the try statement; an unwind action returns nothing of interest"
+  parent_frame_offset: "a catch funclet stores its RDX at [RSP+16] on entry (its home slot); HandlerType.ParentFrameOffset is that slot's offset from the catch funclet's own establisher frame: a handler running for a catch funclet's frame finds the parent function's frame there"
+  unwind_help: "FuncInfo.UnwindHelp is the offset (from the establisher frame) of an 8-byte slot the function sets to -2 (as a 32-bit value) on entry and never reads: scratch space for the runtime (Wine keeps the current state there between a catch and the next exception)"
+  dispositions: "ExceptionContinueSearch (1) whenever it returns (excpt.h); it never returns ExceptionContinueExecution"
+data_layouts:
+  conventions: "little endian; every field 32 bits; 'rva' = offset from the image base (dispatch->ImageBase for FuncInfo and its tables; the exception record's parameter 3 for the thrown type's tables); 0 = absent"
+  FuncInfo: "u32 MagicNumber (0x19930520, 0x19930521 or 0x19930522 in the low 29 bits; clang writes the upper 3 bits 0), i32 MaxState (number of UnwindMap entries), rva UnwindMap, u32 NumTryBlocks, rva TryBlockMap, u32 IPMapEntries, rva IPToStateMap, i32 UnwindHelp; then from 0x19930521: rva ESTypeList (0); from 0x19930522: u32 EHFlags (bit 0x1: synchronous exceptions only, /EHs; bit 0x4: the function is noexcept). 40 bytes for 0x19930522"
+  UnwindMapEntry: "i32 ToState, rva Action (the unwind funclet, 0 = nothing to do); entry i describes state i"
+  TryBlockMapEntry: "i32 TryLow, i32 TryHigh, i32 CatchHigh, u32 NumCatches, rva HandlerArray: the try block covers states TryLow..TryHigh, its catch blocks' code runs in states TryHigh+1..CatchHigh; an inner try block comes before the try blocks that enclose it"
+  HandlerType: "u32 Adjectives, rva TypeDescriptor (0 = catch(...)), i32 CatchObjOffset (frame offset of the catch object; 0 = no catch object, e.g. an unnamed parameter), rva Handler (the catch funclet), u32 ParentFrameOffset; 20 bytes, NumCatches of them in clause order"
+  Adjectives: "0x1 const, 0x2 volatile, 0x4 __unaligned, 0x8 reference (catch object is a pointer to the exception object), 0x40 on catch(...): C++ exceptions only (clang without -fasync-exceptions; /EHs)"
+  IPToStateMapEntry: "rva IP, i32 State; sorted by IP; the state at a control PC is the State of the last entry with IP <= PC (control PC = dispatch->ControlPc, the return address for a calling frame; clang's entries start one byte after a call's label so that this works), -1 before the first entry"
+  TypeDescriptor: "8-byte vftable pointer (type_info's), 8-byte spare, NUL-terminated decorated name at offset 16 ('.H' int, '.?AUName@@' struct, '.PEAH' int*, '.PEAX' void*)"
+  ThrowInfo_and_CatchableType: "see _CxxThrowException.yaml: ThrowInfo {u32 attributes (0x1 const, 0x2 volatile pointee), rva destructor, rva forward compat, rva CatchableTypeArray}; CatchableTypeArray {i32 count, rva types[count]}; CatchableType {u32 properties (0x1 simple type, 0x4 has virtual bases, 0x10 std::bad_alloc), rva TypeDescriptor, i32 mdisp, i32 pdisp (-1: not in a virtual base), i32 vdisp, i32 size, rva copy function (0 = bit copy)}"
+rules:
+  state: "the frame's state is looked up from dispatch->ControlPc in the IP-to-state map; unwinding from state s to state t (t < s) means: while s > t, call UnwindMap[s].Action (if not 0) with RDX = establisher frame, then s = UnwindMap[s].ToState (cxx3_unwind_order, cxx3_state_after_catch)"
+  try_block_choice: "during the search, a try block of the frame applies when TryLow <= state <= TryHigh; try blocks are tried in map order (inner first), and in each its clauses in order; the first clause that matches wins, also a base class listed before the derived one (a held-out test, cxx3_nested_try)"
+  in_catch_block: "for a frame of a catch funclet (state between TryHigh+1 and CatchHigh of some try block), only try blocks inside that catch block or enclosing the whole try statement apply; the parent function's frame is found through ParentFrameOffset; catch objects and unwinding then use the parent's frame (cxx3_nested_try, cxx3_throw_in_catch)"
+  match_catch_all: "catch(...) (TypeDescriptor 0) takes every C++ exception (cxx3_catch_by_type, cxx3_by_value_lifetime); a non-C++ exception only when its Adjectives lack 0x40 and the frame is not synchronous-only (non_cxx_exceptions)"
+  match_type: "a typed clause takes a C++ exception when some CatchableType of the thrown CatchableTypeArray (in array order) has a TypeDescriptor with the same decorated name (byte-wise; the descriptors' addresses need not be equal, the vftable pointer is not read: cxxthrow_handmade) and the throw's const/volatile attributes are all present in the clause's adjectives (a held-out test). No other conversion: int is not long, unsigned, char or an enum (cxx3_catch_by_type). The array lists the type and its unambiguous public bases (and void* for object pointers), so private and ambiguous bases never match (a held-out test); nullptr is caught as void* only (a held-out test). A pointer clause does not take a class object and a reference clause does not take a pointer"
+  this_adjustment: "the address of the matched type inside the exception object: p = object; if pdisp >= 0 then p = object + pdisp + (i32 at (pointer at object + pdisp) + vdisp); p += mdisp (virtual and non-virtual bases at any offset: a held-out test, cxx3_virtual_base)"
+  catch_object: "made at establisher frame + CatchObjOffset, only if that is not 0 and the clause is typed: a reference clause gets the adjusted address (no copy, the very exception object: cxx3_by_reference); a simple type gets `size` bytes copied, and a pointer (size 8) is then adjusted like an object address (Derived* as Base*); a class with a copy function gets copy_function(this = catch object, adjusted exception object) plus a third argument 1 when properties has 0x4 (virtual bases: they are copied once, cxx3_virtual_base) - also a compiler 'copying closure' (a held-out test); a class without one gets `size` bytes copied (cxx3_by_value_lifetime). An unnamed by-value clause copies nothing"
+  order_of_events: "for a C++ exception taken by a catch clause: (1) the search asks every frame from the throw outwards (SEH filters included) until the clause is found; (2) the catch object is made; (3) the frames below are unwound innermost first, each running its unwind actions (destructors, __finally blocks) in reverse construction order; (4) this frame is unwound to the try block's TryLow (objects of the try block are destroyed); (5) the catch funclet runs; (6) the by-value catch object is destroyed by the catch block itself at its end; (7) the exception object is destroyed (ThrowInfo destructor with this = object; nothing if 0); (8) the function goes on at the address the funclet returned, with its own frame (RSP and non-volatile registers as of that frame). Observed: 'A+1 A+2 Acopy102 ~A1 catch102 ~A102 ~A2' (cxx3_by_value_lifetime)"
+  stack_during_catch: "the catch funclet runs while the stack memory of the frames between it and the throw is still in place, below it: the exception object lives in the throwing function's frame and is used and destroyed after the catch block (its address is lower than the catching function's locals: cxx3_by_reference). Only step (8) gives the stack back. One way to do this is what Learn's RtlUnwindEx offers with a consolidation record (STATUS_UNWIND_CONSOLIDATE, ntstatus.h), as Wine does"
+  rethrow: "`throw;` raises a record whose parameters 1..3 are 0. A frame handler that sees one completes it in place with the record of the exception currently being handled by this thread (filters further out see the original object, ThrowInfo and image base: cxxthrow_rethrow_fill) and matches it as that exception: same object, same type (an outer clause may take it as a base class), no copy unless a later clause is by value. The rethrowing catch block's by-value catch object is destroyed when that catch block is unwound; the exception object is not destroyed when a catch block is left by a rethrow, only at the end of the catch block that finally takes it, once (a held-out test, cxx3_by_reference). Works from a function the catch block calls and through any number of levels"
+  rethrow_without_exception: "a rethrow record while no exception is being handled matches no clause, not even catch(...); it ends as an unhandled exception (code 0xE06D7363, parameters 1..3 still 0); terminate() is not called (cxx3_rethrow_nothing)"
+  new_exception_in_catch: "an exception thrown in a catch block (and not caught inside it) replaces the one being handled: the first exception object is destroyed while that catch block is unwound, after the new object was made and before the clause that takes the new exception runs, whether that clause is in an enclosing try block of the same function or in a caller: 'A+1 c1 A+2 ~A1 c2 ~A2' (cxx3_throw_in_catch). A by-value catch object of the abandoned block is destroyed before the first exception object"
+  nested_independent: "exceptions thrown and caught entirely inside a catch block, or inside a destructor that runs during an unwind, are independent of the outer one, which stays valid and is delivered afterwards (a held-out test, cxx3_nested_try)"
+  state_after_catch: "after the catch the function goes on in a consistent state: objects made after the try statement are destroyed by a later throw, none twice; a thousand catches in a loop work (cxx3_state_after_catch, cxx3_deep_recursion)"
+  unwind_phase: "with EXCEPTION_UNWINDING set: if EXCEPTION_TARGET_UNWIND (0x20) is set too (this frame holds the catch being entered) the frame is unwound to that try block's TryLow, otherwise to -1 (all of it); then ExceptionContinueSearch"
+  non_cxx_exceptions: "an exception with another code (RaiseException(0xE0000001), hardware faults): if the FuncInfo has magic 0x19930522 and EHFlags bit 0x1, the frame ignores it completely - no clause, and no unwind actions during its unwind (no destructors run when an outer __except takes it: cxx3_seh_sync). Otherwise (EHFlags 0, or magic 0x19930520/0x19930521, which have no flags) the frame's unwind actions run during its unwind (cxx3_seh_flags0, cxx3_older_magic), and only a catch(...) without adjective 0x40 takes it - after the frames below were unwound, as for a C++ exception (cxx3_seh_async); typed clauses never do"
+  seh_filters: "SEH and C++ frames share one search: an __except filter between the throw and a C++ catch is asked first and sees code 0xE06D7363 with the throw's parameters; when it continues the search the C++ catch further out takes the exception and __finally blocks between run in the unwind in frame order with the destructors (cxx3_seh_mixed)"
+  cxx_exception_taken_by_seh: "when an __except takes a C++ exception, the exception object is destroyed first in the unwind (by the throw itself, see _CxxThrowException), then the C++ frames between are unwound with their destructors whatever their EH flags (cxx3_seh_mixed)"
+  unhandled: "a C++ exception no clause takes is an unhandled exception: the search reaches the top-level filter (SetUnhandledExceptionFilter) with code 0xE06D7363, flags 0x81, 4 parameters; nothing was unwound (no destructor ran) and terminate() is not called (cxx3_unhandled)"
+errors:
+  terminate_destructor: "an exception leaving a destructor (or any unwind action) while it runs as part of an unwind: terminate() (the set_terminate handler), nothing else unwound, no clause entered: '~Bad terminate' (cxx3_terminate_dtor); __std_terminate was not involved"
+  terminate_noexcept_flag: "magic 0x19930522 with EHFlags bit 0x4: when the search reaches such a frame with a C++ exception and none of its clauses matches, terminate() during the search; nothing is unwound (a held-out test; MSVC emits the bit for noexcept functions)"
+  clang_noexcept: "clang marks a noexcept function's body as a state whose unwind action calls __std_terminate: the runtime simply runs it during the unwind, so the inner frames are unwound first and terminate comes from the program (a held-out test); nothing special for the runtime"
+  bad_magic: "a magic number outside 0x19930520..0x19930522: not observed (Wine continues the search)"
+side_effects: >
+  Calls the program's copy constructors, destructors (unwind actions and
+  ThrowInfo destructors), catch funclets and terminate(). Keeps per
+  thread which exception is being handled (for rethrow and for completing
+  rethrow records) and may use the frame's UnwindHelp slot. Nothing else.
+threading: >
+  Per thread: the exception being handled is the current thread's; the
+  tests are single-threaded. Exceptions on different threads must not see
+  each other (not tested).
+ordering:
+  - "search before unwind: SEH filters and clause matching for every frame from the throw outwards before any destructor runs (cxx3_seh_mixed, cxx3_unhandled)"
+  - "catch object copy before the unwind of the frames below (cxx3_by_value_lifetime)"
+  - "unwind innermost frame first; inside a frame reverse construction order; a throwing constructor destroys its constructed members and bases, not itself; constructed array elements in reverse (cxx3_unwind_order)"
+  - "catch block, then its by-value catch object, then the exception object (cxx3_by_value_lifetime)"
+  - "throw in a catch block: new object made, old catch object and old exception object destroyed in the unwind, then the new clause (cxx3_throw_in_catch)"
+timing:                                       # envelopes, never exact values
+  typical: "each test (up to a thousand throws, 200 frames deep) runs in well under a second on the oracle"
+  guarantees: none
+tests:
+  visible: 17  # count in <symbol>.tests/
+  held_out: 8  # count kept by the diff runner
+building_tests: >
+  The tests are C++ (`.cpp`) built by `cargo xtask pipeline win build`
+  with clang++ and lld-link against import libraries made from
+  tests/windows/cxx/{msvcrt,kernel32}.def; they include
+  tests/windows/cxx/poly_wtest.h, which provides the observation file,
+  the entry point, its own `??_7type_info@@6B@` and `__std_terminate`
+  (msvcrt.dll exports neither). A `// poly-cxx:` line rewrites the
+  compiler's tables (handler name, magic, EH flags) or adds
+  -fasync-exceptions (ADR 0098). Today on Poly every one of them fails:
+  msvcrt.dll has no __CxxFrameHandler3 (the program does not start,
+  0xC0000139), and __CxxFrameHandler continues every search.
