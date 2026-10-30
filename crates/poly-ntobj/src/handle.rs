@@ -157,7 +157,15 @@ impl HandleTable {
     /// Inheritance": an inherited handle has the same value and access).
     fn inheritable(&self) -> HandleTable {
         let entries: Vec<_> = self.entries.iter().map(|e| e.filter(|e| e.flags.inherit)).collect();
-        let free = entries.iter().enumerate().filter(|(_, e)| e.is_none()).map(|(i, _)| i as u32).collect();
+        // Inserted one by one, in order: collecting into a `BTreeSet`
+        // sorts first, with a 4 KiB scratch buffer on the stack, too much
+        // for a kernel thread deep in `NtCreateUserProcess` (ADR 0089).
+        let mut free = BTreeSet::new();
+        for (i, e) in entries.iter().enumerate() {
+            if e.is_none() {
+                free.insert(i as u32);
+            }
+        }
         let count = entries.iter().filter(|e| e.is_some()).count();
         HandleTable { entries, free, count }
     }

@@ -75,13 +75,21 @@ const ERROR_NOACCESS: u32 = 998;
 const STARTUPINFOW_SIZE: usize = 104;
 
 /// `GetStartupInfoW`: Learn: "the STARTUPINFO structure that was specified
-/// when the calling process was created". Poly's `CreateProcessW` does not
-/// pass one on yet (ADR 0079), so every process gets `cb` and zeros: no
+/// when the calling process was created": `CreateProcessW` keeps it in
+/// the child's parameters (ADR 0089, `poly_kernelbase::process::
+/// startup_info`). A process the kernel started gets `cb` and zeros: no
 /// `STARTF_*` flags, so the standard handles come from `GetStdHandle`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetStartupInfoW(info: *mut u8) {
-    let mut b = [0u8; STARTUPINFOW_SIZE];
-    b[0..4].copy_from_slice(&(STARTUPINFOW_SIZE as u32).to_le_bytes());
+    let pp = parameters();
+    let b = if pp == 0 {
+        poly_kernelbase::process::startup_info(&[])
+    } else {
+        // SAFETY: the process parameters are one mapped allocation of at
+        // least the structure's size (ADR 0073, 0079).
+        let header = unsafe { core::slice::from_raw_parts(pp as *const u8, poly_kernelbase::process::PARAMETERS_SIZE) };
+        poly_kernelbase::process::startup_info(header)
+    };
     // SAFETY: the caller's STARTUPINFOW.
     unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), info, STARTUPINFOW_SIZE) };
 }
