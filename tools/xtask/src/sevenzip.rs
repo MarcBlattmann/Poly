@@ -198,7 +198,10 @@ pub fn command(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
         Some("fetch-7zip") => fetch().map(|_| ()),
         Some("imports") => crate::winimports::command(&args[1..]),
-        _ => Err("usage: cargo xtask win <fetch-7zip | imports <exe | 7zip> [--markdown <file>] [--check]>".into()),
+        // The Windows API tracer (wintrace.rs, ADR 0090).
+        Some("trace-kit") => crate::wintrace::trace_kit_command(&args[1..]),
+        Some("trace-diff") => crate::wintrace::trace_diff_command(&args[1..]),
+        _ => Err("usage: cargo xtask win <fetch-7zip | imports <exe | 7zip> [--markdown <file>] [--check] | trace-kit <exe | 7zip> [--out <dir>] | trace-diff <a.jsonl> <b.jsonl>>".into()),
     }
 }
 
