@@ -385,6 +385,25 @@ Compare with the executables of that bundle (the build is reproducible, so
 rebuilding unchanged sources gives the same files; the diff reports
 different executables as an error).
 
+**Scenario drivers** ([ADR 0088](adr/0088-7-zip-scenario-driver.md)): a
+test that runs an unchanged application step by step and records each
+step (exit code, stdout and stderr bytes, every file with size, SHA-256,
+time and attributes) in a `poly-scenario/1` observation file. The first is
+`tests/windows/sevenzip_scenario.rs` (15 runs of the pinned `7za.exe`). Its
+data file `7za.exe` travels beside it: `win bundle --data-dir DIR` adds
+`DIR/<test>/<file>` as `data` lines, which `poly-oracle.ps1` puts beside
+the test (or `-TestsDir ... -DataDir DIR` on the PC). Its Windows recording
+is committed as `tests/windows/oracle/sevenzip_scenario.windows.json`.
+
+```sh
+cargo xtask win 7zip-diff [--markdown docs/windows/7zip-recording.md]   # build, run on Poly, compare per step
+cargo xtask pipeline win scenario show tests/windows/oracle/sevenzip_scenario.windows.json   # what Windows did
+cargo xtask pipeline win scenario poly --bin-dir DIR [--data-dir DIR]  # Poly only
+# on the PC, to record again (after the driver or the support crate changed):
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../poly/tools/pipeline/windows/poly-oracle.ps1 \
+    -Bundle bundle-<id>.txt -Tests sevenzip_scenario -TestTimeouts sevenzip_scenario=300 -Out results.json
+```
+
 ## Safety rules
 
 Reviewers check these on every agent PR; a violation stops the entry
