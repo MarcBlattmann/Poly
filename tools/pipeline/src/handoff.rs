@@ -205,7 +205,14 @@ fn file_at(repo: &Path, revision: &str, path: &str) -> Result<Vec<u8>> {
 
 /// Write the files of the latest hand-off of `entry`, as committed at its
 /// revision, into `out`: everything an implementer agent receives.
+#[cfg(test)]
 pub fn bundle(repo: &Path, entry: &str, out: &Path, heldout: Option<&Path>) -> Result<Record> {
+    Ok(bundle_many(repo, &[entry], out, heldout)?.remove(0))
+}
+
+/// [`bundle`] for several entries handed over together (one implementer
+/// gets them in one directory; ADR 0098's three C++ exception entries).
+pub fn bundle_many(repo: &Path, entries: &[&str], out: &Path, heldout: Option<&Path>) -> Result<Vec<Record>> {
     if let Some(h) = heldout
         && (util::is_inside(out, h) || util::is_inside(h, out))
     {
@@ -214,7 +221,20 @@ pub fn bundle(repo: &Path, entry: &str, out: &Path, heldout: Option<&Path>) -> R
     if out.exists() && !util::files_under(out)?.is_empty() {
         return Err(format!("{} is not empty", out.display()));
     }
-    let record = latest(repo, entry)?;
+    let records = entries.iter().map(|e| latest(repo, e)).collect::<Result<Vec<_>>>()?;
+    let mut seen = std::collections::BTreeSet::new();
+    for f in records.iter().flat_map(|r| &r.files) {
+        if !seen.insert(&f.path) {
+            return Err(format!("{} is in more than one of the hand-offs", f.path));
+        }
+    }
+    for record in &records {
+        write_files(repo, record, out)?;
+    }
+    Ok(records)
+}
+
+fn write_files(repo: &Path, record: &Record, out: &Path) -> Result<()> {
     for f in &record.files {
         let data = file_at(repo, &record.revision, &f.path)?;
         if sha256::hex(&data) != f.sha256 {
@@ -222,7 +242,7 @@ pub fn bundle(repo: &Path, entry: &str, out: &Path, heldout: Option<&Path>) -> R
         }
         util::write(&out.join(&f.path), data)?;
     }
-    Ok(record)
+    Ok(())
 }
 
 #[derive(Debug, Default)]
@@ -382,6 +402,12 @@ mod tests {
         let req =
             VerifyRequest { entry: Some("linux/syscall/x86_64/write"), heldout: Some(&heldout), received: Some(&out) };
         assert_eq!(verify(&repo, &req).unwrap(), Vec::<String>::new());
+        // A second bundle into a directory that is not empty is refused;
+        // the same entry twice in one bundle too (its files would collide).
+        assert!(bundle(&repo, &e.id(), &out, Some(&heldout)).unwrap_err().contains("not empty"));
+        let id = e.id();
+        let twice = bundle_many(&repo, &[id.as_str(), id.as_str()], &base.join("b2"), Some(&heldout)).unwrap_err();
+        assert!(twice.contains("more than one"), "{twice}");
         let _ = std::fs::remove_dir_all(&base);
     }
 

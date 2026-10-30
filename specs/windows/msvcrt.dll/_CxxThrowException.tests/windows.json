@@ -1,0 +1,84 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "eb646a3c3f85",
+  "runner": "poly-oracle.ps1 1",
+  "started": "2026-10-30T15:31:20Z",
+  "tests": [
+    {
+      "name": "cxxthrow_handmade",
+      "exe_sha256": "30b9ca41c667e04399cf81de2894b950b81da01e31e4455eeae430ea3aea7906",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbWF0Y2hlZCBieSBuYW1lOiBvdXIgLkggaXMgaW50Cm9rIGNvcHkgZnVuY3Rpb24ncyB0aGlzIGlzIHRoZSBjYXRjaCBvYmplY3QKb2sgaXRzIGFyZ3VtZW50IGlzIHRoZSBleGNlcHRpb24gb2JqZWN0Cm9rIG91ciBjb3B5IGZ1bmN0aW9uIG1hZGUgdGhlIGNhdGNoIG9iamVjdApvayBvdXIgY29weSwgdGhlIGNhdGNoIG9iamVjdCdzIGRlc3RydWN0b3IsIHRoZW4gb3VyIGRlc3RydWN0b3IKb2sgb3VyIGRlc3RydWN0b3IgZ290IHRoZSBleGNlcHRpb24gb2JqZWN0Cm9rIGJ5IHJlZmVyZW5jZTogdGhlIG9iamVjdCBpdHNlbGYKb2sgbm8gY29weTsgb3VyIGRlc3RydWN0b3IgYXQgdGhlIGVuZApvayBzZWNvbmQgZW50cnkgb2YgdGhlIGFycmF5IG1hdGNoZXMKb2sgY29uc3QgYXR0cmlidXRlOiBub3QgaW50KiwgYnV0IGNvbnN0IGludCoKc3VtbWFyeSAxMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok matched by name: our .H is int\nok copy function's this is the catch object\nok its argument is the exception object\nok our copy function made the catch object\nok our copy, the catch object's destructor, then our destructor\nok our destructor got the exception object\nok by reference: the object itself\nok no copy; our destructor at the end\nok second entry of the array matches\nok const attribute: not int*, but const int*\nsummary 10 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "cxxthrow_record",
+      "exe_sha256": "97309f45496656df5474d5d164bbcdbc15d990887117d86f5fbed36284592a52",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VlbgojIHRocm93IDUKb2sgY29kZQpvayBmbGFncwpvayBwYXJhbWV0ZXJzCm9rIG1hZ2ljCm9rIG5vIGNoYWluZWQgcmVjb3JkCm9rIGltYWdlIGJhc2Ugb2YgdGhlIHRocm93IGluZm8ncyBpbWFnZQpvayB0aHJvdyBpbmZvIGluc2lkZSB0aGF0IGltYWdlCm9rIG9iamVjdCBpcyBhIHBvaW50ZXIKb2sgb2JqZWN0IGhvbGRzIHRoZSB2YWx1ZQpvayBzZWVuCiMgdGhyb3cgVGhpbmcoNikKb2sgY29kZQpvayBmbGFncwpvayBwYXJhbWV0ZXJzCm9rIG1hZ2ljCm9rIG5vIGNoYWluZWQgcmVjb3JkCm9rIGltYWdlIGJhc2Ugb2YgdGhlIHRocm93IGluZm8ncyBpbWFnZQpvayB0aHJvdyBpbmZvIGluc2lkZSB0aGF0IGltYWdlCm9rIG9iamVjdCBpcyB0aGUgdGhyb3duIG9iamVjdCBpdHNlbGYKb2sgc2VlbgpvayBSYWlzZUV4Y2VwdGlvbiB3aXRoIGZsYWdzIDAgc2hvd3MKb2sgZmlsdGVyIGNhbGxzCnN1bW1hcnkgMjIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok seen\n# throw 5\nok code\nok flags\nok parameters\nok magic\nok no chained record\nok image base of the throw info's image\nok throw info inside that image\nok object is a pointer\nok object holds the value\nok seen\n# throw Thing(6)\nok code\nok flags\nok parameters\nok magic\nok no chained record\nok image base of the throw info's image\nok throw info inside that image\nok object is the thrown object itself\nok seen\nok RaiseException with flags 0 shows\nok filter calls\nsummary 22 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "cxxthrow_rethrow_fill",
+      "exe_sha256": "5dc3a24e059f742ff565ea9ee2c0e30732dfbdd541152b887978096e0107c0a3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "IyB0aHJvdzsgaW4gdGhlIGNhdGNoIGJsb2NrCm9rIGNvZGUKb2sgZmxhZ3MKb2sgcGFyYW1ldGVycwpvayBtYWdpYwpvayB0aGUgb3JpZ2luYWwgb2JqZWN0Cm9rIHRoZSBpbWFnZSBiYXNlCm9rIHRoZSBvcmlnaW5hbCB0aHJvdyBpbmZvCiMgdGhyb3c7IGluIGEgZnVuY3Rpb24gdGhlIGNhdGNoIGJsb2NrIGNhbGxzCm9rIGNvZGUKb2sgZmxhZ3MKb2sgcGFyYW1ldGVycwpvayBtYWdpYwpvayB0aGUgb3JpZ2luYWwgb2JqZWN0Cm9rIHRoZSBpbWFnZSBiYXNlCm9rIHRoZSBvcmlnaW5hbCB0aHJvdyBpbmZvCiMgcGFzdCBhbm90aGVyIEMrKyBmcmFtZSB3aG9zZSBjbGF1c2VzIGRvIG5vdCBtYXRjaApvayBjb2RlCm9rIGZsYWdzCm9rIHBhcmFtZXRlcnMKb2sgbWFnaWMKb2sgdGhlIG9yaWdpbmFsIG9iamVjdApvayB0aGUgaW1hZ2UgYmFzZQpvayB0aGUgb3JpZ2luYWwgdGhyb3cgaW5mbwpzdW1tYXJ5IDIxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "# throw; in the catch block\nok code\nok flags\nok parameters\nok magic\nok the original object\nok the image base\nok the original throw info\n# throw; in a function the catch block calls\nok code\nok flags\nok parameters\nok magic\nok the original object\nok the image base\nok the original throw info\n# past another C++ frame whose clauses do not match\nok code\nok flags\nok parameters\nok magic\nok the original object\nok the image base\nok the original throw info\nsummary 21 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "cxxthrow_rethrow_record",
+      "exe_sha256": "78e46f74c6377a41d8d05a03651fbc80f14552b6ff7e557dc6db278c7b754e44",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZmlsdGVyIHRvb2sgdGhlIHJldGhyb3cKIyBpbnNpZGUgYSBjYXRjaCBibG9jawpvayBjb2RlCm9rIGZsYWdzCm9rIHBhcmFtZXRlcnMKb2sgbWFnaWMKb2sgb2JqZWN0IDAKb2sgdGhyb3cgaW5mbyAwCm9rIGltYWdlIGJhc2UgMApvayB0aGUgY2F0Y2ggYmxvY2sgd2VudCBvbgpvayBmaWx0ZXIgdG9vayB0aGUgcmV0aHJvdwojIG5vIGV4Y2VwdGlvbiBiZWluZyBoYW5kbGVkCm9rIGNvZGUKb2sgZmxhZ3MKb2sgcGFyYW1ldGVycwpvayBtYWdpYwpvayBvYmplY3QgMApvayB0aHJvdyBpbmZvIDAKb2sgaW1hZ2UgYmFzZSAwCm9rIGZpbHRlciBjYWxscwpzdW1tYXJ5IDE4IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok filter took the rethrow\n# inside a catch block\nok code\nok flags\nok parameters\nok magic\nok object 0\nok throw info 0\nok image base 0\nok the catch block went on\nok filter took the rethrow\n# no exception being handled\nok code\nok flags\nok parameters\nok magic\nok object 0\nok throw info 0\nok image base 0\nok filter calls\nsummary 18 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "cxxthrow_throwinfo_layout",
+      "exe_sha256": "498d290a2eace3642e4116225542ce3207b6b9871e5af0c35e57b0e05da34c87",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "IyBpbnQKdmFsdWUgYXR0cmlidXRlcyAweDAKdmFsdWUgaGFzIGRlc3RydWN0b3IgMAp2YWx1ZSBmb3J3YXJkIGNvbXBhdCAweDAKdmFsdWUgY2F0Y2hhYmxlIHR5cGVzIDEKLkgKdmFsdWUgICBwcm9wZXJ0aWVzIDB4MQp2YWx1ZSAgIG1kaXNwIDAKdmFsdWUgICBwZGlzcCAtMQp2YWx1ZSAgIHZkaXNwIDAKdmFsdWUgICBzaXplIDQKdmFsdWUgICBoYXMgY29weSBmdW5jdGlvbiAwCm9rICAgdmZ0YWJsZSBwb2ludGVyIGlzIHR5cGVfaW5mbydzCiMgRGVyaXZlZAp2YWx1ZSBhdHRyaWJ1dGVzIDB4MAp2YWx1ZSBoYXMgZGVzdHJ1Y3RvciAxCnZhbHVlIGZvcndhcmQgY29tcGF0IDB4MAp2YWx1ZSBjYXRjaGFibGUgdHlwZXMgMgouP0FVRGVyaXZlZEBACnZhbHVlICAgcHJvcGVydGllcyAweDAKdmFsdWUgICBtZGlzcCAwCnZhbHVlICAgcGRpc3AgLTEKdmFsdWUgICB2ZGlzcCAwCnZhbHVlICAgc2l6ZSAyNAp2YWx1ZSAgIGhhcyBjb3B5IGZ1bmN0aW9uIDEKb2sgICB2ZnRhYmxlIHBvaW50ZXIgaXMgdHlwZV9pbmZvJ3MKLj9BVUJhc2VAQAp2YWx1ZSAgIHByb3BlcnRpZXMgMHgwCnZhbHVlICAgbWRpc3AgMAp2YWx1ZSAgIHBkaXNwIC0xCnZhbHVlICAgdmRpc3AgMAp2YWx1ZSAgIHNpemUgMTYKdmFsdWUgICBoYXMgY29weSBmdW5jdGlvbiAxCm9rICAgdmZ0YWJsZSBwb2ludGVyIGlzIHR5cGVfaW5mbydzCiMgY29uc3QgaW50Kgp2YWx1ZSBhdHRyaWJ1dGVzIDB4MQp2YWx1ZSBoYXMgZGVzdHJ1Y3RvciAwCnZhbHVlIGZvcndhcmQgY29tcGF0IDB4MAp2YWx1ZSBjYXRjaGFibGUgdHlwZXMgMgouUEVBSAp2YWx1ZSAgIHByb3BlcnRpZXMgMHgxCnZhbHVlICAgbWRpc3AgMAp2YWx1ZSAgIHBkaXNwIC0xCnZhbHVlICAgdmRpc3AgMAp2YWx1ZSAgIHNpemUgOAp2YWx1ZSAgIGhhcyBjb3B5IGZ1bmN0aW9uIDAKb2sgICB2ZnRhYmxlIHBvaW50ZXIgaXMgdHlwZV9pbmZvJ3MKLlBFQVgKdmFsdWUgICBwcm9wZXJ0aWVzIDB4MQp2YWx1ZSAgIG1kaXNwIDAKdmFsdWUgICBwZGlzcCAtMQp2YWx1ZSAgIHZkaXNwIDAKdmFsdWUgICBzaXplIDgKdmFsdWUgICBoYXMgY29weSBmdW5jdGlvbiAwCm9rICAgdmZ0YWJsZSBwb2ludGVyIGlzIHR5cGVfaW5mbydzCiMgdm9sYXRpbGUgaW50Kgp2YWx1ZSBhdHRyaWJ1dGVzIDB4Mgp2YWx1ZSBoYXMgZGVzdHJ1Y3RvciAwCnZhbHVlIGZvcndhcmQgY29tcGF0IDB4MAp2YWx1ZSBjYXRjaGFibGUgdHlwZXMgMgouUEVBSAp2YWx1ZSAgIHByb3BlcnRpZXMgMHgxCnZhbHVlICAgbWRpc3AgMAp2YWx1ZSAgIHBkaXNwIC0xCnZhbHVlICAgdmRpc3AgMAp2YWx1ZSAgIHNpemUgOAp2YWx1ZSAgIGhhcyBjb3B5IGZ1bmN0aW9uIDAKb2sgICB2ZnRhYmxlIHBvaW50ZXIgaXMgdHlwZV9pbmZvJ3MKLlBFQVgKdmFsdWUgICBwcm9wZXJ0aWVzIDB4MQp2YWx1ZSAgIG1kaXNwIDAKdmFsdWUgICBwZGlzcCAtMQp2YWx1ZSAgIHZkaXNwIDAKdmFsdWUgICBzaXplIDgKdmFsdWUgICBoYXMgY29weSBmdW5jdGlvbiAwCm9rICAgdmZ0YWJsZSBwb2ludGVyIGlzIHR5cGVfaW5mbydzCiMgTm9EdG9yCnZhbHVlIGF0dHJpYnV0ZXMgMHgwCnZhbHVlIGhhcyBkZXN0cnVjdG9yIDAKdmFsdWUgZm9yd2FyZCBjb21wYXQgMHgwCnZhbHVlIGNhdGNoYWJsZSB0eXBlcyAxCi4/QVVOb0R0b3JAQAp2YWx1ZSAgIHByb3BlcnRpZXMgMHgwCnZhbHVlICAgbWRpc3AgMAp2YWx1ZSAgIHBkaXNwIC0xCnZhbHVlICAgdmRpc3AgMAp2YWx1ZSAgIHNpemUgMTIKdmFsdWUgICBoYXMgY29weSBmdW5jdGlvbiAwCm9rICAgdmZ0YWJsZSBwb2ludGVyIGlzIHR5cGVfaW5mbydzCnN1bW1hcnkgOCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "# int\nvalue attributes 0x0\nvalue has destructor 0\nvalue forward compat 0x0\nvalue catchable types 1\n.H\nvalue   properties 0x1\nvalue   mdisp 0\nvalue   pdisp -1\nvalue   vdisp 0\nvalue   size 4\nvalue   has copy function 0\nok   vftable pointer is type_info's\n# Derived\nvalue attributes 0x0\nvalue has destructor 1\nvalue forward compat 0x0\nvalue catchable types 2\n.?AUDerived@@\nvalue   properties 0x0\nvalue   mdisp 0\nvalue   pdisp -1\nvalue   vdisp 0\nvalue   size 24\nvalue   has copy function 1\nok   vftable pointer is type_info's\n.?AUBase@@\nvalue   properties 0x0\nvalue   mdisp 0\nvalue   pdisp -1\nvalue   vdisp 0\nvalue   size 16\nvalue   has copy function 1\nok   vftable pointer is type_info's\n# const int*\nvalue attributes 0x1\nvalue has destructor 0\nvalue forward compat 0x0\nvalue catchable types 2\n.PEAH\nvalue   properties 0x1\nvalue   mdisp 0\nvalue   pdisp -1\nvalue   vdisp 0\nvalue   size 8\nvalue   has copy function 0\nok   vftable pointer is type_info's\n.PEAX\nvalue   properties 0x1\nvalue   mdisp 0\nvalue   pdisp -1\nvalue   vdisp 0\nvalue   size 8\nvalue   has copy function 0\nok   vftable pointer is type_info's\n# volatile int*\nvalue attributes 0x2\nvalue has destructor 0\nvalue forward compat 0x0\nvalue catchable types 2\n.PEAH\nvalue   properties 0x1\nvalue   mdisp 0\nvalue   pdisp -1\nvalue   vdisp 0\nvalue   size 8\nvalue   has copy function 0\nok   vftable pointer is type_info's\n.PEAX\nvalue   properties 0x1\nvalue   mdisp 0\nvalue   pdisp -1\nvalue   vdisp 0\nvalue   size 8\nvalue   has copy function 0\nok   vftable pointer is type_info's\n# NoDtor\nvalue attributes 0x0\nvalue has destructor 0\nvalue forward compat 0x0\nvalue catchable types 1\n.?AUNoDtor@@\nvalue   properties 0x0\nvalue   mdisp 0\nvalue   pdisp -1\nvalue   vdisp 0\nvalue   size 12\nvalue   has copy function 0\nok   vftable pointer is type_info's\nsummary 8 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}
