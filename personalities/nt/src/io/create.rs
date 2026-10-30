@@ -159,7 +159,12 @@ impl CreateHook<'_> {
         self.information = if exists { FILE_OPENED } else { FILE_CREATED };
         let cookie = self.io.cookie();
         let object = new_file_object(om, cookie, self.thread)?;
-        self.io.pipes.entry(key.clone()).or_default().opens += 1;
+        let pipe = self.io.pipes.entry(key.clone()).or_default();
+        pipe.opens += 1;
+        if p.access & (FILE_WRITE_DATA | FILE_APPEND_DATA) != 0 {
+            pipe.writers += 1;
+            pipe.had_writer = true;
+        }
         self.io.files.insert(cookie, self.record(object, Target::Pipe(key), FileType::Fifo));
         self.made = Some(cookie);
         Ok(object)

@@ -88,6 +88,42 @@ unsafe extern "system" {
     pub fn FindNextFileW(h: Handle, data: *mut u8) -> i32;
     pub fn FindClose(h: Handle) -> i32;
     pub fn Sleep(ms: u32);
+    // Processes, pipes and handles for `_spawn*`, `system`, `_pipe`, `_dup`
+    // (ADR 0093).
+    pub fn GetStartupInfoW(si: *mut u8);
+    pub fn CreateProcessW(
+        application: *const u16,
+        command_line: *mut u16,
+        process_attributes: *const u8,
+        thread_attributes: *const u8,
+        inherit_handles: i32,
+        flags: u32,
+        environment: *const u16,
+        current_directory: *const u16,
+        startup_info: *const u8,
+        information: *mut Handle,
+    ) -> i32;
+    pub fn WaitForSingleObject(h: Handle, ms: u32) -> u32;
+    pub fn GetExitCodeProcess(h: Handle, code: *mut u32) -> i32;
+    pub fn GetCurrentProcess() -> Handle;
+    pub fn DuplicateHandle(
+        source_process: Handle,
+        source: Handle,
+        target_process: Handle,
+        target: *mut Handle,
+        access: u32,
+        inherit: i32,
+        options: u32,
+    ) -> i32;
+    pub fn CreatePipe(read: *mut Handle, write: *mut Handle, sa: *const u8, size: u32) -> i32;
+    pub fn GetEnvironmentVariableW(name: *const u16, buf: *mut u16, size: u32) -> u32;
+    // Console I/O (ADR 0093).
+    pub fn SetConsoleMode(h: Handle, mode: u32) -> i32;
+    pub fn ReadConsoleInputW(h: Handle, records: *mut u8, n: u32, read: *mut u32) -> i32;
+    pub fn PeekConsoleInputW(h: Handle, records: *mut u8, n: u32, read: *mut u32) -> i32;
+    pub fn GetNumberOfConsoleInputEvents(h: Handle, n: *mut u32) -> i32;
+    pub fn WriteConsoleA(h: Handle, buf: *const u8, chars: u32, written: *mut u32, reserved: *mut u8) -> i32;
+    pub fn GetConsoleCP() -> u32;
 }
 
 /// `STD_INPUT_HANDLE` … (`processenv.h`).
@@ -110,3 +146,33 @@ pub const FILE_ATTRIBUTE_READONLY: u32 = 0x1;
 pub const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 /// `ERROR_BROKEN_PIPE` (`winerror.h`).
 pub const ERROR_BROKEN_PIPE: u32 = 109;
+/// `ERROR_NO_MORE_FILES`, `ERROR_FILE_NOT_FOUND`, `ERROR_PATH_NOT_FOUND`
+/// (`winerror.h`).
+pub const ERROR_NO_MORE_FILES: u32 = 18;
+pub const ERROR_FILE_NOT_FOUND: u32 = 2;
+pub const ERROR_PATH_NOT_FOUND: u32 = 3;
+/// `INFINITE`, `WAIT_OBJECT_0` (`synchapi.h`, `winbase.h`).
+pub const INFINITE: u32 = u32::MAX;
+pub const WAIT_OBJECT_0: u32 = 0;
+/// `DUPLICATE_SAME_ACCESS` (`winnt.h`).
+pub const DUPLICATE_SAME_ACCESS: u32 = 2;
+/// `CREATE_UNICODE_ENVIRONMENT`, `DETACHED_PROCESS` (`winbase.h`).
+pub const CREATE_UNICODE_ENVIRONMENT: u32 = 0x400;
+pub const DETACHED_PROCESS: u32 = 0x8;
+/// `STARTF_USESTDHANDLES` (`processthreadsapi.h`).
+pub const STARTF_USESTDHANDLES: u32 = 0x100;
+/// `GENERIC_READ`, `GENERIC_WRITE`, `FILE_SHARE_READ | FILE_SHARE_WRITE`,
+/// `OPEN_EXISTING` (`winnt.h`, `fileapi.h`).
+pub const GENERIC_READ: u32 = 0x8000_0000;
+pub const GENERIC_WRITE: u32 = 0x4000_0000;
+pub const FILE_SHARE_READ_WRITE: u32 = 3;
+pub const OPEN_EXISTING: u32 = 3;
+
+/// `STARTUPINFOW` (`processthreadsapi.h`, x64): `cb` 0, `dwFlags` 60,
+/// `cbReserved2` 66, `lpReserved2` 72, `hStdInput` 80, `hStdOutput` 88,
+/// `hStdError` 96; 104 bytes.
+pub const STARTUPINFO_SIZE: usize = 104;
+pub const SI_FLAGS: usize = 60;
+pub const SI_CB_RESERVED2: usize = 66;
+pub const SI_RESERVED2: usize = 72;
+pub const SI_STD_INPUT: usize = 80;

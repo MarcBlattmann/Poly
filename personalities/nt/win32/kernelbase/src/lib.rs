@@ -30,6 +30,7 @@ mod memory;
 mod misc;
 mod nls;
 mod nt;
+mod pipe;
 mod privilege;
 mod process;
 mod registry;

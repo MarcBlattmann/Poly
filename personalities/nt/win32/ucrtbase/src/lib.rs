@@ -18,6 +18,8 @@ use poly_win32_crt::stdio::{self, BufferRule, File};
 use poly_win32_crt::{env, global, heap, io, misc, timefn};
 use poly_win32_rt as _;
 
+mod files_console;
+
 /// `DllMain`.
 #[unsafe(no_mangle)]
 pub extern "system" fn ucrtbase_main(_module: *mut u8, reason: u32, reserved: *mut u8) -> i32 {

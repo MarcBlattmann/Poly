@@ -77,6 +77,12 @@ pub static UCRTBASE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ucrtbase.
 pub static MSVCRT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcrt.dll"));
 pub static CRTTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crttest.exe"));
 
+mod test_crtio;
+
+/// The program the C runtime's files, processes and console ring-3 test
+/// runs (`test_crtio`, ADR 0093).
+pub static CRTIOTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crtiotest.exe"));
+
 /// The first functions of `user32.dll` and `oleaut32.dll` (ADR 0087),
 /// installed in `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static USER32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/user32.dll"));

@@ -38,6 +38,8 @@
 //! - [`mapping`]: `CreateFileMappingW` / `MapViewOfFile` arguments as the
 //!   section services take them.
 //! - [`time`]: `FILETIME` and `SYSTEMTIME`.
+//! - [`pipe`]: `CreatePipe`'s anonymous pipes on Poly's pipe device (ADR
+//!   0093).
 //!
 //! What 7-Zip's command line needs (ADR 0087) added [`cpu`]
 //! (`IsProcessorFeaturePresent`), [`slist`] (interlocked lists),
@@ -75,6 +77,7 @@ pub mod message;
 pub mod nls;
 pub mod oleaut;
 pub mod path;
+pub mod pipe;
 pub mod process;
 pub mod registry;
 pub mod slist;

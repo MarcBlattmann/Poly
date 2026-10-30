@@ -15,5 +15,8 @@ poly-win32-rt = { path = "../rt" }
 poly-win32-crt = { path = "../crt" }
 poly-crt = { path = "../../../../crates/poly-crt" }
 
+[build-dependencies]
+poly-crt = { path = "../../../../crates/poly-crt" }
+
 [lints]
 workspace = true

@@ -26,6 +26,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crtiotest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "crttest"
 version = "0.0.1"
 dependencies = [

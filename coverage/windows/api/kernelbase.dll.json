@@ -150,7 +150,7 @@
 {"symbol":"CreateMutexExW","src":["wine-spec"]},
 {"symbol":"CreateMutexW","status":"claimed","claimed_by":"kernel32","src":["wine-spec"]},
 {"symbol":"CreateNamedPipeW","src":["wine-spec"]},
-{"symbol":"CreatePipe","src":["wine-spec"]},
+{"symbol":"CreatePipe","status":"claimed","claimed_by":"impl-crt-io","src":["wine-spec"]},
 {"symbol":"CreatePrivateObjectSecurity","src":["wine-spec"]},
 {"symbol":"CreatePrivateObjectSecurityEx","src":["wine-spec"]},
 {"symbol":"CreatePrivateObjectSecurityWithMultipleInheritance","src":["wine-spec"]},

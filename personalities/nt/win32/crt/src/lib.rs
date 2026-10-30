@@ -14,13 +14,60 @@
 extern crate alloc;
 use poly_win32_rt as _;
 
+/// An exported variadic function: spill the register arguments into their
+/// home slots (so all arguments form one array), point at the first
+/// variadic one, and call `$t` with that pointer as the argument after the
+/// `$fixed` fixed ones (Learn, "x64 calling convention": "the caller
+/// reserves ... space for the four register parameters"; varargs are
+/// passed as for an unprototyped function). The thunk has unwind data.
+/// Each DLL's `build.rs` exports the names (`poly_crt::exports::SHARED_VARARGS`
+/// for the ones here).
+#[macro_export]
+macro_rules! va_thunk {
+    ($name:literal, 1, $t:path) => {
+        $crate::va_thunk!(@ $name, "72", "mov rdx, rax", $t);
+    };
+    ($name:literal, 2, $t:path) => {
+        $crate::va_thunk!(@ $name, "80", "mov r8, rax", $t);
+    };
+    ($name:literal, 3, $t:path) => {
+        $crate::va_thunk!(@ $name, "88", "mov r9, rax", $t);
+    };
+    (@ $name:literal, $off:literal, $store:literal, $t:path) => {
+        core::arch::global_asm!(
+            ".text",
+            concat!(".globl ", $name),
+            ".p2align 4",
+            concat!(".seh_proc ", $name),
+            concat!($name, ":"),
+            "mov qword ptr [rsp + 8], rcx",
+            "mov qword ptr [rsp + 16], rdx",
+            "mov qword ptr [rsp + 24], r8",
+            "mov qword ptr [rsp + 32], r9",
+            "sub rsp, 56",
+            ".seh_stackalloc 56",
+            ".seh_endprologue",
+            concat!("lea rax, [rsp + ", $off, "]"),
+            $store,
+            "call {t}",
+            "add rsp, 56",
+            "ret",
+            ".seh_endproc",
+            t = sym $t,
+        );
+    };
+}
+
+pub mod conio;
 pub mod conv;
 pub mod env;
+pub mod find;
 pub mod global;
 pub mod heap;
 pub mod io;
 pub mod lowio;
 pub mod misc;
+pub mod spawn;
 pub mod startup;
 pub mod stdio;
 pub mod strings;
