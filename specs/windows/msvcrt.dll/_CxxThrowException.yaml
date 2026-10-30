@@ -1,0 +1,70 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/msvcrt.dll/_CxxThrowException # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64; the same results byte for byte on Windows 11 Enterprise 25H2 (build 26200.9448)"
+  machine: "homeserver2, the owner's home PC (real hardware, Defender only, ACP 1252, OEM 850), whose results are recorded in windows.json; also the owner's work PC during the exploration; the system's own C:\\Windows\\System32\\msvcrt.dll; tests built by clang 18 (freestanding), run by tools/pipeline/windows/poly-oracle.ps1, three runs each, all identical"
+  observed_by: spec-cxxeh
+  date: 2026-10-30
+sources: >
+  Observations of our own programs on the machine above (an __except
+  filter copies the record it is shown). Layouts as the compiler writes
+  them: clang/lib/CodeGen/MicrosoftCXXABI.cpp (getThrowInfo,
+  getCatchableTypeArray, getCatchableType, emitThrow, emitRethrow),
+  confirmed by reading them back through the raised record on Windows
+  (cxxthrow_throwinfo_layout). Raymond Chen, "Decoding the parameters of a
+  thrown C++ exception (0xE06D7363)", The Old New Thing (Microsoft Dev
+  Blogs), for the code and the four parameters. winnt.h for
+  EXCEPTION_RECORD and the EXCEPTION_* flags. Handed over together with
+  __CxxFrameHandler3.yaml and __CxxFrameHandler.yaml.
+summary: >
+  _CxxThrowException(object, throw_info) is what a C++ `throw` calls
+  (x64 calling convention, does not return): `throw expr` builds the
+  exception object in the throwing function's own frame and passes its
+  address with the type's ThrowInfo; `throw;` passes (NULL, NULL). It
+  raises a noncontinuable SEH exception with code 0xE06D7363, flags 0x81
+  and four parameters: 0x19930520, the object (not copied), the ThrowInfo
+  and the base of the image that contains the ThrowInfo (whose fields are
+  offsets from it; 0 for a rethrow). The frame handlers
+  (__CxxFrameHandler3, __CxxFrameHandler) do the rest. One thing it does
+  itself: when a non-C++ handler (an __except) takes the exception, the
+  unwind destroys the exception object first, before any frame between
+  the throw and that handler is unwound, even when no C++ frame lies
+  between.
+interface:
+  signature: "void _CxxThrowException(void* object, const ThrowInfo* throw_info); noreturn"
+  record_code: "0xE06D7363 ('msc' | 0xE0000000)"
+  record_flags: "0x81: EXCEPTION_NONCONTINUABLE (0x1) and 0x80, which RaiseException itself adds to every exception it raises on this build (RaiseException(0xE0000002, 0, 0, NULL) shows flags 0x80: cxxthrow_record; winnt.h names 0x80 EXCEPTION_SOFTWARE_ORIGINATE). Poly's RaiseException does not set 0x80 today"
+  record_parameters: "NumberParameters 4: [0] 0x19930520 (always this value, whatever magic the FuncInfo tables of the program carry), [1] the object's address exactly as passed, [2] the ThrowInfo's address, [3] the base address of the image holding the ThrowInfo (GetModuleHandleW(NULL) for a throw in the executable); ExceptionRecord (the chain) NULL (cxxthrow_record)"
+  rethrow: "_CxxThrowException(NULL, NULL), what `throw;` calls, raises the same code, flags 0x81, 4 parameters, [0] 0x19930520, [1] [2] [3] all 0, whether or not an exception is being handled (cxxthrow_rethrow_record); a frame handler of the catch block it leaves completes the record in place with the exception being handled (cxxthrow_rethrow_fill, __CxxFrameHandler3.yaml rules.rethrow)"
+  exception_address: "not pinned down (somewhere in the raising code; tests do not look at it)"
+data_layouts:
+  conventions: "little endian, 32-bit fields; 'rva' = offset from record parameter [3]; 0 = absent"
+  ThrowInfo: "u32 attributes (0x1: the thrown pointer's pointee is const, 0x2 volatile, 0x4 __unaligned), rva destructor (called with this = object when the object's life ends; 0 = trivial), rva forward compat (0), rva CatchableTypeArray; 16 bytes"
+  CatchableTypeArray: "i32 count, then count rvas of CatchableType: the thrown type first; for a class then each unambiguous public base (direct and indirect, a virtual base once); for a pointer to an object type then void* (and the pointer-to-base types first); nullptr_t then void*"
+  CatchableType: "u32 properties (0x1 simple type: scalar or pointer; 0x4 the class has virtual bases, its copy function takes a third argument 1; 0x10 std::bad_alloc), rva TypeDescriptor, i32 mdisp, i32 pdisp (-1 unless the type is in a virtual base: then the vbptr's offset in the object), i32 vdisp (offset of the base's entry in the vbtable), i32 size (bytes of the type), rva copy function (copy constructor or copying closure; 0 = copy size bytes); 28 bytes"
+  TypeDescriptor: "8-byte vftable pointer (`??_7type_info@@6B@`, which the program provides: msvcrt.dll does not export it), 8-byte spare (0), NUL-terminated decorated name at offset 16"
+  observed_values: "throw 5: attributes 0, no destructor, 1 type '.H' properties 0x1 size 4 pdisp -1 no copy. throw Derived() (Derived : Base, virtual destructor): 2 types '.?AUDerived@@' (24 bytes) and '.?AUBase@@' (16 bytes), properties 0, copy functions present, ThrowInfo destructor present. throw &const_int: attributes 0x1, '.PEAH' and '.PEAX', properties 0x1, size 8. volatile pointee: attributes 0x2. A trivially copyable struct: properties 0, no copy function, no destructor (cxxthrow_throwinfo_layout)"
+rules:
+  object_not_copied: "the object passed is the exception object; it stays where the throw made it (the throwing frame) until a catch block that takes it ends (__CxxFrameHandler3.yaml); a reference catch clause gets that very address"
+  only_the_throwinfo_counts: "a ThrowInfo the program builds itself at run time in its writable data (offsets from __ImageBase) works like the compiler's: clauses match by decorated name, a null vftable pointer is fine, the array is searched in order, the copy function and destructor given are the ones called (with this = catch object / exception object), attributes 0x1 keeps a non-const pointer clause from matching (cxxthrow_handmade)"
+  destroyed_when_seh_takes_it: "when an __except (filter returning EXCEPTION_EXECUTE_HANDLER) takes a C++ exception, the unwind to it calls the ThrowInfo destructor on the object first - before the throwing function's own destructors, before every other frame, and also with no C++ frame at all between the throw and the __except: 'Obj+1 take ~Obj1 except', 'Obj+2 take ~Obj2 ~thrower except' (a held-out test). So the throw's own frame takes part in the unwind (it has to be a frame with an unwind handler); when the unwind is the one into a C++ catch block it must not destroy the object"
+  rethrow_taken_by_seh: "a rethrow taken by an __except inside the catch block (between the rethrow and the catch block's frame): the catch block goes on, still owns the object, which is destroyed at its end; taken outside, the catch block is abandoned and the object destroyed while it is unwound, before the locals of the function holding the catch block (a held-out test)"
+errors:
+  none: "it does not return and does not fail; a throw no clause takes is an unhandled exception (top-level filter, code 0xE06D7363), see __CxxFrameHandler3.yaml"
+side_effects: "raises the exception; the destruction above"
+threading: "per thread (the exception is raised on the calling thread)"
+ordering:
+  - "SEH takes a C++ exception: filter, exception object destroyed, then the frames' destructors innermost first, then the __except block (a held-out test)"
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per throw on the oracle"
+  guarantees: none
+tests:
+  visible: 5  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  As __CxxFrameHandler3.yaml. Today on Poly: _CxxThrowException raises
+  flags 0x1 (RaiseException adds no 0x80) and parameter [0] 0 instead of
+  0x19930520 (ADR 0087); every test that also needs __CxxFrameHandler3
+  does not start (0xC0000139). cxxthrow_throwinfo_layout, which only reads
+  the compiler's tables through the record, passes on Poly already.

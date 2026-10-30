@@ -1,0 +1,18 @@
+; Import names of msvcrt.dll that the C++ Windows test programs may use
+; (tests/windows/cxx/poly_wtest.h). Names from the DLL's export table
+; (exported names are ABI facts, CLEAN_ROOM.md); `win build` makes the
+; import library from this file.
+LIBRARY msvcrt.dll
+EXPORTS
+    __CxxFrameHandler
+    __CxxFrameHandler2
+    __CxxFrameHandler3
+    _CxxThrowException
+    __C_specific_handler
+    ??1type_info@@UEAA@XZ
+    ?set_terminate@@YAP6AXXZP6AXXZ@Z
+    ?terminate@@YAXXZ
+    _purecall
+    memcpy
+    memmove
+    memset
