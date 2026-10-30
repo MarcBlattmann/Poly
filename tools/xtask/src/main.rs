@@ -50,6 +50,9 @@
 //!   win imports <exe | 7zip> [--markdown <file>] [--check]
 //!                       what a Windows program imports and what of it our DLLs lack
 //!                       (winimports.rs, ADR 0087); --check fails unless every import binds
+//!   win 7zip-diff [--kernel <elf>] [--build-kernel] [--target <poly.json>] [--markdown <file>]
+//!                       run the 7-Zip scenario driver on Poly and compare it step by step
+//!                       with its Windows recording (sevenzip.rs, ADR 0088)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
