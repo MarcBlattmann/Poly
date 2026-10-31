@@ -1379,7 +1379,9 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   Linux descriptors use. Overlapped sends and receives that must wait pend
   as IRPs for the kernel's `nt-afd` worker. `ws2_32.dll` maps the
   requests' `NTSTATUS` to WSA error codes and resolves names
-  (`localhost`, numeric hosts, a UDP stub resolver).
+  (`localhost`, numeric hosts, a UDP stub resolver). `winhttp.dll` and
+  `wininet.dll` make plain HTTP/1.1 requests over it (`crates/poly-http`,
+  `personalities/nt/win32/inet`); `https` waits for TLS.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

@@ -98,6 +98,10 @@ name = "poly-heap"
 version = "0.0.1"
 
 [[package]]
+name = "poly-http"
+version = "0.0.1"
+
+[[package]]
 name = "poly-input"
 version = "0.0.1"
 
@@ -420,6 +424,7 @@ dependencies = [
  "poly-elf",
  "poly-ext2",
  "poly-gfx",
+ "poly-http",
  "poly-kernelbase",
  "poly-ldr",
  "poly-pe",

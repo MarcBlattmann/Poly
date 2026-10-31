@@ -1,9 +1,8 @@
 # 0095: Winsock on Poly's sockets: `ws2_32.dll` over `\Device\Afd`, an NT device in front of the kernel's TCP/IP stack
 
-**Status:** Accepted (first slice: `ws2_32`; `winhttp` / `wininet` follow).
-Works toward the Phase 5 roadmap item "Winsock (`ws2_32`) on our sockets;
-`winhttp` / `wininet` basics", which stays unticked until the HTTP half
-lands with its tests. Builds on [ADR 0028](0028-tcp-ip-stack-in-a-crate.md) (the
+**Status:** Accepted. Delivers the Phase 5 roadmap item "Winsock
+(`ws2_32`) on our sockets; `winhttp` / `wininet` basics" in two slices:
+`ws2_32` first, then `winhttp` / `wininet` ("WinHTTP and WinINet" below). Builds on [ADR 0028](0028-tcp-ip-stack-in-a-crate.md) (the
 `poly-net` stack), [ADR 0048](0048-sockets-inet-unix-netlink.md) (the
 kernel's Internet sockets), [ADR 0067](0067-nt-file-io.md) (NT file I/O,
 IRPs), [ADR 0079](0079-our-kernelbase-and-kernel32.md) (the Win32
@@ -208,6 +207,66 @@ data in one buffer per process (Learn: per thread).
   `nt-afd` worker, and the error codes of the usual mistakes (159
   checks, all passing).
 
+### WinHTTP and WinINet (second slice)
+
+Sources, in addition: RFC 9110 and RFC 9112 (HTTP/1.1 semantics and
+message syntax), RFC 3986 (URLs), Learn's WinHTTP and WinINet reference
+pages ("Query Info Flags", "WinHTTP error codes", "Internet error
+codes"), and the constants of `winhttp.h` and `wininet.h`.
+
+- **`poly-http`** (host-tested): URLs taken apart (`http` / `https`,
+  IPv6 literals, user information, the fragment dropped); a request's head
+  (request line, `Host` with the port only when it is not the default,
+  `User-Agent`, the caller's header lines replacing fields of the same
+  name, `Content-Length`); an incremental response parser (interim `1xx`
+  responses skipped, folded fields joined, the body framed as RFC 9112
+  section 6.3 says: none for `HEAD`, `204` and `304`, `chunked` as the
+  last coding, `Content-Length` with equal repeated values, else until the
+  connection closes); and the header queries both APIs share (`winhttp.h`
+  and `wininet.h` give the levels the same numbers): status code, text,
+  version, raw headers with CRLFs or NULs, the field of each numbered
+  level, `CUSTOM` by name, the index of repeated fields, `FLAG_NUMBER`.
+- **`poly-win32-inet`**, a library both DLLs link: handles (a session, a
+  connection, a request; checked against a list of live handles, so a
+  stale value fails with `ERROR_INVALID_HANDLE`), one connection per
+  request over our `ws2_32` (`getaddrinfo`, then each address until one
+  answers, so `localhost` falls back from `::1` to 127.0.0.1), and the
+  copying of answers into the caller's buffer (UTF-16 with a NUL, or a
+  DWORD; a buffer too small is `ERROR_INSUFFICIENT_BUFFER` with the bytes
+  needed, NUL included).
+- **`winhttp.dll`**: `WinHttpOpen`, `WinHttpConnect` (port 0: 80),
+  `WinHttpOpenRequest`, `WinHttpAddRequestHeaders`, `WinHttpSendRequest`,
+  `WinHttpWriteData`, `WinHttpReceiveResponse`, `WinHttpQueryHeaders`,
+  `WinHttpQueryDataAvailable`, `WinHttpReadData`, `WinHttpSetTimeouts`
+  (the receive timeout), `WinHttpCloseHandle`, `WinHttpCheckPlatform`.
+- **`wininet.dll`**: `InternetOpenW`, `InternetConnectW` (HTTP only),
+  `HttpOpenRequestW`, `HttpAddRequestHeadersW`, `HttpSendRequestW` (sends
+  and reads the response head), `InternetOpenUrlW`, `InternetReadFile`,
+  `InternetQueryDataAvailable`, `HttpQueryInfoW` (a `CUSTOM` query names
+  its field in the buffer, as Learn says), `InternetCloseHandle`.
+- **Synchronous only**: the asynchronous modes (`WINHTTP_FLAG_ASYNC`,
+  `INTERNET_FLAG_ASYNC`) fail with `ERROR_NOT_SUPPORTED`. Proxies are
+  ignored, no authentication, cookies, caching, redirects or keep-alive
+  reuse.
+- **No TLS yet** (it needs the cryptography workstream): a WinHTTP request
+  with `WINHTTP_FLAG_SECURE` fails when sent with
+  `ERROR_WINHTTP_SECURE_FAILURE` (12175); a WinINet request with
+  `INTERNET_FLAG_SECURE`, or `InternetOpenUrlW` of an `https` URL, with
+  `ERROR_INTERNET_SECURITY_CHANNEL_ERROR` (12157, since 12175 means
+  something else in `wininet.h`). Other schemes are
+  `ERROR_INTERNET_UNRECOGNIZED_SCHEME`.
+- **Tests**: `poly-http`'s host tests (URLs, heads, the parser fed byte by
+  byte, chunks split anywhere, until-close bodies, malformed responses,
+  queries); and the ring-3 `kernel_test!`
+  `nt_http_get_through_winhttp_and_wininet` (every boot): `httptest.exe`
+  runs a tiny HTTP server in a second thread on 127.0.0.1 (our `ws2_32`)
+  and makes GET requests to it through both DLLs — status and header
+  queries (a number, a custom field, the raw headers' size with no
+  buffer, a field that is not there), bodies framed by `Content-Length`,
+  chunks and the end of the connection, `localhost`, a 404, the `https`
+  and `ftp` errors, a closed handle — while the server checks every
+  request's `Host` and `User-Agent` (70 checks, all passing).
+
 ## To be confirmed by the spec agent against real Windows
 
 1. `inet_addr` with trailing white space (ours: accepted) and `inet_pton`
@@ -222,6 +281,11 @@ data in one buffer per process (Learn: per thread).
    back (ours: as set), `SO_ERROR` after it was read (ours: cleared).
 5. `recv` on a stream socket that never connected (ours: `WSAENOTCONN`),
    `send` after `shutdown(SD_SEND)` (ours: `WSAESHUTDOWN`).
+6. `WinHttpQueryHeaders` / `HttpQueryInfoW`'s length after a buffer too
+   small (ours: bytes with the NUL) and after success (ours: without);
+   the header fields WinHTTP adds by itself (ours: `Host`, `User-Agent`,
+   `Content-Length` only); what `InternetOpenUrlW` of an `https` URL
+   reports where TLS is missing (Windows always has it).
 
 ## Consequences
 
@@ -246,10 +310,16 @@ data in one buffer per process (Learn: per thread).
   exception whose user stack the kernel cannot walk overflows the kernel
   stack in `nt::exception::backtrace` (a double fault instead of the
   process ending); left for its own change.
-- Coverage: the 68 `ws2_32.dll` entries above are claimed by
-  `impl-winsock`.
+- The second slice adds `crates/poly-http`, `personalities/nt/win32/
+  {inet,winhttp,wininet,httptest}` and `kernel/src/nt/test_http.rs`, and
+  the same shared lists again (`winhttp.dll` and `wininet.dll` installed
+  in `System32`).
+- Coverage: the 68 `ws2_32.dll` entries above, the 13 `winhttp.dll` and
+  the 10 `wininet.dll` entries are claimed by `impl-winsock`.
 - Left: I/O completion ports and the extension functions (`AcceptEx`,
   `ConnectEx`, `TransmitFile`), `WSAEventSelect` / `WSAAsyncSelect`,
   `WSAAccept`'s condition, dual-stack sockets, raw and ICMP sockets,
   out-of-band data, ordinal exports, the `hosts` file, reverse lookups,
-  per-thread result buffers, and `winhttp` / `wininet` (the next slice).
+  per-thread result buffers; for HTTP, TLS (`https`), the asynchronous
+  modes, proxies, authentication, redirects, cookies, connection reuse,
+  `WinHttpCrackUrl` and the ANSI forms of WinINet.

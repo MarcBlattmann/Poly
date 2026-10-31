@@ -1,0 +1,19 @@
+[package]
+name = "wininet"
+description = "Our wininet.dll (ADR 0095): its HTTP basics over our ws2_32"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "wininet"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-inet = { path = "../inet" }
+poly-http = { path = "../../../../crates/poly-http" }
+
+[lints]
+workspace = true

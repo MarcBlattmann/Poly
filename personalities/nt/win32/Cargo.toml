@@ -5,11 +5,11 @@
 # core/alloc for the Windows target once for all of them. advapi32.dll
 # and a32test.exe (ADR 0083) are built here too, and the first functions of
 # user32.dll and oleaut32.dll (ADR 0087), ws2_32.dll and wstest.exe
-# (ADR 0095). No third-party crates:
+# (ADR 0095), and winhttp.dll, wininet.dll (sharing inet) and httptest.exe. No third-party crates:
 # only this repo's host-tested logic and core/alloc.
 [workspace]
 resolver = "3"
-members = ["rt", "kernelbase", "kernel32", "k32test", "contest", "advapi32", "a32test", "crt", "ucrtbase", "msvcrt", "crttest", "user32", "oleaut32", "ws2_32", "wstest"]
+members = ["rt", "kernelbase", "kernel32", "k32test", "contest", "advapi32", "a32test", "crt", "ucrtbase", "msvcrt", "crttest", "user32", "oleaut32", "ws2_32", "wstest", "inet", "winhttp", "wininet", "httptest"]
 
 [workspace.package]
 version = "0.0.1"

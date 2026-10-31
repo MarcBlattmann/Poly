@@ -20,6 +20,7 @@ members = [
     "crates/poly-bochs-vbe",
     "crates/poly-gfx",
     "crates/poly-heap",
+    "crates/poly-http",
     "crates/poly-input",
     "crates/poly-irq",
     "crates/poly-kernelbase",
@@ -82,6 +83,7 @@ poly-cpio = { path = "crates/poly-cpio" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
 poly-gfx = { path = "crates/poly-gfx" }
 poly-heap = { path = "crates/poly-heap" }
+poly-http = { path = "crates/poly-http" }
 poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }

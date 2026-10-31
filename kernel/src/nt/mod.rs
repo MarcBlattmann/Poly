@@ -91,6 +91,15 @@ mod test_winsock;
 pub static WS2_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ws2_32.dll"));
 pub static WSTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wstest.exe"));
 
+mod test_http;
+
+/// Our `winhttp.dll` and `wininet.dll` (ADR 0095), installed in
+/// `C:\Windows\System32` by [`layout`]; and the program the HTTP ring-3
+/// test runs (`test_http`). Empty without `xtask`.
+pub static WINHTTP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/winhttp.dll"));
+pub static WININET: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wininet.dll"));
+pub static HTTPTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/httptest.exe"));
+
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
 use crate::thread;

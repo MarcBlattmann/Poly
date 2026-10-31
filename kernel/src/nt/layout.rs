@@ -133,6 +133,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("oleaut32.dll", super::OLEAUT32),
         // ADR 0095.
         ("ws2_32.dll", super::WS2_32),
+        ("winhttp.dll", super::WINHTTP),
+        ("wininet.dll", super::WININET),
     ] {
         if bytes.is_empty() {
             continue;

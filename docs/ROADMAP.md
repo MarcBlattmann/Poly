@@ -111,7 +111,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles (ADR 0080)
 - [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0073)
 - [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; left: the recording on Windows, C++ exception handling)
-- [ ] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics
+- [x] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics (ADR 0095)
 - [ ] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app)
 - [ ] Fallback if needed: our own `vcruntime140` (and `msvcp140` subsets) per ADR 0055
 

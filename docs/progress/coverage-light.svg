@@ -1468,6 +1468,7 @@
 </g>
 <g><title>wininet: 0 / 248 done (0.0%)</title>
 <rect x="406.8" y="549.0" width="18.9" height="23.3" fill="#e6eaef"/>
+<rect x="406.8" y="549.0" width="0.8" height="23.3" fill="#218bff"/>
 <rect x="405.8" y="548.0" width="20.9" height="25.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>crypt32: 0 / 246 done (0.0%)</title>
@@ -1877,6 +1878,7 @@
 </g>
 <g><title>winhttp: 0 / 49 done (0.0%)</title>
 <rect x="512.9" y="679.1" width="8.6" height="7.9" fill="#e6eaef"/>
+<rect x="512.9" y="679.1" width="2.3" height="7.9" fill="#218bff"/>
 <rect x="511.9" y="678.1" width="10.6" height="9.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>cryptui: 0 / 48 done (0.0%)</title>
