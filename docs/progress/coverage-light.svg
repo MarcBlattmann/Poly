@@ -1277,7 +1277,6 @@
 <text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">0 / 58,682 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 0 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.7" height="218.0" fill="#e6eaef"/>
-<rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#d4a72c"/>
 <rect x="16.0" y="469.0" width="4.5" height="218.0" fill="#218bff"/>
 <rect x="15.0" y="468.0" width="159.7" height="220.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="21.0" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">MSVC runtimes</text>
@@ -1305,7 +1304,7 @@
 <g><title>kernel32: 0 / 1,559 done (0.0%)</title>
 <rect x="244.6" y="469.0" width="57.9" height="53.7" fill="#e6eaef"/>
 <rect x="244.6" y="469.0" width="0.1" height="53.7" fill="#d4a72c"/>
-<rect x="244.7" y="469.0" width="8.6" height="53.7" fill="#218bff"/>
+<rect x="244.7" y="469.0" width="8.8" height="53.7" fill="#218bff"/>
 <rect x="243.6" y="468.0" width="59.9" height="55.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="249.6" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">kernel32</text>
 <text x="249.6" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
@@ -1324,7 +1323,7 @@
 </g>
 <g><title>ntdll: 0 / 1,523 done (0.0%)</title>
 <rect x="244.6" y="634.6" width="57.9" height="52.4" fill="#e6eaef"/>
-<rect x="244.6" y="634.6" width="4.2" height="52.4" fill="#218bff"/>
+<rect x="244.6" y="634.6" width="4.3" height="52.4" fill="#218bff"/>
 <rect x="243.6" y="633.6" width="59.9" height="54.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="249.6" y="648.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ntdll</text>
 <text x="249.6" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
@@ -1332,7 +1331,7 @@
 <g><title>kernelbase: 0 / 1,440 done (0.0%)</title>
 <rect x="304.4" y="469.0" width="40.2" height="71.0" fill="#e6eaef"/>
 <rect x="304.4" y="469.0" width="0.2" height="71.0" fill="#d4a72c"/>
-<rect x="304.6" y="469.0" width="7.5" height="71.0" fill="#218bff"/>
+<rect x="304.6" y="469.0" width="7.6" height="71.0" fill="#218bff"/>
 <rect x="303.4" y="468.0" width="42.2" height="73.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="309.4" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">kern…</text>
 </g>

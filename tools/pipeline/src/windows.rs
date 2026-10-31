@@ -5,6 +5,7 @@
 //! ```text
 //! tests/windows/*.rs, specs/windows/<component>/<symbol>.tests/*.rs   test sources (Rust, no_std)
 //!   │ win build: cargo -Zbuild-std for x86_64-pc-windows-msvc, rust-lld (lld-link)
+//!   │            (and `*.cpp`: clang++ and lld-link, `wincxx`, ADR 0098)
 //!   ▼
 //! target/pipeline/windows/bin/<test>.exe + manifest.json (poly-winbuild/1)
 //!   │ win bundle: one text file (poly-winbundle/1), base64 lines
@@ -21,6 +22,7 @@
 use crate::poly;
 use crate::sha256;
 use crate::util::{self, Result};
+use crate::wincxx;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -54,6 +56,21 @@ pub struct Source {
     pub path: PathBuf,
 }
 
+impl Source {
+    /// A C++ test (`.cpp`, built by [`wincxx`]) rather than a Rust one.
+    pub fn is_cpp(&self) -> bool {
+        self.path.extension().is_some_and(|x| x == "cpp")
+    }
+}
+
+/// The extensions of test sources: Rust (ADR 0075) and C++ (ADR 0098).
+pub const TEST_EXTENSIONS: &[&str] = &["rs", "cpp"];
+
+/// Whether `path` names a Windows test source.
+pub fn is_test_source(path: &Path) -> bool {
+    path.extension().and_then(|x| x.to_str()).is_some_and(|x| TEST_EXTENSIONS.contains(&x))
+}
+
 /// A test name is a Rust identifier in lower case (it is a Cargo binary
 /// and a file name on both systems).
 pub fn valid_name(name: &str) -> bool {
@@ -62,9 +79,9 @@ pub fn valid_name(name: &str) -> bool {
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
-/// The `.rs` files of the corpus and of every `extra` directory (a spec
-/// entry's visible or held-out tests), sorted by name. Names must be
-/// unique and valid.
+/// The `.rs` and `.cpp` files of the corpus and of every `extra` directory
+/// (a spec entry's visible or held-out tests), sorted by name. Names must
+/// be unique and valid.
 pub fn sources(repo: &Path, extra: &[PathBuf]) -> Result<Vec<Source>> {
     let mut dirs = vec![repo.join(CORPUS_DIR)];
     dirs.extend(extra.iter().map(|d| util::absolute(d)));
@@ -73,7 +90,7 @@ pub fn sources(repo: &Path, extra: &[PathBuf]) -> Result<Vec<Source>> {
         let entries = std::fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         for e in entries {
             let path = e.map_err(|e| e.to_string())?.path();
-            if !path.is_file() || path.extension().is_none_or(|x| x != "rs") {
+            if !path.is_file() || !is_test_source(&path) {
                 continue;
             }
             let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
@@ -181,6 +198,9 @@ pub struct Manifest {
     /// `git rev-parse HEAD` of the repository, if known.
     #[serde(default)]
     pub revision: Option<String>,
+    /// `clang++ --version` of the compiler of the C++ tests, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clang: Option<String>,
     pub tests: Vec<Built>,
 }
 
@@ -195,9 +215,10 @@ impl Manifest {
 }
 
 /// What a test executable must be: an x64 PE32+ console executable that
-/// imports by name only, only from [`ALLOWED_DLLS`], with no delay-load
+/// imports by name only, only from `allowed` ([`ALLOWED_DLLS`]; C++ tests
+/// also `msvcrt.dll`, [`wincxx::ALLOWED_DLLS`]), with no delay-load
 /// imports. Returns its imports.
-pub fn check_image(bytes: &[u8]) -> Result<BTreeMap<String, Vec<String>>> {
+pub fn check_image_with(bytes: &[u8], allowed: &[&str]) -> Result<BTreeMap<String, Vec<String>>> {
     let pe = poly_pe::Pe::parse(bytes).map_err(|e| format!("not a PE image: {e:?}"))?;
     let info = pe.info();
     if info.machine() != poly_pe::machine::AMD64 || info.bits() != poly_pe::Bits::Pe32Plus {
@@ -217,8 +238,8 @@ pub fn check_image(bytes: &[u8]) -> Result<BTreeMap<String, Vec<String>>> {
     for d in descriptors {
         let d = d.map_err(|e| format!("imports: {e:?}"))?;
         let dll = String::from_utf8_lossy(d.dll_name().map_err(|e| format!("{e:?}"))?).to_ascii_lowercase();
-        if !ALLOWED_DLLS.contains(&dll.as_str()) {
-            return Err(format!("imports from {dll}; only {} are allowed", ALLOWED_DLLS.join(" and ")));
+        if !allowed.contains(&dll.as_str()) {
+            return Err(format!("imports from {dll}; only {} are allowed", allowed.join(" and ")));
         }
         let names = out.entry(dll.clone()).or_default();
         for e in d.entries().map_err(|e| format!("{e:?}"))? {
@@ -264,18 +285,66 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     if srcs.is_empty() {
         return Err("no Windows test programs to build".into());
     }
+    let (cpp, rust): (Vec<Source>, Vec<Source>) = srcs.iter().cloned().partition(Source::is_cpp);
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
     let sysroot = PathBuf::from(output_of(Command::new(&rustc).current_dir(repo).args(["--print", "sysroot"]))?);
     let version = output_of(Command::new(&rustc).current_dir(repo).arg("-V"))?;
+    let win = repo.join(WIN_DIR);
+    let target_dir = win.join("cargo");
+    if !rust.is_empty() {
+        build_rust(repo, &win, &target_dir, &sysroot, &rust)?;
+    }
+    let tools = wincxx::Tools::from_env();
+    let cxx_dir = win.join("cxx");
+    let (clang, libs) = if cpp.is_empty() {
+        (None, Vec::new())
+    } else {
+        eprintln!("==> build {} C++ Windows test programs", cpp.len());
+        (Some(tools.version()?), wincxx::import_libraries(repo, &tools, &cxx_dir)?)
+    };
+    util::create_dir(out)?;
+    for e in std::fs::read_dir(out).map_err(|e| format!("{}: {e}", out.display()))? {
+        let path = e.map_err(|e| e.to_string())?.path();
+        if path.extension().is_some_and(|x| x == "exe") {
+            std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        }
+    }
+    let mut tests = Vec::new();
+    for src in &srcs {
+        let exe = format!("{}.exe", src.name);
+        let (built, allowed) = if src.is_cpp() {
+            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir)?, wincxx::ALLOWED_DLLS)
+        } else {
+            (target_dir.join(TARGET).join("release").join(&exe), ALLOWED_DLLS)
+        };
+        let bytes = util::read(&built)?;
+        let imports = check_image_with(&bytes, allowed).map_err(|e| format!("{exe}: {e}"))?;
+        util::write(&out.join(&exe), &bytes)?;
+        tests.push(Built {
+            name: src.name.clone(),
+            source: rel(repo, &src.path),
+            source_sha256: sha256::hex(&util::read(&src.path)?),
+            exe,
+            exe_sha256: sha256::hex(&bytes),
+            size: bytes.len() as u64,
+            imports,
+        });
+    }
+    let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
+    let m = Manifest { format: BUILD_FORMAT.into(), rustc: version, revision, clang, tests };
+    util::write_json(&out.join("manifest.json"), &m)?;
+    Ok(m)
+}
+
+/// The Rust tests: one generated Cargo package with a binary per test.
+fn build_rust(repo: &Path, win: &Path, target_dir: &Path, sysroot: &Path, srcs: &[Source]) -> Result<()> {
     let vendor = sysroot.join("lib/rustlib/src/rust/library/vendor");
     if !vendor.is_dir() {
         return Err(format!("{} not found: the rust-src component is needed", vendor.display()));
     }
-    let win = repo.join(WIN_DIR);
     let gen_dir = win.join("build");
-    util::write(&gen_dir.join("Cargo.toml"), cargo_toml(&repo.join(SUPPORT_CRATE), &srcs))?;
-    let target_dir = win.join("cargo");
-    let flags = rustflags(repo, &sysroot).join("\u{1f}");
+    util::write(&gen_dir.join("Cargo.toml"), cargo_toml(&repo.join(SUPPORT_CRATE), srcs))?;
+    let flags = rustflags(repo, sysroot).join("\u{1f}");
     eprintln!("==> build {} Windows test programs", srcs.len());
     let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
         .current_dir(repo)
@@ -290,7 +359,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
         .args(["-Zbuild-std=core,compiler_builtins", "-Zbuild-std-features=compiler-builtins-mem"])
         .args(["--target", TARGET])
         .arg("--target-dir")
-        .arg(&target_dir)
+        .arg(target_dir)
         .arg("--offline")
         .arg("--config")
         .arg("source.crates-io.replace-with=\"rustsrc\"")
@@ -301,33 +370,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     if !status.success() {
         return Err(format!("building the Windows test programs failed ({status})"));
     }
-    util::create_dir(out)?;
-    for e in std::fs::read_dir(out).map_err(|e| format!("{}: {e}", out.display()))? {
-        let path = e.map_err(|e| e.to_string())?.path();
-        if path.extension().is_some_and(|x| x == "exe") {
-            std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        }
-    }
-    let mut tests = Vec::new();
-    for src in &srcs {
-        let exe = format!("{}.exe", src.name);
-        let bytes = util::read(&target_dir.join(TARGET).join("release").join(&exe))?;
-        let imports = check_image(&bytes).map_err(|e| format!("{exe}: {e}"))?;
-        util::write(&out.join(&exe), &bytes)?;
-        tests.push(Built {
-            name: src.name.clone(),
-            source: rel(repo, &src.path),
-            source_sha256: sha256::hex(&util::read(&src.path)?),
-            exe,
-            exe_sha256: sha256::hex(&bytes),
-            size: bytes.len() as u64,
-            imports,
-        });
-    }
-    let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
-    let m = Manifest { format: BUILD_FORMAT.into(), rustc: version, revision, tests };
-    util::write_json(&out.join("manifest.json"), &m)?;
-    Ok(m)
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -384,18 +427,31 @@ pub fn unbase64(text: &str) -> Result<Vec<u8>> {
 // ---------------------------------------------------------------------------
 // The bundle: what travels to the Windows machine.
 
-/// The bundle text of `manifest` and the executables in `dir`:
+/// A test's data file in a bundle: test, file name, bytes (ADR 0088).
+pub type DataFile = (String, String, Vec<u8>);
+
+/// A data file name: one path component of plain characters.
+pub fn valid_data_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
+}
+
+/// The bundle text of `manifest`, the executables in `dir` and the tests'
+/// data files:
 ///
 /// ```text
 /// poly-winbundle/1
 /// manifest <base64 of manifest.json>
 /// file <name>.exe <sha256> <base64>
-/// end <files>
+/// data <test> <name> <sha256> <base64>     (ADR 0088; any number, after the executables)
+/// end <files and data files>
 /// ```
 ///
 /// Line based so a long bundle can be cut into parts at line ends and the
-/// parts concatenated again; every file carries its hash.
-pub fn bundle(manifest: &Manifest, dir: &Path) -> Result<String> {
+/// parts concatenated again; every file carries its hash. The runner puts
+/// a test's data files beside it before it runs.
+pub fn bundle_with_data(manifest: &Manifest, dir: &Path, data: &[DataFile]) -> Result<String> {
     let json = serde_json::to_string(manifest).map_err(|e| e.to_string())?;
     let mut s = format!("{BUNDLE_FORMAT}\nmanifest {}\n", base64(json.as_bytes()));
     for t in &manifest.tests {
@@ -405,8 +461,40 @@ pub fn bundle(manifest: &Manifest, dir: &Path) -> Result<String> {
         }
         s.push_str(&format!("file {} {} {}\n", t.exe, t.exe_sha256, base64(&bytes)));
     }
-    s.push_str(&format!("end {}\n", manifest.tests.len()));
+    for (test, name, bytes) in data {
+        if !manifest.tests.iter().any(|t| &t.name == test) {
+            return Err(format!("data file {name} for {test}, which is not in the bundle"));
+        }
+        if !valid_data_name(name) {
+            return Err(format!("data file name {name:?}: letters, digits, _ . - only"));
+        }
+        s.push_str(&format!("data {test} {name} {} {}\n", sha256::hex(bytes), base64(bytes)));
+    }
+    s.push_str(&format!("end {}\n", manifest.tests.len() + data.len()));
     Ok(s)
+}
+
+/// The data files of the tests in `manifest` under `data_dir`
+/// (`<data_dir>/<test>/<file>`), sorted.
+pub fn data_files(manifest: &Manifest, data_dir: &Path) -> Result<Vec<DataFile>> {
+    let mut out = Vec::new();
+    for t in &manifest.tests {
+        let dir = data_dir.join(&t.name);
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let mut names: Vec<PathBuf> = Vec::new();
+        for e in entries {
+            let path = e.map_err(|e| e.to_string())?.path();
+            if path.is_file() {
+                names.push(path);
+            }
+        }
+        names.sort();
+        for path in names {
+            let name = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            out.push((t.name.clone(), name, util::read(&path)?));
+        }
+    }
+    Ok(out)
 }
 
 /// The bundle's id: the first 12 hex digits of its SHA-256.
@@ -418,13 +506,13 @@ pub fn bundle_id(text: &str) -> String {
 pub type NamedFile = (String, Vec<u8>);
 
 /// Read a bundle back (what the PowerShell runner does): the manifest's
-/// JSON and every file, hashes checked.
-pub fn unbundle(text: &str) -> Result<(Manifest, Vec<NamedFile>)> {
+/// JSON, every file and every data file, hashes checked.
+pub fn unbundle_all(text: &str) -> Result<(Manifest, Vec<NamedFile>, Vec<DataFile>)> {
     let mut lines = text.lines().map(|l| l.trim_end_matches('\r')).filter(|l| !l.is_empty());
     if lines.next() != Some(BUNDLE_FORMAT) {
         return Err(format!("not a {BUNDLE_FORMAT} bundle"));
     }
-    let (mut manifest, mut files, mut ended) = (None, Vec::new(), false);
+    let (mut manifest, mut files, mut data, mut ended) = (None, Vec::new(), Vec::<DataFile>::new(), false);
     for line in lines {
         if ended {
             return Err("text after the end line".into());
@@ -442,9 +530,19 @@ pub fn unbundle(text: &str) -> Result<(Manifest, Vec<NamedFile>)> {
                 }
                 files.push((name.to_string(), bytes));
             }
+            ["data", test, name, hash, b] => {
+                if !valid_name(test) || !valid_data_name(name) {
+                    return Err(format!("bad data line for {test}/{name}"));
+                }
+                let bytes = unbase64(b)?;
+                if sha256::hex(&bytes) != *hash {
+                    return Err(format!("{test}/{name}: hash mismatch (damaged in transfer?)"));
+                }
+                data.push((test.to_string(), name.to_string(), bytes));
+            }
             ["end", n] => {
-                if n.parse::<usize>().ok() != Some(files.len()) {
-                    return Err(format!("the end line says {n} files, the bundle has {}", files.len()));
+                if n.parse::<usize>().ok() != Some(files.len() + data.len()) {
+                    return Err(format!("the end line says {n} files, the bundle has {}", files.len() + data.len()));
                 }
                 ended = true;
             }
@@ -454,7 +552,7 @@ pub fn unbundle(text: &str) -> Result<(Manifest, Vec<NamedFile>)> {
     if !ended {
         return Err("no end line: the bundle is incomplete".into());
     }
-    Ok((manifest.ok_or("no manifest line")?, files))
+    Ok((manifest.ok_or("no manifest line")?, files, data))
 }
 
 /// Cut `text` into parts of at most `limit` bytes at line ends (a line
@@ -527,6 +625,10 @@ pub struct RunResult {
     pub stable: Option<bool>,
     #[serde(default)]
     pub ms: Option<u64>,
+    /// Poly: what the kernel said about the run (unhandled exceptions,
+    /// unimplemented calls), for the scenario reports (ADR 0088).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
 }
 
 /// A result file (`poly-winrun/1`).
@@ -901,6 +1003,63 @@ pub fn report(s: &DiffSummary) -> String {
     out
 }
 
+// ---------------------------------------------------------------------------
+// The visible / held-out split of a Windows entry's tests (ADR 0098).
+
+/// The recorded Windows results of an entry's tests, beside them: for the
+/// visible tests `<symbol>.tests/windows.json`, for the held-out ones the
+/// same name in the entry's held-out directory (ADR 0075, "Recorded
+/// references"). Not a test: `win build` reads only test sources.
+pub const RECORDED_RESULTS: &str = "windows.json";
+
+/// What a Windows entry's generated tests must be: test sources only
+/// (`.rs`, `.cpp`) with valid names, directly in the directory (support
+/// files belong in the repository, `tests/windows/support` and
+/// `tests/windows/cxx`).
+pub fn check_split_files(files: &[String]) -> Result<()> {
+    for f in files {
+        let path = Path::new(f);
+        let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+        if f.contains(['/', '\\']) || !is_test_source(path) || !valid_name(&stem) {
+            return Err(format!(
+                "{f}: a Windows entry's generated tests are .rs or .cpp files named in lower-case letters, digits \
+                 and _, directly in the directory"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Split a Windows result file between the visible tests and the held-out
+/// ones (test names). Every test must be in it, have run on Windows and
+/// have given the same on every run (a reference that is not deterministic
+/// is worth nothing); results of other tests are dropped.
+pub fn split_results(results: &RunFile, visible: &[String], held_out: &[String]) -> Result<(RunFile, RunFile)> {
+    if results.system.name != "windows" {
+        return Err(format!("the results are from {:?}, not from Windows", results.system.name));
+    }
+    let pick = |names: &[String]| -> Result<RunFile> {
+        let mut tests = Vec::new();
+        for n in names {
+            let r = results.test(n).ok_or_else(|| format!("no Windows result for test {n}"))?;
+            if r.status != "ran" {
+                return Err(format!("test {n} did not run on Windows ({})", r.status));
+            }
+            if r.stable == Some(false) {
+                return Err(format!("test {n} gave different results on Windows between runs"));
+            }
+            tests.push(r.clone());
+        }
+        Ok(RunFile { tests, ..results.clone() })
+    };
+    Ok((pick(visible)?, pick(held_out)?))
+}
+
+/// The test name of a generated file (its stem).
+pub fn test_name(file: &str) -> String {
+    Path::new(file).file_stem().unwrap_or_default().to_string_lossy().into_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1043,6 +1202,7 @@ mod tests {
     #[test]
     fn images_import_by_name_from_ntdll_and_kernel32_only() {
         let ok = image(&[("NTDLL.dll", &["NtClose", "NtCreateFile"]), ("kernel32.dll", &["ExitProcess"])], 3);
+        let check_image = |b: &[u8]| check_image_with(b, ALLOWED_DLLS);
         let imports = check_image(&ok).unwrap();
         assert_eq!(imports["ntdll.dll"], ["NtClose", "NtCreateFile"]);
         assert_eq!(imports["kernel32.dll"], ["ExitProcess"]);
@@ -1051,6 +1211,47 @@ mod tests {
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
         assert!(check_image(&gui).unwrap_err().contains("subsystem 2"));
         assert!(check_image(b"MZ not really").is_err());
+        // C++ tests also import the C++ runtime from msvcrt.dll (ADR 0098).
+        let cxx = image(&[("msvcrt.dll", &["_CxxThrowException"]), ("KERNEL32.dll", &["ExitProcess"])], 3);
+        assert!(check_image(&cxx).unwrap_err().contains("msvcrt.dll"));
+        assert_eq!(check_image_with(&cxx, wincxx::ALLOWED_DLLS).unwrap()["msvcrt.dll"], ["_CxxThrowException"]);
+    }
+
+    #[test]
+    fn windows_split_checks_files_and_divides_results() {
+        assert!(check_split_files(&["a_b.cpp".into(), "c.rs".into()]).is_ok());
+        for bad in ["x.h", "sub/a.cpp", "Bad.cpp", "a-b.rs", "windows.json"] {
+            assert!(check_split_files(&[bad.into()]).is_err(), "{bad}");
+        }
+        assert_eq!(test_name("cxx3_x.cpp"), "cxx3_x");
+
+        let mut results = RunFile {
+            format: RUN_FORMAT.into(),
+            system: System { name: "windows".into(), ..System::default() },
+            tests: vec![result("a", 0, b"ok\n"), result("b", 0, b"ok\n"), result("c", 0, b"ok\n")],
+            ..RunFile::default()
+        };
+        let (v, h) = split_results(&results, &["a".into(), "c".into()], &["b".into()]).unwrap();
+        assert_eq!(v.tests.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["a", "c"]);
+        assert_eq!(h.tests.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["b"]);
+        assert_eq!(v.system, results.system);
+        assert!(split_results(&results, &["d".into()], &[]).unwrap_err().contains("no Windows result for test d"));
+        results.tests[1].stable = Some(false);
+        assert!(split_results(&results, &[], &["b".into()]).unwrap_err().contains("different results"));
+        results.tests[1].stable = Some(true);
+        results.tests[1].status = "timeout".into();
+        assert!(split_results(&results, &[], &["b".into()]).unwrap_err().contains("did not run"));
+        results.system.name = "poly".into();
+        assert!(split_results(&results, &[], &[]).unwrap_err().contains("not from Windows"));
+    }
+
+    #[test]
+    fn cpp_sources_are_tests_too() {
+        assert!(is_test_source(Path::new("a/x_y.cpp")) && is_test_source(Path::new("x.rs")));
+        assert!(!is_test_source(Path::new("x.h")) && !is_test_source(Path::new("windows.json")));
+        let s = Source { name: "x".into(), path: PathBuf::from("d/x.cpp") };
+        assert!(s.is_cpp());
+        assert!(!Source { name: "x".into(), path: PathBuf::from("d/x.rs") }.is_cpp());
     }
 
     #[test]
@@ -1071,11 +1272,12 @@ mod tests {
                 imports: BTreeMap::new(),
             });
         }
-        let m = Manifest { format: BUILD_FORMAT.into(), rustc: "rustc 1.97.0".into(), revision: None, tests };
-        let text = bundle(&m, &dir).unwrap();
+        let m =
+            Manifest { format: BUILD_FORMAT.into(), rustc: "rustc 1.97.0".into(), revision: None, clang: None, tests };
+        let text = bundle_with_data(&m, &dir, &[]).unwrap();
         assert!(text.starts_with("poly-winbundle/1\nmanifest "));
         assert!(text.ends_with("end 2\n"));
-        let (back, got) = unbundle(&text).unwrap();
+        let (back, got, _) = unbundle_all(&text).unwrap();
         assert_eq!(back, m);
         assert_eq!(got, files.iter().map(|(n, b)| (n.to_string(), b.clone())).collect::<Vec<_>>());
         assert_eq!(bundle_id(&text).len(), 12);
@@ -1085,13 +1287,24 @@ mod tests {
         assert_eq!(parts.concat(), text);
         assert!(parts.iter().all(|p| p.ends_with('\n')));
         // Windows line ends after a copy through an editor are fine.
-        assert!(unbundle(&text.replace('\n', "\r\n")).is_ok());
+        assert!(unbundle_all(&text.replace('\n', "\r\n")).is_ok());
 
-        assert!(unbundle(&text[..text.len() - 6]).unwrap_err().contains("incomplete"));
+        // Data files travel with their test and count in the end line.
+        let data = vec![("a".to_string(), "7za.exe".to_string(), vec![7u8; 10])];
+        let with = bundle_with_data(&m, &dir, &data).unwrap();
+        assert!(with.contains("\ndata a 7za.exe ") && with.ends_with("end 3\n"));
+        let (_, got2, back_data) = unbundle_all(&with).unwrap();
+        assert_eq!((got2.len(), back_data), (2, data));
+        assert!(bundle_with_data(&m, &dir, &[("zz".into(), "x".into(), vec![])]).unwrap_err().contains("not in"));
+        assert!(bundle_with_data(&m, &dir, &[("a".into(), "../x".into(), vec![])]).is_err());
+        assert!(unbundle_all(&with.replace(&sha256::hex(&[7u8; 10]), &"0".repeat(64))).is_err());
+        assert!(valid_data_name("7za.exe") && valid_data_name("hello.txt") && !valid_data_name(".x"));
+
+        assert!(unbundle_all(&text[..text.len() - 6]).unwrap_err().contains("incomplete"));
         let damaged = text.replace("AQID", "AQIE");
-        assert!(unbundle(&damaged).unwrap_err().contains("hash mismatch"));
+        assert!(unbundle_all(&damaged).unwrap_err().contains("hash mismatch"));
         util::write(&dir.join("a.exe"), [9u8]).unwrap();
-        assert!(bundle(&m, &dir).unwrap_err().contains("changed"));
+        assert!(bundle_with_data(&m, &dir, &[]).unwrap_err().contains("changed"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

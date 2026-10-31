@@ -40,6 +40,9 @@ pub enum Service {
     QueryObject,
     /// `NtMakeTemporaryObject(Handle)`.
     MakeTemporaryObject,
+    /// `NtSetInformationObject(Handle, ObjectInformationClass,
+    /// ObjectInformation, ObjectInformationLength)` (ADR 0089).
+    SetInformationObject,
     /// `NtCreateDirectoryObject(DirectoryHandle*, DesiredAccess,
     /// ObjectAttributes*)`.
     CreateDirectoryObject,
@@ -455,6 +458,10 @@ pub const SYSINFO_SERVICES: [(Service, u32, &str); 3] = [
 /// Device control, in the file I/O group (ADR 0080).
 pub const DEVICE_SERVICES: [(Service, u32, &str); 1] = [(Service::DeviceIoControlFile, 0x0D0, "NtDeviceIoControlFile")];
 
+/// Handle flags, in the object manager group (ADR 0089).
+pub const HANDLE_SERVICES: [(Service, u32, &str); 1] =
+    [(Service::SetInformationObject, 0x011, "NtSetInformationObject")];
+
 /// Access tokens (ADR 0083).
 pub const SECURITY_SERVICES: [(Service, u32, &str); 5] = [
     (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
@@ -473,6 +480,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(SYSINFO_SERVICES.iter())
         .chain(DEVICE_SERVICES.iter())
         .chain(SECURITY_SERVICES.iter())
+        .chain(HANDLE_SERVICES.iter())
 }
 
 impl Service {
@@ -530,5 +538,6 @@ mod tests {
         assert!(SYSINFO_SERVICES.iter().all(|s| (0x140..0x180).contains(&s.1)));
         assert!(DEVICE_SERVICES.iter().all(|s| (0xC0..0x100).contains(&s.1)));
         assert!(SECURITY_SERVICES.iter().all(|s| (0x180..0x1C0).contains(&s.1)));
+        assert!(HANDLE_SERVICES.iter().all(|s| s.1 < 0x40));
     }
 }

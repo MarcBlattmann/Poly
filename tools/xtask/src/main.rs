@@ -50,6 +50,9 @@
 //!   win imports <exe | 7zip> [--markdown <file>] [--check]
 //!                       what a Windows program imports and what of it our DLLs lack
 //!                       (winimports.rs, ADR 0087); --check fails unless every import binds
+//!   win 7zip-diff [--kernel <elf>] [--build-kernel] [--target <poly.json>] [--markdown <file>]
+//!                       run the 7-Zip scenario driver on Poly and compare it step by step
+//!                       with its Windows recording (sevenzip.rs, ADR 0088)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 
@@ -75,6 +78,7 @@ mod symbols;
 mod terminal;
 mod win32;
 mod winimports;
+mod wintrace;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -582,6 +586,9 @@ fn boot_with(
     })
 }
 
+/// `POLY-OUT` lines a boot echoes before it stops showing them.
+const ECHOED_OUT_LINES: usize = 64;
+
 #[allow(clippy::too_many_arguments)]
 fn boot_with_once(
     kernel: &Path,
@@ -609,11 +616,22 @@ fn boot_with_once(
     let (tx, rx) = mpsc::channel();
     let syms = Arc::clone(syms);
     let reader = thread::spawn(move || {
+        // Output files come back as many `POLY-OUT` lines (a trace of the
+        // Windows API tracer is hundreds of KB): only the first are echoed.
+        let mut out_lines = 0usize;
         for line in BufReader::new(stdout).lines().map_while(std::result::Result::ok) {
             let line = syms.symbolize_line(&line);
-            println!("    | {line}");
+            if line.contains("POLY-OUT:") {
+                out_lines += 1;
+            }
+            if out_lines <= ECHOED_OUT_LINES || !line.contains("POLY-OUT:") {
+                println!("    | {line}");
+            }
             on_line(&line);
             let _ = tx.send(line);
+        }
+        if out_lines > ECHOED_OUT_LINES {
+            println!("    | ({} more POLY-OUT lines not shown)", out_lines - ECHOED_OUT_LINES);
         }
     });
 
@@ -1307,7 +1325,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 20] = [
+const BOOT_GROUPS: [BootGroup; 21] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1330,6 +1348,10 @@ const BOOT_GROUPS: [BootGroup; 20] = [
     // 7-Zip's command line on the NT personality, skipped without the
     // cached 7za.exe (sevenzip.rs, ADR 0087).
     ("7zip", sevenzip::boot_test),
+    // 7za.exe under the Windows API tracer, its traces read back and
+    // compared with Windows reference traces if there are any (report only;
+    // wintrace.rs, ADR 0090).
+    ("wintrace", wintrace::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1363,7 +1385,7 @@ const BOOT_GROUPS: [BootGroup; 20] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace"]),
     ("devices", &["net", "ext2", "ext4", "missing-devices", "screen", "terminal"]),
     ("faults", &["faults", "failures"]),
 ];
@@ -1516,6 +1538,19 @@ fn lint() -> Result {
         cargo()
             .args(["fmt", "--all", "--check", "--manifest-path"])
             .arg(root().join("personalities/nt/win32/Cargo.toml")),
+    )?;
+    // The Windows API tracer's DLL sources (no manifest of their own: the
+    // kit's generated workspace builds them, wintrace.rs).
+    step(
+        "fmt (wintrace)",
+        Command::new("rustfmt").args(["--check", "--edition", "2024"]).args(
+            [
+                "tools/wintrace/polytrace/src/lib.rs",
+                "tools/wintrace/polytrace/build.rs",
+                "tools/wintrace/proxy/common.rs",
+            ]
+            .map(|f| root().join(f)),
+        ),
     )?;
     eprintln!("==> font tables");
     font::run(&root(), &["--check".into()])?;

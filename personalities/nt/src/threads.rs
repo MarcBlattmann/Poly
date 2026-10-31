@@ -113,12 +113,16 @@ pub fn image_nt_name(dos: &[u16]) -> Result<alloc::vec::Vec<u16>> {
 ///   `RTL_USER_PROCESS_PARAMETERS` in the caller's memory
 ///   ([`crate::params::read`]): its `ImagePathName` names the executable
 ///   ([`image_nt_name`]), which is opened for execute and read; its
-///   command line, environment and current directory go to the child.
-/// - A `ThreadFlags` with `THREAD_CREATE_FLAGS_CREATE_SUSPENDED` is
-///   `STATUS_NOT_SUPPORTED` for now (resuming another process's thread
-///   is a later item). The object attributes, `ProcessFlags`, `CreateInfo`
-///   and `AttributeList` are not used: the new process is unnamed, inherits
-///   no handles, and its client id is read back with
+///   command line, environment and current directory go to the child, and
+///   so does the creator's `STARTUPINFO` with, under
+///   `STARTF_USESTDHANDLES`, the standard handles it chose (ADR 0089).
+/// - `ThreadFlags` `THREAD_CREATE_FLAGS_CREATE_SUSPENDED`: the first
+///   thread waits for `NtResumeThread` (ADR 0089).
+/// - `ProcessFlags` [`PROCESS_CREATE_FLAGS_INHERIT_HANDLES`] (Poly's own
+///   bit): the child's handle table starts with the creator's inheritable
+///   handles at the same values (ADR 0089). Other bits are ignored.
+/// - The object attributes, `CreateInfo` and `AttributeList` are not used:
+///   the new process is unnamed, and its client id is read back with
 ///   `NtQueryInformationProcess` / `NtQueryInformationThread`.
 /// - Desired access 0 means all access.
 pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
@@ -127,13 +131,11 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     let thread_out = abi::arg(k, regs, 1)?;
     let process_access = abi::arg(k, regs, 2)? as u32;
     let thread_access = abi::arg(k, regs, 3)? as u32;
+    let process_flags = abi::arg(k, regs, 6)? as u32;
     let thread_flags = abi::arg(k, regs, 7)? as u32;
     let params_at = abi::arg(k, regs, 8)?;
     if params_at == 0 || process_out == 0 || thread_out == 0 {
         return Err(STATUS_INVALID_PARAMETER);
-    }
-    if thread_flags & THREAD_CREATE_FLAGS_CREATE_SUSPENDED != 0 {
-        return Err(STATUS_NOT_SUPPORTED);
     }
     let params = crate::params::read(params_at, &mut |addr, buf| abi::read(k, addr, buf))?;
     let name = image_nt_name(&params.image_path)?;
@@ -151,6 +153,8 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         params,
         process_access: all(process_access, poly_ntobj::access::PROCESS_ALL_ACCESS),
         thread_access: all(thread_access, poly_ntobj::access::THREAD_ALL_ACCESS),
+        inherit_handles: process_flags & PROCESS_CREATE_FLAGS_INHERIT_HANDLES != 0,
+        suspended: thread_flags & THREAD_CREATE_FLAGS_CREATE_SUSPENDED != 0,
     };
     let created = k.create_process(req)?;
     return_handle(k, process_out, created.process)?;

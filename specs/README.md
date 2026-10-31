@@ -9,8 +9,11 @@ specs/<os>/<component>/<symbol>.tests/    visible tests (~70%)
 ```
 
 Linux tests are freestanding C programs (`tests/linux/include/`); Windows
-tests are `no_std` Rust files built by `cargo xtask pipeline win build` and
-run on a real Windows PC (`tests/windows/support`, ADR 0075).
+tests are `no_std` Rust files (`tests/windows/support`, ADR 0075) or
+freestanding C++ files (`tests/windows/cxx`, ADR 0098) built by `cargo
+xtask pipeline win build` and run on a real Windows PC. A Windows entry's
+`<symbol>.tests/windows.json` holds the recorded Windows results of its
+visible tests (`tests split --windows-results`).
 
 **Who a Linux test runs as.** A test runs as whatever user runs the
 pipeline: root in some environments, a normal user in others (the home

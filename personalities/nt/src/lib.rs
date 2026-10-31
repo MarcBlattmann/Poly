@@ -160,6 +160,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         DuplicateObject => objects::duplicate_object(k, regs),
         QueryObject => objects::query_object(k, regs),
         MakeTemporaryObject => objects::make_temporary(k, regs),
+        SetInformationObject => objects::set_information_object(k, regs),
         CreateDirectoryObject => objects::create_directory(k, regs),
         OpenDirectoryObject => objects::open_directory(k, regs),
         QueryDirectoryObject => objects::query_directory(k, regs),
