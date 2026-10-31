@@ -90,6 +90,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-font"
+version = "0.0.1"
+
+[[package]]
 name = "poly-gfx"
 version = "0.0.1"
 
@@ -413,6 +417,7 @@ dependencies = [
  "poly-crt",
  "poly-elf",
  "poly-ext2",
+ "poly-font",
  "poly-gfx",
  "poly-kernelbase",
  "poly-ldr",

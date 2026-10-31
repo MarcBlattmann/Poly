@@ -63,6 +63,16 @@ jobs:
         with:
           shared-key: host-tests
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The bundled DejaVu fonts for poly-font's tests on real fonts (ADR
+      # 0105): downloaded and checked against their pinned SHA-256 by
+      # xtask, kept in a cache by version. Without them those tests skip.
+      - name: The fonts' cache
+        uses: actions/cache@v4
+        with:
+          path: target/fonts
+          key: fonts-dejavu-2.37
+      - name: Fetch the fonts (poly-font's tests on real fonts)
+        run: cargo xtask fonts fetch || echo "::warning::could not fetch the fonts; poly-font's tests on them are skipped"
       - run: cargo xtask ci host-tests
 
   boot:
