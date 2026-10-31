@@ -40,8 +40,17 @@ pub(crate) fn nearest_int(x: f64) -> f64 {
 /// `e^r` for `|r| ≤ 0.35` (double-double in and out).
 pub(crate) fn exp_reduced(r: DD) -> DD {
     const DDC: [DD; 11] = [
-        INV_FACT[0], INV_FACT[1], INV_FACT[2], INV_FACT[3], INV_FACT[4], INV_FACT[5], INV_FACT[6], INV_FACT[7],
-        INV_FACT[8], INV_FACT[9], INV_FACT[10],
+        INV_FACT[0],
+        INV_FACT[1],
+        INV_FACT[2],
+        INV_FACT[3],
+        INV_FACT[4],
+        INV_FACT[5],
+        INV_FACT[6],
+        INV_FACT[7],
+        INV_FACT[8],
+        INV_FACT[9],
+        INV_FACT[10],
     ];
     const TAIL: [f64; 9] = [
         INV_FACT[11].hi,
@@ -60,8 +69,16 @@ pub(crate) fn exp_reduced(r: DD) -> DD {
 /// `e^r − 1` for `|r| ≤ 0.35`.
 fn expm1_reduced(r: DD) -> DD {
     const DDC: [DD; 10] = [
-        INV_FACT[1], INV_FACT[2], INV_FACT[3], INV_FACT[4], INV_FACT[5], INV_FACT[6], INV_FACT[7], INV_FACT[8],
-        INV_FACT[9], INV_FACT[10],
+        INV_FACT[1],
+        INV_FACT[2],
+        INV_FACT[3],
+        INV_FACT[4],
+        INV_FACT[5],
+        INV_FACT[6],
+        INV_FACT[7],
+        INV_FACT[8],
+        INV_FACT[9],
+        INV_FACT[10],
     ];
     const TAIL: [f64; 9] = [
         INV_FACT[11].hi,

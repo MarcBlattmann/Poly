@@ -22,7 +22,8 @@ use crate::dd::{self, DD, two_sum};
 
 /// `ln m` for a double-double `m ∈ [√½, √2)`.
 fn log_reduced(m: DD) -> DD {
-    const DDC: [DD; 8] = [INV_ODD[0], INV_ODD[1], INV_ODD[2], INV_ODD[3], INV_ODD[4], INV_ODD[5], INV_ODD[6], INV_ODD[7]];
+    const DDC: [DD; 8] =
+        [INV_ODD[0], INV_ODD[1], INV_ODD[2], INV_ODD[3], INV_ODD[4], INV_ODD[5], INV_ODD[6], INV_ODD[7]];
     const TAIL: [f64; 11] = [
         INV_ODD[8].hi,
         INV_ODD[9].hi,

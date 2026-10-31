@@ -296,9 +296,11 @@ pub extern "C" fn _set_error_mode(mode: i32) -> i32 {
     }
 }
 
-static MATHERR: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+/// The handler `__setusermatherr` installed (the math functions call it,
+/// `mathfn::finish`).
+pub(crate) static MATHERR: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
-/// `__setusermatherr`: kept (Poly's math functions do not call it yet).
+/// `__setusermatherr`: the program's `_matherr` (Learn, `_matherr`).
 #[unsafe(no_mangle)]
 pub extern "C" fn __setusermatherr(f: usize) {
     MATHERR.store(f, Ordering::Release);

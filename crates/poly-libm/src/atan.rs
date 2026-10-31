@@ -183,14 +183,16 @@ mod tests {
         assert_eq!(atan(-1.0), -FRAC_PI_4);
         assert_eq!(atan(f64::INFINITY), FRAC_PI_2);
         assert_eq!(atan(-0.0).to_bits(), (-0.0f64).to_bits());
-        assert_eq!(asin(0.5), 0.5235987755982989);
+        // π/6 rounded up (the constant FRAC_PI_6 is rounded down).
+        assert_eq!(asin(0.5), f64::from_bits(0x3FE0C152382D7366));
         assert_eq!(asin(1.0), FRAC_PI_2);
         assert_eq!(asin(-1.0), -FRAC_PI_2);
         assert!(asin(1.0000000000000002).is_nan() && acos(-2.0).is_nan());
         assert_eq!(acos(1.0).to_bits(), 0);
         assert_eq!(acos(-1.0), P);
         assert_eq!(acos(0.0), FRAC_PI_2);
-        assert_eq!(acos(0.5), 1.0471975511965979);
+        // π/3 to nearest (FRAC_PI_3).
+        assert_eq!(acos(0.5), core::f64::consts::FRAC_PI_3);
         assert_eq!(atan(3f64.sqrt()), 1.0471975511965976);
     }
 

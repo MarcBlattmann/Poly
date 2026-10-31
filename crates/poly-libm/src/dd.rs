@@ -23,6 +23,9 @@ pub struct DD {
 /// 2^27 + 1: Veltkamp's splitting constant for 53-bit significands.
 const SPLITTER: f64 = 134_217_729.0;
 
+// Named methods rather than operator traits: every call site reads as
+// the error-free arithmetic it is, and `const fn`s stay possible.
+#[allow(clippy::should_implement_trait)]
 impl DD {
     pub const ZERO: DD = DD { hi: 0.0, lo: 0.0 };
     pub const ONE: DD = DD { hi: 1.0, lo: 0.0 };
@@ -192,7 +195,7 @@ pub fn round_scaled(m: DD, k: i32) -> f64 {
     // `m × 2^(k + 1074)`, which is below 2^53, so the scaled pair is exact.
     let t = m.scale_wide(k + 1074);
     let n = round_half_even_dd(t);
-    f64::from_bits(n as u64) * if m.hi < 0.0 { -1.0 } else { 1.0 }
+    f64::from_bits(n) * if m.hi < 0.0 { -1.0 } else { 1.0 }
 }
 
 impl DD {

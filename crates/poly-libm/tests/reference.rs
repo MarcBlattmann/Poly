@@ -63,8 +63,7 @@ fn every_function_is_within_its_bound_of_the_exact_value() {
     for line in text.lines().filter(|l| !l.is_empty()) {
         let parts: Vec<&str> = line.split(' ').collect();
         let name = parts[0];
-        let nums: Vec<f64> =
-            parts[1..].iter().map(|h| f64::from_bits(u64::from_str_radix(h, 16).unwrap())).collect();
+        let nums: Vec<f64> = parts[1..].iter().map(|h| f64::from_bits(u64::from_str_radix(h, 16).unwrap())).collect();
         let (args, hi, lo) = (&nums[..nums.len() - 2], nums[nums.len() - 2], nums[nums.len() - 1]);
         let got = call(name, args);
         // (got − hi) is exact when they are close; the error is that minus lo.

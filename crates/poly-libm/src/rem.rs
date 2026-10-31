@@ -55,11 +55,7 @@ pub fn remainder(x: f64, y: f64) -> f64 {
         }
         // r < my; round the quotient to nearest-even.
         let twice = r << 1;
-        if twice > my || (twice == my && odd) {
-            -((my - r) as f64)
-        } else {
-            r as f64
-        }
+        if twice > my || (twice == my && odd) { -((my - r) as f64) } else { r as f64 }
     };
     // r × 2^ey is exact (an integer below 2^53 at an exponent ≥ −1074).
     let v = crate::dd::ldexp_exact(r, ey);

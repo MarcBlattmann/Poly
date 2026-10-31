@@ -603,3 +603,5 @@ pub extern "C" fn _dclass(x: f64) -> i16 {
 pub extern "C" fn _dsign(x: f64) -> i32 {
     i32::from(x.is_sign_negative())
 }
+
+mod math_p;

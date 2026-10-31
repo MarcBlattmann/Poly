@@ -14,4 +14,9 @@ fn main() {
     for (name, _) in poly_crt::exports::MSVCRT_VARARGS {
         println!("cargo:rustc-link-arg=/EXPORT:{name}");
     }
+    // setjmp/longjmp: the shared runtime's assembly (ADR 0092).
+    for name in ["setjmp", "_setjmp", "_setjmpex"] {
+        println!("cargo:rustc-link-arg=/EXPORT:{name}=poly_crt_setjmp");
+    }
+    println!("cargo:rustc-link-arg=/EXPORT:longjmp=poly_crt_longjmp");
 }

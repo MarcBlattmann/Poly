@@ -29,11 +29,8 @@ pub fn sqrt(x: f64) -> f64 {
     let b = x.to_bits();
     let biased = ((b >> 52) & 0x7FF) as i32;
     // x = m × 2^e with m an integer.
-    let (mut m, mut e) = if biased == 0 {
-        (b & ((1 << 52) - 1), -1074)
-    } else {
-        ((b & ((1 << 52) - 1)) | (1 << 52), biased - 1075)
-    };
+    let (mut m, mut e) =
+        if biased == 0 { (b & ((1 << 52) - 1), -1074) } else { ((b & ((1 << 52) - 1)) | (1 << 52), biased - 1075) };
     // Widen m to 109 or 110 bits with an even shift, so the root has 55.
     let bits = 64 - m.leading_zeros() as i32;
     let mut shift = 110 - bits;
@@ -156,9 +153,24 @@ mod tests {
     fn square_roots_are_correctly_rounded() {
         // The hardware's sqrt is correctly rounded too: one right answer.
         let mut xs: Vec<f64> = std::vec![
-            0.0, -0.0, 1.0, 2.0, 4.0, 0.25, 3.0, 5e-324, 1e-323, 2.2250738585072014e-308,
-            2.225073858507201e-308, f64::MAX, 1e300, 1e-300, 0.5, 1.0000000000000002,
-            0.9999999999999999, f64::INFINITY,
+            0.0,
+            -0.0,
+            1.0,
+            2.0,
+            4.0,
+            0.25,
+            3.0,
+            5e-324,
+            1e-323,
+            2.2250738585072014e-308,
+            2.225073858507201e-308,
+            f64::MAX,
+            1e300,
+            1e-300,
+            0.5,
+            1.0000000000000002,
+            0.9999999999999999,
+            f64::INFINITY,
         ];
         let mut s: u64 = 0x1234_5678_9ABC_DEF1;
         for _ in 0..20000 {
