@@ -31,16 +31,21 @@ pub struct GreenEntry {
     pub tests: Vec<String>,
 }
 
-fn c_stems(dir: &Path) -> Result<Vec<String>> {
+/// The file stems of the files in `dir` with one of `extensions`, sorted.
+fn stems(dir: &Path, extensions: &[&str]) -> Result<Vec<String>> {
     let mut out = Vec::new();
     for e in std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
         let path = e.map_err(|e| e.to_string())?.path();
-        if path.extension().is_some_and(|x| x == "c") && path.is_file() {
+        if path.extension().and_then(|x| x.to_str()).is_some_and(|x| extensions.contains(&x)) && path.is_file() {
             out.push(path.file_stem().unwrap().to_string_lossy().into_owned());
         }
     }
     out.sort();
     Ok(out)
+}
+
+fn c_stems(dir: &Path) -> Result<Vec<String>> {
+    stems(dir, &["c"])
 }
 
 fn subdirs(dir: &Path) -> Result<Vec<PathBuf>> {
@@ -64,6 +69,32 @@ fn name(p: &Path) -> String {
 /// components that have a `specs/` directory are read (the Windows and
 /// macOS API files are large).
 pub fn entries(repo: &Path) -> Result<Vec<GreenEntry>> {
+    entries_with(repo, c_stems)
+}
+
+/// A green Windows entry (ADR 0075, 0098) with visible tests and their
+/// recorded Windows results (`<symbol>.tests/windows.json`), which
+/// `pipeline win polycheck` compares Poly with (ADR 0099).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WindowsEntry {
+    pub entry: GreenEntry,
+    /// The recorded results, relative to the repository root.
+    pub reference: PathBuf,
+}
+
+/// Every green Windows entry whose tests directory has `.rs`/`.cpp` tests
+/// and a `windows.json`.
+pub fn windows_entries(repo: &Path) -> Result<Vec<WindowsEntry>> {
+    let all = entries_with(repo, |dir| stems(dir, crate::windows::TEST_EXTENSIONS))?;
+    Ok(all
+        .into_iter()
+        .filter(|g| g.id.starts_with("windows/"))
+        .map(|g| WindowsEntry { reference: g.tests_dir.join("windows.json"), entry: g })
+        .filter(|w| repo.join(&w.reference).is_file())
+        .collect())
+}
+
+fn entries_with(repo: &Path, tests_of: impl Fn(&Path) -> Result<Vec<String>>) -> Result<Vec<GreenEntry>> {
     let mut out = Vec::new();
     for os_dir in subdirs(&repo.join("specs"))? {
         let os = name(&os_dir);
@@ -82,7 +113,7 @@ pub fn entries(repo: &Path) -> Result<Vec<GreenEntry>> {
                     if !repo.join(&tests_dir).is_dir() {
                         continue;
                     }
-                    let tests = c_stems(&repo.join(&tests_dir))?;
+                    let tests = tests_of(&repo.join(&tests_dir))?;
                     if !tests.is_empty() {
                         out.push(GreenEntry { id: id.id(), tests_dir, tests });
                     }
@@ -215,6 +246,22 @@ mod tests {
         let s = summary(&[("hello", Verdict::Pass), ("a_x", Verdict::Pass), ("a_y", Verdict::Pass)]);
         let c = check(&s, &["hello".to_string()], &[green("linux/syscall/x86_64/x", &["a_x", "a_y"])]);
         assert!(c.problems("poly-pass.txt").is_empty());
+    }
+
+    /// The real repository: every green Windows entry has recorded results
+    /// for each of its visible tests; the C-test entries are not Windows
+    /// ones.
+    #[test]
+    fn finds_green_windows_entries_with_their_results() {
+        let repo = crate::repo_root();
+        for w in windows_entries(&repo).unwrap() {
+            assert!(w.entry.id.starts_with("windows/"), "{w:?}");
+            let results = crate::windows::RunFile::load(&repo.join(&w.reference)).unwrap();
+            for t in &w.entry.tests {
+                assert!(results.test(t).is_some(), "{}: no recorded result for {t}", w.entry.id);
+            }
+        }
+        assert!(entries(&repo).unwrap().iter().all(|g| !g.id.starts_with("windows/")));
     }
 
     /// The real repository: every green entry found has its tests directory

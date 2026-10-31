@@ -1,0 +1,14 @@
+[package]
+name = "poly-cxxeh"
+description = "C++ exception handling for msvcrt (ADR 0099): the compiler's FuncInfo and ThrowInfo tables, catch-clause matching, catch objects, unwind actions and the per-thread record of catch blocks in progress"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-seh = { path = "../poly-seh" }
+
+[lints]
+workspace = true

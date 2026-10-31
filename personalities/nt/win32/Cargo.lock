@@ -64,6 +64,7 @@ name = "msvcrt"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
+ "poly-cxxeh",
  "poly-win32-crt",
  "poly-win32-rt",
 ]
@@ -85,6 +86,13 @@ name = "poly-crt"
 version = "0.0.1"
 dependencies = [
  "poly-rtl",
+]
+
+[[package]]
+name = "poly-cxxeh"
+version = "0.0.1"
+dependencies = [
+ "poly-seh",
 ]
 
 [[package]]
@@ -112,6 +120,10 @@ version = "0.0.1"
 dependencies = [
  "poly-ntobj",
 ]
+
+[[package]]
+name = "poly-seh"
+version = "0.0.1"
 
 [[package]]
 name = "poly-win32-crt"

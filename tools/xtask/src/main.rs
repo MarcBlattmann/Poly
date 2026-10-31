@@ -1595,7 +1595,11 @@ fn pipeline_checks() -> Result {
     // on Poly against Linux (one QEMU boot per test, several at a time):
     // the tests of tests/linux/poly-pass.txt and of the green entries must
     // pass. Skips itself like selfcheck, and without QEMU.
-    pipeline(&["polycheck".into()])
+    pipeline(&["polycheck".into()])?;
+    // The visible tests of every green Windows entry on Poly against their
+    // recorded Windows results (ADR 0099). Skips itself without QEMU, and
+    // without clang++/lld-link/llvm-dlltool for C++ tests.
+    pipeline(&["win".into(), "polycheck".into()])
 }
 
 /// A part of CI: its name (`cargo xtask ci <name>`) and what it runs.
@@ -1678,7 +1682,8 @@ fn pipeline(args: &[String]) -> Result {
     // The commands that build the kernel (`--build-kernel`, or a missing
     // one) build it as `kernel_cargo` does, with our ntdll.dll: the same
     // kernel as the boot tests', so neither build undoes the other.
-    if matches!(args.first().map(String::as_str), Some("polycheck" | "diff" | "polyrun")) {
+    let first_two: Vec<&str> = args.iter().take(2).map(String::as_str).collect();
+    if matches!(first_two.first(), Some(&("polycheck" | "diff" | "polyrun"))) || first_two == ["win", "polycheck"] {
         cmd.env(ntdll::KERNEL_ENV, ntdll::ensure()?);
         cmd.env(win32::KERNEL_ENV, win32::ensure()?);
     }

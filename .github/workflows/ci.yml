@@ -153,13 +153,15 @@ jobs:
       - run: cargo xtask ci coverage
 
   pipeline:
-    name: pipeline (selfcheck, polycheck)
+    name: pipeline (selfcheck, polycheck, win polycheck)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Install QEMU and a static BusyBox
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static
+      # clang++, lld-link and llvm-dlltool build the C++ Windows tests of
+      # green Windows entries for `win polycheck` (ADR 0098, 0099).
+      - name: Install QEMU, a static BusyBox and the C++ Windows test tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static clang lld llvm
       - name: Let QEMU use KVM
         run: |
           if [ -e /dev/kvm ]; then
@@ -193,7 +195,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: polycheck-run
-          path: target/pipeline/polycheck/run
+          path: |
+            target/pipeline/polycheck/run
+            target/pipeline/windows/polycheck/run
           if-no-files-found: ignore
           retention-days: 7
 
