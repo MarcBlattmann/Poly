@@ -42,6 +42,15 @@ pub const MSVCRT_VARARGS: &[(&str, u8)] = &[
     ("fwscanf_s", 2),
     ("_snscanf", 3),
     ("_snwscanf", 3),
+    // Positional parameters (ADR 0092).
+    ("_fprintf_p", 2),
+    ("_fprintf_p_l", 3),
+    ("_fwprintf_p", 2),
+    ("_fwprintf_p_l", 3),
+    ("_scprintf_p_l", 2),
+    ("_scwprintf_p_l", 2),
+    ("_sprintf_p_l", 4),
+    ("_swprintf_p_l", 4),
 ];
 
 /// The memory functions both DLLs export from `compiler_builtins`.

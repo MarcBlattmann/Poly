@@ -1,0 +1,13 @@
+[package]
+name = "poly-libm"
+description = "The transcendental math of our C runtime (ADR 0092): sin, cos, tan, their inverses, exp, log, pow, the hyperbolic functions, cbrt, hypot, remainder, written from first principles in double-double arithmetic, with math.h's error classification"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

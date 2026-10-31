@@ -96,6 +96,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-libm"
+version = "0.0.1"
+
+[[package]]
 name = "poly-ntobj"
 version = "0.0.1"
 
@@ -118,6 +122,7 @@ name = "poly-win32-crt"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
+ "poly-libm",
  "poly-win32-rt",
 ]
 
@@ -130,6 +135,7 @@ name = "ucrtbase"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
+ "poly-libm",
  "poly-win32-crt",
  "poly-win32-rt",
 ]

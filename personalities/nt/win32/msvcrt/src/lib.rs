@@ -576,3 +576,5 @@ v_exports! {
     _vsnprintf_s = va::snprintf_s, (b: *mut u8, n: usize, c: usize, f: *const u8);
     _vsnwprintf_s = va::snwprintf_s, (b: *mut u16, n: usize, c: usize, f: *const u16);
 }
+
+mod positional;

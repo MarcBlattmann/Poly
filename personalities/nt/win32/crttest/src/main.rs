@@ -21,6 +21,8 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 use poly_win32_rt as _;
 
+mod mathtest;
+
 /// The exit status when every check passed.
 const PASS: i32 = 0x43;
 
@@ -649,6 +651,9 @@ unsafe fn run() -> ! {
 
         // ----- msvcrt.dll -----
         msvcrt(); // 110 …
+
+        // ----- math, positional printf, setjmp (ADR 0092) -----
+        mathtest::run(); // 300 …
 
         // ----- exit -----
         let mut table = [0usize; 3];
