@@ -97,6 +97,15 @@ pub struct VfsRoot {
     pub vfs: &'static Vfs,
     pub ctx: FsContext,
     pub cred: Cred,
+    /// Case-folded indexes of the directories looked up last
+    /// ([`walk::FoldCache`], ADR 0091).
+    pub fold: core::cell::RefCell<walk::FoldCache>,
+}
+
+impl VfsRoot {
+    pub fn new(vfs: &'static Vfs, ctx: FsContext, cred: Cred) -> VfsRoot {
+        VfsRoot { vfs, ctx, cred, fold: core::cell::RefCell::default() }
+    }
 }
 
 /// A file as the share-access, delete and lock tables name it.
@@ -418,7 +427,7 @@ impl IoState {
             NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
         )?;
         self.add_console_device(cookie);
-        self.root = Some(VfsRoot { vfs, ctx, cred });
+        self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
     }
 
@@ -484,14 +493,17 @@ impl IoState {
         let stored = self.stored(node);
         let key = NodeKey::of(node)?;
         let directory = attr.kind == FileType::Directory;
-        let size = if directory { 0 } else { attr.size };
+        // A symbolic link holds no data of its own (its target is the
+        // reparse point's, `FSCTL_GET_REPARSE_POINT`), so it has no size.
+        let empty = directory || attr.kind == FileType::Symlink;
+        let size = if empty { 0 } else { attr.size };
         Ok(Facts {
             creation: stored.creation.unwrap_or_else(|| info::nt_time(attr.mtime)),
             access: info::nt_time(attr.atime),
             write: info::nt_time(attr.mtime),
             change: info::nt_time(attr.ctime),
             size,
-            allocation: if directory { 0 } else { info::allocation(attr.size, attr.blocks) },
+            allocation: if empty { 0 } else { info::allocation(attr.size, attr.blocks) },
             links: attr.nlink,
             attributes: info::attributes_of(attr.kind, attr.perm, stored.attributes),
             directory,

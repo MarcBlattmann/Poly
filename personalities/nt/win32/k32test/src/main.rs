@@ -1257,11 +1257,11 @@ unsafe extern "system" {
     fn MoveFileW(from: *const u16, to: *const u16) -> i32;
     fn MoveFileWithProgressW(from: *const u16, to: *const u16, p: *const u8, d: *mut u8, flags: u32) -> i32;
     fn FindFirstStreamW(name: *const u16, level: u32, data: *mut u8, flags: u32) -> Handle;
+    fn FindNextStreamW(find: Handle, data: *mut u8) -> i32;
     fn CreateHardLinkW(new: *const u16, existing: *const u16, sa: *const u8) -> i32;
 }
 
 const ERROR_HANDLE_EOF: u32 = 38;
-const ERROR_INVALID_FUNCTION: u32 = 1;
 /// `EXCEPTION_CONTINUE_EXECUTION`, `EXCEPTION_CONTINUE_SEARCH`,
 /// `EXCEPTION_EXECUTE_HANDLER` (`excpt.h`).
 const CONTINUE_EXECUTION: i32 = -1;
@@ -1443,20 +1443,43 @@ unsafe fn seven_zip_imports() {
         SetFileApisToANSI();
         check(AreFileApisANSI() != 0);
 
-        // The older moves; streams and hard links Poly's volumes do not have.
+        // The older moves; streams (the default data stream only) and hard
+        // links (ADR 0091).
         let f = CreateFileW(w!("C:\\k32move1.txt"), GENERIC_WRITE, 0, core::ptr::null(), CREATE_ALWAYS, 0, 0);
-        check(f != INVALID_HANDLE_VALUE && CloseHandle(f) != 0);
+        let mut n = 0u32;
+        check(f != INVALID_HANDLE_VALUE && WriteFile(f, b"five!".as_ptr(), 5, &mut n, core::ptr::null_mut()) != 0);
+        check(CloseHandle(f) != 0);
         check(MoveFileW(w!("C:\\k32move1.txt"), w!("C:\\k32move2.txt")) != 0);
         check(GetFileAttributesW(w!("C:\\k32move1.txt")) == INVALID_FILE_ATTRIBUTES);
         check(
             MoveFileWithProgressW(w!("C:\\k32move2.txt"), w!("C:\\k32move3.txt"), np(), core::ptr::null_mut(), 0) != 0,
         );
         let mut data = [0u8; 600];
-        check(FindFirstStreamW(w!("C:\\k32move3.txt"), 0, data.as_mut_ptr(), 0) == INVALID_HANDLE_VALUE);
+        let fs = FindFirstStreamW(w!("C:\\k32move3.txt"), 0, data.as_mut_ptr(), 0);
+        check(fs != INVALID_HANDLE_VALUE);
+        check(u64::from_le_bytes(data[0..8].try_into().unwrap()) == 5);
+        let stream: [u16; 8] =
+            [b':' as u16, b':' as u16, b'$' as u16, b'D' as u16, b'A' as u16, b'T' as u16, b'A' as u16, 0];
+        check(data[8..24].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).eq(stream));
+        check(FindNextStreamW(fs, data.as_mut_ptr()) == 0);
         check_error(ERROR_HANDLE_EOF);
+        check(FindClose(fs) != 0);
+        // A directory has no data stream.
+        check(FindFirstStreamW(w!("C:\\"), 0, data.as_mut_ptr(), 0) == INVALID_HANDLE_VALUE);
+        check_error(ERROR_HANDLE_EOF);
+        check(CreateHardLinkW(w!("C:\\k32link.txt"), w!("C:\\k32move3.txt"), core::ptr::null()) != 0);
+        let mut info = [0u8; 52];
+        let l = CreateFileW(w!("C:\\k32link.txt"), GENERIC_READ, 7, core::ptr::null(), OPEN_EXISTING, 0, 0);
+        check(l != INVALID_HANDLE_VALUE && GetFileInformationByHandle(l, info.as_mut_ptr()) != 0);
+        // nNumberOfLinks, and the same bytes under the second name.
+        check(u32::from_le_bytes(info[40..44].try_into().unwrap()) == 2);
+        let mut five = [0u8; 5];
+        check(ReadFile(l, five.as_mut_ptr(), 5, &mut n, core::ptr::null_mut()) != 0 && &five == b"five!");
+        check(CloseHandle(l) != 0);
         check(CreateHardLinkW(w!("C:\\k32link.txt"), w!("C:\\k32move3.txt"), core::ptr::null()) == 0);
-        check_error(ERROR_INVALID_FUNCTION);
+        check_error(ERROR_ALREADY_EXISTS);
         check(DeleteFileW(w!("C:\\k32move3.txt")) != 0);
+        check(DeleteFileW(w!("C:\\k32link.txt")) != 0);
 
         // oleaut32 by ordinal, user32 and advapi32's RtlGenRandom, loaded.
         let ole = LoadLibraryW(w!("oleaut32.dll"));

@@ -108,7 +108,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     };
     let real = vfs.path_of(&ctx, &root).ok().map(|p| String::from_utf8_lossy(&p).into_owned());
     *C_ROOT.lock() = real.clone();
-    let vr = VfsRoot { vfs, ctx, cred };
+    let vr = VfsRoot::new(vfs, ctx, cred);
     let report = create::create(&vr, &root, &POLY_USER);
     for (path, status) in &report.conflicts {
         crate::kprintln!("nt: layout: {path} cannot be made ({:#x}): something else is there", status.0);
@@ -205,7 +205,7 @@ mod tests {
                 return Err("the link points elsewhere");
             }
             let root = vfs.lookup(&ctx, &cred, At::Cwd, link.as_bytes(), true).map_err(|_| "link unresolved")?;
-            let vr = VfsRoot { vfs, ctx: vfs.root_context().map_err(|_| "no VFS")?, cred: cred.clone() };
+            let vr = VfsRoot::new(vfs, vfs.root_context().map_err(|_| "no VFS")?, cred.clone());
             let report = create::create(&vr, &root, &POLY_USER);
             if !report.conflicts.is_empty() {
                 return Err("the layout through the link had conflicts");

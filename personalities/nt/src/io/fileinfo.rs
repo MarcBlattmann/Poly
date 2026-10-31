@@ -17,7 +17,7 @@ use core::result::Result;
 use poly_ntobj::NtStatus;
 use poly_ntobj::name::wide;
 use poly_ntobj::status::*;
-use poly_vfs::{At, FileType, NodeRef, RenameFlags, SetTime};
+use poly_vfs::{At, FileType, NodeRef, PathArg, RenameFlags, SetTime};
 
 /// What a query class returns: the bytes and the size of their fixed part
 /// (a shorter buffer is `STATUS_INFO_LENGTH_MISMATCH`; a buffer that holds
@@ -40,6 +40,22 @@ pub enum RenameTo {
     Volume { volume: usize, path: Vec<u16> },
 }
 
+/// Where a new name for a file goes ([`IoState::rename`],
+/// [`IoState::link`]).
+struct NewName {
+    /// The file's node.
+    key: NodeKey,
+    src_parent: NodeRef,
+    src_name: Vec<u8>,
+    dst_parent: NodeRef,
+    /// The new last component, as the VFS spells it, and the new path
+    /// below the volume in the caller's case.
+    new_bytes: Vec<u8>,
+    new_path: Vec<u16>,
+    /// What already has that name (and its name as found).
+    existing: Option<(NodeRef, Vec<u8>)>,
+}
+
 impl IoState {
     /// The access a query of `class` needs, or `None` for a class we do not
     /// answer.
@@ -56,7 +72,8 @@ impl IoState {
             | FILE_NAME_INFORMATION
             | FILE_POSITION_INFORMATION
             | FILE_MODE_INFORMATION
-            | FILE_ALIGNMENT_INFORMATION => 0,
+            | FILE_ALIGNMENT_INFORMATION
+            | FILE_STREAM_INFORMATION => 0,
             _ => return None,
         })
     }
@@ -70,6 +87,7 @@ impl IoState {
             FILE_DISPOSITION_INFORMATION => (DELETE, 1),
             FILE_DISPOSITION_INFORMATION_EX => (DELETE, 4),
             FILE_RENAME_INFORMATION => (DELETE, RENAME_INFO_FIXED),
+            FILE_LINK_INFORMATION => (0, RENAME_INFO_FIXED),
             _ => return None,
         })
     }
@@ -121,6 +139,10 @@ impl IoState {
             FILE_MODE_INFORMATION => fixed(handle.mode.to_le_bytes().to_vec()),
             FILE_NETWORK_OPEN_INFORMATION => fixed(info::network_open(&facts).to_vec()),
             FILE_ATTRIBUTE_TAG_INFORMATION => fixed(info::attribute_tag(&facts).to_vec()),
+            FILE_STREAM_INFORMATION => {
+                let on_disk = matches!(rec.target, Target::Disk(_));
+                InfoBytes { bytes: info::streams(&facts, on_disk), fixed: STREAM_INFO_FIXED }
+            }
             FILE_NAME_INFORMATION => InfoBytes { bytes: info::name(&self.file_name(cookie)), fixed: NAME_INFO_FIXED },
             FILE_ALL_INFORMATION => {
                 InfoBytes { bytes: info::all(&facts, &handle, &self.file_name(cookie)), fixed: ALL_INFO_FIXED }
@@ -225,6 +247,178 @@ impl IoState {
     /// (Learn: "FILE_RENAME_INFORMATION"). Renaming a file to its own name
     /// in another case changes the case.
     pub fn rename(&mut self, cookie: u64, to: RenameTo, replace: bool) -> Result<(), NtStatus> {
+        let n = self.new_name(cookie, to)?;
+        let NewName { key, src_parent, src_name, dst_parent, new_bytes, new_path, existing } = n;
+        if let Some((target, name)) = &existing {
+            let tkey = NodeKey::of(target)?;
+            if tkey != key {
+                self.make_room(target, name, &dst_parent, replace)?;
+            } else if *name == new_bytes && src_name == new_bytes {
+                // Its own name, same case: nothing to do.
+                return Ok(());
+            }
+        }
+        let vr = self.vfs()?;
+        let flags = RenameFlags::default();
+        vr.vfs
+            .rename(&vr.ctx, &vr.cred, At::Node(&src_parent), &src_name, At::Node(&dst_parent), &new_bytes, flags)
+            .map_err(status_of)?;
+        let rec = self.files.get_mut(&cookie).expect("checked");
+        let d = rec.disk_mut().expect("disk");
+        d.parent = Some(dst_parent.clone());
+        d.name = new_bytes.clone();
+        d.path = new_path;
+        if let Some(n) = self.nodes.get_mut(&key) {
+            n.link = Some((dst_parent, new_bytes));
+        }
+        Ok(())
+    }
+
+    /// `FSCTL_GET_REPARSE_POINT` on file object `cookie`: a symbolic link's
+    /// `REPARSE_DATA_BUFFER` ([`info::symlink_reparse`]); anything else on
+    /// a volume is `STATUS_NOT_A_REPARSE_POINT` (Learn:
+    /// "FSCTL_GET_REPARSE_POINT"), anything not on one
+    /// `STATUS_INVALID_DEVICE_REQUEST`.
+    pub fn reparse_point(&self, cookie: u64) -> Result<Vec<u8>, NtStatus> {
+        let rec = self.files.get(&cookie).ok_or(STATUS_INVALID_HANDLE)?;
+        let d = rec.disk().ok_or(STATUS_INVALID_DEVICE_REQUEST)?;
+        if d.node.kind().map_err(status_of)? != FileType::Symlink {
+            return Err(STATUS_NOT_A_REPARSE_POINT);
+        }
+        Ok(info::symlink_reparse(&d.node.readlink().map_err(status_of)?))
+    }
+
+    /// A device or file-system control code `code` on file object `cookie`
+    /// (a file or directory on a volume) with `outlen` bytes for the answer:
+    /// the status and the bytes to return. `FSCTL_GET_REPARSE_POINT` is the
+    /// one Poly's volumes answer: a buffer smaller than the header is
+    /// `STATUS_BUFFER_TOO_SMALL`, one that holds part of the answer gets
+    /// that part and `STATUS_BUFFER_OVERFLOW`. Every other code is
+    /// `STATUS_INVALID_DEVICE_REQUEST` (`ERROR_INVALID_FUNCTION`).
+    pub fn fs_control(
+        &mut self,
+        cookie: u64,
+        code: u32,
+        input: &[u8],
+        outlen: usize,
+    ) -> Result<(NtStatus, Vec<u8>), NtStatus> {
+        match code {
+            FSCTL_SET_REPARSE_POINT => self.set_reparse_point(cookie, input).map(|()| (STATUS_SUCCESS, Vec::new())),
+            FSCTL_GET_REPARSE_POINT => {
+                let mut data = self.reparse_point(cookie)?;
+                if outlen < REPARSE_HEADER_SIZE {
+                    return Err(STATUS_BUFFER_TOO_SMALL);
+                }
+                if data.len() > outlen {
+                    data.truncate(outlen);
+                    return Ok((STATUS_BUFFER_OVERFLOW, data));
+                }
+                Ok((STATUS_SUCCESS, data))
+            }
+            _ => Err(STATUS_INVALID_DEVICE_REQUEST),
+        }
+    }
+
+    /// `FSCTL_SET_REPARSE_POINT` with a symbolic link's
+    /// `REPARSE_DATA_BUFFER` ([`info::parse_symlink_reparse`]) on an empty
+    /// file or directory: its name becomes a VFS symbolic link to the
+    /// target (what Poly's volumes keep of a reparse point). A file with
+    /// data, another tag, or a target on no volume is `STATUS_NOT_SUPPORTED`;
+    /// a directory with entries `STATUS_DIRECTORY_NOT_EMPTY`. The file object
+    /// stays on what it was opened on, which no longer has that name (a
+    /// program closes it next; to be confirmed what else Windows allows).
+    pub fn set_reparse_point(&mut self, cookie: u64, input: &[u8]) -> Result<(), NtStatus> {
+        let rec = self.files.get(&cookie).ok_or(STATUS_INVALID_HANDLE)?;
+        let d = rec.disk().ok_or(STATUS_INVALID_DEVICE_REQUEST)?;
+        let (node, parent, name) = (d.node.clone(), d.parent.clone().ok_or(STATUS_ACCESS_DENIED)?, d.name.clone());
+        let link = info::parse_symlink_reparse(input)?;
+        let target = match link.volume {
+            None => link.path,
+            Some(letter) => {
+                let v = self
+                    .volumes
+                    .iter()
+                    .find(|v| v.letter.is_some_and(|l| l.eq_ignore_ascii_case(&letter)))
+                    .ok_or(STATUS_NOT_SUPPORTED)?;
+                let mut t = v.path.clone();
+                if t.len() > 1 && t.last() == Some(&b'/') {
+                    t.pop();
+                }
+                if t == b"/" {
+                    t.clear();
+                }
+                t.extend_from_slice(&link.path);
+                t
+            }
+        };
+        let attr = node.attr().map_err(status_of)?;
+        let vr = self.vfs()?;
+        match attr.kind {
+            FileType::Directory => {
+                if walk::list(vr, &node)?.iter().any(|n| n != b"." && n != b"..") {
+                    return Err(STATUS_DIRECTORY_NOT_EMPTY);
+                }
+                vr.vfs.rmdir(&vr.ctx, &vr.cred, At::Node(&parent), &name).map_err(status_of)?;
+            }
+            FileType::Regular if attr.size == 0 => {
+                vr.vfs.unlink(&vr.ctx, &vr.cred, At::Node(&parent), &name).map_err(status_of)?;
+            }
+            _ => return Err(STATUS_NOT_SUPPORTED),
+        }
+        vr.vfs.symlink(&vr.ctx, &vr.cred, &target, At::Node(&parent), &name).map_err(status_of)
+    }
+
+    /// Whether file object `cookie` is a file or directory on a volume
+    /// (not a console, pipe or inherited file).
+    pub fn is_disk(&self, cookie: u64) -> bool {
+        self.files.get(&cookie).is_some_and(|f| f.disk().is_some())
+    }
+
+    /// `FileLinkInformation` (`FILE_LINK_INFORMATION` has
+    /// `FILE_RENAME_INFORMATION`'s layout, `ntifs.h`): another name for the
+    /// file, on the same volume (`STATUS_NOT_SAME_DEVICE`). A directory
+    /// cannot get one (`STATUS_FILE_IS_A_DIRECTORY`); an existing name is
+    /// `STATUS_OBJECT_NAME_COLLISION` without `ReplaceIfExists`, and is
+    /// replaced as by a rename otherwise (Learn: "FILE_LINK_INFORMATION";
+    /// what Windows does when the name already is one of the file's own is
+    /// to be confirmed: Poly leaves it, or reports the collision).
+    pub fn link(&mut self, cookie: u64, to: RenameTo, replace: bool) -> Result<(), NtStatus> {
+        let rec = self.files.get(&cookie).ok_or(STATUS_INVALID_HANDLE)?;
+        let node = rec.disk().ok_or(STATUS_INVALID_DEVICE_REQUEST)?.node.clone();
+        if node.attr().map_err(status_of)?.kind == FileType::Directory {
+            return Err(STATUS_FILE_IS_A_DIRECTORY);
+        }
+        let NewName { key, dst_parent, new_bytes, existing, .. } = self.new_name(cookie, to)?;
+        if let Some((target, name)) = &existing {
+            if NodeKey::of(target)? == key {
+                return if replace { Ok(()) } else { Err(STATUS_OBJECT_NAME_COLLISION) };
+            }
+            self.make_room(target, name, &dst_parent, replace)?;
+        }
+        let vr = self.vfs()?;
+        vr.vfs.link_node(&vr.ctx, &vr.cred, &node, PathArg::new(At::Node(&dst_parent), &new_bytes)).map_err(status_of)
+    }
+
+    /// Take the name `name` in `dir` that a rename or a new link wants, held
+    /// by `target`: `STATUS_OBJECT_NAME_COLLISION` without `replace`,
+    /// `STATUS_ACCESS_DENIED` when `target` is a directory, read-only or
+    /// open (Learn: "FILE_RENAME_INFORMATION").
+    fn make_room(&mut self, target: &NodeRef, name: &[u8], dir: &NodeRef, replace: bool) -> Result<(), NtStatus> {
+        if !replace {
+            return Err(STATUS_OBJECT_NAME_COLLISION);
+        }
+        let tkey = NodeKey::of(target)?;
+        let tattr = target.attr().map_err(status_of)?;
+        let open = self.nodes.get(&tkey).is_some_and(|n| n.opens > 0);
+        if tattr.kind == FileType::Directory || tattr.perm & 0o222 == 0 || open {
+            return Err(STATUS_ACCESS_DENIED);
+        }
+        let vr = self.vfs()?;
+        vr.vfs.unlink(&vr.ctx, &vr.cred, At::Node(dir), name).map_err(status_of)
+    }
+
+    /// Resolve where a new name (`to`) for file object `cookie`'s file goes.
+    fn new_name(&self, cookie: u64, to: RenameTo) -> Result<NewName, NtStatus> {
         let rec = self.files.get(&cookie).ok_or(STATUS_INVALID_HANDLE)?;
         let d = rec.disk().ok_or(STATUS_INVALID_DEVICE_REQUEST)?;
         let (volume, key) = (d.volume, d.key);
@@ -265,36 +459,8 @@ impl IoState {
             new_path.truncate(i);
         }
         walk::push_component(&mut new_path, last);
-        let flags = RenameFlags::default();
-        if let Some(target) = &found.node {
-            let tkey = NodeKey::of(target)?;
-            if tkey != key {
-                if !replace {
-                    return Err(STATUS_OBJECT_NAME_COLLISION);
-                }
-                let tattr = target.attr().map_err(status_of)?;
-                let open = self.nodes.get(&tkey).is_some_and(|n| n.opens > 0);
-                if tattr.kind == FileType::Directory || tattr.perm & 0o222 == 0 || open {
-                    return Err(STATUS_ACCESS_DENIED);
-                }
-                vr.vfs.unlink(&vr.ctx, &vr.cred, At::Node(&dst_parent), &found.name).map_err(status_of)?;
-            } else if found.name == new_bytes && src_name == new_bytes {
-                // Its own name, same case: nothing to do.
-                return Ok(());
-            }
-        }
-        vr.vfs
-            .rename(&vr.ctx, &vr.cred, At::Node(&src_parent), &src_name, At::Node(&dst_parent), &new_bytes, flags)
-            .map_err(status_of)?;
-        let rec = self.files.get_mut(&cookie).expect("checked");
-        let d = rec.disk_mut().expect("disk");
-        d.parent = Some(dst_parent.clone());
-        d.name = new_bytes.clone();
-        d.path = new_path;
-        if let Some(n) = self.nodes.get_mut(&key) {
-            n.link = Some((dst_parent, new_bytes));
-        }
-        Ok(())
+        let existing = found.node.clone().map(|n| (n, found.name.clone()));
+        Ok(NewName { key, src_parent, src_name, dst_parent, new_bytes, new_path, existing })
     }
 
     /// `NtQueryVolumeInformationFile(class)`.

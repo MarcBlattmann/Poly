@@ -92,6 +92,27 @@ use symbols::Symbols;
 type Result<T = ()> = std::result::Result<T, String>;
 
 const BOOT_TIMEOUT: Duration = Duration::from_secs(60);
+
+thread_local! {
+    /// This thread's boot timeout ([`with_boot_timeout`]; [`BOOT_TIMEOUT`]
+    /// unless a test asks for more).
+    static THREAD_BOOT_TIMEOUT: std::cell::Cell<Duration> = const { std::cell::Cell::new(BOOT_TIMEOUT) };
+}
+
+/// How long a boot of this thread may run before it is killed.
+fn boot_timeout() -> Duration {
+    THREAD_BOOT_TIMEOUT.with(std::cell::Cell::get)
+}
+
+/// Run `f` with boots of this thread allowed `timeout` instead of
+/// [`BOOT_TIMEOUT`] (a test whose program runs for longer, such as a
+/// benchmark under TCG).
+fn with_boot_timeout<T>(timeout: Duration, f: impl FnOnce() -> T) -> T {
+    let old = THREAD_BOOT_TIMEOUT.with(|t| t.replace(timeout));
+    let r = f();
+    THREAD_BOOT_TIMEOUT.with(|t| t.set(old));
+    r
+}
 /// Must match `selftest::PASS_MARKER` in the kernel.
 const PASS_MARKER: &str = "POLY-SELFTEST: PASS";
 /// QEMU exit statuses produced by the kernel's `qemu::ExitCode`.
@@ -480,7 +501,7 @@ impl Boot {
     fn tests(&self, log: &str) -> Result<ktest::Report> {
         let report = ktest::parse(log);
         let end = if self.timed_out {
-            ktest::End::TimedOut { secs: BOOT_TIMEOUT.as_secs(), last_line: ktest::last_line(&self.output) }
+            ktest::End::TimedOut { secs: boot_timeout().as_secs(), last_line: ktest::last_line(&self.output) }
         } else {
             ktest::End::Exited
         };
@@ -492,7 +513,7 @@ impl Boot {
 /// Say that a boot ran into [`BOOT_TIMEOUT`] (and is being killed), with the
 /// last line it printed, before whatever check then fails on it.
 fn report_timeout(last_line: &str) {
-    eprintln!("==> QEMU timed out after {} s (last line: {last_line:?}); killing it", BOOT_TIMEOUT.as_secs());
+    eprintln!("==> QEMU timed out after {} s (last line: {last_line:?}); killing it", boot_timeout().as_secs());
 }
 
 /// Boot headless with a timeout, echoing serial output as it arrives, with
@@ -635,7 +656,7 @@ fn boot_with_once(
         }
     });
 
-    let deadline = Instant::now() + BOOT_TIMEOUT;
+    let deadline = Instant::now() + boot_timeout();
     let (mut lines, mut taken, mut timed_out) = (Vec::new(), None, false);
     let status = loop {
         for line in rx.try_iter() {

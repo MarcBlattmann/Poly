@@ -56,7 +56,7 @@ mod tests {
                     return Err("System32 lacks ucrtbase.dll or msvcrt.dll");
                 }
             }
-            let vr = VfsRoot { vfs, ctx, cred: Cred::root() };
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
             let exe = super::super::CRTTEST;
             create::install_file(&vr, &root, APP_DIR, "crttest.exe", exe).map_err(|_| "cannot write crttest.exe")?;
             let flags = OpenFlags::CREAT | OpenFlags::TRUNC | OpenFlags::RDWR;

@@ -189,7 +189,13 @@ impl CreateHook<'_> {
         remaining: &[u16],
     ) -> Result<ObjectId, NtStatus> {
         let p = self.params;
-        let (parts, trailing) = split_path(remaining)?;
+        let (mut parts, trailing) = split_path(remaining)?;
+        // `name::$DATA` is the file's default data stream, the file itself
+        // (Learn: "File Streams (Local File Systems)"); Poly's volumes have
+        // no other streams, so any other `:` stays an invalid name.
+        if let Some(last) = parts.last_mut() {
+            *last = names::without_default_stream(last);
+        }
         // The whole name is checked before anything is looked up.
         for part in &parts {
             names::check_component(part)?;

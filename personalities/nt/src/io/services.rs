@@ -679,8 +679,8 @@ pub fn set_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resul
     }
     let mut data = alloc::vec![0u8; size];
     abi::read(k, input, &mut data)?;
-    // The rename target's name follows its fixed part.
-    let rename = if class == FILE_RENAME_INFORMATION {
+    // A rename or link target's name follows its fixed part.
+    let rename = if class == FILE_RENAME_INFORMATION || class == FILE_LINK_INFORMATION {
         let name_len = u32::from_le_bytes(data[16..20].try_into().expect("4 bytes")) as usize;
         if !name_len.is_multiple_of(2) || name_len == 0 || RENAME_INFO_FIXED + name_len > len.max(RENAME_INFO_FIXED) {
             return Err(STATUS_INVALID_PARAMETER);
@@ -715,7 +715,7 @@ pub fn set_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resul
                 let ignore = flags & FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE != 0;
                 sys.io.set_disposition(cookie, flags & FILE_DISPOSITION_DELETE != 0, ignore)
             }
-            FILE_RENAME_INFORMATION => {
+            FILE_RENAME_INFORMATION | FILE_LINK_INFORMATION => {
                 let (replace, root, name) = rename.expect("decoded");
                 let to = if root != 0 {
                     let (_, dir) = file_handle(sys, &caller, Handle(root), 0)?;
@@ -729,7 +729,11 @@ pub fn set_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resul
                 } else {
                     RenameTo::SameDirectory(name)
                 };
-                sys.io.rename(cookie, to, replace)
+                if class == FILE_LINK_INFORMATION {
+                    sys.io.link(cookie, to, replace)
+                } else {
+                    sys.io.rename(cookie, to, replace)
+                }
             }
             _ => Err(STATUS_INVALID_INFO_CLASS),
         };

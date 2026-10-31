@@ -34,6 +34,7 @@ use crate::pdata::{self, RuntimeFunction};
 use crate::record::ExceptionRecord;
 use crate::unwind::{Handler, unwind_leaf, virtual_unwind};
 use crate::{BadAddress, Memory, UnwindError};
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 /// The most frames one walk visits.
@@ -201,13 +202,13 @@ struct Step {
     handler: Option<Handler>,
     establisher_frame: u64,
     /// The caller's context.
-    next: Context,
+    next: Box<Context>,
 }
 
 /// Unwind one frame of `cur`, asking for handlers of `handler_type`.
 fn step(target: &dyn Target, cur: &Context, handler_type: u8) -> Result<Step, UnwindError> {
     let pc = cur.rip;
-    let mut next = cur.clone();
+    let mut next = Box::new(cur.clone());
     match target.function_entry(pc)? {
         None => {
             unwind_leaf(&mut next, target)?;
@@ -236,7 +237,7 @@ pub fn dispatch_exception(
     ctx: &mut Context,
 ) -> DispatchResult {
     let limits = target.stack_limits();
-    let mut cur = ctx.clone();
+    let mut cur = Box::new(ctx.clone());
     for _ in 0..MAX_FRAMES {
         // A zero return address ends the stack (the thread's first frame).
         if cur.rip == 0 {
@@ -259,7 +260,7 @@ pub fn dispatch_exception(
                 function,
                 establisher_frame: s.establisher_frame,
                 target_ip: 0,
-                frame: cur.clone(),
+                frame: (*cur).clone(),
                 handler,
                 scope_index: 0,
             };
@@ -313,7 +314,7 @@ pub fn unwind(
     ctx: &Context,
 ) -> Result<Context, UnwindFailure> {
     let limits = target.stack_limits();
-    let mut cur = ctx.clone();
+    let mut cur = Box::new(ctx.clone());
     for _ in 0..MAX_FRAMES {
         if cur.rip == 0 || !limits.contains(cur.rsp()) {
             return Err(if target_frame.is_none() { UnwindFailure::EndOfStack } else { UnwindFailure::BadStack });
@@ -343,7 +344,7 @@ pub fn unwind(
                 function,
                 establisher_frame: s.establisher_frame,
                 target_ip,
-                frame: cur.clone(),
+                frame: (*cur).clone(),
                 handler,
                 scope_index: 0,
             };
@@ -354,7 +355,7 @@ pub fn unwind(
         if is_target {
             cur.rip = target_ip;
             cur.gpr[usize::from(RAX)] = return_value;
-            return Ok(cur);
+            return Ok(*cur);
         }
         cur = s.next;
     }
@@ -376,7 +377,7 @@ pub struct Frame {
 pub fn walk(target: &dyn Target, ctx: &Context, max: usize) -> Vec<Frame> {
     let limits = target.stack_limits();
     let mut out = Vec::new();
-    let mut cur = ctx.clone();
+    let mut cur = Box::new(ctx.clone());
     while out.len() < max.min(MAX_FRAMES) && cur.rip != 0 && limits.contains(cur.rsp()) {
         let Ok(s) = step(target, &cur, UNW_FLAG_NHANDLER) else {
             out.push(Frame { pc: cur.rip, sp: cur.rsp(), function: None });

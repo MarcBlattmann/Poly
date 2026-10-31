@@ -99,6 +99,33 @@ fn the_stack_grows_through_its_guard_page_until_the_last_page() {
 }
 
 #[test]
+fn a_new_threads_stack_grows_through_its_guard_page_too() {
+    // 7-Zip's worker threads (`_beginthreadex` with a 1 MiB reservation)
+    // touch their guard page at once; that must grow the stack, as for the
+    // first thread, not raise STATUS_GUARD_PAGE_VIOLATION (ADR 0091).
+    let mut f = Fake::bare();
+    start(&mut f, &test_exe(false)).unwrap();
+    let req = crate::kernel::ThreadCreate {
+        start_routine: IMAGE_BASE + 0x1000,
+        argument: 0,
+        stack_reserve: 0x10_0000,
+        stack_commit: 0,
+        suspended: false,
+        desired_access: 0x1F_FFFF,
+    };
+    let t = ThreadRef(TID.0 + 1);
+    let s = exec::create_thread(&mut f.sys, &mut f.proc, &mut f.mem, &req, t).unwrap();
+    let guard = s.stack_limit - 0x1000;
+    assert_eq!(f.proc.vm.query(guard).unwrap().protect, PAGE_READWRITE | PAGE_GUARD);
+    let fault = exec::access_fault(&mut f.proc, &mut f.mem, t, guard + 0xFF8);
+    assert_eq!(fault, AccessFault::StackGrown { limit: guard });
+    assert_eq!(f.u64_at(s.teb + TEB_STACK_LIMIT), guard);
+    assert_eq!(f.proc.vm.query(guard - 0x1000).unwrap().protect, PAGE_READWRITE | PAGE_GUARD);
+    // Its reservation is the one asked for.
+    assert_eq!(f.proc.vm.query(guard).unwrap().allocation_base, s.stack_base - 0x10_0000);
+}
+
+#[test]
 fn an_image_whose_base_is_taken_is_relocated() {
     let mut f = Fake::bare();
     // Something already lives at the preferred base.

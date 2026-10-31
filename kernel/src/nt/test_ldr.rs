@@ -839,7 +839,7 @@ mod tests {
             let vfs = crate::fs::vfs();
             let ctx = vfs.root_context().map_err(|_| "no VFS")?;
             let root = vfs.lookup(&ctx, &Cred::root(), At::Cwd, b"/nt/c", true).map_err(|_| "no C:")?;
-            let vr = VfsRoot { vfs, ctx, cred: Cred::root() };
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
             for (name, bytes) in [("polyldr.dll", dll), ("polydly.dll", delay_dll_image())] {
                 create::install_file(&vr, &root, APP_DIR, name, &bytes).map_err(|_| "cannot write a test DLL")?;
             }

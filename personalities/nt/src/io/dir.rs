@@ -75,15 +75,23 @@ impl IoState {
         let mut scan = match (&rec.scan, q.restart) {
             (Some(s), false) => s.clone(),
             (old, _) => {
-                let mut names = super::walk::list(vr, &dir)?;
-                if at_root {
-                    names.retain(|n| n != b"." && n != b"..");
-                }
                 let pattern = match (q.pattern, old) {
                     (Some(p), _) => p.to_vec(),
                     (None, Some(o)) => o.pattern.clone(),
                     (None, None) => Vec::new(),
                 };
+                // A pattern without wildcards names one entry (in any case):
+                // `FindFirstFileW` of a path, which a program may call for
+                // every file it makes; reading the whole directory each time
+                // made thousands of files quadratic (ADR 0091).
+                let mut names = if names::is_literal(&pattern) {
+                    super::walk::find_all(vr, &dir, &pattern)?
+                } else {
+                    super::walk::list(vr, &dir)?
+                };
+                if at_root {
+                    names.retain(|n| n != b"." && n != b"..");
+                }
                 Scan { pattern, names, next: 0, returned: false }
             }
         };
