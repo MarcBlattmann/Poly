@@ -134,6 +134,10 @@ fn u32_in(input: &[u8], at: usize) -> Result<u32> {
 
 /// `NtDeviceIoControlFile` on a socket handle (`file`), the arguments
 /// already read: run the request and finish it.
+// Not inlined: its locals would otherwise sit in the frame of every system
+// call (`dispatch_with` inlines the services), where the kernel stack is
+// tight (`NtCreateUserProcess`).
+#[inline(never)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn control<K: NtKernel>(
     k: &mut K,
@@ -553,6 +557,7 @@ fn recv<K: NtKernel>(
 
 /// `NtReadFile` on a socket handle: a receive as the socket's mode says.
 /// `None` if `h` is not a socket.
+#[inline(never)]
 pub(crate) fn read_file<K: NtKernel>(k: &mut K, h: u64, n: Notify, buf: u64, len: usize) -> Option<Result<NtStatus>> {
     let file = socket_file(k, h)?;
     let input = afd::RecvReq { flags: 0, buf, len: len as u64 }.encode();
@@ -560,6 +565,7 @@ pub(crate) fn read_file<K: NtKernel>(k: &mut K, h: u64, n: Notify, buf: u64, len
 }
 
 /// `NtWriteFile` on a socket handle: a send. `None` if `h` is not a socket.
+#[inline(never)]
 pub(crate) fn write_file<K: NtKernel>(k: &mut K, h: u64, n: Notify, buf: u64, len: usize) -> Option<Result<NtStatus>> {
     let file = socket_file(k, h)?;
     let input = afd::SendReq { flags: 0, addr_len: 0, buf, len: len as u64, addr: [0; addr::MAX_SIZE] }.encode();

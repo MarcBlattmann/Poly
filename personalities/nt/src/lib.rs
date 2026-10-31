@@ -142,6 +142,13 @@ impl SyscallDispatch for Nt {
 /// [`Outcome::Unimplemented`] (what Windows returns for a service number
 /// that does not exist is to be confirmed by the spec agent:
 /// `STATUS_INVALID_SYSTEM_SERVICE` is a candidate).
+///
+/// Never inlined: inlined into the kernel's system call entry, the locals
+/// of every service it inlines in turn would stay in that frame for the
+/// whole call, and deep calls such as `NtCreateUserProcess` (process
+/// start, image mapping, the memory map) would then overflow a 16 KiB
+/// kernel stack.
+#[inline(never)]
 pub fn dispatch_with<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Outcome {
     let number = regs.rax as u32;
     let Some(service) = Service::from_number(number) else {
