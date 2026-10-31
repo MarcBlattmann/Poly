@@ -1,0 +1,719 @@
+//! The Wayland server: clients, their objects, request dispatch, and the
+//! protocol logic of the core protocol, xdg-shell, xdg-decoration and
+//! presentation-time, feeding a [`Scene`].
+//!
+//! The server never touches a socket, a file descriptor or memory mapping
+//! itself. The caller (the compositor binary, or a test) owns the
+//! transport: it hands each client's bytes and file descriptors to
+//! [`Server::receive`], sends what [`Server::take_output`] returns, and
+//! implements [`Host`], which maps a client's shared memory and closes file
+//! descriptors. Everything here is therefore host-tested without displays,
+//! sockets or another process.
+//!
+//! # Dispatch
+//!
+//! [`Server::receive`] appends to the client's input and handles every
+//! complete message: it looks up the target object (`wl_display.error`
+//! `invalid_object` if there is none), the request by opcode and version
+//! (`invalid_method`), decodes the arguments with the interface's generated
+//! table (taking file descriptors in order), checks that every `new_id` is
+//! a free client ID and every `object` exists and has the interface the XML
+//! names, and calls the interface's handler with the typed request. A
+//! handler's protocol error goes out as `wl_display.error` and the client
+//! is marked failed: no more of its requests are handled, and the caller
+//! disconnects it after sending what is queued. After a destructor request
+//! the object is removed and `wl_display.delete_id` sent.
+//!
+//! # Buffers
+//!
+//! A committed `wl_shm` buffer is copied (the damaged part of it) into the
+//! window's content in the scene and released at once, so clients may
+//! reuse one buffer, and the scene never reads client memory while
+//! composing.
+
+mod decoration;
+mod display;
+mod output;
+mod presentation;
+mod shm;
+mod surface;
+mod xdg;
+
+use crate::compose::{Framebuffer, Hit, Rect, Scene, WindowId};
+use crate::protocol::{
+    wl_buffer, wl_callback, wl_compositor, wl_display, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry,
+    wl_seat, wl_shm, wl_shm_pool, wl_surface, wl_touch, wp_presentation, wp_presentation_feedback, xdg_popup,
+    xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base, zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
+};
+use crate::seat::{BTN_LEFT, Capabilities, InputEvent};
+use crate::wire::{self, Arg, ArgKind, Fd, Fixed, Header, Interface, Message, ObjectId, SERVER_ID_START};
+use alloc::boxed::Box;
+use alloc::collections::{BTreeMap, VecDeque};
+use alloc::format;
+use alloc::rc::Rc;
+use alloc::string::String;
+use alloc::vec::Vec;
+
+pub(crate) use shm::{Buffer, Pool};
+pub(crate) use surface::{Region, Surface};
+pub(crate) use xdg::{Popup, Positioner, Toplevel, XdgSurface};
+
+/// A client's shared memory, mapped by the [`Host`].
+pub trait ShmMap {
+    /// The mapped size in bytes.
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// Map `size` bytes instead (`wl_shm_pool.resize`); false on failure.
+    fn resize(&mut self, size: usize) -> bool;
+    /// Copy `dst.len()` bytes from `offset`; false (and nothing copied) if
+    /// that is not inside the mapping.
+    fn read(&self, offset: usize, dst: &mut [u8]) -> bool;
+}
+
+/// What the server needs from its environment.
+pub trait Host {
+    /// Map `size` bytes of the shared memory file `fd` (`wl_shm.create_pool`).
+    /// The host owns `fd` from here on: it keeps it for resizing and closes
+    /// it when the mapping is dropped, or at once on failure (`None`).
+    fn map_shm(&mut self, fd: Fd, size: usize) -> Option<Box<dyn ShmMap>>;
+    /// Close a file descriptor the server does not keep.
+    fn close_fd(&mut self, fd: Fd);
+}
+
+/// A connected client.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ClientId(pub u32);
+
+/// The output the server advertises (`wl_output`) and composes for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputConfig {
+    /// The mode, in physical pixels.
+    pub width: u32,
+    pub height: u32,
+    /// The integer scale (HiDPI): logical pixels are `scale` physical ones.
+    pub scale: u32,
+    /// Refresh rate in millihertz.
+    pub refresh_mhz: u32,
+    /// Physical size in millimetres (0 if unknown).
+    pub physical_mm: (i32, i32),
+    pub make: String,
+    pub model: String,
+    pub name: String,
+    pub description: String,
+}
+
+impl Default for OutputConfig {
+    fn default() -> OutputConfig {
+        OutputConfig {
+            width: 1024,
+            height: 768,
+            scale: 1,
+            refresh_mhz: 60_000,
+            physical_mm: (0, 0),
+            make: "Poly".into(),
+            model: "virtual output".into(),
+            name: "Virtual-1".into(),
+            description: "Poly virtual output".into(),
+        }
+    }
+}
+
+/// The server's setup.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Config {
+    pub output: OutputConfig,
+    pub seat_name: String,
+}
+
+impl Default for Config {
+    fn default() -> Config {
+        Config { output: OutputConfig::default(), seat_name: "seat0".into() }
+    }
+}
+
+/// The versions of the globals the server implements.
+pub mod versions {
+    pub const COMPOSITOR: u32 = 6;
+    pub const SHM: u32 = 2;
+    pub const OUTPUT: u32 = 4;
+    pub const SEAT: u32 = 7;
+    pub const XDG_WM_BASE: u32 = 6;
+    pub const DECORATION_MANAGER: u32 = 2;
+    pub const PRESENTATION: u32 = 1;
+}
+
+/// A global: its name in the registry, interface and version.
+#[derive(Clone, Copy, Debug)]
+struct Global {
+    name: u32,
+    interface: &'static Interface,
+    version: u32,
+}
+
+/// A protocol error: the object it is about, the interface's error code,
+/// and a message for people.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ProtoError {
+    pub object: ObjectId,
+    pub code: u32,
+    pub message: String,
+}
+
+pub(crate) fn error(object: ObjectId, code: u32, message: impl Into<String>) -> ProtoError {
+    ProtoError { object, code, message: message.into() }
+}
+
+pub(crate) type Res<T = ()> = Result<T, ProtoError>;
+
+/// What an object is, with its state.
+#[derive(Debug)]
+pub(crate) enum Data {
+    Display,
+    Registry,
+    Callback,
+    Compositor,
+    Region(Region),
+    Surface(Box<Surface>),
+    Shm,
+    Pool(Rc<Pool>),
+    Buffer(Buffer),
+    Output,
+    Seat,
+    /// `wl_pointer`, `wl_keyboard`, `wl_touch`: no events until the input
+    /// stack is there.
+    InputDevice,
+    WmBase,
+    Positioner(Positioner),
+    XdgSurface(Box<XdgSurface>),
+    Toplevel(Box<Toplevel>),
+    Popup(Popup),
+    DecorationManager,
+    /// The toplevel it decorates.
+    Decoration(ObjectId),
+    Presentation,
+    Feedback,
+}
+
+/// An object of a client: its interface, the version it was made with, and
+/// what it is.
+#[derive(Debug)]
+pub(crate) struct Object {
+    pub interface: &'static Interface,
+    pub version: u32,
+    pub data: Data,
+}
+
+/// A client's connection state.
+#[derive(Debug, Default)]
+pub(crate) struct Client {
+    pub objects: BTreeMap<u32, Object>,
+    input: Vec<u8>,
+    fds: VecDeque<Fd>,
+    output: Vec<u8>,
+    output_fds: Vec<Fd>,
+    next_server_id: u32,
+    /// Why the client was cut off, after a protocol error.
+    failed: Option<String>,
+}
+
+impl Client {
+    /// Queue `msg` from object `id`, unless the object is gone or older
+    /// than the event.
+    pub fn send(&mut self, id: ObjectId, msg: impl Message) {
+        let Some(obj) = self.objects.get(&id.0) else { return };
+        let opcode = msg.opcode();
+        let Some(desc) = obj.interface.events.get(usize::from(opcode)) else { return };
+        if desc.since > obj.version {
+            return;
+        }
+        // Too long only for a string past 64 KiB, which the server never makes.
+        let _ = wire::encode(&mut self.output, &mut self.output_fds, id, opcode, &msg.into_args());
+    }
+
+    pub fn insert(&mut self, id: ObjectId, interface: &'static Interface, version: u32, data: Data) {
+        self.objects.insert(id.0, Object { interface, version, data });
+    }
+
+    pub fn get(&self, id: ObjectId) -> Option<&Object> {
+        self.objects.get(&id.0)
+    }
+
+    pub fn data(&self, id: ObjectId) -> Option<&Data> {
+        self.objects.get(&id.0).map(|o| &o.data)
+    }
+
+    pub fn data_mut(&mut self, id: ObjectId) -> Option<&mut Data> {
+        self.objects.get_mut(&id.0).map(|o| &mut o.data)
+    }
+
+    pub fn version(&self, id: ObjectId) -> u32 {
+        self.objects.get(&id.0).map_or(0, |o| o.version)
+    }
+
+    /// Remove an object; one the client made gets `wl_display.delete_id`.
+    pub fn delete(&mut self, id: ObjectId) -> Option<Object> {
+        let obj = self.objects.remove(&id.0)?;
+        if !id.is_server() {
+            self.send(ObjectId::DISPLAY, wl_display::Event::DeleteId { id: id.0 });
+        }
+        Some(obj)
+    }
+
+    /// Objects of one kind, by ID.
+    pub fn ids_where(&self, f: impl Fn(&Data) -> bool) -> Vec<ObjectId> {
+        self.objects.iter().filter(|(_, o)| f(&o.data)).map(|(id, _)| ObjectId(*id)).collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn new_server_id(&mut self) -> ObjectId {
+        while self.objects.contains_key(&(SERVER_ID_START + self.next_server_id)) {
+            self.next_server_id = self.next_server_id.wrapping_add(1) & 0x00ff_ffff;
+        }
+        let id = ObjectId(SERVER_ID_START + self.next_server_id);
+        self.next_server_id = self.next_server_id.wrapping_add(1) & 0x00ff_ffff;
+        id
+    }
+
+    /// Callbacks are made, answered and gone at once (`wl_display.sync`).
+    pub fn callback_done(&mut self, id: ObjectId, data: u32) {
+        self.send(id, wl_callback::Event::Done { callback_data: data });
+        self.delete(id);
+    }
+}
+
+/// The state of the seat.
+#[derive(Debug, Default)]
+struct SeatState {
+    name: String,
+    capabilities: Capabilities,
+    /// Every capability the seat ever had (`missing_capability` is for
+    /// those it never had).
+    ever: Capabilities,
+    pointer: (Fixed, Fixed),
+}
+
+/// One frame's presentation time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameTime {
+    /// When it was shown, in nanoseconds on `CLOCK_MONOTONIC`.
+    pub monotonic_ns: u64,
+}
+
+/// The Wayland server.
+pub struct Server {
+    host: Box<dyn Host>,
+    pub(crate) scene: Scene,
+    pub(crate) clients: BTreeMap<ClientId, Client>,
+    next_client: u32,
+    globals: Vec<Global>,
+    pub(crate) output: OutputConfig,
+    seat: SeatState,
+    serial: u32,
+    /// The toplevel with focus.
+    pub(crate) active: Option<(ClientId, ObjectId)>,
+    frame_seq: u64,
+}
+
+impl core::fmt::Debug for Server {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Server").field("clients", &self.clients.len()).field("scene", &self.scene).finish()
+    }
+}
+
+/// A window's owner in the scene: the client and its surface.
+pub(crate) fn owner_tag(c: ClientId, surface: ObjectId) -> u64 {
+    u64::from(c.0) << 32 | u64::from(surface.0)
+}
+
+pub(crate) fn owner_of(tag: u64) -> (ClientId, ObjectId) {
+    (ClientId((tag >> 32) as u32), ObjectId(tag as u32))
+}
+
+impl Server {
+    pub fn new(config: Config, host: Box<dyn Host>) -> Server {
+        let o = &config.output;
+        let globals = [
+            (&wl_compositor::INTERFACE, versions::COMPOSITOR),
+            (&wl_shm::INTERFACE, versions::SHM),
+            (&wl_output::INTERFACE, versions::OUTPUT),
+            (&wl_seat::INTERFACE, versions::SEAT),
+            (&xdg_wm_base::INTERFACE, versions::XDG_WM_BASE),
+            (&zxdg_decoration_manager_v1::INTERFACE, versions::DECORATION_MANAGER),
+            (&wp_presentation::INTERFACE, versions::PRESENTATION),
+        ];
+        Server {
+            host,
+            scene: Scene::new(o.width, o.height, o.scale),
+            clients: BTreeMap::new(),
+            next_client: 1,
+            globals: globals
+                .iter()
+                .enumerate()
+                .map(|(i, (interface, version))| Global { name: i as u32 + 1, interface, version: *version })
+                .collect(),
+            output: config.output,
+            seat: SeatState { name: config.seat_name, ..SeatState::default() },
+            serial: 0,
+            active: None,
+            frame_seq: 0,
+        }
+    }
+
+    pub fn scene(&self) -> &Scene {
+        &self.scene
+    }
+
+    pub fn scene_mut(&mut self) -> &mut Scene {
+        &mut self.scene
+    }
+
+    pub(crate) fn next_serial(&mut self) -> u32 {
+        self.serial = self.serial.wrapping_add(1);
+        self.serial
+    }
+
+    /// A new client; its `wl_display` is object 1.
+    pub fn add_client(&mut self) -> ClientId {
+        let id = ClientId(self.next_client);
+        self.next_client += 1;
+        let mut client = Client::default();
+        client.insert(ObjectId::DISPLAY, &wl_display::INTERFACE, 1, Data::Display);
+        self.clients.insert(id, client);
+        id
+    }
+
+    /// Forget a client (disconnected or cut off): its windows go, its
+    /// shared memory is unmapped, file descriptors it sent are closed.
+    pub fn remove_client(&mut self, c: ClientId) {
+        let Some(mut client) = self.clients.remove(&c) else { return };
+        for fd in client.fds.drain(..) {
+            self.host.close_fd(fd);
+        }
+        for fd in client.output_fds.drain(..) {
+            self.host.close_fd(fd);
+        }
+        let windows: Vec<WindowId> =
+            self.scene.windows().iter().filter(|w| owner_of(w.owner()).0 == c).map(|w| w.id()).collect();
+        for w in windows {
+            self.scene.remove_window(w);
+        }
+        if self.active.is_some_and(|(ac, _)| ac == c) {
+            self.active = None;
+        }
+    }
+
+    pub fn clients(&self) -> impl Iterator<Item = ClientId> + '_ {
+        self.clients.keys().copied()
+    }
+
+    /// Why a client was cut off, if it was: send it what is queued, then
+    /// disconnect it.
+    pub fn failure(&self, c: ClientId) -> Option<&str> {
+        self.clients.get(&c)?.failed.as_deref()
+    }
+
+    /// What to send a client: bytes and the file descriptors to go with
+    /// them (empty if nothing is queued).
+    pub fn take_output(&mut self, c: ClientId) -> (Vec<u8>, Vec<Fd>) {
+        let Some(client) = self.clients.get_mut(&c) else { return (Vec::new(), Vec::new()) };
+        (core::mem::take(&mut client.output), core::mem::take(&mut client.output_fds))
+    }
+
+    /// Bytes and file descriptors from a client: handle every complete
+    /// message.
+    pub fn receive(&mut self, c: ClientId, bytes: &[u8], fds: Vec<Fd>) {
+        let Some(client) = self.clients.get_mut(&c).filter(|cl| cl.failed.is_none()) else {
+            for fd in fds {
+                self.host.close_fd(fd);
+            }
+            return;
+        };
+        client.input.extend_from_slice(bytes);
+        client.fds.extend(fds);
+        while let Some(header) = self.next_message(c) {
+            let Some(client) = self.clients.get_mut(&c) else { return };
+            let size = usize::from(header.size);
+            let body: Vec<u8> = client.input[wire::HEADER_SIZE..size].to_vec();
+            client.input.drain(..size);
+            if let Err(e) = self.handle(c, header, &body) {
+                self.post_error(c, e);
+                return;
+            }
+        }
+    }
+
+    /// The header of the next complete message, if there is one; a
+    /// malformed size cuts the client off.
+    fn next_message(&mut self, c: ClientId) -> Option<Header> {
+        let client = self.clients.get(&c)?;
+        if client.failed.is_some() {
+            return None;
+        }
+        let header = Header::parse(&client.input)?;
+        let size = usize::from(header.size);
+        if size < wire::HEADER_SIZE || size % 4 != 0 {
+            let e = error(ObjectId::DISPLAY, wl_display::Error::INVALID_METHOD.0, format!("message size {size}"));
+            self.post_error(c, e);
+            return None;
+        }
+        (client.input.len() >= size).then_some(header)
+    }
+
+    /// Send `wl_display.error` and stop handling the client's requests.
+    pub(crate) fn post_error(&mut self, c: ClientId, e: ProtoError) {
+        let Some(client) = self.clients.get_mut(&c) else { return };
+        client.send(
+            ObjectId::DISPLAY,
+            wl_display::Event::Error { object_id: e.object, code: e.code, message: e.message.clone() },
+        );
+        client.failed = Some(format!("object {} error {}: {}", e.object, e.code, e.message));
+    }
+
+    pub(crate) fn client(&mut self, c: ClientId) -> &mut Client {
+        self.clients.get_mut(&c).expect("a client being handled exists")
+    }
+
+    pub(crate) fn host(&mut self) -> &mut dyn Host {
+        &mut *self.host
+    }
+
+    /// Close the file descriptors among `args`.
+    fn close_fds(&mut self, args: &[Arg]) {
+        for a in args {
+            if let Arg::Fd(fd) = a {
+                self.host.close_fd(*fd);
+            }
+        }
+    }
+
+    fn handle(&mut self, c: ClientId, h: Header, body: &[u8]) -> Res {
+        let client = self.client(c);
+        let Some(obj) = client.get(h.object) else {
+            let msg = format!("invalid object {}", h.object);
+            return Err(error(ObjectId::DISPLAY, wl_display::Error::INVALID_OBJECT.0, msg));
+        };
+        let (interface, version) = (obj.interface, obj.version);
+        let invalid_method = |what: String| error(h.object, wl_display::Error::INVALID_METHOD.0, what);
+        let Some(desc) = interface.requests.get(usize::from(h.opcode)) else {
+            return Err(invalid_method(format!("{}: no request {}", interface.name, h.opcode)));
+        };
+        if desc.since > version {
+            return Err(invalid_method(format!("{}.{} needs version {}", interface.name, desc.name, desc.since)));
+        }
+        let mut taken = Vec::new();
+        let decoded = wire::decode_args(desc, body, &mut || {
+            let fd = client.fds.pop_front();
+            taken.extend(fd);
+            fd
+        });
+        let args = match decoded {
+            Ok(args) => args,
+            Err(e) => {
+                for fd in taken {
+                    self.host.close_fd(fd);
+                }
+                return Err(invalid_method(format!("{}.{}: {e}", interface.name, desc.name)));
+            }
+        };
+        if let Err(e) = self.check_args(c, desc, &args) {
+            self.close_fds(&args);
+            return Err(e);
+        }
+        self.request(c, h.object, interface, h.opcode, args)?;
+        if desc.destructor {
+            self.client(c).delete(h.object);
+        }
+        Ok(())
+    }
+
+    /// Every `new_id` a free client ID, every `object` there with the
+    /// interface the protocol names.
+    fn check_args(&mut self, c: ClientId, desc: &wire::MessageDesc, args: &[Arg]) -> Res {
+        let client = self.client(c);
+        let invalid = |what: String| error(ObjectId::DISPLAY, wl_display::Error::INVALID_OBJECT.0, what);
+        for (d, a) in desc.args.iter().zip(args) {
+            let new = match a {
+                Arg::NewId(id) => Some(*id),
+                Arg::DynNewId(n) => Some(n.id),
+                _ => None,
+            };
+            if let Some(id) = new
+                && (id.is_server() || client.get(id).is_some())
+            {
+                return Err(invalid(format!("{}: new id {id} is in use or not a client id", desc.name)));
+            }
+            if let (ArgKind::Object, Arg::Object(Some(id))) = (d.kind, a) {
+                let Some(obj) = client.get(*id) else {
+                    return Err(invalid(format!("{}: invalid object {id}", desc.name)));
+                };
+                if let Some(want) = d.interface
+                    && obj.interface.name != want
+                {
+                    return Err(invalid(format!(
+                        "{}: object {id} is a {}, not a {want}",
+                        desc.name, obj.interface.name
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Hand a decoded request to its interface's handler.
+    fn request(&mut self, c: ClientId, id: ObjectId, iface: &'static Interface, op: u16, args: Vec<Arg>) -> Res {
+        macro_rules! parse {
+            ($m:ident) => {
+                $m::Request::from_args(op, args)
+                    .map_err(|e| error(id, wl_display::Error::INVALID_METHOD.0, format!("{}: {e}", iface.name)))?
+            };
+        }
+        match iface.name {
+            wl_display::NAME => self.display_request(c, parse!(wl_display)),
+            wl_registry::NAME => self.registry_request(c, parse!(wl_registry)),
+            wl_compositor::NAME => self.compositor_request(c, id, parse!(wl_compositor)),
+            wl_region::NAME => self.region_request(c, id, parse!(wl_region)),
+            wl_surface::NAME => self.surface_request(c, id, parse!(wl_surface)),
+            wl_shm::NAME => self.shm_request(c, id, parse!(wl_shm)),
+            wl_shm_pool::NAME => self.pool_request(c, id, parse!(wl_shm_pool)),
+            wl_buffer::NAME => Ok(()), // destroy: the content was copied
+            wl_output::NAME => Ok(()), // release
+            wl_seat::NAME => self.seat_request(c, id, parse!(wl_seat)),
+            wl_pointer::NAME | wl_keyboard::NAME | wl_touch::NAME => Ok(()), // set_cursor, release
+            xdg_wm_base::NAME => self.wm_base_request(c, id, parse!(xdg_wm_base)),
+            xdg_positioner::NAME => self.positioner_request(c, id, parse!(xdg_positioner)),
+            xdg_surface::NAME => self.xdg_surface_request(c, id, parse!(xdg_surface)),
+            xdg_toplevel::NAME => self.toplevel_request(c, id, parse!(xdg_toplevel)),
+            xdg_popup::NAME => self.popup_request(c, id, parse!(xdg_popup)),
+            zxdg_decoration_manager_v1::NAME => {
+                self.decoration_manager_request(c, id, parse!(zxdg_decoration_manager_v1))
+            }
+            zxdg_toplevel_decoration_v1::NAME => self.decoration_request(c, id, parse!(zxdg_toplevel_decoration_v1)),
+            wp_presentation::NAME => self.presentation_request(c, id, parse!(wp_presentation)),
+            wp_presentation_feedback::NAME => Ok(()),
+            _ => {
+                self.close_fds(&args);
+                Err(error(id, wl_display::Error::INVALID_METHOD.0, format!("{} is not implemented", iface.name)))
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Frames, output, input.
+
+    /// Draw what changed into `fb` (and present it); returns the physical
+    /// rectangles drawn.
+    pub fn render(&mut self, fb: &mut dyn Framebuffer) -> Vec<Rect> {
+        self.scene.render(fb)
+    }
+
+    /// Whether a frame is wanted: something to draw, or clients waiting for
+    /// frame callbacks or presentation feedback.
+    pub fn wants_frame(&self) -> bool {
+        self.scene.has_damage()
+            || self.clients.values().any(|cl| {
+                cl.objects.values().any(|o| match &o.data {
+                    Data::Surface(s) => !s.frame_callbacks.is_empty() || !s.feedbacks.is_empty(),
+                    _ => false,
+                })
+            })
+    }
+
+    /// A frame was shown at `time`: answer the frame callbacks committed
+    /// before it (`wl_callback.done` with the time in milliseconds) and the
+    /// presentation feedback.
+    pub fn frame_presented(&mut self, time: FrameTime) {
+        self.frame_seq += 1;
+        let ms = (time.monotonic_ns / 1_000_000) as u32;
+        let refresh_ns =
+            if self.output.refresh_mhz == 0 { 0 } else { 1_000_000_000_000 / u64::from(self.output.refresh_mhz) };
+        let seq = self.frame_seq;
+        for client in self.clients.values_mut() {
+            let mut callbacks = Vec::new();
+            let mut feedbacks = Vec::new();
+            for o in client.objects.values_mut() {
+                if let Data::Surface(s) = &mut o.data {
+                    callbacks.append(&mut s.frame_callbacks);
+                    let shown = s.window.is_some();
+                    feedbacks.extend(s.feedbacks.drain(..).map(|f| (f, shown)));
+                }
+            }
+            for cb in callbacks {
+                client.callback_done(cb, ms);
+            }
+            let outputs = client.ids_where(|d| matches!(d, Data::Output));
+            for (f, shown) in feedbacks {
+                if shown {
+                    for o in &outputs {
+                        client.send(f, wp_presentation_feedback::Event::SyncOutput { output: *o });
+                    }
+                    let secs = time.monotonic_ns / 1_000_000_000;
+                    client.send(
+                        f,
+                        wp_presentation_feedback::Event::Presented {
+                            tv_sec_hi: (secs >> 32) as u32,
+                            tv_sec_lo: secs as u32,
+                            tv_nsec: (time.monotonic_ns % 1_000_000_000) as u32,
+                            refresh: refresh_ns as u32,
+                            seq_hi: (seq >> 32) as u32,
+                            seq_lo: seq as u32,
+                            flags: 0,
+                        },
+                    );
+                } else {
+                    client.send(f, wp_presentation_feedback::Event::Discarded);
+                }
+                client.delete(f);
+            }
+        }
+    }
+
+    /// The seat's devices changed (the input stack's
+    /// [`crate::seat::InputSource::capabilities`]): tell every bound seat.
+    pub fn set_seat_capabilities(&mut self, caps: Capabilities) {
+        self.seat.capabilities = caps;
+        self.seat.ever = self.seat.ever.union(caps);
+        for client in self.clients.values_mut() {
+            for s in client.ids_where(|d| matches!(d, Data::Seat)) {
+                client.send(s, wl_seat::Event::Capabilities { capabilities: caps.0 });
+            }
+        }
+    }
+
+    pub fn seat_capabilities(&self) -> Capabilities {
+        self.seat.capabilities
+    }
+
+    /// An input event. For now the frame's part of window management: a
+    /// press of the left button raises and activates the window under the
+    /// pointer, and on a close button asks its client to close it.
+    pub fn handle_input(&mut self, event: InputEvent) {
+        let (ow, oh) = self.scene.logical_size();
+        let clamp = |v: Fixed, max: i32| Fixed(v.0.clamp(0, (max - 1).max(0) * 256));
+        match event {
+            InputEvent::PointerMotion { dx, dy, .. } => {
+                let (x, y) = self.seat.pointer;
+                self.seat.pointer = (clamp(Fixed(x.0 + dx.0), ow), clamp(Fixed(y.0 + dy.0), oh));
+            }
+            InputEvent::PointerMotionAbsolute { x, y, .. } => self.seat.pointer = (clamp(x, ow), clamp(y, oh)),
+            InputEvent::PointerButton { button: BTN_LEFT, pressed: true, .. } => {
+                let (x, y) = (self.seat.pointer.0.floor(), self.seat.pointer.1.floor());
+                match self.scene.hit_test(x, y) {
+                    Hit::Close(w) => self.close_window(w),
+                    Hit::TitleBar(w) | Hit::Border(w) | Hit::Surface { window: w, .. } => self.focus_window(w),
+                    Hit::Desktop => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The pointer's position, logical.
+    pub fn pointer(&self) -> (Fixed, Fixed) {
+        self.seat.pointer
+    }
+}
+
+#[cfg(test)]
+mod tests;

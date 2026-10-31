@@ -61,12 +61,14 @@ members = [
     "crates/poly-wincrypt",
     "crates/poly-x509",
     "crates/poly-winsock",
+    "crates/poly-wayland",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
     "tools/coverage",
     "tools/pipeline",
     "tools/xtask",
+    "userland/poly-compositor",
 ]
 exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
@@ -133,6 +135,7 @@ poly-vfs = { path = "crates/poly-vfs" }
 poly-wincrypt = { path = "crates/poly-wincrypt" }
 poly-x509 = { path = "crates/poly-x509" }
 poly-winsock = { path = "crates/poly-winsock" }
+poly-wayland = { path = "crates/poly-wayland" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
