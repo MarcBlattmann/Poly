@@ -6,8 +6,8 @@ Imports of `7za.exe (7-Zip Extra 26.05, x64)`: 145.
 
 | Verdict | Imports |
 |---|---:|
-| present (code in one of our DLLs) | 138 |
-| present but a stub (coverage status `stub`) | 7 |
+| present (code in one of our DLLs) | 142 |
+| present but a stub (coverage status `stub`) | 3 |
 | missing function (our DLL lacks it) | 0 |
 | missing DLL | 0 |
 
@@ -16,8 +16,8 @@ Imports of `7za.exe (7-Zip Extra 26.05, x64)`: 145.
 | DLL | Resolves to | Present | Stub | Missing | DLL missing |
 |---|---|---:|---:|---:|---:|
 | `advapi32.dll` | `advapi32.dll` | 6 | 3 | 0 | 0 |
-| `kernel32.dll` | `kernel32.dll` | 86 | 3 | 0 | 0 |
-| `msvcrt.dll` | `msvcrt.dll` | 38 | 1 | 0 | 0 |
+| `kernel32.dll` | `kernel32.dll` | 89 | 0 | 0 | 0 |
+| `msvcrt.dll` | `msvcrt.dll` | 39 | 0 | 0 | 0 |
 | `oleaut32.dll` | `oleaut32.dll` | 6 | 0 | 0 | 0 |
 | `user32.dll` | `user32.dll` | 2 | 0 | 0 | 0 |
 
@@ -29,19 +29,15 @@ None.
 
 None.
 
-### Stubs (7)
+### Stubs (3)
 
 | Import | Note |
 |---|---|
 | `advapi32.dll!GetFileSecurityW` | in `kernelbase.dll` |
 | `advapi32.dll!SetFileSecurityW` | in `kernelbase.dll` |
 | `advapi32.dll!AdjustTokenPrivileges` | in `kernelbase.dll` |
-| `msvcrt.dll!__CxxFrameHandler` | in `msvcrt.dll` |
-| `kernel32.dll!CreateHardLinkW` | in `kernelbase.dll` |
-| `kernel32.dll!FindFirstStreamW` | in `kernelbase.dll` |
-| `kernel32.dll!FindNextStreamW` | in `kernelbase.dll` |
 
-### Present (138)
+### Present (142)
 
 | Import | Note |
 |---|---|
@@ -86,6 +82,7 @@ None.
 | `msvcrt.dll!free` | `msvcrt.dll`, claimed |
 | `msvcrt.dll!malloc` | `msvcrt.dll`, claimed |
 | `msvcrt.dll!memcmp` | `msvcrt.dll`, claimed |
+| `msvcrt.dll!__CxxFrameHandler` | `msvcrt.dll`, claimed |
 | `msvcrt.dll!_CxxThrowException` | `msvcrt.dll`, claimed |
 | `msvcrt.dll!memcpy` | `msvcrt.dll`, claimed |
 | `msvcrt.dll!exit` | `msvcrt.dll`, claimed |
@@ -159,6 +156,7 @@ None.
 | `kernel32.dll!SetFileAttributesW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!RemoveDirectoryW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!MoveFileWithProgressW` | `kernelbase.dll`, claimed |
+| `kernel32.dll!CreateHardLinkW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!CreateDirectoryW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!DeleteFileW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!SetCurrentDirectoryW` | `kernelbase.dll`, claimed |
@@ -173,6 +171,8 @@ None.
 | `kernel32.dll!FindClose` | `kernelbase.dll`, claimed |
 | `kernel32.dll!FindFirstFileW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!FindNextFileW` | `kernelbase.dll`, claimed |
+| `kernel32.dll!FindFirstStreamW` | `kernelbase.dll`, claimed |
+| `kernel32.dll!FindNextStreamW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!GetFileAttributesW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!GetLogicalDriveStringsW` | `kernelbase.dll`, claimed |
 | `kernel32.dll!DeviceIoControl` | `kernelbase.dll`, claimed |

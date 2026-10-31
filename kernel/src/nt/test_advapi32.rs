@@ -51,7 +51,7 @@ mod tests {
             if vfs.lookup(&ctx, &Cred::root(), At::Node(&root), b"Windows/System32/advapi32.dll", true).is_err() {
                 return Err("System32 lacks advapi32.dll");
             }
-            let vr = VfsRoot { vfs, ctx, cred: Cred::root() };
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
             let exe = super::super::A32TEST;
             create::install_file(&vr, &root, APP_DIR, "a32test.exe", exe).map_err(|_| "cannot write a32test.exe")?;
 

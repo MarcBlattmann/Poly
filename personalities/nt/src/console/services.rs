@@ -70,6 +70,11 @@ pub fn device_io_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
     let (file, reply) = k.with_state(|sys, _, _| -> Result<((ObjectId, u64), Reply)> {
         let file = file_handle(sys, &caller, Handle(h), 0)?;
         n.check_event(sys, &caller)?;
+        // A file on a volume: the file-system controls it answers (ADR 0091).
+        if sys.io.is_disk(file.1) {
+            let (status, data) = sys.io.fs_control(file.1, code, &input, outlen)?;
+            return Ok((file, Reply::Data(status, data)));
+        }
         let t = sys.io.console_target(file.1)?;
         let sync = sys.io.file(file.1).is_some_and(|f| f.is_sync());
         let r = control(sys, &caller, &n, file, t, sync, code, &input, out, outlen)?;

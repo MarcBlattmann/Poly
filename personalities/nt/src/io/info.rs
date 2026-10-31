@@ -218,6 +218,120 @@ pub fn attribute_tag(f: &Facts) -> [u8; 8] {
     b
 }
 
+/// The name of a file's default (unnamed) data stream (Learn: "File
+/// Streams (Local File Systems)": `::$DATA`).
+pub const DEFAULT_STREAM: &str = "::$DATA";
+
+/// `FILE_STREAM_INFORMATION` (`ntifs.h`: `NextEntryOffset` 0,
+/// `StreamNameLength` 4, `StreamSize` 8, `StreamAllocationSize` 16,
+/// `StreamName` 24): Poly's volumes keep no named streams, so a file on one
+/// has its default data stream only and a directory none (an empty
+/// answer). A console or pipe has none either (to be confirmed).
+pub fn streams(f: &Facts, on_disk: bool) -> Vec<u8> {
+    if f.directory || !on_disk {
+        return Vec::new();
+    }
+    let name: Vec<u16> = DEFAULT_STREAM.encode_utf16().collect();
+    let mut b = alloc::vec![0u8; STREAM_INFO_FIXED];
+    put_u32(&mut b, 4, (2 * name.len()) as u32);
+    b[8..16].copy_from_slice(&f.size.to_le_bytes());
+    b[16..24].copy_from_slice(&f.allocation.to_le_bytes());
+    for c in name {
+        b.extend_from_slice(&c.to_le_bytes());
+    }
+    b
+}
+
+/// A symbolic link to `target` (the VFS's bytes) as a `REPARSE_DATA_BUFFER`
+/// (`ntifs.h`): `ReparseTag` 0, `ReparseDataLength` 4, `Reserved` 6, then
+/// `SymbolicLinkReparseBuffer`: `SubstituteNameOffset` 8,
+/// `SubstituteNameLength` 10, `PrintNameOffset` 12, `PrintNameLength` 14,
+/// `Flags` 16, `PathBuffer` 20 (offsets into it, in bytes). A relative
+/// target is both names with `\` for `/` and `SYMLINK_FLAG_RELATIVE`; an
+/// absolute one starts at the VFS root, the volume `Z:` (ADR 0067): the
+/// substitute name `\??\Z:\...`, the print name `Z:\...`.
+pub fn symlink_reparse(target: &[u8]) -> Vec<u8> {
+    let path: Vec<u16> = alloc::string::String::from_utf8_lossy(target)
+        .encode_utf16()
+        .map(|c| if c == u16::from(b'/') { u16::from(b'\\') } else { c })
+        .collect();
+    let (substitute, print, flags) = if target.first() == Some(&b'/') {
+        let print: Vec<u16> = "Z:".encode_utf16().chain(path.iter().copied()).collect();
+        let sub: Vec<u16> = "\\??\\".encode_utf16().chain(print.iter().copied()).collect();
+        (sub, print, 0)
+    } else {
+        (path.clone(), path, SYMLINK_FLAG_RELATIVE)
+    };
+    let (sub_len, print_len) = (2 * substitute.len(), 2 * print.len());
+    let mut b = alloc::vec![0u8; 20];
+    put_u32(&mut b, 0, IO_REPARSE_TAG_SYMLINK);
+    b[4..6].copy_from_slice(&((12 + sub_len + print_len) as u16).to_le_bytes());
+    b[8..10].copy_from_slice(&0u16.to_le_bytes());
+    b[10..12].copy_from_slice(&(sub_len as u16).to_le_bytes());
+    b[12..14].copy_from_slice(&(sub_len as u16).to_le_bytes());
+    b[14..16].copy_from_slice(&(print_len as u16).to_le_bytes());
+    put_u32(&mut b, 16, flags);
+    for c in substitute.iter().chain(&print) {
+        b.extend_from_slice(&c.to_le_bytes());
+    }
+    b
+}
+
+/// A symbolic link's target as [`parse_symlink_reparse`] reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LinkTarget {
+    /// The drive letter of an absolute target (`\??\X:\...`), `None` for a
+    /// relative one.
+    pub volume: Option<char>,
+    /// The rest, as VFS bytes with `/` for `\`: below that volume's root
+    /// (starting with `/`), or relative to the link's directory.
+    pub path: Vec<u8>,
+}
+
+/// The target of a symbolic link's `REPARSE_DATA_BUFFER` (the layout of
+/// [`symlink_reparse`]): its substitute name, relative with
+/// `SYMLINK_FLAG_RELATIVE`, else `\??\X:\...`. Too short, a length past the
+/// buffer or a name that is no UTF-16 is `STATUS_INVALID_PARAMETER`
+/// (`STATUS_IO_REPARSE_DATA_INVALID` on Windows, to be confirmed);
+/// another tag or another kind of absolute name `STATUS_NOT_SUPPORTED`.
+pub fn parse_symlink_reparse(b: &[u8]) -> Result<LinkTarget, poly_ntobj::NtStatus> {
+    use poly_ntobj::status::{STATUS_INVALID_PARAMETER, STATUS_NOT_SUPPORTED};
+    let u16_at = |o: usize| b.get(o..o + 2).map(|x| usize::from(u16::from_le_bytes([x[0], x[1]])));
+    let tag = b.get(0..4).map(|x| u32::from_le_bytes(x.try_into().expect("4 bytes")));
+    let (Some(tag), Some(data_len)) = (tag, u16_at(4)) else { return Err(STATUS_INVALID_PARAMETER) };
+    if tag != IO_REPARSE_TAG_SYMLINK {
+        return Err(STATUS_NOT_SUPPORTED);
+    }
+    if b.len() < 20 || REPARSE_HEADER_SIZE + data_len > b.len() {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let (off, len) = (u16_at(8).unwrap_or(0), u16_at(10).unwrap_or(0));
+    let flags = u32::from_le_bytes(b[16..20].try_into().expect("4 bytes"));
+    let raw = b.get(20 + off..20 + off + len).filter(|r| r.len() % 2 == 0).ok_or(STATUS_INVALID_PARAMETER)?;
+    let units: Vec<u16> = raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    let name = alloc::string::String::from_utf16(&units).map_err(|_| STATUS_INVALID_PARAMETER)?;
+    let to_vfs = |s: &str| s.replace('\\', "/").into_bytes();
+    if flags & SYMLINK_FLAG_RELATIVE != 0 {
+        if name.is_empty() {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        return Ok(LinkTarget { volume: None, path: to_vfs(&name) });
+    }
+    let rest = name.strip_prefix("\\??\\").ok_or(STATUS_NOT_SUPPORTED)?;
+    let mut chars = rest.chars();
+    match (chars.next(), chars.next()) {
+        (Some(letter), Some(':')) if letter.is_ascii_alphabetic() => {
+            let tail = &rest[2..];
+            let path = if tail.is_empty() { alloc::vec![b'/'] } else { to_vfs(tail) };
+            if path.first() != Some(&b'/') {
+                return Err(STATUS_NOT_SUPPORTED);
+            }
+            Ok(LinkTarget { volume: Some(letter), path })
+        }
+        _ => Err(STATUS_NOT_SUPPORTED),
+    }
+}
+
 /// `FILE_NAME_INFORMATION`: `FileNameLength` (bytes) then the name.
 pub fn name(name: &[u16]) -> Vec<u8> {
     let mut b = Vec::with_capacity(4 + 2 * name.len());

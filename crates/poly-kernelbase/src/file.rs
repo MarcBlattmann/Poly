@@ -354,9 +354,70 @@ pub fn set_times(creation: Option<u64>, access: Option<u64>, write: Option<u64>)
     b
 }
 
+/// `FileStreamInformation` (`ntifs.h`).
+pub const FILE_STREAM_INFORMATION: u32 = 22;
+
+/// `WIN32_FIND_STREAM_DATA` (`minwinbase.h`): `StreamSize` (a
+/// `LARGE_INTEGER`) at 0, `cStreamName[MAX_PATH + 36]` at 8.
+pub const FIND_STREAM_DATA_SIZE: usize = 8 + 2 * (find_data::MAX_PATH + 36);
+
+/// The entries of a `FILE_STREAM_INFORMATION` chain (`ntifs.h`:
+/// `NextEntryOffset` 0, `StreamNameLength` 4, `StreamSize` 8,
+/// `StreamAllocationSize` 16, `StreamName` 24), each as
+/// `WIN32_FIND_STREAM_DATA` (a name too long for it is cut, terminated).
+/// An empty buffer has none; a malformed entry ends the list.
+pub fn find_stream_data(buf: &[u8]) -> Vec<[u8; FIND_STREAM_DATA_SIZE]> {
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    while let (Some(next), Some(len), Some(size)) = (u32_at(buf, at), u32_at(buf, at + 4), u64_at(buf, at + 8)) {
+        let Some(name) = buf.get(at + 24..at + 24 + len as usize) else { break };
+        let mut d = [0u8; FIND_STREAM_DATA_SIZE];
+        d[0..8].copy_from_slice(&size.to_le_bytes());
+        let n = name.len().min(FIND_STREAM_DATA_SIZE - 8 - 2) & !1;
+        d[8..8 + n].copy_from_slice(&name[..n]);
+        out.push(d);
+        if next == 0 {
+            break;
+        }
+        at += next as usize;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stream_information_becomes_find_stream_data() {
+        assert!(find_stream_data(&[]).is_empty());
+        // Two entries: "::$DATA" (12 bytes) and ":x:$DATA" (3 bytes).
+        let entry = |next: u32, name: &str, size: u64| {
+            let units: Vec<u8> = name.encode_utf16().flat_map(u16::to_le_bytes).collect();
+            let mut e = alloc::vec![0u8; 24];
+            e[0..4].copy_from_slice(&next.to_le_bytes());
+            e[4..8].copy_from_slice(&(units.len() as u32).to_le_bytes());
+            e[8..16].copy_from_slice(&size.to_le_bytes());
+            e.extend_from_slice(&units);
+            e
+        };
+        let mut buf = entry(40, "::$DATA", 12);
+        buf.resize(40, 0);
+        buf.extend(entry(0, ":x:$DATA", 3));
+        let d = find_stream_data(&buf);
+        assert_eq!(d.len(), 2);
+        assert_eq!(u64::from_le_bytes(d[0][0..8].try_into().unwrap()), 12);
+        let name = |r: &[u8; FIND_STREAM_DATA_SIZE]| -> alloc::string::String {
+            let units: Vec<u16> =
+                r[8..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&c| c != 0).collect();
+            alloc::string::String::from_utf16_lossy(&units)
+        };
+        assert_eq!(name(&d[0]), "::$DATA");
+        assert_eq!((name(&d[1]).as_str(), d[1][0]), (":x:$DATA", 3));
+        // A name that runs past the buffer ends the list.
+        assert_eq!(find_stream_data(&buf[..30]).len(), 0);
+        assert_eq!(FIND_STREAM_DATA_SIZE, 600);
+    }
 
     #[test]
     fn by_handle_information_layout() {

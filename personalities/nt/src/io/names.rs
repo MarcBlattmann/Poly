@@ -47,6 +47,17 @@ pub fn component_to_vfs(name: &[u16]) -> Result<Vec<u8>, NtStatus> {
     Ok(s.into_bytes())
 }
 
+/// `name` without a `::$DATA` suffix (any case), the default data stream's
+/// full name (Learn: "File Streams (Local File Systems)"); other names as
+/// they are.
+pub fn without_default_stream(name: &[u16]) -> &[u16] {
+    let suffix: Vec<u16> = "::$DATA".encode_utf16().collect();
+    match name.len().checked_sub(suffix.len()) {
+        Some(at) if at > 0 && eq_fold(&name[at..], &suffix) => &name[..at],
+        _ => name,
+    }
+}
+
 /// Check one component of a path that is opened or created.
 pub fn check_component(name: &[u16]) -> Result<(), NtStatus> {
     if name.is_empty() || name.len() > MAX_COMPONENT {
@@ -113,6 +124,13 @@ const DOT: u16 = b'.' as u16;
 /// Whether `expr` has a wildcard (else it names one file).
 pub fn has_wildcards(expr: &[u16]) -> bool {
     expr.iter().any(|&c| matches!(c, STAR | QM | DOS_STAR | DOS_QM | DOS_DOT))
+}
+
+/// Whether `expr` matches exactly the names equal to it without case: not
+/// empty (which matches everything), no wildcard, not `.` or `..` (which
+/// name the directory's own entries).
+pub fn is_literal(expr: &[u16]) -> bool {
+    !expr.is_empty() && !has_wildcards(expr) && expr != [DOT] && expr != [DOT, DOT]
 }
 
 /// Whether `name` matches the expression `expr`, without case, with the

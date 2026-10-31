@@ -26,8 +26,9 @@
 //! the spec agent: Windows may say `STATUS_OBJECT_PATH_NOT_FOUND` or
 //! `STATUS_NOT_A_DIRECTORY`).
 
-use super::names::{self, component_to_vfs, eq_fold, vfs_to_wide};
-use super::{VfsRoot, status_of};
+use super::names::{self, component_to_vfs, eq_fold, fold, vfs_to_wide};
+use super::{NodeKey, VfsRoot, status_of};
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use poly_ntobj::NtStatus;
 use poly_ntobj::status::STATUS_OBJECT_PATH_NOT_FOUND;
@@ -50,13 +51,56 @@ pub struct Resolved {
 }
 
 /// The name in `dir` that `component` finds, without case, if any.
+///
+/// The exact name is one VFS lookup. Without it, the directory's entries
+/// are compared without case — from a [`FoldCache`] index where the
+/// directory has one, so that making thousands of files in one directory
+/// (each a lookup that finds nothing first) is not quadratic (ADR 0091).
 pub fn find_child(vr: &VfsRoot, dir: &NodeRef, component: &[u16]) -> Result<Option<Vec<u8>>, NtStatus> {
     let exact = component_to_vfs(component)?;
-    match vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(dir), &exact, false) {
-        Ok(_) => return Ok(Some(exact)),
-        Err(Errno::ENOENT) => {}
-        Err(e) => return Err(status_of(e)),
+    if exists(vr, dir, &exact)? {
+        return Ok(Some(exact));
     }
+    if !FoldCache::may_index(dir) {
+        return scan(vr, dir, component);
+    }
+    let key = NodeKey::of(dir)?;
+    let mut cache = vr.fold.borrow_mut();
+    let found = cache.spellings(vr, dir, key, component)?.into_iter().next();
+    if found.is_none() {
+        cache.pending = Some((dir.clone(), key, exact));
+    }
+    Ok(found)
+}
+
+/// Every name in `dir` equal to `component` without case, smallest (as
+/// bytes) first: what a directory query for a pattern without wildcards
+/// lists, without reading the whole directory where it has an index.
+pub fn find_all(vr: &VfsRoot, dir: &NodeRef, component: &[u16]) -> Result<Vec<Vec<u8>>, NtStatus> {
+    if !FoldCache::may_index(dir) {
+        let mut all: Vec<Vec<u8>> = list(vr, dir)?
+            .into_iter()
+            .filter(|n| n != b"." && n != b".." && eq_fold(&vfs_to_wide(n), component))
+            .collect();
+        all.sort();
+        return Ok(all);
+    }
+    let key = NodeKey::of(dir)?;
+    vr.fold.borrow_mut().spellings(vr, dir, key, component)
+}
+
+/// Whether `dir` has an entry spelled exactly `name`.
+fn exists(vr: &VfsRoot, dir: &NodeRef, name: &[u8]) -> Result<bool, NtStatus> {
+    match vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(dir), name, false) {
+        Ok(_) => Ok(true),
+        Err(Errno::ENOENT) => Ok(false),
+        Err(e) => Err(status_of(e)),
+    }
+}
+
+/// The smallest name (as bytes) in `dir` equal to `component` without case,
+/// by reading the whole directory.
+fn scan(vr: &VfsRoot, dir: &NodeRef, component: &[u16]) -> Result<Option<Vec<u8>>, NtStatus> {
     let mut best: Option<Vec<u8>> = None;
     for name in list(vr, dir)? {
         if name == b"." || name == b".." {
@@ -67,6 +111,127 @@ pub fn find_child(vr: &VfsRoot, dir: &NodeRef, component: &[u16]) -> Result<Opti
         }
     }
     Ok(best)
+}
+
+/// The names of one directory by their upcased form, each with every
+/// spelling the directory has (smallest first).
+type DirIndex = BTreeMap<Vec<u16>, BTreeSet<Vec<u8>>>;
+
+/// How many directories a [`FoldCache`] keeps.
+const FOLD_CACHE_DIRS: usize = 8;
+
+/// Case-folded indexes of the directories case-insensitive lookups missed
+/// in last (ADR 0091).
+///
+/// They are right while the VFS's [`namespace_generation`] has not moved
+/// since they were read. One step more is accepted when it is the name
+/// the last lookup missed now being there (a file made where nothing of
+/// that name was: the usual next step after such a lookup), which is added
+/// to its directory's index; any other change drops every index. A name
+/// the index has is checked to exist before it is used, so a rename seen
+/// only as its new name cannot find the old one.
+///
+/// [`namespace_generation`]: poly_vfs::Vfs::namespace_generation
+#[derive(Debug, Default)]
+pub struct FoldCache {
+    /// The generation every index is right at.
+    generation: u64,
+    /// Most recently used last.
+    dirs: Vec<(NodeKey, DirIndex)>,
+    /// The last lookup that found nothing: the directory and the name.
+    pending: Option<(NodeRef, NodeKey, Vec<u8>)>,
+}
+
+impl FoldCache {
+    /// Only directories whose names change through the VFS alone are
+    /// indexed: the file systems that let the VFS cache lookups, and tmpfs
+    /// (which does not, lookups being as cheap there). A procfs or devpts
+    /// makes and removes entries by itself.
+    fn may_index(dir: &NodeRef) -> bool {
+        let info = dir.mount().fs().info();
+        info.cache_lookups || info.name == "tmpfs"
+    }
+
+    /// Bring the indexes to the VFS's generation (see the type's docs).
+    fn sync(&mut self, vr: &VfsRoot) {
+        let now = vr.vfs.namespace_generation();
+        if now == self.generation {
+            return;
+        }
+        let pending = self.pending.take();
+        if now == self.generation + 1
+            && let Some((dir, key, name)) = pending
+            && exists(vr, &dir, &name).unwrap_or(false)
+        {
+            if let Some((_, index)) = self.dirs.iter_mut().find(|(k, _)| *k == key) {
+                index.entry(fold(&vfs_to_wide(&name))).or_default().insert(name);
+            }
+            self.generation = now;
+            return;
+        }
+        self.dirs.clear();
+        self.generation = now;
+    }
+
+    /// The names `component` finds in `dir` (key `key`), smallest first,
+    /// from its index, read now if it has none.
+    fn lookup(
+        &mut self,
+        vr: &VfsRoot,
+        dir: &NodeRef,
+        key: NodeKey,
+        component: &[u16],
+    ) -> Result<Vec<Vec<u8>>, NtStatus> {
+        let at = match self.dirs.iter().position(|(k, _)| *k == key) {
+            Some(i) => {
+                let entry = self.dirs.remove(i);
+                self.dirs.push(entry);
+                self.dirs.len() - 1
+            }
+            None => {
+                let mut index = DirIndex::new();
+                for name in list(vr, dir)? {
+                    if name != b"." && name != b".." {
+                        index.entry(fold(&vfs_to_wide(&name))).or_default().insert(name);
+                    }
+                }
+                if self.dirs.len() == FOLD_CACHE_DIRS {
+                    self.dirs.remove(0);
+                }
+                self.dirs.push((key, index));
+                self.dirs.len() - 1
+            }
+        };
+        Ok(self.dirs[at].1.get(&fold(component)).map(|names| names.iter().cloned().collect()).unwrap_or_default())
+    }
+
+    /// The spellings of `component` in `dir` (key `key`), smallest first,
+    /// each checked to exist: the index may hold a name that is gone (a
+    /// rename it saw only as its new name), and then it is read again.
+    fn spellings(
+        &mut self,
+        vr: &VfsRoot,
+        dir: &NodeRef,
+        key: NodeKey,
+        component: &[u16],
+    ) -> Result<Vec<Vec<u8>>, NtStatus> {
+        self.sync(vr);
+        let names = self.lookup(vr, dir, key, component)?;
+        let mut all = true;
+        for n in &names {
+            all &= exists(vr, dir, n)?;
+        }
+        if all {
+            return Ok(names);
+        }
+        self.forget(key);
+        self.lookup(vr, dir, key, component)
+    }
+
+    /// Drop `key`'s index.
+    fn forget(&mut self, key: NodeKey) {
+        self.dirs.retain(|(k, _)| *k != key);
+    }
 }
 
 /// Every name in directory `dir`, in the order the file system lists them

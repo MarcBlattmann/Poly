@@ -31,7 +31,8 @@ pub(super) struct Pending {
     /// RAX to return to user mode with, all 64 bits (a loaded context).
     pub rax: Option<u64>,
     /// An exception nobody handles: the process ends with its code.
-    pub unhandled: Option<(ExceptionRecord, Context)>,
+    /// Boxed: [`Kernel`] is in the frame of every service and fault.
+    pub unhandled: Option<alloc::boxed::Box<(ExceptionRecord, Context)>>,
 }
 
 /// An unhandled exception, kept for the kernel tests: the process, the
@@ -153,7 +154,11 @@ pub fn fault(process: &Process, fault: &Fault) -> bool {
         _ => None,
     };
     let code = code_at(fault.rip);
-    let mut ctx = current_context();
+    // On the heap: an exception that cannot be delivered is walked for its
+    // backtrace below this frame, reading user memory that can fault
+    // again, and every frame of that path counts against the thread's
+    // 16 KiB stack (ADR 0061, 0091).
+    let mut ctx = alloc::boxed::Box::new(current_context());
     let mut k = Kernel::new(ProcessId(process.pid), tid, memory);
     {
         let cpu =
@@ -161,6 +166,7 @@ pub fn fault(process: &Process, fault: &Fault) -> bool {
         nt_exception::dispatch_fault(&mut k, &cpu, &mut ctx);
     }
     drop(code);
+    drop(ctx);
     finish(k);
     true
 }
@@ -170,9 +176,23 @@ pub fn fault(process: &Process, fault: &Fault) -> bool {
 /// memory reference are dropped first, as the thread does not come back),
 /// else give back the RAX a loaded context asked for.
 pub(super) fn finish(mut k: Kernel) -> Option<u64> {
-    let Some((record, ctx)) = k.seh.unhandled.take() else { return k.seh.rax.take() };
-    let frames = backtrace(&k, &ctx);
+    if k.seh.unhandled.is_none() {
+        return k.seh.rax.take();
+    }
+    end_after_unhandled(k)
+}
+
+/// [`finish`] for an unhandled exception, out of line so that the record
+/// and context it takes out are not in the frame of every caller.
+#[cold]
+#[inline(never)]
+fn end_after_unhandled(mut k: Kernel) -> ! {
+    let unhandled = k.seh.unhandled.take().expect("checked by finish");
+    let frames = backtrace(&k, &unhandled.1);
     let (pid, tid) = (k.pid, k.tid);
+    // Nothing on the heap is left behind: the thread does not come back.
+    let record = unhandled.0;
+    drop(unhandled);
     drop(k);
     end_unhandled(pid, tid, &record, frames)
 }
