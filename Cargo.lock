@@ -317,6 +317,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-virtio-sound"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
 name = "poly-vm"
 version = "0.0.1"
 

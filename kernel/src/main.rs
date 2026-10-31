@@ -31,6 +31,7 @@ mod random;
 mod selftest;
 mod shell;
 mod smp;
+mod sound;
 mod sync;
 mod syscall;
 mod terminal;
@@ -147,6 +148,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     fs::init(&boot, initrd);
     tty::init(&boot);
     net::init(&boot);
+    sound::init(&boot);
     // `poly.init=<path>`: the first program runs before anything else; a
     // test run (`poly.qemu_exit`) ends with it (ADR 0027, ADR 0038). With
     // `console=tty1` its console is the screen's terminal (ADR 0046).

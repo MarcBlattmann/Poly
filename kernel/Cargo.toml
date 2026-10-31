@@ -57,6 +57,7 @@ poly-personality-xnu = { path = "../personalities/xnu" }
 poly-virtio = { path = "../crates/poly-virtio" }
 poly-virtio-blk = { path = "../crates/poly-virtio-blk" }
 poly-virtio-net = { path = "../crates/poly-virtio-net" }
+poly-virtio-sound = { path = "../crates/poly-virtio-sound" }
 poly-vdso = { path = "../crates/poly-vdso" }
 poly-vm = { path = "../crates/poly-vm" }
 

@@ -58,6 +58,9 @@ impl Errno {
     /// attribute that does not exist (getxattr(2)).
     pub const ENODATA: Errno = Errno(61);
     pub const EOVERFLOW: Errno = Errno(75);
+    /// `EBADFD` (`asm-generic/errno.h`): "File descriptor in bad state";
+    /// an ALSA PCM request in a state that does not allow it.
+    pub const EBADFD: Errno = Errno(77);
     /// `EUSERS` (`asm-generic/errno.h`): "Too many users"; user
     /// namespaces nested too deep (clone(2), unshare(2)).
     pub const EUSERS: Errno = Errno(87);
@@ -162,6 +165,7 @@ impl Errno {
             43 => "EIDRM",
             61 => "ENODATA",
             75 => "EOVERFLOW",
+            77 => "EBADFD",
             87 => "EUSERS",
             95 => "EOPNOTSUPP",
             110 => "ETIMEDOUT",

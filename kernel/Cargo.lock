@@ -119,6 +119,7 @@ dependencies = [
  "poly-virtio",
  "poly-virtio-blk",
  "poly-virtio-net",
+ "poly-virtio-sound",
  "poly-vm",
 ]
 
@@ -289,6 +290,14 @@ name = "poly-virtio-net"
 version = "0.0.1"
 dependencies = [
  "poly-net",
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
+name = "poly-virtio-sound"
+version = "0.0.1"
+dependencies = [
  "poly-pci",
  "poly-virtio",
 ]
