@@ -234,24 +234,6 @@ pub unsafe extern "C" fn wcscmp(a: *const u16, b: *const u16) -> i32 {
     s::compare(unsafe { sl(a) }, unsafe { sl(b) })
 }
 
-/// `strcoll` in the "C" locale is `strcmp`.
-///
-/// # Safety
-/// Valid C strings.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn strcoll(a: *const u8, b: *const u8) -> i32 {
-    // SAFETY: the caller's strings.
-    unsafe { strcmp(a, b) }
-}
-
-/// # Safety
-/// Valid C strings.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wcscoll(a: *const u16, b: *const u16) -> i32 {
-    // SAFETY: the caller's strings.
-    unsafe { wcscmp(a, b) }
-}
-
 /// # Safety
 /// Readable to their NULs or `n` units.
 #[unsafe(no_mangle)]
@@ -266,72 +248,6 @@ pub unsafe extern "C" fn strncmp(a: *const u8, b: *const u8, n: usize) -> i32 {
 pub unsafe extern "C" fn wcsncmp(a: *const u16, b: *const u16, n: usize) -> i32 {
     // SAFETY: the caller's strings.
     s::compare(unsafe { s::prefix(a, n) }, unsafe { s::prefix(b, n) })
-}
-
-/// `_stricmp`: NULL is an invalid parameter (`_NLSCMPERROR`).
-///
-/// # Safety
-/// Valid C strings.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _stricmp(a: *const u8, b: *const u8) -> i32 {
-    if a.is_null() || b.is_null() {
-        global::invalid(EINVAL);
-        return i32::MAX;
-    }
-    // SAFETY: the caller's strings.
-    s::icompare(unsafe { sl(a) }, unsafe { sl(b) })
-}
-
-/// # Safety
-/// Valid C strings.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _wcsicmp(a: *const u16, b: *const u16) -> i32 {
-    if a.is_null() || b.is_null() {
-        global::invalid(EINVAL);
-        return i32::MAX;
-    }
-    // SAFETY: the caller's strings.
-    s::icompare(unsafe { sl(a) }, unsafe { sl(b) })
-}
-
-/// # Safety
-/// As `strncmp`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _strnicmp(a: *const u8, b: *const u8, n: usize) -> i32 {
-    if a.is_null() || b.is_null() {
-        global::invalid(EINVAL);
-        return i32::MAX;
-    }
-    // SAFETY: the caller's strings.
-    s::icompare(unsafe { s::prefix(a, n) }, unsafe { s::prefix(b, n) })
-}
-
-/// # Safety
-/// As `strncmp`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _wcsnicmp(a: *const u16, b: *const u16, n: usize) -> i32 {
-    if a.is_null() || b.is_null() {
-        global::invalid(EINVAL);
-        return i32::MAX;
-    }
-    // SAFETY: the caller's strings.
-    s::icompare(unsafe { s::prefix(a, n) }, unsafe { s::prefix(b, n) })
-}
-
-/// # Safety
-/// `n` readable bytes each.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _memicmp(a: *const u8, b: *const u8, n: usize) -> i32 {
-    if n == 0 {
-        return 0;
-    }
-    if a.is_null() || b.is_null() {
-        global::invalid(EINVAL);
-        return i32::MAX;
-    }
-    // SAFETY: the caller's buffers.
-    let (x, y) = unsafe { (core::slice::from_raw_parts(a, n), core::slice::from_raw_parts(b, n)) };
-    s::icompare(x, y)
 }
 
 // ----- copies ---------------------------------------------------------------------------
@@ -708,54 +624,6 @@ pub unsafe fn wcstok_thread(text: *mut u16, delims: *const u16) -> *mut u16 {
 // ----- in place -------------------------------------------------------------------------
 
 /// # Safety
-/// `p` is a writable C string.
-unsafe fn map_in_place<C: Unit>(p: *mut C, f: impl Fn(u32) -> u32) -> *mut C {
-    if p.is_null() {
-        global::invalid(EINVAL);
-        return p;
-    }
-    // SAFETY: the caller's string.
-    let n = unsafe { unit::len(p) };
-    for i in 0..n {
-        // SAFETY: i < n.
-        unsafe { p.add(i).write(C::from_u32(f(p.add(i).read().to_u32()))) };
-    }
-    p
-}
-
-/// # Safety
-/// `p` is a writable C string.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _strlwr(p: *mut u8) -> *mut u8 {
-    // SAFETY: the caller's string.
-    unsafe { map_in_place(p, |c| ctype::to_lower(c as i32) as u32) }
-}
-
-/// # Safety
-/// As `_strlwr`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _strupr(p: *mut u8) -> *mut u8 {
-    // SAFETY: the caller's string.
-    unsafe { map_in_place(p, |c| ctype::to_upper(c as i32) as u32) }
-}
-
-/// # Safety
-/// As `_strlwr`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _wcslwr(p: *mut u16) -> *mut u16 {
-    // SAFETY: the caller's string.
-    unsafe { map_in_place(p, |c| u32::from(ctype::to_lower_wide(c as u16))) }
-}
-
-/// # Safety
-/// As `_strlwr`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _wcsupr(p: *mut u16) -> *mut u16 {
-    // SAFETY: the caller's string.
-    unsafe { map_in_place(p, |c| u32::from(ctype::to_upper_wide(c as u16))) }
-}
-
-/// # Safety
 /// As `_strlwr`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn _strrev(p: *mut u8) -> *mut u8 {
@@ -779,13 +647,11 @@ pub unsafe extern "C" fn _wcsrev(p: *mut u16) -> *mut u16 {
 
 // ----- character classes -----------------------------------------------------------------
 
+// The narrow classes and case depend on `LC_CTYPE`: `lctype.rs`.
+
 macro_rules! classes {
-    ($($name:ident, $wname:ident => $mask:expr;)*) => {
+    ($($wname:ident => $mask:expr;)*) => {
         $(
-            #[unsafe(no_mangle)]
-            pub extern "C" fn $name(c: i32) -> i32 {
-                i32::from(ctype::class(c) & ($mask))
-            }
             #[unsafe(no_mangle)]
             pub extern "C" fn $wname(c: u16) -> i32 {
                 i32::from(ctype::wide_class(u32::from(c)) & ($mask))
@@ -795,30 +661,21 @@ macro_rules! classes {
 }
 
 classes! {
-    isalpha, iswalpha => ctype::ALPHA;
-    isupper, iswupper => ctype::UPPER;
-    islower, iswlower => ctype::LOWER;
-    isdigit, iswdigit => ctype::DIGIT;
-    isxdigit, iswxdigit => ctype::HEX;
-    isspace, iswspace => ctype::SPACE;
-    ispunct, iswpunct => ctype::PUNCT;
-    iscntrl, iswcntrl => ctype::CONTROL;
-    isalnum, iswalnum => ctype::ALNUM;
-    isprint, iswprint => ctype::PRINT;
-    isgraph, iswgraph => ctype::GRAPH;
-}
-
-pub extern "C" fn isblank(c: i32) -> i32 {
-    i32::from(c == 9 || ctype::class(c) & ctype::BLANK != 0)
+    iswalpha => ctype::ALPHA;
+    iswupper => ctype::UPPER;
+    iswlower => ctype::LOWER;
+    iswdigit => ctype::DIGIT;
+    iswxdigit => ctype::HEX;
+    iswspace => ctype::SPACE;
+    iswpunct => ctype::PUNCT;
+    iswcntrl => ctype::CONTROL;
+    iswalnum => ctype::ALNUM;
+    iswprint => ctype::PRINT;
+    iswgraph => ctype::GRAPH;
 }
 
 pub extern "C" fn iswblank(c: u16) -> i32 {
     i32::from(c == 9 || ctype::wide_class(u32::from(c)) & ctype::BLANK != 0)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn _isctype(c: i32, mask: i32) -> i32 {
-    i32::from(ctype::class(c)) & mask
 }
 
 #[unsafe(no_mangle)]
@@ -836,26 +693,6 @@ pub extern "C" fn __toascii(c: i32) -> i32 {
     c & 0x7F
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn __iscsym(c: i32) -> i32 {
-    i32::from(c == 0x5F || ctype::class(c) & ctype::ALNUM != 0)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn __iscsymf(c: i32) -> i32 {
-    i32::from(c == 0x5F || ctype::class(c) & ctype::ALPHA != 0)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn toupper(c: i32) -> i32 {
-    ctype::to_upper(c)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn tolower(c: i32) -> i32 {
-    ctype::to_lower(c)
-}
-
 /// `_toupper`: no check that `c` is lower case (Learn: "only ... if c is a
 /// lowercase letter ... otherwise undefined"); Poly maps letters only.
 #[unsafe(no_mangle)]
@@ -866,28 +703,6 @@ pub extern "C" fn _toupper(c: i32) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn _tolower(c: i32) -> i32 {
     ctype::to_lower(c)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn towupper(c: u16) -> u16 {
-    ctype::to_upper_wide(c)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn towlower(c: u16) -> u16 {
-    ctype::to_lower_wide(c)
-}
-
-/// `__pctype_func`: the "C" locale's table, indexable from −1.
-#[unsafe(no_mangle)]
-pub extern "C" fn __pctype_func() -> *const u16 {
-    ctype::NARROW[1..].as_ptr()
-}
-
-/// `___mb_cur_max_func`: 1 in the "C" locale.
-#[unsafe(no_mangle)]
-pub extern "C" fn ___mb_cur_max_func() -> i32 {
-    1
 }
 
 /// `_wctype`: the wide table for U+0000–U+00FF (with the `WEOF` entry

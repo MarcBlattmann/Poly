@@ -72,6 +72,7 @@ unsafe extern "system" {
         default: *const u8,
         used: *mut i32,
     ) -> i32;
+    pub fn IsValidCodePage(cp: u32) -> i32;
     pub fn GetConsoleMode(h: Handle, mode: *mut u32) -> i32;
     pub fn WriteConsoleW(h: Handle, buf: *const u16, chars: u32, written: *mut u32, reserved: *mut u8) -> i32;
     pub fn ReadConsoleW(h: Handle, buf: *mut u16, chars: u32, read: *mut u32, control: *mut u8) -> i32;

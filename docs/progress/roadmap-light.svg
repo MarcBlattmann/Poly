@@ -227,7 +227,7 @@
 <g><title>✔ Our kernelbase / kernel32: files, processes, threads, memory, synchronisation, errors (ADR 0079: two slices, processes, TLS/FLS, code pages, file mappings, condition variables; ADR 0089: handle inheritance, STARTUPINFO and its standard handles, CREATE_SUSPENDED in CreateProcessW)</title>
 <rect x="590.5" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>C runtime: ucrtbase + api-ms-win-crt-* and msvcrt (versioned runtimes come with the apps, ADR 0055) (first slice done, ADR 0084; left: C++ exceptions in msvcrt (_CxxThrowException, __CxxFrameHandler3), setjmp/longjmp, transcendental math, locales other than &quot;C&quot; and multibyte code pages, wildcard argv, _findfirst/_spawn/system/_dup/_pipe, console I/O (_getch, _cprintf), positional printf)</title>
+<g><title>C runtime: ucrtbase + api-ms-win-crt-* and msvcrt (versioned runtimes come with the apps, ADR 0055) (first slice done, ADR 0084; locales and multibyte code pages, ADR 0094; left: C++ exceptions in msvcrt (_CxxThrowException, __CxxFrameHandler3), setjmp/longjmp, transcendental math, wildcard argv, _findfirst/_spawn/system/_dup/_pipe, console I/O (_getch, _cprintf), positional printf)</title>
 <rect x="615.6" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>✔ advapi32 basics: registry API, security descriptors, tokens (single user) (ADR 0083)</title>

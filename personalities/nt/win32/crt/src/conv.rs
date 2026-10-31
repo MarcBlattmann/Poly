@@ -1,19 +1,18 @@
 //! Conversions (C11 7.22.1, 7.29.4.1; Learn: `strtol`, `strtod`, `atoi`,
 //! `_itoa`, `mbstowcs`, `wcstombs`, `mbtowc`, `wctomb`): numbers on
-//! [`poly_crt::convert`] and [`poly_crt::float`], multibyte characters in
-//! the "C" locale (one byte per character, ISO-8859-1, see
-//! [`poly_crt::unit::c_locale_to_wide`]).
+//! [`poly_crt::convert`] and [`poly_crt::float`] (the decimal point is
+//! `LC_NUMERIC`'s, ADR 0094); multibyte characters are `mbconv.rs`'s.
 
 use crate::global;
 use poly_crt::convert::{self, Kind};
 use poly_crt::ctype;
-use poly_crt::errno::{EILSEQ, EINVAL, ERANGE};
+use poly_crt::errno::{EINVAL, ERANGE};
 use poly_crt::float::{self, Format};
 use poly_crt::unit::{self, Unit};
 
 /// # Safety
 /// `s` is a valid C string; `end` NULL or writable.
-unsafe fn strto<C: Unit>(s: *const C, end: *mut *mut C, base: i32, kind: Kind) -> u64 {
+pub(crate) unsafe fn strto<C: Unit>(s: *const C, end: *mut *mut C, base: i32, kind: Kind) -> u64 {
     if s.is_null() || !(base == 0 || (2..=36).contains(&base)) {
         global::invalid(EINVAL);
         if !end.is_null() {
@@ -68,7 +67,7 @@ strto_exports! {
 
 /// # Safety
 /// `s` is a valid C string.
-unsafe fn ato<C: Unit>(s: *const C, wide64: bool) -> i64 {
+pub(crate) unsafe fn ato<C: Unit>(s: *const C, wide64: bool) -> i64 {
     if s.is_null() {
         global::invalid(EINVAL);
         return 0;
@@ -109,7 +108,7 @@ ato_exports! {
 
 /// # Safety
 /// `s` is a valid C string; `end` NULL or writable.
-unsafe fn strtofloat<C: Unit>(s: *const C, end: *mut *mut C, fmt: Format) -> u64 {
+pub(crate) unsafe fn strtofloat<C: Unit>(s: *const C, end: *mut *mut C, fmt: Format, point: u8) -> u64 {
     if s.is_null() {
         global::invalid(EINVAL);
         return 0;
@@ -117,7 +116,7 @@ unsafe fn strtofloat<C: Unit>(s: *const C, end: *mut *mut C, fmt: Format) -> u64
     // SAFETY: the caller's string.
     let t = unsafe { unit::slice(s) };
     let lead = t.iter().take_while(|c| ctype::is_space_unit(c.to_u32(), C::WIDE)).count();
-    let p = float::parse(&t[lead..], fmt);
+    let p = float::parse_point(&t[lead..], fmt, point);
     let used = if p.len == 0 { 0 } else { lead + p.len };
     if p.range_error {
         global::set_errno(ERANGE);
@@ -134,14 +133,14 @@ unsafe fn strtofloat<C: Unit>(s: *const C, end: *mut *mut C, fmt: Format) -> u64
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn strtod(s: *const u8, end: *mut *mut u8) -> f64 {
     // SAFETY: the caller's arguments.
-    f64::from_bits(unsafe { strtofloat(s, end, float::DOUBLE) })
+    f64::from_bits(unsafe { strtofloat(s, end, float::DOUBLE, crate::locale::loc().point) })
 }
 
 /// # Safety
 /// As `strtod`.
 pub unsafe extern "C" fn strtof(s: *const u8, end: *mut *mut u8) -> f32 {
     // SAFETY: the caller's arguments.
-    f32::from_bits(unsafe { strtofloat(s, end, float::SINGLE) } as u32)
+    f32::from_bits(unsafe { strtofloat(s, end, float::SINGLE, crate::locale::loc().point) } as u32)
 }
 
 /// # Safety
@@ -156,14 +155,14 @@ pub unsafe extern "C" fn strtold(s: *const u8, end: *mut *mut u8) -> f64 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn wcstod(s: *const u16, end: *mut *mut u16) -> f64 {
     // SAFETY: the caller's arguments.
-    f64::from_bits(unsafe { strtofloat(s, end, float::DOUBLE) })
+    f64::from_bits(unsafe { strtofloat(s, end, float::DOUBLE, crate::locale::loc().point) })
 }
 
 /// # Safety
 /// As `strtod`.
 pub unsafe extern "C" fn wcstof(s: *const u16, end: *mut *mut u16) -> f32 {
     // SAFETY: the caller's arguments.
-    f32::from_bits(unsafe { strtofloat(s, end, float::SINGLE) } as u32)
+    f32::from_bits(unsafe { strtofloat(s, end, float::SINGLE, crate::locale::loc().point) } as u32)
 }
 
 /// # Safety
@@ -232,158 +231,4 @@ itoa_exports! {
     _ultow: u32, u16, 32, false;
     _i64tow: i64, u16, 64, true;
     _ui64tow: u64, u16, 64, false;
-}
-
-// ----- multibyte characters ("C" locale) ------------------------------------------------
-
-/// `mbtowc`: one byte is one character.
-///
-/// # Safety
-/// `out` NULL or writable; `s` NULL or `n` readable bytes.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn mbtowc(out: *mut u16, s: *const u8, n: usize) -> i32 {
-    if s.is_null() {
-        return 0; // no shift states
-    }
-    if n == 0 {
-        return -1;
-    }
-    // SAFETY: one readable byte.
-    let b = unsafe { *s };
-    if !out.is_null() {
-        // SAFETY: writable.
-        unsafe { *out = unit::c_locale_to_wide(b) };
-    }
-    i32::from(b != 0)
-}
-
-/// # Safety
-/// As `mbtowc`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn mblen(s: *const u8, n: usize) -> i32 {
-    // SAFETY: the caller's arguments.
-    unsafe { mbtowc(core::ptr::null_mut(), s, n) }
-}
-
-/// `wctomb`: −1 (`EILSEQ`) for a character the "C" locale lacks.
-///
-/// # Safety
-/// `out` NULL or writable.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wctomb(out: *mut u8, c: u16) -> i32 {
-    if out.is_null() {
-        return 0;
-    }
-    match unit::c_locale_to_narrow(c) {
-        Some(b) => {
-            // SAFETY: writable.
-            unsafe { *out = b };
-            1
-        }
-        None => {
-            global::set_errno(EILSEQ);
-            -1
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn btowc(c: i32) -> u16 {
-    if (0..=255).contains(&c) { unit::c_locale_to_wide(c as u8) } else { 0xFFFF }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn wctob(c: u16) -> i32 {
-    unit::c_locale_to_narrow(c).map_or(-1, i32::from)
-}
-
-/// `mbstowcs`: the characters converted (without the NUL), or the length
-/// needed when `out` is NULL.
-///
-/// # Safety
-/// `s` a valid C string; `out` NULL or `n` writable units.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn mbstowcs(out: *mut u16, s: *const u8, n: usize) -> usize {
-    if s.is_null() {
-        global::invalid(EINVAL);
-        return usize::MAX;
-    }
-    // SAFETY: the caller's string.
-    let t = unsafe { unit::slice(s) };
-    if out.is_null() {
-        return t.len();
-    }
-    let m = t.len().min(n);
-    for (i, &b) in t[..m].iter().enumerate() {
-        // SAFETY: i < n.
-        unsafe { out.add(i).write(unit::c_locale_to_wide(b)) };
-    }
-    if m < n {
-        // SAFETY: m < n.
-        unsafe { out.add(m).write(0) };
-    }
-    m
-}
-
-/// `wcstombs`: the bytes converted, or −1 (`EILSEQ`) at a character the
-/// "C" locale lacks.
-///
-/// # Safety
-/// `s` a valid wide C string; `out` NULL or `n` writable bytes.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wcstombs(out: *mut u8, s: *const u16, n: usize) -> usize {
-    if s.is_null() {
-        global::invalid(EINVAL);
-        return usize::MAX;
-    }
-    // SAFETY: the caller's string.
-    let t = unsafe { unit::slice(s) };
-    let limit = if out.is_null() { t.len() } else { t.len().min(n) };
-    for (i, &c) in t[..limit].iter().enumerate() {
-        let Some(b) = unit::c_locale_to_narrow(c) else {
-            global::set_errno(EILSEQ);
-            return usize::MAX;
-        };
-        if !out.is_null() {
-            // SAFETY: i < n.
-            unsafe { out.add(i).write(b) };
-        }
-    }
-    if !out.is_null() && limit < n {
-        // SAFETY: limit < n.
-        unsafe { out.add(limit).write(0) };
-    }
-    limit
-}
-
-/// `mbrtowc` (no shift states in the "C" locale).
-///
-/// # Safety
-/// As `mbtowc`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn mbrtowc(out: *mut u16, s: *const u8, n: usize, _state: *mut u32) -> usize {
-    if s.is_null() {
-        return 0;
-    }
-    if n == 0 {
-        return usize::MAX - 1; // (size_t)-2: incomplete
-    }
-    // SAFETY: the caller's arguments.
-    unsafe { mbtowc(out, s, n) as usize }
-}
-
-/// `wcrtomb`.
-///
-/// # Safety
-/// `out` NULL or writable.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn wcrtomb(out: *mut u8, c: u16, _state: *mut u32) -> usize {
-    if out.is_null() {
-        return 1;
-    }
-    // SAFETY: the caller's buffer.
-    match unsafe { wctomb(out, c) } {
-        -1 => usize::MAX,
-        n => n as usize,
-    }
 }

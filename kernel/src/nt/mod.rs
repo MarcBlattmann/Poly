@@ -77,6 +77,12 @@ pub static UCRTBASE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ucrtbase.
 pub static MSVCRT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcrt.dll"));
 pub static CRTTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crttest.exe"));
 
+mod test_crt_locale;
+
+/// The program the C runtime locale ring-3 test runs (`test_crt_locale`,
+/// ADR 0094).
+pub static CRTLOCTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crtloctest.exe"));
+
 /// The first functions of `user32.dll` and `oleaut32.dll` (ADR 0087),
 /// installed in `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static USER32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/user32.dll"));
