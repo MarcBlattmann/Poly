@@ -78,6 +78,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-cxxeh"
+version = "0.0.1"
+dependencies = [
+ "poly-seh",
+]
+
+[[package]]
 name = "poly-elf"
 version = "0.0.1"
 

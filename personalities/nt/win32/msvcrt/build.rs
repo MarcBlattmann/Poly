@@ -11,6 +11,9 @@ fn main() {
     // `__C_specific_handler` is `ntdll`'s (ADR 0087; the coverage map's
     // export list has it in both).
     println!("cargo:rustc-link-arg=/EXPORT:__C_specific_handler=ntdll.__C_specific_handler");
+    // `_CxxThrowException` is assembly: its frame has an unwind handler
+    // (ADR 0099).
+    println!("cargo:rustc-link-arg=/EXPORT:_CxxThrowException");
     for (name, _) in poly_crt::exports::MSVCRT_VARARGS {
         println!("cargo:rustc-link-arg=/EXPORT:{name}");
     }

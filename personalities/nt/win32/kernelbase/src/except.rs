@@ -12,6 +12,10 @@ use poly_kernelbase::slist::Header;
 /// `EXCEPTION_NONCONTINUABLE`, `EXCEPTION_MAXIMUM_PARAMETERS` (`winnt.h`).
 const EXCEPTION_NONCONTINUABLE: u32 = 1;
 const EXCEPTION_MAXIMUM_PARAMETERS: usize = 15;
+/// `EXCEPTION_SOFTWARE_ORIGINATE` (`winnt.h`): every exception
+/// `RaiseException` raises carries it (observed on Windows 11 25H2:
+/// `_CxxThrowException.yaml`, `record_flags`).
+const EXCEPTION_SOFTWARE_ORIGINATE: u32 = 0x80;
 /// `sizeof(EXCEPTION_RECORD)` on x64 (`winnt.h`): code, flags, the nested
 /// record, the address, the parameter count and 15 parameters.
 const EXCEPTION_RECORD_SIZE: usize = 152;
@@ -26,7 +30,8 @@ const EXCEPTION_RECORD_SIZE: usize = 152;
 pub unsafe extern "system" fn RaiseException(code: u32, flags: u32, count: u32, args: *const usize) {
     let mut r = [0u8; EXCEPTION_RECORD_SIZE];
     r[0..4].copy_from_slice(&code.to_le_bytes());
-    r[4..8].copy_from_slice(&(flags & EXCEPTION_NONCONTINUABLE).to_le_bytes());
+    let flags = (flags & EXCEPTION_NONCONTINUABLE) | EXCEPTION_SOFTWARE_ORIGINATE;
+    r[4..8].copy_from_slice(&flags.to_le_bytes());
     let n = if args.is_null() { 0 } else { (count as usize).min(EXCEPTION_MAXIMUM_PARAMETERS) };
     r[24..28].copy_from_slice(&(n as u32).to_le_bytes());
     for i in 0..n {
@@ -47,9 +52,18 @@ static TOP_FILTER: AtomicUsize = AtomicUsize::new(0);
 const EXCEPTION_EXECUTE_HANDLER: i32 = 1;
 const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 
-/// `SetUnhandledExceptionFilter`: the previous filter.
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn RtlSetUnhandledExceptionFilter(filter: usize);
+}
+
+/// `SetUnhandledExceptionFilter`: the previous filter. `ntdll`'s dispatcher
+/// is told to ask `UnhandledExceptionFilter` about exceptions no frame
+/// handler takes (ADR 0099), as the base of a Windows thread does.
 #[unsafe(no_mangle)]
 pub extern "system" fn SetUnhandledExceptionFilter(filter: usize) -> usize {
+    // SAFETY: registers a function with the documented filter signature.
+    unsafe { RtlSetUnhandledExceptionFilter(UnhandledExceptionFilter as *const () as usize) };
     TOP_FILTER.swap(filter, Ordering::AcqRel)
 }
 
