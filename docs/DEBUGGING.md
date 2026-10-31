@@ -804,9 +804,10 @@ Without a keyboard the kernel says why and carries on:
 | `i8042: NoKeyboard`, `KeyboardSelfTest(x)` | nothing acknowledged the reset (0xFF), or the keyboard's own test failed (0xFC / 0xFD) |
 | `setting the LEDs to 0b... failed: ...` | the keyboard did not acknowledge 0xED and its mask in 250 ms |
 
-The layout is chosen on the command line, `poly.keymap=us` (the default)
-or `poly.keymap=de-ch`. `keyboard::stats()` counts interrupts, bytes,
-bytes dropped because nobody read them, and LED updates.
+The layout is chosen on the command line, `poly.keymap=us` (the default),
+`poly.keymap=de-ch` or `poly.keymap=de`. `keyboard::stats()` counts
+interrupts, bytes, console keys dropped because nobody read them, mouse
+bytes and LED updates.
 
 **Typing into the guest.** What you type in the terminal running `cargo
 xtask run` goes to the serial port, not to the PS/2 keyboard; what you
@@ -856,7 +857,26 @@ drains it itself within 100 ms.
 The kernel tests can feed the decoder without a host: `keyboard::inject`
 takes set 1 bytes as if the keyboard had sent them, and the controller's
 command 0xD2 makes it deliver a byte through IRQ 1
-(`keyboard::irq_delivers_controller_bytes`).
+(`keyboard::irq_delivers_controller_bytes`); 0xD3 does the same for mouse
+bytes through IRQ 12 (`mouse::controller_mouse_bytes_become_events`).
+
+**Mice, tablets and `/dev/input`** (ADR 0103). Every input device is in
+the event layer and logs a line `input: event<n>: <name>`; the PS/2 mouse
+adds `mouse: PS/2 IntelliMouse Explorer (id 4), ISA IRQ 12 -> ...` (id 0:
+no wheel, 3: a wheel, 4: a wheel and five buttons), or `mouse: i8042
+second port: NoMouse` and similar when it is missing. virtio devices come
+with `-device virtio-keyboard-pci`, `virtio-mouse-pci` or
+`virtio-tablet-pci` and log their name, ids, event types and interrupt.
+QMP's `input-send-event` drives any of them from a script (the `input`
+boot group does): keys (`{"type": "key", "data": {"down": true, "key":
+{"type": "qcode", "data": "a"}}}`), relative and absolute motion (`rel` /
+`abs`, axis `x` or `y`; absolute runs 0 to 32767) and buttons (`btn`,
+`left`, `wheel-up`, ...); QEMU routes each to the device of its kind that
+the guest enabled last. A program reads them from `/dev/input/event<n>`;
+`tools/xtask/programs/evtest.rs` is a small one that prints every device
+and event. If events reach the kernel but not the program, check for a
+grab (`EVIOCGRAB` takes a device's events from everyone else, the screen
+console included).
 
 ## File systems and the initramfs
 

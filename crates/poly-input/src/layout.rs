@@ -12,9 +12,9 @@
 //! the helpers below ([`letter`], [`keys`], [`KeyDef::alt_gr`],
 //! [`KeyDef::caps`]) and listing it in [`LAYOUTS`].
 //!
-//! Sources for the two layouts here: the keyboard layout descriptions in
-//! the Microsoft "Windows keyboard layouts" reference ("US" and "Swiss
-//! German"), and the W3C "UI Events KeyboardEvent code Values" key
+//! Sources for the layouts here: the keyboard layout descriptions in the
+//! Microsoft "Windows keyboard layouts" reference ("US", "Swiss German"
+//! and "German"), and the W3C "UI Events KeyboardEvent code Values" key
 //! positions.
 
 use crate::Key;
@@ -360,10 +360,72 @@ pub static DE_CH: Layout = Layout::new(
     ],
 );
 
-/// Every layout, the default ([`US`]) first.
-pub static LAYOUTS: [&Layout; 2] = [&US, &DE_CH];
+/// German (de, QWERTZ), the 105-key ISO keyboard (Germany's T1 layout as
+/// the Windows "German" layout has it). ^ (base), ´ and \` are dead keys;
+/// AltGr gives @ € µ ² ³ { [ ] } \ | and ~; the keypad's decimal key types
+/// a comma.
+pub static DE: Layout = Layout::new(
+    "de",
+    "German (QWERTZ)",
+    true,
+    ',',
+    &[
+        (Key::Backquote, keys(dead(DeadKey::Circumflex), c('°'))),
+        (Key::Digit1, chars('1', '!')),
+        (Key::Digit2, chars('2', '"').alt_gr(c('²'))),
+        (Key::Digit3, chars('3', '§').alt_gr(c('³'))),
+        (Key::Digit4, chars('4', '$')),
+        (Key::Digit5, chars('5', '%')),
+        (Key::Digit6, chars('6', '&')),
+        (Key::Digit7, chars('7', '/').alt_gr(c('{'))),
+        (Key::Digit8, chars('8', '(').alt_gr(c('['))),
+        (Key::Digit9, chars('9', ')').alt_gr(c(']'))),
+        (Key::Digit0, chars('0', '=').alt_gr(c('}'))),
+        (Key::Minus, chars('ß', '?').alt_gr(c('\\'))),
+        (Key::Equal, keys(dead(DeadKey::Acute), dead(DeadKey::Grave))),
+        (Key::Q, letter('q', 'Q').alt_gr(c('@'))),
+        (Key::W, letter('w', 'W')),
+        (Key::E, letter('e', 'E').alt_gr(c('€'))),
+        (Key::R, letter('r', 'R')),
+        (Key::T, letter('t', 'T')),
+        (Key::Y, letter('z', 'Z')),
+        (Key::U, letter('u', 'U')),
+        (Key::I, letter('i', 'I')),
+        (Key::O, letter('o', 'O')),
+        (Key::P, letter('p', 'P')),
+        (Key::BracketLeft, letter('ü', 'Ü')),
+        (Key::BracketRight, chars('+', '*').alt_gr(c('~'))),
+        (Key::A, letter('a', 'A')),
+        (Key::S, letter('s', 'S')),
+        (Key::D, letter('d', 'D')),
+        (Key::F, letter('f', 'F')),
+        (Key::G, letter('g', 'G')),
+        (Key::H, letter('h', 'H')),
+        (Key::J, letter('j', 'J')),
+        (Key::K, letter('k', 'K')),
+        (Key::L, letter('l', 'L')),
+        (Key::Semicolon, letter('ö', 'Ö')),
+        (Key::Quote, letter('ä', 'Ä')),
+        (Key::Backslash, chars('#', '\'')),
+        (Key::IntlBackslash, chars('<', '>').alt_gr(c('|'))),
+        (Key::Z, letter('y', 'Y')),
+        (Key::X, letter('x', 'X')),
+        (Key::C, letter('c', 'C')),
+        (Key::V, letter('v', 'V')),
+        (Key::B, letter('b', 'B')),
+        (Key::N, letter('n', 'N')),
+        (Key::M, letter('m', 'M').alt_gr(c('µ'))),
+        (Key::Comma, chars(',', ';')),
+        (Key::Period, chars('.', ':')),
+        (Key::Slash, chars('-', '_')),
+        (Key::Space, SPACE),
+    ],
+);
 
-/// The layout called `name` (ASCII case-insensitive): "us", "de-ch".
+/// Every layout, the default ([`US`]) first.
+pub static LAYOUTS: [&Layout; 3] = [&US, &DE_CH, &DE];
+
+/// The layout called `name` (ASCII case-insensitive): "us", "de-ch", "de".
 pub fn by_name(name: &str) -> Option<&'static Layout> {
     LAYOUTS.iter().copied().find(|l| l.name.eq_ignore_ascii_case(name))
 }

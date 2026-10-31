@@ -1,45 +1,71 @@
-//! Keyboard input, from controller bytes to characters.
+//! Input: keyboards and mice, from controller bytes and device events to
+//! the event layer, `/dev/input/event*` and characters.
 //!
 //! ```text
-//!  i8042 (IRQ 1) ──bytes──▶ Set1Decoder ──ScanEvent──▶ KeyState ──KeyEvent──▶ Composer + Layout ──▶ Output
-//!   i8042::init              E0 / E1 sequences          modifiers, locks,       shift levels, Caps / Num Lock,
-//!   (polled bring-up)        Pause, Print Screen         auto-repeat             AltGr, dead keys, Ctrl
+//!  i8042 (IRQ 1) ──bytes──▶ Set1Decoder ──ScanEvent──┐
+//!   i8042::init              (Set2Decoder)           │ keycode::code
+//!  i8042 aux (IRQ 12) ─▶ ps2mouse::MouseDecoder ─────┤
+//!  virtio-input ───────────── evdev events ──────────┤
+//!                                                    ▼
+//!                       hub::Hub: devices, state, frames, soft repeat, LEDs, grabs
+//!                         │                                   │
+//!                         ▼ client queues                     ▼ console keys (every keyboard)
+//!                  evdev: /dev/input/event* bytes      KeyState ──KeyEvent──▶ Composer + Layout ──▶ Output
+//!                  and EVIOC* ioctls                   modifiers, locks       shift levels, AltGr, dead keys
 //! ```
 //!
 //! - [`key`]: [`Key`] (a physical key position), [`Modifiers`], [`Leds`]
 //!   and [`KeyEvent`].
-//! - [`set1`]: the scancode set 1 decoder (what an i8042 delivers with
-//!   translation on) and its encoder.
+//! - [`set1`] and [`set2`]: the scancode set 1 decoder (what an i8042
+//!   delivers with translation on) and the set 2 one (what a keyboard
+//!   sends), with their encoders.
+//! - [`codes`]: the evdev event types and codes; [`keycode`] maps
+//!   [`Key`]s to key codes and back.
 //! - [`KeyState`]: which keys are down, the modifiers and locks.
-//! - [`layout`]: layouts as data tables ([`layout::US`], [`layout::DE_CH`]),
-//!   and [`Composer`], which applies one to key events: characters, dead
-//!   keys and the special keys a line editor uses ([`Output`]).
-//! - [`Keyboard`]: all of the above in one, fed one byte at a time.
-//! - [`i8042`]: the controller's registers and bring-up sequence behind an
-//!   access trait; [`ring::ByteRing`] carries bytes from the interrupt
-//!   handler to a thread.
+//! - [`layout`]: layouts as data tables ([`layout::US`], [`layout::DE_CH`],
+//!   [`layout::DE`]), and [`Composer`], which applies one to key events:
+//!   characters, dead keys and the special keys a line editor uses
+//!   ([`Output`]); [`keysym`] gives a key's X11 keysym on a level.
+//! - [`Keyboard`]: all of the above in one, fed one byte at a time (or one
+//!   decoded key event, [`Keyboard::apply`]).
+//! - [`hub`]: the event layer: devices, a queue per reader, frames,
+//!   soft repeat, LEDs, grabs and the console's keys; [`evdev`] puts the
+//!   Linux event device interface on top.
+//! - [`i8042`]: the controller's registers and bring-up sequence (keyboard
+//!   and mouse) behind an access trait; [`ps2mouse`] the mouse protocol
+//!   (wheel detection, packets); [`ring::ByteRing`] carries bytes from
+//!   an interrupt handler to a thread.
 //!
-//! Nothing here allocates or panics on input: every byte sequence is
-//! accepted (unknown codes are ignored), and every wait for the controller
-//! is bounded.
+//! Nothing here panics on input: every byte sequence is accepted (unknown
+//! codes are ignored), and every wait for the controller is bounded. The
+//! hub allocates only when devices and readers come and go.
 
 #![no_std]
 
+extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+pub mod codes;
 mod compose;
+pub mod evdev;
+pub mod hub;
 pub mod i8042;
 pub mod key;
+pub mod keycode;
+pub mod keysym;
 pub mod layout;
+pub mod ps2mouse;
 pub mod ring;
 pub mod set1;
+pub mod set2;
 mod state;
 
 pub use compose::{Composer, Output, Special};
 pub use key::{Key, KeyEvent, Leds, Modifiers};
 pub use layout::{DeadKey, Layout};
 pub use set1::{ScanEvent, Set1Decoder};
+pub use set2::Set2Decoder;
 pub use state::KeyState;
 
 /// One key event and what it types.
@@ -81,9 +107,16 @@ impl Keyboard {
     /// completes and what that types.
     pub fn feed(&mut self, byte: u8) -> Option<Input> {
         let scan = self.decoder.feed(byte)?;
+        Some(self.apply(scan))
+    }
+
+    /// Take a key event decoded elsewhere (the event layer's console keys,
+    /// a virtio keyboard): the key state and the layout as for bytes. A
+    /// press of a key that is down is a repeat.
+    pub fn apply(&mut self, scan: ScanEvent) -> Input {
         let event = self.state.apply(scan);
         let output = self.composer.translate(self.layout, &event);
-        Some(Input { event, output })
+        Input { event, output }
     }
 
     pub fn modifiers(&self) -> Modifiers {

@@ -2,7 +2,7 @@
 //!
 //! Commands:
 //!   build [--release]   build the kernel
-//!   run   [--release] [--gdb] [--no-disk] [--headless] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
+//!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices and a virtio-net NIC on QEMU's user
 //!                       networking attached (--no-disk: without them),
@@ -14,11 +14,13 @@
 //!                       BusyBox's init and a shell on the console, see busybox.rs;
 //!                       add console=tty1 for the screen; --disk-root [--fresh-disk]: BusyBox's
 //!                       init mounts the root disk (made if missing) and runs its bash, see
-//!                       rootdisk.rs)
-//!   screenshot [--release] [--out <file>] [--wait <text>] [kernel args...]
+//!                       rootdisk.rs); --virtio-gpu: a virtio GPU instead of the
+//!                       standard VGA (ADR 0102)
+//!   screenshot [--release] [--virtio-gpu] [--out <file>] [--wait <text>] [kernel args...]
 //!                       boot headless, wait for a serial line containing <text>
 //!                       (default: the self-test's verdict), save the screen to <file>
-//!                       (default target/poly-screen.png; .ppm for PPM) and quit
+//!                       (default target/poly-screen.png; .ppm for PPM) and quit;
+//!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   boot-tests [--list] [--shard <name>]... [group...]
 //!                       the boot tests alone: all, the groups named (`selftest` is
@@ -55,17 +57,27 @@
 //!                       with its Windows recording (sevenzip.rs, ADR 0088)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
+//!   fonts fetch         download the pinned DejaVu fonts of the font store into the cache (fonts.rs)
+//!   fonts list [pattern] [element...] | fonts match [--sort] <pattern>
+//!                       fc-list / fc-match over them with Poly's fonts.conf (poly-font, ADR 0105)
+//!   fonts render [--lcd] [--size <px>] [--width <px>] [--out <file.png>] <pattern> <text...>
+//!                       render text in the matched font to a PNG
+//!   wayland [--check]   regenerate poly-wayland's protocol modules from the Wayland
+//!                       protocol XML in third_party/ (--check: fail if out of date; wayland.rs)
 
 mod accel;
 mod asmlabels;
 mod busybox;
+mod compositor;
 mod conflicts;
 mod console;
 mod dynamic;
 mod ext2disk;
 mod ext4disk;
 mod font;
+mod fonts;
 mod initramfs;
+mod input;
 mod ktest;
 mod libsearch;
 mod net;
@@ -75,8 +87,11 @@ mod programs;
 mod rootdisk;
 mod screen;
 mod sevenzip;
+mod sound;
 mod symbols;
+mod sysmsg;
 mod terminal;
+mod wayland;
 mod win32;
 mod winimports;
 mod wintrace;
@@ -143,6 +158,9 @@ fn main() -> ExitCode {
         Some("pipeline") => return pipeline_command(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
         Some("nls-tables") => nls::run(&root(), &args[1..]),
+        Some("system-messages") => sysmsg::run(&root(), &args[1..]),
+        Some("fonts") => fonts::command(&args[1..]),
+        Some("wayland") => wayland::run(&root(), &args[1..]),
         Some("ntdll") => ntdll::command(&args[1..]),
         Some("win32") => win32::command(&args[1..]),
         Some("win") => sevenzip::command(&args[1..]),
@@ -153,7 +171,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|nls-tables|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -269,6 +287,26 @@ const DEFAULT_DISPLAY: (u32, u32) = (1280, 800);
 /// is tested too.
 const SCREENSHOT_DISPLAY: (u32, u32) = (1024, 768);
 
+/// Kernel flag saying the boot has a virtio GPU (and no VGA); the kernel's
+/// display tests then require the display to be on it
+/// (`display::TEST_VIRTIO_GPU_FLAG`).
+const TEST_VIRTIO_GPU_FLAG: &str = "poly.test.virtio_gpu";
+/// The preferred mode the virtio-gpu boot test gives QEMU's virtio GPU
+/// (`xres`, `yres`), not the kernel's default, so the kernel must have
+/// taken it from `GET_DISPLAY_INFO`.
+const VIRTIO_GPU_DISPLAY: (u32, u32) = (1152, 864);
+
+/// QEMU arguments replacing the standard VGA with a virtio GPU
+/// (`virtio-gpu-pci`, 2D), whose scanout prefers `size` if given (else
+/// QEMU's default).
+fn virtio_gpu_args(size: Option<(u32, u32)>) -> Vec<String> {
+    let device = match size {
+        Some((w, h)) => format!("virtio-gpu-pci,xres={w},yres={h}"),
+        None => "virtio-gpu-pci".into(),
+    };
+    ["-vga", "none", "-device", &device].map(String::from).to_vec()
+}
+
 /// The test devices a boot gets.
 #[derive(Clone, Copy, Debug)]
 enum Devices<'a> {
@@ -346,7 +384,7 @@ fn has_desktop() -> bool {
 /// `run [--release] [--gdb] [--no-disk] [--headless] [--busybox | --initrd=<file> | --no-initrd] [kernel args...]`
 fn run(args: &[String]) -> Result {
     let (mut release, mut gdb, mut with_disk, mut window, mut cmdline) = (false, false, true, true, Vec::new());
-    let (mut with_busybox, mut disk_root, mut fresh_disk) = (false, false, false);
+    let (mut with_busybox, mut disk_root, mut fresh_disk, mut virtio_gpu) = (false, false, false, false);
     // The default initramfs: an empty path until it is written below.
     let mut initrd = Some(PathBuf::new());
     for a in args {
@@ -359,6 +397,7 @@ fn run(args: &[String]) -> Result {
             "--busybox" => with_busybox = true,
             "--disk-root" => disk_root = true,
             "--fresh-disk" => fresh_disk = true,
+            "--virtio-gpu" => virtio_gpu = true,
             flag if flag.starts_with("--initrd=") => initrd = Some(PathBuf::from(&flag["--initrd=".len()..])),
             flag if flag.starts_with("--") => return Err(format!("run: unknown option {flag}")),
             arg => cmdline.push(arg),
@@ -397,6 +436,9 @@ fn run(args: &[String]) -> Result {
     }
     if let Some(file) = &initrd {
         cmd.arg("-initrd").arg(file);
+    }
+    if virtio_gpu {
+        cmd.args(virtio_gpu_args(None));
     }
     if window && !has_desktop() {
         eprintln!(
@@ -707,13 +749,15 @@ fn kernel_version() -> Result<String> {
 /// What the self-test prints before PASS or FAIL.
 const SELFTEST_VERDICT: &str = "POLY-SELFTEST: ";
 
-/// `screenshot [--release] [--out <file>] [--wait <text>] [kernel args...]`
+/// `screenshot [--release] [--virtio-gpu] [--out <file>] [--wait <text>] [kernel args...]`
 fn screenshot(args: &[String]) -> Result {
     let (mut release, mut out, mut wait, mut cmdline) = (false, None, SELFTEST_VERDICT.to_string(), Vec::new());
+    let mut qemu_args = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--release" => release = true,
+            "--virtio-gpu" => qemu_args = virtio_gpu_args(None),
             "--out" => out = Some(PathBuf::from(it.next().ok_or("--out needs a file")?)),
             "--wait" => wait = it.next().ok_or("--wait needs a text")?.clone(),
             flag if flag.starts_with("--") => return Err(format!("screenshot: unknown option {flag}")),
@@ -730,7 +774,7 @@ fn screenshot(args: &[String]) -> Result {
     // QEMU writes the file itself, so give it a full path.
     let out = std::path::absolute(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let shot = Screenshot { marker: &wait, file: &out };
-    boot_with(&kernel, &syms, DEFAULT_MEMORY, &cmdline.join(" "), devices, &[], Some(shot), |_| {})?;
+    boot_with(&kernel, &syms, DEFAULT_MEMORY, &cmdline.join(" "), devices, &qemu_args, Some(shot), |_| {})?;
     eprintln!("==> screenshot saved to {}", out.display());
     Ok(())
 }
@@ -1348,7 +1392,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 21] = [
+const BOOT_GROUPS: [BootGroup; 25] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1375,9 +1419,14 @@ const BOOT_GROUPS: [BootGroup; 21] = [
     // compared with Windows reference traces if there are any (report only;
     // wintrace.rs, ADR 0090).
     ("wintrace", wintrace::boot_test),
+    // The Wayland compositor as init with a C client (compositor.rs, ADR 0106).
+    ("wayland", compositor::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
+    // Sound: /bin/pcm-tone plays through ALSA on virtio-sound, QEMU's wav
+    // backend records it, and the recording is checked (sound.rs, ADR 0104).
+    ("sound", sound::boot_tests),
     ("ext2", |k, s| {
         eprintln!("==> boot test: a file written to the ext2 test disk in one boot is there in the next");
         ext2_persistence_test(k, s)
@@ -1388,6 +1437,10 @@ const BOOT_GROUPS: [BootGroup; 21] = [
     // pixel with the boot screen poly-gfx draws for the same size, after the
     // display tests (which draw and must put the screen back).
     ("screen", screenshot_test),
+    // The same on a virtio GPU instead of the VGA: the scanout's preferred
+    // mode, the display tests, and a screenshot of what the device shows
+    // (ADR 0102).
+    ("virtio-gpu", virtio_gpu_test),
     // The screen terminal: a command typed on the keyboard runs in the shell
     // on the screen, whose output and status bar show up.
     ("terminal", |k, s| {
@@ -1396,6 +1449,9 @@ const BOOT_GROUPS: [BootGroup; 21] = [
         );
         terminal::boot_test(k, s, &kernel_version()?)
     }),
+    // Input: keys, motion, the wheel and clicks from QMP through the PS/2
+    // and virtio-input devices to /dev/input/event* (input.rs, ADR 0103).
+    ("input", input::boot_tests),
     ("faults", fault_tests),
     ("failures", failure_tests),
 ];
@@ -1408,8 +1464,8 @@ const BOOT_GROUPS: [BootGroup; 21] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace"]),
-    ("devices", &["net", "ext2", "ext4", "missing-devices", "screen", "terminal"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland"]),
+    ("devices", &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "terminal", "input"]),
     ("faults", &["faults", "failures"]),
 ];
 
@@ -1513,6 +1569,52 @@ fn screenshot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     })
 }
 
+/// Boot with a virtio GPU instead of the VGA, its scanout preferring
+/// [`VIRTIO_GPU_DISPLAY`], and no `poly.display=`: the kernel must find
+/// the device, take that mode from `GET_DISPLAY_INFO`, pass the display
+/// tests on it (which draw and flush patterns and switch modes, and must
+/// put the screen back), and show the boot screen, which a screenshot of
+/// the device's scanout compares pixel for pixel.
+fn virtio_gpu_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    let (w, h) = VIRTIO_GPU_DISPLAY;
+    eprintln!(
+        "==> boot test: on virtio-gpu, the scanout's preferred mode {w}x{h} shows the boot screen (screenshot through QMP)"
+    );
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: screenshots need a Unix host");
+        return Ok(());
+    }
+    let target = root().join("target");
+    std::fs::create_dir_all(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+    let file = target.join("poly-screen-virtio-gpu.ppm");
+    let append = format!("poly.test=display {TEST_DISPLAY_FLAG} {TEST_VIRTIO_GPU_FLAG} poly.terminal=off");
+    let shot = Screenshot { marker: PASS_MARKER, file: &file };
+    let args = virtio_gpu_args(Some((w, h)));
+    let b = boot_with(kernel, syms, DEFAULT_MEMORY, &append, Devices::None, &args, Some(shot), |_| {})?;
+    let report = b.tests(&b.output)?;
+    let ran = |name: &str| report.passed.iter().any(|t| t == name);
+    for test in ["display::virtio_gpu_mode_set", "display::virtio_gpu_draws_and_flushes_a_pattern"] {
+        if !ran(test) {
+            return Err(format!("the kernel test {test} did not run and pass"));
+        }
+    }
+    let shown = b
+        .output
+        .lines()
+        .any(|l| l.contains("display: virtio-gpu ") && l.contains(&format!(" {w}x{h}x32 (Preferred size)")));
+    if !shown {
+        return Err(format!("the kernel did not report the virtio GPU's preferred mode {w}x{h} as the display"));
+    }
+    let got = screen::Image::read_ppm(&file)?;
+    let want = screen::boot_screen(w, h, &kernel_version()?);
+    screen::compare(&got, &want).map_err(|e| {
+        let expected = target.join("poly-screen-virtio-gpu-expected.ppm");
+        let saved =
+            want.write_ppm(&expected).map_or_else(|e| e, |()| format!("expected image: {}", expected.display()));
+        format!("the virtio-gpu screenshot ({}) is not the boot screen: {e}; {saved}", file.display())
+    })
+}
+
 /// Boot with a `poly.selftest.*` flag that makes the kernel fault on purpose
 /// and check that the fault was reported: a panic whose message contains
 /// `report`, and QEMU's failure status.
@@ -1535,7 +1637,14 @@ fn announced<'a>(output: &'a str, prefix: &str) -> Result<&'a str> {
 }
 
 fn host_tests() -> Result {
-    step("host tests", cargo().current_dir(root()).args(["test", "--workspace"]))
+    let mut cmd = cargo();
+    cmd.current_dir(root()).args(["test", "--workspace"]);
+    // poly-font's tests on the bundled fonts run when they are fetched
+    // (`cargo xtask fonts fetch`) and skip, saying so, when not.
+    if let Some(dir) = fonts::cached() {
+        cmd.env(fonts::TEST_ENV, dir);
+    }
+    step("host tests", &mut cmd)
 }
 
 fn test() -> Result {
@@ -1577,6 +1686,8 @@ fn lint() -> Result {
     )?;
     eprintln!("==> font tables");
     font::run(&root(), &["--check".into()])?;
+    eprintln!("==> Wayland protocol modules");
+    wayland::run(&root(), &["--check".into()])?;
     eprintln!("==> global_asm! labels");
     asmlabels::check(&kernel_dir().join("src"))?;
     eprintln!("==> merge conflict markers");

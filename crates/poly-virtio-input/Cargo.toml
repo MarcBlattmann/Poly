@@ -1,0 +1,16 @@
+[package]
+name = "poly-virtio-input"
+description = "virtio input device driver (keyboards, mice, tablets): the configuration as an event-layer device description, the event and status virtqueues"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+poly-input.workspace = true
+poly-pci.workspace = true
+poly-virtio.workspace = true

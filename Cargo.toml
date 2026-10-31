@@ -18,9 +18,11 @@ members = [
     "crates/poly-elf",
     "crates/poly-ext2",
     "crates/poly-cpio",
+    "crates/poly-font",
     "crates/poly-bochs-vbe",
     "crates/poly-gfx",
     "crates/poly-heap",
+    "crates/poly-http",
     "crates/poly-input",
     "crates/poly-irq",
     "crates/poly-kernelbase",
@@ -50,18 +52,24 @@ members = [
     "crates/poly-unix",
     "crates/poly-virtio",
     "crates/poly-virtio-blk",
+    "crates/poly-virtio-gpu",
+    "crates/poly-virtio-input",
     "crates/poly-virtio-net",
+    "crates/poly-virtio-sound",
     "crates/poly-vdso",
     "crates/poly-vm",
     "crates/poly-vfs",
     "crates/poly-wincrypt",
     "crates/poly-x509",
+    "crates/poly-winsock",
+    "crates/poly-wayland",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
     "tools/coverage",
     "tools/pipeline",
     "tools/xtask",
+    "userland/poly-compositor",
 ]
 exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
@@ -85,9 +93,11 @@ poly-crypto = { path = "crates/poly-crypto" }
 poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-cpio = { path = "crates/poly-cpio" }
+poly-font = { path = "crates/poly-font" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
 poly-gfx = { path = "crates/poly-gfx" }
 poly-heap = { path = "crates/poly-heap" }
+poly-http = { path = "crates/poly-http" }
 poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
@@ -117,12 +127,17 @@ poly-tty = { path = "crates/poly-tty" }
 poly-unix = { path = "crates/poly-unix" }
 poly-virtio = { path = "crates/poly-virtio" }
 poly-virtio-blk = { path = "crates/poly-virtio-blk" }
+poly-virtio-gpu = { path = "crates/poly-virtio-gpu" }
+poly-virtio-input = { path = "crates/poly-virtio-input" }
 poly-virtio-net = { path = "crates/poly-virtio-net" }
+poly-virtio-sound = { path = "crates/poly-virtio-sound" }
 poly-vdso = { path = "crates/poly-vdso" }
 poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
 poly-wincrypt = { path = "crates/poly-wincrypt" }
 poly-x509 = { path = "crates/poly-x509" }
+poly-winsock = { path = "crates/poly-winsock" }
+poly-wayland = { path = "crates/poly-wayland" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }

@@ -125,6 +125,7 @@ unsafe extern "system" {
     fn GetSystemInfo(info: *mut u8);
     fn FormatMessageW(flags: u32, src: *const u8, id: u32, lang: u32, buf: *mut u16, size: u32, args: *const u8)
     -> u32;
+    fn FormatMessageA(flags: u32, src: *const u8, id: u32, lang: u32, buf: *mut u8, size: u32, args: *const u8) -> u32;
     fn IsDebuggerPresent() -> i32;
 
     // The second slice (ADR 0079).
@@ -307,6 +308,101 @@ fn wslice<'a>(p: *const u16) -> &'a [u16] {
 
 fn ascii_eq(w: &[u16], a: &[u8]) -> bool {
     w.len() == a.len() && w.iter().zip(a).all(|(&x, &y)| x == u16::from(y))
+}
+
+/// `FormatMessageW` / `FormatMessageA` (ADR 0101): HRESULTs, an allocated
+/// buffer, errors, inserts from an argument array and a `va_list`, line
+/// widths, module message tables and the ANSI forms.
+fn messages() {
+    const FROM_SYSTEM: u32 = 0x1000;
+    const FROM_STRING: u32 = 0x400;
+    const FROM_HMODULE: u32 = 0x800;
+    const IGNORE: u32 = 0x200;
+    const ALLOCATE: u32 = 0x100;
+    const ARRAY: u32 = 0x2000;
+    let null = core::ptr::null();
+    let mut msg = [0u16; 256];
+    let fm = |flags: u32, src: *const u8, id: u32, lang: u32, msg: &mut [u16], args: *const u8| {
+        // SAFETY: a buffer of `msg.len()` units; the arguments match the
+        // inserts.
+        let n = unsafe { FormatMessageW(flags, src, id, lang, msg.as_mut_ptr(), msg.len() as u32, args) };
+        n as usize
+    };
+    // An HRESULT_FROM_WIN32 value has its Win32 code's text.
+    let n = fm(FROM_SYSTEM | IGNORE, null, 0x8007_0002, 0, &mut msg, null);
+    check(ascii_eq(&msg[..n], b"The system cannot find the file specified.\r\n"));
+    // A code from the networking range, in English (United States).
+    let n = fm(FROM_SYSTEM | IGNORE, null, 10061, 0x0409, &mut msg, null);
+    check(ascii_eq(&msg[..n], b"No connection could be made because the target machine actively refused it.\r\n"));
+    // Unknown messages and languages.
+    check(fm(FROM_SYSTEM | IGNORE, null, 0xDEAD, 0, &mut msg, null) == 0);
+    check_error(317);
+    check(fm(FROM_SYSTEM | IGNORE, null, 2, 0x0407, &mut msg, null) == 0);
+    check_error(1815);
+    // An allocated buffer (LocalAlloc'd, LocalFree'd).
+    let mut p: *mut u16 = core::ptr::null_mut();
+    // SAFETY: `lpBuffer` is the address of a pointer with ALLOCATE_BUFFER.
+    let n = unsafe { FormatMessageW(FROM_SYSTEM | IGNORE | ALLOCATE, null, 5, 0, (&raw mut p).cast(), 0, null) };
+    check(n == 19 && !p.is_null());
+    // SAFETY: FormatMessageW wrote `n` units and a NUL at `p`.
+    check(ascii_eq(unsafe { core::slice::from_raw_parts(p, n as usize + 1) }, b"Access is denied.\r\n\0"));
+    // SAFETY: the buffer FormatMessageW allocated.
+    check(unsafe { LocalFree(p.cast()) }.is_null());
+    // MAX_WIDTH_MASK: the text's line break becomes a space.
+    let n = fm(FROM_SYSTEM | IGNORE | 0xFF, null, 2, 0, &mut msg, null);
+    check(ascii_eq(&msg[..n], b"The system cannot find the file specified. "));
+    // Inserts: Learn's argument-array and va_list examples, and a system
+    // message's insert.
+    let (bill, bob) = (w!("Bill"), w!("Bob"));
+    let array: [usize; 6] = [4, 2, bill as usize, bob as usize, 6, bill as usize];
+    let n = fm(FROM_STRING | ARRAY, w!("%1!*.*s! %4 %5!*s!").cast(), 0, 0, &mut msg, array.as_ptr().cast());
+    check(ascii_eq(&msg[..n], b"  Bi Bob   Bill"));
+    let va = array.as_ptr();
+    let n = fm(FROM_STRING, w!("%1!*.*s! %3 %4!*s!").cast(), 0, 0, &mut msg, (&raw const va).cast());
+    check(ascii_eq(&msg[..n], b"  Bi Bob   Bill"));
+    let one: [usize; 2] = [w!("x.exe") as usize, 0x2A];
+    let n = fm(FROM_SYSTEM | ARRAY, null, 193, 0, &mut msg, one.as_ptr().cast());
+    check(ascii_eq(&msg[..n], b"x.exe is not a valid Win32 application.\r\n"));
+    let n = fm(FROM_STRING | ARRAY, w!("[%2!04X!]%%%n%0tail").cast(), 0, 0, &mut msg, one.as_ptr().cast());
+    check(ascii_eq(&msg[..n], b"[002A]%\r\n"));
+    // An insert without arguments.
+    check(fm(FROM_SYSTEM, null, 193, 0, &mut msg, null) == 0);
+    check_error(87);
+    // This program has no message table; with FROM_SYSTEM the system's is
+    // searched next.
+    check(fm(FROM_HMODULE | IGNORE, null, 2, 0, &mut msg, null) == 0);
+    check_error(1813);
+    let n = fm(FROM_HMODULE | FROM_SYSTEM | IGNORE, null, 2, 0, &mut msg, null);
+    check(ascii_eq(&msg[..n], b"The system cannot find the file specified.\r\n"));
+    // FormatMessageA: ANSI text, a plain insert is ANSI, `!S!` wide.
+    let mut a = [0u8; 128];
+    // SAFETY: a buffer of 128 bytes.
+    let n = unsafe { FormatMessageA(FROM_SYSTEM | IGNORE, null, 0x8007_0005, 0, a.as_mut_ptr(), 128, null) };
+    check(&a[..n as usize + 1] == b"Access is denied.\r\n\0");
+    let args: [usize; 2] = [c"abc".as_ptr() as usize, w!("def") as usize];
+    // SAFETY: as above; the inserts are an ANSI and a wide string.
+    let n = unsafe {
+        FormatMessageA(
+            FROM_STRING | ARRAY,
+            c"%1 and %2!S!".as_ptr().cast(),
+            0,
+            0,
+            a.as_mut_ptr(),
+            128,
+            args.as_ptr().cast(),
+        )
+    };
+    check(&a[..n as usize] == b"abc and def");
+    // SAFETY: as above, with a too small buffer.
+    check(unsafe { FormatMessageA(FROM_SYSTEM | IGNORE, null, 2, 0, a.as_mut_ptr(), 4, null) } == 0);
+    check_error(122);
+    let mut pa: *mut u8 = core::ptr::null_mut();
+    // SAFETY: an allocated ANSI buffer.
+    let n = unsafe { FormatMessageA(FROM_SYSTEM | IGNORE | ALLOCATE, null, 5, 0, (&raw mut pa).cast(), 64, null) };
+    // SAFETY: FormatMessageA wrote `n` bytes and a NUL at `pa`.
+    check(n == 19 && unsafe { core::slice::from_raw_parts(pa, 20) } == b"Access is denied.\r\n\0");
+    // SAFETY: the buffer FormatMessageA allocated.
+    check(unsafe { LocalFree(pa) }.is_null());
 }
 
 fn ends_with_ignore_case(w: &[u16], a: &[u8]) -> bool {
@@ -721,6 +817,8 @@ unsafe fn system_and_modules() {
         let n = FormatMessageW(0x1200, core::ptr::null(), 2, 0, msg.as_mut_ptr(), 128, core::ptr::null()) as usize;
         check(ascii_eq(&msg[..n], b"The system cannot find the file specified.\r\n"));
         check(FormatMessageW(0x1200, core::ptr::null(), 2, 0, msg.as_mut_ptr(), 8, core::ptr::null()) == 0);
+        check_error(122);
+        messages();
 
         // Modules: this program, kernel32 (with its forwarders) and
         // kernelbase.

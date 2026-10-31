@@ -49,6 +49,12 @@ fn embed_win32() {
         "cryptest.exe",
         // ADR 0093.
         "crtiotest.exe",
+        // ADR 0095.
+        "ws2_32.dll",
+        "wstest.exe",
+        "winhttp.dll",
+        "wininet.dll",
+        "httptest.exe",
     ] {
         match &dir {
             Some(d) => {

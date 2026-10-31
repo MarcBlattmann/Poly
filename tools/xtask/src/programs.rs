@@ -130,6 +130,12 @@ pub fn socket_test() -> Result<Vec<u8>> {
     nolibc_program("tools/xtask/programs/socket_test.rs", "socket-test")
 }
 
+/// Build `tools/xtask/programs/evtest.rs` (the input boot test's reader of
+/// `/dev/input/event*`, see `input.rs`); returns the ELF.
+pub fn evtest() -> Result<Vec<u8>> {
+    nolibc_program("tools/xtask/programs/evtest.rs", "evtest")
+}
+
 /// The C programs of the corpus, built by the pipeline tool into
 /// `target/xtask-programs/corpus`: `(name, ELF)` for `hello` and
 /// `libc-hello` as far as they were built. Empty, with the reason, without
