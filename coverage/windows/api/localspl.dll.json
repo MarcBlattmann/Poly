@@ -3,7 +3,7 @@
 {"symbol":"ControlPrintProcessor","src":["wine-spec"]},
 {"symbol":"EnumPrintProcessorDatatypesW","src":["wine-spec"]},
 {"symbol":"GetPrintProcessorCapabilities","src":["wine-spec"]},
-{"symbol":"InitializePrintMonitor","src":["wine-spec"]},
+{"symbol":"InitializePrintMonitor","src":["wine-spec"],"seeds":["wine:localspl/tests/localmon.c:test_InitializePrintMonitor","wine:localspl/tests/localmon.c:START_TEST"]},
 {"symbol":"InitializePrintProvidor","src":["wine-spec"]},
 {"symbol":"OpenPrintProcessor","src":["wine-spec"]},
 {"symbol":"PrintDocumentOnPrintProcessor","src":["wine-spec"]},

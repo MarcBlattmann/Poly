@@ -13,16 +13,21 @@
 //!                                                    (every entry of those components)
 //! coverage check
 //! coverage readme [--check]      README progress section + docs/progress/*.svg
+//! coverage seed-wine <wine-checkout> --revision <rev>
+//!                                where Wine's conformance tests exercise each Windows entry (names only, ADR 0097)
+//! coverage show <id>...          one entry: status, sources, tests, seeds (seeds hidden from implementers)
 //! ```
 
 mod import;
 mod model;
 mod readme;
 mod roadmap;
+mod seeds;
 mod svg;
 
 use model::{Coverage, Entry, Source, Status};
 use roadmap::Roadmap;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -252,17 +257,112 @@ fn readme(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// `seed-wine <checkout> --revision <rev>`: replace every entry's `wine:`
+/// seeds with what the checkout's conformance tests call (ADR 0097).
+fn seed_wine(args: &[String]) -> Result<(), String> {
+    let pos = positional(args);
+    let [dir] = pos.as_slice() else {
+        return Err("usage: coverage seed-wine <wine checkout> --revision <wine commit>".into());
+    };
+    let revision = opt(args, "--revision").ok_or("--revision <wine commit> is required")?;
+    // A git checkout must be at the revision it is recorded as (only read,
+    // so a checkout owned by another user, as in a container, is fine).
+    let safe = format!("safe.directory={dir}");
+    if let Ok(out) = std::process::Command::new("git")
+        .args(["-c", &safe, "-C", dir, "rev-parse", "HEAD"])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        && out.status.success()
+    {
+        let head = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !head.starts_with(&revision.to_ascii_lowercase()) {
+            return Err(format!("{dir} is at {head}, not {revision}"));
+        }
+    }
+    let files = seeds::wine_test_files(Path::new(dir))?;
+    if files.is_empty() {
+        return Err(format!("{dir}: no dlls/*/tests/*.c; is it a Wine checkout?"));
+    }
+    let mut c = load()?;
+    let (found, stats) = seeds::seeds(&c, &files);
+    let source = Source { description: seeds::WINE_DESCRIPTION.into(), revision: revision.into() };
+    let seeded = c.set_seeds(seeds::WINE, source, &found)?;
+    save(&c)?;
+    println!(
+        "{} test files, {} functions ({} that check something), {} entry/test pairs: {seeded} entries seeded (at most {} each)",
+        stats.files,
+        stats.functions,
+        stats.checking,
+        stats.pairs,
+        seeds::MAX_SEEDS
+    );
+    Ok(())
+}
+
+/// `show <id>...`: what the map knows of entries. Seeds point into other
+/// projects' tests, which implementers may not read (CLEAN_ROOM.md), so
+/// under `POLY_ROLE=implementer` only their number is shown.
+fn show(args: &[String]) -> Result<(), String> {
+    let ids = positional(args);
+    if ids.is_empty() {
+        return Err("usage: coverage show <id>...".into());
+    }
+    let implementer = std::env::var("POLY_ROLE").is_ok_and(|r| r == "implementer");
+    let c = load()?;
+    for id in ids {
+        let e = c.find(id).ok_or_else(|| format!("no entry {id}"))?;
+        println!("{}", e.id);
+        let claim = e.claimed_by.as_ref().map(|a| format!(" by {a}")).unwrap_or_default();
+        println!("  status   {}{claim}", e.status.name());
+        if let Some(n) = e.number {
+            println!("  number   {n}");
+        }
+        if let Some(f) = &e.forward {
+            println!("  forward  {f}");
+        }
+        if !e.arch.is_empty() {
+            println!("  arch     {}", e.arch.join(" "));
+        }
+        for s in &e.sources {
+            let rev = c.sources.get(s).map(|s| s.revision.as_str()).unwrap_or("?");
+            println!("  source   {s} @ {rev}");
+        }
+        println!("  tests    {} visible, {} held out", e.tests_visible, e.tests_held_out);
+        if e.weight > 0.0 {
+            println!("  weight   {}", e.weight);
+        }
+        if e.seeds.is_empty() {
+            println!("  seeds    none");
+        } else if implementer {
+            println!("  seeds    {} (not shown to implementers: CLEAN_ROOM.md)", e.seeds.len());
+        } else {
+            let prefixes: BTreeSet<&str> = e.seeds.iter().filter_map(|s| s.split_once(':')).map(|(p, _)| p).collect();
+            for p in prefixes {
+                let rev = c.seeds.get(p).map(|s| s.revision.as_str()).unwrap_or("?");
+                println!("  seeds    {p} @ {rev} (spec agents only: read for behaviour, never copy)");
+            }
+            for s in &e.seeds {
+                println!("    {s}");
+            }
+        }
+    }
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let rest = args.get(1..).unwrap_or(&[]);
     let result = match args.first().map(String::as_str) {
         Some("import") => import(rest),
+        Some("seed-wine") => seed_wine(rest),
+        Some("show") => show(rest),
         Some("claim") => claim(rest),
         Some("release") => release(rest),
         Some("set-status") => set_status(rest),
         Some("check") => check(),
         Some("readme") => readme(rest),
-        _ => Err("usage: coverage <import|claim|release|set-status|check|readme> ...".into()),
+        _ => Err("usage: coverage <import|seed-wine|show|claim|release|set-status|check|readme> ...".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

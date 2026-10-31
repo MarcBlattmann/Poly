@@ -1,3 +1,3 @@
 [
-{"symbol":"MetaDataGetDispenser","src":["wine-spec"]}
+{"symbol":"MetaDataGetDispenser","src":["wine-spec"],"seeds":["wine:rometadata/tests/rometadata.c:test_MetaDataGetDispenser","wine:rometadata/tests/rometadata.c:test_MetaDataDispenser_OpenScope","wine:rometadata/tests/rometadata.c:test_IMetaDataImport_winrt","wine:rometadata/tests/rometadata.c:test_IMetaDataImport"]}
 ]

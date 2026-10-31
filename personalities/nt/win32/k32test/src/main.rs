@@ -1174,7 +1174,7 @@ unsafe fn conditions_and_init_once() {
         // One-time initialisation: a failed run lets the next one try.
         static mut ONCE: usize = 0;
         let mut ctx: *mut u8 = core::ptr::null_mut();
-        check(InitOnceExecuteOnce(&raw mut ONCE, init_fn, 1 as *mut u8, &mut ctx) == 0);
+        check(InitOnceExecuteOnce(&raw mut ONCE, init_fn, core::ptr::without_provenance_mut(1), &mut ctx) == 0);
         check(InitOnceExecuteOnce(&raw mut ONCE, init_fn, core::ptr::null_mut(), &mut ctx) != 0);
         check(ctx as usize == 0x1000);
         ctx = core::ptr::null_mut();

@@ -8,10 +8,10 @@
 {"symbol":"D3DPERF_SetRegion","src":["wine-spec"]},
 {"symbol":"DebugSetLevel","src":["wine-spec"]},
 {"symbol":"DebugSetMute","src":["wine-spec"]},
-{"symbol":"Direct3DCreate9","src":["wine-spec"]},
-{"symbol":"Direct3DCreate9Ex","src":["wine-spec"]},
-{"symbol":"Direct3DCreate9On12","src":["wine-spec"]},
-{"symbol":"Direct3DShaderValidatorCreate9","src":["wine-spec"]},
+{"symbol":"Direct3DCreate9","src":["wine-spec"],"seeds":["wine:d3d9/tests/device.c:test_multi_device","wine:d3d9/tests/device.c:test_begin_end_state_block","wine:d3d9/tests/device.c:test_check_device_format","wine:d3d9/tests/device.c:test_checkdevicemultisampletype","wine:d3d9/tests/device.c:test_create_rt_ds_fail","wine:d3d9/tests/device.c:test_cube_textures","wine:d3d9/tests/device.c:test_depthstenciltest","wine:d3d9/tests/device.c:test_destroyed_window"]},
+{"symbol":"Direct3DCreate9Ex","src":["wine-spec"],"seeds":["wine:d3d9/tests/d3d9ex.c:test_get_adapter_luid","wine:d3d9/tests/d3d9ex.c:test_get_adapter_displaymode_ex","wine:d3d9/tests/d3d9ex.c:test_qi_ex_to_base","wine:d3d9/tests/d3d9ex.c:test_swapchain_parameters","wine:d3d9/tests/d3d9ex.c:test_wndproc"]},
+{"symbol":"Direct3DCreate9On12","src":["wine-spec"],"seeds":["wine:d3d9/tests/device.c:test_d3d9on12","wine:d3d9/tests/device.c:create_d3d9on12_device_"]},
+{"symbol":"Direct3DShaderValidatorCreate9","src":["wine-spec"],"seeds":["wine:d3d9/tests/device.c:test_shader_validator"]},
 {"symbol":"PSGPError","src":["wine-spec"]},
 {"symbol":"PSGPSampleTexture","src":["wine-spec"]}
 ]

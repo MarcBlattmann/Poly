@@ -14,7 +14,7 @@
 {"symbol":"#7","src":["wine-spec"]},
 {"symbol":"#8","src":["wine-spec"]},
 {"symbol":"#9","src":["wine-spec"]},
-{"symbol":"ActivateAudioInterfaceAsync","src":["wine-spec"]},
+{"symbol":"ActivateAudioInterfaceAsync","src":["wine-spec"],"seeds":["wine:mmdevapi/tests/mmdevenum.c:test_ActivateAudioInterfaceAsync"]},
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},

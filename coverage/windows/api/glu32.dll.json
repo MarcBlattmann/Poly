@@ -41,7 +41,7 @@
 {"symbol":"gluQuadricNormals","src":["wine-spec"]},
 {"symbol":"gluQuadricOrientation","src":["wine-spec"]},
 {"symbol":"gluQuadricTexture","src":["wine-spec"]},
-{"symbol":"gluScaleImage","src":["wine-spec"]},
+{"symbol":"gluScaleImage","src":["wine-spec"],"seeds":["wine:glu32/tests/glu.c:test_gluScaleImage"]},
 {"symbol":"gluSphere","src":["wine-spec"]},
 {"symbol":"gluTessBeginContour","src":["wine-spec"]},
 {"symbol":"gluTessBeginPolygon","src":["wine-spec"]},

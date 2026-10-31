@@ -7,6 +7,10 @@ built from Rust for `x86_64-pc-windows-msvc` with `-Zbuild-std` and `rust-lld`,
 offline; the kernel starts every NT process in it) and
 [ADR 0073](0073-windows-file-system-layout.md) (an executable outside `C:` is
 named `Z:\...`). The workflow is in [AGENT_PIPELINE.md](../AGENT_PIPELINE.md#windows-test-oracle).
+Refined by [ADR 0097](0097-oracle-machine-over-ssh-and-wine-test-seeds.md):
+the oracle is now a dedicated machine reached over SSH (`win remote`),
+references are kept one file per test, and Wine's tests enter the coverage
+map as name-only seeds.
 
 ## Context
 
