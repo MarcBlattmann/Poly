@@ -24,6 +24,13 @@ fn is(c: u32, b: u8) -> bool {
 
 /// Split a command line (without its NUL) into arguments.
 pub fn parse<C: Unit>(line: &[C]) -> Vec<Vec<C>> {
+    parse_marked(line).into_iter().map(|(a, _)| a).collect()
+}
+
+/// [`parse`], each argument with whether a double quote delimited part
+/// of it (wildcard expansion leaves such arguments as they are,
+/// [`crate::wildcard`]).
+pub fn parse_marked<C: Unit>(line: &[C]) -> Vec<(Vec<C>, bool)> {
     let at = |i: usize| line.get(i).map_or(0, |c| c.to_u32());
     let blank = |c: u32| is(c, b' ') || is(c, b'\t');
     let n = line.len();
@@ -32,10 +39,12 @@ pub fn parse<C: Unit>(line: &[C]) -> Vec<Vec<C>> {
     let mut i = 0;
     let mut name = Vec::new();
     let mut quoted = false;
+    let mut had_quote = false;
     while i < n {
         let c = at(i);
         if is(c, b'"') {
             quoted = !quoted;
+            had_quote = true;
         } else if blank(c) && !quoted {
             break;
         } else {
@@ -43,7 +52,7 @@ pub fn parse<C: Unit>(line: &[C]) -> Vec<Vec<C>> {
         }
         i += 1;
     }
-    args.push(name);
+    args.push((name, had_quote));
     loop {
         while i < n && blank(at(i)) {
             i += 1;
@@ -53,6 +62,7 @@ pub fn parse<C: Unit>(line: &[C]) -> Vec<Vec<C>> {
         }
         let mut arg = Vec::new();
         let mut quoted = false;
+        let mut had_quote = false;
         while i < n {
             let c = at(i);
             if is(c, b'\\') {
@@ -79,6 +89,7 @@ pub fn parse<C: Unit>(line: &[C]) -> Vec<Vec<C>> {
                     continue;
                 }
                 quoted = !quoted;
+                had_quote = true;
                 i += 1;
                 continue;
             }
@@ -88,7 +99,7 @@ pub fn parse<C: Unit>(line: &[C]) -> Vec<Vec<C>> {
             arg.push(line[i]);
             i += 1;
         }
-        args.push(arg);
+        args.push((arg, had_quote));
     }
     args
 }
@@ -137,6 +148,13 @@ mod tests {
         let w: Vec<u16> = "p \"\u{e9}t\u{e9} x\" y".encode_utf16().collect();
         let a = parse(&w);
         assert_eq!(String::from_utf16(&a[1]).unwrap(), "\u{e9}t\u{e9} x");
+    }
+
+    #[test]
+    fn quotes_are_marked() {
+        let marks: Vec<bool> = parse_marked(br#"p *.c "*.h" a\"b x"y"z"#).into_iter().map(|(_, q)| q).collect();
+        assert_eq!(marks, [false, false, true, false, true]);
+        assert!(parse_marked(br#""C:\p" x"#)[0].1);
     }
 
     #[test]

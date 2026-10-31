@@ -53,6 +53,31 @@ pub const MSVCRT_VARARGS: &[(&str, u8)] = &[
     ("_swprintf_p_l", 4),
 ];
 
+/// `msvcrt.dll`'s variadic console functions (ADR 0093).
+pub const MSVCRT_CONIO_VARARGS: &[(&str, u8)] =
+    &[("_cprintf", 1), ("_cprintf_l", 2), ("_cwprintf", 1), ("_cwprintf_l", 2)];
+
+/// The variadic functions both DLLs export, thunks of the shared runtime
+/// (ADR 0093): `_spawnl*` (mode and name fixed), `_execl*` (name fixed).
+pub const SHARED_VARARGS: &[(&str, u8)] = &[
+    ("_spawnl", 2),
+    ("_spawnle", 2),
+    ("_spawnlp", 2),
+    ("_spawnlpe", 2),
+    ("_wspawnl", 2),
+    ("_wspawnle", 2),
+    ("_wspawnlp", 2),
+    ("_wspawnlpe", 2),
+    ("_execl", 1),
+    ("_execle", 1),
+    ("_execlp", 1),
+    ("_execlpe", 1),
+    ("_wexecl", 1),
+    ("_wexecle", 1),
+    ("_wexeclp", 1),
+    ("_wexeclpe", 1),
+];
+
 /// The memory functions both DLLs export from `compiler_builtins`.
 pub const BUILTIN_MEMORY: &[&str] = &["memcpy", "memmove", "memset", "memcmp"];
 
@@ -135,6 +160,12 @@ mod tests {
             assert!((1..=4).contains(n), "{a}");
             assert!(MSVCRT_VARARGS[i + 1..].iter().all(|(b, _)| a != b), "{a} twice");
         }
+        let all: alloc::vec::Vec<&str> =
+            MSVCRT_VARARGS.iter().chain(MSVCRT_CONIO_VARARGS).chain(SHARED_VARARGS).map(|&(n, _)| n).collect();
+        for (i, a) in all.iter().enumerate() {
+            assert!(!all[i + 1..].contains(a), "{a} twice");
+        }
+        assert!(SHARED_VARARGS.iter().chain(MSVCRT_CONIO_VARARGS).all(|&(_, n)| (1..=3).contains(&n)));
         assert!(UCRT_STARTUP.contains(&"_initterm") && MSVCRT_STARTUP.contains(&"__getmainargs"));
         assert_eq!(BUILTIN_MEMORY.len(), 4);
     }

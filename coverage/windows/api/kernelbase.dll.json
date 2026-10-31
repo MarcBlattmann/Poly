@@ -150,7 +150,7 @@
 {"symbol":"CreateMutexExW","src":["wine-spec"]},
 {"symbol":"CreateMutexW","status":"claimed","claimed_by":"kernel32","src":["wine-spec"],"seeds":["wine:kernel32/tests/file.c:test_GetFileType","wine:kernel32/tests/loader.c:child_process","wine:ntdll/tests/om.c:get_base_dir"]},
 {"symbol":"CreateNamedPipeW","src":["wine-spec"],"seeds":["wine:kernel32/tests/console.c:test_pseudo_console","wine:kernel32/tests/file.c:test_GetFileType","wine:msvcp140/tests/msvcp140.c:test_Stat"]},
-{"symbol":"CreatePipe","src":["wine-spec"],"seeds":["wine:kernel32/tests/pipe.c:test_CreatePipe","wine:kernel32/tests/console.c:testCursorInfo","wine:kernel32/tests/console.c:test_AllocConsole","wine:kernel32/tests/console.c:test_SetCurrentConsoleFontEx","wine:kernel32/tests/console.c:test_GetConsoleScreenBufferInfoEx","wine:kernel32/tests/console.c:test_GetCurrentConsoleFont","wine:kernel32/tests/console.c:test_GetCurrentConsoleFontEx","wine:kernel32/tests/process.c:test_handle_list_attribute"]},
+{"symbol":"CreatePipe","src":["wine-spec"],"seeds":["wine:kernel32/tests/pipe.c:test_CreatePipe","wine:kernel32/tests/console.c:testCursorInfo","wine:kernel32/tests/console.c:test_AllocConsole","wine:kernel32/tests/console.c:test_SetCurrentConsoleFontEx","wine:kernel32/tests/console.c:test_GetConsoleScreenBufferInfoEx","wine:kernel32/tests/console.c:test_GetCurrentConsoleFont","wine:kernel32/tests/console.c:test_GetCurrentConsoleFontEx","wine:kernel32/tests/process.c:test_handle_list_attribute"],"status":"claimed","claimed_by":"impl-crt-io"},
 {"symbol":"CreatePrivateObjectSecurity","src":["wine-spec"]},
 {"symbol":"CreatePrivateObjectSecurityEx","src":["wine-spec"]},
 {"symbol":"CreatePrivateObjectSecurityWithMultipleInheritance","src":["wine-spec"]},

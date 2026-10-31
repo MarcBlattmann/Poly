@@ -34,6 +34,7 @@ use poly_win32_crt::stdio::{self, BufferRule, File};
 use poly_win32_crt::{heap, timefn};
 use poly_win32_rt as _;
 
+mod files_console;
 mod locale;
 
 // ----- exported data --------------------------------------------------------------------
@@ -138,7 +139,7 @@ pub unsafe extern "C" fn __getmainargs(
     argc: *mut i32,
     argv: *mut *mut *mut u8,
     env: *mut *mut *mut u8,
-    _wildcard: i32,
+    wildcard: i32,
     info: *const StartupInfo,
 ) -> i32 {
     if !info.is_null() {
@@ -146,7 +147,7 @@ pub unsafe extern "C" fn __getmainargs(
         heap::_set_new_mode(unsafe { (*info).newmode });
     }
     // SAFETY: the caller's out-pointers.
-    unsafe { startup::main_args(argc, argv, env, false) }
+    unsafe { startup::main_args(argc, argv, env, false, wildcard != 0) }
 }
 
 /// # Safety
@@ -156,7 +157,7 @@ pub unsafe extern "C" fn __wgetmainargs(
     argc: *mut i32,
     argv: *mut *mut *mut u16,
     env: *mut *mut *mut u16,
-    _wildcard: i32,
+    wildcard: i32,
     info: *const StartupInfo,
 ) -> i32 {
     if !info.is_null() {
@@ -164,7 +165,7 @@ pub unsafe extern "C" fn __wgetmainargs(
         heap::_set_new_mode(unsafe { (*info).newmode });
     }
     // SAFETY: the caller's out-pointers.
-    unsafe { startup::main_args(argc, argv as *mut *mut *mut u8, env as *mut *mut *mut u8, true) }
+    unsafe { startup::main_args(argc, argv as *mut *mut *mut u8, env as *mut *mut *mut u8, true, wildcard != 0) }
 }
 
 static APP_TYPE: AtomicI32 = AtomicI32::new(0);

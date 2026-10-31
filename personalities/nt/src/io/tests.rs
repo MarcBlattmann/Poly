@@ -1145,6 +1145,37 @@ fn pipe_reads_wait_for_writes_and_cancel() {
 }
 
 #[test]
+fn pipe_reads_end_when_the_last_writer_closes() {
+    let mut t = setup();
+    let name = r"\Device\PolyPipe\anon";
+    // A read-only end first: its read waits, as no writer came yet.
+    let (s, r, _) = t.create(name, FILE_READ_DATA | SYNCHRONIZE, SHARE_ALL, FILE_CREATE, 0, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    let buf = t.f.alloc(16);
+    let iosb = t.f.alloc(16);
+    assert_eq!(t.f.call(Service::ReadFile, &[r, 0, 0, 0, iosb, buf, 16, 0, 0]), STATUS_PENDING);
+    // Two writers; the data written stays readable after both close.
+    let (s, w1, _) = t.create(name, FILE_WRITE_DATA | SYNCHRONIZE, SHARE_ALL, FILE_OPEN, 0, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (_, w2, _) = t.create(name, FILE_WRITE_DATA | SYNCHRONIZE, SHARE_ALL, FILE_OPEN, 0, 0);
+    assert_eq!(t.write(w1, b"ab", None).0, STATUS_SUCCESS);
+    assert_eq!(t.drain()[0].status, STATUS_SUCCESS);
+    t.write(w2, b"cd", None);
+    t.close(w1);
+    // A writer is left: an empty pipe still waits.
+    assert_eq!(t.f.call(Service::ReadFile, &[r, 0, 0, 0, iosb, buf, 2, 0, 0]), STATUS_SUCCESS);
+    t.drain();
+    assert_eq!(t.f.bytes_at(buf, 2), b"cd");
+    assert_eq!(t.f.call(Service::ReadFile, &[r, 0, 0, 0, iosb, buf, 16, 0, 0]), STATUS_PENDING);
+    // The last writer closes: the waiting read ends, and so do new ones.
+    t.close(w2);
+    assert_eq!(t.drain()[0].status, STATUS_PIPE_BROKEN);
+    assert_eq!(t.f.call(Service::ReadFile, &[r, 0, 0, 0, iosb, buf, 16, 0, 0]), STATUS_PIPE_BROKEN);
+    t.close(r);
+    assert_eq!(t.f.sys.io.pending_irps(), 0);
+}
+
+#[test]
 fn waiting_lock_granted_on_unlock() {
     let mut t = setup();
     let a = t.file("\\??\\C:\\wl");

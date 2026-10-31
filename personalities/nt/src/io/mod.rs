@@ -47,7 +47,12 @@
 //! shares. A write appends and completes waiting reads; a read takes what
 //! is there or waits, which is what the asynchronous-I/O and cancellation
 //! tests need from a "slow device". It is Poly's own device, not a Windows
-//! interface.
+//! interface. Once a stream has had an open with write access and the last
+//! of them closes, a read of an empty stream fails with
+//! `STATUS_PIPE_BROKEN` and so do the reads waiting then (ADR 0093:
+//! `kernelbase`'s anonymous pipes are such streams, and Learn's `ReadFile`
+//! fails with `ERROR_BROKEN_PIPE` once "the write handle has been
+//! closed").
 
 pub mod consts;
 pub mod create;
@@ -244,6 +249,9 @@ pub struct Pipe {
     pub opens: u32,
     /// Reads waiting for data, oldest first (IRP ids).
     pub readers: VecDeque<u64>,
+    /// Opens with write access now, and whether there ever was one.
+    pub writers: u32,
+    pub had_writer: bool,
 }
 
 /// The machine-wide file I/O state (in [`crate::NtSystem`]).
@@ -541,11 +549,21 @@ impl IoState {
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Pipe(key) => {
+                let mut broken = Vec::new();
                 if let Some(p) = self.pipes.get_mut(&key) {
                     p.opens -= 1;
+                    if rec.access & (FILE_WRITE_DATA | FILE_APPEND_DATA) != 0 {
+                        p.writers = p.writers.saturating_sub(1);
+                        if p.writers == 0 {
+                            broken = p.readers.drain(..).collect();
+                        }
+                    }
                     if p.opens == 0 {
                         self.pipes.remove(&key);
                     }
+                }
+                for id in broken {
+                    self.complete(id, STATUS_PIPE_BROKEN, 0, None);
                 }
             }
             Target::Disk(d) => {

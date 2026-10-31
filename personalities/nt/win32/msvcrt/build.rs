@@ -14,7 +14,11 @@ fn main() {
     // `_CxxThrowException` is assembly: its frame has an unwind handler
     // (ADR 0099).
     println!("cargo:rustc-link-arg=/EXPORT:_CxxThrowException");
-    for (name, _) in poly_crt::exports::MSVCRT_VARARGS {
+    for (name, _) in poly_crt::exports::MSVCRT_VARARGS
+        .iter()
+        .chain(poly_crt::exports::MSVCRT_CONIO_VARARGS)
+        .chain(poly_crt::exports::SHARED_VARARGS)
+    {
         println!("cargo:rustc-link-arg=/EXPORT:{name}");
     }
     // setjmp/longjmp: the shared runtime's assembly (ADR 0092).

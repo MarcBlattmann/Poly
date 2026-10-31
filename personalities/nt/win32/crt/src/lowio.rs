@@ -11,6 +11,11 @@
 //! modes (`_O_WTEXT`, `_O_U16TEXT`, `_O_U8TEXT`, Learn: `_setmode`) take
 //! and give UTF-16 units: written to a console with `WriteConsoleW`, to
 //! anything else as UTF-16LE or UTF-8 bytes.
+//!
+//! A child started by `_spawn*` or `system` gets every descriptor not
+//! opened with `_O_NOINHERIT` (ADR 0093): [`init`] takes them from the
+//! `STARTUPINFO`'s `lpReserved2` block (`poly_crt::spawn::decode`), the
+//! standard handles filling in 0, 1 and 2 where the block has none.
 
 use crate::global::{self, Global, Lock};
 use crate::sys::{self, Handle};
@@ -41,6 +46,8 @@ pub struct Fd {
     pub pending: Option<u8>,
     /// A high surrogate waiting for its low half (UTF-8 output).
     pub surrogate: u16,
+    /// Opened with `_O_NOINHERIT`: not passed to a child.
+    pub noinherit: bool,
 }
 
 static FDS: Global<Vec<Option<Fd>>> = Global::new(Vec::new());
@@ -65,22 +72,73 @@ fn describe(handle: Handle, mode: Translation, append: bool) -> Fd {
         let console = kind == sys::FILE_TYPE_CHAR && unsafe { sys::GetConsoleMode(handle, &mut m) } != 0;
         (kind, console)
     };
-    Fd { handle, mode, append, kind, console, eof: false, pending: None, surrogate: 0 }
+    Fd { handle, mode, append, kind, console, eof: false, pending: None, surrogate: 0, noinherit: false }
 }
 
-/// Make descriptors 0, 1, 2 from the standard handles (start-up).
+/// The descriptors a creator passed in this process's `STARTUPINFO`.
+fn inherited() -> Vec<Option<poly_crt::spawn::Passed>> {
+    let mut si = [0u8; sys::STARTUPINFO_SIZE];
+    // SAFETY: `si` holds a STARTUPINFOW.
+    unsafe { sys::GetStartupInfoW(si.as_mut_ptr()) };
+    let n = usize::from(u16::from_le_bytes([si[sys::SI_CB_RESERVED2], si[sys::SI_CB_RESERVED2 + 1]]));
+    let mut at = [0u8; 8];
+    at.copy_from_slice(&si[sys::SI_RESERVED2..sys::SI_RESERVED2 + 8]);
+    let at = u64::from_le_bytes(at) as *const u8;
+    if n == 0 || at.is_null() {
+        return Vec::new();
+    }
+    // SAFETY: `cbReserved2` bytes at `lpReserved2`, which the process
+    // parameters keep (ADR 0089).
+    poly_crt::spawn::decode(unsafe { core::slice::from_raw_parts(at, n) })
+}
+
+/// Make the descriptors a creator passed, and 0, 1, 2 from the standard
+/// handles where it passed none (start-up).
 pub fn init() {
+    let passed = inherited();
     let _g = LOCK.lock();
     let t = table();
     t.clear();
-    for which in sys::STD_HANDLES {
+    t.extend(passed.iter().map(|p| p.map(|p| describe(p.handle as Handle, p.mode, p.append))));
+    if t.len() < 3 {
+        t.resize(3, None);
+    }
+    for (i, which) in sys::STD_HANDLES.into_iter().enumerate() {
+        if t[i].is_some() {
+            continue;
+        }
         // SAFETY: no preconditions.
         let mut h = unsafe { sys::GetStdHandle(which) };
         if h == 0 || h == sys::INVALID_HANDLE_VALUE {
             h = NO_HANDLE;
         }
-        t.push(Some(describe(h, Translation::Text, false)));
+        t[i] = Some(describe(h, Translation::Text, false));
     }
+}
+
+/// Every descriptor a child gets, by number (`_O_NOINHERIT` ones and
+/// standard ones without a handle left out).
+pub fn inheritable() -> Vec<Option<Fd>> {
+    let _g = LOCK.lock();
+    table().iter().map(|e| e.filter(|f| !f.noinherit && f.handle != NO_HANDLE)).collect()
+}
+
+/// Put `fd` at number `at` (`_dup2`), growing the table; the descriptor
+/// that was there, whose handle is the caller's to close.
+pub fn place(at: i32, fd: Fd) -> Result<Option<Fd>, Failed> {
+    let i = match usize::try_from(at) {
+        Ok(i) if i < MAX => i,
+        _ => {
+            global::invalid(EBADF);
+            return Err(Failed);
+        }
+    };
+    let _g = LOCK.lock();
+    let t = table();
+    if t.len() <= i {
+        t.resize(i + 1, None);
+    }
+    Ok(t[i].replace(fd))
 }
 
 /// A copy of a descriptor's state.
@@ -110,7 +168,12 @@ pub fn check(fd: i32) -> Result<Fd, Failed> {
 
 /// The lowest free descriptor for `handle`; −1 and `EMFILE` when full.
 pub fn allocate(handle: Handle, mode: Translation, append: bool) -> i32 {
-    let fd = describe(handle, mode, append);
+    allocate_with(handle, mode, append, false)
+}
+
+/// [`allocate`], marked `_O_NOINHERIT` or not.
+pub fn allocate_with(handle: Handle, mode: Translation, append: bool, noinherit: bool) -> i32 {
+    let fd = Fd { noinherit, ..describe(handle, mode, append) };
     let _g = LOCK.lock();
     let t = table();
     if let Some(i) = t.iter().position(Option::is_none) {
