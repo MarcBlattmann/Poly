@@ -118,7 +118,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 ## Phase 6: Graphics, input, audio and the desktop
 
 - [ ] ⚖️ Decide: global menu bar or per-window menus
-- [ ] ⚖️ Decide: native window frames per app, or one neutral frame
+- [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app
 - [x] virtio-gpu driver: modesetting and 2D framebuffer
 - [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
 - [ ] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged

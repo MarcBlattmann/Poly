@@ -52,6 +52,14 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-compositor"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "poly-wayland",
+]
+
+[[package]]
 name = "poly-console"
 version = "0.0.1"
 
@@ -111,6 +119,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-heap"
+version = "0.0.1"
+
+[[package]]
+name = "poly-http"
 version = "0.0.1"
 
 [[package]]
@@ -206,12 +218,14 @@ dependencies = [
  "poly-abi",
  "poly-console",
  "poly-ldr",
+ "poly-net",
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
  "poly-security",
  "poly-seh",
  "poly-vfs",
+ "poly-winsock",
 ]
 
 [[package]]
@@ -344,6 +358,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-virtio-input"
+version = "0.0.1"
+dependencies = [
+ "poly-input",
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
 name = "poly-virtio-net"
 version = "0.0.1"
 dependencies = [
@@ -365,12 +388,23 @@ name = "poly-vm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-wayland"
+version = "0.0.1"
+dependencies = [
+ "poly-gfx",
+]
+
+[[package]]
 name = "poly-wincrypt"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
  "poly-x509",
 ]
+
+[[package]]
+name = "poly-winsock"
+version = "0.0.1"
 
 [[package]]
 name = "poly-x509"
@@ -474,12 +508,14 @@ dependencies = [
  "poly-ext2",
  "poly-font",
  "poly-gfx",
+ "poly-http",
  "poly-kernelbase",
  "poly-ldr",
  "poly-pe",
  "poly-term",
  "poly-vfs",
  "poly-wincrypt",
+ "poly-winsock",
  "rustc-demangle",
  "serde_json",
 ]

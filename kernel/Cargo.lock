@@ -119,6 +119,7 @@ dependencies = [
  "poly-virtio",
  "poly-virtio-blk",
  "poly-virtio-gpu",
+ "poly-virtio-input",
  "poly-virtio-net",
  "poly-virtio-sound",
  "poly-vm",
@@ -292,6 +293,15 @@ dependencies = [
 name = "poly-virtio-gpu"
 version = "0.0.1"
 dependencies = [
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
+name = "poly-virtio-input"
+version = "0.0.1"
+dependencies = [
+ "poly-input",
  "poly-pci",
  "poly-virtio",
 ]

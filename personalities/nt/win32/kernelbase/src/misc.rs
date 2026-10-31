@@ -410,7 +410,7 @@ unsafe fn deliver<T: Copy + Default>(flags: u32, text: &[T], buffer: *mut T, siz
             return fail(ERROR_INVALID_PARAMETER, 0);
         }
         // Learn: a message longer than 128K bytes is ERROR_MORE_DATA.
-        if text.len() * unit > MAX_ALLOCATED_BYTES {
+        if core::mem::size_of_val(text) > MAX_ALLOCATED_BYTES {
             return fail(ERROR_MORE_DATA, 0);
         }
         let units = (text.len() + 1).max(size as usize);

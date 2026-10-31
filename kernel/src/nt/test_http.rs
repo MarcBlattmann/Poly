@@ -51,7 +51,7 @@ mod tests {
                     return Err("System32 lacks winhttp.dll or wininet.dll");
                 }
             }
-            let vr = VfsRoot { vfs, ctx, cred: Cred::root() };
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
             let exe = super::super::HTTPTEST;
             create::install_file(&vr, &root, APP_DIR, "httptest.exe", exe).map_err(|_| "cannot write httptest.exe")?;
 
