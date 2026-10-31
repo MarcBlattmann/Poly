@@ -32,7 +32,8 @@ what exists **today** and how it fits that plan.
             network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets;
                      socket files (inet, poly-unix Unix sockets, netlink) with per-socket wake-ups
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
-            display: QEMU standard VGA framebuffer + RAM back buffer; poly-gfx (drawing, font, text grid)
+            display: RAM back buffer onto virtio-gpu (2D resource) or the QEMU standard VGA framebuffer;
+                     poly-gfx (drawing, font, text grid)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
                          syscall/sysret, FPU state, context switch, AP start-up, per-CPU data)
 ```
@@ -792,6 +793,51 @@ it. With `poly.test.display` (which `cargo xtask` passes) they require a
 display. Under TCG a full redraw of 1280x800 in the 8x16 font takes about
 40 ms and a full flush about 20 ms, so a terminal renders once per batch of
 output.
+
+### virtio-gpu
+
+With a virtio GPU (`-device virtio-gpu-pci`; `cargo xtask run --virtio-gpu`)
+the same back buffer goes to the screen another way
+([ADR 0102](adr/0102-virtio-gpu-2d-display.md)): it is the guest memory of
+a 2D resource, and a flush is a `TRANSFER_TO_HOST_2D` + `RESOURCE_FLUSH` of
+the rectangle. A virtio GPU wins over the VGA; the VGA is the fallback.
+
+```
+   back buffer   = resource 1's backing (RESOURCE_ATTACH_BACKING, one piece)
+          │  display::flush(rect): TRANSFER_TO_HOST_2D + RESOURCE_FLUSH, one notify, polled
+          ▼
+   virtio-gpu    resource 1 (B8G8R8X8) ──SET_SCANOUT──▶ scanout 0, and every other enabled scanout (mirrored)
+                 events_read polled on each flush: a display change re-plans (new resource on a resize)
+```
+
+- **`poly-virtio-gpu`** (VIRTIO 1.2 §5.7): the control queue's wire format,
+  EDID base blocks, the mode plan (the command line's size, else the first
+  enabled scanout's preferred mode, else 1280x800; other enabled scanouts
+  mirror the top-left corner) and the driver: synchronous commands, each
+  fenced, polled with a 2 s timeout, a transfer and its flush in one
+  notification; `show`, `update`, `destroy`, `take_events`. Tested against
+  a simulated GPU.
+- **The kernel side** (`kernel/src/virtio_gpu.rs`) finds the first
+  virtio-gpu function, maps its structures, resets it, gives the driver
+  its queue and command memory and logs the scanouts and EDIDs;
+  `display.rs` plans the size, allocates the back buffer and shows it.
+- **Display changes**: on VIRTIO_GPU_EVENT_DISPLAY the display plans again
+  from `GET_DISPLAY_INFO`; another size gets a new back buffer and
+  resource that keep the picture, and the old ones are destroyed and freed.
+
+```text
+virtio-gpu: 00:02.0: features 0x120000002 (EDID), 1 scanout(s), 0 capset(s), control queue 4 entries, polled
+virtio-gpu: 00:02.0: scanout 0: enabled, preferred 1152x864
+virtio-gpu: 00:02.0: scanout 0: EDID 1.4 from RHT product 0x1234 "QEMU Monitor", preferred timing 1152x864
+display: virtio-gpu 00:02.0 1152x864x32 (Preferred size), resource 1 on scanout(s) 0; back buffer 0x800000 (3888 KiB)
+```
+
+The display tests run on it too (where they cannot read the screen back,
+they check the rectangle sent to the device), plus `display::virtio_gpu_*`:
+the mode is the preferred one, a pattern goes out as one accepted update,
+and a switch to a larger size and back keeps the picture. Boot group
+`virtio-gpu` then compares a QMP screenshot of the scanout with the boot
+screen.
 
 ## Screen terminal
 

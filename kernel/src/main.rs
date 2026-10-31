@@ -42,6 +42,7 @@ mod tty;
 mod user;
 mod vdso;
 mod virtio_blk;
+mod virtio_gpu;
 
 use alloc::boxed::Box;
 use core::panic::PanicInfo;
