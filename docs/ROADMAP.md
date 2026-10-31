@@ -96,7 +96,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 ## Phase 5: NT personality and Windows console apps
 
 - [x] Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed
-- [ ] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds
+- [x] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds (oracle: a dedicated machine over SSH, ADR 0097; tracer: ADR 0090; Wine seeds: ADR 0097)
 - [x] NT object manager: handles, object namespace (`\??`, `\Device`, `\BaseNamedObjects`), reference counts
 - [x] NT memory services: sections, `NtAllocateVirtualMemory`, `NtMapViewOfSection`, protections
 - [x] NT processes and threads, TEB/PEB, thread contexts, APCs (ADR 0065)
@@ -105,7 +105,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Structured exception handling: kernel-to-user exception dispatch, unwinding (ADR 0068)
 - [x] Registry: hive storage, `NtOpenKey` family, default system hives
 - [x] Our `ntdll`: PE loader (imports, relocations, TLS, delay-load), heap, `Rtl*`, loader lock (ADR 0071)
-- [ ] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors (first and second slices done, ADR 0079: processes, TLS/FLS, code pages, file mappings, condition variables; left: `CREATE_SUSPENDED` and handle inheritance in `CreateProcessW`)
+- [x] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors (ADR 0079: two slices, processes, TLS/FLS, code pages, file mappings, condition variables; ADR 0089: handle inheritance, `STARTUPINFO` and its standard handles, `CREATE_SUSPENDED` in `CreateProcessW`)
 - [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055) (first slice done, ADR 0084; left: C++ exceptions in `msvcrt` (`_CxxThrowException`, `__CxxFrameHandler3`), `setjmp`/`longjmp`, transcendental math, locales other than "C" and multibyte code pages, wildcard `argv`, `_findfirst`/`_spawn`/`system`/`_dup`/`_pipe`, console I/O (`_getch`, `_cprintf`), positional `printf`)
 - [x] `advapi32` basics: registry API, security descriptors, tokens (single user) (ADR 0083)
 - [x] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles (ADR 0080)

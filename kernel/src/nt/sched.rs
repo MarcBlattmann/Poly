@@ -358,6 +358,17 @@ pub fn terminate_other(pid: ProcessId, thread: ThreadRef, status: NtStatus) -> R
     Ok(())
 }
 
+/// The NT process `thread` belongs to: the caller's `pid` unless another
+/// process has it (a child's first thread, ADR 0089).
+fn owner_of(pid: ProcessId, thread: ThreadRef) -> ProcessId {
+    with(|s| {
+        if s.processes.get(&pid).is_some_and(|p| p.thread(thread).is_some()) {
+            return pid;
+        }
+        s.processes.iter().find(|(_, p)| p.thread(thread).is_some()).map_or(pid, |(&id, _)| id)
+    })
+}
+
 pub fn suspend(pid: ProcessId, thread: ThreadRef) -> Result<u32, NtStatus> {
     let prev = with(|s| {
         let c = s.ctl.entry(thread).or_default();
@@ -366,7 +377,7 @@ pub fn suspend(pid: ProcessId, thread: ThreadRef) -> Result<u32, NtStatus> {
         p
     });
     if prev == 0
-        && let Some(process) = find(pid)
+        && let Some(process) = find(owner_of(pid, thread))
         && let Some(f) = process.thread_flags(thread.0 as u32)
     {
         f.suspended.store(true, Ordering::SeqCst);
@@ -376,16 +387,21 @@ pub fn suspend(pid: ProcessId, thread: ThreadRef) -> Result<u32, NtStatus> {
 }
 
 pub fn resume(pid: ProcessId, memory: &Arc<Memory>, thread: ThreadRef) -> Result<u32, NtStatus> {
-    let (prev, now, deferred) = with(|s| {
+    let (prev, now, deferred, child) = with(|s| {
         let c = s.ctl.entry(thread).or_default();
         let prev = c.suspend_count;
         c.suspend_count = c.suspend_count.saturating_sub(1);
         let now = c.suspend_count;
         let deferred = if now == 0 { c.deferred_start.take() } else { None };
-        (prev, now, deferred)
+        let child = if now == 0 { c.deferred_process.take() } else { None };
+        (prev, now, deferred, child)
     });
     if prev > 0 && now == 0 {
-        let process = find(pid);
+        // A new process's first thread, created suspended (ADR 0089).
+        if let (Some((entry, teb)), Some((process, child_memory))) = (deferred, &child) {
+            return super::start_first_thread(process, child_memory, &super::Start { entry, teb }).map(|()| prev);
+        }
+        let process = find(owner_of(pid, thread));
         if let Some((entry, teb)) = deferred {
             if let Some(process) = &process {
                 spawn(process, memory, thread, entry, teb)?;

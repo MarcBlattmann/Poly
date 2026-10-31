@@ -78,6 +78,20 @@ pub const THREAD_QUERY_LIMITED_INFORMATION: u32 = 0x0800;
 // the `THREAD_CREATE_FLAGS_*` names).
 pub const THREAD_CREATE_FLAGS_CREATE_SUSPENDED: u32 = 0x0001;
 
+/// Poly's own `NtCreateUserProcess` `ProcessFlags` bit (ADR 0089; no
+/// public header defines the flags): the new process inherits the
+/// creator's inheritable handles (`CreateProcessW`'s `bInheritHandles`).
+pub const PROCESS_CREATE_FLAGS_INHERIT_HANDLES: u32 = 0x0004;
+
+/// Poly's own `OBJECT_INFORMATION_CLASS` value for a handle's flags (ADR
+/// 0089): `ObjectHandleFlagInformation`, read by `NtQueryObject` and set by
+/// `NtSetInformationObject`, two `BOOLEAN`s, `Inherit` and
+/// `ProtectFromClose` (Learn's `SetHandleInformation` flags; no public
+/// header defines the class or the structure, to be confirmed by the spec
+/// agent).
+pub const OBJECT_HANDLE_FLAG_INFORMATION: u32 = 4;
+pub const OBJECT_HANDLE_FLAG_INFORMATION_SIZE: usize = 2;
+
 // ----- information classes
 
 /// `PROCESSINFOCLASS` (`winternl.h`): `ProcessBasicInformation`, the one we

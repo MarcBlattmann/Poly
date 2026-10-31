@@ -74,6 +74,57 @@ pub fn write_handles(b: &mut dyn Backend, base: u64, console: u64, std: [u64; 3]
     Ok(())
 }
 
+/// Poly's own (ADR 0089): the creator's `STARTUPINFO`, as
+/// `CreateProcessW` puts it into the parameters (`poly_kernelbase::process`
+/// lays it out; to be confirmed by the spec agent): `cb` at + 0xA0 (0: none
+/// was given), `dwX` .. `cbReserved2` as `STARTUPINFOW` has them at + 0xA4
+/// (so `dwFlags` is at + 0xC0 and `cbReserved2` at + 0xC6), `lpDesktop`,
+/// `lpTitle` and `lpReserved` as `UNICODE_STRING`s at + 0xC8, 0xD8 and
+/// 0xE8 (a null `Buffer` for a null pointer) and the `lpReserved2`
+/// bytes' address at + 0xF8.
+pub const PP_STARTUP: u64 = 0xA0;
+/// The bytes of `cb` and `dwX` .. `cbReserved2`.
+pub const STARTUP_FIXED: usize = 40;
+pub const PP_STARTUP_FLAGS: u64 = 0xC0;
+pub const PP_STARTUP_CB_RESERVED2: u64 = 0xC6;
+pub const PP_DESKTOP: u64 = 0xC8;
+pub const PP_TITLE: u64 = 0xD8;
+pub const PP_SHELL_INFO: u64 = 0xE8;
+pub const PP_RESERVED2: u64 = 0xF8;
+/// The header [`read`] copies: everything up to the end of the fields
+/// above.
+const HEADER: u64 = 0x100;
+/// `STARTF_USESTDHANDLES` (`processthreadsapi.h`): the standard handles
+/// in the parameters (+ 0x20) are the creator's choice.
+pub const STARTF_USESTDHANDLES: u32 = 0x100;
+
+/// The creator's `STARTUPINFO` in a process's parameters ([`PP_STARTUP`]),
+/// copied as it is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Startup {
+    /// `cb` and `dwX` .. `cbReserved2` (all zero: none given).
+    pub fixed: [u8; STARTUP_FIXED],
+    pub desktop: Option<Vec<u16>>,
+    pub title: Option<Vec<u16>>,
+    pub shell_info: Option<Vec<u16>>,
+    /// The `lpReserved2` bytes.
+    pub reserved2: Vec<u8>,
+}
+
+impl Default for Startup {
+    fn default() -> Startup {
+        Startup { fixed: [0; STARTUP_FIXED], desktop: None, title: None, shell_info: None, reserved2: Vec::new() }
+    }
+}
+
+impl Startup {
+    /// `dwFlags`.
+    pub fn flags(&self) -> u32 {
+        let at = (PP_STARTUP_FLAGS - PP_STARTUP) as usize;
+        u32::from_le_bytes(self.fixed[at..at + 4].try_into().expect("4 bytes"))
+    }
+}
+
 /// A process's parameters.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Parameters {
@@ -85,6 +136,19 @@ pub struct Parameters {
     pub environment: Vec<u16>,
     /// The starting current directory (empty: the executable's).
     pub current_dir: Vec<u16>,
+    /// The creator's `STARTUPINFO` (ADR 0089).
+    pub startup: Startup,
+    /// The standard handles the creator put in (+ 0x20, + 0x28, + 0x30):
+    /// the child's when [`Startup::flags`] has `STARTF_USESTDHANDLES`.
+    pub std_handles: [u64; 3],
+}
+
+impl Parameters {
+    /// The standard handles the creator chose (`STARTF_USESTDHANDLES`),
+    /// which the child gets as they are (ADR 0089), if it chose them.
+    pub fn given_std_handles(&self) -> Option<[u64; 3]> {
+        (self.startup.flags() & STARTF_USESTDHANDLES != 0).then_some(self.std_handles)
+    }
 }
 
 fn put_u64(buf: &mut [u8], at: u64, v: u64) {
@@ -126,6 +190,33 @@ pub fn image(base: u64, p: &Parameters) -> Result<Vec<u8>, NtStatus> {
     let current_at = base + buf.len() as u64;
     push_wide(&mut buf, &p.current_dir);
     buf.extend_from_slice(&[0, 0]);
+    align(&mut buf, 8);
+    // The STARTUPINFO's fields, strings and bytes (ADR 0089).
+    let st = &p.startup;
+    let at = PP_STARTUP as usize;
+    buf[at..at + STARTUP_FIXED].copy_from_slice(&st.fixed);
+    for (field, text) in [(PP_DESKTOP, &st.desktop), (PP_TITLE, &st.title), (PP_SHELL_INFO, &st.shell_info)] {
+        if let Some(text) = text {
+            let text_at = base + buf.len() as u64;
+            push_wide(&mut buf, text);
+            buf.extend_from_slice(&[0, 0]);
+            align(&mut buf, 8);
+            put_string(&mut buf, field, text_at, text.len())?;
+        }
+    }
+    let reserved2 = u16::try_from(st.reserved2.len()).map_err(|_| STATUS_INVALID_PARAMETER)?;
+    if reserved2 > 0 {
+        let reserved2_at = base + buf.len() as u64;
+        put_u64(&mut buf, PP_RESERVED2, reserved2_at);
+        buf.extend_from_slice(&st.reserved2);
+        align(&mut buf, 8);
+    }
+    // `cbReserved2` counts the bytes there are.
+    let cb2 = PP_STARTUP_CB_RESERVED2 as usize;
+    buf[cb2..cb2 + 2].copy_from_slice(&reserved2.to_le_bytes());
+    for (i, h) in p.std_handles.iter().enumerate() {
+        put_u64(&mut buf, PP_STANDARD_INPUT + 8 * i as u64, *h);
+    }
     align(&mut buf, 16);
     let env_at = base + buf.len() as u64;
     push_wide(&mut buf, &p.environment);
@@ -200,6 +291,7 @@ pub fn for_program(image_path: &str, args: &[&str], environment: Vec<u16>) -> Pa
         command_line: command_line(image_path, args).encode_utf16().collect(),
         environment,
         current_dir: Vec::new(),
+        ..Parameters::default()
     }
 }
 
@@ -215,7 +307,7 @@ pub type ReadUser<'a> = dyn FnMut(u64, &mut [u8]) -> Result<(), NtStatus> + 'a;
 /// (`NtCreateUserProcess`, ADR 0079): the strings and the environment
 /// block, copied out. `read` reads the caller's memory.
 pub fn read(at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
-    let mut header = alloc::vec![0u8; (PP_CURRENT_DIRECTORY + 16) as usize];
+    let mut header = alloc::vec![0u8; HEADER as usize];
     read(at, &mut header)?;
     let u64_at = |o: u64| u64::from_le_bytes(header[o as usize..][..8].try_into().expect("8 bytes"));
     let mut string = |o: u64| -> Result<Vec<u16>, NtStatus> {
@@ -248,7 +340,37 @@ pub fn read(at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
     if image_path.is_empty() {
         return Err(STATUS_INVALID_PARAMETER);
     }
-    Ok(Parameters { image_path, command_line, environment, current_dir })
+    // The STARTUPINFO (ADR 0089): a string with a null buffer is `None`.
+    let mut optional = |o: u64| -> Result<Option<Vec<u16>>, NtStatus> {
+        let len = usize::from(u16::from_le_bytes([header[o as usize], header[o as usize + 1]]));
+        let buf = u64_at(o + 8);
+        if buf == 0 {
+            return Ok(None);
+        }
+        if len % 2 != 0 {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        let mut b = alloc::vec![0u8; len];
+        read(buf, &mut b)?;
+        Ok(Some(b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect()))
+    };
+    let (desktop, title, shell_info) = (optional(PP_DESKTOP)?, optional(PP_TITLE)?, optional(PP_SHELL_INFO)?);
+    let mut fixed = [0u8; STARTUP_FIXED];
+    fixed.copy_from_slice(&header[PP_STARTUP as usize..][..STARTUP_FIXED]);
+    let cb2 = PP_STARTUP_CB_RESERVED2 as usize;
+    let reserved2_len = usize::from(u16::from_le_bytes([header[cb2], header[cb2 + 1]]));
+    let reserved2_at = u64_at(PP_RESERVED2);
+    let mut reserved2 = Vec::new();
+    if reserved2_len > 0 && reserved2_at != 0 {
+        reserved2 = alloc::vec![0u8; reserved2_len];
+        read(reserved2_at, &mut reserved2)?;
+    } else {
+        // No bytes: none are counted.
+        fixed[cb2 - PP_STARTUP as usize..][..2].fill(0);
+    }
+    let startup = Startup { fixed, desktop, title, shell_info, reserved2 };
+    let std_handles = core::array::from_fn(|i| u64_at(PP_STANDARD_INPUT + 8 * i as u64));
+    Ok(Parameters { image_path, command_line, environment, current_dir, startup, std_handles })
 }
 
 #[cfg(test)]
@@ -375,6 +497,22 @@ mod tests {
         // The structure reads back as it was written.
         let mut with_dir = p.clone();
         with_dir.current_dir = "C:\\Work".encode_utf16().collect();
+        // With a STARTUPINFO (ADR 0089): its fields, strings (a null one
+        // stays null, an empty one empty), bytes and standard handles.
+        let mut fixed = [0u8; STARTUP_FIXED];
+        fixed[0..4].copy_from_slice(&104u32.to_le_bytes());
+        fixed[0x20..0x24].copy_from_slice(&STARTF_USESTDHANDLES.to_le_bytes());
+        fixed[0x26..0x28].copy_from_slice(&3u16.to_le_bytes());
+        with_dir.startup = Startup {
+            fixed,
+            desktop: None,
+            title: Some("T".encode_utf16().collect()),
+            shell_info: Some(Vec::new()),
+            reserved2: alloc::vec![1, 2, 3],
+        };
+        with_dir.std_handles = [4, 8, 0xC];
+        assert_eq!(with_dir.given_std_handles(), Some([4, 8, 0xC]));
+        assert_eq!(p.given_std_handles(), None);
         let img = image(base, &with_dir).unwrap();
         let mut reader = |addr: u64, buf: &mut [u8]| {
             let off = (addr - base) as usize;

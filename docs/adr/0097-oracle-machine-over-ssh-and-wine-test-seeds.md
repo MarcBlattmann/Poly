@@ -2,8 +2,8 @@
 
 **Status:** Accepted. Two of the three parts of the Phase 5 item "Windows
 test oracle VM, Windows API tracer, Wine conformance tests imported as spec
-seeds"; the API tracer is ADR 0090's (branch `win-api-tracer`), so the
-item stays unticked until that is merged too. Builds on
+seeds"; with the API tracer of [ADR 0090](0090-windows-api-tracer.md), merged before it, the
+item is complete and ticked. Builds on
 [ADR 0075](0075-windows-test-oracle.md) (test programs, `poly-oracle.ps1`,
 bundles, `poly-winrun/1`, `win diff`) and
 [ADR 0006](0006-coverage-map-one-file-per-component.md) (the coverage map); compatible with
@@ -231,10 +231,10 @@ conflicts in git; take the other side and run `seed-wine` again.
 
 ## Not built here
 
-- The Windows API tracer (ADR 0090, another agent); the roadmap item stays
-  open until it is merged.
-- A `win polycheck` in CI against the recorded references, and `tests
-  split` / `handoff` for `.rs` tests (ADR 0075's next steps).
+- The Windows API tracer: [ADR 0090](0090-windows-api-tracer.md) (`win trace-kit`,
+  `trace-diff`), built separately.
+- A `win polycheck` in CI against the recorded references (ADR 0075's
+  next step; `tests split --windows-results` exists since ADR 0098).
 - Uploading bundles through a release for an unattended loop (ADR 0075);
   SSH makes it unnecessary while a machine is reachable.
 
