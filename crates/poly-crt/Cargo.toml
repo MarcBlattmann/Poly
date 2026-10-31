@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+poly-nls = { workspace = true }
 poly-rtl = { workspace = true }
 
 [lints]

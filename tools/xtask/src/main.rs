@@ -69,6 +69,7 @@ mod initramfs;
 mod ktest;
 mod libsearch;
 mod net;
+mod nls;
 mod ntdll;
 mod programs;
 mod rootdisk;
@@ -120,6 +121,7 @@ fn main() -> ExitCode {
         Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => return pipeline_command(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
+        Some("nls-tables") => nls::run(&root(), &args[1..]),
         Some("ntdll") => ntdll::command(&args[1..]),
         Some("win32") => win32::command(&args[1..]),
         Some("win") => sevenzip::command(&args[1..]),
@@ -130,7 +132,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|nls-tables|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }

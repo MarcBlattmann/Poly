@@ -5,9 +5,9 @@
 //! The "C" locale's narrow classes are ASCII's; bytes 0x80–0xFF have none.
 //! Wide characters (`_wctype`, `iswalpha` …) are classified by Unicode
 //! for U+0000–U+00FF (Latin-1: letters, the no-break space, controls,
-//! punctuation); characters above U+00FF have no class (Poly's choice, to
-//! be confirmed by the spec agent: Windows classifies them with
-//! `GetStringTypeW`). `toupper`/`tolower` map ASCII letters,
+//! punctuation); characters above U+00FF by `poly_nls::unicode` (ADR
+//! 0094; Windows classifies them with `GetStringTypeW`, to be confirmed by
+//! the spec agent). `toupper`/`tolower` map ASCII letters,
 //! `towupper`/`towlower` ASCII and Latin-1 letters.
 
 /// `ctype.h`.
@@ -84,9 +84,14 @@ pub fn class(c: i32) -> u16 {
     }
 }
 
-/// `iswctype(c, mask)`'s class bits.
+/// `iswctype(c, mask)`'s class bits: the table for U+0000-U+00FF, above
+/// it `poly_nls::unicode`'s classes (ADR 0094).
 pub fn wide_class(c: u32) -> u16 {
-    if c < 256 { WIDE[c as usize + 1] } else { 0 }
+    match c {
+        0..=0xFF => WIDE[c as usize + 1],
+        0x100..=0xFFFF => poly_nls::unicode::class(c as u16),
+        _ => 0,
+    }
 }
 
 /// White space as `strtol`/`strtod` skip it (`isspace` / `iswspace`).
@@ -171,7 +176,7 @@ mod tests {
         assert_eq!(wide_class(0xA0), SPACE | BLANK);
         assert_eq!(wide_class(0xD7), PUNCT);
         assert_eq!(wide_class(0x85), CONTROL);
-        assert_eq!(wide_class(0x3B1), 0);
+        assert_eq!(wide_class(0x3B1), LOWER | 0x100);
         assert_eq!(to_upper_wide(0xE9), 0xC9);
         assert_eq!(to_lower_wide(0xC9), 0xE9);
         assert_eq!(to_upper_wide(0xF7), 0xF7);

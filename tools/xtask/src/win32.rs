@@ -33,7 +33,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 11] = [
+pub const OUTPUTS: [&str; 12] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -43,6 +43,7 @@ pub const OUTPUTS: [&str; 11] = [
     "ucrtbase.dll",
     "msvcrt.dll",
     "crttest.exe",
+    "crtloctest.exe",
     "user32.dll",
     "oleaut32.dll",
 ];
@@ -89,6 +90,7 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/ucrtbase",
             "personalities/nt/win32/msvcrt",
             "personalities/nt/win32/crttest",
+            "personalities/nt/win32/crtloctest",
             "personalities/nt/win32/user32",
             "personalities/nt/win32/oleaut32",
         ],

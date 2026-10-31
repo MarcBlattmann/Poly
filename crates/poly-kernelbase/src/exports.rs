@@ -197,6 +197,10 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetOEMCP", "api-ms-win-core-localization-l1-2-0"),
     ("GetCPInfo", "api-ms-win-core-localization-l1-2-0"),
     ("IsValidCodePage", "api-ms-win-core-localization-l1-2-0"),
+    // Double-byte code pages (ADR 0094; the contract is a guess, to be
+    // confirmed by the spec agent).
+    ("IsDBCSLeadByte", "api-ms-win-core-localization-l1-2-0"),
+    ("IsDBCSLeadByteEx", "api-ms-win-core-localization-l1-2-0"),
     // File mappings (memoryapi.h).
     ("CreateFileMappingW", "api-ms-win-core-memory-l1-1-0"),
     ("OpenFileMappingW", "api-ms-win-core-memory-l1-1-0"),

@@ -26,10 +26,10 @@ pub const DEFAULT_CHAR: u8 = b'?';
 pub const ANSI_CODE_PAGE: u32 = 1252;
 
 /// One byte to UTF-16.
-pub fn to_unicode(b: u8) -> u16 {
+pub const fn to_unicode(b: u8) -> u16 {
     match b {
-        0x80..=0x9F => HIGH[usize::from(b - 0x80)],
-        _ => u16::from(b),
+        0x80..=0x9F => HIGH[(b - 0x80) as usize],
+        _ => b as u16,
     }
 }
 

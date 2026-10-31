@@ -28,6 +28,8 @@ use poly_win32_crt::stdio::{self, BufferRule, File};
 use poly_win32_crt::{heap, timefn};
 use poly_win32_rt as _;
 
+mod locale;
+
 // ----- exported data --------------------------------------------------------------------
 
 /// `_iob[_IOB_ENTRIES]` (20 in the classic `stdio.h`).
@@ -104,6 +106,7 @@ pub extern "system" fn msvcrt_main(_module: *mut u8, reason: u32, reserved: *mut
             commode: _commode.get(),
         });
         stdio::bind_iob(_iob.get() as *mut File);
+        locale::bind(_pctype.get(), __mb_cur_max.get());
         // SAFETY: process attach; one thread.
         let list = unsafe { &mut *_sys_errlist.get() };
         for (i, slot) in list.iter_mut().enumerate() {

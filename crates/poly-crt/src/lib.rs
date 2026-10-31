@@ -17,6 +17,10 @@
 //! - [`args`]: "Parsing C command-line arguments".
 //! - [`ctype`]: the "C" locale's character classes (`_pctype`), case
 //!   mapping.
+//! - [`locale`]: `setlocale`'s names and categories, a locale's `LC_CTYPE`
+//!   tables and `lconv` (ADR 0094).
+//! - [`mbcs`]: the multibyte code page (`_setmbcp`, `_mbctype`) and the
+//!   `_mbs*` / `_mbc*` / `_ismb*` logic (ADR 0094).
 //! - [`time`]: `time_t` ↔ `struct tm`, `asctime`, `strftime`.
 //! - [`sort`]: `qsort`, `bsearch`.
 //! - [`errno`]: `errno` values, messages, Win32 error → `errno`.
@@ -52,7 +56,9 @@ pub mod exports;
 pub mod fenv;
 pub mod float;
 pub mod fmode;
+pub mod locale;
 pub mod math;
+pub mod mbcs;
 pub mod printf;
 pub mod scanf;
 pub mod sort;

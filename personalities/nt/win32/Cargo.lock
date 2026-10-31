@@ -26,6 +26,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crtloctest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "crttest"
 version = "0.0.1"
 dependencies = [
@@ -84,6 +91,7 @@ version = "0.0.1"
 name = "poly-crt"
 version = "0.0.1"
 dependencies = [
+ "poly-nls",
  "poly-rtl",
 ]
 
@@ -91,7 +99,15 @@ dependencies = [
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-nls",
  "poly-ntobj",
+ "poly-rtl",
+]
+
+[[package]]
+name = "poly-nls"
+version = "0.0.1"
+dependencies = [
  "poly-rtl",
 ]
 
@@ -118,6 +134,7 @@ name = "poly-win32-crt"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
+ "poly-nls",
  "poly-win32-rt",
 ]
 
