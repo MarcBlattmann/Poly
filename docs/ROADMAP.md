@@ -110,7 +110,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] `advapi32` basics: registry API, security descriptors, tokens (single user) (ADR 0083)
 - [x] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles (ADR 0080)
 - [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0073)
-- [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; left: the recording on Windows)
+- [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; left: the API trace (ADR 0090) of the scenario recorded on Windows and compared without differences, ADR 0101 "The milestone")
 - [ ] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics
 - [x] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app) (ADR 0096)
 - [ ] Fallback if needed: our own `vcruntime140` (and `msvcp140` subsets) per ADR 0055

@@ -19,7 +19,9 @@
 //! - [`sync`]: wait timeouts and results, object names, the SRW lock.
 //! - [`memory`]: `VirtualAlloc`/`VirtualFree`, `LocalAlloc`/`GlobalAlloc`
 //!   flag checks.
-//! - [`message`]: `FormatMessageW` for system messages and its inserts.
+//! - [`message`]: `FormatMessageW`/`FormatMessageA`: system and module
+//!   messages and their inserts; [`sysmsg`] is the system message table,
+//!   generated from Learn by `cargo xtask system-messages` (ADR 0101).
 //! - [`version`]: `GetVersion`/`GetVersionExW` and the manifest rule,
 //!   `SYSTEM_INFO`.
 //! - [`exports`]: which functions `kernel32` forwards to `kernelbase`, by
@@ -82,6 +84,7 @@ pub mod process;
 pub mod registry;
 pub mod slist;
 pub mod sync;
+pub mod sysmsg;
 pub mod system;
 pub mod text;
 pub mod time;

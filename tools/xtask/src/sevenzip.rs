@@ -49,8 +49,8 @@
 //! (`tests/windows/sevenzip_scenario.rs`) on Poly: one boot in which the
 //! driver runs fifteen 7-Zip steps itself and records each one, compared
 //! step by step with the recording made on Windows
-//! ([`SCENARIO_REFERENCE`]) by `pipeline win scenario diff`. It is
-//! reported only ([`SCENARIO_REQUIRED`]) until Poly passes it.
+//! ([`SCENARIO_REFERENCE`]) by `pipeline win scenario diff`. Poly passes
+//! every step, so a difference fails the test ([`SCENARIO_REQUIRED`], ADR 0101).
 //! `cargo xtask win 7zip-diff` runs the same comparison by itself.
 
 use crate::symbols::Symbols;
@@ -243,9 +243,9 @@ pub const SCENARIO_REFERENCE: &str = "tests/windows/oracle/sevenzip_scenario.win
 const SCENARIO_BIN: &str = "target/pipeline/windows/scenario-bin";
 /// Its data files: `<dir>/<test>/7za.exe` (`pipeline`'s `scenario::DATA_DIR`).
 const SCENARIO_DATA: &str = "target/pipeline/windows/data";
-/// Whether a difference fails the `7zip` boot test. `false` until Poly
-/// passes every step; then `true` makes the scenario required (ADR 0088).
-const SCENARIO_REQUIRED: bool = false;
+/// Whether a difference fails the `7zip` boot test: `true` since Poly
+/// passes every step (ADR 0101; ADR 0088 made it report-only until then).
+const SCENARIO_REQUIRED: bool = true;
 
 /// `cargo run --package poly-pipeline -- <args>`; its exit status.
 fn pipeline(args: &[&str]) -> Result<std::process::ExitStatus> {
