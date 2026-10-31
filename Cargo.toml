@@ -50,12 +50,14 @@ members = [
     "crates/poly-vdso",
     "crates/poly-vm",
     "crates/poly-vfs",
+    "crates/poly-wayland",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
     "tools/coverage",
     "tools/pipeline",
     "tools/xtask",
+    "userland/poly-compositor",
 ]
 exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
@@ -111,6 +113,7 @@ poly-virtio-net = { path = "crates/poly-virtio-net" }
 poly-vdso = { path = "crates/poly-vdso" }
 poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
+poly-wayland = { path = "crates/poly-wayland" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }

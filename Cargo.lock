@@ -52,6 +52,14 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-compositor"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "poly-wayland",
+]
+
+[[package]]
 name = "poly-console"
 version = "0.0.1"
 
@@ -319,6 +327,13 @@ dependencies = [
 [[package]]
 name = "poly-vm"
 version = "0.0.1"
+
+[[package]]
+name = "poly-wayland"
+version = "0.0.1"
+dependencies = [
+ "poly-gfx",
+]
 
 [[package]]
 name = "proc-macro2"

@@ -1,0 +1,14 @@
+[package]
+name = "poly-wayland"
+description = "A Wayland server core: the wire format, protocol types generated from the XML, an object table and request dispatch, the core, xdg-shell and decoration protocol logic, and a software compositor that composes SHM buffers with neutral window frames"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-gfx.workspace = true
+
+[lints]
+workspace = true

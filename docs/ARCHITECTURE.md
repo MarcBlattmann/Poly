@@ -793,6 +793,46 @@ display. Under TCG a full redraw of 1280x800 in the 8x16 font takes about
 40 ms and a full flush about 20 ms, so a terminal renders once per batch of
 output.
 
+## Wayland compositor
+
+The compositor's groundwork (Phase 6, ADR 0106) lives in user space, on
+the Linux personality, with its logic in a host-tested crate:
+
+```
+ wl-client ──AF_UNIX + SCM_RIGHTS──▶ poly-compositor (userland/poly-compositor, static glibc)
+ (any Wayland client)                 │  poll, recvmsg/sendmsg, mmap of SHM pools (UnixHost)
+                                      ▼
+                         poly_wayland::server::Server        no I/O: bytes and fds in, bytes out
+                           wire decode ─▶ object table ─▶ handlers (core, xdg-shell,
+                           xdg-decoration, presentation-time); errors as wl_display.error
+                                      │ committed SHM buffers copied (damage only) and released
+                                      ▼
+                         poly_wayland::compose::Scene        windows, z-order, damage, scale
+                           render: background, neutral frame, content (premultiplied, HiDPI)
+                                      ▼
+                         Framebuffer trait ── MemoryFramebuffer (PPM on SIGUSR1) today;
+                                              the virtio-gpu scanout later
+```
+
+- **Protocol types** are generated from the XML in `third_party/wayland*/`
+  by `cargo xtask wayland` into `crates/poly-wayland/src/protocol/`
+  (checked in; `ci lint` checks they are current).
+- **Frames:** every toplevel gets Poly's neutral frame (title bar with the
+  title and a close button, a one-pixel border), drawn by the compositor;
+  `zxdg_decoration_manager_v1` always answers `server_side`.
+- **Timing:** frames at most every 1/60 s when something changed or a
+  client waits; frame callbacks and `wp_presentation` feedback are
+  answered with them. Real vsync comes with the display driver.
+- **Input:** `seat::InputSource` is the input stack's interface; for now
+  the seat only has capabilities, and clicks drive the frame (raise,
+  activate, close).
+- **Socket:** `$XDG_RUNTIME_DIR/wayland-0`, else `/run/user/<uid>/wayland-0`.
+  Shared memory comes from files in `/dev/shm` (tmpfs, `MAP_SHARED`);
+  `memfd_create` is not implemented yet.
+
+The boot test `wayland` runs `poly-compositor --exec /bin/wl-client` as the
+first process; `cargo xtask boot-tests wayland` runs it alone.
+
 ## Screen terminal
 
 A status bar and a text grid on the display, a second kernel shell on the
@@ -1489,6 +1529,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
 | Networking: virtio-net on QEMU's user networking (interrupt-driven, and in another boot polled): ping to the gateway, 1 MiB TCP and UDP through echo servers on the host, a connection from the host through a port forward; `ifconfig`, `ping` and `nc` in the shell. Loopback TCP, UDP and ping in every boot | `kernel_test!` + `poly.test.net=<port>`; `cargo xtask` (`net.rs`) | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
+| Wayland: the wire format, the generated protocol tables, the server's dispatch and protocol errors, the configure sequence, SHM buffers, damage, decorations, HiDPI, popups, presentation; small scenes rendered and compared pixel for pixel. On Poly: `poly-compositor` as init with the C client `wl-client` (SHM through `SCM_RIGHTS`, xdg_toplevel, frame callback, its pixels found in the compositor's picture) | `#[test]` in `poly-wayland`, `poly-compositor`, `xtask` (`wayland.rs`); boot group `wayland` (`compositor.rs`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
 | The persistent root disk (made by `cargo xtask` from the host's programs, ext4, booted through BusyBox's init and a chroot into its bash): coreutils pipelines under `bash -c`, job control and Ctrl-C, file work on the disk, 32 MiB through `dd`; Python scripts (stdlib modules, `subprocess`, threads, `mmap` resized and flushed, a growing buffer through `mremap`, record locks and flock across processes, SQLite, signals, the terminal's size, children's CPU time, `posix_spawn`); gcc compiling and linking programs onto the disk and running them; `e2fsck -fn` and the program read back on the host; a second boot finds what the first wrote. Lock table and remap kernel tests | `tools/xtask/src/rootdisk.rs`, `kernel_test!` in `fs/locks.rs`, `user/memory/remap.rs` | `cargo xtask test` (alone: `cargo xtask root-disk-test`) |
 | Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff [--target poly]`; in `cargo xtask ci`: Linux against Linux (`selfcheck`) and Poly against Linux for the tests in `tests/linux/poly-pass.txt` (`polycheck`) |

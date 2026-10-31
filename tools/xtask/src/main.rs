@@ -55,10 +55,13 @@
 //!                       with its Windows recording (sevenzip.rs, ADR 0088)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
+//!   wayland [--check]   regenerate poly-wayland's protocol modules from the Wayland
+//!                       protocol XML in third_party/ (--check: fail if out of date; wayland.rs)
 
 mod accel;
 mod asmlabels;
 mod busybox;
+mod compositor;
 mod conflicts;
 mod console;
 mod dynamic;
@@ -76,6 +79,7 @@ mod screen;
 mod sevenzip;
 mod symbols;
 mod terminal;
+mod wayland;
 mod win32;
 mod winimports;
 mod wintrace;
@@ -120,6 +124,7 @@ fn main() -> ExitCode {
         Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => return pipeline_command(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
+        Some("wayland") => wayland::run(&root(), &args[1..]),
         Some("ntdll") => ntdll::command(&args[1..]),
         Some("win32") => win32::command(&args[1..]),
         Some("win") => sevenzip::command(&args[1..]),
@@ -130,7 +135,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|wayland|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -1325,7 +1330,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 21] = [
+const BOOT_GROUPS: [BootGroup; 22] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1352,6 +1357,8 @@ const BOOT_GROUPS: [BootGroup; 21] = [
     // compared with Windows reference traces if there are any (report only;
     // wintrace.rs, ADR 0090).
     ("wintrace", wintrace::boot_test),
+    // The Wayland compositor as init with a C client (compositor.rs, ADR 0106).
+    ("wayland", compositor::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1385,7 +1392,7 @@ const BOOT_GROUPS: [BootGroup; 21] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland"]),
     ("devices", &["net", "ext2", "ext4", "missing-devices", "screen", "terminal"]),
     ("faults", &["faults", "failures"]),
 ];
@@ -1554,6 +1561,8 @@ fn lint() -> Result {
     )?;
     eprintln!("==> font tables");
     font::run(&root(), &["--check".into()])?;
+    eprintln!("==> Wayland protocol modules");
+    wayland::run(&root(), &["--check".into()])?;
     eprintln!("==> global_asm! labels");
     asmlabels::check(&kernel_dir().join("src"))?;
     eprintln!("==> merge conflict markers");
