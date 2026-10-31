@@ -489,6 +489,11 @@ fn matches_ci<C: crate::Unit>(s: &[C], at: usize, word: &[u8]) -> bool {
 /// `strtod`'s grammar (C11 7.22.1.3), after leading white space (the
 /// caller skips it with `isspace`). `s` need not hold the NUL.
 pub fn parse<C: crate::Unit>(s: &[C], fmt: Format) -> Parsed {
+    parse_point(s, fmt, b'.')
+}
+
+/// [`parse`] with the locale's decimal point (ADR 0094).
+pub fn parse_point<C: crate::Unit>(s: &[C], fmt: Format, point: u8) -> Parsed {
     let at = |i: usize| s.get(i).map_or(0, |c| c.to_u32());
     let sign_bit = 1u64 << (fmt.precision - 1 + bits_of_exponent(fmt));
     let mut i = 0;
@@ -529,7 +534,7 @@ pub fn parse<C: crate::Unit>(s: &[C], fmt: Format) -> Parsed {
         let mut seen_point = false;
         loop {
             let c = at(j);
-            if c == u32::from(b'.') && !seen_point {
+            if c == u32::from(point) && !seen_point {
                 seen_point = true;
             } else if let Some(v) = digit(c, 16) {
                 any = true;
@@ -572,7 +577,7 @@ pub fn parse<C: crate::Unit>(s: &[C], fmt: Format) -> Parsed {
     let mut any = false;
     loop {
         let c = at(j);
-        if c == u32::from(b'.') && !seen_point {
+        if c == u32::from(point) && !seen_point {
             seen_point = true;
         } else if let Some(v) = digit(c, 10) {
             any = true;

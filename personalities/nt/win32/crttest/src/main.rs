@@ -630,9 +630,14 @@ unsafe fn run() -> ! {
         check(abs(-3) == 3 && floor(-1.5) == -2.0 && sqrt(2.25) == 1.5 && fmod(5.5, 2.0) == 1.5);
 
         // ----- locale -----
-        check(cs(setlocale(0, c"".as_ptr() as *const u8)) == b"C"); // 100
+        // The user's default locale (ADR 0094; crtloctest checks the rest).
+        check(cs(setlocale(0, c"".as_ptr() as *const u8)) == b"English_United States.1252"); // 100
         check(setlocale(0, c"xx-YY".as_ptr() as *const u8).is_null());
-        check(cs(*localeconv()) == b"." && _configthreadlocale(0) == 2);
+        check(
+            cs(*localeconv()) == b"."
+                && _configthreadlocale(0) == 2
+                && cs(setlocale(0, c"C".as_ptr() as *const u8)) == b"C",
+        );
 
         // ----- signals, errors, threads -----
         check(signal(SIGTERM, on_sigterm as extern "C" fn(i32) as usize) == 0);

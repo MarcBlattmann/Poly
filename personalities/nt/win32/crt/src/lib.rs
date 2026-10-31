@@ -20,8 +20,12 @@ pub mod global;
 pub mod heap;
 pub mod io;
 pub mod jmp;
+pub mod lctype;
+pub mod locale;
 pub mod lowio;
 pub mod mathfn;
+pub mod mbconv;
+pub mod mbstring;
 pub mod misc;
 pub mod startup;
 pub mod stdio;
@@ -54,7 +58,10 @@ pub fn dll_main(reason: u32, terminating: bool) -> i32 {
             lowio::init();
             stdio::init();
         }
-        DLL_THREAD_DETACH => global::thread_detach(),
+        DLL_THREAD_DETACH => {
+            locale::thread_detach();
+            global::thread_detach();
+        }
         DLL_PROCESS_DETACH if !terminating => {
             stdio::flush_all();
         }

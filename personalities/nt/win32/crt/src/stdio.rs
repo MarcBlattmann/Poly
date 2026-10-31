@@ -1229,7 +1229,7 @@ pub unsafe fn vfprintf<C: StreamUnit>(f: *mut File, fmt: *const C, args: &mut im
         }
         let mut sink = StreamSink { s, failed: false };
         // SAFETY: the caller's arguments.
-        match unsafe { printf::format(fmt, args, &mut sink, options, count_output) } {
+        match unsafe { printf::format(fmt, args, &mut sink, crate::locale::with_point(options), count_output) } {
             Ok(n) if !sink.failed => n as i32,
             Ok(_) => -1,
             Err(e) => {
@@ -1280,7 +1280,9 @@ pub unsafe fn vsprintf<C: Unit>(
     };
     let mut sink = printf::Buffer { ptr: buf, capacity: keep, kept: 0 };
     // SAFETY: the caller's arguments and buffer.
-    let total = match unsafe { printf::format(f, args, &mut sink, options, crate::misc::count_output()) } {
+    let total = match unsafe {
+        printf::format(f, args, &mut sink, crate::locale::with_point(options), crate::misc::count_output())
+    } {
         Ok(n) => n,
         Err(e) => {
             format_error(e);
@@ -1343,7 +1345,7 @@ pub unsafe fn vfscanf<C: Unit>(f: *mut File, fmt: *const C, args: &mut impl Args
         }
         let mut input = StreamInput { s, wide: C::WIDE, held: None };
         // SAFETY: the caller's arguments.
-        let r = unsafe { poly_crt::scanf::scan(fmt, &mut input, args, options) };
+        let r = unsafe { poly_crt::scanf::scan(fmt, &mut input, args, crate::locale::with_point(options)) };
         if let Some(c) = input.held {
             if C::WIDE {
                 input.s.wunget.push(c as u16);
@@ -1372,7 +1374,7 @@ pub unsafe fn vsscanf<C: Unit>(buf: *const C, count: usize, fmt: *const C, args:
     let (s, f) = unsafe { (unit::slice_max(buf, count), unit::slice(fmt)) };
     let mut input = poly_crt::scanf::Str { s, at: 0 };
     // SAFETY: the caller's arguments.
-    unsafe { poly_crt::scanf::scan(f, &mut input, args, options) }.unwrap_or_else(|_| {
+    unsafe { poly_crt::scanf::scan(f, &mut input, args, crate::locale::with_point(options)) }.unwrap_or_else(|_| {
         global::invalid(EINVAL);
         EOF
     })

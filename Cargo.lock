@@ -74,6 +74,7 @@ dependencies = [
 name = "poly-crt"
 version = "0.0.1"
 dependencies = [
+ "poly-nls",
  "poly-rtl",
 ]
 
@@ -113,6 +114,7 @@ name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
  "poly-ldr",
+ "poly-nls",
  "poly-ntobj",
  "poly-rtl",
 ]
@@ -140,6 +142,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-net"
 version = "0.0.1"
+
+[[package]]
+name = "poly-nls"
+version = "0.0.1"
+dependencies = [
+ "poly-rtl",
+]
 
 [[package]]
 name = "poly-ntobj"

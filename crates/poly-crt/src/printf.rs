@@ -774,6 +774,10 @@ impl<S> Formatter<'_, S> {
                 _ => general_form(d, p, spec.alt, upper, three, ties),
             }
         };
+        // The locale's decimal point (ADR 0094), carried in the option word.
+        let point = crate::locale::point_of(self.options);
+        let body =
+            if point == b'.' { body } else { body.into_iter().map(|c| if c == b'.' { point } else { c }).collect() };
         let mut prefix: Vec<u8> = Vec::from(sign);
         let body = if lower == b'a' {
             prefix.extend_from_slice(&body[..2]);

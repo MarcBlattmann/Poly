@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 poly-ntobj = { workspace = true }
+poly-nls = { workspace = true }
 poly-rtl = { workspace = true }
 
 [lints]

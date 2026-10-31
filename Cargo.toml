@@ -29,6 +29,7 @@ members = [
     "crates/poly-mem",
     "crates/poly-ntobj",
     "crates/poly-net",
+    "crates/poly-nls",
     "crates/poly-pagecache",
     "crates/poly-paging",
     "crates/poly-pci",
@@ -91,6 +92,7 @@ poly-line = { path = "crates/poly-line" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
 poly-net = { path = "crates/poly-net" }
+poly-nls = { path = "crates/poly-nls" }
 poly-pagecache = { path = "crates/poly-pagecache" }
 poly-paging = { path = "crates/poly-paging" }
 poly-pci = { path = "crates/poly-pci" }

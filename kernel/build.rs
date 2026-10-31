@@ -38,6 +38,8 @@ fn embed_win32() {
         "ucrtbase.dll",
         "msvcrt.dll",
         "crttest.exe",
+        // ADR 0094.
+        "crtloctest.exe",
         // ADR 0087.
         "user32.dll",
         "oleaut32.dll",

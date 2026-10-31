@@ -5,7 +5,7 @@
 
 use crate::base::*;
 use poly_kernelbase::error::*;
-use poly_kernelbase::nls::{self, CodePage};
+use poly_kernelbase::nls;
 
 /// `GetACP`: Windows-1252.
 #[unsafe(no_mangle)]
@@ -31,7 +31,7 @@ pub unsafe extern "system" fn GetCPInfo(code_page: u32, info: *mut u8) -> i32 {
     if info.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    match CodePage::of(code_page) {
+    match nls::code_page(code_page) {
         Ok(cp) => {
             let b = nls::cp_info(cp);
             // SAFETY: the caller's CPINFO.
@@ -40,6 +40,22 @@ pub unsafe extern "system" fn GetCPInfo(code_page: u32, info: *mut u8) -> i32 {
         }
         Err(e) => fail(e, FALSE),
     }
+}
+
+/// `IsDBCSLeadByteEx`: whether `byte` is a lead byte of the code page;
+/// `ERROR_INVALID_PARAMETER` for a code page Poly lacks (ADR 0094).
+#[unsafe(no_mangle)]
+pub extern "system" fn IsDBCSLeadByteEx(code_page: u32, byte: u8) -> i32 {
+    match nls::is_lead_byte(code_page, byte) {
+        Ok(lead) => lead as i32,
+        Err(e) => fail(e, FALSE),
+    }
+}
+
+/// `IsDBCSLeadByte`: in the ANSI code page (1252: never).
+#[unsafe(no_mangle)]
+pub extern "system" fn IsDBCSLeadByte(byte: u8) -> i32 {
+    IsDBCSLeadByteEx(nls::CP_ACP, byte)
 }
 
 /// The input of a conversion: `len` -1 is NUL-terminated, the NUL

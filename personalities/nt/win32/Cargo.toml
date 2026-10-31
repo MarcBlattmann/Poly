@@ -8,7 +8,7 @@
 # only this repo's host-tested logic and core/alloc.
 [workspace]
 resolver = "3"
-members = ["rt", "kernelbase", "kernel32", "k32test", "contest", "advapi32", "a32test", "crt", "ucrtbase", "msvcrt", "crttest", "user32", "oleaut32"]
+members = ["rt", "kernelbase", "kernel32", "k32test", "contest", "advapi32", "a32test", "crt", "ucrtbase", "msvcrt", "crttest", "crtloctest", "user32", "oleaut32"]
 
 [workspace.package]
 version = "0.0.1"
