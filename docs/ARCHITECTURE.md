@@ -31,6 +31,7 @@ what exists **today** and how it fits that plan.
             block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
             network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets;
                      socket files (inet, poly-unix Unix sockets, netlink) with per-socket wake-ups
+            sound: ALSA card 0 (/dev/snd/controlC0, pcmC0D<n>p) on virtio-sound (poly-virtio-sound), audio thread
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             input: event layer (poly-input hub), PS/2 keyboard and mouse (IRQ 1, 12), virtio-input; /dev/input/event*
             display: RAM back buffer onto virtio-gpu (2D resource) or the QEMU standard VGA framebuffer;
@@ -383,6 +384,66 @@ like on a pipe (ADR 0042):
   built by the personality from a snapshot of the interface.
 - `/etc/hosts` and `/etc/resolv.conf` (DNS 10.0.2.3) come with the
   initramfs; name resolution is the C library's.
+
+## Sound
+
+One ALSA card, card 0, on a virtio-sound device (VIRTIO 1.2 §5.14):
+playback through the ALSA kernel/user interface (`/dev/snd/*`, the
+`SNDRV_*` ioctls of the uapi header `sound/asound.h`), the interface
+`aplay -D hw:0,0` uses (aplay itself is not in the build image; a C test
+program drives the same ioctls). Decisions are in
+[ADR 0104](adr/0104-virtio-sound-and-alsa-pcm.md); Intel HDA, capture and
+an audio server come later.
+
+```text
+ /dev/snd/pcmC0D0p ──ioctl/write/poll──► Card { Mutex<Inner { VirtioSound, [PcmSlot { PcmRuntime, DevStream }] }> }
+        ▲ blocks on the card's wait queue          │ Glue: PcmBackend → virtio commands, PeriodRing, output messages
+        │                                          ▼
+ notify ◄──── audio thread ◄── MSI-X entry 0 (returned output messages, events); polled every 2 ms without MSI-X
+```
+
+- **`poly-virtio-sound`** sets up the control, event, transmit and
+  receive queues, queries jacks, PCM streams and channel maps, walks each
+  stream through the command lifecycle (SET PARAMETERS, PREPARE, START,
+  STOP, RELEASE; `stream::StreamState::path_to` inserts what is missing)
+  and sends output messages: the stream id, a piece of the PCM ring buffer
+  in DMA memory, and the device-writable status. The device returns a
+  message once it has consumed its frames: that is the period interrupt.
+  `ring::PeriodRing` tracks what is written, handed over and played, sends
+  whole periods (partial ones only when the device would run dry, or at
+  a drain, whose last period is padded with silence). Host tests run it
+  against a simulated device written from the specification.
+- **The ALSA layer** (`poly_personality_linux::sound`, host-tested): the
+  structures of `sound/asound.h`, hardware parameter refinement
+  (`HW_REFINE`: masks and open/closed intervals narrowed by the rules
+  between sample and frame bits, channels, rate, period and buffer sizes,
+  bytes and times, and the device's limits) and the choice of one
+  configuration (`HW_PARAMS`), and the playback runtime: states OPEN,
+  SETUP, PREPARED, RUNNING, XRUN, DRAINING, the application and hardware
+  pointers, start and stop thresholds, underruns, drain, status,
+  `SYNC_PTR`.
+- **The kernel side** (`kernel/src/sound/`) finds the device, gives it
+  DMA memory (rings, a control page, event buffers, per-message headers
+  and status, a 256 KiB PCM ring buffer), registers the character devices
+  (major 116: control at minor 0, playback device `d` at 16 + `d`) and
+  makes the nodes; an output stream's ALSA device number is its virtio
+  stream id. `alsa.rs` copies structures to and from user memory and
+  blocks where ALSA does (writes until every frame is in the buffer,
+  drains until everything played) on the card's wait queue. The audio
+  thread, woken by MSI-X entry 0, collects returned messages, advances the
+  ring and the runtime's hardware pointer (an empty buffer is an underrun:
+  the stream stops in XRUN), sends the next periods and wakes waiters.
+
+```text
+sound: 00:03.0: virtio-sound, 0 jacks, 2 streams, 0 channel maps; queues [64, 64, 64, 64], 21 output messages in flight
+sound: stream 0: output, 1-2 channels, rates [5512, 8000, ..., 384000], ALSA formats [0, 1, 2, 4, 10, 12, 14], features 0x0
+sound: card 0: /dev/snd/controlC0, pcmC0D0p; MSI-X entry 0 -> vector 0x32
+```
+
+The `sound` boot test runs `/bin/pcm-tone` (`tests/linux/audio/pcm_tone.c`)
+as init with `-device virtio-sound-pci` on QEMU's `wav` audio backend and
+checks the recording on the host: 100 ms windows whose frequency (zero
+crossings) and level (RMS) are each tone's, on both channels.
 
 ## Input
 

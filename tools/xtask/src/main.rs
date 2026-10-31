@@ -78,6 +78,7 @@ mod programs;
 mod rootdisk;
 mod screen;
 mod sevenzip;
+mod sound;
 mod symbols;
 mod sysmsg;
 mod terminal;
@@ -1379,7 +1380,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 23] = [
+const BOOT_GROUPS: [BootGroup; 24] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1409,6 +1410,9 @@ const BOOT_GROUPS: [BootGroup; 23] = [
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
+    // Sound: /bin/pcm-tone plays through ALSA on virtio-sound, QEMU's wav
+    // backend records it, and the recording is checked (sound.rs, ADR 0104).
+    ("sound", sound::boot_tests),
     ("ext2", |k, s| {
         eprintln!("==> boot test: a file written to the ext2 test disk in one boot is there in the next");
         ext2_persistence_test(k, s)
@@ -1447,7 +1451,7 @@ const BOOT_GROUPS: [BootGroup; 23] = [
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace"]),
-    ("devices", &["net", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "terminal", "input"]),
+    ("devices", &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "terminal", "input"]),
     ("faults", &["faults", "failures"]),
 ];
 

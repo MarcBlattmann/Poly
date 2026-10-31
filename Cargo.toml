@@ -53,6 +53,7 @@ members = [
     "crates/poly-virtio-blk",
     "crates/poly-virtio-gpu", "crates/poly-virtio-input",
     "crates/poly-virtio-net",
+    "crates/poly-virtio-sound",
     "crates/poly-vdso",
     "crates/poly-vm",
     "crates/poly-vfs",
@@ -123,6 +124,7 @@ poly-virtio = { path = "crates/poly-virtio" }
 poly-virtio-blk = { path = "crates/poly-virtio-blk" }
 poly-virtio-gpu = { path = "crates/poly-virtio-gpu", "crates/poly-virtio-input" }
 poly-virtio-net = { path = "crates/poly-virtio-net" }
+poly-virtio-sound = { path = "crates/poly-virtio-sound" }
 poly-vdso = { path = "crates/poly-vdso" }
 poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
