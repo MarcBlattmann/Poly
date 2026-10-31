@@ -9,6 +9,8 @@ publish.workspace = true
 [dependencies]
 poly-win32-rt = { path = "../rt" }
 poly-crt = { path = "../../../../crates/poly-crt" }
+poly-libm = { path = "../../../../crates/poly-libm" }
+poly-nls = { path = "../../../../crates/poly-nls" }
 
 [lints]
 workspace = true

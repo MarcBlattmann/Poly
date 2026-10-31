@@ -1,0 +1,20 @@
+[package]
+name = "crypt32"
+description = "Our crypt32.dll (ADR 0096): certificate contexts and stores, finding, name strings, CryptDecodeObjectEx, Base64/hex strings, chain building and policies, CryptProtectData"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "crypt32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-cryptrt = { path = "../cryptrt" }
+poly-crypto = { path = "../../../../crates/poly-crypto" }
+poly-x509 = { path = "../../../../crates/poly-x509" }
+poly-wincrypt = { path = "../../../../crates/poly-wincrypt" }
+
+[lints]
+workspace = true

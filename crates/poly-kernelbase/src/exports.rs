@@ -179,6 +179,9 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("DuplicateHandle", "api-ms-win-core-handle-l1-1-0"),
     ("GetHandleInformation", "api-ms-win-core-handle-l1-1-0"),
     ("SetHandleInformation", "api-ms-win-core-handle-l1-1-0"),
+    // Anonymous pipes for the C runtime's _pipe and _popen (ADR 0093;
+    // namedpipeapi.h).
+    ("CreatePipe", "api-ms-win-core-namedpipe-l1-1-0"),
     // Thread-local storage (processthreadsapi.h) and fiber-local storage
     // (fibersapi.h).
     ("TlsAlloc", "api-ms-win-core-processthreads-l1-1-0"),
@@ -197,6 +200,10 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetOEMCP", "api-ms-win-core-localization-l1-2-0"),
     ("GetCPInfo", "api-ms-win-core-localization-l1-2-0"),
     ("IsValidCodePage", "api-ms-win-core-localization-l1-2-0"),
+    // Double-byte code pages (ADR 0094; the contract is a guess, to be
+    // confirmed by the spec agent).
+    ("IsDBCSLeadByte", "api-ms-win-core-localization-l1-2-0"),
+    ("IsDBCSLeadByteEx", "api-ms-win-core-localization-l1-2-0"),
     // File mappings (memoryapi.h).
     ("CreateFileMappingW", "api-ms-win-core-memory-l1-1-0"),
     ("OpenFileMappingW", "api-ms-win-core-memory-l1-1-0"),

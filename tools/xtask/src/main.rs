@@ -69,6 +69,7 @@ mod initramfs;
 mod ktest;
 mod libsearch;
 mod net;
+mod nls;
 mod ntdll;
 mod programs;
 mod rootdisk;
@@ -92,6 +93,27 @@ use symbols::Symbols;
 type Result<T = ()> = std::result::Result<T, String>;
 
 const BOOT_TIMEOUT: Duration = Duration::from_secs(60);
+
+thread_local! {
+    /// This thread's boot timeout ([`with_boot_timeout`]; [`BOOT_TIMEOUT`]
+    /// unless a test asks for more).
+    static THREAD_BOOT_TIMEOUT: std::cell::Cell<Duration> = const { std::cell::Cell::new(BOOT_TIMEOUT) };
+}
+
+/// How long a boot of this thread may run before it is killed.
+fn boot_timeout() -> Duration {
+    THREAD_BOOT_TIMEOUT.with(std::cell::Cell::get)
+}
+
+/// Run `f` with boots of this thread allowed `timeout` instead of
+/// [`BOOT_TIMEOUT`] (a test whose program runs for longer, such as a
+/// benchmark under TCG).
+fn with_boot_timeout<T>(timeout: Duration, f: impl FnOnce() -> T) -> T {
+    let old = THREAD_BOOT_TIMEOUT.with(|t| t.replace(timeout));
+    let r = f();
+    THREAD_BOOT_TIMEOUT.with(|t| t.set(old));
+    r
+}
 /// Must match `selftest::PASS_MARKER` in the kernel.
 const PASS_MARKER: &str = "POLY-SELFTEST: PASS";
 /// QEMU exit statuses produced by the kernel's `qemu::ExitCode`.
@@ -120,6 +142,7 @@ fn main() -> ExitCode {
         Some("coverage") => coverage(&args[1..]),
         Some("pipeline") => return pipeline_command(&args[1..]),
         Some("font") => font::run(&root(), &args[1..]),
+        Some("nls-tables") => nls::run(&root(), &args[1..]),
         Some("ntdll") => ntdll::command(&args[1..]),
         Some("win32") => win32::command(&args[1..]),
         Some("win") => sevenzip::command(&args[1..]),
@@ -130,7 +153,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|nls-tables|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -480,7 +503,7 @@ impl Boot {
     fn tests(&self, log: &str) -> Result<ktest::Report> {
         let report = ktest::parse(log);
         let end = if self.timed_out {
-            ktest::End::TimedOut { secs: BOOT_TIMEOUT.as_secs(), last_line: ktest::last_line(&self.output) }
+            ktest::End::TimedOut { secs: boot_timeout().as_secs(), last_line: ktest::last_line(&self.output) }
         } else {
             ktest::End::Exited
         };
@@ -492,7 +515,7 @@ impl Boot {
 /// Say that a boot ran into [`BOOT_TIMEOUT`] (and is being killed), with the
 /// last line it printed, before whatever check then fails on it.
 fn report_timeout(last_line: &str) {
-    eprintln!("==> QEMU timed out after {} s (last line: {last_line:?}); killing it", BOOT_TIMEOUT.as_secs());
+    eprintln!("==> QEMU timed out after {} s (last line: {last_line:?}); killing it", boot_timeout().as_secs());
 }
 
 /// Boot headless with a timeout, echoing serial output as it arrives, with
@@ -635,7 +658,7 @@ fn boot_with_once(
         }
     });
 
-    let deadline = Instant::now() + BOOT_TIMEOUT;
+    let deadline = Instant::now() + boot_timeout();
     let (mut lines, mut taken, mut timed_out) = (Vec::new(), None, false);
     let status = loop {
         for line in rx.try_iter() {
@@ -1595,7 +1618,11 @@ fn pipeline_checks() -> Result {
     // on Poly against Linux (one QEMU boot per test, several at a time):
     // the tests of tests/linux/poly-pass.txt and of the green entries must
     // pass. Skips itself like selfcheck, and without QEMU.
-    pipeline(&["polycheck".into()])
+    pipeline(&["polycheck".into()])?;
+    // The visible tests of every green Windows entry on Poly against their
+    // recorded Windows results (ADR 0099). Skips itself without QEMU, and
+    // without clang++/lld-link/llvm-dlltool for C++ tests.
+    pipeline(&["win".into(), "polycheck".into()])
 }
 
 /// A part of CI: its name (`cargo xtask ci <name>`) and what it runs.
@@ -1678,7 +1705,8 @@ fn pipeline(args: &[String]) -> Result {
     // The commands that build the kernel (`--build-kernel`, or a missing
     // one) build it as `kernel_cargo` does, with our ntdll.dll: the same
     // kernel as the boot tests', so neither build undoes the other.
-    if matches!(args.first().map(String::as_str), Some("polycheck" | "diff" | "polyrun")) {
+    let first_two: Vec<&str> = args.iter().take(2).map(String::as_str).collect();
+    if matches!(first_two.first(), Some(&("polycheck" | "diff" | "polyrun"))) || first_two == ["win", "polycheck"] {
         cmd.env(ntdll::KERNEL_ENV, ntdll::ensure()?);
         cmd.env(win32::KERNEL_ENV, win32::ensure()?);
     }

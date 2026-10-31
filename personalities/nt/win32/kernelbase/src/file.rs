@@ -5,6 +5,7 @@
 use crate::base::*;
 use crate::nt::{self, Handle, IoStatusBlock};
 use alloc::boxed::Box;
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use poly_kernelbase::error::*;
 use poly_kernelbase::file::{self, *};
@@ -647,13 +648,15 @@ pub unsafe extern "system" fn GetTempPathW(size: u32, buf: *mut u16) -> u32 {
 // ----- finding files ------------------------------------------------------------------------
 
 /// What a find handle holds: the open directory, the pattern, and the
-/// entries of the last query not yet returned.
+/// entries of the last query not yet returned; or, for `FindFirstStreamW`
+/// (no directory, `dir` 0), the streams not yet returned.
 struct Find {
     dir: Handle,
     mask: Vec<u16>,
     buf: Vec<u8>,
     entries: Vec<usize>,
     next: usize,
+    streams: Option<VecDeque<[u8; FIND_STREAM_DATA_SIZE]>>,
 }
 
 /// A buffer for several `FILE_BOTH_DIR_INFORMATION` entries.
@@ -721,7 +724,7 @@ pub unsafe extern "system" fn FindFirstFileW(pattern: *const u16, data: *mut u8)
         Ok(h) => h,
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
     };
-    let mut find = Box::new(Find { dir, mask, buf: Vec::new(), entries: Vec::new(), next: 0 });
+    let mut find = Box::new(Find { dir, mask, buf: Vec::new(), entries: Vec::new(), next: 0, streams: None });
     let first = find.fill(true).and_then(|()| find.next());
     match first {
         Ok(d) => {
@@ -756,7 +759,9 @@ fn find_of(handle: Handle) -> Option<&'static mut Find> {
 /// `FindNextFileW`: `ERROR_NO_MORE_FILES` at the end.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn FindNextFileW(handle: Handle, data: *mut u8) -> i32 {
-    let Some(find) = find_of(handle) else { return fail(ERROR_INVALID_HANDLE, FALSE) };
+    let Some(find) = find_of(handle).filter(|f| f.streams.is_none()) else {
+        return fail(ERROR_INVALID_HANDLE, FALSE);
+    };
     match find.next() {
         Ok(d) => {
             // SAFETY: the caller's WIN32_FIND_DATAW.
@@ -774,10 +779,26 @@ pub unsafe extern "system" fn FindClose(handle: Handle) -> i32 {
     if find_of(handle).is_none() {
         return fail(ERROR_INVALID_HANDLE, FALSE);
     }
-    // SAFETY: a handle `FindFirstFileW` made from a box.
+    // SAFETY: a handle `FindFirstFileW` or `FindFirstStreamW` made from a
+    // box.
     let find = unsafe { Box::from_raw(handle as *mut Find) };
-    close(find.dir);
+    if find.dir != 0 {
+        close(find.dir);
+    }
     TRUE
+}
+
+/// A find handle for `FindFirstStreamW` over the streams after the first
+/// (Learn: `FindClose` closes it).
+pub(crate) fn stream_find_handle(rest: VecDeque<[u8; FIND_STREAM_DATA_SIZE]>) -> Handle {
+    let find = Find { dir: 0, mask: Vec::new(), buf: Vec::new(), entries: Vec::new(), next: 0, streams: Some(rest) };
+    Box::into_raw(Box::new(find)) as Handle
+}
+
+/// The next stream of a `FindFirstStreamW` handle: `None` for a handle
+/// that is not one, `Some(None)` at the end.
+pub(crate) fn next_stream(handle: Handle) -> Option<Option<[u8; FIND_STREAM_DATA_SIZE]>> {
+    find_of(handle)?.streams.as_mut().map(VecDeque::pop_front)
 }
 
 // ----- information and times by handle (ADR 0079, second slice) --------------------------

@@ -47,7 +47,12 @@
 //! shares. A write appends and completes waiting reads; a read takes what
 //! is there or waits, which is what the asynchronous-I/O and cancellation
 //! tests need from a "slow device". It is Poly's own device, not a Windows
-//! interface.
+//! interface. Once a stream has had an open with write access and the last
+//! of them closes, a read of an empty stream fails with
+//! `STATUS_PIPE_BROKEN` and so do the reads waiting then (ADR 0093:
+//! `kernelbase`'s anonymous pipes are such streams, and Learn's `ReadFile`
+//! fails with `ERROR_BROKEN_PIPE` once "the write handle has been
+//! closed").
 
 pub mod consts;
 pub mod create;
@@ -97,6 +102,15 @@ pub struct VfsRoot {
     pub vfs: &'static Vfs,
     pub ctx: FsContext,
     pub cred: Cred,
+    /// Case-folded indexes of the directories looked up last
+    /// ([`walk::FoldCache`], ADR 0091).
+    pub fold: core::cell::RefCell<walk::FoldCache>,
+}
+
+impl VfsRoot {
+    pub fn new(vfs: &'static Vfs, ctx: FsContext, cred: Cred) -> VfsRoot {
+        VfsRoot { vfs, ctx, cred, fold: core::cell::RefCell::default() }
+    }
 }
 
 /// A file as the share-access, delete and lock tables name it.
@@ -235,6 +249,9 @@ pub struct Pipe {
     pub opens: u32,
     /// Reads waiting for data, oldest first (IRP ids).
     pub readers: VecDeque<u64>,
+    /// Opens with write access now, and whether there ever was one.
+    pub writers: u32,
+    pub had_writer: bool,
 }
 
 /// The machine-wide file I/O state (in [`crate::NtSystem`]).
@@ -418,7 +435,7 @@ impl IoState {
             NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
         )?;
         self.add_console_device(cookie);
-        self.root = Some(VfsRoot { vfs, ctx, cred });
+        self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
     }
 
@@ -484,14 +501,17 @@ impl IoState {
         let stored = self.stored(node);
         let key = NodeKey::of(node)?;
         let directory = attr.kind == FileType::Directory;
-        let size = if directory { 0 } else { attr.size };
+        // A symbolic link holds no data of its own (its target is the
+        // reparse point's, `FSCTL_GET_REPARSE_POINT`), so it has no size.
+        let empty = directory || attr.kind == FileType::Symlink;
+        let size = if empty { 0 } else { attr.size };
         Ok(Facts {
             creation: stored.creation.unwrap_or_else(|| info::nt_time(attr.mtime)),
             access: info::nt_time(attr.atime),
             write: info::nt_time(attr.mtime),
             change: info::nt_time(attr.ctime),
             size,
-            allocation: if directory { 0 } else { info::allocation(attr.size, attr.blocks) },
+            allocation: if empty { 0 } else { info::allocation(attr.size, attr.blocks) },
             links: attr.nlink,
             attributes: info::attributes_of(attr.kind, attr.perm, stored.attributes),
             directory,
@@ -529,11 +549,21 @@ impl IoState {
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Pipe(key) => {
+                let mut broken = Vec::new();
                 if let Some(p) = self.pipes.get_mut(&key) {
                     p.opens -= 1;
+                    if rec.access & (FILE_WRITE_DATA | FILE_APPEND_DATA) != 0 {
+                        p.writers = p.writers.saturating_sub(1);
+                        if p.writers == 0 {
+                            broken = p.readers.drain(..).collect();
+                        }
+                    }
                     if p.opens == 0 {
                         self.pipes.remove(&key);
                     }
+                }
+                for id in broken {
+                    self.complete(id, STATUS_PIPE_BROKEN, 0, None);
                 }
             }
             Target::Disk(d) => {

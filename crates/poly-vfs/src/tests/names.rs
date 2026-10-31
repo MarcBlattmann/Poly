@@ -162,3 +162,33 @@ fn magic_numbers_by_name() {
     assert_eq!(magic_for("sysfs"), 0x6265_6572);
     assert_eq!(magic_for("nope"), 0);
 }
+
+#[test]
+fn the_namespace_generation_counts_every_change_of_a_name_and_nothing_else() {
+    let env = Env::new();
+    let g = || env.vfs.namespace_generation();
+    let start = g();
+    env.mkdir("/d");
+    env.write("/d/f", b"one");
+    assert_eq!(g(), start + 2);
+    // Writing, reading and changing the mode of an existing file change no
+    // name.
+    env.write("/d/f", b"two");
+    assert_eq!(env.read("/d/f").unwrap(), b"two");
+    env.vfs.chmod(&env.ctx, &env.root, At::Cwd, b"/d/f", 0o600, true).unwrap();
+    assert_eq!(g(), start + 2);
+    // A link, a symbolic link, a node, a rename, four unlinks, an rmdir.
+    env.vfs.link(&env.ctx, &env.root, At::Cwd, b"/d/f", At::Cwd, b"/d/g", false).unwrap();
+    env.symlink("f", "/d/s");
+    env.vfs.mknod(&env.ctx, &env.root, At::Cwd, b"/d/fifo", FileType::Fifo, 0o644, DeviceId::default()).unwrap();
+    env.vfs.rename(&env.ctx, &env.root, At::Cwd, b"/d/g", At::Cwd, b"/d/h", RenameFlags::default()).unwrap();
+    for name in [&b"/d/f"[..], b"/d/h", b"/d/s", b"/d/fifo"] {
+        env.vfs.unlink(&env.ctx, &env.root, At::Cwd, name).unwrap();
+    }
+    env.vfs.rmdir(&env.ctx, &env.root, At::Cwd, b"/d").unwrap();
+    assert_eq!(g(), start + 2 + 4 + 4 + 1);
+    // What fails changes nothing.
+    assert!(env.vfs.unlink(&env.ctx, &env.root, At::Cwd, b"/nothing").is_err());
+    assert!(env.vfs.mkdir(&env.ctx, &env.root, At::Cwd, b"/missing/d", 0o755).is_err());
+    assert_eq!(g(), start + 11);
+}

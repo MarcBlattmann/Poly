@@ -159,7 +159,12 @@ impl CreateHook<'_> {
         self.information = if exists { FILE_OPENED } else { FILE_CREATED };
         let cookie = self.io.cookie();
         let object = new_file_object(om, cookie, self.thread)?;
-        self.io.pipes.entry(key.clone()).or_default().opens += 1;
+        let pipe = self.io.pipes.entry(key.clone()).or_default();
+        pipe.opens += 1;
+        if p.access & (FILE_WRITE_DATA | FILE_APPEND_DATA) != 0 {
+            pipe.writers += 1;
+            pipe.had_writer = true;
+        }
         self.io.files.insert(cookie, self.record(object, Target::Pipe(key), FileType::Fifo));
         self.made = Some(cookie);
         Ok(object)
@@ -189,7 +194,13 @@ impl CreateHook<'_> {
         remaining: &[u16],
     ) -> Result<ObjectId, NtStatus> {
         let p = self.params;
-        let (parts, trailing) = split_path(remaining)?;
+        let (mut parts, trailing) = split_path(remaining)?;
+        // `name::$DATA` is the file's default data stream, the file itself
+        // (Learn: "File Streams (Local File Systems)"); Poly's volumes have
+        // no other streams, so any other `:` stays an invalid name.
+        if let Some(last) = parts.last_mut() {
+            *last = names::without_default_stream(last);
+        }
         // The whole name is checked before anything is looked up.
         for part in &parts {
             names::check_component(part)?;

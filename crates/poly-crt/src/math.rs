@@ -2,8 +2,8 @@
 //! `fmod`, `frexp`, `ldexp`, `modf`, `copysign`, and the UCRT's
 //! classification (`_dclass`, `math.h`'s `FP_*` values). Each result is
 //! exact, so there is only one right answer; they work on the bits.
-//! The transcendental functions (`exp`, `log`, `pow`, `sin` …) are not here
-//! yet (ADR 0084).
+//! The transcendental functions (`exp`, `log`, `pow`, `sin` …) are in
+//! `poly-libm` (ADR 0092).
 
 /// `math.h` (UCRT): `_dclass` results.
 pub const FP_INFINITE: i16 = 1;

@@ -106,13 +106,13 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Registry: hive storage, `NtOpenKey` family, default system hives
 - [x] Our `ntdll`: PE loader (imports, relocations, TLS, delay-load), heap, `Rtl*`, loader lock (ADR 0071)
 - [x] Our `kernelbase` / `kernel32`: files, processes, threads, memory, synchronisation, errors (ADR 0079: two slices, processes, TLS/FLS, code pages, file mappings, condition variables; ADR 0089: handle inheritance, `STARTUPINFO` and its standard handles, `CREATE_SUSPENDED` in `CreateProcessW`)
-- [ ] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055) (first slice done, ADR 0084; left: C++ exceptions in `msvcrt` (`_CxxThrowException`, `__CxxFrameHandler3`), `setjmp`/`longjmp`, transcendental math, locales other than "C" and multibyte code pages, wildcard `argv`, `_findfirst`/`_spawn`/`system`/`_dup`/`_pipe`, console I/O (`_getch`, `_cprintf`), positional `printf`)
+- [x] C runtime: `ucrtbase` + `api-ms-win-crt-*` and `msvcrt` (versioned runtimes come with the apps, ADR 0055) (first slice ADR 0084; math, `setjmp`/`longjmp` and positional `printf` ADR 0092; files, processes, pipes, wildcard `argv` and console I/O ADR 0093; locales and multibyte code pages ADR 0094; C++ exceptions in `msvcrt` ADR 0099)
 - [x] `advapi32` basics: registry API, security descriptors, tokens (single user) (ADR 0083)
 - [x] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles (ADR 0080)
 - [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0073)
-- [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; left: the recording on Windows, C++ exception handling)
+- [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; left: the recording on Windows)
 - [ ] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics
-- [ ] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app)
+- [x] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app) (ADR 0096)
 - [ ] Fallback if needed: our own `vcruntime140` (and `msvcp140` subsets) per ADR 0055
 
 ## Phase 6: Graphics, input, audio and the desktop

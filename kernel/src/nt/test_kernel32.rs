@@ -59,7 +59,7 @@ mod tests {
                     return Err("System32 lacks kernelbase.dll or kernel32.dll");
                 }
             }
-            let vr = VfsRoot { vfs, ctx, cred: Cred::root() };
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
             let exe = super::super::K32TEST;
             create::install_file(&vr, &root, APP_DIR, "k32test.exe", exe).map_err(|_| "cannot write k32test.exe")?;
 

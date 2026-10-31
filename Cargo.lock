@@ -74,7 +74,19 @@ dependencies = [
 name = "poly-crt"
 version = "0.0.1"
 dependencies = [
+ "poly-nls",
  "poly-rtl",
+]
+
+[[package]]
+name = "poly-crypto"
+version = "0.0.1"
+
+[[package]]
+name = "poly-cxxeh"
+version = "0.0.1"
+dependencies = [
+ "poly-seh",
 ]
 
 [[package]]
@@ -113,6 +125,7 @@ name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
  "poly-ldr",
+ "poly-nls",
  "poly-ntobj",
  "poly-rtl",
 ]
@@ -126,6 +139,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-libm"
+version = "0.0.1"
+
+[[package]]
 name = "poly-line"
 version = "0.0.1"
 
@@ -136,6 +153,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-net"
 version = "0.0.1"
+
+[[package]]
+name = "poly-nls"
+version = "0.0.1"
+dependencies = [
+ "poly-rtl",
+]
 
 [[package]]
 name = "poly-ntobj"
@@ -321,6 +345,21 @@ name = "poly-vm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-wincrypt"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-x509",
+]
+
+[[package]]
+name = "poly-x509"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -419,6 +458,7 @@ dependencies = [
  "poly-pe",
  "poly-term",
  "poly-vfs",
+ "poly-wincrypt",
  "rustc-demangle",
  "serde_json",
 ]

@@ -38,9 +38,17 @@ fn embed_win32() {
         "ucrtbase.dll",
         "msvcrt.dll",
         "crttest.exe",
+        // ADR 0094.
+        "crtloctest.exe",
         // ADR 0087.
         "user32.dll",
         "oleaut32.dll",
+        // ADR 0096.
+        "bcrypt.dll",
+        "crypt32.dll",
+        "cryptest.exe",
+        // ADR 0093.
+        "crtiotest.exe",
     ] {
         match &dir {
             Some(d) => {

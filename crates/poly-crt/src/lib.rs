@@ -17,6 +17,10 @@
 //! - [`args`]: "Parsing C command-line arguments".
 //! - [`ctype`]: the "C" locale's character classes (`_pctype`), case
 //!   mapping.
+//! - [`locale`]: `setlocale`'s names and categories, a locale's `LC_CTYPE`
+//!   tables and `lconv` (ADR 0094).
+//! - [`mbcs`]: the multibyte code page (`_setmbcp`, `_mbctype`) and the
+//!   `_mbs*` / `_mbc*` / `_ismb*` logic (ADR 0094).
 //! - [`time`]: `time_t` ↔ `struct tm`, `asctime`, `strftime`.
 //! - [`sort`]: `qsort`, `bsearch`.
 //! - [`errno`]: `errno` values, messages, Win32 error → `errno`.
@@ -26,6 +30,11 @@
 //! - [`fenv`]: `_controlfp` words ↔ `MXCSR`.
 //! - [`exports`]: what each DLL exports and, for `ucrtbase`, through which
 //!   `api-ms-win-crt-*` contract.
+//! - [`find`]: `_findfirst`'s `_finddata*_t` structures (ADR 0093).
+//! - [`wildcard`]: wildcard expansion of `argv` (ADR 0093).
+//! - [`spawn`]: `_spawn*` / `system` command lines, the file search, the
+//!   descriptors passed to a child (ADR 0093).
+//! - [`conio`]: which console key events `_getch` returns (ADR 0093).
 //!
 //! Sources (clean room, CLEAN_ROOM.md): the C standard (C11/C17), Microsoft
 //! Learn's C runtime reference (each function's page, "Format specification
@@ -45,19 +54,25 @@ extern crate alloc;
 extern crate std;
 
 pub mod args;
+pub mod conio;
 pub mod convert;
 pub mod ctype;
 pub mod errno;
 pub mod exports;
 pub mod fenv;
+pub mod find;
 pub mod float;
 pub mod fmode;
+pub mod locale;
 pub mod math;
+pub mod mbcs;
 pub mod printf;
 pub mod scanf;
 pub mod sort;
+pub mod spawn;
 pub mod string;
 pub mod time;
 pub mod unit;
+pub mod wildcard;
 
 pub use unit::Unit;

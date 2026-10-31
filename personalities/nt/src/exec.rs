@@ -156,6 +156,9 @@ fn make_stack(proc: &mut NtProcess, b: &mut dyn Backend, reserve: u64, commit: u
     let limit = top - commit;
     proc.vm.allocate(b, limit, commit, 0, MEM_COMMIT, rw)?;
     proc.vm.allocate(b, limit - PAGE_SIZE, PAGE_SIZE, 0, MEM_COMMIT, rw | PAGE_GUARD)?;
+    // Every thread's stack grows through its guard page, not only the
+    // first thread's (ADR 0091).
+    proc.vm.set_stack(alloc);
     Ok(ThreadStack { alloc, top, limit })
 }
 
@@ -290,7 +293,6 @@ pub fn start_process_from(
     let (teb, _) = proc.vm.allocate(b, 0, TEB_SIZE, 0, anywhere_top, rw)?;
 
     let stack = make_stack(proc, b, reserve, commit)?;
-    proc.vm.set_stack(stack.alloc);
     let client = crate::kernel::ClientId { process: proc.pid, thread };
     write_teb(b, teb, peb, &stack, client)?;
     let rsp = start_rsp(b, &stack)?;

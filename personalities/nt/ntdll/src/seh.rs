@@ -182,6 +182,23 @@ pub unsafe extern "C" fn RtlVirtualUnwind(
     }
 }
 
+/// The top-level filter of unhandled exceptions (0: none).
+static UNHANDLED_FILTER: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+/// `EXCEPTION_CONTINUE_EXECUTION` (`excpt.h`).
+const EXCEPTION_CONTINUE_EXECUTION: i32 = -1;
+
+/// `RtlSetUnhandledExceptionFilter(filter)`: the function the dispatcher
+/// asks about an exception no frame handler took, as
+/// `filter(EXCEPTION_POINTERS*)`; `EXCEPTION_CONTINUE_EXECUTION` resumes
+/// the (possibly changed) context, anything else ends the process with the
+/// exception's code. Poly's kernelbase registers its
+/// `UnhandledExceptionFilter` here when a program sets a top-level filter
+/// (ADR 0099).
+#[unsafe(no_mangle)]
+pub extern "C" fn RtlSetUnhandledExceptionFilter(filter: u64) {
+    UNHANDLED_FILTER.store(filter, core::sync::atomic::Ordering::Release);
+}
+
 /// `KiUserExceptionDispatcher`: the kernel transfers here on an exception
 /// as if it had been called as `KiUserExceptionDispatcher(record, context)`
 /// with both on this thread's stack and a zero return address (ADR 0068).
@@ -206,6 +223,29 @@ pub unsafe extern "C" fn KiUserExceptionDispatcher(record_ptr: *mut u8, context_
             let mut bytes = ctx.to_bytes();
             // SAFETY: NtContinue resumes the (fixed-up) context; never returns.
             unsafe { syscalls::NtContinue(bytes.as_mut_ptr(), 0) };
+        }
+        DispatchResult::NotHandled => {
+            // The top-level filter (kernelbase's `UnhandledExceptionFilter`,
+            // registered when the program sets one), asked before anything
+            // is unwound, as at the base of a Windows thread.
+            let mut rec = record.to_bytes();
+            let mut bytes = ctx.to_bytes();
+            let filter = UNHANDLED_FILTER.load(core::sync::atomic::Ordering::Acquire);
+            if filter != 0 {
+                let mut pointers = [rec.as_mut_ptr() as u64, bytes.as_mut_ptr() as u64];
+                type Filter = unsafe extern "system" fn(*mut u64) -> i32;
+                // SAFETY: the function registered with
+                // `RtlSetUnhandledExceptionFilter`, an
+                // `LPTOP_LEVEL_EXCEPTION_FILTER`, given EXCEPTION_POINTERS.
+                let r = unsafe { core::mem::transmute::<u64, Filter>(filter)(pointers.as_mut_ptr()) };
+                if r == EXCEPTION_CONTINUE_EXECUTION && record.flags & 1 == 0 {
+                    // SAFETY: resume the context the filter may have fixed up.
+                    unsafe { syscalls::NtContinue(bytes.as_mut_ptr(), 0) };
+                }
+            }
+            // Second chance: the kernel ends the process (ADR 0068).
+            // SAFETY: a valid record and context.
+            unsafe { syscalls::NtRaiseException(rec.as_ptr(), bytes.as_mut_ptr(), 0) };
         }
         _ => {
             let rec = record.to_bytes();
@@ -242,6 +282,15 @@ pub unsafe extern "C" fn RtlUnwindEx(
     let frame = if target_frame == 0 { None } else { Some(target_frame) };
     match unwind(&Proc, &mut CallHandlers, frame, target_ip, &mut rec, return_value, &ctx) {
         Ok(resume) => {
+            if rec.code == STATUS_UNWIND_CONSOLIDATE && rec.number_parameters >= 1 && rec.information[0] != 0 {
+                let mut target = ContextBuf([0; CONTEXT_SIZE]);
+                target.0.copy_from_slice(&resume.to_bytes());
+                let mut rb = rec.to_bytes();
+                // SAFETY: the record's first parameter is the callback its
+                // maker named; the context and record stay in this frame,
+                // above everything the callback uses.
+                unsafe { poly_consolidate(target.0.as_mut_ptr(), rec.information[0], rb.as_mut_ptr()) };
+            }
             let mut bytes = resume.to_bytes();
             // SAFETY: resume the target frame; never returns.
             unsafe { syscalls::NtContinue(bytes.as_mut_ptr(), 0) };
@@ -253,6 +302,74 @@ pub unsafe extern "C" fn RtlUnwindEx(
     }
     // SAFETY: NtContinue does not return.
     unsafe { core::arch::asm!("int 0x29", in("ecx") 2u32, options(noreturn)) }
+}
+
+/// `STATUS_UNWIND_CONSOLIDATE` (`ntstatus.h`).
+const STATUS_UNWIND_CONSOLIDATE: u32 = 0x8000_0029;
+
+// The end of an unwind whose record is `STATUS_UNWIND_CONSOLIDATE` (ADR
+// 0099; msvcrt unwinds to a C++ catch block so): instead of resuming the
+// target context, `ExceptionInformation[0]` is called as
+// `callback(record)` on the stack below the unwound frames (they stay in
+// place), and the address it returns becomes the target's RIP, which is
+// then resumed. A stack walk from inside the callback must continue in
+// the target frame, not in the frames below it: the callback is called
+// from `poly_consolidate_frame`, whose unwind data is a machine frame
+// (`UWOP_PUSH_MACHFRAME`, Learn: "x64 exception handling") holding the
+// target's RIP and RSP, and whose nonvolatile registers are the target's
+// when it calls, so every frame above it unwinds to the target context.
+//
+// `poly_consolidate(context, callback, record)`: RCX = the target CONTEXT
+// (16-byte aligned), RDX = the callback, R8 = the record. Lays the machine
+// frame out below the current stack and enters the frame.
+core::arch::global_asm!(
+    r#"
+    .text
+    .globl poly_consolidate
+    .p2align 4
+poly_consolidate:
+    and rsp, -16
+    sub rsp, 0x30
+    mov rax, qword ptr [rcx + 0xF8]
+    mov qword ptr [rsp], rax
+    mov qword ptr [rsp + 0x08], 0
+    mov qword ptr [rsp + 0x10], 0
+    mov rax, qword ptr [rcx + 0x98]
+    mov qword ptr [rsp + 0x18], rax
+    mov qword ptr [rsp + 0x20], 0
+    jmp poly_consolidate_frame
+
+    .p2align 4
+    .seh_proc poly_consolidate_frame
+poly_consolidate_frame:
+    .seh_pushframe
+    sub rsp, 0x30
+    .seh_stackalloc 0x30
+    .seh_endprologue
+    mov qword ptr [rsp + 0x20], rcx
+    mov rbx, qword ptr [rcx + 0x90]
+    mov rbp, qword ptr [rcx + 0xA0]
+    mov rsi, qword ptr [rcx + 0xA8]
+    mov rdi, qword ptr [rcx + 0xB0]
+    mov r12, qword ptr [rcx + 0xD8]
+    mov r13, qword ptr [rcx + 0xE0]
+    mov r14, qword ptr [rcx + 0xE8]
+    mov r15, qword ptr [rcx + 0xF0]
+    mov rax, rdx
+    mov rcx, r8
+    call rax
+    mov rcx, qword ptr [rsp + 0x20]
+    mov qword ptr [rcx + 0xF8], rax
+    xor edx, edx
+    call {cont}
+    int3
+    .seh_endproc
+"#,
+    cont = sym syscalls::NtContinue,
+);
+
+unsafe extern "C" {
+    fn poly_consolidate(context: *mut u8, callback: u64, record: *mut u8) -> !;
 }
 
 // `RtlCaptureContext(CONTEXT*)` (Learn: "Retrieves a context record in the

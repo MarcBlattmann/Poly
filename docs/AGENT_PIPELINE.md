@@ -376,6 +376,13 @@ same result on every run, and writes the visible tests' results to
 the tests (`win diff --reference <symbol>.tests/windows.json` compares Poly
 with them without the PC). The hand-off works as for Linux entries.
 
+**Keeping green Windows entries green** ([ADR 0099](adr/0099-cpp-exception-handling-in-msvcrt.md)):
+`cargo xtask pipeline win polycheck` (in `cargo xtask ci pipeline`) builds
+the visible tests of every green Windows entry that has a `windows.json`,
+runs them on Poly and compares them with those recorded results; every one
+must pass. It skips itself without QEMU, without clang++/lld-link/
+llvm-dlltool for C++ tests, and for implementer agents.
+
 **One round on the oracle machine, over SSH** (ADR 0097). On the owner's PC,
 where builds run in the container and SSH on the host, from the repository
 or worktree root in Git Bash:
@@ -495,7 +502,4 @@ Reviewers check these on every agent PR; a violation stops the entry
 - `data<i>` fields and times in the kernel's `POLY-SYSCALL` records.
   (`POLY-SIGNAL` reports every signal a thread takes but `SIGKILL`, as the
   ptrace tracer's signal-delivery-stops: ADR 0062.)
-- A Windows API tracer and a `win polycheck` in CI against the recorded
-  references (`tests split` and `handoff` for Windows tests and their
-  recorded results exist since ADR 0098): ADR 0075 says what they need.
-  The macOS oracle and tracer (later phases).
+- The macOS oracle and tracer (later phases).

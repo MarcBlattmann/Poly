@@ -1,0 +1,105 @@
+//! Constants: the double-double values of π, ln 2 and friends, the
+//! coefficients of the Taylor series, and the bits of 2/π for the argument
+//! reduction of the trigonometric functions.
+//!
+//! Every value was computed to 120 decimal digits with Python's `decimal`
+//! module (π by Machin's formula, π/4 = 4 arctan(1/5) − arctan(1/239), in
+//! integer arithmetic; logarithms with `Decimal.ln`), then split into the
+//! nearest `f64` and the nearest `f64` to the rest. The tests check them
+//! against identities. The first words of 2/π match its published
+//! hexadecimal expansion (`A2F9836E 4E441529 FC2757D1 …`).
+
+use crate::dd::DD;
+
+pub const PI: DD = DD::from_bits(0x400921FB54442D18, 0x3CA1A62633145C07);
+pub const PI_2: DD = DD::from_bits(0x3FF921FB54442D18, 0x3C91A62633145C07);
+pub const PI_4: DD = DD::from_bits(0x3FE921FB54442D18, 0x3C81A62633145C07);
+pub const LN2: DD = DD::from_bits(0x3FE62E42FEFA39EF, 0x3C7ABC9E3B39803F);
+/// log2(e) = 1 / ln 2.
+pub const LOG2E: DD = DD::from_bits(0x3FF71547652B82FE, 0x3C7777D0FFDA0D24);
+/// log10(e) = 1 / ln 10.
+pub const LOG10E: DD = DD::from_bits(0x3FDBCB7B1526E50E, 0x3C695355BAAAFAD3);
+
+/// 1/n! for n = 0 … 26.
+pub const INV_FACT: [DD; 27] = [
+    DD::from_bits(0x3FF0000000000000, 0x0000000000000000), // 1/0!
+    DD::from_bits(0x3FF0000000000000, 0x0000000000000000), // 1/1!
+    DD::from_bits(0x3FE0000000000000, 0x0000000000000000), // 1/2!
+    DD::from_bits(0x3FC5555555555555, 0x3C65555555555555), // 1/3!
+    DD::from_bits(0x3FA5555555555555, 0x3C45555555555555), // 1/4!
+    DD::from_bits(0x3F81111111111111, 0x3C01111111111111), // 1/5!
+    DD::from_bits(0x3F56C16C16C16C17, 0xBBEF49F49F49F49F), // 1/6!
+    DD::from_bits(0x3F2A01A01A01A01A, 0x3B6A01A01A01A01A), // 1/7!
+    DD::from_bits(0x3EFA01A01A01A01A, 0x3B3A01A01A01A01A), // 1/8!
+    DD::from_bits(0x3EC71DE3A556C734, 0xBB6C154F8DDC6C00), // 1/9!
+    DD::from_bits(0x3E927E4FB7789F5C, 0x3B3CBBC05B4FA99A), // 1/10!
+    DD::from_bits(0x3E5AE64567F544E4, 0xBAFC062E06D1F209), // 1/11!
+    DD::from_bits(0x3E21EED8EFF8D898, 0xBAC2AEC959E14C06), // 1/12!
+    DD::from_bits(0x3DE6124613A86D09, 0x3A8F28E0CC748EBE), // 1/13!
+    DD::from_bits(0x3DA93974A8C07C9D, 0x3A305D6F8A2EFD1F), // 1/14!
+    DD::from_bits(0x3D6AE7F3E733B81F, 0x39E1D8656B0EE8CB), // 1/15!
+    DD::from_bits(0x3D2AE7F3E733B81F, 0x39A1D8656B0EE8CB), // 1/16!
+    DD::from_bits(0x3CE952C77030AD4A, 0x398AC981465DDC6C), // 1/17!
+    DD::from_bits(0x3CA6827863B97D97, 0x394EEC01221A8B0B), // 1/18!
+    DD::from_bits(0x3C62F49B46814157, 0x38F2650F61DBDCB4), // 1/19!
+    DD::from_bits(0x3C1E542BA4020225, 0x387EA72B4AFE3C2F), // 1/20!
+    DD::from_bits(0x3BD71B8EF6DCF572, 0xB87D043AE40C4647), // 1/21!
+    DD::from_bits(0x3B90CE396DB7F853, 0xB83AEBCDBD20331C), // 1/22!
+    DD::from_bits(0x3B4761B41316381A, 0xB7D3423C7D91404F), // 1/23!
+    DD::from_bits(0x3AFF2CF01972F578, 0xB789ADA5FCC1AB14), // 1/24!
+    DD::from_bits(0x3AB3F3CCDD165FA9, 0xB7458DDADF344487), // 1/25!
+    DD::from_bits(0x3A688E85FC6A4E5A, 0xB7071C37EBD16540), // 1/26!
+];
+
+/// 1/(2k + 1) for k = 0 … 23.
+pub const INV_ODD: [DD; 24] = [
+    DD::from_bits(0x3FF0000000000000, 0x0000000000000000), // 1/1
+    DD::from_bits(0x3FD5555555555555, 0x3C75555555555555), // 1/3
+    DD::from_bits(0x3FC999999999999A, 0xBC6999999999999A), // 1/5
+    DD::from_bits(0x3FC2492492492492, 0x3C62492492492492), // 1/7
+    DD::from_bits(0x3FBC71C71C71C71C, 0x3C5C71C71C71C71C), // 1/9
+    DD::from_bits(0x3FB745D1745D1746, 0xBC4745D1745D1746), // 1/11
+    DD::from_bits(0x3FB3B13B13B13B14, 0xBC53B13B13B13B14), // 1/13
+    DD::from_bits(0x3FB1111111111111, 0x3C31111111111111), // 1/15
+    DD::from_bits(0x3FAE1E1E1E1E1E1E, 0x3C2E1E1E1E1E1E1E), // 1/17
+    DD::from_bits(0x3FAAF286BCA1AF28, 0x3C4AF286BCA1AF28), // 1/19
+    DD::from_bits(0x3FA8618618618618, 0x3C48618618618618), // 1/21
+    DD::from_bits(0x3FA642C8590B2164, 0x3C3642C8590B2164), // 1/23
+    DD::from_bits(0x3FA47AE147AE147B, 0xBC2EB851EB851EB8), // 1/25
+    DD::from_bits(0x3FA2F684BDA12F68, 0x3C42F684BDA12F68), // 1/27
+    DD::from_bits(0x3FA1A7B9611A7B96, 0x3C21A7B9611A7B96), // 1/29
+    DD::from_bits(0x3FA0842108421084, 0x3C30842108421084), // 1/31
+    DD::from_bits(0x3F9F07C1F07C1F08, 0xBC2F07C1F07C1F08), // 1/33
+    DD::from_bits(0x3F9D41D41D41D41D, 0x3C30750750750750), // 1/35
+    DD::from_bits(0x3F9BACF914C1BAD0, 0xBC3BACF914C1BAD0), // 1/37
+    DD::from_bits(0x3F9A41A41A41A41A, 0x3C30690690690690), // 1/39
+    DD::from_bits(0x3F98F9C18F9C18FA, 0xBC2F3831F3831F38), // 1/41
+    DD::from_bits(0x3F97D05F417D05F4, 0x3C17D05F417D05F4), // 1/43
+    DD::from_bits(0x3F96C16C16C16C17, 0xBC2F49F49F49F49F), // 1/45
+    DD::from_bits(0x3F95C9882B931057, 0x3C2310572620AE4C), // 1/47
+];
+
+/// The first 1280 bits of the fraction of 2/π (2/π = 0.A2F9836E… in
+/// hexadecimal), most significant first.
+pub const TWO_OVER_PI: [u64; 20] = [
+    0xA2F9836E4E441529,
+    0xFC2757D1F534DDC0,
+    0xDB6295993C439041,
+    0xFE5163ABDEBBC561,
+    0xB7246E3A424DD2E0,
+    0x06492EEA09D1921C,
+    0xFE1DEB1CB129A73E,
+    0xE88235F52EBB4484,
+    0xE99C7026B45F7E41,
+    0x3991D639835339F4,
+    0x9C845F8BBDF9283B,
+    0x1FF897FFDE05980F,
+    0xEF2F118B5A0A6D1F,
+    0x6D367ECF27CB09B7,
+    0x4F463F669E5FEA2D,
+    0x7527BAC7EBE5F17B,
+    0x3D0739F78A5292EA,
+    0x6BFB5FB11F8D5D08,
+    0x56033046FC7B6BAB,
+    0xF0CFBC209AF4361D,
+];

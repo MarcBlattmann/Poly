@@ -18,10 +18,16 @@ use poly_win32_crt::stdio::{self, BufferRule, File};
 use poly_win32_crt::{env, global, heap, io, misc, timefn};
 use poly_win32_rt as _;
 
+mod files_console;
+
 /// `DllMain`.
 #[unsafe(no_mangle)]
 pub extern "system" fn ucrtbase_main(_module: *mut u8, reason: u32, reserved: *mut u8) -> i32 {
-    poly_win32_crt::dll_main(reason, !reserved.is_null())
+    let r = poly_win32_crt::dll_main(reason, !reserved.is_null());
+    if reason == poly_win32_crt::DLL_PROCESS_ATTACH {
+        locale::bind();
+    }
+    r
 }
 
 // ----- functions of the shared runtime only the UCRT exports ------------------------------
@@ -36,6 +42,8 @@ macro_rules! forward {
         }
     )*};
 }
+
+mod locale;
 
 forward! {
     _aligned_msize(p: *mut u8, alignment: usize, offset: usize) -> usize = heap::_aligned_msize;
@@ -70,7 +78,6 @@ forward! {
     _get_daylight(out: *mut i32) -> i32 = timefn::_get_daylight;
     _get_dstbias(out: *mut i32) -> i32 = timefn::_get_dstbias;
     _get_timezone(out: *mut i32) -> i32 = timefn::_get_timezone;
-    isblank(c: i32) -> i32 = poly_win32_crt::strings::isblank;
     iswblank(c: u16) -> i32 = poly_win32_crt::strings::iswblank;
     strtof(s: *const u8, end: *mut *mut u8) -> f32 = poly_win32_crt::conv::strtof;
     strtold(s: *const u8, end: *mut *mut u8) -> f64 = poly_win32_crt::conv::strtold;
@@ -274,24 +281,6 @@ pub extern "C" fn _get_purecall_handler() -> usize {
 #[unsafe(no_mangle)]
 pub extern "C" fn _set_new_handler(h: usize) -> usize {
     heap::set_new_handler(h)
-}
-
-static THREAD_LOCALE: AtomicI32 = AtomicI32::new(2);
-
-/// `_configthreadlocale`: 0 asks, `_ENABLE_PER_THREAD_LOCALE` (1) and
-/// `_DISABLE_PER_THREAD_LOCALE` (2) set, −1 is the global setting (2); the
-/// previous setting. With one locale ("C") it changes nothing else.
-#[unsafe(no_mangle)]
-pub extern "C" fn _configthreadlocale(mode: i32) -> i32 {
-    match mode {
-        0 => THREAD_LOCALE.load(Ordering::Acquire),
-        1 | 2 => THREAD_LOCALE.swap(mode, Ordering::AcqRel),
-        -1 => THREAD_LOCALE.swap(2, Ordering::AcqRel),
-        _ => {
-            global::invalid(poly_crt::errno::EINVAL);
-            -1
-        }
-    }
 }
 
 // ----- stdio ------------------------------------------------------------------------------
@@ -544,14 +533,6 @@ pub extern "C" fn __tzname() -> *mut *const u8 {
     V.get() as *mut *const u8
 }
 
-/// `__p__mbctype`: the "C" locale has no multibyte characters (257 zero
-/// bytes).
-#[unsafe(no_mangle)]
-pub extern "C" fn __p__mbctype() -> *const u8 {
-    static TABLE: [u8; 257] = [0; 257];
-    TABLE.as_ptr()
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn __initialize_lconv_for_unsigned_char() -> i32 {
     0
@@ -603,3 +584,5 @@ pub extern "C" fn _dclass(x: f64) -> i16 {
 pub extern "C" fn _dsign(x: f64) -> i32 {
     i32::from(x.is_sign_negative())
 }
+
+mod math_p;

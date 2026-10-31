@@ -77,10 +77,31 @@ pub static UCRTBASE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ucrtbase.
 pub static MSVCRT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcrt.dll"));
 pub static CRTTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crttest.exe"));
 
+mod test_crt_locale;
+
+/// The program the C runtime locale ring-3 test runs (`test_crt_locale`,
+/// ADR 0094).
+pub static CRTLOCTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crtloctest.exe"));
+
+mod test_crtio;
+
+/// The program the C runtime's files, processes and console ring-3 test
+/// runs (`test_crtio`, ADR 0093).
+pub static CRTIOTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crtiotest.exe"));
+
 /// The first functions of `user32.dll` and `oleaut32.dll` (ADR 0087),
 /// installed in `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static USER32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/user32.dll"));
 pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.dll"));
+
+mod test_crypto;
+
+/// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in
+/// `C:\Windows\System32` by [`layout`]; and the program the cryptography
+/// ring-3 test runs (`test_crypto`). Empty without `xtask`.
+pub static BCRYPT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcrypt.dll"));
+pub static CRYPT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crypt32.dll"));
+pub static CRYPTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cryptest.exe"));
 
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
@@ -184,24 +205,32 @@ fn note_exit_status(pid: u32, status: NtStatus, by_process: bool) {
 
 fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
     let mut guard = STATE.lock();
+    if guard.is_none() {
+        make_state(&mut guard);
+    }
+    f(guard.as_mut().expect("made above"))
+}
 
-    let state = guard.get_or_insert_with(|| {
-        let mut state = NtState {
-            sys: registry::boot_system(),
-            processes: BTreeMap::new(),
-            sections: Sections::default(),
-            ctl: BTreeMap::new(),
-            timers: BTreeMap::new(),
-            created: BTreeMap::new(),
-        };
-        // The Windows folders on C: and the registry values that follow
-        // them (ADR 0073), before file I/O attaches C:.
-        layout::prepare(&mut state.sys);
-        // File I/O: the VFS's volumes and drive letters (ADR 0067).
-        io::attach(&mut state.sys);
-        state
-    });
-    f(state)
+/// The NT state of the first NT use, made in a frame of its own: `with`
+/// runs on deep paths (a page fault while an exception is dispatched, ADR
+/// 0091), and the state built inline would make each of its frames large.
+#[cold]
+#[inline(never)]
+fn make_state(slot: &mut Option<NtState>) {
+    let mut state = NtState {
+        sys: registry::boot_system(),
+        processes: BTreeMap::new(),
+        sections: Sections::default(),
+        ctl: BTreeMap::new(),
+        timers: BTreeMap::new(),
+        created: BTreeMap::new(),
+    };
+    // The Windows folders on C: and the registry values that follow
+    // them (ADR 0073), before file I/O attaches C:.
+    layout::prepare(&mut state.sys);
+    // File I/O: the VFS's volumes and drive letters (ADR 0067).
+    io::attach(&mut state.sys);
+    *slot = Some(state);
 }
 
 /// Run `f` on the NT state if the first NT use made it already.
@@ -359,7 +388,7 @@ impl NtKernel for Kernel {
     }
 
     fn unhandled_exception(&mut self, record: &poly_seh::ExceptionRecord, ctx: &poly_seh::Context) {
-        self.seh.unhandled = Some((*record, ctx.clone()));
+        self.seh.unhandled = Some(alloc::boxed::Box::new((*record, ctx.clone())));
     }
 
     fn trace(&mut self, values: [u64; 3]) {

@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 poly-win32-rt = { path = "../rt" }
 poly-win32-crt = { path = "../crt" }
 poly-crt = { path = "../../../../crates/poly-crt" }
+poly-cxxeh = { path = "../../../../crates/poly-cxxeh" }
 
 [build-dependencies]
 poly-crt = { path = "../../../../crates/poly-crt" }

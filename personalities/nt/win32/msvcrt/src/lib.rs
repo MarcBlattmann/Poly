@@ -13,11 +13,17 @@
 //!   wide `%s` in wide functions) — the variadic ones through assembly
 //!   thunks that hand the arguments on as a `va_list`;
 //! - `time` and its family as 64-bit-`time_t` functions, the two-argument
-//!   `wcstok`, and the C++-named `terminate` / `set_terminate`.
+//!   `wcstok`, and the C++-named `terminate` / `set_terminate`;
+//! - C++ exception handling (`cxx`, ADR 0099): `_CxxThrowException`,
+//!   `__CxxFrameHandler3` and `__CxxFrameHandler`.
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
 #![allow(non_upper_case_globals)]
+
+extern crate alloc;
+
+mod cxx;
 
 use core::sync::atomic::{AtomicI32, Ordering};
 use poly_crt::printf::{self, MSVCRT_OPTIONS, VaList};
@@ -27,6 +33,9 @@ use poly_win32_crt::startup::{self, Cells};
 use poly_win32_crt::stdio::{self, BufferRule, File};
 use poly_win32_crt::{heap, timefn};
 use poly_win32_rt as _;
+
+mod files_console;
+mod locale;
 
 // ----- exported data --------------------------------------------------------------------
 
@@ -104,6 +113,7 @@ pub extern "system" fn msvcrt_main(_module: *mut u8, reason: u32, reserved: *mut
             commode: _commode.get(),
         });
         stdio::bind_iob(_iob.get() as *mut File);
+        locale::bind(_pctype.get(), __mb_cur_max.get());
         // SAFETY: process attach; one thread.
         let list = unsafe { &mut *_sys_errlist.get() };
         for (i, slot) in list.iter_mut().enumerate() {
@@ -129,7 +139,7 @@ pub unsafe extern "C" fn __getmainargs(
     argc: *mut i32,
     argv: *mut *mut *mut u8,
     env: *mut *mut *mut u8,
-    _wildcard: i32,
+    wildcard: i32,
     info: *const StartupInfo,
 ) -> i32 {
     if !info.is_null() {
@@ -137,7 +147,7 @@ pub unsafe extern "C" fn __getmainargs(
         heap::_set_new_mode(unsafe { (*info).newmode });
     }
     // SAFETY: the caller's out-pointers.
-    unsafe { startup::main_args(argc, argv, env, false) }
+    unsafe { startup::main_args(argc, argv, env, false, wildcard != 0) }
 }
 
 /// # Safety
@@ -147,7 +157,7 @@ pub unsafe extern "C" fn __wgetmainargs(
     argc: *mut i32,
     argv: *mut *mut *mut u16,
     env: *mut *mut *mut u16,
-    _wildcard: i32,
+    wildcard: i32,
     info: *const StartupInfo,
 ) -> i32 {
     if !info.is_null() {
@@ -155,7 +165,7 @@ pub unsafe extern "C" fn __wgetmainargs(
         heap::_set_new_mode(unsafe { (*info).newmode });
     }
     // SAFETY: the caller's out-pointers.
-    unsafe { startup::main_args(argc, argv as *mut *mut *mut u8, env as *mut *mut *mut u8, true) }
+    unsafe { startup::main_args(argc, argv as *mut *mut *mut u8, env as *mut *mut *mut u8, true, wildcard != 0) }
 }
 
 static APP_TYPE: AtomicI32 = AtomicI32::new(0);
@@ -250,56 +260,7 @@ pub extern "C" fn cxx_terminate() -> ! {
     startup::terminate()
 }
 
-// ----- C++ exceptions and RTTI: the stubs 7-Zip's command line needs (ADR 0087) ---------
-
-#[link(name = "kernel32", kind = "raw-dylib")]
-unsafe extern "system" {
-    fn RaiseException(code: u32, flags: u32, count: u32, args: *const usize);
-    fn RtlPcToFileHeader(pc: *const u8, base: *mut *mut u8) -> *mut u8;
-}
-
-/// The exception code of a C++ `throw` (Raymond Chen, "Decoding the
-/// parameters of a thrown C++ exception (0xE06D7363)", The Old New Thing,
-/// Microsoft Dev Blogs, 2010-07-30).
-const CXX_EXCEPTION: u32 = 0xE06D_7363;
-/// `EXCEPTION_NONCONTINUABLE` (`winnt.h`): a `throw` does not return.
-const EXCEPTION_NONCONTINUABLE: u32 = 1;
-
-/// `_CxxThrowException(object, throw_info)`: raise the C++ exception with
-/// the four parameters the article describes for 64-bit Windows: an
-/// internal value (which it does not give; Poly passes 0), the thrown
-/// object, its throw information, and the base of the module that threw
-/// (whose image the throw information's offsets are relative to).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn _CxxThrowException(object: *mut u8, throw_info: *const u8) -> ! {
-    let mut base = core::ptr::null_mut();
-    // SAFETY: a lookup without preconditions.
-    unsafe { RtlPcToFileHeader(throw_info, &mut base) };
-    let args = [0, object as usize, throw_info as usize, base as usize];
-    // SAFETY: four arguments.
-    unsafe { RaiseException(CXX_EXCEPTION, EXCEPTION_NONCONTINUABLE, 4, args.as_ptr()) };
-    // A noncontinuable exception does not come back.
-    poly_win32_rt::fail_fast(7)
-}
-
-/// `EXCEPTION_DISPOSITION`'s `ExceptionContinueSearch` (`excpt.h`).
-const EXCEPTION_CONTINUE_SEARCH: u32 = 1;
-
-/// `__CxxFrameHandler`, the language-specific handler of functions with
-/// C++ `try`/`catch` or objects to destroy: a stub (ADR 0087). Poly does
-/// not implement C++ exception handling (its tables are the compiler's,
-/// documented nowhere public), so no `catch` takes an exception and no
-/// destructor runs while one unwinds: every C++ exception goes on unhandled
-/// and ends the process with `0xE06D7363`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __CxxFrameHandler(
-    _record: *mut u8,
-    _frame: u64,
-    _context: *mut u8,
-    _dispatch: *mut u8,
-) -> u32 {
-    EXCEPTION_CONTINUE_SEARCH
-}
+// ----- C++ exceptions (ADR 0099, module `cxx`) and RTTI -------------------------------------
 
 /// `type_info::~type_info()`: `typeinfo.h`'s `type_info` keeps a cached
 /// undecorated name after its virtual table, which `type_info::name`
@@ -576,3 +537,5 @@ v_exports! {
     _vsnprintf_s = va::snprintf_s, (b: *mut u8, n: usize, c: usize, f: *const u8);
     _vsnwprintf_s = va::snwprintf_s, (b: *mut u16, n: usize, c: usize, f: *const u16);
 }
+
+mod positional;

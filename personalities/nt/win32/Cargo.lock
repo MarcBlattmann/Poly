@@ -19,6 +19,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcrypt"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-win32-cryptrt",
+ "poly-wincrypt",
+]
+
+[[package]]
 name = "contest"
 version = "0.0.1"
 dependencies = [
@@ -26,7 +35,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "crtloctest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "crttest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "crypt32"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-win32-cryptrt",
+ "poly-wincrypt",
+ "poly-x509",
+]
+
+[[package]]
+name = "cryptest"
 version = "0.0.1"
 dependencies = [
  "poly-win32-rt",
@@ -64,6 +97,7 @@ name = "msvcrt"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
+ "poly-cxxeh",
  "poly-win32-crt",
  "poly-win32-rt",
 ]
@@ -84,14 +118,38 @@ version = "0.0.1"
 name = "poly-crt"
 version = "0.0.1"
 dependencies = [
+ "poly-nls",
  "poly-rtl",
+]
+
+[[package]]
+name = "poly-crypto"
+version = "0.0.1"
+
+[[package]]
+name = "poly-cxxeh"
+version = "0.0.1"
+dependencies = [
+ "poly-seh",
 ]
 
 [[package]]
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-nls",
  "poly-ntobj",
+ "poly-rtl",
+]
+
+[[package]]
+name = "poly-libm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-nls"
+version = "0.0.1"
+dependencies = [
  "poly-rtl",
 ]
 
@@ -114,10 +172,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-seh"
+version = "0.0.1"
+
+[[package]]
 name = "poly-win32-crt"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
+ "poly-libm",
+ "poly-nls",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "poly-win32-cryptrt"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -126,10 +197,26 @@ name = "poly-win32-rt"
 version = "0.0.1"
 
 [[package]]
+name = "poly-wincrypt"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-x509",
+]
+
+[[package]]
+name = "poly-x509"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+]
+
+[[package]]
 name = "ucrtbase"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
+ "poly-libm",
  "poly-win32-crt",
  "poly-win32-rt",
 ]

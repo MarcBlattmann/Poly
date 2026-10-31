@@ -296,9 +296,11 @@ pub extern "C" fn _set_error_mode(mode: i32) -> i32 {
     }
 }
 
-static MATHERR: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+/// The handler `__setusermatherr` installed (the math functions call it,
+/// `mathfn::finish`).
+pub(crate) static MATHERR: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
-/// `__setusermatherr`: kept (Poly's math functions do not call it yet).
+/// `__setusermatherr`: the program's `_matherr` (Learn, `_matherr`).
 #[unsafe(no_mangle)]
 pub extern "C" fn __setusermatherr(f: usize) {
     MATHERR.store(f, Ordering::Release);
@@ -328,112 +330,6 @@ pub unsafe extern "C" fn _get_fmode(out: *mut i32) -> i32 {
     }
     // SAFETY: writable; a valid cell.
     unsafe { *out = startup::fmode() };
-    0
-}
-
-// ----- locales ------------------------------------------------------------------------
-
-/// `LC_ALL` … `LC_TIME` (`locale.h`).
-const LC_MAX: i32 = 5;
-
-/// `setlocale`: Poly has the "C" locale only. Asking (NULL), "C", "POSIX"
-/// and "" (the user's default, which Poly takes to be "C") answer "C";
-/// any other name fails (NULL), as for a locale Windows lacks.
-///
-/// # Safety
-/// `locale` NULL or a C string.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn setlocale(category: i32, locale: *const u8) -> *const u8 {
-    if !(0..=LC_MAX).contains(&category) {
-        global::invalid(EINVAL);
-        return core::ptr::null();
-    }
-    if locale.is_null() {
-        return c"C".as_ptr() as *const u8;
-    }
-    // SAFETY: the caller's string.
-    match unsafe { poly_crt::unit::slice(locale) } {
-        b"" | b"C" | b"POSIX" => c"C".as_ptr() as *const u8,
-        _ => core::ptr::null(),
-    }
-}
-
-/// # Safety
-/// As `setlocale`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn _wsetlocale(category: i32, locale: *const u16) -> *const u16 {
-    static C_WIDE: [u16; 2] = [b'C' as u16, 0];
-    if !(0..=LC_MAX).contains(&category) {
-        global::invalid(EINVAL);
-        return core::ptr::null();
-    }
-    if locale.is_null() {
-        return C_WIDE.as_ptr();
-    }
-    // SAFETY: the caller's string.
-    let name = unsafe { poly_crt::unit::slice(locale) };
-    let c: &[u16] = &[b'C' as u16];
-    let posix: &[u16] = &[b'P' as u16, b'O' as u16, b'S' as u16, b'I' as u16, b'X' as u16];
-    if name.is_empty() || name == c || name == posix { C_WIDE.as_ptr() } else { core::ptr::null() }
-}
-
-/// `struct lconv` (`locale.h`): ten `char *`, eight `char`, eight
-/// `wchar_t *`.
-#[repr(C)]
-pub struct Lconv {
-    strings: [*const u8; 10],
-    chars: [u8; 8],
-    wide: [*const u16; 8],
-}
-
-// SAFETY: read-only data.
-unsafe impl Sync for Lconv {}
-
-static DOT: [u16; 2] = [b'.' as u16, 0];
-static EMPTY_W: [u16; 1] = [0];
-
-/// The "C" locale's `lconv` (C11 7.11.2.1: "." and empty strings, the
-/// `char` members `CHAR_MAX`).
-static C_LCONV: Lconv = Lconv {
-    strings: [
-        c".".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-        c"".as_ptr() as *const u8,
-    ],
-    chars: [127; 8],
-    wide: [
-        DOT.as_ptr(),
-        EMPTY_W.as_ptr(),
-        EMPTY_W.as_ptr(),
-        EMPTY_W.as_ptr(),
-        EMPTY_W.as_ptr(),
-        EMPTY_W.as_ptr(),
-        EMPTY_W.as_ptr(),
-        EMPTY_W.as_ptr(),
-    ],
-};
-
-#[unsafe(no_mangle)]
-pub extern "C" fn localeconv() -> *const Lconv {
-    &C_LCONV
-}
-
-/// `___lc_codepage_func`: the "C" locale's `LC_CTYPE` code page, 0 (Poly's
-/// reading, to be confirmed).
-#[unsafe(no_mangle)]
-pub extern "C" fn ___lc_codepage_func() -> u32 {
-    0
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn _getmbcp() -> i32 {
     0
 }
 

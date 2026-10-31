@@ -38,6 +38,8 @@
 //! win diff --reference WIN.json [--target poly|FILE.json] [--tests a,b] [--strict] [poly options]
 //!                                                compare Windows results with Poly (or another result file)
 //! win show <results.json> [--tests a,b]          print a result file's observations
+//! win polycheck [--kernel ELF] [--jobs N]         the visible tests of every green Windows entry on Poly
+//!                                                against their recorded windows.json: all must pass (CI)
 //! win scenario poly [--bin-dir DIR] [--data-dir DIR] [--tests a,b] [--kernel ELF] [--build-kernel]
 //!                   [--timeout SECS] [--out FILE]
 //!                                                run scenario drivers (ADR 0088) on Poly with their data files
@@ -695,6 +697,81 @@ fn polycheck(repo: &Path) -> Result<u8> {
     Ok(0)
 }
 
+/// Poly against the recorded Windows results of every green Windows
+/// entry's visible tests (ADR 0099; ADR 0098 left it to be built): each
+/// must pass, so a green entry stays green. Skipped, successfully, without
+/// green Windows entries, without QEMU, without clang++ when an entry has
+/// C++ tests, and for implementer agents (it reads Windows' observations).
+fn win_polycheck(repo: &Path, a: &Args) -> Result<u8> {
+    if oracle_guard("win polycheck").is_err() {
+        println!("pipeline win polycheck: skipped (implementer agents do not read Windows results)");
+        return Ok(0);
+    }
+    let entries = green::windows_entries(repo)?;
+    if entries.is_empty() {
+        println!("pipeline win polycheck: no green Windows entry has visible tests with recorded results");
+        return Ok(0);
+    }
+    if Command::new("qemu-system-x86_64").arg("--version").output().is_err() {
+        println!("pipeline win polycheck: skipped (no qemu-system-x86_64)");
+        return Ok(0);
+    }
+    let has_cpp = entries
+        .iter()
+        .any(|w| w.entry.tests.iter().any(|t| repo.join(&w.entry.tests_dir).join(format!("{t}.cpp")).is_file()));
+    if has_cpp && let Err(e) = wincxx::Tools::from_env().version() {
+        println!("pipeline win polycheck: skipped (C++ tests need clang++, lld-link and llvm-dlltool: {e})");
+        return Ok(0);
+    }
+    let base = repo.join(windows::WIN_DIR).join("polycheck");
+    let bin = base.join("bin");
+    let dirs: Vec<PathBuf> = entries.iter().map(|w| repo.join(&w.entry.tests_dir)).collect();
+    let tests: Vec<String> = entries.iter().flat_map(|w| w.entry.tests.iter().cloned()).collect();
+    let manifest = windows::build(repo, &bin, &dirs, &tests)?;
+    let kernel = match a.opt("kernel") {
+        Some(k) => PathBuf::from(k),
+        None => {
+            poly::build_kernel(repo)?;
+            poly::default_kernel(repo)
+        }
+    };
+    let target = poly::Target { kernel, timeout: timeout(a, POLY_TIMEOUT)? };
+    let run_dir = base.join("run");
+    let _ = std::fs::remove_dir_all(&run_dir);
+    let jobs = match a.opt("jobs") {
+        Some(j) => j.parse().map_err(|_| "--jobs: a number")?,
+        None => util::default_jobs(POLYCHECK_MAX_JOBS),
+    };
+    let results = windows::run_poly(&target, &bin, &manifest, &run_dir, jobs)?;
+    util::write_json(&run_dir.join("poly.json"), &results)?;
+    let mut report = String::new();
+    let mut problems = Vec::new();
+    for w in &entries {
+        let reference = windows::RunFile::load(&repo.join(&w.reference))?;
+        let summary = windows::diff(&reference, &results, &w.entry.tests)?;
+        report.push_str(&format!("== {}\n{}\n", w.entry.id, windows::report(&summary)));
+        let mut bad: Vec<String> =
+            summary.tests.iter().filter(|t| t.verdict != windows::Verdict::Pass).map(|t| t.name.clone()).collect();
+        bad.extend(
+            w.entry.tests.iter().filter(|t| reference.test(t).is_none()).map(|t| format!("{t} (no recorded result)")),
+        );
+        if !bad.is_empty() {
+            problems.push(format!("green entry {}: {}", w.entry.id, bad.join(", ")));
+        }
+    }
+    util::write(&run_dir.join("report.txt"), &report)?;
+    print!("{report}");
+    if !problems.is_empty() {
+        return Err(format!("on Poly, {} (report: {})", problems.join("; "), run_dir.join("report.txt").display()));
+    }
+    println!(
+        "pipeline win polycheck: the {} visible tests of {} green Windows entries pass on Poly",
+        tests.len(),
+        entries.len()
+    );
+    Ok(0)
+}
+
 /// The freestanding hello world makes exactly two syscalls.
 fn check_hello(t: &Trace) -> Result {
     let lines: Vec<String> = trace::normalize(t, &NormOptions::default()).iter().map(ToString::to_string).collect();
@@ -936,7 +1013,8 @@ fn test_list(a: &Args) -> Vec<String> {
 
 /// The Windows test oracle (ADR 0075): `win build|bundle|poly|diff|show`.
 fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
-    let usage = "usage: pipeline win <build|bundle|unbundle|poly|diff|show|remote> (see tools/pipeline/src/main.rs)";
+    let usage =
+        "usage: pipeline win <build|bundle|unbundle|poly|diff|show|remote|polycheck> (see tools/pipeline/src/main.rs)";
     let (sub, rest) = a.positional.split_first().ok_or(usage)?;
     let win = repo.join(windows::WIN_DIR);
     let bin_dir = a.opt("bin-dir").map_or_else(|| win.join("bin"), PathBuf::from);
@@ -1053,6 +1131,10 @@ fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
                 .sum::<usize>()
                 + if a.has("strict") { summary.count(windows::Verdict::Unsupported) } else { 0 };
             Ok(u8::from(bad > 0))
+        }
+        "polycheck" => {
+            a.only(&["kernel", "jobs", "timeout"])?;
+            win_polycheck(repo, a)
         }
         "unbundle" => {
             // What the Windows runner does with a bundle, here: check it

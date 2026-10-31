@@ -114,7 +114,7 @@ jobs:
         with:
           path: target/ntdll-cache
           key: ${{ steps.ntdll.outputs.key }}
-      # 7-Zip's 7za.exe for the `7zip` boot test (ADR 0087): downloaded and
+      # 7-Zip's 7za.exe and Linux 7zz for the `7zip` boot test (ADR 0087, 0091): downloaded and
       # checked against its pinned SHA-256 by xtask, kept in a cache by
       # version. If the download fails the boot test skips, with a warning.
       - name: 7-Zip's cache
@@ -122,7 +122,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target/7zip
-          key: 7zip-26.05
+          key: 7zip-26.05-7zz
       - name: Fetch 7-Zip (the 7zip boot test)
         if: matrix.shard == 'userland'
         run: cargo xtask win fetch-7zip || echo "::warning::could not fetch 7-Zip; the 7zip boot test is skipped"
@@ -153,13 +153,15 @@ jobs:
       - run: cargo xtask ci coverage
 
   pipeline:
-    name: pipeline (selfcheck, polycheck)
+    name: pipeline (selfcheck, polycheck, win polycheck)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Install QEMU and a static BusyBox
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static
+      # clang++, lld-link and llvm-dlltool build the C++ Windows tests of
+      # green Windows entries for `win polycheck` (ADR 0098, 0099).
+      - name: Install QEMU, a static BusyBox and the C++ Windows test tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static clang lld llvm
       - name: Let QEMU use KVM
         run: |
           if [ -e /dev/kvm ]; then
@@ -193,7 +195,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: polycheck-run
-          path: target/pipeline/polycheck/run
+          path: |
+            target/pipeline/polycheck/run
+            target/pipeline/windows/polycheck/run
           if-no-files-found: ignore
           retention-days: 7
 

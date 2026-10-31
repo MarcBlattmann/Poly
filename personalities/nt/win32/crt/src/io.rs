@@ -33,7 +33,7 @@ fn open_wide(name: &[u16], flags: i32, share: i32, pmode: i32) -> i32 {
         return -1;
     }
     let mode = Translation::of(flags, crate::startup::fmode());
-    let fd = lowio::allocate(h, mode, flags & fmode::O_APPEND != 0);
+    let fd = lowio::allocate_with(h, mode, flags & fmode::O_APPEND != 0, flags & fmode::O_NOINHERIT != 0);
     if fd < 0 {
         // SAFETY: the handle just opened.
         unsafe { sys::CloseHandle(h) };
@@ -317,7 +317,121 @@ pub extern "C" fn _open_osfhandle(handle: isize, flags: i32) -> i32 {
         return -1;
     }
     let mode = Translation::of(flags, crate::startup::fmode());
-    lowio::allocate(handle, mode, flags & fmode::O_APPEND != 0)
+    lowio::allocate_with(handle, mode, flags & fmode::O_APPEND != 0, flags & fmode::O_NOINHERIT != 0)
+}
+
+// ----- _dup, _dup2, _pipe (ADR 0093) ------------------------------------------------
+
+/// A second handle to `h`'s object in this process (`inherit`: for a child).
+pub(crate) fn duplicate(h: Handle, inherit: bool) -> Option<Handle> {
+    let mut out: Handle = 0;
+    // SAFETY: the pseudo handle of this process and a handle of it; `out`
+    // writable.
+    let ok = unsafe {
+        let me = sys::GetCurrentProcess();
+        sys::DuplicateHandle(me, h, me, &mut out, 0, i32::from(inherit), sys::DUPLICATE_SAME_ACCESS)
+    };
+    (ok != 0).then_some(out)
+}
+
+/// `_dup(fd)`: the lowest free descriptor for a new handle to `fd`'s file,
+/// in `fd`'s mode (Learn: "the new file descriptor ... refers to the same
+/// file"); −1 with `EBADF` or `EMFILE`.
+#[unsafe(no_mangle)]
+pub extern "C" fn _dup(fd: i32) -> i32 {
+    let Ok(e) = lowio::check(fd) else { return -1 };
+    if e.handle == lowio::NO_HANDLE {
+        global::set_errno(EBADF);
+        return -1;
+    }
+    let Some(h) = duplicate(e.handle, false) else {
+        global::set_errno_from_win32();
+        return -1;
+    };
+    let new = lowio::allocate_with(h, e.mode, e.append, e.noinherit);
+    if new < 0 {
+        // SAFETY: the handle just made.
+        unsafe { sys::CloseHandle(h) };
+    }
+    new
+}
+
+/// `_dup2(fd1, fd2)`: `fd2` refers to `fd1`'s file, closing what `fd2` had
+/// (Learn); 0, or −1 with `EBADF`.
+#[unsafe(no_mangle)]
+pub extern "C" fn _dup2(fd1: i32, fd2: i32) -> i32 {
+    let Ok(e) = lowio::check(fd1) else { return -1 };
+    if fd1 == fd2 {
+        return 0;
+    }
+    if e.handle == lowio::NO_HANDLE {
+        global::set_errno(EBADF);
+        return -1;
+    }
+    let Some(h) = duplicate(e.handle, false) else {
+        global::set_errno_from_win32();
+        return -1;
+    };
+    let copy = lowio::Fd { handle: h, eof: false, pending: None, surrogate: 0, ..e };
+    match lowio::place(fd2, copy) {
+        Ok(old) => {
+            if let Some(old) = old.filter(|o| o.handle != lowio::NO_HANDLE) {
+                // SAFETY: the replaced descriptor's own handle.
+                unsafe { sys::CloseHandle(old.handle) };
+            }
+            0
+        }
+        Err(lowio::Failed) => {
+            // SAFETY: the handle just made.
+            unsafe { sys::CloseHandle(h) };
+            -1
+        }
+    }
+}
+
+/// `_pipe(fds, size, textmode)`: an anonymous pipe (`CreatePipe`), its read
+/// end in `fds[0]` and its write end in `fds[1]`, in `textmode`'s
+/// translation (`_O_BINARY`, `_O_TEXT`, a Unicode mode, or `_fmode`'s with
+/// none); `_O_NOINHERIT` keeps both from a child. 0, or −1 with `EINVAL` or
+/// `EMFILE` (Learn).
+///
+/// # Safety
+/// `fds` holds two writable `int`s.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn _pipe(fds: *mut i32, size: u32, textmode: i32) -> i32 {
+    const KNOWN: i32 =
+        fmode::O_BINARY | fmode::O_TEXT | fmode::O_WTEXT | fmode::O_U16TEXT | fmode::O_U8TEXT | fmode::O_NOINHERIT;
+    if fds.is_null() || textmode & !KNOWN != 0 {
+        global::invalid(EINVAL);
+        return -1;
+    }
+    let (mut r, mut w): (Handle, Handle) = (0, 0);
+    // SAFETY: `r` and `w` writable; no security attributes.
+    if unsafe { sys::CreatePipe(&mut r, &mut w, core::ptr::null(), size) } == 0 {
+        global::set_errno_from_win32();
+        return -1;
+    }
+    let mode = Translation::of(textmode, crate::startup::fmode());
+    let noinherit = textmode & fmode::O_NOINHERIT != 0;
+    let rfd = lowio::allocate_with(r, mode, false, noinherit);
+    let wfd = if rfd < 0 { -1 } else { lowio::allocate_with(w, mode, false, noinherit) };
+    if wfd < 0 {
+        if rfd >= 0 {
+            lowio::release(rfd);
+        }
+        // SAFETY: the handles just made.
+        unsafe {
+            sys::CloseHandle(r);
+            sys::CloseHandle(w);
+        }
+        return -1;
+    }
+    // SAFETY: the caller's two ints.
+    unsafe {
+        fds.write(rfd);
+        fds.add(1).write(wfd);
+    }
+    0
 }
 
 /// `_isatty`: non-zero for a character device.
@@ -554,7 +668,7 @@ pub unsafe extern "C" fn _wgetcwd(buf: *mut u16, size: i32) -> *mut u16 {
     give(&current_dir(), buf, size.max(0) as usize)
 }
 
-fn full_path(name: &[u16]) -> Option<Vec<u16>> {
+pub(crate) fn full_path(name: &[u16]) -> Option<Vec<u16>> {
     // SAFETY: a size query; `name` has its NUL.
     let n = unsafe { sys::GetFullPathNameW(name.as_ptr(), 0, core::ptr::null_mut(), core::ptr::null_mut()) };
     if n == 0 {

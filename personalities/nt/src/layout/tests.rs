@@ -37,7 +37,7 @@ fn setup() -> (VfsRoot, NodeRef) {
     vfs.mkdir(&ctx, &cred, At::Cwd, b"/nt", 0o755).unwrap();
     vfs.mkdir(&ctx, &cred, At::Cwd, b"/nt/c", 0o755).unwrap();
     let root = vfs.lookup(&ctx, &cred, At::Cwd, b"/nt/c", true).unwrap();
-    (VfsRoot { vfs, ctx, cred }, root)
+    (VfsRoot::new(vfs, ctx, cred), root)
 }
 
 fn exists(vr: &VfsRoot, path: &str) -> bool {

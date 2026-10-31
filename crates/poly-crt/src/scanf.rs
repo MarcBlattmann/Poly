@@ -214,7 +214,7 @@ pub unsafe fn scan<C: Unit, I: Input, A: Args>(
                 }
             }
             b'e' | b'E' | b'f' | b'F' | b'g' | b'G' | b'a' | b'A' => {
-                let text = collect_float(&mut inp, width.unwrap_or(usize::MAX));
+                let text = collect_float(&mut inp, width.unwrap_or(usize::MAX), crate::locale::point_of(options));
                 let fmt_ = if matches!(size, Size::L | Size::Big | Size::Ll) { float::DOUBLE } else { float::SINGLE };
                 let parsed = float::parse(&text, fmt_);
                 if parsed.len == 0 {
@@ -365,7 +365,7 @@ fn collect_integer<I: Input>(inp: &mut Counted<'_, I>, width: usize, base: u32) 
     out
 }
 
-fn collect_float<I: Input>(inp: &mut Counted<'_, I>, width: usize) -> Vec<u8> {
+fn collect_float<I: Input>(inp: &mut Counted<'_, I>, width: usize, point: u8) -> Vec<u8> {
     // Take the longest prefix the float grammar could extend.
     let mut out: Vec<u8> = Vec::new();
     while out.len() < width {
@@ -373,7 +373,12 @@ fn collect_float<I: Input>(inp: &mut Counted<'_, I>, width: usize) -> Vec<u8> {
         if c >= 0x80 {
             break;
         }
-        let b = c as u8;
+        // The locale's decimal point stands for '.' (ADR 0094).
+        let b = match c as u8 {
+            b'.' if point != b'.' => break,
+            b if b == point => b'.',
+            b => b,
+        };
         let mut candidate = out.clone();
         candidate.push(b);
         if !float_prefix(&candidate) {

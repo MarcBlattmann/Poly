@@ -55,6 +55,18 @@ pub const LEGACY_THREE_DIGIT_EXPONENTS: u64 = 1 << 4;
 /// `_CRT_INTERNAL_PRINTF_STANDARD_ROUNDING` (Visual Studio 2019 16.2+).
 pub const STANDARD_ROUNDING: u64 = 1 << 5;
 
+/// Poly's own option bit (not a UCRT one): the positional-parameter
+/// functions (`_printf_p`, `__stdio_common_vfprintf_p` …), Learn's
+/// "printf_p Positional Parameters". See [`positional`]. Clear of the
+/// locale's decimal point in bits 56-63 ([`crate::locale::POINT_MASK`]).
+pub const POSITIONAL: u64 = 1 << 48;
+const _: () = assert!(POSITIONAL & crate::locale::POINT_MASK == 0);
+
+/// `_ARGMAX`: the most positional parameters a format may name (Learn:
+/// "The maximum number of positional parameters allowed in a format string
+/// is given by `_ARGMAX`"; 100 in the SDK headers).
+pub const ARGMAX: usize = 100;
+
 /// What `msvcrt.dll`'s own functions behave as.
 pub const MSVCRT_OPTIONS: u64 = LEGACY_WIDE_SPECIFIERS | LEGACY_MSVCRT_COMPATIBILITY | LEGACY_THREE_DIGIT_EXPONENTS;
 
@@ -147,7 +159,8 @@ struct Spec {
 
 /// Format `fmt` (without its NUL) into `out`; the number of units written.
 ///
-/// `count_output` is `_get_printf_count_output()`.
+/// `count_output` is `_get_printf_count_output()`. With [`POSITIONAL`] in
+/// `options` a format may number its arguments (`%2$s`, `*1$`).
 ///
 /// # Safety
 /// The arguments are those `fmt` describes (C11 7.21.6.1: "If any argument
@@ -157,6 +170,158 @@ struct Spec {
 pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
     fmt: &[C],
     args: &mut A,
+    out: &mut S,
+    options: u64,
+    count_output: bool,
+) -> Result<usize, Error> {
+    if options & POSITIONAL != 0
+        && let Some(n) = positional(fmt)?
+    {
+        // Every argument is one 8-byte slot on x64, so the slots can be
+        // read in order up to the highest number, then picked by number.
+        let mut slots = [0u64; ARGMAX];
+        for s in slots.iter_mut().take(n) {
+            *s = args.next();
+        }
+        let mut src = Source::<A>::Numbered(&slots[..n]);
+        // SAFETY: the caller's contract.
+        return unsafe { run(fmt, &mut src, out, options, count_output) };
+    }
+    // SAFETY: the caller's contract.
+    unsafe { run(fmt, &mut Source::InOrder(args), out, options, count_output) }
+}
+
+/// Where a conversion's argument comes from.
+enum Source<'a, A> {
+    /// The next one (C).
+    InOrder(&'a mut A),
+    /// By its number (`%n$`), from the slots read up front.
+    Numbered(&'a [u64]),
+}
+
+impl<A: Args> Source<'_, A> {
+    fn numbered(&self) -> bool {
+        matches!(self, Source::Numbered(_))
+    }
+
+    fn arg(&mut self, position: Option<usize>) -> u64 {
+        match self {
+            Source::InOrder(a) => a.next(),
+            Source::Numbered(s) => position.and_then(|p| s.get(p.wrapping_sub(1))).copied().unwrap_or(0),
+        }
+    }
+
+    /// After a `*` in a numbered format: its `n$`.
+    fn star<C: Unit>(&self, fmt: &[C], i: &mut usize) -> Option<usize> {
+        if !self.numbered() {
+            return None;
+        }
+        let (p, j) = dollar(fmt, *i);
+        *i = j;
+        p
+    }
+}
+
+/// `n$` at `fmt[i..]`: the number and the index after the `$` (or `i`).
+fn dollar<C: Unit>(fmt: &[C], i: usize) -> (Option<usize>, usize) {
+    let mut j = i;
+    let mut n = 0usize;
+    while let Some(d) = fmt.get(j).and_then(|c| digit(c.to_u32())) {
+        n = n.saturating_mul(10).saturating_add(d);
+        j += 1;
+    }
+    if j > i && fmt.get(j).map(|c| c.to_u32()) == Some(u32::from(b'$')) { (Some(n), j + 1) } else { (None, i) }
+}
+
+/// Whether `fmt` numbers its arguments (Learn, "printf_p Positional
+/// Parameters"): `Ok(None)` if no conversion does (the format is read as by
+/// `printf`), `Ok(Some(n))` with the highest number if every conversion and
+/// every `*` does, each number from 1 to `n` is used at least once ("All
+/// arguments must be used at least once") and `n ≤ _ARGMAX`. Mixing
+/// numbered and unnumbered conversions ("If any positional formatting is
+/// used, all format specifiers must use positional formatting"), a number
+/// 0, a gap or a number above `_ARGMAX` is an invalid format: the invalid
+/// parameter handler, then `EINVAL`, as for any invalid format. A number
+/// may be used more than once. Poly does not compare the types of
+/// conversions sharing a number (every argument is an 8-byte slot on x64).
+pub fn positional<C: Unit>(fmt: &[C]) -> Result<Option<usize>, Error> {
+    let at = |i: usize| fmt.get(i).map_or(0, |c| c.to_u32());
+    let in_set = |c: u32, set: &[u8]| set.iter().any(|&b| u32::from(b) == c);
+    let mut used = [false; ARGMAX + 1];
+    let (mut numbered, mut plain) = (false, false);
+    let mut note = |p: Option<usize>| -> Result<(), Error> {
+        match p {
+            Some(n) if n == 0 || n > ARGMAX => return Err(Error::Invalid),
+            Some(n) => {
+                used[n] = true;
+                numbered = true;
+            }
+            None => plain = true,
+        }
+        Ok(())
+    };
+    let mut i = 0;
+    while i < fmt.len() {
+        if at(i) != u32::from(b'%') {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        if at(i) == u32::from(b'%') {
+            i += 1;
+            continue;
+        }
+        let (p, j) = dollar(fmt, i);
+        i = j;
+        note(p)?;
+        while in_set(at(i), b"-+ #0") {
+            i += 1;
+        }
+        for k in 0..2 {
+            if k == 1 {
+                if at(i) != u32::from(b'.') {
+                    break;
+                }
+                i += 1;
+            }
+            if at(i) == u32::from(b'*') {
+                let (p, j) = dollar(fmt, i + 1);
+                i = j.max(i + 1);
+                note(p)?;
+            } else {
+                while digit(at(i)).is_some() {
+                    i += 1;
+                }
+            }
+        }
+        while in_set(at(i), b"hlLwjztI") {
+            if at(i) == u32::from(b'I') && in_set(at(i + 1), b"36") && in_set(at(i + 2), b"24") {
+                i += 2;
+            }
+            i += 1;
+        }
+        i += 1; // the conversion
+    }
+    if !numbered {
+        return Ok(None);
+    }
+    if plain {
+        return Err(Error::Invalid);
+    }
+    let n = used.iter().rposition(|&u| u).unwrap_or(0);
+    if used[1..=n].iter().any(|&u| !u) {
+        return Err(Error::Invalid);
+    }
+    Ok(Some(n))
+}
+
+/// [`format`]'s work, the arguments from `args`.
+///
+/// # Safety
+/// As [`format`].
+unsafe fn run<C: Unit, A: Args, S: Sink<C>>(
+    fmt: &[C],
+    args: &mut Source<'_, A>,
     out: &mut S,
     options: u64,
     count_output: bool,
@@ -173,6 +338,12 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
         }
         i += 1;
         let mut spec = Spec::default();
+        let mut pos = None;
+        if args.numbered() && !is(i, b'%') {
+            let (p, j) = dollar(fmt, i);
+            pos = p;
+            i = j;
+        }
         loop {
             match at(i) {
                 0x2D => spec.left = true,
@@ -185,12 +356,13 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
             i += 1;
         }
         if is(i, b'*') {
-            let w = args.next() as i32;
+            i += 1;
+            let at_star = args.star(fmt, &mut i);
+            let w = args.arg(at_star) as i32;
             if w < 0 {
                 spec.left = true;
             }
             spec.width = w.unsigned_abs() as usize;
-            i += 1;
         } else {
             while let Some(d) = digit(at(i)) {
                 spec.width = spec.width.saturating_mul(10).saturating_add(d);
@@ -200,9 +372,10 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
         if is(i, b'.') {
             i += 1;
             if is(i, b'*') {
-                let p = args.next() as i32;
-                spec.precision = if p < 0 { None } else { Some(p as usize) };
                 i += 1;
+                let at_star = args.star(fmt, &mut i);
+                let p = args.arg(at_star) as i32;
+                spec.precision = if p < 0 { None } else { Some(p as usize) };
             } else {
                 let mut p = 0usize;
                 while let Some(d) = digit(at(i)) {
@@ -275,7 +448,7 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
         match conv {
             b'%' => f.put(C::ascii(b'%')),
             b'd' | b'i' => {
-                let raw = args.next();
+                let raw = args.arg(pos);
                 let v: i64 = match size {
                     Size::Hh => i64::from(raw as i8),
                     Size::H => i64::from(raw as i16),
@@ -285,7 +458,7 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
                 f.integer(v.unsigned_abs(), v < 0, 10, false, &spec, true);
             }
             b'u' | b'o' | b'x' | b'X' => {
-                let raw = args.next();
+                let raw = args.arg(pos);
                 let v: u64 = match size {
                     Size::Hh => u64::from(raw as u8),
                     Size::H => u64::from(raw as u16),
@@ -300,7 +473,7 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
                 f.integer(v, false, base, conv == b'X', &spec, false);
             }
             b'p' => {
-                let v = args.next();
+                let v = args.arg(pos);
                 let mut digits = [0u8; 16];
                 for (k, d) in digits.iter_mut().enumerate() {
                     *d = b"0123456789ABCDEF"[((v >> (60 - 4 * k)) & 0xF) as usize];
@@ -309,7 +482,7 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
             }
             b'c' | b'C' => {
                 let wide = f.wide_arg::<C>(size, conv == b'C');
-                let raw = args.next();
+                let raw = args.arg(pos);
                 let ch: u32 = if wide { u32::from(raw as u16) } else { u32::from(raw as u8) };
                 let mut units: Vec<C> = Vec::new();
                 f.convert_char::<C>(ch, wide, &mut units)?;
@@ -317,7 +490,7 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
             }
             b's' | b'S' => {
                 let wide = f.wide_arg::<C>(size, conv == b'S');
-                let p = args.next() as usize;
+                let p = args.arg(pos) as usize;
                 let mut units: Vec<C> = Vec::new();
                 if p == 0 {
                     f.null_text(&mut units, spec.precision);
@@ -340,7 +513,7 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
                     _ if f.legacy() => false,
                     _ => !C::WIDE,
                 };
-                let p = args.next() as usize;
+                let p = args.arg(pos) as usize;
                 let mut units: Vec<C> = Vec::new();
                 let (bytes, buffer) = if p == 0 {
                     (0, 0)
@@ -369,7 +542,7 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
                 if !count_output {
                     return Err(Error::Invalid);
                 }
-                let p = args.next() as usize;
+                let p = args.arg(pos) as usize;
                 let n = f.count as u64;
                 // SAFETY: `%n`'s argument points to an integer of the size
                 // its prefix names.
@@ -383,7 +556,7 @@ pub unsafe fn format<C: Unit, A: Args, S: Sink<C>>(
                 }
             }
             b'e' | b'E' | b'f' | b'F' | b'g' | b'G' | b'a' | b'A' => {
-                let v = f64::from_bits(args.next());
+                let v = f64::from_bits(args.arg(pos));
                 f.float(v, conv, &spec);
             }
             other => {
@@ -603,6 +776,10 @@ impl<S> Formatter<'_, S> {
                 _ => general_form(d, p, spec.alt, upper, three, ties),
             }
         };
+        // The locale's decimal point (ADR 0094), carried in the option word.
+        let point = crate::locale::point_of(self.options);
+        let body =
+            if point == b'.' { body } else { body.into_iter().map(|c| if c == b'.' { point } else { c }).collect() };
         let mut prefix: Vec<u8> = Vec::from(sign);
         let body = if lower == b'a' {
             prefix.extend_from_slice(&body[..2]);
@@ -1112,5 +1289,38 @@ mod tests {
         let n = unsafe { format(b"abcdef", &mut Slots(&[]), &mut sink, UCRT, false) }.unwrap();
         assert_eq!((n, sink.kept, buf), (6, 3, [b'a', b'b', b'c', 0xAA]));
         let _ = vec![0u8];
+    }
+
+    #[test]
+    fn positional_parameters() {
+        let pp = |f: &str, args: &[u64]| fmt_opts(f, args, UCRT | POSITIONAL);
+        let (nov, ten) = (c"November".as_ptr() as u64, c"10".as_ptr() as u64);
+        // Learn's examples ("printf_p Positional Parameters").
+        assert_eq!(pp("%1$s %2$s", &[nov, ten]).unwrap(), "November 10");
+        assert_eq!(pp("%2$s %1$s", &[nov, ten]).unwrap(), "10 November");
+        assert_eq!(pp("%1$d times %1$d is %2$d", &[10, 100]).unwrap(), "10 times 10 is 100");
+        assert_eq!(pp("%d %d %d", &[1, 2, 3]).unwrap(), "1 2 3");
+        assert_eq!(pp("%3$d %1$d %2$d", &[1, 2, 3]).unwrap(), "3 1 2");
+        let hello = c"Hello".as_ptr() as u64;
+        assert_eq!(pp("%1$*2$s|", &[hello, 10]).unwrap(), "     Hello|");
+        assert_eq!(pp("%2$*1$s|", &[10, hello]).unwrap(), "     Hello|");
+        assert_eq!(
+            pp("%3$*5$f %2$.*4$f %1$*4$.*5$f", &[d(0.1), d(2.22), d(333.3333), 2, 3]).unwrap(),
+            "333.333300 2.22 0.100"
+        );
+        assert_eq!(pp("%1$s%%%1$s", &[ten]).unwrap(), "10%10");
+        assert_eq!(pp("%1$-5d|%1$05I64x", &[42]).unwrap(), "42   |0002a");
+        // Errors: mixed, a gap, 0, above _ARGMAX.
+        assert_eq!(pp("%1$d %d", &[1, 2]), Err(Error::Invalid));
+        assert_eq!(pp("%1$*d", &[1, 2]), Err(Error::Invalid));
+        assert_eq!(pp("%1$d %3$d", &[1, 2, 3]), Err(Error::Invalid));
+        assert_eq!(pp("%0$d", &[1]), Err(Error::Invalid));
+        assert_eq!(pp("%101$d", &[1]), Err(Error::Invalid));
+        // Without the option `$` is no positional syntax (as before).
+        assert_eq!(fmt_opts("%1$d", &[1], UCRT), Err(Error::Invalid));
+        assert_eq!(positional(b"%5d %s".as_slice()), Ok(None));
+        let w: Vec<u16> = "%2$s".encode_utf16().collect();
+        assert_eq!(positional(&w), Err(Error::Invalid));
+        assert_eq!(wp("%2$hs-%1$d", &[7, ten], LEGACY_WIDE_SPECIFIERS | POSITIONAL), Ok("10-7".into()));
     }
 }
