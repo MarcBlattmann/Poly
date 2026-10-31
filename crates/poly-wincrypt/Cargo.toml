@@ -1,0 +1,15 @@
+[package]
+name = "poly-wincrypt"
+description = "The Windows-facing decisions of our bcrypt.dll and crypt32.dll: CNG algorithm and property names, key blobs, NTSTATUS results, certificate store contents, name strings and the Poly-local data protection format"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-crypto = { workspace = true }
+poly-x509 = { workspace = true }
+
+[lints]
+workspace = true

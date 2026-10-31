@@ -78,6 +78,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-crypto"
+version = "0.0.1"
+
+[[package]]
 name = "poly-elf"
 version = "0.0.1"
 
@@ -321,6 +325,21 @@ name = "poly-vm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-wincrypt"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-x509",
+]
+
+[[package]]
+name = "poly-x509"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -419,6 +438,7 @@ dependencies = [
  "poly-pe",
  "poly-term",
  "poly-vfs",
+ "poly-wincrypt",
  "rustc-demangle",
  "serde_json",
 ]

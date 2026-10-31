@@ -1,0 +1,13 @@
+[package]
+name = "poly-win32-cryptrt"
+description = "What our bcrypt.dll and crypt32.dll share (ADR 0096): the process-heap allocator, a spin lock, a registry of live handles, wide strings and random bytes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

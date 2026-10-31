@@ -41,6 +41,10 @@ fn embed_win32() {
         // ADR 0087.
         "user32.dll",
         "oleaut32.dll",
+        // ADR 0096.
+        "bcrypt.dll",
+        "crypt32.dll",
+        "cryptest.exe",
     ] {
         match &dir {
             Some(d) => {
