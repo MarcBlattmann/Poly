@@ -28,6 +28,8 @@ pub struct Vfs {
     anon: (Arc<AnonFs>, Arc<Mount>),
     /// The pipes of open FIFO inodes (`fifo.rs`).
     fifos: crate::fifo::Fifos,
+    /// Counts every change of a name ([`namespace_generation`](Self::namespace_generation)).
+    names_changed: core::sync::atomic::AtomicU64,
 }
 
 impl core::fmt::Debug for Vfs {
@@ -57,7 +59,25 @@ impl Vfs {
             devices: SpinMutex::new(BTreeMap::new()),
             anon: (anon_fs, anon_mount),
             fifos: crate::fifo::Fifos::default(),
+            names_changed: core::sync::atomic::AtomicU64::new(0),
         }
+    }
+
+    /// A number that grows with every change of a name anywhere in this VFS
+    /// (a file, directory, node or link made, a name removed, a rename),
+    /// and never otherwise: a cache of directory contents made at one value
+    /// is still right while it has not moved (the NT personality's
+    /// case-insensitive lookup, ADR 0091).
+    pub fn namespace_generation(&self) -> u64 {
+        self.names_changed.load(core::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Count a change of a name if `r` says it happened.
+    fn name_changed<T>(&self, r: Result<T>) -> Result<T> {
+        if r.is_ok() {
+            self.names_changed.fetch_add(1, core::sync::atomic::Ordering::AcqRel);
+        }
+        r
     }
 
     /// A new inode for a file object (`kind` and `perm` as `fstat` will
@@ -431,7 +451,7 @@ impl Vfs {
                     let dir_attr = self.may_change(walk.cred, &p.dir)?;
                     let (uid, gid, perm) = Self::new_owner(walk.cred, &dir_attr, mode & !ctx.umask, false);
                     let node = NewNode { kind: FileType::Regular, perm, uid, gid, rdev: DeviceId::default() };
-                    let ino = p.dir.mount.sb.fs.create(p.dir.ino, name, &node)?;
+                    let ino = self.name_changed(p.dir.mount.sb.fs.create(p.dir.ino, name, &node))?;
                     let loc = Location { mount: p.dir.mount.clone(), ino };
                     return Ok(((loc, Some((p.dir, name.clone()))), true));
                 }
@@ -464,7 +484,7 @@ impl Vfs {
         let name = self.new_name(&p)?;
         let dir_attr = self.may_change(cred, &p.dir)?;
         let (uid, gid, perm) = Self::new_owner(cred, &dir_attr, mode & !ctx.umask & 0o1777, true);
-        p.dir.mount.sb.fs.mkdir(p.dir.ino, name, perm, uid, gid).map(|_| ())
+        self.name_changed(p.dir.mount.sb.fs.mkdir(p.dir.ino, name, perm, uid, gid)).map(|_| ())
     }
 
     /// `mknod(2)`: regular files, FIFOs and sockets for anyone with write
@@ -496,7 +516,8 @@ impl Vfs {
         let (uid, gid, perm) = Self::new_owner(cred, &dir_attr, mode & !ctx.umask, false);
         let rdev =
             if matches!(kind, FileType::CharDevice | FileType::BlockDevice) { rdev } else { DeviceId::default() };
-        p.dir.mount.sb.fs.create(p.dir.ino, name, &NewNode { kind, perm, uid, gid, rdev }).map(|_| ())
+        self.name_changed(p.dir.mount.sb.fs.create(p.dir.ino, name, &NewNode { kind, perm, uid, gid, rdev }))
+            .map(|_| ())
     }
 
     /// `symlink(2)`: a link at `path` to `target` (stored as given).
@@ -524,7 +545,7 @@ impl Vfs {
         }
         let dir_attr = self.may_change(cred, &p.dir)?;
         let (uid, gid, _) = Self::new_owner(cred, &dir_attr, 0o777, false);
-        p.dir.mount.sb.fs.symlink(p.dir.ino, name, target, uid, gid).map(|_| ())
+        self.name_changed(p.dir.mount.sb.fs.symlink(p.dir.ino, name, target, uid, gid)).map(|_| ())
     }
 
     /// `linkat(2)`: a new name `new` for what `old` names. `follow` is
@@ -599,7 +620,7 @@ impl Vfs {
         if !nameable {
             return Err(Errno::ENOENT);
         }
-        p.dir.mount.sb.fs.link(p.dir.ino, name, src.ino)
+        self.name_changed(p.dir.mount.sb.fs.link(p.dir.ino, name, src.ino))
     }
 
     // ----- removing and renaming -----
@@ -623,7 +644,7 @@ impl Vfs {
         Self::sticky_allows(cred, &dattr, &vattr)?;
         let sb = &p.dir.mount.sb;
         sb.forget(p.dir.ino, name);
-        sb.fs.unlink(p.dir.ino, name)
+        self.name_changed(sb.fs.unlink(p.dir.ino, name))
     }
 
     /// `rmdir(2)`: `/` is `EBUSY`, a final `.` is `EINVAL`, `..` is
@@ -648,7 +669,7 @@ impl Vfs {
         Self::sticky_allows(cred, &dattr, &vattr)?;
         let sb = &p.dir.mount.sb;
         sb.forget(p.dir.ino, name);
-        sb.fs.rmdir(p.dir.ino, name)
+        self.name_changed(sb.fs.rmdir(p.dir.ino, name))
     }
 
     /// `renameat2(2)`.
@@ -757,7 +778,7 @@ impl Vfs {
         let sb = &op.dir.mount.sb;
         sb.forget(op.dir.ino, old_name);
         sb.forget(np.dir.ino, new_name);
-        sb.fs.rename(op.dir.ino, old_name, np.dir.ino, new_name, flags)
+        self.name_changed(sb.fs.rename(op.dir.ino, old_name, np.dir.ino, new_name, flags))
     }
 
     /// Whether `dir` is the directory `ancestor` or below it, within one
