@@ -223,7 +223,8 @@ fn readme(args: &[String]) -> Result<(), String> {
     let current = std::fs::read_to_string(&readme_path).map_err(|e| format!("{}: {e}", readme_path.display()))?;
 
     let mut files = readme::assets(&coverage, &roadmap);
-    files.push(("README.md".into(), readme::splice(&current, &readme::render(&coverage, &roadmap))?));
+    let updated = readme::splice(&current, &readme::render(&coverage, &roadmap))?;
+    files.push(("README.md".into(), readme::splice_phases(&updated, &readme::render_phases(&roadmap))?));
 
     let check = args.iter().any(|a| a == "--check");
     let mut stale = Vec::new();
@@ -246,7 +247,7 @@ fn readme(args: &[String]) -> Result<(), String> {
         return Err(format!("stale: {}; run `cargo xtask coverage readme`", stale.join(", ")));
     }
     if check {
-        println!("README progress section and graphics up to date");
+        println!("README progress section, phase table and graphics up to date");
     }
     Ok(())
 }

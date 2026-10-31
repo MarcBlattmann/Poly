@@ -17,7 +17,11 @@ Each test runs -Runs times (default 2), each time as a copy of itself in a
 fresh scratch directory below -Work, which is also its current directory,
 with standard input at end of file and standard output and error captured.
 A test writes its observations into `poly-test.out` beside itself; that
-file, the exit code (32 bits), stdout and stderr are recorded. A run that
+file, the exit code (32 bits), stdout and stderr are recorded. A test can
+have data files (ADR 0088): the files of <DataDir>\<test>\ (or the bundle's
+`data` lines for it) are copied beside it into every scratch directory
+before it runs, so a test such as the 7-Zip scenario driver finds the
+program it runs there. A run that
 takes longer than -TimeoutSeconds is killed. Runs that differ make the test
 "stable": false (a test must be deterministic).
 
@@ -31,6 +35,16 @@ The bundle file, or its parts in order (bundle.txt.part1of3, ...).
 
 .PARAMETER TestsDir
 Instead of a bundle: a directory of test .exe files.
+
+.PARAMETER DataDir
+A directory with one subdirectory per test that has data files
+(<DataDir>\sevenzip_scenario\7za.exe); each subdirectory's files are copied
+beside that test before each run. A bundle's `data` lines are unpacked into
+<Work>\data, which is the default when the bundle has any.
+
+.PARAMETER TestTimeouts
+Per-test timeouts in seconds, overriding -TimeoutSeconds:
+'sevenzip_scenario=300' (several separated by commas).
 
 .PARAMETER Out
 The result file to write (default: results.json in the current directory).
@@ -49,6 +63,8 @@ Also print the result file on standard output (to copy it from a session).
 param(
     [string[]] $Bundle,
     [string] $TestsDir,
+    [string] $DataDir,
+    [string[]] $TestTimeouts,
     [string] $Out = 'results.json',
     [string[]] $Tests,
     [int] $TimeoutSeconds = 10,
@@ -61,7 +77,7 @@ param(
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
 
-$RunnerVersion = 'poly-oracle.ps1 1'
+$RunnerVersion = 'poly-oracle.ps1 2'
 $RunFormat = 'poly-winrun/1'
 $BundleFormat = 'poly-winbundle/1'
 $ObservationFile = 'poly-test.out'
@@ -102,9 +118,10 @@ function Get-SystemInfo {
     }
 }
 
-# Unpack a bundle into $BinDir; returns the bundle's id (the first 12 hex
-# digits of the SHA-256 of its text, as `pipeline win bundle` names it).
-function Expand-Bundle([string[]] $Parts, [string] $BinDir) {
+# Unpack a bundle into $BinDir (data files into $DataOut\<test>\); returns
+# the bundle's id (the first 12 hex digits of the SHA-256 of its text, as
+# `pipeline win bundle` names it).
+function Expand-Bundle([string[]] $Parts, [string] $BinDir, [string] $DataOut) {
     $all = New-Object IO.MemoryStream
     foreach ($part in $Parts) {
         $bytes = [IO.File]::ReadAllBytes((Resolve-UserPath $part))
@@ -133,6 +150,21 @@ function Expand-Bundle([string[]] $Parts, [string] $BinDir) {
                 [IO.File]::WriteAllBytes((Join-Path $BinDir $name), $bytes)
                 $files++
             }
+            'data' {
+                # data <test> <name> <sha256> <base64> (ADR 0088)
+                if ($f.Count -ne 5) { throw "bad data line $i" }
+                $test = $f[1]
+                $name = $f[2]
+                if ($test -notmatch '^[a-z_][a-z0-9_]*$') { throw "bad data test name $test" }
+                if ($name -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]*$') { throw "bad data file name $name" }
+                $bytes = [Convert]::FromBase64String($f[4])
+                if ((Get-Sha256Hex $bytes) -ne $f[3]) { throw "$test/$name`: hash mismatch (damaged in transfer?)" }
+                $dir = Join-Path $DataOut $test
+                if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+                [IO.File]::WriteAllBytes((Join-Path $dir $name), $bytes)
+                $script:BundleHasData = $true
+                $files++
+            }
             'end' {
                 if ([int]$f[1] -ne $files) { throw "the end line says $($f[1]) files, the bundle has $files" }
                 $ended = $true
@@ -154,6 +186,14 @@ function Invoke-TestOnce([string] $Exe, [string] $Name, [int] $Index) {
     try {
         # Fails if an antivirus has taken the file away meanwhile.
         Copy-Item -LiteralPath $Exe -Destination $copy
+        if ($DataDir) {
+            $data = Join-Path $DataDir $Name
+            if (Test-Path -LiteralPath $data) {
+                Get-ChildItem -LiteralPath $data -File | ForEach-Object {
+                    Copy-Item -LiteralPath $_.FullName -Destination $scratch
+                }
+            }
+        }
     } catch {
         $r.status = 'error'
         $r.error = 'could not copy it: ' + $_.Exception.Message
@@ -183,7 +223,9 @@ function Invoke-TestOnce([string] $Exe, [string] $Name, [int] $Index) {
     $errStream = New-Object IO.MemoryStream
     $outCopy = $p.StandardOutput.BaseStream.CopyToAsync($outStream)
     $errCopy = $p.StandardError.BaseStream.CopyToAsync($errStream)
-    if (-not $p.WaitForExit($TimeoutSeconds * 1000)) {
+    $limit = $TimeoutSeconds
+    if ($Timeouts.ContainsKey($Name)) { $limit = $Timeouts[$Name] }
+    if (-not $p.WaitForExit($limit * 1000)) {
         try { $p.Kill() } catch { }
         [void]$p.WaitForExit(5000)
         $r.status = 'timeout'
@@ -219,6 +261,13 @@ function Get-RunKey($r) {
 # `powershell -File` passes "a,b" as one string: split lists on commas.
 $Bundle = @($Bundle | Where-Object { $_ } | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $Tests = @($Tests | Where-Object { $_ } | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+$Timeouts = @{}
+foreach ($t in @($TestTimeouts | Where-Object { $_ } | ForEach-Object { $_ -split ',' } | Where-Object { $_ })) {
+    $kv = $t -split '=', 2
+    if ($kv.Count -ne 2 -or $kv[1] -notmatch '^[0-9]+$') { throw "-TestTimeouts: name=seconds, not $t" }
+    $Timeouts[$kv[0]] = [int]$kv[1]
+}
+$script:BundleHasData = $false
 if ($Bundle.Count -eq 0 -and -not $TestsDir) {
     throw 'give -Bundle <file or parts> or -TestsDir <directory of .exe files>'
 }
@@ -230,9 +279,12 @@ $BinDir = Join-Path $Work 'bin'
 New-Item -ItemType Directory -Path $BinDir | Out-Null
 
 $bundleId = $null
+if ($DataDir) { $DataDir = Resolve-UserPath $DataDir }
 if ($Bundle.Count -gt 0) {
-    $bundleId = Expand-Bundle $Bundle $BinDir
+    $dataOut = Join-Path $Work 'data'
+    $bundleId = Expand-Bundle $Bundle $BinDir $dataOut
     Write-Host "bundle $bundleId unpacked, hashes good"
+    if ($script:BundleHasData -and -not $DataDir) { $DataDir = $dataOut }
 } else {
     Get-ChildItem -LiteralPath (Resolve-UserPath $TestsDir) -Filter '*.exe' | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination $BinDir
@@ -296,6 +348,7 @@ $result = [ordered]@{
     runner  = $RunnerVersion
     started = $started
     timeout_ms = $TimeoutSeconds * 1000
+    test_timeouts_s = $Timeouts
     runs    = $Runs
     tests   = @($results.ToArray())
 }

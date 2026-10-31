@@ -36,6 +36,16 @@
 //! far it got: the exit code and `NTSTATUS`, what it printed, and the
 //! loader's or the program's last word. Which steps must pass is
 //! [`REQUIRED`]; the others are reported only, until Poly runs them.
+//!
+//! # The scenario (ADR 0088)
+//!
+//! After those boots the test runs the scenario driver
+//! (`tests/windows/sevenzip_scenario.rs`) on Poly: one boot in which the
+//! driver runs fifteen 7-Zip steps itself and records each one, compared
+//! step by step with the recording made on Windows
+//! ([`SCENARIO_REFERENCE`]) by `pipeline win scenario diff`. It is
+//! reported only ([`SCENARIO_REQUIRED`]) until Poly passes it.
+//! `cargo xtask win 7zip-diff` runs the same comparison by itself.
 
 use crate::symbols::Symbols;
 use crate::{Result, root};
@@ -193,12 +203,119 @@ pub fn fetch() -> Result<PathBuf> {
     Ok(exe)
 }
 
-/// `cargo xtask win <fetch-7zip | imports ...>`.
+/// `cargo xtask win <fetch-7zip | imports ... | 7zip-diff ...>`.
 pub fn command(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
         Some("fetch-7zip") => fetch().map(|_| ()),
         Some("imports") => crate::winimports::command(&args[1..]),
-        _ => Err("usage: cargo xtask win <fetch-7zip | imports <exe | 7zip> [--markdown <file>] [--check]>".into()),
+        Some("7zip-diff") => scenario_diff(&args[1..]),
+        // The Windows API tracer (wintrace.rs, ADR 0090).
+        Some("trace-kit") => crate::wintrace::trace_kit_command(&args[1..]),
+        Some("trace-diff") => crate::wintrace::trace_diff_command(&args[1..]),
+        _ => Err("usage: cargo xtask win <fetch-7zip | imports <exe | 7zip> [--markdown <file>] [--check] | \
+                  7zip-diff [--kernel <elf>] [--build-kernel] [--markdown <file>] [--target <poly.json>] | \
+                  trace-kit <exe | 7zip> [--out <dir>] | trace-diff <a.jsonl> <b.jsonl>>"
+            .into()),
+    }
+}
+
+// ----- the scenario (ADR 0088) -----------------------------------------------------------
+
+/// The scenario driver (`tests/windows/<name>.rs`).
+const SCENARIO_TEST: &str = "sevenzip_scenario";
+/// Its recording on the oracle machine (`poly-oracle.ps1`, ADR 0075).
+pub const SCENARIO_REFERENCE: &str = "tests/windows/oracle/sevenzip_scenario.windows.json";
+/// Where the driver is built (apart from `win build`'s own directory, so
+/// building it does not remove a developer's other test programs).
+const SCENARIO_BIN: &str = "target/pipeline/windows/scenario-bin";
+/// Its data files: `<dir>/<test>/7za.exe` (`pipeline`'s `scenario::DATA_DIR`).
+const SCENARIO_DATA: &str = "target/pipeline/windows/data";
+/// Whether a difference fails the `7zip` boot test. `false` until Poly
+/// passes every step; then `true` makes the scenario required (ADR 0088).
+const SCENARIO_REQUIRED: bool = false;
+
+/// `cargo run --package poly-pipeline -- <args>`; its exit status.
+fn pipeline(args: &[&str]) -> Result<std::process::ExitStatus> {
+    crate::cargo()
+        .current_dir(root())
+        .args(["run", "--quiet", "--package", "poly-pipeline", "--"])
+        .args(args)
+        .status()
+        .map_err(|e| format!("pipeline: {e}"))
+}
+
+/// Put `7za.exe` where the driver's data files go and build the driver.
+fn stage_scenario(exe: &Path) -> Result {
+    let data = root().join(SCENARIO_DATA).join(SCENARIO_TEST);
+    std::fs::create_dir_all(&data).map_err(|e| format!("{}: {e}", data.display()))?;
+    std::fs::copy(exe, data.join(EXE)).map_err(|e| format!("{}: {e}", data.display()))?;
+    let built = pipeline(&["win", "build", "--tests", SCENARIO_TEST, "--out", SCENARIO_BIN])?;
+    if !built.success() {
+        return Err(format!("building {SCENARIO_TEST}.exe failed ({built})"));
+    }
+    Ok(())
+}
+
+/// `pipeline win scenario diff` against the recording, with `extra`
+/// arguments; whether every step passed.
+fn run_scenario_diff(extra: &[&str]) -> Result<bool> {
+    let mut args = vec!["win", "scenario", "diff", "--reference", SCENARIO_REFERENCE, "--bin-dir", SCENARIO_BIN];
+    args.extend_from_slice(extra);
+    let status = pipeline(&args)?;
+    match status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(format!("pipeline win scenario diff failed ({status})")),
+    }
+}
+
+/// `cargo xtask win 7zip-diff [pipeline options]`: build the driver, run
+/// it on Poly (the default kernel, or `--kernel`, `--build-kernel`) and
+/// compare it with the Windows recording step by step.
+fn scenario_diff(args: &[String]) -> Result {
+    let exe = cached().ok_or_else(|| {
+        format!("7-Zip {VERSION}'s 7za.exe is not in the cache; `cargo xtask win fetch-7zip` downloads it")
+    })?;
+    stage_scenario(&exe)?;
+    let given = |a: &str| args.iter().any(|x| x == a);
+    // The kernel the boot tests run (our DLLs embedded), built unless one
+    // is named or a result file stands in for Poly.
+    let kernel = if given("--build-kernel") || !given("--kernel") && !given("--target") {
+        Some(crate::build_kernel(false)?.to_string_lossy().into_owned())
+    } else {
+        None
+    };
+    let mut extra: Vec<&str> = args.iter().map(String::as_str).filter(|a| *a != "--build-kernel").collect();
+    if let Some(k) = &kernel {
+        extra.extend(["--kernel", k.as_str()]);
+    }
+    if run_scenario_diff(&extra)? {
+        Ok(())
+    } else {
+        Err("the 7-Zip scenario on Poly differs from the Windows recording (report above)".into())
+    }
+}
+
+/// The scenario on the boot test's kernel: reported, and failing the boot
+/// test only when [`SCENARIO_REQUIRED`].
+fn scenario_boot(kernel: &Path, exe: &Path) -> Result {
+    eprintln!("==> 7-Zip scenario (ADR 0088): the driver runs every step in one boot, compared with Windows");
+    let outcome = stage_scenario(exe).and_then(|()| run_scenario_diff(&["--kernel", &kernel.to_string_lossy()]));
+    match outcome {
+        Ok(true) => {
+            eprintln!("==> 7-Zip scenario: every step matches the Windows recording");
+            Ok(())
+        }
+        Ok(false) if SCENARIO_REQUIRED => Err("the 7-Zip scenario differs from the Windows recording".into()),
+        Ok(false) => {
+            eprintln!("==> 7-Zip scenario: differs from the Windows recording (report only, ADR 0088)");
+            Ok(())
+        }
+        Err(e) if SCENARIO_REQUIRED => Err(format!("7-Zip scenario: {e}")),
+        Err(e) => {
+            eprintln!("==> 7-Zip scenario: could not run ({e}; report only, ADR 0088)");
+            Ok(())
+        }
     }
 }
 
@@ -384,7 +501,11 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             failed.push(step.name);
         }
     }
-    if failed.is_empty() { Ok(()) } else { Err(format!("7za.exe steps that must pass did not: {}", failed.join(", "))) }
+    let scenario = scenario_boot(kernel, &exe);
+    if !failed.is_empty() {
+        return Err(format!("7za.exe steps that must pass did not: {}", failed.join(", ")));
+    }
+    scenario
 }
 
 #[cfg(test)]

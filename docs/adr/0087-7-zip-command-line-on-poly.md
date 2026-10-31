@@ -294,6 +294,9 @@ runner, results as a file), compared with Poly's run. The runner today runs
    pointers (as the Linux diff runner does for syscalls, ADR 0027).
 
 Until that recording exists and passes, the milestone stays open.
+[ADR 0088](0088-7-zip-scenario-driver.md) builds points 1, 2, 4 and 5
+(without the API trace of point 3): a scenario driver, its recording and
+the step-by-step comparison.
 
 ## To be confirmed by the spec agent against real Windows
 

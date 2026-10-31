@@ -264,4 +264,9 @@ fn open_for_process_gives_three_handles() {
     assert!(conn.0 != input.0 && input.0 != output.0 && output.0 != error.0);
     assert_eq!(t.f.sys.io.take_console_events(), []);
     assert_eq!(t.f.sys.io.console_processes(id), [caller.process]);
+    // A child it creates finds its console (ADR 0089).
+    let other = t.f.sys.io.create_console(80, 25);
+    assert_eq!(t.f.sys.io.console_of_process(caller.process), Some(id));
+    assert_eq!(t.f.sys.io.console_processes(other), []);
+    assert_eq!(t.f.sys.io.console_of_process(poly_ntobj::ProcessId(999)), None);
 }
