@@ -179,12 +179,14 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-net",
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
  "poly-security",
  "poly-seh",
  "poly-vfs",
+ "poly-winsock",
 ]
 
 [[package]]
@@ -295,4 +297,8 @@ dependencies = [
 
 [[package]]
 name = "poly-vm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-winsock"
 version = "0.0.1"

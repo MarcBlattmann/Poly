@@ -374,6 +374,9 @@ pub fn create_thread(
             return Err(e);
         }
     };
+    // It grows through its guard page like the first thread's (Learn:
+    // "Thread Stack Size").
+    proc.vm.set_stack(stack.alloc);
     let client = crate::kernel::ClientId { process: proc.pid, thread };
     write_teb(b, teb, peb_of(proc), &stack, client)?;
     let rsp = start_rsp(b, &stack)?;

@@ -131,6 +131,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("msvcrt.dll", super::MSVCRT),
         ("user32.dll", super::USER32),
         ("oleaut32.dll", super::OLEAUT32),
+        // ADR 0095.
+        ("ws2_32.dll", super::WS2_32),
     ] {
         if bytes.is_empty() {
             continue;

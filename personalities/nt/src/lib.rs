@@ -27,6 +27,7 @@
 //! - [`backend`]: what the memory model asks the kernel's memory map to do.
 //! - [`pe_writer`]: a minimal PE32+ writer for test programs.
 
+//! - [`afd`]: `\Device\Afd`, the sockets of `ws2_32` (ADR 0095).
 //! - [`io`]: file I/O (ADR 0067): file and device objects over the VFS,
 //!   drive letters, share modes, byte-range locks, IRP-style async I/O.
 //! - [`registry`]: the `\REGISTRY` key object and the registry services
@@ -42,6 +43,7 @@
 extern crate alloc;
 
 pub mod abi;
+pub mod afd;
 pub mod backend;
 pub mod console;
 pub mod consts;

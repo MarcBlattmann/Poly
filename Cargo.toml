@@ -50,6 +50,7 @@ members = [
     "crates/poly-vdso",
     "crates/poly-vm",
     "crates/poly-vfs",
+    "crates/poly-winsock",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -111,6 +112,7 @@ poly-virtio-net = { path = "crates/poly-virtio-net" }
 poly-vdso = { path = "crates/poly-vdso" }
 poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
+poly-winsock = { path = "crates/poly-winsock" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }

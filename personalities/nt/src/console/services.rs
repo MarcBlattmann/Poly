@@ -67,6 +67,15 @@ pub fn device_io_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
     }
     let n = Notify { event, apc_routine, apc_context, iosb };
     let caller = k.caller();
+    // A socket handle: `\Device\Afd`'s requests (ADR 0095).
+    let socket = k.with_state(|sys, _, _| -> Result<Option<(ObjectId, u64)>> {
+        let file = file_handle(sys, &caller, Handle(h), 0)?;
+        n.check_event(sys, &caller)?;
+        Ok(crate::afd::services::is_endpoint(sys, file.1).then_some(file))
+    })?;
+    if let Some(file) = socket {
+        return crate::afd::services::control(k, file, n, code, &input, out, outlen);
+    }
     let (file, reply) = k.with_state(|sys, _, _| -> Result<((ObjectId, u64), Reply)> {
         let file = file_handle(sys, &caller, Handle(h), 0)?;
         n.check_event(sys, &caller)?;

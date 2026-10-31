@@ -178,12 +178,14 @@ dependencies = [
  "poly-abi",
  "poly-console",
  "poly-ldr",
+ "poly-net",
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
  "poly-security",
  "poly-seh",
  "poly-vfs",
+ "poly-winsock",
 ]
 
 [[package]]
@@ -321,6 +323,10 @@ name = "poly-vm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-winsock"
+version = "0.0.1"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -419,6 +425,7 @@ dependencies = [
  "poly-pe",
  "poly-term",
  "poly-vfs",
+ "poly-winsock",
  "rustc-demangle",
  "serde_json",
 ]

@@ -102,7 +102,7 @@ impl IoState {
                 ..Default::default()
             },
             // A console or an inherited file: nothing on a volume (ADR 0080).
-            Target::Console(_) | Target::Host(_) => {
+            Target::Console(_) | Target::Host(_) | Target::Socket(_) => {
                 info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() }
             }
         };
@@ -312,6 +312,8 @@ impl IoState {
                 Target::Disk(_) => FILE_DEVICE_DISK,
                 Target::Pipe(_) => FILE_DEVICE_NAMED_PIPE,
                 Target::Console(_) => poly_console::ioctl::FILE_DEVICE_CONSOLE,
+                // A socket (ADR 0095): GetFileType's FILE_TYPE_PIPE.
+                Target::Socket(_) => FILE_DEVICE_NAMED_PIPE,
                 Target::Host(open) => match open.kind() {
                     poly_vfs::FileType::Regular | poly_vfs::FileType::Directory => FILE_DEVICE_DISK,
                     poly_vfs::FileType::Fifo | poly_vfs::FileType::Socket => FILE_DEVICE_NAMED_PIPE,

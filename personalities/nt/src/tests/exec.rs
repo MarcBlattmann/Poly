@@ -66,6 +66,26 @@ fn teb_peb_and_stack() {
 }
 
 #[test]
+fn a_second_threads_stack_grows_too() {
+    let mut f = Fake::bare();
+    start(&mut f, &test_exe(false)).unwrap();
+    let tid = ThreadRef(TID.0 + 1);
+    let req = crate::kernel::ThreadCreate {
+        start_routine: 0x1000,
+        argument: 0,
+        stack_reserve: 0,
+        stack_commit: 0,
+        suspended: false,
+        desired_access: 0x1F_FFFF,
+    };
+    let t = exec::create_thread(&mut f.sys, &mut f.proc, &mut f.mem, &req, tid).unwrap();
+    let guard = t.stack_limit - 0x1000;
+    let fault = exec::access_fault(&mut f.proc, &mut f.mem, tid, guard + 8);
+    assert_eq!(fault, AccessFault::StackGrown { limit: guard });
+    assert_eq!(f.u64_at(t.teb + TEB_STACK_LIMIT), guard);
+}
+
+#[test]
 fn the_stack_grows_through_its_guard_page_until_the_last_page() {
     let mut f = Fake::bare();
     let s = start(&mut f, &test_exe(false)).unwrap();

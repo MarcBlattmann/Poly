@@ -103,7 +103,7 @@ kernel, and all three share one core. More detail in
 | Linux | syscalls | 370 | 154 | 0 | 1 | 215 | 0 | 0 |
 | Linux | user-mode API | runs unchanged (glibc, Mesa, GTK, Qt) | | | | | | |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 2 | 1,809 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,147 | 0 | 13 | 1,627 | 55,231 | 0 | 73,276 |
+| Windows | user-mode DLL exports | 130,147 | 0 | 13 | 1,695 | 55,163 | 0 | 73,276 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 0 | 517 | 0 | 0 |
 | macOS | framework API | 712,565 | 0 | 0 | 0 | 712,565 | 0 | 0 |
 

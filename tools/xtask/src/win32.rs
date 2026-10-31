@@ -1,7 +1,8 @@
 //! Build our Win32 modules above `ntdll` (ADR 0079) — `kernelbase.dll`,
 //! `kernel32.dll` and the test program `k32test.exe`, plus `advapi32.dll`
 //! and its test program `a32test.exe` (ADR 0083), the C runtime (ADR 0084),
-//! `user32.dll` and `oleaut32.dll` (ADR 0087) — and check them.
+//! `user32.dll` and `oleaut32.dll` (ADR 0087), `ws2_32.dll` and its test
+//! program `wstest.exe` (ADR 0095) — and check them.
 //!
 //! They are one Cargo workspace, `personalities/nt/win32`, built the way
 //! `ntdll` is (ADR 0071, `ntdll.rs`): `no_std` Rust for
@@ -33,7 +34,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 11] = [
+pub const OUTPUTS: [&str; 13] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -45,6 +46,9 @@ pub const OUTPUTS: [&str; 11] = [
     "crttest.exe",
     "user32.dll",
     "oleaut32.dll",
+    // ADR 0095.
+    "ws2_32.dll",
+    "wstest.exe",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -91,6 +95,8 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/crttest",
             "personalities/nt/win32/user32",
             "personalities/nt/win32/oleaut32",
+            "personalities/nt/win32/ws2_32",
+            "personalities/nt/win32/wstest",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -243,7 +249,23 @@ fn verify(dir: &Path) -> Result {
     verify_advapi32(dir)?;
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])?;
     verify_crt(dir)?;
-    verify_user32_oleaut32(dir)
+    verify_user32_oleaut32(dir)?;
+    verify_ws2_32(dir)
+}
+
+/// `ws2_32` exports every function of `poly_winsock::exports` by name, as
+/// code, and `wstest.exe` imports from it and `kernel32` only (ADR 0095).
+fn verify_ws2_32(dir: &Path) -> Result {
+    use poly_pe::ExportTarget;
+    let bytes = read(&dir.join("ws2_32.dll"))?;
+    let dll = parse(&bytes)?;
+    let exports = dll.exports().map_err(|e| format!("ws2_32 exports: {e:?}"))?.ok_or("ws2_32: no exports")?;
+    for name in poly_winsock::exports::WS2_32_EXPORTS {
+        if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+            return Err(format!("ws2_32.dll lacks {name}"));
+        }
+    }
+    verify_exe(dir, "wstest.exe", &["ws2_32.dll", "kernel32.dll"])
 }
 
 /// `user32` exports its functions by name; `oleaut32` exports each of its

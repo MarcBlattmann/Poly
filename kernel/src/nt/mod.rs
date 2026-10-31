@@ -17,6 +17,7 @@
 //!
 //! [ADR 0063]: ../../../docs/adr/0063-nt-processes-object-manager-and-memory.md
 
+mod afd;
 mod backend;
 pub mod console;
 mod io;
@@ -81,6 +82,14 @@ pub static CRTTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crttest.ex
 /// installed in `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static USER32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/user32.dll"));
 pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.dll"));
+
+mod test_winsock;
+
+/// Our `ws2_32.dll` (ADR 0095), installed in `C:\Windows\System32` by
+/// [`layout`]; and the program the Winsock ring-3 test runs
+/// (`test_winsock`). Empty without `xtask`.
+pub static WS2_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ws2_32.dll"));
+pub static WSTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wstest.exe"));
 
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
@@ -383,6 +392,31 @@ impl NtKernel for Kernel {
 
     fn save_hive(&mut self, file: &str, data: &[u8]) -> Result<(), NtStatus> {
         registry::save(file, data)
+    }
+
+    fn socket_create(
+        &mut self,
+        domain: poly_personality_nt::afd::Domain,
+        ty: poly_personality_nt::afd::SockType,
+        protocol: poly_personality_nt::afd::Protocol,
+    ) -> Result<Arc<dyn poly_personality_nt::afd::NtSocket>, NtStatus> {
+        afd::create(domain, ty, protocol)
+    }
+
+    fn socket_poll(
+        &mut self,
+        socks: &[(Arc<dyn poly_personality_nt::afd::NtSocket>, poly_personality_nt::afd::Readiness)],
+        wait: poly_personality_nt::afd::SockWait,
+    ) -> Result<Vec<poly_personality_nt::afd::Readiness>, NtStatus> {
+        Ok(afd::poll_sockets(socks, wait))
+    }
+
+    fn socket_pend(&mut self, io: poly_personality_nt::afd::PendIo) -> Result<(), poly_personality_nt::afd::PendIo> {
+        afd::pend(io)
+    }
+
+    fn net_info(&self) -> (Vec<[u8; 4]>, String) {
+        afd::net_info()
     }
 }
 

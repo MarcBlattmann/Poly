@@ -15,6 +15,7 @@ poly-kernelbase.workspace = true
 poly-ldr.workspace = true
 poly-crt.workspace = true
 poly-pe.workspace = true
+poly-winsock.workspace = true
 poly-term.workspace = true
 poly-vfs.workspace = true
 rustc-demangle.workspace = true

@@ -96,6 +96,7 @@ impl CreateHook<'_> {
                 Some(Device::Volume(v)) => Start::Volume(v),
                 Some(Device::Pipe) => Start::Pipe,
                 Some(Device::Console) => return self.open_console(om, r, None),
+                Some(Device::Afd) => return self.open_endpoint(om, r.remaining),
                 None => return Err(STATUS_OBJECT_PATH_NOT_FOUND),
             },
             ObjectType::File => {
@@ -135,6 +136,25 @@ impl CreateHook<'_> {
         let (object, cookie) =
             self.io.open_console(om, r.caller.as_ref(), self.thread, &self.params, relative, r.remaining)?;
         self.information = FILE_OPENED;
+        self.made = Some(cookie);
+        Ok(object)
+    }
+
+    /// `\Device\Afd\Endpoint` (or the device itself): a new socket
+    /// endpoint, with no socket until `ws2_32` asks for one (ADR 0095).
+    fn open_endpoint(&mut self, om: &mut ObjectManager, remaining: &[u16]) -> Result<ObjectId, NtStatus> {
+        if self.params.options & FILE_DIRECTORY_FILE != 0 {
+            return Err(STATUS_NOT_A_DIRECTORY);
+        }
+        let name = names::fold(remaining.strip_prefix(&[u16::from(b'\\')]).unwrap_or(remaining));
+        if !name.is_empty() && name != names::fold(&poly_ntobj::name::wide("Endpoint")) {
+            return Err(STATUS_OBJECT_NAME_NOT_FOUND);
+        }
+        self.information = FILE_OPENED;
+        let cookie = self.io.cookie();
+        let object = new_file_object(om, cookie, self.thread)?;
+        let target = Target::Socket(crate::afd::Endpoint::default());
+        self.io.files.insert(cookie, self.record(object, target, FileType::Socket));
         self.made = Some(cookie);
         Ok(object)
     }

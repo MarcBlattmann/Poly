@@ -126,6 +126,10 @@ name = "poly-win32-rt"
 version = "0.0.1"
 
 [[package]]
+name = "poly-winsock"
+version = "0.0.1"
+
+[[package]]
 name = "ucrtbase"
 version = "0.0.1"
 dependencies = [
@@ -139,5 +143,20 @@ name = "user32"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "ws2_32"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+ "poly-winsock",
+]
+
+[[package]]
+name = "wstest"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
