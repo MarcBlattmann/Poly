@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pwritev              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  pwritev(fd, iov, iovcnt, pos_l, pos_h) is system call 296. It is writev
+  (20) at an explicit file offset: it writes the iovcnt buffers of the struct
+  iovec array in order starting at the offset (pos_l, signed 64-bit; pos_h
+  ignored on x86-64) and returns the number of bytes written; the file
+  position is neither used nor changed. On a descriptor opened with O_APPEND,
+  Linux ignores the offset and appends.
+returns:
+  success: "bytes written: the sum of the lengths (short only on errors part-way or limits)"
+  gather: "the buffers are written in array order (\"ab\"+\"cde\"+\"f\" at offset 2 of \"..........\" gives \"..abcdef..\")"
+  position: "unchanged"
+  pos_h: "ignored"
+  extend: "writing past the end extends the file; the gap reads as zeros (5 bytes at offset 20 of a 10-byte file: size 25, bytes 10-19 zero)"
+  zero_lengths: "zero-length entries are skipped; iovcnt 0 returns 0 and changes nothing"
+  times: "mtime and ctime change, atime does not"
+  o_append: "with O_APPEND the data goes to the end of the file whatever the offset (offset 0 or 1000), and the file position is still not changed"
+  devices: "/dev/null accepts everything at any offset"
+  rlimit_fsize: "a write crossing RLIMIT_FSIZE is cut at the limit (12 bytes at offset 0 with limit 10 write 10); one starting at the limit fails with EFBIG and SIGXFSZ (ignored in the tests); the limit also applies to the test's own output when that is a regular file"
+  partial_fault: "a bad later buffer: the bytes of the earlier ones are written and counted (4)"
+errors:
+  bad_offset: "EINVAL (22): offset < 0"
+  bad_count: "EINVAL (22): iovcnt > 1024 or < 0"
+  bad_length: "EINVAL (22): an iov_len negative as ssize_t"
+  bad_fd: "EBADF (9): not open, not open for writing (O_RDONLY, a directory), O_PATH"
+  not_seekable: "ESPIPE (29): pipes, sockets"
+  bad_address: "EFAULT (14): iov not readable; the first buffer not readable (nothing written)"
+  too_big: "EFBIG (27): at or beyond RLIMIT_FSIZE"
+  order: "(1) EINVAL for a negative offset, before the descriptor; (2) EBADF; (3) ESPIPE; (4) the iovec array (EINVAL, EFAULT); (5) EFBIG; (6) EFAULT for buffers. A failed call writes nothing"
+side_effects: "file data, size, mtime, ctime"
+threading: "writes at explicit offsets do not race on the file position"
+ordering: []
+timing:
+  typical: "microseconds for small writes to the page cache"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

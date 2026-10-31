@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/readlink             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  readlink(path, buf, bufsiz) is system call 89. It copies the contents of
+  the symbolic link named path into buf and returns the number of bytes
+  copied. It is readlinkat(AT_FDCWD, path, buf, bufsiz) (267). No NUL is
+  appended; if the contents are longer than bufsiz, the first bufsiz bytes
+  are copied and bufsiz is returned (no error). The last component is not
+  followed (unless a trailing slash follows it); links before it are.
+returns:
+  success: "min(length of the contents, bufsiz); the bytes after the copied ones in buf are not touched"
+  bufsiz: "an int: the upper half of the register is ignored (0x100000040 is 64); 1 copies the first byte; a bufsiz much larger than the contents is fine"
+  last_component: "the link itself: a chain l2 -> l1 -> f gives \"l1\" for l2; a dangling or looping link can be read"
+  intermediate_links: "followed (D/link-to-dir/inner reads sub/inner)"
+  contents: "returned byte for byte as stored, multi-byte UTF-8 included; a 4095-byte link returns 4095"
+  relative_paths: "relative to the working directory"
+  permissions: "only search permission on the directories walked; nothing on the link itself"
+errors:
+  bad_bufsiz: "EINVAL (22): bufsiz 0 or negative (as an int: 0x80000000 too), checked before anything else (also with a missing path, a NULL path or a NULL buffer)"
+  not_a_link: "EINVAL (22): the path names a regular file, directory, FIFO, \"/\", /dev/null; also a link followed by a trailing slash that resolves to a directory (D/link-to-dir/)"
+  trailing_slash: "the link is followed: to a directory EINVAL, to a file ENOTDIR, dangling ENOENT, looping ELOOP"
+  missing: "ENOENT (2): a missing name or directory, the empty path"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components"
+  loop: "ELOOP (40): a looping link on the way"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more counting its NUL"
+  search_permission: "EACCES (13): a directory on the way without x for the caller, also for a missing name (not for root; x alone is enough)"
+  bad_path_pointer: "EFAULT (14): path NULL or unmapped"
+  bad_buffer: "EFAULT (14): buf NULL, unmapped or read-only (only when path is a symbolic link)"
+  order: "(1) bufsiz EINVAL; (2) the path: string, components (D/nope/<256 bytes> ENOENT); (3) not a link EINVAL; (4) the buffer EFAULT. So readlink(missing, NULL, 64) is ENOENT, readlink(file, NULL, 64) is EINVAL, readlink(NULL, NULL, 64) EFAULT"
+side_effects: "none observable: the link's mtime and ctime do not change"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

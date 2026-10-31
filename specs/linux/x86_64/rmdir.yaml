@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rmdir                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  rmdir(path) is system call 84. It removes the empty directory named path
+  and returns 0. It is unlinkat(AT_FDCWD, path, AT_REMOVEDIR) (263). The last
+  component is never followed: a symbolic link (to a directory or not) is
+  ENOTDIR. The directory's own mode and owner do not matter (outside sticky
+  directories); write and search permission on its parent do. An open
+  descriptor on the directory, or a process whose working directory it is,
+  does not prevent the removal.
+returns:
+  success: "0; the name is gone at once (stat: ENOENT) and can be reused for a directory or a file"
+  links: "the parent's st_nlink goes down by 1"
+  times: "the parent's mtime and ctime change, its atime does not"
+  trailing_slashes: "allowed: D/b/ and D//c// remove the directory"
+  mode_irrelevant: "a directory with mode 0 can be removed"
+  relative_paths: "relative to the working directory (\"x\", \"../rel/y\"); links on the way are followed (D/link-to-dir/../full2/sub)"
+  open_descriptor: "a descriptor opened on the directory before stays valid: fstat shows S_IFDIR with st_nlink 0; getdents64 on it fails with ENOENT; creating anything in it (openat O_CREAT, mkdirat) is ENOENT; newfstatat(fd, \".\") still works"
+  working_directory: "the working directory can be removed by any path naming it (also \"../cwd2\" from inside); afterwards stat(\".\") works with st_nlink 0, stat(\"..\") works, creating a name there is ENOENT, chdir(\"..\") leaves to the former parent"
+errors:
+  not_empty: "ENOTEMPTY (39): any entry inside (file, directory, dangling symbolic link); also a last component \"..\" (D/empty/.. names D, which is not empty)"
+  dot: "EINVAL (22): a last component \".\" (D/empty/., \".\"), whether or not the directory is empty"
+  root_or_mount_point: "EBUSY (16): \"/\", and any directory that is a mount point (also for root; also for a normal user who owns the mount-point directory)"
+  not_a_directory: "ENOTDIR (20): a regular file (also \"D/f/\"), a symbolic link of any kind as the last component (to a directory, also \"D/ldir/\"; dangling; looping), and a non-directory on the way (D/f/x; D/f/. and D/f/.. too)"
+  missing: "ENOENT (2): a missing name or directory on the way, the empty path; D/nope/. is ENOENT"
+  loop: "ELOOP (40): a looping link on the way (D/loop/x)"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): NULL or an unmapped address"
+  permission: "EACCES (13): no write permission on the parent, or no search permission on a directory on the way (not for root). A missing name in a parent the caller may search but not write is ENOENT"
+  sticky: "EPERM (1): in a sticky (01000) parent, a caller without CAP_FOWNER who owns neither the directory being removed nor the parent; the owner of the directory, the owner of the sticky parent and root may remove it. Comes before ENOTEMPTY (a non-empty directory of another user is EPERM)"
+  read_only_fs: "EROFS (30): on a read-only mount, also for a name that does not exist there"
+  order: "(1) the path string: EFAULT, ENAMETOOLONG (4096+), ENOENT (empty); (2) the components before the last, left to right: ENOENT, ENOTDIR, ELOOP, EACCES (search), ENAMETOOLONG; (3) a last component \".\" EINVAL, \"..\" ENOTEMPTY (only after the directories before it resolved: D/nope/. is ENOENT, D/f/. ENOTDIR); (4) EROFS (before looking up the last name); (5) the last name: ENAMETOOLONG (256+), ENOENT if missing; (6) EACCES (write on the parent), EPERM (sticky), ENOTDIR (not a directory), EBUSY (mount point / root), ENOTEMPTY"
+side_effects: "the parent's link count drops by one and its mtime/ctime change"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/chmod                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  chmod(path, mode) is system call 90. It sets the 12 permission bits
+  (07777: set-user-ID 04000, set-group-ID 02000, sticky 01000 and rwx for
+  owner, group, other) of the file named by path to mode and returns 0. It is
+  fchmodat(AT_FDCWD, path, mode) (268): relative paths start at the working
+  directory and symbolic links are followed, also at the end (a link's own
+  mode stays 0777). The file type and everything else about the file stay;
+  only ctime changes.
+returns:
+  success: "0; the new st_mode is the old type bits | (mode & 07777)"
+  mode_argument: "the umask does not apply (0666 gives 0666); file type bits in mode are ignored (S_IFDIR|0644 on a regular file gives a regular 0644 file); bits above 07777 and the upper 32 bits of the register are ignored; -1 gives 07777. Setting the mode the file already has succeeds and still updates ctime"
+  owner_and_root: "only the file's owner or a caller with CAP_FOWNER (root) may change the mode. The owner may set every bit, set-user-ID and sticky on regular files included. set-group-ID (02000) is kept only if the caller's effective gid or a supplementary group is the file's group, or the caller has CAP_FSETID; otherwise it is silently dropped and the call still returns 0 with the other bits set (06755 by an owner outside the group gives 04755; the same on a directory: 03775 gives 01775). Root keeps all bits on any file"
+  directories: "the same rules; a trailing slash is allowed on a directory and on a link to a directory (the directory changes)"
+  symbolic_links: "followed: chmod(link) changes the target; lstat of the link still shows S_IFLNK|0777"
+  hard_links: "the mode belongs to the file: all names see it"
+  open_descriptors: "descriptors opened before keep their access when the mode drops to 0 (reads and writes still work; fstat shows the new mode); later opens are checked against the new mode (a normal user then gets EACCES, root passes)"
+  relative_paths: "relative to the working directory, \".\" and \"sub/../f\" included"
+errors:
+  not_owner: "EPERM (1): the caller is neither the owner nor has CAP_FOWNER; also when the mode would not change, when the caller has write permission on the file, and when the caller is in the file's group. Nothing changes"
+  read_only_fs: "EROFS (30): the file is on a read-only mount; checked before ownership (a non-owner gets EROFS, not EPERM); root gets it too"
+  search_permission: "EACCES (13): a directory on the way without x for the caller; before EPERM; the directory itself can still be changed by its owner. Not for root"
+  missing: "ENOENT (2): a missing name or directory on the way, the empty path, a dangling symbolic link"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components, or a trailing slash after a regular file"
+  loop: "ELOOP (40): a symbolic link loop (a link to itself)"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more (255 is fine); a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): NULL or an unmapped address"
+  order: "(1) the path string: EFAULT, ENAMETOOLONG for 4096 bytes or more, ENOENT if empty; (2) the components left to right as the walk reaches them: ENOENT, ENOTDIR, ELOOP, EACCES (search), ENAMETOOLONG for a long name (D/nope/<256 bytes> is ENOENT); (3) EROFS; (4) EPERM. A failed call changes nothing"
+side_effects: "ctime of the file changes (also for an unchanged mode); mtime, atime, size, link count and inode do not; the parent directory does not change"
+threading: "no thread-specific behaviour; the working directory used for relative paths is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

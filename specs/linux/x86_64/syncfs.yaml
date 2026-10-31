@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/syncfs               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  syncfs(fd) is system call 306. It is sync (162) restricted to the one file
+  system that contains the object open on fd: it writes that file system's
+  modified data and metadata to storage and returns 0. Any open descriptor
+  except O_PATH is accepted, whatever it refers to (the internal file
+  systems of pipes, sockets and eventfds included), unlike fsync/fdatasync.
+returns:
+  success: "0"
+  descriptors: "regular files (O_RDWR, O_RDONLY, O_WRONLY), directories (also \"/\"), a file with no names left, pipes (both ends), AF_UNIX sockets, eventfds, /dev/null, files of a separately mounted tmpfs before and after it became read-only, and descriptors that outlived a lazy unmount (umount2 MNT_DETACH)"
+  fd_argument: "an int: the upper half of the register is ignored"
+  no_visible_change: "fstat before and after is identical; offset and contents stay"
+errors:
+  bad_fd: "EBADF (9): not open (-1, AT_FDCWD, 4000, a closed descriptor) and O_PATH descriptors"
+  io: "EIO (5), ENOSPC, EDQUOT: a write-back error of the file system (not reproducible on tmpfs)"
+side_effects: "none visible"
+threading: "blocks the caller until that file system's write-back is done"
+ordering: []
+timing:
+  typical: "immediate on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

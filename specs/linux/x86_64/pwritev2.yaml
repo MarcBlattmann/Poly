@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pwritev2             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (differences noted); tmpfs-specific checks on a tmpfs the test mounts; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  pwritev2(fd, iov, iovcnt, pos_l, pos_h, flags) is system call 328. It is
+  pwritev (296) with an offset of -1 meaning "the file position" (used and
+  advanced, like writev; pipes can be written this way) and RWF_* flags for
+  this one call, notably RWF_APPEND (append this write) and RWF_NOAPPEND
+  (write at the offset despite O_APPEND).
+returns:
+  success: "bytes written"
+  offset_minus1: "writes at the file position and advances it; with O_APPEND the data goes to the end and the position moves to the new end (8 after appending 2 bytes to a 6-byte file); pos_h ignored"
+  explicit_offset: "as pwritev: the position is not used or moved; with O_APPEND the data still goes to the end and the position stays"
+  rwf_append: "0x10: this write goes to the end whatever the offset (explicit offset: position unchanged; -1: position moves to the new end); the descriptor does not become O_APPEND (F_GETFL unchanged; the next plain write lands at its offset)"
+  rwf_noappend: "0x20: accepted. On tmpfs, on an O_APPEND descriptor, the data goes to the given offset (offset 4: \"dataXYtadata\"), with -1 to the file position (which advances: 0 -> 2), and the descriptor stays O_APPEND (a later plain write appends). On overlayfs the write appended anyway (observed on 6.18): file-system dependent"
+  flags_accepted: "RWF_HIPRI (1), RWF_DSYNC (2), RWF_SYNC (4) are accepted"
+  rwf_nowait: "RWF_NOWAIT (8): never wait. A full pipe (F_SETPIPE_SZ 4096, 4096 bytes written) gives EAGAIN; on a tmpfs file EOPNOTSUPP and nothing is written"
+  newer_flags: "RWF_ATOMIC (0x40), RWF_DONTCACHE (0x80) were EOPNOTSUPP on tmpfs; RWF_NOSIGNAL (0x100, Linux 6.18) was accepted. Kernel-version and file-system dependent; not tested"
+errors:
+  bad_offset: "EINVAL (22): an offset < -1"
+  unknown_flags: "EOPNOTSUPP (95): bits no kernel defines (0x4000, 0x80000000)"
+  explicit_offset_on_pipe: "ESPIPE (29): an offset >= 0 on a pipe"
+  others: "as pwritev: EINVAL for iovcnt > 1024, EBADF (not open, O_RDONLY, also on a read-only mount), EFAULT, EFBIG"
+  order: "(1) EINVAL for an offset < -1, before unknown flags; (2) EBADF (before unknown flags); (3) EOPNOTSUPP; (4) as pwritev"
+side_effects: "file data, size, mtime, ctime; with -1 the file position"
+threading: "with -1 the position is the open file description's"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "RWF_NOWAIT never sleeps"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
