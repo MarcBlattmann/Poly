@@ -36,6 +36,8 @@ pub const STATUS_PARITY: u8 = 1 << 7;
 pub const CMD_READ_CONFIG: u8 = 0x20;
 pub const CMD_WRITE_CONFIG: u8 = 0x60;
 pub const CMD_DISABLE_AUX: u8 = 0xa7;
+pub const CMD_ENABLE_AUX: u8 = 0xa8;
+pub const CMD_TEST_AUX_PORT: u8 = 0xa9;
 pub const CMD_SELF_TEST: u8 = 0xaa;
 pub const CMD_TEST_KEYBOARD_PORT: u8 = 0xab;
 pub const CMD_DISABLE_KEYBOARD: u8 = 0xad;
@@ -43,6 +45,11 @@ pub const CMD_ENABLE_KEYBOARD: u8 = 0xae;
 /// The next data byte appears in the output buffer as if the keyboard had
 /// sent it (raising IRQ 1 if enabled).
 pub const CMD_WRITE_KEYBOARD_OUTPUT: u8 = 0xd2;
+/// The next data byte appears in the output buffer as if the second-port
+/// device (the mouse) had sent it (raising IRQ 12 if enabled).
+pub const CMD_WRITE_AUX_OUTPUT: u8 = 0xd3;
+/// The next data byte goes to the second-port device (the mouse).
+pub const CMD_WRITE_AUX: u8 = 0xd4;
 
 /// Self-test passed.
 pub const SELF_TEST_OK: u8 = 0x55;
@@ -303,6 +310,161 @@ fn reset_keyboard(io: &impl Io) -> Result<(), Error> {
 /// raises it at once.
 pub fn enable_interrupts(io: &impl Io, setup: &Setup) -> Result<(), Error> {
     write_config(io, setup.config)
+}
+
+/// Make `byte` appear in the output buffer as if the mouse had sent it
+/// (raising IRQ 12 if it is enabled). For testing the mouse's interrupt
+/// path.
+pub fn write_aux_output(io: &impl Io, byte: u8) -> Result<(), Error> {
+    command(io, CMD_WRITE_AUX_OUTPUT)?;
+    write_data(io, byte)
+}
+
+/// Why the mouse could not be brought up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuxError {
+    /// The controller has no second port, or its test failed (the reply,
+    /// or `None` for no reply).
+    NoPort(Option<u8>),
+    /// Nothing acknowledged the reset: no mouse is plugged in.
+    NoMouse,
+    /// The mouse's self-test after the reset failed.
+    SelfTest(u8),
+    /// The mouse refused a command.
+    Refused(u8),
+    Controller(Error),
+}
+
+impl From<Error> for AuxError {
+    fn from(e: Error) -> AuxError {
+        AuxError::Controller(e)
+    }
+}
+
+/// What [`init_aux`] found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuxSetup {
+    /// The ID the mouse reported after the wheel detection.
+    pub id: u8,
+    pub kind: crate::ps2mouse::Kind,
+    /// Bytes thrown away while flushing.
+    pub flushed: u32,
+}
+
+/// The next byte from the mouse, waiting up to `timeout_ns`; keyboard bytes
+/// that come meanwhile are dropped.
+fn read_aux_byte(io: &impl Io, timeout_ns: u64) -> Option<u8> {
+    let start = io.now_ns();
+    loop {
+        let left = timeout_ns.saturating_sub(io.now_ns().wrapping_sub(start));
+        if !wait_status(io, STATUS_OUTPUT_FULL, STATUS_OUTPUT_FULL, left) {
+            return None;
+        }
+        let status = io.read_status();
+        if status & STATUS_OUTPUT_FULL == 0 {
+            continue;
+        }
+        let byte = io.read_data();
+        if status & STATUS_AUX_DATA != 0 {
+            return Some(byte);
+        }
+        if left == 0 {
+            return None;
+        }
+    }
+}
+
+/// Send a byte to the mouse (through 0xD4) and wait for its
+/// acknowledgement, sending it again when the mouse asks to.
+pub fn aux_command(io: &impl Io, byte: u8) -> Result<(), AuxError> {
+    for _ in 0..=RETRIES {
+        command(io, CMD_WRITE_AUX)?;
+        write_data(io, byte)?;
+        match read_aux_byte(io, KEYBOARD_TIMEOUT_NS) {
+            Some(ACK) => return Ok(()),
+            Some(RESEND) => continue,
+            _ => return Err(AuxError::Refused(byte)),
+        }
+    }
+    Err(AuxError::Refused(byte))
+}
+
+/// Send a command and its parameter byte to the mouse.
+fn aux_command_with(io: &impl Io, byte: u8, param: u8) -> Result<(), AuxError> {
+    aux_command(io, byte)?;
+    aux_command(io, param)
+}
+
+/// The ID the mouse reports (`GET_ID`).
+fn aux_id(io: &impl Io) -> Result<u8, AuxError> {
+    aux_command(io, crate::ps2mouse::GET_ID)?;
+    read_aux_byte(io, KEYBOARD_TIMEOUT_NS).ok_or(AuxError::Refused(crate::ps2mouse::GET_ID))
+}
+
+/// Bring up the mouse on the second port, polled, after [`init`] and before
+/// [`enable_interrupts`] (whose configuration byte gets the second port's
+/// interrupt and clock on here):
+///
+/// 1. Disable the keyboard port, so its bytes do not mix in, and flush.
+/// 2. Test the second port (0xA9, expect 0x00) and enable it (0xA8).
+/// 3. Reset the mouse (0xFF: ACK, 0xAA from its self-test, then its ID).
+/// 4. The IntelliMouse detection: sample rates 200, 100, 80, then the ID
+///    (3: a wheel); if so, 200, 200, 80 and the ID again (4: five
+///    buttons).
+/// 5. Sample rate 100, resolution 8 counts/mm, scaling 1:1, enable
+///    reporting (0xF4).
+/// 6. Enable the keyboard port again.
+///
+/// On failure the second port is disabled again and `setup` is left as
+/// it was; the keyboard port is enabled either way.
+pub fn init_aux(io: &impl Io, setup: &mut Setup) -> Result<AuxSetup, AuxError> {
+    command(io, CMD_DISABLE_KEYBOARD)?;
+    let flushed = flush(io);
+    let result = bring_up_aux(io);
+    if result.is_err() {
+        let _ = command(io, CMD_DISABLE_AUX);
+    }
+    command(io, CMD_ENABLE_KEYBOARD)?;
+    let (id, kind) = result?;
+    setup.config = (setup.config | CONFIG_AUX_IRQ) & !CONFIG_AUX_CLOCK_OFF;
+    Ok(AuxSetup { id, kind, flushed })
+}
+
+fn bring_up_aux(io: &impl Io) -> Result<(u8, crate::ps2mouse::Kind), AuxError> {
+    use crate::ps2mouse::{self as m, Kind};
+    command(io, CMD_TEST_AUX_PORT)?;
+    match read_byte(io, CONTROLLER_TIMEOUT_NS) {
+        Some(PORT_TEST_OK) => {}
+        other => return Err(AuxError::NoPort(other)),
+    }
+    command(io, CMD_ENABLE_AUX)?;
+    match aux_command(io, m::RESET) {
+        Ok(()) => {}
+        Err(AuxError::Refused(_)) => return Err(AuxError::NoMouse),
+        Err(e) => return Err(e),
+    }
+    match read_aux_byte(io, RESET_TIMEOUT_NS) {
+        Some(BAT_OK) => {}
+        Some(b) => return Err(AuxError::SelfTest(b)),
+        None => return Err(AuxError::NoMouse),
+    }
+    // Its ID follows the self-test result.
+    let _ = read_aux_byte(io, KEYBOARD_TIMEOUT_NS);
+    for rate in m::WHEEL_KNOCK {
+        aux_command_with(io, m::SET_SAMPLE_RATE, rate)?;
+    }
+    let mut id = aux_id(io)?;
+    if id == m::ID_WHEEL {
+        for rate in m::FIVE_BUTTON_KNOCK {
+            aux_command_with(io, m::SET_SAMPLE_RATE, rate)?;
+        }
+        id = aux_id(io)?;
+    }
+    aux_command_with(io, m::SET_SAMPLE_RATE, m::SAMPLE_RATE)?;
+    aux_command_with(io, m::SET_RESOLUTION, m::RESOLUTION)?;
+    aux_command(io, m::SET_SCALING_1_1)?;
+    aux_command(io, m::ENABLE_REPORTING)?;
+    Ok((id, Kind::from_id(id)))
 }
 
 /// Read one waiting byte from the keyboard, if there is one: for the

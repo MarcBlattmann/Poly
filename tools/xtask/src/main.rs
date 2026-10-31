@@ -68,6 +68,7 @@ mod ext2disk;
 mod ext4disk;
 mod font;
 mod initramfs;
+mod input;
 mod ktest;
 mod libsearch;
 mod net;
@@ -1378,7 +1379,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 22] = [
+const BOOT_GROUPS: [BootGroup; 23] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1430,6 +1431,9 @@ const BOOT_GROUPS: [BootGroup; 22] = [
         );
         terminal::boot_test(k, s, &kernel_version()?)
     }),
+    // Input: keys, motion, the wheel and clicks from QMP through the PS/2
+    // and virtio-input devices to /dev/input/event* (input.rs, ADR 0103).
+    ("input", input::boot_tests),
     ("faults", fault_tests),
     ("failures", failure_tests),
 ];
@@ -1443,7 +1447,7 @@ const BOOT_GROUPS: [BootGroup; 22] = [
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace"]),
-    ("devices", &["net", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "terminal"]),
+    ("devices", &["net", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "terminal", "input"]),
     ("faults", &["faults", "failures"]),
 ];
 

@@ -192,6 +192,8 @@ pub fn install(vfs: &Vfs, ctx: &FsContext) {
     for (path, target) in LINKS {
         made += created(vfs.symlink(&ctx, &root, target, At::Cwd, path), path);
     }
+    // /dev/input/event* for the input devices found so far (ADR 0103).
+    crate::input::install_nodes(vfs, &ctx);
     crate::kprintln!(
         "fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); \
          {made} of {} directories, nodes and links made",

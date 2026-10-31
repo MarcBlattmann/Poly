@@ -120,7 +120,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] ⚖️ Decide: global menu bar or per-window menus
 - [ ] ⚖️ Decide: native window frames per app, or one neutral frame
 - [x] virtio-gpu driver: modesetting and 2D framebuffer
-- [ ] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
+- [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
 - [ ] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged
 - [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
 - [ ] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface

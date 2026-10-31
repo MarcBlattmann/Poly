@@ -180,6 +180,108 @@ fn controller_can_fake_keyboard_bytes() {
     }
 }
 
+// --- The mouse on the second port -------------------------------------------
+
+use crate::ps2mouse::{self as m, Kind};
+
+#[test]
+fn brings_up_a_wheel_mouse_and_turns_its_interrupt_on() {
+    let sim = Sim::new();
+    let mut setup = init(&sim).unwrap();
+    let before = sim.log().len();
+    let aux = init_aux(&sim, &mut setup).unwrap();
+    assert_eq!((aux.id, aux.kind), (m::ID_WHEEL, Kind::Wheel));
+    use Op::*;
+    let log = sim.log()[before..].to_vec();
+    let to_mouse = |b: u8| [Command(CMD_WRITE_AUX), Data(b)];
+    let mut want = vec![Command(CMD_DISABLE_KEYBOARD), Command(CMD_TEST_AUX_PORT), Command(CMD_ENABLE_AUX)];
+    want.extend(to_mouse(m::RESET));
+    for rate in m::WHEEL_KNOCK {
+        want.extend(to_mouse(m::SET_SAMPLE_RATE));
+        want.extend(to_mouse(rate));
+    }
+    want.extend(to_mouse(m::GET_ID));
+    for rate in m::FIVE_BUTTON_KNOCK {
+        want.extend(to_mouse(m::SET_SAMPLE_RATE));
+        want.extend(to_mouse(rate));
+    }
+    want.extend(to_mouse(m::GET_ID));
+    want.extend(to_mouse(m::SET_SAMPLE_RATE));
+    want.extend(to_mouse(m::SAMPLE_RATE));
+    want.extend(to_mouse(m::SET_RESOLUTION));
+    want.extend(to_mouse(m::RESOLUTION));
+    want.extend(to_mouse(m::SET_SCALING_1_1));
+    want.extend(to_mouse(m::ENABLE_REPORTING));
+    want.push(Command(CMD_ENABLE_KEYBOARD));
+    assert_eq!(log, want);
+    sim.mouse(|mouse| assert!(mouse.reporting && mouse.rate == 100 && mouse.resolution == 3));
+    enable_interrupts(&sim, &setup).unwrap();
+    let c = sim.config();
+    assert_eq!(c & (CONFIG_AUX_IRQ | CONFIG_AUX_CLOCK_OFF), CONFIG_AUX_IRQ, "mouse interrupt and clock on");
+    assert_eq!(c & (CONFIG_KEYBOARD_IRQ | CONFIG_KEYBOARD_CLOCK_OFF), CONFIG_KEYBOARD_IRQ);
+    // Mouse bytes raise IRQ 12 and read as second-port bytes; the
+    // controller can fake them (0xD3).
+    write_aux_output(&sim, 0x08).unwrap();
+    assert!(sim.aux_irq() && !sim.keyboard_irq());
+    assert_eq!(read_keyboard_byte(&sim), Some(Err(0x08)));
+    quick(&sim, 10_000_000);
+}
+
+#[test]
+fn mouse_kinds_follow_the_knocks() {
+    for (wheel, five, want) in
+        [(false, false, Kind::Standard), (true, false, Kind::Wheel), (true, true, Kind::FiveButtons)]
+    {
+        let sim = Sim::new();
+        sim.mouse(|mouse| {
+            mouse.wheel = wheel;
+            mouse.five_buttons = five;
+        });
+        let mut setup = init(&sim).unwrap();
+        assert_eq!(init_aux(&sim, &mut setup).unwrap().kind, want);
+    }
+}
+
+#[test]
+fn no_mouse_leaves_the_second_port_off() {
+    // No mouse: the reset is not acknowledged.
+    let sim = Sim::with(|s| s.mouse = None);
+    let mut setup = init(&sim).unwrap();
+    let config = setup.config;
+    assert_eq!(init_aux(&sim, &mut setup), Err(AuxError::NoMouse));
+    assert_eq!(setup.config, config, "the setup is unchanged");
+    assert_ne!(sim.config() & CONFIG_AUX_CLOCK_OFF, 0, "the second port is disabled again");
+    assert_eq!(sim.config() & CONFIG_KEYBOARD_CLOCK_OFF, 0, "the keyboard port is enabled again");
+    quick(&sim, 2 * RESET_TIMEOUT_NS);
+    // No second port at all, or a failed port test.
+    let sim = Sim::with(|s| s.aux_port_test_reply = None);
+    let mut setup = init(&sim).unwrap();
+    assert_eq!(init_aux(&sim, &mut setup), Err(AuxError::NoPort(None)));
+    let sim = Sim::with(|s| s.aux_port_test_reply = Some(2));
+    let mut setup = init(&sim).unwrap();
+    assert_eq!(init_aux(&sim, &mut setup), Err(AuxError::NoPort(Some(2))));
+    // A mouse that fails its self-test or refuses a command.
+    let sim = Sim::new();
+    sim.mouse(|mouse| mouse.bat = 0xfc);
+    let mut setup = init(&sim).unwrap();
+    assert_eq!(init_aux(&sim, &mut setup), Err(AuxError::SelfTest(0xfc)));
+    let sim = Sim::new();
+    sim.mouse(|mouse| mouse.refuse.push(m::ENABLE_REPORTING));
+    let mut setup = init(&sim).unwrap();
+    assert_eq!(init_aux(&sim, &mut setup), Err(AuxError::Refused(m::ENABLE_REPORTING)));
+}
+
+#[test]
+fn keyboard_bytes_during_mouse_bring_up_are_dropped() {
+    let sim = Sim::new();
+    let mut setup = init(&sim).unwrap();
+    // A key typed right before: flushed with the keyboard port disabled.
+    sim.type_bytes(&[0x1e, 0x9e]);
+    let aux = init_aux(&sim, &mut setup).unwrap();
+    assert_eq!(aux.flushed, 2);
+    assert_eq!(read_keyboard_byte(&sim), None);
+}
+
 #[test]
 fn leds_and_echo_are_keyboard_commands() {
     let sim = Sim::new();
