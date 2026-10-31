@@ -1013,7 +1013,8 @@ fn test_list(a: &Args) -> Vec<String> {
 
 /// The Windows test oracle (ADR 0075): `win build|bundle|poly|diff|show`.
 fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
-    let usage = "usage: pipeline win <build|bundle|unbundle|poly|diff|show|remote|polycheck> (see tools/pipeline/src/main.rs)";
+    let usage =
+        "usage: pipeline win <build|bundle|unbundle|poly|diff|show|remote|polycheck> (see tools/pipeline/src/main.rs)";
     let (sub, rest) = a.positional.split_first().ok_or(usage)?;
     let win = repo.join(windows::WIN_DIR);
     let bin_dir = a.opt("bin-dir").map_or_else(|| win.join("bin"), PathBuf::from);

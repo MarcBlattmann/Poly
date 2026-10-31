@@ -236,7 +236,7 @@ struct CatchInfo {
 /// A record whose first parameter is [`catch_callback`] was made by
 /// [`frame_handler`] with a live [`CatchInfo`] as the second.
 unsafe fn consolidation(exc: &Exception) -> Option<&'static CatchInfo> {
-    let ours = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as u64;
+    let ours = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
     if exc.code == STATUS_UNWIND_CONSOLIDATE && exc.count >= 2 && exc.params[0] == ours && exc.params[1] != 0 {
         // SAFETY: the caller's contract.
         Some(unsafe { &*(exc.params[1] as *const CatchInfo) })
@@ -460,7 +460,7 @@ unsafe fn search_frame(record: *mut u8, frame: u64, d: &Dispatch, mut exc: Excep
     unwind[0..4].copy_from_slice(&STATUS_UNWIND_CONSOLIDATE.to_le_bytes());
     unwind[4..8].copy_from_slice(&EXCEPTION_NONCONTINUABLE.to_le_bytes());
     unwind[0x18..0x1C].copy_from_slice(&2u32.to_le_bytes());
-    let callback = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as u64;
+    let callback = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
     unwind[0x20..0x28].copy_from_slice(&callback.to_le_bytes());
     unwind[0x28..0x30].copy_from_slice(&(&raw const info as u64).to_le_bytes());
     // SAFETY: unwind to this frame (its control PC keeps the stack walk of

@@ -51,7 +51,7 @@ mod tests {
                     return Err("System32 lacks bcrypt.dll or crypt32.dll");
                 }
             }
-            let vr = VfsRoot { vfs, ctx, cred: Cred::root() };
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
             let exe = super::super::CRYPTEST;
             create::install_file(&vr, &root, APP_DIR, "cryptest.exe", exe).map_err(|_| "cannot write cryptest.exe")?;
 

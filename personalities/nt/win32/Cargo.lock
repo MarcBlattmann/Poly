@@ -19,6 +19,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcrypt"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-win32-cryptrt",
+ "poly-wincrypt",
+]
+
+[[package]]
 name = "contest"
 version = "0.0.1"
 dependencies = [
@@ -26,7 +35,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "crtloctest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "crttest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "crypt32"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-win32-cryptrt",
+ "poly-wincrypt",
+ "poly-x509",
+]
+
+[[package]]
+name = "cryptest"
 version = "0.0.1"
 dependencies = [
  "poly-win32-rt",
@@ -85,8 +118,13 @@ version = "0.0.1"
 name = "poly-crt"
 version = "0.0.1"
 dependencies = [
+ "poly-nls",
  "poly-rtl",
 ]
+
+[[package]]
+name = "poly-crypto"
+version = "0.0.1"
 
 [[package]]
 name = "poly-cxxeh"
@@ -99,6 +137,7 @@ dependencies = [
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-nls",
  "poly-ntobj",
  "poly-rtl",
 ]
@@ -106,6 +145,13 @@ dependencies = [
 [[package]]
 name = "poly-libm"
 version = "0.0.1"
+
+[[package]]
+name = "poly-nls"
+version = "0.0.1"
+dependencies = [
+ "poly-rtl",
+]
 
 [[package]]
 name = "poly-ntobj"
@@ -135,12 +181,35 @@ version = "0.0.1"
 dependencies = [
  "poly-crt",
  "poly-libm",
+ "poly-nls",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "poly-win32-cryptrt"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
 [[package]]
 name = "poly-win32-rt"
 version = "0.0.1"
+
+[[package]]
+name = "poly-wincrypt"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+ "poly-x509",
+]
+
+[[package]]
+name = "poly-x509"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+]
 
 [[package]]
 name = "ucrtbase"

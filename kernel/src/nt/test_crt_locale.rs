@@ -46,7 +46,7 @@ mod tests {
             let vfs = crate::fs::vfs();
             let ctx = vfs.root_context().map_err(|_| "no VFS")?;
             let root = vfs.lookup(&ctx, &Cred::root(), At::Cwd, b"/nt/c", true).map_err(|_| "no C:")?;
-            let vr = VfsRoot { vfs, ctx, cred: Cred::root() };
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
             let exe = super::super::CRTLOCTEST;
             create::install_file(&vr, &root, APP_DIR, "crtloctest.exe", exe).map_err(|_| "cannot write crtloctest.exe")?;
             let flags = OpenFlags::CREAT | OpenFlags::TRUNC | OpenFlags::RDWR;

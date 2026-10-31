@@ -57,8 +57,10 @@ pub const STANDARD_ROUNDING: u64 = 1 << 5;
 
 /// Poly's own option bit (not a UCRT one): the positional-parameter
 /// functions (`_printf_p`, `__stdio_common_vfprintf_p` …), Learn's
-/// "printf_p Positional Parameters". See [`positional`].
-pub const POSITIONAL: u64 = 1 << 63;
+/// "printf_p Positional Parameters". See [`positional`]. Clear of the
+/// locale's decimal point in bits 56-63 ([`crate::locale::POINT_MASK`]).
+pub const POSITIONAL: u64 = 1 << 48;
+const _: () = assert!(POSITIONAL & crate::locale::POINT_MASK == 0);
 
 /// `_ARGMAX`: the most positional parameters a format may name (Learn:
 /// "The maximum number of positional parameters allowed in a format string
