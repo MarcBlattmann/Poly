@@ -18,6 +18,7 @@
 //! | (none) | `\Device\PolyFs2`... | every other VFS mount, by mount point |
 //! | (none) | `\Device\PolyPipe` | Poly's loopback byte pipes (below) |
 //! | (none) | `\Device\PolyConsole` | the consoles ([`crate::console`], ADR 0080) |
+//! | (none) | `\Device\Afd` | sockets ([`crate::afd`], ADR 0095) |
 //!
 //! So `\??\C:\Windows\win.ini` reaches `\Device\PolyFs1` through the link
 //! and becomes `/nt/c/Windows/win.ini` (in whatever case it has on disk).
@@ -156,6 +157,8 @@ pub enum Device {
     Pipe,
     /// `\Device\PolyConsole` (ADR 0080, [`crate::console`]).
     Console,
+    /// `\Device\Afd`, the sockets of `ws2_32` (ADR 0095, [`crate::afd`]).
+    Afd,
 }
 
 /// A file object's target on a volume.
@@ -184,6 +187,8 @@ pub enum Target {
     /// An open file of Poly's own a process was started with (a
     /// redirected standard handle, ADR 0080): read and written as it is.
     Host(Arc<OpenFile>),
+    /// A socket endpoint on `\Device\Afd` (ADR 0095).
+    Socket(crate::afd::Endpoint),
 }
 
 /// The kernel's data for one file object.
@@ -435,6 +440,14 @@ impl IoState {
             NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
         )?;
         self.add_console_device(cookie);
+        let cookie = self.cookie();
+        add_named(
+            om,
+            &kernel,
+            &wide(poly_winsock::afd::DEVICE),
+            NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
+        )?;
+        self.devices.insert(cookie, Device::Afd);
         self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
     }
@@ -548,6 +561,7 @@ impl IoState {
         match rec.target {
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
+            Target::Socket(e) => crate::afd::services::endpoint_closed(e),
             Target::Pipe(key) => {
                 let mut broken = Vec::new();
                 if let Some(p) = self.pipes.get_mut(&key) {

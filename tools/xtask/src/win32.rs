@@ -2,7 +2,8 @@
 //! `kernel32.dll` and the test program `k32test.exe`, plus `advapi32.dll`
 //! and its test program `a32test.exe` (ADR 0083), the C runtime (ADR 0084),
 //! `user32.dll` and `oleaut32.dll` (ADR 0087), `bcrypt.dll`, `crypt32.dll`
-//! and `cryptest.exe` (ADR 0096) — and check them.
+//! and `cryptest.exe` (ADR 0096), `ws2_32.dll`, `winhttp.dll`, `wininet.dll`
+//! and their test programs (ADR 0095) — and check them.
 //!
 //! They are one Cargo workspace, `personalities/nt/win32`, built the way
 //! `ntdll` is (ADR 0071, `ntdll.rs`): `no_std` Rust for
@@ -34,7 +35,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 16] = [
+pub const OUTPUTS: [&str; 21] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -52,6 +53,12 @@ pub const OUTPUTS: [&str; 16] = [
     "cryptest.exe",
     // ADR 0093.
     "crtiotest.exe",
+    // ADR 0095.
+    "ws2_32.dll",
+    "wstest.exe",
+    "winhttp.dll",
+    "wininet.dll",
+    "httptest.exe",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -104,6 +111,12 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/crypt32",
             "personalities/nt/win32/cryptest",
             "personalities/nt/win32/crtiotest",
+            "personalities/nt/win32/ws2_32",
+            "personalities/nt/win32/wstest",
+            "personalities/nt/win32/inet",
+            "personalities/nt/win32/winhttp",
+            "personalities/nt/win32/wininet",
+            "personalities/nt/win32/httptest",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -257,7 +270,8 @@ fn verify(dir: &Path) -> Result {
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])?;
     verify_crt(dir)?;
     verify_user32_oleaut32(dir)?;
-    verify_crypto(dir)
+    verify_crypto(dir)?;
+    verify_ws2_32(dir)
 }
 
 /// `bcrypt` and `crypt32` export their functions by name; `cryptest.exe`
@@ -278,6 +292,43 @@ fn verify_crypto(dir: &Path) -> Result {
         }
     }
     verify_exe(dir, "cryptest.exe", &["bcrypt.dll", "crypt32.dll", "kernel32.dll"])
+}
+
+/// `ws2_32` exports every function of `poly_winsock::exports` by name, as
+/// code, and `wstest.exe` imports from it and `kernel32` only (ADR 0095).
+fn verify_ws2_32(dir: &Path) -> Result {
+    use poly_pe::ExportTarget;
+    let bytes = read(&dir.join("ws2_32.dll"))?;
+    let dll = parse(&bytes)?;
+    let exports = dll.exports().map_err(|e| format!("ws2_32 exports: {e:?}"))?.ok_or("ws2_32: no exports")?;
+    for name in poly_winsock::exports::WS2_32_EXPORTS {
+        if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+            return Err(format!("ws2_32.dll lacks {name}"));
+        }
+    }
+    verify_exe(dir, "wstest.exe", &["ws2_32.dll", "kernel32.dll"])?;
+    verify_http(dir)
+}
+
+/// `winhttp` and `wininet` export their functions by name, as code, and
+/// `httptest.exe` imports from them, `ws2_32` and `kernel32` only (ADR
+/// 0095).
+fn verify_http(dir: &Path) -> Result {
+    use poly_pe::ExportTarget;
+    for (file, names) in
+        [("winhttp.dll", poly_http::exports::WINHTTP_EXPORTS), ("wininet.dll", poly_http::exports::WININET_EXPORTS)]
+    {
+        let bytes = read(&dir.join(file))?;
+        let dll = parse(&bytes)?;
+        let exports =
+            dll.exports().map_err(|e| format!("{file} exports: {e:?}"))?.ok_or(format!("{file}: no exports"))?;
+        for name in names {
+            if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+                return Err(format!("{file} lacks {name}"));
+            }
+        }
+    }
+    verify_exe(dir, "httptest.exe", &["winhttp.dll", "wininet.dll", "ws2_32.dll", "kernel32.dll"])
 }
 
 /// `user32` exports its functions by name; `oleaut32` exports each of its

@@ -1,0 +1,13 @@
+[package]
+name = "poly-http"
+description = "HTTP/1.1 without the machine (ADR 0095): URLs, requests, an incremental response parser (status line, headers, Content-Length and chunked bodies) and the header queries of WinHTTP and WinINet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

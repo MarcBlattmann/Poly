@@ -1370,6 +1370,18 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   and keeps the SDDL SID strings and `GetUserNameW`. Tokens are `Token`
   objects from the kernel's token services; every process has the single
   user's elevated token. Descriptors are stored and returned, not enforced.
+- **Winsock** (`personalities/nt/win32/ws2_32`, `crates/poly-winsock`,
+  `personalities/nt/src/afd`, `kernel/src/nt/afd.rs`,
+  [ADR 0095](adr/0095-winsock-on-polys-sockets.md)): a socket is a file
+  object on `\Device\Afd`, driven by Poly's own `NtDeviceIoControlFile`
+  codes; the personality reaches the kernel's TCP/IP stack through
+  `NtSocket`, which the kernel implements over the same Internet sockets
+  Linux descriptors use. Overlapped sends and receives that must wait pend
+  as IRPs for the kernel's `nt-afd` worker. `ws2_32.dll` maps the
+  requests' `NTSTATUS` to WSA error codes and resolves names
+  (`localhost`, numeric hosts, a UDP stub resolver). `winhttp.dll` and
+  `wininet.dll` make plain HTTP/1.1 requests over it (`crates/poly-http`,
+  `personalities/nt/win32/inet`); `https` waits for TLS.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

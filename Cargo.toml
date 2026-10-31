@@ -21,6 +21,7 @@ members = [
     "crates/poly-bochs-vbe",
     "crates/poly-gfx",
     "crates/poly-heap",
+    "crates/poly-http",
     "crates/poly-input",
     "crates/poly-irq",
     "crates/poly-kernelbase",
@@ -56,6 +57,7 @@ members = [
     "crates/poly-vfs",
     "crates/poly-wincrypt",
     "crates/poly-x509",
+    "crates/poly-winsock",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -88,6 +90,7 @@ poly-cpio = { path = "crates/poly-cpio" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
 poly-gfx = { path = "crates/poly-gfx" }
 poly-heap = { path = "crates/poly-heap" }
+poly-http = { path = "crates/poly-http" }
 poly-input = { path = "crates/poly-input" }
 poly-irq = { path = "crates/poly-irq" }
 poly-kernelbase = { path = "crates/poly-kernelbase" }
@@ -123,6 +126,7 @@ poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
 poly-wincrypt = { path = "crates/poly-wincrypt" }
 poly-x509 = { path = "crates/poly-x509" }
+poly-winsock = { path = "crates/poly-winsock" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
