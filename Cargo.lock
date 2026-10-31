@@ -332,6 +332,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-virtio-gpu"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
 name = "poly-virtio-net"
 version = "0.0.1"
 dependencies = [
