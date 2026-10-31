@@ -1,0 +1,14 @@
+[package]
+name = "poly-x509"
+description = "ASN.1 DER (X.690), X.509 certificates (RFC 5280), PEM/Base64/hex text forms and certificate chain building with signature verification"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-crypto = { workspace = true }
+
+[lints]
+workspace = true

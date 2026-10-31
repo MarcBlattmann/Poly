@@ -14,6 +14,7 @@ members = [
     "crates/poly-bpf",
     "crates/poly-console",
     "crates/poly-crt",
+    "crates/poly-crypto",
     "crates/poly-elf",
     "crates/poly-ext2",
     "crates/poly-cpio",
@@ -53,6 +54,8 @@ members = [
     "crates/poly-vdso",
     "crates/poly-vm",
     "crates/poly-vfs",
+    "crates/poly-wincrypt",
+    "crates/poly-x509",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -78,6 +81,7 @@ poly-block = { path = "crates/poly-block" }
 poly-bpf = { path = "crates/poly-bpf" }
 poly-console = { path = "crates/poly-console" }
 poly-crt = { path = "crates/poly-crt" }
+poly-crypto = { path = "crates/poly-crypto" }
 poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-cpio = { path = "crates/poly-cpio" }
@@ -117,6 +121,8 @@ poly-virtio-net = { path = "crates/poly-virtio-net" }
 poly-vdso = { path = "crates/poly-vdso" }
 poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
+poly-wincrypt = { path = "crates/poly-wincrypt" }
+poly-x509 = { path = "crates/poly-x509" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }

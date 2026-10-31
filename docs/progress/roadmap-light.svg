@@ -245,8 +245,8 @@
 <g><title>Winsock (ws2_32) on our sockets; winhttp / wininet basics</title>
 <rect x="740.8" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>Cryptography: bcrypt, crypt32 certificate stores (needed by almost every networked app)</title>
-<rect x="765.9" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Cryptography: bcrypt, crypt32 certificate stores (needed by almost every networked app) (ADR 0096)</title>
+<rect x="765.9" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>Fallback if needed: our own vcruntime140 (and msvcp140 subsets) per ADR 0055</title>
 <rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>

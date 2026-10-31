@@ -88,6 +88,15 @@ pub static CRTLOCTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crtloct
 pub static USER32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/user32.dll"));
 pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.dll"));
 
+mod test_crypto;
+
+/// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in
+/// `C:\Windows\System32` by [`layout`]; and the program the cryptography
+/// ring-3 test runs (`test_crypto`). Empty without `xtask`.
+pub static BCRYPT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bcrypt.dll"));
+pub static CRYPT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crypt32.dll"));
+pub static CRYPTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cryptest.exe"));
+
 use crate::process::{ExitStatus, Process, ThreadFlags};
 use crate::sync::Mutex;
 use crate::thread;

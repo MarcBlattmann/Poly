@@ -131,6 +131,9 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("msvcrt.dll", super::MSVCRT),
         ("user32.dll", super::USER32),
         ("oleaut32.dll", super::OLEAUT32),
+        // ADR 0096.
+        ("bcrypt.dll", super::BCRYPT),
+        ("crypt32.dll", super::CRYPT32),
     ] {
         if bytes.is_empty() {
             continue;
