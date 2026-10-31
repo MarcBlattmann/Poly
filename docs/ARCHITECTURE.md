@@ -898,6 +898,16 @@ host-tested drawing library `poly-gfx`
   and the drawn cursor; `render` moves scrolled pixels and draws only the
   changed cells at any offset on a canvas, so a status bar can sit next to
   it. Nothing in `poly-gfx` allocates.
+- **Outline fonts** ([ADR 0105](adr/0105-fonts-poly-font-font-store-and-fontconfig-discovery.md))
+  are `poly-font`'s (`no_std` + `alloc`, not in the kernel yet): TrueType
+  and OpenType parsing (`glyf` and `CFF ` outlines, `cmap`, metrics,
+  `name`, `OS/2`, `GPOS`/`kern` pair kerning), an anti-aliased rasteriser
+  by signed-area accumulation (grey or hinting-free LCD, quarter-pixel
+  positions), a glyph cache, simple layout, and fontconfig-compatible
+  discovery (patterns, matching, `fonts.conf`). The font store is the
+  bundled DejaVu fonts in `/usr/share/fonts/truetype/dejavu` on the root
+  disk (also in `C:\Windows\Fonts`), fetched and pinned by
+  `cargo xtask fonts fetch`.
 
 ```text
 mm: direct map at 0xffff800000000000: ...; NX: yes, 1 GiB pages: no, global pages: yes, write-combining (PAT): yes

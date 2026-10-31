@@ -57,6 +57,11 @@
 //!                       with its Windows recording (sevenzip.rs, ADR 0088)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
+//!   fonts fetch         download the pinned DejaVu fonts of the font store into the cache (fonts.rs)
+//!   fonts list [pattern] [element...] | fonts match [--sort] <pattern>
+//!                       fc-list / fc-match over them with Poly's fonts.conf (poly-font, ADR 0105)
+//!   fonts render [--lcd] [--size <px>] [--width <px>] [--out <file.png>] <pattern> <text...>
+//!                       render text in the matched font to a PNG
 
 mod accel;
 mod asmlabels;
@@ -67,6 +72,7 @@ mod dynamic;
 mod ext2disk;
 mod ext4disk;
 mod font;
+mod fonts;
 mod initramfs;
 mod input;
 mod ktest;
@@ -149,6 +155,7 @@ fn main() -> ExitCode {
         Some("font") => font::run(&root(), &args[1..]),
         Some("nls-tables") => nls::run(&root(), &args[1..]),
         Some("system-messages") => sysmsg::run(&root(), &args[1..]),
+        Some("fonts") => fonts::command(&args[1..]),
         Some("ntdll") => ntdll::command(&args[1..]),
         Some("win32") => win32::command(&args[1..]),
         Some("win") => sevenzip::command(&args[1..]),
@@ -159,7 +166,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -1623,7 +1630,14 @@ fn announced<'a>(output: &'a str, prefix: &str) -> Result<&'a str> {
 }
 
 fn host_tests() -> Result {
-    step("host tests", cargo().current_dir(root()).args(["test", "--workspace"]))
+    let mut cmd = cargo();
+    cmd.current_dir(root()).args(["test", "--workspace"]);
+    // poly-font's tests on the bundled fonts run when they are fetched
+    // (`cargo xtask fonts fetch`) and skip, saying so, when not.
+    if let Some(dir) = fonts::cached() {
+        cmd.env(fonts::TEST_ENV, dir);
+    }
+    step("host tests", &mut cmd)
 }
 
 fn test() -> Result {

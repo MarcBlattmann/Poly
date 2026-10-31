@@ -128,7 +128,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Shell: launcher, window management, notifications, settings (own non-glass design)
 - [ ] Compositor exposes the content behind each window (needed later for Liquid Glass)
 - [ ] XWayland for X11 apps
-- [ ] Fonts: font store, rasterisation, fontconfig-compatible discovery
+- [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
 - [ ] **Milestone:** GTK and Qt apps run; VLC plays a video with sound
 
 ## Phase 7: Windows GUI apps
