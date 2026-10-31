@@ -73,7 +73,7 @@ kernel, and all three share one core. More detail in
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
-**Now:** Phase 5, NT personality and Windows console apps. **Next milestone:** Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds
+**Now:** Phase 5, NT personality and Windows console apps. **Next milestone:** Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds (oracle runs on the owner's Windows PC instead of a VM, ADR 0075; first run: Poly matches Windows on all 29 checks; left: API tracer, Wine conformance tests as spec seeds)
 
 <a href="docs/ROADMAP.md">
 <picture>
