@@ -1,3 +1,3 @@
 [
-{"symbol":"DXCoreCreateAdapterFactory","src":["wine-spec"]}
+{"symbol":"DXCoreCreateAdapterFactory","src":["wine-spec"],"seeds":["wine:dxcore/tests/dxcore.c:test_DXCoreCreateAdapterFactory","wine:dxcore/tests/dxcore.c:test_GetAdapterByLuid","wine:dxcore/tests/dxcore.c:test_GetProperty"]}
 ]

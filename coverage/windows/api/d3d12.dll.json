@@ -2,7 +2,7 @@
 {"symbol":"D3D12CoreCreateLayeredDevice","src":["wine-spec"]},
 {"symbol":"D3D12CoreGetLayeredDeviceSize","src":["wine-spec"]},
 {"symbol":"D3D12CoreRegisterLayers","src":["wine-spec"]},
-{"symbol":"D3D12CreateDevice","src":["wine-spec"]},
+{"symbol":"D3D12CreateDevice","src":["wine-spec"],"seeds":["wine:d3d12/tests/d3d12.c:test_create_device"]},
 {"symbol":"D3D12CreateRootSignatureDeserializer","src":["wine-spec"]},
 {"symbol":"D3D12CreateVersionedRootSignatureDeserializer","src":["wine-spec"]},
 {"symbol":"D3D12EnableExperimentalFeatures","src":["wine-spec"]},

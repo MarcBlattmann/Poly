@@ -1,5 +1,5 @@
 [
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},
-{"symbol":"DllGetActivationFactory","src":["wine-spec"]},
+{"symbol":"DllGetActivationFactory","src":["wine-spec"],"seeds":["wine:windows.media.speech/tests/speech.c:test_ActivationFactory","wine:windows.media.speech/tests/speech.c:test_SpeechSynthesizer"]},
 {"symbol":"DllGetClassObject","src":["wine-spec"]}
 ]

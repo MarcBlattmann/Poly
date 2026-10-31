@@ -32,7 +32,7 @@
 {"symbol":"DhcpRenewIpAddressLeaseEx","src":["wine-spec"]},
 {"symbol":"DhcpRequestCachedParams","src":["wine-spec"]},
 {"symbol":"DhcpRequestOptions","src":["wine-spec"]},
-{"symbol":"DhcpRequestParams","src":["wine-spec"]},
+{"symbol":"DhcpRequestParams","src":["wine-spec"],"seeds":["wine:dhcpcsvc/tests/dhcpcsvc.c:test_DhcpRequestParams"]},
 {"symbol":"DhcpSetMSFTVendorSpecificOptions","src":["wine-spec"]},
 {"symbol":"DhcpStaticRefreshParams","src":["wine-spec"]},
 {"symbol":"DhcpUndoRequestParams","src":["wine-spec"]},

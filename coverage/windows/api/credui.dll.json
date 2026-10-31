@@ -3,12 +3,12 @@
 {"symbol":"CredUICmdLinePromptForCredentialsA","src":["wine-spec"]},
 {"symbol":"CredUICmdLinePromptForCredentialsW","src":["wine-spec"]},
 {"symbol":"CredUIConfirmCredentialsA","src":["wine-spec"]},
-{"symbol":"CredUIConfirmCredentialsW","src":["wine-spec"]},
+{"symbol":"CredUIConfirmCredentialsW","src":["wine-spec"],"seeds":["wine:credui/tests/credui.c:test_CredUIPromptForCredentials"]},
 {"symbol":"CredUIInitControls","src":["wine-spec"]},
 {"symbol":"CredUIParseUserNameA","src":["wine-spec"]},
 {"symbol":"CredUIParseUserNameW","src":["wine-spec"]},
 {"symbol":"CredUIPromptForCredentialsA","src":["wine-spec"]},
-{"symbol":"CredUIPromptForCredentialsW","src":["wine-spec"]},
+{"symbol":"CredUIPromptForCredentialsW","src":["wine-spec"],"seeds":["wine:credui/tests/credui.c:test_CredUIPromptForCredentials"]},
 {"symbol":"CredUIPromptForWindowsCredentialsW","src":["wine-spec"]},
 {"symbol":"CredUIReadSSOCredA","src":["wine-spec"]},
 {"symbol":"CredUIReadSSOCredW","src":["wine-spec"]},
@@ -19,5 +19,5 @@
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]},
-{"symbol":"SspiPromptForCredentialsW","src":["wine-spec"]}
+{"symbol":"SspiPromptForCredentialsW","src":["wine-spec"],"seeds":["wine:credui/tests/credui.c:test_SspiPromptForCredentials"]}
 ]

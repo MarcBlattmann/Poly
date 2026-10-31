@@ -1,6 +1,6 @@
 [
-{"symbol":"AtlThunk_AllocateData","src":["wine-spec"]},
-{"symbol":"AtlThunk_DataToCode","src":["wine-spec"]},
-{"symbol":"AtlThunk_FreeData","src":["wine-spec"]},
-{"symbol":"AtlThunk_InitData","src":["wine-spec"]}
+{"symbol":"AtlThunk_AllocateData","src":["wine-spec"],"seeds":["wine:atlthunk/tests/atlthunk.c:test_thunk_proc"]},
+{"symbol":"AtlThunk_DataToCode","src":["wine-spec"],"seeds":["wine:atlthunk/tests/atlthunk.c:test_thunk_proc"]},
+{"symbol":"AtlThunk_FreeData","src":["wine-spec"],"seeds":["wine:atlthunk/tests/atlthunk.c:test_thunk_proc"]},
+{"symbol":"AtlThunk_InitData","src":["wine-spec"],"seeds":["wine:atlthunk/tests/atlthunk.c:test_thunk_proc"]}
 ]

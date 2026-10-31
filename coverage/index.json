@@ -22,5 +22,11 @@
       "revision": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea"
     }
   },
-  "traces": {}
+  "traces": {},
+  "seeds": {
+    "wine": {
+      "description": "Wine conformance tests (wine-mirror/wine dlls/*/tests/*.c): the test functions that call an export, by name only; spec agents' oracle, never copied (CLEAN_ROOM.md, ADR 0097)",
+      "revision": "840a939ee526137639665ff5f587224d6a36403f"
+    }
+  }
 }

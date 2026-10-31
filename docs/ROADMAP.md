@@ -96,7 +96,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 ## Phase 5: NT personality and Windows console apps
 
 - [x] Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed
-- [ ] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds
+- [x] Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds (oracle: a dedicated machine over SSH, ADR 0097; tracer: ADR 0090; Wine seeds: ADR 0097)
 - [x] NT object manager: handles, object namespace (`\??`, `\Device`, `\BaseNamedObjects`), reference counts
 - [x] NT memory services: sections, `NtAllocateVirtualMemory`, `NtMapViewOfSection`, protections
 - [x] NT processes and threads, TEB/PEB, thread contexts, APCs (ADR 0065)

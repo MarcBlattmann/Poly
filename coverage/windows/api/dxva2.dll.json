@@ -1,7 +1,7 @@
 [
 {"symbol":"CapabilitiesRequestAndCapabilitiesReply","src":["wine-spec"]},
-{"symbol":"DXVA2CreateDirect3DDeviceManager9","src":["wine-spec"]},
-{"symbol":"DXVA2CreateVideoService","src":["wine-spec"]},
+{"symbol":"DXVA2CreateDirect3DDeviceManager9","src":["wine-spec"],"seeds":["wine:dxva2/tests/dxva2.c:test_device_manager","wine:dxva2/tests/dxva2.c:test_progressive_device","wine:dxva2/tests/dxva2.c:test_video_processor"]},
+{"symbol":"DXVA2CreateVideoService","src":["wine-spec"],"seeds":["wine:dxva2/tests/dxva2.c:test_device_manager"]},
 {"symbol":"DXVAHD_CreateDevice","src":["wine-spec"]},
 {"symbol":"DegaussMonitor","src":["wine-spec"]},
 {"symbol":"DestroyPhysicalMonitor","src":["wine-spec"]},
