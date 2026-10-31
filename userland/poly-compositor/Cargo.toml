@@ -1,0 +1,14 @@
+[package]
+name = "poly-compositor"
+description = "Poly's Wayland compositor for the Linux personality: poly-wayland's server on a Unix socket, composing off-screen until the display driver is there"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+libc.workspace = true
+poly-wayland.workspace = true
+
+[lints]
+workspace = true

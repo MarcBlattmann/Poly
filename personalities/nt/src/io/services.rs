@@ -402,6 +402,10 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
     let offset = read_offset(k, off_ptr)?;
     let key = if key_ptr == 0 { 0 } else { abi::read_u32(k, key_ptr)? };
     let n = Notify { event, apc_routine, apc_context, iosb };
+    // A socket: a receive (ADR 0095).
+    if let Some(r) = crate::afd::services::read_file(k, h, n, buf, len) {
+        return r;
+    }
     let caller = k.caller();
     let plan = k.with_state(|sys, _, _| -> Result<Plan> {
         let file = file_handle(sys, &caller, Handle(h), FILE_READ_DATA)?;
@@ -432,6 +436,8 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
                 })
             }
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: false }),
+            // Sockets are read before this (`afd::services::read_file`).
+            Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
             Target::Disk(d) => {
                 if rec.kind == FileType::Directory {
                     return Err(STATUS_INVALID_DEVICE_REQUEST);
@@ -509,6 +515,10 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
     let offset = read_offset(k, off_ptr)?;
     let key = if key_ptr == 0 { 0 } else { abi::read_u32(k, key_ptr)? };
     let n = Notify { event, apc_routine, apc_context, iosb };
+    // A socket: a send (ADR 0095).
+    if let Some(r) = crate::afd::services::write_file(k, h, n, buf, len) {
+        return r;
+    }
     let caller = k.caller();
     // What kind of file it is decides whether the data is copied in whole
     // (a request that outlives the call) or in pieces.
@@ -556,6 +566,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
             // Written at its end: a redirected output shared by two handles
             // (`2>&1`) interleaves rather than overwrites.
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: true }),
+            Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
             Target::Disk(d) => {
                 if rec.kind == FileType::Directory {
                     return Err(STATUS_INVALID_DEVICE_REQUEST);

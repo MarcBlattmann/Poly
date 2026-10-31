@@ -834,6 +834,15 @@ pub fn collect() -> Result<Contents, String> {
     tree.file("etc/profile", 0o644, PROFILE.as_bytes());
     tree.file("etc/inputrc", 0o644, INPUTRC.as_bytes());
     tree.file("etc/shells", 0o644, b"/bin/sh\n/bin/bash\n");
+    // The font store: fonts.conf, and the bundled fonts once fetched
+    // (fonts.rs, ADR 0105).
+    match crate::fonts::add_to_root(&mut tree) {
+        Ok(true) => {
+            have.insert("fonts");
+        }
+        Ok(false) => notes.push("fonts: not fetched (cargo xtask fonts fetch); /etc/fonts/fonts.conf only".into()),
+        Err(e) => notes.push(format!("fonts: {e}")),
+    }
     if have.contains("bash") && !tree.entries.contains_key("usr/bin/sh") {
         tree.symlink("usr/bin/sh", "bash");
     }

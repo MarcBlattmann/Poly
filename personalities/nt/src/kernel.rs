@@ -278,6 +278,44 @@ pub trait NtKernel {
         Ok(())
     }
 
+    /// Make a socket of the kernel's TCP/IP stack (`\Device\Afd`, ADR
+    /// 0095). A kernel without sockets answers `STATUS_NOT_IMPLEMENTED`.
+    fn socket_create(
+        &mut self,
+        domain: crate::afd::Domain,
+        ty: crate::afd::SockType,
+        protocol: crate::afd::Protocol,
+    ) -> Result<alloc::sync::Arc<dyn crate::afd::NtSocket>, NtStatus> {
+        let _ = (domain, ty, protocol);
+        Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
+
+    /// Wait until one of `socks` has any of its interest (or an error or
+    /// a hang-up), or `wait` runs out; returns each socket's readiness
+    /// then (`select`, `WSAPoll`). The default looks once.
+    fn socket_poll(
+        &mut self,
+        socks: &[(alloc::sync::Arc<dyn crate::afd::NtSocket>, crate::afd::Readiness)],
+        wait: crate::afd::SockWait,
+    ) -> Result<alloc::vec::Vec<crate::afd::Readiness>, NtStatus> {
+        let _ = wait;
+        Ok(socks.iter().map(|(s, _)| s.readiness()).collect())
+    }
+
+    /// Finish an overlapped socket request later (ADR 0095): the kernel's
+    /// worker retries it when the socket is ready and completes its
+    /// request packet. A kernel without one gives it back, and the
+    /// personality runs it in the calling thread.
+    fn socket_pend(&mut self, io: crate::afd::PendIo) -> Result<(), crate::afd::PendIo> {
+        Err(io)
+    }
+
+    /// The DNS servers and the host name `ws2_32` uses
+    /// (`poly_winsock::afd::NET_INFO`).
+    fn net_info(&self) -> (alloc::vec::Vec<[u8; 4]>, alloc::string::String) {
+        (alloc::vec::Vec::new(), alloc::string::String::from("poly"))
+    }
+
     /// Make the calling thread resume user mode with the registers of `ctx`
     /// that `flags` selects (`CONTEXT_CONTROL`, `CONTEXT_INTEGER`,
     /// `CONTEXT_FLOATING_POINT`), once the current call or exception returns

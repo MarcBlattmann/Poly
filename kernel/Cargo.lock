@@ -118,7 +118,10 @@ dependencies = [
  "poly-vfs",
  "poly-virtio",
  "poly-virtio-blk",
+ "poly-virtio-gpu",
+ "poly-virtio-input",
  "poly-virtio-net",
+ "poly-virtio-sound",
  "poly-vm",
 ]
 
@@ -179,12 +182,14 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-console",
+ "poly-net",
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
  "poly-security",
  "poly-seh",
  "poly-vfs",
+ "poly-winsock",
 ]
 
 [[package]]
@@ -285,6 +290,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-virtio-gpu"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
+name = "poly-virtio-input"
+version = "0.0.1"
+dependencies = [
+ "poly-input",
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
 name = "poly-virtio-net"
 version = "0.0.1"
 dependencies = [
@@ -294,5 +316,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-virtio-sound"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
 name = "poly-vm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-winsock"
 version = "0.0.1"

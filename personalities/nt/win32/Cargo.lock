@@ -35,6 +35,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crtiotest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "crtloctest"
 version = "0.0.1"
 dependencies = [
@@ -66,6 +73,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "httptest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "k32test"
 version = "0.0.1"
 dependencies = [
@@ -87,6 +101,7 @@ dependencies = [
  "poly-console",
  "poly-kernelbase",
  "poly-ntobj",
+ "poly-pe",
  "poly-rtl",
  "poly-security",
  "poly-win32-rt",
@@ -134,6 +149,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-http"
+version = "0.0.1"
+
+[[package]]
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
@@ -155,6 +174,10 @@ dependencies = [
 
 [[package]]
 name = "poly-ntobj"
+version = "0.0.1"
+
+[[package]]
+name = "poly-pe"
 version = "0.0.1"
 
 [[package]]
@@ -193,6 +216,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-win32-inet"
+version = "0.0.1"
+dependencies = [
+ "poly-http",
+]
+
+[[package]]
 name = "poly-win32-rt"
 version = "0.0.1"
 
@@ -203,6 +233,10 @@ dependencies = [
  "poly-crypto",
  "poly-x509",
 ]
+
+[[package]]
+name = "poly-winsock"
+version = "0.0.1"
 
 [[package]]
 name = "poly-x509"
@@ -226,5 +260,38 @@ name = "user32"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "winhttp"
+version = "0.0.1"
+dependencies = [
+ "poly-http",
+ "poly-win32-inet",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "wininet"
+version = "0.0.1"
+dependencies = [
+ "poly-http",
+ "poly-win32-inet",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "ws2_32"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+ "poly-winsock",
+]
+
+[[package]]
+name = "wstest"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]

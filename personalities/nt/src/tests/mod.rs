@@ -249,13 +249,40 @@ pub struct Fake {
     pub next_tid: u64,
     /// Processes `NtCreateUserProcess` made, with their memory.
     pub children: Vec<(NtProcess, Mem)>,
+    /// Makes the sockets of `socket_create` (the `\Device\Afd` tests).
+    pub sockets: Option<SocketFactory>,
     /// Bump allocator in the scratch area.
     next: u64,
 }
 
+/// What the fake's `socket_create` calls.
+pub type SocketFactory = alloc::boxed::Box<
+    dyn FnMut(
+        crate::afd::Domain,
+        crate::afd::SockType,
+        crate::afd::Protocol,
+    ) -> Result<alloc::sync::Arc<dyn crate::afd::NtSocket>, NtStatus>,
+>;
+
 impl NtKernel for Fake {
     fn read_user(&mut self, addr: u64, buf: &mut [u8]) -> Result<(), UserFault> {
         self.mem.read(addr, buf)
+    }
+
+    fn socket_create(
+        &mut self,
+        domain: crate::afd::Domain,
+        ty: crate::afd::SockType,
+        protocol: crate::afd::Protocol,
+    ) -> Result<alloc::sync::Arc<dyn crate::afd::NtSocket>, NtStatus> {
+        match &mut self.sockets {
+            Some(f) => f(domain, ty, protocol),
+            None => Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED),
+        }
+    }
+
+    fn net_info(&self) -> (Vec<[u8; 4]>, alloc::string::String) {
+        (vec![[10, 0, 2, 3]], "polytest".into())
     }
 
     fn process_times(&self, pid: ProcessId) -> Option<[u64; 3]> {
@@ -472,6 +499,7 @@ impl Fake {
             apcs: Vec::new(),
             next_tid: TID.0,
             children: Vec::new(),
+            sockets: None,
             next: SCRATCH,
         }
     }

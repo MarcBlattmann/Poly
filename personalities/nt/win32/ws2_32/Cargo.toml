@@ -1,0 +1,18 @@
+[package]
+name = "ws2_32"
+description = "Our ws2_32.dll (ADR 0095): Winsock 2 over sockets on \\Device\\Afd, the kernel's TCP/IP stack"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ws2_32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-winsock = { path = "../../../../crates/poly-winsock" }
+
+[lints]
+workspace = true
