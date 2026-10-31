@@ -390,7 +390,8 @@ impl IoState {
 
     // ----- \Device\PolyPipe
 
-    /// Read from a pipe: at once if it has data, else wait.
+    /// Read from a pipe: at once if it has data, else wait; with no data
+    /// and no writer left (after there was one), `STATUS_PIPE_BROKEN`.
     pub fn pipe_read(&mut self, key: &[u16], mut irp: Irp) -> Result<Option<u64>, NtStatus> {
         let pipe = self.pipes.get_mut(key).ok_or(STATUS_INVALID_HANDLE)?;
         let IrpOp::Read { len, buf, .. } = irp.op else { return Err(STATUS_INVALID_PARAMETER) };
@@ -406,6 +407,10 @@ impl IoState {
             irp.sync = false;
             self.complete_now(irp, STATUS_SUCCESS, 0, None);
             return Ok(None);
+        }
+        if pipe.data.is_empty() && pipe.had_writer && pipe.writers == 0 {
+            // Every writer is gone: the end of the stream.
+            return Err(STATUS_PIPE_BROKEN);
         }
         pipe.readers.push_back(irp.id);
         Ok(Some(self.park(irp)))

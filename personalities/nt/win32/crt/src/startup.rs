@@ -159,10 +159,34 @@ fn array<T: Copy + Default>(items: &[&[T]]) -> *mut *mut T {
 
 /// `_crt_argv_mode` (`corecrt_startup.h`).
 const ARGV_NO_ARGUMENTS: i32 = 0;
+const ARGV_EXPANDED_ARGUMENTS: i32 = 2;
 
-/// `_configure_narrow_argv`: 0, or `EINVAL` for an unknown mode. Wildcard
-/// expansion (`_crt_argv_expanded_arguments`) is not done (Poly passes the
-/// patterns through; to come).
+/// The arguments of a command line, wildcards expanded with `expand`
+/// (`poly_crt::wildcard`, ADR 0093: the program linked `setargv.obj`).
+fn arguments<C: poly_crt::Unit>(line: &[C], expand: bool, find: impl FnMut(&[C]) -> Vec<Vec<C>>) -> Vec<Vec<C>> {
+    if expand {
+        poly_crt::wildcard::expand(poly_crt::args::parse_marked(line), find)
+    } else {
+        poly_crt::args::parse(line)
+    }
+}
+
+/// The names a narrow pattern matches, narrow.
+fn find_narrow(pattern: &[u8]) -> Vec<Vec<u8>> {
+    let mut w = crate::text::ansi_to_wide(pattern);
+    w.push(0);
+    crate::find::names_matching(&w).iter().map(|n| crate::text::wide_to_ansi(n)).collect()
+}
+
+/// The names a wide pattern matches.
+fn find_wide(pattern: &[u16]) -> Vec<Vec<u16>> {
+    let mut w = pattern.to_vec();
+    w.push(0);
+    crate::find::names_matching(&w)
+}
+
+/// `_configure_narrow_argv`: 0, or `EINVAL` for an unknown mode;
+/// `_crt_argv_expanded_arguments` expands wildcards (ADR 0093).
 pub extern "C" fn _configure_narrow_argv(mode: i32) -> i32 {
     if !(0..=2).contains(&mode) {
         global::invalid(EINVAL);
@@ -174,7 +198,7 @@ pub extern "C" fn _configure_narrow_argv(mode: i32) -> i32 {
     }
     // SAFETY: the command line is a valid C string.
     let line = unsafe { crate::text::cstr(sys::GetCommandLineA()) };
-    let args = poly_crt::args::parse(line);
+    let args = arguments(line, mode == ARGV_EXPANDED_ARGUMENTS, find_narrow);
     let refs: Vec<&[u8]> = args.iter().map(Vec::as_slice).collect();
     // SAFETY: valid cells.
     unsafe {
@@ -195,7 +219,7 @@ pub extern "C" fn _configure_wide_argv(mode: i32) -> i32 {
     }
     // SAFETY: the command line is a valid C string.
     let line = unsafe { crate::text::wstr(sys::GetCommandLineW()) };
-    let args = poly_crt::args::parse(line);
+    let args = arguments(line, mode == ARGV_EXPANDED_ARGUMENTS, find_wide);
     let refs: Vec<&[u16]> = args.iter().map(Vec::as_slice).collect();
     // SAFETY: valid cells.
     unsafe {
@@ -275,17 +299,25 @@ pub extern "C" fn _get_initial_wide_environment() -> *mut *mut u16 {
 }
 
 /// `__getmainargs` / `__wgetmainargs` (`msvcrt.dll`): the arguments and
-/// environment as `main` gets them.
+/// environment as `main` gets them; `wildcards`: their `DoWildCard`
+/// argument, wildcards expanded (ADR 0093).
 ///
 /// # Safety
 /// Each out-pointer is NULL or writable.
-pub unsafe fn main_args(argc: *mut i32, argv: *mut *mut *mut u8, env: *mut *mut *mut u8, wide: bool) -> i32 {
+pub unsafe fn main_args(
+    argc: *mut i32,
+    argv: *mut *mut *mut u8,
+    env: *mut *mut *mut u8,
+    wide: bool,
+    wildcards: bool,
+) -> i32 {
     let c = cells();
+    let mode = if wildcards { ARGV_EXPANDED_ARGUMENTS } else { 1 };
     if wide {
-        _configure_wide_argv(1);
+        _configure_wide_argv(mode);
         _initialize_wide_environment();
     } else {
-        _configure_narrow_argv(1);
+        _configure_narrow_argv(mode);
         _initialize_narrow_environment();
     }
     // SAFETY: the caller's out-pointers (checked) and valid cells.

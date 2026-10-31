@@ -1,0 +1,19 @@
+[package]
+name = "crtiotest"
+description = "The program the kernel's C runtime files, processes and console ring-3 test runs (ADR 0093): _findfirst, _dup/_pipe, _spawn/system/_popen, wildcard argv, console I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "crtiotest"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

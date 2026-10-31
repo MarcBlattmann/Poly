@@ -167,7 +167,7 @@
 {"symbol":"CreateMutexW","status":"claimed","claimed_by":"kernel32","src":["wine-spec"]},
 {"symbol":"CreateNamedPipeA","src":["wine-spec"]},
 {"symbol":"CreateNamedPipeW","src":["wine-spec"]},
-{"symbol":"CreatePipe","src":["wine-spec"]},
+{"symbol":"CreatePipe","status":"claimed","claimed_by":"impl-crt-io","src":["wine-spec"]},
 {"symbol":"CreateProcessA","status":"claimed","claimed_by":"impl-createprocess","src":["wine-spec"]},
 {"symbol":"CreateProcessAsUserA","src":["wine-spec"]},
 {"symbol":"CreateProcessAsUserW","src":["wine-spec"]},

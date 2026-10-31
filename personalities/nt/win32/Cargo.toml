@@ -4,11 +4,12 @@
 # kernel's ring-3 tests run. One workspace, so `cargo xtask` builds
 # core/alloc for the Windows target once for all of them. advapi32.dll
 # and a32test.exe (ADR 0083) are built here too, and the first functions of
-# user32.dll and oleaut32.dll (ADR 0087). No third-party crates:
+# user32.dll and oleaut32.dll (ADR 0087), and crtiotest.exe (ADR 0093).
+# No third-party crates:
 # only this repo's host-tested logic and core/alloc.
 [workspace]
 resolver = "3"
-members = ["rt", "kernelbase", "kernel32", "k32test", "contest", "advapi32", "a32test", "crt", "ucrtbase", "msvcrt", "crttest", "user32", "oleaut32"]
+members = ["rt", "kernelbase", "kernel32", "k32test", "contest", "advapi32", "a32test", "crt", "ucrtbase", "msvcrt", "crttest", "user32", "oleaut32", "crtiotest"]
 
 [workspace.package]
 version = "0.0.1"

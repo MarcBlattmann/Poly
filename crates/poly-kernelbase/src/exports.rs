@@ -179,6 +179,9 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("DuplicateHandle", "api-ms-win-core-handle-l1-1-0"),
     ("GetHandleInformation", "api-ms-win-core-handle-l1-1-0"),
     ("SetHandleInformation", "api-ms-win-core-handle-l1-1-0"),
+    // Anonymous pipes for the C runtime's _pipe and _popen (ADR 0093;
+    // namedpipeapi.h).
+    ("CreatePipe", "api-ms-win-core-namedpipe-l1-1-0"),
     // Thread-local storage (processthreadsapi.h) and fiber-local storage
     // (fibersapi.h).
     ("TlsAlloc", "api-ms-win-core-processthreads-l1-1-0"),
