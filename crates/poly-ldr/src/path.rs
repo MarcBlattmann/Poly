@@ -39,6 +39,8 @@ pub const KNOWN_DLLS: &[&str] = &[
     "ws2_32.dll",
     "ole32.dll",
     "oleaut32.dll",
+    "bcrypt.dll",
+    "crypt32.dll",
     "shell32.dll",
     "combase.dll",
 ];

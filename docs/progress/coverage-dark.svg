@@ -1472,6 +1472,7 @@
 </g>
 <g><title>crypt32: 0 / 246 done (0.0%)</title>
 <rect x="406.8" y="574.4" width="18.9" height="23.1" fill="#21262d"/>
+<rect x="406.8" y="574.4" width="2.5" height="23.1" fill="#388bfd"/>
 <rect x="405.8" y="573.4" width="20.9" height="25.1" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>wldap32: 0 / 245 done (0.0%)</title>
@@ -1800,6 +1801,7 @@
 </g>
 <g><title>bcrypt: 0 / 62 done (0.0%)</title>
 <rect x="502.3" y="618.4" width="8.7" height="10.4" fill="#21262d"/>
+<rect x="502.3" y="618.4" width="3.9" height="10.4" fill="#388bfd"/>
 <rect x="501.3" y="617.4" width="10.7" height="12.4" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>srvcli: 0 / 61 done (0.0%)</title>

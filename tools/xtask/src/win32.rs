@@ -1,7 +1,8 @@
 //! Build our Win32 modules above `ntdll` (ADR 0079) — `kernelbase.dll`,
 //! `kernel32.dll` and the test program `k32test.exe`, plus `advapi32.dll`
 //! and its test program `a32test.exe` (ADR 0083), the C runtime (ADR 0084),
-//! `user32.dll` and `oleaut32.dll` (ADR 0087) — and check them.
+//! `user32.dll` and `oleaut32.dll` (ADR 0087), `bcrypt.dll`, `crypt32.dll`
+//! and `cryptest.exe` (ADR 0096) — and check them.
 //!
 //! They are one Cargo workspace, `personalities/nt/win32`, built the way
 //! `ntdll` is (ADR 0071, `ntdll.rs`): `no_std` Rust for
@@ -33,7 +34,7 @@ pub const KERNEL_ENV: &str = "POLY_WIN32_DIR";
 /// The workspace.
 const WORKSPACE: &str = "personalities/nt/win32";
 /// What the build produces (in the target's release directory).
-pub const OUTPUTS: [&str; 11] = [
+pub const OUTPUTS: [&str; 14] = [
     "kernelbase.dll",
     "kernel32.dll",
     "k32test.exe",
@@ -45,6 +46,9 @@ pub const OUTPUTS: [&str; 11] = [
     "crttest.exe",
     "user32.dll",
     "oleaut32.dll",
+    "bcrypt.dll",
+    "crypt32.dll",
+    "cryptest.exe",
 ];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
@@ -91,6 +95,10 @@ pub fn ensure() -> Result<PathBuf> {
             "personalities/nt/win32/crttest",
             "personalities/nt/win32/user32",
             "personalities/nt/win32/oleaut32",
+            "personalities/nt/win32/cryptrt",
+            "personalities/nt/win32/bcrypt",
+            "personalities/nt/win32/crypt32",
+            "personalities/nt/win32/cryptest",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -243,7 +251,28 @@ fn verify(dir: &Path) -> Result {
     verify_advapi32(dir)?;
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])?;
     verify_crt(dir)?;
-    verify_user32_oleaut32(dir)
+    verify_user32_oleaut32(dir)?;
+    verify_crypto(dir)
+}
+
+/// `bcrypt` and `crypt32` export their functions by name; `cryptest.exe`
+/// imports from them and `kernel32` only (ADR 0096).
+fn verify_crypto(dir: &Path) -> Result {
+    use poly_pe::ExportTarget;
+    for (file, names) in
+        [("bcrypt.dll", poly_wincrypt::BCRYPT_EXPORTS), ("crypt32.dll", poly_wincrypt::CRYPT32_EXPORTS)]
+    {
+        let bytes = read(&dir.join(file))?;
+        let dll = parse(&bytes)?;
+        let exports =
+            dll.exports().map_err(|e| format!("{file} exports: {e:?}"))?.ok_or(format!("{file}: no exports"))?;
+        for name in names {
+            if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+                return Err(format!("{file} lacks {name}"));
+            }
+        }
+    }
+    verify_exe(dir, "cryptest.exe", &["bcrypt.dll", "crypt32.dll", "kernel32.dll"])
 }
 
 /// `user32` exports its functions by name; `oleaut32` exports each of its

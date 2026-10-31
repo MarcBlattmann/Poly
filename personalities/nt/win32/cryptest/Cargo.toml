@@ -1,0 +1,19 @@
+[package]
+name = "cryptest"
+description = "The program the kernel's cryptography ring-3 test runs (ADR 0096): imports from bcrypt.dll, crypt32.dll and kernel32.dll"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "cryptest"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

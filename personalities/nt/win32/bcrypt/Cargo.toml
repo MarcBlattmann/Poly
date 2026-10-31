@@ -1,0 +1,19 @@
+[package]
+name = "bcrypt"
+description = "Our bcrypt.dll (ADR 0096): CNG hashes, HMAC, random numbers, AES (ECB/CBC/CFB/GCM), PBKDF2, RSA, ECDSA and ECDH"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "bcrypt"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-cryptrt = { path = "../cryptrt" }
+poly-crypto = { path = "../../../../crates/poly-crypto" }
+poly-wincrypt = { path = "../../../../crates/poly-wincrypt" }
+
+[lints]
+workspace = true
