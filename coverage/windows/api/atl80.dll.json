@@ -11,7 +11,7 @@
 {"symbol":"AtlAxDialogBoxW","src":["wine-spec"]},
 {"symbol":"AtlAxGetControl","src":["wine-spec"]},
 {"symbol":"AtlAxGetHost","src":["wine-spec"]},
-{"symbol":"AtlAxWinInit","src":["wine-spec"]},
+{"symbol":"AtlAxWinInit","src":["wine-spec"],"seeds":["wine:atl80/tests/atl.c:test_ax_win"]},
 {"symbol":"AtlCallTermFunc","src":["wine-spec"]},
 {"symbol":"AtlComModuleGetClassObject","src":["wine-spec"]},
 {"symbol":"AtlComModuleRegisterClassObjects","src":["wine-spec"]},

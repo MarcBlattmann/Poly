@@ -1,4 +1,4 @@
 [
 {"symbol":"SetupColorMatchingA","src":["wine-spec"]},
-{"symbol":"SetupColorMatchingW","src":["wine-spec"]}
+{"symbol":"SetupColorMatchingW","src":["wine-spec"],"seeds":["wine:icmui/tests/icmui.c:test_SetupColorMatchingW"]}
 ]

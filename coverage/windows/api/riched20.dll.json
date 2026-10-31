@@ -1,5 +1,5 @@
 [
-{"symbol":"CreateTextServices","src":["wine-spec"]},
+{"symbol":"CreateTextServices","src":["wine-spec"],"seeds":["wine:riched20/tests/txtsrv.c:test_COM","wine:riched20/tests/txtsrv.c:init_texthost"]},
 {"symbol":"IID_IRichEditOle","src":["wine-spec"]},
 {"symbol":"IID_IRichEditOleCallback","src":["wine-spec"]},
 {"symbol":"IID_ITextHost","src":["wine-spec"]},

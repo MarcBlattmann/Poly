@@ -1,7 +1,7 @@
 [
 {"symbol":"ADsBuildEnumerator","src":["wine-spec"]},
-{"symbol":"ADsBuildVarArrayInt","src":["wine-spec"]},
-{"symbol":"ADsBuildVarArrayStr","src":["wine-spec"]},
+{"symbol":"ADsBuildVarArrayInt","src":["wine-spec"],"seeds":["wine:activeds/tests/activeds.c:test_ADsBuildVarArrayInt"]},
+{"symbol":"ADsBuildVarArrayStr","src":["wine-spec"],"seeds":["wine:activeds/tests/activeds.c:test_ADsBuildVarArrayStr"]},
 {"symbol":"ADsDecodeBinaryData","src":["wine-spec"]},
 {"symbol":"ADsEncodeBinaryData","src":["wine-spec"]},
 {"symbol":"ADsEnumerateNext","src":["wine-spec"]},

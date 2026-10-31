@@ -1,0 +1,32 @@
+{
+  "bundle": "66486cf140c5",
+  "format": "poly-winrun/1",
+  "runner": "poly-oracle.ps1 2",
+  "runs": 2,
+  "started": "2026-10-30T17:42:45Z",
+  "system": {
+    "arch": "AMD64",
+    "build": "26200.9711",
+    "display": "25H2",
+    "edition": "Core",
+    "name": "windows",
+    "version": "10.0.26200.0"
+  },
+  "test_timeouts_s": {},
+  "tests": [
+    {
+      "error": null,
+      "exe_sha256": "0a8a44f5eabeafed7417578a73936da27453817e95b81ebe08aa4976ae39322c",
+      "exit_code": 0,
+      "ms": 69,
+      "name": "nt_file_rw",
+      "output": "ok create\nok create_information\nok create_again_collides\nok write\nok write_information\nok read\nok read_information\nok read_same_bytes\nok read_at_end\nok close\nok open_delete_on_close\nok open_information\nok close_deletes\nok gone_after_close\nsummary 14 passed, 0 failed\n",
+      "output_b64": "b2sgY3JlYXRlCm9rIGNyZWF0ZV9pbmZvcm1hdGlvbgpvayBjcmVhdGVfYWdhaW5fY29sbGlkZXMKb2sgd3JpdGUKb2sgd3JpdGVfaW5mb3JtYXRpb24Kb2sgcmVhZApvayByZWFkX2luZm9ybWF0aW9uCm9rIHJlYWRfc2FtZV9ieXRlcwpvayByZWFkX2F0X2VuZApvayBjbG9zZQpvayBvcGVuX2RlbGV0ZV9vbl9jbG9zZQpvayBvcGVuX2luZm9ybWF0aW9uCm9rIGNsb3NlX2RlbGV0ZXMKb2sgZ29uZV9hZnRlcl9jbG9zZQpzdW1tYXJ5IDE0IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stable": true,
+      "status": "ran",
+      "stderr_b64": "",
+      "stdout_b64": ""
+    }
+  ],
+  "timeout_ms": 10000
+}

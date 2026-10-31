@@ -13,7 +13,7 @@
 {"symbol":"CryptExtAddSPCW","src":["wine-spec"]},
 {"symbol":"CryptExtOpenCAT","src":["wine-spec"]},
 {"symbol":"CryptExtOpenCATW","src":["wine-spec"]},
-{"symbol":"CryptExtOpenCER","src":["wine-spec"]},
+{"symbol":"CryptExtOpenCER","src":["wine-spec"],"seeds":["wine:cryptext/tests/cryptext.c:test_CryptExtOpenCER"]},
 {"symbol":"CryptExtOpenCERW","src":["wine-spec"]},
 {"symbol":"CryptExtOpenCRL","src":["wine-spec"]},
 {"symbol":"CryptExtOpenCRLW","src":["wine-spec"]},

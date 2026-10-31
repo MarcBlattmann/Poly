@@ -8,6 +8,6 @@
 {"symbol":"RoGetMetaDataFile","src":["wine-spec"]},
 {"symbol":"RoIsApiContractMajorVersionPresent","src":["wine-spec"]},
 {"symbol":"RoIsApiContractPresent","src":["wine-spec"]},
-{"symbol":"RoParseTypeName","src":["wine-spec"]},
-{"symbol":"RoResolveNamespace","src":["wine-spec"]}
+{"symbol":"RoParseTypeName","src":["wine-spec"],"seeds":["wine:wintypes/tests/wintypes.c:test_RoParseTypeName"]},
+{"symbol":"RoResolveNamespace","src":["wine-spec"],"seeds":["wine:wintypes/tests/wintypes.c:test_RoResolveNamespace"]}
 ]

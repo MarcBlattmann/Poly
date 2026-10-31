@@ -1,0 +1,32 @@
+{
+  "bundle": "66486cf140c5",
+  "format": "poly-winrun/1",
+  "runner": "poly-oracle.ps1 2",
+  "runs": 2,
+  "started": "2026-10-30T17:42:45Z",
+  "system": {
+    "arch": "AMD64",
+    "build": "26200.9711",
+    "display": "25H2",
+    "edition": "Core",
+    "name": "windows",
+    "version": "10.0.26200.0"
+  },
+  "test_timeouts_s": {},
+  "tests": [
+    {
+      "error": null,
+      "exe_sha256": "e8897be6f48a70c8893102856111bf8d80fc383d338f2e9cf230bc620fd5c4bc",
+      "exit_code": 0,
+      "ms": 40,
+      "name": "nt_virtual_memory",
+      "output": "ok allocate\nok base_not_null\nok base_on_64k\nok size_rounded_to_pages\nok starts_zeroed\nok reads_back\nok release\nok release_reports_base\nok release_reports_size\nok second_release_fails\nvalue second_release_status 0xc00000a0\nsummary 10 passed, 0 failed\n",
+      "output_b64": "b2sgYWxsb2NhdGUKb2sgYmFzZV9ub3RfbnVsbApvayBiYXNlX29uXzY0awpvayBzaXplX3JvdW5kZWRfdG9fcGFnZXMKb2sgc3RhcnRzX3plcm9lZApvayByZWFkc19iYWNrCm9rIHJlbGVhc2UKb2sgcmVsZWFzZV9yZXBvcnRzX2Jhc2UKb2sgcmVsZWFzZV9yZXBvcnRzX3NpemUKb2sgc2Vjb25kX3JlbGVhc2VfZmFpbHMKdmFsdWUgc2Vjb25kX3JlbGVhc2Vfc3RhdHVzIDB4YzAwMDAwYTAKc3VtbWFyeSAxMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stable": true,
+      "status": "ran",
+      "stderr_b64": "",
+      "stdout_b64": ""
+    }
+  ],
+  "timeout_ms": 10000
+}
