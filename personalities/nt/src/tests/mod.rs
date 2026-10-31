@@ -300,13 +300,27 @@ impl NtKernel for Fake {
         let mut child = NtProcess::new(pid);
         let mut mem = Mem::default();
         let caller = self.caller();
-        let started =
-            crate::exec::start_child(&mut self.sys, &mut child, &mut mem, &req.image, &fake_ntdll(), &req.params, tid)
-                .and_then(|_| {
-                    crate::exec::child_handles(&mut self.sys, &caller, pid, tid, req.process_access, req.thread_access)
-                });
+        let inherit = req.inherit_handles.then_some(caller.process);
+        let ntdll = fake_ntdll();
+        let started = crate::exec::start_child(
+            &mut self.sys,
+            &mut child,
+            &mut mem,
+            &req.image,
+            &ntdll,
+            &req.params,
+            tid,
+            inherit,
+        )
+        .and_then(|_| {
+            crate::exec::child_handles(&mut self.sys, &caller, pid, tid, req.process_access, req.thread_access)
+        });
         match started {
             Ok((process, thread)) => {
+                if req.suspended {
+                    // The kernel defers the first thread's start (ADR 0089).
+                    self.suspend.insert(tid, 1);
+                }
                 self.children.push((child, mem));
                 Ok(ProcessCreated { process, thread, client: ClientId { process: pid, thread: tid } })
             }

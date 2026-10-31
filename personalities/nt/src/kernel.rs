@@ -110,6 +110,12 @@ pub struct ProcessCreate {
     /// opened with.
     pub process_access: u32,
     pub thread_access: u32,
+    /// The new process gets the creator's inheritable handles at the same
+    /// values (ADR 0089: `bInheritHandles`).
+    pub inherit_handles: bool,
+    /// Its first thread starts suspended, until `NtResumeThread` (ADR
+    /// 0089: `CREATE_SUSPENDED`).
+    pub suspended: bool,
 }
 
 /// What [`NtKernel::create_process`] produced: handles in the caller's

@@ -172,10 +172,36 @@ pub fn query_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
                 let name: Vec<u16> = om.nt_query_object_type(&caller, h)?.encode_utf16().collect();
                 string_info(buf, OBJECT_TYPE_INFORMATION_SIZE, &name)
             }
+            OBJECT_HANDLE_FLAG_INFORMATION => {
+                let f = om.handle_flags(&caller, h)?;
+                alloc::vec![u8::from(f.inherit), u8::from(f.protect_from_close)]
+            }
             _ => return Err(STATUS_INVALID_INFO_CLASS),
         })
     })?;
     return_info(k, buf, length, ret, &info)
+}
+
+/// `NtSetInformationObject`: only Poly's `ObjectHandleFlagInformation`
+/// ([`OBJECT_HANDLE_FLAG_INFORMATION`], ADR 0089), the handle's inherit
+/// and protect-from-close flags (`SetHandleInformation`). A length other
+/// than the structure's is `STATUS_INFO_LENGTH_MISMATCH`, a pseudo handle
+/// `STATUS_INVALID_HANDLE`, another class `STATUS_INVALID_INFO_CLASS` (to
+/// be confirmed by the spec agent).
+pub fn set_information_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [h, class, buf, length] = abi::args::<K, 4>(k, regs)?;
+    if class as u32 != OBJECT_HANDLE_FLAG_INFORMATION {
+        return Err(STATUS_INVALID_INFO_CLASS);
+    }
+    if length as usize != OBJECT_HANDLE_FLAG_INFORMATION_SIZE {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let mut info = [0u8; OBJECT_HANDLE_FLAG_INFORMATION_SIZE];
+    abi::read(k, buf, &mut info)?;
+    let flags = poly_ntobj::HandleFlags { inherit: info[0] != 0, protect_from_close: info[1] != 0 };
+    let caller = k.caller();
+    k.with_state(|sys, _, _| sys.objects.set_handle_flags(&caller, Handle(h), flags))?;
+    Ok(STATUS_SUCCESS)
 }
 
 pub fn create_directory<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {

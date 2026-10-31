@@ -991,6 +991,7 @@ fn parameters_in(t: &mut T, exe: &str, cmd: &str, cwd: &str) -> (u64, crate::par
         command_line: cmd.encode_utf16().collect(),
         environment: "A=1\0POLY=child\0\0".encode_utf16().collect(),
         current_dir: cwd.encode_utf16().collect(),
+        ..crate::params::Parameters::default()
     };
     let size = crate::params::image(0, &p).unwrap().len();
     let at = t.f.alloc(size);
@@ -1057,9 +1058,6 @@ fn create_user_process_failures() {
     assert_eq!(create_process(&mut t, p, 0).0, STATUS_OBJECT_PATH_SYNTAX_BAD);
     let (p, _) = parameters_in(&mut t, "C:\\notpe.exe", "notpe", "");
     assert_eq!(create_process(&mut t, p, 0).0, STATUS_INVALID_IMAGE_FORMAT);
-    let (p, _) = parameters_in(&mut t, "C:\\app.exe", "app", "");
-    let suspended = crate::consts::THREAD_CREATE_FLAGS_CREATE_SUSPENDED;
-    assert_eq!(create_process(&mut t, p, suspended).0, STATUS_NOT_SUPPORTED);
     assert_eq!(create_process(&mut t, 0, 0).0, STATUS_INVALID_PARAMETER);
     // The NT path rules.
     let nt = |s: &str| {
@@ -1071,6 +1069,138 @@ fn create_user_process_failures() {
     assert_eq!(nt("\\??\\Z:\\x.exe"), Ok("\\??\\Z:\\x.exe".into()));
     assert_eq!(nt("\\\\server\\share\\x.exe"), Err(STATUS_OBJECT_PATH_SYNTAX_BAD));
     assert!(t.f.children.is_empty());
+}
+
+/// `NtSetInformationObject` / `NtQueryObject` of Poly's
+/// `ObjectHandleFlagInformation` (ADR 0089).
+fn set_handle_flags(t: &mut T, h: u64, inherit: bool, protect: bool) -> NtStatus {
+    let info = t.f.put(&[u8::from(inherit), u8::from(protect)]);
+    t.f.call(Service::SetInformationObject, &[h, 4, info, 2])
+}
+
+fn handle_flags(t: &mut T, h: u64) -> (NtStatus, [u8; 2]) {
+    let (buf, ret) = (t.f.alloc(8), t.f.alloc(4));
+    let s = t.f.call(Service::QueryObject, &[h, 4, buf, 2, ret]);
+    let mut b = [0u8; 2];
+    t.f.mem.read(buf, &mut b).unwrap();
+    (s, b)
+}
+
+#[test]
+fn handle_flags_are_set_and_read() {
+    let mut t = setup();
+    let h = t.file("\\??\\C:\\flags.txt");
+    assert_eq!(handle_flags(&mut t, h), (STATUS_SUCCESS, [0, 0]));
+    assert_eq!(set_handle_flags(&mut t, h, true, true), STATUS_SUCCESS);
+    assert_eq!(handle_flags(&mut t, h), (STATUS_SUCCESS, [1, 1]));
+    // Protected from close until the flag is cleared.
+    assert_eq!(t.f.call(Service::Close, &[h]), STATUS_HANDLE_NOT_CLOSABLE);
+    assert_eq!(set_handle_flags(&mut t, h, true, false), STATUS_SUCCESS);
+    assert_eq!(handle_flags(&mut t, h).1, [1, 0]);
+    // The wrong length, class or handle.
+    let info = t.f.put(&[1, 0]);
+    assert_eq!(t.f.call(Service::SetInformationObject, &[h, 4, info, 4]), STATUS_INFO_LENGTH_MISMATCH);
+    assert_eq!(t.f.call(Service::SetInformationObject, &[h, 0, info, 2]), STATUS_INVALID_INFO_CLASS);
+    assert_eq!(t.f.call(Service::SetInformationObject, &[0x7777_0000, 4, info, 2]), STATUS_INVALID_HANDLE);
+    assert_eq!(t.f.call(Service::SetInformationObject, &[u64::MAX, 4, info, 2]), STATUS_INVALID_HANDLE);
+    let (buf, ret) = (t.f.alloc(8), t.f.alloc(4));
+    assert_eq!(t.f.call(Service::QueryObject, &[h, 4, buf, 1, ret]), STATUS_INFO_LENGTH_MISMATCH);
+    assert_eq!(t.f.u32_at(ret), 2);
+    t.close(h);
+}
+
+fn create_process_with(t: &mut T, params: u64, process_flags: u32, thread_flags: u32) -> (NtStatus, u64, u64) {
+    let (ph, th) = (t.f.alloc(8), t.f.alloc(8));
+    let args = [ph, th, 0, 0, 0, 0, u64::from(process_flags), u64::from(thread_flags), params, 0, 0];
+    let s = t.f.call(Service::CreateUserProcess, &args);
+    (s, t.f.u64_at(ph), t.f.u64_at(th))
+}
+
+#[test]
+fn create_user_process_inherits_inheritable_handles_at_the_same_values() {
+    let mut t = setup();
+    t.vfs_create(b"/nt/c/app.exe", &crate::tests::test_exe(false));
+    let kept = t.file("\\??\\C:\\inherited.txt");
+    let private = t.file("\\??\\C:\\private.txt");
+    assert_eq!(set_handle_flags(&mut t, kept, true, false), STATUS_SUCCESS);
+    let me = poly_ntobj::Caller::user(crate::tests::PID, crate::tests::TID);
+    let object_of =
+        |t: &T, c: &poly_ntobj::Caller, h: u64| t.f.sys.objects.object_by_handle(c, poly_ntobj::Handle(h), 0, None);
+    let kept_object = object_of(&t, &me, kept).unwrap();
+
+    // bInheritHandles: the inheritable handle at its value, still
+    // inheritable; the other one not there.
+    let (params, _) = parameters_in(&mut t, "C:\\app.exe", "app", "");
+    let inherit = crate::consts::PROCESS_CREATE_FLAGS_INHERIT_HANDLES;
+    let (s, ph, th) = create_process_with(&mut t, params, inherit, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (child, _) = t.f.children.last().unwrap();
+    let them = poly_ntobj::Caller::user(child.pid, child.threads[0].thread);
+    assert_eq!(object_of(&t, &them, kept), Ok(kept_object));
+    assert!(t.f.sys.objects.handle_flags(&them, poly_ntobj::Handle(kept)).unwrap().inherit);
+    assert_eq!(object_of(&t, &them, private), Err(STATUS_INVALID_HANDLE));
+    // Its handle to the file counts: the creator may close its own.
+    t.close(kept);
+    assert_eq!(object_of(&t, &them, kept), Ok(kept_object));
+    t.close(th);
+    t.close(ph);
+
+    // Without the flag, nothing is inherited.
+    let again = t.file("\\??\\C:\\inherited.txt");
+    assert_eq!(set_handle_flags(&mut t, again, true, false), STATUS_SUCCESS);
+    let (s, ph, th) = create_process_with(&mut t, params, 0, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (child, _) = t.f.children.last().unwrap();
+    let them = poly_ntobj::Caller::user(child.pid, child.threads[0].thread);
+    assert_eq!(object_of(&t, &them, again), Err(STATUS_INVALID_HANDLE));
+    assert_eq!(t.f.sys.objects.process_handle_count(child.pid), Some(0));
+    t.close(th);
+    t.close(ph);
+    t.close(again);
+    t.close(private);
+}
+
+#[test]
+fn create_user_process_suspended_and_with_a_startupinfo() {
+    let mut t = setup();
+    t.vfs_create(b"/nt/c/app.exe", &crate::tests::test_exe(false));
+    // A STARTUPINFO with STARTF_USESTDHANDLES and its three handles.
+    let mut p = crate::params::Parameters {
+        image_path: "C:\\app.exe".encode_utf16().collect(),
+        command_line: "app".encode_utf16().collect(),
+        environment: "A=1\0\0".encode_utf16().collect(),
+        ..crate::params::Parameters::default()
+    };
+    p.startup.fixed[0..4].copy_from_slice(&104u32.to_le_bytes());
+    p.startup.fixed[0x20..0x24].copy_from_slice(&crate::params::STARTF_USESTDHANDLES.to_le_bytes());
+    p.startup.title = Some("child".encode_utf16().collect());
+    p.std_handles = [0x10, 0x14, 0x14];
+    let size = crate::params::image(0, &p).unwrap().len();
+    let at = t.f.alloc(size);
+    let bytes = crate::params::image(at, &p).unwrap();
+    t.f.mem.write_bytes(at, &bytes).unwrap();
+
+    let suspended = crate::consts::THREAD_CREATE_FLAGS_CREATE_SUSPENDED;
+    let (s, ph, th) = create_process_with(&mut t, at, 0, suspended);
+    assert_eq!(s, STATUS_SUCCESS);
+    // The child's parameters hold the STARTUPINFO and the handles.
+    let (child, mem) = t.f.children.last_mut().unwrap();
+    let tid = child.threads[0].thread;
+    let mut pp = [0u8; 8];
+    mem.read(child.peb + crate::params::PEB_PROCESS_PARAMETERS, &mut pp).unwrap();
+    let got =
+        crate::params::read(u64::from_le_bytes(pp), &mut |a, b| mem.read(a, b).map_err(|_| STATUS_ACCESS_VIOLATION))
+            .unwrap();
+    assert_eq!(got, p);
+    assert_eq!(got.given_std_handles(), Some([0x10, 0x14, 0x14]));
+    // Its first thread waits for NtResumeThread on the creator's handle.
+    assert_eq!(t.f.suspend.get(&tid), Some(&1));
+    let prev = t.f.alloc(4);
+    assert_eq!(t.f.call(Service::ResumeThread, &[th, prev]), STATUS_SUCCESS);
+    assert_eq!(t.f.u32_at(prev), 1);
+    assert_eq!(t.f.suspend.get(&tid), Some(&0));
+    t.close(th);
+    t.close(ph);
 }
 
 fn create_section(t: &mut T, file: u64, size: u64, protect: u32) -> (NtStatus, u64) {
