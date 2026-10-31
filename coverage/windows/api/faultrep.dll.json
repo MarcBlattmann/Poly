@@ -1,5 +1,5 @@
 [
-{"symbol":"AddERExcludedApplicationA","src":["wine-spec"]},
+{"symbol":"AddERExcludedApplicationA","src":["wine-spec"],"seeds":["wine:faultrep/tests/faultrep.c:test_AddERExcludedApplicationA"]},
 {"symbol":"AddERExcludedApplicationW","src":["wine-spec"]},
 {"symbol":"CreateMinidumpA","src":["wine-spec"]},
 {"symbol":"CreateMinidumpW","src":["wine-spec"]},

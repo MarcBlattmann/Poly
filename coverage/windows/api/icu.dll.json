@@ -54,7 +54,7 @@
 {"symbol":"u_getUnicodeVersion","src":["wine-spec"]},
 {"symbol":"u_getVersion","src":["wine-spec"]},
 {"symbol":"u_hasBinaryProperty","src":["wine-spec"]},
-{"symbol":"u_init","src":["wine-spec"]},
+{"symbol":"u_init","src":["wine-spec"],"seeds":["wine:icu/tests/icu.c:test_u_init"]},
 {"symbol":"u_isIDIgnorable","src":["wine-spec"]},
 {"symbol":"u_isIDPart","src":["wine-spec"]},
 {"symbol":"u_isIDStart","src":["wine-spec"]},

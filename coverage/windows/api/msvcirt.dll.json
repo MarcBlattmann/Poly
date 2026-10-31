@@ -1119,6 +1119,6 @@
 {"symbol":"?xsputn@streambuf@@UAEHPBDH@Z","arch":["i386"],"src":["wine-spec"]},
 {"symbol":"?xsputn@streambuf@@UEAAHPEBDH@Z","arch":["win64"],"src":["wine-spec"]},
 {"symbol":"__dummy_export","src":["wine-spec"]},
-{"symbol":"_mtlock","src":["wine-spec"]},
-{"symbol":"_mtunlock","src":["wine-spec"]}
+{"symbol":"_mtlock","src":["wine-spec"],"seeds":["wine:msvcirt/tests/msvcirt.c:test_mtlock_mtunlock"]},
+{"symbol":"_mtunlock","src":["wine-spec"],"seeds":["wine:msvcirt/tests/msvcirt.c:test_mtlock_mtunlock"]}
 ]

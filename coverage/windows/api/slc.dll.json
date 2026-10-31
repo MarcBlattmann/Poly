@@ -19,7 +19,7 @@
 {"symbol":"SLGetSLIDList","src":["wine-spec"]},
 {"symbol":"SLGetServiceInformation","src":["wine-spec"]},
 {"symbol":"SLGetWindowsInformation","src":["wine-spec"]},
-{"symbol":"SLGetWindowsInformationDWORD","src":["wine-spec"]},
+{"symbol":"SLGetWindowsInformationDWORD","src":["wine-spec"],"seeds":["wine:slc/tests/slc.c:test_SLGetWindowsInformationDWORD"]},
 {"symbol":"SLInstallLicense","src":["wine-spec"]},
 {"symbol":"SLInstallProofOfPurchase","src":["wine-spec"]},
 {"symbol":"SLInstallSAMLicense","src":["wine-spec"]},

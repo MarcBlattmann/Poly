@@ -1,8 +1,8 @@
 [
-{"symbol":"CreateXmlReader","src":["wine-spec"]},
-{"symbol":"CreateXmlReaderInputWithEncodingCodePage","src":["wine-spec"]},
-{"symbol":"CreateXmlReaderInputWithEncodingName","src":["wine-spec"]},
-{"symbol":"CreateXmlWriter","src":["wine-spec"]},
-{"symbol":"CreateXmlWriterOutputWithEncodingCodePage","src":["wine-spec"]},
-{"symbol":"CreateXmlWriterOutputWithEncodingName","src":["wine-spec"]}
+{"symbol":"CreateXmlReader","src":["wine-spec"],"seeds":["wine:xmllite/tests/reader.c:test_reader_create","wine:xmllite/tests/reader.c:test_endoffile","wine:xmllite/tests/reader.c:test_attribute_by_name","wine:xmllite/tests/reader.c:test_isemptyelement","wine:xmllite/tests/reader.c:test_max_element_depth","wine:xmllite/tests/reader.c:test_namespaceuri","wine:xmllite/tests/reader.c:test_prefix","wine:xmllite/tests/reader.c:test_read_cdata"]},
+{"symbol":"CreateXmlReaderInputWithEncodingCodePage","src":["wine-spec"],"seeds":["wine:xmllite/tests/reader.c:test_readerinput"]},
+{"symbol":"CreateXmlReaderInputWithEncodingName","src":["wine-spec"],"seeds":["wine:xmllite/tests/reader.c:test_readerinput"]},
+{"symbol":"CreateXmlWriter","src":["wine-spec"],"seeds":["wine:xmllite/tests/writer.c:test_writer_create","wine:xmllite/tests/writer.c:test_flush","wine:xmllite/tests/writer.c:test_WriteStartElement","wine:xmllite/tests/writer.c:test_WriteString","wine:xmllite/tests/writer.c:test_WriteAttributeString","wine:xmllite/tests/writer.c:test_WriteCData","wine:xmllite/tests/writer.c:test_WriteCharEntity","wine:xmllite/tests/writer.c:test_WriteChars"]},
+{"symbol":"CreateXmlWriterOutputWithEncodingCodePage","src":["wine-spec"],"seeds":["wine:xmllite/tests/writer.c:test_writeroutput"]},
+{"symbol":"CreateXmlWriterOutputWithEncodingName","src":["wine-spec"],"seeds":["wine:xmllite/tests/writer.c:test_bom","wine:xmllite/tests/writer.c:test_writestartdocument","wine:xmllite/tests/writer.c:test_writeroutput"]}
 ]

@@ -11,9 +11,13 @@ specs/<os>/<component>/<symbol>.tests/    visible tests (~70%)
 Linux tests are freestanding C programs (`tests/linux/include/`); Windows
 tests are `no_std` Rust files (`tests/windows/support`, ADR 0075) or
 freestanding C++ files (`tests/windows/cxx`, ADR 0098) built by `cargo
-xtask pipeline win build` and run on a real Windows PC. A Windows entry's
+xtask pipeline win build` and run on the Windows oracle machine
+(`cargo xtask pipeline win remote`, ADR 0097). A Windows entry's
 `<symbol>.tests/windows.json` holds the recorded Windows results of its
-visible tests (`tests split --windows-results`).
+visible tests (`tests split --windows-results`, or `win remote --record`).
+Before writing a Windows spec, `cargo xtask coverage show <id>` lists where
+Wine's conformance tests exercise the entry (its seeds): read those for
+behaviour worth observing, never copy them (`../CLEAN_ROOM.md`).
 
 **Who a Linux test runs as.** A test runs as whatever user runs the
 pipeline: root in some environments, a normal user in others (the home

@@ -3,7 +3,7 @@
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]},
-{"symbol":"StiCreateInstance","src":["wine-spec"]},
-{"symbol":"StiCreateInstanceA","src":["wine-spec"]},
-{"symbol":"StiCreateInstanceW","src":["wine-spec"]}
+{"symbol":"StiCreateInstance","src":["wine-spec"],"seeds":["wine:sti/tests/sti.c:test_launch_app_registry","wine:sti/tests/sti.c:test_version_flag_versus_aw"]},
+{"symbol":"StiCreateInstanceA","src":["wine-spec"],"seeds":["wine:sti/tests/sti.c:test_version_flag_versus_aw"]},
+{"symbol":"StiCreateInstanceW","src":["wine-spec"],"seeds":["wine:sti/tests/sti.c:test_stillimage_aggregation","wine:sti/tests/sti.c:test_version_flag_versus_aw"]}
 ]

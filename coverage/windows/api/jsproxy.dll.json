@@ -1,8 +1,8 @@
 [
-{"symbol":"InternetDeInitializeAutoProxyDll","src":["wine-spec"]},
+{"symbol":"InternetDeInitializeAutoProxyDll","src":["wine-spec"],"seeds":["wine:jsproxy/tests/jsproxy.c:test_InternetGetProxyInfo","wine:jsproxy/tests/jsproxy.c:test_InternetInitializeAutoProxyDll"]},
 {"symbol":"InternetDeInitializeAutoProxyDllEx","src":["wine-spec"]},
-{"symbol":"InternetGetProxyInfo","src":["wine-spec"]},
+{"symbol":"InternetGetProxyInfo","src":["wine-spec"],"seeds":["wine:jsproxy/tests/jsproxy.c:test_InternetGetProxyInfo","wine:jsproxy/tests/jsproxy.c:test_InternetInitializeAutoProxyDll"]},
 {"symbol":"InternetGetProxyInfoEx","src":["wine-spec"]},
-{"symbol":"InternetInitializeAutoProxyDll","src":["wine-spec"]},
+{"symbol":"InternetInitializeAutoProxyDll","src":["wine-spec"],"seeds":["wine:jsproxy/tests/jsproxy.c:test_InternetInitializeAutoProxyDll","wine:jsproxy/tests/jsproxy.c:test_InternetGetProxyInfo"]},
 {"symbol":"InternetInitializeAutoProxyDllEx","src":["wine-spec"]}
 ]

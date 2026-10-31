@@ -5,7 +5,7 @@
 {"symbol":"ApphelpCheckMsiPackage","src":["wine-spec"]},
 {"symbol":"ApphelpCheckRunApp","src":["wine-spec"]},
 {"symbol":"ApphelpCheckRunAppEx","src":["wine-spec"]},
-{"symbol":"ApphelpCheckShellObject","src":["wine-spec"]},
+{"symbol":"ApphelpCheckShellObject","src":["wine-spec"],"seeds":["wine:apphelp/tests/apphelp.c:test_ApphelpCheckShellObject"]},
 {"symbol":"ApphelpCreateAppcompatData","src":["wine-spec"]},
 {"symbol":"ApphelpFixMsiPackage","src":["wine-spec"]},
 {"symbol":"ApphelpFixMsiPackageExe","src":["wine-spec"]},

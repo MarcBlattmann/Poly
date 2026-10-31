@@ -1,6 +1,6 @@
 [
-{"symbol":"SnmpExtensionInit","src":["wine-spec"]},
+{"symbol":"SnmpExtensionInit","src":["wine-spec"],"seeds":["wine:inetmib1/tests/main.c:testInit"]},
 {"symbol":"SnmpExtensionInitEx","src":["wine-spec"]},
-{"symbol":"SnmpExtensionQuery","src":["wine-spec"]},
+{"symbol":"SnmpExtensionQuery","src":["wine-spec"],"seeds":["wine:inetmib1/tests/main.c:testQuery"]},
 {"symbol":"SnmpExtensionTrap","src":["wine-spec"]}
 ]

@@ -54,6 +54,8 @@ self-check and the Poly check (both run the reference OS).
 | Compare real OS and Poly | tool | `pipeline diff [--target linux\|poly]` |
 | Merge decision | CI + held-out result | PR, never a direct push |
 | Windows tests: build, bundle, run on Poly, compare | tool | `pipeline win build\|bundle\|poly\|diff\|show` (runner on the PC: `poly-oracle.ps1`) |
+| Windows tests on the oracle machine over SSH, record, compare | tool | `pipeline win remote --host homeserver2 [--record] [--diff]` (from a container host: `tools/pipeline/windows/poly-remote.sh`) |
+| Where Wine's conformance tests exercise an entry (spec agents) | tool | `cargo xtask coverage show <id>`; refreshed by `cargo xtask coverage seed-wine` |
 
 All of these are `cargo xtask pipeline <command>`; the full option list is
 at the top of `tools/pipeline/src/main.rs`. Outputs go under
@@ -311,11 +313,14 @@ roles for an entry, and that no held-out content is in the log, under
 
 ## Windows test oracle
 
-The real Windows is the owner's Windows 11 PC, reached through a Claude Code
-session on it; nothing is installed there. Test programs are built here, run
-there by a PowerShell script and on Poly in QEMU, and the results compared
+The real Windows is a dedicated Windows 11 machine, **`homeserver2`**,
+reached over SSH ([ADR 0097](adr/0097-oracle-machine-over-ssh-and-wine-test-seeds.md));
+nothing is installed there. Test programs are built here, run there by a
+PowerShell script and on Poly in QEMU, and the results compared
 ([ADR 0075](adr/0075-windows-test-oracle.md); code in
-`tools/pipeline/src/windows.rs`, runner `tools/pipeline/windows/poly-oracle.ps1`).
+`tools/pipeline/src/windows.rs` and `remote.rs`, runner
+`tools/pipeline/windows/poly-oracle.ps1`). Never run test executables on
+the owner's corporate PC (its endpoint protection refuses unsigned ones).
 
 **A test** is one Rust file, `#![no_std]` + `#![no_main]`, in
 `tests/windows/` (the corpus) or `specs/windows/<component>/<symbol>.tests/`,
@@ -348,8 +353,8 @@ refuses an executable that imports from another DLL, by ordinal, or
 delay-loaded. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
-start is **unsupported**. `win show` and `win diff` read real Windows'
-observations, so implementers may not run them.
+start is **unsupported**. `win show`, `win diff` and `win remote` read real
+Windows' observations, so implementers may not run them.
 
 **C++ tests** ([ADR 0098](adr/0098-cpp-windows-tests-and-the-cpp-exception-spec.md)):
 a test may also be one `.cpp` file, for what Rust cannot do (C++
@@ -371,8 +376,32 @@ same result on every run, and writes the visible tests' results to
 the tests (`win diff --reference <symbol>.tests/windows.json` compares Poly
 with them without the PC). The hand-off works as for Linux entries.
 
-**One round on the PC** (the coordinator relays; the session there uses Git
-Bash). Here:
+**One round on the oracle machine, over SSH** (ADR 0097). On the owner's PC,
+where builds run in the container and SSH on the host, from the repository
+or worktree root in Git Bash:
+
+```sh
+POLY_RUN=~/poly-dev/polyd tools/pipeline/windows/poly-remote.sh --host homeserver2 \
+    [--tests a,b] [--tests-dir specs/windows/<component>/<symbol>.tests] [--record] [--diff]
+```
+
+That runs `cargo xtask pipeline win remote prepare` in the container (build,
+bundle, stage in `.oracle-remote/homeserver2/` with a generated
+`transfer.sh`), `transfer.sh` on the host (scp the bundle and the runner to
+`poly-oracle-work/remote/<bundle id>/` on the machine, run them, scp
+`results.json` back, remove the remote directory) and `win remote finish` in
+the container: it checks the results against the bundle and keeps them as
+`target/pipeline/windows/results/windows-<id>.json`; `--record` writes the
+references (`tests/windows/oracle/<test>.windows.json` for the corpus,
+`windows.json` beside a spec entry's tests); `--diff` runs the same
+executables on Poly and compares (`--build-kernel`, `--jobs N`, `--strict`).
+Where `cargo` and `ssh` are on one machine, `cargo xtask pipeline win remote
+--host homeserver2 [...]` does all three. `--runner-arg` passes arguments to
+the runner (`--runner-arg -Runs --runner-arg 3`). A test Defender takes away
+is reported as `error`; stop and tell the owner (an exclusion is their call).
+
+**One round through a session on a Windows PC** (the older way, ADR 0075:
+the coordinator relays; the session there uses Git Bash). Here:
 
 ```sh
 cargo xtask pipeline win build && cargo xtask pipeline win bundle
@@ -423,6 +452,19 @@ cargo xtask pipeline win scenario poly --bin-dir DIR [--data-dir DIR]  # Poly on
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../poly/tools/pipeline/windows/poly-oracle.ps1 \
     -Bundle bundle-<id>.txt -Tests sevenzip_scenario -TestTimeouts sevenzip_scenario=300 -Out results.json
 ```
+### Where Windows behaviour is already tested: Wine seeds
+
+For a spec agent: `cargo xtask coverage show <id>` lists an entry's
+**seeds**, the Wine conformance-test functions that check something and
+call that export (`wine:ntdll/tests/file.c:test_NtCreateFile`, best first,
+at most 8; ADR 0097). They say where to read for behaviour worth observing
+(Wine's tests are a spec agent's oracle, CLEAN_ROOM.md); the spec agent
+then writes its own tests and runs them on the oracle machine. Nothing of
+Wine's tests is copied; the map holds only these names and the Wine
+revision (`coverage/index.json`, `seeds.wine`). Implementers see only how
+many seeds an entry has. The seeds are refreshed from a Wine checkout
+outside the repository with `cargo xtask coverage seed-wine <checkout>
+--revision <commit>`.
 
 ## Safety rules
 

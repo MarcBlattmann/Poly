@@ -2,7 +2,7 @@
 {"symbol":"#327","src":["wine-spec"]},
 {"symbol":"DebugConnect","src":["wine-spec"]},
 {"symbol":"DebugConnectWide","src":["wine-spec"]},
-{"symbol":"DebugCreate","src":["wine-spec"]},
+{"symbol":"DebugCreate","src":["wine-spec"],"seeds":["wine:dbgeng/tests/dbgeng.c:test_engine_options","wine:dbgeng/tests/dbgeng.c:test_attach","wine:dbgeng/tests/dbgeng.c:test_module_information"]},
 {"symbol":"DebugCreateEx","src":["wine-spec"]},
 {"symbol":"DebugExtensionInitialize","src":["wine-spec"]}
 ]

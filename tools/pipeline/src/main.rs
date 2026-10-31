@@ -44,6 +44,12 @@
 //! win scenario diff --reference WIN.json [--target poly|FILE.json] [--markdown FILE] [poly options]
 //!                                                compare scenario runs step by step (exit 1 unless all pass)
 //! win scenario show <results.json> [--tests a,b] a scenario run, step by step, outputs as text
+//! win remote [prepare|finish] --host H [--tests a,b] [--tests-dir DIR]... [--data-dir DIR] [--runner-arg ARG]...
+//!            [--remote-dir DIR] [--stage DIR] [--record] [--diff] [poly options]
+//!                                                the Windows oracle machine over SSH (ADR 0097): build, bundle,
+//!                                                run there, fetch results.json; record it as the reference,
+//!                                                compare Poly with it; prepare/finish around a host-side
+//!                                                transfer.sh where the build runs in a container
 //! ```
 
 mod apps;
@@ -59,6 +65,7 @@ mod identity;
 mod libsearch;
 mod poly;
 mod ptrace;
+mod remote;
 mod runner;
 mod scenario;
 mod sha256;
@@ -929,7 +936,7 @@ fn test_list(a: &Args) -> Vec<String> {
 
 /// The Windows test oracle (ADR 0075): `win build|bundle|poly|diff|show`.
 fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
-    let usage = "usage: pipeline win <build|bundle|unbundle|poly|diff|show> (see tools/pipeline/src/main.rs)";
+    let usage = "usage: pipeline win <build|bundle|unbundle|poly|diff|show|remote> (see tools/pipeline/src/main.rs)";
     let (sub, rest) = a.positional.split_first().ok_or(usage)?;
     let win = repo.join(windows::WIN_DIR);
     let bin_dir = a.opt("bin-dir").map_or_else(|| win.join("bin"), PathBuf::from);
@@ -1102,6 +1109,7 @@ fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
             Ok(0)
         }
         "scenario" => win_scenario(repo, a, rest, &bin_dir),
+        "remote" => remote::cmd(repo, a, rest),
         _ => Err(usage.into()),
     }
 }
@@ -1233,7 +1241,7 @@ fn win_scenario(repo: &Path, a: &Args, rest: &[String], bin_dir: &Path) -> Resul
 fn run(args: &[String]) -> Result<u8> {
     let repo = repo_root();
     let (cmd, rest) = args.split_first().ok_or("usage: pipeline <command> (see tools/pipeline/src/main.rs)")?;
-    let switches = ["all", "print", "strict", "build-kernel", "replace", "allow-dirty"];
+    let switches = ["all", "print", "strict", "build-kernel", "replace", "allow-dirty", "record", "diff"];
     let a = Args::parse(rest, &switches)?;
     match cmd.as_str() {
         "build" => build(&repo, &a),

@@ -1,5 +1,5 @@
 [
-{"symbol":"DirectPlay8Create","src":["wine-spec"]},
+{"symbol":"DirectPlay8Create","src":["wine-spec"],"seeds":["wine:dpnet/tests/server.c:test_DirectPlay8Create"]},
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},

@@ -1,9 +1,9 @@
 [
-{"symbol":"ApplyPatchToFileA","src":["wine-spec"]},
-{"symbol":"ApplyPatchToFileByBuffers","src":["wine-spec"]},
-{"symbol":"ApplyPatchToFileByHandles","src":["wine-spec"]},
-{"symbol":"ApplyPatchToFileByHandlesEx","src":["wine-spec"]},
-{"symbol":"ApplyPatchToFileExA","src":["wine-spec"]},
+{"symbol":"ApplyPatchToFileA","src":["wine-spec"],"seeds":["wine:mspatcha/tests/apply_patch.c:test_ApplyPatchToFile"]},
+{"symbol":"ApplyPatchToFileByBuffers","src":["wine-spec"],"seeds":["wine:mspatcha/tests/apply_patch.c:test_ApplyPatchToFileByBuffers"]},
+{"symbol":"ApplyPatchToFileByHandles","src":["wine-spec"],"seeds":["wine:mspatcha/tests/apply_patch.c:test_ApplyPatchToFileByHandles"]},
+{"symbol":"ApplyPatchToFileByHandlesEx","src":["wine-spec"],"seeds":["wine:mspatcha/tests/apply_patch.c:test_ApplyPatchToFileByHandles"]},
+{"symbol":"ApplyPatchToFileExA","src":["wine-spec"],"seeds":["wine:mspatcha/tests/apply_patch.c:test_ApplyPatchToFile"]},
 {"symbol":"ApplyPatchToFileExW","src":["wine-spec"]},
 {"symbol":"ApplyPatchToFileW","src":["wine-spec"]},
 {"symbol":"GetFilePatchSignatureA","src":["wine-spec"]},
@@ -11,8 +11,8 @@
 {"symbol":"GetFilePatchSignatureByHandle","src":["wine-spec"]},
 {"symbol":"GetFilePatchSignatureW","src":["wine-spec"]},
 {"symbol":"NormalizeFileForPatchSignature","src":["wine-spec"]},
-{"symbol":"TestApplyPatchToFileA","src":["wine-spec"]},
-{"symbol":"TestApplyPatchToFileByBuffers","src":["wine-spec"]},
-{"symbol":"TestApplyPatchToFileByHandles","src":["wine-spec"]},
+{"symbol":"TestApplyPatchToFileA","src":["wine-spec"],"seeds":["wine:mspatcha/tests/apply_patch.c:test_TestApplyPatchToFile"]},
+{"symbol":"TestApplyPatchToFileByBuffers","src":["wine-spec"],"seeds":["wine:mspatcha/tests/apply_patch.c:test_ApplyPatchToFileByBuffers"]},
+{"symbol":"TestApplyPatchToFileByHandles","src":["wine-spec"],"seeds":["wine:mspatcha/tests/apply_patch.c:test_ApplyPatchToFileByHandles"]},
 {"symbol":"TestApplyPatchToFileW","src":["wine-spec"]}
 ]
