@@ -110,17 +110,17 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] `advapi32` basics: registry API, security descriptors, tokens (single user) (ADR 0083)
 - [x] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles (ADR 0080)
 - [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0073)
-- [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; left: the recording on Windows)
-- [ ] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics
+- [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; left: the API trace (ADR 0090) of the scenario recorded on Windows and compared without differences, ADR 0101 "The milestone")
+- [x] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics (ADR 0095)
 - [x] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app) (ADR 0096)
 - [ ] Fallback if needed: our own `vcruntime140` (and `msvcp140` subsets) per ADR 0055
 
 ## Phase 6: Graphics, input, audio and the desktop
 
 - [ ] ⚖️ Decide: global menu bar or per-window menus
-- [ ] ⚖️ Decide: native window frames per app, or one neutral frame
-- [ ] virtio-gpu driver: modesetting and 2D framebuffer
-- [ ] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
+- [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app
+- [x] virtio-gpu driver: modesetting and 2D framebuffer
+- [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
 - [ ] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged
 - [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
 - [ ] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
@@ -128,7 +128,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Shell: launcher, window management, notifications, settings (own non-glass design)
 - [ ] Compositor exposes the content behind each window (needed later for Liquid Glass)
 - [ ] XWayland for X11 apps
-- [ ] Fonts: font store, rasterisation, fontconfig-compatible discovery
+- [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
 - [ ] **Milestone:** GTK and Qt apps run; VLC plays a video with sound
 
 ## Phase 7: Windows GUI apps

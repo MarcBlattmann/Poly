@@ -31,8 +31,11 @@ what exists **today** and how it fits that plan.
             block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
             network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets;
                      socket files (inet, poly-unix Unix sockets, netlink) with per-socket wake-ups
+            sound: ALSA card 0 (/dev/snd/controlC0, pcmC0D<n>p) on virtio-sound (poly-virtio-sound), audio thread
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
-            display: QEMU standard VGA framebuffer + RAM back buffer; poly-gfx (drawing, font, text grid)
+            input: event layer (poly-input hub), PS/2 keyboard and mouse (IRQ 1, 12), virtio-input; /dev/input/event*
+            display: RAM back buffer onto virtio-gpu (2D resource) or the QEMU standard VGA framebuffer;
+                     poly-gfx (drawing, font, text grid)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
                          syscall/sysret, FPU state, context switch, AP start-up, per-CPU data)
 ```
@@ -382,35 +385,123 @@ like on a pipe (ADR 0042):
 - `/etc/hosts` and `/etc/resolv.conf` (DNS 10.0.2.3) come with the
   initramfs; name resolution is the C library's.
 
+## Sound
+
+One ALSA card, card 0, on a virtio-sound device (VIRTIO 1.2 §5.14):
+playback through the ALSA kernel/user interface (`/dev/snd/*`, the
+`SNDRV_*` ioctls of the uapi header `sound/asound.h`), the interface
+`aplay -D hw:0,0` uses (aplay itself is not in the build image; a C test
+program drives the same ioctls). Decisions are in
+[ADR 0104](adr/0104-virtio-sound-and-alsa-pcm.md); Intel HDA, capture and
+an audio server come later.
+
+```text
+ /dev/snd/pcmC0D0p ──ioctl/write/poll──► Card { Mutex<Inner { VirtioSound, [PcmSlot { PcmRuntime, DevStream }] }> }
+        ▲ blocks on the card's wait queue          │ Glue: PcmBackend → virtio commands, PeriodRing, output messages
+        │                                          ▼
+ notify ◄──── audio thread ◄── MSI-X entry 0 (returned output messages, events); polled every 2 ms without MSI-X
+```
+
+- **`poly-virtio-sound`** sets up the control, event, transmit and
+  receive queues, queries jacks, PCM streams and channel maps, walks each
+  stream through the command lifecycle (SET PARAMETERS, PREPARE, START,
+  STOP, RELEASE; `stream::StreamState::path_to` inserts what is missing)
+  and sends output messages: the stream id, a piece of the PCM ring buffer
+  in DMA memory, and the device-writable status. The device returns a
+  message once it has consumed its frames: that is the period interrupt.
+  `ring::PeriodRing` tracks what is written, handed over and played, sends
+  whole periods (partial ones only when the device would run dry, or at
+  a drain, whose last period is padded with silence). Host tests run it
+  against a simulated device written from the specification.
+- **The ALSA layer** (`poly_personality_linux::sound`, host-tested): the
+  structures of `sound/asound.h`, hardware parameter refinement
+  (`HW_REFINE`: masks and open/closed intervals narrowed by the rules
+  between sample and frame bits, channels, rate, period and buffer sizes,
+  bytes and times, and the device's limits) and the choice of one
+  configuration (`HW_PARAMS`), and the playback runtime: states OPEN,
+  SETUP, PREPARED, RUNNING, XRUN, DRAINING, the application and hardware
+  pointers, start and stop thresholds, underruns, drain, status,
+  `SYNC_PTR`.
+- **The kernel side** (`kernel/src/sound/`) finds the device, gives it
+  DMA memory (rings, a control page, event buffers, per-message headers
+  and status, a 256 KiB PCM ring buffer), registers the character devices
+  (major 116: control at minor 0, playback device `d` at 16 + `d`) and
+  makes the nodes; an output stream's ALSA device number is its virtio
+  stream id. `alsa.rs` copies structures to and from user memory and
+  blocks where ALSA does (writes until every frame is in the buffer,
+  drains until everything played) on the card's wait queue. The audio
+  thread, woken by MSI-X entry 0, collects returned messages, advances the
+  ring and the runtime's hardware pointer (an empty buffer is an underrun:
+  the stream stops in XRUN), sends the next periods and wakes waiters.
+
+```text
+sound: 00:03.0: virtio-sound, 0 jacks, 2 streams, 0 channel maps; queues [64, 64, 64, 64], 21 output messages in flight
+sound: stream 0: output, 1-2 channels, rates [5512, 8000, ..., 384000], ALSA formats [0, 1, 2, 4, 10, 12, 14], features 0x0
+sound: card 0: /dev/snd/controlC0, pcmC0D0p; MSI-X entry 0 -> vector 0x32
+```
+
+The `sound` boot test runs `/bin/pcm-tone` (`tests/linux/audio/pcm_tone.c`)
+as init with `-device virtio-sound-pci` on QEMU's `wav` audio backend and
+checks the recording on the host: 100 ms windows whose frequency (zero
+crossings) and level (RMS) are each tone's, on both channels.
+
 ## Input
 
-Keyboard input is the host-tested `poly-input` crate; `kernel/src/keyboard.rs`
-drives the PS/2 keyboard with it, and `arch/x86_64/i8042.rs` gives it the
-controller's ports ([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md)).
+Input is the host-tested `poly-input` crate: keys, scancode decoders,
+layouts, the PS/2 controller and mouse protocol, and the event layer with
+the Linux event interface on top. `kernel/src/input.rs` gives the event
+layer a lock, wakeups and `/dev/input/event*`; `keyboard.rs` and
+`mouse.rs` drive the i8042 (whose ports are `arch/x86_64/i8042.rs`),
+`virtio_input.rs` the virtio input devices through `poly-virtio-input`
+([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md),
+[ADR 0103](adr/0103-input-event-layer-evdev-ps2-mouse-virtio-input.md)).
 
 ```
-   IRQ 1 ─▶ keyboard::on_irq: data port ─▶ ByteRing (256 bytes, lock-free) ─▶ wake waiters
-                                                           │
-   keyboard::next_event / try_next_event (thread) ◀────────┘
-      poly_input::Keyboard
-        Set1Decoder   bytes ─▶ (Key, pressed): E0 / E1 prefixes, fake shifts, Print Screen, Pause
-        KeyState      ─▶ KeyEvent { key, pressed, repeat, modifiers }: Shift/Ctrl/Alt/AltGr/Meta, 3 locks
-        Composer      ─▶ Output: Char, Chars (accent + char), Dead, Special (Enter, arrows, F-keys, ...)
-          + Layout    US, Swiss German (de-CH); six levels per key, as data
+   IRQ 1 / IRQ 12 ─▶ keyboard::on_irq: drain the controller
+        keyboard byte ─▶ Set1Decoder ─▶ (Key, pressed) ─▶ keycode ─┐
+        mouse byte ─▶ ps2mouse::MouseDecoder ─▶ REL_X/Y/WHEEL, BTN_* ┤ input::report_at (interrupt-safe)
+   virtio-input (MSI-X) ─▶ VirtioInput::poll ─▶ evdev events ────────┤
+                                                                     ▼
+   poly_input::hub::Hub   devices, state, frames (SYN_REPORT), filters, grabs, LEDs, soft repeat
+        │ client queues (256 events)                    │ console keys (every keyboard, unless grabbed)
+        ▼                                               ▼
+   /dev/input/event<n>: read, write, poll,       keyboard::next_event / try_next_event (thread)
+   EVIOC* ioctls (poly_input::evdev)               poly_input::Keyboard::apply
+        ▲ woken by the input thread                 KeyState ─▶ KeyEvent { key, pressed, repeat, modifiers }
+   input thread: Hub::tick (soft repeat),           Composer + Layout (US, de-CH, de) ─▶ Output
+   wakes event-file readers, polls devices          lock LEDs of every keyboard follow (0xED, virtio status queue)
+   without interrupts
 ```
 
 - **Keys** (`poly_input::Key`) are physical positions named after the US
   legends (W3C UI Events `code` names): 105 keys, the ISO key next to the
-  left Shift (`IntlBackslash`) included. `Modifiers` is a bit set (Shift,
-  Control, Alt, AltGr, Meta, Caps / Num / Scroll Lock), `Leds` the PS/2 LED
-  mask.
+  left Shift (`IntlBackslash`) included. `keycode` maps them to evdev key
+  codes (`KEY_*`) and back. `Modifiers` is a bit set (Shift, Control, Alt,
+  AltGr, Meta, Caps / Num / Scroll Lock), `Leds` the PS/2 LED mask
+  (`to_evdev` / `from_evdev` convert).
 - **Decoding.** The controller translates the keyboard's scancode set 2
-  into set 1, which `Set1Decoder` decodes; it ignores replies and unknown
-  codes, resynchronises after broken sequences and never panics.
-  `set1::encode` is the reverse (tests, `keyboard::inject`). `KeyState`
-  flags a press of a key that is down as a repeat (locks toggle only on
-  the first press) and makes the right Alt key AltGr on layouts that have
-  it.
+  into set 1, which `Set1Decoder` decodes; `Set2Decoder` decodes set 2 for
+  untranslated keyboards. Both ignore replies and unknown codes,
+  resynchronise after broken sequences and never panic; `encode` is the
+  reverse (tests, `keyboard::inject`). The interrupt handler decodes as
+  bytes arrive, so events carry the time of the interrupt.
+- **The event layer** (`poly_input::hub`) speaks evdev: a device reports
+  `(type, code, value)` and `SYN_REPORT` ends a frame, delivered to every
+  reader at once (or only to the one that grabbed the device). Undeclared
+  and no-op events are dropped (a press of a key that is down is the
+  device's own repeat, value 2); a reader whose queue overruns gets
+  `SYN_DROPPED`. Devices that ask for it get soft repeat (250 ms, then 33
+  ms): the PS/2 keyboard repeats itself, a virtio keyboard with `EV_REP`
+  does not. Reporting never allocates or sleeps, so drivers report from
+  interrupt handlers under the hub's spinlock. The kernel's `input` thread
+  makes the repeats and wakes event-file readers (their `poly_vfs` wait
+  queues must not be touched from interrupt handlers).
+- **The console** reads the keys of every console keyboard (the PS/2 one,
+  virtio keyboards) from one queue: `KeyState` flags a press of a key that
+  is down as a repeat (locks toggle only on the first press) and makes the
+  right Alt key AltGr on layouts that have it. When the locks change, the
+  LEDs of every console keyboard follow (`input::set_console_leds`, a hook
+  per device).
 - **Layouts** (`poly_input::layout`) are tables built at compile time:
   base, Shift, Caps Lock, Caps Lock + Shift, AltGr and AltGr + Shift, each a
   character, a dead key (\` ´ ^ ~ ¨) or nothing. `Composer` picks the
@@ -418,28 +509,45 @@ controller's ports ([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md)).
   otherwise, Shift reverses it), turns Ctrl + letter into a control
   character and composes dead keys (accent + letter: the accented letter;
   + Space: the accent; + anything else: both; a special key drops it).
-  `layout::by_name` finds one (`us`, `de-ch`).
-- **Bring-up** (`keyboard::init`, after the block layer). If the ACPI FADT
-  (revision 2+) says there is no 8042, nothing is touched. Otherwise
-  `poly_input::i8042::init`, polled with both ports' interrupts off:
-  disable both ports, flush the output buffer, clear the interrupt and
+  `layout::by_name` finds one (`us`, `de-ch`, `de`); `keysym::keysym` gives
+  a key's X11 keysym on the selected level.
+- **Bring-up** (`keyboard::init`, after the block layer and `input::init`).
+  If the ACPI FADT (revision 2+) says there is no 8042, nothing is touched.
+  Otherwise `poly_input::i8042::init`, polled with both ports' interrupts
+  off: disable both ports, flush the output buffer, clear the interrupt and
   translation bits in the configuration byte, controller self-test (0xAA
   → 0x55) and the configuration written again, keyboard port test (0xAB →
   0x00), enable the port, reset the keyboard (0xFF → ACK, 0xAA), scancode
-  set 2 (0xF0 0x02), enable scanning (0xF4). Every wait is bounded; a
-  missing controller (status 0xFF), a failed self-test or no keyboard is
-  logged and the kernel runs on without one. Then ISA IRQ 1 is routed
-  (`arch::irq::route_isa_irq`), the configuration byte gets the keyboard
-  interrupt and translation on (mouse port off), and the controller is
-  drained once. The layout comes from `poly.keymap=` (default `us`); Num
-  Lock starts on.
-- **Interrupts and waiting.** The handler moves every waiting byte into
-  the ring and wakes the readers; decoding happens in the reader's thread
-  under a sleeping `Mutex`, which is never held while waiting for input. A
-  reader that sleeps looks at the controller itself every 100 ms, so a
-  lost interrupt costs latency, not the keyboard. LED updates (0xED + mask)
-  follow the locks: the reader writes each byte and sleeps until the
-  handler hands it the keyboard's ACK (or RESEND) instead of queueing it.
+  set 2 (0xF0 0x02), enable scanning (0xF4). Then `i8042::init_aux` for the
+  mouse, with the keyboard port disabled meanwhile: second port test (0xA9),
+  enable it (0xA8), reset the mouse (0xD4 0xFF → ACK, 0xAA, ID), the
+  IntelliMouse sample-rate knocks (200, 100, 80 → ID 3, a wheel; 200, 200,
+  80 → ID 4, five buttons), 100 reports/s, resolution, 1:1 scaling,
+  reporting on (0xF4). Every wait is bounded; a missing controller, a
+  failed self-test, no keyboard or no mouse is logged and the kernel runs
+  on without it. ISA IRQ 1 and IRQ 12 are routed to the same handler
+  (`arch::irq::route_isa_irq`), the configuration byte gets both
+  interrupts and translation on, and the controller is drained once. The
+  layout comes from `poly.keymap=` (default `us`); Num Lock starts on.
+- **virtio-input** (`virtio_input::init`, after the keyboard): every
+  function (device type 18) is reset and brought up by
+  `poly_virtio_input::init`, which reads its configuration (name, serial,
+  ids, properties, the codes of each event type, absolute axis ranges)
+  into a device description, keeps the event queue full of 8-byte buffers
+  and sends LED events on the status queue. MSI-X entry 0 serves both
+  queues; without MSI-X the input thread polls every 10 ms.
+- **Interrupts and waiting.** A console reader that sleeps looks at the
+  controller itself every 100 ms, so a lost interrupt costs latency, not
+  the keyboard. PS/2 LED updates (0xED + mask) write each byte and sleep
+  until the handler hands over the keyboard's ACK (or RESEND).
+- **`/dev/input/event<n>`** (char 13, 64 + n, mode 0660): each open is a
+  client of the hub. `read` returns whole 24-byte `struct input_event`s
+  (`EAGAIN` when empty; blocking reads and `poll` wait for the input
+  thread's wakeup), `write` injects events (an `EV_LED` lights the LED),
+  and the ioctls are `EVIOCGVERSION`, `EVIOCGID`, `EVIOCGREP`/`EVIOCSREP`,
+  `EVIOCGNAME`/`EVIOCGPHYS`/`EVIOCGUNIQ`/`EVIOCGPROP`, `EVIOCGKEY`/`EVIOCGLED`/
+  `EVIOCGSND`/`EVIOCGSW`, `EVIOCGBIT`, `EVIOCGABS`/`EVIOCSABS`, `EVIOCGRAB`,
+  `EVIOCREVOKE`, `EVIOCSCLOCKID` and `EVIOCGEFFECTS`.
 - **API** (what the terminal uses): `keyboard::next_event()` (sleeps),
   `next_event_until(deadline_ns)`, `try_next_event()`, each an `Input {
   event: KeyEvent, output: Output }` for every press and release;
@@ -447,19 +555,33 @@ controller's ports ([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md)).
   `is_present()`, `inject(bytes)` (set 1 bytes as if typed), `stats()`.
 
 ```text
-keyboard: i8042 config 0x71 -> 0x61, 0 stale byte(s) flushed; keyboard reset ok, scancode set 2 translated to set 1
-keyboard: ISA IRQ 1 -> GSI 1 -> vector 0x31; layout us (US English (QWERTY)), Num Lock on
+input: event0: PS/2 Keyboard
+input: event1: PS/2 IntelliMouse Explorer
+keyboard: i8042 config 0x71 -> 0x43, 0 stale byte(s) flushed; keyboard reset ok, scancode set 2 translated to set 1
+keyboard: ISA IRQ 1 -> GSI 1 -> vector 0x30; layout us (US English (QWERTY)), Num Lock on
+mouse: PS/2 IntelliMouse Explorer (id 4), ISA IRQ 12 -> GSI 12 -> vector 0x31; event1
+input: event2: QEMU Virtio Tablet
+virtio-input: 00:03.0: "QEMU Virtio Tablet" (bus 0x06 vendor 0x0627 product 0x0003), event types 0xf, features 0x120000000, queues 64 / 16 entries; event2
+virtio-input: 00:03.0: MSI-X entry 0 -> vector 0x32; interrupt-driven
+input: 3 event device(s), 3 node(s) made in /dev/input (char 13, 64+n)
 ```
 
-The kernel tests (`keyboard::*`) decode injected scancodes through the ring
-(US and de-CH, with AltGr and dead keys), check modifiers on events, the
-I/O APIC route for IRQ 1, bytes the controller fakes with its "write
-keyboard output" command (0xD2) arriving through the interrupt, and Caps
-Lock LED updates acknowledged by the keyboard. With
+The kernel tests (`keyboard::*`) decode injected scancodes through the
+event layer (US, de-CH and de, with AltGr and dead keys), check modifiers
+on events, the I/O APIC route for IRQ 1, bytes the controller fakes with
+its "write keyboard output" command (0xD2) arriving through the interrupt,
+and Caps Lock LED updates acknowledged by the keyboard. `mouse::*` checks
+IRQ 12's route and mouse bytes faked with "write auxiliary output" (0xD3)
+arriving as motion, wheel and a click; `input::*` the event nodes, reads
+and wakeups of an event file, a grab and the soft repeat. With
 `poly.test.keyboard=<text>`, `keyboard::typed_text_matches_the_host_keys`
 waits up to 30 s for keys from the host, which `cargo xtask test` types
 through the QEMU monitor (`sendkey`), with the US layout and with
-`poly.keymap=de-ch` (see [DEBUGGING.md](DEBUGGING.md)).
+`poly.keymap=de-ch` (see [DEBUGGING.md](DEBUGGING.md)). The boot group
+`input` runs `/bin/evtest` (a reader of `/dev/input/event*` without a C
+library) as init and sends keys, motion, the wheel, clicks and an absolute
+position through QMP's `input-send-event`, through the PS/2 devices and
+through `virtio-keyboard-pci`, `virtio-mouse-pci` and `virtio-tablet-pci`.
 
 ## File systems
 
@@ -776,6 +898,16 @@ host-tested drawing library `poly-gfx`
   and the drawn cursor; `render` moves scrolled pixels and draws only the
   changed cells at any offset on a canvas, so a status bar can sit next to
   it. Nothing in `poly-gfx` allocates.
+- **Outline fonts** ([ADR 0105](adr/0105-fonts-poly-font-font-store-and-fontconfig-discovery.md))
+  are `poly-font`'s (`no_std` + `alloc`, not in the kernel yet): TrueType
+  and OpenType parsing (`glyf` and `CFF ` outlines, `cmap`, metrics,
+  `name`, `OS/2`, `GPOS`/`kern` pair kerning), an anti-aliased rasteriser
+  by signed-area accumulation (grey or hinting-free LCD, quarter-pixel
+  positions), a glyph cache, simple layout, and fontconfig-compatible
+  discovery (patterns, matching, `fonts.conf`). The font store is the
+  bundled DejaVu fonts in `/usr/share/fonts/truetype/dejavu` on the root
+  disk (also in `C:\Windows\Fonts`), fetched and pinned by
+  `cargo xtask fonts fetch`.
 
 ```text
 mm: direct map at 0xffff800000000000: ...; NX: yes, 1 GiB pages: no, global pages: yes, write-combining (PAT): yes
@@ -792,6 +924,91 @@ it. With `poly.test.display` (which `cargo xtask` passes) they require a
 display. Under TCG a full redraw of 1280x800 in the 8x16 font takes about
 40 ms and a full flush about 20 ms, so a terminal renders once per batch of
 output.
+
+### virtio-gpu
+
+With a virtio GPU (`-device virtio-gpu-pci`; `cargo xtask run --virtio-gpu`)
+the same back buffer goes to the screen another way
+([ADR 0102](adr/0102-virtio-gpu-2d-display.md)): it is the guest memory of
+a 2D resource, and a flush is a `TRANSFER_TO_HOST_2D` + `RESOURCE_FLUSH` of
+the rectangle. A virtio GPU wins over the VGA; the VGA is the fallback.
+
+```
+   back buffer   = resource 1's backing (RESOURCE_ATTACH_BACKING, one piece)
+          │  display::flush(rect): TRANSFER_TO_HOST_2D + RESOURCE_FLUSH, one notify, polled
+          ▼
+   virtio-gpu    resource 1 (B8G8R8X8) ──SET_SCANOUT──▶ scanout 0, and every other enabled scanout (mirrored)
+                 events_read polled on each flush: a display change re-plans (new resource on a resize)
+```
+
+- **`poly-virtio-gpu`** (VIRTIO 1.2 §5.7): the control queue's wire format,
+  EDID base blocks, the mode plan (the command line's size, else the first
+  enabled scanout's preferred mode, else 1280x800; other enabled scanouts
+  mirror the top-left corner) and the driver: synchronous commands, each
+  fenced, polled with a 2 s timeout, a transfer and its flush in one
+  notification; `show`, `update`, `destroy`, `take_events`. Tested against
+  a simulated GPU.
+- **The kernel side** (`kernel/src/virtio_gpu.rs`) finds the first
+  virtio-gpu function, maps its structures, resets it, gives the driver
+  its queue and command memory and logs the scanouts and EDIDs;
+  `display.rs` plans the size, allocates the back buffer and shows it.
+- **Display changes**: on VIRTIO_GPU_EVENT_DISPLAY the display plans again
+  from `GET_DISPLAY_INFO`; another size gets a new back buffer and
+  resource that keep the picture, and the old ones are destroyed and freed.
+
+```text
+virtio-gpu: 00:02.0: features 0x120000002 (EDID), 1 scanout(s), 0 capset(s), control queue 4 entries, polled
+virtio-gpu: 00:02.0: scanout 0: enabled, preferred 1152x864
+virtio-gpu: 00:02.0: scanout 0: EDID 1.4 from RHT product 0x1234 "QEMU Monitor", preferred timing 1152x864
+display: virtio-gpu 00:02.0 1152x864x32 (Preferred size), resource 1 on scanout(s) 0; back buffer 0x800000 (3888 KiB)
+```
+
+The display tests run on it too (where they cannot read the screen back,
+they check the rectangle sent to the device), plus `display::virtio_gpu_*`:
+the mode is the preferred one, a pattern goes out as one accepted update,
+and a switch to a larger size and back keeps the picture. Boot group
+`virtio-gpu` then compares a QMP screenshot of the scanout with the boot
+screen.
+
+## Wayland compositor
+
+The compositor's groundwork (Phase 6, ADR 0106) lives in user space, on
+the Linux personality, with its logic in a host-tested crate:
+
+```
+ wl-client ──AF_UNIX + SCM_RIGHTS──▶ poly-compositor (userland/poly-compositor, static glibc)
+ (any Wayland client)                 │  poll, recvmsg/sendmsg, mmap of SHM pools (UnixHost)
+                                      ▼
+                         poly_wayland::server::Server        no I/O: bytes and fds in, bytes out
+                           wire decode ─▶ object table ─▶ handlers (core, xdg-shell,
+                           xdg-decoration, presentation-time); errors as wl_display.error
+                                      │ committed SHM buffers copied (damage only) and released
+                                      ▼
+                         poly_wayland::compose::Scene        windows, z-order, damage, scale
+                           render: background, neutral frame, content (premultiplied, HiDPI)
+                                      ▼
+                         Framebuffer trait ── MemoryFramebuffer (PPM on SIGUSR1) today;
+                                              the virtio-gpu scanout later
+```
+
+- **Protocol types** are generated from the XML in `third_party/wayland*/`
+  by `cargo xtask wayland` into `crates/poly-wayland/src/protocol/`
+  (checked in; `ci lint` checks they are current).
+- **Frames:** every toplevel gets Poly's neutral frame (title bar with the
+  title and a close button, a one-pixel border), drawn by the compositor;
+  `zxdg_decoration_manager_v1` always answers `server_side`.
+- **Timing:** frames at most every 1/60 s when something changed or a
+  client waits; frame callbacks and `wp_presentation` feedback are
+  answered with them. Real vsync comes with the display driver.
+- **Input:** `seat::InputSource` is the input stack's interface; for now
+  the seat only has capabilities, and clicks drive the frame (raise,
+  activate, close).
+- **Socket:** `$XDG_RUNTIME_DIR/wayland-0`, else `/run/user/<uid>/wayland-0`.
+  Shared memory comes from files in `/dev/shm` (tmpfs, `MAP_SHARED`);
+  `memfd_create` is not implemented yet.
+
+The boot test `wayland` runs `poly-compositor --exec /bin/wl-client` as the
+first process; `cargo xtask boot-tests wayland` runs it alone.
 
 ## Screen terminal
 
@@ -1370,6 +1587,18 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   and keeps the SDDL SID strings and `GetUserNameW`. Tokens are `Token`
   objects from the kernel's token services; every process has the single
   user's elevated token. Descriptors are stored and returned, not enforced.
+- **Winsock** (`personalities/nt/win32/ws2_32`, `crates/poly-winsock`,
+  `personalities/nt/src/afd`, `kernel/src/nt/afd.rs`,
+  [ADR 0095](adr/0095-winsock-on-polys-sockets.md)): a socket is a file
+  object on `\Device\Afd`, driven by Poly's own `NtDeviceIoControlFile`
+  codes; the personality reaches the kernel's TCP/IP stack through
+  `NtSocket`, which the kernel implements over the same Internet sockets
+  Linux descriptors use. Overlapped sends and receives that must wait pend
+  as IRPs for the kernel's `nt-afd` worker. `ws2_32.dll` maps the
+  requests' `NTSTATUS` to WSA error codes and resolves names
+  (`localhost`, numeric hosts, a UDP stub resolver). `winhttp.dll` and
+  `wininet.dll` make plain HTTP/1.1 requests over it (`crates/poly-http`,
+  `personalities/nt/win32/inet`); `https` waits for TLS.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →
@@ -1489,6 +1718,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
 | Networking: virtio-net on QEMU's user networking (interrupt-driven, and in another boot polled): ping to the gateway, 1 MiB TCP and UDP through echo servers on the host, a connection from the host through a port forward; `ifconfig`, `ping` and `nc` in the shell. Loopback TCP, UDP and ping in every boot | `kernel_test!` + `poly.test.net=<port>`; `cargo xtask` (`net.rs`) | `cargo xtask test` |
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
+| Wayland: the wire format, the generated protocol tables, the server's dispatch and protocol errors, the configure sequence, SHM buffers, damage, decorations, HiDPI, popups, presentation; small scenes rendered and compared pixel for pixel. On Poly: `poly-compositor` as init with the C client `wl-client` (SHM through `SCM_RIGHTS`, xdg_toplevel, frame callback, its pixels found in the compositor's picture) | `#[test]` in `poly-wayland`, `poly-compositor`, `xtask` (`wayland.rs`); boot group `wayland` (`compositor.rs`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
 | The persistent root disk (made by `cargo xtask` from the host's programs, ext4, booted through BusyBox's init and a chroot into its bash): coreutils pipelines under `bash -c`, job control and Ctrl-C, file work on the disk, 32 MiB through `dd`; Python scripts (stdlib modules, `subprocess`, threads, `mmap` resized and flushed, a growing buffer through `mremap`, record locks and flock across processes, SQLite, signals, the terminal's size, children's CPU time, `posix_spawn`); gcc compiling and linking programs onto the disk and running them; `e2fsck -fn` and the program read back on the host; a second boot finds what the first wrote. Lock table and remap kernel tests | `tools/xtask/src/rootdisk.rs`, `kernel_test!` in `fs/locks.rs`, `user/memory/remap.rs` | `cargo xtask test` (alone: `cargo xtask root-disk-test`) |
 | Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff [--target poly]`; in `cargo xtask ci`: Linux against Linux (`selfcheck`) and Poly against Linux for the tests in `tests/linux/poly-pass.txt` (`polycheck`) |

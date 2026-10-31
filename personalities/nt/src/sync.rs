@@ -22,6 +22,7 @@ use poly_ntobj::{EventType, Handle, NtStatus, ObjectType, WaitOutcome, WaitType}
 
 /// `(handle*, access, attributes*)`: the three arguments every create and
 /// open service starts with (as in [`crate::objects`]).
+#[inline(never)]
 fn open_args<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<(u64, u32, crate::abi::Attributes)> {
     let [out, access, attrs] = abi::args::<K, 3>(k, regs)?;
     let attrs = abi::read_attributes(k, attrs)?;

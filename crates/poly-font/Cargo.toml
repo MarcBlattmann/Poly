@@ -1,0 +1,11 @@
+[package]
+name = "poly-font"
+description = "Outline fonts: TrueType/OpenType parsing, an anti-aliased rasteriser, a glyph cache, simple text layout and fontconfig-compatible font discovery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

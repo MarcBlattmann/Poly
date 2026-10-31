@@ -1,0 +1,13 @@
+[package]
+name = "poly-winsock"
+description = "Winsock without the machine (ADR 0095): winsock2.h constants and structure layouts, socket addresses, address text, WSA error codes, Poly's AFD ioctl protocol, the DNS stub resolver's messages and getaddrinfo's decisions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

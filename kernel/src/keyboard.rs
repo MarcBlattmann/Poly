@@ -1,57 +1,60 @@
-//! The PS/2 keyboard behind the i8042 controller (ADR 0020).
+//! The PS/2 keyboard behind the i8042 controller (ADR 0020), and the
+//! console's keys from every keyboard (ADR 0103).
 //!
 //! ```text
-//!  IRQ 1 ─▶ on_irq: read the data port ─▶ RING (256 bytes, lock-free) ─▶ wake ARRIVED
-//!                                                         │
-//!  next_event / try_next_event (thread context) ◀─────────┘
-//!     poly_input::Keyboard: set 1 decoder, modifiers and locks, layout + dead keys
-//!     LEDs follow the locks (0xED, acknowledged through the interrupt handler)
+//!  IRQ 1 ─▶ on_irq: read the data port ─▶ Set1Decoder ─▶ input::report (event layer)
+//!  IRQ 12 ─┘ (mouse bytes ─▶ mouse::on_byte)                   │ console keys, from every keyboard
+//!                                                               ▼
+//!  next_event / try_next_event (thread context) ◀── input::console_pop
+//!     poly_input::Keyboard: modifiers and locks, layout + dead keys
+//!     the lock LEDs of every keyboard follow the locks (input::set_console_leds;
+//!     the PS/2 one with 0xED, acknowledged through the interrupt handler)
 //! ```
 //!
 //! The controller is brought up polled by `poly_input::i8042::init` (both
 //! ports disabled, buffer flushed, self-tests, keyboard reset, scancode set
-//! 2 with the controller translating to set 1); then ISA IRQ 1 is routed
-//! through the I/O APIC and the keyboard interrupt enabled. The interrupt
-//! handler only moves bytes into a ring and wakes waiters: decoding runs in
-//! the thread that asks for events. A keyboard command (the LEDs) is
-//! answered through the handler too: while one is in flight, it hands the
-//! acknowledgement to the waiting thread instead of the ring.
+//! 2 with the controller translating to set 1), then the mouse on its
+//! second port (`i8042::init_aux`, see `mouse.rs`); then ISA IRQ 1 (and
+//! 12) are routed through the I/O APIC and the interrupts enabled. The
+//! interrupt handler decodes the bytes into key events for the event
+//! layer, which queues them for `/dev/input/event*` readers and for the
+//! console; the console reader turns them into characters. A keyboard
+//! command (the LEDs) is answered through the handler too: while one is in
+//! flight, it hands the acknowledgement to the waiting thread.
 //!
-//! The layout is US unless the command line says `poly.keymap=de-ch`;
-//! [`set_layout`] changes it. Num Lock starts on.
+//! The layout is US unless the command line says `poly.keymap=de-ch` (or
+//! `de`); [`set_layout`] changes it. Num Lock starts on.
 
 use crate::arch::i8042::I8042Ports;
 use crate::boot_info::BootInfo;
 use crate::sync::{Mutex, SpinLock};
 use crate::thread::WaitQueue;
-use crate::{acpi, arch, kprintln, time};
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicU64, Ordering::SeqCst};
+use crate::{acpi, arch, input, kprintln, time};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicU64, AtomicUsize, Ordering::SeqCst};
+use poly_input::codes::{bus, ev, syn};
+use poly_input::hub::{DeviceInfo, InputId};
 use poly_input::i8042::{self, ACK, RESEND};
 use poly_input::layout::{self, Layout};
-use poly_input::ring::ByteRing;
-use poly_input::{Keyboard, Leds};
+use poly_input::{Keyboard, Leds, ScanEvent, Set1Decoder, keycode};
 
 /// What [`next_event`] returns, re-exported for the terminal.
 pub use poly_input::{Input, Key, KeyEvent, Modifiers, Output, Special};
 
 /// The ISA IRQ of the controller's first (keyboard) port.
 const KEYBOARD_IRQ: u8 = 1;
-/// Bytes buffered between the interrupt handler and the reader: about 40
-/// key presses and releases.
-const RING_BYTES: usize = 256;
 /// How often a waiting reader looks at the controller itself, in case an
 /// interrupt was lost (an edge while the I/O APIC input was masked).
 const POLL_NS: u64 = 100 * time::NANOS_PER_MILLI;
+/// The event layer's name for the keyboard.
+pub const DEVICE_NAME: &str = "PS/2 Keyboard";
 
-static RING: ByteRing<RING_BYTES> = ByteRing::new();
-/// The ring has one producer at a time: the interrupt handler (on the boot
-/// CPU), a thread polling the controller or injecting bytes, on any CPU.
-/// They also share the controller's ports. Consumers are serialised by the
-/// driver's lock.
-static PRODUCER: SpinLock<()> = SpinLock::new(());
-/// Woken when bytes arrive.
-static ARRIVED: WaitQueue = WaitQueue::new();
+/// The decoder, used by one producer at a time: the interrupt handler, or
+/// a thread polling the controller or injecting bytes, on any CPU. They
+/// also share the controller's ports.
+static PRODUCER: SpinLock<Set1Decoder> = SpinLock::new(Set1Decoder::new());
 static PRESENT: AtomicBool = AtomicBool::new(false);
+/// The keyboard's device in the event layer (`usize::MAX`: none).
+static DEVICE: AtomicUsize = AtomicUsize::new(usize::MAX);
 /// The vector IRQ 1 arrives on (0: not routed).
 static VECTOR: AtomicU8 = AtomicU8::new(0);
 
@@ -64,30 +67,32 @@ const REPLIED: u16 = 0x100;
 static REPLIES: WaitQueue = WaitQueue::new();
 
 static IRQS: AtomicU64 = AtomicU64::new(0);
+/// Bytes decoded (from the keyboard or injected).
+static BYTES: AtomicU64 = AtomicU64::new(0);
 static AUX_BYTES: AtomicU64 = AtomicU64::new(0);
 static LED_UPDATES: AtomicU64 = AtomicU64::new(0);
 static LED_FAILURES: AtomicU64 = AtomicU64::new(0);
 
 /// Serialises writes to the controller (a command and its data byte
 /// belong together); held only for the write, with interrupts off.
-static CONTROLLER: SpinLock<()> = SpinLock::new(());
+pub(crate) static CONTROLLER: SpinLock<()> = SpinLock::new(());
 
-/// The decoding state, used by whoever reads events.
+/// The console's state, used by whoever reads its keys.
 struct Driver {
     keyboard: Keyboard,
-    /// What the keyboard's LEDs show.
+    /// What the keyboards' LEDs show.
     leds: Leds,
 }
 
 static DRIVER: Mutex<Driver> = Mutex::new(Driver { keyboard: Keyboard::new(&layout::US), leds: Leds(0) });
 
-/// Find the controller and bring up the keyboard; logs what happened. The
-/// kernel runs on without a keyboard if there is none.
+/// Find the controller and bring up the keyboard (and the mouse); logs
+/// what happened. The kernel runs on without them if there are none.
 pub fn init(boot: &BootInfo) {
     let layout = match boot.arg("poly.keymap") {
         None => &layout::US,
         Some(name) => layout::by_name(name).unwrap_or_else(|| {
-            kprintln!("keyboard: unknown layout \"{name}\" (poly.keymap=us or de-ch); using us");
+            kprintln!("keyboard: unknown layout \"{name}\" (poly.keymap=us, de-ch or de); using us");
             &layout::US
         }),
     };
@@ -96,19 +101,26 @@ pub fn init(boot: &BootInfo) {
         d.keyboard.set_layout(layout);
         d.keyboard.set_locks(Modifiers::NUM_LOCK);
     }
+    bring_up(layout);
+    // The lock LEDs of every keyboard there is (PS/2 or virtio).
+    DRIVER.lock().sync_leds();
+}
+
+fn bring_up(layout: &Layout) {
     // ACPI 2.0+ firmware says whether the 8042 exists; without that, the
     // probe finds out (a missing controller reads 0xFF).
     if acpi::platform().and_then(|p| p.has_8042) == Some(false) {
         kprintln!("keyboard: no 8042 controller (ACPI FADT); no PS/2 keyboard");
         return;
     }
-    let setup = match i8042::init(&I8042Ports) {
+    let mut setup = match i8042::init(&I8042Ports) {
         Ok(s) => s,
         Err(e) => {
             kprintln!("keyboard: i8042: {e:?}; no PS/2 keyboard");
             return;
         }
     };
+    let aux = i8042::init_aux(&I8042Ports, &mut setup);
     let vector = match arch::irq::route_isa_irq(KEYBOARD_IRQ, on_irq, 0) {
         Ok(v) => v,
         Err(e) => {
@@ -117,6 +129,11 @@ pub fn init(boot: &BootInfo) {
         }
     };
     let gsi = arch::apic::isa_route(KEYBOARD_IRQ).map_or(u32::from(KEYBOARD_IRQ), |r| r.gsi);
+    let id = InputId { bustype: bus::I8042, vendor: 0, product: 1, version: 0 };
+    let mut info = DeviceInfo::keyboard(DEVICE_NAME, id);
+    info.phys = "i8042/serio0".into();
+    DEVICE.store(input::register(info, Some((set_leds_hook, 0))), SeqCst);
+    let mouse = crate::mouse::attach(aux, &mut setup);
     let enabled = {
         let _c = CONTROLLER.lock();
         i8042::enable_interrupts(&I8042Ports, &setup)
@@ -142,7 +159,16 @@ pub fn init(boot: &BootInfo) {
         layout.name,
         layout.description
     );
-    DRIVER.lock().sync_leds();
+    if let Some(m) = mouse {
+        m.log();
+    }
+}
+
+/// Light the lock LEDs of keyboards that came after [`init`] (virtio
+/// ones) as the console's locks are.
+pub fn refresh_leds() {
+    let leds = DRIVER.lock().leds;
+    input::set_console_leds(leds);
 }
 
 /// Whether a PS/2 keyboard was found and is interrupt-driven.
@@ -150,17 +176,20 @@ pub fn is_present() -> bool {
     PRESENT.load(SeqCst)
 }
 
-/// The next key event (presses and releases) and what it types, if one is
-/// buffered; never sleeps for input.
+/// The PS/2 keyboard's device in the event layer.
+pub fn device() -> Option<usize> {
+    let d = DEVICE.load(SeqCst);
+    (d != usize::MAX).then_some(d)
+}
+
+/// The next console key event (presses and releases, from any keyboard)
+/// and what it types, if one is buffered; never sleeps for input.
 pub fn try_next_event() -> Option<Input> {
     let mut d = DRIVER.lock();
-    while let Some(byte) = RING.pop() {
-        if let Some(input) = d.keyboard.feed(byte) {
-            d.sync_leds();
-            return Some(input);
-        }
-    }
-    None
+    let k = input::console_pop()?;
+    let input = d.keyboard.apply(ScanEvent { key: k.key, pressed: k.value != 0 });
+    d.sync_leds();
+    Some(input)
 }
 
 /// The next key event, sleeping until one arrives. Without a keyboard that
@@ -177,6 +206,7 @@ pub fn next_event() -> Input {
 /// `deadline_ns`.
 pub fn next_event_until(deadline_ns: u64) -> Option<Input> {
     loop {
+        let seen = input::console_seq();
         if let Some(input) = try_next_event() {
             return Some(input);
         }
@@ -185,7 +215,7 @@ pub fn next_event_until(deadline_ns: u64) -> Option<Input> {
             return None;
         }
         let wake = deadline_ns.min(now.saturating_add(POLL_NS));
-        if !ARRIVED.wait_until_deadline(|| !RING.is_empty(), wake) {
+        if !input::wait_console(seen, wake) {
             poll_controller();
         }
     }
@@ -195,19 +225,19 @@ pub fn next_event_until(deadline_ns: u64) -> Option<Input> {
 /// tests (the screen terminal's shell): while tests run (`ktest::running`),
 /// it takes no events, since the keyboard tests read the keyboard
 /// themselves, and just waits for the deadline. Whether tests run is
-/// checked under the decoder's lock, right before taking an event.
+/// checked under the console's lock, right before taking an event.
 pub fn next_shared_event_until(deadline_ns: u64) -> Option<Input> {
     let testing = crate::ktest::running;
     loop {
+        let seen = input::console_seq();
         {
             let mut d = DRIVER.lock();
-            while !testing()
-                && let Some(byte) = RING.pop()
+            if !testing()
+                && let Some(k) = input::console_pop()
             {
-                if let Some(input) = d.keyboard.feed(byte) {
-                    d.sync_leds();
-                    return Some(input);
-                }
+                let input = d.keyboard.apply(ScanEvent { key: k.key, pressed: k.value != 0 });
+                d.sync_leds();
+                return Some(input);
             }
         }
         let now = time::now_ns();
@@ -215,7 +245,9 @@ pub fn next_shared_event_until(deadline_ns: u64) -> Option<Input> {
             return None;
         }
         let wake = deadline_ns.min(now.saturating_add(POLL_NS));
-        if !ARRIVED.wait_until_deadline(|| !RING.is_empty() && !testing(), wake) && !testing() {
+        if testing() {
+            crate::thread::sleep_until(wake);
+        } else if !input::wait_console(seen, wake) {
             poll_controller();
         }
     }
@@ -235,27 +267,48 @@ pub fn modifiers() -> Modifiers {
     DRIVER.lock().keyboard.modifiers()
 }
 
-/// Put bytes into the input buffer as if the keyboard had sent them (set 1
-/// scancodes): for tests, and for feeding key presses from elsewhere.
-/// False if the buffer was full and some were dropped.
+/// Put bytes into the input path as if the PS/2 keyboard had sent them
+/// (set 1 scancodes): for tests, and for feeding key presses from
+/// elsewhere. Without a PS/2 keyboard they go to the console only. False
+/// if the console's buffer was full and keys were dropped.
 pub fn inject(bytes: &[u8]) -> bool {
-    let all = {
-        let _producer = PRODUCER.lock();
-        bytes.iter().filter(|&&b| !RING.push(b)).count() == 0
-    };
-    ARRIVED.wake_all();
-    all
+    let dropped = input::console_dropped();
+    {
+        let mut decoder = PRODUCER.lock();
+        let now = time::now_ns();
+        for &b in bytes {
+            decode(&mut decoder, b, now);
+        }
+    }
+    input::console_dropped() == dropped
+}
+
+/// Decode one keyboard byte into the event layer.
+fn decode(decoder: &mut Set1Decoder, byte: u8, now: u64) {
+    if let Some(scan) = decoder.feed(byte) {
+        let value = i32::from(scan.pressed);
+        match device() {
+            Some(dev) => {
+                input::report_at(dev, now, &[(ev::KEY, keycode::code(scan.key), value), (ev::SYN, syn::REPORT, 0)])
+            }
+            None => {
+                input::console_push(scan.key, value);
+            }
+        }
+    }
+    // Counted once the byte's event is in the event layer.
+    BYTES.fetch_add(1, SeqCst);
 }
 
 /// Counters for the boot log and tests.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Stats {
     pub interrupts: u64,
-    /// Bytes buffered (from the keyboard or injected).
+    /// Bytes decoded (from the keyboard or injected).
     pub bytes: u64,
-    /// Bytes lost because the buffer was full.
+    /// Console keys lost because the buffer was full.
     pub dropped: u64,
-    /// Bytes from the second (mouse) port, discarded.
+    /// Bytes from the second (mouse) port.
     pub aux_bytes: u64,
     pub led_updates: u64,
     pub led_failures: u64,
@@ -264,8 +317,8 @@ pub struct Stats {
 pub fn stats() -> Stats {
     Stats {
         interrupts: IRQS.load(SeqCst),
-        bytes: RING.pushed() as u64,
-        dropped: RING.dropped() as u64,
+        bytes: BYTES.load(SeqCst),
+        dropped: input::console_dropped(),
         aux_bytes: AUX_BYTES.load(SeqCst),
         led_updates: LED_UPDATES.load(SeqCst),
         led_failures: LED_FAILURES.load(SeqCst),
@@ -273,21 +326,30 @@ pub fn stats() -> Stats {
 }
 
 impl Driver {
-    /// Make the LEDs show the locks, if they do not.
+    /// Make the keyboards' LEDs show the locks, if they do not.
     fn sync_leds(&mut self) {
         let want = self.keyboard.leds();
-        if want == self.leds || !is_present() {
+        if want == self.leds {
             return;
         }
-        // Not retried on failure: the next lock change tries again.
         self.leds = want;
-        if let Err(why) = keyboard_command(&[i8042::KBD_SET_LEDS, want.0]) {
-            if LED_FAILURES.fetch_add(1, SeqCst) < 4 {
-                kprintln!("keyboard: setting the LEDs to {:#05b} failed: {why}", want.0);
-            }
-        } else {
-            LED_UPDATES.fetch_add(1, SeqCst);
+        input::set_console_leds(want);
+    }
+}
+
+/// The event layer lights the PS/2 keyboard's LEDs (evdev LED bits).
+fn set_leds_hook(_: usize, bits: u64) {
+    if !is_present() {
+        return;
+    }
+    let want = Leds::from_evdev(bits);
+    // Not retried on failure: the next change tries again.
+    if let Err(why) = keyboard_command(&[i8042::KBD_SET_LEDS, want.0]) {
+        if LED_FAILURES.fetch_add(1, SeqCst) < 4 {
+            kprintln!("keyboard: setting the LEDs to {:#05b} failed: {why}", want.0);
         }
+    } else {
+        LED_UPDATES.fetch_add(1, SeqCst);
     }
 }
 
@@ -324,52 +386,45 @@ fn keyboard_command(bytes: &[u8]) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// Move every byte waiting in the controller into the ring (or hand a
-/// command's reply over). Runs in the interrupt handler, or with
-/// interrupts off.
-fn drain() -> bool {
-    let _producer = PRODUCER.lock();
-    let mut got = false;
+/// Decode every byte waiting in the controller into the event layer (or
+/// hand a command's reply over); mouse bytes go to the mouse. Runs in the
+/// interrupt handlers, or with interrupts off.
+fn drain() {
+    let mut decoder = PRODUCER.lock();
     let mut reply = false;
+    let now = time::now_ns();
     // Bounded: a controller that always reports a byte cannot hold us here.
     for _ in 0..16 {
         match i8042::read_keyboard_byte(&I8042Ports) {
             None => break,
-            Some(Err(_)) => {
+            Some(Err(b)) => {
                 AUX_BYTES.fetch_add(1, SeqCst);
+                crate::mouse::on_byte(b, now);
             }
             Some(Ok(b)) if (b == ACK || b == RESEND) && AWAITING_REPLY.load(SeqCst) => {
                 REPLY.store(REPLIED | u16::from(b), SeqCst);
                 reply = true;
             }
-            Some(Ok(b)) => {
-                RING.push(b);
-                got = true;
-            }
+            Some(Ok(b)) => decode(&mut decoder, b, now),
         }
     }
     if reply {
         REPLIES.wake_all();
     }
-    got
 }
 
-fn on_irq(_: usize) {
+/// The handler of IRQ 1 and IRQ 12: both read the same controller.
+pub(crate) fn on_irq(_: usize) {
     IRQS.fetch_add(1, SeqCst);
-    if drain() {
-        ARRIVED.wake_all();
-    }
+    drain();
 }
 
 /// Read the controller from thread context, as the interrupt handler would.
-fn poll_controller() {
+pub(crate) fn poll_controller() {
     if !is_present() {
         return;
     }
-    let got = drain();
-    if got {
-        ARRIVED.wake_all();
-    }
+    drain();
 }
 
 // --- Tests ------------------------------------------------------------------
@@ -388,7 +443,7 @@ pub const TEST_KEYBOARD_FLAG: &str = "poly.test.keyboard";
 pub const TEST_READY: &str = "keyboard: ready for test input";
 
 /// Throw away whatever is buffered (no key is typed during the tests).
-fn drain_events() {
+pub(crate) fn drain_events() {
     while try_next_event().is_some() {}
 }
 
@@ -432,6 +487,9 @@ kernel_test! {
         if entry.vector() != vector || entry.is_masked() {
             return Err("IRQ 1's redirection entry is masked or points elsewhere");
         }
+        if device().and_then(input::info).is_none_or(|i| i.name != DEVICE_NAME) {
+            return Err("the keyboard is not a device of the event layer");
+        }
         Ok(())
     }
 }
@@ -457,9 +515,16 @@ kernel_test! {
         bytes.extend(tap_bytes(&[], &[Key::N]));
         inject(&bytes);
         let de_ch = read_text();
+        set_layout(&layout::DE);
+        // z, AltGr-Q = @, ß, ´ then e = é.
+        let mut bytes = tap_bytes(&[], &[Key::Y]);
+        bytes.extend(tap_bytes(&[Key::AltRight], &[Key::Q]));
+        bytes.extend(tap_bytes(&[], &[Key::Minus, Key::Equal, Key::E]));
+        inject(&bytes);
+        let de = read_text();
         set_layout(before);
-        crate::kprintln!("keyboard: injected: us {us:?}, de-ch {de_ch:?}");
-        if us != "Poly<Enter><Left>\u{3}" || de_ch != "z@âüñ" {
+        crate::kprintln!("keyboard: injected: us {us:?}, de-ch {de_ch:?}, de {de:?}");
+        if us != "Poly<Enter><Left>\u{3}" || de_ch != "z@âüñ" || de != "z@ßé" {
             return Err("injected scancodes did not decode to the expected text");
         }
         Ok(())
@@ -500,12 +565,12 @@ kernel_test! {
         // later than this one writes.
         let deadline = time::now_ns() + time::NANOS_PER_SEC;
         for b in [0x30, 0xb0] {
-            let pushed = RING.pushed();
+            let decoded = BYTES.load(SeqCst);
             {
                 let _c = CONTROLLER.lock();
                 i8042::write_keyboard_output(&I8042Ports, b).map_err(|_| "the controller did not take the command")?;
             }
-            while RING.pushed() == pushed && time::now_ns() < deadline {
+            while BYTES.load(SeqCst) == decoded && time::now_ns() < deadline {
                 crate::thread::yield_now();
             }
         }
@@ -542,6 +607,11 @@ kernel_test! {
         }
         if after.led_updates != before.led_updates + 2 || modifiers().caps_lock() {
             return Err("Caps Lock did not update the LEDs twice");
+        }
+        // The event layer knows the LEDs too: Num Lock on, Caps Lock off.
+        let leds = device().map(input::leds).ok_or("no keyboard device")?;
+        if leds != Leds::NUM_LOCK.to_evdev() {
+            return Err("the event layer's LED state is not Num Lock alone");
         }
         Ok(())
     }

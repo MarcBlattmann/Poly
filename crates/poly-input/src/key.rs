@@ -378,6 +378,39 @@ impl Leds {
     pub const SCROLL_LOCK: Leds = Leds(1 << 0);
     pub const NUM_LOCK: Leds = Leds(1 << 1);
     pub const CAPS_LOCK: Leds = Leds(1 << 2);
+
+    /// The evdev LED bits (bit `n` for `LED_*` code `n`: Num Lock 0, Caps
+    /// Lock 1, Scroll Lock 2).
+    pub const fn to_evdev(self) -> u64 {
+        use crate::codes::led;
+        let mut b = 0;
+        if self.0 & Leds::NUM_LOCK.0 != 0 {
+            b |= 1 << led::NUML;
+        }
+        if self.0 & Leds::CAPS_LOCK.0 != 0 {
+            b |= 1 << led::CAPSL;
+        }
+        if self.0 & Leds::SCROLL_LOCK.0 != 0 {
+            b |= 1 << led::SCROLLL;
+        }
+        b
+    }
+
+    /// The PS/2 LED mask for evdev LED bits (others are dropped).
+    pub const fn from_evdev(bits: u64) -> Leds {
+        use crate::codes::led;
+        let mut l = 0;
+        if bits & (1 << led::NUML) != 0 {
+            l |= Leds::NUM_LOCK.0;
+        }
+        if bits & (1 << led::CAPSL) != 0 {
+            l |= Leds::CAPS_LOCK.0;
+        }
+        if bits & (1 << led::SCROLLL) != 0 {
+            l |= Leds::SCROLL_LOCK.0;
+        }
+        Leds(l)
+    }
 }
 
 /// A key went down or came up.

@@ -1,0 +1,15 @@
+[package]
+name = "poly-virtio-gpu"
+description = "virtio GPU device driver (2D): control-queue commands and responses, display info and EDID, scanout planning, and a synchronous driver over a split virtqueue"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+poly-pci.workspace = true
+poly-virtio.workspace = true

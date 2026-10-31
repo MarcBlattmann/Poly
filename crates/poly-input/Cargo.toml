@@ -1,6 +1,6 @@
 [package]
 name = "poly-input"
-description = "Keyboard input: key and event types, the PS/2 scancode set 1 decoder, modifier and lock state, keyboard layouts (US, Swiss German) with dead keys, and the i8042 controller protocol"
+description = "Input: key and event types, PS/2 scancode sets 1 and 2, evdev codes, modifier and lock state, keyboard layouts (US, Swiss German, German) with dead keys and keysyms, the input event layer (devices, queues, soft repeat, LEDs, grabs) with the Linux evdev interface, and the i8042 keyboard and mouse protocol"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

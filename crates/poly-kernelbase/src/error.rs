@@ -20,6 +20,8 @@ pub const ERROR_FILE_EXISTS: u32 = 80;
 pub const ERROR_NEGATIVE_SEEK: u32 = 131;
 /// `ERROR_INVALID_FLAGS` (`winerror.h`).
 pub const ERROR_INVALID_FLAGS: u32 = 1004;
+/// `ERROR_RESOURCE_TYPE_NOT_FOUND` (`winerror.h`).
+pub const ERROR_RESOURCE_TYPE_NOT_FOUND: u32 = 1813;
 /// `ERROR_RESOURCE_LANG_NOT_FOUND` (`winerror.h`).
 pub const ERROR_RESOURCE_LANG_NOT_FOUND: u32 = 1815;
 

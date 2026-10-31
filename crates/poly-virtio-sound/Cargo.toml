@@ -1,0 +1,15 @@
+[package]
+name = "poly-virtio-sound"
+description = "virtio sound device driver: control requests (jacks, PCM streams, channel maps), the PCM stream state machine, period feeding through the transmit queue, events"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+poly-pci.workspace = true
+poly-virtio.workspace = true
