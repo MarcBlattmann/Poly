@@ -1,7 +1,7 @@
 [
 {"symbol":"D3D8GetSWInfo","src":["wine-spec"]},
 {"symbol":"DebugSetMute","src":["wine-spec"]},
-{"symbol":"Direct3DCreate8","src":["wine-spec"]},
-{"symbol":"ValidatePixelShader","src":["wine-spec"]},
-{"symbol":"ValidateVertexShader","src":["wine-spec"]}
+{"symbol":"Direct3DCreate8","src":["wine-spec"],"seeds":["wine:d3d8/tests/device.c:test_ApplyStateBlock","wine:d3d8/tests/device.c:test_begin_end_state_block","wine:d3d8/tests/device.c:test_check_device_format","wine:d3d8/tests/device.c:test_checkdevicemultisampletype","wine:d3d8/tests/device.c:test_create_rt_ds_fail","wine:d3d8/tests/device.c:test_cube_textures","wine:d3d8/tests/device.c:test_depth_stencil_size","wine:d3d8/tests/device.c:test_destroyed_window"]},
+{"symbol":"ValidatePixelShader","src":["wine-spec"],"seeds":["wine:d3d8/tests/device.c:test_validate_ps"]},
+{"symbol":"ValidateVertexShader","src":["wine-spec"],"seeds":["wine:d3d8/tests/device.c:test_validate_vs"]}
 ]

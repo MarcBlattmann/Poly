@@ -5643,10 +5643,10 @@
 {"symbol":"btowc","src":["wine-spec"]},
 {"symbol":"mbrlen","src":["wine-spec"]},
 {"symbol":"mbrtowc","src":["wine-spec"]},
-{"symbol":"mbsrtowcs","src":["wine-spec"]},
+{"symbol":"mbsrtowcs","src":["wine-spec"],"seeds":["wine:msvcp60/tests/string.c:test_mbsrtowcs"]},
 {"symbol":"towctrans","src":["wine-spec"]},
 {"symbol":"wcrtomb","src":["wine-spec"]},
-{"symbol":"wcsrtombs","src":["wine-spec"]},
+{"symbol":"wcsrtombs","src":["wine-spec"],"seeds":["wine:msvcp60/tests/string.c:test_wcsrtombs"]},
 {"symbol":"wctob","src":["wine-spec"]},
 {"symbol":"wctrans","src":["wine-spec"]},
 {"symbol":"wctype","src":["wine-spec"]}

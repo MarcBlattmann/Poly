@@ -3,9 +3,9 @@
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]},
-{"symbol":"MFCreateSinkWriterFromMediaSink","src":["wine-spec"]},
-{"symbol":"MFCreateSinkWriterFromURL","src":["wine-spec"]},
-{"symbol":"MFCreateSourceReaderFromByteStream","src":["wine-spec"]},
-{"symbol":"MFCreateSourceReaderFromMediaSource","src":["wine-spec"]},
+{"symbol":"MFCreateSinkWriterFromMediaSink","src":["wine-spec"],"seeds":["wine:mfreadwrite/tests/mfplat.c:test_sink_writer_create"]},
+{"symbol":"MFCreateSinkWriterFromURL","src":["wine-spec"],"seeds":["wine:mfreadwrite/tests/mfplat.c:test_sink_writer_create","wine:mfreadwrite/tests/mfplat.c:test_sink_writer_add_stream","wine:mfreadwrite/tests/mfplat.c:test_sink_writer_get_object","wine:mfreadwrite/tests/mfplat.c:test_sink_writer_sample_process"]},
+{"symbol":"MFCreateSourceReaderFromByteStream","src":["wine-spec"],"seeds":["wine:mfreadwrite/tests/mfplat.c:test_source_reader","wine:mfreadwrite/tests/mfplat.c:test_source_reader_release"]},
+{"symbol":"MFCreateSourceReaderFromMediaSource","src":["wine-spec"],"seeds":["wine:mfreadwrite/tests/mfplat.c:test_source_reader_aspect_ratio","wine:mfreadwrite/tests/mfplat.c:test_source_reader_transforms","wine:mfreadwrite/tests/mfplat.c:test_source_reader_transforms_d3d9","wine:mfreadwrite/tests/mfplat.c:test_interfaces","wine:mfreadwrite/tests/mfplat.c:test_reader_d3d9","wine:mfreadwrite/tests/mfplat.c:test_source_reader_transform_stream_change","wine:mfreadwrite/tests/mfplat.c:test_source_reader_transforms_d3d11","wine:mfreadwrite/tests/mfplat.c:test_source_reader_from_media_source"]},
 {"symbol":"MFCreateSourceReaderFromURL","src":["wine-spec"]}
 ]

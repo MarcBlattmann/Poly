@@ -2,5 +2,5 @@
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]},
-{"symbol":"MFCreateWAVEMediaSink","src":["wine-spec"]}
+{"symbol":"MFCreateWAVEMediaSink","src":["wine-spec"],"seeds":["wine:mfsrcsnk/tests/mfsrcsnk.c:test_wave_sink"]}
 ]

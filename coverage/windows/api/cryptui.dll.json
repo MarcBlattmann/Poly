@@ -35,7 +35,7 @@
 {"symbol":"CryptUIWizExport","src":["wine-spec"]},
 {"symbol":"CryptUIWizFreeCertRequestNoDS","src":["wine-spec"]},
 {"symbol":"CryptUIWizFreeDigitalSignContext","src":["wine-spec"]},
-{"symbol":"CryptUIWizImport","src":["wine-spec"]},
+{"symbol":"CryptUIWizImport","src":["wine-spec"],"seeds":["wine:cryptui/tests/cryptui.c:test_crypt_ui_wiz_import"]},
 {"symbol":"CryptUIWizQueryCertRequestNoDS","src":["wine-spec"]},
 {"symbol":"CryptUIWizSubmitCertRequestNoDS","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},

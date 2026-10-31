@@ -4,6 +4,6 @@
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]},
 {"symbol":"GetPStoreProvider","src":["wine-spec"]},
-{"symbol":"PStoreCreateInstance","src":["wine-spec"]},
+{"symbol":"PStoreCreateInstance","src":["wine-spec"],"seeds":["wine:pstorec/tests/pstorec.c:test_PStoreCreateInstance"]},
 {"symbol":"PStoreEnumProviders","src":["wine-spec"]}
 ]

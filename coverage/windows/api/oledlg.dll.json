@@ -1,6 +1,6 @@
 [
 {"symbol":"OleUIAddVerbMenuA","src":["wine-spec"]},
-{"symbol":"OleUIAddVerbMenuW","src":["wine-spec"]},
+{"symbol":"OleUIAddVerbMenuW","src":["wine-spec"],"seeds":["wine:oledlg/tests/main.c:test_OleUIAddVerbMenu"]},
 {"symbol":"OleUIBusyA","src":["wine-spec"]},
 {"symbol":"OleUIBusyW","src":["wine-spec"]},
 {"symbol":"OleUICanConvertOrActivateAs","src":["wine-spec"]},

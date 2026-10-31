@@ -1,3 +1,3 @@
 [
-{"symbol":"DWriteCreateFactory","src":["wine-spec"]}
+{"symbol":"DWriteCreateFactory","src":["wine-spec"],"seeds":["wine:dwrite/tests/font.c:test_shared_isolated","wine:dwrite/tests/font.c:test_GetGdiInterop","wine:dwrite/tests/analyzer.c:START_TEST"]}
 ]

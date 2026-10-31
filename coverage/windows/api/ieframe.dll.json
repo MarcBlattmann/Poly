@@ -7,5 +7,5 @@
 {"symbol":"IERefreshElevationPolicy","src":["wine-spec"]},
 {"symbol":"IEWinMain","src":["wine-spec"]},
 {"symbol":"OpenURL","src":["wine-spec"]},
-{"symbol":"SetQueryNetSessionCount","src":["wine-spec"]}
+{"symbol":"SetQueryNetSessionCount","src":["wine-spec"],"seeds":["wine:ieframe/tests/webbrowser.c:test_SetQueryNetSessionCount","wine:ieframe/tests/webbrowser.c:test_ClientSite"]}
 ]

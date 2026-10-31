@@ -1,3 +1,3 @@
 [
-{"symbol":"DSM_Entry","forward":"twaindsm.DSM_Entry","src":["wine-spec"]}
+{"symbol":"DSM_Entry","forward":"twaindsm.DSM_Entry","src":["wine-spec"],"seeds":["wine:twain_32/tests/dsm.c:test_sources","wine:twain_32/tests/dsm.c:test_imagelayout","wine:twain_32/tests/dsm.c:test_onevalue_cap","wine:twain_32/tests/dsm.c:test_supported_sizes","wine:twain_32/tests/dsm.c:test_physical","wine:twain_32/tests/dsm.c:test_single_source","wine:twain_32/tests/dsm.c:test_resolution","wine:twain_32/tests/dsm.c:get_condition_code"]}
 ]

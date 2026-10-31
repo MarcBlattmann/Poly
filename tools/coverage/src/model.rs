@@ -151,6 +151,13 @@ pub struct Entry {
     /// Keys into `Coverage::sources`.
     #[serde(rename = "src")]
     pub sources: Vec<String>,
+    /// Where the real OS's behaviour for this entry is tested by others,
+    /// for spec agents only (ADR 0097): `<seed source>:<locator>`, the
+    /// source a key into `Coverage::seeds`, e.g.
+    /// `wine:kernel32/tests/file.c:test_CreateFileW`. Names only, best
+    /// first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub seeds: Vec<String>,
 }
 
 fn default_os() -> Os {
@@ -182,6 +189,7 @@ impl Entry {
             arch: Vec::new(),
             forward: None,
             sources: vec![source.to_string()],
+            seeds: Vec::new(),
         }
     }
 }
@@ -207,12 +215,21 @@ pub struct Coverage {
     /// Recorded app trace sessions per OS.
     #[serde(default)]
     pub traces: BTreeMap<Os, Traces>,
+    /// Where entries' `seeds` come from (ADR 0097), by prefix (`wine`).
+    #[serde(default)]
+    pub seeds: BTreeMap<String, Source>,
     pub entries: Vec<Entry>,
 }
 
 impl Default for Coverage {
     fn default() -> Self {
-        Coverage { schema_version: SCHEMA_VERSION, sources: BTreeMap::new(), traces: BTreeMap::new(), entries: vec![] }
+        Coverage {
+            schema_version: SCHEMA_VERSION,
+            sources: BTreeMap::new(),
+            traces: BTreeMap::new(),
+            seeds: BTreeMap::new(),
+            entries: vec![],
+        }
     }
 }
 
@@ -230,6 +247,7 @@ impl Coverage {
                     schema_version: index.schema_version,
                     sources: index.sources,
                     traces: index.traces,
+                    seeds: index.seeds,
                     entries: vec![],
                 }
             }
@@ -252,8 +270,12 @@ impl Coverage {
     /// Every file of the on-disk form: (path relative to the coverage dir, contents).
     pub fn files(&self) -> BTreeMap<PathBuf, String> {
         let mut out = BTreeMap::new();
-        let index =
-            Index { schema_version: self.schema_version, sources: self.sources.clone(), traces: self.traces.clone() };
+        let index = Index {
+            schema_version: self.schema_version,
+            sources: self.sources.clone(),
+            traces: self.traces.clone(),
+            seeds: self.seeds.clone(),
+        };
         out.insert(PathBuf::from(INDEX), serde_json::to_string_pretty(&index).unwrap() + "\n");
         let mut groups: BTreeMap<PathBuf, Vec<&Entry>> = BTreeMap::new();
         for e in &self.entries {
@@ -389,6 +411,45 @@ impl Coverage {
         Ok(changed)
     }
 
+    /// Replace every seed of one seed source (`prefix`) with `seeds` (entry
+    /// id to its seeds, best first, without the prefix), recording where
+    /// they come from. Seeds of other sources stay. Fails, changing
+    /// nothing, on an unknown id. Returns how many entries have seeds of
+    /// this source now.
+    pub fn set_seeds(
+        &mut self,
+        prefix: &str,
+        source: Source,
+        seeds: &BTreeMap<String, Vec<String>>,
+    ) -> Result<usize, String> {
+        let index: BTreeMap<&str, usize> = self.entries.iter().enumerate().map(|(i, e)| (e.id.as_str(), i)).collect();
+        let mut at = Vec::new();
+        for id in seeds.keys() {
+            at.push(*index.get(id.as_str()).ok_or_else(|| format!("no entry {id}"))?);
+        }
+        let tag = format!("{prefix}:");
+        for e in &mut self.entries {
+            e.seeds.retain(|s| !s.starts_with(&tag));
+        }
+        let mut seeded = 0;
+        for (i, list) in at.into_iter().zip(seeds.values()) {
+            let e = &mut self.entries[i];
+            for s in list {
+                let s = format!("{tag}{s}");
+                if !e.seeds.contains(&s) {
+                    e.seeds.push(s);
+                }
+            }
+            seeded += usize::from(!list.is_empty());
+        }
+        self.seeds.insert(prefix.to_string(), source);
+        Ok(seeded)
+    }
+
+    pub fn find(&self, id: &str) -> Option<&Entry> {
+        self.entries.iter().find(|e| e.id == id)
+    }
+
     /// Invariants that CI enforces.
     pub fn check(&self) -> Vec<String> {
         let mut errors = Vec::new();
@@ -425,6 +486,16 @@ impl Coverage {
             for s in &e.sources {
                 if !self.sources.contains_key(s) {
                     errors.push(format!("{}: unknown source {s}", e.id));
+                }
+            }
+            let mut seen = BTreeSet::new();
+            for s in &e.seeds {
+                match s.split_once(':') {
+                    Some((prefix, locator)) if self.seeds.contains_key(prefix) && !locator.is_empty() => {}
+                    _ => errors.push(format!("{}: seed {s} is not <known seed source>:<locator>", e.id)),
+                }
+                if !seen.insert(s) {
+                    errors.push(format!("{}: seed {s} twice", e.id));
                 }
             }
         }
@@ -464,6 +535,9 @@ struct Index {
     /// Recorded app trace sessions per OS.
     #[serde(default)]
     traces: BTreeMap<Os, Traces>,
+    /// Absent until the first seed import, so older maps stay byte-identical.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    seeds: BTreeMap<String, Source>,
 }
 
 fn valid_component(c: &str) -> bool {
@@ -599,6 +673,44 @@ mod tests {
         assert_eq!(c.find_mut("windows/api/kernel32.dll/CreateFileW").unwrap().status, Status::Green);
         assert_eq!(c.set_component_status("linux/syscall/x86_64", Status::Stub), Ok(1));
         assert_eq!(c.set_component_status("linux/syscall/x86_64", Status::Stub), Ok(0));
+    }
+
+    #[test]
+    fn seeds_are_optional_replaced_per_source_and_checked() {
+        let mut c = sample();
+        let dir = temp_dir("seeds");
+        c.save(&dir).unwrap();
+        assert!(!std::fs::read_to_string(dir.join("index.json")).unwrap().contains("seeds"));
+
+        let id = "windows/api/kernel32.dll/CreateFileW";
+        let src = |rev: &str| Source { description: "test seeds".into(), revision: rev.into() };
+        let seeds =
+            BTreeMap::from([(id.to_string(), vec!["a/tests/f.c:test_one".into(), "a/tests/f.c:test_two".into()])]);
+        assert_eq!(c.set_seeds("wine", src("1"), &seeds), Ok(1));
+        c.find_mut(id).unwrap().seeds.push("other:x".into());
+        c.seeds.insert("other".into(), src("9"));
+        assert!(c.check().is_empty());
+        let text = &c.files()[&PathBuf::from("windows/api/kernel32.dll.json")];
+        assert!(
+            text.contains(r#""src":["t"],"seeds":["wine:a/tests/f.c:test_one","wine:a/tests/f.c:test_two","other:x"]"#)
+        );
+        c.save(&dir).unwrap();
+        assert!(std::fs::read_to_string(dir.join("index.json")).unwrap().contains("\"seeds\""));
+        assert_eq!(Coverage::load(&dir).unwrap(), c);
+
+        // A new import replaces that source's seeds and keeps the others.
+        let again = BTreeMap::from([(id.to_string(), vec!["b/tests/g.c:test_three".to_string()])]);
+        assert_eq!(c.set_seeds("wine", src("2"), &again), Ok(1));
+        assert_eq!(c.find(id).unwrap().seeds, ["other:x", "wine:b/tests/g.c:test_three"]);
+        assert_eq!(c.seeds["wine"].revision, "2");
+        assert!(c.set_seeds("wine", src("3"), &BTreeMap::from([("nope".to_string(), vec![])])).is_err());
+        assert_eq!(c.seeds["wine"].revision, "2");
+
+        // Unknown seed sources and duplicates are errors.
+        c.find_mut(id).unwrap().seeds.push("nobody:y".into());
+        c.find_mut(id).unwrap().seeds.push("other:x".into());
+        assert_eq!(c.check().len(), 2);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

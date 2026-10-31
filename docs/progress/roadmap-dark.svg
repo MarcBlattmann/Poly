@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 73 of 141 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 74 of 141 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">73 / 141 milestones · 52%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">74 / 141 milestones · 52%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -197,8 +197,8 @@
 <g><title>✔ Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed</title>
 <rect x="340.0" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds</title>
-<rect x="365.1" y="203.0" width="23.1" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
+<g><title>✔ Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds (oracle: a dedicated machine over SSH, ADR 0097; tracer: ADR 0090; Wine seeds: ADR 0097)</title>
+<rect x="365.1" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>✔ NT object manager: handles, object namespace (\??, \Device, \BaseNamedObjects), reference counts</title>
 <rect x="390.1" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
@@ -228,7 +228,7 @@
 <rect x="590.5" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>C runtime: ucrtbase + api-ms-win-crt-* and msvcrt (versioned runtimes come with the apps, ADR 0055) (first slice done, ADR 0084; left: C++ exceptions in msvcrt (_CxxThrowException, __CxxFrameHandler3), setjmp/longjmp, transcendental math, locales other than &quot;C&quot; and multibyte code pages, wildcard argv, _findfirst/_spawn/system/_dup/_pipe, console I/O (_getch, _cprintf), positional printf)</title>
-<rect x="615.6" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="615.6" y="203.0" width="23.1" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
 <g><title>✔ advapi32 basics: registry API, security descriptors, tokens (single user) (ADR 0083)</title>
 <rect x="640.6" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
@@ -251,7 +251,7 @@
 <g><title>Fallback if needed: our own vcruntime140 (and msvcp140 subsets) per ADR 0055</title>
 <rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">13/19</text>
+<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">14/19</text>
 <text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>⚖️ Decide: global menu bar or per-window menus</title>
 <rect x="340.0" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>

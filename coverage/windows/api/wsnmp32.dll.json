@@ -1,6 +1,6 @@
 [
 {"symbol":"SnmpCancelMsg","src":["wine-spec"]},
-{"symbol":"SnmpCleanup","src":["wine-spec"]},
+{"symbol":"SnmpCleanup","src":["wine-spec"],"seeds":["wine:wsnmp32/tests/wsnmp.c:test_SnmpStartup"]},
 {"symbol":"SnmpClose","src":["wine-spec"]},
 {"symbol":"SnmpContextToStr","src":["wine-spec"]},
 {"symbol":"SnmpCountVbl","src":["wine-spec"]},
@@ -41,7 +41,7 @@
 {"symbol":"SnmpSetTimeout","src":["wine-spec"]},
 {"symbol":"SnmpSetTranslateMode","src":["wine-spec"]},
 {"symbol":"SnmpSetVb","src":["wine-spec"]},
-{"symbol":"SnmpStartup","src":["wine-spec"]},
+{"symbol":"SnmpStartup","src":["wine-spec"],"seeds":["wine:wsnmp32/tests/wsnmp.c:test_SnmpStartup"]},
 {"symbol":"SnmpStrToContext","src":["wine-spec"]},
 {"symbol":"SnmpStrToEntity","src":["wine-spec"]},
 {"symbol":"SnmpStrToOid","src":["wine-spec"]},

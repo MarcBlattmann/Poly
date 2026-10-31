@@ -1,6 +1,6 @@
 [
 {"symbol":"DllCanUnloadNow","src":["wine-spec"]},
-{"symbol":"DllGetClassObject","src":["wine-spec"]},
+{"symbol":"DllGetClassObject","src":["wine-spec"],"seeds":["wine:ddrawex/tests/ddrawex.c:START_TEST","wine:ddrawex/tests/surface.c:START_TEST"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]}
 ]

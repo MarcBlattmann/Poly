@@ -3,6 +3,6 @@
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]},
-{"symbol":"MFPCreateMediaPlayer","src":["wine-spec"]},
+{"symbol":"MFPCreateMediaPlayer","src":["wine-spec"],"seeds":["wine:mfplay/tests/mfplay.c:test_create_player","wine:mfplay/tests/mfplay.c:test_video_control","wine:mfplay/tests/mfplay.c:test_duration","wine:mfplay/tests/mfplay.c:test_media_language","wine:mfplay/tests/mfplay.c:test_playback_rate","wine:mfplay/tests/mfplay.c:test_shutdown","wine:mfplay/tests/mfplay.c:test_media_item"]},
 {"symbol":"MFPCreateMediaPlayerEx","src":["wine-spec"]}
 ]

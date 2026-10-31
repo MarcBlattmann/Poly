@@ -4,5 +4,5 @@
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]},
-{"symbol":"DoOpenPipeStream","src":["wine-spec"]}
+{"symbol":"DoOpenPipeStream","src":["wine-spec"],"seeds":["wine:scrrun/tests/filesystem.c:test_DoOpenPipeStream"]}
 ]
