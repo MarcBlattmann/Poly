@@ -32,6 +32,7 @@ what exists **today** and how it fits that plan.
             network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets;
                      socket files (inet, poly-unix Unix sockets, netlink) with per-socket wake-ups
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
+            input: event layer (poly-input hub), PS/2 keyboard and mouse (IRQ 1, 12), virtio-input; /dev/input/event*
             display: QEMU standard VGA framebuffer + RAM back buffer; poly-gfx (drawing, font, text grid)
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
                          syscall/sysret, FPU state, context switch, AP start-up, per-CPU data)
@@ -384,33 +385,61 @@ like on a pipe (ADR 0042):
 
 ## Input
 
-Keyboard input is the host-tested `poly-input` crate; `kernel/src/keyboard.rs`
-drives the PS/2 keyboard with it, and `arch/x86_64/i8042.rs` gives it the
-controller's ports ([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md)).
+Input is the host-tested `poly-input` crate: keys, scancode decoders,
+layouts, the PS/2 controller and mouse protocol, and the event layer with
+the Linux event interface on top. `kernel/src/input.rs` gives the event
+layer a lock, wakeups and `/dev/input/event*`; `keyboard.rs` and
+`mouse.rs` drive the i8042 (whose ports are `arch/x86_64/i8042.rs`),
+`virtio_input.rs` the virtio input devices through `poly-virtio-input`
+([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md),
+[ADR 0103](adr/0103-input-event-layer-evdev-ps2-mouse-virtio-input.md)).
 
 ```
-   IRQ 1 ─▶ keyboard::on_irq: data port ─▶ ByteRing (256 bytes, lock-free) ─▶ wake waiters
-                                                           │
-   keyboard::next_event / try_next_event (thread) ◀────────┘
-      poly_input::Keyboard
-        Set1Decoder   bytes ─▶ (Key, pressed): E0 / E1 prefixes, fake shifts, Print Screen, Pause
-        KeyState      ─▶ KeyEvent { key, pressed, repeat, modifiers }: Shift/Ctrl/Alt/AltGr/Meta, 3 locks
-        Composer      ─▶ Output: Char, Chars (accent + char), Dead, Special (Enter, arrows, F-keys, ...)
-          + Layout    US, Swiss German (de-CH); six levels per key, as data
+   IRQ 1 / IRQ 12 ─▶ keyboard::on_irq: drain the controller
+        keyboard byte ─▶ Set1Decoder ─▶ (Key, pressed) ─▶ keycode ─┐
+        mouse byte ─▶ ps2mouse::MouseDecoder ─▶ REL_X/Y/WHEEL, BTN_* ┤ input::report_at (interrupt-safe)
+   virtio-input (MSI-X) ─▶ VirtioInput::poll ─▶ evdev events ────────┤
+                                                                     ▼
+   poly_input::hub::Hub   devices, state, frames (SYN_REPORT), filters, grabs, LEDs, soft repeat
+        │ client queues (256 events)                    │ console keys (every keyboard, unless grabbed)
+        ▼                                               ▼
+   /dev/input/event<n>: read, write, poll,       keyboard::next_event / try_next_event (thread)
+   EVIOC* ioctls (poly_input::evdev)               poly_input::Keyboard::apply
+        ▲ woken by the input thread                 KeyState ─▶ KeyEvent { key, pressed, repeat, modifiers }
+   input thread: Hub::tick (soft repeat),           Composer + Layout (US, de-CH, de) ─▶ Output
+   wakes event-file readers, polls devices          lock LEDs of every keyboard follow (0xED, virtio status queue)
+   without interrupts
 ```
 
 - **Keys** (`poly_input::Key`) are physical positions named after the US
   legends (W3C UI Events `code` names): 105 keys, the ISO key next to the
-  left Shift (`IntlBackslash`) included. `Modifiers` is a bit set (Shift,
-  Control, Alt, AltGr, Meta, Caps / Num / Scroll Lock), `Leds` the PS/2 LED
-  mask.
+  left Shift (`IntlBackslash`) included. `keycode` maps them to evdev key
+  codes (`KEY_*`) and back. `Modifiers` is a bit set (Shift, Control, Alt,
+  AltGr, Meta, Caps / Num / Scroll Lock), `Leds` the PS/2 LED mask
+  (`to_evdev` / `from_evdev` convert).
 - **Decoding.** The controller translates the keyboard's scancode set 2
-  into set 1, which `Set1Decoder` decodes; it ignores replies and unknown
-  codes, resynchronises after broken sequences and never panics.
-  `set1::encode` is the reverse (tests, `keyboard::inject`). `KeyState`
-  flags a press of a key that is down as a repeat (locks toggle only on
-  the first press) and makes the right Alt key AltGr on layouts that have
-  it.
+  into set 1, which `Set1Decoder` decodes; `Set2Decoder` decodes set 2 for
+  untranslated keyboards. Both ignore replies and unknown codes,
+  resynchronise after broken sequences and never panic; `encode` is the
+  reverse (tests, `keyboard::inject`). The interrupt handler decodes as
+  bytes arrive, so events carry the time of the interrupt.
+- **The event layer** (`poly_input::hub`) speaks evdev: a device reports
+  `(type, code, value)` and `SYN_REPORT` ends a frame, delivered to every
+  reader at once (or only to the one that grabbed the device). Undeclared
+  and no-op events are dropped (a press of a key that is down is the
+  device's own repeat, value 2); a reader whose queue overruns gets
+  `SYN_DROPPED`. Devices that ask for it get soft repeat (250 ms, then 33
+  ms): the PS/2 keyboard repeats itself, a virtio keyboard with `EV_REP`
+  does not. Reporting never allocates or sleeps, so drivers report from
+  interrupt handlers under the hub's spinlock. The kernel's `input` thread
+  makes the repeats and wakes event-file readers (their `poly_vfs` wait
+  queues must not be touched from interrupt handlers).
+- **The console** reads the keys of every console keyboard (the PS/2 one,
+  virtio keyboards) from one queue: `KeyState` flags a press of a key that
+  is down as a repeat (locks toggle only on the first press) and makes the
+  right Alt key AltGr on layouts that have it. When the locks change, the
+  LEDs of every console keyboard follow (`input::set_console_leds`, a hook
+  per device).
 - **Layouts** (`poly_input::layout`) are tables built at compile time:
   base, Shift, Caps Lock, Caps Lock + Shift, AltGr and AltGr + Shift, each a
   character, a dead key (\` ´ ^ ~ ¨) or nothing. `Composer` picks the
@@ -418,28 +447,45 @@ controller's ports ([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md)).
   otherwise, Shift reverses it), turns Ctrl + letter into a control
   character and composes dead keys (accent + letter: the accented letter;
   + Space: the accent; + anything else: both; a special key drops it).
-  `layout::by_name` finds one (`us`, `de-ch`).
-- **Bring-up** (`keyboard::init`, after the block layer). If the ACPI FADT
-  (revision 2+) says there is no 8042, nothing is touched. Otherwise
-  `poly_input::i8042::init`, polled with both ports' interrupts off:
-  disable both ports, flush the output buffer, clear the interrupt and
+  `layout::by_name` finds one (`us`, `de-ch`, `de`); `keysym::keysym` gives
+  a key's X11 keysym on the selected level.
+- **Bring-up** (`keyboard::init`, after the block layer and `input::init`).
+  If the ACPI FADT (revision 2+) says there is no 8042, nothing is touched.
+  Otherwise `poly_input::i8042::init`, polled with both ports' interrupts
+  off: disable both ports, flush the output buffer, clear the interrupt and
   translation bits in the configuration byte, controller self-test (0xAA
   → 0x55) and the configuration written again, keyboard port test (0xAB →
   0x00), enable the port, reset the keyboard (0xFF → ACK, 0xAA), scancode
-  set 2 (0xF0 0x02), enable scanning (0xF4). Every wait is bounded; a
-  missing controller (status 0xFF), a failed self-test or no keyboard is
-  logged and the kernel runs on without one. Then ISA IRQ 1 is routed
-  (`arch::irq::route_isa_irq`), the configuration byte gets the keyboard
-  interrupt and translation on (mouse port off), and the controller is
-  drained once. The layout comes from `poly.keymap=` (default `us`); Num
-  Lock starts on.
-- **Interrupts and waiting.** The handler moves every waiting byte into
-  the ring and wakes the readers; decoding happens in the reader's thread
-  under a sleeping `Mutex`, which is never held while waiting for input. A
-  reader that sleeps looks at the controller itself every 100 ms, so a
-  lost interrupt costs latency, not the keyboard. LED updates (0xED + mask)
-  follow the locks: the reader writes each byte and sleeps until the
-  handler hands it the keyboard's ACK (or RESEND) instead of queueing it.
+  set 2 (0xF0 0x02), enable scanning (0xF4). Then `i8042::init_aux` for the
+  mouse, with the keyboard port disabled meanwhile: second port test (0xA9),
+  enable it (0xA8), reset the mouse (0xD4 0xFF → ACK, 0xAA, ID), the
+  IntelliMouse sample-rate knocks (200, 100, 80 → ID 3, a wheel; 200, 200,
+  80 → ID 4, five buttons), 100 reports/s, resolution, 1:1 scaling,
+  reporting on (0xF4). Every wait is bounded; a missing controller, a
+  failed self-test, no keyboard or no mouse is logged and the kernel runs
+  on without it. ISA IRQ 1 and IRQ 12 are routed to the same handler
+  (`arch::irq::route_isa_irq`), the configuration byte gets both
+  interrupts and translation on, and the controller is drained once. The
+  layout comes from `poly.keymap=` (default `us`); Num Lock starts on.
+- **virtio-input** (`virtio_input::init`, after the keyboard): every
+  function (device type 18) is reset and brought up by
+  `poly_virtio_input::init`, which reads its configuration (name, serial,
+  ids, properties, the codes of each event type, absolute axis ranges)
+  into a device description, keeps the event queue full of 8-byte buffers
+  and sends LED events on the status queue. MSI-X entry 0 serves both
+  queues; without MSI-X the input thread polls every 10 ms.
+- **Interrupts and waiting.** A console reader that sleeps looks at the
+  controller itself every 100 ms, so a lost interrupt costs latency, not
+  the keyboard. PS/2 LED updates (0xED + mask) write each byte and sleep
+  until the handler hands over the keyboard's ACK (or RESEND).
+- **`/dev/input/event<n>`** (char 13, 64 + n, mode 0660): each open is a
+  client of the hub. `read` returns whole 24-byte `struct input_event`s
+  (`EAGAIN` when empty; blocking reads and `poll` wait for the input
+  thread's wakeup), `write` injects events (an `EV_LED` lights the LED),
+  and the ioctls are `EVIOCGVERSION`, `EVIOCGID`, `EVIOCGREP`/`EVIOCSREP`,
+  `EVIOCGNAME`/`EVIOCGPHYS`/`EVIOCGUNIQ`/`EVIOCGPROP`, `EVIOCGKEY`/`EVIOCGLED`/
+  `EVIOCGSND`/`EVIOCGSW`, `EVIOCGBIT`, `EVIOCGABS`/`EVIOCSABS`, `EVIOCGRAB`,
+  `EVIOCREVOKE`, `EVIOCSCLOCKID` and `EVIOCGEFFECTS`.
 - **API** (what the terminal uses): `keyboard::next_event()` (sleeps),
   `next_event_until(deadline_ns)`, `try_next_event()`, each an `Input {
   event: KeyEvent, output: Output }` for every press and release;
@@ -447,19 +493,33 @@ controller's ports ([ADR 0020](adr/0020-ps2-keyboard-and-layouts.md)).
   `is_present()`, `inject(bytes)` (set 1 bytes as if typed), `stats()`.
 
 ```text
-keyboard: i8042 config 0x71 -> 0x61, 0 stale byte(s) flushed; keyboard reset ok, scancode set 2 translated to set 1
-keyboard: ISA IRQ 1 -> GSI 1 -> vector 0x31; layout us (US English (QWERTY)), Num Lock on
+input: event0: PS/2 Keyboard
+input: event1: PS/2 IntelliMouse Explorer
+keyboard: i8042 config 0x71 -> 0x43, 0 stale byte(s) flushed; keyboard reset ok, scancode set 2 translated to set 1
+keyboard: ISA IRQ 1 -> GSI 1 -> vector 0x30; layout us (US English (QWERTY)), Num Lock on
+mouse: PS/2 IntelliMouse Explorer (id 4), ISA IRQ 12 -> GSI 12 -> vector 0x31; event1
+input: event2: QEMU Virtio Tablet
+virtio-input: 00:03.0: "QEMU Virtio Tablet" (bus 0x06 vendor 0x0627 product 0x0003), event types 0xf, features 0x120000000, queues 64 / 16 entries; event2
+virtio-input: 00:03.0: MSI-X entry 0 -> vector 0x32; interrupt-driven
+input: 3 event device(s), 3 node(s) made in /dev/input (char 13, 64+n)
 ```
 
-The kernel tests (`keyboard::*`) decode injected scancodes through the ring
-(US and de-CH, with AltGr and dead keys), check modifiers on events, the
-I/O APIC route for IRQ 1, bytes the controller fakes with its "write
-keyboard output" command (0xD2) arriving through the interrupt, and Caps
-Lock LED updates acknowledged by the keyboard. With
+The kernel tests (`keyboard::*`) decode injected scancodes through the
+event layer (US, de-CH and de, with AltGr and dead keys), check modifiers
+on events, the I/O APIC route for IRQ 1, bytes the controller fakes with
+its "write keyboard output" command (0xD2) arriving through the interrupt,
+and Caps Lock LED updates acknowledged by the keyboard. `mouse::*` checks
+IRQ 12's route and mouse bytes faked with "write auxiliary output" (0xD3)
+arriving as motion, wheel and a click; `input::*` the event nodes, reads
+and wakeups of an event file, a grab and the soft repeat. With
 `poly.test.keyboard=<text>`, `keyboard::typed_text_matches_the_host_keys`
 waits up to 30 s for keys from the host, which `cargo xtask test` types
 through the QEMU monitor (`sendkey`), with the US layout and with
-`poly.keymap=de-ch` (see [DEBUGGING.md](DEBUGGING.md)).
+`poly.keymap=de-ch` (see [DEBUGGING.md](DEBUGGING.md)). The boot group
+`input` runs `/bin/evtest` (a reader of `/dev/input/event*` without a C
+library) as init and sends keys, motion, the wheel, clicks and an absolute
+position through QMP's `input-send-event`, through the PS/2 devices and
+through `virtio-keyboard-pci`, `virtio-mouse-pci` and `virtio-tablet-pci`.
 
 ## File systems
 

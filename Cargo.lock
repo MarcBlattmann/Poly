@@ -308,6 +308,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-virtio-input"
+version = "0.0.1"
+dependencies = [
+ "poly-input",
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
 name = "poly-virtio-net"
 version = "0.0.1"
 dependencies = [

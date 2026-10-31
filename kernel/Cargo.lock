@@ -118,6 +118,7 @@ dependencies = [
  "poly-vfs",
  "poly-virtio",
  "poly-virtio-blk",
+ "poly-virtio-input",
  "poly-virtio-net",
  "poly-vm",
 ]
@@ -280,6 +281,15 @@ name = "poly-virtio-blk"
 version = "0.0.1"
 dependencies = [
  "poly-block",
+ "poly-pci",
+ "poly-virtio",
+]
+
+[[package]]
+name = "poly-virtio-input"
+version = "0.0.1"
+dependencies = [
+ "poly-input",
  "poly-pci",
  "poly-virtio",
 ]

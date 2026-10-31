@@ -551,3 +551,72 @@ fn random_key_streams_decode_exactly() {
         assert_eq!((e.key, e.pressed, e.repeat, e.modifiers), (key, pressed, repeat, want));
     }
 }
+
+// --- German -------------------------------------------------------------------
+
+#[test]
+fn de_types_every_key_unshifted_and_shifted() {
+    use crate::layout::DE;
+    // Backquote (^) and Equal (´ and `) are dead keys (tested below).
+    let keys: Vec<Key> = TYPING_KEYS.iter().copied().filter(|&k| k != Key::Equal && k != Key::Backquote).collect();
+    assert_eq!(typed(&DE, &taps(&keys)), "1234567890ßqwertzuiopü+#asdfghjklöä<yxcvbnm,.- ");
+    assert_eq!(typed(&DE, &shifted(&keys)), "!\"§$%&/()=?QWERTZUIOPÜ*'ASDFGHJKLÖÄ>YXCVBNM;:_ ");
+    assert_eq!(typed(&DE, &[With(SHIFT, Key::Backquote)]), "°");
+}
+
+#[test]
+fn de_alt_gr_caps_lock_and_dead_keys() {
+    use crate::layout::DE;
+    use Key::*;
+    let keys = [Q, E, M, Digit2, Digit3, Digit7, Digit8, Digit9, Digit0, Minus, IntlBackslash, BracketRight];
+    let script: Vec<Step> = keys.iter().map(|&k| With(ALT_GR, k)).collect();
+    assert_eq!(typed(&DE, &script), "@€µ²³{[]}\\|~");
+    // Caps Lock capitalises the umlauts like any letter.
+    let mut script = std::vec![Tap(CapsLock)];
+    script.extend(taps(&[BracketLeft, Semicolon, Quote, Y, Minus]));
+    assert_eq!(typed(&DE, &script), "ÜÖÄZß");
+    // ^ (base of Backquote), ´ and ` (Equal) are dead keys.
+    let cases: &[(&[Step], &str)] = &[
+        (&[Tap(Backquote), Tap(A)], "â"),
+        (&[Tap(Equal), Tap(E)], "é"),
+        (&[With(SHIFT, Equal), Tap(A)], "à"),
+        (&[Tap(Backquote), Tap(Space)], "^"),
+        (&[Tap(Equal), Tap(X)], "´x"),
+    ];
+    for &(script, want) in cases {
+        assert_eq!(typed(&DE, script), want, "{script:?}");
+    }
+    // The keypad's decimal key types a comma with Num Lock on.
+    let mut kb = Keyboard::new(&DE);
+    kb.set_locks(Modifiers::NUM_LOCK);
+    assert_eq!(typed_on(&mut kb, &[Tap(NumpadDecimal)]), ",");
+    assert_eq!(layout::by_name("de").map(|l| l.name), Some("de"));
+}
+
+// --- Key events from elsewhere ------------------------------------------------
+
+#[test]
+fn key_events_without_scancodes_type_the_same() {
+    // A virtio keyboard delivers key codes, not scancodes: `apply` takes
+    // the decoded event and types what the scancodes would have.
+    let mut kb = Keyboard::new(&DE_CH);
+    let mut text = String::new();
+    let mut repeats = 0;
+    for (key, pressed) in [
+        (Key::Equal, true),
+        (Key::Equal, false),
+        (Key::A, true),
+        (Key::A, true),
+        (Key::A, false),
+        (Key::ShiftLeft, true),
+        (Key::Y, true),
+        (Key::Y, false),
+        (Key::ShiftLeft, false),
+    ] {
+        let input = kb.apply(ScanEvent { key, pressed });
+        text.extend(input.output.chars());
+        repeats += usize::from(input.event.repeat);
+    }
+    assert_eq!(text, "âaZ");
+    assert_eq!(repeats, 1, "the second press of A is a repeat");
+}
