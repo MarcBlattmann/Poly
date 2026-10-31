@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sendmmsg             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; observed as root with all capabilities and the tests also run as uid/gid 65534 without capabilities, umask 022; loopback networking in the container's network namespace; net.core.wmem_default 212992; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  sendmmsg(fd, msgvec, vlen, flags) (syscall 307) sends up to vlen
+  messages on a socket, each exactly as sendmsg(fd, &msgvec[i].msg_hdr,
+  flags) would, in array order, and returns how many were sent. After
+  each sent message its msg_len field is set to the bytes sent for it;
+  entries after the last sent one are not written. struct mmsghdr is
+  struct msghdr (56 bytes on x86-64: msg_name, msg_namelen, msg_iov,
+  msg_iovlen, msg_control, msg_controllen, msg_flags) followed by
+  unsigned int msg_len and 4 bytes of padding: 64 bytes (linux/socket.h).
+  vlen is capped at UIO_MAXIOV (1024). The call stops at the first
+  message that fails: if any were sent before, their count is returned
+  and the error is dropped; otherwise the error is returned. Arguments:
+  fd, vlen and flags are 32-bit (upper register halves ignored; vlen 2^32
+  counts as 0).
+returns:
+  success: "number of messages sent (1..min(vlen, 1024)); msg_len of each sent entry = bytes sent (msg_len is output only; msg_flags of each msghdr is ignored on input)"
+  vlen_0: "0, msgvec not read (NULL fine), but only after the descriptor checks"
+  datagram: "AF_UNIX datagram socketpair: one datagram per entry, scatter-gathered from its iovec, received in order"
+  stream: "AF_UNIX stream: each entry's bytes appended to the byte stream (the peer reads 'one,two,three' from three entries); with MSG_DONTWAIT an entry may be sent partly (its msg_len < its length), then the next one that cannot be sent at all ends the call"
+  names: "unconnected UDP: each entry goes to its own msg_name; an entry without a name fails (EDESTADDRREQ) and ends the call, the earlier ones counted"
+  cap: "vlen 1500 or 0xffffffff: 1024 messages sent, 1024 returned; entry 1024's msg_len untouched"
+errors:
+  compat_flag: "EINVAL (22): MSG_CMSG_COMPAT (0x80000000) in flags; checked before everything (bad fd, non-socket, vlen 0)"
+  bad_fd: "EBADF (9): fd not open (also with vlen 0 or a NULL msgvec)"
+  not_socket: "ENOTSOCK (88): fd is not a socket (also with vlen 0)"
+  bad_msgvec: "EFAULT (14): the first entry cannot be read (NULL or bad msgvec); nothing sent"
+  first_message_errors: "the first entry's sendmsg error is the call's error, nothing sent: EFAULT (iovec base unreadable), EMSGSIZE (90, datagram too large for AF_UNIX datagram: 300000 bytes), EOPNOTSUPP (95, MSG_OOB on AF_UNIX datagram), EDESTADDRREQ (89, unconnected UDP without msg_name), EAGAIN (11, MSG_DONTWAIT and no room), EPIPE (32, stream peer closed)"
+  later_errors: "an error at entry i > 0 (bad iovec, EMSGSIZE, unreadable entry because msgvec runs into an unmapped page) ends the call with return value i; entry i's msg_len untouched; the error is not reported later"
+  msg_len_writeback: "EFAULT: a message was sent but its msg_len could not be stored (msgvec in read-only memory); that message is not counted, and if it was the first the call fails with EFAULT although the datagram was delivered"
+  sigpipe: "EPIPE on a stream whose peer closed raises SIGPIPE once per call (kills at default disposition) unless MSG_NOSIGNAL"
+  order: "MSG_CMSG_COMPAT EINVAL; EBADF; ENOTSOCK; vlen 0 -> 0; then per entry: read entry (EFAULT), sendmsg (its errors), store msg_len (EFAULT)"
+side_effects: "messages are sent as by sendmsg; msg_len fields of sent entries are written. SIGPIPE as for sendmsg."
+threading: "no thread-specific behaviour; each message is sent separately (another sender's messages may come between them)"
+ordering:
+  - "entries are sent in array order; per entry: copy-in of the msghdr, send, store msg_len"
+timing:
+  typical: "microseconds per message"
+  guarantees: "without MSG_DONTWAIT (on a blocking socket) each message may block like sendmsg; an interruption after some messages were sent returns their count"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: flags apply to every message. The AF_UNIX datagram socketpair's
+# queue was not filled by 60 small datagrams (the per-socket send buffer
+# limits it), so "datagram queue full" is not tested. Exact partial counts
+# on streams depend on buffer sizes and are not tested. Constants:
+# linux/socket.h (struct mmsghdr, MSG_*), linux/uio.h (UIO_MAXIOV),
+# asm-generic/errno.h.

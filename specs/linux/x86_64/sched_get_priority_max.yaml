@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_get_priority_max  # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_HZ=250, CONFIG_SCHED_CLASS_EXT not set; tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  sched_get_priority_max(policy) (syscall 146) returns the highest static
+  priority that sched_setscheduler/sched_setparam accept for a
+  scheduling policy: 99 for SCHED_FIFO (1) and SCHED_RR (2), 0 for
+  SCHED_OTHER (0), SCHED_BATCH (3), SCHED_IDLE (5), SCHED_DEADLINE (6)
+  and SCHED_EXT (7). Any other value is EINVAL. The argument is a 32-bit
+  int (the upper half of the register is ignored). The result does not
+  depend on the caller, its credentials or its own policy; the call has
+  no side effects and needs no permission.
+returns:
+  fifo_rr: "99 for SCHED_FIFO (1) and SCHED_RR (2)"
+  fair: "0 for SCHED_OTHER (0), SCHED_BATCH (3), SCHED_IDLE (5)"
+  deadline: "0 for SCHED_DEADLINE (6)"
+  ext: "0 for SCHED_EXT (7), also on a kernel built without sched_ext support (sched_setscheduler with 7 is EINVAL there)"
+  width: "only the low 32 bits of policy count, as a signed int: 1<<32|1 is SCHED_FIFO (99), 0xffffffff00000000 is SCHED_OTHER (0)"
+  bounds: "the maximum is accepted by sched_setscheduler for the policy (SCHED_OTHER with 0 succeeds) and maximum+1 is EINVAL there (SCHED_FIFO/RR with 100 is EINVAL for any caller, before the permission check); max >= min for every policy"
+errors:
+  invalid_policy: "EINVAL (22): any policy other than 0,1,2,3,5,6,7: 4, 8, 64, 100, -1, INT_MIN, INT_MAX, 0x80000000 (negative as an int), 1<<32|4"
+  reset_on_fork: "EINVAL (22): a valid policy with SCHED_RESET_ON_FORK (0x40000000) or any other high bit or-ed in; the flag is accepted only by sched_setscheduler"
+side_effects: none
+threading: "no per-thread behaviour"
+ordering: []
+timing:
+  typical: "below a microsecond; never blocks"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: policy numbers from linux/sched.h (SCHED_NORMAL/OTHER 0, FIFO 1,
+# RR 2, BATCH 3, IDLE 5, DEADLINE 6, EXT 7, SCHED_RESET_ON_FORK
+# 0x40000000). Kernels before 6.12 answer EINVAL for 7; the tests expect
+# the 6.12+ answer 0. The tests also call sched_setscheduler (144) and
+# sched_getscheduler (145) for the cross-checks.

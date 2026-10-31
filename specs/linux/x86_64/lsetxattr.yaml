@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lsetxattr            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  lsetxattr(path, name, value, size, flags) (syscall 189) is setxattr
+  (setxattr.yaml) except that a symbolic link in the last component of
+  path is not followed: the call acts on the link itself. Everything
+  else is identical: flags (XATTR_CREATE 1, XATTR_REPLACE 2, other bits
+  EINVAL), name rules (1..255 bytes, known prefix), size limit 65536
+  (E2BIG), value reading (EFAULT), the order of checks, permissions,
+  EROFS, ctime update. Symbolic links cannot carry user.* attributes
+  (EPERM), but root can give a link its own trusted.* and security.*
+  attributes, which lgetxattr/llistxattr/lremovexattr then see.
+returns:
+  non_link: "on a regular file, directory, FIFO etc. exactly setxattr (create, replace, flags, empty values, EPERM for user.* on a FIFO)"
+  link_trusted: "root: trusted.* and security.* names on the link itself (also a dangling link) succeed; XATTR_CREATE/XATTR_REPLACE behave as on files; getxattr/listxattr through the link do not see them (they read the target)"
+  trailing_slash: "a trailing '/' makes the last component be followed: a link to a directory reaches the directory (the attribute is set there), a link to a regular file is ENOTDIR"
+  earlier_links: "symbolic links in earlier components are followed as usual ('linkdir/../file')"
+errors:
+  link_user: "EPERM (1): a user.* name on a symbolic link, with any valid flags, also 'user.' alone, also for a dangling link (setxattr: ENOENT) and a link that is part of a loop (setxattr: ELOOP); nothing of the target changes"
+  link_unknown: "EOPNOTSUPP (95): an unknown prefix ('plain') or unknown system.* name on a link (a link's permission bits allow everything, so no EACCES)"
+  link_trusted_user: "EPERM (1): trusted.* or security.* on a link (even the caller's own) without CAP_SYS_ADMIN"
+  link_prefix_only: "EINVAL (22): 'trusted.' alone for root, as on files (not tested on links)"
+  order: "as setxattr: EINVAL (flags), EFAULT/ERANGE (name), E2BIG, EFAULT (value), path errors (with the final link not followed), EROFS, EPERM/EACCES, EOPNOTSUPP, EINVAL, EEXIST/ENODATA"
+  rest: "every other error exactly as setxattr.yaml"
+side_effects: "as setxattr; on a link the link's own inode is the one changed (its ctime was not checked)"
+threading: "as setxattr"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: tests of a link's own trusted.*/security.* attributes use
+# /dev/shm (tmpfs on Linux and Poly) and need root. Constants as in
+# setxattr.yaml.

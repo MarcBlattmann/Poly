@@ -1,0 +1,70 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/recvmmsg             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; observed as root with all capabilities and the tests also run as uid/gid 65534 without capabilities, umask 022; loopback networking in the container's network namespace; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  recvmmsg(fd, msgvec, vlen, flags, timeout) (syscall 299) receives up to
+  vlen messages from a socket, each exactly as recvmsg(fd,
+  &msgvec[i].msg_hdr, flags') would, in array order, and returns how many
+  it received. Each received entry gets msg_len (bytes received, or the
+  real datagram length with MSG_TRUNC in flags) and its msghdr's
+  msg_flags, msg_namelen and msg_controllen updated as by recvmsg;
+  entries after the last received one are not written. struct mmsghdr:
+  struct msghdr (56 bytes) + unsigned int msg_len + 4 bytes padding = 64
+  bytes (linux/socket.h). Waiting: without MSG_DONTWAIT or
+  MSG_WAITFORONE (0x10000) the call waits until vlen messages arrived;
+  MSG_DONTWAIT takes what is queued; MSG_WAITFORONE waits for the first
+  message, then takes what is queued. The optional timeout (struct
+  timespec, 16 bytes) is only looked at after a message was received:
+  when it has expired the call returns what it has; with no message at
+  all it waits indefinitely (the timeout does not end that wait). On
+  success with a timeout the time left is written back. There is no cap
+  on vlen (1500 entries filled in one call). Arguments: fd, vlen and
+  flags are 32-bit (upper halves ignored; vlen 2^32 counts as 0).
+returns:
+  success: "messages received (1..vlen)"
+  dontwait: "3 queued, vlen 5, MSG_DONTWAIT: 3; the 4th and 5th entries untouched"
+  waitforone: "2 queued, vlen 5, MSG_WAITFORONE: 2; with none queued it waits for one"
+  blocking: "3 queued, vlen 2: 2, one stays queued; vlen 2 with one queued and the next arriving 100 ms later: waits and returns 2"
+  vlen_0: "0 immediately (after the descriptor checks), even on an empty socket with no flags"
+  truncation: "a datagram longer than the entry's buffers: msg_len = bytes stored, msg_flags = MSG_TRUNC (0x20), rest dropped; with MSG_TRUNC in flags msg_len = the datagram's real length"
+  peek: "MSG_PEEK: every entry peeks the same first message (vlen 2 returns 2 copies), nothing consumed"
+  names: "UDP: msg_name of each entry gets the sender (msg_namelen 16, AF_INET)"
+  stream: "AF_UNIX stream: each entry is one receive of up to its buffer size (10 bytes into 4-byte entries: 4, 4, 2); with MSG_DONTWAIT it stops at an empty stream; after the peer closed, an end-of-file receive counts as a received entry with msg_len 0 (4 bytes then EOF with vlen 4 returns 4: lens 4, 0, 0, 0)"
+  timeout_zero: "timeout {0,0}, 2 queued, vlen 5: returns 1 (the timeout expired after the first message); the second stays queued; the timeout stays {0,0}"
+  timeout_left: "timeout 5 s, 2 queued, vlen 2: returns 2 at once and the timeout now holds the time left (4.99... s); with MSG_WAITFORONE and 3 s likewise (2.99... s)"
+errors:
+  timeout_fault: "EFAULT (14): the timeout cannot be read; checked first, before the descriptor"
+  timeout_invalid: "EINVAL (22): timeout tv_nsec outside 0..999999999 or tv_sec negative; checked before the descriptor"
+  compat_flag: "EINVAL: MSG_CMSG_COMPAT (0x80000000) in flags, also with a bad descriptor"
+  bad_fd: "EBADF (9): fd not open (also with vlen 0, NULL msgvec)"
+  not_socket: "ENOTSOCK (88): fd not a socket (also with vlen 0)"
+  bad_msgvec: "EFAULT: the first entry cannot be read; checked before waiting (also on an empty socket without MSG_DONTWAIT); a queued message stays queued"
+  empty: "EAGAIN (11): MSG_DONTWAIT and nothing queued (whatever the timeout)"
+  first_message_errors: "the first entry's recvmsg error is the call's error: EFAULT for an unwritable buffer (the AF_UNIX datagram is consumed and lost), EOPNOTSUPP (95) for MSG_OOB on AF_UNIX datagram"
+  msg_len_writeback: "EFAULT: a message was received but msg_len could not be stored (read-only msgvec): the message is consumed, the call fails"
+  timeout_writeback: "EFAULT: messages were received but the time left cannot be written back (read-only timeout): the messages are consumed, the call fails"
+  later_errors: "an error at entry i > 0 (unwritable buffer of entry 1) returns i; the error (other than EAGAIN) is kept on the socket and returned once by the next receive call on it (recvmmsg or recvfrom: EFAULT), then normal receiving resumes; the failing AF_UNIX datagram is gone"
+  interrupted: "EINTR (4): a signal with a handler (no SA_RESTART) while nothing was received. If at least one message was received when the signal arrives, the count is returned and the interruption is kept as the socket's error: the next receive call returns errno 512 (the kernel's internal restart code) once"
+  errqueue: "AF_UNIX has no error queue: MSG_ERRQUEUE receives from the normal queue"
+  order: "timeout EFAULT; timeout EINVAL; MSG_CMSG_COMPAT EINVAL; EBADF; ENOTSOCK; vlen 0 -> 0; then per entry: read entry (EFAULT), recvmsg (its errors / waiting), store msg_len (EFAULT); timeout write-back (EFAULT) at the end"
+side_effects: "messages are consumed (except with MSG_PEEK); received entries' msg_len and msghdr outputs written; timeout updated on success; a late error is stored on the socket"
+threading: "no thread-specific behaviour; messages are taken one by one (another receiver may take some in between)"
+ordering:
+  - "entries are filled in array order with the messages in queue order"
+  - "the timeout is checked after each received message, never while waiting for the first"
+timing:
+  typical: "microseconds per message"
+  guarantees: "without MSG_DONTWAIT the call can wait indefinitely for the first message even with a timeout; with a timeout it returns at the first message received after the timeout expired"
+tests:
+  visible: 5  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the errno-512 leak after a signal (late error ERESTARTSYS kept on
+# the socket) is a Linux quirk; it is described for completeness and not
+# tested. Constants: linux/socket.h (struct mmsghdr, MSG_WAITFORONE
+# 0x10000, MSG_CMSG_COMPAT, MSG_ERRQUEUE 0x2000), linux/time_types.h
+# (struct __kernel_timespec), asm-generic/errno.h.

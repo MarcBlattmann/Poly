@@ -1,0 +1,66 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/msgget               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace with default limits (/proc/sys/kernel: msgmax 8192, msgmnb 16384, msgmni 32000)"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  msgget(key, msgflg) (syscall 68) returns the id of a System V message
+  queue, creating it when asked. Queues belong to the system (the IPC
+  namespace), not to a process: they and their messages outlive their
+  creator until removed with msgctl(IPC_RMID). key and msgflg are 32-bit
+  ints (upper register halves ignored); key 0 is IPC_PRIVATE. Message
+  queue keys are a namespace of their own (the same key may name a
+  semaphore set and a shared memory segment at the same time).
+  IPC_PRIVATE always makes a new queue, whatever the flags (no IPC_CREAT
+  needed, IPC_EXCL ignored). Any other key looks up the live queue with
+  that key: none and no IPC_CREAT (01000) is ENOENT; none and IPC_CREAT
+  makes one; found with IPC_CREAT|IPC_EXCL (02000) is EEXIST; IPC_EXCL
+  without IPC_CREAT is ignored. A new queue gets mode = msgflg & 0777
+  (other flag bits are accepted and not stored), owner and creator
+  uid/gid = the caller's effective uid/gid (not real or saved),
+  msg_qbytes = msgmnb (16384), no messages (msg_qnum 0, msg_cbytes 0),
+  msg_lspid and msg_lrpid 0, msg_stime and msg_rtime 0, msg_ctime the
+  current time. Finding an existing queue checks the access asked for in
+  msgflg & 0777 as shmget and semget do: the r, w and x bits of the
+  three classes are merged into one rwx request, each requested bit must
+  be granted by the queue's mode for the caller's class (owner if euid
+  is the queue's uid or cuid, else group, else other); otherwise EACCES,
+  unless the caller has CAP_IPC_OWNER (root). Removing a queue releases
+  its key at once (ENOENT again; IPC_CREAT makes a new queue with a
+  different id); the old id is EINVAL for every call.
+returns:
+  success: "a non-negative int queue id; distinct among live queues; not a file descriptor (the next open still gets the lowest free fd)"
+  ids: "values depend on the namespace's history and are not predictable; an id just removed is not returned by the next msgget"
+  private: "IPC_PRIVATE (low 32 bits of key 0): a new id every call, regardless of IPC_CREAT/IPC_EXCL"
+  existing_key: "the same id for every lookup of a live keyed queue (flags 0, IPC_CREAT, or IPC_EXCL alone; high key bits ignored)"
+  new_queue_stat: "msgctl IPC_STAT: key as given (sign kept), uid=cuid=euid, gid=cgid=egid, mode=msgflg&0777, qbytes=16384, qnum=0, cbytes=0, lspid=lrpid=0, stime=rtime=0, ctime=now (seconds)"
+errors:
+  no_such_key: "ENOENT (2): key not in use and no IPC_CREAT (IPC_EXCL alone does not create)"
+  exists: "EEXIST (17): key in use and IPC_CREAT|IPC_EXCL; reported before EACCES"
+  access: "EACCES (13): key in use and a requested access bit (merged rwx of msgflg & 0777) not granted to the caller's class; never for root (CAP_IPC_OWNER); IPC_CREAT on an existing key is checked the same way; asking for 0 always passes"
+  order: "for an existing key: EEXIST, then EACCES"
+  limits: "ENOSPC (28): msgmni (32000) queues in use; not tested (system-wide)"
+  no_memory: "ENOMEM (12): no memory for the queue; not tested"
+side_effects: >
+  Creates a system-wide queue that persists after the creating process
+  exits until IPC_RMID. Lookups change nothing (no ctime change). A
+  failed call creates nothing. No file descriptors.
+threading: "no thread-specific behaviour; queues are visible by key and id to every process in the IPC namespace"
+ordering:
+  - "IPC_RMID releases the key immediately; the next IPC_CREAT of that key makes a new queue with a new id"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the tests also use msgctl (IPC_STAT, IPC_SET, IPC_RMID),
+# msgsnd, msgrcv, semget/semctl (to show keys are separate), fork and,
+# in one needs=root test, setresgid/setresuid. Keys are made from the
+# test's pid. Queue ids differ between runs, so single-process tests
+# compare syscall names (syscalls=names), multi-process ones only output
+# (syscalls=off). struct msqid64_ds (120 bytes): asm-generic/msgbuf.h,
+# asm-generic/ipcbuf.h; constants: linux/ipc.h, linux/msg.h.

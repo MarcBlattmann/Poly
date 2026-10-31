@@ -1,0 +1,82 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/msgrcv               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, CONFIG_CHECKPOINT_RESTORE=y; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace with default limits (/proc/sys/kernel: msgmax 8192, msgmnb 16384, msgmni 32000)"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  msgrcv(msqid, msgp, msgsz, msgtyp, msgflg) (syscall 70) takes a message
+  off a System V message queue and returns the number of text bytes
+  copied. msgp points to a buffer laid out as struct msgbuf: the
+  message's 64-bit mtype is written first, then up to msgsz text bytes
+  (bytes after them are not touched). msqid and msgflg are 32-bit ints
+  (upper halves ignored); msgsz is a full size_t, msgtyp a full signed
+  64-bit long. Selection: msgtyp 0 takes the first message in the
+  queue; msgtyp > 0 the first message of exactly that type, or with
+  MSG_EXCEPT (020000) the first whose type differs; msgtyp < 0 the
+  first message of the lowest type <= |msgtyp| (LONG_MIN: any type);
+  MSG_EXCEPT with msgtyp <= 0 changes nothing. MSG_COPY (040000) makes
+  msgtyp a 0-based position: the message there is copied and left in
+  the queue (nothing in IPC_STAT changes); it needs IPC_NOWAIT and
+  excludes MSG_EXCEPT (EINVAL otherwise). Checks, in order: msqid < 0 or
+  msgsz with the top bit set: EINVAL; MSG_COPY rules: EINVAL; the id
+  (not in use or removed: EINVAL); read permission for the caller's
+  class (owner if euid is the queue's uid or cuid, else group, else
+  other): EACCES unless CAP_IPC_OWNER (root). Then a matching message:
+  if its text is longer than msgsz and MSG_NOERROR (010000) is not set,
+  E2BIG and the message stays; otherwise it is removed (unless
+  MSG_COPY), msg_qnum -1, msg_cbytes -its size, msg_lrpid = caller,
+  msg_rtime = now, waiting senders get a chance, and min(msgsz, size)
+  bytes are copied (MSG_NOERROR truncates; the rest is discarded). The
+  copy to the buffer happens after removal: an unwritable buffer is
+  EFAULT and the message is lost. No match: IPC_NOWAIT (04000) gives
+  ENOMSG; otherwise the caller sleeps until a matching message is sent
+  (the sender hands it over directly), the queue is removed (EIDRM) or
+  a signal with a handler arrives (EINTR, never restarted, also with
+  SA_RESTART). A sleeping receiver whose buffer is too small for the
+  matching message sent (without MSG_NOERROR) wakes with E2BIG and the
+  message is queued instead.
+returns:
+  success: "number of text bytes copied: the message size, or msgsz when MSG_NOERROR truncated it; 0 for a zero-length message; mtype written at msgp"
+  selection: "0: first; >0: first of that type; >0 with MSG_EXCEPT: first of another type; <0: first of the lowest type <= |msgtyp|; LONG_MIN: lowest type overall"
+  stat_after: "IPC_STAT: qnum -1, cbytes -size (the full size also when truncated), lrpid = caller, rtime = now (seconds); stime and lspid unchanged"
+  msg_copy: "copy of the message at position msgtyp (0-based, queue order); queue, qnum, cbytes, lrpid, rtime unchanged"
+  buffer: "bytes of the text area past the returned count are not written; msgsz may exceed msgmax (100000 works); msgsz (1<<32)|1 is a valid size"
+  high_bits: "msqid | (1<<32) is msqid; msgtyp uses all 64 bits (type 1<<40 is selectable)"
+errors:
+  bad_args: "EINVAL (22): msqid < 0 or msgsz with the top bit set (SIZE_MAX, 2^63); checked first (NULL buffer still EINVAL)"
+  copy_flags: "EINVAL (22): MSG_COPY without IPC_NOWAIT, or with MSG_EXCEPT; checked before the id"
+  bad_id: "EINVAL (22): no live queue with this id (never handed out or removed), also without IPC_NOWAIT"
+  access: "EACCES (13): no r for the caller's class (mode bits of other classes do not help the owner); not for root; before E2BIG and ENOMSG; also for MSG_COPY"
+  too_big: "E2BIG (7): matching message longer than msgsz and no MSG_NOERROR; the message stays (no field changes); also for MSG_COPY; also for a sleeping receiver when such a message is sent"
+  no_message: "ENOMSG (42): no matching message (or MSG_COPY position >= qnum) and IPC_NOWAIT; nothing removed"
+  fault: "EFAULT (14): buffer unwritable (e.g. NULL) when a message was found; the message has already been removed and is lost (qnum and cbytes go down); with no match or a too-small msgsz the NULL buffer gives ENOMSG / E2BIG instead"
+  removed_while_sleeping: "EIDRM (43): the queue was removed while the receiver slept"
+  interrupted: "EINTR (4): a signal with a handler arrived while sleeping; not restarted even with SA_RESTART"
+  order: "EINVAL (msqid < 0, msgsz) > EINVAL (MSG_COPY flags) > EINVAL (id) > EACCES > E2BIG / ENOMSG / sleep > EFAULT (copy-out)"
+  no_memory: "ENOMEM (12): MSG_COPY buffer allocation; not tested"
+side_effects: >
+  Removes the received message (not with MSG_COPY or on E2BIG/ENOMSG/
+  EACCES/EINVAL) and updates msg_qnum, msg_cbytes, msg_lrpid, msg_rtime;
+  freed room wakes senders sleeping in msgsnd. A truncated message's
+  remaining bytes are discarded.
+threading: "queues are system-wide; a receiver sleeping in one process gets messages sent by any process"
+ordering:
+  - "messages of the same selection are received in the order they were sent"
+  - "a message sent while a matching receiver sleeps goes to that receiver and never appears in the queue (msg_qnum stays the same)"
+  - "a message of a non-matching type does not wake the receiver; it is queued"
+timing:
+  typical: "microseconds per non-sleeping call"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the tests also use msgget, msgsnd, msgctl (IPC_STAT, IPC_SET,
+# IPC_RMID), fork, kill and signal handlers. Tests that need another
+# process asleep give it 300 ms and compare only output (syscalls=off).
+# MSG_COPY exists only with CONFIG_CHECKPOINT_RESTORE (ENOSYS
+# otherwise); MSG_COPY with MSG_NOERROR and a too small buffer is not
+# specified here. struct msgbuf: linux/msg.h; flags: linux/msg.h,
+# linux/ipc.h.

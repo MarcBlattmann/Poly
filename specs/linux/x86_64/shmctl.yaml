@@ -1,0 +1,82 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/shmctl               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022, RLIMIT_MEMLOCK unlimited (tests lower it); own IPC namespace with default limits (shmmni 4096, shmmax and shmall 18446744073692774399)"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  shmctl(shmid, cmd, buf) (syscall 31) controls a System V shared memory
+  segment made by shmget. shmid and cmd are 32-bit ints (upper halves
+  ignored); buf is a pointer. A negative shmid or negative cmd is EINVAL
+  for every command. Commands (linux/ipc.h, linux/shm.h): IPC_RMID 0,
+  IPC_SET 1, IPC_STAT 2, IPC_INFO 3, SHM_LOCK 11, SHM_UNLOCK 12,
+  SHM_STAT 13, SHM_INFO 14, SHM_STAT_ANY 15; any other (4-10, 16+, or
+  with the IPC_64 bit 0x100) is EINVAL. IPC_STAT writes a struct
+  shmid64_ds (112 bytes: ipc64_perm {key, uid, gid, cuid, cgid, mode,
+  seq}, shm_segsz, shm_atime, shm_dtime, shm_ctime, shm_cpid, shm_lpid,
+  shm_nattch) and needs read permission; mode carries the permission
+  bits plus SHM_DEST (01000, marked for removal) and SHM_LOCKED (02000).
+  IPC_SET reads one first (EFAULT before the id lookup) and takes uid,
+  gid and mode & 0777 (all other fields ignored; SHM_DEST/SHM_LOCKED
+  kept), sets shm_ctime; uid or gid -1 is EINVAL. IPC_RMID: a segment
+  with no attachment is destroyed at once; otherwise it gets SHM_DEST,
+  its key becomes 0 (the key is free at once), it stays usable through
+  existing attachments and can still be attached by id, stat'ed, set
+  and removed again (0), and is destroyed at the last detach; buf is
+  ignored. IPC_SET and IPC_RMID need euid == uid or cuid, or
+  CAP_SYS_ADMIN (EPERM). SHM_LOCK/SHM_UNLOCK set/clear SHM_LOCKED (0
+  also when already in that state); without CAP_IPC_LOCK the caller
+  must be uid or cuid (EPERM), SHM_LOCK also needs RLIMIT_MEMLOCK > 0
+  (EPERM) and the segment must fit in the limit (ENOMEM). IPC_INFO
+  writes a struct shminfo64, SHM_INFO a struct shm_info; both return
+  the highest index in use. SHM_STAT and SHM_STAT_ANY take an index
+  instead of an id and return the id; SHM_STAT needs read permission,
+  SHM_STAT_ANY nothing. Read permission is checked for the caller's
+  class (owner if euid is uid or cuid, else group, else other);
+  CAP_IPC_OWNER (root) bypasses it.
+returns:
+  ipc_stat: "0; shmid64_ds: key (0 after IPC_RMID with attachments), uid, gid, cuid, cgid, mode (perm bits | SHM_DEST | SHM_LOCKED), segsz (as created), atime, dtime, ctime (seconds), cpid, lpid, nattch; IPC_STAT changes no time"
+  ipc_set: "0; uid, gid, mode&0777 taken; ctime = now; cuid, segsz, times, pids, nattch kept; SHM_DEST and SHM_LOCKED kept; the owner may give the segment to any valid uid/gid (the creator keeps owner rights through cuid)"
+  ipc_rmid: "0; no attachment: destroyed (id EINVAL); attachments left: SHM_DEST set, key 0, key free, memory usable, id still valid until the last detach; a second IPC_RMID returns 0; buf ignored"
+  shm_lock: "0; SHM_LOCKED set in mode; ctime unchanged; repeated lock returns 0; the memory stays usable"
+  shm_unlock: "0; SHM_LOCKED cleared; returns 0 on an unlocked segment; needs no memlock limit"
+  ipc_info: "highest index in use (>= 0); struct shminfo64 {shmmax, shmmin, shmmni, shmseg, shmall, 4 unused} (unsigned longs, 72 bytes) = 18446744073692774399, 1, 4096, 4096, 18446744073692774399 with default limits; shmid only needs to be >= 0"
+  shm_info: "same return as IPC_INFO; struct shm_info {int used_ids; unsigned long shm_tot (pages of all segments, from their sizes), shm_rss, shm_swp, swap_attempts, swap_successes} (48 bytes); used_ids = segments in use"
+  shm_stat: "the segment's id; shmid is an index (on this system the id modulo 32768); fills shmid64_ds"
+  high_bits: "shmid | (1<<32) is shmid; cmd (1<<32)|IPC_STAT is IPC_STAT"
+errors:
+  negative: "EINVAL (22): shmid < 0 or cmd < 0, for every command; checked first"
+  bad_cmd: "EINVAL (22): unknown command (4-10, 16+, IPC_STAT|0x100)"
+  set_fault: "EFAULT (14): IPC_SET buffer unreadable; before the id lookup (an unused id with NULL is EFAULT)"
+  bad_id: "EINVAL (22): no live segment with this id (never handed out, or removed with no attachment left); also for SHM_LOCK/SHM_UNLOCK; SHM_STAT/SHM_STAT_ANY: index not in use"
+  access: "EACCES (13): IPC_STAT or SHM_STAT without r for the caller's class; not for root"
+  owner: "EPERM (1): IPC_SET or IPC_RMID by a caller who is neither uid nor cuid and lacks CAP_SYS_ADMIN; SHM_LOCK/SHM_UNLOCK by such a caller lacking CAP_IPC_LOCK; whatever the mode"
+  memlock_zero: "EPERM (1): SHM_LOCK by a caller without CAP_IPC_LOCK whose RLIMIT_MEMLOCK soft limit is 0"
+  memlock_exceeded: "ENOMEM (12): SHM_LOCK of a segment larger than the caller's RLIMIT_MEMLOCK (128 KiB segment, 64 KiB limit) without CAP_IPC_LOCK; not locked"
+  ids: "EINVAL (22): IPC_SET with uid or gid (unsigned) -1; nothing changes"
+  fault: "EFAULT (14): unwritable buffer for IPC_STAT, SHM_STAT, IPC_INFO, SHM_INFO"
+  order_set: "EINVAL (negative) > EFAULT (buffer) > EINVAL (id) > EPERM > EINVAL (uid/gid)"
+side_effects: >
+  IPC_SET changes owner, mode and shm_ctime; IPC_RMID destroys or marks
+  the segment and frees its key; SHM_LOCK/SHM_UNLOCK change SHM_LOCKED
+  (and the locked-memory accounting of the caller's user). The other
+  commands change nothing.
+threading: "segments are system-wide; marks and locks are seen by every process at once"
+ordering:
+  - "IPC_RMID releases the key immediately, even while attached; the id stays valid until the last detach"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the tests also use shmget, shmat, shmdt, getrlimit/setrlimit
+# (RLIMIT_MEMLOCK), fork and (needs=root test) setresgid/setresuid. The
+# lock test lowers RLIMIT_MEMLOCK to at most 64 KiB and expects at least
+# 8 KiB to start with. Ids are not printed; single-process tests compare
+# syscall names, others only output. struct shmid64_ds, shminfo64,
+# shm_info: asm-generic/shmbuf.h, linux/shm.h, asm-generic/ipcbuf.h.
+# shm_rss/shm_swp depend on memory state and are not specified. The
+# index taken by SHM_STAT is id modulo 32768 with the default ipcmni.

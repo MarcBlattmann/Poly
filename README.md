@@ -100,7 +100,7 @@ kernel, and all three share one core. More detail in
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | Blocked | App-provided |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| Linux | syscalls | 370 | 154 | 0 | 1 | 215 | 0 | 0 |
+| Linux | syscalls | 370 | 154 | 0 | 36 | 180 | 0 | 0 |
 | Linux | user-mode API | runs unchanged (glibc, Mesa, GTK, Qt) | | | | | | |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 2 | 1,809 | 0 | 0 |
 | Windows | user-mode DLL exports | 130,147 | 3 | 6 | 2,618 | 54,244 | 0 | 73,276 |

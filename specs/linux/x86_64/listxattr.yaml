@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/listxattr            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  listxattr(path, list, size) (syscall 194) writes the names of the
+  extended attributes of the file `path` names (following a symbolic
+  link in the last component) into `list`, each name followed by a NUL
+  byte, and returns the total number of bytes. size 0 is a length
+  query (buffer untouched, may be NULL). A buffer too small for the
+  whole list is ERANGE; no partial list is ever returned. Listing needs
+  no permission on the file itself (only search permission on the
+  path's directories). Callers without CAP_SYS_ADMIN do not see
+  trusted.* names; user.* and security.* names are listed for
+  everyone. llistxattr (195) does not follow a final symbolic link;
+  flistxattr (196) takes a descriptor.
+returns:
+  format: "concatenated NUL-terminated names, no other separator, no trailing extra NUL; e.g. user.one and user.second give 'user.one\\0user.second\\0' (21 bytes) in some order"
+  none: "0 for a file without attributes (also with a NULL buffer and size > 0)"
+  size_zero: "size 0: the total length, buffer untouched"
+  exact_or_larger: "size >= length: the names, nothing written past them"
+  size_clamp: "size above 65536 is treated as 65536 (huge sizes work)"
+  empty_values: "a name whose value is empty is listed like any other"
+  after_changes: "a removed name disappears; replacing a value keeps one name"
+  order: "the order of names depends on the file system: tmpfs (Linux 6.18) lists in descending byte order of the names (user.xx, user.mm, user.cc, user.aa, trusted.bb, security.zz), ext4 roughly in insertion order; tests never compare the order"
+  symlink: "follows a final symbolic link: lists the target's names (llistxattr lists the link's own)"
+  special_files: "FIFOs list 0 (they cannot have user.* names; root's trusted.*/security.* names on a FIFO are listed)"
+  hidden_trusted: "without CAP_SYS_ADMIN trusted.* names are left out; on tmpfs the size query counts only the names that would be listed (18 for user.u+security.s although trusted.t exists); on ext4 the size query counts the hidden names too and a buffer of the visible length is ERANGE (tests use tmpfs for this)"
+  over_limit: "tmpfs allows more than 65536 bytes of names on one file (6000 names of 12 bytes): the size query returns the full length (72000); a size below 65536 is ERANGE as usual; any size of 65536 or more is E2BIG (the list can never be returned); after removing names below the limit the list comes back whole"
+errors:
+  path: "EFAULT (path NULL/unmapped), ENOENT (missing, empty path '', dangling final symlink), ENOTDIR (trailing '/' on a file, file used as a directory), ENAMETOOLONG, ELOOP, EACCES (no search permission on a directory of the path)"
+  short_buffer: "ERANGE (34): 0 < size < length (size below 65536); nothing written; also with a NULL buffer"
+  buffer_fault: "EFAULT (14): size >= length > 0 and the buffer not writable (NULL, read-only memory)"
+  too_long: "E2BIG (7): the names total more than 65536 bytes (XATTR_LIST_MAX) and size >= 65536 (observed: size 100 ERANGE, sizes 65536 and 100000 E2BIG; size 0 returns the length)"
+  no_permission_needed: "no EACCES for the file itself: uid 1000 lists root's mode-0 file and its own mode-0 file"
+  order: "path errors first; then the list is built: ERANGE / E2BIG, then EFAULT when copying"
+side_effects: "none"
+threading: "a concurrent setxattr/removexattr is seen entirely or not at all"
+ordering: []
+timing:
+  typical: "microseconds for a few names on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: list contents are checked as a set (x_count / x_has in the
+# tests), never in order. Tests of hidden trusted.* names and of more
+# than 65536 bytes of names use /dev/shm (tmpfs on Linux and Poly).
+# Constants as in setxattr.yaml (XATTR_LIST_MAX 65536, linux/limits.h).
