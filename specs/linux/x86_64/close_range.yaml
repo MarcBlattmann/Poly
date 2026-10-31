@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/close_range          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  close_range(first, last, flags) (syscall 436) closes every open
+  descriptor of the caller numbered first..last inclusive and returns 0.
+  All three arguments are 32-bit unsigned values (bits above 31 are
+  ignored: first (1<<32)|4 means 4, flags (1<<32)|4 means 4). Numbers in
+  the range that are not open are skipped; a range with nothing open
+  (also above every open descriptor, or the whole table empty) returns
+  0; last = ~0U means "to the end". flags: CLOSE_RANGE_CLOEXEC (4) sets
+  FD_CLOEXEC on the open descriptors of the range instead of closing
+  them (others keep their flag; they are then closed by execve);
+  CLOSE_RANGE_UNSHARE (2) first gives the caller a private copy of its
+  descriptor table if it shares it with other tasks (CLONE_FILES), so
+  the closing (or marking) affects only the caller; without it, a task
+  sharing the table closes the descriptors for all sharers. Freed
+  numbers are reused by later opens, lowest first.
+returns:
+  success: "0"
+  ranges: "5..7 closes 5, 6, 7; 4..9 over a gap closes what is open; 10..10 one descriptor; 11..~0U all from 11; 3..~0U leaves only 0-2"
+  nothing_open: "0 (also repeated, also above all descriptors)"
+  cloexec: "FD_CLOEXEC set on the range, descriptors stay open; execve then closes exactly those"
+  unshare: "alone: closes as with 0; with CLOEXEC: marks; in a CLONE_FILES task: only the task's own copy changes, the parent keeps its descriptors (and the task keeps the descriptors outside the range)"
+  shared_table: "without UNSHARE, a CLONE_FILES task's close_range closes the parent's descriptors too"
+errors:
+  bad_flags: "EINVAL (22): any flag bit other than 2 and 4 (1, 8, 0x80000000, 4|1)"
+  bad_range: "EINVAL (22): first > last (with any flags)"
+  no_memory: "ENOMEM / EMFILE: unsharing the table needs memory; not tested"
+  on_error: "nothing is closed or marked"
+side_effects: "descriptors closed (or marked close-on-exec); with UNSHARE the task's table is no longer shared"
+threading: "closes in the (possibly shared) descriptor table of the caller"
+ordering: []
+timing:
+  typical: "microseconds, growing with the number of open descriptors in the range"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: CLOSE_RANGE_UNSHARE and CLOSE_RANGE_CLOEXEC from
+# linux/close_range.h. What survives execve is checked by running the
+# test program again with arguments (pass/fail counts carried over). All
+# tests pass as root and as an unprivileged user.

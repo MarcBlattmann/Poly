@@ -1,0 +1,84 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rseq                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2, 32 CPUs, one NUMA node; auxv AT_RSEQ_FEATURE_SIZE 28, AT_RSEQ_ALIGN 32; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  rseq(rseq, rseq_len, flags, sig) (syscall 334) registers (flags 0) or
+  unregisters (flags RSEQ_FLAG_UNREGISTER 1) the calling thread's
+  restartable-sequences area and returns 0. The area is struct rseq
+  (linux/rseq.h): u32 cpu_id_start at 0, u32 cpu_id at 4, u64 rseq_cs at
+  8, u32 flags at 16, u32 node_id at 20, u32 mm_cid at 24; 32 bytes,
+  32-byte aligned. rseq_len, flags and sig are 32-bit values (upper
+  halves of the registers ignored). Registration needs a 32-byte aligned
+  area and rseq_len >= 32 (32, 33, 64, 4096 all work); the area must be
+  readable (else EFAULT). Before the call returns, the kernel stores the
+  current CPU in cpu_id_start and cpu_id, the NUMA node in node_id (0
+  here) and the concurrency id in mm_cid (0 in a single-threaded
+  process); it does not change flags or rseq_cs. From then on it keeps
+  cpu_id/cpu_id_start current whenever the thread returns to user mode
+  after being moved to another CPU, preempted or signalled. If the area
+  is readable but not writable the registration is accepted and the
+  thread is killed by SIGSEGV on its way back to user mode. A thread has
+  at most one registration: while registered, the same (area, len, sig)
+  again is EBUSY, the same area and len with another sig EPERM, any other
+  area or len EINVAL. Unregistering needs the same area and len (else
+  EINVAL) and sig (else EPERM); it stores cpu_id = 0xffffffff
+  (RSEQ_CPU_ID_UNINITIALIZED) and cpu_id_start = 0 and returns 0. Critical
+  sections: when the thread is preempted or a signal is delivered while
+  its instruction pointer is inside the section described by the struct
+  rseq_cs that rseq_cs points to ({u32 version 0; u32 flags 0; u64
+  start_ip; u64 post_commit_offset; u64 abort_ip}, 32-byte aligned; the
+  section is [start_ip, start_ip + post_commit_offset)), the kernel sets
+  rseq_cs to 0 and moves the thread to abort_ip (for a signal, the
+  handler runs first and returns to abort_ip). The 4 bytes before
+  abort_ip must equal the sig given at registration; otherwise the thread
+  is killed by SIGSEGV. Whenever the kernel looks at the area and finds
+  the instruction pointer outside the section, it also clears rseq_cs.
+returns:
+  register: "0; cpu_id = cpu_id_start = current CPU (equals getcpu when pinned), node_id 0, mm_cid 0, flags and rseq_cs unchanged"
+  lengths: "any rseq_len >= 32 with a 32-byte aligned area (33, 64, 4096, also an area 32 bytes before a page end with len 32)"
+  unregister: "0; cpu_id 0xffffffff, cpu_id_start 0"
+  reregister: "after unregistering, any area (also another sig) can be registered"
+  widths: "len (1<<32)|32 is 32; flags (1<<32)|1 is 1; sig (1<<32)|S is S"
+  abort: "inside the critical section a timer signal (or preemption) makes the section continue at abort_ip; rseq_cs reads 0 afterwards"
+  bad_signature: "the 4 bytes before abort_ip differ from sig: the thread dies of SIGSEGV when the abort happens"
+  read_only_area: "registration of a readable, non-writable area returns, then the thread is killed by SIGSEGV"
+  fork: "a fork child inherits the registration (same area again EBUSY in the child; the child may unregister it without affecting the parent)"
+  clone_vm: "a task created with CLONE_VM starts unregistered: unregistering is EINVAL, registering its own area works, it cannot unregister the parent's area (EINVAL)"
+errors:
+  bad_flags: "EINVAL (22): flags other than 0 and 1 (2, 3, 0xffffffff), registered or not"
+  short_len: "EINVAL (22): rseq_len < 32 (0, 16, 31)"
+  misaligned: "EINVAL (22): area not 32-byte aligned (offset 8 or 16, also with len 64)"
+  fault: "EFAULT (14): area unreadable (NULL, address 32, an unmapped page, non-canonical 0x800000000000) when registering"
+  busy: "EBUSY (16): already registered with the same area, len and sig"
+  sig_mismatch: "EPERM (1): same area and len, other sig (register or unregister)"
+  other_area: "EINVAL (22): registered with another area or len (register or unregister)"
+  not_registered: "EINVAL (22): unregister with nothing registered (also with NULL)"
+  order: "flags; then if registered: area/len mismatch EINVAL, sig mismatch EPERM, else EBUSY; if not registered: alignment/len EINVAL, then EFAULT"
+side_effects: >
+  The thread's registration; the kernel writes cpu_id_start, cpu_id,
+  node_id and mm_cid of the area and clears rseq_cs (on abort or when it
+  finds the thread outside the section). execve drops the registration
+  (not tested).
+threading: "per thread; CLONE_VM children start unregistered, fork children inherit"
+ordering:
+  - "on a signal inside a critical section: the instruction pointer is moved to abort_ip and rseq_cs cleared before the handler runs; the handler returns to abort_ip"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct rseq, struct rseq_cs, RSEQ_FLAG_UNREGISTER and
+# RSEQ_CPU_ID_UNINITIALIZED from linux/rseq.h. Poly answers rseq with
+# ENOSYS today on purpose (docs/AGENT_PIPELINE.md, ADR 0043 / 0049:
+# glibc then runs without it); this sheet describes Linux so the owner
+# can decide whether to implement it. Critical-section aborts are
+# provoked with a periodic ITIMER_REAL signal and compared on output only
+# (poly-diff: syscalls=off). cpu_id is compared with getcpu only after
+# the thread pinned itself to the CPU it runs on. All tests pass as root
+# and as an unprivileged user.

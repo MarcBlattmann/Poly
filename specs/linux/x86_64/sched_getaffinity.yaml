@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_getaffinity    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2, 32 CPUs (0-31 possible and online, nr_cpu_ids 32), one NUMA node; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  sched_getaffinity(pid, len, mask) (syscall 204) copies the CPU
+  affinity mask of thread pid (0: the caller; the caller's pid or tid
+  work the same) into the buffer mask and returns the number of bytes
+  copied: the smaller of len and the kernel's mask size, which is the
+  number of possible CPUs rounded up to whole 8-byte words (8 on this
+  32-CPU machine; 8 on any machine with at most 64 possible CPUs). Bytes
+  of the buffer past that count are not touched. Bit n of the mask (byte
+  n/8, bit n%8; little-endian 64-bit words) is set when the thread may
+  run on CPU n; the mask is never empty and contains the CPU the thread
+  runs on. len is a 32-bit unsigned value (upper half ignored); it must
+  be a multiple of 8 and at least the kernel's mask size in bits / 8
+  (i.e. len*8 >= number of possible CPUs). No permission is needed to
+  read another process's mask. Masks are inherited by fork children and
+  CLONE_VM tasks.
+returns:
+  success: "bytes copied = min(len, kernel mask size); 8 here for len 8, 16, 128, 256, (1<<32)|128, 0xfffffff8"
+  untouched_tail: "buffer bytes after the returned count keep their old contents"
+  mask: "non-empty; includes getcpu's CPU; the same for pid 0, getpid(), gettid()"
+  after_pin: "after sched_setaffinity to one CPU: only that bit; a fork child and a CLONE_VM task have the same (read by themselves and by the parent through their pid)"
+errors:
+  bad_len: "EINVAL (22): len not a multiple of 8 (4, 7, 9, 12, 127), len 0, or len*8 smaller than the number of possible CPUs; checked first (before the pid and the buffer)"
+  no_thread: "ESRCH (3): no thread with that id (an unused number, -1); before the buffer (NULL buffer still ESRCH)"
+  fault: "EFAULT (14): buffer unwritable (NULL, read-only memory)"
+  order: "EINVAL (len), ESRCH, EFAULT"
+side_effects: "none"
+threading: "per thread masks; any thread's mask can be read"
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the successful result is the machine's mask size, so tests that
+# succeed compare syscall names only (poly-diff: syscalls=names) and
+# check the result's properties (multiple of 8, 8..len), never its
+# value. The error test is compared exactly. glibc's
+# sched_getaffinity wrapper clears the bytes after the returned count;
+# the system call does not. All tests pass as root and as an
+# unprivileged user.

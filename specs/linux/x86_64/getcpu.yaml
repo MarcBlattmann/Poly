@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getcpu               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2, 32 CPUs (0-31 possible and online), one NUMA node; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  getcpu(cpu, node, tcache) (syscall 309; also offered by the vDSO)
+  stores the number of the CPU the calling thread is running on as a u32
+  at *cpu and that CPU's NUMA node as a u32 at *node (0 on a single-node
+  machine) and returns 0. Either pointer may be NULL (that value is not
+  stored); the third argument is ignored, whatever it holds. The CPU is
+  one in the thread's affinity mask; right after the thread is pinned to
+  a single CPU with sched_setaffinity, getcpu reports that CPU. The two
+  stores are independent: if one pointer is unwritable the call is
+  EFAULT but the other value is still stored. Children (fork, CLONE_VM)
+  inherit the affinity, so after pinning they report the same CPU.
+returns:
+  success: "0; *cpu < number of possible CPUs, its bit set in sched_getaffinity's mask; *node 0"
+  null_pointers: "cpu NULL, node NULL, or both: 0, the other value stored"
+  tcache: "ignored (8, 0x800000000000 accepted)"
+  pinned: "after sched_setaffinity to one CPU: that CPU (lowest and highest allowed CPU checked)"
+errors:
+  fault: "EFAULT (14): cpu or node unwritable (address 8, read-only memory, non-canonical); the other value is still stored (bad cpu: *node = 0 written; bad node: *cpu written)"
+side_effects: "none"
+threading: "per thread; the answer may be stale as soon as it is returned unless the thread is pinned"
+ordering: []
+timing:
+  typical: "well under a microsecond (also via the vDSO)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the tests call the syscall directly (no vDSO). Tests that also
+# call sched_getaffinity compare syscall names only (its result is the
+# machine's mask size); tests with several tasks compare output only. All
+# tests pass as root and as an unprivileged user.
