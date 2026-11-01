@@ -1,7 +1,7 @@
 //! Drawing one damaged rectangle: the desktop, then every window bottom to
 //! top — its frame, then its content over it — clipped to the rectangle.
 
-use super::frame::{FrameLayout, cross_covers};
+use super::frame::{FrameLayout, Glyph, glyph_covers};
 use super::scene::{Scene, Window};
 use super::{CURSOR_SIZE, Framebuffer, Layer, Rect, over, with_alpha};
 
@@ -101,14 +101,17 @@ fn draw_frame(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect, w: &Window, f
     }
     fill(fb, clip, f.title.scale(s), title_bg);
     draw_title(scene, fb, clip, f, w.title(), text, s);
-    // The close button: a cross in the title text's colour.
-    let close = f.close.scale(s);
-    let area = close.intersect(&clip);
-    for y in area.y..area.bottom() {
-        let row = fb.row_mut(y as u32);
-        for x in area.x..area.right() {
-            if cross_covers(x - close.x, y - close.y, close.width, s) {
-                row[x as usize] = text | OPAQUE;
+    // The buttons: glyphs in the title text's colour.
+    let middle = if w.is_maximized() { Glyph::Restore } else { Glyph::Maximize };
+    for (button, glyph) in [(f.close, Glyph::Close), (f.maximize, middle), (f.minimize, Glyph::Minimize)] {
+        let b = button.scale(s);
+        let area = b.intersect(&clip);
+        for y in area.y..area.bottom() {
+            let row = fb.row_mut(y as u32);
+            for x in area.x..area.right() {
+                if glyph_covers(glyph, x - b.x, y - b.y, b.width, s) {
+                    row[x as usize] = text | OPAQUE;
+                }
             }
         }
     }

@@ -18,7 +18,7 @@ mod render;
 mod scene;
 mod text;
 
-pub use frame::{BORDER, CLOSE_SIZE, TITLE_HEIGHT, Theme};
+pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, TITLE_HEIGHT, Theme};
 pub use scene::{CURSOR_SIZE, Content, Hit, Placement, Scene, Window, WindowId};
 pub use text::{BitmapFont, TextRenderer};
 

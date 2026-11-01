@@ -60,6 +60,7 @@ name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
  "libc",
+ "poly-dbus",
  "poly-fbdev",
  "poly-font",
  "poly-input",
@@ -104,6 +105,10 @@ version = "0.0.1"
 dependencies = [
  "poly-seh",
 ]
+
+[[package]]
+name = "poly-dbus"
+version = "0.0.1"
 
 [[package]]
 name = "poly-drm"
@@ -198,6 +203,14 @@ name = "poly-nls"
 version = "0.0.1"
 dependencies = [
  "poly-rtl",
+]
+
+[[package]]
+name = "poly-notify"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "poly-dbus",
 ]
 
 [[package]]
@@ -319,6 +332,7 @@ version = "0.0.1"
 name = "poly-shell"
 version = "0.0.1"
 dependencies = [
+ "poly-dbus",
  "poly-font",
  "poly-gfx",
  "poly-wayland",

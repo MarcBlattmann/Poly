@@ -38,7 +38,10 @@ mod output;
 mod presentation;
 mod shm;
 mod surface;
+mod wm;
 mod xdg;
+
+pub use wm::{InternalEvent, WindowInfo};
 
 use crate::compose::{Framebuffer, Hit, Rect, Scene, WindowId};
 use crate::protocol::{
@@ -323,6 +326,13 @@ pub struct Server {
     /// The toplevel with focus.
     pub(crate) active: Option<(ClientId, ObjectId)>,
     frame_seq: u64,
+    /// Windows the compositor draws itself (ADR 0117), their events, the
+    /// one with focus (never at the same time as `active`), and the next
+    /// owner tag.
+    pub(crate) internal: BTreeMap<WindowId, wm::Internal>,
+    pub(crate) internal_events: Vec<InternalEvent>,
+    pub(crate) active_internal: Option<WindowId>,
+    next_internal: u32,
 }
 
 impl core::fmt::Debug for Server {
@@ -367,6 +377,10 @@ impl Server {
             serial: 0,
             active: None,
             frame_seq: 0,
+            internal: BTreeMap::new(),
+            internal_events: Vec::new(),
+            active_internal: None,
+            next_internal: 1,
         }
     }
 
@@ -411,6 +425,7 @@ impl Server {
         self.input_client_gone(c);
         if self.active.is_some_and(|(ac, _)| ac == c) {
             self.active = None;
+            self.focus_next();
         }
     }
 

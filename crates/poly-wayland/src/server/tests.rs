@@ -987,3 +987,4 @@ fn removing_a_client_frees_its_windows_and_memory() {
     assert_eq!(srv.clients().count(), 0);
 }
 mod input_routing;
+mod window_management;

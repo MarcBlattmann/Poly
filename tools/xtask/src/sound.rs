@@ -84,7 +84,7 @@ fn build() -> Result<Option<Vec<u8>>> {
 }
 
 /// Does this QEMU have the virtio sound device?
-fn qemu_has_virtio_sound() -> bool {
+pub(crate) fn qemu_has_virtio_sound() -> bool {
     Command::new("qemu-system-x86_64")
         .args(["-device", "help"])
         .output()

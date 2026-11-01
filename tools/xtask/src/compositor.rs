@@ -58,6 +58,23 @@ pub fn build_compositor() -> Result<Vec<u8>> {
     std::fs::read(&elf).map_err(|e| format!("{}: {e}", elf.display()))
 }
 
+/// Build `notify-send` (`userland/poly-notify`, ADR 0117) as a static Linux
+/// program, like the compositor; returns the ELF.
+pub fn build_notify_send() -> Result<Vec<u8>> {
+    let status = cargo()
+        .current_dir(root())
+        .args(["build", "--release", "--quiet", "--package", "poly-notify", "--target", TRIPLE, "--target-dir"])
+        .arg(root().join(TARGET_DIR))
+        .env("RUSTFLAGS", "-C target-feature=+crt-static -C relocation-model=static -C strip=symbols")
+        .status()
+        .map_err(|e| format!("cargo build poly-notify: {e}"))?;
+    if !status.success() {
+        return Err(format!("building notify-send failed ({status})"));
+    }
+    let elf = root().join(TARGET_DIR).join(TRIPLE).join("release/notify-send");
+    std::fs::read(&elf).map_err(|e| format!("{}: {e}", elf.display()))
+}
+
 /// Build the C client statically: the ELF, or why not.
 pub fn build_client() -> std::result::Result<Vec<u8>, String> {
     build_c(CLIENT, "wl-client")

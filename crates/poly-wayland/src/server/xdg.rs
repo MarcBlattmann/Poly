@@ -54,8 +54,15 @@ pub(crate) struct Toplevel {
     /// What is applied.
     pub maximized: bool,
     pub fullscreen: bool,
-    /// Where the window was before it was maximized or made fullscreen.
+    /// Where the window was before it was maximized, tiled or made
+    /// fullscreen.
     pub restore: Option<(i32, i32)>,
+    /// The size of its visible bounds then, suggested when it is restored.
+    pub floating: Option<(i32, i32)>,
+    /// The frame's outer rectangle the shell tiles it to (ADR 0117):
+    /// wanted, and applied once acked.
+    pub want_tile: Option<Rect>,
+    pub tile: Option<Rect>,
     pub decoration: Option<ObjectId>,
     /// A decoration configure is due with the next configure sequence.
     pub decoration_due: bool,
@@ -384,28 +391,53 @@ impl Server {
         let Some(t) = self.toplevel(c, tl) else { return };
         let xid = t.xdg;
         let mapped = matches!(self.client(c).data(xid), Some(Data::XdgSurface(x)) if x.mapped);
+        let bounds = self.toplevel_window(c, tl).and_then(|w| self.scene.window(w)).map(|w| w.bounds());
         let Some(t) = self.toplevel(c, tl) else { return };
+        if (t.want_maximized || t.want_fullscreen || t.want_tile.is_some())
+            && !(t.maximized || t.fullscreen || t.tile.is_some())
+            && let Some(b) = bounds
+        {
+            // Leaving the floating state: the size to suggest when it comes back.
+            t.floating = Some((b.width, b.height));
+        }
         // A window not shown yet gets focus when it is.
         let mut states = Vec::new();
         if active || !mapped {
             states.push(xdg_toplevel::State::ACTIVATED.0);
         }
+        let mut tile = None;
         let size = if t.want_fullscreen {
             states.push(xdg_toplevel::State::FULLSCREEN.0);
             (ow, oh)
         } else if t.want_maximized {
             states.push(xdg_toplevel::State::MAXIMIZED.0);
             work
+        } else if let Some(outer) = t.want_tile {
+            // Tiled (ADR 0117): the bounds the frame leaves.
+            tile = Some(outer);
+            (outer.width - 2 * BORDER, outer.height - TITLE_HEIGHT - 2 * BORDER)
+        } else if t.maximized || t.fullscreen || t.tile.is_some() {
+            // Going back to floating: the size it had.
+            t.floating.unwrap_or((0, 0))
         } else {
             (0, 0)
         };
         let send_caps = !core::mem::replace(&mut t.capabilities_sent, true);
         let decoration = t.decoration.filter(|_| core::mem::take(&mut t.decoration_due));
+        if let Some(outer) = tile
+            && self.client(c).version(tl) >= 2
+        {
+            self.tiled_states(outer, &mut states);
+        }
         let serial = self.next_serial();
         let client = self.client(c);
         client.send(tl, xdg_toplevel::Event::ConfigureBounds { width: work.0, height: work.1 });
         if send_caps {
-            let caps = [xdg_toplevel::WmCapabilities::MAXIMIZE.0, xdg_toplevel::WmCapabilities::FULLSCREEN.0];
+            let caps = [
+                xdg_toplevel::WmCapabilities::MAXIMIZE.0,
+                xdg_toplevel::WmCapabilities::FULLSCREEN.0,
+                xdg_toplevel::WmCapabilities::MINIMIZE.0,
+            ];
             client.send(tl, xdg_toplevel::Event::WmCapabilities { capabilities: u32_array(&caps) });
         }
         if let Some(d) = decoration {
@@ -506,6 +538,8 @@ impl Server {
             && self.active == Some((c, r))
         {
             self.active = None;
+            // The next window gets the focus (ADR 0117).
+            self.focus_next();
         }
         let client = self.client(c);
         let children = client.ids_where(|d| matches!(d, Data::Popup(p) if p.parent == Some(xid)));
@@ -532,22 +566,28 @@ impl Server {
         let title = t.title.clone();
         let mut position = None;
         let mut decorated = !t.fullscreen;
-        if acked_all && (t.maximized, t.fullscreen) != (t.want_maximized, t.want_fullscreen) {
-            if !t.maximized && !t.fullscreen {
+        let want = (t.want_maximized, t.want_fullscreen, t.want_tile);
+        if acked_all && (t.maximized, t.fullscreen, t.tile) != want {
+            if !t.maximized && !t.fullscreen && t.tile.is_none() {
+                // Leaving the floating state: where it was.
                 t.restore = Some(pos);
             }
-            (t.maximized, t.fullscreen) = (t.want_maximized, t.want_fullscreen);
+            (t.maximized, t.fullscreen, t.tile) = want;
             decorated = !t.fullscreen;
             position = Some(if t.fullscreen {
                 (-g.x, -g.y)
             } else if t.maximized {
                 (BORDER - g.x, top + TITLE_HEIGHT + BORDER - g.y)
+            } else if let Some(outer) = t.tile {
+                (outer.x + BORDER - g.x, outer.y + TITLE_HEIGHT + BORDER - g.y)
             } else {
                 t.restore.take().unwrap_or(pos)
             });
         }
+        let snapped = t.maximized || t.tile.is_some();
         self.scene.set_title(win, &title);
         self.scene.set_decorated(win, decorated);
+        self.scene.set_maximized(win, snapped);
         if let Some((x, y)) = position {
             self.scene.set_position(win, x, y);
         }
@@ -557,6 +597,9 @@ impl Server {
     /// had focus is not any more; both hear of it through configure events
     /// (`configure` says so only if the window was configured as inactive).
     pub(super) fn activate(&mut self, c: ClientId, tl: ObjectId, configure: bool) {
+        if let Some(iw) = self.active_internal.take() {
+            self.scene.set_active(iw, false);
+        }
         let previous = self.active.replace((c, tl));
         if previous == Some((c, tl)) {
             if let Some(w) = self.toplevel_window(c, tl) {
@@ -580,7 +623,7 @@ impl Server {
         }
     }
 
-    fn toplevel_window(&mut self, c: ClientId, tl: ObjectId) -> Option<WindowId> {
+    pub(super) fn toplevel_window(&mut self, c: ClientId, tl: ObjectId) -> Option<WindowId> {
         let xid = self.toplevel(c, tl)?.xdg;
         self.xdg_window(c, xid)
     }
@@ -598,14 +641,19 @@ impl Server {
 
     /// A click on a window: focus it.
     pub(super) fn focus_window(&mut self, w: WindowId) {
-        if let Some((c, tl)) = self.window_toplevel(w) {
+        if self.internal.contains_key(&w) {
+            self.activate_internal(w);
+        } else if let Some((c, tl)) = self.window_toplevel(w) {
             self.activate(c, tl, true);
         }
     }
 
-    /// A click on a window's close button: ask its client to close it.
+    /// A click on a window's close button: ask its client to close it (an
+    /// internal window's owner, ADR 0117).
     pub(super) fn close_window(&mut self, w: WindowId) {
-        if let Some((c, tl)) = self.window_toplevel(w) {
+        if self.internal.contains_key(&w) {
+            self.internal_events.push(super::InternalEvent::Close(w));
+        } else if let Some((c, tl)) = self.window_toplevel(w) {
             self.client(c).send(tl, xdg_toplevel::Event::Close);
         }
     }
@@ -667,9 +715,15 @@ impl Server {
                 }
                 return Ok(());
             }
-            // Interactive resize and the window menu are not offered yet;
-            // minimizing is not offered (wm_capabilities).
-            xdg_toplevel::Request::ShowWindowMenu { .. } | xdg_toplevel::Request::SetMinimized => {}
+            // Minimizing (ADR 0117): off the output, the focus moves on.
+            xdg_toplevel::Request::SetMinimized => {
+                if let Some(w) = self.toplevel_window(c, tl) {
+                    self.minimize_window(w);
+                }
+                return Ok(());
+            }
+            // Interactive resize and the window menu are not offered yet.
+            xdg_toplevel::Request::ShowWindowMenu { .. } => {}
         }
         if reconfigure && self.xdg(c, xid).is_some_and(|x| x.initial_done) {
             self.configure_toplevel(c, tl);
