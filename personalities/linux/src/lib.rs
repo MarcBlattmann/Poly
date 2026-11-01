@@ -49,6 +49,8 @@
 //!   namespace.
 //! - [`net`]: what the socket calls need from the kernel
 //!   ([`net::LinuxNet`]), socket structures and `NETLINK_ROUTE` (ADR 0048).
+//! - [`sound`]: the ALSA interface of `/dev/snd/*`: hardware parameter
+//!   refinement and the PCM playback runtime (ADR 0104).
 //!
 //! Implementation status lives in `coverage/linux/syscall/x86_64.json`, not here.
 
@@ -75,6 +77,7 @@ mod numbers;
 pub mod rlimit;
 pub mod seccomp;
 pub mod signal;
+pub mod sound;
 pub mod sys;
 pub mod table;
 pub mod task;

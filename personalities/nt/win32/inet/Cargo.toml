@@ -1,0 +1,16 @@
+[package]
+name = "poly-win32-inet"
+description = "What winhttp.dll and wininet.dll share (ADR 0095): handles, plain HTTP/1.1 requests over ws2_32 sockets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "poly_win32_inet"
+
+[dependencies]
+poly-http = { path = "../../../../crates/poly-http" }
+
+[lints]
+workspace = true

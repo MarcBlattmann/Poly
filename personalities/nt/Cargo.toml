@@ -11,6 +11,10 @@ rust-version.workspace = true
 poly-abi.workspace = true
 # The console host's logic (ADR 0080).
 poly-console.workspace = true
+# Socket types of the kernel's TCP/IP stack, and Winsock's protocol for
+# `\Device\Afd` (ADR 0095).
+poly-net.workspace = true
+poly-winsock.workspace = true
 poly-ntobj.workspace = true
 poly-pe.workspace = true
 poly-registry.workspace = true

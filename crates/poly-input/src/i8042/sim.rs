@@ -51,6 +51,43 @@ impl Default for Keyboard {
     }
 }
 
+/// A mouse on the second port.
+#[derive(Debug)]
+pub struct Mouse {
+    /// Understands the IntelliMouse wheel knock (then ID 3).
+    pub wheel: bool,
+    /// ... and the five-button knock (then ID 4).
+    pub five_buttons: bool,
+    pub id: u8,
+    pub reporting: bool,
+    pub rate: u8,
+    pub resolution: u8,
+    /// The last three sample rates set.
+    rates: Vec<u8>,
+    /// What the self-test after a reset reports.
+    pub bat: u8,
+    /// Commands answered with RESEND every time.
+    pub refuse: Vec<u8>,
+    param_for: Option<u8>,
+}
+
+impl Default for Mouse {
+    fn default() -> Mouse {
+        Mouse {
+            wheel: true,
+            five_buttons: false,
+            id: 0,
+            reporting: false,
+            rate: 100,
+            resolution: 2,
+            rates: Vec::new(),
+            bat: BAT_OK,
+            refuse: Vec::new(),
+            param_for: None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct State {
     /// Nothing decodes the ports: reads give 0xFF, writes vanish.
@@ -64,7 +101,10 @@ pub struct State {
     /// The configuration byte becomes this after the self-test.
     pub config_after_self_test: Option<u8>,
     pub port_test_reply: u8,
+    /// The second port's test result; `None`: no second port (no reply).
+    pub aux_port_test_reply: Option<u8>,
     pub keyboard: Option<Keyboard>,
+    pub mouse: Option<Mouse>,
     /// Status reports "input full" for this many reads after each write;
     /// `u32::MAX` keeps it full for good.
     pub busy_reads: u32,
@@ -93,7 +133,9 @@ impl Sim {
                 self_test_reply: SELF_TEST_OK,
                 config_after_self_test: None,
                 port_test_reply: PORT_TEST_OK,
+                aux_port_test_reply: Some(PORT_TEST_OK),
                 keyboard: Some(Keyboard::default()),
+                mouse: Some(Mouse::default()),
                 busy_reads: 0,
                 busy_left: 0,
                 pending: None,
@@ -111,6 +153,16 @@ impl Sim {
 
     pub fn keyboard<R>(&self, f: impl FnOnce(&mut Keyboard) -> R) -> R {
         f(self.state.borrow_mut().keyboard.as_mut().expect("no keyboard"))
+    }
+
+    pub fn mouse<R>(&self, f: impl FnOnce(&mut Mouse) -> R) -> R {
+        f(self.state.borrow_mut().mouse.as_mut().expect("no mouse"))
+    }
+
+    /// Whether IRQ 12 would be raised now.
+    pub fn aux_irq(&self) -> bool {
+        let s = self.state.borrow();
+        s.config & CONFIG_AUX_IRQ != 0 && s.output.front().is_some_and(|&(_, aux)| aux)
     }
 
     pub fn log(&self) -> Vec<Op> {
@@ -156,11 +208,29 @@ impl State {
         }
     }
 
+    fn aux_port_enabled(&self) -> bool {
+        self.config & CONFIG_AUX_CLOCK_OFF == 0
+    }
+
+    fn aux_reply(&mut self, byte: u8) {
+        if !self.mute {
+            self.output.push_back((byte, true));
+        }
+    }
+
     fn controller_command(&mut self, cmd: u8) {
         match cmd {
             CMD_READ_CONFIG => self.reply(self.config),
-            CMD_WRITE_CONFIG | CMD_WRITE_KEYBOARD_OUTPUT => self.pending = Some(cmd),
+            CMD_WRITE_CONFIG | CMD_WRITE_KEYBOARD_OUTPUT | CMD_WRITE_AUX | CMD_WRITE_AUX_OUTPUT => {
+                self.pending = Some(cmd)
+            }
             CMD_DISABLE_AUX => self.config |= CONFIG_AUX_CLOCK_OFF,
+            CMD_ENABLE_AUX => self.config &= !CONFIG_AUX_CLOCK_OFF,
+            CMD_TEST_AUX_PORT => {
+                if let Some(r) = self.aux_port_test_reply {
+                    self.reply(r);
+                }
+            }
             CMD_SELF_TEST => {
                 self.reply(self.self_test_reply);
                 if let Some(c) = self.config_after_self_test {
@@ -178,7 +248,67 @@ impl State {
         match self.pending.take() {
             Some(CMD_WRITE_CONFIG) => self.config = byte,
             Some(CMD_WRITE_KEYBOARD_OUTPUT) => self.reply(byte),
+            Some(CMD_WRITE_AUX_OUTPUT) => self.aux_reply(byte),
+            Some(CMD_WRITE_AUX) => self.mouse_receives(byte),
             _ => self.keyboard_receives(byte),
+        }
+    }
+
+    fn mouse_receives(&mut self, byte: u8) {
+        use crate::ps2mouse as m;
+        if !self.aux_port_enabled() {
+            return;
+        }
+        let Some(mouse) = self.mouse.as_mut() else { return };
+        let mut replies = Vec::new();
+        if let Some(cmd) = mouse.param_for.take() {
+            match cmd {
+                m::SET_SAMPLE_RATE => {
+                    mouse.rate = byte;
+                    mouse.rates.push(byte);
+                    if mouse.rates.len() > 3 {
+                        mouse.rates.remove(0);
+                    }
+                    if mouse.rates == m::WHEEL_KNOCK && mouse.wheel {
+                        mouse.id = m::ID_WHEEL;
+                    }
+                    if mouse.rates == m::FIVE_BUTTON_KNOCK && mouse.five_buttons && mouse.id == m::ID_WHEEL {
+                        mouse.id = m::ID_FIVE_BUTTONS;
+                    }
+                }
+                m::SET_RESOLUTION => mouse.resolution = byte,
+                _ => {}
+            }
+            replies.push(ACK);
+        } else if mouse.refuse.contains(&byte) {
+            replies.push(RESEND);
+        } else {
+            match byte {
+                m::RESET => {
+                    let bat = mouse.bat;
+                    let refuse = core::mem::take(&mut mouse.refuse);
+                    *mouse =
+                        Mouse { wheel: mouse.wheel, five_buttons: mouse.five_buttons, bat, refuse, ..Mouse::default() };
+                    replies.extend([ACK, bat, 0x00]);
+                }
+                m::SET_SAMPLE_RATE | m::SET_RESOLUTION => {
+                    mouse.param_for = Some(byte);
+                    replies.push(ACK);
+                }
+                m::GET_ID => replies.extend([ACK, mouse.id]),
+                m::ENABLE_REPORTING => {
+                    mouse.reporting = true;
+                    replies.push(ACK);
+                }
+                m::DISABLE_REPORTING | m::SET_DEFAULTS | m::SET_SCALING_1_1 => {
+                    mouse.reporting &= byte != m::DISABLE_REPORTING;
+                    replies.push(ACK);
+                }
+                _ => replies.push(RESEND),
+            }
+        }
+        for r in replies {
+            self.aux_reply(r);
         }
     }
 

@@ -195,6 +195,7 @@ fn signal(om: &mut ObjectManager, event: ObjectId) {
 /// Write the I/O status blocks of the caller's completed notifications,
 /// then signal their events. Runs after every service
 /// ([`crate::dispatch_with`]).
+#[inline(never)]
 pub fn finish<K: NtKernel>(k: &mut K) {
     let caller = k.caller();
     let mine = k.with_state(|sys, _, _| {

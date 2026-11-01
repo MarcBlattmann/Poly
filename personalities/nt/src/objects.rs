@@ -34,6 +34,7 @@ pub fn return_handle<K: NtKernel>(k: &mut K, ptr: u64, h: Handle) -> Result<()> 
 
 /// `(handle*, access, attributes*)`: the three arguments every create and
 /// open service starts with.
+#[inline(never)]
 fn open_args<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<(u64, u32, Attributes)> {
     let [out, access, attrs] = abi::args::<K, 3>(k, regs)?;
     let attrs = abi::read_attributes(k, attrs)?;

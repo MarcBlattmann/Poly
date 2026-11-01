@@ -136,6 +136,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetLastError", "api-ms-win-core-errorhandling-l1-1-0"),
     ("SetLastError", "api-ms-win-core-errorhandling-l1-1-0"),
     ("FormatMessageW", "api-ms-win-core-localization-l1-2-0"),
+    ("FormatMessageA", "api-ms-win-core-localization-l1-2-0"),
     ("IsDebuggerPresent", "api-ms-win-core-debug-l1-1-0"),
     // The console (consoleapi.h, consoleapi2.h, consoleapi3.h; ADR 0080).
     ("AllocConsole", "api-ms-win-core-console-l1-1-0"),
