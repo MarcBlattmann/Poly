@@ -380,8 +380,12 @@ pub fn truncate(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             crate::abi::mode::S_IFREG => {}
             _ => return Err(Errno::EINVAL),
         }
-        fs(k)?.accessat(AT_FDCWD, &path, access::W_OK, true, true)?;
-        return crate::sys::fsize::too_big_signal(k);
+        // Only growing past the limit is refused; shrinking (to anything)
+        // works (the spec of truncate: `rlimit_fsize`).
+        if len > u64::try_from(st.stat.size).unwrap_or(0) {
+            fs(k)?.accessat(AT_FDCWD, &path, access::W_OK, true, true)?;
+            return crate::sys::fsize::too_big_signal(k);
+        }
     }
     fs(k)?.truncate(&path, len).map(|()| 0)
 }

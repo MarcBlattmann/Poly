@@ -250,7 +250,21 @@ fn file_system_types_and_options() {
     assert_eq!(FsType::from_name(b"btrfs"), Err(Errno::ENODEV));
     assert!(FsType::Ext2.needs_device() && !FsType::Proc.needs_device());
     let opts = admin::mount_options(FsType::Tmpfs, b"mode=0700,uid=5,gid=6,size=10%,nr_inodes=1k,,noswap").unwrap();
-    assert_eq!(opts, RootOptions { mode: Some(0o700), uid: Some(5), gid: Some(6) });
+    assert_eq!(
+        opts,
+        RootOptions {
+            mode: Some(0o700),
+            uid: Some(5),
+            gid: Some(6),
+            size: Some(admin::Amount::Percent(10)),
+            inodes: Some(admin::Amount::Count(1024)),
+        }
+    );
+    let sizes = admin::mount_options(FsType::Tmpfs, b"size=64k").unwrap();
+    assert_eq!(sizes.size, Some(admin::Amount::Count(64 * 1024)));
+    let blocks = admin::mount_options(FsType::Tmpfs, b"nr_blocks=16,nr_inodes=100").unwrap();
+    assert_eq!((blocks.size, blocks.inodes), (Some(admin::Amount::Count(65536)), Some(admin::Amount::Count(100))));
+    assert_eq!(admin::mount_options(FsType::Tmpfs, b"size=2M").unwrap().size, Some(admin::Amount::Count(2 << 20)));
     assert_eq!(admin::mount_options(FsType::Tmpfs, b"mode=9"), Err(Errno::EINVAL));
     assert_eq!(admin::mount_options(FsType::Tmpfs, b"size=lots"), Err(Errno::EINVAL));
     assert_eq!(admin::mount_options(FsType::Tmpfs, b"bogus"), Err(Errno::EINVAL));

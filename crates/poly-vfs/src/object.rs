@@ -161,14 +161,17 @@ impl FileSystem for AnonFs {
     }
 
     /// `fchmod` / `fchown` / `futimens` on an object change what `fstat`
-    /// reports and nothing else; the mode of an inode without a type does
-    /// not change (`EOPNOTSUPP`).
+    /// reports and nothing else; the mode and the owner of an inode without
+    /// a type do not change (`EOPNOTSUPP`), only its times.
     fn setattr(&self, ino: Ino, set: &SetAttr) -> Result<Attr> {
         if set.size.is_some() {
             return Err(Errno::EINVAL);
         }
         let mut n = self.nodes.lock();
-        if set.perm.is_some() && n.typeless.contains(&ino) {
+        // Neither the mode nor the owner of an inode without a type
+        // changes, not even by chown(-1, -1) (the specs of fchmod and
+        // fchown: `anonymous_inodes`); only its times may be set.
+        if n.typeless.contains(&ino) && set.atime.is_none() && set.mtime.is_none() {
             return Err(Errno::EOPNOTSUPP);
         }
         let (a, _) = n.live.get_mut(&ino).ok_or(Errno::EPERM)?;
