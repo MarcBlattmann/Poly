@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_getparam       # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_HZ=250; tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /; RLIMIT_NICE and RLIMIT_RTPRIO 0/0"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  sched_getparam(pid, param) (syscall 143) stores the static scheduling
+  priority of one thread into *param (struct sched_param, a single int
+  sched_priority, 4 bytes, linux/sched/types.h) and returns 0. The
+  priority is the real-time priority (1..99) under SCHED_FIFO/SCHED_RR
+  and 0 under SCHED_OTHER, SCHED_BATCH and SCHED_IDLE (the nice value is
+  not reported here). pid 0 is the calling thread, otherwise a thread id
+  (a process id names the main thread); pid is a 32-bit int (upper half
+  ignored). Reading needs no permission.
+returns:
+  success: "0; exactly 4 bytes written at param (the bytes after them are untouched)"
+  fair: "0 under SCHED_OTHER, SCHED_BATCH, SCHED_IDLE, whatever the nice value"
+  realtime: "the priority last set by sched_setscheduler/sched_setparam under SCHED_FIFO/RR (1, 50, 99, ...); a failed sched_setparam leaves it; back under SCHED_OTHER it is 0 again"
+  per_thread: "per thread: a thread of a process at SCHED_RR 42 can be SCHED_FIFO 7; by tid it reads 7, by process id 42"
+  other_tasks: "children, zombies (exited, not reaped), threads and other users' tasks are readable without privilege"
+errors:
+  null_param: "EINVAL (22): param is NULL; checked first (NULL with a pid no task has, or a negative pid, is EINVAL)"
+  negative_pid: "EINVAL (22): pid negative as a 32-bit int (-1, 0xffffffff); nothing written"
+  no_task: "ESRCH (3): no thread has the id (also when param is an unwritable non-NULL address); nothing written"
+  fault: "EFAULT (14): param not writable: low address (1), non-canonical (0x800000000000), read-only memory (the read-only data is unchanged); checked after the lookup"
+  order: "EINVAL (NULL param or negative pid), ESRCH, EFAULT"
+side_effects: "none besides writing *param"
+threading: "reads one thread's state"
+ordering: []
+timing:
+  typical: "about a microsecond; never blocks"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the tests set real-time policies with sched_setscheduler (144)
+# and sched_setparam (142) as root (needs=root); without CAP_SYS_NICE
+# and with RLIMIT_RTPRIO 0 those are EPERM. They use waitid (247,
+# WNOWAIT) for a zombie and clone for threads.

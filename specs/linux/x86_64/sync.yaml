@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sync                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  sync() is system call 162. It writes all modified file data and metadata of
+  every mounted file system to storage and returns 0. It takes no arguments
+  (whatever is in the argument registers is ignored), needs no privilege,
+  cannot fail, and changes nothing visible.
+returns:
+  success: "always 0, also with garbage in rdi..r9, repeated many times, as a normal user, in a child, with fds 0-2 closed, with a removed working directory, with an unlinked open file, with extra (also read-only) tmpfs mounts and after unmounting them"
+  no_visible_change: "stat of a just-written file is identical before and after; the offset and contents of open files stay"
+errors:
+  none: "none"
+side_effects: "none visible (data reaches the storage devices)"
+threading: "blocks the caller until the write-back it started is done; other threads continue"
+ordering: []
+timing:
+  typical: "immediate with nothing to write (tmpfs); otherwise until the devices acknowledge"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

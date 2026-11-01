@@ -14,7 +14,7 @@
 //! descriptor, shared offsets between duplicates.
 
 use super::vfs;
-use crate::sync::Mutex;
+use crate::sync::{Mutex, SpinLock};
 
 mod more;
 mod mounts;
@@ -36,10 +36,15 @@ mod perm;
 /// credentials of the thread that calls ([`Files::cred`], ADR 0045).
 /// Locks: the context, then the table; neither is held during a read or
 /// write.
+///
+/// The descriptor table may be shared with other processes (clone(2)
+/// `CLONE_FILES` without `CLONE_THREAD`, ADR 0111): `fds` holds this
+/// process's reference to it, which [`Files::unshare_table`] replaces by
+/// a private copy (close_range(2) `CLOSE_RANGE_UNSHARE`).
 #[derive(Debug)]
 pub struct Files {
     ctx: Mutex<FsContext>,
-    fds: Mutex<FdTable>,
+    fds: SpinLock<Arc<Mutex<FdTable>>>,
 }
 
 impl Default for Files {
@@ -52,7 +57,7 @@ impl Files {
     /// No descriptors, root and working directory at `/`, umask 022.
     pub fn new() -> Files {
         let ctx = vfs().root_context().expect("the root directory is always there");
-        Files { ctx: Mutex::new(ctx), fds: Mutex::new(FdTable::new()) }
+        Files { ctx: Mutex::new(ctx), fds: SpinLock::new(Arc::new(Mutex::new(FdTable::new()))) }
     }
 
     /// What a new process starts with: `/dev/console` open for reading and
@@ -76,8 +81,34 @@ impl Files {
     /// close-on-exec flags, directories and umask.
     pub fn fork(&self) -> Files {
         let ctx = self.ctx.lock().clone();
-        let fds = self.fds.lock().clone();
-        Files { ctx: Mutex::new(ctx), fds: Mutex::new(fds) }
+        let fds = self.table().lock().clone();
+        Files { ctx: Mutex::new(ctx), fds: SpinLock::new(Arc::new(Mutex::new(fds))) }
+    }
+
+    /// For clone(2) `CLONE_FILES` between processes: the same descriptor
+    /// table (a descriptor opened or closed by either is opened or closed
+    /// for both), a copy of the directories and umask.
+    pub fn share_table(&self) -> Files {
+        let ctx = self.ctx.lock().clone();
+        Files { ctx: Mutex::new(ctx), fds: SpinLock::new(self.table()) }
+    }
+
+    /// Give this process a private copy of its descriptor table if other
+    /// processes share it (close_range(2) `CLOSE_RANGE_UNSHARE`,
+    /// unshare(2) `CLONE_FILES`); nothing to do otherwise.
+    pub fn unshare_table(&self) {
+        let table = self.table();
+        if Arc::strong_count(&table) <= 2 {
+            return;
+        }
+        let copy = table.lock().clone();
+        *self.fds.lock() = Arc::new(Mutex::new(copy));
+    }
+
+    /// This process's descriptor table (the reference, so no lock is held
+    /// while it is used).
+    fn table(&self) -> Arc<Mutex<FdTable>> {
+        self.fds.lock().clone()
     }
 
     /// The credentials permission checks use: the calling thread's file
@@ -92,55 +123,63 @@ impl Files {
     /// The open file behind `fd` (`EBADF`), for callers that need more than
     /// this API offers (mapping a file, exec, waiting on a device).
     pub fn file(&self, fd: Fd) -> Result<Arc<OpenFile>> {
-        self.fds.lock().get(fd).cloned()
+        self.table().lock().get(fd).cloned()
     }
 
     /// Open descriptors.
     pub fn count(&self) -> usize {
-        self.fds.lock().count()
+        self.table().lock().count()
     }
 
     /// Put `file` at the lowest free descriptor: an open file that does
     /// not come from a path (a pipe end, an event file; ADR 0042).
     pub fn install(&self, file: Arc<OpenFile>, cloexec: bool) -> Result<Fd> {
-        self.fds.lock().install(file, cloexec)
+        self.table().lock().install(file, cloexec)
     }
 
     /// The most descriptors the process may have (`RLIMIT_NOFILE`).
     pub fn fd_limit(&self) -> usize {
-        self.fds.lock().limit()
+        self.table().lock().limit()
     }
 
     /// `close(2)`.
     pub fn close(&self, fd: Fd) -> Result<()> {
         // The file is dropped after the table's lock is released.
-        let file = self.fds.lock().close(fd)?;
+        let file = self.table().lock().close(fd)?;
         self.released(alloc::vec![file]);
         Ok(())
     }
 
-    /// The owner id of this table's record locks (fcntl(2): the process).
+    /// The owner id of this table's record locks (fcntl(2): the process;
+    /// processes sharing a descriptor table share their locks).
     pub fn lock_owner(&self) -> usize {
-        self as *const Files as usize
+        Arc::as_ptr(&self.table()) as usize
     }
 
     /// Drop `files`, which descriptors of this table no longer hold, and
     /// let go of the record locks on them (ADR 0059).
     fn released(&self, files: Vec<Arc<OpenFile>>) {
+        Self::released_by(self.lock_owner(), files);
+    }
+
+    /// [`released`](Self::released) for the table whose lock owner id is
+    /// `owner` (one this process no longer holds, at its end).
+    fn released_by(owner: usize, files: Vec<Arc<OpenFile>>) {
         let keys = super::locks::keys_of(&files);
         drop(files);
-        super::locks::closed(self.lock_owner(), &keys);
+        super::locks::closed(owner, &keys);
     }
 
     /// `dup(2)`: the lowest free descriptor, close-on-exec clear.
     pub fn dup(&self, fd: Fd) -> Result<Fd> {
-        self.fds.lock().dup(fd)
+        self.table().lock().dup(fd)
     }
 
     /// `dup2(2)`.
     pub fn dup2(&self, old: Fd, new: Fd) -> Result<Fd> {
         let replaced = {
-            let mut fds = self.fds.lock();
+            let table = self.table();
+            let mut fds = table.lock();
             let replaced = fds.get(new).ok().cloned();
             fds.dup2(old, new)?;
             replaced
@@ -153,7 +192,8 @@ impl Files {
     /// `dup3(2)`: `flags` may hold only `O_CLOEXEC`.
     pub fn dup3(&self, old: Fd, new: Fd, flags: OpenFlags) -> Result<Fd> {
         let replaced = {
-            let mut fds = self.fds.lock();
+            let table = self.table();
+            let mut fds = table.lock();
             let replaced = fds.get(new).ok().cloned();
             fds.dup3(old, new, flags)?;
             replaced
@@ -165,17 +205,17 @@ impl Files {
     /// `fcntl(F_DUPFD)` / `fcntl(F_DUPFD_CLOEXEC)`: the lowest free
     /// descriptor at or above `min`.
     pub fn dup_from(&self, fd: Fd, min: Fd, cloexec: bool) -> Result<Fd> {
-        self.fds.lock().dup_from(fd, min, cloexec)
+        self.table().lock().dup_from(fd, min, cloexec)
     }
 
     /// `fcntl(F_GETFD)`: whether close-on-exec is set.
     pub fn cloexec(&self, fd: Fd) -> Result<bool> {
-        self.fds.lock().cloexec(fd)
+        self.table().lock().cloexec(fd)
     }
 
     /// `fcntl(F_SETFD)`.
     pub fn set_cloexec(&self, fd: Fd, cloexec: bool) -> Result<()> {
-        self.fds.lock().set_cloexec(fd, cloexec)
+        self.table().lock().set_cloexec(fd, cloexec)
     }
 
     /// `fcntl(F_GETFL)`: access mode and status flags.
@@ -196,7 +236,8 @@ impl Files {
     /// At `execve`: close every descriptor marked close-on-exec.
     pub fn close_on_exec(&self) {
         let closed: Vec<Arc<OpenFile>> = {
-            let mut fds = self.fds.lock();
+            let table = self.table();
+            let mut fds = table.lock();
             let closed = fds.iter().filter(|(_, _, cloexec)| *cloexec).map(|(_, f, _)| Arc::clone(f)).collect();
             fds.close_on_exec();
             closed
@@ -208,17 +249,23 @@ impl Files {
     /// `close_range(2)`: close (or, with `cloexec`, mark close-on-exec)
     /// the open descriptors from `first` to `last`.
     pub fn close_range(&self, first: u32, last: u32, cloexec: bool) {
-        let closed = self.fds.lock().close_range(first, last, cloexec);
+        let closed = self.table().lock().close_range(first, last, cloexec);
         // The files' last references go unlocked.
         self.released(closed);
     }
 
     /// At exit: close everything.
     pub fn close_all(&self) {
-        let old = core::mem::take(&mut *self.fds.lock());
+        let table = core::mem::replace(&mut *self.fds.lock(), Arc::new(Mutex::new(FdTable::new())));
+        // The record locks are the old table's (`lock_owner`).
+        let owner = Arc::as_ptr(&table) as usize;
+        // A table other processes still share stays as it is: this process
+        // only lets go of it (clone(2) `CLONE_FILES`).
+        let Ok(table) = Arc::try_unwrap(table) else { return };
+        let old = core::mem::take(&mut *table.lock());
         let files = old.iter().map(|(_, f, _)| Arc::clone(f)).collect();
         drop(old);
-        self.released(files);
+        Self::released_by(owner, files);
     }
 
     // ---- I/O on descriptors (no lock held during the transfer) ------------
@@ -245,6 +292,19 @@ impl Files {
         let file = self.file(fd)?;
         self.before_write(&file, buf.len())?;
         file.write_at(offset, buf)
+    }
+
+    /// `pwritev2(2)` with `RWF_APPEND` / `RWF_NOAPPEND`
+    /// ([`OpenFile::write_with`]).
+    pub fn write_with(&self, fd: Fd, buf: &[u8], at: Option<u64>, append: Option<bool>) -> Result<usize> {
+        let file = self.file(fd)?;
+        self.before_write(&file, buf.len())?;
+        file.write_with(at, append, buf)
+    }
+
+    /// `fallocate(2)` ([`OpenFile::fallocate`]).
+    pub fn fallocate(&self, fd: Fd, mode: u32, offset: u64, len: u64) -> Result<()> {
+        self.file(fd)?.fallocate(mode, offset, len)
     }
 
     /// `lseek(2)`: returns the new offset.
@@ -301,7 +361,7 @@ impl Files {
         let dir: Option<NodeRef> = if dirfd == AT_FDCWD || path.first() == Some(&b'/') {
             None
         } else {
-            Some(self.fds.lock().get(dirfd)?.node().clone())
+            Some(self.table().lock().get(dirfd)?.node().clone())
         };
         let ctx = self.ctx.lock().clone();
         f(vfs(), &ctx, dir.as_ref().map_or(At::Cwd, At::Node))
@@ -314,7 +374,7 @@ impl Files {
 
     /// `EMFILE` when no descriptor below the limit is free.
     pub fn check_fd_free(&self) -> Result<()> {
-        self.fds.lock().check_free()
+        self.table().lock().check_free()
     }
 
     /// `openat(2)`: opens `path` and puts it at the lowest free descriptor,
@@ -322,7 +382,7 @@ impl Files {
     /// umask) is used when `O_CREAT` makes the file.
     pub fn openat(&self, dirfd: Fd, path: &[u8], flags: OpenFlags, mode: u16) -> Result<Fd> {
         let file = self.at(dirfd, path, |vfs, ctx, at| vfs.open(ctx, &self.cred(), at, path, flags, mode))?;
-        self.fds.lock().install(file, flags.contains(OpenFlags::CLOEXEC))
+        self.table().lock().install(file, flags.contains(OpenFlags::CLOEXEC))
     }
 
     /// `execve(2)`: open `path` (from `dirfd`, as for `openat`) to run it:

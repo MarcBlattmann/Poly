@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::compose::{MemoryFramebuffer, Theme};
+use crate::seat::BTN_LEFT;
 use crate::wire::{NewObject, decode_args, encode};
 use alloc::vec;
 use core::cell::RefCell;
@@ -76,7 +77,14 @@ impl Host for TestHost {
     fn close_fd(&mut self, fd: Fd) {
         self.0.borrow_mut().closed.push(fd.0);
     }
+
+    fn keymap(&mut self) -> Option<(Fd, u32)> {
+        Some((Fd(KEYMAP_FD), 1234))
+    }
 }
+
+/// What the test host hands out as the keymap's file descriptor.
+const KEYMAP_FD: i32 = 999;
 
 // ---------------------------------------------------------------------
 // A client.
@@ -122,14 +130,15 @@ impl Peer {
     }
 
     fn read(&mut self, srv: &mut Server) {
-        let (bytes, _fds) = srv.take_output(self.id);
+        let (bytes, fds) = srv.take_output(self.id);
+        let mut fds = fds.into_iter();
         let mut at = 0;
         while at < bytes.len() {
             let h = Header::parse(&bytes[at..]).unwrap();
             let interface = self.objects[&h.object.0];
             let desc = &interface.events[usize::from(h.opcode)];
             let body = &bytes[at + 8..at + usize::from(h.size)];
-            let args = decode_args(desc, body, &mut || None).unwrap();
+            let args = decode_args(desc, body, &mut || fds.next()).unwrap();
             if let (wl_display::NAME, "delete_id") = (interface.name, desc.name) {
                 let Arg::Uint(id) = args[0] else { panic!() };
                 self.objects.remove(&id);
@@ -977,3 +986,4 @@ fn removing_a_client_frees_its_windows_and_memory() {
     assert!(closed.contains(&fd.0), "an unused fd is closed: {closed:?}");
     assert_eq!(srv.clients().count(), 0);
 }
+mod input_routing;

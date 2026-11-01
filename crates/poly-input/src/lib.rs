@@ -60,6 +60,7 @@ pub mod ring;
 pub mod set1;
 pub mod set2;
 mod state;
+pub mod xkb;
 
 pub use compose::{Composer, Output, Special};
 pub use key::{Key, KeyEvent, Leds, Modifiers};

@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/get_robust_list      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  get_robust_list(pid, head_ptr, len_ptr) (syscall 274) stores the
+  robust futex list head of thread pid (0: the calling thread; the
+  caller's own pid or tid works the same) as an 8-byte pointer at
+  *head_ptr and 24 (sizeof(struct robust_list_head)) as an 8-byte size
+  at *len_ptr, and returns 0. pid is a 32-bit int (upper half ignored).
+  Any thread id can be named: a thread of the same process, another
+  process, a zombie (its head reads NULL, cleared at exit). Reading a
+  thread of another process needs ptrace read access to it
+  (PTRACE_MODE_READ with real credentials): same user and the target
+  dumpable, or CAP_SYS_PTRACE; otherwise EPERM. A thread that never set
+  a head reads NULL.
+returns:
+  success: "0, *head_ptr = head, *len_ptr = 24"
+  self: "pid 0, getpid(), gettid(), (1<<32)|getpid(): all the caller"
+  thread: "a thread of the caller's process, by tid: its own head"
+  child: "a child process of the same user: its head"
+  zombie: "an exited, not yet reaped child: 0 with head NULL, len 24"
+errors:
+  no_thread: "ESRCH (3): no thread with that id (an unused number, -1, a reaped child); checked before the pointers (NULL pointers still ESRCH)"
+  permission: "EPERM (1): the target is another process the caller may not ptrace-read, e.g. a same-user child that made itself non-dumpable (prctl PR_SET_DUMPABLE 0) when the caller lacks CAP_SYS_PTRACE; root reads it"
+  fault: "EFAULT (14): head_ptr or len_ptr unwritable (NULL, read-only memory)"
+  order: "ESRCH, EPERM, then EFAULT"
+side_effects: "none"
+threading: "reads another thread's head without stopping it"
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the cross-process test makes a thread and a child with raw
+# clone and compares only output (poly-diff: syscalls=off); its EPERM
+# check expects 0 and the child's head when run as root. All tests pass
+# as root and as an unprivileged user.

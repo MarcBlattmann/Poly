@@ -141,12 +141,52 @@ pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     k.ioctl(fd, request, a.ulong(2))
 }
 
+/// Where and how one transfer of a vectored call goes: at the file offset
+/// (`at: None`, which advances) or at an explicit offset (preadv(2),
+/// pwritev(2)), with preadv2(2)/pwritev2(2)'s `RWF_APPEND` /
+/// `RWF_NOAPPEND` (`append`) and `RWF_NOWAIT` (`nowait`).
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct How {
+    pub at: Option<u64>,
+    pub append: Option<bool>,
+    pub nowait: bool,
+}
+
+impl How {
+    /// The offset `done` bytes into the transfer, if it has one.
+    fn at_after(self, done: u64) -> Option<u64> {
+        self.at.map(|o| o.saturating_add(done))
+    }
+}
+
+/// One read of `fd` into `buf`, `done` bytes into a transfer `how`.
+fn read_once(k: &mut dyn LinuxKernel, fd: i32, buf: &mut [u8], how: How, done: u64) -> Result<usize, Errno> {
+    let at = how.at_after(done);
+    match at {
+        _ if how.nowait => crate::sys::path::fs(k)?.read_nowait(fd, buf, at),
+        Some(offset) => crate::sys::path::fs(k)?.pread(fd, buf, offset),
+        None => k.read(fd, buf),
+    }
+}
+
+/// One write of `buf` to `fd`, `done` bytes into a transfer `how`.
+fn write_once(k: &mut dyn LinuxKernel, fd: i32, buf: &[u8], how: How, done: u64) -> Result<usize, Errno> {
+    let at = how.at_after(done);
+    match at {
+        _ if how.nowait || how.append.is_some() => {
+            crate::sys::path::fs(k)?.write_flags(fd, buf, at, how.append, how.nowait)
+        }
+        Some(offset) => crate::sys::path::fs(k)?.pwrite(fd, buf, offset),
+        None => k.write(fd, buf),
+    }
+}
+
 /// Read an iovec array from user memory and check it (readv(2)): `EINVAL`
 /// if `count` is negative or above `IOV_MAX`, or if the lengths, as
 /// `ssize_t`, are negative or add up past `SSIZE_MAX`; `EFAULT` if the
 /// array cannot be read. Returns the vectors and the byte total, capped at
 /// [`MAX_RW_COUNT`].
-fn load_iovecs(k: &mut dyn LinuxKernel, iov: UserPtr, count: i32) -> Result<(Vec<Iovec>, u64), Errno> {
+pub(crate) fn load_iovecs(k: &mut dyn LinuxKernel, iov: UserPtr, count: i32) -> Result<(Vec<Iovec>, u64), Errno> {
     if count < 0 || count as u32 > IOV_MAX {
         return Err(Errno::EINVAL);
     }
@@ -208,8 +248,13 @@ fn write_from(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> S
     if total == 0 {
         return k.write(fd, &[]).map(|n| n as u64);
     }
+    write_from_how(k, fd, iovs, total, How::default())
+}
+
+/// [`write_from`] for a transfer `how` (`total` not zero).
+pub(crate) fn write_from_how(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64, how: How) -> SysResult {
     // RLIMIT_FSIZE: the write may be cut short, or refused.
-    let total = crate::sys::fsize::allowed(k, fd, None, total)?;
+    let total = crate::sys::fsize::allowed_with(k, fd, how.at, total, how.append)?;
     let mut chunk = bounce(total.min(CHUNK as u64) as usize)?;
     let mut cursor = Cursor::new(iovs, total);
     let mut done: u64 = 0;
@@ -233,13 +278,13 @@ fn write_from(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> S
             if filled == 0 {
                 return if done == 0 { Err(Errno::EFAULT) } else { Ok(done) };
             }
-            return match k.write(fd, &chunk[..filled]) {
+            return match write_once(k, fd, &chunk[..filled], how, done) {
                 Ok(n) => Ok(done + n.min(filled) as u64),
                 Err(e) if done == 0 => Err(e),
                 Err(_) => Ok(done),
             };
         }
-        match k.write(fd, &chunk[..want]) {
+        match write_once(k, fd, &chunk[..want], how, done) {
             Ok(n) => {
                 done += n.min(want) as u64;
                 if n < want {
@@ -260,6 +305,11 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
     if total == 0 {
         return k.read(fd, &mut []).map(|n| n as u64);
     }
+    read_into_how(k, fd, iovs, total, How::default())
+}
+
+/// [`read_into`] for a transfer `how` (`total` not zero).
+pub(crate) fn read_into_how(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64, how: How) -> SysResult {
     let mut buf = bounce(total.min(CHUNK as u64) as usize)?;
     let mut cursor = Cursor::new(iovs, total);
     let mut done: u64 = 0;
@@ -270,7 +320,7 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
     let mut whole = None;
     loop {
         let want = (total - done).min(buf.len() as u64) as usize;
-        let n = match k.read(fd, &mut buf[..want]) {
+        let n = match read_once(k, fd, &mut buf[..want], how, done) {
             Ok(n) => n.min(want),
             Err(e) if done == 0 => return Err(e),
             Err(_) => break,
@@ -284,7 +334,10 @@ fn read_into(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], total: u64) -> Sy
                 // The bytes read but not delivered were not read, as far
                 // as the file's offset goes (read(2) returns the bytes it
                 // copied; with none, EFAULT and the offset is unchanged).
-                unread(k, fd, (n - copied) as u64);
+                // (An explicit offset moves nothing.)
+                if how.at.is_none() {
+                    unread(k, fd, (n - copied) as u64);
+                }
                 return if done == 0 && copied == 0 { Err(Errno::EFAULT) } else { Ok(done + copied as u64) };
             }
         }

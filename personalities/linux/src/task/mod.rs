@@ -102,6 +102,7 @@ pub fn process_exited(k: &mut dyn LinuxKernel, how: Termination) {
     let pid = k.pid();
     let uid = k.credentials().uid;
     end_namespace(k, pid);
+    let children = with_tree(k, |t| t.children(pid)).unwrap_or_default();
     let Ok(Some(parent)) = with_tree(k, |t| t.parent(pid)) else { return };
     let ignores = parent != 0 && sigchld_of(k, parent).is_some_and(|(ign, flags)| ign || flags & SA_NOCLDWAIT != 0);
     let Ok(report) = with_tree(k, |t| t.exit_announced_later(pid, how, ignores)) else { return };
@@ -123,6 +124,30 @@ pub fn process_exited(k: &mut dyn LinuxKernel, how: Termination) {
         if signal != 0 {
             let waited = Waited { pid: child, uid, event: ChildEvent::Ended(how) };
             signal_process(k, adopter, wait::child_info(signal, &waited));
+        }
+    }
+    parent_died(k, pid, &children);
+}
+
+/// Process `parent` ended: each thread of its children `children` that set
+/// a parent-death signal (prctl(2) `PR_SET_PDEATHSIG`) gets it, as from
+/// the kernel (`SI_KERNEL`), after the children were reparented. Linux
+/// sends it when the creating *thread* exits; Poly when the process does
+/// (ADR 0111).
+pub fn parent_died(k: &mut dyn LinuxKernel, parent: i32, children: &[i32]) {
+    let _ = parent;
+    for &child in children {
+        let wanted = with_target(k, Target::Process(child), |p, _| {
+            p.thread_ids().filter_map(|t| Some((t, p.thread(t).pdeathsig)).filter(|&(_, s)| s != 0)).collect()
+        })
+        .unwrap_or_else(|_| alloc::vec::Vec::new());
+        for (tid, signal) in wanted {
+            let sent = with_target(k, Target::Thread(tid), |p, _| {
+                p.send(SigInfo::new(signal, SI_KERNEL), Dest::Thread(tid), false)
+            });
+            if let Ok(Ok(sent)) = sent {
+                complete(k, child, &sent);
+            }
         }
     }
 }

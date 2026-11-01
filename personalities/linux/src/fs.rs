@@ -45,6 +45,9 @@ pub mod fcntl {
     /// `F_LINUX_SPECIFIC_BASE + 7` and `+ 8`: a pipe's capacity.
     pub const F_SETPIPE_SZ: u32 = 1031;
     pub const F_GETPIPE_SZ: u32 = 1032;
+    /// `F_LINUX_SPECIFIC_BASE + 9` and `+ 10`: file seals (memfd).
+    pub const F_ADD_SEALS: u32 = 1033;
+    pub const F_GET_SEALS: u32 = 1034;
     /// The close-on-exec descriptor flag.
     pub const FD_CLOEXEC: u64 = 1;
     /// `O_CLOEXEC`, the only flag dup3(2) takes.
@@ -363,6 +366,34 @@ pub trait LinuxFs {
     /// offset unchanged. `ESPIPE` for unseekable files.
     fn pread(&mut self, fd: i32, buf: &mut [u8], offset: u64) -> Result<usize, Errno>;
     fn pwrite(&mut self, fd: i32, buf: &[u8], offset: u64) -> Result<usize, Errno>;
+    /// fallocate(2) on `fd` (open for writing, a regular file; the range
+    /// checked): `ENOSPC`, and `EOPNOTSUPP` for modes the file system does
+    /// not support.
+    fn fallocate(&mut self, _fd: i32, _mode: u32, _offset: u64, _len: u64) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+    /// preadv2(2) with `RWF_NOWAIT`: one read that never waits (`EAGAIN`
+    /// where it would), at `at` or (`None`) at the file offset, which
+    /// advances. `EOPNOTSUPP` for a file on a file system (tmpfs has no
+    /// non-blocking buffered reads; the spec of preadv2).
+    fn read_nowait(&mut self, _fd: i32, _buf: &mut [u8], _at: Option<u64>) -> Result<usize, Errno> {
+        Err(Errno::EOPNOTSUPP)
+    }
+    /// pwritev2(2) with `RWF_APPEND` (`append: Some(true)`), `RWF_NOAPPEND`
+    /// (`Some(false)`) or `RWF_NOWAIT` (`nowait`, as for
+    /// [`read_nowait`](Self::read_nowait)): one write at `at` or (`None`)
+    /// at the file offset, which advances (to the new end after an
+    /// append). The descriptor's own flags do not change.
+    fn write_flags(
+        &mut self,
+        _fd: i32,
+        _buf: &[u8],
+        _at: Option<u64>,
+        _append: Option<bool>,
+        _nowait: bool,
+    ) -> Result<usize, Errno> {
+        Err(Errno::EOPNOTSUPP)
+    }
 
     /// dup(2).
     fn dup(&mut self, fd: i32) -> Result<i32, Errno>;
@@ -377,6 +408,13 @@ pub trait LinuxFs {
     /// descriptors from `first` to `last`, both included (ADR 0059).
     fn close_range(&mut self, _first: u32, _last: u32, _cloexec: bool) -> Result<(), Errno> {
         Err(Errno::ENOSYS)
+    }
+    /// close_range(2) `CLOSE_RANGE_UNSHARE`, unshare(2) `CLONE_FILES`: give
+    /// the calling process a private copy of its descriptor table if
+    /// another process shares it (clone(2) `CLONE_FILES`); nothing to do
+    /// otherwise (ADR 0111).
+    fn unshare_fd_table(&mut self) -> Result<(), Errno> {
+        Ok(())
     }
     /// fcntl(2) `F_GETLK` (`ofd`: `F_OFD_GETLK`): the lock of another
     /// owner that keeps the caller from a read (`write` false) or write
@@ -409,6 +447,27 @@ pub trait LinuxFs {
     }
     /// flock(2): a shared or exclusive lock (`Some(exclusive)`) on `fd`'s
     /// file, or unlock (`None`); a conflict as for [`set_lock`](Self::set_lock).
+    /// memfd_create(2): a new unnamed regular file in memory, mode `perm`
+    /// (no umask), owned by the caller's file system ids, open
+    /// `O_RDWR | O_LARGEFILE` on the lowest free descriptor, starting with
+    /// `seals`; its `/proc` name is `/memfd:<name> (deleted)`. `EMFILE`.
+    fn memfd_create(&mut self, _name: &[u8], _perm: u32, _seals: u32, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// fcntl `F_ADD_SEALS`: `EINVAL` if `fd` is not a memfd or `seals` has
+    /// unknown bits, `EPERM` if it is not open for writing or sealing is
+    /// sealed, `EBUSY` for `F_SEAL_WRITE` while a writable shared mapping
+    /// exists.
+    fn add_seals(&mut self, _fd: i32, _seals: u32) -> Result<(), Errno> {
+        Err(Errno::EINVAL)
+    }
+
+    /// fcntl `F_GET_SEALS`: `EINVAL` if `fd` is not a memfd.
+    fn get_seals(&mut self, _fd: i32) -> Result<u32, Errno> {
+        Err(Errno::EINVAL)
+    }
+
     fn flock(&mut self, _fd: i32, _exclusive: Option<bool>, _wait: bool) -> Result<(), Errno> {
         Err(Errno::ENOSYS)
     }

@@ -170,7 +170,8 @@ table's limit, `LinuxFs::set_fd_limit`; `EPERM` above `nr_open`,
 1048576) and `RLIMIT_SIGPENDING` sets the signal queue limit; raising a
 hard limit needs root.
 
-**`rseq` stays `ENOSYS`.** Registering and never aborting would be wrong
+**`rseq` stays `ENOSYS`** (superseded by [ADR 0111](0111-inotify-memfd-pidfd-rseq-and-process-odds.md),
+which implements it). Registering and never aborting would be wrong
 whenever a thread is preempted inside a critical section, which the
 manual's contract forbids; C libraries treat `ENOSYS` as "no rseq".
 

@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lgetxattr            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  lgetxattr(path, name, value, size) (syscall 192) is getxattr
+  (getxattr.yaml) except that a symbolic link in the last component is
+  not followed: it reads the attributes of the link itself. Size rules
+  (size 0 for the length, ERANGE for a short buffer, sizes above 65536
+  fine, EFAULT for an unwritable buffer), name rules and the order of
+  checks are the same. A link has no user.* attributes (ENODATA); it
+  can have trusted.* and security.* attributes set by root.
+returns:
+  non_link: "on anything but a symbolic link exactly getxattr"
+  link_trusted: "root reads a link's own trusted.* value (set with lsetxattr) with the usual size rules; uid 1000 reads a link's security.* value"
+  trailing_slash: "a trailing '/' follows the final link: to a directory the directory's attribute is returned, to a regular file ENOTDIR"
+  earlier_links: "links in earlier components are followed"
+  no_permission: "reading a link's attributes needs no permission on the link (its mode allows everything)"
+errors:
+  link_user: "ENODATA (61): any user.* name on a symbolic link, whatever the target has, also 'user.' alone (not EINVAL), also a dangling link (getxattr: ENOENT) and a link in a loop (getxattr: ELOOP), also with size 0"
+  link_unknown: "EOPNOTSUPP (95): unknown prefix on a link"
+  link_trusted_user: "ENODATA (61): a link's trusted.* name without CAP_SYS_ADMIN, also with size 0"
+  rest: "every other error and the check order exactly as getxattr.yaml (name EFAULT/ERANGE before path errors, path before namespace; ERANGE before EFAULT when copying out)"
+side_effects: "none"
+threading: "as getxattr"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants as in setxattr.yaml.

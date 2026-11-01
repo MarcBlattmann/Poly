@@ -129,7 +129,7 @@ impl Server {
         }
     }
 
-    fn toplevel(&mut self, c: ClientId, id: ObjectId) -> Option<&mut Toplevel> {
+    pub(super) fn toplevel(&mut self, c: ClientId, id: ObjectId) -> Option<&mut Toplevel> {
         match self.client(c).data_mut(id) {
             Some(Data::Toplevel(t)) => Some(t),
             _ => None,
@@ -371,8 +371,8 @@ impl Server {
 
     /// The area a maximized window's frame may fill, and its bounds inside.
     fn work_area(&self) -> (i32, i32) {
-        let (w, h) = self.scene.logical_size();
-        (w - 2 * BORDER, h - TITLE_HEIGHT - 2 * BORDER)
+        let a = self.scene.work_area();
+        (a.width - 2 * BORDER, a.height - TITLE_HEIGHT - 2 * BORDER)
     }
 
     /// `configure_bounds`, `wm_capabilities` (once), the decoration mode if
@@ -527,6 +527,7 @@ impl Server {
         let acked_all = self.xdg(c, xid).is_some_and(|x| x.sent.is_empty());
         let g = self.geometry(c, surface, xid);
         let pos = self.scene.window(win).map_or((0, 0), |w| w.position());
+        let top = self.scene.reserved_top();
         let Some(t) = self.toplevel(c, role) else { return };
         let title = t.title.clone();
         let mut position = None;
@@ -540,7 +541,7 @@ impl Server {
             position = Some(if t.fullscreen {
                 (-g.x, -g.y)
             } else if t.maximized {
-                (BORDER - g.x, TITLE_HEIGHT + BORDER - g.y)
+                (BORDER - g.x, top + TITLE_HEIGHT + BORDER - g.y)
             } else {
                 t.restore.take().unwrap_or(pos)
             });
@@ -659,11 +660,16 @@ impl Server {
             xdg_toplevel::Request::UnsetMaximized => (t.want_maximized, reconfigure) = (false, true),
             xdg_toplevel::Request::SetFullscreen { .. } => (t.want_fullscreen, reconfigure) = (true, true),
             xdg_toplevel::Request::UnsetFullscreen => (t.want_fullscreen, reconfigure) = (false, true),
-            // Interactive move and resize and the window menu need a seat
-            // with a pointer; minimizing is not offered (wm_capabilities).
-            xdg_toplevel::Request::ShowWindowMenu { .. }
-            | xdg_toplevel::Request::Move { .. }
-            | xdg_toplevel::Request::SetMinimized => {}
+            // An interactive move while a button is held (ADR 0107).
+            xdg_toplevel::Request::Move { .. } => {
+                if let Some(w) = self.toplevel_window(c, tl) {
+                    self.start_move(w);
+                }
+                return Ok(());
+            }
+            // Interactive resize and the window menu are not offered yet;
+            // minimizing is not offered (wm_capabilities).
+            xdg_toplevel::Request::ShowWindowMenu { .. } | xdg_toplevel::Request::SetMinimized => {}
         }
         if reconfigure && self.xdg(c, xid).is_some_and(|x| x.initial_done) {
             self.configure_toplevel(c, tl);
@@ -701,6 +707,6 @@ impl Server {
 }
 
 /// 32-bit values in the host's byte order, as `array` arguments carry them.
-fn u32_array(values: &[u32]) -> Vec<u8> {
+pub(super) fn u32_array(values: &[u32]) -> Vec<u8> {
     values.iter().flat_map(|v| v.to_ne_bytes()).collect()
 }

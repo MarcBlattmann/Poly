@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fgetxattr            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  fgetxattr(fd, name, value, size) (syscall 193) is getxattr
+  (getxattr.yaml) on the file an open descriptor refers to: same size
+  rules (size 0 for the length, ERANGE for a short buffer, sizes above
+  65536 fine, EFAULT for an unwritable buffer), name rules, namespaces
+  and permission rules. The descriptor's access mode is irrelevant
+  (O_WRONLY works); read permission is checked on the file's current
+  mode at the call. Sockets have one attribute, system.sockprotoname.
+returns:
+  any_mode: "O_RDONLY, O_WRONLY and O_RDWR descriptors and directory descriptors work"
+  unlinked: "an unlinked but open file keeps its attributes"
+  fd_width: "only the low 32 bits of fd count"
+  sockprotoname: "a socket's system.sockprotoname is its protocol name with the terminating NUL: 'UNIX-STREAM' (12 bytes) for AF_UNIX SOCK_STREAM, 'UNIX' (5 bytes) for AF_UNIX SOCK_DGRAM and SOCK_SEQPACKET, 'UDP' (4 bytes) for an AF_INET datagram socket; usual size rules (size 0 gives the length, an 11-byte buffer for UNIX-STREAM is ERANGE); readable by any user"
+  special_files: "pipes, FIFOs and eventfds have no attributes: user.* names (also 'user.' alone) are ENODATA; other names on pipes and sockets EOPNOTSUPP; user.* names on a socket ENODATA; system.* names other than sockprotoname on a socket EOPNOTSUPP"
+errors:
+  bad_fd: "EBADF (9): fd -1, unused, closed, or O_PATH (file, or symbolic link opened O_PATH|O_NOFOLLOW), also with size 0"
+  order: "the name (EFAULT, ERANGE) comes before EBADF; EBADF before the namespace (unknown prefix or 'user.' alone with a bad fd: EBADF); then as getxattr"
+  access_at_call: "EACCES (13): user.* names need read permission now: the owner's O_WRONLY descriptor of a 0200 file gives EACCES (also for missing names) and works after chmod 0600; a descriptor of root's 0600 file opened by root and used as uid 1000 gives EACCES; security.* names need no read permission, trusted.* names are ENODATA without CAP_SYS_ADMIN"
+  eventfd_unknown_prefix: "an unknown prefix on an eventfd is EOPNOTSUPP for root but EACCES for other users (the eventfd's inode is root's, mode 0600); not tested"
+  rest: "every other error exactly as getxattr.yaml"
+side_effects: "none"
+threading: "as getxattr"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants as in setxattr.yaml; AF_UNIX, SOCK_STREAM (1),
+# SOCK_DGRAM (2) from linux/socket.h and linux/net.h.

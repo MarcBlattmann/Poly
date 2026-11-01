@@ -8,14 +8,17 @@ mod devices;
 mod dirorder;
 mod fdtable;
 mod files;
+mod inotify;
 mod locks;
 mod lstat;
+mod memfd;
 mod mounts;
 mod names;
 mod objects;
 mod path;
 mod path_order;
 mod perm;
+mod spec_b;
 mod tmpfs;
 mod xattrs;
 

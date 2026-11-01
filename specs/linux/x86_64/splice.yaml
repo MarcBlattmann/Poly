@@ -1,0 +1,87 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/splice               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; observed as root with all capabilities and the tests also run as uid/gid 65534 without capabilities, umask 022; /tmp is overlayfs (upper on ext4); /proc/sys/fs/pipe-max-size 1048576, pipe-user-pages-soft 16384; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  splice(fd_in, off_in, fd_out, off_out, len, flags) (syscall 275) moves
+  up to len bytes between two descriptors inside the kernel, at least
+  one of which must be a pipe (or FIFO), and returns how many bytes
+  moved. Three cases: pipe -> pipe (bytes leave fd_in's pipe and are
+  appended to fd_out's pipe), pipe -> other (a regular file, /dev/null, a
+  connected stream socket; the pipe is drained into it) and other ->
+  pipe (a regular file, /dev/zero, a connected AF_UNIX stream or datagram
+  socket, a FIFO; read into the pipe). For a non-pipe side an offset
+  pointer may be given: the transfer happens at *off and the advanced
+  offset is written back to *off, the descriptor's file offset is
+  neither used nor changed; with NULL the descriptor's file offset is
+  used and advanced. One call moves at most what the input pipe holds
+  (pipe input) or what fits into the output pipe's free buffers (pipe
+  output); once something moved it returns without waiting for more.
+  Flags: SPLICE_F_MOVE 1, SPLICE_F_NONBLOCK 2, SPLICE_F_MORE 4,
+  SPLICE_F_GIFT 8 (linux/splice.h); MOVE, MORE and GIFT have no visible
+  effect. Arguments: fd_in and fd_out are 32-bit ints and flags a 32-bit
+  unsigned int (upper register halves ignored); len is a full 64-bit
+  size_t; off_in/off_out point to a 64-bit loff_t.
+returns:
+  success: "bytes moved (> 0), at most len"
+  len_0: "0 immediately when len is 0, before any other check (bad descriptors, bad flags, bad pointers do not matter)"
+  file_to_pipe: "reads at *off_in (pointer; *off_in += n, file offset untouched) or at the file offset (NULL; it advances by n); stops at end of file (fewer bytes than len); 0 at or past the end of file (*off_in unchanged)"
+  pipe_to_file: "writes at *off_out (pointer; *off_out += n, file offset untouched) or at the file offset (NULL; it advances); bytes overwrite in place; an offset past the end leaves a hole of zero bytes and extends the file; moves only what the pipe holds (a pipe with 8 bytes and len 100 returns 8)"
+  pipe_to_pipe: "moves min(len, bytes in the input pipe, room in the output pipe); part of a buffer can be moved (10 queued, len 4: 4 move, 6 stay), several buffers in one call; order kept"
+  socket_to_pipe: "AF_UNIX stream: the queued bytes up to len; a stream whose peer closed gives 0; AF_UNIX datagram: one datagram per call (3 of a 3-byte datagram, then 2 of the next with len 2)"
+  pipe_to_socket: "connected AF_UNIX stream or datagram socket: the bytes are sent (to a datagram socket as one datagram of all moved bytes)"
+  dev_files: "/dev/zero -> pipe gives zero bytes; pipe -> /dev/null discards (returns the count)"
+  input_eof: "an empty input pipe whose writers are all closed gives 0"
+  capacity: "into a fresh pipe at most 65536 bytes (16 page buffers) per call from a file or /dev/zero; with one buffer already in use 61440 (15 pages); after F_SETPIPE_SZ 1 MiB, 1048576 in one call. A small file (26 bytes) still goes in whole into a pipe with one buffer in use"
+  large_len: "len up to 2^63-1 accepted (transfer stops at EOF / pipe room); between two pipes even len with bit 63 set is accepted (moves what is there)"
+  fifo: "a FIFO behaves as a pipe on either side"
+errors:
+  bad_flags: "EINVAL (22): flags outside 0xf (low 32 bits); checked after len 0 and before the descriptors"
+  bad_fd: "EBADF (9): fd_in or fd_out not an open descriptor (fd_in checked first; with off pointers present still EBADF)"
+  offset_on_pipe: "ESPIPE (29): an offset pointer given for a side that is a pipe (either side; for pipe -> pipe either pointer); the pointer is not read (a bad pointer is still ESPIPE); checked before the offsets are read"
+  bad_offset_pointer: "EFAULT (14): *off_in or *off_out cannot be read; checked after ESPIPE and before the descriptor modes and kinds (EFAULT also when neither side is a pipe)"
+  access_mode: "EBADF (9): fd_in not open for reading (O_WRONLY file, a pipe's write end) or fd_out not open for writing (O_RDONLY file, a pipe's read end); O_PATH descriptors on either side; checked after EFAULT and before the values"
+  same_pipe: "EINVAL: fd_in and fd_out are the two ends of the same pipe"
+  no_pipe: "EINVAL: neither side is a pipe (file to file, socket to file, file to socket)"
+  bad_kind: "EINVAL: the non-pipe side is a directory, an eventfd, a timerfd, /dev/null as input; an offset pointer given for a socket side is also EINVAL (not ESPIPE)"
+  append: "EINVAL: fd_out is a regular file opened O_APPEND (with or without off_out); nothing leaves the pipe"
+  negative_offset: "EINVAL: *off_in or *off_out negative; nothing moved"
+  len_sign: "EINVAL: len with bit 63 set when a file is read or written (file -> pipe, pipe -> file); *off + len beyond 2^63-1 is EINVAL too (off 0x7fffffffffffff00, len 0x1000)"
+  would_block: "EAGAIN (11): the call would wait (empty input pipe with a writer, no free buffer in the output pipe, empty socket) and SPLICE_F_NONBLOCK is given or the pipe that would wait has O_NONBLOCK (between two pipes O_NONBLOCK on either is enough); a non-blocking AF_UNIX socket input (O_NONBLOCK) also gives EAGAIN. A full output pipe is EAGAIN even when the file input is at its end (room is checked before reading)"
+  broken_pipe: "EPIPE (32): output pipe without readers; SIGPIPE is sent to the caller once per call (kills at default disposition); nothing is taken from the input (input pipe keeps its bytes, file offset and *off_in unchanged)"
+  not_connected: "ENOTCONN (107): an unconnected TCP socket as input; EPIPE for one as output"
+  interrupted: "EINTR (4): a blocking splice interrupted by a signal whose handler lacks SA_RESTART; with SA_RESTART the call is restarted transparently"
+  offset_writeback: "EFAULT: the advanced offset cannot be written back to *off_in/*off_out (read-only memory); the bytes HAVE moved (into the pipe / into the file, pipe drained), the stored value is unchanged; also when 0 bytes moved (offset past EOF)"
+  order: "len 0 -> 0; flags EINVAL; fd_in EBADF; fd_out EBADF; ESPIPE (offset for a pipe side); EFAULT (reading offsets); EBADF (access modes); then per case: same pipe / no pipe / kind / O_APPEND / negative offset / len sign EINVAL; then the transfer (EAGAIN, EPIPE, EINTR); EFAULT on write-back last"
+side_effects: >
+  Moves bytes: the input pipe loses them, the output pipe gains them, a
+  file is read or written (size and contents), file offsets advance
+  when NULL offsets are used, *off_in/*off_out advance when given.
+  SIGPIPE on EPIPE. No partial effect on errors detected before the
+  transfer.
+threading: >
+  The descriptors' pipes are shared state; blocking waits (empty input,
+  full output, empty socket) end when another task writes/reads, or on
+  a signal. No thread-specific behaviour.
+ordering:
+  - "argument checks: len 0 -> flags -> descriptors exist -> ESPIPE -> copy-in of offsets (EFAULT) -> access modes (EBADF) -> kinds/values (EINVAL) -> transfer -> write-back of offsets (EFAULT)"
+  - "a blocking splice from an empty pipe returns as soon as a writer puts bytes in, with those bytes (5 written: returns 5 for len 100)"
+  - "a blocking splice into a full pipe returns once a reader freed a whole buffer (reading 4096 bytes of a full pipe of page buffers); freeing a few bytes is not enough"
+timing:
+  typical: "microseconds for small transfers; a 1 MiB pipe fill takes well under a millisecond"
+  guarantees: "blocks only on an empty input pipe/socket or a full output pipe, until that changes or a signal arrives"
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+# Notes: socket sources without a native splice (seen with an unconnected
+# UDP socket) ignore SPLICE_F_NONBLOCK and block unless the socket itself
+# is O_NONBLOCK; not tested. Splicing from an AF_UNIX datagram socket
+# with len smaller than the datagram: only len bytes arrive (whether the
+# rest is dropped was not examined). Pipe capacity and the per-user pipe
+# page limits are those of pipe2/fcntl(F_SETPIPE_SZ). Constants:
+# linux/splice.h (SPLICE_F_*), asm-generic/fcntl.h (O_APPEND, O_PATH,
+# O_NONBLOCK), asm-generic/errno-base.h.

@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fchown               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  fchown(fd, owner, group) is system call 93. It is chown (92) on the file
+  open on fd: same -1 convention, same permission rules, same clearing of
+  set-user-ID / set-group-ID on regular files, same ctime update. The
+  descriptor's access mode does not matter (read-only, write-only, a
+  directory) and grants nothing; an O_PATH descriptor is not accepted.
+returns:
+  success: "0; fstat and stat by any name show the new ids"
+  access_mode_irrelevant: "O_RDONLY, O_WRONLY, O_RDWR and O_RDONLY|O_DIRECTORY descriptors all work"
+  unlinked_file: "a file with no names left can still be changed"
+  ids: "32-bit; -1 / 0xffffffff means no change; the upper half of the register is ignored"
+  mode_bits: "regular file: set-user-ID cleared always, set-group-ID cleared when group execute is set (06745 -> 02745, 06755 -> 0755), also for -1, -1; a directory keeps 06755"
+  permission_rules: "as chown: a normal owner may set the group to its gid or a supplementary group, may not give the file away (EPERM); another user's file: EPERM for any real change, 0 for -1, -1 (even through a descriptor root opened read-write before the process became that user); root sets anything"
+  pipes_and_sockets: "a pipe, an AF_UNIX socket and a memfd belong to the creator's euid/egid; the creator may set its own ids, root may set any (fstat shows them), a normal user giving them away gets EPERM"
+  anonymous_inodes: "an eventfd answers EOPNOTSUPP (95), also for -1, -1"
+  devices: "/dev/null (root's): -1, -1 succeeds for anyone; any real id (also 0, 0) is EPERM for a normal user, 0 for root"
+errors:
+  bad_fd: "EBADF (9): -1, AT_FDCWD, a number never opened, a closed descriptor, an O_PATH descriptor"
+  not_permitted: "EPERM (1): as chown"
+  read_only_fs: "EROFS (30): a descriptor on a read-only mount (also opened before the remount), root included, also for -1, -1"
+  not_supported: "EOPNOTSUPP (95): anonymous inodes (eventfd)"
+  order: "EBADF, then EROFS, then EPERM"
+side_effects: "ctime changes on success; mtime and atime do not; the mode changes as in mode_bits"
+threading: "no thread-specific behaviour; the descriptor table is shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

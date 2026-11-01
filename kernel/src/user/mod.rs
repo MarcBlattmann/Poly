@@ -149,6 +149,13 @@ pub struct UserThread {
     pub(crate) arch: arch::user::ThreadState,
 }
 
+impl UserThread {
+    /// The scheduler switches this thread out ([`ThreadFlags::switched_out`]).
+    pub(crate) fn switched_out(&self) {
+        self.flags.switched_out();
+    }
+}
+
 /// Start a thread of `process` that runs in `space` from `entry`, its
 /// system calls handled by `hook`. It runs once the threads ahead of it
 /// have had their turn; join it like any thread.
@@ -391,7 +398,13 @@ pub fn return_to_user() {
     let Some((process, flags, tid)) = current() else { return };
     let notified = flags.notified.load(Ordering::SeqCst);
     let suspended = flags.suspended.load(Ordering::SeqCst);
-    if !notified && !suspended && !process.is_exiting() && !process.is_stopped() && !flags.killed.load(Ordering::SeqCst)
+    let rseq = flags.rseq_notify.load(Ordering::Relaxed);
+    if !notified
+        && !suspended
+        && !rseq
+        && !process.is_exiting()
+        && !process.is_stopped()
+        && !flags.killed.load(Ordering::SeqCst)
     {
         return;
     }
@@ -405,6 +418,12 @@ pub fn return_to_user() {
         crate::nt::wait_while_suspended(process.pid, tid);
     }
     leave_if_ended(process);
+    // rseq(2) (ADR 0111): the thread was switched out; a failure there
+    // queues a signal, so the notification is read again.
+    if rseq && flags.rseq_notify.swap(false, Ordering::Relaxed) && process.linux.is_some() {
+        crate::linux::rseq_resume(process);
+    }
+    let notified = notified || flags.notified.load(Ordering::SeqCst);
     if notified && process.linux.is_some() && crate::linux::exit_to_user(process) == crate::linux::Leave::Killed {
         end_thread(ExitStatus::Exited(0), 0);
     }

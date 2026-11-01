@@ -11,6 +11,10 @@ name = "poly-acpi"
 version = "0.0.1"
 
 [[package]]
+name = "poly-audio"
+version = "0.0.1"
+
+[[package]]
 name = "poly-backtrace"
 version = "0.0.1"
 
@@ -45,6 +49,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-drm"
+version = "0.0.1"
+
+[[package]]
 name = "poly-elf"
 version = "0.0.1"
 
@@ -57,8 +65,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-fbdev"
+version = "0.0.1"
+
+[[package]]
 name = "poly-gfx"
 version = "0.0.1"
+
+[[package]]
+name = "poly-hda"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+]
 
 [[package]]
 name = "poly-heap"
@@ -81,14 +100,18 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-acpi",
+ "poly-audio",
  "poly-backtrace",
  "poly-binfmt",
  "poly-block",
  "poly-bochs-vbe",
  "poly-cpio",
+ "poly-drm",
  "poly-elf",
  "poly-ext2",
+ "poly-fbdev",
  "poly-gfx",
+ "poly-hda",
  "poly-heap",
  "poly-input",
  "poly-irq",

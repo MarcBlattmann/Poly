@@ -25,10 +25,12 @@ poly-block = { path = "../crates/poly-block" }
 poly-bochs-vbe = { path = "../crates/poly-bochs-vbe" }
 poly-elf = { path = "../crates/poly-elf" }
 poly-ext2 = { path = "../crates/poly-ext2" }
+poly-fbdev = { path = "../crates/poly-fbdev" }
 poly-cpio = { path = "../crates/poly-cpio" }
 poly-gfx = { path = "../crates/poly-gfx" }
 poly-heap = { path = "../crates/poly-heap" }
 poly-input = { path = "../crates/poly-input" }
+poly-drm = { path = "../crates/poly-drm" }
 poly-irq = { path = "../crates/poly-irq" }
 poly-line = { path = "../crates/poly-line" }
 poly-mem = { path = "../crates/poly-mem" }
@@ -60,6 +62,8 @@ poly-virtio-gpu = { path = "../crates/poly-virtio-gpu" }
 poly-virtio-input = { path = "../crates/poly-virtio-input" }
 poly-virtio-net = { path = "../crates/poly-virtio-net" }
 poly-virtio-sound = { path = "../crates/poly-virtio-sound" }
+poly-hda = { path = "../crates/poly-hda" }
+poly-audio = { path = "../crates/poly-audio" }
 poly-vdso = { path = "../crates/poly-vdso" }
 poly-vm = { path = "../crates/poly-vm" }
 

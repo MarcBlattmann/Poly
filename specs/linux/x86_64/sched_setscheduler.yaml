@@ -1,0 +1,72 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_setscheduler   # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_HZ=250, CONFIG_SCHED_CLASS_EXT and CONFIG_RT_GROUP_SCHED not set; tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /; default RLIMIT_NICE and RLIMIT_RTPRIO 0/0"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  sched_setscheduler(pid, policy, param) (syscall 144) sets the
+  scheduling policy and static priority of one thread and returns 0.
+  pid 0 is the calling thread, otherwise a thread id (a process id names
+  the main thread only; other threads keep theirs). policy is
+  SCHED_OTHER 0, SCHED_FIFO 1, SCHED_RR 2, SCHED_BATCH 3 or SCHED_IDLE 5,
+  optionally or-ed with SCHED_RESET_ON_FORK 0x40000000; param points to
+  struct sched_param (one int, linux/sched/types.h) whose priority must
+  be 0 for the fair policies (OTHER/BATCH/IDLE) and 1..99 for FIFO/RR.
+  pid and policy are 32-bit ints (upper halves ignored). Changing the
+  policy does not change the nice value (fair <-> fair, fair <-> real
+  time). A caller with CAP_SYS_NICE may do anything; without it the
+  caller needs to own the target, and real-time policies, higher
+  real-time priorities, leaving SCHED_IDLE and clearing
+  SCHED_RESET_ON_FORK are limited (below). SCHED_DEADLINE (6) is only
+  settable with sched_setattr and is EINVAL here.
+returns:
+  success: "0; the new policy (with the flag) shows at once in sched_getscheduler, the priority in sched_getparam"
+  same_policy: "setting the policy and priority a thread already has succeeds (also SCHED_IDLE again)"
+  nice_kept: "the nice value is unchanged by any policy change: nice 4 stays 4 through OTHER->BATCH->IDLE, FIFO->OTHER keeps nice 3; under IDLE the nice value can still be changed with setpriority"
+  per_thread: "only the named thread changes: setscheduler(tid, BATCH) changes that thread, setscheduler(0, ...) in a thread changes that thread, the process id names the main thread"
+  reset_on_fork: "with SCHED_RESET_ON_FORK set, sched_getscheduler reports policy|0x40000000; sched_setparam keeps the flag; a later sched_setscheduler without the flag clears it (privileged callers only, see permissions)"
+  fork: "a fork child inherits policy, priority and nice. With SCHED_RESET_ON_FORK in the parent the child's flag is clear, and: a FIFO/RR parent's child runs SCHED_OTHER with priority 0 and nice 0 (whatever the parent's nice, -5 or +5); a fair-policy parent's child keeps the policy (BATCH stays BATCH, IDLE stays IDLE) and gets nice 0 only if the parent's nice was negative (nice +5 is inherited)"
+  width: "pid 1<<32 is pid 0; policy 1<<32|3 is SCHED_BATCH; policy 1<<32|0x80000000 is negative (EINVAL); pid 1<<32|0xffffffff is -1 (EINVAL)"
+errors:
+  null_or_negative: "EINVAL (22): param NULL or pid negative (32-bit); checked first: NULL with a pid no task has or with a bad policy, and a negative pid with an unreadable param, are EINVAL"
+  fault: "EFAULT (14): param unreadable (e.g. address 1); checked before the pid lookup and the policy check (bad pid or bad policy with param 1 is EFAULT)"
+  no_task: "ESRCH (3): no thread has the id; checked before the policy and priority checks"
+  bad_policy: "EINVAL (22): policy (low 32 bits, flag removed) not 0,1,2,3,5: 4, 6 (SCHED_DEADLINE), 7 (SCHED_EXT, on kernels without sched_ext), 8, -1; any high bit other than 0x40000000 (0x20000000, 0x80000000)"
+  bad_priority: "EINVAL (22): priority not 0 for OTHER/BATCH/IDLE (1, -1), or outside 1..99 for FIFO/RR (0, 100, -1)"
+  permission: "EPERM (1): see permissions; checked after all EINVAL checks (an unprivileged SCHED_FIFO 0 or RR 100 is EINVAL, a bad policy on another user's task is EINVAL)"
+  order: "EINVAL (NULL param / negative pid), EFAULT, ESRCH, EINVAL (policy, priority), EPERM"
+  unchanged: "a failed call changes nothing"
+permissions:
+  privileged: "a caller with CAP_SYS_NICE (root) may set any valid policy/priority on any thread and clear SCHED_RESET_ON_FORK"
+  owner: "without CAP_SYS_NICE the caller's effective uid must equal the target's real or effective uid; else EPERM, even if nothing would change. Target real 1111/effective 2222/saved 3333: callers with euid 1111 or 2222 pass whatever their real uid; callers matching only by real or saved uid fail"
+  capabilities: "without CAP_SYS_NICE, a target whose permitted capability set is not a subset of the caller's is EPERM even with matching uids (e.g. a target with saved uid 0 that kept its permitted capabilities)"
+  realtime: "without CAP_SYS_NICE, FIFO/RR need RLIMIT_RTPRIO: switching to a real-time policy different from the current one is EPERM when the soft limit is 0; a priority above both the current real-time priority and the soft limit is EPERM. With limit 10: FIFO 11 EPERM, FIFO 10 ok, then RR 5 ok; with the limit lowered to 0 while RR 5: lowering (RR 4) ok, raising EPERM, switching to FIFO EPERM, back to OTHER ok"
+  fair: "any caller may switch among SCHED_OTHER and SCHED_BATCH and into SCHED_IDLE, with or without setting SCHED_RESET_ON_FORK"
+  leave_idle: "without CAP_SYS_NICE, leaving SCHED_IDLE (for OTHER or BATCH) needs the current nice to be within RLIMIT_NICE (20 - nice <= soft limit): EPERM with limit 0 at nice 0, allowed with limit 25"
+  clear_reset_flag: "without CAP_SYS_NICE, a call without SCHED_RESET_ON_FORK on a thread that has it set is EPERM (sched_setparam keeps the flag and is allowed)"
+side_effects: >
+  Changes the named thread's policy, real-time priority and
+  SCHED_RESET_ON_FORK flag; nothing else (nice value, other threads,
+  children already forked). The flag affects only later forks.
+threading: >
+  Per thread. Real-time policies change how the thread competes for CPUs;
+  tests only observe the reported values, never timing.
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: none
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: constants from linux/sched.h and linux/sched/types.h;
+# RLIMIT_NICE 13 and RLIMIT_RTPRIO 14 from asm-generic/resource.h. On a
+# kernel with sched_ext (CONFIG_SCHED_CLASS_EXT) policy 7 may be
+# accepted; the tests do not depend on it. Tests that need real-time
+# policies, other users or resource limits say needs=root and drop to
+# uid 65534 (or 1111..7777) themselves after setting RLIMIT_NICE and
+# RLIMIT_RTPRIO explicitly. The pipeline's syscall table has no
+# signature for this call, so pid arguments are not masked:
+# single-process tests passing a pid compare syscall names only.

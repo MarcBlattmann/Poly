@@ -1,0 +1,91 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setxattr             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  setxattr(path, name, value, size, flags) (syscall 188) sets the
+  extended attribute `name` of the file `path` names (following a
+  symbolic link in the last component) to the `size` bytes at `value`,
+  and returns 0. Values are byte strings: any bytes, NULs included, of
+  length 0..65536 (XATTR_SIZE_MAX); a value of length 0 is a real,
+  empty attribute. Names are NUL-terminated strings of 1..255 bytes
+  (XATTR_NAME_MAX, prefix included) that start with a namespace prefix:
+  "user." (ordinary attributes, governed by file permissions),
+  "trusted." (only with CAP_SYS_ADMIN), "security." (setting needs
+  CAP_SYS_ADMIN when no LSM claims the name) or "system." (only names
+  the file system implements, e.g. POSIX ACLs; others EOPNOTSUPP). flags
+  0 creates or replaces; XATTR_CREATE (1) only creates (EEXIST if it
+  exists); XATTR_REPLACE (2) only replaces (ENODATA if it does not);
+  both bits fail either way. Each name is one attribute of the inode:
+  hard links share them, they stay with the file across rename, and
+  they vanish with the inode. user.* attributes exist only on regular
+  files and directories. lsetxattr (189) is the same call without
+  following a final symbolic link, fsetxattr (190) takes a descriptor;
+  their sheets describe only the differences.
+returns:
+  success: "0; the attribute now has exactly the given bytes (a later getxattr returns size and the bytes)"
+  replace: "flags 0 or XATTR_REPLACE on an existing name replaces the whole value; the new length is the given size (shorter or longer than before)"
+  empty: "size 0 creates or replaces with an empty value; value may then be NULL or anything (it is not read)"
+  copy: "the value is copied at the call; changing the caller's buffer afterwards changes nothing; a value in read-only memory is fine"
+  case: "names are compared byte for byte (case-sensitive): user.a and user.A are different attributes"
+  name_bytes: "after the prefix any bytes but NUL are allowed: dots, '/', bytes >= 0x80, the prefix again ('user.user.' is a valid name)"
+  directories: "user.* attributes on a directory work as on a file, also on a sticky directory the caller owns"
+  symlink_target: "a path ending in a symbolic link sets the attribute of the link's target (directory or file); the link itself is not changed"
+  widths: "flags is a 32-bit int (bits 32..63 of the register ignored: 1<<32|XATTR_CREATE behaves as XATTR_CREATE, 0x7f<<33 as 0); size is a full 64-bit count (1<<32 is E2BIG, not 0)"
+  tmpfs_limits: "tmpfs (/dev/shm, an initramfs) takes user.* values of the full 65536 bytes, many per file (20 full values, 1.25 MiB, and 100000 empty ones on one file were accepted); list order on tmpfs is descending byte order of the names, other file systems differ (not tested)"
+  other_fs_limits: "ext4 without large-attribute support stores all of a file's attributes in about one block: a 4000- or 65536-byte value, or a few hundred names, give ENOSPC there (not tested; tests keep values <= 100 bytes outside /dev/shm)"
+errors:
+  flags: "EINVAL (22): flags (low 32 bits) has a bit other than XATTR_CREATE|XATTR_REPLACE (4, 8, 0x100, 0x80000000, 0xffffffff); checked first, before the name, size, value and path (NULL path or missing file with bad flags is EINVAL); nothing changes"
+  name_fault: "EFAULT (14): name NULL, unmapped, or running into an unmapped page before its NUL within its first 256 bytes"
+  name_range: "ERANGE (34): name empty, or 256 or more bytes long (a name with 256 readable non-NUL bytes is ERANGE even if no NUL follows)"
+  too_big: "E2BIG (7): size > 65536 (also sizes with high bits only); checked after the name and before the value is read (NULL value with size 65537 is E2BIG)"
+  value_fault: "EFAULT (14): size > 0 and the size bytes at value not all readable (NULL, low address, crossing into an unmapped page); checked before the path is looked up; nothing is created and an existing value stays"
+  path: "after the value: EFAULT (path NULL/unmapped), ENOENT (missing file or directory, empty path '', dangling final symlink), ENOTDIR (a non-directory used as a directory, trailing '/' on a regular file), ENAMETOOLONG (path >= 4096 bytes), ELOOP (symlink loop), EACCES (no search permission on a directory of the path)"
+  read_only: "EROFS (30): the file is on a read-only mount; checked after the path and before namespace, permission and existence (an unknown prefix, 'user.' alone, a trusted.* name or XATTR_CREATE of an existing name on a read-only mount are all EROFS)"
+  trusted_cap: "EPERM (1): a trusted.* name (also 'trusted.' alone) without CAP_SYS_ADMIN; before file permissions"
+  user_kind: "EPERM (1): a user.* name (also 'user.' alone, any valid flags) on anything but a regular file or directory: FIFO, socket, character/block device, symbolic link (via lsetxattr), pipe/socket/eventfd descriptors (via fsetxattr)"
+  sticky_dir: "EPERM (1): a user.* name on a directory with the sticky bit whose owner is not the caller's fsuid, without CAP_FOWNER (even with write permission, mode 01777)"
+  access: "EACCES (13): user.* names and names with an unknown prefix need write permission on the file for the caller's class (owner bits for the owner, else group, else other; owner of a 0400 or 0066 file: EACCES); root (CAP_DAC_OVERRIDE) passes; checked before EOPNOTSUPP, EINVAL ('user.' alone) and EEXIST/ENODATA. trusted.*, security.* and system.* names are not subject to this check"
+  security_cap: "EPERM (1): a security.* name without CAP_SYS_ADMIN (no LSM), even on the caller's own writable file; root may set security.* names on files, directories, FIFOs and links"
+  namespace: "EOPNOTSUPP (95): the name has no known prefix ('plain', 'user' without the dot, 'USER.x', 'other.x', ' user.x') or is a system.* name the file system does not implement ('system.nothing'); on files whose file system has no attribute support at all (pipes, sockets, eventfds) every non-user name is EOPNOTSUPP (as root)"
+  prefix_only: "EINVAL (22): the name is exactly 'user.', 'trusted.' or 'security.' (nothing after the prefix), after the permission checks (a non-writable file gives EACCES, a FIFO or link EPERM, a read-only mount EROFS)"
+  exists: "EEXIST (17) for XATTR_CREATE (or both flags) when the name exists; ENODATA (61) for XATTR_REPLACE (or both flags) when it does not; last of all"
+  acl: "system.posix_acl_access / system.posix_acl_default take POSIX ACL data: malformed data is EINVAL (a 2-byte value), a bad version EOPNOTSUPP, a default ACL on a non-directory EACCES; a valid access ACL equivalent to the mode only changes the mode (nothing is stored), an extended one is stored and changes the group bits; an empty value removes it (observed on tmpfs; not tested beyond EINVAL/ENODATA)"
+  security_capability: "security.capability with malformed data is EINVAL (root; not tested)"
+  no_space: "ENOSPC (28) / EDQUOT: the file system has no room for the attribute (ext4 per-inode limit); not on tmpfs in these tests"
+  order: "EINVAL (flags), EFAULT/ERANGE (name), E2BIG (size), EFAULT (value), path errors, EROFS, then EPERM (trusted.* without CAP_SYS_ADMIN; user.* on a non-regular, non-directory file; sticky directory), EACCES (write permission for user.* and unknown prefixes), EPERM (security.* without CAP_SYS_ADMIN), EOPNOTSUPP (no handler for the name), EINVAL (prefix only, malformed ACL), then EEXIST/ENODATA, then ENOSPC"
+side_effects: >
+  A successful call sets the file's ctime to the current time and
+  changes nothing else of the inode (mtime, atime, size, contents and
+  mode stay; a POSIX ACL name may change the mode). A failed call
+  (any error, including EEXIST and ENODATA) changes neither the
+  attribute nor the ctime. The attribute belongs to the inode: visible
+  through every hard link, through a still-open descriptor after the
+  last name is unlinked, and gone when the inode is freed (a new file
+  under the same name has none).
+threading: >
+  Each call is atomic with respect to the others on the same inode: a
+  reader sees the old or the new value, never a mix; XATTR_CREATE and
+  XATTR_REPLACE are decided under the same lock as the change.
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 7  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+# Notes: the tests live under /tmp (any file system: ext4, overlay or
+# tmpfs; values <= 100 bytes, no list order compared) and, for tmpfs
+# behaviour (65536-byte values, many names, trusted.*/security.* listing
+# rules), under /dev/shm, which is a tmpfs on Linux and on Poly. Tests
+# that need CAP_SYS_ADMIN, set up other users' files or mount say
+# poly-diff: needs=root and drop to uid/gid 1000 in a child made with a
+# vfork-like clone (so the order of calls is fixed). Constants:
+# XATTR_CREATE/XATTR_REPLACE in linux/xattr.h, XATTR_NAME_MAX,
+# XATTR_SIZE_MAX, XATTR_LIST_MAX in linux/limits.h, ENODATA (61, the
+# value <errno.h> calls ENOATTR) in asm-generic/errno.h, syscall numbers
+# 188..199 in asm/unistd_64.h.

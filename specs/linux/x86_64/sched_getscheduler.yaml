@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_getscheduler   # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_HZ=250, CONFIG_SCHED_CLASS_EXT not set; tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /; RLIMIT_NICE and RLIMIT_RTPRIO 0/0"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  sched_getscheduler(pid) (syscall 145) returns the scheduling policy of
+  one thread: SCHED_OTHER 0, SCHED_FIFO 1, SCHED_RR 2, SCHED_BATCH 3,
+  SCHED_IDLE 5 (SCHED_DEADLINE 6 via sched_setattr, not tested), with
+  SCHED_RESET_ON_FORK (0x40000000) or-ed in while that flag is set on
+  the thread. pid 0 is the calling thread; any other value is a thread
+  id (a process id names that process's main thread). pid is a 32-bit
+  int (upper half of the register ignored). No permission is needed to
+  read any task's policy. A program starts with SCHED_OTHER (Poly's
+  test init runs programs under SCHED_OTHER, nice 0, flag clear).
+returns:
+  self: "pid 0, getpid() and gettid() of the caller all give the caller's policy; 1<<32 is pid 0"
+  values: "0 OTHER, 1 FIFO, 2 RR, 3 BATCH, 5 IDLE; with SCHED_RESET_ON_FORK set: policy | 0x40000000 (e.g. 0x40000000, 0x40000002, 0x40000003, 0x40000005)"
+  immediate: "a successful sched_setscheduler shows at once, through pid 0 and through the pid"
+  per_thread: "the policy belongs to a thread: a second thread at SCHED_BATCH reads 3 by its tid while the main thread (pid 0 or process id) still reads 0"
+  other_tasks: "a child's policy, a zombie child's policy (exited, not reaped) and other users' tasks' policies are readable without privilege"
+  fork: "a fork child inherits the policy; if the parent had SCHED_RESET_ON_FORK the child's flag is clear and a real-time policy (FIFO/RR) becomes SCHED_OTHER, while a fair policy (OTHER/BATCH/IDLE) is kept"
+errors:
+  negative: "EINVAL (22): pid negative as a 32-bit int (-1, INT_MIN, 0xffffffff, 1<<32|0x80000000)"
+  no_task: "ESRCH (3): no thread has the id (an id above the pid limit, INT_MAX, a reaped child)"
+  order: "EINVAL (negative), then ESRCH"
+side_effects: none
+threading: "reads one thread's state; the policy is per thread"
+ordering: []
+timing:
+  typical: "about a microsecond; never blocks"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: constants from linux/sched.h. The tests change policies with
+# sched_setscheduler (144) (rules in its spec: any caller may choose
+# OTHER/BATCH/IDLE and set SCHED_RESET_ON_FORK; leaving IDLE and clearing
+# the flag need privilege or RLIMIT_NICE), use waitid (247, WNOWAIT) to
+# keep a zombie, and threads made with clone. The pipeline's syscall
+# table has no signature for this call, so pid arguments are not masked:
+# single-process tests passing a pid compare syscall names only.

@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/inotify_rm_watch     # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; /tmp on overlayfs; tests run as root with every capability and again as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  inotify_rm_watch(fd, wd) (syscall 255) removes watch wd from inotify
+  instance fd and returns 0. It queues an IN_IGNORED event for wd (mask
+  0x8000, cookie 0, len 0) behind any events of that watch still queued,
+  which stay readable. Afterwards changes to the object are no longer
+  reported and wd is unknown to the instance (removing it again is
+  EINVAL; the number is not reused). The other watches of the instance
+  keep working. The kernel removes a watch by itself, queueing
+  IN_DELETE_SELF (if in the mask) and IN_IGNORED, when the watched inode
+  is deleted: rmdir of a watched directory, unlink of the last name of a
+  watched file that nobody has open; for a file unlinked while still
+  open, the unlink only gives IN_ATTRIB (link count) and IN_DELETE_SELF +
+  IN_IGNORED come when the last descriptor is closed. After such an
+  implicit removal inotify_rm_watch on the wd is EINVAL. wd is a 32-bit
+  int (upper half of the register ignored).
+returns:
+  success: "0"
+  ignored_event: "{wd, 0x8000, 0, 0} queued after the watch's pending events"
+  after: "the object's changes are not reported; rm of the same wd again EINVAL"
+  implicit_removal: "rmdir of a watched dir: IN_DELETE_SELF, IN_IGNORED; unlink of a watched file (not open): IN_DELETE_SELF, IN_IGNORED; unlink of an open watched file: IN_ATTRIB now, IN_DELETE_SELF + IN_IGNORED at the last close; afterwards the wd is EINVAL"
+  wd_width: "wd (1<<32)|2 removes watch 2"
+errors:
+  bad_fd: "EBADF (9): fd not open (999, -1); checked first (bad fd with a bad wd is EBADF)"
+  not_inotify: "EINVAL (22): fd open but not an inotify instance"
+  bad_wd: "EINVAL (22): wd not a watch of this instance: 0, -1, never handed out, of another instance, already removed (explicitly, by IN_ONESHOT, or because the inode was deleted)"
+  order: "EBADF, then EINVAL (not inotify), then EINVAL (unknown wd)"
+side_effects: "the watch is removed and IN_IGNORED is queued"
+threading: "watches belong to the instance, shared by every descriptor of it"
+ordering:
+  - "events of the watch queued before the removal come before its IN_IGNORED"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/inotify.h. All tests pass as root and as an
+# unprivileged user.

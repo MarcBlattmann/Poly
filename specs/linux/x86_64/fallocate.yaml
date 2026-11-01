@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fallocate            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (where noted, results differ); tmpfs-specific checks on a tmpfs the test mounts itself; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  fallocate(fd, mode, offset, len) is system call 285. It manipulates the
+  storage of the byte range [offset, offset+len) of the regular file open for
+  writing on fd and returns 0. mode 0 allocates the range (reads of new
+  bytes give zeros) and extends the file size to offset+len if that is
+  larger; FALLOC_FL_KEEP_SIZE (1) allocates without changing the size;
+  FALLOC_FL_PUNCH_HOLE (2), which must be combined with KEEP_SIZE (3), frees
+  the range so that it reads as zeros. The file position never moves. Which
+  other modes exist depends on the file system (tmpfs supports only these).
+returns:
+  success: "0"
+  mode_0: "the size becomes max(size, offset+len) (16000+385 gives 16385); the new bytes read as zeros; st_blocks grows (16 KiB gives at least 32); inside the file nothing visible changes; mtime and ctime move when the size changes"
+  keep_size: "st_size unchanged, st_blocks grows; reading at the old end still gives EOF"
+  punch_hole: "mode 3: the range reads as zeros afterwards (whole pages are freed: st_blocks drops; a partial-page punch of bytes 1-2 zeroes just those bytes); the size is unchanged; a punch past the end does nothing and returns 0"
+  descriptors: "any descriptor open for writing: O_RDWR, O_WRONLY, O_WRONLY|O_APPEND (O_APPEND does not matter); a memfd works too"
+  tmpfs_modes: "on tmpfs: 0, 1 and 3 work; 2 (PUNCH_HOLE without KEEP_SIZE), 4 (NO_HIDE_STALE), 8 (COLLAPSE_RANGE), 16 and 17 (ZERO_RANGE, with or without KEEP_SIZE), 32 (INSERT_RANGE), 64 (UNSHARE_RANGE) are EOPNOTSUPP. Other file systems (ext4, xfs) support some of these; the portable tests use only 0, 1 and 3"
+errors:
+  bad_fd: "EBADF (9): not open (-1, 900)"
+  bad_range: "EINVAL (22): offset < 0, len == 0, len < 0"
+  not_writable: "EBADF (9): open read-only (also a directory, which can only be opened read-only), O_PATH, the read end of a pipe"
+  unsupported_mode: "EOPNOTSUPP (95): a bit no kernel knows (0x40000000), PUNCH_HOLE without KEEP_SIZE, and modes the file system does not support (see tmpfs_modes)"
+  pipe: "ESPIPE (29): the write end of a pipe"
+  not_regular: "ENODEV (19): a character device (/dev/null), a socket, an eventfd"
+  too_big: "EFBIG (27): offset+len beyond the largest file size (0x7fffffffffffff00 + 0x1000); growing past RLIMIT_FSIZE with mode 0 (SIGXFSZ is sent; ignored in the tests). On tmpfs KEEP_SIZE past RLIMIT_FSIZE is EFBIG too; on overlayfs (ext4 below) it was 0, so that is file-system specific"
+  no_space: "ENOSPC (28): more than the file system can hold (a size=64k tmpfs and 1 MiB); the size stays"
+  read_only_fs: "a file on a read-only mount can only be open read-only: EBADF"
+  order: "(1) EBADF for a descriptor that is not open; (2) EINVAL for offset/len (before the access mode: a read-only descriptor with offset -1 is EINVAL; and before unknown mode bits); (3) EOPNOTSUPP for invalid mode combinations; (4) EBADF for a descriptor not open for writing (len 0 on an O_PATH descriptor is EBADF: O_PATH is refused like a closed descriptor); (5) ESPIPE / ENODEV for the file type; (6) EFBIG / ENOSPC"
+side_effects: "size and allocation as described; mtime/ctime when the size changes; data in a punched range is gone"
+threading: "no thread-specific behaviour"
+ordering: []
+timing:
+  typical: "microseconds for tmpfs; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

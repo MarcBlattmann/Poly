@@ -201,6 +201,13 @@ pub const GROUPS: &[&[(u64, Handler)]] = &[
     crate::sys::utimes::CALLS,
     crate::sys::shm::CALLS,
     crate::sys::sem::CALLS,
+    crate::sys::inotify::CALLS,
+    crate::sys::memfd::CALLS,
+    crate::sys::membarrier::CALLS,
+    crate::sys::pidfd::CALLS,
+    crate::sys::rseq::CALLS,
+    crate::sys::rwv::CALLS,
+    crate::sys::falloc::CALLS,
 ];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();

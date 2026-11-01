@@ -250,7 +250,7 @@ fn copy_file_range_copies_at_file_offsets_and_at_pointers() {
     assert_eq!(sys(k, nr::COPY_FILE_RANGE, &[dir_fd, 0, fd_out, 0, 1, 0]), Err(Errno::EISDIR));
     assert_eq!(sys(k, nr::COPY_FILE_RANGE, &[77, 0, fd_out, 0, 1, 0]), Err(Errno::EBADF));
     k.poke(off_in, &(-1i64).to_le_bytes());
-    assert_eq!(sys(k, nr::COPY_FILE_RANGE, &[fd_in, off_in, fd_out, 0, 1, 0]), Err(Errno::EINVAL), "negative");
+    assert_eq!(sys(k, nr::COPY_FILE_RANGE, &[fd_in, off_in, fd_out, 0, 1, 0]), Err(Errno::EOVERFLOW), "negative");
 }
 
 // ---- close_range --------------------------------------------------------

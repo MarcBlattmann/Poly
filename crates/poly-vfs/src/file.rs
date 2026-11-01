@@ -164,6 +164,8 @@ pub struct OpenFile {
     origin: Option<Origin>,
     /// Made by `O_TMPFILE | O_EXCL`: it may never get a name.
     never_named: bool,
+    /// Made by memfd_create(2): its label and seals.
+    memfd: Option<Arc<crate::memfd::Memfd>>,
 }
 
 impl OpenFile {
@@ -193,7 +195,25 @@ impl OpenFile {
             offset: SpinMutex::new(0),
             origin: None,
             never_named: false,
+            memfd: None,
         }
+    }
+
+    /// A memfd_create(2) file (`Vfs::memfd_file`): never named.
+    pub(crate) fn with_memfd(mut self, memfd: Arc<crate::memfd::Memfd>) -> OpenFile {
+        self.memfd = Some(memfd);
+        self.never_named = true;
+        self
+    }
+
+    /// The label and seals of a memfd_create(2) file.
+    pub fn memfd(&self) -> Option<&Arc<crate::memfd::Memfd>> {
+        self.memfd.as_ref()
+    }
+
+    /// The size of the file, for the seal checks of a memfd.
+    fn size(&self) -> Result<u64> {
+        Ok(self.node.attr()?.size)
     }
 
     /// An `O_TMPFILE | O_EXCL` file: `linkat` may never give it a name.
@@ -287,8 +307,14 @@ impl OpenFile {
         self.offset.try_lock().map(|o| *o)
     }
 
+    /// `fstat(2)`: the node's status; an object on an anonymous inode
+    /// ([`FileObject::anon_name`]) has no file type bits in its mode.
     pub fn stat(&self) -> Result<Stat> {
-        self.node.stat()
+        let mut st = self.node.stat()?;
+        if self.object().is_some_and(|o| o.anon_name().is_some()) {
+            st.mode &= !crate::S_IFMT;
+        }
+        Ok(st)
     }
 
     /// `read(2)`: from the offset, advancing it.
@@ -299,9 +325,13 @@ impl OpenFile {
         match &self.backend {
             Backend::Inode if self.kind == FileType::Directory => Err(Errno::EISDIR),
             Backend::Inode => {
-                let mut off = self.offset.lock();
-                let n = self.fs().read(self.node.ino(), *off, buf)?;
-                *off += n as u64;
+                let n = {
+                    let mut off = self.offset.lock();
+                    let n = self.fs().read(self.node.ino(), *off, buf)?;
+                    *off += n as u64;
+                    n
+                };
+                self.accessed(n);
                 Ok(n)
             }
             Backend::Device(dev) if dev.seekable() => {
@@ -325,16 +355,25 @@ impl OpenFile {
             // Nothing to write changes nothing: not the size, not the times.
             Backend::Inode if buf.is_empty() => Ok(0),
             Backend::Inode => {
-                let mut off = self.offset.lock();
-                if self.flags().contains(OpenFlags::APPEND) {
-                    let (at, n) = self.fs().append(self.node.ino(), buf)?;
-                    *off = at + n as u64;
-                    Ok(n)
-                } else {
-                    let n = self.fs().write(self.node.ino(), *off, buf)?;
-                    *off += n as u64;
-                    Ok(n)
-                }
+                let n = {
+                    let mut off = self.offset.lock();
+                    if let Some(m) = &self.memfd {
+                        let size = self.size()?;
+                        let at = if self.flags().contains(OpenFlags::APPEND) { size } else { *off };
+                        m.check_write(at, buf.len() as u64, size)?;
+                    }
+                    if self.flags().contains(OpenFlags::APPEND) {
+                        let (at, n) = self.fs().append(self.node.ino(), buf)?;
+                        *off = at + n as u64;
+                        n
+                    } else {
+                        let n = self.fs().write(self.node.ino(), *off, buf)?;
+                        *off += n as u64;
+                        n
+                    }
+                };
+                self.modified(n);
+                Ok(n)
             }
             Backend::Device(dev) if dev.seekable() => {
                 let mut off = self.offset.lock();
@@ -359,7 +398,11 @@ impl OpenFile {
         }
         match &self.backend {
             Backend::Inode if self.kind == FileType::Directory => Err(Errno::EISDIR),
-            Backend::Inode => self.fs().read(self.node.ino(), offset, buf),
+            Backend::Inode => {
+                let n = self.fs().read(self.node.ino(), offset, buf)?;
+                self.accessed(n);
+                Ok(n)
+            }
             Backend::Device(dev) if dev.seekable() => dev.read(offset, buf, self.nonblock()),
             Backend::Device(_) | Backend::Object(_) => Err(Errno::ESPIPE),
             Backend::Path => Err(Errno::EBADF),
@@ -376,16 +419,95 @@ impl OpenFile {
         if offset > MAX_FILE_SIZE {
             return Err(Errno::EINVAL);
         }
+        if let (Some(m), Backend::Inode) = (&self.memfd, &self.backend) {
+            let size = self.size()?;
+            let at = if self.flags().contains(OpenFlags::APPEND) { size } else { offset };
+            m.check_write(at, buf.len() as u64, size)?;
+        }
         match &self.backend {
             Backend::Inode if buf.is_empty() => Ok(0),
             Backend::Inode if self.flags().contains(OpenFlags::APPEND) => {
-                self.fs().append(self.node.ino(), buf).map(|(_, n)| n)
+                let n = self.fs().append(self.node.ino(), buf).map(|(_, n)| n)?;
+                self.modified(n);
+                Ok(n)
             }
-            Backend::Inode => self.fs().write(self.node.ino(), offset, buf),
+            Backend::Inode => {
+                let n = self.fs().write(self.node.ino(), offset, buf)?;
+                self.modified(n);
+                Ok(n)
+            }
             Backend::Device(dev) if dev.seekable() => dev.write(offset, buf, self.nonblock()),
             Backend::Device(_) | Backend::Object(_) => Err(Errno::ESPIPE),
             Backend::Path => Err(Errno::EBADF),
         }
+    }
+
+    /// `pwritev2(2)` with `RWF_APPEND` (`append: Some(true)`) or
+    /// `RWF_NOAPPEND` (`Some(false)`): this one write appends, or goes to
+    /// the offset although the file is `O_APPEND`; `None` keeps the file's
+    /// own mode. `at` is the explicit offset (the file offset is left
+    /// alone) or `None` for the file offset, which then advances (to the
+    /// new end after an append). The open file's flags do not change. Only
+    /// files on a file system care; the others write as usual.
+    pub fn write_with(&self, at: Option<u64>, append: Option<bool>, buf: &[u8]) -> Result<usize> {
+        if !self.writable() {
+            return Err(Errno::EBADF);
+        }
+        if !matches!(self.backend, Backend::Inode) {
+            return match at {
+                Some(offset) => self.write_at(offset, buf),
+                None => self.write(buf),
+            };
+        }
+        if at.is_some_and(|o| o > MAX_FILE_SIZE) {
+            return Err(Errno::EINVAL);
+        }
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        let append = append.unwrap_or_else(|| self.flags().contains(OpenFlags::APPEND));
+        match at {
+            Some(_) if append => self.fs().append(self.node.ino(), buf).map(|(_, n)| n),
+            Some(offset) => self.fs().write(self.node.ino(), offset, buf),
+            None => {
+                let mut off = self.offset.lock();
+                if append {
+                    let (end, n) = self.fs().append(self.node.ino(), buf)?;
+                    *off = end + n as u64;
+                    Ok(n)
+                } else {
+                    let n = self.fs().write(self.node.ino(), *off, buf)?;
+                    *off += n as u64;
+                    Ok(n)
+                }
+            }
+        }
+    }
+
+    /// fallocate(2) (see [`FileSystem::fallocate`](crate::FileSystem::fallocate)):
+    /// `EBADF` unless open for writing, `ESPIPE` on a pipe, `ENODEV` on
+    /// anything else that is not a regular file, `EFBIG` for a range
+    /// ending past [`MAX_FILE_SIZE`]. The offset does not move.
+    pub fn fallocate(&self, mode: u32, offset: u64, len: u64) -> Result<()> {
+        if !self.writable() {
+            return Err(Errno::EBADF);
+        }
+        match &self.backend {
+            Backend::Inode if self.kind == FileType::Regular => {}
+            Backend::Path => return Err(Errno::EBADF),
+            _ if self.kind == FileType::Fifo => return Err(Errno::ESPIPE),
+            _ => return Err(Errno::ENODEV),
+        }
+        if offset.checked_add(len).is_none_or(|end| end > MAX_FILE_SIZE) {
+            return Err(Errno::EFBIG);
+        }
+        self.fs().fallocate(self.node.ino(), mode, offset, len)
+    }
+
+    /// Whether this is an open file on a file system (not a device, pipe,
+    /// socket or other object): `RWF_NOWAIT` is `EOPNOTSUPP` there.
+    pub fn on_inode(&self) -> bool {
+        matches!(self.backend, Backend::Inode)
     }
 
     /// `lseek(2)`; returns the new offset. Directories accept `SEEK_SET` and
@@ -398,7 +520,7 @@ impl OpenFile {
             Backend::Path => return Err(Errno::EBADF),
             Backend::Device(dev) if !dev.seekable() => return Err(Errno::ESPIPE),
             Backend::Object(o) if o.seek_stays_at_zero() => return Ok(0),
-            Backend::Object(_) => return Err(Errno::ESPIPE),
+            Backend::Object(o) => o.seek_size().ok_or(Errno::ESPIPE)?,
             Backend::Device(_) => 0,
             Backend::Inode => self.node.attr()?.size,
         };
@@ -471,7 +593,35 @@ impl OpenFile {
         if self.node.mount().read_only() {
             return Err(Errno::EROFS);
         }
-        self.node.truncate_unchecked(size)
+        if let Some(m) = &self.memfd {
+            m.check_truncate(self.size()?, size)?;
+        }
+        self.node.truncate_unchecked(size)?;
+        crate::inotify::file_event(self, crate::inotify::mask::IN_MODIFY);
+        Ok(())
+    }
+
+    /// inotify(7): `IN_ACCESS` after a read that returned data.
+    fn accessed(&self, n: usize) {
+        if n > 0 {
+            crate::inotify::file_event(self, crate::inotify::mask::IN_ACCESS);
+        }
+    }
+
+    /// inotify(7): `IN_MODIFY` after a write that wrote something.
+    fn modified(&self, n: usize) {
+        if n > 0 {
+            crate::inotify::file_event(self, crate::inotify::mask::IN_MODIFY);
+        }
+    }
+
+    /// `fchmod(2)` of the file: [`NodeRef::chmod`], which a memfd's
+    /// `F_SEAL_EXEC` may refuse (`EPERM` for a change of an execute bit).
+    pub fn chmod(&self, cred: &crate::Cred, perm: u16) -> Result<()> {
+        if let Some(m) = &self.memfd {
+            m.check_chmod(self.node.attr()?.perm, perm)?;
+        }
+        self.node.chmod(cred, perm)
     }
 
     /// `fsync(2)`.
@@ -595,6 +745,19 @@ impl OpenFile {
                 Err(_) if done > 0 => return Ok(done),
                 Err(e) => return Err(e),
             }
+        }
+    }
+}
+
+/// inotify(7): closing the last descriptor of an open file description
+/// is `IN_CLOSE_WRITE` if it was open for writing, else
+/// `IN_CLOSE_NOWRITE`. (Dropping the node afterwards may free an unlinked
+/// inode: `IN_DELETE_SELF`, see `NodeRef`'s drop.)
+impl Drop for OpenFile {
+    fn drop(&mut self) {
+        if crate::inotify::active() && matches!(self.backend, Backend::Inode | Backend::Device(_)) {
+            use crate::inotify::mask::{IN_CLOSE_NOWRITE, IN_CLOSE_WRITE};
+            crate::inotify::file_event(self, if self.writable() { IN_CLOSE_WRITE } else { IN_CLOSE_NOWRITE });
         }
     }
 }

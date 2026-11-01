@@ -1451,10 +1451,6 @@ fn is_kernel_line(line: &str) -> bool {
     ["syscall: pid ", "linux: pid ", "fs: ", "strace: "].iter().any(|p| line.starts_with(p))
 }
 
-/// System calls a program may make that Poly answers with `ENOSYS` on
-/// purpose (ADR 0043, 0049, 0059).
-const EXPECTED_ENOSYS: &[&str] = &[" rseq not implemented"];
-
 /// Run the steps; `ran` gets the names of those that ran.
 fn session(
     s: &mut crate::busybox::Session,
@@ -1484,7 +1480,9 @@ fn session(
         let mut out = String::new();
         for line in raw.split_inclusive('\n') {
             if is_kernel_line(line) {
-                if line.contains(" not implemented") && !EXPECTED_ENOSYS.iter().any(|e| line.contains(e)) {
+                // No call may be missing (`rseq`, the last one a program
+                // here made, is implemented since ADR 0111).
+                if line.contains(" not implemented") {
                     unimplemented.insert(line.trim_end().to_string());
                 }
             } else {

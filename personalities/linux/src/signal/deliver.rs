@@ -292,6 +292,17 @@ pub fn exit_to_user(k: &mut dyn LinuxKernel) -> ExitToUser {
                     }
                 }
                 let signal = info.signal();
+                // rseq(2): a restartable sequence the signal interrupts is
+                // aborted first, so the handler returns to its abort
+                // handler (ADR 0111).
+                if crate::sys::rseq::fixup(k, &mut ctx).is_err() {
+                    let segv = SigInfo::new(SIGSEGV, SI_KERNEL);
+                    with_own(k, |p| {
+                        p.thread_mut(tid).mask = saved_mask;
+                        p.force(tid, segv, signal == SIGSEGV);
+                    });
+                    continue;
+                }
                 match setup_frame(k, &mut ctx, &info, &action, saved_mask, altstack) {
                     Some(switched) => {
                         k.set_user_context(&ctx);

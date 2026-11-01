@@ -213,12 +213,16 @@ struct Harness {
     control: DmaMemory,
     events: DmaMemory,
     tx_meta: DmaMemory,
+    rx_meta: DmaMemory,
     pcm: DmaMemory,
     desc: [Vec<DescState>; 4],
     event_owner: Vec<u16>,
     tx_owner: Vec<u16>,
     tx_free: Vec<u16>,
     tx_len: Vec<u32>,
+    rx_owner: Vec<u16>,
+    rx_free: Vec<u16>,
+    rx_len: Vec<u32>,
     vector: Option<u16>,
 }
 
@@ -232,12 +236,16 @@ impl Harness {
             control: DmaMemory::new(1024),
             events: DmaMemory::new(n * Event::LEN),
             tx_meta: DmaMemory::new(n * TX_SLOT_LEN),
+            rx_meta: DmaMemory::new(n * RX_SLOT_LEN),
             pcm: DmaMemory::new(PCM_LEN),
             desc: core::array::from_fn(|_| vec![DescState::default(); n]),
             event_owner: vec![0; n],
             tx_owner: vec![0; n],
             tx_free: vec![0; n],
             tx_len: vec![0; n],
+            rx_owner: vec![0; n],
+            rx_free: vec![0; n],
+            rx_len: vec![0; n],
             vector: None,
         }
     }
@@ -255,6 +263,7 @@ impl Harness {
                 control: self.control.region(),
                 events: self.events.region(),
                 tx_meta: self.tx_meta.region(),
+                rx_meta: self.rx_meta.region(),
                 pcm: self.pcm.region(),
             },
             storage: Storage {
@@ -263,6 +272,9 @@ impl Harness {
                 tx_owner: &mut self.tx_owner,
                 tx_free: &mut self.tx_free,
                 tx_len: &mut self.tx_len,
+                rx_owner: &mut self.rx_owner,
+                rx_free: &mut self.rx_free,
+                rx_len: &mut self.rx_len,
             },
             vector: self.vector,
         };
@@ -583,4 +595,99 @@ fn interrupts_are_asked_for_on_the_event_and_transmit_queues() {
     assert!(snd.enable_interrupts(), "work that arrived is reported");
     snd.poll_events(|_| {});
     assert!(!snd.has_work());
+}
+
+fn s16_input(period: u32, buffer: u32) -> SetParams {
+    let mut info = output_stream();
+    info.direction = direction::INPUT;
+    check_params(
+        &info,
+        &Wanted { format: format::S16, rate_hz: 48000, channels: 2, period_bytes: period, buffer_bytes: buffer },
+    )
+    .unwrap()
+}
+
+/// Capture the way the kernel does: lend periods to the device, collect
+/// them filled, read the data, lend them again.
+#[test]
+fn capture_lends_periods_and_gets_them_back_filled() {
+    let sim = qemu_like();
+    let mut h = Harness::new(&sim, 32);
+    h.vector = Some(0);
+    let mut snd = h.init();
+    assert_eq!(snd.rx_slots(), 10);
+    let mut st = StreamState::default();
+    let p = s16_input(1024, 4096);
+    snd.pcm_goto(&mut st, 1, Command::SetParams, Some(&p), &mut patience(10)).unwrap();
+    snd.pcm_goto(&mut st, 1, Command::Prepare, None, &mut patience(10)).unwrap();
+    // Capture lives in the upper half of the PCM memory.
+    let base = 8192u32;
+    for i in 0..4 {
+        snd.submit_rx(1, Chunk { offset: base + i * 1024, len: 1024 }).unwrap();
+    }
+    assert_eq!((snd.rx_in_flight(), sim.rx_pending()), (4, 4));
+    // Not running yet: nothing is recorded.
+    assert_eq!(sim.record(4, |_, _| {}), 0);
+    snd.pcm_goto(&mut st, 1, Command::Start, None, &mut patience(10)).unwrap();
+    let mut counter = 0u8;
+    let mut source = |stream: u32, buf: &mut [u8]| {
+        assert_eq!(stream, 1);
+        for b in buf {
+            *b = counter;
+            counter = counter.wrapping_add(1);
+        }
+    };
+    let mut got = Vec::new();
+    for _ in 0..10 {
+        assert_eq!(sim.record(2, &mut source), 2);
+        let mut back = Vec::new();
+        snd.poll_rx(|d| back.push(d));
+        assert_eq!(back.len(), 2);
+        for d in back {
+            assert_eq!((d.stream, d.len, d.status.status), (1, 1024, status::OK));
+            let mut b = vec![0u8; d.len as usize];
+            assert!(snd.pcm_read(d.offset as usize, &mut b));
+            got.extend_from_slice(&b);
+            snd.submit_rx(1, Chunk { offset: d.offset, len: d.len }).unwrap();
+        }
+    }
+    let want: Vec<u8> = (0..got.len()).map(|i| i as u8).collect();
+    assert_eq!(got, want, "every captured byte, in order");
+    assert!(sim.dev().queues[3].interrupts > 0, "filled input messages interrupt");
+    let s = snd.stats();
+    assert_eq!((s.rx_messages, s.rx_bytes), (20, 20 * 1024));
+    // RELEASE hands back what the device still holds, empty.
+    snd.pcm_goto(&mut st, 1, Command::Release, None, &mut patience(10)).unwrap();
+    let mut empty = 0;
+    snd.poll_rx(|d| {
+        assert_eq!(d.len, 0);
+        empty += 1;
+    });
+    assert_eq!((empty, snd.rx_in_flight()), (4, 0));
+}
+
+#[test]
+fn input_messages_check_range_and_take_a_short_used_length_as_full() {
+    let sim = qemu_like();
+    let mut h = Harness::new(&sim, 8);
+    let mut snd = h.init();
+    assert_eq!(snd.rx_slots(), 2);
+    assert_eq!(snd.submit_rx(1, Chunk { offset: 0, len: 0 }), Err(TxError::Range));
+    assert_eq!(snd.submit_rx(1, Chunk { offset: PCM_LEN as u32 - 2, len: 4 }), Err(TxError::Range));
+    let mut st = StreamState::default();
+    snd.pcm_goto(&mut st, 1, Command::SetParams, Some(&s16_input(1024, 4096)), &mut patience(10)).unwrap();
+    snd.pcm_goto(&mut st, 1, Command::Start, None, &mut patience(10)).unwrap();
+    snd.submit_rx(1, Chunk { offset: 0, len: 512 }).unwrap();
+    snd.submit_rx(1, Chunk { offset: 512, len: 512 }).unwrap();
+    assert_eq!(snd.submit_rx(1, Chunk { offset: 1024, len: 512 }), Err(TxError::Busy));
+    // A used length of 0 with an OK status: the whole buffer.
+    sim.dev().rx_used_len = Some(0);
+    sim.record(1, |_, b| b.fill(7));
+    // One that covers 100 bytes of data and the status.
+    sim.dev().rx_used_len = Some(108);
+    sim.record(1, |_, b| b.fill(9));
+    let mut lens = Vec::new();
+    snd.poll_rx(|d| lens.push((d.offset, d.len)));
+    assert_eq!(lens, [(0, 512), (512, 100)]);
+    assert_eq!(snd.stats().rx_short, 1);
 }

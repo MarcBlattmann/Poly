@@ -110,20 +110,20 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] `advapi32` basics: registry API, security descriptors, tokens (single user) (ADR 0083)
 - [x] Console: our console host, `AllocConsole`, `ReadConsole` / `WriteConsole`, standard handles (ADR 0080)
 - [x] Windows file system layout: `C:\Windows`, `System32`, `Program Files`, user profile (ADR 0073)
-- [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; left: the API trace (ADR 0090) of the scenario recorded on Windows and compared without differences, ADR 0101 "The milestone")
+- [ ] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the `wintrace` boot group, report only; left: Poly's trace of every step without a divergence from the reference (0 of 15 today, `docs/windows/7zip-trace.md`), then `TRACE_REQUIRED`, ADR 0110 "What passes its full recorded trace means")
 - [x] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics (ADR 0095)
 - [x] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app) (ADR 0096)
 - [ ] Fallback if needed: our own `vcruntime140` (and `msvcp140` subsets) per ADR 0055
 
 ## Phase 6: Graphics, input, audio and the desktop
 
-- [ ] ⚖️ Decide: global menu bar or per-window menus
+- [x] ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)
 - [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app
 - [x] virtio-gpu driver: modesetting and 2D framebuffer
 - [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
 - [ ] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged
 - [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
-- [ ] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
+- [x] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
 - [ ] Compositor: Wayland server, surface composition, HiDPI scaling, vsync
 - [ ] Shell: launcher, window management, notifications, settings (own non-glass design)
 - [ ] Compositor exposes the content behind each window (needed later for Liquid Glass)
@@ -174,7 +174,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 ## Phase 10: macOS GUI apps and Liquid Glass
 
-- [ ] Window server: Quartz / CoreGraphics windows composited by our compositor, global menu bar handling
+- [ ] Window server: Quartz / CoreGraphics windows composited by our compositor, menu bars drawn in-window (owner decision, ADR 0107)
 - [ ] Core Text and font rendering matching macOS
 - [ ] Core Animation: layer tree, implicit animations, timing curves
 - [ ] Metal on Vulkan; Core Image

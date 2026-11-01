@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/access               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities (CapEff 000001ffffffffff) and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  access(path, mode) is system call 21. It answers whether the caller could
+  open path for reading (R_OK 4), writing (W_OK 2) or executing / searching
+  (X_OK 1), or with F_OK (0) only whether the path resolves, and returns 0 or
+  -errno. It is faccessat(AT_FDCWD, path, mode) (269): relative paths start
+  at the working directory and symbolic links are always followed. The check
+  uses the REAL uid and gid (and the supplementary groups), not the
+  effective ones, so a set-user-ID program can ask what its invoker may do.
+  Nothing is opened and nothing changes.
+returns:
+  success: "0 when every requested permission is granted (F_OK: when the path resolves)"
+  mode_argument: "the mode is a 32-bit int: bits above bit 31 of the register are ignored (0x100000004 is R_OK). Any bit other than the low three (8, 0x10, 0x100, -1) is EINVAL, checked before the path is looked at: access(\"\", 8), access(missing, 8) and access(NULL, 8) are all EINVAL"
+  class_selection: "for a caller other than root exactly one class of bits applies: the owner bits if the real uid owns the file, else the group bits if the real gid or a supplementary group is the file's group, else the other bits. An owner of a 0407 file gets only r (W_OK and X_OK are EACCES although others have rwx); an owner of a 0077 file gets nothing; a member of the group of a 0070 file gets rwx; a member of no class gets the other bits"
+  several_bits: "every requested bit must be granted: 0400 answers R_OK 0, R_OK|W_OK EACCES"
+  root: "real uid 0 (with capabilities): R_OK and W_OK always pass, also on a mode 0000 file or directory; X_OK passes on a directory always and on any other file only when at least one of the three execute bits is set (0100, 0010 or 0001; 0644, 0000 and 07000 are EACCES); /dev/null (0666) is never executable. Search permission on the directories walked is always granted"
+  real_not_effective: "real uid 1000, effective 0: a root-only 0600 file is EACCES for R_OK while open() of it succeeds. Real uid 0, effective 1000: R_OK|W_OK on it is 0 (access judges as root, with root's powers) while open() is EACCES. The same applies to search permission on the directories walked"
+  set_id_and_sticky: "the 07000 bits grant nothing"
+  directories: "X_OK is search permission: a 0000 directory is EACCES for X_OK for a normal owner, 0 for root; 0500 answers R_OK|X_OK 0 and W_OK EACCES (root: 0); a trailing slash is allowed"
+  symbolic_links: "followed, at the end too: the target's mode decides, never the link's 0777; a link to a directory may have a trailing slash; through links in the middle of the path as usual"
+  relative_paths: "relative to the working directory (\"tmp/x\" from /, \"../x\", \".\")"
+  slashes_dots: "repeated slashes count as one; \".\" and \"..\" work; \"/..\" is the root; a path of 4095 bytes plus NUL made of \"/.\" pieces resolves"
+errors:
+  denied: "EACCES (13): a requested bit not granted (see class_selection and root)"
+  bad_mode: "EINVAL (22): any mode bit other than 0-2 set, before anything else"
+  search_permission: "EACCES: a directory on the way without x for the caller (0600, 0000), for every mode including F_OK, whether or not the next name exists, also for \"dir/.\" and \"dir/..\"; the directory itself (\"dir\" or \"dir/\") still answers. x alone (0100) is enough to reach names under it. Not for root"
+  read_only_fs: "EROFS (30): W_OK (alone or with other bits) on a regular file, directory or symbolic link to one on a read-only mount, before the permission bits are looked at (a 0444 file is EROFS, not EACCES; W_OK|X_OK on a file without x is EROFS too). R_OK, X_OK and F_OK on the same files answer as usual. W_OK on a character device or FIFO on a read-only mount is 0 (the node is not written through the file system). A missing name is still ENOENT"
+  missing: "ENOENT (2): a missing last name or directory on the way, the empty path, a dangling symbolic link (also with a trailing slash); \"D/nope/../f\" is ENOENT (a later \"..\" does not undo it)"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components, a trailing slash or \"/.\" after a regular file, a trailing slash after a link to a file"
+  loop: "ELOOP (40): a link to itself, a two-link loop, at the end or in the middle of the path"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more (255 is fine); a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): NULL, address 1, a kernel address"
+  order: "(1) the mode (EINVAL); (2) the path string as a whole: unreadable EFAULT, 4096 bytes or more ENAMETOOLONG, empty ENOENT; (3) the components from left to right as the walk reaches them, links followed: missing ENOENT, non-directory ENOTDIR, loop ELOOP, no search permission EACCES, a name over 255 bytes ENAMETOOLONG. So D/nope/<256 bytes> is ENOENT, D/file/<256 bytes> ENOTDIR, D/<256 bytes>/nope ENAMETOOLONG; (4) the target: read-only mount EROFS for W_OK, then the permission bits EACCES"
+side_effects: "none: no timestamps change, nothing is opened"
+threading: "no thread-specific behaviour; the working directory used for relative paths is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

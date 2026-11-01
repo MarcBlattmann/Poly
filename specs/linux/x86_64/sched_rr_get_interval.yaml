@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_rr_get_interval  # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_HZ=250, /proc/sys/kernel/sched_rr_timeslice_ms 100 (default); tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  sched_rr_get_interval(pid, tp) (syscall 148) stores the round-robin
+  time quantum of one thread in *tp (struct timespec: 64-bit tv_sec,
+  64-bit tv_nsec, 16 bytes) and returns 0. pid 0 is the calling thread,
+  else a thread id; pid is a 32-bit int (upper half ignored). Under
+  SCHED_RR the value is the RR time slice, 100 ms with the default
+  sched_rr_timeslice_ms of 100 (whatever the priority); under SCHED_FIFO
+  it is 0. Under the fair policies (OTHER, BATCH, IDLE) it is the
+  thread's current time slice rounded down to whole clock ticks: always
+  tv_sec 0 and well under 100 ms, but its exact value depends on the
+  kernel's tick rate and CPU count (0 on this 250 Hz oracle; a few ms on
+  a 1000 Hz kernel; a thread that is not running may report 0). It is
+  the same for OTHER, BATCH and IDLE of one running thread. No
+  permission is needed.
+returns:
+  rr: "tv_sec 0, tv_nsec 100000000 under SCHED_RR (priority 1 or 99), also read for another process"
+  fifo: "0, 0 under SCHED_FIFO"
+  fair: "tv_sec 0, 0 <= tv_nsec <= 100000000 under OTHER/BATCH/IDLE; equal for the three policies of the same running thread; 0 on the oracle"
+  write: "exactly 16 bytes are written; the bytes after them are untouched"
+  other_tasks: "threads, children, zombie children (exited, not reaped) and other users' tasks are readable"
+  self: "pid 0, getpid(), gettid() and 1<<32 name the caller"
+errors:
+  negative: "EINVAL (22): pid negative as a 32-bit int (-1, 0xffffffff), checked first (also with tp NULL); nothing written"
+  no_task: "ESRCH (3): no thread has the id (also a reaped child), checked before tp is used (tp NULL or 1 with a pid no task has is ESRCH); nothing written"
+  fault: "EFAULT (14): tp not writable: NULL (EFAULT, not EINVAL), address 1, non-canonical, read-only memory (left unchanged), or a struct whose second half is in an unmapped page (the last 16 bytes of a mapped page work)"
+  order: "EINVAL, ESRCH, EFAULT"
+side_effects: "none besides writing *tp"
+threading: "reads one thread's state"
+ordering: []
+timing:
+  typical: "about a microsecond; never blocks"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct timespec from linux/time_types.h (__kernel_timespec).
+# For Poly, any fair-policy value with tv_sec 0 and tv_nsec at most
+# 100 ms satisfies the tests; reporting 0 matches the oracle exactly.
+# The real-time cases need root (needs=root) to set SCHED_RR/FIFO with
+# sched_setscheduler (144).

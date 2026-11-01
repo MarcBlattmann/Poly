@@ -109,9 +109,9 @@ pub fn dup3(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 }
 
 /// fcntl(fd, cmd, arg): descriptor duplication, the close-on-exec flag,
-/// the status flags and record locks ([`record_lock`]). The descriptor is
-/// checked first (`EBADF`), then the command: signal-driven I/O ownership,
-/// leases, pipe sizes and seals are not supported yet and give `EINVAL`,
+/// the status flags, record locks ([`record_lock`]) and file seals. The descriptor is
+/// checked first (`EBADF`), then the command: signal-driven I/O ownership
+/// and leases are not supported yet and give `EINVAL`,
 /// as fcntl(2) says for "cmd is not recognized by this kernel".
 pub fn fcntl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
@@ -139,6 +139,8 @@ pub fn fcntl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         cmd @ (F_GETLK | F_SETLK | F_SETLKW | F_OFD_GETLK | F_OFD_SETLK | F_OFD_SETLKW) => {
             record_lock(k, fd, cmd, a.ptr(2), flags)
         }
+        F_ADD_SEALS => fs.add_seals(fd, a.uint(2)).map(|()| 0),
+        F_GET_SEALS => fs.get_seals(fd).map(u64::from),
         _ => Err(Errno::EINVAL),
     }
 }
@@ -277,22 +279,33 @@ pub const LOCK_SH: u32 = 1;
 pub const LOCK_EX: u32 = 2;
 pub const LOCK_NB: u32 = 4;
 pub const LOCK_UN: u32 = 8;
+/// `LOCK_MAND` (`asm-generic/fcntl.h`): mandatory locks, no longer
+/// supported; a call with it does nothing.
+pub const LOCK_MAND: u32 = 32;
 
 /// flock(fd, operation) (ADR 0059): "EINVAL operation is invalid" unless
 /// it is exactly one of `LOCK_SH`, `LOCK_EX`, `LOCK_UN`, optionally with
 /// `LOCK_NB`; "EWOULDBLOCK The file is locked and the LOCK_NB flag was
 /// selected"; without `LOCK_NB` the call waits and a signal ends it
-/// (`EINTR`, restarted under `SA_RESTART`, signal(7)).
+/// (`EINTR`, restarted under `SA_RESTART`, signal(7)). The order (the
+/// spec of flock): `LOCK_MAND` makes the call a no-op returning 0 (even
+/// for a descriptor that is not open), then `EINVAL` for the operation,
+/// then `EBADF` (not open, or `O_PATH`).
 pub fn flock(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let fd = fd_arg(a, 0)?;
     let op = a.uint(1);
+    if op & LOCK_MAND != 0 {
+        return Ok(0);
+    }
     let exclusive = match op & !LOCK_NB {
         LOCK_SH => Some(false),
         LOCK_EX => Some(true),
         LOCK_UN => None,
         _ => return Err(Errno::EINVAL),
     };
-    fs(k)?.status_flags(fd)?;
+    let fd = fd_arg(a, 0)?;
+    if fs(k)?.status_flags(fd)? & crate::sys::path::O_PATH != 0 {
+        return Err(Errno::EBADF);
+    }
     fs(k)?.flock(fd, exclusive, op & LOCK_NB == 0).map(|()| 0)
 }
 
@@ -338,17 +351,20 @@ pub const CLOSE_RANGE_CLOEXEC: u32 = 1 << 2;
 /// greater than last". Descriptors in the range that are not open are
 /// skipped; `CLOSE_RANGE_CLOEXEC` marks instead of closing.
 /// `CLOSE_RANGE_UNSHARE` first gives the caller a descriptor table of its
-/// own: a Poly process's table is already its own (ADR 0054), so this is
-/// nothing to do for a single thread; with other threads sharing it Poly
-/// cannot split it and refuses (`EINVAL`, Poly's choice, as unshare(2)
-/// with `CLONE_FILES`).
+/// own: a process that shares its table with other processes (clone(2)
+/// `CLONE_FILES`) gets a private copy (ADR 0111); a table shared by the
+/// threads of one process Poly cannot split, and refuses (`EINVAL`, Poly's
+/// choice, as unshare(2) with `CLONE_FILES`).
 pub fn close_range(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (first, last, flags) = (a.uint(0), a.uint(1), a.uint(2));
     if flags & !(CLOSE_RANGE_UNSHARE | CLOSE_RANGE_CLOEXEC) != 0 || first > last {
         return Err(Errno::EINVAL);
     }
-    if flags & CLOSE_RANGE_UNSHARE != 0 && crate::signal::deliver::with_own(k, |p| p.thread_ids().count()) > 1 {
-        return Err(Errno::EINVAL);
+    if flags & CLOSE_RANGE_UNSHARE != 0 {
+        if crate::signal::deliver::with_own(k, |p| p.thread_ids().count()) > 1 {
+            return Err(Errno::EINVAL);
+        }
+        fs(k)?.unshare_fd_table()?;
     }
     fs(k)?.close_range(first, last, flags & CLOSE_RANGE_CLOEXEC != 0).map(|()| 0)
 }

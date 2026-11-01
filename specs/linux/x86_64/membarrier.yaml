@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/membarrier           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64, no nohz_full)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2, 32 CPUs; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  membarrier(cmd, flags, cpu_id) (syscall 324) issues memory barriers on
+  other CPUs running threads of the caller (or of all processes) so that
+  memory accesses are ordered across threads without each thread issuing
+  a barrier. cmd is one command (an int; the upper half of the register
+  is ignored): QUERY 0 returns the bit mask of supported commands, 0x3ff
+  on this kernel (GLOBAL 1, GLOBAL_EXPEDITED 2, REGISTER_GLOBAL_EXPEDITED
+  4, PRIVATE_EXPEDITED 8, REGISTER_PRIVATE_EXPEDITED 16,
+  PRIVATE_EXPEDITED_SYNC_CORE 32, REGISTER_PRIVATE_EXPEDITED_SYNC_CORE
+  64, PRIVATE_EXPEDITED_RSEQ 128, REGISTER_PRIVATE_EXPEDITED_RSEQ 256,
+  GET_REGISTRATIONS 512; a kernel booted with nohz_full leaves out
+  GLOBAL). Every other command returns 0 on success. GLOBAL and
+  GLOBAL_EXPEDITED need no registration by the caller.
+  PRIVATE_EXPEDITED, PRIVATE_EXPEDITED_SYNC_CORE and
+  PRIVATE_EXPEDITED_RSEQ need the process to have done the matching
+  REGISTER_ command first (EPERM otherwise); REGISTER_ commands can be
+  repeated. GET_REGISTRATIONS returns the mask of REGISTER_ commands the
+  process has done (0 at the start). Registrations belong to the process
+  (memory): CLONE_VM tasks share them, a fork child inherits the parent's
+  and what it adds itself is not seen by the parent. flags must be 0,
+  except MEMBARRIER_CMD_FLAG_CPU (1) with PRIVATE_EXPEDITED_RSEQ, which
+  restricts it to CPU cpu_id (a CPU number that does not exist, 9999 or
+  -1, is not an error). cpu_id is ignored otherwise.
+returns:
+  query: "0x3ff (bit mask of supported commands); flags must be 0; cpu_id ignored"
+  commands: "0"
+  get_registrations: "0 initially; after REGISTER_PRIVATE_EXPEDITED 16; plus SYNC_CORE 16|64; plus RSEQ 16|64|256; plus REGISTER_GLOBAL_EXPEDITED 4|16|64|256"
+  fork: "the child reads the parent's registrations (4|16), may use PRIVATE_EXPEDITED, may register more (the parent still reads 4|16)"
+  clone_vm: "a CLONE_VM task reads the same registrations and may use PRIVATE_EXPEDITED"
+errors:
+  bad_cmd: "EINVAL (22): not one command (3, 6, 1024, -1, 0x80000000)"
+  bad_flags: "EINVAL (22): flags != 0 for any command except FLAG_CPU (1) with PRIVATE_EXPEDITED_RSEQ (flags 2 there is EINVAL too); checked before the registration (PRIVATE_EXPEDITED with flags 1 unregistered is EINVAL)"
+  not_registered: "EPERM (1): PRIVATE_EXPEDITED / _SYNC_CORE / _RSEQ before the matching REGISTER_ command"
+  order: "cmd, flags, then registration"
+side_effects: "registrations of the process; barriers on other CPUs (not observable here)"
+threading: "registration is per process (shared by all its threads and CLONE_VM tasks); inherited by fork"
+ordering: []
+timing:
+  typical: "GLOBAL waits for an RCU grace period (milliseconds); the others microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: command values from linux/membarrier.h. The ordering guarantees
+# themselves cannot be observed by a test; the tests check results and
+# registration state only. All tests pass as root and as an unprivileged
+# user.

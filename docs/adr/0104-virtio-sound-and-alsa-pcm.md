@@ -5,7 +5,10 @@ virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible
 interface": the virtio-sound driver and the ALSA-compatible PCM playback
 interface are done; Intel HDA, capture and the audio server are not, so the
 item stays unticked. The owner allowed Phase 6 work to start alongside the
-end of Phase 5.
+end of Phase 5. The follow-ups below are done in
+[ADR 0109](0109-audio-server-capture-mmap-mixer-and-intel-hda.md), which
+also replaces "one stream at a time" with the audio server and numbers
+capture devices from 0.
 
 ## Context
 

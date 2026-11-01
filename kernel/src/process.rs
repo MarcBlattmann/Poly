@@ -115,9 +115,25 @@ pub struct ThreadFlags {
     /// Its kernel thread (`ThreadId::to_bits` + 1; 0 until it is known), to
     /// interrupt it when it runs on another CPU ([`ThreadFlags::kick`]).
     pub thread: AtomicU64,
+    /// The thread has an rseq(2) area (ADR 0111): switching it out sets
+    /// [`rseq_notify`](Self::rseq_notify).
+    pub rseq: AtomicBool,
+    /// The thread with an rseq area was switched out: before it returns to
+    /// user mode the personality looks at the area
+    /// (`Linux::rseq_resume`). Cleared by the thread itself.
+    pub rseq_notify: AtomicBool,
 }
 
 impl ThreadFlags {
+    /// The thread is being switched out (by the scheduler, with interrupts
+    /// off): one with an rseq area must look at it before it next runs
+    /// user code.
+    pub fn switched_out(&self) {
+        if self.rseq.load(Ordering::Relaxed) {
+            self.rseq_notify.store(true, Ordering::Relaxed);
+        }
+    }
+
     /// Make the thread look at its flags soon: if it runs on another CPU
     /// (maybe in ring 3, where it would not look until its next interrupt
     /// or system call), interrupt that CPU; on its way back to user mode it
@@ -272,6 +288,12 @@ impl Process {
         }
         if let Some(linux) = &self.linux {
             linux.add_thread(tid);
+            // A fork child keeps its creator's rseq area (ADR 0111); it may
+            // start on another CPU, so it looks at the area first.
+            if linux.with(|p| p.thread(tid as i32).rseq.is_some()) {
+                flags.rseq.store(true, Ordering::Relaxed);
+                flags.rseq_notify.store(true, Ordering::Relaxed);
+            }
         }
         Some((tid, flags))
     }

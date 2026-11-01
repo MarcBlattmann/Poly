@@ -1,0 +1,66 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/prctl                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64; CAP_LAST_CAP 40)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged, full bounding set) on WSL2; the container runs under a seccomp filter (PR_GET_SECCOMP 2); tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  prctl(option, arg2, arg3, arg4, arg5) (syscall 157) performs an
+  operation on the calling thread or process chosen by option (an int).
+  This sheet covers the options common in libc and toolkit start-up;
+  arguments an option does not use are ignored unless stated. Unknown
+  options (0, 9999, -1) are EINVAL. PR_SET_NAME (15) / PR_GET_NAME (16):
+  the calling thread's name (comm), at most 15 bytes. PR_SET_PDEATHSIG
+  (1) / PR_GET_PDEATHSIG (2): the signal the thread gets when its parent
+  exits. PR_GET_DUMPABLE (3) / PR_SET_DUMPABLE (4): the process's
+  dumpable flag (also governs ptrace-style access by others).
+  PR_SET_NO_NEW_PRIVS (38) / PR_GET_NO_NEW_PRIVS (39): a one-way flag
+  that execve never grants privileges past. PR_GET_SECCOMP (21): the
+  seccomp mode. PR_SET_CHILD_SUBREAPER (36) / PR_GET_CHILD_SUBREAPER
+  (37): orphaned descendants are reparented to this process instead of
+  init. PR_CAPBSET_READ (23): whether a capability is in the bounding
+  set (PR_CAPBSET_DROP 24 removes one, with CAP_SETPCAP).
+returns:
+  set_name: "0; the name becomes the first 15 bytes of arg2 (\"0123456789abcdefghij\" -> \"0123456789abcde\"), \"\" allowed; /proc/self/comm and /proc/self/task/<tid>/comm show it followed by a newline; other arguments ignored"
+  get_name: "0; writes exactly 16 bytes at arg2: the name, NUL, NUL padding (\"abc\" -> 'a','b','c' then 13 NULs); byte 16 onward untouched"
+  name_per_thread: "a thread setting its name does not change the leader's (/proc/self/comm shows the leader's)"
+  pdeathsig: "PR_SET_PDEATHSIG: 0 for sig 0..64 (0 clears); PR_GET_PDEATHSIG: 0, stores the value as an int at arg2 (0 at program start); a fork child starts with 0; when the parent exits, the thread gets the signal (SIGTERM kills a pausing grandchild once its parent exits; it is then reparented to the nearest subreaper)"
+  dumpable: "PR_GET_DUMPABLE returns the flag as the result (1 for a normal program; arguments ignored); PR_SET_DUMPABLE 0 or 1 returns 0; inherited by fork children"
+  no_new_privs: "PR_GET_NO_NEW_PRIVS returns 0 or 1 as the result; PR_SET_NO_NEW_PRIVS(1, 0, 0, 0) returns 0 (also when already set); inherited by fork children and kept across execve; never cleared"
+  seccomp: "PR_GET_SECCOMP returns the mode as the result: 0 none, 2 filter (2 here: the container filters); arguments ignored; after a filter is installed (PR_SET_SECCOMP 2 with an allow-all filter, after PR_SET_NO_NEW_PRIVS) it is 2; in strict mode (PR_SET_SECCOMP 1, entered from mode 0) calling prctl kills the thread with SIGKILL; under a filter PR_SET_SECCOMP 1 is EINVAL"
+  subreaper: "PR_SET_CHILD_SUBREAPER: 0; any non-zero arg2 stored as 1, 0 clears; PR_GET_CHILD_SUBREAPER stores 0/1 as an int at arg2 (0 at start); not inherited by fork children; a grandchild whose parent exits gets the subreaper as its parent (getppid) and is waited for by it"
+  capbset_read: "PR_CAPBSET_READ returns 1 if cap arg2 is in the bounding set, 0 if not (every cap 0..40 answers 0 or 1; a normal program starts with the full set)"
+  capbset_drop: "PR_CAPBSET_DROP(cap) with CAP_SETPCAP: 0; the cap then reads 0, others still 1; fork children inherit the reduced set"
+errors:
+  unknown_option: "EINVAL (22): option not known (0, 9999, -1)"
+  name_fault: "EFAULT (14): PR_SET_NAME with an unreadable name (NULL); PR_GET_NAME with an unwritable buffer (NULL, read-only memory)"
+  pdeathsig_range: "EINVAL (22): PR_SET_PDEATHSIG with a signal outside 0..64 (65, -1)"
+  pdeathsig_fault: "EFAULT (14): PR_GET_PDEATHSIG with an unwritable pointer"
+  dumpable_value: "EINVAL (22): PR_SET_DUMPABLE with a value other than 0 and 1 (2, 3, -1)"
+  no_new_privs_args: "EINVAL (22): PR_SET_NO_NEW_PRIVS with arg2 != 1 (0, 2) or any of arg3..arg5 non-zero; PR_GET_NO_NEW_PRIVS with any of arg2..arg5 non-zero"
+  subreaper_fault: "EFAULT (14): PR_GET_CHILD_SUBREAPER with an unwritable pointer"
+  capbset_range: "EINVAL (22): PR_CAPBSET_READ / PR_CAPBSET_DROP with a capability above CAP_LAST_CAP (41, 63, -1, 1<<32; arg2 is a full 64-bit value)"
+  capbset_drop_perm: "EPERM (1): PR_CAPBSET_DROP without CAP_SETPCAP; not tested"
+side_effects: "as listed per option: thread name, parent-death signal, dumpable flag, no_new_privs flag, subreaper mark, bounding set"
+threading: >
+  Per thread: the name, the parent-death signal (it fires when the
+  thread that created the caller exits), no_new_privs, the seccomp mode,
+  the bounding set. Per process: dumpable, the subreaper mark.
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: option numbers from linux/prctl.h; SECCOMP_MODE_*,
+# SECCOMP_RET_ALLOW from linux/seccomp.h; struct sock_filter /
+# sock_fprog and BPF_RET|BPF_K from linux/filter.h and
+# linux/bpf_common.h; capability numbers from linux/capability.h. No
+# test checks the starting name (it is the program file's name, which
+# differs between Linux and Poly runs). Seccomp checks accept a starting
+# mode of 0 or 2 and compare output only, since the environment decides
+# it. Tests that drop from the bounding set need root (poly-diff:
+# needs=root); all others pass as root and as an unprivileged user.

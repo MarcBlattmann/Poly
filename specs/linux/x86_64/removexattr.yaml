@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/removexattr          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  removexattr(path, name) (syscall 197) removes the extended attribute
+  `name` from the file `path` names (following a symbolic link in the
+  last component) and returns 0; the file's other attributes stay. A
+  name that does not exist is ENODATA. Name rules, namespaces and
+  permissions are those of setxattr (setxattr.yaml): removing needs the
+  same rights as setting (write permission for user.*, CAP_SYS_ADMIN
+  for trusted.* and security.*), on a read-only mount it is EROFS, and
+  files that cannot have user.* attributes answer EPERM.
+  lremovexattr (198) does not follow a final symbolic link;
+  fremovexattr (199) takes a descriptor.
+returns:
+  success: "0; the name is gone from getxattr (ENODATA) and listxattr; the other names and values are unchanged"
+  empty_value: "an attribute with an empty value is removed like any other"
+  recreate: "a removed name can be created again, also with XATTR_CREATE"
+  symlink: "follows a final symbolic link: removes the target's attribute"
+  identity: "the attribute is the inode's: removing through one hard link removes it for all; an unlinked but open file can still lose attributes (fremovexattr)"
+errors:
+  name: "EFAULT (14) for a NULL/unreadable name, ERANGE (34) for an empty or 256+ byte name; before the path (bad name with a missing or NULL path is still ERANGE)"
+  path: "EFAULT (path NULL/unmapped), ENOENT (missing, empty path '', dangling final symlink), ENOTDIR (trailing '/' on a file), ENAMETOOLONG, ELOOP, EACCES (no search permission)"
+  read_only: "EROFS (30): read-only mount, after the path and before every namespace, permission and existence check (removing a missing name is EROFS too)"
+  trusted_cap: "EPERM (1): trusted.* without CAP_SYS_ADMIN (also for names that do not exist)"
+  user_kind: "EPERM (1): a user.* name (also 'user.' alone) on anything but a regular file or directory (FIFO, socket, device; symbolic link via lremovexattr; pipe, socket, eventfd via fremovexattr), before ENODATA"
+  sticky_dir: "EPERM (1): user.* on a sticky directory not owned by the caller, without CAP_FOWNER"
+  access: "EACCES (13): user.* names and names with an unknown prefix need write permission (owner of a 0444 file: EACCES; other on root's 0644 file: EACCES, also for a missing name and for an unknown prefix); root passes"
+  security_cap: "EPERM (1): security.* without CAP_SYS_ADMIN, even on the caller's own file"
+  namespace: "EOPNOTSUPP (95): unknown prefix ('plain'), unknown system.* name, any non-user name on pipes/sockets/eventfds as root, and a socket's system.sockprotoname"
+  prefix_only: "EINVAL (22): 'user.' alone on a regular file or directory the caller may write"
+  missing: "ENODATA (61): the name does not exist (removed already, never set)"
+  order: "name, path, EROFS, EPERM (trusted.*; user.* on special files; sticky directory), EACCES, EPERM (security.*), EOPNOTSUPP, EINVAL (prefix only), ENODATA"
+side_effects: >
+  A successful removal sets the ctime to the current time; mtime, size
+  and contents stay. A failed call (ENODATA included) changes nothing,
+  not even the ctime. Reading and listing never change timestamps.
+threading: "atomic with respect to other attribute calls on the inode"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the ctime test waits 30 ms between steps so the coarse
+# timestamp clock moves. Constants as in setxattr.yaml.

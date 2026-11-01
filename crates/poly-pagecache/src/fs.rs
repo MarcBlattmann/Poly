@@ -7,8 +7,8 @@ use alloc::vec::Vec;
 use core::sync::atomic::Ordering::Relaxed;
 use poly_vfs::lock::RawLock;
 use poly_vfs::{
-    Attr, DirEntry, Errno, FileSystem, FileType, FsInfo, Ino, MAX_FILE_SIZE, NewNode, RenameFlags, Result, SetAttr,
-    SetTime,
+    Attr, DirEntry, Errno, FALLOC_FL_KEEP_SIZE, FALLOC_FL_PUNCH_HOLE, FileSystem, FileType, FsInfo, Ino, MAX_FILE_SIZE,
+    NewNode, RenameFlags, Result, SetAttr, SetTime,
 };
 
 /// A registered file system: what gets mounted in place of the inner one
@@ -194,6 +194,30 @@ impl<F: PageFrame, L: RawLock + Default> CachedFs<F, L> {
         }
         if let Some(page) = self.core.index.lock().get(&self.key(ino, size / PAGE)) {
             page.zero_from(in_page);
+        }
+    }
+
+    /// The cache's copy of `[offset, end)` of `ino` reads as zeros, as
+    /// the file will after a hole is punched there: whole pages leave the
+    /// cache (their data is gone, dirty or not), the bytes of the pages at
+    /// the edges are zeroed. The caller holds the inode's lock.
+    fn punch_cached(&self, ino: Ino, offset: u64, end: u64) {
+        let (first_whole, end_whole) = (offset.div_ceil(PAGE), end / PAGE);
+        let dropped: Vec<Arc<Page<F>>> = {
+            let mut index = self.core.index.lock();
+            let keys = index.keys_of(self.st.id, ino, first_whole);
+            keys.iter().filter(|k| k.index < end_whole).filter_map(|k| index.remove(k)).collect()
+        };
+        drop(dropped);
+        for i in [offset / PAGE, end.saturating_sub(1) / PAGE] {
+            if (first_whole..end_whole).contains(&i) {
+                continue;
+            }
+            if let Some(page) = self.core.lookup(&self.key(ino, i)) {
+                let start = offset.max(i * PAGE) - i * PAGE;
+                let stop = end.min((i + 1) * PAGE) - i * PAGE;
+                page.write(start as usize, &vec![0; (stop - start) as usize]);
+            }
         }
     }
 
@@ -444,6 +468,31 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
 
     fn readdir(&self, dir: Ino, pos: u64, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<()> {
         self.st.inner.readdir(dir, pos, emit)
+    }
+
+    /// fallocate(2) through the cache: growing the size zeroes the cached
+    /// tail of the old last page (as a truncation would), punching a hole
+    /// makes the cached copy of the range read as zeros too.
+    fn fallocate(&self, ino: Ino, mode: u32, offset: u64, len: u64) -> Result<()> {
+        self.changed();
+        let lock = self.core.inode_lock(self.st.id, ino);
+        let _held = lock.lock();
+        let old = self.st.inner.getattr(ino)?;
+        if old.kind == FileType::Regular {
+            let end = offset.saturating_add(len);
+            if mode & FALLOC_FL_PUNCH_HOLE != 0 {
+                if mode == FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE {
+                    self.punch_cached(ino, offset, end);
+                }
+            } else if mode & FALLOC_FL_KEEP_SIZE == 0 && end > old.size {
+                self.zero_tail(ino, old.size);
+            }
+        }
+        self.st.inner.fallocate(ino, mode, offset, len)
+    }
+
+    fn typeless(&self, ino: Ino) -> bool {
+        self.st.inner.typeless(ino)
     }
 
     fn readdir_end(&self) -> Option<u64> {

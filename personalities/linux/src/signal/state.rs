@@ -59,6 +59,14 @@ pub struct LinuxThread {
     /// Strict mode or the seccomp filters (ADR 0054): inherited by the
     /// threads and processes it creates, kept by execve(2).
     pub seccomp: crate::seccomp::Seccomp,
+    /// prctl(2) `PR_SET_PDEATHSIG`: the signal the thread gets when its
+    /// parent dies (0: none). Not inherited: new threads and fork children
+    /// start with 0.
+    pub pdeathsig: u32,
+    /// rseq(2): the thread's restartable-sequences area (ADR 0111). A
+    /// fork(2) child keeps it, other new threads start without one,
+    /// execve(2) drops it.
+    pub rseq: Option<crate::sys::rseq::Registration>,
 }
 
 impl LinuxThread {
@@ -120,6 +128,11 @@ pub struct LinuxProcess {
     /// discarding it when it is generated, so the taking is seen
     /// ([`LinuxProcess::send`]). Inherited by fork, kept by exec.
     pub traced: bool,
+    /// prctl(2) `PR_SET_DUMPABLE`: whether the process may be dumped and
+    /// looked at by others of its user without `CAP_SYS_PTRACE`
+    /// (ptrace(2) "ptrace access mode checking"). 1 at start; inherited by
+    /// fork; execve(2) sets it again.
+    pub dumpable: bool,
 }
 
 impl LinuxProcess {
@@ -139,6 +152,7 @@ impl LinuxProcess {
             nice: 0,
             ns: crate::ns::Namespaces::default(),
             traced: false,
+            dumpable: true,
         }
     }
 
@@ -150,7 +164,10 @@ impl LinuxProcess {
     /// list is not (set_robust_list(2) registers it per thread; to be
     /// confirmed by the diff runner). The credentials and the name are the
     /// calling thread's (fork(2) inherits the process's credentials, which
-    /// are per thread in the kernel: ADR 0045).
+    /// are per thread in the kernel: ADR 0045). The rseq(2) registration
+    /// is kept: the child's copy of the area is at the same address (a
+    /// child sharing the memory, `CLONE_VM`, must drop it, which the
+    /// caller does).
     pub fn fork(&self, parent_tid: i32, child_tid: i32) -> LinuxProcess {
         let parent = self.thread(parent_tid);
         let child = LinuxThread {
@@ -159,6 +176,7 @@ impl LinuxProcess {
             creds: parent.creds.clone(),
             comm: parent.comm,
             seccomp: parent.seccomp.clone(),
+            rseq: parent.rseq,
             ..LinuxThread::default()
         };
         let mut threads = BTreeMap::new();
@@ -176,6 +194,7 @@ impl LinuxProcess {
             nice: self.nice,
             ns: self.ns.for_child(),
             traced: self.traced,
+            dumpable: self.dumpable,
         }
     }
 
@@ -196,6 +215,7 @@ impl LinuxProcess {
         thread.altstack = AltStack::DISABLED;
         thread.robust_list = UserPtr::NULL;
         thread.clear_child_tid = UserPtr::NULL;
+        thread.rseq = None;
         thread.saved_mask = None;
         thread.restart = None;
         thread.restart_block = None;
@@ -204,6 +224,7 @@ impl LinuxProcess {
         // timer_create(2): POSIX timers are deleted; setitimer(2): interval
         // timers are preserved.
         self.timers.exec();
+        self.dumpable = true;
     }
 
     /// A new thread `tid` created by `parent_tid` with clone(2). It

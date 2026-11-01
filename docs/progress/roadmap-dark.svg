@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 81 of 141 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 83 of 141 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">81 / 141 milestones · 57%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">83 / 141 milestones · 59%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -239,7 +239,7 @@
 <g><title>✔ Windows file system layout: C:\Windows, System32, Program Files, user profile (ADR 0073)</title>
 <rect x="690.7" y="203.0" width="23.1" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; left: the API trace (ADR 0090) of the scenario recorded on Windows and compared without differences, ADR 0101 &quot;The milestone&quot;)</title>
+<g><title>Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the wintrace boot group, report only; left: Poly's trace of every step without a divergence from the reference (0 of 15 today, docs/windows/7zip-trace.md), then TRACE_REQUIRED, ADR 0110 &quot;What passes its full recorded trace means&quot;)</title>
 <rect x="715.8" y="203.0" width="23.1" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
 <g><title>✔ Winsock (ws2_32) on our sockets; winhttp / wininet basics (ADR 0095)</title>
@@ -253,8 +253,8 @@
 </g>
 <text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">17/19</text>
 <text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
-<g><title>⚖️ Decide: global menu bar or per-window menus</title>
-<rect x="340.0" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)</title>
+<rect x="340.0" y="233.0" width="34.6" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>✔ ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app</title>
 <rect x="376.6" y="233.0" width="34.6" height="16.0" fill="#2ea043" rx="3"/>
@@ -271,8 +271,8 @@
 <g><title>3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa</title>
 <rect x="523.1" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<g><title>Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface</title>
-<rect x="559.7" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface</title>
+<rect x="559.7" y="233.0" width="34.6" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>Compositor: Wayland server, surface composition, HiDPI scaling, vsync</title>
 <rect x="596.3" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
@@ -292,7 +292,7 @@
 <g><title>Milestone: GTK and Qt apps run; VLC plays a video with sound</title>
 <rect x="779.4" y="233.0" width="34.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">4/13</text>
+<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">6/13</text>
 <text x="16.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 7  Windows GUI apps</text>
 <g><title>win32k services: windows, message queues, input routing, hooks, timers</title>
 <rect x="340.0" y="263.0" width="32.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
@@ -396,7 +396,7 @@
 </g>
 <text x="884.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/12</text>
 <text x="16.0" y="365.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start">10  macOS GUI apps and Liquid Glass</text>
-<g><title>Window server: Quartz / CoreGraphics windows composited by our compositor, global menu bar handling</title>
+<g><title>Window server: Quartz / CoreGraphics windows composited by our compositor, menu bars drawn in-window (owner decision, ADR 0107)</title>
 <rect x="340.0" y="353.0" width="45.6" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Core Text and font rendering matching macOS</title>
