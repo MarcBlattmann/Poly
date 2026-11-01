@@ -55,6 +55,13 @@ impl LinuxFs for Thread<'_> {
         self.fifo_open_wait(fd)
     }
 
+    fn openat2(&mut self, dirfd: i32, path: &[u8], flags: u32, mode: u32, resolve: u64) -> Result<i32, Errno> {
+        let files = &self.process().files;
+        let resolve = poly_vfs::Resolve::from_bits(resolve);
+        let fd = files.openat2(dirfd, path, OpenFlags::from_bits(flags), mode as u16, resolve).map_err(vfs_errno)?;
+        self.fifo_open_wait(fd)
+    }
+
     fn check_fd_free(&mut self) -> Result<(), Errno> {
         self.process().files.check_fd_free().map_err(vfs_errno)
     }
@@ -192,6 +199,11 @@ impl LinuxFs for Thread<'_> {
         Ok(())
     }
 
+    fn unshare_fs_context(&mut self) -> Result<(), Errno> {
+        self.process().files.unshare_context();
+        Ok(())
+    }
+
     fn test_lock(
         &mut self,
         fd: i32,
@@ -318,6 +330,10 @@ impl LinuxFs for Thread<'_> {
 
     fn fchmodat(&mut self, dirfd: i32, path: &[u8], mode: u32) -> Result<(), Errno> {
         self.process().files.fchmodat(dirfd, path, mode as u16).map_err(vfs_errno)
+    }
+
+    fn fchmodat2(&mut self, dirfd: i32, path: &[u8], mode: u32, follow: bool) -> Result<(), Errno> {
+        self.process().files.fchmodat2(dirfd, path, mode as u16, follow).map_err(vfs_errno)
     }
 
     fn fchownat(

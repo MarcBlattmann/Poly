@@ -622,6 +622,22 @@ fn wait_now(ep: &Epoll, max: usize) -> Vec<EpollEvent> {
 }
 
 #[test]
+fn epoll_targets_by_number_and_offset() {
+    let env = Env::new();
+    let (ep, _) = epoll_file(&env);
+    let (r, w) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+    let (r2, _w2) = pipe_files(&env, OpenFlags::NONBLOCK, false);
+    ep.ctl(EpollOp::Add, 3, &r, ev(PollEvents::IN, 0, 1)).unwrap();
+    ep.ctl(EpollOp::Add, 3, &r2, ev(PollEvents::IN, 0, 2)).unwrap();
+    ep.ctl(EpollOp::Add, 4, &w, ev(PollEvents::OUT, 0, 3)).unwrap();
+    assert!(Arc::ptr_eq(&ep.target(4, 0).unwrap(), &w));
+    let both = [ep.target(3, 0).unwrap(), ep.target(3, 1).unwrap()];
+    assert!(both.iter().any(|f| Arc::ptr_eq(f, &r)) && both.iter().any(|f| Arc::ptr_eq(f, &r2)));
+    assert!(ep.target(3, 2).is_none());
+    assert!(ep.target(5, 0).is_none());
+}
+
+#[test]
 fn epoll_level_triggered_reports_while_ready() {
     let env = Env::new();
     let (ep, _) = epoll_file(&env);

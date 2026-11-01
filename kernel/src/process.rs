@@ -159,6 +159,8 @@ struct Threads {
     /// ([`Process::thread_exiting`]): the process's status without a group
     /// exit.
     last_exiting: Option<ExitStatus>,
+    /// Live threads that have started to exit ([`Process::thread_exiting`]).
+    exiting: Vec<u32>,
     /// Set when the last thread has gone.
     status: Option<ExitStatus>,
 }
@@ -332,6 +334,7 @@ impl Process {
         let status = {
             let mut t = self.threads.lock();
             t.live.retain(|(id, _)| *id != tid);
+            t.exiting.retain(|&id| id != tid);
             self.live.store(t.live.len() as u32, Ordering::SeqCst);
             if !t.live.is_empty() || t.status.is_some() {
                 drop(t);
@@ -364,7 +367,22 @@ impl Process {
         let mut t = self.threads.lock();
         if t.live.iter().any(|(id, _)| *id == tid) {
             t.last_exiting = Some(own);
+            if !t.exiting.contains(&tid) {
+                t.exiting.push(tid);
+            }
         }
+    }
+
+    /// Whether the process has ended or every live thread has started to
+    /// exit (it no longer runs user code: pidfd_getfd(2) and
+    /// process_vm_readv(2) treat it as gone, as once its last thread has
+    /// cleared its `clear_child_tid` word).
+    pub fn is_ending(&self) -> bool {
+        if self.has_ended() {
+            return true;
+        }
+        let t = self.threads.lock();
+        t.status.is_some() || t.live.iter().all(|(id, _)| t.exiting.contains(id))
     }
 
     /// The process's exit is complete (after [`detach_thread`] and the

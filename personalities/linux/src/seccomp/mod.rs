@@ -20,12 +20,12 @@
 //!   the process the same way when it is the only thread; `TRAP` sends
 //!   `SIGSYS` (`SYS_SECCOMP`, `si_call_addr`, `si_syscall`, `si_arch`,
 //!   `si_errno` = the data); `ERRNO` returns `-data` (at most 4095, the
-//!   largest errno); `TRACE` without a tracer and `USER_NOTIF` without a
-//!   listener (Poly has neither) fail the call with `ENOSYS`; `LOG` runs
+//!   largest errno); `TRACE` without a tracer and `USER_NOTIF` (Poly's
+//!   listeners are never notified) fail the call with `ENOSYS`; `LOG` runs
 //!   the call and tells the kernel to log it; `ALLOW` runs it. A call not
-//!   run leaves `rax` as the action says; after `TRAP` it is `-ENOSYS`
-//!   unless the handler changes it (Poly's choice, to be confirmed by the
-//!   diff runner).
+//!   run leaves `rax` as the action says; after `TRAP` the registers are
+//!   as at entry, so the call appears to return its own number (seccomp's
+//!   spec sheet).
 //! - **Strict mode**: only read(2), write(2), _exit(2) and rt_sigreturn(2);
 //!   anything else is `SIGKILL` for the process.
 //!
@@ -54,6 +54,8 @@ pub struct Filter {
     program: Program,
     /// `SECCOMP_FILTER_FLAG_LOG`: log every action but `ALLOW`.
     log: bool,
+    /// Installed with `SECCOMP_FILTER_FLAG_NEW_LISTENER`.
+    listener: bool,
     prev: Option<Arc<Filter>>,
     /// Instructions of this filter and every earlier one, each earlier one
     /// counted with [`PATH_PENALTY`] more (seccomp(2), `ENOMEM`).
@@ -230,8 +232,8 @@ impl Action {
     }
 
     /// Whether `SECCOMP_GET_ACTION_AVAIL` reports the action as
-    /// supported. `USER_NOTIF` is not: Poly cannot create listeners
-    /// (`SECCOMP_FILTER_FLAG_NEW_LISTENER` is `EINVAL`).
+    /// supported: every action the header defines, given exactly (data
+    /// bits 0).
     pub const fn available(action: u32) -> bool {
         matches!(
             action,
@@ -239,6 +241,7 @@ impl Action {
                 | SECCOMP_RET_KILL_THREAD
                 | SECCOMP_RET_TRAP
                 | SECCOMP_RET_ERRNO
+                | SECCOMP_RET_USER_NOTIF
                 | SECCOMP_RET_TRACE
                 | SECCOMP_RET_LOG
                 | SECCOMP_RET_ALLOW
@@ -306,7 +309,7 @@ pub fn check(k: &mut dyn LinuxKernel, regs: &mut SyscallRegs) -> Verdict {
             Verdict::Skip
         }
         Action::Trap(data) => {
-            regs.rax = Errno::ENOSYS.to_rax();
+            // `rax` keeps the call's number: the registers are as at entry.
             force_signal(k, sigsys(ip, regs_nr, data));
             Verdict::Skip
         }
@@ -370,10 +373,34 @@ pub enum Installed {
     Blocked(i32),
 }
 
+/// How a filter is installed (`SECCOMP_SET_MODE_FILTER`'s flags).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FilterOptions {
+    /// `SECCOMP_FILTER_FLAG_LOG`.
+    pub log: bool,
+    /// `SECCOMP_FILTER_FLAG_NEW_LISTENER`.
+    pub listener: bool,
+}
+
+/// Whether a filter of the calling thread's chain was installed with a
+/// listener (a second one is `EBUSY`).
+pub fn has_listener(k: &mut dyn LinuxKernel) -> bool {
+    let tid = k.tid();
+    with_own(k, |p| match &p.thread(tid).seccomp {
+        Seccomp::Filter(f) => f.chain().any(|f| f.listener),
+        _ => false,
+    })
+}
+
 /// Install `program` on the calling thread (`SECCOMP_SET_MODE_FILTER`),
 /// and on every other thread of the process with `tsync`. Fails with
 /// `EINVAL` in strict mode, `ENOMEM` past [`MAX_INSNS_PER_PATH`].
-pub fn install(k: &mut dyn LinuxKernel, program: Program, log: bool, tsync: bool) -> Result<Installed, Errno> {
+pub fn install(
+    k: &mut dyn LinuxKernel,
+    program: Program,
+    opts: FilterOptions,
+    tsync: bool,
+) -> Result<Installed, Errno> {
     let tid = k.tid();
     let done = with_own(k, |p| {
         let mine = p.thread(tid).seccomp.clone();
@@ -387,7 +414,7 @@ pub fn install(k: &mut dyn LinuxKernel, program: Program, log: bool, tsync: bool
         if path_len > MAX_INSNS_PER_PATH {
             return Err(Errno::ENOMEM);
         }
-        let new = Arc::new(Filter { program, log, prev, path_len });
+        let new = Arc::new(Filter { program, log: opts.log, listener: opts.listener, prev, path_len });
         if tsync {
             let others: Vec<i32> = p.thread_ids().filter(|&t| t != tid).collect();
             if let Some(&blocked) = others.iter().find(|&&t| !p.thread(t).seccomp.can_sync_to(&new)) {

@@ -285,11 +285,12 @@ pub fn exit_to_user(k: &mut dyn LinuxKernel) -> ExitToUser {
             }
             Step::Handle { info, action, saved_mask, current_mask, altstack } => {
                 let mut ctx = k.user_context();
+                // A call that fails with EINTR keeps its restart block
+                // while the handler runs: restart_syscall(2) there resumes
+                // it (restart_syscall's spec sheet); rt_sigreturn(2) drops
+                // it.
                 if let Some(r) = pending_restart.take() {
-                    let decision = restart::apply(&mut ctx, &r, Some(action.flags));
-                    if decision == Decision::Eintr {
-                        with_own(k, |p| p.thread_mut(tid).restart_block = None);
-                    }
+                    restart::apply(&mut ctx, &r, Some(action.flags));
                 }
                 let signal = info.signal();
                 // rseq(2): a restartable sequence the signal interrupts is

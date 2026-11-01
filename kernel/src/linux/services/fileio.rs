@@ -40,9 +40,44 @@ use poly_vfs::poll::{PollEntry, PollTarget};
 use poly_vfs::timerfd::{TimerClock, TimerFd, TimerSpec};
 use poly_vfs::{FileObject, PollEvents, Timeout};
 
+/// A seccomp user notification descriptor
+/// (`SECCOMP_FILTER_FLAG_NEW_LISTENER`). Poly's filters never notify
+/// (`SECCOMP_RET_USER_NOTIF` fails the call with `ENOSYS`), so it never
+/// has anything to read: it exists so the descriptor is there, named
+/// `anon_inode:seccomp notify` (ADR 0121).
+struct SeccompNotify;
+
+impl FileObject for SeccompNotify {
+    fn read(&self, _buf: &mut [u8]) -> poly_vfs::Result<usize> {
+        Err(poly_vfs::Errno::EINVAL)
+    }
+
+    fn write(&self, _buf: &[u8]) -> poly_vfs::Result<usize> {
+        Err(poly_vfs::Errno::EINVAL)
+    }
+
+    fn poll(&self) -> PollEvents {
+        PollEvents::NONE
+    }
+
+    fn wait_queue(&self) -> Option<&Arc<poly_vfs::WaitQueue>> {
+        None
+    }
+
+    fn anon_name(&self) -> Option<&'static str> {
+        Some("seccomp notify")
+    }
+}
+
 impl Thread<'_> {
     pub(in crate::linux) fn blocker(&self) -> ThreadBlocker<'_> {
         ThreadBlocker::new(self.process, Arc::clone(&self.flags))
+    }
+
+    /// `LinuxKernel::seccomp_listener`: `O_RDWR`, close-on-exec.
+    pub(super) fn seccomp_listener_fd(&self) -> Result<i32, Errno> {
+        let new = NewFd { nonblock: false, cloexec: true };
+        self.install_object(Arc::new(SeccompNotify), FileType::Regular, OpenFlags::RDWR, new)
     }
 
     fn file(&self, fd: Fd) -> Result<Arc<OpenFile>, Errno> {

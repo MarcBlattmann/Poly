@@ -219,14 +219,22 @@ pub fn tgkill(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 
 /// tkill(tid, sig): tgkill without the process check (tgkill(2): "tkill()
 /// is an obsolete predecessor to tgkill()").
+/// The checks run in the order of tkill's spec sheet: `tid <= 0`
+/// (`EINVAL`), the thread (`ESRCH`), the signal number (`EINVAL`), then
+/// permission (`EPERM`).
 pub fn tkill(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let tid = a.int(0);
-    let sig = signal_number(a.int(1), true)?;
     if tid <= 0 {
         return Err(Errno::EINVAL);
     }
-    let info = sender_info(k, sig, SI_TKILL);
     let tid = pid::find(k, tid)?;
+    let mut exists = false;
+    k.with_process(Target::Thread(tid), &mut |p, _| exists = p.has_thread(tid))?;
+    if !exists {
+        return Err(Errno::ESRCH);
+    }
+    let sig = signal_number(a.int(1), true)?;
+    let info = sender_info(k, sig, SI_TKILL);
     send(k, Target::Thread(tid), Some(tid), None, info)?;
     Ok(0)
 }
@@ -268,16 +276,45 @@ pub fn rt_sigqueueinfo(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     Ok(0)
 }
 
-/// rt_tgsigqueueinfo(tgid, tid, sig, info): the same for one thread, with
-/// tgkill(2)'s rules for the ids.
+/// Whether the kernel knows the layout of a caller's siginfo with `code`
+/// (rt_tgsigqueueinfo's spec sheet): then the bytes past the first 48
+/// are ignored, else they must be zero (`E2BIG`). Known: the user codes
+/// `SI_USER` (0), -1 to -7 and `SI_ASYNCNL` (-60), `SI_KERNEL` (0x80) and
+/// the small positive codes of the kernel's own signals.
+pub const fn known_info_layout(code: i32) -> bool {
+    matches!(code, -7..=0 | -60 | 1..=0x80)
+}
+
+/// rt_tgsigqueueinfo(tgid, tid, sig, info): send `sig` with the caller's
+/// siginfo to thread `tid` of process `tgid`. In the order of the spec
+/// sheet: `info` is read (`EFAULT`) and its layout checked (`E2BIG`), the
+/// ids (`EINVAL` if not positive), the code (`EPERM` for a code that is
+/// not negative, or `SI_TKILL`, unless `tid` is the caller's own thread),
+/// the thread (`ESRCH`, also for a thread of another process), the signal
+/// number (`EINVAL`), then kill(2)'s permission (`EPERM`). The receiver
+/// gets the caller's siginfo with `si_signo` set to `sig`.
 pub fn rt_tgsigqueueinfo(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (tgid, tid) = (a.int(0), a.int(1));
-    let sig = signal_number(a.int(2), true)?;
+    let mut raw = [0; SigInfo::SIZE];
+    k.copy_from_user(a.ptr(3), &mut raw)?;
+    let mut info = SigInfo::from_bytes(&raw);
+    if !known_info_layout(info.code) && raw[QUEUED_INFO_BYTES..].iter().any(|&b| b != 0) {
+        return Err(Errno::E2BIG);
+    }
     if tgid <= 0 || tid <= 0 {
         return Err(Errno::EINVAL);
     }
-    let info = queued_info(k, a.ptr(3), sig, tgid)?;
+    if (info.code >= 0 || info.code == SI_TKILL) && tid != pid::view(k, k.tid()) {
+        return Err(Errno::EPERM);
+    }
     let (tgid, tid) = (pid::find(k, tgid)?, pid::find(k, tid)?);
+    let mut found = false;
+    k.with_process(Target::Thread(tid), &mut |p, pi| found = pi.pid == tgid && p.has_thread(tid))?;
+    if !found {
+        return Err(Errno::ESRCH);
+    }
+    let sig = signal_number(a.int(2), true)?;
+    info.signo = sig as i32;
     send(k, Target::Thread(tid), Some(tid), Some(tgid), info)?;
     Ok(0)
 }
@@ -321,6 +358,21 @@ pub fn rt_sigsuspend(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         t.saved_mask.get_or_insert(t.mask);
         t.mask = mask;
     });
+    loop {
+        k.clear_signal_notification();
+        if with_own(k, |p| p.has_deliverable(tid)) {
+            return Err(Errno::RESTART_IF_NO_HANDLER);
+        }
+        k.block(None);
+    }
+}
+
+/// pause(): sleep until a signal runs a handler (then `EINTR`, also with
+/// `SA_RESTART`: pause's spec sheet) or ends the process. Ignored and
+/// blocked signals do not end it; after a stop and `SIGCONT` it sleeps on
+/// (the call restarts when no handler ran).
+pub fn pause(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
+    let tid = k.tid();
     loop {
         k.clear_signal_notification();
         if with_own(k, |p| p.has_deliverable(tid)) {

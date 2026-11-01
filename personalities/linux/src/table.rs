@@ -49,6 +49,7 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::FORK, task::fork),
     (nr::VFORK, task::vfork),
     (nr::EXECVE, task::execve),
+    (nr::EXECVEAT, task::execveat),
     (nr::EXIT, process::exit),
     (nr::WAIT4, task::wait4),
     (nr::KILL, signal::kill),
@@ -67,6 +68,7 @@ pub const IMPLEMENTED: &[(u64, Handler)] = &[
     (nr::RT_SIGTIMEDWAIT, signal::rt_sigtimedwait),
     (nr::RT_SIGQUEUEINFO, signal::rt_sigqueueinfo),
     (nr::RT_SIGSUSPEND, signal::rt_sigsuspend),
+    (nr::PAUSE, signal::pause),
     (nr::SIGALTSTACK, signal::sigaltstack),
     (nr::ARCH_PRCTL, process::arch_prctl),
     (nr::GETTID, process::gettid),
@@ -177,6 +179,8 @@ pub const FILE_SYSTEM: &[(u64, Handler)] = &[
     (nr::RENAMEAT2, path::renameat2),
     (nr::STATX, path::statx),
     (nr::FACCESSAT2, path::faccessat2),
+    (nr::OPENAT2, path::openat2),
+    (nr::FCHMODAT2, path::fchmodat2),
     (nr::CLOSE_RANGE, fd::close_range),
     (nr::FLOCK, fd::flock),
 ];
@@ -210,6 +214,11 @@ pub const GROUPS: &[&[(u64, Handler)]] = &[
     crate::sys::rwv::CALLS,
     crate::sys::falloc::CALLS,
     crate::sys::msg::CALLS,
+    crate::sys::futex2::CALLS,
+    crate::sys::procaccess::CALLS,
+    crate::sys::pkey::CALLS,
+    crate::sys::ioprio::CALLS,
+    crate::sys::personality::CALLS,
 ];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();
@@ -373,6 +382,7 @@ mod tests {
             "select",
             "mremap",
             "msync",
+            "pause",
             "getpid",
             "clone",
             "fork",
@@ -441,6 +451,7 @@ mod tests {
             "pipe2",
             "rt_tgsigqueueinfo",
             "getrandom",
+            "execveat",
             "clone3",
             "epoll_pwait2",
         ];

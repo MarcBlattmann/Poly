@@ -51,7 +51,7 @@ fn spans(m: &Map) -> Vec<(u64, u64, Prot)> {
 }
 
 fn region(start: u64, end: u64, prot: Prot, kind: Kind, backing: Backing<u32>) -> Vma<u32> {
-    Vma { start, end, prot, max_prot: Prot::ALL, kind, backing, wipe_on_fork: false }
+    Vma { start, end, prot, max_prot: Prot::ALL, kind, backing, wipe_on_fork: false, locked: false }
 }
 
 fn anon_vma(start: u64, end: u64, prot: Prot) -> Vma<u32> {
@@ -932,4 +932,45 @@ fn remap_errors_change_nothing() {
     // The stack is not remapped.
     let stack = m.setup_stack(4 * P, Prot::RW).unwrap();
     assert_eq!(e(&mut m, stack, P, 2 * P, RemapPlacement::MayMove), Some(Error::Fault));
+}
+
+#[test]
+fn locks_split_merge_and_count() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 8, Prot::RW);
+    m.set_locked(MIN + P, 2 * P, true).unwrap();
+    assert_eq!(m.region_count(), 3);
+    assert_eq!(m.locked_bytes(), 2 * P);
+    assert_eq!(m.locked_bytes_in(MIN, MIN + 2 * P), P);
+    m.set_locked(MIN + 2 * P, 2 * P, true).unwrap();
+    assert_eq!(m.locked_bytes(), 3 * P, "locked pages count once");
+    m.set_locked(MIN, 8 * P, false).unwrap();
+    assert_eq!((m.region_count(), m.locked_bytes()), (1, 0), "merged back");
+    assert_eq!(m.set_locked(MIN + P, P + 1, true), Err(Error::Invalid));
+}
+
+#[test]
+fn lock_stops_at_a_hole() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 2, Prot::RW);
+    fixed(&mut m, MIN + 3 * P, 2, Prot::READ);
+    assert_eq!(m.set_locked(MIN, 5 * P, true), Err(Error::NoMemory));
+    assert_eq!(m.locked_bytes(), 2 * P, "before the hole only");
+    m.set_all_locked(true);
+    assert_eq!(m.locked_bytes(), 4 * P);
+    m.set_all_locked(false);
+    assert_eq!(m.locked_bytes(), 0);
+    assert_eq!(m.mapped_bytes(), 4 * P);
+}
+
+#[test]
+fn future_locks_apply_to_new_mappings() {
+    let mut m = map_with(small());
+    m.set_lock_future(Some(FutureLock::OnFault));
+    fixed(&mut m, MIN, 2, Prot::RW);
+    assert_eq!(m.locked_bytes(), 2 * P);
+    m.set_lock_future(None);
+    fixed(&mut m, MIN + 4 * P, 1, Prot::RW);
+    assert_eq!(m.locked_bytes(), 2 * P);
+    assert_eq!(m.lock_future(), None);
 }

@@ -169,6 +169,9 @@ pub struct OpenFile {
     /// Opened to run the file as a program: while it lives, the inode
     /// cannot be written (`ETXTBSY`).
     denies_write: bool,
+    /// Opened for writing a regular file: while it lives, the inode
+    /// cannot be run as a program (`ETXTBSY`, execve(2)).
+    counts_writer: bool,
 }
 
 impl OpenFile {
@@ -200,7 +203,16 @@ impl OpenFile {
             never_named: false,
             memfd: None,
             denies_write: false,
+            counts_writer: false,
         }
+    }
+
+    /// An open file that writes its inode: execve(2) of it is `ETXTBSY`
+    /// until it is dropped.
+    pub(crate) fn counting_writer(mut self) -> OpenFile {
+        self.node.loc().mount.sb.add_writer(self.node.ino());
+        self.counts_writer = true;
+        self
     }
 
     /// An open file that runs its inode as a program: writers get
@@ -778,6 +790,9 @@ impl Drop for OpenFile {
     fn drop(&mut self) {
         if self.denies_write {
             self.node.loc().mount.sb.allow_write(self.node.ino());
+        }
+        if self.counts_writer {
+            self.node.loc().mount.sb.drop_writer(self.node.ino());
         }
         if crate::inotify::active() && matches!(self.backend, Backend::Inode | Backend::Device(_)) {
             use crate::inotify::mask::{IN_CLOSE_NOWRITE, IN_CLOSE_WRITE};

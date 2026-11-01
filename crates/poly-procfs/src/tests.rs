@@ -28,6 +28,10 @@ struct Fake {
     pids: Mutex<Vec<u32>>,
     /// What was written to uid_map: (pid, offset, data).
     uid_map: Mutex<Vec<(u32, u64, Vec<u8>)>>,
+    /// Pins of namespace files: (inum, kind) to the count.
+    pins: Mutex<std::collections::BTreeMap<(u32, usize), i32>>,
+    /// What was written to hostname and domainname.
+    names: Mutex<Vec<(KernelName, Vec<u8>)>>,
 }
 
 /// Process 42's namespaces have inode numbers 100 + kind (pid 1's: 200 +
@@ -51,6 +55,7 @@ fn maps_of(pid: u32) -> Vec<MapEntry> {
         dev: (0, 1),
         ino: 77,
         name: MapName::Path(EXE.to_vec()),
+        locked: false,
     };
     let mut v = std::vec![
         file(0x40_0000, 0x40_1000, false, false, 0),
@@ -62,6 +67,7 @@ fn maps_of(pid: u32) -> Vec<MapEntry> {
             read: true,
             write: true,
             name: MapName::Heap,
+            locked: true,
             ..Default::default()
         },
         MapEntry {
@@ -299,10 +305,20 @@ impl ProcSource for Fake {
     }
 
     fn namespace(&self, pid: u32, kind: usize) -> Option<u32> {
-        if NS_KINDS[kind] == "pid_for_children" {
-            return fake_inum(pid, 3);
+        match NS_KINDS[kind] {
+            "pid_for_children" => fake_inum(pid, 3),
+            "time_for_children" => fake_inum(pid, 8),
+            _ => fake_inum(pid, kind),
         }
-        fake_inum(pid, kind)
+    }
+
+    fn pin_namespace(&self, inum: u32, kind: usize, pin: bool) {
+        *self.pins.lock().unwrap().entry((inum, kind)).or_default() += if pin { 1 } else { -1 };
+    }
+
+    fn write_kernel_name(&self, which: KernelName, _offset: u64, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        self.names.lock().unwrap().push((which, data.to_vec()));
+        Ok(data.len())
     }
 
     fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
@@ -549,7 +565,12 @@ fn process_directories_name_their_process() {
 #[test]
 fn namespace_links_and_id_maps() {
     let e = env();
-    assert_eq!(names(&e.list("/proc/42/ns")), [".", "..", "ipc", "mnt", "pid", "pid_for_children", "user", "uts"]);
+    assert_eq!(
+        names(&e.list("/proc/42/ns")),
+        [".", "..", "ipc", "mnt", "pid", "pid_for_children", "user", "uts", "cgroup", "time", "time_for_children"]
+    );
+    assert_eq!(e.readlink("/proc/42/ns/time_for_children").unwrap(), b"time:[108]");
+    assert_eq!(e.readlink("/proc/42/ns/cgroup").unwrap(), b"cgroup:[107]");
     assert_eq!(e.readlink("/proc/42/ns/uts").unwrap(), b"uts:[106]");
     assert_eq!(e.readlink("/proc/42/ns/pid_for_children").unwrap(), b"pid:[103]");
     assert_eq!(e.readlink("/proc/1/ns/net").unwrap(), b"net:[202]");
@@ -561,7 +582,13 @@ fn namespace_links_and_id_maps() {
     let f = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/self/ns/user", OpenFlags::RDONLY, 0).unwrap();
     assert_eq!(namespace_file(f.node().ino()), Some((105, 5)));
     let by_name = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/1/ns/user:[105]", true).unwrap();
-    assert_eq!(by_name.ino, f.node().ino());
+    assert_eq!(by_name.ino, 105, "a namespace file's inode number is the namespace's");
+    // An open namespace file pins its namespace, until it is closed.
+    assert!(e.fake.pins.lock().unwrap().get(&(105, 5)).is_some_and(|&n| n > 0));
+    let time = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/ns/time_for_children", OpenFlags::RDONLY, 0).unwrap();
+    assert_eq!(namespace_file(time.node().ino()), Some((108, 8)), "the time namespace itself");
+    drop(time);
+    assert_eq!(e.fake.pins.lock().unwrap().get(&(108, 8)), Some(&0));
     let mut buf = [0u8; 8];
     assert_eq!(f.read(&mut buf), Err(poly_vfs::Errno::EINVAL));
     assert_eq!(e.read("/proc/42/ns/net:[999]"), Err(poly_vfs::Errno::ENOENT));
@@ -578,6 +605,12 @@ fn namespace_links_and_id_maps() {
     assert_eq!(*e.fake.uid_map.lock().unwrap(), [(42, 0, b"0 1000 1\n".to_vec())]);
     let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/gid_map", OpenFlags::WRONLY, 0).unwrap();
     assert_eq!(w.write(b"0 1000 1\n"), Err(poly_vfs::Errno::EPERM));
+    // So are the host and domain names.
+    let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/sys/kernel/hostname", OpenFlags::WRONLY, 0).unwrap();
+    assert_eq!(w.write(b"box\n"), Ok(4));
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/sys/kernel/domainname", true).unwrap();
+    assert_eq!(st.mode & 0o777, 0o644);
+    assert_eq!(*e.fake.names.lock().unwrap(), [(KernelName::Host, b"box\n".to_vec())]);
     // Other files stay read-only.
     let w = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/comm", OpenFlags::WRONLY, 0);
     assert_eq!(w.err(), Some(poly_vfs::Errno::EROFS));
@@ -640,6 +673,7 @@ fn status_reports_the_process() {
         "VmStk:\t     132 kB\n",
         "VmExe:\t       8 kB\n",
         "VmLib:\t       8 kB\n",
+        "VmLck:\t     128 kB\n",
         "Threads:\t3\n",
         "SigQ:\t1/4096\n",
         "ShdPnd:\t0000000000000200\n",

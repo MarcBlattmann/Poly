@@ -305,6 +305,11 @@ pub struct Vma<F> {
     /// `MADV_WIPEONFORK` (madvise(2)): a child made by fork gets the range
     /// zero-filled instead of a copy. Private anonymous memory only.
     pub wipe_on_fork: bool,
+    /// Locked in memory (mlock(2), mlock2(2), mlockall(2), `MAP_LOCKED`):
+    /// counted in `VmLck` and against `RLIMIT_MEMLOCK`. Poly never pages
+    /// memory out, so the flag is bookkeeping; populating a locked range is
+    /// the kernel's job (unless the lock was made "on fault").
+    pub locked: bool,
 }
 
 impl<F: Clone + PartialEq> Vma<F> {
@@ -361,6 +366,7 @@ impl<F: Clone + PartialEq> Vma<F> {
             kind: self.kind,
             backing,
             wipe_on_fork: self.wipe_on_fork,
+            locked: self.locked,
         }
     }
 
@@ -372,6 +378,7 @@ impl<F: Clone + PartialEq> Vma<F> {
             && self.max_prot == next.max_prot
             && self.kind == next.kind
             && self.wipe_on_fork == next.wipe_on_fork
+            && self.locked == next.locked
             && match (&self.backing, &next.backing) {
                 (Backing::Anonymous, Backing::Anonymous) => true,
                 (
@@ -712,6 +719,19 @@ pub struct VmMap<F> {
     /// Regions keyed by their start address.
     vmas: BTreeMap<u64, Vma<F>>,
     brk: Option<BrkState>,
+    /// mlockall(2) `MCL_FUTURE`: new regions start locked; the value says
+    /// whether only on fault (`MCL_ONFAULT`), i.e. whether the kernel
+    /// leaves them unpopulated.
+    lock_future: Option<FutureLock>,
+}
+
+/// How mlockall(2) `MCL_FUTURE` locks new mappings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FutureLock {
+    /// Locked and populated when made.
+    Populate,
+    /// Locked, pages brought in as they are touched (`MCL_ONFAULT`).
+    OnFault,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -726,6 +746,7 @@ enum Op<F> {
     Insert(Vma<F>),
     Protect(Prot),
     WipeOnFork(bool),
+    Lock(bool),
 }
 
 impl<F: Clone + PartialEq> VmMap<F> {
@@ -733,7 +754,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
     /// page-aligned and ordered.
     pub fn new(layout: Layout) -> Result<VmMap<F>, Error> {
         layout.check()?;
-        Ok(VmMap { layout, vmas: BTreeMap::new(), brk: None })
+        Ok(VmMap { layout, vmas: BTreeMap::new(), brk: None, lock_future: None })
     }
 
     pub fn layout(&self) -> &Layout {
@@ -831,8 +852,16 @@ impl<F: Clone + PartialEq> VmMap<F> {
             }
             Placement::Hint(hint) => self.place(hint, len).ok_or(Error::NoMemory)?,
         };
-        let vma =
-            Vma { start: addr, end: addr + len, prot, max_prot, kind: Kind::Normal, backing, wipe_on_fork: false };
+        let vma = Vma {
+            start: addr,
+            end: addr + len,
+            prot,
+            max_prot,
+            kind: Kind::Normal,
+            backing,
+            wipe_on_fork: false,
+            locked: self.lock_future.is_some(),
+        };
         let replaced = self.rewrite(addr, addr + len, Op::Insert(vma))?;
         Ok(Mapped { addr, replaced })
     }
@@ -919,6 +948,67 @@ impl<F: Clone + PartialEq> VmMap<F> {
             self.rewrite(s, e, Op::WipeOnFork(on))?;
         }
         if hole { Err(Error::NoMemory) } else { Ok(()) }
+    }
+
+    /// Lock (`on`) or unlock the regions of `[addr, addr + len)` (page
+    /// aligned, `len` non-zero; mlock(2) / munlock(2) bookkeeping). The
+    /// range must be mapped: at the first hole the call stops with
+    /// [`Error::NoMemory`], the regions before it already changed and
+    /// nothing after it (mlock2's spec sheet).
+    pub fn set_locked(&mut self, addr: u64, len: u64, on: bool) -> Result<(), Error> {
+        let end = addr.checked_add(len).ok_or(Error::NoMemory)?;
+        if !is_page_aligned(addr) || !is_page_aligned(end) || len == 0 {
+            return Err(Error::Invalid);
+        }
+        let mut covered = addr;
+        let mut parts = Vec::new();
+        for v in self.regions_in(addr, end) {
+            if v.start > covered {
+                break;
+            }
+            parts.push((v.start.max(addr), v.end.min(end)));
+            covered = v.end;
+        }
+        for (s, e) in parts {
+            self.rewrite(s, e, Op::Lock(on))?;
+        }
+        if covered < end { Err(Error::NoMemory) } else { Ok(()) }
+    }
+
+    /// Lock or unlock every region (mlockall(2) `MCL_CURRENT`,
+    /// munlockall(2)).
+    pub fn set_all_locked(&mut self, on: bool) {
+        let ranges: Vec<(u64, u64)> = self.vmas.values().map(|v| (v.start, v.end)).collect();
+        for (s, e) in ranges {
+            // Changing a flag on whole regions never splits one: the map
+            // count cannot grow.
+            let _ = self.rewrite(s, e, Op::Lock(on));
+        }
+    }
+
+    /// The `MCL_FUTURE` setting: new regions are created locked while it
+    /// is `Some`.
+    pub fn lock_future(&self) -> Option<FutureLock> {
+        self.lock_future
+    }
+
+    pub fn set_lock_future(&mut self, future: Option<FutureLock>) {
+        self.lock_future = future;
+    }
+
+    /// Bytes in locked regions (`VmLck`).
+    pub fn locked_bytes(&self) -> u64 {
+        self.vmas.values().filter(|v| v.locked).map(Vma::size).sum()
+    }
+
+    /// Bytes of `[addr, end)` in locked regions.
+    pub fn locked_bytes_in(&self, addr: u64, end: u64) -> u64 {
+        self.regions_in(addr, end).filter(|v| v.locked).map(|v| v.end.min(end) - v.start.max(addr)).sum()
+    }
+
+    /// Bytes mapped in all (the size of the address space, `VmSize`).
+    pub fn mapped_bytes(&self) -> u64 {
+        self.vmas.values().map(Vma::size).sum()
     }
 
     /// Resize the mapping `[old, old + old_len)` to `new_len` bytes, moving
@@ -1029,6 +1119,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
             kind: Kind::Stack,
             backing: Backing::Anonymous,
             wipe_on_fork: false,
+            locked: self.lock_future.is_some(),
         };
         self.rewrite(start, top, Op::Insert(vma))?;
         Ok(start)
@@ -1091,6 +1182,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
                     kind: Kind::Heap,
                     backing: Backing::Anonymous,
                     wipe_on_fork: false,
+                    locked: self.lock_future.is_some(),
                 };
                 if self.rewrite(old_end, new_end, Op::Insert(vma)).is_err() {
                     return unchanged;
@@ -1291,6 +1383,7 @@ impl<F: Clone + PartialEq> VmMap<F> {
             match op {
                 Op::Protect(prot) => pieces.push(Vma { prot, ..inside }),
                 Op::WipeOnFork(wipe_on_fork) => pieces.push(Vma { wipe_on_fork, ..inside }),
+                Op::Lock(locked) => pieces.push(Vma { locked, ..inside }),
                 Op::Remove | Op::Insert(_) => removed.push(inside),
             }
             if v.end > end {

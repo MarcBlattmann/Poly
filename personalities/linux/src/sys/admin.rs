@@ -45,10 +45,6 @@ fn admin(k: &mut dyn LinuxKernel) -> Result<&mut dyn LinuxAdmin, Errno> {
     k.admin().ok_or(Errno::ENOSYS)
 }
 
-fn require(k: &mut dyn LinuxKernel, capability: u32) -> Result<(), Errno> {
-    if cred::current(k).capable(capability) { Ok(()) } else { Err(Errno::EPERM) }
-}
-
 /// `capability` in the initial user namespace: for what is the whole
 /// system's (device nodes, rebooting).
 fn require_initial(k: &mut dyn LinuxKernel, capability: u32) -> Result<(), Errno> {
@@ -194,6 +190,7 @@ pub fn umount2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 const S_IFMT: u32 = 0o170000;
 const S_IFSOCK: u32 = 0o140000;
 const S_IFREG: u32 = 0o100000;
+const S_IFDIR: u32 = 0o040000;
 const S_IFBLK: u32 = 0o060000;
 const S_IFCHR: u32 = 0o020000;
 const S_IFIFO: u32 = 0o010000;
@@ -202,19 +199,24 @@ fn mknod_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, mode: u32, dev:
     // mknod(2): "zero file type is equivalent to type S_IFREG".
     let mode = if mode & S_IFMT == 0 { mode | S_IFREG } else { mode };
     match mode & S_IFMT {
-        S_IFREG | S_IFIFO | S_IFSOCK => {}
-        // "EPERM mode requested creation of something other than a regular
-        // file, FIFO (named pipe), or UNIX domain socket, and the caller is
-        // not privileged (Linux: does not have the CAP_MKNOD capability)".
-        S_IFCHR | S_IFBLK => require_initial(k, cap::MKNOD)?,
+        S_IFREG | S_IFIFO | S_IFSOCK | S_IFCHR | S_IFBLK => {}
+        // mknod's spec sheet: a directory is EPERM (mknod(2): "EPERM ...
+        // if the file system containing pathname does not support the type
+        // of node requested"), checked before anything else.
+        S_IFDIR => return Err(Errno::EPERM),
         // "EINVAL mode requested creation of something other than a
         // regular file, device special file, FIFO or socket."
         _ => return Err(Errno::EINVAL),
     }
     let path = nonempty_path(k, p)?;
+    // "EPERM mode requested creation of something other than a regular
+    // file, FIFO (named pipe), or UNIX domain socket, and the caller is
+    // not privileged (Linux: does not have the CAP_MKNOD capability)":
+    // decided by the kernel after the lookup (the spec sheet's order).
+    let may_mknod = cred::current(k).capable_initial(cap::MKNOD);
     // The system call's `dev` is an `unsigned int`.
     let dev = dev & 0xffff_ffff;
-    admin(k)?.mknodat(dirfd, &path, mode & (S_IFMT | 0o7777), dev).map(|()| 0)
+    admin(k)?.mknodat(dirfd, &path, mode & (S_IFMT | 0o7777), dev, may_mknod).map(|()| 0)
 }
 
 /// mknodat(dirfd, pathname, mode, dev)
@@ -227,33 +229,37 @@ pub fn mknod(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     mknod_common(k, AT_FDCWD, a.ptr(0), a.uint(1), a.ulong(2))
 }
 
-/// chroot(path): `CAP_SYS_CHROOT` (`EPERM`).
+/// chroot(path): `CAP_SYS_CHROOT` (`EPERM`), checked by the kernel after
+/// the lookup (chroot's spec sheet: "the lookup errors are the same for
+/// every caller").
 pub fn chroot(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    require(k, cap::SYS_CHROOT)?;
     let path = path_arg(k, a.ptr(0))?;
     if path.is_empty() {
         return Err(Errno::ENOENT);
     }
-    admin(k)?.chroot(&path).map(|()| 0)
+    let may_chroot = cred::current(k).capable(cap::SYS_CHROOT);
+    admin(k)?.chroot(&path, may_chroot).map(|()| 0)
 }
 
 // ---- names ------------------------------------------------------------
 
 fn set_name(k: &mut dyn LinuxKernel, a: &Args, which: SystemName) -> SysResult {
-    // sethostname(2): "EINVAL len is negative or ... len is larger than the
-    // maximum allowed size"; "EPERM the caller did not have the
-    // CAP_SYS_ADMIN capability"; "EFAULT name is an invalid address".
-    let len = a.long(1);
-    if len < 0 || len as usize > NAME_MAX_LEN {
-        return Err(Errno::EINVAL);
-    }
+    // sethostname(2): "EPERM the caller did not have the CAP_SYS_ADMIN
+    // capability"; "EINVAL len is negative or ... len is larger than the
+    // maximum allowed size"; "EFAULT name is an invalid address", in this
+    // order (the spec sheets). `len` is an int: the upper half of the
+    // register does not count.
+    //
     // uts_namespaces(7): the names are the caller's UTS namespace's;
     // changing them needs CAP_SYS_ADMIN in the user namespace that owns it.
     let creds = cred::current(k);
     let uts = with_own(k, |p| p.ns.uts.clone());
-    let owner = uts.as_ref().and_then(|u| u.owner().clone());
-    if !crate::ns::user::ns_capable(&creds, &owner, cap::SYS_ADMIN) {
+    if !may_set_names(&creds, &uts) {
         return Err(Errno::EPERM);
+    }
+    let len = a.int(1);
+    if len < 0 || len as usize > NAME_MAX_LEN {
+        return Err(Errno::EINVAL);
     }
     let mut name = alloc::vec![0u8; len as usize];
     k.copy_from_user(a.ptr(0), &mut name)?;
@@ -263,6 +269,23 @@ fn set_name(k: &mut dyn LinuxKernel, a: &Args, which: SystemName) -> SysResult {
         (None, _) => return admin(k)?.set_system_name(which, &name).map(|()| 0),
     }
     Ok(0)
+}
+
+/// What a write of `data` to `/proc/sys/kernel/hostname` or `domainname`
+/// sets the name to (sethostname's spec sheet: "writing \"name\\n\" to it
+/// sets the name (the newline is dropped)"): the bytes up to the first
+/// newline or NUL, at most [`NAME_MAX_LEN`] of them.
+pub fn sysctl_name(data: &[u8]) -> &[u8] {
+    let end = data.iter().position(|&b| b == b'\n' || b == 0).unwrap_or(data.len());
+    &data[..end.min(NAME_MAX_LEN)]
+}
+
+/// May a thread with `creds` change the names of the UTS namespace `uts`
+/// (`None`: the initial one)? `CAP_SYS_ADMIN` in the user namespace that
+/// owns it (uts_namespaces(7)).
+pub fn may_set_names(creds: &cred::Creds, uts: &Option<alloc::sync::Arc<crate::ns::UtsNs>>) -> bool {
+    let owner = uts.as_ref().and_then(|u| u.owner().clone());
+    crate::ns::user::ns_capable(creds, &owner, cap::SYS_ADMIN)
 }
 
 /// sethostname(name, len)

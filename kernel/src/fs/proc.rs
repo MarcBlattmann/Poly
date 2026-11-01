@@ -25,10 +25,11 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use poly_personality_linux::admin::SystemName;
 use poly_personality_linux::ns;
 use poly_procfs::{
-    CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, MapEntry, MapName, MountEntry, Owner, ProcFs, ProcSource,
-    ProcState, ProcessInfo, SignalSets, SystemInfo,
+    CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, KernelName, MapEntry, MapName, MountEntry, Owner, ProcFs,
+    ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo,
 };
 use poly_vfs::{At, Cred, FileType, FsContext, MountFlags, OpenFile, Vfs};
 
@@ -147,7 +148,7 @@ pub fn comm(pid: u32) -> Option<Vec<u8>> {
 
 /// The memory map of process `pid`: the caller's own, or the one recorded
 /// at exec.
-fn memory_of(pid: u32) -> Option<Arc<Memory>> {
+pub(crate) fn memory_of(pid: u32) -> Option<Arc<Memory>> {
     if user::current_process().is_some_and(|p| p.pid == pid) {
         return user::current_memory();
     }
@@ -336,6 +337,7 @@ impl ProcSource for KernelProc {
                     dev,
                     ino,
                     name,
+                    locked: vma.locked,
                 }
             })
             .collect()
@@ -520,11 +522,36 @@ impl ProcSource for KernelProc {
         let kind = ns::Kind::from_index(kind as u32)?;
         let p = find(pid)?;
         let (namespaces, user_ns) = namespaces_of(&p)?;
-        Some(namespaces.inum(kind, &user_ns))
+        namespaces.entry_inum(kind, &user_ns)
     }
 
     fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
         ns::Kind::from_index(kind as u32).is_some_and(|k| ns::lookup(inum, k).is_some())
+    }
+
+    fn pin_namespace(&self, inum: u32, kind: usize, pin: bool) {
+        if let Some(k) = ns::Kind::from_index(kind as u32) {
+            ns::pin(inum, k, pin);
+        }
+    }
+
+    fn write_kernel_name(&self, which: KernelName, _offset: u64, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        use poly_personality_linux::sys::admin::{may_set_names, sysctl_name};
+        // The writer's UTS namespace, with sethostname(2)'s privilege
+        // (sethostname's spec sheet: "with the same permission").
+        let creds = crate::linux::cred::current_creds().ok_or(poly_vfs::Errno::EPERM)?;
+        let uts = user::current_process().and_then(|p| p.linux.as_ref().and_then(|l| l.with(|s| s.ns.uts.clone())));
+        if !may_set_names(&creds, &uts) {
+            return Err(poly_vfs::Errno::EPERM);
+        }
+        let name = sysctl_name(data);
+        match (uts, which) {
+            (Some(u), KernelName::Host) => u.set_hostname(name),
+            (Some(u), KernelName::Domain) => u.set_domainname(name),
+            (None, KernelName::Host) => crate::linux::admin::set_name(SystemName::Host, name),
+            (None, KernelName::Domain) => crate::linux::admin::set_name(SystemName::Domain, name),
+        }
+        Ok(data.len())
     }
 
     fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {

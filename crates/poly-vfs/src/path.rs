@@ -58,6 +58,7 @@ use crate::cred::{Access, Cred};
 use crate::fdtable::At;
 use crate::node::Location;
 use crate::{Errno, FileType, Result, Vfs};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 /// The longest path, including its terminating NUL (`PATH_MAX`, Linux UAPI
@@ -128,6 +129,51 @@ impl<'a> PathArg<'a> {
     }
 }
 
+/// openat2(2)'s restrictions on a resolution (`struct open_how`'s
+/// `resolve`, the `RESOLVE_*` bits of Linux UAPI `linux/openat2.h`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Resolve(u64);
+
+impl Resolve {
+    /// Crossing a mount point either way is `EXDEV`.
+    pub const NO_XDEV: Resolve = Resolve(0x01);
+    /// Following a magic link ([`crate::FileSystem::is_magic_link`]) is
+    /// `ELOOP`.
+    pub const NO_MAGICLINKS: Resolve = Resolve(0x02);
+    /// Following any symbolic link is `ELOOP`.
+    pub const NO_SYMLINKS: Resolve = Resolve(0x04);
+    /// The walk must stay below its starting directory: an absolute path,
+    /// an absolute link target or a `..` at the start is `EXDEV`.
+    pub const BENEATH: Resolve = Resolve(0x08);
+    /// The starting directory is `/` for this walk.
+    pub const IN_ROOT: Resolve = Resolve(0x10);
+    /// Only cached lookups (`EAGAIN` otherwise). Every lookup of Poly's
+    /// file systems counts as cached.
+    pub const CACHED: Resolve = Resolve(0x20);
+    /// Every bit openat2(2) knows.
+    pub const ALL: Resolve = Resolve(0x3f);
+
+    pub const fn empty() -> Resolve {
+        Resolve(0)
+    }
+
+    pub const fn from_bits(bits: u64) -> Resolve {
+        Resolve(bits)
+    }
+
+    pub const fn bits(self) -> u64 {
+        self.0
+    }
+
+    pub const fn contains(self, other: Resolve) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub const fn union(self, other: Resolve) -> Resolve {
+        Resolve(self.0 | other.0)
+    }
+}
+
 /// A resolved location and, when it was found by name, the directory and
 /// the name.
 pub(crate) type Found = (Location, Option<(Location, Vec<u8>)>);
@@ -142,6 +188,10 @@ pub(crate) struct Walk<'a> {
     /// The same with mounts on it followed: what `/` shows.
     root_top: Location,
     links_left: u32,
+    /// openat2(2)'s restrictions; empty for every other call.
+    resolve: Resolve,
+    /// With [`Resolve::BENEATH`], the directory the walk must stay below.
+    beneath: Option<Location>,
 }
 
 /// Checks a path given to a system call: non-empty (`ENOENT`) and shorter
@@ -159,7 +209,36 @@ pub(crate) fn check_path(path: &[u8]) -> Result<()> {
 impl<'a> Walk<'a> {
     pub(crate) fn new(vfs: &'a Vfs, cred: &'a Cred, root: Location) -> Walk<'a> {
         let root_top = vfs.follow_mounts(root.clone());
-        Walk { vfs, cred, root, root_top, links_left: MAX_SYMLINKS }
+        Walk { vfs, cred, root, root_top, links_left: MAX_SYMLINKS, resolve: Resolve::empty(), beneath: None }
+    }
+
+    /// A walk under openat2(2)'s `resolve` restrictions starting at
+    /// `start`: with [`Resolve::IN_ROOT`] `start` is the walk's root, with
+    /// [`Resolve::BENEATH`] the walk must not leave it.
+    pub(crate) fn restricted(
+        vfs: &'a Vfs,
+        cred: &'a Cred,
+        root: Location,
+        start: &Location,
+        resolve: Resolve,
+    ) -> Walk<'a> {
+        let root = if resolve.contains(Resolve::IN_ROOT) { start.clone() } else { root };
+        let mut walk = Walk::new(vfs, cred, root);
+        walk.resolve = resolve;
+        if resolve.contains(Resolve::BENEATH) {
+            walk.beneath = Some(vfs.follow_mounts(start.clone()));
+        }
+        walk
+    }
+
+    /// Looks `name` up in `dir` and follows mounts on it; with
+    /// [`Resolve::NO_XDEV`] landing on another mount is `EXDEV`.
+    pub(crate) fn child(&self, dir: &Location, name: &[u8]) -> Result<Location> {
+        let loc = self.vfs.child(dir, name)?;
+        if self.resolve.contains(Resolve::NO_XDEV) && !Arc::ptr_eq(&loc.mount, &dir.mount) {
+            return Err(Errno::EXDEV);
+        }
+        Ok(loc)
     }
 
     /// What `/` shows for this walk.
@@ -182,6 +261,9 @@ impl<'a> Walk<'a> {
     pub(crate) fn dirs(&mut self, start: Location, path: &[u8]) -> Result<Parent> {
         let mut buf: Vec<u8> = path.to_vec();
         let mut pos = 0;
+        if path.first() == Some(&b'/') && self.beneath.is_some() {
+            return Err(Errno::EXDEV);
+        }
         let mut cur = if path.first() == Some(&b'/') { self.root_top.clone() } else { self.vfs.follow_mounts(start) };
         loop {
             while buf.get(pos) == Some(&b'/') {
@@ -221,7 +303,7 @@ impl<'a> Walk<'a> {
                 b"." => {}
                 b".." => cur = self.dotdot(cur)?,
                 name => {
-                    let child = self.vfs.child(&cur, name)?;
+                    let child = self.child(&cur, name)?;
                     if child.attr()?.kind == FileType::Symlink {
                         let target = self.link_target(&child)?;
                         let mut spliced = Vec::with_capacity(target.len() + 1 + buf.len() - next);
@@ -271,7 +353,7 @@ impl<'a> Walk<'a> {
                 Last::DotDot => return Ok((self.dotdot(p.dir)?, None)),
                 Last::Name(name) => name,
             };
-            let loc = self.vfs.child(&p.dir, &name)?;
+            let loc = self.child(&p.dir, &name)?;
             let kind = loc.attr()?.kind;
             if kind == FileType::Symlink && (follow || p.trailing_slash) {
                 let mut target = self.link_target(&loc)?;
@@ -288,8 +370,17 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// Counts a link against the limit and reads its target.
+    /// Counts a link against the limit and reads its target, the link
+    /// about to be followed. Under openat2(2)'s restrictions following it
+    /// may be refused: any link with [`Resolve::NO_SYMLINKS`], a magic one
+    /// with [`Resolve::NO_MAGICLINKS`] (`ELOOP`), an absolute target with
+    /// [`Resolve::BENEATH`] (`EXDEV`).
     pub(crate) fn link_target(&mut self, link: &Location) -> Result<Vec<u8>> {
+        if self.resolve.contains(Resolve::NO_SYMLINKS)
+            || (self.resolve.contains(Resolve::NO_MAGICLINKS) && link.mount.sb.fs.is_magic_link(link.ino))
+        {
+            return Err(Errno::ELOOP);
+        }
         if self.links_left == 0 {
             return Err(Errno::ELOOP);
         }
@@ -298,18 +389,30 @@ impl<'a> Walk<'a> {
         if target.is_empty() {
             return Err(Errno::ENOENT);
         }
+        if target[0] == b'/' && self.beneath.is_some() {
+            return Err(Errno::EXDEV);
+        }
         Ok(target)
     }
 
     /// The parent of `cur`, staying at the process root and climbing out of
     /// mounts.
+    /// Under openat2(2)'s restrictions `..` at the start of a
+    /// [`Resolve::BENEATH`] walk and, with [`Resolve::NO_XDEV`], out of a
+    /// mount are `EXDEV`.
     pub(crate) fn dotdot(&self, mut cur: Location) -> Result<Location> {
+        if self.beneath.as_ref().is_some_and(|b| cur.same(b)) {
+            return Err(Errno::EXDEV);
+        }
         loop {
             if cur.same(&self.root_top) || cur.same(&self.root) {
                 return Ok(self.root_top.clone());
             }
             if !cur.is_mount_root() {
                 break;
+            }
+            if self.resolve.contains(Resolve::NO_XDEV) {
+                return Err(Errno::EXDEV);
             }
             match &cur.mount.parent {
                 Some((m, ino)) => cur = Location { mount: m.clone(), ino: *ino },

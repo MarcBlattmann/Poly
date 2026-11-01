@@ -11,6 +11,7 @@
 
 use super::pipe::file_io;
 use super::poll::{Waited, ms_timeout, sigmask_arg, timespec_timeout, wait_with_signals};
+use crate::abi::USER_ADDRESS_LIMIT;
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::fileio::{EpollEvent, EpollOp, WaitTime, flags::O_CLOEXEC};
@@ -83,11 +84,31 @@ pub fn epoll_pwait(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 
 /// epoll_pwait2(epfd, events, maxevents, timeout, sigmask, sigsetsize):
 /// epoll_pwait with a `timespec` timeout (null: forever).
+///
+/// Checks in the order of epoll_pwait2's spec sheet: the timeout (`EFAULT`,
+/// `EINVAL`), `sigsetsize` (`EINVAL`), the mask (`EFAULT`), `epfd`
+/// (`EBADF`), `maxevents` (`EINVAL`), the range of `events` (`EFAULT` when
+/// `events + maxevents * 12` is not within user space), then the kernel's
+/// (not an epoll instance: `EINVAL`), and writing the events (`EFAULT`).
 pub fn epoll_pwait2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let max = max_events(a.int(2))?;
     let (wait, _) = timespec_timeout(k, a.ptr(3))?;
     let mask = sigmask_arg(k, a.ptr(4), a.ulong(5))?;
-    wait_events(k, a.fd(0), a.ptr(1), max, wait, mask)
+    let epfd = a.fd(0);
+    // Whether `epfd` is open, asked of the descriptor table (without a
+    // file system service the kernel's epoll_wait says it later).
+    let open = epfd >= 0 && crate::sys::path::fs(k).map_or(true, |fs| fs.cloexec(epfd).is_ok());
+    if !open {
+        return Err(Errno::EBADF);
+    }
+    let max = max_events(a.int(2))?;
+    events_in_range(a.ptr(1), max)?;
+    wait_events(k, epfd, a.ptr(1), max, wait, mask)
+}
+
+/// `EFAULT` unless `max` events at `events` lie within user space.
+fn events_in_range(events: UserPtr, max: usize) -> Result<(), Errno> {
+    let end = events.0.checked_add((max * EpollEvent::SIZE) as u64).ok_or(Errno::EFAULT)?;
+    if end > USER_ADDRESS_LIMIT { Err(Errno::EFAULT) } else { Ok(()) }
 }
 
 fn max_events(max: i32) -> Result<usize, Errno> {
@@ -107,6 +128,10 @@ fn wait_events(
     if epfd < 0 {
         return Err(Errno::EBADF);
     }
+    // A zero timeout only polls: the mask is put back before anything is
+    // delivered, so a pending signal it unblocks stays pending
+    // (epoll_pwait2's spec sheet, "sigmask_poll"), as if there were none.
+    let mask = if wait == WaitTime::Poll { None } else { mask };
     let events = match wait_with_signals(k, mask, wait, |io, w| io.epoll_wait(epfd, max, w), Vec::is_empty)? {
         Waited::Done(events) => events,
         Waited::Interrupted => return Err(Errno::EINTR),

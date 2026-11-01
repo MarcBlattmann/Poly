@@ -593,6 +593,40 @@ fn epoll_pwait_masks_and_pwait2_takes_a_timespec() {
     assert_eq!(k.io.epoll_waits.last().unwrap().2, WaitTime::Until(Deadline { clock: Clock::Monotonic, at }));
 }
 
+#[test]
+fn epoll_pwait2_checks_in_the_spec_order() {
+    let mut k = FakeKernel::new();
+    let ep = sys(&mut k, nr::EPOLL_CREATE1, &[0]).unwrap();
+    let bad = u64::MAX; // -1
+    let w = nr::EPOLL_PWAIT2;
+    assert_eq!(sys(&mut k, w, &[bad, BUF, 0, UNMAPPED, ARG, 4]), Err(Errno::EFAULT), "timeout first");
+    k.poke(ARG + 8, &Timespec { sec: -1, nsec: 0 }.to_bytes());
+    assert_eq!(sys(&mut k, w, &[bad, BUF, 0, ARG + 8, ARG, 4]), Err(Errno::EINVAL), "timeout value");
+    assert_eq!(sys(&mut k, w, &[bad, BUF, 0, 0, ARG, 4]), Err(Errno::EINVAL), "sigsetsize");
+    assert_eq!(sys(&mut k, w, &[bad, BUF, 0, 0, UNMAPPED, 8]), Err(Errno::EFAULT), "sigmask");
+    assert_eq!(sys(&mut k, w, &[bad, BUF, 0, 0, 0, 8]), Err(Errno::EBADF), "epfd before maxevents");
+    assert_eq!(sys(&mut k, w, &[ep, BUF, 0, 0, 0, 8]), Err(Errno::EINVAL), "maxevents");
+    assert_eq!(sys(&mut k, w, &[ep, BUF, 0xAAA_AAAB, 0, 0, 8]), Err(Errno::EINVAL), "above INT_MAX / 12");
+    let top = 0x7fff_ffff_fff0;
+    assert_eq!(sys(&mut k, w, &[ep, top, 4, 0, 0, 8]), Err(Errno::EFAULT), "past user space");
+    assert_eq!(sys(&mut k, w, &[ep, 0xffff_8000_0000_0000, 1, 0, 0, 8]), Err(Errno::EFAULT), "kernel address");
+}
+
+#[test]
+fn epoll_pwait2_with_a_zero_timeout_leaves_signals_pending() {
+    let mut k = FakeKernel::new();
+    let ep = sys(&mut k, nr::EPOLL_CREATE1, &[0]).unwrap();
+    k.poke(ARG, &SigSet::only(SIGUSR1).0.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::RT_SIGPROCMASK, &[0, ARG, 0, 8]), Ok(0));
+    assert_eq!(sys(&mut k, nr::TKILL, &[100, SIGUSR1 as u64]), Ok(0));
+    k.poke(ARG, &0u64.to_le_bytes());
+    k.poke(ARG + 8, &Timespec { sec: 0, nsec: 0 }.to_bytes());
+    assert_eq!(sys(&mut k, nr::EPOLL_PWAIT2, &[ep, BUF, 1, ARG + 8, ARG, 8]), Ok(0), "only polls");
+    assert!(k.me().pending(100).contains(SIGUSR1), "still pending");
+    assert_eq!(k.mask(), SigSet::only(SIGUSR1));
+    assert_eq!(sys(&mut k, nr::EPOLL_PWAIT2, &[ep, BUF, 1, 0, ARG, 8]), Err(Errno::EINTR), "would sleep");
+}
+
 // ---- event files ---------------------------------------------------------------
 
 #[test]

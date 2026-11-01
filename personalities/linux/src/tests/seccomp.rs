@@ -122,12 +122,30 @@ fn bad_programs_and_arguments_are_refused() {
     // Unknown and unsupported flags, operations.
     let allow = [ret(SECCOMP_RET_ALLOW)];
     assert_eq!(install(&mut k, &allow, 1 << 6), Err(Errno::EINVAL));
-    assert_eq!(install(&mut k, &allow, SECCOMP_FILTER_FLAG_NEW_LISTENER), Err(Errno::EINVAL));
-    assert_eq!(install(&mut k, &allow, SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV), Err(Errno::EINVAL));
+    assert_eq!(install(&mut k, &allow, SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV), Err(Errno::EINVAL), "needs a listener");
+    assert_eq!(
+        install(&mut k, &allow, SECCOMP_FILTER_FLAG_TSYNC | SECCOMP_FILTER_FLAG_NEW_LISTENER),
+        Err(Errno::EINVAL),
+        "TSYNC with a listener needs TSYNC_ESRCH"
+    );
     assert_eq!(sys(&mut k, nr::SECCOMP, &[9, 0, 0]), Err(Errno::EINVAL));
     assert!(!k.seccomp_on, "nothing was installed");
     // Accepted flags.
     assert_eq!(install(&mut k, &allow, SECCOMP_FILTER_FLAG_SPEC_ALLOW | SECCOMP_FILTER_FLAG_LOG), Ok(0));
+    // A listener: the kernel's descriptor is the result; one per chain.
+    assert_eq!(install(&mut k, &allow, SECCOMP_FILTER_FLAG_NEW_LISTENER), Ok(3));
+    assert_eq!(install(&mut k, &allow, SECCOMP_FILTER_FLAG_NEW_LISTENER), Err(Errno::EBUSY));
+    assert_eq!(k.thread_state().seccomp.filters(), 2);
+}
+
+#[test]
+fn program_checks_come_before_the_privilege() {
+    let mut k = FakeKernel::new();
+    k.creds_mut().caps = crate::cred::Caps::NONE;
+    // Without no_new_privs: a bad program is still EFAULT / EINVAL.
+    assert_eq!(sys(&mut k, nr::SECCOMP, &[1, 0, 0]), Err(Errno::EFAULT));
+    assert_eq!(install(&mut k, &[], 0), Err(Errno::EINVAL));
+    assert_eq!(install(&mut k, &[ret(SECCOMP_RET_ALLOW)], 0), Err(Errno::EACCES));
 }
 
 #[test]
@@ -135,7 +153,7 @@ fn trap_sends_sigsys_with_the_call_in_its_siginfo() {
     let mut k = FakeKernel::new();
     no_new_privs(&mut k);
     install(&mut k, &for_call(nr::GETPID, SECCOMP_RET_TRAP | 0x42), 0).unwrap();
-    assert_eq!(sys(&mut k, nr::GETPID, &[]), Err(Errno::ENOSYS));
+    assert_eq!(sys(&mut k, nr::GETPID, &[]), Ok(nr::GETPID), "registers as at entry");
     let info = *k.thread_state().pending.iter().next().expect("SIGSYS queued");
     assert_eq!(info.signal(), SIGSYS);
     assert_eq!(info.code, SYS_SECCOMP);
@@ -235,7 +253,7 @@ fn stacked_filters_take_the_most_restrictive_action() {
     install(&mut k, &[ret(SECCOMP_RET_ALLOW)], 0).unwrap();
     assert_eq!(sys(&mut k, nr::GETPID, &[]), Err(Errno::EPERM));
     install(&mut k, &for_call(nr::GETPID, SECCOMP_RET_TRAP), 0).unwrap();
-    assert_eq!(sys(&mut k, nr::GETPID, &[]), Err(Errno::ENOSYS));
+    assert_eq!(sys(&mut k, nr::GETPID, &[]), Ok(nr::GETPID));
     assert_eq!(k.thread_state().pending.len(), 1);
     assert_eq!(k.thread_state().seccomp.filters(), 3);
     // Among equal actions the newest filter's data counts.
@@ -368,7 +386,7 @@ fn action_availability_is_reported() {
         (SECCOMP_RET_TRACE, true),
         (SECCOMP_RET_LOG, true),
         (SECCOMP_RET_ALLOW, true),
-        (SECCOMP_RET_USER_NOTIF, false),
+        (SECCOMP_RET_USER_NOTIF, true),
         (0x1234_0000, false),
     ] {
         k.poke(at, &action.to_le_bytes());

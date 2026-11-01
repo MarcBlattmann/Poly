@@ -9,7 +9,7 @@ use super::files::{AT, env, s};
 use crate::abi::PAGE_SIZE;
 use crate::abi::clock as id;
 use crate::fs::rlimit::RLIMIT_FSIZE;
-use crate::kernel::{CpuTimes, CpuTimesOf};
+use crate::kernel::{CpuTimes, CpuTimesOf, MemLock};
 use crate::rlimit::Rlimit;
 use crate::time::cpuclock::{Counts, CpuClock, decode};
 use crate::{Errno, nr};
@@ -23,9 +23,11 @@ const DATA_END: u64 = DATA + 16 * P;
 #[test]
 fn mlock_rounds_to_pages_and_checks_the_range() {
     let mut k = FakeKernel::new();
+    // With CAP_IPC_LOCK: no RLIMIT_MEMLOCK in the way.
+    *k.creds_mut() = crate::cred::Creds::root();
     assert_eq!(sys(&mut k, nr::MLOCK, &[DATA + 7, 3]), Ok(0));
     assert_eq!(sys(&mut k, nr::MUNLOCK, &[DATA + P - 1, 2]), Ok(0), "two pages touched");
-    assert_eq!(k.locked, [(DATA, P, true), (DATA, 2 * P, false)]);
+    assert_eq!(k.locked, [(DATA, P, MemLock::Lock), (DATA, 2 * P, MemLock::Unlock)]);
     assert_eq!(sys(&mut k, nr::MLOCK, &[DATA, 0]), Ok(0), "length 0");
     assert_eq!(sys(&mut k, nr::MLOCK, &[DATA, (-(P as i64)) as u64]), Err(Errno::EINVAL), "wraps");
     assert_eq!(k.locked.len(), 2, "neither reached the kernel");
@@ -42,6 +44,43 @@ fn mlockall_flags() {
     }
     assert_eq!(sys(&mut k, nr::MLOCKALL, &[8]), Err(Errno::EINVAL), "unknown bit");
     assert_eq!(sys(&mut k, nr::MUNLOCKALL, &[]), Ok(0));
+}
+
+#[test]
+fn memlock_limit_without_cap_ipc_lock() {
+    use crate::cred::Creds;
+    use crate::fs::rlimit::RLIMIT_MEMLOCK;
+    let mut k = FakeKernel::new();
+    *k.creds_mut() = Creds::user(1000, 1000);
+    k.me().limits.set(RLIMIT_MEMLOCK, Rlimit { cur: 2 * P, max: 2 * P });
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA, 2 * P, 0]), Ok(0));
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA + 2 * P, P, 1]), Err(Errno::ENOMEM), "a third page");
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA, 2 * P, 1]), Ok(0), "locked pages count once");
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA, 3 * P, 0]), Err(Errno::ENOMEM));
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA, (-8192i64) as u64, 0]), Err(Errno::ENOMEM), "over any limit");
+    assert_eq!(sys(&mut k, nr::MUNLOCK, &[DATA, P]), Ok(0));
+    assert_eq!(sys(&mut k, nr::MLOCK, &[DATA + 4 * P, P]), Ok(0));
+    assert_eq!(sys(&mut k, nr::MLOCKALL, &[1]), Err(Errno::ENOMEM), "the address space is larger");
+    assert_eq!(sys(&mut k, nr::MUNLOCKALL, &[]), Ok(0));
+    assert_eq!(sys(&mut k, nr::MLOCKALL, &[2]), Ok(0));
+    assert_eq!(crate::sys::mlock::future_mmap_check(&mut k, 3 * P), Err(Errno::EAGAIN));
+    assert_eq!(crate::sys::mlock::future_mmap_check(&mut k, P), Ok(Some(MemLock::Lock)));
+    k.me().limits.set(RLIMIT_MEMLOCK, Rlimit { cur: 0, max: 2 * P });
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA, 0, 0]), Err(Errno::EPERM), "even len 0");
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA, P, 2]), Err(Errno::EINVAL), "flags first");
+    assert_eq!(sys(&mut k, nr::MLOCKALL, &[2]), Err(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::MUNLOCK, &[DATA, P]), Ok(0));
+}
+
+#[test]
+fn mlock_lengths_round_with_the_offset() {
+    let mut k = FakeKernel::new();
+    *k.creds_mut() = crate::cred::Creds::root();
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA, !0, 0]), Ok(0), "rounds to 0");
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA, (-8192i64) as u64, 0]), Err(Errno::EINVAL), "wraps");
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[DATA + P - 1, 2, 1]), Ok(0));
+    assert_eq!(k.locked.last(), Some(&(DATA, 2 * P, MemLock::LockOnFault)));
+    assert_eq!(sys(&mut k, nr::MLOCK2, &[0xffff_8000_0000_0000, 0, 0]), Ok(0), "len 0 looks at nothing");
 }
 
 #[test]

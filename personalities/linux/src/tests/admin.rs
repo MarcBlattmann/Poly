@@ -41,11 +41,17 @@ impl LinuxAdmin for Recorder {
         self.log.lock().unwrap().umounts.push((target.to_vec(), detach, follow));
         Ok(())
     }
-    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64) -> Result<(), Errno> {
+    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64, may_mknod: bool) -> Result<(), Errno> {
+        if !may_mknod && matches!(mode & 0o170000, 0o020000 | 0o060000) {
+            return Err(Errno::EPERM);
+        }
         self.log.lock().unwrap().nodes.push((dirfd, path.to_vec(), mode, dev));
         Ok(())
     }
-    fn chroot(&mut self, path: &[u8]) -> Result<(), Errno> {
+    fn chroot(&mut self, path: &[u8], may_chroot: bool) -> Result<(), Errno> {
+        if !may_chroot {
+            return Err(Errno::EPERM);
+        }
         self.log.lock().unwrap().roots.push(path.to_vec());
         Ok(())
     }
@@ -185,7 +191,12 @@ fn mknod_types_and_device_numbers() {
     // a regular file.
     assert_eq!(sys(&mut k, nr::MKNODAT, &[(-100i64) as u64, p[0], 0o020660, 0x440]), Ok(0));
     assert_eq!(sys(&mut k, nr::MKNOD, &[p[0], 0o644, 0]), Ok(0));
-    assert_eq!(sys(&mut k, nr::MKNOD, &[p[0], 0o040755, 0]), Err(Errno::EINVAL));
+    // A directory is EPERM, a symbolic link or an unused type EINVAL,
+    // before the path is read.
+    assert_eq!(sys(&mut k, nr::MKNOD, &[p[0], 0o040755, 0]), Err(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::MKNOD, &[0, 0o040755, 0]), Err(Errno::EPERM));
+    assert_eq!(sys(&mut k, nr::MKNOD, &[0, 0o120777, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::MKNOD, &[0, 0o030777, 0]), Err(Errno::EINVAL));
     let nodes = &log.lock().unwrap().nodes;
     assert_eq!(nodes[0], (-100, b"node".to_vec(), 0o020660, 0x440));
     assert_eq!((crate::fs::major(nodes[0].3), crate::fs::minor(nodes[0].3)), (4, 64));

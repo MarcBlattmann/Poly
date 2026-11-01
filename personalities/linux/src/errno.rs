@@ -51,6 +51,9 @@ impl Errno {
     pub const ERANGE: Errno = Errno(34);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
+    /// `ELOOP` (`asm-generic/errno.h`): "Too many symbolic links
+    /// encountered"; also openat2(2)'s refusal to follow a link.
+    pub const ELOOP: Errno = Errno(40);
     /// `ENOMSG` (`asm-generic/errno.h`): "No message of desired type"
     /// (msgrcv(2) with `IPC_NOWAIT`).
     pub const ENOMSG: Errno = Errno(42);
@@ -171,6 +174,7 @@ impl Errno {
             34 => "ERANGE",
             36 => "ENAMETOOLONG",
             38 => "ENOSYS",
+            40 => "ELOOP",
             42 => "ENOMSG",
             43 => "EIDRM",
             61 => "ENODATA",

@@ -39,6 +39,7 @@ mod files_tests;
 pub mod net;
 mod ns_tests;
 mod pidfd;
+mod procaccess;
 mod services;
 mod shm;
 mod shm_tests;
@@ -178,7 +179,14 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     k.set_result(regs.rax);
     let exit = k.take_exit();
     if process.traced {
-        let ret = exit.is_none().then(|| Linux::traced_result(&mut k, regs.rax));
+        let ret = match exit {
+            None => Some(Linux::traced_result(&mut k, regs.rax)),
+            // seccomp(2) killed the process at this call (the only way a
+            // call ends in a signal): a tracer still reads its registers,
+            // which are as at entry (`rax` the call's number).
+            Some(crate::process::ExitStatus::Signaled { .. }) => Some(regs.rax),
+            Some(_) => None,
+        };
         testrun::syscall_of(process.pid, tid, number, &args, ret);
     }
     if let Some(line) = strace {

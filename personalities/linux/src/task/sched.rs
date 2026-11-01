@@ -46,6 +46,14 @@ pub const RT_PRIO_MAX: i32 = 99;
 /// nanoseconds (the default `sched_rr_timeslice_ms`, 100).
 pub const RR_INTERVAL_NS: i64 = 100_000_000;
 
+/// The time slice a fair task without one of its own reports through
+/// sched_getattr(2)'s `sched_runtime`, in nanoseconds (sched_getattr's
+/// spec sheet: 2.8 ms, kernel-configuration dependent).
+pub const DEFAULT_SLICE_NS: u64 = 2_800_000;
+/// The bounds of a custom slice (sched_setattr's spec sheet).
+pub const SLICE_MIN_NS: u64 = 100_000;
+pub const SLICE_MAX_NS: u64 = 100_000_000;
+
 /// Whether `policy` (without the flag) is a real-time one.
 pub const fn is_realtime(policy: i32) -> bool {
     matches!(policy, SCHED_FIFO | SCHED_RR)
@@ -62,6 +70,17 @@ pub struct Sched {
     /// The static priority: 1 to 99 under a real-time policy, else 0.
     pub priority: i32,
     pub reset_on_fork: bool,
+    /// `SCHED_DEADLINE`'s parameters in nanoseconds (period as stored:
+    /// the deadline when given as 0); 0 under other policies.
+    pub runtime: u64,
+    pub deadline: u64,
+    pub period: u64,
+    /// `SCHED_FLAG_RECLAIM` / `SCHED_FLAG_DL_OVERRUN` as set with
+    /// sched_setattr(2), reported for a deadline task.
+    pub dl_flags: u64,
+    /// A custom time slice for the fair policies set with sched_setattr(2)
+    /// (100 us .. 100 ms), 0 for the default ([`DEFAULT_SLICE_NS`]).
+    pub slice: u64,
 }
 
 impl Sched {
@@ -80,7 +99,7 @@ impl Sched {
         if !self.reset_on_fork {
             return *self;
         }
-        if is_realtime(self.policy) {
+        if is_realtime(self.policy) || self.policy == SCHED_DEADLINE {
             return Sched::default();
         }
         Sched { nice: self.nice.max(0), reset_on_fork: false, ..*self }
@@ -210,6 +229,183 @@ pub fn check_nice_change(who: &Changer, t: &Changed, nice: i32) -> Result<(), Er
     Ok(())
 }
 
+// ---- sched_setattr(2) / sched_getattr(2) ----------------------------------
+
+/// `SCHED_FLAG_*` (`linux/sched.h`).
+pub const SCHED_FLAG_RESET_ON_FORK: u64 = 0x01;
+pub const SCHED_FLAG_RECLAIM: u64 = 0x02;
+pub const SCHED_FLAG_DL_OVERRUN: u64 = 0x04;
+pub const SCHED_FLAG_KEEP_POLICY: u64 = 0x08;
+pub const SCHED_FLAG_KEEP_PARAMS: u64 = 0x10;
+pub const SCHED_FLAG_UTIL_CLAMP_MIN: u64 = 0x20;
+pub const SCHED_FLAG_UTIL_CLAMP_MAX: u64 = 0x40;
+pub const SCHED_FLAG_ALL: u64 = 0x7f;
+
+/// `SCHED_ATTR_SIZE_VER0` and `SCHED_ATTR_SIZE_VER1` (`linux/sched/types.h`):
+/// the structure without and with the utilisation clamp fields.
+pub const SCHED_ATTR_SIZE_VER0: usize = 48;
+pub const SCHED_ATTR_SIZE_VER1: usize = 56;
+/// The largest `size` either call accepts (a page).
+pub const SCHED_ATTR_SIZE_MAX: usize = 4096;
+
+/// `struct sched_attr` (`linux/sched/types.h`), 56 bytes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SchedAttr {
+    pub size: u32,
+    pub policy: u32,
+    pub flags: u64,
+    pub nice: i32,
+    pub priority: u32,
+    pub runtime: u64,
+    pub deadline: u64,
+    pub period: u64,
+    pub util_min: u32,
+    pub util_max: u32,
+}
+
+impl SchedAttr {
+    pub fn to_bytes(&self) -> [u8; SCHED_ATTR_SIZE_VER1] {
+        let mut b = [0u8; SCHED_ATTR_SIZE_VER1];
+        b[0..4].copy_from_slice(&self.size.to_ne_bytes());
+        b[4..8].copy_from_slice(&self.policy.to_ne_bytes());
+        b[8..16].copy_from_slice(&self.flags.to_ne_bytes());
+        b[16..20].copy_from_slice(&self.nice.to_ne_bytes());
+        b[20..24].copy_from_slice(&self.priority.to_ne_bytes());
+        b[24..32].copy_from_slice(&self.runtime.to_ne_bytes());
+        b[32..40].copy_from_slice(&self.deadline.to_ne_bytes());
+        b[40..48].copy_from_slice(&self.period.to_ne_bytes());
+        b[48..52].copy_from_slice(&self.util_min.to_ne_bytes());
+        b[52..56].copy_from_slice(&self.util_max.to_ne_bytes());
+        b
+    }
+
+    /// The structure from its first `b.len()` bytes (48 to 56; missing
+    /// fields read 0).
+    pub fn from_bytes(b: &[u8]) -> SchedAttr {
+        let mut full = [0u8; SCHED_ATTR_SIZE_VER1];
+        let n = b.len().min(SCHED_ATTR_SIZE_VER1);
+        full[..n].copy_from_slice(&b[..n]);
+        let u32_at = |i: usize| u32::from_ne_bytes(full[i..i + 4].try_into().expect("4 bytes"));
+        let u64_at = |i: usize| u64::from_ne_bytes(full[i..i + 8].try_into().expect("8 bytes"));
+        SchedAttr {
+            size: u32_at(0),
+            policy: u32_at(4),
+            flags: u64_at(8),
+            nice: u32_at(16) as i32,
+            priority: u32_at(20),
+            runtime: u64_at(24),
+            deadline: u64_at(32),
+            period: u64_at(40),
+            util_min: u32_at(48),
+            util_max: u32_at(52),
+        }
+    }
+
+    /// What sched_getattr(2) reports for `s` (`size` set by the caller).
+    pub fn of(s: &Sched) -> SchedAttr {
+        let fair = !is_realtime(s.policy) && s.policy != SCHED_DEADLINE;
+        let mut a = SchedAttr {
+            policy: s.policy as u32,
+            flags: if s.reset_on_fork { SCHED_FLAG_RESET_ON_FORK } else { 0 },
+            ..SchedAttr::default()
+        };
+        if fair {
+            a.nice = s.nice;
+            a.runtime = if s.slice == 0 { DEFAULT_SLICE_NS } else { s.slice };
+        } else if s.policy == SCHED_DEADLINE {
+            a.flags |= s.dl_flags;
+            a.runtime = s.runtime;
+            a.deadline = s.deadline;
+            a.period = s.period;
+        } else {
+            a.priority = s.priority as u32;
+        }
+        a
+    }
+}
+
+/// The attributes a sched_setattr(2) of `attr` (read with `size` bytes)
+/// gives a thread that has `cur`, after the policy, flag, priority and
+/// deadline checks (`EINVAL`; `EOPNOTSUPP` for utilisation clamping,
+/// which Poly does not do). The permission checks follow
+/// ([`check_attr_change`]).
+pub fn apply_attr(cur: &Sched, attr: &SchedAttr, size: usize) -> Result<Sched, Errno> {
+    let flags = attr.flags;
+    let keep_policy = flags & SCHED_FLAG_KEEP_POLICY != 0;
+    let keep_params = flags & SCHED_FLAG_KEEP_PARAMS != 0;
+    let policy = if keep_policy {
+        cur.policy
+    } else {
+        match attr.policy as i32 {
+            p @ (SCHED_OTHER | SCHED_FIFO | SCHED_RR | SCHED_BATCH | SCHED_IDLE | SCHED_DEADLINE) => p,
+            _ => return Err(Errno::EINVAL),
+        }
+    };
+    if flags & !SCHED_FLAG_ALL != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let clamp = SCHED_FLAG_UTIL_CLAMP_MIN | SCHED_FLAG_UTIL_CLAMP_MAX;
+    if flags & clamp != 0 {
+        return Err(if size < SCHED_ATTR_SIZE_VER1 { Errno::EINVAL } else { Errno::EOPNOTSUPP });
+    }
+    let priority = attr.priority as i32;
+    if attr.priority > i32::MAX as u32 {
+        return Err(Errno::EINVAL);
+    }
+    if policy == SCHED_DEADLINE {
+        if priority != 0 {
+            return Err(Errno::EINVAL);
+        }
+        let bit63 = 1u64 << 63;
+        let period = if attr.period == 0 { attr.deadline } else { attr.period };
+        if attr.runtime < 1024
+            || attr.deadline == 0
+            || attr.deadline & bit63 != 0
+            || attr.period & bit63 != 0
+            || attr.deadline > period
+            || attr.runtime > attr.deadline
+        {
+            return Err(Errno::EINVAL);
+        }
+    } else {
+        check_priority(policy, priority)?;
+    }
+    let reset_on_fork = flags & SCHED_FLAG_RESET_ON_FORK != 0;
+    if keep_params {
+        return Ok(Sched { reset_on_fork, ..*cur });
+    }
+    let mut next = Sched { policy, reset_on_fork, priority, ..Sched::default() };
+    next.nice = cur.nice;
+    if policy == SCHED_DEADLINE {
+        next.runtime = attr.runtime;
+        next.deadline = attr.deadline;
+        next.period = if attr.period == 0 { attr.deadline } else { attr.period };
+        next.dl_flags = flags & (SCHED_FLAG_RECLAIM | SCHED_FLAG_DL_OVERRUN);
+    } else if !is_realtime(policy) {
+        next.nice = attr.nice.clamp(NICE_MIN, NICE_MAX);
+        next.slice = if attr.runtime == 0 { 0 } else { attr.runtime.clamp(SLICE_MIN_NS, SLICE_MAX_NS) };
+    }
+    Ok(next)
+}
+
+/// The permission checks of sched_setattr(2) for going from `t.sched` to
+/// `next` (`EPERM`): those of sched_setscheduler(2), a lower nice value
+/// within `RLIMIT_NICE`, and `SCHED_DEADLINE` only with `CAP_SYS_NICE`.
+pub fn check_attr_change(who: &Changer, t: &Changed, next: &Sched) -> Result<(), Errno> {
+    may_change(who, t)?;
+    if who.privileged {
+        return Ok(());
+    }
+    if next.policy == SCHED_DEADLINE {
+        return Err(Errno::EPERM);
+    }
+    check_policy_change(who, t, next.policy, next.priority, next.reset_on_fork)?;
+    if next.nice < t.sched.nice && !nice_allowed(next.nice, t.nice_limit) {
+        return Err(Errno::EPERM);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,14 +446,17 @@ mod tests {
 
     #[test]
     fn reset_on_fork() {
-        let rt = Sched { nice: -5, policy: SCHED_FIFO, priority: 30, reset_on_fork: true };
+        let rt = Sched { nice: -5, policy: SCHED_FIFO, priority: 30, reset_on_fork: true, ..Sched::default() };
         assert_eq!(rt.reported_policy(), SCHED_FIFO | SCHED_RESET_ON_FORK);
         assert_eq!(rt.for_child(), Sched::default());
-        let batch = Sched { nice: -5, policy: SCHED_BATCH, priority: 0, reset_on_fork: true };
-        assert_eq!(batch.for_child(), Sched { nice: 0, policy: SCHED_BATCH, priority: 0, reset_on_fork: false });
-        let idle = Sched { nice: 5, policy: SCHED_IDLE, priority: 0, reset_on_fork: true };
+        let batch = Sched { nice: -5, policy: SCHED_BATCH, priority: 0, reset_on_fork: true, ..Sched::default() };
+        assert_eq!(
+            batch.for_child(),
+            Sched { nice: 0, policy: SCHED_BATCH, priority: 0, reset_on_fork: false, ..Sched::default() }
+        );
+        let idle = Sched { nice: 5, policy: SCHED_IDLE, priority: 0, reset_on_fork: true, ..Sched::default() };
         assert_eq!(idle.for_child(), Sched { reset_on_fork: false, ..idle });
-        let plain = Sched { nice: -3, policy: SCHED_RR, priority: 7, reset_on_fork: false };
+        let plain = Sched { nice: -3, policy: SCHED_RR, priority: 7, reset_on_fork: false, ..Sched::default() };
         assert_eq!(plain.for_child(), plain);
     }
 
@@ -313,5 +512,80 @@ mod tests {
         assert_eq!(check_nice_change(&user(4444), &t, 9), Err(Errno::EPERM));
         assert_eq!(check_nice_change(&user(4444), &t, -20), Err(Errno::EPERM));
         assert_eq!(check_nice_change(&ROOT, &t, -20), Ok(()));
+    }
+
+    fn attr(policy: i32, flags: u64, nice: i32, priority: u32) -> SchedAttr {
+        SchedAttr { size: 48, policy: policy as u32, flags, nice, priority, ..SchedAttr::default() }
+    }
+
+    #[test]
+    fn sched_attr_layout() {
+        let a = SchedAttr {
+            size: 56,
+            policy: 6,
+            flags: 1,
+            nice: -3,
+            priority: 0,
+            runtime: 7,
+            deadline: 8,
+            period: 9,
+            util_min: 0,
+            util_max: 1024,
+        };
+        let b = a.to_bytes();
+        assert_eq!(&b[16..20], &(-3i32).to_ne_bytes());
+        assert_eq!(SchedAttr::from_bytes(&b), a);
+        assert_eq!(SchedAttr::from_bytes(&b[..48]), SchedAttr { util_max: 0, ..a });
+    }
+
+    #[test]
+    fn getattr_reports_by_policy() {
+        let fair = Sched { nice: 7, policy: SCHED_BATCH, reset_on_fork: true, ..Sched::default() };
+        let a = SchedAttr::of(&fair);
+        assert_eq!((a.policy, a.flags, a.nice, a.priority, a.runtime), (3, 1, 7, 0, DEFAULT_SLICE_NS));
+        let rt = Sched { nice: 5, policy: SCHED_FIFO, priority: 10, ..Sched::default() };
+        let a = SchedAttr::of(&rt);
+        assert_eq!((a.nice, a.priority, a.runtime), (0, 10, 0));
+    }
+
+    #[test]
+    fn setattr_rules() {
+        let cur = Sched { nice: 3, policy: SCHED_BATCH, ..Sched::default() };
+        // KEEP_POLICY keeps the policy, applies nice; priority judged by the kept policy.
+        let next = apply_attr(&cur, &attr(SCHED_OTHER, SCHED_FLAG_KEEP_POLICY, 4, 0), 48).unwrap();
+        assert_eq!((next.policy, next.nice), (SCHED_BATCH, 4));
+        assert_eq!(apply_attr(&cur, &attr(SCHED_RR, SCHED_FLAG_KEEP_POLICY, 6, 7), 48), Err(Errno::EINVAL));
+        let both = SCHED_FLAG_KEEP_POLICY | SCHED_FLAG_KEEP_PARAMS;
+        assert_eq!(apply_attr(&cur, &attr(SCHED_RR, both, 6, 7), 48), Err(Errno::EINVAL));
+        // KEEP_PARAMS keeps policy, nice and priority; the reset flag applies.
+        let flags = SCHED_FLAG_KEEP_PARAMS | SCHED_FLAG_RESET_ON_FORK;
+        let next = apply_attr(&cur, &attr(SCHED_OTHER, flags, 9, 0), 48).unwrap();
+        assert_eq!(next, Sched { reset_on_fork: true, ..cur });
+        for bad in [4, 7, 8, -1, SCHED_BATCH | SCHED_RESET_ON_FORK] {
+            assert_eq!(apply_attr(&cur, &attr(bad, 0, 0, 0), 48), Err(Errno::EINVAL), "{bad}");
+        }
+        for bad in [0x80, 0x100, 1 << 63] {
+            assert_eq!(apply_attr(&cur, &attr(0, bad, 0, 0), 48), Err(Errno::EINVAL));
+        }
+        assert_eq!(apply_attr(&cur, &attr(0, SCHED_FLAG_UTIL_CLAMP_MIN, 0, 0), 48), Err(Errno::EINVAL));
+        assert_eq!(apply_attr(&cur, &attr(0, SCHED_FLAG_UTIL_CLAMP_MAX, 0, 0), 56), Err(Errno::EOPNOTSUPP));
+        assert_eq!(apply_attr(&cur, &attr(0, 0, 25, 0), 48).unwrap().nice, 19, "clamped");
+        assert_eq!(apply_attr(&cur, &attr(SCHED_FIFO, 0, 0, 100), 48), Err(Errno::EINVAL));
+    }
+
+    #[test]
+    fn setattr_deadline() {
+        let dl = |rt, d, p| SchedAttr { runtime: rt, deadline: d, period: p, ..attr(SCHED_DEADLINE, 0, 0, 0) };
+        let next = apply_attr(&Sched::default(), &dl(10_000_000, 30_000_000, 0), 48).unwrap();
+        assert_eq!((next.runtime, next.deadline, next.period), (10_000_000, 30_000_000, 30_000_000));
+        for (rt, d, p) in [(1000, 2000, 0), (5000, 0, 0), (5000, 4000, 0), (5000, 9000, 8000), (5000, 1 << 63, 0)] {
+            assert_eq!(apply_attr(&Sched::default(), &dl(rt, d, p), 48), Err(Errno::EINVAL), "{rt} {d} {p}");
+        }
+        let t = thread(1000, 1000, Sched::default());
+        assert_eq!(check_attr_change(&user(1000), &t, &next), Err(Errno::EPERM));
+        assert_eq!(check_attr_change(&ROOT, &t, &next), Ok(()));
+        assert_eq!(Sched { reset_on_fork: true, ..next }.for_child(), Sched::default());
+        let lower = Sched { nice: -1, ..Sched::default() };
+        assert_eq!(check_attr_change(&user(1000), &t, &lower), Err(Errno::EPERM));
     }
 }

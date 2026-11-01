@@ -280,11 +280,17 @@ pub trait LinuxAdmin {
 
     /// mknodat(2): a regular file, FIFO, socket or device node (`mode`
     /// has the type bits, checked; `dev` is the device number as
-    /// `makedev` encodes it).
-    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64) -> Result<(), Errno>;
+    /// `makedev` encodes it). `may_mknod` says whether the caller has
+    /// `CAP_MKNOD`: without it a device node is `EPERM`, but only after the
+    /// path was looked up and the directory found writable (mknod's spec
+    /// sheet: `ENOENT`, `EEXIST`, `EACCES` come first).
+    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64, may_mknod: bool) -> Result<(), Errno>;
 
     /// chroot(2): the calling process's root directory becomes `path`.
-    fn chroot(&mut self, path: &[u8]) -> Result<(), Errno>;
+    /// `may_chroot` says whether the caller has `CAP_SYS_CHROOT`: without
+    /// it the call is `EPERM`, after the lookup and the search permission
+    /// on the directory (chroot's spec sheet).
+    fn chroot(&mut self, path: &[u8], may_chroot: bool) -> Result<(), Errno>;
 
     /// The current host or domain name.
     fn system_name(&self, which: SystemName) -> Vec<u8>;
