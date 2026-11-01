@@ -11,6 +11,7 @@
 //! | `timerfd_*` | `poly_vfs::timerfd::TimerFd` on [`fs::poll::timers`] |
 //! | `signalfd` | [`SignalFd`](crate::linux::signalfd::SignalFd) |
 //! | `inotify_*` | `poly_vfs::inotify::Inotify` (events from the VFS itself) |
+//! | `mq_install`, `mq_file` | [`MqFile`](crate::linux::mqueue::MqFile) |
 //!
 //! Waits block with [`ThreadBlocker`] (park / unpark), so the thread's
 //! signal notification, or the end of its process, interrupts them: a
@@ -22,6 +23,7 @@
 use super::{Thread, vfs_errno};
 use crate::fs::poll::{ThreadBlocker, timers};
 use crate::fs::{self, Fd, FileType, OpenFile, OpenFlags};
+use crate::linux::landlock::RulesetFile;
 use crate::linux::signalfd::SignalFd;
 use crate::time;
 use alloc::sync::Arc;
@@ -32,17 +34,55 @@ use poly_personality_linux::fileio::{
     EpollEvent, EpollOp, FileIo, ItimerSpec, NewFd, PidFdTarget, PipeStatus, PipeTransfer, PollFd, WaitTime,
 };
 use poly_personality_linux::kernel::{Clock, SigSet};
+use poly_personality_linux::landlock::Ruleset;
+use poly_personality_linux::sys::fanotify::{MarkOp as FanOp, MarkRequest, MarkWhat};
 use poly_vfs::epoll::{self, Epoll};
 use poly_vfs::eventfd::EventFd;
+use poly_vfs::fanotify::{Fanotify, MarkKey, MarkOp};
 use poly_vfs::inotify::{Inotify, WatchKey};
 use poly_vfs::pipe::{PIPE_PAGE, Piece, Pipe, PipeEnd, PipeSource, Transfer};
 use poly_vfs::poll::{PollEntry, PollTarget};
 use poly_vfs::timerfd::{TimerClock, TimerFd, TimerSpec};
 use poly_vfs::{FileObject, PollEvents, Timeout};
 
+/// A seccomp user notification descriptor
+/// (`SECCOMP_FILTER_FLAG_NEW_LISTENER`). Poly's filters never notify
+/// (`SECCOMP_RET_USER_NOTIF` fails the call with `ENOSYS`), so it never
+/// has anything to read: it exists so the descriptor is there, named
+/// `anon_inode:seccomp notify` (ADR 0121).
+struct SeccompNotify;
+
+impl FileObject for SeccompNotify {
+    fn read(&self, _buf: &mut [u8]) -> poly_vfs::Result<usize> {
+        Err(poly_vfs::Errno::EINVAL)
+    }
+
+    fn write(&self, _buf: &[u8]) -> poly_vfs::Result<usize> {
+        Err(poly_vfs::Errno::EINVAL)
+    }
+
+    fn poll(&self) -> PollEvents {
+        PollEvents::NONE
+    }
+
+    fn wait_queue(&self) -> Option<&Arc<poly_vfs::WaitQueue>> {
+        None
+    }
+
+    fn anon_name(&self) -> Option<&'static str> {
+        Some("seccomp notify")
+    }
+}
+
 impl Thread<'_> {
     pub(in crate::linux) fn blocker(&self) -> ThreadBlocker<'_> {
         ThreadBlocker::new(self.process, Arc::clone(&self.flags))
+    }
+
+    /// `LinuxKernel::seccomp_listener`: `O_RDWR`, close-on-exec.
+    pub(super) fn seccomp_listener_fd(&self) -> Result<i32, Errno> {
+        let new = NewFd { nonblock: false, cloexec: true };
+        self.install_object(Arc::new(SeccompNotify), FileType::Regular, OpenFlags::RDWR, new)
     }
 
     fn file(&self, fd: Fd) -> Result<Arc<OpenFile>, Errno> {
@@ -335,6 +375,10 @@ impl FileIo for Thread<'_> {
         Ok(end.pipe().peek(buf))
     }
 
+    fn is_eventfd(&mut self, fd: i32) -> Result<bool, Errno> {
+        Ok(self.file(fd)?.object_as::<EventFd>().is_some())
+    }
+
     fn inotify_init(&mut self, new: NewFd) -> Result<i32, Errno> {
         self.install_object(Inotify::new(), FileType::Regular, OpenFlags::RDONLY, new)
     }
@@ -358,5 +402,56 @@ impl FileIo for Thread<'_> {
     fn inotify_rm_watch(&mut self, fd: i32, wd: i32) -> Result<(), Errno> {
         let instance = self.file(fd)?.object_as::<Inotify>().ok_or(Errno::EINVAL)?;
         instance.rm_watch(wd).map_err(vfs_errno)
+    }
+
+    fn landlock_ruleset_fd(&mut self, ruleset: Arc<Ruleset>) -> Result<i32, Errno> {
+        let new = NewFd { cloexec: true, nonblock: false };
+        self.install_object(Arc::new(RulesetFile(ruleset)), FileType::Regular, OpenFlags::RDWR, new)
+    }
+
+    fn landlock_ruleset(&mut self, fd: i32) -> Result<Option<Arc<Ruleset>>, Errno> {
+        Ok(self.file(fd)?.object_as::<RulesetFile>().map(|r| Arc::clone(&r.0)))
+    }
+
+    fn fanotify_init(&mut self, flags: u32, event_flags: u32, privileged: bool, new: NewFd) -> Result<i32, Errno> {
+        let group = Fanotify::new(flags, OpenFlags::from_bits(event_flags), privileged);
+        self.install_object(group, FileType::Regular, OpenFlags::RDWR, new)
+    }
+
+    fn fanotify_group(&mut self, fd: i32) -> Result<Option<(u32, bool)>, Errno> {
+        Ok(self.file(fd)?.object_as::<Fanotify>().map(|g| (g.flags(), g.privileged())))
+    }
+
+    fn fanotify_mark(&mut self, fd: i32, req: &MarkRequest<'_>) -> Result<(), Errno> {
+        let group = self.file(fd)?.object_as::<Fanotify>().ok_or(Errno::EINVAL)?;
+        if req.op == FanOp::Flush {
+            group.flush(req.what == MarkWhat::Mount, req.what == MarkWhat::Filesystem);
+            return Ok(());
+        }
+        let files = &self.process.files;
+        let node = match req.path {
+            None => files.node_at(req.dirfd),
+            Some(path) => files.lookupat(req.dirfd, path, req.follow),
+        }
+        .map_err(vfs_errno)?;
+        node.access(&files.cred(), poly_vfs::Access::READ).map_err(vfs_errno)?;
+        if req.onlydir && node.kind().map_err(vfs_errno)? != FileType::Directory {
+            return Err(Errno::ENOTDIR);
+        }
+        let key = match req.what {
+            MarkWhat::Inode => MarkKey::inode(&node),
+            MarkWhat::Mount => MarkKey::mount(&node),
+            MarkWhat::Filesystem => MarkKey::filesystem(&node),
+        };
+        let op = if req.op == FanOp::Add { MarkOp::Add } else { MarkOp::Remove };
+        group.mark(key, op, req.mask, req.ignored).map_err(vfs_errno)
+    }
+
+    fn mq_install(&mut self, queue: Arc<poly_personality_linux::ipc::mqueue::Queue>, flags: u32) -> Result<i32, Errno> {
+        crate::linux::mqueue::install(&self.process.files, queue, flags)
+    }
+
+    fn mq_file(&mut self, fd: i32) -> Result<Option<poly_personality_linux::ipc::mqueue::MqFd>, Errno> {
+        crate::linux::mqueue::file(&self.process.files, fd)
     }
 }

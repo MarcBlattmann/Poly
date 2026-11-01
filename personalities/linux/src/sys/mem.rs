@@ -125,8 +125,18 @@ pub fn mmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         locked: flags & map::MAP_LOCKED != 0,
         no_reserve: flags & map::MAP_NORESERVE != 0,
     };
+    // personality(2) READ_IMPLIES_EXEC: readable means executable too.
+    let prot_bits = crate::sys::personality::effective_prot(crate::sys::personality::current(k), prot_bits);
     let request = MapRequest { addr, len, prot: Prot(prot_bits), placement, shared, backing, hints };
-    k.mmap(&request)
+    // Under mlockall(MCL_FUTURE) the mapping is made locked (the kernel's
+    // region map does that) and, without MCL_ONFAULT, populated here.
+    let future = crate::sys::mlock::future_mmap_check(k, len)?;
+    let at = k.mmap(&request)?;
+    if future == Some(crate::kernel::MemLock::Lock) {
+        // Pages that cannot come in (PROT_NONE) do not fail the mmap.
+        let _ = k.mlock(at, len, crate::kernel::MemLock::Lock);
+    }
+    Ok(at)
 }
 
 /// munmap(addr, length)
@@ -147,6 +157,7 @@ pub fn munmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     addr.checked_add(len).ok_or(Errno::EINVAL)?;
     let shm = k.shm_mapped(addr, len);
     k.munmap(addr, len)?;
+    crate::sys::aio::unmapped(k, addr, len);
     if !shm.is_empty() {
         crate::sys::shm::unmapped(k, &shm);
     }
@@ -177,6 +188,7 @@ pub fn mprotect(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
     let len = page_round_up(size).ok_or(Errno::ENOMEM)?;
     addr.checked_add(len).ok_or(Errno::ENOMEM)?;
+    let prot_bits = crate::sys::personality::effective_prot(crate::sys::personality::current(k), prot_bits);
     k.mprotect(addr, len, Prot(prot_bits)).map(|()| 0)
 }
 

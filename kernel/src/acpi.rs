@@ -12,7 +12,7 @@ use crate::{kprint, kprintln};
 use alloc::vec::Vec;
 use poly_acpi::{
     Acpi, AddressSpace, EcamRegion, Error, Fadt, GenericAddress, Hpet, Madt, MadtEntry, Mcfg, PhysMemory,
-    ResetRegister, Sdt, Table,
+    ResetRegister, Rsdp, Sdt, Table,
 };
 use poly_mem::{MemoryMap, RegionKind};
 
@@ -156,8 +156,8 @@ impl PhysMemory for FirmwareMemory<'_> {
 
 /// Read the ACPI tables, print a summary and remember it.
 pub fn init(rsdp: Option<u64>, memory: &MemoryMap) {
-    let Some(rsdp) = rsdp else {
-        kprintln!("acpi: the boot loader passed no RSDP");
+    let Some(rsdp) = rsdp.or_else(|| search_bios_area(memory)) else {
+        kprintln!("acpi: the boot loader passed no RSDP and there is none in the BIOS area");
         return;
     };
     match probe(&FirmwareMemory { memory }, rsdp) {
@@ -167,6 +167,23 @@ pub fn init(rsdp: Option<u64>, memory: &MemoryMap) {
         }
         Err(e) => kprintln!("acpi: unavailable: {e:?}"),
     }
+}
+
+/// Where firmware puts the RSDP when the boot loader does not say (ACPI
+/// §5.2.5.1, which QEMU 9's PVH boot needs: it passes none): the first KiB
+/// of the EBDA, whose segment is the word at 0x40E, then the BIOS area
+/// 0xE0000-0xFFFFF, on 16-byte boundaries.
+fn search_bios_area(memory: &MemoryMap) -> Option<u64> {
+    let mem = FirmwareMemory { memory };
+    let ebda = mem.bytes(0x40e, 2).map(|b| (u16::from_le_bytes([b[0], b[1]]) as u64) << 4).filter(|&e| e != 0);
+    for (start, len) in ebda.map(|e| (e, 1024)).into_iter().chain([(0xe_0000, 0x2_0000)]) {
+        if let Some(off) = mem.bytes(start, len).and_then(Rsdp::search) {
+            let at = start + off as u64;
+            kprintln!("acpi: the boot loader passed no RSDP; found one at {at:#x}");
+            return Some(at);
+        }
+    }
+    None
 }
 
 fn text(b: &[u8]) -> &str {

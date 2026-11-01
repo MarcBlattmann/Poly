@@ -1,0 +1,85 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_submit            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; /tmp on overlayfs; fs.aio-max-nr 65536"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_submit(ctx_id, nr, iocbpp) (syscall 209) queues up to nr operations
+  on an AIO context (see io_setup). iocbpp is an array of nr pointers to
+  struct iocb (64 bytes, linux/aio_abi.h): u64 aio_data (returned in the
+  event), u32 aio_key (must be 0 for io_cancel, ignored here), s32
+  aio_rw_flags (RWF_* as for preadv2), u16 aio_lio_opcode, s16
+  aio_reqprio, u32 aio_fildes, u64 aio_buf, u64 aio_nbytes, s64
+  aio_offset, u64 aio_reserved2 (must be 0), u32 aio_flags
+  (IOCB_FLAG_RESFD 1, IOCB_FLAG_IOPRIO 2; other bits ignored), u32
+  aio_resfd. Opcodes: PREAD 0 and PWRITE 1 (positioned read/write of
+  aio_nbytes bytes at aio_buf, at aio_offset; the file offset is not
+  used or moved), FSYNC 2 and FDSYNC 3 (aio_buf, aio_nbytes, aio_offset
+  and aio_rw_flags must be 0), POLL 5 (aio_buf is a 16-bit poll event
+  mask; aio_offset, aio_nbytes and aio_rw_flags must be 0), PREADV 7 and
+  PWRITEV 8 (aio_buf is a struct iovec array, aio_nbytes the number of
+  entries, at most 1024). 4 and NOOP 6 and anything else are EINVAL. The
+  iocbs are taken in array order; the call stops at the first iocb it
+  cannot queue and returns the number queued, or that iocb's error when it
+  is the first. Each queued iocb later yields exactly one struct io_event
+  {data = aio_data, obj = address of the iocb, res = result (bytes, poll
+  mask, 0, or -errno), res2 = 0}. Reads, writes and syncs on regular files
+  (buffered I/O) are done inside io_submit, so their events are ready when
+  it returns; a read that would block (a pipe with no data, without
+  RWF_NOWAIT) blocks io_submit itself. Errors found while doing the I/O
+  (an unreadable buffer: -EFAULT; RWF_NOWAIT on an empty pipe: -EAGAIN)
+  are reported in res, not by the call. POLL stays pending until an
+  event in the mask (or POLLERR/POLLHUP) is ready, then completes once
+  with res = ready events (masked by the request, plus POLLERR/POLLHUP;
+  when completed by a wake-up it may also carry the POLLRDNORM that came
+  with POLLIN); a mask of 0 waits until cancelled. With IOCB_FLAG_RESFD,
+  each completion adds 1 to the eventfd aio_resfd.
+returns:
+  success: "number of iocbs queued, 1..nr (nr is capped to the context's size)"
+  nr_zero: "0, nothing read"
+  partial: "k (k >= 1) when iocb k+1 fails; iocbs after it are not looked at; only k events appear"
+  event_rw: "res = bytes transferred: a read past EOF 0, a count beyond EOF cut at EOF, a write past EOF extends the file; a zero-length write 0"
+  event_vectored: "res = total bytes over all iovecs; 0 entries gives res 0; holes read as zeros"
+  event_sync: "FSYNC/FDSYNC: res 0 (also on a file opened read-only)"
+  event_poll: "res = ready events (pipe read end with data: POLLIN or POLLIN|POLLRDNORM; write end: POLLOUT; read end after the writer closed and no data: POLLHUP; regular file: POLLIN|POLLOUT as requested)"
+  event_bad_buffer: "res = -EFAULT (14) for an unreadable/unwritable aio_buf; the submit succeeded"
+  resfd: "with IOCB_FLAG_RESFD the eventfd's counter grows by 1 per completed iocb"
+errors:
+  bad_nr: "EINVAL (22): nr < 0 (nr is a signed long)"
+  bad_ctx: "EINVAL (22): ctx_id is not a live context of this process (0, a random number, destroyed, or one whose ring was unmapped, or the parent's after fork)"
+  array_fault: "EFAULT (14): iocbpp or one of its pointers unreadable, or the iocb itself unreadable"
+  buffer_range: "EFAULT (14) at submit for PREAD/PWRITE when [aio_buf, aio_buf + min(aio_nbytes, MAX_RW_COUNT 0x7ffff000)) is not inside the user address space (ends above 0x7ffffffff000); only the range is checked here, not whether it is mapped (an unmapped low buffer fails later, in res). So a huge aio_nbytes works with a buffer low in memory but fails with one near the top, e.g. a stack buffer when address randomisation is off (which made an earlier version of e_io_submit_rw fail on the reference under the pipeline's tracer; the test now uses a static buffer and checks the high case explicitly)"
+  reserved: "EINVAL (22): aio_reserved2 != 0"
+  bad_fd: "EBADF (9): aio_fildes not open, or an O_PATH descriptor"
+  bad_resfd: "EINVAL (22): IOCB_FLAG_RESFD and aio_resfd is not an eventfd; EBADF (9) if it is not open"
+  opcode: "EINVAL (22): aio_lio_opcode not one of 0, 1, 2, 3, 5, 7, 8"
+  access: "EBADF (9): PREAD/PREADV on a descriptor not open for reading, PWRITE/PWRITEV on one not open for writing"
+  offset: "EINVAL (22): negative aio_offset for a read or write"
+  no_read_write: "EINVAL (22): a read or write on a file with no read/write (a directory)"
+  rw_flags: "EOPNOTSUPP (95): unknown aio_rw_flags bits for a read or write; EINVAL (22) for any aio_rw_flags on FSYNC/FDSYNC/POLL"
+  sync_fields: "EINVAL (22): FSYNC/FDSYNC with aio_buf, aio_nbytes or aio_offset != 0; or on a file without fsync (a pipe)"
+  poll_fields: "EINVAL (22): POLL with aio_offset or aio_nbytes != 0, or mask bits above 0xffff"
+  too_many_iovecs: "EINVAL (22): PREADV/PWRITEV with more than 1024 entries; EFAULT (14) if the iovec array is unreadable"
+  full: "EAGAIN (11): the context already holds as many completions as it can (unreaped events plus pending operations); nothing is queued; reaping makes room"
+  order: "nr < 0, then the context, then per iocb in order: reading the pointer and iocb (EFAULT), aio_reserved2, the fd (EBADF), resfd, opcode-specific checks"
+side_effects: >
+  Performs the I/O (or arms the poll) and posts events to the context's
+  ring (tail advances). A failed iocb posts nothing. aio_key, aio_reqprio
+  (without IOCB_FLAG_IOPRIO) and aio_resfd (without IOCB_FLAG_RESFD) are
+  ignored.
+threading: "several threads may submit to one context; events of one context are delivered to whoever reaps them"
+ordering:
+  - "iocbs are processed in array order; synchronous ones complete in that order, so their events are in that order"
+  - "a POLL completes after the event it waits for, never before submit returns unless already ready"
+timing:
+  typical: "microseconds per iocb plus the I/O"
+  guarantees: "none"
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: constants from linux/aio_abi.h, linux/fs.h (RWF_*), poll bits from
+# asm-generic/poll.h. The EAGAIN capacity depends on the CPU count on
+# Linux; tests only require it to be at least nr_events.

@@ -377,6 +377,21 @@ kernel_test! {
         if f.file(0).is_err() || f.lock_owner() == shared.lock_owner() {
             return Err("unshare_table did not give a private copy");
         }
+        // CLONE_FS (ADR 0121): one umask and working directory for both
+        // until one unshares them.
+        let old_mask = f.umask(0o022);
+        let both = f.clone_for(false, true);
+        if both.umask(0o077) != 0o022 || f.umask(0o077) != 0o077 || both.context_id() != f.context_id() {
+            return Err("a shared context does not show the other's umask");
+        }
+        both.unshare_context();
+        if both.umask(0o002) != 0o077 || f.umask(0o077) != 0o077 || both.context_id() == f.context_id() {
+            return Err("unshare_context did not give a private copy");
+        }
+        if f.fork().context_id() == f.context_id() {
+            return Err("a forked context is not a copy");
+        }
+        f.umask(old_mask);
         let again = f.share_table();
         again.close_all();
         if f.file(0).is_err() {

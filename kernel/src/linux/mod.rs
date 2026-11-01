@@ -33,12 +33,18 @@ mod admin_tests;
 pub mod cred;
 mod cred_tests;
 mod fifo;
+mod fileattr;
 mod fileio_tests;
 mod files;
 mod files_tests;
+pub mod landlock;
+mod memcalls;
+mod mountapi;
+mod mqueue;
 pub mod net;
 mod ns_tests;
 mod pidfd;
+mod procaccess;
 mod services;
 mod shm;
 mod shm_tests;
@@ -49,6 +55,8 @@ pub mod task;
 mod task_tests;
 mod tests;
 pub mod timers;
+pub mod uffd;
+pub mod uring;
 mod xattr;
 mod xattr_tests;
 
@@ -178,7 +186,14 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     k.set_result(regs.rax);
     let exit = k.take_exit();
     if process.traced {
-        let ret = exit.is_none().then(|| Linux::traced_result(&mut k, regs.rax));
+        let ret = match exit {
+            None => Some(Linux::traced_result(&mut k, regs.rax)),
+            // seccomp(2) killed the process at this call (the only way a
+            // call ends in a signal): a tracer still reads its registers,
+            // which are as at entry (`rax` the call's number).
+            Some(crate::process::ExitStatus::Signaled { .. }) => Some(regs.rax),
+            Some(_) => None,
+        };
         testrun::syscall_of(process.pid, tid, number, &args, ret);
     }
     if let Some(line) = strace {
@@ -187,6 +202,11 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     if let Some(status) = exit {
         let _ = user::request_exit(status);
         return outcome;
+    }
+    // io_uring requests waiting for a file this call may have made ready
+    // (ADR 0122).
+    if Linux::background_pending() {
+        Linux::background(&mut k);
     }
     // rseq(2) (ADR 0111): the thread was switched out during the call.
     if k.flags.rseq_notify.load(Ordering::Relaxed) && k.flags.rseq_notify.swap(false, Ordering::Relaxed) {
@@ -210,6 +230,15 @@ pub fn exit_to_user(process: &Process) -> Leave {
     match Thread::current(process) {
         Some(mut k) => Linux::exit_to_user(&mut k).into(),
         None => Leave::Return,
+    }
+}
+
+/// The running thread of `process` is about to return to user mode after
+/// an interrupt while io_uring requests wait somewhere
+/// ([`Linux::background_pending`]): its process's run if they can.
+pub fn background(process: &Process) {
+    if let Some(mut k) = Thread::current(process) {
+        Linux::background(&mut k);
     }
 }
 

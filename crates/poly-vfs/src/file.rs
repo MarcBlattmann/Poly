@@ -169,6 +169,15 @@ pub struct OpenFile {
     /// Opened to run the file as a program: while it lives, the inode
     /// cannot be written (`ETXTBSY`).
     denies_write: bool,
+    /// Opened for writing a regular file: while it lives, the inode
+    /// cannot be run as a program (`ETXTBSY`, execve(2)).
+    counts_text_writer: bool,
+    /// Open for writing an inode of a mount: counted in the mount's and
+    /// its superblock's writers (`Mount::writers`) while it lives.
+    counts_writer: bool,
+    /// Causes no inotify or fanotify events (a descriptor fanotify hands
+    /// to its reader).
+    quiet: bool,
 }
 
 impl OpenFile {
@@ -190,6 +199,10 @@ impl OpenFile {
 
     pub(crate) fn new(node: NodeRef, kind: FileType, backend: Backend, flags: OpenFlags) -> OpenFile {
         let flags = flags.intersection(Self::KEPT);
+        let counts_writer = matches!(backend, Backend::Inode) && flags.writable();
+        if counts_writer {
+            node.loc().mount.count_writer(true);
+        }
         OpenFile {
             node,
             kind,
@@ -200,7 +213,30 @@ impl OpenFile {
             never_named: false,
             memfd: None,
             denies_write: false,
+            counts_writer,
+            counts_text_writer: false,
+            quiet: false,
         }
+    }
+
+    /// An open file that writes its inode: execve(2) of it is `ETXTBSY`
+    /// until it is dropped.
+    pub(crate) fn counting_text_writer(mut self) -> OpenFile {
+        self.node.loc().mount.sb.add_text_writer(self.node.ino());
+        self.counts_text_writer = true;
+        self
+    }
+
+    /// An open file that causes no file system events (fanotify(7): the
+    /// descriptors of events are opened so that they report nothing).
+    pub(crate) fn quiet(mut self) -> OpenFile {
+        self.quiet = true;
+        self
+    }
+
+    /// Whether the file causes no file system events.
+    pub(crate) fn is_quiet(&self) -> bool {
+        self.quiet
     }
 
     /// An open file that runs its inode as a program: writers get
@@ -221,6 +257,13 @@ impl OpenFile {
     /// The label and seals of a memfd_create(2) file.
     pub fn memfd(&self) -> Option<&Arc<crate::memfd::Memfd>> {
         self.memfd.as_ref()
+    }
+
+    /// Whether this is a memfd_secret(2) file, used only through shared
+    /// mappings ([`Memfd::secret`](crate::memfd::Memfd::secret)): reads and
+    /// writes are `EINVAL`, positioned ones and seeks `ESPIPE`.
+    pub fn secret(&self) -> bool {
+        self.memfd.as_ref().is_some_and(|m| m.is_secret())
     }
 
     /// The size of the file, for the seal checks of a memfd.
@@ -334,6 +377,9 @@ impl OpenFile {
         if !self.readable() {
             return Err(Errno::EBADF);
         }
+        if self.secret() {
+            return Err(Errno::EINVAL);
+        }
         match &self.backend {
             Backend::Inode if self.kind == FileType::Directory => Err(Errno::EISDIR),
             Backend::Inode => {
@@ -362,6 +408,9 @@ impl OpenFile {
     pub fn write(&self, buf: &[u8]) -> Result<usize> {
         if !self.writable() {
             return Err(Errno::EBADF);
+        }
+        if self.secret() {
+            return Err(Errno::EINVAL);
         }
         match &self.backend {
             // Nothing to write changes nothing: not the size, not the times.
@@ -405,6 +454,9 @@ impl OpenFile {
         if !self.readable() {
             return Err(Errno::EBADF);
         }
+        if self.secret() {
+            return Err(Errno::ESPIPE);
+        }
         if offset > MAX_FILE_SIZE {
             return Err(Errno::EINVAL);
         }
@@ -427,6 +479,9 @@ impl OpenFile {
     pub fn write_at(&self, offset: u64, buf: &[u8]) -> Result<usize> {
         if !self.writable() {
             return Err(Errno::EBADF);
+        }
+        if self.secret() {
+            return Err(Errno::ESPIPE);
         }
         if offset > MAX_FILE_SIZE {
             return Err(Errno::EINVAL);
@@ -464,6 +519,9 @@ impl OpenFile {
     pub fn write_with(&self, at: Option<u64>, append: Option<bool>, buf: &[u8]) -> Result<usize> {
         if !self.writable() {
             return Err(Errno::EBADF);
+        }
+        if self.secret() {
+            return Err(if at.is_some() { Errno::ESPIPE } else { Errno::EINVAL });
         }
         if !matches!(self.backend, Backend::Inode) {
             return match at {
@@ -514,6 +572,9 @@ impl OpenFile {
             return Err(Errno::EFBIG);
         };
         // A memfd's seals: punching a hole writes, growing grows.
+        if self.secret() {
+            return Err(Errno::EOPNOTSUPP);
+        }
         if let Some(m) = &self.memfd {
             let size = self.size()?;
             if mode & crate::FALLOC_FL_PUNCH_HOLE != 0 {
@@ -537,6 +598,9 @@ impl OpenFile {
     /// `EINVAL`; data/hole seeking treats the whole file as data. A failed
     /// seek leaves the offset alone.
     pub fn seek(&self, offset: i64, whence: Whence) -> Result<u64> {
+        if self.secret() {
+            return Err(Errno::ESPIPE);
+        }
         let size = match &self.backend {
             Backend::Path => return Err(Errno::EBADF),
             Backend::Device(dev) if !dev.seekable() => return Err(Errno::ESPIPE),
@@ -654,10 +718,12 @@ impl OpenFile {
         }
     }
 
-    /// `ioctl(2)`: devices only; `ENOTTY` for everything else.
+    /// `ioctl(2)`: devices and objects only (a device is told whether the
+    /// file is non-blocking now, [`CharDevice::ioctl_nonblock`]); `ENOTTY`
+    /// for everything else.
     pub fn ioctl(&self, request: u32, arg: u64) -> Result<u64> {
         match &self.backend {
-            Backend::Device(dev) => dev.ioctl(request, arg),
+            Backend::Device(dev) => dev.ioctl_nonblock(request, arg, self.nonblock()),
             Backend::Object(obj) => obj.ioctl(request, arg),
             Backend::Path => Err(Errno::EBADF),
             Backend::Inode => Err(Errno::ENOTTY),
@@ -696,7 +762,7 @@ impl OpenFile {
         match &self.backend {
             Backend::Inode | Backend::Path => PollEvents::READABLE | PollEvents::WRITABLE,
             Backend::Device(dev) => dev.poll(),
-            Backend::Object(obj) => obj.poll(),
+            Backend::Object(obj) => obj.poll_as(self.nonblock()),
         }
     }
 
@@ -779,6 +845,13 @@ impl Drop for OpenFile {
         if self.denies_write {
             self.node.loc().mount.sb.allow_write(self.node.ino());
         }
+        if self.counts_text_writer {
+            self.node.loc().mount.sb.drop_text_writer(self.node.ino());
+        }
+        if self.counts_writer {
+            self.node.loc().mount.count_writer(false);
+        }
+
         if crate::inotify::active() && matches!(self.backend, Backend::Inode | Backend::Device(_)) {
             use crate::inotify::mask::{IN_CLOSE_NOWRITE, IN_CLOSE_WRITE};
             crate::inotify::file_event(self, if self.writable() { IN_CLOSE_WRITE } else { IN_CLOSE_NOWRITE });

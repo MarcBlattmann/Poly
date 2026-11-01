@@ -28,10 +28,12 @@ use crate::args::Args;
 use crate::cred::{self, cap};
 use crate::errno::{Errno, SysResult};
 use crate::fs::rlimit::{RLIMIT_NICE, RLIMIT_RTPRIO};
-use crate::kernel::{LinuxKernel, ProcessSelector, Target};
+use crate::kernel::{LinuxKernel, ProcessSelector, Target, UserPtr};
 use crate::signal::LinuxProcess;
 use crate::table::{Handler, nr};
-use crate::task::sched::{self as rules, Changed, Changer, Sched};
+use crate::task::sched::{
+    self as rules, Changed, Changer, SCHED_ATTR_SIZE_MAX, SCHED_ATTR_SIZE_VER0, SCHED_ATTR_SIZE_VER1, Sched, SchedAttr,
+};
 use alloc::vec::Vec;
 
 pub use crate::task::sched::{
@@ -53,6 +55,8 @@ pub const CALLS: &[(u64, Handler)] = &[
     (nr::SCHED_RR_GET_INTERVAL, sched_rr_get_interval),
     (nr::SCHED_SETAFFINITY, sched_setaffinity),
     (nr::SCHED_GETAFFINITY, sched_getaffinity),
+    (nr::SCHED_SETATTR, sched_setattr),
+    (nr::SCHED_GETATTR, sched_getattr),
 ];
 
 /// `PRIO_*` (`linux/resource.h`).
@@ -316,6 +320,81 @@ pub fn sched_rr_get_interval(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     ts[8..].copy_from_slice(&(ns % 1_000_000_000).to_ne_bytes());
     k.copy_to_user(a.ptr(1), &ts)?;
     Ok(0)
+}
+
+/// sched_getattr(pid, attr, size, flags): the thread's attributes as a
+/// `struct sched_attr` ([`SchedAttr::of`]). `size` (32 bits) is the
+/// caller's buffer: 48 to 4096 bytes; `min(size, 56)` bytes are written
+/// with `attr->size` saying how many, and bytes 56 up to `size` zeroed.
+/// In order: `EINVAL` (NULL `attr`, negative `pid`, `flags` not 0), `EINVAL`
+/// (`size`), `ESRCH`, `EFAULT`.
+pub fn sched_getattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let attr = a.ptr(1);
+    if attr.is_null() || a.int(0) < 0 || a.uint(3) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let size = a.uint(2) as usize;
+    if !(SCHED_ATTR_SIZE_VER0..=SCHED_ATTR_SIZE_MAX).contains(&size) {
+        return Err(Errno::EINVAL);
+    }
+    let s = with_thread(k, Addr::Thread(a.int(0)), |p, tid| p.sched_of(tid))?;
+    let n = size.min(SCHED_ATTR_SIZE_VER1);
+    let out = SchedAttr { size: n as u32, ..SchedAttr::of(&s) };
+    k.copy_to_user(attr, &out.to_bytes()[..n])?;
+    if size > n {
+        let zeros = [0u8; SCHED_ATTR_SIZE_MAX];
+        k.copy_to_user(attr.offset(n as u64).ok_or(Errno::EFAULT)?, &zeros[..size - n])?;
+    }
+    Ok(0)
+}
+
+/// Read the `struct sched_attr` at `ptr` the way sched_setattr(2) does:
+/// `size` 0 means 48; below 48, above 4096, or above 56 with a non-zero
+/// byte after the 56 Poly knows is `E2BIG`, and 56 is written to
+/// `attr->size`; `EFAULT` if it cannot be read. Returns the structure and
+/// the size it was read with.
+fn read_attr(k: &mut dyn LinuxKernel, ptr: UserPtr) -> Result<(SchedAttr, usize), Errno> {
+    let mut raw = [0u8; 4];
+    k.copy_from_user(ptr, &mut raw)?;
+    let size = match u32::from_ne_bytes(raw) as usize {
+        0 => SCHED_ATTR_SIZE_VER0,
+        n => n,
+    };
+    let mut too_big = !(SCHED_ATTR_SIZE_VER0..=SCHED_ATTR_SIZE_MAX).contains(&size);
+    let mut buf = [0u8; SCHED_ATTR_SIZE_MAX];
+    if !too_big {
+        k.copy_from_user(ptr, &mut buf[..size])?;
+        too_big = buf[SCHED_ATTR_SIZE_VER1.min(size)..size].iter().any(|&b| b != 0);
+    }
+    if too_big {
+        k.copy_to_user(ptr, &(SCHED_ATTR_SIZE_VER1 as u32).to_ne_bytes())?;
+        return Err(Errno::E2BIG);
+    }
+    Ok((SchedAttr::from_bytes(&buf[..size.min(SCHED_ATTR_SIZE_VER1)]), size))
+}
+
+/// sched_setattr(pid, attr, flags): set the thread's policy and
+/// parameters from a `struct sched_attr`. In order: `EINVAL` (NULL `attr`,
+/// negative `pid`, `flags` not 0), `E2BIG` / `EFAULT` ([`read_attr`]),
+/// `ESRCH`, `EINVAL` / `EOPNOTSUPP` ([`rules::apply_attr`]), `EPERM`
+/// ([`rules::check_attr_change`]).
+pub fn sched_setattr(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let ptr = a.ptr(1);
+    if ptr.is_null() || a.int(0) < 0 || a.uint(2) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let (attr, size) = read_attr(k, ptr)?;
+    let who = changer(k);
+    with_thread(k, Addr::Thread(a.int(0)), |p, tid| {
+        let t = changed(p, tid)?;
+        let set = || -> Result<Sched, Errno> {
+            let next = rules::apply_attr(&t.sched, &attr, size)?;
+            rules::check_attr_change(&who, &t, &next)?;
+            Ok(next)
+        };
+        Some(set().map(|s| store(p, tid, s)))
+    })?
+    .map(|()| 0)
 }
 
 /// The size of the kernel's CPU mask: one `unsigned long`, 64 CPUs.

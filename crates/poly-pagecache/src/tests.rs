@@ -131,6 +131,9 @@ impl FileSystem for Probe {
     fn info(&self) -> FsInfo {
         self.fs.info()
     }
+    fn data_pages(&self, ino: Ino, first: u64, end: u64) -> Option<Vec<u64>> {
+        self.fs.data_pages(ino, first, end)
+    }
     fn root(&self) -> Ino {
         self.fs.root()
     }
@@ -702,4 +705,21 @@ fn the_end_of_a_listing_is_the_inner_file_systems() {
     assert_eq!(fs.readdir_end(), Some(i32::MAX as u64));
     let (_cache, _probe, probed) = setup(4);
     assert_eq!(probed.readdir_end(), None, "a file system that does not say");
+}
+
+#[test]
+fn data_pages_are_written_pages_not_holes() {
+    let (cache, _probe, fs) = setup(1000);
+    let ino = fs.create(fs.root(), b"f", &REG).unwrap();
+    fs.write(ino, 0, b"a").unwrap();
+    fs.write(ino, 16 * PAGE, b"b").unwrap();
+    fs.truncate(ino, 1 << 20).unwrap();
+    assert_eq!(fs.data_pages(ino, 0, u64::MAX), Some(vec![0, 16]), "dirty, not written back yet");
+    cache.writeback_all().unwrap();
+    assert_eq!(fs.data_pages(ino, 0, u64::MAX), Some(vec![0, 16]), "written back");
+    let _ = read_all(&*fs, ino);
+    assert_eq!(fs.data_pages(ino, 1, 16), Some(vec![]), "cached holes hold no data");
+    assert_eq!(fs.data_pages(ino, 16, 17), Some(vec![16]));
+    fs.truncate(ino, 0).unwrap();
+    assert_eq!(fs.data_pages(ino, 0, u64::MAX), Some(vec![]));
 }

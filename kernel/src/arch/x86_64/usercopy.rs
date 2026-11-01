@@ -159,7 +159,7 @@ pub(super) fn page_fault(frame: &mut TrapFrame) -> bool {
         // been read. The trap frame is on this thread's stack, so blocking
         // or being preempted here is like doing so in the copy itself.
         unsafe { cpu::enable_interrupts() };
-        let resolved = crate::user::page_fault(addr, access).is_ok();
+        let resolved = crate::user::page_fault_in(addr, access, true).is_ok();
         cpu::disable_interrupts();
         if resolved {
             return true;

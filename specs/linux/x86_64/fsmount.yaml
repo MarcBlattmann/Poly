@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fsmount              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (and children dropping to uid/gid 1000); umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  fsmount(fs_fd, flags, attr_flags) (syscall 432) creates a detached
+  mount of the superblock made by fsconfig(FSCONFIG_CMD_CREATE) on the
+  context fs_fd and returns an O_PATH descriptor of its root directory
+  (lowest free; FD_CLOEXEC only with FSMOUNT_CLOEXEC 1). attr_flags are
+  MOUNT_ATTR_* per-mount attributes: RDONLY 0x1, NOSUID 0x2, NODEV 0x4,
+  NOEXEC 0x8, one atime mode in the field 0x70 (RELATIME 0, NOATIME 0x10,
+  STRICTATIME 0x20; 0x30 and above invalid), NODIRATIME 0x80, NOSYMFOLLOW
+  0x200000 (IDMAP 0x100000 is not accepted here); they show in statfs
+  f_flags (ST_RDONLY 1, ST_NOSUID 2, ST_NODEV 4, ST_NOEXEC 8, ST_NOATIME
+  1024, ST_NODIRATIME 2048, ST_RELATIME 4096, ST_NOSYMFOLLOW 0x2000). The
+  detached mount is in no namespace: it is reachable only through the
+  descriptor (openat/statx relative to it work, files can be created) and
+  is discarded with its contents when the last descriptor referring to it
+  is closed, unless move_mount attached it first; once attached it stays
+  after the descriptor is closed. A context can be mounted once.
+returns:
+  success: "a new O_PATH fd for the root of the detached mount"
+  attributes: "statfs of the attached mount shows the requested ST_* bits"
+errors:
+  perm: "EPERM (1): no CAP_SYS_ADMIN; checked first (also with a closed fd)"
+  flags: "EINVAL (22): flags other than FSMOUNT_CLOEXEC; unknown attr_flags bits; atime value 0x30"
+  bad_fd: "EBADF (9): fs_fd not open, or an O_PATH descriptor (also a mount fd)"
+  not_context: "EINVAL (22): fs_fd is not a file system context (a pipe)"
+  not_created: "EINVAL (22): the context has no superblock yet (no CMD_CREATE)"
+  twice: "EBUSY (16): fsmount already done on this context; also on a context from fspick"
+  order: "EPERM, flags/attr (EINVAL), descriptor (EBADF/EINVAL), context state (EBUSY/EINVAL)"
+side_effects: "creates a detached mount; uses one descriptor"
+threading: "none specific"
+ordering:
+  - "the detached mount is torn down when its last reference (descriptor, dup) goes, before close returns"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

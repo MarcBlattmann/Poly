@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mq_getsetattr        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  mq_getsetattr(mqdes, newattr, oldattr) (syscall 245) reads and/or
+  changes a message-queue descriptor's attributes (struct mq_attr, 64
+  bytes: long mq_flags, mq_maxmsg, mq_msgsize, mq_curmsgs, reserved[4]).
+  oldattr (if non-NULL) receives the attributes as they were before any
+  change: mq_flags = the open file's O_NONBLOCK bit (0 or 04000),
+  mq_maxmsg, mq_msgsize, mq_curmsgs (messages queued now), reserved words
+  0. newattr (if non-NULL): only mq_flags is used and it may contain only
+  O_NONBLOCK (anything else, e.g. O_RDWR, is EINVAL and nothing changes);
+  it sets or clears the open file's O_NONBLOCK (seen by fcntl(F_GETFL) and
+  by other descriptors sharing that open file, not by separate mq_open
+  descriptors). mq_maxmsg, mq_msgsize and mq_curmsgs in newattr are
+  ignored. fcntl(F_SETFL, O_NONBLOCK) likewise changes mq_flags. Works on
+  descriptors of any access mode. Both pointers NULL is a successful
+  no-op.
+returns:
+  success: "0"
+  get: "oldattr = {O_NONBLOCK or 0, maxmsg, msgsize, curmsgs, 0, 0, 0, 0}"
+errors:
+  bad_fd: "EBADF (9): mqdes not open, or not a message queue (stdout, a pipe)"
+  flags: "EINVAL (22): newattr->mq_flags has bits other than O_NONBLOCK"
+  fault: "EFAULT (14): newattr unreadable or oldattr unwritable"
+  order: "newattr copy (EFAULT), mq_flags check (EINVAL), descriptor (EBADF), then oldattr copy-out (EFAULT)"
+side_effects: "may change the open file's O_NONBLOCK flag"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

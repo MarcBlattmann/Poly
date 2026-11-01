@@ -201,6 +201,7 @@ pub fn bind(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if addr == SockAddr::Unspec {
         addr = unspec_bind(k, fd, a.ptr(1), a.int(2))?;
     }
+    crate::sys::landlock::check_socket(k, fd, &addr, false)?;
     net(k)?.bind(fd, &addr).map(|()| 0)
 }
 
@@ -278,6 +279,7 @@ fn do_accept(k: &mut dyn LinuxKernel, a: &Args, flags: u32) -> SysResult {
 pub fn connect(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let addr = read_addr(k, a.ptr(1), a.int(2))?;
+    crate::sys::landlock::check_socket(k, fd, &addr, true)?;
     let r = net(k)?.connect(fd, &addr);
     r.map(|()| 0).map_err(|e| interrupted(k, fd, true, e))
 }

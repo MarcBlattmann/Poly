@@ -2,12 +2,11 @@
 //! strict mode or a filter on the calling thread, ask which actions are
 //! supported. The rules are in [`crate::seccomp`] (ADR 0054).
 //!
-//! The order of the checks of `SECCOMP_SET_MODE_FILTER` is Poly's (the
-//! man page lists the errors without one), to be confirmed by the diff
-//! runner: unknown or unsupported flags (`EINVAL`), the privilege
-//! (`EACCES`), reading and checking the program (`EFAULT`, `EINVAL`), the
-//! thread's mode (`EINVAL`), the path length (`ENOMEM`), the other threads
-//! (`TSYNC`).
+//! The order of the checks of `SECCOMP_SET_MODE_FILTER` is the spec
+//! sheet's: the operation and flags (`EINVAL`), reading and checking the
+//! program (`EFAULT`, `EINVAL`), the privilege (`EACCES`), a listener
+//! already there (`EBUSY`), the thread's mode (`EINVAL`), the path length
+//! (`ENOMEM`), the other threads (`TSYNC`).
 
 use crate::args::Args;
 use crate::cred::{self, cap};
@@ -58,16 +57,32 @@ pub fn seccomp(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
 }
 
-/// `SECCOMP_SET_MODE_FILTER`. A user notification listener
-/// (`SECCOMP_FILTER_FLAG_NEW_LISTENER`, and `WAIT_KILLABLE_RECV`, which
-/// needs one) is `EINVAL`: Poly has none. `SPEC_ALLOW` changes nothing
-/// (no speculation mitigations to leave off).
-fn set_filter(k: &mut dyn LinuxKernel, flags: u32, fprog: UserPtr) -> SysResult {
+/// Check `SECCOMP_SET_MODE_FILTER`'s flags (seccomp(2), the spec sheet):
+/// only known bits; `WAIT_KILLABLE_RECV` needs `NEW_LISTENER`; `TSYNC`
+/// with `NEW_LISTENER` needs `TSYNC_ESRCH` (its result could not be both a
+/// thread id and a descriptor).
+pub fn check_filter_flags(flags: u32) -> Result<(), Errno> {
+    let has = |f: u32| flags & f != 0;
     if flags & !SECCOMP_FILTER_FLAGS != 0
-        || flags & (SECCOMP_FILTER_FLAG_NEW_LISTENER | SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV) != 0
+        || has(SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV) && !has(SECCOMP_FILTER_FLAG_NEW_LISTENER)
+        || has(SECCOMP_FILTER_FLAG_TSYNC)
+            && has(SECCOMP_FILTER_FLAG_NEW_LISTENER)
+            && !has(SECCOMP_FILTER_FLAG_TSYNC_ESRCH)
     {
         return Err(Errno::EINVAL);
     }
+    Ok(())
+}
+
+/// `SECCOMP_SET_MODE_FILTER`. With `SECCOMP_FILTER_FLAG_NEW_LISTENER` the
+/// result is a new notification descriptor
+/// ([`LinuxKernel::seccomp_listener`]); only one filter of a thread's
+/// chain may have one (`EBUSY`). Poly never sends it notifications
+/// (`SECCOMP_RET_USER_NOTIF` fails the call with `ENOSYS`).
+/// `SPEC_ALLOW` changes nothing (no speculation mitigations to leave off).
+fn set_filter(k: &mut dyn LinuxKernel, flags: u32, fprog: UserPtr) -> SysResult {
+    check_filter_flags(flags)?;
+    let program = seccomp::read_program(k, fprog)?;
     // seccomp(2): "either the calling thread must have the CAP_SYS_ADMIN
     // capability in its user namespace, or the thread must already have
     // the no_new_privs bit set" (EACCES).
@@ -75,10 +90,15 @@ fn set_filter(k: &mut dyn LinuxKernel, flags: u32, fprog: UserPtr) -> SysResult 
     if !creds.no_new_privs && !creds.capable(cap::SYS_ADMIN) {
         return Err(Errno::EACCES);
     }
-    let program = seccomp::read_program(k, fprog)?;
+    let listener = flags & SECCOMP_FILTER_FLAG_NEW_LISTENER != 0;
+    if listener && seccomp::has_listener(k) {
+        return Err(Errno::EBUSY);
+    }
     let tsync = flags & SECCOMP_FILTER_FLAG_TSYNC != 0;
-    match seccomp::install(k, program, flags & SECCOMP_FILTER_FLAG_LOG != 0, tsync)? {
-        Installed::Done => Ok(0),
+    let opts = seccomp::FilterOptions { log: flags & SECCOMP_FILTER_FLAG_LOG != 0, listener };
+    let fd = if listener { Some(k.seccomp_listener()?) } else { None };
+    match seccomp::install(k, program, opts, tsync)? {
+        Installed::Done => Ok(fd.map_or(0, |fd| fd as u64)),
         // "the call will not attach the new seccomp filter, and will fail,
         // returning the first thread ID found that cannot synchronize",
         // or ESRCH with SECCOMP_FILTER_FLAG_TSYNC_ESRCH.

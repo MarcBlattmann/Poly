@@ -54,12 +54,31 @@ struct State {
 pub struct Memfd {
     name: Box<[u8]>,
     state: SpinMutex<State>,
+    /// A memfd_secret(2) file ([`Memfd::secret`]).
+    secret: bool,
 }
 
 impl Memfd {
     /// A memfd called `name` starting with `seals`.
     pub fn new(name: &[u8], seals: u32) -> Arc<Memfd> {
-        Arc::new(Memfd { name: name.into(), state: SpinMutex::new(State { seals, writable_maps: 0 }) })
+        Arc::new(Memfd { name: name.into(), state: SpinMutex::new(State { seals, writable_maps: 0 }), secret: false })
+    }
+
+    /// A memfd_secret(2) file: no seals can be added (`F_SEAL_SEAL`), its
+    /// size is set once (a second ftruncate(2) is `EINVAL`), and its
+    /// contents are reached only through shared mappings (see
+    /// [`OpenFile::secret`](crate::OpenFile::secret)).
+    pub fn secret() -> Arc<Memfd> {
+        Arc::new(Memfd {
+            name: b"secretmem"[..].into(),
+            state: SpinMutex::new(State { seals: seal::SEAL, writable_maps: 0 }),
+            secret: true,
+        })
+    }
+
+    /// Whether this is a memfd_secret(2) file.
+    pub fn is_secret(&self) -> bool {
+        self.secret
     }
 
     /// The name given to memfd_create(2).
@@ -70,6 +89,9 @@ impl Memfd {
     /// What `/proc/<pid>/fd/<n>` and `/proc/<pid>/maps` show:
     /// `/memfd:<name> (deleted)`.
     pub fn path(&self) -> alloc::vec::Vec<u8> {
+        if self.secret {
+            return b"/secretmem (deleted)"[..].into();
+        }
         let mut p = alloc::vec::Vec::with_capacity(self.name.len() + 17);
         p.extend_from_slice(b"/memfd:");
         p.extend_from_slice(&self.name);
@@ -115,6 +137,10 @@ impl Memfd {
 
     /// May the file's size change from `size` to `new`?
     pub fn check_truncate(&self, size: u64, new: u64) -> Result<()> {
+        // A secret memory file's size is set once (memfd_secret(2)).
+        if self.secret && size != 0 {
+            return Err(Errno::EINVAL);
+        }
         let seals = self.seals();
         if (new < size && seals & seal::SHRINK != 0) || (new > size && seals & seal::GROW != 0) {
             return Err(Errno::EPERM);
@@ -134,6 +160,10 @@ impl Memfd {
     /// writes are sealed; otherwise, for a writable shared one, the guard
     /// that counts it until dropped.
     pub fn map(self: &Arc<Self>, shared: bool, writable: bool) -> Result<Option<WritableMap>> {
+        // Secret memory is used through shared mappings only.
+        if self.secret && !shared {
+            return Err(Errno::EINVAL);
+        }
         if !(shared && writable) {
             return Ok(None);
         }

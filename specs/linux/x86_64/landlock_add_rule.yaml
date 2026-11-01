@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/landlock_add_rule    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; Landlock enabled (ABI 7); tests run as root with all capabilities and as uid/gid 65534; umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  landlock_add_rule(ruleset_fd, rule_type, rule_attr, flags) (syscall 445)
+  adds a rule to a ruleset that has not been enforced yet. rule_type
+  LANDLOCK_RULE_PATH_BENEATH (1): rule_attr is struct
+  landlock_path_beneath_attr {u64 allowed_access; s32 parent_fd} (packed,
+  12 bytes): once enforced, the listed accesses are allowed on parent_fd's
+  file or directory and everything beneath it (parent_fd may be an O_PATH
+  or a normal descriptor; for a non-directory only file accesses are
+  allowed: EXECUTE, WRITE_FILE, READ_FILE, TRUNCATE, IOCTL_DEV). rule_type
+  LANDLOCK_RULE_NET_PORT (2): struct landlock_net_port_attr {u64
+  allowed_access; u64 port} allows BIND_TCP/CONNECT_TCP on that TCP port
+  (0-65535). allowed_access must be non-empty and a subset of what the
+  ruleset handles. Rules accumulate (union of allowed accesses). flags must
+  be 0.
+returns:
+  success: "0"
+  enforced_effect: "with READ_FILE|READ_DIR handled and a rule for directory A: files and directories under A readable, others EACCES; with BIND_TCP handled and a rule for port P: bind to P works, to other ports EACCES, UDP unaffected"
+errors:
+  flags: "EINVAL (22): flags != 0"
+  type: "EINVAL (22): unknown rule_type"
+  unhandled: "EINVAL (22): allowed_access has bits the ruleset does not handle; a net rule on a ruleset without handled_access_net; directory-only accesses on a non-directory"
+  empty: "ENOMSG (42): allowed_access 0"
+  port: "EINVAL (22): port > 65535"
+  parent_fd: "EBADF (9): parent_fd not open; EBADFD (77): parent_fd is not a usable file (a ruleset fd)"
+  fault: "EFAULT (14): rule_attr unreadable"
+  ruleset_fd: "EBADF (9): ruleset_fd not open; EBADFD (77): not a ruleset (stdout)"
+side_effects: "extends the ruleset"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

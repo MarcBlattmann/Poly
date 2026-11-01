@@ -142,6 +142,33 @@ pub struct MapHints {
     pub no_reserve: bool,
 }
 
+/// What [`LinuxKernel::mlock`] and [`LinuxKernel::mlockall`] do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MemLock {
+    /// Unlock (munlock(2)).
+    Unlock,
+    /// Lock and bring every page in now.
+    Lock,
+    /// Lock, bringing pages in only as they are touched (`MLOCK_ONFAULT`,
+    /// `MCL_ONFAULT`).
+    LockOnFault,
+}
+
+/// The locked memory of an address space, in bytes
+/// ([`LinuxKernel::locked_memory`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LockedMemory {
+    /// Locked in all (`VmLck`).
+    pub locked: u64,
+    /// Locked in the range asked about.
+    pub in_range: u64,
+    /// Mapped in all (`VmSize`).
+    pub mapped: u64,
+    /// The mlockall(2) `MCL_FUTURE` setting: [`MemLock::Lock`] or
+    /// [`MemLock::LockOnFault`] for new mappings, `None` when off.
+    pub future: Option<MemLock>,
+}
+
 /// A validated `mmap` request. The personality has already checked the
 /// flags, the alignment of `addr` (for fixed placements) and of the file
 /// offset, and rounded `len` up to whole pages.
@@ -574,13 +601,37 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
-    /// mlock(2) (`lock`) or munlock(2) of `[addr, addr + len)` (both page
-    /// aligned, `len` non-zero, no overflow): `ENOMEM` if part of it is not
-    /// mapped, or, to lock, is `PROT_NONE`; locking brings every page in.
-    /// `ENOSYS` by default.
-    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
-        let _ = (addr, len, lock);
+    /// mlock(2), mlock2(2) or munlock(2) of `[addr, addr + len)` (both page
+    /// aligned, `len` non-zero, no overflow): the regions are marked
+    /// locked (or unlocked) up to the first hole, which makes it `ENOMEM`;
+    /// [`MemLock::Lock`] then brings every page in, `ENOMEM` if a region
+    /// is `PROT_NONE` (it stays marked); [`MemLock::LockOnFault`] brings
+    /// nothing in. `ENOSYS` by default.
+    fn mlock(&mut self, addr: u64, len: u64, how: MemLock) -> Result<(), Errno> {
+        let _ = (addr, len, how);
         Err(Errno::ENOSYS)
+    }
+
+    /// mlockall(2): with `current`, mark every region locked (bringing
+    /// its pages in for [`MemLock::Lock`], skipping what cannot come in);
+    /// `future` replaces the "lock new mappings" setting (`None` ends it).
+    /// `ENOSYS` by default.
+    fn mlockall(&mut self, current: Option<MemLock>, future: Option<MemLock>) -> Result<(), Errno> {
+        let _ = (current, future);
+        Err(Errno::ENOSYS)
+    }
+
+    /// munlockall(2): unlock every region and end the "lock new mappings"
+    /// setting. `ENOSYS` by default.
+    fn munlockall(&mut self) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// How much of the address space is locked, and how much of
+    /// `[addr, addr + len)`. All zero by default.
+    fn locked_memory(&self, addr: u64, len: u64) -> LockedMemory {
+        let _ = (addr, len);
+        LockedMemory::default()
     }
 
     /// mincore(2) of `[addr, addr + vec.len() pages)` (`addr` page
@@ -848,6 +899,16 @@ pub trait LinuxKernel {
         Err(Errno::ENOSYS)
     }
 
+    /// execveat(2) before it reads `argv` and `envp`: look up the program
+    /// of `req` (its `argv` and `envp` are empty here) and check it as
+    /// [`execve`](Self::execve) would (`EBADF`, `ENOTDIR`, `ENOENT`,
+    /// `ELOOP`, `EACCES`, `ETXTBSY`), changing nothing. The default:
+    /// nothing to check.
+    fn exec_lookup(&mut self, req: &crate::task::exec::ExecRequest<'_>) -> Result<(), Errno> {
+        let _ = req;
+        Ok(())
+    }
+
     /// Run `f` with the system's process tree locked
     /// ([`crate::task::tree::ProcessTree`]); `f` never blocks and never
     /// calls back into the kernel. The kernel lets go of the records of
@@ -1110,10 +1171,136 @@ pub trait LinuxKernel {
     }
 
     /// The namespace descriptor `fd` refers to (opened from
-    /// `/proc/[pid]/ns/<kind>`): its inode number and kind. `EBADF`,
-    /// `EINVAL` for another file. `EINVAL` by default.
+    /// `/proc/[pid]/ns/<kind>`): its inode number and kind. `EBADF` (also
+    /// for an `O_PATH` descriptor), `EINVAL` for another file. `EINVAL` by
+    /// default.
     fn namespace_of_fd(&mut self, fd: i32) -> Result<(u32, crate::ns::Kind), Errno> {
         let _ = fd;
         Err(Errno::EINVAL)
     }
+
+    // ---- other processes' resources (ADR 0121) -------------------------
+
+    /// kcmp(2): an identity of resource `what` of process `pid` (a global
+    /// thread group id, alive or a zombie): equal identities mean the same
+    /// kernel object, and they order the objects consistently. `EBADF`
+    /// for a descriptor `pid` does not have open; for
+    /// [`KcmpResource::EpollTarget`] also `EINVAL` (not an epoll
+    /// descriptor) and `ENOENT` (no such registration). `ENOSYS` by
+    /// default.
+    fn kcmp_id(&mut self, pid: i32, what: KcmpResource) -> Result<u64, Errno> {
+        let _ = (pid, what);
+        Err(Errno::ENOSYS)
+    }
+
+    /// process_vm_readv(2): copy `buf.len()` bytes from `addr` in the
+    /// memory of process `pid` (a global thread group id; the caller
+    /// itself included), as a read by that process would (unmapped or
+    /// unreadable memory: `EFAULT`, nothing promised about `buf`). The
+    /// personality never asks for a range that crosses a page boundary.
+    /// `EFAULT` by default.
+    fn process_vm_read(&mut self, pid: i32, addr: u64, buf: &mut [u8]) -> Result<(), Errno> {
+        let _ = (pid, addr, buf);
+        Err(Errno::EFAULT)
+    }
+
+    /// process_vm_writev(2): copy `data` to `addr` in the memory of
+    /// process `pid`, as a write by that process would (no forced write
+    /// to read-only memory: `EFAULT`); see
+    /// [`process_vm_read`](Self::process_vm_read). `EFAULT` by default.
+    fn process_vm_write(&mut self, pid: i32, addr: u64, data: &[u8]) -> Result<(), Errno> {
+        let _ = (pid, addr, data);
+        Err(Errno::EFAULT)
+    }
+
+    /// pidfd_getfd(2): put the open file description behind descriptor
+    /// `fd` of process `pid` on the caller's lowest free descriptor, with
+    /// `FD_CLOEXEC`; returns it. `EBADF` if `pid` has no such descriptor,
+    /// `EMFILE` past the caller's `RLIMIT_NOFILE`. `EBADF` by default.
+    fn take_fd(&mut self, pid: i32, fd: i32) -> Result<i32, Errno> {
+        let _ = (pid, fd);
+        Err(Errno::EBADF)
+    }
+
+    /// Whether the calling thread's memory has other users (other threads,
+    /// or processes made with `CLONE_VM`): unshare(2) `CLONE_VM` is then
+    /// `EINVAL`. By default, whether the process has other threads.
+    fn memory_shared(&mut self) -> bool {
+        let mut threads = 0;
+        let _ = self.with_process(Target::Current, &mut |p, _| threads = p.thread_ids().count());
+        threads > 1
+    }
+
+    /// seccomp(2) `SECCOMP_FILTER_FLAG_NEW_LISTENER`: a new notification
+    /// descriptor on the lowest free number, open `O_RDWR`, close-on-exec,
+    /// an anonymous inode named `seccomp notify`. `ENOSYS` by default.
+    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// mseal(2): seal the page-aligned, non-empty range `[addr, addr +
+    /// len)` (`ENOMEM` if part of it is unmapped, nothing sealed then).
+    fn mseal(&mut self, _addr: u64, _len: u64) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// memfd_secret(2): a new secret memory file
+    /// ([`crate::sys::secretmem`]); returns its descriptor.
+    fn memfd_secret(&mut self, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// cachestat(2): how many of the pages `[first, end)` of the file
+    /// behind `fd` hold data (`end` may be `u64::MAX`: to the end of the
+    /// file); 0 for descriptors without pages of their own. `EBADF` for a
+    /// descriptor that is not open or is `O_PATH`.
+    fn cachestat(&mut self, _fd: i32, _first: u64, _end: u64) -> Result<u64, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// userfaultfd(2): a new userfaultfd object for the caller's memory
+    /// ([`crate::sys::userfaultfd`]); returns its descriptor.
+    /// `user_mode_only`: made with `UFFD_USER_MODE_ONLY`.
+    fn userfaultfd(&mut self, _nonblock: bool, _cloexec: bool, _user_mode_only: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// Carry out `op` on the userfaultfd object behind `fd`; `None` if
+    /// `fd` is not one.
+    fn userfaultfd_op(
+        &mut self,
+        _fd: i32,
+        _op: crate::sys::userfaultfd::UffdOp<'_>,
+    ) -> Option<Result<crate::sys::userfaultfd::UffdReply, Errno>> {
+        None
+    }
+
+    /// io_uring's kernel services ([`crate::uring`]); `None` (the calls
+    /// fail with `ENOSYS`) by default.
+    fn uring(&mut self) -> Option<&mut dyn crate::uring::UringKernel> {
+        None
+    }
+}
+
+/// A resource kcmp(2) compares ([`LinuxKernel::kcmp_id`]); the types of
+/// `linux/kcmp.h`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KcmpResource {
+    /// `KCMP_FILE`: the open file description behind a descriptor.
+    File(i32),
+    /// `KCMP_VM`: the address space.
+    Vm,
+    /// `KCMP_FILES`: the descriptor table.
+    Files,
+    /// `KCMP_FS`: root and working directory, umask.
+    Fs,
+    /// `KCMP_SIGHAND`: the signal dispositions.
+    Sighand,
+    /// `KCMP_IO`: the I/O context.
+    Io,
+    /// `KCMP_SYSVSEM`: the System V semaphore undo list.
+    SysvSem,
+    /// `KCMP_EPOLL_TFD`: the file registered as descriptor `tfd` (the
+    /// `toff`-th registration with that number) in epoll descriptor `efd`.
+    EpollTarget { efd: i32, tfd: i32, toff: u32 },
 }

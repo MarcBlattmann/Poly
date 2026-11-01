@@ -72,6 +72,14 @@ pub struct LinuxThread {
     /// fork(2) child keeps it, other new threads start without one,
     /// execve(2) drops it.
     pub rseq: Option<crate::sys::rseq::Registration>,
+    /// ioprio_set(2): the I/O priority (class << 13 | hint << 3 | level),
+    /// 0 for none; copied to the threads and processes it creates.
+    pub ioprio: u16,
+    /// personality(2): the execution domain and flags. Per thread; new
+    /// threads and fork(2) children start with their creator's; execve(2)
+    /// keeps it but for `READ_IMPLIES_EXEC`
+    /// ([`crate::sys::personality::after_exec`]).
+    pub personality: u32,
 }
 
 impl LinuxThread {
@@ -137,6 +145,19 @@ pub struct LinuxProcess {
     /// (ptrace(2) "ptrace access mode checking"). 1 at start; inherited by
     /// fork; execve(2) sets it again.
     pub dumpable: bool,
+    /// What identifies the signal handler table for kcmp(2)
+    /// `KCMP_SIGHAND`: a fresh value per process, the creator's for a
+    /// child made with `CLONE_SIGHAND` (the kernel sets it at clone(2)),
+    /// a fresh one again after execve(2).
+    /// Poly copies the actions to such a child instead of sharing them.
+    pub sighand: u64,
+}
+
+/// A signal handler table identity no process has had
+/// ([`LinuxProcess::sighand`]).
+fn new_sighand_id() -> u64 {
+    static NEXT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
 }
 
 impl LinuxProcess {
@@ -157,6 +178,7 @@ impl LinuxProcess {
             ns: crate::ns::Namespaces::default(),
             traced: false,
             dumpable: true,
+            sighand: new_sighand_id(),
         }
     }
 
@@ -182,6 +204,8 @@ impl LinuxProcess {
             seccomp: parent.seccomp.clone(),
             sched: parent.sched.for_child(),
             rseq: parent.rseq,
+            ioprio: parent.ioprio,
+            personality: parent.personality,
             ..LinuxThread::default()
         };
         let mut threads = BTreeMap::new();
@@ -200,6 +224,7 @@ impl LinuxProcess {
             ns: self.ns.for_child(),
             traced: self.traced,
             dumpable: self.dumpable,
+            sighand: new_sighand_id(),
         }
     }
 
@@ -210,6 +235,8 @@ impl LinuxProcess {
     /// alternate signal stack is not preserved". The robust list and
     /// `clear_child_tid` belong to the old program and are dropped.
     pub fn exec(&mut self, tid: i32) {
+        // execve(2) gives a process that shared its handlers its own.
+        self.sighand = new_sighand_id();
         for signal in 1..=crate::abi::signal::NSIG {
             let action = self.actions.get(signal);
             if action.handler != SIG_DFL && action.handler != SIG_IGN {
@@ -224,6 +251,7 @@ impl LinuxProcess {
         thread.saved_mask = None;
         thread.restart = None;
         thread.restart_block = None;
+        thread.personality = crate::sys::personality::after_exec(thread.personality);
         self.threads.clear();
         self.threads.insert(tid, thread);
         // timer_create(2): POSIX timers are deleted; setitimer(2): interval
@@ -248,6 +276,8 @@ impl LinuxProcess {
             comm: parent.comm,
             seccomp: parent.seccomp.clone(),
             sched: parent.sched.for_child(),
+            ioprio: parent.ioprio,
+            personality: parent.personality,
             ..LinuxThread::default()
         };
         self.threads.insert(tid, thread);
@@ -426,7 +456,13 @@ impl LinuxProcess {
             sent.notify = self.threads.keys().copied().collect();
         } else {
             match dest {
-                Dest::Thread(tid) if !blocked => sent.notify.push(tid),
+                // A thread waiting for the signal in rt_sigtimedwait(2)
+                // counts as blocking it for the rules above (it stays
+                // pending and kills nobody), but has it unmasked for the
+                // wait and must be woken to take it.
+                Dest::Thread(tid) if !self.blocked(signal, dest) || self.waited_for(signal, dest) => {
+                    sent.notify.push(tid)
+                }
                 Dest::Thread(_) => {}
                 Dest::Process => {
                     sent.notify.extend(self.threads.iter().find(|(_, t)| !t.mask.contains(signal)).map(|(&tid, _)| tid))
@@ -522,6 +558,27 @@ mod tests {
         assert_eq!(p.dequeue(100), None, "blocked in 100");
         assert_eq!(p.dequeue(102).map(|i| i.signal()), Some(SIGUSR1), "any unblocked thread may take it");
         assert_eq!(p.dequeue(101), None, "taken once");
+    }
+
+    /// pthread_kill(3) of a thread that waits for the signal in sigwait(3)
+    /// (VLC's main thread at exit) wakes it.
+    #[test]
+    fn a_thread_waiting_for_a_signal_sent_to_it_is_woken() {
+        let mut p = three_threads();
+        for tid in [100, 101, 102] {
+            p.thread_mut(tid).mask.insert(SIGTERM);
+        }
+        // As rt_sigtimedwait leaves the waiter: the set unblocked, waited for.
+        let t = p.thread_mut(100);
+        t.mask = t.mask.without(SigSet::only(SIGTERM));
+        t.sigwait = SigSet::only(SIGTERM);
+        let sent = p.send(SigInfo::from_process(SIGTERM, SI_TKILL, 100, 1000), Dest::Thread(100), false).unwrap();
+        assert!(sent.queued);
+        assert_eq!(sent.notify, [100], "only the waiter, and the signal is not fatal");
+        assert_eq!(p.dequeue_from(100, SigSet::only(SIGTERM)).map(|i| i.signal()), Some(SIGTERM));
+        // A thread that blocks it without waiting is not woken.
+        let sent = p.send(SigInfo::from_process(SIGTERM, SI_TKILL, 100, 1000), Dest::Thread(101), false).unwrap();
+        assert!(sent.queued && sent.notify.is_empty());
     }
 
     #[test]

@@ -25,10 +25,11 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use poly_personality_linux::admin::SystemName;
 use poly_personality_linux::ns;
 use poly_procfs::{
-    CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, MapEntry, MapName, MountEntry, Owner, ProcFs, ProcSource,
-    ProcState, ProcessInfo, SignalSets, SystemInfo,
+    CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, KernelName, MapEntry, MapName, MountEntry, Owner, ProcFs,
+    ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo,
 };
 use poly_vfs::{At, Cred, FileType, FsContext, MountFlags, OpenFile, Vfs};
 
@@ -147,7 +148,7 @@ pub fn comm(pid: u32) -> Option<Vec<u8>> {
 
 /// The memory map of process `pid`: the caller's own, or the one recorded
 /// at exec.
-fn memory_of(pid: u32) -> Option<Arc<Memory>> {
+pub(crate) fn memory_of(pid: u32) -> Option<Arc<Memory>> {
     if user::current_process().is_some_and(|p| p.pid == pid) {
         return user::current_memory();
     }
@@ -336,6 +337,7 @@ impl ProcSource for KernelProc {
                     dev,
                     ino,
                     name,
+                    locked: vma.locked,
                 }
             })
             .collect()
@@ -520,11 +522,36 @@ impl ProcSource for KernelProc {
         let kind = ns::Kind::from_index(kind as u32)?;
         let p = find(pid)?;
         let (namespaces, user_ns) = namespaces_of(&p)?;
-        Some(namespaces.inum(kind, &user_ns))
+        namespaces.entry_inum(kind, &user_ns)
     }
 
     fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
         ns::Kind::from_index(kind as u32).is_some_and(|k| ns::lookup(inum, k).is_some())
+    }
+
+    fn pin_namespace(&self, inum: u32, kind: usize, pin: bool) {
+        if let Some(k) = ns::Kind::from_index(kind as u32) {
+            ns::pin(inum, k, pin);
+        }
+    }
+
+    fn write_kernel_name(&self, which: KernelName, _offset: u64, data: &[u8]) -> Result<usize, poly_vfs::Errno> {
+        use poly_personality_linux::sys::admin::{may_set_names, sysctl_name};
+        // The writer's UTS namespace, with sethostname(2)'s privilege
+        // (sethostname's spec sheet: "with the same permission").
+        let creds = crate::linux::cred::current_creds().ok_or(poly_vfs::Errno::EPERM)?;
+        let uts = user::current_process().and_then(|p| p.linux.as_ref().and_then(|l| l.with(|s| s.ns.uts.clone())));
+        if !may_set_names(&creds, &uts) {
+            return Err(poly_vfs::Errno::EPERM);
+        }
+        let name = sysctl_name(data);
+        match (uts, which) {
+            (Some(u), KernelName::Host) => u.set_hostname(name),
+            (Some(u), KernelName::Domain) => u.set_domainname(name),
+            (None, KernelName::Host) => crate::linux::admin::set_name(SystemName::Host, name),
+            (None, KernelName::Domain) => crate::linux::admin::set_name(SystemName::Domain, name),
+        }
+        Ok(data.len())
     }
 
     fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {
@@ -585,33 +612,43 @@ pub fn new_procfs() -> Arc<dyn poly_vfs::FileSystem> {
     Arc::new(ProcFs::new(Arc::new(KernelProc)))
 }
 
-/// Mount procfs on `/proc`, sysfs on `/sys` and a tmpfs on `/dev/shm`
-/// (each directory made if missing). Called once at boot by `fs::init`.
+/// A file system mounted at boot: path, file system, mode of its root,
+/// `MS_NOEXEC`.
+type BootMount = (&'static [u8], Arc<dyn poly_vfs::FileSystem>, u16, bool);
+
+/// The memory file systems a Linux system has at boot (ADR 0122): procfs
+/// on `/proc`, sysfs on `/sys`, tmpfs on `/dev/shm`, the POSIX message
+/// queue file system on `/dev/mqueue` (mq_overview(7); a tmpfs named
+/// `mqueue`), tmpfs on `/run` and `/run/lock`. Each directory is made if
+/// missing, in this order (`/run/lock` on the new `/run`). Called once at
+/// boot by `fs::init`.
 pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
     let root = Cred::root();
     let mut made = ctx.clone();
     made.set_umask(0);
-    for (path, perm) in [(&b"/proc"[..], 0o555), (b"/sys", 0o555), (b"/dev/shm", 0o1777)] {
-        let _ = vfs.mkdir(&made, &root, At::Cwd, path, perm);
-    }
-    let mounts: [(&[u8], Arc<dyn poly_vfs::FileSystem>); 3] = [
-        (b"/proc", new_procfs()),
-        (b"/sys", super::sysfs::build()),
-        (b"/dev/shm", super::memfs::cached(super::memfs::new_tmpfs(super::clock()))),
+    let clock = super::clock;
+    let tmpfs = || -> Arc<dyn poly_vfs::FileSystem> { super::memfs::cached(super::memfs::new_tmpfs(clock())) };
+    let mounts: [BootMount; 6] = [
+        (b"/proc", new_procfs(), 0o555, true),
+        (b"/sys", super::sysfs::build(), 0o555, true),
+        (b"/dev/shm", tmpfs(), 0o1777, false),
+        (b"/dev/mqueue", Arc::new(poly_vfs::Tmpfs::new(clock()).named("mqueue", poly_vfs::MQUEUE_MAGIC)), 0o1777, true),
+        (b"/run", tmpfs(), 0o755, false),
+        (b"/run/lock", tmpfs(), 0o1777, true),
     ];
+    let total = mounts.len();
     let mut ok = 0;
-    for (path, fs) in mounts {
-        let flags = MountFlags { no_suid: true, no_dev: true, no_exec: path != b"/dev/shm", read_only: false };
+    for (path, fs, perm, no_exec) in mounts {
+        let _ = vfs.mkdir(&made, &root, At::Cwd, path, perm);
+        let flags = MountFlags { no_suid: true, no_dev: true, no_exec, read_only: false };
         match vfs.mount(ctx, &root, At::Cwd, path, fs, flags) {
             Ok(_) => {
                 ok += 1;
-                if path == b"/dev/shm" {
-                    // A new tmpfs's root is 0755; shared memory is for everyone.
-                    let _ = vfs.chmod(ctx, &root, At::Cwd, path, 0o1777, true);
-                }
+                // A new tmpfs's root is 0755; set what the directory is for.
+                let _ = vfs.chmod(ctx, &root, At::Cwd, path, perm, true);
             }
             Err(e) => kprintln!("fs: mounting on {}: {}", String::from_utf8_lossy(path), e.name()),
         }
     }
-    kprintln!("fs: proc on /proc, sysfs on /sys, tmpfs on /dev/shm; {ok} of 3 mounted");
+    kprintln!("fs: proc, sysfs, tmpfs on /dev/shm, /run, /run/lock, mqueue on /dev/mqueue; {ok} of {total} mounted");
 }

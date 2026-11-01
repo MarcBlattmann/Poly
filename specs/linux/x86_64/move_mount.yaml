@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/move_mount           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (and children dropping to uid/gid 1000); umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  move_mount(from_dfd, from_path, to_dfd, to_path, flags) (syscall 429)
+  attaches a detached mount or moves an attached one. The source is
+  (from_dfd, from_path) resolved like openat (MOVE_MOUNT_F_EMPTY_PATH 0x4
+  allows "" to mean from_dfd itself, F_SYMLINKS 0x1 follows a final
+  symlink, F_AUTOMOUNTS 0x2); the target likewise with T_EMPTY_PATH 0x40,
+  T_SYMLINKS 0x10, T_AUTOMOUNTS 0x20. The source must be the root of a
+  mount: a detached mount from fsmount or open_tree(OPEN_TREE_CLONE)
+  (given by its descriptor with F_EMPTY_PATH) is attached at the target;
+  an attached mount (its root path, or a descriptor of it) is moved, with
+  everything mounted below it, so its files are then seen at the target
+  and no longer at the old place. A mount cannot be moved below itself.
+  Requires CAP_SYS_ADMIN.
+returns:
+  success: "0"
+  attach: "files of the detached mount appear at to_path"
+  move: "the mount and its submounts appear at to_path and vanish from the old place"
+errors:
+  perm: "EPERM (1): no CAP_SYS_ADMIN"
+  flags: "EINVAL (22): unknown flag bits (0x8000 here)"
+  empty_path: "ENOENT (2): \"\" without the matching *_EMPTY_PATH flag"
+  missing: "ENOENT (2): source or target does not exist"
+  bad_fd: "EBADF (9): from_dfd/to_dfd not open (with a path relative to it or an empty path)"
+  fault: "EFAULT (14): a path unreadable"
+  not_mount_root: "EINVAL (22): the source is not the root of a mount (a plain directory)"
+  loop: "ELOOP (40): moving a mount to a place below itself"
+  order: "EPERM and flags (EINVAL) first (their relative order not tested), then path lookups (ENOENT/EBADF/EFAULT), then mount checks (EINVAL, ELOOP)"
+side_effects: "changes the mount tree of the caller's mount namespace"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

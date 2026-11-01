@@ -67,20 +67,24 @@
 
 extern crate alloc;
 
+pub mod ancestry;
 mod cred;
 pub mod device;
 pub mod epoll;
 mod errno;
 pub mod eventfd;
+pub mod fanotify;
 mod fdtable;
 mod fifo;
 mod file;
+pub mod fileattr;
 mod fs;
 pub mod inotify;
 pub mod lock;
 pub mod locks;
 pub mod memfd;
 mod mount;
+mod mountapi;
 mod node;
 mod object;
 mod path;
@@ -98,13 +102,14 @@ pub use errno::Errno;
 pub use fdtable::{AT_FDCWD, At, DEFAULT_FD_LIMIT, Fd, FdTable};
 pub use file::{OpenFile, OpenFlags, Whence};
 pub use fs::{
-    Clock, DirEntry, EXT2_SUPER_MAGIC, FALLOC_FL_KEEP_SIZE, FALLOC_FL_PUNCH_HOLE, FileSystem, FsInfo, FsStats, NewNode,
-    PROC_SUPER_MAGIC, RenameFlags, ST_NODEV, ST_NOEXEC, ST_NOSUID, ST_RDONLY, SYSFS_MAGIC, TMPFS_MAGIC, magic_for,
+    Clock, DirEntry, EXT2_SUPER_MAGIC, FALLOC_FL_KEEP_SIZE, FALLOC_FL_PUNCH_HOLE, FileSystem, FsInfo, FsStats,
+    MQUEUE_MAGIC, NewNode, PROC_SUPER_MAGIC, RenameFlags, ST_NODEV, ST_NOEXEC, ST_NOSUID, ST_RDONLY, ST_RELATIME,
+    SYSFS_MAGIC, TMPFS_MAGIC, magic_for,
 };
 pub use mount::{Mount, MountFlags, MountId, MountInfo};
 pub use node::{FsContext, NodeRef};
 pub use object::FileObject;
-pub use path::{MAX_SYMLINKS, NAME_MAX, PATH_MAX, PathArg};
+pub use path::{MAX_SYMLINKS, NAME_MAX, PATH_MAX, PathArg, Resolve};
 pub use poll::{Blocker, PollEvents, Timeout, WaitQueue, Waker, Woke};
 pub use tmpfs::Tmpfs;
 pub use vfs::Vfs;

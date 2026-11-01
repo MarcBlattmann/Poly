@@ -22,7 +22,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
 /// Identifies a mount for as long as the VFS lives (ids are not reused).
 pub type MountId = u32;
@@ -75,12 +75,69 @@ pub struct Mount {
     pub(crate) id: MountId,
     pub(crate) sb: Arc<Superblock>,
     pub(crate) root: Ino,
-    /// The mount point: a mount and an inode on it. `None` for the first
-    /// root.
-    pub(crate) parent: Option<(Arc<Mount>, Ino)>,
+    /// The mount point: a mount and an inode on it. `None` for the root
+    /// of a tree (a namespace's first mount) and for a detached mount.
+    /// Moving a mount (`move_mount(2)`, `pivot_root(2)`) changes it.
+    /// A mount below the top of a detached tree holds its parent weakly
+    /// (see `subtree`).
+    parent: SpinMutex<Option<(Link, Ino)>>,
+    /// The top of a detached tree (`open_tree(OPEN_TREE_CLONE |
+    /// AT_RECURSIVE)`): the copied mounts below it, at any depth, parents
+    /// before their children. They are in no table; this list keeps them
+    /// (they point back weakly), so they go with the top when its last
+    /// descriptor is closed. Attaching the top moves them into the table.
+    subtree: SpinMutex<Vec<Arc<Mount>>>,
     /// [`MountFlags`] as bits: a remount changes them in place.
     flags: AtomicU8,
+    /// The rest of the per-mount attributes, as Linux's `MOUNT_ATTR_*`
+    /// bits other than the four of [`MountFlags`] (`linux/mount.h`: the
+    /// access time mode `0x70`, `NODIRATIME 0x80`, `NOSYMFOLLOW
+    /// 0x200000`): kept for `statmount(2)` and reported by `statfs(2)`;
+    /// `NOSYMFOLLOW` is enforced by path resolution, the access time
+    /// modes are not (Poly's tmpfs keeps access times as asked).
+    attrs: AtomicU32,
+    /// The propagation type, as Linux's `MS_PRIVATE`, `MS_SHARED`,
+    /// `MS_SLAVE` or `MS_UNBINDABLE` value (`linux/mount.h`). Poly
+    /// propagates nothing; the type is kept for `statmount(2)` and the
+    /// checks that refuse shared mounts (`pivot_root(2)`).
+    propagation: AtomicU32,
+    /// Open files writing to inodes through this mount: making it
+    /// read-only then is `EBUSY` (`mount_setattr(2)`).
+    writers: AtomicU32,
 }
+
+/// How a mount refers to the mount it is on.
+#[derive(Clone)]
+enum Link {
+    Strong(Arc<Mount>),
+    /// Below the top of a detached tree, which owns it (`Mount::subtree`).
+    Weak(Weak<Mount>, MountId),
+}
+
+impl Link {
+    fn id(&self) -> MountId {
+        match self {
+            Link::Strong(m) => m.id,
+            Link::Weak(_, id) => *id,
+        }
+    }
+
+    fn get(&self) -> Option<Arc<Mount>> {
+        match self {
+            Link::Strong(m) => Some(m.clone()),
+            Link::Weak(w, _) => w.upgrade(),
+        }
+    }
+}
+
+/// `MOUNT_ATTR_NOSYMFOLLOW` (`linux/mount.h`) in [`Mount::attrs`]: path
+/// resolution does not follow symbolic links on the mount (`ELOOP`).
+pub const ATTR_NOSYMFOLLOW: u32 = 0x0020_0000;
+
+/// `MS_PRIVATE` (`linux/mount.h`): the propagation type of a new mount.
+pub const PROPAGATION_PRIVATE: u32 = 1 << 18;
+/// `MS_SHARED` (`linux/mount.h`).
+pub const PROPAGATION_SHARED: u32 = 1 << 20;
 
 impl Mount {
     pub fn id(&self) -> MountId {
@@ -93,6 +150,160 @@ impl Mount {
 
     pub(crate) fn set_flags(&self, flags: MountFlags) {
         self.flags.store(flags.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Change the per-mount flags in place (`mount_setattr(2)`,
+    /// `fsmount(2)`'s attributes).
+    pub fn change_flags(&self, flags: MountFlags) {
+        self.set_flags(flags);
+    }
+
+    /// Where this mount is mounted: the mount and inode of its mount
+    /// point; `None` for the root of a tree or a detached mount.
+    pub fn parent(&self) -> Option<(Arc<Mount>, Ino)> {
+        let link = self.parent.lock().clone();
+        link.and_then(|(l, ino)| l.get().map(|m| (m, ino)))
+    }
+
+    pub(crate) fn set_parent(&self, parent: Option<(Arc<Mount>, Ino)>) {
+        *self.parent.lock() = parent.map(|(m, ino)| (Link::Strong(m), ino));
+    }
+
+    /// Mount this (a copy below the top of a detached tree) on `(parent,
+    /// ino)` without keeping `parent` alive.
+    pub(crate) fn set_weak_parent(&self, parent: &Arc<Mount>, ino: Ino) {
+        *self.parent.lock() = Some((Link::Weak(Arc::downgrade(parent), parent.id), ino));
+    }
+
+    /// Whether this mount is mounted on `(mount, ino)` (any inode of
+    /// `mount` when `ino` is `None`).
+    pub(crate) fn is_on(&self, mount: MountId, ino: Option<Ino>) -> bool {
+        matches!(&*self.parent.lock(), Some((p, i)) if p.id() == mount && ino.is_none_or(|x| x == *i))
+    }
+
+    /// The first mount of the tree this mount is in (itself for a
+    /// namespace's first mount or a detached mount).
+    pub(crate) fn top(self: &Arc<Self>) -> Arc<Mount> {
+        let mut cur = self.clone();
+        while let Some((p, _)) = cur.parent() {
+            cur = p;
+        }
+        cur
+    }
+
+    /// The mounts a detached tree's top keeps below it (empty for any
+    /// other mount).
+    pub(crate) fn subtree(&self) -> Vec<Arc<Mount>> {
+        self.subtree.lock().clone()
+    }
+
+    pub(crate) fn set_subtree(&self, mounts: Vec<Arc<Mount>>) {
+        *self.subtree.lock() = mounts;
+    }
+
+    /// The tree is being attached: hand over the mounts below and make
+    /// their links to their parents strong, as in the table.
+    pub(crate) fn take_subtree(&self) -> Vec<Arc<Mount>> {
+        let mounts = core::mem::take(&mut *self.subtree.lock());
+        for m in &mounts {
+            let mut link = m.parent.lock();
+            if let Some((l, ino)) = link.clone()
+                && let Some(p) = l.get()
+            {
+                *link = Some((Link::Strong(p), ino));
+            }
+        }
+        mounts
+    }
+
+    /// The topmost mount on `(self, ino)` among the mounts a detached
+    /// tree keeps (the table does not know them).
+    pub(crate) fn detached_covering(self: &Arc<Self>, ino: Ino) -> Option<Arc<Mount>> {
+        let top = self.top();
+        let kept = top.subtree.lock();
+        kept.iter().rev().find(|m| m.is_on(self.id, Some(ino))).cloned()
+    }
+
+    /// The Linux `MOUNT_ATTR_*` bits beyond [`MountFlags`] (see the field).
+    pub fn attrs(&self) -> u32 {
+        self.attrs.load(Ordering::Relaxed)
+    }
+
+    pub fn set_attrs(&self, attrs: u32) {
+        self.attrs.store(attrs, Ordering::Relaxed);
+    }
+
+    /// The propagation type (an `MS_*` value).
+    pub fn propagation(&self) -> u32 {
+        self.propagation.load(Ordering::Relaxed)
+    }
+
+    pub fn set_propagation(&self, propagation: u32) {
+        self.propagation.store(propagation, Ordering::Relaxed);
+    }
+
+    /// Open files writing through this mount.
+    pub fn writers(&self) -> u32 {
+        self.writers.load(Ordering::Relaxed)
+    }
+
+    /// One more (`true`) or one fewer open file writes through this mount
+    /// and to its superblock.
+    pub(crate) fn count_writer(&self, more: bool) {
+        if more {
+            self.writers.fetch_add(1, Ordering::Relaxed);
+            self.sb.writers.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.writers.fetch_sub(1, Ordering::Relaxed);
+            self.sb.writers.fetch_sub(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Open files writing to the file system this mount shows, through
+    /// any of its mounts (a read-only reconfiguration is then `EBUSY`).
+    pub fn sb_writers(&self) -> u32 {
+        self.sb.writers.load(Ordering::Relaxed)
+    }
+
+    /// Whether the file system itself is read-only (made so by a remount
+    /// without `MS_BIND` or an `fsconfig(2)` reconfiguration, or by its
+    /// nature): every mount of it is then read-only.
+    pub fn sb_read_only(&self) -> bool {
+        self.sb.ro.load(Ordering::Relaxed) || self.sb.info.read_only
+    }
+
+    /// Make the file system read-only as a whole, or writable again.
+    pub fn set_sb_read_only(&self, ro: bool) {
+        self.sb.ro.store(ro, Ordering::Relaxed);
+    }
+
+    /// What the file system was mounted from (`mount(2)`'s source, the
+    /// `source` parameter of `fsconfig(2)`), as recorded by
+    /// [`set_sb_info`](Self::set_sb_info).
+    pub fn sb_source(&self) -> Vec<u8> {
+        self.sb.meta.lock().0.clone()
+    }
+
+    /// The file system's options as `/proc/self/mountinfo` shows them
+    /// (without `rw`/`ro`), as recorded by [`set_sb_info`](Self::set_sb_info).
+    pub fn sb_options(&self) -> Vec<u8> {
+        self.sb.meta.lock().1.clone()
+    }
+
+    /// Record the source and options of the file system (shared by all
+    /// its mounts).
+    pub fn set_sb_info(&self, source: &[u8], options: &[u8]) {
+        *self.sb.meta.lock() = (source.to_vec(), options.to_vec());
+    }
+
+    /// The file system's type name (`"tmpfs"`).
+    pub fn fs_name(&self) -> &'static str {
+        self.sb.info.name
+    }
+
+    /// Whether `other` shows the same file system (superblock).
+    pub fn same_sb(&self, other: &Mount) -> bool {
+        Arc::ptr_eq(&self.sb, &other.sb)
     }
 
     pub fn fs(&self) -> &Arc<dyn FileSystem> {
@@ -111,7 +322,7 @@ impl Mount {
 
     /// Whether changes must fail with `EROFS`.
     pub fn read_only(&self) -> bool {
-        self.flags().read_only || self.sb.info.read_only
+        self.flags().read_only || self.sb_read_only()
     }
 
     /// Whether writing inode `ino` must fail with `EROFS`: as
@@ -119,7 +330,9 @@ impl Mount {
     /// writable ([`FileSystem::writable_file`]) may be written unless the
     /// mount is read-only.
     pub fn read_only_for(&self, ino: Ino) -> bool {
-        self.flags().read_only || (self.sb.info.read_only && !self.sb.fs.writable_file(ino))
+        self.flags().read_only
+            || self.sb.ro.load(Ordering::Relaxed)
+            || (self.sb.info.read_only && !self.sb.fs.writable_file(ino))
     }
 }
 
@@ -129,7 +342,7 @@ impl core::fmt::Debug for Mount {
             .field("id", &self.id)
             .field("fs", &self.sb.info.name)
             .field("root", &self.root)
-            .field("parent", &self.parent.as_ref().map(|(m, ino)| (m.id, *ino)))
+            .field("parent", &self.parent().map(|(m, ino)| (m.id, ino)))
             .field("flags", &self.flags())
             .finish()
     }
@@ -138,8 +351,8 @@ impl core::fmt::Debug for Mount {
 /// The first mount of the tree `m` belongs to: the root of its mount
 /// namespace ([`Vfs::copy_namespace`](crate::Vfs::copy_namespace)).
 pub(crate) fn base_of(m: &Arc<Mount>) -> MountId {
-    let mut cur = m;
-    while let Some((p, _)) = &cur.parent {
+    let mut cur = m.clone();
+    while let Some((p, _)) = cur.parent() {
         cur = p;
     }
     cur.id
@@ -167,6 +380,15 @@ pub(crate) struct Superblock {
     /// ([`Vfs::open_exec`](crate::Vfs::open_exec)): opening them for
     /// writing or truncating them is `ETXTBSY` (open(2), truncate(2)).
     exec_busy: SpinMutex<BTreeMap<Ino, u32>>,
+    /// Regular files open for writing, and how many open files write
+    /// them: running them as programs is `ETXTBSY` (execve(2)).
+    text_writers: SpinMutex<BTreeMap<Ino, u32>>,
+    /// Made read-only as a whole (see [`Mount::sb_read_only`]).
+    ro: AtomicBool,
+    /// Open files writing to it ([`Mount::sb_writers`]).
+    writers: AtomicU32,
+    /// The source and options recorded by [`Mount::set_sb_info`].
+    meta: SpinMutex<(Vec<u8>, Vec<u8>)>,
 }
 
 impl Superblock {
@@ -203,6 +425,27 @@ impl Superblock {
             *n -= 1;
             if *n == 0 {
                 busy.remove(&ino);
+            }
+        }
+    }
+
+    /// Whether an open file writes `ino` (`ETXTBSY` for execve(2)).
+    pub(crate) fn has_text_writers(&self, ino: Ino) -> bool {
+        self.text_writers.lock().contains_key(&ino)
+    }
+
+    /// One more open file writes `ino`.
+    pub(crate) fn add_text_writer(&self, ino: Ino) {
+        *self.text_writers.lock().entry(ino).or_insert(0) += 1;
+    }
+
+    /// One open file writing `ino` is gone.
+    pub(crate) fn drop_text_writer(&self, ino: Ino) {
+        let mut writers = self.text_writers.lock();
+        if let Some(n) = writers.get_mut(&ino) {
+            *n -= 1;
+            if *n == 0 {
+                writers.remove(&ino);
             }
         }
     }
@@ -263,11 +506,39 @@ pub(crate) struct MountTable {
     next_id: MountId,
     next_anon_minor: u32,
     supers: Vec<Weak<Superblock>>,
+    /// Namespaces whose first mount changed (`pivot_root(2)`): the id a
+    /// namespace was named by when it was made, and its first mount now.
+    aliases: BTreeMap<MountId, MountId>,
 }
 
 impl MountTable {
     pub(crate) fn new() -> MountTable {
-        MountTable { mounts: Vec::new(), next_id: 1, next_anon_minor: 1, supers: Vec::new() }
+        MountTable { mounts: Vec::new(), next_id: 1, next_anon_minor: 1, supers: Vec::new(), aliases: BTreeMap::new() }
+    }
+
+    /// The first mount now of the namespace named `name` (its first mount
+    /// when it was made).
+    pub(crate) fn current_base(&self, name: MountId) -> MountId {
+        self.aliases.get(&name).copied().unwrap_or(name)
+    }
+
+    /// The namespace whose first mount was `old` now starts at `new`.
+    pub(crate) fn rebase(&mut self, old: MountId, new: MountId) {
+        let mut renamed = false;
+        for v in self.aliases.values_mut() {
+            if *v == old {
+                *v = new;
+                renamed = true;
+            }
+        }
+        if !renamed {
+            self.aliases.insert(old, new);
+        }
+    }
+
+    /// The namespace named `name` is gone.
+    pub(crate) fn forget_alias(&mut self, name: MountId) {
+        self.aliases.remove(&name);
     }
 
     /// The superblock of `fs`, made on its first mount. `info` is
@@ -284,7 +555,17 @@ impl MountTable {
         let dev = DeviceId::new(0, self.next_anon_minor);
         self.next_anon_minor += 1;
         let cache = info.cache_lookups.then(|| SpinMutex::new(NameCache { dirs: BTreeMap::new(), entries: 0 }));
-        let sb = Arc::new(Superblock { fs, info, dev, cache, exec_busy: SpinMutex::new(BTreeMap::new()) });
+        let sb = Arc::new(Superblock {
+            fs,
+            info,
+            dev,
+            cache,
+            exec_busy: SpinMutex::new(BTreeMap::new()),
+            text_writers: SpinMutex::new(BTreeMap::new()),
+            ro: AtomicBool::new(false),
+            writers: AtomicU32::new(0),
+            meta: SpinMutex::new((Vec::new(), Vec::new())),
+        });
         self.supers.push(Arc::downgrade(&sb));
         sb
     }
@@ -296,24 +577,79 @@ impl MountTable {
         parent: Option<(Arc<Mount>, Ino)>,
         flags: MountFlags,
     ) -> Arc<Mount> {
-        let m = Arc::new(Mount { id: self.next_id, sb, root, parent, flags: AtomicU8::new(flags.to_bits()) });
-        self.next_id += 1;
+        let m = self.new_mount(sb, root, parent, flags);
         self.mounts.push(m.clone());
         m
+    }
+
+    /// A mount with the next id, in no list yet.
+    pub(crate) fn new_mount(
+        &mut self,
+        sb: Arc<Superblock>,
+        root: Ino,
+        parent: Option<(Arc<Mount>, Ino)>,
+        flags: MountFlags,
+    ) -> Arc<Mount> {
+        let m = Arc::new(Mount {
+            id: self.next_id,
+            sb,
+            root,
+            parent: SpinMutex::new(parent.map(|(m, ino)| (Link::Strong(m), ino))),
+            subtree: SpinMutex::new(Vec::new()),
+            flags: AtomicU8::new(flags.to_bits()),
+            attrs: AtomicU32::new(0),
+            propagation: AtomicU32::new(PROPAGATION_PRIVATE),
+            writers: AtomicU32::new(0),
+        });
+        self.next_id += 1;
+        m
+    }
+
+    /// Whether `m` is in the table (attached), not detached.
+    pub(crate) fn contains(&self, m: &Arc<Mount>) -> bool {
+        self.mounts.iter().any(|x| Arc::ptr_eq(x, m))
+    }
+
+    /// The mounts below `id` (at any depth), not `id` itself, in table
+    /// order.
+    pub(crate) fn descendants(&self, id: MountId) -> Vec<Arc<Mount>> {
+        let mut ids = alloc::vec![id];
+        let mut i = 0;
+        while i < ids.len() {
+            let d = ids[i];
+            ids.extend(self.mounts.iter().filter(|m| m.is_on(d, None)).map(|m| m.id));
+            i += 1;
+        }
+        self.mounts.iter().filter(|m| m.id != id && ids.contains(&m.id)).cloned().collect()
+    }
+
+    /// Put the tree whose first mount is `base` back in an order where
+    /// every mount comes after the mount it is on (what [`tree`](Self::tree)
+    /// and namespace copies rely on) after mounts moved, keeping the
+    /// relative order of mounts on the same mount point (the last one
+    /// stays the visible one).
+    pub(crate) fn reorder(&mut self, base: MountId) {
+        let members = self.tree(base);
+        let mut ordered: Vec<Arc<Mount>> = members.iter().filter(|m| m.id == base).cloned().collect();
+        let mut i = 0;
+        while i < ordered.len() {
+            let parent = ordered[i].id;
+            ordered.extend(members.iter().filter(|m| m.is_on(parent, None)).cloned());
+            i += 1;
+        }
+        self.mounts.retain(|m| !members.iter().any(|x| Arc::ptr_eq(x, m)));
+        self.mounts.extend(ordered);
     }
 
     /// A mount that is in no tree: the anonymous file system of file
     /// objects, which no path reaches and nothing can unmount.
     pub(crate) fn detached(&mut self, sb: Arc<Superblock>, root: Ino) -> Arc<Mount> {
-        let flags = AtomicU8::new(0);
-        let m = Arc::new(Mount { id: self.next_id, sb, root, parent: None, flags });
-        self.next_id += 1;
-        m
+        self.new_mount(sb, root, None, MountFlags::default())
     }
 
     /// The topmost mount on mount point `(mount, ino)`.
     pub(crate) fn covering(&self, mount: MountId, ino: Ino) -> Option<&Arc<Mount>> {
-        self.mounts.iter().rev().find(|m| matches!(&m.parent, Some((p, i)) if p.id == mount && *i == ino))
+        self.mounts.iter().rev().find(|m| m.is_on(mount, Some(ino)))
     }
 
     /// The mounts of the tree whose first mount is `base`, in mount order
@@ -323,7 +659,7 @@ impl MountTable {
     }
 
     pub(crate) fn has_children(&self, mount: MountId) -> bool {
-        self.mounts.iter().any(|m| matches!(&m.parent, Some((p, _)) if p.id == mount))
+        self.mounts.iter().any(|m| m.is_on(mount, None))
     }
 
     /// Removes `id` and, transitively, everything mounted below it.
@@ -335,7 +671,7 @@ impl MountTable {
         let mut i = 0;
         while i < doomed.len() {
             let d = doomed[i];
-            doomed.extend(self.mounts.iter().filter(|m| matches!(&m.parent, Some((p, _)) if p.id == d)).map(|m| m.id));
+            doomed.extend(self.mounts.iter().filter(|m| m.is_on(d, None)).map(|m| m.id));
             i += 1;
         }
         self.mounts.retain(|m| !doomed.contains(&m.id));

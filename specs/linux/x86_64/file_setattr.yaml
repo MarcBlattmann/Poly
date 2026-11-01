@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/file_setattr         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 (children dropping to uid/gid 1000); umask 022; tests use /dev/shm (tmpfs)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  file_setattr(dfd, filename, ufattr, usize, at_flags) (syscall 469) sets
+  a file's inode flags by path, like the FS_IOC_FSSETXATTR ioctl, from
+  struct file_attr (see file_getattr; usize at least 24, larger only with
+  a zero tail, at most a page; at_flags AT_SYMLINK_NOFOLLOW, AT_EMPTY_PATH).
+  fa_xflags replaces the file's flags (bits not given are cleared);
+  fa_nextents is ignored. tmpfs supports IMMUTABLE 0x8, APPEND 0x10,
+  NOATIME 0x40, NODUMP 0x80 (as far as tested: APPEND, IMMUTABLE, NODUMP);
+  REALTIME 0x1, a non-zero fa_extsize and fa_projid are EOPNOTSUPP there.
+  Only the owner (or CAP_FOWNER) may change flags; setting or clearing
+  APPEND or IMMUTABLE needs CAP_LINUX_IMMUTABLE. Effects: APPEND makes
+  opens for writing without O_APPEND fail with EPERM; IMMUTABLE makes any
+  write open and unlink fail with EPERM.
+returns:
+  success: "0; file_getattr then reports the new flags"
+errors:
+  usize: "EINVAL (22): usize < 24; E2BIG (7): larger with non-zero bytes past 24, or above a page"
+  at_flags: "EINVAL (22): at_flags other than AT_SYMLINK_NOFOLLOW|AT_EMPTY_PATH"
+  unknown_flags: "EINVAL (22): unknown fa_xflags bits"
+  unsupported: "EOPNOTSUPP (95): a flag or field the file system does not support (tmpfs: REALTIME, projid, extsize); a file without inode flags (symlink itself, /dev/null)"
+  fault: "EFAULT (14): ufattr unreadable"
+  perm: "EPERM (1): caller not the owner and without CAP_FOWNER; APPEND/IMMUTABLE changed without CAP_LINUX_IMMUTABLE (also clearing them)"
+  path: "ENOENT (2): missing file or \"\" without AT_EMPTY_PATH; EBADF (9): closed dirfd"
+side_effects: "changes the inode flags; changes ctime"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

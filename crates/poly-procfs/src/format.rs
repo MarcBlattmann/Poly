@@ -54,6 +54,8 @@ pub struct VmSizes {
     pub data: u64,
     /// The stack (`VmStk`).
     pub stack: u64,
+    /// Locked mappings (`VmLck`).
+    pub locked: u64,
     /// Executable mappings of the program file (`VmExe`).
     pub exe: u64,
     /// Executable mappings of other files (`VmLib`).
@@ -70,6 +72,9 @@ pub fn vm_sizes(maps: &[MapEntry], exe: Option<&[u8]>) -> VmSizes {
     for m in maps {
         let size = m.size();
         v.size += size;
+        if m.locked {
+            v.locked += size;
+        }
         let of_exe = matches!((&m.name, exe), (MapName::Path(p), Some(e)) if p.as_slice() == e);
         match m.name {
             MapName::Stack => v.stack += size,
@@ -192,7 +197,7 @@ pub fn status(p: &ProcessInfo, maps: &[MapEntry]) -> Vec<u8> {
     );
     kb(&mut o, "VmPeak", v.size);
     kb(&mut o, "VmSize", v.size);
-    kb(&mut o, "VmLck", 0);
+    kb(&mut o, "VmLck", v.locked);
     kb(&mut o, "VmPin", 0);
     kb(&mut o, "VmHWM", rss);
     kb(&mut o, "VmRSS", rss);

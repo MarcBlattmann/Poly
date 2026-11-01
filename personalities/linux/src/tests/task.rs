@@ -186,6 +186,31 @@ fn execve_reads_path_arguments_and_environment() {
 }
 
 #[test]
+fn execveat_checks_in_order_and_supplies_argv0() {
+    let mut k = family();
+    let path = scratch(0);
+    k.poke(path, b"prog\0");
+    let empty = scratch(0x10);
+    k.poke(empty, b"\0");
+    let argv = put_strings(&mut k, scratch(0x1000), &[b"prog", b"x"]);
+    let envp = put_strings(&mut k, scratch(0x2000), &[b"A=1"]);
+    let at =
+        |k: &mut FakeKernel, fd: u64, p: u64, a: u64, e: u64, flags: u64| sys(k, nr::EXECVEAT, &[fd, p, a, e, flags]);
+    assert_eq!(at(&mut k, 3, 0, argv, envp, 1), Err(Errno::EFAULT), "the path first");
+    assert_eq!(at(&mut k, 99, path, argv, envp, 1), Err(Errno::EINVAL), "then the flags");
+    assert_eq!(at(&mut k, 3, empty, argv, envp, 0), Err(Errno::ENOENT), "empty without AT_EMPTY_PATH");
+    assert!(k.tasks.execs.is_empty());
+    assert_eq!(at(&mut k, 3, path, argv, envp, (1 << 32) | 0x100), Ok(0), "upper flag bits ignored");
+    assert_eq!(
+        k.tasks.execs[0],
+        (b"prog".to_vec(), std::vec![b"prog".to_vec(), b"x".to_vec()], std::vec![b"A=1".to_vec()])
+    );
+    // NULL argv: one empty string; NULL envp: nothing.
+    assert_eq!(at(&mut k, 3, empty, 0, 0, 0x1000), Ok(0));
+    assert_eq!(k.tasks.execs[1], (std::vec::Vec::new(), std::vec![std::vec::Vec::new()], std::vec::Vec::new()));
+}
+
+#[test]
 fn execve_refuses_huge_arguments() {
     let mut k = family();
     let path = scratch(0);

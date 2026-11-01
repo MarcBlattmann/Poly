@@ -141,6 +141,14 @@ impl Peer {
         ObjectId(self.next)
     }
 
+    /// An ID the server freed (`wl_display.delete_id` came) for a new
+    /// object, as libwayland's client reuses them.
+    fn reuse_id(&mut self, id: ObjectId, interface: &'static Interface) -> ObjectId {
+        assert!(!self.objects.contains_key(&id.0), "{id} was not freed by delete_id");
+        self.objects.insert(id.0, interface);
+        id
+    }
+
     /// Send a request (and its file descriptors), then read what comes back.
     fn send(&mut self, srv: &mut Server, object: ObjectId, req: impl Message) {
         let (mut bytes, mut fds) = (Vec::new(), Vec::new());

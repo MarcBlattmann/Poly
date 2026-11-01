@@ -16,13 +16,14 @@
 use super::vfs;
 use crate::sync::{Mutex, SpinLock};
 
+mod ancestry;
 mod more;
 mod mounts;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_vfs::{
-    AT_FDCWD, At, Cred, DirEntry, Errno, Fd, FdTable, FileType, FsContext, NodeRef, OpenFile, OpenFlags, Result, Stat,
-    Whence,
+    AT_FDCWD, At, Cred, DirEntry, Errno, Fd, FdTable, FileType, FsContext, NodeRef, OpenFile, OpenFlags, Resolve,
+    Result, Stat, Whence,
 };
 
 /// `AT_REMOVEDIR` (Linux UAPI `linux/fcntl.h`): `unlinkat` removes a
@@ -40,10 +41,13 @@ mod perm;
 /// The descriptor table may be shared with other processes (clone(2)
 /// `CLONE_FILES` without `CLONE_THREAD`, ADR 0111): `fds` holds this
 /// process's reference to it, which [`Files::unshare_table`] replaces by
-/// a private copy (close_range(2) `CLOSE_RANGE_UNSHARE`).
+/// a private copy (close_range(2) `CLOSE_RANGE_UNSHARE`). So may the
+/// directories and umask (clone(2) `CLONE_FS`, ADR 0121): `fs` holds this
+/// process's reference, which [`Files::unshare_context`] replaces by a
+/// private copy (unshare(2) `CLONE_FS`).
 #[derive(Debug)]
 pub struct Files {
-    ctx: Mutex<FsContext>,
+    fs: SpinLock<Arc<Mutex<FsContext>>>,
     fds: SpinLock<Arc<Mutex<FdTable>>>,
 }
 
@@ -57,7 +61,7 @@ impl Files {
     /// No descriptors, root and working directory at `/`, umask 022.
     pub fn new() -> Files {
         let ctx = vfs().root_context().expect("the root directory is always there");
-        Files { ctx: Mutex::new(ctx), fds: SpinLock::new(Arc::new(Mutex::new(FdTable::new()))) }
+        Files { fs: SpinLock::new(Arc::new(Mutex::new(ctx))), fds: SpinLock::new(Arc::new(Mutex::new(FdTable::new()))) }
     }
 
     /// What a new process starts with: `/dev/console` open for reading and
@@ -80,17 +84,24 @@ impl Files {
     /// A copy for `fork`: the same open file descriptions (offsets shared),
     /// close-on-exec flags, directories and umask.
     pub fn fork(&self) -> Files {
-        let ctx = self.ctx.lock().clone();
-        let fds = self.table().lock().clone();
-        Files { ctx: Mutex::new(ctx), fds: SpinLock::new(Arc::new(Mutex::new(fds))) }
+        self.clone_for(false, false)
     }
 
     /// For clone(2) `CLONE_FILES` between processes: the same descriptor
-    /// table (a descriptor opened or closed by either is opened or closed
-    /// for both), a copy of the directories and umask.
+    /// table, a copy of the directories and umask.
     pub fn share_table(&self) -> Files {
-        let ctx = self.ctx.lock().clone();
-        Files { ctx: Mutex::new(ctx), fds: SpinLock::new(self.table()) }
+        self.clone_for(true, false)
+    }
+
+    /// For clone(2) between processes: with `share_table` (`CLONE_FILES`)
+    /// the same descriptor table (a descriptor opened or closed by either
+    /// is opened or closed for both), else a copy; with `share_fs`
+    /// (`CLONE_FS`) the same root, working directory and umask (a chdir(2)
+    /// or umask(2) of either is the other's), else a copy.
+    pub fn clone_for(&self, share_table: bool, share_fs: bool) -> Files {
+        let fs = if share_fs { self.ctx() } else { Arc::new(Mutex::new(self.ctx().lock().clone())) };
+        let fds = if share_table { self.table() } else { Arc::new(Mutex::new(self.table().lock().clone())) };
+        Files { fs: SpinLock::new(fs), fds: SpinLock::new(fds) }
     }
 
     /// Give this process a private copy of its descriptor table if other
@@ -105,10 +116,40 @@ impl Files {
         *self.fds.lock() = Arc::new(Mutex::new(copy));
     }
 
+    /// Give this process a private copy of its root, working directory and
+    /// umask if other processes share them (unshare(2) `CLONE_FS`);
+    /// nothing to do otherwise.
+    pub fn unshare_context(&self) {
+        let ctx = self.ctx();
+        if Arc::strong_count(&ctx) <= 2 {
+            return;
+        }
+        let copy = ctx.lock().clone();
+        *self.fs.lock() = Arc::new(Mutex::new(copy));
+    }
+
+    /// This process's directories and umask (the reference, so the outer
+    /// lock is not held while they are used).
+    fn ctx(&self) -> Arc<Mutex<FsContext>> {
+        self.fs.lock().clone()
+    }
+
     /// This process's descriptor table (the reference, so no lock is held
     /// while it is used).
     fn table(&self) -> Arc<Mutex<FdTable>> {
         self.fds.lock().clone()
+    }
+
+    /// What identifies the descriptor table (kcmp(2) `KCMP_FILES`): equal
+    /// for processes that share it.
+    pub fn table_id(&self) -> u64 {
+        Arc::as_ptr(&self.table()) as usize as u64
+    }
+
+    /// What identifies the root, working directory and umask (kcmp(2)
+    /// `KCMP_FS`): equal for processes that share them.
+    pub fn context_id(&self) -> u64 {
+        Arc::as_ptr(&self.ctx()) as usize as u64
     }
 
     /// The credentials permission checks use: the calling thread's file
@@ -363,7 +404,7 @@ impl Files {
         } else {
             Some(self.table().lock().get(dirfd)?.node().clone())
         };
-        let ctx = self.ctx.lock().clone();
+        let ctx = self.ctx().lock().clone();
         f(vfs(), &ctx, dir.as_ref().map_or(At::Cwd, At::Node))
     }
 
@@ -385,11 +426,42 @@ impl Files {
         self.table().lock().install(file, flags.contains(OpenFlags::CLOEXEC))
     }
 
+    /// `openat2(2)`: [`openat`](Self::openat) under `resolve`'s
+    /// restrictions. With `RESOLVE_IN_ROOT` `dirfd` names the walk's root
+    /// even for an absolute `path`.
+    pub fn openat2(&self, dirfd: Fd, path: &[u8], flags: OpenFlags, mode: u16, resolve: Resolve) -> Result<Fd> {
+        let absolute = path.first() == Some(&b'/');
+        let dir: Option<NodeRef> = if dirfd == AT_FDCWD || (absolute && !resolve.contains(Resolve::IN_ROOT)) {
+            None
+        } else {
+            Some(self.table().lock().get(dirfd)?.node().clone())
+        };
+        let ctx = self.ctx().lock().clone();
+        let at = dir.as_ref().map_or(At::Cwd, At::Node);
+        let file = vfs().open_resolve(&ctx, &self.cred(), at, path, flags, mode, resolve)?;
+        self.table().lock().install(file, flags.contains(OpenFlags::CLOEXEC))
+    }
+
     /// `execve(2)`: open `path` (from `dirfd`, as for `openat`) to run it:
     /// a regular file with execute permission on a mount that allows
     /// executing (`EACCES` otherwise). Not installed as a descriptor.
     pub fn open_exec_at(&self, dirfd: Fd, path: &[u8]) -> Result<Arc<OpenFile>> {
         self.at(dirfd, path, |vfs, ctx, at| vfs.open_exec(ctx, &self.cred(), at, path))
+    }
+
+    /// execveat(2): `path` from `dirfd`, a final symbolic link followed
+    /// only with `follow`; an empty `path` runs the file `dirfd` is open
+    /// on (`AT_EMPTY_PATH`).
+    pub fn open_exec_with(&self, dirfd: Fd, path: &[u8], follow: bool) -> Result<Arc<OpenFile>> {
+        if path.is_empty() {
+            if dirfd == AT_FDCWD {
+                // The working directory: never a program.
+                return Err(Errno::EACCES);
+            }
+            let file = self.file(dirfd)?;
+            return vfs().open_exec_file(&self.cred(), &file);
+        }
+        self.at(dirfd, path, |vfs, ctx, at| vfs.open_exec_with(ctx, &self.cred(), at, path, follow))
     }
 
     /// `stat(2)` (`follow`) and `lstat(2)`, `fstatat(2)` with `dirfd`.
@@ -436,25 +508,25 @@ impl Files {
     pub fn chdir(&self, path: &[u8]) -> Result<()> {
         // Resolved unlocked, like every walk (see `at`).
         let dir = self.at(AT_FDCWD, path, |vfs, ctx, at| vfs.lookup(ctx, &self.cred(), at, path, true))?;
-        self.ctx.lock().set_cwd(&self.cred(), dir)
+        self.ctx().lock().set_cwd(&self.cred(), dir)
     }
 
     /// `fchdir(2)`.
     pub fn fchdir(&self, fd: Fd) -> Result<()> {
         let dir = self.file(fd)?.node().clone();
-        self.ctx.lock().set_cwd(&self.cred(), dir)
+        self.ctx().lock().set_cwd(&self.cred(), dir)
     }
 
     /// `getcwd(2)`: the working directory's absolute path.
     pub fn getcwd(&self) -> Result<Vec<u8>> {
         // On a copy, unlocked: the walk up may read procfs (see `at`).
-        let ctx = self.ctx.lock().clone();
+        let ctx = self.ctx().lock().clone();
         vfs().getcwd(&ctx)
     }
 
     /// `umask(2)`: sets the mask, returns the old one.
     pub fn umask(&self, mask: u16) -> u16 {
-        self.ctx.lock().set_umask(mask)
+        self.ctx().lock().set_umask(mask)
     }
 
     // ---- conveniences for the kernel itself (shell, tests) ----------------

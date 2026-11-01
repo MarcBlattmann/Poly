@@ -17,7 +17,7 @@
 //! are opened and closed.
 
 use crate::format;
-use crate::source::{IdMapFile, Owner, ProcSource, ProcessInfo};
+use crate::source::{IdMapFile, KernelName, Owner, ProcSource, ProcessInfo};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_vfs::{
@@ -130,16 +130,30 @@ impl E {
 }
 
 /// The entries of `/proc/<pid>/ns`, in listing order: what namespaces(7)
-/// lists that Poly has. A kind's index here is what [`ProcSource`] gets.
-/// Their links' texts use the type name: `pid` for `pid_for_children`.
-pub const NS_KINDS: [&str; 7] = ["ipc", "mnt", "net", "pid", "pid_for_children", "user", "uts"];
+/// lists. A kind's index here is what [`ProcSource`] gets. Their links'
+/// texts use the type name: `pid` for `pid_for_children`, `time` for
+/// `time_for_children`.
+pub const NS_KINDS: [&str; 10] =
+    ["ipc", "mnt", "net", "pid", "pid_for_children", "user", "uts", "cgroup", "time", "time_for_children"];
 
-/// The index of `pid_for_children`, whose type is `pid`.
+/// The indexes of `pid_for_children` and `time_for_children`, whose types
+/// are `pid` and `time`.
 const PID_FOR_CHILDREN: usize = 4;
 const PID_KIND: usize = 3;
+const TIME_FOR_CHILDREN: usize = 9;
+const TIME_KIND: usize = 8;
+
+/// The kind of namespace an entry names (`pid` for `pid_for_children`).
+const fn ns_base(kind: usize) -> usize {
+    match kind {
+        PID_FOR_CHILDREN => PID_KIND,
+        TIME_FOR_CHILDREN => TIME_KIND,
+        k => k,
+    }
+}
 
 fn ns_type(kind: usize) -> &'static str {
-    if kind == PID_FOR_CHILDREN { NS_KINDS[PID_KIND] } else { NS_KINDS[kind] }
+    NS_KINDS[ns_base(kind)]
 }
 
 /// A link text `<type>:[<inum>]`: the type's index and the number.
@@ -147,13 +161,14 @@ fn parse_ns_name(name: &[u8]) -> Option<(usize, u32)> {
     let open = name.iter().position(|&b| b == b':')?;
     let (ty, rest) = name.split_at(open);
     let num = rest.strip_prefix(b":[")?.strip_suffix(b"]")?;
-    let kind = NS_KINDS.iter().position(|k| k.as_bytes() == ty).filter(|&k| k != PID_FOR_CHILDREN)?;
+    let kind = NS_KINDS.iter().position(|k| k.as_bytes() == ty).filter(|&k| ns_base(k) == k)?;
     Some((kind, parse_number(num)?))
 }
 
 /// The namespace an open procfs file is on, if it is one of the hidden
 /// files `/proc/<pid>/ns/<kind>` links to: its inode number and kind (an
-/// index into [`NS_KINDS`], never `pid_for_children`).
+/// index into [`NS_KINDS`], never `pid_for_children` or
+/// `time_for_children`).
 pub fn namespace_file(ino: Ino) -> Option<(u32, usize)> {
     match Node::from_ino(ino)? {
         Node::NsFile(inum, kind) => Some((inum, kind)),
@@ -253,7 +268,7 @@ impl Node {
             K_FD if pid != 0 => Node::Fd(pid, index as u32),
             K_FDINFO if pid != 0 => Node::FdInfo(pid, index as u32),
             K_NS if pid != 0 && (index as usize) < NS_KINDS.len() => Node::Ns(pid, index as usize),
-            K_NSFILE if pid != 0 && (index as usize) < NS_KINDS.len() && index as usize != PID_FOR_CHILDREN => {
+            K_NSFILE if pid != 0 && (index as usize) < NS_KINDS.len() && ns_base(index as usize) == index as usize => {
                 Node::NsFile(pid, index as usize)
             }
             K_TASK if pid != 0 && index != 0 => Node::Task(pid, index as u32),
@@ -516,6 +531,18 @@ impl ProcFs {
         })
     }
 
+    /// `/proc/sys/kernel/hostname` and `domainname`, which a write sets.
+    fn kernel_name_file(node: Node) -> Option<KernelName> {
+        match node {
+            Node::Global(i) => match GLOBALS[i].2 {
+                G::Hostname => Some(KernelName::Host),
+                G::Domainname => Some(KernelName::Domain),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// The writable files: a process's user namespace files.
     fn id_map_file(node: Node) -> Option<(u32, IdMapFile)> {
         match node {
@@ -608,6 +635,7 @@ impl FileSystem for ProcFs {
             Node::Global(i) => match GLOBALS[i].2 {
                 G::Dir => 0o555,
                 G::SelfLink | G::MountsLink => 0o777,
+                G::Hostname | G::Domainname => 0o644,
                 _ => 0o444,
             },
             Node::Entry(_, i) => PID_ENTRIES[i].2,
@@ -618,8 +646,14 @@ impl FileSystem for ProcFs {
             Node::FdInfo(..) | Node::NsFile(..) => 0o444,
             Node::Ns(..) => 0o777,
         };
+        // A namespace file's inode number is the namespace's (namespaces(7):
+        // "the inode number of the namespace", what its link shows).
+        let shown_ino = match node {
+            Node::NsFile(inum, _) => u64::from(inum),
+            _ => ino,
+        };
         Ok(Attr {
-            ino,
+            ino: shown_ino,
             kind,
             perm,
             nlink: if kind == FileType::Directory { 2 } else { 1 },
@@ -702,7 +736,18 @@ impl FileSystem for ProcFs {
     }
 
     fn writable_file(&self, ino: Ino) -> bool {
-        Node::from_ino(ino).and_then(Self::id_map_file).is_some()
+        Node::from_ino(ino).is_some_and(|n| Self::id_map_file(n).is_some() || Self::kernel_name_file(n).is_some())
+    }
+
+    /// A process's `exe`, `cwd`, `root`, `fd/<n>` and `ns/<kind>` name
+    /// what the kernel holds, not a path of their own (proc_pid_fd(5)
+    /// calls them magic links).
+    fn is_magic_link(&self, ino: Ino) -> bool {
+        match Node::from_ino(ino) {
+            Some(Node::Fd(..) | Node::Ns(..)) => true,
+            Some(Node::Entry(_, i)) => matches!(PID_ENTRIES[i].1, E::Exe | E::Cwd | E::Root),
+            _ => false,
+        }
     }
 
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize> {
@@ -714,12 +759,41 @@ impl FileSystem for ProcFs {
     }
 
     fn write(&self, ino: Ino, offset: u64, data: &[u8]) -> Result<usize> {
-        match Self::id_map_file(self.node(ino)?) {
+        let node = self.node(ino)?;
+        if let Some(which) = Self::kernel_name_file(node) {
+            return self.src.write_kernel_name(which, offset, data);
+        }
+        match Self::id_map_file(node) {
             Some((p, file)) => {
                 self.owner(p)?;
                 self.src.write_id_map(p, file, offset, data)
             }
             None => Err(Errno::EROFS),
+        }
+    }
+
+    fn truncate(&self, ino: Ino, _size: u64) -> Result<()> {
+        // `O_TRUNC` on the writable sysctl files changes nothing; the
+        // write that follows sets the value.
+        match Self::kernel_name_file(self.node(ino)?) {
+            Some(_) => Ok(()),
+            None => Err(Errno::EROFS),
+        }
+    }
+
+    fn open(&self, ino: Ino) -> Result<()> {
+        self.getattr(ino)?;
+        let node = self.node(ino)?;
+        // A reference to a namespace file holds its namespace (setns(2)).
+        if let Node::NsFile(inum, k) = node {
+            self.src.pin_namespace(inum, k, true);
+        }
+        Ok(())
+    }
+
+    fn release(&self, ino: Ino) {
+        if let Some(Node::NsFile(inum, k)) = Node::from_ino(ino) {
+            self.src.pin_namespace(inum, k, false);
         }
     }
 

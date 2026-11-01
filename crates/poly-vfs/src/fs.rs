@@ -91,6 +91,15 @@ pub trait FileSystem: Send + Sync {
     /// A symbolic link's target (`EINVAL` for anything else).
     fn readlink(&self, ino: Ino) -> Result<Vec<u8>>;
 
+    /// Whether the symbolic link `ino` is a "magic" link: one that names an
+    /// object the kernel knows rather than holding a path of its own
+    /// (procfs's `/proc/<pid>/fd/<n>`, `exe`, `cwd`, `root`). openat2(2)'s
+    /// `RESOLVE_NO_MAGICLINKS` refuses to follow them.
+    fn is_magic_link(&self, ino: Ino) -> bool {
+        let _ = ino;
+        false
+    }
+
     /// Whether `ino` takes writes although the file system is read-only
     /// ([`FsInfo::read_only`]): a control file of a pseudo file system
     /// (procfs's `uid_map`). A read-only mount still refuses them.
@@ -209,11 +218,48 @@ pub trait FileSystem: Send + Sync {
         Err(Errno::EOPNOTSUPP)
     }
 
+    /// The pages of regular file `ino` in `[first, end)` (page indexes)
+    /// that hold data, in order, for cachestat(2); holes of sparse files
+    /// are left out. `None` (the default) if the file system cannot tell.
+    fn data_pages(&self, _ino: Ino, _first: u64, _end: u64) -> Option<Vec<u64>> {
+        None
+    }
+
     /// Space and inode counts for `statfs(2)`. The default reports a file
     /// system without blocks or inode limits; the VFS fills in the magic
     /// number from the name when this leaves it 0 (see [`FsStats`]).
     fn statfs(&self) -> Result<FsStats> {
         Ok(FsStats { block_size: 4096, fragment_size: 4096, name_max: crate::NAME_MAX as u64, ..FsStats::default() })
+    }
+
+    /// `ino`'s inode flags (`FS_XFLAG_*`, [`crate::fileattr`]). The default
+    /// is a file system without inode flags: `EOPNOTSUPP`, also from
+    /// [`set_xflags`](Self::set_xflags).
+    fn xflags(&self, ino: Ino) -> Result<u32> {
+        let _ = ino;
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// Replaces `ino`'s inode flags (`EOPNOTSUPP` for a flag the file
+    /// system does not keep), and sets the change time. The VFS has checked
+    /// the caller's permissions.
+    fn set_xflags(&self, ino: Ino, flags: u32) -> Result<()> {
+        let _ = (ino, flags);
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// A persistent handle for `ino` (name_to_handle_at(2)). The default
+    /// is a file system that cannot make handles: `EOPNOTSUPP`.
+    fn handle(&self, ino: Ino) -> Result<crate::fileattr::FileHandle> {
+        let _ = ino;
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// The live inode a handle of this file system names
+    /// (open_by_handle_at(2)); `ESTALE` if there is none.
+    fn handle_ino(&self, kind: i32, bytes: &[u8]) -> Result<Ino> {
+        let _ = (kind, bytes);
+        Err(Errno::ESTALE)
     }
 }
 
@@ -251,12 +297,42 @@ pub const ST_RDONLY: u64 = 1;
 pub const ST_NOSUID: u64 = 2;
 pub const ST_NODEV: u64 = 4;
 pub const ST_NOEXEC: u64 = 8;
+/// More `f_flags` bits (`sys/statvfs.h` as Linux reports them).
+pub const ST_NOATIME: u64 = 1024;
+pub const ST_NODIRATIME: u64 = 2048;
+pub const ST_NOSYMFOLLOW: u64 = 0x2000;
+pub const ST_RELATIME: u64 = 4096;
+
+/// The `f_flags` bits a mount's extra attributes ([`Mount::attrs`],
+/// Linux `MOUNT_ATTR_*` bits, `linux/mount.h`) add: the access time mode
+/// (the field `0x70`: `MOUNT_ATTR_RELATIME` 0 gives `ST_RELATIME`,
+/// `MOUNT_ATTR_NOATIME` `0x10` gives `ST_NOATIME`, `MOUNT_ATTR_STRICTATIME`
+/// `0x20` neither, as mount_setattr's spec sheet observed),
+/// `MOUNT_ATTR_NODIRATIME` (`0x80`), `MOUNT_ATTR_NOSYMFOLLOW` (`0x200000`).
+///
+/// [`Mount::attrs`]: crate::Mount::attrs
+pub const fn st_flags_of_attrs(attrs: u32) -> u64 {
+    let mut f = 0;
+    match attrs & 0x70 {
+        0 => f |= ST_RELATIME,
+        0x10 => f |= ST_NOATIME,
+        _ => {}
+    }
+    if attrs & 0x80 != 0 {
+        f |= ST_NODIRATIME;
+    }
+    if attrs & 0x0020_0000 != 0 {
+        f |= ST_NOSYMFOLLOW;
+    }
+    f
+}
 
 /// Magic numbers of the file systems Poly has (Linux UAPI `linux/magic.h`).
 pub const TMPFS_MAGIC: u64 = 0x0102_1994;
 pub const EXT2_SUPER_MAGIC: u64 = 0xef53;
 pub const PROC_SUPER_MAGIC: u64 = 0x9fa0;
 pub const SYSFS_MAGIC: u64 = 0x6265_6572;
+pub const MQUEUE_MAGIC: u64 = 0x1980_0202;
 
 /// The `f_type` of a file system by its name ([`FsInfo::name`]); 0 for
 /// names without one here.
@@ -266,6 +342,7 @@ pub fn magic_for(name: &str) -> u64 {
         "ext2" => EXT2_SUPER_MAGIC,
         "proc" => PROC_SUPER_MAGIC,
         "sysfs" => SYSFS_MAGIC,
+        "mqueue" => MQUEUE_MAGIC,
         _ => 0,
     }
 }

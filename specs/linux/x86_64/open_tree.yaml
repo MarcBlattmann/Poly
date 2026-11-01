@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/open_tree            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 (plain open_tree), children dropping to uid/gid 1000; umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  open_tree(dfd, path, flags) (syscall 428) returns an O_PATH descriptor
+  (lowest free; FD_CLOEXEC only with OPEN_TREE_CLOEXEC = O_CLOEXEC). flags
+  also take AT_EMPTY_PATH (path "" means dfd), AT_SYMLINK_NOFOLLOW (open a
+  final symlink itself), AT_NO_AUTOMOUNT, AT_RECURSIVE (only with
+  OPEN_TREE_CLONE) and OPEN_TREE_CLONE (1). Without OPEN_TREE_CLONE it is
+  the same as openat(dfd, path, O_PATH): any user may call it, the result
+  works as a dirfd and with fstat/statx. With OPEN_TREE_CLONE (needs
+  CAP_SYS_ADMIN) it makes a detached copy of the mount at path, or, when
+  path is a plain directory, of the subtree rooted there (like a bind
+  mount source), and returns a descriptor of its root: the copy shares the
+  file system (changes are seen both ways), does not include submounts
+  unless AT_RECURSIVE, can be attached with move_mount, and is discarded
+  when its last descriptor closes without being attached (the source is
+  not affected).
+returns:
+  success: "a new O_PATH fd; FD_CLOEXEC iff OPEN_TREE_CLOEXEC"
+  clone: "a detached copy of the mount (or directory subtree); AT_RECURSIVE copies submounts too"
+errors:
+  flags: "EINVAL (22): unknown flag bits (0x2); AT_RECURSIVE without OPEN_TREE_CLONE"
+  perm: "EPERM (1): OPEN_TREE_CLONE without CAP_SYS_ADMIN"
+  missing: "ENOENT (2): path does not exist; \"\" without AT_EMPTY_PATH"
+  fault: "EFAULT (14): path unreadable"
+  bad_fd: "EBADF (9): dfd not open (relative path)"
+  fds: "EMFILE (24): no free descriptor; not tested"
+side_effects: "OPEN_TREE_CLONE creates a detached mount owned by the descriptor"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/mount.h and linux/fcntl.h. The plain test
+# runs as any user; the clone tests need root.

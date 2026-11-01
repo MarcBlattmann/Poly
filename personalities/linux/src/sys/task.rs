@@ -37,6 +37,13 @@ fn spawn(k: &mut dyn LinuxKernel, req: &CloneRequest) -> SysResult {
     if req.flags & CLONE_NEWUSER != 0 && k.chrooted() {
         return Err(Errno::EPERM);
     }
+    // A SCHED_DEADLINE task cannot create tasks unless they are reset to
+    // SCHED_OTHER (sched_setattr's spec sheet: EAGAIN).
+    let tid = k.tid();
+    let sched = crate::signal::deliver::with_own(k, |p| p.sched_of(tid));
+    if sched.is_some_and(|s| s.policy == crate::task::sched::SCHED_DEADLINE && !s.reset_on_fork) {
+        return Err(Errno::EAGAIN);
+    }
     let child = k.clone_task(req)?;
     seen(k, child)
 }
@@ -108,7 +115,70 @@ pub fn execve(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let mut budget = exec::MAX_ARG_TOTAL;
     let argv = exec::read_strings(k, a.ptr(1), &mut budget)?;
     let envp = exec::read_strings(k, a.ptr(2), &mut budget)?;
-    k.execve(&ExecRequest { dirfd: AT_FDCWD, path: &path, argv: &argv, envp: &envp })?;
+    crate::sys::landlock::check_object(k, AT_FDCWD, &path, true, crate::landlock::abi::LANDLOCK_ACCESS_FS_EXECUTE)?;
+    let old_space = k.address_space_id();
+    k.execve(&ExecRequest::new(&path, &argv, &envp))?;
+    crate::sys::aio::left_address_space(k, old_space);
+    let pid = k.pid();
+    let _ = with_tree(k, |t| t.exec(pid));
+    Ok(0)
+}
+
+/// execveat(2) flags (`linux/fcntl.h`).
+const AT_SYMLINK_NOFOLLOW: u32 = 0x100;
+const AT_EMPTY_PATH: u32 = 0x1000;
+
+/// execveat(dirfd, pathname, argv, envp, flags): execve(2) of `pathname`
+/// relative to `dirfd`, or of `dirfd`'s own file with `AT_EMPTY_PATH` and
+/// an empty path. In the order of execveat's spec sheet: the path is read
+/// (`EFAULT`), the flags checked (`EINVAL` for bits other than
+/// `AT_EMPTY_PATH` and `AT_SYMLINK_NOFOLLOW`), the file looked up and
+/// checked ([`LinuxKernel::exec_lookup`]: `EBADF`, `ENOTDIR`, `ENOENT`,
+/// `ELOOP`, `EACCES`, `ETXTBSY`), then `argv` and `envp` read (`EFAULT`)
+/// and the program run. The new image is known as [`exec::exec_name`];
+/// a script reached through a descriptor with `FD_CLOEXEC` could not be
+/// opened by its interpreter and is `ENOENT`. An empty `argv` becomes
+/// one empty string.
+pub fn execveat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    let dirfd = a.fd(0);
+    let path = crate::sys::path::path_arg(k, a.ptr(1))?;
+    let flags = a.uint(4);
+    if flags & !(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW) != 0 {
+        return Err(Errno::EINVAL);
+    }
+    if path.is_empty() && flags & AT_EMPTY_PATH == 0 {
+        return Err(Errno::ENOENT);
+    }
+    let name = exec::exec_name(dirfd, &path);
+    let mut req = ExecRequest {
+        dirfd,
+        path: &path,
+        argv: &[],
+        envp: &[],
+        follow: flags & AT_SYMLINK_NOFOLLOW == 0,
+        name: &name,
+        script_reachable: true,
+    };
+    k.exec_lookup(&req)?;
+    // The descriptor the name goes through (the directory, or the file
+    // itself) is closed by the exec when it has FD_CLOEXEC.
+    let through_fd = dirfd != AT_FDCWD && path.first() != Some(&b'/');
+    if through_fd {
+        // The lookup has found the descriptor open already.
+        req.script_reachable = !crate::sys::path::fs(k).and_then(|fs| fs.cloexec(dirfd)).unwrap_or(false);
+    }
+    let mut budget = exec::MAX_ARG_TOTAL;
+    let mut argv = exec::read_strings(k, a.ptr(2), &mut budget)?;
+    let envp = exec::read_strings(k, a.ptr(3), &mut budget)?;
+    if argv.is_empty() {
+        argv.push(alloc::vec::Vec::new());
+    }
+    req.argv = &argv;
+    req.envp = &envp;
+    crate::sys::landlock::check_object(k, dirfd, &path, req.follow, crate::landlock::abi::LANDLOCK_ACCESS_FS_EXECUTE)?;
+    let old_space = k.address_space_id();
+    k.execve(&req)?;
+    crate::sys::aio::left_address_space(k, old_space);
     let pid = k.pid();
     let _ = with_tree(k, |t| t.exec(pid));
     Ok(0)
@@ -117,12 +187,26 @@ pub fn execve(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// Wait until a child matches `filter` (`None` at once with `nohang`).
 /// `ECHILD` if no child matches at all. A signal for the caller ends the
 /// wait; signal(7) lists wait(2) among the calls `SA_RESTART` restarts.
-fn wait_for(k: &mut dyn LinuxKernel, filter: &WaitFilter, nohang: bool) -> Result<Option<Waited>, Errno> {
+///
+/// Returns the child and its id as the caller's pid namespace sees it,
+/// taken while the child is still in the tree: once it is reaped, its
+/// numbers in the namespaces are free again.
+fn wait_for(k: &mut dyn LinuxKernel, filter: &WaitFilter, nohang: bool) -> Result<Option<(Waited, i32)>, Errno> {
     let me = k.pid();
+    let ns = k.pid_ns();
+    let local = |global: i32| match &ns {
+        None => global,
+        ns => crate::ns::pid::local_or_zero(ns, global),
+    };
     loop {
-        let (generation, poll) = with_tree(k, |t| (t.generation(), t.poll(me, filter)))?;
+        let (generation, poll, seen) = with_tree(k, |t| {
+            let generation = t.generation();
+            let poll = t.poll(me, filter);
+            let seen = if let Poll::Ready(w) = &poll { local(w.pid) } else { 0 };
+            (generation, poll, seen)
+        })?;
         match poll {
-            Poll::Ready(w) => return Ok(Some(w)),
+            Poll::Ready(w) => return Ok(Some((w, seen))),
             Poll::NoChildren => return Err(Errno::ECHILD),
             Poll::Pending if nohang => return Ok(None),
             // A child is in the middle of ending (on another CPU): its exit
@@ -165,12 +249,12 @@ pub fn wait4(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let pgid = view(k, k.pgid());
     let (mut filter, nohang) = wait::wait4_filter(a.int(0), a.uint(2), pgid)?;
     filter.selector = global_selector(k, filter.selector);
-    let Some(w) = wait_for(k, &filter, nohang)? else { return Ok(0) };
+    let Some((w, local)) = wait_for(k, &filter, nohang)? else { return Ok(0) };
     if !a.ptr(1).is_null() {
         k.copy_to_user(a.ptr(1), &wait::status_word(w.event).to_le_bytes())?;
     }
     write_rusage(k, a.ptr(3), w.pid)?;
-    seen(k, w.pid)
+    pid_result(local)
 }
 
 /// waitid(idtype, id, infop, options, rusage): 0, with the child's
@@ -201,12 +285,12 @@ pub fn waitid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         (filter, nohang)
     };
     let waited = wait_for(k, &filter, nohang)?;
-    let found = waited.map(|w| Waited { pid: view(k, w.pid), ..w });
+    let found = waited.map(|(w, local)| Waited { pid: local, ..w });
     if !a.ptr(2).is_null() {
         let info = found.map_or([0; SigInfo::SIZE], |w| wait::sigchld(&w).to_bytes());
         k.copy_to_user(a.ptr(2), &info)?;
     }
-    if let Some(w) = waited {
+    if let Some((w, _)) = waited {
         write_rusage(k, a.ptr(4), w.pid)?;
     }
     Ok(0)

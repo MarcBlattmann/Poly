@@ -31,10 +31,12 @@
 //!   reaped, and a process is adopted by the init of its namespace.
 //!
 //! `CLONE_FILES` between *processes* (without `CLONE_THREAD`) shares the
-//! descriptor table (`Files::share_table`, ADR 0111). Not done yet:
-//! `CLONE_FS` and `CLONE_SIGHAND` between processes copy instead of
-//! sharing, since a process owns its directories and signal state;
-//! threads share all three.
+//! descriptor table (`Files::share_table`, ADR 0111), and `CLONE_FS` its
+//! root, working directory and umask (`Files::clone_for`, ADR 0121). Not
+//! done yet: `CLONE_SIGHAND` between processes copies the signal
+//! handlers instead of sharing them, since a process owns its signal
+//! state (kcmp(2) still reports them shared, see `procaccess.rs`);
+//! threads share everything.
 //! `CLONE_PTRACE`, `CLONE_IO`, `CLONE_SYSVSEM` have no effect. Resource
 //! usage (`wait4`'s `rusage`) is all zero.
 
@@ -60,7 +62,7 @@ use poly_personality_linux::ns::pid as pid_ns;
 use poly_personality_linux::ns::user::UserNsRef;
 use poly_personality_linux::ns::{self, UtsNames};
 use poly_personality_linux::sys::ns::initial_names;
-use poly_personality_linux::task::clone::{CLONE_NEWUTS, CloneRequest};
+use poly_personality_linux::task::clone::{CLONE_NEWUTS, CLONE_SIGHAND, CloneRequest};
 use poly_personality_linux::task::exec::{ELOOP, ExecRequest, MAX_SCRIPT_DEPTH, parse_shebang, script_argv};
 use poly_personality_linux::task::tree::{ProcessTree, Termination};
 
@@ -170,6 +172,7 @@ pub fn release_mount_namespaces() {
 /// Install the kernel's side of the personality's namespaces (ADR 0054).
 pub fn init_namespaces() {
     poly_personality_linux::ns::on_mounts_released(mounts_released);
+    super::landlock::init();
 }
 
 /// Make `generation` (the tree's, read with it locked) the published one
@@ -306,9 +309,16 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
         out_of_line(move || -> Result<u32, Errno> {
             let names = if req.flags & CLONE_NEWUTS != 0 { initial_names(k) } else { UtsNames::default() };
             let pid = process::alloc_pid();
-            // CLONE_FILES: the child shares the caller's descriptor table.
-            let files = if req.shares_files() { k.process.files.share_table() } else { k.process.files.fork() };
+            // CLONE_FILES: the child shares the caller's descriptor table;
+            // CLONE_FS: its root, working directory and umask.
+            let files = k.process.files.clone_for(req.shares_files(), req.shares_fs());
             let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
+            // CLONE_SIGHAND: the handlers are copied, but kcmp(2) sees one
+            // table (ADR 0121).
+            if req.flags & CLONE_SIGHAND != 0 {
+                let parent = k.linux.with(|p| p.sighand);
+                linux.with(|c| c.sighand = parent);
+            }
             // A child sharing the memory starts without an rseq(2) area: the
             // parent's is the parent's (ADR 0111).
             if req.shares_memory() {
@@ -484,7 +494,12 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     let mut dirfd = req.dirfd;
     let mut depth = 0;
     let file = loop {
-        let file = k.process.files.open_exec_at(dirfd, &path).map_err(vfs_errno)?;
+        let file = if depth == 0 {
+            k.process.files.open_exec_with(dirfd, &path, req.follow)
+        } else {
+            k.process.files.open_exec_at(dirfd, &path)
+        };
+        let file = file.map_err(vfs_errno)?;
         let mut header = alloc::vec![0u8; HEADER_BYTES];
         let mut len = 0;
         while len < header.len() {
@@ -500,18 +515,27 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
                 _ => return Err(Errno::ENOEXEC),
             }
         };
+        // The interpreter opens the script by its name; through a
+        // descriptor the exec closes, it could not (execveat's spec sheet).
+        if depth == 0 && !req.script_reachable {
+            return Err(Errno::ENOENT);
+        }
+        // The first script is passed on by the name the caller knows it by.
+        let name = if depth == 0 { req.name } else { &path };
+        argv = script_argv(&script, name, &argv);
         depth += 1;
         if depth > MAX_SCRIPT_DEPTH {
             return Err(ELOOP);
         }
-        argv = script_argv(&script, &path, &argv);
         path = script.interpreter;
         // The interpreter's path is the system's, not relative to dirfd.
         dirfd = crate::fs::AT_FDCWD;
     };
     let argv_refs: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
     let envp_refs: Vec<&[u8]> = req.envp.iter().map(Vec::as_slice).collect();
-    let mut params = ExecParams::new(&argv_refs, &envp_refs, &path);
+    // AT_EXECFN: the name the program was started by, not that of a
+    // script's interpreter.
+    let mut params = ExecParams::new(&argv_refs, &envp_refs, req.name);
     // The credentials the program will run with (set-user-ID and
     // set-group-ID bits of the executable, not of a script; capabilities):
     // computed now for the auxiliary vector, installed past the point of
@@ -553,7 +577,7 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         k.tid = pid;
     }
     k.linux.with(|p| p.exec(pid as i32));
-    super::cred::commit_exec(k, pid, creds, req.path);
+    super::cred::commit_exec(k, pid, creds, req.name);
     let old = user::replace_memory(image.memory);
     // Dropping the old memory may take file system locks: fine here.
     drop(old);

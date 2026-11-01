@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fsopen               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (and children dropping to uid/gid 1000 without capabilities); umask 022; /tmp on overlayfs; tests mount tmpfs instances under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  fsopen(fsname, flags) (syscall 430) starts the new mount API: it makes a
+  file system context for the named file system type (as in
+  /proc/filesystems, e.g. "tmpfs") and returns a descriptor for it
+  (lowest free; O_RDWR; FD_CLOEXEC only with FSOPEN_CLOEXEC 1). The
+  context collects parameters with fsconfig(FSCONFIG_SET_*), becomes a
+  superblock with fsconfig(FSCONFIG_CMD_CREATE), and is mounted with
+  fsmount (a detached mount) and move_mount (attach). Messages the file
+  system logs while parsing parameters are queued on the context and
+  read back with read(2) on the descriptor, one message per read, oldest
+  first, each "e <fsname>: <text>\n" for an error (for tmpfs: "e tmpfs:
+  Unknown parameter 'bogus'\n", "e tmpfs: Bad value for 'size'\n"); with
+  none queued read fails with ENODATA, and a buffer smaller than the next
+  message gives EMSGSIZE (the message stays). Requires CAP_SYS_ADMIN
+  (checked before anything else).
+returns:
+  success: "a new fd (lowest free), O_RDWR, FD_CLOEXEC iff FSOPEN_CLOEXEC"
+  log_read: "read returns the length of one message (text includes the trailing newline)"
+errors:
+  perm: "EPERM (1): caller lacks CAP_SYS_ADMIN; checked first (also for bad flags or an unknown type)"
+  flags: "EINVAL (22): flags other than FSOPEN_CLOEXEC"
+  name_fault: "EFAULT (14): fsname unreadable"
+  unknown: "ENODEV (19): no such file system type (also the empty name)"
+  fds: "EMFILE (24): no free descriptor; not tested"
+  order: "EPERM, flags (EINVAL), name copy (EFAULT), type lookup (ENODEV)"
+  log_empty: "read on the context: ENODATA (61) with no message; EMSGSIZE (90) when the buffer is too small"
+side_effects: "none until CMD_CREATE and fsmount"
+threading: "none specific"
+ordering:
+  - "log messages are read in the order they were produced"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/mount.h. All tests that touch the mount API
+# need root (needs=root) and use tmpfs only; they unmount what they mount.

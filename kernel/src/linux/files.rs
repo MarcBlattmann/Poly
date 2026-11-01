@@ -55,6 +55,13 @@ impl LinuxFs for Thread<'_> {
         self.fifo_open_wait(fd)
     }
 
+    fn openat2(&mut self, dirfd: i32, path: &[u8], flags: u32, mode: u32, resolve: u64) -> Result<i32, Errno> {
+        let files = &self.process().files;
+        let resolve = poly_vfs::Resolve::from_bits(resolve);
+        let fd = files.openat2(dirfd, path, OpenFlags::from_bits(flags), mode as u16, resolve).map_err(vfs_errno)?;
+        self.fifo_open_wait(fd)
+    }
+
     fn check_fd_free(&mut self) -> Result<(), Errno> {
         self.process().files.check_fd_free().map_err(vfs_errno)
     }
@@ -192,6 +199,11 @@ impl LinuxFs for Thread<'_> {
         Ok(())
     }
 
+    fn unshare_fs_context(&mut self) -> Result<(), Errno> {
+        self.process().files.unshare_context();
+        Ok(())
+    }
+
     fn test_lock(
         &mut self,
         fd: i32,
@@ -320,6 +332,10 @@ impl LinuxFs for Thread<'_> {
         self.process().files.fchmodat(dirfd, path, mode as u16).map_err(vfs_errno)
     }
 
+    fn fchmodat2(&mut self, dirfd: i32, path: &[u8], mode: u32, follow: bool) -> Result<(), Errno> {
+        self.process().files.fchmodat2(dirfd, path, mode as u16, follow).map_err(vfs_errno)
+    }
+
     fn fchownat(
         &mut self,
         dirfd: i32,
@@ -431,6 +447,68 @@ impl LinuxFs for Thread<'_> {
 
     fn removexattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<(), Errno> {
         super::xattr::remove(self, target, name)
+    }
+
+    fn file_getattr(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<poly_personality_linux::sys::fileattr::FileAttr, Errno> {
+        super::fileattr::get(self, dirfd, path, follow)
+    }
+
+    fn file_setattr(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+        attr: &poly_personality_linux::sys::fileattr::FileAttr,
+    ) -> Result<(), Errno> {
+        super::fileattr::set(self, dirfd, path, follow, attr)
+    }
+
+    fn name_to_handle(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<(poly_personality_linux::sys::handle::FileHandle, u64), Errno> {
+        super::fileattr::name_to_handle(self, dirfd, path, follow)
+    }
+
+    fn open_by_handle(
+        &mut self,
+        mount_fd: i32,
+        handle: &poly_personality_linux::sys::handle::FileHandle,
+        flags: u32,
+    ) -> Result<i32, Errno> {
+        super::fileattr::open_by_handle(self, mount_fd, handle, flags)
+    }
+
+    fn path_ancestry(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<(Vec<poly_personality_linux::landlock::ObjectKey>, bool), Errno> {
+        let a = self.process().files.path_ancestry(dirfd, path, follow).map_err(vfs_errno)?;
+        let chain = a.keys.into_iter().map(super::landlock::object_key).collect();
+        Ok((chain, a.kind == poly_vfs::FileType::Directory))
+    }
+
+    fn parent_ancestry(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+    ) -> Result<Vec<poly_personality_linux::landlock::ObjectKey>, Errno> {
+        let keys = self.process().files.parent_ancestry(dirfd, path).map_err(vfs_errno)?;
+        Ok(keys.into_iter().map(super::landlock::object_key).collect())
+    }
+
+    fn fd_object(&mut self, fd: i32) -> Result<Option<(poly_personality_linux::landlock::ObjectKey, bool)>, Errno> {
+        let o = self.process().files.fd_object(fd).map_err(vfs_errno)?;
+        Ok(o.map(|(key, kind)| (super::landlock::object_key(key), kind == poly_vfs::FileType::Directory)))
     }
 }
 

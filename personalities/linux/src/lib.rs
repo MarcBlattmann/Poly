@@ -45,6 +45,8 @@
 //!   (ADR 0054).
 //! - [`ns`]: namespaces (user, pid, mount, network, UTS, IPC) and the
 //!   rules of clone(2), unshare(2) and setns(2) about them (ADR 0054).
+//! - [`aio`]: native Linux AIO contexts, their completion rings and
+//!   pending polls (io_setup(2) and friends, ADR 0122).
 //! - [`ipc`]: System V shared memory segments, one table per IPC
 //!   namespace.
 //! - [`net`]: what the socket calls need from the kernel
@@ -63,6 +65,7 @@ extern crate alloc;
 
 pub mod abi;
 pub mod admin;
+pub mod aio;
 pub mod args;
 pub mod cred;
 pub mod errno;
@@ -71,6 +74,8 @@ pub mod fs;
 pub mod futex;
 pub mod ipc;
 pub mod kernel;
+pub mod landlock;
+pub mod mountapi;
 pub mod net;
 pub mod ns;
 mod numbers;
@@ -82,6 +87,7 @@ pub mod sys;
 pub mod table;
 pub mod task;
 pub mod time;
+pub mod uring;
 
 #[cfg(test)]
 mod tests;
@@ -160,6 +166,22 @@ impl Linux {
         signal::exit_to_user(kernel)
     }
 
+    /// Whether [`background`](Self::background) has anything to do for
+    /// some process: the kernel asks before it calls it, after every
+    /// system call and on the way back from interrupts.
+    pub fn background_pending() -> bool {
+        uring::exec::parked_anywhere()
+    }
+
+    /// Called by the kernel on a thread's way back to user mode (after a
+    /// system call, before [`exit_to_user`](Self::exit_to_user); after an
+    /// interrupt) while [`background_pending`](Self::background_pending):
+    /// io_uring requests of its process that waited for a file run now if
+    /// it became ready ([`uring::exec::background`]).
+    pub fn background(kernel: &mut dyn LinuxKernel) {
+        uring::exec::background(kernel);
+    }
+
     /// Called by the kernel before a thread with an rseq(2) registration
     /// ([`LinuxKernel::rseq_registered`]) returns to user mode after it
     /// was switched out (preempted, blocked or moved to another CPU), and
@@ -187,6 +209,8 @@ impl Linux {
     pub fn process_exit(kernel: &mut dyn LinuxKernel) {
         sys::shm::process_exit(kernel);
         sys::sem::process_exit(kernel);
+        sys::aio::process_exit(kernel);
+        sys::mqueue::process_exit(kernel);
     }
 
     /// Called by the kernel for a fault in user mode that becomes a signal

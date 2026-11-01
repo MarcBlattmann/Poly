@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fsconfig             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities; umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  fsconfig(fd, cmd, key, value, aux) (syscall 431) configures a file
+  system context from fsopen or fspick. Commands (linux/mount.h):
+  FSCONFIG_SET_FLAG 0 (key, value NULL, aux 0), SET_STRING 1 (key, value
+  = string, aux 0), SET_BINARY 2 (value = blob, aux = length), SET_PATH 3
+  and SET_PATH_EMPTY 4 (value = path, aux = dirfd), SET_FD 5 (aux = fd),
+  CMD_CREATE 6 (key and value NULL, aux 0), CMD_RECONFIGURE 7,
+  CMD_CREATE_EXCL 8. Parameters are handed to the file system, which
+  rejects unknown keys and bad values with EINVAL and a log message (see
+  fsopen); "source" may be given once ("e Multiple sources" and EINVAL on
+  a second). tmpfs keys used here: size (e.g. "1m"), mode (octal string),
+  source, flags ro/rw. CMD_CREATE on a fresh fsopen context creates the
+  superblock; afterwards CMD_CREATE and every SET_* are EBUSY. On a
+  context from fspick, CMD_RECONFIGURE applies the parameters set since to
+  the live superblock (ro makes it read-only, rw writable again;
+  read-only fails with EBUSY while a file on it is open for writing); on
+  an fsopen context it is EBUSY, and CMD_CREATE on an fspick context is
+  EBUSY. After a command fails (CREATE or RECONFIGURE) the context is
+  unusable: every later fsconfig on it is EBUSY. A rejected parameter does
+  not spoil the context.
+returns:
+  success: "0"
+  create_effect: "the superblock gets the parameters (tmpfs size=1m: statfs f_blocks*f_bsize 1048576; mode=0750: root directory mode 040750; statmount mnt_opts \"size=1024k,mode=750\"; sb_source = source)"
+  reconfigure_effect: "ro: new files EROFS, statfs ST_RDONLY, for every mount of the superblock; rw: writable again"
+errors:
+  bad_fd: "EBADF (9): fd not open, or an O_PATH descriptor"
+  not_context: "EINVAL (22): fd is not a file system context (a pipe)"
+  unknown_cmd: "EOPNOTSUPP (95): cmd not one of 0-8"
+  args: "EINVAL (22): key NULL for SET_*; SET_FLAG with value or aux; SET_STRING with NULL value or aux != 0; CMD_* with key, value or aux"
+  param: "EINVAL (22): unknown key or bad value (message logged); second source"
+  busy: "EBUSY (16): CMD_CREATE or SET_* after CMD_CREATE; CMD_RECONFIGURE on an fsopen context; CMD_CREATE on an fspick context; any command after a failed command; RECONFIGURE to ro with files open for writing"
+  perm: "EPERM (1): CMD_CREATE/RECONFIGURE without CAP_SYS_ADMIN (contexts can only be made with it); not reached in tests"
+side_effects: "CMD_CREATE allocates a superblock; CMD_RECONFIGURE changes the mounted file system for all its mounts"
+threading: "commands on one context are serialised"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
