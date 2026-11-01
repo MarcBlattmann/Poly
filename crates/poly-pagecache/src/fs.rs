@@ -475,6 +475,13 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
     /// makes the cached copy of the range read as zeros too.
     fn fallocate(&self, ino: Ino, mode: u32, offset: u64, len: u64) -> Result<()> {
         self.changed();
+        // Allocating must see what the file system really holds: data
+        // still dirty in the cache takes room it has not been charged for
+        // yet (a full tmpfs `size=` mount is ENOSPC, the spec of
+        // fallocate). Written back first, without the inode's lock.
+        if mode & FALLOC_FL_PUNCH_HOLE == 0 {
+            self.writeback(None)?;
+        }
         let lock = self.core.inode_lock(self.st.id, ino);
         let _held = lock.lock();
         let old = self.st.inner.getattr(ino)?;

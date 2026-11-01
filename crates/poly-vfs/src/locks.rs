@@ -84,11 +84,34 @@ struct FileLocks {
     /// Sorted by owner, then start.
     records: Vec<RecordLock>,
     whole: Vec<WholeLock>,
+    /// flock(2) requests waiting for the file, oldest first
+    /// ([`LockTable::flock_wait`]): when a lock goes, they get it before
+    /// anyone asks again.
+    pending: Vec<WholeLock>,
 }
 
 impl FileLocks {
     fn is_empty(&self) -> bool {
-        self.records.is_empty() && self.whole.is_empty()
+        self.records.is_empty() && self.whole.is_empty() && self.pending.is_empty()
+    }
+
+    fn whole_conflicts(&self, owner: LockOwner, exclusive: bool) -> bool {
+        self.whole.iter().any(|w| w.owner != owner && (w.exclusive || exclusive))
+    }
+
+    /// Give the waiting requests that no longer conflict their locks, in
+    /// the order they came (a lock went).
+    fn grant_pending(&mut self) {
+        let mut i = 0;
+        while i < self.pending.len() {
+            let w = self.pending[i];
+            if self.whole_conflicts(w.owner, w.exclusive) {
+                i += 1;
+            } else {
+                self.pending.remove(i);
+                self.whole.push(w);
+            }
+        }
     }
 }
 
@@ -186,10 +209,15 @@ impl LockTable {
     /// flock(2) `LOCK_SH` / `LOCK_EX`: [`WouldBlock`] if another description
     /// holds a lock that conflicts, after the owner's old lock (if any)
     /// was given up.
+    ///
+    /// A conversion is not atomic (the spec of flock): the old lock goes
+    /// first, and requests waiting for the file get it before the new one
+    /// is looked at, so converting to exclusive while another description
+    /// waits for it fails and leaves the owner without a lock.
     pub fn flock(&mut self, file: FileKey, owner: LockOwner, exclusive: bool) -> Result<(), WouldBlock> {
         self.unflock(file, owner);
         let locks = self.files.entry(file).or_default();
-        if locks.whole.iter().any(|w| w.owner != owner && (w.exclusive || exclusive)) {
+        if locks.whole_conflicts(owner, exclusive) {
             if locks.is_empty() {
                 self.files.remove(&file);
             }
@@ -199,15 +227,56 @@ impl LockTable {
         Ok(())
     }
 
-    /// Whether `flock` would succeed now (it gives up the old lock first).
-    pub fn flock_would_block(&self, file: FileKey, owner: LockOwner, exclusive: bool) -> bool {
-        self.files.get(&file).is_some_and(|l| l.whole.iter().any(|w| w.owner != owner && (w.exclusive || exclusive)))
+    /// [`flock`](Self::flock) for a caller that will wait: on a conflict
+    /// the request joins the file's waiting requests, which get their
+    /// locks as soon as the conflicting ones go
+    /// ([`flock_granted`](Self::flock_granted) tells the waiter;
+    /// [`flock_cancel`](Self::flock_cancel) gives up).
+    pub fn flock_wait(&mut self, file: FileKey, owner: LockOwner, exclusive: bool) -> Result<(), WouldBlock> {
+        let r = self.flock(file, owner, exclusive);
+        if r.is_err() {
+            let locks = self.files.entry(file).or_default();
+            locks.pending.retain(|w| w.owner != owner);
+            locks.pending.push(WholeLock { owner, exclusive });
+        }
+        r
     }
 
-    /// flock(2) `LOCK_UN`.
+    /// Whether `owner`'s waiting request on `file` got its lock.
+    pub fn flock_granted(&self, file: FileKey, owner: LockOwner) -> bool {
+        self.files
+            .get(&file)
+            .is_some_and(|l| !l.pending.iter().any(|w| w.owner == owner) && l.whole.iter().any(|w| w.owner == owner))
+    }
+
+    /// `owner` stops waiting for `file` (interrupted).
+    pub fn flock_cancel(&mut self, file: FileKey, owner: LockOwner) {
+        if let Some(locks) = self.files.get_mut(&file) {
+            locks.pending.retain(|w| w.owner != owner);
+            if locks.is_empty() {
+                self.files.remove(&file);
+            }
+        }
+    }
+
+    /// The flock(2) lock `owner` holds on `file`, if any: `Some(exclusive)`.
+    pub fn flock_of(&self, file: FileKey, owner: LockOwner) -> Option<bool> {
+        self.files.get(&file)?.whole.iter().find(|w| w.owner == owner).map(|w| w.exclusive)
+    }
+
+    /// Whether `flock` would succeed now (it gives up the old lock first).
+    pub fn flock_would_block(&self, file: FileKey, owner: LockOwner, exclusive: bool) -> bool {
+        self.files.get(&file).is_some_and(|l| l.whole_conflicts(owner, exclusive))
+    }
+
+    /// flock(2) `LOCK_UN`; waiting requests may get the lock.
     pub fn unflock(&mut self, file: FileKey, owner: LockOwner) {
         if let Some(locks) = self.files.get_mut(&file) {
+            let before = locks.whole.len();
             locks.whole.retain(|w| w.owner != owner);
+            if locks.whole.len() != before {
+                locks.grant_pending();
+            }
             if locks.is_empty() {
                 self.files.remove(&file);
             }
@@ -222,6 +291,9 @@ impl LockTable {
         locks.records.retain(|l| l.owner != owner);
         locks.whole.retain(|w| w.owner != owner);
         let released = locks.records.len() + locks.whole.len() != before;
+        if released {
+            locks.grant_pending();
+        }
         if locks.is_empty() {
             self.files.remove(&file);
         }
@@ -236,7 +308,12 @@ impl LockTable {
             let before = locks.records.len() + locks.whole.len();
             locks.records.retain(|l| alive(l.owner));
             locks.whole.retain(|w| alive(w.owner));
-            released |= locks.records.len() + locks.whole.len() != before;
+            locks.pending.retain(|w| alive(w.owner));
+            let went = locks.records.len() + locks.whole.len() != before;
+            if went {
+                locks.grant_pending();
+            }
+            released |= went;
             !locks.is_empty()
         });
         released
