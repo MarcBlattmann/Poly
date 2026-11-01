@@ -1039,6 +1039,19 @@ Boot group `drm` runs the kernel's DRM tests, then
 screenshot of the scanout at each step with the pattern it drew, and the
 boot screen after it closed.
 
+Unmodified Mesa runs on it ([ADR 0115](adr/0115-unmodified-mesa-on-the-drm-kms-device.md)):
+the root disk carries the host's Mesa (GBM with its DRI backend, glvnd's
+EGL and GLES with Mesa's vendor library, the `kms_swrast` / `swrast` /
+`virtio_gpu` DRI stubs and the Gallium library with llvmpipe and LLVM),
+libdrm's `modetest` and `kmscube`. Mesa's loader finds the device through
+sysfs, its `virtio_gpu` (virgl) driver finds no 3D (the virtio-gpu driver
+ioctls are `EINVAL`) and GBM falls back to `kms_swrast`, which renders
+with llvmpipe into dumb buffers that kmscube flips. Boot group `mesa`
+checks modetest's listing and its legacy, atomic and flipping mode sets,
+and kmscube's turning cube, by QMP screenshots. `GET_UNIQUE` reports the
+bus ID only to a file that set interface version 1.1, so libdrm's lookup
+by driver name (`modetest -M virtio_gpu`) takes the device.
+
 ## Wayland compositor
 
 The compositor's groundwork (Phase 6, ADR 0106) lives in user space, on

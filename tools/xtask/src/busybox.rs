@@ -301,6 +301,16 @@ impl Session {
         self.wait(&format!("{needle:?}"), |t| t.find(needle).map(|i| i + needle.len()))
     }
 
+    /// Wait for whichever of `needles` comes first; its index and the text
+    /// up to it.
+    pub(crate) fn expect_any(&mut self, needles: &[&str]) -> super::Result<(usize, String)> {
+        let first =
+            |t: &str| needles.iter().enumerate().filter_map(|(i, n)| t.find(n).map(|at| (at, i, n.len()))).min();
+        let got = self.wait(&format!("one of {needles:?}"), |t| first(t).map(|(at, _, len)| at + len))?;
+        let (_, i, _) = first(&got).expect("found above");
+        Ok((i, got))
+    }
+
     /// Wait for the shell's prompt (`root@<host>:<dir># ` at the end of
     /// the output so far); returns the text before it.
     pub(crate) fn prompt(&mut self) -> super::Result<String> {

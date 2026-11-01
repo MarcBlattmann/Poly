@@ -244,6 +244,10 @@ pub(crate) struct File {
     pub magic: u32,
     pub authenticated: bool,
     pub was_master: bool,
+    /// Whether the file asked for interface version 1.1 or later
+    /// (`SET_VERSION`), which binds the bus ID: `GET_UNIQUE` reports it
+    /// only then.
+    pub bus_id: bool,
 }
 
 impl File {
@@ -532,6 +536,7 @@ impl<H: Hardware> Device<H> {
                 magic,
                 authenticated: master,
                 was_master: master,
+                bus_id: false,
             },
         );
         if master {
@@ -741,8 +746,13 @@ impl<H: Hardware> Device<H> {
         match n {
             nr::VERSION => done(self.version(b, ctx.user)),
             nr::GET_UNIQUE => {
+                // Empty until the file binds the bus ID with interface
+                // version 1.1 (libdrm's `drmSetInterfaceVersion`): libdrm's
+                // `drmOpen` by driver name passes over a minor whose bus ID
+                // is already set, as one some other client set up.
+                let unique = if self.file(file)?.bus_id { self.info.unique.as_bytes() } else { &[] };
                 let mut u = Unique::decode(b);
-                copy_field(ctx.user, &mut u.len, u.ptr, self.info.unique.as_bytes())?;
+                copy_field(ctx.user, &mut u.len, u.ptr, unique)?;
                 u.encode(b);
                 Ok(Reply::Done(0))
             }
@@ -756,7 +766,7 @@ impl<H: Hardware> Device<H> {
                 f.authenticated = true;
                 Ok(Reply::Done(0))
             }
-            nr::SET_VERSION => done(self.set_version(b)),
+            nr::SET_VERSION => done(self.set_version(file, b)),
             nr::MODESET_CTL => Ok(Reply::Done(0)),
             nr::GEM_CLOSE => done(self.delete_handle(file, GemClose::decode(b).handle)),
             nr::GEM_FLINK => done(self.flink(file, b)),
@@ -808,7 +818,7 @@ impl<H: Hardware> Device<H> {
     /// `SET_VERSION`: -1 asks for nothing; interface 1.x up to 1.4 and the
     /// driver's own major version are accepted. The reply is the versions
     /// in use.
-    fn set_version(&mut self, b: &mut [u8]) -> Result<()> {
+    fn set_version(&mut self, file: FileId, b: &mut [u8]) -> Result<()> {
         let v = SetVersion::decode(b);
         if v.di_major != -1 && (v.di_major != DI_VERSION.0 || v.di_minor < 0 || v.di_minor > DI_VERSION.1) {
             return Err(Errno::EINVAL);
@@ -816,6 +826,9 @@ impl<H: Hardware> Device<H> {
         if v.dd_major != -1 && (v.dd_major != self.info.version.0 || v.dd_minor < 0 || v.dd_minor > self.info.version.1)
         {
             return Err(Errno::EINVAL);
+        }
+        if v.di_major == 1 && v.di_minor >= 1 {
+            self.file_mut(file)?.bus_id = true;
         }
         SetVersion {
             di_major: DI_VERSION.0,
