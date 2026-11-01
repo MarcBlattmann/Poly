@@ -458,6 +458,25 @@ cargo xtask pipeline win scenario poly --bin-dir DIR [--data-dir DIR]  # Poly on
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../poly/tools/pipeline/windows/poly-oracle.ps1 \
     -Bundle bundle-<id>.txt -Tests sevenzip_scenario -TestTimeouts sevenzip_scenario=300 -Out results.json
 ```
+
+**The traced scenario** ([ADR 0110](adr/0110-7-zip-traced-scenario-and-what-passing-its-trace-means.md)):
+`tests/windows/sevenzip_trace.rs` runs the same steps through the API
+tracer's kit (ADR 0090) in a work directory of a fixed path length and
+records each step's trace. The Windows reference is committed in canonical
+form as `tests/windows/oracle/sevenzip_trace.reference.json`; the
+`wintrace` boot group compares Poly's with it (report only until
+`TRACE_REQUIRED`).
+
+```sh
+cargo xtask win 7zip-trace diff [--markdown docs/windows/7zip-trace.md] [--check]   # stage, run on Poly, compare per step
+cargo xtask win 7zip-trace diff --target poly.json                                 # compare a saved Poly run
+# to record again (after the driver, poly-wtest, the tracer or its signatures changed), from the host:
+polyd 'cargo xtask win 7zip-trace stage'
+POLY_RUN=~/poly-dev/polyd tools/pipeline/windows/poly-remote.sh --host homeserver2 --tests sevenzip_trace \
+    --data-dir target/pipeline/windows/data --runner-arg -Runs --runner-arg 1 --runner-arg -TestTimeouts --runner-arg sevenzip_trace=1800
+cp .oracle-remote/homeserver2/results.json .oracle-remote/windows-1.json    # repeat for -2, -3
+polyd 'cargo xtask win 7zip-trace record .oracle-remote/windows-1.json .oracle-remote/windows-2.json .oracle-remote/windows-3.json'
+```
 ### Where Windows behaviour is already tested: Wine seeds
 
 For a spec agent: `cargo xtask coverage show <id>` lists an entry's

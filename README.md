@@ -73,7 +73,7 @@ kernel, and all three share one core. More detail in
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
-**Now:** Phase 5, NT personality and Windows console apps. **Next milestone:** Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; left: the API trace (ADR 0090) of the scenario recorded on Windows and compared without differences, ADR 0101 "The milestone")
+**Now:** Phase 5, NT personality and Windows console apps. **Next milestone:** Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the wintrace boot group, report only; left: Poly's trace of every step without a divergence from the reference (0 of 15 today, docs/windows/7zip-trace.md), then TRACE_REQUIRED, ADR 0110 "What passes its full recorded trace means")
 
 <a href="docs/ROADMAP.md">
 <picture>
