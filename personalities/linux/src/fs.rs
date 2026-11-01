@@ -68,6 +68,8 @@ pub mod access {
 pub mod statx {
     pub const STATX_BASIC_STATS: u32 = 0x7ff;
     pub const STATX_MNT_ID: u32 = 0x1000;
+    /// The unique 64-bit mount id instead of the legacy one (`stx_mnt_id`).
+    pub const STATX_MNT_ID_UNIQUE: u32 = 0x4000;
     pub const STATX_RESERVED: u32 = 0x8000_0000;
     pub const STATX_ATTR_MOUNT_ROOT: u64 = 0x2000;
 }
@@ -609,6 +611,80 @@ pub trait LinuxFs {
         let _ = (target, name);
         Err(Errno::ENOSYS)
     }
+
+    /// file_getattr(2): the inode flags of `(dirfd, path)` (an empty path:
+    /// `dirfd`'s file, any descriptor); `EOPNOTSUPP` for a file without
+    /// them.
+    fn file_getattr(&mut self, dirfd: i32, path: &[u8], follow: bool) -> Result<crate::sys::fileattr::FileAttr, Errno> {
+        let _ = (dirfd, path, follow);
+        Err(Errno::ENOSYS)
+    }
+
+    /// file_setattr(2): replace the inode flags of `(dirfd, path)`.
+    fn file_setattr(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+        attr: &crate::sys::fileattr::FileAttr,
+    ) -> Result<(), Errno> {
+        let _ = (dirfd, path, follow, attr);
+        Err(Errno::ENOSYS)
+    }
+
+    /// name_to_handle_at(2): the handle of `(dirfd, path)` (an empty path:
+    /// `dirfd`'s file) and the id of its mount, as `/proc/<pid>/mountinfo`
+    /// shows it; `EOPNOTSUPP` if its file system makes none.
+    fn name_to_handle(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<(crate::sys::handle::FileHandle, u64), Errno> {
+        let _ = (dirfd, path, follow);
+        Err(Errno::ENOSYS)
+    }
+
+    /// open_by_handle_at(2): open the file `handle` names on the file
+    /// system of `mount_fd`'s file (`AT_FDCWD`: the working directory's)
+    /// with open(2) `flags`; `ESTALE` if it names no live file there.
+    fn open_by_handle(
+        &mut self,
+        mount_fd: i32,
+        handle: &crate::sys::handle::FileHandle,
+        flags: u32,
+    ) -> Result<i32, Errno> {
+        let _ = (mount_fd, handle, flags);
+        Err(Errno::ENOSYS)
+    }
+
+    /// Landlock (`crate::landlock`): the chain of the object `path` names
+    /// from `dirfd` (the object, then each directory above it up to the
+    /// root) and whether it is a directory. Errors are the lookup's.
+    fn path_ancestry(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<(Vec<crate::landlock::ObjectKey>, bool), Errno> {
+        let _ = (dirfd, path, follow);
+        Err(Errno::ENOSYS)
+    }
+
+    /// Landlock: the chain of the directory the last component of `path`
+    /// is in.
+    fn parent_ancestry(&mut self, dirfd: i32, path: &[u8]) -> Result<Vec<crate::landlock::ObjectKey>, Errno> {
+        let _ = (dirfd, path);
+        Err(Errno::ENOSYS)
+    }
+
+    /// Landlock: the object `fd` is open on and whether it is a directory;
+    /// `None` if it is no file of a file system (a pipe, a socket, an
+    /// event file, a ruleset). `EBADF` if `fd` is not open.
+    fn fd_object(&mut self, fd: i32) -> Result<Option<(crate::landlock::ObjectKey, bool)>, Errno> {
+        let _ = fd;
+        Err(Errno::ENOSYS)
+    }
 }
 
 /// The file an extended attribute call is about.
@@ -619,4 +695,8 @@ pub enum XattrTarget<'a> {
     Path { path: &'a [u8], follow: bool },
     /// An open descriptor (`fgetxattr`); `EBADF` for an `O_PATH` one.
     Fd(i32),
+    /// The *xattrat calls: `path` from `dirfd` (`AT_FDCWD`: the working
+    /// directory); an empty path (`AT_EMPTY_PATH`) is `dirfd`'s file, as
+    /// [`XattrTarget::Fd`] (the working directory for `AT_FDCWD`).
+    At { dirfd: i32, path: &'a [u8], follow: bool },
 }

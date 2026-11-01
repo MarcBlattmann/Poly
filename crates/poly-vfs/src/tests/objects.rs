@@ -945,3 +945,38 @@ fn a_blocking_fifo_open_waits_for_the_other_side() {
     assert_eq!(lone.object_as::<PipeEnd>().unwrap().wait_for_peer(&mut blocker), Err(Errno::EINTR));
     t.join().unwrap();
 }
+
+// ---- readiness that depends on the file's status flags -------------------
+
+/// An object that, like a userfaultfd, reports `POLLERR` through a file
+/// that is not `O_NONBLOCK`.
+struct ErrUnlessNonblock;
+
+impl FileObject for ErrUnlessNonblock {
+    fn read(&self, _buf: &mut [u8]) -> Result<usize> {
+        Err(Errno::EAGAIN)
+    }
+    fn write(&self, _buf: &[u8]) -> Result<usize> {
+        Err(Errno::EINVAL)
+    }
+    fn poll(&self) -> PollEvents {
+        PollEvents::IN
+    }
+    fn poll_as(&self, nonblock: bool) -> PollEvents {
+        if nonblock { self.poll() } else { PollEvents::ERR }
+    }
+    fn wait_queue(&self) -> Option<&Arc<poll::WaitQueue>> {
+        None
+    }
+}
+
+#[test]
+fn poll_sees_the_current_nonblock_flag() {
+    let env = Env::new();
+    let f = object_file(&env, Arc::new(ErrUnlessNonblock), OpenFlags::RDONLY);
+    assert_eq!(f.poll(), PollEvents::ERR, "made blocking");
+    f.set_flags(OpenFlags::NONBLOCK);
+    assert_eq!(f.poll(), PollEvents::IN, "fcntl(F_SETFL, O_NONBLOCK) afterwards");
+    f.set_flags(OpenFlags::RDONLY);
+    assert_eq!(f.poll(), PollEvents::ERR, "and back");
+}

@@ -1,0 +1,78 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_uring_setup       # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; kernel.io_uring_disabled 0, kernel.io_uring_group -1 (io_uring open to every user)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_uring_setup(entries, params) (syscall 425) creates an io_uring
+  instance and returns a file descriptor for it (O_RDWR, always
+  close-on-exec, lowest free number). params points at struct
+  io_uring_params (120 bytes, linux/io_uring.h): u32 sq_entries,
+  cq_entries, flags, sq_thread_cpu, sq_thread_idle, features, wq_fd,
+  resv[3]; struct io_sqring_offsets sq_off (u32 head, tail, ring_mask,
+  ring_entries, flags, dropped, array, resv1; u64 user_addr); struct
+  io_cqring_offsets cq_off (u32 head, tail, ring_mask, ring_entries,
+  overflow, cqes, flags, resv1; u64 user_addr). In: flags (IORING_SETUP_*),
+  cq_entries (only with IORING_SETUP_CQSIZE), sq_thread_cpu/idle (only with
+  SQPOLL/SQ_AFF), wq_fd (only with ATTACH_WQ); resv must be 0. Out:
+  sq_entries = entries rounded up to a power of two; cq_entries = twice
+  that (or the CQSIZE value rounded up to a power of two); features =
+  IORING_FEAT_* bits (Linux 6.18: 0x3ffff, bits 0-17); sq_off/cq_off =
+  byte offsets of each ring field inside the mapped regions (user space must
+  use these, not fixed values; observed for 4 entries: sq head 0, tail 4,
+  ring_mask 16, ring_entries 24, flags 36, dropped 32, array 192; cq head
+  8, tail 12, ring_mask 20, ring_entries 28, overflow 44, cqes 64, flags
+  40). The rings are mapped with mmap(MAP_SHARED) of the fd at offsets
+  IORING_OFF_SQ_RING 0, IORING_OFF_CQ_RING 0x8000000 and IORING_OFF_SQES
+  0x10000000 (the offset is masked with 0xf8000000 before comparing).
+  With IORING_FEAT_SINGLE_MMAP the SQ and CQ ring fields share one
+  region, so mapping either offset gives the same memory. The SQ ring
+  holds head (kernel advances), tail (user advances), ring_mask
+  (entries-1), ring_entries, flags (IORING_SQ_NEED_WAKEUP 1,
+  IORING_SQ_CQ_OVERFLOW 2, IORING_SQ_TASKRUN 4), dropped (count of
+  invalid SQ array entries) and array (u32 per entry: index of the SQE to
+  use). The SQE region holds sq_entries struct io_uring_sqe (64 bytes).
+  The CQ ring holds head (user advances), tail (kernel advances),
+  ring_mask, ring_entries, overflow, flags, and cq_entries struct
+  io_uring_cqe (16 bytes: u64 user_data, s32 res, u32 flags) at cqes.
+  All indices are free-running u32 counters masked with ring_mask. At
+  creation every head/tail/flags/dropped/overflow is 0. The mappings
+  keep the instance alive after the fd is closed. The fd and its MAP_SHARED
+  rings are inherited by fork, and a child may submit on them.
+returns:
+  success: "a new fd (O_RDWR, FD_CLOEXEC); params filled as described"
+  sizes: "entries 1 -> 1/2, 4 -> 4/8, 5 -> 8/16, 32768 -> 32768/65536 (sq/cq)"
+  features_required: "at least IORING_FEAT_SINGLE_MMAP 1, NODROP 2, SUBMIT_STABLE 4, RW_CUR_POS 8, EXT_ARG 0x100 (the tests check these; Linux reports 0x3ffff)"
+  ignored_inputs: "sq_entries, features, sq_thread_cpu, wq_fd and sq_off/cq_off contents (including their resv1) are ignored when the flags do not use them"
+  clamp: "IORING_SETUP_CLAMP: entries > 32768 become 32768 and CQSIZE > 65536 becomes 65536 instead of failing"
+  cqsize: "IORING_SETUP_CQSIZE: cq_entries from params, rounded up to a power of two (3 -> 4, 100 -> 128)"
+  other_flags: "IOPOLL, SQPOLL, R_DISABLED, SUBMIT_ALL, COOP_TASKRUN, TASKRUN_FLAG, SQE128, CQE32, SINGLE_ISSUER, DEFER_TASKRUN, NO_MMAP, REGISTERED_FD_ONLY, NO_SQARRAY (bits 0-16 and more) are accepted by Linux 6.18; their behaviour is outside this sheet (NO_SQARRAY reports sq_off.array 0)"
+errors:
+  zero: "EINVAL (22): entries == 0"
+  too_many: "EINVAL (22): entries > 32768 without IORING_SETUP_CLAMP"
+  flags: "EINVAL (22): unknown flag bits (bit 20, bit 31 observed)"
+  resv: "EINVAL (22): any resv[] word non-zero"
+  params_fault: "EFAULT (14): params unreadable or NULL"
+  sq_aff: "EINVAL (22): IORING_SETUP_SQ_AFF without IORING_SETUP_SQPOLL"
+  cqsize: "EINVAL (22): CQSIZE with cq_entries 0, below sq_entries, or above 65536 (without CLAMP)"
+  attach: "ATTACH_WQ with a wq_fd that is not open: ENXIO (6) here (EBADF per the man page); with a fd that is not an io_uring: EINVAL"
+  no_memory: "ENOMEM (12): no memory for the rings; not tested"
+  fds: "EMFILE (24)/ENFILE (23): no descriptor; not tested"
+  disabled: "EPERM (1): kernel.io_uring_disabled 2, or 1 and caller not in io_uring_group; not the case on the oracle"
+  mmap_bad_offset: "mmap of an offset that names no region (0x20000000) fails with ENOMEM on Linux 6.18"
+side_effects: "allocates the rings; uses one fd"
+threading: "the rings are shared memory; user space must order its stores (release on SQ tail, acquire on CQ tail)"
+ordering:
+  - "the fd is the lowest free descriptor; failed calls open nothing"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants and layouts from linux/io_uring.h (the header shipped
+# with the build image is older than 6.18; the tests define what they use).
+# Tests use raw syscalls and map the rings themselves; no liburing.

@@ -1,0 +1,68 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mq_open              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace; fs.mqueue: msg_default 10, msg_max 10, msgsize_default 8192, msgsize_max 8192, queues_max 256; RLIMIT_MSGQUEUE 819200"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  mq_open(name, oflag, mode, attr) (syscall 240) opens a POSIX message
+  queue, creating it with O_CREAT. Queues live in the IPC namespace (a
+  hidden mqueue file system, also mountable at /dev/mqueue) and persist
+  until mq_unlink, independent of processes. The raw call takes the name
+  WITHOUT a leading slash (the C library strips it): a name containing
+  '/', ".", ".." is EACCES, "" is ENOENT, more than 255 bytes ENAMETOOLONG.
+  oflag: access mode O_RDONLY/O_WRONLY/O_RDWR (3 is EINVAL), O_CREAT,
+  O_EXCL, O_NONBLOCK; O_CLOEXEC is implied (the descriptor is always
+  close-on-exec); O_TRUNC, O_DIRECTORY and other bits are ignored. The
+  result is a file descriptor (lowest free) whose F_GETFL shows the access
+  mode and O_NONBLOCK; fstat shows a regular file (S_IFREG | mode & ~umask)
+  owned by the caller's euid/egid. attr (struct mq_attr, 64 bytes: long
+  mq_flags, mq_maxmsg, mq_msgsize, mq_curmsgs, reserved[4]) is used only
+  when a new queue is created: mq_maxmsg and mq_msgsize must be > 0 and,
+  for a caller without CAP_SYS_RESOURCE, at most fs.mqueue.msg_max (10)
+  and msgsize_max (8192); with CAP_SYS_RESOURCE up to 65536 messages (and
+  larger sizes); mq_flags and mq_curmsgs are ignored. attr NULL gives
+  msg_default (10) and msgsize_default (8192). When the queue exists,
+  attr is still read (EFAULT if unreadable) but its values are ignored.
+  Opening an existing queue checks its mode against the access mode like
+  a file open (EACCES), unless the caller has CAP_DAC_OVERRIDE. read(2) on
+  the descriptor returns a 60-byte status line "QSIZE:%-10lu NOTIFY:%-5d
+  SIGNO:%-5d NOTIFY_PID:%-6d\n" (QSIZE = total bytes of queued messages;
+  NOTIFY = sigev_notify of the registration, SIGNO its signal,
+  NOTIFY_PID the registered process, 0 when none); write(2) is EINVAL.
+  The descriptor is inherited by fork and shares the queue.
+returns:
+  success: "a new fd, lowest free, FD_CLOEXEC set, F_GETFL = access mode | (O_NONBLOCK if asked)"
+  defaults: "attr NULL: mq_maxmsg 10, mq_msgsize 8192"
+  attr: "new queue gets attr's mq_maxmsg and mq_msgsize; curmsgs 0"
+  existing: "an existing queue is opened as is; O_CREAT without O_EXCL is fine; attr ignored"
+  persistence: "messages stay in the queue after all descriptors are closed"
+errors:
+  name_slash: "EACCES (13): name contains '/' (including a leading one), or is '.' or '..'"
+  name_empty: "ENOENT (2): name is empty"
+  name_long: "ENAMETOOLONG (36): name longer than 255 bytes"
+  name_fault: "EFAULT (14): name unreadable"
+  attr_fault: "EFAULT (14): attr given (with O_CREAT) and unreadable, also when the queue exists"
+  missing: "ENOENT (2): no such queue and no O_CREAT"
+  exists: "EEXIST (17): O_CREAT|O_EXCL and the queue exists"
+  accmode: "EINVAL (22): access mode 3"
+  attr_values: "EINVAL (22): creating with mq_maxmsg <= 0 or mq_msgsize <= 0; above msg_max/msgsize_max without CAP_SYS_RESOURCE; mq_maxmsg above 65536 even with it"
+  access: "EACCES (13): existing queue whose mode denies the requested access (another user's 0600 queue; write to a 0644 queue); O_CREAT on such a queue too"
+  limits: "EMFILE (24): RLIMIT_MSGQUEUE exceeded or no free fd; ENFILE (23); ENOSPC (28): queues_max reached for a caller without CAP_SYS_RESOURCE; ENOMEM; not tested"
+  order: "name copy (EFAULT, ENAMETOOLONG), attr copy (EFAULT), name syntax (EACCES/ENOENT), then existence (EEXIST/ENOENT/EACCES), then attr values (EINVAL) for a new queue"
+side_effects: "creates a queue in the IPC namespace (survives the process); uses one descriptor"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct mq_attr from linux/mqueue.h; default limits are the sysctls
+# above. Tests use small queues (a few messages of <= 100 bytes) so that
+# parallel runs as one user stay within RLIMIT_MSGQUEUE; names are fixed
+# per test and unlinked at start and end. The perms test switches to uid
+# 1000 (needs=root).

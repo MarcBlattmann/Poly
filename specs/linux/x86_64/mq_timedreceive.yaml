@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mq_timedreceive      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  mq_timedreceive(mqdes, msg_ptr, msg_len, msg_prio, abs_timeout) (syscall
+  243) removes the oldest message of the highest priority from the queue,
+  copies it to msg_ptr, stores its priority in *msg_prio (unless msg_prio
+  is NULL) and returns its length. msg_len must be at least the queue's
+  mq_msgsize (EMSGSIZE otherwise, whatever the message's length; the
+  message stays queued). If abs_timeout is non-NULL it is read and
+  validated first (EFAULT, EINVAL for tv_nsec outside 0..999999999 or a
+  negative tv_sec), even when a message is waiting. On an empty queue:
+  O_NONBLOCK gives EAGAIN; otherwise it sleeps until a message arrives or
+  the absolute CLOCK_REALTIME time abs_timeout passes (ETIMEDOUT; a past
+  time expires at once but does not matter when a message is there; NULL
+  waits forever). A blocked receiver gets a message sent later directly
+  (and suppresses notifications). Copying the message or the priority to
+  user memory happens after the message has been taken: an unwritable
+  msg_ptr or msg_prio gives EFAULT and the message is lost. Receiving from
+  a full queue wakes one blocked sender.
+returns:
+  success: "the message length (0 for an empty message); *msg_prio set; mq_curmsgs shrinks by one"
+  order: "highest priority first; FIFO within a priority; interleaved sends keep that rule"
+errors:
+  bad_fd: "EBADF (9): mqdes not open, not a message queue, or not open for reading"
+  too_small: "EMSGSIZE (90): msg_len < mq_msgsize; *msg_prio untouched; message kept"
+  timeout_invalid: "EINVAL (22): abs_timeout invalid, checked before anything else"
+  timeout_fault: "EFAULT (14): abs_timeout unreadable, checked before anything else"
+  empty_nonblock: "EAGAIN (11): queue empty and O_NONBLOCK"
+  timed_out: "ETIMEDOUT (110): queue stayed empty until abs_timeout"
+  copy_fault: "EFAULT (14): msg_ptr or msg_prio unwritable; the message was removed and is lost"
+  interrupted: "EINTR (4): a handler without SA_RESTART ran during the sleep (with SA_RESTART: restarted, same deadline)"
+  order: "abs_timeout (EFAULT/EINVAL), descriptor (EBADF), msg_len (EMSGSIZE), then empty/wait, then copy-out (EFAULT)"
+side_effects: "removes the message; may wake a blocked sender"
+threading: "several blocked receivers get messages in the order they started waiting"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "with an empty queue, returns no earlier than abs_timeout unless a message arrives"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

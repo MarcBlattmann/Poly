@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_cancel            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_cancel(ctx_id, iocb, result) (syscall 210) asks to cancel an operation
+  previously queued with io_submit, named by the address of its iocb. Only
+  operations that are still pending can be cancelled; of the opcodes
+  io_submit takes, that means IOCB_CMD_POLL (file reads, writes and syncs
+  have completed by the time io_submit returns). Cancelling a pending poll
+  never succeeds synchronously: the call returns EINPROGRESS and does not
+  write *result (it may be NULL); the cancelled operation then completes
+  through the context's ring like any other, with its aio_data and obj,
+  res 0 and res2 0, and is gone (cancelling it again is EINVAL). The iocb's
+  aio_key is read and must be 0.
+returns:
+  success: "never 0 on Linux 6.18 for the opcodes io_submit accepts; a cancelled poll gives -1 EINPROGRESS"
+  event: "the cancelled iocb's event: data = aio_data, obj = iocb address, res 0, res2 0; exactly one event, no second one if the awaited event happens later"
+  result: "*result is never written (contents unchanged); NULL is fine"
+errors:
+  in_progress: "EINPROGRESS (115): the operation was found and cancellation started; its event follows in the ring"
+  iocb_fault: "EFAULT (14): the iocb (its aio_key) is not readable; checked first"
+  key: "EINVAL (22): iocb->aio_key != 0"
+  bad_ctx: "EINVAL (22): ctx_id is not a live context of this process"
+  not_found: "EINVAL (22): the iocb is not pending in this context: never submitted, submitted to another context, already completed (file I/O), or already cancelled"
+  order: "EFAULT (reading aio_key), EINVAL (key), EINVAL (context), EINVAL (not found)"
+side_effects: "a cancelled poll stops waiting; other pending iocbs (also on the same file) are untouched"
+threading: "none specific"
+ordering:
+  - "the cancellation event appears after io_cancel returns EINPROGRESS (a wait of at most a few milliseconds)"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

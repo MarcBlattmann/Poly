@@ -115,7 +115,10 @@ pub fn execve(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let mut budget = exec::MAX_ARG_TOTAL;
     let argv = exec::read_strings(k, a.ptr(1), &mut budget)?;
     let envp = exec::read_strings(k, a.ptr(2), &mut budget)?;
+    crate::sys::landlock::check_object(k, AT_FDCWD, &path, true, crate::landlock::abi::LANDLOCK_ACCESS_FS_EXECUTE)?;
+    let old_space = k.address_space_id();
     k.execve(&ExecRequest::new(&path, &argv, &envp))?;
+    crate::sys::aio::left_address_space(k, old_space);
     let pid = k.pid();
     let _ = with_tree(k, |t| t.exec(pid));
     Ok(0)
@@ -172,7 +175,10 @@ pub fn execveat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
     req.argv = &argv;
     req.envp = &envp;
+    crate::sys::landlock::check_object(k, dirfd, &path, req.follow, crate::landlock::abi::LANDLOCK_ACCESS_FS_EXECUTE)?;
+    let old_space = k.address_space_id();
     k.execve(&req)?;
+    crate::sys::aio::left_address_space(k, old_space);
     let pid = k.pid();
     let _ = with_tree(k, |t| t.exec(pid));
     Ok(0)

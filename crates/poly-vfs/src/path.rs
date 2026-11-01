@@ -381,7 +381,9 @@ impl<'a> Walk<'a> {
         {
             return Err(Errno::ELOOP);
         }
-        if self.links_left == 0 {
+        // `MOUNT_ATTR_NOSYMFOLLOW` (`linux/mount.h`, mount_setattr(2)):
+        // symbolic links on the mount are not followed (`ELOOP`).
+        if self.links_left == 0 || link.mount.attrs() & crate::mount::ATTR_NOSYMFOLLOW != 0 {
             return Err(Errno::ELOOP);
         }
         self.links_left -= 1;
@@ -414,8 +416,8 @@ impl<'a> Walk<'a> {
             if self.resolve.contains(Resolve::NO_XDEV) {
                 return Err(Errno::EXDEV);
             }
-            match &cur.mount.parent {
-                Some((m, ino)) => cur = Location { mount: m.clone(), ino: *ino },
+            match cur.mount.parent() {
+                Some((m, ino)) => cur = Location { mount: m, ino },
                 // The topmost root, outside the process root (a chroot
                 // escaped through a descriptor): stay.
                 None => return Ok(cur),

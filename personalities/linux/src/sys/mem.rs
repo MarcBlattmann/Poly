@@ -157,6 +157,7 @@ pub fn munmap(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     addr.checked_add(len).ok_or(Errno::EINVAL)?;
     let shm = k.shm_mapped(addr, len);
     k.munmap(addr, len)?;
+    crate::sys::aio::unmapped(k, addr, len);
     if !shm.is_empty() {
         crate::sys::shm::unmapped(k, &shm);
     }

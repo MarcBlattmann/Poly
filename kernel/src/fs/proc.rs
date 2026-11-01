@@ -612,33 +612,43 @@ pub fn new_procfs() -> Arc<dyn poly_vfs::FileSystem> {
     Arc::new(ProcFs::new(Arc::new(KernelProc)))
 }
 
-/// Mount procfs on `/proc`, sysfs on `/sys` and a tmpfs on `/dev/shm`
-/// (each directory made if missing). Called once at boot by `fs::init`.
+/// A file system mounted at boot: path, file system, mode of its root,
+/// `MS_NOEXEC`.
+type BootMount = (&'static [u8], Arc<dyn poly_vfs::FileSystem>, u16, bool);
+
+/// The memory file systems a Linux system has at boot (ADR 0122): procfs
+/// on `/proc`, sysfs on `/sys`, tmpfs on `/dev/shm`, the POSIX message
+/// queue file system on `/dev/mqueue` (mq_overview(7); a tmpfs named
+/// `mqueue`), tmpfs on `/run` and `/run/lock`. Each directory is made if
+/// missing, in this order (`/run/lock` on the new `/run`). Called once at
+/// boot by `fs::init`.
 pub fn mount_all(vfs: &Vfs, ctx: &FsContext) {
     let root = Cred::root();
     let mut made = ctx.clone();
     made.set_umask(0);
-    for (path, perm) in [(&b"/proc"[..], 0o555), (b"/sys", 0o555), (b"/dev/shm", 0o1777)] {
-        let _ = vfs.mkdir(&made, &root, At::Cwd, path, perm);
-    }
-    let mounts: [(&[u8], Arc<dyn poly_vfs::FileSystem>); 3] = [
-        (b"/proc", new_procfs()),
-        (b"/sys", super::sysfs::build()),
-        (b"/dev/shm", super::memfs::cached(super::memfs::new_tmpfs(super::clock()))),
+    let clock = super::clock;
+    let tmpfs = || -> Arc<dyn poly_vfs::FileSystem> { super::memfs::cached(super::memfs::new_tmpfs(clock())) };
+    let mounts: [BootMount; 6] = [
+        (b"/proc", new_procfs(), 0o555, true),
+        (b"/sys", super::sysfs::build(), 0o555, true),
+        (b"/dev/shm", tmpfs(), 0o1777, false),
+        (b"/dev/mqueue", Arc::new(poly_vfs::Tmpfs::new(clock()).named("mqueue", poly_vfs::MQUEUE_MAGIC)), 0o1777, true),
+        (b"/run", tmpfs(), 0o755, false),
+        (b"/run/lock", tmpfs(), 0o1777, true),
     ];
+    let total = mounts.len();
     let mut ok = 0;
-    for (path, fs) in mounts {
-        let flags = MountFlags { no_suid: true, no_dev: true, no_exec: path != b"/dev/shm", read_only: false };
+    for (path, fs, perm, no_exec) in mounts {
+        let _ = vfs.mkdir(&made, &root, At::Cwd, path, perm);
+        let flags = MountFlags { no_suid: true, no_dev: true, no_exec, read_only: false };
         match vfs.mount(ctx, &root, At::Cwd, path, fs, flags) {
             Ok(_) => {
                 ok += 1;
-                if path == b"/dev/shm" {
-                    // A new tmpfs's root is 0755; shared memory is for everyone.
-                    let _ = vfs.chmod(ctx, &root, At::Cwd, path, 0o1777, true);
-                }
+                // A new tmpfs's root is 0755; set what the directory is for.
+                let _ = vfs.chmod(ctx, &root, At::Cwd, path, perm, true);
             }
             Err(e) => kprintln!("fs: mounting on {}: {}", String::from_utf8_lossy(path), e.name()),
         }
     }
-    kprintln!("fs: proc on /proc, sysfs on /sys, tmpfs on /dev/shm; {ok} of 3 mounted");
+    kprintln!("fs: proc, sysfs, tmpfs on /dev/shm, /run, /run/lock, mqueue on /dev/mqueue; {ok} of {total} mounted");
 }

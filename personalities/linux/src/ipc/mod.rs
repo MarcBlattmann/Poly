@@ -2,6 +2,7 @@
 //! memory ([`shm`]), semaphore sets ([`sem`]) and message queues
 //! ([`msg`]).
 
+pub mod mqueue;
 pub mod msg;
 pub mod sem;
 pub mod shm;

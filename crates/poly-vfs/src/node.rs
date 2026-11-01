@@ -106,7 +106,9 @@ impl NodeRef {
         .iter()
         .filter(|(on, _)| *on)
         .fold(0, |acc, (_, bit)| acc | bit);
+        st.flags |= crate::fs::st_flags_of_attrs(mount.attrs());
         let dev = mount.dev();
+
         st.fsid = [dev.major, dev.minor];
         Ok(st)
     }

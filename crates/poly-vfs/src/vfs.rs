@@ -179,13 +179,22 @@ impl Vfs {
     /// root of the topmost one (repeatedly).
     pub(crate) fn follow_mounts(&self, mut loc: Location) -> Location {
         let table = self.mounts.lock();
-        for _ in 0..=table.mounts.len() {
-            match table.covering(loc.mount.id, loc.ino) {
-                Some(m) => loc = Location { mount: m.clone(), ino: m.root },
+        for _ in 0..=table.mounts.len() + 64 {
+            match Self::covering_of(&table, &loc) {
+                Some(m) => loc = Location { ino: m.root, mount: m },
                 None => break,
             }
         }
         loc
+    }
+
+    /// The topmost mount on `loc`: in the table, or among the mounts a
+    /// detached tree keeps ([`Mount::detached_covering`]).
+    pub(crate) fn covering_of(table: &crate::mount::MountTable, loc: &Location) -> Option<Arc<Mount>> {
+        match table.covering(loc.mount.id, loc.ino) {
+            Some(m) => Some(m.clone()),
+            None => loc.mount.detached_covering(loc.ino),
+        }
     }
 
     /// Looks `name` up in `dir`, without following mounts.
@@ -200,7 +209,7 @@ impl Vfs {
     }
 
     fn is_mount_point(&self, loc: &Location) -> bool {
-        self.mounts.lock().covering(loc.mount.id, loc.ino).is_some()
+        Self::covering_of(&self.mounts.lock(), loc).is_some()
     }
 
     fn start(ctx: &FsContext, at: At<'_>) -> Location {
@@ -408,6 +417,8 @@ impl Vfs {
             if flags.contains(OpenFlags::NOATIME) && !cred.owns(&attr) {
                 return Err(Errno::EPERM);
             }
+            // An append-only or immutable inode (`crate::fileattr`).
+            crate::fileattr::check_open(&loc, flags, write)?;
         }
         let backend = match attr.kind {
             FileType::Regular | FileType::Directory => Backend::Inode,
@@ -442,7 +453,7 @@ impl Vfs {
         }
         let mut file = OpenFile::new(node, attr.kind, backend, flags).with_origin(origin);
         if attr.kind == FileType::Regular && flags.writable() && !flags.contains(OpenFlags::PATH) {
-            file = file.counting_writer();
+            file = file.counting_text_writer();
         }
         let file = Arc::new(file);
         inotify::file_event(&file, inotify::mask::IN_OPEN);
@@ -583,7 +594,7 @@ impl Vfs {
         cred.check(&attr, Access::EXEC)?;
         // execve(2): "ETXTBSY The specified executable was open for
         // writing by one or more processes."
-        if loc.mount.sb.has_writers(loc.ino) {
+        if loc.mount.sb.has_text_writers(loc.ino) {
             return Err(Errno::ETXTBSY);
         }
         let file = OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin);
@@ -791,6 +802,7 @@ impl Vfs {
         if vattr.kind == FileType::Directory {
             return Err(Errno::EISDIR);
         }
+        crate::fileattr::check_remove(&victim)?;
         if self.is_mount_point(&victim) {
             return Err(Errno::EBUSY);
         }
@@ -825,6 +837,7 @@ impl Vfs {
         if vattr.kind != FileType::Directory {
             return Err(Errno::ENOTDIR);
         }
+        crate::fileattr::check_remove(&victim)?;
         if self.is_mount_point(&victim) || victim.same(ctx.root.loc()) {
             return Err(Errno::EBUSY);
         }
@@ -1162,10 +1175,10 @@ impl Vfs {
                 break;
             }
             if cur.is_mount_root() {
-                match &cur.mount.parent {
+                match cur.mount.parent() {
                     Some((m, ino)) => {
                         // Name the mount point, not the mounted root.
-                        cur = Location { mount: m.clone(), ino: *ino };
+                        cur = Location { mount: m, ino };
                         if cur.same(walk.top_root()) || cur.same(ctx.root.loc()) {
                             break;
                         }
@@ -1330,7 +1343,7 @@ impl Vfs {
         }
         let mount = loc.mount.clone();
         drop(loc);
-        if mount.parent.is_none() {
+        if mount.parent().is_none() {
             return Err(Errno::EBUSY);
         }
         let mut table = self.mounts.lock();
@@ -1398,7 +1411,7 @@ impl Vfs {
     /// namespace's first mount, or what is mounted over it, is not.
     pub fn is_chrooted(&self, ctx: &FsContext) -> bool {
         let mut first = ctx.root.loc().mount.clone();
-        while let Some((p, _)) = first.parent.clone() {
+        while let Some((p, _)) = first.parent() {
             first = p;
         }
         let top = self.follow_mounts(Location { ino: first.root, mount: first });
@@ -1416,17 +1429,19 @@ impl Vfs {
             let mut table = self.mounts.lock();
             let mut new_base = None;
             for m in table.tree(base) {
-                let parent = match &m.parent {
+                let parent = match m.parent() {
                     None => None,
                     // A parent that left the table (a lazy unmount) takes
                     // its subtree with it.
                     Some((p, ino)) => match copies.get(&p.id) {
-                        Some(c) => Some((c.clone(), *ino)),
+                        Some(c) => Some((c.clone(), ino)),
                         None => continue,
                     },
                 };
                 let is_base = parent.is_none();
                 let copy = table.add(m.sb.clone(), m.root, parent, m.flags());
+                copy.set_attrs(m.attrs());
+                copy.set_propagation(m.propagation());
                 if is_base {
                     new_base = Some(copy.id);
                 }
@@ -1454,14 +1469,10 @@ impl Vfs {
     /// `setns(2)` into mount namespace `base`: `ctx`'s root and working
     /// directory become its root. `EINVAL` if there is no such namespace.
     pub fn enter_namespace(&self, ctx: &mut FsContext, base: MountId) -> Result<()> {
-        let first = self
-            .mounts
-            .lock()
-            .mounts
-            .iter()
-            .find(|m| m.id == base && m.parent.is_none())
-            .cloned()
-            .ok_or(Errno::EINVAL)?;
+        let table = self.mounts.lock();
+        let base = table.current_base(base);
+        let first = table.mounts.iter().find(|m| m.id == base && m.parent().is_none()).cloned().ok_or(Errno::EINVAL)?;
+        drop(table);
         let root = Location { ino: first.root, mount: first }.pin()?;
         ctx.cwd = root.clone();
         ctx.root = root;
@@ -1476,17 +1487,24 @@ impl Vfs {
         if table.mounts.first().is_some_and(|m| m.id == base) {
             return Err(Errno::EBUSY);
         }
+        let name = base;
+        let base = table.current_base(name);
         let doomed: Vec<MountId> = table.tree(base).iter().map(|m| m.id).collect();
         if doomed.is_empty() {
             return Err(Errno::EINVAL);
         }
         table.mounts.retain(|m| !doomed.contains(&m.id));
+        table.forget_alias(name);
         Ok(())
     }
 
     /// The mounts of namespace `base`, in mount order.
     pub fn namespace_mounts(&self, base: MountId) -> Vec<MountInfo> {
-        let ids: Vec<MountId> = self.mounts.lock().tree(base).iter().map(|m| m.id).collect();
+        let ids: Vec<MountId> = {
+            let table = self.mounts.lock();
+            table.tree(table.current_base(base)).iter().map(|m| m.id).collect()
+        };
+
         self.mounts().into_iter().filter(|m| ids.contains(&m.id)).collect()
     }
 
@@ -1498,7 +1516,7 @@ impl Vfs {
             .iter()
             .map(|m| MountInfo {
                 id: m.id,
-                parent: m.parent.as_ref().map(|(p, ino)| (p.id, *ino)),
+                parent: m.parent().map(|(p, ino)| (p.id, ino)),
                 fs_name: m.sb.info.name,
                 dev: m.sb.dev,
                 root: m.root,

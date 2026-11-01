@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/file_getattr         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; tests use /dev/shm (tmpfs)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  file_getattr(dfd, filename, ufattr, usize, at_flags) (syscall 468)
+  reads a file's inode flags by path, the same information as the
+  FS_IOC_FSGETXATTR ioctl, into struct file_attr {u64 fa_xflags; u32
+  fa_extsize; u32 fa_nextents; u32 fa_projid; u32 fa_cowextsize} (24
+  bytes, FILE_ATTR_SIZE_VER0). The file is (dfd, filename) resolved like
+  the *at calls; at_flags may be AT_SYMLINK_NOFOLLOW and AT_EMPTY_PATH
+  (filename "" means dfd). usize must be at least 24 and at most a page.
+  fa_xflags uses FS_XFLAG_* (linux/fs.h): IMMUTABLE 0x8, APPEND 0x10, SYNC
+  0x20, NOATIME 0x40, NODUMP 0x80, ...; on tmpfs a new file reports 0 in
+  every field, and flags set with file_setattr (or chattr) show up. No
+  permission is needed beyond resolving the path. File systems without
+  inode flags (a symlink itself, device nodes, procfs files) give
+  EOPNOTSUPP.
+returns:
+  success: "0; the structure filled (unused fields 0)"
+  examples: "fresh tmpfs file: all 0; after NODUMP: fa_xflags 0x80; APPEND 0x10; IMMUTABLE 0x8"
+errors:
+  usize: "EINVAL (22): usize < 24; E2BIG (7): usize > 4096"
+  at_flags: "EINVAL (22): at_flags other than AT_SYMLINK_NOFOLLOW|AT_EMPTY_PATH"
+  fault: "EFAULT (14): ufattr not writable"
+  unsupported: "EOPNOTSUPP (95): the file has no inode flags (symlink itself with AT_SYMLINK_NOFOLLOW, /dev/null, /proc/self/status)"
+  path: "ENOENT (2): missing file, or \"\" without AT_EMPTY_PATH; EBADF (9): closed dirfd"
+side_effects: none
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct file_attr and FS_XFLAG_* from linux/fs.h. Overlayfs on ext4
+# accepts more flags than tmpfs (realtime, extent size); the tests stay on
+# tmpfs (/dev/shm) where Linux and Poly agree on the file system.

@@ -126,7 +126,8 @@ fn mount_decodes_the_operation_from_the_flags() {
             MountRequest::Remount {
                 target: b"/mnt".to_vec(),
                 flags: MountFlags { read_only: true, ..MountFlags::default() },
-                data: Vec::new()
+                data: Vec::new(),
+                bind: false
             },
             MountRequest::Bind {
                 source: b"/mnt".to_vec(),
@@ -134,7 +135,7 @@ fn mount_decodes_the_operation_from_the_flags() {
                 flags: MountFlags::default(),
                 recursive: true
             },
-            MountRequest::Propagation { target: b"/mnt".to_vec() },
+            MountRequest::Propagation { target: b"/mnt".to_vec(), kind: admin::ms::PRIVATE, recursive: true },
             MountRequest::Move { source: b"/mnt".to_vec(), target: b"/mnt".to_vec() },
         ]
     );

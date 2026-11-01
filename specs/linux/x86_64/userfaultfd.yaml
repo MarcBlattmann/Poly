@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/userfaultfd          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; vm.unprivileged_userfaultfd 0; tests run as root with all capabilities and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  userfaultfd(flags) (syscall 323) creates a userfaultfd object for the
+  caller's address space and returns its descriptor. flags: O_CLOEXEC,
+  O_NONBLOCK, UFFD_USER_MODE_ONLY (1: only faults raised in user mode are
+  handled). With vm.unprivileged_userfaultfd 0 a caller without
+  CAP_SYS_PTRACE must pass UFFD_USER_MODE_ONLY (EPERM otherwise, checked
+  before the flags). It is driven by ioctls (linux/userfaultfd.h):
+  UFFDIO_API (_IOWR(0xAA, 0x3F, struct uffdio_api {u64 api, features,
+  ioctls}) = 0xc018aa3f) must come first, once, with api = UFFD_API (0xAA)
+  and the wanted features; it returns all supported features (Linux 6.18:
+  0x1ffff) and the available ioctls (bits 1 << nr: API 0x3f, REGISTER 0,
+  UNREGISTER 1). UFFDIO_REGISTER (0xc020aa00, struct uffdio_register
+  {range {start, len}; mode; ioctls}) registers a page-aligned range with
+  mode MISSING (1) and/or WP (2) and returns the ioctls usable on it (WAKE
+  2, COPY 3, ZEROPAGE 4, ...). UFFDIO_COPY (0xc028aa03, {dst, src, len,
+  mode, copy}) fills missing pages with data and wakes waiters (copy =
+  bytes copied or -errno); UFFDIO_ZEROPAGE (0xc020aa04, {range, mode,
+  zeropage}) fills with zeros; UFFDIO_WAKE (0x8010aa02, range) wakes;
+  UFFDIO_UNREGISTER (0x8010aa01, range) undoes the registration. A fault
+  on a registered missing page blocks the faulting task and queues a
+  32-byte struct uffd_msg {u8 event = UFFD_EVENT_PAGEFAULT 0x12; ...; u64
+  flags (UFFD_PAGEFAULT_FLAG_WRITE 1 for writes); u64 address
+  (page-aligned); u32 ptid} read with read(2); resolving it (COPY/ZEROPAGE
+  or WAKE) lets the task continue. With UFFD_FEATURE_SIGBUS (0x80) the
+  fault raises SIGBUS instead of waiting. poll/select report POLLIN when a
+  message is pending; on a descriptor without O_NONBLOCK poll always
+  reports POLLERR. Registrations are not inherited by fork (without
+  UFFD_FEATURE_EVENT_FORK); tasks sharing the address space (CLONE_VM) are
+  covered.
+returns:
+  success: "a new fd (FD_CLOEXEC iff O_CLOEXEC; O_NONBLOCK iff asked)"
+  api: "UFFDIO_API 0; features and ioctls filled"
+  register: "UFFDIO_REGISTER 0; ioctls of the range (WAKE|COPY|ZEROPAGE at least for anonymous memory); registering the same range again is fine"
+  copy: "UFFDIO_COPY 0 and copy = len; on a page already present EEXIST with copy = -EEXIST"
+  message: "read returns 32 per message; event 0x12, write flag, address of the faulting page"
+errors:
+  perm: "EPERM (1): no UFFD_USER_MODE_ONLY without CAP_SYS_PTRACE while vm.unprivileged_userfaultfd is 0 (also with bad flags)"
+  flags: "EINVAL (22): unknown flags (0x10) for a privileged caller"
+  before_api: "EINVAL (22): UFFDIO_REGISTER or read before UFFDIO_API"
+  api: "EINVAL (22): api != 0xAA (the handshake may then be retried); unknown feature bits (features set to 0); UFFDIO_API a second time; EPERM for privileged features (EVENT_FORK) without CAP_SYS_PTRACE"
+  register: "EINVAL (22): unaligned start or length, mode 0 or unknown mode bits, range not entirely mapped by a suitable mapping"
+  read: "EAGAIN (11): no message and O_NONBLOCK; EINVAL (22): buffer smaller than 32 bytes"
+  sigbus: "a fault with UFFD_FEATURE_SIGBUS: SIGBUS to the faulting task (default action kills it)"
+side_effects: "faults on registered ranges are redirected to the userfaultfd"
+threading: "faults of every task sharing the address space are reported; each blocked task resumes when its page is resolved"
+ordering:
+  - "messages are read in fault order"
+timing:
+  typical: "microseconds"
+  guarantees: "a faulting task stays blocked until resolved or the userfaultfd is closed"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: all tests use UFFD_USER_MODE_ONLY so they pass for any user. The
+# fault test uses a CLONE_VM child (syscalls=off). /dev/userfaultfd is
+# outside this sheet.

@@ -391,6 +391,11 @@ impl LinuxKernel for Thread<'_> {
                     let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), start, r.shared);
                     return map_placed(&memory, req, r);
                 }
+                // An io_uring's rings and SQEs.
+                if let Some(found) = super::uring::mapping(&file, offset, r.len) {
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(found?), 0, r.shared);
+                    return map_placed(&memory, req, r);
+                }
                 // Pipes and event files have nothing to map.
                 if file.object().is_some() {
                     return Err(Errno::ENODEV);
@@ -830,7 +835,7 @@ impl LinuxKernel for Thread<'_> {
         // Bring the page in writable first if that may block here; under the
         // futex table's lock (interrupts off) it must be present already.
         if crate::arch::cpu::interrupts_enabled() {
-            let _ = user::page_fault(addr.0, Access::Write);
+            let _ = user::page_fault_in(addr.0, Access::Write, true);
         }
         // Atomic on the user word: other threads of the process may run on
         // other CPUs meanwhile.
@@ -1011,6 +1016,10 @@ impl LinuxKernel for Thread<'_> {
         Some(self)
     }
 
+    fn uring(&mut self) -> Option<&mut dyn poly_personality_linux::uring::UringKernel> {
+        Some(self)
+    }
+
     fn seccomp_active(&self) -> bool {
         self.linux.seccomp.load(Ordering::Relaxed)
     }
@@ -1090,5 +1099,29 @@ impl LinuxKernel for Thread<'_> {
 
     fn seccomp_listener(&mut self) -> Result<i32, Errno> {
         self.seccomp_listener_fd()
+    }
+
+    fn mseal(&mut self, addr: u64, len: u64) -> Result<(), Errno> {
+        self.memory()?.seal(addr, len).map_err(memory_errno)
+    }
+
+    fn memfd_secret(&mut self, cloexec: bool) -> Result<i32, Errno> {
+        super::memcalls::memfd_secret(self, cloexec)
+    }
+
+    fn cachestat(&mut self, fd: i32, first: u64, end: u64) -> Result<u64, Errno> {
+        super::memcalls::cachestat(self, fd, first, end)
+    }
+
+    fn userfaultfd(&mut self, nonblock: bool, cloexec: bool, user_mode_only: bool) -> Result<i32, Errno> {
+        super::uffd::create(self, nonblock, cloexec, user_mode_only)
+    }
+
+    fn userfaultfd_op(
+        &mut self,
+        fd: i32,
+        op: poly_personality_linux::sys::userfaultfd::UffdOp<'_>,
+    ) -> Option<Result<poly_personality_linux::sys::userfaultfd::UffdReply, Errno>> {
+        super::uffd::op(self, fd, op)
     }
 }

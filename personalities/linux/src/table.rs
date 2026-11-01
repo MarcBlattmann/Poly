@@ -202,6 +202,8 @@ pub const GROUPS: &[&[(u64, Handler)]] = &[
     crate::sys::ns::CALLS,
     crate::sys::fadvise::CALLS,
     crate::sys::xattr::CALLS,
+    crate::sys::landlock::CALLS,
+    crate::sys::fanotify::CALLS,
     crate::sys::mlock::CALLS,
     crate::sys::utimes::CALLS,
     crate::sys::shm::CALLS,
@@ -212,6 +214,7 @@ pub const GROUPS: &[&[(u64, Handler)]] = &[
     crate::sys::pidfd::CALLS,
     crate::sys::rseq::CALLS,
     crate::sys::rwv::CALLS,
+    crate::sys::aio::CALLS,
     crate::sys::falloc::CALLS,
     crate::sys::msg::CALLS,
     crate::sys::futex2::CALLS,
@@ -219,6 +222,16 @@ pub const GROUPS: &[&[(u64, Handler)]] = &[
     crate::sys::pkey::CALLS,
     crate::sys::ioprio::CALLS,
     crate::sys::personality::CALLS,
+    crate::sys::mountapi::CALLS,
+    crate::sys::xattrat::CALLS,
+    crate::sys::fileattr::CALLS,
+    crate::sys::handle::CALLS,
+    crate::sys::mseal::CALLS,
+    crate::sys::cachestat::CALLS,
+    crate::sys::secretmem::CALLS,
+    crate::sys::userfaultfd::CALLS,
+    crate::sys::uring::CALLS,
+    crate::sys::mqueue::CALLS,
 ];
 
 static HANDLERS: [Option<Handler>; TABLE_LEN] = build();

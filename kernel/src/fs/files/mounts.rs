@@ -73,6 +73,22 @@ impl Files {
         vfs().enter_namespace(&mut self.ctx().lock(), base)
     }
 
+    /// pivot_root(2) (ADR 0122): `new_root`'s mount becomes the first of
+    /// the process's mount namespace, the old one moves to `put_old`; the
+    /// root and working directory move with it where they were the old
+    /// root, and so do those of every other process that used the old
+    /// root (the same mount: processes of the namespace).
+    pub fn pivot_root(&self, new_root: &poly_vfs::NodeRef, put_old: &poly_vfs::NodeRef) -> Result<()> {
+        let cred = self.cred();
+        let (old, new) = vfs().pivot_root(&mut self.ctx().lock(), &cred, new_root, put_old)?;
+        for p in crate::process::all() {
+            if !core::ptr::eq(&p.files, self) {
+                poly_vfs::Vfs::repoint_context(&mut p.files.ctx().lock(), &old, &new);
+            }
+        }
+        Ok(())
+    }
+
     /// Whether the root directory is not its mount namespace's root
     /// (chroot(2) moved it).
     pub fn chrooted(&self) -> bool {

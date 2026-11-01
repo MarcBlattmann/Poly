@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getxattrat           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; /tmp on overlayfs (ext4 upper), /dev/shm tmpfs; same results on both"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  getxattrat(dfd, path, at_flags, name, uargs, usize) (syscall 464) is
+  getxattr with a directory fd and flags. File resolution and at_flags as
+  for setxattrat (AT_SYMLINK_NOFOLLOW, AT_EMPTY_PATH with "" meaning dfd;
+  an O_PATH dfd with AT_EMPTY_PATH is EBADF). uargs points at struct
+  xattr_args {u64 value; u32 size; u32 flags}: value/size describe the
+  output buffer, flags must be 0; usize at least 16, larger with zero
+  tail. It returns the value's length and copies the value into the
+  buffer; size 0 (value may be NULL) returns the length without copying.
+  A buffer shorter than the value is ERANGE. A missing attribute is
+  ENODATA (also on a symlink itself with AT_SYMLINK_NOFOLLOW when only the
+  target has it). Permission rules as getxattr (user.* needs read
+  permission; root always).
+returns:
+  success: "the value's length (0 for an empty value); value copied when size > 0"
+  query: "size 0: the length, nothing copied"
+errors:
+  usize: "EINVAL (22): usize < 16; E2BIG (7): larger with a non-zero tail or above a page"
+  flags: "EINVAL (22): uargs->flags != 0"
+  at_flags: "EINVAL (22): at_flags other than AT_SYMLINK_NOFOLLOW|AT_EMPTY_PATH"
+  uargs_fault: "EFAULT (14): uargs NULL or unreadable"
+  value_fault: "EFAULT (14): value buffer not writable (size > 0)"
+  range: "ERANGE (34): buffer too small for the value; name empty or longer than 255 bytes"
+  absent: "ENODATA (61): no such attribute"
+  namespace: "EOPNOTSUPP (95): name without a known namespace prefix"
+  path: "ENOENT (2): missing file or \"\" without AT_EMPTY_PATH; EBADF (9): closed dirfd, or O_PATH dfd with AT_EMPTY_PATH"
+side_effects: none
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -487,6 +487,52 @@ impl LinuxFs for VfsFs {
     fn removexattr(&mut self, target: XattrTarget<'_>, name: &[u8]) -> Result<(), Errno> {
         self.xattr_node(target)?.removexattr(&self.cred, name).map_err(errno)
     }
+
+    fn file_getattr(&mut self, dirfd: i32, path: &[u8], follow: bool) -> Result<crate::sys::fileattr::FileAttr, Errno> {
+        let a = self.at_node(dirfd, path, follow)?.file_getattr().map_err(errno)?;
+        Ok(crate::sys::fileattr::FileAttr { xflags: a.xflags, ..Default::default() })
+    }
+
+    fn file_setattr(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+        attr: &crate::sys::fileattr::FileAttr,
+    ) -> Result<(), Errno> {
+        let a = poly_vfs::fileattr::FileAttr {
+            xflags: attr.xflags,
+            extsize: attr.extsize,
+            nextents: attr.nextents,
+            projid: attr.projid,
+            cowextsize: attr.cowextsize,
+        };
+        self.at_node(dirfd, path, follow)?.file_setattr(&self.cred, &a).map_err(errno)
+    }
+
+    fn name_to_handle(
+        &mut self,
+        dirfd: i32,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<(crate::sys::handle::FileHandle, u64), Errno> {
+        let n = self.at_node(dirfd, path, follow)?;
+        let h = n.file_handle().map_err(errno)?;
+        Ok((crate::sys::handle::FileHandle { kind: h.kind, bytes: h.bytes().to_vec() }, u64::from(n.mount().id())))
+    }
+
+    fn open_by_handle(
+        &mut self,
+        mount_fd: i32,
+        handle: &crate::sys::handle::FileHandle,
+        flags: u32,
+    ) -> Result<i32, Errno> {
+        let mount = self.node(mount_fd)?.mount().clone();
+        let h = poly_vfs::fileattr::FileHandle::new(handle.kind, &handle.bytes);
+        let flags = OpenFlags::from_bits(flags);
+        let file = self.vfs.open_handle(&self.cred, &mount, &h, flags).map_err(errno)?;
+        self.fds.install(file, flags.contains(OpenFlags::CLOEXEC)).map_err(errno)
+    }
 }
 
 impl VfsFs {
@@ -495,11 +541,21 @@ impl VfsFs {
             XattrTarget::Path { path, follow } => {
                 self.vfs.lookup(&self.ctx, &self.cred, At::Cwd, path, follow).map_err(errno)
             }
-            XattrTarget::Fd(fd) => {
+            XattrTarget::Fd(fd) | XattrTarget::At { dirfd: fd, path: b"", .. } if fd != AT_FDCWD => {
                 let file = self.fds.get(fd).map_err(errno)?;
                 if file.is_path_only() { Err(Errno::EBADF) } else { Ok(file.node().clone()) }
             }
+            XattrTarget::Fd(_) => Err(Errno::EBADF),
+            XattrTarget::At { dirfd, path, follow } => self.at_node(dirfd, path, follow),
         }
+    }
+
+    /// The node `(dirfd, path)` names; an empty path is `dirfd`'s.
+    fn at_node(&self, dirfd: i32, path: &[u8], follow: bool) -> Result<poly_vfs::NodeRef, Errno> {
+        if path.is_empty() {
+            return self.node(dirfd);
+        }
+        self.at(dirfd, path, |vfs, at| vfs.lookup(&self.ctx, &self.cred, at, path, follow))
     }
 }
 

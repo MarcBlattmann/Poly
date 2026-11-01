@@ -120,7 +120,7 @@ fn statfs_reports_the_file_system_and_the_mount_flags() {
     assert_eq!(st.block_size, 4096);
     assert_eq!(st.blocks, 2, "no limit: the pages in use");
     assert_eq!(st.blocks_free, 0);
-    assert_eq!(st.flags, 0);
+    assert_eq!(st.flags, ST_RELATIME, "relatime, the default access time mode");
     assert_eq!(st.name_max, 255);
     assert!(st.files >= 2);
 
@@ -131,7 +131,7 @@ fn statfs_reports_the_file_system_and_the_mount_flags() {
     let ro = env.vfs.lookup(&env.ctx, &env.root, At::Cwd, b"/ro", true).unwrap();
     let st = ro.statfs().unwrap();
     assert_eq!((st.blocks, st.blocks_free, st.blocks_avail), (10, 10, 10));
-    assert_eq!(st.flags, ST_RDONLY | ST_NOSUID | ST_NODEV | ST_NOEXEC);
+    assert_eq!(st.flags, ST_RDONLY | ST_NOSUID | ST_NODEV | ST_NOEXEC | ST_RELATIME);
     assert_ne!(st.fsid, root.statfs().unwrap().fsid);
 }
 

@@ -66,6 +66,9 @@ impl Memory {
         // "The child does not inherit its parent's memory locks").
         child.map.set_all_locked(false);
         child.map.set_lock_future(None);
+        // userfaultfd(2) registrations stay with the parent (no
+        // UFFD_FEATURE_EVENT_FORK); mseal(2) seals are inherited.
+        child.map.forget_userfaults(None);
         // MADV_WIPEONFORK regions: the child's copy starts zero-filled, so
         // their pages are not shared with it.
         let private: Vec<(u64, u64, Prot)> = inner

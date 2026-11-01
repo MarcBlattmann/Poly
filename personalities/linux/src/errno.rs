@@ -72,6 +72,9 @@ impl Errno {
     pub const EUSERS: Errno = Errno(87);
     pub const EOPNOTSUPP: Errno = Errno(95);
     pub const ETIMEDOUT: Errno = Errno(110);
+    /// `ESTALE` (`asm-generic/errno.h`): "Stale file handle";
+    /// open_by_handle_at(2) with a handle that names no live file.
+    pub const ESTALE: Errno = Errno(116);
 
     // ---- internal: never returned to user space -----------------------
     //
@@ -183,6 +186,7 @@ impl Errno {
             87 => "EUSERS",
             95 => "EOPNOTSUPP",
             110 => "ETIMEDOUT",
+            116 => "ESTALE",
             3840 => "RESTART_IF_SA_RESTART",
             3841 => "RESTART_ALWAYS",
             3842 => "RESTART_IF_NO_HANDLER",

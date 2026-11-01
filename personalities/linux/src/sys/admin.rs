@@ -117,8 +117,9 @@ pub fn mount_request(
     let per_mount = MountFlags::from_bits(flags);
     if flags & ms::REMOUNT != 0 {
         let target = nonempty_path(k, target)?;
-        let data = if flags & ms::BIND != 0 { Vec::new() } else { data_arg(k, data)? };
-        return Ok(MountRequest::Remount { target, flags: per_mount, data });
+        let bind = flags & ms::BIND != 0;
+        let data = if bind { Vec::new() } else { data_arg(k, data)? };
+        return Ok(MountRequest::Remount { target, flags: per_mount, data, bind });
     }
     if flags & ms::BIND != 0 {
         let source = nonempty_path(k, source)?;
@@ -130,7 +131,11 @@ pub fn mount_request(
         if (flags & ms::PROPAGATION).count_ones() != 1 {
             return Err(Errno::EINVAL);
         }
-        return Ok(MountRequest::Propagation { target: nonempty_path(k, target)? });
+        return Ok(MountRequest::Propagation {
+            target: nonempty_path(k, target)?,
+            kind: flags & ms::PROPAGATION,
+            recursive: flags & ms::REC != 0,
+        });
     }
     if flags & ms::MOVE != 0 {
         let source = nonempty_path(k, source)?;
@@ -209,6 +214,17 @@ fn mknod_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, mode: u32, dev:
         _ => return Err(Errno::EINVAL),
     }
     let path = nonempty_path(k, p)?;
+    {
+        use crate::landlock::abi::*;
+        let make = match mode & S_IFMT {
+            S_IFIFO => LANDLOCK_ACCESS_FS_MAKE_FIFO,
+            S_IFSOCK => LANDLOCK_ACCESS_FS_MAKE_SOCK,
+            S_IFCHR => LANDLOCK_ACCESS_FS_MAKE_CHAR,
+            S_IFBLK => LANDLOCK_ACCESS_FS_MAKE_BLOCK,
+            _ => LANDLOCK_ACCESS_FS_MAKE_REG,
+        };
+        crate::sys::landlock::check_parent(k, dirfd, &path, make)?;
+    }
     // "EPERM mode requested creation of something other than a regular
     // file, FIFO (named pipe), or UNIX domain socket, and the caller is
     // not privileged (Linux: does not have the CAP_MKNOD capability)":

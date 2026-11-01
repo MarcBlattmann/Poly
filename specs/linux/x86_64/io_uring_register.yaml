@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/io_uring_register    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; kernel.io_uring_disabled 0"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  io_uring_register(fd, opcode, arg, nr_args) (syscall 427) registers or
+  unregisters resources of an io_uring instance. Opcodes covered:
+  REGISTER_BUFFERS 0 (arg = struct iovec array of nr_args entries, 1 to
+  16384; each must be a non-empty, mapped, user range; later READ_FIXED /
+  WRITE_FIXED SQEs name one by buf_index and must stay inside it);
+  UNREGISTER_BUFFERS 1; REGISTER_FILES 2 (arg = int array of nr_args
+  descriptors, -1 for an empty slot; the table holds its own references,
+  so the files stay usable through IOSQE_FIXED_FILE after the original fds
+  are closed); UNREGISTER_FILES 3; REGISTER_EVENTFD 4 (arg = pointer to one
+  int, nr_args 1: an eventfd that is signalled whenever CQEs are posted;
+  its counter grows by at least 1 per batch of CQEs, at most one per CQE);
+  UNREGISTER_EVENTFD 5; REGISTER_FILES_UPDATE 6 (arg = struct
+  io_uring_files_update {u32 offset; u32 resv; u64 fds pointer}, nr_args
+  = number of slots from offset; -1 clears a slot; returns the number of
+  slots updated); REGISTER_PROBE 8 (arg = struct io_uring_probe {u8
+  last_op; u8 ops_len; u16 resv; u32 resv2[3]} followed by nr_args struct
+  io_uring_probe_op {u8 op; u8 resv; u16 flags; u32 resv2}, at most 256,
+  all zero on entry: the kernel sets last_op to the highest opcode it
+  knows (62 on Linux 6.18), ops_len = min(nr_args, last_op + 1), and for
+  each op i < ops_len op = i and flags IO_URING_OP_SUPPORTED (1) when
+  supported; entries beyond ops_len are untouched). The unregister opcodes
+  take arg 0 and nr_args 0.
+returns:
+  success: "0 (REGISTER_FILES_UPDATE: the number of slots updated)"
+  probe: "last_op >= 27 (RECV) and every common opcode (0-3, 6, 7, 11-14, 16, 18, 19, 21-23, 26, 27) flagged supported; Linux 6.18 reports all 63 (0..62)"
+  fixed_files: "an SQE with IOSQE_FIXED_FILE and fd = slot uses the registered file; empty slot, slot >= table size, or no table: CQE res -EBADF"
+  fixed_buffers: "READ_FIXED/WRITE_FIXED inside the registered buffer: bytes; outside it, or buf_index beyond the table, or no buffers: CQE res -EFAULT"
+  eventfd: "after registration, posting CQEs makes the eventfd readable; after unregistration it is no longer signalled"
+errors:
+  bad_fd: "EBADF (9): fd not open"
+  not_uring: "EOPNOTSUPP (95): fd is not an io_uring"
+  opcode: "EINVAL (22): unknown opcode (200, 999)"
+  busy: "EBUSY (16): REGISTER_BUFFERS / REGISTER_FILES / REGISTER_EVENTFD when already registered"
+  nothing: "ENXIO (6): UNREGISTER_BUFFERS / UNREGISTER_FILES / UNREGISTER_EVENTFD with nothing registered"
+  unregister_args: "EINVAL (22): unregister with arg != 0 or nr_args != 0"
+  counts: "EINVAL (22): REGISTER_BUFFERS or REGISTER_FILES with nr_args 0; REGISTER_BUFFERS with more than 16384; REGISTER_EVENTFD with nr_args != 1; REGISTER_PROBE with nr_args > 256"
+  probe_dirty: "EINVAL (22): REGISTER_PROBE buffer not all zero"
+  buffers_fault: "EFAULT (14): an iovec with a NULL base, zero length, or an unmapped range; an unreadable iovec array"
+  files_bad: "EBADF (9): REGISTER_FILES with a closed descriptor or an io_uring descriptor; EFAULT (14) for an unreadable array"
+  eventfd_bad: "EINVAL (22): REGISTER_EVENTFD with a descriptor that is not an eventfd; EBADF (9) if it is not open"
+  probe_fault: "EFAULT (14): REGISTER_PROBE buffer unreadable/unwritable"
+side_effects: "registering files takes references (closing the original fd does not close the file); registering buffers pins the memory; unregistering releases them"
+threading: "registration is serialised with submission on the same instance"
+ordering:
+  - "a registration is in force for every SQE submitted after the call returns"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: struct io_uring_probe, io_uring_probe_op, io_uring_files_update and
+# the opcode numbers from linux/io_uring.h. Linux has many more register
+# opcodes (personalities, restrictions, ring fds, provided-buffer rings,
+# NAPI, clock, regions ...); they are outside this sheet.

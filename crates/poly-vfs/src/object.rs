@@ -29,6 +29,16 @@ pub trait FileObject: Any + Send + Sync {
     /// What the object is ready for now.
     fn poll(&self) -> PollEvents;
 
+    /// What the object is ready for now through an open file whose
+    /// current status flags have `O_NONBLOCK` (`nonblock`) or not; most
+    /// objects do not care ([`poll`](Self::poll)). A userfaultfd reports
+    /// `POLLERR` on a blocking file (its spec sheet), whatever flags it
+    /// was made with, so a later `fcntl(F_SETFL)` counts.
+    fn poll_as(&self, nonblock: bool) -> PollEvents {
+        let _ = nonblock;
+        self.poll()
+    }
+
     /// Where waiters for a change of [`poll`](Self::poll) register; `None`
     /// for an object whose readiness never changes.
     fn wait_queue(&self) -> Option<&Arc<WaitQueue>>;

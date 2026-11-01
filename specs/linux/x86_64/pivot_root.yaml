@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pivot_root           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (children dropping to uid/gid 1000); umask 022; every pivot happens in a child after unshare(CLONE_NEWNS) and mount(\"/\", MS_REC|MS_PRIVATE)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  pivot_root(new_root, put_old) (syscall 155) changes the root mount of
+  the caller's mount namespace: new_root (a directory that is a mount
+  point, not on the current root mount) becomes the root mount, and the
+  old root mount is moved to put_old (a directory at or below new_root).
+  Every process in the namespace whose root (or cwd) was the old root
+  directory gets new_root instead; so after chdir(new_root) and
+  pivot_root(".", "old") the caller's cwd is "/" (getcwd), the new
+  file system's files are at "/", and the old tree is at /old until it is
+  unmounted (umount2 MNT_DETACH). pivot_root(".", ".") from inside
+  new_root stacks the old root on top of the new one; umount2(".",
+  MNT_DETACH) then leaves just the new root. Requires CAP_SYS_ADMIN. The
+  propagation of the mounts involved must not be shared (tests make "/"
+  recursively private first).
+returns:
+  success: "0"
+  effects: "getcwd \"/\" after pivot from inside new_root; files of new_root at \"/\"; old root reachable under put_old"
+errors:
+  perm: "EPERM (1): no CAP_SYS_ADMIN"
+  missing: "ENOENT (2): new_root or put_old does not exist"
+  not_dir: "ENOTDIR (20): new_root or put_old is not a directory"
+  fault: "EFAULT (14): a path unreadable"
+  busy: "EBUSY (16): new_root or put_old is on the current root mount (also \"/\", \"/\"); a second pivot to the already-root mount"
+  invalid: "EINVAL (22): new_root is not a mount point (and not on the root mount); put_old is not at or under new_root; shared propagation on the mounts involved"
+  order: "EPERM, path lookups (EFAULT/ENOENT/ENOTDIR), then mount checks (EBUSY before EINVAL)"
+side_effects: "changes the namespace's root mount and the root/cwd of processes that used the old root"
+threading: "affects all threads and processes sharing the mount namespace"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the tests need unshare(CLONE_NEWNS) (a private mount namespace in
+# a child) so that nothing outside the test changes; without it a
+# successful pivot_root would replace the root of the whole system.

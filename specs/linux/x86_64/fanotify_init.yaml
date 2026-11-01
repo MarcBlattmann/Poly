@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fanotify_init        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 (children dropping to uid/gid 1000); umask 022; tests use /dev/shm (tmpfs)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  fanotify_init(flags, event_f_flags) (syscall 300) creates a fanotify
+  notification group and returns its descriptor (lowest free; F_GETFL
+  O_RDWR, plus O_NONBLOCK with FAN_NONBLOCK 0x2; FD_CLOEXEC with
+  FAN_CLOEXEC 0x1). flags: one class FAN_CLASS_NOTIF 0 / CONTENT 0x4 /
+  PRE_CONTENT 0x8; FAN_UNLIMITED_QUEUE 0x10, FAN_UNLIMITED_MARKS 0x20,
+  FAN_ENABLE_AUDIT 0x40, FAN_REPORT_PIDFD 0x80, FAN_REPORT_TID 0x100,
+  FAN_REPORT_FID 0x200, FAN_REPORT_DIR_FID 0x400, FAN_REPORT_NAME 0x800,
+  FAN_REPORT_TARGET_FID 0x1000, ... event_f_flags are the open flags
+  (O_RDONLY, O_WRONLY, O_RDWR, O_LARGEFILE, O_CLOEXEC, ...) of the
+  descriptors handed to the reader with events. Events are read with
+  read(2) as a sequence of struct fanotify_event_metadata {u32 event_len;
+  u8 vers (3); u8 reserved; u16 metadata_len (24); u64 mask; s32 fd; s32
+  pid} (see fanotify_mark); a buffer too small for one event is EINVAL; an
+  empty non-blocking group gives EAGAIN; write is EINVAL. A group with
+  FAN_REPORT_FID (or DIR_FID) reports fd FAN_NOFD (-1) and appends info
+  records: {u8 info_type (FAN_EVENT_INFO_TYPE_FID 1, DFID_NAME 2, DFID 3,
+  ...); u8 pad; u16 len} followed by an 8-byte fsid and a struct
+  file_handle equal to name_to_handle_at's handle for the object; event_len
+  covers the records (24 + 4 + 8 + 8 + handle bytes). With CAP_SYS_ADMIN
+  any combination is allowed; without it only FID-reporting groups
+  (FAN_REPORT_FID, or DIR_FID with NAME), notification class, default
+  limits, which may only mark inodes.
+returns:
+  success: "a new fd; FD_CLOEXEC iff FAN_CLOEXEC; O_NONBLOCK iff FAN_NONBLOCK"
+errors:
+  flags: "EINVAL (22): unknown flag bits; more than one class; FAN_REPORT_NAME without FAN_REPORT_DIR_FID; FID reporting with a permission class (CONTENT/PRE_CONTENT)"
+  event_flags: "EINVAL (22): event_f_flags not acceptable as open flags (O_CREAT)"
+  perm: "EPERM (1): without CAP_SYS_ADMIN: a group without FID reporting, FAN_UNLIMITED_QUEUE/MARKS, a content class (EPERM is reported before the flag validation for these, except a lone FAN_REPORT_NAME which is EINVAL)"
+  limits: "EMFILE (24): fs.fanotify.max_user_groups reached or no fd; not tested"
+side_effects: "creates a notification group (uses one fd)"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants and layouts from linux/fanotify.h. Events carry the pid
+# (and inode-based handles), so event-reading tests compare syscall names
+# only.

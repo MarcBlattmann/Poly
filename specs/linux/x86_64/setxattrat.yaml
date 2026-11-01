@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setxattrat           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 (children dropping to uid/gid 1000); umask 022; /tmp on overlayfs (ext4 upper), /dev/shm tmpfs; same results on both"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  setxattrat(dfd, path, at_flags, name, uargs, usize) (syscall 463) is
+  setxattr with a directory fd and flags. The file is (dfd, path) resolved
+  like the *at calls: a relative path from dfd (AT_FDCWD = cwd); a final
+  symlink is followed unless AT_SYMLINK_NOFOLLOW (0x100); with
+  AT_EMPTY_PATH (0x1000) an empty or NULL path means dfd itself (any open
+  fd). No other at_flags are allowed. uargs points at struct xattr_args
+  {u64 value (pointer); u32 size; u32 flags} and usize is its size: at
+  least 16 (XATTR_ARGS_SIZE_VER0), larger only if the extra bytes are zero,
+  at most a page. flags: 0 (create or replace), XATTR_CREATE 1 (EEXIST if
+  present), XATTR_REPLACE 2 (ENODATA if absent). The name must have a
+  known namespace prefix (user., trusted., security., system.) and be 1 to
+  255 bytes. Values may be empty. Everything else (permission rules, value
+  limits, namespaces) is as for setxattr/lsetxattr/fsetxattr (see those
+  sheets): user.* needs write permission on the file (owner included) and
+  is not allowed on symlinks (EPERM with AT_SYMLINK_NOFOLLOW on a link),
+  trusted.* needs CAP_SYS_ADMIN.
+returns:
+  success: "0; the attribute is visible to getxattrat/getxattr/listxattr"
+errors:
+  usize_small: "EINVAL (22): usize < 16"
+  usize_big: "E2BIG (7): usize > 16 with non-zero bytes beyond 16, or usize above a page (4097)"
+  at_flags: "EINVAL (22): at_flags other than AT_SYMLINK_NOFOLLOW|AT_EMPTY_PATH (AT_NO_AUTOMOUNT and 0x200 rejected)"
+  flags: "EINVAL (22): uargs->flags other than 0, XATTR_CREATE, XATTR_REPLACE"
+  uargs_fault: "EFAULT (14): uargs NULL or unreadable"
+  value_fault: "EFAULT (14): value NULL or unreadable with size > 0"
+  exists: "EEXIST (17): XATTR_CREATE and the attribute exists"
+  absent: "ENODATA (61): XATTR_REPLACE and the attribute does not exist"
+  namespace: "EOPNOTSUPP (95): name without a known namespace prefix"
+  name_size: "ERANGE (34): name empty or longer than 255 bytes"
+  name_fault: "EFAULT (14): name unreadable"
+  path: "ENOENT (2): missing file, or \"\" without AT_EMPTY_PATH; EFAULT (14): NULL path without AT_EMPTY_PATH; EBADF (9): closed dirfd"
+  perm: "EACCES (13): user.* without write permission (another user's 0644 file; one's own 0444 file); EPERM (1): trusted.* without CAP_SYS_ADMIN; user.* on a symlink itself"
+  order: "the argument checks (at_flags, uargs, flags, name, value) come before the path lookup and the namespace/permission/existence checks; their order among themselves is not tested"
+side_effects: "sets the attribute; changes the file's ctime"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct xattr_args and XATTR_* from linux/xattr.h. The tests keep
+# values tiny and never depend on list order, so they pass on ext4,
+# overlayfs and tmpfs.

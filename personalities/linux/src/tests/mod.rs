@@ -2,6 +2,7 @@
 //! [`fake::FakeKernel`].
 
 mod admin;
+mod aio;
 mod cred;
 mod fake;
 mod fileio;
@@ -12,6 +13,7 @@ mod io;
 mod madvise;
 mod mem;
 mod memfd;
+mod mountapi;
 mod msg;
 mod ns;
 mod persona;
@@ -33,6 +35,7 @@ mod startup;
 mod task;
 mod time;
 mod userland;
+mod xattrat;
 
 use crate::{ENOSYS, Errno, Linux, err, nr};
 use fake::{FakeKernel, call, sys};

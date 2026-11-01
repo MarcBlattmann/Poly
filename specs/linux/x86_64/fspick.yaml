@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fspick               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (and children dropping to uid/gid 1000); umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  fspick(dfd, path, flags) (syscall 433) opens a file system context for
+  the superblock of the mount whose root is at (dfd, path), in
+  reconfiguration mode, and returns its descriptor (lowest free, O_RDWR;
+  FD_CLOEXEC only with FSPICK_CLOEXEC 1). Other flags: FSPICK_SYMLINK_NOFOLLOW
+  2, FSPICK_NO_AUTOMOUNT 4, FSPICK_EMPTY_PATH 8 ("" means the mount of
+  dfd). Parameters set with fsconfig and FSCONFIG_CMD_RECONFIGURE then
+  change the live superblock, so every mount of it (bind mounts too) sees
+  the change (e.g. "ro"/"rw"). A picked context cannot create a superblock
+  (CMD_CREATE EBUSY) or be mounted (fsmount EBUSY). Requires CAP_SYS_ADMIN
+  (checked first).
+returns:
+  success: "a new fd, O_RDWR, FD_CLOEXEC iff FSPICK_CLOEXEC"
+errors:
+  perm: "EPERM (1): no CAP_SYS_ADMIN; checked before flags"
+  flags: "EINVAL (22): unknown flag bits (0x10)"
+  not_mount_root: "EINVAL (22): path is not the root of a mount"
+  missing: "ENOENT (2): path does not exist; \"\" without FSPICK_EMPTY_PATH"
+  fault: "EFAULT (14): path unreadable"
+  bad_fd: "EBADF (9): dfd not open (relative path)"
+side_effects: "none until reconfigured"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
