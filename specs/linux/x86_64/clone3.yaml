@@ -1,0 +1,75 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/clone3               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2, 4 KiB pages; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  clone3(args, size) (syscall 435) creates a new task like clone(2), with
+  the arguments in struct clone_args (linux/sched.h; all fields u64, 88
+  bytes): flags 0, pidfd 8, child_tid 16, parent_tid 24, exit_signal 32,
+  stack 40, stack_size 48, tls 56, set_tid 64, set_tid_size 72, cgroup 80.
+  size is the size of the caller's structure: 64 (CLONE_ARGS_SIZE_VER0),
+  80 (VER1, set_tid), 88 (VER2, cgroup), or larger up to one page (4096)
+  if every byte after the known 88 is 0. It returns the new task's id in
+  the caller and 0 in the new task. flags are the clone flags (CLONE_VM,
+  CLONE_FS, CLONE_FILES, CLONE_SIGHAND, CLONE_PIDFD, CLONE_VFORK,
+  CLONE_PARENT_SETTID, CLONE_CHILD_SETTID, CLONE_CHILD_CLEARTID,
+  CLONE_THREAD, CLONE_SETTLS, namespace flags, CLONE_INTO_CGROUP ...),
+  but the exit signal is not in the low byte of flags: it is
+  exit_signal (0 = no signal at the child's end; then wait with
+  __WALL). Without a stack (stack and stack_size 0) the child continues
+  on a copy of the caller's stack, as with fork. With a stack, the child
+  starts with its stack pointer at stack + stack_size (stack is the
+  lowest address), right after the syscall instruction with the caller's
+  other registers. CLONE_PIDFD stores a new pidfd for the child (an int,
+  lowest free descriptor, FD_CLOEXEC) at the address in pidfd;
+  CLONE_PARENT_SETTID stores the child's id (int) at parent_tid in the
+  caller's memory; CLONE_CHILD_SETTID at child_tid in the child's memory;
+  CLONE_CHILD_CLEARTID clears child_tid and wakes a futex there when the
+  child exits (seen by the parent when memory is shared). CLONE_VFORK
+  suspends the caller until the child exits or execs.
+returns:
+  parent: "the child's pid (> 0)"
+  child: "0; getppid() is the caller; without CLONE_VM its stores are not seen by the parent"
+  signal: "exit_signal SIGCHLD: the parent gets SIGCHLD at the child's end (pending when blocked); exit_signal 64 works too; 0: no signal, wait4 with __WALL reaps it"
+  sizes: "64, 80, 88 and 4096 (zero tail) all work"
+  pidfd: "*pidfd = lowest free descriptor (3 in the test), FD_CLOEXEC; poll on it: nothing while the child runs, POLLIN after it exits; waitid(P_PIDFD) reaps it (si_pid, si_status)"
+  settid: "CLONE_PARENT_SETTID: *parent_tid = child pid in the caller; CLONE_CHILD_SETTID: the child sees its pid at child_tid in its own copy, the parent's word is unchanged"
+  stack: "CLONE_VM with stack/stack_size: the child's first stack pointer is exactly stack + stack_size; its stores are seen; CLONE_CHILD_CLEARTID zeroes child_tid at its exit"
+  vfork: "CLONE_VFORK: the caller resumes only after the child exited"
+errors:
+  small_size: "EINVAL (22): size < 64 (0, 8, 63), also with a NULL args pointer"
+  big_size: "E2BIG (7): size > 4096 (4097, 8192), also with a NULL pointer"
+  nonzero_tail: "E2BIG (7): size between 89 and 4096 with a non-zero byte after offset 88 (byte 88 with size 89, byte 100 with size 200 or 4096)"
+  fault: "EFAULT (14): args unreadable with a valid size (NULL, address 8, a structure running into an unmapped page)"
+  exit_signal: "EINVAL (22): exit_signal > 64, or with bits outside the low 8 (0x111)"
+  signal_in_flags: "EINVAL (22): any bit of the low byte (CSIGNAL 0xff) set in flags (e.g. flags = SIGCHLD)"
+  stack_pair: "EINVAL (22): stack without stack_size, or stack_size without stack"
+  detached: "EINVAL (22): CLONE_DETACHED (0x400000), also with CLONE_PIDFD"
+  unknown_flags: "EINVAL (22): a flag bit clone3 does not know (1 << 40)"
+  set_tid: "EINVAL (22): set_tid_size > 0 with set_tid NULL, or set_tid_size > 32 (MAX_PID_NS_LEVEL); choosing pids with set_tid needs CAP_SYS_ADMIN (EPERM otherwise) and a free pid (EEXIST otherwise): not tested"
+  flag_combinations: "EINVAL (22): CLONE_THREAD without CLONE_SIGHAND; CLONE_SIGHAND without CLONE_VM; CLONE_FS with CLONE_NEWNS"
+  no_child: "a failed call makes no child (wait4(-1, WNOHANG|__WALL) is ECHILD)"
+  limits: "EAGAIN (RLIMIT_NPROC, pid space), ENOMEM, ENOSPC (pid namespace): not tested"
+  order: "size (EINVAL / E2BIG), reading the structure (EFAULT, E2BIG for the tail), then field validation (EINVAL)"
+side_effects: "a new task, sharing what the flags say; the pidfd descriptor with CLONE_PIDFD"
+threading: "as clone(2)"
+ordering:
+  - "with CLONE_VFORK the caller continues only after the child has exited or called execve"
+timing:
+  typical: "tens of microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: struct clone_args, CLONE_ARGS_SIZE_VER*, CLONE_PIDFD,
+# CLONE_DETACHED and the other flags from linux/sched.h; P_PIDFD from
+# linux/wait.h. A child started on a new stack needs a few assembly
+# instructions in a test (it cannot return from the C function that made
+# the call). Children in exactly compared tests are made with
+# CLONE_VFORK, or the parent waits by watching memory, so the call order
+# is fixed; tests with two processes running at once compare output
+# only. All tests pass as root and as an unprivileged user.

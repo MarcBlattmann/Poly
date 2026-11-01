@@ -372,6 +372,10 @@ impl HwParams {
 /// What the device can do, in ALSA's terms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Caps {
+    /// `SNDRV_PCM_ACCESS_*` values offered.
+    pub access: Mask,
+    /// `SNDRV_PCM_INFO_*` bits of every configuration.
+    pub info: u32,
     /// `SNDRV_PCM_FORMAT_*` values, each one [`format::describe`] knows.
     pub formats: Mask,
     /// Rates in hertz, increasing; `rates[..rate_count]` are used.
@@ -392,9 +396,19 @@ impl Caps {
     }
 }
 
-/// `SNDRV_PCM_INFO_*` of every configuration: interleaved frames moved
-/// in blocks of whole periods.
+/// `SNDRV_PCM_INFO_*` of a device read and written in blocks of whole
+/// periods: interleaved frames.
 pub const INFO: u32 = info::INTERLEAVED | info::BLOCK_TRANSFER | info::BATCH;
+
+/// `SNDRV_PCM_INFO_*` of a stream whose ring buffer may also be mapped
+/// (the audio server's: ADR 0109).
+pub const INFO_MMAP: u32 = INFO | info::MMAP | info::MMAP_VALID;
+
+/// The access modes of a stream that may be mapped: interleaved, through
+/// read/write or mmap.
+pub fn access_rw_and_mmap() -> Mask {
+    Mask::of(&[access::RW_INTERLEAVED, access::MMAP_INTERLEAVED])
+}
 
 /// Parameters that only take integers.
 const INTEGER_PARAMS: [usize; 9] = [
@@ -503,7 +517,7 @@ pub fn refine(p: &mut HwParams, caps: &Caps) -> Result<(), Errno> {
     if p.intervals.iter().any(|i| i.empty) {
         return Err(Errno::EINVAL);
     }
-    p.mask_mut(ACCESS).intersect(&Mask::of(&[access::RW_INTERLEAVED]));
+    p.mask_mut(ACCESS).intersect(&caps.access);
     p.mask_mut(FORMAT).intersect(&caps.formats);
     p.mask_mut(SUBFORMAT).intersect(&Mask::of(&[abi::SUBFORMAT_STD]));
     if p.masks.iter().any(Mask::is_empty) {
@@ -526,7 +540,7 @@ pub fn refine(p: &mut HwParams, caps: &Caps) -> Result<(), Errno> {
         }
     }
     p.cmask = changed_params(&before, p);
-    p.info = INFO;
+    p.info = caps.info;
     p.msbits = match p.mask(FORMAT).single().and_then(format::describe) {
         Some((_, width, _)) => width,
         None => 0,

@@ -30,9 +30,11 @@
 //!   (`ns::pid::attach`), given back when a thread ends or a process is
 //!   reaped, and a process is adopted by the init of its namespace.
 //!
-//! Not done yet: `CLONE_FILES`, `CLONE_FS` and `CLONE_SIGHAND` between
-//! *processes* (without `CLONE_THREAD`) copy instead of sharing, since a
-//! process owns its files and signal state; threads share all three.
+//! `CLONE_FILES` between *processes* (without `CLONE_THREAD`) shares the
+//! descriptor table (`Files::share_table`, ADR 0111). Not done yet:
+//! `CLONE_FS` and `CLONE_SIGHAND` between processes copy instead of
+//! sharing, since a process owns its directories and signal state;
+//! threads share all three.
 //! `CLONE_PTRACE`, `CLONE_IO`, `CLONE_SYSVSEM` have no effect. Resource
 //! usage (`wait4`'s `rusage`) is all zero.
 
@@ -95,6 +97,7 @@ pub fn with_tree<R>(f: impl FnOnce(&mut ProcessTree) -> R) -> R {
     // sees the new value already and does not sleep.
     if moved {
         process::wake_waiters();
+        super::pidfd::changed();
     }
     if !reaped.is_empty() {
         let gone: Vec<Arc<Process>> = {
@@ -179,6 +182,13 @@ fn publish(published: &AtomicU64, generation: u64) -> bool {
 /// The tree's published generation: it moves with every change.
 pub fn generation() -> u64 {
     GENERATION.load(Ordering::SeqCst)
+}
+
+/// Whether process `pid` has ended: a zombie, or not in the tree (reaped,
+/// or never a process of it). A pidfd is readable then (`pidfd.rs`).
+pub fn exited_or_gone(pid: i32) -> bool {
+    let t = TREE.lock();
+    !t.contains(pid) || t.is_zombie(pid)
 }
 
 /// A process the kernel started: the root of a tree of its own (its
@@ -296,8 +306,14 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
         out_of_line(move || -> Result<u32, Errno> {
             let names = if req.flags & CLONE_NEWUTS != 0 { initial_names(k) } else { UtsNames::default() };
             let pid = process::alloc_pid();
-            let files = k.process.files.fork();
+            // CLONE_FILES: the child shares the caller's descriptor table.
+            let files = if req.shares_files() { k.process.files.share_table() } else { k.process.files.fork() };
             let linux = child_state(k.linux, k.tid, pid, req.clears_handlers());
+            // A child sharing the memory starts without an rseq(2) area: the
+            // parent's is the parent's (ADR 0111).
+            if req.shares_memory() {
+                linux.with(|p| p.thread_mut(pid as i32).rseq = None);
+            }
             // The namespaces clone(2) asks for (the checks are done): made for
             // the child, its mount namespace a copy for its own files.
             let new = req.flags & ns::NEW_NAMESPACES;
@@ -322,6 +338,22 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
                     }
                 }
             };
+            // CLONE_PIDFD: the child's pidfd in the caller's table (the
+            // child's copy of the table was made above, so it has none),
+            // stored in the caller's memory (the child's copy was made too).
+            let pidfd = match req.pidfd {
+                Some(ptr) => match super::pidfd::install(&k.process.files, pid as i32, false, false) {
+                    Ok(fd) if k.copy_to_user(ptr, &fd.to_le_bytes()).is_ok() => Some(fd),
+                    other => {
+                        if let Ok(fd) = other {
+                            let _ = k.process.files.close(fd);
+                        }
+                        pid_ns::detach(&child_ns, pid as i32);
+                        return Err(other.err().unwrap_or(Errno::EFAULT));
+                    }
+                },
+                None => None,
+            };
             crate::fs::proc::record_fork(k.process.pid, pid, &memory);
             linux.with(|p| p.thread_mut(pid as i32).clear_child_tid = clear_child_tid);
             let child = Process::new_linux_child(pid, k.process.pid, k.process.format, k.process.traced, files, linux);
@@ -340,6 +372,9 @@ pub fn clone_task(k: &mut Thread<'_>, req: &CloneRequest) -> Result<i32, Errno> 
             let started = user::spawn_child(Arc::new(child), memory, &regs, &fpu, fs_base, gs_base, hook, None);
             if started.is_err() {
                 with_tree(|t| t.remove(pid as i32));
+                if let Some(fd) = pidfd {
+                    let _ = k.process.files.close(fd);
+                }
                 pid_ns::detach(&child_ns, pid as i32);
                 VFORKS.lock().remove(&pid);
                 return Err(Errno::EAGAIN);

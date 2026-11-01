@@ -59,6 +59,9 @@ impl Server {
         let client = self.client(c);
         let version = client.version(seat);
         client.insert(id, interface, version, Data::InputDevice);
+        if cap == Capabilities::KEYBOARD {
+            self.keyboard_created(c, id);
+        }
         Ok(())
     }
 }

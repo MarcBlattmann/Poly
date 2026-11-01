@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/chown                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  chown(path, owner, group) is system call 92. It sets the owner uid and/or
+  the group gid of the file named by path and returns 0. It is
+  fchownat(AT_FDCWD, path, owner, group, 0) (260): relative paths start at
+  the working directory and symbolic links are followed, also at the end
+  (lchown (94) is the variant that does not follow the last one). An id of
+  -1 (0xffffffff) leaves that id unchanged. Both ids are 32-bit: the upper
+  half of each register is ignored. Every successful call (also -1, -1)
+  updates ctime, and on a regular file clears set-user-ID and, when group
+  execute is set, set-group-ID.
+returns:
+  success: "0"
+  new_files: "a file is created with the caller's effective uid and gid (in a directory without set-group-ID)"
+  minus_one: "-1 / 0xffffffff for owner or group means no change; 0xfffffffe is an ordinary id (root may set it, stat shows 4294967294)"
+  root: "with CAP_CHOWN (root) any owner and any group may be set on any file"
+  owner_rules: "a caller without CAP_CHOWN: owner may only be -1 or the file's current owner, and only if the caller is that owner (fsuid); group may be -1, or, if the caller owns the file, the caller's effective gid, any of its supplementary groups, or the file's current group (naming the current group again succeeds even if the caller is not in it); anything else is EPERM"
+  non_owner_noop: "chown(path, -1, -1) succeeds for any caller who can reach the file, also on files of other users (and updates their ctime), unless the file is a regular file with set-user-ID (or set-group-ID with group execute): clearing that bit is a mode change, so a non-owner gets EPERM and the bits stay"
+  mode_bits: "on a regular file a successful chown (by root too, and also with -1, -1 or the ids it already has) clears set-user-ID (04000) always, and set-group-ID (02000) only when the group execute bit (0010) is set: 06755 -> 0755, 04700 -> 0700, 04644 -> 0644, 02755 -> 0755, 02710 -> 0710, 02745 -> 02745, 06745 -> 02745, 07777 -> 01777; the sticky bit stays. A directory keeps all its bits (07755 stays 07755). A failed chown leaves the mode alone"
+  symbolic_links: "followed: the target's ids change, the link's do not; a trailing slash on a directory or a link to one is allowed"
+  relative_paths: "relative to the working directory"
+errors:
+  not_permitted: "EPERM (1): see owner_rules and non_owner_noop: giving a file away (also to uid 0 or 0xfffffffe), a group the owner is not in, any change of another user's file (also naming its current ids, also by a member of its group), -1/-1 on another user's set-user-ID file. Nothing changes"
+  read_only_fs: "EROFS (30): the file is on a read-only mount; for root too, also for -1/-1, and before EPERM"
+  search_permission: "EACCES (13): a directory on the way without x for the caller; before EROFS and EPERM; the directory itself can still be reached. Not for root"
+  missing: "ENOENT (2): a missing name or directory on the way, the empty path, a dangling symbolic link"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components, or a trailing slash after a regular file"
+  loop: "ELOOP (40): a symbolic link loop"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more (255 is fine); a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): NULL or an unmapped address"
+  order: "(1) the path string: EFAULT, ENAMETOOLONG for 4096 bytes or more, ENOENT if empty; (2) the components left to right: ENOENT, ENOTDIR (D/file/<256 bytes> is ENOTDIR), ELOOP, EACCES, ENAMETOOLONG (D/<256 bytes>); (3) EROFS; (4) EPERM"
+side_effects: "ctime changes on success (also for -1, -1); mtime and atime do not; the mode changes as in mode_bits; the parent directory does not change"
+threading: "no thread-specific behaviour; the working directory used for relative paths is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

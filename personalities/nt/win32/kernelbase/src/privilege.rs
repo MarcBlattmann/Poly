@@ -1,40 +1,38 @@
-//! The security functions 7-Zip's command line imports that Poly cannot do
-//! yet (ADR 0087): privilege adjustment and file security descriptors.
-//! Each reports what Learn documents for that outcome; they are stubs in
-//! the coverage map.
+//! The security functions 7-Zip's command line imports beyond ADR 0083's:
+//! privilege adjustment (ADR 0114: the kernel's `NtAdjustPrivilegesToken`,
+//! the logic `poly_security::token::adjust_privileges`) and file security
+//! descriptors (ADR 0087: stubs in the coverage map, each reporting what
+//! Learn documents for that outcome).
 
 use crate::base::*;
 use crate::nt::Handle;
-use alloc::vec::Vec;
 use poly_kernelbase::error::*;
+use poly_ntobj::NtStatus;
+use poly_security::token::STATUS_NOT_ALL_ASSIGNED;
 
 /// `ERROR_NOT_ALL_ASSIGNED` (`winerror.h`).
 const ERROR_NOT_ALL_ASSIGNED: u32 = 1300;
-/// `TokenPrivileges` (`winnt.h`'s `TOKEN_INFORMATION_CLASS`).
-const TOKEN_PRIVILEGES: u32 = 3;
 
-/// The LUIDs of the privileges `token` holds (`TOKEN_PRIVILEGES`: a count,
-/// then 12-byte `LUID_AND_ATTRIBUTES`).
-fn held(token: Handle) -> Option<Vec<u64>> {
-    let mut buf = [0u8; 1024];
-    let mut len = 0u32;
-    // SAFETY: valid pointers.
-    let ok = unsafe {
-        crate::security::GetTokenInformation(token, TOKEN_PRIVILEGES, buf.as_mut_ptr(), buf.len() as u32, &mut len)
-    };
-    if ok == FALSE {
-        return None;
-    }
-    let n = u32::from_le_bytes(buf[0..4].try_into().unwrap()) as usize;
-    Some((0..n.min(84)).map(|i| u64::from_le_bytes(buf[4 + i * 12..12 + i * 12].try_into().unwrap())).collect())
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn NtAdjustPrivilegesToken(
+        token: Handle,
+        disable_all: u8,
+        new_state: *const u8,
+        buffer_length: u32,
+        previous: *mut u8,
+        return_length: *mut u32,
+    ) -> NtStatus;
 }
 
-/// `AdjustTokenPrivileges`: Poly's tokens have no service to change their
-/// privileges' state yet, so nothing is adjusted. Learn: the function
-/// "may succeed with" `ERROR_NOT_ALL_ASSIGNED` "even if no privileges were
-/// adjusted"; Poly reports that unless every privilege asked for is one
-/// the token holds (then `ERROR_SUCCESS`, its state left as it is).
-/// `PreviousState`, if asked for, lists no privileges.
+/// `AdjustTokenPrivileges` (Learn): enables, disables or removes the
+/// privileges `NewState` names that the token holds, or with
+/// `DisableAllPrivileges` disables them all. A success sets the last error
+/// to `ERROR_SUCCESS`, or to `ERROR_NOT_ALL_ASSIGNED` when the token lacks
+/// one of them ("The function may succeed with this error value even if no
+/// privileges were adjusted"); `PreviousState` gets the privileges that
+/// changed with their former attributes, and a buffer too small for them
+/// is `ERROR_INSUFFICIENT_BUFFER` with nothing adjusted.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn AdjustTokenPrivileges(
     token: Handle,
@@ -44,36 +42,19 @@ pub unsafe extern "system" fn AdjustTokenPrivileges(
     previous: *mut u8,
     return_length: *mut u32,
 ) -> i32 {
-    let Some(have) = held(token) else { return FALSE };
-    if !previous.is_null() {
-        if buffer_length < 4 {
-            if !return_length.is_null() {
-                // SAFETY: the caller's out-pointer.
-                unsafe { return_length.write_unaligned(4) };
-            }
-            return fail(ERROR_INSUFFICIENT_BUFFER, FALSE);
-        }
-        // SAFETY: the caller's TOKEN_PRIVILEGES of `buffer_length` bytes.
-        unsafe { previous.cast::<u32>().write_unaligned(0) };
-    }
-    if !return_length.is_null() {
-        // SAFETY: as above.
-        unsafe { return_length.write_unaligned(4) };
-    }
-    if disable_all != 0 {
-        return fail(ERROR_SUCCESS, TRUE);
-    }
-    if new_state.is_null() {
+    // Learn: ReturnLength "can be NULL if PreviousState is NULL".
+    if !previous.is_null() && return_length.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    // SAFETY: the caller's TOKEN_PRIVILEGES.
-    let n = unsafe { new_state.cast::<u32>().read_unaligned() } as usize;
-    let all = (0..n).all(|i| {
-        // SAFETY: as above: `n` entries of 12 bytes after the count.
-        let luid = unsafe { new_state.add(4 + i * 12).cast::<u64>().read_unaligned() };
-        have.contains(&luid)
-    });
-    fail(if all { ERROR_SUCCESS } else { ERROR_NOT_ALL_ASSIGNED }, TRUE)
+    // SAFETY: the caller's structures, checked by the kernel.
+    let st = unsafe {
+        NtAdjustPrivilegesToken(token, u8::from(disable_all != 0), new_state, buffer_length, previous, return_length)
+    };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    set_last_error(if st == STATUS_NOT_ALL_ASSIGNED { ERROR_NOT_ALL_ASSIGNED } else { ERROR_SUCCESS });
+    TRUE
 }
 
 /// `GetFileSecurityW`: Poly's NT file I/O keeps no security descriptors

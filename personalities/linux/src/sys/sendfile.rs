@@ -271,15 +271,15 @@ fn copy(k: &mut dyn LinuxKernel, in_fd: i32, out_fd: i32, start: Option<u64>, to
 }
 
 /// An `loff_t *` argument of copy_file_range(2): `None` for a null pointer
-/// (the file offset is used), else the offset it holds ("EINVAL" when
-/// negative, as for pread).
-fn offset_arg(k: &mut dyn LinuxKernel, ptr: crate::kernel::UserPtr) -> Result<Option<u64>, Errno> {
+/// (the file offset is used), else the offset it holds (`EFAULT` when it
+/// cannot be read; a negative value is the caller's to judge).
+fn offset_arg(k: &mut dyn LinuxKernel, ptr: crate::kernel::UserPtr) -> Result<Option<i64>, Errno> {
     if ptr.is_null() {
         return Ok(None);
     }
     let mut raw = [0u8; 8];
     k.copy_from_user(ptr, &mut raw)?;
-    u64::try_from(i64::from_le_bytes(raw)).map(Some).map_err(|_| Errno::EINVAL)
+    Ok(Some(i64::from_le_bytes(raw)))
 }
 
 /// copy_file_range(fd_in, off_in, fd_out, off_out, len, flags) (ADR 0059;
@@ -295,8 +295,14 @@ fn offset_arg(k: &mut dyn LinuxKernel, ptr: crate::kernel::UserPtr) -> Result<Op
 /// then moves; otherwise `*off` moves and the file offset stays. The copy
 /// goes through a kernel buffer in chunks, like [`sendfile`]; it stops at
 /// the end of the input or at a short write and returns the count (an
-/// error after some bytes returns the count so far). The order of the
-/// checks is ours, to be confirmed by the diff runner.
+/// error after some bytes returns the count so far).
+///
+/// The order of the checks (the spec of copy_file_range): (1) `EBADF` for
+/// a descriptor that is not open or is `O_PATH`; (2) `EFAULT` for an
+/// offset pointer that cannot be read; (3) `EINVAL` for flags; (4)
+/// `EBADF` for the access modes and `O_APPEND`; (5) the file types; (6)
+/// `EXDEV`, `EOVERFLOW` (a negative offset, or the output offset plus
+/// `len` past the largest offset), overlapping ranges `EINVAL`.
 pub fn copy_file_range(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let (fd_in, fd_out) = (a.fd(0), a.fd(2));
     if fd_in < 0 || fd_out < 0 {
@@ -304,14 +310,20 @@ pub fn copy_file_range(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
     let in_flags = fs(k)?.status_flags(fd_in)?;
     let out_flags = fs(k)?.status_flags(fd_out)?;
+    if (in_flags | out_flags) & crate::sys::path::O_PATH != 0 {
+        return Err(Errno::EBADF);
+    }
+    let (in_ptr, out_ptr) = (a.ptr(1), a.ptr(3));
+    let raw_in = offset_arg(k, in_ptr)?;
+    let raw_out = offset_arg(k, out_ptr)?;
+    if a.uint(5) != 0 {
+        return Err(Errno::EINVAL);
+    }
     if in_flags & O_ACCMODE == O_WRONLY || !matches!(out_flags & O_ACCMODE, O_WRONLY | O_RDWR) {
         return Err(Errno::EBADF);
     }
     if out_flags & O_APPEND != 0 {
         return Err(Errno::EBADF);
-    }
-    if a.uint(5) != 0 {
-        return Err(Errno::EINVAL);
     }
     let (st_in, st_out) = (k.fstat(fd_in)?, k.fstat(fd_out)?);
     for st in [&st_in, &st_out] {
@@ -324,9 +336,17 @@ pub fn copy_file_range(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if st_in.dev != st_out.dev {
         return Err(Errno::EXDEV);
     }
-    let (in_ptr, out_ptr) = (a.ptr(1), a.ptr(3));
-    let mut off_in = offset_arg(k, in_ptr)?;
-    let mut off_out = offset_arg(k, out_ptr)?;
+    let nonnegative = |o: Option<i64>| o.map(u64::try_from).transpose().map_err(|_| Errno::EOVERFLOW);
+    let mut off_in = nonnegative(raw_in)?;
+    let mut off_out = nonnegative(raw_out)?;
+    // The output range must end inside the offsets an `loff_t` can hold.
+    let out_start = match off_out {
+        Some(at) => at,
+        None => fs(k)?.lseek(fd_out, 0, SEEK_CUR)?,
+    };
+    if out_start.checked_add(a.ulong(4)).is_none() {
+        return Err(Errno::EOVERFLOW);
+    }
     let total = a.ulong(4).min(MAX_RW_COUNT);
     if st_in.ino == st_out.ino {
         // The same file: the ranges must not overlap.

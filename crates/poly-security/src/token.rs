@@ -99,6 +99,11 @@ pub const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
 /// Privilege attributes (`winnt.h`, `SE_PRIVILEGE_*`).
 pub const SE_PRIVILEGE_ENABLED_BY_DEFAULT: u32 = 0x1;
 pub const SE_PRIVILEGE_ENABLED: u32 = 0x2;
+pub const SE_PRIVILEGE_REMOVED: u32 = 0x4;
+
+/// `STATUS_NOT_ALL_ASSIGNED` (`ntstatus.h`): a success status, Win32's
+/// `ERROR_NOT_ALL_ASSIGNED` (1300).
+pub const STATUS_NOT_ALL_ASSIGNED: NtStatus = NtStatus(0x0000_0106);
 
 /// `TOKEN_TYPE`: `TokenPrimary`.
 pub const TOKEN_PRIMARY: u32 = 1;
@@ -167,6 +172,91 @@ pub fn privilege_value(name: &[u16]) -> Option<u32> {
 /// The name of a privilege LUID.
 pub fn privilege_name(luid: u32) -> Option<&'static str> {
     PRIVILEGES.iter().find(|&&(l, _)| l == luid).map(|&(_, n)| n)
+}
+
+/// What adjusting a token's privileges did ([`adjust_privileges`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Adjusted {
+    /// The privileges afterwards.
+    pub privileges: Vec<(u32, u32)>,
+    /// The privileges the adjustment changed, with their attributes before
+    /// (`PreviousState`), each once, in the order they changed.
+    pub previous: Vec<(u32, u32)>,
+    /// Whether the token held every privilege `NewState` named.
+    pub all_assigned: bool,
+}
+
+/// `AdjustTokenPrivileges` on a token holding `privileges` (Learn): with
+/// `disable_all`, every enabled privilege is disabled and `new` ignored;
+/// else each `new` entry enables (`SE_PRIVILEGE_ENABLED`), disables (no
+/// attribute) or removes (`SE_PRIVILEGE_REMOVED`) a privilege the token
+/// holds, and one it does not hold is skipped (`ERROR_NOT_ALL_ASSIGNED`:
+/// "the function may succeed with this error value even if no privileges
+/// were adjusted"). `PreviousState` lists only what changed ("if a
+/// privilege has been modified by this function, the privilege and its
+/// previous state are contained in" it). Other attribute bits of `new`
+/// are ignored.
+pub fn adjust_privileges(privileges: &[(u32, u32)], disable_all: bool, new: &[(u32, u32)]) -> Adjusted {
+    fn note(previous: &mut Vec<(u32, u32)>, luid: u32, attrs: u32) {
+        if !previous.iter().any(|&(l, _)| l == luid) {
+            previous.push((luid, attrs));
+        }
+    }
+    let mut now = privileges.to_vec();
+    let mut previous = Vec::new();
+    let mut all_assigned = true;
+    if disable_all {
+        for p in now.iter_mut() {
+            if p.1 & SE_PRIVILEGE_ENABLED != 0 {
+                note(&mut previous, p.0, p.1);
+                p.1 &= !SE_PRIVILEGE_ENABLED;
+            }
+        }
+        return Adjusted { privileges: now, previous, all_assigned };
+    }
+    for &(luid, attrs) in new {
+        let Some(i) = now.iter().position(|&(l, _)| l == luid) else {
+            all_assigned = false;
+            continue;
+        };
+        let old = now[i].1;
+        if attrs & SE_PRIVILEGE_REMOVED != 0 {
+            note(&mut previous, luid, old);
+            now.remove(i);
+        } else if (attrs & SE_PRIVILEGE_ENABLED != 0) != (old & SE_PRIVILEGE_ENABLED != 0) {
+            note(&mut previous, luid, old);
+            now[i].1 = old ^ SE_PRIVILEGE_ENABLED;
+        }
+    }
+    Adjusted { privileges: now, previous, all_assigned }
+}
+
+/// `TOKEN_PRIVILEGES` (`winnt.h`): `PrivilegeCount`, then 12-byte
+/// `LUID_AND_ATTRIBUTES` (LUID low, high, attributes).
+pub fn token_privileges(privileges: &[(u32, u32)]) -> Vec<u8> {
+    let mut out = Vec::new();
+    u32s(&mut out, &[privileges.len() as u32]);
+    for &(luid, attrs) in privileges {
+        u32s(&mut out, &[luid, 0, attrs]);
+    }
+    out
+}
+
+/// A `TOKEN_PRIVILEGES` read back; `None` if `bytes` is shorter than its
+/// count says. A LUID whose high part is not 0 names none of Poly's
+/// privileges (all are below 2^32, `wdm.h`): it becomes `u32::MAX`, which
+/// no token holds.
+pub fn parse_token_privileges(bytes: &[u8]) -> Option<Vec<(u32, u32)>> {
+    let n = u32::from_le_bytes(bytes.get(0..4)?.try_into().ok()?) as usize;
+    let body = bytes.get(4..4 + n.checked_mul(12)?)?;
+    Some(
+        body.chunks_exact(12)
+            .map(|c| {
+                let w = |i: usize| u32::from_le_bytes([c[i], c[i + 1], c[i + 2], c[i + 3]]);
+                (if w(4) == 0 { w(0) } else { u32::MAX }, w(8))
+            })
+            .collect(),
+    )
 }
 
 /// An access token's contents.
@@ -250,12 +340,7 @@ impl Token {
             TOKEN_USER => sid_and_attributes(&mut out, base, &[(&self.user, 0)]),
             TOKEN_GROUPS => token_groups(&mut out, base, self.groups.iter().map(|(s, a)| (s, *a))),
             TOKEN_LOGON_SID => token_groups(&mut out, base, self.logon_sid().into_iter().map(|(s, a)| (s, *a))),
-            TOKEN_PRIVILEGES => {
-                u32s(&mut out, &[self.privileges.len() as u32]);
-                for &(luid, attrs) in &self.privileges {
-                    u32s(&mut out, &[luid, 0, attrs]);
-                }
-            }
+            TOKEN_PRIVILEGES => out = token_privileges(&self.privileges),
             TOKEN_OWNER => pointer_then(&mut out, base, &self.owner.to_bytes()),
             TOKEN_PRIMARY_GROUP => pointer_then(&mut out, base, &self.primary_group.to_bytes()),
             TOKEN_DEFAULT_DACL => pointer_then(&mut out, base, &self.default_dacl),
@@ -350,6 +435,43 @@ mod tests {
     }
     fn u32_at(b: &[u8], at: usize) -> u32 {
         u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn adjusting_privileges() {
+        const E: u32 = SE_PRIVILEGE_ENABLED;
+        const D: u32 = SE_PRIVILEGE_ENABLED_BY_DEFAULT;
+        let held = [(18, 0), (23, E | D), (35, 0)];
+        // Enabling two held privileges: both change, all assigned.
+        let a = adjust_privileges(&held, false, &[(18, E), (35, E)]);
+        assert_eq!(a.privileges, [(18, E), (23, E | D), (35, E)]);
+        assert_eq!(a.previous, [(18, 0), (35, 0)]);
+        assert!(a.all_assigned);
+        // Enabling one already enabled changes nothing.
+        let b = adjust_privileges(&a.privileges, false, &[(18, E)]);
+        assert_eq!(b.privileges, a.privileges);
+        assert!(b.previous.is_empty() && b.all_assigned);
+        // One not held (SeLockMemoryPrivilege, 4) is skipped.
+        let c = adjust_privileges(&held, false, &[(4, E), (18, E)]);
+        assert_eq!(c.previous, [(18, 0)]);
+        assert!(!c.all_assigned);
+        // Disabling (no attribute) and removing.
+        let d = adjust_privileges(&held, false, &[(23, 0), (35, SE_PRIVILEGE_REMOVED)]);
+        assert_eq!(d.privileges, [(18, 0), (23, D)]);
+        assert_eq!(d.previous, [(23, E | D), (35, 0)]);
+        // Disable all ignores the new state.
+        let e = adjust_privileges(&a.privileges, true, &[(4, E)]);
+        assert_eq!(e.privileges, [(18, 0), (23, D), (35, 0)]);
+        assert_eq!(e.previous, [(18, E), (23, E | D), (35, E)]);
+        assert!(e.all_assigned);
+        // TOKEN_PRIVILEGES round trip; a short buffer and a high LUID.
+        let bytes = token_privileges(&held);
+        assert_eq!(bytes.len(), 4 + 3 * 12);
+        assert_eq!(parse_token_privileges(&bytes).unwrap(), held);
+        assert_eq!(parse_token_privileges(&bytes[..20]), None);
+        let mut high = token_privileges(&[(18, E)]);
+        high[8] = 1;
+        assert_eq!(parse_token_privileges(&high).unwrap(), [(u32::MAX, E)]);
     }
 
     #[test]

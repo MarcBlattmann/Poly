@@ -142,8 +142,8 @@ code in `tools/pipeline/src/apps.rs`). A test is a JSON file:
   classes: `ok`, `-1 ERRNO`, `?` (no return), or the descriptor for calls
   that return one; consecutive events of the same name and class are
   collapsed into one (a read loop over a host file of another size, a
-  signal action set for many signals); `rseq` (`ENOSYS` on Poly by
-  decision, ADR 0043/0049) and `SIGCHLD` are left out. Arguments are shown
+  signal action set for many signals); `rseq` (`ENOSYS` on Poly until
+  ADR 0111, ADR 0043/0049) and `SIGCHLD` are left out. Arguments are shown
   in the report but not compared: an unchanged program's arguments are its
   own, and where they follow from the system (a read size after a short
   read of `/proc/self/maps`) they are not about Poly.
@@ -282,9 +282,8 @@ AT_EMPTY_PATH)` of a file the caller opened works on Linux 6.18 without
 `CAP_DAC_READ_SEARCH`, Poly says `ENOENT`). Held-out tests are not in the repository and not on
 GitHub, so CI cannot run them: they are checked before an entry is
 marked green (`pipeline diff --target poly` with the entry's visible and
-held-out directories). Today 11 of the 12 corpus programs
-pass (`libc-hello` differs at `rseq`: Poly answers `ENOSYS`, with the same
-output and exit status); all 11 corpus app tests pass (app mode); and 139
+held-out directories). Today the 12 corpus programs
+pass (`libc-hello` differed at `rseq` until Poly implemented it, ADR 0111); all 11 corpus app tests pass (app mode); and 139
 green entries bring 245 visible tests. The spec tests take about a minute with four jobs
 (the app tests run one at a time after them). (`write` was green
 before its spec tests existed; its visible and held-out spec tests pass
@@ -458,6 +457,25 @@ cargo xtask pipeline win scenario poly --bin-dir DIR [--data-dir DIR]  # Poly on
 # on the PC, to record again (after the driver or the support crate changed):
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../poly/tools/pipeline/windows/poly-oracle.ps1 \
     -Bundle bundle-<id>.txt -Tests sevenzip_scenario -TestTimeouts sevenzip_scenario=300 -Out results.json
+```
+
+**The traced scenario** ([ADR 0110](adr/0110-7-zip-traced-scenario-and-what-passing-its-trace-means.md)):
+`tests/windows/sevenzip_trace.rs` runs the same steps through the API
+tracer's kit (ADR 0090) in a work directory of a fixed path length and
+records each step's trace. The Windows reference is committed in canonical
+form as `tests/windows/oracle/sevenzip_trace.reference.json`; the
+`wintrace` boot group compares Poly's with it, a required check since
+ADR 0114 (`TRACE_REQUIRED`).
+
+```sh
+cargo xtask win 7zip-trace diff [--markdown docs/windows/7zip-trace.md] [--check]   # stage, run on Poly, compare per step
+cargo xtask win 7zip-trace diff --target poly.json                                 # compare a saved Poly run
+# to record again (after the driver, poly-wtest, the tracer or its signatures changed), from the host:
+polyd 'cargo xtask win 7zip-trace stage'
+POLY_RUN=~/poly-dev/polyd tools/pipeline/windows/poly-remote.sh --host homeserver2 --tests sevenzip_trace \
+    --data-dir target/pipeline/windows/data --runner-arg -Runs --runner-arg 1 --runner-arg -TestTimeouts --runner-arg sevenzip_trace=1800
+cp .oracle-remote/homeserver2/results.json .oracle-remote/windows-1.json    # repeat for -2, -3
+polyd 'cargo xtask win 7zip-trace record .oracle-remote/windows-1.json .oracle-remote/windows-2.json .oracle-remote/windows-3.json'
 ```
 ### Where Windows behaviour is already tested: Wine seeds
 

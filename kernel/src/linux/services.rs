@@ -193,6 +193,23 @@ pub fn vfs_errno(e: poly_vfs::Errno) -> Errno {
     Errno::new(e as u16).unwrap_or(Errno::EIO)
 }
 
+/// Map `req` where the `mmap(2)` call `r` asks for it.
+fn map_placed(memory: &Memory, req: poly_vm::MapRequest<FileRef>, r: &MapRequest) -> Result<u64, Errno> {
+    let placement = match r.placement {
+        Placement::Hint => poly_vm::Placement::Hint(r.addr),
+        Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
+        Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
+    };
+    let addr = memory.map(req.at(placement)).map_err(memory_errno)?;
+    // MAP_32BIT: the region map has no "below 2 GiB" placement yet; a
+    // mapping that landed higher is taken back.
+    if r.hints.low_2g && addr.saturating_add(r.len) > 1 << 31 {
+        let _ = memory.unmap(addr, r.len);
+        return Err(Errno::ENOMEM);
+    }
+    Ok(addr)
+}
+
 fn memory_errno(e: MemoryError) -> Errno {
     Errno::new(e.linux_errno() as u16).unwrap_or(Errno::ENOMEM)
 }
@@ -340,6 +357,13 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn mmap(&mut self, r: &MapRequest) -> Result<u64, Errno> {
+        fn placement_of(r: &MapRequest) -> poly_vm::Placement {
+            match r.placement {
+                Placement::Hint => poly_vm::Placement::Hint(r.addr),
+                Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
+                Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
+            }
+        }
         let memory = self.memory()?;
         let prot = vm_prot(r.prot);
         let req = match r.backing {
@@ -358,9 +382,42 @@ impl LinuxKernel for Thread<'_> {
                 if !file.readable() {
                     return Err(Errno::EACCES);
                 }
+                // A DRM dumb buffer or a dma-buf: its frames (ADR 0108).
+                if let Some(found) = crate::drm::mapping(&file, offset, r.len) {
+                    let (source, start) = found.map_err(vfs_errno)?;
+                    if r.shared && r.prot.writable() && !file.writable() {
+                        return Err(Errno::EACCES);
+                    }
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), start, r.shared);
+                    return map_placed(&memory, req, r);
+                }
                 // Pipes and event files have nothing to map.
                 if file.object().is_some() {
                     return Err(Errno::ENODEV);
+                }
+                // The frame buffer device maps its shadow memory (ADR 0107).
+                if let Some(source) = crate::fbdev::page_source(&file) {
+                    if r.shared && r.prot.writable() && !file.writable() {
+                        return Err(Errno::EACCES);
+                    }
+                    let object = FileRef::new(source);
+                    let req = poly_vm::MapRequest::file(r.len, prot, object, offset, r.shared);
+                    let placement = match r.placement {
+                        Placement::Hint => poly_vm::Placement::Hint(r.addr),
+                        Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
+                        Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
+                    };
+                    return memory.map(req.at(placement)).map_err(memory_errno);
+                }
+                // A sound card's PCM device maps its ring buffer and its
+                // status and control pages (ADR 0109).
+                if file.kind() == FileType::CharDevice
+                    && let Some(m) = file.device().and_then(|d| crate::sound::alsa::map(d, offset, r.len, r.shared))
+                {
+                    let (source, at) = m?;
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), at, true);
+                    let addr = memory.map(req.at(placement_of(r))).map_err(memory_errno)?;
+                    return Ok(addr);
                 }
                 if file.kind() != FileType::Regular {
                     return Err(if file.kind() == FileType::CharDevice { Errno::ENODEV } else { Errno::EACCES });
@@ -368,23 +425,17 @@ impl LinuxKernel for Thread<'_> {
                 if r.shared && r.prot.writable() && !file.writable() {
                     return Err(Errno::EACCES);
                 }
-                let source = FileSource::of(&file);
+                // A memfd's write seals refuse writable shared mappings
+                // (fcntl(2), "File sealing"); one that is made is counted.
+                let writable_map = match file.memfd() {
+                    Some(m) => m.map(r.shared, r.prot.writable()).map_err(vfs_errno)?,
+                    None => None,
+                };
+                let source = FileSource::of(&file).holding(writable_map);
                 poly_vm::MapRequest::file(r.len, prot, FileRef::new(Arc::new(source)), offset, r.shared)
             }
         };
-        let placement = match r.placement {
-            Placement::Hint => poly_vm::Placement::Hint(r.addr),
-            Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
-            Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
-        };
-        let addr = memory.map(req.at(placement)).map_err(memory_errno)?;
-        // MAP_32BIT: the region map has no "below 2 GiB" placement yet; a
-        // mapping that landed higher is taken back.
-        if r.hints.low_2g && addr.saturating_add(r.len) > 1 << 31 {
-            let _ = memory.unmap(addr, r.len);
-            return Err(Errno::ENOMEM);
-        }
-        Ok(addr)
+        map_placed(&memory, req, r)
     }
 
     fn munmap(&mut self, addr: u64, len: u64) -> Result<(), Errno> {
@@ -793,8 +844,32 @@ impl LinuxKernel for Thread<'_> {
         crate::thread::this_cpu() as u32
     }
 
+    fn rseq_registered(&mut self, on: bool) {
+        self.flags.rseq.store(on, core::sync::atomic::Ordering::Relaxed);
+        if !on {
+            self.flags.rseq_notify.store(false, core::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
     fn yield_cpu(&mut self) {
         crate::thread::yield_now();
+    }
+
+    fn membarrier_registrations(&self) -> u32 {
+        user::current_memory().map_or(0, |m| m.membarrier_registrations())
+    }
+
+    fn membarrier_register(&mut self, bits: u32) {
+        if let Some(m) = user::current_memory() {
+            m.membarrier_register(bits);
+        }
+    }
+
+    fn memory_barrier(&mut self, private: bool) {
+        match user::current_memory() {
+            Some(m) if private => m.barrier(),
+            _ => crate::user::memory::global_barrier(),
+        }
     }
 
     fn cpu_affinity(&mut self, tid: i32) -> Result<u64, Errno> {

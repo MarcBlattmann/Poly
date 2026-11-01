@@ -336,7 +336,8 @@ fn affinity_target(k: &dyn LinuxKernel, pid: i32) -> Result<i32, Errno> {
 /// `cpusetsize` is smaller than the kernel's mask or not a multiple of the
 /// size of a long.
 pub fn sched_getaffinity(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let size = a.ulong(1) as usize;
+    // `cpusetsize` is an `unsigned int` in the kernel's call.
+    let size = a.uint(1) as usize;
     if size < MASK_BYTES || !size.is_multiple_of(8) {
         return Err(Errno::EINVAL);
     }
@@ -350,13 +351,20 @@ pub fn sched_getaffinity(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// mask's CPUs from now on (a running thread moves at once if it is the
 /// caller, else at its CPU's next tick); `EINVAL` if the mask names no CPU
 /// the system runs.
+///
+/// The mask is read first (`EFAULT` even for a thread that does not
+/// exist), then the thread looked up (`ESRCH`, also for an empty mask),
+/// then the mask judged.
 pub fn sched_setaffinity(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let tid = affinity_target(k, a.int(0))?;
-    let len = (a.ulong(1) as usize).min(MASK_BYTES);
+    let len = (a.uint(1) as usize).min(MASK_BYTES);
     let mut bytes = [0u8; MASK_BYTES];
-    k.copy_from_user(a.ptr(2), &mut bytes[..len])?;
+    if len > 0 {
+        k.copy_from_user(a.ptr(2), &mut bytes[..len])?;
+    }
+    let tid = affinity_target(k, a.int(0))?;
     let mask = u64::from_le_bytes(bytes);
     if mask == 0 {
+        k.cpu_affinity(tid)?;
         return Err(Errno::EINVAL);
     }
     k.set_cpu_affinity(tid, mask)?;

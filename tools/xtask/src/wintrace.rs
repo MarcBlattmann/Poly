@@ -1007,10 +1007,112 @@ const VOLATILE: &[&str] = &[
     "GetSystemTimeAsFileTime",
 ];
 
+/// Results that describe the machine, not the system's behaviour: two
+/// correct systems on different machines differ (ADR 0110). `GetOEMCP`:
+/// the OEM code page of the machine's locale (850 on the oracle, 437 on
+/// Poly; ADR 0088 lists it as a machine fact). Not compared, like
+/// [`VOLATILE`]'s.
+const MACHINE_RESULTS: &[&str] = &["GetOEMCP"];
+
+/// Functions taken out of both traces before they are aligned (ADR 0110):
+/// `IsProcessorFeaturePresent` answers for the processor (`PF_XSAVE_ENABLED`
+/// is 1 on the oracle, 0 on QEMU's CPU), and how often a program asks
+/// follows `CPUID`, which is not a traced call.
+const MACHINE_CALLS: &[&str] = &["IsProcessorFeaturePresent"];
+
+/// Arguments of which only the low byte is the argument (ADR 0110):
+/// `memset`'s fill value is converted to `unsigned char` (Learn: "memset");
+/// the caller may leave anything in the register's other bits.
+const BYTE_ARGS: &[(&str, usize)] = &[("memset", 1)];
+
+/// The documented normalisations of the comparison (ADR 0110), applied to
+/// both traces before [`diff_traces`]: [`MACHINE_CALLS`] left out,
+/// `GetVersion`'s result as its major and minor version only (the build
+/// number in its high word is the machine's Windows build), [`BYTE_ARGS`]
+/// masked. Results of [`VOLATILE`] and [`MACHINE_RESULTS`] functions are
+/// not compared either (in [`differences`] and [`canonical`]).
+pub fn normalise(calls: &[Call]) -> Vec<Call> {
+    calls
+        .iter()
+        .filter(|c| !MACHINE_CALLS.contains(&c.func.as_str()))
+        .map(|c| {
+            let mut c = c.clone();
+            if c.func == "GetVersion"
+                && let Some(v) = c.ret.as_u64()
+            {
+                c.ret = Value::from(format!("version {}.{}", v & 0xff, (v >> 8) & 0xff));
+            }
+            for &(f, i) in BYTE_ARGS {
+                if c.func == f
+                    && let Some(v) = c.args.get(i).and_then(Value::as_u64)
+                {
+                    c.args[i] = Value::from(v & 0xff);
+                }
+            }
+            c
+        })
+        .collect()
+}
+
+/// What the comparison sees of a value, as a value: numbers as they are,
+/// strings with `map` applied (`{"w":…}` / `{"a":…}`), pointers and
+/// handles as `"NULL"`, `"-1"` (all ones) or `"ptr"`. Two values compare
+/// equal in [`diff_traces`] exactly when their canonical forms are equal,
+/// and canonical forms compare among themselves the same way, so a trace
+/// can be kept in this form (the committed reference of ADR 0110).
+pub fn canonical_value(v: &Value, map: &[(String, String)]) -> Value {
+    match norm(v, map) {
+        Norm::Num(n) => Value::from(n),
+        Norm::Null => Value::Null,
+        Norm::NullPtr => Value::from("NULL"),
+        Norm::AllOnes => Value::from("-1"),
+        Norm::Ptr => Value::from("ptr"),
+        Norm::Str(s) => {
+            let key = if v.get("w").is_some() { "w" } else { "a" };
+            serde_json::json!({ key: s })
+        }
+        Norm::Other(_) => v.clone(),
+    }
+}
+
+/// `calls` in canonical form: [`normalise`]d, per thread in call order,
+/// `seq` renumbered from 0 in each thread (the call's index in its
+/// thread), every value [`canonical_value`], and the results
+/// [`diff_traces`] does not compare ([`VOLATILE`], [`MACHINE_RESULTS`])
+/// replaced by `"*"`.
+pub fn canonical(calls: &[Call], map: &[(String, String)]) -> Vec<Call> {
+    let calls = normalise(calls);
+    let mut sorted: Vec<&Call> = calls.iter().collect();
+    sorted.sort_by_key(|c| (c.t, c.seq));
+    let mut index: BTreeMap<u64, u64> = BTreeMap::new();
+    sorted
+        .into_iter()
+        .map(|c| {
+            let n = index.entry(c.t).or_default();
+            let seq = *n;
+            *n += 1;
+            Call {
+                seq,
+                t: c.t,
+                dll: c.dll.to_ascii_lowercase(),
+                func: c.func.clone(),
+                args: c.args.iter().map(|a| canonical_value(a, map)).collect(),
+                ret: if volatile(c) { Value::from("*") } else { canonical_value(&c.ret, map) },
+                err: c.err,
+            }
+        })
+        .collect()
+}
+
+/// Whether `c`'s result is not compared.
+fn volatile(c: &Call) -> bool {
+    VOLATILE.contains(&c.func.as_str()) || MACHINE_RESULTS.contains(&c.func.as_str())
+}
+
 /// How two calls of the same function differ (empty: they do not).
 fn differences(a: &Call, b: &Call, map_a: &[(String, String)], map_b: &[(String, String)]) -> Vec<String> {
     let mut out = Vec::new();
-    if !VOLATILE.contains(&a.func.as_str()) && norm(&a.ret, map_a) != norm(&b.ret, map_b) {
+    if !volatile(a) && norm(&a.ret, map_a) != norm(&b.ret, map_b) {
         out.push(format!("result {} vs {}", a.ret, b.ret));
     }
     if a.err != b.err {
@@ -1247,7 +1349,7 @@ pub fn trace_diff_command(args: &[String]) -> Result {
         let text = std::fs::read_to_string(f).map_err(|e| format!("{f}: {e}"))?;
         parse_trace(&text).map_err(|e| format!("{f}: {e}"))
     };
-    let d = diff_traces(&read(fa)?, &read(fb)?, &map_a, &map_b);
+    let d = diff_traces(&normalise(&read(fa)?), &normalise(&read(fb)?), &map_a, &map_b);
     print!("{}", report(&d, fa, fb, limit));
     if check && !d.divergences.is_empty() {
         return Err(format!("the traces differ ({} divergences)", d.divergences.len()));
@@ -1257,139 +1359,13 @@ pub fn trace_diff_command(args: &[String]) -> Result {
 
 // ----- the boot test ----------------------------------------------------------------------
 
-/// The traced runs of `7za.exe` on Poly: a name and the arguments (the
-/// `7zip` boot test's steps of those names, and `add` on one thread).
-pub const TRACED: [(&str, &[&str]); 3] = [
-    ("info", &["i"]),
-    ("add", &["a", "-bd", "new.7z", "hello.txt"]),
-    ("add-mmt1", &["a", "-bd", "-mmt1", "new.7z", "hello.txt"]),
-];
-/// The file the test archives (`sevenzip.rs`'s sample, byte for byte).
-const SAMPLE_FILE: &str = "hello.txt";
-const SAMPLE_TEXT: &str = "Hello from 7-Zip on Poly.\r\n";
-/// `Z:\7zip` to the program, its own and current directory.
-const DIR: &str = "7zip";
-/// Where reference traces from Windows are looked for (not committed:
-/// they are oracle observations, kept out of the repository like the
-/// oracle's run files): `POLY_WINTRACE_REF` or `target/wintrace/reference`,
-/// files `7za-<step>.jsonl` and, optionally, `7za-<step>.dir` (the
-/// working directory of that run, replaced by Poly's in strings).
-const REFERENCE_ENV: &str = "POLY_WINTRACE_REF";
-
-/// One traced boot, read back.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct TracedRun {
-    pub started: bool,
-    pub exit: Option<u32>,
-    /// The trace file's bytes (`POLY-OUT: fd=2` records).
-    pub trace: Vec<u8>,
-}
-
-/// Read a boot's `POLY-INIT`/`POLY-EXIT` records and the trace file the
-/// kernel reported as standard error (`poly.test.stderr=`).
-pub fn read_boot(log: &str) -> TracedRun {
-    let mut r = TracedRun::default();
-    for line in log.lines() {
-        let Some(at) = line.find("POLY-") else { continue };
-        let rec = &line[at..];
-        if rec.starts_with("POLY-INIT: exec") {
-            r.started = true;
-        } else if let Some(rest) = rec.strip_prefix("POLY-OUT: ") {
-            let mut fields = rest.split_whitespace();
-            if fields.next() != Some("fd=2") {
-                continue;
-            }
-            if let Some(hex) = fields.next().and_then(|f| f.strip_prefix("hex=")) {
-                r.trace
-                    .extend((0..hex.len() / 2).filter_map(|i| u8::from_str_radix(hex.get(2 * i..2 * i + 2)?, 16).ok()));
-            }
-        } else if let Some(rest) = rec.strip_prefix("POLY-EXIT: ") {
-            for f in rest.split_whitespace() {
-                if let Some(v) = f.strip_prefix("ntstatus=0x") {
-                    r.exit = u32::from_str_radix(v, 16).ok();
-                } else if let Some(v) = f.strip_prefix("code=")
-                    && r.exit.is_none()
-                {
-                    r.exit = v.parse().ok();
-                }
-            }
-        }
-    }
-    r
-}
-
-fn reference_dir() -> PathBuf {
-    std::env::var_os(REFERENCE_ENV).map_or_else(|| work_dir().join("reference"), PathBuf::from)
-}
-
-/// The boot test `wintrace` (report only): `7za.exe` from the cache under
-/// the tracer, [`TRACED`] runs, each trace written to
-/// `target/wintrace/poly/7za-<step>.jsonl`, summarised, and compared with
-/// a Windows reference trace when there is one. Fails only when the kit
-/// cannot be built (the tracer's own tooling).
-pub fn boot_test(kernel: &Path, syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
-    eprintln!("==> boot test: 7za.exe under the Windows API tracer on the NT personality (ADR 0090, report only)");
-    let Some(exe) = crate::sevenzip::cached() else {
-        eprintln!("==> skipped: 7za.exe is not in the cache; `cargo xtask win fetch-7zip` downloads it");
-        return Ok(());
-    };
-    let kit = build_kit(&exe, &work_dir().join("kit-7za"), &[])?;
-    let mut tree = crate::initramfs::Tree::default();
-    let mut names: Vec<String> = vec![kit.exe.clone(), "polytrace.dll".into()];
-    names.extend(kit.proxies.iter().map(|p| p.file.clone()));
-    for n in &names {
-        let bytes = std::fs::read(kit.dir.join(n)).map_err(|e| format!("{n}: {e}"))?;
-        tree.files.push((format!("{DIR}/{n}"), 0o755, bytes));
-    }
-    tree.files.push((format!("{DIR}/{SAMPLE_FILE}"), 0o644, SAMPLE_TEXT.as_bytes().to_vec()));
-    let image = crate::initramfs::programs_image_with(&[], &tree);
-    let image = crate::initramfs::write(&crate::root(), "poly-wintrace-initramfs.cpio", &image)?;
-    let out_dir = work_dir().join("poly");
-    std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
-    for (step, args) in TRACED {
-        let mut append = format!("poly.qemu_exit poly.init=/{DIR}/{}", kit.exe);
-        for a in args {
-            append.push_str(" poly.init.arg=");
-            append.push_str(a);
-        }
-        append.push_str(&format!(" poly.test.stderr=/{DIR}/polytrace.jsonl"));
-        let b = crate::boot_on(None, Some(&image), kernel, syms, crate::DEFAULT_MEMORY, &append, crate::Devices::None)?;
-        let r = read_boot(&b.output);
-        let file = out_dir.join(format!("7za-{step}.jsonl"));
-        std::fs::write(&file, &r.trace).map_err(|e| format!("{}: {e}", file.display()))?;
-        let calls = parse_trace(&String::from_utf8_lossy(&r.trace)).unwrap_or_default();
-        eprintln!(
-            "==> 7za {} ({step}) traced: started {}, exit {:?}{}, {} calls recorded ({} bytes, {})",
-            args.join(" "),
-            r.started,
-            r.exit,
-            if b.timed_out { ", the boot timed out" } else { "" },
-            calls.len(),
-            r.trace.len(),
-            file.display()
-        );
-        let mut last: Vec<&Call> = calls.iter().filter(|c| c.t == 0).collect();
-        last.sort_by_key(|c| c.seq);
-        for c in last.iter().rev().take(3).rev() {
-            eprintln!("      last: {c}");
-        }
-        let reference = reference_dir().join(format!("7za-{step}.jsonl"));
-        let Ok(text) = std::fs::read_to_string(&reference) else {
-            eprintln!("      (no Windows reference trace at {})", reference.display());
-            continue;
-        };
-        let reference_calls = parse_trace(&text).map_err(|e| format!("{}: {e}", reference.display()))?;
-        let mut map_a = Vec::new();
-        if let Ok(dir) = std::fs::read_to_string(reference.with_extension("dir")) {
-            map_a.push((dir.trim().trim_end_matches('\\').to_string(), "<dir>".to_string()));
-        }
-        let map_b = vec![(format!("Z:\\{DIR}"), "<dir>".to_string())];
-        let d = diff_traces(&reference_calls, &calls, &map_a, &map_b);
-        for line in report(&d, "Windows", "Poly", 3).lines() {
-            eprintln!("      {line}");
-        }
-    }
-    Ok(())
+/// The boot test `wintrace`: the traced 7-Zip scenario
+/// (`sevenzip_trace.rs`, ADR 0110), which runs ADR 0088's steps under the
+/// tracer and compares each step's trace with the committed Windows
+/// reference (required: `TRACE_REQUIRED`, ADR 0114). It replaced ADR 0090's
+/// three single runs.
+pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    crate::sevenzip_trace::boot_test(kernel)
 }
 
 #[cfg(test)]
@@ -1628,6 +1604,25 @@ mod tests {
     }
 
     #[test]
+    fn normalises_machine_facts_and_byte_arguments() {
+        let t = "{\"seq\":0,\"t\":0,\"dll\":\"kernel32.dll\",\"fn\":\"IsProcessorFeaturePresent\",\"args\":[17],\"ret\":1}\n\
+                 {\"seq\":1,\"t\":0,\"dll\":\"kernel32.dll\",\"fn\":\"GetVersion\",\"args\":[],\"ret\":1717043210}\n\
+                 {\"seq\":2,\"t\":0,\"dll\":\"msvcrt.dll\",\"fn\":\"memset\",\"args\":[\"0x10\",4294775809,1],\"ret\":\"0x10\"}\n\
+                 {\"seq\":3,\"t\":0,\"dll\":\"kernel32.dll\",\"fn\":\"GetOEMCP\",\"args\":[],\"ret\":850}\n";
+        let n = normalise(&parse_trace(t).unwrap());
+        let funcs: Vec<&str> = n.iter().map(|c| c.func.as_str()).collect();
+        assert_eq!(funcs, ["GetVersion", "memset", "GetOEMCP"]);
+        assert_eq!(n[0].ret, Value::from("version 10.0"));
+        assert_eq!(n[1].args[1], Value::from(1));
+        // Another build, another register's junk, another code page: the same.
+        let other = t.replace("1717043210", "1248133130").replace("4294775809", "1").replace("850", "437");
+        let d = diff_traces(&n, &normalise(&parse_trace(&other).unwrap()), &[], &[]);
+        assert!(d.divergences.is_empty(), "{d:?}");
+        let c = canonical(&parse_trace(t).unwrap(), &[]);
+        assert_eq!((c[2].ret.clone(), c[1].args[0].clone()), (Value::from("*"), Value::from("ptr")));
+    }
+
+    #[test]
     fn diffs_align_by_thread_and_ignore_pointers() {
         let (a, b) = (parse_trace(A).unwrap(), parse_trace(B).unwrap());
         let map_a = [("C:\\w".to_string(), "<dir>".to_string())];
@@ -1693,14 +1688,5 @@ mod tests {
             })
             .collect();
         assert_eq!(kinds, [(1, 2), (0, 1)]);
-    }
-
-    #[test]
-    fn reads_a_traced_boot() {
-        let log = "init: running\nPOLY-INIT: exec /7zip/7za.exe\nPOLY-OUT: fd=1 hex=41\nPOLY-OUT: fd=2 hex=7b7d\nx POLY-OUT: fd=2 hex=0a\nPOLY-EXIT: pid=2 code=0 ntstatus=0x0\n";
-        let r = read_boot(log);
-        assert_eq!(r, TracedRun { started: true, exit: Some(0), trace: b"{}\n".to_vec() });
-        assert_eq!(read_boot("POLY-EXIT: pid=2 code=7\n").exit, Some(7));
-        assert!(!read_boot("").started);
     }
 }

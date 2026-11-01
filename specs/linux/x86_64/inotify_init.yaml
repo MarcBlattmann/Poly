@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/inotify_init         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; /tmp on overlayfs; tests run as root with every capability and again as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  inotify_init() (syscall 253, no arguments) is inotify_init1(0): it
+  creates a new inotify instance and returns the lowest free descriptor,
+  open O_RDONLY, blocking (no O_NONBLOCK), without FD_CLOEXEC, st_mode
+  0600 with no type bits, link "anon_inode:inotify". Everything about
+  reading the instance (event layout, EINVAL for a too small buffer,
+  FIONREAD, poll) is as described for inotify_init1. A read on an empty
+  queue sleeps until an event is queued (e.g. another process creates a
+  file in a watched directory) and then returns it. Each call makes an
+  independent instance: watch descriptors are numbered from 1 per
+  instance, and an event on an object watched by several instances is
+  queued in each. dup'd descriptors and a fork child share the instance
+  and its single queue.
+returns:
+  success: "the new descriptor (lowest free number)"
+  state: "F_GETFL O_RDONLY, F_GETFD 0, st_mode 0600, link anon_inode:inotify"
+  blocking_read: "sleeps on an empty queue; returns the event once one is queued by another process"
+  independent: "two instances watching the same directory each get the event; wd numbering starts at 1 in each"
+  shared_queue: "reading through a dup'd descriptor, or in a fork child, removes the event for all holders of that instance"
+errors:
+  no_descriptor: "EMFILE (24): no free descriptor below RLIMIT_NOFILE (also when the user's inotify instance limit is reached; not tested)"
+  no_memory: "ENOMEM / ENFILE: not tested"
+side_effects: "a new instance and descriptor"
+threading: "a blocked reader is woken by an event caused by any process"
+ordering: []
+timing:
+  typical: "microseconds per call; a blocked read returns within milliseconds of the event"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: a blocked read is woken by another task creating a file in the
+# watched directory; tests with several tasks compare output only
+# (poly-diff: syscalls=off). EMFILE for inotify_init is also checked by
+# inotify_init1's tests. All tests pass as root and as an unprivileged
+# user.

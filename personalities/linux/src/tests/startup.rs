@@ -26,8 +26,6 @@ enum Expect {
     Errno(Errno),
     /// Handled, any non-error value (an address the kernel picks).
     Any,
-    /// Not implemented: `-ENOSYS`.
-    Enosys,
 }
 
 /// Runs steps and keeps the names of the calls made, for the final check.
@@ -46,10 +44,6 @@ impl Script {
         self.calls.push(name);
         let (outcome, rax) = call(&mut self.k, number, args);
         match expect {
-            Expect::Enosys => {
-                assert_eq!(outcome, Outcome::Unimplemented { table: "linux", number }, "{name}");
-                assert_eq!(Errno::from_rax(rax), Some(Errno::ENOSYS), "{name}");
-            }
             Expect::Value(v) => {
                 assert_eq!(outcome, Outcome::Handled, "{name}");
                 assert_eq!(rax, v, "{name}: got {:?}", Errno::from_rax(rax));
@@ -106,7 +100,8 @@ fn glibc_static_hello(stdout: Kind) -> Script {
     s.step(nr::ARCH_PRCTL, &[op::ARCH_SET_FS as u64, b + 0x380], Expect::Value(0));
     s.step(nr::SET_TID_ADDRESS, &[b + 0x650], Expect::Value(100));
     s.step(nr::SET_ROBUST_LIST, &[b + 0x660, 24], Expect::Value(0));
-    s.step(nr::RSEQ, &[b + 0xca0, 0x20, 0, 0x5305_3053], Expect::Enosys);
+    s.step(nr::RSEQ, &[b + 0xca0, 0x20, 0, 0x5305_3053], Expect::Value(0));
+    assert_eq!(s.k.peek_u32(b + 0xca4), s.k.on_cpu, "rseq's cpu_id");
     s.step(nr::PRLIMIT64, &[0, 3, 0, STACK], Expect::Value(0));
     assert_eq!(s.k.peek(STACK, 16), crate::rlimit::DEFAULT_STACK.to_bytes(), "the stack limit");
     // Without file system services (the fake has none here) readlinkat
@@ -235,7 +230,7 @@ fn rust_std_musl_static_hello_world() {
 }
 
 /// The calls the traced programs made that Poly does not implement yet:
-/// the work list after this milestone.
+/// none since rseq(2) (ADR 0111).
 #[test]
 fn traced_calls_still_missing() {
     let mut missing: Vec<&str> = Vec::new();
@@ -273,5 +268,5 @@ fn traced_calls_still_missing() {
             missing.push(call);
         }
     }
-    assert_eq!(missing, ["rseq"]);
+    assert!(missing.is_empty(), "not implemented: {missing:?}");
 }

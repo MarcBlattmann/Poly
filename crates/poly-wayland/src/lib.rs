@@ -24,7 +24,7 @@
 //! - [`compose`]: the scene of windows and the renderer: damage tracking,
 //!   HiDPI scaling, premultiplied alpha, Poly's neutral window frame, behind
 //!   the [`compose::Framebuffer`] trait.
-//! - [`seat`]: what the input stack will plug into.
+//! - [`seat`]: what the input stack plugs into; `server` routes it to clients.
 //!
 //! `no_std` with `alloc`: nothing here needs an operating system, so all of
 //! it is tested on the host, and the kernel could use it.

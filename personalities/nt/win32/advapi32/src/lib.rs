@@ -332,8 +332,13 @@ pub unsafe extern "system" fn LookupPrivilegeValueW(_system: *const u16, name: *
     }
     match token::privilege_value(name) {
         Some(v) => {
-            // SAFETY: checked non-null (`LUID`: LowPart, HighPart = 0).
-            unsafe { luid.write(u64::from(v)) };
+            // SAFETY: checked non-null (`LUID`: LowPart, HighPart = 0);
+            // ADR 0114: a success leaves the last error `ERROR_SUCCESS`
+            // (ADR 0110's trace of Windows; Learn is silent).
+            unsafe {
+                luid.write(u64::from(v));
+                SetLastError(0);
+            }
             TRUE
         }
         None => fail(ERROR_NO_SUCH_PRIVILEGE),

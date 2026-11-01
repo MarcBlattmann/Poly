@@ -51,6 +51,15 @@ pub fn cached_fs_of(fs: &Arc<dyn FileSystem>) -> Option<Arc<CachedDiskFs>> {
     MEMORY_FS.lock().iter().filter_map(Weak::upgrade).find(|m| Arc::as_ptr(m) as *const () == want)
 }
 
+/// The memory file system memfd_create(2)'s files live on (ADR 0111): a
+/// tmpfs behind the page cache, like `/dev/shm`, mounted where no path
+/// reaches it; made at the first call.
+pub fn memfd_mount() -> Arc<poly_vfs::Mount> {
+    static MOUNT: SpinLock<Option<Arc<poly_vfs::Mount>>> = SpinLock::new(None);
+    let mut m = MOUNT.lock();
+    m.get_or_insert_with(|| super::vfs().detached_mount(cached(new_tmpfs(super::clock())))).clone()
+}
+
 /// Write the dirty pages of every memory file system back into its tmpfs.
 pub fn writeback_pass() {
     let all: Vec<Arc<CachedDiskFs>> = MEMORY_FS.lock().iter().filter_map(Weak::upgrade).collect();

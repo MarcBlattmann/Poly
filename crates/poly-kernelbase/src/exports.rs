@@ -103,6 +103,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("LoadLibraryW", "api-ms-win-core-libraryloader-l1-2-0"),
     ("GetProcAddress", "api-ms-win-core-libraryloader-l1-1-0"),
     ("FreeLibrary", "api-ms-win-core-libraryloader-l1-1-0"),
+    // ADR 0114: 7-Zip asks for it with `GetProcAddress`.
+    ("SetDefaultDllDirectories", "api-ms-win-core-libraryloader-l1-1-0"),
     // Memory (memoryapi.h, heapapi.h, winbase.h).
     ("VirtualAlloc", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualFree", "api-ms-win-core-memory-l1-1-0"),
@@ -320,6 +322,10 @@ pub const KERNEL32_OWN: &[&str] = &[
     // ADR 0089: `kernelbase` exports no `GetStartupInfoA` (the coverage
     // map's export lists), so `kernel32` converts `GetStartupInfoW`'s.
     "GetStartupInfoA",
+    // ADR 0114: 7-Zip asks for them with `GetProcAddress`; their pages
+    // (winbase.h) name no API set.
+    "GetActiveProcessorGroupCount",
+    "GetActiveProcessorCount",
 ];
 
 /// Every function `kernelbase.dll` must export: each one `kernel32` or

@@ -1,0 +1,71 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/memfd_create         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2, 32 CPUs; tests run as root with every capability and again as uid/gid 65534 without capabilities; umask 022; sysctl vm.memfd_noexec = 0"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  memfd_create(name, flags) (syscall 319) makes a new anonymous regular
+  file that lives only in memory (shared memory, like a file on tmpfs
+  that has no directory entry) and returns the lowest free descriptor
+  for it. The descriptor is open O_RDWR | O_LARGEFILE (F_GETFL 0100002)
+  with FD_CLOEXEC only when MFD_CLOEXEC is given. The file is empty
+  (size 0, st_blocks 0), st_nlink 0, owned by the caller's euid/egid,
+  st_blksize 4096, mode S_IFREG | 0777 regardless of the umask (0666
+  with MFD_NOEXEC_SEAL). It behaves like any regular file: read, write,
+  pread/pwrite, lseek, ftruncate (grow: zero-filled hole; shrink),
+  fchmod, fstat, mmap MAP_SHARED (all mappings and read/write see the
+  same bytes, also across fork and dup) and MAP_PRIVATE. It is freed when
+  the last descriptor and the last mapping are gone. name only labels
+  the file: /proc/self/fd/<fd> reads "/memfd:<name> (deleted)"; several
+  files may have the same name. flags: MFD_CLOEXEC 0x1, MFD_ALLOW_SEALING
+  0x2, MFD_HUGETLB 0x4 (with an optional huge page size in bits 26..31),
+  MFD_NOEXEC_SEAL 0x8, MFD_EXEC 0x10.
+returns:
+  success: "the new descriptor (lowest free number)"
+  open_flags: "F_GETFL = O_RDWR | O_LARGEFILE; F_GETFD = FD_CLOEXEC with MFD_CLOEXEC, else 0"
+  stat: "S_IFREG | 0777 (umask ignored; MFD_NOEXEC_SEAL: 0666), st_size 0, st_blocks 0, st_nlink 0, st_uid/st_gid = caller's euid/egid, st_blksize 4096, a new st_ino per call"
+  link: "readlink /proc/self/fd/N = \"/memfd:\" + name + \" (deleted)\" (the empty name gives \"/memfd: (deleted)\"; a 249-byte name gives a 266-byte link)"
+  name_rules: "0..249 bytes before the NUL; any bytes allowed, also '/' and spaces; the same name may be used again (independent file)"
+  flags_accepted: "any combination of MFD_CLOEXEC, MFD_ALLOW_SEALING, MFD_HUGETLB, MFD_NOEXEC_SEAL, MFD_EXEC except MFD_EXEC together with MFD_NOEXEC_SEAL; flags is 32 bits: bits 32..63 are ignored (flags (1<<32)|MFD_CLOEXEC is MFD_CLOEXEC)"
+  seals_default: "without MFD_ALLOW_SEALING (and without MFD_NOEXEC_SEAL) the file starts with F_SEAL_SEAL: fcntl F_GET_SEALS = 1 and F_ADD_SEALS is EPERM"
+  seals_allowed: "with MFD_ALLOW_SEALING the seals start at 0 and fcntl F_ADD_SEALS works (fcntl behaviour, listed because programs use memfd for it): F_SEAL_SHRINK (2) makes shrinking ftruncate EPERM (growing and same size work); F_SEAL_GROW (4) makes growing ftruncate and writes past the end EPERM (writes inside work); F_SEAL_WRITE (8) makes write/pwrite EPERM and a new PROT_WRITE MAP_SHARED mapping EPERM (PROT_READ shared and MAP_PRIVATE writable mappings work, ftruncate within the other seals works), and adding it while a writable shared mapping exists is EBUSY (seals unchanged); F_SEAL_FUTURE_WRITE (0x10) makes write EPERM; F_SEAL_SEAL (1) forbids adding any seal later (EPERM, also for seals already set); F_GET_SEALS is the union; unknown seal bits (0x40) EINVAL"
+  noexec_seal: "MFD_NOEXEC_SEAL: mode 0666, seals = F_SEAL_EXEC (0x20), sealing allowed (more seals can be added); fchmod that would set any x bit (0777, 0766, 0667) is EPERM (mode unchanged), fchmod 0600 works"
+  exec: "MFD_EXEC: mode 0777, seals F_SEAL_SEAL unless MFD_ALLOW_SEALING too (then 0); after F_SEAL_EXEC is added to a 0777 file, fchmod changing any x bit is EPERM (0666 refused), keeping them works (0777, 0555)"
+  hugetlb: "MFD_HUGETLB alone or with size field 21 (2 MiB) works here (a hugetlbfs file: st_blksize 2097152, F_GET_SEALS 1, write fails, ftruncate to a huge page multiple works); with a size the machine does not support (field 1) ENODEV; not tested (depends on the machine's huge page configuration)"
+errors:
+  bad_flags: "EINVAL (22): any bit outside 0x1f in the low 32 bits (0x20, 0x40, 0x100, 0x10000, 0x80000000), a huge page size (bits 26..31) without MFD_HUGETLB, or MFD_EXEC | MFD_NOEXEC_SEAL; checked first (NULL name with bad flags is EINVAL)"
+  bad_name: "EFAULT (14): name unreadable before its terminator (NULL, a low address, a string running into an unmapped page within its first 250 bytes)"
+  long_name: "EINVAL (22): name of 250 bytes or more (also when the bytes after the 250th are unreadable)"
+  no_descriptor: "EMFILE (24): no free descriptor below RLIMIT_NOFILE; reported after the flags and name checks (bad flags or a long name still EINVAL, NULL name still EFAULT when the table is full)"
+  hugetlb_size: "ENODEV (19): MFD_HUGETLB with a huge page size the system does not have; not tested"
+  no_memory: "ENOMEM / ENFILE: out of memory or system file limit; not tested"
+  order: "flags (EINVAL), then name (EFAULT / EINVAL for length), then descriptor allocation (EMFILE)"
+side_effects: >
+  A new file and descriptor; nothing else. The umask is not applied.
+  vm.memfd_noexec (0 here) changes the defaults (1: as if MFD_NOEXEC_SEAL
+  when neither MFD_EXEC nor MFD_NOEXEC_SEAL is given; 2: MFD_EXEC
+  refused); only 0 was observed. The kernel may log a warning when
+  neither MFD_EXEC nor MFD_NOEXEC_SEAL is given (not visible to the
+  program).
+threading: >
+  The file is shared by every descriptor and mapping that refers to it:
+  dup'd descriptors share the offset; a fork child's descriptor and
+  MAP_SHARED mapping refer to the same file (writes through either are
+  seen by the parent).
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 5  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: constants from linux/memfd.h (MFD_*), linux/fcntl.h (F_ADD_SEALS
+# 1033, F_GET_SEALS 1034, F_SEAL_*), asm-generic/fcntl.h (O_*). The tests
+# use only raw syscalls; every test passes as root and as an unprivileged
+# user. MFD_HUGETLB observation: on this machine memfd_create("h",
+# MFD_HUGETLB) succeeded, fstat st_blksize 2097152, a 1-byte write
+# failed and ftruncate to 2 MiB worked; huge pages are machine
+# configuration, so no test depends on it.

@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/set_robust_list      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  set_robust_list(head, len) (syscall 273) records head as the calling
+  thread's robust futex list and returns 0. len must be exactly 24,
+  sizeof(struct robust_list_head) on x86-64 (len is a full 64-bit value:
+  24 with bit 32 set is EINVAL). head is not looked at by the call: NULL,
+  small numbers, unmapped and non-canonical addresses are all accepted
+  and read back by get_robust_list. A new program starts with head NULL.
+  The list is used when the thread exits (exit, exit_group, a fatal
+  signal; for a thread or a whole process): struct robust_list_head is
+  {struct robust_list *next (the list, circular: it ends when an entry's
+  next points back to the head); long futex_offset; struct robust_list
+  *list_op_pending}; each entry is a struct robust_list {next} and its
+  32-bit lock word is at entry address + futex_offset. For every entry,
+  and for list_op_pending, whose lock word's owner bits (FUTEX_TID_MASK
+  0x3fffffff) equal the exiting thread's id, the kernel replaces the
+  word with FUTEX_OWNER_DIED (0x40000000), plus FUTEX_WAITERS
+  (0x80000000) if that bit was set (the owner id is cleared), and wakes
+  one waiter if FUTEX_WAITERS was set. Words with another owner and
+  words not on the list are left alone. After processing, the thread's
+  head reads NULL. The head is per thread: tasks made with CLONE_VM and
+  fork children start with NULL.
+returns:
+  success: "0"
+  readback: "get_robust_list(0) returns the head set and len 24; a failed set leaves the old head"
+  initial: "NULL head (and len 24) at program start"
+  on_exit: "owned lock word -> 0x40000000; owned word with FUTEX_WAITERS -> 0xc0000000; list_op_pending entry handled the same; others untouched; head NULL afterwards (a zombie's head reads NULL)"
+  inheritance: "CLONE_VM task: NULL; fork child: NULL; setting it in one task does not change another"
+errors:
+  bad_len: "EINVAL (22): len != 24 (0, 23, 25, 48, (1<<32)|24)"
+  head_never_checked: "no EFAULT: an invalid head only means the list cannot be walked at exit (nothing happens)"
+side_effects: "the thread's robust list head; at thread exit lock words are rewritten as described and waiters woken"
+threading: "per thread; the walk at exit uses the exiting thread's id; lock words in MAP_SHARED memory are rewritten for a process exit too"
+ordering:
+  - "the lock words are rewritten before a parent waiting for the task's end (CLONE_CHILD_CLEARTID word or wait4) sees it ended"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct robust_list / robust_list_head and FUTEX_OWNER_DIED,
+# FUTEX_WAITERS, FUTEX_TID_MASK from linux/futex.h. Waking waiters on
+# FUTEX_WAITERS and the kernel's limit on list length (2048 entries) are
+# not tested. All tests pass as root and as an unprivileged user.

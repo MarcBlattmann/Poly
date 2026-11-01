@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mkdir                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  mkdir(path, mode) is system call 83. It creates a new, empty directory
+  named path and returns 0. It is mkdirat(AT_FDCWD, path, mode) (258):
+  relative paths start at the working directory. The last component is never
+  followed if it is a symbolic link (an existing link of any kind, dangling
+  included, is EEXIST). The new directory's permission bits are
+  mode & 01777 & ~umask, its owner is the caller's effective uid and its group
+  the caller's effective gid, unless the parent is set-group-ID (then the
+  parent's group, and the new directory is set-group-ID too).
+returns:
+  success: "0"
+  mode: "mode & 01777 & ~umask: with umask 022, 0777 gives 0755, 07777 gives 01755 (set-user-ID and set-group-ID in mode are ignored, sticky is kept), 06700 gives 0700, 0 gives 0; with umask 0, 01777 gives 01777; umask 0777 gives 0. File type bits in mode (S_IFREG|0750) and bits above 07777 or in the upper half of the register are ignored: the result is always S_IFDIR"
+  ownership: "st_uid = effective uid, st_gid = effective gid; in a parent with set-group-ID: st_gid = the parent's gid (even if the caller is not in that group) and the new directory gets 02000 added (0700 gives 02700); files created there get the group but not the bit; grandchildren inherit again"
+  links: "the new directory has st_nlink 2; the parent's st_nlink goes up by 1 (regular files do not count)"
+  times: "the new directory's atime, mtime and ctime are the creation time (equal to each other); the parent's mtime and ctime change to the creation time, its atime does not"
+  trailing_slashes: "allowed: mkdir(\"D/new/\") and mkdir(\"D//new///\") create D/new"
+  relative_paths: "relative to the working directory (\"rel\", \"../a/rel2\", \"./rel3\"); intermediate symbolic links to directories are followed (D/link-to-sub/new creates sub/new)"
+  name_lengths: "a 255-byte name can be created; 256 bytes is ENAMETOOLONG"
+errors:
+  exists: "EEXIST (17): the name exists as anything: directory (also with a trailing slash), regular file (also \"D/f/\"), symbolic link to a directory or file, dangling symbolic link (the link is not followed and nothing is created at its target; also \"D/dangling/\"), looping link; a last component \".\" or \"..\" (D/sub/., D/sub/.., \".\"); \"/\" (also a path of 4095 slashes)"
+  missing: "ENOENT (2): a missing directory on the way (D/nope/x, also with a trailing slash), a dangling link on the way (D/dangling/x), the empty path; a parent that was removed (mkdir(\"x\") with a removed working directory is ENOENT, mkdir(\".\") there is EEXIST)"
+  not_a_directory: "ENOTDIR (20): a non-directory (or link to one) followed by more components (D/f/x, D/link-to-file/x)"
+  loop: "ELOOP (40): a looping link on the way (D/loop/x)"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more (also the last); a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): NULL or an unmapped address"
+  permission: "EACCES (13): no write permission on the parent (0555: D/ro/new), or no search permission on a directory on the way (0600: D/nox/new, also D/nox/existing). -wx (0300) on the parent is enough. Root passes both checks"
+  read_only_fs: "EROFS (30): a new name on a read-only mount"
+  order: "(1) the path string: EFAULT, ENAMETOOLONG (4096+), ENOENT (empty); (2) the components before the last, left to right: ENOENT, ENOTDIR, ELOOP, EACCES (search), ENAMETOOLONG (D/nope/<256 bytes> is ENOENT, D/f/<256 bytes> ENOTDIR, D/<256 bytes>/x ENAMETOOLONG); (3) the last name: ENAMETOOLONG if over 255 bytes; EEXIST if it exists, which comes before EROFS (an existing name on a read-only mount is EEXIST, also the mount point itself) and before EACCES for missing write permission (D/ro/existing is EEXIST for a normal user); (4) EROFS; (5) EACCES (write permission on the parent)"
+side_effects: "the parent's mtime/ctime change and its link count goes up by one"
+threading: "no thread-specific behaviour; the working directory and umask are the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none; timestamps are not guaranteed to differ between calls made in quick succession: the tests wait 20 ms before a change whose ctime/mtime they compare"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,5 +1,6 @@
 //! Frames with several users: [`SharedFrame`] (a user frame behind an
-//! `Arc`, freed with its last reference) and [`AnonShared`], the memory
+//! `Arc`, freed with its last reference, or a page of device memory such
+//! as a DRM buffer, which its owner keeps) and [`AnonShared`], the memory
 //! object behind shared anonymous mappings.
 
 use super::super::UserFrame;
@@ -8,17 +9,69 @@ use crate::arch;
 use crate::sync::SpinLock;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use core::any::Any;
 
-/// A user frame that several memories map (after `fork`, or as a page of
-/// shared anonymous memory). Kept in an `Arc`; the frame is freed when the
-/// last one goes, by the [`UserFrame`] inside.
-#[derive(Debug)]
-pub struct SharedFrame(pub(super) UserFrame);
+/// A frame that several memories map (after `fork`, or as a page of
+/// shared memory). Kept in an `Arc`; a user frame is freed when the last
+/// one goes, by the [`UserFrame`] inside. A device frame belongs to the
+/// memory object it is part of, which the frame holds a reference on: it
+/// is never taken over as a memory's own, so a private mapping copies it on
+/// a write.
+pub struct SharedFrame(pub(super) Owner);
+
+/// Who frees a shared frame.
+pub(super) enum Owner {
+    User(UserFrame),
+    /// A page at `phys` of memory that `_memory` keeps allocated (held,
+    /// never read).
+    Device {
+        phys: u64,
+        _memory: Arc<dyn Any + Send + Sync>,
+    },
+}
+
+impl core::fmt::Debug for SharedFrame {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match &self.0 {
+            Owner::User(u) => f.debug_tuple("SharedFrame").field(u).finish(),
+            Owner::Device { phys, .. } => write!(f, "SharedFrame(device {phys:#x})"),
+        }
+    }
+}
 
 impl SharedFrame {
+    /// A user frame, freed with the last reference.
+    pub(super) fn owned(frame: UserFrame) -> SharedFrame {
+        SharedFrame(Owner::User(frame))
+    }
+
+    /// The page at `phys` (page-aligned RAM in the direct map) of device
+    /// memory that `memory` keeps allocated as long as it lives.
+    pub fn device(phys: u64, memory: Arc<dyn Any + Send + Sync>) -> SharedFrame {
+        debug_assert_eq!(phys % PAGE_SIZE, 0);
+        SharedFrame(Owner::Device { phys, _memory: memory })
+    }
+
+    /// Whether this is device memory (never a memory's own frame).
+    pub fn is_device(&self) -> bool {
+        matches!(self.0, Owner::Device { .. })
+    }
+
+    /// The user frame, to take over as a memory's own; a device frame
+    /// back as it is.
+    pub(super) fn into_owned(self) -> Result<UserFrame, SharedFrame> {
+        match self.0 {
+            Owner::User(f) => Ok(f),
+            device => Err(SharedFrame(device)),
+        }
+    }
+
     /// Physical address of the frame.
     pub fn phys(&self) -> u64 {
-        self.0.phys()
+        match &self.0 {
+            Owner::User(f) => f.phys(),
+            Owner::Device { phys, .. } => *phys,
+        }
     }
 
     /// Copy the frame's contents to `out`.
@@ -91,7 +144,7 @@ impl PageSource for AnonShared {
         // Allocated unlocked; if another fault made the page meanwhile,
         // that one wins and this frame is freed.
         let Some(frame) = UserFrame::zeroed() else { return Some(Err(IoError)) };
-        let new = Arc::new(SharedFrame(frame));
+        let new = Arc::new(SharedFrame::owned(frame));
         Some(Ok(Arc::clone(self.pages.lock().entry(page).or_insert(new))))
     }
 }

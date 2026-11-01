@@ -139,6 +139,20 @@ pub enum Hit {
     Border(WindowId),
 }
 
+/// Where new toplevels go ([`Scene::place`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Placement {
+    /// From the work area's top left, each new window a step further.
+    #[default]
+    Cascade,
+    /// The first window centred in the work area, the next ones a step
+    /// down and right of the centre (the shell's choice, ADR 0107).
+    Centered,
+}
+
+/// The software cursor's side, logical (the arrow fits in it).
+pub const CURSOR_SIZE: (i32, i32) = (12, 19);
+
 /// Windows bottom to top on one output.
 #[derive(Debug)]
 pub struct Scene {
@@ -153,6 +167,11 @@ pub struct Scene {
     text: Box<dyn TextRenderer>,
     next_id: u32,
     placed: u32,
+    placement: Placement,
+    /// Logical rows at the top kept free of windows (the shell's ridge).
+    reserved_top: i32,
+    /// The software cursor's hot spot, logical, if it is shown.
+    cursor: Option<(i32, i32)>,
 }
 
 impl Scene {
@@ -173,9 +192,63 @@ impl Scene {
             text,
             next_id: 1,
             placed: 0,
+            placement: Placement::Cascade,
+            reserved_top: 0,
+            cursor: None,
         };
         s.damage_all();
         s
+    }
+
+    pub fn set_placement(&mut self, p: Placement) {
+        self.placement = p;
+    }
+
+    /// Keep the top `rows` logical rows free of new, maximized and dragged
+    /// windows (a shell's strip along the top).
+    pub fn set_reserved_top(&mut self, rows: i32) {
+        self.reserved_top = rows.max(0);
+    }
+
+    pub fn reserved_top(&self) -> i32 {
+        self.reserved_top
+    }
+
+    /// Where windows go, logical: the output less the reserved rows.
+    pub fn work_area(&self) -> Rect {
+        let (w, h) = self.logical_size();
+        let top = self.reserved_top.min(h);
+        Rect::new(0, top, w, h - top)
+    }
+
+    /// The rectangle the cursor covers at (`x`, `y`), logical.
+    fn cursor_rect(x: i32, y: i32) -> Rect {
+        Rect::new(x, y, CURSOR_SIZE.0, CURSOR_SIZE.1)
+    }
+
+    /// Show the software cursor with its hot spot at (`x`, `y`), logical, or
+    /// hide it (`None`).
+    pub fn set_cursor(&mut self, at: Option<(i32, i32)>) {
+        if at == self.cursor {
+            return;
+        }
+        if let Some((x, y)) = self.cursor {
+            self.damage_logical(Self::cursor_rect(x, y));
+        }
+        self.cursor = at;
+        if let Some((x, y)) = at {
+            self.damage_logical(Self::cursor_rect(x, y));
+        }
+    }
+
+    pub fn cursor(&self) -> Option<(i32, i32)> {
+        self.cursor
+    }
+
+    /// Draw titles with `text` from now on (an outline font, ADR 0107).
+    pub fn set_text(&mut self, text: Box<dyn TextRenderer>) {
+        self.text = text;
+        self.damage_all();
     }
 
     pub fn set_theme(&mut self, theme: Theme) {
@@ -413,12 +486,18 @@ impl Scene {
     pub fn place(&mut self, gx: i32, gy: i32, width: i32, height: i32, decorated: bool) -> (i32, i32) {
         const START: i32 = 32;
         const STEP: i32 = 32;
-        let (ow, oh) = self.logical_size();
+        let area = self.work_area();
         let (left, top) = if decorated { (BORDER, TITLE_HEIGHT + BORDER) } else { (0, 0) };
+        // The frame's outer size.
+        let (fw, fh) = (width + 2 * left, height + top + if decorated { BORDER } else { 0 });
+        let origin = match self.placement {
+            Placement::Cascade => (area.x + START, area.y + START),
+            Placement::Centered => (area.x + ((area.width - fw) / 2).max(0), area.y + ((area.height - fh) / 2).max(0)),
+        };
         let mut k = self.placed as i32;
-        let at = |k: i32| (START + STEP * k, START + STEP * k);
+        let at = |k: i32| (origin.0 + STEP * k, origin.1 + STEP * k);
         let (mut fx, mut fy) = at(k);
-        if k > 0 && (fx + width + 2 * left > ow || fy + height + top + BORDER > oh) {
+        if k > 0 && (fx + fw > area.right() || fy + fh > area.bottom()) {
             k = 0;
             (fx, fy) = at(0);
         }
@@ -430,6 +509,18 @@ impl Scene {
     /// drawn (physical). A framebuffer of another size than the output's
     /// gets the whole picture, clipped to the smaller of the two.
     pub fn render(&mut self, fb: &mut dyn Framebuffer) -> Vec<Rect> {
+        self.render_with(fb, None, None)
+    }
+
+    /// [`Scene::render`] with a layer drawn instead of the plain background
+    /// (`below`: a wallpaper, a shell's strip) and one over the windows
+    /// (`above`: a launcher); the cursor goes on top of everything.
+    pub fn render_with(
+        &mut self,
+        fb: &mut dyn Framebuffer,
+        below: Option<&dyn super::Layer>,
+        above: Option<&dyn super::Layer>,
+    ) -> Vec<Rect> {
         if (fb.width(), fb.height()) != (self.width, self.height) {
             self.damage_all();
         }
@@ -437,7 +528,7 @@ impl Scene {
         let damage: Vec<Rect> =
             core::mem::take(&mut self.damage).iter().map(|d| d.intersect(&screen)).filter(|d| !d.is_empty()).collect();
         for r in &damage {
-            super::render::draw(self, fb, *r);
+            super::render::draw(self, fb, *r, below, above);
         }
         if !damage.is_empty() {
             fb.present(&damage);

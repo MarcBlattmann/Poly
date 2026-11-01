@@ -156,6 +156,18 @@ impl NewFd {
     }
 }
 
+/// What a descriptor names for pidfd_send_signal(2) and waitid(2)'s
+/// `P_PIDFD` (pidfd_open(2)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PidFdTarget {
+    /// A pidfd of process (or with `PIDFD_THREAD`, thread) `pid`, a global
+    /// id.
+    PidFd { pid: i32, thread: bool },
+    /// A descriptor of the `/proc/<pid>` directory of process `pid`
+    /// (global), which pidfd_send_signal(2) takes like a pidfd.
+    ProcDir(i32),
+}
+
 /// The kernel's pipes, waits and event files for the calling thread.
 /// Descriptor arguments are not negative unless a method says otherwise;
 /// a descriptor that is not open is `EBADF`.
@@ -216,6 +228,22 @@ pub trait FileIo {
     /// (signalfd(2)), encoded by [`crate::sys::signalfd::siginfo_bytes`].
     fn signalfd(&mut self, fd: i32, mask: SigSet, new: NewFd) -> Result<i32, Errno>;
 
+    /// A pidfd (pidfd_open(2)) for process `pid` (a global id that exists,
+    /// alive or a zombie; `thread`: `PIDFD_THREAD`, a thread id) on the
+    /// lowest free descriptor, open `O_RDWR` (`O_NONBLOCK` with
+    /// `nonblock`), always close-on-exec.
+    fn pidfd_open(&mut self, pid: i32, thread: bool, nonblock: bool) -> Result<i32, Errno> {
+        let _ = (pid, thread, nonblock);
+        Err(Errno::ENOSYS)
+    }
+
+    /// What `fd` names if it is a pidfd or a `/proc/<pid>` directory
+    /// (`None` for any other file; `EBADF` if it is not open).
+    fn pidfd_target(&mut self, fd: i32) -> Result<Option<PidFdTarget>, Errno> {
+        let _ = fd;
+        Ok(None)
+    }
+
     /// Whether `fd` is a file object (a pipe, socket, event counter, timer,
     /// signal or epoll file) rather than a file of a file system.
     fn is_object(&mut self, fd: i32) -> Result<bool, Errno> {
@@ -245,6 +273,38 @@ pub trait FileIo {
     fn set_pipe_size(&mut self, fd: i32, bytes: usize) -> Result<usize, Errno> {
         let _ = (fd, bytes);
         Err(Errno::EINVAL)
+    }
+
+    /// A new inotify instance (inotify(7)) on the lowest free descriptor,
+    /// open read-only. `EMFILE`.
+    fn inotify_init(&mut self, fd: NewFd) -> Result<i32, Errno> {
+        let _ = fd;
+        Err(Errno::ENOSYS)
+    }
+
+    /// Whether `fd` is an inotify instance (`EBADF` if it is not open).
+    fn is_inotify(&mut self, fd: i32) -> Result<bool, Errno> {
+        let _ = fd;
+        Err(Errno::ENOSYS)
+    }
+
+    /// Watch the inode `path` names (relative to the working directory;
+    /// a final symbolic link followed unless `IN_DONT_FOLLOW`) with
+    /// `mask` (checked by the caller) in the inotify instance `fd`;
+    /// returns the watch descriptor. Path errors as for any lookup,
+    /// `EACCES` without read permission on the inode, `ENOTDIR` for
+    /// `IN_ONLYDIR` on anything but a directory, `EEXIST` for
+    /// `IN_MASK_CREATE` on a watched inode.
+    fn inotify_add_watch(&mut self, fd: i32, path: &[u8], mask: u32) -> Result<i32, Errno> {
+        let _ = (fd, path, mask);
+        Err(Errno::ENOSYS)
+    }
+
+    /// Remove watch `wd` of the inotify instance `fd` (`EINVAL` if it has
+    /// no such watch), queueing its `IN_IGNORED`.
+    fn inotify_rm_watch(&mut self, fd: i32, wd: i32) -> Result<(), Errno> {
+        let _ = (fd, wd);
+        Err(Errno::ENOSYS)
     }
 
     /// What the pipe (or FIFO) `fd` is an end of holds and who has it open

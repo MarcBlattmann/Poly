@@ -197,6 +197,9 @@ pub struct FileSource {
     /// The open file it was made from, which knows the file's name
     /// (`/proc/<pid>/maps`).
     file: Option<Arc<poly_vfs::OpenFile>>,
+    /// A writable shared mapping of a memfd counts while its source lives
+    /// (`F_SEAL_WRITE` is `EBUSY` meanwhile, ADR 0111).
+    _writable_map: Option<poly_vfs::memfd::WritableMap>,
 }
 
 impl core::fmt::Debug for FileSource {
@@ -210,12 +213,18 @@ impl FileSource {
     pub fn new(node: NodeRef) -> FileSource {
         let fs = node.mount().fs();
         let cached = disk::cached_fs_of(fs).or_else(|| super::memfs::cached_fs_of(fs));
-        FileSource { node, cached, file: None }
+        FileSource { node, cached, file: None, _writable_map: None }
     }
 
     /// The file `file` is open on.
     pub fn of(file: &Arc<poly_vfs::OpenFile>) -> FileSource {
         FileSource { file: Some(Arc::clone(file)), ..FileSource::new(file.node().clone()) }
+    }
+
+    /// The same source, counting `map` as a writable shared mapping of
+    /// the memfd it maps for as long as it lives.
+    pub fn holding(self, map: Option<poly_vfs::memfd::WritableMap>) -> FileSource {
+        FileSource { _writable_map: map, ..self }
     }
 
     pub fn node(&self) -> &NodeRef {

@@ -948,8 +948,7 @@ them (ADR 0027):
 ```text
 init: running /test-binary (traced)
 POLY-INIT: exec /test-binary
-POLY-SYSCALL: pid=2 tid=2 nr=334 args=0x4b2ca0,0x20,0x0,0x53053053,0x0,0x4a8480 ret=-38
-syscall: pid 2 linux/linux #334 rseq not implemented
+POLY-SYSCALL: pid=2 tid=2 nr=334 args=0x4b2ca0,0x20,0x0,0x53053053,0x0,0x4a8480 ret=0
 POLY-SYSCALL: pid=2 tid=2 nr=1 args=0x1,0x4b33d0,0xd,0x4b31b0,0x1,0x7 ret=13
 POLY-SYSCALL: pid=2 tid=2 nr=231 args=0x0,0xffffffffffffffc0,0xe7,0x4b31b0,0x1,0x7 ret=?
 POLY-EXIT: pid=2 code=0
@@ -1065,8 +1064,8 @@ When a dynamically linked program fails:
 - `poly.test.capture` shows every call the loader makes: `openat` of each
   library it tries (`ret=-2` for the misses), `mmap` of a reservation and
   of each segment over it (`MAP_FIXED`), `mprotect` of the RELRO pages.
-  The only call without a handler should be `rseq` (`ENOSYS` on purpose,
-  ADR 0049); any other "not implemented" line is what to build next.
+  Every call should have a handler (`rseq` too since ADR 0111); a "not
+  implemented" line is what to build next.
 - A crash inside a library: the `killed by signal` line gives `rip`, and
   `run LD_DEBUG=files <program>` prints where the loader put each
   library (`base: 0x00007ffff7cae000` for `libc.so.6`), so `rip` minus
@@ -1455,7 +1454,8 @@ POLY_ROOTDISK_APPEND=poly.strace=python3 cargo xtask root-disk-test   # more ker
 
 `strace:` lines (and the kernel's `syscall:`, `fs:` and `linux:` lines) are
 taken out of each step's output, so a traced run still checks it; the
-trace is in the log. Any `not implemented` line but `rseq` fails the test.
+trace is in the log. Any `not implemented` line fails the test (`rseq`
+was tolerated until ADR 0111 implemented it).
 What earlier failures looked like, and where to look:
 
 - `bash: /usr/bin/python3: Cannot allocate memory` or gcc's `cannot execute

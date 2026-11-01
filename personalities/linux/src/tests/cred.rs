@@ -230,6 +230,34 @@ fn prctl_names() {
 }
 
 #[test]
+fn prctl_dumpable_and_parent_death_signal() {
+    let mut k = FakeKernel::new();
+    let pr = |k: &mut FakeKernel, args: &[u64]| sys(k, nr::PRCTL, args);
+    assert_eq!(pr(&mut k, &[PR_GET_DUMPABLE.into(), 5, 6, 7, 8]), Ok(1), "arguments ignored");
+    for bad in [2, 3, u64::MAX] {
+        assert_eq!(pr(&mut k, &[PR_SET_DUMPABLE.into(), bad]), Err(Errno::EINVAL));
+    }
+    assert_eq!(pr(&mut k, &[PR_SET_DUMPABLE.into(), 0]), Ok(0));
+    assert_eq!(pr(&mut k, &[PR_GET_DUMPABLE.into()]), Ok(0));
+    let tid = k.tid();
+    assert!(!k.me().fork(tid, 300).dumpable, "inherited by fork");
+    k.me().exec(tid);
+    assert_eq!(pr(&mut k, &[PR_GET_DUMPABLE.into()]), Ok(1), "execve sets it again");
+
+    assert_eq!(pr(&mut k, &[PR_GET_PDEATHSIG.into(), P]), Ok(0));
+    assert_eq!(k.peek_u32(P), 0);
+    assert_eq!(pr(&mut k, &[PR_SET_PDEATHSIG.into(), 15]), Ok(0));
+    assert_eq!(pr(&mut k, &[PR_GET_PDEATHSIG.into(), P]), Ok(0));
+    assert_eq!(k.peek_u32(P), 15);
+    assert_eq!(pr(&mut k, &[PR_SET_PDEATHSIG.into(), 65]), Err(Errno::EINVAL));
+    assert_eq!(pr(&mut k, &[PR_SET_PDEATHSIG.into(), u64::MAX]), Err(Errno::EINVAL));
+    assert_eq!(pr(&mut k, &[PR_GET_PDEATHSIG.into(), UNMAPPED]), Err(Errno::EFAULT));
+    assert_eq!(k.me().fork(tid, 300).thread(300).pdeathsig, 0, "not inherited");
+    assert_eq!(pr(&mut k, &[PR_SET_PDEATHSIG.into(), 0]), Ok(0));
+    assert_eq!(k.thread_state().pdeathsig, 0);
+}
+
+#[test]
 fn credentials_are_per_thread() {
     let mut k = root();
     k.add_thread(101);

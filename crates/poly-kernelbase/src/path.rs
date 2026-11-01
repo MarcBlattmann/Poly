@@ -323,6 +323,15 @@ pub fn split_find(pattern: &[u16], base: &Base<'_>) -> Result<(Vec<u16>, Vec<u16
     if mask.is_empty() {
         return Err(ERROR_FILE_NOT_FOUND);
     }
+    // A last component `.` or `..` names a directory, not a pattern: find
+    // that directory in its parent, so its entry carries its own name
+    // (ADR 0110's trace: `FindFirstFileW(".")` reports the current
+    // directory's name on Windows; ADR 0114). A root has no entry.
+    if kind(&dir_part) != Kind::Verbatim && (mask == [DOT] || mask == [DOT, DOT]) {
+        let (full, part) = full_path(pattern, base)?;
+        let Some(at) = part.filter(|&i| i < full.len()) else { return Err(ERROR_FILE_NOT_FOUND) };
+        return Ok((full[..at].to_vec(), full[at..].to_vec()));
+    }
     let dir = if kind(&dir_part) == Kind::Verbatim {
         dir_part
     } else {
@@ -489,6 +498,13 @@ mod tests {
         // A mask keeps its trailing period (only the directory is
         // normalised).
         assert_eq!(f("C:\\d\\*."), Ok(("C:\\d\\".into(), "*.".into())));
+        // `.` and `..` are the directories they name, found in their
+        // parents (ADR 0114).
+        assert_eq!(f("."), Ok(("C:\\Users\\".into(), "poly".into())));
+        assert_eq!(f(".."), Ok(("C:\\".into(), "Users".into())));
+        assert_eq!(f("sub\\."), Ok(("C:\\Users\\poly\\".into(), "sub".into())));
+        assert_eq!(f("C:\\a\\b\\.."), Ok(("C:\\".into(), "a".into())));
+        assert_eq!(f("C:\\."), Err(ERROR_FILE_NOT_FOUND));
     }
 
     #[test]

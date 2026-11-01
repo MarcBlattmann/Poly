@@ -176,6 +176,11 @@ mod tests {
         assert_eq!(compare(b"abc", b"ab"), 1);
         assert_eq!(compare(b"", b""), 0);
         assert_eq!(compare(&[0x80u8], b"a"), 1, "unsigned");
+        // `msvcrt`'s `memcmp` (equal lengths): the sign, not the
+        // difference (ADR 0114).
+        assert_eq!(compare(&[0u8, 0x6a], &[0u8, 0x01]), 1);
+        assert_eq!(compare(&[1u8, 0xff], &[0xa1u8, 0]), -1);
+        assert_eq!(compare(b"same", b"same"), 0);
         assert_eq!(icompare(b"HeLLo", b"hello"), 0);
         assert_eq!(icompare(b"a", b"B"), -1);
         assert_eq!(icompare(b"_", b"A"), -1, "both folded to lower: '_' < 'a'");

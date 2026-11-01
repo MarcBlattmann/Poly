@@ -10,6 +10,7 @@
 //! | `eventfd` | `poly_vfs::eventfd::EventFd` |
 //! | `timerfd_*` | `poly_vfs::timerfd::TimerFd` on [`fs::poll::timers`] |
 //! | `signalfd` | [`SignalFd`](crate::linux::signalfd::SignalFd) |
+//! | `inotify_*` | `poly_vfs::inotify::Inotify` (events from the VFS itself) |
 //!
 //! Waits block with [`ThreadBlocker`] (park / unpark), so the thread's
 //! signal notification, or the end of its process, interrupts them: a
@@ -28,18 +29,19 @@ use alloc::vec::Vec;
 use poly_personality_linux::abi::Timespec;
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::fileio::{
-    EpollEvent, EpollOp, FileIo, ItimerSpec, NewFd, PipeStatus, PipeTransfer, PollFd, WaitTime,
+    EpollEvent, EpollOp, FileIo, ItimerSpec, NewFd, PidFdTarget, PipeStatus, PipeTransfer, PollFd, WaitTime,
 };
 use poly_personality_linux::kernel::{Clock, SigSet};
 use poly_vfs::epoll::{self, Epoll};
 use poly_vfs::eventfd::EventFd;
+use poly_vfs::inotify::{Inotify, WatchKey};
 use poly_vfs::pipe::{PIPE_PAGE, Pipe, PipeEnd, Transfer};
 use poly_vfs::poll::{PollEntry, PollTarget};
 use poly_vfs::timerfd::{TimerClock, TimerFd, TimerSpec};
 use poly_vfs::{FileObject, PollEvents, Timeout};
 
 impl Thread<'_> {
-    fn blocker(&self) -> ThreadBlocker<'_> {
+    pub(in crate::linux) fn blocker(&self) -> ThreadBlocker<'_> {
         ThreadBlocker::new(self.process, Arc::clone(&self.flags))
     }
 
@@ -68,7 +70,14 @@ fn open_object(
     flags: OpenFlags,
     new: NewFd,
 ) -> Result<Arc<OpenFile>, Errno> {
-    let node = fs::vfs().anon_node(kind, 0o600, &files.cred()).map_err(vfs_errno)?;
+    // Event files, timers, epoll sets and signal files (`Regular` here) are
+    // anonymous inodes without a type, as on Linux.
+    let node = if kind == FileType::Regular {
+        fs::vfs().anon_inode(0o600, &files.cred())
+    } else {
+        fs::vfs().anon_node(kind, 0o600, &files.cred())
+    }
+    .map_err(vfs_errno)?;
     let flags = if new.nonblock { flags | OpenFlags::NONBLOCK } else { flags };
     Ok(Arc::new(OpenFile::on_object(node, object, flags)))
 }
@@ -249,6 +258,14 @@ impl FileIo for Thread<'_> {
         self.install_object(Arc::new(SignalFd::new(mask)), FileType::Regular, OpenFlags::RDWR, new)
     }
 
+    fn pidfd_open(&mut self, pid: i32, thread: bool, nonblock: bool) -> Result<i32, Errno> {
+        crate::linux::pidfd::install(&self.process.files, pid, thread, nonblock)
+    }
+
+    fn pidfd_target(&mut self, fd: i32) -> Result<Option<PidFdTarget>, Errno> {
+        crate::linux::pidfd::target(&self.process.files, fd)
+    }
+
     fn is_object(&mut self, fd: i32) -> Result<bool, Errno> {
         Ok(self.file(fd)?.object().is_some())
     }
@@ -292,5 +309,30 @@ impl FileIo for Thread<'_> {
     fn pipe_peek(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
         let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
         Ok(end.pipe().peek(buf))
+    }
+
+    fn inotify_init(&mut self, new: NewFd) -> Result<i32, Errno> {
+        self.install_object(Inotify::new(), FileType::Regular, OpenFlags::RDONLY, new)
+    }
+
+    fn is_inotify(&mut self, fd: i32) -> Result<bool, Errno> {
+        Ok(self.file(fd)?.object_as::<Inotify>().is_some())
+    }
+
+    fn inotify_add_watch(&mut self, fd: i32, path: &[u8], mask: u32) -> Result<i32, Errno> {
+        use poly_personality_linux::sys::inotify::mask::{IN_DONT_FOLLOW, IN_ONLYDIR};
+        let instance = self.file(fd)?.object_as::<Inotify>().ok_or(Errno::EINVAL)?;
+        let files = &self.process.files;
+        let node = files.lookupat(fs::AT_FDCWD, path, mask & IN_DONT_FOLLOW == 0).map_err(vfs_errno)?;
+        node.access(&files.cred(), poly_vfs::Access::READ).map_err(vfs_errno)?;
+        if mask & IN_ONLYDIR != 0 && node.kind().map_err(vfs_errno)? != FileType::Directory {
+            return Err(Errno::ENOTDIR);
+        }
+        instance.add_watch(WatchKey::of_node(&node), mask).map_err(vfs_errno)
+    }
+
+    fn inotify_rm_watch(&mut self, fd: i32, wd: i32) -> Result<(), Errno> {
+        let instance = self.file(fd)?.object_as::<Inotify>().ok_or(Errno::EINVAL)?;
+        instance.rm_watch(wd).map_err(vfs_errno)
     }
 }

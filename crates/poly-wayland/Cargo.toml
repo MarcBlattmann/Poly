@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 poly-gfx.workspace = true
+poly-input.workspace = true
 
 [lints]
 workspace = true

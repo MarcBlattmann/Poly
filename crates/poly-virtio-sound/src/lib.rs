@@ -18,8 +18,15 @@
 //!
 //! # Queues (§5.14.2)
 //!
-//! 0 control, 1 event, 2 tx (output), 3 rx (input). All four are set up;
-//! the receive queue stays empty (capture is not done yet).
+//! 0 control, 1 event, 2 tx (output), 3 rx (input). All four are set up.
+//!
+//! # Input messages (§5.14.6.8)
+//!
+//! Capture runs the other way round: each message is the header
+//! (device-readable), a data buffer in the PCM memory and the status (both
+//! device-writable). The device returns it once it filled the buffer with
+//! captured frames ([`VirtioSound::submit_rx`], [`VirtioSound::poll_rx`]);
+//! ADR 0109 has the capture design.
 //!
 //! # Output messages (§5.14.6.8)
 //!
@@ -41,8 +48,8 @@ pub mod ring;
 pub mod stream;
 
 pub use driver::{
-    CONTROL_MIN, CONTROL_REQUEST_MAX, CtlError, DRIVER_FEATURES, DmaRegion, InitError, Memory, Setup, Stats, Storage,
-    TX_DESCRIPTORS, TX_SLOT_LEN, TxDone, TxError, VirtioSound, init,
+    CONTROL_MIN, CONTROL_REQUEST_MAX, CtlError, DRIVER_FEATURES, DmaRegion, InitError, Memory, RX_DESCRIPTORS,
+    RX_SLOT_LEN, RxDone, Setup, Stats, Storage, TX_DESCRIPTORS, TX_SLOT_LEN, TxDone, TxError, VirtioSound, init,
 };
 
 /// Virtqueue numbers (§5.14.2).

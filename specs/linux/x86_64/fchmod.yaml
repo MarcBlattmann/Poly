@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fchmod               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  fchmod(fd, mode) is system call 91. It sets the 12 permission bits (07777)
+  of the file open on fd, exactly like chmod (90) does for a path, and
+  returns 0. The descriptor may be open for reading, writing or both, or be
+  a directory opened O_RDONLY|O_DIRECTORY; its access mode does not matter
+  and it grants nothing: the same ownership rules as chmod apply. An O_PATH
+  descriptor is not accepted.
+returns:
+  success: "0; fstat (and stat by any name) shows the old type bits | (mode & 07777)"
+  mode_argument: "the umask does not apply; file type bits and bits above 07777 are ignored (S_IFDIR|0640 on a regular file gives a regular 0640 file)"
+  access_mode_irrelevant: "O_RDONLY, O_WRONLY, O_RDWR and directory descriptors all work; the descriptor stays usable after the mode becomes 0 (writes still succeed) and fchmod through it still works for the owner"
+  unlinked_file: "a file whose last name was removed (st_nlink 0) can still be changed through the descriptor"
+  owner_and_root: "as chmod: only the owner or CAP_FOWNER; set-group-ID dropped silently (0 returned, 02750 gives 0750) unless the caller is in the file's group or has CAP_FSETID; a descriptor opened by root before the process became uid 1000 does not make 1000 the owner (EPERM)"
+  pipes_and_sockets: "a pipe (created 0600, both ends one inode, S_IFIFO) takes the new mode, seen through both ends, and keeps working; an AF_UNIX socket (S_IFSOCK|0777) and a memfd (S_IFREG|0777) take the new mode"
+  anonymous_inodes: "an eventfd (st_mode 0600 with no type bits) answers EOPNOTSUPP (95) and keeps its mode"
+  devices: "/dev/null belongs to root: root may fchmod it (0666 again gives 0), a normal user gets EPERM"
+errors:
+  bad_fd: "EBADF (9): -1, AT_FDCWD (-100), a number never opened, a closed descriptor, and an O_PATH descriptor (the mode stays)"
+  not_owner: "EPERM (1): neither owner nor CAP_FOWNER, whatever the descriptor's access mode"
+  read_only_fs: "EROFS (30): a descriptor on a file of a read-only mount (also opened before the remount), for root and before the ownership check"
+  not_supported: "EOPNOTSUPP (95): anonymous inodes such as eventfd"
+  order: "EBADF first; then EROFS; then EPERM"
+side_effects: "ctime changes; mtime (seconds and nanoseconds), atime, size and contents do not"
+threading: "no thread-specific behaviour; the descriptor table is shared by the threads of a process"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

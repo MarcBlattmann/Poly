@@ -70,7 +70,11 @@ impl NodeRef {
     }
 
     pub fn stat(&self) -> Result<Stat> {
-        Ok(Stat::new(self.loc.mount.dev(), &self.attr()?))
+        let mut st = Stat::new(self.loc.mount.dev(), &self.attr()?);
+        if self.loc.mount.sb.fs.typeless(self.loc.ino) {
+            st.mode &= !crate::S_IFMT;
+        }
+        Ok(st)
     }
 
     pub fn kind(&self) -> Result<FileType> {
@@ -165,14 +169,21 @@ impl NodeRef {
             }
         }
         // Every successful call, even one that changes no id, clears the
-        // set-id bits below and touches ctime (as on Linux).
+        // set-id bits of a regular file below and touches ctime (the spec
+        // of chown: `mode_bits`; a directory keeps its bits).
         let mut set = SetAttr { uid, gid, ..SetAttr::default() };
-        if attr.kind != FileType::Directory {
+        if attr.kind == FileType::Regular {
             let mut perm = attr.perm & !S_ISUID;
             if perm & S_IXGRP != 0 {
                 perm &= !S_ISGID;
             }
             if perm != attr.perm {
+                // Clearing them is a mode change: a caller who neither
+                // owns the file nor may chown it gets EPERM for -1, -1 on
+                // another user's set-user-ID file (`non_owner_noop`).
+                if !cred.has(cap::CHOWN) && !cred.owns(&attr) {
+                    return Err(Errno::EPERM);
+                }
                 set.perm = Some(perm);
             }
         }
@@ -212,7 +223,9 @@ impl NodeRef {
         self.writable_mount()?;
         cred.check(&attr, Access::WRITE)?;
         self.clear_setid(cred)?;
-        self.truncate_unchecked(size)
+        self.truncate_unchecked(size)?;
+        crate::inotify::self_event(&self.loc, crate::inotify::mask::IN_MODIFY, false);
+        Ok(())
     }
 
     /// What a write or a truncation by `cred` does to the mode: a caller
@@ -250,8 +263,11 @@ impl NodeRef {
         self.loc.mount.sb.fs.truncate(self.loc.ino, size)
     }
 
+    /// Changes attributes; inotify(7): `IN_ATTRIB`.
     fn setattr(&self, set: &SetAttr) -> Result<()> {
-        self.loc.mount.sb.fs.setattr(self.loc.ino, set).map(|_| ())
+        let attr = self.loc.mount.sb.fs.setattr(self.loc.ino, set)?;
+        crate::inotify::self_event(&self.loc, crate::inotify::mask::IN_ATTRIB, attr.kind == FileType::Directory);
+        Ok(())
     }
 
     fn writable_mount(&self) -> Result<()> {
@@ -278,6 +294,9 @@ impl Clone for NodeRef {
 impl Drop for NodeRef {
     fn drop(&mut self) {
         self.loc.mount.sb.fs.release(self.loc.ino);
+        // The last reference to an unlinked inode frees it (inotify(7):
+        // `IN_DELETE_SELF` for its watches).
+        crate::inotify::inode_may_be_gone(&self.loc);
     }
 }
 

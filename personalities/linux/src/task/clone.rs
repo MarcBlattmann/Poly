@@ -19,10 +19,14 @@
 //!   ([`crate::ns::check_clone_flags`]); Poly's namespaces belong to
 //!   processes, so with `CLONE_THREAD` any of them is `EINVAL`;
 //! - cgroup and time namespaces (`CLONE_NEWCGROUP`, `CLONE_NEWTIME`),
-//!   pidfds (`CLONE_PIDFD`), cgroups (`CLONE_INTO_CGROUP`) and `set_tid`
-//!   are not supported: `EINVAL`, as clone(2) documents for a kernel built
-//!   without them;
-//! - `CLONE_DETACHED` is ignored ("this flag is ignored" since 2.6.2);
+//!   cgroups (`CLONE_INTO_CGROUP`) and `set_tid` are not supported:
+//!   `EINVAL`, as clone(2) documents for a kernel built without them;
+//! - `CLONE_PIDFD` stores a pidfd for the child (pidfd_open(2)) at
+//!   clone3's `pidfd`, or at clone(2)'s `parent_tid`, which is why clone(2)
+//!   refuses it with `CLONE_PARENT_SETTID`; with `CLONE_DETACHED` or
+//!   `CLONE_THREAD` it is `EINVAL` (clone(2));
+//! - `CLONE_DETACHED` is ignored by clone(2) ("this flag is ignored" since
+//!   2.6.2) and refused by clone3 (its spec sheet);
 //!   `CLONE_PTRACE`, `CLONE_UNTRACED`, `CLONE_IO` and `CLONE_SYSVSEM` are
 //!   accepted and have no effect yet (no tracing, I/O contexts or System V
 //!   semaphores);
@@ -111,6 +115,8 @@ pub struct CloneRequest {
     pub child_tid: Option<UserPtr>,
     /// `CLONE_CHILD_CLEARTID`.
     pub clear_child_tid: Option<UserPtr>,
+    /// `CLONE_PIDFD`: where the caller gets the child's pidfd (an `int`).
+    pub pidfd: Option<UserPtr>,
 }
 
 impl CloneRequest {
@@ -125,6 +131,7 @@ impl CloneRequest {
             parent_tid: None,
             child_tid: None,
             clear_child_tid: None,
+            pidfd: None,
         }
     }
 
@@ -202,7 +209,10 @@ fn check_flags(flags: u64, caller_pid: i32) -> Result<(), Errno> {
     if has(CLONE_CLEAR_SIGHAND) && has(CLONE_SIGHAND) {
         return Err(Errno::EINVAL);
     }
-    if has(CLONE_NEWCGROUP | CLONE_NEWTIME | CLONE_PIDFD | CLONE_INTO_CGROUP) {
+    if has(CLONE_NEWCGROUP | CLONE_NEWTIME | CLONE_INTO_CGROUP) {
+        return Err(Errno::EINVAL);
+    }
+    if has(CLONE_PIDFD) && has(CLONE_DETACHED | CLONE_THREAD) {
         return Err(Errno::EINVAL);
     }
     if has(CLONE_THREAD) && has(crate::ns::NEW_NAMESPACES) {
@@ -232,10 +242,17 @@ pub fn decode_clone(
     let exit_signal = (flags & CSIGNAL) as u32;
     let flags = flags & !CSIGNAL;
     check_flags(flags, caller_pid)?;
+    // clone(2): "CLONE_PIDFD ... together with CLONE_PARENT_SETTID" is
+    // EINVAL for clone(), which stores the pidfd at parent_tid.
+    if flags & CLONE_PIDFD != 0 && flags & CLONE_PARENT_SETTID != 0 {
+        return Err(Errno::EINVAL);
+    }
     if exit_signal > NSIG {
         return Err(Errno::EINVAL);
     }
-    Ok(request(flags, exit_signal, (stack != 0).then_some(stack), parent_tid, child_tid, tls))
+    let mut r = request(flags, exit_signal, (stack != 0).then_some(stack), parent_tid, child_tid, tls);
+    r.pidfd = (flags & CLONE_PIDFD != 0).then_some(parent_tid);
+    Ok(r)
 }
 
 fn request(flags: u64, exit_signal: u32, stack: Option<u64>, ptid: UserPtr, ctid: UserPtr, tls: u64) -> CloneRequest {
@@ -249,6 +266,7 @@ fn request(flags: u64, exit_signal: u32, stack: Option<u64>, ptid: UserPtr, ctid
         parent_tid: when(CLONE_PARENT_SETTID, ptid),
         child_tid: when(CLONE_CHILD_SETTID, ctid),
         clear_child_tid: when(CLONE_CHILD_CLEARTID, ctid),
+        pidfd: None,
     }
 }
 
@@ -313,6 +331,10 @@ pub fn decode_clone3(args: &CloneArgs, extra_nonzero: bool, caller_pid: i32) -> 
     if args.flags & !CLONE3_KNOWN != 0 || args.flags & CSIGNAL & !CLONE_NEWTIME != 0 {
         return Err(Errno::EINVAL);
     }
+    // clone3 has no use for the ignored CLONE_DETACHED (its spec sheet).
+    if args.flags & CLONE_DETACHED != 0 {
+        return Err(Errno::EINVAL);
+    }
     // clone(2): "exit_signal ... must be a valid signal number" (0 or
     // 1-64); "stack and stack_size ... must both be given or neither".
     if args.exit_signal > u64::from(NSIG) {
@@ -341,6 +363,7 @@ pub fn decode_clone3(args: &CloneArgs, extra_nonzero: bool, caller_pid: i32) -> 
     // clone3 has a separate pidfd field, so CLONE_PARENT_SETTID uses
     // parent_tid alone; both tid pointers are what the structure says.
     r.parent_tid = (args.flags & CLONE_PARENT_SETTID != 0).then_some(UserPtr(args.parent_tid));
+    r.pidfd = (args.flags & CLONE_PIDFD != 0).then_some(UserPtr(args.pidfd));
     Ok(r)
 }
 
@@ -397,7 +420,12 @@ mod tests {
         assert_eq!(p(CLONE_NEWUSER | CLONE_FS), Some(Errno::EINVAL));
         assert_eq!(p(CLONE_NEWIPC | CLONE_SYSVSEM), Some(Errno::EINVAL));
         assert_eq!(p(CLONE_VM | CLONE_SIGHAND | CLONE_THREAD | CLONE_NEWUTS), Some(Errno::EINVAL));
-        assert_eq!(p(CLONE_PIDFD), Some(Errno::EINVAL));
+        assert_eq!(p(CLONE_PIDFD), None);
+        assert_eq!(p(CLONE_PIDFD | CLONE_PARENT_SETTID), Some(Errno::EINVAL));
+        assert_eq!(p(CLONE_PIDFD | CLONE_DETACHED), Some(Errno::EINVAL));
+        assert_eq!(p(CLONE_PIDFD | CLONE_THREAD | CLONE_SIGHAND | CLONE_VM), Some(Errno::EINVAL));
+        let r = decode_clone(CLONE_PIDFD | 17, 0, UserPtr(0x5000), UserPtr(0), 0, 100).unwrap();
+        assert_eq!((r.pidfd, r.parent_tid), (Some(UserPtr(0x5000)), None), "clone() puts the pidfd at parent_tid");
         assert_eq!(p(CLONE_DETACHED | u64::from(SIGCHLD)), None, "CLONE_DETACHED is ignored");
         assert_eq!(p(CLONE_VM | CLONE_SIGHAND), None);
         assert_eq!(decode_clone(CLONE_PARENT, 0, UserPtr(0), UserPtr(0), 0, 1), Err(Errno::EINVAL));
@@ -429,6 +457,17 @@ mod tests {
         assert_eq!(bad(&|b| b.set_tid_size = 1), Some(Errno::EINVAL));
         assert_eq!(bad(&|b| b.flags = CLONE_CLEAR_SIGHAND | CLONE_SIGHAND | CLONE_VM), Some(Errno::EINVAL));
         assert_eq!(bad(&|b| b.flags = CLONE_CLEAR_SIGHAND), None);
+        assert_eq!(bad(&|b| b.flags = CLONE_DETACHED), Some(Errno::EINVAL), "clone3 refuses CLONE_DETACHED");
+        assert_eq!(bad(&|b| b.flags = CLONE_DETACHED | CLONE_PIDFD), Some(Errno::EINVAL));
+        assert_eq!(bad(&|b| b.exit_signal = 0x111), Some(Errno::EINVAL), "bits above the low byte");
+        let pidfd = CloneArgs {
+            flags: CLONE_PIDFD | CLONE_PARENT_SETTID,
+            pidfd: 0x7000,
+            parent_tid: 0x7004,
+            ..CloneArgs::default()
+        };
+        let r = decode_clone3(&pidfd, false, 100).unwrap();
+        assert_eq!((r.pidfd, r.parent_tid), (Some(UserPtr(0x7000)), Some(UserPtr(0x7004))), "clone3 has both fields");
         assert_eq!(check_clone3_size(63), Err(Errno::EINVAL));
         assert_eq!(check_clone3_size(64), Ok(64));
         assert_eq!(check_clone3_size(4097), Err(Errno::E2BIG));

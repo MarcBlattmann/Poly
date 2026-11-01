@@ -1,0 +1,16 @@
+[package]
+name = "poly-shell"
+description = "Poly's desktop shell, first version: the ridge (a slim status strip along the top), a launcher centred on the screen that filters the installed apps (.desktop files and built-ins), a wallpaper, drawn as compositor layers with poly-font"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-font.workspace = true
+poly-gfx.workspace = true
+poly-wayland.workspace = true
+
+[lints]
+workspace = true

@@ -35,7 +35,7 @@
 //! (`poly.init`), then all of them from the shell's `run`, the dynamic
 //! linker as a program (`run /lib64/ld-linux-x86-64.so.2 /bin/dyn-hello`)
 //! and `run LD_DEBUG=libs /bin/dyn-hello`; each must print its line and
-//! exit with status 0, and no system call but `rseq` may be missing.
+//! exit with status 0, and no system call may be missing.
 //! `cargo xtask dynamic-initramfs` writes the image for a boot by hand.
 
 use crate::initramfs::Tree;
@@ -218,14 +218,11 @@ pub fn command() -> super::Result {
     }
 }
 
-/// System calls a dynamically linked glibc program may make that Poly
-/// answers with `ENOSYS` on purpose: `rseq` (ADR 0043, 0049).
-const EXPECTED_ENOSYS: [&str; 1] = [" rseq not implemented"];
-
-/// The first "not implemented" line of a boot's log other than the
-/// expected ones.
+/// The first "not implemented" line of a boot's log: a dynamically
+/// linked glibc program makes no call Poly does not implement (`rseq`,
+/// the last one, since ADR 0111).
 fn unimplemented(output: &str) -> Option<&str> {
-    output.lines().find(|l| l.contains(" not implemented") && !EXPECTED_ENOSYS.iter().any(|e| l.contains(e)))
+    output.lines().find(|l| l.contains(" not implemented"))
 }
 
 /// The boot tests: every program as the first process, then from the

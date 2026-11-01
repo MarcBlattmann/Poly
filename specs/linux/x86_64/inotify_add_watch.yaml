@@ -1,0 +1,75 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/inotify_add_watch    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; /tmp on overlayfs (same results on tmpfs /dev/shm); tests run as root with every capability and again as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  inotify_add_watch(fd, path, mask) (syscall 254) adds a watch for the
+  inode path names (following a final symlink unless IN_DONT_FOLLOW) to
+  inotify instance fd, or changes the existing watch of this instance
+  on that inode, and returns its watch descriptor (wd). wds are per
+  instance: the first is 1 and each new inode gets the next number;
+  numbers of removed watches are not handed out again (the next new
+  watch gets a higher number). The same inode reached by any path (other
+  spelling, "..", hard link, followed symlink) returns the existing wd;
+  its mask is replaced by the new one, or OR'ed into it with IN_MASK_ADD.
+  mask is 32 bits (upper half ignored): event bits IN_ACCESS 0x1,
+  IN_MODIFY 0x2, IN_ATTRIB 0x4, IN_CLOSE_WRITE 0x8, IN_CLOSE_NOWRITE 0x10,
+  IN_OPEN 0x20, IN_MOVED_FROM 0x40, IN_MOVED_TO 0x80, IN_CREATE 0x100,
+  IN_DELETE 0x200, IN_DELETE_SELF 0x400, IN_MOVE_SELF 0x800 (IN_ALL_EVENTS
+  0xfff); bits accepted but never requesting anything: IN_UNMOUNT 0x2000,
+  IN_Q_OVERFLOW 0x4000, IN_IGNORED 0x8000, IN_ISDIR 0x40000000; flags
+  IN_ONLYDIR 0x01000000, IN_DONT_FOLLOW 0x02000000, IN_EXCL_UNLINK
+  0x04000000, IN_MASK_CREATE 0x10000000, IN_MASK_ADD 0x20000000,
+  IN_ONESHOT 0x80000000. Once watched, matching events are queued on the
+  instance (see inotify_init1 for the record layout). For a watched
+  directory, events about entries carry the entry's name (len > 0) and
+  IN_ISDIR when the entry is a directory; events about the watched object
+  itself have no name. IN_IGNORED (wd, no name) is queued whenever a
+  watch goes away (inotify_rm_watch, IN_ONESHOT after its event, the
+  inode deleted). IN_ONESHOT: after the first event the watch is removed.
+returns:
+  success: "the watch descriptor (>= 1)"
+  numbering: "1, 2, ... per instance; same inode -> same wd; after removing wd 4 the next new watch is 5 (even for the same inode)"
+  same_inode: "DIR, DIR/./, DIR/../name, a hard link, a symlink that is followed: all the existing wd; IN_DONT_FOLLOW on a symlink watches the link itself (a new wd)"
+  mask_replace: "adding again replaces the mask (IN_CREATE then IN_DELETE: only deletes reported)"
+  mask_add: "with IN_MASK_ADD the bits are added (both reported)"
+  mask_no_events: "a mask of only IN_IGNORED, IN_ISDIR or IN_UNMOUNT, or only flag bits (IN_ONLYDIR | IN_MASK_ADD), is accepted and makes/keeps a watch that reports nothing"
+  directory_events: "create + open + write twice + close of a file: IN_CREATE, IN_OPEN, IN_MODIFY (merged, see ordering), IN_CLOSE_WRITE, each named; rename inside the directory: IN_MOVED_FROM (old name) then IN_MOVED_TO (new name) with the same non-zero cookie (all other events cookie 0); chmod: IN_ATTRIB; open+read+close read-only: IN_OPEN, IN_ACCESS, IN_CLOSE_NOWRITE; unlink: IN_DELETE; mkdir/rmdir of a subdirectory: IN_CREATE|IN_ISDIR, IN_DELETE|IN_ISDIR; rmdir of the watched directory: IN_DELETE_SELF then IN_IGNORED"
+  file_events: "a watched file: chmod -> IN_ATTRIB, write -> IN_MODIFY, both with len 0"
+  oneshot: "IN_ONESHOT watch: the first matching event, then IN_IGNORED; the wd is gone (inotify_rm_watch EINVAL)"
+errors:
+  bad_mask: "EINVAL (22): no known bit at all in the low 32 bits (0, or only bits above 31), an unknown bit (0x1000, 0x10000, 0x800000), or IN_MASK_ADD together with IN_MASK_CREATE; checked first (before the descriptor and the path: mask 0 with fd 999 or a NULL path is EINVAL)"
+  bad_fd: "EBADF (9): fd not open (999, -1); before the path (NULL path still EBADF)"
+  not_inotify: "EINVAL (22): fd open but not an inotify instance; before the path"
+  bad_path: "EFAULT (14): path unreadable (NULL)"
+  no_entry: "ENOENT (2): empty path, or a component missing"
+  not_dir: "ENOTDIR (20): IN_ONLYDIR and the inode is not a directory (also a symlink with IN_ONLYDIR | IN_DONT_FOLLOW); or a non-directory used as a directory in the path"
+  loop: "ELOOP (40): a symlink loop (a link to itself) that is followed; with IN_DONT_FOLLOW the link itself is watched"
+  long_name: "ENAMETOOLONG (36): a component longer than 255 bytes"
+  access: "EACCES (13): the caller may not read the inode (mode 0200 or 0000 file) or search a directory of the path (mode 0600 directory), unless it has CAP_DAC_OVERRIDE / CAP_DAC_READ_SEARCH (root passes and gets a wd); checked after the mask and descriptor"
+  exists: "EEXIST (17): IN_MASK_CREATE and the inode is already watched by this instance (IN_MASK_CREATE on a new inode works)"
+  no_space: "ENOSPC (28): the user's fs.inotify.max_user_watches is reached; not tested"
+  order: "mask (EINVAL), descriptor (EBADF, then EINVAL for a non-inotify descriptor), path lookup (EFAULT, ENOENT, ENOTDIR, ELOOP, ENAMETOOLONG, EACCES), IN_ONLYDIR (ENOTDIR), IN_MASK_CREATE (EEXIST)"
+side_effects: "a new watch or a changed mask; no event is queued by the call itself"
+threading: "watches belong to the instance, shared by every descriptor of it"
+ordering:
+  - "events are queued in the order of the operations that cause them"
+  - "an event equal to the last one in the queue (same wd, mask, cookie and name) is merged into it: two writes in a row give one IN_MODIFY"
+  - "IN_MOVED_FROM comes right before IN_MOVED_TO of the same rename"
+  - "IN_DELETE_SELF comes before the IN_IGNORED of the same watch"
+timing:
+  typical: "microseconds per call; events are queued before the causing call returns"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: constants and struct inotify_event from linux/inotify.h. Each
+# test uses its own directory /tmp/<test name> and removes it at the end
+# (tests run in parallel, so none watches /tmp itself). Tests whose read
+# data holds a rename cookie compare syscall names only. Permission
+# checks expect EACCES as a normal user and success as root (one check
+# name either way). All tests pass as root and as an unprivileged user.

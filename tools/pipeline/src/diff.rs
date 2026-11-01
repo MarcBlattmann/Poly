@@ -134,9 +134,9 @@ const FD_RESULTS: &[&str] = &[
     "pidfd_open",
 ];
 
-/// Calls app mode leaves out: `rseq`, which Poly answers with `ENOSYS` by
-/// decision (ADR 0043, ADR 0049) and after which a C library behaves the
-/// same either way.
+/// Calls app mode leaves out: `rseq`, which Poly answered with `ENOSYS`
+/// until ADR 0111 (ADR 0043, ADR 0049) and after which a C library behaves
+/// the same either way; still left out so app tests do not depend on it.
 pub const APP_DROPPED_CALLS: &[&str] = &["rseq"];
 
 /// Signals app mode leaves out: `SIGCHLD`, whose place in the parent's
