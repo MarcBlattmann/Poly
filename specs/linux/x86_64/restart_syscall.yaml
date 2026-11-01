@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/restart_syscall      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  restart_syscall() (syscall 219, no arguments; any passed are ignored)
+  continues the last sleeping call of this thread that a signal
+  interrupted and that left something to restart, with the time it had
+  left. The kernel uses it itself: when nanosleep, a relative
+  clock_nanosleep, a classic FUTEX_WAIT with a timeout or poll with a
+  timeout is interrupted by a signal that runs no handler (SIGSTOP then
+  SIGCONT, or a ptrace stop), the call is transparently resumed for the
+  remaining time and the program sees it complete normally (0, 0,
+  ETIMEDOUT, 0) after its full time; nanosleep/clock_nanosleep still
+  write the time left at the interruption to their rem argument. When the
+  signal runs a handler, the interrupted call returns EINTR (4) instead;
+  inside that handler, before it returns, a call to restart_syscall
+  resumes the interrupted relative sleep for its remaining time and
+  returns 0. Returning from the handler (rt_sigreturn) forgets the
+  restart, so afterwards, and in a fresh process, after a completed
+  sleep, after pause, or after an absolute clock_nanosleep
+  (TIMER_ABSTIME, which leaves no restart), restart_syscall returns
+  EINTR.
+returns:
+  nothing_to_restart: "EINTR (4): fresh process, after a sleep completed, after a handler returned (rt_sigreturn), after pause, after an interrupted TIMER_ABSTIME clock_nanosleep, any arguments"
+  in_handler: "inside the handler of the signal that interrupted a nanosleep or relative clock_nanosleep: sleeps for the remaining time and returns 0 (the interrupted call itself still returns EINTR afterwards, with rem as written at the interruption)"
+  in_handler_pause: "inside the handler of a signal that interrupted pause: EINTR at once"
+  transparent: "a sleep interrupted by a stop/continue (no handler) completes as if not interrupted: nanosleep 0, clock_nanosleep 0, FUTEX_WAIT with timeout ETIMEDOUT (110), poll 0, each after at least its full duration"
+errors:
+  eintr: "EINTR (4): nothing to restart (see returns)"
+  order: "no argument checks"
+side_effects: >
+  When it restarts a sleep it behaves like the remainder of that call
+  (sleeping; the original rem pointer is not written again on
+  completion). Otherwise none.
+threading: "per thread: each thread has its own pending restart"
+ordering:
+  - "the interrupted sleep's rem is written at the interruption, before any restart"
+timing:
+  typical: "EINTR in microseconds; a resumed sleep lasts the remaining time"
+  guarantees: "a resumed relative sleep ends no earlier than the original deadline"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: syscall numbers from asm/unistd_64.h; TIMER_ABSTIME 1 from
+# linux/time.h; FUTEX_WAIT 0 from linux/futex.h. ld_restart_syscall_stopcont
+# uses syscalls=off: two processes, and whether a tracer sees the kernel's
+# restart as a separate restart_syscall call is not something a program
+# observes. The other tests' traces include restart_syscall calls made by
+# the program. Every test passes as root and as an unprivileged user.

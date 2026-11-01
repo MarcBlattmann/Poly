@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/kcmp                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1 (CONFIG_KCMP present)"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  kcmp(pid1, pid2, type, idx1, idx2) (syscall 312) tells whether two
+  processes share a kernel resource. type (32 bits): KCMP_FILE 0 (the
+  open file description behind descriptor idx1 of pid1 and idx2 of pid2),
+  KCMP_VM 1 (address space), KCMP_FILES 2 (descriptor table), KCMP_FS 3
+  (root/cwd/umask data), KCMP_SIGHAND 4 (signal handler table), KCMP_IO 5
+  (I/O context), KCMP_SYSVSEM 6 (System V semaphore undo list),
+  KCMP_EPOLL_TFD 7 (idx2 points to struct kcmp_epoll_slot {u32 efd, u32
+  tfd, u32 toff}: the file registered as target tfd (with offset toff
+  among same-numbered registrations) in pid2's epoll descriptor efd,
+  compared with descriptor idx1 of pid1). The result is 0 when both
+  refer to the same object, otherwise 1 or 2: an ordering of the two
+  objects that is consistent (swapping the operands swaps 1 and 2; dup'd
+  descriptors order alike) but not meaningful and not stable between
+  runs (only 0 versus non-zero is portable). Descriptor indexes use only
+  their low 32 bits; idx1/idx2 are ignored for types 1..6. The caller
+  needs ptrace read access (PTRACE_MODE_READ with real credentials) to
+  both processes.
+returns:
+  same: "0: same file description (dup, dup2, inherited copy in a child's table, the same descriptor), same mm (CLONE_VM), same table/fs/handlers (CLONE_FILES/CLONE_FS/CLONE_SIGHAND), any process with itself for every type"
+  different: "1 or 2 (consistent ordering; kcmp(a,b) + kcmp(b,a) = 3): two opens of one file, a child's own table/fs/handlers, a child's newly opened file at the same number"
+  io_sysvsem: "two tasks that have no I/O context / no undo list compare equal (0); observed for a CLONE_VM child, not tested"
+  exited: "a zombie (exited, not reaped) can still be named; KCMP_VM against it is non-zero (its address space is gone); not tested"
+errors:
+  no_process: "ESRCH (3): pid1 or pid2 names no process (0, -1, 0x7fffffff); checked first, before the type and the descriptors"
+  no_access: "EPERM (1): no ptrace read access to pid1 or pid2 (another user's process for a normal user; also Yama restrictions); checked after the lookup and before the type (bad type still EPERM)"
+  bad_type: "EINVAL (22): type outside 0..7 (8, 100, -1)"
+  bad_fd: "EBADF (9): KCMP_FILE or KCMP_EPOLL_TFD with a descriptor idx1 (or idx2 for KCMP_FILE, efd for KCMP_EPOLL_TFD) not open in that process"
+  epoll_not_epoll: "EINVAL (22): KCMP_EPOLL_TFD efd is not an epoll descriptor"
+  epoll_no_target: "ENOENT (2): KCMP_EPOLL_TFD tfd/toff not registered in efd"
+  epoll_fault: "EFAULT (14): KCMP_EPOLL_TFD slot unreadable (NULL, low address)"
+  no_kcmp: "ENOSYS (38): kernels built without CONFIG_KCMP (not this one)"
+  order: "lookup (ESRCH) > access (EPERM) > type (EINVAL) > descriptors (EBADF, EINVAL, ENOENT, EFAULT)"
+side_effects: none
+threading: >
+  Threads of one process share every resource but possibly KCMP_IO/
+  KCMP_SYSVSEM; pids may be thread ids.
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: KCMP_* and struct kcmp_epoll_slot from linux/kcmp.h;
+# EPOLL_CTL_ADD from linux/eventpoll.h; CLONE_* from linux/sched.h. All
+# tests pass pids, so they use syscalls=names. Children are CLONE_VM
+# tasks that wait in a spin loop, so their state is stable while
+# compared, and end one at a time. The EPERM test (needs=root) compares
+# from a child that switched to uid/gid 4242 against its root parent.

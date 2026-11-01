@@ -1,0 +1,68 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/openat2              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs, /proc and /dev/shm separate mounts"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  openat2(dirfd, pathname, how, size) (syscall 437) opens a file like
+  openat, with its parameters in struct open_how {u64 flags; u64 mode;
+  u64 resolve;} (24 bytes, OPEN_HOW_SIZE_VER0) and size the size of the
+  caller's struct. Unlike openat it rejects unknown flags and a mode
+  without O_CREAT/O_TMPFILE (EINVAL), and resolve restricts how the path
+  is resolved: RESOLVE_NO_XDEV 0x01 (no mount point crossings, EXDEV),
+  RESOLVE_NO_MAGICLINKS 0x02 (no /proc/<pid>/fd-style magic links,
+  ELOOP), RESOLVE_NO_SYMLINKS 0x04 (no symlinks at all, ELOOP),
+  RESOLVE_BENEATH 0x08 (stay below dirfd, else EXDEV), RESOLVE_IN_ROOT
+  0x10 (treat dirfd as the root directory), RESOLVE_CACHED 0x20 (only
+  from cached lookup data, else EAGAIN). With resolve 0 and valid flags
+  the result is what openat gives: the lowest free descriptor, F_GETFL
+  with O_LARGEFILE added (not for O_PATH), FD_CLOEXEC from O_CLOEXEC,
+  O_CREAT with mode & ~umask (setuid/setgid/sticky kept), the usual
+  lookup and open errors.
+returns:
+  success: "lowest free descriptor; F_GETFL = flags & (access mode | status flags) | O_LARGEFILE (O_PATH descriptors: O_PATH plus O_DIRECTORY/O_NOFOLLOW as given, no O_LARGEFILE); F_GETFD = FD_CLOEXEC iff O_CLOEXEC"
+  creat: "O_CREAT: new file mode & 07777 & ~umask, owned by euid/egid; O_EXCL on an existing name EEXIST; O_TRUNC truncates"
+  accepted_flags: "every O_* flag the kernel knows; tested: O_RDONLY/O_WRONLY/O_RDWR and access mode 3, O_CREAT, O_EXCL, O_NOCTTY, O_TRUNC, O_APPEND, O_NONBLOCK, FASYNC (020000), O_LARGEFILE, O_DIRECTORY, O_NOFOLLOW, O_CLOEXEC, O_PATH, O_TMPFILE (O_DSYNC, O_DIRECT, O_NOATIME, O_SYNC are known flags too, not tested)"
+  opath: "O_PATH alone or with O_DIRECTORY, O_NOFOLLOW, O_CLOEXEC; O_PATH|O_NOFOLLOW on a symlink gives a descriptor of the link itself"
+  tmpfile: "O_TMPFILE with O_WRONLY or O_RDWR creates an unnamed file in the directory (mode may be 0); F_GETFL shows O_TMPFILE's bits; depends on the file system supporting it, not tested"
+  size_rules: "size < 24: EINVAL; size > 4096 (a page): E2BIG; 24..4096: bytes 24..size-1 must all be zero, else E2BIG (a non-zero byte beyond size is not looked at)"
+  beneath: "RESOLVE_BENEATH: resolution must never leave dirfd's directory (the working directory for AT_FDCWD): absolute pathnames (even to dirfd's own directory), '..' above the start, symlinks with absolute targets (even pointing inside) or climbing out are EXDEV; '..' that stays inside and relative symlinks that stay inside work; a missing component before the escape gives ENOENT ('nope/../..'), the escape itself EXDEV ('../x' even if x does not exist)"
+  in_root: "RESOLVE_IN_ROOT: dirfd's directory is '/' for this lookup: absolute pathnames and absolute symlink targets start there, '..' at it stays there (climbing symlinks are clamped), '/' opens dirfd's directory; O_CREAT of '/c' creates c in dirfd's directory; names outside are unreachable (a symlink to '/tmp' means dirfd's tmp)"
+  no_symlinks: "RESOLVE_NO_SYMLINKS: any symlink in the path or as the last component is ELOOP, also with O_NOFOLLOW (except O_PATH|O_NOFOLLOW on a final symlink, which opens the link); O_CREAT through a dangling symlink ELOOP (resolve 0 creates the target); magic links are refused too"
+  no_magiclinks: "RESOLVE_NO_MAGICLINKS: /proc/self/fd/N (as last or middle component) ELOOP; O_PATH|O_NOFOLLOW opens the magic link itself; ordinary symlinks are fine"
+  no_xdev: "RESOLVE_NO_XDEV: crossing a mount point either way ('/proc/self' from '/', '..' from /proc's root) is EXDEV; paths within one mount (also through symlinks on it) work; observed: an absolute pathname starting from a dirfd on another mount ('/' from a /dev/shm dirfd) is allowed"
+  cached: "RESOLVE_CACHED: with O_CREAT, O_TRUNC or O_TMPFILE always EAGAIN (11); otherwise EAGAIN when the lookup would need the file system, which depends on the cache state (not tested)"
+errors:
+  bad_size: "EINVAL (22): size < 24 (checked first; NULL how with size 0 is EINVAL)"
+  size_too_big: "E2BIG (7): size > 4096 (checked first; NULL how with size 5000 is E2BIG), or a non-zero byte between offset 24 and size"
+  bad_how: "EFAULT (14): how unreadable (size 24..4096)"
+  bad_flags: "EINVAL (22): unknown flag bits (bit 23, bit 31, bits 32..63); O_PATH with anything but O_DIRECTORY/O_NOFOLLOW/O_CLOEXEC (O_RDWR, O_WRONLY, O_NONBLOCK, O_CREAT, O_TRUNC, O_LARGEFILE); O_TMPFILE without write access; O_DIRECTORY|O_CREAT"
+  bad_mode: "EINVAL (22): mode != 0 without O_CREAT or O_TMPFILE; mode with bits outside 07777 (010000, bit 32) with them"
+  bad_resolve: "EINVAL (22): unknown resolve bits (0x40, bit 63); RESOLVE_BENEATH together with RESOLVE_IN_ROOT"
+  cached_create: "EAGAIN (11): RESOLVE_CACHED with O_CREAT, O_TRUNC or O_TMPFILE"
+  bad_path: "EFAULT (14): pathname NULL or unreadable (after the struct checks, before dirfd)"
+  bad_dirfd: "EBADF (9): relative pathname with a closed or negative descriptor other than AT_FDCWD; an absolute pathname ignores dirfd"
+  not_dir: "ENOTDIR (20): dirfd not a directory with a relative pathname; O_DIRECTORY on a non-directory; a file in the directory part"
+  lookup: "ENOENT (2) missing name or empty pathname; EEXIST (17) O_CREAT|O_EXCL on an existing name; EISDIR (21) directory opened for writing; ELOOP (40) O_NOFOLLOW on a final symlink, symlink loops, RESOLVE_NO_SYMLINKS / RESOLVE_NO_MAGICLINKS refusals; EXDEV (18) RESOLVE_BENEATH escapes and RESOLVE_NO_XDEV crossings; EACCES (13), ENAMETOOLONG (36), EMFILE (24) as for openat"
+  order: "size (EINVAL/E2BIG) > read how (EFAULT) > trailing bytes (E2BIG) > flags, mode, resolve validation (EINVAL; EAGAIN for RESOLVE_CACHED with creation flags) > pathname read (EFAULT) > dirfd (EBADF/ENOTDIR) > lookup and open errors"
+side_effects: >
+  As openat: a new descriptor; O_CREAT creates, O_TRUNC truncates. Failed
+  calls change nothing (an invalid mode with O_CREAT creates no file).
+threading: "Descriptor allocation is per process as for openat; not tested with threads."
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: struct open_how, OPEN_HOW_SIZE_VER0 (24) and RESOLVE_* from
+# linux/openat2.h; O_* from asm-generic/fcntl.h; AT_FDCWD from
+# linux/fcntl.h; syscall number 437 from asm/unistd_64.h. The tests use
+# /tmp/ld_openat2_* trees and, for magic links and mount crossings, /proc
+# (a separate proc mount, /proc/self/fd/N). Results with resolve 0 match
+# openat on the same file system; nothing tested depends on the file
+# system type. All pass as root and as an unprivileged user.

@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/chroot               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  chroot(path) (syscall 161) sets the calling process's root directory,
+  the starting point of absolute pathnames and the upper limit of '..',
+  to the directory path names (resolved from the current root and
+  working directory; a final symlink is followed). It needs
+  CAP_SYS_CHROOT (EPERM otherwise, after the path was looked up and the
+  caller's search permission on it checked). It changes nothing else:
+  the working directory stays where it was (possibly outside the new
+  root, where relative paths and '..' still work from it, up to the real
+  root), open descriptors keep their files, and a descriptor of a
+  directory outside the new root can be fchdir'ed into. Afterwards
+  absolute paths and absolute symlink targets resolve inside the new
+  root, '..' at the new root stays there, and names outside are
+  unreachable (ENOENT). getcwd reports a working directory outside the
+  root as "(unreachable)" followed by its path from the real root. The
+  root is per process: children forked afterwards inherit it, the parent
+  is not affected. It cannot be undone except by escaping through a
+  directory outside it (chroot('.') with the working directory outside).
+  Returns 0.
+returns:
+  success: "0; root = the directory (a symlink to a directory is followed); working directory unchanged"
+  after: "absolute paths start at the new root; '/..' and '../../..' from the root stay at it; absolute symlinks resolve inside; outside names ENOENT; getcwd with the working directory at the root '/', in a subdirectory '/sub'"
+  cwd_outside: "if the working directory was outside the new directory (e.g. chroot('/tmp/x') with cwd '/'), it stays there: relative names resolve from it, getcwd gives '(unreachable)' + its real path ('(unreachable)/', '(unreachable)/tmp/x'); chdir('/') moves it into the new root"
+  escape: "with a descriptor of an outside directory: fchdir to it, chdir('../../..') climbs to the real root (the new root only stops '..' that starts at it), chroot('.') restores the real root"
+  repeat: "chroot('.') at the current root and nested chroots (relative paths from the working directory) work; each replaces the root"
+  inheritance: "fork children inherit the root; the parent keeps its own"
+  root_permissions: "root (CAP_DAC_OVERRIDE / CAP_DAC_READ_SEARCH) may chroot to a directory of mode 0000"
+errors:
+  bad_path: "EFAULT (14): path NULL or unreadable"
+  not_found: "ENOENT (2): missing path or directory in it, empty path, dangling symlink"
+  not_dir: "ENOTDIR (20): path (or a symlink's target) is not a directory, a file in the directory part, a trailing slash on a file"
+  loop: "ELOOP (40): symlink loop"
+  name_too_long: "ENAMETOOLONG (36): component over 255 bytes, path of 4096 bytes or more"
+  no_search: "EACCES (13): the caller lacks search (x) permission on the directory itself or on a directory on the way (not for root)"
+  no_cap: "EPERM (1): caller without CAP_SYS_CHROOT, for any directory it may reach and search ('/', '.', its own directories)"
+  other: "EIO, ENOMEM: not tested"
+  order: "path read (EFAULT, ENAMETOOLONG) > lookup (ENOENT, ENOTDIR, ELOOP, EACCES on the way) > search permission on the directory itself (EACCES) > capability (EPERM); so the lookup errors are the same for every caller"
+side_effects: "The calling process's root directory changes; nothing else (no cwd change, no descriptor change). Nothing on error."
+threading: "The root directory is shared by threads that share file system information (CLONE_FS); not tested with threads."
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: syscall number 161 from asm/unistd_64.h; errno values from
+# asm-generic/errno-base.h. Successful chroots run in fork children (a
+# chroot cannot be undone); those tests are needs=root. The error test
+# passes as any user (its errors come before the capability check). The
+# getcwd '(unreachable)' form is getcwd(2) behaviour, checked because it
+# shows where the working directory is.

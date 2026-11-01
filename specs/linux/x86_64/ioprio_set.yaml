@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ioprio_set           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  ioprio_set(which, who, ioprio) (syscall 251) sets the I/O scheduling
+  priority of a thread, of every process in a process group, or of every
+  process of a user, and returns 0. which/who as for ioprio_get
+  (IOPRIO_WHO_PROCESS 1 with 0 = the caller, IOPRIO_WHO_PGRP 2 with 0 =
+  the caller's group, IOPRIO_WHO_USER 3 with who a uid, 0 meaning uid 0).
+  ioprio is a 32-bit int: class = bits 13..15, hint = bits 3..12, level =
+  bits 0..2. Classes: none 0 (level must be 0; stored as 0, meaning
+  "derived from the nice value"), real time 1 (levels 0..7, needs
+  CAP_SYS_ADMIN or CAP_SYS_NICE), best effort 2 and idle 3 (levels 0..7,
+  any user). Classes 4..7 are invalid. Hint bits are accepted with any
+  value for real time, best effort and idle and stored as given; bits
+  16..31 of ioprio are dropped (ioprio_get reads the low 16 bits); the
+  upper half of the 64-bit register is ignored (also for which). The value
+  is stored per thread and inherited by children made by fork or clone;
+  later changes in parent or child do not affect the other. Changing
+  another process needs its real uid to equal the caller's real or
+  effective uid, or CAP_SYS_NICE. A group or user change applies to the
+  matching processes one by one and stops at the first that fails (that
+  error is returned; earlier members keep the new value).
+returns:
+  success: "0; ioprio_get(IOPRIO_WHO_PROCESS, target) then returns the stored 16-bit value"
+  stored: "best effort/idle/real time level l with hint h: class<<13 | h<<3 | l exactly; class none level 0: 0; bit 16 set: dropped (0x14001 reads 0x4001)"
+  inheritance: "fork child and CLONE_VM child start with the parent's value; each later set changes only that task"
+  group: "IOPRIO_WHO_PGRP 0: every member of the caller's group gets the value"
+  user: "IOPRIO_WHO_USER uid: every process whose real uid is uid; who 0 is uid 0 (a non-root caller gets EPERM for root's processes)"
+errors:
+  bad_prio: "EINVAL (22): class 4..7 (also ioprio -1), class none with a non-zero level; checked first, before which and who"
+  rt_without_privilege: "EPERM (1): real-time class without CAP_SYS_ADMIN/CAP_SYS_NICE; checked right after the class/level check, before which and who (an RT request with a bad which or a missing pid is EPERM for a normal user)"
+  bad_which: "EINVAL (22): which not 1, 2 or 3"
+  no_target: "ESRCH (3): no such thread (also -1, 0x7fffffff, a reaped child), group or user with processes"
+  not_owner: "EPERM (1): target process's real uid differs from the caller's real and effective uid and no CAP_SYS_NICE (for a group or user: the first such member; earlier members were already changed)"
+  order: "class/level (EINVAL) > real-time privilege (EPERM) > which (EINVAL) > lookup (ESRCH) > per-target permission (EPERM)"
+side_effects: >
+  Changes only the stored priority of the targets; nothing observable
+  through other calls (the I/O scheduler effect is not part of this
+  spec).
+threading: >
+  Per thread; IOPRIO_WHO_PROCESS 0 changes only the calling thread. A
+  CLONE_VM child is a separate task with its own value.
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/ioprio.h; syscall number from
+# asm/unistd_64.h. The real-time test, the other-owner test and the
+# IOPRIO_WHO_USER test are needs=root (a child switches to uid/gid 4242,
+# a uid with no other process, so IOPRIO_WHO_USER touches only it); no
+# test changes IOPRIO_WHO_USER of root or of the runner's user, which
+# would change processes of the whole machine. Observed but not tested:
+# IOPRIO_WHO_PGRP on a group with processes of another user fails with
+# EPERM after changing the members before it (order of members).

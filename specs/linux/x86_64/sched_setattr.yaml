@@ -1,0 +1,85 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_setattr        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1; RLIMIT_NICE 0, RLIMIT_RTPRIO 0; kernel without utilisation clamping (CONFIG_UCLAMP_TASK off) and without sched_ext; deadline admission control has bandwidth for 10 ms / 100 ms"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  sched_setattr(pid, attr, flags) (syscall 314) sets the scheduling
+  policy and parameters of a thread (pid 0 = the caller) from a struct
+  sched_attr (see sched_getattr) and returns 0. attr->size: 0 means 48;
+  48..56 are read as given; larger sizes up to 4096 are accepted when all
+  bytes after 56 are zero (attr->size left as given); otherwise E2BIG and
+  the kernel writes 56 into attr->size. Policies: SCHED_OTHER 0,
+  SCHED_BATCH 3, SCHED_IDLE 5 (fair; sched_priority must be 0;
+  sched_nice sets the nice value, clamped to -20..19), SCHED_FIFO 1 and
+  SCHED_RR 2 (sched_priority 1..99), SCHED_DEADLINE 6 (sched_runtime,
+  sched_deadline, sched_period in ns; period 0 means equal to the
+  deadline). Any other policy value (4, 7 without a loaded sched_ext
+  scheduler, 8, 0xffffffff, a policy with SCHED_RESET_ON_FORK or-ed in)
+  is EINVAL. sched_flags: SCHED_FLAG_RESET_ON_FORK 1 (fork children of a
+  real-time or deadline task start as SCHED_OTHER nice 0 priority 0;
+  children of a task with negative nice start at nice 0; the flag itself
+  is not inherited), SCHED_FLAG_RECLAIM 2 and SCHED_FLAG_DL_OVERRUN 4
+  (stored for deadline tasks, accepted for others), SCHED_FLAG_KEEP_POLICY
+  8 (the current policy is kept, the other fields applied, priority
+  validated against the kept policy), SCHED_FLAG_KEEP_PARAMS 0x10 (policy,
+  nice and priority are left as they are; only the remaining flags are
+  applied), SCHED_FLAG_UTIL_CLAMP_MIN 0x20 / MAX 0x40 (need size >= 56;
+  EOPNOTSUPP on this kernel, which has no clamping). Flags above 0x7f are
+  EINVAL. For fair policies a non-zero sched_runtime sets a custom time
+  slice, clamped to 100 us .. 100 ms (0 restores the default); deadline
+  and period are ignored for them. Permissions without CAP_SYS_NICE:
+  raising nice is allowed, lowering it is EPERM (RLIMIT_NICE 0); real-time
+  policies EPERM (RLIMIT_RTPRIO 0); SCHED_DEADLINE always EPERM; leaving
+  SCHED_IDLE for another fair policy EPERM; clearing an existing
+  RESET_ON_FORK EPERM; changing another user's task EPERM. flags (the
+  third argument, 32 bits) must be 0.
+returns:
+  success: "0; sched_getattr reads the new values (nice for fair policies, priority for real-time, runtime/deadline/period for deadline)"
+  nice_clamp: "sched_nice 25 or 1000 -> 19; -25 -> -20 (root)"
+  realtime_nice: "a real-time task reads sched_nice 0 (getpriority still reports the stored nice)"
+  deadline_period0: "period read back equals the deadline"
+  slice: "SCHED_OTHER with runtime 5000000 reads 5000000; 50000 reads 100000; 200000000 reads 100000000 (6.12+ behaviour; not tested)"
+  keep_params: "policy, nice, priority unchanged; RESET_ON_FORK in the same call is applied"
+  keep_policy: "policy unchanged; nice from the call applied"
+  reset_child: "fork child of SCHED_FIFO/RR/DEADLINE + RESET_ON_FORK: SCHED_OTHER, nice 0, priority 0, flags 0; of SCHED_BATCH + RESET_ON_FORK at nice >= 0: SCHED_BATCH, same nice, flags 0; of SCHED_RR without the flag: SCHED_RR with the same priority"
+errors:
+  invalid: "EINVAL (22): attr NULL, pid < 0, or flags argument (low 32 bits) not 0; checked first"
+  size: "E2BIG (7): attr->size 1..47, > 4096, or > 56 with a non-zero byte after 56; attr->size is set to 56; checked before the pid lookup"
+  fault: "EFAULT (14): attr unreadable"
+  no_task: "ESRCH (3): no thread with that pid"
+  bad_policy: "EINVAL (22): unknown policy"
+  bad_flags: "EINVAL (22): sched_flags with bits above 0x7f (0x80, 0x100, bit 63); UTIL_CLAMP flags with size < 56"
+  bad_priority: "EINVAL (22): sched_priority not 0 for a fair policy, not 1..99 for FIFO/RR (checked before permissions, so a normal user gets EINVAL for FIFO 0 or 100); with KEEP_POLICY the kept policy's rule applies"
+  bad_deadline: "EINVAL (22): SCHED_DEADLINE with runtime < 1024, deadline 0, deadline > period (period != 0), runtime > deadline, deadline or period with bit 63 set; checked before permissions"
+  uclamp: "EOPNOTSUPP (95): utilisation clamp flags on a kernel without clamping (this one; not tested)"
+  no_permission: "EPERM (1): see the permission rules in the summary; nothing changes"
+  deadline_fork: "fork/clone by a SCHED_DEADLINE task without RESET_ON_FORK fails with EAGAIN (11)"
+  admission: "EBUSY (16): SCHED_DEADLINE parameters beyond the available bandwidth (not observed; not tested)"
+  order: "NULL / pid < 0 / flags (EINVAL) > attr copy (E2BIG, EFAULT) > lookup (ESRCH) > policy/flags/priority/deadline validation (EINVAL) > permission (EPERM) > admission (EBUSY)"
+side_effects: >
+  Changes the target's policy, nice value, real-time priority, deadline
+  parameters, flags or time slice; getpriority, sched_getscheduler,
+  sched_getparam and sched_getattr observe them.
+threading: >
+  Per thread. Changing nice with sched_setattr is the same nice value
+  setpriority(PRIO_PROCESS) changes.
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: struct sched_attr from linux/sched/types.h; SCHED_* and
+# SCHED_FLAG_* from linux/sched.h. Real-time and deadline successes are
+# in a needs=root test; SCHED_DEADLINE success depends on admission
+# control (a container whose cgroup has no deadline bandwidth would get
+# EBUSY/EPERM there). Other tests check privileged-only results by
+# branching on euid (root: success; others: EPERM), each case in a fork
+# child because a normal user cannot undo a raised nice. Custom fair
+# slices (6.12+) and utilisation clamps (configuration) are described but
+# not tested. Tests assume they start as SCHED_OTHER at nice 0.

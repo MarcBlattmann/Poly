@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/process_vm_readv     # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  process_vm_readv(pid, local_iov, liovcnt, remote_iov, riovcnt, flags)
+  (syscall 310) copies bytes from the address space of process pid into
+  the caller's. local_iov and remote_iov are arrays of struct iovec
+  {void *base; size_t len}. The remote ranges are read in order and
+  written into the local ranges in order; the boundaries of the two lists
+  are independent (scatter/gather) and zero-length entries are skipped.
+  The result is the number of bytes copied: the smaller of the two totals
+  when everything was accessible. The copy stops at the first remote byte
+  that is not readable in the target (unmapped, PROT_NONE) or local byte
+  not writable in the caller, and returns the count so far; if that is
+  0, EFAULT. Remote read-only memory can be read. pid may be the caller
+  itself or any process it has ptrace attach access to (PTRACE_MODE_ATTACH
+  with real credentials: same uid and dumpable, or CAP_SYS_PTRACE; Yama
+  may restrict further). flags is reserved and must be 0. When either
+  list is empty (count 0, or only zero-length entries) the result is 0
+  without the pid being looked up.
+returns:
+  success: "bytes copied = min(sum of local lengths, sum of remote lengths) when all accessible"
+  partial: "copy stops at the first inaccessible byte on either side: remote range crossing into an unmapped page after 6 readable bytes -> 6; second remote iovec unmapped after a 50-byte first -> 50; local range crossing into a hole after 6 bytes -> 6; second local iovec unmapped after 4 -> 4"
+  empty: "0 for liovcnt 0, riovcnt 0, or zero-length iovecs (also for a pid with no process)"
+  separate_memory: "from a fork child: the child's copy of the bytes, not the caller's"
+errors:
+  bad_flags: "EINVAL (22): flags not 0; checked first (also with empty lists)"
+  too_many: "EINVAL (22): liovcnt or riovcnt above UIO_MAXIOV (1024)"
+  bad_array: "EFAULT (14): local or remote iovec array unreadable"
+  no_process: "ESRCH (3): pid names no process (0, -1, 0x7fffffff, an exited child: zombie or reaped)"
+  no_access: "EPERM (1): no ptrace attach access (a process of another user for a normal user; init for a normal user)"
+  nothing_copied: "EFAULT (14): the first remote byte unreadable (unmapped, NULL, PROT_NONE) or the first local byte unwritable (unmapped, read-only)"
+  order: "flags (EINVAL) > counts (EINVAL) > iovec arrays (EFAULT) > empty-list shortcut (0) > lookup (ESRCH) > access (EPERM) > copy (count or EFAULT)"
+side_effects: >
+  Writes only the caller's local ranges; the target is not stopped or
+  changed.
+threading: >
+  The target's address space is shared by its threads; any thread id
+  names the process's memory.
+ordering: []
+timing:
+  typical: "microseconds per call plus copy time"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct iovec and UIO_MAXIOV (1024) from linux/uio.h. Observed but
+# not tested: a remote iovec length of 1<<62 or two remote lengths whose
+# sum overflows are accepted (the copy is limited by the local total),
+# while local lengths that overflow are EFAULT. Tests that run a fork
+# child at the same time use syscalls=off; the others pass the caller's
+# pid and use syscalls=names. The EPERM test is needs=root (a child that
+# switched to uid/gid 4242 reads its root parent).

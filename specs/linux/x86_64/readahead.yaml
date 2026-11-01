@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/readahead            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs, /dev/shm on tmpfs"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  readahead(fd, offset, count) (syscall 187) asks the kernel to read the
+  pages of [offset, offset+count) of a file into the page cache, so later
+  reads do not wait. It returns 0 without waiting for the reads, never
+  changes the file offset or data, and reads nothing into the program's
+  memory. offset is a signed 64-bit value (any value accepted, also
+  negative and past the end of the file); count is a size_t: below 2^63
+  any value (also 0) is accepted, 2^63 and above is EINVAL. fd must be
+  open for reading (O_RDONLY or O_RDWR) and refer to a regular file
+  whose pages are cached: files on disk file systems and overlayfs,
+  tmpfs files (/dev/shm) and memfd files all work. Other kinds of
+  descriptor (directories, pipes, FIFOs, sockets, character devices such
+  as /dev/null and /dev/zero) are EINVAL.
+returns:
+  success: "0; the file offset (lseek SEEK_CUR) and contents are unchanged"
+  offset: "any 64-bit value: negative (-1), past the end of the file (1<<30), near the maximum (0x7fffffffffff0000 with count 0x7fffffffffffffff): 0"
+  count: "0 and any count up to 0x7fffffffffffffff: 0; 0x8000000000000000 and above (~0): EINVAL"
+  memory_files: "files in /dev/shm (tmpfs) and memfd files: 0, with the same count rule"
+errors:
+  bad_fd: "EBADF (9): fd not open (closed, -1), opened with O_PATH, or not open for reading (O_WRONLY, a pipe's write end)"
+  not_cacheable: "EINVAL (22): fd open for reading but not a regular file: a directory, a pipe's read end, a FIFO, a socket, /dev/null, /dev/zero"
+  huge_count: "EINVAL (22): count >= 2^63"
+  order: "EBADF (not open, O_PATH, not readable) before EINVAL: O_WRONLY with a huge count is EBADF; a pipe's read end with a huge count is EINVAL"
+side_effects: >
+  May start I/O to fill the page cache; no other effect. File offset,
+  size and data are unchanged (timestamps were not checked).
+threading: "No interaction with other threads; the file offset is not used or changed, so concurrent reads are unaffected."
+ordering: []
+timing:
+  typical: "microseconds for cached or small ranges"
+  guarantees: "returns before or while the reads proceed; no guarantee that the data is cached afterwards"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: errno values from asm-generic/errno-base.h. The same results on
+# /tmp (overlayfs), /dev/shm (tmpfs) and memfd, for root and an
+# unprivileged user. The tests use raw syscalls only and pass as any
+# user.

@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sync_file_range      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs, /dev/shm on tmpfs"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  sync_file_range(fd, offset, nbytes, flags) (syscall 277) starts and/or
+  waits for write-out of the dirty pages of [offset, offset+nbytes) of a
+  file (nbytes 0: from offset to the end of the file). It returns 0 and
+  changes nothing the program can see (data, size, offset). offset and
+  nbytes are signed 64-bit values; flags is a 32-bit unsigned int (bits
+  32..63 ignored) made of SYNC_FILE_RANGE_WAIT_BEFORE (1),
+  SYNC_FILE_RANGE_WRITE (2) and SYNC_FILE_RANGE_WAIT_AFTER (4); every
+  combination, including 0 (does nothing), is valid. Regular files
+  (overlayfs, tmpfs, memfd) and directories (and, per the man page and
+  kernel source, block devices; not tested) are accepted with any access mode;
+  pipes, FIFOs, sockets and character devices are ESPIPE. It does not
+  flush file metadata and gives no durability guarantee.
+returns:
+  success: "0; file data, size and offset unchanged"
+  flags: "0..7 in any combination: 0; flags (1<<32)|2 is WRITE (0)"
+  range: "nbytes 0 = to the end of the file; ranges past the end of the file and up to the largest offset (offset 0x7fffffffffff0000 with nbytes 0x1000 or 0xffff; offset 1<<40 with nbytes 0; offset 0 with nbytes 0x7fffffffffffffff) are fine"
+  kinds: "regular file open O_RDONLY, O_WRONLY or O_RDWR; a directory; a memfd; a tmpfs file: 0"
+errors:
+  bad_fd: "EBADF (9): fd not open (closed, -1) or opened with O_PATH"
+  bad_flags: "EINVAL (22): any flag bit other than 1, 2, 4 in the low 32 bits (8, 0x10, 0x80000000, 0xffffffff)"
+  negative: "EINVAL (22): offset < 0 or nbytes < 0"
+  overflow: "EINVAL (22): offset + nbytes overflows a signed 64-bit value (offset 0x7fffffffffff0000 with nbytes 0x100000; offset 1 with nbytes 0x7fffffffffffffff)"
+  not_a_file: "ESPIPE (29): a pipe (either end), a FIFO, a socket, a character device (/dev/null)"
+  order: "EBADF, then the argument checks (EINVAL: flags, offset, nbytes, overflow; all EINVAL, so their mutual order is not visible), then the file type (ESPIPE): a closed fd with a negative offset or bad flags is EBADF; a pipe with bad flags, a negative offset or a negative nbytes is EINVAL"
+side_effects: >
+  May start or wait for write-back of dirty pages in the range. Nothing
+  visible: data, size and offset unchanged; file metadata is not written
+  out (per the man page; not observable in the tests).
+threading: "No interaction with other threads; WAIT_* waits only for write-back of pages in the range."
+ordering: []
+timing:
+  typical: "microseconds when there is nothing dirty; with WRITE|WAIT_AFTER up to the time of writing the range"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: SYNC_FILE_RANGE_* from linux/fs.h; errno values from
+# asm-generic/errno-base.h. The same results on /tmp (overlayfs), tmpfs
+# and memfd, for root and an unprivileged user. Block devices were not
+# tested. The tests use raw syscalls only and pass as any user.

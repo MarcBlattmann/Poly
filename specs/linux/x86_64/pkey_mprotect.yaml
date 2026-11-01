@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pkey_mprotect        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); the VM exposes no protection keys (CPUID leaf 7 ECX: PKU bit 3 and OSPKE bit 4 clear); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  pkey_mprotect(addr, len, prot, pkey) (syscall 329) is mprotect that
+  also tags the pages with protection key pkey. pkey is a 32-bit int
+  (0xffffffff is -1, 1<<32 is 0); addr, len and prot are full 64-bit
+  values. pkey -1 means "no key": the call is exactly mprotect (changes
+  the protection of the pages of [addr, addr+len rounded up to pages),
+  returns 0) and works on every CPU. Any other key must have been
+  allocated by pkey_alloc, else EINVAL; on a CPU without protection keys
+  (as observed, and on QEMU's default CPU) no key is allocated, not even
+  the default key 0, so every pkey other than -1 is EINVAL and the
+  mapping is unchanged. prot accepts PROT_READ 1, PROT_WRITE 2,
+  PROT_EXEC 4, PROT_SEM 8 (accepted, no effect on x86-64) and one of
+  PROT_GROWSDOWN 0x01000000 / PROT_GROWSUP 0x02000000 (only on a mapping
+  that grows that way). With protection keys (not observed; man page)
+  an allocated key is stored in the pages, and the thread's PKRU rights
+  for it apply on top of prot; PROT_EXEC alone may use an execute-only
+  key.
+returns:
+  key_minus1: "0; protection changed as by mprotect: a page made PROT_READ can be read, made PROT_READ|PROT_WRITE again it keeps its contents and can be written; PROT_READ|PROT_EXEC pages can be read"
+  rounding: "len is rounded up to whole pages: len 1 on a page changes that page only; the next page is untouched"
+  len_zero: "0, nothing changes (checked after the alignment of addr, before prot, key and range)"
+  prot_sem: "PROT_SEM (8) together with READ|WRITE: 0"
+  key_width: "pkey 0xffffffff is -1 (0); 1<<32 is key 0 (EINVAL without protection keys)"
+  with_pku: "not observed: an allocated key (and key 0) is accepted and stored in the pages"
+errors:
+  unaligned: "EINVAL (22): addr not page aligned (also with len 0)"
+  wrap: "ENOMEM (12): the end of the range, after rounding len up, wraps around (len -8192, len ~0)"
+  bad_prot: "EINVAL (22): prot bits other than READ, WRITE, EXEC, SEM, GROWSDOWN, GROWSUP (0x10; bit 32), or GROWSDOWN together with GROWSUP"
+  bad_key: "EINVAL (22): pkey not -1 and not an allocated key; without protection keys every key other than -1 (0, 1, 15, 16, -2); nothing changes"
+  unmapped: "ENOMEM (12): the range is not entirely mapped (an unmapped address, NULL, a kernel address, a range starting in a hole); a range starting in a hole changes nothing"
+  grows: "EINVAL (22): PROT_GROWSDOWN or PROT_GROWSUP on a mapping that does not grow in that direction"
+  hole_inside: "ENOMEM (12) for a range that starts in a mapping and runs into a hole; the mappings before the hole have already been changed (a page made read-only there faults on write); not tested (needs a signal handler)"
+  order: "addr alignment (EINVAL), then len 0 (returns 0, also with bad prot or a bad key), then wrap-around (ENOMEM, also with bad prot or a bad key), then prot (EINVAL), then pkey (EINVAL, also for an unmapped range or one with a hole), then the range (ENOMEM; EINVAL for GROWSDOWN/GROWSUP on a mapping that does not grow)"
+side_effects: "Changes the protection (and, with an allocated key, the key) of the pages, splitting mappings at the range ends; with pkey -1 the pages keep their key (key 0 where keys exist)."
+threading: "Applies to the address space, so to every thread sharing it; a fork child has its own copy."
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "the new protection applies when the call returns"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: PROT_* from asm-generic/mman-common.h; errno values from
+# asm-generic/errno-base.h. The tests with keys other than -1 detect
+# protection keys with CPUID leaf 7 (ECX bit 4, OSPKE) without a system
+# call; on a CPU with OSPKE they print one "skip:" line and exit 0,
+# because this sheet describes only the observed case. The key -1 tests
+# run everywhere. Root and an unprivileged user behave the same.

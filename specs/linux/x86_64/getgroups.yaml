@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getgroups            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities (one supplementary group, 0) and as uid/gid 65534 without capabilities and with no supplementary groups; umask 022; initial user namespace"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  getgroups(size, list) (syscall 115) returns the number of supplementary
+  group ids of the calling thread and, when size is not 0, writes them to
+  list as 32-bit unsigned gids. size is a 32-bit int (upper register half
+  ignored). size 0 only counts: list is not touched and may be NULL or
+  invalid. size >= count writes exactly count gids and nothing after
+  them; 0 < size < count and size < 0 are EINVAL. The list is the one
+  setgroups stored, which Linux keeps sorted in ascending unsigned order
+  with duplicates kept (setgroups {5, 3, 5} reads back 3, 5, 5;
+  0x80000000 sorts below 0xfffffffe). At most 65536 (NGROUPS_MAX) groups
+  exist; a full list of 65536 can be read. No privilege is needed, and
+  the call changes nothing. The list belongs to each thread's
+  credentials: the raw setgroups system call in one thread does not
+  change what another thread reads; fork copies the forking thread's
+  list.
+returns:
+  count: "number of supplementary gids (0..65536), for size 0 and for any size >= count"
+  list: "count 32-bit gids, ascending unsigned order, duplicates kept; bytes after them untouched"
+  size_zero: "list never used (NULL or a bad pointer is fine)"
+  no_groups: "with no supplementary groups every size >= 0 returns 0 and the list pointer is never written (NULL or a read-only page is fine)"
+  widths: "size (1<<32) is 0; 0xffffffff is -1"
+errors:
+  bad_size: "EINVAL (22): size < 0 (also 0xffffffff, -100000), or 0 < size < count"
+  fault: "EFAULT (14): list cannot take count gids (NULL, low address, read-only page, a buffer running into an unmapped page) when size >= count > 0"
+  order: "size check (EINVAL) before the copy (EFAULT): with size below the count a NULL list is EINVAL"
+side_effects: none
+threading: >
+  Reads the calling thread's credentials. setgroups as a raw system call
+  changes only the calling thread's list (C libraries broadcast it to
+  every thread); children made by fork inherit the list.
+ordering: []
+timing:
+  typical: "microseconds; proportional to the number of groups copied"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: syscall numbers from asm/unistd_64.h (getgroups 115, setgroups
+# 116); NGROUPS_MAX 65536 from linux/limits.h; errno values from
+# asm-generic/errno-base.h. setgroups of 65537 groups is EINVAL and
+# setgroups without CAP_SETGID is EPERM (setgroups behaviour, used by the
+# tests). Tests that set groups are needs=root and run in a child; the
+# count/fault tests pass for any identity (their checks adapt to the
+# caller's count, so their output is the same on both sides of a run).

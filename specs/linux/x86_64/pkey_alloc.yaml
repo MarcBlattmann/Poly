@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pkey_alloc           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); the VM exposes no protection keys (CPUID leaf 7 ECX: PKU bit 3 and OSPKE bit 4 clear, no pku flag in /proc/cpuinfo); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  pkey_alloc(flags, access_rights) (syscall 330) allocates a memory
+  protection key. Both arguments are full 64-bit values: flags must be 0
+  and access_rights may only contain PKEY_DISABLE_ACCESS (1) and
+  PKEY_DISABLE_WRITE (2); anything else is EINVAL. Observed behaviour is
+  for a CPU WITHOUT protection keys (OSPKE clear; this is also what
+  QEMU's default CPU, on which Poly runs, reports): no key can ever be
+  allocated, so every valid call fails with ENOSPC (28), any number of
+  times, with no other effect (no descriptor, no change to the address
+  space; pkey_free of 1..15 stays EINVAL, pkey_mprotect still accepts
+  only key -1; the same in a fork child). With protection keys (not
+  observed here; from the man page): a free key between 1 and 15 is
+  returned and the calling thread's PKRU register gets access_rights for
+  it; ENOSPC when all keys are in use.
+returns:
+  no_pku_valid: "ENOSPC (28) for flags 0 and access_rights 0, 1, 2 or 3, every time (20 calls in a row)"
+  no_pku_effect: "none: the next open still returns the lowest descriptor; mprotect and pkey_mprotect(-1) work as before; pkey_mprotect with key 0 or 1 is EINVAL; a fork child sees the same"
+  with_pku: "not observed: the new key (1..15); the calling thread's access rights for it set from access_rights"
+errors:
+  bad_flags: "EINVAL (22): flags != 0 (1, 2, ~0, 1<<32: all 64 bits count)"
+  bad_rights: "EINVAL (22): access_rights with any bit other than 1 and 2 (4, 7, 0x100, 1<<32, ~0)"
+  no_keys: "ENOSPC (28): no key can be allocated (always on a CPU without protection keys; on one with them, when all are in use)"
+  order: "EINVAL (flags, then access_rights; both EINVAL) before ENOSPC: invalid arguments are EINVAL also without protection keys"
+side_effects: "Without protection keys: none. With them: the key is marked allocated in the address space and the calling thread's PKRU is updated (not observed)."
+threading: "Without protection keys: none. With them, keys belong to the address space, access rights (PKRU) to each thread (not observed)."
+ordering: []
+timing:
+  typical: "constant, sub-microsecond"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: PKEY_DISABLE_ACCESS / PKEY_DISABLE_WRITE from
+# asm-generic/mman-common.h; errno values from asm-generic/errno-base.h
+# (ENOSPC 28). The tests detect protection keys with CPUID leaf 7
+# (ECX bit 4, OSPKE) without a system call; on a CPU with OSPKE they
+# print one "skip:" line and exit 0, because this sheet describes only
+# the observed case without protection keys. Root and an unprivileged
+# user behave the same.

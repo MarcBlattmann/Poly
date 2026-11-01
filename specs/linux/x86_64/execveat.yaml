@@ -1,0 +1,84 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/execveat             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs; programs are static, freestanding, non-PIE"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  execveat(dirfd, pathname, argv, envp, flags) (syscall 322) is execve
+  with the program named relative to a directory descriptor, or given as
+  a descriptor. A relative pathname is resolved from dirfd (an O_RDONLY
+  or O_PATH directory descriptor; AT_FDCWD means the working directory);
+  an absolute pathname ignores dirfd, even an invalid one. flags is an
+  int (bits 32..63 ignored) that may hold AT_EMPTY_PATH (0x1000) and
+  AT_SYMLINK_NOFOLLOW (0x100). With AT_EMPTY_PATH and an empty pathname
+  the file dirfd refers to is run (fexecve): the descriptor may be
+  O_RDONLY or O_PATH, and may have FD_CLOEXEC when the file is an ELF
+  program. AT_EMPTY_PATH with a non-empty pathname is ignored. A symlink
+  as the last component is followed unless AT_SYMLINK_NOFOLLOW is given
+  (then ELOOP). On success the call does not return and the new image
+  starts exactly as after execve: argv and envp as given, descriptors
+  without FD_CLOEXEC still open (including dirfd, if it lacks
+  FD_CLOEXEC), those with it closed. The name the kernel records for the
+  new image (the AT_EXECFN auxiliary vector entry, and the script name
+  passed to an interpreter) is "/dev/fd/<dirfd>/<pathname>" for a
+  relative pathname with a real dirfd, "/dev/fd/<fd>" for AT_EMPTY_PATH,
+  and the pathname itself when it is absolute or dirfd is AT_FDCWD; that
+  name is only a string, nothing needs to exist at /dev/fd. For a script
+  (first line "#!") the interpreter gets argv = [interpreter path, the optional
+  argument from the "#!" line, that script name, argv[1..] of the call];
+  if the descriptor that names the script (dirfd, or the AT_EMPTY_PATH
+  fd) has FD_CLOEXEC, the interpreter could not open the script, and
+  execveat fails with ENOENT instead (ELF programs are not affected).
+  argv or envp NULL (or empty lists) are allowed: the new image then gets
+  argc 1 with argv[0] the empty string (Linux supplies it), and an empty
+  environment for envp NULL.
+returns:
+  success: "does not return; the new program runs in the same process (same pid, same descriptors minus FD_CLOEXEC ones)"
+  relative: "pathname relative to dirfd (O_RDONLY or O_PATH directory) or to the working directory with AT_FDCWD; '..' and symlinks in the path are followed; AT_EXECFN '/dev/fd/<dirfd>/<pathname>' ('pathname' as given with AT_FDCWD)"
+  absolute: "dirfd is ignored, also a closed or invalid one; AT_EXECFN is the pathname"
+  empty_path: "AT_EMPTY_PATH with '' runs dirfd's file: O_RDONLY, O_PATH, and FD_CLOEXEC descriptors all work for ELF programs; AT_EXECFN '/dev/fd/<fd>'; a FD_CLOEXEC fd is closed in the new image, others stay open"
+  empty_path_flag_ignored: "AT_EMPTY_PATH with a non-empty pathname resolves the pathname as usual"
+  symlink: "a final symlink is followed (AT_EXECFN keeps the name used, e.g. '/dev/fd/3/link')"
+  script: "'#!<interp> <arg>' first line: interpreter argv = [<interp>, <arg>, script name, argv[1], argv[2], ...]; argv[0] of the call is dropped; envp passed through; script name and AT_EXECFN '/dev/fd/<dirfd>/<path>' or '/dev/fd/<fd>'"
+  argv_null: "argv NULL or {NULL}: new image sees argc 1, argv[0] = '' and argv[1] NULL; empty strings in argv or envp are kept as they are"
+  envp_null: "envp NULL or {NULL}: empty environment"
+errors:
+  bad_path: "EFAULT (14): pathname NULL or unreadable; checked first, before flags (NULL pathname with bad flags is EFAULT)"
+  bad_flags: "EINVAL (22): any bit of the int flags other than AT_EMPTY_PATH and AT_SYMLINK_NOFOLLOW (0x1, AT_REMOVEDIR 0x200, AT_SYMLINK_FOLLOW 0x400 ...); checked before dirfd and lookup (bad flags with a bad dirfd or a missing file is EINVAL)"
+  bad_dirfd: "EBADF (9): relative or empty (AT_EMPTY_PATH) pathname with a closed or negative descriptor other than AT_FDCWD"
+  dirfd_not_dir: "ENOTDIR (20): relative pathname with a dirfd that is not a directory; or a file used as a directory in the path"
+  not_found: "ENOENT (2): missing file or directory; empty pathname without AT_EMPTY_PATH; a '#!' interpreter that does not exist; a script reached through a FD_CLOEXEC descriptor"
+  symlink_nofollow: "ELOOP (40): AT_SYMLINK_NOFOLLOW and the last component is a symlink; also AT_EMPTY_PATH on an O_PATH|O_NOFOLLOW descriptor of a symlink; also a symlink loop"
+  not_executable: "EACCES (13): no execute permission for the caller (mode 0644 even for root), or not a regular file (a directory, by name or as the AT_EMPTY_PATH descriptor)"
+  busy: "ETXTBSY (26): the file is open for writing (by this or another process)"
+  bad_argv: "EFAULT (14): argv, envp or one of their strings unreadable; reported after the file was found and checked (bad argv with a missing file is ENOENT, with a mode-0644 file EACCES, with a bad dirfd EBADF) but before the format"
+  bad_format: "ENOEXEC (8): not an ELF program and no '#!' line (also an empty file)"
+  too_big: "E2BIG (7): argument and environment strings too large; not tested"
+  no_memory: "ENOMEM, EIO, ENAMETOOLONG, EMFILE ...: as execve; not tested"
+  order: "pathname read (EFAULT) > flags (EINVAL) > dirfd and lookup (EBADF, ENOTDIR, ENOENT, ELOOP) > permission and file type (EACCES) > writers (ETXTBSY) > argv/envp read (EFAULT) > format (ENOEXEC, interpreter ENOENT)"
+side_effects: >
+  On success everything execve does: the old image is replaced,
+  FD_CLOEXEC descriptors are closed, signal handlers reset, the new
+  image's AT_EXECFN is the name described above (/proc/self/exe names the
+  real file). On failure nothing changes and the caller continues with
+  the same descriptors (dirfd, the AT_EMPTY_PATH fd stay open).
+threading: >
+  As execve: a successful call from any thread replaces the whole process.
+  Not tested with threads.
+ordering: []
+timing:
+  typical: "about a millisecond per successful exec of a small static program; errors in microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: constants from linux/fcntl.h (AT_FDCWD -100, AT_SYMLINK_NOFOLLOW
+# 0x100, AT_EMPTY_PATH 0x1000), asm-generic/errno-base.h and errno.h;
+# syscall number 322 from asm/unistd_64.h; AT_EXECFN (31) from
+# linux/auxvec.h. The tests copy their own binary into /tmp/ld_execveat_*
+# and run it again, carrying stage and check counts in argv or envp, so
+# they need no other program on the system; they do not depend on /dev/fd
+# or /proc. All pass as root and as an unprivileged user.
