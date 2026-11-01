@@ -215,7 +215,7 @@
 {"symbol":"pipe2","number":293,"status":"green","tests_visible":3,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"pivot_root","number":155,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"pkey_alloc","number":330,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
-{"symbol":"pkey_free","number":331,"status":"claimed","claimed_by":"impl-linux-d","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
+{"symbol":"pkey_free","number":331,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"pkey_mprotect","number":329,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"poll","number":7,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"ppoll","number":271,"status":"green","tests_visible":1,"tests_held_out":1,"src":["linux-syscall-tbl"]},
