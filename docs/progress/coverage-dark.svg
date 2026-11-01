@@ -2116,9 +2116,9 @@
 <rect x="575.8" y="681.5" width="9.2" height="6.5" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <text x="600.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Linux</text>
-<text x="885.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">72.7%</text>
-<text x="600.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">269 / 370 entries</text>
-<g><title>syscalls: 269 / 370 done (72.7%)</title>
+<text x="885.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">73.0%</text>
+<text x="600.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">270 / 370 entries</text>
+<g><title>syscalls: 270 / 370 done (73.0%)</title>
 <rect x="601.0" y="469.0" width="283.0" height="218.0" fill="#21262d"/>
 <rect x="601.0" y="469.0" width="12.9" height="12.8" fill="#2ea043"/>
 <rect x="601.0" y="469.0" width="12.9" height="12.8" fill="none" stroke="#0d1117" stroke-width="0.5"/>
@@ -2658,7 +2658,7 @@
 <rect x="639.6" y="622.9" width="12.9" height="12.8" fill="none" stroke="#0d1117" stroke-width="0.5"/>
 <rect x="652.5" y="622.9" width="12.9" height="12.8" fill="#2ea043"/>
 <rect x="652.5" y="622.9" width="12.9" height="12.8" fill="none" stroke="#0d1117" stroke-width="0.5"/>
-<rect x="665.3" y="622.9" width="12.9" height="12.8" fill="#388bfd"/>
+<rect x="665.3" y="622.9" width="12.9" height="12.8" fill="#2ea043"/>
 <rect x="665.3" y="622.9" width="12.9" height="12.8" fill="none" stroke="#0d1117" stroke-width="0.5"/>
 <rect x="678.2" y="622.9" width="12.9" height="12.8" fill="#388bfd"/>
 <rect x="678.2" y="622.9" width="12.9" height="12.8" fill="none" stroke="#0d1117" stroke-width="0.5"/>

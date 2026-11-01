@@ -357,7 +357,7 @@
 {"symbol":"unshare","number":272,"src":["linux-syscall-tbl"]},
 {"symbol":"uprobe","number":336,"src":["linux-syscall-tbl"]},
 {"symbol":"uretprobe","number":335,"src":["linux-syscall-tbl"]},
-{"symbol":"userfaultfd","number":323,"status":"claimed","claimed_by":"impl-linux-e","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
+{"symbol":"userfaultfd","number":323,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"ustat","number":136,"src":["linux-syscall-tbl"]},
 {"symbol":"utime","number":132,"status":"claimed","claimed_by":"impl-linux-b","src":["linux-syscall-tbl"]},
 {"symbol":"utimensat","number":280,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
