@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/llistxattr           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  llistxattr(path, list, size) (syscall 195) is listxattr
+  (listxattr.yaml) except that a symbolic link in the last component is
+  not followed: it lists the attributes of the link itself. Format
+  (NUL-terminated names), size rules (0 for the length, ERANGE for a
+  short buffer, sizes above 65536 fine, E2BIG beyond 65536 bytes of
+  names), the hiding of trusted.* names from callers without
+  CAP_SYS_ADMIN, and path errors are the same.
+returns:
+  link: "a link without trusted.*/security.* attributes lists nothing (0), whatever its target has; so does a dangling link (listxattr: ENOENT) and a link in a loop (listxattr: ELOOP)"
+  link_trusted: "a link given trusted.* and security.* names by root lists both for root; without CAP_SYS_ADMIN only the security.* names are listed and, on tmpfs, counted by the size query"
+  non_link: "on anything but a link exactly listxattr (FIFOs list 0)"
+  trailing_slash: "a trailing '/' follows the final link (a link to a directory lists the directory's names; a link to a file is ENOTDIR)"
+  no_names_null_buffer: "a file without names returns 0 even with a NULL or read-only buffer and a large size (nothing is copied)"
+errors:
+  path: "EFAULT (path NULL or unmapped, e.g. address 8), ENOENT (missing file, missing directory in the middle, empty path ''), ENOTDIR (file used as a directory), ENAMETOOLONG, ELOOP (loop in an earlier component), EACCES (search permission)"
+  short_buffer: "ERANGE (34): 0 < size < length, also with a NULL buffer"
+  buffer_fault: "EFAULT (14): names to copy and the buffer NULL or read-only with size >= length"
+  rest: "as listxattr.yaml"
+side_effects: "none"
+threading: "as listxattr"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: list contents are compared as a set. Tests of a link's own
+# trusted.*/security.* names use /dev/shm and need root. Constants as in
+# setxattr.yaml.

@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getxattr             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  getxattr(path, name, value, size) (syscall 191) returns the length of
+  the value of the extended attribute `name` of the file `path` names
+  (following a symbolic link in the last component) and copies the
+  value into the `size` bytes at `value`. size 0 is a length query: the
+  buffer is not touched and may be NULL. A buffer smaller than the
+  value is ERANGE (nothing written); a larger one gets the value and
+  nothing past it. Names follow the rules of setxattr.yaml (1..255
+  bytes, a known namespace prefix). Reading user.* names needs read
+  permission on the file; trusted.* names are invisible (ENODATA)
+  without CAP_SYS_ADMIN; security.* names are readable by anyone. Files
+  that cannot have user.* attributes (FIFOs, devices, sockets, links)
+  answer ENODATA for user.* names. lgetxattr (192) does not follow a
+  final symbolic link; fgetxattr (193) takes a descriptor.
+returns:
+  length: "the value's length in bytes (0 for an empty value), whether or not a buffer was given"
+  size_zero: "size 0: the length, buffer untouched (may be NULL or anything)"
+  exact_or_larger: "size >= length: the value is copied to the start of the buffer, bytes after it are not written"
+  size_clamp: "size is a 64-bit count; anything above 65536 is treated as 65536 (1<<32, 1<<40, SIZE_MAX all work)"
+  empty_value: "an empty value returns 0, also with a NULL buffer and size > 0 (nothing to copy)"
+  symlink: "follows a final symbolic link: returns the target's attribute"
+  identity: "attributes belong to the inode: same through hard links, kept across rename, readable through a descriptor after unlink, absent on a new file made under a removed file's name"
+  exact_name: "only the exact name matches: user.ab, user.AB, user.abc, user.a and security.ab are all different"
+  tmpfs_max: "on tmpfs a 65536-byte value comes back whole with a 65536-byte buffer; a 65535-byte buffer is ERANGE"
+errors:
+  name_fault: "EFAULT (14): name NULL or unreadable (as setxattr)"
+  name_range: "ERANGE (34): name empty or 256+ bytes; checked before the path (a bad name with a missing or NULL path is still ERANGE/EFAULT)"
+  path: "after the name: EFAULT (path NULL/unmapped), ENOENT (missing, empty path '', dangling symlink), ENOTDIR (trailing '/' on a file, file used as a directory), ENAMETOOLONG, ELOOP, EACCES (no search permission on a directory of the path)"
+  trusted_hidden: "ENODATA (61): a trusted.* name without CAP_SYS_ADMIN, whether it exists or not (also 'trusted.' alone and size 0)"
+  user_kind: "ENODATA (61): a user.* name (also 'user.' alone) on anything but a regular file or directory (FIFO, socket file, device, symbolic link via lgetxattr, pipe/socket/eventfd via fgetxattr)"
+  access: "EACCES (13): user.* names and names with an unknown prefix need read permission on the file for the caller's class (owner of a 0200 or 0044 file: EACCES; other on root's 0640 file: EACCES), also for names that do not exist and with size 0; root passes; security.* and trusted.* names are not subject to it"
+  namespace: "EOPNOTSUPP (95): unknown prefix ('plain', 'USER.a') or a system.* name the file system lacks ('system.nothing'); on pipes, sockets and eventfds every name other than user.* (and a socket's system.sockprotoname) is EOPNOTSUPP"
+  prefix_only: "EINVAL (22): 'user.' alone on a regular file or directory; 'trusted.' / 'security.' alone (with CAP_SYS_ADMIN for trusted.)"
+  missing: "ENODATA (61): no attribute of that name (also POSIX ACL names on a file without an ACL)"
+  short_buffer: "ERANGE (34): 0 < size < length; buffer untouched; also with a NULL or read-only buffer"
+  buffer_fault: "EFAULT (14): size >= length > 0 and the buffer not writable (NULL, low address, read-only memory, crossing into an unmapped page); the attribute is unchanged"
+  order: "name (EFAULT/ERANGE), path errors, then ENODATA for trusted.* without CAP_SYS_ADMIN, ENODATA for user.* on a special file, EACCES (read permission), EOPNOTSUPP, EINVAL (prefix only), ENODATA (missing), ERANGE (size), EFAULT (copy out); getxattr never says EPERM"
+side_effects: "none: no timestamps change (atime and ctime stay)"
+threading: "a concurrent setxattr is seen entirely or not at all"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: tests under /tmp work on any file system; tests of tmpfs sizes
+# and of the trusted.*/security.* rules for other users use /dev/shm
+# (tmpfs on Linux and Poly); needs=root tests drop to uid/gid 1000 in a
+# vfork-like child. Constants as in setxattr.yaml.

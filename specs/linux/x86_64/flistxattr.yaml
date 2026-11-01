@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/flistxattr           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  flistxattr(fd, list, size) (syscall 196) is listxattr
+  (listxattr.yaml) on the file an open descriptor refers to: the same
+  format (NUL-terminated names), size rules (0 for the length, ERANGE
+  for a short buffer, sizes above 65536 fine, E2BIG beyond 65536 bytes
+  of names, EFAULT for an unwritable buffer) and hiding of trusted.*
+  names. No permission on the file is needed. Sockets list one name,
+  system.sockprotoname.
+returns:
+  any_mode: "O_RDONLY, O_WRONLY and directory descriptors work; an unlinked but open file still lists its names"
+  fd_width: "only the low 32 bits of fd count (fd | 1<<63 is fd)"
+  special_files: "pipes (both ends), FIFOs and eventfds list nothing (0); a Unix socket (stream or datagram) lists 'system.sockprotoname' (21 bytes with its NUL; a 20-byte buffer is ERANGE)"
+  trusted_at_call: "the caller's capabilities at the time of the call decide: a descriptor opened by root lists trusted.* names for root, and only user.* and security.* names (counted alike by the size query, on tmpfs) after a switch to uid 1000; a mode-0 file is listed"
+errors:
+  bad_fd: "EBADF (9): fd -1, unused, closed, or O_PATH (file, or symbolic link opened O_PATH|O_NOFOLLOW), also with size 0 or a NULL buffer"
+  rest: "ERANGE, E2BIG, EFAULT as listxattr.yaml"
+side_effects: "none"
+threading: "as listxattr"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants as in setxattr.yaml.

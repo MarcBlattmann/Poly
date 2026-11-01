@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_setparam       # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_HZ=250; tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /; default RLIMIT_NICE and RLIMIT_RTPRIO 0/0"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  sched_setparam(pid, param) (syscall 142) sets the static priority of
+  one thread under its current policy and returns 0: it behaves as
+  sched_setscheduler with the thread's own policy, keeping the policy
+  and the SCHED_RESET_ON_FORK flag. param points to struct sched_param
+  (one int). The priority must be 0 under SCHED_OTHER/BATCH/IDLE and
+  1..99 under SCHED_FIFO/RR. pid 0 is the calling thread, else a thread
+  id; pid is a 32-bit int. The nice value is not touched.
+returns:
+  success: "0; sched_getparam reports the new priority; policy, SCHED_RESET_ON_FORK and nice unchanged"
+  fair: "under OTHER/BATCH/IDLE only 0 is accepted (a no-op that succeeds), also with the flag set (BATCH|RESET at nice 3 stays so)"
+  realtime: "under FIFO/RR any 1..99 (FIFO 10 -> 99 -> 1; RR|RESET 5 -> 60 keeps RR|RESET)"
+  other_tasks: "a thread by tid, a child process, another process whose real or effective uid is the caller's effective uid; the accepted range is the target's policy's (a BATCH child takes only 0)"
+errors:
+  null_or_negative: "EINVAL (22): param NULL or pid negative (32-bit, also 0xffffffff); checked first (NULL with a pid no task has is EINVAL, a negative pid with param 1 is EINVAL)"
+  fault: "EFAULT (14): param unreadable; checked before the lookup (pid no task has with param 1 is EFAULT)"
+  no_task: "ESRCH (3): no thread has the id (also a reaped child); checked before the priority range"
+  bad_priority: "EINVAL (22): priority outside the target's policy's range (1 or -1 under a fair policy; 0 or 100 under FIFO/RR); checked before permissions (1 on another user's task is EINVAL)"
+  permission: "EPERM (1): without CAP_SYS_NICE: the caller's effective uid is neither the target's real nor effective uid (even for a no-op priority 0), or the target holds capabilities the caller lacks, or (real-time target) the new priority is above both its current priority and RLIMIT_RTPRIO's soft limit (with limit 0 at FIFO 30: 20 ok, then 25 EPERM)"
+  order: "EINVAL (NULL / negative pid), EFAULT, ESRCH, EINVAL (priority), EPERM"
+  unchanged: "a failed call changes nothing (policy and priority as before)"
+side_effects: "changes only the named thread's static priority"
+threading: "per thread"
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: see sched_setscheduler for the policy and permission rules this
+# call shares. Tests that need real-time policies or other users say
+# needs=root; they set RLIMIT_RTPRIO (14, asm-generic/resource.h)
+# explicitly before dropping privileges.

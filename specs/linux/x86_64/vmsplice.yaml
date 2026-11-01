@@ -1,0 +1,66 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/vmsplice             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; observed as root with all capabilities and the tests also run as uid/gid 65534 without capabilities, umask 022; /tmp is overlayfs; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  vmsplice(fd, iov, nr_segs, flags) (syscall 278) moves user memory to or
+  from a pipe. The direction follows how fd was opened: a descriptor
+  open for writing (a pipe's write end, a FIFO opened O_WRONLY or
+  O_RDWR) gets the iovec's bytes appended (gather, like writev); one
+  open only for reading (a pipe's read end, a FIFO opened O_RDONLY)
+  gives its bytes to the iovec's buffers (scatter, like readv, filling
+  each segment before the next). Returns the bytes moved. Into a pipe
+  each segment (each page-sized piece of a segment) becomes a pipe
+  buffer of its own, not merged with neighbours, so the pipe's buffer
+  count (16 in a fresh pipe) limits how many segments one call can take;
+  the pipe refers to the caller's pages instead of copying them at call
+  time: changes the caller makes to the memory before the reader reads
+  are what the reader gets (with or without SPLICE_F_GIFT). Flags:
+  SPLICE_F_MOVE 1, SPLICE_F_NONBLOCK 2, SPLICE_F_MORE 4, SPLICE_F_GIFT 8
+  (linux/splice.h); only NONBLOCK has a visible effect, and O_NONBLOCK on
+  the descriptor is ignored (vmsplice waits unless SPLICE_F_NONBLOCK).
+  struct iovec {void *iov_base; size_t iov_len} (16 bytes, linux/uio.h).
+  Arguments: fd a 32-bit int, flags a 32-bit unsigned int, nr_segs taken
+  as a 32-bit unsigned count (upper halves ignored; 2^32 counts as 0).
+returns:
+  write_end: "bytes gathered into the pipe in iovec order; zero-length segments (even with a NULL base) are skipped; read-only source memory is fine; the iovec array is only read"
+  read_end: "bytes copied out of the pipe into the segments in order; at most what the pipe holds (a 3-byte segment takes 3 of 8, the rest stays); an empty pipe without writers gives 0"
+  total_zero: "0 when nr_segs is 0 or all segments are empty, without looking at what kind of descriptor fd is (a regular file or socket with nr_segs 0 gives 0)"
+  segments_vs_buffers: "20 one-byte segments into a fresh pipe: 16; after one write(2) (one buffer used): 15; 15 one-byte segments then a 200-byte segment crossing a page boundary 50 bytes before it: 15 + 50 (the segment's second page piece needs a 17th buffer); that segment alone: 200; one 200000-byte segment into a fresh pipe: 65536; an unaligned 5000-byte segment: 5000"
+  nr_segs_max: "1024 segments (UIO_MAXIOV) accepted"
+  partial_fault: "the call stops at the first segment it cannot read (write end): bytes moved before it are returned (6 for [6 good, bad, 4 good]); if the first segment is bad, EFAULT"
+  fifo_rdwr: "a FIFO opened O_RDWR is treated as a write end: vmsplice always appends to it"
+  page_reference: "write end: memory changed after vmsplice and before the read is read changed ('orig' spliced, 'CHGD' written into the buffer, reader gets 'CHGD'); write(2) by contrast copies"
+errors:
+  bad_flags: "EINVAL (22): flags outside 0xf (low 32 bits); checked first (before a bad descriptor and with nr_segs 0)"
+  bad_fd: "EBADF (9): fd not open, or open neither for reading nor writing (O_PATH); checked before the iovec is read (bad fd with nr_segs 1025 or a NULL iov is EBADF; with nr_segs 0 also EBADF)"
+  too_many_segments: "EINVAL: nr_segs (low 32 bits) > 1024, also when fd is not a pipe"
+  bad_iovec_array: "EFAULT (14): the iovec array cannot be read (NULL), also when fd is not a pipe"
+  length_overflow: "EINVAL: a segment length with bit 63 set or a total that overflows (6 + 0xffffffffffffffff)"
+  not_a_pipe: "EBADF: fd is open but not a pipe or FIFO (regular file opened O_RDWR, socket), checked only after the iovec was read and the total is non-zero"
+  bad_buffer: "EFAULT: write end, first segment unreadable (nothing moved); read end, a buffer that cannot be written (bad address, read-only memory): EFAULT and the bytes stay in the pipe"
+  would_block: "EAGAIN (11): SPLICE_F_NONBLOCK and the pipe has no free buffer (write end) or is empty with writers (read end). Without SPLICE_F_NONBLOCK the call waits, even with O_NONBLOCK on fd"
+  broken_pipe: "EPIPE (32): write end of a pipe without readers (with or without SPLICE_F_NONBLOCK); SIGPIPE sent once per call (kills at default disposition). The read end of a pipe without writers gives 0, no signal"
+  interrupted: "EINTR (4): a waiting vmsplice interrupted by a signal whose handler lacks SA_RESTART"
+  order: "flags EINVAL; fd EBADF (missing, O_PATH); iovec: nr_segs > 1024 EINVAL, array EFAULT, length EINVAL; total 0 -> 0; not a pipe EBADF; transfer (EAGAIN, EPIPE, EFAULT on buffers)"
+side_effects: "write end: the pipe gains buffers referring to the caller's pages; read end: the pipe loses the bytes copied out. SIGPIPE on EPIPE."
+threading: "a waiting vmsplice ends when another task reads from (frees a buffer of) / writes into the pipe, or on a signal; no thread-specific behaviour"
+ordering:
+  - "a vmsplice into a full pipe (no SPLICE_F_NONBLOCK, O_NONBLOCK set on fd) waits until a reader frees a whole buffer, then returns the full count"
+  - "a vmsplice from an empty pipe (read end, O_NONBLOCK set) waits until a writer puts bytes in, then returns them"
+timing:
+  typical: "microseconds"
+  guarantees: "waits only without SPLICE_F_NONBLOCK, on a full pipe (write end) or an empty pipe with writers (read end)"
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the page-reference behaviour means an implementation that copies
+# at call time differs only when the caller changes the memory before the
+# reader reads (the tests check that case). Pipe
+# capacity: 16 buffers by default, changed by fcntl(F_SETPIPE_SZ).
+# Constants: linux/splice.h, linux/uio.h (UIO_MAXIOV 1024),
+# asm-generic/fcntl.h.

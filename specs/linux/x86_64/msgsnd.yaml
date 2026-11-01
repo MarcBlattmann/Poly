@@ -1,0 +1,74 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/msgsnd               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace with default limits (/proc/sys/kernel: msgmax 8192, msgmnb 16384, msgmni 32000)"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  msgsnd(msqid, msgp, msgsz, msgflg) (syscall 69) appends a message to a
+  System V message queue (made by msgget) and returns 0. msgp points to
+  a struct msgbuf: a 64-bit signed long mtype followed by msgsz bytes of
+  text (linux/msg.h). msqid and msgflg are 32-bit ints (upper halves
+  ignored); msgsz is a full 64-bit size_t. Checks, in order: mtype is
+  read (unreadable: EFAULT, before anything else); msqid < 0, msgsz >
+  msgmax (8192) or msgsz with the top bit set: EINVAL; mtype < 1:
+  EINVAL; the msgsz text bytes are read (any unreadable: EFAULT; msgsz 0
+  reads nothing); the id is looked up (not in use or removed: EINVAL);
+  the caller needs write permission for its class (owner if euid is the
+  queue's uid or cuid, else group, else other; x and other classes do
+  not help): EACCES, unless CAP_IPC_OWNER (root). Then room: the message
+  fits when msg_cbytes + msgsz <= msg_qbytes and msg_qnum + 1 <=
+  msg_qbytes (so msg_qbytes also caps the number of messages; a full
+  queue still takes a zero-length message; with msg_qbytes 0 nothing
+  fits). If it fits it is appended (FIFO), else with IPC_NOWAIT (04000)
+  the call fails with EAGAIN, otherwise the caller sleeps until it
+  fits (a receive or an IPC_SET that raises msg_qbytes), the queue is
+  removed (EIDRM) or a signal with a handler arrives (EINTR, not
+  restarted, also with SA_RESTART); then the access and room checks are
+  made again. If a process sleeps in msgrcv for a message this one
+  matches (and with a large enough buffer), the message is handed to it
+  directly and never counts in msg_qnum/msg_cbytes. On success:
+  msg_lspid = caller, msg_stime = now, and either qnum +1 and cbytes
+  +msgsz, or (hand-off) msg_lrpid = the receiver and msg_rtime = now.
+  Other msgflg bits are ignored.
+returns:
+  success: "0; the message is at the tail of the queue (or already with a sleeping receiver)"
+  stat_after: "IPC_STAT: qnum +1, cbytes +msgsz, lspid = caller, stime = now (seconds); rtime, lrpid unchanged; on a hand-off qnum/cbytes unchanged, lrpid = receiver's pid and rtime = now already when msgsnd returns"
+  sizes: "msgsz 0..8192 (msgmax); a zero-length message is a real message (counts in qnum, received with length 0)"
+  types: "mtype 1..2^63-1 kept exactly"
+  order: "messages are queued in the order they were sent"
+  high_bits: "msqid | (1<<32) is msqid; msgflg bits above 31 are ignored; msgsz is 64-bit ((1<<32)|1 is too big: EINVAL)"
+errors:
+  type_fault: "EFAULT (14): mtype unreadable (msgp NULL or unmapped); checked first: beats a negative id and a too-big size"
+  bad_args: "EINVAL (22): msqid < 0, or msgsz > 8192 (also any size with the top bit set)"
+  bad_type: "EINVAL (22): mtype < 1 (0, negative, LONG_MIN); after the size/id-sign check, before the text is read"
+  text_fault: "EFAULT (14): some of the msgsz text bytes unreadable; before the id lookup (an unused id with an unreadable text is EFAULT); nothing queued"
+  bad_id: "EINVAL (22): no live queue with this id (never handed out or removed), also with IPC_NOWAIT"
+  access: "EACCES (13): no w for the caller's class; not for root; before the room check (a full queue without w is EACCES)"
+  full: "EAGAIN (11): the message does not fit (bytes or count) and IPC_NOWAIT is set; nothing queued"
+  removed_while_sleeping: "EIDRM (43): the queue was removed while the sender slept"
+  interrupted: "EINTR (4): a signal with a handler arrived while sleeping; not restarted even with SA_RESTART; nothing queued"
+  order: "EFAULT (mtype) > EINVAL (msqid < 0, size) > EINVAL (mtype) > EFAULT (text) > EINVAL (id) > EACCES > EAGAIN / sleep"
+  no_memory: "ENOMEM (12): no memory for the message copy; not tested"
+side_effects: >
+  Appends the message (or hands it to a sleeping receiver, which then
+  returns with it), updates msg_qnum, msg_cbytes, msg_lspid, msg_stime
+  (and on hand-off msg_lrpid, msg_rtime). A failed or interrupted call
+  queues nothing and changes no field.
+threading: "queues are system-wide; any process's msgrcv makes room for and wakes sleeping senders; a sender woken by room re-checks permission and room"
+ordering:
+  - "a sleeping receiver whose type matches gets the message before msgsnd returns; receivers are considered in the order they went to sleep"
+  - "a sleeping sender continues once its message fits (after a msgrcv frees room or IPC_SET raises msg_qbytes)"
+timing:
+  typical: "microseconds per non-sleeping call"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the tests also use msgget, msgctl (IPC_STAT, IPC_SET, IPC_RMID),
+# msgrcv, mmap/munmap (a text that runs into an unmapped page), fork,
+# kill and signal handlers. Tests that need another process to be asleep
+# give it 300 ms; they compare only output (syscalls=off). struct msgbuf:
+# linux/msg.h; struct msqid64_ds: asm-generic/msgbuf.h.
