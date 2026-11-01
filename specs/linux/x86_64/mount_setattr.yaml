@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mount_setattr        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (and children dropping to uid/gid 1000); umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  mount_setattr(dfd, path, flags, attr, size) (syscall 442) changes the
+  per-mount attributes of the mount whose root is at (dfd, path). flags:
+  AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW, AT_NO_AUTOMOUNT, AT_RECURSIVE (apply
+  to every mount below too). attr points at struct mount_attr {u64
+  attr_set, attr_clr, propagation, userns_fd} (32 bytes =
+  MOUNT_ATTR_SIZE_VER0); size may be larger if the extra bytes are zero.
+  attr_clr bits are cleared, then attr_set bits set: RDONLY 0x1, NOSUID
+  0x2, NODEV 0x4, NOEXEC 0x8, NODIRATIME 0x80, NOSYMFOLLOW 0x200000, IDMAP
+  0x100000 (needs userns_fd; outside this sheet). The atime mode is the
+  3-bit field MOUNT_ATTR__ATIME 0x70 (RELATIME 0, NOATIME 0x10,
+  STRICTATIME 0x20): setting NOATIME or STRICTATIME requires attr_clr to
+  contain 0x70, and clearing 0x70 alone selects RELATIME. propagation, if
+  non-zero, is one of MS_PRIVATE, MS_SHARED, MS_SLAVE, MS_UNBINDABLE (a
+  private mount made slave stays private). Results show in statfs f_flags
+  and statmount mnt_attr / mnt_propagation. A call with nothing to set,
+  clear or propagate returns 0 (also on a path that is not a mount root).
+  Requires CAP_SYS_ADMIN.
+returns:
+  success: "0"
+  effects: "RDONLY: new files EROFS, ST_RDONLY; NOSUID/NODEV/NOEXEC/NODIRATIME/NOSYMFOLLOW: ST_NOSUID 2/ST_NODEV 4/ST_NOEXEC 8/ST_NODIRATIME 2048/ST_NOSYMFOLLOW 0x2000; NOATIME: ST_NOATIME 1024 without ST_RELATIME; STRICTATIME: neither; RELATIME: ST_RELATIME 4096"
+  recursive: "AT_RECURSIVE changes submounts too; without it only the named mount"
+errors:
+  size: "EINVAL (22): size < 32; E2BIG (7): size > 32 with non-zero bytes past 32, or size above a page"
+  flags: "EINVAL (22): unknown flags"
+  attr_bits: "EINVAL (22): unknown attribute bits in attr_set or attr_clr; NOATIME/STRICTATIME without clearing MOUNT_ATTR__ATIME; atime value 0x30"
+  propagation: "EINVAL (22): propagation not 0 or one of the four types"
+  fault: "EFAULT (14): attr unreadable"
+  missing: "ENOENT (2): path does not exist"
+  not_mount_root: "EINVAL (22): path is not the root of a mount and there is something to change"
+  busy: "EBUSY (16): setting RDONLY while a file on the mount is open for writing"
+  perm: "EPERM (1): no CAP_SYS_ADMIN (after the size/flags checks: a user with size 8 gets EINVAL)"
+  order: "size (EINVAL) before EPERM (verified); then path lookup (ENOENT), mount root check (EINVAL), EBUSY last; the relative order of the other argument checks is not tested"
+side_effects: "changes mount attributes; with AT_RECURSIVE all-or-nothing for the subtree"
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

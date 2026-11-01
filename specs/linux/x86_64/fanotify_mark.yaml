@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fanotify_mark        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 (children dropping to uid/gid 1000); umask 022; tests use /dev/shm (tmpfs)"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  fanotify_mark(fanotify_fd, flags, mask, dirfd, pathname) (syscall 301)
+  adds, removes or flushes marks of a fanotify group. flags: exactly one of
+  FAN_MARK_ADD 0x1, FAN_MARK_REMOVE 0x2, FAN_MARK_FLUSH 0x80, plus
+  FAN_MARK_DONT_FOLLOW 0x4, ONLYDIR 0x8, MOUNT 0x10, IGNORED_MASK 0x20,
+  IGNORED_SURV_MODIFY 0x40, FILESYSTEM 0x100, EVICTABLE 0x200, IGNORE
+  0x400. The object is (dirfd, pathname) resolved like the *at calls, or,
+  with pathname NULL, dirfd's own file. mask (u64): FAN_ACCESS 0x1, MODIFY
+  0x2, ATTRIB 0x4, CLOSE_WRITE 0x8, CLOSE_NOWRITE 0x10, OPEN 0x20,
+  MOVED_FROM 0x40, MOVED_TO 0x80, CREATE 0x100, DELETE 0x200, DELETE_SELF
+  0x400, MOVE_SELF 0x800, OPEN_EXEC 0x1000, permission events OPEN_PERM
+  0x10000, ACCESS_PERM 0x20000, OPEN_EXEC_PERM 0x40000, and the modifiers
+  FAN_EVENT_ON_CHILD 0x08000000 (events of a directory's direct children),
+  FAN_ONDIR 0x40000000 (events on directories themselves). After ADD the
+  group queues an event for each matching action: in a descriptor group
+  each event has fd = a new descriptor for the object opened with the
+  group's event_f_flags (the reader must close it), pid = the acting
+  process, mask = the event bits (FAN_ONDIR is not set in such events);
+  consecutive events on the same object are merged with their masks or-ed
+  (open+modify+close_write of one file read back as one event, mask 0x2a).
+  REMOVE takes bits off a mark; FLUSH removes all inode marks (with MOUNT
+  or FILESYSTEM those marks). IGNORED_MASK adds bits that suppress events
+  on that object (e.g. a child of a marked directory). Directory-entry
+  events (CREATE, DELETE, MOVED_*) need a FID-reporting group.
+returns:
+  success: "0"
+  event_example: "file marked OPEN|MODIFY|CLOSE_WRITE|CLOSE_NOWRITE, opened O_RDWR, written, closed: one event {event_len 24, vers 3, metadata_len 24, mask 0x2a, fd = lowest free, pid = caller}; open+close read-only: mask 0x30"
+errors:
+  flags: "EINVAL (22): unknown flag bits; ADD and REMOVE together, or neither (without FLUSH)"
+  mask: "EINVAL (22): empty mask on ADD; unknown mask bits; directory-entry events on a group without FID reporting; permission events on a notification-class group"
+  missing: "ENOENT (2): path does not exist; REMOVE of a mark that does not exist"
+  onlydir: "ENOTDIR (20): FAN_MARK_ONLYDIR on a non-directory"
+  bad_fd: "EBADF (9): fanotify_fd not open"
+  not_group: "EINVAL (22): fanotify_fd is not a fanotify group"
+  perm: "EPERM (1): mount or file system marks from a group made without CAP_SYS_ADMIN"
+  limits: "ENOSPC (28): mark limit reached; not tested"
+side_effects: "adds/removes marks; marks go away with the group (close) or the object"
+threading: "events from any thread or process acting on the object"
+ordering:
+  - "events are read in the order they happened (merged events keep the position of the first)"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

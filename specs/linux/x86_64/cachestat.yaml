@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/cachestat            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; tests use /dev/shm (tmpfs) and memfd"
+  observed_by: spec-linux-e
+  date: 2026-11-01
+summary: >
+  cachestat(fd, cstat_range, cstat, flags) (syscall 451) reports the page
+  cache state of a byte range of the file behind fd. cstat_range points at
+  struct cachestat_range {u64 off; u64 len} (len 0 = to the end of the
+  file); cstat receives struct cachestat {u64 nr_cache; u64 nr_dirty; u64
+  nr_writeback; u64 nr_evicted; u64 nr_recently_evicted}, counted in pages
+  overlapping the range (a range inside one page counts that page; a range
+  starting past the end counts 0). Only pages that exist are counted:
+  holes of sparse files count 0, truncated pages disappear. For tmpfs and
+  memfd files (in memory, never written back) every page with data is
+  cached and none is dirty, under writeback or evicted (a file of 8292
+  bytes: nr_cache 3). Any descriptor except O_PATH works, also write-only;
+  descriptors without page cache of their own (pipes, sockets, directories,
+  /dev/null) report all zeros. flags must be 0. (On overlayfs the counts
+  belong to the underlying file and read 0 through the overlay file.)
+returns:
+  success: "0; cstat filled"
+  tmpfs_example: "pages written at 0..8291: whole file 3, [4096, 8192) 1, [1, 2) 1, [4000, 4200) 2, from 100000: 0"
+errors:
+  flags: "EINVAL (22): flags != 0"
+  bad_fd: "EBADF (9): fd not open, or an O_PATH descriptor"
+  fault: "EFAULT (14): cstat_range unreadable or cstat unwritable"
+  unsupported: "EOPNOTSUPP (95): hugetlbfs files; not tested"
+side_effects: none
+threading: "none specific"
+ordering: []
+timing:
+  typical: "microseconds per thousand pages"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: structures from linux/mman.h. Disk-backed files have
+# timing-dependent dirty/writeback counts; the tests use tmpfs/memfd only.
