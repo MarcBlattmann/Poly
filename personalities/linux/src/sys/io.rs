@@ -113,6 +113,10 @@ pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if let Some(r) = crate::sys::fdioctl::generic(k, fd, request, a) {
         return r;
     }
+    // A userfaultfd's UFFDIO_* requests (ioctl_userfaultfd(2)).
+    if let Some(r) = crate::sys::userfaultfd::ioctl(k, fd, request, a.ptr(2)) {
+        return r;
+    }
     // SIOCOUTQ on a socket (ADR 0048): the same number as the terminal
     // request TIOCOUTQ, so it is answered before the terminal check.
     if request == crate::net::abi::SIOCOUTQ

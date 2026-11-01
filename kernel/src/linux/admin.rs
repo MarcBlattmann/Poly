@@ -16,6 +16,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use poly_personality_linux::admin::{self, FsType, LinuxAdmin, MountRequest, Reboot, SystemName};
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::fs::{major, minor};
+use poly_personality_linux::mountapi::{AttrChange, Command, FsContext, MountDesc, MountLink, PathAt};
+
 use poly_vfs::{AT_FDCWD, DeviceId, FileType, MountFlags};
 
 /// The longest host or domain name (`__NEW_UTS_LEN`).
@@ -118,8 +120,13 @@ impl Thread<'_> {
                 Err(e) => return Err(vfs_errno(e.errno())),
             }
         } else {
-            let fs = mounts::new_virtual(fs, root).map_err(vfs_errno)?;
-            files.mount_fs(target, fs, flags).map_err(vfs_errno)?
+            let made = mounts::new_virtual(fs, root).map_err(vfs_errno)?;
+            let id = files.mount_fs(target, made, flags).map_err(vfs_errno)?;
+            if let Some(m) = crate::fs::vfs().mount_by_id(id) {
+                let source = if source.is_empty() { &b"none"[..] } else { source };
+                m.set_sb_info(source, &poly_personality_linux::mountapi::options_string(fs, &root));
+            }
+            id
         };
         mounts::record_source(id, if source.is_empty() { b"none" } else { source });
         Ok(())
@@ -133,12 +140,20 @@ impl LinuxAdmin for Thread<'_> {
             MountRequest::New { source, target, fstype, flags, data } => {
                 self.mount_new(source, target, fstype, *flags, data)
             }
-            MountRequest::Remount { target, flags, data } => {
+            MountRequest::Remount { target, flags, data, bind } => {
                 // The file system's own options are only checked for the
                 // memory file systems, whose options Poly knows.
                 let id = files.mount_at(target, true).map_err(vfs_errno)?;
                 let _ = data;
                 files.remount(target, vfs_flags(*flags)).map_err(vfs_errno)?;
+                if !*bind
+                    && disk::mount_of(id).is_none()
+                    && let Some(m) = crate::fs::vfs().mount_by_id(id)
+                {
+                    // Without MS_BIND the file system itself changes too
+                    // (statmount(2)'s `sb_flags`, every mount of it).
+                    m.set_sb_read_only(flags.read_only);
+                }
                 if let Some(m) = disk::mount_of(id)
                     && !flags.read_only
                     && m.read_only
@@ -155,9 +170,21 @@ impl LinuxAdmin for Thread<'_> {
                 mounts::record_source(id, source);
                 Ok(())
             }
-            MountRequest::Propagation { target } => files.mount_at(target, true).map(|_| ()).map_err(vfs_errno),
-            // Not yet: moving a mount (switch_root, pivot setups).
-            MountRequest::Move { .. } => Err(Errno::EINVAL),
+            MountRequest::Propagation { target, kind, recursive } => {
+                let id = files.mount_at(target, true).map_err(vfs_errno)?;
+                let vfs = crate::fs::vfs();
+                let m = vfs.mount_by_id(id).ok_or(Errno::EINVAL)?;
+                let change = poly_personality_linux::mountapi::AttrChange { propagation: *kind, ..Default::default() };
+                for m in vfs.mount_subtree(&m, *recursive) {
+                    m.set_propagation(change.propagation_of(u64::from(m.propagation())) as u32);
+                }
+                Ok(())
+            }
+            MountRequest::Move { source, target } => {
+                let src = files.lookupat(AT_FDCWD, source, true).map_err(vfs_errno)?;
+                let dst = files.lookupat(AT_FDCWD, target, true).map_err(vfs_errno)?;
+                crate::fs::vfs().move_mount(&files.cred(), &src, &dst).map_err(vfs_errno)
+            }
         }
     }
 
@@ -220,5 +247,47 @@ impl LinuxAdmin for Thread<'_> {
                 power::power_off(&mut Log)
             }
         }
+    }
+
+    // The new mount API and pivot_root (ADR 0122): `super::mountapi`.
+
+    fn open_tree(&mut self, at: &PathAt, clone: Option<bool>, cloexec: bool) -> Result<i32, Errno> {
+        self.mnt_open_tree(at, clone, cloexec)
+    }
+
+    fn move_mount(&mut self, from: &PathAt, to: &PathAt) -> Result<(), Errno> {
+        self.mnt_move_mount(from, to)
+    }
+
+    fn mount_setattr(&mut self, at: &PathAt, recursive: bool, change: &AttrChange) -> Result<(), Errno> {
+        self.mnt_setattr(at, recursive, change)
+    }
+
+    fn fsopen(&mut self, ctx: FsContext, cloexec: bool) -> Result<i32, Errno> {
+        self.mnt_fsopen(ctx, cloexec)
+    }
+
+    fn fspick(&mut self, at: &PathAt, cloexec: bool) -> Result<i32, Errno> {
+        self.mnt_fspick(at, cloexec)
+    }
+
+    fn fsconfig(&mut self, fd: i32, cmd: &Command<'_>) -> Result<(), Errno> {
+        self.mnt_fsconfig(fd, cmd)
+    }
+
+    fn fsmount(&mut self, fd: i32, attrs: u64, cloexec: bool) -> Result<i32, Errno> {
+        self.mnt_fsmount(fd, attrs, cloexec)
+    }
+
+    fn mount_links(&mut self) -> Result<Vec<MountLink>, Errno> {
+        self.mnt_links()
+    }
+
+    fn describe_mount(&mut self, id: u64) -> Result<MountDesc, Errno> {
+        self.mnt_describe(id)
+    }
+
+    fn pivot_root(&mut self, new_root: &[u8], put_old: &[u8]) -> Result<(), Errno> {
+        self.mnt_pivot_root(new_root, put_old)
     }
 }

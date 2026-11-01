@@ -378,12 +378,20 @@ impl Vfs {
                 want = want | Access::WRITE;
             }
             cred.check(&attr, want)?;
+            // open(2): "ETXTBSY pathname refers to an executable image
+            // which is currently being executed and write access was
+            // requested."
+            if want.contains(Access::WRITE) && attr.kind == FileType::Regular && loc.mount.sb.exec_busy(loc.ino) {
+                return Err(Errno::ETXTBSY);
+            }
             // open(2): "EPERM The O_NOATIME flag was specified, but the
             // effective user ID of the caller did not match the owner of
             // the file and the caller was not privileged" (CAP_FOWNER).
             if flags.contains(OpenFlags::NOATIME) && !cred.owns(&attr) {
                 return Err(Errno::EPERM);
             }
+            // An append-only or immutable inode (`crate::fileattr`).
+            crate::fileattr::check_open(&loc, flags, write)?;
         }
         let backend = match attr.kind {
             FileType::Regular | FileType::Directory => Backend::Inode,
@@ -525,7 +533,8 @@ impl Vfs {
             return Err(Errno::EACCES);
         }
         cred.check(&attr, Access::EXEC)?;
-        Ok(Arc::new(OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin)))
+        let file = OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin);
+        Ok(Arc::new(file.denying_write()))
     }
 
     /// `mkdir(2)`: `mode` is masked by the umask.
@@ -726,6 +735,7 @@ impl Vfs {
         if vattr.kind == FileType::Directory {
             return Err(Errno::EISDIR);
         }
+        crate::fileattr::check_remove(&victim)?;
         if self.is_mount_point(&victim) {
             return Err(Errno::EBUSY);
         }
@@ -760,6 +770,7 @@ impl Vfs {
         if vattr.kind != FileType::Directory {
             return Err(Errno::ENOTDIR);
         }
+        crate::fileattr::check_remove(&victim)?;
         if self.is_mount_point(&victim) || victim.same(ctx.root.loc()) {
             return Err(Errno::EBUSY);
         }
@@ -804,17 +815,23 @@ impl Vfs {
         if flags.noreplace && flags.exchange {
             return Err(Errno::EINVAL);
         }
+        // The order (the spec of rename): both paths' directories, EXDEV,
+        // a last "."/".."/"/" (EBUSY), EROFS, the last names, the trailing
+        // slashes, then the rename's own errors.
         let op = self.dirs_of(ctx, cred, old)?;
         let np = self.dirs_of(ctx, cred, new)?;
-        let (Last::Name(old_name), Last::Name(new_name)) = (&op.last, &np.last) else {
-            return Err(Errno::EBUSY);
-        };
-        op.check_name()?;
-        let src = self.raw_child(&op.dir, old_name)?;
-        np.check_name()?;
         if !Arc::ptr_eq(&op.dir.mount, &np.dir.mount) {
             return Err(Errno::EXDEV);
         }
+        let (Last::Name(old_name), Last::Name(new_name)) = (&op.last, &np.last) else {
+            return Err(Errno::EBUSY);
+        };
+        if op.dir.mount.read_only() {
+            return Err(Errno::EROFS);
+        }
+        op.check_name()?;
+        let src = self.raw_child(&op.dir, old_name)?;
+        np.check_name()?;
         let sattr = src.attr()?;
         let dst = match self.raw_child(&np.dir, new_name) {
             Ok(d) => Some(d),
@@ -829,9 +846,6 @@ impl Vfs {
         if (op.trailing_slash && !src_dir) || (np.trailing_slash && !(if flags.exchange { dst_dir } else { src_dir })) {
             return Err(Errno::ENOTDIR);
         }
-        if self.is_mount_point(&src) || dst.as_ref().is_some_and(|d| self.is_mount_point(d)) {
-            return Err(Errno::EBUSY);
-        }
         if let Some(dattr) = &dattr {
             // RENAME_NOREPLACE: an existing target, even the source's own
             // name or another link of it, is EEXIST (the spec of renameat2).
@@ -842,14 +856,6 @@ impl Vfs {
                 // Two names of one inode (or the same name): nothing to do.
                 return Ok(());
             }
-            if !flags.exchange {
-                if src_dir && !dst_dir {
-                    return Err(Errno::ENOTDIR);
-                }
-                if !src_dir && dst_dir {
-                    return Err(Errno::EISDIR);
-                }
-            }
         }
         // A directory cannot move below itself.
         if src_dir && self.is_within(&np.dir, src.ino)? {
@@ -857,6 +863,11 @@ impl Vfs {
         }
         if flags.exchange && dst_dir && self.is_within(&op.dir, dattr.as_ref().map_or(0, |a| a.ino))? {
             return Err(Errno::EINVAL);
+        }
+        // A directory over one of its own ancestors: that target is not
+        // empty (it holds the source).
+        if !flags.exchange && src_dir && dst_dir && self.is_within(&op.dir, dattr.as_ref().map_or(0, |a| a.ino))? {
+            return Err(Errno::ENOTEMPTY);
         }
         let old_dattr = self.may_change(cred, &op.dir)?;
         let new_dattr = self.may_change(cred, &np.dir)?;
@@ -872,6 +883,19 @@ impl Vfs {
         }
         if moves_parent && flags.exchange && dst_dir {
             cred.check(dattr.as_ref().ok_or(Errno::ENOENT)?, Access::WRITE)?;
+        }
+        // Then the kinds, a non-empty target (the file system's), a mount
+        // point.
+        if dattr.is_some() && !flags.exchange {
+            if src_dir && !dst_dir {
+                return Err(Errno::ENOTDIR);
+            }
+            if !src_dir && dst_dir {
+                return Err(Errno::EISDIR);
+            }
+        }
+        if self.is_mount_point(&src) || dst.as_ref().is_some_and(|d| self.is_mount_point(d)) {
+            return Err(Errno::EBUSY);
         }
         let sb = &op.dir.mount.sb;
         sb.forget(op.dir.ino, old_name);
@@ -1063,10 +1087,10 @@ impl Vfs {
                 break;
             }
             if cur.is_mount_root() {
-                match &cur.mount.parent {
+                match cur.mount.parent() {
                     Some((m, ino)) => {
                         // Name the mount point, not the mounted root.
-                        cur = Location { mount: m.clone(), ino: *ino };
+                        cur = Location { mount: m, ino };
                         if cur.same(walk.top_root()) || cur.same(ctx.root.loc()) {
                             break;
                         }
@@ -1226,7 +1250,7 @@ impl Vfs {
         }
         let mount = loc.mount.clone();
         drop(loc);
-        if mount.parent.is_none() {
+        if mount.parent().is_none() {
             return Err(Errno::EBUSY);
         }
         let mut table = self.mounts.lock();
@@ -1294,7 +1318,7 @@ impl Vfs {
     /// namespace's first mount, or what is mounted over it, is not.
     pub fn is_chrooted(&self, ctx: &FsContext) -> bool {
         let mut first = ctx.root.loc().mount.clone();
-        while let Some((p, _)) = first.parent.clone() {
+        while let Some((p, _)) = first.parent() {
             first = p;
         }
         let top = self.follow_mounts(Location { ino: first.root, mount: first });
@@ -1312,17 +1336,19 @@ impl Vfs {
             let mut table = self.mounts.lock();
             let mut new_base = None;
             for m in table.tree(base) {
-                let parent = match &m.parent {
+                let parent = match m.parent() {
                     None => None,
                     // A parent that left the table (a lazy unmount) takes
                     // its subtree with it.
                     Some((p, ino)) => match copies.get(&p.id) {
-                        Some(c) => Some((c.clone(), *ino)),
+                        Some(c) => Some((c.clone(), ino)),
                         None => continue,
                     },
                 };
                 let is_base = parent.is_none();
                 let copy = table.add(m.sb.clone(), m.root, parent, m.flags());
+                copy.set_attrs(m.attrs());
+                copy.set_propagation(m.propagation());
                 if is_base {
                     new_base = Some(copy.id);
                 }
@@ -1350,14 +1376,10 @@ impl Vfs {
     /// `setns(2)` into mount namespace `base`: `ctx`'s root and working
     /// directory become its root. `EINVAL` if there is no such namespace.
     pub fn enter_namespace(&self, ctx: &mut FsContext, base: MountId) -> Result<()> {
-        let first = self
-            .mounts
-            .lock()
-            .mounts
-            .iter()
-            .find(|m| m.id == base && m.parent.is_none())
-            .cloned()
-            .ok_or(Errno::EINVAL)?;
+        let table = self.mounts.lock();
+        let base = table.current_base(base);
+        let first = table.mounts.iter().find(|m| m.id == base && m.parent().is_none()).cloned().ok_or(Errno::EINVAL)?;
+        drop(table);
         let root = Location { ino: first.root, mount: first }.pin()?;
         ctx.cwd = root.clone();
         ctx.root = root;
@@ -1372,17 +1394,24 @@ impl Vfs {
         if table.mounts.first().is_some_and(|m| m.id == base) {
             return Err(Errno::EBUSY);
         }
+        let name = base;
+        let base = table.current_base(name);
         let doomed: Vec<MountId> = table.tree(base).iter().map(|m| m.id).collect();
         if doomed.is_empty() {
             return Err(Errno::EINVAL);
         }
         table.mounts.retain(|m| !doomed.contains(&m.id));
+        table.forget_alias(name);
         Ok(())
     }
 
     /// The mounts of namespace `base`, in mount order.
     pub fn namespace_mounts(&self, base: MountId) -> Vec<MountInfo> {
-        let ids: Vec<MountId> = self.mounts.lock().tree(base).iter().map(|m| m.id).collect();
+        let ids: Vec<MountId> = {
+            let table = self.mounts.lock();
+            table.tree(table.current_base(base)).iter().map(|m| m.id).collect()
+        };
+
         self.mounts().into_iter().filter(|m| ids.contains(&m.id)).collect()
     }
 
@@ -1394,7 +1423,7 @@ impl Vfs {
             .iter()
             .map(|m| MountInfo {
                 id: m.id,
-                parent: m.parent.as_ref().map(|(p, ino)| (p.id, *ino)),
+                parent: m.parent().map(|(p, ino)| (p.id, ino)),
                 fs_name: m.sb.info.name,
                 dev: m.sb.dev,
                 root: m.root,

@@ -311,8 +311,8 @@ impl<'a> Walk<'a> {
             if !cur.is_mount_root() {
                 break;
             }
-            match &cur.mount.parent {
-                Some((m, ino)) => cur = Location { mount: m.clone(), ino: *ino },
+            match cur.mount.parent() {
+                Some((m, ino)) => cur = Location { mount: m, ino },
                 // The topmost root, outside the process root (a chroot
                 // escaped through a descriptor): stay.
                 None => return Ok(cur),

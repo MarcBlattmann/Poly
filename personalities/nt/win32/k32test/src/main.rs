@@ -123,6 +123,10 @@ unsafe extern "system" {
     fn GetVersion() -> u32;
     fn GetVersionExW(info: *mut u8) -> i32;
     fn GetSystemInfo(info: *mut u8);
+    // ADR 0114.
+    fn GetActiveProcessorGroupCount() -> u16;
+    fn GetActiveProcessorCount(group: u16) -> u32;
+    fn SetDefaultDllDirectories(flags: u32) -> i32;
     fn FormatMessageW(flags: u32, src: *const u8, id: u32, lang: u32, buf: *mut u16, size: u32, args: *const u8)
     -> u32;
     fn FormatMessageA(flags: u32, src: *const u8, id: u32, lang: u32, buf: *mut u8, size: u32, args: *const u8) -> u32;
@@ -566,7 +570,11 @@ unsafe fn files() {
         check(GetFileSize(h, &mut high) == text.len() as u32 && high == 0);
         let mut size = 0i64;
         check(GetFileSizeEx(h, &mut size) != 0 && size == text.len() as i64);
+        // A success other than INVALID_SET_FILE_POINTER leaves the last
+        // error alone (ADR 0114).
+        SetLastError(87);
         check(SetFilePointer(h, 0, core::ptr::null_mut(), 0) == 0);
+        check_error(87);
         let mut back = [0u8; 32];
         check(ReadFile(h, back.as_mut_ptr(), 32, &mut done, core::ptr::null_mut()) != 0);
         check(done == text.len() as u32 && &back[..text.len()] == text);
@@ -598,8 +606,10 @@ unsafe fn files() {
 
         // Finding files.
         let mut data = [0u8; 592];
+        SetLastError(87);
         let f = FindFirstFileW(w!("k32dir\\a.*"), data.as_mut_ptr());
         check(f != INVALID_HANDLE_VALUE);
+        check_error(87);
         let name = wslice(data.as_ptr().add(44).cast());
         check(ascii_eq(name, b"a.txt"));
         check(u32::from_le_bytes(data[32..36].try_into().unwrap()) == text.len() as u32);
@@ -617,6 +627,11 @@ unsafe fn files() {
         check(FindClose(f) != 0);
         check(FindFirstFileW(w!("k32dir\\*.none"), data.as_mut_ptr()) == INVALID_HANDLE_VALUE);
         check_error(ERROR_FILE_NOT_FOUND);
+        // "k32dir\." is the directory itself, by its own name (ADR 0114).
+        let f = FindFirstFileW(w!("k32dir\\."), data.as_mut_ptr());
+        check(f != INVALID_HANDLE_VALUE);
+        check(ascii_eq(wslice(data.as_ptr().add(44).cast()), b"k32dir"));
+        check(FindClose(f) != 0);
 
         // Full paths.
         let mut full = [0u16; 260];
@@ -810,6 +825,14 @@ unsafe fn system_and_modules() {
         GetSystemInfo(si.as_mut_ptr());
         check(u32::from_le_bytes(si[4..8].try_into().unwrap()) == 4096);
         check(u32::from_le_bytes(si[32..36].try_into().unwrap()) >= 1);
+        let cpus = u32::from_le_bytes(si[32..36].try_into().unwrap());
+        check(GetActiveProcessorGroupCount() == 1);
+        check(GetActiveProcessorCount(0xFFFF) == cpus && GetActiveProcessorCount(0) == cpus);
+        check(GetActiveProcessorCount(1) == 0);
+        check_error(ERROR_INVALID_PARAMETER);
+        check(SetDefaultDllDirectories(0x1000) != 0);
+        check(SetDefaultDllDirectories(0) == 0);
+        check_error(ERROR_INVALID_PARAMETER);
         check(IsDebuggerPresent() == 0);
 
         // Messages.

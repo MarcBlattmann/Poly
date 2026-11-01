@@ -49,6 +49,9 @@ impl Memory {
         let mut inner = self.inner.lock();
         let mut child =
             Inner { map: inner.map.clone(), parked: BTreeMap::new(), cached: BTreeMap::new(), shared: BTreeMap::new() };
+        // userfaultfd(2) registrations stay with the parent (no
+        // UFFD_FEATURE_EVENT_FORK); mseal(2) seals are inherited.
+        child.map.forget_userfaults(None);
         // MADV_WIPEONFORK regions: the child's copy starts zero-filled, so
         // their pages are not shared with it.
         let private: Vec<(u64, u64, Prot)> = inner

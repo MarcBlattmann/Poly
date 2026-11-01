@@ -170,6 +170,7 @@ pub fn release_mount_namespaces() {
 /// Install the kernel's side of the personality's namespaces (ADR 0054).
 pub fn init_namespaces() {
     poly_personality_linux::ns::on_mounts_released(mounts_released);
+    super::landlock::init();
 }
 
 /// Make `generation` (the tree's, read with it locked) the published one

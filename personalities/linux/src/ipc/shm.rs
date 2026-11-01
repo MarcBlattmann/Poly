@@ -52,6 +52,16 @@ pub const SHM_REMAP: u32 = 0o40000;
 pub const SHM_EXEC: u32 = 0o100000;
 /// Mode bit of a removed segment that is still attached (`linux/shm.h`).
 pub const SHM_DEST: u16 = 0o1000;
+/// Mode bit of a segment locked with `SHM_LOCK` (`linux/shm.h`).
+pub const SHM_LOCKED: u16 = 0o2000;
+/// shmctl commands beyond `IPC_RMID`, `IPC_SET`, `IPC_STAT`
+/// (`linux/ipc.h`, `linux/shm.h`).
+pub const IPC_INFO: u32 = 3;
+pub const SHM_LOCK: u32 = 11;
+pub const SHM_UNLOCK: u32 = 12;
+pub const SHM_STAT: u32 = 13;
+pub const SHM_INFO: u32 = 14;
+pub const SHM_STAT_ANY: u32 = 15;
 
 /// Limits (`linux/shm.h`): the smallest and largest segment, the most
 /// segments, and the most pages of all segments together.
@@ -234,6 +244,21 @@ impl ShmTable {
         self.segments.values_mut().find(|s| s.memory.serial() == serial)
     }
 
+    /// The id of the segment at `index` ([`super::index_of`]).
+    pub fn by_index(&self, index: i32) -> Option<i32> {
+        self.segments.keys().copied().find(|id| super::index_of(*id) == index)
+    }
+
+    /// The highest index in use, 0 if none (what `IPC_INFO` returns).
+    pub fn max_index(&self) -> i32 {
+        self.segments.keys().map(|id| super::index_of(*id)).max().unwrap_or(0)
+    }
+
+    /// Pages of all segments, from their sizes (`SHM_INFO`'s `shm_tot`).
+    pub fn total_pages(&self) -> u64 {
+        self.segments.values().fold(0u64, |t, s| t.saturating_add(s.pages()))
+    }
+
     /// The live segment with `key` (never [`IPC_PRIVATE`]).
     fn by_key(&self, key: i32) -> Option<(i32, &Segment)> {
         self.segments.iter().find(|(_, s)| s.key == key && !s.removed()).map(|(id, s)| (*id, s))
@@ -337,6 +362,30 @@ impl ShmTable {
         s.mode |= SHM_DEST;
         if s.nattch() == 0 { self.segments.remove(&id) } else { None }
     }
+}
+
+/// `SHMSEG` (`linux/shm.h`): the most attachments per process, as
+/// `IPC_INFO` reports it.
+pub const SHMSEG: u64 = SHMMNI as u64;
+
+/// `struct shminfo64` (`asm-generic/shmbuf.h`, nine `unsigned long`s):
+/// the limits `IPC_INFO` writes.
+pub fn shminfo_bytes() -> [u8; 72] {
+    let mut b = [0u8; 72];
+    for (i, v) in [SHMMAX, SHMMIN, SHMMNI as u64, SHMSEG, SHMALL].iter().enumerate() {
+        b[i * 8..i * 8 + 8].copy_from_slice(&v.to_ne_bytes());
+    }
+    b
+}
+
+/// `struct shm_info` (`linux/shm.h`, 48 bytes): what `SHM_INFO` writes,
+/// the segments in use and their pages (nothing is resident or swapped as
+/// far as it reports).
+pub fn shm_info_bytes(t: &ShmTable) -> [u8; 48] {
+    let mut b = [0u8; 48];
+    b[0..4].copy_from_slice(&(t.len() as i32).to_ne_bytes());
+    b[8..16].copy_from_slice(&t.total_pages().to_ne_bytes());
+    b
 }
 
 /// The segments of the initial IPC namespace.

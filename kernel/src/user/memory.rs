@@ -80,9 +80,11 @@ mod futex;
 mod remap;
 mod residency;
 mod shared;
+mod userfault;
 
 pub use advice::Advice;
 pub use shared::{AnonShared, SharedFrame};
+pub use userfault::FillError;
 
 pub use poly_vm::{Access, Backing, Kind, Layout, MapRequest, PAGE_SIZE, Placement, Prot, SegvCode, Vma};
 
@@ -293,6 +295,10 @@ pub enum FaultError {
     /// An action the kernel cannot carry out (copy on write of a page that
     /// is neither a page-cache page nor a shared frame: never happens).
     Unsupported,
+    /// The page is missing in a range registered with userfaultfd object
+    /// `uffd` (userfaultfd(2)): the fault goes to that object, and the
+    /// access is retried once the page is filled (`user::page_fault`).
+    UserFault { uffd: u32, page: u64 },
 }
 
 impl FaultError {
@@ -305,6 +311,7 @@ impl FaultError {
             FaultError::OutOfMemory => "out of memory",
             FaultError::NoMemoryMap => "no memory map",
             FaultError::Unsupported => "unsupported fault action",
+            FaultError::UserFault { .. } => "userfaultfd fault",
         }
     }
 }
@@ -716,6 +723,7 @@ impl Memory {
                 self.space.map_owned(page, frame, page_prot(prot)).map_err(map_error)
             }
             FaultAction::Segv(code) => Err(FaultError::Segv(code)),
+            FaultAction::UserFault { page, uffd } => Err(FaultError::UserFault { uffd, page }),
         }
     }
 

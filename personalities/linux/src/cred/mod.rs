@@ -254,6 +254,10 @@ pub struct Creds {
     /// The ids above are kernel ids; the capability sets are what the
     /// thread has in this namespace ([`crate::ns::user`]).
     pub user_ns: UserNsRef,
+    /// The thread's Landlock domain (`landlock_restrict_self`), if any:
+    /// inherited, kept across execve(2), never removed
+    /// ([`crate::landlock`]).
+    pub landlock: Option<Arc<crate::landlock::Domain>>,
 }
 
 impl Default for Creds {
@@ -307,6 +311,7 @@ impl Creds {
             keep_caps: false,
             no_new_privs: false,
             user_ns: None,
+            landlock: None,
         }
     }
 

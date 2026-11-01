@@ -1116,4 +1116,46 @@ pub trait LinuxKernel {
         let _ = fd;
         Err(Errno::EINVAL)
     }
+
+    /// mseal(2): seal the page-aligned, non-empty range `[addr, addr +
+    /// len)` (`ENOMEM` if part of it is unmapped, nothing sealed then).
+    fn mseal(&mut self, _addr: u64, _len: u64) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// memfd_secret(2): a new secret memory file
+    /// ([`crate::sys::secretmem`]); returns its descriptor.
+    fn memfd_secret(&mut self, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// cachestat(2): how many of the pages `[first, end)` of the file
+    /// behind `fd` hold data (`end` may be `u64::MAX`: to the end of the
+    /// file); 0 for descriptors without pages of their own. `EBADF` for a
+    /// descriptor that is not open or is `O_PATH`.
+    fn cachestat(&mut self, _fd: i32, _first: u64, _end: u64) -> Result<u64, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// userfaultfd(2): a new userfaultfd object for the caller's memory
+    /// ([`crate::sys::userfaultfd`]); returns its descriptor.
+    fn userfaultfd(&mut self, _nonblock: bool, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// Carry out `op` on the userfaultfd object behind `fd`; `None` if
+    /// `fd` is not one.
+    fn userfaultfd_op(
+        &mut self,
+        _fd: i32,
+        _op: crate::sys::userfaultfd::UffdOp<'_>,
+    ) -> Option<Result<crate::sys::userfaultfd::UffdReply, Errno>> {
+        None
+    }
+
+    /// io_uring's kernel services ([`crate::uring`]); `None` (the calls
+    /// fail with `ENOSYS`) by default.
+    fn uring(&mut self) -> Option<&mut dyn crate::uring::UringKernel> {
+        None
+    }
 }

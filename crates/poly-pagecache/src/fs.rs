@@ -291,6 +291,28 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
         self.st.inner.info()
     }
 
+    /// The inner file system's data pages and the dirty pages not written
+    /// back to it yet; for a file system that cannot tell, the pages in
+    /// the cache. Within the file's size in every case.
+    fn data_pages(&self, ino: Ino, first: u64, end: u64) -> Option<Vec<u64>> {
+        let size = self.st.inner.getattr(ino).ok()?.size;
+        let end = end.min(size.div_ceil(PAGE)).max(first);
+        let inner = self.st.inner.data_pages(ino, first, end);
+        let (lo, hi) = (Key::new(self.st.id, ino, first), Key::new(self.st.id, ino, end));
+        let index = self.core.index.lock();
+        let mut pages: Vec<u64> = match inner {
+            Some(mut held) => {
+                held.extend(index.dirty.range(lo..hi).map(|k| k.index));
+                held
+            }
+            None => index.pages.range(lo..hi).map(|(k, _)| k.index).collect(),
+        };
+        drop(index);
+        pages.sort_unstable();
+        pages.dedup();
+        Some(pages)
+    }
+
     fn root(&self) -> Ino {
         self.st.inner.root()
     }
@@ -424,6 +446,23 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
     fn removexattr(&self, ino: Ino, name: &[u8]) -> Result<()> {
         self.changed();
         self.st.inner.removexattr(ino, name)
+    }
+
+    fn xflags(&self, ino: Ino) -> Result<u32> {
+        self.st.inner.xflags(ino)
+    }
+
+    fn set_xflags(&self, ino: Ino, flags: u32) -> Result<()> {
+        self.changed();
+        self.st.inner.set_xflags(ino, flags)
+    }
+
+    fn handle(&self, ino: Ino) -> Result<poly_vfs::fileattr::FileHandle> {
+        self.st.inner.handle(ino)
+    }
+
+    fn handle_ino(&self, kind: i32, bytes: &[u8]) -> Result<Ino> {
+        self.st.inner.handle_ino(kind, bytes)
     }
 
     fn read(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> Result<usize> {

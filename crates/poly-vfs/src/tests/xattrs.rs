@@ -142,6 +142,61 @@ fn read_only_mounts_refuse_changes() {
     assert_eq!(n.setxattr(&e.root, b"user.a", b"1", 0), Err(Errno::EROFS));
     assert_eq!(n.removexattr(&e.root, b"user.a"), Err(Errno::EROFS));
     assert_eq!(n.listxattr(&e.root), Ok(Vec::new()));
+    // EROFS comes before every name check.
+    assert_eq!(n.setxattr(&e.root, b"plain", b"1", 0), Err(Errno::EROFS));
+    assert_eq!(n.setxattr(&e.root, b"user.", b"1", 0), Err(Errno::EROFS));
+    assert_eq!(n.removexattr(&user(), b"trusted.x"), Err(Errno::EROFS));
+}
+
+#[test]
+fn error_order_of_names() {
+    // setxattr's and getxattr's spec sheets: permissions before
+    // EOPNOTSUPP (unknown prefix) and EINVAL (bare prefix).
+    let e = Env::new();
+    e.write("/f", b"x");
+    let n = node(&e, "/f", true);
+    n.chown(&e.root, Some(1000), Some(1000)).unwrap();
+    let u = user();
+    n.chmod(&e.root, 0o400).unwrap();
+    assert_eq!(n.setxattr(&u, b"plain", b"1", 0), Err(Errno::EACCES));
+    assert_eq!(n.setxattr(&u, b"user.", b"1", 0), Err(Errno::EACCES));
+    assert_eq!(n.removexattr(&u, b"plain"), Err(Errno::EACCES));
+    n.chmod(&e.root, 0o200).unwrap();
+    assert_eq!(n.getxattr(&u, b"plain"), Err(Errno::EACCES));
+    assert_eq!(n.getxattr(&u, b"user."), Err(Errno::EACCES));
+    n.chmod(&e.root, 0o600).unwrap();
+    assert_eq!(n.setxattr(&u, b"plain", b"1", 0), Err(Errno::EOPNOTSUPP));
+    assert_eq!(n.setxattr(&u, b"user.", b"1", 0), Err(Errno::EINVAL));
+    assert_eq!(n.getxattr(&u, b"plain"), Err(Errno::EOPNOTSUPP));
+    assert_eq!(n.getxattr(&u, b"user."), Err(Errno::EINVAL));
+    // trusted. and security. without CAP_SYS_ADMIN, bare or not.
+    assert_eq!(n.setxattr(&u, b"trusted.", b"1", 0), Err(Errno::EPERM));
+    assert_eq!(n.getxattr(&u, b"trusted."), Err(Errno::ENODATA));
+    assert_eq!(n.setxattr(&u, b"security.", b"1", 0), Err(Errno::EPERM));
+    assert_eq!(n.setxattr(&e.root, b"security.", b"1", 0), Err(Errno::EINVAL));
+    assert_eq!(n.setxattr(&e.root, b"trusted.", b"1", 0), Err(Errno::EINVAL));
+    assert_eq!(n.setxattr(&e.root, b"system.", b"1", 0), Err(Errno::EOPNOTSUPP));
+    // Both flags: ENODATA for a missing name, EEXIST for one that exists.
+    assert_eq!(n.setxattr(&u, b"user.a", b"1", XATTR_CREATE | XATTR_REPLACE), Err(Errno::ENODATA));
+    n.setxattr(&u, b"user.a", b"1", 0).unwrap();
+    assert_eq!(n.setxattr(&u, b"user.a", b"1", XATTR_CREATE | XATTR_REPLACE), Err(Errno::EEXIST));
+}
+
+#[test]
+fn file_objects_have_no_attributes() {
+    // Pipes, sockets and event counters (fgetxattr's spec sheet).
+    let e = Env::new();
+    for kind in [FileType::Fifo, FileType::Regular, FileType::Socket] {
+        let n = e.vfs.anon_node(kind, 0o600, &e.root).unwrap();
+        assert_eq!(n.listxattr(&e.root), Ok(Vec::new()));
+        assert_eq!(n.getxattr(&e.root, b"user.a"), Err(Errno::ENODATA));
+        assert_eq!(n.getxattr(&e.root, b"user."), Err(Errno::ENODATA));
+        assert_eq!(n.setxattr(&e.root, b"user.a", b"1", 0), Err(Errno::EPERM));
+        assert_eq!(n.setxattr(&e.root, b"user.", b"1", 0), Err(Errno::EPERM));
+        assert_eq!(n.removexattr(&e.root, b"user.a"), Err(Errno::EPERM));
+        assert_eq!(n.getxattr(&e.root, b"plain"), Err(Errno::EOPNOTSUPP));
+        assert_eq!(n.setxattr(&e.root, b"security.x", b"1", 0), Err(Errno::EOPNOTSUPP));
+    }
 }
 
 #[test]

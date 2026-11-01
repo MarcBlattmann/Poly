@@ -16,6 +16,7 @@
 use super::vfs;
 use crate::sync::{Mutex, SpinLock};
 
+mod ancestry;
 mod more;
 mod mounts;
 use alloc::sync::Arc;

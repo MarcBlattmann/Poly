@@ -1,11 +1,20 @@
 //! System V IPC (svipc(7)): the objects of an IPC namespace. Shared
-//! memory ([`shm`]) and semaphore sets ([`sem`]); message queues are not
-//! implemented.
+//! memory ([`shm`]), semaphore sets ([`sem`]) and message queues
+//! ([`msg`]).
 
+pub mod mqueue;
+pub mod msg;
 pub mod sem;
 pub mod shm;
 
 use shm::Who;
+
+/// The index of an object's id: what `IPC_INFO` reports the highest of
+/// and what `SEM_STAT`, `SHM_STAT` and `MSG_STAT` take instead of an id
+/// (the id modulo 32768, as `ipcs`(1) expects).
+pub const fn index_of(id: i32) -> i32 {
+    id & 0x7fff
+}
 
 /// Whether `who` may have the access in `request` (permission bits as in
 /// a mode, of any class) to an object with permission bits `mode`, owned

@@ -209,11 +209,48 @@ pub trait FileSystem: Send + Sync {
         Err(Errno::EOPNOTSUPP)
     }
 
+    /// The pages of regular file `ino` in `[first, end)` (page indexes)
+    /// that hold data, in order, for cachestat(2); holes of sparse files
+    /// are left out. `None` (the default) if the file system cannot tell.
+    fn data_pages(&self, _ino: Ino, _first: u64, _end: u64) -> Option<Vec<u64>> {
+        None
+    }
+
     /// Space and inode counts for `statfs(2)`. The default reports a file
     /// system without blocks or inode limits; the VFS fills in the magic
     /// number from the name when this leaves it 0 (see [`FsStats`]).
     fn statfs(&self) -> Result<FsStats> {
         Ok(FsStats { block_size: 4096, fragment_size: 4096, name_max: crate::NAME_MAX as u64, ..FsStats::default() })
+    }
+
+    /// `ino`'s inode flags (`FS_XFLAG_*`, [`crate::fileattr`]). The default
+    /// is a file system without inode flags: `EOPNOTSUPP`, also from
+    /// [`set_xflags`](Self::set_xflags).
+    fn xflags(&self, ino: Ino) -> Result<u32> {
+        let _ = ino;
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// Replaces `ino`'s inode flags (`EOPNOTSUPP` for a flag the file
+    /// system does not keep), and sets the change time. The VFS has checked
+    /// the caller's permissions.
+    fn set_xflags(&self, ino: Ino, flags: u32) -> Result<()> {
+        let _ = (ino, flags);
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// A persistent handle for `ino` (name_to_handle_at(2)). The default
+    /// is a file system that cannot make handles: `EOPNOTSUPP`.
+    fn handle(&self, ino: Ino) -> Result<crate::fileattr::FileHandle> {
+        let _ = ino;
+        Err(Errno::EOPNOTSUPP)
+    }
+
+    /// The live inode a handle of this file system names
+    /// (open_by_handle_at(2)); `ESTALE` if there is none.
+    fn handle_ino(&self, kind: i32, bytes: &[u8]) -> Result<Ino> {
+        let _ = (kind, bytes);
+        Err(Errno::ESTALE)
     }
 }
 
@@ -251,6 +288,30 @@ pub const ST_RDONLY: u64 = 1;
 pub const ST_NOSUID: u64 = 2;
 pub const ST_NODEV: u64 = 4;
 pub const ST_NOEXEC: u64 = 8;
+/// More `f_flags` bits (`sys/statvfs.h` as Linux reports them).
+pub const ST_NOATIME: u64 = 1024;
+pub const ST_NODIRATIME: u64 = 2048;
+pub const ST_NOSYMFOLLOW: u64 = 0x2000;
+
+/// The `f_flags` bits a mount's extra attributes ([`Mount::attrs`],
+/// Linux `MOUNT_ATTR_*` bits, `linux/mount.h`) add: `MOUNT_ATTR_NOATIME`
+/// (`0x10` in the access time field `0x70`), `MOUNT_ATTR_NODIRATIME`
+/// (`0x80`), `MOUNT_ATTR_NOSYMFOLLOW` (`0x200000`).
+///
+/// [`Mount::attrs`]: crate::Mount::attrs
+pub const fn st_flags_of_attrs(attrs: u32) -> u64 {
+    let mut f = 0;
+    if attrs & 0x70 == 0x10 {
+        f |= ST_NOATIME;
+    }
+    if attrs & 0x80 != 0 {
+        f |= ST_NODIRATIME;
+    }
+    if attrs & 0x0020_0000 != 0 {
+        f |= ST_NOSYMFOLLOW;
+    }
+    f
+}
 
 /// Magic numbers of the file systems Poly has (Linux UAPI `linux/magic.h`).
 pub const TMPFS_MAGIC: u64 = 0x0102_1994;

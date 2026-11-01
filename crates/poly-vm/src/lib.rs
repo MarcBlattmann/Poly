@@ -305,6 +305,15 @@ pub struct Vma<F> {
     /// `MADV_WIPEONFORK` (madvise(2)): a child made by fork gets the range
     /// zero-filled instead of a copy. Private anonymous memory only.
     pub wipe_on_fork: bool,
+    /// Sealed by mseal(2): the region can no longer be unmapped, moved,
+    /// resized, re-protected or replaced (`EPERM`) for the life of the
+    /// address space. Inherited by a fork child (the map is copied).
+    pub sealed: bool,
+    /// Registered with a userfaultfd(2) object for missing-page faults:
+    /// that object's id ([`VmMap::set_userfault`]), 0 for none. A fault on
+    /// an absent page is then [`FaultAction::UserFault`]. Not inherited by
+    /// a fork child (the kernel clears it, [`VmMap::clear_userfault`]).
+    pub uffd: u32,
 }
 
 impl<F: Clone + PartialEq> Vma<F> {
@@ -361,6 +370,8 @@ impl<F: Clone + PartialEq> Vma<F> {
             kind: self.kind,
             backing,
             wipe_on_fork: self.wipe_on_fork,
+            sealed: self.sealed,
+            uffd: self.uffd,
         }
     }
 
@@ -372,6 +383,8 @@ impl<F: Clone + PartialEq> Vma<F> {
             && self.max_prot == next.max_prot
             && self.kind == next.kind
             && self.wipe_on_fork == next.wipe_on_fork
+            && self.sealed == next.sealed
+            && self.uffd == next.uffd
             && match (&self.backing, &next.backing) {
                 (Backing::Anonymous, Backing::Anonymous) => true,
                 (
@@ -703,6 +716,11 @@ pub enum FaultAction<F> {
     /// Deliver `SIGSEGV` with this code (or fail with `EFAULT` when the
     /// fault happened in the kernel's user-copy routines).
     Segv(SegvCode),
+    /// The page is missing in a region registered with userfaultfd object
+    /// `uffd` ([`Vma::uffd`]): the kernel reports the fault to it and
+    /// waits until the page is filled (or raises `SIGBUS` if the object
+    /// asked for that), then retries.
+    UserFault { page: u64, uffd: u32 },
 }
 
 /// The regions of one address space. See the crate docs.
@@ -726,6 +744,8 @@ enum Op<F> {
     Insert(Vma<F>),
     Protect(Prot),
     WipeOnFork(bool),
+    Seal,
+    UserFault(u32),
 }
 
 impl<F: Clone + PartialEq> VmMap<F> {
@@ -812,12 +832,24 @@ impl<F: Clone + PartialEq> VmMap<F> {
                 {
                     return Err(Error::Exists);
                 }
+                if self.is_sealed(addr, addr + len) {
+                    return Err(Error::Permission);
+                }
                 addr
             }
             Placement::Hint(hint) => self.place(hint, len).ok_or(Error::NoMemory)?,
         };
-        let vma =
-            Vma { start: addr, end: addr + len, prot, max_prot, kind: Kind::Normal, backing, wipe_on_fork: false };
+        let vma = Vma {
+            start: addr,
+            end: addr + len,
+            prot,
+            max_prot,
+            kind: Kind::Normal,
+            backing,
+            wipe_on_fork: false,
+            sealed: false,
+            uffd: 0,
+        };
         let replaced = self.rewrite(addr, addr + len, Op::Insert(vma))?;
         Ok(Mapped { addr, replaced })
     }
@@ -836,6 +868,9 @@ impl<F: Clone + PartialEq> VmMap<F> {
         let end = page_up(len).and_then(|len| addr.checked_add(len)).ok_or(Error::Invalid)?;
         if end > self.layout.max_addr {
             return Err(Error::Invalid);
+        }
+        if self.is_sealed(addr, end) {
+            return Err(Error::Permission);
         }
         self.rewrite(addr, end, Op::Remove)
     }
@@ -872,6 +907,9 @@ impl<F: Clone + PartialEq> VmMap<F> {
         if covered < end {
             return Err(Error::NoMemory);
         }
+        if self.is_sealed(addr, end) {
+            return Err(Error::Permission);
+        }
         if !allowed {
             return Err(Error::Access);
         }
@@ -904,6 +942,114 @@ impl<F: Clone + PartialEq> VmMap<F> {
             self.rewrite(s, e, Op::WipeOnFork(on))?;
         }
         if hole { Err(Error::NoMemory) } else { Ok(()) }
+    }
+
+    /// Whether any part of `[start, end)` is sealed ([`Vma::sealed`]).
+    pub fn is_sealed(&self, start: u64, end: u64) -> bool {
+        self.regions_in(start, end).any(|v| v.sealed)
+    }
+
+    /// Seal `[addr, addr + len)` (mseal(2)): `len` is rounded up to whole
+    /// pages; 0 succeeds without doing anything. Sealing a sealed range
+    /// again is fine.
+    ///
+    /// Errors, nothing sealed then: a misaligned `addr` or a range that
+    /// wraps around ([`Error::Invalid`]); any part of the range unmapped
+    /// ([`Error::NoMemory`]); too many regions ([`Error::NoMemory`]).
+    pub fn seal(&mut self, addr: u64, len: u64) -> Result<(), Error> {
+        if !is_page_aligned(addr) {
+            return Err(Error::Invalid);
+        }
+        let end = page_up(len).and_then(|len| addr.checked_add(len)).ok_or(Error::Invalid)?;
+        if len == 0 {
+            return Ok(());
+        }
+        if !self.is_covered(addr, end) {
+            return Err(Error::NoMemory);
+        }
+        self.rewrite(addr, end, Op::Seal).map(|_| ())
+    }
+
+    /// Whether a discarding madvise(2) (`MADV_DONTNEED` and the like) over
+    /// `[start, end)` must be refused because of a seal: some sealed part
+    /// is private anonymous memory without write permission, whose
+    /// contents the process could not have written back itself.
+    pub fn discard_refused(&self, start: u64, end: u64) -> bool {
+        self.regions_in(start, end)
+            .any(|v| v.sealed && matches!(v.backing, Backing::Anonymous) && !v.prot.contains(Prot::WRITE))
+    }
+
+    /// Whether every page of `[start, end)` is mapped.
+    fn is_covered(&self, start: u64, end: u64) -> bool {
+        let mut covered = start;
+        for v in self.regions_in(start, end) {
+            if v.start > covered {
+                return false;
+            }
+            covered = v.end;
+        }
+        covered >= end
+    }
+
+    /// Register `[addr, addr + len)` with userfaultfd object `uffd`
+    /// (non-zero) for missing-page faults (`UFFDIO_REGISTER`). Registering
+    /// again replaces the registration.
+    ///
+    /// Errors, nothing registered then: a misaligned `addr` or `len`, a zero
+    /// `len`, a range that wraps around or leaves the address space, any
+    /// part of the range unmapped ([`Error::Invalid`]); too many regions
+    /// ([`Error::NoMemory`]).
+    pub fn set_userfault(&mut self, addr: u64, len: u64, uffd: u32) -> Result<(), Error> {
+        let end = addr.checked_add(len).ok_or(Error::Invalid)?;
+        if !is_page_aligned(addr) || !is_page_aligned(len) || len == 0 || end > self.layout.max_addr {
+            return Err(Error::Invalid);
+        }
+        if !self.is_covered(addr, end) {
+            return Err(Error::Invalid);
+        }
+        self.rewrite(addr, end, Op::UserFault(uffd)).map(|_| ())
+    }
+
+    /// Undo the registrations with `uffd` of the mapped parts of `[addr,
+    /// addr + len)` (`UFFDIO_UNREGISTER`).
+    ///
+    /// Errors: a misaligned `addr` or `len`, a zero `len`, a range that
+    /// wraps around or leaves the address space ([`Error::Invalid`]); too
+    /// many regions ([`Error::NoMemory`]).
+    pub fn clear_userfault(&mut self, addr: u64, len: u64, uffd: u32) -> Result<(), Error> {
+        let end = addr.checked_add(len).ok_or(Error::Invalid)?;
+        if !is_page_aligned(addr) || !is_page_aligned(len) || len == 0 || end > self.layout.max_addr {
+            return Err(Error::Invalid);
+        }
+        let parts: Vec<(u64, u64)> = self
+            .regions_in(addr, end)
+            .filter(|v| v.uffd == uffd)
+            .map(|v| (v.start.max(addr), v.end.min(end)))
+            .collect();
+        for (s, e) in parts {
+            self.rewrite(s, e, Op::UserFault(0))?;
+        }
+        Ok(())
+    }
+
+    /// Whether `addr` lies in a region registered with `uffd`.
+    pub fn userfault_registered(&self, addr: u64, uffd: u32) -> bool {
+        self.find(addr).is_some_and(|v| v.uffd == uffd)
+    }
+
+    /// Drop every registration with userfaultfd object `uffd` (the object
+    /// was closed), or with any object (`None`: a fork child's copy of the
+    /// map). Merging regions back only shrinks the map, so this cannot
+    /// fail.
+    pub fn forget_userfaults(&mut self, uffd: Option<u32>) {
+        let parts: Vec<(u64, u64)> = self
+            .regions()
+            .filter(|v| v.uffd != 0 && uffd.is_none_or(|u| v.uffd == u))
+            .map(|v| (v.start, v.end))
+            .collect();
+        for (s, e) in parts {
+            let _ = self.rewrite(s, e, Op::UserFault(0));
+        }
     }
 
     /// Resize the mapping `[old, old + old_len)` to `new_len` bytes, moving
@@ -949,6 +1095,12 @@ impl<F: Clone + PartialEq> VmMap<F> {
             if to < self.layout.min_addr || to_end > self.layout.max_addr {
                 return Err(Error::NoMemory);
             }
+            if self.is_sealed(to, to_end) {
+                return Err(Error::Permission);
+            }
+        }
+        if vma.sealed {
+            return Err(Error::Permission);
         }
         // Work on a copy, so that an error half-way changes nothing.
         let mut next = self.clone();
@@ -1014,6 +1166,8 @@ impl<F: Clone + PartialEq> VmMap<F> {
             kind: Kind::Stack,
             backing: Backing::Anonymous,
             wipe_on_fork: false,
+            sealed: false,
+            uffd: 0,
         };
         self.rewrite(start, top, Op::Insert(vma))?;
         Ok(start)
@@ -1076,6 +1230,8 @@ impl<F: Clone + PartialEq> VmMap<F> {
                     kind: Kind::Heap,
                     backing: Backing::Anonymous,
                     wipe_on_fork: false,
+                    sealed: false,
+                    uffd: 0,
                 };
                 if self.rewrite(old_end, new_end, Op::Insert(vma)).is_err() {
                     return unchanged;
@@ -1125,6 +1281,9 @@ impl<F: Clone + PartialEq> VmMap<F> {
         let vma = &self.vmas[&key];
         if !vma.prot.allows(access) {
             return FaultAction::Segv(SegvCode::AccErr);
+        }
+        if vma.uffd != 0 && page == PageState::Absent {
+            return FaultAction::UserFault { page: page_addr, uffd: vma.uffd };
         }
         match page {
             PageState::Absent => match &vma.backing {
@@ -1276,6 +1435,8 @@ impl<F: Clone + PartialEq> VmMap<F> {
             match op {
                 Op::Protect(prot) => pieces.push(Vma { prot, ..inside }),
                 Op::WipeOnFork(wipe_on_fork) => pieces.push(Vma { wipe_on_fork, ..inside }),
+                Op::Seal => pieces.push(Vma { sealed: true, ..inside }),
+                Op::UserFault(uffd) => pieces.push(Vma { uffd, ..inside }),
                 Op::Remove | Op::Insert(_) => removed.push(inside),
             }
             if v.end > end {

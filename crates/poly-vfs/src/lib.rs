@@ -67,20 +67,24 @@
 
 extern crate alloc;
 
+pub mod ancestry;
 mod cred;
 pub mod device;
 pub mod epoll;
 mod errno;
 pub mod eventfd;
+pub mod fanotify;
 mod fdtable;
 mod fifo;
 mod file;
+pub mod fileattr;
 mod fs;
 pub mod inotify;
 pub mod lock;
 pub mod locks;
 pub mod memfd;
 mod mount;
+mod mountapi;
 mod node;
 mod object;
 mod path;

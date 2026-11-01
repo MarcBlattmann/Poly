@@ -58,11 +58,14 @@ pub struct Pipe {
 }
 
 /// One page of a pipe's buffer: how many bytes were written into it and
-/// how many of those are still unread.
+/// how many of those are still unread, and whether a later write may add
+/// to it (a page a write started; not one splice(2), tee(2) or
+/// vmsplice(2) put in, which stays a buffer of its own).
 #[derive(Clone, Copy, Debug)]
 struct Page {
     filled: usize,
     left: usize,
+    merge: bool,
 }
 
 struct State {
@@ -93,7 +96,7 @@ impl State {
     fn merge(&self, len: usize) -> usize {
         let tail = len % PIPE_PAGE;
         match self.pages.back() {
-            Some(p) if !self.packet && tail > 0 && p.filled + tail <= PIPE_PAGE => tail,
+            Some(p) if !self.packet && p.merge && tail > 0 && p.filled + tail <= PIPE_PAGE => tail,
             _ => 0,
         }
     }
@@ -116,7 +119,7 @@ impl State {
         let mut n = n - merge;
         while n > 0 {
             let k = n.min(PIPE_PAGE);
-            self.pages.push_back(Page { filled: k, left: k });
+            self.pages.push_back(Page { filled: k, left: k, merge: true });
             n -= k;
         }
     }
@@ -218,6 +221,128 @@ impl Pipe {
         }
         Ok(slots * PIPE_PAGE)
     }
+
+    /// What the pipe holds and who has it open.
+    pub fn status(&self) -> PipeStatus {
+        let s = self.state.lock();
+        PipeStatus { len: s.data.len(), free_pages: s.free_pages(), readers: s.readers, writers: s.writers }
+    }
+
+    /// Copy up to `buf.len()` of the bytes at the front out without taking
+    /// them; returns how many.
+    pub fn peek(&self, buf: &mut [u8]) -> usize {
+        let s = self.state.lock();
+        let n = s.data.len().min(buf.len());
+        for (d, b) in buf[..n].iter_mut().zip(s.data.iter()) {
+            *d = *b;
+        }
+        n
+    }
+
+    /// vmsplice(2) into the pipe: each of `pieces` (at most a page each,
+    /// non-empty) becomes a buffer of its own, not merged with what is
+    /// there; whole pieces go in, in order, while pages are free. Returns
+    /// the bytes taken. `EPIPE` without read ends; `EAGAIN` when not even
+    /// the first piece finds a free page.
+    pub fn push_pieces(&self, pieces: &[&[u8]]) -> Result<usize> {
+        let mut s = self.state.lock();
+        if s.readers == 0 {
+            return Err(Errno::EPIPE);
+        }
+        let mut n = 0;
+        for piece in pieces.iter().filter(|p| !p.is_empty()) {
+            if s.free_pages() == 0 {
+                break;
+            }
+            debug_assert!(piece.len() <= PIPE_PAGE);
+            s.data.extend(piece.iter());
+            s.pages.push_back(Page { filled: piece.len(), left: piece.len(), merge: false });
+            n += piece.len();
+        }
+        drop(s);
+        if n == 0 {
+            return Err(Errno::EAGAIN);
+        }
+        self.queue.notify(PollEvents::READABLE);
+        Ok(n)
+    }
+
+    /// splice(2) (`keep` false) or tee(2) (`keep` true) between two pipes:
+    /// up to `len` bytes from the front of this pipe go to the end of
+    /// `out`, each of this pipe's buffers (or the part of it within `len`)
+    /// becoming a buffer of `out`'s while `out` has free pages. tee(2)
+    /// leaves this pipe as it was. In this order: an empty pipe with
+    /// writers waits ([`Transfer::WaitInput`]), an `out` without a free
+    /// page waits ([`Transfer::WaitOutput`]), an `out` without readers is
+    /// `EPIPE`, an empty pipe without writers is the end
+    /// ([`Transfer::Moved`] of 0). `EINVAL` if `out` is this pipe.
+    pub fn transfer(&self, out: &Pipe, len: usize, keep: bool) -> Result<Transfer> {
+        if core::ptr::eq(self, out) {
+            return Err(Errno::EINVAL);
+        }
+        // Two locks, always taken in address order.
+        let (mut src, mut dst) = if (self as *const Pipe) < (out as *const Pipe) {
+            let a = self.state.lock();
+            (a, out.state.lock())
+        } else {
+            let b = out.state.lock();
+            (self.state.lock(), b)
+        };
+        if src.data.is_empty() && src.writers > 0 {
+            return Ok(Transfer::WaitInput);
+        }
+        if dst.free_pages() == 0 {
+            return Ok(Transfer::WaitOutput);
+        }
+        if dst.readers == 0 {
+            return Err(Errno::EPIPE);
+        }
+        let mut moved = 0;
+        let mut at = 0;
+        let mut page = 0;
+        while moved < len && page < src.pages.len() && dst.free_pages() > 0 {
+            let k = src.pages[page].left.min(len - moved);
+            dst.data.extend(src.data.range(at..at + k));
+            dst.pages.push_back(Page { filled: k, left: k, merge: false });
+            moved += k;
+            at += k;
+            page += 1;
+        }
+        if !keep {
+            src.data.drain(..moved);
+            src.drain(moved);
+        }
+        drop((src, dst));
+        if moved > 0 {
+            out.queue.notify(PollEvents::READABLE);
+            if !keep {
+                self.queue.notify(PollEvents::WRITABLE);
+            }
+        }
+        Ok(Transfer::Moved(moved))
+    }
+}
+
+/// What [`Pipe::status`] tells.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PipeStatus {
+    /// Bytes in the pipe.
+    pub len: usize,
+    /// Pages no write has started yet.
+    pub free_pages: usize,
+    pub readers: usize,
+    pub writers: usize,
+}
+
+/// What [`Pipe::transfer`] did, or what it waits for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Transfer {
+    /// This many bytes went (0: the input is empty and has no writers).
+    Moved(usize),
+    /// The input is empty but has writers.
+    WaitInput,
+    /// The output has no free page.
+    WaitOutput,
 }
 
 impl core::fmt::Debug for Pipe {
@@ -408,5 +533,92 @@ impl FileObject for PipeEnd {
 
     fn bytes_readable(&self) -> Option<usize> {
         Some(self.pipe.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec::Vec;
+
+    fn write(end: &PipeEnd, data: &[u8]) {
+        assert_eq!(end.write(data), Ok(data.len()));
+    }
+
+    fn read_all(end: &PipeEnd) -> Vec<u8> {
+        let mut buf = alloc::vec![0u8; 1 << 21];
+        let n = end.read(&mut buf).unwrap_or(0);
+        buf.truncate(n);
+        buf
+    }
+
+    #[test]
+    fn splice_moves_buffers_and_stops_inside_one() {
+        let (pr, pw) = Pipe::pair(false);
+        let (qr, qw) = Pipe::pair(false);
+        write(&pw, b"0123456789");
+        assert_eq!(pr.pipe().transfer(qw.pipe(), 4, false), Ok(Transfer::Moved(4)));
+        assert_eq!((pr.pipe().len(), qr.pipe().len()), (6, 4));
+        assert_eq!(pr.pipe().transfer(qw.pipe(), 100, false), Ok(Transfer::Moved(6)));
+        assert_eq!(read_all(&qr), b"0123456789");
+        // Empty with a writer waits; without writers it is the end.
+        assert_eq!(pr.pipe().transfer(qw.pipe(), 1, false), Ok(Transfer::WaitInput));
+        drop(pw);
+        assert_eq!(pr.pipe().transfer(qw.pipe(), 1, false), Ok(Transfer::Moved(0)));
+        assert_eq!(pr.pipe().transfer(pr.pipe(), 1, false), Err(Errno::EINVAL));
+    }
+
+    #[test]
+    fn tee_keeps_the_input_and_spans_buffers() {
+        let (pr, pw) = Pipe::pair(false);
+        let (qr, qw) = Pipe::pair(false);
+        write(&pw, b"aaa");
+        write(&pw, b"bbbb");
+        assert_eq!(pr.pipe().transfer(qw.pipe(), 5, true), Ok(Transfer::Moved(5)));
+        assert_eq!(pr.pipe().len(), 7);
+        assert_eq!(read_all(&qr), b"aaabb");
+        let mut peek = [0u8; 4];
+        assert_eq!(pr.pipe().peek(&mut peek), 4);
+        assert_eq!(&peek, b"aaab");
+        assert_eq!(read_all(&pr), b"aaabbbb");
+    }
+
+    #[test]
+    fn output_room_is_counted_in_buffers_and_waited_for_before_epipe() {
+        let (pr, pw) = Pipe::pair(false);
+        let (_qr, qw) = Pipe::pair(false);
+        pr.pipe().set_capacity(1 << 20).unwrap();
+        let big = alloc::vec![7u8; 1 << 20];
+        let mut n = 0;
+        while n < big.len() {
+            n += pw.write(&big[n..]).unwrap();
+        }
+        assert_eq!(pr.pipe().transfer(qw.pipe(), 1 << 20, true), Ok(Transfer::Moved(PIPE_CAPACITY)));
+        assert_eq!(pr.pipe().transfer(qw.pipe(), 1, true), Ok(Transfer::WaitOutput));
+        // No reader on the output: EPIPE, and the input keeps its bytes.
+        let (zr, zw) = Pipe::pair(false);
+        let (yr, yw) = Pipe::pair(false);
+        drop(yr);
+        write(&zw, b"abc");
+        assert_eq!(zr.pipe().transfer(yw.pipe(), 3, false), Err(Errno::EPIPE));
+        assert_eq!(zr.pipe().len(), 3);
+    }
+
+    #[test]
+    fn vmsplice_pieces_take_a_buffer_each() {
+        let (pr, pw) = Pipe::pair(false);
+        let pieces: Vec<&[u8]> = (0..20).map(|_| &b"x"[..]).collect();
+        assert_eq!(pw.pipe().push_pieces(&pieces), Ok(16));
+        assert_eq!(pw.pipe().push_pieces(&pieces), Err(Errno::EAGAIN));
+        assert_eq!(read_all(&pr).len(), 16);
+        write(&pw, b"y");
+        assert_eq!(pw.pipe().push_pieces(&pieces), Ok(15));
+        read_all(&pr);
+        // A piece is not merged into by a later write.
+        assert_eq!(pw.pipe().push_pieces(&[b"ab"]), Ok(2));
+        write(&pw, b"c");
+        assert_eq!(pw.pipe().status().free_pages, 14);
+        drop(pr);
+        assert_eq!(pw.pipe().push_pieces(&[b"z"]), Err(Errno::EPIPE));
     }
 }

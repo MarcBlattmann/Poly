@@ -136,10 +136,64 @@ pub fn valid_affinity(mask: u64, system: u64) -> bool {
     mask != 0 && mask & !system == 0
 }
 
+/// `ALL_PROCESSOR_GROUPS` (`winnt.h`).
+pub const ALL_PROCESSOR_GROUPS: u16 = 0xFFFF;
+
+/// `GetActiveProcessorGroupCount`: Poly has at most 64 processors, all in
+/// group 0 (Learn, "Processor Groups": a group holds up to 64).
+pub const ACTIVE_PROCESSOR_GROUPS: u16 = 1;
+
+/// The last error `GetActiveProcessorGroupCount` and
+/// `GetActiveProcessorCount` leave when they succeed. ADR 0110's trace of
+/// 7-Zip shows Windows leaving one that is not 0 (the next call that sets
+/// `ERROR_SUCCESS` changes it on Windows only; 7-Zip calls the two through
+/// `GetProcAddress` pointers, which the tracer does not see), not which
+/// value: Poly's is a placeholder, `ERROR_INSUFFICIENT_BUFFER`
+/// (`winerror.h`), to be confirmed by the spec agent (ADR 0114).
+pub const PROCESSOR_QUERY_LAST_ERROR: u32 = 122;
+
+/// `GetActiveProcessorCount(GroupNumber)` on a system with `cpus`
+/// processors: the processors of group 0, or of every group for
+/// `ALL_PROCESSOR_GROUPS` (Learn); another group does not exist, which is
+/// a failure (Learn: "the return value is zero"), `ERROR_INVALID_PARAMETER`
+/// (Poly's choice, to be confirmed by the spec agent).
+pub fn active_processor_count(group: u16, cpus: u32) -> Result<u32, u32> {
+    match group {
+        0 | ALL_PROCESSOR_GROUPS => Ok(cpus.clamp(1, 64)),
+        _ => Err(crate::error::ERROR_INVALID_PARAMETER),
+    }
+}
+
+/// The `LOAD_LIBRARY_SEARCH_*` flags `SetDefaultDllDirectories` takes
+/// (`libloaderapi.h`): `APPLICATION_DIR`, `USER_DIRS`, `SYSTEM32`,
+/// `DEFAULT_DIRS`.
+pub const DEFAULT_DLL_DIRECTORY_FLAGS: u32 = 0x0200 | 0x0400 | 0x0800 | 0x1000;
+
+/// Whether `flags` is a valid `SetDefaultDllDirectories` argument: Learn's
+/// table lists those four values, "any combination" of them; Poly takes
+/// none, or any other bit, as `ERROR_INVALID_PARAMETER` (to be confirmed by
+/// the spec agent).
+pub fn valid_default_dll_directories(flags: u32) -> bool {
+    flags != 0 && flags & !DEFAULT_DLL_DIRECTORY_FLAGS == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     extern crate std;
+
+    #[test]
+    fn processor_groups_and_dll_directories() {
+        assert_eq!(active_processor_count(0, 6), Ok(6));
+        assert_eq!(active_processor_count(ALL_PROCESSOR_GROUPS, 6), Ok(6));
+        assert_eq!(active_processor_count(ALL_PROCESSOR_GROUPS, 0), Ok(1));
+        assert_eq!(active_processor_count(1, 6), Err(crate::error::ERROR_INVALID_PARAMETER));
+        assert!(valid_default_dll_directories(0x0800));
+        assert!(valid_default_dll_directories(0x1000));
+        assert!(valid_default_dll_directories(0x0200 | 0x0400 | 0x0800));
+        assert!(!valid_default_dll_directories(0));
+        assert!(!valid_default_dll_directories(0x0100), "LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR is LoadLibraryEx's only");
+    }
 
     #[test]
     fn meminfo_and_status() {

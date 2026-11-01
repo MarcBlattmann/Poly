@@ -201,6 +201,7 @@ pub fn bind(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if addr == SockAddr::Unspec {
         addr = unspec_bind(k, fd, a.ptr(1), a.int(2))?;
     }
+    crate::sys::landlock::check_socket(k, fd, &addr, false)?;
     net(k)?.bind(fd, &addr).map(|()| 0)
 }
 
@@ -278,6 +279,7 @@ fn do_accept(k: &mut dyn LinuxKernel, a: &Args, flags: u32) -> SysResult {
 pub fn connect(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
     let addr = read_addr(k, a.ptr(1), a.int(2))?;
+    crate::sys::landlock::check_socket(k, fd, &addr, true)?;
     let r = net(k)?.connect(fd, &addr);
     r.map(|()| 0).map_err(|e| interrupted(k, fd, true, e))
 }
@@ -543,18 +545,26 @@ pub fn sendmsg(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// sendmmsg(fd, msgvec, vlen, flags): the messages one by one, each
 /// `msg_len` set; stops at the first error after a message went (that
 /// count is returned) (sendmmsg(2)).
+///
+/// sendmmsg's spec sheet: `MSG_CMSG_COMPAT` is `EINVAL` before anything
+/// else, then the descriptor (`EBADF`, `ENOTSOCK`), then a `vlen` of 0
+/// returns 0. A sent message whose `msg_len` cannot be stored does not
+/// count (`EFAULT` if it was the first).
 pub fn sendmmsg(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let fd = fd_arg(a, 0)?;
-    let vlen = a.uint(2).min(MAX_MMSG);
     let flags = a.uint(3);
+    if flags & abi::MSG_CMSG_COMPAT != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let fd = fd_arg(a, 0)?;
+    net(k)?.getsockopt(fd, OptName::Type)?;
+    let vlen = a.uint(2).min(MAX_MMSG);
     let mut sent = 0u32;
     while sent < vlen {
         let at = a.ptr(1).0 + u64::from(sent) * abi::MMSGHDR_SIZE;
-        match sendmsg_one(k, fd, UserPtr(at), flags) {
-            Ok(n) => {
-                k.copy_to_user(UserPtr(at + MsgHdr::SIZE as u64), &(n as u32).to_le_bytes())?;
-                sent += 1;
-            }
+        let stored = sendmsg_one(k, fd, UserPtr(at), flags)
+            .and_then(|n| k.copy_to_user(UserPtr(at + MsgHdr::SIZE as u64), &(n as u32).to_le_bytes()));
+        match stored {
+            Ok(()) => sent += 1,
             Err(e) if sent == 0 => return Err(e),
             Err(_) => break,
         }
@@ -692,24 +702,46 @@ pub fn recvmsg(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     recvmsg_one(k, fd, a.ptr(1), a.uint(2)).map(|n| n as u64)
 }
 
-/// recvmmsg(fd, msgvec, vlen, flags, timeout): up to `vlen` messages;
-/// `MSG_WAITFORONE` makes every receive after the first non-blocking; the
-/// timeout (recvmmsg(2) BUGS: only checked after each datagram) ends the
-/// call once it has passed.
+/// recvmmsg(fd, msgvec, vlen, flags, timeout): up to `vlen` messages (no
+/// cap); `MSG_WAITFORONE` makes every receive after the first
+/// non-blocking; the timeout (recvmmsg(2) BUGS: only checked after each
+/// datagram) ends the call once it has passed, and the time left is
+/// written back (`EFAULT` if it cannot be, the messages taken all the
+/// same).
+///
+/// recvmmsg's spec sheet: the timeout is read (`EFAULT`) and checked
+/// (`EINVAL`) first, then `MSG_CMSG_COMPAT` (`EINVAL`), the descriptor
+/// (`EBADF`, `ENOTSOCK`) and a `vlen` of 0. An error after a message was
+/// received ends the call with the count and, unless it is `EAGAIN`, is
+/// kept on the socket for its next receive ([`LinuxNet::keep_error`]); an
+/// interruption by a signal is kept as error 512
+/// ([`Errno::RECV_INTERRUPTED`]).
 pub fn recvmmsg(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let fd = fd_arg(a, 0)?;
-    let vlen = a.uint(2).min(MAX_MMSG);
-    let flags = a.uint(3);
-    let deadline = if a.ptr(4).0 == 0 {
+    let ts_ptr = a.ptr(4);
+    let timeout = if ts_ptr.is_null() {
         None
     } else {
         let mut t = [0u8; 16];
-        k.copy_from_user(a.ptr(4), &mut t)?;
+        k.copy_from_user(ts_ptr, &mut t)?;
         let ts = crate::abi::Timespec::from_bytes(&t);
         if !ts.is_valid() {
             return Err(Errno::EINVAL);
         }
-        Some(k.clock(Clock::Monotonic)?.saturating_add(ts))
+        Some(ts)
+    };
+    let flags = a.uint(3);
+    if flags & abi::MSG_CMSG_COMPAT != 0 {
+        return Err(Errno::EINVAL);
+    }
+    let fd = fd_arg(a, 0)?;
+    net(k)?.getsockopt(fd, OptName::Type)?;
+    let vlen = a.uint(2);
+    if vlen == 0 {
+        return Ok(0);
+    }
+    let deadline = match timeout {
+        Some(ts) => Some(k.clock(Clock::Monotonic)?.saturating_add(ts)),
+        None => None,
     };
     let mut got = 0u32;
     while got < vlen {
@@ -724,7 +756,14 @@ pub fn recvmmsg(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
                 got += 1;
             }
             Err(e) if got == 0 => return Err(e),
-            Err(_) => break,
+            Err(e) => {
+                if e.is_restart() || e == Errno::EINTR {
+                    net(k)?.keep_error(fd, Errno::RECV_INTERRUPTED);
+                } else if e != Errno::EAGAIN {
+                    net(k)?.keep_error(fd, e);
+                }
+                break;
+            }
         }
         if let Some(d) = deadline {
             let now = k.clock(Clock::Monotonic)?;
@@ -732,6 +771,12 @@ pub fn recvmmsg(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
                 break;
             }
         }
+    }
+    if let Some(d) = deadline {
+        let now = k.clock(Clock::Monotonic)?;
+        let to_ns = |t: crate::abi::Timespec| (t.sec.max(0) as u128) * 1_000_000_000 + t.nsec.max(0) as u128;
+        let left = to_ns(d).saturating_sub(to_ns(now)).min(u128::from(u64::MAX)) as u64;
+        k.copy_to_user(ts_ptr, &crate::abi::Timespec::from_nanos(left).to_bytes())?;
     }
     Ok(u64::from(got))
 }

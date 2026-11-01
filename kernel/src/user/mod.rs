@@ -630,7 +630,18 @@ pub fn current_memory() -> Option<Arc<Memory>> {
 /// copy return [`Efault`].
 pub fn page_fault(addr: u64, access: memory::Access) -> Result<(), FaultError> {
     let memory = current_memory().ok_or(FaultError::NoMemoryMap)?;
-    match memory.fault(addr, access) {
+    let mut result = memory.fault(addr, access);
+    // A missing page of a userfaultfd(2) range: the object hears of it and
+    // the thread waits until the page is filled (or gets SIGBUS), then the
+    // fault is resolved again.
+    while let Err(FaultError::UserFault { uffd, .. }) = result {
+        let (process, flags, tid) = current().ok_or(FaultError::Bus)?;
+        let stop = || flags.killed.load(core::sync::atomic::Ordering::SeqCst) || process.is_exiting();
+        let write = access == memory::Access::Write;
+        result =
+            crate::linux::uffd::fault(&memory, uffd, addr, write, tid, &stop).and_then(|()| memory.fault(addr, access));
+    }
+    match result {
         Ok(()) => {
             // getrusage(2): a minor fault, and perhaps a new peak of the
             // memory.

@@ -391,6 +391,11 @@ impl LinuxKernel for Thread<'_> {
                     let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), start, r.shared);
                     return map_placed(&memory, req, r);
                 }
+                // An io_uring's rings and SQEs.
+                if let Some(found) = super::uring::mapping(&file, offset, r.len) {
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(found?), 0, r.shared);
+                    return map_placed(&memory, req, r);
+                }
                 // Pipes and event files have nothing to map.
                 if file.object().is_some() {
                     return Err(Errno::ENODEV);
@@ -973,6 +978,10 @@ impl LinuxKernel for Thread<'_> {
         Some(self)
     }
 
+    fn uring(&mut self) -> Option<&mut dyn poly_personality_linux::uring::UringKernel> {
+        Some(self)
+    }
+
     fn seccomp_active(&self) -> bool {
         self.linux.seccomp.load(Ordering::Relaxed)
     }
@@ -1021,5 +1030,29 @@ impl LinuxKernel for Thread<'_> {
         let (inum, kind) = poly_procfs::namespace_file(file.node().ino()).ok_or(Errno::EINVAL)?;
         let kind = poly_personality_linux::ns::Kind::from_index(kind as u32).ok_or(Errno::EINVAL)?;
         Ok((inum, kind))
+    }
+
+    fn mseal(&mut self, addr: u64, len: u64) -> Result<(), Errno> {
+        self.memory()?.seal(addr, len).map_err(memory_errno)
+    }
+
+    fn memfd_secret(&mut self, cloexec: bool) -> Result<i32, Errno> {
+        super::memcalls::memfd_secret(self, cloexec)
+    }
+
+    fn cachestat(&mut self, fd: i32, first: u64, end: u64) -> Result<u64, Errno> {
+        super::memcalls::cachestat(self, fd, first, end)
+    }
+
+    fn userfaultfd(&mut self, nonblock: bool, cloexec: bool) -> Result<i32, Errno> {
+        super::uffd::create(self, nonblock, cloexec)
+    }
+
+    fn userfaultfd_op(
+        &mut self,
+        fd: i32,
+        op: poly_personality_linux::sys::userfaultfd::UffdOp<'_>,
+    ) -> Option<Result<poly_personality_linux::sys::userfaultfd::UffdReply, Errno>> {
+        super::uffd::op(self, fd, op)
     }
 }

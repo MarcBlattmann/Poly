@@ -11,6 +11,7 @@
 //! arguments already in kernel memory.
 
 use crate::errno::Errno;
+use crate::mountapi::{AttrChange, Command, FsContext, MountDesc, MountLink, PathAt};
 use alloc::vec::Vec;
 
 /// `mount(2)` flags (`linux/mount.h`).
@@ -89,14 +90,16 @@ pub enum MountRequest {
     New { source: Vec<u8>, target: Vec<u8>, fstype: Vec<u8>, flags: MountFlags, data: Vec<u8> },
     /// `MS_REMOUNT`: new per-mount flags for the mount at `target`
     /// (with `MS_BIND`, only those; otherwise also the file system's
-    /// options in `data`).
-    Remount { target: Vec<u8>, flags: MountFlags, data: Vec<u8> },
+    /// options in `data`, and `MS_RDONLY` for the file system itself).
+    Remount { target: Vec<u8>, flags: MountFlags, data: Vec<u8>, bind: bool },
     /// `MS_BIND`: what `source` names, visible at `target` too.
     Bind { source: Vec<u8>, target: Vec<u8>, flags: MountFlags, recursive: bool },
-    /// `MS_SHARED` / `MS_PRIVATE` / `MS_SLAVE` / `MS_UNBINDABLE`: Poly has
-    /// no mount propagation (every mount is private), so this only checks
-    /// that `target` is a mount point.
-    Propagation { target: Vec<u8> },
+    /// `MS_SHARED` / `MS_PRIVATE` / `MS_SLAVE` / `MS_UNBINDABLE` (`kind`,
+    /// the one type given) for the mount at `target`, and with `MS_REC`
+    /// (`recursive`) every mount below it. Poly propagates nothing: the
+    /// type is recorded (statmount(2) reports it, pivot_root(2) refuses
+    /// shared mounts) and a slave without a master stays private.
+    Propagation { target: Vec<u8>, kind: u64, recursive: bool },
     /// `MS_MOVE`: the mount at `source` moves to `target`.
     Move { source: Vec<u8>, target: Vec<u8> },
 }
@@ -152,7 +155,24 @@ pub struct RootOptions {
     pub mode: Option<u16>,
     pub uid: Option<u32>,
     pub gid: Option<u32>,
+    /// tmpfs(5) `size` (or `nr_blocks` pages): the most file data, in
+    /// bytes or as a percentage of RAM; `Count(0)` is no limit.
+    pub size: Option<Amount>,
+    /// tmpfs(5) `nr_inodes`: the most inodes; `Count(0)` is no limit.
+    pub inodes: Option<Amount>,
 }
+
+/// The value of a tmpfs size option: a count (bytes, pages or inodes,
+/// with the `k`, `m`, `g`, `t`, `p`, `e` suffixes applied) or a
+/// percentage of RAM (`%`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Amount {
+    Count(u64),
+    Percent(u64),
+}
+
+/// tmpfs(5)'s `nr_blocks` counts pages of this size.
+const PAGE_BYTES: u64 = 4096;
 
 fn number(v: Option<&[u8]>, radix: u32) -> Result<u64, Errno> {
     let v = core::str::from_utf8(v.ok_or(Errno::EINVAL)?).map_err(|_| Errno::EINVAL)?;
@@ -160,24 +180,31 @@ fn number(v: Option<&[u8]>, radix: u32) -> Result<u64, Errno> {
 }
 
 /// A size option (tmpfs(5) `size`, `nr_blocks`, `nr_inodes`): a number
-/// with an optional `k`, `m`, `g`, `t`, `p` or `e` suffix, or a percentage.
-fn size(v: Option<&[u8]>) -> Result<(), Errno> {
+/// with an optional `k`, `m`, `g`, `t`, `p` or `e` suffix (powers of
+/// 1024), or a percentage.
+fn size(v: Option<&[u8]>) -> Result<Amount, Errno> {
     let v = v.ok_or(Errno::EINVAL)?;
-    let digits = match v.last() {
-        Some(b'%' | b'k' | b'K' | b'm' | b'M' | b'g' | b'G' | b't' | b'T' | b'p' | b'P' | b'e' | b'E') => {
-            &v[..v.len() - 1]
-        }
-        _ => v,
+    let (digits, shift) = match v.last().map(u8::to_ascii_lowercase) {
+        Some(b'%') => return number(Some(&v[..v.len() - 1]), 10).map(Amount::Percent),
+        Some(b'k') => (&v[..v.len() - 1], 10),
+        Some(b'm') => (&v[..v.len() - 1], 20),
+        Some(b'g') => (&v[..v.len() - 1], 30),
+        Some(b't') => (&v[..v.len() - 1], 40),
+        Some(b'p') => (&v[..v.len() - 1], 50),
+        Some(b'e') => (&v[..v.len() - 1], 60),
+        _ => (v, 0),
     };
-    number(Some(digits), 10).map(|_| ())
+    let n = number(Some(digits), 10)?;
+    n.checked_mul(1 << shift).map(Amount::Count).ok_or(Errno::EINVAL)
 }
 
 /// Check a new mount's `data` for file system `fs` and return what Poly
 /// applies of it. Each type takes the options its manual page lists
 /// (tmpfs(5); proc(5): `hidepid`, `gid`, `subset`; devpts as mount(8)
 /// lists them; sysfs none); anything else is `EINVAL`. Poly applies a
-/// tmpfs root's `mode`, `uid` and `gid`; the size limits and the other
-/// types' options are accepted and have no effect yet. ext2's many options
+/// tmpfs root's `mode`, `uid` and `gid` and its size limits (`size`,
+/// `nr_blocks`, `nr_inodes`); the other types' options are accepted and
+/// have no effect yet. ext2's many options
 /// (mount(8)) are accepted as they are.
 pub fn mount_options(fs: FsType, data: &[u8]) -> Result<RootOptions, Errno> {
     let mut root = RootOptions::default();
@@ -186,7 +213,14 @@ pub fn mount_options(fs: FsType, data: &[u8]) -> Result<RootOptions, Errno> {
             (FsType::Tmpfs, b"mode") => root.mode = Some((number(value, 8)? & 0o7777) as u16),
             (FsType::Tmpfs, b"uid") => root.uid = Some(number(value, 10)? as u32),
             (FsType::Tmpfs, b"gid") => root.gid = Some(number(value, 10)? as u32),
-            (FsType::Tmpfs, b"size" | b"nr_blocks" | b"nr_inodes") => size(value)?,
+            (FsType::Tmpfs, b"size") => root.size = Some(size(value)?),
+            (FsType::Tmpfs, b"nr_blocks") => {
+                root.size = Some(match size(value)? {
+                    Amount::Count(pages) => Amount::Count(pages.checked_mul(PAGE_BYTES).ok_or(Errno::EINVAL)?),
+                    percent => percent,
+                });
+            }
+            (FsType::Tmpfs, b"nr_inodes") => root.inodes = Some(size(value)?),
             (FsType::Tmpfs, b"huge" | b"mpol") if value.is_some() => {}
             (FsType::Tmpfs, b"noswap" | b"inode32" | b"inode64") if value.is_none() => {}
             (FsType::Proc, b"hidepid" | b"gid" | b"subset") if value.is_some() => {}
@@ -267,4 +301,70 @@ pub trait LinuxAdmin {
 
     /// Restart, halt or power off the machine. Returns only if it failed.
     fn reboot(&mut self, how: Reboot) -> Errno;
+
+    // ---- the new mount API (ADR 0122, `crate::mountapi`) ----
+    //
+    // The personality checks flags, privileges and structures; these
+    // carry out the rest as the calling thread. `ENOSYS` without them.
+
+    /// open_tree(2): an `O_PATH` descriptor of `at`; with `clone`
+    /// (`OPEN_TREE_CLONE`, `Some(recursive)`) of the root of a detached
+    /// copy of the mount there (the subtree from `at`).
+    fn open_tree(&mut self, _at: &PathAt, _clone: Option<bool>, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// move_mount(2): attach the detached mount whose root `from` names,
+    /// or move the attached one, to what `to` names.
+    fn move_mount(&mut self, _from: &PathAt, _to: &PathAt) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// mount_setattr(2) of the mount whose root `at` names (and with
+    /// `recursive` every mount below it); `change` is checked.
+    fn mount_setattr(&mut self, _at: &PathAt, _recursive: bool, _change: &AttrChange) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// fsopen(2): a descriptor (`O_RDWR`) for the new context `ctx`.
+    fn fsopen(&mut self, _ctx: FsContext, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// fspick(2): a context for the superblock of the mount whose root
+    /// `at` names (`EINVAL` if it is no mount's root).
+    fn fspick(&mut self, _at: &PathAt, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// fsconfig(2) on descriptor `fd`: `EBADF` if it is not open (or
+    /// `O_PATH`), `EINVAL` if it is no context; then
+    /// [`FsContext::config`](crate::mountapi::FsContext::config).
+    fn fsconfig(&mut self, _fd: i32, _cmd: &Command<'_>) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// fsmount(2): a detached mount of the superblock context `fd` made,
+    /// with the checked `MOUNT_ATTR_*` bits `attrs`; an `O_PATH`
+    /// descriptor of its root.
+    fn fsmount(&mut self, _fd: i32, _attrs: u64, _cloexec: bool) -> Result<i32, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// The mounts of the caller's mount namespace, its root first
+    /// (listmount(2)).
+    fn mount_links(&mut self) -> Result<Vec<MountLink>, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// What statmount(2) reports about mount `id` (Poly's id) of the
+    /// caller's namespace (`ENOENT` if it is not in it).
+    fn describe_mount(&mut self, _id: u64) -> Result<MountDesc, Errno> {
+        Err(Errno::ENOSYS)
+    }
+
+    /// pivot_root(2) in the caller's mount namespace.
+    fn pivot_root(&mut self, _new_root: &[u8], _put_old: &[u8]) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
 }

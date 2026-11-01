@@ -45,6 +45,8 @@
 //!   (ADR 0054).
 //! - [`ns`]: namespaces (user, pid, mount, network, UTS, IPC) and the
 //!   rules of clone(2), unshare(2) and setns(2) about them (ADR 0054).
+//! - [`aio`]: native Linux AIO contexts, their completion rings and
+//!   pending polls (io_setup(2) and friends, ADR 0122).
 //! - [`ipc`]: System V shared memory segments, one table per IPC
 //!   namespace.
 //! - [`net`]: what the socket calls need from the kernel
@@ -63,6 +65,7 @@ extern crate alloc;
 
 pub mod abi;
 pub mod admin;
+pub mod aio;
 pub mod args;
 pub mod cred;
 pub mod errno;
@@ -71,6 +74,8 @@ pub mod fs;
 pub mod futex;
 pub mod ipc;
 pub mod kernel;
+pub mod landlock;
+pub mod mountapi;
 pub mod net;
 pub mod ns;
 mod numbers;
@@ -82,6 +87,7 @@ pub mod sys;
 pub mod table;
 pub mod task;
 pub mod time;
+pub mod uring;
 
 #[cfg(test)]
 mod tests;
@@ -187,6 +193,8 @@ impl Linux {
     pub fn process_exit(kernel: &mut dyn LinuxKernel) {
         sys::shm::process_exit(kernel);
         sys::sem::process_exit(kernel);
+        sys::aio::process_exit(kernel);
+        sys::mqueue::process_exit(kernel);
     }
 
     /// Called by the kernel for a fault in user mode that becomes a signal

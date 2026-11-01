@@ -106,7 +106,9 @@ impl NodeRef {
         .iter()
         .filter(|(on, _)| *on)
         .fold(0, |acc, (_, bit)| acc | bit);
+        st.flags |= crate::fs::st_flags_of_attrs(mount.attrs());
         let dev = mount.dev();
+
         st.fsid = [dev.major, dev.minor];
         Ok(st)
     }
@@ -222,6 +224,11 @@ impl NodeRef {
         }
         self.writable_mount()?;
         cred.check(&attr, Access::WRITE)?;
+        // truncate(2): "ETXTBSY The file is an executable file that is
+        // being executed."
+        if self.loc.mount.sb.exec_busy(self.loc.ino) {
+            return Err(Errno::ETXTBSY);
+        }
         self.clear_setid(cred)?;
         self.truncate_unchecked(size)?;
         crate::inotify::self_event(&self.loc, crate::inotify::mask::IN_MODIFY, false);

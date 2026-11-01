@@ -51,6 +51,9 @@ impl Errno {
     pub const ERANGE: Errno = Errno(34);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
+    /// `ENOMSG` (`asm-generic/errno.h`): "No message of desired type"
+    /// (msgrcv(2) with `IPC_NOWAIT`).
+    pub const ENOMSG: Errno = Errno(42);
     /// `EIDRM` (`asm-generic/errno.h`): "Identifier removed"; a System V
     /// semaphore set removed while semop(2) slept on it.
     pub const EIDRM: Errno = Errno(43);
@@ -66,6 +69,9 @@ impl Errno {
     pub const EUSERS: Errno = Errno(87);
     pub const EOPNOTSUPP: Errno = Errno(95);
     pub const ETIMEDOUT: Errno = Errno(110);
+    /// `ESTALE` (`asm-generic/errno.h`): "Stale file handle";
+    /// open_by_handle_at(2) with a handle that names no live file.
+    pub const ESTALE: Errno = Errno(116);
 
     // ---- internal: never returned to user space -----------------------
     //
@@ -94,6 +100,12 @@ impl Errno {
     /// "ensures that the restarted call doesn't sleep for longer than the
     /// time it was told to" (to be confirmed by the diff runner).
     pub const RESTART_WITH_BLOCK: Errno = Errno(3843);
+    /// Error number 512, which user space sees in one place: a recvmmsg(2)
+    /// interrupted by a signal after it received a message returns the
+    /// count and leaves this on the socket for its next receive
+    /// (recvmmsg's spec sheet: "errno 512 (the kernel's internal restart
+    /// code)"). An ordinary error to Poly, never restarted.
+    pub const RECV_INTERRUPTED: Errno = Errno(512);
 
     /// An error number from its value. Returns `None` for 0 and for values
     /// above [`MAX_ERRNO`], which the ABI cannot express.
@@ -162,6 +174,7 @@ impl Errno {
             34 => "ERANGE",
             36 => "ENAMETOOLONG",
             38 => "ENOSYS",
+            42 => "ENOMSG",
             43 => "EIDRM",
             61 => "ENODATA",
             75 => "EOVERFLOW",
@@ -169,6 +182,7 @@ impl Errno {
             87 => "EUSERS",
             95 => "EOPNOTSUPP",
             110 => "ETIMEDOUT",
+            116 => "ESTALE",
             3840 => "RESTART_IF_SA_RESTART",
             3841 => "RESTART_ALWAYS",
             3842 => "RESTART_IF_NO_HANDLER",

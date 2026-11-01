@@ -55,10 +55,15 @@ pub fn with_target<R>(
 /// target's credentials are their threads' own (ADR 0045): the calling
 /// thread's, and the target thread's or the target process's
 /// ([`LinuxProcess::process_creds`]).
+///
+/// A Landlock domain that scopes signals (`LANDLOCK_SCOPE_SIGNAL`) also
+/// keeps the sender to targets in its own domain, whatever its privilege
+/// ([`crate::landlock::may_signal`]).
 pub fn may_signal(sender: &Creds, sender_sid: i32, target: &Creds, target_sid: i32, signal: u32) -> bool {
-    crate::ns::user::ns_capable(sender, &target.user_ns, cap::KILL)
-        || [sender.uid, sender.euid].iter().any(|&id| id == target.uid || id == target.suid)
-        || (signal == SIGCONT && sender_sid == target_sid)
+    crate::landlock::may_signal(sender.landlock.as_deref(), target.landlock.as_deref())
+        && (crate::ns::user::ns_capable(sender, &target.user_ns, cap::KILL)
+            || [sender.uid, sender.euid].iter().any(|&id| id == target.uid || id == target.suid)
+            || (signal == SIGCONT && sender_sid == target_sid))
 }
 
 /// Act on what [`LinuxProcess::send`] asked for.

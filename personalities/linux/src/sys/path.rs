@@ -76,6 +76,7 @@ fn open_common(k: &mut dyn LinuxKernel, dirfd: i32, p: UserPtr, flags: u32, mode
     // On x86-64 every open is a large-file open: F_GETFL reports
     // O_LARGEFILE for all but O_PATH descriptors (the spec of fcntl).
     let flags = if flags & O_PATH == 0 { flags | O_LARGEFILE } else { flags };
+    crate::sys::landlock::check_open(k, dirfd, &path, flags)?;
     fs(k)?.openat(dirfd, &path, flags, mode).map(|fd| fd as u64)
 }
 
@@ -163,8 +164,16 @@ pub fn statx(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     let path = maybe_empty_path(k, p, flags)?;
-    let st = fs(k)?.statat(dirfd, &path, flags & AT_SYMLINK_NOFOLLOW == 0)?;
-    k.copy_to_user(buf, &st.to_statx(statx::STATX_BASIC_STATS | statx::STATX_MNT_ID))?;
+    let mut st = fs(k)?.statat(dirfd, &path, flags & AT_SYMLINK_NOFOLLOW == 0)?;
+    // `STATX_MNT_ID_UNIQUE` asked for: the unique 64-bit id in
+    // `stx_mnt_id` instead of the legacy one (statx(2)).
+    let id_bit = if mask & statx::STATX_MNT_ID_UNIQUE != 0 {
+        st.mount_id = crate::mountapi::unique_id(st.mount_id);
+        statx::STATX_MNT_ID_UNIQUE
+    } else {
+        statx::STATX_MNT_ID
+    };
+    k.copy_to_user(buf, &st.to_statx(statx::STATX_BASIC_STATS | id_bit))?;
     Ok(0)
 }
 
@@ -200,6 +209,7 @@ fn symlink_common(k: &mut dyn LinuxKernel, target: UserPtr, dirfd: i32, p: UserP
     // symlink(2): "ENOENT ... target or linkpath is an empty string."
     let target = nonempty_path(k, target)?;
     let path = nonempty_path(k, p)?;
+    crate::sys::landlock::check_parent(k, dirfd, &path, crate::landlock::abi::LANDLOCK_ACCESS_FS_MAKE_SYM)?;
     fs(k)?.symlinkat(&target, dirfd, &path).map(|()| 0)
 }
 
@@ -228,6 +238,9 @@ fn link_common(
     // newpath's string errors come after every error of oldpath, which the
     // kernel finds (linkat's path_order_two_paths).
     let new = nonempty_path(k, new);
+    if let Ok(n) = &new {
+        crate::sys::landlock::check_move(k, olddirfd, &old, newdirfd, n, false)?;
+    }
     fs(k)?.linkat(olddirfd, &old, newdirfd, new.as_deref().map_err(|&e| e), flags & AT_SYMLINK_FOLLOW != 0).map(|()| 0)
 }
 
@@ -278,12 +291,14 @@ pub fn faccessat2(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// mkdirat(dirfd, pathname, mode)
 pub fn mkdirat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(1))?;
+    crate::sys::landlock::check_parent(k, a.fd(0), &path, crate::landlock::abi::LANDLOCK_ACCESS_FS_MAKE_DIR)?;
     fs(k)?.mkdirat(a.fd(0), &path, a.uint(2) & 0o7777).map(|()| 0)
 }
 
 /// mkdir(pathname, mode)
 pub fn mkdir(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
+    crate::sys::landlock::check_parent(k, AT_FDCWD, &path, crate::landlock::abi::LANDLOCK_ACCESS_FS_MAKE_DIR)?;
     fs(k)?.mkdirat(AT_FDCWD, &path, a.uint(1) & 0o7777).map(|()| 0)
 }
 
@@ -295,18 +310,21 @@ pub fn unlinkat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         return Err(Errno::EINVAL);
     }
     let path = nonempty_path(k, a.ptr(1))?;
+    crate::sys::landlock::check_remove(k, a.fd(0), &path, flags & AT_REMOVEDIR != 0)?;
     fs(k)?.unlinkat(a.fd(0), &path, flags & AT_REMOVEDIR != 0).map(|()| 0)
 }
 
 /// unlink(pathname)
 pub fn unlink(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
+    crate::sys::landlock::check_remove(k, AT_FDCWD, &path, false)?;
     fs(k)?.unlinkat(AT_FDCWD, &path, false).map(|()| 0)
 }
 
 /// rmdir(pathname)
 pub fn rmdir(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let path = nonempty_path(k, a.ptr(0))?;
+    crate::sys::landlock::check_remove(k, AT_FDCWD, &path, true)?;
     fs(k)?.unlinkat(AT_FDCWD, &path, true).map(|()| 0)
 }
 
@@ -322,6 +340,9 @@ fn rename_common(
     // newpath's string errors come after oldpath's directories, which the
     // kernel walks (renameat2's path_order_two_paths).
     let new = nonempty_path(k, new);
+    if let Ok(n) = &new {
+        crate::sys::landlock::check_move(k, olddirfd, &old, newdirfd, n, true)?;
+    }
     fs(k)?.renameat(olddirfd, &old, newdirfd, new.as_deref().map_err(|&e| e), flags).map(|()| 0)
 }
 
@@ -380,9 +401,14 @@ pub fn truncate(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             crate::abi::mode::S_IFREG => {}
             _ => return Err(Errno::EINVAL),
         }
-        fs(k)?.accessat(AT_FDCWD, &path, access::W_OK, true, true)?;
-        return crate::sys::fsize::too_big_signal(k);
+        // Only growing past the limit is refused; shrinking (to anything)
+        // works (the spec of truncate: `rlimit_fsize`).
+        if len > u64::try_from(st.stat.size).unwrap_or(0) {
+            fs(k)?.accessat(AT_FDCWD, &path, access::W_OK, true, true)?;
+            return crate::sys::fsize::too_big_signal(k);
+        }
     }
+    crate::sys::landlock::check_object(k, AT_FDCWD, &path, true, crate::landlock::abi::LANDLOCK_ACCESS_FS_TRUNCATE)?;
     fs(k)?.truncate(&path, len).map(|()| 0)
 }
 

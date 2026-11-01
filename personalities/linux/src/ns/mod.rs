@@ -17,8 +17,10 @@
 //!   of the mount table ([`MntNs::id`] names it), a network namespace has
 //!   only a loopback interface that is down, so its sockets reach nothing
 //!   ([`NetNs`]), an IPC namespace holds its System V shared memory
-//!   segments and semaphore sets ([`IpcNs::shm`], [`IpcNs::sem`]). Cgroup and time namespaces are not supported: their flags are
-//!   `EINVAL`, as clone(2) and unshare(2) document for a kernel built
+//!   segments, semaphore sets and message queues ([`IpcNs::shm`],
+//!   [`IpcNs::sem`], [`IpcNs::msg`]). Cgroup and time namespaces are not
+//!   supported: their flags are `EINVAL`, as clone(2) and unshare(2)
+//!   document for a kernel built
 //!   without them.
 //! - **Identity.** Each namespace has an inode number ([`inum`]):
 //!   `/proc/[pid]/ns/<kind>` reads as `<kind>:[<inum>]` and a descriptor
@@ -181,6 +183,7 @@ pub struct IpcNs {
     common: Common,
     shm: Mutex<crate::ipc::shm::ShmTable>,
     sem: Mutex<crate::ipc::sem::SemTable>,
+    msg: Mutex<crate::ipc::msg::MsgTable>,
 }
 
 impl IpcNs {
@@ -191,6 +194,7 @@ impl IpcNs {
             common: Common::new(owner),
             shm: Mutex::new(crate::ipc::shm::ShmTable::new()),
             sem: Mutex::new(crate::ipc::sem::SemTable::new()),
+            msg: Mutex::new(crate::ipc::msg::MsgTable::new()),
         });
         register(ipc.inum(), Handle::Ipc(Some(ipc.clone())));
         ipc
@@ -204,6 +208,11 @@ impl IpcNs {
     /// Its semaphore sets (a new namespace has none).
     pub fn sem(&self) -> &Mutex<crate::ipc::sem::SemTable> {
         &self.sem
+    }
+
+    /// Its message queues (a new namespace has none).
+    pub fn msg(&self) -> &Mutex<crate::ipc::msg::MsgTable> {
+        &self.msg
     }
 }
 

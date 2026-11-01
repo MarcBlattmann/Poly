@@ -19,7 +19,7 @@
 
 use crate::fs::{Clock, DirEntry, FALLOC_FL_KEEP_SIZE, FALLOC_FL_PUNCH_HOLE, FileSystem, FsInfo, NewNode, RenameFlags};
 use crate::sync::SpinMutex;
-use crate::xattr::{SetMode, XATTR_LIST_MAX, Xattrs};
+use crate::xattr::{SetMode, Xattrs};
 use crate::{Attr, DeviceId, Errno, FileType, Ino, MAX_FILE_SIZE, NAME_MAX, Result, SetAttr, SetTime, Timespec};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -56,7 +56,14 @@ pub struct Tmpfs {
     clock: Arc<dyn Clock>,
     /// Data pages the file system may hold, if limited (`ENOSPC` beyond).
     page_limit: Option<u64>,
+    /// This instance's number, part of its file handles
+    /// ([`crate::fileattr`]): a handle made by another tmpfs does not
+    /// decode here.
+    instance: u32,
 }
+
+/// The number the next tmpfs instance gets.
+static NEXT_INSTANCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(1);
 
 impl core::fmt::Debug for Tmpfs {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -92,6 +99,8 @@ struct Node {
     /// Made by `create_tmpfile` and never named: `link` may give it its
     /// first name.
     linkable: bool,
+    /// Inode flags (`FS_XFLAG_*`, [`crate::fileattr`]).
+    xflags: u32,
 }
 
 enum Data {
@@ -267,6 +276,12 @@ impl Tmpfs {
         Tmpfs::build(clock, Some(bytes / PAGE), Some(inodes))
     }
 
+    /// [`with_limits`](Self::with_limits) with either limit optional
+    /// (`None`: none).
+    pub fn with_optional_limits(clock: Arc<dyn Clock>, bytes: Option<u64>, inodes: Option<u64>) -> Tmpfs {
+        Tmpfs::build(clock, bytes.map(|b| b / PAGE), inodes)
+    }
+
     fn build(clock: Arc<dyn Clock>, page_limit: Option<u64>, inode_limit: Option<u64>) -> Tmpfs {
         let now = clock.now();
         let root = Node {
@@ -283,10 +298,17 @@ impl Tmpfs {
             xattrs: Xattrs::new(),
             data: Data::Dir(Dir::new(ROOT)),
             linkable: false,
+            xflags: 0,
         };
         let mut nodes = BTreeMap::new();
         nodes.insert(ROOT, root);
-        Tmpfs { inner: SpinMutex::new(Inner { nodes, next_ino: ROOT + 1, pages: 0, inode_limit }), clock, page_limit }
+        let instance = NEXT_INSTANCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        Tmpfs {
+            inner: SpinMutex::new(Inner { nodes, next_ino: ROOT + 1, pages: 0, inode_limit }),
+            clock,
+            page_limit,
+            instance,
+        }
     }
 
     /// Inodes alive, the root included.
@@ -585,6 +607,7 @@ impl Tmpfs {
             xattrs: Xattrs::new(),
             data,
             linkable: false,
+            xflags: 0,
         }
     }
 
@@ -619,6 +642,15 @@ impl Tmpfs {
 impl FileSystem for Tmpfs {
     fn info(&self) -> FsInfo {
         FsInfo { name: "tmpfs", read_only: false, cache_lookups: false }
+    }
+
+    /// The data pages a file holds (written, or allocated by fallocate);
+    /// never-written holes have none.
+    fn data_pages(&self, ino: Ino, first: u64, end: u64) -> Option<Vec<u64>> {
+        let inner = self.inner.lock();
+        let pages = file(inner.node(ino).ok()?).ok()?;
+        let last = pages.size.div_ceil(PAGE);
+        Some(pages.pages.range(first..end.min(last).max(first)).map(|(&i, _)| i).collect())
     }
 
     /// Blocks are 4 KiB pages: the limit (or, without one, the pages in
@@ -910,18 +942,14 @@ impl FileSystem for Tmpfs {
     }
 
     /// Every kind of node keeps attributes (the VFS decides which
-    /// namespaces apply to it); the names of one inode take at most
-    /// `XATTR_LIST_MAX` bytes in a list (`ENOSPC` beyond), so listxattr(2)
-    /// can always return them.
+    /// namespaces apply to it), as many as memory allows: the names of one
+    /// inode may take more than `XATTR_LIST_MAX` bytes in a list, which
+    /// listxattr(2) then refuses (`E2BIG`) while every name still works
+    /// (listxattr's spec sheet: 6000 names on tmpfs).
     fn setxattr(&self, ino: Ino, name: &[u8], value: &[u8], how: SetMode) -> Result<()> {
         let now = self.clock.now();
         let mut inner = self.inner.lock();
         let node = inner.node_mut(ino)?;
-        let exists = node.xattrs.get(name).is_ok();
-        how.check(exists)?;
-        if !exists && node.xattrs.list().len() + name.len() + 1 > XATTR_LIST_MAX {
-            return Err(Errno::ENOSPC);
-        }
         node.xattrs.set(name, value, how)?;
         node.ctime = now;
         Ok(())
@@ -1065,7 +1093,74 @@ impl FileSystem for Tmpfs {
         }
         inner.maybe_free(ino);
     }
+
+    /// Regular files and directories keep inode flags; tmpfs supports
+    /// [`TMPFS_XFLAGS`] (file_setattr's spec sheet).
+    fn xflags(&self, ino: Ino) -> Result<u32> {
+        let inner = self.inner.lock();
+        let node = inner.node(ino)?;
+        match node.kind {
+            FileType::Regular | FileType::Directory => Ok(node.xflags),
+            _ => Err(Errno::EOPNOTSUPP),
+        }
+    }
+
+    fn set_xflags(&self, ino: Ino, flags: u32) -> Result<()> {
+        if flags & !TMPFS_XFLAGS != 0 {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        let now = self.clock.now();
+        let mut inner = self.inner.lock();
+        let node = inner.node_mut(ino)?;
+        if !matches!(node.kind, FileType::Regular | FileType::Directory) {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        node.xflags = flags;
+        node.ctime = now;
+        Ok(())
+    }
+
+    /// A handle is the inode number (8 bytes) and the instance number (4
+    /// bytes), little-endian, type [`TMPFS_HANDLE_TYPE`]: inode numbers
+    /// are never reused, so a handle names one inode for ever.
+    fn handle(&self, ino: Ino) -> Result<crate::fileattr::FileHandle> {
+        self.inner.lock().node(ino)?;
+        let mut bytes = [0u8; 12];
+        bytes[..8].copy_from_slice(&ino.to_le_bytes());
+        bytes[8..].copy_from_slice(&self.instance.to_le_bytes());
+        Ok(crate::fileattr::FileHandle::new(TMPFS_HANDLE_TYPE, &bytes))
+    }
+
+    /// The live inode a handle names (also one without names that is still
+    /// open); `ESTALE` for anything else.
+    fn handle_ino(&self, _kind: i32, bytes: &[u8]) -> Result<Ino> {
+        let (Ok(ino), Ok(instance)) = (
+            <[u8; 8]>::try_from(bytes.get(..8).ok_or(Errno::ESTALE)?),
+            <[u8; 4]>::try_from(bytes.get(8..12).ok_or(Errno::ESTALE)?),
+        ) else {
+            return Err(Errno::ESTALE);
+        };
+        let ino = Ino::from_le_bytes(ino);
+        if bytes.len() != 12 || u32::from_le_bytes(instance) != self.instance {
+            return Err(Errno::ESTALE);
+        }
+        let inner = self.inner.lock();
+        match inner.nodes.get(&ino) {
+            Some(n) if n.nlink > 0 || n.pins > 0 => Ok(ino),
+            _ => Err(Errno::ESTALE),
+        }
+    }
 }
+
+/// The inode flags tmpfs keeps (UAPI `linux/fs.h`): `FS_XFLAG_IMMUTABLE`,
+/// `FS_XFLAG_APPEND`, `FS_XFLAG_NOATIME`, `FS_XFLAG_NODUMP`.
+pub const TMPFS_XFLAGS: u32 = crate::fileattr::xflag::IMMUTABLE
+    | crate::fileattr::xflag::APPEND
+    | crate::fileattr::xflag::NOATIME
+    | crate::fileattr::xflag::NODUMP;
+
+/// The `handle_type` of a tmpfs file handle (the spec sheet observed 1).
+pub const TMPFS_HANDLE_TYPE: i32 = 1;
 
 #[cfg(test)]
 mod tests {

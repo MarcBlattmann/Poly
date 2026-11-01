@@ -51,7 +51,7 @@ fn spans(m: &Map) -> Vec<(u64, u64, Prot)> {
 }
 
 fn region(start: u64, end: u64, prot: Prot, kind: Kind, backing: Backing<u32>) -> Vma<u32> {
-    Vma { start, end, prot, max_prot: Prot::ALL, kind, backing, wipe_on_fork: false }
+    Vma { start, end, prot, max_prot: Prot::ALL, kind, backing, wipe_on_fork: false, sealed: false, uffd: 0 }
 }
 
 fn anon_vma(start: u64, end: u64, prot: Prot) -> Vma<u32> {
@@ -910,4 +910,82 @@ fn remap_errors_change_nothing() {
     // The stack is not remapped.
     let stack = m.setup_stack(4 * P, Prot::RW).unwrap();
     assert_eq!(e(&mut m, stack, P, 2 * P, RemapPlacement::MayMove), Some(Error::Fault));
+}
+
+// ------------------------------------------------------- mseal, userfault --
+
+#[test]
+fn sealed_regions_refuse_every_change() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 4, Prot::RW);
+    assert_eq!(m.seal(MIN + 1, P), Err(Error::Invalid), "misaligned");
+    assert_eq!(m.seal(MIN, u64::MAX - P), Err(Error::Invalid), "wraps around");
+    assert_eq!(m.seal(MIN + 3 * P, 2 * P), Err(Error::NoMemory), "a hole");
+    assert!(!m.is_sealed(MIN, MIN + 4 * P), "a failed seal seals nothing");
+    assert_eq!(m.seal(MIN, 0), Ok(()));
+    m.seal(MIN, 1).unwrap();
+    assert_eq!(m.region_count(), 2, "the sealed page is a region of its own");
+    assert_eq!(m.seal(MIN, P), Ok(()), "sealing again is fine");
+    assert_eq!(m.protect(MIN, P, Prot::READ), Err(Error::Permission));
+    assert_eq!(m.unmap(MIN, P), Err(Error::Permission));
+    assert_eq!(m.unmap(MIN, 4 * P), Err(Error::Permission));
+    assert_eq!(m.region_count(), 2, "a refused partly sealed unmap changes nothing");
+    assert_eq!(m.remap(MIN, P, 2 * P, RemapPlacement::MayMove).map(|_| ()), Err(Error::Permission));
+    assert_eq!(m.map(anon(P, Prot::READ, Placement::Fixed(MIN))).map(|_| ()), Err(Error::Permission));
+    assert_eq!(m.remap(MIN + 2 * P, P, P, RemapPlacement::Fixed(MIN)).map(|_| ()), Err(Error::Permission));
+    // The neighbours stay changeable.
+    m.protect(MIN + P, P, Prot::READ).unwrap();
+    m.unmap(MIN + 2 * P, 2 * P).unwrap();
+    // A copy (fork) keeps the seal.
+    let mut child = m.clone();
+    assert_eq!(child.unmap(MIN, P), Err(Error::Permission));
+}
+
+#[test]
+fn sealed_read_only_private_memory_refuses_discards() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 1, Prot::RW);
+    fixed(&mut m, MIN + 2 * P, 1, Prot::READ);
+    m.map(file(P, Prot::READ, 7, 0, true, Placement::Fixed(MIN + 4 * P))).unwrap();
+    assert!(!m.discard_refused(MIN, MIN + 5 * P), "nothing sealed yet");
+    for at in [MIN, MIN + 2 * P, MIN + 4 * P] {
+        m.seal(at, P).unwrap();
+    }
+    assert!(!m.discard_refused(MIN, MIN + P), "writable private memory");
+    assert!(m.discard_refused(MIN + 2 * P, MIN + 3 * P), "read-only private memory");
+    assert!(!m.discard_refused(MIN + 4 * P, MIN + 5 * P), "a shared mapping");
+}
+
+#[test]
+fn userfault_registration_turns_missing_pages_into_user_faults() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 4, Prot::RW);
+    assert_eq!(m.set_userfault(MIN + 1, P, 3), Err(Error::Invalid));
+    assert_eq!(m.set_userfault(MIN, 0, 3), Err(Error::Invalid));
+    assert_eq!(m.set_userfault(MIN + 2 * P, 4 * P, 3), Err(Error::Invalid), "partly unmapped");
+    m.set_userfault(MIN, 2 * P, 3).unwrap();
+    m.set_userfault(MIN, 2 * P, 3).unwrap();
+    assert!(m.userfault_registered(MIN + P, 3));
+    assert_eq!(
+        m.fault(MIN + P + 5, Access::Write, PageState::Absent),
+        FaultAction::UserFault { page: MIN + P, uffd: 3 }
+    );
+    assert_eq!(
+        m.fault(MIN, Access::Write, PageState::Present { refs: 1 }),
+        FaultAction::SetPermissions { page: MIN, prot: Prot::RW },
+        "present pages fault as usual"
+    );
+    assert_eq!(
+        m.fault(MIN + 2 * P, Access::Read, PageState::Absent),
+        FaultAction::ZeroFill { page: MIN + 2 * P, prot: Prot::RW }
+    );
+    m.clear_userfault(MIN, P, 3).unwrap();
+    assert_eq!(m.fault(MIN, Access::Read, PageState::Absent), FaultAction::ZeroFill { page: MIN, prot: Prot::RW });
+    let mut child = m.clone();
+    child.forget_userfaults(None);
+    assert_eq!(child.region_count(), 1, "a fork child's copy has no registrations");
+    m.forget_userfaults(Some(4));
+    assert!(m.userfault_registered(MIN + P, 3), "another object's registration stays");
+    m.forget_userfaults(Some(3));
+    assert_eq!(m.region_count(), 1);
 }

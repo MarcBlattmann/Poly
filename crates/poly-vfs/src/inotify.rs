@@ -106,6 +106,12 @@ impl WatchKey {
     pub fn of_node(node: &NodeRef) -> WatchKey {
         WatchKey::of(node.loc())
     }
+
+    /// The file system's identity and the inode number, for callers that
+    /// keep keys in their own terms (Landlock rules).
+    pub fn parts(&self) -> (usize, Ino) {
+        (self.fs, self.ino)
+    }
 }
 
 /// One instance's watch of an inode, as the registry holds it.
@@ -127,6 +133,12 @@ static NEXT_COOKIE: AtomicU32 = AtomicU32::new(1);
 /// Whether any watch exists.
 #[inline]
 pub(crate) fn active() -> bool {
+    WATCHES.load(Ordering::Relaxed) != 0 || crate::fanotify::active()
+}
+
+/// Whether any inotify watch exists.
+#[inline]
+fn watching() -> bool {
     WATCHES.load(Ordering::Relaxed) != 0
 }
 
@@ -419,7 +431,12 @@ fn isdir(is_dir: bool) -> u32 {
 /// An event about the entry `name` of directory `dir` (named, with
 /// `IN_ISDIR` when the entry is a directory).
 pub(crate) fn entry_event(dir: &Location, name: &[u8], mask: u32, is_dir: bool, cookie: u32) {
-    if active() {
+    inotify_entry_event(dir, name, mask, is_dir, cookie);
+    crate::fanotify::entry_event(dir, name, mask, is_dir);
+}
+
+fn inotify_entry_event(dir: &Location, name: &[u8], mask: u32, is_dir: bool, cookie: u32) {
+    if watching() {
         notify(WatchKey::of(dir), mask | isdir(is_dir), cookie, Some(name));
     }
 }
@@ -427,7 +444,12 @@ pub(crate) fn entry_event(dir: &Location, name: &[u8], mask: u32, is_dir: bool, 
 /// An event about the inode `loc` itself (no name); `IN_ISDIR` for a
 /// directory, except on `IN_DELETE_SELF` and `IN_MOVE_SELF`.
 pub(crate) fn self_event(loc: &Location, mask: u32, is_dir: bool) {
-    if active() {
+    inotify_self_event(loc, mask, is_dir);
+    crate::fanotify::self_event(loc, mask, is_dir);
+}
+
+fn inotify_self_event(loc: &Location, mask: u32, is_dir: bool) {
+    if watching() {
         let dir = is_dir && mask & (IN_DELETE_SELF | IN_MOVE_SELF) == 0;
         notify(WatchKey::of(loc), mask | isdir(dir), 0, None);
     }
@@ -436,15 +458,19 @@ pub(crate) fn self_event(loc: &Location, mask: u32, is_dir: bool) {
 /// An event about the file `file` is open on: for its own watches and,
 /// named, for the watches of the directory it was opened in.
 pub(crate) fn file_event(file: &OpenFile, mask: u32) {
-    if !active() {
+    if !active() || file.is_quiet() {
+        return;
+    }
+    crate::fanotify::file_event(file, mask);
+    if !watching() {
         return;
     }
     let is_dir = file.kind() == FileType::Directory;
-    self_event(file.node().loc(), mask, is_dir);
+    inotify_self_event(file.node().loc(), mask, is_dir);
     if let Some(origin) = file.origin()
         && let Some(mount) = origin.mount.upgrade()
     {
-        entry_event(&Location { mount, ino: origin.dir }, &origin.name, mask, is_dir, 0);
+        inotify_entry_event(&Location { mount, ino: origin.dir }, &origin.name, mask, is_dir, 0);
     }
 }
 
