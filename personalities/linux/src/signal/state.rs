@@ -59,6 +59,11 @@ pub struct LinuxThread {
     /// Strict mode or the seccomp filters (ADR 0054): inherited by the
     /// threads and processes it creates, kept by execve(2).
     pub seccomp: crate::seccomp::Seccomp,
+    /// The nice value, policy, priority and `SCHED_RESET_ON_FORK` flag
+    /// (ADR 0113): per thread, a new thread or process starts with its
+    /// creator's ([`Sched::for_child`](crate::task::sched::Sched::for_child)),
+    /// kept by execve(2).
+    pub sched: crate::task::sched::Sched,
 }
 
 impl LinuxThread {
@@ -101,14 +106,13 @@ pub struct LinuxProcess {
     /// The credentials of the last thread to leave, so a zombie is still
     /// seen with them ([`LinuxProcess::process_creds`]).
     exited_creds: Option<Creds>,
+    /// The scheduling attributes of the last thread to leave, so a zombie
+    /// is still seen with them ([`LinuxProcess::sched_of`]).
+    exited_sched: Option<crate::task::sched::Sched>,
     /// Resource limits (getrlimit(2)): inherited by fork, kept by exec.
     pub limits: crate::rlimit::ResourceLimits,
     /// Interval and POSIX timers (ADR 0044).
     pub timers: crate::time::timers::Timers,
-    /// The nice value, -20 (most favourable) to 19 (getpriority(2),
-    /// `sys::sched`): inherited by fork, kept by exec. The scheduler does
-    /// not use it yet.
-    pub nice: i32,
     /// The process's namespaces but its user namespace, which is each
     /// thread's (ADR 0054). fork(2) copies them (a child's pid namespace
     /// is its parent's `pid_for_children`); execve(2) keeps them.
@@ -134,9 +138,9 @@ impl LinuxProcess {
             threads,
             queue_limit: DEFAULT_QUEUE_LIMIT,
             exited_creds: None,
+            exited_sched: None,
             limits: crate::rlimit::ResourceLimits::new(),
             timers: crate::time::timers::Timers::new(),
-            nice: 0,
             ns: crate::ns::Namespaces::default(),
             traced: false,
         }
@@ -159,6 +163,7 @@ impl LinuxProcess {
             creds: parent.creds.clone(),
             comm: parent.comm,
             seccomp: parent.seccomp.clone(),
+            sched: parent.sched.for_child(),
             ..LinuxThread::default()
         };
         let mut threads = BTreeMap::new();
@@ -171,9 +176,9 @@ impl LinuxProcess {
             threads,
             queue_limit: self.queue_limit,
             exited_creds: None,
+            exited_sched: None,
             limits: self.limits,
             timers,
-            nice: self.nice,
             ns: self.ns.for_child(),
             traced: self.traced,
         }
@@ -221,6 +226,7 @@ impl LinuxProcess {
             creds: parent.creds.clone(),
             comm: parent.comm,
             seccomp: parent.seccomp.clone(),
+            sched: parent.sched.for_child(),
             ..LinuxThread::default()
         };
         self.threads.insert(tid, thread);
@@ -232,8 +238,20 @@ impl LinuxProcess {
         let thread = self.threads.remove(&tid);
         if self.threads.is_empty() {
             self.exited_creds = thread.as_ref().map(|t| t.creds.clone());
+            self.exited_sched = thread.as_ref().map(|t| t.sched);
         }
         thread
+    }
+
+    /// The scheduling attributes thread `tid` is seen with: its own, or,
+    /// once every thread has gone (a zombie), the last one's. `None` if
+    /// the process has no such thread.
+    pub fn sched_of(&self, tid: i32) -> Option<crate::task::sched::Sched> {
+        match self.threads.get(&tid) {
+            Some(t) => Some(t.sched),
+            None if self.threads.is_empty() => self.exited_sched,
+            None => None,
+        }
     }
 
     /// The credentials process `pid` is seen with by kill(2) and the

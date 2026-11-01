@@ -263,6 +263,11 @@ fn file_system_types_and_options() {
 
 // ---- priorities and scheduling ------------------------------------------
 
+/// The nice value of process `pid`'s main thread.
+fn nice_of(k: &FakeKernel, pid: i32) -> i32 {
+    k.procs[&pid].state.thread(pid).sched.nice
+}
+
 #[test]
 fn nice_values_by_process_group_and_user() {
     let mut k = FakeKernel::new();
@@ -274,15 +279,15 @@ fn nice_values_by_process_group_and_user() {
     // getpriority returns 20 - nice.
     assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_PROCESS as u64, 0]), Ok(20));
     assert_eq!(sys(&mut k, nr::SETPRIORITY, &[PRIO_PROCESS as u64, 0, 5]), Ok(0));
-    assert_eq!(k.me().nice, 5);
+    assert_eq!(k.thread_state().sched.nice, 5);
     assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_PROCESS as u64, 0]), Ok(15));
     // A group: the highest priority (lowest nice) of its members.
     assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_PGRP as u64, 0]), Ok(20));
     assert_eq!(sys(&mut k, nr::SETPRIORITY, &[PRIO_PGRP as u64, 0, (-3i64) as u64]), Ok(0));
-    assert_eq!((k.me().nice, k.proc_state(200).nice, k.proc_state(201).nice), (-3, -3, 0));
+    assert_eq!((k.thread_state().sched.nice, nice_of(&k, 200), nice_of(&k, 201)), (-3, -3, 0));
     // A user; values are clamped.
     assert_eq!(sys(&mut k, nr::SETPRIORITY, &[PRIO_USER as u64, 2000, 100]), Ok(0));
-    assert_eq!((k.proc_state(200).nice, k.proc_state(201).nice, k.me().nice), (19, 19, -3));
+    assert_eq!((nice_of(&k, 200), nice_of(&k, 201), k.thread_state().sched.nice), (19, 19, -3));
     assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_USER as u64, 2000]), Ok(1));
     assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_PROCESS as u64, 4242]), Err(Errno::ESRCH));
     assert_eq!(sys(&mut k, nr::GETPRIORITY, &[7, 0]), Err(Errno::EINVAL));
@@ -300,19 +305,29 @@ fn unprivileged_priority_changes() {
     // cannot be changed at all.
     assert_eq!(sys(&mut k, nr::SETPRIORITY, &[PRIO_PROCESS as u64, 0, 2]), Err(Errno::EACCES));
     assert_eq!(sys(&mut k, nr::SETPRIORITY, &[PRIO_PROCESS as u64, 300, 10]), Err(Errno::EPERM));
-    assert_eq!(k.me().nice, 4);
+    assert_eq!(k.thread_state().sched.nice, 4);
 }
 
 #[test]
 fn scheduling_policies_and_affinity() {
     let mut k = FakeKernel::new();
     let param = DATA;
+    k.poke(param, &10i32.to_le_bytes());
+    // Without CAP_SYS_NICE and with RLIMIT_RTPRIO 0: no real-time policy.
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[0, SCHED_FIFO as u64, param]), Err(Errno::EPERM));
+    *k.creds_mut() = Creds::root();
     k.poke(param, &0i32.to_le_bytes());
     assert_eq!(sys(&mut k, nr::SCHED_GETSCHEDULER, &[0]), Ok(SCHED_OTHER as u64));
     assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[0, SCHED_OTHER as u64, param]), Ok(0));
     k.poke(param, &10i32.to_le_bytes());
-    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[0, SCHED_FIFO as u64, param]), Err(Errno::EPERM));
+    // Real-time policies are recorded for a privileged caller (ADR 0113).
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[0, SCHED_FIFO as u64, param]), Ok(0));
+    assert_eq!(sys(&mut k, nr::SCHED_GETSCHEDULER, &[0]), Ok(SCHED_FIFO as u64));
     assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[0, SCHED_OTHER as u64, param]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::SCHED_GETPARAM, &[0, param + 8]), Ok(0));
+    assert_eq!(k.peek_u32(param + 8), 10);
+    k.poke(param, &0i32.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[0, SCHED_OTHER as u64, param]), Ok(0));
     assert_eq!(sys(&mut k, nr::SCHED_GETPARAM, &[0, param]), Ok(0));
     assert_eq!(k.peek_u32(param), 0);
     assert_eq!(sys(&mut k, nr::SCHED_GET_PRIORITY_MAX, &[SCHED_FIFO as u64]), Ok(99));
@@ -331,4 +346,71 @@ fn scheduling_policies_and_affinity() {
     k.poke(mask, &[2, 0, 0, 0, 0, 0, 0, 0]);
     assert_eq!(sys(&mut k, nr::SCHED_SETAFFINITY, &[0, 8, mask]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::SCHED_YIELD, &[]), Ok(0));
+}
+
+#[test]
+fn scheduling_attributes_are_per_thread() {
+    use crate::sys::sched::{SCHED_BATCH, SCHED_IDLE, SCHED_RESET_ON_FORK, SCHED_RR};
+    let mut k = FakeKernel::new();
+    *k.creds_mut() = Creds::root();
+    let me = k.tid;
+    let param = DATA;
+    k.poke(param, &0i32.to_le_bytes());
+    k.add_thread(me + 1);
+    let t = (me + 1) as u64;
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[t, SCHED_BATCH as u64, param]), Ok(0));
+    assert_eq!(sys(&mut k, nr::SCHED_GETSCHEDULER, &[t]), Ok(SCHED_BATCH as u64));
+    assert_eq!(sys(&mut k, nr::SCHED_GETSCHEDULER, &[0]), Ok(SCHED_OTHER as u64));
+    assert_eq!(sys(&mut k, nr::SETPRIORITY, &[PRIO_PROCESS as u64, t, 7]), Ok(0));
+    assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_PROCESS as u64, t]), Ok(13));
+    assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_PROCESS as u64, 0]), Ok(20));
+    // The group sees every thread.
+    assert_eq!(sys(&mut k, nr::SETPRIORITY, &[PRIO_PROCESS as u64, 0, 9]), Ok(0));
+    assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_PGRP as u64, 0]), Ok(13));
+    // The flag is reported and kept by sched_setparam.
+    let flagged = (SCHED_RR | SCHED_RESET_ON_FORK) as u64;
+    k.poke(param, &5i32.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[0, flagged, param]), Ok(0));
+    k.poke(param, &60i32.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::SCHED_SETPARAM, &[0, param]), Ok(0));
+    assert_eq!(sys(&mut k, nr::SCHED_GETSCHEDULER, &[0]), Ok(flagged));
+    let ts = DATA + 0x100;
+    assert_eq!(sys(&mut k, nr::SCHED_RR_GET_INTERVAL, &[0, ts]), Ok(0));
+    assert_eq!((k.peek_u64(ts), k.peek_u64(ts + 8)), (0, 100_000_000));
+    assert_eq!(sys(&mut k, nr::SCHED_RR_GET_INTERVAL, &[t, ts]), Ok(0));
+    assert_eq!(k.peek_u64(ts + 8), 0);
+    // A new thread starts with its creator's attributes, reset by the flag.
+    k.add_thread(me + 2);
+    let s = k.me().thread(me + 2).sched;
+    assert_eq!((s.policy, s.nice, s.reset_on_fork), (SCHED_OTHER, 0, false));
+    // A zombie is still seen with the values it had.
+    k.add_process(300, 0, 300, 300);
+    k.proc_state(300).thread_mut(300).sched.policy = SCHED_IDLE;
+    k.proc_state(300).thread_mut(300).sched.nice = 9;
+    k.proc_state(300).remove_thread(300);
+    k.procs.get_mut(&300).unwrap().info.zombie = true;
+    assert_eq!(sys(&mut k, nr::SCHED_GETSCHEDULER, &[300]), Ok(SCHED_IDLE as u64));
+    assert_eq!(sys(&mut k, nr::GETPRIORITY, &[PRIO_PROCESS as u64, 300]), Ok(11));
+}
+
+#[test]
+fn scheduling_argument_order() {
+    let mut k = FakeKernel::new();
+    let bad = 1u64;
+    let minus1 = (-1i64) as u64;
+    // NULL param or a negative pid first, then EFAULT, then ESRCH, then
+    // the policy and priority.
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[4242, 77, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[minus1, 0, bad]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[4242, 77, bad]), Err(Errno::EFAULT));
+    k.poke(DATA, &0i32.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[4242, 77, DATA]), Err(Errno::ESRCH));
+    assert_eq!(sys(&mut k, nr::SCHED_SETSCHEDULER, &[0, 77, DATA]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::SCHED_SETPARAM, &[minus1, bad]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::SCHED_GETPARAM, &[4242, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::SCHED_GETPARAM, &[4242, bad]), Err(Errno::ESRCH));
+    assert_eq!(sys(&mut k, nr::SCHED_RR_GET_INTERVAL, &[minus1, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::SCHED_RR_GET_INTERVAL, &[4242, 0]), Err(Errno::ESRCH));
+    assert_eq!(sys(&mut k, nr::SCHED_RR_GET_INTERVAL, &[0, 0]), Err(Errno::EFAULT));
+    assert_eq!(sys(&mut k, nr::SCHED_GET_PRIORITY_MIN, &[7]), Ok(0));
 }

@@ -210,7 +210,7 @@ pub fn sendfile(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 }
 
 /// What `fd` is and how it is open; `EBADF` if it is not.
-fn describe(k: &mut dyn LinuxKernel, fd: i32) -> Result<Desc, Errno> {
+pub(crate) fn describe(k: &mut dyn LinuxKernel, fd: i32) -> Result<Desc, Errno> {
     let st = k.fstat(fd)?;
     let object = match k.file_io() {
         Some(io) => io.is_object(fd)?,

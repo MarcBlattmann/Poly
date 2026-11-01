@@ -246,6 +246,61 @@ pub trait FileIo {
         let _ = (fd, bytes);
         Err(Errno::EINVAL)
     }
+
+    /// What the pipe (or FIFO) `fd` is an end of holds and who has it open
+    /// (splice(2) and friends). `EINVAL` if it is not a pipe.
+    fn pipe_status(&mut self, fd: i32) -> Result<PipeStatus, Errno> {
+        let _ = fd;
+        Err(Errno::EINVAL)
+    }
+
+    /// splice(2) (`keep` false) or tee(2) (`keep` true) between the pipes
+    /// `fd_in` and `fd_out` are ends of, without waiting: up to `len`
+    /// bytes, each buffer of the input becoming one of the output while it
+    /// has free pages. In this order: an empty input with writers is
+    /// [`PipeTransfer::WaitInput`], an output without a free page
+    /// [`PipeTransfer::WaitOutput`], an output without readers `EPIPE`, an
+    /// empty input without writers `Moved(0)`. `EINVAL` if either is not a
+    /// pipe or both are ends of the same pipe.
+    fn pipe_transfer(&mut self, fd_in: i32, fd_out: i32, len: usize, keep: bool) -> Result<PipeTransfer, Errno> {
+        let _ = (fd_in, fd_out, len, keep);
+        Err(Errno::EINVAL)
+    }
+
+    /// vmsplice(2) into the pipe `fd` is an end of: each of `pieces` (at
+    /// most a page each) becomes a buffer of its own; whole pieces go in
+    /// while pages are free. Returns the bytes taken; `EPIPE` without
+    /// readers, `EAGAIN` if no page is free, `EINVAL` if `fd` is not a pipe.
+    fn pipe_push(&mut self, fd: i32, pieces: &[&[u8]]) -> Result<usize, Errno> {
+        let _ = (fd, pieces);
+        Err(Errno::EINVAL)
+    }
+
+    /// Copy the first bytes of the pipe `fd` is an end of into `buf`
+    /// without taking them; returns how many. `EINVAL` if it is not a pipe.
+    fn pipe_peek(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
+        let _ = (fd, buf);
+        Err(Errno::EINVAL)
+    }
+}
+
+/// What [`FileIo::pipe_status`] tells about a pipe.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PipeStatus {
+    /// Bytes in the pipe.
+    pub len: usize,
+    /// Bytes of the pages no write has started yet.
+    pub room: usize,
+    pub readers: usize,
+    pub writers: usize,
+}
+
+/// What [`FileIo::pipe_transfer`] did, or what it would wait for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PipeTransfer {
+    Moved(usize),
+    WaitInput,
+    WaitOutput,
 }
 
 /// The deadline `timeout` after now on `clock`.

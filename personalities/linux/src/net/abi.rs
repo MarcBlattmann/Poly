@@ -47,6 +47,8 @@ pub const MSG_NOSIGNAL: u32 = 0x4000;
 pub const MSG_MORE: u32 = 0x8000;
 pub const MSG_WAITFORONE: u32 = 0x10000;
 pub const MSG_CMSG_CLOEXEC: u32 = 0x4000_0000;
+/// 32-bit control messages: only the compat entry points take it.
+pub const MSG_CMSG_COMPAT: u32 = 0x8000_0000;
 
 pub const SHUT_RD: i32 = 0;
 pub const SHUT_WR: i32 = 1;

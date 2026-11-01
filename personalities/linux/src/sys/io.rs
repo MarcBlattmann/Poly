@@ -146,7 +146,7 @@ pub fn ioctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// `ssize_t`, are negative or add up past `SSIZE_MAX`; `EFAULT` if the
 /// array cannot be read. Returns the vectors and the byte total, capped at
 /// [`MAX_RW_COUNT`].
-fn load_iovecs(k: &mut dyn LinuxKernel, iov: UserPtr, count: i32) -> Result<(Vec<Iovec>, u64), Errno> {
+pub(crate) fn load_iovecs(k: &mut dyn LinuxKernel, iov: UserPtr, count: i32) -> Result<(Vec<Iovec>, u64), Errno> {
     if count < 0 || count as u32 > IOV_MAX {
         return Err(Errno::EINVAL);
     }
