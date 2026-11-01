@@ -308,7 +308,8 @@ mod tests {
 
     #[test]
     fn thumbnails_keep_the_aspect() {
-        let c = Content { width: 400, height: 200, scale: 1, pixels: vec![0xff20_4060; 400 * 200], ..Content::default() };
+        let c =
+            Content { width: 400, height: 200, scale: 1, pixels: vec![0xff20_4060; 400 * 200], ..Content::default() };
         let t = thumbnail(&c, 200, 124, 0);
         assert_eq!((t.width, t.height), (200, 100));
         assert!(t.pixels.iter().all(|&p| p == 0x20_4060));
