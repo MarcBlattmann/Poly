@@ -574,6 +574,32 @@ fn interrupted_epoll_wait_is_never_restarted() {
     }
 }
 
+/// A traced process keeps the default-ignored SIGCHLD of a child's exit
+/// until it is taken; that ends the kernel's wait, but taking it does
+/// nothing, so the call goes on (epoll_wait's visible test: the child's
+/// exit reports EPOLLHUP, not EINTR), whether it came during the wait or
+/// was pending before it.
+#[test]
+fn an_ignored_signal_does_not_end_epoll_wait() {
+    for before in [false, true] {
+        let mut k = FakeKernel::new();
+        k.me().traced = true;
+        let ep = sys(&mut k, nr::EPOLL_CREATE1, &[0]).unwrap();
+        let chld = move |k: &mut FakeKernel| {
+            let me = k.tid;
+            assert_eq!(sys(k, nr::TKILL, &[me as u64, SIGCHLD as u64]), Ok(0));
+        };
+        if before {
+            chld(&mut k);
+        } else {
+            k.meanwhile(chld);
+        }
+        let (_, ctx) = run(&mut k, nr::EPOLL_WAIT, &[ep, BUF, 4, u64::MAX]);
+        assert_eq!(k.delivered, [SIGCHLD], "taken (before: {before})");
+        assert_eq!((ctx.rip, ctx.rax), (SYSCALL_RIP - 2, nr::EPOLL_WAIT), "restarted (before: {before})");
+    }
+}
+
 #[test]
 fn epoll_pwait_masks_and_pwait2_takes_a_timespec() {
     let mut k = FakeKernel::new();
