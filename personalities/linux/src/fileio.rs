@@ -328,10 +328,14 @@ pub trait FileIo {
     }
 
     /// vmsplice(2) into the pipe `fd` is an end of: each of `pieces` (at
-    /// most a page each) becomes a buffer of its own; whole pieces go in
-    /// while pages are free. Returns the bytes taken; `EPIPE` without
-    /// readers, `EAGAIN` if no page is free, `EINVAL` if `fd` is not a pipe.
-    fn pipe_push(&mut self, fd: i32, pieces: &[&[u8]]) -> Result<usize, Errno> {
+    /// most a page each: the bytes, read from the caller's memory at the
+    /// address beside them) becomes a buffer of its own; whole pieces go in
+    /// while pages are free. The pipe keeps referring to that memory: what
+    /// the caller writes there before the bytes are read is what the
+    /// reader gets (vmsplice's spec sheet). Returns the bytes taken;
+    /// `EPIPE` without readers, `EAGAIN` if no page is free, `EINVAL` if
+    /// `fd` is not a pipe.
+    fn pipe_push(&mut self, fd: i32, pieces: &[(&[u8], u64)]) -> Result<usize, Errno> {
         let _ = (fd, pieces);
         Err(Errno::EINVAL)
     }

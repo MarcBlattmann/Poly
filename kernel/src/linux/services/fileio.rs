@@ -35,7 +35,7 @@ use poly_personality_linux::kernel::{Clock, SigSet};
 use poly_vfs::epoll::{self, Epoll};
 use poly_vfs::eventfd::EventFd;
 use poly_vfs::inotify::{Inotify, WatchKey};
-use poly_vfs::pipe::{PIPE_PAGE, Pipe, PipeEnd, Transfer};
+use poly_vfs::pipe::{PIPE_PAGE, Piece, Pipe, PipeEnd, PipeSource, Transfer};
 use poly_vfs::poll::{PollEntry, PollTarget};
 use poly_vfs::timerfd::{TimerClock, TimerFd, TimerSpec};
 use poly_vfs::{FileObject, PollEvents, Timeout};
@@ -60,6 +60,20 @@ impl Thread<'_> {
     ) -> Result<Fd, Errno> {
         let file = open_object(&self.process.files, object, kind, flags, new)?;
         self.process.files.install(file, new.cloexec).map_err(vfs_errno)
+    }
+}
+
+/// The caller's memory behind a vmsplice(2)d pipe buffer: read again
+/// before the buffer is read. It keeps the memory alive while the buffer
+/// is in the pipe; a page unmapped meanwhile leaves the bytes of the call.
+struct UserBytes {
+    memory: Arc<crate::user::Memory>,
+    addr: u64,
+}
+
+impl PipeSource for UserBytes {
+    fn reread(&self, buf: &mut [u8]) -> bool {
+        self.memory.read(self.addr, buf).is_ok()
     }
 }
 
@@ -301,9 +315,19 @@ impl FileIo for Thread<'_> {
         })
     }
 
-    fn pipe_push(&mut self, fd: i32, pieces: &[&[u8]]) -> Result<usize, Errno> {
+    fn pipe_push(&mut self, fd: i32, pieces: &[(&[u8], u64)]) -> Result<usize, Errno> {
         let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
-        end.pipe().push_pieces(pieces).map_err(vfs_errno)
+        let memory = crate::user::current_memory();
+        let sourced: Vec<Piece<'_>> = pieces
+            .iter()
+            .map(|(bytes, addr)| {
+                let source = memory
+                    .as_ref()
+                    .map(|m| Arc::new(UserBytes { memory: m.clone(), addr: *addr }) as Arc<dyn PipeSource>);
+                (*bytes, source)
+            })
+            .collect();
+        end.pipe().push_pieces(&sourced).map_err(vfs_errno)
     }
 
     fn pipe_peek(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {

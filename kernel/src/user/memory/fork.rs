@@ -49,6 +49,19 @@ impl Memory {
         let mut inner = self.inner.lock();
         let mut child =
             Inner { map: inner.map.clone(), parked: BTreeMap::new(), cached: BTreeMap::new(), shared: BTreeMap::new() };
+        // Sources that are each memory's own (System V attachments) get a
+        // copy in the child, one per source value, so the pieces of one
+        // attachment stay one attachment there too.
+        let mut copies: Vec<(*const (), super::FileRef)> = Vec::new();
+        child.map.replace_files(|f| {
+            let key = Arc::as_ptr(f.source()) as *const ();
+            if let Some((_, c)) = copies.iter().find(|(k, _)| *k == key) {
+                return Some(c.clone());
+            }
+            let copy = super::FileRef::window(f.source().fork_copy()?, f.limit());
+            copies.push((key, copy.clone()));
+            Some(copy)
+        });
         // MADV_WIPEONFORK regions: the child's copy starts zero-filled, so
         // their pages are not shared with it.
         let private: Vec<(u64, u64, Prot)> = inner

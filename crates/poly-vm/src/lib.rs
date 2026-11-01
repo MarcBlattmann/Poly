@@ -755,6 +755,21 @@ impl<F: Clone + PartialEq> VmMap<F> {
         self.vmas.range(..=addr).next_back().map(|(_, v)| v).filter(|v| v.contains(addr))
     }
 
+    /// Give file-backed regions another handle: each region whose handle
+    /// `f` answers with `Some` takes the new one; the rest stay. Addresses,
+    /// offsets and rights do not change, and nothing is merged or split. A
+    /// forked copy of a map uses it for handles that must not be shared
+    /// with the parent (a System V attachment is each process's own).
+    pub fn replace_files(&mut self, mut f: impl FnMut(&F) -> Option<F>) {
+        for v in self.vmas.values_mut() {
+            if let Backing::File { file, .. } = &mut v.backing
+                && let Some(new) = f(file)
+            {
+                *file = new;
+            }
+        }
+    }
+
     /// The regions overlapping `[start, end)`, in address order.
     pub fn regions_in(&self, start: u64, end: u64) -> impl Iterator<Item = &Vma<F>> {
         let first = self.vmas.range(..start).next_back().map(|(_, v)| v).filter(|v| v.end > start && start < end);

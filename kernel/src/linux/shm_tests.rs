@@ -145,6 +145,13 @@ kernel_test! {
         if shm::mapped(&m, a + P, P) != [seg.serial()] || !shm::mapped(&m, a + 3 * P, P).is_empty() {
             return Err("the attachments in a range are wrong");
         }
+        // Pieces of one attachment count once (shmdt's spec sheet).
+        if m.protect(a + P, P, Prot::READ).is_err() || seg.attachments() != 2 {
+            return Err("an attachment split by mprotect does not count once");
+        }
+        if shm::mapped(&m, a, 3 * P) != [seg.serial()] {
+            return Err("the pieces of one attachment are not one attachment");
+        }
         m.unmap(a, P).map_err(|_| "munmap failed")?;
         write(&m, a + 2 * P, &[5])?;
         let mut one = [0u8; 1];
@@ -152,14 +159,18 @@ kernel_test! {
         if seg.attachments() != 2 || one != [5] {
             return Err("a partly unmapped attachment is not attached any more");
         }
-        if shm::detach(&m, a) != Err(Errno::EINVAL) {
-            return Err("shmdt where an attachment no longer starts is not EINVAL");
+        // The start of a later piece names nothing; the attach address
+        // still names the attachment without its first page.
+        if shm::detach(&m, a + P) != Err(Errno::EINVAL) {
+            return Err("shmdt at a later piece is not EINVAL");
         }
-        m.unmap(a + P, 2 * P).map_err(|_| "munmap failed")?;
-        if seg.attachments() != 1 {
-            return Err("unmapping all of an attachment does not detach it");
+        if shm::detach(&m, a) != Ok(seg.serial()) || seg.attachments() != 1 || m.read(a + 2 * P, &mut one).is_ok() {
+            return Err("shmdt of the attach address did not detach what is left");
         }
         shm::detach(&m, ro).map_err(|_| "shmdt failed")?;
+        if seg.attachments() != 0 {
+            return Err("attachments left after the last shmdt");
+        }
         Ok(())
     }
 }

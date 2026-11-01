@@ -10,9 +10,11 @@
 //! side goes through a kernel buffer: into a pipe at most the bytes of its
 //! free pages (like sendfile(2)), out of a pipe at most what it holds,
 //! peeked first and taken only once written, so an error of the output
-//! leaves the bytes in the pipe. vmsplice(2) copies the caller's memory
-//! at the call (Linux's pipe refers to the caller's pages until they are
-//! read; Poly's pipes hold bytes).
+//! leaves the bytes in the pipe. vmsplice(2) gives the pipe the bytes and
+//! where they came from: the pipe keeps referring to the caller's memory
+//! and reads it again before the bytes are read, so a change the caller
+//! makes meanwhile is what the reader gets, as on Linux
+//! ([`FileIo::pipe_push`], `poly_vfs::pipe::PipeSource`).
 //!
 //! The checks follow the spec sheets' orders ([`check_splice`] has
 //! splice's checks on the descriptors' kinds and the values). A call that
@@ -446,16 +448,16 @@ fn vmsplice_in(k: &mut dyn LinuxKernel, fd: i32, iovs: &[Iovec], nonblock: bool)
     loop {
         let room = pipe_room(k, fd, nonblock)?;
         let slots = room / PAGE_SIZE as usize;
-        let mut data: Vec<Vec<u8>> = Vec::new();
+        let mut data: Vec<(Vec<u8>, u64)> = Vec::new();
         for (at, len) in pieces(iovs, slots) {
             let mut piece = bounce(len)?;
             match k.copy_from_user(UserPtr(at), &mut piece) {
-                Ok(()) => data.push(piece),
+                Ok(()) => data.push((piece, at)),
                 Err(e) if data.is_empty() => return Err(e),
                 Err(_) => break,
             }
         }
-        let refs: Vec<&[u8]> = data.iter().map(|p| &p[..]).collect();
+        let refs: Vec<(&[u8], u64)> = data.iter().map(|(p, at)| (&p[..], *at)).collect();
         match io(k)?.pipe_push(fd, &refs) {
             // Another writer took the pages meanwhile.
             Err(Errno::EAGAIN) => continue,
