@@ -71,7 +71,8 @@ pub trait CharDevice: Send + Sync {
     }
 
     /// The device as `Any`, for the kernel to find its own device type
-    /// behind an open file (what a mapping of a DRM device file maps).
+    /// behind an open file where it offers a service the VFS knows nothing
+    /// of (mapping a DRM device file, or a sound card's ring buffer).
     /// `None` (the default) for devices nobody looks into.
     fn as_any(&self) -> Option<&(dyn core::any::Any + Send + Sync)> {
         None

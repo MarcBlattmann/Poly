@@ -2,8 +2,9 @@
 //! refinement and choice, and the playback runtime over a fake device.
 
 use super::abi::{self, SwParams, SyncPtr, Timespec, Xferi, format, ioctl, param, state};
+use super::ctl::{self, Controls, ElemId, VOLUME_MAX, id_by_name, iface};
 use super::hw::{self, Caps, HwConfig, HwParams, Interval, Mask};
-use super::pcm::{PcmBackend, PcmRuntime, State, boundary_for};
+use super::pcm::{Dir, PcmBackend, PcmRuntime, State, boundary_for};
 use crate::errno::Errno;
 extern crate std;
 use std::vec::Vec;
@@ -164,6 +165,8 @@ fn caps() -> Caps {
     let mut rates = [0u32; 16];
     rates[..4].copy_from_slice(&[8000, 22050, 44100, 48000]);
     Caps {
+        access: Mask::of(&[abi::access::RW_INTERLEAVED]),
+        info: hw::INFO,
         formats: Mask::of(&[format::U8, format::S16_LE, format::S32_LE]),
         rates,
         rate_count: 4,
@@ -298,6 +301,7 @@ struct FakeDevice {
     committed: usize,
     running: bool,
     fail_start: bool,
+    consumed: usize,
 }
 
 impl PcmBackend for FakeDevice {
@@ -337,6 +341,13 @@ impl PcmBackend for FakeDevice {
     }
     fn release(&mut self) {
         self.calls.push("release".into());
+    }
+    fn read(&mut self, offset: usize, out: &mut [u8]) -> Result<(), Errno> {
+        out.copy_from_slice(&self.ring[offset..offset + out.len()]);
+        Ok(())
+    }
+    fn consumed(&mut self, bytes: usize) {
+        self.consumed += bytes;
     }
 }
 
@@ -517,7 +528,7 @@ fn sync_ptr_reports_pointers_and_takes_avail_min() {
     rt.write(&frames(700, 0), &mut dev, T0).unwrap();
     rt.on_played(256, &mut dev, T0);
     let req = SyncPtr { flags: abi::sync_ptr::APPL, avail_min: 128, ..Default::default() };
-    let r = rt.sync_ptr(&req, T0);
+    let r = rt.sync_ptr(&req, &mut dev, T0);
     assert_eq!((r.state, r.hw_ptr, r.appl_ptr, r.avail_min), (state::RUNNING, 256, 700, 128));
     let req = SyncPtr {
         flags: abi::sync_ptr::APPL | abi::sync_ptr::AVAIL_MIN,
@@ -525,6 +536,223 @@ fn sync_ptr_reports_pointers_and_takes_avail_min() {
         appl_ptr: 5,
         ..Default::default()
     };
-    let r = rt.sync_ptr(&req, T0);
+    let r = rt.sync_ptr(&req, &mut dev, T0);
     assert_eq!((r.appl_ptr, r.avail_min), (700, 128));
+}
+
+// ---- capture ---------------------------------------------------------------
+
+#[test]
+fn capture_reads_what_the_device_captured() {
+    let mut rt = PcmRuntime::capture();
+    let mut dev = FakeDevice::default();
+    assert_eq!(rt.dir(), Dir::Capture);
+    rt.hw_params(cfg(), &mut dev).unwrap();
+    rt.prepare(&mut dev).unwrap();
+    // Starting a capture stream needs nothing written.
+    let mut out = vec![0u8; 100 * 4];
+    assert_eq!(rt.write(&frames(1, 0), &mut dev, T0), Err(Errno::EBADFD));
+    // A read of at least start_threshold (1) frames starts it; nothing yet.
+    assert_eq!(rt.read(&mut out, &mut dev, T0), Ok(0));
+    assert_eq!(rt.state(), State::Running);
+    assert!(!rt.readiness().readable);
+    // The device captured 300 frames into the ring.
+    dev.ring[..300 * 4].copy_from_slice(&frames(300, 9));
+    rt.on_captured(300, &mut dev, T0);
+    assert_eq!((rt.avail(), rt.capture_room()), (300, 724));
+    assert!(rt.readiness().readable, "300 frames, avail_min 256");
+    assert_eq!(rt.read(&mut out, &mut dev, T0), Ok(100));
+    assert_eq!(out, frames(100, 9));
+    assert_eq!(dev.consumed, 400);
+    let st = rt.status(T0);
+    assert_eq!((st.state, st.appl_ptr, st.hw_ptr, st.avail, st.delay), (state::RUNNING, 100, 300, 200, 200));
+    // The device may not run more than a buffer ahead of the reader.
+    rt.on_captured(5000, &mut dev, T0);
+    assert_eq!(rt.hw(), 100 + 1024);
+    assert_eq!(rt.state(), State::Xrun, "the buffer filled up: an overrun");
+    assert_eq!(rt.xruns, 1);
+    assert_eq!(rt.read(&mut out, &mut dev, T0), Err(Errno::EPIPE));
+    let r = rt.readiness();
+    assert!(r.error && r.readable && !r.writable);
+    rt.prepare(&mut dev).unwrap();
+    assert_eq!((rt.appl(), rt.hw(), rt.state()), (0, 0, State::Prepared));
+    // START works from PREPARED with nothing captured.
+    rt.start(&mut dev, T0).unwrap();
+    assert_eq!(rt.state(), State::Running);
+}
+
+#[test]
+fn capture_reads_wrap_and_drain_leaves_frames_to_read() {
+    let mut rt = PcmRuntime::capture();
+    let mut dev = FakeDevice::default();
+    rt.hw_params(cfg(), &mut dev).unwrap();
+    let mut sw = rt.sw_params();
+    sw.start_threshold = 2000;
+    rt.set_sw_params(&sw).unwrap();
+    rt.prepare(&mut dev).unwrap();
+    let mut out = vec![0u8; 900 * 4];
+    assert_eq!(rt.read(&mut out, &mut dev, T0), Ok(0));
+    assert_eq!(rt.state(), State::Prepared, "900 frames are below the start threshold");
+    rt.start(&mut dev, T0).unwrap();
+    rt.on_captured(900, &mut dev, T0);
+    assert_eq!(rt.read(&mut out, &mut dev, T0), Ok(900));
+    // The next 300 frames wrap around the 1024-frame ring.
+    for i in 0..300 {
+        let at = ((900 + i) % 1024) * 4;
+        dev.ring[at..at + 4].copy_from_slice(&[i as u8; 4]);
+    }
+    rt.on_captured(1200, &mut dev, T0);
+    let mut out = vec![0u8; 300 * 4];
+    assert_eq!(rt.read(&mut out[..200 * 4], &mut dev, T0), Ok(200));
+    assert_eq!(&out[124 * 4..124 * 4 + 4], &[124; 4], "frames after the wrap");
+    // DRAIN stops the device; the 100 frames left can still be read.
+    assert_eq!(rt.drain(&mut dev, T0), Ok(true));
+    assert_eq!(rt.state(), State::Draining);
+    assert!(rt.readiness().readable);
+    rt.on_captured(2000, &mut dev, T0);
+    assert_eq!(rt.avail(), 100, "nothing is captured once stopped");
+    assert_eq!(rt.read(&mut out, &mut dev, T0), Ok(100));
+    assert_eq!(rt.state(), State::Setup);
+    assert_eq!(rt.read(&mut out, &mut dev, T0), Err(Errno::EBADFD));
+}
+
+// ---- mmap ------------------------------------------------------------------
+
+fn mmap_cfg() -> HwConfig {
+    HwConfig { access: abi::access::MMAP_INTERLEAVED, ..cfg() }
+}
+
+#[test]
+fn mmap_playback_moves_appl_through_sync_ptr() {
+    let mut rt = PcmRuntime::new();
+    let mut dev = FakeDevice::default();
+    rt.hw_params(mmap_cfg(), &mut dev).unwrap();
+    assert!(rt.is_mmap());
+    rt.prepare(&mut dev).unwrap();
+    // The application filled 600 frames of the mapped buffer.
+    let req = SyncPtr { flags: abi::sync_ptr::AVAIL_MIN, appl_ptr: 600, ..Default::default() };
+    let r = rt.sync_ptr(&req, &mut dev, T0);
+    assert_eq!((r.appl_ptr, r.hw_ptr, r.state), (600, 0, state::PREPARED));
+    assert_eq!(dev.committed, 600 * 4);
+    assert_eq!(rt.state(), State::Prepared, "moving appl does not start the stream");
+    rt.start(&mut dev, T0).unwrap();
+    rt.on_played(500, &mut dev, T0);
+    // More than a buffer past hw, or behind hw: refused.
+    assert_eq!(rt.set_appl(500 + 1025, &mut dev), Err(Errno::EINVAL));
+    assert_eq!(rt.set_appl(499, &mut dev), Err(Errno::EINVAL));
+    rt.set_appl(1500, &mut dev).unwrap();
+    assert_eq!(rt.appl(), 1500);
+    // Rewind over what the device has not taken; forward over free room.
+    assert_eq!(rt.rewind(2000), Ok(1000));
+    assert_eq!(rt.appl(), 500);
+    assert_eq!(rt.forward(100, &mut dev), Ok(100));
+    // Read/write access does not take the caller's appl_ptr.
+    let mut rw = PcmRuntime::new();
+    rw.hw_params(cfg(), &mut dev).unwrap();
+    rw.prepare(&mut dev).unwrap();
+    rw.sync_ptr(&SyncPtr { appl_ptr: 300, ..Default::default() }, &mut dev, T0);
+    assert_eq!(rw.appl(), 0);
+}
+
+#[test]
+fn mmap_pointers_wrap_at_the_boundary() {
+    let mut rt = PcmRuntime::new();
+    let mut dev = FakeDevice::default();
+    rt.hw_params(mmap_cfg(), &mut dev).unwrap();
+    rt.prepare(&mut dev).unwrap();
+    let b = rt.sw_params().boundary;
+    assert_eq!(rt.set_appl(b, &mut dev), Err(Errno::EINVAL), "beyond the boundary");
+    rt.set_appl(1000, &mut dev).unwrap();
+    rt.start(&mut dev, T0).unwrap();
+    rt.on_played(1000, &mut dev, T0);
+    assert_eq!(rt.state(), State::Xrun);
+    let st = rt.mmap_status(T0);
+    assert_eq!((st.state, st.hw_ptr), (state::XRUN, 1000));
+    let e = st.encode();
+    assert_eq!(&e[8..16], &1000u64.to_le_bytes());
+    assert_eq!(rt.wrap(b + 5), 5);
+}
+
+#[test]
+fn mmap_capture_takes_frames_through_the_control_pointer() {
+    let mut rt = PcmRuntime::capture();
+    let mut dev = FakeDevice::default();
+    rt.hw_params(mmap_cfg(), &mut dev).unwrap();
+    rt.prepare(&mut dev).unwrap();
+    rt.start(&mut dev, T0).unwrap();
+    rt.on_captured(700, &mut dev, T0);
+    assert_eq!(rt.set_appl(701, &mut dev), Err(Errno::EINVAL), "past what was captured");
+    rt.set_appl(512, &mut dev).unwrap();
+    assert_eq!((rt.avail(), dev.consumed), (188, 512 * 4));
+    rt.set_avail_min(64);
+    assert_eq!(rt.sw_params().avail_min, 64);
+    let mc = abi::MmapControl { appl_ptr: 7, avail_min: 9 };
+    assert_eq!(abi::MmapControl::decode(&mc.encode()), mc);
+}
+
+// ---- mixer controls --------------------------------------------------------
+
+#[test]
+fn controls_list_info_read_and_write() {
+    assert_eq!(ioctl::CTL_ELEM_INFO, 0xc110_5511);
+    let mut c = Controls::new(true, true);
+    assert_eq!(c.len(), 4);
+    let mut list = [0u8; abi::ELEM_LIST_LEN];
+    list[4..8].copy_from_slice(&3u32.to_le_bytes()); // space
+    list[16..24].copy_from_slice(&0x1234u64.to_le_bytes());
+    assert_eq!(c.list(&mut list), 0..3);
+    assert_eq!((&list[8..12], &list[12..16]), (&3u32.to_le_bytes()[..], &4u32.to_le_bytes()[..]));
+    assert_eq!(Controls::list_pointer(&list), 0x1234);
+    list[0..4].copy_from_slice(&2u32.to_le_bytes()); // offset
+    assert_eq!(c.list(&mut list), 2..4);
+    let id = c.id(0).unwrap();
+    assert_eq!((id.numid, id.iface, id.name()), (1, iface::MIXER, &b"Master Playback Volume"[..]));
+    assert_eq!(ElemId::decode(&id.encode()), id);
+
+    // INFO by name.
+    let mut req = [0u8; abi::ELEM_INFO_LEN];
+    req[..abi::ELEM_ID_LEN].copy_from_slice(&id_by_name(iface::MIXER, "Master Playback Volume").encode());
+    let info = c.info(&req).unwrap();
+    assert_eq!(&info[0..4], &1u32.to_le_bytes(), "the numid is filled in");
+    assert_eq!(&info[64..68], &ctl::elem_type::INTEGER.to_le_bytes());
+    assert_eq!(&info[68..72], &ctl::access::READWRITE.to_le_bytes());
+    assert_eq!(&info[72..76], &2u32.to_le_bytes());
+    assert_eq!(&info[88..96], &(VOLUME_MAX as u64).to_le_bytes());
+    let mut sw = [0u8; abi::ELEM_INFO_LEN];
+    sw[0..4].copy_from_slice(&2u32.to_le_bytes());
+    assert_eq!(&c.info(&sw).unwrap()[64..68], &ctl::elem_type::BOOLEAN.to_le_bytes());
+    let mut missing = [0u8; abi::ELEM_INFO_LEN];
+    missing[..abi::ELEM_ID_LEN].copy_from_slice(&id_by_name(iface::MIXER, "PCM Playback Volume").encode());
+    assert_eq!(c.info(&missing), Err(Errno::ENOENT));
+    missing[0..4].copy_from_slice(&9u32.to_le_bytes());
+    assert_eq!(c.info(&missing), Err(Errno::ENOENT));
+
+    // READ, WRITE, and the gains they make.
+    let mut v = [0u8; abi::ELEM_VALUE_LEN];
+    v[0..4].copy_from_slice(&1u32.to_le_bytes());
+    let r = c.read(&v).unwrap();
+    assert_eq!(&r[72..80], &100u64.to_le_bytes());
+    assert_eq!(c.playback_gains(), [1 << 16, 1 << 16]);
+    v[72..80].copy_from_slice(&50u64.to_le_bytes());
+    v[80..88].copy_from_slice(&25u64.to_le_bytes());
+    let w = c.write(&v).unwrap();
+    assert_eq!(w.changed.map(|i| i.numid), Some(1));
+    assert_eq!(c.playback_gains(), [1 << 15, 1 << 14]);
+    assert_eq!(c.write(&v).unwrap().changed, None, "the same values again: no change");
+    v[72..80].copy_from_slice(&101u64.to_le_bytes());
+    assert_eq!(c.write(&v), Err(Errno::EINVAL));
+    assert_eq!(c.playback_gains(), [1 << 15, 1 << 14], "a refused write changes nothing");
+    // Switching the master off mutes.
+    let mut s = [0u8; abi::ELEM_VALUE_LEN];
+    s[..abi::ELEM_ID_LEN].copy_from_slice(&id_by_name(iface::MIXER, "Master Playback Switch").encode());
+    assert!(c.write(&s).unwrap().changed.is_some());
+    assert_eq!(c.playback_gains(), [0, 0]);
+    s[72..80].copy_from_slice(&2u64.to_le_bytes());
+    assert_eq!(c.write(&s), Err(Errno::EINVAL), "a switch is 0 or 1");
+    assert_eq!(c.capture_gains(), [1 << 16, 1 << 16]);
+    let e = ctl::event(&c.id(1).unwrap(), ctl::EVENT_MASK_VALUE);
+    assert_eq!((&e[0..4], &e[4..8], &e[8..12]), (&[0u8; 4][..], &1u32.to_le_bytes()[..], &2u32.to_le_bytes()[..]));
+    // A playback-only card has two controls.
+    assert_eq!(Controls::new(true, false).len(), 2);
+    assert!(Controls::new(false, false).is_empty());
 }

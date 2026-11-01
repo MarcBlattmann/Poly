@@ -8,6 +8,7 @@ resolver = "3"
 members = [
     "crates/poly-abi",
     "crates/poly-acpi",
+    "crates/poly-audio",
     "crates/poly-backtrace",
     "crates/poly-binfmt",
     "crates/poly-block",
@@ -23,6 +24,7 @@ members = [
     "crates/poly-font",
     "crates/poly-bochs-vbe",
     "crates/poly-gfx",
+    "crates/poly-hda",
     "crates/poly-heap",
     "crates/poly-http",
     "crates/poly-input",
@@ -86,6 +88,7 @@ rust-version = "1.97"
 [workspace.dependencies]
 poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
+poly-audio = { path = "crates/poly-audio" }
 poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
@@ -101,6 +104,7 @@ poly-drm = { path = "crates/poly-drm" }
 poly-font = { path = "crates/poly-font" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
 poly-gfx = { path = "crates/poly-gfx" }
+poly-hda = { path = "crates/poly-hda" }
 poly-heap = { path = "crates/poly-heap" }
 poly-http = { path = "crates/poly-http" }
 poly-input = { path = "crates/poly-input" }

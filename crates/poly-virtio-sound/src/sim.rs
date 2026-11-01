@@ -125,6 +125,16 @@ pub struct SimStream {
     pub messages: Vec<u32>,
 }
 
+/// An input message waiting in the device: its header's stream, its data
+/// buffer and its status.
+#[derive(Debug)]
+struct RxPending {
+    head: u16,
+    stream: u32,
+    buf: (u64, u32),
+    status_addr: u64,
+}
+
 /// An output message waiting in the device.
 #[derive(Debug)]
 struct Pending {
@@ -154,6 +164,11 @@ pub struct Device {
     /// QEMU 8.2 does for item queries).
     pub short_control: bool,
     pending: VecDeque<Pending>,
+    /// Input messages waiting to be filled.
+    rx_pending: VecDeque<RxPending>,
+    /// Report this used length for the next filled input message (a
+    /// device that reports less than it wrote).
+    pub rx_used_len: Option<u32>,
     /// Event buffers waiting for events: (head, address, length).
     events: VecDeque<(u16, u64, u32)>,
 }
@@ -240,6 +255,8 @@ impl Sim {
                 short_status: None,
                 short_control: false,
                 pending: VecDeque::new(),
+                rx_pending: VecDeque::new(),
+                rx_used_len: None,
                 events: VecDeque::new(),
             }),
         }))
@@ -436,6 +453,9 @@ impl Sim {
                     for p in dev.pending.iter_mut().filter(|p| p.stream == id) {
                         p.stream |= RELEASED;
                     }
+                    for p in dev.rx_pending.iter_mut().filter(|p| p.stream == id) {
+                        p.stream |= RELEASED;
+                    }
                 }
                 status(snd::OK)
             }
@@ -483,6 +503,70 @@ impl Sim {
             write_bytes(p.status_addr, &PcmStatus { status: snd::OK, latency_bytes: 0 }.encode());
             Self::put_used(&q, &mut dev.queues[2], &mut dev.bogus_id, p.head, PcmStatus::LEN as u32, event_idx);
         }
+        let q = self.queue(3);
+        while let Some(i) = dev.rx_pending.iter().position(|p| p.stream & RELEASED != 0) {
+            let p = dev.rx_pending.remove(i).unwrap();
+            write_bytes(p.status_addr, &PcmStatus { status: snd::OK, latency_bytes: 0 }.encode());
+            Self::put_used(&q, &mut dev.queues[3], &mut dev.bogus_id, p.head, PcmStatus::LEN as u32, event_idx);
+        }
+    }
+
+    /// Take every input message the driver queued into the device.
+    fn take_rx(&self) {
+        let q = self.queue(3);
+        if !self.live(&q) {
+            return;
+        }
+        let event_idx = self.event_idx();
+        let mut dev = self.0.dev.borrow_mut();
+        let dev = &mut *dev;
+        while let Some((head, descs)) = Self::take_chain(&q, &mut dev.queues[3], event_idx) {
+            // §5.14.6.8: a readable header, then the writable buffer and
+            // the writable status.
+            assert!(descs.len() == 3, "an input message is header, buffer, status");
+            assert!(!descs[0].2 && descs[1].2 && descs[2].2, "readable header, writable buffer and status");
+            assert!(descs[0].1 as usize >= XFER_LEN && descs[2].1 as usize >= PcmStatus::LEN);
+            let stream = u32::from_le_bytes(read_bytes(descs[0].0, 4).try_into().unwrap());
+            dev.rx_pending.push_back(RxPending {
+                head,
+                stream,
+                buf: (descs[1].0, descs[1].1),
+                status_addr: descs[2].0,
+            });
+        }
+    }
+
+    /// Input messages waiting in the device.
+    pub fn rx_pending(&self) -> usize {
+        self.0.dev.borrow().rx_pending.len()
+    }
+
+    /// Fill up to `n` waiting input messages of running input streams,
+    /// oldest first, with bytes from `source(stream, buffer)`; returns how
+    /// many.
+    pub fn record(&self, n: usize, mut source: impl FnMut(u32, &mut [u8])) -> usize {
+        let q = self.queue(3);
+        if !self.live(&q) {
+            return 0;
+        }
+        let event_idx = self.event_idx();
+        let mut dev = self.0.dev.borrow_mut();
+        let dev = &mut *dev;
+        let mut done = 0;
+        while done < n {
+            let running =
+                |p: &RxPending| dev.streams.get(p.stream as usize).is_some_and(|s| s.state == DevState::Running);
+            let Some(i) = dev.rx_pending.iter().position(running) else { break };
+            let p = dev.rx_pending.remove(i).unwrap();
+            let mut data = vec![0u8; p.buf.1 as usize];
+            source(p.stream, &mut data);
+            write_bytes(p.buf.0, &data);
+            write_bytes(p.status_addr, &PcmStatus { status: snd::OK, latency_bytes: 0 }.encode());
+            let len = dev.rx_used_len.take().unwrap_or(p.buf.1 + PcmStatus::LEN as u32);
+            Self::put_used(&q, &mut dev.queues[3], &mut dev.bogus_id, p.head, len, event_idx);
+            done += 1;
+        }
+        done
     }
 
     /// Output messages waiting in the device.
@@ -560,6 +644,7 @@ impl Sim {
         let mut dev = self.0.dev.borrow_mut();
         dev.queues = Default::default();
         dev.pending.clear();
+        dev.rx_pending.clear();
         dev.events.clear();
         for s in &mut dev.streams {
             s.state = DevState::Fresh;
@@ -718,6 +803,10 @@ impl Mmio for NotifyRegs {
             2 => {
                 sim.dev().queues[2].notifies += 1;
                 sim.take_tx();
+            }
+            3 => {
+                sim.dev().queues[3].notifies += 1;
+                sim.take_rx();
             }
             q => panic!("notification for queue {q}"),
         }

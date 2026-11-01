@@ -29,6 +29,10 @@ name = "poly-acpi"
 version = "0.0.1"
 
 [[package]]
+name = "poly-audio"
+version = "0.0.1"
+
+[[package]]
 name = "poly-backtrace"
 version = "0.0.1"
 
@@ -128,6 +132,13 @@ version = "0.0.1"
 [[package]]
 name = "poly-gfx"
 version = "0.0.1"
+
+[[package]]
+name = "poly-hda"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+]
 
 [[package]]
 name = "poly-heap"
