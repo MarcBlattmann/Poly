@@ -89,10 +89,16 @@ tests, the man pages and the UAPI headers (CLEAN_ROOM.md).
 - splice from a pipe into a file or socket peeks, writes, then consumes,
   so an error of the output leaves the bytes in the pipe; into a pipe
   from a file, memory device or socket at most the free pages' bytes go.
-- **vmsplice copies** the caller's memory at the call. Linux's pipe
-  refers to the caller's pages until they are read (a change before the
-  read is seen); Poly's pipes hold bytes, and referring to user pages
-  would need page pinning in the memory manager. Known difference.
+- **vmsplice refers to the caller's memory.** Linux's pipe refers to the
+  caller's pages until they are read (a change before the read is seen).
+  Poly's pipes hold bytes, so a vmsplice(2)d buffer keeps a copy and a
+  `poly_vfs::pipe::PipeSource` (the kernel's: the caller's `Memory` and
+  the address), and the pipe reads the source again, without its lock,
+  before the buffer is read, peeked or moved on (`Pipe::refresh`). A
+  page unmapped meanwhile leaves the last copy; the buffer keeps the
+  memory object alive until it is read. Pinning frames would be closer
+  (a later munmap would still show the last writes), at the price of
+  changes to copy on write; the lazy read covers what programs do.
 
 ### Sockets: sendmmsg, recvmmsg
 
@@ -127,6 +133,22 @@ tests, the man pages and the UAPI headers (CLEAN_ROOM.md).
   never swaps. Without `CAP_IPC_LOCK` the segment must fit in the
   caller's `RLIMIT_MEMLOCK` (compared with this segment's size, not with
   everything the user has locked).
+- **An attachment is one source value** (`linux::shm::Attachment`): every
+  region of one shmat(2) maps the same `PageSource`, which knows the
+  attach address, so the pieces mprotect(2) or munmap(2) leave count as
+  one attachment in `shm_nattch`, shmdt(2) of the attach address detaches
+  them all (also after munmap of the first page), and the start of a
+  later piece names nothing (shmdt's spec sheet). fork gives the child
+  attachments of its own (`PageSource::fork_copy`, applied by
+  `Memory::fork` through `poly_vm::VmMap::replace_files`). The futex key
+  of such memory stays the segment's pages.
+
+### Receive flags on Unix sockets
+
+- recvmmsg's spec sheet: `MSG_OOB` on a Unix datagram socket is
+  `EOPNOTSUPP` (elsewhere still `EINVAL`), and a Unix socket has no error
+  queue, so `MSG_ERRQUEUE` receives from the normal queue (elsewhere
+  still `EAGAIN`). This applies to recvfrom and recvmsg too.
 
 ## Consequences
 
@@ -135,5 +157,6 @@ tests, the man pages and the UAPI headers (CLEAN_ROOM.md).
 - Code that read `LinuxProcess::nice` reads the thread's `sched.nice`.
 - The scheduler can later honour policies and nice values from the
   per-thread state without changing the system call layer.
-- Known differences, recorded in the module docs: vmsplice copies; the
-  kept-error mechanism exists only for AF_UNIX sockets.
+- Known differences, recorded in the module docs: a vmsplice(2)d page
+  unmapped before it is read shows the bytes of the call, not the last
+  writes; the kept-error mechanism exists only for AF_UNIX sockets.

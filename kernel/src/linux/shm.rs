@@ -4,12 +4,17 @@
 //!
 //! A segment's memory is a [`ShmPages`]: shared anonymous memory
 //! ([`AnonShared`], zero-filled pages made at the first fault) that knows
-//! its serial. An attachment is a shared mapping of it, so `fork` gives
-//! the child the same pages and every attachment sees every write. The
-//! personality's [`Segment`] holds one `Arc` of the pages and every
-//! mapping holds another: the attachments are the others (a mapping that
-//! `mprotect` split in two counts twice). The pages are freed when the
-//! segment is gone and its last mapping too.
+//! its serial. An attachment is a shared mapping of an `Attachment`, a
+//! source of its own over those pages: every piece mprotect(2) or
+//! munmap(2) leaves of it maps that one value, which knows the address
+//! shmat(2) returned, so shmdt(2) of that address detaches all the pieces
+//! (also once the first page is gone) and the pieces count as one
+//! attachment (shmdt's spec sheet). `fork` gives the child the same pages
+//! through attachments of its own, so every attachment sees every write
+//! and the child's count separately. The personality's [`Segment`] holds
+//! one `Arc` of the pages and every attachment another: the attachments
+//! are the others. The pages are freed when the segment is gone and its
+//! last attachment too.
 
 use crate::user::memory::{Backing, IoError, PageSource, SharedFrame};
 use crate::user::{AnonShared, FileRef, Memory, MemoryError};
@@ -51,6 +56,57 @@ impl PageSource for ShmPages {
     }
 }
 
+/// One attachment: the source every region of one shmat(2) maps, so the
+/// pieces mprotect(2) or munmap(2) leave of it are still one attachment,
+/// named by the address shmat returned ([`PageSource::sysv_attach_addr`]).
+/// It holds the segment's pages; fork gives the child an attachment of its
+/// own ([`PageSource::fork_copy`]).
+#[derive(Debug)]
+struct Attachment {
+    pages: Arc<ShmPages>,
+    /// The attach address; 0 until the mapping is placed.
+    addr: AtomicU64,
+}
+
+impl PageSource for Attachment {
+    fn len(&self) -> u64 {
+        self.pages.len()
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, IoError> {
+        self.pages.read_at(offset, buf)
+    }
+
+    /// The segment's pages, so a futex in them has one key in every
+    /// attachment of every process.
+    fn object_id(&self) -> Option<u64> {
+        Some(Arc::as_ptr(&self.pages) as *const () as u64)
+    }
+
+    fn shareable(&self) -> bool {
+        true
+    }
+
+    fn shared_frame(&self, offset: u64) -> Option<Result<Arc<SharedFrame>, IoError>> {
+        self.pages.shared_frame(offset)
+    }
+
+    fn sysv_shm(&self) -> Option<u64> {
+        Some(self.pages.serial)
+    }
+
+    fn sysv_attach_addr(&self) -> Option<u64> {
+        Some(self.addr.load(Ordering::Relaxed))
+    }
+
+    fn fork_copy(&self) -> Option<Arc<dyn PageSource>> {
+        Some(Arc::new(Attachment {
+            pages: self.pages.clone(),
+            addr: AtomicU64::new(self.addr.load(Ordering::Relaxed)),
+        }))
+    }
+}
+
 /// What the personality's segment holds: the pages.
 #[derive(Debug)]
 pub struct Segment {
@@ -58,6 +114,8 @@ pub struct Segment {
 }
 
 impl ShmMemory for Segment {
+    /// The live attachments: every one holds the pages once, whatever
+    /// number of pieces it is in now.
     fn attachments(&self) -> u64 {
         Arc::strong_count(&self.pages) as u64 - 1
     }
@@ -91,55 +149,74 @@ pub fn attach(
     prot: poly_vm::Prot,
 ) -> Result<u64, Errno> {
     let segment = segment.as_any().downcast_ref::<Segment>().ok_or(Errno::EINVAL)?;
-    let source: Arc<dyn PageSource> = segment.pages.clone();
+    let attachment = Arc::new(Attachment { pages: segment.pages.clone(), addr: AtomicU64::new(0) });
+    let source: Arc<dyn PageSource> = attachment.clone();
     let max = prot | poly_vm::Prot::READ | poly_vm::Prot::EXEC;
     let req = poly_vm::MapRequest::file(len, prot, FileRef::new(source), 0, true).with_max_prot(max).at(placement);
-    memory.map(req).map_err(|e| match e {
+    let addr = memory.map(req).map_err(|e| match e {
         MemoryError::OutOfMemory => Errno::ENOMEM,
         MemoryError::Vm(poly_vm::Error::NoMemory) => Errno::ENOMEM,
         MemoryError::Vm(poly_vm::Error::Permission) => Errno::EPERM,
         _ => Errno::EINVAL,
-    })
+    })?;
+    attachment.addr.store(addr, Ordering::Relaxed);
+    Ok(addr)
+}
+
+/// A piece of an attachment: start, end, attach address and serial.
+type Piece = (u64, u64, u64, u64);
+
+/// Every region of `memory` that maps an attachment.
+fn pieces(memory: &Memory) -> Vec<Piece> {
+    let mut out = Vec::new();
+    for v in memory.regions() {
+        let Backing::File { file, shared: true, .. } = &v.backing else { continue };
+        let (Some(serial), Some(at)) = (file.source().sysv_shm(), file.source().sysv_attach_addr()) else { continue };
+        out.push((v.start, v.end, at, serial));
+    }
+    out
 }
 
 /// The serials of the attachments in `memory` with pages in
 /// `[addr, addr + len)`, one per attachment.
 pub fn mapped(memory: &Memory, addr: u64, len: u64) -> Vec<u64> {
     let end = addr.saturating_add(len);
-    attachments(memory).into_iter().filter(|a| a.0 < end && addr < a.1).map(|a| a.2).collect()
-}
-
-/// The attachments of `memory`: start, end and serial of each run of
-/// adjacent regions mapping one segment's pages in order.
-fn attachments(memory: &Memory) -> Vec<(u64, u64, u64)> {
-    let mut out: Vec<(u64, u64, u64)> = Vec::new();
-    let mut next_offset = 0;
-    for v in memory.regions() {
-        let Backing::File { file, offset, shared: true } = &v.backing else { continue };
-        let Some(serial) = file.source().sysv_shm() else { continue };
-        match out.last_mut() {
-            Some(last) if last.1 == v.start && last.2 == serial && *offset == next_offset => last.1 = v.end,
-            _ => out.push((v.start, v.end, serial)),
+    let mut seen: Vec<(u64, u64)> = Vec::new();
+    for (start, stop, at, serial) in pieces(memory) {
+        if start < end && addr < stop && !seen.contains(&(at, serial)) {
+            seen.push((at, serial));
         }
-        next_offset = offset + v.size();
     }
-    out
+    seen.into_iter().map(|(_, serial)| serial).collect()
 }
 
-/// shmdt(2): unmap the attachment that starts at `addr` and return its
-/// segment's serial; `EINVAL` if none starts there.
+/// Unmap `pieces`.
+fn unmap_all(memory: &Memory, pieces: &[Piece]) {
+    for (start, end, _, _) in pieces {
+        let _ = memory.unmap(*start, end - start);
+    }
+}
+
+/// shmdt(2): unmap every piece of the attachment shmat placed at `addr`
+/// (also when its first page is gone) and return its segment's serial;
+/// `EINVAL` if no attachment has that address.
 pub fn detach(memory: &Memory, addr: u64) -> Result<u64, Errno> {
-    let (start, end, serial) = attachments(memory).into_iter().find(|a| a.0 == addr).ok_or(Errno::EINVAL)?;
-    memory.unmap(start, end - start).map_err(|_| Errno::EINVAL)?;
+    let mine: Vec<Piece> = pieces(memory).into_iter().filter(|p| p.2 == addr).collect();
+    let serial = mine.first().ok_or(Errno::EINVAL)?.3;
+    unmap_all(memory, &mine);
     Ok(serial)
 }
 
 /// Unmap every attachment of `memory` (its process is exiting); their
-/// serials.
+/// serials, one per attachment.
 pub fn detach_all(memory: &Memory) -> Vec<u64> {
-    let all = attachments(memory);
-    for (start, end, _) in &all {
-        let _ = memory.unmap(*start, end - start);
+    let all = pieces(memory);
+    unmap_all(memory, &all);
+    let mut seen: Vec<(u64, u64)> = Vec::new();
+    for (_, _, at, serial) in all {
+        if !seen.contains(&(at, serial)) {
+            seen.push((at, serial));
+        }
     }
-    all.into_iter().map(|a| a.2).collect()
+    seen.into_iter().map(|(_, serial)| serial).collect()
 }
