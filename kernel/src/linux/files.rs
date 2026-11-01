@@ -147,6 +147,11 @@ impl LinuxFs for Thread<'_> {
         Ok(())
     }
 
+    fn unshare_fd_table(&mut self) -> Result<(), Errno> {
+        self.process().files.unshare_table();
+        Ok(())
+    }
+
     fn test_lock(
         &mut self,
         fd: i32,
@@ -206,7 +211,9 @@ impl LinuxFs for Thread<'_> {
     }
 
     fn status_flags(&mut self, fd: i32) -> Result<u32, Errno> {
-        self.process().files.status_flags(fd).map(OpenFlags::bits).map_err(vfs_errno)
+        let files = &self.process().files;
+        let extra = files.file(fd).map_or(0, |f| super::pidfd::extra_status_flags(&f));
+        files.status_flags(fd).map(|f| f.bits() | extra).map_err(vfs_errno)
     }
 
     fn set_status_flags(&mut self, fd: i32, flags: u32) -> Result<(), Errno> {
@@ -286,6 +293,29 @@ impl LinuxFs for Thread<'_> {
     ) -> Result<(), Errno> {
         let (atime, mtime) = (super::cred::set_time(atime), super::cred::set_time(mtime));
         self.process().files.utimensat(dirfd, path, atime, mtime, follow).map_err(vfs_errno)
+    }
+
+    fn memfd_create(&mut self, name: &[u8], perm: u32, seals: u32, cloexec: bool) -> Result<i32, Errno> {
+        let files = &self.process().files;
+        let memfd = poly_vfs::memfd::Memfd::new(name, seals);
+        let file =
+            fs::vfs().memfd_file(&fs::memfs::memfd_mount(), &files.cred(), perm as u16, memfd).map_err(vfs_errno)?;
+        files.install(file, cloexec).map_err(vfs_errno)
+    }
+
+    fn add_seals(&mut self, fd: i32, seals: u32) -> Result<(), Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        let memfd = file.memfd().ok_or(Errno::EINVAL)?;
+        // fcntl(2): "EPERM ... fd is not open for writing".
+        if !file.writable() {
+            return Err(Errno::EPERM);
+        }
+        memfd.add_seals(seals).map_err(vfs_errno)
+    }
+
+    fn get_seals(&mut self, fd: i32) -> Result<u32, Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        file.memfd().map(|m| m.seals()).ok_or(Errno::EINVAL)
     }
 
     fn ftruncate(&mut self, fd: i32, len: u64) -> Result<(), Errno> {

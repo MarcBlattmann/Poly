@@ -5,8 +5,7 @@
 # tests that newly pass. Add a test here once it passes; never remove one to
 # make CI green.
 #
-# Not here yet: libc-hello (glibc registers rseq, which Poly answers with
-# ENOSYS; its output and exit status already match). App tests
+# libc-hello passes since Poly implements rseq (ADR 0111). App tests
 # (tests/linux/apps/*.app) compare in app mode, which leaves rseq out; any
 # not here yet are in specs/linux/FAILING.md under "spec-c (apps)".
 arch_prctl
@@ -16,6 +15,7 @@ efault
 exit42
 getrandom
 hello
+libc-hello
 mmap
 segv
 stderr

@@ -5,6 +5,7 @@ use crate::device::CharDevice;
 use crate::fdtable::At;
 use crate::file::{Backend, OpenFile, OpenFlags, Origin};
 use crate::fs::{FileSystem, NewNode, RenameFlags};
+use crate::inotify;
 use crate::mount::{Mount, MountFlags, MountId, MountInfo, MountTable};
 use crate::node::{FsContext, Location, NodeRef, is_fs_object};
 use crate::object::AnonFs;
@@ -14,6 +15,9 @@ use crate::{Attr, DeviceId, Errno, FileType, Ino, PERM_MASK, Result, S_ISGID, S_
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+
+/// The directory and name a lookup found its node under, if any.
+type Named = Option<(Location, Vec<u8>)>;
 
 /// The virtual file system of one machine: what is mounted where, which
 /// character devices exist, and every path-based operation.
@@ -89,6 +93,40 @@ impl Vfs {
         let (fs, mount) = &self.anon;
         let ino = fs.alloc(kind, perm & PERM_MASK, cred.uid, cred.gid);
         Location { mount: mount.clone(), ino }.pin()
+    }
+
+    /// A mount of `fs` that no path reaches, for files that never get a
+    /// name (memfd_create(2)'s, [`memfd_file`](Self::memfd_file)).
+    pub fn detached_mount(&self, fs: Arc<dyn FileSystem>) -> Arc<Mount> {
+        let root = fs.root();
+        let info = fs.info();
+        let mut table = self.mounts.lock();
+        let sb = table.superblock(fs, info);
+        table.detached(sb, root)
+    }
+
+    /// memfd_create(2): a new empty regular file without links in the root
+    /// of `mount` (a [`detached_mount`](Self::detached_mount) of a memory
+    /// file system), mode `perm` (no umask), owned by `cred`'s file system
+    /// ids, open `O_RDWR | O_LARGEFILE`, carrying `memfd`'s label and seals.
+    pub fn memfd_file(
+        &self,
+        mount: &Arc<Mount>,
+        cred: &Cred,
+        perm: u16,
+        memfd: Arc<crate::memfd::Memfd>,
+    ) -> Result<Arc<OpenFile>> {
+        let node = NewNode {
+            kind: FileType::Regular,
+            perm: perm & PERM_MASK,
+            uid: cred.uid,
+            gid: cred.gid,
+            rdev: DeviceId::default(),
+        };
+        let ino = mount.sb.fs.create_tmpfile(mount.root, &node)?;
+        let loc = Location { mount: mount.clone(), ino };
+        let file = OpenFile::new(loc.pin()?, FileType::Regular, Backend::Inode, OpenFlags::RDWR | OpenFlags::LARGEFILE);
+        Ok(Arc::new(file.with_memfd(memfd)))
     }
 
     #[cfg(test)]
@@ -369,7 +407,9 @@ impl Vfs {
                 node.truncate_unchecked(0)?;
             }
         }
-        Ok(Arc::new(OpenFile::new(node, attr.kind, backend, flags).with_origin(origin)))
+        let file = Arc::new(OpenFile::new(node, attr.kind, backend, flags).with_origin(origin));
+        inotify::file_event(&file, inotify::mask::IN_OPEN);
+        Ok(file)
     }
 
     /// `O_TMPFILE` (open(2)): an unnamed regular file in the directory
@@ -452,6 +492,7 @@ impl Vfs {
                     let (uid, gid, perm) = Self::new_owner(walk.cred, &dir_attr, mode & !ctx.umask, false);
                     let node = NewNode { kind: FileType::Regular, perm, uid, gid, rdev: DeviceId::default() };
                     let ino = self.name_changed(p.dir.mount.sb.fs.create(p.dir.ino, name, &node))?;
+                    inotify::entry_event(&p.dir, name, inotify::mask::IN_CREATE, false, 0);
                     let loc = Location { mount: p.dir.mount.clone(), ino };
                     return Ok(((loc, Some((p.dir, name.clone()))), true));
                 }
@@ -484,7 +525,9 @@ impl Vfs {
         let name = self.new_name(&p)?;
         let dir_attr = self.may_change(cred, &p.dir)?;
         let (uid, gid, perm) = Self::new_owner(cred, &dir_attr, mode & !ctx.umask & 0o1777, true);
-        self.name_changed(p.dir.mount.sb.fs.mkdir(p.dir.ino, name, perm, uid, gid)).map(|_| ())
+        self.name_changed(p.dir.mount.sb.fs.mkdir(p.dir.ino, name, perm, uid, gid))?;
+        inotify::entry_event(&p.dir, name, inotify::mask::IN_CREATE, true, 0);
+        Ok(())
     }
 
     /// `mknod(2)`: regular files, FIFOs and sockets for anyone with write
@@ -516,8 +559,9 @@ impl Vfs {
         let (uid, gid, perm) = Self::new_owner(cred, &dir_attr, mode & !ctx.umask, false);
         let rdev =
             if matches!(kind, FileType::CharDevice | FileType::BlockDevice) { rdev } else { DeviceId::default() };
-        self.name_changed(p.dir.mount.sb.fs.create(p.dir.ino, name, &NewNode { kind, perm, uid, gid, rdev }))
-            .map(|_| ())
+        self.name_changed(p.dir.mount.sb.fs.create(p.dir.ino, name, &NewNode { kind, perm, uid, gid, rdev }))?;
+        inotify::entry_event(&p.dir, name, inotify::mask::IN_CREATE, false, 0);
+        Ok(())
     }
 
     /// `symlink(2)`: a link at `path` to `target` (stored as given).
@@ -545,7 +589,9 @@ impl Vfs {
         }
         let dir_attr = self.may_change(cred, &p.dir)?;
         let (uid, gid, _) = Self::new_owner(cred, &dir_attr, 0o777, false);
-        self.name_changed(p.dir.mount.sb.fs.symlink(p.dir.ino, name, target, uid, gid)).map(|_| ())
+        self.name_changed(p.dir.mount.sb.fs.symlink(p.dir.ino, name, target, uid, gid))?;
+        inotify::entry_event(&p.dir, name, inotify::mask::IN_CREATE, false, 0);
+        Ok(())
     }
 
     /// `linkat(2)`: a new name `new` for what `old` names. `follow` is
@@ -620,7 +666,11 @@ impl Vfs {
         if !nameable {
             return Err(Errno::ENOENT);
         }
-        self.name_changed(p.dir.mount.sb.fs.link(p.dir.ino, name, src.ino))
+        self.name_changed(p.dir.mount.sb.fs.link(p.dir.ino, name, src.ino))?;
+        // inotify(7): the link count changed; a new name appeared.
+        inotify::self_event(&src, inotify::mask::IN_ATTRIB, false);
+        inotify::entry_event(&p.dir, name, inotify::mask::IN_CREATE, false, 0);
+        Ok(())
     }
 
     // ----- removing and renaming -----
@@ -644,7 +694,9 @@ impl Vfs {
         Self::sticky_allows(cred, &dattr, &vattr)?;
         let sb = &p.dir.mount.sb;
         sb.forget(p.dir.ino, name);
-        self.name_changed(sb.fs.unlink(p.dir.ino, name))
+        self.name_changed(sb.fs.unlink(p.dir.ino, name))?;
+        inotify::removed(&p.dir, name, &victim, false);
+        Ok(())
     }
 
     /// `rmdir(2)`: `/` is `EBUSY`, a final `.` is `EINVAL`, `..` is
@@ -669,7 +721,9 @@ impl Vfs {
         Self::sticky_allows(cred, &dattr, &vattr)?;
         let sb = &p.dir.mount.sb;
         sb.forget(p.dir.ino, name);
-        self.name_changed(sb.fs.rmdir(p.dir.ino, name))
+        self.name_changed(sb.fs.rmdir(p.dir.ino, name))?;
+        inotify::removed(&p.dir, name, &victim, true);
+        Ok(())
     }
 
     /// `renameat2(2)`.
@@ -778,7 +832,26 @@ impl Vfs {
         let sb = &op.dir.mount.sb;
         sb.forget(op.dir.ino, old_name);
         sb.forget(np.dir.ino, new_name);
-        self.name_changed(sb.fs.rename(op.dir.ino, old_name, np.dir.ino, new_name, flags))
+        self.name_changed(sb.fs.rename(op.dir.ino, old_name, np.dir.ino, new_name, flags))?;
+        if inotify::active() {
+            use inotify::mask::{IN_MOVE_SELF, IN_MOVED_FROM, IN_MOVED_TO};
+            let cookie = inotify::next_cookie();
+            inotify::entry_event(&op.dir, old_name, IN_MOVED_FROM, src_dir, cookie);
+            inotify::entry_event(&np.dir, new_name, IN_MOVED_TO, src_dir, cookie);
+            inotify::self_event(&src, IN_MOVE_SELF, src_dir);
+            if let Some(dst) = &dst {
+                if flags.exchange {
+                    let cookie = inotify::next_cookie();
+                    inotify::entry_event(&np.dir, new_name, IN_MOVED_FROM, dst_dir, cookie);
+                    inotify::entry_event(&op.dir, old_name, IN_MOVED_TO, dst_dir, cookie);
+                    inotify::self_event(dst, IN_MOVE_SELF, dst_dir);
+                } else {
+                    // The replaced inode may be gone with its name.
+                    inotify::inode_may_be_gone(dst);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Whether `dir` is the directory `ancestor` or below it, within one
@@ -834,7 +907,36 @@ impl Vfs {
 
     /// `chmod(2)`.
     pub fn chmod(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], perm: u16, follow: bool) -> Result<()> {
-        self.lookup(ctx, cred, at, path, follow)?.chmod(cred, perm)
+        let (node, named) = self.lookup_named(ctx, cred, at, path, follow)?;
+        node.chmod(cred, perm)?;
+        Self::changed_in_dir(&node, named, inotify::mask::IN_ATTRIB);
+        Ok(())
+    }
+
+    /// [`lookup`](Self::lookup), and the directory and name the node was
+    /// found under (for inotify(7)'s events in that directory).
+    fn lookup_named(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<(NodeRef, Named)> {
+        check_path(path)?;
+        let (loc, named) = self.walk(ctx, cred).resolve_named(Self::start(ctx, at), path, follow)?;
+        Ok((loc.pin()?, named))
+    }
+
+    /// inotify(7): `mask` (an attribute change or modification of `node`)
+    /// for the watches of the directory it was named in.
+    fn changed_in_dir(node: &NodeRef, named: Named, mask: u32) {
+        if inotify::active()
+            && let Some((dir, name)) = named
+        {
+            let is_dir = node.kind().is_ok_and(|k| k == FileType::Directory);
+            inotify::entry_event(&dir, &name, mask, is_dir, 0);
+        }
     }
 
     /// `chown(2)` / `lchown(2)`; `None` leaves an id alone.
@@ -849,7 +951,10 @@ impl Vfs {
         gid: Option<u32>,
         follow: bool,
     ) -> Result<()> {
-        self.lookup(ctx, cred, at, path, follow)?.chown(cred, uid, gid)
+        let (node, named) = self.lookup_named(ctx, cred, at, path, follow)?;
+        node.chown(cred, uid, gid)?;
+        Self::changed_in_dir(&node, named, inotify::mask::IN_ATTRIB);
+        Ok(())
     }
 
     /// `utimensat(2)` on a path: `None` leaves a time alone (`UTIME_OMIT`);
@@ -865,12 +970,18 @@ impl Vfs {
         mtime: Option<crate::SetTime>,
         follow: bool,
     ) -> Result<()> {
-        self.lookup(ctx, cred, at, path, follow)?.set_times(cred, atime, mtime)
+        let (node, named) = self.lookup_named(ctx, cred, at, path, follow)?;
+        node.set_times(cred, atime, mtime)?;
+        Self::changed_in_dir(&node, named, inotify::mask::IN_ATTRIB);
+        Ok(())
     }
 
     /// `truncate(2)`.
     pub fn truncate(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], size: u64) -> Result<()> {
-        self.lookup(ctx, cred, at, path, true)?.truncate(cred, size)
+        let (node, named) = self.lookup_named(ctx, cred, at, path, true)?;
+        node.truncate(cred, size)?;
+        Self::changed_in_dir(&node, named, inotify::mask::IN_MODIFY);
+        Ok(())
     }
 
     // ----- the process context -----
@@ -956,6 +1067,9 @@ impl Vfs {
     /// its old path. `ENOENT` when the file was not opened by name (pipes,
     /// sockets) or its directory is gone or outside the root.
     pub fn file_path(&self, ctx: &FsContext, file: &OpenFile) -> Result<Vec<u8>> {
+        if let Some(m) = file.memfd() {
+            return Ok(m.path());
+        }
         let node = file.node();
         if file.kind() == FileType::Directory {
             return self.path_of(ctx, node);

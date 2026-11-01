@@ -1351,7 +1351,7 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   and `AT_ENTRY` saying where both are; the loader then maps the shared
   libraries itself with `openat`, `mmap` and `mprotect`. `madvise`
   (`sys/madvise.rs`, `Memory::advise`) gives a finished thread's stack
-  back. `rseq` stays `ENOSYS`. The boot tests run dynamically linked C and
+  back. `rseq` registers and aborts restartable sequences (ADR 0111). The boot tests run dynamically linked C and
   C++ programs built with the host's compiler against the host's C library
   (`tools/xtask/src/dynamic.rs`).
 - **The first program and the test-run protocol** (ADR 0027).

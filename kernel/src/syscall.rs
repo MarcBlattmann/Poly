@@ -23,7 +23,7 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     {
         // This line is the seed of the API tracer: every unimplemented call
         // an app makes is a work item. Each is logged once per boot, so a
-        // call every program makes (`rseq`) does not flood the console of
+        // call every program of a kind makes does not flood the console of
         // an interactive shell; `poly.strace` shows every call.
         let name = match process.personality {
             Personality::Linux => poly_personality_linux::table::name(number),

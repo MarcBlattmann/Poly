@@ -212,7 +212,9 @@ impl NodeRef {
         self.writable_mount()?;
         cred.check(&attr, Access::WRITE)?;
         self.clear_setid(cred)?;
-        self.truncate_unchecked(size)
+        self.truncate_unchecked(size)?;
+        crate::inotify::self_event(&self.loc, crate::inotify::mask::IN_MODIFY, false);
+        Ok(())
     }
 
     /// What a write or a truncation by `cred` does to the mode: a caller
@@ -250,8 +252,11 @@ impl NodeRef {
         self.loc.mount.sb.fs.truncate(self.loc.ino, size)
     }
 
+    /// Changes attributes; inotify(7): `IN_ATTRIB`.
     fn setattr(&self, set: &SetAttr) -> Result<()> {
-        self.loc.mount.sb.fs.setattr(self.loc.ino, set).map(|_| ())
+        let attr = self.loc.mount.sb.fs.setattr(self.loc.ino, set)?;
+        crate::inotify::self_event(&self.loc, crate::inotify::mask::IN_ATTRIB, attr.kind == FileType::Directory);
+        Ok(())
     }
 
     fn writable_mount(&self) -> Result<()> {
@@ -278,6 +283,9 @@ impl Clone for NodeRef {
 impl Drop for NodeRef {
     fn drop(&mut self) {
         self.loc.mount.sb.fs.release(self.loc.ino);
+        // The last reference to an unlinked inode frees it (inotify(7):
+        // `IN_DELETE_SELF` for its watches).
+        crate::inotify::inode_may_be_gone(&self.loc);
     }
 }
 

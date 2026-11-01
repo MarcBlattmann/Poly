@@ -168,7 +168,8 @@ finds.
   outside the reader's root is named from the system's root.
 
 `rseq` stays `ENOSYS` (ADR 0043, 0049): every program here treats it as
-"no rseq".
+"no rseq". (Superseded: ADR 0111 implements `rseq`, and the boot tests no
+longer tolerate any "not implemented" line.)
 
 **The boot test** (`rootdisk::boot_test`, in `cargo xtask test`, alone
 `cargo xtask root-disk-test`) makes a fresh image, boots it and types into

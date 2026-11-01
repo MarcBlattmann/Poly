@@ -610,6 +610,9 @@ fn switch(sw: Switch) {
         let t = &mut *guard;
         let top = t.stacks[sw.to.slot()].map(|s| s.top());
         let [from, to] = t.user.get_disjoint_mut([sw.from.slot(), sw.to.slot()]).expect("switch to the running thread");
+        if let Some(u) = from.as_deref() {
+            u.switched_out();
+        }
         arch::user::switch(from.as_deref_mut().map(|u| &mut u.arch), to.as_deref().map(|u| &u.arch), top);
     }
     crate::cputime::switched(sw.from.slot(), sw.to.slot());

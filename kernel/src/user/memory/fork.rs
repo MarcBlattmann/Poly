@@ -103,7 +103,8 @@ impl Memory {
             inner.shared.insert(page, SharedPage { frame: Arc::clone(&frame), mapped: false });
             child.shared.insert(page, SharedPage { frame, mapped: false });
         }
-        Ok(Memory { space: Arc::new(space), inner: Mutex::new(child) })
+        let membarrier = core::sync::atomic::AtomicU32::new(self.membarrier_registrations());
+        Ok(Memory { space: Arc::new(space), inner: Mutex::new(child), membarrier })
     }
 
     /// Map shared frame `frame` (a page of shared anonymous memory) at

@@ -361,6 +361,27 @@ kernel_test! {
         if f.file(0).is_err() || !Arc::ptr_eq(&f.file(2).map_err(e)?, &child.file(2).map_err(e)?) {
             return Err("a forked table is not a copy sharing open files");
         }
+        // CLONE_FILES (ADR 0111): one table for both; a private copy after
+        // unsharing; the end of one sharer leaves the table to the other.
+        let shared = f.share_table();
+        let fd = shared.dup(0).map_err(e)?;
+        if f.file(fd).is_err() || f.lock_owner() != shared.lock_owner() {
+            return Err("a shared table does not show the other's descriptor");
+        }
+        shared.close(fd).map_err(e)?;
+        if f.file(fd).is_ok() {
+            return Err("a close in a shared table left the descriptor open for the other");
+        }
+        shared.unshare_table();
+        shared.close(0).map_err(e)?;
+        if f.file(0).is_err() || f.lock_owner() == shared.lock_owner() {
+            return Err("unshare_table did not give a private copy");
+        }
+        let again = f.share_table();
+        again.close_all();
+        if f.file(0).is_err() {
+            return Err("close_all of one sharer closed the other's descriptors");
+        }
         f.close_all();
         if f.count() != 0 {
             return Err("close_all left descriptors open");

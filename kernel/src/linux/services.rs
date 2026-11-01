@@ -368,7 +368,13 @@ impl LinuxKernel for Thread<'_> {
                 if r.shared && r.prot.writable() && !file.writable() {
                     return Err(Errno::EACCES);
                 }
-                let source = FileSource::of(&file);
+                // A memfd's write seals refuse writable shared mappings
+                // (fcntl(2), "File sealing"); one that is made is counted.
+                let writable_map = match file.memfd() {
+                    Some(m) => m.map(r.shared, r.prot.writable()).map_err(vfs_errno)?,
+                    None => None,
+                };
+                let source = FileSource::of(&file).holding(writable_map);
                 poly_vm::MapRequest::file(r.len, prot, FileRef::new(Arc::new(source)), offset, r.shared)
             }
         };
@@ -793,8 +799,32 @@ impl LinuxKernel for Thread<'_> {
         crate::thread::this_cpu() as u32
     }
 
+    fn rseq_registered(&mut self, on: bool) {
+        self.flags.rseq.store(on, core::sync::atomic::Ordering::Relaxed);
+        if !on {
+            self.flags.rseq_notify.store(false, core::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
     fn yield_cpu(&mut self) {
         crate::thread::yield_now();
+    }
+
+    fn membarrier_registrations(&self) -> u32 {
+        user::current_memory().map_or(0, |m| m.membarrier_registrations())
+    }
+
+    fn membarrier_register(&mut self, bits: u32) {
+        if let Some(m) = user::current_memory() {
+            m.membarrier_register(bits);
+        }
+    }
+
+    fn memory_barrier(&mut self, private: bool) {
+        match user::current_memory() {
+            Some(m) if private => m.barrier(),
+            _ => crate::user::memory::global_barrier(),
+        }
     }
 
     fn cpu_affinity(&mut self, tid: i32) -> Result<u64, Errno> {

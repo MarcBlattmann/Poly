@@ -34,6 +34,11 @@ pub fn unshare(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let flags = u64::from(a.uint(0));
     let threads = with_own(k, |p| p.thread_ids().count());
     let make = ns::check_unshare(flags, threads, k.chrooted())?;
+    if flags & crate::task::clone::CLONE_FILES != 0
+        && let Some(fs) = k.fs()
+    {
+        fs.unshare_fd_table()?;
+    }
     if make == 0 {
         return Ok(0);
     }

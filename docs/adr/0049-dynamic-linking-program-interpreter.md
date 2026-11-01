@@ -104,7 +104,9 @@ segments over it (`MAP_DENYWRITE` is ignored, as mmap(2) says),
   the backing object's contents. The mapped parts of a range get the
   advice; a hole makes the call fail with `ENOMEM` afterwards.
 
-**`rseq` stays `ENOSYS`** (ADR 0043). rseq(2) lets the kernel abort a
+**`rseq` stays `ENOSYS`** (ADR 0043; superseded by
+[ADR 0111](0111-inotify-memfd-pidfd-rseq-and-process-odds.md), which
+implements the abort on the way back to user mode). rseq(2) lets the kernel abort a
 thread's restartable sequence when it is preempted, migrated or gets a
 signal; registering without ever aborting breaks that contract the first
 time a thread is preempted inside a critical section. glibc's loader and

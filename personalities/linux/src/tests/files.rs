@@ -191,6 +191,26 @@ impl LinuxFs for VfsFs {
         self.fds.set_cloexec(fd, cloexec).map_err(errno)
     }
 
+    fn memfd_create(&mut self, name: &[u8], perm: u32, seals: u32, cloexec: bool) -> Result<i32, Errno> {
+        let mount = self.vfs.detached_mount(Arc::new(Tmpfs::new(Arc::new(Clock))));
+        let memfd = poly_vfs::memfd::Memfd::new(name, seals);
+        let file = self.vfs.memfd_file(&mount, &self.cred, perm as u16, memfd).map_err(errno)?;
+        self.fds.install(file, cloexec).map_err(errno)
+    }
+
+    fn add_seals(&mut self, fd: i32, seals: u32) -> Result<(), Errno> {
+        let file = self.fds.get(fd).map_err(errno)?;
+        let memfd = file.memfd().ok_or(Errno::EINVAL)?;
+        if !file.writable() {
+            return Err(Errno::EPERM);
+        }
+        memfd.add_seals(seals).map_err(errno)
+    }
+
+    fn get_seals(&mut self, fd: i32) -> Result<u32, Errno> {
+        self.fds.get(fd).map_err(errno)?.memfd().map(|m| m.seals()).ok_or(Errno::EINVAL)
+    }
+
     fn close_range(&mut self, first: u32, last: u32, cloexec: bool) -> Result<(), Errno> {
         self.fds.close_range(first, last, cloexec);
         Ok(())
@@ -301,7 +321,7 @@ impl LinuxFs for VfsFs {
     }
 
     fn fchmod(&mut self, fd: i32, mode: u32) -> Result<(), Errno> {
-        self.node(fd)?.chmod(&self.cred, mode as u16).map_err(errno)
+        self.fds.get(fd).map_err(errno)?.chmod(&self.cred, mode as u16).map_err(errno)
     }
 
     fn fchmodat(&mut self, dirfd: i32, path: &[u8], mode: u32) -> Result<(), Errno> {

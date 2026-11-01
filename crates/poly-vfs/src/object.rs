@@ -58,6 +58,13 @@ pub trait FileObject: Any + Send + Sync {
     fn seek_stays_at_zero(&self) -> bool {
         false
     }
+
+    /// For an object Linux keeps on an anonymous inode: what follows
+    /// `anon_inode:` in its `/proc/<pid>/fd` link (`inotify` for an inotify
+    /// instance). Such a file's `fstat` mode has no file type bits.
+    fn anon_name(&self) -> Option<&'static str> {
+        None
+    }
 }
 
 /// The inode number of the anonymous file system's root directory.

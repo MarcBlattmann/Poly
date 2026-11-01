@@ -127,6 +127,9 @@ pub struct FakeKernel {
     pub ioctls: Vec<(i32, u32, u64)>,
     /// The CPU the caller runs on, its yields, and each thread's affinity
     /// (absent: CPU 0 only); the system has `cpus` CPUs.
+    /// membarrier(2) registrations and the barriers asked for (`private`).
+    pub membarrier: u32,
+    pub barriers: Vec<bool>,
     pub on_cpu: u32,
     pub yields: usize,
     pub affinity: BTreeMap<i32, u64>,
@@ -235,6 +238,8 @@ impl FakeKernel {
             remapped: Vec::new(),
             synced_maps: Vec::new(),
             on_cpu: 0,
+            membarrier: 0,
+            barriers: Vec::new(),
             yields: 0,
             affinity: BTreeMap::new(),
             cpus: 1,
@@ -1011,6 +1016,18 @@ impl LinuxKernel for FakeKernel {
 
     fn current_cpu(&self) -> u32 {
         self.on_cpu
+    }
+
+    fn membarrier_registrations(&self) -> u32 {
+        self.membarrier
+    }
+
+    fn membarrier_register(&mut self, bits: u32) {
+        self.membarrier |= bits;
+    }
+
+    fn memory_barrier(&mut self, private: bool) {
+        self.barriers.push(private);
     }
 
     fn yield_cpu(&mut self) {

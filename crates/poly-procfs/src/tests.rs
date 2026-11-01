@@ -98,6 +98,19 @@ impl ProcSource for Fake {
         self.pids.lock().unwrap().clone()
     }
 
+    /// Process 42 has threads 42 and 43; 43 named itself "worker".
+    fn threads(&self, pid: u32) -> Vec<u32> {
+        match pid {
+            42 => std::vec![43, 42],
+            p if self.pids.lock().unwrap().contains(&p) => std::vec![p],
+            _ => Vec::new(),
+        }
+    }
+
+    fn thread_comm(&self, pid: u32, tid: u32) -> Option<Vec<u8>> {
+        (pid == 42 && tid == 43).then(|| b"worker".to_vec())
+    }
+
     fn process(&self, pid: u32) -> Option<ProcessInfo> {
         if !self.pids.lock().unwrap().contains(&pid) {
             return None;
@@ -473,7 +486,8 @@ fn process_directories_list_their_files() {
             "ns",
             "uid_map",
             "gid_map",
-            "setgroups"
+            "setgroups",
+            "task"
         ]
     );
     assert_eq!(names(&e.list("/proc/42/fd")), [".", "..", "0", "1", "2", "5"]);
@@ -514,6 +528,22 @@ fn links_lead_to_files() {
     assert_eq!(e.read("/proc/self/fd/5").unwrap(), b"payload");
     let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/self/cwd", true).unwrap();
     assert_eq!(st.kind(), Some(FileType::Directory));
+}
+
+#[test]
+fn process_directories_name_their_process() {
+    let e = env();
+    let dir = |path: &[u8]| {
+        let flags = OpenFlags::RDONLY | OpenFlags::DIRECTORY;
+        let f = e.vfs.open(&e.ctx, &e.cred, At::Cwd, path, flags, 0).unwrap();
+        process_dir(f.node().ino())
+    };
+    assert_eq!(dir(b"/proc/42"), Some(42));
+    assert_eq!(dir(b"/proc/self"), Some(42), "the link leads to the caller's directory");
+    assert_eq!(dir(b"/proc/1"), Some(1));
+    assert_eq!(dir(b"/proc"), None);
+    assert_eq!(dir(b"/proc/42/fd"), None);
+    assert_eq!(dir(b"/proc/42/ns"), None);
 }
 
 #[test]
@@ -822,4 +852,17 @@ fn a_static_tree_serves_sysfs() {
     let mut ctx = e.ctx.clone();
     e.vfs.chdir(&mut ctx, &e.cred, At::Cwd, b"/sys/devices/virtual/mem").unwrap();
     assert_eq!(e.vfs.getcwd(&ctx).unwrap(), b"/sys/devices/virtual/mem");
+}
+
+#[test]
+fn task_lists_threads_with_their_own_names() {
+    let e = env();
+    assert_eq!(names(&e.list("/proc/42/task")), [".", "..", "42", "43"]);
+    assert_eq!(names(&e.list("/proc/42/task/43")), [".", "..", "comm"]);
+    assert_eq!(e.text("/proc/42/task/43/comm"), "worker\n");
+    assert_eq!(e.text("/proc/42/task/42/comm"), "a-very-long-pro\n", "the process's comm, 15 bytes");
+    assert_eq!(e.read("/proc/42/task/44/comm"), Err(poly_vfs::Errno::ENOENT));
+    assert_eq!(e.read("/proc/1/task/43/comm"), Err(poly_vfs::Errno::ENOENT));
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/task/43", true).unwrap();
+    assert_eq!(st.mode, 0o040555);
 }

@@ -196,18 +196,28 @@ pub fn get_robust_list(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     } else {
         let me = k.pid();
         let creds = crate::cred::current(k);
-        with_target(k, Target::Thread(pid), |p, t| {
-            if !p.has_thread(pid) {
+        let read = |p: &mut crate::LinuxProcess, t: &crate::kernel::ProcessInfo| {
+            // A zombie (its threads are gone) reads NULL: the list was
+            // cleared when its thread exited.
+            let zombie = !p.has_thread(pid) && t.pid == pid && p.thread_ids().next().is_none();
+            if !p.has_thread(pid) && !zombie {
                 return Err(Errno::ESRCH);
             }
-            let c = &p.thread(pid).creds;
+            let c = if zombie { p.process_creds(pid).ok_or(Errno::ESRCH)? } else { &p.thread(pid).creds };
             let same_ids = [c.uid, c.euid, c.suid].iter().all(|&id| id == creds.uid)
                 && [c.gid, c.egid, c.sgid].iter().all(|&id| id == creds.gid);
-            if t.pid != me && !same_ids && !creds.capable(crate::cred::cap::SYS_PTRACE) {
+            // ptrace(2) access mode checking (PTRACE_MODE_READ_REALCREDS):
+            // the same user and a dumpable target, or CAP_SYS_PTRACE.
+            if t.pid != me && !(same_ids && p.dumpable) && !creds.capable(crate::cred::cap::SYS_PTRACE) {
                 return Err(Errno::EPERM);
             }
-            Ok(p.thread(pid).robust_list)
-        })??
+            Ok(if zombie { UserPtr::NULL } else { p.thread(pid).robust_list })
+        };
+        match with_target(k, Target::Thread(pid), read) {
+            // No live thread: perhaps a zombie process of that id.
+            Err(Errno::ESRCH) => with_target(k, Target::Process(pid), read)??,
+            other => other??,
+        }
     };
     k.copy_to_user(a.ptr(1), &head.0.to_le_bytes())?;
     k.copy_to_user(a.ptr(2), &ROBUST_LIST_HEAD_SIZE.to_le_bytes())?;

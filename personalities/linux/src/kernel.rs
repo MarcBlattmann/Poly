@@ -907,9 +907,38 @@ pub trait LinuxKernel {
         0
     }
 
+    /// The calling thread registered (`true`) or dropped (`false`) an
+    /// rseq(2) area (ADR 0111): from now on the kernel calls
+    /// [`crate::Linux::rseq_resume`] before the thread returns to user mode
+    /// after it was switched out, or stops doing so.
+    fn rseq_registered(&mut self, on: bool) {
+        let _ = on;
+    }
+
     /// Give up the CPU to another runnable thread, if there is one
     /// (sched_yield(2)).
     fn yield_cpu(&mut self) {}
+
+    /// membarrier(2): the `MEMBARRIER_CMD_REGISTER_*` command bits done on
+    /// the calling thread's memory (shared by every task using it, copied
+    /// by fork, none after execve).
+    fn membarrier_registrations(&self) -> u32 {
+        0
+    }
+
+    /// membarrier(2): add registration bits `bits` to the calling
+    /// thread's memory.
+    fn membarrier_register(&mut self, bits: u32) {
+        let _ = bits;
+    }
+
+    /// membarrier(2): order the memory accesses of every CPU that runs a
+    /// thread of the caller's memory (`private`) or of every CPU, before
+    /// returning.
+    fn memory_barrier(&mut self, private: bool) {
+        let _ = private;
+        core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+    }
 
     /// The CPUs thread `tid` may run on, as a mask of CPU numbers (bit `n`
     /// = CPU `n`), limited to the CPUs the system has. `ESRCH` if there is

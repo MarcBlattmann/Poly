@@ -114,6 +114,7 @@ enum E {
     UidMap,
     GidMap,
     Setgroups,
+    TaskDir,
 }
 
 impl E {
@@ -160,6 +161,15 @@ pub fn namespace_file(ino: Ino) -> Option<(u32, usize)> {
     }
 }
 
+/// The process whose directory `/proc/<pid>` an open procfs file is, if
+/// it is one (pidfd_send_signal(2) takes such a descriptor like a pidfd).
+pub fn process_dir(ino: Ino) -> Option<u32> {
+    match Node::from_ino(ino)? {
+        Node::Pid(pid) => Some(pid),
+        _ => None,
+    }
+}
+
 /// A process directory: name, contents, permission bits.
 const PID_ENTRIES: &[(&[u8], E, u16)] = &[
     (b"stat", E::Stat, 0o444),
@@ -180,6 +190,7 @@ const PID_ENTRIES: &[(&[u8], E, u16)] = &[
     (b"uid_map", E::UidMap, 0o644),
     (b"gid_map", E::GidMap, 0o644),
     (b"setgroups", E::Setgroups, 0o644),
+    (b"task", E::TaskDir, 0o555),
 ];
 
 /// A node of the tree, decoded from its inode number.
@@ -195,6 +206,10 @@ enum Node {
     Ns(u32, usize),
     /// What it names: a namespace (inode number, type), in no directory.
     NsFile(u32, usize),
+    /// `/proc/<pid>/task/<tid>`: a thread of the process.
+    Task(u32, u32),
+    /// `/proc/<pid>/task/<tid>/comm`: the thread's name.
+    TaskComm(u32, u32),
 }
 
 const K_ROOT: u64 = 1;
@@ -206,6 +221,8 @@ const K_FDINFO: u64 = 6;
 const K_NS: u64 = 7;
 /// The "pid" bits hold the namespace's inode number.
 const K_NSFILE: u64 = 8;
+const K_TASK: u64 = 9;
+const K_TASKCOMM: u64 = 10;
 const INDEX_MASK: u64 = (1 << 24) - 1;
 
 impl Node {
@@ -219,6 +236,8 @@ impl Node {
             Node::FdInfo(p, fd) => (p, K_FDINFO, u64::from(fd)),
             Node::Ns(p, k) => (p, K_NS, k as u64),
             Node::NsFile(inum, k) => (inum, K_NSFILE, k as u64),
+            Node::Task(p, t) => (p, K_TASK, u64::from(t)),
+            Node::TaskComm(p, t) => (p, K_TASKCOMM, u64::from(t)),
         };
         (u64::from(pid) << 32) | (kind << 24) | (index & INDEX_MASK)
     }
@@ -237,6 +256,8 @@ impl Node {
             K_NSFILE if pid != 0 && (index as usize) < NS_KINDS.len() && index as usize != PID_FOR_CHILDREN => {
                 Node::NsFile(pid, index as usize)
             }
+            K_TASK if pid != 0 && index != 0 => Node::Task(pid, index as u32),
+            K_TASKCOMM if pid != 0 && index != 0 => Node::TaskComm(pid, index as u32),
             _ => return None,
         })
     }
@@ -304,19 +325,19 @@ impl ProcFs {
 
     fn kind(node: Node) -> FileType {
         match node {
-            Node::Root | Node::Pid(_) => FileType::Directory,
+            Node::Root | Node::Pid(_) | Node::Task(..) => FileType::Directory,
             Node::Global(i) => match GLOBALS[i].2 {
                 G::Dir => FileType::Directory,
                 G::SelfLink | G::MountsLink => FileType::Symlink,
                 _ => FileType::Regular,
             },
             Node::Entry(_, i) => match PID_ENTRIES[i].1 {
-                E::FdDir | E::FdinfoDir | E::NsDir => FileType::Directory,
+                E::FdDir | E::FdinfoDir | E::NsDir | E::TaskDir => FileType::Directory,
                 E::Exe | E::Cwd | E::Root => FileType::Symlink,
                 _ => FileType::Regular,
             },
             Node::Fd(..) | Node::Ns(..) => FileType::Symlink,
-            Node::FdInfo(..) | Node::NsFile(..) => FileType::Regular,
+            Node::FdInfo(..) | Node::NsFile(..) | Node::TaskComm(..) => FileType::Regular,
         }
     }
 
@@ -333,6 +354,8 @@ impl ProcFs {
             Node::FdInfo(p, _) => Node::Entry(p, entry_index(E::FdinfoDir)),
             Node::Ns(p, _) => Node::Entry(p, entry_index(E::NsDir)),
             Node::NsFile(..) => Node::Root,
+            Node::Task(p, _) => Node::Entry(p, entry_index(E::TaskDir)),
+            Node::TaskComm(p, t) => Node::Task(p, t),
         }
     }
 
@@ -385,6 +408,22 @@ impl ProcFs {
                         .map(|k| (NS_KINDS[k].as_bytes().to_vec(), Node::Ns(p, k))),
                 )
             }
+            Node::Entry(p, i) if PID_ENTRIES[i].1 == E::TaskDir => {
+                self.owner(p)?;
+                let mut tids = self.src.threads(p);
+                tids.sort_unstable();
+                tids.dedup();
+                for tid in tids.into_iter().filter(|&t| t != 0 && u64::from(t) <= INDEX_MASK) {
+                    let at = PID_POS + u64::from(tid);
+                    if at >= pos {
+                        out.push((at, decimal(u64::from(tid)), Node::Task(p, tid)));
+                    }
+                }
+            }
+            Node::Task(p, t) => {
+                self.owner(p)?;
+                fixed(&mut out, &mut core::iter::once((b"comm".to_vec(), Node::TaskComm(p, t))))
+            }
             Node::Entry(p, i) if matches!(PID_ENTRIES[i].1, E::FdDir | E::FdinfoDir) => {
                 self.owner(p)?;
                 let mut fds = self.src.fds(p);
@@ -412,6 +451,7 @@ impl ProcFs {
             Node::Fd(p, fd) | Node::FdInfo(p, fd) => self.has_fd(p, fd),
             Node::Ns(p, k) => self.src.namespace(p, k).is_some(),
             Node::NsFile(inum, k) => self.src.namespace_exists(inum, k),
+            Node::Task(p, t) | Node::TaskComm(p, t) => self.src.threads(p).contains(&t),
         }
     }
 
@@ -457,11 +497,20 @@ impl ProcFs {
                     E::UidMap => src.id_map(p, IdMapFile::Uid),
                     E::GidMap => src.id_map(p, IdMapFile::Gid),
                     E::Setgroups => src.id_map(p, IdMapFile::Setgroups),
-                    E::Exe | E::Cwd | E::Root | E::FdDir | E::FdinfoDir | E::NsDir => return Err(Errno::EINVAL),
+                    E::Exe | E::Cwd | E::Root | E::FdDir | E::FdinfoDir | E::NsDir | E::TaskDir => {
+                        return Err(Errno::EINVAL);
+                    }
                 }
             }
             Node::FdInfo(p, fd) => format::fdinfo(&src.fd(p, fd).ok_or(Errno::ENOENT)?),
-            Node::Root | Node::Pid(_) => return Err(Errno::EISDIR),
+            Node::TaskComm(p, t) => {
+                let comm = match src.thread_comm(p, t) {
+                    Some(c) => c,
+                    None => self.process(p)?.comm,
+                };
+                format::line(format::comm(&comm))
+            }
+            Node::Root | Node::Pid(_) | Node::Task(..) => return Err(Errno::EISDIR),
             // A namespace file has no contents (read(2) on Linux's: EINVAL).
             Node::Fd(..) | Node::Ns(..) | Node::NsFile(..) => return Err(Errno::EINVAL),
         })
@@ -517,6 +566,10 @@ impl FileSystem for ProcFs {
                         .map(|(k, inum)| Node::NsFile(inum, k)),
                 }
             }
+            Node::Entry(p, i) if PID_ENTRIES[i].1 == E::TaskDir => parse_number(name)
+                .filter(|&t| t != 0 && u64::from(t) <= INDEX_MASK && self.src.threads(p).contains(&t))
+                .map(|t| Node::Task(p, t)),
+            Node::Task(p, t) => (name == b"comm").then_some(Node::TaskComm(p, t)),
             Node::Entry(p, i) => parse_number(name)
                 .filter(|&fd| fd <= MAX_FD && self.has_fd(p, fd))
                 .map(|fd| if PID_ENTRIES[i].1 == E::FdinfoDir { Node::FdInfo(p, fd) } else { Node::Fd(p, fd) }),
@@ -531,7 +584,13 @@ impl FileSystem for ProcFs {
         let boot = Timespec::new(boot_time as i64, 0);
         let (uid, gid, time) = match node {
             Node::Root | Node::Global(_) | Node::NsFile(..) => (0, 0, boot),
-            Node::Pid(p) | Node::Entry(p, _) | Node::Fd(p, _) | Node::FdInfo(p, _) | Node::Ns(p, _) => {
+            Node::Pid(p)
+            | Node::Entry(p, _)
+            | Node::Fd(p, _)
+            | Node::FdInfo(p, _)
+            | Node::Ns(p, _)
+            | Node::Task(p, _)
+            | Node::TaskComm(p, _) => {
                 let info = self.owner(p)?;
                 let start = info.start_ns;
                 let time =
@@ -544,7 +603,8 @@ impl FileSystem for ProcFs {
         }
         let kind = Self::kind(node);
         let perm = match node {
-            Node::Root | Node::Pid(_) => 0o555,
+            Node::Root | Node::Pid(_) | Node::Task(..) => 0o555,
+            Node::TaskComm(..) => 0o644,
             Node::Global(i) => match GLOBALS[i].2 {
                 G::Dir => 0o555,
                 G::SelfLink | G::MountsLink => 0o777,

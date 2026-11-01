@@ -9,6 +9,10 @@ use crate::kernel::LinuxKernel;
 use crate::signal::deliver::with_own;
 
 /// Options (UAPI `linux/prctl.h`).
+pub const PR_SET_PDEATHSIG: u32 = 1;
+pub const PR_GET_PDEATHSIG: u32 = 2;
+pub const PR_GET_DUMPABLE: u32 = 3;
+pub const PR_SET_DUMPABLE: u32 = 4;
 pub const PR_GET_KEEPCAPS: u32 = 7;
 pub const PR_SET_KEEPCAPS: u32 = 8;
 pub const PR_SET_NAME: u32 = 15;
@@ -72,9 +76,32 @@ fn cap_arg(v: u64) -> Result<u32, Errno> {
 /// - `PR_SET_SECCOMP` / `PR_GET_SECCOMP`: [`super::seccomp`] (ADR 0054).
 /// - `PR_SET_NAME` / `PR_GET_NAME`: the thread's name, 16 bytes with the
 ///   NUL ("silently truncated" if longer); `EFAULT`.
+/// - `PR_SET_PDEATHSIG` (a signal number 0..=64, else `EINVAL`) /
+///   `PR_GET_PDEATHSIG` (stored as an `int` at `arg2`): the calling
+///   thread's parent-death signal ([`crate::task::parent_died`]).
+/// - `PR_GET_DUMPABLE` (the result) / `PR_SET_DUMPABLE` (0 or 1, else
+///   `EINVAL`): the process's dumpable flag.
 pub fn prctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let arg2 = a.ulong(1);
     match a.int(0) as u32 {
+        PR_SET_PDEATHSIG => {
+            let signal = u32::try_from(arg2).ok().filter(|&s| s <= crate::abi::signal::NSIG).ok_or(Errno::EINVAL)?;
+            let tid = k.tid();
+            with_own(k, |p| p.thread_mut(tid).pdeathsig = signal);
+            Ok(0)
+        }
+        PR_GET_PDEATHSIG => {
+            let tid = k.tid();
+            let signal = with_own(k, |p| p.thread(tid).pdeathsig);
+            k.copy_to_user(a.ptr(1), &(signal as i32).to_le_bytes())?;
+            Ok(0)
+        }
+        PR_GET_DUMPABLE => Ok(u64::from(with_own(k, |p| p.dumpable))),
+        PR_SET_DUMPABLE => {
+            let dumpable = bool_arg(arg2)?;
+            with_own(k, |p| p.dumpable = dumpable);
+            Ok(0)
+        }
         PR_GET_KEEPCAPS => Ok(u64::from(cred::current(k).keep_caps)),
         PR_SET_KEEPCAPS => {
             let keep = bool_arg(arg2)?;
