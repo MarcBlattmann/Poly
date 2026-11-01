@@ -39,8 +39,13 @@ kernel's public user-space API documentation and the UAPI headers
 ### Native AIO (`personalities/linux/src/aio`, `sys/aio.rs`)
 
 - **The context id is the ring's address.** `io_setup` maps a shared
-  anonymous read-write ring of whole pages (at least `nr_events + 1`
-  slots) with the `aio_abi.h` header (magic `0xa10a10a1`). One
+  anonymous read-write ring of whole pages with the `aio_abi.h` header
+  (magic `0xa10a10a1`). As the spec sheet observed (383 slots for any
+  request up to 128), the ring is sized for twice the larger of
+  `nr_events` and 128; unreaped events plus pending polls may fill all
+  slots but one, so a context of 1 takes 382 requests before `io_submit`
+  says `EAGAIN` (a batch gets as many as fit). Events user space reaped
+  by advancing the ring's head free their slots for the next submit. One
   system-wide table, keyed by (address space, ring address) and
   recording the owner pid, holds the kernel's head and tail and mirrors
   them into the header; it reads the user's head back before reaping,
@@ -52,7 +57,10 @@ kernel's public user-space API documentation and the UAPI headers
 - **Requests run in `io_submit`.** `PREAD`, `PWRITE`, `PREADV`,
   `PWRITEV`, `FSYNC` and `FDSYNC` reuse the read/write/fsync paths; I/O
   errors land in the event's `res`, submission errors follow the spec
-  sheet's order. Only `IOCB_CMD_POLL` stays pending; it completes when
+  sheet's order. A `PREAD`/`PWRITE` buffer is range-checked at submit:
+  `[buf, buf + min(count, MAX_RW_COUNT))` past the end of user space
+  (`0x7ffffffff000`) is `EFAULT` with nothing queued; whether it is
+  mapped shows only in the event. Only `IOCB_CMD_POLL` stays pending; it completes when
   the process next enters an AIO call, and `io_getevents` waits by
   polling the pending polls' descriptors (with `io_pgetevents`' mask
   installed like ppoll's). `IOCB_FLAG_RESFD` signals an eventfd.
@@ -68,6 +76,25 @@ kernel's public user-space API documentation and the UAPI headers
   `RECVMSG`), `POLL_ADD` and `TIMEOUT` are parked and retried on every
   enter; `GETEVENTS` waits by polling the parked requests' descriptors
   until the earliest timeout (an expired `EXT_ARG` timeout is `ETIME`).
+- **Completion without another enter.** Linux completes parked requests
+  asynchronously, so a program may find the CQE in the ring right after
+  the system call that made the file ready (`write` to the peer of a
+  waiting `RECV`). Poly retries a process's parked requests on each of
+  its threads' way back to user mode: after every system call, and after
+  interrupts while anything is parked anywhere (a global count gates
+  it). A parked request belongs to the process that submitted it (its
+  descriptor numbers are that process's), and only that process's
+  threads retry it in the background. The kernel watches each parked
+  request's file (a waker on its wait queue): a wake-up counts and kicks
+  the instance, which wakes the ring file's own wait queue; a kicked
+  ring reads as readable (and `POLLPRI`, which `GETEVENTS` asks of the
+  ring itself), so `poll`/`epoll` on the ring fd wake and the poller's
+  way back to user mode posts the CQE. The ring file's queue is also
+  woken when a CQE is posted. A multishot `POLL_ADD` fires once per
+  wake-up of its file (also while the file stays ready), as Linux posts
+  one CQE per wake-up. Kept-back CQEs still move into the ring only in
+  io_uring_enter. `GETEVENTS` rechecks every 10 ms for CQEs other
+  threads post.
 - **Ring memory** is two kernel shared regions: the SQ and CQ rings,
   CQEs and SQ array together (`IORING_FEAT_SINGLE_MMAP`), and the SQEs;
   `mmap` of the ring fd at `IORING_OFF_SQ_RING`/`CQ_RING`/`SQES` maps
@@ -83,8 +110,9 @@ kernel's public user-space API documentation and the UAPI headers
   that lists only the opcodes Poly runs.
 - **Simplified:** `SQPOLL` has no poll thread (`NEED_WAKEUP` stays set);
   `IOSQE_IO_DRAIN` and `IOSQE_ASYNC` are ignored; `BUFFER_SELECT`,
-  `NO_MMAP` and registered rings are `EINVAL`; the ring fd's `poll`
-  reports completions but has no wait queue.
+  `NO_MMAP` and registered rings are `EINVAL`; a `TIMEOUT` that falls
+  due while its process sleeps outside io_uring_enter (in `poll` on the
+  ring fd) completes only when one of its threads runs again.
 
 ### POSIX message queues (`ipc/mqueue.rs`, `sys/mqueue.rs`, `kernel/src/linux/mqueue.rs`)
 
@@ -117,15 +145,23 @@ kernel's public user-space API documentation and the UAPI headers
   private in effect.
 - **Detached mounts** (`fsmount`, `open_tree(OPEN_TREE_CLONE)`) stay out
   of the table; the `O_PATH` files on their root hold them, and closing
-  the last drops the mount. `move_mount` attaches one.
+  the last drops the mount. `move_mount` attaches one. A recursive clone
+  (`OPEN_TREE_CLONE | AT_RECURSIVE`) copies the mounts below the source
+  directory at any depth; the detached top keeps the copies in a list
+  (`Mount::subtree`), the copies point back to their parents weakly (no
+  reference cycle), path lookups find them through the top's list, and
+  attaching the top moves them into the table.
 - **pivot_root** moves the namespace's root mount onto `put_old` and
   makes `new_root` the base; since namespaces are named by their first
   mount, the table keeps an alias from the old name. The caller's root
   and working directory move, and so do those of every process that
   used the old root.
 - **Attributes:** `MOUNT_ATTR_RDONLY`/`NOSUID`/`NODEV`/`NOEXEC` are the
-  existing per-mount flags; atime modes, `NODIRATIME` and `NOSYMFOLLOW`
-  are stored and reported, not enforced. Superblocks can be read-only
+  existing per-mount flags; atime modes and `NODIRATIME` are stored and
+  reported (`statfs` `ST_RELATIME` for the default relatime mode,
+  `ST_NOATIME` for noatime, neither for strictatime), not enforced;
+  `NOSYMFOLLOW` is enforced: path resolution does not follow a symbolic
+  link on such a mount (`ELOOP`). Superblocks can be read-only
   as a whole (remount, `fsconfig` reconfigure), and per-mount and
   per-superblock writer counts give the `EBUSY` cases.
 - **File system contexts** (`fsopen`, `fspick`) hold the parameters, a
@@ -136,8 +172,14 @@ kernel's public user-space API documentation and the UAPI headers
   statmount` and does listmount's ordering and paging. Unique mount ids
   are 2^31 plus the mount id (`statx` `STATX_MNT_ID_UNIQUE`,
   `name_to_handle_at` `AT_HANDLE_MNT_ID_UNIQUE`, statmount).
-- **Simplified:** recursive `OPEN_TREE_CLONE` copies only the top mount;
-  `MOVE_MOUNT_SET_GROUP`, `MOVE_MOUNT_BENEATH` and `MOUNT_ATTR_IDMAP` are
+- **The boot mounts** are closer to a Linux system's: besides `/proc`,
+  `/sys`, `/dev/pts` and `/dev/shm`, the POSIX message queue file system
+  on `/dev/mqueue` (a tmpfs named `mqueue`, `MQUEUE_MAGIC`; the queues
+  themselves are not files in it) and tmpfs on `/run` and `/run/lock`
+  (`/tmp` stays on the root file system). Programs that list or count
+  mounts (listmount's test fills an 8-entry buffer) see a usual layout.
+- **Simplified:** a mount below the top of a detached tree cannot be
+  attached on its own; `MOVE_MOUNT_SET_GROUP`, `MOVE_MOUNT_BENEATH` and `MOUNT_ATTR_IDMAP` are
   `EINVAL`.
 
 ### `*xattrat`, inode flags, file handles (`poly_vfs::fileattr`, `sys/{xattrat,fileattr,handle}.rs`)
@@ -189,7 +231,12 @@ kernel's public user-space API documentation and the UAPI headers
   report file ids.
 - **Reading:** a descriptor group opens the object "quietly" in the
   reader's process (a quiet file causes no events); a file-id group
-  reports `FAN_NOFD` with FID/DFID/DFID_NAME records. Events merge with
+  reports `FAN_NOFD` with FID/DFID/DFID_NAME records whose fsid is
+  statfs's `f_fsid` and whose `struct file_handle` is the one
+  name_to_handle_at gives for the object (the file system's handle; the
+  32-bit inode number, `FILEID_INO32_GEN`, only where the file system
+  makes none). Mount marks are keyed by the mount's id and identity.
+  Events merge with
   the last queued one when they match; the queue holds 16384 events,
   then one overflow event.
 - **Not implemented:** permission events never block.
@@ -202,11 +249,16 @@ kernel's public user-space API documentation and the UAPI headers
   `EPERM`. Fork copies the flag.
 - **userfaultfd** registers regions by object id; a missing page in a
   registered region makes the faulting thread (also a `CLONE_VM`
-  child, also inside a usercopy) queue a message and wait until
-  `UFFDIO_COPY`/`ZEROPAGE` fills the page, a wake, an unregister or the
-  object's close, or gets `SIGBUS` with `UFFD_FEATURE_SIGBUS`. The
-  handshake and queue are host-tested in the personality. Write-protect
-  mode is accepted, nothing is protected.
+  child) queue a message and wait until a wake covers its page
+  (`UFFDIO_WAKE`, `UFFDIO_COPY`/`ZEROPAGE` without `DONTWAKE`, which
+  wake only the filled range), the range is unregistered or the object
+  is closed; with `UFFD_FEATURE_SIGBUS` it gets `SIGBUS` instead. A
+  fault the kernel takes on user memory inside a system call is not
+  handled by an object made with `UFFD_USER_MODE_ONLY`: the call fails
+  with `EFAULT` and no message is queued. The descriptor is read-only
+  (`F_GETFL` shows `O_RDONLY`, plus `O_NONBLOCK` if asked for). The
+  handshake, queue and waiters are host-tested in the personality.
+  Write-protect mode is accepted, nothing is protected.
 - **memfd_secret** is a sealed memfd marked secret: `read`/`write` are
   `EINVAL`, `MAP_PRIVATE` and a second size change are refused. Nothing
   leaves the direct map (Poly never swaps).
@@ -218,10 +270,11 @@ kernel's public user-space API documentation and the UAPI headers
 
 - All 91 visible tests of the 42 entries pass on Poly; the held-out tests
   decide the guesses listed above as simplified.
-- AIO and io_uring complete deferred requests only when the process
-  enters the interface again; a program that waits for an io_uring
-  completion with `poll`/`epoll` on the ring fd would not be woken.
+- AIO completes deferred polls only when the process enters the
+  interface again. io_uring completes parked requests on the owning
+  process's way back to user mode (after any system call, or an
+  interrupt), and the ring fd wakes `poll`/`epoll` waiters.
 - `Mount::parent` is private behind a lock now; code walking mounts uses
   `Mount::parent()`.
-- fanotify's file ids (`FILEID_INO32_GEN`) and name_to_handle_at's tmpfs
-  handles are different encodings; no test compares them yet.
+- fanotify's file ids and name_to_handle_at's handles are the same
+  bytes, so a reader can match an event to a file it knows.

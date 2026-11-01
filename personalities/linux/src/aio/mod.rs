@@ -65,14 +65,21 @@ pub mod cmd {
 /// `IOCB_FLAG_RESFD` (`linux/aio_abi.h`): signal the eventfd `aio_resfd`.
 pub const IOCB_FLAG_RESFD: u32 = 1;
 
-/// The size of a ring for `nr_events`: `(slots, bytes)`, whole pages with
-/// room for at least `nr_events + 1` slots (one stays empty so a full ring
-/// differs from an empty one). `None` if absurdly large.
+/// The fewest events a ring is sized for: io_setup's spec sheet observed
+/// 383 slots (three pages) "for any request up to 128".
+pub const MIN_RING_EVENTS: u64 = 128;
+
+/// The size of a ring for `nr_events`: `(slots, bytes)`. As the spec sheet
+/// observed, the ring is sized for twice the larger of `nr_events` and
+/// [`MIN_RING_EVENTS`], in whole pages (so 1 to 128 events give 383 slots),
+/// which leaves room for well over `nr_events` outstanding events.
+/// `None` if `nr_events` is absurdly large (its own ring would exceed
+/// [`MAX_RING_BYTES`]).
 pub fn ring_size(nr_events: u32) -> Option<(u32, u64)> {
-    let want = HEADER_LEN + (u64::from(nr_events) + 1) * EVENT_SIZE;
-    if want > MAX_RING_BYTES {
+    if HEADER_LEN + (u64::from(nr_events) + 1) * EVENT_SIZE > MAX_RING_BYTES {
         return None;
     }
+    let want = HEADER_LEN + 2 * u64::from(nr_events).max(MIN_RING_EVENTS) * EVENT_SIZE;
     let bytes = want.div_ceil(PAGE) * PAGE;
     Some((((bytes - HEADER_LEN) / EVENT_SIZE) as u32, bytes))
 }
@@ -341,10 +348,11 @@ mod tests {
 
     #[test]
     fn ring_sizes() {
-        assert_eq!(ring_size(1), Some((127, 4096)));
-        assert_eq!(ring_size(126), Some((127, 4096)));
-        assert_eq!(ring_size(127), Some((255, 8192)));
-        assert!(ring_size(128).unwrap().0 >= 128);
+        assert_eq!(ring_size(1), Some((383, 12288)), "the spec sheet's 383 slots");
+        assert_eq!(ring_size(128), Some((383, 12288)));
+        assert_eq!(ring_size(191), Some((383, 12288)));
+        assert_eq!(ring_size(192), Some((511, 16384)));
+        assert!(ring_size(65536).unwrap().0 >= 2 * 65536);
         assert_eq!(ring_size(0x7fff_ffff), None);
         assert_eq!(ring_size(u32::MAX), None);
     }

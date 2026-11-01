@@ -139,7 +139,9 @@ fn hooks() -> Option<Hooks> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MarkKey {
     Inode(WatchKey),
-    Mount(MountId),
+    /// A mount, by its id and the identity of the file system it shows
+    /// (ids are only unique within one VFS; host tests run several).
+    Mount(MountId, usize),
     /// A file system, by the identity of its instance.
     Filesystem(usize),
 }
@@ -152,7 +154,7 @@ impl MarkKey {
 
     /// The mount `node` was reached through (`FAN_MARK_MOUNT`).
     pub fn mount(node: &NodeRef) -> MarkKey {
-        MarkKey::Mount(node.mount().id())
+        MarkKey::Mount(node.mount().id(), Arc::as_ptr(node.mount().fs()) as *const () as usize)
     }
 
     /// The file system `node` is on (`FAN_MARK_FILESYSTEM`).
@@ -192,30 +194,45 @@ pub(crate) fn active() -> bool {
 struct Fid {
     info_type: u8,
     fsid: u64,
-    ino: u64,
+    /// `struct file_handle`'s `handle_type` and bytes: the handle
+    /// name_to_handle_at(2) gives for the object (fanotify_init's spec
+    /// sheet), or for a file system without handles the 32-bit inode
+    /// number with generation 0 ([`FILEID_INO32_GEN`]).
+    handle_type: i32,
+    handle: Box<[u8]>,
     name: Option<Box<[u8]>>,
 }
 
 impl Fid {
     fn of(loc: &Location, info_type: u8, name: Option<&[u8]>) -> Fid {
         let dev = loc.mount.dev();
+        let (handle_type, handle) = match loc.mount.fs().handle(loc.ino) {
+            Ok(h) => (h.kind, Box::from(h.bytes())),
+            Err(_) => {
+                let mut b = [0u8; 8];
+                b[..4].copy_from_slice(&(loc.ino as u32).to_le_bytes());
+                (FILEID_INO32_GEN, Box::from(&b[..]))
+            }
+        };
         Fid {
             info_type,
+            // statfs(2)'s `f_fsid`: the device number, major then minor.
             fsid: u64::from(dev.major) | (u64::from(dev.minor) << 32),
-            ino: loc.ino,
+            handle_type,
+            handle,
             name: name.map(Box::from),
         }
     }
 
     /// `{u8 info_type; u8 pad; u16 len}`, the 8-byte fsid, `struct
-    /// file_handle {u32 handle_bytes; s32 handle_type}` and the handle
-    /// (32-bit inode number, generation 0), then for a `DFID_NAME` record
-    /// the NUL-terminated name, padded to a multiple of 4.
+    /// file_handle {u32 handle_bytes; s32 handle_type}` and the handle,
+    /// then for a `DFID_NAME` record the NUL-terminated name; the record
+    /// is padded to a multiple of 4.
     fn size(&self) -> usize {
-        let base = 4 + 8 + 8 + 8;
+        let base = 4 + 8 + 8 + self.handle.len();
         match &self.name {
             Some(n) => (base + n.len() + 1).next_multiple_of(4),
-            None => base,
+            None => base.next_multiple_of(4),
         }
     }
 
@@ -225,11 +242,12 @@ impl Fid {
         out[0] = self.info_type;
         out[2..4].copy_from_slice(&(len as u16).to_le_bytes());
         out[4..12].copy_from_slice(&self.fsid.to_le_bytes());
-        out[12..16].copy_from_slice(&8u32.to_le_bytes());
-        out[16..20].copy_from_slice(&FILEID_INO32_GEN.to_le_bytes());
-        out[20..24].copy_from_slice(&(self.ino as u32).to_le_bytes());
+        out[12..16].copy_from_slice(&(self.handle.len() as u32).to_le_bytes());
+        out[16..20].copy_from_slice(&self.handle_type.to_le_bytes());
+        let end = 20 + self.handle.len();
+        out[20..end].copy_from_slice(&self.handle);
         if let Some(n) = &self.name {
-            out[28..28 + n.len()].copy_from_slice(n);
+            out[end..end + n.len()].copy_from_slice(n);
         }
     }
 }
@@ -373,7 +391,7 @@ impl Fanotify {
         st.marks.retain(|key| {
             let hit = match key {
                 MarkKey::Inode(_) => !mounts && !filesystems,
-                MarkKey::Mount(_) => mounts,
+                MarkKey::Mount(..) => mounts,
                 MarkKey::Filesystem(_) => filesystems,
             };
             if hit && let Some(list) = reg.get_mut(key) {
@@ -558,7 +576,7 @@ fn dispatch(obj: &Location, is_dir: bool, parent: Option<(&Location, &[u8])>, en
         {
             take(MarkKey::Inode(WatchKey::of(dir)), true);
         }
-        take(MarkKey::Mount(obj.mount.id), false);
+        take(MarkKey::Mount(obj.mount.id, Arc::as_ptr(obj.mount.fs()) as *const () as usize), false);
         take(MarkKey::Filesystem(Arc::as_ptr(obj.mount.fs()) as *const () as usize), false);
     }
     if hits.is_empty() {

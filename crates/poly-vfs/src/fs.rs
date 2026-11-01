@@ -292,17 +292,22 @@ pub const ST_NOEXEC: u64 = 8;
 pub const ST_NOATIME: u64 = 1024;
 pub const ST_NODIRATIME: u64 = 2048;
 pub const ST_NOSYMFOLLOW: u64 = 0x2000;
+pub const ST_RELATIME: u64 = 4096;
 
 /// The `f_flags` bits a mount's extra attributes ([`Mount::attrs`],
-/// Linux `MOUNT_ATTR_*` bits, `linux/mount.h`) add: `MOUNT_ATTR_NOATIME`
-/// (`0x10` in the access time field `0x70`), `MOUNT_ATTR_NODIRATIME`
-/// (`0x80`), `MOUNT_ATTR_NOSYMFOLLOW` (`0x200000`).
+/// Linux `MOUNT_ATTR_*` bits, `linux/mount.h`) add: the access time mode
+/// (the field `0x70`: `MOUNT_ATTR_RELATIME` 0 gives `ST_RELATIME`,
+/// `MOUNT_ATTR_NOATIME` `0x10` gives `ST_NOATIME`, `MOUNT_ATTR_STRICTATIME`
+/// `0x20` neither, as mount_setattr's spec sheet observed),
+/// `MOUNT_ATTR_NODIRATIME` (`0x80`), `MOUNT_ATTR_NOSYMFOLLOW` (`0x200000`).
 ///
 /// [`Mount::attrs`]: crate::Mount::attrs
 pub const fn st_flags_of_attrs(attrs: u32) -> u64 {
     let mut f = 0;
-    if attrs & 0x70 == 0x10 {
-        f |= ST_NOATIME;
+    match attrs & 0x70 {
+        0 => f |= ST_RELATIME,
+        0x10 => f |= ST_NOATIME,
+        _ => {}
     }
     if attrs & 0x80 != 0 {
         f |= ST_NODIRATIME;
@@ -318,6 +323,7 @@ pub const TMPFS_MAGIC: u64 = 0x0102_1994;
 pub const EXT2_SUPER_MAGIC: u64 = 0xef53;
 pub const PROC_SUPER_MAGIC: u64 = 0x9fa0;
 pub const SYSFS_MAGIC: u64 = 0x6265_6572;
+pub const MQUEUE_MAGIC: u64 = 0x1980_0202;
 
 /// The `f_type` of a file system by its name ([`FsInfo::name`]); 0 for
 /// names without one here.
@@ -327,6 +333,7 @@ pub fn magic_for(name: &str) -> u64 {
         "ext2" => EXT2_SUPER_MAGIC,
         "proc" => PROC_SUPER_MAGIC,
         "sysfs" => SYSFS_MAGIC,
+        "mqueue" => MQUEUE_MAGIC,
         _ => 0,
     }
 }

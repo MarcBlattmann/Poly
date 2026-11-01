@@ -18,7 +18,7 @@ use crate::errno::{Errno, SysResult};
 use crate::fileio::flags::{O_CLOEXEC, O_NONBLOCK};
 use crate::kernel::{LinuxKernel, UserPtr};
 use crate::table::{Handler, nr};
-use alloc::collections::VecDeque;
+use alloc::collections::{BTreeMap, VecDeque};
 
 /// The calls of this module, for [`crate::table::GROUPS`].
 pub const CALLS: &[(u64, Handler)] = &[(nr::USERFAULTFD, userfaultfd)];
@@ -90,13 +90,33 @@ pub struct UffdState {
     features: u64,
     /// Fault messages not read yet, oldest first.
     queue: VecDeque<[u8; MSG_SIZE]>,
-    /// Counts `UFFDIO_WAKE`s, so a blocked task knows it was woken.
-    wakes: u64,
+    /// Tasks blocked on a fault, by ticket: the page they wait for and
+    /// whether a wake covering it came (`UFFDIO_WAKE`, a waking
+    /// `UFFDIO_COPY` / `UFFDIO_ZEROPAGE`, `UFFDIO_UNREGISTER`).
+    waiters: BTreeMap<u64, (u64, bool)>,
+    /// The next waiter's ticket.
+    next_ticket: u64,
+    /// Made with `UFFD_USER_MODE_ONLY`: faults the kernel takes on user
+    /// memory (inside a system call) are not handled; they fail as on an
+    /// unmapped page (`EFAULT`).
+    user_mode_only: bool,
 }
 
 impl UffdState {
     pub fn new() -> UffdState {
         UffdState::default()
+    }
+
+    /// A new object made with or without `UFFD_USER_MODE_ONLY`.
+    pub fn with_user_mode_only(user_mode_only: bool) -> UffdState {
+        UffdState { user_mode_only, ..UffdState::default() }
+    }
+
+    /// Whether a fault the kernel took inside a system call (`kernel`) or
+    /// in user mode is handled by the object at all: not a kernel one with
+    /// `UFFD_USER_MODE_ONLY` (userfaultfd(2)).
+    pub fn handles(&self, kernel: bool) -> bool {
+        !(kernel && self.user_mode_only)
     }
 
     /// `UFFDIO_API` with `api` and the wanted `features`: the supported
@@ -126,8 +146,9 @@ impl UffdState {
     }
 
     /// Queue the message for a fault at `addr` (a write if `write`) by
-    /// thread `tid`.
-    pub fn push_fault(&mut self, addr: u64, write: bool, tid: u32) {
+    /// thread `tid`, which now waits: returns its ticket for
+    /// [`woken`](Self::woken) and [`leave`](Self::leave).
+    pub fn push_fault(&mut self, addr: u64, write: bool, tid: u32) -> u64 {
         let mut m = [0u8; MSG_SIZE];
         m[0] = UFFD_EVENT_PAGEFAULT;
         let flags = if write { UFFD_PAGEFAULT_FLAG_WRITE } else { 0 };
@@ -137,6 +158,10 @@ impl UffdState {
         let ptid = if self.features & UFFD_FEATURE_THREAD_ID != 0 { tid } else { 0 };
         m[24..28].copy_from_slice(&ptid.to_le_bytes());
         self.queue.push_back(m);
+        let ticket = self.next_ticket;
+        self.next_ticket += 1;
+        self.waiters.insert(ticket, (addr & !(PAGE - 1), false));
+        ticket
     }
 
     /// Whether a message waits to be read.
@@ -165,14 +190,26 @@ impl UffdState {
         Ok(n)
     }
 
-    /// `UFFDIO_WAKE`: blocked tasks look at their page again.
-    pub fn wake(&mut self) {
-        self.wakes = self.wakes.wrapping_add(1);
+    /// Wake the tasks blocked on pages of `[start, start + len)`: they
+    /// resolve their fault again (and fault to the object once more if the
+    /// page is still missing).
+    pub fn wake(&mut self, start: u64, len: u64) {
+        let end = start.saturating_add(len);
+        for (page, woken) in self.waiters.values_mut() {
+            if *page >= start && *page < end {
+                *woken = true;
+            }
+        }
     }
 
-    /// How many wakes there were.
-    pub fn wakes(&self) -> u64 {
-        self.wakes
+    /// Whether the waiter `ticket` was woken.
+    pub fn woken(&self, ticket: u64) -> bool {
+        self.waiters.get(&ticket).is_none_or(|w| w.1)
+    }
+
+    /// The waiter `ticket` stops waiting.
+    pub fn leave(&mut self, ticket: u64) {
+        self.waiters.remove(&ticket);
     }
 }
 
@@ -191,10 +228,12 @@ pub enum UffdOp<'a> {
     Unregister { start: u64, len: u64 },
     /// `UFFDIO_WAKE` of a checked range.
     Wake { start: u64, len: u64 },
-    /// One page of `UFFDIO_COPY`: fill the missing page `dst` with `data`.
-    Copy { dst: u64, data: &'a [u8] },
-    /// `UFFDIO_ZEROPAGE` of a checked range: fill missing pages with zeros.
-    ZeroPage { start: u64, len: u64 },
+    /// One page of `UFFDIO_COPY`: fill the missing page `dst` with `data`;
+    /// `wake` (no `UFFDIO_COPY_MODE_DONTWAKE`): wake its waiters.
+    Copy { dst: u64, data: &'a [u8], wake: bool },
+    /// `UFFDIO_ZEROPAGE` of a checked range: fill missing pages with zeros;
+    /// `wake` (no `UFFDIO_ZEROPAGE_MODE_DONTWAKE`): wake their waiters.
+    ZeroPage { start: u64, len: u64, wake: bool },
 }
 
 /// What the kernel answers to a [`UffdOp`].
@@ -243,7 +282,8 @@ pub fn userfaultfd(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     if flags & !(O_CLOEXEC | O_NONBLOCK | UFFD_USER_MODE_ONLY) != 0 {
         return Err(Errno::EINVAL);
     }
-    k.userfaultfd(flags & O_NONBLOCK != 0, flags & O_CLOEXEC != 0).map(|fd| fd as u64)
+    let user_mode_only = flags & UFFD_USER_MODE_ONLY != 0;
+    k.userfaultfd(flags & O_NONBLOCK != 0, flags & O_CLOEXEC != 0, user_mode_only).map(|fd| fd as u64)
 }
 
 fn word(b: &[u8], i: usize) -> u64 {
@@ -328,7 +368,8 @@ fn uffd_ioctl(k: &mut dyn LinuxKernel, fd: i32, request: u32, arg: UserPtr) -> S
                     failed = Some(e);
                     break;
                 }
-                match op(k, fd, UffdOp::Copy { dst: dst + done, data: &page }) {
+                let wake = mode & UFFDIO_COPY_MODE_DONTWAKE == 0;
+                match op(k, fd, UffdOp::Copy { dst: dst + done, data: &page, wake }) {
                     Ok(UffdReply::Filled(n)) if n == PAGE => done += PAGE,
                     Ok(_) => {
                         failed = Some(Errno::EEXIST);
@@ -352,7 +393,8 @@ fn uffd_ioctl(k: &mut dyn LinuxKernel, fd: i32, request: u32, arg: UserPtr) -> S
                 return Err(Errno::EINVAL);
             }
             range_args(start, len)?;
-            match op(k, fd, UffdOp::ZeroPage { start, len }) {
+            let wake = mode & UFFDIO_ZEROPAGE_MODE_DONTWAKE == 0;
+            match op(k, fd, UffdOp::ZeroPage { start, len, wake }) {
                 Ok(UffdReply::Filled(n)) => filled(k, result_at, n, (n < len).then_some(Errno::EEXIST)),
                 Ok(_) => Err(Errno::EINVAL),
                 Err(e) => filled(k, result_at, 0, Some(e)),
@@ -408,9 +450,9 @@ mod tests {
         let mut buf = [0u8; 64];
         assert_eq!(s.read(&mut buf), Err(Errno::EAGAIN));
         assert_eq!(s.read(&mut buf[..8]), Err(Errno::EINVAL));
-        s.push_fault(0x12345, true, 7);
-        s.push_fault(0x20000, false, 8);
-        s.push_fault(0x30000, false, 9);
+        let a = s.push_fault(0x12345, true, 7);
+        let b = s.push_fault(0x20000, false, 8);
+        let c = s.push_fault(0x30000, false, 9);
         assert!(s.pending());
         assert_eq!(s.read(&mut buf), Ok(64), "whole messages that fit");
         assert_eq!(buf[0], UFFD_EVENT_PAGEFAULT);
@@ -420,9 +462,20 @@ mod tests {
         assert_eq!(word(&buf, 5), 0, "a read");
         assert_eq!(s.read(&mut buf[..40]), Ok(32));
         assert!(!s.pending());
-        let w = s.wakes();
-        s.wake();
-        assert_ne!(s.wakes(), w);
+        assert!(!s.woken(a) && !s.woken(b) && !s.woken(c));
+        s.wake(0x12000, 0x1000);
+        assert!(s.woken(a) && !s.woken(b), "only waiters of the range");
+        s.wake(0x20000, 0x11000);
+        assert!(s.woken(b) && s.woken(c));
+        s.leave(a);
+        assert!(s.woken(a), "a waiter that left counts as woken");
+    }
+
+    #[test]
+    fn user_mode_only() {
+        assert!(UffdState::with_user_mode_only(true).handles(false));
+        assert!(!UffdState::with_user_mode_only(true).handles(true), "a fault inside a system call: EFAULT");
+        assert!(UffdState::with_user_mode_only(false).handles(true));
     }
 
     #[test]

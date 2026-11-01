@@ -219,14 +219,18 @@ fn pending_requests_are_found_by_user_data() {
     let (inst, _, _) = ring(2);
     let at = Timespec { sec: 5, nsec: 0 };
     let timeout = Wait::Timeout { deadline: Deadline { clock: Clock::Monotonic, at }, target: None };
-    inst.add_pending(Pending { sqe: Sqe { user_data: 4, ..Sqe::default() }, wait: timeout, chain: Vec::new() });
-    inst.add_pending(Pending {
-        sqe: Sqe { user_data: 8, fd: 3, ..Sqe::default() },
-        wait: Wait::Ready { events: 1 },
-        chain: Vec::new(),
-    });
-    let t = inst.wait_targets();
+    inst.add_pending(Pending::new(Sqe { user_data: 4, ..Sqe::default() }, timeout, Vec::new(), 7));
+    inst.add_pending(Pending::new(
+        Sqe { user_data: 8, fd: 3, ..Sqe::default() },
+        Wait::Ready { events: 1 },
+        Vec::new(),
+        7,
+    ));
+    let t = inst.wait_targets(7);
     assert_eq!(t.fds, vec![(3, 1)]);
+    let other = inst.wait_targets(9);
+    assert!(other.fds.is_empty() && other.recheck, "another process's descriptors are not this one's");
+    assert!(inst.has_pending_of(7) && !inst.has_pending_of(9));
     assert_eq!(t.timeout, Some(at));
     assert!(inst.remove_pending(8, |p| matches!(p.wait, Wait::Timeout { .. })).is_none());
     assert!(inst.remove_pending(4, |p| matches!(p.wait, Wait::Timeout { .. })).is_some());
@@ -249,4 +253,42 @@ fn registrations_are_exclusive() {
     assert_eq!(inst.files_len(), Some(2));
     assert!(inst.file(0).is_none());
     assert!(inst.clear_files());
+}
+
+#[test]
+fn kicks_and_posts_wake_the_descriptor() {
+    use core::sync::atomic::AtomicUsize;
+    let (inst, _, _) = ring(2);
+    let woken = Arc::new(AtomicUsize::new(0));
+    let w = Arc::clone(&woken);
+    inst.set_notifier(Arc::new(move || {
+        w.fetch_add(1, Ordering::SeqCst);
+    }));
+    assert!(!inst.kicked());
+    inst.kick();
+    assert!(inst.kicked());
+    assert_eq!(woken.load(Ordering::SeqCst), 1);
+    assert!(inst.take_kick() && !inst.kicked(), "trying the requests clears the kick");
+    inst.post(Cqe { user_data: 1, res: 0, flags: 0 });
+    assert_eq!(woken.load(Ordering::SeqCst), 2, "a posted CQE wakes the descriptor's waiters");
+}
+
+#[test]
+fn background_retries_only_the_owners_instances() {
+    use super::exec::{note_parked, parked_of};
+    // Owners far from real pids, as other tests may park too.
+    let (a, b) = (900_001, 900_002);
+    let (inst, _, _) = ring(2);
+    let inst = Arc::new(inst);
+    let sqe = Sqe { user_data: 1, fd: 3, ..Sqe::default() };
+    inst.add_pending(Pending::new(sqe, Wait::Ready { events: 1 }, Vec::new(), a));
+    note_parked(&inst, a);
+    note_parked(&inst, a);
+    note_parked(&inst, b);
+    let mine = parked_of(a);
+    assert_eq!(mine.len(), 1, "noted once per owner");
+    assert!(Arc::ptr_eq(&mine[0], &inst));
+    assert!(parked_of(b).is_empty(), "b has no request waiting: its entry goes");
+    let _ = inst.take_pending();
+    assert!(parked_of(a).is_empty(), "nothing waits any more");
 }

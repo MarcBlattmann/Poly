@@ -195,6 +195,11 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         let _ = user::request_exit(status);
         return outcome;
     }
+    // io_uring requests waiting for a file this call may have made ready
+    // (ADR 0122).
+    if Linux::background_pending() {
+        Linux::background(&mut k);
+    }
     // rseq(2) (ADR 0111): the thread was switched out during the call.
     if k.flags.rseq_notify.load(Ordering::Relaxed) && k.flags.rseq_notify.swap(false, Ordering::Relaxed) {
         Linux::rseq_resume(&mut k);
@@ -217,6 +222,15 @@ pub fn exit_to_user(process: &Process) -> Leave {
     match Thread::current(process) {
         Some(mut k) => Linux::exit_to_user(&mut k).into(),
         None => Leave::Return,
+    }
+}
+
+/// The running thread of `process` is about to return to user mode after
+/// an interrupt while io_uring requests wait somewhere
+/// ([`Linux::background_pending`]): its process's run if they can.
+pub fn background(process: &Process) {
+    if let Some(mut k) = Thread::current(process) {
+        Linux::background(&mut k);
     }
 }
 

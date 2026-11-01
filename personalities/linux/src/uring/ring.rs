@@ -6,12 +6,18 @@
 //! into the kernel never holds it.
 
 use super::abi::{Cqe, Layout, Sqe, sq_flags};
-use super::{FileHandle, RingMemory};
+use super::{FileHandle, RingMemory, Watch};
 use crate::kernel::Deadline;
 use crate::ns::lock::Mutex;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+/// What the kernel does when an instance has news for whoever waits on its
+/// descriptor (a CQE was posted, or a waiting request may go on): wake the
+/// descriptor's waiters.
+pub type Notifier = Arc<dyn Fn() + Send + Sync>;
 
 /// What a request that could not finish at once waits for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,9 +26,12 @@ pub enum Wait {
     /// at every attempt) to be ready for `events`; then the request runs.
     Ready { events: u16 },
     /// A poll request: the events of `fd` it asks for. A multishot one
-    /// stays after each CQE; `armed` is false after it fired until the
-    /// descriptor is seen not ready, so one readiness gives one CQE.
-    Poll { events: u16, multishot: bool, armed: bool },
+    /// stays after each CQE; `armed` is false after it fired. With a
+    /// [`Watch`] on the file it fires again at every wake-up of the file
+    /// (the watch's count moved past `seen`, its count when it fired), as
+    /// Linux posts one CQE per wake-up; without one, once the descriptor
+    /// was seen not ready.
+    Poll { events: u16, multishot: bool, armed: bool, seen: u64 },
     /// A timeout: due at `deadline` (on the monotonic clock), or done
     /// early once the instance has posted `target` CQEs in all.
     Timeout { deadline: Deadline, target: Option<u64> },
@@ -43,6 +52,19 @@ pub struct Pending {
     pub wait: Wait,
     /// The SQEs linked after this one, which start when it completes.
     pub chain: Vec<Sqe>,
+    /// The process that submitted it: its descriptor numbers are that
+    /// process's, so only its threads run it again.
+    pub owner: i32,
+    /// The kernel's watch on the request's file (waking the instance when
+    /// the file's readiness changes), if it has one.
+    pub watch: Option<Arc<dyn Watch>>,
+}
+
+impl Pending {
+    /// A request of process `owner` waiting for `wait`, without a watch.
+    pub fn new(sqe: Sqe, wait: Wait, chain: Vec<Sqe>, owner: i32) -> Pending {
+        Pending { sqe, wait, chain, owner, watch: None }
+    }
 }
 
 #[derive(Default)]
@@ -77,6 +99,10 @@ pub struct Instance {
     rings: Arc<dyn RingMemory>,
     sqes: Arc<dyn RingMemory>,
     state: Mutex<State>,
+    /// A watched file woke since requests were last tried: a waiting
+    /// request may go on ([`kick`](Self::kick)).
+    kicked: AtomicBool,
+    notifier: Mutex<Option<Notifier>>,
 }
 
 impl core::fmt::Debug for Instance {
@@ -101,7 +127,47 @@ impl Instance {
             state.sq_flags = sq_flags::NEED_WAKEUP;
             rings.store_release(Layout::SQ_FLAGS as usize, state.sq_flags);
         }
-        Instance { layout, setup_flags, rings, sqes, state: Mutex::new(state) }
+        Instance {
+            layout,
+            setup_flags,
+            rings,
+            sqes,
+            state: Mutex::new(state),
+            kicked: AtomicBool::new(false),
+            notifier: Mutex::new(None),
+        }
+    }
+
+    /// What to call when the instance has news for its descriptor's
+    /// waiters (set by the kernel when it makes the descriptor).
+    pub fn set_notifier(&self, n: Notifier) {
+        *self.notifier.lock() = Some(n);
+    }
+
+    fn notify(&self) {
+        let n = self.notifier.lock().clone();
+        if let Some(n) = n {
+            n();
+        }
+    }
+
+    /// A watched file of a waiting request woke: note it and wake the
+    /// descriptor's waiters (called from the file's wake-up, holding no
+    /// lock of the instance).
+    pub fn kick(&self) {
+        self.kicked.store(true, Ordering::SeqCst);
+        self.notify();
+    }
+
+    /// Whether a watched file woke since the last [`take_kick`](Self::take_kick).
+    pub fn kicked(&self) -> bool {
+        self.kicked.load(Ordering::SeqCst)
+    }
+
+    /// Clear the kick (before requests are tried again, so a wake-up
+    /// during the attempt is not lost).
+    pub fn take_kick(&self) -> bool {
+        self.kicked.swap(false, Ordering::SeqCst)
     }
 
     /// The region mmap(2) maps at file offset `offset` (masked with
@@ -176,16 +242,19 @@ impl Instance {
     /// Post `cqe`: into the CQ ring if it has room and nothing is kept
     /// back, otherwise at the end of the kept-back list.
     pub fn post(&self, cqe: Cqe) {
-        let mut s = self.state.lock();
-        s.posted += 1;
-        s.signal = true;
-        self.flush_locked(&mut s);
-        if s.overflow.is_empty() && self.room(&s) {
-            self.write_cqe(&mut s, cqe);
-        } else {
-            s.overflow.push_back(cqe);
-            self.set_overflow_flag(&mut s);
+        {
+            let mut s = self.state.lock();
+            s.posted += 1;
+            s.signal = true;
+            self.flush_locked(&mut s);
+            if s.overflow.is_empty() && self.room(&s) {
+                self.write_cqe(&mut s, cqe);
+            } else {
+                s.overflow.push_back(cqe);
+                self.set_overflow_flag(&mut s);
+            }
         }
+        self.notify();
     }
 
     /// Move kept-back CQEs into the ring while it has room.
@@ -266,15 +335,18 @@ impl Instance {
     /// the waiting requests, the earliest timeout, and whether some
     /// request can only be looked at again later (a fired multishot poll,
     /// a request on a registered file).
-    pub fn wait_targets(&self) -> WaitTargets {
+    pub fn wait_targets(&self, owner: i32) -> WaitTargets {
         let s = self.state.lock();
         let mut t = WaitTargets::default();
         for p in &s.pending {
             let fixed = p.sqe.flags & super::abi::sqe_flags::FIXED_FILE != 0;
             match p.wait {
-                Wait::Ready { events } | Wait::Poll { events, armed: true, .. } if !fixed => {
+                Wait::Ready { events } | Wait::Poll { events, armed: true, .. } if !fixed && p.owner == owner => {
                     t.fds.push((p.sqe.fd, events))
                 }
+                // A fired multishot poll with a watch: the watch wakes the
+                // descriptor's waiters at the file's next wake-up.
+                Wait::Poll { armed: false, .. } if p.watch.is_some() => {}
                 Wait::Timeout { deadline, .. } => {
                     if t.timeout.is_none_or(|d| (deadline.at.sec, deadline.at.nsec) < (d.sec, d.nsec)) {
                         t.timeout = Some(deadline.at);
@@ -289,6 +361,11 @@ impl Instance {
     /// Whether any request waits.
     pub fn has_pending(&self) -> bool {
         !self.state.lock().pending.is_empty()
+    }
+
+    /// Whether a request of process `owner` waits.
+    pub fn has_pending_of(&self, owner: i32) -> bool {
+        self.state.lock().pending.iter().any(|p| p.owner == owner)
     }
 
     /// Remove the first pending request with `user_data` that `pick`

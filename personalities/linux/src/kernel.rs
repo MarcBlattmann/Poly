@@ -1139,7 +1139,8 @@ pub trait LinuxKernel {
 
     /// userfaultfd(2): a new userfaultfd object for the caller's memory
     /// ([`crate::sys::userfaultfd`]); returns its descriptor.
-    fn userfaultfd(&mut self, _nonblock: bool, _cloexec: bool) -> Result<i32, Errno> {
+    /// `user_mode_only`: made with `UFFD_USER_MODE_ONLY`.
+    fn userfaultfd(&mut self, _nonblock: bool, _cloexec: bool, _user_mode_only: bool) -> Result<i32, Errno> {
         Err(Errno::ENOSYS)
     }
 

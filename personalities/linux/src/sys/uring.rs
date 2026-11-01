@@ -125,7 +125,7 @@ pub fn io_uring_enter(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             (None, sigmask_arg(k, a.ptr(4), a.ulong(5))?)
         };
         let min = min_complete.min(inst.layout.cq_entries);
-        if let Err(e) = exec::wait(k, &inst, min, until, mask) {
+        if let Err(e) = exec::wait(k, &inst, a.fd(0), min, until, mask) {
             return if submitted > 0 { Ok(u64::from(submitted)) } else { Err(e) };
         }
     }

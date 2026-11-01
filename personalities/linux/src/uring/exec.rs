@@ -1,5 +1,6 @@
 //! How requests run: submission (link chains), the per-opcode work, the
-//! retries of waiting requests and the `GETEVENTS` wait.
+//! retries of waiting requests (in io_uring_enter(2) and in the background,
+//! [`background`]) and the `GETEVENTS` wait.
 //!
 //! Most requests are the system call of the same name: each runs that
 //! call's handler from [`crate::table`] with arguments taken from the SQE,
@@ -16,19 +17,24 @@ use crate::args::Args;
 use crate::errno::Errno;
 use crate::fileio::{PollFd, WaitTime, events};
 use crate::kernel::{Clock, Deadline, LinuxKernel, SigSet};
+use crate::ns::lock::Mutex;
 use crate::sys::poll::{Waited, wait_with_signals};
 use crate::table::nr;
 use alloc::collections::VecDeque;
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 /// `MSG_DONTWAIT` (`linux/socket.h`).
 const MSG_DONTWAIT: u32 = 0x40;
 /// `O_NONBLOCK` (`asm-generic/fcntl.h`).
 const O_NONBLOCK: u32 = 0o4000;
-/// How often a wait looks again at requests it cannot sleep on (multishot
-/// polls that fired, requests on registered files): 10 ms.
+/// How often a wait looks again at what it cannot sleep on (requests on
+/// registered files or of other processes, CQEs other threads post): 10 ms.
 const RECHECK_NS: u64 = 10_000_000;
+/// `POLLPRI`: what a `GETEVENTS` wait asks of the ring's own descriptor,
+/// which reports it while the instance is kicked (the kernel's ring file).
+const KICK_EVENT: u16 = 0x002;
 
 pub(crate) fn uring(k: &mut dyn LinuxKernel) -> Result<&mut dyn UringKernel, Errno> {
     k.uring().ok_or(Errno::ENOSYS)
@@ -76,14 +82,97 @@ fn run_chain(k: &mut dyn LinuxKernel, inst: &Arc<Instance>, mut chain: VecDeque<
             }
             Step::More(res, wait) => {
                 complete(inst, &sqe, res, cqe_flags::MORE);
-                inst.add_pending(Pending { sqe, wait, chain: chain.into() });
+                park(k, inst, sqe, wait, chain.into());
                 return;
             }
             Step::Wait(wait) => {
-                inst.add_pending(Pending { sqe, wait, chain: chain.into() });
+                park(k, inst, sqe, wait, chain.into());
                 return;
             }
         }
+    }
+}
+
+/// Put a request that waits in `inst`'s pending list, owned by the calling
+/// process, with a watch on its file (not for registered files, which are
+/// opened again at each attempt), and note the instance for
+/// [`background`].
+fn park(k: &mut dyn LinuxKernel, inst: &Arc<Instance>, sqe: Sqe, wait: Wait, chain: Vec<Sqe>) {
+    let owner = k.pid();
+    let mut p = Pending::new(sqe, wait, chain, owner);
+    let fixed = sqe.flags & sqe_flags::FIXED_FILE != 0;
+    if let (false, Wait::Ready { events } | Wait::Poll { events, .. }) = (fixed, wait) {
+        p.watch = k.uring().and_then(|u| u.watch(sqe.fd, events, inst));
+    }
+    inst.add_pending(p);
+    note_parked(inst, owner);
+}
+
+/// Instances with requests waiting, and the process each request of the
+/// entry belongs to, for [`background`]; dead or idle entries are dropped
+/// there.
+static PARKED: Mutex<Vec<(i32, Weak<Instance>)>> = Mutex::new(Vec::new());
+/// Entries in [`PARKED`]: a lock-free answer to "is anything waiting".
+static PARKED_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether some request of some instance may be waiting: the kernel calls
+/// [`background`] on a thread's way to user mode only then.
+pub fn parked_anywhere() -> bool {
+    PARKED_COUNT.load(Ordering::Relaxed) > 0
+}
+
+pub(crate) fn note_parked(inst: &Arc<Instance>, owner: i32) {
+    let mut list = PARKED.lock();
+    if !list.iter().any(|(o, w)| *o == owner && core::ptr::eq(w.as_ptr(), Arc::as_ptr(inst))) {
+        list.push((owner, Arc::downgrade(inst)));
+    }
+    PARKED_COUNT.store(list.len(), Ordering::Relaxed);
+}
+
+/// The instances with requests of process `owner` waiting; forgets
+/// entries whose instance is gone or has none of its owner's requests.
+pub(crate) fn parked_of(owner: i32) -> Vec<Arc<Instance>> {
+    let mut mine = Vec::new();
+    // References taken under the lock are dropped after it: the last one
+    // may end an instance, whose watches then leave their wait queues.
+    let mut others = Vec::new();
+    {
+        let mut list = PARKED.lock();
+        list.retain(|(o, w)| match w.upgrade() {
+            Some(i) if i.has_pending_of(*o) => {
+                if *o == owner {
+                    mine.push(i);
+                } else {
+                    others.push(i);
+                }
+                true
+            }
+            Some(i) => {
+                others.push(i);
+                false
+            }
+            None => false,
+        });
+        PARKED_COUNT.store(list.len(), Ordering::Relaxed);
+    }
+    drop(others);
+    mine
+}
+
+/// On a thread's way back to user mode (after a system call, or an
+/// interrupt while requests wait): try the waiting requests of its process
+/// again, so one whose file became ready (data arrived, a client
+/// connected, a poll fired) completes without another io_uring_enter(2),
+/// as Linux completes such requests asynchronously. Kept-back CQEs are left
+/// for the next io_uring_enter(2), which moves them into the ring.
+pub fn background(k: &mut dyn LinuxKernel) {
+    if !parked_anywhere() || k.uring().is_none() {
+        return;
+    }
+    let owner = k.pid();
+    for inst in parked_of(owner) {
+        retry(k, &inst, Some(owner));
+        signal(k, &inst);
     }
 }
 
@@ -330,15 +419,15 @@ fn poll_step(k: &mut dyn LinuxKernel, fd: i32, ask: u16, multishot: bool, armed:
         return Step::Done(Err(Errno::EBADF));
     }
     if revents == 0 {
-        return Step::Wait(Wait::Poll { events: ask, multishot, armed: true });
+        return Step::Wait(Wait::Poll { events: ask, multishot, armed: true, seen: 0 });
     }
     if !multishot {
         return Step::Done(Ok(u64::from(revents)));
     }
     if !armed {
-        return Step::Wait(Wait::Poll { events: ask, multishot, armed: false });
+        return Step::Wait(Wait::Poll { events: ask, multishot, armed: false, seen: 0 });
     }
-    Step::More(i32::from(revents), Wait::Poll { events: ask, multishot, armed: false })
+    Step::More(i32::from(revents), Wait::Poll { events: ask, multishot, armed: false, seen: 0 })
 }
 
 fn now(k: &mut dyn LinuxKernel) -> Timespec {
@@ -422,12 +511,27 @@ fn timeout_remove(k: &mut dyn LinuxKernel, inst: &Instance, s: &Sqe) -> Result<u
 /// end timeouts that are due or counted out, fire polls. Repeats while
 /// something completed (a completion may count a timeout out).
 pub fn progress(k: &mut dyn LinuxKernel, inst: &Arc<Instance>) {
+    retry(k, inst, None);
+    inst.flush_overflow();
+    signal(k, inst);
+}
+
+/// [`progress`] without moving kept-back CQEs or signalling, for the
+/// requests of process `only` (all with `None`).
+fn retry(k: &mut dyn LinuxKernel, inst: &Arc<Instance>, only: Option<i32>) {
+    inst.take_kick();
     for _ in 0..16 {
-        let pending = inst.take_pending();
+        let mut pending = inst.take_pending();
+        let mut kept = Vec::new();
+        if let Some(owner) = only {
+            let (mine, others): (Vec<Pending>, Vec<Pending>) = pending.into_iter().partition(|p| p.owner == owner);
+            pending = mine;
+            kept = others;
+        }
         if pending.is_empty() {
+            inst.restore_pending(kept);
             break;
         }
-        let mut kept = Vec::new();
         let mut changed = false;
         for p in pending {
             match p.wait {
@@ -458,8 +562,24 @@ pub fn progress(k: &mut dyn LinuxKernel, inst: &Arc<Instance>) {
                         kept.push(p);
                     }
                 }
-                Wait::Poll { events: ask, multishot, armed } => {
+                Wait::Poll { events: ask, multishot, armed, seen } => {
+                    // With a watch, a fired multishot poll fires again at
+                    // the file's next wake-up (the count is read before
+                    // the file is, so a wake-up meanwhile is not lost).
+                    let (armed, count) = match &p.watch {
+                        Some(w) => {
+                            let c = w.count();
+                            (armed || c != seen, c)
+                        }
+                        None => (armed, seen),
+                    };
                     let step = flatten(with_fd(k, inst, &p.sqe, |k, fd| poll_step(k, fd, ask, multishot, armed)));
+                    let seen_now = |w: Wait| match w {
+                        Wait::Poll { events, multishot, armed, .. } => {
+                            Wait::Poll { events, multishot, armed, seen: count }
+                        }
+                        other => other,
+                    };
                     match step {
                         Step::Done(r) => {
                             changed = true;
@@ -468,9 +588,9 @@ pub fn progress(k: &mut dyn LinuxKernel, inst: &Arc<Instance>) {
                         Step::More(res, wait) => {
                             changed = true;
                             complete(inst, &p.sqe, res, cqe_flags::MORE);
-                            kept.push(Pending { wait, ..p });
+                            kept.push(Pending { wait: seen_now(wait), ..p });
                         }
-                        Step::Wait(wait) => kept.push(Pending { wait, ..p }),
+                        Step::Wait(wait) => kept.push(Pending { wait: seen_now(wait), ..p }),
                     }
                 }
             }
@@ -480,8 +600,6 @@ pub fn progress(k: &mut dyn LinuxKernel, inst: &Arc<Instance>) {
             break;
         }
     }
-    inst.flush_overflow();
-    signal(k, inst);
 }
 
 /// A waiting request ended with `res`: post it and go on with its chain.
@@ -511,6 +629,7 @@ pub fn signal(k: &mut dyn LinuxKernel, inst: &Instance) {
 pub fn wait(
     k: &mut dyn LinuxKernel,
     inst: &Arc<Instance>,
+    ring_fd: i32,
     min: u32,
     until: Option<Timespec>,
     mask: Option<SigSet>,
@@ -524,9 +643,14 @@ pub fn wait(
         if until.is_some_and(|u| ts_ns(t) >= ts_ns(u)) {
             return Err(err::ETIME);
         }
-        let targets = inst.wait_targets();
+        let mut targets = inst.wait_targets(k.pid());
+        // CQEs other threads post wake nothing here: look again now and
+        // then.
+        targets.recheck = true;
         let mut fds: Vec<PollFd> =
             targets.fds.iter().map(|&(fd, ask)| PollFd { fd, events: ask, revents: 0 }).collect();
+        // The ring's own descriptor reports a kick: a watched file woke.
+        fds.push(PollFd { fd: ring_fd, events: KICK_EVENT, revents: 0 });
         let mut wake = until;
         let mut earliest = |x: Timespec| {
             if wake.is_none_or(|w| ts_ns(x) < ts_ns(w)) {

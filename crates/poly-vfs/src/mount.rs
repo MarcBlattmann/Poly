@@ -78,14 +78,23 @@ pub struct Mount {
     /// The mount point: a mount and an inode on it. `None` for the root
     /// of a tree (a namespace's first mount) and for a detached mount.
     /// Moving a mount (`move_mount(2)`, `pivot_root(2)`) changes it.
-    parent: SpinMutex<Option<(Arc<Mount>, Ino)>>,
+    /// A mount below the top of a detached tree holds its parent weakly
+    /// (see `subtree`).
+    parent: SpinMutex<Option<(Link, Ino)>>,
+    /// The top of a detached tree (`open_tree(OPEN_TREE_CLONE |
+    /// AT_RECURSIVE)`): the copied mounts below it, at any depth, parents
+    /// before their children. They are in no table; this list keeps them
+    /// (they point back weakly), so they go with the top when its last
+    /// descriptor is closed. Attaching the top moves them into the table.
+    subtree: SpinMutex<Vec<Arc<Mount>>>,
     /// [`MountFlags`] as bits: a remount changes them in place.
     flags: AtomicU8,
     /// The rest of the per-mount attributes, as Linux's `MOUNT_ATTR_*`
     /// bits other than the four of [`MountFlags`] (`linux/mount.h`: the
     /// access time mode `0x70`, `NODIRATIME 0x80`, `NOSYMFOLLOW
-    /// 0x200000`): kept for `statmount(2)` and reported by `statfs(2)`,
-    /// not enforced.
+    /// 0x200000`): kept for `statmount(2)` and reported by `statfs(2)`;
+    /// `NOSYMFOLLOW` is enforced by path resolution, the access time
+    /// modes are not (Poly's tmpfs keeps access times as asked).
     attrs: AtomicU32,
     /// The propagation type, as Linux's `MS_PRIVATE`, `MS_SHARED`,
     /// `MS_SLAVE` or `MS_UNBINDABLE` value (`linux/mount.h`). Poly
@@ -96,6 +105,34 @@ pub struct Mount {
     /// read-only then is `EBUSY` (`mount_setattr(2)`).
     writers: AtomicU32,
 }
+
+/// How a mount refers to the mount it is on.
+#[derive(Clone)]
+enum Link {
+    Strong(Arc<Mount>),
+    /// Below the top of a detached tree, which owns it (`Mount::subtree`).
+    Weak(Weak<Mount>, MountId),
+}
+
+impl Link {
+    fn id(&self) -> MountId {
+        match self {
+            Link::Strong(m) => m.id,
+            Link::Weak(_, id) => *id,
+        }
+    }
+
+    fn get(&self) -> Option<Arc<Mount>> {
+        match self {
+            Link::Strong(m) => Some(m.clone()),
+            Link::Weak(w, _) => w.upgrade(),
+        }
+    }
+}
+
+/// `MOUNT_ATTR_NOSYMFOLLOW` (`linux/mount.h`) in [`Mount::attrs`]: path
+/// resolution does not follow symbolic links on the mount (`ELOOP`).
+pub const ATTR_NOSYMFOLLOW: u32 = 0x0020_0000;
 
 /// `MS_PRIVATE` (`linux/mount.h`): the propagation type of a new mount.
 pub const PROPAGATION_PRIVATE: u32 = 1 << 18;
@@ -124,17 +161,67 @@ impl Mount {
     /// Where this mount is mounted: the mount and inode of its mount
     /// point; `None` for the root of a tree or a detached mount.
     pub fn parent(&self) -> Option<(Arc<Mount>, Ino)> {
-        self.parent.lock().clone()
+        let link = self.parent.lock().clone();
+        link.and_then(|(l, ino)| l.get().map(|m| (m, ino)))
     }
 
     pub(crate) fn set_parent(&self, parent: Option<(Arc<Mount>, Ino)>) {
-        *self.parent.lock() = parent;
+        *self.parent.lock() = parent.map(|(m, ino)| (Link::Strong(m), ino));
+    }
+
+    /// Mount this (a copy below the top of a detached tree) on `(parent,
+    /// ino)` without keeping `parent` alive.
+    pub(crate) fn set_weak_parent(&self, parent: &Arc<Mount>, ino: Ino) {
+        *self.parent.lock() = Some((Link::Weak(Arc::downgrade(parent), parent.id), ino));
     }
 
     /// Whether this mount is mounted on `(mount, ino)` (any inode of
     /// `mount` when `ino` is `None`).
     pub(crate) fn is_on(&self, mount: MountId, ino: Option<Ino>) -> bool {
-        matches!(&*self.parent.lock(), Some((p, i)) if p.id == mount && ino.is_none_or(|x| x == *i))
+        matches!(&*self.parent.lock(), Some((p, i)) if p.id() == mount && ino.is_none_or(|x| x == *i))
+    }
+
+    /// The first mount of the tree this mount is in (itself for a
+    /// namespace's first mount or a detached mount).
+    pub(crate) fn top(self: &Arc<Self>) -> Arc<Mount> {
+        let mut cur = self.clone();
+        while let Some((p, _)) = cur.parent() {
+            cur = p;
+        }
+        cur
+    }
+
+    /// The mounts a detached tree's top keeps below it (empty for any
+    /// other mount).
+    pub(crate) fn subtree(&self) -> Vec<Arc<Mount>> {
+        self.subtree.lock().clone()
+    }
+
+    pub(crate) fn set_subtree(&self, mounts: Vec<Arc<Mount>>) {
+        *self.subtree.lock() = mounts;
+    }
+
+    /// The tree is being attached: hand over the mounts below and make
+    /// their links to their parents strong, as in the table.
+    pub(crate) fn take_subtree(&self) -> Vec<Arc<Mount>> {
+        let mounts = core::mem::take(&mut *self.subtree.lock());
+        for m in &mounts {
+            let mut link = m.parent.lock();
+            if let Some((l, ino)) = link.clone()
+                && let Some(p) = l.get()
+            {
+                *link = Some((Link::Strong(p), ino));
+            }
+        }
+        mounts
+    }
+
+    /// The topmost mount on `(self, ino)` among the mounts a detached
+    /// tree keeps (the table does not know them).
+    pub(crate) fn detached_covering(self: &Arc<Self>, ino: Ino) -> Option<Arc<Mount>> {
+        let top = self.top();
+        let kept = top.subtree.lock();
+        kept.iter().rev().find(|m| m.is_on(self.id, Some(ino))).cloned()
     }
 
     /// The Linux `MOUNT_ATTR_*` bits beyond [`MountFlags`] (see the field).
@@ -482,7 +569,8 @@ impl MountTable {
             id: self.next_id,
             sb,
             root,
-            parent: SpinMutex::new(parent),
+            parent: SpinMutex::new(parent.map(|(m, ino)| (Link::Strong(m), ino))),
+            subtree: SpinMutex::new(Vec::new()),
             flags: AtomicU8::new(flags.to_bits()),
             attrs: AtomicU32::new(0),
             propagation: AtomicU32::new(PROPAGATION_PRIVATE),

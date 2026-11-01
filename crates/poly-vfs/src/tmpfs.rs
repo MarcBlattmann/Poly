@@ -60,6 +60,10 @@ pub struct Tmpfs {
     /// ([`crate::fileattr`]): a handle made by another tmpfs does not
     /// decode here.
     instance: u32,
+    /// The type name and `statfs` magic it reports: `tmpfs` unless made
+    /// [`named`](Tmpfs::named) (the POSIX message queue file system on
+    /// `/dev/mqueue` is a tmpfs called `mqueue`).
+    kind: (&'static str, u64),
 }
 
 /// The number the next tmpfs instance gets.
@@ -308,7 +312,15 @@ impl Tmpfs {
             clock,
             page_limit,
             instance,
+            kind: ("tmpfs", crate::TMPFS_MAGIC),
         }
+    }
+
+    /// This tmpfs, reporting type `name` and `statfs` magic `magic`
+    /// (Linux UAPI `linux/magic.h`).
+    pub fn named(mut self, name: &'static str, magic: u64) -> Tmpfs {
+        self.kind = (name, magic);
+        self
     }
 
     /// Inodes alive, the root included.
@@ -641,7 +653,7 @@ impl Tmpfs {
 
 impl FileSystem for Tmpfs {
     fn info(&self) -> FsInfo {
-        FsInfo { name: "tmpfs", read_only: false, cache_lookups: false }
+        FsInfo { name: self.kind.0, read_only: false, cache_lookups: false }
     }
 
     /// The data pages a file holds (written, or allocated by fallocate);
@@ -664,7 +676,7 @@ impl FileSystem for Tmpfs {
         // Without a limit, as many inodes as an inode count can hold.
         let files = inner.inode_limit.unwrap_or(u64::from(u32::MAX)).max(used);
         Ok(crate::FsStats {
-            magic: crate::TMPFS_MAGIC,
+            magic: self.kind.1,
             block_size: PAGE,
             blocks: total,
             blocks_free: free,

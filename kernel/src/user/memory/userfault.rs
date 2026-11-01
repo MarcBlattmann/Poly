@@ -40,6 +40,12 @@ impl Memory {
         self.inner.lock().map.forget_userfaults(Some(uffd));
     }
 
+    /// Whether the page at `addr` is in a range registered with object
+    /// `uffd`.
+    pub fn userfault_registered(&self, addr: u64, uffd: u32) -> bool {
+        self.inner.lock().map.userfault_registered(poly_vm::page_down(addr), uffd)
+    }
+
     /// Whether the page at `addr` still faults to object `uffd`: it is
     /// registered with it and has no frame.
     pub fn awaits_userfault(&self, addr: u64, uffd: u32) -> bool {

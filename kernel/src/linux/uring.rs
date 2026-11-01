@@ -6,6 +6,12 @@
 //! of a region (in whichever process, after `fork`) maps its frames, and
 //! the kernel reads and writes the same frames through the direct map.
 //! The mappings hold the memory, so the rings outlive the descriptor.
+//!
+//! The ring file has a wait queue: the instance notifies it when it posts
+//! a CQE or is kicked ([`Instance::kick`]), which a [`FileWatch`] on the
+//! file of a waiting request does at each wake-up of that file. A kicked
+//! instance reads as readable (and `POLLPRI`) until its requests were
+//! tried again, which the owner's threads do on their way to user mode.
 
 use super::Thread;
 use super::services::vfs_errno;
@@ -13,12 +19,13 @@ use crate::arch;
 use crate::fs::{self, OpenFile, OpenFlags};
 use crate::user::AnonShared;
 use crate::user::memory::PageSource;
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use core::any::Any;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::uring::{FileHandle, Instance, RingMemory, UringKernel};
+use poly_personality_linux::uring::{FileHandle, Instance, RingMemory, UringKernel, Watch};
 use poly_vfs::eventfd::EventFd;
+use poly_vfs::poll::{Registration, Waker};
 use poly_vfs::{FileObject, PollEvents, WaitQueue};
 
 const PAGE: usize = 4096;
@@ -106,6 +113,7 @@ impl RingMemory for Region {
 /// What a ring's descriptor is open on.
 pub struct RingFile {
     instance: Arc<Instance>,
+    queue: Arc<WaitQueue>,
 }
 
 impl core::fmt::Debug for RingFile {
@@ -123,19 +131,25 @@ impl FileObject for RingFile {
         Err(poly_vfs::Errno::EINVAL)
     }
 
-    /// Readable while the CQ ring holds CQEs (looked at when asked: CQEs
-    /// are posted by the threads that call io_uring_enter, which wake
-    /// nobody here).
+    /// Readable while the CQ ring holds CQEs, or while the instance is
+    /// kicked and has requests waiting (one of them is about to complete:
+    /// the poller's way back to user mode tries them, see the module
+    /// documentation); `POLLPRI` while kicked, which io_uring_enter's own
+    /// wait asks for.
     fn poll(&self) -> PollEvents {
         let mut e = PollEvents::WRITABLE;
-        if self.instance.cq_ready() > 0 {
+        let kicked = self.instance.kicked() && self.instance.has_pending();
+        if self.instance.cq_ready() > 0 || kicked {
             e = e | PollEvents::READABLE;
+        }
+        if kicked {
+            e = e | PollEvents::PRI;
         }
         e
     }
 
     fn wait_queue(&self) -> Option<&Arc<WaitQueue>> {
-        None
+        Some(&self.queue)
     }
 
     fn anon_name(&self) -> Option<&'static str> {
@@ -158,6 +172,40 @@ pub fn mapping(file: &OpenFile, offset: u64, len: u64) -> Option<Result<Arc<dyn 
     Some(Ok(source))
 }
 
+/// Counts the wake-ups of one file and kicks the instance at each.
+struct WatchWaker {
+    count: AtomicU64,
+    instance: Weak<Instance>,
+}
+
+impl Waker for WatchWaker {
+    fn wake(&self, _events: PollEvents) {
+        self.count.fetch_add(1, Ordering::SeqCst);
+        if let Some(i) = self.instance.upgrade() {
+            i.kick();
+        }
+    }
+}
+
+/// A waiting request's watch on its file ([`UringKernel::watch`]); the
+/// registration ends with it.
+pub struct FileWatch {
+    waker: Arc<WatchWaker>,
+    _registration: Registration,
+}
+
+impl core::fmt::Debug for FileWatch {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("FileWatch").field("count", &self.waker.count.load(Ordering::Relaxed)).finish()
+    }
+}
+
+impl Watch for FileWatch {
+    fn count(&self) -> u64 {
+        self.waker.count.load(Ordering::SeqCst)
+    }
+}
+
 impl UringKernel for Thread<'_> {
     fn ring_memory(&mut self, len: usize) -> Result<Arc<dyn RingMemory>, Errno> {
         let rounded = len.div_ceil(PAGE).max(1) * PAGE;
@@ -167,7 +215,10 @@ impl UringKernel for Thread<'_> {
     fn install_ring(&mut self, instance: Arc<Instance>) -> Result<i32, Errno> {
         let files = &self.process.files;
         let node = fs::vfs().anon_inode(0o600, &files.cred()).map_err(vfs_errno)?;
-        let file = Arc::new(OpenFile::on_object(node, Arc::new(RingFile { instance }), OpenFlags::RDWR));
+        let queue = Arc::new(WaitQueue::new());
+        let notify = Arc::clone(&queue);
+        instance.set_notifier(Arc::new(move || notify.notify(PollEvents::READABLE | PollEvents::PRI)));
+        let file = Arc::new(OpenFile::on_object(node, Arc::new(RingFile { instance, queue }), OpenFlags::RDWR));
         files.install(file, true).map_err(vfs_errno)
     }
 
@@ -199,5 +250,13 @@ impl UringKernel for Thread<'_> {
 
     fn handle_is_ring(&mut self, handle: &FileHandle) -> bool {
         handle.downcast_ref::<Arc<OpenFile>>().is_some_and(|f| f.object_as::<RingFile>().is_some())
+    }
+
+    fn watch(&mut self, fd: i32, events: u16, instance: &Arc<Instance>) -> Option<Arc<dyn Watch>> {
+        let file = self.process.files.file(fd).ok()?;
+        let queue = file.wait_queue()?;
+        let waker = Arc::new(WatchWaker { count: AtomicU64::new(0), instance: Arc::downgrade(instance) });
+        let registration = queue.register(PollEvents::from_bits(u32::from(events)), waker.clone());
+        Some(Arc::new(FileWatch { waker, _registration: registration }))
     }
 }

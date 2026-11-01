@@ -95,6 +95,15 @@ static __attribute__((unused)) i64 io_getevents(u64 ctx, i64 min, i64 nr, struct
                                                 struct k_timespec *ts) {
     return syscall5(SYS_io_getevents, ctx, min, nr, ev, ts);
 }
+/* struct __aio_sigset (linux/aio_abi.h). */
+struct k_aio_sigset {
+    const u64 *sigmask;
+    u64 sigsetsize;
+};
+static __attribute__((unused)) i64 io_pgetevents(u64 ctx, i64 min, i64 nr, struct k_io_event *ev,
+                                                 struct k_timespec *ts, struct k_aio_sigset *us) {
+    return syscall6(SYS_io_pgetevents, (i64)ctx, min, nr, (i64)ev, (i64)ts, (i64)us);
+}
 static __attribute__((unused)) i64 io_cancel(u64 ctx, struct k_iocb *cb, struct k_io_event *res) {
     return syscall3(SYS_io_cancel, ctx, cb, res);
 }
@@ -126,6 +135,13 @@ static __attribute__((unused)) i64 open3(const char *path, i64 flags, i64 mode) 
     return syscall4(SYS_openat, AT_FDCWD, path, flags, mode);
 }
 static __attribute__((unused)) i64 unlink_path(const char *path) { return syscall3(SYS_unlinkat, AT_FDCWD, path, 0); }
+/* fork that suspends the parent until the child exits (CLONE_VFORK
+ * without CLONE_VM), with SIGCHLD blocked so its arrival does not land at
+ * a varying point of the trace. */
+static __attribute__((unused)) i64 fork_sync(void) {
+    sig_mask(SIG_BLOCK, SIGBIT(SIGCHLD), 0);
+    return syscall5(SYS_clone, 0x4000 /* CLONE_VFORK */ | SIGCHLD, 0, 0, 0, 0);
+}
 /* Is the page at `p` mapped? (msync says ENOMEM for an unmapped range.) */
 static __attribute__((unused)) int page_mapped(u64 p) { return syscall3(SYS_msync, p, 4096, MS_ASYNC) == 0; }
 

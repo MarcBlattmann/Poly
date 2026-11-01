@@ -4,7 +4,10 @@
  * (or -errno) and res2 = 0. Reads past the end give 0, a write past the
  * end extends the file, a too-large count is cut at the end of file, and
  * an unreadable buffer completes with res = -EFAULT (the submit itself
- * succeeds).
+ * succeeds). A count is first capped at MAX_RW_COUNT (0x7ffff000) and the
+ * range [buf, buf + that) must lie inside the user address space (below
+ * 0x7ffffffff000), or the submit fails with EFAULT: so a huge count works
+ * with a buffer low in memory and fails with one near the top.
  */
 #include "poly_ipc.h"
 
@@ -95,6 +98,15 @@ static __attribute__((unused)) i64 io_getevents(u64 ctx, i64 min, i64 nr, struct
                                                 struct k_timespec *ts) {
     return syscall5(SYS_io_getevents, ctx, min, nr, ev, ts);
 }
+/* struct __aio_sigset (linux/aio_abi.h). */
+struct k_aio_sigset {
+    const u64 *sigmask;
+    u64 sigsetsize;
+};
+static __attribute__((unused)) i64 io_pgetevents(u64 ctx, i64 min, i64 nr, struct k_io_event *ev,
+                                                 struct k_timespec *ts, struct k_aio_sigset *us) {
+    return syscall6(SYS_io_pgetevents, (i64)ctx, min, nr, (i64)ev, (i64)ts, (i64)us);
+}
 static __attribute__((unused)) i64 io_cancel(u64 ctx, struct k_iocb *cb, struct k_io_event *res) {
     return syscall3(SYS_io_cancel, ctx, cb, res);
 }
@@ -126,6 +138,13 @@ static __attribute__((unused)) i64 open3(const char *path, i64 flags, i64 mode) 
     return syscall4(SYS_openat, AT_FDCWD, path, flags, mode);
 }
 static __attribute__((unused)) i64 unlink_path(const char *path) { return syscall3(SYS_unlinkat, AT_FDCWD, path, 0); }
+/* fork that suspends the parent until the child exits (CLONE_VFORK
+ * without CLONE_VM), with SIGCHLD blocked so its arrival does not land at
+ * a varying point of the trace. */
+static __attribute__((unused)) i64 fork_sync(void) {
+    sig_mask(SIG_BLOCK, SIGBIT(SIGCHLD), 0);
+    return syscall5(SYS_clone, 0x4000 /* CLONE_VFORK */ | SIGCHLD, 0, 0, 0, 0);
+}
 /* Is the page at `p` mapped? (msync says ENOMEM for an unmapped range.) */
 static __attribute__((unused)) int page_mapped(u64 p) { return syscall3(SYS_msync, p, 4096, MS_ASYNC) == 0; }
 
@@ -138,7 +157,9 @@ int test_main(void) {
     int fd = (int)open3(F, O_RDWR | O_CREAT | O_TRUNC, 0600);
     write(fd, "hello world", 11);
 
-    char buf[32];
+    /* Static, not on the stack: the huge-count check below needs the
+     * buffer far from the top of the address space (see the header). */
+    static char buf[32];
     memset(buf, 0, sizeof buf);
     struct k_iocb cb;
     struct k_io_event ev[4];
@@ -166,9 +187,16 @@ int test_main(void) {
     check("pread_past_eof_zero", n == 1 && ev[0].res == 0, ev[0].res);
 
     iocb_rw(&cb, IOCB_CMD_PREAD, fd, buf, 0x7fffffffffffffffUL, 0, 4);
-    check("huge_count_submit", submit1(ctx, &cb) == 1, 0);
+    i64 s = submit1(ctx, &cb);
+    check("huge_count_submit", s == 1, s);
     n = reap(ctx, ev, 4);
     check("huge_count_cut_at_eof", n == 1 && ev[0].res == 22, ev[0].res);
+
+    /* Near the top of the address space the capped range leaves it. */
+    iocb_rw(&cb, IOCB_CMD_PREAD, fd, (void *)0x7ffff0000000UL, 0x7fffffffffffffffUL, 0, 7);
+    s = submit1(ctx, &cb);
+    check("huge_count_high_buffer_efault", s == -EFAULT, s);
+    check("nothing_queued", reap(ctx, ev, 4) == 0, 0);
 
     iocb_rw(&cb, IOCB_CMD_PREAD, fd, (void *)8, 4, 0, 5);
     check("bad_buffer_submit_ok", submit1(ctx, &cb) == 1, 0);

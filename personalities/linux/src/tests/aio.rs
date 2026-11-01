@@ -50,7 +50,7 @@ fn contexts_rings_and_synchronous_reads() {
     let ctx = k.peek_u64(scratch(CTX));
     assert!(ctx != 0 && ctx.is_multiple_of(4096));
     assert_eq!(k.peek_u32(ctx + 16), AIO_RING_MAGIC);
-    assert_eq!(k.peek_u32(ctx + 4), 127, "a page of slots");
+    assert_eq!(k.peek_u32(ctx + 4), 383, "three pages of slots");
 
     // A read of /dir/file completes inside io_submit.
     let path = s(k, 0x800, b"/dir/file");

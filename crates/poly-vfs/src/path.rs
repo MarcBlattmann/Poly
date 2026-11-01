@@ -290,7 +290,9 @@ impl<'a> Walk<'a> {
 
     /// Counts a link against the limit and reads its target.
     pub(crate) fn link_target(&mut self, link: &Location) -> Result<Vec<u8>> {
-        if self.links_left == 0 {
+        // `MOUNT_ATTR_NOSYMFOLLOW` (`linux/mount.h`, mount_setattr(2)):
+        // symbolic links on the mount are not followed (`ELOOP`).
+        if self.links_left == 0 || link.mount.attrs() & crate::mount::ATTR_NOSYMFOLLOW != 0 {
             return Err(Errno::ELOOP);
         }
         self.links_left -= 1;

@@ -152,7 +152,7 @@ fn fid_groups_report_entries_with_info_records() {
     let (len, mask, fd, _) = evs[0];
     assert_eq!(fd, FAN_NOFD);
     assert_eq!(mask, u64::from(FAN_CREATE | FAN_DELETE));
-    assert_eq!(len, 24 + 4 + 8 + 8 + 8);
+    assert_eq!(len, 24 + 4 + 8 + 8 + 12, "the info record holds tmpfs's 12-byte handle");
     // A subdirectory entry needs FAN_ONDIR.
     env.mkdir("/d/sub");
     assert!(drain(&g).is_empty());

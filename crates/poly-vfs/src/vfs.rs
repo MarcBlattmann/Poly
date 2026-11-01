@@ -179,13 +179,22 @@ impl Vfs {
     /// root of the topmost one (repeatedly).
     pub(crate) fn follow_mounts(&self, mut loc: Location) -> Location {
         let table = self.mounts.lock();
-        for _ in 0..=table.mounts.len() {
-            match table.covering(loc.mount.id, loc.ino) {
-                Some(m) => loc = Location { mount: m.clone(), ino: m.root },
+        for _ in 0..=table.mounts.len() + 64 {
+            match Self::covering_of(&table, &loc) {
+                Some(m) => loc = Location { ino: m.root, mount: m },
                 None => break,
             }
         }
         loc
+    }
+
+    /// The topmost mount on `loc`: in the table, or among the mounts a
+    /// detached tree keeps ([`Mount::detached_covering`]).
+    pub(crate) fn covering_of(table: &crate::mount::MountTable, loc: &Location) -> Option<Arc<Mount>> {
+        match table.covering(loc.mount.id, loc.ino) {
+            Some(m) => Some(m.clone()),
+            None => loc.mount.detached_covering(loc.ino),
+        }
     }
 
     /// Looks `name` up in `dir`, without following mounts.
@@ -200,7 +209,7 @@ impl Vfs {
     }
 
     fn is_mount_point(&self, loc: &Location) -> bool {
-        self.mounts.lock().covering(loc.mount.id, loc.ino).is_some()
+        Self::covering_of(&self.mounts.lock(), loc).is_some()
     }
 
     fn start(ctx: &FsContext, at: At<'_>) -> Location {

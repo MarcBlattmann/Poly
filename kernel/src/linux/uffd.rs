@@ -5,10 +5,13 @@
 //! personality's `UffdState`; registrations live in the region map of the
 //! memory the object was made for (`poly_vm::Vma::uffd`, by the object's
 //! id). A missing page of a registered range makes `user::page_fault`
-//! call [`fault`]: the message is queued and the thread waits until the
-//! page is filled, the range is woken or unregistered, or the object is
+//! call [`fault`]: the message is queued and the thread waits until a
+//! wake covers its page (`UFFDIO_WAKE`, `UFFDIO_COPY` / `UFFDIO_ZEROPAGE`
+//! without `DONTWAKE`), the range is unregistered or the object is
 //! closed, and then resolves the fault again (or, with
-//! `UFFD_FEATURE_SIGBUS`, gets `SIGBUS` at once). Waits are on the
+//! `UFFD_FEATURE_SIGBUS`, gets `SIGBUS` at once). A fault the kernel takes
+//! inside a system call is not handled by an object made with
+//! `UFFD_USER_MODE_ONLY`: the copy fails with `EFAULT`. Waits are on the
 //! process event queue; everything that may end one bumps a generation
 //! counter and wakes that queue.
 
@@ -60,6 +63,12 @@ impl Uffd {
         process::wake_waiters();
     }
 
+    /// Wake the tasks blocked on pages of `[start, start + len)`.
+    fn wake(&self, start: u64, len: u64) {
+        self.state.lock().wake(start, len);
+        self.kick();
+    }
+
     fn memory(&self) -> Result<Arc<Memory>, Errno> {
         self.memory.upgrade().ok_or(Errno::EINVAL)
     }
@@ -80,22 +89,28 @@ impl Uffd {
             }
             UffdOp::Unregister { start, len } => {
                 self.memory()?.clear_userfault(start, len, self.id).map_err(|_| Errno::EINVAL)?;
-                self.kick();
+                self.wake(start, len);
                 Ok(UffdReply::Done)
             }
-            UffdOp::Wake { .. } => {
-                self.state.lock().wake();
-                self.kick();
+            UffdOp::Wake { start, len } => {
+                self.wake(start, len);
                 Ok(UffdReply::Done)
             }
-            UffdOp::Copy { dst, data } => {
+            UffdOp::Copy { dst, data, wake } => {
                 let filled = self.fill(dst, PAGE, Some(data));
-                self.kick();
+                if wake && matches!(filled, Ok(UffdReply::Filled(n)) if n > 0) {
+                    self.wake(dst, PAGE);
+                }
                 filled
             }
-            UffdOp::ZeroPage { start, len } => {
+            UffdOp::ZeroPage { start, len, wake } => {
                 let filled = self.fill(start, len, None);
-                self.kick();
+                if wake
+                    && let Ok(UffdReply::Filled(n)) = filled
+                    && n > 0
+                {
+                    self.wake(start, n);
+                }
                 filled
             }
         }
@@ -156,12 +171,12 @@ impl FileObject for Uffd {
 
 /// userfaultfd(2) for thread `t`: a new object for its memory, installed
 /// as a descriptor.
-pub fn create(t: &Thread<'_>, nonblock: bool, cloexec: bool) -> Result<i32, Errno> {
+pub fn create(t: &Thread<'_>, nonblock: bool, cloexec: bool, user_mode_only: bool) -> Result<i32, Errno> {
     let memory = crate::user::current_memory().ok_or(Errno::EINVAL)?;
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let object = Arc::new(Uffd {
         id,
-        state: SpinLock::new(UffdState::new()),
+        state: SpinLock::new(UffdState::with_user_mode_only(user_mode_only)),
         queue: Arc::new(WaitQueue::new()),
         memory: Arc::downgrade(&memory),
         nonblock,
@@ -169,7 +184,9 @@ pub fn create(t: &Thread<'_>, nonblock: bool, cloexec: bool) -> Result<i32, Errn
     OBJECTS.lock().insert(id, Arc::downgrade(&object));
     let files = &t.process().files;
     let node = fs::vfs().anon_inode(0o600, &files.cred()).map_err(vfs_errno)?;
-    let flags = if nonblock { OpenFlags::RDWR | OpenFlags::NONBLOCK } else { OpenFlags::RDWR };
+    // The description is read-only: F_GETFL shows `O_RDONLY` plus
+    // `O_NONBLOCK` if asked for; reads and ioctls need no more.
+    let flags = if nonblock { OpenFlags::RDONLY | OpenFlags::NONBLOCK } else { OpenFlags::RDONLY };
     let file = Arc::new(OpenFile::on_object(node, object, flags));
     files.install(file, cloexec).map_err(vfs_errno)
 }
@@ -183,16 +200,19 @@ pub fn op(t: &Thread<'_>, fd: i32, op: UffdOp<'_>) -> Option<Result<UffdReply, E
 }
 
 /// A fault at `addr` (`write` or read) by thread `tid` on a missing page
-/// registered with object `id`, in `memory`: report it and wait until the
-/// page may be there (see the module docs). `Ok` means: resolve the fault
-/// again. `SIGBUS` with `UFFD_FEATURE_SIGBUS`, or when the thread must end
-/// (`stop`) while it waits.
+/// registered with object `id`, in `memory`, taken in user mode or by the
+/// kernel inside a system call (`kernel`): report it and wait until a wake
+/// covers the page (see the module docs). `Ok` means: resolve the fault
+/// again. `SIGBUS` (`EFAULT` for a kernel fault) with
+/// `UFFD_FEATURE_SIGBUS`, for a kernel fault with `UFFD_USER_MODE_ONLY`,
+/// or when the thread must end (`stop`) while it waits.
 pub fn fault(
     memory: &Arc<Memory>,
     id: u32,
     addr: u64,
     write: bool,
     tid: u32,
+    kernel: bool,
     stop: &dyn Fn() -> bool,
 ) -> Result<(), FaultError> {
     let Some(object) = OBJECTS.lock().get(&id).and_then(Weak::upgrade) else {
@@ -200,30 +220,40 @@ pub fn fault(
         memory.forget_userfaults(id);
         return Ok(());
     };
-    let wakes = {
+    let ticket = {
         let mut state = object.state.lock();
-        if state.sigbus() {
+        if !state.handles(kernel) || state.sigbus() {
             return Err(FaultError::Bus);
         }
-        state.push_fault(addr, write, tid);
-        state.wakes()
+        state.push_fault(addr, write, tid)
     };
     object.queue.notify(PollEvents::READABLE);
     // Only a weak reference while waiting: closing the descriptor drops
     // the object, which ends the wait.
     let weak = Arc::downgrade(&object);
     drop(object);
+    let leave = |result| {
+        if let Some(o) = weak.upgrade() {
+            o.state.lock().leave(ticket);
+        }
+        result
+    };
     loop {
         let seen = GENERATION.load(Ordering::SeqCst);
         match weak.upgrade() {
             None => return Ok(()),
-            Some(o) if o.state.lock().wakes() != wakes || !memory.awaits_userfault(addr, id) => return Ok(()),
+            // Woken, or the page no longer faults to this object (its
+            // range was unregistered or unmapped).
+            Some(o) if o.state.lock().woken(ticket) || !memory.userfault_registered(addr, id) => {
+                drop(o);
+                return leave(Ok(()));
+            }
             Some(_) => {}
         }
         // Atomics only: the condition runs with the scheduler locked.
         process::wait_event(|| GENERATION.load(Ordering::SeqCst) != seen || stop());
         if stop() {
-            return Err(FaultError::Bus);
+            return leave(Err(FaultError::Bus));
         }
     }
 }

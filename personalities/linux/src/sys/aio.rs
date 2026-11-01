@@ -185,6 +185,9 @@ pub fn io_submit(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let slots = CONTEXTS.lock().get(space, id).map_or(0, |c| c.nr);
     let count = (count as u64).min(u64::from(slots));
     poll_pending(k, space, id)?;
+    // Events user space reaped itself (it advanced the ring's head) free
+    // their slots.
+    let _ = refresh_head(k, space, id);
     let mut done = 0;
     while done < count {
         let result = array
@@ -202,6 +205,21 @@ pub fn io_submit(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         }
     }
     Ok(done)
+}
+
+/// The end of x86-64 user space with 4-level paging (the last page below
+/// 2^47 is never user memory).
+const USER_SPACE_END: u64 = 0x7fff_ffff_f000;
+
+/// io_submit's range check for `PREAD`/`PWRITE` (the spec sheet's
+/// `buffer_range`): `[buf, buf + len)`, `len` already capped at
+/// `MAX_RW_COUNT`, must lie inside user space, or the submit fails with
+/// `EFAULT`; whether it is mapped is found out later, in the event.
+pub(crate) const fn in_user_space(buf: u64, len: u64) -> bool {
+    match buf.checked_add(len) {
+        Some(end) => end <= USER_SPACE_END,
+        None => false,
+    }
 }
 
 /// Queue the iocb at `at` (and, for everything but a poll, do it).
@@ -261,6 +279,9 @@ fn submit_one(k: &mut dyn LinuxKernel, space: u64, id: u64, at: u64) -> Result<(
                 load_iovecs(k, UserPtr(cb.buf), cb.nbytes as i32)?
             } else {
                 let len = cb.nbytes.min(MAX_RW_COUNT);
+                if !in_user_space(cb.buf, len) {
+                    return Err(Errno::EFAULT);
+                }
                 (alloc::vec![Iovec { base: cb.buf, len }], len)
             };
             room(space, id)?;
@@ -473,6 +494,16 @@ fn reap(k: &mut dyn LinuxKernel, space: u64, id: u64, max: u64, events: UserPtr)
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn buffer_range_is_checked_against_the_top_of_user_space() {
+        use super::{MAX_RW_COUNT, in_user_space};
+        assert!(in_user_space(0x60_0000, MAX_RW_COUNT), "a huge count with a low buffer");
+        assert!(!in_user_space(0x7fff_f000_0000, MAX_RW_COUNT), "the same count near the top");
+        assert!(in_user_space(0x7fff_ffff_e000, 0x1000));
+        assert!(!in_user_space(0x7fff_ffff_e000, 0x1001));
+        assert!(!in_user_space(u64::MAX, 1));
+    }
+
     use super::*;
 
     #[test]

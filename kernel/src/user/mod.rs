@@ -399,9 +399,13 @@ pub fn return_to_user() {
     let notified = flags.notified.load(Ordering::SeqCst);
     let suspended = flags.suspended.load(Ordering::SeqCst);
     let rseq = flags.rseq_notify.load(Ordering::Relaxed);
+    // io_uring requests wait for files (ADR 0122): the thread may run its
+    // process's on the way out.
+    let background = process.linux.is_some() && poly_personality_linux::Linux::background_pending();
     if !notified
         && !suspended
         && !rseq
+        && !background
         && !process.is_exiting()
         && !process.is_stopped()
         && !flags.killed.load(Ordering::SeqCst)
@@ -418,6 +422,9 @@ pub fn return_to_user() {
         crate::nt::wait_while_suspended(process.pid, tid);
     }
     leave_if_ended(process);
+    if background {
+        crate::linux::background(process);
+    }
     // rseq(2) (ADR 0111): the thread was switched out; a failure there
     // queues a signal, so the notification is read again.
     if rseq && flags.rseq_notify.swap(false, Ordering::Relaxed) && process.linux.is_some() {
@@ -624,11 +631,18 @@ pub fn current_memory() -> Option<Arc<Memory>> {
 }
 
 /// A page fault at the user address `addr` in the running thread, from
-/// ring 3 or from a user-copy routine, with interrupts on: resolve it
-/// against the thread's memory map ([`Memory::fault`]). On `Ok` the
-/// faulting instruction is retried; an error kills the thread, or makes the
-/// copy return [`Efault`].
+/// ring 3, with interrupts on: see [`page_fault_in`].
 pub fn page_fault(addr: u64, access: memory::Access) -> Result<(), FaultError> {
+    page_fault_in(addr, access, false)
+}
+
+/// A page fault at the user address `addr` in the running thread, from
+/// ring 3 or (`kernel`) from a user-copy routine or another kernel access
+/// to user memory, with interrupts on: resolve it against the thread's
+/// memory map ([`Memory::fault`]). On `Ok` the faulting instruction is
+/// retried; an error kills the thread, or makes the copy return
+/// [`Efault`].
+pub fn page_fault_in(addr: u64, access: memory::Access, kernel: bool) -> Result<(), FaultError> {
     let memory = current_memory().ok_or(FaultError::NoMemoryMap)?;
     let mut result = memory.fault(addr, access);
     // A missing page of a userfaultfd(2) range: the object hears of it and
@@ -638,8 +652,8 @@ pub fn page_fault(addr: u64, access: memory::Access) -> Result<(), FaultError> {
         let (process, flags, tid) = current().ok_or(FaultError::Bus)?;
         let stop = || flags.killed.load(core::sync::atomic::Ordering::SeqCst) || process.is_exiting();
         let write = access == memory::Access::Write;
-        result =
-            crate::linux::uffd::fault(&memory, uffd, addr, write, tid, &stop).and_then(|()| memory.fault(addr, access));
+        result = crate::linux::uffd::fault(&memory, uffd, addr, write, tid, kernel, &stop)
+            .and_then(|()| memory.fault(addr, access));
     }
     match result {
         Ok(()) => {

@@ -166,6 +166,22 @@ impl Linux {
         signal::exit_to_user(kernel)
     }
 
+    /// Whether [`background`](Self::background) has anything to do for
+    /// some process: the kernel asks before it calls it, after every
+    /// system call and on the way back from interrupts.
+    pub fn background_pending() -> bool {
+        uring::exec::parked_anywhere()
+    }
+
+    /// Called by the kernel on a thread's way back to user mode (after a
+    /// system call, before [`exit_to_user`](Self::exit_to_user); after an
+    /// interrupt) while [`background_pending`](Self::background_pending):
+    /// io_uring requests of its process that waited for a file run now if
+    /// it became ready ([`uring::exec::background`]).
+    pub fn background(kernel: &mut dyn LinuxKernel) {
+        uring::exec::background(kernel);
+    }
+
     /// Called by the kernel before a thread with an rseq(2) registration
     /// ([`LinuxKernel::rseq_registered`]) returns to user mode after it
     /// was switched out (preempted, blocked or moved to another CPU), and

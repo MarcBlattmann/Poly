@@ -142,8 +142,8 @@ impl Thread<'_> {
     pub(super) fn mnt_open_tree(&mut self, at: &PathAt, clone: Option<bool>, cloexec: bool) -> Result<i32, Errno> {
         let vfs = fs::vfs();
         let mut node = self.resolve_at(at)?;
-        if clone.is_some() {
-            let m = vfs.clone_mount(&self.process().files.cred(), &node).map_err(vfs_errno)?;
+        if let Some(recursive) = clone {
+            let m = vfs.clone_mount(&self.process().files.cred(), &node, recursive).map_err(vfs_errno)?;
             node = vfs.mount_root_node(&m).map_err(vfs_errno)?;
         }
         self.install_file(vfs.open_path(node), cloexec)

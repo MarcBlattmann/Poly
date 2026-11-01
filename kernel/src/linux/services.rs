@@ -801,7 +801,7 @@ impl LinuxKernel for Thread<'_> {
         // Bring the page in writable first if that may block here; under the
         // futex table's lock (interrupts off) it must be present already.
         if crate::arch::cpu::interrupts_enabled() {
-            let _ = user::page_fault(addr.0, Access::Write);
+            let _ = user::page_fault_in(addr.0, Access::Write, true);
         }
         // Atomic on the user word: other threads of the process may run on
         // other CPUs meanwhile.
@@ -1044,8 +1044,8 @@ impl LinuxKernel for Thread<'_> {
         super::memcalls::cachestat(self, fd, first, end)
     }
 
-    fn userfaultfd(&mut self, nonblock: bool, cloexec: bool) -> Result<i32, Errno> {
-        super::uffd::create(self, nonblock, cloexec)
+    fn userfaultfd(&mut self, nonblock: bool, cloexec: bool, user_mode_only: bool) -> Result<i32, Errno> {
+        super::uffd::create(self, nonblock, cloexec, user_mode_only)
     }
 
     fn userfaultfd_op(

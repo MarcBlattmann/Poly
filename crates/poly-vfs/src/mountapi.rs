@@ -7,7 +7,10 @@
 //! `O_PATH` files open on its root ([`Vfs::open_path`]) hold it, and it
 //! goes (with the file system, if nothing else holds that) when the last
 //! of them is closed. Attaching it ([`Vfs::move_mount`]) puts it in the
-//! table, which then keeps it.
+//! table, which then keeps it. A recursive clone's copies of submounts
+//! are kept by the detached top ([`Mount::subtree`]), point back to their
+//! parents weakly, and are found by path lookups through the top's list;
+//! attaching the top moves them into the table.
 //!
 //! Moving: a mount's mount point can change ([`Mount::parent`]); the table
 //! is then put back in an order where every mount follows the mount it is
@@ -46,17 +49,69 @@ impl Vfs {
     /// `open_tree(OPEN_TREE_CLONE)`: a detached copy of the mount `node`
     /// is on, showing the subtree from `node` (its root, or any directory
     /// below it, like a bind mount's source), with the same per-mount
-    /// attributes. Mounts below are not copied (`AT_RECURSIVE` is
-    /// accepted and copies only the top mount).
-    pub fn clone_mount(&self, cred: &Cred, node: &NodeRef) -> Result<Arc<Mount>> {
+    /// attributes. With `recursive` (`AT_RECURSIVE`) the mounts below
+    /// `node` are copied too, at any depth, on the same mount points of
+    /// the copies; the copy's top keeps them ([`Mount::subtree`]) until it
+    /// is attached or its last descriptor is closed.
+    pub fn clone_mount(&self, cred: &Cred, node: &NodeRef, recursive: bool) -> Result<Arc<Mount>> {
         if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
         }
         let loc = node.loc();
-        let src = &loc.mount;
-        let m = self.mounts.lock().new_mount(src.sb.clone(), loc.ino, None, src.flags());
+        let src = loc.mount.clone();
+        let (m, direct) = {
+            let mut table = self.mounts.lock();
+            let m = table.new_mount(src.sb.clone(), loc.ino, None, src.flags());
+            let direct = if recursive { Self::children_of(&table, &src) } else { Vec::new() };
+            (m, direct)
+        };
         m.set_attrs(src.attrs());
+        if direct.is_empty() {
+            return Ok(m);
+        }
+        // Only the mounts on mount points at or below `node`.
+        let below: Vec<Arc<Mount>> = direct
+            .into_iter()
+            .filter(|c| c.parent().is_some_and(|(p, ino)| self.is_at_or_below(&Location { mount: p, ino }, loc)))
+            .collect();
+        let mut kept = Vec::new();
+        {
+            let mut table = self.mounts.lock();
+            let mut queue: Vec<(Arc<Mount>, Arc<Mount>)> = below.into_iter().map(|c| (c, m.clone())).collect();
+            let mut i = 0;
+            while i < queue.len() && kept.len() < 4096 {
+                let (old, new_parent) = queue[i].clone();
+                i += 1;
+                let Some((_, ino)) = old.parent() else { continue };
+                let copy = table.new_mount(old.sb.clone(), old.root, None, old.flags());
+                copy.set_attrs(old.attrs());
+                copy.set_weak_parent(&new_parent, ino);
+                queue.extend(Self::children_of(&table, &old).into_iter().map(|c| (c, copy.clone())));
+                kept.push(copy);
+            }
+        }
+        m.set_subtree(kept);
         Ok(m)
+    }
+
+    /// The mounts directly on `m` (in the table, or kept by the detached
+    /// tree `m` is in), in mount order.
+    fn children_of(table: &crate::mount::MountTable, m: &Arc<Mount>) -> Vec<Arc<Mount>> {
+        let mut out: Vec<Arc<Mount>> = table.mounts.iter().filter(|c| c.is_on(m.id, None)).cloned().collect();
+        out.extend(m.top().subtree().into_iter().filter(|c| c.is_on(m.id, None)));
+        out
+    }
+
+    /// Whether `m` is below `top` (at any depth), not `top` itself.
+    fn is_below(m: &Arc<Mount>, top: &Arc<Mount>) -> bool {
+        let mut cur = m.parent().map(|(p, _)| p);
+        while let Some(c) = cur {
+            if Arc::ptr_eq(&c, top) {
+                return true;
+            }
+            cur = c.parent().map(|(p, _)| p);
+        }
+        false
     }
 
     /// Whether `m` is attached (in a tree of the table), not detached.
@@ -84,9 +139,15 @@ impl Vfs {
         let m = src.mount.clone();
         let mut table = self.mounts.lock();
         if !table.contains(&m) {
-            // A detached mount: attach it.
+            // A detached mount: attach it, with what its tree keeps below.
+            if m.parent().is_some() {
+                // Below the top of a detached tree: not supported.
+                return Err(Errno::EINVAL);
+            }
             m.set_parent(Some((dst.mount.clone(), dst.ino)));
-            table.mounts.push(m);
+            table.mounts.push(m.clone());
+            let below = m.take_subtree();
+            table.mounts.extend(below);
             return Ok(());
         }
         if m.parent().is_none() {
@@ -216,6 +277,7 @@ impl Vfs {
         let mut out = alloc::vec![m.clone()];
         if recursive {
             out.extend(self.mounts.lock().descendants(m.id));
+            out.extend(m.top().subtree().into_iter().filter(|c| Self::is_below(c, m)));
         }
         out
     }

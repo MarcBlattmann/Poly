@@ -13,9 +13,15 @@
 //! There is no worker thread: requests run in the thread that submits
 //! them. One that cannot finish at once (a read of an empty pipe, a poll,
 //! a timeout) waits in the instance's pending list and is tried again on
-//! every io_uring_enter(2); a `GETEVENTS` wait sleeps in a poll(2) of the
-//! pending requests' descriptors until one is ready, a timeout is due or a
-//! signal comes ([`exec`]).
+//! every io_uring_enter(2), and also by its process's threads on their way
+//! back to user mode after any system call or interrupt
+//! ([`exec::background`]), so a request completes soon after its file
+//! becomes ready even if the program never enters again, as Linux's
+//! asynchronous completion promises. A `GETEVENTS` wait sleeps in a
+//! poll(2) of the pending requests' descriptors until one is ready, a
+//! timeout is due or a signal comes ([`exec`]). The kernel watches the
+//! files of waiting requests ([`UringKernel::watch`]): a wake-up of one
+//! kicks the instance, which wakes whoever polls the ring's descriptor.
 //!
 //! Layouts and constants are those of the UAPI header `linux/io_uring.h`.
 
@@ -27,7 +33,7 @@ pub mod ring;
 mod tests;
 
 pub use abi::{Cqe, Layout, Params, Sqe};
-pub use ring::{Instance, Pending, Wait};
+pub use ring::{Instance, Notifier, Pending, Wait};
 
 use crate::errno::Errno;
 use alloc::sync::Arc;
@@ -68,6 +74,14 @@ pub trait RingMemory: Send + Sync + core::fmt::Debug {
     fn as_any(&self) -> &dyn Any;
 }
 
+/// The kernel's watch on the file of a waiting request: it counts the
+/// file's wake-ups (for the events the request asks for) and kicks the
+/// instance ([`Instance::kick`]) at each. Dropping it ends the watch.
+pub trait Watch: Send + Sync + core::fmt::Debug {
+    /// Wake-ups so far.
+    fn count(&self) -> u64;
+}
+
 /// What io_uring needs from the kernel beyond [`LinuxKernel`]: ring
 /// memory, the ring's file descriptor, and references to open files.
 ///
@@ -103,4 +117,12 @@ pub trait UringKernel {
     /// Whether `handle` refers to an io_uring instance (which cannot be
     /// registered as a file).
     fn handle_is_ring(&mut self, handle: &FileHandle) -> bool;
+
+    /// Watch the file open as `fd` for wake-ups with `events` on behalf of
+    /// `instance`; `None` if the file has nothing to watch (a regular file
+    /// is always ready) or is not open.
+    fn watch(&mut self, fd: i32, events: u16, instance: &Arc<Instance>) -> Option<Arc<dyn Watch>> {
+        let _ = (fd, events, instance);
+        None
+    }
 }

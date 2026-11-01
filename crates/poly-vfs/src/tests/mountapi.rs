@@ -76,7 +76,7 @@ fn a_clone_shares_the_file_system() {
     env.mkdir("/a");
     env.new_tmpfs("/a");
     env.mkdir("/a/dir");
-    let c = env.vfs.clone_mount(&env.root, &env.found("/a/dir")).unwrap();
+    let c = env.vfs.clone_mount(&env.root, &env.found("/a/dir"), false).unwrap();
     let root = env.vfs.mount_root_node(&c).unwrap();
     env.vfs.open(&env.ctx, &env.root, At::Node(&root), b"f", OpenFlags::CREAT | OpenFlags::RDWR, 0o644).unwrap();
     assert!(env.stat("/a/dir/f").is_ok());
@@ -172,3 +172,66 @@ fn copies_keep_attributes() {
 
 /// `ST_NODIRATIME` (`sys/statvfs.h`).
 const ST_NODIRATIME_BIT: u64 = 2048;
+
+#[test]
+fn a_recursive_clone_keeps_its_submounts_until_attached_or_closed() {
+    let env = Env::new();
+    env.mkdir("/a");
+    env.new_tmpfs("/a");
+    env.mkdir("/a/s");
+    env.new_tmpfs("/a/s");
+    env.mkdir("/a/s/t");
+    env.new_tmpfs("/a/s/t");
+    env.write("/a/s/t/f", b"deep");
+    env.mkdir("/a/other");
+    env.new_tmpfs("/a/other");
+    // Plain clone: the submount is not there.
+    let flat = env.vfs.clone_mount(&env.root, &env.found("/a"), false).unwrap();
+    let flat_root = env.vfs.mount_root_node(&flat).unwrap();
+    assert_eq!(env.vfs.lookup(&env.ctx, &env.root, At::Node(&flat_root), b"s/t/f", true).err(), Some(Errno::ENOENT));
+    // Recursive: both levels, found through the detached top.
+    let c = env.vfs.clone_mount(&env.root, &env.found("/a"), true).unwrap();
+    let root = env.vfs.mount_root_node(&c).unwrap();
+    let f = env.vfs.lookup(&env.ctx, &env.root, At::Node(&root), b"s/t/f", true).unwrap();
+    assert!(!Arc::ptr_eq(f.mount(), env.found("/a/s/t/f").mount()), "a copy of the mount, not the mount");
+    assert_eq!(env.vfs.mount_subtree(&c, true).len(), 4, "top, s, t, other");
+    // A clone of a directory takes only what is mounted below it.
+    let part = env.vfs.clone_mount(&env.root, &env.found("/a/s"), true).unwrap();
+    assert_eq!(env.vfs.mount_subtree(&part, true).len(), 2);
+    // Attached: the table keeps them all.
+    env.mkdir("/b");
+    env.vfs.move_mount(&env.root, &root, &env.found("/b")).unwrap();
+    drop((f, root));
+    drop(c);
+    assert_eq!(env.read("/b/s/t/f").unwrap(), b"deep");
+    // Closed without attaching: the copies go with the top.
+    let weak = {
+        let d = env.vfs.clone_mount(&env.root, &env.found("/a"), true).unwrap();
+        let below = d.subtree();
+        assert_eq!(below.len(), 3);
+        Arc::downgrade(&below[0])
+    };
+    assert!(weak.upgrade().is_none());
+}
+
+#[test]
+fn nosymfollow_and_the_access_time_mode_in_statfs() {
+    let env = Env::new();
+    env.mkdir("/a");
+    env.new_tmpfs("/a");
+    env.write("/a/f", b"x");
+    env.symlink("f", "/a/l");
+    let m = env.found("/a").mount().clone();
+    assert_eq!(env.found("/a").statfs().unwrap().flags & crate::ST_RELATIME, crate::ST_RELATIME);
+    m.set_attrs(0x10);
+    let flags = env.found("/a").statfs().unwrap().flags;
+    assert_eq!(flags & (crate::ST_RELATIME | 1024), 1024, "noatime: ST_NOATIME, no ST_RELATIME");
+    m.set_attrs(0x20);
+    assert_eq!(env.found("/a").statfs().unwrap().flags & (crate::ST_RELATIME | 1024), 0, "strictatime: neither");
+    m.set_attrs(crate::mount::ATTR_NOSYMFOLLOW);
+    assert_eq!(env.read("/a/l").err(), Some(Errno::ELOOP));
+    assert_eq!(env.read("/a/f").unwrap(), b"x");
+    assert!(env.vfs.lookup(&env.ctx, &env.root, At::Cwd, b"/a/l", false).is_ok(), "the link itself");
+    m.set_attrs(0);
+    assert_eq!(env.read("/a/l").unwrap(), b"x");
+}
