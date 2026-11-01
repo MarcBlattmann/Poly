@@ -47,6 +47,10 @@
 //!   root-disk           write the persistent root disk image target/poly-root-disk.img
 //!                       (the host's bash, coreutils, Python, gcc; rootdisk.rs)
 //!   root-disk-test      only the root disk boot test of `test` (rootdisk.rs)
+//!   toolkits [--release] [--fresh-disk] [STEP...]
+//!                       boot the toolkits' root disk (GTK, Qt, VLC; toolkits.rs, ADR 0120)
+//!                       to the desktop and the console's bash, and run the steps
+//!                       (run:LINE send:LINE expect:TEXT shot:NAME click:X,Y key:QCODE sleep:S)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -103,6 +107,7 @@ mod sound;
 mod symbols;
 mod sysmsg;
 mod terminal;
+mod toolkits;
 mod wayland;
 mod win32;
 mod winimports;
@@ -183,9 +188,10 @@ fn main() -> ExitCode {
         Some("busybox-test") => busybox_test(),
         Some("root-disk") => rootdisk::command(),
         Some("root-disk-test") => root_disk_test(),
+        Some("toolkits") => toolkits::command(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test|toolkits> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -952,6 +958,9 @@ fn boot_typing_once(
     Ok(Boot { status, output: rest, timed_out })
 }
 
+/// How long the long line [`shell_test`] types is, in bytes.
+const LONG_LINE: usize = 700;
+
 /// Type commands into the kernel shell on the serial port and check what
 /// they print; `reboot` ends the boot (QEMU runs with `-no-reboot`).
 fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
@@ -960,6 +969,15 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let append = format!("poly.qemu_exit {SHELL_FLAG} poly.test=shell:: {}", devices.flags());
     let initrd = programs::test_initramfs()?;
     let qemu_args = ["-initrd".to_string(), initrd.display().to_string()];
+    // A line far longer than the kernel's serial input ring (256 bytes),
+    // typed ahead while the shell is busy with a kernel test that spins
+    // for a fifth of a second at least: it must arrive whole, the UART held
+    // back while the ring is full (ADR 0123). The empty step takes the
+    // prompt after the test, so the next command is sent after the line's
+    // prompt.
+    let long_text: String =
+        (0..LONG_LINE).map(|i| char::from(b"0123456789abcdefghijklmnopqrstuvwxyz"[i % 36])).collect();
+    let typed_ahead = format!("test timer_ticks_at_the_expected_rate\recho {long_text}\r");
     let commands = [
         "help\r",
         "uptime\r",
@@ -972,6 +990,8 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         "ls /test\r",
         "cat /etc/motd\r",
         "run /bin/hello\r",
+        typed_ahead.as_str(),
+        "",
         "reboot\r",
     ];
     let steps: Vec<_> = commands.iter().map(|&c| (console::PROMPT, c)).collect();
@@ -988,7 +1008,7 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         ));
     }
     let out = |i: usize| ex[i].output;
-    let checks: [(&str, bool); 11] = [
+    let checks: [(&str, bool); 13] = [
         (
             "help lists the commands",
             ["uptime ", "lspci ", "reboot ", "list the commands"].iter().all(|s| out(0).contains(s)),
@@ -1014,10 +1034,19 @@ fn shell_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             "run starts /bin/hello and reports its exit",
             out(9).contains(programs::HELLO_OUTPUT) && out(9).ends_with("/bin/hello: exit status 0\n"),
         ),
-        ("reboot uses the ACPI reset register", out(10).contains("reboot: ACPI reset register")),
+        ("the tests run again", out(10).contains("test result: ok.")),
+        ("a line typed ahead, longer than the serial input ring, arrives whole", out(11).trim_end() == long_text),
+        ("reboot uses the ACPI reset register", out(12).contains("reboot: ACPI reset register")),
     ];
     for (what, ok) in checks {
         if !ok {
+            if what.starts_with("a line typed ahead") {
+                let got = out(11).trim_end();
+                return Err(format!(
+                    "shell over the serial port: {what} failed ({} of {LONG_LINE} bytes: {got:?})",
+                    got.len()
+                ));
+            }
             return Err(format!("shell over the serial port: {what} failed"));
         }
     }
@@ -1406,7 +1435,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 31] = [
+const BOOT_GROUPS: [BootGroup; 32] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1449,6 +1478,9 @@ const BOOT_GROUPS: [BootGroup; 31] = [
     // X11 apps through Xwayland on the desktop, from the root disk
     // (xwayland.rs, ADR 0118).
     ("xwayland", xwayland::boot_test),
+    // GTK 3, GTK 4 and Qt apps on the desktop from the toolkits' root disk,
+    // and VLC playing a video with sound (toolkits.rs, ADR 0120).
+    ("toolkits", toolkits::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1515,6 +1547,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
             "desktop-shell",
             "mesa",
             "xwayland",
+            "toolkits",
         ],
     ),
     (

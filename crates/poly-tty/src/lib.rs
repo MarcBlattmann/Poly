@@ -24,6 +24,7 @@
 //!   and what terminals share (the controlling terminal of each session).
 //! - [`pty`]: `/dev/ptmx`, masters and slaves; [`devpts`]: `/dev/pts`.
 //! - [`device`]: the nodes that stand for terminals.
+//! - [`rx`]: a serial port's receive ring, with flow control (ADR 0123).
 //!
 //! Sources: termios(3), ioctl_tty(2) (tty_ioctl(4)), pty(7), pts(4),
 //! credentials(7), tty(4), console(4), ttyS(4), grantpt(3), unlockpt(3),
@@ -44,6 +45,7 @@ pub mod hw;
 pub mod ioctl;
 pub mod ldisc;
 pub mod pty;
+pub mod rx;
 pub mod termios;
 mod tty;
 

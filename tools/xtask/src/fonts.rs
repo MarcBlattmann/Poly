@@ -284,3 +284,29 @@ fn render(args: &[String]) -> Result {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The real fontconfig (the host's `fc-match`; GTK and Qt link the same
+    /// library on the toolkits' disk, ADR 0120) reads Poly's `fonts.conf`
+    /// without a warning. Skipped where the host has no fontconfig.
+    #[test]
+    fn real_fontconfig_reads_polys_fonts_conf_quietly() {
+        let dir = std::env::temp_dir().join(format!("poly-fc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let conf = dir.join("fonts.conf");
+        std::fs::write(&conf, POLY_FONTS_CONF).unwrap();
+        let out = Command::new("fc-match")
+            .env("FONTCONFIG_FILE", &conf)
+            .env("XDG_CACHE_HOME", &dir)
+            .arg("Arial")
+            .stdout(Stdio::null())
+            .output();
+        let _ = std::fs::remove_dir_all(&dir);
+        let Ok(out) = out else { return };
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!stderr.contains("Fontconfig"), "fontconfig complained about fonts.conf: {stderr}");
+    }
+}

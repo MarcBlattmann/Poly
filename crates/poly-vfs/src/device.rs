@@ -38,6 +38,16 @@ pub trait CharDevice: Send + Sync {
         Err(Errno::ENOTTY)
     }
 
+    /// [`ioctl`](Self::ioctl), told whether the open file is non-blocking
+    /// now, for requests that may block (a sound card's transfers and
+    /// drain): `O_NONBLOCK` is the open file's and can change after the
+    /// open (`fcntl(F_SETFL)`; alsa-lib opens a PCM non-blocking and then
+    /// clears it). The open file calls this one; the default ignores the
+    /// flag.
+    fn ioctl_nonblock(&self, request: u32, arg: u64, _nonblock: bool) -> Result<u64> {
+        self.ioctl(request, arg)
+    }
+
     /// What the device is ready for now (`poll(2)`); always ready to read
     /// and write by default, like the memory devices.
     fn poll(&self) -> PollEvents {

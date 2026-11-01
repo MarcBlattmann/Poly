@@ -419,6 +419,12 @@ pub fn disk_root_image(busybox: &[u8]) -> Vec<u8> {
     busybox_image_with(busybox, DISK_ROOT_INITTAB, &[("etc/init.d/rootdisk", ROOTDISK_SCRIPT)])
 }
 
+/// [`disk_root_image`] with another `/etc/inittab` (the toolkits' disk
+/// starts the desktop in the chroot too; `toolkits.rs`).
+pub fn disk_root_image_with(busybox: &[u8], inittab: &str) -> Vec<u8> {
+    busybox_image_with(busybox, inittab, &[("etc/init.d/rootdisk", ROOTDISK_SCRIPT)])
+}
+
 /// [`busybox_image`] with another `/etc/inittab` and more scripts in it.
 fn busybox_image_with(busybox: &[u8], inittab: &str, scripts: &[(&str, &str)]) -> Vec<u8> {
     let mut w = writer();

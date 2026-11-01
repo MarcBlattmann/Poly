@@ -755,7 +755,11 @@ impl Server {
         }
         let previous = self.active.replace((c, tl));
         if previous == Some((c, tl)) {
+            // It may have been given the focus before it had a window (an
+            // activation request before the first map): the window is
+            // shown active now.
             if let Some(w) = self.toplevel_window(c, tl) {
+                self.scene.set_active(w, true);
                 self.scene.raise(w);
             }
             return;
