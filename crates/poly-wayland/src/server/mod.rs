@@ -71,8 +71,7 @@ use crate::protocol::{
     wp_fractional_scale_manager_v1, wp_fractional_scale_v1, wp_presentation, wp_presentation_feedback, wp_viewport,
     wp_viewporter, xdg_activation_token_v1, xdg_activation_v1, xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel,
     xdg_wm_base, xwayland_shell_v1, xwayland_surface_v1, zwp_linux_buffer_params_v1, zwp_linux_dmabuf_feedback_v1,
-    zwp_linux_dmabuf_v1,
-    zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
+    zwp_linux_dmabuf_v1, zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
 };
 use crate::seat::{Capabilities, InputEvent};
 use crate::wire::{self, Arg, ArgKind, Fd, Fixed, Header, Interface, Message, ObjectId, SERVER_ID_START};
@@ -566,6 +565,9 @@ impl Server {
             self.active = None;
             self.focus_next();
         }
+        if self.xwayland_client() == Some(c) {
+            self.set_xwayland_client(None);
+        }
     }
 
     /// The scene window showing client `c`'s surface, while it is shown.
@@ -603,9 +605,6 @@ impl Server {
         {
             self.seat.cursor = Some(cursor::CursorRequest::Hidden);
             self.update_cursor_look();
-        }
-        if self.xwayland_client() == Some(c) {
-            self.set_xwayland_client(None);
         }
     }
 
