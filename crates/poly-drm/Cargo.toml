@@ -1,0 +1,11 @@
+[package]
+name = "poly-drm"
+description = "Linux DRM/KMS core: the drm.h / drm_mode.h ioctl encoding, mode objects (CRTCs, encoders, connectors, planes, framebuffers, properties, blobs), GEM handles and dumb buffers, modes from EDID and CVT, legacy and atomic modesetting, vblank and page-flip events, master and render-node rules, behind a hardware trait"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

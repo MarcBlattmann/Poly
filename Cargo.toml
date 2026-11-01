@@ -19,6 +19,7 @@ members = [
     "crates/poly-ext2",
     "crates/poly-fbdev",
     "crates/poly-cpio",
+    "crates/poly-drm",
     "crates/poly-font",
     "crates/poly-bochs-vbe",
     "crates/poly-gfx",
@@ -96,6 +97,7 @@ poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-fbdev = { path = "crates/poly-fbdev" }
 poly-cpio = { path = "crates/poly-cpio" }
+poly-drm = { path = "crates/poly-drm" }
 poly-font = { path = "crates/poly-font" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
 poly-gfx = { path = "crates/poly-gfx" }

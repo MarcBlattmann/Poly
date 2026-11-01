@@ -70,7 +70,7 @@ impl Memory {
                     // memories keep in `shared` while they map it; every
                     // path that drops such an entry unmaps the page first.
                     let Some(frame) = (unsafe { self.space.disown(page, ro, &mut sync.flush) }) else { continue };
-                    let frame = Arc::new(SharedFrame(frame));
+                    let frame = Arc::new(SharedFrame::owned(frame));
                     inner.shared.insert(page, SharedPage { frame: Arc::clone(&frame), mapped: true });
                     map_shared_into(&space, &mut child, page, frame, ro)?;
                 } else if let Some(s) = inner.shared.get(&page) {
@@ -99,7 +99,7 @@ impl Memory {
         }
         let parked: Vec<u64> = inner.parked.keys().copied().filter(|&p| !wiped(&inner, p)).collect();
         for page in parked {
-            let frame = Arc::new(SharedFrame(inner.parked.remove(&page).expect("listed above")));
+            let frame = Arc::new(SharedFrame::owned(inner.parked.remove(&page).expect("listed above")));
             inner.shared.insert(page, SharedPage { frame: Arc::clone(&frame), mapped: false });
             child.shared.insert(page, SharedPage { frame, mapped: false });
         }
@@ -170,8 +170,13 @@ impl Memory {
     /// use it.
     fn take_back(&self, inner: &mut Inner, page: u64, prot: Prot) -> Option<Result<(), FaultError>> {
         let s = inner.shared.remove(&page)?;
-        let frame = match Arc::try_unwrap(s.frame) {
-            Ok(SharedFrame(frame)) => frame,
+        // Device memory is never taken over: it is copied instead.
+        let frame = match Arc::try_unwrap(s.frame).map(SharedFrame::into_owned) {
+            Ok(Ok(frame)) => frame,
+            Ok(Err(device)) => {
+                inner.shared.insert(page, SharedPage { frame: Arc::new(device), mapped: s.mapped });
+                return None;
+            }
             Err(frame) => {
                 inner.shared.insert(page, SharedPage { frame, mapped: s.mapped });
                 return None;

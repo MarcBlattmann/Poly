@@ -36,6 +36,7 @@ what exists **today** and how it fits that plan.
             input: event layer (poly-input hub), PS/2 keyboard and mouse (IRQ 1, 12), virtio-input; /dev/input/event*
             display: RAM back buffer onto virtio-gpu (2D resource) or the QEMU standard VGA framebuffer;
                      poly-gfx (drawing, font, text grid)
+            DRM/KMS: /dev/dri/card0, renderD128 on the virtio GPU (poly-drm), dumb buffers, PRIME, vblank thread
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
                          syscall/sysret, FPU state, context switch, AP start-up, per-CPU data)
 ```
@@ -969,6 +970,52 @@ the mode is the preferred one, a pattern goes out as one accepted update,
 and a switch to a larger size and back keeps the picture. Boot group
 `virtio-gpu` then compares a QMP screenshot of the scanout with the boot
 screen.
+
+### DRM/KMS
+
+`/dev/dri/card0` (226:0) and `/dev/dri/renderD128` (226:128) are a Linux
+DRM device on the same virtio GPU
+([ADR 0108](adr/0108-drm-kms-device-on-virtio-gpu.md)), for KMS clients
+(compositors, Mesa's GBM, `modetest`):
+
+```
+ ioctl / read / poll / mmap on /dev/dri/*  (kernel/src/drm.rs: DrmFile, DmaBuf, drm-vblank thread)
+          │
+          ▼
+ poly_drm::Device      uapi decode (min(user, kernel) size) ─▶ master / render-node checks
+   CRTC i ─ encoder i ─ connector i ─ primary plane i   (one per virtio scanout), properties, blobs
+   GEM objects (dumb buffers: contiguous frames) ─▶ framebuffers ─▶ State ──commit──▶ Hardware
+   per-file events (flip complete, vblank) on a virtual vblank clock per CRTC (the mode's refresh)
+          │ KernelHw: display::with_gpu
+          ▼
+ virtio-gpu  resource 0x1000 + fb ID ── TRANSFER_TO_HOST_2D, SET_SCANOUT, RESOURCE_FLUSH
+             (the console's resource waits: display::console_yield / console_restore)
+```
+
+- **`poly-drm`** (host-tested, `no_std` + `alloc`): the `drm.h` /
+  `drm_mode.h` structures and request numbers, modes from EDID and CVT,
+  the object model, legacy and atomic modesetting through one commit,
+  dumb buffers and their fake mmap offsets, events, master and render
+  nodes, PRIME through an `Fds` trait.
+- **Mappings** of a dumb buffer or dma-buf map its frames themselves
+  (`SharedFrame::device`), so the client draws into what the device copies.
+- **The console yields** while a DRM master shows its framebuffers and
+  comes back when the master closes; `display::flush` (the terminal,
+  fbdev) sends nothing to the device meanwhile.
+- **sysfs**: `/sys/dev/char/226:*`, `/sys/class/drm/*` and the PCI
+  function's identity files, for device discovery.
+
+```text
+drm: /dev/dri/card0 (226:0) and renderD128 (226:128) on virtio-gpu pci:0000:00:02.0: 1 CRTC(s), dumb buffers, PRIME, atomic
+display: virtio-gpu: a DRM client took the display; the console waits
+display: virtio-gpu: the console has the display again
+```
+
+Boot group `drm` runs the kernel's DRM tests, then
+`tests/linux/drm/drm_kms.c` as init (mode set, page flip with an event,
+`DIRTYFB`, vblank waits, an atomic flip, PRIME), comparing a QMP
+screenshot of the scanout at each step with the pattern it drew, and the
+boot screen after it closed.
 
 ## Wayland compositor
 

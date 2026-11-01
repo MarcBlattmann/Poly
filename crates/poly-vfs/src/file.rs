@@ -520,7 +520,7 @@ impl OpenFile {
             Backend::Path => return Err(Errno::EBADF),
             Backend::Device(dev) if !dev.seekable() => return Err(Errno::ESPIPE),
             Backend::Object(o) if o.seek_stays_at_zero() => return Ok(0),
-            Backend::Object(_) => return Err(Errno::ESPIPE),
+            Backend::Object(o) => o.seek_size().ok_or(Errno::ESPIPE)?,
             Backend::Device(_) => 0,
             Backend::Inode => self.node.attr()?.size,
         };

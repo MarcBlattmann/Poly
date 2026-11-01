@@ -45,6 +45,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-drm"
+version = "0.0.1"
+
+[[package]]
 name = "poly-elf"
 version = "0.0.1"
 
@@ -90,6 +94,7 @@ dependencies = [
  "poly-block",
  "poly-bochs-vbe",
  "poly-cpio",
+ "poly-drm",
  "poly-elf",
  "poly-ext2",
  "poly-fbdev",

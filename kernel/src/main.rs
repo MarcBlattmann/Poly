@@ -12,6 +12,7 @@ mod boot_info;
 mod cputime;
 mod display;
 mod dma;
+mod drm;
 mod fbdev;
 mod frames;
 mod fs;
@@ -156,6 +157,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     keyboard::refresh_leds();
     display::init(&boot);
     fs::init(&boot, initrd);
+    // /dev/dri on the virtio GPU the display found (ADR 0108).
+    drm::init();
     tty::init(&boot);
     net::init(&boot);
     sound::init(&boot);
