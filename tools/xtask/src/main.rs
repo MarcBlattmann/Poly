@@ -105,6 +105,7 @@ mod wayland;
 mod win32;
 mod winimports;
 mod wintrace;
+mod xwayland;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -1403,7 +1404,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 27] = [
+const BOOT_GROUPS: [BootGroup; 28] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1435,6 +1436,9 @@ const BOOT_GROUPS: [BootGroup; 27] = [
     // The desktop: the compositor on virtio-gpu through /dev/fb0 with the
     // shell, driven by QMP input (desktop.rs, ADR 0107).
     ("desktop", desktop::boot_test),
+    // X11 apps through Xwayland on the desktop, from the root disk
+    // (xwayland.rs, ADR 0118).
+    ("xwayland", xwayland::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1482,7 +1486,7 @@ const BOOT_GROUPS: [BootGroup; 27] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop", "xwayland"]),
     (
         "devices",
         &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "drm", "terminal", "input"],

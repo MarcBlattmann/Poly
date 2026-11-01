@@ -68,6 +68,7 @@ members = [
     "crates/poly-x509",
     "crates/poly-winsock",
     "crates/poly-wayland",
+    "crates/poly-x11",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -148,6 +149,7 @@ poly-wincrypt = { path = "crates/poly-wincrypt" }
 poly-x509 = { path = "crates/poly-x509" }
 poly-winsock = { path = "crates/poly-winsock" }
 poly-wayland = { path = "crates/poly-wayland" }
+poly-x11 = { path = "crates/poly-x11" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }

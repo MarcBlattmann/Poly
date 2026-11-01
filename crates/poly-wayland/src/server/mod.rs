@@ -39,12 +39,14 @@ mod presentation;
 mod shm;
 mod surface;
 mod xdg;
+mod xwayland;
 
 use crate::compose::{Framebuffer, Hit, Rect, Scene, WindowId};
 use crate::protocol::{
     wl_buffer, wl_callback, wl_compositor, wl_display, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry,
     wl_seat, wl_shm, wl_shm_pool, wl_surface, wl_touch, wp_presentation, wp_presentation_feedback, xdg_popup,
-    xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base, zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
+    xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base, xwayland_shell_v1, xwayland_surface_v1,
+    zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
 };
 use crate::seat::{Capabilities, InputEvent};
 use crate::wire::{self, Arg, ArgKind, Fd, Fixed, Header, Interface, Message, ObjectId, SERVER_ID_START};
@@ -58,6 +60,7 @@ use alloc::vec::Vec;
 pub(crate) use shm::{Buffer, Pool};
 pub(crate) use surface::{Region, Surface};
 pub(crate) use xdg::{Popup, Positioner, Toplevel, XdgSurface};
+pub use xwayland::{SurfaceRef, XRequest, XWindowState};
 
 /// A client's shared memory, mapped by the [`Host`].
 pub trait ShmMap {
@@ -150,6 +153,7 @@ pub mod versions {
     pub const XDG_WM_BASE: u32 = 6;
     pub const DECORATION_MANAGER: u32 = 2;
     pub const PRESENTATION: u32 = 1;
+    pub const XWAYLAND_SHELL: u32 = 1;
 }
 
 /// A global: its name in the registry, interface and version.
@@ -202,6 +206,10 @@ pub(crate) enum Data {
     Decoration(ObjectId),
     Presentation,
     Feedback,
+    /// `xwayland_shell_v1` (Xwayland only, ADR 0118).
+    XwaylandShell,
+    /// `xwayland_surface_v1`: the surface it gives the role.
+    XwaylandSurface(ObjectId),
 }
 
 /// An object of a client: its interface, the version it was made with, and
@@ -323,6 +331,8 @@ pub struct Server {
     /// The toplevel with focus.
     pub(crate) active: Option<(ClientId, ObjectId)>,
     frame_seq: u64,
+    /// Xwayland's client and its X windows (ADR 0118).
+    xwayland: xwayland::XwaylandState,
 }
 
 impl core::fmt::Debug for Server {
@@ -351,6 +361,7 @@ impl Server {
             (&xdg_wm_base::INTERFACE, versions::XDG_WM_BASE),
             (&zxdg_decoration_manager_v1::INTERFACE, versions::DECORATION_MANAGER),
             (&wp_presentation::INTERFACE, versions::PRESENTATION),
+            (&xwayland_shell_v1::INTERFACE, versions::XWAYLAND_SHELL),
         ];
         Server {
             host,
@@ -367,6 +378,7 @@ impl Server {
             serial: 0,
             active: None,
             frame_seq: 0,
+            xwayland: xwayland::XwaylandState::default(),
         }
     }
 
@@ -411,6 +423,9 @@ impl Server {
         self.input_client_gone(c);
         if self.active.is_some_and(|(ac, _)| ac == c) {
             self.active = None;
+        }
+        if self.xwayland_client() == Some(c) {
+            self.set_xwayland_client(None);
         }
     }
 
@@ -604,6 +619,8 @@ impl Server {
             zxdg_toplevel_decoration_v1::NAME => self.decoration_request(c, id, parse!(zxdg_toplevel_decoration_v1)),
             wp_presentation::NAME => self.presentation_request(c, id, parse!(wp_presentation)),
             wp_presentation_feedback::NAME => Ok(()),
+            xwayland_shell_v1::NAME => self.xwayland_shell_request(c, parse!(xwayland_shell_v1)),
+            xwayland_surface_v1::NAME => self.xwayland_surface_request(c, id, parse!(xwayland_surface_v1)),
             _ => {
                 self.close_fds(&args);
                 Err(error(id, wl_display::Error::INVALID_METHOD.0, format!("{} is not implemented", iface.name)))

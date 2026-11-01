@@ -4,7 +4,7 @@
 use super::{ClientId, Data, Res, Server, error};
 use crate::protocol::{
     wl_compositor, wl_display, wl_output, wl_registry, wl_seat, wl_shm, wp_presentation, xdg_wm_base,
-    zxdg_decoration_manager_v1,
+    xwayland_shell_v1, zxdg_decoration_manager_v1,
 };
 use crate::wire::ObjectId;
 use alloc::format;
@@ -19,7 +19,10 @@ impl Server {
                 client.callback_done(callback, serial);
             }
             wl_display::Request::GetRegistry { registry } => {
-                let globals = self.globals.clone();
+                let mut globals = self.globals.clone();
+                // xwayland_shell_v1 is for Xwayland only (ADR 0118).
+                let xwayland = self.xwayland_client() == Some(c);
+                globals.retain(|g| xwayland || g.interface.name != xwayland_shell_v1::NAME);
                 let client = self.client(c);
                 client.insert(registry, &wl_registry::INTERFACE, 1, Data::Registry);
                 for g in globals {
@@ -43,6 +46,9 @@ impl Server {
         let Some(g) = self.globals.iter().find(|g| g.name == name).copied() else {
             return Err(invalid(format!("no global {name}")));
         };
+        if g.interface.name == xwayland_shell_v1::NAME && self.xwayland_client() != Some(c) {
+            return Err(invalid(format!("global {name} is only for Xwayland")));
+        }
         if new.interface != g.interface.name {
             return Err(invalid(format!("global {name} is a {}, not a {}", g.interface.name, new.interface)));
         }
@@ -58,6 +64,7 @@ impl Server {
             xdg_wm_base::NAME => Data::WmBase,
             zxdg_decoration_manager_v1::NAME => Data::DecorationManager,
             wp_presentation::NAME => Data::Presentation,
+            xwayland_shell_v1::NAME => Data::XwaylandShell,
             _ => return Err(invalid(format!("{} cannot be bound", g.interface.name))),
         };
         self.client(c).insert(id, g.interface, version, data);

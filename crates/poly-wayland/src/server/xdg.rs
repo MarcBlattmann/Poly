@@ -571,6 +571,9 @@ impl Server {
             self.scene.set_active(w, false);
             self.configure_toplevel(pc, ptl);
         }
+        if let Some((pc, ptl)) = previous {
+            self.x_lost_focus(pc, ptl);
+        }
         if let Some(w) = self.toplevel_window(c, tl) {
             self.scene.set_active(w, true);
             self.scene.raise(w);
@@ -580,7 +583,7 @@ impl Server {
         }
     }
 
-    fn toplevel_window(&mut self, c: ClientId, tl: ObjectId) -> Option<WindowId> {
+    pub(super) fn toplevel_window(&mut self, c: ClientId, tl: ObjectId) -> Option<WindowId> {
         let xid = self.toplevel(c, tl)?.xdg;
         self.xdg_window(c, xid)
     }
@@ -600,6 +603,8 @@ impl Server {
     pub(super) fn focus_window(&mut self, w: WindowId) {
         if let Some((c, tl)) = self.window_toplevel(w) {
             self.activate(c, tl, true);
+        } else {
+            self.x_clicked(w);
         }
     }
 
@@ -607,6 +612,8 @@ impl Server {
     pub(super) fn close_window(&mut self, w: WindowId) {
         if let Some((c, tl)) = self.window_toplevel(w) {
             self.client(c).send(tl, xdg_toplevel::Event::Close);
+        } else {
+            self.x_close(w);
         }
     }
 

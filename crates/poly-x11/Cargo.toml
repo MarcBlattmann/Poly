@@ -1,0 +1,11 @@
+[package]
+name = "poly-x11"
+description = "The X11 wire protocol (connection setup, requests, replies, errors, events, atoms, ICCCM and EWMH properties) and an X11 window manager for Xwayland as a state machine without I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

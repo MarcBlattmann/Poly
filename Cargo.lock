@@ -65,6 +65,7 @@ dependencies = [
  "poly-input",
  "poly-shell",
  "poly-wayland",
+ "poly-x11",
 ]
 
 [[package]]
@@ -437,6 +438,10 @@ dependencies = [
 
 [[package]]
 name = "poly-winsock"
+version = "0.0.1"
+
+[[package]]
+name = "poly-x11"
 version = "0.0.1"
 
 [[package]]

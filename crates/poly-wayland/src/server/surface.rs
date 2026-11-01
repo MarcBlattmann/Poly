@@ -49,6 +49,8 @@ pub(crate) enum Role {
     None,
     XdgToplevel,
     XdgPopup,
+    /// An X window's surface, Xwayland's (ADR 0118).
+    Xwayland,
 }
 
 #[derive(Debug)]
@@ -205,6 +207,7 @@ impl Server {
         if let Some(w) = s.window.take() {
             self.scene.remove_window(w);
         }
+        self.xwayland_surface_destroyed(c, id);
         Ok(())
     }
 
@@ -267,6 +270,7 @@ impl Server {
         s.feedbacks.extend(p.feedbacks);
         // The role maps or unmaps the window...
         self.xdg_commit(c, id, attached)?;
+        self.xwayland_commit(c, id, attached)?;
         // ...and what the buffer shows is copied into it.
         let Some(s) = self.surface(c, id) else { return Ok(()) };
         if let (Attached::Buffer(b), Some(win)) = (attached, s.window) {
@@ -284,7 +288,7 @@ impl Server {
 
     /// Copy the damaged part of buffer `b` into window `win`'s content (all
     /// of it if the size or scale changed).
-    fn copy_buffer(&mut self, c: ClientId, b: ObjectId, win: WindowId, scale: i32, damage: &[Rect]) {
+    pub(super) fn copy_buffer(&mut self, c: ClientId, b: ObjectId, win: WindowId, scale: i32, damage: &[Rect]) {
         let Some(Data::Buffer(buf)) = self.client(c).data(b) else { return };
         let (pool, offset, width, height, stride, format) =
             (Rc::clone(&buf.pool), buf.offset, buf.width, buf.height, buf.stride, buf.format);

@@ -24,10 +24,15 @@
 //!   app chosen with `WAYLAND_DISPLAY` set), the wallpaper, new windows
 //!   centred. `SIGUSR1` still writes the picture.
 //!
+//! - **`--xwayland`** (or `--xwayland-lazy`): an X display for X11 apps
+//!   through the unmodified Xwayland, started with the compositor (or
+//!   with the first X client), with Poly's X window manager; launched apps
+//!   get `DISPLAY` (ADR 0118, `xwayland.rs`).
+//!
 //! ```text
 //! poly-compositor [--socket NAME] [--size WxH] [--scale N] [--dump FILE]
 //!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME]]
-//!                 [--exec PROGRAM [ARGS...]]
+//!                 [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]
 //! ```
 //!
 //! `--exec` starts a client once the socket is up (with `WAYLAND_DISPLAY`,
@@ -45,6 +50,7 @@ mod desktop;
 mod evdev;
 mod fbdev;
 mod unix;
+mod xwayland;
 
 use poly_input::layout::Layout;
 use poly_shell::{Press, Shell};
@@ -80,10 +86,11 @@ struct Options {
     desktop: bool,
     fb: String,
     keymap: String,
+    xwayland: Option<xwayland::Start>,
     exec: Vec<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N] [--dump FILE] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME]] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N] [--dump FILE] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME]] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
 
 fn pair(s: &str, sep: char) -> Option<(u32, u32)> {
     let (a, b) = s.split_once(sep)?;
@@ -101,6 +108,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         desktop: false,
         fb: "/dev/fb0".into(),
         keymap: "us".into(),
+        xwayland: None,
         exec: Vec::new(),
     };
     let mut it = args.iter();
@@ -128,6 +136,8 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
                 poly_input::layout::by_name(&v).ok_or(format!("no keyboard layout {v} (us, de-ch, de)"))?;
                 o.keymap = v;
             }
+            "--xwayland" => o.xwayland = Some(xwayland::Start::Now),
+            "--xwayland-lazy" => o.xwayland = Some(xwayland::Start::Lazy),
             "--exec" => {
                 o.exec = it.by_ref().cloned().collect();
                 if o.exec.is_empty() {
@@ -368,12 +378,17 @@ fn main() -> ExitCode {
     }
 }
 
-/// The environment a client gets: ours, with the display's variables.
-fn client_env(socket: &str, dir: &Path, dump: &Path) -> Vec<String> {
+/// The environment a client gets: ours, with the display's variables (and
+/// `DISPLAY=...` for the X display, if there is one).
+fn client_env(socket: &str, dir: &Path, dump: &Path, display: Option<String>) -> Vec<String> {
     let mut env: Vec<String> = std::env::vars()
-        .filter(|(k, _)| !["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "POLY_COMPOSITOR_DUMP"].contains(&k.as_str()))
+        .filter(|(k, _)| {
+            !["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "POLY_COMPOSITOR_DUMP", "DISPLAY"].contains(&k.as_str())
+                || (k == "DISPLAY" && display.is_none())
+        })
         .map(|(k, v)| format!("{k}={v}"))
         .collect();
+    env.extend(display);
     env.push(format!("WAYLAND_DISPLAY={socket}"));
     env.push(format!("XDG_RUNTIME_DIR={}", dir.display()));
     // Where SIGUSR1 puts the picture, for a client that checks it.
@@ -468,16 +483,26 @@ fn run(args: &[String]) -> Result<u8, String> {
         None
     };
 
+    let mut xw = match o.xwayland {
+        Some(start) => Some(xwayland::Xwayland::new(start)?),
+        None => None,
+    };
+    let env = client_env(&o.socket, &dir, &dump_path, xw.as_ref().map(|x| x.display_env()));
     let child = if o.exec.is_empty() {
         None
     } else {
-        let env = client_env(&o.socket, &dir, &dump_path);
         let pid = unix::spawn(&o.exec, &env).map_err(|e| format!("{}: {e}", o.exec[0]))?;
         println!("poly-compositor: started {} (pid {pid})", o.exec[0]);
         Some(pid)
     };
 
     let mut conns: BTreeMap<ClientId, Connection> = BTreeMap::new();
+    if let Some(x) = &mut xw
+        && x.wants_start()
+    {
+        let (id, stream) = x.start(&mut server, &env)?;
+        conns.insert(id, Connection { stream, out: Vec::new(), out_fds: Vec::new() });
+    }
     let mut next_frame = 0u64;
     let mut buf = vec![0u8; 4096];
     loop {
@@ -492,6 +517,10 @@ fn run(args: &[String]) -> Result<u8, String> {
         let input_at = fds.len();
         if let Some(d) = &desk {
             fds.extend(d.input.devices.iter().map(|dev| libc::pollfd { fd: dev.fd, events: libc::POLLIN, revents: 0 }));
+        }
+        let x_at = fds.len();
+        if let Some(x) = &xw {
+            fds.extend(x.poll_fds());
         }
         let now = unix::monotonic_ns();
         let timeout = if server.wants_frame() {
@@ -533,14 +562,13 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let Some(d) = &mut desk {
             let size = server.scene().logical_size();
             let ms = (unix::monotonic_ns() / 1_000_000) as u32;
-            for (i, pfd) in fds[input_at..].iter().enumerate() {
+            for (i, pfd) in fds[input_at..x_at].iter().enumerate() {
                 if pfd.revents != 0 {
                     d.input.read(i, size, ms);
                 }
             }
             while let Some(ev) = d.input.next_event() {
                 if let Some(app) = d.route(ev, &mut server) {
-                    let env = client_env(&o.socket, &dir, &dump_path);
                     match unix::spawn(&app.argv, &env) {
                         Ok(pid) => {
                             println!("poly-compositor: launched {} (pid {pid})", app.name);
@@ -551,6 +579,18 @@ fn run(args: &[String]) -> Result<u8, String> {
                 }
             }
             d.sync(&mut server);
+        }
+
+        // Xwayland: a client waiting for it, its window manager, what the
+        // user did to X windows.
+        if let Some(x) = &mut xw {
+            if let Some((id, stream)) = x.handle(&fds[x_at..], &mut server, &env) {
+                conns.insert(id, Connection { stream, out: Vec::new(), out_fds: Vec::new() });
+            }
+            x.pump(&mut server);
+            if let Some(c) = x.reap(&mut server) {
+                gone.push(c);
+            }
         }
 
         // A frame when one is due.
@@ -669,6 +709,17 @@ mod tests {
         assert_eq!(out, [5, 6, 7, 8]);
         assert!(!map.read(6, &mut out));
         assert!(map.resize(8));
+    }
+
+    /// Programs without a `/` are searched in `PATH`, as desktop files
+    /// name them.
+    #[test]
+    fn programs_are_found_in_path() {
+        let env = ["PATH=/nonexistent:/bin:/usr/bin".to_string()];
+        let sh = unix::resolve_program("sh", &env);
+        assert!(sh.ends_with("/sh") && sh.starts_with('/'), "{sh}");
+        assert_eq!(unix::resolve_program("/x/y", &env), "/x/y");
+        assert_eq!(unix::resolve_program("no-such-program-here", &env), "no-such-program-here");
     }
 
     /// The desktop's layers through the scene into memory: the ridge, the

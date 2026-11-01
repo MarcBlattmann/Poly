@@ -10,8 +10,8 @@
 //!   and encoding against the protocol's tables.
 //! - [`protocol`]: request and event types and tables for every interface of
 //!   `wayland.xml`, `xdg-shell`, `xdg-decoration`, `viewporter`,
-//!   `presentation-time` and `linux-dmabuf`, generated from the XML by
-//!   `cargo xtask wayland`.
+//!   `presentation-time`, `linux-dmabuf` and `xwayland-shell-v1`, generated
+//!   from the XML by `cargo xtask wayland`.
 //! - [`server`]: clients and their objects, request dispatch, and the
 //!   protocol logic: `wl_display`/`wl_registry`/`wl_callback`,
 //!   `wl_compositor`/`wl_surface`/`wl_region` (double-buffered state, damage,
@@ -19,7 +19,8 @@
 //!   (`argb8888`, `xrgb8888`), `wl_output` (with its scale), `wl_seat`
 //!   (capabilities), `xdg_wm_base`/`xdg_positioner`/`xdg_surface`/
 //!   `xdg_toplevel`/`xdg_popup`, `zxdg_decoration_manager_v1` (always
-//!   server-side) and `wp_presentation`. The transport and shared memory
+//!   server-side), `wp_presentation`, and `xwayland_shell_v1` with X
+//!   windows as scene windows (ADR 0118). The transport and shared memory
 //!   are the caller's ([`server::Host`]).
 //! - [`compose`]: the scene of windows and the renderer: damage tracking,
 //!   HiDPI scaling, premultiplied alpha, Poly's neutral window frame, behind

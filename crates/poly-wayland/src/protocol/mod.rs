@@ -22,6 +22,7 @@ pub mod viewporter;
 pub mod wayland;
 pub mod xdg_decoration_unstable_v1;
 pub mod xdg_shell;
+pub mod xwayland_shell;
 
 pub use linux_dmabuf_v1::*;
 pub use presentation_time::*;
@@ -29,6 +30,7 @@ pub use viewporter::*;
 pub use wayland::*;
 pub use xdg_decoration_unstable_v1::*;
 pub use xdg_shell::*;
+pub use xwayland_shell::*;
 
 /// Every interface of every protocol.
 pub static INTERFACES: &[&crate::wire::Interface] = &[
@@ -69,6 +71,8 @@ pub static INTERFACES: &[&crate::wire::Interface] = &[
     &zwp_linux_dmabuf_v1::INTERFACE,
     &zwp_linux_buffer_params_v1::INTERFACE,
     &zwp_linux_dmabuf_feedback_v1::INTERFACE,
+    &xwayland_shell_v1::INTERFACE,
+    &xwayland_surface_v1::INTERFACE,
 ];
 
 /// The interface called `name`.

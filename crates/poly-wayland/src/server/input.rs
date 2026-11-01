@@ -306,6 +306,7 @@ impl Server {
         }
         if (x, y) != (wx, wy) {
             self.scene.set_position(w, x, y);
+            self.x_moved(w, x, y);
         }
     }
 
@@ -389,7 +390,11 @@ impl Server {
         let target = if self.seat.input.keyboard_suspended {
             None
         } else {
-            self.active.and_then(|(c, tl)| self.toplevel(c, tl).map(|t| (c, t.surface)))
+            // An xdg toplevel, or an X window's surface (ADR 0118).
+            self.active.and_then(|(c, tl)| match self.toplevel(c, tl) {
+                Some(t) => Some((c, t.surface)),
+                None => self.is_x_surface(c, tl).then_some((c, tl)),
+            })
         };
         if target == self.seat.input.keyboard_focus {
             return;
