@@ -197,8 +197,13 @@ const TEST_FILE_NAME: &str = "poly-root-disk-mesa.img";
 /// and rendering in software are slow under emulation.
 const STEP_TIMEOUT: Duration = Duration::from_secs(600);
 const SESSION_TIMEOUT: Duration = Duration::from_secs(2400);
-/// The frames each kmscube run renders.
-const FRAMES: u32 = 150;
+/// The frames each kmscube run renders: 4 s at the 75 Hz the flips are paced
+/// to, so that on KVM (where llvmpipe keeps up with every vblank) the
+/// screenshots still catch kmscube running.
+const FRAMES: u32 = 300;
+/// The time between the two screenshots of a run: the cube turns visibly in
+/// a few frames.
+const SECOND_SHOT: Duration = Duration::from_millis(150);
 /// The environment kmscube runs with: Mesa's software rasteriser.
 const SOFTWARE: &str = "LIBGL_ALWAYS_SOFTWARE=1";
 /// What the kernel logs when a DRM client first shows a framebuffer, and
@@ -398,7 +403,7 @@ fn session(s: &mut crate::busybox::Session, socket: &Path, target: &Path, versio
     // 3. kmscube with Mesa's software rasteriser (legacy page flips with
     //    events), then without asking for it: Mesa's virtio_gpu (virgl)
     //    driver finds no 3D on this device and GBM falls back to kms_swrast.
-    for (name, env, frames) in [("kmscube", SOFTWARE, FRAMES), ("kmscube-fallback", "", FRAMES / 2)] {
+    for (name, env, frames) in [("kmscube", SOFTWARE, FRAMES), ("kmscube-fallback", "", FRAMES)] {
         if skip(name) {
             continue;
         }
@@ -429,7 +434,7 @@ fn session(s: &mut crate::busybox::Session, socket: &Path, target: &Path, versio
             }
             std::thread::sleep(Duration::from_millis(250));
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(SECOND_SHOT);
         seen.push(shot(&mut qmp, &format!("{name}-1"))?);
         let out = split_kernel_lines(&s.prompt()?, &mut unimplemented);
         let rate = out.lines().rfind(|l| l.starts_with("Rendered ")).unwrap_or_default().to_string();
