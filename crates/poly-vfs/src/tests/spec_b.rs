@@ -222,3 +222,61 @@ fn anonymous_inodes_have_no_type_and_a_fixed_mode() {
     assert_eq!(pipe.chmod(&env.root, 0o640), Ok(()));
     assert_eq!(pipe.stat().unwrap().mode, S_IFIFO | 0o640);
 }
+
+#[test]
+fn anonymous_inodes_refuse_chown_even_minus_one() {
+    let env = Env::new();
+    let node = env.vfs.anon_inode(0o600, &env.root).unwrap();
+    assert_eq!(node.chown(&env.root, None, None), Err(Errno::EOPNOTSUPP));
+    assert_eq!(node.chown(&env.root, Some(5), Some(6)), Err(Errno::EOPNOTSUPP));
+    let st = node.stat().unwrap();
+    assert_eq!((st.uid, st.gid), (0, 0));
+}
+
+#[test]
+fn a_running_program_cannot_be_written_or_truncated() {
+    let env = Env::new();
+    env.write("/prog", b"\x7fELF");
+    env.chmod_b("/prog", 0o755);
+    let exe = env.vfs.open_exec(&env.ctx, &env.root, At::Cwd, b"/prog").unwrap();
+    assert_eq!(env.open("/prog", OpenFlags::WRONLY).map(|_| ()), Err(Errno::ETXTBSY));
+    assert_eq!(env.open("/prog", OpenFlags::RDWR).map(|_| ()), Err(Errno::ETXTBSY));
+    assert!(env.open("/prog", OpenFlags::RDONLY).is_ok());
+    assert_eq!(env.vfs.truncate(&env.ctx, &env.root, At::Cwd, b"/prog", 0), Err(Errno::ETXTBSY));
+    // Write permission comes first: a user who may not write gets EACCES.
+    assert_eq!(env.vfs.truncate(&env.ctx, &alice(), At::Cwd, b"/prog", 0), Err(Errno::EACCES));
+    drop(exe);
+    assert!(env.open("/prog", OpenFlags::WRONLY).is_ok());
+    assert_eq!(env.vfs.truncate(&env.ctx, &env.root, At::Cwd, b"/prog", 0), Ok(()));
+}
+
+#[test]
+fn rename_checks_exdev_busy_and_erofs_before_the_names() {
+    let env = Env::new();
+    env.mkdir("/d");
+    env.mkdir("/d/sub");
+    env.mount_tmpfs("/mnt", false);
+    env.mount_tmpfs("/ro", true);
+    let rename_as = |cred: &Cred, old: &str, new: &str| {
+        env.vfs.rename(&env.ctx, cred, At::Cwd, old.as_bytes(), At::Cwd, new.as_bytes(), RenameFlags::default())
+    };
+    let rename = |old: &str, new: &str| rename_as(&env.root, old, new);
+    // EXDEV before EBUSY for "." and before a missing source.
+    assert_eq!(rename("/mnt/.", "/d/x"), Err(Errno::EXDEV));
+    assert_eq!(rename("/d/missing", "/mnt/x"), Err(Errno::EXDEV));
+    assert_eq!(rename("/d/missing", "/d/sub/."), Err(Errno::EBUSY));
+    // EROFS before the last name.
+    assert_eq!(rename("/ro/missing", "/ro/x"), Err(Errno::EROFS));
+    // A directory over its own ancestor: ENOTEMPTY.
+    assert_eq!(rename("/d/sub", "/d"), Err(Errno::ENOTEMPTY));
+    // Write permission on the parent before the kinds.
+    env.write("/d/f", b"x");
+    assert_eq!(rename_as(&alice(), "/d/f", "/d/sub"), Err(Errno::EACCES));
+    assert_eq!(rename("/d/f", "/d/sub"), Err(Errno::EISDIR));
+}
+
+#[test]
+fn optional_limits_bound_the_data() {
+    let fs = Tmpfs::with_optional_limits(Arc::new(TestClock::default()), Some(64 * 1024), None);
+    assert_eq!(fs.statfs().unwrap().blocks, 16);
+}

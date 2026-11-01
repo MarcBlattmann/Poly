@@ -313,6 +313,10 @@ pub fn flock(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// `encode` (of `len` bytes each) into a buffer of at most `count`
 /// bytes, copied to `dirp`. "EINVAL Result buffer is too small" when not
 /// even the first entry fits.
+/// `SEEK_SET` and `SEEK_CUR` (`linux/fs.h`).
+const SEEK_SET: u32 = 0;
+const SEEK_CUR: u32 = 1;
+
 fn getdents_common(
     k: &mut dyn LinuxKernel,
     fd: i32,
@@ -325,6 +329,9 @@ fn getdents_common(
     let mut buf = bounce(size)?;
     let mut used = 0;
     let mut too_small = false;
+    // Where the listing stood: a buffer that cannot be written loses no
+    // entries (the spec of getdents: `bad_buffer`).
+    let before = fs(k)?.lseek(fd, 0, SEEK_CUR).ok();
     fs(k)?.getdents(fd, &mut |e| {
         let n = len(e.name);
         if used + n > size {
@@ -338,7 +345,12 @@ fn getdents_common(
     if too_small {
         return Err(Errno::EINVAL);
     }
-    k.copy_to_user(dirp, &buf[..used])?;
+    if let Err(e) = k.copy_to_user(dirp, &buf[..used]) {
+        if let Some(at) = before.and_then(|at| i64::try_from(at).ok()) {
+            let _ = fs(k)?.lseek(fd, at, SEEK_SET);
+        }
+        return Err(e);
+    }
     Ok(used as u64)
 }
 
@@ -410,6 +422,10 @@ pub fn sync(k: &mut dyn LinuxKernel, _: &Args) -> SysResult {
 /// syncfs(fd)
 pub fn syncfs(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let fd = fd_arg(a, 0)?;
+    // Any open descriptor but an O_PATH one (the spec of syncfs).
+    if fs(k)?.status_flags(fd)? & crate::sys::path::O_PATH != 0 {
+        return Err(Errno::EBADF);
+    }
     fs(k)?.syncfs(fd).map(|()| 0)
 }
 
