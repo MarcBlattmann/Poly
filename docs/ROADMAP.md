@@ -124,9 +124,9 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged
 - [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
 - [x] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
-- [ ] Compositor: Wayland server, surface composition, HiDPI scaling, vsync
+- [x] Compositor: Wayland server, surface composition, HiDPI scaling, vsync (ADR 0106, 0107, 0116)
 - [ ] Shell: launcher, window management, notifications, settings (own non-glass design)
-- [ ] Compositor exposes the content behind each window (needed later for Liquid Glass)
+- [x] Compositor exposes the content behind each window (needed later for Liquid Glass) (ADR 0116)
 - [ ] XWayland for X11 apps
 - [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
 - [ ] **Milestone:** GTK and Qt apps run; VLC plays a video with sound

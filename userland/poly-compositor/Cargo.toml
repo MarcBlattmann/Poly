@@ -1,6 +1,6 @@
 [package]
 name = "poly-compositor"
-description = "Poly's Wayland compositor for the Linux personality: poly-wayland's server on a Unix socket, on the screen through /dev/fb0 with evdev input and Poly's shell (--desktop), or off-screen"
+description = "Poly's Wayland compositor for the Linux personality: poly-wayland's server on a Unix socket, on the screen through DRM/KMS page flips (vsync) or /dev/fb0, with evdev input and Poly's shell (--desktop), or off-screen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 libc.workspace = true
+poly-drm.workspace = true
 poly-fbdev.workspace = true
 poly-font.workspace = true
 poly-input.workspace = true

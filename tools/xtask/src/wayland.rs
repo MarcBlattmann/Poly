@@ -42,7 +42,7 @@ struct ProtocolFile {
 /// `4460c20cfcf68b994a5ee206ed15fc19ad312f16c96075186e83b0e3f4aa48a5`),
 /// both as published with their `.sha256sum` files on
 /// gitlab.freedesktop.org.
-const PROTOCOLS: [ProtocolFile; 6] = [
+const PROTOCOLS: [ProtocolFile; 9] = [
     ProtocolFile {
         xml: "third_party/wayland/wayland.xml",
         module: "wayland",
@@ -72,6 +72,21 @@ const PROTOCOLS: [ProtocolFile; 6] = [
         xml: "third_party/wayland-protocols/linux-dmabuf/linux-dmabuf-v1.xml",
         module: "linux_dmabuf_v1",
         sha256: "d4feffb8c0a3dbdecfff141f4d65d88d91ff2b022cb343c988b73e3c358d9a76",
+    },
+    ProtocolFile {
+        xml: "third_party/wayland-protocols/fractional-scale/fractional-scale-v1.xml",
+        module: "fractional_scale_v1",
+        sha256: "42945a10487cebe2f16c2f0284f263957d78325748409bfa8bcada385b65f86a",
+    },
+    ProtocolFile {
+        xml: "third_party/wayland-protocols/xdg-activation/xdg-activation-v1.xml",
+        module: "xdg_activation",
+        sha256: "d8418be2d5738d50aff788bef1c7574f33f26659aa045447ff2ef9b78c58fe01",
+    },
+    ProtocolFile {
+        xml: "third_party/wayland-protocols/cursor-shape/cursor-shape-v1.xml",
+        module: "cursor_shape_v1",
+        sha256: "bb57d91e53a79dadab7c612dab87c233393cee73673feefa7442cfbfdd9aed2f",
     },
 ];
 

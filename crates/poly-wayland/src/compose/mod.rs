@@ -19,7 +19,9 @@ mod scene;
 mod text;
 
 pub use frame::{BORDER, CLOSE_SIZE, TITLE_HEIGHT, Theme};
-pub use scene::{CURSOR_SIZE, Content, Hit, Placement, Scene, Window, WindowId};
+pub use scene::{
+    Backdrop, CURSOR_SIZE, Content, CursorLook, Hit, Placement, Scene, View, Window, WindowId, buffer_point,
+};
 pub use text::{BitmapFont, TextRenderer};
 
 use alloc::vec;

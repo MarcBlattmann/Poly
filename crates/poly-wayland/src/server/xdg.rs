@@ -56,6 +56,10 @@ pub(crate) struct Toplevel {
     pub fullscreen: bool,
     /// Where the window was before it was maximized or made fullscreen.
     pub restore: Option<(i32, i32)>,
+    /// The size an interactive resize asks for (configure's size while
+    /// neither maximized nor fullscreen), and whether one is going on.
+    pub resize_size: Option<(i32, i32)>,
+    pub resizing: bool,
     pub decoration: Option<ObjectId>,
     /// A decoration configure is due with the next configure sequence.
     pub decoration_due: bool,
@@ -68,8 +72,43 @@ pub(crate) struct Popup {
     pub xdg: ObjectId,
     /// The parent's xdg_surface.
     pub parent: Option<ObjectId>,
-    /// Relative to the parent's window geometry.
+    /// Relative to the parent's window geometry, as last configured
+    /// (constraints applied).
     pub rect: Rect,
+    /// The rules it was placed by.
+    pub positioner: Positioner,
+    /// `xdg_popup.grab` was asked for.
+    pub grab: bool,
+}
+
+/// `xdg_positioner.constraint_adjustment` bits.
+pub(crate) mod adjust {
+    pub const SLIDE_X: u32 = 1;
+    pub const SLIDE_Y: u32 = 2;
+    pub const FLIP_X: u32 = 4;
+    pub const FLIP_Y: u32 = 8;
+    pub const RESIZE_X: u32 = 16;
+    pub const RESIZE_Y: u32 = 32;
+}
+
+/// An anchor or gravity mirrored left-right (`x`) or top-bottom (`y`):
+/// both enums number the edges and corners alike.
+fn mirror(v: u32, x: bool) -> u32 {
+    match (v, x) {
+        (3, true) => 4,
+        (4, true) => 3,
+        (5, true) => 7,
+        (7, true) => 5,
+        (6, true) => 8,
+        (8, true) => 6,
+        (1, false) => 2,
+        (2, false) => 1,
+        (5, false) => 6,
+        (6, false) => 5,
+        (7, false) => 8,
+        (8, false) => 7,
+        (v, _) => v,
+    }
 }
 
 /// An `xdg_positioner`'s rules.
@@ -116,10 +155,79 @@ impl Positioner {
         };
         Some(Rect::new(x + self.offset.0, y + self.offset.1, w, h))
     }
+
+    /// [`Positioner::place`] kept inside `area` (output coordinates) by the
+    /// constraint adjustments allowed, axis by axis as xdg-shell.xml orders
+    /// them: flip (kept only if it is no longer constrained), then slide
+    /// (towards the area until the edge is inside, the leading edge winning
+    /// if it is too large), then resize (cut to the area). `origin` is
+    /// where the parent's window geometry starts; the result is relative to
+    /// it again.
+    pub fn place_in(&self, origin: (i32, i32), area: Rect) -> Option<Rect> {
+        let mut out = self.place()?.translate(origin.0, origin.1);
+        let ca = self.constraint_adjustment;
+        let off_x = |r: Rect| r.x < area.x || r.right() > area.right();
+        let off_y = |r: Rect| r.y < area.y || r.bottom() > area.bottom();
+        if off_x(out) {
+            if ca & adjust::FLIP_X != 0 {
+                let flipped =
+                    Positioner { anchor: mirror(self.anchor, true), gravity: mirror(self.gravity, true), ..*self };
+                if let Some(f) = flipped.place().map(|r| r.translate(origin.0, origin.1))
+                    && !off_x(f)
+                {
+                    out.x = f.x;
+                }
+            }
+            if off_x(out) && ca & adjust::SLIDE_X != 0 {
+                if out.right() > area.right() {
+                    out.x -= out.right() - area.right();
+                }
+                if out.x < area.x {
+                    out.x = area.x;
+                }
+            }
+            if off_x(out) && ca & adjust::RESIZE_X != 0 {
+                let (left, right) = (out.x.max(area.x), out.right().min(area.right()));
+                if right > left {
+                    out = Rect::new(left, out.y, right - left, out.height);
+                }
+            }
+        }
+        if off_y(out) {
+            if ca & adjust::FLIP_Y != 0 {
+                let flipped =
+                    Positioner { anchor: mirror(self.anchor, false), gravity: mirror(self.gravity, false), ..*self };
+                if let Some(f) = flipped.place().map(|r| r.translate(origin.0, origin.1))
+                    && !off_y(f)
+                {
+                    out.y = f.y;
+                }
+            }
+            if off_y(out) && ca & adjust::SLIDE_Y != 0 {
+                if out.bottom() > area.bottom() {
+                    out.y -= out.bottom() - area.bottom();
+                }
+                if out.y < area.y {
+                    out.y = area.y;
+                }
+            }
+            if off_y(out) && ca & adjust::RESIZE_Y != 0 {
+                let (top, bottom) = (out.y.max(area.y), out.bottom().min(area.bottom()));
+                if bottom > top {
+                    out = Rect::new(out.x, top, out.width, bottom - top);
+                }
+            }
+        }
+        Some(out.translate(-origin.0, -origin.1))
+    }
 }
 
-/// `xdg_toplevel.resize_edge` values.
+/// `xdg_toplevel.resize_edge` values, and its bits.
 const RESIZE_EDGES: [u32; 9] = [0, 1, 2, 4, 5, 6, 8, 9, 10];
+pub(crate) const RESIZE_TOP: u32 = 1;
+pub(crate) const RESIZE_BOTTOM: u32 = 2;
+pub(crate) const RESIZE_LEFT: u32 = 4;
+pub(crate) const RESIZE_RIGHT: u32 = 8;
 
 impl Server {
     fn xdg(&mut self, c: ClientId, id: ObjectId) -> Option<&mut XdgSurface> {
@@ -268,8 +376,8 @@ impl Server {
             }
             xdg_surface::Request::GetPopup { id: popup, parent, positioner } => {
                 constructed("get_popup")?;
-                let rect = self.positioner(c, positioner).and_then(|p| p.place());
-                let Some(rect) = rect else {
+                let rules = self.positioner(c, positioner);
+                let (Some(rules), Some(rect)) = (rules, rules.and_then(|p| p.place())) else {
                     let code = xdg_wm_base::Error::INVALID_POSITIONER.0;
                     return Err(error(base, code, "the positioner has no size or anchor rectangle"));
                 };
@@ -280,7 +388,7 @@ impl Server {
                 s.role = Role::XdgPopup;
                 let client = self.client(c);
                 let version = client.version(id);
-                let p = Popup { xdg: id, parent, rect };
+                let p = Popup { xdg: id, parent, rect, positioner: rules, grab: false };
                 client.insert(popup, &xdg_popup::INTERFACE, version, Data::Popup(p));
                 if let Some(x) = self.xdg(c, id) {
                     x.role = Some(popup);
@@ -397,8 +505,11 @@ impl Server {
             states.push(xdg_toplevel::State::MAXIMIZED.0);
             work
         } else {
-            (0, 0)
+            t.resize_size.unwrap_or((0, 0))
         };
+        if t.resizing {
+            states.push(xdg_toplevel::State::RESIZING.0);
+        }
         let send_caps = !core::mem::replace(&mut t.capabilities_sent, true);
         let decoration = t.decoration.filter(|_| core::mem::take(&mut t.decoration_due));
         let serial = self.next_serial();
@@ -419,9 +530,35 @@ impl Server {
         }
     }
 
+    /// Where a popup's parent's window geometry starts on the output, if
+    /// the parent is shown.
+    fn popup_origin(&mut self, c: ClientId, parent: Option<ObjectId>) -> Option<(i32, i32)> {
+        let px = parent?;
+        let pw = self.xdg_window(c, px)?;
+        let ps = self.xdg(c, px)?.surface;
+        let pg = self.geometry(c, ps, px);
+        let (wx, wy) = self.scene.window(pw)?.position();
+        Some((wx + pg.x, wy + pg.y))
+    }
+
     fn configure_popup(&mut self, c: ClientId, popup: ObjectId) {
         let Some(Data::Popup(p)) = self.client(c).data(popup) else { return };
-        let (xid, r) = (p.xdg, p.rect);
+        let (xid, parent, rules, mut r) = (p.xdg, p.parent, p.positioner, p.rect);
+        // Kept on the output (the work area) where the rules allow.
+        let origin = self.popup_origin(c, parent);
+        if let Some(origin) = origin {
+            let area = self.scene.work_area();
+            r = rules.place_in(origin, area).unwrap_or(r);
+        }
+        if let Some(Data::Popup(p)) = self.client(c).data_mut(popup) {
+            p.rect = r;
+        }
+        // Shown already (a reposition): it moves now.
+        if let (Some(origin), Some(win)) = (origin, self.xdg_window(c, xid)) {
+            let surface = self.xdg(c, xid).map(|x| x.surface).unwrap_or(popup);
+            let g = self.geometry(c, surface, xid);
+            self.scene.set_position(win, origin.0 + r.x - g.x, origin.1 + r.y - g.y);
+        }
         let serial = self.next_serial();
         let client = self.client(c);
         client.send(popup, xdg_popup::Event::Configure { x: r.x, y: r.y, width: r.width, height: r.height });
@@ -459,7 +596,10 @@ impl Server {
                 self.scene.place_above(win, pw);
             }
         } else if let Some(Data::Popup(p)) = self.client(c).data(role) {
-            let (parent, rect) = (p.parent, p.rect);
+            let (parent, rect, grab) = (p.parent, p.rect, p.grab);
+            if grab {
+                self.popup_grabs.push((c, role));
+            }
             let parent_win = parent.and_then(|px| self.xdg_window(c, px));
             let origin = match (parent, parent_win) {
                 (Some(px), Some(pw)) => {
@@ -472,6 +612,8 @@ impl Server {
             };
             self.scene.set_position(win, origin.0 + rect.x - g.x, origin.1 + rect.y - g.y);
             if let Some(pw) = parent_win {
+                // Part of its parent: moves and is raised with it.
+                self.scene.set_parent(win, Some(pw));
                 self.scene.place_above(win, pw);
             }
         }
@@ -507,6 +649,10 @@ impl Server {
         {
             self.active = None;
         }
+        if let Some(r) = role {
+            self.popup_grabs.retain(|g| *g != (c, r));
+            self.end_grabs_of(c, r);
+        }
         let client = self.client(c);
         let children = client.ids_where(|d| matches!(d, Data::Popup(p) if p.parent == Some(xid)));
         for p in children {
@@ -528,9 +674,16 @@ impl Server {
         let g = self.geometry(c, surface, xid);
         let pos = self.scene.window(win).map_or((0, 0), |w| w.position());
         let top = self.scene.reserved_top();
+        // An interactive resize from the left or top keeps the opposite
+        // edge where it was.
+        let anchored = self.resize_anchor(win).map(|(edges, right, bottom)| {
+            let x = if edges & RESIZE_LEFT != 0 { right - g.width - g.x } else { pos.0 };
+            let y = if edges & RESIZE_TOP != 0 { bottom - g.height - g.y } else { pos.1 };
+            (x, y)
+        });
         let Some(t) = self.toplevel(c, role) else { return };
         let title = t.title.clone();
-        let mut position = None;
+        let mut position = anchored.filter(|p| *p != pos);
         let mut decorated = !t.fullscreen;
         if acked_all && (t.maximized, t.fullscreen) != (t.want_maximized, t.want_fullscreen) {
             if !t.maximized && !t.fullscreen {
@@ -580,16 +733,27 @@ impl Server {
         }
     }
 
-    fn toplevel_window(&mut self, c: ClientId, tl: ObjectId) -> Option<WindowId> {
+    /// The window of a toplevel — or of a surface an outside window manager
+    /// manages (`external.rs`), which takes a toplevel's place.
+    pub(super) fn toplevel_window(&mut self, c: ClientId, tl: ObjectId) -> Option<WindowId> {
+        if let Some(s) = self.surface(c, tl).filter(|s| s.role == Role::External) {
+            return s.window;
+        }
         let xid = self.toplevel(c, tl)?.xdg;
         self.xdg_window(c, xid)
     }
 
-    /// The toplevel shown in scene window `w`.
-    fn window_toplevel(&mut self, w: WindowId) -> Option<(ClientId, ObjectId)> {
+    /// The toplevel (or externally managed surface) shown in scene window
+    /// `w`.
+    pub(super) fn window_toplevel(&mut self, w: WindowId) -> Option<(ClientId, ObjectId)> {
+        // A subsurface's or popup's window is part of its toplevel's.
+        let w = self.scene.root(w);
         let (c, surface) = owner_of(self.scene.window(w)?.owner());
         if !self.clients.contains_key(&c) {
             return None;
+        }
+        if self.surface(c, surface)?.role == Role::External {
+            return Some((c, surface));
         }
         let xid = self.surface(c, surface)?.xdg?;
         let role = self.xdg(c, xid)?.role?;
@@ -603,10 +767,16 @@ impl Server {
         }
     }
 
-    /// A click on a window's close button: ask its client to close it.
+    /// A click on a window's close button: ask its client to close it (an
+    /// externally managed one: its window manager, through
+    /// [`Server::take_wm_events`]).
     pub(super) fn close_window(&mut self, w: WindowId) {
         if let Some((c, tl)) = self.window_toplevel(w) {
-            self.client(c).send(tl, xdg_toplevel::Event::Close);
+            if self.surface_ref(c, tl).is_some_and(|s| s.role == Role::External) {
+                self.wm_events.push(super::WmEvent::Close { client: c, surface: tl });
+            } else {
+                self.client(c).send(tl, xdg_toplevel::Event::Close);
+            }
         }
     }
 
@@ -655,6 +825,13 @@ impl Server {
                     let code = xdg_toplevel::Error::INVALID_RESIZE_EDGE.0;
                     return Err(error(tl, code, format!("resize edge {edges}")));
                 }
+                // An interactive resize while a button is held.
+                if edges != 0
+                    && let Some(w) = self.toplevel_window(c, tl)
+                {
+                    self.start_resize(w, edges);
+                }
+                return Ok(());
             }
             xdg_toplevel::Request::SetMaximized => (t.want_maximized, reconfigure) = (true, true),
             xdg_toplevel::Request::UnsetMaximized => (t.want_maximized, reconfigure) = (false, true),
@@ -682,21 +859,41 @@ impl Server {
         let xid = p.xdg;
         match req {
             xdg_popup::Request::Destroy => {
+                // Popups with a grab go top down.
+                let top = self.popup_grabs.iter().rposition(|g| g.0 == c);
+                let mine = self.popup_grabs.iter().position(|g| *g == (c, popup));
+                if let (Some(top), Some(mine)) = (top, mine)
+                    && mine < top
+                {
+                    let base = self.xdg(c, xid).map_or(popup, |x| x.wm_base);
+                    let code = xdg_wm_base::Error::NOT_THE_TOPMOST_POPUP.0;
+                    return Err(error(base, code, "a popup was destroyed before the one above it"));
+                }
                 self.unmap(c, xid);
                 if let Some(x) = self.xdg(c, xid) {
                     x.role = None;
                 }
             }
-            // Grabs need a seat with a pointer or keyboard.
-            xdg_popup::Request::Grab { .. } => {}
+            // The popup takes the keyboard; a click outside the client's
+            // surfaces dismisses it (`input.rs`).
+            xdg_popup::Request::Grab { .. } => {
+                if self.xdg(c, xid).is_some_and(|x| x.mapped) {
+                    let code = xdg_popup::Error::INVALID_GRAB.0;
+                    return Err(error(popup, code, "a grab after the popup was mapped"));
+                }
+                if let Some(Data::Popup(p)) = self.client(c).data_mut(popup) {
+                    p.grab = true;
+                }
+            }
             xdg_popup::Request::Reposition { positioner, token } => {
-                let Some(rect) = self.positioner(c, positioner).and_then(|p| p.place()) else {
+                let rules = self.positioner(c, positioner);
+                let (Some(rules), Some(rect)) = (rules, rules.and_then(|p| p.place())) else {
                     let base = self.xdg(c, xid).map_or(popup, |x| x.wm_base);
                     let code = xdg_wm_base::Error::INVALID_POSITIONER.0;
                     return Err(error(base, code, "the positioner has no size or anchor rectangle"));
                 };
                 if let Some(Data::Popup(p)) = self.client(c).data_mut(popup) {
-                    p.rect = rect;
+                    (p.rect, p.positioner) = (rect, rules);
                 }
                 self.client(c).send(popup, xdg_popup::Event::Repositioned { token });
                 self.configure_popup(c, popup);

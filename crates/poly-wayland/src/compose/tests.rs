@@ -240,3 +240,178 @@ fn a_ppm_holds_the_picture() {
     fb.row_mut(0).copy_from_slice(&[0xff11_2233, 0x44_5566]);
     assert_eq!(fb.to_ppm(), [b"P6\n2 1\n255\n".as_slice(), &[0x11, 0x22, 0x33, 0x44, 0x55, 0x66]].concat());
 }
+
+/// A 3 × 2 picture `abc` / `def` (one colour per letter) drawn through
+/// every buffer transform: what the client turned, the compositor turns
+/// back (wayland.xml: transforms are counter-clockwise, flips first).
+#[test]
+fn buffer_transforms_are_undone() {
+    let colours = [0xffff_0000, 0xff00_ff00, 0xff00_00ff, 0xffff_ff00, 0xff00_ffff, 0xffff_00ff];
+    let key = [
+        ('.', BG),
+        ('a', 0xff0000),
+        ('b', 0x00ff00),
+        ('c', 0x0000ff),
+        ('d', 0xffff00),
+        ('e', 0x00ffff),
+        ('f', 0xff00ff),
+    ];
+    let draw = |transform: u32| {
+        let mut scene = Scene::new(4, 4, 1);
+        let id = scene.add_window(0, false);
+        // A buffer holding abc/def with `transform` applied.
+        let (w, h) = if transform & 1 != 0 { (2, 3) } else { (3, 2) };
+        scene.resize_content(id, w, h, 1);
+        scene.set_view(id, View { transform, ..View::default() });
+        let c = scene.content_mut(id).unwrap();
+        for v in 0..2 {
+            for u in 0..3 {
+                let (bx, by) = buffer_point(transform, u, v, 3, 2);
+                c.pixels[(by * w as i32 + bx) as usize] = colours[(v * 3 + u) as usize];
+            }
+        }
+        let mut fb = MemoryFramebuffer::new(4, 4);
+        scene.render(&mut fb);
+        picture(&fb, &key)
+    };
+    for t in 0..8 {
+        assert_eq!(draw(t), ["abc.", "def.", "....", "...."], "transform {t}");
+    }
+    // The 90° buffer as the client draws it: the picture turned
+    // counter-clockwise (its right column on top, its left at the bottom).
+    assert_eq!(buffer_point(1, 2, 0, 3, 2), (0, 0));
+    assert_eq!(buffer_point(1, 0, 0, 3, 2), (0, 2));
+    // Flipped: mirrored around the vertical axis.
+    assert_eq!(buffer_point(4, 0, 0, 3, 2), (2, 0));
+}
+
+/// A viewport crops a source rectangle and scales it to its destination.
+#[test]
+fn viewports_crop_and_scale() {
+    let mut scene = Scene::new(8, 4, 1);
+    let id = scene.add_window(0, false);
+    scene.resize_content(id, 4, 2, 1);
+    let c = scene.content_mut(id).unwrap();
+    c.pixels.copy_from_slice(&[
+        0xffff_0000,
+        0xff00_ff00,
+        0xff00_00ff,
+        0xffff_ffff,
+        0xff00_0000,
+        0xff00_ff00,
+        0xff00_00ff,
+        0xffff_ffff,
+    ]);
+    // The middle two columns of the top row, shown 4 × 2.
+    scene.set_view(id, View { source: Some((256, 0, 512, 256)), destination: Some((4, 2)), ..View::default() });
+    assert_eq!(scene.window(id).unwrap().surface_rect(), Rect::new(0, 0, 4, 2));
+    let mut fb = MemoryFramebuffer::new(8, 4);
+    scene.render(&mut fb);
+    let key = [('.', BG), ('g', 0x00ff00), ('b', 0x0000ff)];
+    assert_eq!(picture(&fb, &key), ["ggbb....", "ggbb....", "........", "........"]);
+    // Only a destination: the whole buffer scaled down.
+    scene.set_view(id, View { destination: Some((2, 1)), ..View::default() });
+    scene.render(&mut fb);
+    let key = [('.', BG), ('g', 0x00ff00), ('w', 0xffffff)];
+    assert_eq!(picture(&fb, &key), ["gw......", "........", "........", "........"]);
+}
+
+/// A window part of another (a subsurface, a popup) moves and is raised
+/// with it, and can be stacked below it.
+#[test]
+fn families_move_and_stack_together() {
+    let mut scene = Scene::new(20, 10, 1);
+    let a = window(&mut scene, 0, 0, 6, 6, 1, 0xffff_0000, false);
+    let b = window(&mut scene, 4, 2, 6, 6, 1, 0xff00_ff00, false);
+    let child = window(&mut scene, 2, 2, 2, 2, 1, 0xff00_00ff, false);
+    scene.set_parent(child, Some(a));
+    scene.place_above(child, a);
+    assert_eq!(scene.family(a), [a, child]);
+    assert_eq!(scene.root(child), a);
+    // Raising the parent brings the child along.
+    scene.raise(a);
+    let order: Vec<WindowId> = scene.windows().iter().map(|w| w.id()).collect();
+    assert_eq!(order, [b, a, child]);
+    scene.set_position(a, 10, 0);
+    assert_eq!(scene.window(child).unwrap().position(), (12, 2));
+    // Below its parent: hidden behind it.
+    scene.restack_below(child, a);
+    let order: Vec<WindowId> = scene.windows().iter().map(|w| w.id()).collect();
+    assert_eq!(order, [b, child, a]);
+    let mut fb = MemoryFramebuffer::new(20, 10);
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(12, 2), Some(0xff0000));
+    scene.restack_above(child, a);
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(12, 2), Some(0x0000ff));
+    // No cycles.
+    scene.set_parent(a, Some(child));
+    assert_eq!(scene.window(a).unwrap().parent(), None);
+    scene.remove_window(a);
+    assert_eq!(scene.window(child).unwrap().parent(), None);
+}
+
+/// A client's cursor image replaces the arrow, with its hot spot.
+#[test]
+fn cursor_images_and_hidden_cursors() {
+    let mut scene = Scene::new(10, 10, 1);
+    scene.set_cursor(Some((5, 5)));
+    let content = Content { width: 2, height: 2, scale: 1, pixels: alloc::vec![0xff12_3456; 4], ..Content::default() };
+    scene.set_cursor_look(CursorLook::Image { content, hx: 1, hy: 1 });
+    let mut fb = MemoryFramebuffer::new(10, 10);
+    scene.render(&mut fb);
+    assert_eq!((fb.pixel(4, 4), fb.pixel(5, 5), fb.pixel(6, 6)), (Some(0x123456), Some(0x123456), Some(BG)));
+    scene.set_cursor_look(CursorLook::Hidden);
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(4, 4), Some(BG));
+    assert_eq!(scene.cursor_rect(5, 5), Rect::default());
+}
+
+/// The picture behind a window: what is under it, without it, kept up to
+/// date with damage as things below it change, and left alone by changes
+/// elsewhere (ADR 0116; Liquid Glass samples it later).
+#[test]
+fn backdrops_hold_what_is_behind_a_window() {
+    let mut scene = Scene::new(20, 10, 1);
+    let below = window(&mut scene, 0, 0, 8, 8, 1, 0xffff_0000, false);
+    let far = window(&mut scene, 14, 0, 4, 4, 1, 0xff00_00ff, false);
+    let glass = window(&mut scene, 4, 2, 6, 6, 1, 0x8000_0000, false);
+    scene.set_backdrop(glass, true);
+    let mut fb = MemoryFramebuffer::new(20, 10);
+    scene.render(&mut fb);
+    let b = scene.backdrop(glass).unwrap();
+    assert_eq!(b.rect(), Rect::new(4, 2, 6, 6));
+    // Red where the window below is, the background beside it; not the
+    // half-transparent black of the window itself.
+    assert_eq!((b.pixel(5, 3), b.pixel(9, 3)), (Some(0xff0000), Some(BG)));
+    assert_ne!(fb.pixel(5, 3), Some(0xff0000), "the screen shows the glass over it");
+    assert_eq!(scene.take_backdrop_damage(glass), [Rect::new(4, 2, 6, 6)]);
+    // A change far away: no backdrop damage.
+    scene.content_mut(far).unwrap().pixels.fill(0xff00_ff00);
+    scene.damage_content(far, Rect::new(0, 0, 4, 4));
+    scene.render(&mut fb);
+    assert!(scene.take_backdrop_damage(glass).is_empty());
+    // A change below: that part is drawn again.
+    scene.content_mut(below).unwrap().pixels.fill(0xff00_ff00);
+    scene.damage_content(below, Rect::new(5, 3, 2, 2));
+    scene.render(&mut fb);
+    assert_eq!(scene.take_backdrop_damage(glass), [Rect::new(5, 3, 2, 2)]);
+    assert_eq!(scene.backdrop(glass).unwrap().pixel(5, 3), Some(0x00ff00));
+    // Moving the window takes the picture along.
+    scene.set_position(glass, 10, 2);
+    scene.render(&mut fb);
+    let b = scene.backdrop(glass).unwrap();
+    assert_eq!(b.rect(), Rect::new(10, 2, 6, 6));
+    assert_eq!((b.pixel(15, 3), b.pixel(10, 9)), (Some(0x00ff00), None));
+    // HiDPI: physical pixels.
+    let mut scene = Scene::new(20, 20, 2);
+    window(&mut scene, 0, 0, 10, 10, 1, 0xffff_0000, false);
+    let glass = window(&mut scene, 2, 2, 4, 4, 1, 0x0000_0000, false);
+    scene.set_backdrop(glass, true);
+    let mut fb = MemoryFramebuffer::new(20, 20);
+    scene.render(&mut fb);
+    assert_eq!(scene.backdrop(glass).unwrap().rect(), Rect::new(4, 4, 8, 8));
+    assert_eq!(scene.backdrop(glass).unwrap().pixel(5, 5), Some(0xff0000));
+    scene.set_backdrop(glass, false);
+    assert!(scene.backdrop(glass).is_none());
+}

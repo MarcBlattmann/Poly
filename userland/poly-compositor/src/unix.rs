@@ -85,15 +85,91 @@ pub fn close(fd: RawFd) {
     unsafe { libc::close(fd) };
 }
 
-/// The [`Host`] on Linux: `mmap`, `close`, and the keymap file.
+/// The [`Host`] on Linux: `mmap`, `close`, the keymap file, and dma-bufs.
 #[derive(Debug, Default)]
 pub struct UnixHost {
     /// The keymap file (read-only, unlinked) and its size; each
     /// `wl_keyboard` gets a duplicate of the descriptor.
     pub keymap: Option<(RawFd, u32)>,
+    /// The `dev_t` of the DRM render node clients allocate dma-bufs on, if
+    /// the compositor takes them (it runs on KMS).
+    pub dmabuf_device: Option<u64>,
+}
+
+/// The device number of a device node (`st_rdev`), if it is one.
+pub fn device_number(path: &str) -> Option<u64> {
+    let c = CString::new(path).ok()?;
+    // SAFETY: stat is plain data; all-zero is a valid value to overwrite.
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    // SAFETY: a NUL-terminated path and a stat buffer to fill.
+    let r = unsafe { libc::stat(c.as_ptr(), &mut st) };
+    (r == 0 && st.st_rdev != 0).then_some(st.st_rdev)
+}
+
+/// A read-only descriptor holding `bytes`: a sealed memfd, else an unlinked
+/// file in `/tmp`.
+pub fn read_only_file(name: &str, bytes: &[u8]) -> Option<RawFd> {
+    let c = CString::new(name).ok()?;
+    // SAFETY: a NUL-terminated name and valid flags.
+    let fd = unsafe { libc::memfd_create(c.as_ptr(), libc::MFD_CLOEXEC | libc::MFD_ALLOW_SEALING) };
+    let fd = if fd >= 0 {
+        fd
+    } else {
+        let path = format!("/tmp/{name}-{}", std::process::id());
+        let p = CString::new(path.as_str()).ok()?;
+        // SAFETY: a NUL-terminated path.
+        let fd =
+            unsafe { libc::open(p.as_ptr(), libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC, 0o600) };
+        let _ = std::fs::remove_file(&path);
+        if fd < 0 {
+            return None;
+        }
+        fd
+    };
+    let mut at = 0;
+    while at < bytes.len() {
+        // SAFETY: writing from a live buffer of the length given.
+        let n = unsafe { libc::write(fd, bytes[at..].as_ptr().cast(), bytes.len() - at) };
+        if n <= 0 {
+            close(fd);
+            return None;
+        }
+        at += n as usize;
+    }
+    // Sealing is best effort (a file in /tmp cannot be sealed).
+    // SAFETY: fcntl on a descriptor we own.
+    unsafe { libc::fcntl(fd, libc::F_ADD_SEALS, libc::F_SEAL_SHRINK | libc::F_SEAL_GROW | libc::F_SEAL_WRITE) };
+    let path = format!("/proc/self/fd/{fd}");
+    let p = CString::new(path).ok()?;
+    // A read-only descriptor of it, as the protocol wants.
+    // SAFETY: a NUL-terminated path.
+    let ro = unsafe { libc::open(p.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+    if ro >= 0 {
+        close(fd);
+        return Some(ro);
+    }
+    Some(fd)
 }
 
 impl Host for UnixHost {
+    fn dmabuf_device(&mut self) -> Option<u64> {
+        self.dmabuf_device
+    }
+
+    fn map_dmabuf(&mut self, fd: Fd) -> Option<Box<dyn ShmMap>> {
+        // SAFETY: lseek on a descriptor the client sent.
+        let size = unsafe { libc::lseek(fd.0, 0, libc::SEEK_END) };
+        if size <= 0 {
+            close(fd.0);
+            return None;
+        }
+        self.map_shm(fd, size as usize)
+    }
+
+    fn dmabuf_table(&mut self, table: &[u8]) -> Option<Fd> {
+        read_only_file("poly-dmabuf-formats", table).map(Fd)
+    }
+
     fn keymap(&mut self) -> Option<(Fd, u32)> {
         let (fd, size) = self.keymap?;
         // SAFETY: duplicating a descriptor the host keeps open.
