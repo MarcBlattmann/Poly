@@ -71,6 +71,7 @@ mod busybox;
 mod compositor;
 mod conflicts;
 mod console;
+mod drm;
 mod dynamic;
 mod ext2disk;
 mod ext4disk;
@@ -1392,7 +1393,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 25] = [
+const BOOT_GROUPS: [BootGroup; 26] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1441,6 +1442,10 @@ const BOOT_GROUPS: [BootGroup; 25] = [
     // mode, the display tests, and a screenshot of what the device shows
     // (ADR 0102).
     ("virtio-gpu", virtio_gpu_test),
+    // DRM/KMS on the virtio GPU: the kernel's DRM tests, then
+    // /bin/drm-kms sets a mode, flips and draws through /dev/dri/card0,
+    // checked by screenshots, and the console comes back (drm.rs, ADR 0108).
+    ("drm", drm::boot_tests),
     // The screen terminal: a command typed on the keyboard runs in the shell
     // on the screen, whose output and status bar show up.
     ("terminal", |k, s| {
@@ -1465,7 +1470,10 @@ const BOOT_GROUPS: [BootGroup; 25] = [
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland"]),
-    ("devices", &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "terminal", "input"]),
+    (
+        "devices",
+        &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "drm", "terminal", "input"],
+    ),
     ("faults", &["faults", "failures"]),
 ];
 

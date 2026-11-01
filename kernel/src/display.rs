@@ -73,6 +73,17 @@
 //! panic screen will want to; keep the work done under it to what changed.
 //! (That is also why the virtio GPU's commands are polled, not waited for
 //! with an interrupt.)
+//!
+//! # Sharing the virtio GPU with DRM
+//!
+//! `/dev/dri/card0` (`crate::drm`, ADR 0108) drives the same virtio GPU
+//! through [`with_gpu`], with resource IDs of its own. While a DRM client
+//! shows its framebuffers ([`console_yield`]), the console keeps drawing
+//! into the back buffer but [`flush`] sends nothing to the device (and
+//! display-change events wait), so the two never fight over the scanouts;
+//! [`console_restore`] (the DRM master closed) plans the scanouts again,
+//! sets the console's resource on them and flushes all of it. A Bochs VBE
+//! display has no DRM device and never yields.
 
 use crate::arch::dispi::DispiPorts;
 use crate::boot_info::BootInfo;
@@ -241,6 +252,8 @@ struct GpuOutput {
     last_update: Option<poly_virtio_gpu::Rect>,
     /// Failed updates, to log only the first few.
     failures: u32,
+    /// A DRM client shows its own framebuffers: nothing goes to the device.
+    yielded: bool,
 }
 
 /// A zeroed back buffer from the frame allocator: its frames and a canvas
@@ -275,7 +288,7 @@ impl Display {
         match &mut self.output {
             Output::Vbe(v) => v.front.blit(r.x, r.y, &self.back, r),
             Output::VirtioGpu(g) => {
-                if g.gpu.is_broken() {
+                if g.gpu.is_broken() || g.yielded {
                     return;
                 }
                 // Clipped to the screen above, so the corner is not negative.
@@ -295,7 +308,7 @@ impl Display {
     /// follow the new display configuration (§5.7.4.2).
     fn poll_gpu_events(&mut self) {
         let Output::VirtioGpu(g) = &mut self.output else { return };
-        if g.gpu.is_broken() || g.gpu.take_events() & poly_virtio_gpu::event::DISPLAY == 0 {
+        if g.yielded || g.gpu.is_broken() || g.gpu.take_events() & poly_virtio_gpu::event::DISPLAY == 0 {
             return;
         }
         let size = g.request.size;
@@ -464,6 +477,72 @@ pub fn flush_all() {
     }
 }
 
+/// Run `f` on the virtio GPU the display is on, under the display's lock
+/// (interrupts off: keep it to a few commands). `None` on Bochs VBE or
+/// without a display. For `crate::drm`, which uses resource IDs the
+/// console does not (the console's are 1 and 2).
+pub fn with_gpu<R>(f: impl FnOnce(&mut virtio_gpu::Driver) -> R) -> Option<R> {
+    let mut guard = DISPLAY.lock();
+    match &mut guard.as_mut()?.output {
+        Output::VirtioGpu(g) => Some(f(&mut g.gpu)),
+        Output::Vbe(_) => None,
+    }
+}
+
+/// The PCI function of the display, if it is on a virtio GPU.
+pub fn gpu_bdf() -> Option<Bdf> {
+    let guard = DISPLAY.lock();
+    let d = guard.as_ref()?;
+    matches!(d.output, Output::VirtioGpu(_)).then_some(d.bdf)
+}
+
+/// A DRM client is about to show its framebuffers on the virtio GPU: stop
+/// sending the console's updates to the device (see the module
+/// documentation). False if the display is not on a virtio GPU.
+pub fn console_yield() -> bool {
+    let mut guard = DISPLAY.lock();
+    let Some(d) = guard.as_mut() else { return false };
+    let Output::VirtioGpu(g) = &mut d.output else { return false };
+    if !g.yielded {
+        g.yielded = true;
+        kprintln!("display: virtio-gpu: a DRM client took the display; the console waits");
+    }
+    true
+}
+
+/// Whether the console gave the display to a DRM client.
+pub fn console_yielded() -> bool {
+    matches!(DISPLAY.lock().as_ref().map(|d| &d.output), Some(Output::VirtioGpu(g)) if g.yielded)
+}
+
+/// The DRM client let go of the display: plan the console's scanouts
+/// again (the display may have changed meanwhile), show its resource on
+/// them and flush all of it.
+pub fn console_restore() {
+    let mut guard = DISPLAY.lock();
+    let Some(d) = guard.as_mut() else { return };
+    let Output::VirtioGpu(g) = &mut d.output else { return };
+    if !g.yielded {
+        return;
+    }
+    g.yielded = false;
+    // Events that came meanwhile are answered by planning again now.
+    let _ = g.gpu.take_events();
+    let size = g.request.size;
+    if let Err(e) = d.replan(size) {
+        // Show it as it was planned before.
+        kprintln!("display: virtio-gpu: planning the console's scanouts again failed: {e}");
+        if let Output::VirtioGpu(g) = &mut d.output
+            && let Err(e) = g.gpu.set_scanouts(&g.fb, &g.plan, None)
+        {
+            kprintln!("display: virtio-gpu: showing the console again failed: {e:?}");
+        }
+    }
+    let bounds = d.info.bounds();
+    d.flush(bounds);
+    kprintln!("display: virtio-gpu: the console has the display again");
+}
+
 /// QEMU's standard VGA, `secondary-vga` or `bochs-display`, the first one.
 fn find() -> Option<&'static Device> {
     pci::devices().iter().find(|d| (d.header.vendor_id, d.header.device_id) == (vbe::PCI_VENDOR, vbe::PCI_DEVICE))
@@ -602,7 +681,7 @@ fn bring_up_gpu(gpu: virtio_gpu::Gpu, asked: Option<Mode>) -> Result<Display, Er
         write_combining: false,
         device: DeviceKind::VirtioGpu,
     };
-    let output = GpuOutput { gpu: driver, fb, plan, request, last_update: None, failures: 0 };
+    let output = GpuOutput { gpu: driver, fb, plan, request, last_update: None, failures: 0, yielded: false };
     Ok(Display {
         info,
         bdf,

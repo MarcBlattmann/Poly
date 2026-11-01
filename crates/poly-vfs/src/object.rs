@@ -58,6 +58,15 @@ pub trait FileObject: Any + Send + Sync {
     fn seek_stays_at_zero(&self) -> bool {
         false
     }
+
+    /// For an object that seeks like a file of this many bytes (a dma-buf:
+    /// `lseek(fd, 0, SEEK_END)` gives its size, the kernel's dma-buf
+    /// documentation): `lseek` moves the offset as on a regular file of
+    /// that size. `None` (the default): `ESPIPE`, or see
+    /// [`seek_stays_at_zero`](Self::seek_stays_at_zero).
+    fn seek_size(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// The inode number of the anonymous file system's root directory.

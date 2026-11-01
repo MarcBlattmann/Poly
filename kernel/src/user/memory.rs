@@ -622,6 +622,8 @@ impl Memory {
         // them; a page-cache page in a private region is the cache's too.
         let refs = match (inner.cached.get(&page), inner.shared.get(&page)) {
             (Some(m), _) if !m.shared => 2,
+            // Device memory always has another user: its owner.
+            (_, Some(s)) if s.frame.is_device() => u32::MAX,
             (_, Some(s)) => u32::try_from(Arc::strong_count(&s.frame)).unwrap_or(u32::MAX),
             _ => 1,
         };

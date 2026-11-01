@@ -193,6 +193,23 @@ pub fn vfs_errno(e: poly_vfs::Errno) -> Errno {
     Errno::new(e as u16).unwrap_or(Errno::EIO)
 }
 
+/// Map `req` where the `mmap(2)` call `r` asks for it.
+fn map_placed(memory: &Memory, req: poly_vm::MapRequest<FileRef>, r: &MapRequest) -> Result<u64, Errno> {
+    let placement = match r.placement {
+        Placement::Hint => poly_vm::Placement::Hint(r.addr),
+        Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
+        Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
+    };
+    let addr = memory.map(req.at(placement)).map_err(memory_errno)?;
+    // MAP_32BIT: the region map has no "below 2 GiB" placement yet; a
+    // mapping that landed higher is taken back.
+    if r.hints.low_2g && addr.saturating_add(r.len) > 1 << 31 {
+        let _ = memory.unmap(addr, r.len);
+        return Err(Errno::ENOMEM);
+    }
+    Ok(addr)
+}
+
 fn memory_errno(e: MemoryError) -> Errno {
     Errno::new(e.linux_errno() as u16).unwrap_or(Errno::ENOMEM)
 }
@@ -358,6 +375,15 @@ impl LinuxKernel for Thread<'_> {
                 if !file.readable() {
                     return Err(Errno::EACCES);
                 }
+                // A DRM dumb buffer or a dma-buf: its frames (ADR 0108).
+                if let Some(found) = crate::drm::mapping(&file, offset, r.len) {
+                    let (source, start) = found.map_err(vfs_errno)?;
+                    if r.shared && r.prot.writable() && !file.writable() {
+                        return Err(Errno::EACCES);
+                    }
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), start, r.shared);
+                    return map_placed(&memory, req, r);
+                }
                 // Pipes and event files have nothing to map.
                 if file.object().is_some() {
                     return Err(Errno::ENODEV);
@@ -372,19 +398,7 @@ impl LinuxKernel for Thread<'_> {
                 poly_vm::MapRequest::file(r.len, prot, FileRef::new(Arc::new(source)), offset, r.shared)
             }
         };
-        let placement = match r.placement {
-            Placement::Hint => poly_vm::Placement::Hint(r.addr),
-            Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
-            Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
-        };
-        let addr = memory.map(req.at(placement)).map_err(memory_errno)?;
-        // MAP_32BIT: the region map has no "below 2 GiB" placement yet; a
-        // mapping that landed higher is taken back.
-        if r.hints.low_2g && addr.saturating_add(r.len) > 1 << 31 {
-            let _ = memory.unmap(addr, r.len);
-            return Err(Errno::ENOMEM);
-        }
-        Ok(addr)
+        map_placed(&memory, req, r)
     }
 
     fn munmap(&mut self, addr: u64, len: u64) -> Result<(), Errno> {

@@ -29,6 +29,7 @@ poly-cpio = { path = "../crates/poly-cpio" }
 poly-gfx = { path = "../crates/poly-gfx" }
 poly-heap = { path = "../crates/poly-heap" }
 poly-input = { path = "../crates/poly-input" }
+poly-drm = { path = "../crates/poly-drm" }
 poly-irq = { path = "../crates/poly-irq" }
 poly-line = { path = "../crates/poly-line" }
 poly-mem = { path = "../crates/poly-mem" }

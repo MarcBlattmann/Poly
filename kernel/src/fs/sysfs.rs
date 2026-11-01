@@ -12,6 +12,10 @@
 //! /sys/{block,bus,firmware,fs,kernel,module,power}/   empty for now
 //! ```
 //!
+//! With a DRM device (`crate::drm`, ADR 0108) also its PCI function under
+//! `/sys/devices/pci0000:00/`, with the `drm/card0` and `drm/renderD128`
+//! minors, `/sys/class/drm/*` and `/sys/dev/char/226:*`.
+//!
 //! The `dev` files and the `/sys/dev/char` links are sysfs(5)'s example
 //! (`/sys/dev/char/1:3` -> `../../devices/virtual/mem/null`, whose `dev`
 //! reads `1:3`).
@@ -51,6 +55,7 @@ pub fn build() -> Arc<StaticFs> {
         b.link(&format!("dev/char/{}:{}", id.major, id.minor), &format!("../../{dir}"));
         b.link(&format!("class/{class}/{name}"), &format!("../../{dir}"));
     }
+    crate::drm::sysfs(&mut b);
     b.dir("dev/block");
     for dir in ["block", "bus", "firmware", "fs", "kernel", "module", "power"] {
         b.dir(dir);

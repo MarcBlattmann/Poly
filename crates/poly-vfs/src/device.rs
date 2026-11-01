@@ -69,6 +69,13 @@ pub trait CharDevice: Send + Sync {
     fn pty_index(&self) -> Option<u32> {
         None
     }
+
+    /// The device as `Any`, for the kernel to find its own device type
+    /// behind an open file (what a mapping of a DRM device file maps).
+    /// `None` (the default) for devices nobody looks into.
+    fn as_any(&self) -> Option<&(dyn core::any::Any + Send + Sync)> {
+        None
+    }
 }
 
 /// `/dev/null` (1, 3).
