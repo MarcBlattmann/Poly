@@ -289,7 +289,7 @@ fn gpu_args(size: (u32, u32), vnc: &Path, options: &str) -> Vec<String> {
 /// authentication, raw encoding, 32-bit true colour. QEMU's egl-headless
 /// display reads the GL scanout back into the surface VNC serves.
 pub struct Vnc {
-    sock: std::os::unix::net::UnixStream,
+    sock: crate::hostfs::UnixStream,
     width: u32,
     height: u32,
 }
@@ -306,7 +306,7 @@ impl Vnc {
     pub fn connect(path: &Path, timeout: Duration) -> Result<Vnc, String> {
         let deadline = Instant::now() + timeout;
         let sock = loop {
-            match std::os::unix::net::UnixStream::connect(path) {
+            match crate::hostfs::UnixStream::connect(path) {
                 Ok(s) => break s,
                 Err(e) if Instant::now() > deadline => return Err(format!("VNC {}: {e}", path.display())),
                 Err(_) => std::thread::sleep(Duration::from_millis(100)),

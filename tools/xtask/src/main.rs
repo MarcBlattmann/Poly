@@ -90,6 +90,7 @@ mod ext2disk;
 mod ext4disk;
 mod font;
 mod fonts;
+mod hostfs;
 mod initramfs;
 mod input;
 mod ktest;
@@ -115,8 +116,8 @@ mod winimports;
 mod wintrace;
 mod xwayland;
 
+use hostfs::UnixStream;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::{Arc, mpsc};
@@ -1766,6 +1767,22 @@ fn lint() -> Result {
         cargo().current_dir(root()).args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
     )?;
     step("clippy (kernel)", kernel_cargo()?.args(["clippy", "--", "-D", "warnings"]))?;
+    // xtask itself on Windows, so building and booting work on a Windows
+    // host too (hostfs.rs has the stand-ins for what needs Linux).
+    step(
+        "clippy (xtask for Windows)",
+        cargo().current_dir(root()).args([
+            "clippy",
+            "--package",
+            "xtask",
+            "--all-targets",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--",
+            "-D",
+            "warnings",
+        ]),
+    )?;
     step(
         "fmt (ntdll)",
         cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
