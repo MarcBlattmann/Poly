@@ -48,8 +48,6 @@ pub struct Uffd {
     queue: Arc<WaitQueue>,
     /// The memory whose faults it handles.
     memory: Weak<Memory>,
-    /// Made with `O_NONBLOCK`: poll(2) reports `POLLERR` otherwise.
-    nonblock: bool,
 }
 
 fn errno_vfs(e: Errno) -> poly_vfs::Errno {
@@ -154,10 +152,17 @@ impl FileObject for Uffd {
     }
 
     fn poll(&self) -> PollEvents {
-        if !self.nonblock {
-            return PollEvents::ERR;
-        }
-        if self.state.lock().pending() { PollEvents::READABLE } else { PollEvents::NONE }
+        self.poll_as(true)
+    }
+
+    /// poll(2) on a userfaultfd (the spec sheet): `POLLERR` through a file
+    /// that is not `O_NONBLOCK` now (`fcntl(F_SETFL)` changes it after
+    /// userfaultfd(2)), else `POLLIN` while a message is pending.
+    fn poll_as(&self, nonblock: bool) -> PollEvents {
+        PollEvents::from_bits(poly_personality_linux::sys::userfaultfd::poll_bits(
+            nonblock,
+            self.state.lock().pending(),
+        ))
     }
 
     fn wait_queue(&self) -> Option<&Arc<WaitQueue>> {
@@ -179,7 +184,6 @@ pub fn create(t: &Thread<'_>, nonblock: bool, cloexec: bool, user_mode_only: boo
         state: SpinLock::new(UffdState::with_user_mode_only(user_mode_only)),
         queue: Arc::new(WaitQueue::new()),
         memory: Arc::downgrade(&memory),
-        nonblock,
     });
     OBJECTS.lock().insert(id, Arc::downgrade(&object));
     let files = &t.process().files;

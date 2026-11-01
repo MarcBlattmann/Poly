@@ -748,7 +748,7 @@ impl OpenFile {
         match &self.backend {
             Backend::Inode | Backend::Path => PollEvents::READABLE | PollEvents::WRITABLE,
             Backend::Device(dev) => dev.poll(),
-            Backend::Object(obj) => obj.poll(),
+            Backend::Object(obj) => obj.poll_as(self.nonblock()),
         }
     }
 

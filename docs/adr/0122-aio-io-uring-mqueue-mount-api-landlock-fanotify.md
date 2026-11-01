@@ -255,7 +255,16 @@ kernel's public user-space API documentation and the UAPI headers
   is closed; with `UFFD_FEATURE_SIGBUS` it gets `SIGBUS` instead. A
   fault the kernel takes on user memory inside a system call is not
   handled by an object made with `UFFD_USER_MODE_ONLY`: the call fails
-  with `EFAULT` and no message is queued. The descriptor is read-only
+  with `EFAULT` and no message is queued. A message stands for a
+  pending fault: releasing its task (a wake covering the page, an
+  unregister, the task being killed) takes the message back if it was
+  not read yet, so faults resolved out of order leave no stale messages,
+  and a task woken on a page still missing faults and reports again.
+  `poll` reports exactly `POLLIN` while a message is pending, and
+  `POLLERR` through a file that is not `O_NONBLOCK` at the time of the
+  call: a new `FileObject::poll_as` hook hands objects the open file's
+  current status flags, so `fcntl(F_SETFL)` after userfaultfd(2) counts
+  (reads already followed the current flags). The descriptor is read-only
   (`F_GETFL` shows `O_RDONLY`, plus `O_NONBLOCK` if asked for). The
   handshake, queue and waiters are host-tested in the personality.
   Write-protect mode is accepted, nothing is protected.

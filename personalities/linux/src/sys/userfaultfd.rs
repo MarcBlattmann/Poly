@@ -88,8 +88,11 @@ pub struct UffdState {
     api: bool,
     /// The features it enabled.
     features: u64,
-    /// Fault messages not read yet, oldest first.
-    queue: VecDeque<[u8; MSG_SIZE]>,
+    /// Fault messages not read yet, oldest first, with the ticket of the
+    /// blocked task each stands for: a message is pending only while its
+    /// fault is, so releasing the task (a wake covering its page, or the
+    /// task giving up) takes an unread message back.
+    queue: VecDeque<(u64, [u8; MSG_SIZE])>,
     /// Tasks blocked on a fault, by ticket: the page they wait for and
     /// whether a wake covering it came (`UFFDIO_WAKE`, a waking
     /// `UFFDIO_COPY` / `UFFDIO_ZEROPAGE`, `UFFDIO_UNREGISTER`).
@@ -157,9 +160,9 @@ impl UffdState {
         m[16..24].copy_from_slice(&addr.to_le_bytes());
         let ptid = if self.features & UFFD_FEATURE_THREAD_ID != 0 { tid } else { 0 };
         m[24..28].copy_from_slice(&ptid.to_le_bytes());
-        self.queue.push_back(m);
         let ticket = self.next_ticket;
         self.next_ticket += 1;
+        self.queue.push_back((ticket, m));
         self.waiters.insert(ticket, (addr & !(PAGE - 1), false));
         ticket
     }
@@ -182,7 +185,7 @@ impl UffdState {
         }
         let mut n = 0;
         while n + MSG_SIZE <= buf.len()
-            && let Some(m) = self.queue.pop_front()
+            && let Some((_, m)) = self.queue.pop_front()
         {
             buf[n..n + MSG_SIZE].copy_from_slice(&m);
             n += MSG_SIZE;
@@ -193,6 +196,9 @@ impl UffdState {
     /// Wake the tasks blocked on pages of `[start, start + len)`: they
     /// resolve their fault again (and fault to the object once more if the
     /// page is still missing).
+    /// Their messages not read yet go: they describe faults that are no
+    /// longer pending (a task woken on a page still missing faults again
+    /// and reports anew).
     pub fn wake(&mut self, start: u64, len: u64) {
         let end = start.saturating_add(len);
         for (page, woken) in self.waiters.values_mut() {
@@ -200,6 +206,8 @@ impl UffdState {
                 *woken = true;
             }
         }
+        let waiters = &self.waiters;
+        self.queue.retain(|(ticket, _)| waiters.get(ticket).is_some_and(|w| !w.1));
     }
 
     /// Whether the waiter `ticket` was woken.
@@ -208,8 +216,27 @@ impl UffdState {
     }
 
     /// The waiter `ticket` stops waiting.
+    /// Its message goes too if it was not read.
     pub fn leave(&mut self, ticket: u64) {
         self.waiters.remove(&ticket);
+        self.queue.retain(|(t, _)| *t != ticket);
+    }
+}
+
+/// What poll(2) reports for a userfaultfd (`POLL*` bits of
+/// `asm-generic/poll.h`): `POLLERR` (8) through a file that is not
+/// `O_NONBLOCK` at the time of the call, whatever flags userfaultfd(2) got
+/// (`fcntl(F_SETFL)` may change them), else `POLLIN` (1) while a message
+/// is `pending`, nothing otherwise (the spec sheet).
+pub const fn poll_bits(nonblock: bool, pending: bool) -> u32 {
+    const POLLIN: u32 = 0x001;
+    const POLLERR: u32 = 0x008;
+    if !nonblock {
+        POLLERR
+    } else if pending {
+        POLLIN
+    } else {
+        0
     }
 }
 
@@ -469,6 +496,38 @@ mod tests {
         assert!(s.woken(b) && s.woken(c));
         s.leave(a);
         assert!(s.woken(a), "a waiter that left counts as woken");
+    }
+
+    #[test]
+    fn released_faults_take_back_unread_messages() {
+        let mut s = UffdState::new();
+        s.api(UFFD_API, 0, false).unwrap();
+        let mut buf = [0u8; 128];
+        let a = s.push_fault(0x10000, false, 1);
+        let b = s.push_fault(0x20000, true, 2);
+        let c = s.push_fault(0x20000, false, 3);
+        let d = s.push_fault(0x40000, false, 4);
+        // Resolved out of order before being read: page 0x20000 first.
+        s.wake(0x20000, 0x1000);
+        assert!(s.woken(b) && s.woken(c) && !s.woken(a) && !s.woken(d));
+        assert_eq!(s.read(&mut buf), Ok(64), "only the faults still pending");
+        assert_eq!(word(&buf, 2), 0x10000);
+        assert_eq!(word(&buf, 6), 0x40000);
+        // A read message stays read; its task waits until woken.
+        let e = s.push_fault(0x50000, false, 5);
+        s.leave(e);
+        assert_eq!(s.read(&mut buf), Err(Errno::EAGAIN), "a task that gave up takes its message back");
+        assert!(!s.woken(a));
+        s.wake(0x10000, 0x1000);
+        assert!(s.woken(a) && !s.pending());
+    }
+
+    #[test]
+    fn poll_follows_the_current_status_flags() {
+        assert_eq!(poll_bits(false, false), 8, "blocking: POLLERR");
+        assert_eq!(poll_bits(false, true), 8, "blocking, a message pending: still POLLERR");
+        assert_eq!(poll_bits(true, false), 0, "O_NONBLOCK set later, nothing pending");
+        assert_eq!(poll_bits(true, true), 1, "O_NONBLOCK, a message pending: POLLIN");
     }
 
     #[test]
