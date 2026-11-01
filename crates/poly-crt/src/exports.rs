@@ -78,8 +78,14 @@ pub const SHARED_VARARGS: &[(&str, u8)] = &[
     ("_wexeclpe", 1),
 ];
 
-/// The memory functions both DLLs export from `compiler_builtins`.
+/// The memory functions both DLLs export from `compiler_builtins`
+/// (`msvcrt` all but `memcmp`, [`MSVCRT_OWN_MEMORY`]).
 pub const BUILTIN_MEMORY: &[&str] = &["memcpy", "memmove", "memset", "memcmp"];
+
+/// `(export, symbol)`: the memory functions `msvcrt.dll` exports from the
+/// shared runtime instead of `compiler_builtins`: its `memcmp` returns -1,
+/// 0 or 1 (ADR 0114).
+pub const MSVCRT_OWN_MEMORY: &[(&str, &str)] = &[("memcmp", "poly_crt_memcmp")];
 
 /// Functions every MSVC-built console program's start-up code imports from
 /// the UCRT (Learn, "CRT initialization"; the `corecrt_startup.h` entry
@@ -168,5 +174,6 @@ mod tests {
         assert!(SHARED_VARARGS.iter().chain(MSVCRT_CONIO_VARARGS).all(|&(_, n)| (1..=3).contains(&n)));
         assert!(UCRT_STARTUP.contains(&"_initterm") && MSVCRT_STARTUP.contains(&"__getmainargs"));
         assert_eq!(BUILTIN_MEMORY.len(), 4);
+        assert!(MSVCRT_OWN_MEMORY.iter().all(|(n, _)| BUILTIN_MEMORY.contains(n)));
     }
 }

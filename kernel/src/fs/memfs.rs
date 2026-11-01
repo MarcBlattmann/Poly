@@ -20,6 +20,7 @@ use crate::frames::FRAMES;
 use crate::sync::SpinLock;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use poly_personality_linux::admin::Amount;
 use poly_vfs::{Clock, FileSystem, Tmpfs};
 
 /// Every memory file system behind the cache, for writeback.
@@ -33,6 +34,21 @@ pub fn new_tmpfs(clock: Arc<dyn Clock>) -> Arc<Tmpfs> {
         return Arc::new(Tmpfs::new(clock));
     }
     Arc::new(Tmpfs::with_limits(clock, pages / 2 * 4096, pages / 2))
+}
+
+/// A new tmpfs with mount(2)'s `size` / `nr_inodes` (tmpfs(5)): a count,
+/// or a percentage of RAM (of its bytes for `size`, of its pages for
+/// `nr_inodes`); 0 is no limit; an option not given keeps the default.
+pub fn new_tmpfs_sized(clock: Arc<dyn Clock>, size: Option<Amount>, inodes: Option<Amount>) -> Arc<Tmpfs> {
+    let pages = FRAMES.lock().as_ref().map_or(0, |f| f.total_frames());
+    let default = |total: u64| (pages > 0).then_some(total / 2);
+    let limit = |a: Option<Amount>, total: u64| match a {
+        None => default(total),
+        Some(Amount::Count(0)) => None,
+        Some(Amount::Count(n)) => Some(n),
+        Some(Amount::Percent(p)) => Some(total.saturating_mul(p) / 100),
+    };
+    Arc::new(Tmpfs::with_optional_limits(clock, limit(size, pages * 4096), limit(inodes, pages)))
 }
 
 /// `tmpfs` behind the page cache: what gets mounted.

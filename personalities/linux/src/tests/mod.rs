@@ -12,6 +12,7 @@ mod io;
 mod madvise;
 mod mem;
 mod memfd;
+mod msg;
 mod ns;
 mod process;
 mod process_ids;

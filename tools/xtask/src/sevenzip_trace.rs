@@ -53,10 +53,11 @@ const DATA: &str = "target/pipeline/windows/data";
 /// Where `diff` and the boot test put Poly's run, its traces and reports.
 const OUT: &str = "target/wintrace/scenario";
 /// Whether a difference fails the `wintrace` boot test. Set it to `true`
-/// once `cargo xtask win 7zip-trace diff` passes every step (ADR 0110);
+/// once `cargo xtask win 7zip-trace diff` passes every step (ADR 0110;
+/// set since ADR 0114, all 15 steps match);
 /// that is the milestone "7-Zip command line passes its full recorded
 /// trace".
-pub const TRACE_REQUIRED: bool = false;
+pub const TRACE_REQUIRED: bool = true;
 /// The observation file's first word (the driver's).
 const OBSERVATION_FORMAT: &str = "poly-tracescenario/1";
 /// The reference's format.

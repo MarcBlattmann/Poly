@@ -283,4 +283,11 @@ pub trait LinuxNet {
 
     /// `SIOCOUTQ`: bytes sent and not yet taken by the peer.
     fn send_queued(&mut self, fd: i32) -> Result<usize, Errno>;
+
+    /// Keep `e` on the socket: its next receive fails with it, once
+    /// (recvmmsg(2) with an error after the first message). Sockets that
+    /// cannot keep one ignore it.
+    fn keep_error(&mut self, fd: i32, e: Errno) {
+        let _ = (fd, e);
+    }
 }
