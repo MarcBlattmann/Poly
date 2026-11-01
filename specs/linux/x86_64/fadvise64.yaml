@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fadvise64            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs, /dev/shm on tmpfs"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  fadvise64(fd, offset, len, advice) (syscall 221; posix_fadvise in the
+  C library) tells the kernel how the program will use the byte range
+  [offset, offset+len) of an open file (len 0: from offset to the end of
+  the file). It is advice only: it never changes what the program can
+  see (file data, size, file offset, mappings) and returns 0 on success.
+  offset and len are signed 64-bit values, advice a 32-bit int (bits
+  32..63 of the register are ignored). Advice values (x86-64):
+  POSIX_FADV_NORMAL 0, POSIX_FADV_RANDOM 1, POSIX_FADV_SEQUENTIAL 2,
+  POSIX_FADV_WILLNEED 3, POSIX_FADV_DONTNEED 4, POSIX_FADV_NOREUSE 5.
+  Any descriptor that is open (not O_PATH) and not a pipe or FIFO is
+  accepted, whatever its access mode: regular files on any file system
+  (overlayfs, tmpfs, memfd), directories, character devices (/dev/null,
+  /dev/zero) and sockets. DONTNEED may drop clean cached pages, but dirty
+  data and mapped pages are kept, so nothing visible changes.
+returns:
+  success: "0, for every valid advice on an accepted descriptor"
+  range: "any offset is accepted, also negative ones and offsets past the end of the file; len >= 0 any size, also when offset + len overflows (offset 0x7fffffffffffffff, len 0x7fffffffffffffff: 0); len 0 means to the end of the file"
+  advice_width: "advice is a 32-bit int: (1<<32)|4 is DONTNEED (0); (1<<32)|6 is EINVAL"
+  access_mode: "O_RDONLY, O_WRONLY, O_RDWR and O_APPEND descriptors all work; no read or write permission is needed"
+  kinds: "regular files, directories, /dev/null, /dev/zero, memfd files, tmpfs files and Unix sockets: 0"
+  no_visible_effect: "file offset, size and contents unchanged; DONTNEED on freshly written (dirty) data or on pages mapped MAP_SHARED keeps every byte visible through read, pread and the mapping; WILLNEED followed by reads gives the file's bytes"
+errors:
+  bad_fd: "EBADF (9): fd not open (closed, -1, a large number) or opened with O_PATH"
+  pipe: "ESPIPE (29): fd is a pipe (either end) or a FIFO"
+  bad_advice: "EINVAL (22): advice (low 32 bits) not in 0..5 (-1, 6, 7, 9, 100)"
+  negative_len: "EINVAL (22): len < 0 (on files, directories, devices and sockets alike)"
+  order: "EBADF, then ESPIPE, then EINVAL: a closed or O_PATH fd with bad advice or negative len is EBADF; a pipe with bad advice or negative len is ESPIPE; negative len and bad advice together is EINVAL"
+side_effects: >
+  None visible to the program. The kernel may start reading pages
+  (WILLNEED), change its read-ahead window (NORMAL, RANDOM, SEQUENTIAL)
+  or drop clean, unmapped page-cache pages (DONTNEED); NOREUSE does
+  nothing more. File offset, size, data and timestamps are not changed.
+threading: "No interaction with other threads beyond the shared page cache; safe to call concurrently."
+ordering: []
+timing:
+  typical: "microseconds (WILLNEED and DONTNEED of large cached ranges may take longer)"
+  guarantees: "none; WILLNEED does not wait for the reads to finish"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: advice values from linux/fadvise.h (POSIX_FADV_DONTNEED and
+# POSIX_FADV_NOREUSE are 4 and 5 on x86-64; s390x differs); errno values
+# from asm-generic/errno-base.h. The results were the same on /tmp
+# (overlayfs) and /dev/shm (tmpfs) and for root and an unprivileged
+# user. The tests use raw syscalls only and pass as any user.

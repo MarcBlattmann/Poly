@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/futimesat            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  futimesat(dirfd, pathname, times) (syscall 261) sets a file's access
+  and modification times with microsecond values: times points to two
+  struct timeval {i64 tv_sec; i64 tv_usec;} (16 bytes each), times[0]
+  the access time and times[1] the modification time; the stored
+  nanoseconds are tv_usec * 1000. Negative tv_sec values are allowed
+  (times before 1970). times NULL sets both to the current time.
+  pathname is resolved relative to dirfd (a directory descriptor or
+  AT_FDCWD) unless absolute (dirfd ignored); a final symlink is followed.
+  pathname NULL means the file dirfd refers to (any descriptor, a
+  regular file opened read-only or a directory); AT_FDCWD with a NULL
+  pathname is EFAULT. There is no flags argument (no AT_EMPTY_PATH: an
+  empty pathname is ENOENT). Explicit times need the caller to own the
+  file or have CAP_FOWNER (EPERM); the current time also works with
+  write permission (else EACCES). Setting times updates ctime to now.
+returns:
+  success: "0; atime = times[0].tv_sec + tv_usec*1000 ns, mtime = times[1] likewise; ctime = now"
+  negative_seconds: "tv_sec may be negative (-5 stored as -5); tv_sec 0 stores the epoch"
+  null_times: "times NULL: atime = mtime = the current time (same value for both)"
+  null_path: "pathname NULL: the file dirfd refers to (file opened O_RDONLY, directory); AT_FDCWD with NULL: EFAULT"
+  follow: "a final symlink is followed (the target's times change); directories can be changed ('.' is dirfd's directory)"
+errors:
+  bad_times: "EFAULT (14): times unreadable; checked first, before pathname, dirfd and lookup"
+  bad_usec: "EINVAL (22): a tv_usec < 0 or >= 1000000 (UTIME_NOW and UTIME_OMIT values have no special meaning here and are EINVAL too); checked right after reading times, before pathname, dirfd and lookup (also with a NULL pathname and AT_FDCWD)"
+  bad_path: "EFAULT (14): pathname unreadable (non-NULL); NULL pathname with AT_FDCWD; checked before dirfd"
+  bad_dirfd: "EBADF (9): closed or negative descriptor (not AT_FDCWD) with a relative or NULL pathname"
+  not_dir: "ENOTDIR (20): relative pathname with a dirfd that is not a directory; a file in the directory part"
+  not_found: "ENOENT (2): missing name, empty pathname, dangling symlink"
+  loop: "ELOOP (40): symlink loop"
+  name_too_long: "ENAMETOOLONG (36): component over 255 bytes"
+  not_owner: "EPERM (1): explicit times on a file the caller does not own, without CAP_FOWNER, even if writable"
+  no_write: "EACCES (13): times NULL on a file the caller neither owns nor may write (also through a descriptor); also search permission denied on the path"
+  read_only: "EROFS (30): read-only file system; not tested"
+  order: "times read (EFAULT) > tv_usec range (EINVAL) > pathname read (EFAULT) > dirfd (EBADF/ENOTDIR) > lookup (ENOENT/ENOTDIR/ELOOP/ENAMETOOLONG) > ownership/permission (EPERM, EACCES)"
+side_effects: "atime, mtime and ctime of the file; nothing on error."
+threading: "No thread-specific behaviour; not tested with threads."
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "the current time set by times NULL lies between clock_gettime(CLOCK_REALTIME) readings taken before and after the call (to file-system timestamp granularity)"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct timeval from linux/time.h (x86-64: two 8-byte fields);
+# AT_FDCWD from linux/fcntl.h; UTIME_NOW/UTIME_OMIT values from
+# linux/stat.h (used only as invalid tv_usec values); syscall number 261
+# from asm/unistd_64.h. The perm test (needs=root) drops to uid/gid 65534
+# in a child; the others pass as root and as an unprivileged user.

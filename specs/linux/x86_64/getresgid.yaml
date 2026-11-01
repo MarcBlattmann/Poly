@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getresgid            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; initial user namespace"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  getresgid(rgid, egid, sgid) (syscall 120) writes the calling thread's
+  real, effective and saved group ids, each as a 32-bit unsigned value (4
+  bytes, no alignment needed), and returns 0. The real id equals getgid,
+  the effective id getegid; for a program that was not started from a
+  set-group-id file the saved id equals the effective id. Values are
+  reported exactly as set by setresgid/setregid/setgid (any 32-bit value
+  but 0xffffffff, e.g. 0xfffffffe and 0x80000000). The filesystem gid
+  (setfsgid) is not reported. No privilege is needed; nothing changes.
+returns:
+  success: "0; *rgid = real gid, *egid = effective gid, *sgid = saved gid (32-bit each, nothing else written)"
+  same_pointer: "the three writes happen in the order real, effective, saved: one pointer passed three times ends up holding the saved gid"
+errors:
+  fault: "EFAULT (14): a pointer that cannot be written (NULL, low address, read-only page, unmapped)"
+  partial: "writes stop at the first failure: a bad egid pointer leaves *rgid written and *sgid untouched; a bad sgid pointer leaves *rgid and *egid written; a bad rgid pointer writes nothing"
+  order: "rgid, then egid, then sgid; the first unwritable one gives EFAULT"
+side_effects: none
+threading: >
+  Reports the calling thread's credentials (a raw setresgid/setregid in
+  another thread does not change them). Children made by fork and
+  threads made by clone(CLONE_THREAD) start with the creator's ids.
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: syscall numbers from asm/unistd_64.h (getresgid 120, setresgid
+# 119, setresuid 117, setfsgid 123); errno values from
+# asm-generic/errno-base.h. ld_getresgid_root is needs=root (it sets other
+# gids in a child); the other tests pass for any identity.

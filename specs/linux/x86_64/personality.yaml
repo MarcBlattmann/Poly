@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/personality          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; the pipeline's ptrace tracer starts programs with ADDR_NO_RANDOMIZE set"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  personality(persona) (syscall 135) returns the calling task's current
+  persona (execution domain in the low byte plus flag bits) and, unless
+  persona is 0xffffffff, replaces it with persona. The persona is a 32-bit
+  unsigned value: only the low 32 bits of the argument count (so
+  0xffffffffffffffff and 0x2ffffffff only read; (1<<32)|5 sets 5), and the
+  old value is returned zero-extended (0x80000000 and 0xfffffffe come back
+  as 2147483648 and 4294967294, never as an error). Every 32-bit value is
+  accepted, undefined bits and domains included; the call never fails and
+  needs no privilege. The initial value is inherited from the parent (0
+  for a normal start; ADDR_NO_RANDOMIZE 0x0040000 under setarch -R or the
+  pipeline's tracer). Flags with an effect observed here: PER_LINUX32
+  (0x0008) makes uname report machine "i686"; UNAME26 (0x0020000) makes
+  uname report a release starting with "2.6." (6.18.54.1-... read as
+  2.6.78.1-...); READ_IMPLIES_EXEC (0x0400000) makes later mmap and
+  mprotect with PROT_READ also executable (r-x, rw- becomes rwx);
+  ADDR_NO_RANDOMIZE disables address randomisation for programs started
+  later. Turning a flag off restores the normal behaviour at once.
+returns:
+  success: "the previous persona, 0..0xffffffff (zero-extended 32-bit)"
+  query: "persona 0xffffffff (low 32 bits) changes nothing"
+  set: "any other low-32-bit value is stored as given"
+  uname: "PER_LINUX32: machine i686 (release, sysname, version unchanged); UNAME26: release begins 2.6.; both together: both"
+  read_implies_exec: "with READ_IMPLIES_EXEC, new mappings and mprotect with PROT_READ get PROT_EXEC too (/proc/self/maps r-xp, rwxp); PROT_NONE stays ---p; existing mappings keep their protection"
+  exec: "execve keeps the persona except READ_IMPLIES_EXEC, which is cleared for an x86-64 ELF program whose PT_GNU_STACK is not executable (domain byte, ADDR_NO_RANDOMIZE, UNAME26, PER_LINUX32, SHORT_INODE 0x1000000, ADDR_LIMIT_32BIT 0x0800000, ADDR_LIMIT_3GB 0x8000000 are kept)"
+errors:
+  none: "no error observed for any value; personality never fails here"
+  order: "not applicable"
+side_effects: >
+  Changes the calling task's persona, which affects uname (PER_LINUX32,
+  UNAME26), the protection of later mappings (READ_IMPLIES_EXEC) and the
+  layout of later exec'd programs (ADDR_NO_RANDOMIZE). Executing a
+  set-user-id or set-group-id program clears some flags (not tested).
+threading: >
+  The persona belongs to each task: a thread made with clone(CLONE_THREAD)
+  starts with its creator's persona, but personality in that thread
+  changes only the thread's own persona (the main thread keeps its
+  value). A child made by fork starts with the parent's persona; later
+  changes on either side are independent.
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: syscall number from asm/unistd_64.h; persona constants (PER_LINUX
+# 0, PER_LINUX32 0x0008, PER_BSD 0x0006, UNAME26 0x0020000,
+# ADDR_NO_RANDOMIZE 0x0040000, READ_IMPLIES_EXEC 0x0400000,
+# ADDR_LIMIT_32BIT 0x0800000, SHORT_INODE 0x1000000, ADDR_LIMIT_3GB
+# 0x8000000) from linux/personality.h. The tests never print or compare
+# the inherited persona: they compare only values they set and restore
+# the original at the end. Because the first call's result is the
+# inherited value (0x40000 under the reference tracer), the
+# single-process tests use syscalls=names; those with a thread or an
+# execve use syscalls=off. The exact UNAME26 release string depends on
+# the kernel version, so only its 2.6. prefix is tested.

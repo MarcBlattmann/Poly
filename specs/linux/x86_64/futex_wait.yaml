@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/futex_wait           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs, one NUMA node); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  futex_wait(uaddr, val, mask, flags, timeout, clockid) (syscall 455, the
+  futex2 interface) sleeps on the 32-bit futex word at uaddr if it holds
+  val. flags (32 bits; register bits 32..63 ignored) must give
+  FUTEX2_SIZE_U32 (2) and may add FUTEX2_PRIVATE 128, FUTEX2_NUMA 0x4 and
+  FUTEX2_MPOL 0x8; nothing else (FUTEX_CLOCK_REALTIME 0x100 is not a futex2
+  flag). val and mask are 64-bit arguments that must fit in 32 bits; mask
+  must not be 0. timeout is NULL (no limit, clockid not looked at) or a
+  struct timespec holding an ABSOLUTE time on clockid, which must be
+  CLOCK_MONOTONIC (1) or CLOCK_REALTIME (0); a small value such as
+  {0, 30 ms} is long past and times out at once; the timespec is never
+  written. The word is compared with val (all 32 bits) atomically with
+  going to sleep: different -> EAGAIN at once (also when the deadline has
+  passed). Otherwise the task sleeps until a futex_wake (or classic
+  FUTEX_WAKE/FUTEX_WAKE_BITSET, futex_requeue then a wake of the target)
+  of the same kind (private or shared, see futex_wake) whose mask
+  overlaps this mask wakes it (returns 0, whatever the word holds then),
+  until the deadline (ETIMEDOUT), or until a signal runs a handler.
+  Storing to the word does not wake it. A private futex belongs to the
+  address space (tasks sharing it with CLONE_VM count); a shared one to
+  the memory (works between processes on MAP_SHARED memory).
+returns:
+  woken: "0, when a wake of the same futex (kind and memory) with an overlapping mask selected this task; also before the deadline"
+  timed_out: "ETIMEDOUT (110) once the clock reaches the absolute deadline; the clock read after return is at or past the deadline"
+  value_differs: "EAGAIN (11) at once when *uaddr != val (32-bit comparison), checked before the deadline"
+  signal: "EINTR (4) after a handler ran when the handler lacks SA_RESTART; with SA_RESTART the wait is restarted after the handler (with the same absolute deadline, if any) and goes back to sleep; stop/continue signals and ignored signals do not end it"
+  numa: "with FUTEX2_NUMA the futex is followed by a 32-bit node (pair 8-byte aligned); node -1 is replaced in memory by the caller's node (0 on a one-node machine), a node that does not exist is EINVAL"
+errors:
+  bad_flags: "EINVAL (22): size other than FUTEX2_SIZE_U32, or an unknown flag bit (0x10, 0x100)"
+  bad_clock: "EINVAL (22): timeout given and clockid not CLOCK_MONOTONIC or CLOCK_REALTIME (CLOCK_BOOTTIME, CLOCK_PROCESS_CPUTIME_ID, CLOCK_TAI, -1)"
+  bad_val: "EINVAL (22): val with any bit above bit 31"
+  timeout_fault: "EFAULT (14): timeout unreadable"
+  timeout_value: "EINVAL (22): tv_sec < 0, or tv_nsec < 0 or >= 1000000000"
+  bad_mask: "EINVAL (22): mask 0 or with bits above bit 31"
+  alignment: "EINVAL (22): uaddr not 4-byte aligned (8 with FUTEX2_NUMA)"
+  numa_node: "EINVAL (22): FUTEX2_NUMA with a nonexistent node in the word after the futex"
+  fault: "EFAULT (14): uaddr unmapped (NULL, 0x1000), for private and shared futexes alike"
+  value: "EAGAIN (11): word differs from val"
+  timeout: "ETIMEDOUT (110): deadline reached (also at once for a deadline in the past)"
+  order: "flags (EINVAL) > clockid (EINVAL, only with a timeout) > val width (EINVAL) > timeout read/validity (EFAULT/EINVAL) > mask and alignment (EINVAL) > address (EFAULT) > value (EAGAIN) > deadline (ETIMEDOUT)"
+side_effects: >
+  None besides sleeping; the timespec is not written. FUTEX2_NUMA with
+  node -1 writes the caller's node into the node word.
+threading: >
+  A task sleeping in futex_wait is woken by any task that can name the
+  futex (same address space for private futexes, the same memory for
+  shared ones). A task can be moved to another futex by futex_requeue or
+  the classic FUTEX_CMP_REQUEUE and is then woken by wakes of that one.
+ordering:
+  - "waiters are woken longest-waiting first (equal priority)"
+timing:
+  typical: "EAGAIN/ETIMEDOUT for past deadlines: microseconds; a timed sleep ends at or shortly after the deadline (30 ms deadlines returned after about 30-35 ms)"
+  guarantees: "never returns ETIMEDOUT before the deadline on the given clock"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/futex.h (FUTEX2_*), linux/time.h (clock
+# ids), asm-generic/signal-defs.h (SA_RESTART 0x10000000), errno values
+# from asm-generic/errno*.h. Multi-task tests count sleepers with a
+# classic FUTEX_CMP_REQUEUE of the word onto itself and use
+# syscalls=off. Every test passes as root and as an unprivileged user.

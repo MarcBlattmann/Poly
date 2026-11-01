@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fchmodat2            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs (symlink results also checked on tmpfs /dev/shm)"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  fchmodat2(dirfd, pathname, mode, flags) (syscall 452) sets the
+  permission bits of a file: fchmodat with a flags argument. pathname is
+  resolved relative to dirfd (O_RDONLY or O_PATH directory, AT_FDCWD for
+  the working directory) unless absolute (then dirfd is ignored). mode is
+  32 bits wide and only mode & 07777 is used (file type bits ignored);
+  the umask does not apply. flags (32 bits; bits 32..63 ignored) may
+  hold AT_SYMLINK_NOFOLLOW (0x100) and AT_EMPTY_PATH (0x1000). Without
+  AT_SYMLINK_NOFOLLOW a final symlink is followed and its target
+  changes. With it, a final symlink is not followed, and since a
+  symlink's mode cannot be changed the call fails with EOPNOTSUPP (on
+  every file system: the refusal is not file-system specific); other
+  files are changed normally. With AT_EMPTY_PATH and an empty pathname
+  the file dirfd refers to is changed: any descriptor, including an
+  O_PATH one (fchmod refuses those with EBADF) and AT_FDCWD (the working
+  directory); an O_PATH|O_NOFOLLOW descriptor of a symlink gives
+  EOPNOTSUPP. Only the owner (euid == file uid) or a caller with
+  CAP_FOWNER may change the mode (EPERM). If the caller lacks CAP_FSETID
+  and is not in the file's group, S_ISGID is cleared from the new mode
+  (silently). Returns 0; the inode's ctime is updated.
+returns:
+  success: "0; st_mode = file type | (mode & 07777)"
+  mode_bits: "07777 kept (setuid, setgid, sticky, also on directories); file type bits (0170000) and bits 32..63 of the argument ignored; umask not applied; mode 0 allowed"
+  follow: "flags 0: final symlink followed (target changes, the link stays 0777); dangling symlink ENOENT"
+  nofollow: "AT_SYMLINK_NOFOLLOW: regular files and directories change; a final symlink (dangling or not, also to a directory) EOPNOTSUPP and nothing changes; symlinks in the directory part are still followed"
+  empty_path: "AT_EMPTY_PATH with '': changes dirfd's file (O_RDONLY file, directory, O_PATH descriptor, AT_FDCWD = working directory); with AT_SYMLINK_NOFOLLOW too it is the same for non-symlinks; O_PATH symlink descriptor EOPNOTSUPP; a non-empty pathname with AT_EMPTY_PATH is resolved normally"
+  sgid_clear: "owner without CAP_FSETID that is not a member of the file's group: S_ISGID dropped from the new mode, other bits set; root keeps it"
+  old_fchmodat: "for contrast: fchmodat (268) has only three arguments, a fourth is ignored, so it always follows symlinks"
+errors:
+  bad_flags: "EINVAL (22): any flag bit other than AT_SYMLINK_NOFOLLOW and AT_EMPTY_PATH in the low 32 bits (0x1, AT_REMOVEDIR 0x200, AT_SYMLINK_FOLLOW 0x400, AT_NO_AUTOMOUNT 0x800, AT_STATX_FORCE_SYNC 0x2000, 0x80000000); checked first (with a NULL pathname or a bad dirfd still EINVAL)"
+  bad_path: "EFAULT (14): pathname NULL or unreadable, also with AT_EMPTY_PATH; checked before dirfd"
+  bad_dirfd: "EBADF (9): closed or negative descriptor (not AT_FDCWD) with a relative or empty (AT_EMPTY_PATH) pathname"
+  not_dir: "ENOTDIR (20): dirfd is not a directory and pathname is relative; a non-directory in the directory part; trailing slash on a file"
+  not_found: "ENOENT (2): missing name; empty pathname without AT_EMPTY_PATH (also with only AT_SYMLINK_NOFOLLOW); dangling symlink followed"
+  loop: "ELOOP (40): symlink loop (last component when following, or in the directory part)"
+  name_too_long: "ENAMETOOLONG (36): component over 255 bytes, path of 4096 bytes or more"
+  symlink_mode: "EOPNOTSUPP (95): the file to change is a symlink (AT_SYMLINK_NOFOLLOW, or an O_PATH symlink descriptor with AT_EMPTY_PATH)"
+  not_owner: "EPERM (1): caller is not the owner and lacks CAP_FOWNER, whatever the file's mode (also world-writable files, also through a descriptor it holds)"
+  search: "EACCES (13): search permission denied on a directory of the path"
+  read_only: "EROFS (30): file on a read-only file system; not tested"
+  order: "flags (EINVAL) > pathname read (EFAULT) > dirfd (EBADF/ENOTDIR) > lookup (ENOENT/ENOTDIR/ELOOP/ENAMETOOLONG/EACCES) > symlink (EOPNOTSUPP) > ownership (EPERM)"
+side_effects: "The mode and ctime of the file change; nothing on error."
+threading: "No thread-specific behaviour; not tested with threads."
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: AT_* from linux/fcntl.h, S_* from linux/stat.h, EOPNOTSUPP (95)
+# from asm-generic/errno.h; syscall numbers 452 (fchmodat2) and 268
+# (fchmodat) from asm/unistd_64.h. fchmodat2 is new in Linux 6.6; older
+# kernels give ENOSYS. The owner test (needs=root) drops to uid/gid 65534
+# in a child. Other tests pass as root and as an unprivileged user.

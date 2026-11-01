@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setregid             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities (privilege-dependent cases as root in children that drop to uid 1000); umask 022; initial user namespace"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  setregid(rgid, egid) (syscall 114) sets the calling thread's real and/or
+  effective group id; -1 (0xffffffff) for either leaves it unchanged. The
+  arguments are 32-bit gids (upper register halves ignored, so (1<<32)|7
+  is 7 and 0x1ffffffff is -1). With CAP_SETGID any gid may be set. Without
+  it the new real gid must be the current real or effective gid, and the
+  new effective gid the current real, effective or saved gid; otherwise
+  EPERM and nothing changes, even if the other half alone would have been
+  allowed. On success the saved gid becomes the new effective gid if rgid
+  was given (not -1, even when equal to the old real gid) or if egid was
+  given and differs from the old real gid; otherwise the saved gid stays.
+  The filesystem gid is always reset to the (new) effective gid, also by
+  setregid(-1, -1). New files are then created with the effective gid as
+  their group, and group permission checks use it.
+returns:
+  success: "0"
+  saved_gid_rule: "sgid := new egid when rgid != -1, or when egid != -1 and egid != old rgid; else unchanged"
+  fsgid: "fsgid := new egid on every successful call"
+  examples_from_100_200_300: "(10,20) gives 10/20/20; (-1,30) 100/30/30; (-1,100) 100/100/300; (40,-1) 40/200/200; (100,-1) 100/200/200; (-1,-1) 100/200/300; (200,100) 200/100/100; (0xfffffffe,0x80000000) with privilege: 0xfffffffe/0x80000000/0x80000000"
+  unprivileged_allowed: "rgid in {rgid, egid}; egid in {rgid, egid, sgid}; from 100/200/300: (200,-1) 200/200/200, (-1,300) 100/300/300, (200,100) 200/100/100, (200,200) 200/200/200"
+errors:
+  permission: "EPERM (1): without CAP_SETGID, a new rgid other than the current real or effective gid (the saved gid is not enough), or a new egid other than the current real, effective or saved gid; nothing changes (ids and fsgid stay)"
+  invalid_gid: "EINVAL (22): a gid that has no mapping in the caller's user namespace; cannot happen in the initial namespace, where every value but -1 is valid (not tested)"
+  order: "gid validity (EINVAL) before permission (EPERM); the whole call fails if either half is not allowed"
+side_effects: >
+  Changes the calling thread's credentials: real, effective, saved and
+  filesystem gid as described. The set of supplementary groups and the
+  uids are not touched. Capabilities are not affected (they follow uids).
+threading: >
+  The system call changes only the calling thread's credentials: another
+  thread of the same process keeps its ids (C libraries make every thread
+  call it). Children forked later inherit the forking thread's ids.
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: syscall numbers from asm/unistd_64.h (setregid 114, setresgid 119,
+# getresgid 120, setfsgid 123, setgroups 116, setresuid 117); errno values
+# from asm-generic/errno-base.h. Each privileged case runs in a fresh
+# child made with clone(CLONE_VFORK) and reports through a shared page;
+# SIGCHLD is blocked so traces are deterministic. Tests needing root are
+# marked needs=root; ld_setregid_self passes for any identity.

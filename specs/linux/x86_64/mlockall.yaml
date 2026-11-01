@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mlockall             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; RLIMIT_MEMLOCK unlimited (soft and hard) as inherited, the tests set the soft limit themselves"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  mlockall(flags) (syscall 151) locks the whole address space. flags is
+  a 32-bit int (bits 32..63 ignored) made of MCL_CURRENT (1), MCL_FUTURE
+  (2) and MCL_ONFAULT (4). MCL_CURRENT locks every existing mapping
+  (populating its pages unless MCL_ONFAULT is given; mappings that cannot
+  be populated, such as PROT_NONE ones, do not make it fail). MCL_FUTURE
+  makes every mapping created later (mmap, and growth of the address
+  space) locked from the start: populated at mmap time, or with
+  MCL_ONFAULT only locked as pages are touched. Each call replaces the
+  "future" setting: a call without MCL_FUTURE (for example MCL_CURRENT
+  alone) ends an earlier MCL_FUTURE; munlockall ends it too. Returns 0.
+  Without CAP_IPC_LOCK, RLIMIT_MEMLOCK applies: limit 0 is EPERM;
+  MCL_CURRENT fails with ENOMEM when the whole address space is larger
+  than the limit; under MCL_FUTURE, an mmap that would take the locked
+  total over the limit fails with EAGAIN.
+returns:
+  success: "0 for flags 1, 2, 3, 5, 6, 7 (MCL_ONFAULT only with MCL_CURRENT and/or MCL_FUTURE)"
+  current: "MCL_CURRENT: every existing mapping locked and its pages present afterwards (mincore); MCL_CURRENT|MCL_ONFAULT: locked, nothing populated"
+  future: "MCL_FUTURE: later anonymous mmaps are present right after mmap; MCL_FUTURE|MCL_ONFAULT: later mappings are locked but not populated (a touched page becomes present); existing mappings are not touched by MCL_FUTURE alone"
+  replace: "a call with MCL_CURRENT but without MCL_FUTURE (with or without MCL_ONFAULT) ends MCL_FUTURE: later mmaps are not populated"
+  prot_none: "a PROT_NONE mapping in the address space does not make MCL_CURRENT fail"
+  flags_width: "flags (1<<32)|MCL_FUTURE is MCL_FUTURE; 1<<32 alone is 0 (EINVAL)"
+  rlimit: "without CAP_IPC_LOCK and soft limit 2 pages: MCL_CURRENT (also with MCL_FUTURE) ENOMEM and nothing changes (MCL_FUTURE not set); MCL_FUTURE alone 0, then an mmap of 4 pages EAGAIN, mmaps of 1 page work until 2 pages are locked, the next EAGAIN; with CAP_IPC_LOCK (root) the limit is ignored (limit 0: MCL_CURRENT|MCL_FUTURE 0, a 32-page mmap works and is populated)"
+errors:
+  bad_flags: "EINVAL (22): flags 0, MCL_ONFAULT alone (4), or any bit other than 1, 2, 4 in the low 32 bits (8, 9, 0x100, 0x80000000, ~0); checked first"
+  no_permission: "EPERM (1): RLIMIT_MEMLOCK soft limit 0 and no CAP_IPC_LOCK (MCL_CURRENT, MCL_FUTURE, MCL_FUTURE|MCL_ONFAULT)"
+  too_big: "ENOMEM (12): MCL_CURRENT without CAP_IPC_LOCK when the size of the whole address space exceeds the soft limit; nothing is locked and the future setting is unchanged"
+  later_mmap: "EAGAIN (11), from mmap (not mlockall): under MCL_FUTURE without CAP_IPC_LOCK, a new mapping that would take the locked total over the soft limit"
+  order: "flags (EINVAL), then RLIMIT_MEMLOCK 0 (EPERM), then the size check for MCL_CURRENT (ENOMEM)"
+side_effects: >
+  Sets or clears the address space's "lock future mappings" (and
+  "on fault") default; with MCL_CURRENT marks every mapping locked and,
+  without MCL_ONFAULT, faults every page in. VmLck in /proc/self/status
+  grows accordingly. Data is not changed.
+threading: "Applies to the address space, so to every thread sharing it."
+ordering: []
+timing:
+  typical: "proportional to the size of the address space for MCL_CURRENT (page allocation); constant for MCL_FUTURE alone"
+  guarantees: "with MCL_CURRENT and without MCL_ONFAULT the pages are present when the call returns"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: MCL_* from asm-generic/mman.h (x86-64); RLIMIT_MEMLOCK from
+# asm-generic/resource.h; errno values from asm-generic/errno-base.h.
+# The limit tests run unprivileged (as root they first switch to uid/gid
+# 65534, dropping every capability) and lower the soft limit themselves.
+# ld_mlockall_root needs root (CAP_IPC_LOCK). Tests that call
+# mlockall(MCL_CURRENT) as a normal user assume a hard RLIMIT_MEMLOCK of
+# at least about 1 MiB (Linux's default is 8 MiB): the soft limit is not
+# raised. mincore shows which pages are present.

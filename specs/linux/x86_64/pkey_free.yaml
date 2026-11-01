@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pkey_free            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); the VM exposes no protection keys (CPUID leaf 7 ECX: PKU bit 3 and OSPKE bit 4 clear); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  pkey_free(pkey) (syscall 331) frees a protection key that pkey_alloc
+  returned. pkey is a 32-bit int (bits 32..63 ignored). On a CPU without
+  protection keys (OSPKE clear, as observed and as on QEMU's default
+  CPU) no key is ever allocated, so every call is EINVAL (22): the
+  default key 0, keys 1..15, 16 and above, negative keys, 1<<32 (key 0),
+  the value of a failed pkey_alloc (-28); repeated calls give the same,
+  in the parent, a fork child and a CLONE_VM child alike. It changes
+  nothing: memory protection, mprotect and pkey_mprotect(-1) work as
+  before and pkey_mprotect still refuses key 0. With protection keys
+  (not observed; man page): 0 for an allocated key, which becomes free;
+  EINVAL for a key that is not allocated.
+returns:
+  no_pku: "never succeeds: EINVAL for every value"
+  with_pku: "not observed: 0 for a key that is allocated"
+errors:
+  not_allocated: "EINVAL (22): pkey is not an allocated key; without protection keys this is every value (-4..32, 0x7fffffff, 1<<32)"
+  order: "single check"
+side_effects: "None without protection keys. With them the key becomes free for pkey_alloc again; pages still tagged with it keep the tag (man page; not observed)."
+threading: "Keys belong to the address space; the result is the same from every thread and process."
+ordering: []
+timing:
+  typical: "constant, sub-microsecond"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: errno values from asm-generic/errno-base.h. The tests detect
+# protection keys with CPUID leaf 7 (ECX bit 4, OSPKE) without a system
+# call; on a CPU with OSPKE they print one "skip:" line and exit 0,
+# because this sheet describes only the observed case. Root and an
+# unprivileged user behave the same.

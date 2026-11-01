@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pidfd_getfd          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  pidfd_getfd(pidfd, targetfd, flags) (syscall 438) duplicates descriptor
+  targetfd of the process that pidfd refers to into the caller's
+  descriptor table and returns the new descriptor: the lowest free one,
+  always with FD_CLOEXEC set. It refers to the same open file description
+  as the target's descriptor (same status flags such as O_APPEND, shared
+  file offset: writes or lseek through either move both), like dup across
+  processes; closing it does not affect the target. pidfd comes from
+  pidfd_open or clone/clone3 with CLONE_PIDFD (a pidfd made by clone is
+  installed only in the parent, after the child's table was copied). The
+  caller needs ptrace attach access (PTRACE_MODE_ATTACH with real
+  credentials) to the target; a process may use a pidfd of itself. flags
+  is reserved and must be 0.
+returns:
+  success: "new descriptor, lowest free; F_GETFD = FD_CLOEXEC; F_GETFL = the target description's flags (O_RDWR | O_LARGEFILE, plus O_APPEND etc.)"
+  sharing: "offset shared with the target's descriptor (write of 6 bytes through the copy: target's lseek(fd,0,SEEK_CUR) = 6)"
+  independence: "closing the copy leaves the target's descriptor open; taking it again gives the same lowest number"
+errors:
+  bad_flags: "EINVAL (22): flags not 0 (1, O_CLOEXEC); checked first (also with an invalid pidfd)"
+  bad_pidfd: "EBADF (9): pidfd not open (also -1) or not a pidfd (regular file, pipe)"
+  exited: "ESRCH (3): the target has exited (zombie or reaped); the pidfd stays open and valid; also for a targetfd that was never open"
+  no_access: "EPERM (1): no ptrace attach access (target of another user for a normal user; Yama); checked before targetfd (a targetfd not open is still EPERM)"
+  bad_target: "EBADF (9): targetfd not open in the target (also -1, closed by the target, a descriptor the target never had)"
+  no_descriptor: "EMFILE (24): no free descriptor below the caller's RLIMIT_NOFILE (checked after targetfd: a missing targetfd is still EBADF)"
+  order: "flags (EINVAL) > pidfd (EBADF) > target alive (ESRCH) > access (EPERM) > targetfd (EBADF) > descriptor allocation (EMFILE)"
+side_effects: >
+  A new descriptor in the caller's table; the target is not changed.
+threading: >
+  The target's descriptor table is the one of the process the pidfd
+  names (shared by its threads).
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: CLONE_PIDFD from linux/sched.h; F_* and O_* from
+# asm-generic/fcntl.h. The tests get pidfds from clone(CLONE_VM |
+# CLONE_PIDFD) children that act only when told to (no pid appears as an
+# argument, so syscalls are compared exactly). The EPERM test
+# (needs=root): a fork child that switched to uid/gid 4242 uses an
+# inherited pidfd of a root process.

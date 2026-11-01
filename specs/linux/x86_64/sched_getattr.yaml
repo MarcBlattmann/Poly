@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_getattr        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1; kernel without utilisation clamping (CONFIG_UCLAMP_TASK off: util fields read 0) and without sched_ext"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  sched_getattr(pid, attr, size, flags) (syscall 315) writes the
+  scheduling attributes of a thread (pid 0 = the caller) into a struct
+  sched_attr at attr and returns 0. The kernel's structure is 56 bytes
+  (SCHED_ATTR_SIZE_VER1): u32 size, u32 sched_policy, u64 sched_flags,
+  s32 sched_nice, u32 sched_priority, u64 sched_runtime, u64
+  sched_deadline, u64 sched_period, u32 sched_util_min, u32
+  sched_util_max. size (32 bits, upper half ignored) is the caller's
+  buffer size and must be 48 (VER0) .. 4096: with less than 56 only size
+  bytes are written and attr->size = size; with more, 56 bytes of data
+  are written, attr->size = 56 and every byte from 56 up to size is set to
+  zero. Fields: sched_policy is the policy without the reset flag
+  (SCHED_OTHER 0, FIFO 1, RR 2, BATCH 3, IDLE 5, DEADLINE 6);
+  sched_flags has SCHED_FLAG_RESET_ON_FORK (1) while set (also
+  SCHED_FLAG_RECLAIM 2 / DL_OVERRUN 4 for deadline tasks that set them);
+  sched_nice is the nice value for SCHED_OTHER/BATCH/IDLE and 0 for
+  real-time and deadline tasks; sched_priority is the real-time priority
+  (0 for other policies); for deadline tasks runtime/deadline/period are
+  the parameters (period as stored: equal to the deadline when set as 0);
+  for fair tasks deadline and period are 0 and sched_runtime is the
+  task's time slice in ns (kernel-configuration dependent, 2800000 here
+  by default; a custom slice set with sched_setattr reads back); for
+  real-time tasks runtime is 0. The util clamp fields are 0 here (with
+  clamping configured, 0 and 1024 by default). flags (32 bits) must be 0.
+  Any thread may be read (no permission check).
+returns:
+  success: "0"
+  size_field: "min(size, 56)"
+  short_buffer: "size 48: only the first 48 bytes written (bytes 48..55 untouched)"
+  long_buffer: "size > 56: bytes 56..size-1 zeroed; nothing written after size"
+  default_task: "SCHED_OTHER at nice 0: policy 0, flags 0, nice 0, priority 0, deadline 0, period 0"
+  after_setpriority: "sched_nice = the nice value (SCHED_OTHER, SCHED_BATCH, SCHED_IDLE)"
+  after_reset_on_fork: "sched_flags 1; a fork child reads 0 (fair policy and nice >= 0 kept)"
+errors:
+  invalid: "EINVAL (22): attr NULL, pid < 0, or flags (low 32 bits) not 0; checked first"
+  bad_size: "EINVAL (22): size < 48 (also 0) or > 4096; checked before the pid lookup"
+  no_task: "ESRCH (3): no thread with that id (0x7fffffff; a reaped child)"
+  fault: "EFAULT (14): attr not writable for min(size,56) bytes, or a byte in 56..size-1 not writable (the zeroing reaches an unmapped page); checked after the lookup"
+  order: "NULL attr / pid < 0 / flags (EINVAL) > size (EINVAL) > lookup (ESRCH) > copy (EFAULT)"
+side_effects: none
+threading: >
+  Per thread: pid may be any thread id. A CLONE_VM child is a separate
+  task with its own attributes.
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct sched_attr and SCHED_ATTR_SIZE_VER0/VER1 from
+# linux/sched/types.h; SCHED_* policies, SCHED_RESET_ON_FORK and
+# SCHED_FLAG_* from linux/sched.h. Tests never check sched_runtime of a
+# fair task (time slice; depends on kernel version and configuration) or
+# the util clamp fields (depend on CONFIG_UCLAMP_TASK). Tests assume they
+# start as SCHED_OTHER at nice 0 and change policies only in children.
+# Tests that pass a child's pid use syscalls=names.

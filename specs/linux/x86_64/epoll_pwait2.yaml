@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/epoll_pwait2         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  epoll_pwait2(epfd, events, maxevents, timeout, sigmask, sigsetsize)
+  (syscall 441) is epoll_pwait with a struct timespec timeout. It waits
+  until at least one file descriptor in the epoll instance epfd is ready
+  and writes up to maxevents struct epoll_event (12 bytes, packed: u32
+  events, u64 data) to events, returning their number. timeout is
+  relative: NULL waits without limit, {0, 0} only polls (no sleep), any
+  other value waits at most that long (returns 0 when it passes); it is
+  never written. sigmask, if not NULL, is an 8-byte signal set
+  (sigsetsize must be 8) installed as the signal mask while the call
+  waits and replaced by the old mask before it returns; a signal it
+  leaves unblocked that is pending or arrives while the call would sleep
+  runs its handler and the call returns EINTR. Readiness reporting is
+  epoll's: level-triggered entries are reported while ready, EPOLLET
+  once per new readiness, EPOLLONESHOT once until re-armed with
+  EPOLL_CTL_MOD; with more ready entries than maxevents successive calls
+  take turns. epfd and maxevents are 32-bit ints.
+returns:
+  events: "count 1..maxevents of records written to events; the rest of the buffer is untouched"
+  timeout: "0 when the timeout passes with nothing ready (elapsed >= timeout); 0 at once for {0,0} and 1 ns"
+  ready_now: "an entry already ready returns at once, whatever the timeout (NULL, long)"
+  becomes_ready: "a sleeping call returns as soon as an entry becomes ready (another process writing an eventfd)"
+  sigmask_eintr: "EINTR (4) when a signal unblocked by sigmask is pending or arrives while the call sleeps (NULL or non-zero timeout); its handler has run; the caller's mask is back"
+  sigmask_poll: "with timeout {0,0} the call only polls: returns 0 (or the ready count), a pending signal unblocked by sigmask is not delivered and stays pending"
+  event_beats_signal: "with an entry ready and an unblocked signal pending the call returns the events; the signal stays pending (the old mask is back without delivering it)"
+  sigmask_blocking: "a signal blocked by sigmask that arrives during the wait does not end it (timeout returns 0); it is delivered when the old mask returns, right after the call"
+  null_sigmask: "sigmask NULL: the mask is not changed and sigsetsize is not checked"
+  events_null: "events NULL (or any address within user space) is accepted as long as nothing is returned: 0 with nothing ready, EFAULT when an event would be written"
+errors:
+  timeout_fault: "EFAULT (14): timeout unreadable"
+  timeout_value: "EINVAL (22): tv_sec < 0, tv_nsec < 0 or >= 1000000000"
+  sigsetsize: "EINVAL (22): sigmask not NULL and sigsetsize != 8 (4, 16)"
+  sigmask_fault: "EFAULT (14): sigmask unreadable"
+  bad_fd: "EBADF (9): epfd not open (99, -1)"
+  maxevents: "EINVAL (22): maxevents <= 0 or > INT_MAX / 12 (178956970, 0xAAAAAAA; 0xAAAAAAA itself is accepted)"
+  events_range: "EFAULT (14): events + maxevents*12 not within user space (a kernel address, or a range running past the top of user space)"
+  not_epoll: "EINVAL (22): epfd is open but not an epoll instance (eventfd, stdin)"
+  write_fault: "EFAULT (14): an event is ready but events is not writable (NULL, read-only memory)"
+  order: "timeout (EFAULT/EINVAL) > sigsetsize (EINVAL) > sigmask read (EFAULT) > epfd (EBADF) > maxevents (EINVAL) > events range (EFAULT) > epoll type (EINVAL) > writing events (EFAULT)"
+side_effects: >
+  Consumes edge-triggered and one-shot readiness as epoll_wait does;
+  changes the signal mask only for the duration of the call.
+threading: >
+  Several tasks may wait on one epoll instance; another process making a
+  watched descriptor ready wakes the waiter.
+ordering:
+  - "signals left blocked by sigmask during the wait are delivered right after the call returns, before the next instruction"
+timing:
+  typical: "polls in microseconds; timed waits end at or shortly after the timeout (30 ms waits took 30-35 ms)"
+  guarantees: "a timeout of t returns 0 no earlier than t after the call began"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/eventpoll.h (EPOLL_CTL_ADD 1, EPOLL_CTL_DEL
+# 2, EPOLL_CTL_MOD 3, EPOLLIN 1, EPOLLOUT 4, EPOLLHUP 0x10, EPOLLONESHOT
+# 1<<30, EPOLLET 1<<31; struct epoll_event is packed on x86-64), syscall
+# numbers from asm/unistd_64.h. ld_epoll_pwait2_timeout uses
+# syscalls=off (a child's write races with the wait). Every test passes
+# as root and as an unprivileged user.

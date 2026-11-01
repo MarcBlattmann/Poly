@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/munlockall           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; RLIMIT_MEMLOCK unlimited (soft and hard) as inherited, the tests set the soft limit themselves"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  munlockall() (syscall 152) takes no arguments (the argument registers
+  are ignored) and always returns 0. It unlocks every mapping of the
+  address space (whether locked by mlock, mlock2, mlockall or
+  MAP_LOCKED; VmLck in /proc/self/status becomes 0 kB) and ends any
+  MCL_FUTURE / MCL_ONFAULT default set by mlockall, so mappings made
+  afterwards are not locked (not populated at mmap time). Pages stay
+  mapped, present and keep their contents. Everything it unlocks no
+  longer counts against RLIMIT_MEMLOCK. It needs no privilege and works
+  with RLIMIT_MEMLOCK 0.
+returns:
+  success: "0, always: with nothing locked, repeatedly, with any values in the argument registers, as any user, with RLIMIT_MEMLOCK 0"
+  unlocks: "VmLck 0 kB afterwards (after mlock2 of several ranges, also MLOCK_ONFAULT ones, and after mlockall(MCL_CURRENT|MCL_FUTURE))"
+  ends_future: "after mlockall(MCL_FUTURE) or (MCL_FUTURE|MCL_ONFAULT), a later mmap is not populated and adds nothing to VmLck"
+  pages_kept: "unlocked pages stay present (mincore) with their contents"
+  limit_released: "without CAP_IPC_LOCK and soft limit 2 pages: after 2 pages were locked (a third ENOMEM) and munlockall, 2 other pages can be locked; an mmap refused with EAGAIN under MCL_FUTURE works after munlockall"
+errors:
+  none: "munlockall has no error return"
+  order: "not applicable"
+side_effects: >
+  Clears the locked state of every mapping (merging mappings that differed
+  only in that) and the address space's "lock future mappings" and "on
+  fault" defaults; releases the memory-lock accounting. Pages are not
+  freed or changed.
+threading: "Applies to the address space, so to every thread sharing it."
+ordering: []
+timing:
+  typical: "proportional to the number of mappings"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: MCL_* from asm-generic/mman.h; RLIMIT_MEMLOCK from
+# asm-generic/resource.h. The limit test runs unprivileged (as root it
+# first switches to uid/gid 65534, dropping every capability). The VmLck
+# test reads /proc/self/status and compares syscalls by name only; it
+# calls mlockall(MCL_CURRENT) and so assumes a hard RLIMIT_MEMLOCK of at
+# least about 1 MiB for normal users (Linux's default is 8 MiB).

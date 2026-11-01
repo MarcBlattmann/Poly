@@ -1,0 +1,100 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/seccomp              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; IMPORTANT: every process here already runs under one seccomp filter installed by the container runtime (/proc/self/status Seccomp 2, Seccomp_filters 1, although Docker was given seccomp=unconfined); /proc/sys/kernel/seccomp/actions_avail = kill_process kill_thread trap errno user_notif trace log allow; core_pattern is a pipe (wsl-capture-crash)"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  seccomp(operation, flags, args) (syscall 317) restricts the system calls
+  of the calling thread with classic BPF filters, or reports what the
+  kernel supports. operation and flags are 32-bit values. Operations
+  (linux/seccomp.h): SECCOMP_SET_MODE_STRICT 0, SECCOMP_SET_MODE_FILTER 1,
+  SECCOMP_GET_ACTION_AVAIL 2, SECCOMP_GET_NOTIF_SIZES 3; others EINVAL.
+  SET_MODE_FILTER: args points to struct sock_fprog {u16 len; struct
+  sock_filter *filter} (16 bytes; an instruction is {u16 code; u8 jt; u8
+  jf; u32 k}). The program runs on every later system call of the thread
+  (and of children created afterwards, which inherit the filters; they
+  stay across changes of uid, and across execve per the man page) with struct seccomp_data as its
+  input: int nr at offset 0, u32 arch at 4 (AUDIT_ARCH_X86_64 0xc000003e
+  for native calls), u64 instruction_pointer at 8, u64 args[6] at 16
+  (64-bit values, low half first, so a 32-bit load at 16 sees the low half
+  of the first argument). Its 32-bit result is an action in the high 16
+  bits plus 16 data bits: SECCOMP_RET_KILL_PROCESS 0x80000000 (the
+  process dies as if by SIGSYS, wait status signal 31), KILL_THREAD 0 (the
+  thread dies by SIGSYS; a single-threaded process dies the same way),
+  TRAP 0x00030000 (the call is not run; SIGSYS is sent with si_code
+  SYS_SECCOMP 1, si_errno = data, si_syscall = the number, si_arch; with
+  the default action the process dies by SIGSYS; when a handler returns,
+  the call appears to return its own syscall number, the registers being
+  as at entry), ERRNO 0x00050000 (the call is not run and returns -data;
+  data above 4095 is clamped to 4095; data 0 returns 0), USER_NOTIF
+  0x7fc00000, TRACE 0x7ff00000, LOG 0x7ffc0000 (allowed and logged),
+  ALLOW 0x7fff0000. Filters stack and are never removed: every filter
+  runs and the most severe action wins (KILL_PROCESS > KILL_THREAD > TRAP
+  > ERRNO > USER_NOTIF > TRACE > LOG > ALLOW); for the same action the
+  data of the most recently installed filter is used. Installing a filter
+  needs no_new_privs (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) or
+  CAP_SYS_ADMIN, else EACCES. After a filter is installed,
+  prctl(PR_GET_SECCOMP) reads 2. Flags: SECCOMP_FILTER_FLAG_TSYNC 1,
+  LOG 2, SPEC_ALLOW 4, NEW_LISTENER 8 (returns a notification descriptor
+  instead of 0), TSYNC_ESRCH 16, WAIT_KILLABLE_RECV 32. STRICT mode
+  (args NULL, flags 0) allows only read, write, exit (60, not exit_group)
+  and rt_sigreturn; any other call kills the thread with SIGKILL; it can
+  only be entered from mode 0 (a process with filters gets EINVAL).
+returns:
+  set_mode_filter: "0, or with SECCOMP_FILTER_FLAG_NEW_LISTENER a new descriptor: the lowest free, O_RDWR, FD_CLOEXEC set, readlink of /proc/self/fd/N \"anon_inode:seccomp notify\""
+  flags_accepted: "LOG, SPEC_ALLOW, TSYNC, TSYNC_ESRCH alone each return 0; TSYNC|NEW_LISTENER|TSYNC_ESRCH is accepted (here EBUSY because a listener existed)"
+  get_action_avail: "0 for KILL_PROCESS, KILL_THREAD, TRAP, ERRNO, USER_NOTIF, TRACE, LOG, ALLOW given exactly (data bits 0); args points to a u32"
+  get_notif_sizes: "0; writes three u16: sizeof(struct seccomp_notif) 80, sizeof(struct seccomp_notif_resp) 24, sizeof(struct seccomp_data) 64; nothing after them"
+  errno_action: "the call returns -data without running (ERRNO|42 on getppid: -42; ERRNO|0 on getpid: 0; ERRNO|5000: -4095)"
+  trap_action: "SIGSYS with si_signo 31, si_code 1, si_errno = data, si_syscall = nr, si_arch 0xc000003e; after the handler the call's return value (rax) is the syscall number"
+  kill_actions: "the process ends with wait status 'terminated by signal 31' (core bit also set where core dumps are enabled; the tests set PR_SET_DUMPABLE 0)"
+  precedence: "older KILL_PROCESS beats newer ERRNO and newer KILL_PROCESS beats older ERRNO; ERRNO|42 then ERRNO|7 on the same call: -7; ERRNO|9 then ALLOW then LOG: still -9"
+  no_new_privs: "prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) = 0 (again: 0); PR_GET_NO_NEW_PRIVS (args 0) reads 1; inherited by children; cannot be cleared"
+  limit: "the total size of all filters attached to a thread is limited (32768 instructions counting a per-filter overhead of 4): further filters fail with ENOMEM; the exact count depends on filters already present (2515 more 4-instruction filters here, where one runtime filter existed); not tested"
+errors:
+  bad_operation: "EINVAL (22): operation not 0..3"
+  bad_flags: "EINVAL (22): GET_ACTION_AVAIL or GET_NOTIF_SIZES with flags != 0; SET_MODE_STRICT with flags != 0 or args != NULL; SET_MODE_FILTER with an unknown flag bit (0x40), WAIT_KILLABLE_RECV without NEW_LISTENER, TSYNC with NEW_LISTENER but without TSYNC_ESRCH; flag checks come first (an unknown flag with a NULL args is EINVAL)"
+  unknown_action: "EOPNOTSUPP (95): GET_ACTION_AVAIL for any other value (an action with data bits, 0x12340000, 0x80000001)"
+  fault: "EFAULT (14): args unreadable (NULL, low address) for GET_ACTION_AVAIL, SET_MODE_FILTER (the sock_fprog or the instruction array); unwritable for GET_NOTIF_SIZES"
+  bad_program: "EINVAL (22): len 0 or more than 4096 instructions; last instruction not a return; a load outside struct seccomp_data (offset >= 64) or not 4-byte aligned; an unknown opcode; a jump past the end"
+  no_permission: "EACCES (13): SET_MODE_FILTER without no_new_privs and without CAP_SYS_ADMIN; checked after flags, the copy (EFAULT) and the program check (EINVAL)"
+  listener_busy: "EBUSY (16): NEW_LISTENER when a filter with a listener is already installed for the thread"
+  strict_from_filter: "EINVAL (22): SET_MODE_STRICT (or prctl(PR_SET_SECCOMP, 1)) when the thread already has filters"
+  nnp_args: "prctl PR_SET_NO_NEW_PRIVS: EINVAL (22) for arg2 other than 1 (0 included: no clearing) or any of arg3..arg5 non-zero; PR_GET_NO_NEW_PRIVS with arg2 != 0: EINVAL"
+  too_many: "ENOMEM (12): filter size limit reached; not tested"
+  order: "operation (EINVAL) > flags (EINVAL) > copy of args (EFAULT) > program validity (EINVAL) > no_new_privs/CAP_SYS_ADMIN (EACCES) > listener (EBUSY) / mode (EINVAL)"
+side_effects: >
+  Installs a filter that cannot be removed, for the calling thread (all
+  threads with TSYNC) and its future children; sets the seccomp mode to 2.
+  GET_* operations change nothing.
+threading: >
+  Filters belong to the thread that installs them; SECCOMP_FILTER_FLAG_TSYNC
+  installs the filter on every thread of the process (or fails with the
+  id of a thread that cannot be synchronised; with TSYNC_ESRCH with ESRCH).
+  Only single-threaded behaviour is tested.
+ordering: []
+timing:
+  typical: "microseconds per installation; a few nanoseconds to microseconds per filtered call"
+  guarantees: "none"
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: constants from linux/seccomp.h (SECCOMP_SET_MODE_*, SECCOMP_GET_*,
+# SECCOMP_FILTER_FLAG_*, SECCOMP_RET_*), linux/filter.h (struct
+# sock_filter, sock_fprog), linux/bpf_common.h (BPF_LD|BPF_W|BPF_ABS 0x20,
+# BPF_JMP|BPF_JEQ|BPF_K 0x15, BPF_RET|BPF_K 0x06), linux/audit.h
+# (AUDIT_ARCH_X86_64), linux/prctl.h (PR_GET_SECCOMP 21, PR_SET_SECCOMP 22,
+# PR_SET_NO_NEW_PRIVS 38, PR_GET_NO_NEW_PRIVS 39, PR_SET_DUMPABLE 4),
+# asm-generic/siginfo.h (SYS_SECCOMP 1, _sigsys layout). Strict mode could
+# not be observed here: the container's own filter makes every
+# SET_MODE_STRICT EINVAL; the strict-mode rules above are from the
+# seccomp(2) man page, and the tests check strict mode only after a filter
+# of their own (EINVAL everywhere). Every test installs filters in a
+# child, never in the test's main process, never reads the initial mode
+# (2 here, 0 on a machine without a runtime filter), and passes for any
+# caller except ld_seccomp_root (CAP_SYS_ADMIN without no_new_privs). The
+# TRACE and USER_NOTIF actions are not exercised (a ptrace-based reference
+# changes TRACE).

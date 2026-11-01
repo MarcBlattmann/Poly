@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/tkill                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1; pid_max well below 0x7fffffff"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  tkill(tid, sig) (syscall 200) sends signal sig to the single thread
+  whose thread id is tid, wherever it is: tid may be a thread of the
+  caller's process or of any other process (a process's main thread has
+  tid = pid), unlike tgkill there is no thread-group check. tid and sig
+  are 32-bit ints (the upper halves of the registers are ignored). The
+  signal is thread-directed: it becomes pending for that thread only
+  (rt_sigpending in that thread shows it, other threads of the process do
+  not see it) and is taken by that thread's handler or rt_sigtimedwait.
+  The siginfo the receiver sees has si_signo = sig, si_errno 0, si_code
+  SI_TKILL (-6), si_pid = the sender's process id (tgid), si_uid = the
+  sender's real uid, the rest zero. Signal 0 performs every check but
+  sends nothing. A handled, unblocked signal sent to the caller's own
+  thread runs its handler before tkill returns. Standard signals (1-31)
+  are pending at most once (a second send while blocked is merged);
+  real-time signals (32-64) are queued once per send. A blocked signal is
+  queued even if its action is SIG_IGN (and discarded when it is
+  unblocked while still ignored); an unblocked ignored signal is dropped
+  at once. Default actions apply as usual (SIGKILL, SIGTERM end the
+  target process).
+returns:
+  success: "0 (also for signal 0 and for an ignored signal)"
+  siginfo: "si_signo = sig, si_errno = 0, si_code = SI_TKILL (-6), si_pid = sender's tgid, si_uid = sender's real uid; other bytes 0"
+  delivery: "pending for the target thread only; to the own thread, an unblocked handled signal runs before the call returns"
+  queueing: "standard signals merged while pending (one instance); real-time signals queued per call; lowest number taken first by rt_sigtimedwait"
+  widths: "tid (1<<32)|t is thread t; sig (1<<32)|10 is 10; tid 0xffffffff is -1"
+errors:
+  bad_tid: "EINVAL (22): tid <= 0; checked first (tid 0 with sig 999 is EINVAL)"
+  no_thread: "ESRCH (3): no thread with that id (never existed, or exited and reaped); checked before the signal number (a missing tid with sig 999 is ESRCH)"
+  bad_signal: "EINVAL (22): sig < 0 or sig > 64 for an existing thread; nothing is sent; checked before permission"
+  permission: "EPERM (1): sender lacks CAP_KILL and neither its real nor its effective uid equals the target's real or saved uid (the target's effective uid does not count); also for signal 0; nothing is sent"
+  order: "tid <= 0 (EINVAL) > thread lookup (ESRCH) > signal number (EINVAL) > permission (EPERM)"
+side_effects: >
+  The signal is made pending for (or delivered to) the target thread; a
+  default action may stop, continue or end the target's process. Nothing
+  happens for signal 0 or on error.
+threading: >
+  Targets exactly one thread. Sending to another thread of the own
+  process does not make the signal pending for the sender. A thread that
+  has exited and been reaped is ESRCH (thread ids are not checked against
+  the caller's process).
+ordering:
+  - "own thread, unblocked handled signal: the handler runs before tkill returns"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: syscall number from asm/unistd_64.h; signal numbers from
+# asm/signal.h (SIGRTMIN 32, SIGRTMAX 64); SI_TKILL (-6) from
+# asm-generic/siginfo.h; errno values from asm-generic/errno-base.h.
+# The pipeline signature table types tid as a pid, so traces compare
+# exactly; tests with several tasks running at once use syscalls=off.
+# ld_tkill_perm is needs=root (it makes processes of other uids).
+# Only signal 0 and SIGKILL/SIGTERM were sent to other processes.

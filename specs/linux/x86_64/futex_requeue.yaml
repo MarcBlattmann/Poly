@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/futex_requeue        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs, one NUMA node); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  futex_requeue(waiters, flags, nr_wake, nr_requeue) (syscall 456) wakes
+  up to nr_wake tasks sleeping on one futex and moves up to nr_requeue of
+  the remaining ones, without waking them, to a second futex. waiters
+  points to two struct futex_waitv (24 bytes: u64 val, u64 uaddr, u32
+  flags, u32 __reserved): [0] is the source, whose word must hold [0].val
+  (else EAGAIN and nothing happens), [1] the target (its val is ignored).
+  Both entries need FUTEX2_SIZE_U32 and the same kind: both private or
+  both shared, both FUTEX2_NUMA or neither, both FUTEX2_MPOL or neither.
+  flags must be 0; flags, nr_wake and nr_requeue are 32-bit (upper
+  register bits ignored); nr_wake and nr_requeue must be >= 0. Waiters
+  are taken longest-waiting first: the first nr_wake are woken (their
+  wait returns 0), the next nr_requeue are moved (they keep sleeping and
+  are woken later by a wake of the target, not of the source). Moved
+  waiters may be futex_wait, classic FUTEX_WAIT or futex_waitv sleepers
+  (only the futex_waitv entry for the source moves; a later wake of the
+  target makes futex_waitv return that entry's index). Requeuing a futex
+  onto itself wakes nobody beyond nr_wake and returns the count it
+  "moved", so it counts sleepers.
+returns:
+  success: "number woken + number moved (0 with no waiters; requeue(0,0) returns 0 and changes nothing)"
+  self: "target == source: waiters stay where they are, the count of the selected ones is returned"
+  value_differs: "EAGAIN (11) when *waiters[0].uaddr != waiters[0].val; nobody woken or moved"
+errors:
+  bad_args: "EINVAL (22): flags != 0, nr_wake < 0, nr_requeue < 0"
+  null_array: "EINVAL (22): waiters NULL"
+  array_fault: "EFAULT (14): waiters unreadable (0x1000)"
+  bad_entry: "EINVAL (22): an entry with size other than U32 (U8, U64), unknown flag (0x10), __reserved != 0, val above 32 bits, unaligned uaddr, or the two entries of different kinds (private vs shared, NUMA vs not, MPOL vs not)"
+  fault: "EFAULT (14): either entry's uaddr unmapped (NULL)"
+  value: "EAGAIN (11)"
+  order: "flags/nr_wake/nr_requeue (EINVAL, before the array is read) > array NULL (EINVAL) / unreadable (EFAULT) > entry fields and kind match (EINVAL) > both addresses (EFAULT, a bad target beats a value mismatch) > value (EAGAIN)"
+side_effects: "wakes and moves sleepers; no memory is written"
+threading: "the moved tasks continue sleeping; a moved futex_waitv sleeper also stays on its other futexes"
+ordering:
+  - "longest-waiting sleepers are woken first, the next ones are moved"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct futex_waitv and FUTEX2_* from linux/futex.h; classic ops
+# (FUTEX_WAIT 0, FUTEX_WAKE 1, FUTEX_CMP_REQUEUE 4, FUTEX_PRIVATE_FLAG
+# 128) likewise. Multi-task tests use syscalls=off. Every test passes as
+# root and as an unprivileged user.
