@@ -277,22 +277,33 @@ pub const LOCK_SH: u32 = 1;
 pub const LOCK_EX: u32 = 2;
 pub const LOCK_NB: u32 = 4;
 pub const LOCK_UN: u32 = 8;
+/// `LOCK_MAND` (`asm-generic/fcntl.h`): mandatory locks, no longer
+/// supported; a call with it does nothing.
+pub const LOCK_MAND: u32 = 32;
 
 /// flock(fd, operation) (ADR 0059): "EINVAL operation is invalid" unless
 /// it is exactly one of `LOCK_SH`, `LOCK_EX`, `LOCK_UN`, optionally with
 /// `LOCK_NB`; "EWOULDBLOCK The file is locked and the LOCK_NB flag was
 /// selected"; without `LOCK_NB` the call waits and a signal ends it
-/// (`EINTR`, restarted under `SA_RESTART`, signal(7)).
+/// (`EINTR`, restarted under `SA_RESTART`, signal(7)). The order (the
+/// spec of flock): `LOCK_MAND` makes the call a no-op returning 0 (even
+/// for a descriptor that is not open), then `EINVAL` for the operation,
+/// then `EBADF` (not open, or `O_PATH`).
 pub fn flock(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let fd = fd_arg(a, 0)?;
     let op = a.uint(1);
+    if op & LOCK_MAND != 0 {
+        return Ok(0);
+    }
     let exclusive = match op & !LOCK_NB {
         LOCK_SH => Some(false),
         LOCK_EX => Some(true),
         LOCK_UN => None,
         _ => return Err(Errno::EINVAL),
     };
-    fs(k)?.status_flags(fd)?;
+    let fd = fd_arg(a, 0)?;
+    if fs(k)?.status_flags(fd)? & crate::sys::path::O_PATH != 0 {
+        return Err(Errno::EBADF);
+    }
     fs(k)?.flock(fd, exclusive, op & LOCK_NB == 0).map(|()| 0)
 }
 

@@ -23,6 +23,7 @@ mod signal;
 mod signal_trace;
 mod socket;
 mod spec_a;
+mod spec_b;
 mod startup;
 mod task;
 mod time;

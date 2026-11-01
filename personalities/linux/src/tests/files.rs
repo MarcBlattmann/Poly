@@ -170,6 +170,37 @@ impl LinuxFs for VfsFs {
         self.fds.get(fd).map_err(errno)?.write_at(offset, buf).map_err(errno)
     }
 
+    fn fallocate(&mut self, fd: i32, mode: u32, offset: u64, len: u64) -> Result<(), Errno> {
+        self.fds.get(fd).map_err(errno)?.fallocate(mode, offset, len).map_err(errno)
+    }
+
+    fn read_nowait(&mut self, fd: i32, buf: &mut [u8], at: Option<u64>) -> Result<usize, Errno> {
+        let file = self.fds.get(fd).map_err(errno)?.clone();
+        if file.on_inode() {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        match at {
+            Some(offset) => file.read_at(offset, buf),
+            None => file.read(buf),
+        }
+        .map_err(errno)
+    }
+
+    fn write_flags(
+        &mut self,
+        fd: i32,
+        buf: &[u8],
+        at: Option<u64>,
+        append: Option<bool>,
+        nowait: bool,
+    ) -> Result<usize, Errno> {
+        let file = self.fds.get(fd).map_err(errno)?.clone();
+        if nowait && file.on_inode() {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        file.write_with(at, append, buf).map_err(errno)
+    }
+
     fn dup(&mut self, fd: i32) -> Result<i32, Errno> {
         self.fds.dup(fd).map_err(errno)
     }

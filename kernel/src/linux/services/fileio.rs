@@ -37,7 +37,7 @@ use poly_vfs::timerfd::{TimerClock, TimerFd, TimerSpec};
 use poly_vfs::{FileObject, PollEvents, Timeout};
 
 impl Thread<'_> {
-    fn blocker(&self) -> ThreadBlocker<'_> {
+    pub(in crate::linux) fn blocker(&self) -> ThreadBlocker<'_> {
         ThreadBlocker::new(self.process, Arc::clone(&self.flags))
     }
 
@@ -66,7 +66,14 @@ fn open_object(
     flags: OpenFlags,
     new: NewFd,
 ) -> Result<Arc<OpenFile>, Errno> {
-    let node = fs::vfs().anon_node(kind, 0o600, &files.cred()).map_err(vfs_errno)?;
+    // Event files, timers, epoll sets and signal files (`Regular` here) are
+    // anonymous inodes without a type, as on Linux.
+    let node = if kind == FileType::Regular {
+        fs::vfs().anon_inode(0o600, &files.cred())
+    } else {
+        fs::vfs().anon_node(kind, 0o600, &files.cred())
+    }
+    .map_err(vfs_errno)?;
     let flags = if new.nonblock { flags | OpenFlags::NONBLOCK } else { flags };
     Ok(Arc::new(OpenFile::on_object(node, object, flags)))
 }

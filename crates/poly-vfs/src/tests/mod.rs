@@ -16,6 +16,7 @@ mod objects;
 mod path;
 mod path_order;
 mod perm;
+mod spec_b;
 mod tmpfs;
 mod xattrs;
 

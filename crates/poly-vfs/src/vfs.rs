@@ -10,7 +10,7 @@ use crate::node::{FsContext, Location, NodeRef, is_fs_object};
 use crate::object::AnonFs;
 use crate::path::{Found, Last, PATH_MAX, Parent, PathArg, Walk, check_path};
 use crate::sync::SpinMutex;
-use crate::{Attr, DeviceId, Errno, FileType, Ino, PERM_MASK, Result, S_ISGID, S_ISVTX, Stat};
+use crate::{Attr, DeviceId, Errno, FileType, Ino, PERM_MASK, Result, S_ISGID, S_ISUID, S_ISVTX, S_IXGRP, Stat};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -88,6 +88,15 @@ impl Vfs {
     pub fn anon_node(&self, kind: FileType, perm: u16, cred: &Cred) -> Result<NodeRef> {
         let (fs, mount) = &self.anon;
         let ino = fs.alloc(kind, perm & PERM_MASK, cred.uid, cred.gid);
+        Location { mount: mount.clone(), ino }.pin()
+    }
+
+    /// An anonymous inode without a file type (an event file, timer,
+    /// epoll set or signal file): `st_mode` is the permission bits alone
+    /// and `fchmod` is `EOPNOTSUPP`, as on Linux.
+    pub fn anon_inode(&self, perm: u16, cred: &Cred) -> Result<NodeRef> {
+        let (fs, mount) = &self.anon;
+        let ino = fs.alloc_typeless(perm & PERM_MASK, cred.uid, cred.gid);
         Location { mount: mount.clone(), ino }.pin()
     }
 
@@ -613,14 +622,34 @@ impl Vfs {
         if !Arc::ptr_eq(&src.mount, &p.dir.mount) {
             return Err(Errno::EXDEV);
         }
-        if src.attr()?.kind == FileType::Directory {
+        // A directory is EPERM before the new parent's permissions
+        // (link("/", "/x") by a normal user); the protected_hardlinks EPERM
+        // comes after EROFS and EACCES (the spec of link: `order`).
+        let attr = src.attr()?;
+        if attr.kind == FileType::Directory {
             return Err(Errno::EPERM);
         }
         self.may_change(cred, &p.dir)?;
+        if !Self::protected_hardlinks_allow(cred, &attr) {
+            return Err(Errno::EPERM);
+        }
         if !nameable {
             return Err(Errno::ENOENT);
         }
         self.name_changed(p.dir.mount.sb.fs.link(p.dir.ino, name, src.ino))
+    }
+
+    /// The `fs.protected_hardlinks = 1` rule (the default; `proc(5)`,
+    /// `/proc/sys/fs/protected_hardlinks`): a caller without `CAP_FOWNER`
+    /// who does not own the file may only link a regular file it may both
+    /// read and write and that is neither set-user-ID nor set-group-ID
+    /// with group execute.
+    fn protected_hardlinks_allow(cred: &Cred, attr: &Attr) -> bool {
+        if cred.has(cap::FOWNER) || cred.uid == attr.uid {
+            return true;
+        }
+        let setid = attr.perm & S_ISUID != 0 || (attr.perm & S_ISGID != 0 && attr.perm & S_IXGRP != 0);
+        attr.kind == FileType::Regular && !setid && cred.check(attr, Access::READ | Access::WRITE).is_ok()
     }
 
     // ----- removing and renaming -----
@@ -628,20 +657,28 @@ impl Vfs {
     /// `unlink(2)`.
     pub fn unlink(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8]) -> Result<()> {
         let p = self.parent_of(ctx, cred, at, path)?;
+        // The order (the spec of unlink): a last "." or ".." EISDIR, a
+        // read-only mount EROFS (also for a missing name), the last name
+        // (missing, then a trailing slash after a non-directory), then
+        // write permission on the parent, the sticky bit, a directory
+        // (EISDIR) and a mount point (EBUSY).
         let Last::Name(name) = &p.last else { return Err(Errno::EISDIR) };
+        if p.dir.mount.read_only() {
+            return Err(Errno::EROFS);
+        }
         let victim = self.raw_child(&p.dir, name)?;
         let vattr = victim.attr()?;
+        if p.trailing_slash && vattr.kind != FileType::Directory {
+            return Err(Errno::ENOTDIR);
+        }
+        let dattr = self.may_change(cred, &p.dir)?;
+        Self::sticky_allows(cred, &dattr, &vattr)?;
         if vattr.kind == FileType::Directory {
             return Err(Errno::EISDIR);
-        }
-        if p.trailing_slash {
-            return Err(Errno::ENOTDIR);
         }
         if self.is_mount_point(&victim) {
             return Err(Errno::EBUSY);
         }
-        let dattr = self.may_change(cred, &p.dir)?;
-        Self::sticky_allows(cred, &dattr, &vattr)?;
         let sb = &p.dir.mount.sb;
         sb.forget(p.dir.ino, name);
         self.name_changed(sb.fs.unlink(p.dir.ino, name))
@@ -657,16 +694,23 @@ impl Vfs {
             Last::DotDot => return Err(Errno::ENOTEMPTY),
             Last::Name(name) => name,
         };
+        // Then (the spec of rmdir): a read-only mount EROFS before the last
+        // name is looked up, the name (missing ENOENT), write permission on
+        // the parent, the sticky bit, not a directory, a mount point or
+        // the caller's root (EBUSY), and the file system's ENOTEMPTY.
+        if p.dir.mount.read_only() {
+            return Err(Errno::EROFS);
+        }
         let victim = self.raw_child(&p.dir, name)?;
         let vattr = victim.attr()?;
+        let dattr = self.may_change(cred, &p.dir)?;
+        Self::sticky_allows(cred, &dattr, &vattr)?;
         if vattr.kind != FileType::Directory {
             return Err(Errno::ENOTDIR);
         }
         if self.is_mount_point(&victim) || victim.same(ctx.root.loc()) {
             return Err(Errno::EBUSY);
         }
-        let dattr = self.may_change(cred, &p.dir)?;
-        Self::sticky_allows(cred, &dattr, &vattr)?;
         let sb = &p.dir.mount.sb;
         sb.forget(p.dir.ino, name);
         self.name_changed(sb.fs.rmdir(p.dir.ino, name))

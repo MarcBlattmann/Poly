@@ -6,8 +6,9 @@
 //!   limit is cut short at it; one that starts at or past it writes
 //!   nothing, fails with `EFBIG` and raises `SIGXFSZ` (to the writing
 //!   thread, `SI_KERNEL`, like `SIGPIPE`).
-//! - ftruncate and truncate past the limit fail with `EFBIG`, without a
-//!   signal (the spec of setrlimit names only the writes).
+//! - ftruncate past the limit fails with `EFBIG`, without a signal (the
+//!   spec of setrlimit names only the writes); truncate also raises
+//!   `SIGXFSZ` (the spec of truncate).
 
 use crate::abi::SigInfo;
 use crate::abi::mode;
@@ -35,6 +36,19 @@ fn limit(k: &mut dyn LinuxKernel) -> Option<u64> {
 /// offset, or at the end with `O_APPEND`) may write under the limit. With
 /// none, `EFBIG` and `SIGXFSZ`.
 pub fn allowed(k: &mut dyn LinuxKernel, fd: i32, at: Option<u64>, len: u64) -> Result<u64, Errno> {
+    allowed_with(k, fd, at, len, None)
+}
+
+/// [`allowed`] for a write that appends (`append: Some(true)`, pwritev2's
+/// `RWF_APPEND`) or does not (`Some(false)`, `RWF_NOAPPEND`) whatever the
+/// descriptor's `O_APPEND` says.
+pub fn allowed_with(
+    k: &mut dyn LinuxKernel,
+    fd: i32,
+    at: Option<u64>,
+    len: u64,
+    append: Option<bool>,
+) -> Result<u64, Errno> {
     let Some(limit) = limit(k) else { return Ok(len) };
     let Ok(st) = k.fstat(fd) else { return Ok(len) };
     if st.file_type() != mode::S_IFREG || len == 0 {
@@ -46,7 +60,7 @@ pub fn allowed(k: &mut dyn LinuxKernel, fd: i32, at: Option<u64>, len: u64) -> R
     if !matches!(flags & 3, 1 | 2) {
         return Ok(len);
     }
-    let append = flags & O_APPEND != 0;
+    let append = append.unwrap_or(flags & O_APPEND != 0);
     let pos = match at {
         _ if append => size,
         Some(at) => at,
@@ -61,6 +75,15 @@ pub fn allowed(k: &mut dyn LinuxKernel, fd: i32, at: Option<u64>, len: u64) -> R
         return Err(Errno::EFBIG);
     }
     Ok(len.min(limit - pos))
+}
+
+/// truncate(2) or fallocate(2) of a file past the limit: `EFBIG`, and
+/// `SIGXFSZ` to the calling thread as for a write (the specs of truncate
+/// and fallocate: `rlimit_fsize`, `too_big`).
+pub fn too_big_signal(k: &mut dyn LinuxKernel) -> Result<u64, Errno> {
+    let tid = k.tid();
+    let _ = send(k, Target::Thread(tid), Some(tid), None, SigInfo::new(SIGXFSZ, SI_KERNEL));
+    Err(Errno::EFBIG)
 }
 
 /// A truncation of a file to `len` bytes: `EFBIG` past the limit.

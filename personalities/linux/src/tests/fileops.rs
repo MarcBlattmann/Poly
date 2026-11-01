@@ -98,9 +98,9 @@ fn copy_file_range_with_offset_pointers() {
     // At the end of the source: 0.
     k.poke(off_in, &100u64.to_le_bytes());
     assert_eq!(sys(k, nr::COPY_FILE_RANGE, &[src, off_in, dst, off_out, 4, 0]), Ok(0));
-    // Negative offset, a bad pointer.
+    // A negative offset (EOVERFLOW, the spec of copy_file_range), a bad pointer.
     k.poke(off_in, &(-1i64).to_le_bytes());
-    assert_eq!(sys(k, nr::COPY_FILE_RANGE, &[src, off_in, dst, 0, 4, 0]), Err(Errno::EINVAL));
+    assert_eq!(sys(k, nr::COPY_FILE_RANGE, &[src, off_in, dst, 0, 4, 0]), Err(Errno::EOVERFLOW));
     assert_eq!(sys(k, nr::COPY_FILE_RANGE, &[src, UNMAPPED, dst, 0, 4, 0]), Err(Errno::EFAULT));
 }
 
