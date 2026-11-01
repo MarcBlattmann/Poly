@@ -340,6 +340,13 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn mmap(&mut self, r: &MapRequest) -> Result<u64, Errno> {
+        fn placement_of(r: &MapRequest) -> poly_vm::Placement {
+            match r.placement {
+                Placement::Hint => poly_vm::Placement::Hint(r.addr),
+                Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
+                Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
+            }
+        }
         let memory = self.memory()?;
         let prot = vm_prot(r.prot);
         let req = match r.backing {
@@ -361,6 +368,16 @@ impl LinuxKernel for Thread<'_> {
                 // Pipes and event files have nothing to map.
                 if file.object().is_some() {
                     return Err(Errno::ENODEV);
+                }
+                // A sound card's PCM device maps its ring buffer and its
+                // status and control pages (ADR 0109).
+                if file.kind() == FileType::CharDevice
+                    && let Some(m) = file.device().and_then(|d| crate::sound::alsa::map(d, offset, r.len, r.shared))
+                {
+                    let (source, at) = m?;
+                    let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), at, true);
+                    let addr = memory.map(req.at(placement_of(r))).map_err(memory_errno)?;
+                    return Ok(addr);
                 }
                 if file.kind() != FileType::Regular {
                     return Err(if file.kind() == FileType::CharDevice { Errno::ENODEV } else { Errno::EACCES });

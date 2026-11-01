@@ -1,0 +1,11 @@
+[package]
+name = "poly-audio"
+description = "The audio server's arithmetic: sample formats to and from one integer domain, channel mapping, linear resampling, gain, and mixing client streams into one hardware stream (and capture back out to clients)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

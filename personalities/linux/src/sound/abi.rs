@@ -64,6 +64,13 @@ pub mod ioctl {
     pub const CTL_PVERSION: u32 = 0x8004_5500;
     pub const CTL_CARD_INFO: u32 = 0x8178_5501;
     pub const CTL_ELEM_LIST: u32 = 0xc050_5510;
+    pub const CTL_ELEM_INFO: u32 = 0xc110_5511;
+    pub const CTL_ELEM_READ: u32 = 0xc4c8_5512;
+    pub const CTL_ELEM_WRITE: u32 = 0xc4c8_5513;
+    pub const CTL_ELEM_LOCK: u32 = 0x4040_5514;
+    pub const CTL_ELEM_UNLOCK: u32 = 0x4040_5515;
+    pub const CTL_TLV_READ: u32 = 0xc008_551a;
+    pub const CTL_POWER_STATE: u32 = 0x8004_55d1;
     pub const CTL_SUBSCRIBE_EVENTS: u32 = 0xc004_5516;
     pub const CTL_PCM_NEXT_DEVICE: u32 = 0x8004_5530;
     pub const CTL_PCM_INFO: u32 = 0xc120_5531;
@@ -185,6 +192,8 @@ pub mod state {
 
 /// `SNDRV_PCM_INFO_*` bits this implementation reports.
 pub mod info {
+    pub const MMAP: u32 = 0x0000_0001;
+    pub const MMAP_VALID: u32 = 0x0000_0002;
     pub const INTERLEAVED: u32 = 0x0000_0100;
     pub const BLOCK_TRANSFER: u32 = 0x0001_0000;
     pub const BATCH: u32 = 0x0000_0010;
@@ -225,6 +234,17 @@ pub mod tstamp_type {
     pub const MONOTONIC_RAW: u32 = 2;
 }
 
+/// `SNDRV_PCM_MMAP_OFFSET_*`: what `mmap(2)` of a PCM device maps at
+/// these file offsets. On 64-bit the old and new status and control
+/// layouts are the same.
+pub mod mmap_offset {
+    pub const DATA: u64 = 0x0000_0000;
+    pub const STATUS_OLD: u64 = 0x8000_0000;
+    pub const CONTROL_OLD: u64 = 0x8100_0000;
+    pub const STATUS_NEW: u64 = 0x8200_0000;
+    pub const CONTROL_NEW: u64 = 0x8300_0000;
+}
+
 /// Structure sizes.
 pub const PCM_INFO_LEN: usize = 288;
 pub const HW_PARAMS_LEN: usize = 608;
@@ -234,24 +254,30 @@ pub const SYNC_PTR_LEN: usize = 136;
 pub const XFERI_LEN: usize = 24;
 pub const CARD_INFO_LEN: usize = 376;
 pub const ELEM_LIST_LEN: usize = 80;
+pub const ELEM_ID_LEN: usize = 64;
+pub const ELEM_INFO_LEN: usize = 272;
+pub const ELEM_VALUE_LEN: usize = 1224;
+pub const CTL_EVENT_LEN: usize = 72;
+pub const MMAP_STATUS_LEN: usize = 56;
+pub const MMAP_CONTROL_LEN: usize = 16;
 
-fn put32(b: &mut [u8], at: usize, v: u32) {
+pub(crate) fn put32(b: &mut [u8], at: usize, v: u32) {
     b[at..at + 4].copy_from_slice(&v.to_le_bytes());
 }
 
-fn put64(b: &mut [u8], at: usize, v: u64) {
+pub(crate) fn put64(b: &mut [u8], at: usize, v: u64) {
     b[at..at + 8].copy_from_slice(&v.to_le_bytes());
 }
 
-fn get32(b: &[u8], at: usize) -> u32 {
+pub(crate) fn get32(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]])
 }
 
-fn get64(b: &[u8], at: usize) -> u64 {
+pub(crate) fn get64(b: &[u8], at: usize) -> u64 {
     u64::from_le_bytes(core::array::from_fn(|i| b[at + i]))
 }
 
-fn put_str(b: &mut [u8], at: usize, len: usize, s: &str) {
+pub(crate) fn put_str(b: &mut [u8], at: usize, len: usize, s: &str) {
     let n = s.len().min(len - 1);
     b[at..at + n].copy_from_slice(&s.as_bytes()[..n]);
 }
@@ -487,5 +513,49 @@ impl Xferi {
     /// Just the `result` field, which the kernel writes back.
     pub fn result_bytes(result: i64) -> [u8; 8] {
         result.to_le_bytes()
+    }
+}
+
+/// `struct snd_pcm_mmap_status`, the page mapped at
+/// [`mmap_offset::STATUS_OLD`]: what the kernel publishes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MmapStatus {
+    pub state: u32,
+    pub hw_ptr: u64,
+    pub tstamp: Timespec,
+    pub suspended_state: u32,
+    pub audio_tstamp: Timespec,
+}
+
+impl MmapStatus {
+    pub fn encode(&self) -> [u8; MMAP_STATUS_LEN] {
+        let mut b = [0u8; MMAP_STATUS_LEN];
+        put32(&mut b, 0, self.state);
+        put64(&mut b, 8, self.hw_ptr);
+        self.tstamp.put(&mut b, 16);
+        put32(&mut b, 32, self.suspended_state);
+        self.audio_tstamp.put(&mut b, 40);
+        b
+    }
+}
+
+/// `struct snd_pcm_mmap_control`, the page mapped at
+/// [`mmap_offset::CONTROL_OLD`]: what the application writes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MmapControl {
+    pub appl_ptr: u64,
+    pub avail_min: u64,
+}
+
+impl MmapControl {
+    pub fn decode(b: &[u8; MMAP_CONTROL_LEN]) -> MmapControl {
+        MmapControl { appl_ptr: get64(b, 0), avail_min: get64(b, 8) }
+    }
+
+    pub fn encode(&self) -> [u8; MMAP_CONTROL_LEN] {
+        let mut b = [0u8; MMAP_CONTROL_LEN];
+        put64(&mut b, 0, self.appl_ptr);
+        put64(&mut b, 8, self.avail_min);
+        b
     }
 }

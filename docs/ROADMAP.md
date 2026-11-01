@@ -123,7 +123,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
 - [ ] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged
 - [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
-- [ ] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
+- [x] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
 - [ ] Compositor: Wayland server, surface composition, HiDPI scaling, vsync
 - [ ] Shell: launcher, window management, notifications, settings (own non-glass design)
 - [ ] Compositor exposes the content behind each window (needed later for Liquid Glass)

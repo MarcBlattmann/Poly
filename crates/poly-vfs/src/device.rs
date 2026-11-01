@@ -69,6 +69,14 @@ pub trait CharDevice: Send + Sync {
     fn pty_index(&self) -> Option<u32> {
         None
     }
+
+    /// The device as `Any`, so the kernel can tell what it is where it
+    /// offers a service the VFS knows nothing of (mapping a sound card's
+    /// ring buffer with `mmap(2)`). `None` (the default) for devices that
+    /// need no such thing.
+    fn as_any(&self) -> Option<&dyn core::any::Any> {
+        None
+    }
 }
 
 /// `/dev/null` (1, 3).

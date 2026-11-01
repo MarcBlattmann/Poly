@@ -31,7 +31,8 @@ what exists **today** and how it fits that plan.
             block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
             network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets;
                      socket files (inet, poly-unix Unix sockets, netlink) with per-socket wake-ups
-            sound: ALSA card 0 (/dev/snd/controlC0, pcmC0D<n>p) on virtio-sound (poly-virtio-sound), audio thread
+            sound: ALSA card 0 (/dev/snd/controlC0, pcmC0D0p, pcmC0D0c; 8 subdevices each) on virtio-sound
+                   (poly-virtio-sound) or Intel HDA (poly-hda); audio server in the audio thread (poly-audio)
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             input: event layer (poly-input hub), PS/2 keyboard and mouse (IRQ 1, 12), virtio-input; /dev/input/event*
             display: RAM back buffer onto virtio-gpu (2D resource) or the QEMU standard VGA framebuffer;
@@ -387,13 +388,30 @@ like on a pipe (ADR 0042):
 
 ## Sound
 
-One ALSA card, card 0, on a virtio-sound device (VIRTIO 1.2 §5.14):
-playback through the ALSA kernel/user interface (`/dev/snd/*`, the
-`SNDRV_*` ioctls of the uapi header `sound/asound.h`), the interface
-`aplay -D hw:0,0` uses (aplay itself is not in the build image; a C test
-program drives the same ioctls). Decisions are in
-[ADR 0104](adr/0104-virtio-sound-and-alsa-pcm.md); Intel HDA, capture and
-an audio server come later.
+One ALSA card, card 0, on a virtio-sound device (VIRTIO 1.2 §5.14) or,
+without one, an Intel HDA controller: playback and capture through the
+ALSA kernel/user interface (`/dev/snd/*`, the `SNDRV_*` ioctls of the uapi
+header `sound/asound.h`), the interface `aplay -D hw:0,0` uses (aplay
+itself is not in the build image; a C test program drives the same
+ioctls), with mmap access and mixer controls, and an audio server that
+mixes every open stream into the device's one. Decisions are in
+[ADR 0104](adr/0104-virtio-sound-and-alsa-pcm.md) (virtio-sound, the ALSA
+PCM interface) and [ADR 0109](adr/0109-audio-server-capture-mmap-mixer-and-intel-hda.md)
+(the server, capture, mmap, controls, HDA).
+
+**The audio server (ADR 0109).** Each open of a PCM device is a substream
+of its own (8 ALSA subdevices per device): its own `PcmRuntime` and ring
+buffer in shared memory (which `mmap(2)` maps, with the status and control
+pages), in the client's format. The device runs one fixed stream (S16,
+stereo, 48 kHz, 20 ms periods); whenever it has room for a period the
+audio thread mixes one from every active playback client with
+`poly-audio` (conversion, linear resampling, sum, the master volume,
+clipping) and hands it over, which moves each client's hardware pointer;
+captured periods go to every active capture client the same way. HDA
+(`poly-hda`: CORB/RIRB, the widget graph walked to one DAC-to-pin path,
+a BDL stream) plays a ring of periods round and round, refilled behind
+the DMA position. What follows describes the virtio-sound driver beneath
+it.
 
 ```text
  /dev/snd/pcmC0D0p ──ioctl/write/poll──► Card { Mutex<Inner { VirtioSound, [PcmSlot { PcmRuntime, DevStream }] }> }
@@ -435,15 +453,19 @@ an audio server come later.
   the stream stops in XRUN), sends the next periods and wakes waiters.
 
 ```text
-sound: 00:03.0: virtio-sound, 0 jacks, 2 streams, 0 channel maps; queues [64, 64, 64, 64], 21 output messages in flight
-sound: stream 0: output, 1-2 channels, rates [5512, 8000, ..., 384000], ALSA formats [0, 1, 2, 4, 10, 12, 14], features 0x0
-sound: card 0: /dev/snd/controlC0, pcmC0D0p; MSI-X entry 0 -> vector 0x32
+sound: 00:03.0: virtio-sound, 0 jacks, 2 streams, 0 channel maps; queues [64, 64, 64, 64], 21 output and 21 input messages in flight
+sound: stream 0: output, 1-2 channels, rates [5512, 8000, ..., 384000], formats 0xe0078, features 0x0
+sound: output device stream: S16, 2 channels, 48000 Hz, periods of 960 frames x 4
+sound: card 0: /dev/snd/controlC0, pcmC0D0p, pcmC0D0c; MSI-X entry 0 -> vector 0x33
 ```
 
-The `sound` boot test runs `/bin/pcm-tone` (`tests/linux/audio/pcm_tone.c`)
-as init with `-device virtio-sound-pci` on QEMU's `wav` audio backend and
-checks the recording on the host: 100 ms windows whose frequency (zero
-crossings) and level (RMS) are each tone's, on both channels.
+The `sound` boot tests run `/bin/pcm-tone` (`tests/linux/audio/pcm_tone.c`)
+as init with `-device virtio-sound-pci` (or `intel-hda` + `hda-duplex`) on
+QEMU's `wav` audio backend and check the recording on the host: 100 ms
+windows whose frequency (zero crossings) and level (RMS) are each tone's,
+on both channels, and for two programs playing at once each tone's level
+from one DFT bin. Capture runs on the `none` backend (silence in real
+time), since `wav` has no input.
 
 ## Input
 

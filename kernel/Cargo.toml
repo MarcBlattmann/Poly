@@ -60,6 +60,8 @@ poly-virtio-gpu = { path = "../crates/poly-virtio-gpu" }
 poly-virtio-input = { path = "../crates/poly-virtio-input" }
 poly-virtio-net = { path = "../crates/poly-virtio-net" }
 poly-virtio-sound = { path = "../crates/poly-virtio-sound" }
+poly-hda = { path = "../crates/poly-hda" }
+poly-audio = { path = "../crates/poly-audio" }
 poly-vdso = { path = "../crates/poly-vdso" }
 poly-vm = { path = "../crates/poly-vm" }
 

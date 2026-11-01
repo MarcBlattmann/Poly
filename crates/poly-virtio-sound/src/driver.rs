@@ -30,6 +30,12 @@ pub const CONTROL_MIN: usize = 256;
 pub const TX_SLOT_LEN: usize = 16;
 /// Descriptors per output message: header, data, status.
 pub const TX_DESCRIPTORS: u16 = 3;
+/// Bytes per receive slot in the message memory: the header at 0, the
+/// status at 8 (as for [`TX_SLOT_LEN`]).
+pub const RX_SLOT_LEN: usize = 16;
+/// Descriptors per input message: header (device-readable), data and
+/// status (device-writable).
+pub const RX_DESCRIPTORS: u16 = 3;
 
 /// Features this driver uses when offered. The sound device defines none
 /// of its own in VIRTIO 1.2 (§5.14.3). VIRTIO_F_ACCESS_PLATFORM is accepted
@@ -56,7 +62,10 @@ pub struct Memory {
     pub events: DmaRegion,
     /// Headers and status of output messages, [`TX_SLOT_LEN`] per slot.
     pub tx_meta: DmaRegion,
-    /// The PCM ring buffer the output messages point into.
+    /// Headers and status of input messages, [`RX_SLOT_LEN`] per slot.
+    pub rx_meta: DmaRegion,
+    /// The PCM memory output and input messages point into (the caller
+    /// keeps the two directions' ring buffers apart).
     pub pcm: DmaRegion,
 }
 
@@ -73,6 +82,10 @@ pub struct Storage<'a> {
     /// Free transmit slots (a stack), and each slot's data length.
     pub tx_free: &'a mut [u16],
     pub tx_len: &'a mut [u32],
+    /// The same for input messages on the receive queue.
+    pub rx_owner: &'a mut [u16],
+    pub rx_free: &'a mut [u16],
+    pub rx_len: &'a mut [u32],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,6 +167,18 @@ pub struct TxDone {
     pub status: PcmStatus,
 }
 
+/// An input message the device filled and returned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RxDone {
+    pub stream: u32,
+    /// Where its data is in the PCM memory, and how many bytes the device
+    /// wrote there (see [`VirtioSound::poll_rx`]).
+    pub offset: u32,
+    pub len: u32,
+    /// The device's status.
+    pub status: PcmStatus,
+}
+
 /// Counters.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Stats {
@@ -171,6 +196,14 @@ pub struct Stats {
     pub period_elapsed: u64,
     pub xruns: u64,
     pub jack_events: u64,
+    pub rx_messages: u64,
+    pub rx_bytes: u64,
+    /// Input messages that came back with a status other than OK.
+    pub rx_errors: u64,
+    /// Input messages whose used length did not cover the status (taken
+    /// as full: see `poll_rx`).
+    pub rx_short: u64,
+    pub rx_kicks: u64,
 }
 
 /// The largest power-of-two queue size, at most `max` (the device's limit)
@@ -261,7 +294,7 @@ pub unsafe fn init<'a, M: Mmio, C: Mmio, N: Mmio>(
     if memory.control.len < CONTROL_MIN {
         fail!(InitError::NoRoom);
     }
-    let Storage { desc, event_owner, tx_owner, tx_free, tx_len } = storage;
+    let Storage { desc, event_owner, tx_owner, tx_free, tx_len, rx_owner, rx_free, rx_len } = storage;
     let [control_desc, event_desc, tx_desc, rx_desc] = desc;
     let mut max = [0u16; 4];
     for (q, m) in max.iter_mut().enumerate() {
@@ -272,14 +305,17 @@ pub unsafe fn init<'a, M: Mmio, C: Mmio, N: Mmio>(
     }
     let event_room = event_desc.len().min(event_owner.len()).min(memory.events.len / Event::LEN);
     let tx_room = tx_desc.len().min(tx_owner.len());
+    let rx_room = rx_desc.len().min(rx_owner.len());
     let sizes = [
         queue_size(max[0], control_desc.len(), &memory.rings[0]),
         queue_size(max[1], event_room, &memory.rings[1]),
         queue_size(max[2], tx_room, &memory.rings[2]),
-        queue_size(max[3], rx_desc.len(), &memory.rings[3]),
+        queue_size(max[3], rx_room, &memory.rings[3]),
     ];
     let tx_slots = (sizes[2] / TX_DESCRIPTORS)
         .min(tx_free.len().min(tx_len.len()).min(memory.tx_meta.len / TX_SLOT_LEN).min(u16::MAX as usize) as u16);
+    let rx_slots = (sizes[3] / RX_DESCRIPTORS)
+        .min(rx_free.len().min(rx_len.len()).min(memory.rx_meta.len / RX_SLOT_LEN).min(u16::MAX as usize) as u16);
     if sizes[0] < 2 || sizes[1] < 1 || tx_slots < 2 || sizes[3] < 1 {
         fail!(InitError::NoRoom);
     }
@@ -302,8 +338,8 @@ pub unsafe fn init<'a, M: Mmio, C: Mmio, N: Mmio>(
         Err(e) => fail!(e),
     };
     // SAFETY: forwarded from our caller.
-    let r = unsafe { setup_queue(&cfg, &transport, RX_QUEUE, sizes[3], &memory.rings[3], rx_desc, None) };
-    let (rx, _rx_n) = match r {
+    let r = unsafe { setup_queue(&cfg, &transport, RX_QUEUE, sizes[3], &memory.rings[3], rx_desc, vector) };
+    let (rx, rx_n) = match r {
         Ok(q) => q,
         Err(e) => fail!(e),
     };
@@ -319,6 +355,9 @@ pub unsafe fn init<'a, M: Mmio, C: Mmio, N: Mmio>(
     for (i, f) in tx_free.iter_mut().take(tx_slots as usize).enumerate() {
         *f = i as u16;
     }
+    for (i, f) in rx_free.iter_mut().take(rx_slots as usize).enumerate() {
+        *f = i as u16;
+    }
     let features = cfg.driver_ok();
     let mut snd = VirtioSound {
         common,
@@ -330,6 +369,7 @@ pub unsafe fn init<'a, M: Mmio, C: Mmio, N: Mmio>(
         control_n,
         event_n,
         tx_n,
+        rx_n,
         memory,
         event_owner,
         tx_owner,
@@ -337,6 +377,11 @@ pub unsafe fn init<'a, M: Mmio, C: Mmio, N: Mmio>(
         tx_len,
         tx_free_len: tx_slots,
         tx_slots,
+        rx_owner,
+        rx_free,
+        rx_len,
+        rx_free_len: rx_slots,
+        rx_slots,
         config,
         features,
         stats: Stats::default(),
@@ -361,12 +406,11 @@ pub struct VirtioSound<'a, M, N> {
     control: SplitQueue<'a>,
     event: SplitQueue<'a>,
     tx: SplitQueue<'a>,
-    /// Set up as §5.14.5 asks, unused (no capture yet).
-    #[allow(dead_code)]
     rx: SplitQueue<'a>,
     control_n: Notifier,
     event_n: Notifier,
     tx_n: Notifier,
+    rx_n: Notifier,
     memory: Memory,
     event_owner: &'a mut [u16],
     tx_owner: &'a mut [u16],
@@ -374,6 +418,14 @@ pub struct VirtioSound<'a, M, N> {
     tx_len: &'a mut [u32],
     tx_free_len: u16,
     tx_slots: u16,
+    rx_owner: &'a mut [u16],
+    rx_free: &'a mut [u16],
+    /// Per receive slot, the length of its data buffer. Its offset in the
+    /// PCM memory is kept in the slot's message memory at byte 4, after
+    /// the 4-byte header (bytes the device is never shown).
+    rx_len: &'a mut [u32],
+    rx_free_len: u16,
+    rx_slots: u16,
     config: DeviceConfig,
     features: u64,
     stats: Stats,
@@ -713,6 +765,116 @@ impl<M: Mmio, N: Mmio> VirtioSound<'_, M, N> {
         }
     }
 
+    // ---- input messages ----------------------------------------------------
+
+    /// Input messages the device can hold at once.
+    pub const fn rx_slots(&self) -> u16 {
+        self.rx_slots
+    }
+
+    /// Input messages handed to the device and not back yet.
+    pub const fn rx_in_flight(&self) -> u16 {
+        self.rx_slots - self.rx_free_len
+    }
+
+    /// Lend `chunk` of the PCM memory to the device as an input message of
+    /// stream `id` (§5.14.6.8): the header (device-readable), then the
+    /// data buffer and the status (device-writable). The device returns
+    /// it once it filled the buffer with captured frames
+    /// ([`poll_rx`](Self::poll_rx)); until then the caller must not touch
+    /// those bytes.
+    pub fn submit_rx(&mut self, id: u32, chunk: Chunk) -> Result<(), TxError> {
+        if self.failed {
+            return Err(TxError::Failed);
+        }
+        let (off, len) = (chunk.offset as usize, chunk.len as usize);
+        if len == 0 || off.checked_add(len).is_none_or(|end| end > self.memory.pcm.len) {
+            return Err(TxError::Range);
+        }
+        if self.rx_free_len == 0 {
+            return Err(TxError::Busy);
+        }
+        self.rx_free_len -= 1;
+        let slot = self.rx_free[self.rx_free_len as usize];
+        let meta = slot as usize * RX_SLOT_LEN;
+        // SAFETY: the slot is inside the receive message memory (`init`
+        // made no more slots than fit) and free, so nothing else uses it;
+        // the queue's Release fence orders these writes before the device
+        // sees the message.
+        unsafe {
+            let p = self.memory.rx_meta.ptr.as_ptr().add(meta);
+            ptr::copy_nonoverlapping(id.to_le_bytes().as_ptr(), p, XFER_LEN);
+            ptr::copy_nonoverlapping(chunk.offset.to_le_bytes().as_ptr(), p.add(4), 4);
+            ptr::write_bytes(p.add(8), 0, PcmStatus::LEN);
+        }
+        let bus = self.memory.rx_meta.bus + meta as u64;
+        let header = Buffer { addr: bus, len: XFER_LEN as u32 };
+        let writable = [
+            Buffer { addr: self.memory.pcm.bus + off as u64, len: len as u32 },
+            Buffer { addr: bus + 8, len: PcmStatus::LEN as u32 },
+        ];
+        match self.rx.add(&[header], &writable) {
+            Ok(head) => {
+                self.rx_owner[head as usize] = slot;
+                self.rx_len[slot as usize] = len as u32;
+            }
+            Err(_) => {
+                self.rx_free[self.rx_free_len as usize] = slot;
+                self.rx_free_len += 1;
+                return Err(TxError::Busy);
+            }
+        }
+        if self.rx.should_notify() {
+            self.rx_n.notify(&self.notify);
+            self.stats.rx_kicks += 1;
+        }
+        Ok(())
+    }
+
+    /// Take back every input message the device returned, oldest first.
+    /// The used length counts the data and the status the device wrote
+    /// (§5.14.6.8), so the data is that minus the status, at most the
+    /// buffer. A length that does not even cover the status, with an OK
+    /// status, is taken as a full buffer and counted (`rx_short`), as for
+    /// QEMU's short control responses.
+    pub fn poll_rx(&mut self, mut done: impl FnMut(RxDone)) {
+        while !self.failed {
+            match self.rx.pop_used() {
+                Ok(Some(u)) => {
+                    let slot = self.rx_owner[u.head as usize];
+                    let meta = slot as usize * RX_SLOT_LEN;
+                    let mut b = [0u8; RX_SLOT_LEN];
+                    // SAFETY: inside the receive message memory; the device
+                    // handed the message back (Acquire fence in `pop_used`).
+                    unsafe {
+                        ptr::copy_nonoverlapping(self.memory.rx_meta.ptr.as_ptr().add(meta), b.as_mut_ptr(), b.len())
+                    };
+                    let stream = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+                    let offset = u32::from_le_bytes([b[4], b[5], b[6], b[7]]);
+                    let status = PcmStatus::decode(&b[8..]);
+                    let posted = self.rx_len[slot as usize];
+                    let len = if (u.len as usize) < PcmStatus::LEN {
+                        self.stats.rx_short += 1;
+                        posted
+                    } else {
+                        (u.len - PcmStatus::LEN as u32).min(posted)
+                    };
+                    if status.status != snd_status::OK {
+                        self.stats.rx_errors += 1;
+                    } else {
+                        self.stats.rx_messages += 1;
+                        self.stats.rx_bytes += len as u64;
+                    }
+                    self.rx_free[self.rx_free_len as usize] = slot;
+                    self.rx_free_len += 1;
+                    done(RxDone { stream, offset, len, status });
+                }
+                Ok(None) => return,
+                Err(_) => self.fail(),
+            }
+        }
+    }
+
     // ---- events ------------------------------------------------------------
 
     fn kick_events(&mut self) {
@@ -768,26 +930,29 @@ impl<M: Mmio, N: Mmio> VirtioSound<'_, M, N> {
 
     // ---- interrupts --------------------------------------------------------
 
-    /// Ask for interrupts on returned output messages and on events.
-    /// Returns true if some arrived meanwhile (poll before waiting).
+    /// Ask for interrupts on returned output and input messages and on
+    /// events. Returns true if some arrived meanwhile (poll before
+    /// waiting).
     pub fn enable_interrupts(&mut self) -> bool {
         if self.failed {
             return false;
         }
         let a = self.tx.enable_interrupts();
         let b = self.event.enable_interrupts();
-        a || b
+        let c = self.rx.enable_interrupts();
+        a || b || c
     }
 
     /// Ask the device not to interrupt (a hint, §2.7.7).
     pub fn disable_interrupts(&mut self) {
         self.tx.disable_interrupts();
         self.event.disable_interrupts();
+        self.rx.disable_interrupts();
     }
 
     /// Is there anything to collect?
     pub fn has_work(&self) -> bool {
-        !self.failed && (self.tx.has_used() || self.event.has_used())
+        !self.failed && (self.tx.has_used() || self.event.has_used() || self.rx.has_used())
     }
 
     // ---- PCM memory --------------------------------------------------------
