@@ -294,6 +294,19 @@ impl Files {
         file.write_at(offset, buf)
     }
 
+    /// `pwritev2(2)` with `RWF_APPEND` / `RWF_NOAPPEND`
+    /// ([`OpenFile::write_with`]).
+    pub fn write_with(&self, fd: Fd, buf: &[u8], at: Option<u64>, append: Option<bool>) -> Result<usize> {
+        let file = self.file(fd)?;
+        self.before_write(&file, buf.len())?;
+        file.write_with(at, append, buf)
+    }
+
+    /// `fallocate(2)` ([`OpenFile::fallocate`]).
+    pub fn fallocate(&self, fd: Fd, mode: u32, offset: u64, len: u64) -> Result<()> {
+        self.file(fd)?.fallocate(mode, offset, len)
+    }
+
     /// `lseek(2)`: returns the new offset.
     pub fn lseek(&self, fd: Fd, offset: i64, whence: Whence) -> Result<u64> {
         self.file(fd)?.seek(offset, whence)

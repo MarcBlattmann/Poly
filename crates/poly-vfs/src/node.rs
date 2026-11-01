@@ -70,7 +70,11 @@ impl NodeRef {
     }
 
     pub fn stat(&self) -> Result<Stat> {
-        Ok(Stat::new(self.loc.mount.dev(), &self.attr()?))
+        let mut st = Stat::new(self.loc.mount.dev(), &self.attr()?);
+        if self.loc.mount.sb.fs.typeless(self.loc.ino) {
+            st.mode &= !crate::S_IFMT;
+        }
+        Ok(st)
     }
 
     pub fn kind(&self) -> Result<FileType> {
@@ -165,14 +169,21 @@ impl NodeRef {
             }
         }
         // Every successful call, even one that changes no id, clears the
-        // set-id bits below and touches ctime (as on Linux).
+        // set-id bits of a regular file below and touches ctime (the spec
+        // of chown: `mode_bits`; a directory keeps its bits).
         let mut set = SetAttr { uid, gid, ..SetAttr::default() };
-        if attr.kind != FileType::Directory {
+        if attr.kind == FileType::Regular {
             let mut perm = attr.perm & !S_ISUID;
             if perm & S_IXGRP != 0 {
                 perm &= !S_ISGID;
             }
             if perm != attr.perm {
+                // Clearing them is a mode change: a caller who neither
+                // owns the file nor may chown it gets EPERM for -1, -1 on
+                // another user's set-user-ID file (`non_owner_noop`).
+                if !cred.has(cap::CHOWN) && !cred.owns(&attr) {
+                    return Err(Errno::EPERM);
+                }
                 set.perm = Some(perm);
             }
         }

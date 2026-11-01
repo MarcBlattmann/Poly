@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/renameat             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  renameat(olddirfd, oldpath, newdirfd, newpath) is system call 264. It is
+  rename (82) with each relative path resolved from its own directory
+  descriptor; it is exactly renameat2(olddirfd, oldpath, newdirfd, newpath,
+  0) (316): same replace semantics, same errors (see rename.yaml). There is
+  no flags argument and no AT_EMPTY_PATH: an empty path is ENOENT.
+returns:
+  success: "0"
+  dirfd: "a relative oldpath starts at olddirfd and a relative newpath at newdirfd (they may differ or be the same); AT_FDCWD (-100) means the working directory; an O_PATH directory descriptor works; \"..\" from a dirfd works (renameat(b, \"../a/f\", a, \"../b/f\")). An absolute path ignores its descriptor entirely, even -1, 9999 or a regular file's descriptor; one path may be absolute and the other relative"
+  replace: "as rename: a file replaces a file (the old one gone, the inode of the source kept); renaming onto another hard link of the same file changes nothing; a symbolic link is moved or replaced itself, not followed; an empty directory is replaced by a directory (a descriptor on the replaced one shows st_nlink 0 and creating in it is ENOENT); a non-empty one is ENOTEMPTY; into its own subtree EINVAL"
+errors:
+  bad_dirfd: "EBADF (9): a relative path with a descriptor that is not open (-1, 500, 9999)"
+  dirfd_not_directory: "ENOTDIR (20): a relative path with a descriptor open on a non-directory"
+  empty_path: "ENOENT (2): an empty oldpath or newpath, whatever the descriptor"
+  others: "as rename (82): ENOENT, EBUSY for \".\"/\"..\", ENOTDIR, EISDIR, ENOTEMPTY, EINVAL, ELOOP, ENAMETOOLONG, EFAULT, EXDEV, EACCES, EPERM, EROFS"
+  order: "(1) oldpath's string: EFAULT, ENAMETOOLONG (4096+), ENOENT (empty); (2) olddirfd for a relative oldpath: EBADF, ENOTDIR; (3) oldpath's directories left to right; (4)-(6) the same for newpath (string, newdirfd, directories); (7) \".\"/\"..\" EBUSY; (8) oldpath's last name (ENOENT if missing, ENAMETOOLONG), newpath's last name (ENAMETOOLONG); (9) the rename itself. Observed: renameat(d, (char*)1, 9999, \"x\") EFAULT; renameat(d, 4096-byte path, 9999, \"x\") ENAMETOOLONG; renameat(d, \"\", 9999, \"x\") ENOENT; renameat(9999, \"f\", d, (char*)1) EBADF; renameat(filefd, \"f\", 9999, \"x\") ENOTDIR; renameat(d, \"nope/x\", 9999, \"x\") ENOENT; renameat(d, \"f/x\", d, 4096-byte path) ENOTDIR; renameat(d, \"missing\", 9999, \"x\") EBADF; renameat(d, \"missing\", d, 4096-byte path) ENAMETOOLONG; renameat(d, \"missing\", d, \"nope/x\") ENOENT; renameat(d, <256 bytes>, d, \"f/x\") ENOTDIR; renameat(d, \"missing\", d, <256 bytes>) ENOENT; renameat(d, <256 bytes>, d, <256 bytes>) ENAMETOOLONG; renameat(d, \"f\", d, <256 bytes>) ENAMETOOLONG; renameat(d, \"sub/.\", d, \"nope/x\") ENOENT; renameat(d, \"missing\", d, \"sub/..\") EBUSY; then ENOTDIR (directory over file) and EISDIR (file over directory)"
+side_effects: "as rename"
+threading: "no thread-specific behaviour; the descriptor table and working directory are the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "replacing an existing target is atomic"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

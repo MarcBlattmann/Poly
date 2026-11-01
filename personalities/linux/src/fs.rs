@@ -366,6 +366,34 @@ pub trait LinuxFs {
     /// offset unchanged. `ESPIPE` for unseekable files.
     fn pread(&mut self, fd: i32, buf: &mut [u8], offset: u64) -> Result<usize, Errno>;
     fn pwrite(&mut self, fd: i32, buf: &[u8], offset: u64) -> Result<usize, Errno>;
+    /// fallocate(2) on `fd` (open for writing, a regular file; the range
+    /// checked): `ENOSPC`, and `EOPNOTSUPP` for modes the file system does
+    /// not support.
+    fn fallocate(&mut self, _fd: i32, _mode: u32, _offset: u64, _len: u64) -> Result<(), Errno> {
+        Err(Errno::ENOSYS)
+    }
+    /// preadv2(2) with `RWF_NOWAIT`: one read that never waits (`EAGAIN`
+    /// where it would), at `at` or (`None`) at the file offset, which
+    /// advances. `EOPNOTSUPP` for a file on a file system (tmpfs has no
+    /// non-blocking buffered reads; the spec of preadv2).
+    fn read_nowait(&mut self, _fd: i32, _buf: &mut [u8], _at: Option<u64>) -> Result<usize, Errno> {
+        Err(Errno::EOPNOTSUPP)
+    }
+    /// pwritev2(2) with `RWF_APPEND` (`append: Some(true)`), `RWF_NOAPPEND`
+    /// (`Some(false)`) or `RWF_NOWAIT` (`nowait`, as for
+    /// [`read_nowait`](Self::read_nowait)): one write at `at` or (`None`)
+    /// at the file offset, which advances (to the new end after an
+    /// append). The descriptor's own flags do not change.
+    fn write_flags(
+        &mut self,
+        _fd: i32,
+        _buf: &[u8],
+        _at: Option<u64>,
+        _append: Option<bool>,
+        _nowait: bool,
+    ) -> Result<usize, Errno> {
+        Err(Errno::EOPNOTSUPP)
+    }
 
     /// dup(2).
     fn dup(&mut self, fd: i32) -> Result<i32, Errno>;

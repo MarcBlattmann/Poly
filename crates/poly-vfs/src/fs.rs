@@ -31,6 +31,12 @@ use alloc::vec::Vec;
 /// [`open`]: FileSystem::open
 /// [`getattr`]: FileSystem::getattr
 /// [`rename`]: FileSystem::rename
+/// `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE` (Linux UAPI
+/// `linux/falloc.h`): the fallocate(2) modes [`FileSystem::fallocate`]
+/// speaks of.
+pub const FALLOC_FL_KEEP_SIZE: u32 = 0x01;
+pub const FALLOC_FL_PUNCH_HOLE: u32 = 0x02;
+
 pub trait FileSystem: Send + Sync {
     /// Static facts about this file system.
     fn info(&self) -> FsInfo;
@@ -148,6 +154,24 @@ pub trait FileSystem: Send + Sync {
 
     /// Drops a pin taken by [`FileSystem::open`].
     fn release(&self, _ino: Ino) {}
+
+    /// Whether `ino` has no file type: `stat` reports its mode without
+    /// `S_IFMT` bits (Linux's anonymous inodes). The default is no.
+    fn typeless(&self, _ino: Ino) -> bool {
+        false
+    }
+
+    /// fallocate(2) on regular file `ino`, the range `[offset, offset +
+    /// len)` checked (`len` > 0, the end within
+    /// [`MAX_FILE_SIZE`](crate::MAX_FILE_SIZE)): `mode` 0 allocates the
+    /// range and grows the size to its end, [`FALLOC_FL_KEEP_SIZE`]
+    /// allocates without changing the size, `FALLOC_FL_KEEP_SIZE |`
+    /// [`FALLOC_FL_PUNCH_HOLE`] frees the range so it reads as zeros.
+    /// `ENOSPC` when the file system is full; `EOPNOTSUPP` for modes it
+    /// does not support, which by default is every mode.
+    fn fallocate(&self, _ino: Ino, _mode: u32, _offset: u64, _len: u64) -> Result<()> {
+        Err(Errno::EOPNOTSUPP)
+    }
 
     /// Makes everything written so far durable.
     fn sync(&self) -> Result<()> {

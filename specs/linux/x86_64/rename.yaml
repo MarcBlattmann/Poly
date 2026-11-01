@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rename               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  rename(oldpath, newpath) is system call 82. It gives the file named
+  oldpath the name newpath and returns 0. It is renameat2(AT_FDCWD, oldpath,
+  AT_FDCWD, newpath, 0) (316): relative paths start at the working
+  directory; the last component of either path is never followed (a symbolic
+  link is renamed or replaced itself). An existing newpath is replaced
+  atomically (a non-directory by a non-directory, a directory by an empty
+  directory). The inode, its contents and open descriptors are kept.
+returns:
+  success: "0; oldpath no longer exists, newpath names the same inode (same st_ino, st_nlink unchanged)"
+  replace: "an existing non-directory target is replaced by a non-directory source; an existing empty directory target by a directory source. The replaced file stays alive in descriptors opened before (fstat: st_nlink 0, contents readable); a replaced directory's descriptor shows st_nlink 0 and nothing can be created in it (ENOENT)"
+  same_file: "rename(x, x) and rename(x, y) where x and y are hard links of the same file both succeed and change nothing: both names remain, st_nlink stays. The same for directories (rename(D/p1, D/p1), rename(D/p1/, D/p1))"
+  symbolic_links: "a link as source is moved (its target may become unreachable or dangling; a link to a directory is moved, not the directory); a dangling link can be renamed; a link as target is replaced by a file and a file by a link"
+  directories: "a directory moves with its contents; the old parent's st_nlink drops by 1, the new parent's rises by 1 (none change for a move within one parent); the moved directory's \"..\" is the new parent. Trailing slashes are allowed on either path when the source is a directory"
+  times: "the moved inode's ctime changes (mtime, atime kept); the old and new parents' mtime and ctime change"
+  relative_paths: "each relative to the working directory (rename(\"../b/t\", \"t2\"))"
+errors:
+  missing: "ENOENT (2): oldpath missing, a missing directory on either path, an empty oldpath or newpath"
+  dot_dotdot_root: "EBUSY (16): a last component \".\" or \"..\" in either path (D/sub/., D/sub/..), or oldpath \"/\" (rename(\"/\", \"/x\"); see cross_device for a target on another mount)"
+  trailing_slash: "ENOTDIR (20): a trailing slash on either path when the source is not a directory: rename(D/f/, x), rename(D/f, D/x/), rename(D/f, D/g/) where g is a file, rename(D/f, D/dir/) where dir is a directory (ENOTDIR, not EISDIR), rename(D/link-to-file/, x)"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components in either path; a directory source over a non-directory target"
+  is_a_directory: "EISDIR (21): a non-directory source over a directory target"
+  not_empty: "ENOTEMPTY (39): a directory source over a non-empty directory target; also a directory renamed over one of its own ancestors (rename(D/p1/sub, D/p1))"
+  invalid: "EINVAL (22): a directory moved into itself or its own subtree (rename(D/p1, D/p1/x), rename(D/p1, D/p1/sub/x), also onto an existing empty subdirectory of itself)"
+  loop: "ELOOP (40): a looping link on the way in either path"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): either pointer NULL or unmapped"
+  cross_device: "EXDEV (18): oldpath's and newpath's parents are on different mounts (also when the source name does not exist, and before EBUSY for \".\"/\"..\"/\"/\": rename(D/mnt/., D/x) is EXDEV when D/mnt is a mount point; rename(\"/\", \"/tmp/x\") is EXDEV when /tmp is a separate mount)"
+  busy: "EBUSY (16): either name is a mount point (rename(D/mnt, D/mnt2), rename(D/dir, D/mnt)), also for root"
+  permission: "EACCES (13): no write or search permission on either parent; moving a directory to a different parent also needs write permission on the directory itself (its \"..\" changes): a normal user cannot move another user's 0755 directory out of a 0777 parent, but can rename it within that parent and can move its own directory. Not for root. A missing source in a parent the caller may not write is ENOENT"
+  sticky: "EPERM (1): in a sticky parent a caller without CAP_FOWNER must own the file or the parent, for the source and for a replaced target; a new name in a sticky directory is fine"
+  read_only_fs: "EROFS (30): on a read-only mount"
+  order: "(1) oldpath's string (EFAULT, ENAMETOOLONG for 4096+, ENOENT if empty) and the walk of its directories (ENOENT, ENOTDIR, ELOOP, EACCES, ENAMETOOLONG); (2) the same for newpath; (3) EXDEV; (4) \".\"/\"..\" last components EBUSY (old, then new); (5) EROFS; (6) oldpath's last name (ENAMETOOLONG for 256+ bytes, ENOENT if missing), then newpath's last name (ENAMETOOLONG), trailing-slash ENOTDIR; (7) the rename's own errors (EINVAL subtree, ENOTEMPTY ancestor, EACCES/EPERM permission, ENOTDIR/EISDIR kinds, ENOTEMPTY target, EBUSY mount point). Examples: rename(D/<256 bytes>, D/nope/x) ENOENT; rename(D/<256 bytes>, D/f/x) ENOTDIR; rename(D/missing, D/<256 bytes>) ENOENT; rename(D/missing, 4096-byte path) ENAMETOOLONG; rename(D/nope/x, 4096-byte path) ENOENT; rename(D/sub/., D/nope/x) ENOENT; rename(D/missing, D/sub/.) EBUSY. A failed call changes nothing"
+side_effects: "ctime of the moved inode; mtime/ctime of both parents; link counts of the parents when a directory moves; a replaced target loses its name"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "the replacement of an existing target is atomic: there is no moment at which newpath does not exist"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

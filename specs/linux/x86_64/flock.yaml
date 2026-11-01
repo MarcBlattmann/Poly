@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/flock                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  flock(fd, operation) is system call 73. It places, converts or removes an
+  advisory whole-file lock and returns 0. operation is LOCK_SH (1, shared),
+  LOCK_EX (2, exclusive) or LOCK_UN (8, unlock), optionally ORed with
+  LOCK_NB (4: fail with EWOULDBLOCK = EAGAIN instead of waiting). The lock
+  belongs to the open file description: descriptors made by dup and fork
+  share it, a second open() of the same file (any name, hard links included)
+  is a separate owner that conflicts like another process. Any number of
+  shared locks may coexist; an exclusive lock excludes all others. flock locks
+  are independent of fcntl record locks.
+returns:
+  success: "0"
+  operation_argument: "a 32-bit value (upper half of the register ignored). Exactly one of LOCK_SH, LOCK_EX, LOCK_UN must be set, LOCK_NB may be added; LOCK_MAND (32), alone or with other bits, makes the whole call a no-op that returns 0 (even for a descriptor that is not open)"
+  same_description: "locking again with the lock already held succeeds; LOCK_SH -> LOCK_EX and LOCK_EX -> LOCK_SH convert. A conversion is not atomic: the old lock is dropped first, so a conversion to LOCK_EX that fails with EAGAIN leaves the description with no lock at all"
+  unlock: "LOCK_UN (also with LOCK_NB) of an unlocked file returns 0"
+  sharing: "dup'ed descriptors and fork children share the lock: any of them can relock or unlock it; closing one duplicate keeps the lock; closing the last descriptor of the description releases it; unlinking the file does not"
+  waiting: "without LOCK_NB the caller sleeps until the lock can be granted (a child asking for LOCK_EX while the parent holds LOCK_EX gets it when the parent unlocks); a handled signal interrupts the wait with EINTR (the lock is not taken)"
+  objects: "any open descriptor except O_PATH: regular files of any access mode (O_RDONLY may take LOCK_EX), directories, pipes (both ends are one inode: a lock on the read end conflicts with one on the write end through another description), sockets, /dev/null"
+errors:
+  invalid: "EINVAL (22): operation 0, LOCK_SH|LOCK_EX (3), LOCK_NB alone, LOCK_SH|LOCK_UN, unknown bits (16, 64, LOCK_EX|64); checked before the descriptor (flock(-1, 0) is EINVAL)"
+  bad_fd: "EBADF (9): not open (-1, 600) or an O_PATH descriptor"
+  would_block: "EAGAIN (11) with LOCK_NB when another description holds a conflicting lock (EX vs EX, EX vs SH, SH vs EX)"
+  interrupted: "EINTR (4): a handled signal arrived while waiting"
+  order: "(1) LOCK_MAND: return 0; (2) EINVAL for the operation; (3) EBADF; (4) conflicts"
+side_effects: "none on the file itself (no timestamps change)"
+threading: "the lock is per open file description, not per thread or process"
+ordering: []
+timing:
+  typical: "microseconds without contention"
+  guarantees: "a waiter is woken when the conflicting lock goes away"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

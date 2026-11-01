@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fdatasync            # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  fdatasync(fd) is system call 75. It is fsync (74) without forcing out
+  metadata that is not needed to read the data back (such as timestamps): it
+  blocks until the data of the file open on fd is on its storage and returns
+  0. On a memory file system like tmpfs there is nothing to write and it
+  returns 0 at once. Nothing visible changes. Objects that cannot be
+  synchronized (pipes, sockets, eventfds, character devices) are EINVAL.
+returns:
+  success: "0"
+  descriptors: "any open regular file or directory descriptor, whatever its access mode: O_RDWR, O_RDONLY, O_WRONLY|O_APPEND, a directory opened O_RDONLY (also \"/\"), a dup, a file whose last name was removed, a file on a read-only mount opened read-only"
+  no_visible_change: "fstat before and after is identical (size, times); the offset and the contents stay; calling it twice is fine"
+  same_as_fsync: "fsync and fdatasync give the same results on the same descriptors"
+errors:
+  bad_fd: "EBADF (9): not open (-1, AT_FDCWD, 777, a closed descriptor) and O_PATH descriptors"
+  cannot_sync: "EINVAL (22): both ends of a pipe (also a pipe dup'ed onto fd 0), an AF_UNIX socket and each end of a socketpair, an eventfd, /dev/null"
+  io: "EIO (5), ENOSPC (28), EDQUOT (122): a write-back error of the file system (not reproducible on tmpfs)"
+side_effects: "none visible"
+threading: "may block the calling thread until the storage has the data; other threads continue"
+ordering: []
+timing:
+  typical: "immediate on tmpfs; on disks, until the device acknowledges the writes"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/symlink              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  symlink(target, linkpath) is system call 88. It creates a symbolic link
+  named linkpath whose contents are the string target and returns 0. It is
+  symlinkat(target, AT_FDCWD, linkpath) (266). The target is stored byte for
+  byte and never looked at: it need not exist and may be any non-empty string
+  of at most 4095 bytes. A relative target is resolved later relative to the
+  directory containing the link, not the working directory. linkpath must
+  not exist (its last component is never followed).
+returns:
+  success: "0"
+  new_link: "lstat: S_IFLNK | 0777 whatever the umask (also umask 0777); st_size = number of bytes of target; st_nlink 1; st_uid = effective uid; st_gid = effective gid, or the parent's group when the parent is set-group-ID (also for a caller not in that group)"
+  contents: "readlink returns exactly the bytes given: absolute or relative paths, \"../../..\", spaces, repeated slashes and \"./\" pieces, a trailing slash, bytes above 127 (UTF-8), \".\", \"/\", \"-\""
+  long_targets: "4095 bytes is accepted (st_size 4095); following such a link fails as any path would (ENAMETOOLONG for a component over 255 bytes). A target with a 300-byte component is accepted"
+  following: "open/stat through the link reach the target; a chain of links resolves; a dangling link stat()s as ENOENT; names created through a link to a directory land in that directory"
+  times: "the parent's mtime and ctime change"
+  relative_linkpath: "linkpath relative to the working directory"
+errors:
+  exists: "EEXIST (17): linkpath exists as anything (file, directory, also with a trailing slash; a dangling link, also with a trailing slash, and nothing is created at its target; a looping link), or its last component is \".\" or \"..\", or it is \"/\""
+  empty_target: "ENOENT (2): target is the empty string"
+  missing: "ENOENT (2): an empty linkpath, a missing or dangling directory on the way; linkpath with a trailing slash when the name does not exist (D/new/: nothing created); a removed working directory with a relative linkpath"
+  target_too_long: "ENAMETOOLONG (36): target of 4096 bytes or more"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components in linkpath"
+  loop: "ELOOP (40): a looping link on the way in linkpath"
+  name_too_long: "ENAMETOOLONG (36): a linkpath component of 256 bytes or more (255 is fine); a linkpath of 4096 bytes or more"
+  bad_pointer: "EFAULT (14): target or linkpath NULL or unmapped"
+  permission: "EACCES (13): no write or search permission on linkpath's parent (not for root); -wx is enough; an existing name is EEXIST first"
+  read_only_fs: "EROFS (30): a new name on a read-only mount; an existing name there is EEXIST, an empty target ENOENT, a missing directory ENOENT"
+  order: "(1) target: EFAULT, ENAMETOOLONG (4096+), ENOENT (empty), before anything about linkpath (symlink(\"\", existing) is ENOENT; symlink(\"\", NULL) is ENOENT; symlink(NULL, NULL) EFAULT); (2) linkpath: string, directories left to right (D/nope/<256 bytes> is ENOENT), last name length; (3) EEXIST; (4) EROFS; (5) EACCES (write)"
+side_effects: "the parent's mtime/ctime"
+threading: "no thread-specific behaviour; the working directory and umask are the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

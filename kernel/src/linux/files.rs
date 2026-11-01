@@ -121,6 +121,46 @@ impl LinuxFs for Thread<'_> {
         self.process().files.pwrite(fd, buf, offset).map_err(vfs_errno)
     }
 
+    fn fallocate(&mut self, fd: i32, mode: u32, offset: u64, len: u64) -> Result<(), Errno> {
+        self.process().files.fallocate(fd, mode, offset, len).map_err(vfs_errno)
+    }
+
+    fn read_nowait(&mut self, fd: i32, buf: &mut [u8], at: Option<u64>) -> Result<usize, Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        if file.on_inode() {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        match at {
+            Some(offset) => file.read_at(offset, buf),
+            None => file.read_wait_until(buf, &mut self.blocker(), poly_vfs::Timeout::Now),
+        }
+        .map_err(vfs_errno)
+    }
+
+    fn write_flags(
+        &mut self,
+        fd: i32,
+        buf: &[u8],
+        at: Option<u64>,
+        append: Option<bool>,
+        nowait: bool,
+    ) -> Result<usize, Errno> {
+        let files = &self.process().files;
+        if !nowait {
+            return files.write_with(fd, buf, at, append).map_err(vfs_errno);
+        }
+        let file = files.file(fd).map_err(vfs_errno)?;
+        if file.on_inode() {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        files.before_write(&file, buf.len()).map_err(vfs_errno)?;
+        match at {
+            Some(offset) => file.write_at(offset, buf),
+            None => file.write_wait_until(buf, &mut self.blocker(), poly_vfs::Timeout::Now),
+        }
+        .map_err(vfs_errno)
+    }
+
     fn dup(&mut self, fd: i32) -> Result<i32, Errno> {
         self.process().files.dup(fd).map_err(vfs_errno)
     }

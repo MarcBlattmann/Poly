@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/stat                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  stat(path, statbuf) is system call 4. It fills the 144-byte x86-64 struct
+  stat (asm/stat.h; the same layout as fstat (5), lstat (6), newfstatat
+  (262)) for the file named by path and returns 0. It is newfstatat(AT_FDCWD,
+  path, statbuf, 0): relative paths start at the working directory and
+  symbolic links are followed, also the last one, so a link reports its
+  target (lstat is the variant that does not follow the last one). Needs no
+  permission on the file itself, only search (x) on every directory walked.
+returns:
+  success: "0, and exactly 144 bytes of statbuf are written (bytes after them are untouched); on error statbuf is untouched"
+  struct_fields: "st_dev, st_ino, st_nlink, st_mode (type | 07777), st_uid, st_gid, a 4-byte padding (0), st_rdev, st_size, st_blksize (> 0), st_blocks (512-byte units), atime, mtime, ctime as seconds + nanoseconds (< 1e9; negative seconds possible), three reserved longs (0)"
+  same_as_fstat: "stat of a file gives byte-for-byte the struct fstat gives for a descriptor on it"
+  symbolic_links: "followed: stat(link) is byte-for-byte stat(target) (chains too); a link to a directory with or without a trailing slash, \"link/.\" is the directory, \"link/..\" the target's parent (not the link's)"
+  regular_file: "S_IFREG | perms; st_size bytes; st_nlink = number of names (2 after link); st_rdev 0; st_blocks 0 when empty or only a hole (truncate to 10 MiB), >= 8 after writing 4096 bytes"
+  directory: "S_IFDIR | perms; st_nlink = 2 + number of subdirectories"
+  fifo: "S_IFIFO | perms, size 0"
+  char_device: "/dev/null: S_IFCHR | 0666, st_rdev = (1 << 8) | 3"
+  root: "\"/\" and \"/..\" are the same directory (st_ino and st_dev)"
+  times: "times set with utimensat are reported exactly (1234567890.123456789, 987654321.999999999; -1 and -86400.000000500 too); a write moves mtime and ctime (not atime); stat itself changes nothing (two calls give identical structs)"
+  link_limit: "a chain of 40 symbolic links resolves; 41 is ELOOP (lstat of the 41st link still works)"
+  relative_targets: "a relative link target is resolved from the link's directory; an absolute one from /"
+  slashes: "a path of 4095 bytes plus NUL made of \"/.\" pieces resolves to /"
+errors:
+  missing: "ENOENT (2): a missing name or directory, the empty path, a dangling link (also on the way)"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components, a trailing slash or \"/.\" after a regular file"
+  loop: "ELOOP (40): a link to itself, a two-link loop, more than 40 links in one lookup, a loop on the way"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more counting its NUL"
+  search_permission: "EACCES (13): a directory on the way without x for the caller (also for a missing name); the directory itself can be stat'ed; x alone (0100) is enough. Not for root. The file's own mode does not matter (mode 0 works)"
+  bad_path_pointer: "EFAULT (14): NULL or a kernel address"
+  bad_buffer: "EFAULT (14): NULL, a read-only page, 144 bytes running into an unmapped page (ending exactly at the end of a mapping is fine)"
+  order: "(1) the path string; (2) the components left to right; (3) the buffer only once the path resolved: stat(missing, NULL) ENOENT, stat(D/f/x, NULL) ENOTDIR, stat(NULL, NULL) EFAULT"
+side_effects: "none"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -442,6 +442,74 @@ impl OpenFile {
         }
     }
 
+    /// `pwritev2(2)` with `RWF_APPEND` (`append: Some(true)`) or
+    /// `RWF_NOAPPEND` (`Some(false)`): this one write appends, or goes to
+    /// the offset although the file is `O_APPEND`; `None` keeps the file's
+    /// own mode. `at` is the explicit offset (the file offset is left
+    /// alone) or `None` for the file offset, which then advances (to the
+    /// new end after an append). The open file's flags do not change. Only
+    /// files on a file system care; the others write as usual.
+    pub fn write_with(&self, at: Option<u64>, append: Option<bool>, buf: &[u8]) -> Result<usize> {
+        if !self.writable() {
+            return Err(Errno::EBADF);
+        }
+        if !matches!(self.backend, Backend::Inode) {
+            return match at {
+                Some(offset) => self.write_at(offset, buf),
+                None => self.write(buf),
+            };
+        }
+        if at.is_some_and(|o| o > MAX_FILE_SIZE) {
+            return Err(Errno::EINVAL);
+        }
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        let append = append.unwrap_or_else(|| self.flags().contains(OpenFlags::APPEND));
+        match at {
+            Some(_) if append => self.fs().append(self.node.ino(), buf).map(|(_, n)| n),
+            Some(offset) => self.fs().write(self.node.ino(), offset, buf),
+            None => {
+                let mut off = self.offset.lock();
+                if append {
+                    let (end, n) = self.fs().append(self.node.ino(), buf)?;
+                    *off = end + n as u64;
+                    Ok(n)
+                } else {
+                    let n = self.fs().write(self.node.ino(), *off, buf)?;
+                    *off += n as u64;
+                    Ok(n)
+                }
+            }
+        }
+    }
+
+    /// fallocate(2) (see [`FileSystem::fallocate`](crate::FileSystem::fallocate)):
+    /// `EBADF` unless open for writing, `ESPIPE` on a pipe, `ENODEV` on
+    /// anything else that is not a regular file, `EFBIG` for a range
+    /// ending past [`MAX_FILE_SIZE`]. The offset does not move.
+    pub fn fallocate(&self, mode: u32, offset: u64, len: u64) -> Result<()> {
+        if !self.writable() {
+            return Err(Errno::EBADF);
+        }
+        match &self.backend {
+            Backend::Inode if self.kind == FileType::Regular => {}
+            Backend::Path => return Err(Errno::EBADF),
+            _ if self.kind == FileType::Fifo => return Err(Errno::ESPIPE),
+            _ => return Err(Errno::ENODEV),
+        }
+        if offset.checked_add(len).is_none_or(|end| end > MAX_FILE_SIZE) {
+            return Err(Errno::EFBIG);
+        }
+        self.fs().fallocate(self.node.ino(), mode, offset, len)
+    }
+
+    /// Whether this is an open file on a file system (not a device, pipe,
+    /// socket or other object): `RWF_NOWAIT` is `EOPNOTSUPP` there.
+    pub fn on_inode(&self) -> bool {
+        matches!(self.backend, Backend::Inode)
+    }
+
     /// `lseek(2)`; returns the new offset. Directories accept `SEEK_SET` and
     /// `SEEK_CUR` to any position from 0 up (the file system decides what a
     /// listing reads from it), `SEEK_END`, `SEEK_DATA` and `SEEK_HOLE` are
