@@ -48,3 +48,20 @@ Run `cargo xtask ci` before every commit. It must pass.
 - **Constants from public SDK headers** (error codes, struct layouts) cite the header.
 - Architecture-specific code lives under `kernel/src/arch/<arch>/` only.
 - Significant design decisions get an ADR in `docs/adr/`.
+- **Build on Windows and Linux.** Everything that ships in Poly (kernel, native
+  programs, the desktop) must build and boot with the same `cargo xtask` commands
+  on a Windows host and a Linux host. Use pure Rust and `rust-lld`; no host C
+  toolchain, no Unix-only std APIs outside `tools/xtask/src/hostfs.rs`. Only tooling
+  that needs Linux by nature (the diff runner, distro-package root disks, QEMU-socket
+  boot tests) may be Linux-only, and it reports that instead of failing to build.
+  `ci lint` checks xtask for `x86_64-pc-windows-msvc`. (ADR 0124)
+- **The desktop is native Poly user space** (compositor, shell, panels,
+  notifications, settings): pure Rust on Poly's own system calls, in user-space
+  processes, never a Linux, Windows or macOS program and never inside the kernel.
+  Apps of every world reach it through their own protocols. (ADR 0124)
+- **The UI looks 1:1 like Alpine Shell**, the owner's shell
+  (`C:\Users\Marc.Blattmann\Documents\GitHub\alpine-shell`; a running copy is on
+  `ssh homeserver2` for reference screenshots). Its assets (icons, colour and spacing
+  tokens, wallpaper) may be reused; its OFL fonts (Geist, Geist Mono, Averia Serif
+  Libre) come from upstream with their licences. Check changes by comparing
+  screenshots with Alpine Shell's at the same size. (ADR 0124)

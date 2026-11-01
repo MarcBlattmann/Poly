@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 91 of 141 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 92 of 147 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">91 / 141 milestones · 65%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">92 / 147 milestones · 63%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -252,47 +252,62 @@
 <rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
 </g>
 <text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">18/19</text>
-<text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
+<text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>✔ ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)</title>
-<rect x="340.0" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="340.0" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app</title>
-<rect x="376.6" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="366.4" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ virtio-gpu driver: modesetting and 2D framebuffer</title>
-<rect x="413.2" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="392.9" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps</title>
-<rect x="449.8" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="419.3" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged (ADR 0108, ADR 0115: kmscube renders with Mesa's kms_swrast on /dev/dri/card0, boot group mesa)</title>
-<rect x="486.5" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="445.8" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa (ADR 0119: unmodified Mesa's virgl renders eglinfo, gl-readback and kmscube on QEMU's virtio-gpu-gl-pci; Venus runs vulkaninfo and vk-clear on QEMU 9.2's venus=on; boot group virgl, skipped where the host has no render node)</title>
-<rect x="523.1" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="472.2" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface</title>
-<rect x="559.7" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="498.7" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Compositor: Wayland server, surface composition, HiDPI scaling, vsync (ADR 0106, 0107, 0116)</title>
-<rect x="596.3" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="525.1" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Shell: launcher, window management, notifications, settings (own non-glass design) (ADR 0107, ADR 0117)</title>
-<rect x="632.9" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="551.6" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Compositor exposes the content behind each window (needed later for Liquid Glass) (ADR 0116)</title>
-<rect x="669.5" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="578.0" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ XWayland for X11 apps (ADR 0118)</title>
-<rect x="706.2" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="604.4" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Fonts: font store, rasterisation, fontconfig-compatible discovery</title>
-<rect x="742.8" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="630.9" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>✔ ⚖️ Decided (owner, ADR 0124): the desktop becomes native Poly user space, looks 1:1 like Alpine Shell (its assets reused), and everything that ships builds on Windows and Linux hosts</title>
+<rect x="657.3" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>Native user space: Poly's own system call interface and a Rust runtime; a native program, linked by rust-lld, builds on Windows and Linux and runs on Poly (boot test)</title>
+<rect x="683.8" y="233.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+</g>
+<g><title>The desktop (compositor, shell, notifications, settings) runs as native Poly processes; Linux apps' Wayland and X11 windows still reach it (the desktop and toolkits boot groups pass)</title>
+<rect x="710.2" y="233.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+</g>
+<g><title>The shell looks 1:1 like Alpine Shell: ridge with panels extending from it, centred launcher, notifications at the top right, settings window, its fonts, icons, colours, soft shadows and blur (screenshots match Alpine Shell's references)</title>
+<rect x="736.7" y="233.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+</g>
+<g><title>cargo xtask desktop builds and boots the desktop on a Windows host as well as on Linux</title>
+<rect x="763.1" y="233.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>✔ Milestone: GTK and Qt apps run; VLC plays a video with sound (ADR 0120, 0123: GTK 3, GTK 4 and Qt 6 apps from the launcher, clicked and typed into; cvlc plays the test video with its sound through ALSA; VLC's Qt interface through Xwayland shows it; boot group toolkits)</title>
-<rect x="779.4" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="789.6" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">13/13</text>
+<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">14/18</text>
 <text x="16.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 7  Windows GUI apps</text>
 <g><title>win32k services: windows, message queues, input routing, hooks, timers</title>
 <rect x="340.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
@@ -339,24 +354,27 @@
 <text x="884.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">0/14</text>
 <text x="16.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 8  Integration bridges</text>
 <g><title>Shared clipboard across Linux, Windows and macOS formats</title>
-<rect x="340.0" y="293.0" width="77.3" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="340.0" y="293.0" width="66.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Drag and drop between app worlds</title>
-<rect x="419.3" y="293.0" width="77.3" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="408.0" y="293.0" width="66.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>One file picker for every app world, mapped to each OS's path conventions</title>
-<rect x="498.7" y="293.0" width="77.3" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="476.0" y="293.0" width="66.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Unified notifications, app launcher entries and file associations</title>
-<rect x="578.0" y="293.0" width="77.3" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="544.0" y="293.0" width="66.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+</g>
+<g><title>A preinstalled browser (Chromium) downloads and installs Linux and Windows apps, which then appear in the launcher</title>
+<rect x="612.0" y="293.0" width="66.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)</title>
-<rect x="657.3" y="293.0" width="77.3" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="680.0" y="293.0" width="66.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>One user home visible as ~, C:\Users\&lt;name&gt; and /Users/&lt;name&gt;</title>
-<rect x="736.7" y="293.0" width="77.3" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="748.0" y="293.0" width="66.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">0/6</text>
+<text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">0/7</text>
 <text x="16.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 9  XNU personality and macOS foundations</text>
 <g><title>⚖️ Decide: aarch64 kernel port or x86-64 only (modern Mac apps are increasingly arm64-only)</title>
 <rect x="340.0" y="323.0" width="37.7" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
