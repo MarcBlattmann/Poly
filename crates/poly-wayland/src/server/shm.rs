@@ -1,5 +1,8 @@
 //! `wl_shm`, `wl_shm_pool` and `wl_buffer`: shared memory buffers in
-//! `argb8888` and `xrgb8888`, the two formats every renderer supports.
+//! `argb8888` and `xrgb8888` (the two every renderer supports) and their
+//! byte-swapped `abgr8888` and `xbgr8888` (what GL-based clients often
+//! read back). `linux-dmabuf` buffers (`dmabuf.rs`) are the same kind of
+//! [`Buffer`], over a mapped dma-buf instead of a pool.
 
 use super::{ClientId, Data, Res, Server, ShmMap, error};
 use crate::compose::Rect;
@@ -12,7 +15,18 @@ use alloc::vec;
 use core::cell::RefCell;
 
 /// The formats the server takes, as `wl_shm.format` events announce.
-pub const FORMATS: [wl_shm::Format; 2] = [wl_shm::Format::ARGB8888, wl_shm::Format::XRGB8888];
+pub const FORMATS: [wl_shm::Format; 4] =
+    [wl_shm::Format::ARGB8888, wl_shm::Format::XRGB8888, wl_shm::Format::ABGR8888, wl_shm::Format::XBGR8888];
+
+/// The `wl_shm` format of a DRM fourcc, if the server takes it.
+pub fn from_fourcc(code: u32) -> Option<wl_shm::Format> {
+    let f = match &code.to_le_bytes() {
+        b"AR24" => wl_shm::Format::ARGB8888,
+        b"XR24" => wl_shm::Format::XRGB8888,
+        _ => wl_shm::Format(code),
+    };
+    FORMATS.contains(&f).then_some(f)
+}
 
 /// A pool: the client's memory, mapped. Buffers keep it alive.
 pub(crate) struct Pool {
@@ -34,27 +48,46 @@ pub(crate) struct Buffer {
     pub height: i32,
     pub stride: usize,
     pub format: wl_shm::Format,
+    /// The rows are stored bottom first (`linux-dmabuf`'s `y_invert`).
+    pub y_invert: bool,
 }
 
 impl Buffer {
     /// Copy `r` (buffer pixels, inside the buffer) into `dst`, rows of
-    /// `dst_width` premultiplied pixels: `argb8888` as it is (it is
-    /// premultiplied already), `xrgb8888` made opaque. Rows the mapping no
-    /// longer covers (the client shrank its file) are left as they were.
+    /// `dst_width` premultiplied `0xAARRGGBB` pixels: `argb8888` as it is
+    /// (it is premultiplied already), `xrgb8888` made opaque, the `bgr`
+    /// ones with red and blue swapped. Rows the mapping no longer covers
+    /// (the client shrank its file) are left as they were.
     pub fn copy_rect(&self, r: Rect, dst: &mut [u32], dst_width: usize) {
-        let opaque = if self.format == wl_shm::Format::XRGB8888 { 0xff00_0000 } else { 0 };
+        let opaque = match self.format {
+            wl_shm::Format::XRGB8888 | wl_shm::Format::XBGR8888 => 0xff00_0000,
+            _ => 0,
+        };
+        let swap = matches!(self.format, wl_shm::Format::ABGR8888 | wl_shm::Format::XBGR8888);
         let mut bytes = vec![0u8; r.width as usize * 4];
         let map = self.pool.map.borrow();
         for y in r.y..r.bottom() {
-            let at = self.offset + y as usize * self.stride + r.x as usize * 4;
+            let row = if self.y_invert { self.height - 1 - y } else { y };
+            let at = self.offset + row as usize * self.stride + r.x as usize * 4;
             if !map.read(at, &mut bytes) {
                 continue;
             }
             let row = &mut dst[y as usize * dst_width + r.x as usize..][..r.width as usize];
             for (px, b) in row.iter_mut().zip(bytes.chunks_exact(4)) {
-                *px = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) | opaque;
+                let p = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) | opaque;
+                *px = if swap { (p & 0xff00_ff00) | (p >> 16 & 0xff) | (p & 0xff) << 16 } else { p };
             }
         }
+    }
+
+    /// Whether `width` × `height` pixels with `stride` at `offset` fit in
+    /// `len` bytes.
+    pub fn fits(offset: i64, width: i32, height: i32, stride: i32, len: usize) -> bool {
+        offset >= 0
+            && width > 0
+            && height > 0
+            && stride >= width.saturating_mul(4)
+            && (offset as u64) + (stride as u64) * (height as u64 - 1) + (width as u64) * 4 <= len as u64
     }
 }
 
@@ -93,16 +126,19 @@ impl Server {
                     return Err(error(pool_id, wl_shm_pool::Error::INVALID_FORMAT.0, msg));
                 }
                 let len = pool.map.borrow().len();
-                let fits = offset >= 0
-                    && width > 0
-                    && height > 0
-                    && stride >= width.saturating_mul(4)
-                    && (offset as u64) + (stride as u64) * (height as u64 - 1) + (width as u64) * 4 <= len as u64;
-                if !fits {
+                if !Buffer::fits(i64::from(offset), width, height, stride, len) {
                     let msg = format!("{width}x{height} stride {stride} at {offset} does not fit a pool of {len}");
                     return Err(error(pool_id, wl_shm_pool::Error::INVALID_STRIDE.0, msg));
                 }
-                let buffer = Buffer { pool, offset: offset as usize, width, height, stride: stride as usize, format };
+                let buffer = Buffer {
+                    pool,
+                    offset: offset as usize,
+                    width,
+                    height,
+                    stride: stride as usize,
+                    format,
+                    y_invert: false,
+                };
                 client.insert(id, &wl_buffer::INTERFACE, 1, Data::Buffer(buffer));
             }
             wl_shm_pool::Request::Resize { size } => {

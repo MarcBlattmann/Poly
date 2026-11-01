@@ -27,6 +27,10 @@ use alloc::vec::Vec;
 use poly_abi::Personality;
 use poly_vfs::{At, Cred};
 
+/// The kernel parameter giving the display's scale, handed to the first
+/// program as `POLY_DISPLAY_SCALE` (`poly-compositor` reads it; ADR 0116).
+const DISPLAY_SCALE: &str = "poly.display.scale";
+
 /// Bytes read from the start of a file to decide its format.
 const HEADER_BYTES: usize = 4096;
 
@@ -244,7 +248,10 @@ pub fn run_init(boot: &BootInfo) -> bool {
     let identity = crate::testinit::identity(boot).map_err(ExecPathError::Unsupported);
     // Its arguments: one `poly.init.arg=` word each (ADR 0087).
     let args: Vec<&str> = boot.args(testrun::INIT_ARGV).collect();
-    match identity.and_then(|id| run_first(path, &args, traced, id.as_ref())) {
+    // Its environment: the display scale for a compositor (ADR 0116).
+    let env: Vec<String> = boot.arg(DISPLAY_SCALE).map(|s| format!("POLY_DISPLAY_SCALE={s}")).into_iter().collect();
+    let env: Vec<&[u8]> = env.iter().map(|s| s.as_bytes()).collect();
+    match identity.and_then(|id| run_first(path, &args, &env, traced, id.as_ref())) {
         Ok((pid, status)) => {
             crate::testinit::report_output_files(boot);
             testrun::exit(pid, status, crate::nt::take_exit_status(pid));
@@ -266,13 +273,14 @@ pub fn run_init(boot: &BootInfo) -> bool {
 fn run_first(
     path: &str,
     args: &[&str],
+    env: &[&[u8]],
     traced: bool,
     identity: Option<&crate::testinit::Identity>,
 ) -> Result<(u32, ExitStatus), ExecPathError> {
     let argv: Vec<&[u8]> = core::iter::once(path).chain(args.iter().copied()).map(str::as_bytes).collect();
     // A traced program runs as the child of the kernel's init (ADR 0064).
     let init = traced && crate::testinit::start();
-    let prepared = prepare_as(path.as_bytes(), &argv, &[], traced, identity.map(|id| &id.creds))?;
+    let prepared = prepare_as(path.as_bytes(), &argv, env, traced, identity.map(|id| &id.creds))?;
     // Only a Linux program has a place in the Linux process tree.
     let init = init && prepared.process().linux.is_some();
     if init {

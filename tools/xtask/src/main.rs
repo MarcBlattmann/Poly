@@ -23,7 +23,7 @@
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
 //!   desktop [--release] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
-//!                       virtio GPU through /dev/fb0, a virtio keyboard and tablet (desktop.rs,
+//!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   boot-tests [--list] [--shard <name>]... [group...]
@@ -76,6 +76,7 @@ mod accel;
 mod asmlabels;
 mod busybox;
 mod compositor;
+mod compositor_kms;
 mod conflicts;
 mod console;
 mod desktop;
@@ -1404,7 +1405,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 28] = [
+const BOOT_GROUPS: [BootGroup; 29] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1433,7 +1434,11 @@ const BOOT_GROUPS: [BootGroup; 28] = [
     ("wintrace", wintrace::boot_test),
     // The Wayland compositor as init with a C client (compositor.rs, ADR 0106).
     ("wayland", compositor::boot_test),
-    // The desktop: the compositor on virtio-gpu through /dev/fb0 with the
+    // The compositor on DRM/KMS: page flips and vsync, a subsurface, a
+    // popup, a dma-buf client buffer, the clipboard between two clients,
+    // checked by screenshots (compositor_kms.rs, ADR 0116).
+    ("wayland-kms", compositor_kms::boot_test),
+    // The desktop: the compositor on virtio-gpu through DRM/KMS with the
     // shell, driven by QMP input (desktop.rs, ADR 0107).
     ("desktop", desktop::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
@@ -1487,7 +1492,10 @@ const BOOT_GROUPS: [BootGroup; 28] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop", "mesa"]),
+    (
+        "userland",
+        &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "wayland-kms", "desktop", "mesa"],
+    ),
     (
         "devices",
         &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "drm", "terminal", "input"],

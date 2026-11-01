@@ -32,6 +32,7 @@ impl Server {
                 client.send(s, wl_surface::Event::PreferredBufferScale { factor: o.scale as i32 });
             }
         }
+        self.fractional_scale_changed();
     }
 
     pub fn output(&self) -> &OutputConfig {

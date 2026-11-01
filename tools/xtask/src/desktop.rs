@@ -304,7 +304,7 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     let image = image()?;
     eprintln!(
-        "==> boot test: the desktop on virtio-gpu through /dev/fb0 (ridge, launcher, typing, a client launched, \
+        "==> boot test: the desktop on virtio-gpu through DRM/KMS (ridge, launcher, typing, a client launched, \
          pointer and keyboard routed, a window dragged)"
     );
     let socket = std::env::temp_dir().join(format!("poly-desktop-qmp-{}.sock", std::process::id()));

@@ -15,19 +15,29 @@
 //!   `$XDG_RUNTIME_DIR/poly-compositor.ppm`): written on `SIGUSR1`, with
 //!   the windows and the `--probe` pixels printed, and with `--dump` when
 //!   the compositor ends.
-//! - **`--desktop`**: on the screen through `/dev/fb0` (`--fb`), with the
-//!   keyboards and pointers of `/dev/input/event*` routed to the clients
-//!   (`wl_pointer`, `wl_keyboard` with an XKB keymap of `--keymap`'s
-//!   layout), a software cursor, and Poly's shell (`poly-shell`): the
-//!   ridge along the top, the launcher in the middle (shown on an empty
-//!   desktop; the Windows key or Ctrl+Space toggles it; Enter starts the
-//!   app chosen with `WAYLAND_DISPLAY` set), the wallpaper, new windows
-//!   centred. `SIGUSR1` still writes the picture.
+//! - **`--desktop`**: on the screen, with the keyboards and pointers of
+//!   `/dev/input/event*` routed to the clients (`wl_pointer`, `wl_keyboard`
+//!   with an XKB keymap of `--keymap`'s layout), a software cursor, and
+//!   Poly's shell (`poly-shell`): the ridge along the top, the launcher in
+//!   the middle (shown on an empty desktop; the Windows key or Ctrl+Space
+//!   toggles it; Enter starts the app chosen with `WAYLAND_DISPLAY` set),
+//!   the wallpaper, new windows centred. `SIGUSR1` still writes the
+//!   picture.
+//! - **`--kms`**: on the screen without the shell (what the boot tests of
+//!   the protocols use).
+//!
+//! On the screen means DRM/KMS when `/dev/dri/card0` (`--drm`) has a
+//! connected output (ADR 0116): two dumb buffers flipped at vblank, frames
+//! paced by the flips' completion (real vsync), dma-buf client buffers
+//! taken (`zwp_linux_dmabuf_v1`), the scale from the screen's physical
+//! size unless `--scale` or `POLY_DISPLAY_SCALE` (the kernel's
+//! `poly.display.scale=`) says otherwise. Without DRM (or with
+//! `--no-kms`) `--desktop` falls back to `/dev/fb0` (`--fb`, ADR 0107).
 //!
 //! ```text
-//! poly-compositor [--socket NAME] [--size WxH] [--scale N] [--dump FILE]
+//! poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE]
 //!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME]]
-//!                 [--exec PROGRAM [ARGS...]]
+//!                 [--kms] [--drm PATH] [--no-kms] [--exec PROGRAM [ARGS...]]
 //! ```
 //!
 //! `--exec` starts a client once the socket is up (with `WAYLAND_DISPLAY`,
@@ -44,13 +54,14 @@
 mod desktop;
 mod evdev;
 mod fbdev;
+mod kms;
 mod unix;
 
 use poly_input::layout::Layout;
 use poly_shell::{Press, Shell};
 use poly_wayland::compose::{Framebuffer, MemoryFramebuffer, Placement};
 use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
-use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server};
+use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server, present_flags};
 use poly_wayland::wire::Fd;
 use std::collections::{BTreeMap, BTreeSet};
 use std::os::fd::AsRawFd;
@@ -74,16 +85,29 @@ struct Options {
     socket: String,
     width: u32,
     height: u32,
-    scale: u32,
+    /// `None`: automatic (from the screen, or `POLY_DISPLAY_SCALE`).
+    scale: Option<u32>,
     dump: Option<PathBuf>,
     probes: Vec<(u32, u32)>,
     desktop: bool,
     fb: String,
     keymap: String,
+    /// On the screen without the shell.
+    kms: bool,
+    drm: String,
+    no_kms: bool,
     exec: Vec<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N] [--dump FILE] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME]] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME]] [--kms] [--drm PATH] [--no-kms] [--exec PROGRAM [ARGS...]]";
+
+/// A scale given as `N` (1 to 8) or `auto`.
+fn parse_scale(v: &str) -> Result<Option<u32>, String> {
+    if v == "auto" {
+        return Ok(None);
+    }
+    v.parse().ok().filter(|s| (1..=8).contains(s)).map(Some).ok_or(format!("bad scale {v}"))
+}
 
 fn pair(s: &str, sep: char) -> Option<(u32, u32)> {
     let (a, b) = s.split_once(sep)?;
@@ -95,12 +119,15 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         socket: "wayland-0".into(),
         width: 1024,
         height: 768,
-        scale: 1,
+        scale: None,
         dump: None,
         probes: Vec::new(),
         desktop: false,
         fb: "/dev/fb0".into(),
         keymap: "us".into(),
+        kms: false,
+        drm: "/dev/dri/card0".into(),
+        no_kms: false,
         exec: Vec::new(),
     };
     let mut it = args.iter();
@@ -112,10 +139,10 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
                 let v = value()?;
                 (o.width, o.height) = pair(&v, 'x').filter(|(w, h)| *w > 0 && *h > 0).ok_or(format!("bad size {v}"))?;
             }
-            "--scale" => {
-                let v = value()?;
-                o.scale = v.parse().ok().filter(|s| (1..=8).contains(s)).ok_or(format!("bad scale {v}"))?;
-            }
+            "--scale" => o.scale = parse_scale(&value()?)?,
+            "--kms" => o.kms = true,
+            "--drm" => o.drm = value()?,
+            "--no-kms" => o.no_kms = true,
             "--dump" => o.dump = Some(value()?.into()),
             "--probe" => {
                 let v = value()?;
@@ -181,11 +208,12 @@ fn flush(conn: &mut Connection) -> bool {
     true
 }
 
-/// Where frames go: memory or the screen.
+/// Where frames go: memory or the screen (KMS, or fbdev).
 #[derive(Debug)]
 enum Screen {
     Memory(MemoryFramebuffer),
     Fb(fbdev::FbFramebuffer),
+    Kms(Box<kms::Kms<kms::CardFile>>),
 }
 
 impl Screen {
@@ -193,7 +221,61 @@ impl Screen {
         match self {
             Screen::Memory(m) => m,
             Screen::Fb(f) => f,
+            Screen::Kms(k) => &mut **k,
         }
+    }
+
+    /// Run `f` on what is shown (for KMS the front buffer; the others are
+    /// drawn in place).
+    fn shown<R>(&mut self, f: impl FnOnce(&mut dyn Framebuffer) -> R) -> R {
+        match self {
+            Screen::Kms(k) => f(&mut k.front_view()),
+            other => f(other.fb()),
+        }
+    }
+
+    fn kms(&mut self) -> Option<&mut kms::Kms<kms::CardFile>> {
+        match self {
+            Screen::Kms(k) => Some(k),
+            _ => None,
+        }
+    }
+}
+
+/// How many flips completed and at what rate (the boot test reads it).
+fn log_flips(k: &kms::Kms<kms::CardFile>) {
+    let span = k.first_flip_ns.map_or(0, |first| k.last_flip_ns - first);
+    let rate = (k.flips.saturating_sub(1) * 1_000_000_000_000).checked_div(span).unwrap_or(0);
+    println!(
+        "poly-compositor: {} flips in {} ms ({}.{:03} per second)",
+        k.flips,
+        span / 1_000_000,
+        rate / 1000,
+        rate % 1000
+    );
+}
+
+/// Take the screen through KMS, if the card has an output.
+fn open_kms(path: &str) -> Result<kms::Kms<kms::CardFile>, String> {
+    let card = kms::CardFile::open(path).map_err(|e| format!("{path}: {e}"))?;
+    kms::Kms::open(card).map_err(|e| format!("{path}: {e}"))
+}
+
+/// The scale: asked for, else `POLY_DISPLAY_SCALE`, else from the screen
+/// (KMS) or 1.
+fn choose_scale(asked: Option<u32>, screen: &Screen) -> u32 {
+    if let Some(s) = asked {
+        return s;
+    }
+    if let Some(s) = std::env::var("POLY_DISPLAY_SCALE").ok().and_then(|v| parse_scale(&v).ok().flatten()) {
+        return s;
+    }
+    match screen {
+        Screen::Kms(k) => {
+            let o = k.output();
+            kms::auto_scale(o.size().0, o.mm.0)
+        }
+        _ => 1,
     }
 }
 
@@ -404,12 +486,25 @@ fn run(args: &[String]) -> Result<u8, String> {
     // SAFETY: the handler only stores to an atomic, which is async-signal-safe.
     unsafe { libc::signal(libc::SIGUSR1, on_sigusr1 as *const () as libc::sighandler_t) };
 
-    let mut screen = if o.desktop {
+    // The screen: KMS if the card has an output, else fbdev for the
+    // desktop (ADR 0116).
+    let on_screen = o.desktop || o.kms;
+    let mut screen = if on_screen && !o.no_kms {
+        match open_kms(&o.drm) {
+            Ok(k) => Screen::Kms(Box::new(k)),
+            Err(e) if o.desktop => {
+                println!("poly-compositor: no KMS ({e}): the desktop goes through {}", o.fb);
+                Screen::Fb(fbdev::FbFramebuffer::open(&o.fb).map_err(|e| format!("{}: {e}", o.fb))?)
+            }
+            Err(e) => return Err(e),
+        }
+    } else if o.desktop {
         Screen::Fb(fbdev::FbFramebuffer::open(&o.fb).map_err(|e| format!("{}: {e}", o.fb))?)
     } else {
         Screen::Memory(MemoryFramebuffer::new(o.width, o.height))
     };
     let (width, height) = (screen.fb().width(), screen.fb().height());
+    let scale = choose_scale(o.scale, &screen);
     let mut host = unix::UnixHost::default();
     let layout = poly_input::layout::by_name(&o.keymap).unwrap_or(&poly_input::layout::US);
     if o.desktop {
@@ -418,9 +513,28 @@ fn run(args: &[String]) -> Result<u8, String> {
             Err(e) => eprintln!("poly-compositor: keymap: {e}"),
         }
     }
-    let output = OutputConfig { width, height, scale: o.scale, ..OutputConfig::default() };
+    let mut output = OutputConfig { width, height, scale, ..OutputConfig::default() };
+    if let Some(k) = screen.kms() {
+        let out = k.output().clone();
+        output.refresh_mhz = out.refresh_mhz();
+        output.physical_mm = (out.mm.0 as i32, out.mm.1 as i32);
+        // Clients may share dma-bufs made on the render node.
+        host.dmabuf_device = unix::device_number("/dev/dri/renderD128").or_else(|| unix::device_number(&o.drm));
+        let r = output.refresh_mhz;
+        println!(
+            "poly-compositor: KMS on {}: connector {}, CRTC {}, {width}x{height} at {}.{:03} Hz, {}x{} mm, scale {scale}{}",
+            o.drm,
+            out.connector,
+            out.crtc,
+            r / 1000,
+            r % 1000,
+            out.mm.0,
+            out.mm.1,
+            if host.dmabuf_device.is_some() { ", dma-bufs taken" } else { "" }
+        );
+    }
     let mut server = Server::new(Config { output, ..Config::default() }, Box::new(host));
-    println!("poly-compositor: listening on {} ({width}x{height}, scale {})", path.display(), o.scale);
+    println!("poly-compositor: listening on {} ({width}x{height}, scale {scale})", path.display());
 
     let mut desk = if o.desktop {
         let (lw, lh) = server.scene().logical_size();
@@ -434,10 +548,9 @@ fn run(args: &[String]) -> Result<u8, String> {
         let input = evdev::Evdev::open_all();
         let names: Vec<String> =
             input.devices.iter().map(|d| format!("{} ({:?})", d.name, d.translator.kind)).collect();
+        let display = if matches!(screen, Screen::Kms(_)) { format!("{} (KMS)", o.drm) } else { o.fb.clone() };
         println!(
-            "poly-compositor: desktop on {} ({width}x{height}, scale {}), keymap {}, {} input device(s): {}",
-            o.fb,
-            o.scale,
+            "poly-compositor: desktop on {display} ({width}x{height}, scale {scale}), keymap {}, {} input device(s): {}",
             layout.name,
             names.len(),
             names.join(", ")
@@ -493,9 +606,17 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let Some(d) = &desk {
             fds.extend(d.input.devices.iter().map(|dev| libc::pollfd { fd: dev.fd, events: libc::POLLIN, revents: 0 }));
         }
+        // The card's flip events.
+        let card_fd = screen.kms().and_then(|k| k.fd());
+        if let Some(fd) = card_fd {
+            fds.push(libc::pollfd { fd, events: libc::POLLIN, revents: 0 });
+        }
+        let flip_pending = screen.kms().is_some_and(|k| k.is_pending());
         let now = unix::monotonic_ns();
-        let timeout = if server.wants_frame() {
+        let timeout = if server.wants_frame() && !flip_pending {
             (next_frame.saturating_sub(now) / 1_000_000) as i32
+        } else if flip_pending && card_fd.is_none() {
+            1
         } else if desk.is_some() {
             // The clock, and apps that ended.
             500
@@ -529,11 +650,29 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
         }
 
+        // A flip completed: the frame it showed is on the screen since its
+        // vblank; its frame callbacks and feedback are answered with that
+        // time and sequence (vsync).
+        if let Some(k) = screen.kms()
+            && k.is_pending()
+        {
+            match k.dispatch() {
+                Ok(Some(flip)) => {
+                    let flags = present_flags::VSYNC | present_flags::HW_CLOCK | present_flags::HW_COMPLETION;
+                    let time = FrameTime { monotonic_ns: flip.monotonic_ns };
+                    server.frame_completed(time, Some(u64::from(flip.sequence)), flags);
+                }
+                Ok(None) => {}
+                Err(e) => return Err(format!("{}: reading events: {e}", o.drm)),
+            }
+        }
+
         // Input, then the shell.
         if let Some(d) = &mut desk {
             let size = server.scene().logical_size();
             let ms = (unix::monotonic_ns() / 1_000_000) as u32;
-            for (i, pfd) in fds[input_at..].iter().enumerate() {
+            let devices = d.input.devices.len();
+            for (i, pfd) in fds[input_at..input_at + devices].iter().enumerate() {
                 if pfd.revents != 0 {
                     d.input.read(i, size, ms);
                 }
@@ -553,18 +692,35 @@ fn run(args: &[String]) -> Result<u8, String> {
             d.sync(&mut server);
         }
 
-        // A frame when one is due.
+        // A frame when one is due: with KMS whenever no flip is pending (the
+        // flips pace it), else at most every 1/60 s.
         let now = unix::monotonic_ns();
-        if server.wants_frame() && now >= next_frame {
+        let kms = matches!(screen, Screen::Kms(_));
+        let due = if kms { !screen.kms().is_some_and(|k| k.is_pending()) } else { now >= next_frame };
+        if server.wants_frame() && due {
+            if let Some(k) = screen.kms() {
+                k.begin_frame();
+            }
             let fb = screen.fb();
-            match &desk {
+            let drawn = match &desk {
                 Some(d) => server.render_with(fb, Some(&d.shell.below()), Some(&d.shell.above())),
                 None => server.render(fb),
             };
-            // Presented: the frame is on the screen once the device's
-            // requests returned.
             let shown = unix::monotonic_ns();
-            server.frame_presented(FrameTime { monotonic_ns: shown });
+            if let Some(k) = screen.kms() {
+                // Drawn frames flipped themselves (`present`); clients
+                // waiting with nothing new to draw are paced by a flip too.
+                if drawn.is_empty()
+                    && let Err(e) = k.flip(&[])
+                {
+                    eprintln!("poly-compositor: page flip: {e}");
+                }
+                server.frame_submitted();
+            } else {
+                // Presented: the frame is on the screen once the device's
+                // requests returned.
+                server.frame_presented(FrameTime { monotonic_ns: shown });
+            }
             next_frame = now + FRAME_NS;
             if let Some(d) = &mut desk
                 && !d.ready
@@ -596,19 +752,27 @@ fn run(args: &[String]) -> Result<u8, String> {
         }
 
         if DUMP.swap(false, Ordering::Relaxed) {
-            let fb = screen.fb();
-            match &desk {
-                Some(d) => server.render_with(fb, Some(&d.shell.below()), Some(&d.shell.above())),
-                None => server.render(fb),
-            };
-            report(&server, fb, &o.probes, &dump_path);
+            // Drawn in place, what changed is drawn first; with KMS the
+            // picture is the buffer on the screen.
+            if !kms {
+                let fb = screen.fb();
+                match &desk {
+                    Some(d) => server.render_with(fb, Some(&d.shell.below()), Some(&d.shell.above())),
+                    None => server.render(fb),
+                };
+            }
+            screen.shown(|fb| report(&server, fb, &o.probes, &dump_path));
         }
 
         if let Some(status) = child.and_then(unix::try_wait) {
             if o.dump.is_some() {
-                let fb = screen.fb();
-                server.render(fb);
-                write_dump(fb, &dump_path);
+                if !kms {
+                    server.render(screen.fb());
+                }
+                screen.shown(|fb| write_dump(fb, &dump_path));
+            }
+            if let Some(k) = screen.kms() {
+                log_flips(k);
             }
             println!("poly-compositor: client exited with status {status}");
             let _ = std::fs::remove_file(&path);
@@ -634,8 +798,11 @@ mod tests {
     #[test]
     fn parses_its_arguments() {
         let o = parse_args(&args("--size 640x480 --scale 2 --probe 1,2 --probe 3,4 --exec /bin/c -x")).unwrap();
-        assert_eq!((o.width, o.height, o.scale), (640, 480, 2));
+        assert_eq!((o.width, o.height, o.scale), (640, 480, Some(2)));
         assert_eq!(o.probes, [(1, 2), (3, 4)]);
+        let k = parse_args(&args("--kms --drm /dev/dri/card1 --scale auto")).unwrap();
+        assert_eq!((k.kms, k.drm.as_str(), k.scale), (true, "/dev/dri/card1", None));
+        assert!(parse_args(&args("--no-kms")).unwrap().no_kms);
         assert_eq!(o.exec, ["/bin/c", "-x"]);
         assert_eq!(o.socket, "wayland-0");
         assert!(!o.desktop);

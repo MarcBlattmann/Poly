@@ -26,25 +26,49 @@
 //!
 //! # Buffers
 //!
-//! A committed `wl_shm` buffer is copied (the damaged part of it) into the
-//! window's content in the scene and released at once, so clients may
-//! reuse one buffer, and the scene never reads client memory while
-//! composing.
+//! A committed `wl_shm` or `linux-dmabuf` buffer is copied (the damaged
+//! part of it) into the window's content in the scene and released at
+//! once, so clients may reuse one buffer, and the scene never reads client
+//! memory while composing.
+//!
+//! # Frames
+//!
+//! [`Server::frame_presented`] answers the frame callbacks and
+//! presentation feedback committed so far, for a compositor that shows a
+//! frame as it draws it. One that waits for the display (page flips, ADR
+//! 0116) calls [`Server::frame_submitted`] when the frame goes to the
+//! display, which takes what was committed for it, and
+//! [`Server::frame_completed`] when the flip completed, with the vblank's
+//! time and sequence number: clients are paced by the display's refresh.
 
+mod cursor;
+mod data_device;
 mod decoration;
 mod display;
+mod dmabuf;
+mod external;
+mod extras;
 mod input;
 mod output;
 mod presentation;
 mod shm;
+mod subsurface;
 mod surface;
+mod viewporter;
 mod xdg;
+
+pub use dmabuf::{MOD_INVALID, MOD_LINEAR, format_table as dmabuf_format_table, formats as dmabuf_formats};
+pub use external::WmEvent;
 
 use crate::compose::{Framebuffer, Hit, Rect, Scene, WindowId};
 use crate::protocol::{
-    wl_buffer, wl_callback, wl_compositor, wl_display, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry,
-    wl_seat, wl_shm, wl_shm_pool, wl_surface, wl_touch, wp_presentation, wp_presentation_feedback, xdg_popup,
-    xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base, zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
+    wl_buffer, wl_callback, wl_compositor, wl_data_device, wl_data_device_manager, wl_data_offer, wl_data_source,
+    wl_display, wl_keyboard, wl_output, wl_pointer, wl_region, wl_registry, wl_seat, wl_shm, wl_shm_pool,
+    wl_subcompositor, wl_subsurface, wl_surface, wl_touch, wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1,
+    wp_fractional_scale_manager_v1, wp_fractional_scale_v1, wp_presentation, wp_presentation_feedback, wp_viewport,
+    wp_viewporter, xdg_activation_token_v1, xdg_activation_v1, xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel,
+    xdg_wm_base, zwp_linux_buffer_params_v1, zwp_linux_dmabuf_feedback_v1, zwp_linux_dmabuf_v1,
+    zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
 };
 use crate::seat::{Capabilities, InputEvent};
 use crate::wire::{self, Arg, ArgKind, Fd, Fixed, Header, Interface, Message, ObjectId, SERVER_ID_START};
@@ -86,6 +110,26 @@ pub trait Host {
     /// server queues it to be sent; whoever sends it closes it afterwards.
     /// `None` (the default): no keymap.
     fn keymap(&mut self) -> Option<(Fd, u32)> {
+        None
+    }
+    /// The `dev_t` of the DRM device clients should allocate on (its render
+    /// node), if dma-buf buffers can be taken: then `zwp_linux_dmabuf_v1`
+    /// is offered. Asked once, when the server is made. `None` (the
+    /// default): no dma-bufs.
+    fn dmabuf_device(&mut self) -> Option<u64> {
+        None
+    }
+    /// Map all of the dma-buf `fd` for reading (its size is the host's to
+    /// find out: `lseek(SEEK_END)`). The host owns `fd` from here on, as
+    /// with [`Host::map_shm`].
+    fn map_dmabuf(&mut self, fd: Fd) -> Option<Box<dyn ShmMap>> {
+        self.close_fd(fd);
+        None
+    }
+    /// A fresh read-only file descriptor holding `table` (the dma-buf
+    /// format table of `zwp_linux_dmabuf_feedback_v1`); whoever sends it
+    /// closes it afterwards.
+    fn dmabuf_table(&mut self, _table: &[u8]) -> Option<Fd> {
         None
     }
 }
@@ -150,6 +194,25 @@ pub mod versions {
     pub const XDG_WM_BASE: u32 = 6;
     pub const DECORATION_MANAGER: u32 = 2;
     pub const PRESENTATION: u32 = 1;
+    pub const SUBCOMPOSITOR: u32 = 1;
+    pub const DATA_DEVICE_MANAGER: u32 = 3;
+    pub const VIEWPORTER: u32 = 1;
+    pub const LINUX_DMABUF: u32 = 4;
+    pub const FRACTIONAL_SCALE: u32 = 1;
+    pub const ACTIVATION: u32 = 1;
+    pub const CURSOR_SHAPE: u32 = 2;
+}
+
+/// `wp_presentation_feedback.kind` bits (presentation-time.xml): how a
+/// frame was shown.
+pub mod present_flags {
+    /// Shown at a vertical blank (no tearing).
+    pub const VSYNC: u32 = 0x1;
+    /// The time is the display's own.
+    pub const HW_CLOCK: u32 = 0x2;
+    /// The display said when it was shown.
+    pub const HW_COMPLETION: u32 = 0x4;
+    pub const ZERO_COPY: u32 = 0x8;
 }
 
 /// A global: its name in the registry, interface and version.
@@ -177,6 +240,7 @@ pub(crate) type Res<T = ()> = Result<T, ProtoError>;
 
 /// What an object is, with its state.
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum Data {
     Display,
     Registry,
@@ -202,6 +266,27 @@ pub(crate) enum Data {
     Decoration(ObjectId),
     Presentation,
     Feedback,
+    Subcompositor,
+    /// A `wl_subsurface`: the surface it made a subsurface.
+    Subsurface(ObjectId),
+    Viewporter,
+    /// A `wp_viewport`: its surface, while there is one.
+    Viewport(Option<ObjectId>),
+    DataDeviceManager,
+    DataSource(Box<data_device::DataSource>),
+    DataDevice,
+    DataOffer(Box<data_device::DataOffer>),
+    Dmabuf,
+    DmabufParams(Box<dmabuf::Params>),
+    DmabufFeedback,
+    FractionalManager,
+    /// A `wp_fractional_scale_v1`: its surface, while there is one.
+    Fractional(Option<ObjectId>),
+    Activation,
+    ActivationToken(Box<extras::Token>),
+    CursorShapeManager,
+    /// A `wp_cursor_shape_device_v1`.
+    CursorShapeDevice,
 }
 
 /// An object of a client: its interface, the version it was made with, and
@@ -301,6 +386,17 @@ struct SeatState {
     ever: Capabilities,
     pointer: (Fixed, Fixed),
     input: input::InputState,
+    /// What the client the pointer is over asked it to look like.
+    cursor: Option<cursor::CursorRequest>,
+}
+
+/// What one client's frame callbacks and feedback wait for: the frame
+/// that went to the display ([`Server::frame_submitted`]).
+#[derive(Debug, Default)]
+struct InFlight {
+    callbacks: Vec<ObjectId>,
+    /// Feedback, and whether its surface was shown.
+    feedbacks: Vec<(ObjectId, bool)>,
 }
 
 /// One frame's presentation time.
@@ -323,6 +419,19 @@ pub struct Server {
     /// The toplevel with focus.
     pub(crate) active: Option<(ClientId, ObjectId)>,
     frame_seq: u64,
+    /// The clipboard and drag and drop.
+    data: data_device::DataState,
+    /// Popups with a grab, bottom to top: client and `xdg_popup`.
+    popup_grabs: Vec<(ClientId, ObjectId)>,
+    /// Activation tokens handed out and not used yet.
+    tokens: Vec<String>,
+    token_serial: u64,
+    /// The DRM device dma-bufs are made on, if they are taken.
+    dmabuf_device: Option<u64>,
+    /// Frame callbacks and feedback of the frame on its way to the display.
+    in_flight: BTreeMap<ClientId, InFlight>,
+    /// What an outside window manager is to act on (`external.rs`).
+    wm_events: Vec<WmEvent>,
 }
 
 impl core::fmt::Debug for Server {
@@ -341,9 +450,10 @@ pub(crate) fn owner_of(tag: u64) -> (ClientId, ObjectId) {
 }
 
 impl Server {
-    pub fn new(config: Config, host: Box<dyn Host>) -> Server {
+    pub fn new(config: Config, mut host: Box<dyn Host>) -> Server {
         let o = &config.output;
-        let globals = [
+        let dmabuf_device = host.dmabuf_device();
+        let mut globals = alloc::vec![
             (&wl_compositor::INTERFACE, versions::COMPOSITOR),
             (&wl_shm::INTERFACE, versions::SHM),
             (&wl_output::INTERFACE, versions::OUTPUT),
@@ -351,7 +461,16 @@ impl Server {
             (&xdg_wm_base::INTERFACE, versions::XDG_WM_BASE),
             (&zxdg_decoration_manager_v1::INTERFACE, versions::DECORATION_MANAGER),
             (&wp_presentation::INTERFACE, versions::PRESENTATION),
+            (&wl_subcompositor::INTERFACE, versions::SUBCOMPOSITOR),
+            (&wl_data_device_manager::INTERFACE, versions::DATA_DEVICE_MANAGER),
+            (&wp_viewporter::INTERFACE, versions::VIEWPORTER),
+            (&wp_fractional_scale_manager_v1::INTERFACE, versions::FRACTIONAL_SCALE),
+            (&xdg_activation_v1::INTERFACE, versions::ACTIVATION),
+            (&wp_cursor_shape_manager_v1::INTERFACE, versions::CURSOR_SHAPE),
         ];
+        if dmabuf_device.is_some() {
+            globals.push((&zwp_linux_dmabuf_v1::INTERFACE, versions::LINUX_DMABUF));
+        }
         Server {
             host,
             scene: Scene::new(o.width, o.height, o.scale),
@@ -367,6 +486,13 @@ impl Server {
             serial: 0,
             active: None,
             frame_seq: 0,
+            data: data_device::DataState::default(),
+            popup_grabs: Vec::new(),
+            tokens: Vec::new(),
+            token_serial: 0,
+            dmabuf_device,
+            in_flight: BTreeMap::new(),
+            wm_events: Vec::new(),
         }
     }
 
@@ -409,8 +535,48 @@ impl Server {
             self.scene.remove_window(w);
         }
         self.input_client_gone(c);
+        self.data_client_gone(c);
+        self.in_flight.remove(&c);
         if self.active.is_some_and(|(ac, _)| ac == c) {
             self.active = None;
+        }
+    }
+
+    /// The scene window showing client `c`'s surface, while it is shown.
+    pub fn surface_window(&self, c: ClientId, surface: ObjectId) -> Option<WindowId> {
+        self.surface_ref(c, surface)?.window
+    }
+
+    /// Keep the picture of what lies behind client `c`'s surface up to date
+    /// (or stop): [`crate::compose::Backdrop`], read with
+    /// [`Server::surface_backdrop`]. What a material like Liquid Glass
+    /// samples (ADR 0116). False if the surface is not shown.
+    pub fn set_surface_backdrop(&mut self, c: ClientId, surface: ObjectId, keep: bool) -> bool {
+        let Some(w) = self.surface_window(c, surface) else { return false };
+        self.scene.set_backdrop(w, keep);
+        true
+    }
+
+    /// The picture behind client `c`'s surface, if it is kept, and the parts
+    /// of it drawn again since the last call.
+    pub fn surface_backdrop(
+        &mut self,
+        c: ClientId,
+        surface: ObjectId,
+    ) -> Option<(&crate::compose::Backdrop, Vec<Rect>)> {
+        let w = self.surface_window(c, surface)?;
+        let damage = self.scene.take_backdrop_damage(w);
+        self.scene.backdrop(w).map(|b| (b, damage))
+    }
+
+    /// A surface of client `c` was destroyed: whatever pointed at it lets
+    /// go (its viewport, the cursor).
+    pub(crate) fn surface_gone(&mut self, c: ClientId, surface: ObjectId) {
+        self.viewport_surface_gone(c, surface);
+        if matches!(self.seat.cursor, Some(cursor::CursorRequest::Surface { client, surface: s, .. }) if (client, s) == (c, surface))
+        {
+            self.seat.cursor = Some(cursor::CursorRequest::Hidden);
+            self.update_cursor_look();
         }
     }
 
@@ -592,7 +758,29 @@ impl Server {
             wl_buffer::NAME => Ok(()), // destroy: the content was copied
             wl_output::NAME => Ok(()), // release
             wl_seat::NAME => self.seat_request(c, id, parse!(wl_seat)),
-            wl_pointer::NAME | wl_keyboard::NAME | wl_touch::NAME => Ok(()), // set_cursor, release
+            wl_pointer::NAME => self.pointer_request(c, id, parse!(wl_pointer)),
+            wl_keyboard::NAME | wl_touch::NAME => Ok(()), // release
+            wl_subcompositor::NAME => self.subcompositor_request(c, id, parse!(wl_subcompositor)),
+            wl_subsurface::NAME => self.subsurface_request(c, id, parse!(wl_subsurface)),
+            wp_viewporter::NAME => self.viewporter_request(c, id, parse!(wp_viewporter)),
+            wp_viewport::NAME => self.viewport_request(c, id, parse!(wp_viewport)),
+            wl_data_device_manager::NAME => self.data_manager_request(c, id, parse!(wl_data_device_manager)),
+            wl_data_source::NAME => self.data_source_request(c, id, parse!(wl_data_source)),
+            wl_data_device::NAME => self.data_device_request(c, id, parse!(wl_data_device)),
+            wl_data_offer::NAME => self.data_offer_request(c, id, parse!(wl_data_offer)),
+            zwp_linux_dmabuf_v1::NAME => self.dmabuf_request(c, id, parse!(zwp_linux_dmabuf_v1)),
+            zwp_linux_buffer_params_v1::NAME => self.params_request(c, id, parse!(zwp_linux_buffer_params_v1)),
+            zwp_linux_dmabuf_feedback_v1::NAME => Ok(()), // destroy
+            wp_fractional_scale_manager_v1::NAME => {
+                self.fractional_manager_request(c, id, parse!(wp_fractional_scale_manager_v1))
+            }
+            wp_fractional_scale_v1::NAME => self.fractional_request(c, id, parse!(wp_fractional_scale_v1)),
+            xdg_activation_v1::NAME => self.activation_request(c, id, parse!(xdg_activation_v1)),
+            xdg_activation_token_v1::NAME => self.activation_token_request(c, id, parse!(xdg_activation_token_v1)),
+            wp_cursor_shape_manager_v1::NAME => {
+                self.cursor_shape_manager_request(c, id, parse!(wp_cursor_shape_manager_v1))
+            }
+            wp_cursor_shape_device_v1::NAME => self.cursor_shape_request(c, id, parse!(wp_cursor_shape_device_v1)),
             xdg_wm_base::NAME => self.wm_base_request(c, id, parse!(xdg_wm_base)),
             xdg_positioner::NAME => self.positioner_request(c, id, parse!(xdg_positioner)),
             xdg_surface::NAME => self.xdg_surface_request(c, id, parse!(xdg_surface)),
@@ -645,28 +833,59 @@ impl Server {
 
     /// A frame was shown at `time`: answer the frame callbacks committed
     /// before it (`wl_callback.done` with the time in milliseconds) and the
-    /// presentation feedback.
+    /// presentation feedback. For a display shown as it is drawn; with page
+    /// flips use [`Server::frame_submitted`] and [`Server::frame_completed`].
     pub fn frame_presented(&mut self, time: FrameTime) {
+        self.frame_submitted();
+        self.frame_completed(time, None, 0);
+    }
+
+    /// The frame just drawn went to the display (a page flip was queued):
+    /// the frame callbacks and feedback committed so far belong to it.
+    /// Called again before [`Server::frame_completed`], the newer ones
+    /// join them.
+    pub fn frame_submitted(&mut self) {
+        for (id, client) in self.clients.iter_mut() {
+            let flight = self.in_flight.entry(*id).or_default();
+            for o in client.objects.values_mut() {
+                if let Data::Surface(s) = &mut o.data {
+                    flight.callbacks.append(&mut s.frame_callbacks);
+                    let shown = s.window.is_some();
+                    flight.feedbacks.extend(s.feedbacks.drain(..).map(|f| (f, shown)));
+                }
+            }
+        }
+    }
+
+    /// Whether a submitted frame's callbacks or feedback still wait for
+    /// [`Server::frame_completed`].
+    pub fn frame_in_flight(&self) -> bool {
+        self.in_flight.values().any(|f| !f.callbacks.is_empty() || !f.feedbacks.is_empty())
+    }
+
+    /// The submitted frame is on the screen since `time` (the vblank it
+    /// was flipped at): answer its frame callbacks and feedback. `seq` is
+    /// the display's vblank counter (else the server counts frames),
+    /// `flags` the `wp_presentation_feedback.kind` bits
+    /// ([`present_flags`]).
+    pub fn frame_completed(&mut self, time: FrameTime, seq: Option<u64>, flags: u32) {
         self.frame_seq += 1;
         let ms = (time.monotonic_ns / 1_000_000) as u32;
         let refresh_ns =
             if self.output.refresh_mhz == 0 { 0 } else { 1_000_000_000_000 / u64::from(self.output.refresh_mhz) };
-        let seq = self.frame_seq;
-        for client in self.clients.values_mut() {
-            let mut callbacks = Vec::new();
-            let mut feedbacks = Vec::new();
-            for o in client.objects.values_mut() {
-                if let Data::Surface(s) = &mut o.data {
-                    callbacks.append(&mut s.frame_callbacks);
-                    let shown = s.window.is_some();
-                    feedbacks.extend(s.feedbacks.drain(..).map(|f| (f, shown)));
+        let seq = seq.unwrap_or(self.frame_seq);
+        for (id, flight) in core::mem::take(&mut self.in_flight) {
+            let Some(client) = self.clients.get_mut(&id) else { continue };
+            for cb in flight.callbacks {
+                if client.get(cb).is_some() {
+                    client.callback_done(cb, ms);
                 }
             }
-            for cb in callbacks {
-                client.callback_done(cb, ms);
-            }
             let outputs = client.ids_where(|d| matches!(d, Data::Output));
-            for (f, shown) in feedbacks {
+            for (f, shown) in flight.feedbacks {
+                if client.get(f).is_none() {
+                    continue;
+                }
                 if shown {
                     for o in &outputs {
                         client.send(f, wp_presentation_feedback::Event::SyncOutput { output: *o });
@@ -681,7 +900,7 @@ impl Server {
                             refresh: refresh_ns as u32,
                             seq_hi: (seq >> 32) as u32,
                             seq_lo: seq as u32,
-                            flags: 0,
+                            flags,
                         },
                     );
                 } else {

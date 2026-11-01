@@ -60,6 +60,7 @@ name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
  "libc",
+ "poly-drm",
  "poly-fbdev",
  "poly-font",
  "poly-input",
