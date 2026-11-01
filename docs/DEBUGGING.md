@@ -1250,7 +1250,8 @@ in one:
   `RESTART_IF_SA_RESTART` inside the kernel: the call is restarted under
   `SA_RESTART` (`rip` back at the `syscall`) or fails with `EINTR`;
   `poll` / `select` are never restarted after a handler, `epoll_wait`
-  never at all.
+  never after a handler or a stop (only after signals that are ignored,
+  which a traced test process keeps until they are taken).
 
 The kernel tests run with `poly.test=linux::fileio_tests`; the host tests
 are `cargo test -p poly-vfs objects` and `cargo test -p
