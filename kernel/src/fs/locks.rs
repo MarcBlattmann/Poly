@@ -108,21 +108,51 @@ pub fn set(
 }
 
 /// flock(2) on `file`: `Some(exclusive)` locks, `None` unlocks. `Err`
-/// when another description's lock is in the way.
-pub fn flock(file: &Arc<OpenFile>, op: Option<bool>) -> Result<(), WouldBlock> {
+/// when another description's lock is in the way; with `wait` the request
+/// then waits in the lock table, which gives it the lock as soon as the
+/// conflicting ones go ([`flock_granted`], [`flock_cancel`]).
+pub fn flock(file: &Arc<OpenFile>, op: Option<bool>, wait: bool) -> Result<(), WouldBlock> {
     purge();
     register(file);
     let owner = description(file);
-    let result = match op {
-        Some(exclusive) => TABLE.lock().flock(key(file), owner, exclusive),
-        None => {
-            TABLE.lock().unflock(key(file), owner);
-            Ok(())
-        }
+    let (held, result) = {
+        let mut table = TABLE.lock();
+        let held = table.flock_of(key(file), owner);
+        let result = match op {
+            Some(exclusive) if wait => table.flock_wait(key(file), owner, exclusive),
+            Some(exclusive) => table.flock(key(file), owner, exclusive),
+            None => {
+                table.unflock(key(file), owner);
+                Ok(())
+            }
+        };
+        (held, result)
     };
-    // Unlocking, and the old lock a conversion gave up.
-    changed();
+    // Waiters look again only when a lock went: an unlock, a lock a
+    // conversion gave up (also one that then failed), an exclusive lock
+    // turned shared. A waiter's own failed attempt, holding nothing, wakes
+    // nobody: otherwise two waiters (or one and its own attempt) would
+    // wake each other for ever and keep the holder from running.
+    let released = match (held, op, &result) {
+        (None, _, _) => false,
+        (Some(_), None, _) | (Some(_), Some(_), Err(_)) => true,
+        (Some(was_exclusive), Some(exclusive), Ok(())) => was_exclusive && !exclusive,
+    };
+    if released {
+        changed();
+    }
     result
+}
+
+/// Whether `file`'s waiting flock(2) request got its lock.
+pub fn flock_granted(file: &Arc<OpenFile>) -> bool {
+    purge();
+    TABLE.lock().flock_granted(key(file), description(file))
+}
+
+/// `file`'s waiting flock(2) request gives up (a signal).
+pub fn flock_cancel(file: &Arc<OpenFile>) {
+    TABLE.lock().flock_cancel(key(file), description(file));
 }
 
 /// The keys of `files`, for [`closed`] (nothing before any lock was taken).
@@ -178,15 +208,15 @@ crate::kernel_test! {
         // flock: the description's lock goes with the description.
         let file_key = key(&file_b);
         drop(file_a);
-        flock(&file_b, Some(true)).map_err(|WouldBlock| "flock was refused")?;
+        flock(&file_b, Some(true), false).map_err(|WouldBlock| "flock was refused")?;
         drop(file_b);
         let fa2 = a.open(path, OpenFlags::RDONLY, 0).map_err(|_| "open failed")?;
         let file_a2 = a.file(fa2).map_err(|_| "no file")?;
-        if flock(&file_a2, Some(false)).is_ok() {
+        if flock(&file_a2, Some(false), false).is_ok() {
             return Err("flock ignored another description's lock");
         }
         b.close_all();
-        flock(&file_a2, Some(false)).map_err(|WouldBlock| "the closed description kept its flock")?;
+        flock(&file_a2, Some(false), false).map_err(|WouldBlock| "the closed description kept its flock")?;
         drop(file_a2);
         a.close_all();
         let _ = Files::new().unlinkat(poly_vfs::AT_FDCWD, path, 0);

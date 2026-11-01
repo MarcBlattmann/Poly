@@ -82,3 +82,44 @@ fn flock_locks_are_whole_file_and_separate_from_record_locks() {
     assert!(!t.flock_would_block(F, d2, true));
     assert_eq!(spans(&t, A).len(), 1, "the record lock stayed");
 }
+
+#[test]
+fn waiting_flock_requests_get_the_lock_when_it_goes() {
+    let (d1, d2, d3) = (LockOwner::Description(1), LockOwner::Description(2), LockOwner::Description(3));
+    let mut t = LockTable::new();
+    t.flock(F, d1, true).unwrap();
+    // Two waiters: the first wants it exclusive, the second shared.
+    assert_eq!(t.flock_wait(F, d2, true), Err(WouldBlock));
+    assert_eq!(t.flock_wait(F, d3, false), Err(WouldBlock));
+    assert!(!t.flock_granted(F, d2));
+    t.unflock(F, d1);
+    assert!(t.flock_granted(F, d2), "the first waiter got it");
+    assert!(!t.flock_granted(F, d3), "the second still waits");
+    // A closed holder (a released description) hands it on too.
+    assert!(t.retain_owners(|o| o != d2));
+    assert!(t.flock_granted(F, d3));
+    t.unflock(F, d3);
+    assert!(t.is_empty());
+}
+
+#[test]
+fn a_conversion_lets_a_waiter_in_first() {
+    // The spec of flock: "a conversion to LOCK_EX that fails with EAGAIN
+    // leaves the description with no lock at all".
+    let (d1, d2) = (LockOwner::Description(1), LockOwner::Description(2));
+    let mut t = LockTable::new();
+    t.flock(F, d1, false).unwrap();
+    t.flock(F, d2, false).unwrap();
+    // d1 waits to convert to exclusive (its shared lock is gone).
+    assert_eq!(t.flock_wait(F, d1, true), Err(WouldBlock));
+    assert_eq!(t.flock_of(F, d1), None);
+    // d2 converts too: its shared lock goes first, d1 gets the file.
+    assert_eq!(t.flock(F, d2, true), Err(WouldBlock));
+    assert!(t.flock_granted(F, d1));
+    assert_eq!(t.flock_of(F, d2), None);
+    // A waiter that gives up leaves nothing behind.
+    assert_eq!(t.flock_wait(F, d2, false), Err(WouldBlock));
+    t.flock_cancel(F, d2);
+    t.unflock(F, d1);
+    assert!(t.is_empty());
+}
