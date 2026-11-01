@@ -252,7 +252,7 @@
 {"symbol":"renameat2","number":316,"status":"green","tests_visible":2,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"request_key","number":249,"src":["linux-syscall-tbl"]},
 {"symbol":"restart_syscall","number":219,"src":["linux-syscall-tbl"]},
-{"symbol":"rmdir","number":84,"src":["linux-syscall-tbl"],"status":"green","tests_visible":3,"tests_held_out":1},
+{"symbol":"rmdir","number":84,"status":"green","tests_visible":3,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"rseq","number":334,"status":"green","tests_visible":3,"tests_held_out":1,"src":["linux-syscall-tbl"]},
 {"symbol":"rseq_slice_yield","number":471,"src":["linux-syscall-tbl"]},
 {"symbol":"rt_sigaction","number":13,"status":"green","tests_visible":4,"tests_held_out":2,"src":["linux-syscall-tbl"]},
