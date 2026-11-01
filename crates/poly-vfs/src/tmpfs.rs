@@ -267,6 +267,12 @@ impl Tmpfs {
         Tmpfs::build(clock, Some(bytes / PAGE), Some(inodes))
     }
 
+    /// [`with_limits`](Self::with_limits) with either limit optional
+    /// (`None`: none).
+    pub fn with_optional_limits(clock: Arc<dyn Clock>, bytes: Option<u64>, inodes: Option<u64>) -> Tmpfs {
+        Tmpfs::build(clock, bytes.map(|b| b / PAGE), inodes)
+    }
+
     fn build(clock: Arc<dyn Clock>, page_limit: Option<u64>, inode_limit: Option<u64>) -> Tmpfs {
         let now = clock.now();
         let root = Node {

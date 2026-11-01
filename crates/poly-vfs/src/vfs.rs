@@ -378,6 +378,12 @@ impl Vfs {
                 want = want | Access::WRITE;
             }
             cred.check(&attr, want)?;
+            // open(2): "ETXTBSY pathname refers to an executable image
+            // which is currently being executed and write access was
+            // requested."
+            if want.contains(Access::WRITE) && attr.kind == FileType::Regular && loc.mount.sb.exec_busy(loc.ino) {
+                return Err(Errno::ETXTBSY);
+            }
             // open(2): "EPERM The O_NOATIME flag was specified, but the
             // effective user ID of the caller did not match the owner of
             // the file and the caller was not privileged" (CAP_FOWNER).
@@ -525,7 +531,8 @@ impl Vfs {
             return Err(Errno::EACCES);
         }
         cred.check(&attr, Access::EXEC)?;
-        Ok(Arc::new(OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin)))
+        let file = OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin);
+        Ok(Arc::new(file.denying_write()))
     }
 
     /// `mkdir(2)`: `mode` is masked by the umask.
@@ -804,17 +811,23 @@ impl Vfs {
         if flags.noreplace && flags.exchange {
             return Err(Errno::EINVAL);
         }
+        // The order (the spec of rename): both paths' directories, EXDEV,
+        // a last "."/".."/"/" (EBUSY), EROFS, the last names, the trailing
+        // slashes, then the rename's own errors.
         let op = self.dirs_of(ctx, cred, old)?;
         let np = self.dirs_of(ctx, cred, new)?;
-        let (Last::Name(old_name), Last::Name(new_name)) = (&op.last, &np.last) else {
-            return Err(Errno::EBUSY);
-        };
-        op.check_name()?;
-        let src = self.raw_child(&op.dir, old_name)?;
-        np.check_name()?;
         if !Arc::ptr_eq(&op.dir.mount, &np.dir.mount) {
             return Err(Errno::EXDEV);
         }
+        let (Last::Name(old_name), Last::Name(new_name)) = (&op.last, &np.last) else {
+            return Err(Errno::EBUSY);
+        };
+        if op.dir.mount.read_only() {
+            return Err(Errno::EROFS);
+        }
+        op.check_name()?;
+        let src = self.raw_child(&op.dir, old_name)?;
+        np.check_name()?;
         let sattr = src.attr()?;
         let dst = match self.raw_child(&np.dir, new_name) {
             Ok(d) => Some(d),
@@ -829,9 +842,6 @@ impl Vfs {
         if (op.trailing_slash && !src_dir) || (np.trailing_slash && !(if flags.exchange { dst_dir } else { src_dir })) {
             return Err(Errno::ENOTDIR);
         }
-        if self.is_mount_point(&src) || dst.as_ref().is_some_and(|d| self.is_mount_point(d)) {
-            return Err(Errno::EBUSY);
-        }
         if let Some(dattr) = &dattr {
             // RENAME_NOREPLACE: an existing target, even the source's own
             // name or another link of it, is EEXIST (the spec of renameat2).
@@ -842,14 +852,6 @@ impl Vfs {
                 // Two names of one inode (or the same name): nothing to do.
                 return Ok(());
             }
-            if !flags.exchange {
-                if src_dir && !dst_dir {
-                    return Err(Errno::ENOTDIR);
-                }
-                if !src_dir && dst_dir {
-                    return Err(Errno::EISDIR);
-                }
-            }
         }
         // A directory cannot move below itself.
         if src_dir && self.is_within(&np.dir, src.ino)? {
@@ -857,6 +859,11 @@ impl Vfs {
         }
         if flags.exchange && dst_dir && self.is_within(&op.dir, dattr.as_ref().map_or(0, |a| a.ino))? {
             return Err(Errno::EINVAL);
+        }
+        // A directory over one of its own ancestors: that target is not
+        // empty (it holds the source).
+        if !flags.exchange && src_dir && dst_dir && self.is_within(&op.dir, dattr.as_ref().map_or(0, |a| a.ino))? {
+            return Err(Errno::ENOTEMPTY);
         }
         let old_dattr = self.may_change(cred, &op.dir)?;
         let new_dattr = self.may_change(cred, &np.dir)?;
@@ -872,6 +879,19 @@ impl Vfs {
         }
         if moves_parent && flags.exchange && dst_dir {
             cred.check(dattr.as_ref().ok_or(Errno::ENOENT)?, Access::WRITE)?;
+        }
+        // Then the kinds, a non-empty target (the file system's), a mount
+        // point.
+        if dattr.is_some() && !flags.exchange {
+            if src_dir && !dst_dir {
+                return Err(Errno::ENOTDIR);
+            }
+            if !src_dir && dst_dir {
+                return Err(Errno::EISDIR);
+            }
+        }
+        if self.is_mount_point(&src) || dst.as_ref().is_some_and(|d| self.is_mount_point(d)) {
+            return Err(Errno::EBUSY);
         }
         let sb = &op.dir.mount.sb;
         sb.forget(op.dir.ino, old_name);
