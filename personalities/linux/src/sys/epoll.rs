@@ -21,7 +21,7 @@ use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::fileio::{EpollEvent, EpollOp, WaitTime, flags::O_CLOEXEC};
 use crate::kernel::{LinuxKernel, SigSet, UserPtr};
-use crate::signal::deliver::with_own;
+use crate::signal::deliver::eintr_if_acting;
 use alloc::vec::Vec;
 
 /// `EP_MAX_EVENTS`: epoll_wait(2) "EINVAL ... maxevents is less than or
@@ -121,15 +121,6 @@ fn max_events(max: i32) -> Result<usize, Errno> {
     if max <= 0 || max > MAX_EVENTS { Err(Errno::EINVAL) } else { Ok(max as usize) }
 }
 
-/// How an interrupted wait ends: `EINTR` if a pending signal acts on
-/// delivery (a handler, a stop, a kill), else a restart once the signals
-/// that do nothing are taken. A handler that comes in meanwhile still
-/// makes it `EINTR` (`RESTART_IF_NO_HANDLER`).
-fn interrupted(k: &mut dyn LinuxKernel) -> Errno {
-    let tid = k.tid();
-    if with_own(k, |p| p.has_acting(tid)) { Errno::EINTR } else { Errno::RESTART_IF_NO_HANDLER }
-}
-
 /// Wait on the set and copy the events out (`EFAULT` if they cannot be
 /// written; the events are consumed then, Poly's choice).
 fn wait_events(
@@ -149,7 +140,7 @@ fn wait_events(
     let mask = if wait == WaitTime::Poll { None } else { mask };
     let events = match wait_with_signals(k, mask, wait, |io, w| io.epoll_wait(epfd, max, w), Vec::is_empty)? {
         Waited::Done(events) => events,
-        Waited::Interrupted => return Err(interrupted(k)),
+        Waited::Interrupted => return Err(eintr_if_acting(k)),
     };
     let bytes: Vec<u8> = events.iter().flat_map(|e| e.to_bytes()).collect();
     if !bytes.is_empty() {

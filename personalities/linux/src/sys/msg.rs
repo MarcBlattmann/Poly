@@ -40,7 +40,9 @@ fn wake(k: &mut dyn LinuxKernel, tids: Vec<i32>) {
 /// Sleep on `ticket` until a waker completes it or a signal is to be
 /// acted on: `EINTR` then, never restarted (signal(7) lists msgsnd and
 /// msgrcv among the calls that fail after a handler, `SA_RESTART` or
-/// not), unless the result came meanwhile.
+/// not), unless the result came meanwhile. A signal that is ignored (a
+/// traced process keeps those until they are taken) does not end the
+/// sleep ([`LinuxProcess::has_acting`](crate::signal::LinuxProcess::has_acting)).
 fn sleep(k: &mut dyn LinuxKernel, ns: &Option<Arc<IpcNs>>, ticket: u64) -> Result<Option<Message>, Errno> {
     let tid = k.tid();
     loop {
@@ -50,7 +52,7 @@ fn sleep(k: &mut dyn LinuxKernel, ns: &Option<Arc<IpcNs>>, ticket: u64) -> Resul
         if let Some(result) = with_table(ns, |t| t.poll(ticket)) {
             return result;
         }
-        if with_own(k, |p| p.has_deliverable(tid)) {
+        if with_own(k, |p| p.has_acting(tid)) {
             return with_table(ns, |t| t.cancel(ticket)).unwrap_or(Err(Errno::EINTR));
         }
         k.block(None);

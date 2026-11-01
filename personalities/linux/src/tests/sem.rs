@@ -133,6 +133,38 @@ fn a_signal_ends_the_sleep_with_eintr() {
     assert_eq!(semctl(&mut k, id, 0, GETNCNT, 0), Ok(0), "left the count");
 }
 
+/// A traced process keeps an ignored signal (the default-ignored SIGCHLD
+/// of a child's exit) until it is taken: it wakes the sleeper, which
+/// sleeps on, for semop and for semtimedop alike.
+#[test]
+fn an_ignored_signal_does_not_end_the_sleep() {
+    use crate::abi::signal::SIGCHLD;
+    for timeout in [false, true] {
+        let mut k = fresh();
+        k.me().traced = true;
+        let id = semget(&mut k, 1);
+        k.add_thread(101);
+        k.meanwhile(|k| {
+            k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, u64::from(SIGCHLD)]).unwrap());
+        });
+        k.meanwhile(move |k| {
+            k.as_thread(101, |k| {
+                assert_eq!(semctl(k, id, 0, GETNCNT, 0), Ok(1), "still asleep");
+                assert_eq!(semop(k, id, &[(0, 1, 0)]), Ok(0));
+            });
+        });
+        k.poke(SOPS, &[0, 0, 0xff, 0xff, 0, 0]);
+        let got = if timeout {
+            k.poke(TS, &crate::abi::Timespec { sec: 5, nsec: 0 }.to_bytes());
+            timed(&mut k, id, SOPS, 1, TS)
+        } else {
+            semop(&mut k, id, &[(0, -1, 0)])
+        };
+        assert_eq!(got, Ok(0), "timeout: {timeout}");
+        assert!(k.me().pending(100).contains(SIGCHLD), "taken on the way out");
+    }
+}
+
 #[test]
 fn removal_ends_the_sleep_with_eidrm() {
     let mut k = fresh();

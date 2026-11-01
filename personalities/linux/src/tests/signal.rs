@@ -668,6 +668,37 @@ fn rt_sigtimedwait_wakes_for_its_signals_and_is_interrupted_by_others() {
     assert_eq!(uc.regs.rip, SYSCALL_RIP);
 }
 
+/// A traced process keeps an ignored signal until it is taken: outside
+/// the waited set it does not end rt_sigtimedwait (the wait goes on to a
+/// signal of the set); in the set it is taken and returned like any.
+#[test]
+fn rt_sigtimedwait_sleeps_on_after_an_ignored_signal_and_takes_one_it_waits_for() {
+    let mut k = FakeKernel::new();
+    k.me().traced = true;
+    k.add_thread(101);
+    set_mask(&mut k, SigSet::only(SIGUSR2));
+    k.poke(ARG, &SigSet::only(SIGUSR2).0.to_le_bytes());
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGCHLD as u64]).unwrap());
+    });
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGUSR2 as u64]).unwrap());
+    });
+    assert_eq!(sys(&mut k, nr::RT_SIGTIMEDWAIT, &[ARG, 0, 0, 8]), Ok(SIGUSR2 as u64));
+    assert!(k.me().pending(100).contains(SIGCHLD), "left for delivery");
+    // SIGCHLD in the set (and ignored): waited for, so taken.
+    let mut k = FakeKernel::new();
+    k.me().traced = true;
+    k.add_thread(101);
+    set_mask(&mut k, SigSet::only(SIGCHLD));
+    k.poke(ARG, &SigSet::only(SIGCHLD).0.to_le_bytes());
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, SIGCHLD as u64]).unwrap());
+    });
+    assert_eq!(sys(&mut k, nr::RT_SIGTIMEDWAIT, &[ARG, 0, 0, 8]), Ok(SIGCHLD as u64));
+    assert!(!k.me().pending(100).contains(SIGCHLD));
+}
+
 #[test]
 fn fault_signals_cannot_be_blocked() {
     let mut k = FakeKernel::new();

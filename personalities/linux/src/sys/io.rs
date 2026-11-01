@@ -14,7 +14,7 @@ use crate::abi::{FileStat, IOV_MAX, Iovec, MAX_RW_COUNT, PAGE_SIZE, SigInfo, ioc
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::kernel::{LinuxKernel, Target, UserPtr};
-use crate::signal::deliver::send;
+use crate::signal::deliver::{eintr_if_acting, send};
 use alloc::vec::Vec;
 
 /// The largest bounce buffer: 64 KiB. Writes of up to this size reach the
@@ -169,8 +169,17 @@ fn read_once(k: &mut dyn LinuxKernel, fd: i32, buf: &mut [u8], how: How, done: u
     match at {
         _ if how.nowait => crate::sys::path::fs(k)?.read_nowait(fd, buf, at),
         Some(offset) => crate::sys::path::fs(k)?.pread(fd, buf, offset),
-        None => k.read(fd, buf),
+        None => k.read(fd, buf).map_err(|e| timed_out_by_signal(k, e)),
     }
+}
+
+/// A blocking read or write that a signal interrupted comes back as an
+/// internal restart code, except on a socket with a timeout in that
+/// direction (`SO_RCVTIMEO` / `SO_SNDTIMEO`), which socket(7) and
+/// signal(7) have fail with `EINTR`: after a handler or a stop, not after a
+/// signal that is ignored ([`eintr_if_acting`]).
+fn timed_out_by_signal(k: &mut dyn LinuxKernel, e: Errno) -> Errno {
+    if e == Errno::EINTR { eintr_if_acting(k) } else { e }
 }
 
 /// One write of `buf` to `fd`, `done` bytes into a transfer `how`.
@@ -181,7 +190,7 @@ fn write_once(k: &mut dyn LinuxKernel, fd: i32, buf: &[u8], how: How, done: u64)
             crate::sys::path::fs(k)?.write_flags(fd, buf, at, how.append, how.nowait)
         }
         Some(offset) => crate::sys::path::fs(k)?.pwrite(fd, buf, offset),
-        None => k.write(fd, buf),
+        None => k.write(fd, buf).map_err(|e| timed_out_by_signal(k, e)),
     }
 }
 
