@@ -44,7 +44,7 @@ impl Env {
         self.vfs.mount(&self.ctx, &self.root, At::Cwd, path.as_bytes(), fs, MountFlags::default()).unwrap();
         if read_only {
             let flags = MountFlags { read_only: true, ..MountFlags::default() };
-            self.vfs.remount(&self.ctx, &self.root, At::Cwd, path.as_bytes(), flags).unwrap();
+            self.vfs.remount(&self.ctx, &self.root, At::Cwd, path.as_bytes(), flags, true).unwrap();
         }
     }
 }

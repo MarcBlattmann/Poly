@@ -1361,7 +1361,23 @@ impl Vfs {
     /// new per-mount flags (`CAP_SYS_ADMIN`, else `EPERM`; not the root of
     /// a mount, `EINVAL`). A file system that is read-only itself stays
     /// so whatever the flags say.
-    pub fn remount(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8], flags: MountFlags) -> Result<()> {
+    ///
+    /// Going read-only is `EBUSY` while something writes (mount(2)'s
+    /// spec sheet, `busy_writers`): with `bind` (`MS_BIND`, this mount
+    /// only) a file open for writing through this mount
+    /// ([`Mount::busy_for_read_only`]); without it (the whole file system)
+    /// a file open for writing through any of its mounts, or an unlinked
+    /// file still open ([`Mount::sb_busy_for_read_only`]). A refused
+    /// remount changes nothing.
+    pub fn remount(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        flags: MountFlags,
+        bind: bool,
+    ) -> Result<()> {
         if !cred.has(cap::SYS_ADMIN) {
             return Err(Errno::EPERM);
         }
@@ -1369,7 +1385,13 @@ impl Vfs {
         if !loc.is_mount_root() {
             return Err(Errno::EINVAL);
         }
-        loc.mount.set_flags(flags);
+        let mount = loc.mount.clone();
+        drop(loc);
+        let busy = if bind { mount.busy_for_read_only() } else { mount.sb_busy_for_read_only() };
+        if flags.read_only && busy {
+            return Err(Errno::EBUSY);
+        }
+        mount.set_flags(flags);
         Ok(())
     }
 

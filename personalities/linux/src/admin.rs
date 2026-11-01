@@ -238,6 +238,19 @@ pub fn mount_options(fs: FsType, data: &[u8]) -> Result<RootOptions, Errno> {
     Ok(root)
 }
 
+/// Check the `data` of a remount of the whole file system (mount(2)
+/// with `MS_REMOUNT` and without `MS_BIND`) whose type is `fs_name`: a
+/// tmpfs takes what a new tmpfs mount takes ([`mount_options`]), anything
+/// else is `EINVAL` (mount's spec sheet, `remount_bad_option`: `bogus=1`,
+/// `size=abc`). The options of the other types are not checked. Poly
+/// applies none of them on a remount.
+pub fn check_remount_options(fs_name: &str, data: &[u8]) -> Result<(), Errno> {
+    match FsType::from_name(fs_name.as_bytes()) {
+        Ok(FsType::Tmpfs) => mount_options(FsType::Tmpfs, data).map(|_| ()),
+        _ => Ok(()),
+    }
+}
+
 /// reboot(2)'s commands (`linux/reboot.h`).
 pub mod cmd {
     pub const RESTART: u32 = 0x0123_4567;

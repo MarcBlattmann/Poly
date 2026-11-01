@@ -102,7 +102,10 @@ pub struct Mount {
     /// checks that refuse shared mounts (`pivot_root(2)`).
     propagation: AtomicU32,
     /// Open files writing to inodes through this mount: making it
-    /// read-only then is `EBUSY` (`mount_setattr(2)`).
+    /// read-only then is `EBUSY` (`mount_setattr(2)`, `mount(2)` with
+    /// `MS_REMOUNT | MS_BIND | MS_RDONLY`). An open file description
+    /// counts once however many descriptors (dups) and mappings share it,
+    /// for as long as one of them lives.
     writers: AtomicU32,
 }
 
@@ -265,6 +268,24 @@ impl Mount {
         self.sb.writers.load(Ordering::Relaxed)
     }
 
+    /// Whether making the file system read-only as a whole (`mount(2)`
+    /// with `MS_REMOUNT | MS_RDONLY`) must be refused with `EBUSY`: a file
+    /// of it is open for writing through any of its mounts
+    /// ([`sb_writers`](Self::sb_writers)), or a file without names
+    /// (unlinked, `nlink` 0) is still open, even read-only. A file system
+    /// that is read-only already is never busy.
+    pub fn sb_busy_for_read_only(&self) -> bool {
+        !self.sb_read_only() && (self.sb_writers() > 0 || self.sb.has_unlinked_open())
+    }
+
+    /// Whether making only this mount read-only (`MS_REMOUNT | MS_BIND |
+    /// MS_RDONLY`, `mount_setattr(2)`) must be refused with `EBUSY`: a
+    /// file is open for writing through this mount. Writers through other
+    /// mounts of the same file system do not count.
+    pub fn busy_for_read_only(&self) -> bool {
+        !self.flags().read_only && self.writers() > 0
+    }
+
     /// Whether the file system itself is read-only (made so by a remount
     /// without `MS_BIND` or an `fsconfig(2)` reconfiguration, or by its
     /// nature): every mount of it is then read-only.
@@ -387,6 +408,10 @@ pub(crate) struct Superblock {
     ro: AtomicBool,
     /// Open files writing to it ([`Mount::sb_writers`]).
     writers: AtomicU32,
+    /// Inodes other than directories that open files (not `O_PATH`) are
+    /// open on, and how many: one of them without names keeps the file
+    /// system from going read-only ([`Mount::sb_busy_for_read_only`]).
+    open_inodes: SpinMutex<BTreeMap<Ino, u32>>,
     /// The source and options recorded by [`Mount::set_sb_info`].
     meta: SpinMutex<(Vec<u8>, Vec<u8>)>,
 }
@@ -448,6 +473,29 @@ impl Superblock {
                 writers.remove(&ino);
             }
         }
+    }
+
+    /// One more open file is open on `ino`.
+    pub(crate) fn add_open(&self, ino: Ino) {
+        *self.open_inodes.lock().entry(ino).or_insert(0) += 1;
+    }
+
+    /// One open file on `ino` is gone.
+    pub(crate) fn drop_open(&self, ino: Ino) {
+        let mut open = self.open_inodes.lock();
+        if let Some(n) = open.get_mut(&ino) {
+            *n -= 1;
+            if *n == 0 {
+                open.remove(&ino);
+            }
+        }
+    }
+
+    /// Whether an open file is open on an inode that has no names left.
+    pub(crate) fn has_unlinked_open(&self) -> bool {
+        // Copied out first: the file system takes its own locks.
+        let open: Vec<Ino> = self.open_inodes.lock().keys().copied().collect();
+        open.into_iter().any(|ino| self.fs.getattr(ino).is_ok_and(|a| a.nlink == 0))
     }
 
     /// Drops what the cache knows about `dir/name`.
@@ -564,6 +612,7 @@ impl MountTable {
             text_writers: SpinMutex::new(BTreeMap::new()),
             ro: AtomicBool::new(false),
             writers: AtomicU32::new(0),
+            open_inodes: SpinMutex::new(BTreeMap::new()),
             meta: SpinMutex::new((Vec::new(), Vec::new())),
         });
         self.supers.push(Arc::downgrade(&sb));

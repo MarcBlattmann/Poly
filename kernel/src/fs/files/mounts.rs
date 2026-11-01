@@ -22,9 +22,10 @@ impl Files {
         vfs().bind(&ctx, &cred, poly_vfs::At::Cwd, source, poly_vfs::At::Cwd, target, flags)
     }
 
-    /// mount(2) with `MS_REMOUNT`.
-    pub fn remount(&self, target: &[u8], flags: MountFlags) -> Result<()> {
-        self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.remount(ctx, &self.cred(), at, target, flags))
+    /// mount(2) with `MS_REMOUNT` (`bind`: with `MS_BIND`, this mount
+    /// only; see `Vfs::remount` for when going read-only is `EBUSY`).
+    pub fn remount(&self, target: &[u8], flags: MountFlags, bind: bool) -> Result<()> {
+        self.at(AT_FDCWD, target, |vfs, ctx, at| vfs.remount(ctx, &self.cred(), at, target, flags, bind))
     }
 
     /// The mount whose root `target` names (`EINVAL` if it is not one).

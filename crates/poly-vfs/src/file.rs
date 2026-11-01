@@ -173,8 +173,14 @@ pub struct OpenFile {
     /// cannot be run as a program (`ETXTBSY`, execve(2)).
     counts_text_writer: bool,
     /// Open for writing an inode of a mount: counted in the mount's and
-    /// its superblock's writers (`Mount::writers`) while it lives.
+    /// its superblock's writers (`Mount::writers`) while it lives (its
+    /// dups and the mappings made from it share it, so they keep it so).
     counts_writer: bool,
+    /// Open on an inode other than a directory: counted in its
+    /// superblock's open inodes while it lives, so that an unlinked file
+    /// still open keeps the file system from going read-only
+    /// (`Mount::sb_busy_for_read_only`).
+    counts_open: bool,
     /// Causes no inotify or fanotify events (a descriptor fanotify hands
     /// to its reader).
     quiet: bool,
@@ -203,6 +209,10 @@ impl OpenFile {
         if counts_writer {
             node.loc().mount.count_writer(true);
         }
+        let counts_open = matches!(backend, Backend::Inode) && kind != FileType::Directory;
+        if counts_open {
+            node.loc().mount.sb.add_open(node.ino());
+        }
         OpenFile {
             node,
             kind,
@@ -214,6 +224,7 @@ impl OpenFile {
             memfd: None,
             denies_write: false,
             counts_writer,
+            counts_open,
             counts_text_writer: false,
             quiet: false,
         }
@@ -850,6 +861,9 @@ impl Drop for OpenFile {
         }
         if self.counts_writer {
             self.node.loc().mount.count_writer(false);
+        }
+        if self.counts_open {
+            self.node.loc().mount.sb.drop_open(self.node.ino());
         }
 
         if crate::inotify::active() && matches!(self.backend, Backend::Inode | Backend::Device(_)) {

@@ -287,6 +287,18 @@ fn file_system_types_and_options() {
     assert!(admin::mount_options(FsType::Ext2, b"errors=remount-ro,user_xattr").is_ok());
 }
 
+/// mount's spec sheet, `remount_bad_option`: a tmpfs remount with an
+/// option tmpfs does not take is EINVAL; other types are not checked.
+#[test]
+fn remount_options_are_checked_for_tmpfs() {
+    assert_eq!(admin::check_remount_options("tmpfs", b"bogus=1"), Err(Errno::EINVAL));
+    assert_eq!(admin::check_remount_options("tmpfs", b"size=abc"), Err(Errno::EINVAL));
+    assert_eq!(admin::check_remount_options("tmpfs", b"size=1m,nr_inodes=10"), Ok(()));
+    assert_eq!(admin::check_remount_options("tmpfs", b""), Ok(()));
+    assert_eq!(admin::check_remount_options("ext4", b"bogus=1"), Ok(()));
+    assert_eq!(admin::check_remount_options("proc", b"bogus=1"), Ok(()));
+}
+
 // ---- priorities and scheduling ------------------------------------------
 
 /// The nice value of process `pid`'s main thread.

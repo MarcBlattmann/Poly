@@ -148,11 +148,15 @@ impl LinuxAdmin for Thread<'_> {
                 self.mount_new(source, target, fstype, *flags, data)
             }
             MountRequest::Remount { target, flags, data, bind } => {
-                // The file system's own options are only checked for the
-                // memory file systems, whose options Poly knows.
+                // mount's spec sheet, `order`: the target (ENOENT; EINVAL
+                // if not a mount root), then a tmpfs's options (EINVAL),
+                // then the writers (EBUSY, in the VFS). A refused remount
+                // changes nothing.
                 let id = files.mount_at(target, true).map_err(vfs_errno)?;
-                let _ = data;
-                files.remount(target, vfs_flags(*flags)).map_err(vfs_errno)?;
+                if !*bind && let Some(m) = crate::fs::vfs().mount_by_id(id) {
+                    admin::check_remount_options(m.fs_name(), data)?;
+                }
+                files.remount(target, vfs_flags(*flags), *bind).map_err(vfs_errno)?;
                 if !*bind
                     && disk::mount_of(id).is_none()
                     && let Some(m) = crate::fs::vfs().mount_by_id(id)
@@ -167,7 +171,9 @@ impl LinuxAdmin for Thread<'_> {
                 {
                     // The volume itself is read-only (the disk, or its
                     // features): the mount stays so.
-                    files.remount(target, MountFlags { read_only: true, ..vfs_flags(*flags) }).map_err(vfs_errno)?;
+                    files
+                        .remount(target, MountFlags { read_only: true, ..vfs_flags(*flags) }, *bind)
+                        .map_err(vfs_errno)?;
                     return Err(Errno::EROFS);
                 }
                 Ok(())
