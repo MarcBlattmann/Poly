@@ -150,7 +150,11 @@ mod tests {
         assert!(sb.address().ends_with("/bus"));
         let mut c = UnixStream::connect(dir.join("bus")).unwrap();
         sb.accept();
-        let (auth, begin) = poly_dbus::auth::client_lines(0);
+        // The bus checks EXTERNAL against the peer's credentials: claim the
+        // uid this test runs as (root in a container, a user on CI).
+        // SAFETY: getuid has no preconditions and cannot fail.
+        let uid = unsafe { libc::getuid() };
+        let (auth, begin) = poly_dbus::auth::client_lines(uid);
         c.write_all(&auth).unwrap();
         let id = sb.poll_fds()[1].1.unwrap();
         sb.readable(id);
