@@ -51,6 +51,7 @@ errors:
   bad_nr: "EINVAL (22): nr < 0 (nr is a signed long)"
   bad_ctx: "EINVAL (22): ctx_id is not a live context of this process (0, a random number, destroyed, or one whose ring was unmapped, or the parent's after fork)"
   array_fault: "EFAULT (14): iocbpp or one of its pointers unreadable, or the iocb itself unreadable"
+  buffer_range: "EFAULT (14) at submit for PREAD/PWRITE when [aio_buf, aio_buf + min(aio_nbytes, MAX_RW_COUNT 0x7ffff000)) is not inside the user address space (ends above 0x7ffffffff000); only the range is checked here, not whether it is mapped (an unmapped low buffer fails later, in res). So a huge aio_nbytes works with a buffer low in memory but fails with one near the top, e.g. a stack buffer when address randomisation is off (which made an earlier version of e_io_submit_rw fail on the reference under the pipeline's tracer; the test now uses a static buffer and checks the high case explicitly)"
   reserved: "EINVAL (22): aio_reserved2 != 0"
   bad_fd: "EBADF (9): aio_fildes not open, or an O_PATH descriptor"
   bad_resfd: "EINVAL (22): IOCB_FLAG_RESFD and aio_resfd is not an eventfd; EBADF (9) if it is not open"
