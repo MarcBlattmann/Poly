@@ -122,7 +122,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] virtio-gpu driver: modesetting and 2D framebuffer
 - [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
 - [ ] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged
-- [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
+- [x] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa (ADR 0119: unmodified Mesa's virgl renders `eglinfo`, `gl-readback` and `kmscube` on QEMU's `virtio-gpu-gl-pci`; Venus runs `vulkaninfo` and `vk-clear` on QEMU 9.2's `venus=on`; boot group `virgl`, skipped where the host has no render node)
 - [x] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
 - [ ] Compositor: Wayland server, surface composition, HiDPI scaling, vsync
 - [ ] Shell: launcher, window management, notifications, settings (own non-glass design)

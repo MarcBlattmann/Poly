@@ -9,6 +9,16 @@
 //! guest backing (a scatter list of host addresses here), and
 //! `RESOURCE_FLUSH` copies into the "screen" of every scanout showing the
 //! resource, which the tests then look at.
+//!
+//! The 3D side (§5.7.6.10) is modelled as far as the driver can tell it
+//! apart: capsets with their data, contexts (and which resources each may
+//! use), 3D resources as host byte arrays copied to and from their guest
+//! backing by the 3D transfers (box, stride, offset), a toy command stream
+//! for `SUBMIT_3D` (the real ones are Mesa's business, not the driver's:
+//! here a stream of `FILL resource byte` dwords), blob resources and the
+//! host-visible region they map into. Fenced 3D requests can be held back
+//! and answered later in any order ([`Sim::retire`]), as a host GPU
+//! finishing work does, and the queue's MSI-X vector is recorded.
 
 extern crate std;
 
@@ -31,6 +41,26 @@ const TRANSFER_TO_HOST_2D: u32 = 0x105;
 const RESOURCE_ATTACH_BACKING: u32 = 0x106;
 const RESOURCE_DETACH_BACKING: u32 = 0x107;
 const GET_EDID: u32 = 0x10a;
+const GET_CAPSET_INFO: u32 = 0x108;
+const GET_CAPSET: u32 = 0x109;
+const RESOURCE_CREATE_BLOB: u32 = 0x10c;
+const CTX_CREATE: u32 = 0x200;
+const CTX_DESTROY: u32 = 0x201;
+const CTX_ATTACH_RESOURCE: u32 = 0x202;
+const CTX_DETACH_RESOURCE: u32 = 0x203;
+const RESOURCE_CREATE_3D: u32 = 0x204;
+const TRANSFER_TO_HOST_3D: u32 = 0x205;
+const TRANSFER_FROM_HOST_3D: u32 = 0x206;
+const SUBMIT_3D: u32 = 0x207;
+const RESOURCE_MAP_BLOB: u32 = 0x208;
+const RESOURCE_UNMAP_BLOB: u32 = 0x209;
+const OK_CAPSET_INFO: u32 = 0x1102;
+const OK_CAPSET: u32 = 0x1103;
+const OK_MAP_INFO: u32 = 0x1106;
+pub const ERR_INVALID_CONTEXT_ID: u32 = 0x1204;
+const FLAG_INFO_RING_IDX: u32 = 2;
+/// The toy command stream's one command: `FILL resource byte`.
+pub const TOY_FILL: u32 = 1;
 pub const OK_NODATA: u32 = 0x1100;
 const OK_DISPLAY_INFO: u32 = 0x1101;
 const OK_EDID: u32 = 0x1104;
@@ -161,6 +191,42 @@ pub struct Logged {
     /// The request after the header.
     pub body: Vec<u8>,
     pub response: u32,
+    /// The header's flags, context and ring.
+    pub flags: u32,
+    pub ctx_id: u32,
+    pub ring_idx: u8,
+}
+
+/// A 3D (or blob) resource: host bytes, maybe guest backing.
+#[derive(Clone, Debug, Default)]
+pub struct Resource3d {
+    /// Width, height, depth, bytes per texel (1 for buffers).
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
+    pub cpp: u32,
+    pub backing: Vec<(u64, u32)>,
+    pub host: Vec<u8>,
+    /// A blob: (blob_mem, blob_flags, blob_id).
+    pub blob: Option<(u32, u32, u64)>,
+    /// Where in the host-visible region it is mapped.
+    pub mapped: Option<u64>,
+}
+
+/// A 3D context: its capset and the resources it may use.
+#[derive(Clone, Debug, Default)]
+pub struct Context {
+    pub capset: u32,
+    pub name: Vec<u8>,
+    pub attached: Vec<u32>,
+}
+
+/// A response written later (a fenced 3D request whose work is not done).
+#[derive(Clone, Debug)]
+struct Held {
+    head: u16,
+    out: Vec<(u64, u32)>,
+    resp: Vec<u8>,
 }
 
 #[derive(Debug, Default)]
@@ -181,6 +247,16 @@ pub struct Device {
     /// Backing detached while a scanout still showed the resource.
     pub detach_while_shown: u32,
     pub notifies: u32,
+    /// Capsets: (id, max_version, data).
+    pub capsets: Vec<(u32, u32, Vec<u8>)>,
+    pub contexts: BTreeMap<u32, Context>,
+    pub resources_3d: BTreeMap<u32, Resource3d>,
+    /// Hold back the responses of fenced `SUBMIT_3D` and 3D transfers until
+    /// [`Sim::retire`].
+    pub hold_3d: bool,
+    held: Vec<Held>,
+    /// The host-visible region's size.
+    pub shm_len: u64,
     last_avail: u16,
     used_idx: u16,
 }
@@ -198,6 +274,8 @@ pub struct Inner {
     pub events: Cell<u32>,
     pub num_scanouts: Cell<u32>,
     pub dev: RefCell<Device>,
+    /// Whether the function has MSI-X entries (vectors written are kept).
+    pub msix_entries: Cell<bool>,
 }
 
 /// Handles on the shared state, one per register block.
@@ -232,6 +310,7 @@ impl Sim {
             events: Cell::new(0),
             num_scanouts: Cell::new(num_scanouts),
             dev: RefCell::new(Device { scanouts, ..Device::default() }),
+            msix_entries: Cell::new(false),
         }))
     }
 
@@ -282,6 +361,54 @@ impl Sim {
 
     pub fn types(&self) -> Vec<u32> {
         self.0.dev.borrow().log.iter().map(|l| l.ty).collect()
+    }
+
+    /// Answer the held-back 3D requests, in the order of `order` (indices
+    /// into the held list; the rest after, in order).
+    pub fn retire(&self, order: &[usize]) {
+        let q = self.queue(0);
+        let mut held = core::mem::take(&mut self.dev().held);
+        let mut sorted = Vec::new();
+        for &i in order {
+            if i < held.len() {
+                sorted.push(held[i].clone());
+            }
+        }
+        for (i, h) in held.drain(..).enumerate() {
+            if !order.contains(&i) {
+                sorted.push(h);
+            }
+        }
+        for h in sorted {
+            self.answer(q, h.head, &h.out, &h.resp);
+        }
+    }
+
+    /// How many responses are held back.
+    pub fn held(&self) -> usize {
+        self.0.dev.borrow().held.len()
+    }
+
+    /// Write `resp` into the writable buffers `out` and put `head` on the
+    /// used ring.
+    fn answer(&self, q: QueueRegs, head: u16, out: &[(u64, u32)], resp: &[u8]) {
+        let mut written = 0usize;
+        for &(addr, len) in out {
+            let n = (len as usize).min(resp.len() - written);
+            for k in 0..n {
+                wr(addr + k as u64, resp[written + k]);
+            }
+            written += n;
+        }
+        assert_eq!(written, resp.len(), "the driver's response buffer is too short");
+        let mut d = self.dev();
+        let id = d.bogus_id.take().unwrap_or(head as u32);
+        let e = q.device + 4 + 8 * (d.used_idx % q.size) as u64;
+        wr(e, id);
+        wr(e + 4, written as u32);
+        d.used_idx = d.used_idx.wrapping_add(1);
+        fence(Ordering::Release);
+        wr(q.device + 2, d.used_idx);
     }
 
     fn reset_device(&self) {
@@ -336,24 +463,14 @@ impl Sim {
                 i = next;
             }
             let resp = self.execute(&req);
-            // Write the response into the writable buffers.
-            let mut written = 0usize;
-            for (addr, len) in out {
-                let n = (len as usize).min(resp.len() - written);
-                for k in 0..n {
-                    wr(addr + k as u64, resp[written + k]);
-                }
-                written += n;
+            let ty = le32(&req, 0);
+            let fenced = le32(&req, 4) & FLAG_FENCE != 0;
+            let slow = matches!(ty, SUBMIT_3D | TRANSFER_TO_HOST_3D | TRANSFER_FROM_HOST_3D);
+            if fenced && slow && self.dev().hold_3d {
+                self.dev().held.push(Held { head, out, resp });
+                continue;
             }
-            assert_eq!(written, resp.len(), "the driver's response buffer is too short");
-            let mut d = self.dev();
-            let id = d.bogus_id.take().unwrap_or(head as u32);
-            let e = q.device + 4 + 8 * (d.used_idx % q.size) as u64;
-            wr(e, id);
-            wr(e + 4, written as u32);
-            d.used_idx = d.used_idx.wrapping_add(1);
-            fence(Ordering::Release);
-            wr(q.device + 2, d.used_idx);
+            self.answer(q, head, &out, &resp);
         }
     }
 
@@ -361,7 +478,10 @@ impl Sim {
     fn execute(&self, req: &[u8]) -> Vec<u8> {
         assert!(req.len() >= 24, "request shorter than its header");
         let (ty, flags, fence_id) = (le32(req, 0), le32(req, 4), le64(req, 8));
+        let (ctx_id, ring_idx) = (le32(req, 16), req[20]);
         let body = &req[24..];
+        let virgl = self.negotiated(1 << 0);
+        let blob = self.negotiated(1 << 3);
         let mut guard = self.dev();
         let d = &mut *guard;
         let n = self.0.num_scanouts.get();
@@ -511,13 +631,218 @@ impl Sim {
                         }
                     }
                 }
+                GET_CAPSET_INFO if virgl => {
+                    let index = le32(body, 0) as usize;
+                    match d.capsets.get(index) {
+                        None => ERR_INVALID_PARAMETER,
+                        Some((id, v, data)) => {
+                            for x in [*id, *v, data.len() as u32, 0] {
+                                payload.extend_from_slice(&x.to_le_bytes());
+                            }
+                            OK_CAPSET_INFO
+                        }
+                    }
+                }
+                GET_CAPSET if virgl => {
+                    let (id, version) = (le32(body, 0), le32(body, 4));
+                    match d.capsets.iter().find(|c| c.0 == id) {
+                        Some((_, max, data)) if version <= *max => {
+                            payload.extend_from_slice(data);
+                            OK_CAPSET
+                        }
+                        _ => ERR_INVALID_PARAMETER,
+                    }
+                }
+                CTX_CREATE if virgl => {
+                    let (nlen, init) = (le32(body, 0) as usize, le32(body, 4));
+                    if ctx_id == 0 || d.contexts.contains_key(&ctx_id) || nlen > 64 {
+                        ERR_INVALID_CONTEXT_ID
+                    } else if init != 0 && !self.negotiated(1 << 4) {
+                        ERR_INVALID_PARAMETER
+                    } else {
+                        let name = body[8..8 + nlen].to_vec();
+                        d.contexts.insert(ctx_id, Context { capset: init & 0xff, name, attached: Vec::new() });
+                        OK_NODATA
+                    }
+                }
+                CTX_DESTROY if virgl => {
+                    if d.contexts.remove(&ctx_id).is_some() {
+                        OK_NODATA
+                    } else {
+                        ERR_INVALID_CONTEXT_ID
+                    }
+                }
+                CTX_ATTACH_RESOURCE | CTX_DETACH_RESOURCE if virgl => {
+                    let id = le32(body, 0);
+                    let known = d.resources_3d.contains_key(&id) || d.resources.contains_key(&id);
+                    match d.contexts.get_mut(&ctx_id) {
+                        None => ERR_INVALID_CONTEXT_ID,
+                        Some(_) if !known => ERR_INVALID_RESOURCE_ID,
+                        Some(c) => {
+                            c.attached.retain(|&r| r != id);
+                            if ty == CTX_ATTACH_RESOURCE {
+                                c.attached.push(id);
+                            }
+                            OK_NODATA
+                        }
+                    }
+                }
+                RESOURCE_CREATE_3D if virgl => {
+                    let f: Vec<u32> = (0..11).map(|i| le32(body, 4 * i)).collect();
+                    let (id, target, w, h, depth, array) = (f[0], f[1], f[4], f[5], f[6], f[7]);
+                    if id == 0 || d.resources_3d.contains_key(&id) || d.resources.contains_key(&id) {
+                        ERR_INVALID_RESOURCE_ID
+                    } else if w == 0 || h == 0 {
+                        ERR_INVALID_PARAMETER
+                    } else {
+                        // Target 0 is a buffer (bytes); the rest 4-byte texels.
+                        let cpp = if target == 0 { 1 } else { 4 };
+                        let depth = depth.max(1) * array.max(1);
+                        let host = vec![0; (w * h * depth * cpp) as usize];
+                        d.resources_3d
+                            .insert(id, Resource3d { width: w, height: h, depth, cpp, host, ..Resource3d::default() });
+                        OK_NODATA
+                    }
+                }
+                TRANSFER_TO_HOST_3D | TRANSFER_FROM_HOST_3D if virgl => {
+                    let b: Vec<u32> = (0..6).map(|i| le32(body, 4 * i)).collect();
+                    let (offset, id, stride) = (le64(body, 24), le32(body, 32), le32(body, 40));
+                    let attached = d.contexts.get(&ctx_id).map(|c| c.attached.contains(&id));
+                    match (attached, d.resources_3d.get_mut(&id)) {
+                        (None, _) => ERR_INVALID_CONTEXT_ID,
+                        (_, None) | (Some(false), _) => ERR_INVALID_RESOURCE_ID,
+                        (_, Some(r)) if r.backing.is_empty() => ERR_UNSPEC,
+                        (_, Some(r)) if b[0] + b[3] > r.width || b[1] + b[4] > r.height || b[2] + b[5] > r.depth => {
+                            ERR_INVALID_PARAMETER
+                        }
+                        (_, Some(r)) => {
+                            let line = (b[3] * r.cpp) as usize;
+                            let stride = if stride == 0 { r.width * r.cpp } else { stride } as u64;
+                            let mut ok = true;
+                            for z in 0..b[5] {
+                                for y in 0..b[4] {
+                                    let guest = offset + ((z * b[4] + y) as u64) * stride;
+                                    let at = ((((b[2] + z) * r.height + b[1] + y) * r.width + b[0]) * r.cpp) as usize;
+                                    if ty == TRANSFER_TO_HOST_3D {
+                                        let mut row = vec![0u8; line];
+                                        ok &= read_pieces(&r.backing, guest, &mut row);
+                                        r.host[at..at + line].copy_from_slice(&row);
+                                    } else {
+                                        ok &= write_pieces(&r.backing, guest, &r.host[at..at + line]);
+                                    }
+                                }
+                            }
+                            if ok { OK_NODATA } else { ERR_INVALID_PARAMETER }
+                        }
+                    }
+                }
+                SUBMIT_3D if virgl => {
+                    let size = le32(body, 0) as usize;
+                    match d.contexts.get(&ctx_id).cloned() {
+                        None => ERR_INVALID_CONTEXT_ID,
+                        Some(_) if body.len() < 8 + size || !size.is_multiple_of(12) => ERR_INVALID_PARAMETER,
+                        Some(c) => {
+                            let mut result = OK_NODATA;
+                            for cmd in body[8..8 + size].chunks_exact(12) {
+                                let (op, id, value) = (le32(cmd, 0), le32(cmd, 4), le32(cmd, 8));
+                                match d.resources_3d.get_mut(&id) {
+                                    Some(r) if op == TOY_FILL && c.attached.contains(&id) => r.host.fill(value as u8),
+                                    _ => result = ERR_INVALID_PARAMETER,
+                                }
+                            }
+                            result
+                        }
+                    }
+                }
+                RESOURCE_CREATE_BLOB if blob => {
+                    let (id, mem, bflags, n) = (le32(body, 0), le32(body, 4), le32(body, 8), le32(body, 12) as usize);
+                    let (blob_id, size) = (le64(body, 16), le64(body, 24));
+                    assert!(body.len() >= 32 + 16 * n, "blob request shorter than its entries");
+                    let host3d = mem == 2 || mem == 3;
+                    if id == 0 || d.resources_3d.contains_key(&id) || d.resources.contains_key(&id) {
+                        ERR_INVALID_RESOURCE_ID
+                    } else if !(1..=3).contains(&mem) || size == 0 || (mem == 1 && n == 0) || (mem == 2 && n != 0) {
+                        ERR_INVALID_PARAMETER
+                    } else if host3d && !d.contexts.contains_key(&ctx_id) {
+                        ERR_INVALID_CONTEXT_ID
+                    } else {
+                        let backing = (0..n).map(|i| (le64(body, 32 + 16 * i), le32(body, 40 + 16 * i))).collect();
+                        let r = Resource3d {
+                            width: size as u32,
+                            height: 1,
+                            depth: 1,
+                            cpp: 1,
+                            backing,
+                            host: vec![0; size as usize],
+                            blob: Some((mem, bflags, blob_id)),
+                            mapped: None,
+                        };
+                        d.resources_3d.insert(id, r);
+                        OK_NODATA
+                    }
+                }
+                RESOURCE_MAP_BLOB if blob => {
+                    let (id, offset) = (le32(body, 0), le64(body, 8));
+                    let shm = d.shm_len;
+                    match d.resources_3d.get_mut(&id) {
+                        None => ERR_INVALID_RESOURCE_ID,
+                        Some(r) if r.mapped.is_some() || !r.blob.is_some_and(|b| b.0 != 1 && b.1 & 1 != 0) => {
+                            ERR_INVALID_PARAMETER
+                        }
+                        Some(r) if offset % 4096 != 0 || offset + r.host.len() as u64 > shm => ERR_INVALID_PARAMETER,
+                        Some(r) => {
+                            r.mapped = Some(offset);
+                            payload.extend_from_slice(&1u32.to_le_bytes());
+                            payload.extend_from_slice(&[0; 4]);
+                            OK_MAP_INFO
+                        }
+                    }
+                }
+                RESOURCE_UNMAP_BLOB if blob => match d.resources_3d.get_mut(&le32(body, 0)).map(|r| r.mapped.take()) {
+                    Some(Some(_)) => OK_NODATA,
+                    Some(None) => ERR_INVALID_PARAMETER,
+                    None => ERR_INVALID_RESOURCE_ID,
+                },
                 _ => ERR_UNSPEC,
             },
         };
-        if result != OK_DISPLAY_INFO && result != OK_EDID {
+        // 3D resources share the 2D commands that apply to any resource.
+        if result == ERR_INVALID_RESOURCE_ID
+            && matches!(ty, RESOURCE_UNREF | RESOURCE_ATTACH_BACKING | RESOURCE_DETACH_BACKING)
+        {
+            let id = le32(body, 0);
+            if let Some(r) = d.resources_3d.get_mut(&id) {
+                result_3d(ty, body, r);
+                if ty == RESOURCE_UNREF {
+                    d.resources_3d.remove(&id);
+                    for c in d.contexts.values_mut() {
+                        c.attached.retain(|&x| x != id);
+                    }
+                }
+                return self.respond(d, ty, flags, fence_id, ctx_id, ring_idx, body, OK_NODATA, Vec::new());
+            }
+        }
+        if ![OK_DISPLAY_INFO, OK_EDID, OK_CAPSET_INFO, OK_CAPSET, OK_MAP_INFO].contains(&result) {
             payload.clear();
         }
-        d.log.push(Logged { ty, body: body.to_vec(), response: result });
+        self.respond(d, ty, flags, fence_id, ctx_id, ring_idx, body, result, payload)
+    }
+
+    /// Log the request and make its response.
+    #[allow(clippy::too_many_arguments)]
+    fn respond(
+        &self,
+        d: &mut Device,
+        ty: u32,
+        flags: u32,
+        fence_id: u64,
+        ctx_id: u32,
+        ring_idx: u8,
+        body: &[u8],
+        result: u32,
+        payload: Vec<u8>,
+    ) -> Vec<u8> {
+        d.log.push(Logged { ty, body: body.to_vec(), response: result, flags, ctx_id, ring_idx });
         let mut resp = Vec::with_capacity(24 + payload.len());
         resp.extend_from_slice(&result.to_le_bytes());
         let (rflags, rfence) = if flags & FLAG_FENCE == 0 {
@@ -525,14 +850,69 @@ impl Sim {
         } else if d.bad_fence {
             (FLAG_FENCE, fence_id + 1000)
         } else {
-            (FLAG_FENCE, fence_id)
+            (flags & (FLAG_FENCE | FLAG_INFO_RING_IDX), fence_id)
         };
         resp.extend_from_slice(&rflags.to_le_bytes());
         resp.extend_from_slice(&rfence.to_le_bytes());
-        resp.extend_from_slice(&[0; 8]);
+        resp.extend_from_slice(&ctx_id.to_le_bytes());
+        resp.extend_from_slice(&[ring_idx, 0, 0, 0]);
         resp.extend_from_slice(&payload);
         resp
     }
+}
+
+/// `RESOURCE_ATTACH_BACKING` / `RESOURCE_DETACH_BACKING` on a 3D resource.
+fn result_3d(ty: u32, body: &[u8], r: &mut Resource3d) {
+    match ty {
+        RESOURCE_ATTACH_BACKING => {
+            let count = le32(body, 4) as usize;
+            r.backing = (0..count).map(|i| (le64(body, 8 + 16 * i), le32(body, 16 + 16 * i))).collect();
+        }
+        RESOURCE_DETACH_BACKING => r.backing.clear(),
+        _ => {}
+    }
+}
+
+/// Read `out.len()` bytes at `offset` of a scatter list.
+fn read_pieces(pieces: &[(u64, u32)], mut offset: u64, out: &mut [u8]) -> bool {
+    let mut done = 0;
+    for &(addr, len) in pieces {
+        if done == out.len() {
+            break;
+        }
+        if offset >= len as u64 {
+            offset -= len as u64;
+            continue;
+        }
+        let n = ((len as u64 - offset) as usize).min(out.len() - done);
+        for (i, b) in out[done..done + n].iter_mut().enumerate() {
+            *b = rd::<u8>(addr + offset + i as u64);
+        }
+        done += n;
+        offset = 0;
+    }
+    done == out.len()
+}
+
+/// Write `data` at `offset` of a scatter list.
+fn write_pieces(pieces: &[(u64, u32)], mut offset: u64, data: &[u8]) -> bool {
+    let mut done = 0;
+    for &(addr, len) in pieces {
+        if done == data.len() {
+            break;
+        }
+        if offset >= len as u64 {
+            offset -= len as u64;
+            continue;
+        }
+        let n = ((len as u64 - offset) as usize).min(data.len() - done);
+        for (i, b) in data[done..done + n].iter().enumerate() {
+            wr(addr + offset + i as u64, *b);
+        }
+        done += n;
+        offset = 0;
+    }
+    done == data.len()
 }
 
 impl Mmio for CommonRegs {
@@ -591,11 +971,11 @@ impl Mmio for CommonRegs {
         let sel = self.0.queue_select.get() as usize;
         let mut qs = self.0.queues.borrow_mut();
         match offset {
-            // No MSI-X entries: every vector is refused.
+            // Without MSI-X entries every vector is refused.
             0x10 => {}
             0x16 => self.0.queue_select.set(value),
             0x18 => qs[sel].size = value,
-            0x1a => qs[sel].msix = 0xffff,
+            0x1a => qs[sel].msix = if self.0.msix_entries.get() { value } else { 0xffff },
             0x1c => qs[sel].enable = value,
             _ => panic!("16-bit write at {offset:#x}"),
         }
@@ -634,13 +1014,13 @@ impl Mmio for ConfigRegs {
     }
 
     /// `events_read`, `events_clear` (reads 0), `num_scanouts`,
-    /// `num_capsets` (0: no 3D).
+    /// `num_capsets`.
     fn read32(&self, offset: usize) -> u32 {
         match offset {
             0 => self.0.events.get(),
             4 => 0,
             8 => self.0.num_scanouts.get(),
-            12 => 0,
+            12 => self.0.dev.borrow().capsets.len() as u32,
             _ => panic!("configuration read at {offset:#x}"),
         }
     }

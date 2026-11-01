@@ -16,6 +16,7 @@ mod drm;
 mod fbdev;
 mod frames;
 mod fs;
+mod gpu3d;
 mod heap;
 mod input;
 mod keyboard;

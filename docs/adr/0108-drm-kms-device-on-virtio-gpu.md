@@ -199,7 +199,8 @@ until a boot test runs Mesa (e.g. `kmscube` or an EGL-on-GBM client with
 its software rasteriser, `kms_swrast` / `LIBGL_ALWAYS_SOFTWARE=1`). For
 that and beyond, Mesa still needs:
 
-- **The virgl/Venus driver interface** (next roadmap item): Mesa picks its
+- **The virgl/Venus driver interface** (next roadmap item; done in
+  [ADR 0119](0119-virtio-gpu-3d-virgl-and-venus.md)): Mesa picks its
   driver by the DRM name `virtio_gpu` and PCI ID; its virgl and Venus
   drivers call the virtio-gpu driver ioctls (`DRM_IOCTL_VIRTGPU_GETPARAM`,
   `GET_CAPS`, `RESOURCE_CREATE(_BLOB)`, `MAP`, `EXECBUFFER`, `WAIT`,

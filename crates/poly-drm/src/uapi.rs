@@ -729,3 +729,171 @@ pub fn name_str(b: &[u8]) -> &str {
     let n = b.iter().position(|&c| c == 0).unwrap_or(b.len());
     core::str::from_utf8(&b[..n]).unwrap_or("")
 }
+
+/// The virtio-gpu driver's own ioctls and their structures, from the
+/// MIT-licensed uapi header `drm/virtgpu_drm.h`: request numbers
+/// `DRM_COMMAND_BASE` (0x40) + `DRM_VIRTGPU_*`, every one `DRM_IOWR`.
+/// Mesa's virgl (OpenGL) and Venus (Vulkan) drivers speak this interface
+/// (ADR 0119).
+pub mod virtgpu {
+    use super::{Field, Request, dir};
+
+    /// `DRM_COMMAND_BASE`: driver-specific requests start here.
+    pub const COMMAND_BASE: u8 = 0x40;
+    /// `DRM_COMMAND_END`: and end before here (the mode-setting requests).
+    pub const COMMAND_END: u8 = 0xa0;
+
+    /// `DRM_VIRTGPU_*` + [`COMMAND_BASE`].
+    pub mod nr {
+        use super::COMMAND_BASE;
+        pub const MAP: u8 = COMMAND_BASE + 0x01;
+        pub const EXECBUFFER: u8 = COMMAND_BASE + 0x02;
+        pub const GETPARAM: u8 = COMMAND_BASE + 0x03;
+        pub const RESOURCE_CREATE: u8 = COMMAND_BASE + 0x04;
+        pub const RESOURCE_INFO: u8 = COMMAND_BASE + 0x05;
+        pub const TRANSFER_FROM_HOST: u8 = COMMAND_BASE + 0x06;
+        pub const TRANSFER_TO_HOST: u8 = COMMAND_BASE + 0x07;
+        pub const WAIT: u8 = COMMAND_BASE + 0x08;
+        pub const GET_CAPS: u8 = COMMAND_BASE + 0x09;
+        pub const RESOURCE_CREATE_BLOB: u8 = COMMAND_BASE + 0x0a;
+        pub const CONTEXT_INIT: u8 = COMMAND_BASE + 0x0b;
+    }
+
+    /// `VIRTGPU_EXECBUF_*`.
+    pub mod execbuf {
+        pub const FENCE_FD_IN: u32 = 0x01;
+        pub const FENCE_FD_OUT: u32 = 0x02;
+        pub const RING_IDX: u32 = 0x04;
+        pub const FLAGS: u32 = FENCE_FD_IN | FENCE_FD_OUT | RING_IDX;
+    }
+
+    /// `VIRTGPU_PARAM_*` of `DRM_IOCTL_VIRTGPU_GETPARAM`.
+    pub mod param {
+        /// 3D features in the device (virgl).
+        pub const THREE_D_FEATURES: u64 = 1;
+        /// `GET_CAPS` takes the capset ID and version as they are.
+        pub const CAPSET_QUERY_FIX: u64 = 2;
+        pub const RESOURCE_BLOB: u64 = 3;
+        /// Host blob resources can be mapped.
+        pub const HOST_VISIBLE: u64 = 4;
+        pub const CROSS_DEVICE: u64 = 5;
+        pub const CONTEXT_INIT: u64 = 6;
+        /// A bit per capset ID the device supports.
+        pub const SUPPORTED_CAPSET_IDS: u64 = 7;
+        pub const EXPLICIT_DEBUG_NAME: u64 = 8;
+    }
+
+    /// `VIRTGPU_WAIT_NOWAIT`.
+    pub const WAIT_NOWAIT: u32 = 1;
+
+    /// `VIRTGPU_BLOB_MEM_*` and `VIRTGPU_BLOB_FLAG_*`.
+    pub mod blob {
+        pub const MEM_GUEST: u32 = 0x0001;
+        pub const MEM_HOST3D: u32 = 0x0002;
+        pub const MEM_HOST3D_GUEST: u32 = 0x0003;
+        pub const FLAG_USE_MAPPABLE: u32 = 0x0001;
+        pub const FLAG_USE_SHAREABLE: u32 = 0x0002;
+        pub const FLAG_USE_CROSS_DEVICE: u32 = 0x0004;
+        pub const FLAGS: u32 = FLAG_USE_MAPPABLE | FLAG_USE_SHAREABLE | FLAG_USE_CROSS_DEVICE;
+    }
+
+    /// `VIRTGPU_CONTEXT_PARAM_*` of `DRM_IOCTL_VIRTGPU_CONTEXT_INIT`.
+    pub mod context_param {
+        pub const CAPSET_ID: u64 = 0x0001;
+        pub const NUM_RINGS: u64 = 0x0002;
+        pub const POLL_RINGS_MASK: u64 = 0x0003;
+        pub const DEBUG_NAME: u64 = 0x0004;
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_map`.
+        Map [16] { offset: u64 = 0, handle: u32 = 8, pad: u32 = 12 }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_execbuffer` (40 bytes before the syncobj
+        /// fields were added).
+        Execbuffer [64] {
+            flags: u32 = 0, size: u32 = 4, command: u64 = 8, bo_handles: u64 = 16,
+            num_bo_handles: u32 = 24, fence_fd: i32 = 28, ring_idx: u32 = 32,
+            syncobj_stride: u32 = 36, num_in_syncobjs: u32 = 40, num_out_syncobjs: u32 = 44,
+            in_syncobjs: u64 = 48, out_syncobjs: u64 = 56,
+        }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_getparam`: `value` points at an `int`.
+        GetParam [16] { param: u64 = 0, value: u64 = 8 }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_resource_create`.
+        ResourceCreate [56] {
+            target: u32 = 0, format: u32 = 4, bind: u32 = 8, width: u32 = 12, height: u32 = 16,
+            depth: u32 = 20, array_size: u32 = 24, last_level: u32 = 28, nr_samples: u32 = 32,
+            flags: u32 = 36, bo_handle: u32 = 40, res_handle: u32 = 44, size: u32 = 48, stride: u32 = 52,
+        }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_resource_info`.
+        ResourceInfo [16] { bo_handle: u32 = 0, res_handle: u32 = 4, size: u32 = 8, blob_mem: u32 = 12 }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_3d_transfer_to_host` and `..._from_host`
+        /// (the same layout; 36 bytes before `stride` and `layer_stride`),
+        /// with its `struct drm_virtgpu_3d_box` spelled out.
+        Transfer [44] {
+            bo_handle: u32 = 0, x: u32 = 4, y: u32 = 8, z: u32 = 12, w: u32 = 16, h: u32 = 20, d: u32 = 24,
+            level: u32 = 28, offset: u32 = 32, stride: u32 = 36, layer_stride: u32 = 40,
+        }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_3d_wait`.
+        Wait [8] { handle: u32 = 0, flags: u32 = 4 }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_get_caps`.
+        GetCaps [24] { cap_set_id: u32 = 0, cap_set_ver: u32 = 4, addr: u64 = 8, size: u32 = 16, pad: u32 = 20 }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_resource_create_blob`.
+        ResourceCreateBlob [48] {
+            blob_mem: u32 = 0, blob_flags: u32 = 4, bo_handle: u32 = 8, res_handle: u32 = 12, size: u64 = 16,
+            pad: u32 = 24, cmd_size: u32 = 28, cmd: u64 = 32, blob_id: u64 = 40,
+        }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_context_init`.
+        ContextInit [16] { num_params: u32 = 0, pad: u32 = 4, ctx_set_params: u64 = 8 }
+    }
+
+    layout! {
+        /// `struct drm_virtgpu_context_set_param`.
+        ContextSetParam [16] { param: u64 = 0, value: u64 = 8 }
+    }
+
+    /// `DRM_IOCTL_VIRTGPU_*` request numbers as userspace passes them.
+    pub mod ioctl {
+        use super::*;
+        const fn iowr(n: u8, size: usize) -> u32 {
+            Request::encode(dir::READ | dir::WRITE, n, size)
+        }
+        pub const MAP: u32 = iowr(nr::MAP, Map::SIZE);
+        pub const EXECBUFFER: u32 = iowr(nr::EXECBUFFER, Execbuffer::SIZE);
+        pub const GETPARAM: u32 = iowr(nr::GETPARAM, GetParam::SIZE);
+        pub const RESOURCE_CREATE: u32 = iowr(nr::RESOURCE_CREATE, ResourceCreate::SIZE);
+        pub const RESOURCE_INFO: u32 = iowr(nr::RESOURCE_INFO, ResourceInfo::SIZE);
+        pub const TRANSFER_FROM_HOST: u32 = iowr(nr::TRANSFER_FROM_HOST, Transfer::SIZE);
+        pub const TRANSFER_TO_HOST: u32 = iowr(nr::TRANSFER_TO_HOST, Transfer::SIZE);
+        pub const WAIT: u32 = iowr(nr::WAIT, Wait::SIZE);
+        pub const GET_CAPS: u32 = iowr(nr::GET_CAPS, GetCaps::SIZE);
+        pub const RESOURCE_CREATE_BLOB: u32 = iowr(nr::RESOURCE_CREATE_BLOB, ResourceCreateBlob::SIZE);
+        pub const CONTEXT_INIT: u32 = iowr(nr::CONTEXT_INIT, ContextInit::SIZE);
+    }
+}

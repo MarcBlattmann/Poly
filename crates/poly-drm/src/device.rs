@@ -43,9 +43,10 @@ use crate::kms::State;
 use crate::props::Prop;
 use crate::uapi::{
     self, Auth, CreateDumb, GemClose, GemFlink, GemOpen, GetCap, IOCTL_BASE, MapDumb, ModeInfo, PrimeHandle, Request,
-    SetVersion, Unique, Version, cap, client_cap, dir, nr,
+    SetVersion, Unique, Version, cap, client_cap, dir, nr, virtgpu,
 };
-use crate::{Ctx, Errno, FbLayout, Hardware, Output, Reply, Result, UserMemory};
+use crate::virtgpu::{FileGpu, GpuRes};
+use crate::{Ctx, Errno, FbLayout, GpuCaps, Hardware, Output, Reply, Result, UserMemory};
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -210,10 +211,14 @@ pub(crate) struct Blob {
 #[derive(Debug)]
 pub(crate) struct Bo<B> {
     pub size: u64,
-    pub buffer: B,
+    /// Its memory: what a mapping maps (`None`: a host resource the CPU
+    /// cannot reach).
+    pub buffer: Option<B>,
     pub refs: u32,
     /// Its global name (`GEM_FLINK`), 0 if none.
     pub name: u32,
+    /// The hardware resource behind a virtio-gpu buffer (ADR 0119).
+    pub gpu: Option<GpuRes>,
 }
 
 /// Client capabilities (`SET_CLIENT_CAP`).
@@ -244,6 +249,8 @@ pub(crate) struct File {
     pub magic: u32,
     pub authenticated: bool,
     pub was_master: bool,
+    /// Its 3D context and what it has attached (ADR 0119).
+    pub gpu: FileGpu,
 }
 
 impl File {
@@ -282,6 +289,9 @@ pub struct Device<H: Hardware> {
     pub(crate) display_taken: bool,
     /// The `IN_FORMATS` blob every plane shares.
     pub(crate) in_formats: u32,
+    /// What the hardware offers for 3D, and the capsets fetched so far.
+    pub(crate) gpu_caps: GpuCaps,
+    pub(crate) capsets: BTreeMap<(u32, u32), Vec<u8>>,
 }
 
 impl<H: Hardware> core::fmt::Debug for Device<H> {
@@ -352,6 +362,8 @@ fn definition(n: u8) -> Option<(usize, u32, u8)> {
         nr::MODE_ATOMIC => (Atomic::SIZE, RW, MASTER),
         nr::MODE_CREATEPROPBLOB => (CreateBlob::SIZE, RW, 0),
         nr::MODE_DESTROYPROPBLOB => (4, RW, 0),
+        // The virtio-gpu driver's own (virtgpu_drm.h): all render-node ioctls.
+        n if (virtgpu::COMMAND_BASE..virtgpu::COMMAND_END).contains(&n) => (crate::virtgpu::arg_size(n)?, RW, RENDER),
         _ => return None,
     })
 }
@@ -372,6 +384,7 @@ impl<H: Hardware> Device<H> {
     /// output [`Hardware::probe`] reports.
     pub fn new(mut hw: H, info: DriverInfo) -> Device<H> {
         let outputs = hw.probe();
+        let gpu_caps = hw.gpu_caps();
         let mut d = Device {
             hw,
             info,
@@ -395,6 +408,8 @@ impl<H: Hardware> Device<H> {
             master: None,
             display_taken: false,
             in_formats: 0,
+            gpu_caps,
+            capsets: BTreeMap::new(),
         };
         for p in Prop::ALL {
             d.prop_ids[p.index()] = d.add_object(Obj::Property(p));
@@ -532,6 +547,7 @@ impl<H: Hardware> Device<H> {
                 magic,
                 authenticated: master,
                 was_master: master,
+                gpu: FileGpu::default(),
             },
         );
         if master {
@@ -559,9 +575,12 @@ impl<H: Hardware> Device<H> {
         }
         let handles: Vec<BoId> =
             self.files.get(&file).map(|f| f.handles.values().copied().collect()).unwrap_or_default();
-        self.files.remove(&file);
+        let gpu = self.files.remove(&file).map(|f| f.gpu).unwrap_or_default();
         for bo in handles {
             self.unref(bo);
+        }
+        if let Some(ctx) = gpu.ctx {
+            self.hw.ctx_destroy(ctx.id);
         }
         let was_master = self.master == Some(file);
         if was_master {
@@ -650,7 +669,8 @@ impl<H: Hardware> Device<H> {
         if len == 0 || start.checked_add(len).is_none_or(|end| end > b.size.next_multiple_of(PAGE)) {
             return Err(Errno::EINVAL);
         }
-        Ok(Mapping { bo, buffer: b.buffer.clone(), start, size: b.size })
+        let buffer = b.buffer.clone().ok_or(Errno::EINVAL)?;
+        Ok(Mapping { bo, buffer, start, size: b.size })
     }
 
     /// A dma-buf file of object `bo` was closed: drop its reference.
@@ -660,7 +680,7 @@ impl<H: Hardware> Device<H> {
 
     /// The memory and size of object `bo` (what a dma-buf maps).
     pub fn buffer(&self, bo: BoId) -> Option<(H::Buffer, u64)> {
-        self.bos.get(&bo).map(|b| (b.buffer.clone(), b.size))
+        self.bos.get(&bo).and_then(|b| Some((b.buffer.clone()?, b.size)))
     }
 
     pub(crate) fn unref(&mut self, bo: BoId) {
@@ -668,9 +688,13 @@ impl<H: Hardware> Device<H> {
         b.refs = b.refs.saturating_sub(1);
         if b.refs == 0
             && let Some(b) = self.bos.remove(&bo)
-            && b.name != 0
         {
-            self.names.remove(&b.name);
+            if b.name != 0 {
+                self.names.remove(&b.name);
+            }
+            if let Some(res) = b.gpu {
+                self.destroy_gpu_resource(&res, b.buffer.as_ref());
+            }
         }
     }
 
@@ -687,6 +711,19 @@ impl<H: Hardware> Device<H> {
             b.refs += 1;
         }
         Ok(h)
+    }
+
+    /// The ID the next GEM object gets.
+    pub(crate) fn next_bo_id(&self) -> u32 {
+        self.next_bo
+    }
+
+    /// A new GEM object (no references yet: give it a handle).
+    pub(crate) fn new_bo(&mut self, size: u64, buffer: Option<H::Buffer>, gpu: Option<GpuRes>) -> BoId {
+        let bo = BoId(self.next_bo);
+        self.next_bo += 1;
+        self.bos.insert(bo, Bo { size, buffer, refs: 0, name: 0, gpu });
+        bo
     }
 
     pub(crate) fn lookup(&self, file: FileId, handle: u32) -> Result<BoId> {
@@ -791,6 +828,7 @@ impl<H: Hardware> Device<H> {
                 Ok(Reply::Done(0))
             }
             nr::MODE_DESTROY_DUMB => done(self.delete_handle(file, uapi::Field::get(b, 0))),
+            n if (virtgpu::COMMAND_BASE..virtgpu::COMMAND_END).contains(&n) => self.virtgpu_ioctl(file, n, b, ctx),
             _ => self.kms_ioctl(file, n, b, ctx),
         }
     }
@@ -944,9 +982,7 @@ impl<H: Hardware> Device<H> {
             return Err(Errno::ENOMEM);
         }
         let buffer = self.hw.alloc(size).ok_or(Errno::ENOMEM)?;
-        let bo = BoId(self.next_bo);
-        self.next_bo += 1;
-        self.bos.insert(bo, Bo { size, buffer, refs: 0, name: 0 });
+        let bo = self.new_bo(size, Some(buffer), None);
         c.handle = self.handle_for(file, bo)?;
         c.pitch = pitch as u32;
         c.size = size;
@@ -961,8 +997,11 @@ impl<H: Hardware> Device<H> {
         }
         let bo = self.lookup(file, p.handle)?;
         let o = self.bos.get_mut(&bo).ok_or(Errno::ENOENT)?;
+        // A host resource without memory the CPU can reach has nothing to
+        // share this way.
+        let buffer = o.buffer.clone().ok_or(Errno::EINVAL)?;
         o.refs += 1;
-        let (buffer, size) = (o.buffer.clone(), o.size);
+        let size = o.size;
         match ctx.fds.export(bo, &buffer, size, p.flags) {
             Ok(fd) => {
                 p.fd = fd;
