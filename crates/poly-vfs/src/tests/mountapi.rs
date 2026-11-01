@@ -104,6 +104,115 @@ fn writers_are_counted_per_mount_and_superblock() {
     assert!(env.open("/a/x", OpenFlags::CREAT | OpenFlags::WRONLY).is_ok());
 }
 
+impl Env {
+    /// mount(2) with `MS_REMOUNT` of the mount at `path`, read-only or
+    /// not, of the whole file system or (`bind`) of that mount only.
+    fn remount(&self, path: &str, read_only: bool, bind: bool) -> Result<()> {
+        let flags = MountFlags { read_only, ..MountFlags::default() };
+        self.vfs.remount(&self.ctx, &self.root, At::Cwd, path.as_bytes(), flags, bind)
+    }
+}
+
+/// mount's spec sheet, `busy_writers`: which open files keep a file
+/// system from being remounted read-only as a whole.
+#[test]
+fn remounting_read_only_is_busy_while_files_are_open_for_writing() {
+    let env = Env::new();
+    env.mkdir("/a");
+    env.new_tmpfs("/a");
+    env.write("/a/f", b"data");
+    for flags in [OpenFlags::RDWR, OpenFlags::WRONLY, OpenFlags::WRONLY | OpenFlags::APPEND] {
+        let w = env.open("/a/f", flags).unwrap();
+        assert_eq!(env.remount("/a", true, false), Err(Errno::EBUSY), "{flags:?}");
+        drop(w);
+    }
+    // A dup shares the open file: closing one of the two is not enough.
+    // (So does a mapping made from it, which holds it until munmap.)
+    let w = env.open("/a/f", OpenFlags::WRONLY).unwrap();
+    let dup = w.clone();
+    drop(w);
+    assert_eq!(env.remount("/a", true, false), Err(Errno::EBUSY));
+    // The refused remount changed nothing: still writable, flags kept.
+    let m = env.found("/a").mount().clone();
+    assert!(!m.read_only());
+    assert_eq!(dup.write(b"more"), Ok(4));
+    let nosuid = MountFlags { read_only: true, no_suid: true, ..MountFlags::default() };
+    assert_eq!(env.vfs.remount(&env.ctx, &env.root, At::Cwd, b"/a", nosuid, false), Err(Errno::EBUSY));
+    assert_eq!(m.flags(), MountFlags::default());
+    assert!(env.open("/a/new", OpenFlags::CREAT | OpenFlags::WRONLY).is_ok());
+    drop(dup);
+    // Once the last writer is gone the same remount succeeds.
+    assert_eq!(env.remount("/a", true, false), Ok(()));
+    assert!(m.read_only());
+    // Already read-only, or going writable: never busy.
+    assert_eq!(env.remount("/a", true, false), Ok(()));
+    assert_eq!(env.remount("/a", false, false), Ok(()));
+    let w = env.open("/a/f", OpenFlags::WRONLY).unwrap();
+    assert_eq!(env.remount("/a", false, false), Ok(()));
+    drop(w);
+}
+
+#[test]
+fn readers_paths_directories_and_other_file_systems_do_not_keep_it_busy() {
+    let env = Env::new();
+    env.mkdir("/a");
+    env.mkdir("/b");
+    env.new_tmpfs("/a");
+    env.new_tmpfs("/b");
+    env.write("/a/f", b"data");
+    env.mkdir("/a/d");
+    let r = env.open("/a/f", OpenFlags::RDONLY).unwrap();
+    let p = env.open("/a/f", OpenFlags::PATH | OpenFlags::RDWR).unwrap();
+    let d = env.open("/a/d", OpenFlags::RDONLY | OpenFlags::DIRECTORY).unwrap();
+    let elsewhere = env.open("/b/w", OpenFlags::CREAT | OpenFlags::WRONLY).unwrap();
+    assert_eq!(env.remount("/a", true, false), Ok(()));
+    assert_eq!(env.remount("/a", false, false), Ok(()));
+    drop((r, p, d, elsewhere));
+}
+
+#[test]
+fn an_unlinked_file_still_open_keeps_it_busy() {
+    let env = Env::new();
+    env.mkdir("/a");
+    env.new_tmpfs("/a");
+    env.write("/a/u", b"u");
+    env.write("/a/kept", b"k");
+    let r = env.open("/a/u", OpenFlags::RDONLY).unwrap();
+    let kept = env.open("/a/kept", OpenFlags::RDONLY).unwrap();
+    env.vfs.unlink(&env.ctx, &env.root, At::Cwd, b"/a/u").unwrap();
+    assert_eq!(env.remount("/a", true, false), Err(Errno::EBUSY));
+    // Not for a remount of one mount only.
+    assert_eq!(env.remount("/a", true, true), Ok(()));
+    assert_eq!(env.remount("/a", false, true), Ok(()));
+    drop(r);
+    assert_eq!(env.remount("/a", true, false), Ok(()));
+    drop(kept);
+}
+
+#[test]
+fn writers_through_any_mount_count_for_the_file_system_only_its_own_for_a_mount() {
+    let env = Env::new();
+    env.mkdir("/a");
+    env.mkdir("/b");
+    env.new_tmpfs("/a");
+    env.write("/a/f", b"data");
+    let flags = MountFlags::default();
+    env.vfs.bind(&env.ctx, &env.root, At::Cwd, b"/a", At::Cwd, b"/b", flags).unwrap();
+    // Through the bind mount: busy for the whole file system and for /b.
+    let w = env.open("/b/f", OpenFlags::WRONLY).unwrap();
+    assert_eq!(env.remount("/a", true, false), Err(Errno::EBUSY));
+    assert_eq!(env.remount("/b", true, true), Err(Errno::EBUSY));
+    assert!(!env.found("/b").mount().read_only());
+    drop(w);
+    // Through the other mount: /b alone may go read-only.
+    let w = env.open("/a/f", OpenFlags::WRONLY).unwrap();
+    assert_eq!(env.remount("/b", true, true), Ok(()));
+    assert_eq!(env.open("/b/x", OpenFlags::CREAT | OpenFlags::WRONLY).err(), Some(Errno::EROFS));
+    assert!(env.open("/a/x", OpenFlags::CREAT | OpenFlags::WRONLY).is_ok());
+    assert_eq!(env.remount("/b", false, true), Ok(()));
+    drop(w);
+}
+
 #[test]
 fn pivot_root_in_a_copied_namespace() {
     let mut env = Env::new();

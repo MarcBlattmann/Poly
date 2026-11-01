@@ -164,6 +164,24 @@ kernel's public user-space API documentation and the UAPI headers
   link on such a mount (`ELOOP`). Superblocks can be read-only
   as a whole (remount, `fsconfig` reconfigure), and per-mount and
   per-superblock writer counts give the `EBUSY` cases.
+- **Busy writers (mount(2)'s `busy_writers`, added later):** mount(2)'s
+  `MS_REMOUNT | MS_RDONLY` uses the same counts, decided in
+  `Vfs::remount`. An open file description counts once in
+  `Mount::writers` and the superblock's count while it lives, so its
+  dups and the mappings made from it (a file mapping holds the open
+  file until `munmap`) keep it busy; `O_PATH` files, read-only ones and
+  directories never count. The superblock also counts the open files
+  (not `O_PATH`, not directories) per inode, and an inode among them
+  whose `nlink` is 0 makes a whole-superblock read-only switch busy too
+  (an unlinked file still open, even read-only):
+  `Mount::sb_busy_for_read_only`, used by mount(2) without `MS_BIND` and
+  by `fsconfig` reconfigure. `MS_REMOUNT | MS_BIND | MS_RDONLY` and
+  `mount_setattr` only look at writers through that mount
+  (`Mount::busy_for_read_only`). The checks run after the target lookup
+  and a tmpfs remount's option check (`check_remount_options`, `EINVAL`)
+  and before anything changes, so a refused remount leaves the flags,
+  `MS_NOSUID` and the superblock as they were. Poly applies no tmpfs
+  option (`size=`) on a remount, refused or not.
 - **File system contexts** (`fsopen`, `fspick`) hold the parameters, a
   state and a message log read one message per `read(2)`; only tmpfs
   creation and `ro`/`rw` reconfiguration take effect, other parameters

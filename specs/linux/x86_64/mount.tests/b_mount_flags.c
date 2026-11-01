@@ -2,11 +2,20 @@
  * MS_RDONLY makes it writable again (files kept); MS_BIND mounts a
  * directory at a second place (same files, changes visible both ways);
  * a read-only bind remount (MS_REMOUNT|MS_BIND|MS_RDONLY) is read-only
- * there only; statfs f_flags shows ST_RDONLY (1). */
+ * there only; statfs f_flags shows ST_RDONLY (1).
+ * Remounting read-only is refused with EBUSY while a file of the file
+ * system is open for writing (also through a shared mapping whose
+ * descriptor is closed, and while an unlinked file is still open even
+ * read-only); descriptors open read-only do not count, and the refused
+ * remount changes nothing. A read-only bind remount is refused only for a
+ * writer through that mount, not one through another mount. */
 #include "poly_ipc.h"
 
 #define D "/tmp/b_mount_flags"
 #define B "/tmp/b_mount_flags_bind"
+
+static i64 remount_ro(void) { return syscall5(SYS_mount, 0, D, 0, MS_REMOUNT | MS_RDONLY, 0); }
+static i64 remount_rw(void) { return syscall5(SYS_mount, 0, D, 0, MS_REMOUNT, 0); }
 
 struct k_statfs {
     i64 f_type, f_bsize;
@@ -33,8 +42,42 @@ int test_main(void) {
     check("remount_rw", r == 0, r);
     fd = syscall4(SYS_openat, AT_FDCWD, D "/f", O_CREAT | O_WRONLY, 0644);
     check("create_after_remount", fd >= 0, fd);
-    write((int)fd, "data", 4);
+    /* a file open for writing keeps the file system from going read-only */
+    r = remount_ro();
+    check("remount_ro_busy", r == -EBUSY, r);
+    r = write((int)fd, "data", 4);
+    check("still_writable_after_ebusy", r == 4, r);
     close((int)fd);
+    /* read-only descriptors do not count */
+    i64 rd = syscall4(SYS_openat, AT_FDCWD, D "/f", O_RDONLY, 0);
+    r = remount_ro();
+    check("remount_ro_with_reader", r == 0, r);
+    r = remount_rw();
+    check("remount_rw_with_reader", r == 0, r);
+    close((int)rd);
+    /* a writable shared mapping counts after its descriptor is closed */
+    fd = syscall4(SYS_openat, AT_FDCWD, D "/f", O_RDWR, 0);
+    i64 m = syscall6(SYS_mmap, 0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    check("mmap_shared", m > 0, m);
+    close((int)fd);
+    r = remount_ro();
+    check("remount_ro_busy_mapping", r == -EBUSY, r);
+    syscall2(SYS_munmap, m, 4096);
+    r = remount_ro();
+    check("remount_ro_after_munmap", r == 0, r);
+    r = remount_rw();
+    check("remount_rw_after_munmap", r == 0, r);
+    /* an unlinked file still open (even read-only) counts */
+    close((int)syscall4(SYS_openat, AT_FDCWD, D "/u", O_CREAT | O_WRONLY, 0644));
+    rd = syscall4(SYS_openat, AT_FDCWD, D "/u", O_RDONLY, 0);
+    syscall3(SYS_unlinkat, AT_FDCWD, D "/u", 0);
+    r = remount_ro();
+    check("remount_ro_busy_unlinked_open", r == -EBUSY, r);
+    close((int)rd);
+    r = remount_ro();
+    check("remount_ro_after_last_close", r == 0, r);
+    r = remount_rw();
+    check("remount_rw_after_last_close", r == 0, r);
 
     r = syscall5(SYS_mount, D, B, 0, MS_BIND, 0);
     check("bind_mount", r == 0, r);
@@ -46,6 +89,17 @@ int test_main(void) {
     close((int)syscall4(SYS_openat, AT_FDCWD, B "/g", O_CREAT | O_WRONLY, 0644));
     fd = syscall4(SYS_openat, AT_FDCWD, D "/g", O_RDONLY, 0);
     check("bind_changes_visible_both_ways", fd >= 0, fd);
+    close((int)fd);
+    /* a read-only bind remount counts only writers through that mount */
+    fd = syscall4(SYS_openat, AT_FDCWD, B "/f", O_WRONLY, 0);
+    r = syscall5(SYS_mount, 0, B, 0, MS_REMOUNT | MS_BIND | MS_RDONLY, 0);
+    check("bind_remount_ro_busy", r == -EBUSY, r);
+    close((int)fd);
+    fd = syscall4(SYS_openat, AT_FDCWD, D "/f", O_WRONLY, 0);
+    r = syscall5(SYS_mount, 0, B, 0, MS_REMOUNT | MS_BIND | MS_RDONLY, 0);
+    check("bind_remount_ro_writer_elsewhere", r == 0, r);
+    r = syscall5(SYS_mount, 0, B, 0, MS_REMOUNT | MS_BIND, 0);
+    check("bind_remount_rw", r == 0, r);
     close((int)fd);
     r = syscall5(SYS_mount, 0, B, 0, MS_REMOUNT | MS_BIND | MS_RDONLY, 0);
     check("bind_remount_rdonly", r == 0, r);

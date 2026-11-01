@@ -100,7 +100,9 @@ impl SuperblockOps for Ops<'_> {
     fn reconfigure(&mut self, read_only: Option<bool>) -> Result<(), Errno> {
         let m = self.made.picked.as_ref().ok_or(Errno::EINVAL)?;
         if let Some(ro) = read_only {
-            if ro && !m.sb_read_only() && m.sb_writers() > 0 {
+            // The rule of mount(2)'s MS_REMOUNT | MS_RDONLY (writers
+            // through any mount, unlinked files still open).
+            if ro && m.sb_busy_for_read_only() {
                 return Err(Errno::EBUSY);
             }
             m.set_sb_read_only(ro);
@@ -167,8 +169,7 @@ impl Thread<'_> {
         let attrs_of = |m: &Mount| join_attrs(admin_flags(m.flags()), m.attrs());
         // All or nothing: no mount made read-only while it has writers.
         for m in &mounts {
-            let (old, new) = (attrs_of(m), change.apply(attrs_of(m)));
-            if new & uapi::MOUNT_ATTR_RDONLY != 0 && old & uapi::MOUNT_ATTR_RDONLY == 0 && m.writers() > 0 {
+            if change.apply(attrs_of(m)) & uapi::MOUNT_ATTR_RDONLY != 0 && m.busy_for_read_only() {
                 return Err(Errno::EBUSY);
             }
         }
