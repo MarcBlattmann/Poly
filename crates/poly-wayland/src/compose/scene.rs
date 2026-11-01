@@ -225,9 +225,23 @@ pub struct Window {
     /// The window it is part of (a subsurface's parent, a popup's): it
     /// moves and is raised with it.
     parent: Option<WindowId>,
+    /// Minimized: kept, not drawn (ADR 0117).
+    hidden: bool,
+    /// Maximized or tiled: the frame shows a restore button.
+    maximized: bool,
 }
 
 impl Window {
+    /// Minimized (not drawn, not hit).
+    pub fn is_hidden(&self) -> bool {
+        self.hidden
+    }
+
+    /// Maximized or tiled (the frame's middle button restores).
+    pub fn is_maximized(&self) -> bool {
+        self.maximized
+    }
+
     pub fn id(&self) -> WindowId {
         self.id
     }
@@ -261,10 +275,11 @@ impl Window {
         self.parent
     }
 
-    /// A window without content is not drawn, frame included.
+    /// A window without content is not drawn, frame included; nor is a
+    /// minimized one.
     pub fn is_visible(&self) -> bool {
         let (w, h) = self.content.logical_size();
-        w > 0 && h > 0
+        w > 0 && h > 0 && !self.hidden
     }
 
     /// The content's rectangle, logical.
@@ -317,6 +332,10 @@ pub enum Hit {
     TitleBar(WindowId),
     Close(WindowId),
     Border(WindowId),
+    /// The title bar's maximize (or restore) button.
+    Maximize(WindowId),
+    /// The title bar's minimize button.
+    Minimize(WindowId),
 }
 
 /// Where new toplevels go ([`Scene::place`]).
@@ -550,8 +569,40 @@ impl Scene {
             active: false,
             geometry: None,
             parent: None,
+            hidden: false,
+            maximized: false,
         });
         id
+    }
+
+    /// Minimize a window (`true`: not drawn, not hit) or show it again.
+    pub fn set_hidden(&mut self, id: WindowId, hidden: bool) {
+        if let Some(i) = self.index(id)
+            && self.windows[i].hidden != hidden
+        {
+            // Damage while visible: before hiding, after showing.
+            self.damage_window(i);
+            self.windows[i].hidden = hidden;
+            self.damage_window(i);
+        }
+    }
+
+    /// Show the frame's restore button instead of maximize, or not.
+    pub fn set_maximized(&mut self, id: WindowId, maximized: bool) {
+        if self.window(id).is_some_and(|w| w.maximized != maximized) {
+            self.update(id, |w| w.maximized = maximized);
+        }
+    }
+
+    /// Put a window at the bottom (under every other).
+    pub fn lower(&mut self, id: WindowId) {
+        if let Some(i) = self.index(id)
+            && i != 0
+        {
+            let w = self.windows.remove(i);
+            self.windows.insert(0, w);
+            self.damage_window(0);
+        }
     }
 
     /// Take a window away; the windows that were part of it are on their
@@ -824,6 +875,12 @@ impl Scene {
             if let Some(f) = w.frame() {
                 if f.close.contains(x, y) {
                     return Hit::Close(w.id);
+                }
+                if f.maximize.contains(x, y) {
+                    return Hit::Maximize(w.id);
+                }
+                if f.minimize.contains(x, y) {
+                    return Hit::Minimize(w.id);
                 }
                 if f.title.contains(x, y) {
                     return Hit::TitleBar(w.id);

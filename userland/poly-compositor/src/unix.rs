@@ -85,12 +85,18 @@ pub fn close(fd: RawFd) {
     unsafe { libc::close(fd) };
 }
 
+/// The keymap file (read-only, unlinked) and its size, shared between the
+/// host and the compositor, which replaces it when the layout changes
+/// (ADR 0117).
+pub type SharedKeymap = std::rc::Rc<std::cell::Cell<Option<(RawFd, u32)>>>;
+
 /// The [`Host`] on Linux: `mmap`, `close`, the keymap file, and dma-bufs.
 #[derive(Debug, Default)]
 pub struct UnixHost {
     /// The keymap file (read-only, unlinked) and its size; each
-    /// `wl_keyboard` gets a duplicate of the descriptor.
-    pub keymap: Option<(RawFd, u32)>,
+    /// `wl_keyboard` gets a duplicate of the descriptor. Shared with the
+    /// compositor, which replaces it when the layout changes (ADR 0117).
+    pub keymap: SharedKeymap,
     /// The `dev_t` of the DRM render node clients allocate dma-bufs on, if
     /// the compositor takes them (it runs on KMS).
     pub dmabuf_device: Option<u64>,
@@ -171,7 +177,7 @@ impl Host for UnixHost {
     }
 
     fn keymap(&mut self) -> Option<(Fd, u32)> {
-        let (fd, size) = self.keymap?;
+        let (fd, size) = self.keymap.get()?;
         // SAFETY: duplicating a descriptor the host keeps open.
         let dup = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) };
         (dup >= 0).then_some((Fd(dup), size))

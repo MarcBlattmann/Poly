@@ -29,6 +29,12 @@
 //! 5. Q closes the client, and the launcher comes back on the empty
 //!    desktop.
 //!
+//! Boot group `desktop-shell` (ADR 0117) boots the same desktop with a
+//! virtio-sound card (the mixer) and an ext2 disk mounted on `/mnt` for
+//! the settings (`--settings /mnt/poly/shell.conf`), and drives window
+//! management, notifications and the settings ([`shell_boot_test`]); a
+//! second boot from the same disk finds the settings it saved.
+//!
 //! Screenshots go to `$POLY_DESKTOP_SHOTS` (default `target/desktop/`) as
 //! PNGs, one per step.
 
@@ -49,6 +55,12 @@ const RIDGE: [u8; 3] = [0x20, 0x20, 0x20];
 /// The desktop file the image carries.
 const DESKTOP_FILE: &str = "[Desktop Entry]\nType=Application\nName=Demo Window\n\
     Comment=The demo client, from a desktop file\nExec=/bin/wl-demo\nKeywords=demo;sample;\n";
+/// A desktop file for `notify-send` (ADR 0117): the launcher sends a
+/// notification through `org.freedesktop.Notifications` with it.
+const NOTIFY_FILE: &str = "[Desktop Entry]\nType=Application\nName=Send Test Notification\n\
+    Comment=notify-send through org.freedesktop.Notifications\n\
+    Exec=/bin/notify-send -a \"Poly Test\" \"Hello from a test client\" \"Sent through org.freedesktop.Notifications on the session bus\"\n\
+    Keywords=notification;test;\n";
 /// Guest memory: the shadow frame buffer and the clients need more than
 /// the default.
 const MEMORY: &str = "512M";
@@ -81,14 +93,17 @@ pub fn image() -> Result<PathBuf> {
     let compositor = compositor::build_compositor()?;
     let demo = compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo")?;
     let client = compositor::build_client()?;
+    let notify = compositor::build_notify_send()?;
     let mut tree = initramfs::Tree::default();
     tree.files.push(("usr/share/applications/demo-window.desktop".into(), 0o644, DESKTOP_FILE.as_bytes().into()));
+    tree.files.push(("usr/share/applications/notify-test.desktop".into(), 0o644, NOTIFY_FILE.as_bytes().into()));
     let font = crate::fonts::cache_dir().join("DejaVuSans.ttf");
     match std::fs::read(&font) {
         Ok(data) => tree.files.push(("usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".into(), 0o644, data)),
         Err(_) => eprintln!("==> no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font"),
     }
-    let programs: [(&str, &[u8]); 3] = [("poly-compositor", &compositor), ("wl-demo", &demo), ("wl-client", &client)];
+    let programs: [(&str, &[u8]); 4] =
+        [("poly-compositor", &compositor), ("wl-demo", &demo), ("wl-client", &client), ("notify-send", &notify)];
     initramfs::write(&root(), "poly-desktop-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))
 }
 
@@ -289,6 +304,303 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let img = d.shot("empty-again")?;
     expect("the launcher is back on the empty desktop", img.pixel(900, 320) == RIDGE)?;
     d.qmp.quit();
+    Ok(())
+}
+
+/// A left click at logical (`x`, `y`).
+fn click(d: &mut Driver, x: i32, y: i32) -> std::result::Result<(), String> {
+    d.send(&abs(x, y))?;
+    d.send(&[button(true)])?;
+    d.send(&[button(false)])
+}
+
+/// Keys pressed together (in order) and released (in reverse).
+fn chord(d: &mut Driver, keys: &[&str]) -> std::result::Result<(), String> {
+    for k in keys {
+        d.send(&[key(k, true)])?;
+    }
+    for k in keys.iter().rev() {
+        d.send(&[key(k, false)])?;
+    }
+    Ok(())
+}
+
+/// The window's place from the newest line `window "TITLE" shown at`.
+fn shown(d: &Driver, title: &str, secs: u64) -> std::result::Result<(i32, i32, i32, i32), String> {
+    let line = d.wait(&format!("window \"{title}\" shown at"), secs)?;
+    window_place(&line).ok_or_else(|| format!("unreadable window line {line:?}"))
+}
+
+/// Wait for the `n`th line containing `text`.
+fn wait_nth(lines: &Lines, text: &str, n: usize, secs: u64) -> std::result::Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(secs);
+    loop {
+        let count = lines.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|l| l.contains(text)).count();
+        if count >= n {
+            return Ok(());
+        }
+        if Instant::now() > deadline {
+            return Err(format!("{count} of {n} lines {text:?} within {secs} s"));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// The work area's frame for a 1280×800 screen with the 24-pixel ridge:
+/// what a maximized demo window's buffer is (less the frame).
+const MAXIMIZED: &str = "wl-demo: size 1278x750";
+/// The left or right half (Alpine's 8-pixel gap), less the frame.
+const HALF: &str = "wl-demo: size 630x742";
+
+/// Every step of the shell's boot test (see [`shell_boot_test`]).
+fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<(), String> {
+    let shots = shots_dir();
+    std::fs::create_dir_all(&shots).map_err(|e| format!("{}: {e}", shots.display()))?;
+    let qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
+    let mut d = Driver { qmp, lines: Arc::clone(&lines), shots, step: 100 };
+    thread::sleep(Duration::from_millis(500));
+    d.wait("session bus on unix:path=", 1)?;
+
+    // 1. The demo window, maximized with the frame's middle button.
+    d.type_text(&["d", "e", "m", "o"])?;
+    d.wait("launcher query \"demo\"", 30)?;
+    d.type_text(&["ret"])?;
+    let (x, y, w, _h) = shown(&d, "Poly Demo", 90)?;
+    thread::sleep(Duration::from_millis(1000));
+    let max_button = (x + w - 4 - 8 - 22, y - 12);
+    click(&mut d, max_button.0, max_button.1)?;
+    d.wait(MAXIMIZED, 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("maximized")?;
+    expect("the maximized window fills the work area", img.pixel(40, 60) == DEMO_A && img.pixel(1240, 760) == DEMO_A)?;
+    expect("the ridge stays above it", img.pixel(640, 6) == RIDGE)?;
+
+    // 2. A double click on the title bar restores it.
+    d.send(&abs(400, 24 + 12))?;
+    d.send(&[button(true)])?;
+    d.send(&[button(false)])?;
+    d.send(&[button(true)])?;
+    d.send(&[button(false)])?;
+    d.wait("wl-demo: size 360x240", 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("restored")?;
+    expect("restored: the wallpaper shows again", img.pixel(40, 60) != DEMO_A)?;
+
+    // 3. Super+Left tiles it to the left half.
+    chord(&mut d, &["meta_l", "left"])?;
+    d.wait("snapped Left to 4,28 632x768", 30)?;
+    d.wait(HALF, 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("tiled-left")?;
+    expect("the left half", img.pixel(300, 700) == DEMO_A && img.pixel(1000, 700) != DEMO_A)?;
+    let wallpaper = img.pixel(1000, 600);
+
+    // 4. Dragged by its title bar to the right edge: the preview, then the
+    // right half.
+    d.send(&abs(300, 28 + 1 + 12))?;
+    d.send(&[button(true)])?;
+    for i in 1..=8 {
+        d.send(&abs(300 + 122 * i, 41 + 45 * i))?;
+    }
+    d.send(&abs(1279, 400))?;
+    thread::sleep(Duration::from_millis(1200));
+    let img = d.shot("snap-preview")?;
+    expect("the snap preview over the right half", img.pixel(1000, 600) != wallpaper)?;
+    d.send(&[button(false)])?;
+    d.wait("snapped Right to 644,28 632x768", 30)?;
+    wait_nth(&lines, HALF, 2, 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("tiled-right")?;
+    expect("the right half", img.pixel(1000, 700) == DEMO_A && img.pixel(300, 700) != DEMO_A)?;
+
+    // 5. A notification from a test client through the session bus.
+    chord(&mut d, &["ctrl", "spc"])?;
+    d.type_text(&["s", "e", "n", "d"])?;
+    d.wait("launcher query \"send\"", 30)?;
+    d.type_text(&["ret"])?;
+    d.wait("notification 1 from Poly Test: \"Hello from a test client\"", 60)?;
+    let exit = d.wait("exited with status", 60)?;
+    expect("notify-send exited 0", exit.contains("Send Test Notification") && exit.contains("status 0"))?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("notification")?;
+    expect("the toast in the top right corner", img.pixel(1280 - 8 - 60, 24 + 8 + 40) == RIDGE)?;
+
+    // 6. The settings window: the volume and the keyboard layout.
+    chord(&mut d, &["meta_l", "i"])?;
+    d.wait("settings window opened", 30)?;
+    let (sx, sy, sw, sh) = shown(&d, "Settings", 30)?;
+    expect("the settings window is 760x520", (sw, sh) == (760, 520))?;
+    click(&mut d, sx + 100, sy + 176)?; // Sound
+    thread::sleep(Duration::from_millis(1000));
+    click(&mut d, sx + 528, sy + 150)?; // 30 % of the volume slider
+    d.wait("settings saved to /mnt/poly/shell.conf", 30)?;
+    if sound {
+        d.wait("poly-compositor: volume 30", 30)?;
+    }
+    thread::sleep(Duration::from_millis(1500));
+    d.shot("settings-sound")?;
+    click(&mut d, sx + 100, sy + 100)?; // Keyboard
+    thread::sleep(Duration::from_millis(1000));
+    click(&mut d, sx + 500, sy + 180)?; // German (Switzerland)
+    d.wait("poly-compositor: keymap de-ch", 30)?;
+    // The demo client got the new keymap.
+    wait_nth(&lines, "wl-demo: keymap format 1", 2, 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    d.shot("settings-keyboard")?;
+
+    // 7. Alt+Tab: the switcher over the windows; releasing Alt switches
+    // back to the demo.
+    d.send(&[key("alt", true)])?;
+    d.send(&[key("tab", true)])?;
+    d.send(&[key("tab", false)])?;
+    d.wait("switcher open: [\"Settings\", \"Poly Demo\"]", 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("switcher")?;
+    expect("the switcher's panel in the middle", img.pixel(640, 320) == RIDGE || img.pixel(640, 480) == RIDGE)?;
+    d.send(&[key("alt", false)])?;
+    d.wait("switched to \"Poly Demo\"", 30)?;
+
+    // 8. Minimized with the frame's button, back with Alt+Tab.
+    let min_button = (645 + 630 - 4 - 8 - 44, 53 - 12);
+    click(&mut d, min_button.0, min_button.1)?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("minimized")?;
+    expect("minimized: the right half shows no demo", img.pixel(1000, 700) != DEMO_A)?;
+    d.send(&[key("alt", true)])?;
+    d.send(&[key("tab", true)])?;
+    d.send(&[key("tab", false)])?;
+    d.send(&[key("alt", false)])?;
+    wait_nth(&lines, "switched to \"Poly Demo\"", 2, 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("unminimized")?;
+    expect("back from the switcher", img.pixel(1000, 700) == DEMO_A)?;
+
+    // 9. Alt+F4 closes it.
+    chord(&mut d, &["alt", "f4"])?;
+    d.wait("wl-demo: closed", 30)?;
+    thread::sleep(Duration::from_millis(1000));
+    d.qmp.quit();
+    Ok(())
+}
+
+/// QEMU's devices for the shell's boot: the desktop's, a virtio-sound card
+/// if QEMU has one, and the settings disk (the first virtio-blk device,
+/// mounted on `/mnt`).
+fn shell_devices(state: &Path, sound: bool) -> Vec<String> {
+    let mut v = devices();
+    if sound {
+        v.extend(["-device", "virtio-sound-pci,audiodev=snd0", "-audiodev", "none,id=snd0"].map(String::from));
+    }
+    v.extend([
+        "-drive".to_string(),
+        format!("if=none,id=state,format=raw,file={}", state.display()),
+        "-device".to_string(),
+        "virtio-blk-pci,drive=state,disable-legacy=on".to_string(),
+    ]);
+    v
+}
+
+/// The kernel command line of the shell's boots.
+fn shell_append() -> String {
+    append("poly.mount=virtio0:/mnt poly.init.arg=--settings poly.init.arg=/mnt/poly/shell.conf")
+}
+
+/// One boot of the shell test with `drive` run once the desktop is up.
+fn shell_boot(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    image: &Path,
+    state: &Path,
+    sound: bool,
+    drive: fn(&Path, Lines, bool) -> std::result::Result<(), String>,
+) -> Result<(Boot, Option<std::result::Result<(), String>>)> {
+    let socket = std::env::temp_dir().join(format!("poly-shell-qmp-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&socket);
+    let mut qemu_args = vec![
+        "-initrd".to_string(),
+        image.display().to_string(),
+        "-qmp".to_string(),
+        format!("unix:{},server=on,wait=off", socket.display()),
+    ];
+    qemu_args.extend(shell_devices(state, sound));
+    let lines: Lines = Arc::default();
+    let result: Arc<Mutex<Option<std::result::Result<(), String>>>> = Arc::default();
+    let (seen, outcome, path) = (Arc::clone(&lines), Arc::clone(&result), socket.clone());
+    let mut started = false;
+    let on_line = move |line: &str| {
+        seen.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_string());
+        if !started && line.contains(READY) {
+            started = true;
+            let (lines, outcome, path) = (Arc::clone(&seen), Arc::clone(&outcome), path.clone());
+            thread::spawn(move || {
+                let r = drive(&path, lines, sound);
+                *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+            });
+        }
+    };
+    let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(600), || {
+        boot_with(kernel, syms, MEMORY, &shell_append(), super::Devices::None, &qemu_args, None, on_line)
+    });
+    let _ = std::fs::remove_file(&socket);
+    let b = b?;
+    let r = result.lock().unwrap_or_else(|e| e.into_inner()).take();
+    Ok((b, r))
+}
+
+/// The second boot: up, then quit.
+fn just_up(socket: &Path, _lines: Lines, _sound: bool) -> std::result::Result<(), String> {
+    let mut qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
+    thread::sleep(Duration::from_millis(500));
+    qmp.quit();
+    Ok(())
+}
+
+/// Boot group `desktop-shell` (ADR 0117): window management (the frame's
+/// maximize and minimize buttons, a double click on the title, Super+Left,
+/// dragging to the right edge with the snap preview, Alt+Tab with the
+/// switcher, Alt+F4), a notification sent by `notify-send` through
+/// `org.freedesktop.Notifications` on the session bus, and the settings
+/// window changing the volume (through the mixer) and the keyboard layout
+/// (the client gets the new keymap); screenshots of each. A second boot
+/// from the same disk reads the settings the first saved.
+pub fn shell_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: the desktop shell boot test needs a Unix host (QMP)");
+        return Ok(());
+    }
+    if let Err(why) = compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo") {
+        eprintln!("==> skipped: the desktop shell boot test: {why}");
+        return Ok(());
+    }
+    let image = image()?;
+    let state = root().join("target").join("poly-shell-state.img");
+    std::fs::write(&state, crate::ext2disk::image()?).map_err(|e| format!("{}: {e}", state.display()))?;
+    let sound = crate::sound::qemu_has_virtio_sound();
+    eprintln!(
+        "==> boot test: the desktop shell (window management, notifications on the session bus, settings{})",
+        if sound { ", the mixer on virtio-sound" } else { "; no virtio-sound in this QEMU" }
+    );
+    let (b, r) = shell_boot(kernel, syms, &image, &state, sound, drive_shell)?;
+    for l in
+        b.output.lines().filter(|l| l.contains("poly-compositor:") && (l.contains("cut off") || l.contains(": No ")))
+    {
+        eprintln!("    {l}");
+    }
+    match r {
+        Some(Ok(())) => {}
+        Some(Err(e)) => return Err(e),
+        None if !b.output.contains(READY) => {
+            return Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out));
+        }
+        None => return Err("the desktop shell boot test did not finish".into()),
+    }
+    eprintln!("==> boot test: the settings saved in the first boot are read in the second");
+    let (b, r) = shell_boot(kernel, syms, &image, &state, sound, just_up)?;
+    if let Some(Err(e)) = r {
+        return Err(e);
+    }
+    expect("the second boot read the settings", b.output.contains("settings read from /mnt/poly/shell.conf"))?;
+    expect("with the layout chosen in the first", b.output.contains("keymap de-ch"))?;
     Ok(())
 }
 

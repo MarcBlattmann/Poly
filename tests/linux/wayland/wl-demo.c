@@ -5,7 +5,9 @@
  * xdg-decoration-unstable-v1.xml): no libwayland. Linked statically.
  *
  * It opens a 360x240 toplevel with a server-side decoration and stays until
- * its window is closed (the frame's close button) or Q is pressed. It binds
+ * its window is closed (the frame's close button) or Q is pressed. When the
+ * compositor configures another size (maximized, tiled, restored; ADR 0117)
+ * it draws a buffer of that size and says so ("wl-demo: size WxH"). It binds
  * the seat and reports what reaches it, one line each, so a boot test can
  * check the compositor's input routing: the keymap (its file descriptor
  * mapped and checked to hold an XKB keymap), keyboard enter, keys,
@@ -180,6 +182,8 @@ static uint32_t registry, compositor, shm, wm_base, decoration_manager, seat;
 static uint32_t surface, xdg_surface, toplevel, decoration, buffer, pointer, keyboard, sync_cb;
 static uint32_t name_compositor, name_shm, name_wm_base, name_decoration, name_seat;
 static uint32_t *pixels;
+static size_t pixels_size;
+static int width = WIDTH, height = HEIGHT, pending_w, pending_h;
 static int configured, closed, sync_done, have_pointer, have_keyboard, motion_reported, colour_b;
 
 static uint32_t bind_global(uint32_t name, const char *iface, uint32_t version) {
@@ -195,9 +199,56 @@ static uint32_t bind_global(uint32_t name, const char *iface, uint32_t version) 
 
 static void draw(void) {
     uint32_t base = colour_b ? DEMO_B : DEMO_A;
-    for (int y = 0; y < HEIGHT; y++)
-        for (int x = 0; x < WIDTH; x++)
-            pixels[y * WIDTH + x] = (y >= 100 && y < 140) ? BAND : base;
+    /* The band at the same height share as in the 240-row window. */
+    int top = height * 100 / HEIGHT, bottom = height * 140 / HEIGHT;
+    for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+            pixels[y * width + x] = (y >= top && y < bottom) ? BAND : base;
+}
+
+/* A buffer of width x height: a file in /dev/shm, unlinked, sized, mapped,
+ * shared as a pool of its own; the old buffer goes. */
+static void make_buffer(void) {
+    char path[64];
+    snprintf(path, sizeof path, "/dev/shm/wl-demo-%d-%dx%d", (int)getpid(), width, height);
+    int memfd = open(path, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+    if (memfd < 0)
+        die("open a file in /dev/shm");
+    unlink(path);
+    size_t size = (size_t)width * (size_t)height * 4;
+    if (ftruncate(memfd, (off_t)size) < 0)
+        die("ftruncate");
+    uint32_t *map = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0);
+    if (map == MAP_FAILED)
+        die("mmap");
+    if (pixels)
+        munmap(pixels, pixels_size);
+    pixels = map;
+    pixels_size = size;
+    draw();
+    if (buffer) {
+        begin();
+        end(buffer, 0); /* wl_buffer.destroy */
+    }
+    uint32_t pool = next_id++;
+    begin();
+    put(pool);
+    put((uint32_t)size);
+    end(shm, 0); /* create_pool */
+    out_fd = memfd;
+    flush_out();
+    close(memfd);
+    buffer = next_id++;
+    begin();
+    put(buffer);
+    put(0);
+    put((uint32_t)width);
+    put((uint32_t)height);
+    put((uint32_t)width * 4);
+    put(FORMAT_XRGB8888);
+    end(pool, 0); /* create_buffer */
+    begin();
+    end(pool, 1); /* destroy the pool */
 }
 
 static void commit(void) {
@@ -209,8 +260,8 @@ static void commit(void) {
     begin();
     put(0);
     put(0);
-    put(WIDTH);
-    put(HEIGHT);
+    put((uint32_t)width);
+    put((uint32_t)height);
     end(surface, 9); /* damage_buffer */
     begin();
     end(surface, 6); /* commit */
@@ -255,6 +306,10 @@ static void handle(const struct event *e) {
         put(e->args[0]);
         end(wm_base, 3); /* pong */
         flush_out();
+    } else if (e->object == toplevel && e->opcode == 0) {
+        /* The size to use (0: ours to choose). */
+        pending_w = (int32_t)e->args[0];
+        pending_h = (int32_t)e->args[1];
     } else if (e->object == xdg_surface && e->opcode == 0) {
         begin();
         put(e->args[0]);
@@ -262,6 +317,12 @@ static void handle(const struct event *e) {
         if (!configured)
             printf("wl-demo: configured\n");
         configured = 1;
+        if (pending_w > 0 && pending_h > 0 && (pending_w != width || pending_h != height)) {
+            width = pending_w;
+            height = pending_h;
+            make_buffer();
+            printf("wl-demo: size %dx%d\n", width, height);
+        }
         commit();
     } else if (e->object == toplevel && e->opcode == 1) {
         closed = 1;
@@ -381,39 +442,7 @@ int main(void) {
     if (name_seat)
         seat = bind_global(name_seat, "wl_seat", 5);
 
-    /* The buffer: a file in /dev/shm, unlinked, sized, mapped. */
-    char path[64];
-    snprintf(path, sizeof path, "/dev/shm/wl-demo-%d", (int)getpid());
-    int memfd = open(path, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
-    if (memfd < 0)
-        die("open a file in /dev/shm");
-    unlink(path);
-    size_t size = WIDTH * HEIGHT * 4;
-    if (ftruncate(memfd, (off_t)size) < 0)
-        die("ftruncate");
-    pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0);
-    if (pixels == MAP_FAILED)
-        die("mmap");
-    draw();
-    uint32_t pool = next_id++;
-    begin();
-    put(pool);
-    put((uint32_t)size);
-    end(shm, 0); /* create_pool */
-    out_fd = memfd;
-    flush_out();
-    close(memfd);
-    buffer = next_id++;
-    begin();
-    put(buffer);
-    put(0);
-    put(WIDTH);
-    put(HEIGHT);
-    put(WIDTH * 4);
-    put(FORMAT_XRGB8888);
-    end(pool, 0); /* create_buffer */
-    begin();
-    end(pool, 1); /* destroy the pool */
+    make_buffer();
 
     surface = next_id++;
     begin();

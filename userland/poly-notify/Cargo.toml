@@ -1,0 +1,18 @@
+[package]
+name = "poly-notify"
+description = "notify-send for Poly: sends a desktop notification through org.freedesktop.Notifications on the session bus, with libnotify's notify-send options"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "notify-send"
+path = "src/main.rs"
+
+[dependencies]
+libc.workspace = true
+poly-dbus.workspace = true
+
+[lints]
+workspace = true

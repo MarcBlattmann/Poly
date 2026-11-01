@@ -55,10 +55,12 @@ mod shm;
 mod subsurface;
 mod surface;
 mod viewporter;
+mod wm;
 mod xdg;
 
 pub use dmabuf::{MOD_INVALID, MOD_LINEAR, format_table as dmabuf_format_table, formats as dmabuf_formats};
 pub use external::WmEvent;
+pub use wm::{InternalEvent, WindowInfo};
 
 use crate::compose::{Framebuffer, Hit, Rect, Scene, WindowId};
 use crate::protocol::{
@@ -432,6 +434,13 @@ pub struct Server {
     in_flight: BTreeMap<ClientId, InFlight>,
     /// What an outside window manager is to act on (`external.rs`).
     wm_events: Vec<WmEvent>,
+    /// Windows the compositor draws itself (ADR 0117), their events, the
+    /// one with focus (never at the same time as `active`), and the next
+    /// owner tag.
+    pub(crate) internal: BTreeMap<WindowId, wm::Internal>,
+    pub(crate) internal_events: Vec<InternalEvent>,
+    pub(crate) active_internal: Option<WindowId>,
+    next_internal: u32,
 }
 
 impl core::fmt::Debug for Server {
@@ -493,6 +502,10 @@ impl Server {
             dmabuf_device,
             in_flight: BTreeMap::new(),
             wm_events: Vec::new(),
+            internal: BTreeMap::new(),
+            internal_events: Vec::new(),
+            active_internal: None,
+            next_internal: 1,
         }
     }
 
@@ -539,6 +552,7 @@ impl Server {
         self.in_flight.remove(&c);
         if self.active.is_some_and(|(ac, _)| ac == c) {
             self.active = None;
+            self.focus_next();
         }
     }
 

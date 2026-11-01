@@ -96,7 +96,23 @@ pub(crate) struct InputState {
     pub sent_mods: Option<(u32, u32)>,
     /// The compositor took the keyboard (its own launcher is open).
     pub keyboard_suspended: bool,
+    /// An internal window a button was pressed on (it gets the motion and
+    /// the release), and the one under the pointer (ADR 0117).
+    pub internal_grab: Option<WindowId>,
+    pub internal_hover: Option<WindowId>,
+    /// The last left press on a title bar and its time: a second within
+    /// [`DOUBLE_CLICK_MS`] maximizes or restores.
+    pub last_title_press: Option<(WindowId, u32)>,
+    /// A move of a maximized or tiled window started here: it is restored
+    /// once the pointer is [`UNSNAP_DISTANCE`] away.
+    pub unsnap_at: Option<(i32, i32)>,
 }
+
+/// Two presses on a title bar this close (ms) are a double click.
+pub const DOUBLE_CLICK_MS: u32 = 400;
+/// How far (logical pixels) a maximized or tiled window is dragged before
+/// it comes off its place.
+pub const UNSNAP_DISTANCE: i32 = 8;
 
 impl Server {
     /// An input event: window management, then the clients.
@@ -195,8 +211,20 @@ impl Server {
             self.scene.set_cursor(Some((x, y)));
         }
         match self.seat.input.grab {
-            Some(Grab::Move { window, dx, dy }) => {
-                self.move_window(window, x + dx, y + dy);
+            Some(Grab::Move { window, mut dx, dy }) => {
+                if let Some((px, py)) = self.seat.input.unsnap_at
+                    && (x - px).abs().max((y - py).abs()) >= UNSNAP_DISTANCE
+                {
+                    // Dragged off its place: floating again, under the pointer.
+                    self.seat.input.unsnap_at = None;
+                    if let Some((nx, _)) = self.unsnap_for_drag(window, px) {
+                        dx = nx - px;
+                        self.seat.input.grab = Some(Grab::Move { window, dx, dy });
+                    }
+                }
+                if self.seat.input.unsnap_at.is_none() {
+                    self.move_window(window, x + dx, y + dy);
+                }
                 return;
             }
             Some(Grab::Resize { .. }) => {
@@ -209,8 +237,29 @@ impl Server {
             }
             None => {}
         }
+        if let Some(w) = self.seat.input.internal_grab {
+            let (wx, wy) = self.scene.window(w).map_or((0, 0), |win| win.position());
+            self.internal_events.push(InternalEvent::Motion { window: w, x: x - wx, y: y - wy });
+            return;
+        }
+        let hit = self.hit(x, y);
+        // Internal windows hear the pointer as events (ADR 0117).
+        let over_internal = match hit {
+            Hit::Surface { window, x: lx, y: ly } if self.internal.contains_key(&window) => Some((window, lx, ly)),
+            _ => None,
+        };
+        let hover = over_internal.map(|(w, ..)| w);
+        if let Some(old) = self.seat.input.internal_hover
+            && hover != Some(old)
+        {
+            self.internal_events.push(InternalEvent::Leave(old));
+        }
+        self.seat.input.internal_hover = hover;
+        if let Some((window, lx, ly)) = over_internal {
+            self.internal_events.push(InternalEvent::Motion { window, x: lx, y: ly });
+        }
         let target = if self.seat.input.buttons.is_empty() {
-            match self.hit(x, y) {
+            match hit {
                 Hit::Surface { window, .. } => self.focus_of(window),
                 _ => None,
             }
@@ -277,12 +326,23 @@ impl Server {
                     Grab::Move { .. } => {}
                 }
                 self.seat.input.grab = None;
+                self.seat.input.unsnap_at = None;
+                self.pointer_moved(time);
+            }
+            return;
+        }
+        let (x, y) = (self.seat.pointer.0.floor(), self.seat.pointer.1.floor());
+        if let Some(w) = self.seat.input.internal_grab {
+            // The press was on an internal window: so is the rest.
+            let (wx, wy) = self.scene.window(w).map_or((0, 0), |win| win.position());
+            self.internal_events.push(InternalEvent::Button { window: w, x: x - wx, y: y - wy, button, pressed });
+            if self.seat.input.buttons.is_empty() {
+                self.seat.input.internal_grab = None;
                 self.pointer_moved(time);
             }
             return;
         }
         if pressed {
-            let (x, y) = (self.seat.pointer.0.floor(), self.seat.pointer.1.floor());
             let hit = self.hit(x, y);
             // A press outside the grabbing client's surfaces dismisses its
             // popups, and goes no further.
@@ -311,11 +371,43 @@ impl Server {
                     }
                     return;
                 }
-                Hit::Close(w) | Hit::TitleBar(w) | Hit::Border(w) => {
+                Hit::Maximize(w) if button == BTN_LEFT => {
+                    self.focus_window(w);
+                    self.toggle_maximized(w);
+                    return;
+                }
+                Hit::Minimize(w) if button == BTN_LEFT => {
+                    self.minimize_window(w);
+                    return;
+                }
+                Hit::TitleBar(w) if button == BTN_LEFT => {
+                    self.focus_window(w);
+                    let double = self
+                        .seat
+                        .input
+                        .last_title_press
+                        .take()
+                        .is_some_and(|(pw, pt)| pw == w && time.wrapping_sub(pt) <= DOUBLE_CLICK_MS);
+                    if double {
+                        self.toggle_maximized(w);
+                    } else {
+                        self.seat.input.last_title_press = Some((w, time));
+                        self.start_move(w);
+                    }
+                    return;
+                }
+                Hit::Close(w) | Hit::Maximize(w) | Hit::Minimize(w) | Hit::TitleBar(w) | Hit::Border(w) => {
                     self.focus_window(w);
                     if button == BTN_LEFT {
                         self.start_move(w);
                     }
+                    return;
+                }
+                Hit::Surface { window, x: lx, y: ly } if self.internal.contains_key(&window) => {
+                    self.focus_window(window);
+                    self.set_pointer_focus(None);
+                    self.seat.input.internal_grab = Some(window);
+                    self.internal_events.push(InternalEvent::Button { window, x: lx, y: ly, button, pressed });
                     return;
                 }
                 Hit::Surface { window, .. } => {
@@ -346,6 +438,10 @@ impl Server {
     }
 
     fn pointer_axis(&mut self, time: u32, horizontal: bool, value: Fixed) {
+        if let Some(window) = self.seat.input.internal_hover {
+            self.internal_events.push(InternalEvent::Axis { window, horizontal, value: value.0 / 256 });
+            return;
+        }
         let Some(f) = self.seat.input.pointer_focus else { return };
         let axis = if horizontal { wl_pointer::Axis::HORIZONTAL_SCROLL } else { wl_pointer::Axis::VERTICAL_SCROLL };
         // One wheel step is 15 logical pixels (the evdev reader's unit).
@@ -369,9 +465,12 @@ impl Server {
         let Some(win) = self.scene.window(w) else { return };
         let (wx, wy) = win.position();
         let (x, y) = (self.seat.pointer.0.floor(), self.seat.pointer.1.floor());
+        let snapped = win.is_maximized();
         // The client no longer gets the pointer while it moves.
         self.set_pointer_focus(None);
         self.seat.input.grab = Some(Grab::Move { window: w, dx: wx - x, dy: wy - y });
+        // A maximized or tiled window stays until the pointer really moves.
+        self.seat.input.unsnap_at = snapped.then_some((x, y));
     }
 
     /// Which edges of window `w`'s frame the point (`x`, `y`) is on (a
@@ -549,6 +648,13 @@ impl Server {
             .filter_map(|&k| xkb::modifier_bit(u16::try_from(k).unwrap_or(0)))
             .filter(|m| !m.locks)
             .fold(0, |a, m| a | m.bit);
+        if !input.keyboard_suspended
+            && let Some(window) = self.active_internal
+        {
+            // An internal window has the keyboard (ADR 0117).
+            self.internal_events.push(InternalEvent::Key { window, key, pressed });
+            return;
+        }
         let Some((c, surface)) = input.keyboard_focus else { return };
         if !self.exists(c, surface) {
             return;
@@ -660,6 +766,25 @@ impl Server {
             && fc == c
         {
             self.keyboard_enter(c, surface, Some(keyboard));
+        }
+    }
+
+    /// The keymap changed (another layout, ADR 0117): every `wl_keyboard`
+    /// gets the new one from the host ([`Host::keymap`]); the focused
+    /// client hears the modifiers again.
+    pub fn keymap_changed(&mut self) {
+        let clients: Vec<ClientId> = self.clients.keys().copied().collect();
+        for c in clients {
+            for k in self.devices(c, wl_keyboard::NAME) {
+                if let Some((fd, size)) = self.host().keymap() {
+                    let format = wl_keyboard::KeymapFormat::XKB_V1.0;
+                    self.client(c).send(k, wl_keyboard::Event::Keymap { format, fd, size });
+                }
+            }
+        }
+        if let Some((c, _)) = self.seat.input.keyboard_focus {
+            self.seat.input.sent_mods = None;
+            self.send_modifiers(c, None);
         }
     }
 

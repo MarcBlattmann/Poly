@@ -1405,7 +1405,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 29] = [
+const BOOT_GROUPS: [BootGroup; 30] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1441,6 +1441,10 @@ const BOOT_GROUPS: [BootGroup; 29] = [
     // The desktop: the compositor on virtio-gpu through DRM/KMS with the
     // shell, driven by QMP input (desktop.rs, ADR 0107).
     ("desktop", desktop::boot_test),
+    // Window management, notifications on the session bus and the settings
+    // window, then the settings read back in a second boot (desktop.rs,
+    // ADR 0117).
+    ("desktop-shell", desktop::shell_boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1494,7 +1498,19 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     (
         "userland",
-        &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "wayland-kms", "desktop", "mesa"],
+        &[
+            "programs",
+            "dynamic",
+            "busybox",
+            "rootdisk",
+            "7zip",
+            "wintrace",
+            "wayland",
+            "wayland-kms",
+            "desktop",
+            "desktop-shell",
+            "mesa",
+        ],
     ),
     (
         "devices",

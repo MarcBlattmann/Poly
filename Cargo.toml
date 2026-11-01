@@ -20,6 +20,7 @@ members = [
     "crates/poly-ext2",
     "crates/poly-fbdev",
     "crates/poly-cpio",
+    "crates/poly-dbus",
     "crates/poly-drm",
     "crates/poly-font",
     "crates/poly-bochs-vbe",
@@ -75,6 +76,7 @@ members = [
     "tools/pipeline",
     "tools/xtask",
     "userland/poly-compositor",
+    "userland/poly-notify",
 ]
 exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
@@ -100,6 +102,7 @@ poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-fbdev = { path = "crates/poly-fbdev" }
 poly-cpio = { path = "crates/poly-cpio" }
+poly-dbus = { path = "crates/poly-dbus" }
 poly-drm = { path = "crates/poly-drm" }
 poly-font = { path = "crates/poly-font" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }

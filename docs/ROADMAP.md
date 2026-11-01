@@ -125,7 +125,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
 - [x] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
 - [x] Compositor: Wayland server, surface composition, HiDPI scaling, vsync (ADR 0106, 0107, 0116)
-- [ ] Shell: launcher, window management, notifications, settings (own non-glass design)
+- [x] Shell: launcher, window management, notifications, settings (own non-glass design) (ADR 0107, ADR 0117)
 - [x] Compositor exposes the content behind each window (needed later for Liquid Glass) (ADR 0116)
 - [ ] XWayland for X11 apps
 - [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
