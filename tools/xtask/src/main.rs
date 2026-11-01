@@ -23,7 +23,7 @@
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
 //!   desktop [--release] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
-//!                       virtio GPU through /dev/fb0, a virtio keyboard and tablet (desktop.rs,
+//!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
 //!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   boot-tests [--list] [--shard <name>]... [group...]
@@ -76,6 +76,7 @@ mod accel;
 mod asmlabels;
 mod busybox;
 mod compositor;
+mod compositor_kms;
 mod conflicts;
 mod console;
 mod desktop;
@@ -89,6 +90,7 @@ mod initramfs;
 mod input;
 mod ktest;
 mod libsearch;
+mod mesa;
 mod net;
 mod nls;
 mod ntdll;
@@ -105,6 +107,7 @@ mod wayland;
 mod win32;
 mod winimports;
 mod wintrace;
+mod xwayland;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -1403,7 +1406,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 27] = [
+const BOOT_GROUPS: [BootGroup; 31] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1432,9 +1435,20 @@ const BOOT_GROUPS: [BootGroup; 27] = [
     ("wintrace", wintrace::boot_test),
     // The Wayland compositor as init with a C client (compositor.rs, ADR 0106).
     ("wayland", compositor::boot_test),
-    // The desktop: the compositor on virtio-gpu through /dev/fb0 with the
+    // The compositor on DRM/KMS: page flips and vsync, a subsurface, a
+    // popup, a dma-buf client buffer, the clipboard between two clients,
+    // checked by screenshots (compositor_kms.rs, ADR 0116).
+    ("wayland-kms", compositor_kms::boot_test),
+    // The desktop: the compositor on virtio-gpu through DRM/KMS with the
     // shell, driven by QMP input (desktop.rs, ADR 0107).
     ("desktop", desktop::boot_test),
+    // Window management, notifications on the session bus and the settings
+    // window, then the settings read back in a second boot (desktop.rs,
+    // ADR 0117).
+    ("desktop-shell", desktop::shell_boot_test),
+    // X11 apps through Xwayland on the desktop, from the root disk
+    // (xwayland.rs, ADR 0118).
+    ("xwayland", xwayland::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1459,6 +1473,10 @@ const BOOT_GROUPS: [BootGroup; 27] = [
     // /bin/drm-kms sets a mode, flips and draws through /dev/dri/card0,
     // checked by screenshots, and the console comes back (drm.rs, ADR 0108).
     ("drm", drm::boot_tests),
+    // Unmodified Mesa on that device from the root disk: modetest lists and
+    // sets a mode, kmscube renders with kms_swrast (llvmpipe) through GBM
+    // and EGL, checked by screenshots (mesa.rs, ADR 0115).
+    ("mesa", mesa::boot_test),
     // The screen terminal: a command typed on the keyboard runs in the shell
     // on the screen, whose output and status bar show up.
     ("terminal", |k, s| {
@@ -1482,7 +1500,23 @@ const BOOT_GROUPS: [BootGroup; 27] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop"]),
+    (
+        "userland",
+        &[
+            "programs",
+            "dynamic",
+            "busybox",
+            "rootdisk",
+            "7zip",
+            "wintrace",
+            "wayland",
+            "wayland-kms",
+            "desktop",
+            "desktop-shell",
+            "mesa",
+            "xwayland",
+        ],
+    ),
     (
         "devices",
         &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "drm", "terminal", "input"],

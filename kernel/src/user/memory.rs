@@ -123,7 +123,10 @@ pub trait PageSource: Send + Sync {
     /// A number that names the object behind the source whichever
     /// `PageSource` value maps it (a file: its device and inode), for
     /// shared futex keys; `None` (the default): the value itself names it.
-    /// Never has the top bit set (that is where kernel addresses live).
+    /// A file's id never has the top bit set (that is where kernel
+    /// addresses live); a source standing in for a kernel object (a System
+    /// V attachment for its segment's pages) answers that object's
+    /// address.
     fn object_id(&self) -> Option<u64> {
         None
     }
@@ -145,6 +148,21 @@ pub trait PageSource: Send + Sync {
     /// (`linux::shm`): its mappings are attachments, which shmdt(2) and
     /// exit detach. `None` (the default) for everything else.
     fn sysv_shm(&self) -> Option<u64> {
+        None
+    }
+
+    /// For a System V attachment: the address shmat(2) returned for it,
+    /// which names it for shmdt(2) whatever pieces of it are left. Every
+    /// region of one attachment maps the same source value.
+    fn sysv_attach_addr(&self) -> Option<u64> {
+        None
+    }
+
+    /// The source a forked child's copy of the mappings takes instead of
+    /// this one, for sources that are each memory's own (a System V
+    /// attachment: the child's is a new attachment of the same segment).
+    /// `None` (the default): parent and child share this value.
+    fn fork_copy(&self) -> Option<Arc<dyn PageSource>> {
         None
     }
 

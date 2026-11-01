@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mknodat              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; /tmp on overlayfs"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  mknodat(dirfd, pathname, mode, dev) (syscall 259) is mknod (see
+  mknod.yaml for node types, modes, dev encoding, ownership and the
+  per-type checks) with pathname resolved relative to the directory
+  dirfd: an O_RDONLY or O_PATH directory descriptor, or AT_FDCWD (-100)
+  for the working directory. An absolute pathname ignores dirfd (even a
+  closed or non-directory descriptor). dirfd is an int (bits 32..63
+  ignored). dirfd keeps naming its directory after the directory is
+  renamed. Nothing confines the path to dirfd's directory ('..' works).
+  There is no flags argument: an empty pathname is ENOENT. Permission is
+  checked against the directory at call time for the calling process; a
+  descriptor opened by a privileged process grants nothing. Returns 0.
+returns:
+  success: "0; the node as mknod makes it (type, mode & 07777 & ~umask, owner euid/egid, st_rdev for devices)"
+  relative: "relative to dirfd (O_RDONLY or O_PATH directory), nested paths and '..' allowed; AT_FDCWD = working directory"
+  absolute: "dirfd ignored (99, a file descriptor: still works)"
+  dirfd_width: "dirfd (1<<32)|3 is descriptor 3"
+  renamed_dir: "a directory renamed after dirfd was opened: new nodes appear in it under its new name"
+  last_component: "never followed: a dangling symlink, a loop, a symlink to a directory, '.', '..', 'sub/..' as last component are EEXIST; symlinks in the directory part are followed (a node made via 'dirlink/x' appears in the link's target)"
+errors:
+  dir_type: "EPERM (1): S_IFDIR; checked first, before pathname and dirfd (bad dirfd and NULL pathname still EPERM)"
+  bad_type: "EINVAL (22): S_IFLNK or an unused type; checked first (bad dirfd or a file descriptor still EINVAL)"
+  bad_path: "EFAULT (14): pathname NULL or unreadable; checked before dirfd (NULL pathname with a bad dirfd is EFAULT)"
+  empty_path: "ENOENT (2): empty pathname, also with a bad dirfd (the empty name is refused when it is read)"
+  bad_dirfd: "EBADF (9): relative pathname with a closed, out-of-range or negative descriptor other than AT_FDCWD"
+  dirfd_not_dir: "ENOTDIR (20): relative pathname with a descriptor of a non-directory; also a non-directory (file, FIFO) in the directory part"
+  name_too_long: "ENAMETOOLONG (36): last component over 255 bytes (255 works)"
+  lookup: "ENOENT (2): missing directory in the path, trailing slash on a new name; ELOOP (40): loop in the directory part; EEXIST (17): existing last component (also with a trailing slash)"
+  no_write: "EACCES (13): the caller may not write or search the directory (whoever opened dirfd; also an O_PATH dirfd of a mode-0700 directory of another user); comes after EEXIST and before EPERM for device nodes"
+  no_mknod: "EPERM (1): S_IFCHR/S_IFBLK without CAP_MKNOD (in a directory the caller may write)"
+  order: "file type (EPERM/EINVAL) > pathname read (EFAULT, empty ENOENT, ENAMETOOLONG) > dirfd (EBADF, ENOTDIR) > lookup (ENOENT, ENOTDIR, ELOOP, EEXIST) > directory permission (EACCES) > CAP_MKNOD (EPERM)"
+side_effects: "A new node in the directory; parent mtime/ctime change. Nothing on error."
+threading: "No thread-specific behaviour; not tested with threads."
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: AT_FDCWD from linux/fcntl.h, S_IF* from linux/stat.h, syscall
+# number 259 from asm/unistd_64.h. The perm test (needs=root) opens
+# descriptors as root and drops to uid/gid 65534 in a child; the other
+# tests pass as root and as an unprivileged user.

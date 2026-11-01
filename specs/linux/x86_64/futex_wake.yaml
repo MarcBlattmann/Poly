@@ -1,0 +1,68 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/futex_wake           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs, one NUMA node); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  futex_wake(uaddr, mask, nr, flags) (syscall 454, the futex2 interface)
+  wakes tasks sleeping on the futex word at uaddr and returns how many it
+  woke. flags (a 32-bit value; bits 32..63 of the register are ignored)
+  holds a size in bits 0..1 (FUTEX2_SIZE_U8 0, U16 1, U32 2, U64 3) of
+  which only FUTEX2_SIZE_U32 is accepted, plus FUTEX2_NUMA 0x4,
+  FUTEX2_MPOL 0x8 and FUTEX2_PRIVATE 128; any other bit is EINVAL. A
+  private futex (FUTEX2_PRIVATE) is identified by the address space and
+  address and is found only by private waits of the same address space; a
+  shared futex by the memory itself, so it works between processes on
+  MAP_SHARED memory and through different mappings of the same page.
+  Private and shared are separate: a shared wake never finds a private
+  waiter, also in the same process, and the other way round. It wakes
+  waiters of the same kind and word whether they sleep in futex_wait,
+  futex_waitv (for that entry) or the classic futex(FUTEX_WAIT,
+  FUTEX_WAIT_BITSET). mask selects waiters: a waiter sleeping with mask m
+  (futex_wait's mask, FUTEX_WAIT_BITSET's val3; classic FUTEX_WAIT and
+  futex_waitv entries count as all ones) is woken only if m & mask is not
+  0. nr is an int: nr > 0 wakes at most nr waiters, nr == 0 wakes none
+  (returns 0), a negative nr wakes one. Waiters of equal priority are
+  woken longest-waiting first. The word itself is neither read nor
+  written (except the NUMA node word, below).
+returns:
+  success: "number of tasks woken, 0..nr (0 when nobody waits; nr <= 0 with waiters: 0 for nr 0, 1 for nr < 0)"
+  order: "longest-waiting first among waiters of equal priority (FIFO)"
+  private_kind: "FUTEX2_PRIVATE wakes only private waiters (futex_wait/futex_waitv with FUTEX2_PRIVATE, classic ops with FUTEX_PRIVATE_FLAG) of the caller's address space; tasks sharing the address space (CLONE_VM) count"
+  shared_kind: "without FUTEX2_PRIVATE wakes only shared waiters on the same memory, in any process; two mappings of one memfd page at different addresses name the same futex"
+  mask: "waiter woken iff (waiter mask & mask) != 0; classic FUTEX_WAIT waiters match any mask"
+  numa: "with FUTEX2_NUMA the futex is followed by a 32-bit node number (the pair must be 8-byte aligned); node -1 (0xffffffff) means any and is replaced in memory by the caller's node (0 on a one-node machine); a valid node is used as given"
+  mpol: "FUTEX2_MPOL is accepted and changes nothing observable here"
+errors:
+  bad_flags: "EINVAL (22): size other than FUTEX2_SIZE_U32 (U8, U16, U64), or any bit outside 0x8f in the low 32 bits (0x10, 0x40, 0x100)"
+  bad_mask: "EINVAL (22): mask 0, or mask with any bit above bit 31"
+  alignment: "EINVAL (22): uaddr not 4-byte aligned (also for a private futex); with FUTEX2_NUMA not 8-byte aligned"
+  numa_node: "EINVAL (22): FUTEX2_NUMA with a node number that does not exist (4096, -2); -1 is allowed"
+  fault: "EFAULT (14): shared futex at an unmapped address (NULL, 0x1000); a private futex is not looked up in memory, so NULL with FUTEX2_PRIVATE returns 0"
+  order: "flags and mask (EINVAL) before the address (EINVAL alignment, EFAULT): a bad size or mask with uaddr NULL is EINVAL"
+side_effects: >
+  Woken tasks return 0 from their wait. With FUTEX2_NUMA and node -1 the
+  node word is overwritten with the caller's node. Nothing else changes.
+threading: >
+  Any task may wake any waiter of the same futex; the woken waiters
+  continue concurrently with the caller.
+ordering:
+  - "woken tasks are those that waited longest (equal priority)"
+timing:
+  typical: "microseconds"
+  guarantees: "none; a woken task runs again at the scheduler's discretion"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/futex.h (FUTEX2_SIZE_U8..U64 0..3,
+# FUTEX2_NUMA 0x04, FUTEX2_MPOL 0x08 (6.16+ headers), FUTEX2_PRIVATE =
+# FUTEX_PRIVATE_FLAG 128; classic ops FUTEX_WAIT 0, FUTEX_WAKE 1,
+# FUTEX_CMP_REQUEUE 4, FUTEX_WAKE_BITSET 10), syscall number from
+# asm/unistd_64.h. The multi-task tests count sleeping waiters with a
+# classic FUTEX_CMP_REQUEUE of a word onto itself (moves nobody, returns
+# the number of waiters) and run with syscalls=off. The tests assume one
+# NUMA node (node -1 becomes 0, node 4096 does not exist). Every test
+# passes as root and as an unprivileged user.

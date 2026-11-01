@@ -570,14 +570,35 @@ pub fn sendmmsg(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     Ok(u64::from(sent))
 }
 
+/// What kind of socket a receive is on, as far as its flags go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RecvKind {
+    unix: bool,
+    datagram: bool,
+}
+
+impl RecvKind {
+    fn of(k: &mut dyn LinuxKernel, fd: i32) -> Result<RecvKind, Errno> {
+        let net = net(k)?;
+        let domain = net.getsockopt(fd, OptName::Domain)?;
+        let kind = net.getsockopt(fd, OptName::Type)?;
+        Ok(RecvKind {
+            unix: domain == OptValue::Int(i32::from(abi::AF_UNIX)),
+            datagram: kind == OptValue::Int(abi::SOCK_DGRAM as i32),
+        })
+    }
+}
+
 /// The receive flags shared by recvfrom and recvmsg; `max_rights` from
-/// the control buffer.
-fn recv_req(flags: u32, max_rights: usize) -> Result<RecvReq, Errno> {
+/// the control buffer. recvmmsg's spec sheet: `MSG_OOB` on a Unix
+/// datagram socket is `EOPNOTSUPP`, and a Unix socket has no error queue,
+/// so `MSG_ERRQUEUE` receives from the normal one.
+fn recv_req(flags: u32, max_rights: usize, kind: RecvKind) -> Result<RecvReq, Errno> {
     if flags & abi::MSG_OOB != 0 {
         // No out-of-band data on any of Poly's sockets.
-        return Err(Errno::EINVAL);
+        return Err(if kind.unix && kind.datagram { Errno::EOPNOTSUPP } else { Errno::EINVAL });
     }
-    if flags & abi::MSG_ERRQUEUE != 0 {
+    if flags & abi::MSG_ERRQUEUE != 0 && !kind.unix {
         // No error queues: nothing is ever queued there.
         return Err(Errno::EAGAIN);
     }
@@ -601,7 +622,12 @@ fn recv_data(
     flags: u32,
     max_rights: usize,
 ) -> Result<(RecvMsg, usize), Errno> {
-    let req = recv_req(flags, max_rights)?;
+    let kind = if flags & (abi::MSG_OOB | abi::MSG_ERRQUEUE) != 0 {
+        RecvKind::of(k, fd)?
+    } else {
+        RecvKind { unix: false, datagram: false }
+    };
+    let req = recv_req(flags, max_rights, kind)?;
     let mut buf = bounce((total as usize).min(MAX_MESSAGE))?;
     let r = net(k)?.recv(fd, &mut buf, &req);
     let got = r.map_err(|e| interrupted(k, fd, false, e))?;

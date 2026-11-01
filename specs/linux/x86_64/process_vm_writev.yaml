@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/process_vm_writev    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  process_vm_writev(pid, local_iov, liovcnt, remote_iov, riovcnt, flags)
+  (syscall 311) copies bytes from the caller's memory into the address
+  space of process pid; the mirror of process_vm_readv (same arguments,
+  iovec rules, permission check, errors and order). The local ranges are
+  read in order and written into the remote ranges in order
+  (scatter/gather, independent boundaries); the result is the number of
+  bytes copied, the smaller of the two totals when everything was
+  accessible. The copy stops at the first remote byte that is not
+  writable in the target (unmapped, read-only, PROT_NONE: there is no
+  forced write as with ptrace) or local byte not readable, returning the
+  count so far, or EFAULT when it is 0. Read-only local memory is a valid
+  source. The target sees the bytes in its own memory at once; a fork
+  child's write does not reach the parent's copy and vice versa.
+returns:
+  success: "bytes copied = min(local total, remote total) when all accessible"
+  partial: "remote range crossing into an unmapped page after 3 writable bytes -> 3 (those 3 written); second remote iovec unmapped after 5 -> 5; local source crossing into a hole after 2 bytes -> 2"
+  empty: "0 for an empty list, without the pid being looked up"
+errors:
+  bad_flags: "EINVAL (22): flags not 0"
+  too_many: "EINVAL (22): liovcnt or riovcnt above 1024"
+  bad_array: "EFAULT (14): iovec array unreadable"
+  no_process: "ESRCH (3): pid names no process (0, 0x7fffffff, exited)"
+  no_access: "EPERM (1): no ptrace attach access (another user's process for a normal user)"
+  nothing_copied: "EFAULT (14): first remote byte not writable (unmapped, read-only, PROT_NONE) or first local byte unreadable; nothing changes in the target"
+  order: "flags (EINVAL) > counts (EINVAL) > iovec arrays (EFAULT) > empty-list shortcut (0) > lookup (ESRCH) > access (EPERM) > copy (count or EFAULT)"
+side_effects: >
+  Writes the target's memory ranges (only the bytes counted in the
+  result). The target is not stopped.
+threading: >
+  The target's memory is shared by its threads; they see the bytes at
+  once.
+ordering: []
+timing:
+  typical: "microseconds per call plus copy time"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct iovec and UIO_MAXIOV from linux/uio.h. The fork-child test
+# uses syscalls=off (two processes at once); the others pass the caller's
+# pid and use syscalls=names. The EPERM check runs only as root (a child
+# that switched to uid/gid 4242 writes into its root parent) inside an
+# otherwise portable test.

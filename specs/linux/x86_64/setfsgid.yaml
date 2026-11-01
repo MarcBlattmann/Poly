@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setfsgid             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities (privilege-dependent cases as root in children that drop to uid 1000); umask 022; /tmp on overlayfs; initial user namespace"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  setfsgid(fsgid) (syscall 123) sets the calling thread's filesystem group
+  id, the gid used for file permission checks and as the group of new
+  files, and always returns the previous filesystem gid. It never fails
+  with an error. The argument is a 32-bit gid (upper register half
+  ignored). -1 (0xffffffff; also 0x1ffffffff, 0xffffffffffffffff) is not
+  a valid gid, so nothing changes and the call just reads the current
+  value. With CAP_SETGID any other value is taken. Without it the new
+  value is taken only if it equals the current real, effective, saved or
+  filesystem gid; other values are silently ignored and the call still
+  returns the previous value (a second call shows whether it worked). The
+  result is the old value zero-extended (0xfffffffe reads back as
+  4294967294, never negative). The filesystem gid starts equal to the
+  effective gid and is reset to the effective gid by every successful
+  setresgid, setregid, setgid or setegid (also one that does not change
+  the effective gid). getresgid and getegid do not report it.
+returns:
+  always: "the previous filesystem gid (0..0xfffffffe), whether or not the new value was taken"
+  query: "setfsgid(-1) reads the current filesystem gid without changing it"
+  privileged: "any gid but -1 is taken"
+  unprivileged: "taken only if equal to the current real, effective, saved or filesystem gid; otherwise ignored, no error"
+  new_files: "files created afterwards get the filesystem gid as their group"
+  access: "group permission checks use the filesystem gid, not the effective gid (mode 0040 file of group 300: EACCES with fsgid 200, readable with fsgid 300 while egid stays 200)"
+errors:
+  none: "no error is ever returned; refused changes are reported only by the unchanged value on the next call"
+  order: "not applicable"
+side_effects: >
+  Changes only the calling thread's filesystem gid (real, effective and
+  saved gids stay). A later change of the effective gid resets it.
+threading: >
+  Per thread, like the other credentials. Children made by fork inherit
+  the value of the forking thread.
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: syscall numbers from asm/unistd_64.h (setfsgid 123, setgid 106,
+# setregid 114, setresgid 119, getresgid 120, setgroups 116, setresuid
+# 117); errno values from asm-generic/errno-base.h. setfsuid (122) is the
+# uid counterpart (its sheet). Changing the fsgid does not change
+# capabilities (unlike moving fsuid away from 0). Tests needing root are
+# marked needs=root and run in a child; ld_setfsgid_query passes for any
+# identity.

@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sethostname          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; the container has its own UTS namespace (node name = container id, domain name \"localdomain\"); unprivileged user namespaces allowed (max_user_namespaces 192190)"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  sethostname(name, len) (syscall 170) sets the node name of the caller's
+  UTS namespace, the string uname(2) returns in nodename and
+  /proc/sys/kernel/hostname reads. len is a 32-bit int (the upper half of
+  the register is ignored); 0..64 is valid. Exactly len bytes are copied
+  from name (no terminator is needed or looked for) and the rest of the
+  65-byte field is cleared, so a shorter name leaves nothing of a longer
+  earlier one; bytes after an embedded NUL are stored but uname shows the
+  name up to it. len 0 (also with a NULL name) makes the name empty. The
+  caller needs CAP_SYS_ADMIN in the user namespace that owns its UTS
+  namespace (root in the initial namespace; the creator of a user
+  namespace for UTS namespaces made inside it). Each UTS namespace has its
+  own name: unshare(CLONE_NEWUTS) or clone(CLONE_NEWUTS) starts a copy of
+  the creator's names, and processes in other UTS namespaces never see a
+  change. The domain name (setdomainname) is a separate field and is
+  not touched.
+returns:
+  success: "0; uname().nodename is the len bytes given, followed by NULs up to 65 bytes"
+  len0: "0; the name becomes empty (NULL name allowed with len 0)"
+  len64: "0; a 64-byte name fills the field (uname shows 64 characters, then the NUL)"
+  embedded_nul: "0; \"ab\\0cd\" with len 5 is stored as given, uname shows \"ab\""
+  len_width: "only the low 32 bits of len count: (1<<32)|3 is length 3; 0xffffffff is -1 (EINVAL)"
+  proc: "/proc/sys/kernel/hostname reads the name and a newline (\"\\n\" alone when empty); writing \"name\\n\" to it sets the name (the newline is dropped), with the same permission"
+  inheritance: "children created afterwards are in the same UTS namespace and see the name; the name of the namespace a process left is unchanged"
+errors:
+  permission: "EPERM (1): no CAP_SYS_ADMIN over the UTS namespace (a normal user; also root-in-a-user-namespace for the UTS namespace it inherited from outside). Checked first: a normal user gets EPERM for len 65, len -1 and NULL too"
+  bad_length: "EINVAL (22): len < 0 or > 64 (as a 32-bit int); checked before name is read (NULL with len 65 is EINVAL)"
+  bad_name: "EFAULT (14): the len bytes at name are not all readable (NULL or a low address with len > 0, a name running into an unmapped page); a name ending exactly at the end of a mapping is fine"
+  unchanged_on_error: "a failed call leaves the name as it was"
+  order: "EPERM (privilege), then EINVAL (length), then EFAULT (copy)"
+side_effects: >
+  Changes the node name of the caller's UTS namespace for every process
+  in it (uname, /proc/sys/kernel/hostname). Nothing else.
+threading: >
+  The name belongs to the UTS namespace, shared by every thread and
+  process in it; a concurrent uname sees either the old or the new name.
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: __NEW_UTS_LEN 64 and struct new_utsname (65-byte fields) from
+# linux/utsname.h; CLONE_NEWUTS 0x04000000 from linux/sched.h. Tests that
+# change a name do so in a new UTS namespace (unshare(CLONE_NEWUTS) in a
+# child, needs root); the permission test runs as uid 65534 (root drops
+# to it in a child with setgroups/setresgid/setresuid) so it is the same
+# for every caller. The tests compare names only with each other and
+# never print the machine's name.

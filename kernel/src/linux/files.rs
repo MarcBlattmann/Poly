@@ -238,15 +238,27 @@ impl LinuxFs for Thread<'_> {
 
     fn flock(&mut self, fd: i32, exclusive: Option<bool>, wait: bool) -> Result<(), Errno> {
         let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        let generation = fs::locks::generation();
+        let wait = wait && exclusive.is_some();
+        if fs::locks::flock(&file, exclusive, wait).is_ok() {
+            return Ok(());
+        }
+        if !wait {
+            return Err(Errno::EAGAIN);
+        }
+        // The request waits in the lock table, which hands it the lock
+        // when the conflicting ones go (before anyone else asks again).
+        let mut generation = generation;
         loop {
-            let generation = fs::locks::generation();
-            if fs::locks::flock(&file, exclusive).is_ok() {
+            if fs::locks::flock_granted(&file) {
                 return Ok(());
             }
-            if !wait {
-                return Err(Errno::EAGAIN);
+            if let Err(e) = self.wait_for_locks(generation) {
+                fs::locks::flock_cancel(&file);
+                // Granted just before the signal: the lock is taken.
+                return if fs::locks::flock_granted(&file) { Ok(()) } else { Err(e) };
             }
-            self.wait_for_locks(generation)?;
+            generation = fs::locks::generation();
         }
     }
 

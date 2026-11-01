@@ -514,8 +514,16 @@ fn recvmsg_builds_control_messages_and_flags() {
     sys(&mut k, nr::RECVMSG, &[fd, S, 0]).unwrap();
     assert_eq!(net(&mut k).recv_reqs.last().unwrap().2.max_rights, 0);
     // Flags.
-    assert_eq!(sys(&mut k, nr::RECVMSG, &[fd, S, u64::from(abi::MSG_OOB)]), Err(Errno::EINVAL));
-    assert_eq!(sys(&mut k, nr::RECVMSG, &[fd, S, u64::from(abi::MSG_ERRQUEUE)]), Err(Errno::EAGAIN));
+    // recvmmsg's spec sheet: MSG_OOB on a Unix datagram socket is
+    // EOPNOTSUPP; a Unix socket has no error queue, MSG_ERRQUEUE reads the
+    // normal one. Elsewhere EINVAL and EAGAIN (nothing is queued there).
+    assert_eq!(sys(&mut k, nr::RECVMSG, &[fd, S, u64::from(abi::MSG_OOB)]), Err(Errno::EOPNOTSUPP));
+    net(&mut k).recvs.push_back(Ok((b"e".to_vec(), RecvMsg::default())));
+    msghdr(&mut k, S, &iovs, (0, 0), (0, 0));
+    assert_eq!(sys(&mut k, nr::RECVMSG, &[fd, S, u64::from(abi::MSG_ERRQUEUE)]), Ok(1));
+    let tcp = net(&mut k).add(Family::Inet, SockType::Stream) as u64;
+    assert_eq!(sys(&mut k, nr::RECVMSG, &[tcp, S, u64::from(abi::MSG_OOB)]), Err(Errno::EINVAL));
+    assert_eq!(sys(&mut k, nr::RECVMSG, &[tcp, S, u64::from(abi::MSG_ERRQUEUE)]), Err(Errno::EAGAIN));
 }
 
 #[test]

@@ -94,6 +94,63 @@ impl Hotkeys {
     }
 }
 
+/// A window management key (ADR 0117).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WmKey {
+    /// Alt+Tab (with Shift: backwards) opens the switcher.
+    SwitchStart {
+        backward: bool,
+    },
+    /// Tab, Shift+Tab or Left/Right while it is open.
+    SwitchStep {
+        forward: bool,
+    },
+    /// Releasing Alt (or Enter) switches.
+    SwitchCommit,
+    /// Escape closes the switcher without switching.
+    SwitchCancel,
+    /// Alt+F4 closes the active window.
+    Close,
+    /// Super+arrow places the active window.
+    Place(poly_shell::wm::Arrow),
+    /// Super+I opens the settings, Super+N the notification history.
+    Settings,
+    History,
+}
+
+/// What key `code` (`pressed` or released, the seat's modifiers
+/// `depressed` before it) means to window management, if anything. All but
+/// Alt's release are taken from the clients.
+pub fn wm_key(code: u32, pressed: bool, depressed: u32, switcher_open: bool) -> Option<WmKey> {
+    use poly_shell::wm::Arrow;
+    let code = u16::try_from(code).ok()?;
+    let (alt, shift, sup) = (depressed & mods::MOD1 != 0, depressed & mods::SHIFT != 0, depressed & mods::MOD4 != 0);
+    if !pressed {
+        return (switcher_open && code == k::LEFTALT).then_some(WmKey::SwitchCommit);
+    }
+    if switcher_open {
+        return match code {
+            k::TAB => Some(WmKey::SwitchStep { forward: !shift }),
+            k::RIGHT => Some(WmKey::SwitchStep { forward: true }),
+            k::LEFT => Some(WmKey::SwitchStep { forward: false }),
+            k::ESC => Some(WmKey::SwitchCancel),
+            k::ENTER => Some(WmKey::SwitchCommit),
+            _ => None,
+        };
+    }
+    match code {
+        k::TAB if alt => Some(WmKey::SwitchStart { backward: shift }),
+        k::F4 if alt => Some(WmKey::Close),
+        k::LEFT if sup => Some(WmKey::Place(Arrow::Left)),
+        k::RIGHT if sup => Some(WmKey::Place(Arrow::Right)),
+        k::UP if sup => Some(WmKey::Place(Arrow::Up)),
+        k::DOWN if sup => Some(WmKey::Place(Arrow::Down)),
+        k::I if sup => Some(WmKey::Settings),
+        k::N if sup => Some(WmKey::History),
+        _ => None,
+    }
+}
+
 /// The apps of every readable desktop file in `dir`.
 pub fn desktop_files(dir: &Path) -> Vec<App> {
     let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
@@ -168,6 +225,27 @@ mod tests {
         assert!(h.key(57, true, mods::CONTROL));
         assert!(!h.key(57, true, 0));
         assert!(!h.key(57, false, mods::CONTROL));
+    }
+
+    #[test]
+    fn window_management_keys() {
+        use poly_shell::wm::Arrow;
+        // Alt+Tab opens, Tab steps, releasing Alt switches.
+        assert_eq!(wm_key(15, true, mods::MOD1, false), Some(WmKey::SwitchStart { backward: false }));
+        assert_eq!(wm_key(15, true, mods::MOD1 | mods::SHIFT, false), Some(WmKey::SwitchStart { backward: true }));
+        assert_eq!(wm_key(15, true, mods::MOD1, true), Some(WmKey::SwitchStep { forward: true }));
+        assert_eq!(wm_key(15, true, mods::MOD1 | mods::SHIFT, true), Some(WmKey::SwitchStep { forward: false }));
+        assert_eq!(wm_key(56, false, mods::MOD1, true), Some(WmKey::SwitchCommit));
+        assert_eq!(wm_key(56, false, mods::MOD1, false), None, "Alt released without the switcher");
+        assert_eq!(wm_key(1, true, mods::MOD1, true), Some(WmKey::SwitchCancel));
+        assert_eq!(wm_key(15, true, 0, false), None, "plain Tab is the client's");
+        // Alt+F4, Super+arrows, Super+I, Super+N.
+        assert_eq!(wm_key(62, true, mods::MOD1, false), Some(WmKey::Close));
+        assert_eq!(wm_key(105, true, mods::MOD4, false), Some(WmKey::Place(Arrow::Left)));
+        assert_eq!(wm_key(103, true, mods::MOD4, false), Some(WmKey::Place(Arrow::Up)));
+        assert_eq!(wm_key(105, true, 0, false), None);
+        assert_eq!(wm_key(23, true, mods::MOD4, false), Some(WmKey::Settings));
+        assert_eq!(wm_key(49, true, mods::MOD4, false), Some(WmKey::History));
     }
 
     #[test]

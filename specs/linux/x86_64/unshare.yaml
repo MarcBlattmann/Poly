@@ -1,0 +1,86 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/unshare              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; the container has its own uts/ipc/mnt/net/pid/cgroup namespaces; unprivileged user namespaces allowed (max_user_namespaces 192190, overflowuid/overflowgid 65534)"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  unshare(flags) (syscall 272) gives the calling thread private copies of
+  resources it shares with others, and moves it into new namespaces.
+  flags is a full 64-bit value. Accepted bits (linux/sched.h): CLONE_VM
+  0x100, CLONE_FS 0x200, CLONE_FILES 0x400, CLONE_SIGHAND 0x800,
+  CLONE_THREAD 0x10000, CLONE_SYSVSEM 0x40000, and the namespace flags
+  CLONE_NEWTIME 0x80, CLONE_NEWNS 0x20000, CLONE_NEWCGROUP 0x02000000,
+  CLONE_NEWUTS 0x04000000, CLONE_NEWIPC 0x08000000, CLONE_NEWUSER
+  0x10000000, CLONE_NEWPID 0x20000000, CLONE_NEWNET 0x40000000; any other
+  bit (CSIGNAL bits 0..6, bits 12..15 and 19..24, CLONE_IO bit 31, bits
+  32..63) is EINVAL. unshare(0) does nothing and returns 0.
+  CLONE_FILES: a descriptor table shared with another process (made by
+  clone(CLONE_FILES)) is copied, so later opens/closes no longer reach the
+  other process; what was open stays open in both. CLONE_FS: umask, cwd
+  and root shared through clone(CLONE_FS) are copied. CLONE_SYSVSEM: the
+  process leaves its System V semaphore undo list; if no other process
+  shares it, its adjustments are applied at once, as at exit. CLONE_VM,
+  CLONE_SIGHAND and CLONE_THREAD cannot really be unshared: they succeed
+  when nothing is shared (a single-threaded process with its own memory /
+  signal handlers) and are EINVAL otherwise. Namespace flags: a new
+  namespace of that type is made and the caller moves into it (its other
+  processes and threads do not), with these exceptions: CLONE_NEWPID and
+  CLONE_NEWTIME do not move the caller but the children it creates from
+  then on (/proc/self/ns/pid_for_children, time_for_children); the
+  caller's own pid never changes. Namespaces other than the user
+  namespace need CAP_SYS_ADMIN (EPERM otherwise); CLONE_NEWUSER needs no
+  privilege (system configuration may restrict it) and the namespaces made
+  in the same call are then owned by the new user namespace, so a normal
+  user may combine CLONE_NEWUSER with the others. Implied flags:
+  CLONE_NEWUSER implies CLONE_THREAD and CLONE_FS; CLONE_NEWNS implies
+  CLONE_FS; CLONE_VM implies CLONE_SIGHAND, which implies CLONE_THREAD.
+  On failure nothing is unshared.
+returns:
+  success: "0"
+  plain_flags_single_threaded: "CLONE_VM, CLONE_FS, CLONE_FILES, CLONE_SIGHAND, CLONE_THREAD, CLONE_SYSVSEM and any combination: 0 for any caller"
+  files: "after clone(CLONE_FILES|CLONE_VFORK), the child's fd opened before unshare(CLONE_FILES) is open in the parent too; one opened after is not; closing fd 0 after unshare does not close the parent's fd 0"
+  fs: "after clone(CLONE_FS|CLONE_VFORK), the child's umask(077) before unshare(CLONE_FS) is the parent's umask; umask(0) and chdir after it are not"
+  sysvsem: "semop +2 with SEM_UNDO, then unshare(CLONE_SYSVSEM): the value is 0 at once; a second call changes nothing; new SEM_UNDO operations afterwards are undone at exit as usual"
+  newuts: "a copy of the node and domain names; changing them affects only the new namespace"
+  newipc: "an empty System V IPC namespace: keys from before are ENOENT, ids from before EINVAL, the same key can be created anew; the old namespace's objects are untouched"
+  newns: "a copy of the mount table; after mount(NULL, \"/\", NULL, MS_REC|MS_PRIVATE, NULL) mounts made in it are invisible outside and vanish with it; cwd and root stay"
+  newnet: "a new network namespace whose only device is a loopback device (lo; /proc/net/dev lists only it); not tested"
+  newpid: "the caller keeps its pid; /proc/self/ns/pid stays; /proc/self/ns/pid_for_children cannot be opened (ENOENT) until the first child is created; that child is pid 1 there with getppid() 0, its children get 2, 3, ...; in the caller the child has an ordinary pid; once that pid-1 process has exited, fork/clone in the namespace fail with ENOMEM; a second unshare(CLONE_NEWPID) before or after is EINVAL"
+  newtime: "/proc/self/ns/time_for_children changes at once, /proc/self/ns/time stays; the next child is in the new time namespace; a second unshare(CLONE_NEWTIME) works"
+  newuser: "the caller's uid/gid read as the overflow ids (65534) until /proc/self/uid_map and gid_map are written; writing \"0 <old euid> 1\" to uid_map makes getuid() 0 (a second write: EPERM); gid_map can be written only after \"deny\" was written to /proc/self/setgroups (EPERM before), also for root; the caller has all capabilities in the new namespace (e.g. may unshare(CLONE_NEWUTS) and sethostname there), but none over namespaces owned by the parent user namespace (sethostname of the inherited UTS namespace: EPERM)"
+  ns_files: "/proc/self/ns/<type> is a regular file (mode 0444) whose inode number identifies the namespace; readlink gives \"<type>:[<inode>]\"; unshare of one type changes exactly that file's inode"
+errors:
+  bad_flags: "EINVAL (22): any bit outside the accepted set (including CLONE_IO and bits 32..63); checked first, also when a namespace flag the caller may not use is given (CLONE_NEWUTS|1 by a normal user: EINVAL)"
+  shared_vm: "EINVAL (22): CLONE_VM while the memory is shared with another thread or process"
+  shared_sighand: "EINVAL (22): CLONE_SIGHAND (or CLONE_VM) while the signal handlers are shared (a second thread)"
+  multithreaded: "EINVAL (22): CLONE_THREAD, CLONE_SIGHAND, CLONE_VM or CLONE_NEWUSER in a process with more than one thread; CLONE_FILES, CLONE_FS, CLONE_SYSVSEM and the other namespaces work there"
+  pid_twice: "EINVAL (22): CLONE_NEWPID when the caller already did unshare(CLONE_NEWPID) (its pid_for_children differs from its own pid namespace)"
+  permission: "EPERM (1): a namespace flag other than CLONE_NEWUSER without CAP_SYS_ADMIN in the caller's user namespace (CLONE_NEWNS, NEWUTS, NEWIPC, NEWNET, NEWPID, NEWCGROUP, NEWTIME); nothing is unshared (a CLONE_FILES in the same call is undone)"
+  userns_permission: "EPERM (1): CLONE_NEWUSER by a chrooted process, or by a process whose euid/egid has no mapping in its user namespace (e.g. a second CLONE_NEWUSER before uid_map was written); the nesting limit (32 levels) or max_user_namespaces exceeded gives EUSERS / ENOSPC (not tested)"
+  no_memory: "ENOMEM (12): out of memory; not tested"
+  order: "EINVAL (flags) > EINVAL (shared/threads) > EPERM (privilege)"
+side_effects: >
+  Only the calling thread changes; other threads and processes that shared
+  the resources keep the originals. New namespaces live as long as a
+  process or an open /proc/<pid>/ns file refers to them. unshare(CLONE_SYSVSEM)
+  applies pending semaphore adjustments.
+threading: >
+  Works per thread for CLONE_FILES, CLONE_FS, CLONE_SYSVSEM and namespace
+  flags other than CLONE_NEWUSER; CLONE_NEWUSER, CLONE_THREAD,
+  CLONE_SIGHAND and CLONE_VM need a single-threaded process.
+ordering: []
+timing:
+  typical: "microseconds; namespace creation tens of microseconds (a new network namespace up to milliseconds)"
+  guarantees: "none"
+tests:
+  visible: 7  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+# Notes: CLONE_* from linux/sched.h; MS_REC 0x4000, MS_PRIVATE 0x40000
+# from linux/mount.h; SEM_UNDO 0x1000, GETVAL 12 from linux/sem.h. The
+# tests for flags, CLONE_FILES/FS, threads, SYSVSEM and EPERM pass for any
+# caller (EPERM checks run as uid 65534, root drops to it in a child);
+# namespace tests need root. CLONE_NEWUSER by a normal user is not tested
+# (it worked here, but distributions may restrict it).

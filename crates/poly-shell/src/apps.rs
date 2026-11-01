@@ -188,7 +188,25 @@ pub fn builtins() -> Vec<App> {
             &["test", "client"],
             &["/bin/wl-client"]
         ),
+        app(
+            "Settings",
+            "Display, keyboard, wallpaper, sound, time zone",
+            &["preferences", "volume", "keyboard", "layout", "wallpaper", "display", "scale", "timezone", "about"],
+            &[SETTINGS]
+        ),
+        app("Notifications", "What came in, newest first", &["history", "messages"], &[NOTIFICATIONS]),
     ]
+}
+
+/// The `argv` of the built-ins the shell itself opens (ADR 0117).
+pub const SETTINGS: &str = "poly-shell:settings";
+pub const NOTIFICATIONS: &str = "poly-shell:notifications";
+
+impl App {
+    /// The shell's own part this app opens, if it is one.
+    pub fn internal(&self) -> Option<&str> {
+        self.argv.first().map(String::as_str).filter(|a| a.starts_with("poly-shell:"))
+    }
 }
 
 /// The catalog: built-ins first, then the desktop files, sorted by name,
@@ -258,7 +276,9 @@ mod tests {
         };
         let all = catalog(vec![file("zebra"), file("Poly Demo"), file("apple")]);
         let names: Vec<&str> = all.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(names, ["apple", "Poly Demo", "Wayland Test Client", "zebra"]);
-        assert_eq!(all[1].id, "f.desktop", "the desktop file replaced the built-in");
+        assert_eq!(names, ["apple", "Notifications", "Poly Demo", "Settings", "Wayland Test Client", "zebra"]);
+        assert_eq!(all[2].id, "f.desktop", "the desktop file replaced the built-in");
+        assert_eq!(all[3].internal(), Some(SETTINGS));
+        assert_eq!(all[2].internal(), None);
     }
 }

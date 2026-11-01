@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pause                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  pause() (syscall 34, no arguments) puts the calling thread to sleep
+  until a signal is delivered that either runs a handler or terminates
+  the process. After a handler has run, pause returns EINTR (4); it never
+  returns anything else and is never restarted (SA_RESTART on the handler
+  makes no difference). Signals that are ignored (SIG_IGN, or default
+  action ignore such as SIGWINCH, SIGCHLD without handler), blocked
+  signals (they stay pending), and stop/continue (SIGSTOP then SIGCONT)
+  do not end it. A signal whose default action terminates the process
+  ends it while in pause. Any handled signal counts: a timer's SIGALRM,
+  SIGCHLD with a handler when a child ends, a signal sent by another
+  process.
+returns:
+  handled_signal: "EINTR (4), after the handler (plain, SA_SIGINFO or SA_RESTART) has run"
+  timer: "ITIMER_REAL SIGALRM delivers with si_code SI_KERNEL (0x80) to an SA_SIGINFO handler"
+errors:
+  eintr: "EINTR (4): the only result"
+  order: "no argument checks"
+side_effects: none
+threading: >
+  Only the calling thread sleeps. Stopping and continuing the process
+  (wait4 WUNTRACED sees it stopped, WCONTINUED sees it continued with
+  status 0xffff) leaves it in pause; afterwards it is still sleeping.
+ordering:
+  - "the handler runs before pause returns"
+  - "a blocked signal stays pending and does not end pause"
+timing:
+  typical: "returns as soon as a handled signal is delivered"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: syscall numbers from asm/unistd_64.h, signal numbers from
+# asm/signal.h (SIGWINCH 28), SA_SIGINFO 4 and SA_RESTART 0x10000000 from
+# asm-generic/signal-defs.h, SI_KERNEL 0x80 from asm-generic/siginfo.h.
+# Tests with two processes use syscalls=off (and, where the moment the
+# child enters pause matters, send the waking signal repeatedly).
+# ld_pause_alarm uses a periodic 100 ms timer stopped right after pause
+# returns. Under ptrace an ignored signal still stops the tracee and pause
+# is re-entered; the program cannot see that. Every test passes as root
+# and as an unprivileged user.

@@ -20,6 +20,7 @@ members = [
     "crates/poly-ext2",
     "crates/poly-fbdev",
     "crates/poly-cpio",
+    "crates/poly-dbus",
     "crates/poly-drm",
     "crates/poly-font",
     "crates/poly-bochs-vbe",
@@ -68,6 +69,7 @@ members = [
     "crates/poly-x509",
     "crates/poly-winsock",
     "crates/poly-wayland",
+    "crates/poly-x11",
     "personalities/linux",
     "personalities/nt",
     "personalities/xnu",
@@ -75,6 +77,7 @@ members = [
     "tools/pipeline",
     "tools/xtask",
     "userland/poly-compositor",
+    "userland/poly-notify",
 ]
 exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
@@ -100,6 +103,7 @@ poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
 poly-fbdev = { path = "crates/poly-fbdev" }
 poly-cpio = { path = "crates/poly-cpio" }
+poly-dbus = { path = "crates/poly-dbus" }
 poly-drm = { path = "crates/poly-drm" }
 poly-font = { path = "crates/poly-font" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
@@ -148,6 +152,7 @@ poly-wincrypt = { path = "crates/poly-wincrypt" }
 poly-x509 = { path = "crates/poly-x509" }
 poly-winsock = { path = "crates/poly-winsock" }
 poly-wayland = { path = "crates/poly-wayland" }
+poly-x11 = { path = "crates/poly-x11" }
 poly-personality-linux = { path = "personalities/linux" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }

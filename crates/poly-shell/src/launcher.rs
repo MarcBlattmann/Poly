@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn selection_editing_and_escape() {
-        let apps = builtins();
+        let apps = builtins()[..2].to_vec();
         let mut l = Launcher::new(8);
         l.toggle();
         typed(&mut l, &apps, "t");

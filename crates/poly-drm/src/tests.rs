@@ -390,6 +390,8 @@ fn request_numbers_are_the_headers() {
     // _IOC(dir, 'd', nr, sizeof(struct)) for the x86-64 structure sizes.
     let expected = [
         (ioctl::VERSION, 0xc040_6400),
+        (ioctl::GET_UNIQUE, 0xc010_6401),
+        (ioctl::SET_VERSION, 0xc010_6407),
         (ioctl::GET_CAP, 0xc010_640c),
         (ioctl::SET_CLIENT_CAP, 0x4010_640d),
         (ioctl::SET_MASTER, 0x0000_641e),
@@ -559,6 +561,38 @@ fn version_unique_and_caps() {
     assert_eq!(t.set_cap(f, client_cap::WRITEBACK_CONNECTORS, 1), Ok(Reply::Done(0)));
     // Another ioctl type, and an unknown DRM one.
     assert_eq!(t.call(f, 0x5401, &mut [0u8; 4]), Err(Errno::ENOTTY));
+}
+
+/// The bus ID is empty until the file asks for interface version 1.1
+/// (libdrm's `drmOpen` by name skips a minor whose bus ID is set); then
+/// `GET_UNIQUE` reports it, in two passes like the other strings.
+#[test]
+fn unique_after_interface_version_1_1() {
+    let mut t = T::one();
+    let f = t.dev.open(Node::Primary);
+    let unique = |t: &mut T, f| {
+        let mut u = Unique::default().to_bytes();
+        t.ok(f, ioctl::GET_UNIQUE, &mut u);
+        let len = Unique::decode(&u).len;
+        let ptr = t.user.alloc(64);
+        let mut u = Unique { len, ptr }.to_bytes();
+        t.ok(f, ioctl::GET_UNIQUE, &mut u);
+        std::string::String::from_utf8(t.user.get(ptr, len as usize)).unwrap()
+    };
+    assert_eq!(unique(&mut t, f), "");
+    // Asking only for the driver's version (-1: don't care) binds nothing.
+    let mut v = SetVersion { di_major: -1, di_minor: -1, dd_major: 0, dd_minor: 1 }.to_bytes();
+    t.ok(f, ioctl::SET_VERSION, &mut v);
+    assert_eq!(SetVersion::decode(&v), SetVersion { di_major: 1, di_minor: 4, dd_major: 0, dd_minor: 1 });
+    assert_eq!(unique(&mut t, f), "");
+    let mut v = SetVersion { di_major: 1, di_minor: 5, dd_major: -1, dd_minor: -1 }.to_bytes();
+    assert_eq!(t.call(f, ioctl::SET_VERSION, &mut v), Err(Errno::EINVAL));
+    let mut v = SetVersion { di_major: 1, di_minor: 1, dd_major: -1, dd_minor: -1 }.to_bytes();
+    t.ok(f, ioctl::SET_VERSION, &mut v);
+    assert_eq!(unique(&mut t, f), "pci:0000:00:02.0");
+    // Per file: another one still sees none.
+    let g = t.dev.open(Node::Primary);
+    assert_eq!(unique(&mut t, g), "");
     assert_eq!(t.call(f, Request::encode(3, 0x7f, 8), &mut [0u8; 8]), Err(Errno::EINVAL));
 }
 

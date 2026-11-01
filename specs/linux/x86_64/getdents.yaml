@@ -3,7 +3,7 @@
 id: linux/syscall/x86_64/getdents             # must match coverage.json
 oracle:                                       # where the behaviour was observed
   os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
-  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on the container's overlayfs /tmp (ext4-like hashed directory order: same behaviour, different order); re-checked 2026-11-01; static freestanding test programs, raw syscalls"
   observed_by: spec-linux-b
   date: 2026-10-31
 summary: >
@@ -19,10 +19,11 @@ summary: >
 returns:
   success: "number of bytes written: a sum of whole records; 0 once every entry has been returned (also on further calls)"
   record_length: "d_reclen = (18 + strlen(name) + 2) rounded up to a multiple of 8: \".\" and \"..\" 24 bytes, a 1-3 byte name 24, \"entry_00\" (8 bytes) 32, a 34-byte name 56"
-  entries: "every entry once, \".\" and \"..\" included (an empty directory gives exactly 48 bytes: two 24-byte records); d_ino equals st_ino from lstat of the entry; the type byte is DT_DIR 4, DT_REG 8, DT_LNK 10, DT_FIFO 1 (and DT_CHR 2, DT_BLK 6, DT_SOCK 12); the order is the file system's (do not rely on it)"
+  entries: "every entry once, \".\" and \"..\" included (an empty directory gives exactly 48 bytes: two 24-byte records); d_ino equals st_ino from lstat of the entry; the type byte is DT_DIR 4, DT_REG 8, DT_LNK 10, DT_FIFO 1 (and DT_CHR 2, DT_BLK 6, DT_SOCK 12); the order is the file system's (do not rely on it): on tmpfs \".\" and \"..\" come first, on the overlayfs /tmp they came in the middle of a hash order"
   same_as_getdents64: "getdents and getdents64 on the same directory list the same entries in the same order with the same d_ino, d_off and type"
   d_off: "each record's d_off is a position: lseek(fd, d_off, SEEK_SET) makes the next call continue with the following record (the bytes returned equal the rest of a full listing); after the whole directory is read, lseek(fd, 0, SEEK_CUR) equals the last record's d_off; lseek(fd, 0, SEEK_SET) starts over (the same bytes again)"
-  small_buffers: "records are never split: with room for 2.5 records, 2 are returned; one record per call when count fits exactly one"
+  small_buffers: "records are never split: with room for two records and all but one byte of the third, 2 are returned; one record per call when count fits exactly one; reading one record at a time gives the same entries in the same order as one full listing"
+  padding: "the bytes between the name's NUL and the type byte are not written: they keep whatever the buffer held before (compare records by d_ino, d_reclen, name and type, not byte for byte)"
   descriptor: "a directory opened with O_RDONLY alone (no O_DIRECTORY) works"
 errors:
   too_small: "EINVAL (22): count smaller than the next record (0, 1, 23 for \".\"; 31 for a 32-byte record), also with a NULL buffer; the position does not move, so a following call with a larger buffer returns that record"

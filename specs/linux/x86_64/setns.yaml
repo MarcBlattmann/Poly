@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setns                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; the container has its own uts/ipc/mnt/net/pid/cgroup namespaces; unprivileged user namespaces allowed"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  setns(fd, nstype) (syscall 308) moves the calling thread into an
+  existing namespace. fd is either a namespace file (an open
+  /proc/<pid>/ns/<type> file: ipc, mnt, net, pid, pid_for_children,
+  cgroup, time, time_for_children, user, uts) or a pidfd. With a
+  namespace file, nstype (a 32-bit int; the upper register half is
+  ignored) is 0 (any type) or the CLONE_NEW* flag of that file's type;
+  the caller joins that one namespace. With a pidfd, nstype is a
+  non-empty set of CLONE_NEW* flags and the caller joins those namespaces
+  of the target process at once (all or nothing). Joining a uts, ipc,
+  net, mnt, cgroup or time namespace takes effect for the caller at once
+  (uname shows the joined node name; System V keys of the joined IPC
+  namespace are visible); joining a pid or time namespace changes the
+  namespace of children created afterwards (pid_for_children /
+  time_for_children), not the caller's own pid. Joining the mount
+  namespace also resets the caller's root and cwd to that namespace's
+  root (cwd /tmp before setns of the own mount namespace reads / after). Joining the namespace one is already in works (0, no change),
+  except the user namespace (EINVAL). Permissions: CAP_SYS_ADMIN in the
+  caller's user namespace and in the user namespace that owns the target
+  namespace (for mnt also CAP_SYS_CHROOT); a normal user gets EPERM. A
+  namespace stays alive while a descriptor of its ns file is open, also
+  after its last process has exited, and can be joined through it.
+returns:
+  success: "0"
+  join_uts: "uname().nodename / domainname become the joined namespace's"
+  join_ipc: "System V objects of the joined namespace are found, those of the old one not"
+  join_back: "joining through a descriptor of the original namespace (kept open) restores the original"
+  same_namespace: "setns of the namespace one is already in (uts, ipc, net, mnt, pid, cgroup, time, pid_for_children, time_for_children) returns 0 for a caller with the capability"
+  ns_file: "/proc/self/ns/<type> files are regular files of mode 0444; they can be opened O_RDONLY by the process itself"
+  pidfd_success: "setns(pidfd, CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNET | CLONE_NEWCGROUP | CLONE_NEWTIME | CLONE_NEWPID | CLONE_NEWNS) with a pidfd of itself (root): 0"
+errors:
+  bad_fd: "EBADF (9): fd not open, negative, or opened with O_PATH; checked first (a closed fd with a bad nstype is EBADF)"
+  not_ns: "EINVAL (22): fd is neither a namespace file nor a pidfd (regular file, the /proc/self/ns directory, a pipe)"
+  wrong_type: "EINVAL (22): namespace file with nstype not 0 and not its own CLONE_NEW* flag (another type, two types, CLONE_VM, bit 0, -1); checked before permissions"
+  pidfd_flags: "EINVAL (22): pidfd with nstype 0, or with any bit that is not a CLONE_NEW* flag (CLONE_NEWUTS|1, CLONE_NEWUTS|CLONE_VM); checked before permissions; also for a pidfd of a reaped process"
+  own_userns: "EINVAL (22): joining the user namespace the caller is already in (ns file, or CLONE_NEWUSER with a pidfd of a process in the same user namespace); also for normal users"
+  threads: "in a process with more than one thread: mnt namespace EINVAL (22) for root (EPERM for a normal user, the privilege check comes first there), user namespace EINVAL (22), time / time_for_children EUSERS (87, checked before privileges); ipc, net, uts, pid, cgroup, pid_for_children work"
+  permission: "EPERM (1): no CAP_SYS_ADMIN (normal user), for every namespace type including re-entering one's own, and for a pidfd with valid flags"
+  dead_target: "ESRCH (3): pidfd of a process that has exited and been reaped, with valid flags; also for a normal user (checked before privileges); not tested"
+  order: "EBADF (fd) > EINVAL (not a namespace file / pidfd, nstype or flags, own user namespace) and EUSERS (time in a multithreaded process) and ESRCH (dead pidfd target) > EPERM (privilege) > EINVAL (mnt in a multithreaded process)"
+side_effects: >
+  The calling thread's namespace changes (for pid and time: the
+  namespace of its future children). Joining a mount namespace moves its
+  root and cwd to that namespace's root. Nothing changes on failure.
+threading: >
+  Per thread, except user and mnt namespaces (single-threaded process only,
+  EINVAL otherwise) and time namespaces (EUSERS with threads).
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: CLONE_NEW* from linux/sched.h; EUSERS 87 from asm-generic/errno.h;
+# pidfd_open is syscall 434. Tests of errors and EPERM pass for any caller
+# (EPERM checks run as uid 65534, root drops to it in a child); joining
+# needs root. Tests that open a pidfd of themselves use syscalls=names
+# (pidfd_open takes a pid).

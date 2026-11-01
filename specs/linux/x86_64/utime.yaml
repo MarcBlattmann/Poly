@@ -3,7 +3,7 @@
 id: linux/syscall/x86_64/utime                # must match coverage.json
 oracle:                                       # where the behaviour was observed
   os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
-  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on the container's overlayfs /tmp (differences noted); re-checked 2026-11-01; static freestanding test programs, raw syscalls"
   observed_by: spec-linux-b
   date: 2026-10-31
 summary: >
@@ -14,7 +14,8 @@ summary: >
   times sets both to the current time. ctime always becomes the current time.
 returns:
   success: "0"
-  explicit_times: "any 64-bit second values: 0, negative (-1, -2000000000), far future (32503680000); atime may be later than mtime; the previous nanoseconds are replaced by 0"
+  explicit_times: "0, negative (-1, -2000000000), 2147483647 and the like are stored exactly; atime may be later than mtime; the previous nanoseconds are replaced by 0"
+  time_range: "the range a file system can store is its own: tmpfs keeps any 64-bit second (32503680000, the year 3000, reads back exactly); on the overlayfs /tmp (ext4-like below) 32503680000 did not read back as given (clamped to the file system's maximum). The call still returns 0. The tests stay within 1901..2038"
   null_times: "atime and mtime both the current time (equal to each other, seconds and nanoseconds), not earlier than the file's ctime before the call"
   ctime: "moves to the current time in both cases; size and contents are untouched"
   symbolic_links: "followed: the target's times change, the link's do not"

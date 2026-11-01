@@ -194,6 +194,59 @@ impl Text {
         }
     }
 
+    /// `s` cut to fit `max_w` at `size`, with an ellipsis if cut.
+    pub fn fit(&self, s: &str, size: f32, max_w: f32) -> alloc::string::String {
+        if self.width(s, size) <= max_w {
+            return s.into();
+        }
+        let mut out = alloc::string::String::new();
+        for c in s.chars() {
+            out.push(c);
+            out.push('\u{2026}');
+            let too_wide = self.width(&out, size) > max_w;
+            out.pop();
+            if too_wide {
+                out.pop();
+                break;
+            }
+        }
+        out.push('\u{2026}');
+        out
+    }
+
+    /// `s` broken into lines no wider than `max_w` at `size`, at spaces
+    /// (a word too long for a line is cut), at most `max_lines` (the last
+    /// ellipsized if there was more).
+    pub fn wrap(&self, s: &str, size: f32, max_w: f32, max_lines: usize) -> alloc::vec::Vec<alloc::string::String> {
+        let mut lines: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
+        for para in s.split('\n') {
+            let mut line = alloc::string::String::new();
+            for word in para.split(' ').filter(|w| !w.is_empty()) {
+                let candidate = if line.is_empty() { word.into() } else { alloc::format!("{line} {word}") };
+                if self.width(&candidate, size) <= max_w {
+                    line = candidate;
+                } else {
+                    if !line.is_empty() {
+                        lines.push(core::mem::take(&mut line));
+                    }
+                    line = if self.width(word, size) <= max_w { word.into() } else { self.fit(word, size, max_w) };
+                }
+            }
+            lines.push(line);
+        }
+        while lines.len() > 1 && lines.last().is_some_and(|l| l.is_empty()) {
+            lines.pop();
+        }
+        if lines.len() > max_lines {
+            lines.truncate(max_lines);
+            if let Some(last) = lines.last_mut() {
+                let more = alloc::format!("{last}\u{2026}");
+                *last = self.fit(&more, size, max_w);
+            }
+        }
+        lines
+    }
+
     /// The ascent of capital letters, roughly: where to put a baseline to
     /// centre a line in a box.
     pub fn cap_height(&self, size: f32) -> f32 {

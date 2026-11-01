@@ -85,17 +85,99 @@ pub fn close(fd: RawFd) {
     unsafe { libc::close(fd) };
 }
 
-/// The [`Host`] on Linux: `mmap`, `close`, and the keymap file.
+/// The keymap file (read-only, unlinked) and its size, shared between the
+/// host and the compositor, which replaces it when the layout changes
+/// (ADR 0117).
+pub type SharedKeymap = std::rc::Rc<std::cell::Cell<Option<(RawFd, u32)>>>;
+
+/// The [`Host`] on Linux: `mmap`, `close`, the keymap file, and dma-bufs.
 #[derive(Debug, Default)]
 pub struct UnixHost {
     /// The keymap file (read-only, unlinked) and its size; each
-    /// `wl_keyboard` gets a duplicate of the descriptor.
-    pub keymap: Option<(RawFd, u32)>,
+    /// `wl_keyboard` gets a duplicate of the descriptor. Shared with the
+    /// compositor, which replaces it when the layout changes (ADR 0117).
+    pub keymap: SharedKeymap,
+    /// The `dev_t` of the DRM render node clients allocate dma-bufs on, if
+    /// the compositor takes them (it runs on KMS).
+    pub dmabuf_device: Option<u64>,
+}
+
+/// The device number of a device node (`st_rdev`), if it is one.
+pub fn device_number(path: &str) -> Option<u64> {
+    let c = CString::new(path).ok()?;
+    // SAFETY: stat is plain data; all-zero is a valid value to overwrite.
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    // SAFETY: a NUL-terminated path and a stat buffer to fill.
+    let r = unsafe { libc::stat(c.as_ptr(), &mut st) };
+    (r == 0 && st.st_rdev != 0).then_some(st.st_rdev)
+}
+
+/// A read-only descriptor holding `bytes`: a sealed memfd, else an unlinked
+/// file in `/tmp`.
+pub fn read_only_file(name: &str, bytes: &[u8]) -> Option<RawFd> {
+    let c = CString::new(name).ok()?;
+    // SAFETY: a NUL-terminated name and valid flags.
+    let fd = unsafe { libc::memfd_create(c.as_ptr(), libc::MFD_CLOEXEC | libc::MFD_ALLOW_SEALING) };
+    let fd = if fd >= 0 {
+        fd
+    } else {
+        let path = format!("/tmp/{name}-{}", std::process::id());
+        let p = CString::new(path.as_str()).ok()?;
+        // SAFETY: a NUL-terminated path.
+        let fd =
+            unsafe { libc::open(p.as_ptr(), libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC, 0o600) };
+        let _ = std::fs::remove_file(&path);
+        if fd < 0 {
+            return None;
+        }
+        fd
+    };
+    let mut at = 0;
+    while at < bytes.len() {
+        // SAFETY: writing from a live buffer of the length given.
+        let n = unsafe { libc::write(fd, bytes[at..].as_ptr().cast(), bytes.len() - at) };
+        if n <= 0 {
+            close(fd);
+            return None;
+        }
+        at += n as usize;
+    }
+    // Sealing is best effort (a file in /tmp cannot be sealed).
+    // SAFETY: fcntl on a descriptor we own.
+    unsafe { libc::fcntl(fd, libc::F_ADD_SEALS, libc::F_SEAL_SHRINK | libc::F_SEAL_GROW | libc::F_SEAL_WRITE) };
+    let path = format!("/proc/self/fd/{fd}");
+    let p = CString::new(path).ok()?;
+    // A read-only descriptor of it, as the protocol wants.
+    // SAFETY: a NUL-terminated path.
+    let ro = unsafe { libc::open(p.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+    if ro >= 0 {
+        close(fd);
+        return Some(ro);
+    }
+    Some(fd)
 }
 
 impl Host for UnixHost {
+    fn dmabuf_device(&mut self) -> Option<u64> {
+        self.dmabuf_device
+    }
+
+    fn map_dmabuf(&mut self, fd: Fd) -> Option<Box<dyn ShmMap>> {
+        // SAFETY: lseek on a descriptor the client sent.
+        let size = unsafe { libc::lseek(fd.0, 0, libc::SEEK_END) };
+        if size <= 0 {
+            close(fd.0);
+            return None;
+        }
+        self.map_shm(fd, size as usize)
+    }
+
+    fn dmabuf_table(&mut self, table: &[u8]) -> Option<Fd> {
+        read_only_file("poly-dmabuf-formats", table).map(Fd)
+    }
+
     fn keymap(&mut self) -> Option<(Fd, u32)> {
-        let (fd, size) = self.keymap?;
+        let (fd, size) = self.keymap.get()?;
         // SAFETY: duplicating a descriptor the host keeps open.
         let dup = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0) };
         (dup >= 0).then_some((Fd(dup), size))
@@ -214,10 +296,35 @@ pub fn monotonic_ns() -> u64 {
 /// Start `argv[0]` with `argv` and `env` (`NAME=value`) in a child process
 /// (fork and execve); returns its pid.
 pub fn spawn(argv: &[String], env: &[String]) -> io::Result<libc::pid_t> {
+    spawn_keeping(argv, env, &[])
+}
+
+/// The program `name` runs: itself if it has a `/`, else the first
+/// executable file of that name in the directories of `PATH` in `env`
+/// (`/usr/local/bin:/usr/bin:/bin` without one), as execvp(3) searches
+/// (desktop files name programs that way, ADR 0118).
+pub fn resolve_program(name: &str, env: &[String]) -> String {
+    if name.contains('/') || name.is_empty() {
+        return name.to_string();
+    }
+    let path = env.iter().find_map(|v| v.strip_prefix("PATH=")).unwrap_or("/usr/local/bin:/usr/bin:/bin");
+    use std::os::unix::fs::PermissionsExt;
+    path.split(':')
+        .filter(|d| !d.is_empty())
+        .map(|d| format!("{d}/{name}"))
+        .find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0))
+        .unwrap_or_else(|| name.to_string())
+}
+
+/// [`spawn`], the descriptors `keep` inherited by the program (their
+/// close-on-exec flag cleared in the child).
+pub fn spawn_keeping(argv: &[String], env: &[String], keep: &[RawFd]) -> io::Result<libc::pid_t> {
     let cstrings = |v: &[String]| -> io::Result<Vec<CString>> {
         v.iter().map(|s| CString::new(s.as_str()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))).collect()
     };
     let (args, envs) = (cstrings(argv)?, cstrings(env)?);
+    let program = CString::new(resolve_program(argv.first().map_or("", String::as_str), env))
+        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
     let mut arg_ptrs: Vec<*const libc::c_char> = args.iter().map(|s| s.as_ptr()).collect();
     arg_ptrs.push(std::ptr::null());
     let mut env_ptrs: Vec<*const libc::c_char> = envs.iter().map(|s| s.as_ptr()).collect();
@@ -229,9 +336,14 @@ pub fn spawn(argv: &[String], env: &[String]) -> io::Result<libc::pid_t> {
     match pid {
         -1 => Err(io::Error::last_os_error()),
         0 => {
+            for &fd in keep {
+                // SAFETY: fcntl on a descriptor of this process; it only
+                // clears FD_CLOEXEC (async-signal-safe after fork).
+                unsafe { libc::fcntl(fd, libc::F_SETFD, 0) };
+            }
             // SAFETY: null-terminated arrays of pointers to live C strings.
             unsafe {
-                libc::execve(arg_ptrs[0], arg_ptrs.as_ptr(), env_ptrs.as_ptr());
+                libc::execve(program.as_ptr(), arg_ptrs.as_ptr(), env_ptrs.as_ptr());
                 libc::_exit(127)
             }
         }

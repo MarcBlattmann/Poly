@@ -61,12 +61,41 @@ pub struct Pipe {
 /// how many of those are still unread, and whether a later write may add
 /// to it (a page a write started; not one splice(2), tee(2) or
 /// vmsplice(2) put in, which stays a buffer of its own).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 struct Page {
     filled: usize,
     left: usize,
     merge: bool,
+    /// Where vmsplice(2) took the page's bytes from (with an id that names
+    /// the page), read again before the page is read ([`Pipe::refresh`]);
+    /// `None` for bytes copied in.
+    source: Option<Sourced>,
 }
+
+/// A page's source and the id that names the page.
+type Sourced = (u64, Arc<dyn PipeSource>);
+
+impl Page {
+    const fn bytes(n: usize, merge: bool) -> Page {
+        Page { filled: n, left: n, merge, source: None }
+    }
+}
+
+/// The memory a vmsplice(2)d buffer refers to. vmsplice's spec sheet: the
+/// pipe keeps referring to the caller's pages, so what the caller writes
+/// there before the bytes are read is what the reader gets. The pipe keeps
+/// a copy of the bytes as they were at the call and reads the source again
+/// before the page is read; a source that cannot be read any more
+/// (unmapped, say) leaves the last copy.
+pub trait PipeSource: Send + Sync {
+    /// Read the page's bytes again into `buf` (as long as the page was);
+    /// `false` if they cannot be read.
+    fn reread(&self, buf: &mut [u8]) -> bool;
+}
+
+/// One piece [`Pipe::push_pieces`] puts in: its bytes, and where they
+/// came from if the pipe is to keep referring to that.
+pub type Piece<'a> = (&'a [u8], Option<Arc<dyn PipeSource>>);
 
 struct State {
     data: VecDeque<u8>,
@@ -82,6 +111,9 @@ struct State {
     /// other side ([`PipeEnd::wait_for_peer`]).
     read_opens: u64,
     write_opens: u64,
+    /// How many pages have a [`PipeSource`], and the last id given to one.
+    sourced: usize,
+    source_ids: u64,
 }
 
 impl State {
@@ -119,7 +151,7 @@ impl State {
         let mut n = n - merge;
         while n > 0 {
             let k = n.min(PIPE_PAGE);
-            self.pages.push_back(Page { filled: k, left: k, merge: true });
+            self.pages.push_back(Page::bytes(k, true));
             n -= k;
         }
     }
@@ -131,8 +163,8 @@ impl State {
             let k = n.min(p.left);
             p.left -= k;
             n -= k;
-            if p.left == 0 {
-                self.pages.pop_front();
+            if p.left == 0 && self.pages.pop_front().is_some_and(|p| p.source.is_some()) {
+                self.sourced -= 1;
             }
         }
     }
@@ -164,6 +196,8 @@ impl Pipe {
                 writers: 0,
                 read_opens: 0,
                 write_opens: 0,
+                sourced: 0,
+                source_ids: 0,
             }),
             queue: Arc::new(WaitQueue::new()),
         })
@@ -228,9 +262,46 @@ impl Pipe {
         PipeStatus { len: s.data.len(), free_pages: s.free_pages(), readers: s.readers, writers: s.writers }
     }
 
+    /// Read the pages that vmsplice(2) put in from their sources again
+    /// ([`PipeSource`]), so the bytes still unread in them are what the
+    /// memory holds now. The sources are read without the pipe's lock
+    /// held; a page that was read or taken meanwhile is left alone.
+    pub fn refresh(&self) {
+        let sources: alloc::vec::Vec<(usize, Sourced)> = {
+            let s = self.state.lock();
+            if s.sourced == 0 {
+                return;
+            }
+            s.pages.iter().filter_map(|p| p.source.clone().map(|src| (p.filled, src))).collect()
+        };
+        for (filled, (id, src)) in sources {
+            let mut now = alloc::vec![0u8; filled];
+            if !src.reread(&mut now) {
+                continue;
+            }
+            let mut s = self.state.lock();
+            // The page's unread bytes are its last `left` ones; they start
+            // after the unread bytes of the pages before it.
+            let mut at = 0;
+            let mut found = None;
+            for p in &s.pages {
+                if p.source.as_ref().is_some_and(|(i, _)| *i == id) {
+                    found = Some(p.left);
+                    break;
+                }
+                at += p.left;
+            }
+            let Some(left) = found else { continue };
+            for (i, b) in now[filled - left..].iter().enumerate() {
+                s.data[at + i] = *b;
+            }
+        }
+    }
+
     /// Copy up to `buf.len()` of the bytes at the front out without taking
     /// them; returns how many.
     pub fn peek(&self, buf: &mut [u8]) -> usize {
+        self.refresh();
         let s = self.state.lock();
         let n = s.data.len().min(buf.len());
         for (d, b) in buf[..n].iter_mut().zip(s.data.iter()) {
@@ -242,21 +313,27 @@ impl Pipe {
     /// vmsplice(2) into the pipe: each of `pieces` (at most a page each,
     /// non-empty) becomes a buffer of its own, not merged with what is
     /// there; whole pieces go in, in order, while pages are free. Returns
-    /// the bytes taken. `EPIPE` without read ends; `EAGAIN` when not even
-    /// the first piece finds a free page.
-    pub fn push_pieces(&self, pieces: &[&[u8]]) -> Result<usize> {
+    /// the bytes taken. A piece with a [`PipeSource`] is read from it
+    /// again before it is read ([`Pipe::refresh`]). `EPIPE` without read
+    /// ends; `EAGAIN` when not even the first piece finds a free page.
+    pub fn push_pieces(&self, pieces: &[Piece<'_>]) -> Result<usize> {
         let mut s = self.state.lock();
         if s.readers == 0 {
             return Err(Errno::EPIPE);
         }
         let mut n = 0;
-        for piece in pieces.iter().filter(|p| !p.is_empty()) {
+        for (piece, source) in pieces.iter().filter(|p| !p.0.is_empty()) {
             if s.free_pages() == 0 {
                 break;
             }
             debug_assert!(piece.len() <= PIPE_PAGE);
             s.data.extend(piece.iter());
-            s.pages.push_back(Page { filled: piece.len(), left: piece.len(), merge: false });
+            let source = source.clone().map(|src| {
+                s.sourced += 1;
+                s.source_ids += 1;
+                (s.source_ids, src)
+            });
+            s.pages.push_back(Page { source, ..Page::bytes(piece.len(), false) });
             n += piece.len();
         }
         drop(s);
@@ -280,6 +357,7 @@ impl Pipe {
         if core::ptr::eq(self, out) {
             return Err(Errno::EINVAL);
         }
+        self.refresh();
         // Two locks, always taken in address order.
         let (mut src, mut dst) = if (self as *const Pipe) < (out as *const Pipe) {
             let a = self.state.lock();
@@ -303,7 +381,7 @@ impl Pipe {
         while moved < len && page < src.pages.len() && dst.free_pages() > 0 {
             let k = src.pages[page].left.min(len - moved);
             dst.data.extend(src.data.range(at..at + k));
-            dst.pages.push_back(Page { filled: k, left: k, merge: false });
+            dst.pages.push_back(Page::bytes(k, false));
             moved += k;
             at += k;
             page += 1;
@@ -455,12 +533,17 @@ impl FileObject for PipeEnd {
         if buf.is_empty() {
             return Ok(0);
         }
+        self.pipe.refresh();
         let mut s = self.pipe.state.lock();
         if s.data.is_empty() {
             return if s.writers == 0 { Ok(0) } else { Err(Errno::EAGAIN) };
         }
         let n = if s.packet {
-            let packet = s.pages.pop_front().map_or(0, |p| p.left);
+            let page = s.pages.pop_front();
+            if page.as_ref().is_some_and(|p| p.source.is_some()) {
+                s.sourced -= 1;
+            }
+            let packet = page.map_or(0, |p| p.left);
             let n = packet.min(buf.len());
             take(&mut s.data, &mut buf[..n]);
             // pipe(7): "the excess bytes in the packet are discarded".
@@ -607,7 +690,7 @@ mod tests {
     #[test]
     fn vmsplice_pieces_take_a_buffer_each() {
         let (pr, pw) = Pipe::pair(false);
-        let pieces: Vec<&[u8]> = (0..20).map(|_| &b"x"[..]).collect();
+        let pieces: Vec<Piece<'_>> = (0..20).map(|_| (&b"x"[..], None)).collect();
         assert_eq!(pw.pipe().push_pieces(&pieces), Ok(16));
         assert_eq!(pw.pipe().push_pieces(&pieces), Err(Errno::EAGAIN));
         assert_eq!(read_all(&pr).len(), 16);
@@ -615,10 +698,58 @@ mod tests {
         assert_eq!(pw.pipe().push_pieces(&pieces), Ok(15));
         read_all(&pr);
         // A piece is not merged into by a later write.
-        assert_eq!(pw.pipe().push_pieces(&[b"ab"]), Ok(2));
+        assert_eq!(pw.pipe().push_pieces(&[(b"ab", None)]), Ok(2));
         write(&pw, b"c");
         assert_eq!(pw.pipe().status().free_pages, 14);
         drop(pr);
-        assert_eq!(pw.pipe().push_pieces(&[b"z"]), Err(Errno::EPIPE));
+        assert_eq!(pw.pipe().push_pieces(&[(b"z", None)]), Err(Errno::EPIPE));
+    }
+
+    /// Memory a test changes after vmsplice; `None`: unmapped.
+    struct Memory(crate::sync::SpinMutex<Option<Vec<u8>>>);
+
+    impl PipeSource for Memory {
+        fn reread(&self, buf: &mut [u8]) -> bool {
+            match &*self.0.lock() {
+                Some(m) => {
+                    buf.copy_from_slice(&m[..buf.len()]);
+                    true
+                }
+                None => false,
+            }
+        }
+    }
+
+    #[test]
+    fn vmspliced_pieces_are_read_from_their_memory_when_read() {
+        // vmsplice's spec sheet: 'orig' spliced, 'CHGD' written into the
+        // buffer before the read, the reader gets 'CHGD'.
+        let (pr, pw) = Pipe::pair(false);
+        let mem = Arc::new(Memory(crate::sync::SpinMutex::new(Some(b"orig".to_vec()))));
+        let src: Arc<dyn PipeSource> = mem.clone();
+        assert_eq!(pw.pipe().push_pieces(&[(b"orig", Some(src.clone())), (b"tail", None)]), Ok(8));
+        *mem.0.lock() = Some(b"CHGD".to_vec());
+        let mut two = [0u8; 2];
+        assert_eq!(pr.read(&mut two), Ok(2));
+        assert_eq!(&two, b"CH");
+        // The rest of a partly read piece, and a later change.
+        *mem.0.lock() = Some(b"wxyz".to_vec());
+        let mut peeked = [0u8; 6];
+        assert_eq!(pw.pipe().peek(&mut peeked), 6);
+        assert_eq!(&peeked, b"yztail");
+        // Memory that went away leaves the last bytes.
+        *mem.0.lock() = None;
+        assert_eq!(read_all(&pr), b"yztail");
+        assert_eq!(pw.pipe().state.lock().sourced, 0);
+        // A write copies at once: it has no source.
+        write(&pw, b"abc");
+        assert_eq!(read_all(&pr), b"abc");
+        // Through tee the copy is made from what the memory holds then.
+        let (qr, qw) = Pipe::pair(false);
+        *mem.0.lock() = Some(b"1234".to_vec());
+        assert_eq!(pw.pipe().push_pieces(&[(b"orig", Some(src))]), Ok(4));
+        *mem.0.lock() = Some(b"5678".to_vec());
+        assert_eq!(pr.pipe().transfer(qw.pipe(), 4, true), Ok(Transfer::Moved(4)));
+        assert_eq!(read_all(&qr), b"5678");
     }
 }

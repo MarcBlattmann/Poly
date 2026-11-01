@@ -19,6 +19,8 @@ type Memory = Rc<RefCell<Vec<u8>>>;
 struct Shared {
     files: Map<i32, Memory>,
     closed: Vec<i32>,
+    /// dma-buf format tables handed out.
+    tables: Vec<Vec<u8>>,
 }
 
 struct TestHost(Rc<RefCell<Shared>>);
@@ -81,10 +83,28 @@ impl Host for TestHost {
     fn keymap(&mut self) -> Option<(Fd, u32)> {
         Some((Fd(KEYMAP_FD), 1234))
     }
+
+    fn dmabuf_device(&mut self) -> Option<u64> {
+        Some(DMABUF_DEVICE)
+    }
+
+    /// A dma-buf is test memory like a pool's file, all of it mapped.
+    fn map_dmabuf(&mut self, fd: Fd) -> Option<Box<dyn ShmMap>> {
+        let len = self.0.borrow().files.get(&fd.0).map(|m| m.borrow().len())?;
+        self.map_shm(fd, len)
+    }
+
+    fn dmabuf_table(&mut self, table: &[u8]) -> Option<Fd> {
+        self.0.borrow_mut().tables.push(table.to_vec());
+        Some(Fd(TABLE_FD))
+    }
 }
 
-/// What the test host hands out as the keymap's file descriptor.
+/// What the test host hands out as the keymap's file descriptor, the
+/// format table's, and the DRM device number it names.
 const KEYMAP_FD: i32 = 999;
+const TABLE_FD: i32 = 998;
+const DMABUF_DEVICE: u64 = 226 << 8 | 128;
 
 // ---------------------------------------------------------------------
 // A client.
@@ -139,6 +159,12 @@ impl Peer {
             let desc = &interface.events[usize::from(h.opcode)];
             let body = &bytes[at + 8..at + usize::from(h.size)];
             let args = decode_args(desc, body, &mut || fds.next()).unwrap();
+            // Objects the server made (a data offer, a dma-buf's wl_buffer).
+            for (d, a) in desc.args.iter().zip(&args) {
+                if let (Arg::NewId(id), Some(name)) = (a, d.interface) {
+                    self.objects.insert(id.0, crate::protocol::interface(name).unwrap());
+                }
+            }
             if let (wl_display::NAME, "delete_id") = (interface.name, desc.name) {
                 let Arg::Uint(id) = args[0] else { panic!() };
                 self.objects.remove(&id);
@@ -307,11 +333,18 @@ fn the_registry_lists_the_globals_and_sync_answers() {
         names,
         [
             "wl_compositor",
+            "wl_data_device_manager",
             "wl_output",
             "wl_seat",
             "wl_shm",
+            "wl_subcompositor",
+            "wp_cursor_shape_manager_v1",
+            "wp_fractional_scale_manager_v1",
             "wp_presentation",
+            "wp_viewporter",
+            "xdg_activation_v1",
             "xdg_wm_base",
+            "zwp_linux_dmabuf_v1",
             "zxdg_decoration_manager_v1"
         ]
     );
@@ -406,7 +439,10 @@ fn shm_announces_formats_and_checks_buffers() {
     let (mut p, registry) = connect(&mut srv, &shared);
     let shm = p.bind(&mut srv, registry, &wl_shm::INTERFACE, 2);
     let formats: Vec<Arg> = p.take().into_iter().flat_map(|e| e.args).collect();
-    assert_eq!(formats, [Arg::Uint(0), Arg::Uint(1)]);
+    // argb8888, xrgb8888, abgr8888 and xbgr8888 (fourcc AB24, XB24).
+    let ab24 = u32::from_le_bytes(*b"AB24");
+    let xb24 = u32::from_le_bytes(*b"XB24");
+    assert_eq!(formats, [Arg::Uint(0), Arg::Uint(1), Arg::Uint(ab24), Arg::Uint(xb24)]);
     let (fd, _mem) = p.memfd(4096);
     let pool = p.new_id(&wl_shm_pool::INTERFACE);
     p.send(&mut srv, shm, wl_shm::Request::CreatePool { id: pool, fd, size: 4096 });
@@ -987,3 +1023,6 @@ fn removing_a_client_frees_its_windows_and_memory() {
     assert_eq!(srv.clients().count(), 0);
 }
 mod input_routing;
+mod protocols;
+mod window_management;
+mod xwayland;

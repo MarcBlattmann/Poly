@@ -121,13 +121,13 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app
 - [x] virtio-gpu driver: modesetting and 2D framebuffer
 - [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
-- [ ] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged
+- [x] Kernel GPU interface compatible with Linux DRM/KMS so Mesa runs unchanged (ADR 0108, ADR 0115: kmscube renders with Mesa's kms_swrast on `/dev/dri/card0`, boot group `mesa`)
 - [ ] 3D acceleration: virtio-gpu with Venus (Vulkan) / virgl (OpenGL) through Mesa
 - [x] Audio: virtio-sound (then Intel HDA) driver, audio server, ALSA-compatible interface
-- [ ] Compositor: Wayland server, surface composition, HiDPI scaling, vsync
-- [ ] Shell: launcher, window management, notifications, settings (own non-glass design)
-- [ ] Compositor exposes the content behind each window (needed later for Liquid Glass)
-- [ ] XWayland for X11 apps
+- [x] Compositor: Wayland server, surface composition, HiDPI scaling, vsync (ADR 0106, 0107, 0116)
+- [x] Shell: launcher, window management, notifications, settings (own non-glass design) (ADR 0107, ADR 0117)
+- [x] Compositor exposes the content behind each window (needed later for Liquid Glass) (ADR 0116)
+- [x] XWayland for X11 apps (ADR 0118)
 - [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
 - [ ] **Milestone:** GTK and Qt apps run; VLC plays a video with sound
 

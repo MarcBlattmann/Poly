@@ -1,0 +1,11 @@
+[package]
+name = "poly-dbus"
+description = "A minimal D-Bus session bus: the wire format (marshalling, messages), SASL authentication, a message bus with name ownership, match rules and the org.freedesktop.DBus driver, and the org.freedesktop.Notifications service's messages; no I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

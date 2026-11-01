@@ -73,3 +73,79 @@ fn the_shell_in_dejavu() {
     let lit = (468..560).any(|x| (284..300).any(|y| fb.pixel(x, y).is_some_and(|p| p & 0xff > 0xb0)));
     assert!(lit, "the title is drawn");
 }
+
+/// The parts of ADR 0117 in DejaVu: toasts, the history, the switcher, the
+/// snap preview and every page of the settings window.
+#[test]
+fn notifications_switcher_and_settings_in_dejavu() {
+    use poly_dbus::notifications::Notify;
+    use poly_shell::settings_ui::{Page, SystemInfo};
+    use poly_shell::switcher::{Entry, Thumb};
+    use poly_wayland::compose::WindowId;
+    let Some(data) = dejavu() else {
+        eprintln!("skipped: no DejaVu fonts (POLY_FONT_DIR)");
+        return;
+    };
+    let font = Font::parse(data).unwrap();
+    let mut shell = Shell::new(1280, 800, apps::catalog(Vec::new()), Text::new(Some(font)));
+    shell.set_time(1_793_491_200 + 21 * 3600 + 41 * 60, 0);
+    shell.hide_launcher();
+    shell.set_network(poly_shell::Network::Online("eth0".into()));
+    shell.set_volume(Some((60, false)));
+    shell.set_now_ms(1000);
+    let n = |s: &str, b: &str| Notify {
+        app_name: "notify-send".into(),
+        summary: s.into(),
+        body: b.into(),
+        expire_timeout: -1,
+        ..Notify::default()
+    };
+    shell.notify(n("Hello from a test client", "Sent through org.freedesktop.Notifications on the session bus"));
+    let mut update = n("Update ready", "Poly 0.0.2 can be installed now.");
+    update.actions = vec![("default".into(), "Open".into()), ("later".into(), "Later".into())];
+    shell.notify(update);
+    let all = Rect::new(0, 0, 1280, 800);
+    let mut fb = MemoryFramebuffer::new(1280, 800);
+    shell.below().draw(&mut fb, all, 1);
+    shell.above().draw(&mut fb, all, 1);
+    save(&fb, "shell-toasts.png");
+    assert_eq!(fb.pixel(1280 - 8 - 60, 24 + 8 + 40), Some(0x20_20_20), "a toast card");
+    shell.toggle_history();
+    shell.below().draw(&mut fb, all, 1);
+    shell.above().draw(&mut fb, all, 1);
+    save(&fb, "shell-history.png");
+    shell.toggle_history();
+    // The switcher with two windows, over a snap preview.
+    let entry = |id: u32, title: &str, colour: u32| Entry {
+        window: WindowId(id),
+        title: title.into(),
+        app_id: String::new(),
+        minimized: false,
+        thumb: Thumb { width: 200, height: 124, pixels: vec![colour; 200 * 124] },
+    };
+    shell.open_switcher(vec![entry(1, "Settings", 0x29_29_29), entry(2, "Poly Demo", 0x2f_7d_6d)], false);
+    shell.set_snap_preview(Some(Rect::new(4, 28, 632, 768)));
+    shell.below().draw(&mut fb, all, 1);
+    shell.above().draw(&mut fb, all, 1);
+    save(&fb, "shell-switcher.png");
+    shell.switcher_cancel();
+    // Every settings page.
+    let info = SystemInfo {
+        os: "Poly 0.0.1".into(),
+        kernel: "Linux 6.1.0-poly #1".into(),
+        machine: "x86_64".into(),
+        cpu: "QEMU Virtual CPU version 2.5+".into(),
+        memory_kib: 512 * 1024,
+        display: (1280, 800),
+        modes: vec![(1280, 800)],
+        sound: Some("virtio-sound".into()),
+        network: "connected (eth0)".into(),
+        session_bus: "unix:path=/run/user/0/bus".into(),
+    };
+    for page in Page::ALL {
+        shell.settings_window.page = page;
+        let mut fb = MemoryFramebuffer::new(760, 520);
+        shell.draw_settings(&mut fb, 760, 520, 1, &info, 1_793_491_200);
+        save(&fb, &format!("settings-{}.png", page.label().to_lowercase().replace(" & ", "-")));
+    }
+}

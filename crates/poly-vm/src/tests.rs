@@ -291,6 +291,28 @@ fn file_regions_merge_only_when_continuous() {
 }
 
 #[test]
+fn replace_files_changes_only_the_handles_asked_for() {
+    let mut m = map_with(small());
+    let a = MIN + 10 * P;
+    let at = |n: u64| Placement::Fixed(a + n * P);
+    m.map(file(2 * P, Prot::READ, 1, 0, true, at(0))).unwrap();
+    m.map(anon(P, Prot::READ, at(2))).unwrap();
+    m.map(file(P, Prot::READ, 2, 0, true, at(3))).unwrap();
+    m.protect(a, P, Prot::NONE).unwrap(); // splits file 1 in two
+    let before = spans(&m);
+    m.replace_files(|f| (*f == 1).then_some(7));
+    assert_eq!(spans(&m), before);
+    let files: Vec<Option<u32>> = m
+        .regions()
+        .map(|v| match v.backing {
+            Backing::File { file, .. } => Some(file),
+            Backing::Anonymous => None,
+        })
+        .collect();
+    assert_eq!(files, vec![Some(7), Some(7), None, Some(2)]);
+}
+
+#[test]
 fn heap_and_stack_never_merge_with_ordinary_regions() {
     let mut m = map_with(Layout { stack_guard_gap: 0, ..small() });
     m.init_brk(MIN + 10 * P).unwrap();

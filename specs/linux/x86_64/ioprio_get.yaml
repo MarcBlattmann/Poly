@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ioprio_get           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; Yama ptrace_scope 1; no I/O scheduler setting matters (only the stored values are observed)"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  ioprio_get(which, who) (syscall 252) returns an I/O scheduling priority.
+  A priority value is class << 13 | hint << 3 | level, kept as 16 bits:
+  class IOPRIO_CLASS_NONE 0, IOPRIO_CLASS_RT 1, IOPRIO_CLASS_BE 2,
+  IOPRIO_CLASS_IDLE 3; level 0..7 (lower is more important); hint bits
+  3..12. which (32 bits, upper register half ignored): IOPRIO_WHO_PROCESS 1
+  (who = a thread/process id, 0 = the caller), IOPRIO_WHO_PGRP 2 (who =
+  a process group id, 0 = the caller's group), IOPRIO_WHO_USER 3 (who =
+  a uid; 0 is uid 0, not the caller). For one process the result is its
+  stored value exactly as ioprio_set stored it, hint bits included; a
+  thread that never set one (and whose parent never did) reads 0
+  (class none). For a group or user the result is the best value over
+  every matching process visible in the caller's pid namespace, where a
+  member with class none counts as best effort with level
+  (nice + 20) / 5 (4 at nice 0, 6 at nice 10, 7 at nice 19); best is real
+  time over best effort over idle, then the lower level. A group of one
+  process with class none therefore reads (2 << 13) | 4 although that
+  process reads 0 for itself. Reading needs no privilege (any process,
+  any owner).
+returns:
+  process: "the target thread's stored 16-bit value; 0 if never set (class none); a value set with hint bits returns them"
+  inherited: "a child made by fork or clone starts with its parent's value (ioprio_set entry, tested there and here through a CLONE_VM child)"
+  group_or_user: "best of the members' values with class none mapped to best effort level (nice+20)/5; real time beats best effort beats idle; lower level wins within a class (best effort 3 vs none-as-4 -> 3; best effort 7 vs none at nice 0 -> 4; idle vs none -> none-as-best-effort)"
+  zombies: "an exited, not yet reaped member of a group still counts, as class none at nice 0 (observed; not tested beyond reaping first)"
+  initial_value: "inherited from whatever started the program (not tested: the reference's tracer and Poly's init may differ); tests set a value before reading"
+errors:
+  bad_which: "EINVAL (22): which not 1, 2 or 3 (0, 4, -1, 9); checked before who"
+  no_target: "ESRCH (3): no thread with that id (also -1 and ids above pid_max), no process in that group, no process of that uid (also a uid with no processes, 0x7fffffff); a reaped child's pid"
+  order: "which (EINVAL), then the lookup (ESRCH)"
+side_effects: none
+threading: >
+  The value is per thread (IOPRIO_WHO_PROCESS with a thread id reads that
+  thread). A CLONE_VM child is a separate task with its own value.
+ordering: []
+timing:
+  typical: "microseconds per call; a group or user scan is proportional to the number of processes"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/ioprio.h (IOPRIO_CLASS_*, IOPRIO_WHO_*,
+# class shift 13, hint bits 3..12, level bits 0..2). Syscall number from
+# asm/unistd_64.h. Group tests run in a new session so the group holds
+# only the test's processes; the member child is reaped before nice-based
+# checks (a zombie still counts). IOPRIO_WHO_USER is only read with a
+# uid that owns no process (ESRCH) or, in ioprio_set's needs=root test,
+# a private uid 4242: as root or as the runner's user it would scan
+# processes of the machine. Tests that pass a child's pid use
+# syscalls=names.

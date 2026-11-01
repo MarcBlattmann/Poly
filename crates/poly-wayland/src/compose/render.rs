@@ -1,21 +1,24 @@
 //! Drawing one damaged rectangle: the desktop, then every window bottom to
 //! top — its frame, then its content over it — clipped to the rectangle.
 
-use super::frame::{FrameLayout, cross_covers};
-use super::scene::{Scene, Window};
+use super::frame::{FrameLayout, Glyph, glyph_covers};
+use super::scene::{Backdrop, Content, CursorLook, Scene, Window, WindowId};
 use super::{CURSOR_SIZE, Framebuffer, Layer, Rect, over, with_alpha};
+use alloc::collections::BTreeMap;
 
 const OPAQUE: u32 = 0xff00_0000;
 
 /// Draw the physical rectangle `clip` (inside the framebuffer) of `scene`:
 /// the background (or the `below` layer), the windows, the `above` layer,
-/// the cursor.
+/// the cursor. Just before a window whose backdrop is kept is drawn, what
+/// the framebuffer holds under it is its backdrop.
 pub(super) fn draw(
     scene: &Scene,
     fb: &mut dyn Framebuffer,
     clip: Rect,
     below: Option<&dyn Layer>,
     above: Option<&dyn Layer>,
+    backdrops: &mut BTreeMap<WindowId, Backdrop>,
 ) {
     let s = scene.output().2 as i32;
     match below {
@@ -26,6 +29,9 @@ pub(super) fn draw(
         if w.extent().scale(s).intersect(&clip).is_empty() {
             continue;
         }
+        if let Some(b) = backdrops.get_mut(&w.id()) {
+            b.capture(fb, clip);
+        }
         if let Some(f) = w.frame() {
             draw_frame(scene, fb, clip, w, &f, s);
         }
@@ -35,7 +41,15 @@ pub(super) fn draw(
         layer.draw(fb, clip, s);
     }
     if let Some((x, y)) = scene.cursor() {
-        draw_cursor(fb, clip, x, y, s);
+        match scene.cursor_look() {
+            CursorLook::Arrow => draw_cursor(fb, clip, x, y, s),
+            CursorLook::Image { content, hx, hy } => {
+                let (w, h) = content.logical_size();
+                let dest = Rect::new(x - hx, y - hy, w, h).scale(s);
+                draw_image(fb, clip, content, dest, dest, s);
+            }
+            CursorLook::Hidden => {}
+        }
     }
 }
 
@@ -101,14 +115,17 @@ fn draw_frame(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect, w: &Window, f
     }
     fill(fb, clip, f.title.scale(s), title_bg);
     draw_title(scene, fb, clip, f, w.title(), text, s);
-    // The close button: a cross in the title text's colour.
-    let close = f.close.scale(s);
-    let area = close.intersect(&clip);
-    for y in area.y..area.bottom() {
-        let row = fb.row_mut(y as u32);
-        for x in area.x..area.right() {
-            if cross_covers(x - close.x, y - close.y, close.width, s) {
-                row[x as usize] = text | OPAQUE;
+    // The buttons: glyphs in the title text's colour.
+    let middle = if w.is_maximized() { Glyph::Restore } else { Glyph::Maximize };
+    for (button, glyph) in [(f.close, Glyph::Close), (f.maximize, middle), (f.minimize, Glyph::Minimize)] {
+        let b = button.scale(s);
+        let area = b.intersect(&clip);
+        for y in area.y..area.bottom() {
+            let row = fb.row_mut(y as u32);
+            for x in area.x..area.right() {
+                if glyph_covers(glyph, x - b.x, y - b.y, b.width, s) {
+                    row[x as usize] = text | OPAQUE;
+                }
             }
         }
     }
@@ -151,11 +168,29 @@ fn draw_title(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect, f: &FrameLayo
 /// bounds are drawn (xdg-shell lets compositors clip to the window
 /// geometry): what a client draws outside them would be under the frame.
 fn draw_content(fb: &mut dyn Framebuffer, clip: Rect, w: &Window, s: i32) {
-    let c = w.content();
     let dest = w.surface_rect().scale(s);
     let shown = if w.is_decorated() { w.bounds().scale(s) } else { dest };
-    let area = shown.intersect(&clip);
+    draw_image(fb, clip, w.content(), dest, shown, s);
+}
+
+/// Content `c` shown over the physical rectangle `dest`, only the part in
+/// `shown` and `clip`, blended over what is below: pixel for pixel when its
+/// buffer scale is the output's and it has no transform or viewport, else
+/// sampled (nearest neighbour).
+fn draw_image(fb: &mut dyn Framebuffer, clip: Rect, c: &Content, dest: Rect, shown: Rect, s: i32) {
+    let area = shown.intersect(&clip).intersect(&dest);
     if area.is_empty() {
+        return;
+    }
+    if !c.view.is_identity() {
+        for y in area.y..area.bottom() {
+            let row = fb.row_mut(y as u32);
+            for x in area.x..area.right() {
+                let p = c.sample(x - dest.x, y - dest.y, dest.width, dest.height);
+                let dst = &mut row[x as usize];
+                *dst = over(p, *dst) | OPAQUE;
+            }
+        }
         return;
     }
     let bs = c.scale.max(1) as i32;

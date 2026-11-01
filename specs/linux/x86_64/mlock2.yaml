@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mlock2               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; RLIMIT_MEMLOCK unlimited (soft and hard) as inherited, the tests set the soft limit themselves"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  mlock2(addr, len, flags) (syscall 325) locks the pages of the range
+  [addr rounded down to a page, addr+len rounded up to a page) in memory
+  and returns 0. flags is a 32-bit int (bits 32..63 ignored): 0 or
+  MLOCK_ONFAULT (1). With flags 0 it is mlock: every page of the range
+  is made present at once (fresh anonymous pages show as resident in
+  mincore right after the call, also on a PROT_READ mapping). With
+  MLOCK_ONFAULT nothing is populated: pages are locked as they are
+  faulted in later (a touched page becomes resident, the others stay
+  absent). Locking pages that are already locked is allowed and counts
+  them once; locking with flags 0 a range earlier locked with
+  MLOCK_ONFAULT populates its missing pages. len 0 returns 0 without
+  looking at addr (unless the limit check below fails first). Locked
+  pages count against RLIMIT_MEMLOCK (soft limit) of callers without
+  CAP_IPC_LOCK, and show in the VmLck line of /proc/self/status (4 kB
+  per page, MLOCK_ONFAULT ranges counted in full at once). munlock (or
+  munmap, munlockall) unlocks.
+returns:
+  success: "0"
+  populate: "flags 0: every page in the range present afterwards (mincore bit 0 set); MLOCK_ONFAULT: no page populated by the call; touching a page makes it present"
+  rounding: "addr is rounded down and the end rounded up to 4096: (page+100, 10 bytes) locks exactly that page; (page_end-1, 2 bytes) locks two pages"
+  relock: "locking a locked range again (with either flag) is 0 and counts once (VmLck unchanged; no extra RLIMIT_MEMLOCK use)"
+  len_zero: "len 0: 0 even for an unmapped or kernel address (no lookup), but EPERM when RLIMIT_MEMLOCK is 0 without CAP_IPC_LOCK"
+  len_wrap: "the length is rounded up to pages including addr's offset in its page; a len whose rounded value wraps to 0 (len ~0) is 0, one that wraps past the start (len -8192) is EINVAL when no limit applies (root) and ENOMEM when RLIMIT_MEMLOCK applies (it exceeds any limit)"
+  flags_width: "flags (1<<32)|MLOCK_ONFAULT is MLOCK_ONFAULT"
+  accounting: "VmLck rises by 4 kB per newly locked page (whole range at once for MLOCK_ONFAULT); munlock of a sub-range lowers it by that range"
+  rlimit: "without CAP_IPC_LOCK: the call fails with ENOMEM if the pages already locked plus the newly locked pages of the range would exceed the RLIMIT_MEMLOCK soft limit (limit 2 pages: 2 pages OK, a third ENOMEM, the same 2 again OK, 3 pages overlapping the 2 locked ENOMEM); munlock gives pages back; with CAP_IPC_LOCK (root) the limit is ignored (limit 0 or 1 page: root locks 4 or 8 pages)"
+errors:
+  bad_flags: "EINVAL (22): any flag bit other than MLOCK_ONFAULT in the low 32 bits (2, 3, 4, 0x80000000, ~0); checked first (before EPERM and ENOMEM); nothing is locked"
+  no_permission: "EPERM (1): RLIMIT_MEMLOCK soft limit is 0 and the caller lacks CAP_IPC_LOCK; for every call with valid flags (also len 0, also an unmapped range)"
+  over_limit: "ENOMEM (12): the caller lacks CAP_IPC_LOCK and the locked total would exceed RLIMIT_MEMLOCK (also for a huge len)"
+  unmapped: "ENOMEM (12): some page of the range is not mapped (an unmapped address, NULL, a kernel address 0xffff800000000000, a range with a hole). With a hole, the mappings before the hole are left marked locked (VmLck counts them) but no page is populated; nothing after the hole changes"
+  prot_none: "ENOMEM (12): flags 0 on a PROT_NONE mapping (its pages cannot be populated; the mapping is still marked locked); MLOCK_ONFAULT on a PROT_NONE mapping is 0"
+  wrap: "EINVAL (22): with no limit applying, the rounded end wraps around below the start (len -8192)"
+  order: "flags (EINVAL), then RLIMIT_MEMLOCK 0 without CAP_IPC_LOCK (EPERM), then rounding and the limit (ENOMEM), then len 0 (0) and wrap-around (EINVAL), then the range lookup (ENOMEM)"
+side_effects: >
+  Marks the mappings of the range locked (splitting mappings at the
+  range ends as needed), counts them in VmLck and against the memory-lock
+  limit, and with flags 0 faults every page in (allocating anonymous
+  pages, reading file pages). Locked pages are never swapped out. Data
+  is not changed. munlock over a hole is ENOMEM too.
+threading: "Locks apply to the address space, so to every thread sharing it; a fork child does not inherit locks (not tested)."
+ordering: []
+timing:
+  typical: "microseconds per page for flags 0 (page allocation), constant for MLOCK_ONFAULT"
+  guarantees: "with flags 0 the pages are present when the call returns"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: MLOCK_ONFAULT from asm-generic/mman-common.h; RLIMIT_MEMLOCK (8)
+# from asm-generic/resource.h; errno values from asm-generic/errno-base.h.
+# Tests that check RLIMIT_MEMLOCK run unprivileged: as root they first
+# switch to uid/gid 65534 (setgroups, setresgid, setresuid), which drops
+# every capability; they lower the soft limit themselves (always
+# allowed). ld_mlock2_root needs root (CAP_IPC_LOCK). Tests that read
+# VmLck from /proc/self/status compare syscalls by name only. mincore is
+# used to see which pages are present. Every test locks well under 64 KiB.

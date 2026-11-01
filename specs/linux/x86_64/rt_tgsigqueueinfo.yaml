@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/rt_tgsigqueueinfo    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "privileged Docker container (poly-dev, Ubuntu 24.04 userland) on WSL2, x86-64 (AMD Ryzen AI MAX+ PRO 395, 32 CPUs); tests run as root with all capabilities and as uid/gid 65534 without capabilities; umask 022; pid_max well below 0x7fffffff"
+  observed_by: spec-linux-d
+  date: 2026-11-01
+summary: >
+  rt_tgsigqueueinfo(tgid, tid, sig, info) (syscall 297) queues signal sig
+  for the one thread tid, which must belong to thread group (process)
+  tgid, with a siginfo supplied by the caller (128 bytes at info). tgid,
+  tid and sig are 32-bit ints (upper register halves ignored). The
+  receiver sees the caller's siginfo with si_signo replaced by sig
+  (whatever info->si_signo held, also 0); si_errno, si_code and the
+  following words (pid, uid, sigval, ...) arrive exactly as given; the
+  kernel does not fill in the real sender. Any si_code may be used for
+  the caller's own thread (tid == the caller's thread id); for any other
+  thread, also a sibling thread of the same process, si_code must be
+  negative and not SI_TKILL (-6) (e.g. SI_QUEUE -1), else EPERM. The
+  signal is thread-directed: pending for the target thread only. A
+  handled, unblocked signal sent to the caller's own thread runs before
+  the call returns. Real-time signals (32-64) are queued once per call,
+  each with its own siginfo, taken in order; a standard signal (1-31) is
+  pending at most once and keeps the siginfo of the first send. Signal 0
+  checks everything and sends nothing. Ordinary kill permission applies
+  for other processes (CAP_KILL, or the sender's real or effective uid
+  equal to the target's real or saved uid).
+returns:
+  success: "0"
+  siginfo: "receiver gets info's 128 bytes with si_signo = sig; si_errno, si_code, pid/uid/value fields unchanged"
+  own_thread_codes: "any si_code accepted (SI_QUEUE -1, SI_USER 0, SI_TKILL -6, positive codes) when tid is the caller's own thread id"
+  other_thread_codes: "only negative codes other than SI_TKILL; SI_USER, SI_TKILL or positive codes are EPERM even for a sibling thread"
+  queueing: "real-time: one instance per call in send order, lower signal numbers taken first; standard: merged, first siginfo kept"
+  widths: "tgid, tid and sig use only their low 32 bits"
+errors:
+  fault: "EFAULT (14): info unreadable (NULL, low address); checked first, before the ids and the signal"
+  e2big: "E2BIG (7): si_code of a layout the kernel does not know and a nonzero byte in bytes 48..127 of info. Observed unknown: -8, -42, 0x81, 1000; known (tail ignored): 0, -1..-7, -60, 0x80 (SI_KERNEL), 1 and 5 (with SIGCHLD, a real-time signal or 0); checked after EFAULT and before everything else"
+  bad_ids: "EINVAL (22): tgid <= 0 or tid <= 0"
+  code_not_allowed: "EPERM (1): si_code >= 0 or si_code == SI_TKILL while tid is not the caller's own thread id; checked before the thread lookup (also EPERM for a thread that does not exist) and before the signal number"
+  no_thread: "ESRCH (3): no thread tid in thread group tgid (no such thread, or it belongs to another process, or the caller's own tid with a wrong tgid); checked before the signal number"
+  bad_signal: "EINVAL (22): sig < 0 or sig > 64 for an existing target"
+  permission: "EPERM (1): another user's process without CAP_KILL (normal kill permission rule); checked after the signal number"
+  order: "EFAULT (info) > E2BIG (unknown code layout) > EINVAL (ids <= 0) > EPERM (code for another thread) > ESRCH (lookup) > EINVAL (signal number) > EPERM (permission)"
+side_effects: >
+  One signal queued for (or delivered to) the target thread; nothing on
+  error or for signal 0. Default actions apply when the signal is
+  delivered.
+threading: >
+  Thread-directed: a signal for a sibling thread is not pending for the
+  sender and is taken only by the target thread.
+ordering:
+  - "own thread, unblocked handled signal: the handler runs before the call returns"
+  - "several pending: lowest signal number first; real-time instances of one signal in send order"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: syscall number from asm/unistd_64.h; siginfo_t layout (128 bytes,
+# si_signo, si_errno, si_code, then the union at byte 16) and SI_* codes
+# from asm-generic/siginfo.h; signal numbers from asm/signal.h; errno
+# values from asm-generic/errno-base.h. rt_sigqueueinfo (129) behaves the
+# same for a whole process (see its sheet). Tests with several tasks
+# running at once use syscalls=off; the others compare traces exactly
+# (tgid and tid are typed as pids in the pipeline's signature table).
