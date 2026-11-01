@@ -309,7 +309,7 @@ impl Server {
         if let Some(&b) = self.xwayland.buffers.get(&surface.0)
             && matches!(self.client(c).data(b), Some(Data::Buffer(_)))
         {
-            self.copy_buffer(c, b, surface.0, Some(win), scale, &[]);
+            self.copy_buffer(c, b, surface, Some(win), scale, &[]);
         }
         self.surface_entered(c, surface);
         let parent = state.transient_for.and_then(|p| self.x_scene_window(p));
