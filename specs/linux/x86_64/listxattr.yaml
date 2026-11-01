@@ -51,3 +51,8 @@ tests:
 # tests), never in order. Tests of hidden trusted.* names and of more
 # than 65536 bytes of names use /dev/shm (tmpfs on Linux and Poly).
 # Constants as in setxattr.yaml (XATTR_LIST_MAX 65536, linux/limits.h).
+# What directories the test did not make carry is the machine's, not
+# listxattr's: '/' of a reference container (overlayfs root) was seen
+# listing 44 bytes of names in one run and none in another, Poly's '/'
+# lists none. The tests list only files and directories they create; a
+# directory just made lists 0.
