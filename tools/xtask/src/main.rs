@@ -89,6 +89,7 @@ mod initramfs;
 mod input;
 mod ktest;
 mod libsearch;
+mod mesa;
 mod net;
 mod nls;
 mod ntdll;
@@ -1403,7 +1404,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 27] = [
+const BOOT_GROUPS: [BootGroup; 28] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1459,6 +1460,10 @@ const BOOT_GROUPS: [BootGroup; 27] = [
     // /bin/drm-kms sets a mode, flips and draws through /dev/dri/card0,
     // checked by screenshots, and the console comes back (drm.rs, ADR 0108).
     ("drm", drm::boot_tests),
+    // Unmodified Mesa on that device from the root disk: modetest lists and
+    // sets a mode, kmscube renders with kms_swrast (llvmpipe) through GBM
+    // and EGL, checked by screenshots (mesa.rs, ADR 0115).
+    ("mesa", mesa::boot_test),
     // The screen terminal: a command typed on the keyboard runs in the shell
     // on the screen, whose output and status bar show up.
     ("terminal", |k, s| {
@@ -1482,7 +1487,7 @@ const BOOT_GROUPS: [BootGroup; 27] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop", "mesa"]),
     (
         "devices",
         &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "drm", "terminal", "input"],

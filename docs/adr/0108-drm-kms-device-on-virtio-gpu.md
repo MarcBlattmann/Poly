@@ -2,7 +2,9 @@
 
 **Status:** Accepted (the 2D/KMS part of roadmap Phase 6's "Kernel GPU
 interface compatible with Linux DRM/KMS so Mesa runs unchanged"; the item
-stays open, see "What Mesa still needs"). Builds on
+stayed open until unmodified Mesa ran on the device, which
+[ADR 0115](0115-unmodified-mesa-on-the-drm-kms-device.md) did: see "What
+Mesa still needs"). Builds on
 [ADR 0102](0102-virtio-gpu-2d-display.md) (the virtio-gpu driver and its
 "DRM/KMS can sit on top later" plan), [ADR 0041](0041-processes-threads-fork-exec-wait.md)
 (shared frames) and [ADR 0042](0042-readiness-pipes-poll-epoll-and-event-files.md) (file

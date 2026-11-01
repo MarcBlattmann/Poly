@@ -229,8 +229,8 @@ pub struct Contents {
 
 /// Collects host files into a [`RootTree`], following symbolic links and
 /// the shared objects ELF files need.
-struct Collector {
-    tree: RootTree,
+pub(crate) struct Collector {
+    pub(crate) tree: RootTree,
     search: SearchPath,
     /// Host paths already added (as given and resolved).
     seen: BTreeSet<PathBuf>,
@@ -263,8 +263,14 @@ impl Collector {
 
     /// Add the host's file, link or directory at `path` (a directory with
     /// nothing in it). `Err` if it does not exist.
-    fn add(&mut self, path: &Path) -> Result<(), String> {
+    pub(crate) fn add(&mut self, path: &Path) -> Result<(), String> {
         self.add_depth(path, 0)
+    }
+
+    /// Where the host's loader would find the shared object `name` (a
+    /// library a program opens by name, which no `DT_NEEDED` entry names).
+    pub(crate) fn find_library(&self, name: &str) -> Option<PathBuf> {
+        self.search.find(name, &[]).map(|(path, _)| path)
     }
 
     fn add_depth(&mut self, path: &Path, depth: u32) -> Result<(), String> {
@@ -802,6 +808,10 @@ pub fn collect() -> Result<Contents, String> {
         }
         Err(why) => notes.push(format!("gcc: {why}")),
     }
+
+    // Mesa's software drivers, GBM and EGL, modetest and kmscube (mesa.rs,
+    // ADR 0115).
+    crate::mesa::add_to_root(&mut c, &mut have, &mut notes)?;
 
     c.add_needed()?;
 

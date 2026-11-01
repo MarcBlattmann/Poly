@@ -156,6 +156,8 @@ pub mod ioctl {
         Request::encode(dir::NONE, n, 0)
     }
     pub const VERSION: u32 = iowr(nr::VERSION, super::Version::SIZE);
+    pub const GET_UNIQUE: u32 = iowr(nr::GET_UNIQUE, super::Unique::SIZE);
+    pub const SET_VERSION: u32 = iowr(nr::SET_VERSION, super::SetVersion::SIZE);
     pub const GET_CAP: u32 = iowr(nr::GET_CAP, super::GetCap::SIZE);
     pub const SET_CLIENT_CAP: u32 = iow(nr::SET_CLIENT_CAP, super::GetCap::SIZE);
     pub const SET_MASTER: u32 = io(nr::SET_MASTER);
