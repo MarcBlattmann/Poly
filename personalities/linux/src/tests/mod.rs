@@ -12,7 +12,9 @@ mod io;
 mod madvise;
 mod mem;
 mod memfd;
+mod msg;
 mod ns;
+mod persona;
 mod process;
 mod process_ids;
 mod rseq;
@@ -26,6 +28,7 @@ mod signal_trace;
 mod socket;
 mod spec_a;
 mod spec_b;
+mod spec_d_files;
 mod startup;
 mod task;
 mod time;
@@ -77,6 +80,10 @@ fn every_implemented_call_reports_handled() {
     // Arguments that make each call fail early or do nothing harmful: the
     // point is the outcome, not the result.
     for (number, _) in crate::table::implemented() {
+        // pause(2) sleeps until a signal: tests::persona covers it.
+        if number == nr::PAUSE {
+            continue;
+        }
         let mut k = FakeKernel::new();
         let (outcome, _) = call(&mut k, number, &[u64::MAX, 0, 0, 0, u64::MAX, 0]);
         assert_eq!(outcome, Outcome::Handled, "{:?}", crate::table::name(number));

@@ -43,8 +43,22 @@ impl Files {
     }
 
     /// mknodat(2): `mode` is the permission bits (the umask applies).
-    pub fn mknodat(&self, dirfd: Fd, path: &[u8], kind: FileType, mode: u16, rdev: DeviceId) -> Result<()> {
-        self.at(dirfd, path, |vfs, ctx, at| vfs.mknod(ctx, &self.cred(), at, path, kind, mode, rdev))
+    /// Without `may_mknod` (the personality's `CAP_MKNOD` check) a device
+    /// node is refused, after the lookup.
+    pub fn mknodat(
+        &self,
+        dirfd: Fd,
+        path: &[u8],
+        kind: FileType,
+        mode: u16,
+        rdev: DeviceId,
+        may_mknod: bool,
+    ) -> Result<()> {
+        let mut cred = self.cred();
+        if !may_mknod {
+            cred.caps = cred.caps.without(poly_vfs::cap::MKNOD);
+        }
+        self.at(dirfd, path, |vfs, ctx, at| vfs.mknod(ctx, &cred, at, path, kind, mode, rdev))
     }
 
     /// unshare(2) / clone(2) `CLONE_NEWNS` (ADR 0054): the process moves to a copy of
@@ -65,10 +79,15 @@ impl Files {
         vfs().is_chrooted(&self.ctx.lock())
     }
 
-    /// chroot(2).
-    pub fn chroot(&self, path: &[u8]) -> Result<()> {
+    /// chroot(2); without `may_chroot` (the personality's
+    /// `CAP_SYS_CHROOT` check) `EPERM` after the lookup.
+    pub fn chroot(&self, path: &[u8], may_chroot: bool) -> Result<()> {
         // Resolved unlocked, like chdir.
         let dir = self.lookupat(AT_FDCWD, path, true)?;
-        self.ctx.lock().set_root(&self.cred(), dir)
+        let mut cred = self.cred();
+        if !may_chroot {
+            cred.caps = cred.caps.without(poly_vfs::cap::SYS_CHROOT);
+        }
+        self.ctx.lock().set_root(&cred, dir)
     }
 }

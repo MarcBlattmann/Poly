@@ -795,3 +795,32 @@ pub unsafe extern "C" fn _strerror(s: *const u8) -> *mut u8 {
     out.push(b'\n');
     crate::heap::dup(&out)
 }
+
+/// `msvcrt.dll`'s `memcmp`: the sign of the first differing byte, compared
+/// unsigned, as -1, 0 or 1. Learn ("memcmp") only promises "less than
+/// zero", zero or "greater than zero"; ADR 0110's trace of 7-Zip records
+/// Windows' `msvcrt` returning exactly 1 and -1 (ADR 0114, to be confirmed
+/// by the spec agent), where `compiler_builtins`' `memcmp` (still
+/// `ucrtbase`'s) returns the bytes' difference. `msvcrt`'s `build.rs`
+/// exports it as `memcmp` through the symbol `poly_crt_memcmp`, a jump
+/// (assembly, so that `ucrtbase`, which links this crate too, does not
+/// export it as a Rust `#[no_mangle]` function would be).
+///
+/// # Safety
+/// `a` and `b` are readable for `n` bytes.
+unsafe extern "C" fn memcmp_sign(a: *const u8, b: *const u8, n: usize) -> i32 {
+    if n == 0 {
+        return 0;
+    }
+    // SAFETY: the caller's contract.
+    let (a, b) = unsafe { (core::slice::from_raw_parts(a, n), core::slice::from_raw_parts(b, n)) };
+    s::compare(a, b)
+}
+
+core::arch::global_asm!(
+    ".text",
+    ".globl poly_crt_memcmp",
+    "poly_crt_memcmp:",
+    "jmp {f}",
+    f = sym memcmp_sign,
+);

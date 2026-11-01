@@ -137,7 +137,10 @@ pub struct FakeKernel {
     /// Every madvise that reached the kernel (ADR 0049).
     pub advised: Vec<(u64, u64, crate::sys::madvise::Advice)>,
     /// mlock (`true`) and munlock calls: address, length.
-    pub locked: Vec<(u64, u64, bool)>,
+    pub locked: Vec<(u64, u64, crate::kernel::MemLock)>,
+    /// Locked pages (by page number) and the mlockall(2) future setting.
+    pub locked_pages: alloc::collections::BTreeSet<u64>,
+    pub lock_future: Option<crate::kernel::MemLock>,
     /// mremap calls: old, old length, new length, placement.
     pub remapped: Vec<(u64, u64, u64, crate::kernel::Remap)>,
     /// msync calls: address, length, sync.
@@ -235,6 +238,8 @@ impl FakeKernel {
             protects: Vec::new(),
             advised: Vec::new(),
             locked: Vec::new(),
+            locked_pages: alloc::collections::BTreeSet::new(),
+            lock_future: None,
             remapped: Vec::new(),
             synced_maps: Vec::new(),
             on_cpu: 0,
@@ -705,13 +710,47 @@ impl LinuxKernel for FakeKernel {
         })
     }
 
-    fn mlock(&mut self, addr: u64, len: u64, lock: bool) -> Result<(), Errno> {
-        self.locked.push((addr, len, lock));
-        let pages = addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE);
-        if pages.into_iter().any(|p| !self.pages.contains_key(&p)) {
-            return Err(Errno::ENOMEM);
+    fn mlock(&mut self, addr: u64, len: u64, how: crate::kernel::MemLock) -> Result<(), Errno> {
+        self.locked.push((addr, len, how));
+        for p in addr / PAGE_SIZE..(addr + len).div_ceil(PAGE_SIZE) {
+            if !self.pages.contains_key(&p) {
+                return Err(Errno::ENOMEM);
+            }
+            if how == crate::kernel::MemLock::Unlock {
+                self.locked_pages.remove(&p);
+            } else {
+                self.locked_pages.insert(p);
+            }
         }
         Ok(())
+    }
+
+    fn mlockall(
+        &mut self,
+        current: Option<crate::kernel::MemLock>,
+        future: Option<crate::kernel::MemLock>,
+    ) -> Result<(), Errno> {
+        if current.is_some() {
+            self.locked_pages.extend(self.pages.keys().copied());
+        }
+        self.lock_future = future;
+        Ok(())
+    }
+
+    fn munlockall(&mut self) -> Result<(), Errno> {
+        self.locked_pages.clear();
+        self.lock_future = None;
+        Ok(())
+    }
+
+    fn locked_memory(&self, addr: u64, len: u64) -> crate::kernel::LockedMemory {
+        let range = addr / PAGE_SIZE..(addr.saturating_add(len)).div_ceil(PAGE_SIZE);
+        crate::kernel::LockedMemory {
+            locked: self.locked_pages.len() as u64 * PAGE_SIZE,
+            in_range: self.locked_pages.range(range).count() as u64 * PAGE_SIZE,
+            mapped: self.pages.len() as u64 * PAGE_SIZE,
+            future: self.lock_future,
+        }
     }
 
     fn mincore(&mut self, addr: u64, vec: &mut [u8]) -> Result<(), Errno> {
@@ -920,6 +959,10 @@ impl LinuxKernel for FakeKernel {
 
     fn seccomp_installed(&mut self) {
         self.seccomp_on = true;
+    }
+
+    fn seccomp_listener(&mut self) -> Result<i32, Errno> {
+        Ok(3)
     }
 
     fn seccomp_log(&mut self, number: u64, ret: u32) {

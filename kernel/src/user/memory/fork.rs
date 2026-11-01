@@ -49,6 +49,10 @@ impl Memory {
         let mut inner = self.inner.lock();
         let mut child =
             Inner { map: inner.map.clone(), parked: BTreeMap::new(), cached: BTreeMap::new(), shared: BTreeMap::new() };
+        // Memory locks and mlockall(MCL_FUTURE) are not inherited (fork(2):
+        // "The child does not inherit its parent's memory locks").
+        child.map.set_all_locked(false);
+        child.map.set_lock_future(None);
         // MADV_WIPEONFORK regions: the child's copy starts zero-filled, so
         // their pages are not shared with it.
         let private: Vec<(u64, u64, Prot)> = inner

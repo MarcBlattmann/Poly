@@ -152,6 +152,8 @@ pub struct MapEntry {
     pub dev: (u32, u32),
     pub ino: u64,
     pub name: MapName,
+    /// Locked in memory (mlock(2)): counted in `VmLck`.
+    pub locked: bool,
 }
 
 impl MapEntry {
@@ -395,6 +397,21 @@ pub trait ProcSource: Send + Sync {
         false
     }
 
+    /// A reference to the file of namespace `inum` of kind `kind` was taken
+    /// (`pin`) or dropped: while one is held, the namespace must stay
+    /// (setns(2) through an open descriptor). Nothing by default.
+    fn pin_namespace(&self, inum: u32, kind: usize, pin: bool) {
+        let _ = (inum, kind, pin);
+    }
+
+    /// A write of `data` at `offset` to `/proc/sys/kernel/hostname` or
+    /// `domainname` by the calling thread: the bytes taken, or the error.
+    /// `EROFS` by default.
+    fn write_kernel_name(&self, which: KernelName, offset: u64, data: &[u8]) -> Result<usize, Errno> {
+        let _ = (which, offset, data);
+        Err(Errno::EROFS)
+    }
+
     /// The text of process `pid`'s `uid_map`, `gid_map` or `setgroups`
     /// as the calling thread sees it (user_namespaces(7)).
     fn id_map(&self, pid: u32, file: IdMapFile) -> Vec<u8> {
@@ -408,6 +425,15 @@ pub trait ProcSource: Send + Sync {
         let _ = (pid, file, offset, data);
         Err(Errno::EROFS)
     }
+}
+
+/// The names `/proc/sys/kernel` lets a write set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KernelName {
+    /// `hostname`: the UTS namespace's node name.
+    Host,
+    /// `domainname`: its NIS domain name.
+    Domain,
 }
 
 /// The files of a process directory that set up its user namespace.

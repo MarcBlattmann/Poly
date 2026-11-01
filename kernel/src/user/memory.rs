@@ -626,6 +626,11 @@ impl Memory {
         Ok(self.inner.lock().map.setup_stack(size, prot)?)
     }
 
+    /// The kind of the region that contains `addr`, if one does.
+    pub fn kind_at(&self, addr: u64) -> Option<Kind> {
+        self.inner.lock().map.find(addr).map(|v| v.kind)
+    }
+
     /// The regions, in address order (for `/proc/<pid>/maps` later, and
     /// tests).
     pub fn regions(&self) -> Vec<Vma<FileRef>> {

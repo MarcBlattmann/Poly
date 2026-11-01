@@ -14,6 +14,7 @@
 //! bitset and go to the back of the target queue.
 
 use alloc::collections::{BTreeMap, VecDeque};
+use alloc::vec::Vec;
 
 /// What identifies a futex word. Two waits find each other only with equal
 /// keys.
@@ -38,6 +39,9 @@ pub type Waiter = i32;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Entry {
     waiter: Waiter,
+    /// Which of the waiter's futexes this is: 0 for a single wait, the
+    /// entry index for futex_waitv(2).
+    slot: u32,
     bitset: u32,
 }
 
@@ -45,51 +49,77 @@ struct Entry {
 #[derive(Clone, Debug, Default)]
 pub struct FutexTable {
     queues: BTreeMap<FutexKey, VecDeque<Entry>>,
-    keys: BTreeMap<Waiter, FutexKey>,
+    /// The key of each of a queued waiter's slots.
+    keys: BTreeMap<Waiter, Vec<FutexKey>>,
+    /// The slot a wake took a waiter off with, until it asks
+    /// ([`FutexTable::take_woken_slot`]).
+    woken: BTreeMap<Waiter, u32>,
 }
 
 impl FutexTable {
     pub const fn new() -> Self {
-        FutexTable { queues: BTreeMap::new(), keys: BTreeMap::new() }
+        FutexTable { queues: BTreeMap::new(), keys: BTreeMap::new(), woken: BTreeMap::new() }
     }
 
     /// Queue `waiter` on `key` with `bitset` (not 0). Returns false, and
     /// changes nothing, if the waiter is already queued somewhere: a thread
     /// waits on one futex at a time.
     pub fn enqueue(&mut self, key: FutexKey, waiter: Waiter, bitset: u32) -> bool {
-        if self.keys.contains_key(&waiter) {
+        self.enqueue_all(&[key], waiter, bitset)
+    }
+
+    /// Queue `waiter` on every key of `keys` at once (futex_waitv(2)): slot
+    /// `i` waits on `keys[i]`, and the first wake of any of them takes the
+    /// waiter off all. The same key may appear more than once. Returns
+    /// false, and changes nothing, if the waiter is already queued or
+    /// `keys` is empty.
+    pub fn enqueue_all(&mut self, keys: &[FutexKey], waiter: Waiter, bitset: u32) -> bool {
+        if keys.is_empty() || self.keys.contains_key(&waiter) {
             return false;
         }
-        self.keys.insert(waiter, key);
-        self.queues.entry(key).or_default().push_back(Entry { waiter, bitset });
+        self.woken.remove(&waiter);
+        for (slot, &key) in keys.iter().enumerate() {
+            self.queues.entry(key).or_default().push_back(Entry { waiter, slot: slot as u32, bitset });
+        }
+        self.keys.insert(waiter, keys.to_vec());
+        true
+    }
+
+    /// Take every entry of `waiter` off its queues. Returns whether it
+    /// was queued.
+    fn unlink(&mut self, waiter: Waiter) -> bool {
+        let Some(keys) = self.keys.remove(&waiter) else { return false };
+        for key in keys {
+            if let Some(queue) = self.queues.get_mut(&key) {
+                queue.retain(|e| e.waiter != waiter);
+                if queue.is_empty() {
+                    self.queues.remove(&key);
+                }
+            }
+        }
         true
     }
 
     /// Dequeue up to `max` waiters on `key` whose bitset shares a bit with
     /// `bitset`, oldest first, calling `woken` for each. Returns how many.
+    /// A waiter on several futexes leaves all of them.
     pub fn wake(&mut self, key: FutexKey, max: usize, bitset: u32, woken: &mut dyn FnMut(Waiter)) -> usize {
-        let Some(queue) = self.queues.get_mut(&key) else { return 0 };
         let mut n = 0;
-        let mut i = 0;
-        while n < max && i < queue.len() {
-            if queue[i].bitset & bitset != 0 {
-                let e = queue.remove(i).expect("index in range");
-                self.keys.remove(&e.waiter);
-                woken(e.waiter);
-                n += 1;
-            } else {
-                i += 1;
-            }
-        }
-        if queue.is_empty() {
-            self.queues.remove(&key);
+        while n < max {
+            let Some(queue) = self.queues.get(&key) else { break };
+            let Some(e) = queue.iter().find(|e| e.bitset & bitset != 0).copied() else { break };
+            self.unlink(e.waiter);
+            self.woken.insert(e.waiter, e.slot);
+            woken(e.waiter);
+            n += 1;
         }
         n
     }
 
     /// Wake up to `max_wake` waiters on `from` (any bitset), then move up
     /// to `max_requeue` of the rest, oldest first, to the back of `to`.
-    /// Returns `(woken, requeued)`.
+    /// Returns `(woken, requeued)`. With `from == to` nobody moves; the
+    /// waiters that would have are counted (futex_requeue's spec sheet).
     pub fn requeue(
         &mut self,
         from: FutexKey,
@@ -101,32 +131,37 @@ impl FutexTable {
         let n_woken = self.wake(from, max_wake, u32::MAX, woken);
         let Some(queue) = self.queues.get_mut(&from) else { return (n_woken, 0) };
         let n = max_requeue.min(queue.len());
+        if from == to {
+            return (n_woken, n);
+        }
         let moved: VecDeque<Entry> = queue.drain(..n).collect();
         if queue.is_empty() {
             self.queues.remove(&from);
         }
         for e in &moved {
-            self.keys.insert(e.waiter, to);
+            if let Some(slot) = self.keys.get_mut(&e.waiter).and_then(|k| k.get_mut(e.slot as usize)) {
+                *slot = to;
+            }
         }
         self.queues.entry(to).or_default().extend(moved);
         (n_woken, n)
     }
 
-    /// Take `waiter` off its queue (after a timeout or a signal). Returns
+    /// Take `waiter` off its queues (after a timeout or a signal). Returns
     /// whether it was still queued; false means someone woke it.
     pub fn remove(&mut self, waiter: Waiter) -> bool {
-        let Some(key) = self.keys.remove(&waiter) else { return false };
-        let queue = self.queues.get_mut(&key).expect("a queued waiter's key has a queue");
-        queue.retain(|e| e.waiter != waiter);
-        if queue.is_empty() {
-            self.queues.remove(&key);
-        }
-        true
+        self.woken.remove(&waiter);
+        self.unlink(waiter)
     }
 
-    /// The key `waiter` is queued on, if it is.
+    /// The key `waiter` is queued on (its first slot's), if it is.
     pub fn key_of(&self, waiter: Waiter) -> Option<FutexKey> {
-        self.keys.get(&waiter).copied()
+        self.keys.get(&waiter).and_then(|k| k.first().copied())
+    }
+
+    /// The slot through which the last wake took `waiter` off, once.
+    pub fn take_woken_slot(&mut self, waiter: Waiter) -> Option<u32> {
+        self.woken.remove(&waiter)
     }
 
     /// The waiters on `key`, oldest first.
@@ -223,6 +258,43 @@ mod tests {
         assert!(t.queues.is_empty() && t.keys.is_empty());
     }
 
+    #[test]
+    fn several_futexes_at_once() {
+        let mut t = FutexTable::new();
+        assert!(t.enqueue_all(&[A, B, A], 1, u32::MAX));
+        assert!(t.enqueue(B, 2, u32::MAX));
+        assert!(!t.enqueue_all(&[C], 1, u32::MAX), "already waiting");
+        assert!(!t.enqueue_all(&[], 3, u32::MAX));
+        assert_eq!(t.len(), 2);
+        assert_eq!(wake(&mut t, B, 9, u32::MAX), [1, 2], "one wake per waiter");
+        assert_eq!(t.take_woken_slot(1), Some(1));
+        assert_eq!(t.take_woken_slot(1), None);
+        assert!(t.queues.is_empty() && t.keys.is_empty());
+    }
+
+    #[test]
+    fn requeued_slot_keeps_its_index() {
+        let mut t = FutexTable::new();
+        t.enqueue_all(&[A, B], 1, u32::MAX);
+        assert_eq!(t.requeue(B, C, 0, 1, &mut |_| ()), (0, 1));
+        assert_eq!(wake(&mut t, B, 9, u32::MAX), [] as [Waiter; 0]);
+        assert_eq!(wake(&mut t, C, 9, u32::MAX), [1]);
+        assert_eq!(t.take_woken_slot(1), Some(1));
+        assert!(t.waiters(A).next().is_none(), "left its other futex too");
+    }
+
+    #[test]
+    fn requeue_onto_itself_counts() {
+        let mut t = FutexTable::new();
+        for w in 1..=4 {
+            t.enqueue(A, w, u32::MAX);
+        }
+        assert_eq!(t.requeue(A, A, 1, 2, &mut |_| ()), (1, 2));
+        assert_eq!(t.waiters(A).collect::<Vec<_>>(), [2, 3, 4]);
+        assert!(t.remove(3));
+        assert_eq!(t.take_woken_slot(3), None);
+    }
+
     /// A small deterministic generator (xorshift64*), so the model test is
     /// reproducible without a dependency.
     struct Rng(u64);
@@ -262,6 +334,9 @@ mod tests {
 
         fn requeue(&mut self, from: FutexKey, to: FutexKey, wake: usize, requeue: usize) -> (Vec<Waiter>, usize) {
             let woken = self.wake(from, wake, u32::MAX);
+            if from == to {
+                return (woken, requeue.min(self.0.iter().filter(|e| e.1 == from).count()));
+            }
             let mut moved = Vec::new();
             self.0.retain(|&(w, k, b)| {
                 if moved.len() < requeue && k == from {

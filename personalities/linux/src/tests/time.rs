@@ -212,7 +212,8 @@ fn nanosleep_interrupted_by_a_handler_reports_the_time_left() {
     assert_eq!(ctx.rip, 0x40_5000, "the handler runs");
     assert_eq!(saved_rip_rax(&k), (SYSCALL_RIP, Errno::EINTR.to_rax()), "EINTR even with SA_RESTART");
     assert_eq!(ts_at(&k, OUT), Timespec { sec: 0, nsec: 750_000_000 });
-    assert_eq!(k.thread_state().restart_block, None);
+    // Kept for restart_syscall(2) in the handler, until rt_sigreturn(2).
+    assert!(k.thread_state().restart_block.is_some());
     // A bad rem: EFAULT instead.
     let mut k = FakeKernel::new();
     install(&mut k, SIGUSR1, 0);

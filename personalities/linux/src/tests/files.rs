@@ -114,6 +114,20 @@ impl LinuxFs for VfsFs {
         self.fds.install(file, flags.contains(OpenFlags::CLOEXEC)).map_err(errno)
     }
 
+    fn openat2(&mut self, dirfd: i32, path: &[u8], flags: u32, mode: u32, resolve: u64) -> Result<i32, Errno> {
+        let flags = OpenFlags::from_bits(flags);
+        let resolve = poly_vfs::Resolve::from_bits(resolve);
+        let rooted = resolve.contains(poly_vfs::Resolve::IN_ROOT);
+        let file = if dirfd == AT_FDCWD || (path.first() == Some(&b'/') && !rooted) {
+            self.vfs.open_resolve(&self.ctx, &self.cred, At::Cwd, path, flags, mode as u16, resolve)
+        } else {
+            let node = self.node(dirfd)?;
+            self.vfs.open_resolve(&self.ctx, &self.cred, At::Node(&node), path, flags, mode as u16, resolve)
+        }
+        .map_err(errno)?;
+        self.fds.install(file, flags.contains(OpenFlags::CLOEXEC)).map_err(errno)
+    }
+
     fn check_fd_free(&mut self) -> Result<(), Errno> {
         self.fds.check_free().map_err(errno)
     }
@@ -357,6 +371,13 @@ impl LinuxFs for VfsFs {
 
     fn fchmodat(&mut self, dirfd: i32, path: &[u8], mode: u32) -> Result<(), Errno> {
         self.at(dirfd, path, |v, at| v.chmod(&self.ctx, &self.cred, at, path, mode as u16, true))
+    }
+
+    fn fchmodat2(&mut self, dirfd: i32, path: &[u8], mode: u32, follow: bool) -> Result<(), Errno> {
+        if path.is_empty() {
+            return self.node(dirfd)?.chmod(&self.cred, mode as u16).map_err(errno);
+        }
+        self.at(dirfd, path, |v, at| v.chmod(&self.ctx, &self.cred, at, path, mode as u16, follow))
     }
 
     fn fchownat(

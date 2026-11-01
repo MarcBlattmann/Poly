@@ -31,6 +31,14 @@
 //! did not write (an ext4 volume made elsewhere) returns them when read.
 //! Other `system.` names are `EOPNOTSUPP`.
 //!
+//! **Order** (the Linux spec sheets, ADR 0113): the permission checks
+//! come before the name's own faults, so an unknown prefix (`EOPNOTSUPP`)
+//! or a bare prefix such as `user.` (`EINVAL`) is reported only to a
+//! caller who passed them ([`Name`], [`NodeRef::getxattr`],
+//! [`NodeRef::setxattr`]). File objects (pipes, sockets, event counters)
+//! keep no attributes: `user.` names are refused as on special files,
+//! others are `EOPNOTSUPP`, and they list nothing.
+//!
 //! Sizes (UAPI `linux/limits.h`): names of 1 to [`XATTR_NAME_MAX`] bytes
 //! (`ERANGE` otherwise), values of at most [`XATTR_SIZE_MAX`] bytes;
 //! changes on a read-only mount are `EROFS`.
@@ -93,6 +101,44 @@ impl Namespace {
     }
 }
 
+/// What a name says before any file is looked at: its namespace (`None`
+/// for an unknown prefix) and whether it is the prefix alone. Only the
+/// size is an error here (`ERANGE`); an unknown prefix (`EOPNOTSUPP`) and
+/// a bare prefix (`EINVAL`) come later, after the permission checks, in
+/// the order [`NodeRef::getxattr`] and [`NodeRef::setxattr`] describe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Name {
+    pub ns: Option<Namespace>,
+    /// The prefix with nothing after its dot (`user.`).
+    pub prefix_only: bool,
+}
+
+impl Name {
+    pub fn of(name: &[u8]) -> Result<Name> {
+        if name.is_empty() || name.len() > XATTR_NAME_MAX {
+            return Err(Errno::ERANGE);
+        }
+        for ns in [Namespace::User, Namespace::Trusted, Namespace::Security, Namespace::System] {
+            if let Some(rest) = name.strip_prefix(ns.prefix()) {
+                return Ok(Name { ns: Some(ns), prefix_only: rest.is_empty() });
+            }
+        }
+        Ok(Name { ns: None, prefix_only: false })
+    }
+
+    /// `EOPNOTSUPP` for a name no handler takes (an unknown prefix, a
+    /// `system.` name other than the ACLs), then `EINVAL` for a bare
+    /// prefix.
+    fn supported(self, name: &[u8]) -> Result<Namespace> {
+        let ns = match self.ns {
+            None => return Err(Errno::EOPNOTSUPP),
+            Some(Namespace::System) if !is_acl(name) => return Err(Errno::EOPNOTSUPP),
+            Some(ns) => ns,
+        };
+        if self.prefix_only { Err(Errno::EINVAL) } else { Ok(ns) }
+    }
+}
+
 /// How setxattr(2) may treat an existing (or missing) attribute.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SetMode {
@@ -103,10 +149,11 @@ pub struct SetMode {
 }
 
 impl SetMode {
-    /// From setxattr(2)'s `flags`; other bits, or both flags, are
-    /// `EINVAL` (the Linux personality's choice, ADR 0059).
+    /// From setxattr(2)'s `flags`; other bits are `EINVAL`. Both flags
+    /// together fail either way: `EEXIST` if the name exists, `ENODATA`
+    /// if not (setxattr's spec sheet; ADR 0113).
     pub fn from_linux(flags: u32) -> Result<SetMode> {
-        if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 || flags == XATTR_CREATE | XATTR_REPLACE {
+        if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 {
             return Err(Errno::EINVAL);
         }
         Ok(SetMode { create: flags & XATTR_CREATE != 0, replace: flags & XATTR_REPLACE != 0 })
@@ -284,27 +331,46 @@ fn is_acl(name: &[u8]) -> bool {
 }
 
 impl NodeRef {
+    /// Whether this is a file object's inode (a pipe, a socket, an event
+    /// counter...): its file system keeps no attributes and it never has
+    /// `user.` ones, whatever kind `fstat` reports for it.
+    fn is_object(&self) -> bool {
+        self.fs().info().name == "anon"
+    }
+
+    /// Whether the node can have `user.` attributes: only regular files
+    /// and directories can (xattr(7)).
+    fn takes_user(&self, attr: &crate::Attr) -> bool {
+        matches!(attr.kind, FileType::Regular | FileType::Directory) && !self.is_object()
+    }
+
     /// getxattr(2): the value of `name` (see the module docs for who may).
+    /// In order: `ENODATA` for a `trusted.` name without `CAP_SYS_ADMIN`
+    /// and for a `user.` name on a node that cannot have them, `EACCES`
+    /// without read permission (`user.` names and unknown prefixes),
+    /// `EOPNOTSUPP` for a name no handler takes, `EINVAL` for a bare
+    /// prefix, then the file system's answer (`ENODATA` for a missing
+    /// name).
     pub fn getxattr(&self, cred: &Cred, name: &[u8]) -> Result<Vec<u8>> {
-        let ns = Namespace::of(name)?;
+        let n = Name::of(name)?;
         let attr = self.attr()?;
-        match ns {
-            Namespace::User => {
-                if !matches!(attr.kind, FileType::Regular | FileType::Directory) {
-                    return Err(Errno::ENODATA);
-                }
-                cred.check(&attr, Access::READ)?;
-            }
-            Namespace::Trusted if !cred.has(cap::SYS_ADMIN) => return Err(Errno::ENODATA),
-            Namespace::System if !is_acl(name) => return Err(Errno::EOPNOTSUPP),
+        match n.ns {
+            Some(Namespace::Trusted) if !cred.has(cap::SYS_ADMIN) => return Err(Errno::ENODATA),
+            Some(Namespace::User) if !self.takes_user(&attr) => return Err(Errno::ENODATA),
+            Some(Namespace::User) | None => cred.check(&attr, Access::READ)?,
             _ => {}
         }
+        n.supported(name)?;
         self.fs().getxattr(self.ino(), name)
     }
 
-    /// listxattr(2): the names `cred` may see, each followed by a NUL.
+    /// listxattr(2): the names `cred` may see, each followed by a NUL. A
+    /// node whose file system keeps no attributes lists none.
     pub fn listxattr(&self, cred: &Cred) -> Result<Vec<u8>> {
-        let all = self.fs().listxattr(self.ino())?;
+        let all = match self.fs().listxattr(self.ino()) {
+            Err(Errno::EOPNOTSUPP) => return Ok(Vec::new()),
+            r => r?,
+        };
         if cred.has(cap::SYS_ADMIN) {
             return Ok(all);
         }
@@ -317,50 +383,67 @@ impl NodeRef {
         Ok(out)
     }
 
-    /// setxattr(2) with its `flags` (`XATTR_CREATE`, `XATTR_REPLACE`).
+    /// setxattr(2) with its `flags` (`XATTR_CREATE`, `XATTR_REPLACE`): the
+    /// checks of [`NodeRef::may_change`], then `EEXIST` / `ENODATA` as the
+    /// flags ask.
     pub fn setxattr(&self, cred: &Cred, name: &[u8], value: &[u8], flags: u32) -> Result<()> {
         let how = SetMode::from_linux(flags)?;
-        let ns = Namespace::of(name)?;
+        let n = Name::of(name)?;
         if value.len() > XATTR_SIZE_MAX {
             return Err(Errno::E2BIG);
         }
-        self.may_change(cred, ns, name)?;
+        let ns = self.may_change(cred, n, name)?;
         if ns == Namespace::System {
             return self.set_acl(cred, name, value, how);
         }
         self.fs().setxattr(self.ino(), name, value, how)
     }
 
-    /// removexattr(2).
+    /// removexattr(2): the checks of [`NodeRef::may_change`], then
+    /// `ENODATA` for a missing name.
     pub fn removexattr(&self, cred: &Cred, name: &[u8]) -> Result<()> {
-        let ns = Namespace::of(name)?;
-        self.may_change(cred, ns, name)?;
+        let n = Name::of(name)?;
+        self.may_change(cred, n, name)?;
         self.fs().removexattr(self.ino(), name)
     }
 
-    /// The checks before a change of attribute `name` in `ns`.
-    fn may_change(&self, cred: &Cred, ns: Namespace, name: &[u8]) -> Result<()> {
+    /// The checks before a change of attribute `name`, in order: `EROFS`
+    /// on a read-only mount; `EPERM` for a `trusted.` name without
+    /// `CAP_SYS_ADMIN`, for a `user.` name on a node that cannot have them
+    /// or on a sticky directory the caller does not own; `EACCES` without
+    /// write permission (`user.` names and unknown prefixes); `EPERM` for
+    /// a `security.` name without `CAP_SYS_ADMIN`; `EOPNOTSUPP` for a name
+    /// no handler takes; `EINVAL` for a bare prefix; `EPERM` for an ACL
+    /// of a file the caller does not own.
+    fn may_change(&self, cred: &Cred, n: Name, name: &[u8]) -> Result<Namespace> {
         let attr = self.attr()?;
         if self.mount().read_only_for(self.ino()) {
             return Err(Errno::EROFS);
         }
-        match ns {
-            Namespace::User => {
-                if !matches!(attr.kind, FileType::Regular | FileType::Directory) {
+        match n.ns {
+            Some(Namespace::Trusted) if !cred.has(cap::SYS_ADMIN) => return Err(Errno::EPERM),
+            Some(Namespace::User) => {
+                if !self.takes_user(&attr) {
                     return Err(Errno::EPERM);
                 }
                 let sticky_dir = attr.kind == FileType::Directory && attr.perm & S_ISVTX != 0;
                 if sticky_dir && !cred.owns(&attr) {
                     return Err(Errno::EPERM);
                 }
-                cred.check(&attr, Access::WRITE)
             }
-            Namespace::Trusted | Namespace::Security if !cred.has(cap::SYS_ADMIN) => Err(Errno::EPERM),
-            Namespace::Trusted | Namespace::Security => Ok(()),
-            Namespace::System if !is_acl(name) => Err(Errno::EOPNOTSUPP),
-            Namespace::System if !cred.owns(&attr) => Err(Errno::EPERM),
-            Namespace::System => Ok(()),
+            _ => {}
         }
+        if matches!(n.ns, Some(Namespace::User) | None) {
+            cred.check(&attr, Access::WRITE)?;
+        }
+        if n.ns == Some(Namespace::Security) && !cred.has(cap::SYS_ADMIN) {
+            return Err(Errno::EPERM);
+        }
+        let ns = n.supported(name)?;
+        if ns == Namespace::System && !cred.owns(&attr) {
+            return Err(Errno::EPERM);
+        }
+        Ok(ns)
     }
 
     /// Setting an ACL: a minimal access ACL becomes the permission bits
@@ -423,7 +506,10 @@ mod tests {
         assert_eq!(x.set(b"user.a", b"2", SetMode::from_linux(XATTR_CREATE).unwrap()), Err(Errno::EEXIST));
         assert_eq!(x.set(b"user.a", b"3", SetMode::from_linux(XATTR_REPLACE).unwrap()), Ok(()));
         assert_eq!(x.get(b"user.a"), Ok(&b"3"[..]));
-        assert_eq!(SetMode::from_linux(XATTR_CREATE | XATTR_REPLACE), Err(Errno::EINVAL));
+        // Both flags: EEXIST if it exists, ENODATA if not.
+        let both = SetMode::from_linux(XATTR_CREATE | XATTR_REPLACE).unwrap();
+        assert_eq!(x.set(b"user.a", b"4", both), Err(Errno::EEXIST));
+        assert_eq!(x.set(b"user.new", b"4", both), Err(Errno::ENODATA));
         x.set(b"security.z", b"", SetMode::default()).unwrap();
         assert_eq!(x.list(), b"security.z\0user.a\0");
         assert_eq!(x.get(b"security.z"), Ok(&b""[..]));

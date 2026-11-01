@@ -121,6 +121,16 @@ impl Files {
         self.at(dirfd, path, |vfs, ctx, at| vfs.chmod(ctx, &self.cred(), at, path, perm, true))
     }
 
+    /// `fchmodat2(2)`: `follow` false for `AT_SYMLINK_NOFOLLOW`; an empty
+    /// `path` (`AT_EMPTY_PATH`) changes the file `dirfd` refers to, also
+    /// through an `O_PATH` descriptor.
+    pub fn fchmodat2(&self, dirfd: Fd, path: &[u8], perm: u16, follow: bool) -> Result<()> {
+        if path.is_empty() {
+            return self.node_at(dirfd)?.chmod(&self.cred(), perm);
+        }
+        self.at(dirfd, path, |vfs, ctx, at| vfs.chmod(ctx, &self.cred(), at, path, perm, follow))
+    }
+
     /// `fchmod(2)`: not on an `O_PATH` descriptor (`EBADF`).
     pub fn fchmod(&self, fd: Fd, perm: u16) -> Result<()> {
         let file = self.file(fd)?;

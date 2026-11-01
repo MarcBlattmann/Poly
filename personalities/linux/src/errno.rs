@@ -51,6 +51,12 @@ impl Errno {
     pub const ERANGE: Errno = Errno(34);
     pub const ENAMETOOLONG: Errno = Errno(36);
     pub const ENOSYS: Errno = Errno(38);
+    /// `ELOOP` (`asm-generic/errno.h`): "Too many symbolic links
+    /// encountered"; also openat2(2)'s refusal to follow a link.
+    pub const ELOOP: Errno = Errno(40);
+    /// `ENOMSG` (`asm-generic/errno.h`): "No message of desired type"
+    /// (msgrcv(2) with `IPC_NOWAIT`).
+    pub const ENOMSG: Errno = Errno(42);
     /// `EIDRM` (`asm-generic/errno.h`): "Identifier removed"; a System V
     /// semaphore set removed while semop(2) slept on it.
     pub const EIDRM: Errno = Errno(43);
@@ -94,6 +100,12 @@ impl Errno {
     /// "ensures that the restarted call doesn't sleep for longer than the
     /// time it was told to" (to be confirmed by the diff runner).
     pub const RESTART_WITH_BLOCK: Errno = Errno(3843);
+    /// Error number 512, which user space sees in one place: a recvmmsg(2)
+    /// interrupted by a signal after it received a message returns the
+    /// count and leaves this on the socket for its next receive
+    /// (recvmmsg's spec sheet: "errno 512 (the kernel's internal restart
+    /// code)"). An ordinary error to Poly, never restarted.
+    pub const RECV_INTERRUPTED: Errno = Errno(512);
 
     /// An error number from its value. Returns `None` for 0 and for values
     /// above [`MAX_ERRNO`], which the ABI cannot express.
@@ -162,6 +174,8 @@ impl Errno {
             34 => "ERANGE",
             36 => "ENAMETOOLONG",
             38 => "ENOSYS",
+            40 => "ELOOP",
+            42 => "ENOMSG",
             43 => "EIDRM",
             61 => "ENODATA",
             75 => "EOVERFLOW",

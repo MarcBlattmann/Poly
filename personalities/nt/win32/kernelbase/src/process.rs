@@ -488,6 +488,24 @@ pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, fla
     if st.is_success() { h } else { fail_status(st, core::ptr::null_mut()) }
 }
 
+/// The process's default DLL directories (`SetDefaultDllDirectories`), 0
+/// until set.
+static DEFAULT_DLL_DIRECTORIES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// `SetDefaultDllDirectories`: Learn: a combination of the four
+/// `LOAD_LIBRARY_SEARCH_*` values, kept for the process (ADR 0114). Poly's
+/// loader does not narrow its search by them yet (`LoadLibraryExW` ignores
+/// its own search flags too); Poly has no user directories
+/// (`AddDllDirectory` is not implemented).
+#[unsafe(no_mangle)]
+pub extern "system" fn SetDefaultDllDirectories(flags: u32) -> i32 {
+    if !poly_kernelbase::system::valid_default_dll_directories(flags) {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    DEFAULT_DLL_DIRECTORIES.store(flags, core::sync::atomic::Ordering::Relaxed);
+    TRUE
+}
+
 /// `LoadLibraryW`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadLibraryW(name: *const u16) -> *mut u8 {

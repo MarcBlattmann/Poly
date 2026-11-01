@@ -140,7 +140,7 @@ fn xattrs_on_files_that_exist() {
         assert_eq!(sys(k, nr, &[missing, out, 64]), Err(Errno::ENOENT));
     }
     assert_eq!(sys(k, nr::SETXATTR, &[file, name, out, 4, 0]), Ok(0));
-    assert_eq!(sys(k, nr::SETXATTR, &[file, name, out, 4, 3]), Err(Errno::EINVAL), "both flags");
+    assert_eq!(sys(k, nr::SETXATTR, &[file, name, out, 4, 3]), Err(Errno::EEXIST), "both flags");
     assert_eq!(sys(k, nr::SETXATTR, &[file, name, out, 4, 8]), Err(Errno::EINVAL), "an unknown flag");
     assert_eq!(sys(k, nr::REMOVEXATTR, &[file, name]), Ok(0));
     let fd = sys(k, nr::OPEN, &[file, 0, 0]).unwrap();
@@ -286,7 +286,7 @@ fn fadvise64_checks_the_descriptor_the_file_and_the_advice() {
     for advice in 0..=5 {
         assert_eq!(sys(&mut k, nr::FADVISE64, &[5, 0, 0, advice]), Ok(0), "advice {advice}");
     }
-    assert_eq!(sys(&mut k, nr::FADVISE64, &[5, 4096, (-1i64) as u64, 2]), Ok(0), "a negative length");
+    assert_eq!(sys(&mut k, nr::FADVISE64, &[5, 4096, (-1i64) as u64, 2]), Err(Errno::EINVAL), "a negative length");
     assert_eq!(sys(&mut k, nr::FADVISE64, &[5, 0, 0, 6]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::FADVISE64, &[6, 0, 0, 0]), Err(Errno::ESPIPE));
     assert_eq!(sys(&mut k, nr::FADVISE64, &[9, 0, 0, 0]), Err(Errno::EBADF));

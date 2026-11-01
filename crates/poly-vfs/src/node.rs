@@ -129,6 +129,11 @@ impl NodeRef {
     /// this will not cause an error to be returned."
     pub fn chmod(&self, cred: &Cred, perm: u16) -> Result<()> {
         let attr = self.attr()?;
+        // A symbolic link's mode cannot be changed, on any file system
+        // (fchmodat2's spec sheet: `EOPNOTSUPP`, before the ownership).
+        if attr.kind == FileType::Symlink {
+            return Err(Errno::EOPNOTSUPP);
+        }
         self.writable_mount()?;
         if !cred.owns(&attr) {
             return Err(Errno::EPERM);
@@ -222,6 +227,11 @@ impl NodeRef {
         }
         self.writable_mount()?;
         cred.check(&attr, Access::WRITE)?;
+        // truncate(2): "ETXTBSY The file is an executable file that is
+        // being executed."
+        if self.loc.mount.sb.exec_busy(self.loc.ino) {
+            return Err(Errno::ETXTBSY);
+        }
         self.clear_setid(cred)?;
         self.truncate_unchecked(size)?;
         crate::inotify::self_event(&self.loc, crate::inotify::mask::IN_MODIFY, false);
@@ -352,14 +362,16 @@ impl FsContext {
     /// (`ENOTDIR`) the caller may search. The working directory is left
     /// alone, as in Linux.
     pub fn set_root(&mut self, cred: &Cred, dir: NodeRef) -> Result<()> {
-        if !cred.has(cap::SYS_CHROOT) {
-            return Err(Errno::EPERM);
-        }
+        // chroot's spec sheet: the lookup errors and the search permission
+        // on the directory come before the capability.
         let attr = dir.attr()?;
         if attr.kind != FileType::Directory {
             return Err(Errno::ENOTDIR);
         }
         cred.check(&attr, Access::EXEC)?;
+        if !cred.has(cap::SYS_CHROOT) {
+            return Err(Errno::EPERM);
+        }
         self.root = dir;
         Ok(())
     }

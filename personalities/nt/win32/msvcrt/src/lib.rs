@@ -120,8 +120,22 @@ pub extern "system" fn msvcrt_main(_module: *mut u8, reason: u32, reserved: *mut
             *slot = poly_win32_crt::strings::strerror(i as i32);
         }
     }
-    poly_win32_crt::dll_main(reason, !reserved.is_null())
+    let r = poly_win32_crt::dll_main(reason, !reserved.is_null());
+    if reason == poly_win32_crt::DLL_PROCESS_ATTACH {
+        // ADR 0114: on Windows the last error is not 0 when a program's
+        // start-up code reaches `__getmainargs` (ADR 0110's trace: that
+        // call changes it to 0); which value it holds the trace does not
+        // show. Poly's start leaves this placeholder (to be confirmed by
+        // the spec agent).
+        // SAFETY: a kernel32 call without pointers.
+        unsafe { poly_win32_crt::sys::SetLastError(START_LAST_ERROR) };
+    }
+    r
 }
+
+/// The last error `msvcrt`'s start leaves (ADR 0114): a placeholder,
+/// `ERROR_INSUFFICIENT_BUFFER` (`winerror.h`).
+const START_LAST_ERROR: u32 = 122;
 
 // ----- the classic start-up interface ------------------------------------------------------
 
@@ -147,7 +161,15 @@ pub unsafe extern "C" fn __getmainargs(
         heap::_set_new_mode(unsafe { (*info).newmode });
     }
     // SAFETY: the caller's out-pointers.
-    unsafe { startup::main_args(argc, argv, env, false, wildcard != 0) }
+    let r = unsafe { startup::main_args(argc, argv, env, false, wildcard != 0) };
+    // ADR 0114: Windows' `msvcrt` leaves the last error 0 after a
+    // successful `__getmainargs` (ADR 0110's trace; Learn is silent, to be
+    // confirmed by the spec agent).
+    if r == 0 {
+        // SAFETY: a kernel32 call without pointers.
+        unsafe { poly_win32_crt::sys::SetLastError(0) };
+    }
+    r
 }
 
 /// # Safety

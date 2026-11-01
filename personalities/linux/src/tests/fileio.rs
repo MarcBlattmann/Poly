@@ -593,6 +593,21 @@ fn epoll_pwait_masks_and_pwait2_takes_a_timespec() {
     assert_eq!(k.io.epoll_waits.last().unwrap().2, WaitTime::Until(Deadline { clock: Clock::Monotonic, at }));
 }
 
+#[test]
+fn epoll_pwait2_with_a_zero_timeout_leaves_signals_pending() {
+    let mut k = FakeKernel::new();
+    let ep = sys(&mut k, nr::EPOLL_CREATE1, &[0]).unwrap();
+    k.poke(ARG, &SigSet::only(SIGUSR1).0.to_le_bytes());
+    assert_eq!(sys(&mut k, nr::RT_SIGPROCMASK, &[0, ARG, 0, 8]), Ok(0));
+    assert_eq!(sys(&mut k, nr::TKILL, &[100, SIGUSR1 as u64]), Ok(0));
+    k.poke(ARG, &0u64.to_le_bytes());
+    k.poke(ARG + 8, &Timespec { sec: 0, nsec: 0 }.to_bytes());
+    assert_eq!(sys(&mut k, nr::EPOLL_PWAIT2, &[ep, BUF, 1, ARG + 8, ARG, 8]), Ok(0), "only polls");
+    assert!(k.me().pending(100).contains(SIGUSR1), "still pending");
+    assert_eq!(k.mask(), SigSet::only(SIGUSR1));
+    assert_eq!(sys(&mut k, nr::EPOLL_PWAIT2, &[ep, BUF, 1, 0, ARG, 8]), Err(Errno::EINTR), "would sleep");
+}
+
 // ---- event files ---------------------------------------------------------------
 
 #[test]

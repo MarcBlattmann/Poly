@@ -18,9 +18,11 @@
 //!   CPU features; both are plain functions, tested here.
 //!
 //! Everything is read-only (`EROFS`) but a process's `uid_map`, `gid_map`
-//! and `setgroups`, which the kernel's [`ProcSource::write_id_map`] takes;
-//! other writes Linux accepts (`comm`, `sys/kernel/hostname`) are not
-//! supported yet.
+//! and `setgroups`, which the kernel's [`ProcSource::write_id_map`] takes,
+//! and `sys/kernel/{hostname,domainname}`
+//! ([`ProcSource::write_kernel_name`]); other writes Linux accepts
+//! (`comm`) are not supported yet. An open namespace file pins its
+//! namespace ([`ProcSource::pin_namespace`]).
 //!
 //! `/proc/<pid>/ns/<kind>` (namespaces(7)) is a link whose text,
 //! `<type>:[<inode number>]`, names a hidden regular file in the same
@@ -40,8 +42,8 @@ mod staticfs;
 
 pub use procfs::{NR_OPEN, NS_KINDS, PID_MAX, PID_POS, ProcFs, copy_at, namespace_file, process_dir};
 pub use source::{
-    CpuFeatures, CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, MapEntry, MapName, MountEntry, NANOS_PER_TICK,
-    Owner, ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo, USER_HZ,
+    CpuFeatures, CpuInfo, CpuTimes, FdInfo, IdMapFile, KernelInfo, KernelName, MapEntry, MapName, MountEntry,
+    NANOS_PER_TICK, Owner, ProcSource, ProcState, ProcessInfo, SignalSets, SystemInfo, USER_HZ,
 };
 pub use staticfs::{Contents, StaticFs, StaticFsBuilder};
 

@@ -91,6 +91,15 @@ pub trait FileSystem: Send + Sync {
     /// A symbolic link's target (`EINVAL` for anything else).
     fn readlink(&self, ino: Ino) -> Result<Vec<u8>>;
 
+    /// Whether the symbolic link `ino` is a "magic" link: one that names an
+    /// object the kernel knows rather than holding a path of its own
+    /// (procfs's `/proc/<pid>/fd/<n>`, `exe`, `cwd`, `root`). openat2(2)'s
+    /// `RESOLVE_NO_MAGICLINKS` refuses to follow them.
+    fn is_magic_link(&self, ino: Ino) -> bool {
+        let _ = ino;
+        false
+    }
+
     /// Whether `ino` takes writes although the file system is read-only
     /// ([`FsInfo::read_only`]): a control file of a pseudo file system
     /// (procfs's `uid_map`). A read-only mount still refuses them.

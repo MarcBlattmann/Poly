@@ -21,6 +21,7 @@ unsafe extern "system" {
     fn GetProcessHeap() -> *mut u8;
     fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
     fn HeapFree(heap: *mut u8, flags: u32, p: *mut u8) -> i32;
+    fn SetLastError(error: u32);
 }
 
 /// `poly-kernelbase` links `alloc`: the process heap (16-byte aligned).
@@ -93,7 +94,7 @@ pub unsafe extern "system" fn SysAllocString(s: *const u16) -> Bstr {
         return core::ptr::null_mut();
     }
     // SAFETY: the caller's string.
-    unsafe { alloc_bstr(s, wcslen(s)) }
+    cleared(unsafe { alloc_bstr(s, wcslen(s)) })
 }
 
 /// `SysAllocStringLen`: `chars` characters (embedded NULs allowed) and a
@@ -102,7 +103,19 @@ pub unsafe extern "system" fn SysAllocString(s: *const u16) -> Bstr {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SysAllocStringLen(s: *const u16, chars: u32) -> Bstr {
     // SAFETY: the caller's string of `chars` characters.
-    unsafe { alloc_bstr(s, chars) }
+    cleared(unsafe { alloc_bstr(s, chars) })
+}
+
+/// A new string from `SysAllocString` / `SysAllocStringLen`, with the last
+/// error set to `ERROR_SUCCESS` when there is one: ADR 0110's trace of
+/// 7-Zip records Windows doing so (Learn is silent; ADR 0114, to be
+/// confirmed by the spec agent).
+fn cleared(s: Bstr) -> Bstr {
+    if !s.is_null() {
+        // SAFETY: a kernel32 call without pointers.
+        unsafe { SetLastError(0) };
+    }
+    s
 }
 
 /// `SysFreeString`: Learn: NULL is ignored.

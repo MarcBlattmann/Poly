@@ -5,7 +5,7 @@
 {"symbol":"NtAccessCheckByTypeAndAuditAlarm","src":["wine-spec"]},
 {"symbol":"NtAddAtom","src":["wine-spec"],"seeds":["wine:ntdll/tests/atom.c:test_Global","wine:win32u/tests/win32u.c:test_class"]},
 {"symbol":"NtAdjustGroupsToken","src":["wine-spec"]},
-{"symbol":"NtAdjustPrivilegesToken","src":["wine-spec"],"seeds":["wine:ntdll/tests/om.c:test_object_permanence"]},
+{"symbol":"NtAdjustPrivilegesToken","status":"claimed","claimed_by":"impl-7zip-trace","src":["wine-spec"],"seeds":["wine:ntdll/tests/om.c:test_object_permanence"]},
 {"symbol":"NtAlertMultipleThreadByThreadId","src":["wine-spec"],"seeds":["wine:ntdll/tests/sync.c:test_tid_alert"]},
 {"symbol":"NtAlertResumeThread","src":["wine-spec"]},
 {"symbol":"NtAlertThread","src":["wine-spec"]},

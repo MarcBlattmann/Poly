@@ -337,6 +337,10 @@ pub enum Service {
     /// `NtQueryInformationToken(TokenHandle, TokenInformationClass,
     /// TokenInformation, TokenInformationLength, ReturnLength*)`.
     QueryInformationToken,
+    /// `NtAdjustPrivilegesToken(TokenHandle, DisableAllPrivileges,
+    /// NewState*, BufferLength, PreviousState*, ReturnLength*)`: not in the
+    /// WDK; `AdjustTokenPrivileges`' parameters in its order (ADR 0114).
+    AdjustPrivilegesToken,
 }
 
 /// Table numbers (bits 12–13 of a service number).
@@ -463,12 +467,13 @@ pub const HANDLE_SERVICES: [(Service, u32, &str); 1] =
     [(Service::SetInformationObject, 0x011, "NtSetInformationObject")];
 
 /// Access tokens (ADR 0083).
-pub const SECURITY_SERVICES: [(Service, u32, &str); 5] = [
+pub const SECURITY_SERVICES: [(Service, u32, &str); 6] = [
     (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
     (Service::OpenProcessTokenEx, 0x181, "NtOpenProcessTokenEx"),
     (Service::OpenThreadToken, 0x182, "NtOpenThreadToken"),
     (Service::OpenThreadTokenEx, 0x183, "NtOpenThreadTokenEx"),
     (Service::QueryInformationToken, 0x184, "NtQueryInformationToken"),
+    (Service::AdjustPrivilegesToken, 0x185, "NtAdjustPrivilegesToken"),
 ];
 
 /// Every service Poly implements, from every table.

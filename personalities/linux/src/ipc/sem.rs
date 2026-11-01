@@ -208,6 +208,21 @@ impl SemTable {
         self.sets.get_mut(&id)
     }
 
+    /// The id of the set at `index` ([`super::index_of`]).
+    pub fn by_index(&self, index: i32) -> Option<i32> {
+        self.sets.keys().copied().find(|id| super::index_of(*id) == index)
+    }
+
+    /// The highest index in use, 0 if none (what `IPC_INFO` returns).
+    pub fn max_index(&self) -> i32 {
+        self.sets.keys().map(|id| super::index_of(*id)).max().unwrap_or(0)
+    }
+
+    /// Semaphores in all sets (`SEM_INFO`'s `semaem`).
+    pub fn semaphores(&self) -> u64 {
+        self.sets.values().map(|s| s.nsems() as u64).sum()
+    }
+
     /// The live set with `key` (never [`IPC_PRIVATE`]).
     fn by_key(&self, key: i32) -> Option<(i32, &SemSet)> {
         self.sets.iter().find(|(_, s)| s.key == key).map(|(id, s)| (*id, s))
@@ -507,6 +522,34 @@ impl SemTable {
         }
         touched.into_iter().flat_map(|id| self.wake(id, now)).collect()
     }
+}
+
+/// semctl commands that are not per set (`linux/ipc.h`, `linux/sem.h`).
+pub const IPC_INFO: u32 = 3;
+pub const SEM_STAT: u32 = 18;
+pub const SEM_INFO: u32 = 19;
+pub const SEM_STAT_ANY: u32 = 20;
+/// `SEMMAP`, `SEMMNU`, `SEMUME` and `SEMUSZ` of `struct seminfo`
+/// (`linux/sem.h`).
+pub const SEMMAP: i32 = SEMMNS as i32;
+pub const SEMMNU: i32 = SEMMNS as i32;
+pub const SEMUME: i32 = SEMOPM as i32;
+pub const SEMUSZ: i32 = 20;
+
+/// `struct seminfo` (`linux/sem.h`, ten `int`s): the limits for
+/// `IPC_INFO`; for `SEM_INFO` (`table` given) `semusz` is the number of
+/// sets and `semaem` of semaphores in use.
+pub fn seminfo_bytes(table: Option<&SemTable>) -> [u8; 40] {
+    let (usz, aem) = match table {
+        Some(t) => (t.len() as i32, t.semaphores() as i32),
+        None => (SEMUSZ, SEMAEM),
+    };
+    let ints = [SEMMAP, SEMMNI as i32, SEMMNS as i32, SEMMNU, SEMMSL, SEMOPM as i32, SEMUME, usz, SEMVMX, aem];
+    let mut b = [0u8; 40];
+    for (i, v) in ints.iter().enumerate() {
+        b[i * 4..i * 4 + 4].copy_from_slice(&v.to_ne_bytes());
+    }
+    b
 }
 
 /// The sets of the initial IPC namespace.

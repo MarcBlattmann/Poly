@@ -332,6 +332,18 @@ pub trait LinuxFs {
     /// the permission bits for a new file. Returns the new descriptor.
     fn openat(&mut self, dirfd: i32, path: &[u8], flags: u32, mode: u32) -> Result<i32, Errno>;
 
+    /// openat2(2): [`openat`](Self::openat) with the walk restricted by
+    /// `resolve` (the `RESOLVE_*` bits, already checked): `NO_XDEV`
+    /// (crossing a mount `EXDEV`), `NO_MAGICLINKS` / `NO_SYMLINKS`
+    /// (following such a link `ELOOP`), `BENEATH` (leaving `dirfd`'s
+    /// directory `EXDEV`), `IN_ROOT` (`dirfd`'s directory is `/`, also for
+    /// an absolute path), `CACHED` (no effect). Without restrictions it is
+    /// openat.
+    fn openat2(&mut self, dirfd: i32, path: &[u8], flags: u32, mode: u32, resolve: u64) -> Result<i32, Errno> {
+        const CACHED: u64 = 0x20;
+        if resolve & !CACHED == 0 { self.openat(dirfd, path, flags, mode) } else { Err(Errno::ENOSYS) }
+    }
+
     /// `EMFILE` when every descriptor below the soft `RLIMIT_NOFILE` is in
     /// use: open(2) reports it before it looks at the path.
     fn check_fd_free(&mut self) -> Result<(), Errno>;
@@ -511,6 +523,14 @@ pub trait LinuxFs {
 
     fn fchmod(&mut self, fd: i32, mode: u32) -> Result<(), Errno>;
     fn fchmodat(&mut self, dirfd: i32, path: &[u8], mode: u32) -> Result<(), Errno>;
+    /// fchmodat2(2): fchmodat with `follow` false for
+    /// `AT_SYMLINK_NOFOLLOW` (a symbolic link found is `EOPNOTSUPP`) and an
+    /// empty `path` for `AT_EMPTY_PATH`: the file `dirfd` refers to (any
+    /// descriptor, `O_PATH` ones too, or the working directory for
+    /// `AT_FDCWD`).
+    fn fchmodat2(&mut self, dirfd: i32, path: &[u8], mode: u32, follow: bool) -> Result<(), Errno> {
+        if follow && !path.is_empty() { self.fchmodat(dirfd, path, mode) } else { Err(Errno::ENOSYS) }
+    }
 
     /// fchownat(2) (chown, lchown): `None` for `-1`, "unchanged". An empty
     /// `path` means `dirfd`'s file (`AT_EMPTY_PATH`, `O_PATH` descriptors

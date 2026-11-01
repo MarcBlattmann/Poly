@@ -733,6 +733,14 @@ impl LinuxNet for Thread<'_> {
             Sock::Netlink(_) => Ok(0),
         }
     }
+
+    fn keep_error(&mut self, fd: i32, e: Errno) {
+        if let Ok((_, Sock::Unix(u))) = self.sock_file(fd)
+            && let Some(e) = poly_vfs::Errno::from_code(i32::from(e.get()))
+        {
+            u.socket().keep_error(e);
+        }
+    }
 }
 
 fn inet_setsockopt(s: &InetSocket, opt: SockOpt) -> Result<(), Errno> {

@@ -484,7 +484,12 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     let mut dirfd = req.dirfd;
     let mut depth = 0;
     let file = loop {
-        let file = k.process.files.open_exec_at(dirfd, &path).map_err(vfs_errno)?;
+        let file = if depth == 0 {
+            k.process.files.open_exec_with(dirfd, &path, req.follow)
+        } else {
+            k.process.files.open_exec_at(dirfd, &path)
+        };
+        let file = file.map_err(vfs_errno)?;
         let mut header = alloc::vec![0u8; HEADER_BYTES];
         let mut len = 0;
         while len < header.len() {
@@ -500,18 +505,27 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
                 _ => return Err(Errno::ENOEXEC),
             }
         };
+        // The interpreter opens the script by its name; through a
+        // descriptor the exec closes, it could not (execveat's spec sheet).
+        if depth == 0 && !req.script_reachable {
+            return Err(Errno::ENOENT);
+        }
+        // The first script is passed on by the name the caller knows it by.
+        let name = if depth == 0 { req.name } else { &path };
+        argv = script_argv(&script, name, &argv);
         depth += 1;
         if depth > MAX_SCRIPT_DEPTH {
             return Err(ELOOP);
         }
-        argv = script_argv(&script, &path, &argv);
         path = script.interpreter;
         // The interpreter's path is the system's, not relative to dirfd.
         dirfd = crate::fs::AT_FDCWD;
     };
     let argv_refs: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
     let envp_refs: Vec<&[u8]> = req.envp.iter().map(Vec::as_slice).collect();
-    let mut params = ExecParams::new(&argv_refs, &envp_refs, &path);
+    // AT_EXECFN: the name the program was started by, not that of a
+    // script's interpreter.
+    let mut params = ExecParams::new(&argv_refs, &envp_refs, req.name);
     // The credentials the program will run with (set-user-ID and
     // set-group-ID bits of the executable, not of a script; capabilities):
     // computed now for the auxiliary vector, installed past the point of
@@ -553,7 +567,7 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         k.tid = pid;
     }
     k.linux.with(|p| p.exec(pid as i32));
-    super::cred::commit_exec(k, pid, creds, req.path);
+    super::cred::commit_exec(k, pid, creds, req.name);
     let old = user::replace_memory(image.memory);
     // Dropping the old memory may take file system locks: fine here.
     drop(old);

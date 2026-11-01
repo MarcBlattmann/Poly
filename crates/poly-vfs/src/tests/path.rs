@@ -269,7 +269,47 @@ fn chroot_confines_dotdot_and_absolute_paths() {
     // An absolute symlink resolves inside the new root.
     env.symlink("/y/target", "/y/abs");
     assert_eq!(env.read("/y/abs").unwrap(), b"in y");
-    // Only root may chroot.
+    // Only root may chroot, but the lookup comes first.
     let user = Cred::user(1000, 1000);
     assert_eq!(env.vfs.chroot(&mut env.ctx, &user, At::Cwd, b"/y"), Err(Errno::EPERM));
+    assert_eq!(env.vfs.chroot(&mut env.ctx, &user, At::Cwd, b"/nope"), Err(Errno::ENOENT));
+    assert_eq!(env.vfs.chroot(&mut env.ctx, &user, At::Cwd, b"/y/target"), Err(Errno::ENOTDIR));
+}
+
+#[test]
+fn getcwd_outside_the_root_is_unreachable() {
+    let mut env = tree();
+    let cred = env.root.clone();
+    env.cd("/a").unwrap();
+    env.vfs.chroot(&mut env.ctx, &cred, At::Cwd, b"/x").unwrap();
+    assert_eq!(env.cwd(), b"(unreachable)/a");
+    // '..' from outside climbs to the real root.
+    env.cd("..").unwrap();
+    assert_eq!(env.cwd(), b"(unreachable)/");
+    env.cd("/").unwrap();
+    assert_eq!(env.cwd(), b"/");
+}
+
+#[test]
+fn open_resolve_restrictions() {
+    let env = tree();
+    env.symlink("b/file", "/a/rel");
+    env.symlink("/a/b/file", "/a/abs");
+    let open = |start: &str, path: &str, flags: OpenFlags, resolve: Resolve| {
+        let dir = env.vfs.lookup(&env.ctx, &env.root, At::Cwd, start.as_bytes(), true).unwrap();
+        env.vfs.open_resolve(&env.ctx, &env.root, At::Node(&dir), path.as_bytes(), flags, 0, resolve).map(|_| ())
+    };
+    let r = OpenFlags::RDONLY;
+    assert_eq!(open("/a", "rel", r, Resolve::BENEATH), Ok(()));
+    assert_eq!(open("/a", "abs", r, Resolve::BENEATH), Err(Errno::EXDEV));
+    assert_eq!(open("/a", "../top", r, Resolve::BENEATH), Err(Errno::EXDEV));
+    assert_eq!(open("/a", "b/../rel", r, Resolve::BENEATH), Ok(()));
+    assert_eq!(open("/a", "/top", r, Resolve::BENEATH), Err(Errno::EXDEV));
+    assert_eq!(open("/a", "abs", r, Resolve::IN_ROOT), Err(Errno::ENOENT), "/a/b/file inside /a is missing");
+    assert_eq!(open("/a/b", "/file", r, Resolve::IN_ROOT), Ok(()));
+    assert_eq!(open("/a/b", "../../../file", r, Resolve::IN_ROOT), Ok(()));
+    assert_eq!(open("/a", "rel", r, Resolve::NO_SYMLINKS), Err(Errno::ELOOP));
+    assert_eq!(open("/a", "rel", OpenFlags::PATH | OpenFlags::NOFOLLOW, Resolve::NO_SYMLINKS), Ok(()));
+    assert_eq!(open("/a", "rel", r, Resolve::NO_MAGICLINKS), Ok(()), "not a magic link");
+    assert_eq!(open("/", "a/b/file", r, Resolve::NO_XDEV), Ok(()));
 }

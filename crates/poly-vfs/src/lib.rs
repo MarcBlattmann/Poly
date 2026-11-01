@@ -104,7 +104,7 @@ pub use fs::{
 pub use mount::{Mount, MountFlags, MountId, MountInfo};
 pub use node::{FsContext, NodeRef};
 pub use object::FileObject;
-pub use path::{MAX_SYMLINKS, NAME_MAX, PATH_MAX, PathArg};
+pub use path::{MAX_SYMLINKS, NAME_MAX, PATH_MAX, PathArg, Resolve};
 pub use poll::{Blocker, PollEvents, Timeout, WaitQueue, Waker, Woke};
 pub use tmpfs::Tmpfs;
 pub use vfs::Vfs;

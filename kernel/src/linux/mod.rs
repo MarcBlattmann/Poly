@@ -39,6 +39,7 @@ mod files_tests;
 pub mod net;
 mod ns_tests;
 mod pidfd;
+mod procaccess;
 mod services;
 mod shm;
 mod shm_tests;

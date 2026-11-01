@@ -152,7 +152,24 @@ pub struct RootOptions {
     pub mode: Option<u16>,
     pub uid: Option<u32>,
     pub gid: Option<u32>,
+    /// tmpfs(5) `size` (or `nr_blocks` pages): the most file data, in
+    /// bytes or as a percentage of RAM; `Count(0)` is no limit.
+    pub size: Option<Amount>,
+    /// tmpfs(5) `nr_inodes`: the most inodes; `Count(0)` is no limit.
+    pub inodes: Option<Amount>,
 }
+
+/// The value of a tmpfs size option: a count (bytes, pages or inodes,
+/// with the `k`, `m`, `g`, `t`, `p`, `e` suffixes applied) or a
+/// percentage of RAM (`%`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Amount {
+    Count(u64),
+    Percent(u64),
+}
+
+/// tmpfs(5)'s `nr_blocks` counts pages of this size.
+const PAGE_BYTES: u64 = 4096;
 
 fn number(v: Option<&[u8]>, radix: u32) -> Result<u64, Errno> {
     let v = core::str::from_utf8(v.ok_or(Errno::EINVAL)?).map_err(|_| Errno::EINVAL)?;
@@ -160,24 +177,31 @@ fn number(v: Option<&[u8]>, radix: u32) -> Result<u64, Errno> {
 }
 
 /// A size option (tmpfs(5) `size`, `nr_blocks`, `nr_inodes`): a number
-/// with an optional `k`, `m`, `g`, `t`, `p` or `e` suffix, or a percentage.
-fn size(v: Option<&[u8]>) -> Result<(), Errno> {
+/// with an optional `k`, `m`, `g`, `t`, `p` or `e` suffix (powers of
+/// 1024), or a percentage.
+fn size(v: Option<&[u8]>) -> Result<Amount, Errno> {
     let v = v.ok_or(Errno::EINVAL)?;
-    let digits = match v.last() {
-        Some(b'%' | b'k' | b'K' | b'm' | b'M' | b'g' | b'G' | b't' | b'T' | b'p' | b'P' | b'e' | b'E') => {
-            &v[..v.len() - 1]
-        }
-        _ => v,
+    let (digits, shift) = match v.last().map(u8::to_ascii_lowercase) {
+        Some(b'%') => return number(Some(&v[..v.len() - 1]), 10).map(Amount::Percent),
+        Some(b'k') => (&v[..v.len() - 1], 10),
+        Some(b'm') => (&v[..v.len() - 1], 20),
+        Some(b'g') => (&v[..v.len() - 1], 30),
+        Some(b't') => (&v[..v.len() - 1], 40),
+        Some(b'p') => (&v[..v.len() - 1], 50),
+        Some(b'e') => (&v[..v.len() - 1], 60),
+        _ => (v, 0),
     };
-    number(Some(digits), 10).map(|_| ())
+    let n = number(Some(digits), 10)?;
+    n.checked_mul(1 << shift).map(Amount::Count).ok_or(Errno::EINVAL)
 }
 
 /// Check a new mount's `data` for file system `fs` and return what Poly
 /// applies of it. Each type takes the options its manual page lists
 /// (tmpfs(5); proc(5): `hidepid`, `gid`, `subset`; devpts as mount(8)
 /// lists them; sysfs none); anything else is `EINVAL`. Poly applies a
-/// tmpfs root's `mode`, `uid` and `gid`; the size limits and the other
-/// types' options are accepted and have no effect yet. ext2's many options
+/// tmpfs root's `mode`, `uid` and `gid` and its size limits (`size`,
+/// `nr_blocks`, `nr_inodes`); the other types' options are accepted and
+/// have no effect yet. ext2's many options
 /// (mount(8)) are accepted as they are.
 pub fn mount_options(fs: FsType, data: &[u8]) -> Result<RootOptions, Errno> {
     let mut root = RootOptions::default();
@@ -186,7 +210,14 @@ pub fn mount_options(fs: FsType, data: &[u8]) -> Result<RootOptions, Errno> {
             (FsType::Tmpfs, b"mode") => root.mode = Some((number(value, 8)? & 0o7777) as u16),
             (FsType::Tmpfs, b"uid") => root.uid = Some(number(value, 10)? as u32),
             (FsType::Tmpfs, b"gid") => root.gid = Some(number(value, 10)? as u32),
-            (FsType::Tmpfs, b"size" | b"nr_blocks" | b"nr_inodes") => size(value)?,
+            (FsType::Tmpfs, b"size") => root.size = Some(size(value)?),
+            (FsType::Tmpfs, b"nr_blocks") => {
+                root.size = Some(match size(value)? {
+                    Amount::Count(pages) => Amount::Count(pages.checked_mul(PAGE_BYTES).ok_or(Errno::EINVAL)?),
+                    percent => percent,
+                });
+            }
+            (FsType::Tmpfs, b"nr_inodes") => root.inodes = Some(size(value)?),
             (FsType::Tmpfs, b"huge" | b"mpol") if value.is_some() => {}
             (FsType::Tmpfs, b"noswap" | b"inode32" | b"inode64") if value.is_none() => {}
             (FsType::Proc, b"hidepid" | b"gid" | b"subset") if value.is_some() => {}
@@ -249,11 +280,17 @@ pub trait LinuxAdmin {
 
     /// mknodat(2): a regular file, FIFO, socket or device node (`mode`
     /// has the type bits, checked; `dev` is the device number as
-    /// `makedev` encodes it).
-    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64) -> Result<(), Errno>;
+    /// `makedev` encodes it). `may_mknod` says whether the caller has
+    /// `CAP_MKNOD`: without it a device node is `EPERM`, but only after the
+    /// path was looked up and the directory found writable (mknod's spec
+    /// sheet: `ENOENT`, `EEXIST`, `EACCES` come first).
+    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64, may_mknod: bool) -> Result<(), Errno>;
 
     /// chroot(2): the calling process's root directory becomes `path`.
-    fn chroot(&mut self, path: &[u8]) -> Result<(), Errno>;
+    /// `may_chroot` says whether the caller has `CAP_SYS_CHROOT`: without
+    /// it the call is `EPERM`, after the lookup and the search permission
+    /// on the directory (chroot's spec sheet).
+    fn chroot(&mut self, path: &[u8], may_chroot: bool) -> Result<(), Errno>;
 
     /// The current host or domain name.
     fn system_name(&self, which: SystemName) -> Vec<u8>;

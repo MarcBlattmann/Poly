@@ -68,6 +68,13 @@ pub fn domainname() -> Vec<u8> {
     DOMAINNAME.lock().get()
 }
 
+/// Set the initial UTS namespace's host or domain name (at most
+/// `NAME_MAX` bytes, checked by the caller), for a write to
+/// `/proc/sys/kernel/hostname` or `domainname`.
+pub fn set_name(which: SystemName, value: &[u8]) {
+    *name(which).lock() = Name::new(&value[..value.len().min(NAME_MAX)]);
+}
+
 fn vfs_flags(f: admin::MountFlags) -> MountFlags {
     MountFlags { read_only: f.read_only, no_exec: f.no_exec, no_suid: f.no_suid, no_dev: f.no_dev }
 }
@@ -174,7 +181,7 @@ impl LinuxAdmin for Thread<'_> {
         Ok(())
     }
 
-    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64) -> Result<(), Errno> {
+    fn mknodat(&mut self, dirfd: i32, path: &[u8], mode: u32, dev: u64, may_mknod: bool) -> Result<(), Errno> {
         let kind = match mode & 0o170000 {
             0o100000 => FileType::Regular,
             0o020000 => FileType::CharDevice,
@@ -184,11 +191,11 @@ impl LinuxAdmin for Thread<'_> {
             _ => return Err(Errno::EINVAL),
         };
         let rdev = DeviceId::new(major(dev), minor(dev));
-        self.process().files.mknodat(dirfd, path, kind, (mode & 0o7777) as u16, rdev).map_err(vfs_errno)
+        self.process().files.mknodat(dirfd, path, kind, (mode & 0o7777) as u16, rdev, may_mknod).map_err(vfs_errno)
     }
 
-    fn chroot(&mut self, path: &[u8]) -> Result<(), Errno> {
-        self.process().files.chroot(path).map_err(vfs_errno)
+    fn chroot(&mut self, path: &[u8], may_chroot: bool) -> Result<(), Errno> {
+        self.process().files.chroot(path, may_chroot).map_err(vfs_errno)
     }
 
     fn system_name(&self, which: SystemName) -> Vec<u8> {

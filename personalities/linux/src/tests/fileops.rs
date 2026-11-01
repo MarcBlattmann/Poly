@@ -236,6 +236,26 @@ fn xattrs_through_the_calls() {
 }
 
 #[test]
+fn xattr_name_lists_beyond_the_limit() {
+    // listxattr's spec sheet: tmpfs keeps 6000 names of 12 bytes (72000
+    // bytes of list); size 0 gives the length, a buffer of 64 KiB or more
+    // E2BIG, a smaller one ERANGE.
+    let mut e = env();
+    let k = &mut e.k;
+    let file = s(k, 0, b"/dir/file");
+    let name = 0x80;
+    let buf = scratch(0x3000);
+    for i in 0..6000 {
+        let n = s(k, name, alloc::format!("user.s{i:05}").as_bytes());
+        assert_eq!(sys(k, nr::SETXATTR, &[file, n, 0, 0, 0]), Ok(0));
+    }
+    assert_eq!(sys(k, nr::LISTXATTR, &[file, 0, 0]), Ok(72000));
+    assert_eq!(sys(k, nr::LISTXATTR, &[file, buf, 65536]), Err(Errno::E2BIG));
+    assert_eq!(sys(k, nr::LISTXATTR, &[file, buf, 100_000]), Err(Errno::E2BIG));
+    assert_eq!(sys(k, nr::LISTXATTR, &[file, buf, 100]), Err(Errno::ERANGE));
+}
+
+#[test]
 fn xattr_arguments() {
     let mut e = env();
     let k = &mut e.k;
@@ -264,6 +284,20 @@ fn xattr_arguments() {
     // The value buffer must be writable once there is something to copy.
     assert_eq!(sys(k, nr::SETXATTR, &[file, name, buf, 4, 0]), Ok(0));
     assert_eq!(sys(k, nr::GETXATTR, &[file, name, UNMAPPED, 64]), Err(Errno::EFAULT));
+    // The name, size and value before the file (the spec sheets' order);
+    // flags first of all; a size above 64 KiB counts as 64 KiB.
+    assert_eq!(sys(k, nr::SETXATTR, &[0, name, buf, 4, 4]), Err(Errno::EINVAL));
+    assert_eq!(sys(k, nr::SETXATTR, &[0, long, buf, 4, 0]), Err(Errno::ERANGE));
+    assert_eq!(sys(k, nr::GETXATTR, &[0, long, buf, 4]), Err(Errno::ERANGE));
+    assert_eq!(sys(k, nr::REMOVEXATTR, &[0, empty]), Err(Errno::ERANGE));
+    assert_eq!(sys(k, nr::FSETXATTR, &[-1i64 as u64, name, buf, 65537, 0]), Err(Errno::E2BIG));
+    assert_eq!(sys(k, nr::FSETXATTR, &[-1i64 as u64, name, UNMAPPED, 4, 0]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::FGETXATTR, &[-1i64 as u64, UNMAPPED, buf, 4]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::GETXATTR, &[file, name, buf, 1 << 40]), Ok(4));
+    // Both flags: ENODATA for a missing name, EEXIST for one that exists.
+    let fresh = s(k, 0x380, b"user.fresh");
+    assert_eq!(sys(k, nr::SETXATTR, &[file, fresh, buf, 1, 3]), Err(Errno::ENODATA));
+    assert_eq!(sys(k, nr::SETXATTR, &[file, name, buf, 1, 3]), Err(Errno::EEXIST));
     // Without kernel services.
     let mut bare = FakeKernel::new();
     let p = s(&mut bare, 0, b"/x");

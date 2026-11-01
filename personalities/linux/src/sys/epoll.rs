@@ -107,6 +107,10 @@ fn wait_events(
     if epfd < 0 {
         return Err(Errno::EBADF);
     }
+    // A zero timeout only polls: the mask is put back before anything is
+    // delivered, so a pending signal it unblocks stays pending
+    // (epoll_pwait2's spec sheet, "sigmask_poll"), as if there were none.
+    let mask = if wait == WaitTime::Poll { None } else { mask };
     let events = match wait_with_signals(k, mask, wait, |io, w| io.epoll_wait(epfd, max, w), Vec::is_empty)? {
         Waited::Done(events) => events,
         Waited::Interrupted => return Err(Errno::EINTR),

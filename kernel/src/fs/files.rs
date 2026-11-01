@@ -21,8 +21,8 @@ mod mounts;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_vfs::{
-    AT_FDCWD, At, Cred, DirEntry, Errno, Fd, FdTable, FileType, FsContext, NodeRef, OpenFile, OpenFlags, Result, Stat,
-    Whence,
+    AT_FDCWD, At, Cred, DirEntry, Errno, Fd, FdTable, FileType, FsContext, NodeRef, OpenFile, OpenFlags, Resolve,
+    Result, Stat, Whence,
 };
 
 /// `AT_REMOVEDIR` (Linux UAPI `linux/fcntl.h`): `unlinkat` removes a
@@ -109,6 +109,18 @@ impl Files {
     /// while it is used).
     fn table(&self) -> Arc<Mutex<FdTable>> {
         self.fds.lock().clone()
+    }
+
+    /// What identifies the descriptor table (kcmp(2) `KCMP_FILES`): equal
+    /// for processes that share it.
+    pub fn table_id(&self) -> u64 {
+        Arc::as_ptr(&self.table()) as usize as u64
+    }
+
+    /// What identifies the root, working directory and umask (kcmp(2)
+    /// `KCMP_FS`): every process has its own.
+    pub fn context_id(&self) -> u64 {
+        core::ptr::from_ref(&self.ctx) as usize as u64
     }
 
     /// The credentials permission checks use: the calling thread's file
@@ -385,11 +397,42 @@ impl Files {
         self.table().lock().install(file, flags.contains(OpenFlags::CLOEXEC))
     }
 
+    /// `openat2(2)`: [`openat`](Self::openat) under `resolve`'s
+    /// restrictions. With `RESOLVE_IN_ROOT` `dirfd` names the walk's root
+    /// even for an absolute `path`.
+    pub fn openat2(&self, dirfd: Fd, path: &[u8], flags: OpenFlags, mode: u16, resolve: Resolve) -> Result<Fd> {
+        let absolute = path.first() == Some(&b'/');
+        let dir: Option<NodeRef> = if dirfd == AT_FDCWD || (absolute && !resolve.contains(Resolve::IN_ROOT)) {
+            None
+        } else {
+            Some(self.table().lock().get(dirfd)?.node().clone())
+        };
+        let ctx = self.ctx.lock().clone();
+        let at = dir.as_ref().map_or(At::Cwd, At::Node);
+        let file = vfs().open_resolve(&ctx, &self.cred(), at, path, flags, mode, resolve)?;
+        self.table().lock().install(file, flags.contains(OpenFlags::CLOEXEC))
+    }
+
     /// `execve(2)`: open `path` (from `dirfd`, as for `openat`) to run it:
     /// a regular file with execute permission on a mount that allows
     /// executing (`EACCES` otherwise). Not installed as a descriptor.
     pub fn open_exec_at(&self, dirfd: Fd, path: &[u8]) -> Result<Arc<OpenFile>> {
         self.at(dirfd, path, |vfs, ctx, at| vfs.open_exec(ctx, &self.cred(), at, path))
+    }
+
+    /// execveat(2): `path` from `dirfd`, a final symbolic link followed
+    /// only with `follow`; an empty `path` runs the file `dirfd` is open
+    /// on (`AT_EMPTY_PATH`).
+    pub fn open_exec_with(&self, dirfd: Fd, path: &[u8], follow: bool) -> Result<Arc<OpenFile>> {
+        if path.is_empty() {
+            if dirfd == AT_FDCWD {
+                // The working directory: never a program.
+                return Err(Errno::EACCES);
+            }
+            let file = self.file(dirfd)?;
+            return vfs().open_exec_file(&self.cred(), &file);
+        }
+        self.at(dirfd, path, |vfs, ctx, at| vfs.open_exec_with(ctx, &self.cred(), at, path, follow))
     }
 
     /// `stat(2)` (`follow`) and `lstat(2)`, `fstatat(2)` with `dirfd`.

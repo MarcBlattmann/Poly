@@ -163,6 +163,13 @@ pub(crate) struct Superblock {
     pub(crate) info: FsInfo,
     pub(crate) dev: DeviceId,
     cache: Option<SpinMutex<NameCache>>,
+    /// Inodes running as programs, and how many open files say so
+    /// ([`Vfs::open_exec`](crate::Vfs::open_exec)): opening them for
+    /// writing or truncating them is `ETXTBSY` (open(2), truncate(2)).
+    exec_busy: SpinMutex<BTreeMap<Ino, u32>>,
+    /// Regular files open for writing, and how many open files write
+    /// them: running them as programs is `ETXTBSY` (execve(2)).
+    writers: SpinMutex<BTreeMap<Ino, u32>>,
 }
 
 impl Superblock {
@@ -180,6 +187,48 @@ impl Superblock {
         let ino = self.fs.lookup(dir, name)?;
         cache.lock().insert(dir, name, ino);
         Ok(ino)
+    }
+
+    /// Whether `ino` is running as a program (`ETXTBSY` for writers).
+    pub(crate) fn exec_busy(&self, ino: Ino) -> bool {
+        self.exec_busy.lock().contains_key(&ino)
+    }
+
+    /// One more open file runs `ino` as a program.
+    pub(crate) fn deny_write(&self, ino: Ino) {
+        *self.exec_busy.lock().entry(ino).or_insert(0) += 1;
+    }
+
+    /// One open file running `ino` as a program is gone.
+    pub(crate) fn allow_write(&self, ino: Ino) {
+        let mut busy = self.exec_busy.lock();
+        if let Some(n) = busy.get_mut(&ino) {
+            *n -= 1;
+            if *n == 0 {
+                busy.remove(&ino);
+            }
+        }
+    }
+
+    /// Whether an open file writes `ino` (`ETXTBSY` for execve(2)).
+    pub(crate) fn has_writers(&self, ino: Ino) -> bool {
+        self.writers.lock().contains_key(&ino)
+    }
+
+    /// One more open file writes `ino`.
+    pub(crate) fn add_writer(&self, ino: Ino) {
+        *self.writers.lock().entry(ino).or_insert(0) += 1;
+    }
+
+    /// One open file writing `ino` is gone.
+    pub(crate) fn drop_writer(&self, ino: Ino) {
+        let mut writers = self.writers.lock();
+        if let Some(n) = writers.get_mut(&ino) {
+            *n -= 1;
+            if *n == 0 {
+                writers.remove(&ino);
+            }
+        }
     }
 
     /// Drops what the cache knows about `dir/name`.
@@ -259,7 +308,14 @@ impl MountTable {
         let dev = DeviceId::new(0, self.next_anon_minor);
         self.next_anon_minor += 1;
         let cache = info.cache_lookups.then(|| SpinMutex::new(NameCache { dirs: BTreeMap::new(), entries: 0 }));
-        let sb = Arc::new(Superblock { fs, info, dev, cache });
+        let sb = Arc::new(Superblock {
+            fs,
+            info,
+            dev,
+            cache,
+            exec_busy: SpinMutex::new(BTreeMap::new()),
+            writers: SpinMutex::new(BTreeMap::new()),
+        });
         self.supers.push(Arc::downgrade(&sb));
         sb
     }

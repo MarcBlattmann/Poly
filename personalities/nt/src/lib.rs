@@ -269,5 +269,6 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         OpenProcessTokenEx => security::open_process_token_ex(k, regs),
         OpenThreadToken | OpenThreadTokenEx => security::open_thread_token(k, regs),
         QueryInformationToken => security::query_information_token(k, regs),
+        AdjustPrivilegesToken => security::adjust_privileges_token(k, regs),
     }
 }

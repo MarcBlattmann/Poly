@@ -9,7 +9,7 @@ use crate::inotify;
 use crate::mount::{Mount, MountFlags, MountId, MountInfo, MountTable};
 use crate::node::{FsContext, Location, NodeRef, is_fs_object};
 use crate::object::AnonFs;
-use crate::path::{Found, Last, PATH_MAX, Parent, PathArg, Walk, check_path};
+use crate::path::{Found, Last, PATH_MAX, Parent, PathArg, Resolve, Walk, check_path};
 use crate::sync::SpinMutex;
 use crate::{Attr, DeviceId, Errno, FileType, Ino, PERM_MASK, Result, S_ISGID, S_ISUID, S_ISVTX, S_IXGRP, Stat};
 use alloc::collections::BTreeMap;
@@ -314,6 +314,24 @@ impl Vfs {
         flags: OpenFlags,
         mode: u16,
     ) -> Result<Arc<OpenFile>> {
+        self.open_resolve(ctx, cred, at, path, flags, mode, Resolve::empty())
+    }
+
+    /// openat2(2): [`open`](Self::open) with the walk restricted by
+    /// `resolve` ([`Resolve`]). With [`Resolve::IN_ROOT`] or
+    /// [`Resolve::BENEATH`], `at` is the directory the walk is rooted at
+    /// or must stay below, also for an absolute `path`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_resolve(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        flags: OpenFlags,
+        mode: u16,
+        resolve: Resolve,
+    ) -> Result<Arc<OpenFile>> {
         let mut flags = flags;
         if flags.contains(OpenFlags::PATH) {
             flags = flags.intersection(OpenFlags::PATH | OpenFlags::DIRECTORY | OpenFlags::NOFOLLOW);
@@ -327,8 +345,8 @@ impl Vfs {
         }
         let follow = !flags.contains(OpenFlags::NOFOLLOW);
         check_path(path)?;
-        let mut walk = self.walk(ctx, cred);
         let start = Self::start(ctx, at);
+        let mut walk = Walk::restricted(self, cred, ctx.root.loc().clone(), &start, resolve);
         let ((loc, named), created) = if !flags.contains(OpenFlags::CREAT) {
             (walk.resolve_named(start, path, follow)?, false)
         } else {
@@ -378,6 +396,12 @@ impl Vfs {
                 want = want | Access::WRITE;
             }
             cred.check(&attr, want)?;
+            // open(2): "ETXTBSY pathname refers to an executable image
+            // which is currently being executed and write access was
+            // requested."
+            if want.contains(Access::WRITE) && attr.kind == FileType::Regular && loc.mount.sb.exec_busy(loc.ino) {
+                return Err(Errno::ETXTBSY);
+            }
             // open(2): "EPERM The O_NOATIME flag was specified, but the
             // effective user ID of the caller did not match the owner of
             // the file and the caller was not privileged" (CAP_FOWNER).
@@ -416,7 +440,11 @@ impl Vfs {
                 node.truncate_unchecked(0)?;
             }
         }
-        let file = Arc::new(OpenFile::new(node, attr.kind, backend, flags).with_origin(origin));
+        let mut file = OpenFile::new(node, attr.kind, backend, flags).with_origin(origin);
+        if attr.kind == FileType::Regular && flags.writable() && !flags.contains(OpenFlags::PATH) {
+            file = file.counting_writer();
+        }
+        let file = Arc::new(file);
         inotify::file_event(&file, inotify::mask::IN_OPEN);
         Ok(file)
     }
@@ -468,7 +496,7 @@ impl Vfs {
         let mut p = walk.parent(start, path)?;
         loop {
             let Last::Name(name) = &p.last else { return Err(Errno::EISDIR) };
-            match self.child(&p.dir, name) {
+            match walk.child(&p.dir, name) {
                 Ok(_) if flags.contains(OpenFlags::EXCL) => return Err(Errno::EEXIST),
                 Ok(loc) => {
                     let kind = loc.attr()?.kind;
@@ -513,19 +541,53 @@ impl Vfs {
     /// Opens a file for `execve`: a regular file (`EACCES` otherwise) the
     /// caller may execute, not on a `noexec` mount (`EACCES`).
     pub fn open_exec(&self, ctx: &FsContext, cred: &Cred, at: At<'_>, path: &[u8]) -> Result<Arc<OpenFile>> {
+        self.open_exec_with(ctx, cred, at, path, true)
+    }
+
+    /// [`open_exec`](Self::open_exec), following a final symbolic link
+    /// only with `follow` (execveat(2) `AT_SYMLINK_NOFOLLOW`: `ELOOP` for
+    /// a link).
+    pub fn open_exec_with(
+        &self,
+        ctx: &FsContext,
+        cred: &Cred,
+        at: At<'_>,
+        path: &[u8],
+        follow: bool,
+    ) -> Result<Arc<OpenFile>> {
         check_path(path)?;
-        let (loc, named) = self.walk(ctx, cred).resolve_named(Self::start(ctx, at), path, true)?;
+        let (loc, named) = self.walk(ctx, cred).resolve_named(Self::start(ctx, at), path, follow)?;
         let origin = named.map(|(dir, name)| Origin {
             mount: Arc::downgrade(&dir.mount),
             dir: dir.ino,
             name: name.into_boxed_slice(),
         });
+        Self::exec_file(cred, loc, origin)
+    }
+
+    /// Opens the file `file` is open on for `execve` (execveat(2) with
+    /// `AT_EMPTY_PATH`): the checks of [`open_exec`](Self::open_exec); a
+    /// descriptor of a symbolic link (`O_PATH | O_NOFOLLOW`) is `ELOOP`.
+    pub fn open_exec_file(&self, cred: &Cred, file: &OpenFile) -> Result<Arc<OpenFile>> {
+        Self::exec_file(cred, file.node().loc().clone(), file.origin().cloned())
+    }
+
+    fn exec_file(cred: &Cred, loc: Location, origin: Option<Origin>) -> Result<Arc<OpenFile>> {
         let attr = loc.attr()?;
+        if attr.kind == FileType::Symlink {
+            return Err(Errno::ELOOP);
+        }
         if attr.kind != FileType::Regular || loc.mount.flags().no_exec {
             return Err(Errno::EACCES);
         }
         cred.check(&attr, Access::EXEC)?;
-        Ok(Arc::new(OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin)))
+        // execve(2): "ETXTBSY The specified executable was open for
+        // writing by one or more processes."
+        if loc.mount.sb.has_writers(loc.ino) {
+            return Err(Errno::ETXTBSY);
+        }
+        let file = OpenFile::new(loc.pin()?, attr.kind, Backend::Inode, OpenFlags::RDONLY).with_origin(origin);
+        Ok(Arc::new(file.denying_write()))
     }
 
     /// `mkdir(2)`: `mode` is masked by the umask.
@@ -554,10 +616,8 @@ impl Vfs {
         mode: u16,
         rdev: DeviceId,
     ) -> Result<()> {
-        match kind {
-            FileType::Directory | FileType::Symlink => return Err(Errno::EINVAL),
-            FileType::CharDevice | FileType::BlockDevice if !cred.has(cap::MKNOD) => return Err(Errno::EPERM),
-            _ => {}
+        if matches!(kind, FileType::Directory | FileType::Symlink) {
+            return Err(Errno::EINVAL);
         }
         let p = self.parent_of(ctx, cred, at, path)?;
         let name = self.new_name(&p)?;
@@ -565,6 +625,11 @@ impl Vfs {
             return Err(Errno::ENOENT);
         }
         let dir_attr = self.may_change(cred, &p.dir)?;
+        // A device node needs CAP_MKNOD, checked after the lookup and the
+        // directory's permission (mknod's spec sheet).
+        if matches!(kind, FileType::CharDevice | FileType::BlockDevice) && !cred.has(cap::MKNOD) {
+            return Err(Errno::EPERM);
+        }
         let (uid, gid, perm) = Self::new_owner(cred, &dir_attr, mode & !ctx.umask, false);
         let rdev =
             if matches!(kind, FileType::CharDevice | FileType::BlockDevice) { rdev } else { DeviceId::default() };
@@ -804,17 +869,23 @@ impl Vfs {
         if flags.noreplace && flags.exchange {
             return Err(Errno::EINVAL);
         }
+        // The order (the spec of rename): both paths' directories, EXDEV,
+        // a last "."/".."/"/" (EBUSY), EROFS, the last names, the trailing
+        // slashes, then the rename's own errors.
         let op = self.dirs_of(ctx, cred, old)?;
         let np = self.dirs_of(ctx, cred, new)?;
-        let (Last::Name(old_name), Last::Name(new_name)) = (&op.last, &np.last) else {
-            return Err(Errno::EBUSY);
-        };
-        op.check_name()?;
-        let src = self.raw_child(&op.dir, old_name)?;
-        np.check_name()?;
         if !Arc::ptr_eq(&op.dir.mount, &np.dir.mount) {
             return Err(Errno::EXDEV);
         }
+        let (Last::Name(old_name), Last::Name(new_name)) = (&op.last, &np.last) else {
+            return Err(Errno::EBUSY);
+        };
+        if op.dir.mount.read_only() {
+            return Err(Errno::EROFS);
+        }
+        op.check_name()?;
+        let src = self.raw_child(&op.dir, old_name)?;
+        np.check_name()?;
         let sattr = src.attr()?;
         let dst = match self.raw_child(&np.dir, new_name) {
             Ok(d) => Some(d),
@@ -829,9 +900,6 @@ impl Vfs {
         if (op.trailing_slash && !src_dir) || (np.trailing_slash && !(if flags.exchange { dst_dir } else { src_dir })) {
             return Err(Errno::ENOTDIR);
         }
-        if self.is_mount_point(&src) || dst.as_ref().is_some_and(|d| self.is_mount_point(d)) {
-            return Err(Errno::EBUSY);
-        }
         if let Some(dattr) = &dattr {
             // RENAME_NOREPLACE: an existing target, even the source's own
             // name or another link of it, is EEXIST (the spec of renameat2).
@@ -842,14 +910,6 @@ impl Vfs {
                 // Two names of one inode (or the same name): nothing to do.
                 return Ok(());
             }
-            if !flags.exchange {
-                if src_dir && !dst_dir {
-                    return Err(Errno::ENOTDIR);
-                }
-                if !src_dir && dst_dir {
-                    return Err(Errno::EISDIR);
-                }
-            }
         }
         // A directory cannot move below itself.
         if src_dir && self.is_within(&np.dir, src.ino)? {
@@ -857,6 +917,11 @@ impl Vfs {
         }
         if flags.exchange && dst_dir && self.is_within(&op.dir, dattr.as_ref().map_or(0, |a| a.ino))? {
             return Err(Errno::EINVAL);
+        }
+        // A directory over one of its own ancestors: that target is not
+        // empty (it holds the source).
+        if !flags.exchange && src_dir && dst_dir && self.is_within(&op.dir, dattr.as_ref().map_or(0, |a| a.ino))? {
+            return Err(Errno::ENOTEMPTY);
         }
         let old_dattr = self.may_change(cred, &op.dir)?;
         let new_dattr = self.may_change(cred, &np.dir)?;
@@ -872,6 +937,19 @@ impl Vfs {
         }
         if moves_parent && flags.exchange && dst_dir {
             cred.check(dattr.as_ref().ok_or(Errno::ENOENT)?, Access::WRITE)?;
+        }
+        // Then the kinds, a non-empty target (the file system's), a mount
+        // point.
+        if dattr.is_some() && !flags.exchange {
+            if src_dir && !dst_dir {
+                return Err(Errno::ENOTDIR);
+            }
+            if !src_dir && dst_dir {
+                return Err(Errno::EISDIR);
+            }
+        }
+        if self.is_mount_point(&src) || dst.as_ref().is_some_and(|d| self.is_mount_point(d)) {
+            return Err(Errno::EBUSY);
         }
         let sb = &op.dir.mount.sb;
         sb.forget(op.dir.ino, old_name);
@@ -1043,8 +1121,18 @@ impl Vfs {
     }
 
     /// `getcwd(2)`: the working directory's path from the process root.
+    /// A working directory outside the root (after a chroot(2) that left
+    /// it there) is `(unreachable)` followed by its path from the topmost
+    /// root (chroot's spec sheet; getcwd(3) describes the prefix).
     pub fn getcwd(&self, ctx: &FsContext) -> Result<Vec<u8>> {
-        self.path_of(ctx, &ctx.cwd)
+        match self.path_from_root(ctx, &ctx.cwd)? {
+            (path, true) => Ok(path),
+            (path, false) => {
+                let mut out = b"(unreachable)".to_vec();
+                out.extend_from_slice(&path);
+                Ok(out)
+            }
+        }
     }
 
     /// The absolute path of `node` as seen from `ctx`'s root, found by
@@ -1053,11 +1141,22 @@ impl Vfs {
     /// if it is not a directory and has no name in the scanned parents.
     /// Meant for directories (getcwd, `/proc/self/cwd`).
     pub fn path_of(&self, ctx: &FsContext, node: &NodeRef) -> Result<Vec<u8>> {
+        match self.path_from_root(ctx, node)? {
+            (path, true) => Ok(path),
+            (_, false) => Err(Errno::ENOENT),
+        }
+    }
+
+    /// [`path_of`](Self::path_of), and for a node outside the process root
+    /// its path from the topmost root instead; the flag says whether the
+    /// process root was met.
+    fn path_from_root(&self, ctx: &FsContext, node: &NodeRef) -> Result<(Vec<u8>, bool)> {
         let cred = Cred::root();
         let walk = self.walk(ctx, &cred);
         let mut cur = self.follow_mounts(node.loc().clone());
         let mut names: Vec<Vec<u8>> = Vec::new();
         let mut total = 0;
+        let mut reachable = true;
         loop {
             if cur.same(walk.top_root()) || cur.same(ctx.root.loc()) {
                 break;
@@ -1074,7 +1173,12 @@ impl Vfs {
                             continue;
                         }
                     }
-                    None => return Err(Errno::ENOENT),
+                    // The topmost root without meeting the process root:
+                    // the node is outside it.
+                    None => {
+                        reachable = false;
+                        break;
+                    }
                 }
             }
             if cur.attr()?.nlink == 0 {
@@ -1097,7 +1201,7 @@ impl Vfs {
         if path.is_empty() {
             path.push(b'/');
         }
-        Ok(path)
+        Ok((path, reachable))
     }
 
     /// The absolute path of the file `file` is open on, as seen from
