@@ -48,14 +48,20 @@ int test_main(void) {
     SC6(SYS_epoll_ctl, ep, EPOLL_CTL_ADD, efd, &e, 0, 0);
 
     struct a_timespec zero = {0, 0}, t30 = {0, 30000000}, ns1 = {0, 1}, big = {100000, 0};
+    /* The 25 ms regions hold only the calls under test: their results are
+     * kept and checked after the second clock read, so the test's own
+     * output does not count against the limit. */
     i64 t0 = now_ns();
-    expect("poll_returns_0", SC6(SYS_epoll_pwait2, ep, evs, 8, &zero, 0, 8), 0);
-    expect("one_ns_returns_0", SC6(SYS_epoll_pwait2, ep, evs, 8, &ns1, 0, 8), 0);
-    check("poll_quick", now_ns() - t0 < 25000000L, 0);
+    i64 r_zero = SC6(SYS_epoll_pwait2, ep, evs, 8, &zero, 0, 8);
+    i64 r_ns1 = SC6(SYS_epoll_pwait2, ep, evs, 8, &ns1, 0, 8);
+    i64 el = now_ns() - t0;
+    expect("poll_returns_0", r_zero, 0);
+    expect("one_ns_returns_0", r_ns1, 0);
+    check("poll_quick", el < 25000000L, 0);
 
     t0 = now_ns();
     expect("wait_30ms_returns_0", SC6(SYS_epoll_pwait2, ep, evs, 8, &t30, 0, 8), 0);
-    i64 el = now_ns() - t0;
+    el = now_ns() - t0;
     check("waited_at_least_30ms", el >= 30000000L, el);
     check("waited_less_than_2s", el < 2000000000L, el);
     check("timespec_unchanged", t30.tv_sec == 0 && t30.tv_nsec == 30000000, t30.tv_nsec);
@@ -63,9 +69,12 @@ int test_main(void) {
     u64 one = 1;
     a_write(efd, &one, 8);
     t0 = now_ns();
-    expect("ready_null_timeout", SC6(SYS_epoll_pwait2, ep, evs, 8, 0, 0, 8), 1);
-    expect("ready_long_timeout", SC6(SYS_epoll_pwait2, ep, evs, 8, &big, 0, 8), 1);
-    check("ready_returns_at_once", now_ns() - t0 < 25000000L, 0);
+    i64 r_null = SC6(SYS_epoll_pwait2, ep, evs, 8, 0, 0, 8);
+    i64 r_big = SC6(SYS_epoll_pwait2, ep, evs, 8, &big, 0, 8);
+    el = now_ns() - t0;
+    expect("ready_null_timeout", r_null, 1);
+    expect("ready_long_timeout", r_big, 1);
+    check("ready_returns_at_once", el < 25000000L, 0);
     expect("ready_data", (i64)evs[0].data, 7);
     check("long_timespec_unchanged", big.tv_sec == 100000 && big.tv_nsec == 0, 0);
     a_read(efd, &one, 8);
