@@ -102,6 +102,11 @@ jobs:
       - name: Install Xwayland and X11 test programs
         if: matrix.shard == 'userland'
         run: sudo apt-get install -y --no-install-recommends xwayland x11-apps x11-utils xterm x11-xkb-utils xkb-data libx11-data xfonts-base
+      # Mesa's software drivers, libdrm's modetest and kmscube for the root
+      # disk (the mesa boot test, ADR 0115); without them that test skips.
+      - name: Install Mesa, modetest and kmscube
+        if: matrix.shard == 'userland'
+        run: sudo apt-get install -y --no-install-recommends libgl1-mesa-dri libgbm1 libegl-mesa0 libegl1 libgles2 libdrm-tests kmscube
       - name: Let QEMU use KVM
         run: |
           if [ -e /dev/kvm ]; then
