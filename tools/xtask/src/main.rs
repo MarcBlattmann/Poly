@@ -1427,7 +1427,7 @@ const BOOT_GROUPS: [BootGroup; 27] = [
     // cached 7za.exe (sevenzip.rs, ADR 0087).
     ("7zip", sevenzip::boot_test),
     // The 7-Zip scenario under the Windows API tracer, each step's trace
-    // compared with the committed Windows reference (report only until
+    // compared with the committed Windows reference, required (ADR 0114:
     // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
     ("wintrace", wintrace::boot_test),
     // The Wayland compositor as init with a C client (compositor.rs, ADR 0106).

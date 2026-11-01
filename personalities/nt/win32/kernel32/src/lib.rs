@@ -175,6 +175,42 @@ pub unsafe extern "system" fn GetStartupInfoA(info: *mut u8) {
     unsafe { core::ptr::copy_nonoverlapping(p, info, STARTUPINFO_SIZE) };
 }
 
+#[link(name = "kernelbase", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetSystemInfo(info: *mut u8);
+}
+
+/// `GetActiveProcessorGroupCount` (Learn names no API set: `kernel32`'s
+/// own, ADR 0114).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetActiveProcessorGroupCount() -> u16 {
+    // SAFETY: no pointers.
+    unsafe { SetLastError(poly_kernelbase::system::PROCESSOR_QUERY_LAST_ERROR) };
+    poly_kernelbase::system::ACTIVE_PROCESSOR_GROUPS
+}
+
+/// `GetActiveProcessorCount`: the processors of a group, from
+/// `GetSystemInfo`'s `dwNumberOfProcessors` (ADR 0114).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetActiveProcessorCount(group: u16) -> u32 {
+    let mut info = [0u8; 48];
+    // SAFETY: a SYSTEM_INFO-sized buffer (48 bytes, sysinfoapi.h).
+    unsafe { GetSystemInfo(info.as_mut_ptr()) };
+    let cpus = u32::from_le_bytes([info[32], info[33], info[34], info[35]]);
+    match poly_kernelbase::system::active_processor_count(group, cpus) {
+        Ok(n) => {
+            // SAFETY: no pointers.
+            unsafe { SetLastError(poly_kernelbase::system::PROCESSOR_QUERY_LAST_ERROR) };
+            n
+        }
+        Err(e) => {
+            // SAFETY: no pointers.
+            unsafe { SetLastError(e) };
+            0
+        }
+    }
+}
+
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]
 pub extern "system" fn kernel32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {

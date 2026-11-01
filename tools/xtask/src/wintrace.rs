@@ -1362,7 +1362,7 @@ pub fn trace_diff_command(args: &[String]) -> Result {
 /// The boot test `wintrace`: the traced 7-Zip scenario
 /// (`sevenzip_trace.rs`, ADR 0110), which runs ADR 0088's steps under the
 /// tracer and compares each step's trace with the committed Windows
-/// reference (report only until `TRACE_REQUIRED`). It replaced ADR 0090's
+/// reference (required: `TRACE_REQUIRED`, ADR 0114). It replaced ADR 0090's
 /// three single runs.
 pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     crate::sevenzip_trace::boot_test(kernel)

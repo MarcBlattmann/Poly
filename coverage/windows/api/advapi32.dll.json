@@ -21,7 +21,7 @@
 {"symbol":"AddConditionalAce","src":["wine-spec"]},
 {"symbol":"AddMandatoryAce","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_AddMandatoryAce","wine:advapi32/tests/security.c:test_token_label","wine:advapi32/tests/security.c:test_token_security_descriptor"]},
 {"symbol":"AdjustTokenGroups","src":["wine-spec"]},
-{"symbol":"AdjustTokenPrivileges","status":"stub","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_AdjustTokenPrivileges","wine:advapi32/tests/security.c:test_duplicate_token","wine:advapi32/tests/security.c:test_system_security_access","wine:advapi32/tests/security.c:test_elevation"]},
+{"symbol":"AdjustTokenPrivileges","status":"claimed","claimed_by":"impl-7zip-trace","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_AdjustTokenPrivileges","wine:advapi32/tests/security.c:test_duplicate_token","wine:advapi32/tests/security.c:test_system_security_access","wine:advapi32/tests/security.c:test_elevation"]},
 {"symbol":"AllocateAndInitializeSid","status":"claimed","claimed_by":"advapi32","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_EqualSid","wine:advapi32/tests/security.c:test_EqualDomainSid","wine:advapi32/tests/security.c:test_SetEntriesInAclA","wine:advapi32/tests/security.c:test_SetEntriesInAclW","wine:advapi32/tests/security.c:test_ConvertStringSidToSid","wine:advapi32/tests/security.c:test_GetExplicitEntriesFromAclW","wine:advapi32/tests/security.c:test_trustee","wine:advapi32/tests/security.c:test_CreateWellKnownSid"]},
 {"symbol":"AllocateLocallyUniqueId","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_allocateLuid"]},
 {"symbol":"AreAllAccessesGranted","src":["wine-spec"]},
