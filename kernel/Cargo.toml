@@ -25,6 +25,7 @@ poly-block = { path = "../crates/poly-block" }
 poly-bochs-vbe = { path = "../crates/poly-bochs-vbe" }
 poly-elf = { path = "../crates/poly-elf" }
 poly-ext2 = { path = "../crates/poly-ext2" }
+poly-fbdev = { path = "../crates/poly-fbdev" }
 poly-cpio = { path = "../crates/poly-cpio" }
 poly-gfx = { path = "../crates/poly-gfx" }
 poly-heap = { path = "../crates/poly-heap" }

@@ -21,6 +21,10 @@
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit;
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
+//!   desktop [--release] [kernel args...]
+//!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
+//!                       virtio GPU through /dev/fb0, a virtio keyboard and tablet (desktop.rs,
+//!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   boot-tests [--list] [--shard <name>]... [group...]
 //!                       the boot tests alone: all, the groups named (`selftest` is
@@ -71,6 +75,7 @@ mod busybox;
 mod compositor;
 mod conflicts;
 mod console;
+mod desktop;
 mod dynamic;
 mod ext2disk;
 mod ext4disk;
@@ -150,6 +155,7 @@ fn main() -> ExitCode {
         Some("build") => build_kernel(release).map(|_| ()),
         Some("run") => run(&args[1..]),
         Some("screenshot") => screenshot(&args[1..]),
+        Some("desktop") => desktop::command(&args[1..]),
         Some("test") => test(),
         Some("ci") => ci(&args[1..]),
         Some("boot-tests") => boot_tests_command(&args[1..]),
@@ -171,7 +177,7 @@ fn main() -> ExitCode {
         Some("root-disk-test") => root_disk_test(),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -1392,7 +1398,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 25] = [
+const BOOT_GROUPS: [BootGroup; 26] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1421,6 +1427,9 @@ const BOOT_GROUPS: [BootGroup; 25] = [
     ("wintrace", wintrace::boot_test),
     // The Wayland compositor as init with a C client (compositor.rs, ADR 0106).
     ("wayland", compositor::boot_test),
+    // The desktop: the compositor on virtio-gpu through /dev/fb0 with the
+    // shell, driven by QMP input (desktop.rs, ADR 0107).
+    ("desktop", desktop::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1464,7 +1473,7 @@ const BOOT_GROUPS: [BootGroup; 25] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop"]),
     ("devices", &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "terminal", "input"]),
     ("faults", &["faults", "failures"]),
 ];

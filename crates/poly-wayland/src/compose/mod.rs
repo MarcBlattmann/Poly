@@ -19,7 +19,7 @@ mod scene;
 mod text;
 
 pub use frame::{BORDER, CLOSE_SIZE, TITLE_HEIGHT, Theme};
-pub use scene::{Content, Hit, Scene, Window, WindowId};
+pub use scene::{CURSOR_SIZE, Content, Hit, Placement, Scene, Window, WindowId};
 pub use text::{BitmapFont, TextRenderer};
 
 use alloc::vec;
@@ -117,6 +117,17 @@ pub trait Framebuffer {
     /// The rectangles drawn since the last call are complete: show them
     /// (virtio-gpu: transfer to the host and flush). Nothing by default.
     fn present(&mut self, _damage: &[Rect]) {}
+}
+
+/// Something drawn with the windows that is not a client's: a wallpaper and
+/// a shell's strip below them, a launcher above them
+/// ([`Scene::render_with`]). A layer that changes says where through
+/// [`Scene::damage_logical`].
+pub trait Layer {
+    /// Draw the part of the layer inside `clip` (physical pixels, inside
+    /// the framebuffer) for an output of integer scale `scale`. A layer
+    /// below the windows must cover all of `clip`.
+    fn draw(&self, fb: &mut dyn Framebuffer, clip: Rect, scale: i32);
 }
 
 /// A framebuffer in memory: the compositor's off-screen target until the

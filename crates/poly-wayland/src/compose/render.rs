@@ -3,14 +3,25 @@
 
 use super::frame::{FrameLayout, cross_covers};
 use super::scene::{Scene, Window};
-use super::{Framebuffer, Rect, over, with_alpha};
+use super::{CURSOR_SIZE, Framebuffer, Layer, Rect, over, with_alpha};
 
 const OPAQUE: u32 = 0xff00_0000;
 
-/// Draw the physical rectangle `clip` (inside the framebuffer) of `scene`.
-pub(super) fn draw(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect) {
+/// Draw the physical rectangle `clip` (inside the framebuffer) of `scene`:
+/// the background (or the `below` layer), the windows, the `above` layer,
+/// the cursor.
+pub(super) fn draw(
+    scene: &Scene,
+    fb: &mut dyn Framebuffer,
+    clip: Rect,
+    below: Option<&dyn Layer>,
+    above: Option<&dyn Layer>,
+) {
     let s = scene.output().2 as i32;
-    fill(fb, clip, clip, scene.theme().background);
+    match below {
+        Some(layer) => layer.draw(fb, clip, s),
+        None => fill(fb, clip, clip, scene.theme().background),
+    }
     for w in scene.windows().iter().filter(|w| w.is_visible()) {
         if w.extent().scale(s).intersect(&clip).is_empty() {
             continue;
@@ -19,6 +30,51 @@ pub(super) fn draw(scene: &Scene, fb: &mut dyn Framebuffer, clip: Rect) {
             draw_frame(scene, fb, clip, w, &f, s);
         }
         draw_content(fb, clip, w, s);
+    }
+    if let Some(layer) = above {
+        layer.draw(fb, clip, s);
+    }
+    if let Some((x, y)) = scene.cursor() {
+        draw_cursor(fb, clip, x, y, s);
+    }
+}
+
+/// The arrow: `X` outline (black), `.` fill (white), hot spot top left.
+const ARROW: [&[u8; CURSOR_SIZE.0 as usize]; CURSOR_SIZE.1 as usize] = [
+    b"X           ",
+    b"XX          ",
+    b"X.X         ",
+    b"X..X        ",
+    b"X...X       ",
+    b"X....X      ",
+    b"X.....X     ",
+    b"X......X    ",
+    b"X.......X   ",
+    b"X........X  ",
+    b"X.........X ",
+    b"X......XXXXX",
+    b"X...X..X    ",
+    b"X..XX..X    ",
+    b"X.X  X..X   ",
+    b"XX   X..X   ",
+    b"X     X..X  ",
+    b"      X..X  ",
+    b"       XX   ",
+];
+
+/// The software cursor with its hot spot at logical (`x`, `y`).
+fn draw_cursor(fb: &mut dyn Framebuffer, clip: Rect, x: i32, y: i32, s: i32) {
+    let area = Rect::new(x, y, CURSOR_SIZE.0, CURSOR_SIZE.1).scale(s).intersect(&clip);
+    for py in area.y..area.bottom() {
+        let row = fb.row_mut(py as u32);
+        let line = ARROW[((py - y * s) / s) as usize];
+        for px in area.x..area.right() {
+            match line[((px - x * s) / s) as usize] {
+                b'X' => row[px as usize] = OPAQUE,
+                b'.' => row[px as usize] = OPAQUE | 0x00ff_ffff,
+                _ => {}
+            }
+        }
     }
 }
 
