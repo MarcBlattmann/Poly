@@ -5,8 +5,14 @@
 fn main() {
     println!("cargo:rerun-if-changed=../../../../crates/poly-crt/src/exports.rs");
     println!("cargo:rustc-link-arg=/ENTRY:msvcrt_main");
+    let own = poly_crt::exports::MSVCRT_OWN_MEMORY;
     for name in poly_crt::exports::BUILTIN_MEMORY {
-        println!("cargo:rustc-link-arg=/EXPORT:{name}");
+        if !own.iter().any(|&(n, _)| n == *name) {
+            println!("cargo:rustc-link-arg=/EXPORT:{name}");
+        }
+    }
+    for (name, symbol) in own {
+        println!("cargo:rustc-link-arg=/EXPORT:{name}={symbol}");
     }
     // `__C_specific_handler` is `ntdll`'s (ADR 0087; the coverage map's
     // export list has it in both).

@@ -117,6 +117,14 @@ unsafe extern "system" {
     fn CheckTokenMembership(token: Handle, sid: *const u8, member: *mut i32) -> i32;
     fn GetUserNameW(buf: *mut u16, size: *mut u32) -> i32;
     fn LookupPrivilegeValueW(system: *const u16, name: *const u16, luid: *mut u64) -> i32;
+    fn AdjustTokenPrivileges(
+        token: Handle,
+        disable_all: i32,
+        new_state: *const u8,
+        length: u32,
+        previous: *mut u8,
+        ret: *mut u32,
+    ) -> i32;
 
     fn AllocateAndInitializeSid(
         auth: *const [u8; 6],
@@ -850,8 +858,57 @@ unsafe fn token() {
         check(GetUserNameW(name.as_mut_ptr(), &mut size) != 0);
         check_got(size == 5 && wide_eq(name.as_ptr(), b"poly"), size);
         let mut luid = 0u64;
+        // A success leaves the last error 0 (ADR 0114).
+        SetLastError(5);
         check(LookupPrivilegeValueW(core::ptr::null(), w!("SeDebugPrivilege"), &mut luid) != 0);
         check_got(luid == 20, luid as u32);
+        check_code(GetLastError(), 0);
+        adjust();
+    }
+}
+
+/// `AdjustTokenPrivileges` (ADR 0114): enable a privilege the token holds,
+/// see it enabled, get it back with `PreviousState`; one it lacks is
+/// `ERROR_NOT_ALL_ASSIGNED`.
+unsafe fn adjust() {
+    const TOKEN_ADJUST_PRIVILEGES: u32 = 0x20;
+    const TOKEN_PRIVILEGES: u32 = 3;
+    // SAFETY: valid arguments throughout.
+    unsafe {
+        // TOKEN_PRIVILEGES with one entry: count, LUID (low, high), attributes.
+        let tp = |luid: u32, attrs: u32| [1u32, luid, 0, attrs];
+        let enabled = |t: Handle, luid: u32| -> Option<u32> {
+            let mut buf = [0u32; 256];
+            let mut len = 0;
+            check(GetTokenInformation(t, TOKEN_PRIVILEGES, buf.as_mut_ptr().cast(), 1024, &mut len) != 0);
+            (0..buf[0] as usize).find(|&i| buf[1 + 3 * i] == luid).map(|i| buf[3 + 3 * i])
+        };
+        let mut t: Handle = 0;
+        check(OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut t) != 0);
+        // SeRestorePrivilege (18): held, disabled.
+        check_got(enabled(t, 18) == Some(0), enabled(t, 18).unwrap_or(99));
+        let on = tp(18, 2);
+        SetLastError(5);
+        check(AdjustTokenPrivileges(t, 0, on.as_ptr().cast(), 0, core::ptr::null_mut(), core::ptr::null_mut()) != 0);
+        check_code(GetLastError(), 0);
+        check_got(enabled(t, 18) == Some(2), enabled(t, 18).unwrap_or(99));
+        // Disable it again, asking for the previous state: just it, enabled.
+        let off = tp(18, 0);
+        let mut prev = [0u32; 8];
+        let mut len = 0u32;
+        check(AdjustTokenPrivileges(t, 0, off.as_ptr().cast(), 32, prev.as_mut_ptr().cast(), &mut len) != 0);
+        check_got(len == 16 && prev[0] == 1 && prev[1] == 18 && prev[3] == 2, len);
+        check_got(enabled(t, 18) == Some(0), enabled(t, 18).unwrap_or(99));
+        // SeLockMemoryPrivilege (4) is not held: success, not all assigned.
+        let lock = tp(4, 2);
+        check(AdjustTokenPrivileges(t, 0, lock.as_ptr().cast(), 0, core::ptr::null_mut(), core::ptr::null_mut()) != 0);
+        check_code(GetLastError(), 1300);
+        check(CloseHandle(t) != 0);
+        // Without TOKEN_ADJUST_PRIVILEGES.
+        check(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut t) != 0);
+        let r = AdjustTokenPrivileges(t, 0, on.as_ptr().cast(), 0, core::ptr::null_mut(), core::ptr::null_mut());
+        check_fail(r, ERROR_ACCESS_DENIED);
+        check(CloseHandle(t) != 0);
     }
 }
 

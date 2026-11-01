@@ -465,8 +465,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../poly/tools/pipeline/w
 tracer's kit (ADR 0090) in a work directory of a fixed path length and
 records each step's trace. The Windows reference is committed in canonical
 form as `tests/windows/oracle/sevenzip_trace.reference.json`; the
-`wintrace` boot group compares Poly's with it (report only until
-`TRACE_REQUIRED`).
+`wintrace` boot group compares Poly's with it, a required check since
+ADR 0114 (`TRACE_REQUIRED`).
 
 ```sh
 cargo xtask win 7zip-trace diff [--markdown docs/windows/7zip-trace.md] [--check]   # stage, run on Poly, compare per step
