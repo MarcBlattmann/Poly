@@ -408,7 +408,10 @@ impl LinuxProcess {
             sent.notify = self.threads.keys().copied().collect();
         } else {
             match dest {
-                Dest::Thread(tid) if !blocked => sent.notify.push(tid),
+                // A thread that waits for the signal in rt_sigtimedwait(2)
+                // is woken to take it, though it counts as blocked (it
+                // stays pending and kills nobody).
+                Dest::Thread(tid) if !blocked || self.waited_for(signal, dest) => sent.notify.push(tid),
                 Dest::Thread(_) => {}
                 Dest::Process => {
                     sent.notify.extend(self.threads.iter().find(|(_, t)| !t.mask.contains(signal)).map(|(&tid, _)| tid))
@@ -504,6 +507,27 @@ mod tests {
         assert_eq!(p.dequeue(100), None, "blocked in 100");
         assert_eq!(p.dequeue(102).map(|i| i.signal()), Some(SIGUSR1), "any unblocked thread may take it");
         assert_eq!(p.dequeue(101), None, "taken once");
+    }
+
+    /// pthread_kill(3) of a thread that waits for the signal in sigwait(3)
+    /// (VLC's main thread at exit) wakes it.
+    #[test]
+    fn a_thread_waiting_for_a_signal_sent_to_it_is_woken() {
+        let mut p = three_threads();
+        for tid in [100, 101, 102] {
+            p.thread_mut(tid).mask.insert(SIGTERM);
+        }
+        // As rt_sigtimedwait leaves the waiter: the set unblocked, waited for.
+        let t = p.thread_mut(100);
+        t.mask = t.mask.without(SigSet::only(SIGTERM));
+        t.sigwait = SigSet::only(SIGTERM);
+        let sent = p.send(SigInfo::from_process(SIGTERM, SI_TKILL, 100, 1000), Dest::Thread(100), false).unwrap();
+        assert!(sent.queued);
+        assert_eq!(sent.notify, [100], "only the waiter, and the signal is not fatal");
+        assert_eq!(p.dequeue_from(100, SigSet::only(SIGTERM)).map(|i| i.signal()), Some(SIGTERM));
+        // A thread that blocks it without waiting is not woken.
+        let sent = p.send(SigInfo::from_process(SIGTERM, SI_TKILL, 100, 1000), Dest::Thread(101), false).unwrap();
+        assert!(sent.queued && sent.notify.is_empty());
     }
 
     #[test]

@@ -47,6 +47,10 @@
 //!   root-disk           write the persistent root disk image target/poly-root-disk.img
 //!                       (the host's bash, coreutils, Python, gcc; rootdisk.rs)
 //!   root-disk-test      only the root disk boot test of `test` (rootdisk.rs)
+//!   toolkits [--release] [--fresh-disk] [STEP...]
+//!                       boot the toolkits' root disk (GTK, Qt, VLC; toolkits.rs, ADR 0120)
+//!                       to the desktop and the console's bash, and run the steps
+//!                       (run:LINE send:LINE expect:TEXT shot:NAME click:X,Y key:QCODE sleep:S)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -101,6 +105,7 @@ mod sound;
 mod symbols;
 mod sysmsg;
 mod terminal;
+mod toolkits;
 mod wayland;
 mod win32;
 mod winimports;
@@ -180,9 +185,10 @@ fn main() -> ExitCode {
         Some("busybox-test") => busybox_test(),
         Some("root-disk") => rootdisk::command(),
         Some("root-disk-test") => root_disk_test(),
+        Some("toolkits") => toolkits::command(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test> [--release]"
+                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test|toolkits> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -1403,7 +1409,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 27] = [
+const BOOT_GROUPS: [BootGroup; 28] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1435,6 +1441,9 @@ const BOOT_GROUPS: [BootGroup; 27] = [
     // The desktop: the compositor on virtio-gpu through /dev/fb0 with the
     // shell, driven by QMP input (desktop.rs, ADR 0107).
     ("desktop", desktop::boot_test),
+    // GTK 3, GTK 4 and Qt apps on the desktop from the toolkits' root disk,
+    // and VLC playing a video with sound (toolkits.rs, ADR 0120).
+    ("toolkits", toolkits::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1482,7 +1491,7 @@ const BOOT_GROUPS: [BootGroup; 27] = [
 /// workflow's matrix lists exactly these.
 const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop"]),
+    ("userland", &["programs", "dynamic", "busybox", "rootdisk", "7zip", "wintrace", "wayland", "desktop", "toolkits"]),
     (
         "devices",
         &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "drm", "terminal", "input"],

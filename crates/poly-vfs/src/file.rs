@@ -633,10 +633,12 @@ impl OpenFile {
         }
     }
 
-    /// `ioctl(2)`: devices only; `ENOTTY` for everything else.
+    /// `ioctl(2)`: devices and objects only (a device is told whether the
+    /// file is non-blocking now, [`CharDevice::ioctl_nonblock`]); `ENOTTY`
+    /// for everything else.
     pub fn ioctl(&self, request: u32, arg: u64) -> Result<u64> {
         match &self.backend {
-            Backend::Device(dev) => dev.ioctl(request, arg),
+            Backend::Device(dev) => dev.ioctl_nonblock(request, arg, self.nonblock()),
             Backend::Object(obj) => obj.ioctl(request, arg),
             Backend::Path => Err(Errno::EBADF),
             Backend::Inode => Err(Errno::ENOTTY),

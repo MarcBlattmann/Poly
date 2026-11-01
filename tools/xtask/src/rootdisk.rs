@@ -229,8 +229,8 @@ pub struct Contents {
 
 /// Collects host files into a [`RootTree`], following symbolic links and
 /// the shared objects ELF files need.
-struct Collector {
-    tree: RootTree,
+pub(crate) struct Collector {
+    pub(crate) tree: RootTree,
     search: SearchPath,
     /// Host paths already added (as given and resolved).
     seen: BTreeSet<PathBuf>,
@@ -263,7 +263,7 @@ impl Collector {
 
     /// Add the host's file, link or directory at `path` (a directory with
     /// nothing in it). `Err` if it does not exist.
-    fn add(&mut self, path: &Path) -> Result<(), String> {
+    pub(crate) fn add(&mut self, path: &Path) -> Result<(), String> {
         self.add_depth(path, 0)
     }
 
@@ -300,9 +300,15 @@ impl Collector {
         Ok(())
     }
 
+    /// Add the shared objects the host's ELF file at `path` needs (not the
+    /// file itself: the caller puts it somewhere else).
+    pub(crate) fn add_elf_needs(&mut self, path: &Path) {
+        self.elves.push_back(path.to_path_buf());
+    }
+
     /// Add a directory and everything under it, leaving out the names in
     /// `skip` (at any depth) and `__pycache__` directories only if asked.
-    fn add_tree(&mut self, dir: &Path, skip: &[&str]) -> Result<(), String> {
+    pub(crate) fn add_tree(&mut self, dir: &Path, skip: &[&str]) -> Result<(), String> {
         self.add(dir)?;
         let at = std::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let mut entries: Vec<_> = std::fs::read_dir(&at)
@@ -716,6 +722,15 @@ int main(int argc, char **argv) {\n\
 
 /// Collect what the image holds (see the module documentation).
 pub fn collect() -> Result<Contents, String> {
+    collect_with(|_, _, _| Ok(()))
+}
+
+/// [`collect`] with more from `extra` (the toolkits' disk, `toolkits.rs`):
+/// it adds host files to the collector (their shared objects are added
+/// after it returns), the programs it found and notes.
+pub(crate) fn collect_with(
+    extra: impl FnOnce(&mut Collector, &mut BTreeSet<&'static str>, &mut Vec<String>) -> Result<(), String>,
+) -> Result<Contents, String> {
     let mut c = Collector::new();
     let mut have = BTreeSet::new();
     let mut notes = Vec::new();
@@ -803,6 +818,7 @@ pub fn collect() -> Result<Contents, String> {
         Err(why) => notes.push(format!("gcc: {why}")),
     }
 
+    extra(&mut c, &mut have, &mut notes)?;
     c.add_needed()?;
 
     let mut tree = c.tree;
@@ -1295,7 +1311,7 @@ fn second_boot(s: &mut crate::busybox::Session, compiled: bool) -> super::Result
 
 /// The file at `path` on the ext4 image, read with `poly-ext2` (from a
 /// copy in memory; the image is not changed).
-fn read_back(image: &Path, path: &str) -> super::Result<Vec<u8>> {
+pub(crate) fn read_back(image: &Path, path: &str) -> super::Result<Vec<u8>> {
     use poly_ext2::{DeviceIo, Ext2, MountOptions};
     use poly_vfs::FileSystem;
     let mut mem = std::fs::read(image).map_err(|e| format!("{}: {e}", image.display()))?;
