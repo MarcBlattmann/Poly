@@ -3,7 +3,9 @@
  * file used as a directory), ELOOP, ENAMETOOLONG. It follows symbolic
  * links: listing through a link lists the target's names. FIFOs list
  * nothing (they have no user.* attributes). The list is the file's, not
- * the name's: hard links list the same names.
+ * the name's: hard links list the same names. A directory the test has
+ * just made lists nothing. (Only files the test creates are listed:
+ * what '/' or other existing directories carry depends on the machine.)
  */
 #include "a_sys.h"
 
@@ -119,6 +121,7 @@ static A_UNUSED int x_in_child(int (*body)(void)) {
 #define L1 "/tmp/c_listxattr_errors_l1"
 #define L2 "/tmp/c_listxattr_errors_l2"
 #define FIFO "/tmp/c_listxattr_errors_fifo"
+#define D "/tmp/c_listxattr_errors_d"
 
 static char buf[128];
 static char longpath[4200];
@@ -157,8 +160,12 @@ int test_main(void) {
     expect("setup_hard", syscall5(SYS_linkat, AT_FDCWD, F, AT_FDCWD, H, 0), 0);
     expect("hard_link_same", x_list(H, buf, sizeof buf), 7);
     expect("fifo_empty", x_list(FIFO, buf, sizeof buf), 0);
-    expect("root_dir_lists", x_list("/", 0, 0) >= 0, 1);
+    a_rmdir(D);
+    expect("setup_dir", a_mkdir(D, 0755), 0);
+    expect("new_dir_empty", x_list(D, buf, sizeof buf), 0);
+    expect("new_dir_trailing_slash", x_list(D "/", 0, 0), 0);
 
+    a_rmdir(D);
     a_unlink(H);
     a_unlink(L);
     a_unlink(DL);
