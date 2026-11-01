@@ -84,7 +84,7 @@ pub fn new_virtual(fs: FsType, root: RootOptions) -> Result<Arc<dyn FileSystem>,
         FsType::Sysfs => sysfs::build(),
         FsType::Devpts => crate::tty::new_devpts().ok_or(Errno::ENODEV)?,
         FsType::Tmpfs => {
-            let tmpfs = super::memfs::new_tmpfs(super::clock());
+            let tmpfs = super::memfs::new_tmpfs_sized(super::clock(), root.size, root.inodes);
             // tmpfs(5): the root is 01777 unless `mode` says otherwise.
             let set =
                 SetAttr { perm: Some(root.mode.unwrap_or(0o1777)), uid: root.uid, gid: root.gid, ..SetAttr::default() };

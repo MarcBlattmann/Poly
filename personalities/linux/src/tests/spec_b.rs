@@ -250,3 +250,51 @@ fn truncate_checks_the_length_before_the_path() {
     assert_eq!(sys(k, nr::TRUNCATE, &[missing, 1]), Err(Errno::ENOENT));
     assert_eq!(sys(k, nr::TRUNCATE, &[0, 1]), Err(Errno::EFAULT));
 }
+
+#[test]
+fn truncate_past_the_size_limit_only_refuses_growth() {
+    let mut e = env();
+    let k = &mut e.k;
+    let lim = scratch(0x300);
+    k.poke(lim, &crate::rlimit::Rlimit { cur: 4, max: u64::MAX }.to_bytes());
+    assert_eq!(sys(k, nr::SETRLIMIT, &[u64::from(crate::fs::rlimit::RLIMIT_FSIZE), lim]), Ok(0));
+    // "/dir/file" holds 8 bytes ("contents"): shrinking to 6 (still past
+    // the limit) works, growing to 7 is EFBIG with SIGXFSZ.
+    let path = s(k, 0x100, b"/dir/file");
+    assert_eq!(sys(k, nr::TRUNCATE, &[path, 6]), Ok(0));
+    assert!(!k.me().pending(100).contains(crate::sys::fsize::SIGXFSZ));
+    assert_eq!(sys(k, nr::TRUNCATE, &[path, 7]), Err(Errno::EFBIG));
+    assert!(k.me().pending(100).contains(crate::sys::fsize::SIGXFSZ));
+    assert_eq!(contents(k, b"/dir/file"), b"conten");
+}
+
+// ---- getdents, syncfs ------------------------------------------------------
+
+#[test]
+fn getdents_into_an_unwritable_buffer_loses_no_entries() {
+    let mut e = env();
+    let k = &mut e.k;
+    let dir = open(k, b"/dir", O_DIRECTORY);
+    assert_eq!(sys(k, nr::GETDENTS, &[dir, UNMAPPED, 4096]), Err(Errno::EFAULT));
+    assert_eq!(sys(k, nr::GETDENTS64, &[dir, 0, 4096]), Err(Errno::EFAULT));
+    // Too small for the first record: EINVAL even with a NULL buffer.
+    assert_eq!(sys(k, nr::GETDENTS, &[dir, 0, 10]), Err(Errno::EINVAL));
+    // ".", "..", "file", "sub": all still there.
+    let n = sys(k, nr::GETDENTS64, &[dir, scratch(0x4000), 4096]).unwrap();
+    let names = crate::fs::dirent64_len(b".") + crate::fs::dirent64_len(b"..");
+    let names = names + crate::fs::dirent64_len(b"file") + crate::fs::dirent64_len(b"sub");
+    assert_eq!(n as usize, names);
+}
+
+#[test]
+fn syncfs_takes_any_descriptor_but_o_path() {
+    let mut e = env();
+    let k = &mut e.k;
+    let fd = open(k, b"/dir/file", O_RDONLY);
+    let dir = open(k, b"/dir", O_DIRECTORY);
+    let path = open(k, b"/dir/file", O_PATH);
+    assert_eq!(sys(k, nr::SYNCFS, &[fd]), Ok(0));
+    assert_eq!(sys(k, nr::SYNCFS, &[dir]), Ok(0));
+    assert_eq!(sys(k, nr::SYNCFS, &[path]), Err(Errno::EBADF));
+    assert_eq!(sys(k, nr::SYNCFS, &[BAD]), Err(Errno::EBADF));
+}

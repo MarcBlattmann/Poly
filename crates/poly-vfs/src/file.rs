@@ -166,6 +166,9 @@ pub struct OpenFile {
     never_named: bool,
     /// Made by memfd_create(2): its label and seals.
     memfd: Option<Arc<crate::memfd::Memfd>>,
+    /// Opened to run the file as a program: while it lives, the inode
+    /// cannot be written (`ETXTBSY`).
+    denies_write: bool,
 }
 
 impl OpenFile {
@@ -196,7 +199,16 @@ impl OpenFile {
             origin: None,
             never_named: false,
             memfd: None,
+            denies_write: false,
         }
+    }
+
+    /// An open file that runs its inode as a program: writers get
+    /// `ETXTBSY` until it is dropped (execve(2), open(2)).
+    pub(crate) fn denying_write(mut self) -> OpenFile {
+        self.node.loc().mount.sb.deny_write(self.node.ino());
+        self.denies_write = true;
+        self
     }
 
     /// A memfd_create(2) file (`Vfs::memfd_file`): never named.
@@ -498,8 +510,17 @@ impl OpenFile {
             _ if self.kind == FileType::Fifo => return Err(Errno::ESPIPE),
             _ => return Err(Errno::ENODEV),
         }
-        if offset.checked_add(len).is_none_or(|end| end > MAX_FILE_SIZE) {
+        let Some(end) = offset.checked_add(len).filter(|&end| end <= MAX_FILE_SIZE) else {
             return Err(Errno::EFBIG);
+        };
+        // A memfd's seals: punching a hole writes, growing grows.
+        if let Some(m) = &self.memfd {
+            let size = self.size()?;
+            if mode & crate::FALLOC_FL_PUNCH_HOLE != 0 {
+                m.check_write(offset, len, size.max(end))?;
+            } else if mode & crate::FALLOC_FL_KEEP_SIZE == 0 {
+                m.check_truncate(size, size.max(end))?;
+            }
         }
         self.fs().fallocate(self.node.ino(), mode, offset, len)
     }
@@ -755,6 +776,9 @@ impl OpenFile {
 /// inode: `IN_DELETE_SELF`, see `NodeRef`'s drop.)
 impl Drop for OpenFile {
     fn drop(&mut self) {
+        if self.denies_write {
+            self.node.loc().mount.sb.allow_write(self.node.ino());
+        }
         if crate::inotify::active() && matches!(self.backend, Backend::Inode | Backend::Device(_)) {
             use crate::inotify::mask::{IN_CLOSE_NOWRITE, IN_CLOSE_WRITE};
             crate::inotify::file_event(self, if self.writable() { IN_CLOSE_WRITE } else { IN_CLOSE_NOWRITE });
