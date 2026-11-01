@@ -4,10 +4,11 @@
 //! access; here are the objects.
 //!
 //! kcmp identities are the addresses of the kernel objects: an open file
-//! description, the memory, the descriptor table, a process's directories
-//! (`Files`) and its signal state, which Poly keeps per process
-//! (`CLONE_FS` and `CLONE_SIGHAND` between processes copy them, see
-//! `task.rs`). Poly has no I/O contexts and keeps semaphore undo lists
+//! description, the memory, the descriptor table, the directories and
+//! umask (shared with `CLONE_FS`). The signal handler table is a number
+//! (`LinuxProcess::sighand`) that a `CLONE_SIGHAND` child takes from its
+//! creator, since Poly copies the handlers to it (see `task.rs`). Poly
+//! has no I/O contexts and keeps semaphore undo lists
 //! with the semaphores, so every process compares equal for `KCMP_IO` and
 //! `KCMP_SYSVSEM`, as two processes without either do (kcmp's spec
 //! sheet).
@@ -53,7 +54,10 @@ pub fn kcmp_id(pid: i32, what: KcmpResource) -> Result<u64, Errno> {
         KcmpResource::Vm => memory(pid).map_or(u64::MAX - pid as u64, |m| Arc::as_ptr(&m) as usize as u64),
         KcmpResource::Files => p.files.table_id(),
         KcmpResource::Fs => p.files.context_id(),
-        KcmpResource::Sighand => core::ptr::from_ref(&p.linux) as usize as u64,
+        KcmpResource::Sighand => match p.linux.as_ref() {
+            Some(l) => l.with(|s| s.sighand),
+            None => core::ptr::from_ref(&p.linux) as usize as u64,
+        },
         KcmpResource::Io | KcmpResource::SysvSem => 0,
         KcmpResource::EpollTarget { efd, tfd, toff } => {
             let file = p.files.file(efd).map_err(vfs_errno)?;

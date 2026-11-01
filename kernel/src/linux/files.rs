@@ -199,6 +199,11 @@ impl LinuxFs for Thread<'_> {
         Ok(())
     }
 
+    fn unshare_fs_context(&mut self) -> Result<(), Errno> {
+        self.process().files.unshare_context();
+        Ok(())
+    }
+
     fn test_lock(
         &mut self,
         fd: i32,

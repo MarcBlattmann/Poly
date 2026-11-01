@@ -19,7 +19,7 @@ fn path_arg<'a>(path: Result<&'a [u8]>, start: &'a Result<Option<NodeRef>>) -> P
 impl Files {
     /// A copy of the context: root, working directory, umask.
     pub fn context(&self) -> FsContext {
-        self.ctx.lock().clone()
+        self.ctx().lock().clone()
     }
 
     /// The file creation mask, for `/proc/<pid>/status`. Read without
@@ -27,7 +27,7 @@ impl Files {
     /// `chdir` into `/proc`, holding the context; then the default
     /// (`022`) is reported.
     pub fn current_umask(&self) -> u16 {
-        self.ctx.try_lock().map_or(FsContext::DEFAULT_UMASK, |c| c.umask())
+        self.ctx().try_lock().map_or(FsContext::DEFAULT_UMASK, |c| c.umask())
     }
 
     /// Every open descriptor with its file and close-on-exec flag, in
@@ -45,7 +45,7 @@ impl Files {
     /// The node `fd` is open on, or the working directory for
     /// [`AT_FDCWD`]: what an empty path with `AT_EMPTY_PATH` means.
     pub fn node_at(&self, dirfd: Fd) -> Result<NodeRef> {
-        if dirfd == AT_FDCWD { Ok(self.ctx.lock().cwd().clone()) } else { Ok(self.file(dirfd)?.node().clone()) }
+        if dirfd == AT_FDCWD { Ok(self.ctx().lock().cwd().clone()) } else { Ok(self.file(dirfd)?.node().clone()) }
     }
 
     /// Where a relative path starts: `None` for the working directory (or

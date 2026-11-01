@@ -428,6 +428,13 @@ pub trait LinuxFs {
     fn unshare_fd_table(&mut self) -> Result<(), Errno> {
         Ok(())
     }
+    /// unshare(2) `CLONE_FS`: give the calling process a private
+    /// copy of its root, working directory and umask if another process
+    /// shares them (clone(2) `CLONE_FS`); nothing to do otherwise
+    /// (ADR 0121).
+    fn unshare_fs_context(&mut self) -> Result<(), Errno> {
+        Ok(())
+    }
     /// fcntl(2) `F_GETLK` (`ofd`: `F_OFD_GETLK`): the lock of another
     /// owner that keeps the caller from a read (`write` false) or write
     /// lock on `[start, end)` of `fd`'s file (`end` `u64::MAX`: to the end

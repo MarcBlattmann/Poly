@@ -145,6 +145,19 @@ pub struct LinuxProcess {
     /// (ptrace(2) "ptrace access mode checking"). 1 at start; inherited by
     /// fork; execve(2) sets it again.
     pub dumpable: bool,
+    /// What identifies the signal handler table for kcmp(2)
+    /// `KCMP_SIGHAND`: a fresh value per process, the creator's for a
+    /// child made with `CLONE_SIGHAND` (the kernel sets it at clone(2)),
+    /// a fresh one again after execve(2).
+    /// Poly copies the actions to such a child instead of sharing them.
+    pub sighand: u64,
+}
+
+/// A signal handler table identity no process has had
+/// ([`LinuxProcess::sighand`]).
+fn new_sighand_id() -> u64 {
+    static NEXT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
 }
 
 impl LinuxProcess {
@@ -165,6 +178,7 @@ impl LinuxProcess {
             ns: crate::ns::Namespaces::default(),
             traced: false,
             dumpable: true,
+            sighand: new_sighand_id(),
         }
     }
 
@@ -210,6 +224,7 @@ impl LinuxProcess {
             ns: self.ns.for_child(),
             traced: self.traced,
             dumpable: self.dumpable,
+            sighand: new_sighand_id(),
         }
     }
 
@@ -220,6 +235,8 @@ impl LinuxProcess {
     /// alternate signal stack is not preserved". The robust list and
     /// `clear_child_tid` belong to the old program and are dropped.
     pub fn exec(&mut self, tid: i32) {
+        // execve(2) gives a process that shared its handlers its own.
+        self.sighand = new_sighand_id();
         for signal in 1..=crate::abi::signal::NSIG {
             let action = self.actions.get(signal);
             if action.handler != SIG_DFL && action.handler != SIG_IGN {

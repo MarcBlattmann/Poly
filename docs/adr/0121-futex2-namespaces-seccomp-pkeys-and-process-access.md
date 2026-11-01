@@ -61,7 +61,25 @@ With a `{0, 0}` timeout the temporary signal mask is installed and put
 back without delivering anything, which is the same as not installing
 it: a pending signal the mask would unblock stays pending and the call
 returns 0 or the ready count. A call that may sleep still returns
-`EINTR` after the handler ran.
+`EINTR` after the handler ran. Its arguments are checked in the spec
+sheet's order: the timeout, `sigsetsize`, the mask, whether `epfd` is
+open (asked of the descriptor table, so `EBADF` comes before a bad
+`maxevents`), `maxevents`, the range `events + maxevents * 12` within
+user space (`EFAULT`), then the kernel's epoll check (`EINVAL`).
+
+### Shared directories, and what tracers and waiters see
+
+- **`CLONE_FS` between processes shares** the root, working directory
+  and umask (`Files` holds them behind a shared reference, like the
+  descriptor table of `CLONE_FILES`); unshare(2) `CLONE_FS`, and
+  `CLONE_NEWNS` and `CLONE_NEWUSER`, which imply it, give the caller a
+  private copy. `KCMP_FS` compares that reference.
+- **A call seccomp kills still reports a result** to the trace: the
+  registers are as at entry (`rax` the call's number), as after
+  `SECCOMP_RET_TRAP`.
+- **wait4 / waitid in a pid namespace** report the child's number there,
+  taken while the child is still in the process tree (reaping frees the
+  number, which used to make the result 0).
 
 ### Access to other processes: one rule, kernel object identities
 
@@ -219,9 +237,10 @@ appear to return its own number.
 
 ## Gaps
 
-- `KCMP_FS` and `KCMP_SIGHAND` report "different" for `CLONE_FS` /
-  `CLONE_SIGHAND` children that are separate processes, because Poly
-  copies that state instead of sharing it.
+- A `CLONE_SIGHAND` child that is a separate process gets a copy of the
+  signal handlers, not the same table: kcmp(2) reports them shared (the
+  child takes its creator's `LinuxProcess::sighand` number, execve(2)
+  gives a fresh one), but a sigaction(2) in one is not seen by the other.
 - No seccomp notification is ever delivered; no deadline admission
   control; pkeys are never allocatable (as without PKU).
 

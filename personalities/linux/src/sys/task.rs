@@ -181,12 +181,26 @@ pub fn execveat(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// Wait until a child matches `filter` (`None` at once with `nohang`).
 /// `ECHILD` if no child matches at all. A signal for the caller ends the
 /// wait; signal(7) lists wait(2) among the calls `SA_RESTART` restarts.
-fn wait_for(k: &mut dyn LinuxKernel, filter: &WaitFilter, nohang: bool) -> Result<Option<Waited>, Errno> {
+///
+/// Returns the child and its id as the caller's pid namespace sees it,
+/// taken while the child is still in the tree: once it is reaped, its
+/// numbers in the namespaces are free again.
+fn wait_for(k: &mut dyn LinuxKernel, filter: &WaitFilter, nohang: bool) -> Result<Option<(Waited, i32)>, Errno> {
     let me = k.pid();
+    let ns = k.pid_ns();
+    let local = |global: i32| match &ns {
+        None => global,
+        ns => crate::ns::pid::local_or_zero(ns, global),
+    };
     loop {
-        let (generation, poll) = with_tree(k, |t| (t.generation(), t.poll(me, filter)))?;
+        let (generation, poll, seen) = with_tree(k, |t| {
+            let generation = t.generation();
+            let poll = t.poll(me, filter);
+            let seen = if let Poll::Ready(w) = &poll { local(w.pid) } else { 0 };
+            (generation, poll, seen)
+        })?;
         match poll {
-            Poll::Ready(w) => return Ok(Some(w)),
+            Poll::Ready(w) => return Ok(Some((w, seen))),
             Poll::NoChildren => return Err(Errno::ECHILD),
             Poll::Pending if nohang => return Ok(None),
             // A child is in the middle of ending (on another CPU): its exit
@@ -229,12 +243,12 @@ pub fn wait4(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let pgid = view(k, k.pgid());
     let (mut filter, nohang) = wait::wait4_filter(a.int(0), a.uint(2), pgid)?;
     filter.selector = global_selector(k, filter.selector);
-    let Some(w) = wait_for(k, &filter, nohang)? else { return Ok(0) };
+    let Some((w, local)) = wait_for(k, &filter, nohang)? else { return Ok(0) };
     if !a.ptr(1).is_null() {
         k.copy_to_user(a.ptr(1), &wait::status_word(w.event).to_le_bytes())?;
     }
     write_rusage(k, a.ptr(3), w.pid)?;
-    seen(k, w.pid)
+    pid_result(local)
 }
 
 /// waitid(idtype, id, infop, options, rusage): 0, with the child's
@@ -265,12 +279,12 @@ pub fn waitid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         (filter, nohang)
     };
     let waited = wait_for(k, &filter, nohang)?;
-    let found = waited.map(|w| Waited { pid: view(k, w.pid), ..w });
+    let found = waited.map(|(w, local)| Waited { pid: local, ..w });
     if !a.ptr(2).is_null() {
         let info = found.map_or([0; SigInfo::SIZE], |w| wait::sigchld(&w).to_bytes());
         k.copy_to_user(a.ptr(2), &info)?;
     }
-    if let Some(w) = waited {
+    if let Some((w, _)) = waited {
         write_rusage(k, a.ptr(4), w.pid)?;
     }
     Ok(0)

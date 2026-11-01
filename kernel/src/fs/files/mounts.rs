@@ -64,19 +64,19 @@ impl Files {
     /// unshare(2) / clone(2) `CLONE_NEWNS` (ADR 0054): the process moves to a copy of
     /// its mount namespace; returns the copy.
     pub fn copy_mount_namespace(&self) -> Result<MountId> {
-        vfs().copy_namespace(&mut self.ctx.lock())
+        vfs().copy_namespace(&mut self.ctx().lock())
     }
 
     /// setns(2) into mount namespace `base`: root and working directory
     /// move to its root.
     pub fn enter_mount_namespace(&self, base: MountId) -> Result<()> {
-        vfs().enter_namespace(&mut self.ctx.lock(), base)
+        vfs().enter_namespace(&mut self.ctx().lock(), base)
     }
 
     /// Whether the root directory is not its mount namespace's root
     /// (chroot(2) moved it).
     pub fn chrooted(&self) -> bool {
-        vfs().is_chrooted(&self.ctx.lock())
+        vfs().is_chrooted(&self.ctx().lock())
     }
 
     /// chroot(2); without `may_chroot` (the personality's
@@ -88,6 +88,6 @@ impl Files {
         if !may_chroot {
             cred.caps = cred.caps.without(poly_vfs::cap::SYS_CHROOT);
         }
-        self.ctx.lock().set_root(&cred, dir)
+        self.ctx().lock().set_root(&cred, dir)
     }
 }

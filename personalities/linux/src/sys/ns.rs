@@ -12,8 +12,8 @@ use crate::ns::{self, Handle, Join, Namespaces, Sharing, UtsNames};
 use crate::signal::deliver::{with_own, with_target};
 use crate::table::{Handler, nr};
 use crate::task::clone::{
-    CLONE_FILES, CLONE_NEWCGROUP, CLONE_NEWIPC, CLONE_NEWNET, CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWTIME, CLONE_NEWUSER,
-    CLONE_NEWUTS, CLONE_SYSVSEM,
+    CLONE_FILES, CLONE_FS, CLONE_NEWCGROUP, CLONE_NEWIPC, CLONE_NEWNET, CLONE_NEWNS, CLONE_NEWPID, CLONE_NEWTIME,
+    CLONE_NEWUSER, CLONE_NEWUTS, CLONE_SYSVSEM,
 };
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -43,8 +43,9 @@ pub fn initial_names(k: &mut dyn LinuxKernel) -> UtsNames {
 /// the new namespace").
 ///
 /// `CLONE_FILES` copies a descriptor table shared with another process;
-/// `CLONE_FS` has nothing to copy (Poly's processes own their directories
-/// and umask); `CLONE_SYSVSEM` leaves the semaphore undo list, which no
+/// `CLONE_FS` (also implied by `CLONE_NEWNS` and `CLONE_NEWUSER`) copies
+/// the root, working directory and umask shared with another process
+/// through clone(2) `CLONE_FS`; `CLONE_SYSVSEM` leaves the semaphore undo list, which no
 /// other process shares in Poly: its adjustments are applied now, as at
 /// exit ([`crate::sys::sem::process_exit`]).
 pub fn unshare(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
@@ -64,6 +65,13 @@ pub fn unshare(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
         && let Some(fs) = k.fs()
     {
         fs.unshare_fd_table()?;
+    }
+    // A new mount or user namespace implies CLONE_FS (unshare's spec
+    // sheet): the directories it changes are no longer another process's.
+    if flags & (CLONE_FS | CLONE_NEWNS | CLONE_NEWUSER) != 0
+        && let Some(fs) = k.fs()
+    {
+        fs.unshare_fs_context()?;
     }
     if flags & CLONE_SYSVSEM != 0 {
         crate::sys::sem::process_exit(k);
