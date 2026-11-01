@@ -139,6 +139,12 @@ cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one
 QEMU runs on KVM when `/dev/kvm` is usable (much faster) and on its
 emulator (TCG) otherwise; `POLY_QEMU_ACCEL=tcg` forces the emulator.
 
+On Windows, `cargo xtask run` builds and boots the kernel natively (QEMU
+for Windows on the `PATH`). The parts that need a Linux host report so: the
+diff runner against real Linux, root disks assembled from Linux packages,
+and the boot tests that take screenshots or type through QEMU's Unix
+sockets. Run those in WSL or a Linux container.
+
 ## Repository layout
 
 | Path | What |

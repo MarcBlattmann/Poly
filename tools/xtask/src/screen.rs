@@ -111,19 +111,17 @@ pub fn compare(got: &Image, want: &Image) -> Result<(), String> {
 }
 
 /// A QMP connection.
-#[cfg(unix)]
 pub struct Qmp {
-    reader: std::io::BufReader<std::os::unix::net::UnixStream>,
-    writer: std::os::unix::net::UnixStream,
+    reader: std::io::BufReader<crate::hostfs::UnixStream>,
+    writer: crate::hostfs::UnixStream,
 }
 
-#[cfg(unix)]
 impl Qmp {
     /// Connect to the socket at `path` (waiting up to `timeout` for QEMU to
     /// create it) and leave capabilities negotiation mode.
     pub fn connect(path: &Path, timeout: Duration) -> Result<Qmp, String> {
+        use crate::hostfs::UnixStream;
         use std::io::BufRead;
-        use std::os::unix::net::UnixStream;
         let deadline = std::time::Instant::now() + timeout;
         let stream = loop {
             match UnixStream::connect(path) {
@@ -182,7 +180,6 @@ impl Qmp {
 
 /// Connect to QEMU's QMP socket at `socket`, save a screenshot to `file`
 /// and make QEMU quit.
-#[cfg(unix)]
 pub fn screenshot(socket: &Path, file: &Path) -> Result<(), String> {
     let _ = std::fs::remove_file(file);
     let mut qmp = Qmp::connect(socket, Duration::from_secs(10))?;
@@ -193,11 +190,6 @@ pub fn screenshot(socket: &Path, file: &Path) -> Result<(), String> {
         return Err(format!("QEMU reported a screenshot but {} is missing", file.display()));
     }
     Ok(())
-}
-
-#[cfg(not(unix))]
-pub fn screenshot(_socket: &Path, _file: &Path) -> Result<(), String> {
-    Err("screenshots go through a Unix socket to QEMU, which this host does not have".into())
 }
 
 #[cfg(test)]

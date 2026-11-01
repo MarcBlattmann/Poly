@@ -818,9 +818,7 @@ fn fixtures(tool: &Path, work: &Path) -> Result<Vec<(String, u16, Vec<u8>)>> {
         std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
         let file = std::fs::File::options().write(true).open(&path).map_err(|e| e.to_string())?;
         file.set_modified(when).map_err(|e| e.to_string())?;
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(u32::from(*mode)))
-            .map_err(|e| e.to_string())?;
+        crate::hostfs::set_mode(&path, u32::from(*mode)).map_err(|e| e.to_string())?;
     }
     for d in dirs.iter().rev() {
         if let Ok(dir) = std::fs::File::open(d) {
@@ -838,7 +836,7 @@ fn fixtures(tool: &Path, work: &Path) -> Result<Vec<(String, u16, Vec<u8>)>> {
         if let Some(p) = path.parent() {
             std::fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
         }
-        std::os::unix::fs::symlink(target, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+        crate::hostfs::symlink(target, &path).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     for args in MADE_BY_7ZZ {
         let made = Command::new(tool)
