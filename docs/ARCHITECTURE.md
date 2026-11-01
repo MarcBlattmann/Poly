@@ -1000,15 +1000,46 @@ the Linux personality, with its logic in a host-tested crate:
 - **Timing:** frames at most every 1/60 s when something changed or a
   client waits; frame callbacks and `wp_presentation` feedback are
   answered with them. Real vsync comes with the display driver.
-- **Input:** `seat::InputSource` is the input stack's interface; for now
-  the seat only has capabilities, and clicks drive the frame (raise,
-  activate, close).
+- **Input:** `seat::InputSource` is the input stack's interface;
+  `Server::handle_input` routes pointer and keyboard events to clients and
+  drives the frame (raise, activate, close, move); see "The desktop" below.
 - **Socket:** `$XDG_RUNTIME_DIR/wayland-0`, else `/run/user/<uid>/wayland-0`.
   Shared memory comes from files in `/dev/shm` (tmpfs, `MAP_SHARED`);
   `memfd_create` is not implemented yet.
 
 The boot test `wayland` runs `poly-compositor --exec /bin/wl-client` as the
 first process; `cargo xtask boot-tests wayland` runs it alone.
+
+## The desktop
+
+`poly-compositor --desktop` puts the compositor on the screen with input
+and Poly's first shell (Phase 6, [ADR 0107](adr/0107-desktop-fbdev-input-routing-and-shell.md)):
+
+```
+ /dev/input/event* ──read──▶ evdev::Translator ──InputEvent──▶ Desktop::route ─┬─▶ poly_shell::Shell (launcher keys, presses)
+   (EVIOCGRAB)                 frames at SYN_REPORT                           └─▶ Server::handle_input
+                                                                                  wl_pointer / wl_keyboard routing,
+                                                                                  focus, title-bar moves, cursor
+ Server::render_with(fb, below = shell wallpaper + ridge, above = launcher)
+        │ damage only
+        ▼
+ FbFramebuffer: /dev/fb0 mmap (MAP_SHARED) ──FBIO_POLY_DAMAGE per rectangle──▶ kernel fbdev.rs
+                                                     copies the rectangle from the shadow pages
+                                                     ─▶ display::draw ─▶ virtio-gpu transfer + flush
+```
+
+- **`/dev/fb0`** (char 29, 0; `kernel/src/fbdev.rs`, ABI in the host-tested
+  `poly-fbdev`): screen information, `FBIOPAN_DISPLAY`, `FBIOBLANK`, read,
+  write, and `mmap` of a shadow frame buffer (an `AnonShared` memory
+  object); Poly's `FBIO_POLY_DAMAGE` shows one rectangle.
+- **Keymaps** come from `poly_input::xkb` (XKB text generated from Poly's
+  layouts), in an unlinked file whose descriptor each `wl_keyboard` gets.
+- **The shell** (`crates/poly-shell`, host-tested) is two compositor
+  layers: the ridge (24 px status strip with the clock) and wallpaper
+  under the windows, the launcher (centred input box filtering `.desktop`
+  files and built-ins) over them.
+- `cargo xtask desktop` boots into it; boot group `desktop` drives it with
+  QMP (screenshots, typing, a client launched, clicks, a drag).
 
 ## Screen terminal
 
@@ -1719,6 +1750,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
 | Wayland: the wire format, the generated protocol tables, the server's dispatch and protocol errors, the configure sequence, SHM buffers, damage, decorations, HiDPI, popups, presentation; small scenes rendered and compared pixel for pixel. On Poly: `poly-compositor` as init with the C client `wl-client` (SHM through `SCM_RIGHTS`, xdg_toplevel, frame callback, its pixels found in the compositor's picture) | `#[test]` in `poly-wayland`, `poly-compositor`, `xtask` (`wayland.rs`); boot group `wayland` (`compositor.rs`) | `cargo xtask test` |
+| The desktop: fbdev screen information, requests, damage spans; XKB keymaps from the layouts; input routing (pointer enter/motion/buttons/wheel with implicit grabs, keyboard focus, keys and modifiers, title-bar moves, the cursor); the shell (desktop files, search, launcher keys, clock, drawing, layout); evdev translation. On Poly: `/dev/fb0` shows written and damaged pixels; the desktop on virtio-gpu with a client launched from the launcher and driven by QMP input | `#[test]` in `poly-fbdev`, `poly-input`, `poly-wayland`, `poly-shell`, `poly-compositor`, `xtask` (`desktop.rs`); kernel test `fbdev::*`; boot group `desktop` (`desktop.rs`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
 | The persistent root disk (made by `cargo xtask` from the host's programs, ext4, booted through BusyBox's init and a chroot into its bash): coreutils pipelines under `bash -c`, job control and Ctrl-C, file work on the disk, 32 MiB through `dd`; Python scripts (stdlib modules, `subprocess`, threads, `mmap` resized and flushed, a growing buffer through `mremap`, record locks and flock across processes, SQLite, signals, the terminal's size, children's CPU time, `posix_spawn`); gcc compiling and linking programs onto the disk and running them; `e2fsck -fn` and the program read back on the host; a second boot finds what the first wrote. Lock table and remap kernel tests | `tools/xtask/src/rootdisk.rs`, `kernel_test!` in `fs/locks.rs`, `user/memory/remap.rs` | `cargo xtask test` (alone: `cargo xtask root-disk-test`) |
 | Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff [--target poly]`; in `cargo xtask ci`: Linux against Linux (`selfcheck`) and Poly against Linux for the tests in `tests/linux/poly-pass.txt` (`polycheck`) |

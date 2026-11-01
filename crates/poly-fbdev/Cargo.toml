@@ -1,0 +1,11 @@
+[package]
+name = "poly-fbdev"
+description = "The Linux framebuffer device interface (/dev/fb0): fb_var_screeninfo and fb_fix_screeninfo, the FBIO* requests, Poly's damage request, and the row spans a damaged rectangle covers in page-sized pieces"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

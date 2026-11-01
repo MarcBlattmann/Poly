@@ -56,6 +56,10 @@ name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
  "libc",
+ "poly-fbdev",
+ "poly-font",
+ "poly-input",
+ "poly-shell",
  "poly-wayland",
 ]
 
@@ -108,6 +112,10 @@ dependencies = [
  "poly-block",
  "poly-vfs",
 ]
+
+[[package]]
+name = "poly-fbdev"
+version = "0.0.1"
 
 [[package]]
 name = "poly-font"
@@ -293,6 +301,15 @@ name = "poly-seh"
 version = "0.0.1"
 
 [[package]]
+name = "poly-shell"
+version = "0.0.1"
+dependencies = [
+ "poly-font",
+ "poly-gfx",
+ "poly-wayland",
+]
+
+[[package]]
 name = "poly-smp"
 version = "0.0.1"
 dependencies = [
@@ -392,6 +409,7 @@ name = "poly-wayland"
 version = "0.0.1"
 dependencies = [
  "poly-gfx",
+ "poly-input",
 ]
 
 [[package]]

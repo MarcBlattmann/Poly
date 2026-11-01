@@ -12,6 +12,7 @@ mod boot_info;
 mod cputime;
 mod display;
 mod dma;
+mod fbdev;
 mod frames;
 mod fs;
 mod heap;

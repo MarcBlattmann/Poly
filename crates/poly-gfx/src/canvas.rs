@@ -116,6 +116,12 @@ impl<'a> Canvas<'a> {
         self.buf
     }
 
+    /// The pixel bytes to write, row by row with the stride's padding (a
+    /// frame buffer device copying a program's pixels in, ADR 0107).
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        self.buf
+    }
+
     /// The same pixels, borrowed for a shorter time: hand a canvas to a
     /// function that takes `&mut Canvas<'_>` and keep using it afterwards.
     pub fn reborrow(&mut self) -> Canvas<'_> {

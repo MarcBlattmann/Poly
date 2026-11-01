@@ -362,6 +362,20 @@ impl LinuxKernel for Thread<'_> {
                 if file.object().is_some() {
                     return Err(Errno::ENODEV);
                 }
+                // The frame buffer device maps its shadow memory (ADR 0107).
+                if let Some(source) = crate::fbdev::page_source(&file) {
+                    if r.shared && r.prot.writable() && !file.writable() {
+                        return Err(Errno::EACCES);
+                    }
+                    let object = FileRef::new(source);
+                    let req = poly_vm::MapRequest::file(r.len, prot, object, offset, r.shared);
+                    let placement = match r.placement {
+                        Placement::Hint => poly_vm::Placement::Hint(r.addr),
+                        Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
+                        Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
+                    };
+                    return memory.map(req.at(placement)).map_err(memory_errno);
+                }
                 if file.kind() != FileType::Regular {
                     return Err(if file.kind() == FileType::CharDevice { Errno::ENODEV } else { Errno::EACCES });
                 }
