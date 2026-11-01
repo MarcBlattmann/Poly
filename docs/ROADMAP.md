@@ -117,7 +117,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 ## Phase 6: Graphics, input, audio and the desktop
 
-- [ ] ⚖️ Decide: global menu bar or per-window menus
+- [x] ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)
 - [x] ⚖️ Decided (owner, ADR 0106): one neutral frame drawn by Poly for every app (server-side decorations), not native frames per app
 - [x] virtio-gpu driver: modesetting and 2D framebuffer
 - [x] Input: virtio-input / PS/2 keyboard and mouse, input event layer, keymaps
@@ -174,7 +174,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 
 ## Phase 10: macOS GUI apps and Liquid Glass
 
-- [ ] Window server: Quartz / CoreGraphics windows composited by our compositor, global menu bar handling
+- [ ] Window server: Quartz / CoreGraphics windows composited by our compositor, menu bars drawn in-window (owner decision, ADR 0107)
 - [ ] Core Text and font rendering matching macOS
 - [ ] Core Animation: layer tree, implicit animations, timing curves
 - [ ] Metal on Vulkan; Core Image

@@ -107,11 +107,13 @@ accepted ADR. Supersede it with a new one and link both ways.
 
 - **Window frames:** one neutral frame drawn by Poly for every app (server-side
   decorations), not native frames per app ([ADR 0106](0106-wayland-server-core-and-software-compositor.md)).
+- **Menus:** per-window menus for every app; Mac apps' menu bars are drawn as
+  a strip under Poly's neutral title bar, and the top ridge stays a pure status
+  strip with nothing dropping down from it ([ADR 0107](0107-desktop-fbdev-input-routing-and-shell.md)).
 
 ## Open decisions
 
 These are also marked ⚖️ in [ROADMAP.md](../ROADMAP.md) at the point where they block work.
 
-- **Global menu bar vs. per-window menus.** Needed before the shell and window management (roadmap Phase 6); the compositor groundwork (ADR 0106) does not depend on it.
 - **aarch64:** port the kernel to 64-bit ARM, or stay x86-64 only. Modern Mac apps
   are increasingly arm64-only, so this decides how much of macOS is reachable.

@@ -12,8 +12,10 @@ scaling, vsync", but that item stays unticked: frames are paced by a
 60 Hz timer, and real vsync needs page flips, which come with DRM/KMS.
 It starts "Shell: launcher, window management, notifications, settings",
 which also stays unticked: notifications and settings are still missing.
-The open decision on menus is not touched. The ridge is a status strip
-with no menus hanging from it, and there is no global menu bar.
+Menus (decided by the owner): per-window menus for every app. Mac apps'
+menu bars are drawn as a strip under Poly's neutral title bar, and the
+ridge stays a pure status strip with nothing dropping down from it; there
+is no global menu bar.
 
 ## Context
 
@@ -329,4 +331,5 @@ screen back afterwards.
     status (network, volume) behind the ridge's placeholders; time zones
     (the clock shows UTC); notifications and settings.
   - **Windows:** windows menu, minimize, workspaces.
-- The menu decision is still open. Nothing here assumes either answer.
+- Menus: per-window for every app (owner decision). Mac apps' menu bars
+  are drawn under the neutral title bar; the ridge stays a status strip.
