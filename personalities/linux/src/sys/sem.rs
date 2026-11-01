@@ -111,7 +111,9 @@ fn operate(k: &mut dyn LinuxKernel, a: &Args, timeout: Option<Timespec>) -> SysR
         if let Some(result) = with_table(&ns, |t| t.poll(ticket)) {
             return result.map(|()| 0);
         }
-        if with_own(k, |p| p.has_deliverable(tid)) {
+        // A signal that is ignored (a traced process keeps those until
+        // they are taken) does not end the wait.
+        if with_own(k, |p| p.has_acting(tid)) {
             return match with_table(&ns, |t| t.cancel(ticket)) {
                 Some(result) => result.map(|()| 0),
                 None => Err(Errno::EINTR),

@@ -471,7 +471,10 @@ fn wait_for_signal(
         k.clear_signal_notification();
         let state = with_own(k, |p| match take_from(p, tid, set) {
             Some(info) => Some(Ok(info)),
-            None if p.has_deliverable(tid) => Some(Err(Errno::EINTR)),
+            // Another signal ends the wait if it acts on delivery; one
+            // that is ignored (kept by a traced process until it is
+            // taken) does not.
+            None if p.has_acting(tid) => Some(Err(Errno::EINTR)),
             None => None,
         });
         if let Some(result) = state {

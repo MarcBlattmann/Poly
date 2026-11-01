@@ -29,7 +29,7 @@ use crate::fileio::NewFd;
 use crate::kernel::{Clock, LinuxKernel, Target, UserPtr};
 use crate::net::abi::{self, MsgHdr, SockAddr, Ucred};
 use crate::net::{Family, Kind, LinuxNet, OptName, OptValue, RecvMsg, RecvReq, SendMsg, Shutdown, SockOpt, SockType};
-use crate::signal::deliver::send as send_signal;
+use crate::signal::deliver::{eintr_if_acting, send as send_signal};
 use crate::sys::io::bounce;
 use crate::table::Handler;
 use crate::table::nr;
@@ -85,12 +85,14 @@ fn fd_arg(a: &Args, i: usize) -> Result<i32, Errno> {
 }
 
 /// A call that a signal interrupted: restarted under `SA_RESTART`, unless
-/// the socket has a timeout in that direction (signal(7)).
+/// the socket has a timeout in that direction (signal(7)): then `EINTR`
+/// after a handler or a stop, and on as if nothing happened after a
+/// signal that is ignored ([`eintr_if_acting`]).
 fn interrupted(k: &mut dyn LinuxKernel, fd: i32, send: bool, e: Errno) -> Errno {
     if e != Errno::EINTR {
         return e;
     }
-    if k.net().is_some_and(|n| n.timed(fd, send)) { Errno::EINTR } else { Errno::RESTART_IF_SA_RESTART }
+    if k.net().is_some_and(|n| n.timed(fd, send)) { eintr_if_acting(k) } else { Errno::RESTART_IF_SA_RESTART }
 }
 
 /// `SIGPIPE` for the calling thread after `EPIPE` (socket(7)).

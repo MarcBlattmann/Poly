@@ -41,6 +41,30 @@ fn msgctl(k: &mut FakeKernel, id: u64, cmd: u32, buf: u64) -> Result<u64, Errno>
     sys(k, nr::MSGCTL, &[id, u64::from(cmd), buf])
 }
 
+/// A traced process keeps an ignored signal (the default-ignored SIGCHLD
+/// of a child's exit) until it is taken: it wakes a sleeping msgrcv,
+/// which sleeps on until a message comes. A signal that acts ends it.
+#[test]
+fn only_a_signal_that_acts_ends_the_sleep() {
+    use crate::abi::signal::{SIGCHLD, SIGUSR1};
+    let mut k = fresh();
+    k.me().traced = true;
+    let id = msgget(&mut k);
+    k.add_thread(101);
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, u64::from(SIGCHLD)]).unwrap());
+    });
+    k.meanwhile(move |k| {
+        k.as_thread(101, |k| assert_eq!(send(k, id, 1, b"hi", 0), Ok(0)));
+    });
+    assert_eq!(recv(&mut k, id, BUF, 16, 0, 0), Ok(2));
+    assert_eq!(k.peek(BUF + 8, 2), b"hi");
+    k.meanwhile(|k| {
+        k.as_thread(101, |k| sys(k, nr::TGKILL, &[100, 100, u64::from(SIGUSR1)]).unwrap());
+    });
+    assert_eq!(recv(&mut k, id, BUF, 16, 0, 0), Err(Errno::EINTR));
+}
+
 #[test]
 fn send_checks_in_order() {
     // c_msgsnd_basic; spec: msgsnd order.
