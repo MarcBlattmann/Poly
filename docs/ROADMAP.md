@@ -129,6 +129,11 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Compositor exposes the content behind each window (needed later for Liquid Glass) (ADR 0116)
 - [x] XWayland for X11 apps (ADR 0118)
 - [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
+- [x] ⚖️ Decided (owner, ADR 0124): the desktop becomes native Poly user space, looks 1:1 like Alpine Shell (its assets reused), and everything that ships builds on Windows and Linux hosts
+- [ ] Native user space: Poly's own system call interface and a Rust runtime; a native program, linked by `rust-lld`, builds on Windows and Linux and runs on Poly (boot test)
+- [ ] The desktop (compositor, shell, notifications, settings) runs as native Poly processes; Linux apps' Wayland and X11 windows still reach it (the desktop and toolkits boot groups pass)
+- [ ] The shell looks 1:1 like Alpine Shell: ridge with panels extending from it, centred launcher, notifications at the top right, settings window, its fonts, icons, colours, soft shadows and blur (screenshots match Alpine Shell's references)
+- [ ] `cargo xtask desktop` builds and boots the desktop on a Windows host as well as on Linux
 - [x] **Milestone:** GTK and Qt apps run; VLC plays a video with sound (ADR 0120, 0123: GTK 3, GTK 4 and Qt 6 apps from the launcher, clicked and typed into; `cvlc` plays the test video with its sound through ALSA; VLC's Qt interface through Xwayland shows it; boot group `toolkits`)
 
 ## Phase 7: Windows GUI apps
@@ -154,6 +159,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Drag and drop between app worlds
 - [ ] One file picker for every app world, mapped to each OS's path conventions
 - [ ] Unified notifications, app launcher entries and file associations
+- [ ] A preinstalled browser (Chromium) downloads and installs Linux and Windows apps, which then appear in the launcher
 - [ ] Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)
 - [ ] One user home visible as `~`, `C:\Users\<name>` and `/Users/<name>`
 
