@@ -127,7 +127,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Compositor: Wayland server, surface composition, HiDPI scaling, vsync (ADR 0106, 0107, 0116)
 - [x] Shell: launcher, window management, notifications, settings (own non-glass design) (ADR 0107, ADR 0117)
 - [x] Compositor exposes the content behind each window (needed later for Liquid Glass) (ADR 0116)
-- [ ] XWayland for X11 apps
+- [x] XWayland for X11 apps (ADR 0118)
 - [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
 - [ ] **Milestone:** GTK and Qt apps run; VLC plays a video with sound
 

@@ -308,7 +308,7 @@ impl Collector {
 
     /// Add a directory and everything under it, leaving out the names in
     /// `skip` (at any depth) and `__pycache__` directories only if asked.
-    fn add_tree(&mut self, dir: &Path, skip: &[&str]) -> Result<(), String> {
+    pub(crate) fn add_tree(&mut self, dir: &Path, skip: &[&str]) -> Result<(), String> {
         self.add(dir)?;
         let at = std::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let mut entries: Vec<_> = std::fs::read_dir(&at)
@@ -812,6 +812,8 @@ pub fn collect() -> Result<Contents, String> {
     // Mesa's software drivers, GBM and EGL, modetest and kmscube (mesa.rs,
     // ADR 0115).
     crate::mesa::add_to_root(&mut c, &mut have, &mut notes)?;
+    // Xwayland and X11 programs with their data (ADR 0118, xwayland.rs).
+    crate::xwayland::add_to_root(&mut c, &mut have, &mut notes)?;
 
     c.add_needed()?;
 

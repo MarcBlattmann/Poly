@@ -621,6 +621,7 @@ impl Server {
         }
         if (x, y) != (wx, wy) {
             self.scene.set_position(w, x, y);
+            self.x_moved(w, x, y);
         }
     }
 
@@ -728,7 +729,11 @@ impl Server {
                 if self.surface_ref(c, tl).is_some_and(|s| s.role == surface::Role::External) {
                     return Some((c, tl));
                 }
-                self.toplevel(c, tl).map(|t| (c, t.surface))
+                // An xdg toplevel, or an X window's surface (ADR 0118).
+                match self.toplevel(c, tl) {
+                    Some(t) => Some((c, t.surface)),
+                    None => self.is_x_surface(c, tl).then_some((c, tl)),
+                }
             })
         };
         if target == self.seat.input.keyboard_focus {

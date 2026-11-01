@@ -97,6 +97,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install QEMU and a static BusyBox (the BusyBox and root disk boots)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86 busybox-static
+      # Xwayland and X11 test programs for the root disk (the xwayland boot
+      # test, ADR 0118); without them that test skips.
+      - name: Install Xwayland and X11 test programs
+        if: matrix.shard == 'userland'
+        run: sudo apt-get install -y --no-install-recommends xwayland x11-apps x11-utils xterm x11-xkb-utils xkb-data libx11-data xfonts-base
       - name: Let QEMU use KVM
         run: |
           if [ -e /dev/kvm ]; then

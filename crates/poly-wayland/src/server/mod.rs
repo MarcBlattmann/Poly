@@ -57,6 +57,7 @@ mod surface;
 mod viewporter;
 mod wm;
 mod xdg;
+mod xwayland;
 
 pub use dmabuf::{MOD_INVALID, MOD_LINEAR, format_table as dmabuf_format_table, formats as dmabuf_formats};
 pub use external::WmEvent;
@@ -69,7 +70,8 @@ use crate::protocol::{
     wl_subcompositor, wl_subsurface, wl_surface, wl_touch, wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1,
     wp_fractional_scale_manager_v1, wp_fractional_scale_v1, wp_presentation, wp_presentation_feedback, wp_viewport,
     wp_viewporter, xdg_activation_token_v1, xdg_activation_v1, xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel,
-    xdg_wm_base, zwp_linux_buffer_params_v1, zwp_linux_dmabuf_feedback_v1, zwp_linux_dmabuf_v1,
+    xdg_wm_base, xwayland_shell_v1, xwayland_surface_v1, zwp_linux_buffer_params_v1, zwp_linux_dmabuf_feedback_v1,
+    zwp_linux_dmabuf_v1,
     zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
 };
 use crate::seat::{Capabilities, InputEvent};
@@ -84,6 +86,7 @@ use alloc::vec::Vec;
 pub(crate) use shm::{Buffer, Pool};
 pub(crate) use surface::{Region, Surface};
 pub(crate) use xdg::{Popup, Positioner, Toplevel, XdgSurface};
+pub use xwayland::{SurfaceRef, XRequest, XWindowState};
 
 /// A client's shared memory, mapped by the [`Host`].
 pub trait ShmMap {
@@ -203,6 +206,7 @@ pub mod versions {
     pub const FRACTIONAL_SCALE: u32 = 1;
     pub const ACTIVATION: u32 = 1;
     pub const CURSOR_SHAPE: u32 = 2;
+    pub const XWAYLAND_SHELL: u32 = 1;
 }
 
 /// `wp_presentation_feedback.kind` bits (presentation-time.xml): how a
@@ -289,6 +293,10 @@ pub(crate) enum Data {
     CursorShapeManager,
     /// A `wp_cursor_shape_device_v1`.
     CursorShapeDevice,
+    /// `xwayland_shell_v1` (Xwayland only, ADR 0118).
+    XwaylandShell,
+    /// `xwayland_surface_v1`: the surface it gives the role.
+    XwaylandSurface(ObjectId),
 }
 
 /// An object of a client: its interface, the version it was made with, and
@@ -441,6 +449,8 @@ pub struct Server {
     pub(crate) internal_events: Vec<InternalEvent>,
     pub(crate) active_internal: Option<WindowId>,
     next_internal: u32,
+    /// Xwayland's client and its X windows (ADR 0118).
+    xwayland: xwayland::XwaylandState,
 }
 
 impl core::fmt::Debug for Server {
@@ -476,6 +486,7 @@ impl Server {
             (&wp_fractional_scale_manager_v1::INTERFACE, versions::FRACTIONAL_SCALE),
             (&xdg_activation_v1::INTERFACE, versions::ACTIVATION),
             (&wp_cursor_shape_manager_v1::INTERFACE, versions::CURSOR_SHAPE),
+            (&xwayland_shell_v1::INTERFACE, versions::XWAYLAND_SHELL),
         ];
         if dmabuf_device.is_some() {
             globals.push((&zwp_linux_dmabuf_v1::INTERFACE, versions::LINUX_DMABUF));
@@ -506,6 +517,7 @@ impl Server {
             internal_events: Vec::new(),
             active_internal: None,
             next_internal: 1,
+            xwayland: xwayland::XwaylandState::default(),
         }
     }
 
@@ -591,6 +603,9 @@ impl Server {
         {
             self.seat.cursor = Some(cursor::CursorRequest::Hidden);
             self.update_cursor_look();
+        }
+        if self.xwayland_client() == Some(c) {
+            self.set_xwayland_client(None);
         }
     }
 
@@ -806,6 +821,8 @@ impl Server {
             zxdg_toplevel_decoration_v1::NAME => self.decoration_request(c, id, parse!(zxdg_toplevel_decoration_v1)),
             wp_presentation::NAME => self.presentation_request(c, id, parse!(wp_presentation)),
             wp_presentation_feedback::NAME => Ok(()),
+            xwayland_shell_v1::NAME => self.xwayland_shell_request(c, parse!(xwayland_shell_v1)),
+            xwayland_surface_v1::NAME => self.xwayland_surface_request(c, id, parse!(xwayland_surface_v1)),
             _ => {
                 self.close_fds(&args);
                 Err(error(id, wl_display::Error::INVALID_METHOD.0, format!("{} is not implemented", iface.name)))

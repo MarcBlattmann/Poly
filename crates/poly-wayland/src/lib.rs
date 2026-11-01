@@ -11,7 +11,8 @@
 //! - [`protocol`]: request and event types and tables for every interface of
 //!   `wayland.xml`, `xdg-shell`, `xdg-decoration`, `viewporter`,
 //!   `presentation-time`, `linux-dmabuf`, `fractional-scale`,
-//!   `xdg-activation` and `cursor-shape`, generated from the XML by
+//!   `xdg-activation`, `cursor-shape` and `xwayland-shell-v1`, generated from
+//!   the XML by
 //!   `cargo xtask wayland`.
 //! - [`server`]: clients and their objects, request dispatch, and the
 //!   protocol logic: `wl_display`/`wl_registry`/`wl_callback`,
@@ -27,8 +28,9 @@
 //!   `zxdg_decoration_manager_v1` (always server-side), `wp_presentation`
 //!   (paced by page flips when the display has them),
 //!   `wp_fractional_scale_v1` and `xdg_activation_v1`; and an API for window
-//!   managers outside xdg-shell (XWayland's). The transport and shared
-//!   memory are the caller's ([`server::Host`]).
+//!   managers outside xdg-shell, and `xwayland_shell_v1` with X windows as
+//!   scene windows (ADR 0118). The transport and shared memory are the
+//!   caller's ([`server::Host`]).
 //! - [`compose`]: the scene of windows and the renderer: damage tracking,
 //!   HiDPI scaling, buffer transforms and viewports, premultiplied alpha,
 //!   Poly's neutral window frame, the picture behind each window (its

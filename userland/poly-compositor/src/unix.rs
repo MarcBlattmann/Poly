@@ -296,10 +296,35 @@ pub fn monotonic_ns() -> u64 {
 /// Start `argv[0]` with `argv` and `env` (`NAME=value`) in a child process
 /// (fork and execve); returns its pid.
 pub fn spawn(argv: &[String], env: &[String]) -> io::Result<libc::pid_t> {
+    spawn_keeping(argv, env, &[])
+}
+
+/// The program `name` runs: itself if it has a `/`, else the first
+/// executable file of that name in the directories of `PATH` in `env`
+/// (`/usr/local/bin:/usr/bin:/bin` without one), as execvp(3) searches
+/// (desktop files name programs that way, ADR 0118).
+pub fn resolve_program(name: &str, env: &[String]) -> String {
+    if name.contains('/') || name.is_empty() {
+        return name.to_string();
+    }
+    let path = env.iter().find_map(|v| v.strip_prefix("PATH=")).unwrap_or("/usr/local/bin:/usr/bin:/bin");
+    use std::os::unix::fs::PermissionsExt;
+    path.split(':')
+        .filter(|d| !d.is_empty())
+        .map(|d| format!("{d}/{name}"))
+        .find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0))
+        .unwrap_or_else(|| name.to_string())
+}
+
+/// [`spawn`], the descriptors `keep` inherited by the program (their
+/// close-on-exec flag cleared in the child).
+pub fn spawn_keeping(argv: &[String], env: &[String], keep: &[RawFd]) -> io::Result<libc::pid_t> {
     let cstrings = |v: &[String]| -> io::Result<Vec<CString>> {
         v.iter().map(|s| CString::new(s.as_str()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))).collect()
     };
     let (args, envs) = (cstrings(argv)?, cstrings(env)?);
+    let program = CString::new(resolve_program(argv.first().map_or("", String::as_str), env))
+        .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
     let mut arg_ptrs: Vec<*const libc::c_char> = args.iter().map(|s| s.as_ptr()).collect();
     arg_ptrs.push(std::ptr::null());
     let mut env_ptrs: Vec<*const libc::c_char> = envs.iter().map(|s| s.as_ptr()).collect();
@@ -311,9 +336,14 @@ pub fn spawn(argv: &[String], env: &[String]) -> io::Result<libc::pid_t> {
     match pid {
         -1 => Err(io::Error::last_os_error()),
         0 => {
+            for &fd in keep {
+                // SAFETY: fcntl on a descriptor of this process; it only
+                // clears FD_CLOEXEC (async-signal-safe after fork).
+                unsafe { libc::fcntl(fd, libc::F_SETFD, 0) };
+            }
             // SAFETY: null-terminated arrays of pointers to live C strings.
             unsafe {
-                libc::execve(arg_ptrs[0], arg_ptrs.as_ptr(), env_ptrs.as_ptr());
+                libc::execve(program.as_ptr(), arg_ptrs.as_ptr(), env_ptrs.as_ptr());
                 libc::_exit(127)
             }
         }

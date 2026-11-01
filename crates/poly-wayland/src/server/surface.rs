@@ -93,6 +93,8 @@ pub(crate) enum Role {
     DndIcon,
     /// Managed by an outside window manager (`external.rs`: XWayland).
     External,
+    /// An X window's surface, Xwayland's (ADR 0118).
+    Xwayland,
 }
 
 /// A subsurface's link to its parent.
@@ -340,6 +342,7 @@ impl Server {
                 st.retain(|s| *s != id);
             }
         }
+        self.xwayland_surface_destroyed(c, id);
         self.surface_gone(c, id);
         Ok(())
     }
@@ -471,6 +474,7 @@ impl Server {
         }
         // The role maps or unmaps the window...
         self.xdg_commit(c, id, attached)?;
+        self.xwayland_commit(c, id, attached)?;
         // ...and what the buffer shows is copied into it.
         let window = self.surface(c, id).and_then(|s| s.window);
         if let Some(win) = window {
@@ -515,7 +519,7 @@ impl Server {
     /// Copy the damaged part of buffer `b` into surface `surface`'s content
     /// (its window's, or its own while it has none); all of it if the size
     /// or scale changed.
-    fn copy_buffer(
+    pub(super) fn copy_buffer(
         &mut self,
         c: ClientId,
         b: ObjectId,

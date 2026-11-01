@@ -767,6 +767,9 @@ impl Server {
             self.scene.set_active(w, false);
             self.configure_toplevel(pc, ptl);
         }
+        if let Some((pc, ptl)) = previous {
+            self.x_lost_focus(pc, ptl);
+        }
         if let Some(w) = self.toplevel_window(c, tl) {
             self.scene.set_active(w, true);
             self.scene.raise(w);
@@ -809,6 +812,8 @@ impl Server {
             self.activate_internal(w);
         } else if let Some((c, tl)) = self.window_toplevel(w) {
             self.activate(c, tl, true);
+        } else {
+            self.x_clicked(w);
         }
     }
 
@@ -824,6 +829,8 @@ impl Server {
             } else {
                 self.client(c).send(tl, xdg_toplevel::Event::Close);
             }
+        } else {
+            self.x_close(w);
         }
     }
 

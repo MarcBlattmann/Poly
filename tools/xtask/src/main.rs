@@ -107,6 +107,7 @@ mod wayland;
 mod win32;
 mod winimports;
 mod wintrace;
+mod xwayland;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -1405,7 +1406,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 30] = [
+const BOOT_GROUPS: [BootGroup; 31] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1445,6 +1446,9 @@ const BOOT_GROUPS: [BootGroup; 30] = [
     // window, then the settings read back in a second boot (desktop.rs,
     // ADR 0117).
     ("desktop-shell", desktop::shell_boot_test),
+    // X11 apps through Xwayland on the desktop, from the root disk
+    // (xwayland.rs, ADR 0118).
+    ("xwayland", xwayland::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1510,6 +1514,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
             "desktop",
             "desktop-shell",
             "mesa",
+            "xwayland",
         ],
     ),
     (
