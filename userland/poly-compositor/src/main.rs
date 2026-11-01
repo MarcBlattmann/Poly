@@ -459,6 +459,8 @@ fn run(args: &[String]) -> Result<u8, String> {
         None => None,
     };
     let env = client_env(&o.socket, &dir, &dump_path, bus_address.as_deref(), xw.as_ref().map(|x| x.display_env()));
+    // Children that end wake the loop, which reaps them at once.
+    let child_signal = unix::ChildSignal::install().map_err(|e| format!("SIGCHLD: {e}"))?;
     let child = if o.exec.is_empty() {
         None
     } else {
@@ -495,6 +497,9 @@ fn run(args: &[String]) -> Result<u8, String> {
             fds.extend(d.poll_fds());
         }
         let desk_end = fds.len();
+        // A child ended (launched apps, Xwayland, the client to run).
+        let child_at = fds.len();
+        fds.push(libc::pollfd { fd: child_signal.fd(), events: libc::POLLIN, revents: 0 });
         // The card's flip events.
         let card_fd = screen.kms().and_then(|k| k.fd());
         if let Some(fd) = card_fd {
@@ -513,12 +518,15 @@ fn run(args: &[String]) -> Result<u8, String> {
         } else if let Some(d) = &desk {
             // The clock and the status, toasts that expire, apps that ended.
             d.timeout_ms()
-        } else if child.is_some() {
-            50
         } else {
             -1
         };
         unix::poll(&mut fds, timeout).map_err(|e| format!("poll: {e}"))?;
+        // What ended is reaped below (the desktop's apps in `sync`,
+        // Xwayland in `reap`, the client to run at the end).
+        if fds[child_at].revents & libc::POLLIN != 0 {
+            child_signal.clear();
+        }
 
         if fds[0].revents & libc::POLLIN != 0 {
             match listener.accept() {

@@ -129,7 +129,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Compositor exposes the content behind each window (needed later for Liquid Glass) (ADR 0116)
 - [x] XWayland for X11 apps (ADR 0118)
 - [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
-- [ ] **Milestone:** GTK and Qt apps run; VLC plays a video with sound
+- [x] **Milestone:** GTK and Qt apps run; VLC plays a video with sound (ADR 0120, 0123: GTK 3, GTK 4 and Qt 6 apps from the launcher, clicked and typed into; `cvlc` plays the test video with its sound through ALSA; VLC's Qt interface through Xwayland shows it; boot group `toolkits`)
 
 ## Phase 7: Windows GUI apps
 

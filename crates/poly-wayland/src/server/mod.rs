@@ -272,8 +272,9 @@ pub(crate) enum Data {
     Presentation,
     Feedback,
     Subcompositor,
-    /// A `wl_subsurface`: the surface it made a subsurface.
-    Subsurface(ObjectId),
+    /// A `wl_subsurface`: the surface it made a subsurface, while there is
+    /// one (inert after the surface was destroyed: its ID may be reused).
+    Subsurface(Option<ObjectId>),
     Viewporter,
     /// A `wp_viewport`: its surface, while there is one.
     Viewport(Option<ObjectId>),
@@ -294,8 +295,9 @@ pub(crate) enum Data {
     CursorShapeDevice,
     /// `xwayland_shell_v1` (Xwayland only, ADR 0118).
     XwaylandShell,
-    /// `xwayland_surface_v1`: the surface it gives the role.
-    XwaylandSurface(ObjectId),
+    /// `xwayland_surface_v1`: the surface it gives the role, while there is
+    /// one.
+    XwaylandSurface(Option<ObjectId>),
 }
 
 /// An object of a client: its interface, the version it was made with, and
@@ -906,14 +908,16 @@ impl Server {
         let seq = seq.unwrap_or(self.frame_seq);
         for (id, flight) in core::mem::take(&mut self.in_flight) {
             let Some(client) = self.clients.get_mut(&id) else { continue };
+            // Only what is still the callback or feedback it was: answering
+            // another object would delete it under the client.
             for cb in flight.callbacks {
-                if client.get(cb).is_some() {
+                if matches!(client.data(cb), Some(Data::Callback)) {
                     client.callback_done(cb, ms);
                 }
             }
             let outputs = client.ids_where(|d| matches!(d, Data::Output));
             for (f, shown) in flight.feedbacks {
-                if client.get(f).is_none() {
+                if !matches!(client.data(f), Some(Data::Feedback)) {
                     continue;
                 }
                 if shown {

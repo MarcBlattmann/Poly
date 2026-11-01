@@ -356,7 +356,7 @@ impl CharDevice for PcmNode {
         Err(Errno::EBADF)
     }
 
-    fn open(&self, flags: OpenFlags) -> Result<Option<Arc<dyn CharDevice>>> {
+    fn open(&self, _flags: OpenFlags) -> Result<Option<Arc<dyn CharDevice>>> {
         let sub = {
             let mut g = self.card.inner.lock();
             let base = self.desc * SUBDEVICES;
@@ -369,12 +369,7 @@ impl CharDevice for PcmNode {
             s.soft.control = None;
             k
         };
-        Ok(Some(Arc::new(PcmFile {
-            card: self.card.clone(),
-            desc: self.desc,
-            sub,
-            nonblock: flags.contains(OpenFlags::NONBLOCK),
-        })))
+        Ok(Some(Arc::new(PcmFile { card: self.card.clone(), desc: self.desc, sub })))
     }
 }
 
@@ -383,7 +378,6 @@ pub struct PcmFile {
     card: Arc<Card>,
     desc: usize,
     sub: usize,
-    nonblock: bool,
 }
 
 impl core::fmt::Debug for PcmFile {
@@ -499,7 +493,7 @@ impl PcmFile {
     /// `SNDRV_PCM_IOCTL_WRITEI_FRAMES` / `READI_FRAMES`: move every frame
     /// (blocking), or as many as possible now (non-blocking); `result`
     /// gets the count.
-    fn xfer(&self, arg: u64, write: bool) -> Result<u64> {
+    fn xfer(&self, arg: u64, write: bool, nonblock: bool) -> Result<u64> {
         let x = Xferi::decode(&get::<{ abi::XFERI_LEN }>(arg)?);
         let fb = self.frame_bytes()?;
         if write {
@@ -512,9 +506,9 @@ impl PcmFile {
             let at = x.buf.wrapping_add(done * fb);
             let left = x.frames - done;
             let r = if write {
-                self.wait(self.nonblock, || self.write_user(at, left, fb))
+                self.wait(nonblock, || self.write_user(at, left, fb))
             } else {
-                self.wait(self.nonblock, || self.read_user(at, left, fb))
+                self.wait(nonblock, || self.read_user(at, left, fb))
             };
             match r {
                 Ok(n) => done += n,
@@ -526,7 +520,7 @@ impl PcmFile {
     }
 
     /// `SNDRV_PCM_IOCTL_DRAIN`.
-    fn drain(&self) -> Result<u64> {
+    fn drain(&self, nonblock: bool) -> Result<u64> {
         let over = self.with(|rt, g| {
             let now = stamp(rt);
             rt.drain(g, now)
@@ -535,13 +529,15 @@ impl PcmFile {
         if over.map_err(errno)? {
             return Ok(0);
         }
-        if self.nonblock {
+        if nonblock {
             return Err(Errno::EAGAIN);
         }
         self.wait(false, || if self.with(|rt, _| rt.state()) == State::Draining { Err(Errno::EAGAIN) } else { Ok(0) })
     }
 
-    fn ioctl_inner(&self, request: u32, arg: u64) -> Result<u64> {
+    /// A request on the PCM; `nonblock` is the open file's `O_NONBLOCK`
+    /// now (alsa-lib opens non-blocking and clears it with `F_SETFL`).
+    fn ioctl_inner(&self, request: u32, arg: u64, nonblock: bool) -> Result<u64> {
         let desc = &self.card.pcms[self.desc];
         let ok = |r: core::result::Result<(), LinuxErrno>| r.map(|()| 0).map_err(errno);
         match request {
@@ -624,9 +620,9 @@ impl PcmFile {
                 self.card.notify();
                 r
             }
-            ioctl::PCM_DRAIN => self.drain(),
-            ioctl::PCM_WRITEI_FRAMES => self.xfer(arg, true),
-            ioctl::PCM_READI_FRAMES => self.xfer(arg, false),
+            ioctl::PCM_DRAIN => self.drain(nonblock),
+            ioctl::PCM_WRITEI_FRAMES => self.xfer(arg, true, nonblock),
+            ioctl::PCM_READI_FRAMES => self.xfer(arg, false, nonblock),
             // No pausing: the stream's info has no PAUSE.
             ioctl::PCM_PAUSE | ioctl::PCM_RESUME => Err(Errno::ENOSYS),
             ioctl::PCM_REWIND => {
@@ -731,8 +727,13 @@ impl CharDevice for PcmFile {
         }
     }
 
+    /// Without the open file's flags: as if non-blocking (never waits).
     fn ioctl(&self, request: u32, arg: u64) -> Result<u64> {
-        self.ioctl_inner(request, arg)
+        self.ioctl_inner(request, arg, true)
+    }
+
+    fn ioctl_nonblock(&self, request: u32, arg: u64, nonblock: bool) -> Result<u64> {
+        self.ioctl_inner(request, arg, nonblock)
     }
 
     fn poll(&self) -> PollEvents {

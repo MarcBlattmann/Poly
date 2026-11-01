@@ -60,11 +60,11 @@ pub fn enter(process: &Process, number: u64, args: &[u64; 6]) -> Option<String> 
     if !ON.load(Ordering::Acquire) {
         return None;
     }
-    {
-        let only = ONLY.lock();
-        if !only.is_empty() && crate::fs::proc::comm(process.pid).as_deref() != Some(only.as_bytes()) {
-            return None;
-        }
+    // The name is copied out first: `comm` takes a sleeping lock, which
+    // must not be waited for under the spinlock.
+    let only = ONLY.lock().clone();
+    if !only.is_empty() && crate::fs::proc::comm(process.pid).as_deref() != Some(only.as_bytes()) {
+        return None;
     }
     let mut line = String::with_capacity(128);
     let name = poly_personality_linux::table::name(number);

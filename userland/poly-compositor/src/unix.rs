@@ -7,6 +7,7 @@ use poly_wayland::wire::Fd;
 use std::ffi::CString;
 use std::io;
 use std::os::fd::RawFd;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 /// The most file descriptors one message may carry (as many as the
 /// receive buffer below has room for).
@@ -366,5 +367,114 @@ pub fn try_wait(pid: libc::pid_t) -> Option<i32> {
         Some(128 + libc::WTERMSIG(status))
     } else {
         None
+    }
+}
+
+/// The write end of [`ChildSignal`]'s pipe, for the signal handler; -1
+/// before [`ChildSignal::install`].
+static CHILD_PIPE: AtomicI32 = AtomicI32::new(-1);
+
+/// `SIGCHLD`'s handler: one byte into the pipe (write(2) is
+/// async-signal-safe, signal-safety(7)); errno is left as it was.
+extern "C" fn on_sigchld(_: libc::c_int) {
+    let fd = CHILD_PIPE.load(Ordering::Relaxed);
+    if fd < 0 {
+        return;
+    }
+    // SAFETY: errno is this thread's and is put back after the write; the
+    // byte is a live one-byte buffer.
+    unsafe {
+        let errno = libc::__errno_location();
+        let saved = *errno;
+        // A full pipe wakes the loop already: the byte may be dropped.
+        libc::write(fd, [1u8].as_ptr().cast(), 1);
+        *errno = saved;
+    }
+}
+
+/// Wakes the main loop when a child process ends: `SIGCHLD`'s handler
+/// writes to a pipe whose read end is polled with the clients (the
+/// self-pipe way, so a child that ends just before `poll` still wakes
+/// it), and the loop then reaps what ended ([`try_wait`]). Apps started
+/// from the launcher are reaped at once, not when something else wakes the
+/// compositor. Children do not keep the handler past `execve` (signal(7)).
+#[derive(Debug)]
+pub struct ChildSignal {
+    read: RawFd,
+}
+
+impl ChildSignal {
+    /// Make the pipe and install the handler (`SA_NOCLDSTOP`: stopped and
+    /// continued children do not count; `SA_RESTART` for the calls that
+    /// restart, sigaction(2)). Once per process.
+    pub fn install() -> io::Result<ChildSignal> {
+        let mut fds = [0 as RawFd; 2];
+        // SAFETY: `fds` has room for the two descriptors pipe2 writes.
+        if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK) } < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        CHILD_PIPE.store(fds[1], Ordering::Relaxed);
+        // SAFETY: a zeroed sigaction is valid; the handler is an extern "C"
+        // function that makes only async-signal-safe calls.
+        let r = unsafe {
+            let mut sa: libc::sigaction = std::mem::zeroed();
+            sa.sa_sigaction = on_sigchld as *const () as libc::sighandler_t;
+            sa.sa_flags = libc::SA_RESTART | libc::SA_NOCLDSTOP;
+            libc::sigemptyset(&mut sa.sa_mask);
+            libc::sigaction(libc::SIGCHLD, &sa, std::ptr::null_mut())
+        };
+        if r < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(ChildSignal { read: fds[0] })
+    }
+
+    /// The descriptor to poll for `POLLIN`.
+    pub fn fd(&self) -> RawFd {
+        self.read
+    }
+
+    /// Empty the pipe (after it polled readable).
+    pub fn clear(&self) {
+        let mut buf = [0u8; 64];
+        // SAFETY: reading into a live buffer of the length given, from our
+        // own non-blocking pipe (it stops with EAGAIN once empty).
+        while unsafe { libc::read(self.read, buf.as_mut_ptr().cast(), buf.len()) } > 0 {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A child that ends makes the pipe readable at once, and is reaped.
+    #[test]
+    fn a_child_that_ends_wakes_the_loop() {
+        let sig = ChildSignal::install().expect("pipe and handler");
+        let mut fds = [libc::pollfd { fd: sig.fd(), events: libc::POLLIN, revents: 0 }];
+        poll(&mut fds, 0).unwrap();
+        assert_eq!(fds[0].revents, 0, "readable before any child ended");
+        let pid = spawn(&["/bin/sh".into(), "-c".into(), "exit 7".into()], &[]).expect("spawn");
+        // Woken by the child's end, long before the hour's timeout.
+        let start = std::time::Instant::now();
+        loop {
+            poll(&mut fds, 3_600_000).unwrap();
+            if fds[0].revents & libc::POLLIN != 0 {
+                break;
+            }
+            assert!(start.elapsed() < std::time::Duration::from_secs(60), "SIGCHLD never woke the poll");
+        }
+        sig.clear();
+        let status = loop {
+            if let Some(s) = try_wait(pid) {
+                break s;
+            }
+            std::thread::yield_now();
+        };
+        assert_eq!(status, 7);
+        // Emptied: not readable until another child ends.
+        fds[0].revents = 0;
+        poll(&mut fds, 0).unwrap();
+        assert_eq!(fds[0].revents, 0, "still readable after clear");
     }
 }

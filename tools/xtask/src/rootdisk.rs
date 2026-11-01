@@ -306,6 +306,12 @@ impl Collector {
         Ok(())
     }
 
+    /// Add the shared objects the host's ELF file at `path` needs (not the
+    /// file itself: the caller puts it somewhere else).
+    pub(crate) fn add_elf_needs(&mut self, path: &Path) {
+        self.elves.push_back(path.to_path_buf());
+    }
+
     /// Add a directory and everything under it, leaving out the names in
     /// `skip` (at any depth) and `__pycache__` directories only if asked.
     pub(crate) fn add_tree(&mut self, dir: &Path, skip: &[&str]) -> Result<(), String> {
@@ -722,6 +728,15 @@ int main(int argc, char **argv) {\n\
 
 /// Collect what the image holds (see the module documentation).
 pub fn collect() -> Result<Contents, String> {
+    collect_with(|_, _, _| Ok(()))
+}
+
+/// [`collect`] with more from `extra` (the toolkits' disk, `toolkits.rs`):
+/// it adds host files to the collector (their shared objects are added
+/// after it returns), the programs it found and notes.
+pub(crate) fn collect_with(
+    extra: impl FnOnce(&mut Collector, &mut BTreeSet<&'static str>, &mut Vec<String>) -> Result<(), String>,
+) -> Result<Contents, String> {
     let mut c = Collector::new();
     let mut have = BTreeSet::new();
     let mut notes = Vec::new();
@@ -818,6 +833,7 @@ pub fn collect() -> Result<Contents, String> {
     // (virgl.rs, ADR 0119).
     crate::virgl::add_to_root(&mut c, &mut have, &mut notes)?;
 
+    extra(&mut c, &mut have, &mut notes)?;
     c.add_needed()?;
 
     let mut tree = c.tree;
@@ -1310,7 +1326,7 @@ fn second_boot(s: &mut crate::busybox::Session, compiled: bool) -> super::Result
 
 /// The file at `path` on the ext4 image, read with `poly-ext2` (from a
 /// copy in memory; the image is not changed).
-fn read_back(image: &Path, path: &str) -> super::Result<Vec<u8>> {
+pub(crate) fn read_back(image: &Path, path: &str) -> super::Result<Vec<u8>> {
     use poly_ext2::{DeviceIo, Ext2, MountOptions};
     use poly_vfs::FileSystem;
     let mut mem = std::fs::read(image).map_err(|e| format!("{}: {e}", image.display()))?;

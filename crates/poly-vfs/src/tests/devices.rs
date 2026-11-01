@@ -105,6 +105,46 @@ fn an_unseekable_terminal_like_device() {
     assert_eq!(env.open("/f", OpenFlags::RDONLY).unwrap().ioctl(0x5401, 0), Err(Errno::ENOTTY));
 }
 
+/// A device whose ioctl blocks unless the file is non-blocking (as a sound
+/// card's transfers and drain do): it answers whether it was told so.
+struct Blocking;
+
+impl CharDevice for Blocking {
+    fn read(&self, _: u64, _: &mut [u8], _: bool) -> Result<usize> {
+        Ok(0)
+    }
+
+    fn write(&self, _: u64, buf: &[u8], _: bool) -> Result<usize> {
+        Ok(buf.len())
+    }
+
+    fn ioctl_nonblock(&self, _: u32, _: u64, nonblock: bool) -> Result<u64> {
+        if nonblock { Err(Errno::EAGAIN) } else { Ok(0) }
+    }
+}
+
+/// An ioctl sees the file's `O_NONBLOCK` as it is now, not as it was at
+/// the open: alsa-lib opens a PCM non-blocking and clears the flag with
+/// `fcntl(F_SETFL)`, and then expects `DRAIN` to wait.
+#[test]
+fn ioctls_see_o_nonblock_as_it_is_now() {
+    let env = Env::new();
+    env.vfs.register_char_device(DeviceId::new(116, 16), Arc::new(Blocking)).unwrap();
+    mknod(&env, "/pcm", DeviceId::new(116, 16));
+    let f = env.open("/pcm", OpenFlags::RDWR | OpenFlags::NONBLOCK).unwrap();
+    assert_eq!(f.ioctl(0x4144, 0), Err(Errno::EAGAIN));
+    f.set_flags(f.flags().without(OpenFlags::NONBLOCK));
+    assert_eq!(f.ioctl(0x4144, 0), Ok(0));
+    f.set_flags(f.flags() | OpenFlags::NONBLOCK);
+    assert_eq!(f.ioctl(0x4144, 0), Err(Errno::EAGAIN));
+    // A device that only has the plain ioctl still gets it.
+    let console = Arc::new(Console::default());
+    env.vfs.register_char_device(device::CONSOLE, console).unwrap();
+    mknod(&env, "/console", device::CONSOLE);
+    let c = env.open("/console", OpenFlags::RDWR | OpenFlags::NONBLOCK).unwrap();
+    assert_eq!(c.ioctl(0x5401, 0), Ok(0));
+}
+
 /// A device that opens as a new device per open (as `/dev/ptmx` does),
 /// counting the opens still alive; with `O_EXCL` it refuses.
 #[derive(Default)]
