@@ -29,6 +29,10 @@ name = "poly-acpi"
 version = "0.0.1"
 
 [[package]]
+name = "poly-audio"
+version = "0.0.1"
+
+[[package]]
 name = "poly-backtrace"
 version = "0.0.1"
 
@@ -56,6 +60,10 @@ name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
  "libc",
+ "poly-fbdev",
+ "poly-font",
+ "poly-input",
+ "poly-shell",
  "poly-wayland",
 ]
 
@@ -98,6 +106,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-drm"
+version = "0.0.1"
+
+[[package]]
 name = "poly-elf"
 version = "0.0.1"
 
@@ -110,12 +122,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-fbdev"
+version = "0.0.1"
+
+[[package]]
 name = "poly-font"
 version = "0.0.1"
 
 [[package]]
 name = "poly-gfx"
 version = "0.0.1"
+
+[[package]]
+name = "poly-hda"
+version = "0.0.1"
+dependencies = [
+ "poly-pci",
+]
 
 [[package]]
 name = "poly-heap"
@@ -293,6 +316,15 @@ name = "poly-seh"
 version = "0.0.1"
 
 [[package]]
+name = "poly-shell"
+version = "0.0.1"
+dependencies = [
+ "poly-font",
+ "poly-gfx",
+ "poly-wayland",
+]
+
+[[package]]
 name = "poly-smp"
 version = "0.0.1"
 dependencies = [
@@ -392,6 +424,7 @@ name = "poly-wayland"
 version = "0.0.1"
 dependencies = [
  "poly-gfx",
+ "poly-input",
 ]
 
 [[package]]

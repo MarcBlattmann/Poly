@@ -31,11 +31,13 @@ what exists **today** and how it fits that plan.
             block layer: request queue + buffer cache per disk (virtio0, ram0; virtio1... on demand)
             network: eth0 on virtio-net (MSI-X), poly-net TCP/IP stack, network thread, blocking sockets;
                      socket files (inet, poly-unix Unix sockets, netlink) with per-socket wake-ups
-            sound: ALSA card 0 (/dev/snd/controlC0, pcmC0D<n>p) on virtio-sound (poly-virtio-sound), audio thread
+            sound: ALSA card 0 (/dev/snd/controlC0, pcmC0D0p, pcmC0D0c; 8 subdevices each) on virtio-sound
+                   (poly-virtio-sound) or Intel HDA (poly-hda); audio server in the audio thread (poly-audio)
             devices: PCI (ECAM, MSI-X, MSI), virtio-blk (MSI-X interrupts), RAM disk, PS/2 keyboard (IRQ 1)
             input: event layer (poly-input hub), PS/2 keyboard and mouse (IRQ 1, 12), virtio-input; /dev/input/event*
             display: RAM back buffer onto virtio-gpu (2D resource) or the QEMU standard VGA framebuffer;
                      poly-gfx (drawing, font, text grid)
+            DRM/KMS: /dev/dri/card0, renderD128 on the virtio GPU (poly-drm), dumb buffers, PRIME, vblank thread
             arch/x86_64 (PVH entry, serial, exceptions, page tables, address spaces,
                          syscall/sysret, FPU state, context switch, AP start-up, per-CPU data)
 ```
@@ -387,13 +389,30 @@ like on a pipe (ADR 0042):
 
 ## Sound
 
-One ALSA card, card 0, on a virtio-sound device (VIRTIO 1.2 §5.14):
-playback through the ALSA kernel/user interface (`/dev/snd/*`, the
-`SNDRV_*` ioctls of the uapi header `sound/asound.h`), the interface
-`aplay -D hw:0,0` uses (aplay itself is not in the build image; a C test
-program drives the same ioctls). Decisions are in
-[ADR 0104](adr/0104-virtio-sound-and-alsa-pcm.md); Intel HDA, capture and
-an audio server come later.
+One ALSA card, card 0, on a virtio-sound device (VIRTIO 1.2 §5.14) or,
+without one, an Intel HDA controller: playback and capture through the
+ALSA kernel/user interface (`/dev/snd/*`, the `SNDRV_*` ioctls of the uapi
+header `sound/asound.h`), the interface `aplay -D hw:0,0` uses (aplay
+itself is not in the build image; a C test program drives the same
+ioctls), with mmap access and mixer controls, and an audio server that
+mixes every open stream into the device's one. Decisions are in
+[ADR 0104](adr/0104-virtio-sound-and-alsa-pcm.md) (virtio-sound, the ALSA
+PCM interface) and [ADR 0109](adr/0109-audio-server-capture-mmap-mixer-and-intel-hda.md)
+(the server, capture, mmap, controls, HDA).
+
+**The audio server (ADR 0109).** Each open of a PCM device is a substream
+of its own (8 ALSA subdevices per device): its own `PcmRuntime` and ring
+buffer in shared memory (which `mmap(2)` maps, with the status and control
+pages), in the client's format. The device runs one fixed stream (S16,
+stereo, 48 kHz, 20 ms periods); whenever it has room for a period the
+audio thread mixes one from every active playback client with
+`poly-audio` (conversion, linear resampling, sum, the master volume,
+clipping) and hands it over, which moves each client's hardware pointer;
+captured periods go to every active capture client the same way. HDA
+(`poly-hda`: CORB/RIRB, the widget graph walked to one DAC-to-pin path,
+a BDL stream) plays a ring of periods round and round, refilled behind
+the DMA position. What follows describes the virtio-sound driver beneath
+it.
 
 ```text
  /dev/snd/pcmC0D0p ──ioctl/write/poll──► Card { Mutex<Inner { VirtioSound, [PcmSlot { PcmRuntime, DevStream }] }> }
@@ -435,15 +454,19 @@ an audio server come later.
   the stream stops in XRUN), sends the next periods and wakes waiters.
 
 ```text
-sound: 00:03.0: virtio-sound, 0 jacks, 2 streams, 0 channel maps; queues [64, 64, 64, 64], 21 output messages in flight
-sound: stream 0: output, 1-2 channels, rates [5512, 8000, ..., 384000], ALSA formats [0, 1, 2, 4, 10, 12, 14], features 0x0
-sound: card 0: /dev/snd/controlC0, pcmC0D0p; MSI-X entry 0 -> vector 0x32
+sound: 00:03.0: virtio-sound, 0 jacks, 2 streams, 0 channel maps; queues [64, 64, 64, 64], 21 output and 21 input messages in flight
+sound: stream 0: output, 1-2 channels, rates [5512, 8000, ..., 384000], formats 0xe0078, features 0x0
+sound: output device stream: S16, 2 channels, 48000 Hz, periods of 960 frames x 4
+sound: card 0: /dev/snd/controlC0, pcmC0D0p, pcmC0D0c; MSI-X entry 0 -> vector 0x33
 ```
 
-The `sound` boot test runs `/bin/pcm-tone` (`tests/linux/audio/pcm_tone.c`)
-as init with `-device virtio-sound-pci` on QEMU's `wav` audio backend and
-checks the recording on the host: 100 ms windows whose frequency (zero
-crossings) and level (RMS) are each tone's, on both channels.
+The `sound` boot tests run `/bin/pcm-tone` (`tests/linux/audio/pcm_tone.c`)
+as init with `-device virtio-sound-pci` (or `intel-hda` + `hda-duplex`) on
+QEMU's `wav` audio backend and check the recording on the host: 100 ms
+windows whose frequency (zero crossings) and level (RMS) are each tone's,
+on both channels, and for two programs playing at once each tone's level
+from one DFT bin. Capture runs on the `none` backend (silence in real
+time), since `wav` has no input.
 
 ## Input
 
@@ -970,6 +993,52 @@ and a switch to a larger size and back keeps the picture. Boot group
 `virtio-gpu` then compares a QMP screenshot of the scanout with the boot
 screen.
 
+### DRM/KMS
+
+`/dev/dri/card0` (226:0) and `/dev/dri/renderD128` (226:128) are a Linux
+DRM device on the same virtio GPU
+([ADR 0108](adr/0108-drm-kms-device-on-virtio-gpu.md)), for KMS clients
+(compositors, Mesa's GBM, `modetest`):
+
+```
+ ioctl / read / poll / mmap on /dev/dri/*  (kernel/src/drm.rs: DrmFile, DmaBuf, drm-vblank thread)
+          │
+          ▼
+ poly_drm::Device      uapi decode (min(user, kernel) size) ─▶ master / render-node checks
+   CRTC i ─ encoder i ─ connector i ─ primary plane i   (one per virtio scanout), properties, blobs
+   GEM objects (dumb buffers: contiguous frames) ─▶ framebuffers ─▶ State ──commit──▶ Hardware
+   per-file events (flip complete, vblank) on a virtual vblank clock per CRTC (the mode's refresh)
+          │ KernelHw: display::with_gpu
+          ▼
+ virtio-gpu  resource 0x1000 + fb ID ── TRANSFER_TO_HOST_2D, SET_SCANOUT, RESOURCE_FLUSH
+             (the console's resource waits: display::console_yield / console_restore)
+```
+
+- **`poly-drm`** (host-tested, `no_std` + `alloc`): the `drm.h` /
+  `drm_mode.h` structures and request numbers, modes from EDID and CVT,
+  the object model, legacy and atomic modesetting through one commit,
+  dumb buffers and their fake mmap offsets, events, master and render
+  nodes, PRIME through an `Fds` trait.
+- **Mappings** of a dumb buffer or dma-buf map its frames themselves
+  (`SharedFrame::device`), so the client draws into what the device copies.
+- **The console yields** while a DRM master shows its framebuffers and
+  comes back when the master closes; `display::flush` (the terminal,
+  fbdev) sends nothing to the device meanwhile.
+- **sysfs**: `/sys/dev/char/226:*`, `/sys/class/drm/*` and the PCI
+  function's identity files, for device discovery.
+
+```text
+drm: /dev/dri/card0 (226:0) and renderD128 (226:128) on virtio-gpu pci:0000:00:02.0: 1 CRTC(s), dumb buffers, PRIME, atomic
+display: virtio-gpu: a DRM client took the display; the console waits
+display: virtio-gpu: the console has the display again
+```
+
+Boot group `drm` runs the kernel's DRM tests, then
+`tests/linux/drm/drm_kms.c` as init (mode set, page flip with an event,
+`DIRTYFB`, vblank waits, an atomic flip, PRIME), comparing a QMP
+screenshot of the scanout at each step with the pattern it drew, and the
+boot screen after it closed.
+
 ## Wayland compositor
 
 The compositor's groundwork (Phase 6, ADR 0106) lives in user space, on
@@ -1000,15 +1069,46 @@ the Linux personality, with its logic in a host-tested crate:
 - **Timing:** frames at most every 1/60 s when something changed or a
   client waits; frame callbacks and `wp_presentation` feedback are
   answered with them. Real vsync comes with the display driver.
-- **Input:** `seat::InputSource` is the input stack's interface; for now
-  the seat only has capabilities, and clicks drive the frame (raise,
-  activate, close).
+- **Input:** `seat::InputSource` is the input stack's interface;
+  `Server::handle_input` routes pointer and keyboard events to clients and
+  drives the frame (raise, activate, close, move); see "The desktop" below.
 - **Socket:** `$XDG_RUNTIME_DIR/wayland-0`, else `/run/user/<uid>/wayland-0`.
   Shared memory comes from files in `/dev/shm` (tmpfs, `MAP_SHARED`);
   `memfd_create` is not implemented yet.
 
 The boot test `wayland` runs `poly-compositor --exec /bin/wl-client` as the
 first process; `cargo xtask boot-tests wayland` runs it alone.
+
+## The desktop
+
+`poly-compositor --desktop` puts the compositor on the screen with input
+and Poly's first shell (Phase 6, [ADR 0107](adr/0107-desktop-fbdev-input-routing-and-shell.md)):
+
+```
+ /dev/input/event* ──read──▶ evdev::Translator ──InputEvent──▶ Desktop::route ─┬─▶ poly_shell::Shell (launcher keys, presses)
+   (EVIOCGRAB)                 frames at SYN_REPORT                           └─▶ Server::handle_input
+                                                                                  wl_pointer / wl_keyboard routing,
+                                                                                  focus, title-bar moves, cursor
+ Server::render_with(fb, below = shell wallpaper + ridge, above = launcher)
+        │ damage only
+        ▼
+ FbFramebuffer: /dev/fb0 mmap (MAP_SHARED) ──FBIO_POLY_DAMAGE per rectangle──▶ kernel fbdev.rs
+                                                     copies the rectangle from the shadow pages
+                                                     ─▶ display::draw ─▶ virtio-gpu transfer + flush
+```
+
+- **`/dev/fb0`** (char 29, 0; `kernel/src/fbdev.rs`, ABI in the host-tested
+  `poly-fbdev`): screen information, `FBIOPAN_DISPLAY`, `FBIOBLANK`, read,
+  write, and `mmap` of a shadow frame buffer (an `AnonShared` memory
+  object); Poly's `FBIO_POLY_DAMAGE` shows one rectangle.
+- **Keymaps** come from `poly_input::xkb` (XKB text generated from Poly's
+  layouts), in an unlinked file whose descriptor each `wl_keyboard` gets.
+- **The shell** (`crates/poly-shell`, host-tested) is two compositor
+  layers: the ridge (24 px status strip with the clock) and wallpaper
+  under the windows, the launcher (centred input box filtering `.desktop`
+  files and built-ins) over them.
+- `cargo xtask desktop` boots into it; boot group `desktop` drives it with
+  QMP (screenshots, typing, a client launched, clicks, a drag).
 
 ## Screen terminal
 
@@ -1351,7 +1451,7 @@ in [ADR 0038](adr/0038-linux-processes-in-the-kernel-and-the-first-program.md).
   and `AT_ENTRY` saying where both are; the loader then maps the shared
   libraries itself with `openat`, `mmap` and `mprotect`. `madvise`
   (`sys/madvise.rs`, `Memory::advise`) gives a finished thread's stack
-  back. `rseq` stays `ENOSYS`. The boot tests run dynamically linked C and
+  back. `rseq` registers and aborts restartable sequences (ADR 0111). The boot tests run dynamically linked C and
   C++ programs built with the host's compiler against the host's C library
   (`tools/xtask/src/dynamic.rs`).
 - **The first program and the test-run protocol** (ADR 0027).
@@ -1719,6 +1819,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
 | Keyboard end to end: keys typed through the QEMU monitor (`sendkey`) decode to the expected text, US and Swiss German | `kernel_test!` + `poly.test.keyboard=<text>`, `poly.keymap` | `cargo xtask test` |
 | What the screen shows: a screenshot through QEMU's QMP socket, compared pixel for pixel with the boot screen `poly-gfx` draws on the host | `cargo xtask` (`screenshot_test`) | `cargo xtask test` |
 | Wayland: the wire format, the generated protocol tables, the server's dispatch and protocol errors, the configure sequence, SHM buffers, damage, decorations, HiDPI, popups, presentation; small scenes rendered and compared pixel for pixel. On Poly: `poly-compositor` as init with the C client `wl-client` (SHM through `SCM_RIGHTS`, xdg_toplevel, frame callback, its pixels found in the compositor's picture) | `#[test]` in `poly-wayland`, `poly-compositor`, `xtask` (`wayland.rs`); boot group `wayland` (`compositor.rs`) | `cargo xtask test` |
+| The desktop: fbdev screen information, requests, damage spans; XKB keymaps from the layouts; input routing (pointer enter/motion/buttons/wheel with implicit grabs, keyboard focus, keys and modifiers, title-bar moves, the cursor); the shell (desktop files, search, launcher keys, clock, drawing, layout); evdev translation. On Poly: `/dev/fb0` shows written and damaged pixels; the desktop on virtio-gpu with a client launched from the launcher and driven by QMP input | `#[test]` in `poly-fbdev`, `poly-input`, `poly-wayland`, `poly-shell`, `poly-compositor`, `xtask` (`desktop.rs`); kernel test `fbdev::*`; boot group `desktop` (`desktop.rs`) | `cargo xtask test` |
 | The screen terminal: a command typed through the QEMU monitor runs in the screen's shell; screenshots compared with the output row and the status bar drawn on the host | `cargo xtask` (`terminal::boot_test`) | `cargo xtask test` |
 | The persistent root disk (made by `cargo xtask` from the host's programs, ext4, booted through BusyBox's init and a chroot into its bash): coreutils pipelines under `bash -c`, job control and Ctrl-C, file work on the disk, 32 MiB through `dd`; Python scripts (stdlib modules, `subprocess`, threads, `mmap` resized and flushed, a growing buffer through `mremap`, record locks and flock across processes, SQLite, signals, the terminal's size, children's CPU time, `posix_spawn`); gcc compiling and linking programs onto the disk and running them; `e2fsck -fn` and the program read back on the host; a second boot finds what the first wrote. Lock table and remap kernel tests | `tools/xtask/src/rootdisk.rs`, `kernel_test!` in `fs/locks.rs`, `user/memory/remap.rs` | `cargo xtask test` (alone: `cargo xtask root-disk-test`) |
 | Conformance vs. real OS (diff runner): the `tests/linux/` corpus and spec tests on real Linux and on Poly, compared per test ([AGENT_PIPELINE.md](AGENT_PIPELINE.md)) | `tools/pipeline` | `cargo xtask pipeline diff [--target poly]`; in `cargo xtask ci`: Linux against Linux (`selfcheck`) and Poly against Linux for the tests in `tests/linux/poly-pass.txt` (`polycheck`) |

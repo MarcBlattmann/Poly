@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/preadv2              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); tmpfs-specific checks on a tmpfs the test mounts; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  preadv2(fd, iov, iovcnt, pos_l, pos_h, flags) is system call 327. It is
+  preadv (295) with two additions: an offset of -1 means "the file position"
+  (used and advanced, exactly like readv, so non-seekable files such as pipes
+  can be read), and a flags argument of RWF_* bits that modify this one
+  call. With flags 0 and an offset >= 0 it is exactly preadv.
+returns:
+  success: "bytes read (0 at the end)"
+  offset_minus1: "reads at the file position and advances it (5 bytes twice from a 10-byte file: \"01234\", \"56789\", then 0); pos_h is ignored; a pipe can be read this way"
+  explicit_offset: "as preadv: the position is not used or moved"
+  flags_accepted: "RWF_HIPRI (1), RWF_DSYNC (2), RWF_SYNC (4), RWF_APPEND (0x10) and RWF_NOAPPEND (0x20) are accepted on a read and change nothing about it (also combined)"
+  rwf_nowait: "RWF_NOWAIT (8): never wait. On an empty pipe EAGAIN; with data the data; with the writer gone 0. On a tmpfs file EOPNOTSUPP (tmpfs does not support it; other file systems read from the page cache or say EAGAIN)"
+  newer_flags: "RWF_ATOMIC (0x40) and RWF_DONTCACHE (0x80) were EOPNOTSUPP on tmpfs reads; RWF_NOSIGNAL (0x100, 6.18) was accepted. These are kernel-version and file-system dependent and are not tested"
+errors:
+  bad_offset: "EINVAL (22): an offset < -1 (-2, INT64_MIN)"
+  unknown_flags: "EOPNOTSUPP (95): any bit no kernel defines (0x4000, 0x80000000, 0x40000000|RWF_DSYNC)"
+  explicit_offset_on_pipe: "ESPIPE (29): an offset >= 0 on a pipe"
+  others: "as preadv: EINVAL for iovcnt > 1024, EBADF (not open, O_WRONLY), EISDIR (also with -1), EFAULT"
+  order: "(1) EINVAL for an offset < -1; (2) EBADF; (3) EOPNOTSUPP for unknown flags (before EISDIR: a directory with flag 0x4000 is EOPNOTSUPP); (4) as preadv"
+side_effects: "with -1 the file position advances; may update atime"
+threading: "with -1 the position is the open file description's, as for read"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "RWF_NOWAIT never sleeps"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

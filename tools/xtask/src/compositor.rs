@@ -60,19 +60,24 @@ pub fn build_compositor() -> Result<Vec<u8>> {
 
 /// Build the C client statically: the ELF, or why not.
 pub fn build_client() -> std::result::Result<Vec<u8>, String> {
+    build_c(CLIENT, "wl-client")
+}
+
+/// Build the C program `source` statically as `name`: the ELF, or why not.
+pub fn build_c(source: &str, name: &str) -> std::result::Result<Vec<u8>, String> {
     let out = root().join(OUT);
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let binary = out.join("wl-client");
+    let binary = out.join(name);
     let cc = std::env::var("CC").unwrap_or_else(|_| "cc".into());
     let built = Command::new(&cc)
         .current_dir(root())
         .args(["-static", "-O2", "-Wall", "-Wextra", "-Werror", "-Wl,--build-id=none", "-o"])
         .arg(&binary)
-        .arg(CLIENT)
+        .arg(source)
         .output()
         .map_err(|e| format!("no C compiler ({cc}: {e})"))?;
     if !built.status.success() {
-        return Err(format!("{CLIENT} did not build statically: {}", String::from_utf8_lossy(&built.stderr).trim()));
+        return Err(format!("{source} did not build statically: {}", String::from_utf8_lossy(&built.stderr).trim()));
     }
     std::fs::read(&binary).map_err(|e| format!("{}: {e}", binary.display()))
 }

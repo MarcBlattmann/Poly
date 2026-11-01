@@ -160,6 +160,16 @@ impl Linux {
         signal::exit_to_user(kernel)
     }
 
+    /// Called by the kernel before a thread with an rseq(2) registration
+    /// ([`LinuxKernel::rseq_registered`]) returns to user mode after it
+    /// was switched out (preempted, blocked or moved to another CPU), and
+    /// before [`exit_to_user`](Self::exit_to_user): aborts a restartable
+    /// sequence it was in and brings its CPU number up to date (ADR 0111,
+    /// [`sys::rseq::resume`]). A failure queues `SIGSEGV`.
+    pub fn rseq_resume(kernel: &mut dyn LinuxKernel) {
+        sys::rseq::resume(kernel);
+    }
+
     /// Called by the kernel when a thread of a Linux process exits, with
     /// `shares_memory` set if its address space has other users: the
     /// robust futex list and `clear_child_tid`. See

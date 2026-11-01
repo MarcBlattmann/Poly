@@ -17,7 +17,7 @@
 //! Everything sits behind one lock per file system. `readdir` copies a batch
 //! of entries out and calls the VFS's callback with the lock released.
 
-use crate::fs::{Clock, DirEntry, FileSystem, FsInfo, NewNode, RenameFlags};
+use crate::fs::{Clock, DirEntry, FALLOC_FL_KEEP_SIZE, FALLOC_FL_PUNCH_HOLE, FileSystem, FsInfo, NewNode, RenameFlags};
 use crate::sync::SpinMutex;
 use crate::xattr::{SetMode, XATTR_LIST_MAX, Xattrs};
 use crate::{Attr, DeviceId, Errno, FileType, Ino, MAX_FILE_SIZE, NAME_MAX, Result, SetAttr, SetTime, Timespec};
@@ -516,6 +516,39 @@ impl Pages {
         self.size = self.size.max(offset + buf.len() as u64);
     }
 
+    /// Pages of `[offset, end)` (not empty) the file does not hold yet.
+    fn missing_pages(&self, offset: u64, end: u64) -> u64 {
+        (offset / PAGE..end.div_ceil(PAGE)).filter(|i| !self.pages.contains_key(i)).count() as u64
+    }
+
+    /// Allocates the pages of `[offset, end)` (zero-filled); the size
+    /// stays.
+    fn allocate(&mut self, offset: u64, end: u64) {
+        for i in offset / PAGE..end.div_ceil(PAGE) {
+            self.pages.entry(i).or_insert_with(|| vec![0; PAGE as usize].into_boxed_slice());
+        }
+    }
+
+    /// Makes `[offset, end)` read as zeros: the pages wholly inside are
+    /// freed, the bytes of the pages at its edges zeroed. Returns how many
+    /// pages were freed.
+    fn punch(&mut self, offset: u64, end: u64) -> u64 {
+        let before = self.pages.len();
+        let (first_whole, end_whole) = (offset.div_ceil(PAGE), end / PAGE);
+        self.pages.retain(|&i, _| i < first_whole || i >= end_whole);
+        for i in [offset / PAGE, end.saturating_sub(1) / PAGE] {
+            if (first_whole..end_whole).contains(&i) {
+                continue;
+            }
+            if let Some(page) = self.pages.get_mut(&i) {
+                let start = offset.max(i * PAGE) - i * PAGE;
+                let stop = end.min((i + 1) * PAGE) - i * PAGE;
+                page[start as usize..stop as usize].fill(0);
+            }
+        }
+        (before - self.pages.len()) as u64
+    }
+
     /// Sets the size; returns how many pages were freed. Bytes past a
     /// smaller size are zeroed so that growing again reads zeros.
     fn truncate(&mut self, size: u64) -> u64 {
@@ -905,6 +938,43 @@ impl FileSystem for Tmpfs {
         node.xattrs.remove(name)?;
         node.ctime = now;
         Ok(())
+    }
+
+    /// Modes 0 and `KEEP_SIZE` allocate pages (`ENOSPC` beyond the
+    /// mount's `size=`; the file is unchanged then), `KEEP_SIZE |
+    /// PUNCH_HOLE` frees them; the other modes are `EOPNOTSUPP` (the spec
+    /// of fallocate: `tmpfs_modes`). Growing the size moves mtime and
+    /// ctime.
+    fn fallocate(&self, ino: Ino, mode: u32, offset: u64, len: u64) -> Result<()> {
+        let end = offset.checked_add(len).filter(|&e| e <= MAX_FILE_SIZE).ok_or(Errno::EFBIG)?;
+        if len == 0 {
+            return Err(Errno::EINVAL);
+        }
+        let mut inner = self.inner.lock();
+        match mode {
+            0 | FALLOC_FL_KEEP_SIZE => {
+                let new_pages = file(inner.node(ino)?)?.missing_pages(offset, end);
+                self.check_space(&inner, new_pages)?;
+                let now = self.clock.now();
+                let n = inner.node_mut(ino)?;
+                let pages = file_mut(n)?;
+                pages.allocate(offset, end);
+                let grows = mode == 0 && end > pages.size;
+                if grows {
+                    pages.size = end;
+                    n.mtime = now;
+                    n.ctime = now;
+                }
+                inner.pages += new_pages;
+                Ok(())
+            }
+            m if m == FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE => {
+                let freed = file_mut(inner.node_mut(ino)?)?.punch(offset, end);
+                inner.pages -= freed;
+                Ok(())
+            }
+            _ => Err(Errno::EOPNOTSUPP),
+        }
     }
 
     fn readlink(&self, ino: Ino) -> Result<Vec<u8>> {

@@ -33,13 +33,13 @@ impl Files {
     /// Every open descriptor with its file and close-on-exec flag, in
     /// increasing order.
     pub fn fd_list(&self) -> Vec<(Fd, Arc<OpenFile>, bool)> {
-        self.fds.lock().iter().map(|(fd, f, cloexec)| (fd, f.clone(), cloexec)).collect()
+        self.table().lock().iter().map(|(fd, f, cloexec)| (fd, f.clone(), cloexec)).collect()
     }
 
     /// Set the soft `RLIMIT_NOFILE`: descriptors at or above it cannot be
     /// opened.
     pub fn set_fd_limit(&self, limit: usize) {
-        self.fds.lock().set_limit(limit);
+        self.table().lock().set_limit(limit);
     }
 
     /// The node `fd` is open on, or the working directory for
@@ -127,7 +127,7 @@ impl Files {
         if file.is_path_only() {
             return Err(Errno::EBADF);
         }
-        file.node().chmod(&self.cred(), perm)
+        file.chmod(&self.cred(), perm)
     }
 
     /// `truncate(2)`.

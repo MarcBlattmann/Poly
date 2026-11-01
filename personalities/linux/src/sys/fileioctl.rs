@@ -57,6 +57,11 @@ pub fn ioctl(k: &mut dyn LinuxKernel, fd: i32, request: u32, arg: u64) -> Option
 }
 
 fn fionread(k: &mut dyn LinuxKernel, fd: i32, arg: UserPtr) -> Option<SysResult> {
+    // A file object (an inotify instance on its anonymous inode, ...) is
+    // never a regular file, whatever type its inode has.
+    if k.file_io().is_some_and(|io| io.is_object(fd).unwrap_or(false)) {
+        return None;
+    }
     let f = k.fs()?;
     let st = f.statat(fd, b"", true).ok()?.stat;
     if st.file_type() != mode::S_IFREG || f.status_flags(fd).ok()? & O_PATH != 0 {

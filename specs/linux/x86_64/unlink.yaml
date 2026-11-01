@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/unlink               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  unlink(path) is system call 87. It removes one name of a non-directory and
+  returns 0. It is unlinkat(AT_FDCWD, path, 0) (263). The last component is
+  never followed: a symbolic link is removed itself, never its target. The
+  file itself lives on while it has other names or open descriptors; its
+  st_nlink counts the names. The file's own mode and owner do not matter
+  (outside sticky directories); write and search permission on the parent
+  do.
+returns:
+  success: "0; the name is gone at once and can be reused (a new file there is a different inode)"
+  hard_links: "the other names stay; st_nlink drops by one; the file's ctime changes, its mtime does not"
+  open_descriptors: "a descriptor open on the last name keeps the file: fstat shows st_nlink 0 and the old size, reads and writes keep working; the storage goes when the last descriptor closes"
+  symbolic_links: "the link is removed, whatever it points to (file, directory, nothing, itself); the target is untouched"
+  other_kinds: "FIFOs, sockets and device nodes are removed like files; a file with mode 0 too"
+  times: "the parent's mtime and ctime change, its atime does not"
+  relative_paths: "relative to the working directory; links on the way are followed (D/link-to-dir/g removes sub/g)"
+errors:
+  is_a_directory: "EISDIR (21): the name is a directory, also with a trailing slash, and the last components \".\" and \"..\" (D/sub/., D/sub/.., \".\") and \"/\""
+  trailing_slash: "a trailing slash after a name that is not a directory: ENOTDIR (20) for a regular file, and for a symbolic link (to a file, to a directory, dangling; the link is not followed and stays); ENOENT (2) for a missing name; D/f/. is ENOTDIR too"
+  missing: "ENOENT (2): a missing name or directory on the way, a dangling link on the way (D/dangling/x), the empty path"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components (D/f/x)"
+  loop: "ELOOP (40): a looping link on the way (D/loop/x); a looping link as the last component is simply removed"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): NULL or an unmapped address"
+  permission: "EACCES (13): no write permission on the parent, or no search permission on a directory on the way (not for root); a missing name in a parent the caller may search but not write is ENOENT. In a world-writable non-sticky directory anyone may remove anyone's file, also one with mode 0"
+  sticky: "EPERM (1): in a sticky (01000) parent, a caller without CAP_FOWNER who owns neither the file nor the parent; the file's owner, the parent's owner and root may remove it"
+  busy: "EBUSY (16): something is mounted on the name (a bind mount onto a file), also for root"
+  read_only_fs: "EROFS (30): on a read-only mount, also for a missing name"
+  order: "(1) the path string: EFAULT, ENAMETOOLONG (4096+), ENOENT (empty); (2) the components before the last: ENOENT, ENOTDIR, ELOOP, EACCES (search), ENAMETOOLONG (D/nope/<256 bytes> is ENOENT, D/f/<256 bytes> ENOTDIR); (3) a last component \".\" or \"..\": EISDIR (before EROFS and before write permission: D/ro/subdir/. is EISDIR for a user who may not write D/ro/subdir); (4) EROFS (also for a missing name); (5) the last name: ENAMETOOLONG, ENOENT, then the trailing-slash errors (ENOTDIR for D/ro/mine/ although the user may not write D/ro); (6) EACCES (write on the parent; a directory in a parent the user may not write is EACCES, not EISDIR), EPERM (sticky), EISDIR (a directory), EBUSY"
+side_effects: "the file's link count drops (its ctime changes when names remain); the parent's mtime/ctime change"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

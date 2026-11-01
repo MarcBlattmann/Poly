@@ -364,11 +364,25 @@ pub fn fchmod(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     fs(k)?.fchmod(fd, a.uint(1) & 0o7777).map(|()| 0)
 }
 
-/// truncate(path, length): "EINVAL The argument length is negative".
+/// truncate(path, length): "EINVAL The argument length is negative",
+/// before the path is looked at. Growing past `RLIMIT_FSIZE` is `EFBIG`
+/// with `SIGXFSZ`, after every error of the path and the file (the spec
+/// of truncate: type, `EROFS`, `EACCES`, then `EFBIG`).
 pub fn truncate(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let path = nonempty_path(k, a.ptr(0))?;
     let len = u64::try_from(a.long(1)).map_err(|_| Errno::EINVAL)?;
-    crate::sys::fsize::check_truncate(k, len)?;
+    let path = nonempty_path(k, a.ptr(0))?;
+    if crate::sys::fsize::check_truncate(k, len).is_err() {
+        // The file's own errors first: its type, then a read-only mount
+        // and write permission as the truncation would check them.
+        let st = fs(k)?.statat(AT_FDCWD, &path, true)?;
+        match st.stat.file_type() {
+            crate::abi::mode::S_IFDIR => return Err(Errno::EISDIR),
+            crate::abi::mode::S_IFREG => {}
+            _ => return Err(Errno::EINVAL),
+        }
+        fs(k)?.accessat(AT_FDCWD, &path, access::W_OK, true, true)?;
+        return crate::sys::fsize::too_big_signal(k);
+    }
     fs(k)?.truncate(&path, len).map(|()| 0)
 }
 

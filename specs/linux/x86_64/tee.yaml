@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/tee                  # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; observed as root with all capabilities and the tests also run as uid/gid 65534 without capabilities, umask 022; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  tee(fd_in, fd_out, len, flags) (syscall 276) duplicates up to len bytes
+  from the pipe fd_in (its read end) into the pipe fd_out (its write
+  end) without consuming them, and returns how many bytes it copied.
+  The copy starts at fd_in's current read position (bytes already read
+  are gone and not copied), spans as many of fd_in's buffers as needed,
+  may stop inside a buffer (len 4 of a 10-byte buffer copies 4), and is
+  limited by the room in fd_out (16 buffers in a fresh pipe: from a pipe
+  of page-sized buffers at most 65536 bytes). fd_in keeps everything; a
+  later read, splice or tee of fd_in sees the same bytes again. Flags as
+  for splice: SPLICE_F_MOVE 1, SPLICE_F_NONBLOCK 2, SPLICE_F_MORE 4,
+  SPLICE_F_GIFT 8 (linux/splice.h); only NONBLOCK has an effect.
+  Arguments: fd_in, fd_out 32-bit ints, flags a 32-bit unsigned int
+  (upper register halves ignored), len a 64-bit size_t (any value; bit 63
+  set is fine).
+returns:
+  success: "bytes copied (> 0): min(len, bytes in fd_in, room in fd_out)"
+  input_kept: "fd_in's contents are unchanged (FIONREAD before and after equal)"
+  after_partial_read: "after reading 3 of 13 bytes from fd_in, tee copies the remaining 10"
+  across_buffers: "two writes of 3 and 4 bytes into fd_in: tee with len 5 copies 'aaabb'"
+  len_0: "0, when flags are valid (even with bad descriptors)"
+  input_eof: "0 when fd_in is empty and has no writers, provided fd_out has room (a full fd_out is waited for first: EAGAIN with SPLICE_F_NONBLOCK, otherwise the call blocks)"
+  fan_out: "two tees of the same bytes into two pipes both get them; the input still holds them"
+errors:
+  bad_flags: "EINVAL (22): flags outside 0xf (low 32 bits); checked first, even before len 0"
+  bad_fd: "EBADF (9): fd_in not open, or not open for reading (a pipe's write end, an O_WRONLY file); fd_out not open, or not open for writing (a pipe's read end)"
+  not_pipes: "EINVAL: fd_in or fd_out is not a pipe (regular file, AF_UNIX socket), checked after the EBADF checks"
+  same_pipe: "EINVAL: fd_in and fd_out are the two ends of the same pipe"
+  would_block: "EAGAIN (11): fd_in empty with a writer, or no free buffer in fd_out, and SPLICE_F_NONBLOCK given or O_NONBLOCK on either pipe descriptor (on fd_in or on fd_out)"
+  broken_pipe: "EPIPE (32): fd_out has no readers; SIGPIPE sent once per call (kills at default disposition); fd_in unchanged"
+  interrupted: "EINTR (4): a blocking tee interrupted by a signal whose handler lacks SA_RESTART"
+  order: "flags EINVAL; len 0 -> 0; fd_in EBADF (missing or not readable); fd_out EBADF (missing or not writable); not pipes / same pipe EINVAL; then wait for input (EAGAIN), wait for room (EAGAIN), EPIPE"
+side_effects: "fd_out gains a copy of the bytes; fd_in is not changed. SIGPIPE on EPIPE."
+threading: "blocking waits end when another task writes into fd_in / frees a buffer of fd_out, or on a signal; no thread-specific behaviour"
+ordering:
+  - "a blocking tee on an empty fd_in returns as soon as a writer puts bytes in (copies what arrived, 4 of len 100)"
+  - "a blocking tee into a full fd_out returns once a reader frees a whole buffer"
+  - "the usual pattern tee(in, copy) then splice(in, file): copy and file get the same bytes, in is empty afterwards"
+timing:
+  typical: "microseconds"
+  guarantees: "blocks only on an empty fd_in (with writers) or a full fd_out, until that changes or a signal arrives"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: tee checks flags before len 0 (splice checks len 0 first). The
+# copied buffers share their pages with fd_in's buffers: data read from
+# either pipe is the same bytes. Constants: linux/splice.h,
+# asm-generic/fcntl.h (O_NONBLOCK, F_SETPIPE_SZ in linux/fcntl.h).

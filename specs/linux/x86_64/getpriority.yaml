@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/getpriority          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_SCHED_AUTOGROUP not set; tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /; RLIMIT_NICE 0/0"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  getpriority(which, who) (syscall 140) returns the scheduling priority
+  of a thread, process group or user in the raw kernel form 20 - nice,
+  so 1 (nice 19) .. 40 (nice -20); it never returns a negative value on
+  success (the C library turns it back into the nice value, the raw
+  syscall does not). which is PRIO_PROCESS 0, PRIO_PGRP 1 or PRIO_USER
+  2 (linux/resource.h). who 0 means the caller: the calling thread, the
+  caller's process group, or the caller's real uid. With PRIO_PROCESS
+  who is a thread id (a process id names the main thread); PRIO_PGRP
+  and PRIO_USER cover every thread of every matching process and return
+  the highest value (lowest nice) among them. which and who are 32-bit
+  ints (upper halves ignored). No permission is needed. A test program
+  starts at nice 0 (20); Poly's test init starts programs at nice 0.
+returns:
+  process: "20 - nice of one thread: 20 at nice 0, 15 at nice 5, 1 at nice 19, 40 at nice -20; who 0, getpid() and gettid() of a single-threaded caller agree"
+  per_thread: "the nice value is per thread: a thread at nice 7 reads 13 by its tid (and by who 0 inside it) while the main thread (who 0 or the process id) reads 20"
+  pgrp: "the maximum over every thread of every process in the group: thread nice 1, member nice 2, leader nice 6 -> 19; without the thread 18; who 0 is the caller's group; who = group id works the same"
+  user: "the maximum over every thread of every process whose real uid is who (effective uid does not count: a process with real 1111 effective 2222 is found as 1111, 2222 is ESRCH); who 0 is the caller's real uid"
+  other_tasks: "children, zombies (exited, not reaped: the value they had) and other users' tasks are readable"
+  width: "which (1<<32)|0 is PRIO_PROCESS, who (3<<32)|pid is pid"
+errors:
+  bad_which: "EINVAL (22): which not 0, 1 or 2 (3, -1, INT_MAX); checked before who (EINVAL also with a who nothing has)"
+  not_found: "ESRCH (3): no thread with the id, no process in the group (also the pid of a process that is not a group leader), no process with the real uid, a negative who (-1 is not special for any which), a reaped child"
+  order: "EINVAL (which), then ESRCH"
+side_effects: none
+threading: "reads per-thread nice values"
+ordering: []
+timing:
+  typical: "microseconds for PRIO_PROCESS; PRIO_PGRP/PRIO_USER walk the matching processes"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the tests change nice values with setpriority (141), always in
+# child processes (and process groups of their own for PRIO_PGRP, so the
+# runner's group is never touched); PRIO_USER is only tested as root in
+# children that become an otherwise unused uid (54321). Non-root callers
+# can only raise nice values, so tests that must pass as any user only
+# raise them, in tasks that start at nice 0.

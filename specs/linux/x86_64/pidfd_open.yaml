@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pidfd_open           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  pidfd_open(pid, flags) (syscall 434) returns the lowest free
+  descriptor referring to the process pid (a pidfd). pid is a 32-bit int
+  and flags a 32-bit unsigned value (upper halves ignored). flags:
+  PIDFD_NONBLOCK (= O_NONBLOCK 04000) and PIDFD_THREAD (= O_EXCL 0200,
+  refer to one thread rather than the process). The descriptor is open
+  O_RDWR (| O_NONBLOCK, | O_EXCL as given) and always FD_CLOEXEC; fstat
+  st_mode 0700 with no type bits; /proc/self/fd/<fd> reads
+  "anon_inode:[pidfd]". No permission is needed (any pid, including the
+  caller's own and other users' processes, e.g. pid 1). A process that
+  has exited but not been reaped (zombie) can still be opened. poll on a
+  pidfd reports nothing while the process runs and POLLIN once it has
+  exited (also while it is a zombie). waitid(P_PIDFD 3, fd, ...) waits
+  for and reaps that child. The pidfd stays a valid descriptor after the
+  process is reaped (waitid on it is then ECHILD), and pidfd_open of the
+  reaped pid is ESRCH. Without PIDFD_THREAD the pid must be a thread
+  group leader (process id): a non-leader thread's id is ENOENT; with
+  PIDFD_THREAD any thread id works.
+returns:
+  success: "new descriptor (lowest free)"
+  state: "F_GETFL O_RDWR (| O_NONBLOCK with PIDFD_NONBLOCK, | O_EXCL with PIDFD_THREAD); F_GETFD FD_CLOEXEC always; st_mode 0700; link anon_inode:[pidfd]"
+  poll: "0 while running; POLLIN after exit (running child: poll timeout 0 gives 0; zombie: POLLIN)"
+  waitid: "waitid(P_PIDFD, fd, &si, WEXITED) = 0 with si_pid = pid, si_code CLD_EXITED, si_status = exit code; again: ECHILD"
+  widths: "pid (1<<32)|pid and flags 1<<32 work as pid and 0"
+errors:
+  bad_flags: "EINVAL (22): any flag other than O_NONBLOCK and O_EXCL (O_CLOEXEC, 1, O_RDWR, 0x80000000, O_NONBLOCK|1); checked first (bad flags with a missing pid is EINVAL)"
+  bad_pid: "EINVAL (22): pid 0 or negative"
+  no_process: "ESRCH (3): no process with that pid (unused number, or already reaped)"
+  not_leader: "ENOENT (2): pid is a thread that is not its thread group's leader, without PIDFD_THREAD"
+  no_descriptor: "EMFILE / ENFILE / ENOMEM: not tested"
+  order: "flags, pid range, lookup (ESRCH / ENOENT)"
+side_effects: "a new descriptor; no effect on the process"
+threading: "poll readiness follows the whole process (thread group) exiting"
+ordering: []
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: PIDFD_NONBLOCK, PIDFD_THREAD from linux/pidfd.h; P_PIDFD from
+# linux/wait.h. pidfd_open's pid argument is not masked by the trace, so
+# the tests that pass pids compare syscall names only; the two-process
+# test compares output only. All tests pass as root and as an
+# unprivileged user.

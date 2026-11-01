@@ -6,9 +6,12 @@
 //! - [`hw`]: hardware parameters (`struct snd_pcm_hw_params`), their
 //!   refinement (`HW_REFINE`) against what the device can do, and the
 //!   choice of one configuration (`HW_PARAMS`).
-//! - [`pcm`]: the runtime of a playback substream: states, pointers,
-//!   thresholds, underruns, drains, over a [`pcm::PcmBackend`] the kernel
-//!   implements for its sound device.
+//! - [`pcm`]: the runtime of a playback or capture substream: states,
+//!   pointers, thresholds, underruns and overruns, drains, mmap access
+//!   (the application pointer moved through `SYNC_PTR` or the mapped
+//!   control page), over a [`pcm::PcmBackend`] the kernel implements.
+//! - [`ctl`]: mixer controls on the control device (`ELEM_LIST`,
+//!   `ELEM_INFO`, `ELEM_READ`, `ELEM_WRITE`, change events).
 //!
 //! The kernel's sound module puts these behind character devices
 //! (`/dev/snd/controlC0`, `/dev/snd/pcmC0D<n>p`), copies the structures
@@ -18,6 +21,7 @@
 //! parameters", "PCM states").
 
 pub mod abi;
+pub mod ctl;
 pub mod hw;
 pub mod pcm;
 

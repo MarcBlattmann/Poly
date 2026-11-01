@@ -1,19 +1,33 @@
 //! `poly-compositor`: Poly's Wayland compositor for the Linux personality
-//! (ADR 0106).
+//! (ADR 0106, 0107).
 //!
 //! It listens on `$XDG_RUNTIME_DIR/<socket>` (`wayland-0` by default) as
 //! the Wayland book's "Wayland display" describes, hands every client's
 //! bytes and file descriptors to `poly-wayland`'s server, and composes the
-//! scene into an off-screen framebuffer at up to 60 frames a second (each
-//! frame answers the frame callbacks committed before it). Until the
-//! virtio-gpu driver's interface is there, the picture goes nowhere but a
-//! PPM file (`--dump`, else `$XDG_RUNTIME_DIR/poly-compositor.ppm`):
-//! written on `SIGUSR1`, with the windows and the `--probe` pixels printed,
-//! and with `--dump` when the compositor ends.
+//! scene at up to 60 frames a second (each frame answers the frame
+//! callbacks committed before it, and `wp_presentation` feedback with the
+//! time the frame was shown).
+//!
+//! Two ways to run:
+//!
+//! - **Off-screen** (the default): into a framebuffer in memory, which
+//!   goes nowhere but a PPM file (`--dump`, else
+//!   `$XDG_RUNTIME_DIR/poly-compositor.ppm`): written on `SIGUSR1`, with
+//!   the windows and the `--probe` pixels printed, and with `--dump` when
+//!   the compositor ends.
+//! - **`--desktop`**: on the screen through `/dev/fb0` (`--fb`), with the
+//!   keyboards and pointers of `/dev/input/event*` routed to the clients
+//!   (`wl_pointer`, `wl_keyboard` with an XKB keymap of `--keymap`'s
+//!   layout), a software cursor, and Poly's shell (`poly-shell`): the
+//!   ridge along the top, the launcher in the middle (shown on an empty
+//!   desktop; the Windows key or Ctrl+Space toggles it; Enter starts the
+//!   app chosen with `WAYLAND_DISPLAY` set), the wallpaper, new windows
+//!   centred. `SIGUSR1` still writes the picture.
 //!
 //! ```text
 //! poly-compositor [--socket NAME] [--size WxH] [--scale N] [--dump FILE]
-//!                 [--probe X,Y]... [--exec PROGRAM [ARGS...]]
+//!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME]]
+//!                 [--exec PROGRAM [ARGS...]]
 //! ```
 //!
 //! `--exec` starts a client once the socket is up (with `WAYLAND_DISPLAY`,
@@ -27,12 +41,18 @@
 //! client, `sendmsg` of what the server queued. A client that stops
 //! reading could stall it; non-blocking sends come with real workloads.
 
+mod desktop;
+mod evdev;
+mod fbdev;
 mod unix;
 
-use poly_wayland::compose::{Framebuffer as _, MemoryFramebuffer};
+use poly_input::layout::Layout;
+use poly_shell::{Press, Shell};
+use poly_wayland::compose::{Framebuffer, MemoryFramebuffer, Placement};
+use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
 use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server};
 use poly_wayland::wire::Fd;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::os::fd::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -57,10 +77,13 @@ struct Options {
     scale: u32,
     dump: Option<PathBuf>,
     probes: Vec<(u32, u32)>,
+    desktop: bool,
+    fb: String,
+    keymap: String,
     exec: Vec<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N] [--dump FILE] [--probe X,Y]... [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N] [--dump FILE] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME]] [--exec PROGRAM [ARGS...]]";
 
 fn pair(s: &str, sep: char) -> Option<(u32, u32)> {
     let (a, b) = s.split_once(sep)?;
@@ -75,6 +98,9 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         scale: 1,
         dump: None,
         probes: Vec::new(),
+        desktop: false,
+        fb: "/dev/fb0".into(),
+        keymap: "us".into(),
         exec: Vec::new(),
     };
     let mut it = args.iter();
@@ -94,6 +120,13 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
             "--probe" => {
                 let v = value()?;
                 o.probes.push(pair(&v, ',').ok_or(format!("bad probe {v}"))?);
+            }
+            "--desktop" => o.desktop = true,
+            "--fb" => o.fb = value()?,
+            "--keymap" => {
+                let v = value()?;
+                poly_input::layout::by_name(&v).ok_or(format!("no keyboard layout {v} (us, de-ch, de)"))?;
+                o.keymap = v;
             }
             "--exec" => {
                 o.exec = it.by_ref().cloned().collect();
@@ -148,32 +181,180 @@ fn flush(conn: &mut Connection) -> bool {
     true
 }
 
+/// Where frames go: memory or the screen.
+#[derive(Debug)]
+enum Screen {
+    Memory(MemoryFramebuffer),
+    Fb(fbdev::FbFramebuffer),
+}
+
+impl Screen {
+    fn fb(&mut self) -> &mut dyn Framebuffer {
+        match self {
+            Screen::Memory(m) => m,
+            Screen::Fb(f) => f,
+        }
+    }
+}
+
+/// The picture as a binary PPM (netpbm's `P6`).
+fn ppm(fb: &mut dyn Framebuffer) -> Vec<u8> {
+    let (w, h) = (fb.width(), fb.height());
+    let mut out = format!("P6\n{w} {h}\n255\n").into_bytes();
+    for y in 0..h {
+        for p in &fb.row_mut(y)[..w as usize] {
+            out.extend_from_slice(&[(p >> 16) as u8, (p >> 8) as u8, *p as u8]);
+        }
+    }
+    out
+}
+
 /// Write the picture as a PPM: to a temporary file renamed into place, so
 /// a reader never sees half of it.
-fn write_dump(fb: &MemoryFramebuffer, path: &Path) {
+fn write_dump(fb: &mut dyn Framebuffer, path: &Path) {
     let tmp = path.with_extension("ppm.tmp");
-    match std::fs::write(&tmp, fb.to_ppm()).and_then(|()| std::fs::rename(&tmp, path)) {
-        Ok(()) => println!("poly-compositor: wrote {} ({}x{})", path.display(), fb.width(), fb.height()),
+    let (w, h) = (fb.width(), fb.height());
+    match std::fs::write(&tmp, ppm(fb)).and_then(|()| std::fs::rename(&tmp, path)) {
+        Ok(()) => println!("poly-compositor: wrote {} ({w}x{h})", path.display()),
         Err(e) => eprintln!("poly-compositor: {}: {e}", path.display()),
     }
 }
 
-/// Draw, describe the windows and the probed pixels, write the picture:
-/// what `SIGUSR1` asks for.
-fn report(server: &mut Server, fb: &mut MemoryFramebuffer, probes: &[(u32, u32)], path: &Path) {
-    server.render(fb);
+/// Describe the windows and the probed pixels, write the picture: what
+/// `SIGUSR1` asks for (after the caller drew what changed).
+fn report(server: &Server, fb: &mut dyn Framebuffer, probes: &[(u32, u32)], path: &Path) {
     for w in server.scene().windows() {
         let (x, y) = w.position();
         let (cw, ch) = w.content().logical_size();
         println!("poly-compositor: window {:?} at {x},{y} size {cw}x{ch}", w.title());
     }
     for &(x, y) in probes {
-        match fb.pixel(x, y) {
-            Some(p) => println!("poly-compositor: pixel {x},{y} = #{p:06x}"),
-            None => println!("poly-compositor: pixel {x},{y} is outside {}x{}", fb.width(), fb.height()),
+        if x < fb.width() && y < fb.height() {
+            let p = fb.row_mut(y)[x as usize] & 0x00ff_ffff;
+            println!("poly-compositor: pixel {x},{y} = #{p:06x}");
+        } else {
+            println!("poly-compositor: pixel {x},{y} is outside {}x{}", fb.width(), fb.height());
         }
     }
     write_dump(fb, path);
+}
+
+/// The desktop: the shell, the input devices and what goes with them.
+#[derive(Debug)]
+struct Desktop {
+    shell: Shell,
+    input: evdev::Evdev,
+    hotkeys: desktop::Hotkeys,
+    layout: &'static Layout,
+    /// A left press the shell took: its release is the shell's too.
+    shell_button: bool,
+    /// Apps started from the launcher, not reaped yet.
+    children: Vec<(libc::pid_t, String)>,
+    /// Windows seen, to log new ones and to bring the launcher back when
+    /// the last one goes.
+    windows: BTreeSet<u32>,
+    ready: bool,
+}
+
+/// Seconds on `CLOCK_REALTIME`.
+fn realtime_secs() -> i64 {
+    let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: `ts` is a valid timespec to write.
+    unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut ts) };
+    ts.tv_sec
+}
+
+impl Desktop {
+    /// An input event: the launcher's hotkeys and keys, the shell's
+    /// presses, the rest to the server. Returns an app to start.
+    fn route(&mut self, ev: InputEvent, server: &mut Server) -> Option<poly_shell::App> {
+        match ev {
+            InputEvent::Key { key, pressed, .. } => {
+                let (depressed, _) = server.modifiers();
+                let toggles = self.hotkeys.key(key, pressed, depressed);
+                let is_super = matches!(key, 125 | 126);
+                // Ctrl+Space is the shell's; the Windows key is a modifier
+                // the clients may see.
+                if !(toggles && !is_super) {
+                    server.handle_input(ev);
+                }
+                if toggles {
+                    self.shell.toggle_launcher();
+                    return None;
+                }
+                if pressed && self.shell.launcher().is_visible() {
+                    let (depressed, locked) = server.modifiers();
+                    if let Some(k) = desktop::launcher_key(key, depressed, locked, self.layout) {
+                        let before = self.shell.launcher().query().to_string();
+                        let app = self.shell.key(k);
+                        if self.shell.launcher().query() != before {
+                            println!("poly-compositor: launcher query {:?}", self.shell.launcher().query());
+                        }
+                        return app;
+                    }
+                }
+                None
+            }
+            InputEvent::PointerButton { button: BTN_LEFT, pressed, .. } => {
+                let (x, y) = server.pointer();
+                if pressed {
+                    match self.shell.press(x.floor(), y.floor()) {
+                        Press::Taken => {
+                            self.shell_button = true;
+                            return None;
+                        }
+                        Press::Launch(app) => {
+                            self.shell_button = true;
+                            return Some(app);
+                        }
+                        Press::NotMine => {}
+                    }
+                } else if std::mem::take(&mut self.shell_button) {
+                    return None;
+                }
+                server.handle_input(ev);
+                None
+            }
+            InputEvent::PointerMotion { .. } | InputEvent::PointerMotionAbsolute { .. } => {
+                server.handle_input(ev);
+                let (x, y) = server.pointer();
+                self.shell.pointer_motion(x.floor(), y.floor());
+                None
+            }
+            _ => {
+                server.handle_input(ev);
+                None
+            }
+        }
+    }
+
+    /// After events and requests: the shell's damage to the scene, the
+    /// keyboard to the launcher while it shows, the launcher back on an
+    /// empty desktop, new windows logged.
+    fn sync(&mut self, server: &mut Server) {
+        let now: BTreeSet<u32> = server.scene().windows().iter().filter(|w| w.is_visible()).map(|w| w.id().0).collect();
+        for w in server.scene().windows().iter().filter(|w| w.is_visible() && !self.windows.contains(&w.id().0)) {
+            let (x, y) = w.position();
+            let (cw, ch) = w.content().logical_size();
+            println!("poly-compositor: window {:?} shown at {x},{y} size {cw}x{ch}", w.title());
+        }
+        if now.is_empty() && !self.windows.is_empty() && !self.shell.launcher().is_visible() {
+            self.shell.toggle_launcher();
+        }
+        self.windows = now;
+        self.shell.set_time(realtime_secs(), 0);
+        for r in self.shell.take_damage() {
+            server.scene_mut().damage_logical(r);
+        }
+        server.set_keyboard_suspended(self.shell.launcher().is_visible());
+        self.children.retain(|(pid, name)| match unix::try_wait(*pid) {
+            Some(status) => {
+                println!("poly-compositor: {name} (pid {pid}) exited with status {status}");
+                false
+            }
+            None => true,
+        });
+    }
 }
 
 fn main() -> ExitCode {
@@ -187,6 +368,32 @@ fn main() -> ExitCode {
     }
 }
 
+/// The environment a client gets: ours, with the display's variables.
+fn client_env(socket: &str, dir: &Path, dump: &Path) -> Vec<String> {
+    let mut env: Vec<String> = std::env::vars()
+        .filter(|(k, _)| !["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "POLY_COMPOSITOR_DUMP"].contains(&k.as_str()))
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    env.push(format!("WAYLAND_DISPLAY={socket}"));
+    env.push(format!("XDG_RUNTIME_DIR={}", dir.display()));
+    // Where SIGUSR1 puts the picture, for a client that checks it.
+    env.push(format!("POLY_COMPOSITOR_DUMP={}", dump.display()));
+    env
+}
+
+/// The shell's font, if the font store has it (kept for the program's
+/// life).
+fn shell_font() -> Option<poly_font::Font<'static>> {
+    let font = std::fs::read(desktop::FONT).ok().and_then(|data| {
+        let data: &'static [u8] = Box::leak(data.into_boxed_slice());
+        poly_font::Font::parse(data).ok()
+    });
+    if font.is_none() {
+        println!("poly-compositor: no {} (fonts not fetched?): the shell uses the bitmap font", desktop::FONT);
+    }
+    font
+}
+
 fn run(args: &[String]) -> Result<u8, String> {
     let o = parse_args(args)?;
     let dir = runtime_dir()?;
@@ -197,22 +404,74 @@ fn run(args: &[String]) -> Result<u8, String> {
     // SAFETY: the handler only stores to an atomic, which is async-signal-safe.
     unsafe { libc::signal(libc::SIGUSR1, on_sigusr1 as *const () as libc::sighandler_t) };
 
-    let output = OutputConfig { width: o.width, height: o.height, scale: o.scale, ..OutputConfig::default() };
-    let mut server = Server::new(Config { output, ..Config::default() }, Box::new(unix::UnixHost));
-    let mut fb = MemoryFramebuffer::new(o.width, o.height);
-    println!("poly-compositor: listening on {} ({}x{}, scale {})", path.display(), o.width, o.height, o.scale);
+    let mut screen = if o.desktop {
+        Screen::Fb(fbdev::FbFramebuffer::open(&o.fb).map_err(|e| format!("{}: {e}", o.fb))?)
+    } else {
+        Screen::Memory(MemoryFramebuffer::new(o.width, o.height))
+    };
+    let (width, height) = (screen.fb().width(), screen.fb().height());
+    let mut host = unix::UnixHost::default();
+    let layout = poly_input::layout::by_name(&o.keymap).unwrap_or(&poly_input::layout::US);
+    if o.desktop {
+        match desktop::keymap_file(&dir, layout) {
+            Ok(k) => host.keymap = Some(k),
+            Err(e) => eprintln!("poly-compositor: keymap: {e}"),
+        }
+    }
+    let output = OutputConfig { width, height, scale: o.scale, ..OutputConfig::default() };
+    let mut server = Server::new(Config { output, ..Config::default() }, Box::new(host));
+    println!("poly-compositor: listening on {} ({width}x{height}, scale {})", path.display(), o.scale);
+
+    let mut desk = if o.desktop {
+        let (lw, lh) = server.scene().logical_size();
+        let apps = poly_shell::apps::catalog(desktop::desktop_files(Path::new(desktop::APPLICATIONS)));
+        let font = shell_font();
+        let shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::new(font));
+        if let Some(f) = font {
+            // Window titles in the same font, 13 pixels as Alpine's rows.
+            server.scene_mut().set_text(Box::new(poly_shell::draw::TitleFont::new(f, 13.0, 16)));
+        }
+        let input = evdev::Evdev::open_all();
+        let names: Vec<String> =
+            input.devices.iter().map(|d| format!("{} ({:?})", d.name, d.translator.kind)).collect();
+        println!(
+            "poly-compositor: desktop on {} ({width}x{height}, scale {}), keymap {}, {} input device(s): {}",
+            o.fb,
+            o.scale,
+            layout.name,
+            names.len(),
+            names.join(", ")
+        );
+        println!("poly-compositor: {} app(s) in the launcher", shell.apps().len());
+        server.set_seat_capabilities(input.capabilities());
+        server.scene_mut().set_placement(Placement::Centered);
+        server.scene_mut().set_reserved_top(shell.reserved_top());
+        // The middle of the screen until the pointer moves.
+        server.handle_input(InputEvent::PointerMotionAbsolute {
+            time: 0,
+            x: poly_wayland::wire::Fixed::from_int(lw / 2),
+            y: poly_wayland::wire::Fixed::from_int(lh / 2),
+        });
+        server.set_cursor_visible(true);
+        server.scene_mut().damage_all();
+        Some(Desktop {
+            shell,
+            input,
+            hotkeys: desktop::Hotkeys::default(),
+            layout,
+            shell_button: false,
+            children: Vec::new(),
+            windows: BTreeSet::new(),
+            ready: false,
+        })
+    } else {
+        None
+    };
 
     let child = if o.exec.is_empty() {
         None
     } else {
-        let mut env: Vec<String> = std::env::vars()
-            .filter(|(k, _)| !["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "POLY_COMPOSITOR_DUMP"].contains(&k.as_str()))
-            .map(|(k, v)| format!("{k}={v}"))
-            .collect();
-        env.push(format!("WAYLAND_DISPLAY={}", o.socket));
-        env.push(format!("XDG_RUNTIME_DIR={}", dir.display()));
-        // Where SIGUSR1 puts the picture, for a client that checks it.
-        env.push(format!("POLY_COMPOSITOR_DUMP={}", dump_path.display()));
+        let env = client_env(&o.socket, &dir, &dump_path);
         let pid = unix::spawn(&o.exec, &env).map_err(|e| format!("{}: {e}", o.exec[0]))?;
         println!("poly-compositor: started {} (pid {pid})", o.exec[0]);
         Some(pid)
@@ -230,9 +489,16 @@ fn run(args: &[String]) -> Result<u8, String> {
             events: libc::POLLIN,
             revents: 0,
         }));
+        let input_at = fds.len();
+        if let Some(d) = &desk {
+            fds.extend(d.input.devices.iter().map(|dev| libc::pollfd { fd: dev.fd, events: libc::POLLIN, revents: 0 }));
+        }
         let now = unix::monotonic_ns();
         let timeout = if server.wants_frame() {
             (next_frame.saturating_sub(now) / 1_000_000) as i32
+        } else if desk.is_some() {
+            // The clock, and apps that ended.
+            500
         } else if child.is_some() {
             50
         } else {
@@ -250,7 +516,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
         }
         let mut gone = Vec::new();
-        for (pfd, id) in fds[1..].iter().zip(&ids) {
+        for (pfd, id) in fds[1..input_at].iter().zip(&ids) {
             if pfd.revents == 0 {
                 continue;
             }
@@ -263,12 +529,50 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
         }
 
+        // Input, then the shell.
+        if let Some(d) = &mut desk {
+            let size = server.scene().logical_size();
+            let ms = (unix::monotonic_ns() / 1_000_000) as u32;
+            for (i, pfd) in fds[input_at..].iter().enumerate() {
+                if pfd.revents != 0 {
+                    d.input.read(i, size, ms);
+                }
+            }
+            while let Some(ev) = d.input.next_event() {
+                if let Some(app) = d.route(ev, &mut server) {
+                    let env = client_env(&o.socket, &dir, &dump_path);
+                    match unix::spawn(&app.argv, &env) {
+                        Ok(pid) => {
+                            println!("poly-compositor: launched {} (pid {pid})", app.name);
+                            d.children.push((pid, app.name.clone()));
+                        }
+                        Err(e) => eprintln!("poly-compositor: {}: {e}", app.argv[0]),
+                    }
+                }
+            }
+            d.sync(&mut server);
+        }
+
         // A frame when one is due.
         let now = unix::monotonic_ns();
         if server.wants_frame() && now >= next_frame {
-            server.render(&mut fb);
-            server.frame_presented(FrameTime { monotonic_ns: now });
+            let fb = screen.fb();
+            match &desk {
+                Some(d) => server.render_with(fb, Some(&d.shell.below()), Some(&d.shell.above())),
+                None => server.render(fb),
+            };
+            // Presented: the frame is on the screen once the device's
+            // requests returned.
+            let shown = unix::monotonic_ns();
+            server.frame_presented(FrameTime { monotonic_ns: shown });
             next_frame = now + FRAME_NS;
+            if let Some(d) = &mut desk
+                && !d.ready
+            {
+                d.ready = true;
+                let ms = (shown - now) / 1_000_000;
+                println!("poly-compositor: desktop ready (first frame drawn in {ms} ms; launcher shown)");
+            }
         }
 
         // Send what the server queued; cut off failed clients.
@@ -292,19 +596,31 @@ fn run(args: &[String]) -> Result<u8, String> {
         }
 
         if DUMP.swap(false, Ordering::Relaxed) {
-            report(&mut server, &mut fb, &o.probes, &dump_path);
+            let fb = screen.fb();
+            match &desk {
+                Some(d) => server.render_with(fb, Some(&d.shell.below()), Some(&d.shell.above())),
+                None => server.render(fb),
+            };
+            report(&server, fb, &o.probes, &dump_path);
         }
 
         if let Some(status) = child.and_then(unix::try_wait) {
             if o.dump.is_some() {
-                server.render(&mut fb);
-                write_dump(&fb, &dump_path);
+                let fb = screen.fb();
+                server.render(fb);
+                write_dump(fb, &dump_path);
             }
             println!("poly-compositor: client exited with status {status}");
             let _ = std::fs::remove_file(&path);
             return Ok(status.clamp(0, 255) as u8);
         }
     }
+}
+
+/// A rectangle of the whole output, for tests.
+#[cfg(test)]
+fn whole(w: u32, h: u32) -> poly_wayland::compose::Rect {
+    poly_wayland::compose::Rect::new(0, 0, w as i32, h as i32)
 }
 
 #[cfg(test)]
@@ -322,6 +638,11 @@ mod tests {
         assert_eq!(o.probes, [(1, 2), (3, 4)]);
         assert_eq!(o.exec, ["/bin/c", "-x"]);
         assert_eq!(o.socket, "wayland-0");
+        assert!(!o.desktop);
+        let o = parse_args(&args("--desktop --fb /dev/fb1 --keymap de-ch")).unwrap();
+        assert!(o.desktop);
+        assert_eq!((o.fb.as_str(), o.keymap.as_str()), ("/dev/fb1", "de-ch"));
+        assert!(parse_args(&args("--keymap xx")).is_err());
         assert!(parse_args(&args("--size 0x4")).is_err());
         assert!(parse_args(&args("--scale 9")).is_err());
         assert!(parse_args(&args("--exec")).is_err());
@@ -342,11 +663,29 @@ mod tests {
         assert_eq!(unix::recv(b.as_raw_fd(), &mut buf, &mut fds).unwrap(), 5);
         assert_eq!((&buf[..5], fds.len()), (&b"hello"[..], 1));
         use poly_wayland::server::Host;
-        let mut map = unix::UnixHost.map_shm(fds[0], 8).unwrap();
+        let mut map = unix::UnixHost::default().map_shm(fds[0], 8).unwrap();
         let mut out = [0u8; 4];
         assert!(map.read(4, &mut out));
         assert_eq!(out, [5, 6, 7, 8]);
         assert!(!map.read(6, &mut out));
         assert!(map.resize(8));
+    }
+
+    /// The desktop's layers through the scene into memory: the ridge, the
+    /// launcher, the cursor; the picture as a PPM.
+    #[test]
+    fn the_desktop_composes() {
+        let host = unix::UnixHost::default();
+        let output = OutputConfig { width: 800, height: 600, ..OutputConfig::default() };
+        let mut server = Server::new(Config { output, ..Config::default() }, Box::new(host));
+        let shell = Shell::new(800, 600, poly_shell::apps::builtins(), poly_shell::draw::Text::new(None));
+        server.set_cursor_visible(true);
+        let mut fb = MemoryFramebuffer::new(800, 600);
+        let drawn = server.render_with(&mut fb, Some(&shell.below()), Some(&shell.above()));
+        assert_eq!(drawn, [whole(800, 600)]);
+        assert_eq!(fb.pixel(400, 5), Some(0x20_20_20), "the ridge");
+        let p = ppm(&mut fb);
+        assert!(p.starts_with(b"P6\n800 600\n255\n"));
+        assert_eq!(p.len(), 15 + 800 * 600 * 3);
     }
 }

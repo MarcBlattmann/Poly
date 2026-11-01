@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/inotify_init1        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; /tmp on overlayfs; tests run as root with every capability and again as uid/gid 65534 without capabilities; umask 022; fs.inotify limits in the notes"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  inotify_init1(flags) (syscall 294) creates a new inotify instance (a
+  queue of file system events plus a set of watches, see
+  inotify_add_watch) and returns the lowest free descriptor for it.
+  flags may contain IN_NONBLOCK (= O_NONBLOCK, 04000) and IN_CLOEXEC (=
+  O_CLOEXEC, 02000000); any other bit of the low 32 is EINVAL; bits 32..63
+  are ignored. The descriptor is read-only: F_GETFL is O_RDONLY (| O_NONBLOCK
+  with IN_NONBLOCK; F_SETFL can change O_NONBLOCK later), F_GETFD is
+  FD_CLOEXEC only with IN_CLOEXEC. fstat gives st_mode 0600 with no file
+  type bits and size 0; /proc/self/fd/<fd> reads "anon_inode:inotify".
+  write is EBADF; lseek returns 0. Reading returns queued events; each
+  event is a 16-byte header {s32 wd; u32 mask; u32 cookie; u32 len}
+  followed by len bytes of name: len is 0 for events about the watched
+  object itself, otherwise the name plus NUL, padded with NULs to a
+  multiple of 16 (1..15 byte name: len 16; 16..31: len 32). A read
+  returns as many whole events as fit in the buffer; if the next event
+  does not fit (buffer smaller than it, also 0 bytes) it is EINVAL and
+  nothing is consumed; an empty queue blocks, or is EAGAIN with
+  O_NONBLOCK (for any buffer size, also 0). ioctl FIONREAD stores (int)
+  the number of queued bytes. poll/select/epoll report POLLIN while
+  events are queued.
+returns:
+  success: "the new descriptor (lowest free number)"
+  flags: "IN_NONBLOCK -> F_GETFL O_RDONLY|O_NONBLOCK; IN_CLOEXEC -> F_GETFD FD_CLOEXEC; flags (1<<32)|IN_CLOEXEC is IN_CLOEXEC"
+  stat: "st_mode 0600 (no S_IFMT bits), st_size 0"
+  link: "anon_inode:inotify"
+  write: "EBADF (descriptor not open for writing)"
+  lseek: "returns 0"
+  read_layout: "events back to back, 16-byte header + len name bytes each; a name of 3 bytes gives 32 bytes, a 16-byte name 48 bytes"
+  read_partial: "a buffer that holds k whole events (and part of the next) returns exactly those k events"
+  read_too_small: "EINVAL when the buffer cannot hold the next event (16 or 31 bytes for a 32-byte event, 47 for a 48-byte one, 0 bytes); the event stays queued"
+  read_empty: "EAGAIN (11) with O_NONBLOCK, any size including 0; blocks otherwise until an event arrives"
+  fionread: "number of bytes queued (0 when empty, 112 for events of 32+48+32)"
+  poll: "POLLIN only while the queue is non-empty; 0 when empty"
+errors:
+  bad_flags: "EINVAL (22): any bit other than O_NONBLOCK and O_CLOEXEC in the low 32 bits (1, O_RDWR, O_APPEND, 0x10, 0x80000000); checked first (also when the descriptor table is full)"
+  no_descriptor: "EMFILE (24): no free descriptor below RLIMIT_NOFILE; also EMFILE when the user already has fs.inotify.max_user_instances instances (not tested: other processes of the same user count)"
+  no_memory: "ENOMEM / ENFILE: not tested"
+side_effects: "a new instance and descriptor"
+threading: >
+  The instance is shared by dup'd descriptors and across fork (one
+  queue: an event read through one descriptor is gone for all). Each
+  call makes an independent instance with its own queue and watch
+  numbering.
+ordering:
+  - "events are queued in the order the operations happened; an event identical to the last queued one (same wd, mask, cookie, name) is merged into it"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/inotify.h (IN_CLOEXEC, IN_NONBLOCK, event
+# bits) and asm-generic/fcntl.h; FIONREAD from asm-generic/ioctls.h;
+# struct inotify_event from linux/inotify.h. /proc/sys/fs/inotify on the
+# oracle: max_queued_events 16384, max_user_instances 8192,
+# max_user_watches 1048576 (read in that order from the directory). The
+# queue overflow event (IN_Q_OVERFLOW, wd -1) after max_queued_events was
+# not observed. All tests pass as root and as an unprivileged user.

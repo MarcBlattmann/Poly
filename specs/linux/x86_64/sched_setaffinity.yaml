@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_setaffinity    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2, 32 CPUs (0-31 possible and online), one NUMA node, no cpuset restriction; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  sched_setaffinity(pid, len, mask) (syscall 203) sets the CPU affinity
+  of thread pid (0: the caller) to the CPUs whose bits are set in the
+  first len bytes of mask (bit n = byte n/8, bit n%8) and returns 0. len
+  is a 32-bit unsigned value (upper half ignored) and may be any byte
+  count: missing bytes (len shorter than the kernel's mask) count as 0,
+  bytes beyond the kernel's mask are ignored, as are bits of CPUs that do
+  not exist, as long as at least one existing, allowed CPU remains. The
+  thread then runs only on those CPUs: right after pinning it to one CPU,
+  getcpu reports that CPU and sched_getaffinity reads back exactly that
+  bit. Setting another process's affinity needs its effective or real
+  uid to equal the caller's euid, or CAP_SYS_NICE (root). New tasks
+  (fork, clone) inherit the mask.
+returns:
+  success: "0"
+  readback: "sched_getaffinity returns the new mask (existing CPUs only)"
+  short_mask: "len = cpu/8 + 1 bytes with only bit cpu: the mask is {cpu}"
+  extra_bits: "bit 1023 (no such CPU) next to an existing CPU: accepted, dropped"
+  restore: "the original mask can be set back"
+  inheritance: "a fork child of a pinned process has the same one-bit mask"
+  other_process: "root sets the mask of another user's process (0); a uid-65534 process may set its own"
+errors:
+  fault: "EFAULT (14): mask unreadable (NULL with len > 0); the mask is read first: EFAULT even for a pid that does not exist"
+  no_thread: "ESRCH (3): no thread with that id (an unused number, -1); before the mask contents are judged (an empty mask, or len 0 with NULL, for a missing pid is ESRCH)"
+  permission: "EPERM (1): the target belongs to another user and the caller lacks CAP_SYS_NICE (uid 65534 setting root's process)"
+  empty: "EINVAL (22): no existing allowed CPU in the mask: all zero, len 0 (also with NULL mask), or only the bit of a nonexistent CPU (1023); the affinity is unchanged"
+  order: "EFAULT (reading the mask), ESRCH, then EPERM or EINVAL (their relative order was not tested)"
+side_effects: "the thread's affinity; it may be moved to an allowed CPU before the call returns"
+threading: "per thread; other threads of the process keep their masks"
+ordering:
+  - "when the call returns, the thread already runs on an allowed CPU"
+timing:
+  typical: "microseconds; up to a context switch when the thread must move"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: tests pin to CPUs taken from the thread's own mask (current,
+# lowest, highest), never to a fixed number, so they work on any
+# machine; tests that call sched_getaffinity compare syscall names only.
+# Tests that change uids need root (poly-diff: needs=root); the others
+# pass as root and as an unprivileged user.
+# cpusets (cgroups) restricting the allowed CPUs were not present.

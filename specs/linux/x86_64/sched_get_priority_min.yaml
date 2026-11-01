@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/sched_get_priority_min  # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_HZ=250, CONFIG_SCHED_CLASS_EXT not set; tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  sched_get_priority_min(policy) (syscall 147) returns the lowest static
+  priority that sched_setscheduler/sched_setparam accept for a
+  scheduling policy: 1 for SCHED_FIFO (1) and SCHED_RR (2), 0 for
+  SCHED_OTHER (0), SCHED_BATCH (3), SCHED_IDLE (5), SCHED_DEADLINE (6)
+  and SCHED_EXT (7). Any other value is EINVAL. The argument is a 32-bit
+  int (upper half ignored). No side effects, no permission needed, the
+  result does not depend on the caller.
+returns:
+  fifo_rr: "1 for SCHED_FIFO (1) and SCHED_RR (2)"
+  fair: "0 for SCHED_OTHER (0), SCHED_BATCH (3), SCHED_IDLE (5)"
+  deadline: "0 for SCHED_DEADLINE (6)"
+  ext: "0 for SCHED_EXT (7), also on a kernel without sched_ext support"
+  width: "only the low 32 bits of policy count, as a signed int: 1<<32|2 is SCHED_RR (1); 0x80000001 is negative (EINVAL)"
+  bounds: "minimum-1 is EINVAL in sched_setscheduler for every policy (SCHED_FIFO/RR with 0 for any caller, before the permission check; fair policies with -1) and in sched_setparam; the fair policies accept 0"
+errors:
+  invalid_policy: "EINVAL (22): any policy other than 0,1,2,3,5,6,7: 4, 8, 64, -1, INT_MIN, INT_MAX, 1<<32|9 (low half 9)"
+  reset_on_fork: "EINVAL (22): a valid policy with SCHED_RESET_ON_FORK (0x40000000) or another high bit (e.g. 0x100) or-ed in"
+side_effects: none
+threading: "no per-thread behaviour"
+ordering: []
+timing:
+  typical: "below a microsecond; never blocks"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/sched.h. The tests also use
+# sched_setscheduler (144), sched_setparam (142) and sched_getscheduler
+# (145) for the cross-checks. Kernels before 6.12 answer EINVAL for 7.

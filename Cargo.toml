@@ -8,6 +8,7 @@ resolver = "3"
 members = [
     "crates/poly-abi",
     "crates/poly-acpi",
+    "crates/poly-audio",
     "crates/poly-backtrace",
     "crates/poly-binfmt",
     "crates/poly-block",
@@ -17,10 +18,13 @@ members = [
     "crates/poly-crypto",
     "crates/poly-elf",
     "crates/poly-ext2",
+    "crates/poly-fbdev",
     "crates/poly-cpio",
+    "crates/poly-drm",
     "crates/poly-font",
     "crates/poly-bochs-vbe",
     "crates/poly-gfx",
+    "crates/poly-hda",
     "crates/poly-heap",
     "crates/poly-http",
     "crates/poly-input",
@@ -43,6 +47,7 @@ members = [
     "crates/poly-rtc",
     "crates/poly-rtl",
     "crates/poly-sched",
+    "crates/poly-shell",
     "crates/poly-security",
     "crates/poly-seh",
     "crates/poly-cxxeh",
@@ -83,6 +88,7 @@ rust-version = "1.97"
 [workspace.dependencies]
 poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
+poly-audio = { path = "crates/poly-audio" }
 poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
@@ -92,10 +98,13 @@ poly-crt = { path = "crates/poly-crt" }
 poly-crypto = { path = "crates/poly-crypto" }
 poly-elf = { path = "crates/poly-elf" }
 poly-ext2 = { path = "crates/poly-ext2" }
+poly-fbdev = { path = "crates/poly-fbdev" }
 poly-cpio = { path = "crates/poly-cpio" }
+poly-drm = { path = "crates/poly-drm" }
 poly-font = { path = "crates/poly-font" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
 poly-gfx = { path = "crates/poly-gfx" }
+poly-hda = { path = "crates/poly-hda" }
 poly-heap = { path = "crates/poly-heap" }
 poly-http = { path = "crates/poly-http" }
 poly-input = { path = "crates/poly-input" }
@@ -118,6 +127,7 @@ poly-registry = { path = "crates/poly-registry" }
 poly-rtc = { path = "crates/poly-rtc" }
 poly-rtl = { path = "crates/poly-rtl" }
 poly-sched = { path = "crates/poly-sched" }
+poly-shell = { path = "crates/poly-shell" }
 poly-security = { path = "crates/poly-security" }
 poly-seh = { path = "crates/poly-seh" }
 poly-cxxeh = { path = "crates/poly-cxxeh" }

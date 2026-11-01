@@ -177,10 +177,29 @@ pub fn wait4(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// `siginfo_t` (`SIGCHLD`, `CLD_*`, pid, uid, status) in `infop`; with
 /// `WNOHANG` and nothing to report, `infop` is zeroed (wait(2) tells
 /// callers to check `si_pid` for 0).
+///
+/// `P_PIDFD` (pidfd_open(2)): `id` is a pidfd and the child it names is
+/// waited for (`EBADF` for a descriptor that is not open, `EINVAL` for one
+/// that is no pidfd); once that child is reaped the wait is `ECHILD`.
 pub fn waitid(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let pgid = view(k, k.pgid());
-    let (mut filter, nohang) = wait::waitid_filter(a.uint(0), a.int(1), a.uint(3), pgid)?;
-    filter.selector = global_selector(k, filter.selector);
+    let (filter, nohang) = if a.uint(0) == wait::P_PIDFD {
+        // The options are checked as for a pid (any positive id will do).
+        let (filter, nohang) = wait::waitid_filter(wait::P_PID, 1, a.uint(3), pgid)?;
+        let fd = a.int(1);
+        if fd < 0 {
+            return Err(Errno::EBADF);
+        }
+        let pid = match crate::sys::pipe::file_io(k)?.pidfd_target(fd)? {
+            Some(crate::fileio::PidFdTarget::PidFd { pid, .. }) => pid,
+            _ => return Err(Errno::EINVAL),
+        };
+        (WaitFilter { selector: Selector::Pid(pid), ..filter }, nohang)
+    } else {
+        let (mut filter, nohang) = wait::waitid_filter(a.uint(0), a.int(1), a.uint(3), pgid)?;
+        filter.selector = global_selector(k, filter.selector);
+        (filter, nohang)
+    };
     let waited = wait_for(k, &filter, nohang)?;
     let found = waited.map(|w| Waited { pid: view(k, w.pid), ..w });
     if !a.ptr(2).is_null() {

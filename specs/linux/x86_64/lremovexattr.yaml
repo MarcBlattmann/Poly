@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lremovexattr         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  lremovexattr(path, name) (syscall 198) is removexattr
+  (removexattr.yaml) except that a symbolic link in the last component
+  is not followed: it removes an attribute of the link itself. Name
+  rules, permissions, EROFS, the ctime update and the order of checks
+  are the same. Links have no user.* attributes (EPERM); root can
+  remove a link's own trusted.* and security.* attributes.
+returns:
+  non_link: "on anything but a link exactly removexattr (remove, ENODATA afterwards, ctime changes, EPERM for a FIFO's user.* name)"
+  link_trusted: "root removes a link's own trusted.*/security.* name (also of a dangling link): 0, then ENODATA; the target's attribute of the same name stays (removexattr through the link removes the target's)"
+  trailing_slash: "a trailing '/' follows the final link (to a directory: the directory's attribute is removed; to a file: ENOTDIR)"
+  earlier_links: "links in earlier components are followed; a loop there is ELOOP, while a final link that is part of a loop is not followed (user.* on it: EPERM)"
+errors:
+  link_user: "EPERM (1): a user.* name on a link, existing on the target or not, also 'user.' alone, also a dangling link (removexattr: ENOENT); the target keeps its attributes"
+  link_unknown: "EOPNOTSUPP (95): unknown prefix on a link"
+  link_trusted_user: "EPERM (1): trusted.* or security.* on a link without CAP_SYS_ADMIN, also for names that do not exist"
+  rest: "every other error and the order exactly as removexattr.yaml"
+side_effects: "as removexattr (ctime of the inode acted on)"
+threading: "as removexattr"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants as in setxattr.yaml.

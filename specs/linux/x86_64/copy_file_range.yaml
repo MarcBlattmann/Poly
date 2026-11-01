@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/copy_file_range      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); cross-file-system checks between tmpfs instances the test mounts; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  copy_file_range(fd_in, off_in, fd_out, off_out, len, flags) is system call
+  326. It copies up to len bytes from the regular file open for reading on
+  fd_in to the regular file open for writing on fd_out, inside the kernel, and
+  returns the number of bytes copied. off_in / off_out are pointers to 64-bit
+  offsets: NULL means "use the descriptor's file position and advance it";
+  non-NULL means "read the offset from there, advance it by the bytes copied,
+  and leave the file position alone". flags must be 0. Both files must be on
+  the same file system (on tmpfs: the same mount instance).
+returns:
+  success: "bytes copied: len, or less when the source ends first (0 at or past the source's end); len 0 returns 0"
+  positions: "NULL offset pointers: both file positions advance by the result; non-NULL: *off_in and *off_out advance by the result, the file positions stay; mixed works"
+  destination: "written like pwrite: a copy past the destination's end leaves a gap of zeros and extends the size; the destination need not be empty"
+  large_copies: "64 KiB copies completely (loop until done in general)"
+  same_file: "fd_in and fd_out may be the same file (or one open twice) when the ranges [off_in, off_in+len) and [off_out, off_out+len) do not overlap"
+  huge_len: "len is cut to what the source has: len = SIZE_MAX from offset 0 of a 10-byte file copies 10 (offsets advance by 10)"
+errors:
+  bad_fd: "EBADF (9): fd_in not open for reading (O_WRONLY), fd_out not open for writing (O_RDONLY) or open with O_APPEND, an O_PATH descriptor, a descriptor that is not open"
+  flags: "EINVAL (22): flags != 0 (1, 0x80000000)"
+  is_a_directory: "EISDIR (21): fd_in is a directory"
+  not_regular: "EINVAL (22): a pipe (either side), /dev/null (either side)"
+  overlap: "EINVAL (22): the same file with overlapping ranges (0..4 and 2..6; 4..8 and 2..6) or identical ranges"
+  overflow: "EOVERFLOW (75): *off_in or *off_out negative; *off_out + len past the largest file offset (off_out 100 with len SIZE_MAX)"
+  bad_pointer: "EFAULT (14): off_in or off_out not readable"
+  cross_fs: "EXDEV (18): the files are on different file systems (two tmpfs mounts; a memfd and a /tmp file; /proc and /tmp); *off_in is not advanced"
+  order: "(1) EBADF for a descriptor that is not open or is O_PATH (copy_file_range(-1, NULL, -1, NULL, 4, 1) is EBADF; copy_file_range(-1, (void*)1, ...) is EBADF); (2) EFAULT for an unreadable offset pointer (before EISDIR: a directory fd_in with off_in (void*)1 is EFAULT); (3) EINVAL for flags (before the access modes: copy_file_range(wronly, NULL, rdonly, NULL, 4, 1) is EINVAL); (4) EBADF for the access modes and O_APPEND; (5) the file types (EISDIR, EINVAL); (6) EXDEV, EOVERFLOW, overlap EINVAL. A failed call copies nothing"
+side_effects: "the destination's data, size, mtime and ctime as for a write"
+threading: "positions are the open file descriptions'"
+ordering: []
+timing:
+  typical: "proportional to len; may copy in pieces"
+  guarantees: "none (a short count is not an error)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -156,6 +156,9 @@ fn memory_of(pid: u32) -> Option<Arc<Memory>> {
 
 /// What `/proc/<pid>/fd/<n>` links to for a file without a path.
 fn anonymous_target(file: &OpenFile) -> Vec<u8> {
+    if let Some(name) = file.object().and_then(|o| o.anon_name()) {
+        return alloc::format!("anon_inode:{name}").into_bytes();
+    }
     let what = match file.kind() {
         FileType::Fifo => "pipe",
         FileType::Socket => "socket",
@@ -293,6 +296,21 @@ impl ProcSource for KernelProc {
         // proc(5): owned by the process's effective user and group ids.
         let cred = crate::linux::cred::process_creds(&p);
         Some(Owner { uid: cred.euid, gid: cred.egid, start_ns: with_record(pid, |r| r.start_ns).unwrap_or(0) })
+    }
+
+    fn threads(&self, pid: u32) -> Vec<u32> {
+        let Some(p) = find(pid) else { return Vec::new() };
+        match p.linux.as_ref() {
+            Some(l) => l.with(|s| s.thread_ids().map(|t| t as u32).collect()),
+            None => alloc::vec![pid],
+        }
+    }
+
+    fn thread_comm(&self, pid: u32, tid: u32) -> Option<Vec<u8>> {
+        let p = find(pid)?;
+        let comm = p.linux.as_ref()?.with(|s| s.has_thread(tid as i32).then(|| s.thread(tid as i32).comm))?;
+        let len = comm.iter().position(|&b| b == 0).unwrap_or(comm.len());
+        Some(comm[..len].to_vec())
     }
 
     fn maps(&self, pid: u32) -> Vec<MapEntry> {

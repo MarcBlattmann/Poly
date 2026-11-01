@@ -194,6 +194,8 @@ pub fn install(vfs: &Vfs, ctx: &FsContext) {
     }
     // /dev/input/event* for the input devices found so far (ADR 0103).
     crate::input::install_nodes(vfs, &ctx);
+    // /dev/fb0 over the display (ADR 0107).
+    crate::fbdev::install(vfs, &ctx);
     crate::kprintln!(
         "fs: devices console (5,1), tty (5,0), null (1,3), zero (1,5), full (1,7), random (1,8), urandom (1,9); \
          {made} of {} directories, nodes and links made",

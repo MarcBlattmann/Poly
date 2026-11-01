@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/creat                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  creat(path, mode) is system call 85. It is exactly open(path,
+  O_CREAT|O_WRONLY|O_TRUNC, mode) (2): it creates the regular file if it does
+  not exist (permission bits mode & ~umask) or truncates it to 0 if it does,
+  and returns a new descriptor open for writing only. Symbolic links are
+  followed, also a dangling one (its target is created).
+returns:
+  success: "the lowest free descriptor (3 in a fresh process; 0 after closing fd 0); F_GETFL shows O_WRONLY (no O_APPEND, no O_NONBLOCK); F_GETFD shows 0 (not close-on-exec); offset 0"
+  new_file: "S_IFREG | (mode & 07777 & ~umask): 0666 with umask 022 gives 0644; 07777 gives 07755; 0 gives 0 and the descriptor still writes; type bits in mode are ignored (S_IFDIR|0640 gives a regular 0640 file). Owner the effective uid, group the effective gid (or the parent's group when it is set-group-ID). Size 0"
+  existing_file: "truncated to 0, same inode, its mode and owner kept (mode is ignored)"
+  write_only: "write works, read is EBADF"
+  symbolic_links: "a link to an existing file truncates the target; a dangling link creates its target (mode applied) when the target's directory exists"
+  relative_paths: "relative to the working directory"
+errors:
+  is_a_directory: "EISDIR (21): the path is a directory (also with a trailing slash, through a link, \"/\"), and any path with a trailing slash: a missing name (nothing created) or an existing regular file with a trailing slash are EISDIR too"
+  missing: "ENOENT (2): a missing directory on the way, the empty path, a dangling link whose target's directory is missing, a removed working directory"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components"
+  loop: "ELOOP (40): a looping link, at the end or on the way"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more (255 creates); a path of 4096 bytes or more"
+  bad_path_pointer: "EFAULT (14): NULL or unmapped"
+  no_descriptor: "EMFILE (24): no descriptor below RLIMIT_NOFILE is free; nothing is created; checked before the path (a missing directory is EMFILE too)"
+  permission: "EACCES (13): a new name in a directory without write or search permission; an existing file without write permission (its contents stay); no search permission on the way; root passes all of these. An existing writable file in a read-only directory is fine"
+  others: "as open with O_CREAT|O_WRONLY|O_TRUNC: EROFS on a read-only mount, ETXTBSY for a program being executed, ENOSPC, EDQUOT"
+  order: "(1) EMFILE; (2) the path string and components; (3) for the last name: EISDIR for a directory or a trailing slash, EACCES; (4) the truncation"
+side_effects: "a new file: the parent's mtime/ctime change; an existing non-empty file: its data is gone and its mtime/ctime change"
+threading: "no thread-specific behaviour; the descriptor table, working directory and umask are the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

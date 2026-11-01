@@ -1,0 +1,99 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/semctl               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace with default limits (/proc/sys/kernel/sem: semmsl 32000, semmns 1024000000, semopm 500, semmni 32000)"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  semctl(semid, semnum, cmd, arg) (syscall 66) controls a System V
+  semaphore set made by semget. semid, semnum and cmd are 32-bit ints
+  (upper register halves ignored); arg is a full 64-bit value used as an
+  int (SETVAL: its low 32 bits), as a pointer (IPC_STAT, IPC_SET,
+  GETALL, SETALL, IPC_INFO, SEM_INFO, SEM_STAT, SEM_STAT_ANY) or ignored
+  (the rest). A negative semid is EINVAL for every command. Commands
+  (linux/ipc.h, linux/sem.h): IPC_RMID 0, IPC_SET 1, IPC_STAT 2,
+  IPC_INFO 3, GETPID 11, GETVAL 12, GETALL 13, GETNCNT 14, GETZCNT 15,
+  SETVAL 16, SETALL 17, SEM_STAT 18, SEM_INFO 19, SEM_STAT_ANY 20; any
+  other value (negative, 4..10, 21, or one with the IPC_64 bit 0x100
+  set) is EINVAL. Per-semaphore commands (GETVAL, GETPID, GETNCNT,
+  GETZCNT, SETVAL) need 0 <= semnum < nsems (EINVAL); the others ignore
+  semnum. Values: GETVAL returns the value, GETPID the pid of the last
+  process that changed it (semop, SETVAL, SETALL, exit undo; 0 in a new
+  set), GETNCNT/GETZCNT the number of processes sleeping in semop on a
+  decrement / on wait-for-zero of that semaphore, GETALL writes nsems
+  unsigned shorts to arg; SETVAL sets one value (0..32767, else ERANGE),
+  SETALL sets all from nsems unsigned shorts at arg (any above 32767:
+  ERANGE, nothing changed). SETVAL and SETALL set sempid to the caller
+  for the semaphores they set, set sem_ctime, clear every process's
+  SEM_UNDO adjustment for those semaphores, and complete any sleeping
+  semop that became possible before returning. IPC_STAT writes a struct
+  semid64_ds; IPC_SET copies uid, gid and mode & 0777 from one (other
+  fields ignored; cuid, cgid, nsems, values and otime kept), sets
+  sem_ctime; IPC_RMID removes the set at once (its key becomes free,
+  the id is EINVAL from then on) and wakes every sleeper with EIDRM.
+  IPC_INFO/SEM_INFO write a struct seminfo and return the highest index
+  in use; SEM_STAT/SEM_STAT_ANY take an index instead of an id and
+  return the id. Access, for the caller's class (owner if euid is the
+  set's uid or cuid, else group, else other): reading commands (GETVAL,
+  GETPID, GETNCNT, GETZCNT, GETALL, IPC_STAT, SEM_STAT) need r,
+  SETVAL/SETALL need w (alter); EACCES otherwise; SEM_STAT_ANY, IPC_INFO
+  and SEM_INFO need nothing; IPC_SET and IPC_RMID need euid == uid or
+  cuid, else EPERM. CAP_IPC_OWNER (root) passes the r/w checks,
+  CAP_SYS_ADMIN (root) the owner check.
+returns:
+  getval: "the semaphore's value (0..32767); arg ignored"
+  getpid: "sempid of the semaphore: pid of the last semop/SETVAL/SETALL/undo that set it; 0 in a new set"
+  getncnt_getzcnt: "number of processes sleeping in semop with this semaphore as the first operation that cannot proceed (decrement / wait-for-zero)"
+  getall: "0; writes exactly nsems unsigned shorts at arg (nothing after them)"
+  setval: "0; value = low 32 bits of arg as an int; sempid = caller; sem_ctime = now; adjustments for that semaphore cleared; sleepers whose arrays became possible are completed before return (GETVAL already shows their effect, GETNCNT 0)"
+  setall: "0; every value from the array; sempid = caller for every semaphore; sem_ctime = now; adjustments cleared; sleepers completed as for SETVAL"
+  ipc_stat: "0; struct semid64_ds (104 bytes): ipc64_perm {key, uid, gid, cuid, cgid, mode (permission bits only), seq}, sem_otime (+high), sem_ctime (+high), sem_nsems"
+  ipc_set: "0; uid, gid, mode&0777 taken; ctime = now; the owner may give the set to any valid uid/gid (the creator keeps owner rights through cuid); takes effect for the next call"
+  ipc_rmid: "0; arg ignored; key released; sleepers return EIDRM; every later call with the id: EINVAL"
+  ipc_info: "highest index in use (>= 0, 0 when none); struct seminfo {semmap, semmni, semmns, semmnu, semmsl, semopm, semume, semusz, semvmx, semaem} (10 ints) = 1024000000, 32000, 1024000000, 1024000000, 32000, 500, 500, 20, 32767, 32767 with default limits; semid only needs to be >= 0"
+  sem_info: "as IPC_INFO, but semusz = number of sets in use, semaem = number of semaphores in use"
+  sem_stat: "the set's id; semid is an index (on this system the id modulo 32768); fills semid64_ds; SEM_STAT needs r, SEM_STAT_ANY nothing"
+  widths: "semnum (1<<32)|1 is semaphore 1, 0xffffffff is -1 (EINVAL); cmd (1<<32)|GETVAL is GETVAL; semid with high bits set addresses its low 32 bits"
+errors:
+  negative_id: "EINVAL (22): semid < 0, for every command (also IPC_INFO, SEM_INFO, unknown commands); checked first"
+  bad_cmd: "EINVAL (22): unknown command (negative, 4-10, 21+, IPC_STAT|0x100)"
+  setval_range: "ERANGE (34): SETVAL with a value < 0 or > 32767; checked before the id is looked up"
+  ipc_set_fault: "EFAULT (14): IPC_SET buffer unreadable; checked before the id is looked up (unused id + NULL is EFAULT)"
+  bad_id: "EINVAL (22): no live set with this id (never handed out or removed); SEM_STAT/SEM_STAT_ANY: index not in use"
+  semnum: "EINVAL (22): per-semaphore command with semnum < 0 or >= nsems"
+  access: "EACCES (13): reading command without r, SETVAL/SETALL without w, for the caller's class; not for root"
+  owner: "EPERM (1): IPC_SET or IPC_RMID by a caller whose euid is neither the set's uid nor cuid and who lacks CAP_SYS_ADMIN, whatever the mode"
+  ipc_set_ids: "EINVAL (22): IPC_SET with uid or gid (unsigned) -1 / not mappable; nothing changes"
+  setall_range: "ERANGE (34): SETALL with any value > 32767; nothing changes"
+  fault: "EFAULT (14): unwritable buffer for IPC_STAT, SEM_STAT, IPC_INFO, SEM_INFO, GETALL; unreadable for SETALL (NULL, kernel address); nothing changes"
+  order_getval: "EINVAL (id) > EACCES > EINVAL (semnum): GETVAL/GETPID/GETNCNT/GETZCNT on a set the caller may not read with a bad semnum is EACCES"
+  order_setval: "ERANGE (value) > EINVAL (id) > EINVAL (semnum) > EACCES: SETVAL with a bad semnum on a set the caller may not alter is EINVAL"
+  order_setall: "EINVAL (id) > EACCES > EFAULT > ERANGE"
+  order_set: "EINVAL (negative id) > EFAULT (buffer) > EINVAL (id) > EPERM > EINVAL (uid/gid)"
+  no_memory: "ENOMEM (12): SETALL/GETALL buffers for large sets; not tested"
+side_effects: >
+  SETVAL/SETALL change values, sempid, sem_ctime and clear SEM_UNDO
+  adjustments of the semaphores they set; IPC_SET changes owner and mode
+  and sem_ctime; IPC_RMID destroys the set and its adjustments. Reading
+  commands change nothing (no time stamps).
+threading: "sets are system-wide; a SETVAL/SETALL/IPC_RMID from any process acts on sleepers of every process"
+ordering:
+  - "a sleeper made runnable by SETVAL/SETALL has its operations applied before semctl returns"
+  - "IPC_RMID wakes all sleepers (decrement and wait-for-zero) with EIDRM"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 5  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the tests also use semget, semop and fork; one test (needs=root)
+# drops a child to uid/gid 65534 with setresgid/setresuid to check access
+# as "other". arg is passed as a plain register value (the kernel's
+# unsigned long), not glibc's union. Ids and pids are not printed; single-
+# process tests compare syscall names only (syscalls=names), multi-process
+# ones only output (syscalls=off). struct semid64_ds: x86-64 asm/sembuf.h,
+# asm-generic/ipcbuf.h; struct seminfo and commands: linux/sem.h,
+# linux/ipc.h. The index used by SEM_STAT is id modulo 32768 with the
+# default ipcmni (IPCMNI 32768); not part of any API, observed only.

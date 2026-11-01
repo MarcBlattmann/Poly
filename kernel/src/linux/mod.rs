@@ -38,6 +38,7 @@ mod files;
 mod files_tests;
 pub mod net;
 mod ns_tests;
+mod pidfd;
 mod services;
 mod shm;
 mod shm_tests;
@@ -59,7 +60,7 @@ use crate::user::memory::SegvCode;
 use crate::user::{self, Fault, FaultError};
 use crate::{kprintln, testrun};
 use alloc::sync::Arc;
-use core::sync::atomic::AtomicBool;
+use core::sync::atomic::{AtomicBool, Ordering};
 use poly_abi::{Outcome, SyscallRegs};
 use poly_personality_linux::futex::FutexTable;
 use poly_personality_linux::signal::fault::{PageFault, fault_info};
@@ -187,6 +188,10 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         let _ = user::request_exit(status);
         return outcome;
     }
+    // rseq(2) (ADR 0111): the thread was switched out during the call.
+    if k.flags.rseq_notify.load(Ordering::Relaxed) && k.flags.rseq_notify.swap(false, Ordering::Relaxed) {
+        Linux::rseq_resume(&mut k);
+    }
     if Linux::exit_to_user(&mut k) == ExitToUser::Killed {
         let status = k.take_exit().unwrap_or(crate::process::ExitStatus::Exited(0));
         let _ = user::request_exit(status);
@@ -205,6 +210,14 @@ pub fn exit_to_user(process: &Process) -> Leave {
     match Thread::current(process) {
         Some(mut k) => Linux::exit_to_user(&mut k).into(),
         None => Leave::Return,
+    }
+}
+
+/// The running thread of `process`, which has an rseq(2) area, is about to
+/// return to user mode after it was switched out (ADR 0111).
+pub fn rseq_resume(process: &Process) {
+    if let Some(mut k) = Thread::current(process) {
+        Linux::rseq_resume(&mut k);
     }
 }
 
@@ -255,6 +268,7 @@ pub fn thread_exit(process: &Process, tid: u32) {
         Linux::thread_exit(&mut k, shares_memory);
     }
     task::vfork_release(tid);
+    pidfd::changed();
 }
 
 /// The last thread of `process` (the running thread) has left it with

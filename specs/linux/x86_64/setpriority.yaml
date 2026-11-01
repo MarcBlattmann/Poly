@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/setpriority          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (--privileged) on WSL2, x86-64, 32 CPUs, CONFIG_SCHED_AUTOGROUP not set; tests run as root with all capabilities and as uid/gid 65534 without capabilities (setpriv), umask 022, from /; default RLIMIT_NICE 0/0"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  setpriority(which, who, nice) (syscall 141) sets the nice value of a
+  thread (PRIO_PROCESS 0), of every thread of every process in a process
+  group (PRIO_PGRP 1) or of every thread of every process with a real
+  uid (PRIO_USER 2), and returns 0. who 0 means the calling thread, the
+  caller's group, or the caller's real uid; with PRIO_PROCESS who is a
+  thread id (a process id names the main thread only). nice is clamped
+  to -20..19 (100 -> 19, -100 -> -20), never rejected. which, who and
+  nice are 32-bit ints (upper halves ignored). Raising the nice value is
+  always allowed on one's own tasks; lowering it needs CAP_SYS_NICE or
+  RLIMIT_NICE (20 - new nice <= soft limit), else EACCES. Changing a
+  task of another user needs CAP_SYS_NICE (EPERM). The policy is not
+  changed. getpriority reads the value back as 20 - nice.
+returns:
+  success: "0; getpriority then reads 20 - nice"
+  clamp: "nice > 19 is 19 (100 and INT_MAX -> getpriority 1); nice < -20 is -20 (-100 -> 40 for a privileged caller); the clamped value is what the permission check compares"
+  same_value: "setting the nice value a task already has succeeds (also unprivileged)"
+  per_thread: "PRIO_PROCESS changes one thread: who 0 in a thread sets that thread only; naming a thread id sets that thread only; the process id sets the main thread only; a thread created later starts with its creator's nice"
+  pgrp: "PRIO_PGRP sets every thread of every member process (members, their threads, the caller); who 0 is the caller's group"
+  user: "PRIO_USER sets every thread of every process whose real uid is who; who 0 is the caller's real uid"
+  fork: "a fork child inherits the nice value (SCHED_RESET_ON_FORK resets a negative nice, or any nice of a real-time parent, to 0 in the child: see sched_setscheduler)"
+  width: "nice (1<<32)|5 is 5; which (7<<32)|0 is PRIO_PROCESS; who (1<<33)|pid is pid"
+errors:
+  bad_which: "EINVAL (22): which not 0, 1 or 2 (3, -1, (1<<32)|3); checked before who"
+  not_found: "ESRCH (3): no thread with the id, no process in the group (also the pid of a process that is not a group leader), no process with the real uid, a negative who (-1), a reaped child"
+  other_user: "EPERM (1): without CAP_SYS_NICE the caller's effective uid is neither the target's real nor effective uid (target real 1111 / effective 2222 / saved 3333: euid 1111 or 2222 pass, matches by real or saved uid only fail), even when nothing would change; or the target holds capabilities the caller lacks (saved uid 0 kept). Checked before EACCES: a stranger lowering is EPERM"
+  lowering: "EACCES (13): the new (clamped) nice is below the target's current nice and the caller lacks CAP_SYS_NICE and 20 - new nice exceeds the target's RLIMIT_NICE soft limit; with limit 0 any lowering (5 -> 3, -100); with limit 25 down to -5 is allowed, -6 and -100 are EACCES"
+  order: "EINVAL (which), ESRCH, then per task EPERM, EACCES"
+  unchanged: "a failed call changes nothing for a single task"
+  several_tasks: "PRIO_PGRP/PRIO_USER: tasks that may be changed are changed; the call returns 0 only if every matching task was changed, else an error of a task that failed (tests use groups where all fail or none fail: unprivileged lowering of a whole user is EACCES and changes no one)"
+side_effects: "changes the nice value (CPU weight) of the matching threads; nothing else"
+threading: "per thread (PRIO_PROCESS), all threads of the matching processes (PRIO_PGRP, PRIO_USER)"
+ordering: []
+timing:
+  typical: "microseconds; never blocks"
+  guarantees: none
+tests:
+  visible: 5  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: PRIO_* from linux/resource.h; RLIMIT_NICE 13 from
+# asm-generic/resource.h. The tests change nice values only in child
+# processes (and in process groups of their own for PRIO_PGRP); a PRIO_PGRP
+# call in the test program's own group would renice the runner too, and
+# PRIO_USER as root would renice every root process, so neither is done.
+# Tests that pass as any user only raise nice values; lowering, other
+# users and RLIMIT_NICE are tested as root (needs=root) in children that
+# set RLIMIT_NICE explicitly and drop to another uid.

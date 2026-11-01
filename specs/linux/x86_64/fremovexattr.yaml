@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/fremovexattr         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (privileged) on WSL2, x86-64; observed as root with every capability and as uid/gid 65534 without capabilities (tests also drop to uid 1000), umask 022; no LSM active; file systems: tmpfs (/dev/shm and a fresh mount), overlayfs over ext4 (/tmp) and a fresh ext4; the tests pass with /tmp on each"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  fremovexattr(fd, name) (syscall 199) is removexattr
+  (removexattr.yaml) on the file an open descriptor refers to: the same
+  name rules, namespaces, permission rules, EROFS, ctime update and
+  ENODATA for a missing name. The descriptor's access mode is
+  irrelevant (O_RDONLY works); write permission is checked on the
+  file's current mode for the caller's current credentials.
+returns:
+  any_mode: "O_RDONLY, O_WRONLY and directory descriptors work; an unlinked but open file can still lose attributes"
+  fd_width: "only the low 32 bits of fd count"
+  ctime: "a successful removal changes the ctime (seen with fstat)"
+  special_files: "pipes, FIFOs, sockets and eventfds: user.* names (also 'user.' alone) are EPERM; unknown prefixes on pipes and sockets EOPNOTSUPP; removing a socket's system.sockprotoname is EOPNOTSUPP and it stays readable"
+errors:
+  bad_fd: "EBADF (9): fd -1, unused, closed, or O_PATH (file or symbolic link)"
+  order: "the name (EFAULT, ERANGE) before EBADF; EBADF before the namespace (unknown prefix or 'user.' alone with a bad fd: EBADF); then as removexattr"
+  access_at_call: "EACCES (13): user.* needs write permission now (own file opened O_RDONLY: works at mode 0600, EACCES after chmod 0400, also for a missing name); a descriptor of root's 0644 file opened by root and used as uid 1000: EACCES for user.* (also missing names), EPERM for trusted.* and security.*"
+  read_only: "EROFS (30) on a read-only mount"
+  rest: "every other error exactly as removexattr.yaml"
+side_effects: "as removexattr"
+threading: "as removexattr"
+ordering: []
+timing:
+  typical: "microseconds per call on tmpfs"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the EROFS case is in c_setxattr_readonly_mount (setxattr's
+# tests). Constants as in setxattr.yaml.

@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lchown               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs; static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  lchown(path, owner, group) is system call 94. It is chown (92) except that
+  a symbolic link at the end of the path is not followed: the link's own uid
+  and gid change. It is fchownat(AT_FDCWD, path, owner, group,
+  AT_SYMLINK_NOFOLLOW). -1 (0xffffffff) leaves an id unchanged. On anything
+  that is not a symbolic link it does exactly what chown does.
+returns:
+  success: "0"
+  symbolic_link: "the link's uid/gid change (lstat shows them), the target's do not; the link's mode stays S_IFLNK|0777; the link's ctime changes, the target's does not. A dangling link and a link to itself (or a link loop) can be changed: no ELOOP and no ENOENT for the last component"
+  followed_when: "a link earlier in the path is followed (D/dirlink/g changes g); a trailing slash after a link makes it be followed (D/dirlink/ changes the directory, not the link)"
+  permission_rules: "as chown, judged on the link's own owner: a caller without CAP_CHOWN may set the group of a link it owns to its effective gid or a supplementary group; giving it away or a foreign group is EPERM; a link of another user can only get -1/-1 (succeeds) . The target's owner does not matter: chown through another user's link to the caller's own file works, lchown of that link does not"
+  regular_files: "same as chown: set-user-ID cleared (04755 -> 0755 even for -1, -1)"
+errors:
+  not_permitted: "EPERM (1): as chown, for the link's ownership"
+  read_only_fs: "EROFS (30): the link is on a read-only mount (also -1, -1)"
+  search_permission: "EACCES (13): a directory on the way without x for the caller (not root)"
+  missing: "ENOENT (2): a missing name or directory on the way, the empty path, a dangling link followed by a trailing slash"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components; a link to a file followed by a trailing slash"
+  loop: "ELOOP (40): a looping link that is not the last component, or is followed by a trailing slash (self/ or loop/x)"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): NULL or an unmapped address"
+  order: "as chown: path string, then the components left to right (D/nope/<256 bytes> is ENOENT), then EROFS, then EPERM"
+side_effects: "ctime of the changed inode (the link itself) changes; nothing else"
+threading: "no thread-specific behaviour; the working directory used for relative paths is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

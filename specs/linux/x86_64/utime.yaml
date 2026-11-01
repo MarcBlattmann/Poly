@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/utime                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  utime(path, times) is system call 132. It sets the access and modification
+  times of the file named by path (symbolic links followed) and returns 0.
+  times points to struct utimbuf {long actime; long modtime;} (16 bytes, whole
+  seconds): atime becomes actime.0 and mtime modtime.0 (nanoseconds 0). A NULL
+  times sets both to the current time. ctime always becomes the current time.
+returns:
+  success: "0"
+  explicit_times: "any 64-bit second values: 0, negative (-1, -2000000000), far future (32503680000); atime may be later than mtime; the previous nanoseconds are replaced by 0"
+  null_times: "atime and mtime both the current time (equal to each other, seconds and nanoseconds), not earlier than the file's ctime before the call"
+  ctime: "moves to the current time in both cases; size and contents are untouched"
+  symbolic_links: "followed: the target's times change, the link's do not"
+  directories: "work like files"
+  relative_paths: "relative to the working directory"
+  permission_rules: "explicit times: only the owner or a caller with CAP_FOWNER (root), whatever the file's mode (an owner may set them on a mode 0 file). NULL: the owner, root, or a caller with write permission on the file"
+errors:
+  bad_times_pointer: "EFAULT (14): times not readable (1, or 16 bytes running into an unmapped page; ending exactly at the end of a mapping is fine). The times are read BEFORE the path is looked at: utime(missing, (void*)1) and utime(NULL, (void*)1) are EFAULT"
+  not_owner: "EPERM (1): explicit times by a non-owner without CAP_FOWNER, also when the caller may write the file"
+  no_write_permission: "EACCES (13): NULL times by a non-owner without write permission (and without CAP_FOWNER / CAP_DAC_OVERRIDE); nothing changes"
+  search_permission: "EACCES (13): a directory on the way without x (not for root)"
+  missing: "ENOENT (2): a missing name or directory, the empty path, a dangling link"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components, a trailing slash after a regular file"
+  loop: "ELOOP (40): a looping link"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more"
+  bad_path_pointer: "EFAULT (14): NULL or unmapped path"
+  read_only_fs: "EROFS (30): a file on a read-only mount (also root, also explicit times of another user's file, also NULL)"
+  order: "(1) reading times (EFAULT); (2) the path string and components; (3) EROFS; (4) EPERM / EACCES"
+side_effects: "atime, mtime and ctime of the file"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

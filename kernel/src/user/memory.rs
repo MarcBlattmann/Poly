@@ -360,6 +360,10 @@ fn map_error(e: MapError) -> FaultError {
 pub struct Memory {
     space: Arc<AddressSpace>,
     inner: Mutex<Inner>,
+    /// membarrier(2): the `MEMBARRIER_CMD_REGISTER_*` commands done on
+    /// this memory, as their bits. Shared by every task using the memory,
+    /// copied by fork, empty after execve (a new memory).
+    membarrier: core::sync::atomic::AtomicU32,
 }
 
 struct Inner {
@@ -434,13 +438,46 @@ impl fmt::Debug for Memory {
     }
 }
 
+/// A memory barrier on every CPU (membarrier(2) `MEMBARRIER_CMD_GLOBAL`):
+/// a kernel TLB request for page 0, which is never a kernel mapping, that
+/// every CPU takes and acknowledges; taking an interrupt is serializing.
+pub fn global_barrier() {
+    let mut flush = crate::arch::user::Flush::None;
+    flush.add_page(0);
+    crate::arch::tlb::flush_kernel(flush);
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+}
+
 impl Memory {
     /// An empty memory map with `layout` in a new address space.
     pub fn new(layout: Layout) -> Result<Memory, MemoryError> {
         let map = VmMap::new(layout)?;
         let space = AddressSpace::new().map_err(|_| MemoryError::OutOfMemory)?;
         let inner = Inner { map, parked: BTreeMap::new(), cached: BTreeMap::new(), shared: BTreeMap::new() };
-        Ok(Memory { space: Arc::new(space), inner: Mutex::new(inner) })
+        Ok(Memory { space: Arc::new(space), inner: Mutex::new(inner), membarrier: Default::default() })
+    }
+
+    /// membarrier(2): the registration commands done on this memory.
+    pub fn membarrier_registrations(&self) -> u32 {
+        self.membarrier.load(core::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// membarrier(2): record registration command bits `bits`.
+    pub fn membarrier_register(&self, bits: u32) {
+        self.membarrier.fetch_or(bits, core::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// A memory barrier on every CPU that runs this memory now
+    /// (membarrier(2) `MEMBARRIER_CMD_PRIVATE_EXPEDITED`): a TLB request
+    /// for page 0, which no user program maps, sent to each of them and
+    /// waited for. Taking the interrupt and returning from it is
+    /// serializing (SDM Vol. 3A §9.3), so each such CPU has ordered its
+    /// memory accesses before the call returns.
+    pub fn barrier(&self) {
+        let mut flush = crate::arch::user::Flush::None;
+        flush.add_page(0);
+        self.space.sync_tlb(flush);
+        core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
     }
 
     /// The page tables.
@@ -622,6 +659,8 @@ impl Memory {
         // them; a page-cache page in a private region is the cache's too.
         let refs = match (inner.cached.get(&page), inner.shared.get(&page)) {
             (Some(m), _) if !m.shared => 2,
+            // Device memory always has another user: its owner.
+            (_, Some(s)) if s.frame.is_device() => u32::MAX,
             (_, Some(s)) => u32::try_from(Arc::strong_count(&s.frame)).unwrap_or(u32::MAX),
             _ => 1,
         };

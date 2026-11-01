@@ -33,6 +33,7 @@
 
 mod decoration;
 mod display;
+mod input;
 mod output;
 mod presentation;
 mod shm;
@@ -45,7 +46,7 @@ use crate::protocol::{
     wl_seat, wl_shm, wl_shm_pool, wl_surface, wl_touch, wp_presentation, wp_presentation_feedback, xdg_popup,
     xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base, zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
 };
-use crate::seat::{BTN_LEFT, Capabilities, InputEvent};
+use crate::seat::{Capabilities, InputEvent};
 use crate::wire::{self, Arg, ArgKind, Fd, Fixed, Header, Interface, Message, ObjectId, SERVER_ID_START};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
@@ -80,6 +81,13 @@ pub trait Host {
     fn map_shm(&mut self, fd: Fd, size: usize) -> Option<Box<dyn ShmMap>>;
     /// Close a file descriptor the server does not keep.
     fn close_fd(&mut self, fd: Fd);
+    /// A fresh file descriptor of the keyboard's XKB keymap (`xkb_v1`, NUL
+    /// included) and its size, for `wl_keyboard.keymap` (ADR 0107). The
+    /// server queues it to be sent; whoever sends it closes it afterwards.
+    /// `None` (the default): no keymap.
+    fn keymap(&mut self) -> Option<(Fd, u32)> {
+        None
+    }
 }
 
 /// A connected client.
@@ -181,8 +189,8 @@ pub(crate) enum Data {
     Buffer(Buffer),
     Output,
     Seat,
-    /// `wl_pointer`, `wl_keyboard`, `wl_touch`: no events until the input
-    /// stack is there.
+    /// `wl_pointer`, `wl_keyboard`, `wl_touch` (told apart by interface;
+    /// routed in `input.rs`, touch not yet).
     InputDevice,
     WmBase,
     Positioner(Positioner),
@@ -292,6 +300,7 @@ struct SeatState {
     /// those it never had).
     ever: Capabilities,
     pointer: (Fixed, Fixed),
+    input: input::InputState,
 }
 
 /// One frame's presentation time.
@@ -399,6 +408,7 @@ impl Server {
         for w in windows {
             self.scene.remove_window(w);
         }
+        self.input_client_gone(c);
         if self.active.is_some_and(|(ac, _)| ac == c) {
             self.active = None;
         }
@@ -442,6 +452,8 @@ impl Server {
                 return;
             }
         }
+        // A window mapped or unmapped: the keyboard follows the active one.
+        self.sync_keyboard_focus();
     }
 
     /// The header of the next complete message, if there is one; a
@@ -608,6 +620,17 @@ impl Server {
         self.scene.render(fb)
     }
 
+    /// [`Server::render`] with layers below and above the windows (a
+    /// shell's; [`crate::compose::Layer`]).
+    pub fn render_with(
+        &mut self,
+        fb: &mut dyn Framebuffer,
+        below: Option<&dyn crate::compose::Layer>,
+        above: Option<&dyn crate::compose::Layer>,
+    ) -> Vec<Rect> {
+        self.scene.render_with(fb, below, above)
+    }
+
     /// Whether a frame is wanted: something to draw, or clients waiting for
     /// frame callbacks or presentation feedback.
     pub fn wants_frame(&self) -> bool {
@@ -683,30 +706,6 @@ impl Server {
 
     pub fn seat_capabilities(&self) -> Capabilities {
         self.seat.capabilities
-    }
-
-    /// An input event. For now the frame's part of window management: a
-    /// press of the left button raises and activates the window under the
-    /// pointer, and on a close button asks its client to close it.
-    pub fn handle_input(&mut self, event: InputEvent) {
-        let (ow, oh) = self.scene.logical_size();
-        let clamp = |v: Fixed, max: i32| Fixed(v.0.clamp(0, (max - 1).max(0) * 256));
-        match event {
-            InputEvent::PointerMotion { dx, dy, .. } => {
-                let (x, y) = self.seat.pointer;
-                self.seat.pointer = (clamp(Fixed(x.0 + dx.0), ow), clamp(Fixed(y.0 + dy.0), oh));
-            }
-            InputEvent::PointerMotionAbsolute { x, y, .. } => self.seat.pointer = (clamp(x, ow), clamp(y, oh)),
-            InputEvent::PointerButton { button: BTN_LEFT, pressed: true, .. } => {
-                let (x, y) = (self.seat.pointer.0.floor(), self.seat.pointer.1.floor());
-                match self.scene.hit_test(x, y) {
-                    Hit::Close(w) => self.close_window(w),
-                    Hit::TitleBar(w) | Hit::Border(w) | Hit::Surface { window: w, .. } => self.focus_window(w),
-                    Hit::Desktop => {}
-                }
-            }
-            _ => {}
-        }
     }
 
     /// The pointer's position, logical.

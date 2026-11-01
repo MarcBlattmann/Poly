@@ -1,0 +1,14 @@
+[package]
+name = "poly-hda"
+description = "Intel High Definition Audio: controller reset, CORB/RIRB codec commands, codec widget-graph discovery and output path setup, stream descriptors with buffer descriptor lists"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+poly-pci.workspace = true

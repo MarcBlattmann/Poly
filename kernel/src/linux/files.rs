@@ -121,6 +121,46 @@ impl LinuxFs for Thread<'_> {
         self.process().files.pwrite(fd, buf, offset).map_err(vfs_errno)
     }
 
+    fn fallocate(&mut self, fd: i32, mode: u32, offset: u64, len: u64) -> Result<(), Errno> {
+        self.process().files.fallocate(fd, mode, offset, len).map_err(vfs_errno)
+    }
+
+    fn read_nowait(&mut self, fd: i32, buf: &mut [u8], at: Option<u64>) -> Result<usize, Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        if file.on_inode() {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        match at {
+            Some(offset) => file.read_at(offset, buf),
+            None => file.read_wait_until(buf, &mut self.blocker(), poly_vfs::Timeout::Now),
+        }
+        .map_err(vfs_errno)
+    }
+
+    fn write_flags(
+        &mut self,
+        fd: i32,
+        buf: &[u8],
+        at: Option<u64>,
+        append: Option<bool>,
+        nowait: bool,
+    ) -> Result<usize, Errno> {
+        let files = &self.process().files;
+        if !nowait {
+            return files.write_with(fd, buf, at, append).map_err(vfs_errno);
+        }
+        let file = files.file(fd).map_err(vfs_errno)?;
+        if file.on_inode() {
+            return Err(Errno::EOPNOTSUPP);
+        }
+        files.before_write(&file, buf.len()).map_err(vfs_errno)?;
+        match at {
+            Some(offset) => file.write_at(offset, buf),
+            None => file.write_wait_until(buf, &mut self.blocker(), poly_vfs::Timeout::Now),
+        }
+        .map_err(vfs_errno)
+    }
+
     fn dup(&mut self, fd: i32) -> Result<i32, Errno> {
         self.process().files.dup(fd).map_err(vfs_errno)
     }
@@ -144,6 +184,11 @@ impl LinuxFs for Thread<'_> {
 
     fn close_range(&mut self, first: u32, last: u32, cloexec: bool) -> Result<(), Errno> {
         self.process().files.close_range(first, last, cloexec);
+        Ok(())
+    }
+
+    fn unshare_fd_table(&mut self) -> Result<(), Errno> {
+        self.process().files.unshare_table();
         Ok(())
     }
 
@@ -206,7 +251,9 @@ impl LinuxFs for Thread<'_> {
     }
 
     fn status_flags(&mut self, fd: i32) -> Result<u32, Errno> {
-        self.process().files.status_flags(fd).map(OpenFlags::bits).map_err(vfs_errno)
+        let files = &self.process().files;
+        let extra = files.file(fd).map_or(0, |f| super::pidfd::extra_status_flags(&f));
+        files.status_flags(fd).map(|f| f.bits() | extra).map_err(vfs_errno)
     }
 
     fn set_status_flags(&mut self, fd: i32, flags: u32) -> Result<(), Errno> {
@@ -286,6 +333,29 @@ impl LinuxFs for Thread<'_> {
     ) -> Result<(), Errno> {
         let (atime, mtime) = (super::cred::set_time(atime), super::cred::set_time(mtime));
         self.process().files.utimensat(dirfd, path, atime, mtime, follow).map_err(vfs_errno)
+    }
+
+    fn memfd_create(&mut self, name: &[u8], perm: u32, seals: u32, cloexec: bool) -> Result<i32, Errno> {
+        let files = &self.process().files;
+        let memfd = poly_vfs::memfd::Memfd::new(name, seals);
+        let file =
+            fs::vfs().memfd_file(&fs::memfs::memfd_mount(), &files.cred(), perm as u16, memfd).map_err(vfs_errno)?;
+        files.install(file, cloexec).map_err(vfs_errno)
+    }
+
+    fn add_seals(&mut self, fd: i32, seals: u32) -> Result<(), Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        let memfd = file.memfd().ok_or(Errno::EINVAL)?;
+        // fcntl(2): "EPERM ... fd is not open for writing".
+        if !file.writable() {
+            return Err(Errno::EPERM);
+        }
+        memfd.add_seals(seals).map_err(vfs_errno)
+    }
+
+    fn get_seals(&mut self, fd: i32) -> Result<u32, Errno> {
+        let file = self.process().files.file(fd).map_err(vfs_errno)?;
+        file.memfd().map(|m| m.seals()).ok_or(Errno::EINVAL)
     }
 
     fn ftruncate(&mut self, fd: i32, len: u64) -> Result<(), Errno> {

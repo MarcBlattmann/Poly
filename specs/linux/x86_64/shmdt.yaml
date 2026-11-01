@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/shmdt                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 4-level paging; tests run as root with all capabilities and as uid/gid 65534 with no capabilities, umask 022; own IPC namespace with default limits"
+  observed_by: spec-linux-c
+  date: 2026-10-31
+summary: >
+  shmdt(shmaddr) (syscall 67) detaches the System V shared memory
+  attachment that shmat placed at shmaddr and returns 0. shmaddr is a
+  full 64-bit address and must be page aligned (EINVAL otherwise). It
+  must be the attach address of an attachment of the calling process
+  (the value shmat returned): the start of any other mapping, a page
+  inside an attachment, an unmapped address, NULL, a kernel or
+  non-canonical address is EINVAL and changes nothing. All remaining
+  pieces of that attachment are unmapped, also when mprotect split it
+  or munmap removed parts of it (even its first page: the attach
+  address still names it, while the start of a later piece does not).
+  Only that attachment goes: other attachments of the same segment in
+  the same process, and copies inherited by or from a forked process,
+  stay. The segment's nattch goes down by one, shm_dtime becomes the
+  current time and shm_lpid the caller's pid (atime, ctime, segsz
+  unchanged); the segment and its contents stay unless it was marked
+  with IPC_RMID and this was its last attachment, in which case it is
+  destroyed (its id is EINVAL from then on). Touching a detached page
+  is SIGSEGV.
+returns:
+  success: "0; every page of the attachment unmapped"
+  stat_after: "IPC_STAT: nattch -1, dtime = now (seconds), lpid = caller; atime, ctime, segsz kept"
+  contents: "the segment keeps its data; a later shmat sees it; other attachments are unaffected"
+  pieces: "an attachment split by mprotect or partly unmapped is detached as a whole by shmdt(attach address); this works also after munmap of its first page; nattch counts the attachment until all of it is gone"
+  fork: "a forked child's inherited attachment is its own: shmdt in the child leaves the parent's attachment (nattch -1, lpid = child)"
+  removal: "segment with SHM_DEST: still alive after a non-last detach (IPC_STAT works, nattch shows the rest); destroyed at the last detach (IPC_STAT and shmat by id: EINVAL)"
+errors:
+  unaligned: "EINVAL (22): shmaddr not a multiple of 4096 (also inside an attachment)"
+  not_attach_address: "EINVAL (22): no attachment starts at shmaddr: NULL, a later page or piece of an attachment, the page before one, an anonymous or file mapping (left mapped), an unmapped hole, a kernel address (0xffff800000000000), a non-canonical one (0x0000800000000000, attach address with bit 63 set), an address already detached"
+  order: "EINVAL is the only error; nothing changes on failure"
+side_effects: >
+  Unmaps the attachment's pages from the caller's address space and
+  updates the segment's nattch, dtime and lpid; may destroy a segment
+  marked for removal. munmap of a whole attachment has the same effect
+  as shmdt (see shmat.yaml); exit and execve detach every attachment.
+threading: "the unmapping is visible to all threads of the process at once"
+ordering:
+  - "a segment marked with IPC_RMID is destroyed when the last attachment in any process goes (shmdt, munmap, exit or execve)"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: the tests also use shmget, shmat, shmctl (IPC_STAT, IPC_RMID),
+# mmap, munmap, mprotect and fork (a child touches a detached page and is
+# expected to die by SIGSEGV). Attach addresses vary, so tests compare
+# syscall names (syscalls=names) or, when they fork, only output
+# (syscalls=off). struct shmid64_ds: asm-generic/shmbuf.h.

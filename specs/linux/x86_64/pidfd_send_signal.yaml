@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/pidfd_send_signal    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker container (poly-dev, Ubuntu 24.04 userland, privileged) on WSL2; tests run as root with every capability and again as uid/gid 65534 without capabilities"
+  observed_by: spec-linux-a
+  date: 2026-10-31
+summary: >
+  pidfd_send_signal(pidfd, sig, info, flags) (syscall 424) sends signal
+  sig (0..64; 0 only checks) to the process a pidfd refers to and
+  returns 0. sig is a 32-bit int. A descriptor of a process's
+  /proc/<pid> directory works like a pidfd. With info NULL the signal is
+  sent as by kill(2): si_code SI_USER (0), si_pid and si_uid of the
+  sender. With info (a 128-byte siginfo_t, as for rt_sigqueueinfo) its
+  si_signo must equal sig, and when the target is not the caller itself
+  its si_code must be negative and not SI_TKILL (-6) (EPERM otherwise);
+  the siginfo is then delivered as given (si_code, si_pid, si_uid,
+  si_value). To the caller itself any si_code is allowed. flags: 0
+  (the process, like kill), or exactly one of PIDFD_SIGNAL_THREAD (1:
+  only the thread the pidfd names), PIDFD_SIGNAL_THREAD_GROUP (2: the
+  thread group), PIDFD_SIGNAL_PROCESS_GROUP (4: the process group whose
+  id is the target's pid; ESRCH when the target does not lead a group).
+  Permission is that of kill(2) (same user or CAP_KILL; not tested
+  across users). A process that has exited but not been reaped (zombie)
+  still accepts signals (0, nothing happens); after it was reaped, ESRCH.
+  Sending an unblocked signal to oneself delivers it (the handler runs)
+  before the call returns.
+returns:
+  success: "0"
+  self: "SIGUSR1 to own pidfd: handler runs before return with si_code 0 (SI_USER), si_pid = getpid(), si_uid = getuid()"
+  child: "sig 0: 0; SIGTERM: the child dies of SIGTERM"
+  zombie: "sig 0 and SIGKILL to an exited, unreaped child: 0 (no effect; wait status still SIGTERM)"
+  queued_info: "SI_QUEUE (-1) info to another process: delivered with si_code -1 and the given si_pid, si_uid, si_value"
+  self_info: "info with si_code SI_KERNEL (0x80) to oneself: delivered as given"
+  proc_dir: "fd of /proc/<pid> opened O_DIRECTORY: signals that process (sig 0 too)"
+  scope_flags: "1, 2: 0 for the caller's own pidfd; 4: 0 when the target leads its process group (after setsid), ESRCH for a fork child that does not lead one"
+errors:
+  bad_flags: "EINVAL (22): flags not 0, 1, 2 or 4 (8, 3, 6, 7, 0x80000000); checked first (bad flags with a closed fd is EINVAL)"
+  bad_fd: "EBADF (9): fd not open (999, -1), or open but neither a pidfd nor a /proc/<pid> directory (/dev/null, /proc, /proc/<pid>/fd); before the signal number (EBADF with sig 65)"
+  bad_signal: "EINVAL (22): sig outside 0..64 (65, -1)"
+  bad_info: "EFAULT (14): info unreadable"
+  info_mismatch: "EINVAL (22): info->si_signo != sig"
+  info_code: "EPERM (1): info to another process with si_code >= 0 (SI_USER 0, SI_KERNEL 0x80) or SI_TKILL"
+  gone: "ESRCH (3): the process was reaped (also for sig 0); PIDFD_SIGNAL_PROCESS_GROUP and the target leads no process group"
+  permission: "EPERM (1): no permission to signal the target (kill rules); not tested"
+  order: "flags, descriptor, signal number, info (EFAULT, EINVAL, EPERM), target (ESRCH / permission)"
+side_effects: "the signal is queued or delivered"
+threading: "flags 0: any thread of the target process may take the signal; PIDFD_SIGNAL_THREAD: that thread"
+ordering:
+  - "a signal sent to the caller itself and not blocked is handled before the call returns"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: PIDFD_SIGNAL_* from linux/pidfd.h; SI_* and siginfo_t from
+# asm-generic/siginfo.h. Tests that run two processes at once compare
+# output only; the others compare syscall names (pids are not masked in
+# pidfd_open's argument or in /proc paths). All tests pass as root and
+# as an unprivileged user.

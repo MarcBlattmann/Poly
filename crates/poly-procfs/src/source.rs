@@ -375,6 +375,20 @@ pub trait ProcSource: Send + Sync {
         None
     }
 
+    /// The thread ids of process `pid` (`/proc/<pid>/task`), in any
+    /// order. By default the process is one thread, its main thread.
+    fn threads(&self, pid: u32) -> Vec<u32> {
+        if self.owner(pid).is_some() { alloc::vec![pid] } else { Vec::new() }
+    }
+
+    /// The name of thread `tid` of process `pid` (`/proc/<pid>/task/<tid>/comm`,
+    /// prctl(2) `PR_SET_NAME`), if it has one of its own; `None` (the
+    /// default) shows the process's `comm`.
+    fn thread_comm(&self, pid: u32, tid: u32) -> Option<Vec<u8>> {
+        let _ = (pid, tid);
+        None
+    }
+
     /// Whether a namespace of kind `kind` with inode number `inum` exists.
     fn namespace_exists(&self, inum: u32, kind: usize) -> bool {
         let _ = (inum, kind);

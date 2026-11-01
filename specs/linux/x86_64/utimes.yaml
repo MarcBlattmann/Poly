@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/utimes               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  utimes(path, times) is system call 235. It is utime (132) with microsecond
+  resolution: times points to two struct timeval {long tv_sec; long tv_usec;}
+  (32 bytes), times[0] for atime and times[1] for mtime; the nanoseconds set
+  are tv_usec * 1000. A NULL times sets both to the current time. ctime
+  becomes the current time. Symbolic links are followed. There are no special
+  values (UTIME_NOW / UTIME_OMIT belong to utimensat only).
+returns:
+  success: "0"
+  explicit_times: "atime = times[0].tv_sec + tv_usec*1000 ns, mtime likewise: {1000000000, 123456} gives 1000000000.123456000; {1500000000, 999999} gives .999999000; negative seconds work ({-1, 1} gives -1 s + 1000 ns; {-100, 500000} gives -100 s + 500000000 ns)"
+  null_times: "both the current time, equal to each other"
+  ctime: "the current time"
+  symbolic_links: "followed (the link's own times are not set); directories work"
+  permission_rules: "as utime: explicit times need ownership or CAP_FOWNER (an owner may set them on its mode 0 file); NULL needs ownership, CAP_FOWNER, or write permission"
+errors:
+  bad_usec: "EINVAL (22): tv_usec of either entry < 0 or >= 1000000 (999999 is fine; the value (1<<30)-1 is EINVAL too); checked after the times are read and before the path: utimes(missing, bad) and utimes(NULL, bad) are EINVAL, and EINVAL comes before EPERM"
+  bad_times_pointer: "EFAULT (14): times not readable, before the path (utimes(missing, (void*)1) is EFAULT)"
+  not_owner: "EPERM (1): explicit times by a non-owner (also with write permission)"
+  no_write_permission: "EACCES (13): NULL by a non-owner without write permission"
+  path: "ENOENT (missing, empty path, dangling link), ENOTDIR, ELOOP, ENAMETOOLONG, EFAULT (path pointer), EACCES (search permission) as utime"
+  read_only_fs: "EROFS (30): a file on a read-only mount (root too)"
+  order: "(1) reading times EFAULT; (2) tv_usec range EINVAL; (3) the path; (4) EROFS; (5) EPERM / EACCES. A failed call changes nothing"
+side_effects: "atime, mtime and ctime of the file"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

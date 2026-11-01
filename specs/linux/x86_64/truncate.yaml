@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/truncate             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  truncate(path, length) is system call 76. It sets the size of the regular
+  file named by path to length bytes and returns 0: shrinking drops the data
+  past length, growing adds zero bytes (a hole that takes no blocks). Symbolic
+  links are followed. The caller needs write permission on the file (not an
+  open descriptor). length is a signed 64-bit off_t.
+returns:
+  success: "0"
+  shrink_and_grow: "shrinking to 4 keeps the first 4 bytes; growing to 12 reads back zeros after them; 0 and 1 TiB (sparse) work"
+  descriptors: "descriptors on the file see the new size at once (fstat); their offsets do not move (an offset past the new end reads 0 bytes); a MAP_SHARED mapping sees the new zero bytes and its stores are read back through pread"
+  times: "when the size changes, mtime and ctime move (atime stays). Truncating to the size the file already has succeeds and changes no data; whether it moves mtime/ctime is file-system and situation dependent (observed: on tmpfs unchanged for a file a normal user had only truncated, moved for a file root had written; on overlayfs moved), so the tests do not pin it down (ftruncate always updates them)"
+  symbolic_links: "followed (the target's size changes, the link's st_size stays); relative paths start at the working directory"
+  permission: "write permission on the file for the caller (0200 is enough; 0444 and 0 are EACCES for a normal user, root passes); ownership does not matter; search permission on the way"
+  rlimit_fsize: "growing past RLIMIT_FSIZE is EFBIG and sends SIGXFSZ (with SIGXFSZ ignored nothing is pending afterwards); growing to exactly the limit and shrinking work"
+errors:
+  negative_length: "EINVAL (22): length < 0 (also INT64_MIN), checked before the path (truncate(NULL, -1), truncate(missing, -1), truncate(dir, -1) are EINVAL; also on a read-only mount)"
+  directory: "EISDIR (21): a directory (also through a link, also without write permission on it)"
+  not_regular: "EINVAL (22): a FIFO, a device (/dev/null)"
+  missing: "ENOENT (2): a missing name or directory, the empty path, a dangling link"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components, or a trailing slash after a regular file"
+  loop: "ELOOP (40): a looping link"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more"
+  bad_path_pointer: "EFAULT (14): NULL or unmapped"
+  permission: "EACCES (13): no write permission on the file, no search permission on a directory on the way (not for root)"
+  too_big: "EFBIG (27): beyond RLIMIT_FSIZE (with SIGXFSZ)"
+  busy: "ETXTBSY (26): the file is a program being executed (truncate of the test's own executable)"
+  read_only_fs: "EROFS (30): a file on a read-only mount (a missing name there is ENOENT, a directory EISDIR)"
+  order: "(1) negative length EINVAL; (2) the path string and components (D/nope/<256 bytes> is ENOENT); (3) EISDIR / EINVAL for the file type; (4) EROFS; (5) EACCES (write permission); (6) ETXTBSY; (7) EFBIG. A failed call leaves the size alone"
+side_effects: "mtime/ctime on a size change; the data past a new smaller size is gone"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

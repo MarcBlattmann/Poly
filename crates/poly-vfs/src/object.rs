@@ -12,7 +12,7 @@ use crate::fs::{DirEntry, FileSystem, FsInfo, NewNode, RenameFlags};
 use crate::poll::{PollEvents, WaitQueue};
 use crate::sync::SpinMutex;
 use crate::{Attr, DeviceId, Errno, FileType, Ino, Result, SetAttr, SetTime, Timespec};
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
@@ -58,6 +58,22 @@ pub trait FileObject: Any + Send + Sync {
     fn seek_stays_at_zero(&self) -> bool {
         false
     }
+
+    /// For an object Linux keeps on an anonymous inode: what follows
+    /// `anon_inode:` in its `/proc/<pid>/fd` link (`inotify` for an inotify
+    /// instance). Such a file's `fstat` mode has no file type bits.
+    fn anon_name(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// For an object that seeks like a file of this many bytes (a dma-buf:
+    /// `lseek(fd, 0, SEEK_END)` gives its size, the kernel's dma-buf
+    /// documentation): `lseek` moves the offset as on a regular file of
+    /// that size. `None` (the default): `ESPIPE`, or see
+    /// [`seek_stays_at_zero`](Self::seek_stays_at_zero).
+    fn seek_size(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// The inode number of the anonymous file system's root directory.
@@ -76,6 +92,11 @@ struct AnonNodes {
     next: Ino,
     /// The attributes and the pins of every live inode but the root.
     live: BTreeMap<Ino, (Attr, usize)>,
+    /// Inodes without a file type: what Linux calls anonymous inodes
+    /// (event files, timers, epoll sets, signal files), whose `st_mode` is
+    /// `0600` with no type bits and whose mode cannot change (the spec of
+    /// fchmod: `anonymous_inodes`).
+    typeless: BTreeSet<Ino>,
 }
 
 fn attr(ino: Ino, kind: FileType, perm: u16, uid: u32, gid: u32) -> Attr {
@@ -106,6 +127,13 @@ impl AnonFs {
         ino
     }
 
+    /// A new inode without a file type (see `typeless`), not yet pinned.
+    pub(crate) fn alloc_typeless(&self, perm: u16, uid: u32, gid: u32) -> Ino {
+        let ino = self.alloc(FileType::Regular, perm, uid, gid);
+        self.nodes.lock().typeless.insert(ino);
+        ino
+    }
+
     #[cfg(test)]
     pub(crate) fn live(&self) -> usize {
         self.nodes.lock().live.len()
@@ -133,12 +161,16 @@ impl FileSystem for AnonFs {
     }
 
     /// `fchmod` / `fchown` / `futimens` on an object change what `fstat`
-    /// reports and nothing else.
+    /// reports and nothing else; the mode of an inode without a type does
+    /// not change (`EOPNOTSUPP`).
     fn setattr(&self, ino: Ino, set: &SetAttr) -> Result<Attr> {
         if set.size.is_some() {
             return Err(Errno::EINVAL);
         }
         let mut n = self.nodes.lock();
+        if set.perm.is_some() && n.typeless.contains(&ino) {
+            return Err(Errno::EOPNOTSUPP);
+        }
         let (a, _) = n.live.get_mut(&ino).ok_or(Errno::EPERM)?;
         if let Some(perm) = set.perm {
             a.perm = perm;
@@ -234,7 +266,12 @@ impl FileSystem for AnonFs {
             *pins = pins.saturating_sub(1);
             if *pins == 0 {
                 n.live.remove(&ino);
+                n.typeless.remove(&ino);
             }
         }
+    }
+
+    fn typeless(&self, ino: Ino) -> bool {
+        self.nodes.lock().typeless.contains(&ino)
     }
 }

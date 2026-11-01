@@ -142,8 +142,8 @@ code in `tools/pipeline/src/apps.rs`). A test is a JSON file:
   classes: `ok`, `-1 ERRNO`, `?` (no return), or the descriptor for calls
   that return one; consecutive events of the same name and class are
   collapsed into one (a read loop over a host file of another size, a
-  signal action set for many signals); `rseq` (`ENOSYS` on Poly by
-  decision, ADR 0043/0049) and `SIGCHLD` are left out. Arguments are shown
+  signal action set for many signals); `rseq` (`ENOSYS` on Poly until
+  ADR 0111, ADR 0043/0049) and `SIGCHLD` are left out. Arguments are shown
   in the report but not compared: an unchanged program's arguments are its
   own, and where they follow from the system (a read size after a short
   read of `/proc/self/maps`) they are not about Poly.
@@ -282,9 +282,8 @@ AT_EMPTY_PATH)` of a file the caller opened works on Linux 6.18 without
 `CAP_DAC_READ_SEARCH`, Poly says `ENOENT`). Held-out tests are not in the repository and not on
 GitHub, so CI cannot run them: they are checked before an entry is
 marked green (`pipeline diff --target poly` with the entry's visible and
-held-out directories). Today 11 of the 12 corpus programs
-pass (`libc-hello` differs at `rseq`: Poly answers `ENOSYS`, with the same
-output and exit status); all 11 corpus app tests pass (app mode); and 139
+held-out directories). Today the 12 corpus programs
+pass (`libc-hello` differed at `rseq` until Poly implemented it, ADR 0111); all 11 corpus app tests pass (app mode); and 139
 green entries bring 245 visible tests. The spec tests take about a minute with four jobs
 (the app tests run one at a time after them). (`write` was green
 before its spec tests existed; its visible and held-out spec tests pass

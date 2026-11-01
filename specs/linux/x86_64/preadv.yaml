@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/preadv               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container; tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  preadv(fd, iov, iovcnt, pos_l, pos_h) is system call 295. It is readv (19)
+  at an explicit file offset: it fills the iovcnt buffers described by the
+  struct iovec array iov {void *iov_base; size_t iov_len;} in order with
+  bytes read starting at the offset, and returns the number of bytes read.
+  The file position is neither used nor changed. On x86-64 the offset is
+  pos_l, a full signed 64-bit value; pos_h is ignored.
+returns:
+  success: "bytes read: the sum of the lengths, less at the end of the file (short read), 0 at or past the end"
+  scatter: "buffers are filled in array order, each completely before the next (4+3+5 buffers from offset 2 of \"0123456789abcdef\" get \"2345\", \"678\", \"9abcd\")"
+  position: "unchanged (also shared with dup'ed descriptors: read(2) continues where it was)"
+  pos_h: "ignored (0x12345678 or -1 make no difference)"
+  zero_lengths: "zero-length entries are skipped (their iov_base may be NULL); iovcnt 0 returns 0 (iov may be NULL), also on a directory"
+  limits: "iovcnt up to 1024 (UIO_MAXIOV); 1024 one-byte buffers work"
+  consistency: "sees data written by pwrite through another descriptor at once; a hole reads as zeros; a file with no names left is still readable"
+  devices: "/dev/zero fills with zeros at any offset; /dev/null returns 0"
+  partial_fault: "if a later buffer is not writable, the bytes copied into the earlier ones are returned (4 for {valid 4, (void*)1})"
+errors:
+  bad_offset: "EINVAL (22): offset < 0 (-1 included: preadv has no 'current position' value)"
+  bad_count: "EINVAL (22): iovcnt > 1024 or < 0"
+  bad_length: "EINVAL (22): an iov_len that is negative as ssize_t (SIZE_MAX, 1<<63), also in a later entry"
+  bad_fd: "EBADF (9): not open, not open for reading (O_WRONLY), O_PATH"
+  is_a_directory: "EISDIR (21): a directory (iovcnt > 0)"
+  not_seekable: "ESPIPE (29): pipes, sockets (socketpair ends)"
+  bad_address: "EFAULT (14): iov not readable; the first buffer not writable"
+  order: "(1) EINVAL for a negative offset, before everything (a bad descriptor, a write-only one or a pipe with offset -1 are EINVAL); (2) EBADF; (3) ESPIPE; (4) the iovec array: EINVAL for iovcnt (before EISDIR), EFAULT for an unreadable array (before EISDIR), EINVAL for lengths; (5) EISDIR; (6) EFAULT for buffers"
+side_effects: "may update atime"
+threading: "no thread-specific behaviour; reads at explicit offsets do not race on the file position"
+ordering: []
+timing:
+  typical: "microseconds for small reads from the page cache"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

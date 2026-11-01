@@ -614,10 +614,15 @@ pub fn getrusage(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// Linux 2.6.24, this argument is ignored"). `EFAULT`.
 pub fn getcpu(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     let cpu = k.current_cpu();
+    // The two stores are independent: an unwritable `cpu` still gets
+    // `node` written, and the other way round; either fault is EFAULT.
+    let mut result = Ok(0);
     for (i, value) in [(0, cpu), (1, 0u32)] {
-        if !a.ptr(i).is_null() {
-            k.copy_to_user(a.ptr(i), &value.to_le_bytes())?;
+        if !a.ptr(i).is_null()
+            && let Err(e) = k.copy_to_user(a.ptr(i), &value.to_le_bytes())
+        {
+            result = Err(e);
         }
     }
-    Ok(0)
+    result
 }

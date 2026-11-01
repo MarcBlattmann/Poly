@@ -1,12 +1,12 @@
 //! What the input stack plugs into: a seat's capabilities and the events
 //! its devices produce, in the compositor's (logical) coordinates.
 //!
-//! The input layer (evdev, virtio-input, PS/2) is built separately; it
-//! implements [`InputSource`] and the compositor's loop feeds what it
-//! yields to [`crate::server::Server::handle_input`]. Today that only
-//! decides the seat's `wl_seat.capabilities` and drives the frame (raise
-//! and activate on a click, the close button); routing events to clients
-//! through `wl_pointer` and `wl_keyboard` comes with the input stack.
+//! The input layer (evdev, virtio-input, PS/2) is built separately; the
+//! compositor implements [`InputSource`] over `/dev/input/event*` and its
+//! loop feeds what it yields to [`crate::server::Server::handle_input`],
+//! which routes it to clients through `wl_pointer` and `wl_keyboard` and
+//! drives the frame (focus on click, the close button, moving by the title
+//! bar; ADR 0107). The capabilities become `wl_seat.capabilities`.
 
 use crate::wire::Fixed;
 

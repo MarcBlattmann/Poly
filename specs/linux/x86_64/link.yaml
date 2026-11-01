@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/link                 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 x86_64"
+  machine: "WSL2 container, fs.protected_hardlinks = 1 (the default); tests run as root with all capabilities and again as uid/gid 1000 with no groups and no capabilities; /tmp a fresh tmpfs, repeated on overlayfs (same results); static freestanding test programs, raw syscalls"
+  observed_by: spec-linux-b
+  date: 2026-10-31
+summary: >
+  link(oldpath, newpath) is system call 86. It creates newpath as a new name
+  (hard link) for the existing non-directory oldpath and returns 0. It is
+  linkat(AT_FDCWD, oldpath, AT_FDCWD, newpath, 0) (265): relative paths start
+  at the working directory, and a symbolic link as the last component of
+  oldpath is NOT followed (the new name is another hard link to the symbolic
+  link itself). newpath must not exist.
+returns:
+  success: "0; both names share st_ino and st_dev; st_nlink goes up by 1; mode, size, owner and contents are the file's (a write through one name is read through the other); removing one name leaves the other"
+  symbolic_links: "oldpath a symbolic link (to a file, a directory, nothing, itself): the link itself gets a second name (S_IFLNK, st_nlink 2 on the link; the target's st_nlink unchanged). A trailing slash on oldpath follows the link (D/link-to-dir/ is the directory: EPERM; D/dangling/ ENOENT; D/loop/ ELOOP). Links on the way are followed (D/link-to-dir/g)"
+  other_kinds: "FIFOs and other non-directories can be linked; a file with mode 0 can be linked by its owner"
+  times: "the file's ctime changes (its mtime does not); the new parent's mtime and ctime change"
+  relative_paths: "each relative to the working directory"
+  name_lengths: "a 255-byte new name works; 256 is ENAMETOOLONG"
+errors:
+  exists: "EEXIST (17): newpath exists as anything (file, directory, the same file, a dangling link: not followed, nothing is created at its target), or its last component is \".\" or \"..\"; also newpath with a trailing slash when the name exists (D/g/ where g is a file)"
+  directory: "EPERM (1): oldpath is a directory (also D/sub/, D/sub/., \"/\" when newpath is on the same mount)"
+  missing: "ENOENT (2): oldpath missing, a missing directory on either path, an empty oldpath or newpath; newpath with a trailing slash when the name does not exist (D/x/)"
+  not_a_directory: "ENOTDIR (20): a non-directory followed by more components in either path; a trailing slash after a regular file in oldpath"
+  loop: "ELOOP (40): a looping link on the way in either path, or followed by a trailing slash in oldpath"
+  name_too_long: "ENAMETOOLONG (36): a component of 256 bytes or more; a path of 4096 bytes or more counting its NUL"
+  bad_path_pointer: "EFAULT (14): either pointer NULL or unmapped"
+  permission: "EACCES (13): no write or search permission on newpath's parent, no search permission on a directory of oldpath (not for root). An existing newpath in a parent the caller may not write is EEXIST"
+  protected_hardlinks: "EPERM (1), with fs.protected_hardlinks = 1, for a caller without CAP_FOWNER (root passes) who does not own oldpath unless oldpath is a regular file that the caller may both read and write and that is not set-user-ID and not set-group-ID-with-group-execute: another user's 0666 file and 02666 file can be linked; 0644, 0600, 04666, 02676 files, a 0666 FIFO and a symbolic link of another user cannot. Files the caller owns can always be linked (also mode 0)"
+  cross_device: "EXDEV (18): oldpath and newpath on different mounts (also for root; an existing newpath there is EEXIST first)"
+  read_only_fs: "EROFS (30): a new name on a read-only mount (an existing one is EEXIST first)"
+  order: "(1) oldpath completely: its string (EFAULT, ENAMETOOLONG, ENOENT if empty) and all of its components including the last (ENOENT, ENOTDIR, ELOOP, EACCES, ENAMETOOLONG); (2) newpath: string, directories, last name (ENAMETOOLONG); (3) EXDEV; (4) EEXIST; (5) EROFS; (6) EACCES (write on newpath's parent); (7) EPERM (directory, protected_hardlinks). Observed: link(D/missing, 4096-byte path) ENOENT; link(D/<256 bytes>, D/nope/x) ENAMETOOLONG; link(4096-byte path, NULL) ENAMETOOLONG; link(D/sub, D/nope/x) ENOENT; link(D/sub, D/g) EEXIST"
+side_effects: "the file's link count and ctime; the new parent's mtime/ctime"
+threading: "no thread-specific behaviour; the working directory is the process's"
+ordering: []
+timing:
+  typical: "microseconds; does not block"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
