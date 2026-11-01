@@ -31,7 +31,7 @@ errors:
   not_regular: "ENODEV (19): a character device (/dev/null), a socket, an eventfd"
   too_big: "EFBIG (27): offset+len beyond the largest file size (0x7fffffffffffff00 + 0x1000); growing past RLIMIT_FSIZE with mode 0 (SIGXFSZ is sent; ignored in the tests). On tmpfs KEEP_SIZE past RLIMIT_FSIZE is EFBIG too; on overlayfs (ext4 below) it was 0, so that is file-system specific"
   no_space: "ENOSPC (28): more than the file system can hold (a size=64k tmpfs and 1 MiB); the size stays"
-  read_only_fs: "a file on a read-only mount can only be open read-only: EBADF"
+  read_only_fs: "a file on a read-only mount can only be open read-only: EBADF. To get there a test remounts its tmpfs read-only (mount MS_REMOUNT|MS_RDONLY); that remount is EBUSY while any file of the tmpfs is still open for writing (read-only descriptors do not count) and succeeds once the writers are closed: see busy_writers in specs/linux/x86_64/mount.yaml"
   order: "(1) EBADF for a descriptor that is not open; (2) EINVAL for offset/len (before the access mode: a read-only descriptor with offset -1 is EINVAL; and before unknown mode bits); (3) EOPNOTSUPP for invalid mode combinations; (4) EBADF for a descriptor not open for writing (len 0 on an O_PATH descriptor is EBADF: O_PATH is refused like a closed descriptor); (5) ESPIPE / ENODEV for the file type; (6) EFBIG / ENOSPC"
 side_effects: "size and allocation as described; mtime/ctime when the size changes; data in a punched range is gone"
 threading: "no thread-specific behaviour"

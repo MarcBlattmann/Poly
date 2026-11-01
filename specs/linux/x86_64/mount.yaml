@@ -14,16 +14,27 @@ summary: >
   ST_RDONLY; MS_REMOUNT without MS_RDONLY makes it writable again (files
   kept). MS_BIND mounts a directory at a second place (same files, changes
   visible both ways); MS_REMOUNT|MS_BIND|MS_RDONLY makes only that place
-  read-only. Needs CAP_SYS_ADMIN.
+  read-only. Remounting read-only is refused with EBUSY while the file
+  system has a file open for writing (busy_writers): MS_REMOUNT|MS_RDONLY
+  counts writers through any mount of that file system,
+  MS_REMOUNT|MS_BIND|MS_RDONLY only writers through that one mount; once
+  the last writer is closed the same call succeeds. Needs CAP_SYS_ADMIN.
 returns:
   success: "0"
+  remount_type_ignored: "with MS_REMOUNT the source and type are not looked at: a NULL type, \"none\" and an unknown type name behave the same"
 errors:
   missing_target: "ENOENT (2)"
   unknown_type: "ENODEV (19)"
   file_target: "ENOTDIR (20)"
   bad_pointer: "EFAULT (14)"
   permission: "EPERM (1) without CAP_SYS_ADMIN"
-side_effects: "none"
+  # observed by spec-linux-b on Linux 6.18.54.1-microsoft-standard-WSL2
+  # (privileged Docker container, root), 2026-11-01
+  busy_writers: "EBUSY (16): MS_REMOUNT|MS_RDONLY of a tmpfs while a file on it is open for writing: O_RDWR, O_WRONLY, O_WRONLY|O_APPEND, a dup of such a descriptor (closing one of the two is not enough), a file opened through a bind mount of the same tmpfs. These count too: a mapping made from a descriptor open for writing, after that descriptor is closed, until munmap (MAP_SHARED with PROT_READ|PROT_WRITE or PROT_READ, MAP_PRIVATE with PROT_READ); a file that was unlinked and is still open, even read-only. These do not count: descriptors open read-only, O_PATH, an open directory, a MAP_PRIVATE PROT_READ|PROT_WRITE mapping made from a read-only descriptor, a writer on another file system. The refused call changes nothing: the mount stays read-write (writes and file creation keep working), statfs f_flags is unchanged, and a size= or MS_NOSUID in the same call is not applied. Once the last such descriptor or mapping is gone the same remount returns 0. MS_REMOUNT|MS_BIND|MS_RDONLY is EBUSY while a file is open for writing through that mount, and 0 when the writers use another mount of the same file system. MS_REMOUNT without MS_RDONLY returns 0 with writers open"
+  remount_not_root: "EINVAL (22): MS_REMOUNT on a directory that is not the root of a mount"
+  remount_bad_option: "EINVAL (22): MS_REMOUNT of a tmpfs with an option it does not accept (\"bogus=1\", \"size=abc\")"
+  order: "MS_REMOUNT|MS_RDONLY with a writer open: as root, a bad target pointer is EFAULT, a missing target ENOENT, a target that is not a mount root EINVAL, a bad option EINVAL (each instead of EBUSY); a process without CAP_SYS_ADMIN gets EPERM, not EBUSY"
+side_effects: "none; a refused remount changes nothing"
 threading: "no thread-specific behaviour observed"
 ordering: []
 timing:
