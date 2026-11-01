@@ -16,8 +16,8 @@ use std::{vec, vec::Vec};
 
 const VERSION_1: u64 = poly_virtio::feature::VERSION_1;
 const EVENT_IDX: u64 = poly_virtio::feature::EVENT_IDX;
-/// Roughly what QEMU's virtio-gpu-pci offers: EDID, event index, indirect
-/// descriptors; plus 3D and blobs, which the driver must not take.
+/// Roughly what QEMU's virtio-gpu-gl-pci offers: EDID, event index, indirect
+/// descriptors (which the driver must not take), 3D and blobs.
 const OFFERED: u64 = VERSION_1
     | EVENT_IDX
     | poly_virtio::feature::INDIRECT_DESC
@@ -52,6 +52,7 @@ struct Harness {
     ring: DmaMemory,
     commands: DmaMemory,
     desc: Vec<DescState>,
+    vector: Option<u16>,
 }
 
 impl Harness {
@@ -61,6 +62,7 @@ impl Harness {
             ring: DmaMemory::new(Layout::new(16).unwrap().total()),
             commands: DmaMemory::new(COMMAND_MEMORY_LEN),
             desc: vec![DescState::default(); 16],
+            vector: None,
         }
     }
 
@@ -75,6 +77,7 @@ impl Harness {
             commands: self.commands.region(),
             desc: &mut self.desc,
             clock: CLOCK,
+            queue_vector: self.vector,
         };
         // SAFETY: the harness owns the memory and outlives the driver.
         unsafe { init(setup) }
@@ -357,15 +360,17 @@ fn init_negotiates_and_sets_up_the_control_queue() {
     let sim = one_monitor();
     let mut h = Harness::new(&sim);
     let gpu = h.init();
-    assert_eq!(gpu.features(), VERSION_1 | EVENT_IDX | feature::EDID);
-    assert!(gpu.has_edid());
+    assert_eq!(gpu.features(), VERSION_1 | EVENT_IDX | feature::EDID | feature::VIRGL | feature::RESOURCE_BLOB);
+    assert!(gpu.has_edid() && gpu.has_virgl() && gpu.has_blob() && !gpu.has_context_init());
+    assert!(!gpu.interrupts());
     assert_eq!(gpu.num_scanouts(), 1);
-    assert_eq!(gpu.queue_size(), 4);
+    // As large as the ring and the table allow (16 here, at most 64).
+    assert_eq!(gpu.queue_size(), 16);
     assert_eq!(sim.0.status.get(), status::ACKNOWLEDGE | status::DRIVER | status::FEATURES_OK | status::DRIVER_OK);
     let (control, cursor) = (sim.queue(0), sim.queue(1));
-    assert_eq!((control.enable, control.size, control.msix), (1, 4, 0xffff));
+    assert_eq!((control.enable, control.size, control.msix), (1, 16, 0xffff));
     assert_eq!(cursor.enable, 0);
-    assert!(!sim.negotiated(feature::VIRGL) && !sim.negotiated(feature::RESOURCE_BLOB));
+    assert!(!sim.negotiated(poly_virtio::feature::INDIRECT_DESC) && !sim.negotiated(feature::RESOURCE_UUID));
 }
 
 #[test]
@@ -656,4 +661,310 @@ fn many_updates_wrap_the_queue() {
     }
     assert_eq!(gpu.stats().updates, 300);
     assert!(!gpu.is_broken());
+}
+
+// --- 3D: capsets, contexts, resources, submission, blobs, fences --------------------
+
+/// A 3D device: virgl and virgl2 capsets, context init, blobs, a 1 MiB
+/// host-visible region.
+fn gpu_3d() -> Sim {
+    let sim = Sim::new(OFFERED | feature::CONTEXT_INIT, 1, &[(0, 640, 480)], 64);
+    {
+        let mut d = sim.dev();
+        d.capsets = vec![(1, 1, vec![0x11; 300]), (2, 2, (0..900u32).map(|i| i as u8).collect()), (4, 0, vec![4; 64])];
+        d.shm_len = 1 << 20;
+    }
+    sim
+}
+
+/// A toy `FILL resource byte` command.
+fn fill(resource: u32, byte: u8) -> Vec<u8> {
+    [sim::TOY_FILL, resource, byte as u32].iter().flat_map(|v| v.to_le_bytes()).collect()
+}
+
+fn buffer_of(mem: &DmaMemory, len: usize) -> Buffer {
+    Buffer { addr: mem.ptr.as_ptr() as u64, len: len as u32 }
+}
+
+#[test]
+fn encodes_3d_requests_at_the_spec_offsets() {
+    let mut b = [0u8; 256];
+    let c = Create3d {
+        resource_id: 7,
+        target: 2,
+        format: 1,
+        bind: 0x8,
+        width: 64,
+        height: 32,
+        depth: 1,
+        array_size: 1,
+        last_level: 0,
+        nr_samples: 0,
+        flags: 0,
+    };
+    assert_eq!(Command::ResourceCreate3d(c).encode(Some(9), &mut b), Some(24 + 48));
+    assert_eq!((le32(&b, 0), le32(&b, 4), le64(&b, 8)), (ctrl::RESOURCE_CREATE_3D, 1, 9));
+    assert_eq!((le32(&b, 24), le32(&b, 28), le32(&b, 32), le32(&b, 36)), (7, 2, 1, 8));
+    assert_eq!((le32(&b, 40), le32(&b, 44), le32(&b, 48), le32(&b, 52)), (64, 32, 1, 1));
+
+    let t = Transfer3d {
+        resource_id: 3,
+        region: Box3d { x: 1, y: 2, z: 0, w: 4, h: 5, d: 1 },
+        offset: 0x1234,
+        level: 2,
+        stride: 256,
+        layer_stride: 4096,
+    };
+    let n = Command::TransferFromHost3d { ctx_id: 5, transfer: t }.encode_on_ring(Some(3), Some(2), &mut b).unwrap();
+    assert_eq!(n, 24 + 48);
+    // FENCE | INFO_RING_IDX, the context and the ring in the header.
+    assert_eq!((le32(&b, 0), le32(&b, 4), le32(&b, 16), b[20]), (ctrl::TRANSFER_FROM_HOST_3D, 3, 5, 2));
+    assert_eq!((le32(&b, 24), le32(&b, 28), le32(&b, 36), le32(&b, 40)), (1, 2, 4, 5));
+    assert_eq!((le64(&b, 48), le32(&b, 56), le32(&b, 60), le32(&b, 64), le32(&b, 68)), (0x1234, 3, 2, 256, 4096));
+
+    assert_eq!(Command::CtxCreate { ctx_id: 4, context_init: 4, name: b"kmscube" }.encode(None, &mut b), Some(96));
+    assert_eq!((le32(&b, 4), le32(&b, 16), le32(&b, 24), le32(&b, 28)), (0, 4, 7, 4));
+    assert_eq!(&b[32..39], b"kmscube");
+    assert_eq!(Command::Submit3d { ctx_id: 4, size: 96 }.encode(Some(1), &mut b), Some(32));
+    assert_eq!((le32(&b, 16), le32(&b, 24)), (4, 96));
+
+    let blob = CreateBlob { resource_id: 9, blob_mem: 2, blob_flags: 1, blob_id: 0xabcd, size: 0x10000 };
+    let e = [MemEntry { addr: 0x5000, length: 4096 }];
+    assert_eq!(Command::ResourceCreateBlob { ctx_id: 4, blob, entries: &e }.encode(None, &mut b), Some(56 + 16));
+    assert_eq!((le32(&b, 24), le32(&b, 28), le32(&b, 32), le32(&b, 36)), (9, 2, 1, 1));
+    assert_eq!((le64(&b, 40), le64(&b, 48), le64(&b, 56), le32(&b, 64)), (0xabcd, 0x10000, 0x5000, 4096));
+    assert_eq!(Command::ResourceMapBlob { resource_id: 9, offset: 0x2000 }.encode(None, &mut b), Some(40));
+    assert_eq!((le32(&b, 24), le64(&b, 32)), (9, 0x2000));
+    assert_eq!(Command::GetCapset { id: 2, version: 2, size: 900 }.response_len(), 924);
+}
+
+#[test]
+fn capsets_are_listed_and_fetched() {
+    let sim = gpu_3d();
+    let mut h = Harness::new(&sim);
+    let mut gpu = h.init();
+    assert_eq!(gpu.config().num_capsets, 3);
+    let infos: Vec<CapsetInfo> = (0..3).map(|i| gpu.capset_info(i).unwrap()).collect();
+    assert_eq!(infos[1], CapsetInfo { id: 2, max_version: 2, max_size: 900 });
+    assert_eq!(infos[2].id, 4);
+    assert_eq!(gpu.capset_info(3), Err(Error::Unsupported));
+    let mut out = DmaMemory::new(24 + 900);
+    // SAFETY: the memory outlives the call and only the device writes it.
+    let n = unsafe { gpu.capset(2, 2, out.region()) }.unwrap();
+    assert_eq!(n, 900);
+    assert_eq!(&out.bytes()[24..30], &[0, 1, 2, 3, 4, 5]);
+    // A version above the set's newest is refused by the device.
+    // SAFETY: as above.
+    let r = unsafe { gpu.capset(2, 3, out.region()) };
+    assert!(matches!(r, Err(Error::Response(ResponseError::Device { request: ctrl::GET_CAPSET, .. }))));
+}
+
+#[test]
+fn contexts_resources_transfers_and_submission() {
+    let sim = gpu_3d();
+    let mut h = Harness::new(&sim);
+    let mut gpu = h.init();
+    gpu.ctx_create(1, 0, b"virgl test").unwrap();
+    gpu.ctx_create(2, crate::protocol::capset::VENUS, b"venus").unwrap();
+    assert_eq!(sim.dev().contexts[&2].capset, 4);
+    assert_eq!(&sim.dev().contexts[&1].name, b"virgl test");
+    // A 2D texture of 16x8 4-byte texels with 16x8x4 bytes of guest memory.
+    let c = Create3d {
+        resource_id: 0x100,
+        target: 2,
+        width: 16,
+        height: 8,
+        depth: 1,
+        array_size: 1,
+        ..Create3d::default()
+    };
+    gpu.create_3d(&c).unwrap();
+    let mut backing = DmaMemory::new(16 * 8 * 4);
+    gpu.attach_backing(0x100, &[MemEntry { addr: backing.ptr.as_ptr() as u64, length: 512 }]).unwrap();
+    let all = Transfer3d {
+        resource_id: 0x100,
+        region: Box3d { w: 16, h: 8, d: 1, ..Box3d::default() },
+        ..Transfer3d::default()
+    };
+    // Not attached to the context yet: refused.
+    assert!(gpu.transfer_3d(true, 1, all).is_err());
+    gpu.ctx_attach(1, 0x100).unwrap();
+    backing.bytes()[..4].copy_from_slice(&[1, 2, 3, 4]);
+    gpu.transfer_3d(true, 1, all).unwrap();
+    assert_eq!(&sim.dev().resources_3d[&0x100].host[..4], &[1, 2, 3, 4]);
+
+    // A submission fills the resource on the host; a transfer back shows it.
+    let cmds = fill(0x100, 0x5a);
+    let mut stream = DmaMemory::new(cmds.len());
+    stream.bytes().copy_from_slice(&cmds);
+    // SAFETY: the stream outlives the ticket, which is waited for below.
+    let t = unsafe { gpu.submit_3d(1, None, cmds.len() as u32, &[buffer_of(&stream, cmds.len())]) }.unwrap();
+    while gpu.poll(t).is_none() {}
+    assert_eq!(gpu.stats().submits, 1);
+    // A box of 2x2 texels at (1, 1) into a packed 8-byte-stride copy.
+    let part = Transfer3d {
+        resource_id: 0x100,
+        region: Box3d { x: 1, y: 1, w: 2, h: 2, d: 1, ..Box3d::default() },
+        offset: 64,
+        stride: 8,
+        ..Transfer3d::default()
+    };
+    gpu.transfer_3d(false, 1, part).unwrap();
+    assert_eq!(&backing.bytes()[64..80], &[0x5a; 16]);
+    assert_eq!(backing.bytes()[80], 0);
+    // A stream that names an unattached resource: the device refuses it.
+    let bad = fill(0x999, 1);
+    stream = DmaMemory::new(bad.len());
+    stream.bytes().copy_from_slice(&bad);
+    // SAFETY: as above.
+    let t = unsafe { gpu.submit_3d(1, None, bad.len() as u32, &[buffer_of(&stream, bad.len())]) }.unwrap();
+    let r = loop {
+        if let Some(r) = gpu.poll(t) {
+            break r;
+        }
+    };
+    assert!(matches!(r, Err(Error::Response(ResponseError::Device { request: ctrl::SUBMIT_3D, .. }))));
+    // The data must add up to the size.
+    // SAFETY: nothing is sent.
+    assert_eq!(unsafe { gpu.submit_3d(1, None, 99, &[buffer_of(&stream, 12)]) }, Err(Error::BadBacking));
+    // Clean-up: detach, unref (also takes it off the context), destroy.
+    gpu.ctx_detach(1, 0x100).unwrap();
+    gpu.detach_backing(0x100).unwrap();
+    gpu.unref(0x100).unwrap();
+    assert!(sim.dev().resources_3d.is_empty());
+    gpu.ctx_destroy(2).unwrap();
+    gpu.ctx_destroy(1).unwrap();
+    assert!(sim.dev().contexts.is_empty());
+    assert!(!gpu.is_broken());
+}
+
+#[test]
+fn fences_complete_out_of_order_while_synchronous_commands_go_on() {
+    let sim = gpu_3d();
+    let mut h = Harness::new(&sim);
+    let mut gpu = h.init();
+    gpu.ctx_create(1, crate::protocol::capset::VIRGL2, b"t").unwrap();
+    let c =
+        Create3d { resource_id: 5, target: 0, width: 4096, height: 1, depth: 1, array_size: 1, ..Create3d::default() };
+    gpu.create_3d(&c).unwrap();
+    gpu.ctx_attach(1, 5).unwrap();
+    sim.dev().hold_3d = true;
+    let mut streams = Vec::new();
+    let mut tickets = Vec::new();
+    for (i, ring) in [None, Some(0), Some(1)].into_iter().enumerate() {
+        let cmds = fill(5, i as u8 + 1);
+        let mut m = DmaMemory::new(cmds.len());
+        m.bytes().copy_from_slice(&cmds);
+        // SAFETY: the streams live until the end of the test.
+        tickets.push(unsafe { gpu.submit_3d(1, ring, 12, &[buffer_of(&m, 12)]) }.unwrap());
+        streams.push(m);
+    }
+    assert_eq!(gpu.in_flight(), 3);
+    assert_eq!(sim.held(), 3);
+    // Ring fences carry INFO_RING_IDX and the ring; the context is in the header.
+    let log: Vec<_> =
+        sim.dev().log.iter().filter(|l| l.ty == ctrl::SUBMIT_3D).map(|l| (l.flags, l.ctx_id, l.ring_idx)).collect();
+    assert_eq!(log, [(1, 1, 0), (3, 1, 0), (3, 1, 1)]);
+    // Synchronous commands are answered meanwhile.
+    assert!(gpu.display_info().is_ok());
+    assert!(tickets.iter().all(|&t| gpu.poll(t).is_none()));
+    // The host finishes the last one first, then the others.
+    sim.retire(&[2]);
+    assert_eq!(gpu.poll(tickets[2]), Some(Ok(())));
+    assert_eq!(gpu.poll(tickets[0]), Some(Ok(())));
+    assert_eq!(gpu.poll(tickets[1]), Some(Ok(())));
+    // Spent tickets are refused.
+    assert_eq!(gpu.poll(tickets[1]), Some(Err(Error::BadTicket)));
+    assert_eq!(gpu.in_flight(), 0);
+    // A forgotten ticket frees its slot when the device is done.
+    let t = gpu.send_transfer_3d(false, 1, None, Transfer3d::default()).unwrap();
+    gpu.forget(t);
+    assert_eq!(gpu.in_flight(), 1);
+    sim.retire(&[]);
+    gpu.reap().unwrap();
+    assert_eq!(gpu.in_flight(), 0);
+    assert!(!gpu.is_broken());
+}
+
+#[test]
+fn every_slot_busy_is_reported_and_recovers() {
+    let sim = Sim::new(OFFERED, 1, &[(0, 640, 480)], 64);
+    let mut h = Harness::new(&sim);
+    h.ring = DmaMemory::new(Layout::new(64).unwrap().total());
+    h.desc = vec![DescState::default(); 64];
+    let mut gpu = h.init();
+    assert_eq!(gpu.queue_size(), 64);
+    gpu.ctx_create(1, 0, b"").unwrap();
+    sim.dev().hold_3d = true;
+    let tickets: Vec<Ticket> =
+        (0..SLOTS).map(|_| gpu.send_transfer_3d(true, 1, None, Transfer3d::default()).unwrap()).collect();
+    assert_eq!(gpu.send_transfer_3d(true, 1, None, Transfer3d::default()), Err(Error::Busy));
+    // A synchronous command waits for a slot, and gives up within its
+    // timeout if none comes back.
+    assert_eq!(gpu.display_info(), Err(Error::Timeout { request: ctrl::GET_DISPLAY_INFO }));
+    assert!(gpu.is_broken());
+    drop(tickets);
+}
+
+#[test]
+fn blobs_are_created_mapped_and_unmapped() {
+    let sim = gpu_3d();
+    let mut h = Harness::new(&sim);
+    let mut gpu = h.init();
+    gpu.ctx_create(3, crate::protocol::capset::VENUS, b"venus").unwrap();
+    use crate::protocol::{blob_flags, blob_mem};
+    let host = CreateBlob {
+        resource_id: 0x20,
+        blob_mem: blob_mem::HOST3D,
+        blob_flags: blob_flags::USE_MAPPABLE,
+        blob_id: 77,
+        size: 0x4000,
+    };
+    gpu.create_blob(3, &host, &[]).unwrap();
+    assert_eq!(sim.dev().resources_3d[&0x20].blob, Some((2, 1, 77)));
+    assert_eq!(gpu.map_blob(0x20, 0x8000), Ok(crate::protocol::map_cache::CACHED));
+    assert_eq!(sim.dev().resources_3d[&0x20].mapped, Some(0x8000));
+    // Mapped twice, or past the region: refused.
+    assert!(gpu.map_blob(0x20, 0).is_err());
+    gpu.unmap_blob(0x20).unwrap();
+    assert!(gpu.map_blob(0x20, (1 << 20) - 0x2000).is_err());
+    // A guest blob carries its scatter list; host blobs need a context.
+    let mem = DmaMemory::new(8192);
+    let e = [MemEntry { addr: mem.ptr.as_ptr() as u64, length: 8192 }];
+    let guest = CreateBlob { resource_id: 0x21, blob_mem: blob_mem::GUEST, blob_flags: 0, blob_id: 0, size: 8192 };
+    gpu.create_blob(0, &guest, &e).unwrap();
+    assert_eq!(sim.dev().resources_3d[&0x21].backing, [(mem.ptr.as_ptr() as u64, 8192)]);
+    let orphan = CreateBlob { resource_id: 0x22, ..host };
+    assert!(gpu.create_blob(9, &orphan, &[]).is_err());
+    gpu.unref(0x20).unwrap();
+    gpu.unref(0x21).unwrap();
+}
+
+#[test]
+fn three_d_needs_its_features() {
+    let sim = Sim::new(OFFERED & !feature::VIRGL & !feature::RESOURCE_BLOB, 1, &[(0, 640, 480)], 64);
+    let mut h = Harness::new(&sim);
+    let mut gpu = h.init();
+    assert!(!gpu.has_virgl());
+    assert_eq!(gpu.ctx_create(1, 0, b""), Err(Error::Unsupported));
+    assert_eq!(gpu.create_3d(&Create3d { resource_id: 1, ..Create3d::default() }), Err(Error::Unsupported));
+    assert_eq!(gpu.map_blob(1, 0), Err(Error::Unsupported));
+    // Without context init, a context of another capset is refused here.
+    let sim = gpu_3d();
+    let mut h = Harness::new(&Sim::new(OFFERED, 1, &[(0, 640, 480)], 64));
+    let mut gpu2 = h.init();
+    assert_eq!(gpu2.ctx_create(1, 4, b""), Err(Error::Unsupported));
+    gpu2.ctx_create(1, 0, b"").unwrap();
+    drop(sim);
+}
+
+#[test]
+fn the_control_queue_can_interrupt() {
+    let sim = gpu_3d();
+    sim.0.msix_entries.set(true);
+    let mut h = Harness::new(&sim);
+    h.vector = Some(0);
+    let gpu = h.init();
+    assert!(gpu.interrupts());
+    assert_eq!(sim.queue(0).msix, 0);
 }

@@ -103,6 +103,7 @@ mod sound;
 mod symbols;
 mod sysmsg;
 mod terminal;
+mod virgl;
 mod wayland;
 mod win32;
 mod winimports;
@@ -1406,7 +1407,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 31] = [
+const BOOT_GROUPS: [BootGroup; 32] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1477,6 +1478,10 @@ const BOOT_GROUPS: [BootGroup; 31] = [
     // sets a mode, kmscube renders with kms_swrast (llvmpipe) through GBM
     // and EGL, checked by screenshots (mesa.rs, ADR 0115).
     ("mesa", mesa::boot_test),
+    // 3D: Mesa's virgl driver (eglinfo, kmscube with hardware GL, screenshots
+    // through VNC) and Venus on a virtio GPU with virgl, skipped where the
+    // host cannot run QEMU's OpenGL display (virgl.rs, ADR 0119).
+    ("virgl", virgl::boot_test),
     // The screen terminal: a command typed on the keyboard runs in the shell
     // on the screen, whose output and status bar show up.
     ("terminal", |k, s| {
@@ -1519,7 +1524,19 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
     ),
     (
         "devices",
-        &["net", "sound", "ext2", "ext4", "missing-devices", "screen", "virtio-gpu", "drm", "terminal", "input"],
+        &[
+            "net",
+            "sound",
+            "ext2",
+            "ext4",
+            "missing-devices",
+            "screen",
+            "virtio-gpu",
+            "drm",
+            "virgl",
+            "terminal",
+            "input",
+        ],
     ),
     ("faults", &["faults", "failures"]),
 ];

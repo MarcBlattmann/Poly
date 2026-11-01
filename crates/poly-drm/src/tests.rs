@@ -25,6 +25,15 @@ enum Call {
     Flush(u32, Rect),
     Take,
     GiveBack,
+    CtxCreate(u32, u32, Vec<u8>),
+    CtxDestroy(u32),
+    Attach(u32, u32),
+    Detach(u32, u32),
+    Create(u32, Option<u32>, ResourceKind),
+    Destroy(u32),
+    Submit(u32, Option<u32>, Vec<u8>),
+    Transfer(bool, Option<u32>, u32, Transfer),
+    Capset(u32, u32),
 }
 
 #[derive(Default)]
@@ -33,6 +42,12 @@ struct Fake {
     calls: Vec<Call>,
     live: Rc<RefCell<usize>>,
     fail_scanout: bool,
+    /// 3D: what it offers, fences not signalled yet, the last fence.
+    caps: GpuCaps,
+    unsignalled: std::collections::BTreeSet<u64>,
+    fence: u64,
+    /// Fences signal only when the test says so.
+    hold_fences: bool,
 }
 
 /// A buffer that counts how many exist (freed when the last clone goes).
@@ -92,6 +107,83 @@ impl Hardware for Fake {
     fn give_back_display(&mut self) {
         self.calls.push(Call::GiveBack);
     }
+
+    fn gpu_caps(&mut self) -> GpuCaps {
+        self.caps.clone()
+    }
+
+    fn capset(&mut self, id: u32, version: u32) -> core::result::Result<Vec<u8>, HwError> {
+        self.calls.push(Call::Capset(id, version));
+        let info = self.caps.capsets.iter().find(|c| c.id == id).ok_or(HwError)?;
+        Ok((0..info.max_size).map(|i| (i as u8) ^ id as u8).collect())
+    }
+
+    fn ctx_create(&mut self, ctx: u32, capset: u32, name: &[u8]) -> core::result::Result<(), HwError> {
+        self.calls.push(Call::CtxCreate(ctx, capset, name.to_vec()));
+        Ok(())
+    }
+
+    fn ctx_destroy(&mut self, ctx: u32) {
+        self.calls.push(Call::CtxDestroy(ctx));
+    }
+
+    fn ctx_attach(&mut self, ctx: u32, res: u32) -> core::result::Result<(), HwError> {
+        self.calls.push(Call::Attach(ctx, res));
+        Ok(())
+    }
+
+    fn ctx_detach(&mut self, ctx: u32, res: u32) {
+        self.calls.push(Call::Detach(ctx, res));
+    }
+
+    fn create_resource(
+        &mut self,
+        res: u32,
+        ctx: Option<u32>,
+        kind: &ResourceKind,
+        _: Option<&Rc<Mem>>,
+    ) -> core::result::Result<Option<Rc<Mem>>, HwError> {
+        self.calls.push(Call::Create(res, ctx, *kind));
+        match kind {
+            // A mappable host blob: its window in the host-visible region.
+            ResourceKind::Blob { mem: 2, flags, size, .. } if flags & 1 != 0 => Ok(self.alloc(*size)),
+            _ => Ok(None),
+        }
+    }
+
+    fn destroy_resource(&mut self, res: u32, _: Option<&Rc<Mem>>) {
+        self.calls.push(Call::Destroy(res));
+    }
+
+    fn submit(&mut self, ctx: u32, ring: Option<u32>, commands: &[u8]) -> core::result::Result<u64, HwError> {
+        self.calls.push(Call::Submit(ctx, ring, commands.to_vec()));
+        Ok(self.next_fence())
+    }
+
+    fn transfer(
+        &mut self,
+        to_host: bool,
+        ctx: Option<u32>,
+        res: u32,
+        t: &Transfer,
+    ) -> core::result::Result<u64, HwError> {
+        self.calls.push(Call::Transfer(to_host, ctx, res, *t));
+        Ok(if ctx.is_some() { self.next_fence() } else { 0 })
+    }
+
+    fn fence_done(&mut self, fence: u64) -> bool {
+        !self.unsignalled.contains(&fence)
+    }
+}
+
+impl Fake {
+    fn next_fence(&mut self) -> u64 {
+        self.fence += 1;
+        if self.hold_fences {
+            self.unsignalled.insert(self.fence);
+        }
+        self.fence
+    }
 }
 
 /// User memory: one flat area from [`BASE`].
@@ -149,11 +241,12 @@ impl UserMemory for User {
     }
 }
 
-/// The file table: dma-buf descriptors from 100.
+/// The file table: dma-buf descriptors from 100, sync files from 200.
 #[derive(Default)]
 struct FdTable {
     files: BTreeMap<i32, (BoId, u32)>,
     next: i32,
+    fences: BTreeMap<i32, Vec<u64>>,
 }
 
 impl Fds<Rc<Mem>> for FdTable {
@@ -166,6 +259,16 @@ impl Fds<Rc<Mem>> for FdTable {
 
     fn import(&mut self, fd: i32) -> Result<BoId> {
         self.files.get(&fd).map(|f| f.0).ok_or(Errno::EBADF)
+    }
+
+    fn export_fence(&mut self, fences: &[u64]) -> Result<i32> {
+        let fd = 200 + self.fences.len() as i32;
+        self.fences.insert(fd, fences.to_vec());
+        Ok(fd)
+    }
+
+    fn import_fence(&mut self, fd: i32) -> Result<Vec<u64>> {
+        self.fences.get(&fd).cloned().ok_or(Errno::EBADF)
     }
 }
 
@@ -1220,4 +1323,376 @@ fn a_failing_device_reports_eio() {
     t.dev.hardware().fail_scanout = true;
     assert_eq!(t.setcrtc(f, crtc, fb, conn, Some(modes[0])), Err(Errno::EIO));
     assert!(format!("{:?}", t.dev).contains("virtio_gpu"));
+}
+
+// --- virtio-gpu 3D (virtgpu_drm.h, ADR 0119) ------------------------------------
+
+use crate::uapi::virtgpu as vg;
+
+/// A device whose hardware offers virgl, virgl2 and Venus capsets, blobs,
+/// host-visible memory and context init.
+fn gpu() -> T {
+    let mut t = T::one();
+    let caps = GpuCaps {
+        virgl: true,
+        blob: true,
+        host_visible: true,
+        context_init: true,
+        capsets: vec![
+            CapsetInfo { id: 1, max_version: 1, max_size: 308 },
+            CapsetInfo { id: 2, max_version: 2, max_size: 1024 },
+            CapsetInfo { id: 4, max_version: 0, max_size: 160 },
+        ],
+    };
+    // The device asks once, when it is made.
+    t.dev = Device::new(Fake { outputs: vec![output(1024, 768)], caps, ..Fake::default() }, t.dev.info.clone());
+    t
+}
+
+impl T {
+    fn getparam(&mut self, file: FileId, param: u64) -> Result<u32> {
+        let at = self.user.put(&[0xff; 8]);
+        let mut g = vg::GetParam { param, value: at }.to_bytes();
+        self.call(file, vg::ioctl::GETPARAM, &mut g)?;
+        let v = self.user.get(at, 8);
+        // An int: the next 4 bytes stay as they were.
+        assert_eq!(&v[4..], &[0xff; 4]);
+        Ok(u32::from_le_bytes(v[..4].try_into().unwrap()))
+    }
+
+    fn create_3d(&mut self, file: FileId, width: u32, height: u32, size: u32) -> vg::ResourceCreate {
+        let mut r = vg::ResourceCreate {
+            target: 2,
+            format: 1,
+            bind: 2,
+            width,
+            height,
+            depth: 1,
+            array_size: 1,
+            size,
+            ..Default::default()
+        }
+        .to_bytes();
+        self.ok(file, vg::ioctl::RESOURCE_CREATE, &mut r);
+        vg::ResourceCreate::decode(&r)
+    }
+
+    fn execbuffer(
+        &mut self,
+        file: FileId,
+        flags: u32,
+        cmds: &[u8],
+        handles: &[u32],
+        fence_fd: i32,
+        ring: u32,
+    ) -> (Result<Reply>, vg::Execbuffer) {
+        let command = self.user.put(cmds);
+        let list: Vec<u8> = handles.iter().flat_map(|h| h.to_le_bytes()).collect();
+        let bo_handles = self.user.put(&list);
+        let mut e = vg::Execbuffer {
+            flags,
+            size: cmds.len() as u32,
+            command,
+            bo_handles,
+            num_bo_handles: handles.len() as u32,
+            fence_fd,
+            ring_idx: ring,
+            ..Default::default()
+        }
+        .to_bytes();
+        let r = self.call(file, vg::ioctl::EXECBUFFER, &mut e);
+        (r, vg::Execbuffer::decode(&e))
+    }
+}
+
+#[test]
+fn virtgpu_request_numbers_match_the_header() {
+    // DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_*, struct ...), as libdrm
+    // computes them for x86-64.
+    assert_eq!(vg::ioctl::MAP, 0xc010_6441);
+    assert_eq!(vg::ioctl::EXECBUFFER, 0xc040_6442);
+    assert_eq!(vg::ioctl::GETPARAM, 0xc010_6443);
+    assert_eq!(vg::ioctl::RESOURCE_CREATE, 0xc038_6444);
+    assert_eq!(vg::ioctl::RESOURCE_INFO, 0xc010_6445);
+    assert_eq!(vg::ioctl::TRANSFER_FROM_HOST, 0xc02c_6446);
+    assert_eq!(vg::ioctl::TRANSFER_TO_HOST, 0xc02c_6447);
+    assert_eq!(vg::ioctl::WAIT, 0xc008_6448);
+    assert_eq!(vg::ioctl::GET_CAPS, 0xc018_6449);
+    assert_eq!(vg::ioctl::RESOURCE_CREATE_BLOB, 0xc030_644a);
+    assert_eq!(vg::ioctl::CONTEXT_INIT, 0xc010_644b);
+}
+
+#[test]
+fn getparam_and_capsets() {
+    let mut t = gpu();
+    let f = t.dev.open(Node::Render);
+    assert_eq!(t.getparam(f, vg::param::THREE_D_FEATURES), Ok(1));
+    assert_eq!(t.getparam(f, vg::param::CAPSET_QUERY_FIX), Ok(1));
+    assert_eq!(t.getparam(f, vg::param::RESOURCE_BLOB), Ok(1));
+    assert_eq!(t.getparam(f, vg::param::HOST_VISIBLE), Ok(1));
+    assert_eq!(t.getparam(f, vg::param::CROSS_DEVICE), Ok(0));
+    assert_eq!(t.getparam(f, vg::param::CONTEXT_INIT), Ok(1));
+    assert_eq!(t.getparam(f, vg::param::SUPPORTED_CAPSET_IDS), Ok(1 << 1 | 1 << 2 | 1 << 4));
+    assert_eq!(t.getparam(f, 99), Err(Errno::EINVAL));
+    // A 2D-only device says so.
+    let mut plain = T::one();
+    let p = plain.dev.open(Node::Render);
+    assert_eq!(plain.getparam(p, vg::param::THREE_D_FEATURES), Ok(0));
+    assert_eq!(plain.getparam(p, vg::param::SUPPORTED_CAPSET_IDS), Ok(0));
+
+    // GET_CAPS copies at most `size` bytes of the capset, fetched once.
+    let out = t.user.alloc(2048);
+    let mut g = vg::GetCaps { cap_set_id: 2, cap_set_ver: 2, addr: out, size: 2048, pad: 0 }.to_bytes();
+    t.ok(f, vg::ioctl::GET_CAPS, &mut g);
+    let data = t.user.get(out, 1024);
+    assert_eq!(data[..4], [2, 3, 0, 1]);
+    let mut g = vg::GetCaps { cap_set_id: 2, cap_set_ver: 2, addr: out, size: 4, pad: 0 }.to_bytes();
+    t.ok(f, vg::ioctl::GET_CAPS, &mut g);
+    assert_eq!(t.calls(), [Call::Capset(2, 2)]);
+    // Unknown capsets, versions above the newest, and no 3D at all.
+    let mut g = vg::GetCaps { cap_set_id: 3, cap_set_ver: 0, addr: out, size: 4, pad: 0 }.to_bytes();
+    assert_eq!(t.call(f, vg::ioctl::GET_CAPS, &mut g), Err(Errno::EINVAL));
+    let mut g = vg::GetCaps { cap_set_id: 1, cap_set_ver: 2, addr: out, size: 4, pad: 0 }.to_bytes();
+    assert_eq!(t.call(f, vg::ioctl::GET_CAPS, &mut g), Err(Errno::EINVAL));
+    let mut g = vg::GetCaps { cap_set_id: 1, cap_set_ver: 1, addr: out, size: 4, pad: 0 }.to_bytes();
+    assert_eq!(plain.call(p, vg::ioctl::GET_CAPS, &mut g), Err(Errno::ENOSYS));
+}
+
+#[test]
+fn context_init_picks_the_capset_once() {
+    let mut t = gpu();
+    let f = t.dev.open(Node::Render);
+    let name = t.user.put(b"vulkaninfo\0");
+    let params: Vec<u8> = [
+        vg::ContextSetParam { param: vg::context_param::CAPSET_ID, value: 4 },
+        vg::ContextSetParam { param: vg::context_param::NUM_RINGS, value: 2 },
+        vg::ContextSetParam { param: vg::context_param::POLL_RINGS_MASK, value: 0 },
+        vg::ContextSetParam { param: vg::context_param::DEBUG_NAME, value: name },
+    ]
+    .iter()
+    .flat_map(|p| p.to_bytes())
+    .collect();
+    let at = t.user.put(&params);
+    let mut c = vg::ContextInit { num_params: 4, pad: 0, ctx_set_params: at }.to_bytes();
+    t.ok(f, vg::ioctl::CONTEXT_INIT, &mut c);
+    assert_eq!(t.calls(), [Call::CtxCreate(f, 4, b"vulkaninfo".to_vec())]);
+    assert_eq!(t.call(f, vg::ioctl::CONTEXT_INIT, &mut c), Err(Errno::EEXIST));
+    // An unsupported capset, too many rings, a mask beyond the rings, an
+    // unknown parameter.
+    for bad in [
+        [(vg::context_param::CAPSET_ID, 3u64), (vg::context_param::NUM_RINGS, 1)],
+        [(vg::context_param::CAPSET_ID, 2), (vg::context_param::NUM_RINGS, 65)],
+        [(vg::context_param::NUM_RINGS, 1), (vg::context_param::POLL_RINGS_MASK, 2)],
+        [(vg::context_param::CAPSET_ID, 2), (9, 0)],
+    ] {
+        let g = t.dev.open(Node::Render);
+        let raw: Vec<u8> =
+            bad.iter().flat_map(|&(param, value)| vg::ContextSetParam { param, value }.to_bytes()).collect();
+        let at = t.user.put(&raw);
+        let mut c = vg::ContextInit { num_params: 2, pad: 0, ctx_set_params: at }.to_bytes();
+        assert_eq!(t.call(g, vg::ioctl::CONTEXT_INIT, &mut c), Err(Errno::EINVAL), "{bad:?}");
+    }
+    assert!(t.calls().is_empty());
+    // Closing the file destroys its context.
+    t.dev.close(f, t.now);
+    assert_eq!(t.calls(), [Call::CtxDestroy(f)]);
+}
+
+#[test]
+fn resources_map_transfer_wait_and_go_with_their_last_handle() {
+    let mut t = gpu();
+    t.dev.hardware().hold_fences = true;
+    let f = t.dev.open(Node::Render);
+    // The first resource makes the file's default (virgl) context.
+    let r = t.create_3d(f, 64, 64, 64 * 64 * 4);
+    assert_eq!(r.res_handle, RESOURCE_BASE + 1);
+    let res = r.res_handle;
+    let calls = t.calls();
+    assert_eq!(calls[0], Call::CtxCreate(f, 0, b"poly".to_vec()));
+    assert!(
+        matches!(calls[1], Call::Create(id, Some(c), ResourceKind::ThreeD(Create3d { width: 64, height: 64, target: 2, .. })) if id == res && c == f)
+    );
+    assert_eq!(calls[2], Call::Attach(f, res));
+    let mut i = vg::ResourceInfo { bo_handle: r.bo_handle, ..Default::default() }.to_bytes();
+    t.ok(f, vg::ioctl::RESOURCE_INFO, &mut i);
+    assert_eq!(
+        vg::ResourceInfo::decode(&i),
+        vg::ResourceInfo { bo_handle: r.bo_handle, res_handle: res, size: 16384, blob_mem: 0 }
+    );
+    // MAP gives the fake offset; mapping it maps the guest memory.
+    let mut m = vg::Map { handle: r.bo_handle, ..Default::default() }.to_bytes();
+    t.ok(f, vg::ioctl::MAP, &mut m);
+    let offset = vg::Map::decode(&m).offset;
+    let map = t.dev.map(f, offset, 16384).unwrap();
+    assert_eq!(map.size, 16384);
+    // A transfer is fenced; WAIT sleeps until the fence signals.
+    let mut x =
+        vg::Transfer { bo_handle: r.bo_handle, w: 64, h: 64, d: 1, stride: 256, ..Default::default() }.to_bytes();
+    t.ok(f, vg::ioctl::TRANSFER_FROM_HOST, &mut x);
+    let fence = t.dev.hardware().fence;
+    assert!(
+        matches!(&t.calls()[..], [Call::Transfer(false, Some(c), id, tr)] if *c == f && *id == res && tr.w == 64 && tr.stride == 256)
+    );
+    let mut w = vg::Wait { handle: r.bo_handle, flags: vg::WAIT_NOWAIT }.to_bytes();
+    assert_eq!(t.call(f, vg::ioctl::WAIT, &mut w), Err(Errno::EBUSY));
+    let mut w = vg::Wait { handle: r.bo_handle, flags: 0 }.to_bytes();
+    assert_eq!(t.call(f, vg::ioctl::WAIT, &mut w), Ok(Reply::WaitFence { fence }));
+    t.dev.hardware().unsignalled.clear();
+    t.ok(f, vg::ioctl::WAIT, &mut w);
+    let mut w = vg::Wait { handle: 77, flags: 0 }.to_bytes();
+    assert_eq!(t.call(f, vg::ioctl::WAIT, &mut w), Err(Errno::ENOENT));
+    // Shared through PRIME with another file, it lives on until both let go.
+    let mut p = PrimeHandle { handle: r.bo_handle, flags: prime::RDWR, fd: -1 }.to_bytes();
+    t.ok(f, ioctl::PRIME_HANDLE_TO_FD, &mut p);
+    let g = t.dev.open(Node::Render);
+    let mut q = PrimeHandle { fd: PrimeHandle::decode(&p).fd, ..Default::default() }.to_bytes();
+    t.ok(g, ioctl::PRIME_FD_TO_HANDLE, &mut q);
+    let gh = PrimeHandle::decode(&q).handle;
+    // The second file's first submission makes its context and attaches.
+    let (r2, _) = t.execbuffer(g, 0, &[1, 2, 3, 4], &[gh], -1, 0);
+    assert_eq!(r2, Ok(Reply::Done(0)));
+    let calls = t.calls();
+    assert_eq!(
+        calls,
+        [Call::CtxCreate(g, 0, b"poly".to_vec()), Call::Attach(g, res), Call::Submit(g, None, vec![1, 2, 3, 4])]
+    );
+    let mut c = GemClose { handle: r.bo_handle, pad: 0 }.to_bytes();
+    t.ok(f, ioctl::GEM_CLOSE, &mut c);
+    drop(map);
+    t.dev.release_dmabuf(BoId(1));
+    assert!(t.calls().is_empty(), "the second file still has it");
+    let mut c = GemClose { handle: gh, pad: 0 }.to_bytes();
+    t.ok(g, ioctl::GEM_CLOSE, &mut c);
+    // Detached from both contexts, then destroyed.
+    let calls = t.calls();
+    assert!(calls.contains(&Call::Detach(f, res)) && calls.contains(&Call::Detach(g, res)));
+    assert_eq!(calls.last(), Some(&Call::Destroy(res)));
+    assert_eq!(t.dev.object_counts(), (0, 0));
+}
+
+#[test]
+fn execbuffer_fences_rings_and_sync_files() {
+    let mut t = gpu();
+    t.dev.hardware().hold_fences = true;
+    let f = t.dev.open(Node::Render);
+    let params: Vec<u8> = [
+        vg::ContextSetParam { param: vg::context_param::CAPSET_ID, value: 2 },
+        vg::ContextSetParam { param: vg::context_param::NUM_RINGS, value: 2 },
+    ]
+    .iter()
+    .flat_map(|p| p.to_bytes())
+    .collect();
+    let at = t.user.put(&params);
+    let mut c = vg::ContextInit { num_params: 2, pad: 0, ctx_set_params: at }.to_bytes();
+    t.ok(f, vg::ioctl::CONTEXT_INIT, &mut c);
+    let a = t.create_3d(f, 16, 16, 1024);
+    t.calls();
+    // An out-fence: a sync file for the submission's fence.
+    let (r, e) = t.execbuffer(f, vg::execbuf::FENCE_FD_OUT | vg::execbuf::RING_IDX, b"cmds", &[a.bo_handle], -1, 1);
+    assert_eq!(r, Ok(Reply::Done(0)));
+    assert_eq!(t.calls(), [Call::Submit(f, Some(1), b"cmds".to_vec())]);
+    let first = t.dev.hardware().fence;
+    assert_eq!(t.fds.fences[&e.fence_fd], [first]);
+    // The buffer is busy with it.
+    let mut w = vg::Wait { handle: a.bo_handle, flags: vg::WAIT_NOWAIT }.to_bytes();
+    assert_eq!(t.call(f, vg::ioctl::WAIT, &mut w), Err(Errno::EBUSY));
+    // An in-fence that has not signalled: wait for it, nothing submitted.
+    let (r, _) = t.execbuffer(f, vg::execbuf::FENCE_FD_IN, b"next", &[], e.fence_fd, 0);
+    assert_eq!(r, Ok(Reply::WaitFence { fence: first }));
+    assert!(t.calls().is_empty());
+    t.dev.hardware().unsignalled.clear();
+    let (r, _) = t.execbuffer(f, vg::execbuf::FENCE_FD_IN, b"next", &[], e.fence_fd, 0);
+    assert_eq!(r, Ok(Reply::Done(0)));
+    assert_eq!(t.calls(), [Call::Submit(f, None, b"next".to_vec())]);
+    t.ok(f, vg::ioctl::WAIT, &mut vg::Wait { handle: a.bo_handle, flags: vg::WAIT_NOWAIT }.to_bytes());
+    // A ring beyond the context's, unknown flags, sync objects, a bad handle.
+    assert_eq!(t.execbuffer(f, vg::execbuf::RING_IDX, b"x", &[], -1, 2).0, Err(Errno::EINVAL));
+    assert_eq!(t.execbuffer(f, 0x80, b"x", &[], -1, 0).0, Err(Errno::EINVAL));
+    assert_eq!(t.execbuffer(f, 0, b"x", &[99], -1, 0).0, Err(Errno::ENOENT));
+    let mut e = vg::Execbuffer { num_in_syncobjs: 1, ..Default::default() }.to_bytes();
+    assert_eq!(t.call(f, vg::ioctl::EXECBUFFER, &mut e), Err(Errno::EINVAL));
+    // The old, 40-byte structure (before the sync objects) still works.
+    let command = t.user.put(b"old!");
+    let mut old = vg::Execbuffer { size: 4, command, fence_fd: -1, ..Default::default() }.to_bytes()[..40].to_vec();
+    let req = Request::encode(dir::READ | dir::WRITE, vg::nr::EXECBUFFER, 40);
+    t.ok(f, req, &mut old);
+    assert_eq!(t.calls(), [Call::Submit(f, None, b"old!".to_vec())]);
+    // A dumb buffer is not a resource: refused by the 3D ioctls.
+    let mut d = CreateDumb { width: 8, height: 8, bpp: 32, ..Default::default() }.to_bytes();
+    let card = t.dev.open(Node::Primary);
+    t.ok(card, ioctl::MODE_CREATE_DUMB, &mut d);
+    let dh = CreateDumb::decode(&d).handle;
+    assert_eq!(t.execbuffer(card, 0, b"x", &[dh], -1, 0).0, Err(Errno::EINVAL));
+}
+
+#[test]
+fn blobs_guest_host_and_mappable() {
+    let mut t = gpu();
+    let f = t.dev.open(Node::Render);
+    let blob = |mem, flags, size, blob_id, cmd: u64, cmd_size| {
+        vg::ResourceCreateBlob { blob_mem: mem, blob_flags: flags, size, blob_id, cmd, cmd_size, ..Default::default() }
+            .to_bytes()
+    };
+    // A mappable host blob made by a command stream first (Venus' way):
+    // the commands go before the resource, and MAP maps its window.
+    let cmd = t.user.put(b"alloc memory");
+    let mut b = blob(vg::blob::MEM_HOST3D, vg::blob::FLAG_USE_MAPPABLE, 8192, 42, cmd, 12);
+    t.ok(f, vg::ioctl::RESOURCE_CREATE_BLOB, &mut b);
+    let rb = vg::ResourceCreateBlob::decode(&b);
+    let calls = t.calls();
+    assert_eq!(calls[0], Call::CtxCreate(f, 0, b"poly".to_vec()));
+    assert_eq!(calls[1], Call::Submit(f, None, b"alloc memory".to_vec()));
+    assert_eq!(
+        calls[2],
+        Call::Create(rb.res_handle, Some(f), ResourceKind::Blob { mem: 2, flags: 1, blob_id: 42, size: 8192 })
+    );
+    let mut m = vg::Map { handle: rb.bo_handle, ..Default::default() }.to_bytes();
+    t.ok(f, vg::ioctl::MAP, &mut m);
+    assert!(t.dev.map(f, vg::Map::decode(&m).offset, 8192).is_ok());
+    // A host blob that is not mappable has nothing to map.
+    let mut b = blob(vg::blob::MEM_HOST3D, 0, 4096, 43, 0, 0);
+    t.ok(f, vg::ioctl::RESOURCE_CREATE_BLOB, &mut b);
+    let mut m = vg::Map { handle: vg::ResourceCreateBlob::decode(&b).bo_handle, ..Default::default() }.to_bytes();
+    assert_eq!(t.call(f, vg::ioctl::MAP, &mut m), Err(Errno::EINVAL));
+    // A guest blob: guest memory, no context needed.
+    let g = t.dev.open(Node::Render);
+    let mut b = blob(vg::blob::MEM_GUEST, vg::blob::FLAG_USE_MAPPABLE, 5000, 0, 0, 0);
+    t.ok(g, vg::ioctl::RESOURCE_CREATE_BLOB, &mut b);
+    let rb = vg::ResourceCreateBlob::decode(&b);
+    let mut i = vg::ResourceInfo { bo_handle: rb.bo_handle, ..Default::default() }.to_bytes();
+    t.ok(g, vg::ioctl::RESOURCE_INFO, &mut i);
+    assert_eq!((vg::ResourceInfo::decode(&i).size, vg::ResourceInfo::decode(&i).blob_mem), (8192, 1));
+    t.calls();
+    // Bad kinds, flags and sizes.
+    for bad in [blob(0, 0, 4096, 0, 0, 0), blob(4, 0, 4096, 0, 0, 0), blob(1, 8, 4096, 0, 0, 0), blob(1, 0, 0, 0, 0, 0)]
+    {
+        let mut bad = bad;
+        assert_eq!(t.call(g, vg::ioctl::RESOURCE_CREATE_BLOB, &mut bad), Err(Errno::EINVAL));
+    }
+    // Without blobs in the hardware: refused.
+    let mut plain = T::one();
+    let p = plain.dev.open(Node::Render);
+    let mut b = blob(vg::blob::MEM_GUEST, 0, 4096, 0, 0, 0);
+    assert_eq!(plain.call(p, vg::ioctl::RESOURCE_CREATE_BLOB, &mut b), Err(Errno::EINVAL));
+}
+
+#[test]
+fn without_3d_resources_are_2d_and_transfers_go_one_way() {
+    let mut t = T::one();
+    let f = t.dev.open(Node::Render);
+    let mut r = vg::ResourceCreate { format: 2, width: 32, height: 16, size: 2048, ..Default::default() }.to_bytes();
+    t.ok(f, vg::ioctl::RESOURCE_CREATE, &mut r);
+    let r = vg::ResourceCreate::decode(&r);
+    assert_eq!(
+        t.calls(),
+        [Call::Create(r.res_handle, None, ResourceKind::Simple { format: 2, width: 32, height: 16 })]
+    );
+    let mut x = vg::Transfer { bo_handle: r.bo_handle, w: 32, h: 16, ..Default::default() }.to_bytes();
+    t.ok(f, vg::ioctl::TRANSFER_TO_HOST, &mut x);
+    assert!(matches!(&t.calls()[..], [Call::Transfer(true, None, _, _)]));
+    assert_eq!(t.call(f, vg::ioctl::TRANSFER_FROM_HOST, &mut x), Err(Errno::ENOSYS));
+    assert_eq!(t.execbuffer(f, 0, b"x", &[], -1, 0).0, Err(Errno::ENOSYS));
+    // The 3D ioctls are render-node ioctls, open to the card node too.
+    let card = t.dev.open(Node::Primary);
+    assert_eq!(t.getparam(card, vg::param::THREE_D_FEATURES), Ok(0));
 }

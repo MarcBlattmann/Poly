@@ -31,6 +31,12 @@
 //!   (`SET_MASTER`, `DROP_MASTER`, the first opener) and the render-node
 //!   subset; PRIME export and import through the kernel's file table
 //!   ([`Fds`]).
+//! - The virtio-gpu driver ioctls (`DRM_IOCTL_VIRTGPU_*`, `virtgpu.rs`, ADR
+//!   0119) that Mesa's virgl and Venus drivers use: parameters, capsets,
+//!   3D contexts (one per file, of a chosen capset), 3D and blob resources
+//!   as GEM objects, transfers, command submission with fences (waited on
+//!   with `WAIT`, or handed out as sync-file descriptors), on the
+//!   [`Hardware`]'s 3D methods.
 //!
 //! # Time
 //!
@@ -58,9 +64,11 @@ mod kms;
 pub mod modes;
 mod props;
 pub mod uapi;
+mod virtgpu;
 
 pub use device::{BoId, Device, DriverInfo, FileId, Mapping, Node};
 pub use props::Prop;
+pub use virtgpu::RESOURCE_BASE;
 
 use alloc::vec::Vec;
 
@@ -83,8 +91,10 @@ impl Errno {
     pub const ENODEV: Errno = Errno(19);
     pub const EINVAL: Errno = Errno(22);
     pub const ENOTTY: Errno = Errno(25);
+    pub const EEXIST: Errno = Errno(17);
     pub const ENOSPC: Errno = Errno(28);
     pub const ERANGE: Errno = Errno(34);
+    pub const ENOSYS: Errno = Errno(38);
     pub const EOPNOTSUPP: Errno = Errno(95);
 }
 
@@ -108,6 +118,19 @@ pub trait Fds<B> {
     /// The GEM object behind dma-buf descriptor `fd`, if it is one of this
     /// device's; `EBADF` for a closed descriptor, `EINVAL` for another file.
     fn import(&mut self, fd: i32) -> Result<BoId>;
+    /// Make a sync file (a fence descriptor, `linux/sync_file.h`) that
+    /// signals when every hardware fence in `fences` has, put it in the
+    /// table (close-on-exec) and return its descriptor.
+    fn export_fence(&mut self, fences: &[u64]) -> Result<i32> {
+        let _ = fences;
+        Err(Errno::EINVAL)
+    }
+    /// The hardware fences behind sync-file descriptor `fd`; `EBADF` for a
+    /// closed descriptor, `EINVAL` for another file.
+    fn import_fence(&mut self, fd: i32) -> Result<Vec<u64>> {
+        let _ = fd;
+        Err(Errno::EINVAL)
+    }
 }
 
 /// What one ioctl call needs from the kernel.
@@ -136,6 +159,10 @@ pub enum Reply {
     /// ioctl again (a blocking vblank wait; a blocking commit behind a
     /// pending one).
     Sleep { until_ns: u64 },
+    /// Sleep until hardware fence `fence` signals ([`Hardware::fence_done`]),
+    /// then issue the same ioctl again (`VIRTGPU_WAIT` on a busy buffer, an
+    /// `EXECBUFFER` behind its in-fence).
+    WaitFence { fence: u64 },
 }
 
 /// One output of the hardware (a virtio-gpu scanout).
@@ -193,6 +220,71 @@ impl Rect {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HwError;
 
+/// One capability set of a 3D device (`GET_CAPSET_INFO`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CapsetInfo {
+    pub id: u32,
+    pub max_version: u32,
+    pub max_size: u32,
+}
+
+/// What the hardware offers for 3D (ADR 0119): what
+/// `DRM_IOCTL_VIRTGPU_GETPARAM` reports.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GpuCaps {
+    /// 3D contexts, resources and command submission (virgl).
+    pub virgl: bool,
+    /// Blob resources.
+    pub blob: bool,
+    /// Host blobs can be mapped (a host-visible memory region).
+    pub host_visible: bool,
+    /// Contexts of a chosen capset, fences on rings.
+    pub context_init: bool,
+    pub capsets: Vec<CapsetInfo>,
+}
+
+/// The body of a 3D resource (`RESOURCE_CREATE_3D`): the 3D protocol's
+/// target, format and bind flags, passed through.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Create3d {
+    pub target: u32,
+    pub format: u32,
+    pub bind: u32,
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
+    pub array_size: u32,
+    pub last_level: u32,
+    pub nr_samples: u32,
+    pub flags: u32,
+}
+
+/// What kind of hardware resource a GEM object is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResourceKind {
+    /// A 2D resource (a device without 3D): a virtio-gpu format.
+    Simple { format: u32, width: u32, height: u32 },
+    /// A 3D resource with guest memory beside it.
+    ThreeD(Create3d),
+    /// A blob (`VIRTGPU_BLOB_MEM_*`, `VIRTGPU_BLOB_FLAG_*`).
+    Blob { mem: u32, flags: u32, blob_id: u64, size: u64 },
+}
+
+/// A 3D transfer's region (`struct drm_virtgpu_3d_transfer_*`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Transfer {
+    pub x: u32,
+    pub y: u32,
+    pub z: u32,
+    pub w: u32,
+    pub h: u32,
+    pub d: u32,
+    pub level: u32,
+    pub offset: u64,
+    pub stride: u32,
+    pub layer_stride: u32,
+}
+
 /// What the device needs from the hardware. Framebuffers are named by
 /// their DRM object ID; how the hardware calls them (virtio resource IDs)
 /// is its own business.
@@ -223,6 +315,74 @@ pub trait Hardware {
     fn take_display(&mut self);
     /// The device shows nothing any more: the console shows itself again.
     fn give_back_display(&mut self);
+
+    // --- 3D (virtio-gpu virgl / Venus, ADR 0119). Hardware without it
+    // keeps the defaults: no 3D, and every 3D call fails.
+
+    /// What the hardware offers for 3D. Asked once, when the device is made.
+    fn gpu_caps(&mut self) -> GpuCaps {
+        GpuCaps::default()
+    }
+    /// The data of capset `id` at `version` (at most its `max_size` bytes).
+    fn capset(&mut self, id: u32, version: u32) -> Result<Vec<u8>, HwError> {
+        let _ = (id, version);
+        Err(HwError)
+    }
+    /// A 3D context `ctx` speaking capset `capset` (0: the default).
+    fn ctx_create(&mut self, ctx: u32, capset: u32, name: &[u8]) -> Result<(), HwError> {
+        let _ = (ctx, capset, name);
+        Err(HwError)
+    }
+    fn ctx_destroy(&mut self, ctx: u32) {
+        let _ = ctx;
+    }
+    /// Let context `ctx` use resource `res`.
+    fn ctx_attach(&mut self, ctx: u32, res: u32) -> Result<(), HwError> {
+        let _ = (ctx, res);
+        Err(HwError)
+    }
+    fn ctx_detach(&mut self, ctx: u32, res: u32) {
+        let _ = (ctx, res);
+    }
+    /// Make resource `res` of `kind` (for context `ctx`, which host blobs
+    /// need), with `backing` as its guest memory if given. Returns the
+    /// memory a mapping of it maps if that is not `backing` (a mappable
+    /// host blob, mapped into the host-visible region).
+    fn create_resource(
+        &mut self,
+        res: u32,
+        ctx: Option<u32>,
+        kind: &ResourceKind,
+        backing: Option<&Self::Buffer>,
+    ) -> Result<Option<Self::Buffer>, HwError> {
+        let _ = (res, ctx, kind, backing);
+        Err(HwError)
+    }
+    /// Destroy resource `res` (its last reference went). If this cannot be
+    /// done the hardware must keep `memory` (the device may still use it).
+    fn destroy_resource(&mut self, res: u32, memory: Option<&Self::Buffer>) {
+        let _ = (res, memory);
+    }
+    /// Run `commands` (the 3D protocol's command stream) in context `ctx`,
+    /// fenced on `ring` if given. Returns the fence that signals when the
+    /// host is done.
+    fn submit(&mut self, ctx: u32, ring: Option<u32>, commands: &[u8]) -> Result<u64, HwError> {
+        let _ = (ctx, ring, commands);
+        Err(HwError)
+    }
+    /// Copy `t` of resource `res` to the host (`to_host`) or back into its
+    /// guest memory, in context `ctx` (`None`: a 2D copy on hardware
+    /// without 3D). Returns the fence that signals when it is done (0:
+    /// done already).
+    fn transfer(&mut self, to_host: bool, ctx: Option<u32>, res: u32, t: &Transfer) -> Result<u64, HwError> {
+        let _ = (to_host, ctx, res, t);
+        Err(HwError)
+    }
+    /// Whether `fence` (from `submit` or `transfer`) has signalled.
+    fn fence_done(&mut self, fence: u64) -> bool {
+        let _ = fence;
+        true
+    }
 }
 
 #[cfg(test)]

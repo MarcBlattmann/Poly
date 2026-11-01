@@ -376,9 +376,9 @@ impl<H: Hardware> Device<H> {
         }
         if let Some(fb) = self.fbs.remove(&id) {
             self.objects.remove(&id);
-            if let Some(bo) = self.bos.get(&fb.bo) {
+            if let Some(buffer) = self.bos.get(&fb.bo).and_then(|bo| bo.buffer.as_ref()) {
                 // On failure the hardware keeps the memory (its contract).
-                let _ = self.hw.destroy_fb(id, &bo.buffer);
+                let _ = self.hw.destroy_fb(id, buffer);
             }
             self.unref(fb.bo);
         }
@@ -1036,7 +1036,7 @@ impl<H: Hardware> Device<H> {
         if layout.offset + layout.pitch as u64 * layout.height as u64 > o.size {
             return Err(Errno::EINVAL);
         }
-        let buffer = o.buffer.clone();
+        let buffer = o.buffer.clone().ok_or(Errno::EINVAL)?;
         let id = self.add_object(Obj::Fb);
         if self.hw.create_fb(id, &layout, &buffer).is_err() {
             self.objects.remove(&id);

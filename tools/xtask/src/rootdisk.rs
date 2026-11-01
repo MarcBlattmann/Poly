@@ -814,6 +814,9 @@ pub fn collect() -> Result<Contents, String> {
     crate::mesa::add_to_root(&mut c, &mut have, &mut notes)?;
     // Xwayland and X11 programs with their data (ADR 0118, xwayland.rs).
     crate::xwayland::add_to_root(&mut c, &mut have, &mut notes)?;
+    // Mesa with its virgl and Venus drivers, eglinfo, kmscube, vulkaninfo
+    // (virgl.rs, ADR 0119).
+    crate::virgl::add_to_root(&mut c, &mut have, &mut notes)?;
 
     c.add_needed()?;
 
