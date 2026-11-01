@@ -9,9 +9,11 @@ use crate::abi::{PAGE_SIZE, page_round_up, prot};
 use crate::args::Args;
 use crate::cred::Creds;
 use crate::errno::{Errno, SysResult};
+use crate::fs::rlimit::RLIMIT_MEMLOCK;
 use crate::ipc::shm::{
-    EXEC, IPC_64, IPC_RMID, IPC_SET, IPC_STAT, Lookup, READ, SHM_EXEC, SHM_NORESERVE, SHM_RDONLY, SHM_REMAP, SHM_RND,
-    SHMLBA, Segment, ShmidDs, WRITE, Who, with_table,
+    EXEC, IPC_INFO, IPC_RMID, IPC_SET, IPC_STAT, Lookup, READ, SHM_EXEC, SHM_INFO, SHM_LOCK, SHM_LOCKED, SHM_NORESERVE,
+    SHM_RDONLY, SHM_REMAP, SHM_RND, SHM_STAT, SHM_STAT_ANY, SHM_UNLOCK, SHMLBA, Segment, ShmidDs, WRITE, Who,
+    shm_info_bytes, shminfo_bytes, with_table,
 };
 use crate::kernel::{Clock, LinuxKernel, Placement, Prot};
 use crate::ns::IpcNs;
@@ -215,38 +217,50 @@ pub fn process_exit(k: &mut dyn LinuxKernel) {
 
 /// shmctl(shmid, cmd, buf)
 ///
-/// shmctl(2), for `IPC_STAT`, `IPC_SET` and `IPC_RMID` (`IPC_64` in `cmd`
-/// is ignored: x86-64 has one layout of `struct shmid_ds`):
+/// shmctl(2). `shmid` and `cmd` are `int`s; a negative one is `EINVAL`
+/// for every command, and so is an unknown command (also one with the
+/// `IPC_64` bit) and an id that names no segment.
 ///
 /// - `IPC_STAT`: needs read permission (`EACCES`); writes the segment's
 ///   `struct shmid64_ds` to `buf` (`EFAULT`), ids and pids as the caller
-///   sees them, `shm_nattch` as the kernel counts it.
-/// - `IPC_SET`: reads `buf` (`EFAULT`); the owner, the creator or a
-///   caller with `CAP_SYS_ADMIN` (`EPERM`) sets the owner's uid and gid
-///   (`EINVAL` if the caller's user namespace has no such id) and the
-///   permission bits; `shm_ctime` is now.
+///   sees them, `shm_nattch` as the kernel counts it. `SHM_STAT` and
+///   `SHM_STAT_ANY` do the same for the segment at an index
+///   ([`crate::ipc::index_of`]) and return its id; `SHM_STAT_ANY` needs no
+///   permission.
+/// - `IPC_SET`: reads `buf` (`EFAULT`, before the id is looked up); the
+///   owner, the creator or a caller with `CAP_SYS_ADMIN` (`EPERM`) sets
+///   the owner's uid and gid (`EINVAL` if the caller's user namespace has
+///   no such id) and the permission bits; `shm_ctime` is now.
 /// - `IPC_RMID`: the same permission; the key is released at once and the
 ///   segment goes now, or with its last detach (`SHM_DEST`).
-///
-/// An id that names no segment is `EINVAL`, and so is every other command
-/// (`IPC_INFO`, `SHM_INFO`, `SHM_STAT`, `SHM_LOCK` and `SHM_UNLOCK` are
-/// not implemented).
+/// - `SHM_LOCK` / `SHM_UNLOCK` set and clear `SHM_LOCKED` in the mode
+///   (Poly never swaps, so nothing else changes). Without `CAP_IPC_LOCK`
+///   the caller must be the owner or creator (`EPERM`), and locking needs
+///   a soft `RLIMIT_MEMLOCK` above 0 (`EPERM`) that holds the segment
+///   (`ENOMEM`).
+/// - `IPC_INFO` and `SHM_INFO` write a `struct shminfo64` (the limits) or
+///   `struct shm_info` (the use) and return the highest index in use.
 pub fn shmctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let (id, cmd, buf) = (a.int(0), a.uint(1) & !IPC_64, a.ptr(2));
+    let (id, cmd, buf) = (a.int(0), a.int(1), a.ptr(2));
+    if id < 0 || cmd < 0 {
+        return Err(Errno::EINVAL);
+    }
+    let cmd = cmd as u32;
     let (ns, creds, who) = caller(k);
     match cmd {
-        IPC_STAT => {
+        IPC_STAT | SHM_STAT | SHM_STAT_ANY => {
             let (found, dead) = with_table(&ns, |t| {
                 let dead = t.purge();
-                let found = match t.segment(id) {
+                let id = if cmd == IPC_STAT { Some(id) } else { t.by_index(id) };
+                let found = match id.and_then(|id| t.segment(id).map(|s| (id, s))) {
                     None => Err(Errno::EINVAL),
-                    Some(s) if !s.allows(&who, READ) => Err(Errno::EACCES),
-                    Some(s) => Ok(stat(s)),
+                    Some((_, s)) if cmd != SHM_STAT_ANY && !s.allows(&who, READ) => Err(Errno::EACCES),
+                    Some((id, s)) => Ok((id, stat(s))),
                 };
                 (found, dead)
             });
             drop(dead);
-            let mut ds = found?;
+            let (id, mut ds) = found?;
             ds.uid = creds.uid_view(ds.uid);
             ds.gid = creds.gid_view(ds.gid);
             ds.cuid = creds.uid_view(ds.cuid);
@@ -254,7 +268,7 @@ pub fn shmctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             ds.cpid = if ds.cpid == 0 { 0 } else { view(k, ds.cpid) };
             ds.lpid = if ds.lpid == 0 { 0 } else { view(k, ds.lpid) };
             k.copy_to_user(buf, &ds.to_bytes())?;
-            Ok(0)
+            Ok(if cmd == IPC_STAT { 0 } else { id as u64 })
         }
         IPC_SET => {
             let mut bytes = [0u8; ShmidDs::SIZE];
@@ -284,6 +298,38 @@ pub fn shmctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             });
             drop(gone?);
             Ok(0)
+        }
+        SHM_LOCK | SHM_UNLOCK => {
+            let memlock = with_own(k, |p| p.limits.get(RLIMIT_MEMLOCK)).map_or(u64::MAX, |l| l.cur);
+            with_table(&ns, |t| {
+                let s = t.segment_mut(id).ok_or(Errno::EINVAL)?;
+                if !who.ipc_lock {
+                    if who.euid != s.uid && who.euid != s.cuid {
+                        return Err(Errno::EPERM);
+                    }
+                    if cmd == SHM_LOCK && memlock == 0 {
+                        return Err(Errno::EPERM);
+                    }
+                    if cmd == SHM_LOCK && s.pages() * PAGE_SIZE > memlock {
+                        return Err(Errno::ENOMEM);
+                    }
+                }
+                if cmd == SHM_LOCK {
+                    s.mode |= SHM_LOCKED;
+                } else {
+                    s.mode &= !SHM_LOCKED;
+                }
+                Ok(0)
+            })
+        }
+        IPC_INFO => {
+            k.copy_to_user(buf, &shminfo_bytes())?;
+            Ok(with_table(&ns, |t| t.max_index()) as u64)
+        }
+        SHM_INFO => {
+            let (info, max) = with_table(&ns, |t| (shm_info_bytes(t), t.max_index()));
+            k.copy_to_user(buf, &info)?;
+            Ok(max as u64)
         }
         _ => Err(Errno::EINVAL),
     }

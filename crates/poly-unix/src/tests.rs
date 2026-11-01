@@ -319,6 +319,18 @@ fn datagrams_keep_boundaries_addresses_and_peers() {
 }
 
 #[test]
+fn a_kept_error_comes_once_before_what_is_queued() {
+    let e = env();
+    let (a, b) = UnixSocket::pair(&e.ns, SocketType::Datagram, ME);
+    assert_eq!(send(&a, b"333"), Ok(3));
+    b.keep_error(Errno::EFAULT);
+    assert!(b.poll().intersects(PollEvents::READABLE));
+    assert_eq!(recv(&b, 8).map(|r| r.0), Err(Errno::EFAULT));
+    assert_eq!(recv(&b, 8).map(|r| r.0), Ok(b"333".to_vec()));
+    assert_eq!(recv(&b, 8).map(|r| r.0), Err(Errno::EAGAIN));
+}
+
+#[test]
 fn a_full_datagram_queue_blocks_senders_until_read() {
     let e = env();
     let (a, b) = UnixSocket::pair(&e.ns, SocketType::Datagram, ME);

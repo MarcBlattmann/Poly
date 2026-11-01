@@ -160,3 +160,51 @@ fn exit_undoes_adjustments() {
     assert_eq!(semctl(&mut k, id, 0, GETVAL, 0), Ok(4));
     assert_eq!(semctl(&mut k, id, 0, GETPID, 0), Ok(200));
 }
+
+const TS: u64 = DATA + 0x1800;
+
+fn timed(k: &mut FakeKernel, id: u64, sops: u64, n: u64, ts: u64) -> Result<u64, Errno> {
+    sys(k, nr::SEMTIMEDOP, &[id, sops, n, ts])
+}
+
+#[test]
+fn semtimedop_timeout_rules() {
+    // c_semtimedop_timeout_errors, c_semtimedop_expire (zero timeout).
+    let mut k = fresh();
+    let id = semget(&mut k, 1);
+    k.poke(SOPS, &[0, 0, 1, 0, 0, 0]);
+    k.poke(TS, &crate::abi::Timespec { sec: 0, nsec: 1_000_000_000 }.to_bytes());
+    assert_eq!(timed(&mut k, id, SOPS, 1, TS), Err(Errno::EINVAL), "bad timeout");
+    assert_eq!(semctl(&mut k, id, 0, GETVAL, 0), Ok(0), "nothing applied");
+    assert_eq!(timed(&mut k, id, SOPS, 501, TS), Err(Errno::E2BIG), "E2BIG before the timeout value");
+    assert_eq!(timed(&mut k, id, 0, 1, TS), Err(Errno::EFAULT), "sops before the timeout value");
+    assert_eq!(timed(&mut k, u64::MAX, 0, 0, UNMAPPED), Err(Errno::EFAULT), "timeout read first");
+    assert_eq!(timed(&mut k, id, SOPS, 1, 0), Ok(0), "NULL timeout is semop");
+    k.poke(TS, &crate::abi::Timespec { sec: 0, nsec: 0 }.to_bytes());
+    assert_eq!(timed(&mut k, id, SOPS, 1, TS), Ok(0), "possible at once");
+    k.poke(SOPS, &[0, 0, 0, 0, 0, 0]);
+    assert_eq!(timed(&mut k, id, SOPS, 1, TS), Err(Errno::EAGAIN), "a zero timeout expires at once");
+    assert_eq!(semctl(&mut k, id, 0, GETZCNT, 0), Ok(0), "and leaves no sleeper");
+    k.poke(SOPS, &[1, 0, 1, 0, 0, 0]);
+    assert_eq!(timed(&mut k, id, SOPS, 1, TS), Err(Errno::EFBIG));
+}
+
+#[test]
+fn semctl_info_stat_and_orders() {
+    // c_semctl_info, c_semctl_values, c_semctl_owner_perms.
+    let mut k = fresh();
+    let id = semget(&mut k, 5);
+    let index = crate::ipc::index_of(id as i32) as u64;
+    assert_eq!(semctl(&mut k, id, 0, IPC_INFO, BUF), Ok(index));
+    assert_eq!(k.peek_u64(BUF) as u32, 1_024_000_000, "semmap");
+    assert_eq!(semctl(&mut k, 0, 0, SEM_INFO, BUF), Ok(index));
+    assert_eq!((k.peek_u64(BUF + 28) as u32, k.peek_u64(BUF + 36) as u32), (1, 5), "sets and semaphores in use");
+    assert_eq!(semctl(&mut k, 0, 0, IPC_INFO, 0), Err(Errno::EFAULT));
+    assert_eq!(semctl(&mut k, u64::MAX, 0, IPC_INFO, BUF), Err(Errno::EINVAL), "negative id");
+    assert_eq!(semctl(&mut k, index, 0, SEM_STAT, BUF), Ok(id));
+    assert_eq!(k.peek_u64(BUF + 80), 5, "sem_nsems");
+    assert_eq!(semctl(&mut k, 32767, 0, SEM_STAT_ANY, BUF), Err(Errno::EINVAL));
+    assert_eq!(semctl(&mut k, id, 0, IPC_STAT | 0x100, BUF), Err(Errno::EINVAL), "IPC_64 is not a command");
+    assert_eq!(semctl(&mut k, 0x7fff_fff0, 0, SETVAL, 40000), Err(Errno::ERANGE), "range before the id");
+    assert_eq!(semctl(&mut k, id, 9, SETVAL, 1), Err(Errno::EINVAL));
+}

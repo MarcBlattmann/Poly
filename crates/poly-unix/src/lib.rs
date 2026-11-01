@@ -254,6 +254,9 @@ struct State {
     closed: bool,
     /// Reported once by the next receive (`ECONNRESET`).
     error: Option<Errno>,
+    /// Reported once by the next receive, before anything queued
+    /// ([`UnixSocket::keep_error`]).
+    kept: Option<Errno>,
     passcred: bool,
     /// The owner's credentials, for `read` / `write` and `SO_PEERCRED` of
     /// the peer.
@@ -444,6 +447,7 @@ impl UnixSocket {
                 peer_gone: false,
                 closed: false,
                 error: None,
+                kept: None,
                 passcred: false,
                 creds,
                 peer_creds: None,
@@ -926,6 +930,9 @@ impl UnixSocket {
 
     fn recv_locked(&self, buf: &mut [u8], peek: bool) -> Result<Received> {
         let mut s = self.state.lock();
+        if let Some(e) = s.kept.take() {
+            return Err(e);
+        }
         if let Conn::Listening(_) = s.conn {
             return Err(Errno::EINVAL);
         }
@@ -1175,7 +1182,7 @@ impl UnixSocket {
                 }
                 _ => {}
             }
-            if !s.rx.is_empty() || s.rd_shut || s.peer_done || s.error.is_some() {
+            if !s.rx.is_empty() || s.rd_shut || s.peer_done || s.error.is_some() || s.kept.is_some() {
                 e = e | IN;
             }
             if s.rd_shut || s.peer_done {
@@ -1250,6 +1257,13 @@ impl UnixSocket {
     pub fn buffers(&self) -> (usize, usize) {
         let s = self.state.lock();
         (s.sndbuf, s.rcvbuf)
+    }
+
+    /// Keep `e` for the next receive, which fails with it once, whatever is
+    /// queued (recvmmsg(2): an error after the first message is returned
+    /// by the next receive call).
+    pub fn keep_error(&self, e: Errno) {
+        self.state.lock().kept = Some(e);
     }
 
     /// `SO_ERROR`: take the pending error.

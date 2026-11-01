@@ -14,10 +14,21 @@
 //!   ("an empty buffer of size zero can be passed in order to obtain the
 //!   current size of the named extended attribute"); a value larger than
 //!   `size` is `ERANGE`. The same for **listxattr** and its name list.
-//! - **setxattr**: `flags` other than `XATTR_CREATE` and `XATTR_REPLACE`,
-//!   or both (ADR 0059's choice, to be confirmed by the diff runner), are
-//!   `EINVAL`, a value of more than `XATTR_SIZE_MAX` (64 KiB) bytes is
-//!   `E2BIG`; a `size` of 0 sets an empty value (`value` is then not read).
+//! - **setxattr**: `flags` with a bit other than `XATTR_CREATE` and
+//!   `XATTR_REPLACE` are `EINVAL` (both together are valid: `EEXIST` if
+//!   the name exists, `ENODATA` if not; ADR 0113), a value of more than
+//!   `XATTR_SIZE_MAX` (64 KiB) bytes is `E2BIG`; a `size` of 0 sets an
+//!   empty value (`value` is then not read).
+//! - **Order** (the spec sheets): the flags, the name, the size and the
+//!   value are checked before the file is looked at (a bad name with a
+//!   NULL path is `ERANGE`, with a bad descriptor too); then the kernel's
+//!   checks in the order `poly_vfs::xattr` gives.
+//! - **Sizes**: a buffer size above the limit counts as the limit; a name
+//!   list longer than `XATTR_LIST_MAX` (tmpfs keeps more) is `E2BIG` for
+//!   a buffer of that size or more, `ERANGE` for a smaller one, and its
+//!   length for size 0.
+//! - **Sockets** have one attribute, `system.sockprotoname`, read-only
+//!   ([`SOCKPROTONAME`]).
 //! - The path calls resolve from the working directory (an empty path is
 //!   `ENOENT`); the `l` calls do not follow a final symbolic link; the `f`
 //!   calls take a descriptor (`EBADF` for a negative one).
@@ -26,6 +37,7 @@ use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::fs::XattrTarget;
 use crate::kernel::{LinuxKernel, UserPtr};
+use crate::net::{OptName, OptValue, abi};
 use crate::sys::io::bounce;
 use crate::sys::path::{fs, nonempty_path};
 use crate::table::{Handler, nr};
@@ -100,28 +112,56 @@ fn name_arg(k: &dyn LinuxKernel, p: UserPtr) -> Result<Vec<u8>, Errno> {
 }
 
 /// Copy `data` out to a caller's buffer of `size` bytes as getxattr(2)
-/// and listxattr(2) do; returns its length.
+/// and listxattr(2) do; returns its length. `size` 0 asks for the length
+/// only; a size above `max` counts as `max`. Data longer than the buffer
+/// is `ERANGE`, or `E2BIG` when the buffer is `max` bytes already (a name
+/// list longer than `XATTR_LIST_MAX` can never be returned).
 fn reply(k: &mut dyn LinuxKernel, data: &[u8], buf: UserPtr, size: u64, max: u64) -> SysResult {
     let len = data.len() as u64;
-    if len > max {
-        return Err(Errno::E2BIG);
-    }
     if size == 0 {
         return Ok(len);
     }
+    let size = size.min(max);
     if len > size {
-        return Err(Errno::ERANGE);
+        return Err(if size == max { Errno::E2BIG } else { Errno::ERANGE });
     }
     k.copy_to_user(buf, data)?;
     Ok(len)
 }
 
-fn set(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
-    let target = Owned::load(k, a, by)?;
-    let flags = a.uint(4);
-    if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 || flags == XATTR_CREATE | XATTR_REPLACE {
-        return Err(Errno::EINVAL);
+/// A socket's one attribute (fgetxattr's spec sheet).
+pub const SOCKPROTONAME: &[u8] = b"system.sockprotoname";
+
+/// The value of `system.sockprotoname` if `fd` is a socket: its
+/// protocol's name with the terminating NUL, `UNIX-STREAM` for a Unix
+/// stream socket and `UNIX` for a Unix datagram socket, as the spec sheet
+/// observed. `None` for anything else, also for sockets whose name Poly
+/// does not know: the name then goes to the kernel, which answers
+/// `EOPNOTSUPP` (no handler).
+fn sock_proto_name(k: &mut dyn LinuxKernel, fd: i32) -> Option<&'static [u8]> {
+    let net = k.net()?;
+    let OptValue::Int(domain) = net.getsockopt(fd, OptName::Domain).ok()? else { return None };
+    let OptValue::Int(kind) = net.getsockopt(fd, OptName::Type).ok()? else { return None };
+    match (u16::try_from(domain).ok()?, u32::try_from(kind).ok()?) {
+        (abi::AF_UNIX, abi::SOCK_STREAM) => Some(b"UNIX-STREAM\0"),
+        (abi::AF_UNIX, abi::SOCK_DGRAM) => Some(b"UNIX\0"),
+        _ => None,
     }
+}
+
+/// setxattr's flags, the low 32 bits of the register: `EINVAL` for any
+/// bit but `XATTR_CREATE` and `XATTR_REPLACE` (both together are valid
+/// and fail with `EEXIST` or `ENODATA`).
+fn set_flags(a: &Args) -> Result<u32, Errno> {
+    let flags = a.uint(4);
+    if flags & !(XATTR_CREATE | XATTR_REPLACE) != 0 { Err(Errno::EINVAL) } else { Ok(flags) }
+}
+
+/// setxattr: the flags, the name, the size, the value, then the file
+/// (setxattr's spec sheet: a bad name with a NULL path is `ERANGE`, a bad
+/// value with a bad descriptor `EFAULT`).
+fn set(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
+    let flags = set_flags(a)?;
     let name = name_arg(k, a.ptr(1))?;
     let size = a.ulong(3);
     if size > XATTR_SIZE_MAX {
@@ -131,25 +171,41 @@ fn set(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
     if size > 0 {
         k.copy_from_user(a.ptr(2), &mut value)?;
     }
+    let target = Owned::load(k, a, by)?;
     fs(k)?.setxattr(target.target(), &name, &value, flags).map(|()| 0)
 }
 
+/// getxattr: the name, then the file.
 fn get(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
-    let target = Owned::load(k, a, by)?;
     let name = name_arg(k, a.ptr(1))?;
+    let target = Owned::load(k, a, by)?;
+    if let Owned::Fd(fd) = target
+        && name == SOCKPROTONAME
+        && let Some(proto) = sock_proto_name(k, fd)
+    {
+        return reply(k, proto, a.ptr(2), a.ulong(3), XATTR_SIZE_MAX);
+    }
     let value = fs(k)?.getxattr(target.target(), &name)?;
     reply(k, &value, a.ptr(2), a.ulong(3), XATTR_SIZE_MAX)
 }
 
+/// listxattr: the file's names, and a socket's `system.sockprotoname`.
 fn list(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
     let target = Owned::load(k, a, by)?;
-    let names = fs(k)?.listxattr(target.target())?;
+    let mut names = fs(k)?.listxattr(target.target())?;
+    if let Owned::Fd(fd) = target
+        && sock_proto_name(k, fd).is_some()
+    {
+        names.extend_from_slice(SOCKPROTONAME);
+        names.push(0);
+    }
     reply(k, &names, a.ptr(1), a.ulong(2), XATTR_LIST_MAX)
 }
 
+/// removexattr: the name, then the file.
 fn remove(k: &mut dyn LinuxKernel, a: &Args, by: By) -> SysResult {
-    let target = Owned::load(k, a, by)?;
     let name = name_arg(k, a.ptr(1))?;
+    let target = Owned::load(k, a, by)?;
     fs(k)?.removexattr(target.target(), &name).map(|()| 0)
 }
 
