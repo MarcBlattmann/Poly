@@ -19,7 +19,7 @@
 
 use crate::fs::{Clock, DirEntry, FALLOC_FL_KEEP_SIZE, FALLOC_FL_PUNCH_HOLE, FileSystem, FsInfo, NewNode, RenameFlags};
 use crate::sync::SpinMutex;
-use crate::xattr::{SetMode, XATTR_LIST_MAX, Xattrs};
+use crate::xattr::{SetMode, Xattrs};
 use crate::{Attr, DeviceId, Errno, FileType, Ino, MAX_FILE_SIZE, NAME_MAX, Result, SetAttr, SetTime, Timespec};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -916,18 +916,14 @@ impl FileSystem for Tmpfs {
     }
 
     /// Every kind of node keeps attributes (the VFS decides which
-    /// namespaces apply to it); the names of one inode take at most
-    /// `XATTR_LIST_MAX` bytes in a list (`ENOSPC` beyond), so listxattr(2)
-    /// can always return them.
+    /// namespaces apply to it), as many as memory allows: the names of one
+    /// inode may take more than `XATTR_LIST_MAX` bytes in a list, which
+    /// listxattr(2) then refuses (`E2BIG`) while every name still works
+    /// (listxattr's spec sheet: 6000 names on tmpfs).
     fn setxattr(&self, ino: Ino, name: &[u8], value: &[u8], how: SetMode) -> Result<()> {
         let now = self.clock.now();
         let mut inner = self.inner.lock();
         let node = inner.node_mut(ino)?;
-        let exists = node.xattrs.get(name).is_ok();
-        how.check(exists)?;
-        if !exists && node.xattrs.list().len() + name.len() + 1 > XATTR_LIST_MAX {
-            return Err(Errno::ENOSPC);
-        }
         node.xattrs.set(name, value, how)?;
         node.ctime = now;
         Ok(())

@@ -393,7 +393,7 @@ fn shmctl_set_and_permissions() {
     assert_eq!(sys(&mut k, nr::SHMCTL, &[id as u64, u64::from(IPC_SET), BUF]), Ok(0));
     let after = stat(&mut k, id).unwrap();
     assert_eq!((after.mode, after.uid, after.gid, after.cgid, after.ctime), (0o644, 1001, 3000, 2001, k.realtime.sec));
-    assert_eq!(sys(&mut k, nr::SHMCTL, &[id as u64, u64::from(IPC_STAT | IPC_64), BUF]), Ok(0));
+    assert_eq!(sys(&mut k, nr::SHMCTL, &[id as u64, u64::from(IPC_STAT | IPC_64), BUF]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::SHMCTL, &[id as u64, 99, BUF]), Err(Errno::EINVAL));
     assert_eq!(sys(&mut k, nr::SHMCTL, &[id as u64, u64::from(IPC_STAT), 0]), Err(Errno::EFAULT));
 
@@ -587,4 +587,43 @@ fn munmap_of_an_attachment_is_recorded() {
     let ds = stat(&mut k, other).unwrap();
     assert_eq!((ds.nattch, ds.dtime), (1, 0), "an attachment outside the range is not touched");
     shmdt(&mut k, keep).unwrap();
+}
+
+fn shmctl(k: &mut FakeKernel, id: i64, cmd: u32, buf: u64) -> Result<u64, Errno> {
+    sys(k, nr::SHMCTL, &[id as u64, u64::from(cmd), buf])
+}
+
+#[test]
+fn info_stat_by_index_and_locking() {
+    // c_shmctl_info, c_shmctl_bad_cmd, c_shmctl_owner_perms; spec: shm_lock.
+    use crate::fs::rlimit::RLIMIT_MEMLOCK;
+    use crate::rlimit::Rlimit;
+    let mut k = fresh();
+    let id = shmget(&mut k, 0, 3 * PAGE_SIZE + 1, 0o600).unwrap();
+    let index = i64::from(crate::ipc::index_of(id));
+    assert_eq!(shmctl(&mut k, 0x7fff_fff0, IPC_INFO, BUF), Ok(index as u64));
+    assert_eq!((k.peek_u64(BUF), k.peek_u64(BUF + 8), k.peek_u64(BUF + 16)), (SHMMAX, 1, 4096));
+    assert_eq!(shmctl(&mut k, 0, SHM_INFO, BUF), Ok(index as u64));
+    assert_eq!((k.peek_u64(BUF) as u32, k.peek_u64(BUF + 8)), (1, 4), "one segment of four pages");
+    assert_eq!(shmctl(&mut k, 0, IPC_INFO, 0), Err(Errno::EFAULT));
+    assert_eq!(shmctl(&mut k, -1, SHM_INFO, BUF), Err(Errno::EINVAL));
+    assert_eq!(shmctl(&mut k, 0, -1i32 as u32, BUF), Err(Errno::EINVAL));
+    assert_eq!(shmctl(&mut k, index, SHM_STAT, BUF), Ok(id as u64));
+    assert_eq!(k.peek_u64(BUF + 48), 3 * PAGE_SIZE + 1, "shm_segsz");
+    assert_eq!(shmctl(&mut k, 32767, SHM_STAT_ANY, BUF), Err(Errno::EINVAL));
+    assert_eq!(shmctl(&mut k, 0x7fff_fff0, SHM_LOCK, 0), Err(Errno::EINVAL));
+
+    k.me().limits.set(RLIMIT_MEMLOCK, Rlimit { cur: 0, max: 0 });
+    assert_eq!(shmctl(&mut k, i64::from(id), SHM_LOCK, 0), Err(Errno::EPERM), "no memlock allowance");
+    k.me().limits.set(RLIMIT_MEMLOCK, Rlimit { cur: PAGE_SIZE, max: PAGE_SIZE });
+    assert_eq!(shmctl(&mut k, i64::from(id), SHM_LOCK, 0), Err(Errno::ENOMEM), "larger than the allowance");
+    k.me().limits.set(RLIMIT_MEMLOCK, Rlimit { cur: 1 << 20, max: 1 << 20 });
+    assert_eq!(shmctl(&mut k, i64::from(id), SHM_LOCK, 0), Ok(0));
+    assert_eq!(stat(&mut k, id).unwrap().mode, 0o600 | SHM_LOCKED);
+    assert_eq!(shmctl(&mut k, i64::from(id), SHM_UNLOCK, 0), Ok(0));
+    assert_eq!(stat(&mut k, id).unwrap().mode, 0o600);
+    *k.creds_mut() = Creds::user(4000, 4000);
+    assert_eq!(shmctl(&mut k, i64::from(id), SHM_UNLOCK, 0), Err(Errno::EPERM), "not the owner");
+    assert_eq!(shmctl(&mut k, index, SHM_STAT, BUF), Err(Errno::EACCES));
+    assert_eq!(shmctl(&mut k, index, SHM_STAT_ANY, BUF), Ok(id as u64));
 }
