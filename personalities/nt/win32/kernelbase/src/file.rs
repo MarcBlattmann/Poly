@@ -305,7 +305,13 @@ pub unsafe extern "system" fn SetFilePointer(handle: Handle, low: i32, high: *mu
                 // SAFETY: as above.
                 unsafe { high.write((n >> 32) as i32) };
             }
-            set_last_error(ERROR_SUCCESS);
+            // Learn: a result other than INVALID_SET_FILE_POINTER is a
+            // success without GetLastError; only that value needs the last
+            // error cleared to tell it from a failure. Other successes
+            // leave it alone (ADR 0110's trace of Windows, ADR 0114).
+            if n as u32 == u32::MAX {
+                set_last_error(ERROR_SUCCESS);
+            }
             n as u32
         }
         Err(e) => fail(e, u32::MAX),
@@ -730,7 +736,8 @@ pub unsafe extern "system" fn FindFirstFileW(pattern: *const u16, data: *mut u8)
         Ok(d) => {
             // SAFETY: the caller's WIN32_FIND_DATAW.
             unsafe { core::ptr::copy_nonoverlapping(d.as_ptr(), data, d.len()) };
-            set_last_error(ERROR_SUCCESS);
+            // A success leaves the last error alone (ADR 0110's trace of
+            // Windows, ADR 0114).
             Box::into_raw(find) as Handle
         }
         Err(st) => {

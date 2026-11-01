@@ -472,6 +472,7 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
         let _ = sys.objects.dereference(t.object);
     }
     let _ = sys.objects.destroy_process(proc.pid);
+    sys.token_privileges.remove(&proc.pid);
     if let Some(p) = proc.object.take() {
         // Kept while a handle keeps the object (`GetExitCodeProcess`);
         // `NtSystem::reap` forgets it with the object.
