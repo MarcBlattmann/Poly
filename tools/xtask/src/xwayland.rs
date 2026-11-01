@@ -175,14 +175,22 @@ fn image() -> crate::Result<Option<PathBuf>> {
     Ok(Some(path))
 }
 
+/// The kernel's serial input ring holds 256 bytes (`kernel/src/shell/serial.rs`)
+/// and drops what does not fit: on KVM a whole typed line arrives before the
+/// shell reads any of it, so every line the test types stays shorter.
+const SERIAL_RING: usize = 256;
+
+/// A shell function for [`wait_for`], typed once: `w FILE TEXT N` waits up
+/// to N half seconds until FILE contains TEXT, then prints the matching
+/// lines, or `TIMEOUT TEXT` and the file's end.
+const WAIT_FN: &str = "w() { for i in $(seq 1 $3); do grep -q -- \"$2\" $1 && break; sleep 0.5; done; \
+                       grep -- \"$2\" $1 || { echo \"TIMEOUT $2\"; tail -n 30 $1; }; }";
+
 /// Wait in the guest (up to `secs`) until `file` contains `text`, then
-/// print the matching lines: a shell line for [`crate::busybox::Session::run`].
+/// print the matching lines: a shell line for [`crate::busybox::Session::run`]
+/// (after [`WAIT_FN`]).
 fn wait_for(file: &str, text: &str, secs: u32) -> String {
-    format!(
-        "for i in $(seq 1 {n}); do grep -q -- '{text}' {file} && break; sleep 0.5; done; grep -- '{text}' {file} || \
-         {{ echo 'TIMEOUT {text}'; tail -n 30 {file}; }}",
-        n = secs * 2
-    )
+    format!("w {file} '{text}' {n}", n = secs * 2)
 }
 
 /// The boot test (see the module documentation).
@@ -371,6 +379,7 @@ fn session(s: &mut crate::busybox::Session, socket: &Path, shots: &Path) -> crat
     let qmp = crate::screen::Qmp::connect(socket, Duration::from_secs(20))?;
     let mut d = Screen { qmp, shots: shots.to_path_buf(), step: 0 };
     s.run("export XDG_RUNTIME_DIR=/run/user/0; mkdir -p -m 700 $XDG_RUNTIME_DIR")?;
+    s.run(WAIT_FN)?;
     s.run("POLY_XWM_DEBUG=1 poly-compositor --desktop --xwayland-lazy > /tmp/comp.log 2>&1 &")?;
     log_wait(s, "desktop ready", 120)?;
     log_wait(s, "X display :0 on /tmp/.X11-unix/X0 and 2 socket(s)", 30)?;
@@ -539,8 +548,13 @@ mod tests {
 
     #[test]
     fn the_guest_waits_for_log_lines() {
-        let l = wait_for("/tmp/x.log", "ready", 3);
-        assert!(l.starts_with("for i in $(seq 1 6); do grep -q -- 'ready' /tmp/x.log && break;"));
-        assert!(l.contains("TIMEOUT ready"));
+        assert_eq!(wait_for("/tmp/x.log", "ready", 3), "w /tmp/x.log 'ready' 6");
+        assert!(WAIT_FN.contains("echo \"TIMEOUT $2\""));
+    }
+
+    #[test]
+    fn typed_lines_fit_the_serial_ring() {
+        let longest = wait_for("/tmp/comp.log", "X display :0 on /tmp/.X11-unix/X0 and 2 socket(s)", 30);
+        assert!(WAIT_FN.len() < SERIAL_RING && longest.len() < SERIAL_RING);
     }
 }
