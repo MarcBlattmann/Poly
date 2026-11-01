@@ -177,7 +177,9 @@ fn image() -> crate::Result<Option<PathBuf>> {
 
 /// The kernel's serial input ring holds 256 bytes (`kernel/src/shell/serial.rs`)
 /// and drops what does not fit: on KVM a whole typed line arrives before the
-/// shell reads any of it, so every line the test types stays shorter.
+/// shell reads any of it, so every line the test types stays shorter (a unit
+/// test checks it).
+#[cfg(test)]
 const SERIAL_RING: usize = 256;
 
 /// A shell function for [`wait_for`], typed once: `w FILE TEXT N` waits up
