@@ -1,13 +1,25 @@
 //! Executable format detection.
 //!
 //! At exec time the kernel looks at the first bytes of an image and decides
-//! which personality the new process gets: ELF → Linux, PE → NT, Mach-O → XNU.
+//! which personality the new process gets: ELF → Linux, PE → NT, Mach-O → XNU,
+//! and an ELF with Poly's ABI note ([`NOTE_OWNER`], [`NT_POLY_ABI`]) → Poly's
+//! native interface (ADR 0125).
 //! This crate only *identifies* the format and its target CPU; it does not
 //! load anything. Every field read here comes from the public format
 //! specifications (ELF gABI, Microsoft PE/COFF spec, Apple `mach-o/loader.h`).
 //!
 //! The parser never panics and never reads out of bounds, whatever the input.
 //! It is `no_std` so the kernel can use it directly.
+//!
+//! # The native ABI note
+//!
+//! A native Poly program is an x86-64 ELF executable with an `SHT_NOTE`
+//! section in a `PT_NOTE` segment holding one note: owner `"Poly"` (name
+//! size 5 with its NUL), type [`NT_POLY_ABI`], and a 4-byte little-endian
+//! description, the native ABI version it was built for. This is how the BSDs
+//! (`.note.tag`) and GNU (`.note.ABI-tag`) mark their binaries. The note
+//! must lie in the bytes [`detect`] is given (the kernel reads the first
+//! page); `poly-rt`'s linker script puts it right after the program headers.
 
 #![no_std]
 
@@ -49,6 +61,13 @@ pub enum Format {
     MachOFat {
         count: u32,
     },
+    /// A native Poly program: a 64-bit little-endian ELF executable with
+    /// Poly's ABI note (see the crate docs), built for native ABI version
+    /// `abi`.
+    Native {
+        arch: Arch,
+        abi: u32,
+    },
     /// `#!` script. The interpreter decides the personality; the caller
     /// resolves it and calls [`detect`] again on the interpreter.
     Script,
@@ -62,10 +81,19 @@ impl Format {
             Format::Elf { .. } => Some(Personality::Linux),
             Format::Pe { .. } => Some(Personality::Nt),
             Format::MachO { .. } | Format::MachOFat { .. } => Some(Personality::Xnu),
+            Format::Native { .. } => Some(Personality::Native),
             Format::Script => None,
         }
     }
 }
+
+/// The owner of Poly's ABI note, with its NUL (the note's name).
+pub const NOTE_OWNER: &[u8] = b"Poly\0";
+/// The type of Poly's ABI note: its description is the native ABI version
+/// (a little-endian `u32`).
+pub const NT_POLY_ABI: u32 = 1;
+/// `PT_NOTE` (ELF gABI, "Program Header").
+const PT_NOTE: u32 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -129,7 +157,61 @@ fn elf(b: &[u8]) -> Result<Format, Error> {
         183 => Arch::Aarch64,
         _ => Arch::Other,
     };
+    if bits == Bits::B64
+        && le
+        && let Some(abi) = poly_abi_note(b)
+    {
+        return Ok(Format::Native { arch, abi });
+    }
     Ok(Format::Elf { bits, arch })
+}
+
+fn u64_le_at(b: &[u8], off: usize) -> Option<u64> {
+    let s: [u8; 8] = b.get(off..off.checked_add(8)?)?.try_into().ok()?;
+    Some(u64::from_le_bytes(s))
+}
+
+/// The native ABI version in Poly's note, if a `PT_NOTE` segment of the
+/// 64-bit little-endian ELF image `b` has one within `b`.
+fn poly_abi_note(b: &[u8]) -> Option<u32> {
+    // ELF64 header: e_phoff at 32, e_phentsize at 54, e_phnum at 56.
+    let phoff = usize::try_from(u64_le_at(b, 32)?).ok()?;
+    let phentsize = usize::from(u16_at(b, 54, true)?);
+    let phnum = usize::from(u16_at(b, 56, true)?);
+    if phentsize < 56 {
+        return None;
+    }
+    (0..phnum).find_map(|i| {
+        let ph = phoff.checked_add(i.checked_mul(phentsize)?)?;
+        if u32_at(b, ph, true)? != PT_NOTE {
+            return None;
+        }
+        let offset = usize::try_from(u64_le_at(b, ph + 8)?).ok()?;
+        let size = usize::try_from(u64_le_at(b, ph + 32)?).ok()?;
+        // Notes are padded to the segment's alignment: 8 for 8-aligned
+        // segments (the gABI's ELF64 rule), 4 as everyone writes them.
+        let align = if u64_le_at(b, ph + 48)? == 8 { 8 } else { 4 };
+        notes_find(b.get(offset..offset.checked_add(size)?)?, align)
+    })
+}
+
+/// Poly's ABI note in the notes `seg` (padded to `align`), if there.
+fn notes_find(mut seg: &[u8], align: usize) -> Option<u32> {
+    let pad = |n: usize| n.checked_add(align - 1).map(|n| n & !(align - 1));
+    while seg.len() >= 12 {
+        let namesz = usize::try_from(u32_at(seg, 0, true)?).ok()?;
+        let descsz = usize::try_from(u32_at(seg, 4, true)?).ok()?;
+        let kind = u32_at(seg, 8, true)?;
+        let name_end = 12usize.checked_add(namesz)?;
+        let desc_at = pad(name_end)?;
+        let next = pad(desc_at.checked_add(descsz)?)?;
+        let name = seg.get(12..name_end)?;
+        if name == NOTE_OWNER && kind == NT_POLY_ABI && descsz == 4 {
+            return u32_at(seg, desc_at, true);
+        }
+        seg = seg.get(next..)?;
+    }
+    None
 }
 
 fn pe(b: &[u8]) -> Result<Format, Error> {
@@ -228,6 +310,71 @@ mod tests {
         h[..4].copy_from_slice(&0xfeed_facfu32.to_le_bytes());
         h[4..8].copy_from_slice(&0x0100_000cu32.to_le_bytes());
         h
+    }
+
+    /// An ELF64 x86-64 header with one `PT_NOTE` segment (alignment
+    /// `align`) holding `notes`.
+    fn elf_with_notes(notes: &[u8], align: u64) -> Vec<u8> {
+        let mut h = elf64_x86_64();
+        h[32..40].copy_from_slice(&64u64.to_le_bytes()); // e_phoff
+        h[54..56].copy_from_slice(&56u16.to_le_bytes()); // e_phentsize
+        h[56..58].copy_from_slice(&1u16.to_le_bytes()); // e_phnum
+        let mut ph = std::vec![0u8; 56];
+        ph[0..4].copy_from_slice(&PT_NOTE.to_le_bytes());
+        ph[8..16].copy_from_slice(&120u64.to_le_bytes()); // p_offset
+        ph[32..40].copy_from_slice(&(notes.len() as u64).to_le_bytes()); // p_filesz
+        ph[48..56].copy_from_slice(&align.to_le_bytes());
+        h.extend_from_slice(&ph);
+        h.extend_from_slice(notes);
+        h
+    }
+
+    fn note(name: &[u8], kind: u32, desc: &[u8], align: usize) -> Vec<u8> {
+        let pad = |v: &mut Vec<u8>| v.resize(v.len().div_ceil(align) * align, 0);
+        let mut n = Vec::new();
+        n.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        n.extend_from_slice(&(desc.len() as u32).to_le_bytes());
+        n.extend_from_slice(&kind.to_le_bytes());
+        n.extend_from_slice(name);
+        pad(&mut n);
+        n.extend_from_slice(desc);
+        pad(&mut n);
+        n
+    }
+
+    #[test]
+    fn poly_note_maps_to_native() {
+        let image = elf_with_notes(&note(NOTE_OWNER, NT_POLY_ABI, &1u32.to_le_bytes(), 4), 4);
+        let f = detect(&image).unwrap();
+        assert_eq!(f, Format::Native { arch: Arch::X86_64, abi: 1 });
+        assert_eq!(f.personality(), Some(Personality::Native));
+    }
+
+    #[test]
+    fn poly_note_after_another_note_and_with_8_byte_padding() {
+        let mut notes = note(b"GNU\0", 3, &[0xaa; 20], 8);
+        notes.extend(note(NOTE_OWNER, NT_POLY_ABI, &7u32.to_le_bytes(), 8));
+        assert_eq!(detect(&elf_with_notes(&notes, 8)).unwrap(), Format::Native { arch: Arch::X86_64, abi: 7 });
+    }
+
+    #[test]
+    fn other_notes_stay_linux() {
+        let elf = Format::Elf { bits: Bits::B64, arch: Arch::X86_64 };
+        // GNU's ABI tag, a Poly note of another type, one with a short
+        // description, and one cut off by the end of the bytes given.
+        let gnu = note(b"GNU\0", 1, &[0; 16], 4);
+        let other_type = note(NOTE_OWNER, 2, &1u32.to_le_bytes(), 4);
+        let short = note(NOTE_OWNER, NT_POLY_ABI, &[1, 0], 4);
+        for notes in [gnu, other_type, short] {
+            assert_eq!(detect(&elf_with_notes(&notes, 4)).unwrap(), elf);
+        }
+        let mut cut = elf_with_notes(&note(NOTE_OWNER, NT_POLY_ABI, &1u32.to_le_bytes(), 4), 4);
+        cut.truncate(cut.len() - 2);
+        assert_eq!(detect(&cut).unwrap(), elf);
+        // A note size that would overflow is no note, not a panic.
+        let mut huge = note(NOTE_OWNER, NT_POLY_ABI, &1u32.to_le_bytes(), 4);
+        huge[0..4].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(detect(&elf_with_notes(&huge, 4)).unwrap(), elf);
     }
 
     #[test]

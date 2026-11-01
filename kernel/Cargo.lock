@@ -125,6 +125,7 @@ dependencies = [
  "poly-pci",
  "poly-pe",
  "poly-personality-linux",
+ "poly-personality-native",
  "poly-personality-nt",
  "poly-personality-xnu",
  "poly-procfs",
@@ -197,6 +198,14 @@ version = "0.0.1"
 dependencies = [
  "poly-abi",
  "poly-bpf",
+]
+
+[[package]]
+name = "poly-personality-native"
+version = "0.0.1"
+dependencies = [
+ "poly-abi",
+ "poly-binfmt",
 ]
 
 [[package]]

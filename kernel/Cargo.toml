@@ -50,6 +50,8 @@ poly-tty = { path = "../crates/poly-tty" }
 poly-unix = { path = "../crates/poly-unix" }
 poly-vfs = { path = "../crates/poly-vfs" }
 poly-personality-linux = { path = "../personalities/linux" }
+# Poly's own system call interface (ADR 0125).
+poly-personality-native = { path = "../personalities/native" }
 poly-ntobj = { path = "../crates/poly-ntobj" }
 poly-pe = { path = "../crates/poly-pe" }
 # The PE builder of the ring-3 loader tests (ADR 0071).

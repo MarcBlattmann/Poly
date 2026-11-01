@@ -1,0 +1,25 @@
+[package]
+name = "native-hello"
+description = "The first native Poly programs: the native boot test's hello world and the child it spawns (ADR 0125)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "native-hello"
+path = "src/main.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "native-child"
+path = "src/bin/native-child.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-rt = { path = "../../../crates/poly-rt" }
+
+[lints]
+workspace = true

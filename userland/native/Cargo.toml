@@ -1,0 +1,30 @@
+# Native Poly programs (ADR 0125): pure Rust on Poly's own system calls
+# through poly-rt, for the x86_64-unknown-none target, linked by rust-lld
+# as static, position-dependent ELF executables. Their own workspace, like
+# the kernel's, because they only build for that target; `.cargo/config.toml`
+# here sets it and the flags. `cargo xtask build` builds them (identically on
+# Windows and Linux hosts) and puts them into the initramfs as /bin/<name>.
+[workspace]
+resolver = "3"
+members = ["hello"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = 2
+debug = false
+strip = true
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
