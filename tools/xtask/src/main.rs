@@ -1,7 +1,7 @@
 //! Developer and CI entry point: `cargo xtask <command>`.
 //!
 //! Commands:
-//!   build [--release]   build the kernel
+//!   build [--release]   build the native programs (userland/native, native.rs) and the kernel
 //!   run   [--release] [--gdb] [--no-disk] [--headless] [--virtio-gpu] [--busybox | --disk-root [--fresh-disk] | --initrd=<file> | --no-initrd] [kernel args...]
 //!                       boot the kernel into its shell in QEMU (serial on stdio, Ctrl-A X quits)
 //!                       with the test devices and a virtio-net NIC on QEMU's user
@@ -9,7 +9,8 @@
 //!                       the screen in a window when there is a desktop (--headless:
 //!                       never); --gdb waits for a debugger on localhost:1234
 //!                       (docs/DEBUGGING.md); the root file system is a small
-//!                       initramfs (--initrd=<file>: that cpio archive instead,
+//!                       initramfs with the native programs in /bin
+//!                       (poly.init=/bin/native-hello runs one first; --initrd=<file>: that cpio archive instead,
 //!                       --no-initrd: none; --busybox: BusyBox's image, booting into
 //!                       BusyBox's init and a shell on the console, see busybox.rs;
 //!                       add console=tty1 for the screen; --disk-root [--fresh-disk]: BusyBox's
@@ -96,6 +97,7 @@ mod input;
 mod ktest;
 mod libsearch;
 mod mesa;
+mod native;
 mod net;
 mod nls;
 mod ntdll;
@@ -237,7 +239,10 @@ fn kernel_cargo() -> Result<Command> {
 }
 
 /// Builds from inside kernel/ so kernel/.cargo/config.toml (target, flags) applies.
+/// The native programs (`userland/native/`, ADR 0125) are built first: they
+/// ship with the kernel, on every host.
 fn build_kernel(release: bool) -> Result<PathBuf> {
+    native::build()?;
     let mut cmd = kernel_cargo()?;
     cmd.arg("build");
     if release {
@@ -443,7 +448,7 @@ fn run(args: &[String]) -> Result {
             cmdline.push(busybox::INIT_ARGS);
         }
     } else if initrd.as_deref() == Some(Path::new("")) {
-        initrd = Some(initramfs::write(&root(), "poly-initramfs.cpio", &initramfs::default_image())?);
+        initrd = Some(native::run_image()?);
     }
     // A virtio-net device on QEMU's user networking with its addresses
     // (an earlier poly.net= on the command line wins).
@@ -1437,7 +1442,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 33] = [
+const BOOT_GROUPS: [BootGroup; 34] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1450,6 +1455,9 @@ const BOOT_GROUPS: [BootGroup; 33] = [
     }),
     // Static Linux hello worlds as the first process (poly.init).
     ("programs", programs::boot_tests),
+    // Native Poly programs on poly-rt as the first process: output, heap,
+    // time, files, native and Linux children (native.rs, ADR 0125).
+    ("native", native::boot_test),
     // Dynamically linked glibc programs through glibc's own ld.so (dynamic.rs).
     ("dynamic", dynamic::boot_tests),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
@@ -1542,6 +1550,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
         "userland",
         &[
             "programs",
+            "native",
             "dynamic",
             "busybox",
             "rootdisk",
@@ -1793,6 +1802,8 @@ fn lint() -> Result {
             .args(["fmt", "--all", "--check", "--manifest-path"])
             .arg(root().join("personalities/nt/win32/Cargo.toml")),
     )?;
+    // The native programs and poly-rt for the native target (ADR 0125).
+    native::lint()?;
     // The Windows API tracer's DLL sources (no manifest of their own: the
     // kit's generated workspace builds them, wintrace.rs).
     step(

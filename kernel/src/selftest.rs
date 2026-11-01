@@ -177,12 +177,41 @@ const MACHO_ARM64: [u8; 32] = {
     h
 };
 
+/// An ELF header with one `PT_NOTE` segment holding Poly's ABI note
+/// (`poly-binfmt`): a native program (ADR 0125).
+const NATIVE_X86_64: [u8; 144] = {
+    let mut h = [0u8; 144];
+    let mut i = 0;
+    while i < 64 {
+        h[i] = ELF_X86_64[i];
+        i += 1;
+    }
+    h[32] = 64; // e_phoff
+    h[54] = 56; // e_phentsize
+    h[56] = 1; // e_phnum
+    h[64] = 4; // PT_NOTE
+    h[72] = 120; // p_offset
+    h[96] = 24; // p_filesz
+    h[112] = 4; // p_align
+    // The note: name size 5, description size 4, type 1, "Poly", ABI 1.
+    h[120] = 5;
+    h[124] = 4;
+    h[128] = 1;
+    h[132] = b'P';
+    h[133] = b'o';
+    h[134] = b'l';
+    h[135] = b'y';
+    h[140] = 1;
+    h
+};
+
 kernel_test! {
     fn personality_routing() -> TestResult {
-        let cases: [(&[u8], Personality, u64); 3] = [
+        let cases: [(&[u8], Personality, u64); 4] = [
             (&ELF_X86_64, Personality::Linux, 39),
             (&PE_X86_64, Personality::Nt, 0x0055),
             (&MACHO_ARM64, Personality::Xnu, 0x0200_0014),
+            (&NATIVE_X86_64, Personality::Native, poly_personality_native::abi::nr::PROCESS_ID),
         ];
         for (pid, (image, expected, nr)) in (1u32..).zip(cases) {
             let p = Process::from_image(pid, image).map_err(|_| "image not recognised")?;
@@ -198,6 +227,10 @@ kernel_test! {
                 Personality::Linux => regs.rax == poly_personality_linux::err(poly_personality_linux::ENOSYS),
                 Personality::Nt => regs.rax == poly_personality_nt::STATUS_NOT_IMPLEMENTED as u64,
                 Personality::Xnu => regs.rax == poly_personality_xnu::ENOSYS && regs.rflags & RFLAGS_CF != 0,
+                Personality::Native => {
+                    use poly_personality_native::abi;
+                    abi::decode(regs.rax) == Err(abi::Error::Unsupported)
+                }
             };
             if !native_error {
                 return Err("wrong native error convention");

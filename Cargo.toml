@@ -45,6 +45,7 @@ members = [
     "crates/poly-procfs",
     "crates/poly-random",
     "crates/poly-registry",
+    "crates/poly-rt",
     "crates/poly-rtc",
     "crates/poly-rtl",
     "crates/poly-sched",
@@ -71,6 +72,7 @@ members = [
     "crates/poly-wayland",
     "crates/poly-x11",
     "personalities/linux",
+    "personalities/native",
     "personalities/nt",
     "personalities/xnu",
     "tools/coverage",
@@ -79,7 +81,7 @@ members = [
     "userland/poly-compositor",
     "userland/poly-notify",
 ]
-exclude = ["kernel", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
+exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
 [workspace.package]
 version = "0.0.1"
@@ -128,6 +130,7 @@ poly-pe = { path = "crates/poly-pe" }
 poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
 poly-registry = { path = "crates/poly-registry" }
+poly-rt = { path = "crates/poly-rt" }
 poly-rtc = { path = "crates/poly-rtc" }
 poly-rtl = { path = "crates/poly-rtl" }
 poly-sched = { path = "crates/poly-sched" }
@@ -154,6 +157,7 @@ poly-winsock = { path = "crates/poly-winsock" }
 poly-wayland = { path = "crates/poly-wayland" }
 poly-x11 = { path = "crates/poly-x11" }
 poly-personality-linux = { path = "personalities/linux" }
+poly-personality-native = { path = "personalities/native" }
 poly-personality-nt = { path = "personalities/nt" }
 poly-personality-xnu = { path = "personalities/xnu" }
 libc = "0.2.177"

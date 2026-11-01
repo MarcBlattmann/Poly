@@ -9,9 +9,11 @@
 //! console on fds 0, 1 and 2) and starts it with `user::exec::load_dynamic`
 //! reading the file through a [`FileSource`]; a dynamically linked one gets
 //! the interpreter its `PT_INTERP` names, opened the same way (ADR 0049).
-//! Other formats are refused with a reason: PE and Mach-O need their
-//! personalities' loaders; `#!` scripts are left to `execve` (a program can
-//! run one).
+//! A PE executable goes to the NT personality's loader (`crate::nt`), and
+//! a native Poly program (an ELF with Poly's ABI note, ADR 0125) is loaded
+//! like a static ELF into a native process. Other formats are refused with
+//! a reason: Mach-O needs its personality's loader; `#!` scripts are left
+//! to `execve` (a program can run one).
 
 use crate::boot_info::BootInfo;
 use crate::fs::cache::FileSource;
@@ -77,6 +79,9 @@ pub enum Prepared {
     Linux { process: Arc<Process>, image: exec::Image },
     /// A PE executable: its process record and bytes, started by `crate::nt`.
     Nt { process: Arc<Process>, file: Vec<u8>, launch: crate::nt::Launch },
+    /// A native Poly program (ADR 0125): its process record and loaded
+    /// image, started like a Linux ELF.
+    Native { process: Arc<Process>, image: exec::Image },
 }
 
 impl Prepared {
@@ -84,14 +89,16 @@ impl Prepared {
     /// [`start`](Self::start)).
     pub fn process(&self) -> &Arc<Process> {
         match self {
-            Prepared::Linux { process, .. } | Prepared::Nt { process, .. } => process,
+            Prepared::Linux { process, .. } | Prepared::Nt { process, .. } | Prepared::Native { process, .. } => {
+                process
+            }
         }
     }
 
     /// Start the program's first thread; returns its process.
     pub fn start(self) -> Result<Arc<Process>, ExecPathError> {
         match self {
-            Prepared::Linux { process, image } => {
+            Prepared::Linux { process, image } | Prepared::Native { process, image } => {
                 let tid = user::spawn_in(Arc::clone(&process), image.memory, image.entry, user::DEFAULT_HOOK)
                     .map_err(|e| ExecPathError::Exec(ExecError::Spawn(e)))?;
                 // Nobody joins the thread: the process is what callers wait for.
@@ -159,6 +166,23 @@ pub fn prepare_as(
             // Its DOS path and arguments go into its process parameters.
             let launch = crate::nt::Launch::of(path, argv);
             return Ok(Prepared::Nt { process, file: file_bytes, launch });
+        }
+        Some(Personality::Native) => {
+            // A native program is a static ELF executable with Poly's ABI
+            // note; its initial stack is the ELF one (argc, argv, envp,
+            // auxv), which `poly-rt` reads (ADR 0125).
+            let abi = if let poly_binfmt::Format::Native { abi, .. } = format { abi } else { 0 };
+            if !(1..=poly_personality_native::abi::ABI_VERSION).contains(&abi) {
+                let have = poly_personality_native::abi::ABI_VERSION;
+                return Err(ExecPathError::Unsupported(format!(
+                    "a native program for ABI version {abi} (this kernel runs 1 to {have})"
+                )));
+            }
+            let params = ExecParams::new(argv, envp, path);
+            let image = exec::load(Arc::new(FileSource::of(&file)), &params).map_err(ExecPathError::Exec)?;
+            let process = Arc::new(Process::new_native(process::alloc_pid(), 0, format, traced));
+            fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
+            return Ok(Prepared::Native { process, image });
         }
         Some(p) => return Err(ExecPathError::Unsupported(format!("{} programs cannot run yet", p.name()))),
         None => return Err(ExecPathError::Unsupported("#! scripts are not supported yet".into())),

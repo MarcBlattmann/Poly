@@ -130,7 +130,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] XWayland for X11 apps (ADR 0118)
 - [x] Fonts: font store, rasterisation, fontconfig-compatible discovery
 - [x] ⚖️ Decided (owner, ADR 0124): the desktop becomes native Poly user space, looks 1:1 like Alpine Shell (its assets reused), and everything that ships builds on Windows and Linux hosts
-- [ ] Native user space: Poly's own system call interface and a Rust runtime; a native program, linked by `rust-lld`, builds on Windows and Linux and runs on Poly (boot test)
+- [x] Native user space: Poly's own system call interface and a Rust runtime; a native program, linked by `rust-lld`, builds on Windows and Linux and runs on Poly (boot test) (ADR 0125: ELF programs with Poly's ABI note run in the native personality; handles are the kernel's shared open files; `poly-rt` with `poly-heap` as its allocator; `/bin/native-hello` prints, allocates, keeps time, uses files and spawns native and Linux children; boot group `native`, passing on Windows and Linux hosts)
 - [ ] The desktop (compositor, shell, notifications, settings) runs as native Poly processes; Linux apps' Wayland and X11 windows still reach it (the desktop and toolkits boot groups pass)
 - [ ] The shell looks 1:1 like Alpine Shell: ridge with panels extending from it, centred launcher, notifications at the top right, settings window, its fonts, icons, colours, soft shadows and blur (screenshots match Alpine Shell's references)
 - [ ] `cargo xtask desktop` builds and boots the desktop on a Windows host as well as on Linux

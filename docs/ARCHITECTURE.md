@@ -12,6 +12,7 @@ what exists **today** and how it fits that plan.
    personalities/linux    personalities/nt        personalities/xnu
    -errno in rax          NTSTATUS in rax         CF + errno / kern_return_t
    └──────────────────────┼────────────────────────┘
+                          │  native programs (poly-rt) ──► personalities/native: Poly's own calls, -error in rax (ADR 0125)
                           │  poly-abi: Personality, SyscallRegs, SyscallDispatch
                  kernel/src/syscall.rs  ← routes by the process's personality tag
                  kernel/src/linux       ← LinuxKernel for the running thread: files, memory, signals, futexes;
@@ -1301,6 +1302,20 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   and `sysinfo` reads what procfs shows (ADR 0043).
   Host tests run every call, and scripted startup sequences of real static
   binaries, against a fake kernel.
+- **Native** ([ADR 0125](adr/0125-native-system-call-interface-and-poly-rt.md)):
+  Poly's own interface, for programs written for Poly (the desktop is moving
+  here, ADR 0124). An ELF with Poly's ABI note (`poly-binfmt`,
+  `Format::Native`) is loaded as a static ELF into a process made by
+  `Process::new_native`; its calls go to `native::syscall`
+  (`Native::dispatch_with` over `NativeKernel`, `personalities/native`,
+  host-tested against a fake kernel): number in `rax`, arguments in `rdi,
+  rsi, rdx, r10, r8, r9`, a value or `-error` (Poly's own 22 errors) back in
+  `rax`. Handles are descriptors of the process's `fs::Files`, the same open
+  files Linux processes hold; `spawn` starts native, Linux or Windows
+  programs (`program::prepare`) and `wait` reaps them. Native programs link
+  `poly-rt` (`crates/poly-rt`: entry point, calls, `poly-heap` over `map`,
+  panics, output, args) and live in `userland/native`, built for
+  `x86_64-unknown-none` by `rust-lld` on any host.
 - **Linux signals and futexes**
   ([ADR 0031](adr/0031-linux-signals-and-futexes.md)): the personality
   owns each process's signal state (`LinuxProcess`: dispositions, pending
