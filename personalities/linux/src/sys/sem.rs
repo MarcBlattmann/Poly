@@ -5,13 +5,15 @@
 //! and completes sleeping callers itself; the handlers only read and write
 //! user memory, sleep and wake threads, outside the lock.
 
+use crate::abi::Timespec;
 use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::ipc::sem::{
-    GETALL, GETNCNT, GETPID, GETVAL, GETZCNT, SEMOPM, SETALL, SETVAL, SemBuf, SemSet, SemidDs, Semop, with_table,
+    GETALL, GETNCNT, GETPID, GETVAL, GETZCNT, IPC_INFO, SEM_INFO, SEM_STAT, SEM_STAT_ANY, SEMOPM, SEMVMX, SETALL,
+    SETVAL, SemBuf, SemSet, SemidDs, Semop, seminfo_bytes, with_table,
 };
-use crate::ipc::shm::{IPC_64, IPC_RMID, IPC_SET, IPC_STAT, READ, WRITE, Who};
-use crate::kernel::LinuxKernel;
+use crate::ipc::shm::{IPC_RMID, IPC_SET, IPC_STAT, READ, WRITE, Who};
+use crate::kernel::{Clock, Deadline, LinuxKernel};
 use crate::ns::pid::view;
 use crate::signal::deliver::with_own;
 use crate::sys::shm::{caller, now};
@@ -20,7 +22,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 /// The calls, registered in [`crate::table::GROUPS`].
-pub const CALLS: &[(u64, Handler)] = &[(nr::SEMGET, semget), (nr::SEMOP, semop), (nr::SEMCTL, semctl)];
+pub const CALLS: &[(u64, Handler)] =
+    &[(nr::SEMGET, semget), (nr::SEMOP, semop), (nr::SEMTIMEDOP, semtimedop), (nr::SEMCTL, semctl)];
 
 /// Wake the threads a table operation completed.
 fn wake(k: &mut dyn LinuxKernel, tids: Vec<i32>) {
@@ -54,6 +57,27 @@ pub fn semget(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
 /// among the calls that fail after a handler, `SA_RESTART` or not, and
 /// after a stop).
 pub fn semop(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    operate(k, a, None)
+}
+
+/// semtimedop(semid, sops, nsops, timeout)
+///
+/// semop with a bound on the sleep: `timeout` (a relative `struct
+/// timespec`, only read) is read first of all (`EFAULT`), checked after
+/// the array was read (`EINVAL` for a negative or unnormalized one, before
+/// the id is looked up), and a sleep that outlasts it fails with `EAGAIN`,
+/// nothing applied. A NULL `timeout` is semop.
+pub fn semtimedop(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
+    if a.ptr(3).is_null() {
+        return operate(k, a, None);
+    }
+    let mut b = [0u8; Timespec::SIZE];
+    k.copy_from_user(a.ptr(3), &mut b)?;
+    operate(k, a, Some(Timespec::from_bytes(&b)))
+}
+
+/// semop(2) and semtimedop(2), with the timeout already read.
+fn operate(k: &mut dyn LinuxKernel, a: &Args, timeout: Option<Timespec>) -> SysResult {
     let (id, nsops) = (a.int(0), a.uint(2));
     if nsops == 0 {
         return Err(Errno::EINVAL);
@@ -63,6 +87,13 @@ pub fn semop(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
     }
     let mut bytes = vec![0u8; nsops as usize * SemBuf::SIZE];
     k.copy_from_user(a.ptr(1), &mut bytes)?;
+    if timeout.is_some_and(|t| !t.is_valid()) {
+        return Err(Errno::EINVAL);
+    }
+    let deadline = match timeout {
+        Some(t) => Some(Deadline { clock: Clock::Monotonic, at: k.clock(Clock::Monotonic)?.saturating_add(t) }),
+        None => None,
+    };
     let ops = SemBuf::parse(&bytes);
     let (ns, _, who) = caller(k);
     let (pid, tid, now) = (k.pid(), k.tid(), now(k));
@@ -86,7 +117,15 @@ pub fn semop(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
                 None => Err(Errno::EINTR),
             };
         }
-        k.block(None);
+        if let Some(d) = deadline
+            && k.clock(Clock::Monotonic).is_ok_and(|now| (now.sec, now.nsec) >= (d.at.sec, d.at.nsec))
+        {
+            return match with_table(&ns, |t| t.cancel(ticket)) {
+                Some(result) => result.map(|()| 0),
+                None => Err(Errno::EAGAIN),
+            };
+        }
+        k.block(deadline);
     }
 }
 
@@ -119,14 +158,17 @@ fn with_set<R>(
 
 /// semctl(semid, semnum, cmd, arg)
 ///
-/// semctl(2), for `IPC_STAT`, `IPC_SET`, `IPC_RMID`, `GETVAL`, `GETPID`,
-/// `GETNCNT`, `GETZCNT`, `GETALL`, `SETVAL` and `SETALL` (`IPC_64` in
-/// `cmd` is ignored: x86-64 has one layout of `struct semid_ds`). An id
-/// that names no set is `EINVAL`, and so is every other command
-/// (`IPC_INFO`, `SEM_INFO`, `SEM_STAT` are not implemented) and a
-/// `semnum` outside the set. Reading needs read permission, setting values
-/// alter permission (`EACCES`); `IPC_SET` and `IPC_RMID` need the owner,
-/// the creator or `CAP_SYS_ADMIN` (`EPERM`).
+/// semctl(2). A negative id is `EINVAL` for every command, and so is an
+/// id that names no set, an unknown command (also one with the `IPC_64`
+/// bit) and a `semnum` outside the set. Reading needs read permission
+/// (checked before `semnum`), setting values alter permission (checked
+/// after it) (`EACCES`); `IPC_SET` and `IPC_RMID` need the owner, the
+/// creator or `CAP_SYS_ADMIN` (`EPERM`).
+///
+/// - `IPC_INFO` and `SEM_INFO` write a `struct seminfo` and return the
+///   highest index in use; `SEM_STAT` and `SEM_STAT_ANY` are `IPC_STAT`
+///   of the set at an index ([`crate::ipc::index_of`]) and return its id
+///   (`SEM_STAT_ANY` needs no permission).
 ///
 /// - `IPC_STAT` writes the set's `struct semid64_ds` to `arg`.
 /// - `IPC_SET` takes the owner's uid and gid and the permission bits from
@@ -135,24 +177,41 @@ fn with_set<R>(
 /// - `GETVAL`, `GETPID`, `GETNCNT`, `GETZCNT` return `semval`, `sempid`,
 ///   `semncnt`, `semzcnt` of semaphore `semnum`; `GETALL` writes every
 ///   `semval` to the `unsigned short` array at `arg`.
-/// - `SETVAL` sets semaphore `semnum` to the `int` in `arg`, `SETALL`
+/// - `SETVAL` sets semaphore `semnum` to the `int` in `arg` (its range is
+///   checked before the id), `SETALL`
 ///   every semaphore from the array at `arg` (`ERANGE` above 32767, or
 ///   below 0): `sempid` becomes the caller, `sem_ctime` now, every
 ///   process's adjustment for the semaphores is dropped, and sleepers
 ///   that can proceed now do.
 pub fn semctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
-    let (id, num, cmd, arg) = (a.int(0), a.int(1), a.uint(2) & !IPC_64, a.ulong(3));
+    let (id, num, cmd, arg) = (a.int(0), a.int(1), a.uint(2), a.ulong(3));
+    if id < 0 {
+        return Err(Errno::EINVAL);
+    }
     let (ns, creds, who) = caller(k);
     let in_set = |s: &SemSet| u16::try_from(num).ok().filter(|n| usize::from(*n) < s.nsems()).ok_or(Errno::EINVAL);
     match cmd {
-        IPC_STAT => {
-            let mut ds = with_set(&ns, id, &who, READ, |s| Ok(SemidDs::of(s)))?;
+        IPC_STAT | SEM_STAT | SEM_STAT_ANY => {
+            let (id, mut ds) = with_table(&ns, |t| {
+                let id = if cmd == IPC_STAT { id } else { t.by_index(id).ok_or(Errno::EINVAL)? };
+                let s = t.set(id).ok_or(Errno::EINVAL)?;
+                if cmd != SEM_STAT_ANY && !s.allows(&who, READ) {
+                    return Err(Errno::EACCES);
+                }
+                Ok((id, SemidDs::of(s)))
+            })?;
             ds.uid = creds.uid_view(ds.uid);
             ds.gid = creds.gid_view(ds.gid);
             ds.cuid = creds.uid_view(ds.cuid);
             ds.cgid = creds.gid_view(ds.cgid);
             k.copy_to_user(a.ptr(3), &ds.to_bytes())?;
-            Ok(0)
+            Ok(if cmd == IPC_STAT { 0 } else { id as u64 })
+        }
+        IPC_INFO | SEM_INFO => {
+            let (info, max) =
+                with_table(&ns, |t| (seminfo_bytes(if cmd == SEM_INFO { Some(t) } else { None }), t.max_index()));
+            k.copy_to_user(a.ptr(3), &info)?;
+            Ok(max as u64)
         }
         IPC_SET => {
             let mut bytes = [0u8; SemidDs::SIZE];
@@ -205,13 +264,18 @@ pub fn semctl(k: &mut dyn LinuxKernel, a: &Args) -> SysResult {
             Ok(0)
         }
         SETVAL => {
+            let val = arg as i32;
+            if !(0..=SEMVMX).contains(&val) {
+                return Err(Errno::ERANGE);
+            }
             let (pid, now) = (k.pid(), now(k));
             let woken = with_table(&ns, |t| {
                 let s = t.set(id).ok_or(Errno::EINVAL)?;
+                let num = in_set(s)?;
                 if !s.allows(&who, WRITE) {
                     return Err(Errno::EACCES);
                 }
-                t.setval(id, in_set(s)?, arg as i32, pid, now)
+                t.setval(id, num, val, pid, now)
             })?;
             wake(k, woken);
             Ok(0)

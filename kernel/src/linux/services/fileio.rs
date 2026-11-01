@@ -28,12 +28,14 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use poly_personality_linux::abi::Timespec;
 use poly_personality_linux::errno::Errno;
-use poly_personality_linux::fileio::{EpollEvent, EpollOp, FileIo, ItimerSpec, NewFd, PidFdTarget, PollFd, WaitTime};
+use poly_personality_linux::fileio::{
+    EpollEvent, EpollOp, FileIo, ItimerSpec, NewFd, PidFdTarget, PipeStatus, PipeTransfer, PollFd, WaitTime,
+};
 use poly_personality_linux::kernel::{Clock, SigSet};
 use poly_vfs::epoll::{self, Epoll};
 use poly_vfs::eventfd::EventFd;
 use poly_vfs::inotify::{Inotify, WatchKey};
-use poly_vfs::pipe::{Pipe, PipeEnd};
+use poly_vfs::pipe::{PIPE_PAGE, Pipe, PipeEnd, Transfer};
 use poly_vfs::poll::{PollEntry, PollTarget};
 use poly_vfs::timerfd::{TimerClock, TimerFd, TimerSpec};
 use poly_vfs::{FileObject, PollEvents, Timeout};
@@ -281,6 +283,32 @@ impl FileIo for Thread<'_> {
     fn set_pipe_size(&mut self, fd: i32, bytes: usize) -> Result<usize, Errno> {
         let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
         end.pipe().set_capacity(bytes).map_err(vfs_errno)
+    }
+
+    fn pipe_status(&mut self, fd: i32) -> Result<PipeStatus, Errno> {
+        let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
+        let s = end.pipe().status();
+        Ok(PipeStatus { len: s.len, room: s.free_pages * PIPE_PAGE, readers: s.readers, writers: s.writers })
+    }
+
+    fn pipe_transfer(&mut self, fd_in: i32, fd_out: i32, len: usize, keep: bool) -> Result<PipeTransfer, Errno> {
+        let input = self.file(fd_in)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
+        let output = self.file(fd_out)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
+        Ok(match input.pipe().transfer(output.pipe(), len, keep).map_err(vfs_errno)? {
+            Transfer::Moved(n) => PipeTransfer::Moved(n),
+            Transfer::WaitInput => PipeTransfer::WaitInput,
+            Transfer::WaitOutput => PipeTransfer::WaitOutput,
+        })
+    }
+
+    fn pipe_push(&mut self, fd: i32, pieces: &[&[u8]]) -> Result<usize, Errno> {
+        let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
+        end.pipe().push_pieces(pieces).map_err(vfs_errno)
+    }
+
+    fn pipe_peek(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno> {
+        let end = self.file(fd)?.object_as::<PipeEnd>().ok_or(Errno::EINVAL)?;
+        Ok(end.pipe().peek(buf))
     }
 
     fn inotify_init(&mut self, new: NewFd) -> Result<i32, Errno> {

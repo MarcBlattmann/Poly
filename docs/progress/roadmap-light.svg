@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 85 of 141 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 86 of 141 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">85 / 141 milestones · 60%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">86 / 141 milestones · 61%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -239,8 +239,8 @@
 <g><title>✔ Windows file system layout: C:\Windows, System32, Program Files, user profile (ADR 0073)</title>
 <rect x="690.7" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the wintrace boot group, report only; left: Poly's trace of every step without a divergence from the reference (0 of 15 today, docs/windows/7zip-trace.md), then TRACE_REQUIRED, ADR 0110 &quot;What passes its full recorded trace means&quot;)</title>
-<rect x="715.8" y="203.0" width="23.1" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the wintrace boot group; ADR 0114: all 15 steps without a divergence, TRACE_REQUIRED, a required check)</title>
+<rect x="715.8" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Winsock (ws2_32) on our sockets; winhttp / wininet basics (ADR 0095)</title>
 <rect x="740.8" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
@@ -249,9 +249,9 @@
 <rect x="765.9" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>Fallback if needed: our own vcruntime140 (and msvcp140 subsets) per ADR 0055</title>
-<rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">17/19</text>
+<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">18/19</text>
 <text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>✔ ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)</title>
 <rect x="340.0" y="233.0" width="34.6" height="16.0" fill="#2da44e" rx="3"/>
