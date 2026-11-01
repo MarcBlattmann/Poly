@@ -1,6 +1,11 @@
 # 0090: The Windows API tracer: proxy DLLs generated from a program's imports, an instrumented copy that loads them, one JSON line per call, the same kit on Windows and on Poly, and a per-thread comparison
 
-**Status:** Accepted. Roadmap Phase 5's "Windows API tracer" (not ticked:
+**Status:** Accepted. Amended by
+[0110](0110-7-zip-traced-scenario-and-what-passing-its-trace-means.md): the
+traced 7-Zip scenario's Windows trace is committed in canonical form, the
+`wintrace` boot group runs that scenario instead of the three runs below,
+and the comparison gained documented machine normalisations. Roadmap Phase
+5's "Windows API tracer" (not ticked:
 the milestone it serves, 7-Zip's recorded trace, stays open). Point 3 of
 [ADR 0087](0087-7-zip-command-line-on-poly.md)'s "The recording on
 Windows". Builds on [ADR 0075](0075-windows-test-oracle.md) (how Windows

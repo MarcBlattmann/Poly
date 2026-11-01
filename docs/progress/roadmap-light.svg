@@ -239,7 +239,7 @@
 <g><title>✔ Windows file system layout: C:\Windows, System32, Program Files, user profile (ADR 0073)</title>
 <rect x="690.7" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; left: the API trace (ADR 0090) of the scenario recorded on Windows and compared without differences, ADR 0101 &quot;The milestone&quot;)</title>
+<g><title>Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the wintrace boot group, report only; left: Poly's trace of every step without a divergence from the reference (0 of 15 today, docs/windows/7zip-trace.md), then TRACE_REQUIRED, ADR 0110 &quot;What passes its full recorded trace means&quot;)</title>
 <rect x="715.8" y="203.0" width="23.1" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>✔ Winsock (ws2_32) on our sockets; winhttp / wininet basics (ADR 0095)</title>

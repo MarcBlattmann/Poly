@@ -55,6 +55,9 @@
 //!   win 7zip-diff [--kernel <elf>] [--build-kernel] [--target <poly.json>] [--markdown <file>]
 //!                       run the 7-Zip scenario driver on Poly and compare it step by step
 //!                       with its Windows recording (sevenzip.rs, ADR 0088)
+//!   win 7zip-trace <stage | record <windows.json>... | diff [--kernel <elf>] [--target <poly.json>] [--markdown <file>] [--check]>
+//!                       the traced scenario: the kit staged, a Windows reference recorded,
+//!                       Poly compared with it call by call (sevenzip_trace.rs, ADR 0110)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
 //!   fonts fetch         download the pinned DejaVu fonts of the font store into the cache (fonts.rs)
@@ -87,6 +90,7 @@ mod programs;
 mod rootdisk;
 mod screen;
 mod sevenzip;
+mod sevenzip_trace;
 mod sound;
 mod symbols;
 mod sysmsg;
@@ -1415,9 +1419,9 @@ const BOOT_GROUPS: [BootGroup; 25] = [
     // 7-Zip's command line on the NT personality, skipped without the
     // cached 7za.exe (sevenzip.rs, ADR 0087).
     ("7zip", sevenzip::boot_test),
-    // 7za.exe under the Windows API tracer, its traces read back and
-    // compared with Windows reference traces if there are any (report only;
-    // wintrace.rs, ADR 0090).
+    // The 7-Zip scenario under the Windows API tracer, each step's trace
+    // compared with the committed Windows reference (report only until
+    // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
     ("wintrace", wintrace::boot_test),
     // The Wayland compositor as init with a C client (compositor.rs, ADR 0106).
     ("wayland", compositor::boot_test),
