@@ -1,7 +1,7 @@
 //! Drawing one damaged rectangle: the desktop, then every window bottom to
 //! top — its frame, then its content over it — clipped to the rectangle.
 
-use super::frame::{FrameLayout, Glyph, cross_covers, glyph_covers};
+use super::frame::{FrameLayout, Glyph, glyph_covers};
 use super::scene::{Backdrop, Content, CursorLook, Scene, Window, WindowId};
 use super::{CURSOR_SIZE, Framebuffer, Layer, Rect, over, with_alpha};
 use alloc::collections::BTreeMap;

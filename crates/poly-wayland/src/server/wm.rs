@@ -172,7 +172,10 @@ impl Server {
 
     /// The window being moved with the pointer, if one is.
     pub fn moving_window(&self) -> Option<WindowId> {
-        self.seat.input.grab.map(|super::input::Grab::Move { window, .. }| window)
+        match self.seat.input.grab {
+            Some(super::input::Grab::Move { window, .. }) => Some(window),
+            _ => None,
+        }
     }
 
     /// Show `w` if it was minimized, raise it and give it the focus.

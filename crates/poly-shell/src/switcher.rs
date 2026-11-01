@@ -308,12 +308,12 @@ mod tests {
 
     #[test]
     fn thumbnails_keep_the_aspect() {
-        let c = Content { width: 400, height: 200, scale: 1, pixels: vec![0xff20_4060; 400 * 200] };
+        let c = Content { width: 400, height: 200, scale: 1, pixels: vec![0xff20_4060; 400 * 200], ..Content::default() };
         let t = thumbnail(&c, 200, 124, 0);
         assert_eq!((t.width, t.height), (200, 100));
         assert!(t.pixels.iter().all(|&p| p == 0x20_4060));
         // Translucent content over the background colour.
-        let c = Content { width: 2, height: 2, scale: 1, pixels: vec![0; 4] };
+        let c = Content { width: 2, height: 2, scale: 1, pixels: vec![0; 4], ..Content::default() };
         assert_eq!(thumbnail(&c, 10, 10, 0x11_2233).pixels, [0x11_2233; 4], "never enlarged");
     }
 }
