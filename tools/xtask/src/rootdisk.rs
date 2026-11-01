@@ -247,8 +247,7 @@ fn host_location(path: &Path) -> Option<PathBuf> {
 }
 
 fn mtime_of(meta: &std::fs::Metadata) -> i64 {
-    use std::os::unix::fs::MetadataExt;
-    meta.mtime()
+    crate::hostfs::mtime(meta)
 }
 
 impl Collector {
@@ -290,15 +289,13 @@ impl Collector {
             return self.add_depth(&resolved, depth + 1);
         }
         if meta.is_dir() {
-            use std::os::unix::fs::PermissionsExt;
-            self.tree.dir(&image_path, (meta.permissions().mode() & 0o7777) as u16);
+            self.tree.dir(&image_path, crate::hostfs::mode(&meta) as u16);
             return Ok(());
         }
         if !meta.is_file() {
             return Err(format!("{}: not a regular file, directory or link", at.display()));
         }
-        use std::os::unix::fs::PermissionsExt;
-        let mode = (meta.permissions().mode() & 0o7777) as u16;
+        let mode = crate::hostfs::mode(&meta) as u16;
         self.tree.insert(&image_path, Entry::File { mode, source: Source::Host(at.clone()), mtime: mtime_of(&meta) });
         if is_elf(&at) {
             self.elves.push_back(at);
@@ -965,8 +962,7 @@ fn gcc_parts() -> Result<GccParts, String> {
 
 /// Whether this process runs as root (`/proc/self` belongs to its user).
 fn running_as_root() -> bool {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::metadata("/proc/self").is_ok_and(|m| m.uid() == 0)
+    crate::hostfs::running_as_root()
 }
 
 /// Whether `mke2fs` can be run.
@@ -1018,7 +1014,6 @@ pub fn write_image(tree: &RootTree, image: &Path) -> Result<&'static str, String
 }
 
 fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
     let target = super::root().join("target");
     let stage = target.join(format!("poly-rootdisk-stage-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&stage);
@@ -1033,7 +1028,7 @@ fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<
                     std::fs::create_dir_all(&at).map_err(|e| err(&at, e))?;
                     dirs.push((at, *mode));
                 }
-                Entry::Symlink(t) => std::os::unix::fs::symlink(t, &at).map_err(|e| err(&at, e))?,
+                Entry::Symlink(t) => crate::hostfs::symlink(t, &at).map_err(|e| err(&at, e))?,
                 Entry::File { mode, source, mtime } => {
                     match source {
                         // A hard link costs no space; the host's file is
@@ -1046,8 +1041,7 @@ fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<
                         }
                         Source::Bytes(b) => {
                             std::fs::write(&at, b).map_err(|e| err(&at, e))?;
-                            std::fs::set_permissions(&at, std::fs::Permissions::from_mode(u32::from(*mode)))
-                                .map_err(|e| err(&at, e))?;
+                            crate::hostfs::set_mode(&at, u32::from(*mode)).map_err(|e| err(&at, e))?;
                             set_mtime(&at, *mtime)?;
                         }
                     }
@@ -1055,7 +1049,7 @@ fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<
             }
         }
         for (at, mode) in dirs.iter().rev() {
-            std::fs::set_permissions(at, std::fs::Permissions::from_mode(u32::from(*mode))).map_err(|e| err(at, e))?;
+            crate::hostfs::set_mode(at, u32::from(*mode)).map_err(|e| err(at, e))?;
         }
         let conf = stage.with_extension("mke2fs.conf");
         std::fs::write(&conf, MKE2FS_CONF).map_err(|e| err(&conf, e))?;
