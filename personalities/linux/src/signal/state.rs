@@ -506,6 +506,15 @@ impl LinuxProcess {
         !self.pending(tid).without(self.thread(tid).mask).is_empty()
     }
 
+    /// Whether thread `tid` has a pending signal it does not block whose
+    /// delivery does something: runs a handler, stops or kills. A traced
+    /// process keeps ignored signals until a thread takes them
+    /// ([`Self::traced`]); taking those does nothing, so a wait they end
+    /// continues as if they had never been sent.
+    pub fn has_acting(&self, tid: i32) -> bool {
+        self.pending(tid).without(self.thread(tid).mask).iter().any(|s| !is_ignored(s, &self.actions.get(s)))
+    }
+
     /// Prepare a signal the kernel raises for thread `tid` itself (a fault,
     /// or `SIGSEGV` for a bad signal frame): if the thread blocks it or
     /// ignores it, the action becomes `SIG_DFL` and the signal is unblocked,
@@ -627,6 +636,31 @@ mod tests {
         p.send(user(SIGTERM), Dest::Thread(1), false).unwrap();
         p.set_action(SIGTERM, SigAction { handler: SIG_IGN, ..SigAction::default() });
         assert!(p.pending(1).is_empty(), "blocked and pending, then ignored: discarded");
+    }
+
+    /// A traced process keeps an ignored signal (the default-ignored
+    /// SIGCHLD of a child's exit) until it is taken: deliverable, but
+    /// taking it does nothing.
+    #[test]
+    fn a_traced_processes_ignored_signal_is_deliverable_but_does_not_act() {
+        let mut p = LinuxProcess::new(1);
+        p.traced = true;
+        assert!(p.send(user(SIGCHLD), Dest::Process, false).unwrap().queued);
+        assert!(p.has_deliverable(1) && !p.has_acting(1));
+        p.set_action(SIGUSR1, handler());
+        p.send(user(SIGUSR1), Dest::Process, false).unwrap();
+        assert!(p.has_acting(1), "a handler runs");
+        p.thread_mut(1).mask.insert(SIGUSR1);
+        assert!(!p.has_acting(1), "blocked");
+        p.send(user(SIGSTOP), Dest::Process, false).unwrap();
+        assert!(p.has_acting(1), "a stop");
+        let mut q = LinuxProcess::new(1);
+        q.traced = true;
+        q.send(user(SIGTERM), Dest::Process, false).unwrap();
+        assert!(q.has_acting(1), "the default action kills");
+        q.set_action(SIGTERM, SigAction { handler: SIG_IGN, ..SigAction::default() });
+        q.send(user(SIGTERM), Dest::Process, false).unwrap();
+        assert!(q.has_deliverable(1) && !q.has_acting(1), "SIG_IGN");
     }
 
     #[test]

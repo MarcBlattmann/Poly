@@ -1,15 +1,17 @@
-//! System call routing: one entry point, three call tables.
+//! System call routing: one entry point, four call tables (Linux, NT, XNU
+//! and Poly's own native one, ADR 0125).
 
 use crate::process::Process;
 use poly_abi::{Outcome, Personality, SyscallDispatch, SyscallRegs};
 use poly_personality_linux::Linux;
+use poly_personality_native::Native;
 use poly_personality_nt::Nt;
 use poly_personality_xnu::Xnu;
 
 /// Route a system call to the calling process's personality. A Linux
 /// process with personality state gets the kernel's services
 /// (`crate::linux`); a bare record only the personality's answers without
-/// them (`-ENOSYS`).
+/// them (`-ENOSYS`). The same holds for native processes (`crate::native`).
 pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let outcome = match process.personality {
         Personality::Linux if process.linux.is_some() => crate::linux::syscall(process, regs),
@@ -17,6 +19,8 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         Personality::Nt if crate::nt::is_nt_process(process.pid) => crate::nt::syscall(process, regs),
         Personality::Nt => Nt::dispatch(regs),
         Personality::Xnu => Xnu::dispatch(regs),
+        Personality::Native if process.native.is_some() => crate::native::syscall(process, regs),
+        Personality::Native => Native::dispatch(regs),
     };
     if let Outcome::Unimplemented { table, number } = outcome
         && first_time(process.personality, number)
@@ -27,6 +31,7 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         // an interactive shell; `poly.strace` shows every call.
         let name = match process.personality {
             Personality::Linux => poly_personality_linux::table::name(number),
+            Personality::Native => poly_personality_native::table::name(number),
             _ => None,
         };
         crate::kprintln!(
@@ -47,11 +52,12 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
 fn first_time(personality: Personality, number: u64) -> bool {
     use core::sync::atomic::{AtomicU64, Ordering};
     const WORDS: usize = 16;
-    static SEEN: [[AtomicU64; WORDS]; 3] = [const { [const { AtomicU64::new(0) }; WORDS] }; 3];
+    static SEEN: [[AtomicU64; WORDS]; 4] = [const { [const { AtomicU64::new(0) }; WORDS] }; 4];
     let table = match personality {
         Personality::Linux => 0,
         Personality::Nt => 1,
         Personality::Xnu => 2,
+        Personality::Native => 3,
     };
     let Some(word) = SEEN[table].get((number / 64) as usize) else { return true };
     let bit = 1 << (number % 64);

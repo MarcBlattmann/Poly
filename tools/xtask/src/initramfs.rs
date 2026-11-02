@@ -3,7 +3,8 @@
 //! needs no `cpio`. Every byte is fixed (times, owners, inode numbers,
 //! order), so the same sources always give the same image.
 //!
-//! - The default image (`cargo xtask run`): `/etc/motd`, `/etc/hostname`,
+//! - The default image (`cargo xtask run`, with the native programs in
+//!   `/bin`, see `native.rs`): `/etc/motd`, `/etc/hostname`,
 //!   `/etc/hosts` and `/etc/resolv.conf` (name resolution is the C
 //!   library's: QEMU's user-networking DNS server at 10.0.2.3, which
 //!   `poly.net=qemu` sets up), a minimal user database (`/etc/passwd`,
@@ -79,7 +80,9 @@ fn base(w: &mut Writer) {
     w.node(b"dev/console", FileType::CharDevice, 0o600, DeviceId::new(5, 1));
 }
 
-/// The image `cargo xtask run` boots with.
+/// The base image alone (`cargo xtask run` boots it with the native
+/// programs in `/bin`, `native.rs`).
+#[cfg(test)]
 pub fn default_image() -> Vec<u8> {
     let mut w = writer();
     base(&mut w);

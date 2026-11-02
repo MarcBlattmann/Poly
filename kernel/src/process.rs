@@ -58,6 +58,9 @@ pub struct Process {
     /// ([`Process::new`]): their system calls go to the personality
     /// without kernel services, and a fault kills only the faulting thread.
     pub linux: Option<LinuxState>,
+    /// The native personality's state (its children) for a process made
+    /// with [`Process::new_native`] (ADR 0125); `None` otherwise.
+    pub native: Option<crate::native::NativeState>,
     /// The process reports its system calls, output, signals and exit on
     /// the serial port (`poly.test.capture`, ADR 0027).
     pub traced: bool,
@@ -216,6 +219,16 @@ impl Process {
         Process::with_state(pid, 0, Personality::Nt, format, None, traced, files)
     }
 
+    /// A native Poly process (ADR 0125): its system calls go to the native
+    /// personality (`crate::native`), the console on fds 0, 1 and 2 (the
+    /// kernel's log console when `traced`).
+    pub fn new_native(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
+        let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
+        let mut p = Process::with_state(pid, ppid, Personality::Native, format, None, traced, files);
+        p.native = Some(crate::native::NativeState::default());
+        p
+    }
+
     /// A Linux process made by `fork` / `clone` (`linux::task`): its files
     /// and personality state come from the parent.
     pub fn new_linux_child(
@@ -245,6 +258,7 @@ impl Process {
             format,
             files,
             linux,
+            native: None,
             traced,
             cpu: crate::cputime::ProcessCpu::default(),
             threads: SpinLock::new(Threads::default()),

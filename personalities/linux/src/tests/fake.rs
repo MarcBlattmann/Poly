@@ -63,6 +63,8 @@ pub struct File {
     pub max_write: Option<usize>,
     /// Fail every write once this many bytes have been written.
     pub fail_after: Option<(usize, Errno)>,
+    /// Fail every read with this.
+    pub read_error: Option<Errno>,
 }
 
 impl File {
@@ -75,6 +77,7 @@ impl File {
             input: Vec::new(),
             max_write: None,
             fail_after: None,
+            read_error: None,
         }
     }
 }
@@ -554,6 +557,9 @@ impl LinuxKernel for FakeKernel {
         let f = self.files.get_mut(&fd).ok_or(Errno::EBADF)?;
         if !f.readable {
             return Err(Errno::EBADF);
+        }
+        if let Some(e) = f.read_error {
+            return Err(e);
         }
         let n = buf.len().min(f.input.len());
         buf[..n].copy_from_slice(&f.input[..n]);

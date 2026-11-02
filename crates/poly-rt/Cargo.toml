@@ -1,0 +1,15 @@
+[package]
+name = "poly-rt"
+description = "The runtime of native Poly programs: entry point, system calls, allocator, panics, output, args (ADR 0125)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-heap.workspace = true
+poly-personality-native.workspace = true
+
+[lints]
+workspace = true

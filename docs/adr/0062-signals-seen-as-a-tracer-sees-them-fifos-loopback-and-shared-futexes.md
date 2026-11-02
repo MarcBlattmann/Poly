@@ -136,3 +136,15 @@ library source was read and nothing was run on Linux.
   image made it 0755, so a test that gave up root could not create files
   there on Poly (the reference's `/tmp` is sticky and world-writable, and
   the app tests' tree already was).
+- **An ignored signal ends no call.** A kept ignored signal still wakes a
+  blocked call, but no call fails because of one: the program sees what
+  an untraced process sees (`b_epoll_wait_block`'s child exit, 1 CI run
+  in 3). The calls signal(7) has fail with `EINTR` (epoll_wait, semop,
+  semtimedop, msgrcv, msgsnd, rt_sigtimedwait, and reads, writes, accept,
+  connect on a socket with `SO_RCVTIMEO` / `SO_SNDTIMEO`) do so only
+  while a pending signal acts on delivery (a handler, a stop, a kill:
+  `LinuxProcess::has_acting`). The ones that sleep in the personality
+  (semop, msgrcv, msgsnd, rt_sigtimedwait) sleep on, keeping their
+  timeout, and the signal is taken when they return; the ones whose
+  kernel wait ended restart (`signal::deliver::eintr_if_acting`), a
+  socket's timeout counting from the restart.

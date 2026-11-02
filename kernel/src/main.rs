@@ -25,6 +25,7 @@ mod linux;
 mod log;
 mod mm;
 mod mouse;
+mod native;
 mod net;
 mod nt;
 mod pci;

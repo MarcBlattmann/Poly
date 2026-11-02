@@ -160,6 +160,19 @@ pub fn force_signal(k: &mut dyn LinuxKernel, info: SigInfo) {
     complete(k, pid, &sent);
 }
 
+/// What a call that a signal ended returns when signal(7) has it fail
+/// with `EINTR` (one never restarted after a handler, or one with a
+/// timeout): `EINTR` if a pending signal acts on delivery (a handler, a
+/// stop, a kill), else `RESTART_IF_NO_HANDLER`. A traced process keeps
+/// ignored signals until a thread takes them
+/// ([`LinuxProcess::traced`]); one of those ends the kernel's wait, but
+/// taking it does nothing, so the call goes on as if it had never been
+/// sent. A handler that comes in meanwhile still makes it `EINTR`.
+pub fn eintr_if_acting(k: &mut dyn LinuxKernel) -> Errno {
+    let tid = k.tid();
+    if with_own(k, |p| p.has_acting(tid)) { Errno::EINTR } else { Errno::RESTART_IF_NO_HANDLER }
+}
+
 /// Record that the current system call (number `number`) was interrupted
 /// with the internal restart code `errno`.
 pub fn note_restart(k: &mut dyn LinuxKernel, number: u64, errno: Errno) {

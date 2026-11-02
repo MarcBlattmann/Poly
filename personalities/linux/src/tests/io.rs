@@ -228,3 +228,26 @@ fn ioctl_errors_and_generic_requests() {
     assert!(!ioctl::is_terminal_request(ioctl::FIOCLEX));
     assert!(ioctl::is_terminal_request(0x8004_5430), "TIOCGPTN, an _IOR('T', 0x30) request");
 }
+
+/// The kernel's plain EINTR for a read or write that a signal ended on a
+/// socket with a timeout (SO_RCVTIMEO / SO_SNDTIMEO) stays EINTR when a
+/// pending signal acts; a signal that is ignored (a traced process keeps
+/// those until they are taken) lets the call go on (a restart).
+#[test]
+fn a_timed_transfer_fails_with_eintr_only_for_a_signal_that_acts() {
+    use crate::abi::signal::{SIGCHLD, SIGUSR1};
+    use crate::args::Args;
+    use crate::sys::io;
+    let mut k = FakeKernel::new();
+    k.me().traced = true;
+    k.files.get_mut(&1).unwrap().fail_after = Some((0, Errno::EINTR));
+    k.files.get_mut(&0).unwrap().read_error = Some(Errno::EINTR);
+    let (read, write) = (Args([0, DATA, 1, 0, 0, 0]), Args([1, DATA, 1, 0, 0, 0]));
+    assert_eq!(io::read(&mut k, &read), Err(Errno::RESTART_IF_NO_HANDLER), "nothing pending");
+    assert_eq!(sys(&mut k, nr::TKILL, &[100, u64::from(SIGCHLD)]), Ok(0));
+    assert_eq!(io::read(&mut k, &read), Err(Errno::RESTART_IF_NO_HANDLER), "an ignored SIGCHLD");
+    assert_eq!(io::write(&mut k, &write), Err(Errno::RESTART_IF_NO_HANDLER), "an ignored SIGCHLD");
+    assert_eq!(sys(&mut k, nr::TKILL, &[100, u64::from(SIGUSR1)]), Ok(0));
+    assert_eq!(io::read(&mut k, &read), Err(Errno::EINTR), "SIGUSR1 kills");
+    assert_eq!(io::write(&mut k, &write), Err(Errno::EINTR), "SIGUSR1 kills");
+}

@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 92 of 147 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 93 of 147 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">92 / 147 milestones · 63%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">93 / 147 milestones · 63%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -292,8 +292,8 @@
 <g><title>✔ ⚖️ Decided (owner, ADR 0124): the desktop becomes native Poly user space, looks 1:1 like Alpine Shell (its assets reused), and everything that ships builds on Windows and Linux hosts</title>
 <rect x="657.3" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Native user space: Poly's own system call interface and a Rust runtime; a native program, linked by rust-lld, builds on Windows and Linux and runs on Poly (boot test)</title>
-<rect x="683.8" y="233.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Native user space: Poly's own system call interface and a Rust runtime; a native program, linked by rust-lld, builds on Windows and Linux and runs on Poly (boot test) (ADR 0125: ELF programs with Poly's ABI note run in the native personality; handles are the kernel's shared open files; poly-rt with poly-heap as its allocator; /bin/native-hello prints, allocates, keeps time, uses files and spawns native and Linux children; boot group native, passing on Windows and Linux hosts)</title>
+<rect x="683.8" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>The desktop (compositor, shell, notifications, settings) runs as native Poly processes; Linux apps' Wayland and X11 windows still reach it (the desktop and toolkits boot groups pass)</title>
 <rect x="710.2" y="233.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
@@ -307,7 +307,7 @@
 <g><title>✔ Milestone: GTK and Qt apps run; VLC plays a video with sound (ADR 0120, 0123: GTK 3, GTK 4 and Qt 6 apps from the launcher, clicked and typed into; cvlc plays the test video with its sound through ALSA; VLC's Qt interface through Xwayland shows it; boot group toolkits)</title>
 <rect x="789.6" y="233.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">14/18</text>
+<text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">15/18</text>
 <text x="16.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 7  Windows GUI apps</text>
 <g><title>win32k services: windows, message queues, input routing, hooks, timers</title>
 <rect x="340.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>

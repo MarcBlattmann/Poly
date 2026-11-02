@@ -1,0 +1,15 @@
+[package]
+name = "poly-personality-native"
+description = "Poly's own system call interface for native programs (ADR 0125)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-abi.workspace = true
+poly-binfmt.workspace = true
+
+[lints]
+workspace = true

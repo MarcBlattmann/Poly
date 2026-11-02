@@ -1,0 +1,13 @@
+[build]
+target = "x86_64-unknown-none"
+
+[target.x86_64-unknown-none]
+# The target's own linker is rust-lld (no host C toolchain). Static and
+# position-dependent (no self-relocation in the runtime), the small code
+# model (the image sits low, at rust-lld's default 0x200000), no build id
+# so builds are reproducible. Poly's ABI note comes from poly-rt (ADR 0125).
+rustflags = [
+    "-C", "relocation-model=static",
+    "-C", "code-model=small",
+    "-C", "link-arg=--build-id=none",
+]
