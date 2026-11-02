@@ -1747,10 +1747,13 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   message sequences that call window procedures (`poly_win32k::user`,
   host-tested) and blocks on a per-thread event win32k sets; GDI draws in the
   process (`poly-gdi`: objects, DIB sections, raster operations, the stock
-  fonts). Each top-level window becomes one surface of the native compositor
-  over the desktop link (`poly_win32k::link` records, `desktop::Desktop` on
-  win32k's side, `win32::WindowsSurfaces` on the compositor's). Painting
-  through update regions is stubbed until its slice.
+  fonts). Each shown top-level window becomes one surface of the native
+  compositor over the desktop link (`poly_win32k::link` records through the
+  `/dev/win32k` device, `kernel/src/nt/link.rs`; `poly_win32k::surfaces` and
+  `desktop::Desktop` on win32k's side, `win32::Link` and
+  `win32::WindowsSurfaces` on the compositor's): its client area, drawn by
+  window DCs into a DIB that `ReleaseDC` commits (`PolyUserCommitSurface`).
+  Painting through update regions is stubbed until its slice.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

@@ -157,9 +157,12 @@ pub fn default_client(w: Rect, style: u32, ex: u32, menu: bool) -> Rect {
     let i = client_insets(style, ex, menu);
     let left = w.left + i.left;
     let top = w.top + i.top;
-    let right = (w.right - i.right).max(left);
-    let bottom = (w.bottom - i.bottom).max(top);
-    Rect::new(left, top, right.max(left), bottom.max(top))
+    let (right, bottom) = (w.right - i.right, w.bottom - i.bottom);
+    if right <= left || bottom <= top {
+        // Smaller than its frame: an empty client area, 0x0 (observed).
+        return Rect::new(left, top, left, top);
+    }
+    Rect::new(left, top, right, bottom)
 }
 
 /// The `MINMAXINFO` win32k fills before `WM_GETMINMAXINFO`:

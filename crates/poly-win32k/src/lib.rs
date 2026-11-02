@@ -49,6 +49,7 @@ pub mod link;
 pub mod metrics;
 pub mod proto;
 pub mod services;
+pub mod surfaces;
 pub mod user;
 pub mod wire;
 pub mod wm;

@@ -147,6 +147,7 @@ dependencies = [
  "poly-virtio-net",
  "poly-virtio-sound",
  "poly-vm",
+ "poly-win32k",
 ]
 
 [[package]]
