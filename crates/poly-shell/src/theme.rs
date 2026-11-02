@@ -242,7 +242,7 @@ pub mod settings {
     pub const HEIGHT: i32 = 620;
     /// The header row (the title, the arrows, where we are) and the
     /// sidebar (`w-56`).
-    pub const HEADER: i32 = 56;
+    pub const HEADER: i32 = 40;
     pub const SIDEBAR: i32 = 224;
     /// Sidebar rows (`h-9`, `gap-0.5`, `px-2`, inside `px-3`, 15-pixel
     /// icons 10 pixels before the text, radius 8).
@@ -287,7 +287,9 @@ pub mod settings {
     /// title, section headings (14 px semibold), labels (14 px),
     /// descriptions (12 px), dense text (13 px), eyebrows (11 px semibold,
     /// 5 % letter spacing).
-    pub const TITLE_SIZE: f32 = 24.0;
+    pub const TITLE_SIZE: f32 = 22.0;
+    /// Hairlines between rows: white at 8 %.
+    pub const HAIRLINE_ALPHA: u8 = 20;
     pub const APP_TITLE_SIZE: f32 = 16.0;
     pub const HEADING_SIZE: f32 = 14.0;
     pub const LABEL_SIZE: f32 = 14.0;

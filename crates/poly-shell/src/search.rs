@@ -40,7 +40,12 @@ fn tier(word: &str, text: &str) -> u32 {
 }
 
 /// The program's file name (`/usr/bin/foo` → `foo`).
+/// The program's file name; an open window has none (its `argv` is the
+/// shell's handle for it, which must not match queries).
 fn program(app: &App) -> &str {
+    if app.window().is_some() {
+        return "";
+    }
     app.argv.first().map_or("", |p| p.rsplit('/').next().unwrap_or(p))
 }
 
@@ -137,5 +142,17 @@ mod tests {
         // Letters in order.
         assert_eq!(names(&search(&apps, "trml", 8)), ["Terminal"]);
         assert_eq!(search(&apps, "e", 2).len(), 2, "the limit");
+    }
+
+    /// An open window matches on its title only, not on the shell's handle
+    /// for it (`poly-shell:window:1` holds the letters of "send").
+    #[test]
+    fn a_window_matches_on_its_title_only() {
+        let apps = vec![
+            crate::apps::window_entry(1, "Poly Demo", "wl-demo"),
+            app("Send Test Notification", &[], "/bin/notify-send"),
+        ];
+        assert_eq!(names(&search(&apps, "send", 8)), ["Send Test Notification"]);
+        assert_eq!(names(&search(&apps, "demo", 8)), ["Poly Demo"]);
     }
 }

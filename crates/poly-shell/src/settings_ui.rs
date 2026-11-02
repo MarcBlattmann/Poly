@@ -1,24 +1,25 @@
 //! The settings window (ADR 0117), drawn by the shell into a window the
-//! compositor frames like any other: Alpine Shell's settings app in its
-//! dark theme as its screenshots show it (ADR 0127) — the title in Averia
-//! Serif Libre and the sections' pages in a sidebar on the ground colour,
-//! back and forward arrows with where we are, the page on a lighter
-//! surface with a rounded top-left corner and a hairline edge, a display
-//! title, headed sections of rows with their controls on the right
-//! (Alpine's outline segmented choices, slider, pill toggle), cards of
-//! choices with a check mark, wallpaper tiles.
+//! compositor frames like any other, in the layout of Alpine Shell's
+//! current settings app (ADR 0127, measured on the live app): the
+//! sections as tabs in the header (Home, Personal, Devices, System) with
+//! the back and forward arrows before them and the settings search on the
+//! right; the active section's pages in the sidebar; the page on a lighter
+//! surface with a rounded top-left corner and a hairline edge, its title in
+//! Geist, labelled sections of cards of rows with their controls on the
+//! right (outline segmented choices, a slider, a pill toggle, choices with
+//! a check mark, wallpaper tiles). Home shows the machine, its memory and
+//! cards to the pages. Dark theme, Alpine's dark tokens.
 //!
 //! ```text
-//!  ┌────────────────────────────────────────────────────────────────┐
-//!  │ Settings         ← →  Sound                                    │ ← header, 56
-//!  │ PERSONAL        ╭──────────────────────────────────────────────┤
-//!  │ ▨ Wallpaper     │ Sound                                        │ ← title, Averia 24 px
-//!  │ DEVICES         │ Output                                       │ ← heading, 14 px semibold
-//!  │ ▣ Displays      │ Volume                      ━━━━━━━──── 60%  │ ← rows: label 14 px,
-//!  │ ⌨ Keyboard      │ virtio-sound                                 │   description 12 px
-//!  │ ◖ Sound         │ Mute                                   (● )  │
-//!  └─────────────────┴──────────────────────────────────────────────┘
-//!    sidebar 224         page: gutter 20
+//!  ┌──────────────────────────────────────────────────────────────────┐
+//!  │ ← →  Home [Personal] Devices System          ⌕ Search settings ⌃K │ ← header, 40
+//!  │ ▨ Wallpaper    ╭──────────────────────────────────────────────────┤
+//!  │                │ Wallpaper                                        │ ← title, 22 px medium
+//!  │                │ WALLPAPER                                        │ ← label, 11 px
+//!  │                │ ╭──────────────────────────────────────────────╮ │
+//!  │                │ │ tiles                                        │ │
+//!  └────────────────┴──────────────────────────────────────────────────┘
+//!    sidebar 224          page: gutter 20, cards radius 12
 //! ```
 //!
 //! Everything is laid out once per draw as a list of [`Item`]s with the
@@ -28,6 +29,7 @@
 
 use crate::draw::{Face, Style, Text, fill, rounded_border, rounded_outline, rounded_rect};
 use crate::icons::{Icon, lucide};
+use crate::launcher::Key;
 use crate::settings::{Change, KEYBOARDS, SCALES, Settings};
 use crate::theme::settings as t;
 use crate::theme::wallpaper::PRESETS;
@@ -44,6 +46,7 @@ const WHITE: u32 = 0xff_ffff;
 /// The pages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
+    Home,
     Display,
     Keyboard,
     Wallpaper,
@@ -53,11 +56,12 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Page; 6] =
-        [Page::Display, Page::Keyboard, Page::Wallpaper, Page::Sound, Page::DateTime, Page::About];
+    pub const ALL: [Page; 7] =
+        [Page::Home, Page::Wallpaper, Page::Display, Page::Sound, Page::Keyboard, Page::DateTime, Page::About];
 
     pub fn label(self) -> &'static str {
         match self {
+            Page::Home => "Home",
             Page::Display => "Displays",
             Page::Keyboard => "Keyboard",
             Page::Wallpaper => "Wallpaper",
@@ -70,6 +74,7 @@ impl Page {
     /// Alpine's icon for the page (its settings registry's).
     fn icon(self) -> Icon {
         match self {
+            Page::Home => lucide::HOUSE,
             Page::Display => lucide::MONITOR,
             Page::Keyboard => lucide::KEYBOARD,
             Page::Wallpaper => lucide::WALLPAPER,
@@ -79,16 +84,36 @@ impl Page {
         }
     }
 
+    /// Words the settings search finds the page by (besides its label).
+    fn keywords(self) -> &'static [&'static str] {
+        match self {
+            Page::Home => &["overview", "system", "memory"],
+            Page::Display => &["resolution", "scale", "screen", "monitor", "hidpi"],
+            Page::Keyboard => &["layout", "input", "language", "keys"],
+            Page::Wallpaper => &["background", "desktop", "picture"],
+            Page::Sound => &["volume", "mute", "audio", "speaker"],
+            Page::DateTime => &["clock", "time zone", "timezone", "date"],
+            Page::About => &["kernel", "processor", "cpu", "memory", "network", "version"],
+        }
+    }
+
     fn index(self) -> usize {
         Page::ALL.iter().position(|&p| p == self).unwrap_or(0)
     }
+
+    /// The section (tab) the page is in.
+    fn section(self) -> usize {
+        SECTIONS.iter().position(|s| s.1.contains(&self)).unwrap_or(0)
+    }
 }
 
-/// The sidebar: Alpine's sections with Poly's pages.
-const SECTIONS: [(&str, &[Page]); 3] = [
-    ("PERSONAL", &[Page::Wallpaper]),
-    ("DEVICES", &[Page::Display, Page::Keyboard, Page::Sound]),
-    ("SYSTEM", &[Page::DateTime, Page::About]),
+/// Alpine's sections with Poly's pages (sections without pages are left
+/// out, as Alpine does: Poly has nothing in Desktop yet).
+const SECTIONS: [(&str, &[Page]); 4] = [
+    ("Home", &[Page::Home]),
+    ("Personal", &[Page::Wallpaper]),
+    ("Devices", &[Page::Display, Page::Sound, Page::Keyboard]),
+    ("System", &[Page::DateTime, Page::About]),
 ];
 
 /// What the settings show about the system (the compositor finds it out).
@@ -101,6 +126,8 @@ pub struct SystemInfo {
     pub machine: String,
     pub cpu: String,
     pub memory_kib: u64,
+    /// Memory available (`MemAvailable`), for Home's bar.
+    pub memory_available_kib: u64,
     /// The display's mode now, and the modes it offers.
     pub display: (u32, u32),
     pub modes: Vec<(u32, u32)>,
@@ -114,6 +141,9 @@ pub struct SystemInfo {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
     Nav(Page),
+    Tab(usize),
+    Search,
+    Result(usize),
     Back,
     Forward,
     Mode(usize),
@@ -137,16 +167,26 @@ enum Item {
         style: Style,
         rgb: u32,
     },
-    /// A card: surface 2 with a hairline, rounded.
+    /// A card: the ghost fill, rounded.
     Card(Rect),
     /// A hairline.
     Line(Rect),
-    /// A hover or selection fill.
+    /// A fill (hover, selection, tabs).
     Fill {
         rect: Rect,
         rgb: u32,
         alpha: u8,
         radius: i32,
+    },
+    /// The settings search field.
+    Field {
+        rect: Rect,
+        focused: bool,
+    },
+    /// A bar of `value` out of 100 (Home's memory).
+    Bar {
+        rect: Rect,
+        value: u32,
     },
     /// Outline segmented choices: (option, label, active).
     Segmented {
@@ -186,11 +226,22 @@ pub struct SettingsWindow {
     /// The pages visited and where we are in them (the arrows).
     history: Vec<Page>,
     at: usize,
+    /// The settings search: its text, and whether it has the keys.
+    search: String,
+    searching: bool,
 }
 
 impl Default for SettingsWindow {
     fn default() -> SettingsWindow {
-        SettingsWindow { page: Page::Display, hover: None, dragging: false, history: vec![Page::Display], at: 0 }
+        SettingsWindow {
+            page: Page::Home,
+            hover: None,
+            dragging: false,
+            history: vec![Page::Home],
+            at: 0,
+            search: String::new(),
+            searching: false,
+        }
     }
 }
 
@@ -223,7 +274,15 @@ fn mib(kib: u64) -> String {
     }
 }
 
-/// Builds a page's items. `y` is where the next thing's capitals start.
+/// A row of a card: label, description, and what goes on its right.
+enum Control {
+    Value(String),
+    Segmented(Vec<(String, bool, Target)>),
+    Slider(u32, Option<Target>),
+    Toggle(bool, Option<Target>),
+}
+
+/// Builds a page's items. `y` is the top of the next thing.
 struct Builder<'a, 'b> {
     cx: &'a Context<'b>,
     items: Vec<Item>,
@@ -243,102 +302,123 @@ impl Builder<'_, '_> {
         self.items.push(Item::Text { x, y, max_x, text: text.into(), style, rgb });
     }
 
-    /// The cap height of `st`, rounded.
-    fn cap(&self, st: Style) -> i32 {
-        (self.cx.text.cap(st) + 0.5) as i32
-    }
-
     /// The baseline that centres a line of `st` in `top..top + h`.
     fn baseline(&self, top: i32, h: i32, st: Style) -> i32 {
         self.cx.text.centre(top, h, st)
     }
 
-    /// A section heading (14 px semibold); the first row's label starts
-    /// 43 pixels lower.
-    fn heading(&mut self, label: &str) {
-        let st = Style::new(Face::Semibold, t::HEADING_SIZE);
-        let b = self.y + self.cap(st);
-        self.text(self.left, b, self.right, label, st, t::INK);
-        self.y += 43;
+    /// The page's title: Geist 22 px medium, `tracking-tight`, a 32-pixel
+    /// line; the first section 32 pixels below it.
+    fn title(&mut self, title: &str) {
+        let st = Style::new(Face::Medium, t::TITLE_SIZE).tracking(-0.025);
+        let b = self.baseline(self.y, 32, st);
+        self.text(self.left, b, self.right, title, st, t::INK);
+        self.y += 32 + 32;
     }
 
-    /// A row's label (14 px) with a description under it (12 px, quiet):
-    /// the line of the label (its top, 20 pixels high) for the control.
-    fn row(&mut self, label: &str, desc: Option<&str>) -> Rect {
-        let b = self.y + self.cap(LABEL);
-        let max = self.right - 200;
-        self.text(self.left, b, max, label, LABEL, t::INK);
-        let line = Rect::new(self.left, self.y - 5, self.right - self.left, 20);
-        match desc {
-            Some(d) => {
-                self.text(self.left, self.y + 20 + self.cap(DESC), max, d, DESC, t::INK_QUIET);
-                self.y += t::ROW_PITCH;
+    /// A section's label (11 px medium, quiet, `pl-1`), 8 pixels above
+    /// its card.
+    fn label(&mut self, label: &str) {
+        let st = Style::new(Face::Medium, t::EYEBROW_SIZE);
+        let b = self.baseline(self.y, 16, st);
+        self.text(self.left + 4, b, self.right, label, st, t::INK_QUIET);
+        self.y += 16 + 8;
+    }
+
+    /// A card of rows (Alpine's group card: `px-3.5 py-2.5`, at least 48
+    /// pixels, hairlines between): (label, description, control).
+    fn rows(&mut self, rows: Vec<(String, Option<String>, Control)>) {
+        let heights: Vec<i32> = rows.iter().map(|r| if r.1.is_some() { 58 } else { 48 }).collect();
+        let total: i32 = heights.iter().sum();
+        let card = Rect::new(self.left, self.y, self.right - self.left, total);
+        self.items.push(Item::Card(card));
+        let mut y = self.y;
+        for (i, ((label, desc, control), h)) in rows.into_iter().zip(heights).enumerate() {
+            let r = Rect::new(card.x, y, card.width, h);
+            if i > 0 {
+                self.items.push(Item::Line(Rect::new(r.x, r.y, r.width, 1)));
             }
-            None => self.y += 44,
+            let x = r.x + t::ROW_PADDING;
+            let max = r.right() - 200;
+            match &desc {
+                None => {
+                    let b = self.baseline(r.y, r.height, LABEL);
+                    self.text(x, b, max, &label, LABEL, t::INK);
+                }
+                Some(d) => {
+                    let b = self.baseline(r.y + 10, 20, LABEL);
+                    self.text(x, b, max, &label, LABEL, t::INK);
+                    let b = self.baseline(r.y + 32, 16, DESC);
+                    self.text(x, b, max, d, DESC, t::INK_QUIET);
+                }
+            }
+            self.control(r, control);
+            y += h;
         }
-        line
+        self.y = card.bottom() + 32;
     }
 
-    /// After a section's last row: the next heading 14 pixels further.
-    fn end_section(&mut self) {
-        self.y += 14;
-    }
-
-    /// Outline segmented choices at the right of a row's line: (label,
-    /// active, target).
-    fn segmented(&mut self, line: Rect, options: &[(String, bool, Target)]) {
-        let widths: Vec<i32> = options.iter().map(|o| self.cx.text.measure(&o.0, DENSE) as i32 + 24).collect();
-        let total: i32 = widths.iter().sum::<i32>() + 10;
-        let rect = Rect::new(self.right - total, line.y + line.height / 2 - 19, total, 38);
-        let mut x = rect.x + 5;
-        let mut opts = Vec::new();
-        for (o, w) in options.iter().zip(widths) {
-            let r = Rect::new(x, rect.y + 5, w, 28);
-            opts.push((r, o.0.clone(), o.1));
-            self.targets.push((r, o.2));
-            x += w;
+    fn control(&mut self, r: Rect, c: Control) {
+        let right = r.right() - t::ROW_PADDING;
+        let mid = r.y + r.height / 2;
+        match c {
+            Control::Value(v) => {
+                let room = (right - (r.x + 200)) as f32;
+                let v = self.cx.text.fit_style(&v, DENSE, room);
+                let w = self.cx.text.measure(&v, DENSE) as i32;
+                let b = self.baseline(r.y, r.height, DENSE);
+                self.text(right - w, b, right + 1, &v, DENSE, t::INK_QUIET);
+            }
+            Control::Segmented(options) => {
+                let widths: Vec<i32> = options.iter().map(|o| self.cx.text.measure(&o.0, DENSE) as i32 + 24).collect();
+                let total: i32 = widths.iter().sum::<i32>() + 10;
+                let rect = Rect::new(right - total, mid - 19, total, 38);
+                let mut x = rect.x + 5;
+                let mut opts = Vec::new();
+                for (o, w) in options.iter().zip(widths) {
+                    let or = Rect::new(x, rect.y + 5, w, 28);
+                    opts.push((or, o.0.clone(), o.1));
+                    self.targets.push((or, o.2));
+                    x += w;
+                }
+                self.items.push(Item::Segmented { rect, options: opts });
+            }
+            Control::Slider(value, target) => {
+                let track = Rect::new(right - 40 - 12 - 176, mid - 4, 176, 8);
+                self.items.push(Item::Slider { rect: track, value, enabled: target.is_some() });
+                let v = format!("{value}%");
+                let w = self.cx.text.measure(&v, DESC) as i32;
+                let b = self.baseline(r.y, r.height, DESC);
+                self.text(right - w, b, right + 1, &v, DESC, t::INK_QUIET);
+                if let Some(tg) = target {
+                    self.targets.push((Rect::new(track.x - 6, r.y, track.width + 12, r.height), tg));
+                }
+            }
+            Control::Toggle(on, target) => {
+                let rect = Rect::new(right - 38, mid - 11, 38, 22);
+                self.items.push(Item::Toggle { rect, on });
+                if let Some(tg) = target {
+                    self.targets.push((rect, tg));
+                }
+            }
         }
-        self.items.push(Item::Segmented { rect, options: opts });
     }
 
-    /// A pill toggle at the right, its top on the label's capitals.
-    fn toggle(&mut self, line: Rect, on: bool, target: Option<Target>) {
-        let rect = Rect::new(self.right - 38, line.y + 5 - 1, 38, 22);
-        self.items.push(Item::Toggle { rect, on });
-        if let Some(tg) = target {
-            self.targets.push((rect, tg));
-        }
-    }
-
-    /// A slider at the right with its value after it.
-    fn slider(&mut self, line: Rect, value: u32, suffix: &str, target: Option<Target>) {
-        let label_w = 40;
-        let track = Rect::new(self.right - label_w - 12 - 176, line.y + line.height / 2 - 4, 176, 8);
-        self.items.push(Item::Slider { rect: track, value, enabled: target.is_some() });
-        let v = format!("{value}{suffix}");
-        let w = self.cx.text.measure(&v, DESC) as i32;
-        let b = self.baseline(line.y, line.height, DESC);
-        self.text(self.right - w, b, self.right + 1, &v, DESC, t::INK_QUIET);
-        if let Some(tg) = target {
-            self.targets.push((Rect::new(track.x - 6, line.y - 8, track.width + 12, line.height + 16), tg));
-        }
-    }
-
-    /// A card of choices (48-pixel rows with hairlines between, 36 for
-    /// long lists): label, detail on the right, a check if chosen.
+    /// A card of choices (48-pixel rows, 36 for long lists): label,
+    /// detail on the right, a check if chosen.
     fn choices(&mut self, rows: &[(String, String, bool, Target)]) {
-        let top = self.y - 8;
+        let top = self.y;
         let rh = if rows.len() > 4 { 36 } else { 48 };
         let card = Rect::new(self.left, top, self.right - self.left, rows.len() as i32 * rh);
         self.items.push(Item::Card(card));
         for (i, (label, detail, chosen, target)) in rows.iter().enumerate() {
             let r = Rect::new(card.x, top + i as i32 * rh, card.width, rh);
             if i > 0 {
-                self.items.push(Item::Line(Rect::new(r.x + 1, r.y, r.width - 2, 1)));
+                self.items.push(Item::Line(Rect::new(r.x, r.y, r.width, 1)));
             }
             if self.hover == Some(*target) {
                 let radius = if i == 0 || i == rows.len() - 1 { t::CARD_RADIUS } else { 0 };
-                self.items.push(Item::Fill { rect: r.grow(-1), rgb: WHITE, alpha: t::GHOST_ALPHA, radius });
+                self.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius });
             }
             let b = self.baseline(r.y, r.height, DENSE);
             self.text(r.x + t::ROW_PADDING, b, r.right() - 140, label, DENSE, t::INK);
@@ -360,57 +440,116 @@ impl Builder<'_, '_> {
             }
             self.targets.push((r, *target));
         }
-        self.y = card.bottom() + 8 + 32;
+        self.y = card.bottom() + 32;
     }
 
-    /// A card of label/value rows.
-    fn facts(&mut self, rows: &[(&str, String)]) {
-        let top = self.y - 8;
-        let card = Rect::new(self.left, top, self.right - self.left, rows.len() as i32 * 44);
+    /// A card of rows that lead to pages: icon, label, detail, chevron.
+    fn links(&mut self, rows: &[(Page, String)]) {
+        let top = self.y;
+        let card = Rect::new(self.left, top, self.right - self.left, rows.len() as i32 * 48);
         self.items.push(Item::Card(card));
-        for (i, (label, value)) in rows.iter().enumerate() {
-            let r = Rect::new(card.x, top + i as i32 * 44, card.width, 44);
+        for (i, (page, detail)) in rows.iter().enumerate() {
+            let r = Rect::new(card.x, top + i as i32 * 48, card.width, 48);
             if i > 0 {
-                self.items.push(Item::Line(Rect::new(r.x + 1, r.y, r.width - 2, 1)));
+                self.items.push(Item::Line(Rect::new(r.x, r.y, r.width, 1)));
             }
+            if self.hover == Some(Target::Nav(*page)) {
+                let radius = if i == 0 || i == rows.len() - 1 { t::CARD_RADIUS } else { 0 };
+                self.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius });
+            }
+            let ix = r.x + t::ROW_PADDING;
+            self.items.push(Item::Icon {
+                icon: page.icon(),
+                x: ix,
+                y: r.y + 16,
+                size: 15,
+                rgb: t::INK_QUIET,
+                alpha: 255,
+            });
             let b = self.baseline(r.y, r.height, DENSE);
-            self.text(r.x + t::ROW_PADDING, b, r.x + 140, label, DENSE, t::INK_QUIET);
-            let room = (r.right() - t::ROW_PADDING - (r.x + 150)) as f32;
-            let v = self.cx.text.fit_style(value, DENSE, room);
-            let w = self.cx.text.measure(&v, DENSE) as i32;
-            self.text(r.right() - t::ROW_PADDING - w, b, r.right(), &v, DENSE, t::INK);
+            self.text(ix + 15 + 12, b, r.right() - 160, page.label(), DENSE, t::INK);
+            let cx = r.right() - t::ROW_PADDING - 16;
+            self.items.push(Item::Icon {
+                icon: lucide::CHEVRON_RIGHT,
+                x: cx,
+                y: r.y + 16,
+                size: 16,
+                rgb: t::INK_FAINT,
+                alpha: 255,
+            });
+            if !detail.is_empty() {
+                let w = self.cx.text.measure(detail, DENSE) as i32;
+                self.text(cx - 12 - w, b, cx - 4, detail, DENSE, t::INK_QUIET);
+            }
+            self.targets.push((r, Target::Nav(*page)));
         }
-        self.y = card.bottom() + 8 + 32;
+        self.y = card.bottom() + 32;
     }
 
-    /// A note under a section (12 px, faint).
+    /// A note (12 px, faint).
     fn note(&mut self, text: &str) {
-        let b = self.y + self.cap(DESC);
-        self.text(self.left, b, self.right, text, DESC, t::INK_FAINT);
-        self.y += 30;
+        let b = self.baseline(self.y - 24, 16, DESC);
+        self.text(self.left + 4, b, self.right, text, DESC, t::INK_FAINT);
+        self.y += 8;
     }
 }
 
-impl SettingsWindow {
-    /// The sidebar's rows: (row, page).
-    fn nav(&self) -> Vec<(Rect, Page)> {
-        let mut out = Vec::new();
-        // The first section label where Alpine's second is, under "Home".
-        let mut y = t::HEADER - 2;
-        for (_, pages) in SECTIONS {
-            y += t::EYEBROW_GAP;
-            for &p in pages {
-                out.push((Rect::new(t::NAV_PADDING, y, t::SIDEBAR - 2 * t::NAV_PADDING, t::NAV_HEIGHT), p));
-                y += t::NAV_HEIGHT + t::NAV_GAP;
-            }
-            y -= t::NAV_GAP;
+/// What the settings search finds for `query`: pages whose label or
+/// keywords contain it (case-insensitive), with the word that matched.
+pub fn search(query: &str) -> Vec<(Page, String)> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for p in Page::ALL {
+        let label = p.label().to_lowercase();
+        if label.contains(&q) {
+            out.push((p, String::new()));
+        } else if let Some(k) = p.keywords().iter().find(|k| k.contains(q.as_str())) {
+            out.push((p, (*k).to_string()));
         }
-        out
+    }
+    out
+}
+
+impl SettingsWindow {
+    /// The sidebar's rows for the active section: (row, page).
+    fn nav(&self) -> Vec<(Rect, Page)> {
+        let pages = SECTIONS[self.page.section()].1;
+        pages
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| {
+                let y = t::HEADER + 4 + i as i32 * (t::NAV_HEIGHT + t::NAV_GAP);
+                (Rect::new(t::NAV_PADDING, y, t::SIDEBAR - 2 * t::NAV_PADDING, t::NAV_HEIGHT), p)
+            })
+            .collect()
+    }
+
+    /// The header's tabs: (tab, section).
+    fn tabs(&self, text: &Text) -> Vec<(Rect, usize)> {
+        let mut x = 12 + 28 + 4 + 28 + 8;
+        SECTIONS
+            .iter()
+            .enumerate()
+            .map(|(i, (label, _))| {
+                let st = if i == self.page.section() { Style::new(Face::Medium, t::DENSE_SIZE) } else { DENSE };
+                let w = text.measure(label, st) as i32 + 24;
+                let r = Rect::new(x, (t::HEADER - 28) / 2, w, 28);
+                x += w + 2;
+                (r, i)
+            })
+            .collect()
+    }
+
+    /// The search field.
+    fn field(w: i32) -> Rect {
+        Rect::new(w - 8 - 256, (t::HEADER - 32) / 2, 256, 32)
     }
 
     /// The page's items and the pointer's targets, for a window `w` × `h`.
     fn layout(&self, w: i32, h: i32, cx: &Context<'_>) -> (Vec<Item>, Vec<(Rect, Target)>) {
-        let main_top = t::HEADER + 1;
         let mut b = Builder {
             cx,
             items: Vec::new(),
@@ -418,18 +557,15 @@ impl SettingsWindow {
             hover: self.hover,
             left: t::SIDEBAR + 1 + t::GUTTER,
             right: w - t::GUTTER,
-            y: main_top + 26,
+            y: t::HEADER + 1 + t::GUTTER,
         };
-        // The header: the app's name in Averia, the arrows, where we are.
-        let app = Style::new(Face::DisplayBold, t::APP_TITLE_SIZE);
-        let ab = 22 + b.cap(app);
-        b.text(20, ab, t::SIDEBAR - 8, "Settings", app, t::INK);
+        // The header: the arrows, the sections' tabs, the search.
         let arrows = [
             (Target::Back, lucide::ARROW_LEFT, self.at > 0),
             (Target::Forward, lucide::ARROW_RIGHT, self.at + 1 < self.history.len()),
         ];
         for (i, (target, icon, enabled)) in arrows.into_iter().enumerate() {
-            let r = Rect::new(t::SIDEBAR + 14 + i as i32 * 32, (t::HEADER - 28) / 2, 28, 28);
+            let r = Rect::new(12 + i as i32 * 32, (t::HEADER - 28) / 2, 28, 28);
             if enabled && self.hover == Some(target) {
                 b.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius: t::FIELD_RADIUS });
             }
@@ -439,22 +575,45 @@ impl SettingsWindow {
                 b.targets.push((r, target));
             }
         }
-        let crumb = self.page.label();
-        let cb = 22 + b.cap(DENSE);
-        let cxp = t::SIDEBAR + 84;
-        b.text(cxp, cb, w - 16, crumb, DENSE, t::INK);
-        let cw = cx.text.measure(crumb, DENSE) as i32;
-        b.items.push(Item::Fill { rect: Rect::new(cxp, cb + 3, cw, 1), rgb: t::UNDERLINE, alpha: 255, radius: 0 });
-        // The sidebar: section labels (11 px semibold, faint, spaced) and
-        // rows (13 px, the active one medium on surface 3).
-        let eyebrow = Style::new(Face::Semibold, t::EYEBROW_SIZE).tracking(0.05);
-        let mut y = t::HEADER - 2;
-        for (label, pages) in SECTIONS {
-            b.text(20, y + 18 + b.cap(eyebrow), t::SIDEBAR - 8, label, eyebrow, t::INK_FAINT);
-            y += t::EYEBROW_GAP + pages.len() as i32 * (t::NAV_HEIGHT + t::NAV_GAP) - t::NAV_GAP;
+        let searching = !self.search.is_empty();
+        for (r, i) in self.tabs(cx.text) {
+            let active = i == self.page.section() && !searching;
+            if active {
+                b.items.push(Item::Fill { rect: r, rgb: t::SURFACE_3, alpha: 255, radius: t::FIELD_RADIUS });
+            } else if self.hover == Some(Target::Tab(i)) {
+                b.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius: t::FIELD_RADIUS });
+            }
+            let (st, ink) =
+                if active { (Style::new(Face::Medium, t::DENSE_SIZE), t::INK) } else { (DENSE, t::INK_QUIET) };
+            let tb = b.baseline(r.y, r.height, st);
+            b.text(r.x + 12, tb, r.right(), SECTIONS[i].0, st, ink);
+            b.targets.push((r, Target::Tab(i)));
         }
+        let f = Self::field(w);
+        b.items.push(Item::Field { rect: f, focused: self.searching });
+        b.items.push(Item::Icon {
+            icon: lucide::SEARCH,
+            x: f.x + 11,
+            y: f.y + 9,
+            size: 14,
+            rgb: t::INK_FAINT,
+            alpha: 255,
+        });
+        let fb = b.baseline(f.y, f.height, DENSE);
+        let (shown, ink) = if searching { (self.search.as_str(), t::INK) } else { ("Search settings", t::INK_FAINT) };
+        let end = f.x + 11 + 14 + 8 + cx.text.measure(if searching { shown } else { "" }, DENSE) as i32;
+        b.text(f.x + 11 + 14 + 8, fb, f.right() - 50, shown, DENSE, ink);
+        if self.searching {
+            b.items.push(Item::Fill { rect: Rect::new(end + 1, f.y + 8, 1, 16), rgb: t::INK, alpha: 255, radius: 0 });
+        }
+        let mono = Style::new(Face::Mono, 11.0);
+        let kw = cx.text.measure("Ctrl K", mono) as i32;
+        b.text(f.right() - 10 - kw, fb, f.right(), "Ctrl K", mono, t::INK_FAINT);
+        b.targets.push((f, Target::Search));
+        // The sidebar: the section's pages (13 px, the active one medium on
+        // surface 3).
         for (r, page) in self.nav() {
-            let active = page == self.page;
+            let active = page == self.page && !searching;
             if active {
                 b.items.push(Item::Fill { rect: r, rgb: t::SURFACE_3, alpha: 255, radius: t::FIELD_RADIUS });
             } else if self.hover == Some(Target::Nav(page)) {
@@ -475,39 +634,53 @@ impl SettingsWindow {
             b.text(r.x + t::NAV_INSET + t::NAV_ICON + 10, tb, r.right() - 8, page.label(), st, ink);
             b.targets.push((r, Target::Nav(page)));
         }
-        // The page: its title in Averia, then its sections.
-        let title = Style::new(Face::Display, t::TITLE_SIZE).tracking(-0.025);
-        let tb = b.y + b.cap(title);
-        b.text(b.left, tb, b.right, self.page.label(), title, t::INK);
-        b.y += 62;
+        if searching {
+            let found = search(&self.search);
+            b.title("Search");
+            b.label(&format!("{} result{}", found.len(), if found.len() == 1 { "" } else { "s" }));
+            let rows: Vec<(String, String, bool, Target)> = found
+                .iter()
+                .enumerate()
+                .map(|(i, (p, why))| (p.label().to_string(), why.clone(), false, Target::Result(i)))
+                .collect();
+            if rows.is_empty() {
+                b.note("No settings match.");
+            } else {
+                b.choices(&rows);
+            }
+            let _ = h;
+            return (b.items, b.targets);
+        }
         let st = cx.settings;
         match self.page {
+            Page::Home => self.home(&mut b),
             Page::Display => {
-                b.heading("Display");
+                b.title("Displays");
                 let mut modes = cx.info.modes.clone();
                 if modes.is_empty() {
                     modes.push(cx.info.display);
                 }
                 let current = st.resolution.unwrap_or(cx.info.display);
-                let line = b.row("Resolution", Some("The display's mode"));
-                let opts: Vec<(String, bool, Target)> = modes
+                b.label("Display");
+                let res: Vec<(String, bool, Target)> = modes
                     .iter()
                     .enumerate()
                     .take(3)
                     .map(|(i, &(mw, mh))| (format!("{mw}\u{d7}{mh}"), (mw, mh) == current, Target::Mode(i)))
                     .collect();
-                b.segmented(line, &opts);
-                let line = b.row("Scale", Some("The size of everything on the screen"));
-                let opts: Vec<(String, bool, Target)> =
+                let scales: Vec<(String, bool, Target)> =
                     SCALES.iter().map(|&s| (format!("{}%", s * 100), s == st.scale, Target::Scale(s))).collect();
-                b.segmented(line, &opts);
+                b.rows(vec![
+                    ("Resolution".into(), Some("The display's mode".into()), Control::Segmented(res)),
+                    ("Scale".into(), Some("The size of everything on the screen".into()), Control::Segmented(scales)),
+                ]);
                 if modes.len() <= 1 {
-                    b.end_section();
                     b.note("Other modes come with the KMS display path.");
                 }
             }
             Page::Keyboard => {
-                b.heading("Keyboard layout");
+                b.title("Keyboard");
+                b.label("Keyboard layout");
                 let rows: Vec<(String, String, bool, Target)> = KEYBOARDS
                     .iter()
                     .enumerate()
@@ -519,40 +692,42 @@ impl SettingsWindow {
                 b.note("Every window gets the new layout at once.");
             }
             Page::Wallpaper => {
-                b.heading("Wallpaper");
+                b.title("Wallpaper");
+                b.label("Wallpaper");
                 let cols = 3;
                 let gap = 12;
                 let tw = (b.right - b.left - gap * (cols - 1)) / cols;
                 let th = tw * 9 / 16;
-                let top = b.y - 8;
+                let top = b.y;
                 for (i, p) in PRESETS.iter().enumerate() {
                     let (c, r) = (i as i32 % cols, i as i32 / cols);
                     let rect = Rect::new(b.left + c * (tw + gap), top + r * (th + 30), tw, th);
                     b.items.push(Item::Tile { rect, id: p.0, selected: st.wallpaper == p.0 });
-                    let lb = rect.bottom() + 8 + b.cap(DESC);
+                    let lb = b.baseline(rect.bottom() + 6, 16, DESC);
                     let ink = if st.wallpaper == p.0 { t::INK } else { t::INK_QUIET };
                     b.text(rect.x, lb, rect.right(), p.1, DESC, ink);
                     b.targets.push((Rect::new(rect.x, rect.y, rect.width, rect.height + 24), Target::Wallpaper(i)));
                 }
             }
             Page::Sound => {
-                b.heading("Output");
+                b.title("Sound");
+                b.label("Output");
                 let card = cx.info.sound.clone().unwrap_or_else(|| "No sound card found".into());
                 let enabled = cx.info.sound.is_some();
-                let line = b.row("Volume", Some(&card));
-                b.slider(line, st.volume, "%", enabled.then_some(Target::Volume));
-                let line = b.row("Mute", Some("Silence every program"));
-                b.toggle(line, st.muted, enabled.then_some(Target::Mute));
+                b.rows(vec![
+                    ("Volume".into(), Some(card), Control::Slider(st.volume, enabled.then_some(Target::Volume))),
+                    (
+                        "Mute".into(),
+                        Some("Silence every program".into()),
+                        Control::Toggle(st.muted, enabled.then_some(Target::Mute)),
+                    ),
+                ]);
             }
             Page::DateTime => {
-                b.heading("Clock");
-                let line = b.row("Local time", None);
-                let v = cx.now;
-                let w = cx.text.measure(v, DENSE) as i32;
-                let vb = b.baseline(line.y, line.height, DENSE);
-                b.text(b.right - w, vb, b.right + 1, v, DENSE, t::INK_QUIET);
-                b.end_section();
-                b.heading("Time zone");
+                b.title("Date & time");
+                b.label("Clock");
+                b.rows(vec![("Local time".into(), None, Control::Value(cx.now.into()))]);
+                b.label("Time zone");
                 let rows: Vec<(String, String, bool, Target)> = ZONES
                     .iter()
                     .enumerate()
@@ -565,8 +740,9 @@ impl SettingsWindow {
             }
             Page::About => {
                 let i = cx.info;
-                b.heading("System");
-                let rows: Vec<(&str, String)> = vec![
+                b.title("About");
+                b.label("System");
+                let rows: Vec<(String, Option<String>, Control)> = vec![
                     ("System", i.os.clone()),
                     ("Kernel", i.kernel.clone()),
                     (
@@ -578,12 +754,59 @@ impl SettingsWindow {
                     ("Sound", i.sound.clone().unwrap_or_else(|| "none".into())),
                     ("Network", i.network.clone()),
                     ("Session bus", i.session_bus.clone()),
-                ];
-                b.facts(&rows);
+                ]
+                .into_iter()
+                .map(|(l, v)| (l.to_string(), None, Control::Value(v)))
+                .collect();
+                b.rows(rows);
             }
         }
         let _ = h;
         (b.items, b.targets)
+    }
+
+    /// Home: the wallpaper, the machine and its memory, cards to pages.
+    fn home(&self, b: &mut Builder<'_, '_>) {
+        let cx = b.cx;
+        let st = cx.settings;
+        let hero = Rect::new(b.left, b.y, 236, 132);
+        b.items.push(Item::Tile {
+            rect: hero,
+            id: PRESETS.iter().find(|p| p.0 == st.wallpaper).map_or(PRESETS[0].0, |p| p.0),
+            selected: false,
+        });
+        let x = hero.right() + 20;
+        let name = Style::new(Face::Medium, t::TITLE_SIZE).tracking(-0.025);
+        let nb = b.baseline(hero.y, 30, name);
+        b.text(x, nb, b.right, "Poly", name, t::INK);
+        let i = cx.info;
+        let b1 = b.baseline(hero.y + 30, 18, DENSE);
+        b.text(x, b1, b.right, &i.os, DENSE, t::INK);
+        let b2 = b.baseline(hero.y + 48, 16, DESC);
+        let machine = if i.cpu.is_empty() { i.machine.clone() } else { format!("{} \u{b7} {}", i.machine, i.cpu) };
+        b.text(x, b2, b.right, &machine, DESC, t::INK_QUIET);
+        // Memory in use.
+        let label = Style::new(Face::Medium, t::EYEBROW_SIZE);
+        let used = i.memory_kib.saturating_sub(i.memory_available_kib);
+        let pct = (used * 100).checked_div(i.memory_kib).unwrap_or(0) as u32;
+        let gib = |k: u64| format!("{:.1} GB", k as f64 / (1024.0 * 1024.0));
+        let ly = hero.y + 96;
+        let lb = b.baseline(ly, 16, label);
+        b.text(x, lb, b.right, "Memory", label, t::INK);
+        let v = format!("{} of {}", gib(used), gib(i.memory_kib));
+        let vw = cx.text.measure(&v, DESC) as i32;
+        b.text(b.right - vw, lb, b.right + 1, &v, DESC, t::INK_QUIET);
+        b.items.push(Item::Bar { rect: Rect::new(x, ly + 20, b.right - x, 6), value: pct });
+        b.y = hero.bottom() + 26;
+        let wall = PRESETS.iter().find(|p| p.0 == st.wallpaper).map_or("", |p| p.1);
+        let kb = KEYBOARDS.iter().find(|k| k.0 == st.keyboard).map_or("", |k| k.1);
+        b.links(&[
+            (Page::Wallpaper, wall.to_string()),
+            (Page::Display, format!("{}\u{d7}{}", i.display.0, i.display.1)),
+            (Page::Sound, if i.sound.is_some() { format!("{}%", st.volume) } else { String::new() }),
+            (Page::Keyboard, kb.to_string()),
+            (Page::DateTime, cx.now.to_string()),
+        ]);
     }
 
     /// The target at logical (`x`, `y`).
@@ -622,16 +845,24 @@ impl SettingsWindow {
         self.hover.take().is_some()
     }
 
-    /// Go to page `p` (remembered for the arrows).
+    /// Go to page `p` (remembered for the arrows); the search ends.
     fn go(&mut self, p: Page) -> bool {
+        let was_searching = !self.search.is_empty();
+        self.search.clear();
+        self.searching = false;
         if p == self.page {
-            return false;
+            return was_searching;
         }
         self.history.truncate(self.at + 1);
         self.history.push(p);
         self.at = self.history.len() - 1;
         self.page = p;
         true
+    }
+
+    /// Open the window at page `p` (from outside: the ridge, a hotkey).
+    pub fn open_at(&mut self, p: Page) {
+        self.go(p);
     }
 
     /// A left button press or release at (`x`, `y`).
@@ -648,15 +879,35 @@ impl SettingsWindow {
             self.dragging = false;
             return (false, None);
         }
-        let Some(target) = self.target_at(x, y, w, h, cx) else { return (false, None) };
+        let target = self.target_at(x, y, w, h, cx);
+        if target != Some(Target::Search) && self.searching && self.search.is_empty() {
+            self.searching = false;
+        }
+        let Some(target) = target else { return (false, None) };
         let st = cx.settings;
         let change = match target {
             Target::Nav(p) => return (self.go(p), None),
+            Target::Tab(i) => return (self.go(SECTIONS[i].1[0]), None),
+            Target::Search => {
+                self.searching = true;
+                return (true, None);
+            }
+            Target::Result(i) => {
+                let found = search(&self.search);
+                return match found.get(i) {
+                    Some(&(p, _)) => {
+                        self.go(p);
+                        (true, None)
+                    }
+                    None => (false, None),
+                };
+            }
             Target::Back | Target::Forward => {
                 let at = if target == Target::Back { self.at.checked_sub(1) } else { Some(self.at + 1) };
                 if let Some(&p) = at.and_then(|a| self.history.get(a)) {
                     self.at = at.unwrap_or(0);
                     self.page = p;
+                    self.search.clear();
                     return (true, None);
                 }
                 return (false, None);
@@ -679,6 +930,48 @@ impl SettingsWindow {
             Target::Zone(i) => ZONES.get(i).map(|z| Change::TimeZone(z.0.to_string())),
         };
         (true, change)
+    }
+
+    /// A key while the window has the keyboard: typing into the search
+    /// (once its field was clicked, or any letter: typing searches, as in
+    /// Alpine), Enter opens the first result, Escape clears it; otherwise
+    /// Up and Down step through the pages. Returns whether to draw again.
+    pub fn key(&mut self, key: Key) -> bool {
+        match key {
+            Key::Char(c) if !c.is_control() => {
+                self.searching = true;
+                self.search.push(c);
+                true
+            }
+            Key::Backspace if self.searching => self.search.pop().is_some(),
+            Key::BackspaceWord | Key::Clear if self.searching => {
+                self.search.clear();
+                true
+            }
+            Key::Escape if self.searching || !self.search.is_empty() => {
+                self.search.clear();
+                self.searching = false;
+                true
+            }
+            Key::Enter if !self.search.is_empty() => match search(&self.search).first() {
+                Some(&(p, _)) => self.go(p),
+                None => false,
+            },
+            Key::Up => {
+                self.step_page(false);
+                true
+            }
+            Key::Down => {
+                self.step_page(true);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The search's text.
+    pub fn search_text(&self) -> &str {
+        &self.search
     }
 
     /// Up or Down: the previous or next page.
@@ -709,14 +1002,24 @@ impl SettingsWindow {
                 Item::Text { x, y, max_x, text: s_, style, rgb } => {
                     text.draw_style(fb, all, (x * s) as f32, y * s, max_x * s, s_, style.scaled(s), *rgb, 255);
                 }
-                Item::Card(c) => {
-                    let c = c.scale(s);
-                    rounded_rect(fb, all, c, t::CARD_RADIUS * s, t::SURFACE_2, 255);
-                    rounded_border(fb, all, c, t::CARD_RADIUS * s, s, t::LINE, 255);
-                }
-                Item::Line(l) => fill(fb, all, Rect::new(l.x * s, l.y * s, l.width * s, s), t::LINE, 255),
+                Item::Card(c) => rounded_rect(fb, all, c.scale(s), t::CARD_RADIUS * s, WHITE, t::GHOST_ALPHA),
+                Item::Line(l) => fill(fb, all, Rect::new(l.x * s, l.y * s, l.width * s, s), WHITE, t::HAIRLINE_ALPHA),
                 Item::Fill { rect, rgb, alpha, radius } => {
                     rounded_rect(fb, all, rect.scale(s), radius * s, *rgb, *alpha)
+                }
+                Item::Field { rect, focused } => {
+                    let f = rect.scale(s);
+                    rounded_rect(fb, all, f, t::FIELD_RADIUS * s, t::SURFACE_2, 255);
+                    let line = if *focused { t::INK_FAINT } else { t::LINE };
+                    rounded_border(fb, all, f, t::FIELD_RADIUS * s, s, line, 255);
+                }
+                Item::Bar { rect, value } => {
+                    let r = rect.scale(s);
+                    rounded_rect(fb, all, r, r.height / 2, WHITE, t::TRACK_ALPHA);
+                    let filled = Rect::new(r.x, r.y, r.width * (*value).min(100) as i32 / 100, r.height);
+                    if filled.width > 0 {
+                        rounded_rect(fb, all.intersect(&filled), r, r.height / 2, t::INK, 255);
+                    }
                 }
                 Item::Segmented { rect, options } => {
                     let rs = rect.scale(s);
@@ -848,6 +1151,7 @@ mod tests {
             machine: "x86_64".into(),
             cpu: "QEMU Virtual CPU".into(),
             memory_kib: 512 * 1024,
+            memory_available_kib: 256 * 1024,
             display: (1280, 800),
             modes: vec![(1280, 800)],
             sound: Some("virtio-sound".into()),
@@ -856,11 +1160,11 @@ mod tests {
         }
     }
 
+    static NO_PICTURES: crate::picture::Pictures = crate::picture::Pictures::new();
+
     fn cx<'a>(st: &'a Settings, i: &'a SystemInfo, text: &'a Text) -> Context<'a> {
         Context { settings: st, info: i, text, now: "12:00 Nov 1", utc: 1_793_491_200, pictures: &NO_PICTURES }
     }
-
-    static NO_PICTURES: crate::picture::Pictures = crate::picture::Pictures::new();
 
     const W: i32 = t::WIDTH;
     const H: i32 = t::HEIGHT;
@@ -873,14 +1177,19 @@ mod tests {
     }
 
     #[test]
-    fn pages_and_changes() {
+    fn tabs_pages_and_changes() {
         let text = Text::new(None);
         let (st, i) = (Settings::default(), info());
         let c = cx(&st, &i, &text);
         let mut win = SettingsWindow::default();
-        // The sidebar switches pages.
-        let (x, y) = at(&win, &c, Target::Nav(Page::Sound));
+        assert_eq!(win.page, Page::Home);
+        // The Devices tab opens its first page; its pages are in the sidebar.
+        let (x, y) = at(&win, &c, Target::Tab(2));
         assert_eq!(win.button(x, y, true, W, H, &c), (true, None));
+        assert_eq!(win.page, Page::Display);
+        assert_eq!(win.nav().iter().map(|n| n.1).collect::<Vec<_>>(), [Page::Display, Page::Sound, Page::Keyboard]);
+        let (x, y) = at(&win, &c, Target::Nav(Page::Sound));
+        win.button(x, y, true, W, H, &c);
         assert_eq!(win.page, Page::Sound);
         win.button(x, y, false, W, H, &c);
         // The volume slider: a press at its middle is 50 %, a drag moves it.
@@ -906,11 +1215,40 @@ mod tests {
         win.page = Page::Display;
         let (dx, dy) = at(&win, &c, Target::Scale(2));
         assert_eq!(win.button(dx, dy, true, W, H, &c).1, Some(Change::Scale(2)));
-        // Pages by key.
-        win.step_page(false);
-        assert_eq!(win.page, Page::About);
-        win.step_page(true);
+        // Home's cards lead to pages.
+        win.page = Page::Home;
+        let (hx, hy) = at(&win, &c, Target::Nav(Page::Sound));
+        win.button(hx, hy, true, W, H, &c);
+        assert_eq!(win.page, Page::Sound);
+    }
+
+    #[test]
+    fn the_search_finds_pages_by_words() {
+        assert_eq!(search("vol").first().map(|r| r.0), Some(Page::Sound));
+        assert_eq!(search("zone").first().map(|r| r.0), Some(Page::DateTime));
+        assert!(search("  ").is_empty());
+        let text = Text::new(None);
+        let (st, i) = (Settings::default(), info());
+        let c = cx(&st, &i, &text);
+        let mut win = SettingsWindow::default();
+        let (fx, fy) = at(&win, &c, Target::Search);
+        win.button(fx, fy, true, W, H, &c);
+        for ch in "layout".chars() {
+            assert!(win.key(Key::Char(ch)));
+        }
+        let (rx, ry) = at(&win, &c, Target::Result(0));
+        win.button(rx, ry, true, W, H, &c);
+        assert_eq!(win.page, Page::Keyboard);
+        assert_eq!(win.search_text(), "", "going to a page ends the search");
+        // Enter opens the first result; Escape clears.
+        for ch in "scale".chars() {
+            win.key(Key::Char(ch));
+        }
+        assert!(win.key(Key::Enter));
         assert_eq!(win.page, Page::Display);
+        win.key(Key::Char('x'));
+        assert!(win.key(Key::Escape));
+        assert_eq!(win.search_text(), "");
     }
 
     #[test]
@@ -921,14 +1259,14 @@ mod tests {
         let mut win = SettingsWindow::default();
         let (_, targets) = win.layout(W, H, &c);
         assert!(!targets.iter().any(|(_, t)| *t == Target::Back), "nowhere to go back to");
-        let (x, y) = at(&win, &c, Target::Nav(Page::Sound));
+        let (x, y) = at(&win, &c, Target::Tab(3));
         win.button(x, y, true, W, H, &c);
         let (bx, by) = at(&win, &c, Target::Back);
         win.button(bx, by, true, W, H, &c);
-        assert_eq!(win.page, Page::Display);
+        assert_eq!(win.page, Page::Home);
         let (fx, fy) = at(&win, &c, Target::Forward);
         win.button(fx, fy, true, W, H, &c);
-        assert_eq!(win.page, Page::Sound);
+        assert_eq!(win.page, Page::DateTime);
     }
 
     #[test]
@@ -950,12 +1288,14 @@ mod tests {
             assert_eq!(fb.pixel(W as u32 - 5, H as u32 - 5), Some(t::SURFACE_1), "the page");
             assert_eq!(fb.pixel(t::SIDEBAR as u32 + 40, t::HEADER as u32), Some(t::LINE), "the page's hairline");
         }
-        // The active page is highlighted in the sidebar.
+        // The active page is highlighted in the sidebar, its tab in the header.
         win.page = Page::Display;
         let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
         win.draw(&mut fb, W, H, 1, &c);
         let row = win.nav().into_iter().find(|n| n.1 == Page::Display).unwrap().0;
         assert_eq!(fb.pixel((row.right() - 6) as u32, (row.y + 4) as u32), Some(t::SURFACE_3));
+        let tab = win.tabs(&text).into_iter().find(|t| t.1 == 2).unwrap().0;
+        assert_eq!(fb.pixel((tab.x + 4) as u32, (tab.y + 14) as u32), Some(t::SURFACE_3));
         // At scale 2 too.
         let mut fb = MemoryFramebuffer::new(2 * W as u32, 2 * H as u32);
         win.draw(&mut fb, W, H, 2, &c);
@@ -977,6 +1317,22 @@ mod tests {
         // On: the track in the ink, the knob in the ground colour on the right.
         assert_eq!(fb.pixel((toggle.x + 6) as u32, (toggle.y + 11) as u32), Some(t::INK));
         assert_eq!(fb.pixel((toggle.x + 27) as u32, (toggle.y + 11) as u32), Some(t::SURFACE_0));
+    }
+
+    /// The places the `desktop-shell` boot test clicks (tools/xtask/src/desktop.rs).
+    #[test]
+    fn the_boot_tests_clicks_land() {
+        let text = Text::new(None);
+        let (st, i) = (Settings::default(), info());
+        let c = cx(&st, &i, &text);
+        let mut win = SettingsWindow::default();
+        assert_eq!(win.target_at(400, 339, W, H, &c), Some(Target::Nav(Page::Sound)));
+        win.button(400, 339, true, W, H, &c);
+        assert_eq!(win.button(691, 178, true, W, H, &c).1, Some(Change::Volume(30)));
+        win.button(691, 178, false, W, H, &c);
+        assert_eq!(win.target_at(100, 138, W, H, &c), Some(Target::Nav(Page::Keyboard)));
+        win.button(100, 138, true, W, H, &c);
+        assert_eq!(win.target_at(500, 221, W, H, &c), Some(Target::Keyboard(1)));
     }
 
     #[test]

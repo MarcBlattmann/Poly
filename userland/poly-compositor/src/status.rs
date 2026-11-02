@@ -47,9 +47,19 @@ pub fn cpu_model(cpuinfo: &str) -> String {
 
 /// `MemTotal` of `/proc/meminfo`'s text, in KiB.
 pub fn mem_total_kib(meminfo: &str) -> u64 {
+    meminfo_kib(meminfo, "MemTotal:")
+}
+
+/// `MemAvailable` of `/proc/meminfo`'s text, in KiB (the settings' Home
+/// shows what is in use).
+pub fn mem_available_kib(meminfo: &str) -> u64 {
+    meminfo_kib(meminfo, "MemAvailable:")
+}
+
+fn meminfo_kib(meminfo: &str, field: &str) -> u64 {
     meminfo
         .lines()
-        .find_map(|l| l.strip_prefix("MemTotal:"))
+        .find_map(|l| l.strip_prefix(field))
         .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
         .unwrap_or(0)
 }
@@ -80,6 +90,7 @@ mod tests {
         assert_eq!(cpu_model(""), "");
         assert_eq!(mem_total_kib("MemTotal:        524288 kB\nMemFree: 1 kB\n"), 524_288);
         assert_eq!(mem_total_kib("nothing"), 0);
+        assert_eq!(mem_available_kib("MemTotal: 8 kB\nMemAvailable:   4096 kB\n"), 4096);
         assert_eq!(uname().3, "x86_64");
     }
 }

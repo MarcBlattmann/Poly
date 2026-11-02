@@ -342,7 +342,7 @@ impl Shell {
             }
             (Panel::Control, Some(Hit::Gear)) => {
                 self.close_panel();
-                return Press::Settings(Page::Display);
+                return Press::Settings(Page::Home);
             }
             (Panel::Calendar, Some(h @ (Hit::Prev | Hit::Next | Hit::Today))) => {
                 self.panels.day = match h {
