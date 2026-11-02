@@ -333,6 +333,9 @@ pub struct Palette {
     pub faint: u32,
     pub on_solid: u32,
     pub knob_off: u32,
+    /// Alpine's `danger` (`tokens.css`: `#f87171` dark, `#dc2626` light):
+    /// a refused shortcut's message.
+    pub danger: u32,
     /// Coverages of `ink` for ghost fills, tracks and hairlines.
     pub ghost: u8,
     pub track: u8,
@@ -353,6 +356,7 @@ pub const DARK: Palette = Palette {
     faint: settings::INK_FAINT,
     on_solid: settings::SURFACE_0,
     knob_off: settings::KNOB_OFF,
+    danger: 0xf8_7171,
     ghost: settings::GHOST_ALPHA,
     track: settings::TRACK_ALPHA,
     hairline: settings::HAIRLINE_ALPHA,
@@ -377,6 +381,7 @@ pub const LIGHT: Palette = Palette {
     faint: 0x91_9191,
     on_solid: 0xff_ffff,
     knob_off: 0xff_ffff,
+    danger: 0xdc_2626,
     ghost: 13,
     track: 38,
     hairline: 23,

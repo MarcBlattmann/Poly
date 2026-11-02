@@ -22,10 +22,11 @@
 //!                       (default: the self-test's verdict), save the screen to <file>
 //!                       (default target/poly-screen.png; .ppm for PPM) and quit;
 //!                       --virtio-gpu: the screen of a virtio GPU instead of the VGA
-//!   desktop [--release] [kernel args...]
+//!   desktop [--release] [--fresh-state] [kernel args...]
 //!                       boot straight into Poly's desktop: the Wayland compositor and shell on a
 //!                       virtio GPU through DRM/KMS, a virtio keyboard and tablet (desktop.rs,
-//!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop
+//!                       ADR 0107); in QEMU's window, or on VNC port 5900 without a desktop; the settings
+//!                       (keyboard shortcuts too) on target/poly-desktop-state.img, kept between runs
 //!   test                host unit tests + kernel boot tests in QEMU
 //!   boot-tests [--list] [--shard <name>]... [group...]
 //!                       the boot tests alone: all, the groups named (`selftest` is

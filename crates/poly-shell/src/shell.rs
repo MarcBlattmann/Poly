@@ -268,11 +268,14 @@ impl Shell {
 
     /// The time is `secs` on the Unix clock (`offset_minutes` east of UTC):
     /// the ridge's clock shows it. True if the text changed.
+    /// A shortcut being recorded gives up after 15 seconds; then too it
+    /// returns true (the settings window is drawn again).
     pub fn set_time(&mut self, secs: i64, offset_minutes: i32) -> bool {
         self.time = (secs, offset_minutes);
+        let timed_out = self.settings_window.recorder.time_out(secs);
         let text = crate::clock::ridge_text(&crate::clock::civil(secs, offset_minutes));
         if text == self.clock {
-            return false;
+            return timed_out;
         }
         self.clock = text;
         self.damage.push(self.ridge_rect());
@@ -441,6 +444,31 @@ impl Shell {
     /// draw it again.
     pub fn settings_key(&mut self, key: Key) -> bool {
         self.settings_window.key(key)
+    }
+
+    /// A key event for a shortcut being recorded (`key` on `layout`), before
+    /// anything else sees it. None if it is not the recorder's; otherwise
+    /// whether to draw the settings window again and the new combination
+    /// to apply (ADR 0129).
+    pub fn shortcut_key(
+        &mut self,
+        key: poly_input::Key,
+        pressed: bool,
+        layout: &poly_input::Layout,
+    ) -> Option<(bool, Option<Change>)> {
+        let (swallow, outcome) = self.settings_window.recorder.key(key, pressed);
+        if !swallow {
+            return None;
+        }
+        Some(match outcome {
+            Some(o) => (true, self.settings_window.recorded(o, &self.settings.shortcuts, layout)),
+            None => (false, None),
+        })
+    }
+
+    /// The keymap the compositor matches keys against.
+    pub fn shortcuts(&self) -> &crate::shortcuts::Keymap {
+        &self.settings.shortcuts
     }
 
     /// The sound card's name (the control centre shows it).

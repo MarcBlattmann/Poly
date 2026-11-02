@@ -361,6 +361,7 @@ dependencies = [
  "poly-dbus",
  "poly-font",
  "poly-gfx",
+ "poly-input",
  "poly-wayland",
 ]
 
