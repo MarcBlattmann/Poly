@@ -115,6 +115,9 @@ crate::wire_struct! {
         /// The size was `CW_USEDEFAULT`: CREATESTRUCT shows -1 x -1
         /// (observed on the oracle).
         pub default_size: bool,
+        /// The height asked, which CREATESTRUCT shows with a default width
+        /// unless it is `CW_USEDEFAULT` too (-1 then; observed).
+        pub asked_cy: i32,
     }
 }
 
