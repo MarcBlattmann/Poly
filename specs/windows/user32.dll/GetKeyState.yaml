@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetKeyState
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read.
+summary: >
+  Returns the calling thread's state of a virtual key as of the input
+  messages it has retrieved so far (not the physical state): the state byte
+  (0x80 down, 0x01 toggled) sign-extended to 16 bits, so a key that is down
+  reads 0xFF80 or 0xFF81. The toggle bit flips with every press of the key,
+  mouse buttons included.
+interface:
+  signature: "SHORT GetKeyState(int virt_key)"
+  return: "up: 0x0000 or 0x0001 (toggled); down: 0xFF80 or 0xFF81 (bits 0x7F80 set as well as 0x8000; only the down bit and bit 0 carry meaning)"
+  virt_key: "VK_* codes of winuser.h, 1..0xFF; VK_SHIFT/VK_CONTROL (generic) and VK_LSHIFT/VK_RSHIFT/VK_LCONTROL/VK_RCONTROL are all answered"
+rules:
+  follows_retrieval: "the state changes when the input message is retrieved from the queue: a key-down sent by SendInput but not yet retrieved still reads up (GetAsyncKeyState already down); in the key's own WM_KEYDOWN and WM_CHAR handlers it reads down, in its WM_KEYUP handler up"
+  shift_sequence: "Shift down, A down, A up, Shift up: in WM_KEYDOWN(VK_SHIFT) Shift and LShift down, A up; in WM_KEYDOWN(A) and WM_CHAR('A') both down; in WM_KEYUP(A) Shift down, A up; in WM_KEYUP(VK_SHIFT) everything up; VK_RSHIFT stays up throughout"
+  generic_and_sides: "the generic code is down when either side is: left shift (scan 0x2A) sets VK_SHIFT and VK_LSHIFT, right shift (0x36) VK_SHIFT and VK_RSHIFT; VK_RCONTROL comes from scan 0x1D with the extended flag"
+  toggle: "the toggle bit flips at each key-down (already flipped inside the first WM_KEYDOWN handler); three presses of A flip it three times"
+  mouse_buttons: "VK_LBUTTON is down in the WM_LBUTTONDOWN handler and up in WM_LBUTTONUP; VK_RBUTTON likewise; with the left button held a right click shows both down in WM_RBUTTONDOWN; the button's toggle bit flips per click"
+  other_threads: "a second thread of the process (own queue, never received input) created while the main thread holds Shift (retrieved) reads VK_SHIFT down, before and after AttachThreadInput to the main thread (AttachThreadInput returns 1 both ways), and up after the release"
+  set_keyboard_state: "after SetKeyboardState with VK_SHIFT = 0x80, GetKeyState(VK_SHIFT) is 0xFF80 (see GetKeyboardState)"
+errors:
+  above_0xff: "virt_key 0x141, 0x241, 0x10041, -191: 0 (even while 'A' is down), last error ERROR_INVALID_PARAMETER (87)"
+  zero_ff: "virt_key 0 and 0xFF: 0, last error unchanged"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering:
+  - "the key state is updated as the message is removed from the queue (PeekMessage/GetMessage), before the window procedure runs"
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+  Keyboard input in the tests is real input (SendInput) to a WS_EX_TOPMOST
+  popup of the test that is the foreground window; the tests never send Alt,
+  AltGr, the Windows keys or function keys.
+not_covered: >
+  Keys held long enough to auto-repeat (real auto-repeat comes from the
+  keyboard, not SendInput). DPI awareness other than unaware (the tests have
+  no manifest), several monitors, other keyboard layouts than German, IME,
+  touch and pen, hooks, menus and the menu loop.

@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "uw_no_validate",
+      "exe_sha256": "4cc0ea353261fd1d2eaffada38e3522252ce46f4bbffcacc4dc186139fa8b7e1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApub3QgdmFsaWRhdGluZzogVXBkYXRlV2luZG93IDEgV01fUEFJTlQgc2VudCAxIHN0aWxsIGludmFsaWQgMSByZWN0IDAsMCw2MCw0MCBxdWV1ZWQgMQpub3QgdmFsaWRhdGluZywgYWdhaW46IFVwZGF0ZVdpbmRvdyAxIFdNX1BBSU5UIHNlbnQgMQp2YWxpZGF0aW5nOiBmaXJzdCBVcGRhdGVXaW5kb3cgc2VudCAxIHNlY29uZCBzZW50IDAgcXVldWVkIDAKaGlkZGVuIGNoaWxkOiBJbnZhbGlkYXRlUmVjdCB0aGVuIFVwZGF0ZVdpbmRvdyAxIFdNX1BBSU5UIHNlbnQgMCBjaGlsZCBpbnZhbGlkIDAKV01fUEFJTlQgd2FpdGluZyBiZWZvcmUgVXBkYXRlV2luZG93IDEgYWZ0ZXIgMCBzZW50IDEKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nnot validating: UpdateWindow 1 WM_PAINT sent 1 still invalid 1 rect 0,0,60,40 queued 1\nnot validating, again: UpdateWindow 1 WM_PAINT sent 1\nvalidating: first UpdateWindow sent 1 second sent 0 queued 0\nhidden child: InvalidateRect then UpdateWindow 1 WM_PAINT sent 0 child invalid 0\nWM_PAINT waiting before UpdateWindow 1 after 0 sent 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 90
+    },
+    {
+      "name": "uw_paint",
+      "exe_sha256": "a8f582b9dc5b6c6275266983adf3bfd04245f4d65d580cbd25ee24e74fd6acb0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAotLSBjcmVhdGlvbiBvZiBQICh2aXNpYmxlKSBhbmQgQyBzZW50OgogIFAgV01fTkNQQUlOVCByZ249MQogIFAgV01fRVJBU0VCS0dORAogIFAgV01fRVJBU0VCS0dORAotLSBmaXJzdCBVcGRhdGVXaW5kb3cgb2YgdGhlIG5ldyB2aXNpYmxlIHBvcHVwOiByZXR1cm5lZCAxIGVycm9yIDAgd21fcGFpbnRfd2FpdGluZ19hZnRlcj0wCiAgUCBXTV9QQUlOVAogIEMgV01fUEFJTlQKICBDIFdNX05DUEFJTlQgcmduPTEKICBDIFdNX0VSQVNFQktHTkQKLS0gYWdhaW4sIG5vdGhpbmcgaW52YWxpZDogcmV0dXJuZWQgMSBlcnJvciAwIHdtX3BhaW50X3dhaXRpbmdfYWZ0ZXI9MAotLSBhZnRlciBJbnZhbGlkYXRlUmVjdChQLCBOVUxMLCBGQUxTRSk6IHJldHVybmVkIDEgZXJyb3IgMCB3bV9wYWludF93YWl0aW5nX2FmdGVyPTAKICBQIFdNX1BBSU5UCiAgQyBXTV9QQUlOVAogIEMgV01fTkNQQUlOVCByZ249MQogIEMgV01fRVJBU0VCS0dORAotLSBVcGRhdGVXaW5kb3coUCkgd2hpbGUgb25seSBDIGlzIGludmFsaWQ6IHJldHVybmVkIDEgZXJyb3IgMCB3bV9wYWludF93YWl0aW5nX2FmdGVyPTAKICBDIFdNX1BBSU5UCiAgQyBXTV9FUkFTRUJLR05ECi0tIHRoZW4gVXBkYXRlV2luZG93KEMpOiByZXR1cm5lZCAxIGVycm9yIDAgd21fcGFpbnRfd2FpdGluZ19hZnRlcj0wCi0tIGJvdGggaW52YWxpZCwgVXBkYXRlV2luZG93KEMpOiByZXR1cm5lZCAxIGVycm9yIDAgd21fcGFpbnRfd2FpdGluZ19hZnRlcj0xCiAgQyBXTV9QQUlOVAogIEMgV01fTkNQQUlOVCByZ249MQogIEMgV01fRVJBU0VCS0dORAotLSB0aGVuIFVwZGF0ZVdpbmRvdyhQKTogcmV0dXJuZWQgMSBlcnJvciAwIHdtX3BhaW50X3dhaXRpbmdfYWZ0ZXI9MAogIFAgV01fUEFJTlQKICBQIFdNX0VSQVNFQktHTkQKLS0gYm90aCBpbnZhbGlkLCBVcGRhdGVXaW5kb3coUCk6IHJldHVybmVkIDEgZXJyb3IgMCB3bV9wYWludF93YWl0aW5nX2FmdGVyPTAKICBQIFdNX1BBSU5UCiAgUCBXTV9FUkFTRUJLR05ECiAgQyBXTV9QQUlOVAogIEMgV01fTkNQQUlOVCByZ249MQogIEMgV01fRVJBU0VCS0dORAotLSBoaWRkZW4gd2luZG93OiByZXR1cm5lZCAxIGVycm9yIDAgd21fcGFpbnRfd2FpdGluZ19hZnRlcj0wCi0tIG51bGwgaGFuZGxlOiByZXR1cm5lZCAwIGVycm9yIDE0MDAgd21fcGFpbnRfd2FpdGluZ19hZnRlcj0wCi0tIGJhZCBoYW5kbGU6IHJldHVybmVkIDAgZXJyb3IgMTQwMCB3bV9wYWludF93YWl0aW5nX2FmdGVyPTAKLS0gcHVtcGluZyBhdCB0aGUgZW5kOgpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n-- creation of P (visible) and C sent:\n  P WM_NCPAINT rgn=1\n  P WM_ERASEBKGND\n  P WM_ERASEBKGND\n-- first UpdateWindow of the new visible popup: returned 1 error 0 wm_paint_waiting_after=0\n  P WM_PAINT\n  C WM_PAINT\n  C WM_NCPAINT rgn=1\n  C WM_ERASEBKGND\n-- again, nothing invalid: returned 1 error 0 wm_paint_waiting_after=0\n-- after InvalidateRect(P, NULL, FALSE): returned 1 error 0 wm_paint_waiting_after=0\n  P WM_PAINT\n  C WM_PAINT\n  C WM_NCPAINT rgn=1\n  C WM_ERASEBKGND\n-- UpdateWindow(P) while only C is invalid: returned 1 error 0 wm_paint_waiting_after=0\n  C WM_PAINT\n  C WM_ERASEBKGND\n-- then UpdateWindow(C): returned 1 error 0 wm_paint_waiting_after=0\n-- both invalid, UpdateWindow(C): returned 1 error 0 wm_paint_waiting_after=1\n  C WM_PAINT\n  C WM_NCPAINT rgn=1\n  C WM_ERASEBKGND\n-- then UpdateWindow(P): returned 1 error 0 wm_paint_waiting_after=0\n  P WM_PAINT\n  P WM_ERASEBKGND\n-- both invalid, UpdateWindow(P): returned 1 error 0 wm_paint_waiting_after=0\n  P WM_PAINT\n  P WM_ERASEBKGND\n  C WM_PAINT\n  C WM_NCPAINT rgn=1\n  C WM_ERASEBKGND\n-- hidden window: returned 1 error 0 wm_paint_waiting_after=0\n-- null handle: returned 0 error 1400 wm_paint_waiting_after=0\n-- bad handle: returned 0 error 1400 wm_paint_waiting_after=0\n-- pumping at the end:\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 113
+    }
+  ]
+}

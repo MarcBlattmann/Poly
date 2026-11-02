@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "b2165ff0025c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T17:18:20Z",
+  "tests": [
+    {
+      "name": "rc_nocapture",
+      "exe_sha256": "bf55785278b3dbf0b67742438f1932adae958ae282149c794b788e001acc1ccc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApvayBmb3JlZ3JvdW5kCm5vIGNhcHR1cmU6IFJlbGVhc2VDYXB0dXJlIHJldHVybmVkIDEgZXJyb3IgMAphZ2FpbjogUmVsZWFzZUNhcHR1cmUgcmV0dXJuZWQgMSBlcnJvciAwCnNlcGFyYXRlIGlucHV0OiBzZWNvbmQgdGhyZWFkIHNhdyBHZXRDYXB0dXJlIG51bGw7IGl0cyBSZWxlYXNlQ2FwdHVyZSByZXR1cm5lZCAxIGVycm9yIDA7IHRoZW4gR2V0Q2FwdHVyZSBudWxsCnNlcGFyYXRlIGlucHV0OiBtYWluIHRocmVhZCBHZXRDYXB0dXJlIGFmdGVyd2FyZHMgQQptYWluIFJlbGVhc2VDYXB0dXJlIHJldHVybmVkIDEgZXJyb3IgMAptYWluIFJlbGVhc2VDYXB0dXJlIGFnYWluIHJldHVybmVkIDEgZXJyb3IgMAogIEEgV01fQ0FQVFVSRUNIQU5HRUQgbmV3PW51bGwKYXR0YWNoZWQgaW5wdXQ6IEF0dGFjaFRocmVhZElucHV0IHJldHVybmVkIDEKYXR0YWNoZWQgaW5wdXQ6IHNlY29uZCB0aHJlYWQgc2F3IEdldENhcHR1cmUgQTsgaXRzIFJlbGVhc2VDYXB0dXJlIHJldHVybmVkIDEgZXJyb3IgMDsgdGhlbiBHZXRDYXB0dXJlIG51bGwKYXR0YWNoZWQgaW5wdXQ6IG1haW4gdGhyZWFkIEdldENhcHR1cmUgYWZ0ZXJ3YXJkcyBudWxsCiAgQSBXTV9DQVBUVVJFQ0hBTkdFRCBuZXc9bnVsbAogIEEgV01fTkNISVRURVNUIHNjcmVlbj0xNTAsMTUwCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD01MCw1MApzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nok foreground\nno capture: ReleaseCapture returned 1 error 0\nagain: ReleaseCapture returned 1 error 0\nseparate input: second thread saw GetCapture null; its ReleaseCapture returned 1 error 0; then GetCapture null\nseparate input: main thread GetCapture afterwards A\nmain ReleaseCapture returned 1 error 0\nmain ReleaseCapture again returned 1 error 0\n  A WM_CAPTURECHANGED new=null\nattached input: AttachThreadInput returned 1\nattached input: second thread saw GetCapture A; its ReleaseCapture returned 1 error 0; then GetCapture null\nattached input: main thread GetCapture afterwards null\n  A WM_CAPTURECHANGED new=null\n  A WM_NCHITTEST screen=150,150\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=50,50\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 329
+    }
+  ]
+}

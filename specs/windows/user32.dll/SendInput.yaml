@@ -1,0 +1,81 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/SendInput
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
+  observed_by: spec-win-gui-b
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Painting and Drawing", "Painting and Drawing Messages", "Keyboard Input
+  Overview", "About Mouse Input", "About Cursors", "Regions", "Multiple
+  Display Monitors", "High DPI Desktop Application Development on Windows";
+  winuser.h, wingdi.h, windef.h and winerror.h for constants and layouts.
+  Wine's tests were not read.
+summary: >
+  Inserts keyboard and mouse events into the input stream, as if from the
+  devices; returns the number inserted. Keyboard events go to the focus
+  window of the foreground thread; mouse events move the cursor and go to
+  the window under it (or the capture). Events are processed asynchronously:
+  the messages arrive in the target thread's queue shortly after the call.
+interface:
+  signature: "UINT SendInput(UINT count, LPINPUT inputs, int size)"
+  INPUT: "winuser.h, 40 bytes on x64: DWORD type (INPUT_MOUSE 0, INPUT_KEYBOARD 1), 4 bytes padding, the union at offset 8: MOUSEINPUT {LONG dx, dy; DWORD mouseData, dwFlags, time; ULONG_PTR dwExtraInfo} or KEYBDINPUT {WORD wVk, wScan; DWORD dwFlags, time; ULONG_PTR dwExtraInfo}"
+  return: "the number of events inserted (all of them in every observed success)"
+rules:
+  typing: "each key-down/up pair gives WM_KEYDOWN and WM_KEYUP to the focus window; TranslateMessage adds WM_CHAR after the WM_KEYDOWN: a 0x61, Shift+a 0x41 (WM_KEYDOWN VK_SHIFT, WM_KEYDOWN A, WM_CHAR, WM_KEYUP A, WM_KEYUP VK_SHIFT), 1 0x31, Enter 0x0D, Backspace 0x08, Tab 0x09, Escape 0x1B, Ctrl+a 0x01, z 0x7A (VK_Z, scan 0x15), y 0x79 (VK_Y, scan 0x2C), VK_OEM_1 U+00FC, VK_OEM_4 U+00DF; Left and Delete give no WM_CHAR"
+  lparam: "WM_KEYDOWN/WM_KEYUP/WM_CHAR lParam: bits 0-15 repeat count, 16-23 the scan code given to SendInput (0 when 0 was given), bit 24 the extended flag (KEYEVENTF_EXTENDEDKEY), bit 30 the previous state (1 in every WM_KEYUP, 1 in a WM_KEYDOWN of a key already down), bit 31 the transition (1 in WM_KEYUP); WM_KEYUP of a key that was down: 0xC0 in the top byte (0xC1 extended); WM_CHAR carries the lParam of the WM_KEYDOWN it came from"
+  extended: "the extended bit (24) is set only when KEYEVENTF_EXTENDEDKEY is given: VK_LEFT without it gives lParam 0x004B0001, with it 0x014B0001; VK_DELETE with it 0x01530001"
+  held_key: "two key-downs and a key-up of b in one call: one WM_KEYDOWN with repeat count 2 (lParam 0x00300002), one WM_CHAR with the same lParam, one WM_KEYUP (0xC0300001); a second key-down of c sent after the first was retrieved: a second WM_KEYDOWN and WM_CHAR with bit 30 set (0x402E0001), then WM_KEYUP 0xC02E0001"
+  wvk_scan: "wVk with scan 0: WM_KEYDOWN carries scan 0 in lParam (0x00000001) and is translated normally; the scan code is not filled in"
+  scancode_flag: "KEYEVENTF_SCANCODE: wVk is ignored and the layout maps the scan code: 0x1E gives VK A ('a'), also with wVk 0x5A given; 0x2C gives VK_Y ('y'); 0x4B with KEYEVENTF_EXTENDEDKEY gives VK_LEFT with lParam 0x014B0001"
+  unicode_flag: "KEYEVENTF_UNICODE with wScan = a UTF-16 unit: WM_KEYDOWN/WM_KEYUP with wParam VK_PACKET (0xE7) and lParam scan field 0 (0x00000001 / 0xC0000001), WM_CHAR with the unit; GetKeyState(VK_PACKET) is down in that WM_KEYDOWN; a surrogate pair sent as D83D down, DE00 down, D83D up, DE00 up gives WM_KEYDOWN/WM_CHAR D83D (lParam 0x00000001), WM_KEYDOWN/WM_CHAR DE00 (0x40000001: VK_PACKET already down), WM_KEYUP 0xC0000001, WM_KEYUP 0x80000001"
+  dead_keys: "typed ^ (VK_OEM_5) then a: WM_KEYDOWN 0xDC, WM_DEADCHAR 0x5E, WM_KEYUP 0xDC, WM_KEYDOWN A, WM_CHAR U+00E2, WM_KEYUP; acute (VK_OEM_6) then e: WM_DEADCHAR 0xB4, WM_CHAR U+00E9; ^ then Space: WM_CHAR 0x5E; ^ then x: two WM_CHARs, 0x5E with lParam 0x022D0001 (bit 25 set) and 0x78 with 0x002D0001"
+  focus: "keys go to the focus window: after SetFocus(child) to the child; after SetFocus(NULL) (no focus, popup still active) to the active window as WM_SYSKEYDOWN / WM_SYSCHAR / WM_SYSKEYUP with the same wParam and lParam (Learn)"
+  mouse_absolute: "MOUSEEVENTF_MOVE|MOUSEEVENTF_ABSOLUTE maps 0..65535 onto the 1920x1080 screen: x_px = floor(dx * 1920 / 65536), y_px = floor(dy * 1080 / 65536) as observed: (0,0), (1,1), (34,34) -> 0,0; (35,35) -> 1,0; (100,0) -> 2,0; (16384,16384) -> 480,270; (32767,32767) -> 959,539; (32768,32768) -> 960,540; (65535,0) -> 1919,0; (65535,16384) -> 1919,270"
+  mouse_into_window: "an absolute move onto a window: WM_NCHITTEST, WM_SETCURSOR(HTCLIENT, WM_MOUSEMOVE), WM_MOUSEMOVE with client coordinates"
+  wheel: "MOUSEEVENTF_WHEEL with mouseData 120: WM_NCHITTEST, then WM_MOUSEWHEEL delta 120 (keys 0, screen coordinates of the cursor) to the window under the cursor (the foreground popup); -240 gives delta -240; two wheel events in one call, not yet retrieved, are combined into one WM_MOUSEWHEEL with the sum (+120 and -240 give one delta -120)"
+  mixed: "one call with an absolute move and a key-down/up returns 3; the window gets the mouse messages first, then WM_KEYDOWN, WM_CHAR, WM_KEYUP"
+errors:
+  size: "size 0, 28, 39 or 41: 0, ERROR_INVALID_PARAMETER (87), nothing delivered"
+  count_zero: "count 0: 0, ERROR_INVALID_PARAMETER (87)"
+  null: "inputs NULL with count 1: 0, ERROR_NOACCESS (998)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering:
+  - "input from one call arrives in the order given; a key event that is not yet retrieved is coalesced with a following repeat of the same key (repeat count) and wheel events with following wheel events"
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
+  carrying its own declarations (Learn prototypes, header constants) and a
+  message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because painting and input need the visible
+  desktop. Window procedures log documented messages only (the "documented"
+  and "documented_b" sets in the tests): never handles (a window in a
+  message is printed as its tag letter, "ours", "other" or "null"), times,
+  WM_GETICON, IME or registered messages. Test windows are placed in the
+  top-left 1000x500 pixels; the cursor is parked at (1500, 600) at the start
+  and put back at the end; keyboard input is sent only while a window of the
+  test is in the foreground and clicks only onto a window of the test.
+  Keyboard input in the tests is real input (SendInput) to a WS_EX_TOPMOST
+  popup of the test that is the foreground window; the tests never send Alt,
+  AltGr, the Windows keys or function keys. Input from a medium-integrity
+  program is not delivered while an elevated window is the foreground window
+  (UIPI: SetCursorPos then also fails); the runner keeps its own keeper
+  window in front between tests and the tests make their own window the
+  foreground window before sending input.
+not_covered: >
+  Relative mouse moves (they follow the pointer speed and acceleration
+  settings: (10,-5) moved the cursor by (8,-4) or (9,-4) on the oracle, not
+  reproducibly); INPUT_HARDWARE; KEYEVENTF_UNICODE combined with other
+  flags; input to another desktop; Alt, AltGr, Windows and function keys as
+  real input. DPI awareness other than unaware (the tests have no manifest),
+  several monitors, other keyboard layouts than German, IME, touch and pen,
+  hooks, menus and the menu loop.
