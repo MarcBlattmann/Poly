@@ -18,7 +18,7 @@
 use core::arch::naked_asm;
 use core::ops::Range;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use poly_backtrace::{End, FrameWalker};
+use poly_backtrace::{End, FrameWalker, Stacks};
 
 /// Frames printed at most, so a corrupt chain cannot flood the log.
 pub const MAX_DEPTH: usize = 32;
@@ -40,7 +40,7 @@ pub fn set_fault_origin(pc: u64, fp: u64) {
 }
 
 /// Kernel thread stacks the walker may follow, at most one per thread slot.
-pub const THREAD_STACK_SLOTS: usize = 64;
+pub const THREAD_STACK_SLOTS: usize = 512;
 
 /// Each slot is one word, so the panic path can never see half an update:
 /// the page-aligned base of the stack ORed with its length in pages
@@ -81,16 +81,35 @@ fn range_of(word: u64) -> Range<u64> {
 }
 
 /// Every stack the kernel runs on: the boot stack, the double-fault and NMI
-/// IST stacks, the registered thread stacks and the CPUs' interrupt stacks
-/// (empty ranges for free slots).
-fn stacks() -> [Range<u64>; 3 + THREAD_STACK_SLOTS + super::MAX_CPUS] {
-    core::array::from_fn(|i| match i {
-        0 => (&raw const __boot_stack_bottom) as u64..(&raw const __boot_stack_top) as u64,
-        1 => super::gdt::double_fault_stack(),
-        2 => super::gdt::nmi_stack(),
-        i if i < 3 + THREAD_STACK_SLOTS => range_of(THREAD_STACKS[i - 3].load(Ordering::Acquire)),
-        i => range_of(INTERRUPT_STACKS[i - 3 - THREAD_STACK_SLOTS].load(Ordering::Acquire)),
-    })
+/// IST stacks, the registered thread stacks and the CPUs' interrupt stacks.
+/// Looked up one by one rather than listed, so a walk needs no table of
+/// every thread slot on the (small) stack it runs on.
+struct KernelStacks;
+
+impl Stacks for KernelStacks {
+    fn stack_of(&self, addr: u64) -> Option<Range<u64>> {
+        let fixed = [
+            (&raw const __boot_stack_bottom) as u64..(&raw const __boot_stack_top) as u64,
+            super::gdt::double_fault_stack(),
+            super::gdt::nmi_stack(),
+        ];
+        let registered =
+            THREAD_STACKS.iter().chain(INTERRUPT_STACKS.iter()).map(|w| range_of(w.load(Ordering::Acquire)));
+        fixed.into_iter().chain(registered).find(|s| s.contains(&addr))
+    }
+}
+
+/// The word at `addr` if all of it lies on one of the kernel's stacks
+/// (`crate::profile` reads an interrupted frame's return address).
+pub fn stack_word(addr: u64) -> Option<u64> {
+    if !addr.is_multiple_of(8) {
+        return None;
+    }
+    let end = addr.checked_add(8)?;
+    KernelStacks.stack_of(addr).filter(|s| end <= s.end)?;
+    // SAFETY: an aligned word inside a registered kernel stack, which stays
+    // mapped while registered (see `walk`).
+    Some(unsafe { (addr as *const u64).read_volatile() })
 }
 
 #[repr(C)]
@@ -116,13 +135,12 @@ fn walk(pc: u64, fp: u64, mut f: impl FnMut(usize, u64)) -> End {
     f(0, pc);
     let read = |addr: u64| {
         // SAFETY: the walker only reads aligned words inside one of
-        // `stacks()`: the boot stack (.bss), statics, thread stacks, which
+        // `KernelStacks`: the boot stack (.bss), statics, thread stacks, which
         // stay mapped while registered, and interrupt stacks, mapped for
         // good.
         unsafe { (addr as *const u64).read_volatile() }
     };
-    let stacks = stacks();
-    let mut walker = FrameWalker::new(fp, &stacks, MAX_DEPTH, read);
+    let mut walker = FrameWalker::new(fp, &KernelStacks, MAX_DEPTH, read);
     for (n, ret) in (1..).zip(walker.by_ref()) {
         f(n, ret);
     }

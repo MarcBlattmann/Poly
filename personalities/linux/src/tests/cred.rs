@@ -163,6 +163,51 @@ fn capget_and_capset() {
 }
 
 #[test]
+fn prctl_names_anonymous_memory() {
+    let mut k = FakeKernel::new();
+    let p = |k: &mut FakeKernel, args: &[u64]| sys(k, nr::PRCTL, args);
+    let vma = u64::from(PR_SET_VMA);
+    k.poke(P, b"poly test-region_1\0");
+    assert_eq!(p(&mut k, &[vma, PR_SET_VMA_ANON_NAME, 0x10000, 0x3000, P]), Ok(0));
+    assert_eq!(p(&mut k, &[vma, PR_SET_VMA_ANON_NAME, 0x10000, 0x3000, 0]), Ok(0), "NULL removes");
+    assert_eq!(k.named, [(0x10000, 0x3000, Some(b"poly test-region_1".to_vec())), (0x10000, 0x3000, None)]);
+    let mut name = [b'n'; 81];
+    name[79] = 0;
+    k.poke(P, &name[..80]);
+    assert_eq!(p(&mut k, &[vma, PR_SET_VMA_ANON_NAME, 0x10000, 0x1000, P]), Ok(0), "79 bytes");
+    name[79] = b'n';
+    name[80] = 0;
+    k.poke(P, &name);
+    assert_eq!(p(&mut k, &[vma, PR_SET_VMA_ANON_NAME, 0x10000, 0x1000, P]), Err(Errno::EINVAL), "80 bytes");
+    for bad in [&b"a[b\0"[..], b"a]b\0", b"a$b\0", b"a\\b\0", b"a`b\0", b"a\nb\0", b"a\x7fb\0"] {
+        k.poke(P, bad);
+        assert_eq!(p(&mut k, &[vma, PR_SET_VMA_ANON_NAME, 0x10000, 0x1000, P]), Err(Errno::EINVAL), "{bad:?}");
+    }
+    k.poke(P, b"x\0");
+    assert_eq!(p(&mut k, &[vma, PR_SET_VMA_ANON_NAME, 0x10001, 0x1000, P]), Err(Errno::EINVAL), "unaligned");
+    assert_eq!(p(&mut k, &[vma, 1, 0x10000, 0x1000, P]), Err(Errno::EINVAL), "sub-option");
+    assert_eq!(p(&mut k, &[vma, PR_SET_VMA_ANON_NAME, 0x10000, 0x1000, UNMAPPED]), Err(Errno::EFAULT));
+    assert_eq!(k.named.len(), 3, "refused calls never reach the kernel");
+    assert!(valid_anon_name(b"poly test-region_1") && valid_anon_name(b""));
+}
+
+#[test]
+fn prctl_speculation_controls() {
+    let mut k = FakeKernel::new();
+    let p = |k: &mut FakeKernel, args: &[u64]| sys(k, nr::PRCTL, args);
+    let (get, set) = (u64::from(PR_GET_SPECULATION_CTRL), u64::from(PR_SET_SPECULATION_CTRL));
+    assert_eq!(p(&mut k, &[get, 0]), Ok(PR_SPEC_PRCTL | PR_SPEC_ENABLE));
+    assert_eq!(p(&mut k, &[get, 3]), Err(Errno::ENODEV));
+    assert_eq!(p(&mut k, &[set, 1, PR_SPEC_DISABLE]), Ok(0));
+    assert_eq!(p(&mut k, &[get, 1]), Ok(PR_SPEC_PRCTL | PR_SPEC_DISABLE));
+    assert_eq!(p(&mut k, &[get, 0]), Ok(PR_SPEC_PRCTL | PR_SPEC_ENABLE), "per feature");
+    assert_eq!(p(&mut k, &[set, 0, 7]), Err(Errno::ERANGE));
+    assert_eq!(p(&mut k, &[set, 0, PR_SPEC_FORCE_DISABLE]), Ok(0));
+    assert_eq!(p(&mut k, &[set, 0, PR_SPEC_ENABLE]), Err(Errno::EPERM), "cannot be undone");
+    assert_eq!(p(&mut k, &[set, 0, PR_SPEC_FORCE_DISABLE]), Ok(0));
+}
+
+#[test]
 fn prctl_capabilities_and_flags() {
     let mut k = root();
     let p = |k: &mut FakeKernel, args: &[u64]| sys(k, nr::PRCTL, args);

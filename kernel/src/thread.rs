@@ -99,8 +99,9 @@ use poly_mem::{BuddyAllocator, StackArea};
 pub use poly_sched::{CpuSet, Error, State, ThreadId};
 use poly_sched::{Join, Scheduler, Switch};
 
-/// Thread table size, boot and idle threads included.
-pub const MAX_THREADS: usize = 64;
+/// Thread table size, boot and idle threads included: room for Chromium's
+/// processes (about 250 threads) next to the desktop's.
+pub const MAX_THREADS: usize = 512;
 
 /// Most CPUs the scheduler runs.
 pub const MAX_CPUS: usize = arch::MAX_CPUS;
@@ -1062,24 +1063,35 @@ fn wake_due(now: u64) {
     let _irq = InterruptsOff::new();
     let kicks = {
         let mut t = THREADS.lock();
-        let mut due = [(u64::MAX, 0usize); MAX_THREADS];
-        let mut n = 0;
-        for slot in 0..MAX_THREADS {
-            let Some(to) = t.timeouts[slot] else { continue };
-            if to.deadline > now {
-                NEXT_WAKE.fetch_min(to.deadline, SeqCst);
-            } else {
-                due[n] = (to.deadline, slot);
-                n += 1;
+        // The earliest due deadlines first, a batch at a time (the table is
+        // too large for a list of all of it on an interrupt stack): each
+        // pass wakes up to `BATCH` of them, in deadline order.
+        const BATCH: usize = 32;
+        loop {
+            let mut due = [(u64::MAX, 0usize); BATCH];
+            let mut n = 0;
+            for slot in 0..MAX_THREADS {
+                let Some(to) = t.timeouts[slot] else { continue };
+                if to.deadline > now {
+                    NEXT_WAKE.fetch_min(to.deadline, SeqCst);
+                } else if n < BATCH {
+                    due[n] = (to.deadline, slot);
+                    n += 1;
+                } else if let Some(last) = due.iter_mut().max().filter(|m| m.0 > to.deadline) {
+                    *last = (to.deadline, slot);
+                }
             }
-        }
-        due[..n].sort_unstable();
-        for &(_, slot) in &due[..n] {
-            let Some(to) = t.timeouts[slot].take() else { continue };
-            // SAFETY: the entry existed, so the queue is alive (see
-            // `Timeout`); THREADS is locked, as its inner queue requires.
-            let q = unsafe { &mut *(*(to.queue as *const WaitQueue)).0.get() };
-            t.sched.wake_all(q);
+            due[..n].sort_unstable();
+            for &(_, slot) in &due[..n] {
+                let Some(to) = t.timeouts[slot].take() else { continue };
+                // SAFETY: the entry existed, so the queue is alive (see
+                // `Timeout`); THREADS is locked, as its inner queue requires.
+                let q = unsafe { &mut *(*(to.queue as *const WaitQueue)).0.get() };
+                t.sched.wake_all(q);
+            }
+            if n < BATCH {
+                break;
+            }
         }
         t.sched.take_kicks()
     };

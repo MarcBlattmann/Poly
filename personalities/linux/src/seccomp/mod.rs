@@ -332,15 +332,19 @@ pub fn check(k: &mut dyn LinuxKernel, regs: &mut SyscallRegs) -> Verdict {
 }
 
 /// The `SIGSYS` of `SECCOMP_RET_TRAP` (sigaction(2)): `si_code`
-/// `SYS_SECCOMP`, `si_call_addr` "the address of the system call
-/// instruction" (2 bytes before the return address `ip`), `si_syscall`,
+/// `SYS_SECCOMP`, `si_call_addr` the instruction pointer of the call
+/// (`ip`, the address after the `syscall` instruction, which the signal
+/// frame's `rip` also holds: Chromium's SIGSYS handler checks that the
+/// two agree and gives up otherwise, "Sanity checks are failing after
+/// receiving SIGSYS"; sigaction(2)'s "address of the system call
+/// instruction" read as 2 bytes before it did not pass), `si_syscall`,
 /// `si_arch`, and `si_errno` the action's data. `_sigsys` in
 /// `asm-generic/siginfo.h`: `void *_call_addr; int _syscall; unsigned
 /// int _arch;` at offset 16.
 pub fn sigsys(ip: u64, nr: i32, data: u16) -> SigInfo {
     let mut info = SigInfo::new(SIGSYS, SYS_SECCOMP);
     info.errno = i32::from(data);
-    info.fields[0..8].copy_from_slice(&ip.wrapping_sub(2).to_le_bytes());
+    info.fields[0..8].copy_from_slice(&ip.to_le_bytes());
     info.fields[8..12].copy_from_slice(&nr.to_le_bytes());
     info.fields[12..16].copy_from_slice(&AUDIT_ARCH_X86_64.to_le_bytes());
     info

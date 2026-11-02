@@ -31,6 +31,7 @@ mod nt;
 mod pci;
 mod power;
 mod process;
+mod profile;
 mod program;
 mod qemu;
 mod random;
@@ -158,6 +159,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     virtio_input::init();
     keyboard::refresh_leds();
     display::init(&boot);
+    profile::init(&boot);
     fs::init(&boot, initrd);
     // /dev/dri on the virtio GPU the display found (ADR 0108).
     drm::init();

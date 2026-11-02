@@ -35,6 +35,10 @@ pub struct InetState {
     /// `IPV6_V6ONLY` as set (the stack's IPv6 sockets carry only IPv6
     /// whatever it says).
     pub v6only: bool,
+    /// `IP_RECVERR` / `IPV6_RECVERR` as set (ip(7), ipv6(7)): reported
+    /// back. The stack keeps no queue of extended errors, so
+    /// `MSG_ERRQUEUE` finds none (`EAGAIN`) whatever it says.
+    pub recverr: bool,
     /// `TCP_MAXSEG` as set (reported back; the stack sizes segments from
     /// the path).
     pub maxseg: Option<u32>,

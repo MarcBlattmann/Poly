@@ -19,6 +19,13 @@ pub enum FillError {
 }
 
 impl Memory {
+    /// prctl(2) `PR_SET_VMA_ANON_NAME`: name the anonymous regions of
+    /// `[addr, addr + len)` or remove their names; see
+    /// `poly_vm::VmMap::set_anon_name`. Only the region map changes.
+    pub fn set_anon_name(&self, addr: u64, len: u64, name: Option<&str>) -> Result<(), MemoryError> {
+        Ok(self.inner.lock().map.set_anon_name(addr, len, name.map(alloc::sync::Arc::from))?)
+    }
+
     /// mseal(2) of `[addr, addr + len)`: see `poly_vm::VmMap::seal`.
     pub fn seal(&self, addr: u64, len: u64) -> Result<(), MemoryError> {
         Ok(self.inner.lock().map.seal(addr, len)?)
