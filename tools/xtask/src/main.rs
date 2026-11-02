@@ -1455,7 +1455,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 35] = [
+const BOOT_GROUPS: [BootGroup; 36] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1498,6 +1498,9 @@ const BOOT_GROUPS: [BootGroup; 35] = [
     // window, then the settings read back in a second boot (desktop.rs,
     // ADR 0117).
     ("desktop-shell", desktop::shell_boot_test),
+    // A Windows GUI program's window on the desktop through win32k's
+    // desktop link, /dev/win32k (desktop.rs, ADR 0131).
+    ("desktop-win32", desktop::win32_boot_test),
     // X11 apps through Xwayland on the desktop, from the root disk
     // (xwayland.rs, ADR 0118).
     ("xwayland", xwayland::boot_test),
@@ -1577,6 +1580,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
             "wayland-kms",
             "desktop",
             "desktop-shell",
+            "desktop-win32",
             "mesa",
             "xwayland",
             "toolkits",

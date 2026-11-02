@@ -100,3 +100,76 @@ fn unknown_numbers_are_unimplemented_and_named_when_known() {
     assert_eq!(service_name(0xFFF), None);
     assert!(!NtProcess::new(PID).win32k_disabled);
 }
+
+#[test]
+fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
+    use poly_win32k::frame::{FrameMetrics, Rect};
+    use poly_win32k::link::{FromCompositor, Stream, ToCompositor, VERSION, encode_all};
+    use poly_win32k::proto::{ClassRef, CreateSpec};
+    let mut f = Fake::new();
+    let call = |f: &mut Fake, req: Request| user_call(f, &req, 4096).1.expect("a reply");
+    // Without a compositor a window has no surface.
+    let name: alloc::vec::Vec<u16> = "Fill".encode_utf16().collect();
+    let spec = ClassSpec { name: name.clone(), wndproc: 0x1000, unicode: true, ..ClassSpec::default() };
+    call(&mut f, Request::RegisterClass { spec });
+    let spec =
+        CreateSpec { class: ClassRef::Name { name }, style: 0x00CF_0000, cx: 300, cy: 200, ..CreateSpec::default() };
+    let Reply::Created { created } = call(&mut f, Request::CreateWindow { spec }) else { panic!("not created") };
+    let h = created.hwnd;
+    let (window_rel, client_rel) = (Some(Rect::new(100, 50, 136, 99)), Some(Rect::new(108, 81, 128, 91)));
+    call(&mut f, Request::SetRects { hwnd: h, window_rel, client_rel });
+    call(&mut f, Request::FinishCreate { hwnd: h });
+    let show = Request::SetState {
+        hwnd: h,
+        visible: Some(true),
+        minimized: None,
+        maximized: None,
+        normal: None,
+        size_move_pending: None,
+    };
+    call(&mut f, show);
+    assert_eq!(call(&mut f, Request::Surface { hwnd: h }), Reply::Value { value: 0 });
+
+    // The compositor greets win32k through the device: the window there
+    // is replayed with a client-sized buffer.
+    let hello =
+        FromCompositor::Hello { version: VERSION, width: 1280, height: 800, scale: 1, frame: FrameMetrics::POLY };
+    f.with_state(|sys, _, _| sys.win32k.link_receive(&encode_all(&[hello])));
+    let (w, hgt) = (20u64, 10u64);
+    assert_eq!(call(&mut f, Request::Surface { hwnd: h }), Reply::Value { value: w | (hgt << 32) });
+    let records = |f: &mut Fake| {
+        let mut s = Stream::<ToCompositor>::new();
+        s.push(&f.with_state(|sys, _, _| sys.win32k.link_output()));
+        s.map(|r| r.unwrap()).collect::<alloc::vec::Vec<_>>()
+    };
+    let r = records(&mut f);
+    assert!(matches!(r[0], ToCompositor::Welcome { .. }));
+    let (surface, buffer) = r
+        .iter()
+        .find_map(
+            |x| if let ToCompositor::Buffer { surface, buffer, .. } = x { Some((*surface, *buffer)) } else { None },
+        )
+        .expect("a buffer");
+    assert!(r.contains(&ToCompositor::Geometry { surface, x: 108, y: 81, width: 20, height: 10 }));
+
+    // PolyUserCommitSurface: rows `stride` apart in the app's memory.
+    let stride = w * 4 + 8;
+    let mut px = alloc::vec![0u8; (stride * hgt) as usize];
+    px[0..4].copy_from_slice(&[0x60, 0x50, 0x40, 0]);
+    let last = ((hgt - 1) * stride) as usize;
+    px[last..last + 4].copy_from_slice(&[1, 2, 3, 0]);
+    let p = f.put(&px);
+    let commit = Win32kService::CommitSurface.number();
+    assert_eq!(raw(&mut f, commit, &[u64::from(h), p, w, hgt, stride]), (Outcome::Handled, 0));
+    assert_eq!(records(&mut f), alloc::vec![ToCompositor::Damage { surface, x: 0, y: 0, width: 20, height: 10 }]);
+    let (first, end) = f.with_state(|sys, _, _| {
+        let rows = sys.win32k.link_rows(buffer, 0, 10).unwrap();
+        (rows[0..4].to_vec(), rows[(9 * 20 * 4)..(9 * 20 * 4 + 4)].to_vec())
+    });
+    assert_eq!((first.as_slice(), end.as_slice()), (&[0x60, 0x50, 0x40, 0][..], &[1, 2, 3, 0][..]));
+    // A size that is not the surface's is refused.
+    assert_eq!(
+        raw(&mut f, commit, &[u64::from(h), p, w - 1, hgt, stride]).1,
+        poly_ntobj::status::STATUS_INVALID_PARAMETER.0
+    );
+}

@@ -112,6 +112,9 @@ crate::wire_struct! {
         pub class_name: Vec<u16>,
         /// The parent `CREATESTRUCT.hwndParent` shows.
         pub cs_parent: u64,
+        /// The size was `CW_USEDEFAULT`: CREATESTRUCT shows -1 x -1
+        /// (observed on the oracle).
+        pub default_size: bool,
     }
 }
 
@@ -222,6 +225,15 @@ crate::wire_enum! {
         39 => ClassName { hwnd: u64 },
         40 => IsChild { parent: u64, child: u64 },
         41 => Queue {},
+        /// `GetMessageTime` / `GetMessagePos` of the last message retrieved:
+        /// a `Value` with the time in the low 32 bits, x and y above.
+        42 => MessageInfo {},
+        /// The desktop link's surface of a top-level window, for its DCs to
+        /// draw into: a `Value` with the width in the low 32 bits and the
+        /// height above; 0 when it has none (no compositor, hidden, a child
+        /// window). Answered by the NT personality, which keeps the
+        /// surfaces ([`crate::surfaces`]).
+        43 => Surface { hwnd: u32 },
     }
 }
 

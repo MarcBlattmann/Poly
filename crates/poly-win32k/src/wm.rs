@@ -148,6 +148,8 @@ struct Queue {
     sent: VecDeque<u64>,
     receiving: Vec<u64>,
     changed: u32,
+    /// The last message retrieved: time and position.
+    last: (u32, i32, i32),
 }
 
 #[derive(Debug)]
@@ -374,6 +376,17 @@ impl Wm {
         }
     }
 
+    /// The desktop's children, topmost first (the desktop link's
+    /// candidates for a surface).
+    pub fn top_levels(&self) -> Vec<u32> {
+        self.get(u64::from(self.desktop)).map_or_else(Vec::new, |d| d.children.clone())
+    }
+
+    /// A window's text.
+    pub fn text(&self, h: u32) -> Option<&[u16]> {
+        self.get(u64::from(h)).map(|w| w.text.as_slice())
+    }
+
     /// `WinInfo` of a window.
     pub fn info(&self, h: u32) -> Option<WinInfo> {
         let w = self.get(u64::from(h))?;
@@ -554,6 +567,7 @@ impl Wm {
         }
         let overlapped = !child && s.style & WS_POPUP == 0 && parent == self.desktop;
         let (mut x, mut y, mut cx, mut cy) = (s.x, s.y, s.cx, s.cy);
+        let default_size = overlapped && s.cx == CW_USEDEFAULT;
         if overlapped {
             let default_pos = x == CW_USEDEFAULT;
             if default_pos {
@@ -593,7 +607,11 @@ impl Wm {
             (c.wndproc, c.unicode, c.wnd_extra.max(0) as usize, c.name.clone())
         };
         let minmax = parent == self.desktop && (has_caption(s.style) || s.style & WS_THICKFRAME != 0);
-        let mut win = Window::new(ctx.key(), class, s.style, Rect::default());
+        // An overlapped window has a caption: WS_CAPTION is added and the
+        // frame counts it from WM_NCCALCSIZE on (AdjustWindowRectEx.yaml's
+        // round trip), though CREATESTRUCT shows the style as given.
+        let stored = if overlapped { s.style | WS_CAPTION } else { s.style };
+        let mut win = Window::new(ctx.key(), class, stored, Rect::default());
         win.ex_style = ex;
         win.parent = parent;
         win.owner = owner;
@@ -628,6 +646,7 @@ impl Wm {
                 ex_style: ex,
                 class_name,
                 cs_parent: s.parent,
+                default_size,
             },
         }
     }
@@ -867,7 +886,15 @@ impl Wm {
                 None => return Reply::Handle { hwnd: 0 },
             }
         };
-        for &c in &pw.children[start..] {
+        let mut candidates: Vec<u32> = pw.children[start..].to_vec();
+        if parent == 0 && after == 0 {
+            // Observed: FindWindowW also finds a message-only window when
+            // no top-level window matches.
+            if let Some(m) = self.get(u64::from(self.message)) {
+                candidates.extend(m.children.iter().copied());
+            }
+        }
+        for c in candidates {
             let Some(w) = self.get(u64::from(c)) else { continue };
             if w.state != State::Normal {
                 continue;
@@ -1250,6 +1277,13 @@ impl Wm {
         }
     }
 
+    /// Whether a thread has something its event should report: posted or
+    /// sent messages, a quit request, a reply to its send.
+    pub fn has_pending(&self, key: Key) -> bool {
+        self.queues.get(&key).is_some_and(|q| !q.posted.is_empty() || !q.sent.is_empty() || q.quit.is_some())
+            || self.sends.values().any(|s| s.from == key && s.result.is_some())
+    }
+
     /// The thread that owns a queue with this id, if one has a queue.
     pub fn thread_with_queue(&self, tid: u32) -> Option<Key> {
         self.queues.keys().find(|k| k.1 == tid).copied()
@@ -1393,7 +1427,19 @@ impl Wm {
                 q.changed |= QS_POSTMESSAGE;
                 Reply::Ok {}
             }
-            Request::Peek { filter, min, max, flags } => self.peek(ctx, filter, min, max, flags),
+            Request::Peek { filter, min, max, flags } => {
+                let r = self.peek(ctx, filter, min, max, flags);
+                if let Reply::Message { msg } = &r {
+                    self.queue(ctx.key()).last = (msg.time, msg.x, msg.y);
+                }
+                r
+            }
+            // The surfaces are the NT personality's (`crate::surfaces`).
+            Request::Surface { .. } => Reply::Value { value: 0 },
+            Request::MessageInfo {} => {
+                let (t, x, y) = self.queue(ctx.key()).last;
+                Reply::Value { value: u64::from(t) | (u64::from(x as u16) << 32) | (u64::from(y as u16) << 48) }
+            }
             Request::SendStart { hwnd, msg, w, l } => self.send_start(ctx, hwnd, msg, w, l, fx),
             Request::SendWait { id } => self.send_wait(ctx, id),
             Request::SendDone { id, result } => {

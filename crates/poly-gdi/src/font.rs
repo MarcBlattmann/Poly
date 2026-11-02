@@ -103,6 +103,7 @@ impl Face {
                 height: 13,
                 ascent: 11,
                 descent: 2,
+                internal_leading: 2,
                 ave_char_width: 5,
                 max_char_width: 23,
                 weight: 400,
