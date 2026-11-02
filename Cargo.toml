@@ -167,6 +167,7 @@ rustc-demangle = "0.1.28"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 jpeg-decoder = { version = "0.3", default-features = false }
+lzma-rs = "0.3"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

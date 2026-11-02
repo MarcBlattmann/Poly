@@ -155,7 +155,7 @@ export QT_QPA_PLATFORM=wayland
 /// runtime directory stays private (mode 0700); programs run as `poly`
 /// (`poly-runas`: VLC will not run as root) reach the socket through a
 /// hard link in their own.
-const DESKTOP_SCRIPT: &str = "#!/bin/bash
+pub(crate) const DESKTOP_SCRIPT: &str = "#!/bin/bash
 # Started by init in the chroot (tools/xtask/src/toolkits.rs).
 . /etc/poly-desktop.env
 mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"
@@ -423,7 +423,7 @@ pub fn make(name: &str) -> std::result::Result<(PathBuf, Contents), String> {
 }
 
 /// The initramfs: BusyBox's init with [`INITTAB`].
-fn write_initramfs() -> Result<std::result::Result<PathBuf, String>> {
+pub(crate) fn write_initramfs() -> Result<std::result::Result<PathBuf, String>> {
     let binary = match crate::busybox::obtain()? {
         Ok(b) => b,
         Err(why) => return Ok(Err(why)),
@@ -439,8 +439,9 @@ pub const SIZE: (u32, u32) = crate::desktop::SIZE;
 /// What the compositor prints when the desktop is up.
 const READY: &str = "poly-compositor: desktop ready";
 
-/// A boot of the toolkits' disk: the serial session, QMP, the recording.
-struct Machine {
+/// A boot of the toolkits' disk: the serial session, QMP, the recording
+/// (Chromium's disk boots the same way, `chromium.rs`).
+pub(crate) struct Machine {
     s: Session,
     qmp: screen::Qmp,
     shots: PathBuf,
@@ -530,6 +531,18 @@ fn abs_events(x: i32, y: i32) -> Vec<String> {
 impl Machine {
     /// Boot `image`.
     fn boot(kernel: &Path, syms: &Arc<Symbols>, image: &Path, initrd: &Path, tag: &str) -> Result<Machine> {
+        Machine::boot_with(kernel, syms, image, initrd, tag, MEMORY)
+    }
+
+    /// Boot `image` with `memory` of guest memory.
+    pub(crate) fn boot_with(
+        kernel: &Path,
+        syms: &Arc<Symbols>,
+        image: &Path,
+        initrd: &Path,
+        tag: &str,
+        memory: &str,
+    ) -> Result<Machine> {
         let qmp_path = std::env::temp_dir().join(format!("poly-toolkits-qmp-{}-{tag}.sock", std::process::id()));
         let _ = std::fs::remove_file(&qmp_path);
         let wav = root().join(format!("target/poly-toolkits-{tag}.wav"));
@@ -540,7 +553,7 @@ impl Machine {
             crate::busybox::INIT_ARGS,
             std::env::var("POLY_TOOLKITS_APPEND").unwrap_or_default()
         );
-        let mut cmd = crate::qemu(kernel, MEMORY, append.trim_end(), crate::Devices::None, "stdio");
+        let mut cmd = crate::qemu(kernel, memory, append.trim_end(), crate::Devices::None, "stdio");
         cmd.args(["-display", "none"])
             .args(rootdisk::drive_args(image))
             .arg("-initrd")
@@ -631,7 +644,7 @@ impl Machine {
         Ok(img)
     }
 
-    fn step(&mut self, step: &Step) -> Result {
+    pub(crate) fn step(&mut self, step: &Step) -> Result {
         match step {
             Step::Run(line) => {
                 let out = self.s.run(line)?;
@@ -652,8 +665,75 @@ impl Machine {
         Ok(())
     }
 
+    /// Wait for the disk and the desktop, then for the console's prompt.
+    pub(crate) fn desktop_up(&mut self) -> Result {
+        let started = Instant::now();
+        self.s.expect("rootdisk: /dev/vda mounted on /mnt/root")?;
+        self.s.expect(READY)?;
+        // The prompt may have come before the compositor's lines: ask again.
+        self.s.send("\r")?;
+        self.s.prompt()?;
+        eprintln!("==> desktop up after {} s", started.elapsed().as_secs());
+        Ok(())
+    }
+
+    /// The console's text so far.
+    pub(crate) fn text(&mut self) -> String {
+        self.s.text().to_string()
+    }
+
+    /// Run a command line on the console; its output.
+    pub(crate) fn run(&mut self, line: &str) -> Result<String> {
+        self.s.run(line)
+    }
+
+    pub(crate) fn set_timeouts(&mut self, step: Duration, session: Duration) {
+        self.s.set_timeouts(step, session);
+    }
+
+    /// Start an app from the launcher by `query`; once its window is shown
+    /// (the compositor's log: `launched <launcher_name>`, `window ... shown
+    /// at`), its content must be mostly `before`, and a click in its middle
+    /// must turn it `after` (Chromium's input page, `chromium.rs`).
+    pub(crate) fn launch_and_click(
+        &mut self,
+        query: &str,
+        launcher_name: &str,
+        before: [u8; 3],
+        after: [u8; 3],
+    ) -> Result {
+        self.key("meta_l")?;
+        std::thread::sleep(Duration::from_millis(500));
+        self.type_text(query)?;
+        self.s.expect(&format!("launcher query {query:?}"))?;
+        std::thread::sleep(Duration::from_millis(500));
+        let from = self.text_len();
+        self.key("ret")?;
+        let wait = Duration::from_secs(600);
+        self.seen(from, &format!("poly-compositor: launched {launcher_name}"), wait)?;
+        let rest = self.seen(from, "poly-compositor: window ", wait)?;
+        let place @ (_, _, w, h) = window_place(&rest).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
+        let deadline = Instant::now() + wait;
+        let ((x0, y0, x1, y1), n) = loop {
+            std::thread::sleep(Duration::from_secs(3));
+            let img = self.shot(&format!("{query}-shown"))?;
+            if let Some(found) = find_colour(&img, before, 3, place)
+                && found.1 as i64 * 3 >= i64::from(w) * i64::from(h)
+            {
+                break found;
+            }
+            expect(&format!("the window at {place:?} shows {before:02x?}"), Instant::now() < deadline)?;
+        };
+        self.click(((x0 + x1) / 2) as i32, ((y0 + y1) / 2) as i32)?;
+        std::thread::sleep(Duration::from_secs(3));
+        let img = self.shot(&format!("{query}-clicked"))?;
+        let area = (x0 as i32, y0 as i32, (x1 - x0 + 1) as i32, (y1 - y0 + 1) as i32);
+        let now = find_colour(&img, after, 3, area).map_or(0, |(_, n)| n);
+        expect(&format!("the click turned the window {after:02x?} ({now} of {n} pixels)"), now * 4 >= n * 3)
+    }
+
     /// Power off and wait for QEMU to end.
-    fn poweroff(&mut self) -> Result {
+    pub(crate) fn poweroff(&mut self) -> Result {
         self.s.send("poweroff\r")?;
         let r = self.s.expect("reboot: Power down.");
         let _ = self.s.finish();
