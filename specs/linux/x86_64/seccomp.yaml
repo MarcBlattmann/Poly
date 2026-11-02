@@ -25,10 +25,13 @@ summary: >
   process dies as if by SIGSYS, wait status signal 31), KILL_THREAD 0 (the
   thread dies by SIGSYS; a single-threaded process dies the same way),
   TRAP 0x00030000 (the call is not run; SIGSYS is sent with si_code
-  SYS_SECCOMP 1, si_errno = data, si_syscall = the number, si_arch; with
+  SYS_SECCOMP 1, si_errno = data, si_syscall = the number, si_arch,
+  si_call_addr = the address just after the 2-byte `syscall` instruction
+  (its return address, not the instruction itself); with
   the default action the process dies by SIGSYS; when a handler returns,
   the call appears to return its own syscall number, the registers being
-  as at entry), ERRNO 0x00050000 (the call is not run and returns -data;
+  as at entry, unless the handler changed the ucontext's RAX, which is
+  then the call's result), ERRNO 0x00050000 (the call is not run and returns -data;
   data above 4095 is clamped to 4095; data 0 returns 0), USER_NOTIF
   0x7fc00000, TRACE 0x7ff00000, LOG 0x7ffc0000 (allowed and logged),
   ALLOW 0x7fff0000. Filters stack and are never removed: every filter
@@ -50,6 +53,11 @@ returns:
   get_notif_sizes: "0; writes three u16: sizeof(struct seccomp_notif) 80, sizeof(struct seccomp_notif_resp) 24, sizeof(struct seccomp_data) 64; nothing after them"
   errno_action: "the call returns -data without running (ERRNO|42 on getppid: -42; ERRNO|0 on getpid: 0; ERRNO|5000: -4095)"
   trap_action: "SIGSYS with si_signo 31, si_code 1, si_errno = data, si_syscall = nr, si_arch 0xc000003e; after the handler the call's return value (rax) is the syscall number"
+  trap_siginfo_layout: "the _sigsys member of the 128-byte siginfo_t: si_signo, si_errno, si_code (3 x i32), 4 bytes padding, then at offset 16 si_call_addr (u64), at 24 si_syscall (i32), at 28 si_arch (u32)"
+  trap_call_addr: "si_call_addr is the address of the byte after the `syscall` instruction (0f 05), i.e. the instruction's address + 2, the address the call would return to; each call site reports its own (two sites of the same call give their own addresses); the filter's seccomp_data.instruction_pointer is the same address (a filter matching it traps that site only)"
+  trap_data: "si_errno is the 16 data bits as given: 0 for TRAP|0, 0x1234 for TRAP|0x1234, 65535 for TRAP|0xffff"
+  trap_ucontext: "at handler entry the ucontext (asm/ucontext.h: uc_flags, uc_link, uc_stack, then struct sigcontext at offset 40) holds the registers of the trapped call: RIP = si_call_addr (after the instruction), RAX = the syscall number (the call was not run; no -ENOSYS), RDI, RSI, RDX, R10, R8, R9 = arguments 1..6"
+  trap_emulation: "a value the handler stores in the ucontext's RAX is the call's return value once the handler returns through rt_sigreturn (1234, 0, -1 = -EPERM all observed); execution resumes at si_call_addr; if it leaves RAX alone the call returns its own number"
   kill_actions: "the process ends with wait status 'terminated by signal 31' (core bit also set where core dumps are enabled; the tests set PR_SET_DUMPABLE 0)"
   precedence: "older KILL_PROCESS beats newer ERRNO and newer KILL_PROCESS beats older ERRNO; ERRNO|42 then ERRNO|7 on the same call: -7; ERRNO|9 then ALLOW then LOG: still -9"
   no_new_privs: "prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) = 0 (again: 0); PR_GET_NO_NEW_PRIVS (args 0) reads 1; inherited by children; cannot be cleared"
@@ -80,8 +88,8 @@ timing:
   typical: "microseconds per installation; a few nanoseconds to microseconds per filtered call"
   guarantees: "none"
 tests:
-  visible: 6  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 8  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
 # Notes: constants from linux/seccomp.h (SECCOMP_SET_MODE_*, SECCOMP_GET_*,
 # SECCOMP_FILTER_FLAG_*, SECCOMP_RET_*), linux/filter.h (struct
 # sock_filter, sock_fprog), linux/bpf_common.h (BPF_LD|BPF_W|BPF_ABS 0x20,
@@ -97,4 +105,8 @@ tests:
 # (2 here, 0 on a machine without a runtime filter), and passes for any
 # caller except ld_seccomp_root (CAP_SYS_ADMIN without no_new_privs). The
 # TRACE and USER_NOTIF actions are not exercised (a ptrace-based reference
-# changes TRACE).
+# changes TRACE). The SIGSYS call address, ucontext and emulation rules
+# (trap_call_addr .. trap_emulation) were observed by spec-linux-chromium-2
+# on 2026-11-02 on the same machine, from raw `syscall` instructions at
+# labelled addresses, with asm/ucontext.h and asm/sigcontext.h for the
+# ucontext layout; they hold under the diff runner's ptrace tracer too.
