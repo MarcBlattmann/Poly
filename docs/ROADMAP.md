@@ -135,6 +135,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] The shell looks 1:1 like Alpine Shell: ridge with panels extending from it, centred launcher, notifications at the top right, settings window, its fonts, icons, colours, soft shadows and blur (screenshots match Alpine Shell's references)
 - [x] `cargo xtask desktop` builds and boots the desktop on a Windows host as well as on Linux (ADR 0126: the glibc build is gone, the C test clients are optional in its image)
 - [x] **Milestone:** GTK and Qt apps run; VLC plays a video with sound (ADR 0120, 0123: GTK 3, GTK 4 and Qt 6 apps from the launcher, clicked and typed into; `cvlc` plays the test video with its sound through ALSA; VLC's Qt interface through Xwayland shows it; boot group `toolkits`)
+- [ ] **Milestone:** Chromium (the Linux build) runs on the desktop with its sandbox enabled: opens pages, renders, takes input (owner request, 2026-11-02)
 
 ## Phase 7: Windows GUI apps
 
