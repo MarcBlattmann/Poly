@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/init_module          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534, children dropping to uid/gid 1000; umask 022; CONFIG_MODULES=y, no module signing, kernel.modules_disabled 0"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  init_module(image, len, params) (syscall 175) loads a kernel module
+  from an ELF image in memory. Order: (1) CAP_SYS_MODULE (and modules not
+  disabled), else EPERM, before anything is read; (2) a length far beyond
+  any image (1 TiB) gives ENOMEM before copying; (3) the image is copied:
+  a NULL or unreadable image with len > 0, or one that runs into an
+  inaccessible page, gives EFAULT; len 0 reads nothing (any pointer,
+  also NULL) and gives ENOEXEC; (4) the image is checked as a module ELF
+  file: anything that is not one gives ENOEXEC (junk bytes, one byte, the
+  ELF identification alone, an ELF header of zeros); (5) only then is
+  params read, so a NULL or unreadable params with an invalid image is
+  still ENOEXEC. Nothing is loaded by an invalid image.
+returns:
+  success: "0 when the module was loaded and its init ran (not tested: Poly cannot load Linux modules)"
+errors:
+  perm: "EPERM (1): no CAP_SYS_MODULE; checked first"
+  nomem: "ENOMEM (12): len far too big (1 TiB)"
+  fault: "EFAULT (14): image NULL/unreadable/partly inaccessible with len > 0"
+  noexec: "ENOEXEC (8): not a valid module ELF image (also len 0)"
+  exist: "EEXIST (17): module already loaded; not tested"
+side_effects: "a valid module is loaded and its init function runs"
+threading: "none specific"
+ordering:
+  - "capability, size, copy of the image, ELF checks, params"
+timing:
+  typical: "microseconds for errors"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: BusyBox insmod/modprobe use init_module or finit_module. Poly has
+# no Linux modules: rejecting every image with these errors is the target.
+# Module names loaded on the host are not used by any test.

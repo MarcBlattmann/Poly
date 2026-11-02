@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/clock_settime        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  clock_settime(clockid, tp) (syscall 227) sets a clock from struct
+  timespec {i64 tv_sec; i64 tv_nsec}. Only CLOCK_REALTIME (0) can be set.
+  Order of checks: the clock id first (every other clock, 1..11 including
+  CLOCK_TAI and the alarm clocks, and unknown ids such as 12, 100, -1 are
+  EINVAL, even when tp is unreadable); then tp is read (EFAULT); then the
+  value is checked (tv_nsec in [0, 999999999], tv_sec >= 0 and within the
+  clock's range, else EINVAL); then CAP_SYS_TIME (EPERM). CPU-time clock
+  ids of the caller (process: -6, thread: -2, as clock_getcpuclockid
+  builds them) are EPERM for everybody. On success CLOCK_REALTIME (and
+  gettimeofday(2)) reads the new time from then on; CLOCK_MONOTONIC is not
+  stepped; the NTP state becomes unsynchronised (STA_UNSYNC).
+returns:
+  success: "0"
+errors:
+  clock: "EINVAL (22): a clock other than CLOCK_REALTIME, or an unknown id (checked first)"
+  fault: "EFAULT (14): tp unreadable (CLOCK_REALTIME)"
+  value: "EINVAL (22): tv_nsec < 0 or > 999999999, tv_sec < 0, or tv_sec too large (e.g. 0x7fffffffffff); before the permission check"
+  permission: "EPERM (1): valid time but no CAP_SYS_TIME"
+  cpu_clock: "EPERM (1): a CPU-time clock id (process or thread), also for root"
+side_effects: "steps CLOCK_REALTIME system-wide; clears the NTP synchronised state"
+threading: "none specific"
+ordering:
+  - "clock id, read tp, value check, permission, set"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: clock ids from linux/time.h. The root test sets the clock only to
+# the time just read (a backward step of microseconds) and checks that it
+# reads within a second of it.

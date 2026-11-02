@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/process_madvise      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  process_madvise(int pidfd, const struct iovec *iov, size_t vlen, int
+  advice, unsigned flags) (syscall 440) applies madvise(2) advice to the
+  ranges iov[0..vlen) of the process behind a pidfd (pidfd_open; also
+  PIDFD_NONBLOCK). It returns the total of the iov_len values advised (as
+  given, not rounded: a 100-byte range counts 100; a zero-length range 0;
+  vlen 0 returns 0). Ranges are processed in order; when one fails after
+  others succeeded the call returns the bytes done so far; when the first
+  fails, its error. On the caller itself every advice madvise accepts for
+  the range works (NORMAL, RANDOM, SEQUENTIAL, WILLNEED, DONTNEED, COLD,
+  PAGEOUT, ...; MADV_DONTNEED really drops private anonymous pages, which
+  read back as zeros). On another process only MADV_WILLNEED (3),
+  MADV_COLD (20), MADV_PAGEOUT (21) and MADV_COLLAPSE (25) are allowed
+  (others EINVAL, checked first), and the caller needs CAP_SYS_NICE
+  (EPERM otherwise, even for its own child) besides the right to inspect
+  the target. A target that has exited (zombie or reaped) has no memory:
+  ESRCH.
+returns:
+  success: "bytes advised (sum of iov_len of the ranges done)"
+errors:
+  flags: "EINVAL (22): flags != 0"
+  vlen: "EINVAL (22): vlen > 1024 (UIO_MAXIOV)"
+  iov: "EFAULT (14): iovec array unreadable"
+  fd: "EBADF (9): fd not open, or not a pidfd (/dev/null, a pipe)"
+  range: "EINVAL (22): range start not page aligned; ENOMEM (12): range with unmapped pages (when it is the first range)"
+  advice: "EINVAL (22): advice madvise rejects for the range (MADV_REMOVE on private anonymous memory, unknown values); remote: any advice outside WILLNEED/COLD/PAGEOUT/COLLAPSE"
+  perm: "EPERM (1): remote target without CAP_SYS_NICE; also madvise's own permission errors (MADV_HWPOISON without CAP_SYS_ADMIN)"
+  dead: "ESRCH (3): target exited (zombie or reaped)"
+side_effects: "as madvise(2) on the target's memory"
+threading: "acts on the target's address space"
+ordering: []
+timing:
+  typical: "microseconds per range"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from asm-generic/mman-common.h and linux/uio.h. The
+# remote test's checks expect the byte count as root and EPERM as any
+# other user (same check names). MADV_COLLAPSE depends on THP and is not
+# tested; MADV_HWPOISON (100) must never be used in tests (as root it
+# poisons memory: EBUSY observed).

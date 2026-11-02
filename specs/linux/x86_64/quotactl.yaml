@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/quotactl             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; kernel built with CONFIG_QUOTA=y, QFMT_V2 as a module, CONFIG_TMPFS_QUOTA off; no quota-enabled file system mounted"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  quotactl(cmd, special, id, addr) (syscall 179) manipulates disk quotas
+  of the file system on the block device `special`. cmd is
+  QCMD(subcmd, type) = (subcmd << 8) | (type & 0xff). Order of checks:
+  (1) type must be below MAXQUOTAS (3: USRQUOTA 0, GRPQUOTA 1, PRJQUOTA
+  2), else EINVAL, before special is read (unreadable or NULL special
+  does not matter); (2) Q_SYNC (0x800001) with special NULL syncs the
+  quotas of all file systems and returns 0, for any user; every other
+  command with special NULL (Q_GETFMT, Q_QUOTAOFF, Q_GETQUOTA, the XFS
+  commands such as Q_XGETQSTAT and Q_XQUOTASYNC, cmd 0, unknown commands)
+  gives ENODEV; (3) special is resolved as a path (ENOENT for missing or
+  "", ENOTDIR, EFAULT) and must be a block device, else ENOTBLK (a
+  directory, a character device), whatever the command; a block device
+  with no mounted file system gives ENODEV; (4) only then is the
+  sub-command looked at, so an unknown command gets the error of the
+  lookup (ENODEV for NULL, ENOENT, ENOTBLK), and the file system decides
+  (ENOSYS without quota support, ESRCH when quota is off, EPERM for
+  setting commands without CAP_SYS_ADMIN or for reading another user's
+  quota). No permission check happens before (4): every result above is
+  the same for an unprivileged user.
+returns:
+  sync_all: "0 for QCMD(Q_SYNC, 0..2) with special NULL"
+errors:
+  type: "EINVAL (22): quota type >= 3; checked first"
+  nodev: "ENODEV (19): special NULL with a command other than Q_SYNC; a block device without a mounted file system"
+  missing: "ENOENT (2): special missing or empty"
+  notdir: "ENOTDIR (20): a component of special is not a directory"
+  fault: "EFAULT (14): special unreadable"
+  notblk: "ENOTBLK (15): special is not a block device (directory, character device)"
+  fs: "ENOSYS (38) / ESRCH (3) / EPERM (1) / EINVAL (22): from the file system for real block devices; not tested (Poly has no block devices)"
+side_effects: "Q_SYNC writes quota files of quota-enabled file systems"
+threading: "none specific"
+ordering:
+  - "type, then NULL-special handling, then path lookup and block device check, then the command"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/quota.h and linux/dqblk_xfs.h. All tests run
+# as any user. Quota-enabled file systems need a block device (ext4, xfs)
+# or a tmpfs built with CONFIG_TMPFS_QUOTA (off on the oracle), so the
+# per-file-system commands were not observed.

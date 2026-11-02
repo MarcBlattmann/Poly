@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/delete_module        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534, children dropping to uid/gid 1000; umask 022; CONFIG_MODULES=y with some modules loaded (never touched by the tests)"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  delete_module(name, flags) (syscall 176) unloads the module `name`.
+  Order: (1) CAP_SYS_MODULE, else EPERM, before the name is read (NULL or
+  unreadable names are EPERM too); (2) the name is read as a string of at
+  most MODULE_NAME_LEN - 1 = 55 bytes: a NULL or unreadable pointer, or a
+  short unterminated name that runs into an inaccessible page, gives
+  EFAULT; a longer name is cut to 55 bytes (no ENAMETOOLONG: a name of 60
+  unterminated bytes ending exactly at an inaccessible page is not a
+  fault); (3) a module of that name must be loaded, else ENOENT, before
+  the flags matter (0, O_NONBLOCK, O_TRUNC, both, or meaningless bits all
+  give ENOENT; "" and names with '/' are just names that are not loaded).
+  For loaded modules (not tested) EWOULDBLOCK/EBUSY report modules in use,
+  and O_TRUNC forces removal.
+returns:
+  success: "0 when the module was unloaded (not tested)"
+errors:
+  perm: "EPERM (1): no CAP_SYS_MODULE; checked first"
+  fault: "EFAULT (14): name NULL, unreadable, or unterminated within 55 bytes before an inaccessible page"
+  missing: "ENOENT (2): no module of that name (also empty, slash, overlong names)"
+  busy: "EBUSY (16) / EWOULDBLOCK (11): module in use; not tested"
+side_effects: "a loaded module is removed"
+threading: "none specific"
+ordering:
+  - "capability, name copy, lookup, then flags"
+timing:
+  typical: "microseconds for errors"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: Poly has no Linux modules, so every readable name is ENOENT for
+# root. The tests use names no Linux module has (f_no_such_module, ...).

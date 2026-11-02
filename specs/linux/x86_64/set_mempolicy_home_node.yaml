@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/set_mempolicy_home_node   # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, CONFIG_NUMA=y, one NUMA node (node 0); tests run as root and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  set_mempolicy_home_node(unsigned long start, unsigned long len,
+  unsigned long home_node, unsigned long flags) (syscall 450) sets the
+  preferred ("home") node of the mbind policies of the mappings in
+  [start, start + len). The range is walked mapping by mapping (holes are
+  skipped); each mapping's policy must be MPOL_BIND or
+  MPOL_PREFERRED_MANY. The first mapping with another explicit policy
+  (INTERLEAVE, WEIGHTED_INTERLEAVE, PREFERRED, LOCAL) stops the call with
+  EOPNOTSUPP. If no mapping in the range had a policy that took the home
+  node and none failed (no mapping policy at all, policy reset to
+  MPOL_DEFAULT, or no mapping in the range) the result is ENOENT; the
+  thread's own policy from set_mempolicy is not used. len 0 returns 0.
+  The mode and mask read back with get_mempolicy are unchanged (the home
+  node is not visible there).
+returns:
+  success: "0 (at least one BIND/PREFERRED_MANY mapping updated, or len 0)"
+  mixed: "hole then BIND: 0; BIND then hole: 0; BIND then INTERLEAVE: EOPNOTSUPP"
+errors:
+  flags: "EINVAL (22): flags != 0"
+  node: "EINVAL (22): home_node not an existing node (1, 5000, -1); checked before the range"
+  range: "EINVAL (22): start not page aligned, or start + len wraps"
+  mode: "EOPNOTSUPP (95): a mapping in the range with an INTERLEAVE, WEIGHTED_INTERLEAVE, PREFERRED or LOCAL policy"
+  no_policy: "ENOENT (2): no mapping policy in the range (never set, reset to DEFAULT, or an unmapped range)"
+side_effects: "later allocations for the range prefer the home node"
+threading: "per address space"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: one node assumed (node 0 is the only valid home node).

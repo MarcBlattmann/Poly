@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/lsm_set_self_attr    # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root and as uid/gid 65534; SELinux active without a policy"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  lsm_set_self_attr(attr, ctx, size, flags) (syscall 460) sets one
+  security attribute of the calling task in the module named by ctx->id.
+  ctx points at one struct lsm_ctx {u64 id; u64 flags; u64 len; u64
+  ctx_len; u8 ctx[]} of size bytes (linux/lsm.h). Checks, in this order:
+  flags must be 0 (EINVAL); size must be larger than the 32-byte header
+  (0, 31, 32: EINVAL) and at most 4096 (E2BIG above); ctx is copied
+  (EFAULT); ctx->len must not exceed size and must be at least 32 +
+  ctx->ctx_len (EINVAL otherwise; a len smaller than size, and a len that
+  is not a multiple of 8, are accepted). Then the module with that id that
+  can set attributes gets the request; if there is none (capability 100,
+  landlock 110, id 0, unknown ids) the result is EOPNOTSUPP whatever attr
+  is (0, 1, 100..105, 999). ctx->flags is not checked. Nothing changes on
+  failure. On a kernel without SELinux, AppArmor or Smack (Poly) every
+  well-formed call is EOPNOTSUPP.
+  On the oracle SELinux (101) accepts some attributes without a policy
+  (FSCREATE with "kernel" returned 0); tests never use id 101.
+returns:
+  success: "0 (only with a module that sets attributes)"
+errors:
+  flags: "EINVAL (22): flags != 0 (before anything else, even a NULL ctx)"
+  size_small: "EINVAL (22): size <= 32 (before ctx is read)"
+  size_big: "E2BIG (7): size > 4096 (before ctx is read)"
+  fault: "EFAULT (14): ctx NULL or unreadable"
+  header: "EINVAL (22): ctx->len > size, or ctx->len < 32 + ctx->ctx_len"
+  no_module: "EOPNOTSUPP (95): no module with id ctx->id that sets attributes, or the module does not support attr"
+side_effects: "none on failure; with a supporting module the attribute of the calling task"
+threading: "the calling thread's attributes"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: f_lsm_set_self_attr_nolsm also checks that lsm_get_self_attr's
+# answer for LSM_ATTR_CURRENT is unchanged by the failed calls.

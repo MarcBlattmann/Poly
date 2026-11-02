@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/finit_module         # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534, children dropping to uid/gid 1000; umask 022; files on /dev/shm (tmpfs); CONFIG_MODULES=y, CONFIG_MODULE_DECOMPRESS off, no module signing"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  finit_module(fd, params, flags) (syscall 313) loads a kernel module from
+  a file descriptor. Order: (1) CAP_SYS_MODULE, else EPERM, before
+  anything else (bad flags or fds are EPERM too); (2) flags may only hold
+  MODULE_INIT_IGNORE_MODVERSIONS (1), MODULE_INIT_IGNORE_VERMAGIC (2),
+  MODULE_INIT_COMPRESSED_FILE (4), else EINVAL, before the fd is looked
+  at; (3) fd must be open for reading: not open, -1, O_WRONLY or O_PATH
+  give EBADF; (4) the file must be a regular file with data: a directory,
+  a pipe, a character device (/dev/null), an empty file give EINVAL;
+  (5) the file must not be open for writing anywhere (another O_WRONLY
+  descriptor, or the passed descriptor itself when it is O_RDWR), else
+  ETXTBSY, before the contents are looked at; once the last writer is
+  closed the same descriptor works; (6) the contents must be a module ELF
+  image, else ENOEXEC (junk, a memfd with junk), whatever flags 1/2;
+  with MODULE_INIT_COMPRESSED_FILE the oracle (no in-kernel module
+  decompression) gives EOPNOTSUPP. params is read after the image (NULL
+  with a junk file is ENOEXEC).
+returns:
+  success: "0 when the module was loaded (not tested: Poly cannot load Linux modules)"
+errors:
+  perm: "EPERM (1): no CAP_SYS_MODULE; checked first"
+  flags: "EINVAL (22): unknown flag bits; before the fd"
+  bad_fd: "EBADF (9): fd not open, not readable (O_WRONLY), or O_PATH"
+  not_file: "EINVAL (22): directory, pipe, character device, empty file"
+  txtbsy: "ETXTBSY (26): the file is open for writing (any descriptor)"
+  noexec: "ENOEXEC (8): not a valid module image"
+  compressed: "EOPNOTSUPP (95): MODULE_INIT_COMPRESSED_FILE on a kernel without module decompression"
+side_effects: "a valid module is loaded and its init function runs"
+threading: "none specific"
+ordering:
+  - "capability, flags, fd, file type, writers, contents, params"
+timing:
+  typical: "microseconds for errors"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/module.h. Observed oddity: a memfd opened
+# read-write by memfd_create gives ENOEXEC (not ETXTBSY) with junk
+# contents; the test only relies on the ENOEXEC result.

@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/migrate_pages        # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, CONFIG_NUMA=y, CONFIG_MIGRATION=y, one NUMA node (node 0); tests run as root and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  migrate_pages(int pid, unsigned long maxnode, const unsigned long
+  *old_nodes, const unsigned long *new_nodes) (syscall 256) moves all
+  pages of process pid (0 or the caller's pid = the caller) that are on
+  old_nodes to new_nodes and returns the number of pages it could not
+  move. Masks hold maxnode - 1 bits, as for set_mempolicy. With one node:
+  0 -> 0 returns 0; old_nodes empty or naming only a missing node returns
+  0 (nothing to move). Memory contents are unchanged. Another process may
+  be targeted when the caller may inspect it (same user) or is
+  privileged; a caller without CAP_SYS_NICE also may only name new_nodes
+  within its own allowed nodes.
+returns:
+  success: "number of pages not moved (0 in every tested case)"
+errors:
+  new_nodes: "EINVAL (22): new_nodes empty (also both masks NULL), or naming only nodes that do not exist (for callers with CAP_SYS_NICE)"
+  new_nodes_unprivileged: "EPERM (1): new_nodes not within the caller's allowed nodes and no CAP_SYS_NICE (checked before the EINVAL above: uid 65534 asking for node 1 gets EPERM, root EINVAL)"
+  maxnode: "EINVAL (22): maxnode 0, or above one page of bits (65536)"
+  fault: "EFAULT (14): old_nodes or new_nodes unreadable"
+  pid: "ESRCH (3): no such process (a reaped child, -1)"
+  perm: "EPERM (1): target of another user without CAP_SYS_NICE (a uid-1000 child on its root parent); root may migrate a uid-1000 process"
+side_effects: "pages change node; with one node nothing moves"
+threading: "acts on the target's whole address space"
+ordering: []
+timing:
+  typical: "microseconds (proportional to the pages moved)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: one node assumed (node 1 does not exist). The permission test
+# needs root (its child drops to uid 1000). maxnode limits as
+# set_mempolicy (32767 already EINVAL on the reference with a mask of
+# 2048 longs; only 65536 is tested).

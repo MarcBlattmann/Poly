@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/request_key          # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root and as uid/gid 65534; no /sbin/request-key installed; every test first joins an anonymous session keyring of its own"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  request_key(type, description, callout_info, dest_keyring) (syscall
+  249) looks for a key of that type and exact description in the caller's
+  thread keyring, process keyring and session keyring, in that order,
+  including keyrings nested in them (keyrings reachable only by serial are
+  not searched; a process that never joined a session searches the
+  user-session keyring instead). A hit returns the key's serial; with
+  dest_keyring != 0 the key is also linked into that keyring (special ids
+  as in add_key.yaml; the thread/process keyring is created if needed).
+  Expired keys are skipped. A revoked match gives EKEYREVOKED only if no
+  keyring searched before it exists; the "not here" of an earlier
+  (existing, even empty) thread or process keyring wins, giving ENOKEY.
+  Without callout_info (NULL) a miss is ENOKEY. With callout_info (any
+  string, also "") and no key, the kernel creates a construction key and
+  runs /sbin/request-key to instantiate it; where that program does not
+  exist the call fails with ENOENT and the key is left negative, linked
+  into the destination (default: the session keyring), so later requests
+  for that type and description, with or without callout, give ENOKEY
+  (for the negative key timeout). Keys of type "keyring" cannot be
+  constructed: EPERM.
+returns:
+  success: "the found key's serial"
+errors:
+  type_fault: "EFAULT (14): type NULL or unreadable"
+  desc_fault: "EFAULT (14): description NULL or unreadable; callout_info unreadable"
+  type_empty: "EINVAL (22): type \"\""
+  type_dot: "EPERM (1): type starting with '.'"
+  dest: "EINVAL (22): dest_keyring KEY_SPEC_GROUP_KEYRING (-6)"
+  missing: "ENOKEY (126): no such key and no callout_info; empty description; unknown type; negative key from an earlier failed construction"
+  revoked: "EKEYREVOKED (128): the match is revoked and no earlier keyring exists (see summary)"
+  no_helper: "ENOENT (2): callout_info given, no key, and /sbin/request-key does not exist"
+  keyring_construct: "EPERM (1): callout_info given for a missing key of type keyring"
+side_effects: "a successful call with dest_keyring links the key there; a failed construction leaves a negative key in the destination"
+threading: "the calling thread's thread keyring is searched first"
+ordering:
+  - "thread keyring, then process keyring, then session (or user-session) keyring"
+timing:
+  typical: "microseconds; construction waits for the upcall program"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes:
+# - The ENOENT behaviour assumes no /sbin/request-key (the oracle has
+#   none, and Poly's test systems have none). With keyutils installed the
+#   helper runs and decides the outcome.
+# - Poly runs the test as the first process (no session joined); tests
+#   join a fresh anonymous session keyring before anything else.
