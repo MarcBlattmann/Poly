@@ -114,6 +114,10 @@ pub fn image() -> Result<PathBuf> {
         Err(_) => eprintln!("==> no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font"),
     }
     // Alpine Shell's fonts for the shell (ADR 0127).
+    // Alpine Shell's wallpapers (ADR 0127).
+    for (path, data) in crate::wallpapers::tree()? {
+        tree.files.push((path, 0o644, data));
+    }
     let shell_fonts = crate::fonts::shell_tree();
     if shell_fonts.is_empty() {
         eprintln!("==> no shell fonts (`cargo xtask fonts fetch`): the shell draws in DejaVu Sans");

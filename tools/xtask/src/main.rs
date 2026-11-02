@@ -113,6 +113,7 @@ mod terminal;
 mod toolkits;
 mod unzip;
 mod virgl;
+mod wallpapers;
 mod wayland;
 mod win32;
 mod winimports;

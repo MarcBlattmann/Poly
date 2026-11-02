@@ -24,7 +24,8 @@ crates and touches the compositor's platform layer only where it must
 Sources: Alpine Shell's source (values only; its TypeScript was not
 copied, ADR 0124), its `@alpine/ui` 0.10.0 tokens and components, its
 `.agent-screenshots`, and the public specifications named below. The live
-copy on `homeserver2` could not be used: Alpine Shell is not installed or
+copy on `homeserver2` was first not usable (see "The live reference" for how it was
+captured later): Alpine Shell was not installed or
 running there (only its old settings folder is), and installing it is not
 allowed, so every comparison is against the repository's screenshots.
 
@@ -143,12 +144,42 @@ In `poly-wayland` because the frame needs them and the shell depends on it
 
 ### The wallpaper
 
-Alpine shows the Windows wallpaper, and the two pictures it bundles
-(`apps/desktop/wallpapers`) have no recorded author, source or licence in
-its own `CREDITS.md`, so Poly does not ship them. Its default, "Valley", is
-drawn: a pale sky over three ranges of dark grainy dunes and a bright
-river, in Alpine's greys, ordered-dithered; the other presets are the
-gradients of ADR 0117.
+Alpine shows the Windows wallpaper and bundles two pictures,
+`Grainy Valley.jpeg` and `Quiet Moment In Nature.jpg`
+(`apps/desktop/wallpapers`). The owner, whose they are or who may use them
+freely, lets Poly ship them (THIRD_PARTY.md). They are in
+`third_party/alpine-shell/wallpapers/`; `cargo xtask` decodes them on the
+host with the `jpeg-decoder` crate (pure Rust, so on Windows too), scales
+them to cover 1600 × 900 by averaging, and puts them in the desktop's
+images as `/usr/share/poly/wallpapers/<preset>.pwal`, a plain picture
+format (`PWAL`, width, height, RGB; `poly_shell::picture`) so the native
+compositor needs no JPEG decoder. The compositor hands them to the shell
+(`Shell::add_wallpaper`), which draws them to cover the screen, sampled
+bilinearly, once per size into its cache. Grainy Valley is the default;
+Quiet Moment and four gradients follow. Without the pictures (tests,
+images built without them) Grainy Valley falls back to a drawn valley in
+the same greys and the others to gradients.
+
+### The live reference (homeserver2)
+
+A fresh build of Alpine Shell (its repository at `3557227`, in a separate
+worktree, `bun install`, the native add-on, `vite build`, electron-builder
+`--dir`) packaged shows only its first-run window ("Welcome to a faster,
+cleaner Windows experience", Install, a gear, a flask). Install registers
+it as the Windows shell; the flask's test session retires Explorer. Its
+development mode — the stock Electron runtime running the unpacked app, the
+pages served from `dist/` on 127.0.0.1:5173 as its dev server would — runs
+the shell beside Explorer without registering anything (its
+`planShellActivation` keeps an unpackaged run idle) and without a licence
+check. It ran on homeserver2 in the logged-on session (a scheduled task,
+`/IT`) at 1920 × 1080 and scale 1, driven over the Chrome DevTools Protocol
+(Alpine's keyboard hook ignores injected keys): the ridge, the launcher
+empty and typed, the system menu, the control centre, a notice (its own
+"plugin not enabled" notice through an `alpine-shell://open-app` link) and
+the settings pages were captured; then it was stopped, the task deleted,
+the build removed. The calendar needs a connected Google calendar and the
+switcher a real Alt+Tab, so those have no live picture. From the live
+launcher the section title's height became 31 (with the list's gap).
 
 ## Tests
 
@@ -187,10 +218,15 @@ gradients of ADR 0117.
   Geist); Segoe UI cannot be shipped, so Poly uses Geist there too.
 - **Text rendering.** Alpine's Chromium draws ClearType (subpixel) text on
   opaque surfaces; Poly draws grayscale with light hinting.
-- **No reference for the panels.** The repository's screenshots show the
-  ridge, the launcher and the settings window, not the control centre,
-  the calendar, the system menu or the notices, and the live copy was not
-  available; those follow Alpine's source only.
+- **No live calendar or switcher.** The calendar needs a Google account
+  connected and the switcher a real Alt+Tab; both follow Alpine's source.
+- **The live settings window is newer.** Alpine's current settings put the
+  sections in tabs in the header with a search field and show only the
+  section's pages in the sidebar, page titles in Geist, and homeserver2 runs
+  it in the light theme; Poly follows the dark sidebar layout of the
+  repository's screenshots.
+- **The notices** hang from the ridge's middle in Alpine and at the top
+  right in Poly (the owner's direction).
 - **The screenshots' ridge colour** is navy (the user picked the wallpaper's
   colour); Poly uses Alpine's default `#202020`.
 - **Content.** Poly's pages are its own (Displays has no arrangement
@@ -198,7 +234,6 @@ gradients of ADR 0117.
   launcher has no settings, windows, calculator or web rows; the control
   centre has no Wi-Fi or Bluetooth; the system menu has no Log Out or
   Hibernate; the clock is 24-hour.
-- **The wallpaper** is Poly's drawing, not Windows' or Alpine's pictures.
 - The 1 px border Alpine draws along the ridge and around surfaces where
   windows lie under them, and hover colours of the frame's buttons, are not
   drawn.
@@ -215,4 +250,5 @@ gradients of ADR 0117.
   set_animations}`, `Press::Power`; `poly_font::render_glyph_scaled`.
 - The compositor's changes: the fonts it loads, `Press::Power`, the
   release of a shell press, the panels' changes applied, no ridge hover
-  while a window is dragged, the sound card's name for the control centre.
+  while a window is dragged, the sound card's name for the control centre,
+  the wallpapers' pictures (`desktop::load_wallpapers`).

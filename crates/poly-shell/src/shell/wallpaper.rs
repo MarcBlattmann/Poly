@@ -1,12 +1,13 @@
-//! The wallpapers, drawn (ADR 0127): Alpine Shell shows the Windows
-//! wallpaper, and the two pictures it bundles carry no recorded author or
-//! licence, so Poly draws its own. The default, "Valley", is a dark,
-//! grainy landscape in Alpine's greys: a pale sky over three ranges of
-//! dunes with a bright river winding through the nearest. The others are
-//! vertical gradients with a soft light from the upper middle. Both are
-//! ordered-dithered so that gentle gradients show no steps.
+//! The wallpapers (ADR 0127): Alpine Shell's two bundled pictures, Grainy
+//! Valley (the default) and Quiet Moment, which the owner lets Poly ship,
+//! drawn from their decoded pictures ([`crate::picture`]); without the
+//! pictures (not in the image, or in tests) Grainy Valley falls back to a
+//! drawn valley in the same greys and the others to vertical gradients with
+//! a soft light from the upper middle, ordered-dithered so that gentle
+//! gradients show no steps.
 
 use crate::icons::sin_cos;
+use crate::picture::Pictures;
 use crate::theme::wallpaper as wt;
 use poly_wayland::compose::{Framebuffer, Rect};
 
@@ -27,8 +28,10 @@ fn grain(x: i32, y: i32) -> i32 {
 }
 
 /// Draw wallpaper `id` on a `w` × `h` (physical) screen, inside `clip`.
-pub fn draw(fb: &mut dyn Framebuffer, clip: Rect, id: &str, w: i32, h: i32) {
-    if id == wt::DEFAULT || !wt::PRESETS.iter().any(|p| p.0 == id) {
+pub fn draw(fb: &mut dyn Framebuffer, clip: Rect, id: &str, w: i32, h: i32, pictures: &Pictures) {
+    if let Some(p) = pictures.get(id) {
+        p.draw_cover(fb, clip, w, h);
+    } else if id == wt::DEFAULT || !wt::PRESETS.iter().any(|p| p.0 == id) {
         valley(fb, clip, w, h);
     } else {
         gradient(fb, clip, wt::colours(id), w, h);
@@ -55,11 +58,12 @@ impl Cache {
         id: &str,
         w: i32,
         h: i32,
+        pictures: &Pictures,
     ) {
         let mut c = cell.borrow_mut();
         if !c.as_ref().is_some_and(|c| c.id == id && c.w == w && c.h == h) {
             let mut mem = poly_wayland::compose::MemoryFramebuffer::new(w.max(1) as u32, h.max(1) as u32);
-            draw(&mut mem, Rect::new(0, 0, w, h), id, w, h);
+            draw(&mut mem, Rect::new(0, 0, w, h), id, w, h, pictures);
             *c = Some(Cache { id: id.into(), w, h, pixels: mem.pixels().to_vec() });
         }
         let Some(c) = c.as_ref() else { return };
@@ -181,7 +185,7 @@ mod tests {
     #[test]
     fn the_valley_has_a_pale_sky_dark_dunes_and_a_river() {
         let mut fb = MemoryFramebuffer::new(320, 200);
-        draw(&mut fb, Rect::new(0, 0, 320, 200), "valley", 320, 200);
+        draw(&mut fb, Rect::new(0, 0, 320, 200), "grainy-valley", 320, 200, &Pictures::new());
         let grey = |x: u32, y: u32| fb.pixel(x, y).unwrap() & 0xff;
         assert!(grey(160, 70) > 150, "the sky near the horizon is pale");
         assert!(grey(160, 5) < grey(160, 70), "darker at the top");
@@ -190,21 +194,21 @@ mod tests {
         assert!(river > 120, "a bright river crosses the bottom");
         // Drawn in pieces, the same.
         let mut parts = MemoryFramebuffer::new(320, 200);
-        draw(&mut parts, Rect::new(0, 0, 320, 100), "valley", 320, 200);
-        draw(&mut parts, Rect::new(0, 100, 320, 100), "valley", 320, 200);
+        draw(&mut parts, Rect::new(0, 0, 320, 100), "grainy-valley", 320, 200, &Pictures::new());
+        draw(&mut parts, Rect::new(0, 100, 320, 100), "grainy-valley", 320, 200, &Pictures::new());
         assert_eq!(parts.pixels(), fb.pixels());
         // From the cache, the same.
         let cell = core::cell::RefCell::new(None);
         let mut cached = MemoryFramebuffer::new(320, 200);
-        Cache::draw(&cell, &mut cached, Rect::new(0, 0, 320, 120), "valley", 320, 200);
-        Cache::draw(&cell, &mut cached, Rect::new(0, 120, 320, 80), "valley", 320, 200);
+        Cache::draw(&cell, &mut cached, Rect::new(0, 0, 320, 120), "grainy-valley", 320, 200, &Pictures::new());
+        Cache::draw(&cell, &mut cached, Rect::new(0, 120, 320, 80), "grainy-valley", 320, 200, &Pictures::new());
         assert_eq!(cached.pixels(), fb.pixels());
     }
 
     #[test]
     fn the_gradients_are_smooth() {
         let mut fb = MemoryFramebuffer::new(64, 64);
-        draw(&mut fb, Rect::new(0, 0, 64, 64), "forest", 64, 64);
+        draw(&mut fb, Rect::new(0, 0, 64, 64), "forest", 64, 64, &Pictures::new());
         let (t, b) = (fb.pixel(32, 0).unwrap() & 0xff00, fb.pixel(32, 63).unwrap() & 0xff00);
         assert!(t > b, "lighter at the top");
     }

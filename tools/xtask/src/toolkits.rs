@@ -365,6 +365,9 @@ pub fn collect() -> std::result::Result<Contents, String> {
     for (path, data) in crate::fonts::shell_tree() {
         tree.file(&path, 0o644, &data);
     }
+    for (path, data) in crate::wallpapers::tree().map_err(|e| e.to_string())? {
+        tree.file(&path, 0o644, &data);
+    }
     match compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo") {
         Ok(demo) => tree.file("usr/local/bin/wl-demo", 0o755, &demo),
         Err(why) => contents.notes.push(format!("wl-demo: {why}")),

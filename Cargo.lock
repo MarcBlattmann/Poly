@@ -9,6 +9,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "jpeg-decoder"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00810f1d8b74be64b13dbf3db89ac67740615d6c891f0e7b6179326533011a07"
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -570,6 +576,7 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 name = "xtask"
 version = "0.0.1"
 dependencies = [
+ "jpeg-decoder",
  "poly-binfmt",
  "poly-block",
  "poly-cpio",
@@ -584,6 +591,7 @@ dependencies = [
  "poly-ldr",
  "poly-pe",
  "poly-personality-native",
+ "poly-shell",
  "poly-term",
  "poly-vfs",
  "poly-wincrypt",

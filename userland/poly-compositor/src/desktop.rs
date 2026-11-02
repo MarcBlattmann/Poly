@@ -22,6 +22,20 @@ pub const FONT: &str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
 /// Alpine Shell's fonts, where the desktop's images put them (ADR 0127).
 pub const SHELL_FONTS: &str = "/usr/share/poly/fonts";
 
+/// Alpine Shell's wallpapers, where the desktop's images put them
+/// (`poly_shell::picture` files, ADR 0127).
+pub const WALLPAPERS: &str = "/usr/share/poly/wallpapers";
+
+/// Give the shell the wallpapers' pictures that are on the disk.
+pub fn load_wallpapers(shell: &mut poly_shell::Shell) {
+    for (id, _, _, _, _) in poly_shell::theme::wallpaper::PRESETS {
+        let path = format!("{WALLPAPERS}/{id}.pwal");
+        if let Some(p) = poly_rt::fs::read(&path).ok().and_then(|d| poly_shell::picture::parse(&d)) {
+            shell.add_wallpaper(id, p);
+        }
+    }
+}
+
 /// A font file read and kept for the program's life.
 fn load_font(path: &str) -> Option<poly_font::Font<'static>> {
     let data = poly_rt::fs::read(path).ok()?;

@@ -69,7 +69,7 @@ fn typing_lists_apps_and_enter_launches() {
     let l = s.launcher_layout(24);
     assert_eq!(l.rows, 1);
     assert!(l.footer.is_some());
-    assert_eq!(l.body.height, 48 + 1 + 28 + 48 + 6 + 1 + 36);
+    assert_eq!(l.body.height, 48 + 1 + 31 + 48 + 6 + 1 + 36);
     let fb = render(&s);
     let row = s.row_rect(&l, 0);
     let p = fb.pixel((row.x + 300) as u32, (row.y + 2) as u32).unwrap() & 0xff;
