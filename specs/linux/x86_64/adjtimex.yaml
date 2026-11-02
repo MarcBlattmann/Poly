@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/adjtimex             # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; the host runs a time daemon"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  adjtimex(buf) (syscall 159) reads and optionally adjusts the kernel's NTP
+  clock discipline through struct timex (linux/timex.h, 208 bytes on
+  x86-64: modes u32 at 0, offset 8, freq 16, maxerror 24, esterror 32,
+  status int 40, constant 48, precision 56, tolerance 64, time (timeval) 72,
+  tick 88, ppsfreq 96, jitter 104, shift 112, stabil 120, jitcnt 128,
+  calcnt 136, errcnt 144, stbcnt 152, tai 160). The whole struct is read
+  first (EFAULT), then modes is checked, the changes applied, and the
+  current state written back; the return value is the clock state:
+  TIME_OK 0, TIME_INS 1, TIME_DEL 2, TIME_OOP 3, TIME_WAIT 4, TIME_ERROR 5
+  (TIME_ERROR whenever status has STA_UNSYNC 0x40, as after the clock was
+  set and before a daemon synchronised it). modes 0 and ADJ_OFFSET_SS_READ
+  (0xa001) only read and are allowed for every user; modes stays as given.
+  Read values: tolerance = MAXFREQ_SCALED (500 ppm << 16 = 32768000), tick
+  = microseconds per USER_HZ tick (10000), precision 1, time = current
+  CLOCK_REALTIME (tv_usec holds nanoseconds when status has STA_NANO
+  0x2000), tai = TAI offset (37 here); offset/freq/maxerror/esterror/
+  constant/status belong to the time daemon and change over time.
+  Modes: ADJ_OFFSET 0x1, ADJ_FREQUENCY 0x2, ADJ_MAXERROR 0x4, ADJ_ESTERROR
+  0x8, ADJ_STATUS 0x10, ADJ_TIMECONST 0x20, ADJ_TAI 0x80, ADJ_SETOFFSET
+  0x100 (step the clock by time; tv_usec in [0, 999999], or nanoseconds in
+  [0, 999999999] with ADJ_NANO), ADJ_MICRO 0x1000, ADJ_NANO 0x2000,
+  ADJ_TICK 0x4000 (tick must be within about 10% of 1000000/USER_HZ: 1,
+  0 and 100000 are EINVAL), ADJ_OFFSET_SINGLESHOT 0x8001. The bit 0x8000
+  without ADJ_OFFSET (0x8000, 0xa000) is EINVAL for everybody. Bits with no
+  meaning (0x10000) are ignored for root. Without CAP_SYS_TIME any other
+  non-zero modes is EPERM before its values are checked.
+returns:
+  success: "clock state 0..5"
+errors:
+  fault: "EFAULT (14): buf unreadable or unwritable"
+  singleshot: "EINVAL (22): bit 0x8000 set without ADJ_OFFSET (0x8000, 0xa000); for every user"
+  permission: "EPERM (1): no CAP_SYS_TIME and modes is neither 0 nor ADJ_OFFSET_SS_READ (unknown bits and invalid values included)"
+  values: "EINVAL (22): ADJ_TICK outside the allowed range; ADJ_SETOFFSET with tv_usec outside [0, 999999] (nanoseconds outside [0, 999999999] with ADJ_NANO, negative included)"
+side_effects: "changing modes alter the system clock's discipline (frequency, status, tick, offset); ADJ_SETOFFSET steps CLOCK_REALTIME"
+threading: "none specific"
+ordering:
+  - "read struct, modes check (0x8000), permission, value checks, apply, write back"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the state values belong to the system's time keeping (the reference
+# host's daemon changes them between runs: status 0 and TIME_OK one minute,
+# STA_UNSYNC and TIME_ERROR after a clock set), so tests only check ranges.
+# Root tests change nothing observable: ADJ_TICK with the current tick and
+# ADJ_SETOFFSET by zero. Poly without a time daemon would report a fixed
+# state (e.g. STA_UNSYNC and TIME_ERROR); that is allowed.

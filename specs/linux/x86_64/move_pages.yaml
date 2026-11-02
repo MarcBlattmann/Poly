@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/move_pages           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, CONFIG_NUMA=y, CONFIG_MIGRATION=y, one NUMA node (node 0); tests run as root and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  move_pages(int pid, unsigned long count, void **pages, const int
+  *nodes, int *status, int flags) (syscall 279) queries or moves single
+  pages of a process (pid 0 or the caller's pid = the caller). With nodes
+  NULL it only fills status[i] with the node of the page that holds
+  pages[i] (addresses need not be page aligned), or a negative errno:
+  -ENOENT (-2) for a mapped page not populated yet (also PROT_NONE),
+  -EFAULT (-14) for an address with no mapping or a private anonymous
+  page that was only read (still the shared zero page). Shared anonymous
+  pages report their node. With nodes, pages[i] is moved to nodes[i] and
+  status[i] gets the resulting node or the same negative errnos. The call
+  returns 0 (per-page failures only show in status). count 0 returns 0
+  and touches nothing (arrays may be NULL). A target node that does not
+  exist fails the whole call with ENODEV and status is not written.
+  Another process (a child of the same user) can be queried and moved.
+returns:
+  success: "0 (number of pages not moved is never positive in these cases)"
+  status_values: "0 = node 0; -2 ENOENT not present; -14 EFAULT no mapping / zero page"
+errors:
+  flags: "EINVAL (22): flags other than MPOL_MF_MOVE (2) and MPOL_MF_MOVE_ALL (4), including MPOL_MF_STRICT (1) and 8"
+  perm_flag: "EPERM (1): MPOL_MF_MOVE_ALL without CAP_SYS_NICE"
+  node: "ENODEV (19): any nodes[i] that does not exist (1, 5000, -1); status untouched"
+  fault: "EFAULT (14): pages or nodes unreadable, status unwritable"
+  pid: "ESRCH (3): no such process (a reaped child, -1)"
+  perm: "EPERM (1): target process the caller may not inspect (a uid-1000 caller on a root process)"
+side_effects: "moving pages changes their node; with one node nothing moves"
+threading: "acts on the target's whole address space"
+ordering: []
+timing:
+  typical: "microseconds per page"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/mempolicy.h and asm-generic/errno*.h. One
+# node assumed. The EPERM test needs root (the child drops to uid 1000).
+# A pid of an unrelated process (e.g. 1) depends on the environment
+# (container init vs Poly's kernel init) and is not tested.

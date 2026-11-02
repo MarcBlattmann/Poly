@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/syslog               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; kernel.dmesg_restrict 0, kernel.printk '10 4 1 7'; tests run as root and as uid/gid 65534"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  syslog(type, buf, len) (syscall 103; glibc klogctl, used by dmesg and
+  klogd) operates on the kernel log buffer. Permission first: with
+  kernel.dmesg_restrict 0, READ_ALL (3) and SIZE_BUFFER (10) are allowed for
+  every user and every other action (also unknown ones) needs CAP_SYSLOG
+  (or CAP_SYS_ADMIN), else EPERM; with dmesg_restrict 1 every action needs
+  it. Then per action: CLOSE (0), OPEN (1): no-ops, 0. READ (2): waits
+  until unread text exists, then copies up to len bytes of it and consumes
+  it (one reader position system-wide); READ_ALL (3): copies the newest
+  whole records that fit into len bytes, oldest first, without consuming;
+  a buffer too small for any record gets 0 bytes; READ_CLEAR (4): as
+  READ_ALL, then clears; for 2, 3, 4 a NULL buf or len < 0 is EINVAL and
+  len 0 returns 0 at once; an unwritable buf is EFAULT when a record is to
+  be copied. CLEAR (5) empties the buffer for READ_ALL. CONSOLE_OFF (6),
+  CONSOLE_ON (7) save/restore the console log level; CONSOLE_LEVEL (8)
+  sets it to len, which must be 1..8 (else EINVAL). SIZE_UNREAD (9): bytes
+  READ would return (>= 0). SIZE_BUFFER (10): the buffer's size in bytes
+  (262144 here). Unknown actions (-1, 11, 100): EINVAL. The text is lines
+  "<level>[seconds.micros] message\n", so the formatted text returned
+  (and SIZE_UNREAD) can exceed SIZE_BUFFER.
+returns:
+  success: "0 for 0, 1, 5, 6, 7, 8; bytes copied for 2, 3, 4; sizes for 9, 10"
+  example: "READ_ALL with len 1: 0; with a 1 MiB buffer: the whole formatted log (274172 bytes here)"
+errors:
+  permission: "EPERM (1): no CAP_SYSLOG for an action other than 3/10 (or any action with dmesg_restrict 1); checked before every argument"
+  invalid: "EINVAL (22): unknown action; NULL buf or negative len for 2/3/4; CONSOLE_LEVEL outside 1..8"
+  fault: "EFAULT (14): buf unwritable while copying a record"
+  interrupted: "ERESTARTSYS/EINTR: a signal while READ waits; not tested"
+side_effects: "READ consumes; READ_CLEAR/CLEAR empty the READ_ALL view; console actions change the console level"
+threading: "READ blocks until text is available"
+ordering: []
+timing:
+  typical: "microseconds; READ blocks"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: action numbers from linux/syslog.h (syslog(2)). The log's content and
+# size are the system's and are never compared; tests only check its shape
+# ('<' first, '\n' last, each line starting with '<') and that it is not
+# empty. Tests never call CLEAR, READ_CLEAR, READ with len > 0 or the console
+# actions as root. Poly's log buffer size may differ (> 0 required).
+# READ_ALL/SIZE_BUFFER for other users depend on dmesg_restrict, so the
+# permission test does not call them.

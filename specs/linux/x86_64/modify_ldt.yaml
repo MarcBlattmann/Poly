@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/modify_ldt           # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; CONFIG_MODIFY_LDT_SYSCALL=y"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  modify_ldt(func, ptr, bytecount) (syscall 154) reads or writes the
+  process's local descriptor table (used by Wine for 16/32-bit code, and
+  by old threading libraries). The result is an int that reaches user
+  space zero-extended to 64 bits: errors are (u32)-errno in rax, e.g.
+  0x00000000ffffffda (4294967258) for ENOSYS and 0xffffffea for EINVAL,
+  never a negative 64-bit value. Successful results are small positive
+  counts or 0. A new process has no LDT. The LDT belongs to the address
+  space: fork copies it (the child's changes stay its own), threads
+  (CLONE_VM) share it. LDT_ENTRIES 8192, LDT_ENTRY_SIZE 8 (asm/ldt.h).
+  func 0 (read): copies the raw 8-byte descriptors of the LDT to ptr.
+  With no LDT it returns 0 and copies nothing (ptr is not even checked).
+  Otherwise bytecount is cut to 65536 at most; it copies the LDT's
+  entries and zero-fills the rest of the range, and returns that
+  (possibly cut) bytecount. func 2 (read default LDT): zero-fills
+  min(bytecount, 128) bytes and returns that count. func 1 (write, old
+  mode) and func 0x11 (write, new mode): ptr is a struct user_desc
+  {u32 entry_number; u32 base_addr; u32 limit; u32 flags: seg_32bit:1,
+  contents:2, read_exec_only:1, limit_in_pages:1, seg_not_present:1,
+  useable:1, lm:1}, bytecount must be 16; installs entry entry_number
+  (growing the LDT to entry_number + 1 entries) and returns 0. The
+  descriptor written: limit 0..15, base 0..23, access byte = present
+  (unless seg_not_present) | DPL 3 | S | type, where type = accessed bit
+  (always set) | writable/readable (read_exec_only clear) | contents << 2;
+  flags nibble = granularity (limit_in_pages) | D/B (seg_32bit) | L (lm) |
+  AVL (useable, new mode only: func 1 clears it); limit 16..19, base
+  24..31. Examples: flat 32-bit data (base 0, limit 0xfffff, pages,
+  seg_32bit) = 0x00cff3000000ffff; base 0x12345678 limit 0xabcde seg_32bit
+  useable = 0x125af3345678bcde with func 0x11, 0x124af3345678bcde with
+  func 1. An "empty" user_desc (read_exec_only = seg_not_present = 1, all
+  else 0; in old mode base = limit = 0 also) clears the entry to 0. A
+  present entry can be loaded as selector (index << 3) | 4 | 3 into a data
+  segment register; loading a cleared entry kills the process with
+  SIGSEGV. Any other func is ENOSYS.
+returns:
+  read_empty: "func 0, no LDT: 0"
+  read: "func 0: min(bytecount, 65536)"
+  read_default: "func 2: min(bytecount, 128), all zeros"
+  write: "func 1 / 0x11: 0"
+errors:
+  func: "ENOSYS (38, as 0xffffffda): func not 0, 1, 2 or 0x11 (3, 0x10, -1)"
+  bytecount: "EINVAL (22, as 0xffffffea): write with bytecount != 16 (0, 15, 17)"
+  entry: "EINVAL: entry_number >= 8192"
+  conforming: "EINVAL: contents 3 (conforming code) with seg_not_present 0, both modes; allowed when not present"
+  fault: "EFAULT (14, as 0xfffffff2): unreadable user_desc; func 0 into an unwritable buffer when the LDT is non-empty; func 2 into an unwritable buffer"
+side_effects: "the LDT is per address space; it survives until exec"
+threading: "shared by all threads of the address space; a write by one thread is seen by the others"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: segment loads are tested with %es only (64-bit mode ignores its
+# base); %fs/%gs are left alone. Code segments (contents 2) are accepted;
+# far calls through them are not tested.

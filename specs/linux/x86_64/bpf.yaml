@@ -1,0 +1,78 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/bpf                  # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities (the unprivileged cases drop to uid/gid 65534 themselves, and f_bpf_errors also runs as uid 65534); kernel.unprivileged_bpf_disabled = 2; CONFIG_BPF_SYSCALL=y, no JIT sysctl (interpreter)"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  bpf(cmd, attr, size) (syscall 321) is a multiplexer over union bpf_attr
+  (linux/bpf.h). size may be smaller than the union (missing fields count
+  as 0) or up to a page (4096) if every byte past the kernel's union is
+  zero. This sheet covers the map commands that need no verifier and the
+  trivial program load: BPF_MAP_CREATE (0) returns a new descriptor
+  ("anon_inode:bpf-map", O_RDWR, always close-on-exec; its
+  /proc/self/fdinfo lists "map_type:\t<n>", "key_size:\t<n>",
+  "value_size:\t<n>", "max_entries:\t<n>", map_flags, map_id, frozen ...).
+  ARRAY maps (type 2): key is a u32 index, key_size must be 4; every
+  element exists and starts zeroed; DELETE is EINVAL; GET_NEXT_KEY of i
+  gives i+1, of the last index ENOENT, of NULL or an index out of range 0.
+  HASH maps (type 1): any key and value size (600-byte keys and 1 MiB
+  values work); a missing key LOOKUP/DELETE/UPDATE(BPF_EXIST) ENOENT;
+  BPF_NOEXIST on an existing key EEXIST; a full map refuses new keys with
+  E2BIG but replaces existing ones; GET_NEXT_KEY with NULL (or a key not
+  in the map) gives the first key, then each other key once, then ENOENT
+  (order unspecified); BPF_F_NO_PREALLOC accepted. UPDATE flags: BPF_ANY
+  0, BPF_NOEXIST 1, BPF_EXIST 2; anything else EINVAL (BPF_F_LOCK too
+  without a spin lock in the value). BPF_OBJ_GET_INFO_BY_FD (15) fills
+  struct bpf_map_info (104 bytes on 6.18: type, id, key_size, value_size,
+  max_entries, map_flags, name[16], ...) up to info_len, writes back
+  min(info_len, 104), and leaves the rest of the caller's buffer alone;
+  info_len 0 succeeds; info_len > 104 needs the excess bytes of the buffer
+  zero. Map ids are non-zero and differ between maps. BPF_MAP_FREEZE (22)
+  makes the map read-only from user space (UPDATE EPERM, LOOKUP works);
+  freezing again EPERM. map_name: up to 15 of [A-Za-z0-9_.] plus NUL.
+  BPF_PROG_LOAD (5) with type BPF_PROG_TYPE_SOCKET_FILTER (1), license
+  "GPL" and the two instructions "r0 = 0" (code 0xb7) / "exit" (0x95)
+  returns a descriptor ("anon_inode:bpf-prog", close-on-exec).
+returns:
+  map_create: "new descriptor"
+  element_ops: "0"
+  prog_load: "new descriptor"
+errors:
+  fault: "EFAULT (14): attr NULL or unreadable; key/value pointer unreadable or the lookup value buffer unwritable"
+  size: "E2BIG (7): size > 4096, or non-zero bytes past the kernel's union within size"
+  cmd: "EINVAL (22): unknown command (9999, -1)"
+  map_create: "EINVAL (22): unknown type (0, 9999); ARRAY key_size != 4; value_size 0; max_entries 0; HASH key_size 0; unknown map_flags (1<<31); BPF_F_NO_PREALLOC on ARRAY; BPF_F_RDONLY|BPF_F_WRONLY; map_name with another character or without NUL; all-zero attr (size 0 or 4)"
+  bad_fd: "EBADF (9): map fd not open (element commands, FREEZE)"
+  not_map: "EINVAL (22): element command on a descriptor that is not a map (/dev/null); OBJ_GET_INFO_BY_FD on a non-bpf descriptor"
+  array: "E2BIG (7): UPDATE of an index >= max_entries; ENOENT (2): LOOKUP of such an index; EEXIST (17): BPF_NOEXIST; EINVAL (22): DELETE"
+  hash: "ENOENT (2): missing key (LOOKUP, DELETE, UPDATE BPF_EXIST, GET_NEXT_KEY after the last / on an empty map); EEXIST (17): BPF_NOEXIST on an existing key; E2BIG (7): new key in a full map"
+  update_flags: "EINVAL (22): flags other than 0, 1, 2"
+  frozen: "EPERM (1): UPDATE of a frozen map; FREEZE of a frozen map"
+  info: "E2BIG (7): info_len > 104 with non-zero excess bytes in the buffer"
+  prog_load: "E2BIG (7): insn_cnt 0; EINVAL (22): program without a final exit, unknown prog_type (9999); EACCES (13): verifier rejects (exit reading r0 before it is set), with a non-empty log when log_level 1 and a log buffer are given"
+  unprivileged: "EPERM (1): with kernel.unprivileged_bpf_disabled 1 or 2 and no CAP_BPF/CAP_SYS_ADMIN: creating a valid map and loading programs; attr errors (EFAULT, E2BIG, EINVAL for an invalid map attr or an unknown command) and EBADF/EINVAL on descriptors come first"
+side_effects: "maps and programs live while a descriptor (or a pin or attachment) refers to them"
+threading: "map element operations are atomic per element"
+ordering:
+  - "GET_NEXT_KEY of a HASH map visits every key exactly once; the order is not specified"
+timing:
+  typical: "microseconds per call"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes:
+# - Poly has no verifier or interpreter. The program tests only need the
+#   trivial "r0 = 0; exit" socket filter to load and the listed error
+#   cases; the program is never attached or run. A Poly that refuses every
+#   program would fail only f_bpf_prog_unpriv's load_trivial and log checks.
+# - The container's linux/bpf.h is older than the kernel (its
+#   struct bpf_map_info is 88 bytes); the kernel's is 104 on 6.18.
+# - Other map types (per-CPU, LRU, ring buffer, ...), pinning (OBJ_PIN),
+#   BTF, links and batch operations are not covered.
+# - Unprivileged results depend on kernel.unprivileged_bpf_disabled; with
+#   0 an unprivileged user may create maps. All tests that create maps or
+#   load programs are needs=root.
