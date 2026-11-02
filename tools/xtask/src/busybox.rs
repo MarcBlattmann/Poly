@@ -102,7 +102,7 @@ fn build() -> super::Result<std::result::Result<Binary, String>> {
     {
         return Ok(Ok(Binary { elf, origin: format!("{} (built from BusyBox {VERSION})", binary.display()) }));
     }
-    for tool in ["curl", "sha256sum", "tar", "bzip2", "make", "cc"] {
+    for tool in ["curl", "tar", "bzip2", "make", "cc"] {
         if !have(tool) {
             return Ok(Err(format!(
                 "no statically linked BusyBox on this host (install busybox-static or set POLY_BUSYBOX) \
@@ -122,9 +122,8 @@ fn build() -> super::Result<std::result::Result<Binary, String>> {
         }
         std::fs::rename(&partial, &tarball).map_err(|e| e.to_string())?;
     }
-    let sum = Command::new("sha256sum").arg(&tarball).output().map_err(|e| format!("sha256sum: {e}"))?;
-    let sum = String::from_utf8_lossy(&sum.stdout);
-    if sum.split_whitespace().next() != Some(SHA256) {
+    let sum = crate::sha256::file(&tarball).unwrap_or_default();
+    if sum != SHA256 {
         let _ = std::fs::remove_file(&tarball);
         return Err(format!("{} does not have the pinned SHA-256 {SHA256} (got {sum}); removed", tarball.display()));
     }

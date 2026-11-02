@@ -100,10 +100,9 @@ fn cache_dir() -> PathBuf {
     ntdll.parent().map_or_else(|| root().join("target"), Path::to_path_buf).join("7zip").join(VERSION)
 }
 
-/// The SHA-256 of a file (`sha256sum`), or `None`.
+/// The SHA-256 of a file, or `None`.
 fn sha256(path: &Path) -> Option<String> {
-    let out = Command::new("sha256sum").arg(path).stderr(Stdio::null()).output().ok()?;
-    String::from_utf8_lossy(&out.stdout).split_whitespace().next().map(str::to_string)
+    crate::sha256::file(path)
 }
 
 /// Whether `path` is the pinned file (size first, then the hash).
@@ -156,7 +155,7 @@ pub fn fetch() -> Result<PathBuf> {
         eprintln!("==> {} is the pinned 7-Zip {VERSION} 7za.exe (x64)", cache_dir().join(EXE).display());
         return Ok(cache_dir().join(EXE));
     }
-    for tool in ["curl", "sha256sum", "tar", "xz"] {
+    for tool in ["curl", "tar", "xz"] {
         if Command::new(tool).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_err() {
             return Err(format!("fetching 7-Zip needs `{tool}`"));
         }
