@@ -15,6 +15,7 @@ poly-dbus.workspace = true
 poly-rt.workspace = true
 poly-shell.workspace = true
 poly-wayland.workspace = true
+poly-win32k.workspace = true
 poly-x11.workspace = true
 
 [lints]

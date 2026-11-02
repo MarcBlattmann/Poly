@@ -1,0 +1,13 @@
+[package]
+name = "poly-win32k"
+description = "win32k without the machine (ADR 0128): Poly's own win32k service table, the desktop link between the NT personality and the native compositor, Poly's frame as the non-client area, and the export lists of user32, gdi32 and win32u"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

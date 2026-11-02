@@ -37,6 +37,8 @@
 //! - [`layout`], [`params`]: the Windows file system layout on `C:`, the
 //!   registry values that follow it, and a new process's environment and
 //!   process parameters (ADR 0073).
+//! - [`win32k`]: table 1, Poly's own win32k services for `user32`, `gdi32`
+//!   and `win32u` (on `poly-win32k`, ADR 0128).
 
 #![no_std]
 
@@ -68,6 +70,7 @@ pub mod sysinfo;
 pub mod system;
 pub mod threads;
 pub mod vm;
+pub mod win32k;
 
 #[cfg(test)]
 mod tests;
@@ -151,6 +154,9 @@ impl SyscallDispatch for Nt {
 #[inline(never)]
 pub fn dispatch_with<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Outcome {
     let number = regs.rax as u32;
+    if decode(number).0 == Table::Win32k {
+        return win32k::dispatch(k, regs);
+    }
     let Some(service) = Service::from_number(number) else {
         return Nt::dispatch(regs);
     };

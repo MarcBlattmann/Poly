@@ -1,0 +1,18 @@
+[package]
+name = "gdi32"
+description = "Our gdi32.dll (ADR 0128): GDI drawing in the app's process; the first slice's exports are stubs until its spec sheets arrive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "gdi32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-gui = { path = "../gui" }
+
+[lints]
+workspace = true

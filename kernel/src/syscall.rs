@@ -41,6 +41,8 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         // an interactive shell; `poly.strace` shows every call.
         let name = match process.personality {
             Personality::Linux => poly_personality_linux::table::name(number),
+            // Poly's own win32k services (ADR 0128) by name.
+            Personality::Nt if table == "win32k" => poly_personality_nt::win32k::service_name(number),
             _ => None,
         };
         crate::kprintln!(

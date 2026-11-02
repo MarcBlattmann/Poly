@@ -55,6 +55,9 @@ fn embed_win32() {
         "winhttp.dll",
         "wininet.dll",
         "httptest.exe",
+        // ADR 0128.
+        "gdi32.dll",
+        "win32u.dll",
     ] {
         match &dir {
             Some(d) => {
