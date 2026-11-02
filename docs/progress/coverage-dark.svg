@@ -1274,7 +1274,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">0.1%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">31 / 58,682 entries · 73,276 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">42 / 58,682 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.7" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2ea043"/>
@@ -1340,10 +1340,10 @@
 <rect x="303.4" y="541.0" width="42.2" height="53.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="309.4" y="556.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">icu</text>
 </g>
-<g><title>user32: 20 / 992 done (2.0%)</title>
+<g><title>user32: 31 / 992 done (3.1%)</title>
 <rect x="304.4" y="595.6" width="40.2" height="48.3" fill="#21262d"/>
-<rect x="304.4" y="595.6" width="0.8" height="48.3" fill="#2ea043"/>
-<rect x="305.2" y="595.6" width="2.3" height="48.3" fill="#388bfd"/>
+<rect x="304.4" y="595.6" width="1.3" height="48.3" fill="#2ea043"/>
+<rect x="305.7" y="595.6" width="1.9" height="48.3" fill="#388bfd"/>
 <rect x="303.4" y="594.6" width="42.2" height="50.3" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="309.4" y="609.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">user…</text>
 </g>

@@ -479,6 +479,8 @@ fn run(args: &[String]) -> Result<u8, String> {
         Some(start) => Some(xwayland::Xwayland::new(start)?),
         None => None,
     };
+    // Windows apps' top-level windows through win32k's desktop link (ADR 0131).
+    let mut winlink = if o.desktop { win32::Link::open(server.scene()) } else { None };
     let env = client_env(&o.socket, &dir, &dump_path, bus_address.as_deref(), xw.as_ref().map(|x| x.display_env()));
     // Children that end wake the loop (their process handles are polled),
     // which reaps them at once.
@@ -528,6 +530,10 @@ fn run(args: &[String]) -> Result<u8, String> {
         let x_at = fds.len();
         if let Some(x) = &xw {
             fds.extend(x.poll_fds());
+        }
+        let win_at = fds.len();
+        if let Some(l) = &winlink {
+            fds.push(os::PollFd::readable(l.fd()));
         }
         let now = os::monotonic_ns();
         let timeout = if server.wants_frame() && !flip_pending {
@@ -625,6 +631,13 @@ fn run(args: &[String]) -> Result<u8, String> {
             if let Some(c) = x.reap(&mut server) {
                 gone.push(c);
             }
+        }
+
+        // Windows apps' windows: what win32k reported.
+        if let Some(l) = &mut winlink
+            && fds.get(win_at).is_some_and(|p| p.revents != 0)
+        {
+            l.pump(server.scene_mut());
         }
 
         // A frame when one is due: with KMS whenever no flip is pending (the

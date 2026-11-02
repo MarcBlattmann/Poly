@@ -3,9 +3,12 @@
 //! and tablet; boot group `desktop` does the same and drives it through
 //! QMP.
 //!
-//! The image: `/bin/poly-compositor` (as init, `--desktop`), the C clients
-//! `/bin/wl-demo` (`tests/linux/wayland/wl-demo.c`, the launcher's "Poly
-//! Demo") and `/bin/wl-client`, a desktop file
+//! The image: `/bin/poly-compositor` (as init, `--desktop`), the Wayland
+//! test clients `/bin/wl-demo` (the launcher's "Poly Demo") and
+//! `/bin/wl-client` ("Wayland Test Client"), native programs of
+//! `userland/poly-wl-demo` built on every host (ADR 0133), the Windows GUI
+//! test program of `desktop-win32` (`/win/win_gui_fill.exe`, "Poly Fill",
+//! below) where it can be built, a desktop file
 //! `/usr/share/applications/demo-window.desktop` ("Demo Window", which
 //! starts `wl-demo` too, so the launcher's desktop file path is used), and
 //! DejaVu Sans from the font store and Alpine Shell's fonts (Geist, Geist
@@ -37,10 +40,20 @@
 //! management, notifications and the settings ([`shell_boot_test`]); a
 //! second boot from the same disk finds the settings it saved.
 //!
+//! Boot group `desktop-win32` (ADR 0131) boots the same desktop with a
+//! Windows GUI program in the image (`tests/windows/win_gui_fill.rs`, built
+//! by `pipeline win build`, behind a desktop file "Poly Fill"): typed into
+//! the launcher, it creates an overlapped window and fills its client area
+//! with one colour through GetDC / FillRect / ReleaseDC; through win32k's
+//! desktop link (`/dev/win32k`) the window must show up on the desktop at
+//! its client rectangle, framed by Poly, in that colour
+//! ([`win32_boot_test`]). Skipped where the Windows test programs cannot be
+//! built.
+//!
 //! Screenshots go to `$POLY_DESKTOP_SHOTS` (default `target/desktop/`) as
 //! PNGs, one per step.
 
-use super::{Boot, Result, Symbols, boot_with, compositor, has_desktop, initramfs, qemu, root, screen};
+use super::{Boot, Result, Symbols, boot_with, has_desktop, initramfs, qemu, root, screen};
 use crate::hostscreen;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -51,7 +64,7 @@ use std::time::{Duration, Instant};
 pub const SIZE: (u32, u32) = (1280, 800);
 /// What the compositor prints when the first frame is on the screen.
 const READY: &str = "poly-compositor: desktop ready";
-/// The demo client's colours (wl-demo.c) and the ridge's.
+/// The demo client's colours (`poly_wl_demo::demo`) and the ridge's.
 const DEMO_A: [u8; 3] = [0x2f, 0x7d, 0x6d];
 const DEMO_B: [u8; 3] = [0xc0, 0x8a, 0x2e];
 const RIDGE: [u8; 3] = [0x20, 0x20, 0x20];
@@ -95,48 +108,131 @@ pub fn devices_sized((w, h): (u32, u32)) -> Vec<String> {
     .to_vec()
 }
 
-/// Build the desktop's initramfs; returns its path.
-pub fn image() -> Result<PathBuf> {
-    // The compositor and notify-send are native programs, built on any
-    // host (ADR 0125); the C test clients need a Linux C toolchain and are
-    // left out without one (the boot tests skip themselves then).
-    let compositor = compositor::build_compositor()?;
-    let notify = compositor::build_notify_send()?;
-    let c_client = |built: std::result::Result<Vec<u8>, String>| {
-        built.unwrap_or_else(|why| {
-            eprintln!("==> without the C test clients: {why}");
+/// The programs in the desktop's image (`/bin/<name>`), all native
+/// programs built on every host (ADR 0125, ADR 0133).
+pub const PROGRAMS: [&str; 4] = ["poly-compositor", "wl-demo", "wl-client", "notify-send"];
+
+/// Whether this checkout has the Windows GUI test program of
+/// `desktop-win32` ([`WIN32_TEST`], ADR 0131), which every desktop image
+/// carries behind a desktop file ("Poly Fill") when it can be built here.
+fn has_windows_app() -> bool {
+    root().join(format!("tests/windows/{WIN32_TEST}.rs")).is_file()
+}
+
+/// The name a desktop file gives its app.
+fn desktop_name(file: &str) -> &str {
+    file.lines().find_map(|l| l.strip_prefix("Name=")).unwrap_or("?")
+}
+
+/// What the desktop's launcher offers, beyond its settings and
+/// notifications: (name in the launcher, what starts it). For `cargo xtask
+/// start`'s menu.
+pub fn launcher_apps() -> Vec<(String, String)> {
+    let mut apps: Vec<(String, String)> = [
+        ("Poly Demo", "/bin/wl-demo (built in)"),
+        ("Wayland Test Client", "/bin/wl-client (built in)"),
+        (desktop_name(DESKTOP_FILE), "/bin/wl-demo (demo-window.desktop)"),
+        (desktop_name(NOTIFY_FILE), "/bin/notify-send (notify-test.desktop)"),
+    ]
+    .into_iter()
+    .map(|(n, w)| (n.to_string(), w.to_string()))
+    .collect();
+    if has_windows_app() {
+        apps.push((desktop_name(WIN32_DESKTOP_FILE).to_string(), format!("/win/{WIN32_TEST}.exe (poly-fill.desktop)")));
+    }
+    apps
+}
+
+/// The Windows GUI test program built (on any host, [`crate::winapp`]),
+/// with its desktop file; left out, saying why, where it cannot be built.
+fn windows_app_files() -> Vec<(String, u16, Vec<u8>)> {
+    if !has_windows_app() {
+        return Vec::new();
+    }
+    match crate::winapp::build(&[WIN32_TEST]) {
+        Ok(built) => built
+            .into_iter()
+            .flat_map(|(name, exe)| {
+                [
+                    (format!("win/{name}.exe"), 0o755, exe),
+                    (
+                        "usr/share/applications/poly-fill.desktop".to_string(),
+                        0o644,
+                        WIN32_DESKTOP_FILE.as_bytes().to_vec(),
+                    ),
+                ]
+            })
+            .collect(),
+        Err(e) => {
+            crate::progress::note(&format!("without the Windows test app {WIN32_TEST}: {e}"));
             Vec::new()
+        }
+    }
+}
+
+/// Build the desktop's initramfs, with the Windows test app when it can
+/// be built; returns its path.
+pub fn image() -> Result<PathBuf> {
+    build_image("poly-desktop-initramfs.cpio", windows_app_files)
+}
+
+/// [`image`] with `extra` files (path, mode, bytes) instead of the Windows
+/// app, written to `name`.
+fn image_with(name: &str, extra: Vec<(String, u16, Vec<u8>)>) -> Result<PathBuf> {
+    build_image(name, move || extra)
+}
+
+/// The desktop's initramfs with the files `extra` gives, written to `name`.
+fn build_image(name: &str, extra: impl FnOnce() -> Vec<(String, u16, Vec<u8>)> + Send) -> Result<PathBuf> {
+    // Every program is a native program, built on any host (ADR 0125;
+    // the Wayland test clients since ADR 0133). The files are gathered
+    // while they build.
+    let (built, files, extra) = thread::scope(|s| {
+        let files = s.spawn(|| crate::progress::task("desktop files (fonts, wallpapers)", image_files));
+        let extra = s.spawn(extra);
+        let built = crate::native::build();
+        let files = files.join().unwrap_or_else(|_| Err("gathering the desktop's files panicked".into()));
+        (built, files, extra.join().unwrap_or_default())
+    });
+    let (built, mut tree) = (built?, files?);
+    tree.files.extend(extra);
+    let programs: Vec<(&str, &[u8])> = PROGRAMS
+        .iter()
+        .map(|name| {
+            let elf = built.iter().find(|(n, _)| n == name).map(|(_, e)| e.as_slice());
+            elf.map(|e| (*name, e)).ok_or_else(|| format!("no native program {name}"))
         })
-    };
-    let demo = c_client(compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo"));
-    let client = c_client(compositor::build_client());
+        .collect::<Result<_>>()?;
+    crate::progress::task("desktop image (initramfs)", || {
+        initramfs::write(&root(), name, &initramfs::programs_image_with(&programs, &tree))
+    })
+}
+
+/// The desktop image's files besides the programs: the desktop files, the
+/// fonts, the wallpapers.
+fn image_files() -> Result<initramfs::Tree> {
     let mut tree = initramfs::Tree::default();
     tree.files.push(("usr/share/applications/demo-window.desktop".into(), 0o644, DESKTOP_FILE.as_bytes().into()));
     tree.files.push(("usr/share/applications/notify-test.desktop".into(), 0o644, NOTIFY_FILE.as_bytes().into()));
     let font = crate::fonts::cache_dir().join("DejaVuSans.ttf");
     match std::fs::read(&font) {
         Ok(data) => tree.files.push(("usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".into(), 0o644, data)),
-        Err(_) => eprintln!("==> no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font"),
+        Err(_) => {
+            crate::progress::note("no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font")
+        }
     }
-    // Alpine Shell's fonts for the shell (ADR 0127).
-    // Alpine Shell's wallpapers (ADR 0127).
+    // Alpine Shell's wallpapers and fonts (ADR 0127).
     for (path, data) in crate::wallpapers::tree()? {
         tree.files.push((path, 0o644, data));
     }
     let shell_fonts = crate::fonts::shell_tree();
     if shell_fonts.is_empty() {
-        eprintln!("==> no shell fonts (`cargo xtask fonts fetch`): the shell draws in DejaVu Sans");
+        crate::progress::note("no shell fonts (`cargo xtask fonts fetch`): the shell draws in DejaVu Sans");
     }
     for (path, data) in shell_fonts {
         tree.files.push((path, 0o644, data));
     }
-    let programs: Vec<(&str, &[u8])> =
-        [("poly-compositor", &compositor), ("wl-demo", &demo), ("wl-client", &client), ("notify-send", &notify)]
-            .into_iter()
-            .filter(|(_, elf)| !elf.is_empty())
-            .map(|(n, e)| (n, e.as_slice()))
-            .collect();
-    initramfs::write(&root(), "poly-desktop-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))
+    Ok(tree)
 }
 
 /// The settings disk `cargo xtask desktop` keeps between runs (ext2,
@@ -158,7 +254,35 @@ pub const STATE_FILE: &str = "poly-desktop-state.img";
 /// screen ([`hostscreen::fit`]). `--scale=N` and `--size=WxH` override them.
 /// A scale other than 1 is given to the compositor as `--scale`, so it wins
 /// over the scale in the saved settings.
+///
+/// `--build-only` builds everything and stops before the boot.
 pub fn command(args: &[String]) -> Result {
+    let ready = prepare(args)?;
+    if args.iter().any(|a| a == "--build-only") {
+        eprintln!("==> built: {}, {}, {}", ready.kernel.display(), ready.image.display(), ready.state.display());
+        return Ok(());
+    }
+    boot(ready)
+}
+
+/// What [`prepare`] made for [`boot`].
+#[derive(Debug)]
+pub struct Prepared {
+    kernel: PathBuf,
+    image: PathBuf,
+    state: PathBuf,
+    size: (u32, u32),
+    scale: u32,
+    /// Whether `--scale` was given.
+    asked: bool,
+    host: Option<hostscreen::Screen>,
+    extra: Vec<String>,
+}
+
+/// The options of [`command`] read, and everything built for the boot: the
+/// kernel (with the native programs), the image and the settings disk, at
+/// the same time (`cargo xtask start` shows them as a table, [`crate::progress`]).
+pub fn prepare(args: &[String]) -> Result<Prepared> {
     let release = args.iter().any(|a| a == "--release");
     let fresh = args.iter().any(|a| a == "--fresh-state");
     let value = |name: &str| args.iter().find_map(|a| a.strip_prefix(name)).map(str::to_string);
@@ -179,24 +303,40 @@ pub fn command(args: &[String]) -> Result {
             _ => (SIZE.0 * scale, SIZE.1 * scale),
         },
     };
-    let extra: Vec<&str> = args.iter().map(String::as_str).filter(|a| !a.starts_with("--")).collect();
-    let kernel = super::build_kernel(release)?;
-    let image = image()?;
+    let extra: Vec<String> = args.iter().filter(|a| !a.starts_with("--")).cloned().collect();
     let state = root().join("target").join(STATE_FILE);
-    if fresh || !state.exists() {
-        std::fs::write(&state, crate::ext2disk::image()?).map_err(|e| format!("{}: {e}", state.display()))?;
-        eprintln!("==> a new settings disk {}", state.display());
-    } else {
-        eprintln!("==> the settings disk {} is kept from before (--fresh-state starts again)", state.display());
-    }
+    let (kernel, image, disk) = thread::scope(|s| {
+        let kernel = s.spawn(|| super::build_kernel(release));
+        let disk = s.spawn(|| -> Result {
+            if fresh || !state.exists() {
+                let disk = crate::ext2disk::image()?;
+                std::fs::write(&state, disk).map_err(|e| format!("{}: {e}", state.display()))?;
+                crate::progress::note(&format!("a new settings disk {}", state.display()));
+            } else {
+                crate::progress::note(&format!(
+                    "the settings disk {} is kept from before (--fresh-state starts again)",
+                    state.display()
+                ));
+            }
+            Ok(())
+        });
+        let image = image();
+        let kernel = kernel.join().unwrap_or_else(|_| Err("building the kernel panicked".into()));
+        (kernel, image, disk.join().unwrap_or_else(|_| Err("making the settings disk panicked".into())))
+    });
+    let (kernel, image) = (kernel?, image?);
+    disk?;
+    Ok(Prepared { kernel, image, state, size, scale, asked: asked.is_some(), host, extra })
+}
+
+/// Boot what [`prepare`] made, in QEMU's window.
+pub fn boot(p: Prepared) -> Result {
+    let Prepared { kernel, image, state, size, scale, asked, host, extra } = p;
     // The compositor's `--scale` wins over the saved settings' scale (which
     // a run at another scale may have saved): asked for, or the host's when
     // that is not 1. At scale 1 the settings choose, as before.
-    let force = if asked.is_some() || scale != 1 {
-        format!("poly.init.arg=--scale poly.init.arg={scale}")
-    } else {
-        String::new()
-    };
+    let force =
+        if asked || scale != 1 { format!("poly.init.arg=--scale poly.init.arg={scale}") } else { String::new() };
     let kernel_args = format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" "));
     let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end()), super::Devices::None, "mon:stdio");
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
@@ -735,10 +875,6 @@ pub fn shell_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         eprintln!("==> skipped: the desktop shell boot test needs a Unix host (QMP)");
         return Ok(());
     }
-    if let Err(why) = compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo") {
-        eprintln!("==> skipped: the desktop shell boot test: {why}");
-        return Ok(());
-    }
     let image = image()?;
     let state = root().join("target").join("poly-shell-state.img");
     std::fs::write(&state, crate::ext2disk::image()?).map_err(|e| format!("{}: {e}", state.display()))?;
@@ -775,10 +911,6 @@ pub fn shell_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
 pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     if cfg!(not(unix)) {
         eprintln!("==> skipped: the desktop boot test needs a Unix host (QMP)");
-        return Ok(());
-    }
-    if let Err(why) = compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo") {
-        eprintln!("==> skipped: the desktop boot test: {why}");
         return Ok(());
     }
     let image = image()?;
@@ -825,6 +957,131 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out))
         }
         None => Err("the desktop boot test did not finish".into()),
+    }
+}
+
+/// The Windows GUI program of `desktop-win32` (`tests/windows/<name>.rs`).
+const WIN32_TEST: &str = "win_gui_fill";
+/// Where `pipeline win build` puts it.
+const WIN32_BIN: &str = "target/pipeline/windows/desktop-bin";
+/// Its desktop file.
+const WIN32_DESKTOP_FILE: &str = "[Desktop Entry]\nType=Application\nName=Poly Fill\n\
+    Comment=A Windows GUI program that fills its window\nExec=/win/win_gui_fill.exe\nKeywords=fill;windows;\n";
+/// The colour it fills its client area with (`FILL`, RGB).
+const WIN32_FILL: [u8; 3] = [0x8a, 0x47, 0xc0];
+/// Its client rectangle: the window at (40, 400), 400 x 300, less
+/// Windows' non-client frame of an overlapped window (8, 31, 8, 8).
+const WIN32_CLIENT: (i32, i32, i32, i32) = (48, 431, 384, 261);
+
+/// Every step of `desktop-win32` (see the module documentation).
+fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
+    let shots = shots_dir();
+    std::fs::create_dir_all(&shots).map_err(|e| format!("{}: {e}", shots.display()))?;
+    let qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
+    let mut d = Driver { qmp, lines, shots, step: 200 };
+    thread::sleep(Duration::from_millis(500));
+    d.wait("poly-compositor: desktop link to Windows apps on /dev/win32k", 1)?;
+    let before = d.shot("win32-before")?;
+
+    // Typed into the launcher, the program starts and shows its window.
+    d.type_text(&["f", "i", "l", "l"])?;
+    d.wait("launcher query \"fill\"", 30)?;
+    thread::sleep(Duration::from_millis(800));
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: launched Poly Fill", 30)?;
+    let (x, y, w, h) = shown(&d, "Poly Fill", 180)?;
+    expect(
+        &format!("the window is at its client rectangle {WIN32_CLIENT:?} (got {:?})", (x, y, w, h)),
+        (x, y, w, h) == WIN32_CLIENT,
+    )?;
+    // The fill comes with the first commit; give the frame time.
+    thread::sleep(Duration::from_millis(3000));
+    let img = d.shot("win32-window")?;
+    let at = |dx: i32, dy: i32| img.pixel((x + dx) as u32, (y + dy) as u32);
+    for (dx, dy) in [(1, 1), (w / 2, h / 2), (w - 2, h - 2), (1, h - 2), (w - 2, 1)] {
+        expect(&format!("the client area is filled at +{dx},+{dy} (got {:?})", at(dx, dy)), at(dx, dy) == WIN32_FILL)?;
+    }
+    expect("nothing filled outside the client area", at(w + 6, h / 2) != WIN32_FILL && at(w / 2, h + 6) != WIN32_FILL)?;
+    // Poly's frame: the title bar above the client area is drawn (not the
+    // wallpaper of before, not the fill).
+    let title = ((x + w / 2) as u32, (y - 12) as u32);
+    expect(
+        "Poly's title bar is above the client area",
+        img.pixel(title.0, title.1) != before.pixel(title.0, title.1) && img.pixel(title.0, title.1) != WIN32_FILL,
+    )?;
+    d.qmp.quit();
+    Ok(())
+}
+
+/// Boot group `desktop-win32`: a Windows GUI program's window on Poly's
+/// desktop through win32k's desktop link (ADR 0131).
+pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: the desktop-win32 boot test needs a Unix host (QMP)");
+        return Ok(());
+    }
+    match crate::sevenzip::pipeline(&["win", "build", "--tests", WIN32_TEST, "--out", WIN32_BIN]) {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            eprintln!("==> skipped: the desktop-win32 boot test: building {WIN32_TEST}.exe failed ({s})");
+            return Ok(());
+        }
+        Err(e) => {
+            eprintln!("==> skipped: the desktop-win32 boot test: {e}");
+            return Ok(());
+        }
+    }
+    let exe_path = root().join(WIN32_BIN).join(format!("{WIN32_TEST}.exe"));
+    let exe = std::fs::read(&exe_path).map_err(|e| format!("{}: {e}", exe_path.display()))?;
+    let extra = vec![
+        (format!("win/{WIN32_TEST}.exe"), 0o755, exe),
+        ("usr/share/applications/poly-fill.desktop".to_string(), 0o644, WIN32_DESKTOP_FILE.as_bytes().to_vec()),
+    ];
+    let image = image_with("poly-desktop-win32-initramfs.cpio", extra)?;
+    eprintln!(
+        "==> boot test: a Windows GUI program's window on the desktop through /dev/win32k (launched, framed, filled)"
+    );
+    let socket = std::env::temp_dir().join(format!("poly-desktop-win32-qmp-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&socket);
+    let mut qemu_args = vec![
+        "-initrd".to_string(),
+        image.display().to_string(),
+        "-qmp".to_string(),
+        format!("unix:{},server=on,wait=off", socket.display()),
+    ];
+    qemu_args.extend(devices());
+    let lines: Lines = Arc::default();
+    let result: Arc<Mutex<Option<std::result::Result<(), String>>>> = Arc::default();
+    let (seen, outcome, path) = (Arc::clone(&lines), Arc::clone(&result), socket.clone());
+    let mut started = false;
+    let on_line = move |line: &str| {
+        seen.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_string());
+        if !started && line.contains(READY) {
+            started = true;
+            let (lines, outcome, path) = (Arc::clone(&seen), Arc::clone(&outcome), path.clone());
+            thread::spawn(move || {
+                let r = drive_win32(&path, lines);
+                *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+            });
+        }
+    };
+    let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(420), || {
+        boot_with(kernel, syms, MEMORY, &append(""), super::Devices::None, &qemu_args, None, on_line)
+    });
+    let _ = std::fs::remove_file(&socket);
+    let b = b?;
+    match result.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        Some(Ok(())) => Ok(()),
+        Some(Err(e)) => {
+            for l in b.output.lines().filter(|l| l.contains("win32k") || l.contains("nt:") || l.contains("Poly Fill")) {
+                eprintln!("    {l}");
+            }
+            Err(e)
+        }
+        None if !b.output.contains(READY) => {
+            Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out))
+        }
+        None => Err("the desktop-win32 boot test did not finish".into()),
     }
 }
 

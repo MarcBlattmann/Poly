@@ -1,0 +1,26 @@
+[package]
+name = "poly-wl-demo-native"
+description = "/bin/wl-demo and /bin/wl-client: the desktop's Wayland test clients (userland/poly-wl-demo) as native Poly programs (ADR 0125, ADR 0133)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "wl-demo"
+path = "src/demo.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "wl-client"
+path = "src/client.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-wl-demo = { path = "../../poly-wl-demo" }
+poly-rt = { path = "../../../crates/poly-rt" }
+
+[lints]
+workspace = true
