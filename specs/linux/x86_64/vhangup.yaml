@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/vhangup              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; umask 022; devpts at /dev/pts with /dev/ptmx"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  vhangup() (syscall 153; arguments ignored) simulates a hang-up of the
+  caller's controlling terminal (getty/login use it). It needs
+  CAP_SYS_TTY_CONFIG in the effective set: without it EPERM, for any user
+  and for root that dropped the capability from its effective set, with
+  or without a controlling terminal. With the capability and no
+  controlling terminal it returns 0 and does nothing (no signal; other
+  terminals the process has open keep working). With a controlling
+  terminal (here a pseudo-terminal slave made controlling with TIOCSCTTY
+  by a session leader) it returns 0 and hangs the terminal up: the
+  session leader gets SIGHUP (once); descriptors opened on that terminal
+  before the hang-up are dead: read returns 0 (end of file), write and
+  ioctl (TCGETS) fail with EIO; the process no longer has a controlling
+  terminal (open("/dev/tty") is ENXIO). The terminal itself survives: a
+  new descriptor for the slave (TIOCGPTPEER on the master) reads and
+  writes normally.
+returns:
+  success: "0"
+errors:
+  no_capability: "EPERM (1): CAP_SYS_TTY_CONFIG not effective"
+side_effects: "hang-up of the controlling terminal: SIGHUP to the session leader, old descriptors of the terminal dead, controlling terminal detached from the session"
+threading: "none specific"
+ordering:
+  - "SIGHUP is delivered to the session leader before vhangup returns to it"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: the tests run vhangup only in children that started a session of
+# their own, so the test's own output is never hung up. The tests with
+# the capability are needs=root. Not observed: SIGCONT to the session,
+# hang-up of a foreground process group other than the leader's.

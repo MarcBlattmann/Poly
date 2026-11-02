@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/ustat                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root and as uid/gid 65534; /dev/shm is tmpfs"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  ustat(dev, ubuf) (syscall 136, obsolete) reports free space of the
+  mounted file system whose device number is dev. dev is an unsigned
+  32-bit value in the encoding stat(2) puts in st_dev (bits above 32 of
+  the register are ignored). The file system is looked up first: no
+  mounted file system with that device is EINVAL (dev 0, 0xfffff), even
+  when ubuf is unwritable. Then ubuf, struct ustat (32 bytes: i64 f_tfree,
+  u64 f_tinode, char f_fname[6], char f_fpack[6], 4 bytes padding), is
+  filled from the file system's statfs: f_tfree = free blocks (f_bfree),
+  f_tinode = free inodes (f_ffree), f_fname and f_fpack all zero bytes;
+  returns 0. Any file system works (proc: 0 and 0; tmpfs: both > 0;
+  overlay root here). Every user may call it.
+returns:
+  success: "0"
+errors:
+  no_fs: "EINVAL (22): no mounted file system has device dev"
+  fault: "EFAULT (14): ubuf unwritable (only for a known device)"
+side_effects: none
+threading: "none specific"
+ordering:
+  - "device lookup, then statfs, then the copy"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: struct ustat from linux/types.h. Free counts of a shared tmpfs
+# change while other tests run; tests compare exact values only for /proc.

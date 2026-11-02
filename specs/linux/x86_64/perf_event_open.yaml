@@ -1,0 +1,94 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/perf_event_open      # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, 32 CPUs; tests run as root with all capabilities (the unprivileged cases drop to uid/gid 65534 themselves); kernel.perf_event_paranoid = 2; PMUs: cpu, software, tracepoint, breakpoint, kprobe, uprobe, msr"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  perf_event_open(attr, pid, cpu, group_fd, flags) (syscall 298) opens a
+  performance counter and returns a new descriptor (anon inode
+  "anon_inode:[perf_event]", O_RDWR, close-on-exec only with
+  PERF_FLAG_FD_CLOEXEC). attr is struct perf_event_attr (linux/perf_event.h;
+  136 bytes = PERF_ATTR_SIZE_VER8 on 6.18). pid 0 / cpu -1 counts the
+  calling thread on any CPU; pid > 0 counts that task (same user, or
+  privileged); pid -1 with cpu >= 0 counts a whole CPU (privileged only).
+  The tests cover software events, which every Linux has and which do not
+  need a hardware PMU: cpu-clock, task-clock (nanoseconds the task ran),
+  page-faults (and -min, -maj), context-switches, cpu-migrations, dummy
+  (never counts), alignment/emulation faults, bpf-output, cgroup-switches
+  (types 0..11 of enum perf_sw_ids open; 12 and above ENOENT).
+  Counting: a counter opened with disabled=1 reads 0 until
+  PERF_EVENT_IOC_ENABLE; PERF_EVENT_IOC_DISABLE freezes the value;
+  PERF_EVENT_IOC_RESET sets it to 0; page-faults counts at least one fault
+  per newly touched anonymous page. read() returns, by read_format:
+  without GROUP: value [, time_enabled] [, time_running] [, id] [, lost]
+  (u64 each); with GROUP: nr, [time_enabled], [time_running], then per
+  event of the group in creation order value [, id] [, lost]; a buffer
+  smaller than that (also 0 bytes) ENOSPC. Reading a group member with
+  GROUP gives the whole group too. PERF_EVENT_IOC_ENABLE / DISABLE /
+  RESET with PERF_IOC_FLAG_GROUP (1) act on the whole group; other
+  argument values are ignored (no error). PERF_EVENT_IOC_ID stores the
+  event's id (non-zero, unique; the same as the ID read field).
+  inherit=1 makes children forked afterwards count into the same counter
+  (their counts appear when they exit); without inherit they do not.
+  prctl(PR_TASK_PERF_EVENTS_DISABLE / _ENABLE) stops and resumes all
+  counters the calling thread owns. A counter on another task stays
+  readable after that task exited and was reaped.
+  mmap: MAP_SHARED of 1 page (the perf_event_mmap_page header only:
+  data_size 0) or 1 + 2^n pages (data_offset 4096, data_size 2^n * 4096,
+  data_head 0); PROT_READ alone also works (overwrite mode). Another size
+  while a ring is mapped, a data part that is not a power of two pages,
+  MAP_PRIVATE, or a non-zero offset: EINVAL.
+returns:
+  success: "a new descriptor (lowest free)"
+  read_sizes: "single: 8 bytes per field; group of 2 with GROUP|ID|TOTAL_TIME_ENABLED|TOTAL_TIME_RUNNING: 56 bytes; ID|TOTAL_TIME_*|LOST single: 40 bytes"
+  attr_size: "0 (taken as 64, VER0) or 64..4096; a size past 136 needs zero excess bytes"
+errors:
+  fault: "EFAULT (14): attr NULL or unreadable; PERF_EVENT_IOC_ID with an unwritable pointer"
+  size: "E2BIG (7): attr->size non-zero and < 64, or > 4096 (a page), or > 136 with a non-zero byte past 136; the kernel then writes 136 into attr->size"
+  flags: "EINVAL (22): unknown flags bit (e.g. 0x100); PERF_FLAG_PID_CGROUP when pid is not a cgroup fd"
+  attr_bits: "EINVAL (22): __reserved_1 bits, unknown read_format or sample_type bits"
+  pid_cpu: "EINVAL (22): pid -1 with cpu -1; cpu not present (99999, -2)"
+  no_task: "ESRCH (3): pid does not exist (also once reaped)"
+  group_fd: "EBADF (9): group_fd not open, or not a perf event (e.g. fd 0); EINVAL (22): group_fd is itself a member of a group"
+  type: "ENOENT (2): unknown type (1000) or unknown software config (>= 12); hardware/cache/raw events where no PMU provides them"
+  sampling: "EINVAL (22): freq=1 with sample_freq above kernel.perf_event_max_sample_rate (100000 here); sample_period with bit 63; sigtrap without remove_on_exec; use_clockid with an unknown clockid (99); sample_stack_user not a multiple of 8; PERF_SAMPLE_BRANCH_STACK on a software event"
+  regs: "EOPNOTSUPP (95): sample_regs_user with a bit the architecture lacks (1<<60); bit 0 (AX) is fine"
+  permission: "EACCES (13): see unprivileged below"
+  read: "ENOSPC (28): read buffer smaller than the read_format needs (also 0)"
+  write: "EINVAL (22): write() on the descriptor"
+  lseek: "ESPIPE (29)"
+  ioctl: "ENOTTY (25): unknown request, or perf ioctls on a non-perf fd; EINVAL (22): REFRESH or PERIOD on a counting (sample_period 0) event, SET_OUTPUT to itself or to an event without a ring, SET_FILTER on a software event, PAUSE_OUTPUT without a ring; EBADF (9): SET_OUTPUT to a closed fd (an argument of -1 in all 64 bits clears the redirection and returns 0); EOPNOTSUPP (95): MODIFY_ATTRIBUTES on a software event; QUERY_BPF EINVAL as root"
+  mmap: "EINVAL (22): see summary"
+unprivileged:
+  rule: "kernel.perf_event_paranoid = 2 (upstream default), no CAP_PERFMON/CAP_SYS_ADMIN: only user-space counting of tasks the caller may ptrace"
+  exclude_kernel: "required (exclude_kernel=1); without it EACCES; exclude_hv alone is not enough (EACCES); exclude_hv is not required"
+  cpu_wide: "pid -1, cpu >= 0: EACCES even with exclude_kernel"
+  other_user: "a task of another user (e.g. the root parent): EACCES"
+  order: "attr copy errors (EFAULT, E2BIG), bad flags and bad attr bits (EINVAL) come before the permission check; pid -1 with cpu -1 EINVAL also for users"
+  distributions: "Debian/Ubuntu kernels with perf_event_paranoid 3 or 4 refuse unprivileged callers with EACCES before most checks; the tests therefore run as root (needs=root)"
+side_effects: "a counter; with inherit, counters in children created later"
+threading: "pid 0 counts the calling thread only (not its other threads) unless inherit is set before they are created"
+ordering:
+  - "read of a group: leader first, then members in the order they were opened"
+timing:
+  typical: "microseconds per call"
+  guarantees: "task-clock grows while the task runs; times enabled/running are > 0 after the group ran and running <= enabled"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes:
+# - Hardware events (PERF_TYPE_HARDWARE, HW_CACHE, RAW) opened on the WSL2
+#   oracle (it exposes a "cpu" PMU), but a QEMU guest without a PMU has
+#   none; the tests never use them. A kernel without a PMU answers
+#   ENOENT for them. Dynamic PMU type numbers (6 and above here) depend on
+#   the machine and are not tested.
+# - PERF_TYPE_TRACEPOINT config 0 and PERF_TYPE_BREAKPOINT config 0 are
+#   EINVAL; tracepoint ids depend on tracefs; not tested.
+# - The tests mark their anonymous mappings MADV_NOHUGEPAGE so one fault
+#   per touched page is guaranteed; all counts are checked with >=, never
+#   for exact values.
+# - The perf_event_mmap_page "version"/"cap_user_time" fields depend on the
+#   clock source and are not specified here.

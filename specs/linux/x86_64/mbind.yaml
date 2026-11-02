@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/mbind                # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64, CONFIG_NUMA=y, one NUMA node (node 0); tests run as root and as uid/gid 65534; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  mbind(void *addr, unsigned long len, int mode, const unsigned long
+  *nmask, unsigned long maxnode, unsigned flags) (syscall 237) sets the
+  NUMA policy of the pages [addr, addr + len) of the caller's address
+  space; get_mempolicy(MPOL_F_ADDR) reads it back per page. Mode, mode
+  flags and mask follow the same rules as set_mempolicy (DEFAULT
+  removes the range's policy, so it reads back as MPOL_DEFAULT; PREFERRED
+  without a mask becomes LOCAL; mode flags are kept and read back, e.g.
+  0x8002, 0x2002). addr must be page aligned; len is rounded up to whole
+  pages (len 1 = one page); len 0 succeeds and does nothing. A range
+  inside a mapping splits it: pages outside keep their own policy. Works
+  on private and shared anonymous mappings and on PROT_NONE mappings.
+  flags: MPOL_MF_STRICT (1), MPOL_MF_MOVE (2), MPOL_MF_MOVE_ALL (4); with
+  pages already on an allowed node they succeed (nothing moves); MOVE_ALL
+  needs CAP_SYS_NICE. A failed call changes no policy.
+returns:
+  success: "0"
+errors:
+  align: "EINVAL (22): addr not page aligned"
+  range: "EINVAL (22): addr in kernel space (-4096) or addr + len wraps"
+  unmapped: "EFAULT (14): any page of the range unmapped (a range reaching into a hole, a range in a hole, a low unmapped address); nothing changes"
+  mode: "EINVAL (22): unknown mode (7), STATIC with RELATIVE, mask rules as set_mempolicy (DEFAULT with a mask, BIND without mask / with only missing nodes / maxnode 1)"
+  flags: "EINVAL (22): flag bits other than STRICT|MOVE|MOVE_ALL (8, 16)"
+  fault: "EFAULT (14): nmask not readable"
+  perm: "EPERM (1): MPOL_MF_MOVE_ALL without CAP_SYS_NICE"
+side_effects: "splits mappings at the range ends (visible in /proc/self/maps)"
+threading: "per address space; shared by threads, copied by fork"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/mempolicy.h. One node (node 0) assumed: node
+# 1 does not exist. With MPOL_MF_STRICT and pages on a node outside the
+# new mask Linux would move them or report EIO; with one node that cannot
+# happen and is not tested.

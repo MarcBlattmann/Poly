@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/open_tree_attr       # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534 (user test), children dropping to uid/gid 1000; umask 022; tmpfs instances mounted under /tmp"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  open_tree_attr(dfd, path, flags, attr, size) (syscall 467, Linux 6.15+)
+  is open_tree(2) (same flags: OPEN_TREE_CLONE 1, OPEN_TREE_CLOEXEC =
+  O_CLOEXEC, AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW, AT_NO_AUTOMOUNT,
+  AT_RECURSIVE only with OPEN_TREE_CLONE) followed by mount_setattr(2)
+  with struct mount_attr {u64 attr_set, attr_clr, propagation,
+  userns_fd} on the result. With attr NULL and size 0 it is exactly
+  open_tree. With OPEN_TREE_CLONE the attributes apply only to the
+  detached copy (a read-only clone of a writable mount leaves the source
+  writable; clearing MOUNT_ATTR_RDONLY on a clone of a read-only mount
+  gives a writable clone while the source stays read-only); without it
+  they change the existing mount at the path itself. Returns an O_PATH
+  descriptor (FD_CLOEXEC iff OPEN_TREE_CLOEXEC) that move_mount attaches.
+  Order of checks: (1) attr NULL with size != 0 is EINVAL and flag
+  errors are EINVAL (unknown bits, AT_RECURSIVE without CLONE), for any
+  user; (2) the open_tree part: OPEN_TREE_CLONE without CAP_SYS_ADMIN is
+  EPERM, path errors (ENOENT, EBADF dirfd) come before any attribute
+  check; (3) attr non-NULL: size below MOUNT_ATTR_SIZE_VER0 (32, also 0)
+  is EINVAL, size over a page is E2BIG, a bigger struct needs zero bytes
+  past the known part (else E2BIG), an unreadable attr is EFAULT;
+  (4) attribute validation as mount_setattr: unknown attr bits EINVAL,
+  an atime mode (NOATIME/STRICTATIME) without attr_clr MOUNT_ATTR__ATIME
+  EINVAL, propagation other than 0/MS_PRIVATE/MS_SHARED/MS_SLAVE/
+  MS_UNBINDABLE EINVAL, MOUNT_ATTR_IDMAP with a userns_fd not open EBADF;
+  (5) without OPEN_TREE_CLONE a non-NULL attr needs CAP_SYS_ADMIN, even
+  an all-zero one (EPERM).
+returns:
+  success: "a new O_PATH fd; FD_CLOEXEC iff OPEN_TREE_CLOEXEC"
+  clone: "detached copy with the attributes applied; the source is unchanged"
+  no_clone: "the mount at path itself gets the attributes"
+errors:
+  flags: "EINVAL (22): unknown flags; AT_RECURSIVE without OPEN_TREE_CLONE; attr NULL with size != 0"
+  perm: "EPERM (1): OPEN_TREE_CLONE, or a non-NULL attr without OPEN_TREE_CLONE, without CAP_SYS_ADMIN"
+  missing: "ENOENT (2): path missing (before attribute checks)"
+  bad_fd: "EBADF (9): dfd not open; MOUNT_ATTR_IDMAP with a userns_fd not open"
+  size: "EINVAL (22): attr non-NULL with size < 32; E2BIG (7): size > 4096 or non-zero bytes past the known struct"
+  fault: "EFAULT (14): attr unreadable"
+  attr: "EINVAL (22): unknown attr_set bits, atime mode without MOUNT_ATTR__ATIME in attr_clr, bad propagation"
+side_effects: "OPEN_TREE_CLONE creates a detached mount owned by the descriptor; without it the existing mount's attributes change"
+threading: "none specific"
+ordering:
+  - "argument/flag checks, open_tree (permission, path), attr size and copy, attr validation, permission for non-clone changes"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+# Notes: constants from linux/mount.h and linux/fcntl.h. Shares behaviour
+# with open_tree.yaml and mount_setattr.yaml (batch E). All tests except
+# f_open_tree_attr_user need root; that one works as any user (on "/").

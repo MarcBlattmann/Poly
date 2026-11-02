@@ -1,0 +1,71 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/add_key              # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64; tests run as root with all capabilities and as uid/gid 65534; every test first joins an anonymous session keyring of its own"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  add_key(type, description, payload, plen, keyring) (syscall 248) creates
+  a key of the given type and links it into the destination keyring, or,
+  when that keyring already holds a key of the same type and description,
+  updates that key in place and returns its serial. The result is the key's
+  serial number: a positive 31-bit value chosen by the kernel (unique,
+  unpredictable; tests never print it). Keys belong to the caller's fsuid
+  and fsgid. Types every kernel with keys has: "user" (payload 1..32767
+  bytes, readable back with KEYCTL_READ), "logon" (like user, but the
+  description must be "<prefix>:<rest>" with a non-empty prefix, and the
+  payload can never be read back from user space: KEYCTL_READ is
+  EOPNOTSUPP) and "keyring" (no payload; a new keyring of the same
+  description replaces the old one's link in the destination rather than
+  updating it, since keyrings cannot be updated). Descriptions are 1..4095
+  bytes plus NUL. Types and keyring descriptions starting with '.' are
+  reserved for the kernel (EPERM).
+  Destination keyring: a keyring serial, or a special id from
+  linux/keyctl.h: KEY_SPEC_THREAD_KEYRING (-1, description "_tid"),
+  KEY_SPEC_PROCESS_KEYRING (-2, "_pid") are created on first use;
+  KEY_SPEC_SESSION_KEYRING (-3) is the session keyring (joined with
+  KEYCTL_JOIN_SESSION_KEYRING; a process that never joined one uses the
+  user-session keyring); KEY_SPEC_USER_KEYRING (-4) and
+  KEY_SPEC_USER_SESSION_KEYRING (-5) always exist per user. The thread and
+  process keyrings are not inherited by fork (the child has none until it
+  makes them); the session keyring is shared with the child.
+  Permissions of a new key (KEYCTL_DESCRIBE's 4th field, possessor/user/
+  group/other bytes): user and keyring 3f010000, logon 3d010000.
+returns:
+  success: "the key's serial (> 0); same serial when an existing user/logon key of that type and description in that keyring was updated"
+  describe_text: "KEYCTL_DESCRIBE gives \"<type>;<uid>;<gid>;<perm %08x>;<description>\", e.g. user;0;0;3f010000;f_k1 as root"
+errors:
+  type_fault: "EFAULT (14): type unreadable (also NULL)"
+  type_empty: "EINVAL (22): type \"\""
+  type_dot: "EPERM (1): type starting with '.'"
+  type_unknown: "ENODEV (19): no such key type"
+  description: "EINVAL (22): description NULL or \"\", or 4096 bytes or longer; logon description without ':' or with an empty prefix"
+  payload_fault: "EFAULT (14): payload unreadable for plen bytes"
+  payload_size: "EINVAL (22): plen > 1 MiB (1048576), before the payload is read; user/logon payload empty or longer than 32767 bytes; any payload for type keyring"
+  keyring_id: "EINVAL (22): keyring 0 or KEY_SPEC_GROUP_KEYRING (-6) or below -8"
+  reqkey_auth: "ENOKEY (126): KEY_SPEC_REQKEY_AUTH_KEY (-7) or KEY_SPEC_REQUESTOR_KEYRING (-8) outside a request-key upcall; a serial that names no key"
+  not_keyring: "ENOTDIR (20): the destination is a key that is not a keyring"
+  revoked: "EKEYREVOKED (128): the destination keyring is revoked"
+  expired: "EKEYEXPIRED (127): the destination keyring has expired"
+  permission: "EACCES (13): no write permission on the destination keyring"
+  quota: "EDQUOT (122): the user's key count or byte quota (/proc/sys/kernel/keys/*) is used up; not tested (the oracle's limits are raised)"
+side_effects: "creates a key and links it into the destination; a failed call adds nothing"
+threading: "the thread keyring is per thread, the process keyring shared by the threads of a process; the session keyring is inherited by fork and clone"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes:
+# - Environment: oracle sysctls kernel.keys.maxkeys 10000, maxbytes 700000
+#   (WSL raised the defaults 200/20000), root_maxkeys 1000000,
+#   root_maxbytes 25000000, gc_delay 300. No test depends on them.
+# - Serials are random; a keyring's READ lists its keys in an order of its
+#   own (not link order), so tests compare as sets.
+# - Poly runs a test as the first process of a fresh boot; every keys test
+#   joins a new anonymous session keyring first and uses only keys it made.
+# - Constants: linux/keyctl.h (KEY_SPEC_*), asm-generic/errno.h.

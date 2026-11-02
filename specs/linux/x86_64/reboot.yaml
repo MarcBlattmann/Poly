@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: linux/syscall/x86_64/reboot               # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Linux 6.18.54.1-microsoft-standard-WSL2 (WSL2 kernel, x86-64)"
+  machine: "Docker privileged container on WSL2, x86-64 (the container has its own PID namespace); tests run as root with all capabilities and as uid/gid 65534, children dropping to uid/gid 1000; umask 022"
+  observed_by: spec-linux-f
+  date: 2026-11-02
+summary: >
+  reboot(magic1, magic2, cmd, arg) (syscall 169; all three first
+  arguments are 32-bit ints, higher bits are ignored). Order of checks:
+  (1) the caller needs CAP_SYS_BOOT (in the user namespace owning its PID
+  namespace), else EPERM, whatever the other arguments; (2) magic1 must be
+  LINUX_REBOOT_MAGIC1 (0xfee1dead) and magic2 one of LINUX_REBOOT_MAGIC2
+  (672274793), MAGIC2A (85072278), MAGIC2B (369367448), MAGIC2C
+  (537993216), else EINVAL; (3) the command.
+  In a PID namespace other than the initial one the machine is never
+  touched: RESTART (0x01234567) and RESTART2 (0xa1b2c3d4, arg not read)
+  end the namespace: every member is killed, the call does not return,
+  and the namespace's init is reported to its parent (wait status) as
+  killed by SIGHUP; HALT (0xcdef0123) and POWER_OFF (0x4321fedc) the same
+  with SIGINT. This holds whether init itself or another member (pid 2)
+  makes the call; the creator of the namespace is not affected. Every
+  other command (CAD_ON 0x89abcdef, CAD_OFF 0, SW_SUSPEND 0xd000fce2,
+  KEXEC 0x45584543, unknown values) fails with EINVAL there and the caller
+  continues.
+  In the initial PID namespace (documented, not tested: it would reboot
+  the machine) RESTART/HALT/POWER_OFF/RESTART2 restart or stop the system,
+  CAD_ON/CAD_OFF set what Ctrl-Alt-Del does and return 0, KEXEC and
+  SW_SUSPEND fail with EINVAL when there is no loaded kernel or no
+  hibernation support; unknown commands are EINVAL.
+returns:
+  pid_namespace_restart: "does not return; namespace init killed, its parent sees signal SIGHUP (wait status 0x1)"
+  pid_namespace_halt: "does not return; namespace init seen as killed by SIGINT (wait status 0x2)"
+  initial_namespace_cad: "0 for CAD_ON / CAD_OFF (not tested: the reference runs in a container's PID namespace, where these give EINVAL)"
+errors:
+  perm: "EPERM (1): no CAP_SYS_BOOT; checked first (bad magic and unknown commands are EPERM too)"
+  magic: "EINVAL (22): magic1 != 0xfee1dead or magic2 not one of the four values"
+  cmd: "EINVAL (22): unknown command; in a non-initial PID namespace every command other than RESTART, RESTART2, HALT, POWER_OFF"
+side_effects: "initial namespace: restarts/halts the machine; other namespaces: kills every process of the namespace"
+threading: "none specific"
+ordering:
+  - "capability check, then magic numbers, then the command"
+timing:
+  typical: "microseconds for errors"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+# Notes: constants from linux/reboot.h. Every root test calls reboot only
+# as a member of a PID namespace it just created with
+# unshare(CLONE_NEWPID) (and checks getpid() == 1 or 2 there first), so
+# Poly needs CLONE_NEWPID for them; without it the tests stop (exit codes
+# 90/91) instead of calling reboot. The EPERM test runs as any user.
+# BusyBox reboot/halt/poweroff use this call (and signal init first).
