@@ -11,13 +11,26 @@
 //! The bus is `$DBUS_SESSION_BUS_ADDRESS` (`unix:path=...`), else
 //! `$XDG_RUNTIME_DIR/bus`. With `-w` or actions it waits for the
 //! notification to close and prints the action chosen.
+//!
+//! A native Poly program on `poly-rt` (ADR 0125): this crate is its code,
+//! tested on the host; `userland/native/notify` builds the program.
 
+#![no_std]
+
+#[macro_use]
+extern crate alloc;
+#[macro_use]
+extern crate poly_rt;
+#[cfg(test)]
+extern crate std;
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use poly_dbus::message::Stream;
 use poly_dbus::notifications::{self as dn, Notify, Urgency};
 use poly_dbus::{Message, MessageType, Value};
-use std::io::{Read, Write};
-use std::os::unix::net::UnixStream;
-use std::process::ExitCode;
+use poly_rt::io::{Read, Write};
+use poly_rt::net::UnixStream;
 
 const USAGE: &str = "usage: notify-send [-u low|normal|critical] [-t MS] [-a APP] [-i ICON] [-c CATEGORY] [-e] [-r ID] [-p] [-A [NAME=]LABEL]... [-w] SUMMARY [BODY]";
 
@@ -123,7 +136,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
 
 /// The session bus's socket path.
 fn bus_path() -> Result<String, String> {
-    if let Ok(addr) = std::env::var("DBUS_SESSION_BUS_ADDRESS") {
+    if let Some(addr) = poly_rt::env::var("DBUS_SESSION_BUS_ADDRESS") {
         // The first `unix:path=` address of a `;`-separated list.
         for a in addr.split(';') {
             if let Some(rest) = a.strip_prefix("unix:") {
@@ -136,8 +149,8 @@ fn bus_path() -> Result<String, String> {
         }
         return Err(format!("no unix:path= in DBUS_SESSION_BUS_ADDRESS ({addr})"));
     }
-    let dir = std::env::var("XDG_RUNTIME_DIR")
-        .map_err(|_| "no session bus (DBUS_SESSION_BUS_ADDRESS and XDG_RUNTIME_DIR unset)")?;
+    let dir = poly_rt::env::var("XDG_RUNTIME_DIR")
+        .ok_or("no session bus (DBUS_SESSION_BUS_ADDRESS and XDG_RUNTIME_DIR unset)")?;
     Ok(format!("{dir}/bus"))
 }
 
@@ -151,8 +164,7 @@ struct Bus {
 impl Bus {
     fn connect(path: &str) -> Result<Bus, String> {
         let mut sock = UnixStream::connect(path).map_err(|e| format!("{path}: {e}"))?;
-        // SAFETY: getuid has no preconditions.
-        let uid = unsafe { libc::getuid() };
+        let uid = poly_rt::process::uid();
         let (auth, begin) = poly_dbus::auth::client_lines(uid);
         sock.write_all(&auth).map_err(|e| e.to_string())?;
         let mut line = Vec::new();
@@ -254,13 +266,15 @@ fn run(args: &[String]) -> Result<(), String> {
     }
 }
 
-fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+/// `notify-send`'s `main`: its arguments from the command line; returns
+/// the exit status.
+pub fn main() -> i32 {
+    let args: Vec<String> = poly_rt::env::args_str().skip(1).map(String::from).collect();
     match run(&args) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) => 0,
         Err(e) => {
             eprintln!("notify-send: {e}");
-            ExitCode::FAILURE
+            1
         }
     }
 }

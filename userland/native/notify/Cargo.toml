@@ -1,0 +1,20 @@
+[package]
+name = "poly-notify-native"
+description = "/bin/notify-send: notify-send (userland/poly-notify) as a native Poly program (ADR 0125)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "notify-send"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-notify = { path = "../../poly-notify" }
+poly-rt = { path = "../../../crates/poly-rt" }
+
+[lints]
+workspace = true

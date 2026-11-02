@@ -3,15 +3,15 @@
 //! modifiers, the launcher's hotkeys, the apps from `.desktop` files, the
 //! font, and the keymap file `wl_keyboard.keymap` hands out.
 
+use crate::io;
+use crate::os::{self, RawFd};
+use crate::prelude::*;
 use poly_input::Modifiers;
 use poly_input::codes::key as k;
 use poly_input::layout::Layout;
 use poly_input::xkb::mods;
 use poly_shell::Key;
 use poly_shell::apps::{App, parse_desktop_entry};
-use std::ffi::CString;
-use std::os::fd::RawFd;
-use std::path::Path;
 
 /// Where desktop files are (the Desktop Entry Specification's
 /// `$XDG_DATA_DIRS/applications`, with the default data directory).
@@ -84,7 +84,7 @@ impl Hotkeys {
                 self.super_alone = true;
                 return false;
             }
-            return std::mem::take(&mut self.super_alone);
+            return core::mem::take(&mut self.super_alone);
         }
         if pressed {
             self.super_alone = false;
@@ -152,15 +152,15 @@ pub fn wm_key(code: u32, pressed: bool, depressed: u32, switcher_open: bool) -> 
 }
 
 /// The apps of every readable desktop file in `dir`.
-pub fn desktop_files(dir: &Path) -> Vec<App> {
-    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+pub fn desktop_files(dir: &str) -> Vec<App> {
+    let Ok(entries) = poly_rt::fs::read_dir(dir) else { return Vec::new() };
     let mut apps = Vec::new();
-    for e in entries.flatten() {
-        let name = e.file_name().to_string_lossy().into_owned();
+    for e in entries {
+        let name = e.name;
         if !name.ends_with(".desktop") {
             continue;
         }
-        if let Ok(text) = std::fs::read_to_string(e.path()) {
+        if let Ok(text) = poly_rt::fs::read_to_string(&poly_rt::fs::join(dir, &name)) {
             match parse_desktop_entry(&name, &text) {
                 Ok(app) => apps.push(app),
                 Err(why) => eprintln!("poly-compositor: {name}: not offered ({why:?})"),
@@ -171,20 +171,13 @@ pub fn desktop_files(dir: &Path) -> Vec<App> {
 }
 
 /// The keymap as a file for `wl_keyboard.keymap`: the XKB text and its
-/// NUL in a file in `dir`, unlinked once open (Poly has no
-/// `memfd_create` yet), read-only. Returns the descriptor and the size.
-pub fn keymap_file(dir: &Path, layout: &Layout) -> std::io::Result<(RawFd, u32)> {
+/// NUL in a sealed memory object, read-only (the runtime directory `_dir`
+/// held it as an unlinked file before memory objects). Returns the handle
+/// and the size.
+pub fn keymap_file(_dir: &str, layout: &Layout) -> io::Result<(RawFd, u32)> {
     let mut text = poly_input::xkb::keymap(layout).into_bytes();
     text.push(0);
-    let path = dir.join(format!("poly-keymap-{}", std::process::id()));
-    std::fs::write(&path, &text)?;
-    let c = CString::new(path.to_string_lossy().as_bytes()).map_err(|_| std::io::ErrorKind::InvalidInput)?;
-    // SAFETY: a NUL-terminated path.
-    let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
-    let _ = std::fs::remove_file(&path);
-    if fd < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
+    let fd = os::read_only_file("poly-keymap", &text).ok_or_else(|| io::Error::other("no memory object"))?;
     Ok((fd, text.len() as u32))
 }
 
@@ -254,23 +247,11 @@ mod tests {
         assert!(m.shift() && m.alt_gr() && m.caps_lock() && !m.control());
     }
 
+    /// Without a kernel (the host) there are no desktop files and no
+    /// memory objects; the desktop boot tests check both on Poly.
     #[test]
-    fn keymap_files_and_desktop_files() {
-        let dir = std::env::temp_dir().join(format!("poly-desktop-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let (fd, size) = keymap_file(&dir, &US).unwrap();
-        let mut buf = vec![0u8; size as usize];
-        // SAFETY: reading into a buffer of the length given.
-        let n = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
-        assert_eq!(n as u32, size);
-        assert!(buf.starts_with(b"xkb_keymap {"));
-        assert_eq!(buf.last(), Some(&0), "NUL-terminated");
-        crate::unix::close(fd);
-        std::fs::write(dir.join("a.desktop"), "[Desktop Entry]\nType=Application\nName=A\nExec=/bin/a\n").unwrap();
-        std::fs::write(dir.join("b.desktop"), "[Desktop Entry]\nType=Link\nName=B\n").unwrap();
-        std::fs::write(dir.join("c.txt"), "x").unwrap();
-        let apps = desktop_files(&dir);
-        assert_eq!(apps.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), ["A"]);
-        std::fs::remove_dir_all(&dir).unwrap();
+    fn keymap_files_and_desktop_files_need_the_kernel() {
+        assert!(desktop_files("/usr/share/applications").is_empty());
+        assert!(keymap_file("/run/user/0", &US).is_err());
     }
 }

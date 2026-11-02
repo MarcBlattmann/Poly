@@ -1,18 +1,18 @@
 [package]
 name = "poly-compositor"
-description = "Poly's Wayland compositor for the Linux personality: poly-wayland's server on a Unix socket, on the screen through DRM/KMS page flips (vsync) or /dev/fb0, with evdev input and Poly's shell (--desktop), or off-screen"
+description = "Poly's Wayland compositor and desktop, a native Poly program on poly-rt (ADR 0125): poly-wayland's server on a Unix socket, on the screen through DRM/KMS page flips (vsync) or /dev/fb0, with evdev input and Poly's shell (--desktop), or off-screen. This is its code, tested on the host; userland/native/compositor builds the program."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
 
 [dependencies]
-libc.workspace = true
 poly-drm.workspace = true
 poly-fbdev.workspace = true
 poly-font.workspace = true
 poly-input.workspace = true
 poly-dbus.workspace = true
+poly-rt.workspace = true
 poly-shell.workspace = true
 poly-wayland.workspace = true
 poly-x11.workspace = true

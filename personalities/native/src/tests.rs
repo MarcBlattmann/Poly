@@ -2,8 +2,10 @@
 
 extern crate std;
 
-use crate::abi::{self, Clock, Error, ExitStatus, Handle, SpawnRequest, Str, Whence, nr};
-use crate::kernel::{NativeKernel, OpenHow, Prot, Spawn};
+use crate::abi::{
+    self, Clock, Error, ExitStatus, FileInfo, Handle, PeerInfo, PollEntry, SpawnRequest, Str, Whence, nr,
+};
+use crate::kernel::{NativeKernel, OpenHow, Prot, Signal, SocketKind, SocketName, Spawn};
 use crate::{Native, table};
 use alloc::collections::BTreeMap;
 use alloc::vec;
@@ -34,6 +36,33 @@ struct Fake {
     slept: Vec<u64>,
     spawned: Vec<Spawn>,
     children: BTreeMap<u32, ExitStatus>,
+    /// Children have not ended yet (`wait` without hanging fails).
+    unfinished: bool,
+    controls: Vec<(Handle, u32, u64)>,
+    /// `map_handle` calls: handle, offset, length, protection, shared.
+    handle_maps: Vec<(Handle, u64, u64, Prot, bool)>,
+    seals: BTreeMap<Handle, u32>,
+    nonblocking: Vec<(Handle, bool)>,
+    /// File system calls, in order: name and path(s).
+    fs_ops: Vec<(&'static str, Vec<u8>)>,
+    /// A directory's entries and how many were read.
+    dir: (Vec<(u8, Vec<u8>)>, usize),
+    /// Sockets: their peer and what came in (bytes, the paths of the
+    /// handles that came with them).
+    sockets: BTreeMap<Handle, FakeSocket>,
+    listening: BTreeMap<Vec<u8>, Handle>,
+    signals: Vec<(u32, Signal)>,
+}
+
+/// A fake socket: its peer, and the messages that came in (bytes, the
+/// paths of the handles that came with them).
+type FakeSocket = (Option<Handle>, Vec<(Vec<u8>, Vec<Vec<u8>>)>);
+
+/// A new handle of the fake: the lowest free number.
+fn new_handle(handles: &mut BTreeMap<Handle, (Vec<u8>, u64)>, path: &[u8]) -> Handle {
+    let h = (0..).find(|h| !handles.contains_key(h)).unwrap();
+    handles.insert(h, (path.to_vec(), 0));
+    h
 }
 
 impl Fake {
@@ -206,8 +235,242 @@ impl NativeKernel for Fake {
         Ok(pid)
     }
 
-    fn wait(&mut self, pid: u32) -> Result<ExitStatus, Error> {
+    fn wait(&mut self, pid: u32, no_hang: bool) -> Result<ExitStatus, Error> {
+        if !self.children.contains_key(&pid) {
+            return Err(Error::NoChild);
+        }
+        if self.unfinished && no_hang {
+            return Err(Error::WouldBlock);
+        }
         self.children.remove(&pid).ok_or(Error::NoChild)
+    }
+
+    fn control(&mut self, handle: Handle, request: u32, arg: u64) -> Result<u64, Error> {
+        if !self.handles.contains_key(&handle) {
+            return Err(Error::BadHandle);
+        }
+        self.controls.push((handle, request, arg));
+        Ok(7)
+    }
+
+    fn poll(&mut self, entries: &mut [PollEntry], timeout_ns: Option<u64>) -> Result<usize, Error> {
+        let mut ready = 0;
+        for e in entries.iter_mut() {
+            if e.handle == abi::NO_HANDLE {
+                continue;
+            }
+            e.revents = match self.sockets.get(&e.handle) {
+                _ if !self.handles.contains_key(&e.handle) => abi::events::INVALID,
+                Some((_, inbox)) if !inbox.is_empty() => e.events & abi::events::READABLE,
+                Some((None, _)) => abi::events::HANGUP,
+                _ => e.events & abi::events::WRITABLE,
+            };
+            ready += usize::from(e.revents != 0);
+        }
+        if ready == 0 && timeout_ns.is_none() {
+            return Err(Error::Interrupted);
+        }
+        Ok(ready)
+    }
+
+    fn map_handle(&mut self, handle: Handle, offset: u64, len: u64, prot: Prot, shared: bool) -> Result<u64, Error> {
+        if !self.handles.contains_key(&handle) {
+            return Err(Error::BadHandle);
+        }
+        self.handle_maps.push((handle, offset, len, prot, shared));
+        Ok(0x6000_0000)
+    }
+
+    fn memory_object(&mut self, size: u64) -> Result<Handle, Error> {
+        let name = alloc::format!("memfd:{size}").into_bytes();
+        self.files.insert(name.clone(), vec![0; size as usize]);
+        Ok(new_handle(&mut self.handles, &name))
+    }
+
+    fn seal(&mut self, handle: Handle, seals: u32) -> Result<(), Error> {
+        *self.seals.entry(handle).or_default() |= seals;
+        Ok(())
+    }
+
+    fn set_nonblocking(&mut self, handle: Handle, on: bool) -> Result<(), Error> {
+        self.nonblocking.push((handle, on));
+        Ok(())
+    }
+
+    fn handle_info(&mut self, handle: Handle) -> Result<FileInfo, Error> {
+        let (path, _) = self.handles.get(&handle).ok_or(Error::BadHandle)?;
+        let size = self.files.get(path).map_or(0, Vec::len) as u64;
+        Ok(FileInfo { size, kind: abi::kind::FILE, mode: 0o644, ..FileInfo::default() })
+    }
+
+    fn stat(&mut self, path: &[u8]) -> Result<FileInfo, Error> {
+        let file = self.files.get(path).ok_or(Error::NotFound)?;
+        Ok(FileInfo {
+            size: file.len() as u64,
+            kind: abi::kind::FILE,
+            mode: 0o600,
+            device: 0xe2_0000_0080,
+            inode: 9,
+            ..FileInfo::default()
+        })
+    }
+
+    fn rename(&mut self, from: &[u8], to: &[u8]) -> Result<(), Error> {
+        let data = self.files.remove(from).ok_or(Error::NotFound)?;
+        self.files.insert(to.to_vec(), data);
+        self.fs_ops.push(("rename", [from, b" ", to].concat()));
+        Ok(())
+    }
+
+    fn remove(&mut self, path: &[u8], directory: bool) -> Result<(), Error> {
+        self.fs_ops.push((if directory { "rmdir" } else { "remove" }, path.to_vec()));
+        self.files.remove(path).map(|_| ()).ok_or(Error::NotFound)
+    }
+
+    fn make_dir(&mut self, path: &[u8], mode: u16) -> Result<(), Error> {
+        self.fs_ops.push(("mkdir", [path, &mode.to_le_bytes()].concat()));
+        Ok(())
+    }
+
+    fn set_mode(&mut self, path: &[u8], mode: u16) -> Result<(), Error> {
+        self.fs_ops.push(("chmod", [path, &mode.to_le_bytes()].concat()));
+        Ok(())
+    }
+
+    fn read_dir(&mut self, handle: Handle, emit: &mut dyn FnMut(u8, &[u8]) -> bool) -> Result<usize, Error> {
+        if !self.handles.contains_key(&handle) {
+            return Err(Error::BadHandle);
+        }
+        let (entries, at) = &mut self.dir;
+        let start = *at;
+        while let Some((kind, name)) = entries.get(*at) {
+            if !emit(*kind, name) {
+                break;
+            }
+            *at += 1;
+        }
+        Ok(*at - start)
+    }
+
+    fn sync(&mut self) {
+        self.fs_ops.push(("sync", Vec::new()));
+    }
+
+    fn pipe(&mut self) -> Result<[Handle; 2], Error> {
+        Ok([new_handle(&mut self.handles, b"pipe:r"), new_handle(&mut self.handles, b"pipe:w")])
+    }
+
+    fn make_fifo(&mut self, path: &[u8], _mode: u16) -> Result<(), Error> {
+        self.fs_ops.push(("mkfifo", path.to_vec()));
+        Ok(())
+    }
+
+    fn socket(&mut self, kind: SocketKind, _nonblock: bool) -> Result<Handle, Error> {
+        if kind == SocketKind::SeqPacket {
+            return Err(Error::Unsupported);
+        }
+        let h = new_handle(&mut self.handles, b"socket");
+        self.sockets.insert(h, (None, Vec::new()));
+        Ok(h)
+    }
+
+    fn socket_pair(&mut self, _kind: SocketKind, _nonblock: bool) -> Result<[Handle; 2], Error> {
+        let a = new_handle(&mut self.handles, b"socket");
+        let b = new_handle(&mut self.handles, b"socket");
+        self.sockets.insert(a, (Some(b), Vec::new()));
+        self.sockets.insert(b, (Some(a), Vec::new()));
+        Ok([a, b])
+    }
+
+    fn bind(&mut self, handle: Handle, name: &SocketName) -> Result<(), Error> {
+        let key = match name {
+            SocketName::Path(p) => p.clone(),
+            SocketName::Abstract(n) => [b"@", &n[..]].concat(),
+        };
+        if self.listening.contains_key(&key) {
+            return Err(Error::AlreadyExists);
+        }
+        self.listening.insert(key, handle);
+        Ok(())
+    }
+
+    fn listen(&mut self, handle: Handle, _backlog: u32) -> Result<(), Error> {
+        self.sockets.get(&handle).map(|_| ()).ok_or(Error::BadHandle)
+    }
+
+    fn accept(&mut self, handle: Handle, nonblock: bool) -> Result<Handle, Error> {
+        let (_, inbox) = self.sockets.get_mut(&handle).ok_or(Error::BadHandle)?;
+        if inbox.is_empty() {
+            return Err(if nonblock { Error::WouldBlock } else { Error::Interrupted });
+        }
+        inbox.remove(0);
+        let h = new_handle(&mut self.handles, b"socket");
+        self.sockets.insert(h, (None, Vec::new()));
+        Ok(h)
+    }
+
+    fn connect(&mut self, handle: Handle, name: &SocketName) -> Result<(), Error> {
+        let key = match name {
+            SocketName::Path(p) => p.clone(),
+            SocketName::Abstract(n) => [b"@", &n[..]].concat(),
+        };
+        let listener = *self.listening.get(&key).ok_or(Error::ConnectionRefused)?;
+        self.sockets.get_mut(&listener).unwrap().1.push((Vec::new(), Vec::new()));
+        self.sockets.get_mut(&handle).ok_or(Error::BadHandle)?.0 = Some(listener);
+        Ok(())
+    }
+
+    fn send(&mut self, handle: Handle, data: &[u8], handles: &[Handle]) -> Result<usize, Error> {
+        let peer = self.sockets.get(&handle).ok_or(Error::BadHandle)?.0.ok_or(Error::BrokenPipe)?;
+        let paths = handles
+            .iter()
+            .map(|h| self.handles.get(h).map(|(p, _)| p.clone()).ok_or(Error::BadHandle))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.sockets.get_mut(&peer).unwrap().1.push((data.to_vec(), paths));
+        Ok(data.len())
+    }
+
+    fn recv(&mut self, handle: Handle, buf: &mut [u8], max_handles: usize) -> Result<(usize, Vec<Handle>), Error> {
+        let (_, inbox) = self.sockets.get_mut(&handle).ok_or(Error::BadHandle)?;
+        if inbox.is_empty() {
+            return Ok((0, Vec::new()));
+        }
+        let (data, paths) = inbox.remove(0);
+        let n = data.len().min(buf.len());
+        buf[..n].copy_from_slice(&data[..n]);
+        let got = paths.iter().take(max_handles).map(|p| new_handle(&mut self.handles, p)).collect();
+        Ok((n, got))
+    }
+
+    fn socket_peer(&mut self, handle: Handle) -> Result<PeerInfo, Error> {
+        self.sockets.get(&handle).ok_or(Error::BadHandle)?;
+        Ok(PeerInfo { pid: 42, uid: 0, gid: 0 })
+    }
+
+    fn process_handle(&mut self, pid: u32) -> Result<Handle, Error> {
+        if !self.children.contains_key(&pid) {
+            return Err(Error::NoChild);
+        }
+        Ok(new_handle(&mut self.handles, b"process"))
+    }
+
+    fn signal(&mut self, pid: u32, what: Signal) -> Result<(), Error> {
+        if !self.children.contains_key(&pid) {
+            return Err(Error::NotFound);
+        }
+        self.signals.push((pid, what));
+        Ok(())
+    }
+
+    fn net_interfaces(&mut self) -> Vec<(u32, Vec<u8>)> {
+        use abi::InterfaceRecord as R;
+        alloc::vec![(R::UP | R::RUNNING | R::LOOPBACK | R::ADDRESSED, b"lo".to_vec()), (R::UP, b"eth0".to_vec())]
+    }
+
+    fn truncate(&mut self, handle: Handle, len: u64) -> Result<(), Error> {
+        let (path, _) = self.handles.get(&handle).ok_or(Error::BadHandle)?;
+        self.files.get_mut(path).ok_or(Error::Unsupported)?.resize(len as usize, 0);
+        Ok(())
     }
 }
 
@@ -384,6 +647,18 @@ fn exit_tells_the_kernel_the_low_byte() {
 /// Lay out a spawn request in the fake's memory: the strings, the [`Str`]
 /// arrays and the request. Returns the request's address.
 fn put_spawn(k: &mut Fake, path: &[u8], args: &[&[u8]], env: &[&[u8]], stdio: [u32; 3]) -> u64 {
+    put_spawn_with(k, path, args, env, stdio, &[])
+}
+
+/// [`put_spawn`] with extra handles (an ABI version 2 request).
+fn put_spawn_with(
+    k: &mut Fake,
+    path: &[u8],
+    args: &[&[u8]],
+    env: &[&[u8]],
+    stdio: [u32; 3],
+    handles: &[(u32, u32)],
+) -> u64 {
     let mut at = 0x4000;
     let mut put = |k: &mut Fake, b: &[u8]| {
         let addr = k.put(at, b);
@@ -398,6 +673,8 @@ fn put_spawn(k: &mut Fake, path: &[u8], args: &[&[u8]], env: &[&[u8]], stdio: [u
     };
     let args_at = array(k, args);
     let env_at = array(k, env);
+    let pairs: Vec<u8> = handles.iter().flat_map(|(f, t)| [f.to_le_bytes(), t.to_le_bytes()].concat()).collect();
+    let handles_at = put(k, &pairs);
     let req = SpawnRequest {
         path,
         args: args_at,
@@ -406,6 +683,8 @@ fn put_spawn(k: &mut Fake, path: &[u8], args: &[&[u8]], env: &[&[u8]], stdio: [u
         env_count: env.len() as u64,
         stdio,
         flags: 0,
+        handles: handles_at,
+        handle_count: handles.len() as u64,
     };
     let mut raw = Vec::new();
     for v in [req.path.ptr, req.path.len, req.args, req.arg_count, req.env, req.env_count] {
@@ -414,15 +693,21 @@ fn put_spawn(k: &mut Fake, path: &[u8], args: &[&[u8]], env: &[&[u8]], stdio: [u
     for v in req.stdio.iter().chain([&req.flags]) {
         raw.extend_from_slice(&v.to_le_bytes());
     }
+    for v in [req.handles, req.handle_count] {
+        raw.extend_from_slice(&v.to_le_bytes());
+    }
     assert_eq!(raw.len(), SpawnRequest::SIZE);
-    assert_eq!(SpawnRequest::from_bytes(raw.as_slice().try_into().unwrap()), req);
+    assert_eq!(SpawnRequest::from_bytes(&raw), req);
+    let v1 = SpawnRequest::from_bytes(&raw[..SpawnRequest::SIZE_V1]);
+    assert_eq!((v1.handles, v1.handle_count), (0, 0), "a version 1 request has no extra handles");
     k.put(0x8000, &raw)
 }
 
 #[test]
 fn spawn_copies_the_request_and_wait_reaps_once() {
     let mut k = Fake::new();
-    let req = put_spawn(&mut k, b"/bin/child", &[b"child", b"--exit", b"42"], &[b"HOME=/"], [0, 1, abi::STDIO_NONE]);
+    let (args, env): (&[&[u8]], &[&[u8]]) = (&[b"child", b"--exit", b"42"], &[b"HOME=/"]);
+    let req = put_spawn_with(&mut k, b"/bin/child", args, env, [0, 1, abi::STDIO_NONE], &[(5, 10), (6, 11)]);
     let pid = k.call(nr::SPAWN, [req, SpawnRequest::SIZE as u64, 0, 0, 0, 0]).unwrap();
     assert_eq!(pid, 101);
     let s = &k.spawned[0];
@@ -430,9 +715,24 @@ fn spawn_copies_the_request_and_wait_reaps_once() {
     assert_eq!(s.args, [b"child".to_vec(), b"--exit".to_vec(), b"42".to_vec()]);
     assert_eq!(s.env, [b"HOME=/".to_vec()]);
     assert_eq!(s.stdio, [Some(0), Some(1), None]);
+    assert_eq!(s.handles, [(5, 10), (6, 11)]);
+    // Not ended yet without waiting, then reaped once.
+    k.unfinished = true;
+    assert_eq!(k.call(nr::WAIT, [pid, abi::wait::NO_HANG, 0, 0, 0, 0]), Err(Error::WouldBlock));
+    k.unfinished = false;
+    assert_eq!(k.call(nr::WAIT, [pid, 2, 0, 0, 0, 0]), Err(Error::InvalidArgument));
     assert_eq!(k.call(nr::WAIT, [pid, 0, 0, 0, 0, 0]).map(ExitStatus::decode), Ok(Some(ExitStatus::Exited(42))));
     assert_eq!(k.call(nr::WAIT, [pid, 0, 0, 0, 0, 0]), Err(Error::NoChild));
     assert_eq!(k.call(nr::WAIT, [u64::MAX, 0, 0, 0, 0, 0]), Err(Error::NoChild));
+    // A version 1 request (64 bytes) still works, without extra handles.
+    let req = put_spawn(&mut k, b"/bin/child", &[b"child"], &[], [0, 1, 2]);
+    assert_eq!(k.call(nr::SPAWN, [req, SpawnRequest::SIZE_V1 as u64, 0, 0, 0, 0]), Ok(102));
+    assert!(k.spawned[1].handles.is_empty());
+    // Extra handles may not name 0, 1 or 2, or one child handle twice.
+    for bad in [&[(5u32, 2u32)][..], &[(5, 10), (6, 10)]] {
+        let req = put_spawn_with(&mut k, b"/bin/child", &[b"child"], &[], [0, 1, 2], bad);
+        assert_eq!(k.call(nr::SPAWN, [req, SpawnRequest::SIZE as u64, 0, 0, 0, 0]), Err(Error::InvalidArgument));
+    }
 }
 
 #[test]
@@ -465,4 +765,204 @@ fn the_abi_note_matches_what_binfmt_looks_for() {
     assert_eq!(core::mem::size_of::<abi::AbiNote>(), 24);
     assert_eq!(core::mem::size_of::<SpawnRequest>(), SpawnRequest::SIZE);
     assert_eq!(core::mem::size_of::<Str>(), Str::SIZE);
+    assert_eq!(core::mem::size_of::<PollEntry>(), PollEntry::SIZE);
+    assert_eq!(core::mem::size_of::<FileInfo>(), FileInfo::SIZE);
+    assert_eq!(core::mem::size_of::<PeerInfo>(), PeerInfo::SIZE);
+    assert_eq!(core::mem::size_of::<abi::HandleMap>(), abi::HandleMap::SIZE);
+}
+
+// ---- ABI version 2 --------------------------------------------------------------
+
+#[test]
+fn control_passes_the_request_through() {
+    let mut k = Fake::new();
+    assert_eq!(k.call(nr::CONTROL, [1, 0xc010_64a0, 0x1234, 0, 0, 0]), Ok(7));
+    assert_eq!(k.controls, [(1, 0xc010_64a0, 0x1234)]);
+    assert_eq!(k.call(nr::CONTROL, [1, 1 << 32, 0, 0, 0, 0]), Err(Error::InvalidArgument));
+    assert_eq!(k.call(nr::CONTROL, [9, 1, 0, 0, 0, 0]), Err(Error::BadHandle));
+}
+
+#[test]
+fn poll_copies_entries_in_and_reports_back() {
+    let mut k = Fake::new();
+    let [a, b] = k.socket_pair(SocketKind::Stream, false).unwrap();
+    k.send(a, b"x", &[]).unwrap();
+    let entries = [
+        PollEntry { handle: b, events: abi::events::READABLE, revents: 0x7777 },
+        PollEntry { handle: a, events: abi::events::READABLE, revents: 0 },
+        PollEntry { handle: abi::NO_HANDLE, events: abi::events::READABLE, revents: 0 },
+        PollEntry { handle: 50, events: abi::events::READABLE, revents: 0 },
+    ];
+    let bytes: Vec<u8> = entries.iter().flat_map(|e| e.to_bytes()).collect();
+    let at = k.put(0x100, &bytes);
+    assert_eq!(k.call(nr::POLL, [at, 4, 0, 0, 0, 0]), Ok(2));
+    let got: Vec<PollEntry> =
+        k.mem[0x100..0x120].chunks_exact(8).map(|c| PollEntry::from_bytes(c.try_into().unwrap())).collect();
+    assert_eq!(got[0].revents, abi::events::READABLE, "revents start from 0");
+    assert_eq!(got[1].revents, 0);
+    assert_eq!(got[2].revents, 0, "no handle: skipped");
+    assert_eq!(got[3].revents, abi::events::INVALID);
+    assert_eq!(k.call(nr::POLL, [at, 2000, 0, 0, 0, 0]), Err(Error::TooLarge));
+    assert_eq!(k.call(nr::POLL, [0x10, 1, 0, 0, 0, 0]), Err(Error::BadAddress));
+    // Forever, and nothing ready: the fake says interrupted.
+    let at = k.put(0x200, &PollEntry { handle: a, events: abi::events::READABLE, revents: 0 }.to_bytes());
+    assert_eq!(k.call(nr::POLL, [at, 1, abi::FOREVER, 0, 0, 0]), Err(Error::Interrupted));
+    assert_eq!(k.call(nr::POLL, [at, 0, 5, 0, 0, 0]), Ok(0), "no entries: a plain sleep");
+}
+
+#[test]
+fn memory_objects_seal_truncate_and_map() {
+    let mut k = Fake::new();
+    let h = k.call(nr::MEMORY_OBJECT, [100, 0, 0, 0, 0, 0]).unwrap();
+    let all = abi::seal::SHRINK | abi::seal::GROW | abi::seal::WRITE;
+    assert_eq!(k.call(nr::SEAL, [h, u64::from(all), 0, 0, 0, 0]), Ok(0));
+    assert_eq!(k.seals[&(h as u32)], all);
+    assert_eq!(k.call(nr::SEAL, [h, 0x10, 0, 0, 0, 0]), Err(Error::InvalidArgument));
+    assert_eq!(k.call(nr::TRUNCATE, [h, 8192, 0, 0, 0, 0]), Ok(0));
+    let info = k.put(0x300, &[0; FileInfo::SIZE]);
+    assert_eq!(k.call(nr::HANDLE_INFO, [h, info, 0, 0, 0, 0]), Ok(0));
+    let got = FileInfo::from_bytes(k.mem[0x300..0x320].try_into().unwrap());
+    assert_eq!((got.size, got.kind, got.mode), (8192, abi::kind::FILE, 0o644));
+    let r = u64::from(abi::prot::READ);
+    assert_eq!(k.call(nr::MAP_HANDLE, [h, 4096, 100, r, abi::map::SHARED, 0]), Ok(0x6000_0000));
+    assert_eq!(k.handle_maps[0], (h as u32, 4096, 4096, Prot { read: true, write: false, exec: false }, true));
+    assert_eq!(k.call(nr::MAP_HANDLE, [h, 100, 4096, r, 0, 0]), Err(Error::InvalidArgument), "offset not a page");
+    assert_eq!(k.call(nr::MAP_HANDLE, [h, 0, 4096, r, 2, 0]), Err(Error::InvalidArgument), "unknown flag");
+    assert_eq!(k.call(nr::MAP_HANDLE, [h, 0, 0, r, 0, 0]), Err(Error::InvalidArgument), "empty");
+    assert_eq!(k.call(nr::SET_NONBLOCKING, [h, 1, 0, 0, 0, 0]), Ok(0));
+    assert_eq!(k.nonblocking, [(h as u32, true)]);
+}
+
+#[test]
+fn file_system_calls_check_paths_and_modes() {
+    let mut k = Fake::new();
+    k.files.insert(b"/tmp/a".to_vec(), b"abc".to_vec());
+    let (a, b) = (k.put(0, b"/tmp/a"), k.put(0x10, b"/tmp/b"));
+    let info = BASE + 0x400;
+    assert_eq!(k.call(nr::STAT, [a, 6, info, 0, 0, 0]), Ok(0));
+    let got = FileInfo::from_bytes(k.mem[0x400..0x420].try_into().unwrap());
+    assert_eq!((got.size, got.device, got.inode, got.mode), (3, 0xe2_0000_0080, 9, 0o600));
+    assert_eq!(k.call(nr::STAT, [b, 6, info, 0, 0, 0]), Err(Error::NotFound));
+    assert_eq!(k.call(nr::RENAME, [a, 6, b, 6, 0, 0]), Ok(0));
+    assert_eq!(k.call(nr::MAKE_DIR, [a, 6, 0o700, 0, 0, 0]), Ok(0));
+    assert_eq!(k.call(nr::MAKE_DIR, [a, 6, 0o10000, 0, 0, 0]), Err(Error::InvalidArgument));
+    assert_eq!(k.call(nr::SET_MODE, [a, 6, 0o1777, 0, 0, 0]), Ok(0));
+    assert_eq!(k.call(nr::MAKE_FIFO, [a, 6, 0o600, 0, 0, 0]), Ok(0));
+    assert_eq!(k.call(nr::REMOVE, [b, 6, 0, 0, 0, 0]), Ok(0));
+    assert_eq!(k.call(nr::REMOVE, [a, 6, abi::remove::DIRECTORY, 0, 0, 0]), Err(Error::NotFound));
+    assert_eq!(k.call(nr::REMOVE, [a, 6, 4, 0, 0, 0]), Err(Error::InvalidArgument));
+    assert_eq!(k.call(nr::SYNC, [0; 6]), Ok(0));
+    let ops: Vec<&str> = k.fs_ops.iter().map(|(n, _)| *n).collect();
+    assert_eq!(ops, ["rename", "mkdir", "chmod", "mkfifo", "remove", "rmdir", "sync"]);
+    assert_eq!(k.fs_ops[1].1, [&b"/tmp/a"[..], &0o700u16.to_le_bytes()].concat());
+}
+
+#[test]
+fn read_dir_fills_records_and_resumes() {
+    let mut k = Fake::new();
+    k.dir.0 = (0..20).map(|i| (abi::kind::FILE, alloc::format!("file-{i:02}").into_bytes())).collect();
+    let buf = BASE + 0x1000;
+    // Room for three records of 3 + 7 bytes.
+    assert_eq!(k.call(nr::READ_DIR, [1, buf, 35, 0, 0, 0]), Ok(30));
+    let (first, rest) = abi::DirRecord::parse(&k.mem[0x1000..0x101e]).unwrap();
+    assert_eq!((first.kind, first.name), (abi::kind::FILE, &b"file-00"[..]));
+    let (third, rest) = abi::DirRecord::parse(abi::DirRecord::parse(rest).unwrap().1).unwrap();
+    assert_eq!(third.name, b"file-02");
+    assert!(rest.is_empty());
+    assert_eq!(k.call(nr::READ_DIR, [1, buf, 5, 0, 0, 0]), Err(Error::TooLarge), "not even one fits");
+    let mut seen = 3;
+    loop {
+        let n = k.call(nr::READ_DIR, [1, buf, 4096, 0, 0, 0]).unwrap();
+        if n == 0 {
+            break;
+        }
+        seen += n as usize / 10;
+    }
+    assert_eq!(seen, 20);
+}
+
+#[test]
+fn sockets_pass_bytes_and_handles() {
+    let mut k = Fake::new();
+    let out = BASE + 0x500;
+    assert_eq!(k.call(nr::SOCKET_PAIR, [abi::socket::STREAM, 0, out, 0, 0, 0]), Ok(0));
+    let a = u32::from_le_bytes(k.mem[0x500..0x504].try_into().unwrap());
+    let b = u32::from_le_bytes(k.mem[0x504..0x508].try_into().unwrap());
+    k.files.insert(b"/etc/motd".to_vec(), b"hi".to_vec());
+    let motd = k.put(0x600, b"/etc/motd");
+    let f = k.call(nr::OPEN, [motd, 9, abi::open::READ as u64, 0, 0, 0]).unwrap() as u32;
+    let msg = k.put(0x700, b"hello");
+    let hs = k.put(0x710, &[f.to_le_bytes(), 1u32.to_le_bytes()].concat());
+    assert_eq!(k.call(nr::SEND, [a.into(), msg, 5, hs, 2, 0]), Ok(5));
+    assert_eq!(k.call(nr::SEND, [a.into(), msg, 5, hs, 300, 0]), Err(Error::TooLarge));
+    // Room for one handle: the second is not taken.
+    let (buf, got, count) = (BASE + 0x800, BASE + 0x900, BASE + 0x910);
+    k.copy_to_user(count, &1u32.to_le_bytes()).unwrap();
+    assert_eq!(k.call(nr::RECV, [b.into(), buf, 64, got, count, 0]), Ok(5));
+    assert_eq!(&k.mem[0x800..0x805], b"hello");
+    assert_eq!(u32::from_le_bytes(k.mem[0x910..0x914].try_into().unwrap()), 1);
+    let new = u32::from_le_bytes(k.mem[0x900..0x904].try_into().unwrap());
+    assert_eq!(k.handles[&new].0, b"/etc/motd", "the passed handle names the same file");
+    // A receive whose handles cannot be written back closes them.
+    k.send(a, b"again", &[f]).unwrap();
+    let before = k.handles.len();
+    assert_eq!(k.call(nr::RECV, [b.into(), buf, 64, 0x10, count, 0]), Err(Error::BadAddress));
+    assert_eq!(k.handles.len(), before);
+    let peer = BASE + 0xa00;
+    assert_eq!(k.call(nr::SOCKET_PEER, [b.into(), peer, 0, 0, 0, 0]), Ok(0));
+    assert_eq!(PeerInfo::from_bytes(k.mem[0xa00..0xa0c].try_into().unwrap()).pid, 42);
+    assert_eq!(k.call(nr::SOCKET, [7, 0, 0, 0, 0, 0]), Err(Error::InvalidArgument));
+    assert_eq!(k.call(nr::SOCKET, [abi::socket::STREAM, 2, 0, 0, 0, 0]), Err(Error::InvalidArgument));
+}
+
+#[test]
+fn sockets_bind_listen_connect_accept_by_path_and_abstract_name() {
+    let mut k = Fake::new();
+    let l = k.call(nr::SOCKET, [abi::socket::STREAM, abi::socket::NONBLOCK, 0, 0, 0, 0]).unwrap();
+    let path = k.put(0, b"/run/user/0/wayland-0");
+    assert_eq!(k.call(nr::BIND, [l, path, 21, 0, 0, 0]), Ok(0));
+    assert_eq!(k.call(nr::BIND, [l, path, 21, 0, 0, 0]), Err(Error::AlreadyExists));
+    assert_eq!(k.call(nr::LISTEN, [l, 128, 0, 0, 0, 0]), Ok(0));
+    assert_eq!(k.call(nr::ACCEPT, [l, abi::socket::NONBLOCK, 0, 0, 0, 0]), Err(Error::WouldBlock));
+    let c = k.call(nr::SOCKET, [abi::socket::STREAM, 0, 0, 0, 0, 0]).unwrap();
+    assert_eq!(k.call(nr::CONNECT, [c, path, 21, 0, 0, 0]), Ok(0));
+    assert!(k.call(nr::ACCEPT, [l, 0, 0, 0, 0, 0]).is_ok());
+    let x = k.put(0x40, b"/tmp/.X11-unix/X0");
+    let lx = k.call(nr::SOCKET, [abi::socket::STREAM, 0, 0, 0, 0, 0]).unwrap();
+    assert_eq!(k.call(nr::BIND, [lx, x, 17, abi::socket::ABSTRACT, 0, 0]), Ok(0));
+    assert!(k.listening.contains_key(&b"@/tmp/.X11-unix/X0"[..]));
+    assert_eq!(k.call(nr::CONNECT, [c, x, 17, 0, 0, 0]), Err(Error::ConnectionRefused), "not the path");
+    assert_eq!(k.call(nr::BIND, [lx, x, 0, abi::socket::ABSTRACT, 0, 0]), Err(Error::InvalidArgument));
+    assert_eq!(k.call(nr::BIND, [lx, x, 200, abi::socket::ABSTRACT, 0, 0]), Err(Error::TooLarge));
+    assert_eq!(k.call(nr::BIND, [lx, x, 17, 2, 0, 0]), Err(Error::InvalidArgument));
+}
+
+#[test]
+fn pipes_processes_signals_and_interfaces() {
+    let mut k = Fake::new();
+    let out = BASE + 0x500;
+    assert_eq!(k.call(nr::PIPE, [out, 0, 0, 0, 0, 0]), Ok(0));
+    let r = u32::from_le_bytes(k.mem[0x500..0x504].try_into().unwrap());
+    assert_eq!(k.handles[&r].0, b"pipe:r");
+    let before = k.handles.len();
+    assert_eq!(k.call(nr::PIPE, [0x10, 0, 0, 0, 0, 0]), Err(Error::BadAddress));
+    assert_eq!(k.handles.len(), before, "handles nobody learns of are closed");
+    k.children.insert(300, ExitStatus::Exited(0));
+    assert!(k.call(nr::PROCESS_HANDLE, [300, 0, 0, 0, 0, 0]).is_ok());
+    assert_eq!(k.call(nr::PROCESS_HANDLE, [301, 0, 0, 0, 0, 0]), Err(Error::NoChild));
+    assert_eq!(k.call(nr::SIGNAL, [300, abi::signal::TERMINATE, 0, 0, 0, 0]), Ok(0));
+    assert_eq!(k.call(nr::SIGNAL, [300, abi::signal::PROBE, 0, 0, 0, 0]), Ok(0));
+    assert_eq!(k.signals, [(300, Signal::Terminate), (300, Signal::Probe)]);
+    assert_eq!(k.call(nr::SIGNAL, [300, 9, 0, 0, 0, 0]), Err(Error::InvalidArgument));
+    assert_eq!(k.call(nr::SIGNAL, [0, 0, 0, 0, 0, 0]), Err(Error::NotFound));
+    let buf = BASE + 0x2000;
+    let n = k.call(nr::NET_INTERFACES, [buf, 256, 0, 0, 0, 0]).unwrap() as usize;
+    let (lo, rest) = abi::InterfaceRecord::parse(&k.mem[0x2000..0x2000 + n]).unwrap();
+    assert_eq!(lo.name, b"lo");
+    assert_ne!(lo.flags & abi::InterfaceRecord::LOOPBACK, 0);
+    let (eth, rest) = abi::InterfaceRecord::parse(rest).unwrap();
+    assert_eq!((eth.name, eth.flags), (&b"eth0"[..], abi::InterfaceRecord::UP));
+    assert!(rest.is_empty());
+    assert_eq!(k.call(nr::NET_INTERFACES, [buf, 4, 0, 0, 0, 0]), Err(Error::TooLarge));
+    let _ = SocketName::Path(Vec::new());
 }

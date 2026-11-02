@@ -21,7 +21,7 @@
 
 mod netlink;
 
-pub use netlink::NetlinkFile;
+pub use netlink::{NetlinkFile, interfaces};
 
 use super::Thread;
 use super::services::vfs_errno;
@@ -47,7 +47,7 @@ use poly_vfs::poll::{self, Timeout, WaitQueue};
 use poly_vfs::{At, FileObject, PollEvents};
 
 /// The system's Unix socket names and descriptors in flight.
-fn namespace() -> &'static Arc<Namespace> {
+pub(crate) fn namespace() -> &'static Arc<Namespace> {
     static NS: SetOnce<Arc<Namespace>> = SetOnce::new();
     if let Some(ns) = NS.get() {
         return ns;

@@ -21,14 +21,14 @@
 //! `drm/drm_fourcc.h` (through `poly-drm`'s `uapi`), and the kernel's
 //! public DRM documentation (KMS, dumb buffers, page-flip events).
 
+use crate::io;
+use crate::os::{self, RawFd};
+use crate::prelude::*;
 use poly_drm::uapi::{
     CardRes, CreateDumb, EventVblank, FbCmd2, GetConnector, GetEncoder, MapDumb, ModeCrtc, ModeInfo, PageFlip, event,
     fourcc, ioctl, mode,
 };
 use poly_wayland::compose::{Framebuffer, Rect};
-use std::ffi::CString;
-use std::io;
-use std::os::fd::RawFd;
 
 /// The calls the backend makes on the card's file.
 pub trait Drm {
@@ -54,19 +54,13 @@ pub struct CardFile {
 
 impl CardFile {
     pub fn open(path: &str) -> io::Result<CardFile> {
-        let c = CString::new(path).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
-        // SAFETY: a NUL-terminated path.
-        let fd = unsafe { libc::open(c.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC | libc::O_NONBLOCK) };
-        if fd < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(CardFile { fd })
+        os::open_device(path, true, true).map(|fd| CardFile { fd })
     }
 }
 
 impl Drop for CardFile {
     fn drop(&mut self) {
-        crate::unix::close(self.fd);
+        os::close(self.fd);
     }
 }
 
@@ -76,46 +70,27 @@ impl Drm for CardFile {
             // SAFETY: `arg` is a buffer of the size `request` encodes (each
             // caller passes the structure's bytes); the pointers inside it
             // point to live buffers of the lengths given.
-            let r = unsafe { libc::ioctl(self.fd, request as libc::c_ulong, arg.as_mut_ptr()) };
-            if r >= 0 {
-                return Ok(());
-            }
-            let e = io::Error::last_os_error();
-            if e.kind() != io::ErrorKind::Interrupted {
-                return Err(e);
+            match unsafe { os::control(self.fd, request, arg.as_mut_ptr() as u64) } {
+                Ok(_) => return Ok(()),
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
             }
         }
     }
 
     fn map(&mut self, offset: u64, len: usize) -> io::Result<*mut u8> {
-        // SAFETY: a new shared mapping chosen by the kernel; nothing else
-        // refers to that range.
-        let ptr = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                len,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
-                self.fd,
-                offset as libc::off_t,
-            )
-        };
-        if ptr == libc::MAP_FAILED { Err(io::Error::last_os_error()) } else { Ok(ptr.cast()) }
+        // A new shared mapping chosen by the kernel; nothing else refers to
+        // that range.
+        os::map_shared(self.fd, offset, len)
     }
 
     fn unmap(&mut self, ptr: *mut u8, len: usize) {
         // SAFETY: exactly a range `map` returned, no longer referred to.
-        unsafe { libc::munmap(ptr.cast(), len) };
+        unsafe { os::unmap(ptr, len) };
     }
 
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // SAFETY: reading into a buffer of the length given.
-        let n = unsafe { libc::read(self.fd, buf.as_mut_ptr().cast(), buf.len()) };
-        if n >= 0 {
-            return Ok(n as usize);
-        }
-        let e = io::Error::last_os_error();
-        if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted) { Ok(0) } else { Err(e) }
+        os::read(self.fd, buf)
     }
 
     fn fd(&self) -> Option<RawFd> {
@@ -360,7 +335,7 @@ impl<D: Drm> Kms<D> {
         let (back, front) = (self.back(), self.front);
         let (w, h) = self.output.size();
         let screen = Rect::new(0, 0, w as i32, h as i32);
-        for r in std::mem::take(&mut self.stale[back]) {
+        for r in core::mem::take(&mut self.stale[back]) {
             let r = r.intersect(&screen);
             for y in r.y..r.bottom() {
                 let (src, dst) = (&self.buffers[front], &self.buffers[back]);
@@ -368,7 +343,7 @@ impl<D: Drm> Kms<D> {
                 // the screen, every row of which the buffers hold); the two
                 // buffers are distinct mappings, so the ranges do not overlap.
                 unsafe {
-                    std::ptr::copy_nonoverlapping(
+                    core::ptr::copy_nonoverlapping(
                         src.ptr.add(y as usize * src.stride + r.x as usize),
                         dst.ptr.add(y as usize * dst.stride + r.x as usize),
                         r.width as usize,
@@ -443,7 +418,7 @@ impl<D: Drm> Kms<D> {
 
 impl<D: Drm> Drop for Kms<D> {
     fn drop(&mut self) {
-        for b in std::mem::take(&mut self.buffers) {
+        for b in core::mem::take(&mut self.buffers) {
             self.drm.unmap(b.ptr.cast(), b.len);
             let mut fb = b.fb.to_ne_bytes();
             let _ = self.drm.ioctl(ioctl::MODE_RMFB, &mut fb);
@@ -470,7 +445,7 @@ impl<D: Drm> Framebuffer for Kms<D> {
         // `height` rows of `stride` pixels), which lives as long as `self`;
         // the `&mut self` borrow keeps other references to it out, and the
         // device reads the back buffer only once it is flipped.
-        unsafe { std::slice::from_raw_parts_mut(b.ptr.add(y as usize * b.stride), self.output.size().0 as usize) }
+        unsafe { core::slice::from_raw_parts_mut(b.ptr.add(y as usize * b.stride), self.output.size().0 as usize) }
     }
 
     /// The frame is drawn: flip to it at the next vblank.
@@ -498,7 +473,7 @@ impl<D: Drm> Framebuffer for FrontView<'_, D> {
         let b = &self.0.buffers[self.0.front];
         // SAFETY: as in `Kms::row_mut`, for the front buffer; only read
         // through this view (a picture of the screen).
-        unsafe { std::slice::from_raw_parts_mut(b.ptr.add(y as usize * b.stride), self.0.output.size().0 as usize) }
+        unsafe { core::slice::from_raw_parts_mut(b.ptr.add(y as usize * b.stride), self.0.output.size().0 as usize) }
     }
 }
 
@@ -569,14 +544,14 @@ mod tests {
             // SAFETY: the backend passes pointers to live buffers of at
             // least the lengths the device reads (the same contract the
             // kernel's copy from user memory checks).
-            unsafe { std::ptr::copy_nonoverlapping(addr as *const u8, buf.as_mut_ptr(), buf.len()) };
+            unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, buf.as_mut_ptr(), buf.len()) };
             Ok(())
         }
 
         fn write(&mut self, addr: u64, data: &[u8]) -> poly_drm::Result<()> {
             // SAFETY: as in `read`, for buffers the backend lets the device
             // fill.
-            unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), addr as *mut u8, data.len()) };
+            unsafe { core::ptr::copy_nonoverlapping(data.as_ptr(), addr as *mut u8, data.len()) };
             Ok(())
         }
     }

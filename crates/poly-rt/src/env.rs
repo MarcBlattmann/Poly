@@ -72,6 +72,12 @@ pub fn vars() -> impl Iterator<Item = &'static [u8]> {
     })
 }
 
+/// The environment as `(name, value)` pairs (entries that are not UTF-8
+/// or have no `=` are left out), as std's `env::vars`.
+pub fn vars_str() -> impl Iterator<Item = (&'static str, &'static str)> {
+    vars().filter_map(|v| core::str::from_utf8(v).ok()?.split_once('='))
+}
+
 /// The value of the environment variable `name`.
 pub fn var(name: &str) -> Option<&'static str> {
     vars().find_map(|v| {
@@ -104,5 +110,6 @@ mod tests {
         assert_eq!(var("POLY"), Some("1"));
         assert_eq!(var("POL"), None);
         assert_eq!(var("PATH"), None);
+        assert_eq!(vars_str().collect::<std::vec::Vec<_>>(), [("HOME", "/"), ("POLY", "1")]);
     }
 }

@@ -13,13 +13,23 @@ use poly_personality_xnu::Xnu;
 /// (`crate::linux`); a bare record only the personality's answers without
 /// them (`-ENOSYS`). The same holds for native processes (`crate::native`).
 pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
+    // A native process: started from a native program, or a Linux process
+    // that `execve`d one (it keeps its Linux tag and state).
+    if process.native.is_active() {
+        let outcome = crate::native::syscall(process, regs);
+        if let Outcome::Unimplemented { number, .. } = outcome
+            && first_time(Personality::Native, number)
+        {
+            crate::kprintln!("syscall: pid {} native/native #{number} not implemented", process.pid);
+        }
+        return outcome;
+    }
     let outcome = match process.personality {
         Personality::Linux if process.linux.is_some() => crate::linux::syscall(process, regs),
         Personality::Linux => Linux::dispatch(regs),
         Personality::Nt if crate::nt::is_nt_process(process.pid) => crate::nt::syscall(process, regs),
         Personality::Nt => Nt::dispatch(regs),
         Personality::Xnu => Xnu::dispatch(regs),
-        Personality::Native if process.native.is_some() => crate::native::syscall(process, regs),
         Personality::Native => Native::dispatch(regs),
     };
     if let Outcome::Unimplemented { table, number } = outcome
@@ -31,7 +41,6 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         // an interactive shell; `poly.strace` shows every call.
         let name = match process.personality {
             Personality::Linux => poly_personality_linux::table::name(number),
-            Personality::Native => poly_personality_native::table::name(number),
             _ => None,
         };
         crate::kprintln!(

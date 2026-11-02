@@ -11,7 +11,8 @@
  * over the socket with SCM_RIGHTS), commits it and waits for the frame
  * callback and the buffer's release. Run by poly-compositor --exec (which
  * sets POLY_COMPOSITOR_DUMP), it then asks the compositor for a picture of
- * the output (SIGUSR1) and finds its own pixels in it. A second connection
+ * the output (a "dump" line on the named pipe $POLY_COMPOSITOR_CONTROL) and
+ * finds its own pixels in it. A second connection
  * checks that a request to an unknown object is a protocol error.
  *
  * Output, one line per check: "ok <check>" or "not ok <check> (...)",
@@ -304,10 +305,22 @@ static uint32_t bind_global(uint32_t name, const char *iface, uint32_t version) 
     return id;
 }
 
-/* Ask the compositor for a picture of the output (SIGUSR1 to the
- * compositor that started us; it writes $POLY_COMPOSITOR_DUMP, a PPM,
- * renamed into place when complete) and count our window's pixels in it:
- * each half of the buffer at the output's scale. */
+/* Ask the compositor that started us for a picture: a "dump" line on its
+ * control pipe. */
+static void request_dump(void) {
+    const char *ctl = getenv("POLY_COMPOSITOR_CONTROL");
+    int fd = ctl ? open(ctl, O_WRONLY | O_NONBLOCK) : -1;
+    if (fd >= 0) {
+        if (write(fd, "dump\n", 5) != 5)
+            printf("wl-client: the control pipe took no request\n");
+        close(fd);
+    }
+}
+
+/* Ask the compositor for a picture of the output (it writes
+ * $POLY_COMPOSITOR_DUMP, a PPM, renamed into place when complete) and
+ * count our window's pixels in it: each half of the buffer at the output's
+ * scale. */
 static void check_composed(void) {
     const char *path = getenv("POLY_COMPOSITOR_DUMP");
     char got[96];
@@ -317,7 +330,7 @@ static void check_composed(void) {
         return;
     }
     unlink(path);
-    kill(getppid(), SIGUSR1);
+    request_dump();
     int waited = 0;
     while (stat(path, &st) < 0 && waited < 10000) {
         usleep(20000);

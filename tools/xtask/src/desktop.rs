@@ -90,10 +90,19 @@ pub fn devices() -> Vec<String> {
 
 /// Build the desktop's initramfs; returns its path.
 pub fn image() -> Result<PathBuf> {
+    // The compositor and notify-send are native programs, built on any
+    // host (ADR 0125); the C test clients need a Linux C toolchain and are
+    // left out without one (the boot tests skip themselves then).
     let compositor = compositor::build_compositor()?;
-    let demo = compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo")?;
-    let client = compositor::build_client()?;
     let notify = compositor::build_notify_send()?;
+    let c_client = |built: std::result::Result<Vec<u8>, String>| {
+        built.unwrap_or_else(|why| {
+            eprintln!("==> without the C test clients: {why}");
+            Vec::new()
+        })
+    };
+    let demo = c_client(compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo"));
+    let client = c_client(compositor::build_client());
     let mut tree = initramfs::Tree::default();
     tree.files.push(("usr/share/applications/demo-window.desktop".into(), 0o644, DESKTOP_FILE.as_bytes().into()));
     tree.files.push(("usr/share/applications/notify-test.desktop".into(), 0o644, NOTIFY_FILE.as_bytes().into()));
@@ -102,8 +111,12 @@ pub fn image() -> Result<PathBuf> {
         Ok(data) => tree.files.push(("usr/share/fonts/truetype/dejavu/DejaVuSans.ttf".into(), 0o644, data)),
         Err(_) => eprintln!("==> no DejaVu fonts (`cargo xtask fonts fetch`): the shell will use the bitmap font"),
     }
-    let programs: [(&str, &[u8]); 4] =
-        [("poly-compositor", &compositor), ("wl-demo", &demo), ("wl-client", &client), ("notify-send", &notify)];
+    let programs: Vec<(&str, &[u8])> =
+        [("poly-compositor", &compositor), ("wl-demo", &demo), ("wl-client", &client), ("notify-send", &notify)]
+            .into_iter()
+            .filter(|(_, elf)| !elf.is_empty())
+            .map(|(n, e)| (n, e.as_slice()))
+            .collect();
     initramfs::write(&root(), "poly-desktop-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))
 }
 

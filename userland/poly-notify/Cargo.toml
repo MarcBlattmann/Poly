@@ -1,18 +1,14 @@
 [package]
 name = "poly-notify"
-description = "notify-send for Poly: sends a desktop notification through org.freedesktop.Notifications on the session bus, with libnotify's notify-send options"
+description = "notify-send for Poly, a native program on poly-rt (ADR 0125): sends a desktop notification through org.freedesktop.Notifications on the session bus, with libnotify's notify-send options. This is its code, tested on the host; userland/native/notify builds the program."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
 
-[[bin]]
-name = "notify-send"
-path = "src/main.rs"
-
 [dependencies]
-libc.workspace = true
 poly-dbus.workspace = true
+poly-rt.workspace = true
 
 [lints]
 workspace = true

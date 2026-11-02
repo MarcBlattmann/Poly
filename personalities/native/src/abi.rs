@@ -23,8 +23,10 @@ pub use poly_binfmt::{NOTE_OWNER, NT_POLY_ABI};
 
 /// The native ABI version this crate describes, the one `poly-rt` writes
 /// into its programs' ABI note. The kernel runs programs of versions
-/// `1..=ABI_VERSION`.
-pub const ABI_VERSION: u32 = 1;
+/// `1..=ABI_VERSION`. Version 1 is the first table (`exit` to
+/// `process_id`); version 2 adds the calls from `control` on (ADR 0125,
+/// stage 2) and the extra handles of `spawn`.
+pub const ABI_VERSION: u32 = 2;
 
 /// The call numbers (`rax`).
 pub mod nr {
@@ -57,10 +59,332 @@ pub mod nr {
     pub const YIELD: u64 = 12;
     /// `spawn(request, request_size) -> pid` ([`super::SpawnRequest`]).
     pub const SPAWN: u64 = 13;
-    /// `wait(pid) -> status`: wait for a child to end ([`super::ExitStatus`]).
+    /// `wait(pid, flags) -> status`: wait for a child to end
+    /// ([`super::ExitStatus`]); with [`super::wait::NO_HANG`] fail with
+    /// `WouldBlock` if it has not.
     pub const WAIT: u64 = 14;
     /// `process_id() -> pid`.
     pub const PROCESS_ID: u64 = 15;
+
+    // ---- ABI version 2 ----------------------------------------------------
+
+    /// `control(handle, request, arg) -> value`: a device's own request
+    /// (its ioctl numbers and structures, e.g. DRM's or evdev's), passed
+    /// through to the open file.
+    pub const CONTROL: u64 = 16;
+    /// `poll(entries, count, timeout_ns) -> ready`: wait until one of the
+    /// [`super::PollEntry`] handles is ready (`timeout_ns` [`super::FOREVER`]
+    /// waits forever, 0 only looks).
+    pub const POLL: u64 = 17;
+    /// `map_handle(handle, offset, len, prot, flags) -> address`: map an
+    /// open file (a memory object, a file, a DRM buffer, a frame buffer);
+    /// [`super::map::SHARED`] shares its pages.
+    pub const MAP_HANDLE: u64 = 18;
+    /// `memory_object(size) -> handle`: an anonymous file in memory that
+    /// can be sealed, mapped and passed on (a memfd).
+    pub const MEMORY_OBJECT: u64 = 19;
+    /// `seal(handle, seals)`: [`super::seal`] bits on a memory object.
+    pub const SEAL: u64 = 20;
+    /// `set_nonblocking(handle, on)`.
+    pub const SET_NONBLOCKING: u64 = 21;
+    /// `handle_info(handle, info)`: fill a [`super::FileInfo`].
+    pub const HANDLE_INFO: u64 = 22;
+    /// `stat(path, path_len, info)`: fill a [`super::FileInfo`] (symbolic
+    /// links followed).
+    pub const STAT: u64 = 23;
+    /// `rename(from, from_len, to, to_len)`.
+    pub const RENAME: u64 = 24;
+    /// `remove(path, path_len, flags)`: a file, or with
+    /// [`super::remove::DIRECTORY`] an empty directory.
+    pub const REMOVE: u64 = 25;
+    /// `make_dir(path, path_len, mode)`.
+    pub const MAKE_DIR: u64 = 26;
+    /// `set_mode(path, path_len, mode)`: permission bits.
+    pub const SET_MODE: u64 = 27;
+    /// `read_dir(handle, buf, len) -> bytes`: [`super::DirRecord`]s of a
+    /// directory opened with `open::DIRECTORY`; 0 at its end.
+    pub const READ_DIR: u64 = 28;
+    /// `sync()`: write every file system's dirty data to its disk.
+    pub const SYNC: u64 = 29;
+    /// `pipe(handles)`: a pipe; writes its read and write handles (two
+    /// `u32`).
+    pub const PIPE: u64 = 30;
+    /// `make_fifo(path, path_len, mode)`: a named pipe.
+    pub const MAKE_FIFO: u64 = 31;
+    /// `socket(kind, flags) -> handle`: an AF_UNIX socket
+    /// ([`super::socket`] kinds and flags).
+    pub const SOCKET: u64 = 32;
+    /// `socket_pair(kind, flags, handles)`: two connected sockets (two
+    /// `u32`).
+    pub const SOCKET_PAIR: u64 = 33;
+    /// `bind(handle, name, name_len, flags)`: a path, or with
+    /// [`super::socket::ABSTRACT`] a name in the abstract name space.
+    pub const BIND: u64 = 34;
+    /// `listen(handle, backlog)`.
+    pub const LISTEN: u64 = 35;
+    /// `accept(handle, flags) -> handle`.
+    pub const ACCEPT: u64 = 36;
+    /// `connect(handle, name, name_len, flags)`, names as for `bind`.
+    pub const CONNECT: u64 = 37;
+    /// `send(handle, buf, len, handles, handle_count) -> bytes`: the
+    /// handles go with the first byte (as `SCM_RIGHTS`). A broken
+    /// connection is `BrokenPipe`, never a signal.
+    pub const SEND: u64 = 38;
+    /// `recv(handle, buf, len, handles, count) -> bytes`: `count` points
+    /// at a `u32`, the room in `handles` on entry and the handles received
+    /// on return. 0 bytes: the peer closed.
+    pub const RECV: u64 = 39;
+    /// `socket_peer(handle, peer)`: fill a [`super::PeerInfo`] with who is
+    /// at the other end.
+    pub const SOCKET_PEER: u64 = 40;
+    /// `process_handle(pid) -> handle`: readable once child `pid` ended.
+    pub const PROCESS_HANDLE: u64 = 41;
+    /// `signal(pid, what)`: [`super::signal`] (probe, terminate, kill) a
+    /// child, or probe any process.
+    pub const SIGNAL: u64 = 42;
+    /// `net_interfaces(buf, len) -> bytes`: [`super::InterfaceRecord`]s
+    /// of the network interfaces.
+    pub const NET_INTERFACES: u64 = 43;
+    /// `truncate(handle, len)`: set a file's length.
+    pub const TRUNCATE: u64 = 44;
+}
+
+/// `wait` flags.
+pub mod wait {
+    /// Do not wait: `WouldBlock` if the child has not ended.
+    pub const NO_HANG: u64 = 1;
+}
+
+/// `poll`'s timeout that never ends.
+pub const FOREVER: u64 = u64::MAX;
+
+/// What `poll` waits for and reports (the bit values of the kernel's
+/// readiness events, which are POSIX's `POLL*`).
+pub mod events {
+    pub const READABLE: u16 = 0x1;
+    pub const PRIORITY: u16 = 0x2;
+    pub const WRITABLE: u16 = 0x4;
+    /// Reported only.
+    pub const ERROR: u16 = 0x8;
+    /// Reported only: the other end is gone.
+    pub const HANGUP: u16 = 0x10;
+    /// Reported only: not an open handle.
+    pub const INVALID: u16 = 0x20;
+}
+
+/// One entry of `poll`'s array.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PollEntry {
+    /// [`NO_HANDLE`]: ignored.
+    pub handle: u32,
+    pub events: u16,
+    pub revents: u16,
+}
+
+impl PollEntry {
+    pub const SIZE: usize = 8;
+
+    pub fn from_bytes(b: [u8; Self::SIZE]) -> PollEntry {
+        PollEntry {
+            handle: u32::from_le_bytes([b[0], b[1], b[2], b[3]]),
+            events: u16::from_le_bytes([b[4], b[5]]),
+            revents: u16::from_le_bytes([b[6], b[7]]),
+        }
+    }
+
+    pub fn to_bytes(self) -> [u8; Self::SIZE] {
+        let mut b = [0u8; Self::SIZE];
+        b[0..4].copy_from_slice(&self.handle.to_le_bytes());
+        b[4..6].copy_from_slice(&self.events.to_le_bytes());
+        b[6..8].copy_from_slice(&self.revents.to_le_bytes());
+        b
+    }
+}
+
+/// No handle: a `poll` entry that is skipped.
+pub const NO_HANDLE: u32 = u32::MAX;
+
+/// `map_handle` flags.
+pub mod map {
+    /// Share the pages with the file and every other mapping of it
+    /// (without it, writes go to private copies).
+    pub const SHARED: u64 = 1;
+}
+
+/// `seal` bits (what memfds call `F_SEAL_*`, the same values).
+pub mod seal {
+    /// No more seals.
+    pub const SEAL: u32 = 0x1;
+    pub const SHRINK: u32 = 0x2;
+    pub const GROW: u32 = 0x4;
+    pub const WRITE: u32 = 0x8;
+    pub const ALL: u32 = SEAL | SHRINK | GROW | WRITE;
+}
+
+/// `remove` flags.
+pub mod remove {
+    /// Remove an empty directory.
+    pub const DIRECTORY: u64 = 1;
+}
+
+/// What kind of object a handle or path names ([`FileInfo::kind`]).
+pub mod kind {
+    pub const FILE: u8 = 1;
+    pub const DIRECTORY: u8 = 2;
+    pub const SYMLINK: u8 = 3;
+    pub const CHAR_DEVICE: u8 = 4;
+    pub const BLOCK_DEVICE: u8 = 5;
+    pub const FIFO: u8 = 6;
+    pub const SOCKET: u8 = 7;
+}
+
+/// What `handle_info` and `stat` report.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FileInfo {
+    pub size: u64,
+    /// The device a device node stands for (major in the high 32 bits),
+    /// 0 for everything else.
+    pub device: u64,
+    pub inode: u64,
+    /// [`kind`].
+    pub kind: u8,
+    pub _pad: u8,
+    /// Permission bits.
+    pub mode: u16,
+    pub _pad2: u32,
+}
+
+impl FileInfo {
+    pub const SIZE: usize = 32;
+
+    pub fn to_bytes(self) -> [u8; Self::SIZE] {
+        let mut b = [0u8; Self::SIZE];
+        b[0..8].copy_from_slice(&self.size.to_le_bytes());
+        b[8..16].copy_from_slice(&self.device.to_le_bytes());
+        b[16..24].copy_from_slice(&self.inode.to_le_bytes());
+        b[24] = self.kind;
+        b[26..28].copy_from_slice(&self.mode.to_le_bytes());
+        b
+    }
+
+    pub fn from_bytes(b: &[u8; Self::SIZE]) -> FileInfo {
+        let u64_at = |at: usize| u64::from_le_bytes(b[at..at + 8].try_into().unwrap());
+        FileInfo {
+            size: u64_at(0),
+            device: u64_at(8),
+            inode: u64_at(16),
+            kind: b[24],
+            mode: u16::from_le_bytes([b[26], b[27]]),
+            ..FileInfo::default()
+        }
+    }
+}
+
+/// One entry `read_dir` writes: `name_len` (u16), `kind` (u8), the name's
+/// bytes; records follow each other without padding.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DirRecord<'a> {
+    pub kind: u8,
+    pub name: &'a [u8],
+}
+
+impl<'a> DirRecord<'a> {
+    pub const HEADER: usize = 3;
+
+    /// Append the record to `out`.
+    pub fn write(&self, out: &mut alloc::vec::Vec<u8>) {
+        out.extend_from_slice(&(self.name.len() as u16).to_le_bytes());
+        out.push(self.kind);
+        out.extend_from_slice(self.name);
+    }
+
+    /// The first record of `buf` and the rest, if `buf` has a whole one.
+    pub fn parse(buf: &'a [u8]) -> Option<(DirRecord<'a>, &'a [u8])> {
+        let len = usize::from(u16::from_le_bytes([*buf.first()?, *buf.get(1)?]));
+        let kind = *buf.get(2)?;
+        let name = buf.get(Self::HEADER..Self::HEADER + len)?;
+        Some((DirRecord { kind, name }, &buf[Self::HEADER + len..]))
+    }
+}
+
+/// AF_UNIX sockets: `socket` kinds and flags, `bind`/`connect` flags.
+pub mod socket {
+    pub const STREAM: u64 = 1;
+    pub const DATAGRAM: u64 = 2;
+    pub const SEQPACKET: u64 = 3;
+    /// `socket`, `socket_pair`, `accept`: the new handles are non-blocking.
+    pub const NONBLOCK: u64 = 1;
+    /// `bind`, `connect`: the name is in the abstract name space (no file).
+    pub const ABSTRACT: u64 = 1;
+    /// The most handles one `send` carries.
+    pub const MAX_HANDLES: u64 = 253;
+}
+
+/// Who is at the other end of a socket (`socket_peer`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PeerInfo {
+    pub pid: u32,
+    pub uid: u32,
+    pub gid: u32,
+}
+
+impl PeerInfo {
+    pub const SIZE: usize = 12;
+
+    pub fn to_bytes(self) -> [u8; Self::SIZE] {
+        let mut b = [0u8; Self::SIZE];
+        b[0..4].copy_from_slice(&self.pid.to_le_bytes());
+        b[4..8].copy_from_slice(&self.uid.to_le_bytes());
+        b[8..12].copy_from_slice(&self.gid.to_le_bytes());
+        b
+    }
+
+    pub fn from_bytes(b: &[u8; Self::SIZE]) -> PeerInfo {
+        let at = |i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap());
+        PeerInfo { pid: at(0), uid: at(4), gid: at(8) }
+    }
+}
+
+/// What `signal` does.
+pub mod signal {
+    /// Only check that the process exists.
+    pub const PROBE: u64 = 0;
+    /// Ask it to end (a Linux child gets `SIGTERM`).
+    pub const TERMINATE: u64 = 1;
+    /// End it now (a Linux child gets `SIGKILL`).
+    pub const KILL: u64 = 2;
+}
+
+/// `net_interfaces` records: `flags` (u32, [`InterfaceRecord`]'s bits),
+/// `name_len` (u8), the name; one after another.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterfaceRecord<'a> {
+    pub flags: u32,
+    pub name: &'a [u8],
+}
+
+impl<'a> InterfaceRecord<'a> {
+    pub const UP: u32 = 1;
+    pub const RUNNING: u32 = 2;
+    pub const LOOPBACK: u32 = 4;
+    /// It has an IPv4 or IPv6 address.
+    pub const ADDRESSED: u32 = 8;
+
+    pub fn write(&self, out: &mut alloc::vec::Vec<u8>) {
+        out.extend_from_slice(&self.flags.to_le_bytes());
+        out.push(self.name.len().min(255) as u8);
+        out.extend_from_slice(&self.name[..self.name.len().min(255)]);
+    }
+
+    pub fn parse(buf: &'a [u8]) -> Option<(InterfaceRecord<'a>, &'a [u8])> {
+        let flags = u32::from_le_bytes(buf.get(0..4)?.try_into().ok()?);
+        let len = usize::from(*buf.get(4)?);
+        let name = buf.get(5..5 + len)?;
+        Some((InterfaceRecord { flags, name }, &buf[5 + len..]))
+    }
 }
 
 /// The largest error code: results in `-MAX_ERROR..=-1` are errors.
@@ -328,6 +652,11 @@ pub const STDIO_NONE: u32 = u32::MAX;
 /// `stdio[0..3]` (shared, as `dup` shares them), or none where an entry is
 /// [`STDIO_NONE`]. Any program Poly runs can be spawned: a native one, or
 /// a Linux, Windows or macOS program in its own personality.
+///
+/// ABI version 2 adds `handles`: [`HandleMap`] pairs, each giving the
+/// child the caller's handle `from` as its handle `to` (Xwayland's
+/// `-listenfd` and `WAYLAND_SOCKET` descriptors). A request of
+/// [`SpawnRequest::SIZE_V1`] bytes has none.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SpawnRequest {
@@ -341,15 +670,34 @@ pub struct SpawnRequest {
     pub stdio: [u32; 3],
     /// Must be 0.
     pub flags: u32,
+    /// `*const HandleMap`, `handle_count` of them.
+    pub handles: u64,
+    pub handle_count: u64,
+}
+
+/// One extra handle of a spawned child: the caller's `from` as its `to`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HandleMap {
+    pub from: u32,
+    pub to: u32,
+}
+
+impl HandleMap {
+    pub const SIZE: usize = 8;
 }
 
 impl SpawnRequest {
-    /// The size `spawn`'s second argument must give (this ABI version's).
-    pub const SIZE: usize = 64;
+    /// The size `spawn`'s second argument gives (this ABI version's).
+    pub const SIZE: usize = 80;
+    /// The size of version 1's request, without extra handles.
+    pub const SIZE_V1: usize = 64;
 
-    pub fn from_bytes(b: &[u8; Self::SIZE]) -> SpawnRequest {
-        let u64_at = |at: usize| u64::from_le_bytes(b[at..at + 8].try_into().unwrap());
-        let u32_at = |at: usize| u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
+    /// The request in `b`: [`SIZE`](Self::SIZE) bytes, or
+    /// [`SIZE_V1`](Self::SIZE_V1) for a version 1 request.
+    pub fn from_bytes(b: &[u8]) -> SpawnRequest {
+        let u64_at = |at: usize| b.get(at..at + 8).map_or(0, |s| u64::from_le_bytes(s.try_into().unwrap()));
+        let u32_at = |at: usize| b.get(at..at + 4).map_or(0, |s| u32::from_le_bytes(s.try_into().unwrap()));
         SpawnRequest {
             path: Str { ptr: u64_at(0), len: u64_at(8) },
             args: u64_at(16),
@@ -358,6 +706,8 @@ impl SpawnRequest {
             env_count: u64_at(40),
             stdio: [u32_at(48), u32_at(52), u32_at(56)],
             flags: u32_at(60),
+            handles: u64_at(64),
+            handle_count: u64_at(72),
         }
     }
 }
@@ -408,6 +758,10 @@ pub mod limits {
     pub const SPAWN_STRINGS: u64 = 4096;
     /// Bytes of all of them together.
     pub const SPAWN_BYTES: u64 = 256 * 1024;
+    /// Extra handles of `spawn`.
+    pub const SPAWN_HANDLES: u64 = 64;
+    /// Entries of one `poll`.
+    pub const POLL_ENTRIES: u64 = 1024;
 }
 
 /// The ABI note `poly-rt` puts into every native program (see `poly-binfmt`):

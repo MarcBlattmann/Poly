@@ -93,7 +93,9 @@ pub fn cache_dir() -> PathBuf {
 
 fn sha256(path: &Path) -> Option<String> {
     let out = Command::new("sha256sum").arg(path).stderr(Stdio::null()).output().ok()?;
-    String::from_utf8_lossy(&out.stdout).split_whitespace().next().map(str::to_string)
+    // GNU sha256sum starts the line with a backslash when the path has one
+    // (a Windows path): the sum follows it.
+    String::from_utf8_lossy(&out.stdout).split_whitespace().next().map(|s| s.trim_start_matches('\\').to_string())
 }
 
 fn matches(path: &Path, size: u64, sum: &str) -> bool {
