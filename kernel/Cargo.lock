@@ -221,6 +221,7 @@ dependencies = [
  "poly-security",
  "poly-seh",
  "poly-vfs",
+ "poly-win32k",
  "poly-winsock",
 ]
 
@@ -357,6 +358,10 @@ dependencies = [
 
 [[package]]
 name = "poly-vm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-win32k"
 version = "0.0.1"
 
 [[package]]

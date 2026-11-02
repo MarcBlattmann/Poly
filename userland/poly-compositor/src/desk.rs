@@ -4,7 +4,7 @@
 //! window, the notifications on the session bus, the ridge's status
 //! (network, volume, local time) and the settings file.
 
-use crate::desktop::{self, WmKey};
+use crate::desktop;
 use crate::mixer::Mixer;
 use crate::prelude::*;
 use crate::session::SessionBus;
@@ -15,10 +15,11 @@ use poly_input::layout::Layout;
 use poly_rt::fs;
 use poly_shell::settings::{Change, Settings};
 use poly_shell::settings_ui::{Page, SystemInfo};
+use poly_shell::shortcuts::Hit;
 use poly_shell::switcher::{Entry, Mru, thumbnail};
 use poly_shell::wm::{self, Action, Placed, Zone};
 use poly_shell::{Key, Press, Shell};
-use poly_wayland::compose::{MemoryFramebuffer, Placement, WindowId};
+use poly_wayland::compose::{MemoryFramebuffer, Placement, Rect, Theme, WindowId};
 use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
 use poly_wayland::server::{InternalEvent, OutputConfig, Server};
 use poly_wayland::wire::Fixed;
@@ -45,7 +46,7 @@ pub struct Options<'a> {
 pub struct Desktop {
     pub shell: Shell,
     pub input: evdev::Evdev,
-    hotkeys: desktop::Hotkeys,
+    shortcuts: desktop::Shortcuts,
     pub layout: &'static Layout,
     keymap: os::SharedKeymap,
     dir: String,
@@ -191,6 +192,9 @@ impl Desktop {
             );
         }
         shell.set_settings(settings);
+        if shell.settings().theme == "light" {
+            server.scene_mut().set_theme(Theme::LIGHT);
+        }
         let input = evdev::Evdev::open_all();
         let names: Vec<String> =
             input.devices.iter().map(|d| format!("{} ({:?})", d.name, d.translator.kind)).collect();
@@ -218,7 +222,7 @@ impl Desktop {
         let mut d = Desktop {
             shell,
             input,
-            hotkeys: desktop::Hotkeys::default(),
+            shortcuts: desktop::Shortcuts::default(),
             layout,
             keymap,
             dir: o.dir.to_string(),
@@ -270,34 +274,58 @@ impl Desktop {
     pub fn route(&mut self, ev: InputEvent, server: &mut Server) -> Option<poly_shell::App> {
         match ev {
             InputEvent::Key { key, pressed, .. } => {
-                let (depressed, _) = server.modifiers();
-                if let Some(action) = desktop::wm_key(key, pressed, depressed, self.shell.switcher_open()) {
-                    // Releasing Alt reaches the clients (the modifier
-                    // goes); the rest is the compositor's.
-                    if !pressed {
-                        server.handle_input(ev);
+                // A shortcut being recorded takes every key first (and the
+                // releases of the keys it took), ADR 0129.
+                if let Some(k) = u16::try_from(key).ok().and_then(poly_input::keycode::key)
+                    && let Some((redraw, change)) = self.shell.shortcut_key(k, pressed, self.layout)
+                {
+                    match change {
+                        Some(c) => self.apply_change(c, server),
+                        None if redraw => self.draw_settings(server),
+                        None => {}
                     }
-                    self.hotkeys.key(key, pressed, depressed);
-                    self.wm_key(action, server);
                     return None;
                 }
-                let toggles = self.hotkeys.key(key, pressed, depressed);
+                let (depressed, _) = server.modifiers();
+                let hit = self.shortcuts.key(
+                    self.shell.shortcuts(),
+                    key,
+                    pressed,
+                    depressed,
+                    self.layout,
+                    self.shell.switcher_open(),
+                );
+                let is_modifier = matches!(key, 29 | 97 | 42 | 54 | 56 | 100 | 125 | 126);
+                match hit {
+                    Some(Hit::Launcher) => {
+                        // A tapped modifier's release reaches the clients
+                        // (they saw it go down); a combination is the shell's.
+                        if is_modifier {
+                            server.handle_input(ev);
+                        }
+                        self.shell.toggle_launcher();
+                        let shown = self.shell.launcher().is_visible();
+                        println!("poly-compositor: launcher {}", if shown { "shown" } else { "hidden" });
+                        return None;
+                    }
+                    Some(h) => {
+                        // Releasing a modifier reaches the clients (the
+                        // modifier goes); the rest is the compositor's.
+                        if !pressed {
+                            server.handle_input(ev);
+                        }
+                        self.wm_key(h, server);
+                        return None;
+                    }
+                    None => {}
+                }
                 // Escape closes the notification history (the clients do
                 // not see it).
                 if pressed && self.shell.history_open() && key == 1 {
                     self.shell.overlay_key(Key::Escape);
                     return None;
                 }
-                let is_super = matches!(key, 125 | 126);
-                // Ctrl+Space is the shell's; the Windows key is a modifier
-                // the clients may see.
-                if !(toggles && !is_super) {
-                    server.handle_input(ev);
-                }
-                if toggles {
-                    self.shell.toggle_launcher();
-                    return None;
-                }
+                server.handle_input(ev);
                 if pressed && self.shell.launcher().is_visible() {
                     let (depressed, locked) = server.modifiers();
                     if let Some(k) = desktop::launcher_key(key, depressed, locked, self.layout) {
@@ -331,6 +359,11 @@ impl Desktop {
                         Press::Settings(page) => {
                             self.shell_button = true;
                             self.open_settings(page, server);
+                            return None;
+                        }
+                        Press::Power(poly_shell::Power::LogOut) => {
+                            self.shell_button = true;
+                            self.log_out(server);
                             return None;
                         }
                         Press::Power(action) => {
@@ -368,7 +401,7 @@ impl Desktop {
                 }
                 if server.moving_window().is_some() {
                     let work = server.scene().work_area();
-                    self.snap = wm::zone_at(x, y, work);
+                    self.snap = if self.shell.settings().snaps().1 { wm::zone_at(x, y, work) } else { None };
                     self.shell.set_snap_preview(self.snap.map(|z| wm::zone_rect(z, work)));
                 } else if self.snap.take().is_some() {
                     self.shell.set_snap_preview(None);
@@ -423,9 +456,10 @@ impl Desktop {
             .collect()
     }
 
-    fn wm_key(&mut self, action: WmKey, server: &mut Server) {
+    fn wm_key(&mut self, action: Hit, server: &mut Server) {
         match action {
-            WmKey::SwitchStart { backward } => {
+            Hit::Launcher => self.shell.toggle_launcher(),
+            Hit::SwitchStart { backward } => {
                 let entries = self.switcher_entries(server);
                 if !entries.is_empty() {
                     let names: Vec<&str> = entries.iter().map(|e| e.title.as_str()).collect();
@@ -433,19 +467,20 @@ impl Desktop {
                     self.shell.open_switcher(entries, backward);
                 }
             }
-            WmKey::SwitchStep { forward } => self.shell.switcher_step(forward),
-            WmKey::SwitchCommit => {
+            Hit::SwitchStep { forward } => self.shell.switcher_step(forward),
+            Hit::SwitchCommit => {
                 if let Some(w) = self.shell.switcher_commit() {
                     self.switch_to(w, server);
                 }
             }
-            WmKey::SwitchCancel => self.shell.switcher_cancel(),
-            WmKey::Close => {
+            Hit::SwitchCancel => self.shell.switcher_cancel(),
+            Hit::Close => {
                 if let Some(w) = server.active_window() {
                     server.request_close(w);
                 }
             }
-            WmKey::Place(arrow) => {
+            Hit::Place(_) if !self.shell.settings().snaps().0 => {}
+            Hit::Place(arrow) => {
                 let Some(w) = server.active_window() else { return };
                 let Some(info) = server.managed_windows().into_iter().find(|i| i.window == w) else { return };
                 let work = server.scene().work_area();
@@ -461,9 +496,28 @@ impl Desktop {
                     Action::Minimize => server.minimize_window(w),
                 }
             }
-            WmKey::Settings => self.open_settings(Page::Home, server),
-            WmKey::History => self.shell.toggle_history(),
+            Hit::Settings => self.open_settings(Page::Home, server),
+            Hit::Notifications => self.shell.toggle_history(),
         }
+    }
+
+    /// The system menu's Log Out: the session ends without a login screen
+    /// (Poly has none): every app is asked to close and then stopped, the
+    /// settings window closes, and the desktop is empty again with the
+    /// launcher on it.
+    fn log_out(&mut self, server: &mut Server) {
+        if let Some(win) = self.settings_win.take() {
+            server.remove_internal_window(win.id);
+            self.shell.settings_window.recorder.stop();
+        }
+        println!("poly-compositor: log out: closing {} window(s)", server.managed_windows().len());
+        for w in server.managed_windows() {
+            server.request_close(w.window);
+        }
+        for (pid, _) in &self.children {
+            os::terminate(*pid);
+        }
+        self.shell.close_panel();
     }
 
     /// An app the launcher started that is the shell's own.
@@ -543,6 +597,8 @@ impl Desktop {
                 }
                 InternalEvent::Close(window) if window == id => {
                     server.remove_internal_window(id);
+                    // A shortcut being recorded stops with the window.
+                    self.shell.settings_window.recorder.stop();
                     self.settings_win = None;
                     println!("poly-compositor: settings window closed");
                     continue;
@@ -565,6 +621,13 @@ impl Desktop {
             return;
         }
         match &change {
+            // The window manager reads these from the settings when it acts.
+            Change::Tiling(_) | Change::SnapKeys(_) | Change::SnapDrag(_) => {}
+            Change::Theme(t) => {
+                let theme = if t == "light" { Theme::LIGHT } else { Theme::NEUTRAL };
+                server.scene_mut().set_theme(theme);
+                server.scene_mut().damage_all();
+            }
             Change::Keyboard(name) => {
                 if let Some(layout) = poly_input::layout::by_name(name) {
                     match desktop::keymap_file(&self.dir, layout) {
@@ -611,6 +674,9 @@ impl Desktop {
                 }
             }
             Change::Wallpaper(w) => println!("poly-compositor: wallpaper {w}"),
+            Change::Shortcut(a, c) => println!("poly-compositor: shortcut {} is {}", a.id(), c.to_text()),
+            Change::ResetShortcut(a) => println!("poly-compositor: shortcut {} back to its default", a.id()),
+            Change::ResetShortcuts => println!("poly-compositor: every shortcut back to its default"),
             Change::TimeZone(z) => {
                 let t = realtime_secs();
                 self.shell.set_time(t, self.shell.local_offset(t));
@@ -734,6 +800,15 @@ impl Desktop {
             self.shell.toggle_launcher();
         }
         self.windows = now;
+        // Where the windows are: the ridge's edge shows over them.
+        let cover: Vec<Rect> = server
+            .scene()
+            .windows()
+            .iter()
+            .filter(|w| w.is_visible())
+            .map(|w| server.scene().frame_rect(w.id()).unwrap_or(w.bounds()))
+            .collect();
+        self.shell.set_window_cover(&cover);
         // The launcher lists the open windows (Alpine Shell's "Windows").
         let list: Vec<(u32, String, String)> =
             server.managed_windows().iter().map(|i| (i.window.0, i.title.clone(), i.app_id.clone())).collect();

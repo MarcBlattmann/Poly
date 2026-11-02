@@ -67,6 +67,21 @@ impl Theme {
         shadow_inactive: Some(Shadow::new(0.0, 4.0, 20.0, 0.0, 0, 64)),
     };
 
+    /// Alpine's light tokens: the ground `#d6d6d6` for the title bar, the
+    /// primary and quiet inks for its text, the strong line for the border;
+    /// lighter shadows.
+    pub const LIGHT: Theme = Theme {
+        background: 0xd6_d6d6,
+        title_active: 0xd6_d6d6,
+        title_inactive: 0xe4_e4e4,
+        text_active: 0x2f_2f2f,
+        text_inactive: 0x6f_6f6f,
+        border_active: 0xb4_b4b4,
+        border_inactive: 0xc8_c8c8,
+        shadow_active: Some(Shadow::new(0.0, 8.0, 32.0, 0.0, 0, 64)),
+        shadow_inactive: Some(Shadow::new(0.0, 4.0, 20.0, 0.0, 0, 40)),
+    };
+
     /// The same without shadows (what tests of exact frame pixels use).
     pub const FLAT: Theme = Theme { shadow_active: None, shadow_inactive: None, ..Theme::NEUTRAL };
 

@@ -23,6 +23,7 @@ poly-http.workspace = true
 poly-pe.workspace = true
 poly-binfmt.workspace = true
 poly-personality-native.workspace = true
+poly-win32k.workspace = true
 poly-wincrypt.workspace = true
 poly-winsock.workspace = true
 poly-term.workspace = true

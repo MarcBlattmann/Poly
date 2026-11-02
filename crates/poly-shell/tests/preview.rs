@@ -197,6 +197,30 @@ fn a_framed_window_and_the_settings() {
             save(&fb, &format!("settings-{name}{tag}.png"));
         }
     }
+    // Keyboard shortcuts being edited (ADR 0129): one changed (its reset
+    // shows), one refused (its message in red), one recording.
+    {
+        use poly_input::Key as K;
+        use poly_shell::settings::Change;
+        use poly_shell::shortcuts::{Action, Chord};
+        s.apply(&Change::Shortcut(Action::Settings, Chord::parse("Ctrl+Alt+O").unwrap()));
+        s.settings_window.open_at(Page::Shortcuts);
+        s.settings_window.recorder.start(Action::Notifications, 0);
+        s.shortcut_key(K::ControlLeft, true, &poly_input::layout::US);
+        s.shortcut_key(K::Space, true, &poly_input::layout::US);
+        s.shortcut_key(K::Space, false, &poly_input::layout::US);
+        s.shortcut_key(K::ControlLeft, false, &poly_input::layout::US);
+        s.settings_window.recorder.start(Action::CloseWindow, 0);
+        for (w, h, tag) in
+            [(poly_shell::theme::settings::WIDTH, poly_shell::theme::settings::HEIGHT, ""), (1200, 800, "-1200")]
+        {
+            let mut fb = MemoryFramebuffer::new(w as u32, h as u32);
+            s.draw_settings(&mut fb, w, h, 1, &info, 1_793_491_200);
+            save(&fb, &format!("settings-shortcuts-editing{tag}.png"));
+        }
+        s.apply(&Change::ResetShortcuts);
+        s.settings_window.recorder.stop();
+    }
     // A framed window — the settings — over the shell.
     let mut scene = poly_wayland::compose::Scene::new(1920, 1080, 1);
     if let Some(font) = title {

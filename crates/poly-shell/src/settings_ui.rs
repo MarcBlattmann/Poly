@@ -31,6 +31,8 @@ use crate::draw::{Face, Style, Text, fill, rounded_border, rounded_outline, roun
 use crate::icons::{Icon, lucide};
 use crate::launcher::Key;
 use crate::settings::{Change, KEYBOARDS, SCALES, Settings};
+use crate::shortcuts::{Action, Keymap, Recorded, Recorder, Refusal, key_name};
+use crate::theme::pal;
 use crate::theme::settings as t;
 use crate::theme::wallpaper::PRESETS;
 use crate::tz::{TimeZone, ZONES};
@@ -38,15 +40,18 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use poly_input::layout::Layout;
 use poly_wayland::compose::paint::{self, Radii, Shadow};
 use poly_wayland::compose::{Framebuffer, Rect};
-
-const WHITE: u32 = 0xff_ffff;
 
 /// The pages.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
     Home,
+    Appearance,
+    Search,
+    Tiling,
+    Shortcuts,
     Display,
     Keyboard,
     Wallpaper,
@@ -56,12 +61,27 @@ pub enum Page {
 }
 
 impl Page {
-    pub const ALL: [Page; 7] =
-        [Page::Home, Page::Wallpaper, Page::Display, Page::Sound, Page::Keyboard, Page::DateTime, Page::About];
+    pub const ALL: [Page; 11] = [
+        Page::Home,
+        Page::Wallpaper,
+        Page::Appearance,
+        Page::Search,
+        Page::Tiling,
+        Page::Shortcuts,
+        Page::Display,
+        Page::Sound,
+        Page::Keyboard,
+        Page::DateTime,
+        Page::About,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             Page::Home => "Home",
+            Page::Appearance => "Appearance",
+            Page::Search => "Search",
+            Page::Tiling => "Window tiling",
+            Page::Shortcuts => "Keyboard shortcuts",
             Page::Display => "Displays",
             Page::Keyboard => "Keyboard",
             Page::Wallpaper => "Wallpaper",
@@ -75,6 +95,10 @@ impl Page {
     fn icon(self) -> Icon {
         match self {
             Page::Home => lucide::HOUSE,
+            Page::Appearance => lucide::SUN_MOON,
+            Page::Search => lucide::SEARCH,
+            Page::Tiling => lucide::LAYOUT_DASHBOARD,
+            Page::Shortcuts => lucide::COMMAND,
             Page::Display => lucide::MONITOR,
             Page::Keyboard => lucide::KEYBOARD,
             Page::Wallpaper => lucide::WALLPAPER,
@@ -88,6 +112,10 @@ impl Page {
     fn keywords(self) -> &'static [&'static str] {
         match self {
             Page::Home => &["overview", "system", "memory"],
+            Page::Appearance => &["theme", "dark", "light", "colour", "color"],
+            Page::Search => &["launcher", "hotkey", "results"],
+            Page::Tiling => &["snap", "snapping", "tile", "gap", "windows"],
+            Page::Shortcuts => &["hotkeys", "keys", "shortcut"],
             Page::Display => &["resolution", "scale", "screen", "monitor", "hidpi"],
             Page::Keyboard => &["layout", "input", "language", "keys"],
             Page::Wallpaper => &["background", "desktop", "picture"],
@@ -109,9 +137,10 @@ impl Page {
 
 /// Alpine's sections with Poly's pages (sections without pages are left
 /// out, as Alpine does: Poly has nothing in Desktop yet).
-const SECTIONS: [(&str, &[Page]); 4] = [
+const SECTIONS: [(&str, &[Page]); 5] = [
     ("Home", &[Page::Home]),
-    ("Personal", &[Page::Wallpaper]),
+    ("Personal", &[Page::Wallpaper, Page::Appearance]),
+    ("Desktop", &[Page::Search, Page::Tiling, Page::Shortcuts]),
     ("Devices", &[Page::Display, Page::Sound, Page::Keyboard]),
     ("System", &[Page::DateTime, Page::About]),
 ];
@@ -137,6 +166,10 @@ pub struct SystemInfo {
     pub session_bus: String,
 }
 
+/// The Search hotkey's description (Alpine's, less what Poly's launcher
+/// does not do).
+const LAUNCHER_HINT: &str = "Search apps and switch to open apps";
+
 /// What the pointer can hit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -153,6 +186,14 @@ pub enum Target {
     Volume,
     Mute,
     Zone(usize),
+    Theme(bool),
+    Tiling,
+    SnapKeys,
+    SnapDrag,
+    /// A shortcut's Set (or Cancel) button, its reset, every reset.
+    Record(Action),
+    ResetShortcut(Action),
+    ResetShortcuts,
 }
 
 /// One thing to draw.
@@ -215,6 +256,31 @@ enum Item {
         rgb: u32,
         alpha: u8,
     },
+    /// Key caps (Alpine's `KeyCaps`): 22 pixels high, radius 5, a ghost
+    /// fill, a hairline ring and a stronger line under, Geist Mono 11 px.
+    Caps(Vec<(Rect, String)>),
+    /// Alpine's small square ghost button (`h-7 px-3`, 13 px medium,
+    /// radius 8, the ghost fill on hover).
+    Button {
+        rect: Rect,
+        label: String,
+        hover: bool,
+    },
+    /// Alpine's `IconButton` (28 × 28, radius 8; faint when it does
+    /// nothing).
+    IconButton {
+        rect: Rect,
+        icon: Icon,
+        size: i32,
+        hover: bool,
+        enabled: bool,
+    },
+    /// Recording: "Press a shortcut" (22 high, radius 5, a quiet ring,
+    /// 11 px).
+    Pill {
+        rect: Rect,
+        text: String,
+    },
 }
 
 /// The window's state.
@@ -229,6 +295,9 @@ pub struct SettingsWindow {
     /// The settings search: its text, and whether it has the keys.
     search: String,
     searching: bool,
+    /// Recording a shortcut, and the last refusal (the row says why).
+    pub recorder: Recorder,
+    refusal: Option<(Action, String)>,
 }
 
 impl Default for SettingsWindow {
@@ -241,6 +310,8 @@ impl Default for SettingsWindow {
             at: 0,
             search: String::new(),
             searching: false,
+            recorder: Recorder::default(),
+            refusal: None,
         }
     }
 }
@@ -280,6 +351,11 @@ enum Control {
     Segmented(Vec<(String, bool, Target)>),
     Slider(u32, Option<Target>),
     Toggle(bool, Option<Target>),
+    /// A shortcut: its caps (or "Press a shortcut"), its reset, Set.
+    Binding {
+        action: Action,
+        refused: bool,
+    },
 }
 
 /// Builds a page's items. `y` is the top of the next thing.
@@ -288,6 +364,9 @@ struct Builder<'a, 'b> {
     items: Vec<Item>,
     targets: Vec<(Rect, Target)>,
     hover: Option<Target>,
+    /// The shortcut being recorded, and the last refusal.
+    recording: Option<Action>,
+    refusal: Option<(Action, String)>,
     left: i32,
     right: i32,
     y: i32,
@@ -312,7 +391,7 @@ impl Builder<'_, '_> {
     fn title(&mut self, title: &str) {
         let st = Style::new(Face::Medium, t::TITLE_SIZE).tracking(-0.025);
         let b = self.baseline(self.y, 32, st);
-        self.text(self.left, b, self.right, title, st, t::INK);
+        self.text(self.left, b, self.right, title, st, pal().ink_primary);
         self.y += 32 + 32;
     }
 
@@ -321,7 +400,7 @@ impl Builder<'_, '_> {
     fn label(&mut self, label: &str) {
         let st = Style::new(Face::Medium, t::EYEBROW_SIZE);
         let b = self.baseline(self.y, 16, st);
-        self.text(self.left + 4, b, self.right, label, st, t::INK_QUIET);
+        self.text(self.left + 4, b, self.right, label, st, pal().quiet);
         self.y += 16 + 8;
     }
 
@@ -343,13 +422,18 @@ impl Builder<'_, '_> {
             match &desc {
                 None => {
                     let b = self.baseline(r.y, r.height, LABEL);
-                    self.text(x, b, max, &label, LABEL, t::INK);
+                    self.text(x, b, max, &label, LABEL, pal().ink_primary);
                 }
                 Some(d) => {
                     let b = self.baseline(r.y + 10, 20, LABEL);
-                    self.text(x, b, max, &label, LABEL, t::INK);
+                    self.text(x, b, max, &label, LABEL, pal().ink_primary);
                     let b = self.baseline(r.y + 32, 16, DESC);
-                    self.text(x, b, max, d, DESC, t::INK_QUIET);
+                    let rgb = if matches!(control, Control::Binding { refused: true, .. }) {
+                        pal().danger
+                    } else {
+                        pal().quiet
+                    };
+                    self.text(x, b, max, d, DESC, rgb);
                 }
             }
             self.control(r, control);
@@ -367,7 +451,7 @@ impl Builder<'_, '_> {
                 let v = self.cx.text.fit_style(&v, DENSE, room);
                 let w = self.cx.text.measure(&v, DENSE) as i32;
                 let b = self.baseline(r.y, r.height, DENSE);
-                self.text(right - w, b, right + 1, &v, DENSE, t::INK_QUIET);
+                self.text(right - w, b, right + 1, &v, DENSE, pal().quiet);
             }
             Control::Segmented(options) => {
                 let widths: Vec<i32> = options.iter().map(|o| self.cx.text.measure(&o.0, DENSE) as i32 + 24).collect();
@@ -389,9 +473,45 @@ impl Builder<'_, '_> {
                 let v = format!("{value}%");
                 let w = self.cx.text.measure(&v, DESC) as i32;
                 let b = self.baseline(r.y, r.height, DESC);
-                self.text(right - w, b, right + 1, &v, DESC, t::INK_QUIET);
+                self.text(right - w, b, right + 1, &v, DESC, pal().quiet);
                 if let Some(tg) = target {
                     self.targets.push((Rect::new(track.x - 6, r.y, track.width + 12, r.height), tg));
+                }
+            }
+            Control::Binding { action, .. } => {
+                // Alpine's `BindingRow`: the caps (or "Press a shortcut"
+                // while recording), the reset when it differs from the
+                // default, then Set or Cancel; 8 pixels apart.
+                let recording = self.recording == Some(action);
+                let label = if recording { "Cancel" } else { "Set" };
+                let bst = Style::new(Face::Medium, t::DENSE_SIZE);
+                let bw = self.cx.text.measure(label, bst) as i32 + 24;
+                let btn = Rect::new(right - bw, mid - 14, bw, 28);
+                let hover = self.hover == Some(Target::Record(action));
+                self.items.push(Item::Button { rect: btn, label: label.into(), hover });
+                self.targets.push((btn, Target::Record(action)));
+                let mut x = btn.x - 8;
+                if !recording && self.cx.settings.shortcuts.is_custom(action) {
+                    let ib = Rect::new(x - 28, mid - 14, 28, 28);
+                    let hover = self.hover == Some(Target::ResetShortcut(action));
+                    self.items.push(Item::IconButton {
+                        rect: ib,
+                        icon: lucide::ROTATE_CCW,
+                        size: 14,
+                        hover,
+                        enabled: true,
+                    });
+                    self.targets.push((ib, Target::ResetShortcut(action)));
+                    x = ib.x - 8;
+                }
+                if recording {
+                    let st = Style::new(Face::Sans, 11.0);
+                    let text = "Press a shortcut";
+                    let w = self.cx.text.measure(text, st) as i32 + 16;
+                    self.items.push(Item::Pill { rect: Rect::new(x - w, mid - 11, w, 22), text: text.into() });
+                } else {
+                    let keys = self.cx.settings.shortcuts.chord(action).caps();
+                    self.caps(x, mid, &keys);
                 }
             }
             Control::Toggle(on, target) => {
@@ -402,6 +522,35 @@ impl Builder<'_, '_> {
                 }
             }
         }
+    }
+
+    /// Key caps ending at `right`, centred on `mid`, 4 pixels apart.
+    fn caps(&mut self, right: i32, mid: i32, keys: &[String]) {
+        let mono = Style::new(Face::Mono, 11.0);
+        let mut caps = Vec::new();
+        let mut x = right;
+        for k in keys.iter().rev() {
+            let w = (self.cx.text.measure(k, mono) as i32 + 12).max(22);
+            x -= w;
+            caps.push((Rect::new(x, mid - 11, w, 22), k.clone()));
+            x -= 4;
+        }
+        caps.reverse();
+        self.items.push(Item::Caps(caps));
+    }
+
+    /// A card of shortcuts (Alpine's `ShortcutsPage` rows): each with its
+    /// description, or the refusal of its last recording in red.
+    fn bindings(&mut self, rows: &[(Action, Option<&str>)]) {
+        let rows = rows
+            .iter()
+            .map(|&(action, desc)| {
+                let refusal = self.refusal.as_ref().filter(|(a, _)| *a == action).map(|(_, m)| m.clone());
+                let refused = refusal.is_some();
+                (action.label().to_string(), refusal.or(desc.map(String::from)), Control::Binding { action, refused })
+            })
+            .collect();
+        self.rows(rows);
     }
 
     /// A card of choices (48-pixel rows, 36 for long lists): label,
@@ -418,10 +567,10 @@ impl Builder<'_, '_> {
             }
             if self.hover == Some(*target) {
                 let radius = if i == 0 || i == rows.len() - 1 { t::CARD_RADIUS } else { 0 };
-                self.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius });
+                self.items.push(Item::Fill { rect: r, rgb: pal().ink, alpha: pal().ghost, radius });
             }
             let b = self.baseline(r.y, r.height, DENSE);
-            self.text(r.x + t::ROW_PADDING, b, r.right() - 140, label, DENSE, t::INK);
+            self.text(r.x + t::ROW_PADDING, b, r.right() - 140, label, DENSE, pal().ink_primary);
             let check_x = r.right() - t::ROW_PADDING - 16;
             if *chosen {
                 self.items.push(Item::Icon {
@@ -429,14 +578,14 @@ impl Builder<'_, '_> {
                     x: check_x,
                     y: r.y + (rh - 16) / 2,
                     size: 16,
-                    rgb: t::INK,
+                    rgb: pal().ink_primary,
                     alpha: 255,
                 });
             }
             if !detail.is_empty() {
                 let w = self.cx.text.measure(detail, DESC) as i32;
                 let b = self.baseline(r.y, r.height, DESC);
-                self.text(check_x - 12 - w, b, check_x - 4, detail, DESC, t::INK_QUIET);
+                self.text(check_x - 12 - w, b, check_x - 4, detail, DESC, pal().quiet);
             }
             self.targets.push((r, *target));
         }
@@ -455,7 +604,7 @@ impl Builder<'_, '_> {
             }
             if self.hover == Some(Target::Nav(*page)) {
                 let radius = if i == 0 || i == rows.len() - 1 { t::CARD_RADIUS } else { 0 };
-                self.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius });
+                self.items.push(Item::Fill { rect: r, rgb: pal().ink, alpha: pal().ghost, radius });
             }
             let ix = r.x + t::ROW_PADDING;
             self.items.push(Item::Icon {
@@ -463,23 +612,23 @@ impl Builder<'_, '_> {
                 x: ix,
                 y: r.y + 16,
                 size: 15,
-                rgb: t::INK_QUIET,
+                rgb: pal().quiet,
                 alpha: 255,
             });
             let b = self.baseline(r.y, r.height, DENSE);
-            self.text(ix + 15 + 12, b, r.right() - 160, page.label(), DENSE, t::INK);
+            self.text(ix + 15 + 12, b, r.right() - 160, page.label(), DENSE, pal().ink_primary);
             let cx = r.right() - t::ROW_PADDING - 16;
             self.items.push(Item::Icon {
                 icon: lucide::CHEVRON_RIGHT,
                 x: cx,
                 y: r.y + 16,
                 size: 16,
-                rgb: t::INK_FAINT,
+                rgb: pal().faint,
                 alpha: 255,
             });
             if !detail.is_empty() {
                 let w = self.cx.text.measure(detail, DENSE) as i32;
-                self.text(cx - 12 - w, b, cx - 4, detail, DENSE, t::INK_QUIET);
+                self.text(cx - 12 - w, b, cx - 4, detail, DENSE, pal().quiet);
             }
             self.targets.push((r, Target::Nav(*page)));
         }
@@ -489,7 +638,7 @@ impl Builder<'_, '_> {
     /// A note (12 px, faint).
     fn note(&mut self, text: &str) {
         let b = self.baseline(self.y - 24, 16, DESC);
-        self.text(self.left + 4, b, self.right, text, DESC, t::INK_FAINT);
+        self.text(self.left + 4, b, self.right, text, DESC, pal().faint);
         self.y += 8;
     }
 }
@@ -555,6 +704,8 @@ impl SettingsWindow {
             items: Vec::new(),
             targets: Vec::new(),
             hover: self.hover,
+            recording: self.recorder.active(),
+            refusal: self.refusal.clone(),
             left: t::SIDEBAR + 1 + t::GUTTER,
             right: w - t::GUTTER,
             y: t::HEADER + 1 + t::GUTTER,
@@ -567,9 +718,9 @@ impl SettingsWindow {
         for (i, (target, icon, enabled)) in arrows.into_iter().enumerate() {
             let r = Rect::new(12 + i as i32 * 32, (t::HEADER - 28) / 2, 28, 28);
             if enabled && self.hover == Some(target) {
-                b.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius: t::FIELD_RADIUS });
+                b.items.push(Item::Fill { rect: r, rgb: pal().ink, alpha: pal().ghost, radius: t::FIELD_RADIUS });
             }
-            let ink = if enabled { t::INK } else { t::INK_FAINT };
+            let ink = if enabled { pal().ink_primary } else { pal().faint };
             b.items.push(Item::Icon { icon, x: r.x + 7, y: r.y + 7, size: 15, rgb: ink, alpha: 255 });
             if enabled {
                 b.targets.push((r, target));
@@ -579,12 +730,15 @@ impl SettingsWindow {
         for (r, i) in self.tabs(cx.text) {
             let active = i == self.page.section() && !searching;
             if active {
-                b.items.push(Item::Fill { rect: r, rgb: t::SURFACE_3, alpha: 255, radius: t::FIELD_RADIUS });
+                b.items.push(Item::Fill { rect: r, rgb: pal().s3, alpha: 255, radius: t::FIELD_RADIUS });
             } else if self.hover == Some(Target::Tab(i)) {
-                b.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius: t::FIELD_RADIUS });
+                b.items.push(Item::Fill { rect: r, rgb: pal().ink, alpha: pal().ghost, radius: t::FIELD_RADIUS });
             }
-            let (st, ink) =
-                if active { (Style::new(Face::Medium, t::DENSE_SIZE), t::INK) } else { (DENSE, t::INK_QUIET) };
+            let (st, ink) = if active {
+                (Style::new(Face::Medium, t::DENSE_SIZE), pal().ink_primary)
+            } else {
+                (DENSE, pal().quiet)
+            };
             let tb = b.baseline(r.y, r.height, st);
             b.text(r.x + 12, tb, r.right(), SECTIONS[i].0, st, ink);
             b.targets.push((r, Target::Tab(i)));
@@ -596,30 +750,36 @@ impl SettingsWindow {
             x: f.x + 11,
             y: f.y + 9,
             size: 14,
-            rgb: t::INK_FAINT,
+            rgb: pal().faint,
             alpha: 255,
         });
         let fb = b.baseline(f.y, f.height, DENSE);
-        let (shown, ink) = if searching { (self.search.as_str(), t::INK) } else { ("Search settings", t::INK_FAINT) };
+        let (shown, ink) =
+            if searching { (self.search.as_str(), pal().ink_primary) } else { ("Search settings", pal().faint) };
         let end = f.x + 11 + 14 + 8 + cx.text.measure(if searching { shown } else { "" }, DENSE) as i32;
         b.text(f.x + 11 + 14 + 8, fb, f.right() - 50, shown, DENSE, ink);
         if self.searching {
-            b.items.push(Item::Fill { rect: Rect::new(end + 1, f.y + 8, 1, 16), rgb: t::INK, alpha: 255, radius: 0 });
+            b.items.push(Item::Fill {
+                rect: Rect::new(end + 1, f.y + 8, 1, 16),
+                rgb: pal().ink_primary,
+                alpha: 255,
+                radius: 0,
+            });
         }
         let mono = Style::new(Face::Mono, 11.0);
         let kw = cx.text.measure("Ctrl K", mono) as i32;
-        b.text(f.right() - 10 - kw, fb, f.right(), "Ctrl K", mono, t::INK_FAINT);
+        b.text(f.right() - 10 - kw, fb, f.right(), "Ctrl K", mono, pal().faint);
         b.targets.push((f, Target::Search));
         // The sidebar: the section's pages (13 px, the active one medium on
         // surface 3).
         for (r, page) in self.nav() {
             let active = page == self.page && !searching;
             if active {
-                b.items.push(Item::Fill { rect: r, rgb: t::SURFACE_3, alpha: 255, radius: t::FIELD_RADIUS });
+                b.items.push(Item::Fill { rect: r, rgb: pal().s3, alpha: 255, radius: t::FIELD_RADIUS });
             } else if self.hover == Some(Target::Nav(page)) {
-                b.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius: t::FIELD_RADIUS });
+                b.items.push(Item::Fill { rect: r, rgb: pal().ink, alpha: pal().ghost, radius: t::FIELD_RADIUS });
             }
-            let (ink, alpha) = if active { (t::INK, 230) } else { (t::INK_QUIET, 153) };
+            let (ink, alpha) = if active { (pal().ink_primary, 230) } else { (pal().quiet, 153) };
             let iy = r.y + (r.height - t::NAV_ICON) / 2;
             b.items.push(Item::Icon {
                 icon: page.icon(),
@@ -654,6 +814,98 @@ impl SettingsWindow {
         let st = cx.settings;
         match self.page {
             Page::Home => self.home(&mut b),
+            Page::Appearance => {
+                b.title("Appearance");
+                b.label("Windows");
+                let light = st.theme == "light";
+                b.rows(vec![(
+                    "Color mode".into(),
+                    Some("Choose whether the shell and your apps use light or dark colors.".into()),
+                    Control::Segmented(vec![
+                        ("Light".into(), light, Target::Theme(true)),
+                        ("Dark".into(), !light, Target::Theme(false)),
+                    ]),
+                )]);
+            }
+            Page::Search => {
+                b.title("Search");
+                b.label("Hotkeys");
+                b.bindings(&[(Action::Launcher, Some(LAUNCHER_HINT))]);
+                b.label("Search results");
+                b.rows(vec![(
+                    "Maximum results".into(),
+                    Some("How many results Search shows at once.".into()),
+                    Control::Value("8".into()),
+                )]);
+            }
+            Page::Tiling => {
+                // Alpine's page: the master switch, and the rest only while
+                // it is on. Poly snaps into zones (no auto-tile mode, no
+                // layouts), with a fixed gap and margin.
+                b.title("Window tiling");
+                b.label("General");
+                b.rows(vec![(
+                    "Enable window tiling".into(),
+                    Some("Arrange windows into layouts.".into()),
+                    Control::Toggle(st.tiling, Some(Target::Tiling)),
+                )]);
+                if st.tiling {
+                    b.label("Snapping");
+                    b.rows(vec![
+                        (
+                            "Win+Arrow snapping".into(),
+                            Some("Use Win+Left / Right / Up / Down to snap the focused window.".into()),
+                            Control::Toggle(st.snap_keys, Some(Target::SnapKeys)),
+                        ),
+                        (
+                            "Drag to zone".into(),
+                            Some("Drag a window to a screen edge or corner to snap it there.".into()),
+                            Control::Toggle(st.snap_drag, Some(Target::SnapDrag)),
+                        ),
+                    ]);
+                    b.label("Spacing");
+                    b.rows(vec![
+                        ("Gap".into(), Some("Space between tiled windows.".into()), Control::Value("8px".into())),
+                        (
+                            "Outer margin".into(),
+                            Some("Space between the tiled area and the edges of the screen.".into()),
+                            Control::Value("0px".into()),
+                        ),
+                    ]);
+                }
+            }
+            Page::Shortcuts => {
+                // Alpine's page: two columns from its `lg` width (1024),
+                // every row recordable (Set, Escape cancels, the reset when
+                // changed); once one is changed, Poly's "Restore all
+                // defaults" on the title's line (a small ghost button).
+                let title_top = b.y;
+                b.title("Keyboard shortcuts");
+                if st.shortcuts.any_custom() {
+                    let label = "Restore all defaults";
+                    let bw = cx.text.measure(label, Style::new(Face::Medium, t::DENSE_SIZE)) as i32 + 24;
+                    let rect = Rect::new(b.right - bw, title_top + 2, bw, 28);
+                    let hover = b.hover == Some(Target::ResetShortcuts);
+                    b.items.push(Item::Button { rect, label: label.into(), hover });
+                    b.targets.push((rect, Target::ResetShortcuts));
+                }
+                let (left, right, top) = (b.left, b.right, b.y);
+                let two = w >= 1024;
+                if two {
+                    b.right = (left + right - 32) / 2;
+                }
+                b.label("Search");
+                b.bindings(&[(Action::Launcher, Some(LAUNCHER_HINT)), (Action::LauncherAlt, None)]);
+                b.label("Apps");
+                b.bindings(&[(Action::Settings, None), (Action::Notifications, None)]);
+                let end = b.y;
+                if two {
+                    (b.left, b.right, b.y) = ((left + right + 32) / 2, right, top);
+                }
+                b.label("Windows");
+                b.bindings(&[(Action::SwitchWindows, None), (Action::SnapWindow, None), (Action::CloseWindow, None)]);
+                (b.left, b.right, b.y) = (left, right, b.y.max(end));
+            }
             Page::Display => {
                 b.title("Displays");
                 let mut modes = cx.info.modes.clone();
@@ -704,7 +956,7 @@ impl SettingsWindow {
                     let rect = Rect::new(b.left + c * (tw + gap), top + r * (th + 30), tw, th);
                     b.items.push(Item::Tile { rect, id: p.0, selected: st.wallpaper == p.0 });
                     let lb = b.baseline(rect.bottom() + 6, 16, DESC);
-                    let ink = if st.wallpaper == p.0 { t::INK } else { t::INK_QUIET };
+                    let ink = if st.wallpaper == p.0 { pal().ink_primary } else { pal().quiet };
                     b.text(rect.x, lb, rect.right(), p.1, DESC, ink);
                     b.targets.push((Rect::new(rect.x, rect.y, rect.width, rect.height + 24), Target::Wallpaper(i)));
                 }
@@ -778,13 +1030,13 @@ impl SettingsWindow {
         let x = hero.right() + 20;
         let name = Style::new(Face::Medium, t::TITLE_SIZE).tracking(-0.025);
         let nb = b.baseline(hero.y, 30, name);
-        b.text(x, nb, b.right, "Poly", name, t::INK);
+        b.text(x, nb, b.right, "Poly", name, pal().ink_primary);
         let i = cx.info;
         let b1 = b.baseline(hero.y + 30, 18, DENSE);
-        b.text(x, b1, b.right, &i.os, DENSE, t::INK);
+        b.text(x, b1, b.right, &i.os, DENSE, pal().ink_primary);
         let b2 = b.baseline(hero.y + 48, 16, DESC);
         let machine = if i.cpu.is_empty() { i.machine.clone() } else { format!("{} \u{b7} {}", i.machine, i.cpu) };
-        b.text(x, b2, b.right, &machine, DESC, t::INK_QUIET);
+        b.text(x, b2, b.right, &machine, DESC, pal().quiet);
         // Memory in use.
         let label = Style::new(Face::Medium, t::EYEBROW_SIZE);
         let used = i.memory_kib.saturating_sub(i.memory_available_kib);
@@ -792,10 +1044,10 @@ impl SettingsWindow {
         let gib = |k: u64| format!("{:.1} GB", k as f64 / (1024.0 * 1024.0));
         let ly = hero.y + 96;
         let lb = b.baseline(ly, 16, label);
-        b.text(x, lb, b.right, "Memory", label, t::INK);
+        b.text(x, lb, b.right, "Memory", label, pal().ink_primary);
         let v = format!("{} of {}", gib(used), gib(i.memory_kib));
         let vw = cx.text.measure(&v, DESC) as i32;
-        b.text(b.right - vw, lb, b.right + 1, &v, DESC, t::INK_QUIET);
+        b.text(b.right - vw, lb, b.right + 1, &v, DESC, pal().quiet);
         b.items.push(Item::Bar { rect: Rect::new(x, ly + 20, b.right - x, 6), value: pct });
         b.y = hero.bottom() + 26;
         let wall = PRESETS.iter().find(|p| p.0 == st.wallpaper).map_or("", |p| p.1);
@@ -845,8 +1097,36 @@ impl SettingsWindow {
         self.hover.take().is_some()
     }
 
+    /// Recording ended with `outcome` (keys named on `layout`): the
+    /// combination to store, or the refusal shown in the row.
+    pub fn recorded(&mut self, outcome: Recorded, keymap: &Keymap, layout: &Layout) -> Option<Change> {
+        self.refusal = None;
+        let Recorded::Chord(action, mods, key) = outcome else { return None };
+        let checked = match key_name(key, layout) {
+            Some(name) => keymap.validate(action, mods, &name),
+            None => Err(Refusal::Unknown),
+        };
+        match checked {
+            Ok(chord) => Some(Change::Shortcut(action, chord)),
+            Err(why) => {
+                self.refusal = Some((action, why.message()));
+                None
+            }
+        }
+    }
+
+    /// Whether a shortcut is being recorded (the compositor gives it the
+    /// keys first).
+    pub fn recording(&self) -> bool {
+        self.recorder.active().is_some()
+    }
+
     /// Go to page `p` (remembered for the arrows); the search ends.
     fn go(&mut self, p: Page) -> bool {
+        if p != self.page {
+            self.recorder.stop();
+            self.refusal = None;
+        }
         let was_searching = !self.search.is_empty();
         self.search.clear();
         self.searching = false;
@@ -883,7 +1163,9 @@ impl SettingsWindow {
         if target != Some(Target::Search) && self.searching && self.search.is_empty() {
             self.searching = false;
         }
-        let Some(target) = target else { return (false, None) };
+        // A press anywhere else ends recording (Alpine's blur).
+        let stopped = !matches!(target, Some(Target::Record(_))) && self.recorder.stop();
+        let Some(target) = target else { return (stopped, None) };
         let st = cx.settings;
         let change = match target {
             Target::Nav(p) => return (self.go(p), None),
@@ -928,6 +1210,27 @@ impl SettingsWindow {
             }
             Target::Mute => Some(Change::Muted(!st.muted)),
             Target::Zone(i) => ZONES.get(i).map(|z| Change::TimeZone(z.0.to_string())),
+            Target::Theme(light) => Some(Change::Theme(if light { "light" } else { "dark" }.into())),
+            Target::Tiling => Some(Change::Tiling(!st.tiling)),
+            Target::SnapKeys => Some(Change::SnapKeys(!st.snap_keys)),
+            Target::SnapDrag => Some(Change::SnapDrag(!st.snap_drag)),
+            Target::Record(a) => {
+                self.refusal = None;
+                if self.recorder.active() == Some(a) {
+                    self.recorder.stop();
+                } else {
+                    self.recorder.start(a, cx.utc);
+                }
+                return (true, None);
+            }
+            Target::ResetShortcut(a) => {
+                self.refusal = None;
+                Some(Change::ResetShortcut(a))
+            }
+            Target::ResetShortcuts => {
+                self.refusal = None;
+                Some(Change::ResetShortcuts)
+            }
         };
         (true, change)
     }
@@ -986,15 +1289,15 @@ impl SettingsWindow {
     /// at least that big, physical).
     pub fn draw(&self, fb: &mut dyn Framebuffer, w: i32, h: i32, s: i32, cx: &Context<'_>) {
         let all = Rect::new(0, 0, w * s, h * s);
-        fill(fb, all, all, t::SURFACE_0, 255);
+        fill(fb, all, all, pal().s0, 255);
         // The page's surface: rounded at the top left, a hairline along its
         // top and left edges.
         let page = Rect::new(t::SIDEBAR, t::HEADER, w - t::SIDEBAR, h - t::HEADER).scale(s);
         let r = (t::CARD_RADIUS * s) as f32;
         let grown = Rect::new(page.x, page.y, page.width + 2 * r as i32, page.height + 2 * r as i32);
-        paint::fill_rounded(fb, page, grown, Radii::all(r), t::LINE, 255);
+        paint::fill_rounded(fb, page, grown, Radii::all(r), pal().line, 255);
         let inner = Rect::new(grown.x + s, grown.y + s, grown.width - s, grown.height - s);
-        paint::fill_rounded(fb, page, inner, Radii::all(r - s as f32), t::SURFACE_1, 255);
+        paint::fill_rounded(fb, page, inner, Radii::all(r - s as f32), pal().s1, 255);
         let (items, _) = self.layout(w, h, cx);
         let text = cx.text;
         for item in &items {
@@ -1002,35 +1305,35 @@ impl SettingsWindow {
                 Item::Text { x, y, max_x, text: s_, style, rgb } => {
                     text.draw_style(fb, all, (x * s) as f32, y * s, max_x * s, s_, style.scaled(s), *rgb, 255);
                 }
-                Item::Card(c) => rounded_rect(fb, all, c.scale(s), t::CARD_RADIUS * s, WHITE, t::GHOST_ALPHA),
-                Item::Line(l) => fill(fb, all, Rect::new(l.x * s, l.y * s, l.width * s, s), WHITE, t::HAIRLINE_ALPHA),
+                Item::Card(c) => rounded_rect(fb, all, c.scale(s), t::CARD_RADIUS * s, pal().ink, pal().ghost),
+                Item::Line(l) => fill(fb, all, Rect::new(l.x * s, l.y * s, l.width * s, s), pal().ink, pal().hairline),
                 Item::Fill { rect, rgb, alpha, radius } => {
                     rounded_rect(fb, all, rect.scale(s), radius * s, *rgb, *alpha)
                 }
                 Item::Field { rect, focused } => {
                     let f = rect.scale(s);
-                    rounded_rect(fb, all, f, t::FIELD_RADIUS * s, t::SURFACE_2, 255);
-                    let line = if *focused { t::INK_FAINT } else { t::LINE };
+                    rounded_rect(fb, all, f, t::FIELD_RADIUS * s, pal().s2, 255);
+                    let line = if *focused { pal().faint } else { pal().line };
                     rounded_border(fb, all, f, t::FIELD_RADIUS * s, s, line, 255);
                 }
                 Item::Bar { rect, value } => {
                     let r = rect.scale(s);
-                    rounded_rect(fb, all, r, r.height / 2, WHITE, t::TRACK_ALPHA);
+                    rounded_rect(fb, all, r, r.height / 2, pal().ink, pal().track);
                     let filled = Rect::new(r.x, r.y, r.width * (*value).min(100) as i32 / 100, r.height);
                     if filled.width > 0 {
-                        rounded_rect(fb, all.intersect(&filled), r, r.height / 2, t::INK, 255);
+                        rounded_rect(fb, all.intersect(&filled), r, r.height / 2, pal().ink_primary, 255);
                     }
                 }
                 Item::Segmented { rect, options } => {
                     let rs = rect.scale(s);
-                    rounded_outline(fb, all, rs, rs.height / 2, t::LINE, 255);
+                    rounded_outline(fb, all, rs, rs.height / 2, pal().line, 255);
                     for (r, label, active) in options {
                         let st = DENSE.scaled(s);
                         let o = r.scale(s);
                         if *active {
-                            rounded_rect(fb, all, o, o.height / 2, t::INK, 255);
+                            rounded_rect(fb, all, o, o.height / 2, pal().ink_primary, 255);
                         }
-                        let ink = if *active { t::SURFACE_0 } else { t::INK_QUIET };
+                        let ink = if *active { pal().on_solid } else { pal().quiet };
                         let lw = text.measure(label, st);
                         let base = text.centre(o.y, o.height, st);
                         text.draw_style(
@@ -1049,18 +1352,18 @@ impl SettingsWindow {
                 Item::Slider { rect, value, enabled } => {
                     let r = rect.scale(s);
                     let a = if *enabled { 255 } else { 110 };
-                    rounded_rect(fb, all, r, r.height / 2, WHITE, t::TRACK_ALPHA);
+                    rounded_rect(fb, all, r, r.height / 2, pal().ink, pal().track);
                     let filled = Rect::new(r.x, r.y, r.width * *value as i32 / 100, r.height);
                     if filled.width > 0 {
-                        rounded_rect(fb, all.intersect(&filled), r, r.height / 2, t::INK, a);
+                        rounded_rect(fb, all.intersect(&filled), r, r.height / 2, pal().ink_primary, a);
                     }
                 }
                 Item::Toggle { rect, on } => {
                     let r = rect.scale(s);
                     let (track, track_a, knob, kx) = if *on {
-                        (t::INK, 255, t::SURFACE_0, r.x + 19 * s)
+                        (pal().ink_primary, 255, pal().on_solid, r.x + 19 * s)
                     } else {
-                        (WHITE, t::TRACK_ALPHA, t::KNOB_OFF, r.x + 3 * s)
+                        (pal().ink, pal().track, pal().knob_off, r.x + 3 * s)
                     };
                     rounded_rect(fb, all, r, r.height / 2, track, track_a);
                     let k = Rect::new(kx, r.y + 3 * s, 16 * s, 16 * s);
@@ -1082,13 +1385,90 @@ impl SettingsWindow {
                     // Cut the corners round: the page's colour over them.
                     corner_mask(fb, all, r, 8 * s);
                     if *selected {
-                        rounded_border(fb, all, r.grow(3 * s), 11 * s, 2 * s, t::INK, 255);
+                        rounded_border(fb, all, r.grow(3 * s), 11 * s, 2 * s, pal().ink_primary, 255);
                     } else {
-                        rounded_border(fb, all, r, 8 * s, s, t::LINE, 255);
+                        rounded_border(fb, all, r, 8 * s, s, pal().line, 255);
                     }
                 }
                 Item::Icon { icon, x, y, size, rgb, alpha } => {
                     icon.draw(fb, all, (x * s) as f32, (y * s) as f32, (size * s) as f32, *rgb, *alpha);
+                }
+                Item::Button { rect, label, hover } => {
+                    let r = rect.scale(s);
+                    if *hover {
+                        rounded_rect(fb, all, r, t::FIELD_RADIUS * s, pal().ink, pal().ghost);
+                    }
+                    let st = Style::new(Face::Medium, t::DENSE_SIZE).scaled(s);
+                    let lw = text.measure(label, st);
+                    let b = text.centre(r.y, r.height, st);
+                    text.draw_style(
+                        fb,
+                        all,
+                        r.x as f32 + (r.width as f32 - lw) / 2.0,
+                        b,
+                        r.right(),
+                        label,
+                        st,
+                        pal().ink_primary,
+                        255,
+                    );
+                }
+                Item::IconButton { rect, icon, size, hover, enabled } => {
+                    let r = rect.scale(s);
+                    if *hover {
+                        rounded_rect(fb, all, r, t::FIELD_RADIUS * s, pal().ink, pal().ghost);
+                    }
+                    let rgb = if *enabled { pal().ink_primary } else { pal().faint };
+                    let sz = size * s;
+                    icon.draw(
+                        fb,
+                        all,
+                        (r.x + (r.width - sz) / 2) as f32,
+                        (r.y + (r.height - sz) / 2) as f32,
+                        sz as f32,
+                        rgb,
+                        255,
+                    );
+                }
+                Item::Pill { rect, text: label } => {
+                    let r = rect.scale(s);
+                    rounded_border(fb, all, r, 5 * s, s, pal().quiet, 255);
+                    let st = Style::new(Face::Sans, 11.0).scaled(s);
+                    let lw = text.measure(label, st);
+                    let b = text.centre(r.y, r.height, st);
+                    text.draw_style(
+                        fb,
+                        all,
+                        r.x as f32 + (r.width as f32 - lw) / 2.0,
+                        b,
+                        r.right(),
+                        label,
+                        st,
+                        pal().ink_primary,
+                        255,
+                    );
+                }
+                Item::Caps(caps) => {
+                    let mono = Style::new(Face::Mono, 11.0).scaled(s);
+                    for (r, k) in caps {
+                        let c = r.scale(s);
+                        rounded_rect(fb, all, c, 5 * s, pal().ink, pal().ghost);
+                        rounded_border(fb, all, c, 5 * s, s, pal().ink, pal().hairline);
+                        fill(fb, all, Rect::new(c.x + 3 * s, c.bottom() - s, c.width - 6 * s, s), pal().line, 255);
+                        let w = text.measure(k, mono);
+                        let b = text.centre(c.y, c.height, mono);
+                        text.draw_style(
+                            fb,
+                            all,
+                            c.x as f32 + (c.width as f32 - w) / 2.0,
+                            b,
+                            c.right(),
+                            k,
+                            mono,
+                            pal().quiet,
+                            255,
+                        );
+                    }
                 }
             }
         }
@@ -1107,7 +1487,7 @@ fn corner_mask(fb: &mut dyn Framebuffer, clip: Rect, r: Rect, rad: i32) {
                 let cov = paint::rounded_coverage(&b, Radii::all(rad as f32), x, y);
                 let a = ((1.0 - cov) * 255.0 + 0.5) as u32;
                 if a > 0 {
-                    row[x as usize] = paint::mix(row[x as usize], t::SURFACE_1, a);
+                    row[x as usize] = paint::mix(row[x as usize], pal().s1, a);
                 }
             }
         }
@@ -1184,7 +1564,7 @@ mod tests {
         let mut win = SettingsWindow::default();
         assert_eq!(win.page, Page::Home);
         // The Devices tab opens its first page; its pages are in the sidebar.
-        let (x, y) = at(&win, &c, Target::Tab(2));
+        let (x, y) = at(&win, &c, Target::Tab(3));
         assert_eq!(win.button(x, y, true, W, H, &c), (true, None));
         assert_eq!(win.page, Page::Display);
         assert_eq!(win.nav().iter().map(|n| n.1).collect::<Vec<_>>(), [Page::Display, Page::Sound, Page::Keyboard]);
@@ -1259,7 +1639,7 @@ mod tests {
         let mut win = SettingsWindow::default();
         let (_, targets) = win.layout(W, H, &c);
         assert!(!targets.iter().any(|(_, t)| *t == Target::Back), "nowhere to go back to");
-        let (x, y) = at(&win, &c, Target::Tab(3));
+        let (x, y) = at(&win, &c, Target::Tab(4));
         win.button(x, y, true, W, H, &c);
         let (bx, by) = at(&win, &c, Target::Back);
         win.button(bx, by, true, W, H, &c);
@@ -1284,22 +1664,22 @@ mod tests {
             assert!(!items.is_empty());
             let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
             win.draw(&mut fb, W, H, 1, &c);
-            assert_eq!(fb.pixel(10, H as u32 - 10), Some(t::SURFACE_0), "the sidebar's ground");
-            assert_eq!(fb.pixel(W as u32 - 5, H as u32 - 5), Some(t::SURFACE_1), "the page");
-            assert_eq!(fb.pixel(t::SIDEBAR as u32 + 40, t::HEADER as u32), Some(t::LINE), "the page's hairline");
+            assert_eq!(fb.pixel(10, H as u32 - 10), Some(pal().s0), "the sidebar's ground");
+            assert_eq!(fb.pixel(W as u32 - 5, H as u32 - 5), Some(pal().s1), "the page");
+            assert_eq!(fb.pixel(t::SIDEBAR as u32 + 40, t::HEADER as u32), Some(pal().line), "the page's hairline");
         }
         // The active page is highlighted in the sidebar, its tab in the header.
         win.page = Page::Display;
         let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
         win.draw(&mut fb, W, H, 1, &c);
         let row = win.nav().into_iter().find(|n| n.1 == Page::Display).unwrap().0;
-        assert_eq!(fb.pixel((row.right() - 6) as u32, (row.y + 4) as u32), Some(t::SURFACE_3));
-        let tab = win.tabs(&text).into_iter().find(|t| t.1 == 2).unwrap().0;
-        assert_eq!(fb.pixel((tab.x + 4) as u32, (tab.y + 14) as u32), Some(t::SURFACE_3));
+        assert_eq!(fb.pixel((row.right() - 6) as u32, (row.y + 4) as u32), Some(pal().s3));
+        let tab = win.tabs(&text).into_iter().find(|t| t.1 == 3).unwrap().0;
+        assert_eq!(fb.pixel((tab.x + 4) as u32, (tab.y + 14) as u32), Some(pal().s3));
         // At scale 2 too.
         let mut fb = MemoryFramebuffer::new(2 * W as u32, 2 * H as u32);
         win.draw(&mut fb, W, H, 2, &c);
-        assert_eq!(fb.pixel(2 * W as u32 - 5, 2 * H as u32 - 5), Some(t::SURFACE_1));
+        assert_eq!(fb.pixel(2 * W as u32 - 5, 2 * H as u32 - 5), Some(pal().s1));
     }
 
     #[test]
@@ -1315,8 +1695,8 @@ mod tests {
         let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
         win.draw(&mut fb, W, H, 1, &c);
         // On: the track in the ink, the knob in the ground colour on the right.
-        assert_eq!(fb.pixel((toggle.x + 6) as u32, (toggle.y + 11) as u32), Some(t::INK));
-        assert_eq!(fb.pixel((toggle.x + 27) as u32, (toggle.y + 11) as u32), Some(t::SURFACE_0));
+        assert_eq!(fb.pixel((toggle.x + 6) as u32, (toggle.y + 11) as u32), Some(pal().ink_primary));
+        assert_eq!(fb.pixel((toggle.x + 27) as u32, (toggle.y + 11) as u32), Some(pal().s0));
     }
 
     /// The places the `desktop-shell` boot test clicks (tools/xtask/src/desktop.rs).
@@ -1333,6 +1713,120 @@ mod tests {
         assert_eq!(win.target_at(100, 138, W, H, &c), Some(Target::Nav(Page::Keyboard)));
         win.button(100, 138, true, W, H, &c);
         assert_eq!(win.target_at(500, 221, W, H, &c), Some(Target::Keyboard(1)));
+        // Keyboard shortcuts (ADR 0129): Up three times from Keyboard, the
+        // Search hotkey's Set (its right edge does not move with the font).
+        for _ in 0..3 {
+            win.key(Key::Up);
+        }
+        assert_eq!(win.page, Page::Shortcuts);
+        assert_eq!(win.target_at(858, 178, W, H, &c), Some(Target::Record(Action::Launcher)));
+        // Once one is changed, Restore all defaults on the title's line.
+        let mut changed = st.clone();
+        changed.apply(&Change::Shortcut(Action::Launcher, crate::shortcuts::Chord::parse("Ctrl+Alt+K").unwrap()));
+        let c = cx(&changed, &i, &text);
+        assert_eq!(win.target_at(872, 77, W, H, &c), Some(Target::ResetShortcuts));
+    }
+
+    #[test]
+    fn appearance_tiling_and_shortcuts() {
+        let text = Text::new(None);
+        let (st, i) = (Settings::default(), info());
+        let c = cx(&st, &i, &text);
+        let mut win = SettingsWindow { page: Page::Appearance, ..SettingsWindow::default() };
+        let (x, y) = at(&win, &c, Target::Theme(true));
+        assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::Theme("light".into())));
+        win.page = Page::Tiling;
+        let (x, y) = at(&win, &c, Target::Tiling);
+        assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::Tiling(false)));
+        win.button(x, y, false, W, H, &c);
+        let (x, y) = at(&win, &c, Target::SnapKeys);
+        assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::SnapKeys(false)));
+        let (x, y) = at(&win, &c, Target::SnapDrag);
+        assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::SnapDrag(false)));
+        // The Desktop tab lists Alpine's Desktop pages.
+        assert_eq!(win.nav().iter().map(|n| n.1).collect::<Vec<_>>(), [Page::Search, Page::Tiling, Page::Shortcuts]);
+        win.page = Page::Shortcuts;
+        let (items, _) = win.layout(W, H, &c);
+        assert!(items.iter().any(|i| matches!(i, Item::Caps(c) if c.iter().any(|k| k.1 == "Tab"))));
+        // With tiling off, the page is the switch alone.
+        let off = Settings { tiling: false, ..Settings::default() };
+        let c = cx(&off, &i, &text);
+        win.page = Page::Tiling;
+        let (_, targets) = win.layout(W, H, &c);
+        assert!(targets.iter().any(|t| t.1 == Target::Tiling));
+        assert!(!targets.iter().any(|t| t.1 == Target::SnapKeys));
+        assert_eq!(off.snaps(), (false, false));
+    }
+
+    #[test]
+    fn shortcuts_are_recorded_refused_and_reset() {
+        use crate::shortcuts::{Chord, Mods};
+        use poly_input::Key as K;
+        use poly_input::layout::US;
+        let text = Text::new(None);
+        let (mut st, i) = (Settings::default(), info());
+        let mut win = SettingsWindow { page: Page::Shortcuts, ..SettingsWindow::default() };
+        let c = cx(&st, &i, &text);
+        // Set starts recording: "Press a shortcut", the button says Cancel.
+        let (x, y) = at(&win, &c, Target::Record(Action::Settings));
+        assert_eq!(win.button(x, y, true, W, H, &c), (true, None));
+        assert!(win.recording());
+        let (items, _) = win.layout(W, H, &c);
+        assert!(items.iter().any(|i| matches!(i, Item::Pill { text, .. } if text == "Press a shortcut")));
+        assert!(items.iter().any(|i| matches!(i, Item::Button { label, .. } if label == "Cancel")));
+        // Win+N is taken: refused, the row says so in red.
+        win.recorder.key(K::MetaLeft, true);
+        let (_, done) = win.recorder.key(K::N, true);
+        assert_eq!(win.recorded(done.unwrap(), &st.shortcuts, &US), None);
+        assert!(!win.recording());
+        let (items, _) = win.layout(W, H, &c);
+        let red = |items: &[Item]| {
+            items.iter().any(
+                |i| matches!(i, Item::Text { text, rgb, .. } if text == "Already used by Notifications." && *rgb == pal().danger),
+            )
+        };
+        assert!(red(&items));
+        // Again, Ctrl+Alt+O: taken.
+        win.button(x, y, true, W, H, &c);
+        assert!(!red(&win.layout(W, H, &c).0), "a new recording clears the refusal");
+        win.recorder.key(K::ControlLeft, true);
+        win.recorder.key(K::AltLeft, true);
+        let (_, done) = win.recorder.key(K::O, true);
+        let change = win.recorded(done.unwrap(), &st.shortcuts, &US).unwrap();
+        let chord = Chord::key(Mods::CTRL.union(Mods::ALT), "O");
+        assert_eq!(change, Change::Shortcut(Action::Settings, chord.clone()));
+        assert!(st.apply(&change));
+        assert_eq!(st.shortcuts.chord(Action::Settings), chord);
+        // Changed: its caps, its reset, and Restore all defaults.
+        let c = cx(&st, &i, &text);
+        let (items, targets) = win.layout(W, H, &c);
+        assert!(
+            items.iter().any(|i| matches!(i, Item::Caps(k) if k.iter().map(|k| k.1.as_str()).eq(["Ctrl", "Alt", "O"])))
+        );
+        assert!(targets.iter().any(|t| t.1 == Target::ResetShortcuts));
+        let (x, y) = at(&win, &c, Target::ResetShortcut(Action::Settings));
+        assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::ResetShortcut(Action::Settings)));
+        let (x, y) = at(&win, &c, Target::ResetShortcuts);
+        assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::ResetShortcuts));
+        // Escape cancels; Cancel and a click elsewhere end it too.
+        let (x, y) = at(&win, &c, Target::Record(Action::Launcher));
+        win.button(x, y, true, W, H, &c);
+        let (_, done) = win.recorder.key(K::Escape, true);
+        assert_eq!(done, Some(Recorded::Cancelled));
+        assert_eq!(win.recorded(done.unwrap(), &st.shortcuts, &US), None);
+        win.button(x, y, true, W, H, &c);
+        win.button(x, y, true, W, H, &c);
+        assert!(!win.recording(), "Cancel");
+        win.button(x, y, true, W, H, &c);
+        win.button(W - 20, H - 20, true, W, H, &c);
+        assert!(!win.recording(), "a click elsewhere");
+        // Nothing changed: Restore all defaults does nothing.
+        let st = Settings::default();
+        let c = cx(&st, &i, &text);
+        assert!(!win.layout(W, H, &c).1.iter().any(|t| t.1 == Target::ResetShortcuts));
+        // The Search page's hotkey records the same binding.
+        win.page = Page::Search;
+        assert!(win.layout(W, H, &c).1.iter().any(|t| t.1 == Target::Record(Action::Launcher)));
     }
 
     #[test]

@@ -73,6 +73,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gdi32"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-gui",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "httptest"
 version = "0.0.1"
 dependencies = [
@@ -216,6 +224,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-win32-gui"
+version = "0.0.1"
+
+[[package]]
 name = "poly-win32-inet"
 version = "0.0.1"
 dependencies = [
@@ -260,6 +272,14 @@ name = "user32"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-gui",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "win32u"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 

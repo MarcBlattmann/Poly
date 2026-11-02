@@ -12,6 +12,7 @@ use poly_input::layout::Layout;
 use poly_input::xkb::mods;
 use poly_shell::Key;
 use poly_shell::apps::{App, parse_desktop_entry};
+use poly_shell::shortcuts::{Hit, Keymap, Matcher, Mods};
 
 /// Where desktop files are (the Desktop Entry Specification's
 /// `$XDG_DATA_DIRS/applications`, with the default data directory).
@@ -123,89 +124,40 @@ pub fn launcher_key(code: u32, depressed: u32, locked: u32, layout: &Layout) -> 
     sym.to_char().filter(|c| !c.is_control()).map(Key::Char)
 }
 
-/// The launcher's hotkeys: the Windows key tapped alone (Alpine Shell's
-/// default) or Ctrl+Space.
+/// The shell's modifiers for the seat's XKB modifier bits.
+pub fn shortcut_mods(depressed: u32) -> Mods {
+    let mut m = Mods::NONE;
+    for (bit, modifier) in
+        [(mods::MOD4, Mods::WIN), (mods::CONTROL, Mods::CTRL), (mods::MOD1, Mods::ALT), (mods::SHIFT, Mods::SHIFT)]
+    {
+        if depressed & bit != 0 {
+            m = m.union(modifier);
+        }
+    }
+    m
+}
+
+/// The keyboard shortcuts (ADR 0129): evdev keys matched against the
+/// shell's keymap (`poly_shell::shortcuts`), which the settings change.
 #[derive(Debug, Default)]
-pub struct Hotkeys {
-    /// The Windows key is down and nothing else was pressed since.
-    super_alone: bool,
+pub struct Shortcuts {
+    matcher: Matcher,
 }
 
-impl Hotkeys {
-    /// A key event; true if it toggles the launcher. `depressed` is the
-    /// seat's modifiers after it.
-    pub fn key(&mut self, code: u32, pressed: bool, depressed: u32) -> bool {
-        let code = u16::try_from(code).unwrap_or(0);
-        let is_super = code == k::LEFTMETA || code == k::RIGHTMETA;
-        if is_super {
-            if pressed {
-                self.super_alone = true;
-                return false;
-            }
-            return core::mem::take(&mut self.super_alone);
-        }
-        if pressed {
-            self.super_alone = false;
-            return code == k::SPACE && depressed & mods::CONTROL != 0;
-        }
-        false
-    }
-}
-
-/// A window management key (ADR 0117).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WmKey {
-    /// Alt+Tab (with Shift: backwards) opens the switcher.
-    SwitchStart {
-        backward: bool,
-    },
-    /// Tab, Shift+Tab or Left/Right while it is open.
-    SwitchStep {
-        forward: bool,
-    },
-    /// Releasing Alt (or Enter) switches.
-    SwitchCommit,
-    /// Escape closes the switcher without switching.
-    SwitchCancel,
-    /// Alt+F4 closes the active window.
-    Close,
-    /// Super+arrow places the active window.
-    Place(poly_shell::wm::Arrow),
-    /// Super+I opens the settings, Super+N the notification history.
-    Settings,
-    History,
-}
-
-/// What key `code` (`pressed` or released, the seat's modifiers
-/// `depressed` before it) means to window management, if anything. All but
-/// Alt's release are taken from the clients.
-pub fn wm_key(code: u32, pressed: bool, depressed: u32, switcher_open: bool) -> Option<WmKey> {
-    use poly_shell::wm::Arrow;
-    let code = u16::try_from(code).ok()?;
-    let (alt, shift, sup) = (depressed & mods::MOD1 != 0, depressed & mods::SHIFT != 0, depressed & mods::MOD4 != 0);
-    if !pressed {
-        return (switcher_open && code == k::LEFTALT).then_some(WmKey::SwitchCommit);
-    }
-    if switcher_open {
-        return match code {
-            k::TAB => Some(WmKey::SwitchStep { forward: !shift }),
-            k::RIGHT => Some(WmKey::SwitchStep { forward: true }),
-            k::LEFT => Some(WmKey::SwitchStep { forward: false }),
-            k::ESC => Some(WmKey::SwitchCancel),
-            k::ENTER => Some(WmKey::SwitchCommit),
-            _ => None,
-        };
-    }
-    match code {
-        k::TAB if alt => Some(WmKey::SwitchStart { backward: shift }),
-        k::F4 if alt => Some(WmKey::Close),
-        k::LEFT if sup => Some(WmKey::Place(Arrow::Left)),
-        k::RIGHT if sup => Some(WmKey::Place(Arrow::Right)),
-        k::UP if sup => Some(WmKey::Place(Arrow::Up)),
-        k::DOWN if sup => Some(WmKey::Place(Arrow::Down)),
-        k::I if sup => Some(WmKey::Settings),
-        k::N if sup => Some(WmKey::History),
-        _ => None,
+impl Shortcuts {
+    /// Key `code` went down or up, the seat's modifiers `depressed` before
+    /// it: what it does by `map`, if anything.
+    pub fn key(
+        &mut self,
+        map: &Keymap,
+        code: u32,
+        pressed: bool,
+        depressed: u32,
+        layout: &Layout,
+        switcher_open: bool,
+    ) -> Option<Hit> {
+        let key = poly_input::keycode::key(u16::try_from(code).ok()?)?;
+        self.matcher.key(map, key, pressed, shortcut_mods(depressed), layout, switcher_open)
     }
 }
 
@@ -262,41 +214,36 @@ mod tests {
     }
 
     #[test]
-    fn hotkeys() {
-        let mut h = Hotkeys::default();
-        // The Windows key tapped alone toggles, on release.
-        assert!(!h.key(125, true, mods::MOD4));
-        assert!(h.key(125, false, 0));
-        // With another key in between it does not.
-        assert!(!h.key(125, true, mods::MOD4));
-        assert!(!h.key(30, true, mods::MOD4));
-        assert!(!h.key(30, false, mods::MOD4));
-        assert!(!h.key(125, false, 0));
-        // Ctrl+Space.
-        assert!(h.key(57, true, mods::CONTROL));
-        assert!(!h.key(57, true, 0));
-        assert!(!h.key(57, false, mods::CONTROL));
-    }
-
-    #[test]
-    fn window_management_keys() {
+    fn shortcuts_from_evdev_keys() {
+        use poly_shell::shortcuts::{Action, Chord};
         use poly_shell::wm::Arrow;
+        let mut map = Keymap::default();
+        let mut s = Shortcuts::default();
+        let mut key = |map: &Keymap, code, pressed, depressed, open| s.key(map, code, pressed, depressed, &US, open);
+        // The Windows key tapped alone, and Ctrl+Space.
+        assert_eq!(key(&map, 125, true, 0, false), None);
+        assert_eq!(key(&map, 125, false, mods::MOD4, false), Some(Hit::Launcher));
+        assert_eq!(key(&map, 57, true, mods::CONTROL, false), Some(Hit::Launcher));
+        assert_eq!(key(&map, 57, true, 0, false), None);
         // Alt+Tab opens, Tab steps, releasing Alt switches.
-        assert_eq!(wm_key(15, true, mods::MOD1, false), Some(WmKey::SwitchStart { backward: false }));
-        assert_eq!(wm_key(15, true, mods::MOD1 | mods::SHIFT, false), Some(WmKey::SwitchStart { backward: true }));
-        assert_eq!(wm_key(15, true, mods::MOD1, true), Some(WmKey::SwitchStep { forward: true }));
-        assert_eq!(wm_key(15, true, mods::MOD1 | mods::SHIFT, true), Some(WmKey::SwitchStep { forward: false }));
-        assert_eq!(wm_key(56, false, mods::MOD1, true), Some(WmKey::SwitchCommit));
-        assert_eq!(wm_key(56, false, mods::MOD1, false), None, "Alt released without the switcher");
-        assert_eq!(wm_key(1, true, mods::MOD1, true), Some(WmKey::SwitchCancel));
-        assert_eq!(wm_key(15, true, 0, false), None, "plain Tab is the client's");
+        assert_eq!(key(&map, 15, true, mods::MOD1, false), Some(Hit::SwitchStart { backward: false }));
+        assert_eq!(key(&map, 15, true, mods::MOD1 | mods::SHIFT, false), Some(Hit::SwitchStart { backward: true }));
+        assert_eq!(key(&map, 15, true, mods::MOD1, true), Some(Hit::SwitchStep { forward: true }));
+        assert_eq!(key(&map, 56, false, mods::MOD1, true), Some(Hit::SwitchCommit));
+        assert_eq!(key(&map, 56, false, mods::MOD1, false), None, "Alt released without the switcher");
+        assert_eq!(key(&map, 1, true, mods::MOD1, true), Some(Hit::SwitchCancel));
+        assert_eq!(key(&map, 15, true, 0, false), None, "plain Tab is the client's");
         // Alt+F4, Super+arrows, Super+I, Super+N.
-        assert_eq!(wm_key(62, true, mods::MOD1, false), Some(WmKey::Close));
-        assert_eq!(wm_key(105, true, mods::MOD4, false), Some(WmKey::Place(Arrow::Left)));
-        assert_eq!(wm_key(103, true, mods::MOD4, false), Some(WmKey::Place(Arrow::Up)));
-        assert_eq!(wm_key(105, true, 0, false), None);
-        assert_eq!(wm_key(23, true, mods::MOD4, false), Some(WmKey::Settings));
-        assert_eq!(wm_key(49, true, mods::MOD4, false), Some(WmKey::History));
+        assert_eq!(key(&map, 62, true, mods::MOD1, false), Some(Hit::Close));
+        assert_eq!(key(&map, 105, true, mods::MOD4, false), Some(Hit::Place(Arrow::Left)));
+        assert_eq!(key(&map, 103, true, mods::MOD4, false), Some(Hit::Place(Arrow::Up)));
+        assert_eq!(key(&map, 105, true, 0, false), None);
+        assert_eq!(key(&map, 23, true, mods::MOD4, false), Some(Hit::Settings));
+        assert_eq!(key(&map, 49, true, mods::MOD4, false), Some(Hit::Notifications));
+        // Rebound in the settings: the new combination, not the old.
+        map.set(Action::Settings, Chord::parse("Ctrl+Alt+O").unwrap());
+        assert_eq!(key(&map, 23, true, mods::MOD4, false), None);
+        assert_eq!(key(&map, 24, true, mods::CONTROL | mods::MOD1, false), Some(Hit::Settings));
     }
 
     #[test]

@@ -104,6 +104,7 @@ dependencies = [
  "poly-rt",
  "poly-shell",
  "poly-wayland",
+ "poly-win32k",
  "poly-x11",
 ]
 
@@ -308,6 +309,7 @@ dependencies = [
  "poly-security",
  "poly-seh",
  "poly-vfs",
+ "poly-win32k",
  "poly-winsock",
 ]
 
@@ -390,6 +392,7 @@ dependencies = [
  "poly-dbus",
  "poly-font",
  "poly-gfx",
+ "poly-input",
  "poly-wayland",
 ]
 
@@ -495,6 +498,10 @@ dependencies = [
  "poly-gfx",
  "poly-input",
 ]
+
+[[package]]
+name = "poly-win32k"
+version = "0.0.1"
 
 [[package]]
 name = "poly-wincrypt"
@@ -626,6 +633,7 @@ dependencies = [
  "poly-shell",
  "poly-term",
  "poly-vfs",
+ "poly-win32k",
  "poly-wincrypt",
  "poly-winsock",
  "rustc-demangle",

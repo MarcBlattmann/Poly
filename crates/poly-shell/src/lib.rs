@@ -44,6 +44,7 @@ pub mod search;
 pub mod settings;
 pub mod settings_ui;
 pub mod shell;
+pub mod shortcuts;
 pub mod switcher;
 pub mod theme;
 pub mod tz;

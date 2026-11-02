@@ -1737,6 +1737,18 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   (`localhost`, numeric hosts, a UDP stub resolver). `winhttp.dll` and
   `wininet.dll` make plain HTTP/1.1 requests over it (`crates/poly-http`,
   `personalities/nt/win32/inet`); `https` waits for TLS.
+- **win32k and the GUI DLLs** (`crates/poly-win32k`, `personalities/nt/src/win32k.rs`,
+  `personalities/nt/win32/{user32,gdi32,win32u}`, `userland/poly-compositor/src/win32.rs`,
+  ADR 0128): table 1 of the NT system calls is Poly's own `PolyUser*`/`PolyGdi*`
+  services (`poly_win32k::services`; `win32u.dll`'s stubs are generated from it),
+  dispatched by the personality after the per-process win32k lockdown check.
+  Windows, queues, timers, hooks and input routing are win32k's; window
+  procedures and GDI drawing run in the process. Each top-level window is one
+  surface of the native compositor over the desktop link (`poly_win32k::link`
+  records, `desktop::Desktop` on win32k's side, `win32::WindowsSurfaces` on the
+  compositor's), framed by Poly as its non-client caption (`poly_win32k::frame`).
+  Every service and every `user32`/`gdi32` export is an explicit
+  not-implemented stub until its slice's spec sheets arrive.
 - **Synchronisation and the dispatcher** (`poly-ntobj` ADR 0030,
   `personalities/nt/src/sync.rs`, `kernel/src/nt/sched.rs`, ADR 0065): events
   (set/reset/pulse/clear/query), mutants (ownership, recursion, abandonment →

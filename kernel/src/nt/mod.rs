@@ -95,6 +95,11 @@ pub static CRTIOTEST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/crtiotes
 pub static USER32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/user32.dll"));
 pub static OLEAUT32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleaut32.dll"));
 
+/// Our `gdi32.dll` and `win32u.dll` (ADR 0128), installed in
+/// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
+pub static GDI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/gdi32.dll"));
+pub static WIN32U: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/win32u.dll"));
+
 mod test_crypto;
 
 /// Our `bcrypt.dll` and `crypt32.dll` (ADR 0096), installed in

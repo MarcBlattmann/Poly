@@ -16,7 +16,7 @@
 //! Layouts are logical, from the panel's body at full height; drawing and
 //! hit-testing use the same layout.
 
-use super::{Power, Press, Shell, WHITE};
+use super::{Power, Press, Shell, fg};
 use crate::chrome::Geometry;
 use crate::draw::{Face, Style, fill, rounded_rect};
 use crate::icons::{Icon, lucide};
@@ -45,8 +45,8 @@ pub enum Panel {
 pub enum ControlView {
     #[default]
     Main,
-    Network,
-    Sound,
+    Wifi,
+    Bluetooth,
 }
 
 /// What the pointer is over in a panel.
@@ -77,7 +77,11 @@ pub(super) struct State {
     pub day: i32,
 }
 
-const MENU: [(Power, &str, &str, Icon); 2] = [
+/// Alpine's power menu: Log Out, Hibernate, Restart, Shut Down. Alpine
+/// shows Hibernate only where the machine can hibernate
+/// (`power.hibernateShown`); Poly cannot, so it is not there.
+const MENU: [(Power, &str, &str, Icon); 3] = [
+    (Power::LogOut, "Log Out", "Confirm log out?", lucide::LOG_OUT),
     (Power::Restart, "Restart", "Confirm restart?", lucide::ROTATE_CCW),
     (Power::ShutDown, "Shut Down", "Confirm shut down?", lucide::POWER),
 ];
@@ -174,7 +178,7 @@ impl Shell {
         let w = body.width - 2 * pt::CONTROL_PADDING;
         let mut y = body.y + pt::CONTROL_PADDING;
         let mut items = Vec::new();
-        for view in [ControlView::Network, ControlView::Sound] {
+        for view in [ControlView::Wifi, ControlView::Bluetooth] {
             let h = if self.item_value(view).is_some() { pt::ITEM_HEIGHT } else { 19 };
             items.push((view, Rect::new(x0, y, w, h)));
             y += h + pt::CONTROL_GAP;
@@ -191,23 +195,18 @@ impl Shell {
         ControlMain { items, slider, icon, track, gear, height: y - body.y }
     }
 
-    /// What an item of the control centre shows under its label.
-    fn item_value(&self, view: ControlView) -> Option<String> {
-        match view {
-            ControlView::Network => match &self.network {
-                super::Network::Online(i) => Some(i.clone()),
-                _ => None,
-            },
-            ControlView::Sound => self.sound_card.clone(),
-            ControlView::Main => None,
-        }
+    /// What an item of the control centre shows under its label: Alpine
+    /// shows the network a Wi-Fi adapter is on and the Bluetooth devices
+    /// connected; Poly's machines have neither adapter, so nothing.
+    fn item_value(&self, _view: ControlView) -> Option<String> {
+        None
     }
 
     pub(super) fn sub_view(&self, v: ControlView, body: Rect) -> SubView {
         let x0 = body.x + pt::CONTROL_PADDING;
         let w = body.width - 2 * pt::CONTROL_PADDING;
         let mut y = body.y + pt::CONTROL_PADDING;
-        let title = if v == ControlView::Sound { "Sound" } else { "Network" };
+        let title = if v == ControlView::Bluetooth { "Bluetooth" } else { "Wi-Fi" };
         let back = Rect::new(x0, y, w / 2, 20);
         y += 20 + 4 + 8;
         let row = |y: i32, label: String, checked: bool, dim: bool| ListRow {
@@ -216,25 +215,12 @@ impl Shell {
             checked,
             dim,
         };
-        let lists: Vec<(&'static str, Vec<Choice>)> = match v {
-            ControlView::Sound => alloc::vec![
-                (
-                    "Output",
-                    match &self.sound_card {
-                        Some(c) => alloc::vec![(c.clone(), true, false)],
-                        None => alloc::vec![("None connected".into(), false, true)],
-                    }
-                ),
-                ("Input", alloc::vec![("None connected".into(), false, true)]),
-            ],
-            _ => alloc::vec![(
-                "Ethernet",
-                match &self.network {
-                    super::Network::Online(i) => alloc::vec![(alloc::format!("{i} \u{b7} Connected"), true, false)],
-                    _ => alloc::vec![("Not connected".into(), false, true)],
-                }
-            )],
-        };
+        // Without adapters Alpine's lists show their empty states: Wi-Fi
+        // "No networks found" (its radio reads as on, its scan finds
+        // nothing), Bluetooth "No Bluetooth adapter".
+        let lists: Vec<(&'static str, Vec<Choice>)> = Vec::new();
+        let _ = row;
+        y += if v == ControlView::Bluetooth { 16 + 20 + 8 + 20 + 16 } else { 16 + 20 + 16 };
         let mut groups = Vec::new();
         for (name, items) in lists {
             let tb = y + 12;
@@ -458,12 +444,12 @@ impl Shell {
                     fb,
                     clip,
                     Rect::new(r.x + nt::PADDING_X * s, r.y - s, r.width - 2 * nt::PADDING_X * s, s),
-                    WHITE,
+                    fg(),
                     nt::DIVIDER_ALPHA,
                 );
             }
             // The dot.
-            let (dot, alpha) = if n.critical { (nt::CRITICAL, 255) } else { (WHITE, nt::DOT_ALPHA) };
+            let (dot, alpha) = if n.critical { (nt::CRITICAL, 255) } else { (fg(), nt::DOT_ALPHA) };
             let d = nt::DOT as f32 * fs;
             let dcx = r.x as f32 + nt::PADDING_X as f32 * fs + d / 2.0;
             let dcy = r.y as f32 + (nt::PADDING_Y + nt::DOT_TOP) as f32 * fs + d / 2.0;
@@ -473,11 +459,11 @@ impl Shell {
             let right = n.close.scale(s).x;
             let mut top = r.y + nt::PADDING_Y * s;
             let b = self.text.centre(top, nt::LINE * s, title_st);
-            self.text.draw_style(fb, clip, tx, b, right, &n.title, title_st, WHITE, nt::TITLE_ALPHA);
+            self.text.draw_style(fb, clip, tx, b, right, &n.title, title_st, fg(), nt::TITLE_ALPHA);
             for line in &n.lines {
                 top += nt::LINE * s;
                 let b = self.text.centre(top, nt::LINE * s, st);
-                self.text.draw_style(fb, clip, tx, b, r.right(), line, st, WHITE, nt::MESSAGE_ALPHA);
+                self.text.draw_style(fb, clip, tx, b, r.right(), line, st, fg(), nt::MESSAGE_ALPHA);
             }
             // The dismiss cross, a 13-pixel ×.
             let c = n.close.scale(s);
@@ -485,14 +471,14 @@ impl Shell {
             let xw = self.text.measure("\u{d7}", xst);
             let xb = self.text.centre(c.y, c.height, xst);
             let xx = c.x as f32 + (c.width as f32 - xw) / 2.0;
-            self.text.draw_style(fb, clip, xx, xb, c.right(), "\u{d7}", xst, WHITE, nt::CLOSE_ALPHA);
+            self.text.draw_style(fb, clip, xx, xb, c.right(), "\u{d7}", xst, fg(), nt::CLOSE_ALPHA);
             // Action buttons.
             let bst = Style::new(Face::Sans, nt::BUTTON_SIZE).scaled(s);
             for (b, _, label) in &n.buttons {
                 let b = b.scale(s);
-                rounded_rect(fb, clip, b, 6 * s, WHITE, nt::BUTTON_ALPHA);
+                rounded_rect(fb, clip, b, 6 * s, fg(), nt::BUTTON_ALPHA);
                 let bb = self.text.centre(b.y, b.height, bst);
-                self.text.draw_style(fb, clip, (b.x + 8 * s) as f32, bb, b.right(), label, bst, WHITE, 255);
+                self.text.draw_style(fb, clip, (b.x + 8 * s) as f32, bb, b.right(), label, bst, fg(), 255);
             }
         }
     }
@@ -527,15 +513,15 @@ impl Shell {
             let r = self.menu_row(body, i).scale(s);
             let hover = self.panels.hover == Some(Hit::MenuRow(i));
             if hover {
-                rounded_rect(fb, clip, r, 6 * s, WHITE, ink::SELECTED);
+                rounded_rect(fb, clip, r, 6 * s, fg(), ink::SELECTED);
             }
             let a = if hover { 255 } else { pt::MENU_ALPHA };
             let isz = pt::MENU_ICON * s;
             let ix = r.x + 8 * s;
-            icon.draw(fb, clip, ix as f32, (r.y + (r.height - isz) / 2) as f32, isz as f32, WHITE, a);
+            icon.draw(fb, clip, ix as f32, (r.y + (r.height - isz) / 2) as f32, isz as f32, fg(), a);
             let text = if self.panels.armed == Some(*action) { confirm } else { label };
             let b = self.text.centre(r.y, r.height, st);
-            self.text.draw_style(fb, clip, (ix + isz + 10 * s) as f32, b, r.right(), text, st, WHITE, a);
+            self.text.draw_style(fb, clip, (ix + isz + 10 * s) as f32, b, r.right(), text, st, fg(), a);
         }
     }
 
@@ -546,28 +532,27 @@ impl Shell {
         for (view, r) in &m.items {
             let r = r.scale(s);
             let value = self.item_value(*view);
-            let active = match view {
-                ControlView::Network => matches!(self.network, super::Network::Online(_)),
-                _ => self.volume.is_some(),
-            };
+            // Wi-Fi's radio reads as on without an adapter, Bluetooth's as
+            // unavailable (dim), as in Alpine.
+            let active = *view == ControlView::Wifi;
             let a = if active { 255 } else { pt::DIM_ALPHA };
-            let icon = if *view == ControlView::Network { lucide::ETHERNET_PORT } else { lucide::SPEAKER };
+            let icon = if *view == ControlView::Wifi { lucide::WIFI } else { lucide::BLUETOOTH };
             let isz = pt::ITEM_ICON * s;
             let ix = r.x + 4 * s;
-            icon.draw(fb, clip, ix as f32, (r.y + (r.height - isz) / 2) as f32, isz as f32, WHITE, a);
+            icon.draw(fb, clip, ix as f32, (r.y + (r.height - isz) / 2) as f32, isz as f32, fg(), a);
             let tx = (ix + isz + 12 * s) as f32;
-            let name = if *view == ControlView::Network { "Ethernet" } else { "Sound" };
+            let name = if *view == ControlView::Wifi { "Wi-Fi" } else { "Bluetooth" };
             match value {
                 Some(v) => {
                     // 12 px over 13 px at 60 %, the second 2 pixels up.
                     let b1 = r.y + 12 * s;
                     let b2 = r.y + 29 * s;
-                    self.text.draw_style(fb, clip, tx, b1, r.right() - 20 * s, name, label_st, WHITE, 255);
-                    self.text.draw_style(fb, clip, tx, b2, r.right() - 20 * s, &v, value_st, WHITE, pt::DIM_ALPHA);
+                    self.text.draw_style(fb, clip, tx, b1, r.right() - 20 * s, name, label_st, fg(), 255);
+                    self.text.draw_style(fb, clip, tx, b2, r.right() - 20 * s, &v, value_st, fg(), pt::DIM_ALPHA);
                 }
                 None => {
                     let b = self.text.centre(r.y, r.height, value_st);
-                    self.text.draw_style(fb, clip, tx, b, r.right() - 20 * s, name, value_st, WHITE, a);
+                    self.text.draw_style(fb, clip, tx, b, r.right() - 20 * s, name, value_st, fg(), a);
                 }
             }
             let csz = pt::CHEVRON * s;
@@ -577,29 +562,37 @@ impl Shell {
                 (r.right() - csz) as f32,
                 (r.y + (r.height - csz) / 2) as f32,
                 csz as f32,
-                WHITE,
+                fg(),
                 a,
             );
         }
         // The volume slider.
         let sl = m.slider.scale(s);
-        rounded_rect(fb, clip, sl, 6 * s, pt::SLIDER_FILL, pt::SLIDER_FILL_ALPHA);
+        // Dark: on #3F3F3F at 20 %, a white track over white at 20 %; light
+        // (Alpine's `cc-slider-light`): on black at 5 %, white over black at 8 %.
+        let light = crate::theme::is_light();
+        if light {
+            rounded_rect(fb, clip, sl, 6 * s, 0, 13);
+        } else {
+            rounded_rect(fb, clip, sl, 6 * s, pt::SLIDER_FILL, pt::SLIDER_FILL_ALPHA);
+        }
         let (level, muted) = self.volume.unwrap_or((0, true));
         let icon = if muted { lucide::VOLUME_X } else { lucide::VOLUME_2 };
         let ia = if muted { 102 } else { 255 };
         let ic = m.icon.scale(s);
-        icon.draw(fb, clip, ic.x as f32, ic.y as f32, ic.width as f32, WHITE, ia);
+        icon.draw(fb, clip, ic.x as f32, ic.y as f32, ic.width as f32, fg(), ia);
         let t = m.track.scale(s);
-        rounded_rect(fb, clip, t, t.height / 2, WHITE, pt::SLIDER_REST_ALPHA);
+        let (rest, rest_a, fill) = if light { (0, 20, 0xff_ffff) } else { (fg(), pt::SLIDER_REST_ALPHA, fg()) };
+        rounded_rect(fb, clip, t, t.height / 2, rest, rest_a);
         let filled = Rect::new(t.x, t.y, t.width * level as i32 / 100, t.height);
         if filled.width > 0 {
             let clip_fill = clip.intersect(&filled);
-            rounded_rect(fb, clip_fill, t, t.height / 2, WHITE, 255);
+            rounded_rect(fb, clip_fill, t, t.height / 2, fill, 255);
         }
         // The settings button.
         let g = m.gear.scale(s);
         if self.panels.hover == Some(Hit::Gear) {
-            rounded_rect(fb, clip, g, 6 * s, WHITE, ink::SELECTED);
+            rounded_rect(fb, clip, g, 6 * s, fg(), ink::SELECTED);
         }
         let gsz = 15 * s;
         lucide::SETTINGS.draw(
@@ -608,7 +601,7 @@ impl Shell {
             (g.x + (g.width - gsz) / 2) as f32,
             (g.y + (g.height - gsz) / 2) as f32,
             gsz as f32,
-            WHITE,
+            fg(),
             255,
         );
     }
@@ -617,10 +610,56 @@ impl Shell {
         let sv = self.sub_view(v, body);
         let b = sv.back.scale(s);
         let csz = 16 * s;
-        lucide::CHEVRON_LEFT.draw(fb, clip, b.x as f32, (b.y + (b.height - csz) / 2) as f32, csz as f32, WHITE, 255);
+        lucide::CHEVRON_LEFT.draw(fb, clip, b.x as f32, (b.y + (b.height - csz) / 2) as f32, csz as f32, fg(), 255);
         let hst = Style::new(Face::Medium, 14.0).scaled(s);
         let hb = self.text.centre(b.y, b.height, hst);
-        self.text.draw_style(fb, clip, (b.x + csz + 8 * s) as f32, hb, body.right() * s, sv.title, hst, WHITE, 255);
+        self.text.draw_style(fb, clip, (b.x + csz + 8 * s) as f32, hb, body.right() * s, sv.title, hst, fg(), 255);
+        // The header's controls: Bluetooth's add and rescan, Wi-Fi's rescan
+        // (dim without a radio), then the small switch.
+        let dim = 153u8;
+        let tw = 26 * s;
+        let toggle = Rect::new(body.right() * s - 12 * s - tw, b.y + (b.height - 14 * s) / 2, tw, 14 * s);
+        let on = v == ControlView::Wifi;
+        let (track, ta) = if on { (fg(), 217) } else { (fg(), 46) };
+        rounded_rect(fb, clip, toggle, toggle.height / 2, track, ta);
+        let knob = Rect::new(if on { toggle.x + 14 * s } else { toggle.x + 2 * s }, toggle.y + 2 * s, 10 * s, 10 * s);
+        let (kc, ka) = if on { (crate::theme::pal().bar, 255) } else { (fg(), 179) };
+        rounded_rect(fb, clip, knob, 5 * s, kc, ka);
+        let mut ix = toggle.x - 4 * s - 10 * s - 14 * s;
+        let fade = if on { dim } else { 61 };
+        lucide::REFRESH_CW.draw(
+            fb,
+            clip,
+            ix as f32,
+            (b.y + (b.height - 14 * s) / 2) as f32,
+            (14 * s) as f32,
+            fg(),
+            fade,
+        );
+        if v == ControlView::Bluetooth {
+            ix -= 10 * s + 15 * s;
+            lucide::PLUS.draw(fb, clip, ix as f32, (b.y + (b.height - 15 * s) / 2) as f32, (15 * s) as f32, fg(), fade);
+        }
+        // The empty state, at 40 %.
+        let top = b.bottom() + 12 * s;
+        let mid = (body.x + body.width / 2) * s;
+        let st = Style::new(Face::Sans, 14.0).scaled(s);
+        if v == ControlView::Bluetooth {
+            let isz = 20 * s;
+            lucide::BLUETOOTH.draw(fb, clip, (mid - isz / 2) as f32, (top + 16 * s) as f32, isz as f32, fg(), 102);
+            let msg = "No Bluetooth adapter";
+            let w = self.text.measure(msg, st);
+            let mb = self.text.centre(top + 16 * s + isz + 8 * s, 20 * s, st);
+            self.text.draw_style(fb, clip, mid as f32 - w / 2.0, mb, body.right() * s, msg, st, fg(), 102);
+        } else {
+            let msg = "No networks found";
+            let isz = 16 * s;
+            let w = self.text.measure(msg, st) + (isz + 8 * s) as f32;
+            let x0 = mid as f32 - w / 2.0;
+            lucide::WIFI_OFF.draw(fb, clip, x0, (top + 16 * s + 2 * s) as f32, isz as f32, fg(), 102);
+            let mb = self.text.centre(top + 16 * s, 20 * s, st);
+            self.text.draw_style(fb, clip, x0 + (isz + 8 * s) as f32, mb, body.right() * s, msg, st, fg(), 102);
+        }
         let gst = Style::new(Face::Sans, 11.0).scaled(s);
         let rst = Style::new(Face::Sans, 13.0).scaled(s);
         let mut i = 0;
@@ -633,13 +672,13 @@ impl Shell {
                 body.right() * s,
                 name,
                 gst,
-                WHITE,
+                fg(),
                 ink::DIM,
             );
             for row in rows {
                 let r = row.rect.scale(s);
                 if self.panels.hover == Some(Hit::Row(i)) && !row.dim {
-                    rounded_rect(fb, clip, r, 6 * s, WHITE, ink::SELECTED);
+                    rounded_rect(fb, clip, r, 6 * s, fg(), ink::SELECTED);
                 }
                 let a = if row.checked {
                     255
@@ -649,7 +688,7 @@ impl Shell {
                     179
                 };
                 let rb = self.text.centre(r.y, r.height, rst);
-                self.text.draw_style(fb, clip, (r.x + 8 * s) as f32, rb, r.right() - 28 * s, &row.label, rst, WHITE, a);
+                self.text.draw_style(fb, clip, (r.x + 8 * s) as f32, rb, r.right() - 28 * s, &row.label, rst, fg(), a);
                 if row.checked {
                     let k = 14 * s;
                     lucide::CHECK.draw(
@@ -658,7 +697,7 @@ impl Shell {
                         (r.right() - 8 * s - k) as f32,
                         (r.y + (r.height - k) / 2) as f32,
                         k as f32,
-                        WHITE,
+                        fg(),
                         255,
                     );
                 }
@@ -699,14 +738,14 @@ impl Shell {
         let hst = Style::new(Face::Medium, 14.0).scaled(s);
         let label = alloc::format!("{}, {} {}", WEEKDAYS[weekday], MONTHS[(month as usize + 11) % 12], day);
         let hb = self.text.centre((body.y + 10) * s, 24 * s, hst);
-        self.text.draw_style(fb, clip, ((body.x + 12) * s) as f32, hb, c.prev.x * s, &label, hst, WHITE, 255);
+        self.text.draw_style(fb, clip, ((body.x + 12) * s) as f32, hb, c.prev.x * s, &label, hst, fg(), 255);
         for (r, icon, enabled, hit) in [
             (c.prev, lucide::CHEVRON_LEFT, self.panels.day > -7, Hit::Prev),
             (c.next, lucide::CHEVRON_RIGHT, self.panels.day < 30, Hit::Next),
         ] {
             let r = r.scale(s);
             if self.panels.hover == Some(hit) && enabled {
-                rounded_rect(fb, clip, r, 6 * s, WHITE, ink::SELECTED);
+                rounded_rect(fb, clip, r, 6 * s, fg(), ink::SELECTED);
             }
             let k = 16 * s;
             icon.draw(
@@ -715,21 +754,21 @@ impl Shell {
                 (r.x + (r.width - k) / 2) as f32,
                 (r.y + (r.height - k) / 2) as f32,
                 k as f32,
-                WHITE,
+                fg(),
                 if enabled { 255 } else { 77 },
             );
         }
         if let Some(t) = c.today {
             let t = t.scale(s);
             if self.panels.hover == Some(Hit::Today) {
-                rounded_rect(fb, clip, t, 6 * s, WHITE, ink::SELECTED);
+                rounded_rect(fb, clip, t, 6 * s, fg(), ink::SELECTED);
             }
             let st = Style::new(Face::Sans, 11.0).scaled(s);
             let b = self.text.centre(t.y, t.height, st);
-            self.text.draw_style(fb, clip, (t.x + 6 * s) as f32, b, t.right(), "Today", st, WHITE, 255);
+            self.text.draw_style(fb, clip, (t.x + 6 * s) as f32, b, t.right(), "Today", st, fg(), 255);
         }
         let col_x = (body.x + pt::CAL_GUTTER) * s;
-        let border = |fb: &mut dyn Framebuffer, r: Rect| fill(fb, clip, r, WHITE, pt::CAL_BORDER_ALPHA);
+        let border = |fb: &mut dyn Framebuffer, r: Rect| fill(fb, clip, r, fg(), pt::CAL_BORDER_ALPHA);
         // The day: weekday (9 px capitals at 50 %), the date in a white
         // circle if it is today.
         let dr = c.day_row.scale(s);
@@ -748,23 +787,23 @@ impl Shell {
             col_x + col_w,
             &wd,
             wst,
-            WHITE,
+            fg(),
             ink::DIM,
         );
         let cy = dr.y as f32 + (6.0 + 13.5 + 2.0 + 12.0) * fs;
         let cx = col_x as f32 + col_w as f32 / 2.0;
         let num = alloc::format!("{day}");
         if self.panels.day == 0 {
-            poly_wayland::compose::paint::circle(fb, clip, cx, cy, 12.0 * fs, None, WHITE, 255);
+            poly_wayland::compose::paint::circle(fb, clip, cx, cy, 12.0 * fs, None, fg(), 255);
             let nst = Style::new(Face::Semibold, 13.0).scaled(s);
             let nw = self.text.measure(&num, nst);
             let nb = (cy + self.text.cap(nst) / 2.0 + 0.5) as i32;
-            self.text.draw_style(fb, clip, cx - nw / 2.0, nb, col_x + col_w, &num, nst, 0, 255);
+            self.text.draw_style(fb, clip, cx - nw / 2.0, nb, col_x + col_w, &num, nst, crate::theme::pal().bar, 255);
         } else {
             let nst = Style::new(Face::Medium, 13.0).scaled(s);
             let nw = self.text.measure(&num, nst);
             let nb = (cy + self.text.cap(nst) / 2.0 + 0.5) as i32;
-            self.text.draw_style(fb, clip, cx - nw / 2.0, nb, col_x + col_w, &num, nst, WHITE, 255);
+            self.text.draw_style(fb, clip, cx - nw / 2.0, nb, col_x + col_w, &num, nst, fg(), 255);
         }
         // The all-day strip.
         let ad = c.all_day.scale(s);
@@ -773,7 +812,7 @@ impl Shell {
         let sst = Style::new(Face::Sans, 9.0).scaled(s);
         let aw = self.text.measure("all-day", sst);
         let ab = ad.y + 4 * s + (13.5 * fs / 2.0 + self.text.cap(sst) / 2.0) as i32;
-        self.text.draw_style(fb, clip, col_x as f32 - 6.0 * fs - aw, ab, col_x, "all-day", sst, WHITE, ink::DIM);
+        self.text.draw_style(fb, clip, col_x as f32 - 6.0 * fs - aw, ab, col_x, "all-day", sst, fg(), ink::DIM);
         // The hours, scrolled so the time now is in view.
         let sc = c.scroll.scale(s);
         let area = clip.intersect(&sc);
@@ -788,12 +827,12 @@ impl Shell {
                 continue;
             }
             let ys = y * s;
-            fill(fb, area, Rect::new(col_x + s, ys, col_w, s), WHITE, pt::CAL_LINE_ALPHA);
+            fill(fb, area, Rect::new(col_x + s, ys, col_w, s), fg(), pt::CAL_LINE_ALPHA);
             if (1..24).contains(&hour) {
                 let label = alloc::format!("{hour:02}:00");
                 let lw = self.text.measure(&label, sst);
                 let lb = ys - 5 * s + (13.5 * fs / 2.0 + self.text.cap(sst) / 2.0) as i32;
-                self.text.draw_style(fb, area, col_x as f32 - 6.0 * fs - lw, lb, col_x, &label, sst, WHITE, ink::DIM);
+                self.text.draw_style(fb, area, col_x as f32 - 6.0 * fs - lw, lb, col_x, &label, sst, fg(), ink::DIM);
             }
         }
         if self.panels.day == 0 {
@@ -835,23 +874,23 @@ impl Shell {
             body.right() * s,
             "Notifications",
             hst,
-            WHITE,
+            fg(),
             255,
         );
         if let Some(c) = h.clear {
             let c = c.scale(s);
             if self.panels.hover == Some(Hit::Clear) {
-                rounded_rect(fb, clip, c, 6 * s, WHITE, ink::SELECTED);
+                rounded_rect(fb, clip, c, 6 * s, fg(), ink::SELECTED);
             }
             let st = Style::new(Face::Sans, 11.0).scaled(s);
             let b = self.text.centre(c.y, c.height, st);
-            self.text.draw_style(fb, clip, (c.x + 6 * s) as f32, b, c.right(), "Clear", st, WHITE, 200);
+            self.text.draw_style(fb, clip, (c.x + 6 * s) as f32, b, c.right(), "Clear", st, fg(), 200);
         }
         fill(
             fb,
             clip,
             Rect::new(body.x * s, (body.y + 40) * s, body.width * s, s),
-            WHITE,
+            fg(),
             crate::theme::launcher::DIVIDER_ALPHA,
         );
         let tst = Style::new(Face::Medium, 12.0).scaled(s);
@@ -861,13 +900,13 @@ impl Shell {
             let r = Rect::new(body.x + 6, body.y + 47, body.width - 12, 32).scale(s);
             let st = Style::new(Face::Sans, 13.0).scaled(s);
             let b = self.text.centre(r.y, r.height, st);
-            self.text.draw_style(fb, clip, (r.x + 8 * s) as f32, b, r.right(), "No notifications", st, WHITE, 153);
+            self.text.draw_style(fb, clip, (r.x + 8 * s) as f32, b, r.right(), "No notifications", st, fg(), 153);
             return;
         }
         for (i, (row, n)) in h.rows.iter().zip(self.notes.history()).enumerate() {
             let r = row.scale(s);
             if self.panels.hover == Some(Hit::Row(i)) {
-                rounded_rect(fb, clip, r, 6 * s, WHITE, ink::HOVER);
+                rounded_rect(fb, clip, r, 6 * s, fg(), ink::HOVER);
             }
             let time = self.age(n.arrived_ms);
             let tw = self.text.measure(&time, ast) as i32;
@@ -883,12 +922,12 @@ impl Shell {
                 right - tw - 8 * s,
                 title,
                 tst,
-                WHITE,
+                fg(),
                 nt::TITLE_ALPHA,
             );
-            self.text.draw_style(fb, clip, (right - tw) as f32, b1, right, &time, ast, WHITE, ink::DIM);
+            self.text.draw_style(fb, clip, (right - tw) as f32, b1, right, &time, ast, fg(), ink::DIM);
             let line = n.body.lines().next().unwrap_or("");
-            self.text.draw_style(fb, clip, (r.x + 8 * s) as f32, b2, right, line, mst, WHITE, nt::MESSAGE_ALPHA);
+            self.text.draw_style(fb, clip, (r.x + 8 * s) as f32, b2, right, line, mst, fg(), nt::MESSAGE_ALPHA);
         }
     }
 

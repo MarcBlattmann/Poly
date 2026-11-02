@@ -267,7 +267,7 @@ fn the_system_menu_asks_before_restarting() {
     s.hide_launcher();
     s.press(10, 10);
     let body = s.panel_geometry(Panel::Menu).body(24);
-    let restart = s.menu_row(body, 0);
+    let restart = s.menu_row(body, 1);
     assert_eq!(s.press(restart.x + 20, restart.y + 5), Press::Taken);
     assert_eq!(s.panels.armed, Some(Power::Restart), "armed: \"Confirm restart?\"");
     assert_eq!(s.press(restart.x + 20, restart.y + 5), Press::Power(Power::Restart));
@@ -287,7 +287,7 @@ fn the_control_centre_sets_the_volume_and_mute_and_opens_lists() {
     let body = s.panel_geometry(Panel::Control).body(24);
     let m = s.control_main(body);
     assert_eq!(m.items.len(), 2);
-    assert_eq!(m.items[0].1.height, 33, "with the interface under the label");
+    assert_eq!(m.items[0].1.height, 19, "Wi-Fi without a network under its label");
     // Dragging the slider: 30 %, then 80 % — changes for the compositor.
     let t = m.track;
     assert_eq!(s.press(t.x + t.width * 30 / 100, t.y + 2), Press::Taken);
@@ -302,13 +302,13 @@ fn the_control_centre_sets_the_volume_and_mute_and_opens_lists() {
     assert!(s.apply(&Change::Muted(true)));
     assert_eq!(s.volume(), Some((60, true)));
     assert!(s.take_damage().contains(&s.ridge_rect()));
-    // Sound opens the list of devices; back returns.
-    let sound = m.items[1].1;
-    s.press(sound.x + 5, sound.y + 5);
-    assert_eq!(s.panels.view, ControlView::Sound);
-    let sv = s.sub_view(ControlView::Sound, s.panel_geometry(Panel::Control).body(24));
-    assert_eq!(sv.groups[0].2[0].label, "Intel HDA");
-    assert!(sv.groups[0].2[0].checked);
+    // Bluetooth opens its list (empty: no adapter); back returns.
+    let bt = m.items[1].1;
+    s.press(bt.x + 5, bt.y + 5);
+    assert_eq!(s.panels.view, ControlView::Bluetooth);
+    let sv = s.sub_view(ControlView::Bluetooth, s.panel_geometry(Panel::Control).body(24));
+    assert_eq!(sv.title, "Bluetooth");
+    assert!(sv.groups.is_empty());
     s.press(sv.back.x + 3, sv.back.y + 3);
     assert_eq!(s.panels.view, ControlView::Main);
     // The gear opens the settings.
@@ -438,4 +438,57 @@ fn the_launcher_lists_open_windows_first_and_switches_to_them() {
     // Closed windows leave the list.
     s.set_windows(&[]);
     assert!(s.apps().iter().all(|a| a.window().is_none()));
+}
+
+#[test]
+fn the_ridge_gets_alpines_edge_over_windows() {
+    let mut s = shell();
+    let plain = render(&s);
+    // A maximized window under the ridge; the launcher hangs from it.
+    s.set_window_cover(&[Rect::new(0, 24, 1280, 776)]);
+    let fb = render(&s);
+    let edge = |fb: &MemoryFramebuffer, x, y| fb.pixel(x, y) != plain.pixel(x, y);
+    assert!(edge(&fb, 100, 24), "along the ridge's bottom edge");
+    assert!(edge(&fb, 279, 50), "down the launcher's side");
+    assert!(edge(&fb, 640, 72), "under its body");
+    assert!(!edge(&fb, 100, 26) && !edge(&fb, 640, 40), "nowhere else");
+    // No surface and the pointer away from the ridge: no edge.
+    s.toggle_launcher();
+    s.pointer_motion(640, 400);
+    let away = render(&s);
+    s.set_window_cover(&[]);
+    let bare = render(&s);
+    assert_eq!(away.pixel(100, 24), bare.pixel(100, 24));
+    // The pointer on the ridge shows it again, over windows only.
+    s.set_window_cover(&[Rect::new(0, 24, 640, 776)]);
+    s.pointer_motion(400, 10);
+    let fb = render(&s);
+    assert_ne!(fb.pixel(100, 24), bare.pixel(100, 24));
+    assert_eq!(fb.pixel(900, 24), bare.pixel(900, 24));
+}
+
+#[test]
+fn shortcuts_recorded_through_the_shell() {
+    use crate::shortcuts::{Action, Chord, Mods};
+    use poly_input::Key as K;
+    use poly_input::layout::US;
+    let mut s = shell();
+    // Not recording: the keys are not the shell's.
+    assert_eq!(s.shortcut_key(K::A, true, &US), None);
+    s.settings_window.open_at(Page::Shortcuts);
+    s.settings_window.recorder.start(Action::Launcher, 1_793_491_200);
+    // A key without a modifier is refused; the window is drawn again.
+    assert_eq!(s.shortcut_key(K::A, true, &US), Some((true, None)));
+    assert_eq!(s.shortcut_key(K::A, false, &US), Some((false, None)), "its release is swallowed too");
+    s.settings_window.recorder.start(Action::Launcher, 1_793_491_200);
+    assert_eq!(s.shortcut_key(K::ControlLeft, true, &US), Some((false, None)));
+    assert_eq!(s.shortcut_key(K::AltLeft, true, &US), Some((false, None)));
+    let chord = Chord::key(Mods::CTRL.union(Mods::ALT), "K");
+    assert_eq!(s.shortcut_key(K::K, true, &US), Some((true, Some(Change::Shortcut(Action::Launcher, chord.clone())))));
+    assert!(s.apply(&Change::Shortcut(Action::Launcher, chord.clone())));
+    assert_eq!(s.shortcuts().chord(Action::Launcher), chord);
+    // Recording gives up after 15 seconds.
+    s.settings_window.recorder.start(Action::Settings, 1_793_491_200);
+    assert!(s.set_time(1_793_491_215, 0));
+    assert!(!s.settings_window.recording());
 }

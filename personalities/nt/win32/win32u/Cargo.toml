@@ -1,0 +1,17 @@
+[package]
+name = "win32u"
+description = "Our win32u.dll (ADR 0128): the stubs of Poly's own win32k system calls, generated from poly-win32k's service table"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "win32u"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

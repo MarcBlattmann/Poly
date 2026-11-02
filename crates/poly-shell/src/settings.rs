@@ -1,6 +1,7 @@
 //! The shell's settings (ADR 0117) and the file they persist in: display
-//! (resolution, scale), keyboard layout, wallpaper, sound (volume, mute)
-//! and time zone.
+//! (resolution, scale), keyboard layout, wallpaper, sound (volume, mute),
+//! time zone, theme, tiling and the keyboard shortcuts changed from their
+//! defaults (`shortcut.<action>=<combination>`, ADR 0129).
 //!
 //! The file is lines of `key=value` with `#` comments, written whole and
 //! renamed into place by the compositor (`$XDG_CONFIG_HOME/poly/shell.conf`
@@ -8,6 +9,7 @@
 //! keeps the default, an unknown key is kept as it was and written back,
 //! so a newer shell's settings survive an older one.
 
+use crate::shortcuts::{Action, Chord, Keymap};
 use crate::theme::wallpaper::PRESETS;
 use crate::tz::{TimeZone, ZONES};
 use alloc::format;
@@ -34,6 +36,17 @@ pub struct Settings {
     pub muted: bool,
     /// A [`ZONES`] name or a POSIX `TZ` rule.
     pub time_zone: String,
+    /// "dark" (Alpine's dark tokens, the default) or "light".
+    pub theme: String,
+    /// Window tiling on at all (Alpine's "Enable window tiling"; Poly has
+    /// always snapped, so on by default where Alpine starts off), then
+    /// Win+Arrow snapping and snapping a dragged window at the screen's
+    /// edges (its Snapping switches).
+    pub tiling: bool,
+    pub snap_keys: bool,
+    pub snap_drag: bool,
+    /// The keyboard shortcuts.
+    pub shortcuts: Keymap,
     /// Keys this version does not know, kept as they were.
     pub extra: Vec<(String, String)>,
 }
@@ -48,6 +61,11 @@ impl Default for Settings {
             volume: 80,
             muted: false,
             time_zone: "UTC".into(),
+            theme: "dark".into(),
+            tiling: true,
+            snap_keys: true,
+            snap_drag: true,
+            shortcuts: Keymap::default(),
             extra: Vec::new(),
         }
     }
@@ -64,6 +82,16 @@ pub enum Change {
     Volume(u32),
     Muted(bool),
     TimeZone(String),
+    /// "dark" or "light".
+    Theme(String),
+    Tiling(bool),
+    SnapKeys(bool),
+    SnapDrag(bool),
+    /// A shortcut's new combination (already checked).
+    Shortcut(Action, Chord),
+    /// A shortcut back to its default, or all of them.
+    ResetShortcut(Action),
+    ResetShortcuts,
 }
 
 impl Settings {
@@ -101,13 +129,34 @@ impl Settings {
                     s.muted = value == "true";
                     true
                 }
+                "theme" => {
+                    if matches!(value, "dark" | "light") {
+                        s.theme = value.into();
+                    }
+                    true
+                }
+                "tiling" => {
+                    s.tiling = value != "false";
+                    true
+                }
+                "snap_keys" => {
+                    s.snap_keys = value != "false";
+                    true
+                }
+                "snap_drag" => {
+                    s.snap_drag = value != "false";
+                    true
+                }
                 "timezone" => {
                     if TimeZone::named(value).is_some() {
                         s.time_zone = value.into();
                     }
                     true
                 }
-                _ => false,
+                _ => match key.strip_prefix("shortcut.") {
+                    Some(id) => s.shortcuts.read_entry(id, value),
+                    None => false,
+                },
             };
             if !known && !matches!(key, "scale" | "volume") {
                 s.extra.push((key.into(), value.into()));
@@ -128,10 +177,22 @@ impl Settings {
         out += &format!("volume={}\n", self.volume);
         out += &format!("muted={}\n", self.muted);
         out += &format!("timezone={}\n", self.time_zone);
+        out += &format!("theme={}\n", self.theme);
+        out += &format!("tiling={}\n", self.tiling);
+        out += &format!("snap_keys={}\n", self.snap_keys);
+        out += &format!("snap_drag={}\n", self.snap_drag);
+        for (id, chord) in self.shortcuts.entries() {
+            out += &format!("shortcut.{id}={chord}\n");
+        }
         for (k, v) in &self.extra {
             out += &format!("{k}={v}\n");
         }
         out
+    }
+
+    /// Whether Win+Arrow snaps, and whether a dragged window snaps.
+    pub fn snaps(&self) -> (bool, bool) {
+        (self.tiling && self.snap_keys, self.tiling && self.snap_drag)
     }
 
     /// Apply a change; true if anything changed.
@@ -145,6 +206,17 @@ impl Settings {
             Change::Volume(v) => self.volume = (*v).min(100),
             Change::Muted(m) => self.muted = *m,
             Change::TimeZone(z) if TimeZone::named(z).is_some() => self.time_zone = z.clone(),
+            Change::Theme(t) if matches!(t.as_str(), "dark" | "light") => self.theme = t.clone(),
+            Change::Tiling(b) => self.tiling = *b,
+            Change::SnapKeys(b) => self.snap_keys = *b,
+            Change::SnapDrag(b) => self.snap_drag = *b,
+            Change::Shortcut(a, c) => self.shortcuts.set(*a, c.clone()),
+            Change::ResetShortcut(a) => {
+                self.shortcuts.reset(*a);
+            }
+            Change::ResetShortcuts => {
+                self.shortcuts.reset_all();
+            }
             _ => {}
         }
         *self != before
@@ -175,10 +247,20 @@ mod tests {
             volume: 35,
             muted: true,
             time_zone: "Europe/Zurich".into(),
+            theme: "light".into(),
+            tiling: false,
+            snap_keys: false,
+            snap_drag: true,
+            shortcuts: {
+                let mut k = Keymap::default();
+                k.set(Action::Launcher, Chord::parse("Ctrl+Alt+K").unwrap());
+                k
+            },
             extra: alloc::vec![("future".into(), "yes".into())],
         };
         let text = s.to_text();
         assert!(text.contains("keyboard=de-ch\n") && text.contains("resolution=1920x1080\n"));
+        assert!(text.contains("shortcut.launcher=Ctrl+Alt+K\n"));
         assert_eq!(Settings::parse(&text), s);
     }
 

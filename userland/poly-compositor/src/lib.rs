@@ -47,6 +47,10 @@
 //!   through the unmodified Xwayland, started with the compositor (or
 //!   with the first X client), with Poly's X window manager; launched apps
 //!   get `DISPLAY` (ADR 0118, `xwayland.rs`).
+//! - Windows apps' top-level windows come over the desktop link from the
+//!   NT personality's win32k (ADR 0128, `win32.rs`: its records as framed
+//!   scene windows; the `/dev/win32k` device and its place in the poll
+//!   loop come with the first Phase 7 slice).
 //!
 //! ```text
 //! poly-compositor [--socket NAME] [--size WxH] [--scale N|auto] [--dump FILE]
@@ -87,6 +91,7 @@ mod mixer;
 pub mod os;
 mod session;
 mod status;
+pub mod win32;
 mod xwayland;
 
 /// What every module of the crate uses from `alloc`, which `std`'s
