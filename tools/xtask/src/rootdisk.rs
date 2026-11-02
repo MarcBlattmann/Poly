@@ -194,6 +194,12 @@ impl RootTree {
         self.insert(path, Entry::File { mode, source: Source::Bytes(data.to_vec()), mtime: MTIME });
     }
 
+    /// A file of the host, at `path` in the image (Chromium's disk adds a
+    /// whole unpacked tree this way, `chromium.rs`).
+    pub fn host_file(&mut self, path: &str, mode: u16, host: &Path, mtime: i64) {
+        self.insert(path, Entry::File { mode, source: Source::Host(host.to_path_buf()), mtime });
+    }
+
     pub fn dir(&mut self, path: &str, mode: u16) {
         self.insert(path, Entry::Dir(mode));
     }
@@ -481,9 +487,9 @@ cd \"$HOME\"
 ";
 
 /// `/usr/local/sbin/poweroff` of the image: asks init (outside the chroot).
-const POWEROFF: &str = "#!/bin/bash\n# BusyBox's init (pid 1) powers off on SIGUSR2.\nsync\nkill -USR2 1\n";
+pub(crate) const POWEROFF: &str = "#!/bin/bash\n# BusyBox's init (pid 1) powers off on SIGUSR2.\nsync\nkill -USR2 1\n";
 /// `/usr/local/sbin/reboot` of the image.
-const REBOOT: &str = "#!/bin/bash\n# BusyBox's init (pid 1) reboots on SIGTERM.\nsync\nkill -TERM 1\n";
+pub(crate) const REBOOT: &str = "#!/bin/bash\n# BusyBox's init (pid 1) reboots on SIGTERM.\nsync\nkill -TERM 1\n";
 
 /// `/etc/inputrc`: readline without bracketed paste (the boot test types
 /// into the shell; the sequences would only clutter its output).
@@ -1011,6 +1017,16 @@ pub fn write_image(tree: &RootTree, image: &Path) -> Result<&'static str, String
         with_poly_ext2(tree, image, size)?;
         Ok("poly-ext2's format")
     }
+}
+
+/// Write `tree` as an ext4 image to `image` with `poly-ext2`'s formatter on
+/// any host, whatever tools it has: the modes are the tree's own (a host
+/// file's mode is not looked at, unlike `mke2fs -d`), so a tree made from
+/// archive entries keeps theirs (Chromium's disk, `chromium.rs`).
+pub fn write_image_poly_ext2(tree: &RootTree, image: &Path) -> Result<(), String> {
+    let (size, _) = image_size(tree);
+    let _ = std::fs::remove_file(image);
+    with_poly_ext2(tree, image, size)
 }
 
 fn with_mke2fs(tree: &RootTree, image: &Path, size: u64, inodes: u64) -> Result<(), String> {

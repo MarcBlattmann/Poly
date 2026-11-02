@@ -53,6 +53,12 @@
 //!                       boot the toolkits' root disk (GTK, Qt, VLC; toolkits.rs, ADR 0120)
 //!                       to the desktop and the console's bash, and run the steps
 //!                       (run:LINE send:LINE expect:TEXT shot:NAME click:X,Y key:QCODE sleep:S)
+//!   chromium lock|fetch|root [--reference]|disk
+//!                       Chromium's root disk from pinned Debian packages (chromium.rs):
+//!                       write the lock, download and check the packages, unpack them
+//!                       (Linux), make target/poly-chromium-disk.img
+//!   chromium [--release] [--fresh-disk] [STEP...]
+//!                       boot Chromium's disk to the desktop, steps as for toolkits
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -81,6 +87,7 @@
 mod accel;
 mod asmlabels;
 mod busybox;
+mod chromium;
 mod compositor;
 mod compositor_kms;
 mod conflicts;
@@ -197,9 +204,10 @@ fn main() -> ExitCode {
         Some("root-disk") => rootdisk::command(),
         Some("root-disk-test") => root_disk_test(),
         Some("toolkits") => toolkits::command(&args[1..]),
+        Some("chromium") => chromium::command(&args[1..]),
         _ => {
             eprintln!(
-                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test|toolkits> [--release]"
+                "usage: cargo xtask <build|run|screenshot|desktop|test|boot-tests|ci|symbolize|coverage|pipeline|font|fonts|wayland|nls-tables|system-messages|ntdll|win32|win|dynamic-initramfs|busybox-initramfs|busybox-test|root-disk|root-disk-test|toolkits|chromium> [--release]"
             );
             return ExitCode::from(2);
         }
@@ -1446,7 +1454,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 34] = [
+const BOOT_GROUPS: [BootGroup; 35] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1495,6 +1503,10 @@ const BOOT_GROUPS: [BootGroup; 34] = [
     // GTK 3, GTK 4 and Qt apps on the desktop from the toolkits' root disk,
     // and VLC playing a video with sound (toolkits.rs, ADR 0120).
     ("toolkits", toolkits::boot_test),
+    // Chromium from pinned Debian packages, headless and on the desktop with
+    // its sandbox; skipped until its packages are fetched (chromium.rs,
+    // docs/chromium-linux-gaps.md).
+    ("chromium", chromium::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1567,6 +1579,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
             "mesa",
             "xwayland",
             "toolkits",
+            "chromium",
         ],
     ),
     (

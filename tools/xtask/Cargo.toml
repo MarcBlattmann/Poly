@@ -18,6 +18,7 @@ poly-crt.workspace = true
 poly-crypto.workspace = true
 poly-shell.workspace = true
 jpeg-decoder.workspace = true
+lzma-rs.workspace = true
 poly-http.workspace = true
 poly-pe.workspace = true
 poly-binfmt.workspace = true

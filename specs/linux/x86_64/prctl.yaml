@@ -22,6 +22,10 @@ summary: >
   (37): orphaned descendants are reparented to this process instead of
   init. PR_CAPBSET_READ (23): whether a capability is in the bounding
   set (PR_CAPBSET_DROP 24 removes one, with CAP_SETPCAP).
+  PR_SET_VMA (0x53564d41) with PR_SET_VMA_ANON_NAME (0) as arg2: names
+  the anonymous mappings in [arg3, arg3 + arg4) with the string at arg5
+  (Chromium names its allocator's regions; added 2026-11-02 by
+  spec-linux-chromium, observed on the same kernel).
 returns:
   set_name: "0; the name becomes the first 15 bytes of arg2 (\"0123456789abcdefghij\" -> \"0123456789abcde\"), \"\" allowed; /proc/self/comm and /proc/self/task/<tid>/comm show it followed by a newline; other arguments ignored"
   get_name: "0; writes exactly 16 bytes at arg2: the name, NUL, NUL padding (\"abc\" -> 'a','b','c' then 13 NULs); byte 16 onward untouched"
@@ -33,6 +37,7 @@ returns:
   subreaper: "PR_SET_CHILD_SUBREAPER: 0; any non-zero arg2 stored as 1, 0 clears; PR_GET_CHILD_SUBREAPER stores 0/1 as an int at arg2 (0 at start); not inherited by fork children; a grandchild whose parent exits gets the subreaper as its parent (getppid) and is waited for by it"
   capbset_read: "PR_CAPBSET_READ returns 1 if cap arg2 is in the bounding set, 0 if not (every cap 0..40 answers 0 or 1; a normal program starts with the full set)"
   capbset_drop: "PR_CAPBSET_DROP(cap) with CAP_SETPCAP: 0; the cap then reads 0, others still 1; fork children inherit the reduced set"
+  vma_anon_name: "PR_SET_VMA, PR_SET_VMA_ANON_NAME, addr, len, name: 0; each /proc/self/maps line of the range then ends in \"[anon:<name>]\" (naming part of a mapping splits its line); a NULL name removes the name (0); names of up to 79 bytes of printable characters (spaces allowed) are accepted"
 errors:
   unknown_option: "EINVAL (22): option not known (0, 9999, -1)"
   name_fault: "EFAULT (14): PR_SET_NAME with an unreadable name (NULL); PR_GET_NAME with an unwritable buffer (NULL, read-only memory)"
@@ -43,6 +48,11 @@ errors:
   subreaper_fault: "EFAULT (14): PR_GET_CHILD_SUBREAPER with an unwritable pointer"
   capbset_range: "EINVAL (22): PR_CAPBSET_READ / PR_CAPBSET_DROP with a capability above CAP_LAST_CAP (41, 63, -1, 1<<32; arg2 is a full 64-bit value)"
   capbset_drop_perm: "EPERM (1): PR_CAPBSET_DROP without CAP_SETPCAP; not tested"
+  vma_name_invalid: "EINVAL (22): PR_SET_VMA_ANON_NAME with a name of 80 bytes or more, or holding \\ ` $ [ ] or a non-printable character (newline); addr not page aligned; a PR_SET_VMA sub-option other than 0"
+  vma_name_fault: "EFAULT (14): an unreadable name pointer"
+  vma_hole: "ENOMEM (12): a page of the range is not mapped"
+  vma_file: "EBADF (9): the range is a file mapping (only anonymous mappings take names)"
+  not_covered: "PR_SET_PTRACER (0x59616d61), which Chromium calls to let its crash handler trace it, exists only with the Yama security module (0 there; EINVAL without it, which Chromium accepts); PR_GET/SET_SPECULATION_CTRL (52/53) answer per CPU (not covered: the results depend on the processor)"
 side_effects: "as listed per option: thread name, parent-death signal, dumpable flag, no_new_privs flag, subreaper mark, bounding set"
 threading: >
   Per thread: the name, the parent-death signal (it fires when the
@@ -53,7 +63,7 @@ timing:
   typical: "microseconds per call"
   guarantees: "none"
 tests:
-  visible: 6  # count in <symbol>.tests/
+  visible: 7  # count in <symbol>.tests/
   held_out: 2  # count kept by the diff runner
 # Notes: option numbers from linux/prctl.h; SECCOMP_MODE_*,
 # SECCOMP_RET_ALLOW from linux/seccomp.h; struct sock_filter /
