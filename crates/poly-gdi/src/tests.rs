@@ -111,15 +111,20 @@ fn objects_live_and_die_as_observed() {
     assert!(g.delete_object(b));
     assert_eq!(g.object_type(b), OBJ_BRUSH);
     assert!(!g.delete_object(b));
-    // Deleted and unselected: FillRect still paints with it, selecting it
-    // fails and the DC keeps its brush.
+    // Deleted and unselected: selecting it succeeds (the old brush comes
+    // back), but it paints nothing; a live brush given to FillRect paints.
     {
-        let (dc, px) = dib32(&mut g, 2, 1);
-        assert!(g.fill_rect(dc, Rect::new(0, 0, 1, 1), b));
-        assert_eq!(px[0], 0x0011_2233);
-        assert_eq!(g.select_object(dc, b), Ok(0));
-        g.pat_blt(dc, 1, 0, 1, 1, 0x00F0_0021);
+        let (dc, mut px) = dib32(&mut g, 12, 1);
+        px.fill(0x00FF_FFFF);
+        let red = u64::from(g.create_solid_brush(0x0000_00FF));
+        g.select_object(dc, red).unwrap();
+        assert_eq!(g.select_object(dc, b), Ok(red as u32));
+        g.pat_blt(dc, 0, 0, 1, 1, 0x00F0_0021);
+        assert_eq!(px[0], 0x00FF_FFFF);
+        assert!(g.fill_rect(dc, Rect::new(1, 0, 2, 1), b));
         assert_eq!(px[1], 0x00FF_FFFF);
+        assert!(g.fill_rect(dc, Rect::new(9, 0, 10, 1), red));
+        assert_eq!(&px[8..11], &[0x00FF_FFFF, 0x00FF_0000, 0x00FF_FFFF]);
     }
     // A bitmap busy in one DC; free after that DC goes.
     let (dc, _px) = dib32(&mut g, 2, 2);

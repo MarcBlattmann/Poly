@@ -107,8 +107,8 @@ operation to raw pixel values (so `NOTSRCCOPY` sets the high byte, as
 observed); colour↔monochrome blits use the source's background and the
 destination's text and background colours. The observed object
 lifetimes are kept: a deleted DC answers `OBJ_DC`, a deleted unselected
-solid brush stays readable (and paints where it is named) but cannot be
-selected again, a selected brush or bitmap goes when it is deselected or
+solid brush stays readable and can be selected again (the old selection
+comes back) but paints nothing, a selected brush or bitmap goes when it is deselected or
 its DC is deleted. GDI handles carry a generation (the top byte), so a
 deleted object's handle never names the object that reuses its slot.
 
