@@ -1,0 +1,10 @@
+[package]
+name = "poly-win32-gui"
+description = "What Poly's GUI DLLs share (ADR 0128): the explicit not-implemented stubs of user32 and gdi32 functions whose slice has not arrived"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

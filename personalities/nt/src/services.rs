@@ -16,7 +16,7 @@
 //! | 0, executive | `0x100`–`0x13F` | registry ([`REGISTRY_SERVICES`], ADR 0066) |
 //! | 0, executive | `0x140`–`0x17F` | time and system information ([`SYSINFO_SERVICES`], ADR 0079) |
 //! | 0, executive | `0x180`–`0x1BF` | security: access tokens ([`SECURITY_SERVICES`], ADR 0083) |
-//! | 1, win32k | | none yet (Phase 7) |
+//! | 1, win32k | `0x000`–`0xFFF` | Poly's own GUI services, in `poly_win32k::services` (ADR 0128) |
 //! | 3, Poly | `0x000`–`0x0FF` | Poly's own services, for its tests and tools; never called by `ntdll` (except `0x010`–`0x01F`, which stand in for what the kernel will learn from our `ntdll`'s exports, ADR 0068) |
 //!
 //! Each service takes its arguments in the order of the documented `Zw*`

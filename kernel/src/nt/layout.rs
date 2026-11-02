@@ -138,6 +138,9 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("ws2_32.dll", super::WS2_32),
         ("winhttp.dll", super::WINHTTP),
         ("wininet.dll", super::WININET),
+        // ADR 0128.
+        ("gdi32.dll", super::GDI32),
+        ("win32u.dll", super::WIN32U),
     ] {
         if bytes.is_empty() {
             continue;

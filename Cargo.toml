@@ -66,6 +66,7 @@ members = [
     "crates/poly-vdso",
     "crates/poly-vm",
     "crates/poly-vfs",
+    "crates/poly-win32k",
     "crates/poly-wincrypt",
     "crates/poly-x509",
     "crates/poly-winsock",
@@ -151,6 +152,7 @@ poly-virtio-sound = { path = "crates/poly-virtio-sound" }
 poly-vdso = { path = "crates/poly-vdso" }
 poly-vm = { path = "crates/poly-vm" }
 poly-vfs = { path = "crates/poly-vfs" }
+poly-win32k = { path = "crates/poly-win32k" }
 poly-wincrypt = { path = "crates/poly-wincrypt" }
 poly-x509 = { path = "crates/poly-x509" }
 poly-winsock = { path = "crates/poly-winsock" }
