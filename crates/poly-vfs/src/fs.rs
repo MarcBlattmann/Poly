@@ -100,6 +100,17 @@ pub trait FileSystem: Send + Sync {
         false
     }
 
+    /// What the magic link `ino` names, for following it: the walk goes on
+    /// at that file or directory itself, whatever the caller's root is
+    /// (proc_pid_fd(5): the links "can be dereferenced ... even if the
+    /// file has been deleted"; Chromium's sandboxed zygote, whose root is
+    /// an empty directory, stats `/proc/self/fd/<n>`). `None` follows the
+    /// link's text like any link's (files without a path: pipes, sockets).
+    fn magic_target(&self, ino: Ino) -> Option<MagicTarget> {
+        let _ = ino;
+        None
+    }
+
     /// Whether `ino` takes writes although the file system is read-only
     /// ([`FsInfo::read_only`]): a control file of a pseudo file system
     /// (procfs's `uid_map`). A read-only mount still refuses them.
@@ -325,6 +336,16 @@ pub const fn st_flags_of_attrs(attrs: u32) -> u64 {
         f |= ST_NOSYMFOLLOW;
     }
     f
+}
+
+/// Where a magic link leads ([`FileSystem::magic_target`]).
+#[derive(Debug)]
+pub enum MagicTarget {
+    /// An open file (`/proc/<pid>/fd/<n>`, `exe`): its node, and the name
+    /// it was opened by.
+    File(alloc::sync::Arc<crate::OpenFile>),
+    /// A directory (`/proc/<pid>/cwd`, `root`).
+    Node(crate::NodeRef),
 }
 
 /// Magic numbers of the file systems Poly has (Linux UAPI `linux/magic.h`).

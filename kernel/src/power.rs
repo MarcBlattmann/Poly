@@ -40,6 +40,8 @@ pub fn power_off(out: &mut dyn Write) -> ! {
     // With `poly.debug.stack_report`, how deep the stacks went (as a test
     // run's end reports it).
     crate::thread::report_stacks();
+    // With `poly.debug.profile`, where the kernel spent its time.
+    crate::profile::dump(out);
     if let Some(off) = acpi::platform().and_then(|p| p.soft_off) {
         let _ = writeln!(
             out,

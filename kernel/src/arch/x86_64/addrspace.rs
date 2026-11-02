@@ -548,13 +548,16 @@ impl AddressSpace {
     }
 
     /// Unmap every page of `[virt, virt + len)` that is mapped (holes are
-    /// skipped), free the frames the space owns and the page tables that
-    /// became empty.
+    /// skipped, found by walking only the page tables that exist, so a
+    /// terabyte reservation with a few pages in it is cheap), free the
+    /// frames the space owns and the page tables that became empty.
     pub fn unmap(&self, virt: u64, len: u64) -> Result<(), MapError> {
         let end = check_range(virt, len)?;
         let mut tables = self.tables.lock();
         let mut reclaim = Reclaim::new();
-        for page in (virt..end).step_by(PAGE_SIZE as usize) {
+        let mut pages = alloc::vec::Vec::new();
+        tables.mapped(virt, end, |page, _| pages.push(page));
+        for page in pages {
             self.unmap_page(&mut tables, &mut reclaim, page);
         }
         reclaim.finish(self);
@@ -816,10 +819,9 @@ fn check_range(virt: u64, len: u64) -> Result<u64, MapError> {
 /// Fail with [`MapError::AlreadyMapped`] if any page of `[virt, end)` is
 /// mapped.
 fn free_slots(tables: &PageTables<KernelPhysMemory>, virt: u64, end: u64) -> Result<(), MapError> {
-    match (virt..end).step_by(PAGE_SIZE as usize).any(|page| tables.translate(page).is_ok()) {
-        true => Err(MapError::AlreadyMapped),
-        false => Ok(()),
-    }
+    let mut any = false;
+    tables.mapped(virt, end, |_, _| any = true);
+    if any { Err(MapError::AlreadyMapped) } else { Ok(()) }
 }
 
 /// Call `f(kernel, n, offset)` for each piece of the user range

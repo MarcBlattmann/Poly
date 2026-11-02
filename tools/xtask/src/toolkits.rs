@@ -541,14 +541,31 @@ impl Machine {
         tag: &str,
         memory: &str,
     ) -> Result<Machine> {
+        Machine::boot_with_init(kernel, syms, image, initrd, tag, memory, crate::busybox::INIT_ARGS, None)
+    }
+
+    /// [`Machine::boot_with`] with `init` as the kernel arguments that
+    /// name the first program (Chromium's disk is switched to as the root,
+    /// `initramfs::SWITCH_ROOT_INIT_ARGS`) and `cpus` virtual CPUs instead
+    /// of the default.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn boot_with_init(
+        kernel: &Path,
+        syms: &Arc<Symbols>,
+        image: &Path,
+        initrd: &Path,
+        tag: &str,
+        memory: &str,
+        init: &str,
+        cpus: Option<u32>,
+    ) -> Result<Machine> {
         let qmp_path = std::env::temp_dir().join(format!("poly-toolkits-qmp-{}-{tag}.sock", std::process::id()));
         let _ = std::fs::remove_file(&qmp_path);
         let wav = root().join(format!("target/poly-toolkits-{tag}.wav"));
         let _ = std::fs::remove_file(&wav);
         // POLY_TOOLKITS_APPEND: more kernel arguments (`poly.strace=...`).
         let append = format!(
-            "{} console=ttyS0 poly.terminal=off {}",
-            crate::busybox::INIT_ARGS,
+            "{init} console=ttyS0 poly.terminal=off {}",
             std::env::var("POLY_TOOLKITS_APPEND").unwrap_or_default()
         );
         let mut cmd = crate::qemu(kernel, memory, append.trim_end(), crate::Devices::None, "stdio");
@@ -559,6 +576,8 @@ impl Machine {
             .args(crate::desktop::devices())
             .args(["-audiodev", &format!("wav,id=snd0,path={}", wav.display())])
             .args(["-device", "virtio-sound-pci,audiodev=snd0"])
+            // A later -smp overrides crate::qemu's.
+            .args(cpus.map(|n| vec!["-smp".to_string(), n.to_string()]).unwrap_or_default())
             .args(["-qmp", &format!("unix:{},server=on,wait=off", qmp_path.display())]);
         let mut s = Session::spawn(cmd, syms)?;
         s.set_timeouts(Duration::from_secs(600), Duration::from_secs(3600));

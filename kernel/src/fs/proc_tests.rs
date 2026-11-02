@@ -55,6 +55,10 @@ kernel_test! {
                 return Err("a sysfs CPU list is not the CPUs online");
             }
         }
+        let kernel_max = alloc::format!("{}\n", crate::thread::MAX_CPUS - 1);
+        if text(&files, "/sys/devices/system/cpu/kernel_max")? != kernel_max {
+            return Err("sysfs cpu/kernel_max is not the last CPU index the kernel supports");
+        }
         let last = alloc::format!("/sys/devices/system/cpu/cpu{}", n - 1);
         if files.open(last.as_bytes(), OpenFlags::RDONLY, 0).is_err() {
             return Err("the last CPU has no sysfs directory");
