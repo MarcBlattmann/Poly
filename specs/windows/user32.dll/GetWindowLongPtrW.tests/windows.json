@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "gwl_fields",
+      "exe_sha256": "d5969f497ca58b1ad4a9fc6a5f5b0dd561fd54e3a72de2d1fc202b7f403931a7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApwcm9jOiB6ZXJvPTAgZXJyb3I9LTEKb2sgcHJvY19pc19jbGFzc19wcm9jCmhpbnN0YW5jZTogemVybz0wIGVycm9yPS0xCm9rIGhpbnN0YW5jZV9pc19leGUKY2hpbGRfaWQ6IHplcm89MCBlcnJvcj0tMQpvayBjaGlsZF9pZF92YWx1ZQpwb3B1cF9pZDogemVybz0xIGVycm9yPS0xCm9rIHBvcHVwX2lkX3ZhbHVlCmNoaWxkX2h3bmRwYXJlbnQ6IHplcm89MCBlcnJvcj0tMQpvayBjaGlsZF9od25kcGFyZW50X2lzX3BhcmVudApvd25lZF9od25kcGFyZW50OiB6ZXJvPTAgZXJyb3I9LTEKb2sgb3duZWRfaHduZHBhcmVudF9pc19vd25lcgp1bm93bmVkX2h3bmRwYXJlbnQ6IHplcm89MSBlcnJvcj0tMQp1c2VyZGF0YTogemVybz0xIGVycm9yPS0xCnN0eWxlOiB6ZXJvPTAgZXJyb3I9LTEKcG9wdXAgc3R5bGUgMHg4NDgwMDAwMApjaGlsZF9zdHlsZTogemVybz0wIGVycm9yPS0xCmNoaWxkIHN0eWxlIDB4NDgwMDAwMDAKZXhzdHlsZTogemVybz0wIGVycm9yPS0xCnBvcHVwIGV4c3R5bGUgMHg4MAppbmRleF9taW51c18yOiB6ZXJvPTEgZXJyb3I9LTEKaW5kZXhfbWludXNfMzA6IHplcm89MSBlcnJvcj0xNDEzCmJhZF93aW5kb3c6IHplcm89MSBlcnJvcj0xNDAwCm51bGxfd2luZG93OiB6ZXJvPTEgZXJyb3I9MTQwMApvayBsb25nX3N0eWxlX21hdGNoZXMKb2sgbG9uZ19pZApzdW1tYXJ5IDkgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nproc: zero=0 error=-1\nok proc_is_class_proc\nhinstance: zero=0 error=-1\nok hinstance_is_exe\nchild_id: zero=0 error=-1\nok child_id_value\npopup_id: zero=1 error=-1\nok popup_id_value\nchild_hwndparent: zero=0 error=-1\nok child_hwndparent_is_parent\nowned_hwndparent: zero=0 error=-1\nok owned_hwndparent_is_owner\nunowned_hwndparent: zero=1 error=-1\nuserdata: zero=1 error=-1\nstyle: zero=0 error=-1\npopup style 0x84800000\nchild_style: zero=0 error=-1\nchild style 0x48000000\nexstyle: zero=0 error=-1\npopup exstyle 0x80\nindex_minus_2: zero=1 error=-1\nindex_minus_30: zero=1 error=1413\nbad_window: zero=1 error=1400\nnull_window: zero=1 error=1400\nok long_style_matches\nok long_id\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    }
+  ]
+}

@@ -348,8 +348,13 @@ cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel
 
 `win build` cross-compiles with the pinned toolchain (`-Zbuild-std` from
 `rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and
-refuses an executable that imports from another DLL, by ordinal, or
-delay-loaded. `win diff` compares per test the 32-bit exit code, the
+refuses an executable that imports from a DLL other than `ntdll`,
+`kernel32`, `user32` and `gdi32` (the GUI entries' tests are still console
+programs), by ordinal, or delay-loaded. GUI tests run in the oracle's SSH
+session, whose desktop is not visible: windows and messages work, but no
+window is visible and nothing is painted through windows (no `WM_PAINT`,
+no update regions), so painting is observed through memory DCs and DIB
+sections. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
 start is **unsupported**. `win show`, `win diff` and `win remote` read real

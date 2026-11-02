@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "pm_limits",
+      "exe_sha256": "eaa0e6550be03d2e79934c9ab95b43726ef7b603a05f3ed7a5791fc5ea2dc630",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApwb3N0ZWQgMTAwMDAgYmVmb3JlIGZhaWxpbmcgd2l0aCBlcnJvciAxODE2CmZpcnN0IG91dCB3PTAKcG9zdCBhZnRlciByZWFkaW5nIG9uZTogMSBlcnJvciAwCnBvc3QgYWdhaW4gd2hlbiBmdWxsOiAwIGVycm9yIDE4MTYKZHJhaW5lZCAxMDAwMApXTV9TRVRURVhUOiAwIGVycm9yIDExNTkKV01fR0VUVEVYVDogMCBlcnJvciAxMTU5CldNX1NFVFRFWFQgd2l0aCBsUGFyYW0gMDogMCBlcnJvciAxMTU5CldNX1FVSVQgYnkgUG9zdE1lc3NhZ2VXOiAxIGVycm9yIDAKV01fUEFJTlQgYnkgaGFuZDogMSBlcnJvciAwCldNX1RJTUVSIGJ5IGhhbmQ6IDEgZXJyb3IgMApHZXRNZXNzYWdlVyByZXR1cm5lZCAwIGZvciBXTV9RVUlUIHc9NQpHZXRNZXNzYWdlVyByZXR1cm5lZCAxIGZvciBXTV9QQUlOVCB3PTAKR2V0TWVzc2FnZVcgcmV0dXJuZWQgMSBmb3IgV01fVElNRVIgdz0zCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nposted 10000 before failing with error 1816\nfirst out w=0\npost after reading one: 1 error 0\npost again when full: 0 error 1816\ndrained 10000\nWM_SETTEXT: 0 error 1159\nWM_GETTEXT: 0 error 1159\nWM_SETTEXT with lParam 0: 0 error 1159\nWM_QUIT by PostMessageW: 1 error 0\nWM_PAINT by hand: 1 error 0\nWM_TIMER by hand: 1 error 0\nGetMessageW returned 0 for WM_QUIT w=5\nGetMessageW returned 1 for WM_PAINT w=0\nGetMessageW returned 1 for WM_TIMER w=3\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 88
+    }
+  ]
+}

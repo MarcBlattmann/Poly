@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "so_effect",
+      "exe_sha256": "bc2659eff7ed1326f1c09016b63848251b46f28e591919124778e28f7dc26003",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UGF0Qmx0IHJlZCAwLDAgM3gyOyBSZWN0YW5nbGUgZ3JlZW4gcGVuIGJsdWUgYnJ1c2ggKDQsMCktKDksNCk6CiAgfFJSUi5HR0dHRy58CiAgfFJSUi5HQkJCRy58CiAgfC4uLi5HQkJCRy58CiAgfC4uLi5HR0dHRy58CiAgfC4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi58Ck5VTExfQlJVU0ggcmVjdGFuZ2xlICgwLDApLSg1LDQpOyBOVUxMX1BFTiBibHVlIHJlY3RhbmdsZSAoNSwxKS0oOSw1KToKICB8R0dHR0cuLi4uLnwKICB8Ry4uLkdCQkIuLnwKICB8Ry4uLkdCQkIuLnwKICB8R0dHR0dCQkIuLnwKICB8Li4uLi4uLi4uLnwKICB8Li4uLi4uLi4uLnwKU2V0RENCcnVzaENvbG9yIHJldHVybmVkIHRoZSBvbGQgY29sb3VyIDB4ZmZmZmZmCkRDX0JSVVNIIFBhdEJsdCAoMSwxKSAyeDI6CiAgfC4uLi4uLi4uLi58CiAgfC5ERC4uLi4uLi58CiAgfC5ERC4uLi4uLi58CiAgfC4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi58CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "PatBlt red 0,0 3x2; Rectangle green pen blue brush (4,0)-(9,4):\n  |RRR.GGGGG.|\n  |RRR.GBBBG.|\n  |....GBBBG.|\n  |....GGGGG.|\n  |..........|\n  |..........|\nNULL_BRUSH rectangle (0,0)-(5,4); NULL_PEN blue rectangle (5,1)-(9,5):\n  |GGGGG.....|\n  |G...GBBB..|\n  |G...GBBB..|\n  |GGGGGBBB..|\n  |..........|\n  |..........|\nSetDCBrushColor returned the old colour 0xffffff\nDC_BRUSH PatBlt (1,1) 2x2:\n  |..........|\n  |.DD.......|\n  |.DD.......|\n  |..........|\n  |..........|\n  |..........|\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

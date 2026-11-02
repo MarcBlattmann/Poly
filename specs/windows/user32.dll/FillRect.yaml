@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/FillRect
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Fills a rectangle with a brush: left..right-1 by top..bottom-1 (right and
+  bottom excluded), clipped to the surface; does not change the DC's
+  selected brush.
+interface:
+  signature: "int FillRect(HDC hdc, const RECT* rect, HBRUSH brush)"
+rules:
+  extent: "on a 32-bit DIB, (2,1)-(5,3) fills 3x2 pixels with 0x00RRGGBB of the brush colour"
+  empty: "empty or inverted rectangles draw nothing (return 1)"
+  clip: "parts outside the bitmap are dropped"
+  system_colour: "brush value COLOR_WINDOW+1 fills with GetSysColor(COLOR_WINDOW) (0xffffff on the oracle)"
+  stock: "stock brushes work"
+  null_brush: "brush NULL: returns 1 and filled the 1x1 rectangle with white (0xffffff) on the oracle"
+  formats: "bottom-up DIBs: logical row 0 is the last row in memory; 16-bit 5-5-5: 0x123456 stored as 0x08ca (GetPixel 0x523110), white as 0x7fff"
+  return: "1"
+errors:
+  bad_dc: "0, ERROR_INVALID_HANDLE (6)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

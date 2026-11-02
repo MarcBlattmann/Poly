@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "to_align",
+      "exe_sha256": "1f572a610903c229406c2c31ff8cec1db5d295686fc1e4737de236f91c436868",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXh0ZW50IDI0eDE2IGFzY2VudCAxMwpUQV9MRUZUfFRBX1RPUCBhdCA1MCwyMDogcmV0dXJuZWQgMSBjZWxsIDUwLDIwLDc0LDM2ClRBX1JJR0hUIGF0IDUwLDIwOiByZXR1cm5lZCAxIGNlbGwgMjYsMjAsNTAsMzYKVEFfQ0VOVEVSIGF0IDUwLDIwOiByZXR1cm5lZCAxIGNlbGwgMzgsMjAsNjIsMzYKVEFfQk9UVE9NIGF0IDUwLDQwOiByZXR1cm5lZCAxIGNlbGwgNTAsMjQsNzQsNDAKVEFfQkFTRUxJTkUgYXQgNTAsNDA6IHJldHVybmVkIDEgY2VsbCA1MCwyNyw3NCw0MwpUQV9MRUZUIGF0IC01LC0zOiByZXR1cm5lZCAxIGNlbGwgMCwwLDE5LDEzCmNvdW50IDA6IHJldHVybmVkIDEgY2hhbmdlZCAwClRBX1VQREFURUNQIHR3aWNlIGZyb20gdGhlIHN0YXJ0IHBvc2l0aW9uOiBjZWxscyBzcGFuIDAsMCw0OCwxNgpiYWQgREM6IDAgZXJyb3IgNgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "extent 24x16 ascent 13\nTA_LEFT|TA_TOP at 50,20: returned 1 cell 50,20,74,36\nTA_RIGHT at 50,20: returned 1 cell 26,20,50,36\nTA_CENTER at 50,20: returned 1 cell 38,20,62,36\nTA_BOTTOM at 50,40: returned 1 cell 50,24,74,40\nTA_BASELINE at 50,40: returned 1 cell 50,27,74,43\nTA_LEFT at -5,-3: returned 1 cell 0,0,19,13\ncount 0: returned 1 changed 0\nTA_UPDATECP twice from the start position: cells span 0,0,48,16\nbad DC: 0 error 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "to_glyphs",
+      "exe_sha256": "21bebcc53720c2f6013975abfb96bca0cab651acb196f5294ad7779170e762b3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VGV4dE91dFcgcmV0dXJuZWQgMQogIHwuLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLnwKICB8Li4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4ufAogIHwuLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLnwKICB8Li4uLiMjLi4uLi4uLi4uLi4uLi4jIy4uLi4uLi4uLi58CiAgfC4uLi4jIy4uLi4uLi4uLi4uLiMjIyMuLi4uLi4uLi4ufAogIHwuLi4jIyMjLi4uLi4uLi4uLi4uLiMjLi4uLi4uLi4uLnwKICB8Li4uIyMjIy4uLi4jIyMjIy4uLi4jIy4uLi4uLi4uLi58CiAgfC4uLiMuLiMuLi4jIy4uIyMuLi4uIyMuLi4uLi4uLi4ufAogIHwuLiMjLi4jIy4uIyMuLiMjLi4uLiMjLi4uLi4uLi4uLnwKICB8Li4jIy4uIyMuLiMjLi4jIy4uLi4jIy4uLi4uLi4uLi58CiAgfC4uIyMjIyMjLi4jIy4uIyMuLi4uIyMuLi4uLi4uLi4ufAogIHwuIyMuLi4uIyMuIyMuLiMjLi4uLiMjLi4uLi4uLi4uLnwKICB8LiMjLi4uLiMjLi4jIyMjIy4uLi4jIy4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi4uLi4uIyMuLi4uLi4uLi4uLi4uLi4ufAogIHwuLi4uLi4uLi4uIyMuLiMjLi4uLi4uLi4uLi4uLi4uLnwKICB8Li4uLi4uLi4uLi4jIyMjLi4uLi4uLi4uLi4uLi4uLi58CiAgfC4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4ufAogIHwuLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLnwKICB8Li4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi4uLi58CiJUaGUgcXVpY2sgYnJvd24gZm94IjogaW5rIDQ0OSBwaXhlbHMgaW4gMCwzLDEyOSwxNiBoYXNoIDUyYjMxYmZjCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "TextOutW returned 1\n  |................................|\n  |................................|\n  |................................|\n  |................................|\n  |....##..............##..........|\n  |....##............####..........|\n  |...####.............##..........|\n  |...####....#####....##..........|\n  |...#..#...##..##....##..........|\n  |..##..##..##..##....##..........|\n  |..##..##..##..##....##..........|\n  |..######..##..##....##..........|\n  |.##....##.##..##....##..........|\n  |.##....##..#####....##..........|\n  |..............##................|\n  |..........##..##................|\n  |...........####.................|\n  |................................|\n  |................................|\n  |................................|\n\"The quick brown fox\": ink 449 pixels in 0,3,129,16 hash 52b31bfc\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}
