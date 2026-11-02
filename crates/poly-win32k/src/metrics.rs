@@ -157,12 +157,20 @@ pub fn default_client(w: Rect, style: u32, ex: u32, menu: bool) -> Rect {
     let i = client_insets(style, ex, menu);
     let left = w.left + i.left;
     let top = w.top + i.top;
-    let (right, bottom) = (w.right - i.right, w.bottom - i.bottom);
-    if right <= left || bottom <= top {
-        // Smaller than its frame: an empty client area, 0x0 (observed).
-        return Rect::new(left, top, left, top);
-    }
+    // Smaller than its frame: each side is empty on its own (observed: a
+    // 3x3 captioned window has a 0x0 client area, an overlapped 136x39
+    // one 120x0).
+    let right = (w.right - i.right).max(left);
+    let bottom = (w.bottom - i.bottom).max(top);
     Rect::new(left, top, right, bottom)
+}
+
+/// Whether a framed top-level window's size is held to its minimum and
+/// maximum track sizes: an overlapped window, or one with a sizing border
+/// (observed: an overlapped window asked 0x0 is 136x39; a captioned popup
+/// asked 3x3 keeps its size).
+pub fn track_limited(style: u32) -> bool {
+    style & WS_POPUP == 0 || style & WS_THICKFRAME != 0
 }
 
 /// The `MINMAXINFO` win32k fills before `WM_GETMINMAXINFO`:
@@ -225,6 +233,11 @@ mod tests {
         assert_eq!(size(WS_POPUP | WS_VSCROLL | WS_HSCROLL, 0), (183, 83));
         let tiny = default_client(Rect::new(10, 10, 14, 14), WS_CAPTION, 0, false);
         assert!(tiny.is_empty());
+        // An overlapped window at its minimum track size: 120x0 at 8,31.
+        let min = default_client(Rect::new(0, 0, 136, 39), WS_CAPTION | WS_THICKFRAME, 0, false);
+        assert_eq!(min, Rect::new(8, 31, 128, 31));
+        assert!(track_limited(WS_CAPTION) && track_limited(WS_POPUP | WS_THICKFRAME));
+        assert!(!track_limited(WS_POPUP | WS_CAPTION));
         assert_eq!(
             minmax(WS_CAPTION | WS_THICKFRAME, 0, DEFAULT_SCREEN),
             [(1040, 784), (-8, -8), (136, 39), (1044, 788)]

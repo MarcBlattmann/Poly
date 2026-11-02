@@ -125,9 +125,10 @@ impl Face {
                 weight: 400,
                 aspect_x: 96,
                 aspect_y: 96,
+                // As Unicode code points: U+2122 and U+20AC (observed).
                 first_char: 32,
-                last_char: 255,
-                default_char: 128,
+                last_char: 8482,
+                default_char: 8364,
                 break_char: 32,
                 pitch_and_family: 0x30,
                 ..TextMetric::default()

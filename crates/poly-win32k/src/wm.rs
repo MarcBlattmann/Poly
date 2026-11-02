@@ -647,6 +647,7 @@ impl Wm {
                 class_name,
                 cs_parent: s.parent,
                 default_size,
+                asked_cy: s.cy,
             },
         }
     }
