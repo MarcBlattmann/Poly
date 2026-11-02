@@ -21,8 +21,71 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-compositor"
+version = "0.0.1"
+dependencies = [
+ "poly-dbus",
+ "poly-drm",
+ "poly-fbdev",
+ "poly-font",
+ "poly-input",
+ "poly-rt",
+ "poly-shell",
+ "poly-wayland",
+ "poly-x11",
+]
+
+[[package]]
+name = "poly-compositor-native"
+version = "0.0.1"
+dependencies = [
+ "poly-compositor",
+ "poly-rt",
+]
+
+[[package]]
+name = "poly-dbus"
+version = "0.0.1"
+
+[[package]]
+name = "poly-drm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-fbdev"
+version = "0.0.1"
+
+[[package]]
+name = "poly-font"
+version = "0.0.1"
+
+[[package]]
+name = "poly-gfx"
+version = "0.0.1"
+
+[[package]]
 name = "poly-heap"
 version = "0.0.1"
+
+[[package]]
+name = "poly-input"
+version = "0.0.1"
+
+[[package]]
+name = "poly-notify"
+version = "0.0.1"
+dependencies = [
+ "poly-dbus",
+ "poly-rt",
+]
+
+[[package]]
+name = "poly-notify-native"
+version = "0.0.1"
+dependencies = [
+ "poly-notify",
+ "poly-rt",
+]
 
 [[package]]
 name = "poly-personality-native"
@@ -39,3 +102,25 @@ dependencies = [
  "poly-heap",
  "poly-personality-native",
 ]
+
+[[package]]
+name = "poly-shell"
+version = "0.0.1"
+dependencies = [
+ "poly-dbus",
+ "poly-font",
+ "poly-gfx",
+ "poly-wayland",
+]
+
+[[package]]
+name = "poly-wayland"
+version = "0.0.1"
+dependencies = [
+ "poly-gfx",
+ "poly-input",
+]
+
+[[package]]
+name = "poly-x11"
+version = "0.0.1"

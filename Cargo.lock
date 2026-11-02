@@ -59,12 +59,12 @@ version = "0.0.1"
 name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
- "libc",
  "poly-dbus",
  "poly-drm",
  "poly-fbdev",
  "poly-font",
  "poly-input",
+ "poly-rt",
  "poly-shell",
  "poly-wayland",
  "poly-x11",
@@ -211,8 +211,8 @@ dependencies = [
 name = "poly-notify"
 version = "0.0.1"
 dependencies = [
- "libc",
  "poly-dbus",
+ "poly-rt",
 ]
 
 [[package]]
@@ -574,6 +574,7 @@ dependencies = [
  "poly-block",
  "poly-cpio",
  "poly-crt",
+ "poly-crypto",
  "poly-elf",
  "poly-ext2",
  "poly-font",

@@ -3,7 +3,9 @@
 //! one-pixel border, a title bar above the window with its title on the
 //! left and three buttons on the right: minimize, maximize (restore when
 //! the window is maximized or tiled) and close (ADR 0117). Sizes are
-//! logical pixels.
+//! logical pixels. Its look follows Alpine Shell on Windows 11's dark mode
+//! (ADR 0127): the title bar in the settings window's ground colour, the top
+//! corners rounded, a hairline border and a soft shadow under the window.
 //!
 //! ```text
 //!   ┌──────────────────────────────────────────┐  ← border (BORDER)
@@ -16,6 +18,7 @@
 //! ```
 
 use super::Rect;
+use super::paint::Shadow;
 
 /// The title bar's height.
 pub const TITLE_HEIGHT: i32 = 24;
@@ -27,9 +30,13 @@ pub const CLOSE_SIZE: i32 = 16;
 pub const PADDING: i32 = 8;
 /// Between two buttons of the title bar.
 pub const BUTTON_GAP: i32 = 6;
+/// The radius of the frame's top corners (Windows 11's windows, which
+/// Alpine Shell's own windows are).
+pub const CORNER_RADIUS: i32 = 8;
 
-/// The frame's colours (opaque `0xRRGGBB`), and the desktop's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The frame's colours (opaque `0xRRGGBB`), and the desktop's; its
+/// shadows (CSS `box-shadow` values, logical pixels).
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Theme {
     pub background: u32,
     pub title_active: u32,
@@ -38,19 +45,41 @@ pub struct Theme {
     pub text_inactive: u32,
     pub border_active: u32,
     pub border_inactive: u32,
+    pub shadow_active: Option<Shadow>,
+    pub shadow_inactive: Option<Shadow>,
 }
 
 impl Theme {
-    /// Greys, nothing else: neutral by design.
+    /// Greys, nothing else: neutral by design. Alpine Shell's dark tokens
+    /// as its screenshots show them: the ground `#1a1a19` for the title
+    /// bar, ink `#ebebe7` and the quiet ink `#9a9a95` for its text, the
+    /// strong line `#3b3b39` for the border; Windows 11's window shadow,
+    /// `0 8px 32px rgba(0,0,0,.37)` (lighter for inactive windows).
     pub const NEUTRAL: Theme = Theme {
         background: 0x20_20_20,
-        title_active: 0x3c_3c_3c,
-        title_inactive: 0x2a_2a_2a,
-        text_active: 0xe8_e8_e8,
-        text_inactive: 0x96_96_96,
-        border_active: 0x5a_5a_5a,
-        border_inactive: 0x38_38_38,
+        title_active: 0x1a_1a_19,
+        title_inactive: 0x24_24_23,
+        text_active: 0xeb_eb_e7,
+        text_inactive: 0x9a_9a_95,
+        border_active: 0x3b_3b_39,
+        border_inactive: 0x2e_2e_2d,
+        shadow_active: Some(Shadow::new(0.0, 8.0, 32.0, 0.0, 0, 94)),
+        shadow_inactive: Some(Shadow::new(0.0, 4.0, 20.0, 0.0, 0, 64)),
     };
+
+    /// The same without shadows (what tests of exact frame pixels use).
+    pub const FLAT: Theme = Theme { shadow_active: None, shadow_inactive: None, ..Theme::NEUTRAL };
+
+    /// The shadow of an active or inactive window.
+    pub fn shadow(&self, active: bool) -> Option<Shadow> {
+        if active { self.shadow_active } else { self.shadow_inactive }
+    }
+
+    /// How far any of the shadows reaches past a frame, logical, on each
+    /// side (for damage).
+    pub fn shadow_extent(&self, outer: Rect) -> Rect {
+        [self.shadow_active, self.shadow_inactive].into_iter().flatten().fold(outer, |e, s| e.union(&s.extent(outer)))
+    }
 }
 
 impl Default for Theme {

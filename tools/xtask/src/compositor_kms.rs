@@ -14,7 +14,8 @@
 //!    dma-buf (`zwp_linux_dmabuf_v1`) and composed;
 //! 5. **clipboard**: a second client pastes the first one's selection.
 //!
-//! The client checks each picture the compositor writes (`SIGUSR1`); at each
+//! The client checks each picture the compositor writes (a `dump` request
+//! on its control pipe); at each
 //! `wl-proto: show <name>` this test takes a screenshot of the scanout
 //! through QMP (PNG in `$POLY_KMS_SHOTS`, default `target/wayland-kms/`),
 //! counts the scenario's colours in it, and answers on the serial console,

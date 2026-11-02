@@ -1,24 +1,24 @@
 //! The settings window (ADR 0117), drawn by the shell into a window the
-//! compositor frames like any other: Alpine Shell's settings app re-created
-//! in its dark theme — a sidebar of pages on the ground colour, the page on
-//! a lighter surface with a rounded top-left corner and a hairline edge,
-//! a title, and cards of rows with their controls on the right
-//! (segmented choices, a slider, a toggle, lists with a check mark,
-//! wallpaper tiles).
+//! compositor frames like any other: Alpine Shell's settings app in its
+//! dark theme as its screenshots show it (ADR 0127) — the title in Averia
+//! Serif Libre and the sections' pages in a sidebar on the ground colour,
+//! back and forward arrows with where we are, the page on a lighter
+//! surface with a rounded top-left corner and a hairline edge, a display
+//! title, headed sections of rows with their controls on the right
+//! (Alpine's outline segmented choices, slider, pill toggle), cards of
+//! choices with a check mark, wallpaper tiles.
 //!
 //! ```text
 //!  ┌────────────────────────────────────────────────────────────────┐
-//!  │ Settings › Sound                                               │ ← header, 40
-//!  │ ┌────────────┐╭───────────────────────────────────────────────┐│
-//!  │ │▣ Display   ││ Sound                                         ││ ← title, 22 px
-//!  │ │⌨ Keyboard  ││ ╭───────────────────────────────────────────╮ ││
-//!  │ │▨ Wallpaper ││ │ Output volume        ━━━━━━━━━──────  60 % │ ││ ← rows, 48 (60 with a line under)
-//!  │ │◖ Sound     ││ │ Mute                               ( ●)   │ ││
-//!  │ │◷ Date&Time ││ ╰───────────────────────────────────────────╯ ││
-//!  │ │ⓘ About     ││                                               ││
-//!  │ └────────────┘╰───────────────────────────────────────────────┘│
-//!  └────────────────────────────────────────────────────────────────┘
-//!    sidebar 224                page: gutter 20, cards radius 12
+//!  │ Settings         ← →  Sound                                    │ ← header, 56
+//!  │ PERSONAL        ╭──────────────────────────────────────────────┤
+//!  │ ▨ Wallpaper     │ Sound                                        │ ← title, Averia 24 px
+//!  │ DEVICES         │ Output                                       │ ← heading, 14 px semibold
+//!  │ ▣ Displays      │ Volume                      ━━━━━━━──── 60%  │ ← rows: label 14 px,
+//!  │ ⌨ Keyboard      │ virtio-sound                                 │   description 12 px
+//!  │ ◖ Sound         │ Mute                                   (● )  │
+//!  └─────────────────┴──────────────────────────────────────────────┘
+//!    sidebar 224         page: gutter 20
 //! ```
 //!
 //! Everything is laid out once per draw as a list of [`Item`]s with the
@@ -26,7 +26,8 @@
 //! Coordinates are logical, relative to the window's content; drawing
 //! multiplies them by the output's scale.
 
-use crate::draw::{self, Text, fill, rounded_outline, rounded_rect};
+use crate::draw::{Face, Style, Text, fill, rounded_border, rounded_outline, rounded_rect};
+use crate::icons::{Icon, lucide};
 use crate::settings::{Change, KEYBOARDS, SCALES, Settings};
 use crate::theme::settings as t;
 use crate::theme::wallpaper::PRESETS;
@@ -35,6 +36,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use poly_wayland::compose::paint::{self, Radii, Shadow};
 use poly_wayland::compose::{Framebuffer, Rect};
 
 const WHITE: u32 = 0xff_ffff;
@@ -56,12 +58,24 @@ impl Page {
 
     pub fn label(self) -> &'static str {
         match self {
-            Page::Display => "Display",
+            Page::Display => "Displays",
             Page::Keyboard => "Keyboard",
             Page::Wallpaper => "Wallpaper",
             Page::Sound => "Sound",
-            Page::DateTime => "Date & Time",
+            Page::DateTime => "Date & time",
             Page::About => "About",
+        }
+    }
+
+    /// Alpine's icon for the page (its settings registry's).
+    fn icon(self) -> Icon {
+        match self {
+            Page::Display => lucide::MONITOR,
+            Page::Keyboard => lucide::KEYBOARD,
+            Page::Wallpaper => lucide::WALLPAPER,
+            Page::Sound => lucide::VOLUME_2,
+            Page::DateTime => lucide::CALENDAR_CLOCK,
+            Page::About => lucide::INFO,
         }
     }
 
@@ -69,6 +83,13 @@ impl Page {
         Page::ALL.iter().position(|&p| p == self).unwrap_or(0)
     }
 }
+
+/// The sidebar: Alpine's sections with Poly's pages.
+const SECTIONS: [(&str, &[Page]); 3] = [
+    ("PERSONAL", &[Page::Wallpaper]),
+    ("DEVICES", &[Page::Display, Page::Keyboard, Page::Sound]),
+    ("SYSTEM", &[Page::DateTime, Page::About]),
+];
 
 /// What the settings show about the system (the compositor finds it out).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -93,6 +114,8 @@ pub struct SystemInfo {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
     Nav(Page),
+    Back,
+    Forward,
     Mode(usize),
     Scale(u32),
     Keyboard(usize),
@@ -111,11 +134,10 @@ enum Item {
         y: i32,
         max_x: i32,
         text: String,
-        size: f32,
+        style: Style,
         rgb: u32,
-        alpha: u8,
     },
-    /// A card: the ghost fill, rounded.
+    /// A card: surface 2 with a hairline, rounded.
     Card(Rect),
     /// A hairline.
     Line(Rect),
@@ -126,6 +148,7 @@ enum Item {
         alpha: u8,
         radius: i32,
     },
+    /// Outline segmented choices: (option, label, active).
     Segmented {
         rect: Rect,
         options: Vec<(Rect, String, bool)>,
@@ -141,14 +164,14 @@ enum Item {
     },
     Tile {
         rect: Rect,
-        colours: (u32, u32, u32),
+        id: &'static str,
         selected: bool,
     },
-    Check(Rect),
-    Glyph {
-        page: Page,
+    Icon {
+        icon: Icon,
         x: i32,
         y: i32,
+        size: i32,
         rgb: u32,
         alpha: u8,
     },
@@ -160,11 +183,14 @@ pub struct SettingsWindow {
     pub page: Page,
     hover: Option<Target>,
     dragging: bool,
+    /// The pages visited and where we are in them (the arrows).
+    history: Vec<Page>,
+    at: usize,
 }
 
 impl Default for SettingsWindow {
     fn default() -> SettingsWindow {
-        SettingsWindow { page: Page::Display, hover: None, dragging: false }
+        SettingsWindow { page: Page::Display, hover: None, dragging: false, history: vec![Page::Display], at: 0 }
     }
 }
 
@@ -195,7 +221,7 @@ fn mib(kib: u64) -> String {
     }
 }
 
-/// Builds a page's items.
+/// Builds a page's items. `y` is where the next thing's capitals start.
 struct Builder<'a, 'b> {
     cx: &'a Context<'b>,
     items: Vec<Item>,
@@ -206,255 +232,339 @@ struct Builder<'a, 'b> {
     y: i32,
 }
 
+const LABEL: Style = Style::new(Face::Sans, t::LABEL_SIZE);
+const DESC: Style = Style::new(Face::Sans, t::SMALL_SIZE);
+const DENSE: Style = Style::new(Face::Sans, t::DENSE_SIZE);
+
 impl Builder<'_, '_> {
-    fn text(&mut self, x: i32, y: i32, max_x: i32, text: &str, size: f32, rgb: u32) {
-        self.items.push(Item::Text { x, y, max_x, text: text.into(), size, rgb, alpha: 255 });
+    fn text(&mut self, x: i32, y: i32, max_x: i32, text: &str, style: Style, rgb: u32) {
+        self.items.push(Item::Text { x, y, max_x, text: text.into(), style, rgb });
     }
 
-    /// The baseline that centres a line of `size` in `top..top + h`.
-    fn baseline(&self, top: i32, h: i32, size: f32) -> i32 {
-        top + (h + self.cx.text.cap_height(size) as i32) / 2
+    /// The cap height of `st`, rounded.
+    fn cap(&self, st: Style) -> i32 {
+        (self.cx.text.cap(st) + 0.5) as i32
     }
 
-    /// A section label (11 px, quiet) and room under it.
-    fn section(&mut self, label: &str) {
-        let y = self.y + 12;
-        self.text(self.left + 4, y, self.right, label, t::EYEBROW_SIZE, t::INK_QUIET);
-        self.y += 20;
+    /// The baseline that centres a line of `st` in `top..top + h`.
+    fn baseline(&self, top: i32, h: i32, st: Style) -> i32 {
+        self.cx.text.centre(top, h, st)
     }
 
-    /// A card of rows of the given heights: their rectangles.
-    fn card(&mut self, heights: &[i32]) -> Vec<Rect> {
-        let total: i32 = heights.iter().sum();
-        let card = Rect::new(self.left, self.y, self.right - self.left, total);
-        self.items.push(Item::Card(card));
-        let mut rows = Vec::new();
-        let mut y = self.y;
-        for (i, h) in heights.iter().enumerate() {
-            if i > 0 {
-                self.items.push(Item::Line(Rect::new(card.x, y, card.width, 1)));
+    /// A section heading (14 px semibold); the first row's label starts
+    /// 43 pixels lower.
+    fn heading(&mut self, label: &str) {
+        let st = Style::new(Face::Semibold, t::HEADING_SIZE);
+        let b = self.y + self.cap(st);
+        self.text(self.left, b, self.right, label, st, t::INK);
+        self.y += 43;
+    }
+
+    /// A row's label (14 px) with a description under it (12 px, quiet):
+    /// the line of the label (its top, 20 pixels high) for the control.
+    fn row(&mut self, label: &str, desc: Option<&str>) -> Rect {
+        let b = self.y + self.cap(LABEL);
+        let max = self.right - 200;
+        self.text(self.left, b, max, label, LABEL, t::INK);
+        let line = Rect::new(self.left, self.y - 5, self.right - self.left, 20);
+        match desc {
+            Some(d) => {
+                self.text(self.left, self.y + 20 + self.cap(DESC), max, d, DESC, t::INK_QUIET);
+                self.y += t::ROW_PITCH;
             }
-            rows.push(Rect::new(card.x, y, card.width, *h));
-            y += h;
+            None => self.y += 44,
         }
-        self.y = y + 16;
-        rows
+        line
     }
 
-    /// A row's label (and the line under it); returns where controls may
-    /// start from the right.
-    fn label(&mut self, row: Rect, label: &str, under: Option<&str>) {
-        let x = row.x + t::ROW_PADDING;
-        let max = row.right() - t::ROW_PADDING;
-        match under {
-            None => {
-                let b = self.baseline(row.y, row.height, t::LABEL_SIZE);
-                self.text(x, b, max, label, t::LABEL_SIZE, t::INK);
-            }
-            Some(u) => {
-                self.text(x, row.y + 26, max, label, t::LABEL_SIZE, t::INK);
-                self.text(x, row.y + 44, max, u, t::SMALL_SIZE, t::INK_QUIET);
-            }
-        }
+    /// After a section's last row: the next heading 14 pixels further.
+    fn end_section(&mut self) {
+        self.y += 14;
     }
 
-    /// A value on the right of a row.
-    fn value(&mut self, row: Rect, value: &str, from_x: i32) {
-        let size = t::DENSE_SIZE;
-        let room = (row.right() - t::ROW_PADDING - from_x) as f32;
-        let v = self.cx.text.fit(value, size, room);
-        let w = self.cx.text.width(&v, size) as i32;
-        let b = self.baseline(row.y, row.height, size);
-        self.text(row.right() - t::ROW_PADDING - w, b, row.right(), &v, size, t::INK_QUIET);
-    }
-
-    /// Segmented choices at the right of a row: (label, active, target).
-    fn segmented(&mut self, row: Rect, options: &[(String, bool, Target)]) {
-        let size = t::SMALL_SIZE;
-        let widths: Vec<i32> = options.iter().map(|o| self.cx.text.width(&o.0, size) as i32 + 20).collect();
-        let total: i32 = widths.iter().sum::<i32>() + 2 * (options.len() as i32 - 1) + 4;
-        let rect = Rect::new(row.right() - t::ROW_PADDING - total, row.y + (row.height - 28) / 2, total, 28);
-        let mut x = rect.x + 2;
+    /// Outline segmented choices at the right of a row's line: (label,
+    /// active, target).
+    fn segmented(&mut self, line: Rect, options: &[(String, bool, Target)]) {
+        let widths: Vec<i32> = options.iter().map(|o| self.cx.text.measure(&o.0, DENSE) as i32 + 24).collect();
+        let total: i32 = widths.iter().sum::<i32>() + 10;
+        let rect = Rect::new(self.right - total, line.y + line.height / 2 - 19, total, 38);
+        let mut x = rect.x + 5;
         let mut opts = Vec::new();
         for (o, w) in options.iter().zip(widths) {
-            let r = Rect::new(x, rect.y + 2, w, 24);
+            let r = Rect::new(x, rect.y + 5, w, 28);
             opts.push((r, o.0.clone(), o.1));
             self.targets.push((r, o.2));
-            x += w + 2;
+            x += w;
         }
         self.items.push(Item::Segmented { rect, options: opts });
     }
 
-    /// A list row: a hover fill, the label, a value and a check if chosen.
-    fn choice(&mut self, row: Rect, label: &str, value: &str, chosen: bool, target: Target) {
-        if self.hover == Some(target) {
-            self.items.push(Item::Fill { rect: row, rgb: WHITE, alpha: t::GHOST_ALPHA, radius: 0 });
+    /// A pill toggle at the right, its top on the label's capitals.
+    fn toggle(&mut self, line: Rect, on: bool, target: Option<Target>) {
+        let rect = Rect::new(self.right - 38, line.y + 5 - 1, 38, 22);
+        self.items.push(Item::Toggle { rect, on });
+        if let Some(tg) = target {
+            self.targets.push((rect, tg));
         }
-        let b = self.baseline(row.y, row.height, t::DENSE_SIZE);
-        self.text(row.x + t::ROW_PADDING, b, row.right() - 120, label, t::DENSE_SIZE, t::INK);
-        let check_x = row.right() - t::ROW_PADDING - 14;
-        if chosen {
-            self.items.push(Item::Check(Rect::new(check_x, row.y + (row.height - 14) / 2, 14, 14)));
+    }
+
+    /// A slider at the right with its value after it.
+    fn slider(&mut self, line: Rect, value: u32, suffix: &str, target: Option<Target>) {
+        let label_w = 40;
+        let track = Rect::new(self.right - label_w - 12 - 176, line.y + line.height / 2 - 4, 176, 8);
+        self.items.push(Item::Slider { rect: track, value, enabled: target.is_some() });
+        let v = format!("{value}{suffix}");
+        let w = self.cx.text.measure(&v, DESC) as i32;
+        let b = self.baseline(line.y, line.height, DESC);
+        self.text(self.right - w, b, self.right + 1, &v, DESC, t::INK_QUIET);
+        if let Some(tg) = target {
+            self.targets.push((Rect::new(track.x - 6, line.y - 8, track.width + 12, line.height + 16), tg));
         }
-        if !value.is_empty() {
-            let w = self.cx.text.width(value, t::SMALL_SIZE) as i32;
-            let b = self.baseline(row.y, row.height, t::SMALL_SIZE);
-            self.text(check_x - 10 - w, b, check_x - 4, value, t::SMALL_SIZE, t::INK_QUIET);
+    }
+
+    /// A card of choices (48-pixel rows with hairlines between, 36 for
+    /// long lists): label, detail on the right, a check if chosen.
+    fn choices(&mut self, rows: &[(String, String, bool, Target)]) {
+        let top = self.y - 8;
+        let rh = if rows.len() > 4 { 36 } else { 48 };
+        let card = Rect::new(self.left, top, self.right - self.left, rows.len() as i32 * rh);
+        self.items.push(Item::Card(card));
+        for (i, (label, detail, chosen, target)) in rows.iter().enumerate() {
+            let r = Rect::new(card.x, top + i as i32 * rh, card.width, rh);
+            if i > 0 {
+                self.items.push(Item::Line(Rect::new(r.x + 1, r.y, r.width - 2, 1)));
+            }
+            if self.hover == Some(*target) {
+                let radius = if i == 0 || i == rows.len() - 1 { t::CARD_RADIUS } else { 0 };
+                self.items.push(Item::Fill { rect: r.grow(-1), rgb: WHITE, alpha: t::GHOST_ALPHA, radius });
+            }
+            let b = self.baseline(r.y, r.height, DENSE);
+            self.text(r.x + t::ROW_PADDING, b, r.right() - 140, label, DENSE, t::INK);
+            let check_x = r.right() - t::ROW_PADDING - 16;
+            if *chosen {
+                self.items.push(Item::Icon {
+                    icon: lucide::CHECK,
+                    x: check_x,
+                    y: r.y + (rh - 16) / 2,
+                    size: 16,
+                    rgb: t::INK,
+                    alpha: 255,
+                });
+            }
+            if !detail.is_empty() {
+                let w = self.cx.text.measure(detail, DESC) as i32;
+                let b = self.baseline(r.y, r.height, DESC);
+                self.text(check_x - 12 - w, b, check_x - 4, detail, DESC, t::INK_QUIET);
+            }
+            self.targets.push((r, *target));
         }
-        self.targets.push((row, target));
+        self.y = card.bottom() + 8 + 32;
+    }
+
+    /// A card of label/value rows.
+    fn facts(&mut self, rows: &[(&str, String)]) {
+        let top = self.y - 8;
+        let card = Rect::new(self.left, top, self.right - self.left, rows.len() as i32 * 44);
+        self.items.push(Item::Card(card));
+        for (i, (label, value)) in rows.iter().enumerate() {
+            let r = Rect::new(card.x, top + i as i32 * 44, card.width, 44);
+            if i > 0 {
+                self.items.push(Item::Line(Rect::new(r.x + 1, r.y, r.width - 2, 1)));
+            }
+            let b = self.baseline(r.y, r.height, DENSE);
+            self.text(r.x + t::ROW_PADDING, b, r.x + 140, label, DENSE, t::INK_QUIET);
+            let room = (r.right() - t::ROW_PADDING - (r.x + 150)) as f32;
+            let v = self.cx.text.fit_style(value, DENSE, room);
+            let w = self.cx.text.measure(&v, DENSE) as i32;
+            self.text(r.right() - t::ROW_PADDING - w, b, r.right(), &v, DENSE, t::INK);
+        }
+        self.y = card.bottom() + 8 + 32;
+    }
+
+    /// A note under a section (12 px, faint).
+    fn note(&mut self, text: &str) {
+        let b = self.y + self.cap(DESC);
+        self.text(self.left, b, self.right, text, DESC, t::INK_FAINT);
+        self.y += 30;
     }
 }
 
 impl SettingsWindow {
+    /// The sidebar's rows: (row, page).
+    fn nav(&self) -> Vec<(Rect, Page)> {
+        let mut out = Vec::new();
+        // The first section label where Alpine's second is, under "Home".
+        let mut y = t::HEADER - 2;
+        for (_, pages) in SECTIONS {
+            y += t::EYEBROW_GAP;
+            for &p in pages {
+                out.push((Rect::new(t::NAV_PADDING, y, t::SIDEBAR - 2 * t::NAV_PADDING, t::NAV_HEIGHT), p));
+                y += t::NAV_HEIGHT + t::NAV_GAP;
+            }
+            y -= t::NAV_GAP;
+        }
+        out
+    }
+
     /// The page's items and the pointer's targets, for a window `w` × `h`.
     fn layout(&self, w: i32, h: i32, cx: &Context<'_>) -> (Vec<Item>, Vec<(Rect, Target)>) {
+        let main_top = t::HEADER + 1;
         let mut b = Builder {
             cx,
             items: Vec::new(),
             targets: Vec::new(),
             hover: self.hover,
-            left: t::SIDEBAR + t::GUTTER,
+            left: t::SIDEBAR + 1 + t::GUTTER,
             right: w - t::GUTTER,
-            y: t::HEADER + t::GUTTER,
+            y: main_top + 26,
         };
-        // The header: where we are.
-        let crumb = format!("Settings \u{203a} {}", self.page.label());
-        let hb = b.baseline(0, t::HEADER, t::DENSE_SIZE);
-        b.text(16, hb, w - 16, &crumb, t::DENSE_SIZE, t::INK_QUIET);
-        // The sidebar.
-        for (i, page) in Page::ALL.into_iter().enumerate() {
-            let r = Rect::new(
-                t::NAV_PADDING,
-                t::HEADER + 4 + i as i32 * (t::NAV_HEIGHT + t::NAV_GAP),
-                t::SIDEBAR - 2 * t::NAV_PADDING,
-                t::NAV_HEIGHT,
-            );
+        // The header: the app's name in Averia, the arrows, where we are.
+        let app = Style::new(Face::DisplayBold, t::APP_TITLE_SIZE);
+        let ab = 22 + b.cap(app);
+        b.text(20, ab, t::SIDEBAR - 8, "Settings", app, t::INK);
+        let arrows = [
+            (Target::Back, lucide::ARROW_LEFT, self.at > 0),
+            (Target::Forward, lucide::ARROW_RIGHT, self.at + 1 < self.history.len()),
+        ];
+        for (i, (target, icon, enabled)) in arrows.into_iter().enumerate() {
+            let r = Rect::new(t::SIDEBAR + 14 + i as i32 * 32, (t::HEADER - 28) / 2, 28, 28);
+            if enabled && self.hover == Some(target) {
+                b.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius: t::FIELD_RADIUS });
+            }
+            let ink = if enabled { t::INK } else { t::INK_FAINT };
+            b.items.push(Item::Icon { icon, x: r.x + 7, y: r.y + 7, size: 15, rgb: ink, alpha: 255 });
+            if enabled {
+                b.targets.push((r, target));
+            }
+        }
+        let crumb = self.page.label();
+        let cb = 22 + b.cap(DENSE);
+        let cxp = t::SIDEBAR + 84;
+        b.text(cxp, cb, w - 16, crumb, DENSE, t::INK);
+        let cw = cx.text.measure(crumb, DENSE) as i32;
+        b.items.push(Item::Fill { rect: Rect::new(cxp, cb + 3, cw, 1), rgb: t::UNDERLINE, alpha: 255, radius: 0 });
+        // The sidebar: section labels (11 px semibold, faint, spaced) and
+        // rows (13 px, the active one medium on surface 3).
+        let eyebrow = Style::new(Face::Semibold, t::EYEBROW_SIZE).tracking(0.05);
+        let mut y = t::HEADER - 2;
+        for (label, pages) in SECTIONS {
+            b.text(20, y + 18 + b.cap(eyebrow), t::SIDEBAR - 8, label, eyebrow, t::INK_FAINT);
+            y += t::EYEBROW_GAP + pages.len() as i32 * (t::NAV_HEIGHT + t::NAV_GAP) - t::NAV_GAP;
+        }
+        for (r, page) in self.nav() {
             let active = page == self.page;
             if active {
                 b.items.push(Item::Fill { rect: r, rgb: t::SURFACE_3, alpha: 255, radius: t::FIELD_RADIUS });
             } else if self.hover == Some(Target::Nav(page)) {
                 b.items.push(Item::Fill { rect: r, rgb: WHITE, alpha: t::GHOST_ALPHA, radius: t::FIELD_RADIUS });
             }
-            let ink = if active { t::INK } else { t::INK_QUIET };
-            let alpha = if active { 230 } else { 153 };
-            b.items.push(Item::Glyph { page, x: r.x + 12, y: r.y + (r.height - 15) / 2, rgb: WHITE, alpha });
-            let tb = b.baseline(r.y, r.height, t::DENSE_SIZE);
-            b.text(r.x + 12 + 15 + 10, tb, r.right() - 8, page.label(), t::DENSE_SIZE, ink);
+            let (ink, alpha) = if active { (t::INK, 230) } else { (t::INK_QUIET, 153) };
+            let iy = r.y + (r.height - t::NAV_ICON) / 2;
+            b.items.push(Item::Icon {
+                icon: page.icon(),
+                x: r.x + t::NAV_INSET,
+                y: iy,
+                size: t::NAV_ICON,
+                rgb: ink,
+                alpha,
+            });
+            let st = if active { Style::new(Face::Medium, t::DENSE_SIZE) } else { DENSE };
+            let tb = b.baseline(r.y, r.height, st);
+            b.text(r.x + t::NAV_INSET + t::NAV_ICON + 10, tb, r.right() - 8, page.label(), st, ink);
             b.targets.push((r, Target::Nav(page)));
         }
-        // The page: its title, then its cards.
-        let ty = b.y + 22;
-        b.text(b.left, ty, b.right, self.page.label(), t::TITLE_SIZE, t::INK);
-        b.y += 40;
+        // The page: its title in Averia, then its sections.
+        let title = Style::new(Face::Display, t::TITLE_SIZE).tracking(-0.025);
+        let tb = b.y + b.cap(title);
+        b.text(b.left, tb, b.right, self.page.label(), title, t::INK);
+        b.y += 62;
         let st = cx.settings;
         match self.page {
             Page::Display => {
-                b.section("Display");
-                let rows = b.card(&[60, 60]);
-                b.label(rows[0], "Resolution", Some("The display's mode"));
+                b.heading("Display");
                 let mut modes = cx.info.modes.clone();
                 if modes.is_empty() {
                     modes.push(cx.info.display);
                 }
                 let current = st.resolution.unwrap_or(cx.info.display);
+                let line = b.row("Resolution", Some("The display's mode"));
                 let opts: Vec<(String, bool, Target)> = modes
                     .iter()
                     .enumerate()
                     .take(3)
                     .map(|(i, &(mw, mh))| (format!("{mw}\u{d7}{mh}"), (mw, mh) == current, Target::Mode(i)))
                     .collect();
-                b.segmented(rows[0], &opts);
-                b.label(rows[1], "Scale", Some("The size of everything on the screen"));
+                b.segmented(line, &opts);
+                let line = b.row("Scale", Some("The size of everything on the screen"));
                 let opts: Vec<(String, bool, Target)> =
                     SCALES.iter().map(|&s| (format!("{}%", s * 100), s == st.scale, Target::Scale(s))).collect();
-                b.segmented(rows[1], &opts);
+                b.segmented(line, &opts);
                 if modes.len() <= 1 {
-                    let y = b.y + 2;
-                    b.text(
-                        b.left + 4,
-                        y,
-                        b.right,
-                        "Other modes come with the KMS display path.",
-                        t::SMALL_SIZE,
-                        t::INK_FAINT,
-                    );
+                    b.end_section();
+                    b.note("Other modes come with the KMS display path.");
                 }
             }
             Page::Keyboard => {
-                b.section("Layout");
-                let heights = vec![40; KEYBOARDS.len()];
-                let rows = b.card(&heights);
-                for (i, (id, label)) in KEYBOARDS.iter().enumerate() {
-                    b.choice(rows[i], label, id, st.keyboard == *id, Target::Keyboard(i));
-                }
-                let y = b.y + 2;
-                b.text(
-                    b.left + 4,
-                    y,
-                    b.right,
-                    "Every window gets the new layout at once.",
-                    t::SMALL_SIZE,
-                    t::INK_FAINT,
-                );
+                b.heading("Keyboard layout");
+                let rows: Vec<(String, String, bool, Target)> = KEYBOARDS
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (id, label))| {
+                        (label.to_string(), id.to_string(), st.keyboard == *id, Target::Keyboard(i))
+                    })
+                    .collect();
+                b.choices(&rows);
+                b.note("Every window gets the new layout at once.");
             }
             Page::Wallpaper => {
-                b.section("Wallpaper");
+                b.heading("Wallpaper");
                 let cols = 3;
                 let gap = 12;
                 let tw = (b.right - b.left - gap * (cols - 1)) / cols;
-                let th = tw * 10 / 16;
+                let th = tw * 9 / 16;
+                let top = b.y - 8;
                 for (i, p) in PRESETS.iter().enumerate() {
                     let (c, r) = (i as i32 % cols, i as i32 / cols);
-                    let rect = Rect::new(b.left + c * (tw + gap), b.y + r * (th + 28), tw, th);
-                    b.items.push(Item::Tile { rect, colours: (p.2, p.3, p.4), selected: st.wallpaper == p.0 });
-                    let lb = rect.bottom() + 18;
+                    let rect = Rect::new(b.left + c * (tw + gap), top + r * (th + 30), tw, th);
+                    b.items.push(Item::Tile { rect, id: p.0, selected: st.wallpaper == p.0 });
+                    let lb = rect.bottom() + 8 + b.cap(DESC);
                     let ink = if st.wallpaper == p.0 { t::INK } else { t::INK_QUIET };
-                    b.text(rect.x + 2, lb, rect.right(), p.1, t::SMALL_SIZE, ink);
+                    b.text(rect.x, lb, rect.right(), p.1, DESC, ink);
                     b.targets.push((Rect::new(rect.x, rect.y, rect.width, rect.height + 24), Target::Wallpaper(i)));
                 }
             }
             Page::Sound => {
-                b.section("Output");
-                let rows = b.card(&[60, 48]);
+                b.heading("Output");
                 let card = cx.info.sound.clone().unwrap_or_else(|| "No sound card found".into());
-                b.label(rows[0], "Volume", Some(&card));
                 let enabled = cx.info.sound.is_some();
-                let pct = format!("{} %", st.volume);
-                let tw = 220;
-                let track =
-                    Rect::new(rows[0].right() - t::ROW_PADDING - 44 - tw, rows[0].y + rows[0].height / 2 - 4, tw, 8);
-                b.items.push(Item::Slider { rect: track, value: st.volume, enabled });
-                let pb = b.baseline(rows[0].y, rows[0].height, t::SMALL_SIZE);
-                b.text(track.right() + 10, pb, rows[0].right(), &pct, t::SMALL_SIZE, t::INK_QUIET);
-                if enabled {
-                    b.targets
-                        .push((Rect::new(track.x - 6, rows[0].y, track.width + 12, rows[0].height), Target::Volume));
-                }
-                b.label(rows[1], "Mute", None);
-                let toggle =
-                    Rect::new(rows[1].right() - t::ROW_PADDING - 38, rows[1].y + (rows[1].height - 22) / 2, 38, 22);
-                b.items.push(Item::Toggle { rect: toggle, on: st.muted });
-                if enabled {
-                    b.targets.push((toggle, Target::Mute));
-                }
+                let line = b.row("Volume", Some(&card));
+                b.slider(line, st.volume, "%", enabled.then_some(Target::Volume));
+                let line = b.row("Mute", Some("Silence every program"));
+                b.toggle(line, st.muted, enabled.then_some(Target::Mute));
             }
             Page::DateTime => {
-                b.section("Clock");
-                let rows = b.card(&[48]);
-                b.label(rows[0], "Local time", None);
-                let x = rows[0].x + 120;
-                b.value(rows[0], cx.now, x);
-                b.section("Time zone");
-                let heights = vec![32; ZONES.len()];
-                let rows = b.card(&heights);
-                for (i, (name, label, rule)) in ZONES.iter().enumerate() {
-                    let off = TimeZone::parse(rule).map_or(0, |z| z.offset_minutes(cx.utc));
-                    b.choice(rows[i], label, &utc_offset(off), st.time_zone == *name, Target::Zone(i));
-                }
+                b.heading("Clock");
+                let line = b.row("Local time", None);
+                let v = cx.now;
+                let w = cx.text.measure(v, DENSE) as i32;
+                let vb = b.baseline(line.y, line.height, DENSE);
+                b.text(b.right - w, vb, b.right + 1, v, DENSE, t::INK_QUIET);
+                b.end_section();
+                b.heading("Time zone");
+                let rows: Vec<(String, String, bool, Target)> = ZONES
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (name, label, rule))| {
+                        let off = TimeZone::parse(rule).map_or(0, |z| z.offset_minutes(cx.utc));
+                        (label.to_string(), utc_offset(off), st.time_zone == *name, Target::Zone(i))
+                    })
+                    .collect();
+                b.choices(&rows);
             }
             Page::About => {
                 let i = cx.info;
-                let rows_text: Vec<(&str, String)> = vec![
+                b.heading("System");
+                let rows: Vec<(&str, String)> = vec![
                     ("System", i.os.clone()),
                     ("Kernel", i.kernel.clone()),
                     (
@@ -467,13 +577,7 @@ impl SettingsWindow {
                     ("Network", i.network.clone()),
                     ("Session bus", i.session_bus.clone()),
                 ];
-                let heights = vec![40; rows_text.len()];
-                let rows = b.card(&heights);
-                for (row, (label, value)) in rows.iter().zip(&rows_text) {
-                    let lb = b.baseline(row.y, row.height, t::DENSE_SIZE);
-                    b.text(row.x + t::ROW_PADDING, lb, row.x + 130, label, t::DENSE_SIZE, t::INK);
-                    b.value(*row, value, row.x + 130);
-                }
+                b.facts(&rows);
             }
         }
         let _ = h;
@@ -516,6 +620,18 @@ impl SettingsWindow {
         self.hover.take().is_some()
     }
 
+    /// Go to page `p` (remembered for the arrows).
+    fn go(&mut self, p: Page) -> bool {
+        if p == self.page {
+            return false;
+        }
+        self.history.truncate(self.at + 1);
+        self.history.push(p);
+        self.at = self.history.len() - 1;
+        self.page = p;
+        true
+    }
+
     /// A left button press or release at (`x`, `y`).
     pub fn button(
         &mut self,
@@ -533,10 +649,15 @@ impl SettingsWindow {
         let Some(target) = self.target_at(x, y, w, h, cx) else { return (false, None) };
         let st = cx.settings;
         let change = match target {
-            Target::Nav(p) => {
-                let redraw = p != self.page;
-                self.page = p;
-                return (redraw, None);
+            Target::Nav(p) => return (self.go(p), None),
+            Target::Back | Target::Forward => {
+                let at = if target == Target::Back { self.at.checked_sub(1) } else { Some(self.at + 1) };
+                if let Some(&p) = at.and_then(|a| self.history.get(a)) {
+                    self.at = at.unwrap_or(0);
+                    self.page = p;
+                    return (true, None);
+                }
+                return (false, None);
             }
             Target::Mode(i) => {
                 let mut modes = cx.info.modes.clone();
@@ -562,7 +683,8 @@ impl SettingsWindow {
     pub fn step_page(&mut self, forward: bool) {
         let i = self.page.index();
         let n = Page::ALL.len();
-        self.page = Page::ALL[if forward { (i + 1) % n } else { (i + n - 1) % n }];
+        let p = Page::ALL[if forward { (i + 1) % n } else { (i + n - 1) % n }];
+        self.go(p);
     }
 
     /// Draw the window, `w` × `h` logical at scale `s`, into `fb` (which is
@@ -570,44 +692,50 @@ impl SettingsWindow {
     pub fn draw(&self, fb: &mut dyn Framebuffer, w: i32, h: i32, s: i32, cx: &Context<'_>) {
         let all = Rect::new(0, 0, w * s, h * s);
         fill(fb, all, all, t::SURFACE_0, 255);
-        // The page's surface: rounded at the top left, a hairline along
-        // its top and left edges.
+        // The page's surface: rounded at the top left, a hairline along its
+        // top and left edges.
         let page = Rect::new(t::SIDEBAR, t::HEADER, w - t::SIDEBAR, h - t::HEADER).scale(s);
-        let r = t::CARD_RADIUS * s;
-        let grown = Rect::new(page.x, page.y, page.width + r, page.height + r);
-        rounded_rect(fb, page, grown, r, t::SURFACE_1, 255);
-        rounded_outline(fb, page, grown, r, WHITE, t::HAIRLINE_ALPHA);
+        let r = (t::CARD_RADIUS * s) as f32;
+        let grown = Rect::new(page.x, page.y, page.width + 2 * r as i32, page.height + 2 * r as i32);
+        paint::fill_rounded(fb, page, grown, Radii::all(r), t::LINE, 255);
+        let inner = Rect::new(grown.x + s, grown.y + s, grown.width - s, grown.height - s);
+        paint::fill_rounded(fb, page, inner, Radii::all(r - s as f32), t::SURFACE_1, 255);
         let (items, _) = self.layout(w, h, cx);
         let text = cx.text;
         for item in &items {
             match item {
-                Item::Text { x, y, max_x, text: s_, size, rgb, alpha } => {
-                    text.draw(fb, all, (x * s) as f32, y * s, max_x * s, s_, size * s as f32, *rgb, *alpha);
+                Item::Text { x, y, max_x, text: s_, style, rgb } => {
+                    text.draw_style(fb, all, (x * s) as f32, y * s, max_x * s, s_, style.scaled(s), *rgb, 255);
                 }
-                Item::Card(c) => rounded_rect(fb, all, c.scale(s), t::CARD_RADIUS * s, WHITE, t::GHOST_ALPHA),
-                Item::Line(l) => fill(fb, all, Rect::new(l.x * s, l.y * s, l.width * s, s), WHITE, t::HAIRLINE_ALPHA),
+                Item::Card(c) => {
+                    let c = c.scale(s);
+                    rounded_rect(fb, all, c, t::CARD_RADIUS * s, t::SURFACE_2, 255);
+                    rounded_border(fb, all, c, t::CARD_RADIUS * s, s, t::LINE, 255);
+                }
+                Item::Line(l) => fill(fb, all, Rect::new(l.x * s, l.y * s, l.width * s, s), t::LINE, 255),
                 Item::Fill { rect, rgb, alpha, radius } => {
                     rounded_rect(fb, all, rect.scale(s), radius * s, *rgb, *alpha)
                 }
                 Item::Segmented { rect, options } => {
-                    rounded_rect(fb, all, rect.scale(s), t::FIELD_RADIUS * s, WHITE, t::GHOST_ALPHA);
+                    let rs = rect.scale(s);
+                    rounded_outline(fb, all, rs, rs.height / 2, t::LINE, 255);
                     for (r, label, active) in options {
-                        let size = t::SMALL_SIZE * s as f32;
+                        let st = DENSE.scaled(s);
+                        let o = r.scale(s);
                         if *active {
-                            rounded_rect(fb, all, r.scale(s), 6 * s, t::INK, 255);
+                            rounded_rect(fb, all, o, o.height / 2, t::INK, 255);
                         }
                         let ink = if *active { t::SURFACE_0 } else { t::INK_QUIET };
-                        let lw = text.width(label, size) as i32;
-                        let rs = r.scale(s);
-                        let base = rs.y + (rs.height + text.cap_height(size) as i32) / 2;
-                        text.draw(
+                        let lw = text.measure(label, st);
+                        let base = text.centre(o.y, o.height, st);
+                        text.draw_style(
                             fb,
                             all,
-                            (rs.x + (rs.width - lw) / 2) as f32,
+                            o.x as f32 + (o.width as f32 - lw) / 2.0,
                             base,
-                            rs.right(),
+                            o.right(),
                             label,
-                            size,
+                            st,
                             ink,
                             255,
                         );
@@ -615,130 +743,94 @@ impl SettingsWindow {
                 }
                 Item::Slider { rect, value, enabled } => {
                     let r = rect.scale(s);
-                    let a = if *enabled { 255 } else { 90 };
+                    let a = if *enabled { 255 } else { 110 };
                     rounded_rect(fb, all, r, r.height / 2, WHITE, t::TRACK_ALPHA);
                     let filled = Rect::new(r.x, r.y, r.width * *value as i32 / 100, r.height);
                     if filled.width > 0 {
-                        rounded_rect(fb, all, filled, r.height / 2, t::INK, a);
+                        rounded_rect(fb, all.intersect(&filled), r, r.height / 2, t::INK, a);
                     }
                 }
                 Item::Toggle { rect, on } => {
                     let r = rect.scale(s);
-                    if *on {
-                        rounded_rect(fb, all, r, r.height / 2, t::INK, 255);
+                    let (track, track_a, knob, kx) = if *on {
+                        (t::INK, 255, t::SURFACE_0, r.x + 19 * s)
                     } else {
-                        rounded_rect(fb, all, r, r.height / 2, WHITE, t::TRACK_ALPHA);
-                    }
-                    let knob = 16 * s;
-                    let kx = r.x + if *on { 19 * s } else { 3 * s };
-                    let colour = if *on { t::SURFACE_0 } else { t::KNOB_OFF };
-                    draw::circle(fb, all, kx + knob / 2, r.y + r.height / 2, knob / 2, None, colour, 255);
+                        (WHITE, t::TRACK_ALPHA, t::KNOB_OFF, r.x + 3 * s)
+                    };
+                    rounded_rect(fb, all, r, r.height / 2, track, track_a);
+                    let k = Rect::new(kx, r.y + 3 * s, 16 * s, 16 * s);
+                    // Alpine's knob shadow, `0 1px 2px rgba(0,0,0,.25)`.
+                    Shadow::new(0.0, 1.0, 2.0, 0.0, 0, 64).scaled(s).draw(
+                        fb,
+                        all,
+                        k,
+                        Radii::all(8.0 * s as f32),
+                        Rect::default(),
+                    );
+                    rounded_rect(fb, all, k, 8 * s, knob, 255);
                 }
-                Item::Tile { rect, colours, selected } => {
+                Item::Tile { rect, id, selected } => {
                     let r = rect.scale(s);
-                    let rad = t::FIELD_RADIUS * s;
-                    // The preset's gradient, row by row, inside the rounded tile.
-                    let (top, bottom, glow) = *colours;
-                    for y in r.y..r.bottom() {
-                        let k = ((y - r.y) * 256 / r.height.max(1)) as u32;
-                        let mixc = |sh: u32| {
-                            let (a, b) = ((top >> sh) & 0xff, (bottom >> sh) & 0xff);
-                            ((a * (256 - k) + b * k) / 256) << sh
-                        };
-                        let row_colour = mixc(16) | mixc(8) | mixc(0);
-                        rounded_rect(fb, Rect::new(all.x, y, all.width, 1), r, rad, row_colour, 255);
-                    }
-                    // The glow, soft: discs growing fainter outwards.
-                    for k in 1..=4 {
-                        let rad = r.height * (6 - k) / 10;
-                        draw::circle(fb, r, r.x + r.width / 2, r.y + r.height / 3, rad, None, glow, 22);
-                    }
+                    let mut tile = TileFb { fb, origin: (r.x, r.y), size: (r.width, r.height) };
+                    let full = Rect::new(0, 0, r.width, r.height);
+                    crate::shell::draw_wallpaper(&mut tile, full, id, r.width, r.height);
+                    // Cut the corners round: the page's colour over them.
+                    corner_mask(fb, all, r, 8 * s);
                     if *selected {
-                        rounded_outline(fb, all, r, rad, WHITE, 179);
-                        let inner = Rect::new(r.x + 1, r.y + 1, r.width - 2, r.height - 2);
-                        rounded_outline(fb, all, inner, rad - 1, WHITE, 179);
+                        rounded_border(fb, all, r.grow(3 * s), 11 * s, 2 * s, t::INK, 255);
                     } else {
-                        rounded_outline(fb, all, r, rad, WHITE, t::HAIRLINE_ALPHA);
+                        rounded_border(fb, all, r, 8 * s, s, t::LINE, 255);
                     }
                 }
-                Item::Check(c) => {
-                    // A tick: a short stroke down-right, a long one up-right.
-                    let r = c.scale(s);
-                    let (x0, y0) = (r.x + r.width / 8, r.y + r.height / 2);
-                    let (x1, y1) = (r.x + r.width * 3 / 8, r.y + r.height * 3 / 4);
-                    let (x2, y2) = (r.right() - r.width / 8, r.y + r.height / 5);
-                    line(fb, all, (x0, y0), (x1, y1), s.max(1) * 2, t::INK);
-                    line(fb, all, (x1, y1), (x2, y2), s.max(1) * 2, t::INK);
+                Item::Icon { icon, x, y, size, rgb, alpha } => {
+                    icon.draw(fb, all, (x * s) as f32, (y * s) as f32, (size * s) as f32, *rgb, *alpha);
                 }
-                Item::Glyph { page, x, y, rgb, alpha } => glyph(fb, all, *page, x * s, y * s, s, *rgb, *alpha),
             }
         }
     }
 }
 
-/// A straight line `thick` pixels wide (squares along it).
-fn line(fb: &mut dyn Framebuffer, clip: Rect, a: (i32, i32), b: (i32, i32), thick: i32, rgb: u32) {
-    let steps = (b.0 - a.0).abs().max((b.1 - a.1).abs()).max(1);
-    for i in 0..=steps {
-        let x = a.0 + (b.0 - a.0) * i / steps;
-        let y = a.1 + (b.1 - a.1) * i / steps;
-        fill(fb, clip, Rect::new(x - thick / 2, y - thick / 2, thick, thick), rgb, 255);
+/// Paint the corners of `r` outside a radius-`rad` rounding in the page's
+/// colour (wallpaper tiles are drawn square, then rounded this way).
+fn corner_mask(fb: &mut dyn Framebuffer, clip: Rect, r: Rect, rad: i32) {
+    let b = paint::Box2::from_rect(r);
+    for (cx, cy) in [(r.x, r.y), (r.right() - rad, r.y), (r.x, r.bottom() - rad), (r.right() - rad, r.bottom() - rad)] {
+        let area = Rect::new(cx, cy, rad, rad).intersect(&clip);
+        for y in area.y..area.bottom() {
+            let row = fb.row_mut(y as u32);
+            for x in area.x..area.right() {
+                let cov = paint::rounded_coverage(&b, Radii::all(rad as f32), x, y);
+                let a = ((1.0 - cov) * 255.0 + 0.5) as u32;
+                if a > 0 {
+                    row[x as usize] = paint::mix(row[x as usize], t::SURFACE_1, a);
+                }
+            }
+        }
     }
 }
 
-/// A page's 15-pixel icon at physical (`x`, `y`), scale `s`.
-#[allow(clippy::too_many_arguments)]
-fn glyph(fb: &mut dyn Framebuffer, clip: Rect, page: Page, x: i32, y: i32, s: i32, rgb: u32, alpha: u8) {
-    let r = |dx: i32, dy: i32, w: i32, h: i32| Rect::new(x + dx * s, y + dy * s, w * s, h * s);
-    let outline = |fb: &mut dyn Framebuffer, b: Rect| {
-        for e in [
-            Rect::new(b.x, b.y, b.width, s),
-            Rect::new(b.x, b.bottom() - s, b.width, s),
-            Rect::new(b.x, b.y, s, b.height),
-            Rect::new(b.right() - s, b.y, s, b.height),
-        ] {
-            fill(fb, clip, e, rgb, alpha);
-        }
-    };
-    match page {
-        Page::Display => {
-            outline(fb, r(0, 2, 15, 9));
-            fill(fb, clip, r(7, 11, 1, 2), rgb, alpha);
-            fill(fb, clip, r(4, 13, 7, 1), rgb, alpha);
-        }
-        Page::Keyboard => {
-            outline(fb, r(0, 3, 15, 9));
-            for i in 0..4 {
-                fill(fb, clip, r(3 + 3 * i, 6, 1, 1), rgb, alpha);
-            }
-            fill(fb, clip, r(4, 9, 7, 1), rgb, alpha);
-        }
-        Page::Wallpaper => {
-            outline(fb, r(0, 2, 15, 11));
-            draw::circle(fb, clip, x + 10 * s, y + 6 * s, 2 * s, None, rgb, alpha);
-            for i in 0..5 {
-                fill(fb, clip, r(2 + i, 10 - i, 1, 2 + i), rgb, alpha);
-                fill(fb, clip, r(10 - i, 10 - i, 1, 2 + i), rgb, alpha);
-            }
-        }
-        Page::Sound => {
-            fill(fb, clip, r(1, 5, 3, 5), rgb, alpha);
-            for i in 0..4 {
-                fill(fb, clip, r(4 + i, 5 - i, 1, 5 + 2 * i), rgb, alpha);
-            }
-            let half = clip.intersect(&r(9, 0, 6, 15));
-            draw::circle(fb, half, x + 8 * s, y + 7 * s, 4 * s, Some(s), rgb, alpha);
-        }
-        Page::DateTime => {
-            draw::circle(fb, clip, x + 7 * s, y + 7 * s, 7 * s, Some(s), rgb, alpha);
-            fill(fb, clip, r(7, 3, 1, 5), rgb, alpha);
-            fill(fb, clip, r(7, 7, 3, 1), rgb, alpha);
-        }
-        Page::About => {
-            draw::circle(fb, clip, x + 7 * s, y + 7 * s, 7 * s, Some(s), rgb, alpha);
-            fill(fb, clip, r(7, 4, 1, 1), rgb, alpha);
-            fill(fb, clip, r(7, 6, 1, 5), rgb, alpha);
-        }
+/// A window onto part of a framebuffer, for drawing a wallpaper tile with
+/// the wallpaper's own code.
+struct TileFb<'a> {
+    fb: &'a mut dyn Framebuffer,
+    origin: (i32, i32),
+    size: (i32, i32),
+}
+
+impl Framebuffer for TileFb<'_> {
+    fn width(&self) -> u32 {
+        self.size.0 as u32
+    }
+
+    fn height(&self) -> u32 {
+        self.size.1 as u32
+    }
+
+    fn row_mut(&mut self, y: u32) -> &mut [u32] {
+        let (ox, oy) = self.origin;
+        let w = self.size.0 as usize;
+        let row = self.fb.row_mut((oy + y as i32) as u32);
+        &mut row[ox as usize..ox as usize + w]
     }
 }
 
@@ -802,7 +894,7 @@ mod tests {
         assert_eq!(win.button(kx, ky, true, W, H, &c).1, Some(Change::Keyboard("de-ch".into())));
         // Wallpapers, time zones, the scale.
         win.page = Page::Wallpaper;
-        let (wx, wy) = at(&win, &c, Target::Wallpaper(2));
+        let (wx, wy) = at(&win, &c, Target::Wallpaper(3));
         assert_eq!(win.button(wx, wy, true, W, H, &c).1, Some(Change::Wallpaper("forest".into())));
         win.page = Page::DateTime;
         let (zx, zy) = at(&win, &c, Target::Zone(1));
@@ -815,6 +907,24 @@ mod tests {
         assert_eq!(win.page, Page::About);
         win.step_page(true);
         assert_eq!(win.page, Page::Display);
+    }
+
+    #[test]
+    fn the_arrows_go_back_and_forward() {
+        let text = Text::new(None);
+        let (st, i) = (Settings::default(), info());
+        let c = cx(&st, &i, &text);
+        let mut win = SettingsWindow::default();
+        let (_, targets) = win.layout(W, H, &c);
+        assert!(!targets.iter().any(|(_, t)| *t == Target::Back), "nowhere to go back to");
+        let (x, y) = at(&win, &c, Target::Nav(Page::Sound));
+        win.button(x, y, true, W, H, &c);
+        let (bx, by) = at(&win, &c, Target::Back);
+        win.button(bx, by, true, W, H, &c);
+        assert_eq!(win.page, Page::Display);
+        let (fx, fy) = at(&win, &c, Target::Forward);
+        win.button(fx, fy, true, W, H, &c);
+        assert_eq!(win.page, Page::Sound);
     }
 
     #[test]
@@ -832,18 +942,37 @@ mod tests {
             assert!(!items.is_empty());
             let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
             win.draw(&mut fb, W, H, 1, &c);
-            assert_eq!(fb.pixel(10, 300), Some(t::SURFACE_0), "the sidebar's ground");
+            assert_eq!(fb.pixel(10, H as u32 - 10), Some(t::SURFACE_0), "the sidebar's ground");
             assert_eq!(fb.pixel(W as u32 - 5, H as u32 - 5), Some(t::SURFACE_1), "the page");
+            assert_eq!(fb.pixel(t::SIDEBAR as u32 + 40, t::HEADER as u32), Some(t::LINE), "the page's hairline");
         }
         // The active page is highlighted in the sidebar.
         win.page = Page::Display;
         let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
         win.draw(&mut fb, W, H, 1, &c);
-        assert_eq!(fb.pixel(t::SIDEBAR as u32 - 20, t::HEADER as u32 + 8), Some(t::SURFACE_3));
+        let row = win.nav().into_iter().find(|n| n.1 == Page::Display).unwrap().0;
+        assert_eq!(fb.pixel((row.right() - 6) as u32, (row.y + 4) as u32), Some(t::SURFACE_3));
         // At scale 2 too.
         let mut fb = MemoryFramebuffer::new(2 * W as u32, 2 * H as u32);
         win.draw(&mut fb, W, H, 2, &c);
         assert_eq!(fb.pixel(2 * W as u32 - 5, 2 * H as u32 - 5), Some(t::SURFACE_1));
+    }
+
+    #[test]
+    fn controls_are_drawn_in_alpines_colours() {
+        let text = Text::new(None);
+        let st = Settings { muted: true, ..Settings::default() };
+        let i = info();
+        let c = cx(&st, &i, &text);
+        let win = SettingsWindow { page: Page::Sound, ..SettingsWindow::default() };
+        let (items, _) = win.layout(W, H, &c);
+        let toggle =
+            items.iter().find_map(|i| if let Item::Toggle { rect, .. } = i { Some(*rect) } else { None }).unwrap();
+        let mut fb = MemoryFramebuffer::new(W as u32, H as u32);
+        win.draw(&mut fb, W, H, 1, &c);
+        // On: the track in the ink, the knob in the ground colour on the right.
+        assert_eq!(fb.pixel((toggle.x + 6) as u32, (toggle.y + 11) as u32), Some(t::INK));
+        assert_eq!(fb.pixel((toggle.x + 27) as u32, (toggle.y + 11) as u32), Some(t::SURFACE_0));
     }
 
     #[test]

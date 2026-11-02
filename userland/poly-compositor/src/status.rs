@@ -1,61 +1,17 @@
 //! What the ridge and the settings window show about the system (ADR
-//! 0117): the network from the kernel's interfaces (`getifaddrs`, which
-//! the C library answers with the netlink requests Poly's Linux
-//! personality serves), and the facts of the About page (`uname`,
+//! 0117): the network from the kernel's interfaces (`net_interfaces`, ADR
+//! 0125), and the facts of the About page (`uname` from `/proc/sys/kernel`,
 //! `/proc/cpuinfo`, `/proc/meminfo`).
 
+use crate::prelude::*;
 use poly_shell::Network;
-use std::ffi::CStr;
 
-/// An interface as `getifaddrs` lists it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Interface {
-    pub name: String,
-    pub up: bool,
-    pub running: bool,
-    pub loopback: bool,
-    /// It has an IPv4 or IPv6 address.
-    pub addressed: bool,
-}
+/// A network interface.
+pub use poly_rt::system::Interface;
 
-/// The interfaces, merged by name.
+/// The interfaces.
 pub fn interfaces() -> Vec<Interface> {
-    let mut list: *mut libc::ifaddrs = std::ptr::null_mut();
-    // SAFETY: `list` is a valid pointer to store the list's head in.
-    if unsafe { libc::getifaddrs(&mut list) } != 0 {
-        return Vec::new();
-    }
-    let mut out: Vec<Interface> = Vec::new();
-    let mut p = list;
-    while !p.is_null() {
-        // SAFETY: `p` is a node of the list getifaddrs returned, not freed yet.
-        let ifa = unsafe { &*p };
-        // SAFETY: ifa_name is a NUL-terminated string in the node.
-        let name = unsafe { CStr::from_ptr(ifa.ifa_name) }.to_string_lossy().into_owned();
-        let flags = ifa.ifa_flags;
-        // SAFETY: a non-null ifa_addr points at a sockaddr of the node.
-        let family = if ifa.ifa_addr.is_null() { 0 } else { i32::from(unsafe { (*ifa.ifa_addr).sa_family }) };
-        let addressed = family == libc::AF_INET || family == libc::AF_INET6;
-        let entry = Interface {
-            name: name.clone(),
-            up: flags & libc::IFF_UP as u32 != 0,
-            running: flags & libc::IFF_RUNNING as u32 != 0,
-            loopback: flags & libc::IFF_LOOPBACK as u32 != 0,
-            addressed,
-        };
-        match out.iter_mut().find(|i| i.name == name) {
-            Some(i) => {
-                i.addressed |= entry.addressed;
-                i.up |= entry.up;
-                i.running |= entry.running;
-            }
-            None => out.push(entry),
-        }
-        p = ifa.ifa_next;
-    }
-    // SAFETY: freeing the list getifaddrs made, once.
-    unsafe { libc::freeifaddrs(list) };
-    out
+    poly_rt::system::interfaces()
 }
 
 /// The network as the ridge shows it: online through the first interface
@@ -78,17 +34,7 @@ pub fn describe(n: &Network) -> String {
 
 /// `uname`: (system, release, version, machine).
 pub fn uname() -> (String, String, String, String) {
-    // SAFETY: utsname is plain old data; all zeroes is a valid value.
-    let mut u: libc::utsname = unsafe { std::mem::zeroed() };
-    // SAFETY: `u` is a valid utsname to fill.
-    if unsafe { libc::uname(&mut u) } != 0 {
-        return Default::default();
-    }
-    let s = |f: &[libc::c_char]| {
-        let bytes: Vec<u8> = f.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
-        String::from_utf8_lossy(&bytes).into_owned()
-    };
-    (s(&u.sysname), s(&u.release), s(&u.version), s(&u.machine))
+    poly_rt::system::uname()
 }
 
 /// The first `model name` of `/proc/cpuinfo`'s text.
@@ -134,6 +80,6 @@ mod tests {
         assert_eq!(cpu_model(""), "");
         assert_eq!(mem_total_kib("MemTotal:        524288 kB\nMemFree: 1 kB\n"), 524_288);
         assert_eq!(mem_total_kib("nothing"), 0);
-        assert!(!uname().0.is_empty());
+        assert_eq!(uname().3, "x86_64");
     }
 }

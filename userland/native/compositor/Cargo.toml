@@ -1,0 +1,20 @@
+[package]
+name = "poly-compositor-native"
+description = "/bin/poly-compositor: the compositor and desktop (userland/poly-compositor) as a native Poly program (ADR 0124, ADR 0125)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "poly-compositor"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-compositor = { path = "../../poly-compositor" }
+poly-rt = { path = "../../../crates/poly-rt" }
+
+[lints]
+workspace = true

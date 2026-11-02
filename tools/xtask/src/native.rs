@@ -1,16 +1,22 @@
 //! Native Poly programs (ADR 0125): building `userland/native/` and the
 //! native boot test.
 //!
-//! The programs are `no_std` + `alloc` Rust on `poly-rt`, for the
-//! `x86_64-unknown-none` target, whose standard library (core, alloc) the
-//! pinned toolchain ships and whose linker is `rust-lld`: no host C
-//! toolchain and no unstable flags, so the build is the same on Windows
-//! and Linux hosts. Cargo runs inside `userland/native/` so its
-//! `.cargo/config.toml` (target, static non-PIE flags) applies; the
-//! artifacts go to `target/native/`. Each built program is checked to be
-//! what the kernel runs natively: an ELF whose first page holds Poly's ABI
-//! note for this ABI version (`poly-binfmt`).
+//! The programs are `no_std` + `alloc` Rust on `poly-rt`, for Poly's own
+//! target `x86_64-unknown-poly` (`userland/native/x86_64-unknown-poly.json`:
+//! `x86_64-unknown-none` with SSE2 floats, ADR 0126), whose `core` and
+//! `alloc` are built from the toolchain's `rust-src` (`build-std`, under
+//! `RUSTC_BOOTSTRAP=1`, as for `ntdll`) and whose linker is `rust-lld`: no
+//! host C toolchain, so the build is the same on Windows and Linux hosts.
+//! Cargo runs inside `userland/native/` so its `.cargo/config.toml`
+//! (target, build-std) applies; the
+//! artifacts go to `target/native/` (the checkout and the toolchain
+//! remapped to `/poly` and `/rust` in what they carry). Each built program
+//! is checked to be what the kernel runs natively: an ELF whose first page
+//! holds Poly's ABI note for this ABI version (`poly-binfmt`).
 //!
+//! The programs: the test programs `native-hello` and `native-child`, the
+//! compositor and desktop `poly-compositor`, and `notify-send` (ADR 0126;
+//! `compositor.rs` and the desktop boot tests take theirs from here).
 //! `cargo xtask build` and every kernel build build them; `cargo xtask run`
 //! puts them into its initramfs as `/bin/<name>`, so
 //! `cargo xtask run poly.init=/bin/native-hello` boots into one.
@@ -18,7 +24,9 @@
 //! The boot test (group `native`): `/bin/native-hello` runs as the first
 //! process with the Linux nolibc hello world next to it, and must report
 //! every check passed (prints, arguments, the heap, time, files, native
-//! children's exit, panic and fault, a Linux child) and exit 0; then
+//! children's exit, panic and fault, a Linux child, and the calls of ABI
+//! version 2: directories, pipes and `poll`, memory objects, sockets
+//! passing handles, process handles) and exit 0; then
 //! `/bin/native-child exit 7` as the first process must end with status 7.
 
 use super::{Boot, DEFAULT_MEMORY, Devices, QEMU_SUCCESS, Result, boot_on, cargo, initramfs, programs, root, step};
@@ -27,8 +35,9 @@ use poly_personality_native::abi::ABI_VERSION;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// The native programs `userland/native/` builds, as `/bin/<name>`.
-pub const PROGRAMS: [&str; 2] = ["native-hello", "native-child"];
+/// The native programs `userland/native/` builds, as `/bin/<name>`: the
+/// test programs, the compositor and desktop, and `notify-send`.
+pub const PROGRAMS: [&str; 4] = ["native-hello", "native-child", "poly-compositor", "notify-send"];
 
 /// What `/bin/native-hello` prints last when every check passed.
 pub const HELLO_OUTPUT: &str = "native-hello: done, 0 failed";
@@ -41,13 +50,32 @@ fn target_dir() -> PathBuf {
     root().join("target").join("native")
 }
 
+/// `cargo` in `userland/native/` with the checkout's path remapped to
+/// `/poly` and the toolchain's to `/rust` in what the compiler writes
+/// (panic locations), so a program does not carry the host's directories.
+fn native_cargo() -> std::process::Command {
+    let sysroot = std::process::Command::new("rustc")
+        .args(["--print", "sysroot"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty());
+    let mut flags = vec![format!("'--remap-path-prefix={}=/poly'", root().display())];
+    flags.extend(sysroot.map(|s| format!("'--remap-path-prefix={s}=/rust'")));
+    let remap = format!("target.x86_64-unknown-poly.rustflags=[{}]", flags.join(", "));
+    let mut cmd = cargo();
+    // Poly's target builds core and alloc from rust-src (build-std).
+    cmd.current_dir(workspace()).env("RUSTC_BOOTSTRAP", "1").args(["--config", &remap]);
+    cmd
+}
+
 /// Build the native programs; returns `(name, ELF)` for each of
 /// [`PROGRAMS`], checked to carry Poly's ABI note.
 pub fn build() -> Result<Vec<(String, Vec<u8>)>> {
-    let mut cmd = cargo();
-    cmd.current_dir(workspace()).args(["build", "--release", "--target-dir"]).arg(target_dir());
+    let mut cmd = native_cargo();
+    cmd.args(["build", "--release", "--target-dir"]).arg(target_dir());
     step("build native programs (userland/native)", &mut cmd)?;
-    let dir = target_dir().join("x86_64-unknown-none").join("release");
+    let dir = target_dir().join("x86_64-unknown-poly").join("release");
     PROGRAMS
         .iter()
         .map(|name| {
@@ -59,13 +87,18 @@ pub fn build() -> Result<Vec<(String, Vec<u8>)>> {
         .collect()
 }
 
+/// Build the native programs and return the one called `name`.
+pub fn program(name: &str) -> Result<Vec<u8>> {
+    build()?.into_iter().find(|(n, _)| n == name).map(|(_, elf)| elf).ok_or_else(|| format!("no native program {name}"))
+}
+
 /// `ci lint`'s part: formatting and clippy of `userland/native/` (for its
 /// target, with `poly-rt`'s native-only code: the entry point, the
 /// allocator, the panic handler).
 pub fn lint() -> Result {
     step("fmt (native)", cargo().current_dir(workspace()).args(["fmt", "--all", "--check"]))?;
-    let mut clippy = cargo();
-    clippy.current_dir(workspace()).args(["clippy", "--release", "--target-dir"]).arg(target_dir());
+    let mut clippy = native_cargo();
+    clippy.args(["clippy", "--release", "--target-dir"]).arg(target_dir());
     step("clippy (native)", clippy.args(["--", "-D", "warnings"]))
 }
 

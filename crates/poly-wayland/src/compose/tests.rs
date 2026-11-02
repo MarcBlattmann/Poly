@@ -125,8 +125,9 @@ fn hidpi_scales_logical_coordinates_and_buffers() {
 
 #[test]
 fn draws_the_neutral_frame_around_toplevels() {
-    let theme = Theme::NEUTRAL;
+    let theme = Theme::FLAT;
     let mut scene = Scene::new(200, 100, 1);
+    scene.set_theme(theme);
     let id = window(&mut scene, 20, 40, 120, 40, 1, 0xff10_2030, true);
     scene.set_title(id, "Hi");
     scene.set_active(id, true);
@@ -135,10 +136,13 @@ fn draws_the_neutral_frame_around_toplevels() {
     let f = FrameLayout::around(Rect::new(20, 40, 120, 40));
     assert_eq!(f.outer, Rect::new(19, 15, 122, 66));
     assert_eq!(scene.frame_rect(id), Some(f.outer));
-    // Border on every side, the title bar above the content.
-    for (x, y) in [(19, 15), (140, 15), (19, 80), (140, 80), (19, 50), (140, 50), (60, 15), (60, 80)] {
+    // Border on every side, the title bar above the content; the top
+    // corners are rounded (CORNER_RADIUS), the bottom ones square.
+    for (x, y) in [(30, 15), (129, 15), (19, 80), (140, 80), (19, 50), (140, 50), (60, 15), (60, 80)] {
         assert_eq!(fb.pixel(x, y), Some(theme.border_active), "border at {x},{y}");
     }
+    assert_eq!(fb.pixel(19, 15), Some(BG), "the top left corner is cut");
+    assert_eq!(fb.pixel(140, 15), Some(BG), "the top right corner is cut");
     assert_eq!(fb.pixel(18, 50), Some(BG));
     assert_eq!(fb.pixel(100, 17), Some(theme.title_active));
     assert_eq!(fb.pixel(60, 40), Some(0x10_20_30));
@@ -166,6 +170,7 @@ fn draws_the_neutral_frame_around_toplevels() {
 #[test]
 fn the_frame_follows_the_window_geometry_and_the_scale() {
     let mut scene = Scene::new(400, 200, 2);
+    scene.set_theme(Theme::FLAT);
     let id = window(&mut scene, 40, 40, 100, 60, 1, 0xff00_0000, true);
     // A geometry 10 pixels inside the content on each side.
     scene.set_geometry(id, Some(Rect::new(10, 10, 80, 40)));
@@ -174,7 +179,7 @@ fn the_frame_follows_the_window_geometry_and_the_scale() {
     let mut fb = MemoryFramebuffer::new(400, 200);
     scene.render(&mut fb);
     // At scale 2 the border is two physical pixels wide.
-    let theme = Theme::NEUTRAL;
+    let theme = Theme::FLAT;
     let (ox, oy) = (f.outer.x * 2, f.outer.y * 2);
     assert_eq!(fb.pixel(ox as u32, (oy + 30) as u32), Some(theme.border_inactive));
     assert_eq!(fb.pixel((ox + 1) as u32, (oy + 30) as u32), Some(theme.border_inactive));
@@ -414,4 +419,41 @@ fn backdrops_hold_what_is_behind_a_window() {
     assert_eq!(scene.backdrop(glass).unwrap().pixel(5, 5), Some(0xff0000));
     scene.set_backdrop(glass, false);
     assert!(scene.backdrop(glass).is_none());
+}
+
+#[test]
+fn framed_windows_cast_a_soft_shadow_that_is_damaged_with_them() {
+    let mut scene = Scene::new(300, 200, 1);
+    let id = window(&mut scene, 100, 60, 100, 60, 1, 0xff10_2030, true);
+    scene.set_active(id, true);
+    let mut fb = MemoryFramebuffer::new(300, 200);
+    scene.render(&mut fb);
+    let outer = scene.frame_rect(id).unwrap();
+    // Below the window the desktop is darker than far away, most just
+    // under it, fading out.
+    let near = fb.pixel(150, (outer.bottom() + 4) as u32).unwrap() & 0xff;
+    let farther = fb.pixel(150, (outer.bottom() + 24) as u32).unwrap() & 0xff;
+    let far = fb.pixel(5, 5).unwrap() & 0xff;
+    assert!(near < farther && farther <= far, "{near} {farther} {far}");
+    assert_eq!(far, BG & 0xff);
+    // The window's own pixels are untouched by it.
+    assert_eq!(fb.pixel(150, 90), Some(0x10_20_30));
+    // Moving the window damages where its shadow was and is.
+    scene.set_position(id, 20, 60);
+    let shadow = scene.theme().shadow_extent(outer);
+    assert!(scene.damage().iter().any(|d| d.right() >= shadow.right() && d.bottom() >= shadow.bottom()));
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(260, (outer.bottom() + 4) as u32).map(|p| p & 0xff), Some(BG & 0xff), "the old shadow is gone");
+}
+
+#[test]
+fn shadows_stay_off_the_rows_a_shell_keeps() {
+    let mut scene = Scene::new(300, 200, 1);
+    scene.set_reserved_top(24);
+    let id = window(&mut scene, 50, 50, 100, 60, 1, 0xff10_2030, true);
+    scene.set_active(id, true);
+    let mut fb = MemoryFramebuffer::new(300, 200);
+    scene.render(&mut fb);
+    assert!((0..300).all(|x| fb.pixel(x, 23) == Some(BG)), "the reserved rows keep the background");
+    assert_ne!(fb.pixel(100, 30), Some(BG), "below them the shadow shows");
 }

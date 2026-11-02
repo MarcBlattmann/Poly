@@ -1,5 +1,8 @@
-//! `poly-compositor`: Poly's Wayland compositor for the Linux personality
-//! (ADR 0106, 0107).
+//! `poly-compositor`: Poly's Wayland compositor (ADR 0106, 0107), a native
+//! Poly program on `poly-rt` (ADR 0125): this crate is its code, built for
+//! the native target by `userland/native/compositor` and tested on the
+//! host. Linux apps reach it as they reach any Wayland compositor: on the
+//! socket path, through the Linux personality's sockets.
 //!
 //! It listens on `$XDG_RUNTIME_DIR/<socket>` (`wayland-0` by default) as
 //! the Wayland book's "Wayland display" describes, hands every client's
@@ -12,9 +15,11 @@
 //!
 //! - **Off-screen** (the default): into a framebuffer in memory, which
 //!   goes nowhere but a PPM file (`--dump`, else
-//!   `$XDG_RUNTIME_DIR/poly-compositor.ppm`): written on `SIGUSR1`, with
-//!   the windows and the `--probe` pixels printed, and with `--dump` when
-//!   the compositor ends.
+//!   `$XDG_RUNTIME_DIR/poly-compositor.ppm`): written when a line `dump`
+//!   comes in on the control pipe (`$POLY_COMPOSITOR_CONTROL`, a named pipe
+//!   in the runtime directory; `SIGUSR1` before ADR 0125), with the windows
+//!   and the `--probe` pixels printed, and with `--dump` when the
+//!   compositor ends.
 //! - **`--desktop`**: on the screen, with the keyboards and pointers of
 //!   `/dev/input/event*` routed to the clients (`wl_pointer`, `wl_keyboard`
 //!   with an XKB keymap of the settings' or `--keymap`'s layout), a
@@ -25,7 +30,8 @@
 //!   snapping, Alt+Tab, Super+arrows, Alt+F4), notifications through a
 //!   session bus at `$XDG_RUNTIME_DIR/bus`, the settings window, kept in
 //!   `--settings` (default `$XDG_CONFIG_HOME/poly/shell.conf`), the
-//!   wallpaper, new windows centred. `SIGUSR1` still writes the picture.
+//!   wallpaper, new windows centred. The control pipe still asks for the
+//!   picture.
 //! - **`--kms`**: on the screen without the shell (what the boot tests of
 //!   the protocols use).
 //!
@@ -53,44 +59,55 @@
 //! `XDG_RUNTIME_DIR` and `POLY_COMPOSITOR_DUMP`, the dump's path, set) and
 //! ends the compositor when it ends, with its exit status: how the boot
 //! test runs it as Poly's first process, the client asking for a dump
-//! with `SIGUSR1` while its window is up. Without `XDG_RUNTIME_DIR` it
-//! uses `/run/user/<uid>`, made if missing.
+//! on the control pipe while its window is up. Without `XDG_RUNTIME_DIR`
+//! it uses `/run/user/<uid>`, made if missing.
 //!
-//! I/O is blocking and driven by `poll`: one `recvmsg` per readable
-//! client, `sendmsg` of what the server queued. A client that stops
-//! reading could stall it; non-blocking sends come with real workloads.
+//! I/O is blocking and driven by `poll`: one receive per readable client,
+//! a send of what the server queued. A client that stops reading could
+//! stall it; non-blocking sends come with real workloads. Children (the
+//! client to run, launched apps, Xwayland) are watched through their
+//! process handles, polled with the rest (`os.rs`).
+
+#![no_std]
+
+#[macro_use]
+extern crate alloc;
+#[macro_use]
+extern crate poly_rt;
+#[cfg(test)]
+extern crate std;
 
 mod desk;
 mod desktop;
 mod evdev;
 mod fbdev;
+pub mod io;
 mod kms;
 mod mixer;
+pub mod os;
 mod session;
 mod status;
-mod unix;
 mod xwayland;
 
+/// What every module of the crate uses from `alloc`, which `std`'s
+/// prelude would have given.
+mod prelude {
+    pub use alloc::boxed::Box;
+    pub use alloc::string::{String, ToString};
+    pub use alloc::vec::Vec;
+}
+
+use crate::prelude::*;
+use alloc::collections::BTreeMap;
+use poly_rt::fs;
+use poly_rt::net::{UnixListener, UnixStream};
 use poly_wayland::compose::{Framebuffer, MemoryFramebuffer};
 use poly_wayland::seat::InputSource;
 use poly_wayland::server::{ClientId, Config, FrameTime, OutputConfig, Server, present_flags};
 use poly_wayland::wire::Fd;
-use std::collections::BTreeMap;
-use std::os::fd::AsRawFd;
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::{Path, PathBuf};
-use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The shortest time between two frames: 60 Hz.
 const FRAME_NS: u64 = 1_000_000_000 / 60;
-
-/// Set by `SIGUSR1`: write the picture.
-static DUMP: AtomicBool = AtomicBool::new(false);
-
-extern "C" fn on_sigusr1(_: libc::c_int) {
-    DUMP.store(true, Ordering::Relaxed);
-}
 
 #[derive(Debug)]
 struct Options {
@@ -99,13 +116,13 @@ struct Options {
     height: u32,
     /// `None`: automatic (from the screen, or `POLY_DISPLAY_SCALE`).
     scale: Option<u32>,
-    dump: Option<PathBuf>,
+    dump: Option<String>,
     probes: Vec<(u32, u32)>,
     desktop: bool,
     fb: String,
     /// `--keymap` as given (it wins over the settings).
     keymap: Option<String>,
-    settings: Option<PathBuf>,
+    settings: Option<String>,
     /// On the screen without the shell.
     kms: bool,
     drm: String,
@@ -160,7 +177,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
             "--kms" => o.kms = true,
             "--drm" => o.drm = value()?,
             "--no-kms" => o.no_kms = true,
-            "--dump" => o.dump = Some(value()?.into()),
+            "--dump" => o.dump = Some(value()?),
             "--probe" => {
                 let v = value()?;
                 o.probes.push(pair(&v, ',').ok_or(format!("bad probe {v}"))?);
@@ -172,7 +189,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
                 poly_input::layout::by_name(&v).ok_or(format!("no keyboard layout {v} (us, de-ch, de)"))?;
                 o.keymap = Some(v);
             }
-            "--settings" => o.settings = Some(value()?.into()),
+            "--settings" => o.settings = Some(value()?),
             "--xwayland" => o.xwayland = Some(xwayland::Start::Now),
             "--xwayland-lazy" => o.xwayland = Some(xwayland::Start::Lazy),
             "--exec" => {
@@ -189,16 +206,13 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
 }
 
 /// `$XDG_RUNTIME_DIR`, or `/run/user/<uid>` made with mode 0700.
-fn runtime_dir() -> Result<PathBuf, String> {
-    if let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR") {
+fn runtime_dir() -> Result<String, String> {
+    if let Some(dir) = poly_rt::env::var("XDG_RUNTIME_DIR") {
         return Ok(dir.into());
     }
-    // SAFETY: getuid has no preconditions.
-    let uid = unsafe { libc::getuid() };
-    let dir = PathBuf::from(format!("/run/user/{uid}"));
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    let dir = format!("/run/user/{}", os::getuid());
+    fs::create_dir_all(&dir).map_err(|e| format!("{dir}: {e}"))?;
+    let _ = fs::set_mode(&dir, 0o700);
     Ok(dir)
 }
 
@@ -213,15 +227,15 @@ struct Connection {
 /// Send what is queued; false if the connection is broken.
 fn flush(conn: &mut Connection) -> bool {
     while !conn.out.is_empty() {
-        match unix::send(conn.stream.as_raw_fd(), &conn.out, &conn.out_fds) {
+        match os::send(conn.stream.handle() as os::RawFd, &conn.out, &conn.out_fds) {
             Ok(n) => {
                 conn.out.drain(..n);
-                let sent = conn.out_fds.len().min(unix::MAX_FDS);
+                let sent = conn.out_fds.len().min(os::MAX_FDS);
                 for fd in conn.out_fds.drain(..sent) {
-                    unix::close(fd.0);
+                    os::close(fd.0);
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(_) => return false,
         }
     }
@@ -287,7 +301,7 @@ fn choose_scale(asked: Option<u32>, screen: &Screen) -> u32 {
     if let Some(s) = asked {
         return s;
     }
-    if let Some(s) = std::env::var("POLY_DISPLAY_SCALE").ok().and_then(|v| parse_scale(&v).ok().flatten()) {
+    if let Some(s) = poly_rt::env::var("POLY_DISPLAY_SCALE").and_then(|v| parse_scale(v).ok().flatten()) {
         return s;
     }
     match screen {
@@ -313,18 +327,18 @@ fn ppm(fb: &mut dyn Framebuffer) -> Vec<u8> {
 
 /// Write the picture as a PPM: to a temporary file renamed into place, so
 /// a reader never sees half of it.
-fn write_dump(fb: &mut dyn Framebuffer, path: &Path) {
-    let tmp = path.with_extension("ppm.tmp");
+fn write_dump(fb: &mut dyn Framebuffer, path: &str) {
+    let tmp = format!("{path}.tmp");
     let (w, h) = (fb.width(), fb.height());
-    match std::fs::write(&tmp, ppm(fb)).and_then(|()| std::fs::rename(&tmp, path)) {
-        Ok(()) => println!("poly-compositor: wrote {} ({w}x{h})", path.display()),
-        Err(e) => eprintln!("poly-compositor: {}: {e}", path.display()),
+    match fs::write(&tmp, &ppm(fb)).and_then(|()| fs::rename(&tmp, path)) {
+        Ok(()) => println!("poly-compositor: wrote {path} ({w}x{h})"),
+        Err(e) => eprintln!("poly-compositor: {path}: {e}"),
     }
 }
 
-/// Describe the windows and the probed pixels, write the picture: what
-/// `SIGUSR1` asks for (after the caller drew what changed).
-fn report(server: &Server, fb: &mut dyn Framebuffer, probes: &[(u32, u32)], path: &Path) {
+/// Describe the windows and the probed pixels, write the picture: what a
+/// `dump` request asks for (after the caller drew what changed).
+fn report(server: &Server, fb: &mut dyn Framebuffer, probes: &[(u32, u32)], path: &str) {
     for w in server.scene().windows() {
         let (x, y) = w.position();
         let (cw, ch) = w.content().logical_size();
@@ -341,59 +355,61 @@ fn report(server: &Server, fb: &mut dyn Framebuffer, probes: &[(u32, u32)], path
     write_dump(fb, path);
 }
 
-fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+/// The compositor's `main`: its arguments from the command line; returns
+/// the exit status (the `--exec` client's, or 1 on an error).
+pub fn main() -> i32 {
+    let args: Vec<String> = poly_rt::env::args_str().skip(1).map(String::from).collect();
     match run(&args) {
-        Ok(code) => ExitCode::from(code),
+        Ok(code) => i32::from(code),
         Err(e) => {
             eprintln!("poly-compositor: {e}");
-            ExitCode::FAILURE
+            1
         }
     }
 }
 
 /// The environment a client gets: ours, with the display's variables, the
-/// session bus's address (ADR 0117) and `DISPLAY=...` for the X display
-/// (ADR 0118), if there are.
-fn client_env(socket: &str, dir: &Path, dump: &Path, bus: Option<&str>, display: Option<String>) -> Vec<String> {
-    let ours = ["WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "POLY_COMPOSITOR_DUMP", "DBUS_SESSION_BUS_ADDRESS"];
-    let mut env: Vec<String> = std::env::vars()
-        .filter(|(k, _)| !ours.contains(&k.as_str()) && (k != "DISPLAY" || display.is_none()))
+/// session bus's address (ADR 0117), `DISPLAY=...` for the X display
+/// (ADR 0118), if there are, and the control pipe.
+fn client_env(socket: &str, dir: &str, dump: &str, bus: Option<&str>, display: Option<String>) -> Vec<String> {
+    let ours = [
+        "WAYLAND_DISPLAY",
+        "XDG_RUNTIME_DIR",
+        "POLY_COMPOSITOR_DUMP",
+        "POLY_COMPOSITOR_CONTROL",
+        "DBUS_SESSION_BUS_ADDRESS",
+    ];
+    let mut env: Vec<String> = poly_rt::env::vars_str()
+        .filter(|(k, _)| !ours.contains(k) && (*k != "DISPLAY" || display.is_none()))
         .map(|(k, v)| format!("{k}={v}"))
         .collect();
     env.extend(display);
     env.push(format!("WAYLAND_DISPLAY={socket}"));
-    env.push(format!("XDG_RUNTIME_DIR={}", dir.display()));
-    // Where SIGUSR1 puts the picture, for a client that checks it.
-    env.push(format!("POLY_COMPOSITOR_DUMP={}", dump.display()));
+    env.push(format!("XDG_RUNTIME_DIR={dir}"));
+    // Where a `dump` request puts the picture, and where to ask, for a
+    // client that checks it.
+    env.push(format!("POLY_COMPOSITOR_DUMP={dump}"));
+    env.push(format!("POLY_COMPOSITOR_CONTROL={}", control_path(dir)));
     if let Some(addr) = bus {
         env.push(format!("DBUS_SESSION_BUS_ADDRESS={addr}"));
     }
     env
 }
 
-/// The shell's font, if the font store has it (kept for the program's
-/// life).
-fn shell_font() -> Option<poly_font::Font<'static>> {
-    let font = std::fs::read(desktop::FONT).ok().and_then(|data| {
-        let data: &'static [u8] = Box::leak(data.into_boxed_slice());
-        poly_font::Font::parse(data).ok()
-    });
-    if font.is_none() {
-        println!("poly-compositor: no {} (fonts not fetched?): the shell uses the bitmap font", desktop::FONT);
-    }
-    font
+/// The control pipe in the runtime directory `dir`.
+fn control_path(dir: &str) -> String {
+    fs::join(dir, "poly-compositor.ctl")
 }
 
 fn run(args: &[String]) -> Result<u8, String> {
     let o = parse_args(args)?;
     let dir = runtime_dir()?;
-    let path = dir.join(&o.socket);
-    let _ = std::fs::remove_file(&path);
-    let listener = UnixListener::bind(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let dump_path = o.dump.clone().unwrap_or_else(|| dir.join("poly-compositor.ppm"));
-    // SAFETY: the handler only stores to an atomic, which is async-signal-safe.
-    unsafe { libc::signal(libc::SIGUSR1, on_sigusr1 as *const () as libc::sighandler_t) };
+    let path = fs::join(&dir, &o.socket);
+    let _ = fs::remove_file(&path);
+    let listener = UnixListener::bind(&path).map_err(|e| format!("{path}: {e}"))?;
+    let dump_path = o.dump.clone().unwrap_or_else(|| fs::join(&dir, "poly-compositor.ppm"));
+    // Requests for a picture (what SIGUSR1 was on Linux).
+    let control = os::Control::open(&control_path(&dir)).map_err(|e| format!("the control pipe: {e}"))?;
 
     // The screen: KMS if the card has an output, else fbdev for the
     // desktop (ADR 0116).
@@ -414,7 +430,7 @@ fn run(args: &[String]) -> Result<u8, String> {
     };
     let (width, height) = (screen.fb().width(), screen.fb().height());
     let scale = choose_scale(o.scale, &screen);
-    let mut host = unix::UnixHost::default();
+    let mut host = os::UnixHost::default();
     let keymap = host.keymap.clone();
     let mut output = OutputConfig { width, height, scale, ..OutputConfig::default() };
     if let Some(k) = screen.kms() {
@@ -422,7 +438,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         output.refresh_mhz = out.refresh_mhz();
         output.physical_mm = (out.mm.0 as i32, out.mm.1 as i32);
         // Clients may share dma-bufs made on the render node.
-        host.dmabuf_device = unix::device_number("/dev/dri/renderD128").or_else(|| unix::device_number(&o.drm));
+        host.dmabuf_device = os::device_number("/dev/dri/renderD128").or_else(|| os::device_number(&o.drm));
         let r = output.refresh_mhz;
         println!(
             "poly-compositor: KMS on {}: connector {}, CRTC {}, {width}x{height} at {}.{:03} Hz, {}x{} mm, scale {scale}{}",
@@ -437,7 +453,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         );
     }
     let mut server = Server::new(Config { output, ..Config::default() }, Box::new(host));
-    println!("poly-compositor: listening on {} ({width}x{height}, scale {scale})", path.display());
+    println!("poly-compositor: listening on {path} ({width}x{height}, scale {scale})");
 
     let mut desk = if o.desktop {
         let display = if matches!(screen, Screen::Kms(_)) { format!("{} (KMS)", o.drm) } else { o.fb.clone() };
@@ -448,7 +464,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             scale: o.scale,
             settings: o.settings.clone(),
         };
-        Some(desk::Desktop::new(&opts, &mut server, keymap, shell_font()))
+        Some(desk::Desktop::new(&opts, &mut server, keymap, desktop::shell_fonts()))
     } else {
         None
     };
@@ -459,12 +475,12 @@ fn run(args: &[String]) -> Result<u8, String> {
         None => None,
     };
     let env = client_env(&o.socket, &dir, &dump_path, bus_address.as_deref(), xw.as_ref().map(|x| x.display_env()));
-    // Children that end wake the loop, which reaps them at once.
-    let child_signal = unix::ChildSignal::install().map_err(|e| format!("SIGCHLD: {e}"))?;
+    // Children that end wake the loop (their process handles are polled),
+    // which reaps them at once.
     let child = if o.exec.is_empty() {
         None
     } else {
-        let pid = unix::spawn(&o.exec, &env).map_err(|e| format!("{}: {e}", o.exec[0]))?;
+        let pid = os::spawn(&o.exec, &env).map_err(|e| format!("{}: {e}", o.exec[0]))?;
         println!("poly-compositor: started {} (pid {pid})", o.exec[0]);
         Some(pid)
     };
@@ -480,16 +496,12 @@ fn run(args: &[String]) -> Result<u8, String> {
     let mut buf = vec![0u8; 4096];
     loop {
         // What to wait for, and how long.
-        let mut fds = vec![libc::pollfd { fd: listener.as_raw_fd(), events: libc::POLLIN, revents: 0 }];
+        let mut fds = vec![os::PollFd::readable(listener.handle() as os::RawFd)];
         let ids: Vec<ClientId> = conns.keys().copied().collect();
-        fds.extend(ids.iter().map(|id| libc::pollfd {
-            fd: conns[id].stream.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        }));
+        fds.extend(ids.iter().map(|id| os::PollFd::readable(conns[id].stream.handle() as os::RawFd)));
         let input_at = fds.len();
         if let Some(d) = &desk {
-            fds.extend(d.input.devices.iter().map(|dev| libc::pollfd { fd: dev.fd, events: libc::POLLIN, revents: 0 }));
+            fds.extend(d.input.devices.iter().map(|dev| os::PollFd::readable(dev.fd)));
         }
         // The session bus and the mixer (ADR 0117).
         let desk_at = fds.len();
@@ -497,20 +509,22 @@ fn run(args: &[String]) -> Result<u8, String> {
             fds.extend(d.poll_fds());
         }
         let desk_end = fds.len();
-        // A child ended (launched apps, Xwayland, the client to run).
-        let child_at = fds.len();
-        fds.push(libc::pollfd { fd: child_signal.fd(), events: libc::POLLIN, revents: 0 });
+        // A child ended (launched apps, Xwayland, the client to run), a
+        // request for a picture.
+        fds.extend(os::child_poll_fds());
+        let control_at = fds.len();
+        fds.push(os::PollFd::readable(control.fd()));
         // The card's flip events.
         let card_fd = screen.kms().and_then(|k| k.fd());
         if let Some(fd) = card_fd {
-            fds.push(libc::pollfd { fd, events: libc::POLLIN, revents: 0 });
+            fds.push(os::PollFd::readable(fd));
         }
         let flip_pending = screen.kms().is_some_and(|k| k.is_pending());
         let x_at = fds.len();
         if let Some(x) = &xw {
             fds.extend(x.poll_fds());
         }
-        let now = unix::monotonic_ns();
+        let now = os::monotonic_ns();
         let timeout = if server.wants_frame() && !flip_pending {
             (next_frame.saturating_sub(now) / 1_000_000) as i32
         } else if flip_pending && card_fd.is_none() {
@@ -521,16 +535,17 @@ fn run(args: &[String]) -> Result<u8, String> {
         } else {
             -1
         };
-        unix::poll(&mut fds, timeout).map_err(|e| format!("poll: {e}"))?;
+        os::poll(&mut fds, timeout).map_err(|e| format!("poll: {e}"))?;
         // What ended is reaped below (the desktop's apps in `sync`,
         // Xwayland in `reap`, the client to run at the end).
-        if fds[child_at].revents & libc::POLLIN != 0 {
-            child_signal.clear();
+        let mut dump = false;
+        if fds[control_at].revents != 0 {
+            dump = control.take_lines().iter().any(|l| l.trim() == "dump");
         }
 
-        if fds[0].revents & libc::POLLIN != 0 {
+        if fds[0].revents & os::POLLIN != 0 {
             match listener.accept() {
-                Ok((stream, _)) => {
+                Ok(stream) => {
                     let id = server.add_client();
                     conns.insert(id, Connection { stream, out: Vec::new(), out_fds: Vec::new() });
                 }
@@ -543,10 +558,10 @@ fn run(args: &[String]) -> Result<u8, String> {
                 continue;
             }
             let mut received = Vec::new();
-            match unix::recv(pfd.fd, &mut buf, &mut received) {
+            match os::recv(pfd.fd, &mut buf, &mut received) {
                 Ok(0) => gone.push(*id),
                 Ok(n) => server.receive(*id, &buf[..n], received),
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => gone.push(*id),
             }
         }
@@ -571,7 +586,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         // Input, then the shell.
         if let Some(d) = &mut desk {
             let size = server.scene().logical_size();
-            let ms = (unix::monotonic_ns() / 1_000_000) as u32;
+            let ms = (os::monotonic_ns() / 1_000_000) as u32;
             for (i, pfd) in fds[input_at..desk_at].iter().enumerate() {
                 if pfd.revents != 0 {
                     d.input.read(i, size, ms);
@@ -583,7 +598,7 @@ fn run(args: &[String]) -> Result<u8, String> {
                     if d.open_internal(&app, &mut server) {
                         continue;
                     }
-                    match unix::spawn(&app.argv, &env) {
+                    match os::spawn(&app.argv, &env) {
                         Ok(pid) => {
                             println!("poly-compositor: launched {} (pid {pid})", app.name);
                             d.children.push((pid, app.name.clone()));
@@ -609,7 +624,7 @@ fn run(args: &[String]) -> Result<u8, String> {
 
         // A frame when one is due: with KMS whenever no flip is pending (the
         // flips pace it), else at most every 1/60 s.
-        let now = unix::monotonic_ns();
+        let now = os::monotonic_ns();
         let kms = matches!(screen, Screen::Kms(_));
         let due = if kms { !screen.kms().is_some_and(|k| k.is_pending()) } else { now >= next_frame };
         if server.wants_frame() && due {
@@ -621,7 +636,7 @@ fn run(args: &[String]) -> Result<u8, String> {
                 Some(d) => server.render_with(fb, Some(&d.shell.below()), Some(&d.shell.above())),
                 None => server.render(fb),
             };
-            let shown = unix::monotonic_ns();
+            let shown = os::monotonic_ns();
             if let Some(k) = screen.kms() {
                 // Drawn frames flipped themselves (`present`); clients
                 // waiting with nothing new to draw are paced by a flip too.
@@ -666,7 +681,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             conns.remove(&id);
         }
 
-        if DUMP.swap(false, Ordering::Relaxed) {
+        if dump {
             // Drawn in place, what changed is drawn first; with KMS the
             // picture is the buffer on the screen.
             if !kms {
@@ -679,7 +694,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             screen.shown(|fb| report(&server, fb, &o.probes, &dump_path));
         }
 
-        if let Some(status) = child.and_then(unix::try_wait) {
+        if let Some(status) = child.and_then(os::try_wait) {
             if o.dump.is_some() {
                 if !kms {
                     server.render(screen.fb());
@@ -690,7 +705,7 @@ fn run(args: &[String]) -> Result<u8, String> {
                 log_flips(k);
             }
             println!("poly-compositor: client exited with status {status}");
-            let _ = std::fs::remove_file(&path);
+            let _ = fs::remove_file(&path);
             return Ok(status.clamp(0, 255) as u8);
         }
     }
@@ -733,44 +748,22 @@ mod tests {
         assert!(parse_args(&args("--what")).is_err());
     }
 
-    /// The compositor's own transport: a client's bytes and a file
-    /// descriptor through a socket pair, its shared memory mapped.
+    /// What a client is given: the display's variables and the control
+    /// pipe, and the compositor's own ones not passed on twice.
     #[test]
-    fn passes_file_descriptors_and_maps_shared_memory() {
-        let (a, b) = UnixStream::pair().unwrap();
-        let path = std::env::temp_dir().join(format!("poly-compositor-test-{}", std::process::id()));
-        std::fs::write(&path, [1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
-        let file = std::fs::File::open(&path).unwrap();
-        std::fs::remove_file(&path).unwrap();
-        assert_eq!(unix::send(a.as_raw_fd(), b"hello", &[Fd(file.as_raw_fd())]).unwrap(), 5);
-        let (mut buf, mut fds) = ([0u8; 16], Vec::new());
-        assert_eq!(unix::recv(b.as_raw_fd(), &mut buf, &mut fds).unwrap(), 5);
-        assert_eq!((&buf[..5], fds.len()), (&b"hello"[..], 1));
-        use poly_wayland::server::Host;
-        let mut map = unix::UnixHost::default().map_shm(fds[0], 8).unwrap();
-        let mut out = [0u8; 4];
-        assert!(map.read(4, &mut out));
-        assert_eq!(out, [5, 6, 7, 8]);
-        assert!(!map.read(6, &mut out));
-        assert!(map.resize(8));
-    }
-
-    /// Programs without a `/` are searched in `PATH`, as desktop files
-    /// name them.
-    #[test]
-    fn programs_are_found_in_path() {
-        let env = ["PATH=/nonexistent:/bin:/usr/bin".to_string()];
-        let sh = unix::resolve_program("sh", &env);
-        assert!(sh.ends_with("/sh") && sh.starts_with('/'), "{sh}");
-        assert_eq!(unix::resolve_program("/x/y", &env), "/x/y");
-        assert_eq!(unix::resolve_program("no-such-program-here", &env), "no-such-program-here");
+    fn a_client_environment() {
+        let env = client_env("wayland-0", "/run/user/0", "/run/user/0/p.ppm", Some("unix:path=/b"), None);
+        assert!(env.contains(&"WAYLAND_DISPLAY=wayland-0".to_string()));
+        assert!(env.contains(&"POLY_COMPOSITOR_CONTROL=/run/user/0/poly-compositor.ctl".to_string()));
+        assert!(env.contains(&"DBUS_SESSION_BUS_ADDRESS=unix:path=/b".to_string()));
+        assert_eq!(env.iter().filter(|v| v.starts_with("WAYLAND_DISPLAY=")).count(), 1);
     }
 
     /// The desktop's layers through the scene into memory: the ridge, the
     /// launcher, the cursor; the picture as a PPM.
     #[test]
     fn the_desktop_composes() {
-        let host = unix::UnixHost::default();
+        let host = os::UnixHost::default();
         let output = OutputConfig { width: 800, height: 600, ..OutputConfig::default() };
         let mut server = Server::new(Config { output, ..Config::default() }, Box::new(host));
         let shell = poly_shell::Shell::new(800, 600, poly_shell::apps::builtins(), poly_shell::draw::Text::new(None));

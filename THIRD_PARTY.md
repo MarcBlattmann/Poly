@@ -11,8 +11,26 @@ an entry here.
 |---|---|---|---|---|
 | [Spleen](https://github.com/fcambus/spleen) bitmap fonts by Frederic Cambus: `spleen-8x16.bdf`, `spleen-12x24.bdf` | 2.1.0 | BSD 2-Clause ([text](third_party/spleen/LICENSE)) | `third_party/spleen/` | the kernel's display fonts: `cargo xtask font` converts them to `crates/poly-gfx/src/font/spleen_8x16.rs` and `spleen_12x24.rs`, which are compiled into the kernel |
 | [DejaVu](https://dejavu-fonts.github.io/) fonts: Sans, Serif and Sans Mono in regular, bold, oblique/italic and bold oblique/italic (12 `.ttf` files) | 2.37 | Bitstream Vera Fonts licence (the Vera glyphs), public domain (the DejaVu changes), Arev Fonts licence (the glyphs from Arev); all permissive ([text](third_party/dejavu/LICENSE)) | **not committed**: `cargo xtask fonts fetch` downloads the pinned release into `target/fonts/`; only the licence is in `third_party/dejavu/` | the font store: `/usr/share/fonts/truetype/dejavu/` (and `C:\Windows\Fonts`) on the root disk, `poly-font`'s tests on real fonts ([ADR 0105](docs/adr/0105-fonts-poly-font-font-store-and-fontconfig-discovery.md)) |
+| [Geist and Geist Mono](https://github.com/vercel/geist-font) fonts by Vercel: `Geist-Regular.ttf`, `Geist-Medium.ttf`, `Geist-SemiBold.ttf`, `GeistMono-Regular.ttf` | 1.7.2 | SIL Open Font License 1.1 ([text](third_party/geist/OFL.txt)) | **not committed**: `cargo xtask fonts fetch` takes them from the pinned release archive (`geist-font-v1.7.2.zip`) into `target/fonts/`; only the licence is in `third_party/geist/` | the shell's text, as Alpine Shell's ([ADR 0127](docs/adr/0127-the-alpine-shell-look.md)): `/usr/share/poly/fonts/` on the desktop's images |
+| [Averia Serif Libre](https://github.com/google/fonts/tree/main/ofl/averiaseriflibre) font by Dan Sayers: `AveriaSerifLibre-Regular.ttf`, `AveriaSerifLibre-Bold.ttf` | Google Fonts commit `6f3c56c7` | SIL Open Font License 1.1, Reserved Font Names "Averia" and "Averia Libre" ([text](third_party/averia-serif-libre/OFL.txt)) | **not committed**: fetched like Geist; only the licence is in `third_party/averia-serif-libre/` | the settings window's titles, as Alpine Shell's (ADR 0127) |
+| [Lucide](https://lucide.dev) icons (lucide-react): the path data of the 35 icons in `crates/poly-shell/src/icons.rs` | 0.575.0 | ISC; parts from Feather, MIT ([text](third_party/lucide/LICENSE)) | `crates/poly-shell/src/icons.rs` (the data), `third_party/lucide/` (the licence) | the shell's icons, the set Alpine Shell draws with (ADR 0127) |
 | [Wayland](https://gitlab.freedesktop.org/wayland/wayland) core protocol: `wayland.xml` | 1.26.0 | MIT ([text](third_party/wayland/COPYING)) | `third_party/wayland/` | the protocol's specification: `cargo xtask wayland` generates `crates/poly-wayland/src/protocol/wayland.rs` from it (ADR 0106) |
 | [wayland-protocols](https://gitlab.freedesktop.org/wayland/wayland-protocols): `xdg-shell.xml`, `xdg-decoration-unstable-v1.xml`, `viewporter.xml`, `presentation-time.xml`, `linux-dmabuf-v1.xml`, `fractional-scale-v1.xml`, `xdg-activation-v1.xml`, `cursor-shape-v1.xml`, `xwayland-shell-v1.xml` (staging, ADR 0118) | 1.50 | MIT ([text](third_party/wayland-protocols/COPYING)) | `third_party/wayland-protocols/` | the same, into the other modules of `crates/poly-wayland/src/protocol/` |
+
+## Geist, Averia Serif Libre and Lucide
+
+Geist (c) 2024 The Geist Project Authors and Averia Serif Libre (c) 2011
+Dan Sayers are under the SIL Open Font License 1.1: they may be bundled
+with software and redistributed, not sold by themselves, and the licence
+and copyright notice go with every copy, so the desktop's images install
+`OFL-Geist.txt` and `OFL-AveriaSerifLibre.txt` (the texts in
+`third_party/geist/OFL.txt` and `third_party/averia-serif-libre/OFL.txt`)
+beside the fonts. Poly ships them unmodified (a modified Averia could not
+keep its Reserved Font Name). `tools/xtask/src/fonts.rs` pins the archive,
+each file and each licence by size and SHA-256. The Lucide icons' path
+data is copied into `crates/poly-shell/src/icons.rs` with the ISC notice
+in `third_party/lucide/LICENSE`; the owner, who owns Alpine Shell, allows
+Poly to reuse its choice of icons, tokens and measurements (ADR 0124).
 
 ## DejaVu
 

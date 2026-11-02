@@ -1,14 +1,15 @@
-//! Poly's desktop shell (ADR 0107, ADR 0117): the look of the owner's
-//! Alpine Shell re-created for Poly's compositor.
+//! Poly's desktop shell (ADR 0107, ADR 0117, ADR 0127): the look of the
+//! owner's Alpine Shell re-created for Poly's compositor.
 //!
-//! - [`shell::Shell`]: the **ridge** (a slim status strip along the top:
-//!   a menu glyph, the unread notifications, the network and volume, the
-//!   clock and date in the configured time zone; nothing hangs from it),
-//!   the **launcher** (an input box in the middle of the screen; typing
-//!   filters the apps, Enter starts one, Escape hides it; it shows on an
-//!   empty desktop), the **notifications** (toasts in the top right, a
-//!   history in the middle), the **window switcher** (Alt+Tab), the
-//!   **snap preview** and the **wallpaper**, drawn as two compositor
+//! - [`shell::Shell`]: the **ridge** (a strip along the top: the system
+//!   menu's circle, the unread notifications, the network and volume, the
+//!   clock and date in the configured time zone) and the **surfaces that
+//!   hang from it**, one at a time with Alpine's shoulders and animations
+//!   ([`chrome`]): the **launcher** (typing filters the apps, Enter starts
+//!   one; it shows on an empty desktop), the **system menu**, the **control
+//!   centre**, the **calendar**, the **notification history**, the
+//!   **notices** at the top right and the **window switcher** (Alt+Tab);
+//!   the **snap preview** and the **wallpaper**, drawn as two compositor
 //!   layers, below and above the windows, with only what changed drawn
 //!   again; and the contents of the **settings window**.
 //! - [`apps`]: `.desktop` files (the Desktop Entry Specification) and the
@@ -17,8 +18,9 @@
 //!   [`tz`]: time zones; [`notify`]: the notification queue and history;
 //!   [`switcher`]: the switcher's order, state and cards; [`wm`]: snap
 //!   zones and Super+arrow; [`settings`]: the settings and their file;
-//!   [`settings_ui`]: the settings window; [`draw`]: round rectangles,
-//!   translucency and text (`poly-font`); [`theme`]: the measurements.
+//!   [`settings_ui`]: the settings window; [`draw`]: text in Alpine's fonts
+//!   (`poly-font`) and shapes; [`icons`]: Lucide's icons; [`theme`]: the
+//!   measurements and tokens.
 //!
 //! `no_std` with `alloc` and host-tested: the compositor
 //! (`userland/poly-compositor`) owns the I/O (reading desktop files and
@@ -31,8 +33,10 @@ extern crate alloc;
 extern crate std;
 
 pub mod apps;
+pub mod chrome;
 pub mod clock;
 pub mod draw;
+pub mod icons;
 pub mod launcher;
 pub mod notify;
 pub mod search;
@@ -46,4 +50,4 @@ pub mod wm;
 
 pub use apps::App;
 pub use launcher::Key;
-pub use shell::{Network, Press, Shell};
+pub use shell::{ControlView, Network, Panel, Power, Press, Shell, Surface};

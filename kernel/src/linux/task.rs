@@ -493,6 +493,9 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     let mut argv = req.argv.to_vec();
     let mut dirfd = req.dirfd;
     let mut depth = 0;
+    // A native program (ADR 0125): the process becomes native at the point
+    // of no return, keeping its Linux state (tree, parent, signals).
+    let mut native = false;
     let file = loop {
         let file = if depth == 0 {
             k.process.files.open_exec_with(dirfd, &path, req.follow)
@@ -512,6 +515,17 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         let Some(script) = parse_shebang(&header[..len])? else {
             match poly_binfmt::detect(&header[..len]).map(|f| f.personality()) {
                 Ok(Some(Personality::Linux)) => break file,
+                Ok(Some(Personality::Native)) => {
+                    let abi = match poly_binfmt::detect(&header[..len]) {
+                        Ok(poly_binfmt::Format::Native { abi, .. }) => abi,
+                        _ => 0,
+                    };
+                    if !(1..=poly_personality_native::abi::ABI_VERSION).contains(&abi) {
+                        return Err(Errno::ENOEXEC);
+                    }
+                    native = true;
+                    break file;
+                }
                 _ => return Err(Errno::ENOEXEC),
             }
         };
@@ -577,6 +591,9 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
         k.tid = pid;
     }
     k.linux.with(|p| p.exec(pid as i32));
+    if native {
+        k.process.native.activate();
+    }
     super::cred::commit_exec(k, pid, creds, req.name);
     let old = user::replace_memory(image.memory);
     // Dropping the old memory may take file system locks: fine here.

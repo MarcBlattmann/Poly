@@ -1,12 +1,13 @@
 # Native Poly programs (ADR 0125): pure Rust on Poly's own system calls
-# through poly-rt, for the x86_64-unknown-none target, linked by rust-lld
+# through poly-rt, for Poly's x86_64-unknown-poly target (x86_64-unknown-none
+# with SSE2 floats, x86_64-unknown-poly.json, ADR 0126), linked by rust-lld
 # as static, position-dependent ELF executables. Their own workspace, like
 # the kernel's, because they only build for that target; `.cargo/config.toml`
 # here sets it and the flags. `cargo xtask build` builds them (identically on
 # Windows and Linux hosts) and puts them into the initramfs as /bin/<name>.
 [workspace]
 resolver = "3"
-members = ["hello"]
+members = ["compositor", "hello", "notify"]
 
 [workspace.package]
 version = "0.0.1"

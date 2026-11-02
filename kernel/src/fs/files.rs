@@ -104,6 +104,13 @@ impl Files {
         Files { fs: SpinLock::new(fs), fds: SpinLock::new(fds) }
     }
 
+    /// Take a copy of `from`'s root, working directory and umask (a
+    /// native process's child starts where its parent is, ADR 0126).
+    pub fn adopt_context(&self, from: &Files) {
+        let copy = from.ctx().lock().clone();
+        *self.fs.lock() = Arc::new(Mutex::new(copy));
+    }
+
     /// Give this process a private copy of its descriptor table if other
     /// processes share it (close_range(2) `CLOSE_RANGE_UNSHARE`,
     /// unshare(2) `CLONE_FILES`); nothing to do otherwise.

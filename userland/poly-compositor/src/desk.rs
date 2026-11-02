@@ -6,10 +6,13 @@
 
 use crate::desktop::{self, WmKey};
 use crate::mixer::Mixer;
+use crate::prelude::*;
 use crate::session::SessionBus;
-use crate::{evdev, status, unix};
+use crate::{evdev, os, status};
+use alloc::collections::BTreeSet;
 use poly_dbus::notifications::{self as dn, Request};
 use poly_input::layout::Layout;
+use poly_rt::fs;
 use poly_shell::settings::{Change, Settings};
 use poly_shell::settings_ui::{Page, SystemInfo};
 use poly_shell::switcher::{Entry, Mru, thumbnail};
@@ -19,8 +22,6 @@ use poly_wayland::compose::{MemoryFramebuffer, Placement, WindowId};
 use poly_wayland::seat::{BTN_LEFT, InputEvent, InputSource};
 use poly_wayland::server::{InternalEvent, OutputConfig, Server};
 use poly_wayland::wire::Fixed;
-use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
 
 /// The settings window, drawn by the shell.
 #[derive(Debug)]
@@ -32,11 +33,11 @@ struct SettingsWin {
 /// What the desktop needs from the command line.
 #[derive(Debug)]
 pub struct Options<'a> {
-    pub dir: &'a Path,
+    pub dir: &'a str,
     pub fb_name: &'a str,
     pub keymap: Option<&'a str>,
     pub scale: Option<u32>,
-    pub settings: Option<PathBuf>,
+    pub settings: Option<String>,
 }
 
 /// The desktop.
@@ -46,12 +47,12 @@ pub struct Desktop {
     pub input: evdev::Evdev,
     hotkeys: desktop::Hotkeys,
     pub layout: &'static Layout,
-    keymap: unix::SharedKeymap,
-    dir: PathBuf,
+    keymap: os::SharedKeymap,
+    dir: String,
     /// A left press the shell took: its release is the shell's too.
     shell_button: bool,
     /// Apps started from the launcher, not reaped yet.
-    pub children: Vec<(libc::pid_t, String)>,
+    pub children: Vec<(os::Pid, String)>,
     /// Windows seen, to log new ones and to bring the launcher back when
     /// the last one goes.
     windows: BTreeSet<u32>,
@@ -60,7 +61,7 @@ pub struct Desktop {
     last_active: Option<WindowId>,
     /// Where the window being dragged would snap.
     snap: Option<Zone>,
-    settings_path: Option<PathBuf>,
+    settings_path: Option<String>,
     settings_win: Option<SettingsWin>,
     info: SystemInfo,
     mixer: Option<Mixer>,
@@ -68,42 +69,39 @@ pub struct Desktop {
     next_status_ms: u64,
 }
 
-/// Seconds on `CLOCK_REALTIME`.
+/// Seconds on the wall clock.
 pub fn realtime_secs() -> i64 {
-    let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
-    // SAFETY: `ts` is a valid timespec to write.
-    unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut ts) };
-    ts.tv_sec
+    os::realtime_secs()
 }
 
 fn now_ms() -> u64 {
-    unix::monotonic_ns() / 1_000_000
+    os::monotonic_ns() / 1_000_000
 }
 
 /// Where the settings live: `$XDG_CONFIG_HOME/poly/shell.conf`, else
 /// `$HOME/.config/poly/shell.conf`, else `/root/.config/...` for root.
-pub fn settings_path() -> PathBuf {
-    let base = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|| {
-        let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/root"));
-        home.join(".config")
+pub fn settings_path() -> String {
+    let base = poly_rt::env::var("XDG_CONFIG_HOME").map(String::from).unwrap_or_else(|| {
+        let home = poly_rt::env::var("HOME").unwrap_or("/root");
+        fs::join(home, ".config")
     });
-    base.join("poly").join("shell.conf")
+    fs::join(&fs::join(&base, "poly"), "shell.conf")
 }
 
 /// Write `text` to `path`: a temporary file, synced, renamed into place.
-fn save_file(path: &Path, text: &str) -> std::io::Result<()> {
-    use std::io::Write;
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
+fn save_file(path: &str, text: &str) -> poly_rt::Result<()> {
+    if let Some((dir, _)) = path.rsplit_once('/')
+        && !dir.is_empty()
+    {
+        fs::create_dir_all(dir)?;
     }
-    let tmp = path.with_extension("conf.tmp");
-    let mut f = std::fs::File::create(&tmp)?;
+    let tmp = format!("{path}.tmp");
+    let f = fs::File::create(&tmp)?;
     f.write_all(text.as_bytes())?;
     f.sync_all()?;
-    std::fs::rename(&tmp, path)?;
+    fs::rename(&tmp, path)?;
     // The rename too must reach the disk before anyone pulls the plug.
-    // SAFETY: sync has no preconditions.
-    unsafe { libc::sync() };
+    poly_rt::sys::sync();
     Ok(())
 }
 
@@ -114,21 +112,22 @@ impl Desktop {
     pub fn new(
         o: &Options<'_>,
         server: &mut Server,
-        keymap: unix::SharedKeymap,
-        font: Option<poly_font::Font<'static>>,
+        keymap: os::SharedKeymap,
+        fonts: poly_shell::draw::Fonts,
     ) -> Desktop {
         let (lw, lh) = server.scene().logical_size();
-        let apps = poly_shell::apps::catalog(desktop::desktop_files(Path::new(desktop::APPLICATIONS)));
-        let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::new(font));
-        if let Some(f) = font {
-            // Window titles in the same font, 13 pixels as Alpine's rows.
-            server.scene_mut().set_text(Box::new(poly_shell::draw::TitleFont::new(f, 13.0, 16)));
+        let apps = poly_shell::apps::catalog(desktop::desktop_files(desktop::APPLICATIONS));
+        let title_font = fonts.sans;
+        let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::with_fonts(fonts));
+        if let Some(f) = title_font {
+            // Window titles in the shell's font, 12 pixels as Windows 11's.
+            server.scene_mut().set_text(Box::new(poly_shell::draw::TitleFont::new(f, 12.0, 16)));
         }
         // The settings: read, the command line's choices first.
         let settings_path = o.settings.clone().unwrap_or_else(settings_path);
-        let (mut settings, saved) = match std::fs::read_to_string(&settings_path) {
+        let (mut settings, saved) = match fs::read_to_string(&settings_path) {
             Ok(text) => {
-                println!("poly-compositor: settings read from {}", settings_path.display());
+                println!("poly-compositor: settings read from {settings_path}");
                 (Settings::parse(&text), true)
             }
             Err(_) => (Settings::default(), false),
@@ -219,7 +218,7 @@ impl Desktop {
             hotkeys: desktop::Hotkeys::default(),
             layout,
             keymap,
-            dir: o.dir.to_path_buf(),
+            dir: o.dir.to_string(),
             shell_button: false,
             children: Vec::new(),
             windows: BTreeSet::new(),
@@ -235,14 +234,15 @@ impl Desktop {
             next_status_ms: 0,
         };
         d.info = d.system_info(server);
+        d.shell.set_sound_card(d.info.sound.clone());
         d
     }
 
     /// What the About page shows.
     fn system_info(&self, server: &Server) -> SystemInfo {
         let (sys, release, version, machine) = status::uname();
-        let cpu = std::fs::read_to_string("/proc/cpuinfo").map(|t| status::cpu_model(&t)).unwrap_or_default();
-        let memory_kib = std::fs::read_to_string("/proc/meminfo").map(|t| status::mem_total_kib(&t)).unwrap_or(0);
+        let cpu = fs::read_to_string("/proc/cpuinfo").map(|t| status::cpu_model(&t)).unwrap_or_default();
+        let memory_kib = fs::read_to_string("/proc/meminfo").map(|t| status::mem_total_kib(&t)).unwrap_or(0);
         let o = server.output();
         SystemInfo {
             os: format!("Poly {}", env!("CARGO_PKG_VERSION")),
@@ -327,9 +327,15 @@ impl Desktop {
                             self.open_settings(page, server);
                             return None;
                         }
+                        Press::Power(action) => {
+                            self.shell_button = true;
+                            desktop::power(action);
+                            return None;
+                        }
                         Press::NotMine => {}
                     }
-                } else if std::mem::take(&mut self.shell_button) {
+                } else if core::mem::take(&mut self.shell_button) {
+                    self.shell.release();
                     return None;
                 }
                 let moving = server.moving_window();
@@ -350,7 +356,10 @@ impl Desktop {
                 server.handle_input(ev);
                 let (x, y) = server.pointer();
                 let (x, y) = (x.floor(), y.floor());
-                self.shell.pointer_motion(x, y);
+                // While a window is dragged the ridge's panels stay shut.
+                if server.moving_window().is_none() {
+                    self.shell.pointer_motion(x, y);
+                }
                 if server.moving_window().is_some() {
                     let work = server.scene().work_area();
                     self.snap = wm::zone_at(x, y, work);
@@ -553,7 +562,7 @@ impl Desktop {
                     match desktop::keymap_file(&self.dir, layout) {
                         Ok(k) => {
                             if let Some((old, _)) = self.keymap.replace(Some(k)) {
-                                unix::close(old);
+                                os::close(old);
                             }
                             server.keymap_changed();
                             self.layout = layout;
@@ -607,8 +616,8 @@ impl Desktop {
     fn save_settings(&self) {
         let Some(path) = &self.settings_path else { return };
         match save_file(path, &self.shell.settings().to_text()) {
-            Ok(()) => println!("poly-compositor: settings saved to {}", path.display()),
-            Err(e) => eprintln!("poly-compositor: {}: {e}", path.display()),
+            Ok(()) => println!("poly-compositor: settings saved to {path}"),
+            Err(e) => eprintln!("poly-compositor: {path}: {e}"),
         }
     }
 
@@ -621,19 +630,19 @@ impl Desktop {
     // Notifications on the bus.
 
     /// The descriptors to poll: the bus's and the mixer's.
-    pub fn poll_fds(&self) -> Vec<libc::pollfd> {
-        let mut v: Vec<libc::pollfd> = Vec::new();
+    pub fn poll_fds(&self) -> Vec<os::PollFd> {
+        let mut v: Vec<os::PollFd> = Vec::new();
         if let Some(b) = &self.bus {
-            v.extend(b.poll_fds().into_iter().map(|(fd, _)| libc::pollfd { fd, events: libc::POLLIN, revents: 0 }));
+            v.extend(b.poll_fds().into_iter().map(|(fd, _)| os::PollFd::readable(fd)));
         }
         if let Some(m) = &self.mixer {
-            v.push(libc::pollfd { fd: m.fd(), events: libc::POLLIN, revents: 0 });
+            v.push(os::PollFd::readable(m.fd()));
         }
         v
     }
 
     /// The polled descriptors of [`Desktop::poll_fds`] came back.
-    pub fn polled(&mut self, fds: &[libc::pollfd]) {
+    pub fn polled(&mut self, fds: &[os::PollFd]) {
         let mut i = 0;
         if let Some(b) = &mut self.bus {
             let list = b.poll_fds();
@@ -742,11 +751,15 @@ impl Desktop {
             }
         }
         self.serve_notifications();
+        // The volume slider and the mute button of the control centre.
+        for c in self.shell.take_changes() {
+            self.apply_change(c, server);
+        }
         for r in self.shell.take_damage() {
             server.scene_mut().damage_logical(r);
         }
         server.set_keyboard_suspended(self.shell.launcher().is_visible());
-        self.children.retain(|(pid, name)| match unix::try_wait(*pid) {
+        self.children.retain(|(pid, name)| match os::try_wait(*pid) {
             Some(status) => {
                 println!("poly-compositor: {name} (pid {pid}) exited with status {status}");
                 false

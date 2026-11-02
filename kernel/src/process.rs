@@ -58,9 +58,10 @@ pub struct Process {
     /// ([`Process::new`]): their system calls go to the personality
     /// without kernel services, and a fault kills only the faulting thread.
     pub linux: Option<LinuxState>,
-    /// The native personality's state (its children) for a process made
-    /// with [`Process::new_native`] (ADR 0125); `None` otherwise.
-    pub native: Option<crate::native::NativeState>,
+    /// The native personality's state (ADR 0125): whether the process's
+    /// calls are native (a native program, or one a Linux process
+    /// `execve`d) and its children not waited for yet.
+    pub native: crate::native::NativeState,
     /// The process reports its system calls, output, signals and exit on
     /// the serial port (`poly.test.capture`, ADR 0027).
     pub traced: bool,
@@ -224,8 +225,8 @@ impl Process {
     /// kernel's log console when `traced`).
     pub fn new_native(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
         let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
-        let mut p = Process::with_state(pid, ppid, Personality::Native, format, None, traced, files);
-        p.native = Some(crate::native::NativeState::default());
+        let p = Process::with_state(pid, ppid, Personality::Native, format, None, traced, files);
+        p.native.activate();
         p
     }
 
@@ -258,7 +259,7 @@ impl Process {
             format,
             files,
             linux,
-            native: None,
+            native: crate::native::NativeState::new(),
             traced,
             cpu: crate::cputime::ProcessCpu::default(),
             threads: SpinLock::new(Threads::default()),
@@ -408,6 +409,8 @@ impl Process {
     pub fn ended(&self) {
         self.ended.store(true, Ordering::SeqCst);
         EVENTS.wake_all();
+        // Native process handles of it turn readable (ADR 0125).
+        crate::native::process_ended();
     }
 
     /// End the whole process with `status` (exit_group(2), a fatal signal):

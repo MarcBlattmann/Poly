@@ -119,6 +119,14 @@ pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Res
     prepare_as(path, argv, envp, traced, None)
 }
 
+/// [`prepare`] for a child of the native process `parent` (its `spawn`,
+/// ADR 0125, ADR 0126): the program (and a Linux program's interpreter)
+/// is looked up from `parent`'s root and working directory, which the
+/// child starts with too, and the child's parent id is `parent`'s.
+pub fn prepare_child(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], parent: &Process) -> Result<Prepared, ExecPathError> {
+    prepare_full(path, argv, envp, false, None, Some(parent))
+}
+
 /// [`prepare`], a Linux program running as `creds` (`None`: root) from
 /// its first instruction: its thread's credentials and the ids in its
 /// auxiliary vector. The file is opened as the kernel, whoever it runs as.
@@ -129,10 +137,31 @@ pub fn prepare_as(
     traced: bool,
     creds: Option<&poly_personality_linux::cred::Creds>,
 ) -> Result<Prepared, ExecPathError> {
+    prepare_full(path, argv, envp, traced, creds, None)
+}
+
+/// Open the executable at `path`: from `parent`'s directories, else the
+/// kernel's root, as the kernel (root's credentials).
+fn open_exec(path: &[u8], parent: Option<&Process>) -> Result<Arc<fs::OpenFile>, poly_vfs::Errno> {
+    if let Some(p) = parent {
+        return p.files.open_exec_at(fs::AT_FDCWD, path);
+    }
     let vfs = fs::vfs();
-    let ctx = vfs.root_context().map_err(ExecPathError::Open)?;
-    let file = vfs.open_exec(&ctx, &Cred::root(), At::Cwd, path).map_err(ExecPathError::Open)?;
-    drop(ctx);
+    let ctx = vfs.root_context()?;
+    vfs.open_exec(&ctx, &Cred::root(), At::Cwd, path)
+}
+
+/// [`prepare_as`] for a child of `parent` (`None`: the kernel's own).
+fn prepare_full(
+    path: &[u8],
+    argv: &[&[u8]],
+    envp: &[&[u8]],
+    traced: bool,
+    creds: Option<&poly_personality_linux::cred::Creds>,
+    parent: Option<&Process>,
+) -> Result<Prepared, ExecPathError> {
+    let ppid = parent.map_or(0, |p| p.pid);
+    let file = open_exec(path, parent).map_err(ExecPathError::Open)?;
     let mut header = alloc::vec![0u8; HEADER_BYTES];
     let mut len = 0;
     while len < header.len() {
@@ -180,7 +209,10 @@ pub fn prepare_as(
             }
             let params = ExecParams::new(argv, envp, path);
             let image = exec::load(Arc::new(FileSource::of(&file)), &params).map_err(ExecPathError::Exec)?;
-            let process = Arc::new(Process::new_native(process::alloc_pid(), 0, format, traced));
+            let process = Arc::new(Process::new_native(process::alloc_pid(), ppid, format, traced));
+            if let Some(p) = parent {
+                process.files.adopt_context(&p.files);
+            }
             fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
             return Ok(Prepared::Native { process, image });
         }
@@ -189,9 +221,7 @@ pub fn prepare_as(
     }
     let source = FileSource::of(&file);
     let open_interp = |interp: &[u8]| -> Result<Arc<dyn PageSource>, ExecError> {
-        let ctx = vfs.root_context().map_err(|e| ExecError::InterpreterOpen(e.code() as u16))?;
-        let file = vfs.open_exec(&ctx, &Cred::root(), At::Cwd, interp);
-        let file = file.map_err(|e| ExecError::InterpreterOpen(e.code() as u16))?;
+        let file = open_exec(interp, parent).map_err(|e| ExecError::InterpreterOpen(e.code() as u16))?;
         Ok(Arc::new(FileSource::of(&file)))
     };
     let mut params = ExecParams::new(argv, envp, path);
@@ -199,7 +229,10 @@ pub fn prepare_as(
         params.creds = crate::linux::cred::aux_creds(c);
     }
     let image = exec::load_dynamic(Arc::new(source), &params, &open_interp).map_err(ExecPathError::Exec)?;
-    let process = Arc::new(Process::new_linux(process::alloc_pid(), 0, format, traced));
+    let process = Arc::new(Process::new_linux(process::alloc_pid(), ppid, format, traced));
+    if let Some(p) = parent {
+        process.files.adopt_context(&p.files);
+    }
     if let Some(linux) = &process.linux {
         // The program's name (prctl(2) PR_GET_NAME); it runs as root
         // unless `creds` say otherwise.

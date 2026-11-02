@@ -2,12 +2,11 @@
 //! groundwork; ADR 0106): `poly-compositor` and the C test client
 //! `tests/linux/wayland/wl-client.c` in one boot.
 //!
-//! - `/bin/poly-compositor`: `userland/poly-compositor`, built for
-//!   `x86_64-unknown-linux-gnu` with the host's static glibc
-//!   (`-C target-feature=+crt-static`, not PIE), into its own target
-//!   directory so the host build keeps its flags.
-//! - `/bin/wl-client`: the client, `cc -static`. Without a C compiler or a
-//!   static C library the test is skipped with the reason.
+//! - `/bin/poly-compositor`: `userland/poly-compositor`, a native Poly
+//!   program on `poly-rt` built by `native.rs` (ADR 0125; a static glibc
+//!   Linux program before).
+//! - `/bin/wl-client`: the client, a Linux program, `cc -static`. Without a
+//!   C compiler or a static C library the test is skipped with the reason.
 //!
 //! The compositor runs as the first process (`poly.init`, its arguments
 //! `poly.init.arg=` words): it listens on `/run/user/0/wayland-0`, starts
@@ -15,11 +14,13 @@
 //! goes through the whole protocol path (registry, SHM pool from a file in
 //! `/dev/shm` passed with `SCM_RIGHTS`, xdg_toplevel with a server-side
 //! decoration, configure and ack, commit, frame callback, release), asks
-//! the compositor for a picture with `SIGUSR1` and finds its pixels in it.
+//! the compositor for a picture (a `dump` line on its control pipe,
+//! `$POLY_COMPOSITOR_CONTROL`) and finds its pixels in it: a Linux client
+//! and a native server sharing a socket, buffers and a pipe.
 //! The boot passes when the client printed `wl-client: ok`, the compositor
 //! reported the window and the probed pixel inside it, and both exited 0.
 
-use super::{Boot, DEFAULT_MEMORY, Devices, QEMU_SUCCESS, Result, boot_on, cargo, initramfs, root};
+use super::{Boot, DEFAULT_MEMORY, Devices, QEMU_SUCCESS, Result, boot_on, initramfs, root};
 use crate::symbols::Symbols;
 use std::path::Path;
 use std::process::Command;
@@ -27,9 +28,6 @@ use std::sync::Arc;
 
 /// Where the programs are built.
 const OUT: &str = "target/xtask-programs";
-/// The compositor's own target directory.
-const TARGET_DIR: &str = "target/xtask-compositor";
-const TRIPLE: &str = "x86_64-unknown-linux-gnu";
 /// The client's source.
 const CLIENT: &str = "tests/linux/wayland/wl-client.c";
 
@@ -42,37 +40,16 @@ const SIZE: &str = "640x480";
 /// its buffer is `0x2060c0`.
 const PROBE: (&str, &str) = ("40,60", "#2060c0");
 
-/// Build `poly-compositor` as a static Linux program; returns the ELF.
+/// Build `poly-compositor` as a native Poly program (ADR 0125); returns
+/// the ELF.
 pub fn build_compositor() -> Result<Vec<u8>> {
-    let status = cargo()
-        .current_dir(root())
-        .args(["build", "--release", "--quiet", "--package", "poly-compositor", "--target", TRIPLE, "--target-dir"])
-        .arg(root().join(TARGET_DIR))
-        .env("RUSTFLAGS", "-C target-feature=+crt-static -C relocation-model=static -C strip=symbols")
-        .status()
-        .map_err(|e| format!("cargo build poly-compositor: {e}"))?;
-    if !status.success() {
-        return Err(format!("building poly-compositor failed ({status})"));
-    }
-    let elf = root().join(TARGET_DIR).join(TRIPLE).join("release/poly-compositor");
-    std::fs::read(&elf).map_err(|e| format!("{}: {e}", elf.display()))
+    crate::native::program("poly-compositor")
 }
 
-/// Build `notify-send` (`userland/poly-notify`, ADR 0117) as a static Linux
+/// Build `notify-send` (`userland/poly-notify`, ADR 0117) as a native
 /// program, like the compositor; returns the ELF.
 pub fn build_notify_send() -> Result<Vec<u8>> {
-    let status = cargo()
-        .current_dir(root())
-        .args(["build", "--release", "--quiet", "--package", "poly-notify", "--target", TRIPLE, "--target-dir"])
-        .arg(root().join(TARGET_DIR))
-        .env("RUSTFLAGS", "-C target-feature=+crt-static -C relocation-model=static -C strip=symbols")
-        .status()
-        .map_err(|e| format!("cargo build poly-notify: {e}"))?;
-    if !status.success() {
-        return Err(format!("building notify-send failed ({status})"));
-    }
-    let elf = root().join(TARGET_DIR).join(TRIPLE).join("release/notify-send");
-    std::fs::read(&elf).map_err(|e| format!("{}: {e}", elf.display()))
+    crate::native::program("notify-send")
 }
 
 /// Build the C client statically: the ELF, or why not.

@@ -1,7 +1,8 @@
 //! `poly-rt`: the runtime of native Poly programs (ADR 0125).
 //!
-//! A native program is a `no_std` + `alloc` Rust binary for the
-//! `x86_64-unknown-none` target, linked by `rust-lld` as a static,
+//! A native program is a `no_std` + `alloc` Rust binary for Poly's target
+//! `x86_64-unknown-poly` (`x86_64-unknown-none` with SSE2 floats, ADR
+//! 0126), linked by `rust-lld` as a static,
 //! position-dependent ELF executable (`cargo xtask` builds the ones in
 //! `userland/native/`). This crate gives it what `std` would:
 //!
@@ -10,9 +11,13 @@
 //!   then exits with what `main` returns;
 //! - Poly's ABI note, which makes the kernel run the program in the
 //!   native personality;
-//! - the system calls ([`sys`]), and on them files ([`fs`]), output
-//!   ([`io`], [`print!`], [`println!`], [`eprintln!`]), memory ([`mem`]),
-//!   time ([`time`]), processes ([`process`]) and [`env`];
+//! - the system calls ([`sys`]), and on them files and directories
+//!   ([`fs`]), output and the `Read`/`Write` traits ([`io`], [`print!`],
+//!   [`println!`], [`eprintln!`]), memory, mappings of handles and memory
+//!   objects ([`mem`]), AF_UNIX sockets with handle passing ([`net`]),
+//!   waiting on handles ([`poll`]), time ([`time`]), processes and their
+//!   handles ([`process`]), the network interfaces and `uname`
+//!   ([`system`]) and [`env`] (ADR 0126 for the calls of ABI version 2);
 //! - a global allocator: `poly-heap`'s slabs over pages from `map`
 //!   ([`heap`]);
 //! - a panic handler that prints the panic and exits with status 101.
@@ -44,8 +49,11 @@ pub mod fs;
 pub mod heap;
 pub mod io;
 pub mod mem;
+pub mod net;
+pub mod poll;
 pub mod process;
 pub mod sys;
+pub mod system;
 pub mod time;
 
 #[cfg(all(target_arch = "x86_64", target_os = "none"))]
