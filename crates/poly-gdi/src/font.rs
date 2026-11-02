@@ -142,8 +142,9 @@ impl Face {
                 weight: 400,
                 aspect_x: 72,
                 aspect_y: 96,
+                // As a Unicode code point: U+2122 (observed).
                 first_char: 1,
-                last_char: 254,
+                last_char: 8482,
                 default_char: 32,
                 break_char: 32,
                 pitch_and_family: 0x30,
