@@ -15,22 +15,16 @@
 //!   fail to bind rather than reach a Poly service with arguments it reads
 //!   differently. Windows names are added to `win32u` only as adapters, once
 //!   a spec sheet documents one (ADR 0128).
-//! - Each service takes the parameters of the documented function it serves,
-//!   in the documented order (noted on each variant); results that are not
-//!   an `NTSTATUS` are written through a pointer, as `Nt*` services do.
+//! - The window manager's requests travel through one service,
+//!   `PolyUserCall`, as records of [`crate::proto`] (the first slice
+//!   replaced the per-function starting list of ADR 0128 with it: the
+//!   requests are one enum both sides share, so adding one touches neither
+//!   the table nor the stubs). Numbers are never reused.
 //!
-//! | Indices | Group |
+//! | Index | Service |
 //! |---|---|
-//! | `0x000`–`0x0FF` | classes and windows |
-//! | `0x100`–`0x1FF` | messages and queues |
-//! | `0x200`–`0x2FF` | input: focus, activation, capture, keyboard state, cursor |
-//! | `0x300`–`0x3FF` | timers and hooks |
-//! | `0x400`–`0x4FF` | painting and surfaces |
-//! | `0x800`–`0xFFF` | GDI services that need the kernel |
-//!
-//! This list is the first slice's starting point: until a service ships
-//! with an implementation its arguments may still be reshaped; after that
-//! its number is never reused.
+//! | `0x000` | `PolyUserCall(request, request_length, reply, reply_capacity, reply_length*)` |
+//! | `0x001` | `PolyUserCommitSurface(hwnd, rects, count)` (the desktop link) |
 
 /// The table number of win32k services (bits 12–13 of a service number).
 pub const TABLE_WIN32K: u32 = 1;
@@ -38,176 +32,21 @@ pub const TABLE_WIN32K: u32 = 1;
 /// One win32k service Poly knows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Win32kService {
-    // ----- classes and windows
-    /// `RegisterClassExW(const WNDCLASSEXW*)`, plus whether the class's
-    /// procedure is Unicode; the atom through a pointer.
-    RegisterClass,
-    /// `UnregisterClassW(lpClassName, hInstance)`.
-    UnregisterClass,
-    /// `GetClassInfoExW(hInstance, lpszClass, WNDCLASSEXW*)`.
-    GetClassInfo,
-    /// `CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y,
-    /// nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam)`; the window
-    /// handle through a pointer.
-    CreateWindow,
-    /// `DestroyWindow(hWnd)`.
-    DestroyWindow,
-    /// `ShowWindow(hWnd, nCmdShow)`.
-    ShowWindow,
-    /// `SetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags)`.
-    SetWindowPos,
-    /// What a window is (rectangles, styles, parent, owner, thread, text
-    /// length, ...): `(hWnd, class, buffer, length, return length*)`, an
-    /// information class of Poly's, like `NtQueryInformation*`.
-    QueryWindow,
-    /// `GetWindowLongPtrW(hWnd, nIndex)`, the value through a pointer.
-    GetWindowLong,
-    /// `SetWindowLongPtrW(hWnd, nIndex, dwNewLong)`, the previous value
-    /// through a pointer.
-    SetWindowLong,
-    /// `SetWindowTextW(hWnd, lpString)`.
-    SetWindowText,
-
-    // ----- messages and queues
-    /// `PostMessageW(hWnd, Msg, wParam, lParam)`.
-    PostMessage,
-    /// `PostThreadMessageW(idThread, Msg, wParam, lParam)`.
-    PostThreadMessage,
-    /// `SendMessageTimeoutW(hWnd, Msg, wParam, lParam, fuFlags, uTimeout,
-    /// lpdwResult)` to a window of another thread (same-thread sends never
-    /// reach the kernel).
-    SendMessage,
-    /// `GetMessageW(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax)`, with the
-    /// caller's callout record.
-    GetMessage,
-    /// `PeekMessageW(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax, wRemoveMsg)`,
-    /// with the caller's callout record.
-    PeekMessage,
-    /// `ReplyMessage(lResult)`.
-    ReplyMessage,
-    /// `PostQuitMessage(nExitCode)`.
-    PostQuitMessage,
-    /// `WaitMessage()`.
-    WaitMessage,
-    /// `MsgWaitForMultipleObjectsEx(nCount, pHandles, dwMilliseconds,
-    /// dwWakeMask, dwFlags)`.
-    MsgWaitForMultipleObjects,
-    /// `GetQueueStatus(flags)`, the result through a pointer.
-    GetQueueStatus,
-    /// The end of a callout (ADR 0128, Decision 1): `(callout, result)`.
-    CalloutReturn,
-
-    // ----- input
-    /// `SetFocus(hWnd)`, the previous focus through a pointer.
-    SetFocus,
-    /// `SetActiveWindow(hWnd)`, the previous active window through a pointer.
-    SetActiveWindow,
-    /// `SetForegroundWindow(hWnd)`.
-    SetForegroundWindow,
-    /// `SetCapture(hWnd)`, the previous capture through a pointer.
-    SetCapture,
-    /// `ReleaseCapture()`.
-    ReleaseCapture,
-    /// `GetKeyState(nVirtKey)`, the state through a pointer.
-    GetKeyState,
-    /// `GetAsyncKeyState(vKey)`, the state through a pointer.
-    GetAsyncKeyState,
-    /// `GetKeyboardState(lpKeyState)`.
-    GetKeyboardState,
-    /// `GetCursorPos(lpPoint)`.
-    GetCursorPos,
-    /// `SetCursor(hCursor)`, the previous cursor through a pointer.
-    SetCursor,
-
-    // ----- timers and hooks
-    /// `SetTimer(hWnd, nIDEvent, uElapse, lpTimerFunc)`, the timer's id
-    /// through a pointer.
-    SetTimer,
-    /// `KillTimer(hWnd, uIDEvent)`.
-    KillTimer,
-    /// `SetWindowsHookExW(idHook, lpfn, hmod, dwThreadId)`, the hook handle
-    /// through a pointer.
-    SetWindowsHook,
-    /// `UnhookWindowsHookEx(hhk)`.
-    UnhookWindowsHook,
-
-    // ----- painting and surfaces
-    /// `BeginPaint(hWnd, lpPaint)`, plus where the window's surface is.
-    BeginPaint,
-    /// `EndPaint(hWnd, lpPaint)`.
-    EndPaint,
-    /// `InvalidateRect(hWnd, lpRect, bErase)`.
-    InvalidateRect,
-    /// `ValidateRect(hWnd, lpRect)`.
-    ValidateRect,
-    /// `GetUpdateRect(hWnd, lpRect, bErase)`, the answer through a pointer.
-    GetUpdateRect,
-    /// `GetDCEx(hWnd, hrgnClip, flags)`'s kernel part: the window's surface
-    /// section, its origin in it and its visible region.
-    GetDC,
-    /// `ReleaseDC(hWnd, hDC)`'s kernel part.
-    ReleaseDC,
-    /// Poly's own: `(hWnd, rects, count)`, the rectangles drawn through a
-    /// window DC since the last commit, which become `Damage` records of
-    /// the desktop link (ADR 0128, Decision 5).
+    /// `PolyUserCall(request, request_length, reply, reply_capacity,
+    /// reply_length*)`: one [`crate::proto::Request`] in, its
+    /// [`crate::proto::Reply`] out (`STATUS_BUFFER_TOO_SMALL` with the
+    /// length needed when the reply does not fit).
+    Call,
+    /// `PolyUserCommitSurface(hwnd, rects, count)`: the rectangles drawn
+    /// into a window's surface since the last commit (ADR 0128, Decision 5).
     CommitSurface,
-
-    // ----- GDI
-    /// The display as GDI reports it (`GetDeviceCaps` of a screen DC,
-    /// monitors): `(class, buffer, length, return length*)`.
-    QueryDisplay,
 }
 
 /// Every win32k service with its number and its name as `win32u.dll`
 /// exports its stub. The numbers are written out (`0x1000 | index`) so
 /// `win32u`'s `build.rs` can read them as they are. Sorted by number.
-pub const WIN32K_SERVICES: [(Win32kService, u32, &str); 45] = [
-    (Win32kService::RegisterClass, 0x1000, "PolyUserRegisterClass"),
-    (Win32kService::UnregisterClass, 0x1001, "PolyUserUnregisterClass"),
-    (Win32kService::GetClassInfo, 0x1002, "PolyUserGetClassInfo"),
-    (Win32kService::CreateWindow, 0x1003, "PolyUserCreateWindow"),
-    (Win32kService::DestroyWindow, 0x1004, "PolyUserDestroyWindow"),
-    (Win32kService::ShowWindow, 0x1005, "PolyUserShowWindow"),
-    (Win32kService::SetWindowPos, 0x1006, "PolyUserSetWindowPos"),
-    (Win32kService::QueryWindow, 0x1007, "PolyUserQueryWindow"),
-    (Win32kService::GetWindowLong, 0x1008, "PolyUserGetWindowLong"),
-    (Win32kService::SetWindowLong, 0x1009, "PolyUserSetWindowLong"),
-    (Win32kService::SetWindowText, 0x100A, "PolyUserSetWindowText"),
-    (Win32kService::PostMessage, 0x1100, "PolyUserPostMessage"),
-    (Win32kService::PostThreadMessage, 0x1101, "PolyUserPostThreadMessage"),
-    (Win32kService::SendMessage, 0x1102, "PolyUserSendMessage"),
-    (Win32kService::GetMessage, 0x1103, "PolyUserGetMessage"),
-    (Win32kService::PeekMessage, 0x1104, "PolyUserPeekMessage"),
-    (Win32kService::ReplyMessage, 0x1105, "PolyUserReplyMessage"),
-    (Win32kService::PostQuitMessage, 0x1106, "PolyUserPostQuitMessage"),
-    (Win32kService::WaitMessage, 0x1107, "PolyUserWaitMessage"),
-    (Win32kService::MsgWaitForMultipleObjects, 0x1108, "PolyUserMsgWaitForMultipleObjects"),
-    (Win32kService::GetQueueStatus, 0x1109, "PolyUserGetQueueStatus"),
-    (Win32kService::CalloutReturn, 0x110A, "PolyUserCalloutReturn"),
-    (Win32kService::SetFocus, 0x1200, "PolyUserSetFocus"),
-    (Win32kService::SetActiveWindow, 0x1201, "PolyUserSetActiveWindow"),
-    (Win32kService::SetForegroundWindow, 0x1202, "PolyUserSetForegroundWindow"),
-    (Win32kService::SetCapture, 0x1203, "PolyUserSetCapture"),
-    (Win32kService::ReleaseCapture, 0x1204, "PolyUserReleaseCapture"),
-    (Win32kService::GetKeyState, 0x1205, "PolyUserGetKeyState"),
-    (Win32kService::GetAsyncKeyState, 0x1206, "PolyUserGetAsyncKeyState"),
-    (Win32kService::GetKeyboardState, 0x1207, "PolyUserGetKeyboardState"),
-    (Win32kService::GetCursorPos, 0x1208, "PolyUserGetCursorPos"),
-    (Win32kService::SetCursor, 0x1209, "PolyUserSetCursor"),
-    (Win32kService::SetTimer, 0x1300, "PolyUserSetTimer"),
-    (Win32kService::KillTimer, 0x1301, "PolyUserKillTimer"),
-    (Win32kService::SetWindowsHook, 0x1302, "PolyUserSetWindowsHook"),
-    (Win32kService::UnhookWindowsHook, 0x1303, "PolyUserUnhookWindowsHook"),
-    (Win32kService::BeginPaint, 0x1400, "PolyUserBeginPaint"),
-    (Win32kService::EndPaint, 0x1401, "PolyUserEndPaint"),
-    (Win32kService::InvalidateRect, 0x1402, "PolyUserInvalidateRect"),
-    (Win32kService::ValidateRect, 0x1403, "PolyUserValidateRect"),
-    (Win32kService::GetUpdateRect, 0x1404, "PolyUserGetUpdateRect"),
-    (Win32kService::GetDC, 0x1405, "PolyUserGetDC"),
-    (Win32kService::ReleaseDC, 0x1406, "PolyUserReleaseDC"),
-    (Win32kService::CommitSurface, 0x1407, "PolyUserCommitSurface"),
-    (Win32kService::QueryDisplay, 0x1800, "PolyGdiQueryDisplay"),
-];
+pub const WIN32K_SERVICES: [(Win32kService, u32, &str); 2] =
+    [(Win32kService::Call, 0x1000, "PolyUserCall"), (Win32kService::CommitSurface, 0x1001, "PolyUserCommitSurface")];
 
 impl Win32kService {
     /// The service number `win32u`'s stub puts in `eax`.
@@ -255,7 +94,7 @@ mod tests {
             assert_eq!(s.name(), name);
         }
         // Bits above the table are ignored; table 0 is not win32k's.
-        assert_eq!(Win32kService::from_number(0x1_0000 | 0x1004), Some(Win32kService::DestroyWindow));
+        assert_eq!(Win32kService::from_number(0x1_0000 | 0x1001), Some(Win32kService::CommitSurface));
         assert_eq!(Win32kService::from_number(0x0004), None);
     }
 
@@ -269,8 +108,6 @@ mod tests {
             assert!(name.starts_with("PolyUser") || name.starts_with("PolyGdi"), "{name}");
             assert!(name.chars().all(|c| c.is_ascii_alphanumeric()), "{name}");
         }
-        let gdi = WIN32K_SERVICES.iter().filter(|s| s.2.starts_with("PolyGdi"));
-        assert!(gdi.clone().all(|s| (0x1800..0x2000).contains(&s.1)));
     }
 
     #[test]

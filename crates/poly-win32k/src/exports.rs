@@ -2,94 +2,153 @@
 //!
 //! - `win32u.dll` exports one stub per service of
 //!   [`crate::services::WIN32K_SERVICES`], under the service's name.
-//! - `user32.dll` and `gdi32.dll` export the functions below. Until the
-//!   spec sheets of their slice arrive, they are **stubs**: each sets the
-//!   last error to `ERROR_CALL_NOT_IMPLEMENTED` and returns the failure
-//!   value its Learn page documents (`grep -rn not_implemented` finds
-//!   them). A function moves out of these lists into an implemented list
-//!   when its slice delivers it.
-//!
-//! The names are the first slice's (window classes and windows, the message
-//! loop, timers, painting with GDI), from the coverage map's export lists.
+//! - `user32.dll` and `gdi32.dll` export the functions below: the first
+//!   slice's implemented ones, and **stubs** for what waits for a later
+//!   slice (each sets `ERROR_CALL_NOT_IMPLEMENTED` and returns the failure
+//!   value its Learn page documents; `grep -rn not_implemented` finds
+//!   them).
 
 /// `ERROR_CALL_NOT_IMPLEMENTED` (`winerror.h`): what every stub sets.
 pub const ERROR_CALL_NOT_IMPLEMENTED: u32 = 120;
 
-/// `user32.dll` functions that are stubs for now.
-pub const USER32_STUBS: &[&str] = &[
+/// `user32.dll` functions of the first slice.
+pub const USER32_EXPORTS: &[&str] = &[
+    "AdjustWindowRect",
+    "AdjustWindowRectEx",
+    "CallWindowProcW",
+    "ClientToScreen",
+    "CreateWindowExW",
+    "DefWindowProcW",
+    "DestroyWindow",
+    "DispatchMessageW",
+    "DrawTextW",
+    "FillRect",
+    "FindWindowExW",
+    "FindWindowW",
+    "GetAncestor",
+    "GetClassInfoExW",
+    "GetClassLongPtrW",
+    "GetClassLongW",
+    "GetClassNameW",
+    "GetClientRect",
+    "GetDC",
+    "GetDesktopWindow",
+    "GetInputState",
+    "GetMessageW",
+    "GetParent",
+    "GetQueueStatus",
+    "GetSysColor",
+    "GetSystemMetrics",
+    "GetWindow",
+    "GetWindowLongPtrW",
+    "GetWindowLongW",
+    "GetWindowRect",
+    "GetWindowTextLengthW",
+    "GetWindowTextW",
+    "InSendMessage",
+    "IsChild",
+    "IsIconic",
+    "IsWindow",
+    "IsWindowUnicode",
+    "IsWindowVisible",
+    "IsZoomed",
+    "KillTimer",
+    "MapVirtualKeyW",
+    "MapWindowPoints",
+    "MoveWindow",
+    "MsgWaitForMultipleObjects",
+    "MsgWaitForMultipleObjectsEx",
+    "PeekMessageW",
+    "PostMessageW",
+    "PostQuitMessage",
+    "PostThreadMessageW",
     "RegisterClassExW",
     "RegisterClassW",
-    "UnregisterClassW",
-    "GetClassInfoExW",
-    "CreateWindowExW",
-    "DestroyWindow",
-    "ShowWindow",
-    "UpdateWindow",
-    "SetWindowPos",
-    "MoveWindow",
-    "GetWindowRect",
-    "GetClientRect",
-    "GetWindowLongPtrW",
-    "SetWindowLongPtrW",
-    "SetWindowTextW",
-    "GetWindowTextW",
-    "DefWindowProcW",
-    "GetMessageW",
-    "PeekMessageW",
-    "TranslateMessage",
-    "DispatchMessageW",
-    "PostMessageW",
-    "PostThreadMessageW",
+    "ReleaseDC",
+    "ReplyMessage",
+    "ScreenToClient",
     "SendMessageW",
-    "PostQuitMessage",
-    "WaitMessage",
-    "MsgWaitForMultipleObjectsEx",
+    "SendNotifyMessageW",
+    "SetParent",
     "SetTimer",
-    "KillTimer",
+    "SetWindowLongPtrW",
+    "SetWindowLongW",
+    "SetWindowPos",
+    "SetWindowTextW",
+    "ShowWindow",
+    "TranslateMessage",
+    "UnregisterClassW",
+    "WaitMessage",
+];
+
+/// `user32.dll` functions that are stubs for now (painting through update
+/// regions is a later slice).
+pub const USER32_STUBS: &[&str] = &[
+    "UpdateWindow",
     "BeginPaint",
     "EndPaint",
     "InvalidateRect",
     "ValidateRect",
     "GetUpdateRect",
-    "GetDC",
-    "ReleaseDC",
-    "FillRect",
     "LoadCursorW",
     "LoadIconW",
 ];
 
-/// `gdi32.dll` functions that are stubs for now.
-pub const GDI32_STUBS: &[&str] = &[
-    "GetStockObject",
-    "CreateCompatibleDC",
-    "DeleteDC",
-    "SelectObject",
-    "DeleteObject",
-    "GetObjectW",
-    "GetObjectType",
-    "CreateSolidBrush",
-    "CreatePen",
-    "CreateCompatibleBitmap",
-    "CreateDIBSection",
-    "CreateRectRgn",
-    "SelectClipRgn",
+/// `gdi32.dll` functions of the first slice (and its private `PolyGdi*`
+/// exports for `user32`).
+pub const GDI32_EXPORTS: &[&str] = &[
     "BitBlt",
+    "CreateBitmap",
+    "CreateCompatibleBitmap",
+    "CreateCompatibleDC",
+    "CreateDIBSection",
+    "CreateFontIndirectW",
+    "CreatePen",
+    "CreateRectRgn",
+    "CreateSolidBrush",
+    "DeleteDC",
+    "DeleteObject",
+    "ExtTextOutW",
+    "GdiFlush",
+    "GetBkColor",
+    "GetBkMode",
+    "GetClipBox",
+    "GetCurrentObject",
+    "GetDeviceCaps",
+    "GetObjectType",
+    "GetObjectW",
+    "GetPixel",
+    "GetStockObject",
+    "GetTextAlign",
+    "GetTextColor",
+    "GetTextExtentPoint32W",
+    "GetTextMetricsW",
+    "LineTo",
+    "MoveToEx",
     "PatBlt",
     "Rectangle",
-    "MoveToEx",
-    "LineTo",
-    "SetPixel",
-    "GetPixel",
+    "RestoreDC",
+    "SaveDC",
+    "SelectClipRgn",
+    "SelectObject",
     "SetBkColor",
-    "SetTextColor",
     "SetBkMode",
-    "CreateFontIndirectW",
+    "SetDCBrushColor",
+    "SetDCPenColor",
+    "SetPixel",
+    "SetPixelV",
+    "SetTextAlign",
+    "SetTextColor",
     "TextOutW",
-    "ExtTextOutW",
-    "GetTextExtentPoint32W",
-    "GetDeviceCaps",
-    "GdiFlush",
+    "PolyGdiCreateDisplayDC",
+    "PolyGdiReleaseDisplayDC",
+    "PolyGdiDeleteDisplayDC",
+    "PolyGdiFillRect",
+    "PolyGdiDrawText",
 ];
+
+/// `gdi32.dll` functions that are stubs for now.
+pub const GDI32_STUBS: &[&str] = &[];
 
 #[cfg(test)]
 mod tests {
@@ -99,12 +158,12 @@ mod tests {
 
     #[test]
     fn names_are_unique_identifiers() {
-        for list in [USER32_STUBS, GDI32_STUBS] {
+        for list in [USER32_EXPORTS, USER32_STUBS, GDI32_EXPORTS, GDI32_STUBS] {
             let set: HashSet<_> = list.iter().collect();
             assert_eq!(set.len(), list.len());
             assert!(list.iter().all(|n| n.chars().all(|c| c.is_ascii_alphanumeric())));
         }
         // Stubs never shadow Poly's own service names.
-        assert!(USER32_STUBS.iter().chain(GDI32_STUBS).all(|n| !n.starts_with("Poly")));
+        assert!(USER32_STUBS.iter().chain(USER32_EXPORTS).all(|n| !n.starts_with("Poly")));
     }
 }
