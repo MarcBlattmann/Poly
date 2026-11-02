@@ -161,6 +161,16 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] One file picker for every app world, mapped to each OS's path conventions
 - [ ] Unified notifications, app launcher entries and file associations
 - [ ] A preinstalled browser (Chromium) downloads and installs Linux and Windows apps, which then appear in the launcher
+- [ ] What Linux package formats need from the kernel: squashfs, loop devices, `/dev/fuse`, overlayfs, user/mount/PID/network namespaces with `pivot_root` and `setns`, seccomp filters (ADR 0132)
+- [ ] One installer for every Linux package format, as on macOS or Windows: opening a downloaded package shows what it is and installs it with one click; it appears in the launcher, updates through its own channel and uninstalls from the launcher or Settings (ADR 0132)
+- [ ] AppImages install and run, without FUSE (Poly mounts their squashfs) (ADR 0132)
+- [ ] ⚖️ Owner decision: which distributions back `.deb` and `.rpm` installs (proposal: Debian stable plus Ubuntu LTS for `.deb`, Fedora for `.rpm`) (ADR 0132)
+- [ ] `.deb` packages install with their dependencies and maintainer scripts (the distribution's own `apt` and `dpkg` in a shared base root) (ADR 0132)
+- [ ] `.rpm` packages install with their dependencies (`dnf` and `rpm` in a shared base root) (ADR 0132)
+- [ ] Flatpak: Flathub apps install and run sandboxed (`flatpak` and `bubblewrap` unchanged; the desktop portals answered by Poly's shell) (ADR 0132)
+- [ ] ⚖️ Owner decision: how Snap packages run (`snapd` itself, or snaps unpacked and run without `snapd`, or later) (ADR 0132)
+- [ ] Snap packages install and run (ADR 0132)
+- [ ] Windows installers (`.exe`, `.msi`), and later macOS `.dmg` and `.pkg`, go through the same installer (ADR 0132)
 - [ ] Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)
 - [ ] One user home visible as `~`, `C:\Users\<name>` and `/Users/<name>`
 
