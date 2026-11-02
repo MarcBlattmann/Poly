@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "bb_mono",
+      "exe_sha256": "30a26410497e44afcd399d46fe4048e226fbaef2685d2a704396371dcc2fea23",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29sb3VyLT5tb25vIHdpdGggc291cmNlIGJrID0gZ3JlZW46IDAwMDAwMCBmZmZmZmYgMDAwMDAwIDAwMDAwMApjb2xvdXItPm1vbm8gd2l0aCBzb3VyY2UgYmsgPSB3aGl0ZTogMDAwMDAwIDAwMDAwMCBmZmZmZmYgMDAwMDAwCm1vbm8tPmNvbG91ciB3aXRoIGRzdCB0ZXh0IDB4MzMyMjExIGJrIDB4Y2NiYmFhOiAxMTIyMzMgMTEyMjMzIGFhYmJjYyAxMTIyMzMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "colour->mono with source bk = green: 000000 ffffff 000000 000000\ncolour->mono with source bk = white: 000000 000000 ffffff 000000\nmono->colour with dst text 0x332211 bk 0xccbbaa: 112233 112233 aabbcc 112233\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "bb_rops",
+      "exe_sha256": "cc309f47d11b046c868d4d9db8ddee5cadc8dfd747121f85e165163cbcb0e46a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U1JDQ09QWTogcmV0dXJuZWQgMSBwaXhlbHMgMDBmMGYwMGYgMDAxMjM0NTYKU1JDUEFJTlQ6IHJldHVybmVkIDEgcGl4ZWxzIDAwZmZmZmZmIDAwYmJmZGZmClNSQ0FORDogcmV0dXJuZWQgMSBwaXhlbHMgMDAwMDAwMDAgMDAwMjA0NDYKU1JDSU5WRVJUOiByZXR1cm5lZCAxIHBpeGVscyAwMGZmZmZmZiAwMGI5ZjliOQpOT1RTUkNDT1BZOiByZXR1cm5lZCAxIHBpeGVscyBmZjBmMGZmMCBmZmVkY2JhOQpEU1RJTlZFUlQ6IHJldHVybmVkIDEgcGl4ZWxzIGZmZjBmMDBmIGZmNTQzMjEwCkJMQUNLTkVTUzogcmV0dXJuZWQgMSBwaXhlbHMgMDAwMDAwMDAgMDAwMDAwMDAKV0hJVEVORVNTOiByZXR1cm5lZCAxIHBpeGVscyBmZmZmZmZmZiBmZmZmZmZmZgpQQVRDT1BZOiByZXR1cm5lZCAxIHBpeGVscyAwMDBmZjA1NSAwMDBmZjA1NQpQQVRDT1BZIHdpdGggYSBOVUxMIHNvdXJjZSBEQzogcmV0dXJuZWQgMSBwaXhlbCAwMDBmZjA1NQpTUkNDT1BZIHdpdGggYSBOVUxMIHNvdXJjZSBEQzogcmV0dXJuZWQgMCBlcnJvciAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SRCCOPY: returned 1 pixels 00f0f00f 00123456\nSRCPAINT: returned 1 pixels 00ffffff 00bbfdff\nSRCAND: returned 1 pixels 00000000 00020446\nSRCINVERT: returned 1 pixels 00ffffff 00b9f9b9\nNOTSRCCOPY: returned 1 pixels ff0f0ff0 ffedcba9\nDSTINVERT: returned 1 pixels fff0f00f ff543210\nBLACKNESS: returned 1 pixels 00000000 00000000\nWHITENESS: returned 1 pixels ffffffff ffffffff\nPATCOPY: returned 1 pixels 000ff055 000ff055\nPATCOPY with a NULL source DC: returned 1 pixel 000ff055\nSRCCOPY with a NULL source DC: returned 0 error 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

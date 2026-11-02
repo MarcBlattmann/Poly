@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "stc_bkcolor",
+      "exe_sha256": "11a3d555d1fd79e2179b95535dbf407a5c069cfc7f07668f621f2d1771bab3a0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0QmtDb2xvciByZXR1cm5lZCB0aGUgZGVmYXVsdCAweGZmZmZmZgptb2RlIDIgKE9QQVFVRSBpcyAyKSwgYWxpZ24gMApleHRlbnQgb2YgIkFiIiB3aXRoIHRoZSBzeXN0ZW0gZm9udDogMTZ4MTYKY2hhbmdlZCBhcmVhIDUsNCwyMSwyMAppbnNpZGU6IGJhY2tncm91bmQgMTg0IHRleHQgNzIgb3RoZXIgMCAodG90YWwgMjU2KQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetBkColor returned the default 0xffffff\nmode 2 (OPAQUE is 2), align 0\nextent of \"Ab\" with the system font: 16x16\nchanged area 5,4,21,20\ninside: background 184 text 72 other 0 (total 256)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

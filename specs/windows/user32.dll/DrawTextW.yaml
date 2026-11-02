@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/DrawTextW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
+  observed_by: spec-win-gui-a
+  date: 2026-11-02
+sources: >
+  Observations of our own test programs on the machine above. Microsoft
+  Learn reference pages of the functions and messages named here, "About
+  Messages and Message Queues", "Window Features", "About Painting and
+  Drawing", "Device Contexts"; winuser.h, wingdi.h, windef.h and winerror.h
+  for constants and layouts. Wine's tests were not read.
+summary: >
+  Draws or measures formatted text in a rectangle with the DC's font and
+  colours. Returns the height of the text (for DT_VCENTER/DT_BOTTOM single
+  lines the offset from the rectangle's top to the text's bottom).
+interface:
+  signature: "int DrawTextW(HDC hdc, LPCWSTR text, int count, RECT* rect, UINT format)"
+rules:
+  calcrect: "DT_CALCRECT draws nothing and sets right/bottom: \"Hello\" with the system font -> 34x16, returns 16; count 3 -> 22 wide; a \"\\n\" makes two lines (32) unless DT_SINGLELINE (one line, the newline measured as a character); DT_WORDBREAK at width 60 wraps \"the quick brown fox jumps\" into 4 lines (64, width 58), a word longer than the width stays on one line; a tab without DT_EXPANDTABS is one character wide, with it 8 average character widths; \"\" returns 16 with DT_SINGLELINE and 1 (height 0) without"
+  prefix: "\"&File\" measures as \"File\" (24 wide), with DT_NOPREFIX as \"&File\" (33); \"A&&B\" as \"A&B\"; no underline is drawn (keyboard cues hidden)"
+  alignment: "in a 100x40 rect at (10,10), \"Text\" (28x16): DT_LEFT|DT_TOP cell at 10,10; DT_CENTER at 46; DT_RIGHT ends at 110; DT_VCENTER|DT_SINGLELINE top 22 (returns 28); DT_BOTTOM|DT_SINGLELINE top 34 (returns 40)"
+  opaque: "in OPAQUE mode the whole text cell gets the background colour"
+  clip: "clipped to the rectangle unless DT_NOCLIP"
+  rect: "without DT_CALCRECT the rectangle is not changed"
+errors:
+  none: "no error cases observed"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; calls on a window of another thread of the process work as noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
+  (allowed since this slice); each carries its own declarations (Learn
+  prototypes, header constants) and a message log helper; window procedures
+  log only documented messages (see "documented" in the tests), never
+  painting messages, activation or IME traffic, handles, times or cascading
+  default positions. Today Poly has no GUI user32/gdi32, so the tests do not
+  start there.
+not_covered: >
+  Everything that needs a visible desktop: WM_PAINT, WM_ERASEBKGND and
+  WM_NCPAINT generation, update regions (InvalidateRect, ValidateRect,
+  GetUpdateRect, UpdateWindow, BeginPaint/EndPaint inside WM_PAINT),
+  IsWindowVisible of shown windows, window DC clipping - in the oracle's
+  session no window is visible (IsWindowVisible is 0 for every shown window,
+  InvalidateRect leaves no update region and no WM_PAINT comes); they need
+  the interactive desktop and are a later entry. Real input (SendInput),
+  focus and activation, menus and the menu loop, hooks, DPI awareness.

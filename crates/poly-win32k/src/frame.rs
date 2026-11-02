@@ -23,6 +23,7 @@
 //! the compositor's tests check against its own constants.
 
 /// A rectangle as Windows' `RECT` has it: right and bottom exclusive.
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rect {
     pub left: i32,

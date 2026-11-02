@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "swl_style",
+      "exe_sha256": "df28e4e96299792f77be8f0ab7529b2d75c04853b0c35eb9bf70602a75abcb25",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAotLSBhZGQgV1NfQk9SREVSOiBvbGQ9MHg4NDAwMDAwMCBub3c9MHg4NDgwMDAwMApXIFdNX1NUWUxFQ0hBTkdJTkcgd2hpY2g9LTE2IG9sZD0weDg0MDAwMDAwIG5ldz0weDgwODAwMDAwClcgV01fU1RZTEVDSEFOR0VEIHdoaWNoPS0xNiBvbGQ9MHg4NDAwMDAwMCBuZXc9MHg4NDgwMDAwMApjbGllbnQgYWZ0ZXIgc3R5bGUgY2hhbmdlIDEwMHg4MAotLSBTZXRXaW5kb3dQb3MgU1dQX0ZSQU1FQ0hBTkdFRApXIFdNX1dJTkRPV1BPU0NIQU5HSU5HIHBvcz0wLDAgc2l6ZT0wLDAgZmxhZ3M9MHgzNwpXIFdNX05DQ0FMQ1NJWkUgMSBuZXc9MCwwLDEwMCw4MCBwb3M9MCwwLDEwMCw4MCBmbGFncz0weDE4M2YKVyBXTV9XSU5ET1dQT1NDSEFOR0VEIHBvcz0wLDAgc2l6ZT0xMDAsODAgZmxhZ3M9MHgzZgpXIFdNX01PVkUgdz0wIGw9MSwxClcgV01fU0laRSB3PTAgbD05OCw3OApjbGllbnQgYWZ0ZXIgU1dQX0ZSQU1FQ0hBTkdFRCA5OHg3OAotLSBzYW1lIHN0eWxlIGFnYWluOiBvbGQ9MHg4NDgwMDAwMCBub3c9MHg4NDgwMDAwMApXIFdNX1NUWUxFQ0hBTkdJTkcgd2hpY2g9LTE2IG9sZD0weDg0ODAwMDAwIG5ldz0weDgwODAwMDAwClcgV01fU1RZTEVDSEFOR0VEIHdoaWNoPS0xNiBvbGQ9MHg4NDgwMDAwMCBuZXc9MHg4NDgwMDAwMAotLSBoYW5kbGVyIGFkZHMgV1NfRElTQUJMRUQ6IG9sZD0weDg0ODAwMDAwIG5vdz0weDhjMDAwMDAwClcgV01fU1RZTEVDSEFOR0lORyB3aGljaD0tMTYgb2xkPTB4ODQ4MDAwMDAgbmV3PTB4ODAwMDAwMDAKVyBXTV9TVFlMRUNIQU5HRUQgd2hpY2g9LTE2IG9sZD0weDg0ODAwMDAwIG5ldz0weDhjMDAwMDAwCi0tIHNldCBXU19WSVNJQkxFIGRpcmVjdGx5OiBvbGQ9MHg4YzAwMDAwMCBub3c9MHg5NDAwMDAwMApXIFdNX1NUWUxFQ0hBTkdJTkcgd2hpY2g9LTE2IG9sZD0weDhjMDAwMDAwIG5ldz0weDkwMDAwMDAwClcgV01fU1RZTEVDSEFOR0VEIHdoaWNoPS0xNiBvbGQ9MHg4YzAwMDAwMCBuZXc9MHg5NDAwMDAwMAotLSBleHN0eWxlIFdTX0VYX1RPT0xXSU5ET1c6IG9sZD0weDAgbm93PTB4ODAKVyBXTV9TVFlMRUNIQU5HSU5HIHdoaWNoPS0yMCBvbGQ9MHgwIG5ldz0weDgwClcgV01fU1RZTEVDSEFOR0VEIHdoaWNoPS0yMCBvbGQ9MHgwIG5ldz0weDgwCi0tIGV4c3R5bGUgV1NfRVhfQ0xJRU5URURHRTogb2xkPTB4ODAgbm93PTB4MjAwClcgV01fU1RZTEVDSEFOR0lORyB3aGljaD0tMjAgb2xkPTB4ODAgbmV3PTB4MjAwClcgV01fU1RZTEVDSEFOR0VEIHdoaWNoPS0yMCBvbGQ9MHg4MCBuZXc9MHgyMDAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n-- add WS_BORDER: old=0x84000000 now=0x84800000\nW WM_STYLECHANGING which=-16 old=0x84000000 new=0x80800000\nW WM_STYLECHANGED which=-16 old=0x84000000 new=0x84800000\nclient after style change 100x80\n-- SetWindowPos SWP_FRAMECHANGED\nW WM_WINDOWPOSCHANGING pos=0,0 size=0,0 flags=0x37\nW WM_NCCALCSIZE 1 new=0,0,100,80 pos=0,0,100,80 flags=0x183f\nW WM_WINDOWPOSCHANGED pos=0,0 size=100,80 flags=0x3f\nW WM_MOVE w=0 l=1,1\nW WM_SIZE w=0 l=98,78\nclient after SWP_FRAMECHANGED 98x78\n-- same style again: old=0x84800000 now=0x84800000\nW WM_STYLECHANGING which=-16 old=0x84800000 new=0x80800000\nW WM_STYLECHANGED which=-16 old=0x84800000 new=0x84800000\n-- handler adds WS_DISABLED: old=0x84800000 now=0x8c000000\nW WM_STYLECHANGING which=-16 old=0x84800000 new=0x80000000\nW WM_STYLECHANGED which=-16 old=0x84800000 new=0x8c000000\n-- set WS_VISIBLE directly: old=0x8c000000 now=0x94000000\nW WM_STYLECHANGING which=-16 old=0x8c000000 new=0x90000000\nW WM_STYLECHANGED which=-16 old=0x8c000000 new=0x94000000\n-- exstyle WS_EX_TOOLWINDOW: old=0x0 now=0x80\nW WM_STYLECHANGING which=-20 old=0x0 new=0x80\nW WM_STYLECHANGED which=-20 old=0x0 new=0x80\n-- exstyle WS_EX_CLIENTEDGE: old=0x80 now=0x200\nW WM_STYLECHANGING which=-20 old=0x80 new=0x200\nW WM_STYLECHANGED which=-20 old=0x80 new=0x200\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "swl_userdata",
+      "exe_sha256": "9aa406c4d5194a08ef9b70175970a9f9d91a2dc03522ccef17f94f8ae819a408",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAp1c2VyZGF0YV9maXJzdDogb2xkPTB4MCBlcnJvcj0tMSBtZXNzYWdlcz0wCnVzZXJkYXRhX3NlY29uZDogb2xkPTB4N2ZmZjAwMDAxMjM0NTY3OCBlcnJvcj0tMSBtZXNzYWdlcz0wCnVzZXJkYXRhX3plcm86IG9sZD0weGZmZmZmZmZmZmZmZmZmZmYgZXJyb3I9LTEgbWVzc2FnZXM9MAp1c2VyZGF0YV9mcm9tX3plcm86IG9sZD0weDAgZXJyb3I9LTEgbWVzc2FnZXM9MApvayB1c2VyZGF0YV9yZWFkCmNoaWxkX2lkOiBvbGQ9MHgzIGVycm9yPS0xIG1lc3NhZ2VzPTAKY2hpbGQgaWQgbm93IDB4MTAwMDAwMDAxCnBvcHVwX2lkOiBvbGQ9MHgwIGVycm9yPTE0MDEgbWVzc2FnZXM9MApwb3B1cCBpZCBub3cgMApoaW5zdGFuY2U6IGVycm9yPS0xCm9rIGhpbnN0YW5jZV9vbGRfaXNfZXhlCmhpbnN0YW5jZSBub3cgMHgxMDAwMAp1bmtub3duX2luZGV4OiBvbGQ9MHgwIGVycm9yPS0xIG1lc3NhZ2VzPTAKYmFkX3dpbmRvdzogb2xkPTB4MCBlcnJvcj0xNDAwIG1lc3NhZ2VzPTAKbnVsbF93aW5kb3c6IG9sZD0weDAgZXJyb3I9MTQwMCBtZXNzYWdlcz0wCnN1bW1hcnkgMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nuserdata_first: old=0x0 error=-1 messages=0\nuserdata_second: old=0x7fff000012345678 error=-1 messages=0\nuserdata_zero: old=0xffffffffffffffff error=-1 messages=0\nuserdata_from_zero: old=0x0 error=-1 messages=0\nok userdata_read\nchild_id: old=0x3 error=-1 messages=0\nchild id now 0x100000001\npopup_id: old=0x0 error=1401 messages=0\npopup id now 0\nhinstance: error=-1\nok hinstance_old_is_exe\nhinstance now 0x10000\nunknown_index: old=0x0 error=-1 messages=0\nbad_window: old=0x0 error=1400 messages=0\nnull_window: old=0x0 error=1400 messages=0\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

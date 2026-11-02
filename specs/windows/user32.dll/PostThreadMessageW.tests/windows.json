@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "ptm_order",
+      "exe_sha256": "2b5cc4268ac163082a35d0f741e501200375e57c2b2a4d612cdfb4c751815f63",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApmaWx0ZXJlZCBvbiB0aGUgd2luZG93OiAxIG1zZ18weDA0MDIgdz0yCnVuZmlsdGVyZWQ6IDEgbXNnXzB4MDQwMSB3PTEgd2luZG93PTAKdW5maWx0ZXJlZDogMCBXTV9RVUlUIHc9MyB3aW5kb3c9MAp1bmZpbHRlcmVkOiAxIG1zZ18weDA0MDQgdz00IHdpbmRvdz0xCnVuZmlsdGVyZWQ6IDEgbXNnXzB4MDQwNSB3PTUgd2luZG93PTAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nfiltered on the window: 1 msg_0x0402 w=2\nunfiltered: 1 msg_0x0401 w=1 window=0\nunfiltered: 0 WM_QUIT w=3 window=0\nunfiltered: 1 msg_0x0404 w=4 window=1\nunfiltered: 1 msg_0x0405 w=5 window=0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

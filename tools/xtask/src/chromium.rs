@@ -1079,6 +1079,9 @@ fn run(args: &[String]) -> Result {
         "==> the desktop is in QEMU's window (the Windows key or Ctrl+Space opens the launcher: type \"chromium\"); \
          the disk's bash is here (Ctrl-A X quits)"
     );
+    // QEMU's GTK window on Windows would shrink the screen to its scaled
+    // size (desktop::window_display).
+    let _ = crate::desktop::window_display(&mut cmd);
     let _ = cmd.status().map_err(|e| format!("qemu: {e}"))?;
     Ok(())
 }

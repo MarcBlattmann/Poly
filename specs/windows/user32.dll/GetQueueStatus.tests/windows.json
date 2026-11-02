@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "gqs_send",
+      "exe_sha256": "392f70e943d84c7ce66bd6140bb4bd32eb4b5e2cf4e16495e5eae8e50f229799",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApiZWZvcmU6IG5vdz0weDAwMDAgbmV3PTB4MDAwMApzZW5kZXIgd2FpdGluZzogbm93PTB4MDA0MCBuZXc9MHgwMDQwCmFza2VkIGFnYWluOiBub3c9MHgwMDQwIG5ldz0weDAwMDAKUGVla01lc3NhZ2VXIGRlbGl2ZXJlZCBpdCBhbmQgcmV0dXJuZWQgMAphZnRlcjogbm93PTB4MDAwMCBuZXc9MHgwMDAwCkdldElucHV0U3RhdGUgd2l0aCBhIHBvc3RlZCBtZXNzYWdlOiAwCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nbefore: now=0x0000 new=0x0000\nsender waiting: now=0x0040 new=0x0040\nasked again: now=0x0040 new=0x0000\nPeekMessageW delivered it and returned 0\nafter: now=0x0000 new=0x0000\nGetInputState with a posted message: 0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 267
+    }
+  ]
+}

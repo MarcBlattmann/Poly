@@ -37,10 +37,21 @@
 //! management, notifications and the settings ([`shell_boot_test`]); a
 //! second boot from the same disk finds the settings it saved.
 //!
+//! Boot group `desktop-win32` (ADR 0131) boots the same desktop with a
+//! Windows GUI program in the image (`tests/windows/win_gui_fill.rs`, built
+//! by `pipeline win build`, behind a desktop file "Poly Fill"): typed into
+//! the launcher, it creates an overlapped window and fills its client area
+//! with one colour through GetDC / FillRect / ReleaseDC; through win32k's
+//! desktop link (`/dev/win32k`) the window must show up on the desktop at
+//! its client rectangle, framed by Poly, in that colour
+//! ([`win32_boot_test`]). Skipped where the Windows test programs cannot be
+//! built.
+//!
 //! Screenshots go to `$POLY_DESKTOP_SHOTS` (default `target/desktop/`) as
 //! PNGs, one per step.
 
 use super::{Boot, Result, Symbols, boot_with, compositor, has_desktop, initramfs, qemu, root, screen};
+use crate::hostscreen;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -75,7 +86,11 @@ pub fn append(extra: &str) -> String {
 /// QEMU's devices for the desktop: a virtio GPU of [`SIZE`], a virtio
 /// keyboard and tablet.
 pub fn devices() -> Vec<String> {
-    let (w, h) = SIZE;
+    devices_sized(SIZE)
+}
+
+/// [`devices`] with a virtio GPU of `(w, h)`.
+pub fn devices_sized((w, h): (u32, u32)) -> Vec<String> {
     [
         "-vga",
         "none",
@@ -92,6 +107,11 @@ pub fn devices() -> Vec<String> {
 
 /// Build the desktop's initramfs; returns its path.
 pub fn image() -> Result<PathBuf> {
+    image_with("poly-desktop-initramfs.cpio", Vec::new())
+}
+
+/// [`image`] with `extra` files (path, mode, bytes), written to `name`.
+fn image_with(name: &str, extra: Vec<(String, u16, Vec<u8>)>) -> Result<PathBuf> {
     // The compositor and notify-send are native programs, built on any
     // host (ADR 0125); the C test clients need a Linux C toolchain and are
     // left out without one (the boot tests skip themselves then).
@@ -131,7 +151,8 @@ pub fn image() -> Result<PathBuf> {
             .filter(|(_, elf)| !elf.is_empty())
             .map(|(n, e)| (n, e.as_slice()))
             .collect();
-    initramfs::write(&root(), "poly-desktop-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))
+    tree.files.extend(extra);
+    initramfs::write(&root(), name, &initramfs::programs_image_with(&programs, &tree))
 }
 
 /// The settings disk `cargo xtask desktop` keeps between runs (ext2,
@@ -139,14 +160,41 @@ pub fn image() -> Result<PathBuf> {
 /// `/mnt/poly/shell.conf`).
 pub const STATE_FILE: &str = "poly-desktop-state.img";
 
-/// `cargo xtask desktop [--release] [--fresh-state] [kernel args...]`: boot
-/// into the desktop in a QEMU window (no window without a desktop: then a
-/// VNC display on port 5900). The settings live on a small disk,
-/// `target/poly-desktop-state.img`, so they survive from one run to the
-/// next (`--fresh-state` starts again with the defaults).
+/// `cargo xtask desktop [--release] [--fresh-state] [--size=WxH]
+/// [--scale=N] [kernel args...]`: boot into the desktop in a QEMU window
+/// (no window without a desktop: then a VNC display on port 5900). The
+/// settings live on a small disk, `target/poly-desktop-state.img`, so they
+/// survive from one run to the next (`--fresh-state` starts again with the
+/// defaults).
+///
+/// The screen is [`SIZE`] times the host's display scale, with Poly's own
+/// scale (`poly.display.scale=`) set to it, so text and icons are drawn
+/// sharp at the host's pixel density instead of stretched by the host; a
+/// smaller scale (or screen) where that would not fit the host's main
+/// screen ([`hostscreen::fit`]). `--scale=N` and `--size=WxH` override them.
+/// A scale other than 1 is given to the compositor as `--scale`, so it wins
+/// over the scale in the saved settings.
 pub fn command(args: &[String]) -> Result {
     let release = args.iter().any(|a| a == "--release");
     let fresh = args.iter().any(|a| a == "--fresh-state");
+    let value = |name: &str| args.iter().find_map(|a| a.strip_prefix(name)).map(str::to_string);
+    let asked = match value("--scale=") {
+        Some(v) => {
+            Some(v.parse::<u32>().ok().filter(|s| (1..=4).contains(s)).ok_or(format!("--scale={v}: expected 1 to 4"))?)
+        }
+        None => None,
+    };
+    let host = hostscreen::main_screen();
+    // (size, scale) for the host's main screen.
+    let fitted = host.map(|h| hostscreen::fit(SIZE, h, WINDOW_TITLE));
+    let scale = asked.or(fitted.map(|f| f.1)).unwrap_or(1);
+    let size = match value("--size=") {
+        Some(v) => parse_size(&v).ok_or(format!("--size={v}: expected WxH, such as 2560x1600"))?,
+        None => match fitted {
+            Some((size, s)) if asked.is_none() || asked == Some(s) => size,
+            _ => (SIZE.0 * scale, SIZE.1 * scale),
+        },
+    };
     let extra: Vec<&str> = args.iter().map(String::as_str).filter(|a| !a.starts_with("--")).collect();
     let kernel = super::build_kernel(release)?;
     let image = image()?;
@@ -157,17 +205,59 @@ pub fn command(args: &[String]) -> Result {
     } else {
         eprintln!("==> the settings disk {} is kept from before (--fresh-state starts again)", state.display());
     }
-    let kernel_args = format!("{} {}", SETTINGS_ARGS, extra.join(" "));
+    // The compositor's `--scale` wins over the saved settings' scale (which
+    // a run at another scale may have saved): asked for, or the host's when
+    // that is not 1. At scale 1 the settings choose, as before.
+    let force = if asked.is_some() || scale != 1 {
+        format!("poly.init.arg=--scale poly.init.arg={scale}")
+    } else {
+        String::new()
+    };
+    let kernel_args = format!("{SETTINGS_ARGS} poly.display.scale={scale} {force} {}", extra.join(" "));
     let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end()), super::Devices::None, "mon:stdio");
-    cmd.arg("-initrd").arg(&image).args(devices()).args(state_drive(&state));
-    if has_desktop() {
+    cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
+    eprintln!("==> screen {}x{} at scale {scale} (--size=WxH, --scale=N)", size.0, size.1);
+    let sdl = window_display(&mut cmd);
+    let mut child = cmd.spawn().map_err(|e| format!("qemu: {e}"))?;
+    if let (true, Some(h)) = (sdl, host) {
+        hostscreen::place_window(child.id(), size, h);
+    }
+    let _ = child.wait().map_err(|e| format!("qemu: {e}"))?;
+    Ok(())
+}
+
+/// The height of QEMU's window title bar, in logical pixels (room left
+/// for it when the window is fitted to the screen).
+const WINDOW_TITLE: u32 = 32;
+
+/// `WxH` as a screen size (each side 320 to 8192).
+fn parse_size(v: &str) -> Option<(u32, u32)> {
+    let (w, h) = v.split_once(['x', 'X'])?;
+    let side = |s: &str| s.parse::<u32>().ok().filter(|n| (320..=8192).contains(n));
+    Some((side(w)?, side(h)?))
+}
+
+/// The QEMU window an interactive desktop boot shows on (`POLY_QEMU_DISPLAY`
+/// overrides it; VNC on port 5900 without a desktop); whether it is SDL's.
+/// On Windows that is SDL, marked DPI-aware so Windows does not stretch it:
+/// QEMU's GTK window there tells the guest its size in scaled units (a
+/// 1280x800 screen became 640x480, stretched back up).
+pub fn window_display(cmd: &mut std::process::Command) -> bool {
+    if let Some(display) = std::env::var("POLY_QEMU_DISPLAY").ok().filter(|d| !d.is_empty()) {
+        cmd.args(["-display", &display]);
+        eprintln!("==> QEMU display {display} (POLY_QEMU_DISPLAY)");
+        return display.starts_with("sdl");
+    } else if cfg!(windows) {
+        cmd.args(["-display", "sdl"]).env("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2");
+        eprintln!("==> the desktop is in QEMU's window; the Windows key or Ctrl+Space toggles the launcher");
+        return true;
+    } else if has_desktop() {
         eprintln!("==> the desktop is in QEMU's window; the Windows key or Ctrl+Space toggles the launcher");
     } else {
         cmd.args(["-display", "vnc=0.0.0.0:0"]);
         eprintln!("==> no desktop here: the screen is on VNC, port 5900 (Ctrl-A X quits)");
     }
-    let _ = cmd.status().map_err(|e| format!("qemu: {e}"))?;
-    Ok(())
+    false
 }
 
 /// Where the screenshots go.
@@ -751,6 +841,131 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out))
         }
         None => Err("the desktop boot test did not finish".into()),
+    }
+}
+
+/// The Windows GUI program of `desktop-win32` (`tests/windows/<name>.rs`).
+const WIN32_TEST: &str = "win_gui_fill";
+/// Where `pipeline win build` puts it.
+const WIN32_BIN: &str = "target/pipeline/windows/desktop-bin";
+/// Its desktop file.
+const WIN32_DESKTOP_FILE: &str = "[Desktop Entry]\nType=Application\nName=Poly Fill\n\
+    Comment=A Windows GUI program that fills its window\nExec=/win/win_gui_fill.exe\nKeywords=fill;windows;\n";
+/// The colour it fills its client area with (`FILL`, RGB).
+const WIN32_FILL: [u8; 3] = [0x8a, 0x47, 0xc0];
+/// Its client rectangle: the window at (40, 400), 400 x 300, less
+/// Windows' non-client frame of an overlapped window (8, 31, 8, 8).
+const WIN32_CLIENT: (i32, i32, i32, i32) = (48, 431, 384, 261);
+
+/// Every step of `desktop-win32` (see the module documentation).
+fn drive_win32(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
+    let shots = shots_dir();
+    std::fs::create_dir_all(&shots).map_err(|e| format!("{}: {e}", shots.display()))?;
+    let qmp = screen::Qmp::connect(socket, Duration::from_secs(20))?;
+    let mut d = Driver { qmp, lines, shots, step: 200 };
+    thread::sleep(Duration::from_millis(500));
+    d.wait("poly-compositor: desktop link to Windows apps on /dev/win32k", 1)?;
+    let before = d.shot("win32-before")?;
+
+    // Typed into the launcher, the program starts and shows its window.
+    d.type_text(&["f", "i", "l", "l"])?;
+    d.wait("launcher query \"fill\"", 30)?;
+    thread::sleep(Duration::from_millis(800));
+    d.type_text(&["ret"])?;
+    d.wait("poly-compositor: launched Poly Fill", 30)?;
+    let (x, y, w, h) = shown(&d, "Poly Fill", 180)?;
+    expect(
+        &format!("the window is at its client rectangle {WIN32_CLIENT:?} (got {:?})", (x, y, w, h)),
+        (x, y, w, h) == WIN32_CLIENT,
+    )?;
+    // The fill comes with the first commit; give the frame time.
+    thread::sleep(Duration::from_millis(3000));
+    let img = d.shot("win32-window")?;
+    let at = |dx: i32, dy: i32| img.pixel((x + dx) as u32, (y + dy) as u32);
+    for (dx, dy) in [(1, 1), (w / 2, h / 2), (w - 2, h - 2), (1, h - 2), (w - 2, 1)] {
+        expect(&format!("the client area is filled at +{dx},+{dy} (got {:?})", at(dx, dy)), at(dx, dy) == WIN32_FILL)?;
+    }
+    expect("nothing filled outside the client area", at(w + 6, h / 2) != WIN32_FILL && at(w / 2, h + 6) != WIN32_FILL)?;
+    // Poly's frame: the title bar above the client area is drawn (not the
+    // wallpaper of before, not the fill).
+    let title = ((x + w / 2) as u32, (y - 12) as u32);
+    expect(
+        "Poly's title bar is above the client area",
+        img.pixel(title.0, title.1) != before.pixel(title.0, title.1) && img.pixel(title.0, title.1) != WIN32_FILL,
+    )?;
+    d.qmp.quit();
+    Ok(())
+}
+
+/// Boot group `desktop-win32`: a Windows GUI program's window on Poly's
+/// desktop through win32k's desktop link (ADR 0131).
+pub fn win32_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    if cfg!(not(unix)) {
+        eprintln!("==> skipped: the desktop-win32 boot test needs a Unix host (QMP)");
+        return Ok(());
+    }
+    match crate::sevenzip::pipeline(&["win", "build", "--tests", WIN32_TEST, "--out", WIN32_BIN]) {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            eprintln!("==> skipped: the desktop-win32 boot test: building {WIN32_TEST}.exe failed ({s})");
+            return Ok(());
+        }
+        Err(e) => {
+            eprintln!("==> skipped: the desktop-win32 boot test: {e}");
+            return Ok(());
+        }
+    }
+    let exe_path = root().join(WIN32_BIN).join(format!("{WIN32_TEST}.exe"));
+    let exe = std::fs::read(&exe_path).map_err(|e| format!("{}: {e}", exe_path.display()))?;
+    let extra = vec![
+        (format!("win/{WIN32_TEST}.exe"), 0o755, exe),
+        ("usr/share/applications/poly-fill.desktop".to_string(), 0o644, WIN32_DESKTOP_FILE.as_bytes().to_vec()),
+    ];
+    let image = image_with("poly-desktop-win32-initramfs.cpio", extra)?;
+    eprintln!(
+        "==> boot test: a Windows GUI program's window on the desktop through /dev/win32k (launched, framed, filled)"
+    );
+    let socket = std::env::temp_dir().join(format!("poly-desktop-win32-qmp-{}.sock", std::process::id()));
+    let _ = std::fs::remove_file(&socket);
+    let mut qemu_args = vec![
+        "-initrd".to_string(),
+        image.display().to_string(),
+        "-qmp".to_string(),
+        format!("unix:{},server=on,wait=off", socket.display()),
+    ];
+    qemu_args.extend(devices());
+    let lines: Lines = Arc::default();
+    let result: Arc<Mutex<Option<std::result::Result<(), String>>>> = Arc::default();
+    let (seen, outcome, path) = (Arc::clone(&lines), Arc::clone(&result), socket.clone());
+    let mut started = false;
+    let on_line = move |line: &str| {
+        seen.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_string());
+        if !started && line.contains(READY) {
+            started = true;
+            let (lines, outcome, path) = (Arc::clone(&seen), Arc::clone(&outcome), path.clone());
+            thread::spawn(move || {
+                let r = drive_win32(&path, lines);
+                *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+            });
+        }
+    };
+    let b: Result<Boot> = super::with_boot_timeout(Duration::from_secs(420), || {
+        boot_with(kernel, syms, MEMORY, &append(""), super::Devices::None, &qemu_args, None, on_line)
+    });
+    let _ = std::fs::remove_file(&socket);
+    let b = b?;
+    match result.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        Some(Ok(())) => Ok(()),
+        Some(Err(e)) => {
+            for l in b.output.lines().filter(|l| l.contains("win32k") || l.contains("nt:") || l.contains("Poly Fill")) {
+                eprintln!("    {l}");
+            }
+            Err(e)
+        }
+        None if !b.output.contains(READY) => {
+            Err(format!("the desktop never came up (QEMU status {:?}, timed out: {})", b.status, b.timed_out))
+        }
+        None => Err("the desktop-win32 boot test did not finish".into()),
     }
 }
 

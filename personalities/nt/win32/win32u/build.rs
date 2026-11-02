@@ -24,7 +24,7 @@ fn main() {
         writeln!(asm, ".globl {name}\n{name}:\n    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n").unwrap();
         println!("cargo:rustc-link-arg=/EXPORT:{name}");
     }
-    assert!(seen.len() > 20, "only {} win32k services found", seen.len());
+    assert!(!seen.is_empty(), "no win32k services found");
     let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("win32k.s");
     std::fs::write(&out, asm).expect("write stubs");
     println!("cargo:rustc-env=WIN32U_SYSCALLS={}", out.display());

@@ -76,6 +76,7 @@ dependencies = [
 name = "gdi32"
 version = "0.0.1"
 dependencies = [
+ "poly-gdi",
  "poly-win32-gui",
  "poly-win32-rt",
 ]
@@ -155,6 +156,10 @@ version = "0.0.1"
 dependencies = [
  "poly-seh",
 ]
+
+[[package]]
+name = "poly-gdi"
+version = "0.0.1"
 
 [[package]]
 name = "poly-http"
@@ -239,6 +244,10 @@ name = "poly-win32-rt"
 version = "0.0.1"
 
 [[package]]
+name = "poly-win32k"
+version = "0.0.1"
+
+[[package]]
 name = "poly-wincrypt"
 version = "0.0.1"
 dependencies = [
@@ -274,6 +283,7 @@ dependencies = [
  "poly-kernelbase",
  "poly-win32-gui",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]

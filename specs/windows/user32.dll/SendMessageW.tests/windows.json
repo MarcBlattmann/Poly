@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9711",
+    "arch": "AMD64"
+  },
+  "bundle": "33d607adedf8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-02T12:06:08Z",
+  "tests": [
+    {
+      "name": "sm_cross_thread",
+      "exe_sha256": "bce52491b236bd73904fbdaec7b71988e8656ff43c5cba703814f5132d0c5702",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAotLSBjYXNlIDEKYWZ0ZXIgMjAwIG1zIHdpdGhvdXQgbG9va2luZyBhdCB0aGUgcXVldWU6IHNlbmRlciBkb25lPTAKcXVldWUgc3RhdHVzIDB4NDAwMDQwCiAgcHJvYyBXTV9VU0VSKzEgdz0xIEluU2VuZE1lc3NhZ2U9MSBzZW5kZXIgZG9uZSB5ZXQ9MApQZWVrTWVzc2FnZVcgcmV0dXJuZWQgMApzZW5kZXIgZ290IDU1Ci0tIGNhc2UgMgphZnRlciAyMDAgbXMgd2l0aG91dCBsb29raW5nIGF0IHRoZSBxdWV1ZTogc2VuZGVyIGRvbmU9MApxdWV1ZSBzdGF0dXMgMHg0MDAwNDAKICBwcm9jIFdNX1VTRVIrMSB3PTIgSW5TZW5kTWVzc2FnZT0xIHNlbmRlciBkb25lIHlldD0wCiAgYWZ0ZXIgUmVwbHlNZXNzYWdlKDEpIHRoZSBzZW5kZXIgaXMgZG9uZT0xClBlZWtNZXNzYWdlVyByZXR1cm5lZCAwCnNlbmRlciBnb3QgNzcKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n-- case 1\nafter 200 ms without looking at the queue: sender done=0\nqueue status 0x400040\n  proc WM_USER+1 w=1 InSendMessage=1 sender done yet=0\nPeekMessageW returned 0\nsender got 55\n-- case 2\nafter 200 ms without looking at the queue: sender done=0\nqueue status 0x400040\n  proc WM_USER+1 w=2 InSendMessage=1 sender done yet=0\n  after ReplyMessage(1) the sender is done=1\nPeekMessageW returned 0\nsender got 77\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 672
+    },
+    {
+      "name": "sm_same_thread",
+      "exe_sha256": "b12f111d24ebb7e33fda502ff65ba93e6e8e6f4220abe8ef83873e42048a0aff",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAogIHByb2MgV01fVVNFUisxIHc9NSBsPS02IEluU2VuZE1lc3NhZ2U9MCBxdWV1ZT0weDAKcmVzdWx0IDB4MTIzNDU2Nzg5YWJjZGVmMAogIHByb2MgV01fVVNFUisyIGRlcHRoIDAKICBwcm9jIFdNX1VTRVIrMiBkZXB0aCAxCiAgcHJvYyBXTV9VU0VSKzIgZGVwdGggMgogIHByb2MgV01fVVNFUisyIGRlcHRoIDMKbmVzdGVkIHJlc3VsdCAxMDMKcHJvY2VkdXJlJ3MgbGFzdCBlcnJvciBzZWVuIGJ5IHRoZSBjYWxsZXI6IHJlc3VsdCAwIGVycm9yIDQyNDIKYmFkIHdpbmRvdzogMCBlcnJvciAxNDAwCm51bGwgd2luZG93OiAwIGVycm9yIDE0MDAKcXVldWUgZW1wdHkgYWZ0ZXJ3YXJkcyAxCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n  proc WM_USER+1 w=5 l=-6 InSendMessage=0 queue=0x0\nresult 0x123456789abcdef0\n  proc WM_USER+2 depth 0\n  proc WM_USER+2 depth 1\n  proc WM_USER+2 depth 2\n  proc WM_USER+2 depth 3\nnested result 103\nprocedure's last error seen by the caller: result 0 error 4242\nbad window: 0 error 1400\nnull window: 0 error 1400\nqueue empty afterwards 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    }
+  ]
+}

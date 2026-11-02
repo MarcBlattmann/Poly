@@ -100,6 +100,7 @@ mod ext4disk;
 mod font;
 mod fonts;
 mod hostfs;
+mod hostscreen;
 mod initramfs;
 mod input;
 mod ktest;
@@ -1454,7 +1455,7 @@ type BootGroup = (&'static str, fn(&Path, &Arc<Symbols>) -> Result);
 
 /// Every boot test, in groups, in the order `test` runs them. CI runs them
 /// in parallel jobs of a few groups each ([`CI_BOOT_SHARDS`]).
-const BOOT_GROUPS: [BootGroup; 35] = [
+const BOOT_GROUPS: [BootGroup; 36] = [
     ("selftest-default", |k, s| selftest_boot(k, s, SELFTEST_DEFAULT)),
     ("selftest-2g", |k, s| selftest_boot(k, s, SELFTEST_2G)),
     ("selftest-polled", |k, s| selftest_boot(k, s, SELFTEST_POLLED)),
@@ -1497,6 +1498,9 @@ const BOOT_GROUPS: [BootGroup; 35] = [
     // window, then the settings read back in a second boot (desktop.rs,
     // ADR 0117).
     ("desktop-shell", desktop::shell_boot_test),
+    // A Windows GUI program's window on the desktop through win32k's
+    // desktop link, /dev/win32k (desktop.rs, ADR 0131).
+    ("desktop-win32", desktop::win32_boot_test),
     // X11 apps through Xwayland on the desktop, from the root disk
     // (xwayland.rs, ADR 0118).
     ("xwayland", xwayland::boot_test),
@@ -1576,6 +1580,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 4] = [
             "wayland-kms",
             "desktop",
             "desktop-shell",
+            "desktop-win32",
             "mesa",
             "xwayland",
             "toolkits",
@@ -1847,11 +1852,11 @@ fn lint() -> Result {
 }
 
 /// The boot tests a second time on QEMU's emulator, when the first ran on
-/// KVM: the self-test boots, so code paths only TCG takes (and TCG's own
+/// a hypervisor: the self-test boots, so code paths only TCG takes (and TCG's own
 /// quirks) stay tested. A separate xtask, since the accelerator is chosen
 /// once per process.
 fn tcg_boot_tests() -> Result {
-    if accel::get() != accel::Accel::Kvm {
+    if accel::get() == accel::Accel::Tcg {
         return Ok(());
     }
     let xtask = std::env::current_exe().map_err(|e| format!("the xtask binary: {e}"))?;
