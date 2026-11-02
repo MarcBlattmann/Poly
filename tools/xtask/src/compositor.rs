@@ -6,7 +6,10 @@
 //!   program on `poly-rt` built by `native.rs` (ADR 0125; a static glibc
 //!   Linux program before).
 //! - `/bin/wl-client`: the client, a Linux program, `cc -static`. Without a
-//!   C compiler or a static C library the test is skipped with the reason.
+//!   C compiler or a static C library that boot is skipped with the reason.
+//!   A second boot runs the same test as a native program
+//!   (`userland/poly-wl-demo`, ADR 0133; a memory object instead of a
+//!   file in `/dev/shm`), on every host.
 //!
 //! The compositor runs as the first process (`poly.init`, its arguments
 //! `poly.init.arg=` words): it listens on `/run/user/0/wayland-0`, starts
@@ -46,12 +49,6 @@ pub fn build_compositor() -> Result<Vec<u8>> {
     crate::native::program("poly-compositor")
 }
 
-/// Build `notify-send` (`userland/poly-notify`, ADR 0117) as a native
-/// program, like the compositor; returns the ELF.
-pub fn build_notify_send() -> Result<Vec<u8>> {
-    crate::native::program("notify-send")
-}
-
 /// Build the C client statically: the ELF, or why not.
 pub fn build_client() -> std::result::Result<Vec<u8>, String> {
     build_c(CLIENT, "wl-client")
@@ -76,21 +73,30 @@ pub fn build_c(source: &str, name: &str) -> std::result::Result<Vec<u8>, String>
     std::fs::read(&binary).map_err(|e| format!("{}: {e}", binary.display()))
 }
 
-/// The boot test.
+/// The boot test: the Linux C client when this host can build it, then
+/// the same test as a native client (`userland/poly-wl-demo`, ADR 0133),
+/// which every host builds.
 pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
-    let client = match build_client() {
-        Ok(elf) => elf,
-        Err(why) => {
-            eprintln!("==> skipped: the Wayland boot test: {why}");
-            return Ok(());
-        }
-    };
     let compositor = build_compositor()?;
-    let image = initramfs::programs_image(&[("poly-compositor", &compositor), ("wl-client", &client)]);
-    let image = initramfs::write(&root(), "poly-wayland-initramfs.cpio", &image)?;
-    eprintln!(
-        "==> boot test: the Wayland compositor and a C client on Poly (SHM buffer, xdg_toplevel, frame callback)"
-    );
+    match build_client() {
+        Ok(client) => {
+            eprintln!(
+                "==> boot test: the Wayland compositor and a C client on Poly (SHM buffer, xdg_toplevel, frame callback)"
+            );
+            boot_client(kernel, syms, &compositor, &client, "poly-wayland-initramfs.cpio")?;
+        }
+        Err(why) => eprintln!("==> skipped: the Wayland boot test with the C client: {why}"),
+    }
+    let native = crate::native::program("wl-client")?;
+    eprintln!("==> boot test: the Wayland compositor and the native wl-client (a memory object as the SHM pool)");
+    boot_client(kernel, syms, &compositor, &native, "poly-wayland-native-initramfs.cpio")
+}
+
+/// One boot: the compositor as init, `client` as `/bin/wl-client` started
+/// with `--exec`.
+fn boot_client(kernel: &Path, syms: &Arc<Symbols>, compositor: &[u8], client: &[u8], name: &str) -> Result {
+    let image = initramfs::programs_image(&[("poly-compositor", compositor), ("wl-client", client)]);
+    let image = initramfs::write(&root(), name, &image)?;
     let args = ["--size", SIZE, "--probe", PROBE.0, "--exec", "/bin/wl-client"];
     let append = args
         .iter()

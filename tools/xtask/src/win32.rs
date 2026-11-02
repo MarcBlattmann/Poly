@@ -160,7 +160,7 @@ pub fn ensure() -> Result<PathBuf> {
         let _ = std::fs::remove_dir_all(&target);
     }
     prune(&cache);
-    eprintln!("==> Win32 modules built in {:.0?}, cached as {}", started.elapsed(), cached.display());
+    crate::progress::note(&format!("Win32 modules built in {:.0?}, cached as {}", started.elapsed(), cached.display()));
     Ok(cached)
 }
 
