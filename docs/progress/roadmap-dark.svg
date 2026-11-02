@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 96 of 158 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 98 of 157 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">96 / 158 milestones · 61%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">98 / 157 milestones · 62%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -357,57 +357,54 @@
 <text x="884.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/14</text>
 <text x="16.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 8  Integration bridges</text>
 <g><title>Shared clipboard across Linux, Windows and macOS formats</title>
-<rect x="340.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="340.0" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Drag and drop between app worlds</title>
-<rect x="368.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="369.8" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>One file picker for every app world, mapped to each OS's path conventions</title>
-<rect x="396.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="399.5" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Unified notifications, app launcher entries and file associations</title>
-<rect x="424.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="429.2" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>A preinstalled browser (Chromium) downloads and installs Linux and Windows apps, which then appear in the launcher</title>
-<rect x="452.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="459.0" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>What Linux package formats need from the kernel: squashfs, loop devices, /dev/fuse, overlayfs, user/mount/PID/network namespaces with pivot_root and setns, seccomp filters (ADR 0132)</title>
-<rect x="480.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="488.8" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>One installer for every Linux package format, as on macOS or Windows: opening a downloaded package shows what it is and installs it with one click; it appears in the launcher, updates through its own channel and uninstalls from the launcher or Settings (ADR 0132)</title>
-<rect x="508.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="518.5" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>AppImages install and run, without FUSE (Poly mounts their squashfs) (ADR 0132)</title>
-<rect x="536.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="548.2" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<g><title>⚖️ Owner decision: which distributions back .deb and .rpm installs (proposal: Debian stable plus Ubuntu LTS for .deb, Fedora for .rpm) (ADR 0132)</title>
-<rect x="564.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ ⚖️ Decided (owner, ADR 0132): .deb installs go into Debian stable or Ubuntu LTS bases (chosen from the package's dependencies), .rpm into a Fedora base</title>
+<rect x="578.0" y="293.0" width="27.8" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>.deb packages install with their dependencies and maintainer scripts (the distribution's own apt and dpkg in a shared base root) (ADR 0132)</title>
-<rect x="592.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="607.8" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>.rpm packages install with their dependencies (dnf and rpm in a shared base root) (ADR 0132)</title>
-<rect x="620.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="637.5" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Flatpak: Flathub apps install and run sandboxed (flatpak and bubblewrap unchanged; the desktop portals answered by Poly's shell) (ADR 0132)</title>
-<rect x="648.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="667.2" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<g><title>⚖️ Owner decision: how Snap packages run (snapd itself, or snaps unpacked and run without snapd, or later) (ADR 0132)</title>
-<rect x="676.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
-</g>
-<g><title>Snap packages install and run (ADR 0132)</title>
-<rect x="704.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<g><title>✔ ⚖️ Decided (owner, ADR 0132): no Snap support; apps shipped as snaps are installed from Flathub or their .deb/.rpm instead</title>
+<rect x="697.0" y="293.0" width="27.8" height="16.0" fill="#2ea043" rx="3"/>
 </g>
 <g><title>Windows installers (.exe, .msi), and later macOS .dmg and .pkg, go through the same installer (ADR 0132)</title>
-<rect x="732.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="726.8" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)</title>
-<rect x="760.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="756.5" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>One user home visible as ~, C:\Users\&lt;name&gt; and /Users/&lt;name&gt;</title>
-<rect x="788.0" y="293.0" width="26.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+<rect x="786.2" y="293.0" width="27.8" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
-<text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/17</text>
+<text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">2/16</text>
 <text x="16.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start"> 9  XNU personality and macOS foundations</text>
 <g><title>⚖️ Decide: aarch64 kernel port or x86-64 only (modern Mac apps are increasingly arm64-only)</title>
 <rect x="340.0" y="323.0" width="37.7" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
