@@ -549,8 +549,18 @@ impl Scene {
     }
 
     fn damage_window(&mut self, i: usize) {
-        let e = self.windows[i].extent();
+        let e = self.drawn_extent(&self.windows[i]);
         self.damage_logical(e);
+    }
+
+    /// Everything drawing window `w` touches, logical: its extent and its
+    /// frame's shadow.
+    pub fn drawn_extent(&self, w: &Window) -> Rect {
+        let e = w.extent();
+        match w.frame() {
+            Some(f) if !e.is_empty() => e.union(&self.theme.shadow_extent(f.outer)),
+            _ => e,
+        }
     }
 
     /// A new window on top of the others, without content (so not shown

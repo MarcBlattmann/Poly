@@ -179,6 +179,17 @@ pub trait NativeKernel {
     fn net_interfaces(&mut self) -> Vec<(u32, Vec<u8>)>;
 
     fn truncate(&mut self, handle: Handle, len: u64) -> Result<(), Error>;
+
+    /// Write the disks back and power off or restart; returns only if it
+    /// could not (the error).
+    fn power(&mut self, action: Power) -> Error;
+}
+
+/// What `power` does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Power {
+    PowerOff,
+    Restart,
 }
 
 /// The kind of an AF_UNIX socket.

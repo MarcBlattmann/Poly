@@ -5,7 +5,7 @@ use crate::abi::nr;
 use crate::sys::{self, Handler};
 
 /// `(number, name, handler)`, in number order.
-pub const TABLE: [(u64, &str, Handler); 45] = [
+pub const TABLE: [(u64, &str, Handler); 46] = [
     (nr::EXIT, "exit", sys::exit),
     (nr::WRITE, "write", sys::write),
     (nr::READ, "read", sys::read),
@@ -51,6 +51,7 @@ pub const TABLE: [(u64, &str, Handler); 45] = [
     (nr::SIGNAL, "signal", sys::signal),
     (nr::NET_INTERFACES, "net_interfaces", sys::net_interfaces),
     (nr::TRUNCATE, "truncate", sys::truncate),
+    (nr::POWER, "power", sys::power),
 ];
 
 /// The handler of call `number`, if there is one.

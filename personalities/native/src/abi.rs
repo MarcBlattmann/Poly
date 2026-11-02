@@ -147,6 +147,15 @@ pub mod nr {
     pub const NET_INTERFACES: u64 = 43;
     /// `truncate(handle, len)`: set a file's length.
     pub const TRUNCATE: u64 = 44;
+    /// `power(what)`: write the disks back and power off or restart the
+    /// machine ([`super::power`]); returns only on failure.
+    pub const POWER: u64 = 45;
+}
+
+/// What `power` does.
+pub mod power {
+    pub const POWER_OFF: u64 = 0;
+    pub const RESTART: u64 = 1;
 }
 
 /// `wait` flags.

@@ -44,7 +44,7 @@ use poly_abi::{Outcome, SyscallDispatch, SyscallRegs};
 use poly_personality_native::abi::{
     self, Clock, Error, FileInfo, Handle, InterfaceRecord, PeerInfo, PollEntry, Whence,
 };
-use poly_personality_native::kernel::{OpenHow, Prot, Signal, SocketKind, SocketName, Spawn};
+use poly_personality_native::kernel::{OpenHow, Power, Prot, Signal, SocketKind, SocketName, Spawn};
 use poly_personality_native::{Native, NativeKernel};
 use poly_unix::{Ancillary, Credentials, SocketType, UnixFile, UnixSocket};
 use poly_vfs::poll::{PollTarget, Timeout, WaitQueue};
@@ -768,5 +768,30 @@ impl NativeKernel for Thread<'_> {
 
     fn truncate(&mut self, handle: Handle, len: u64) -> Result<(), Error> {
         self.process.files.ftruncate(fd(handle)?, len).map_err(vfs_error)
+    }
+
+    fn power(&mut self, action: Power) -> Error {
+        // Native processes run as root (ADR 0125): the desktop's Restart
+        // and Shut Down come here, as reboot(2) does for Linux programs.
+        match action {
+            Power::Restart => {
+                crate::kprintln!("native: pid {} restarts the system", self.process.pid);
+                crate::power::reboot(&mut Log)
+            }
+            Power::PowerOff => {
+                crate::kprintln!("native: pid {} powers the system down", self.process.pid);
+                crate::power::power_off(&mut Log)
+            }
+        }
+    }
+}
+
+/// The kernel's log as a `fmt::Write`, for what `power` reports.
+struct Log;
+
+impl core::fmt::Write for Log {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        crate::kprint!("{s}");
+        Ok(())
     }
 }

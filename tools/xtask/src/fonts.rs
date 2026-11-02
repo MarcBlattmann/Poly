@@ -17,6 +17,22 @@
 //! deletes the archive. The project publishes no hashes; the SHA-256 sums
 //! here are of the files fetched when they were pinned (2026-10-31).
 //!
+//! # Alpine Shell's fonts (ADR 0127)
+//!
+//! The shell draws with the fonts of the owner's Alpine Shell: Geist
+//! (regular, medium, semibold) and Geist Mono (regular), SIL Open Font
+//! License 1.1, from Vercel's release archive of Geist 1.7.2 (its GitHub
+//! release asset, pinned by size and SHA-256 and unpacked by the pure-Rust
+//! [`crate::unzip`]); and Averia Serif Libre (regular, bold), SIL Open
+//! Font License 1.1, from the Google Fonts repository at a pinned commit.
+//! Their licences come from the same places (`third_party/geist/OFL.txt`,
+//! `third_party/averia-serif-libre/OFL.txt` hold the same texts). `fonts
+//! fetch` puts them in `target/fonts/shell-<versions>/`; the desktop's
+//! images carry them in `/usr/share/poly/fonts/` (outside fontconfig's
+//! directories: they are the shell's, not every program's), where the
+//! compositor reads them. Checked with `poly-crypto`'s SHA-256, so the
+//! fetch needs only `curl` on any host.
+//!
 //! # Where they go
 //!
 //! On Poly's root disk (`rootdisk.rs`, when the fonts are fetched): the
@@ -68,6 +84,76 @@ pub const FILES: [(&str, u64, &str); 12] = [
     ("DejaVuSansMono-BoldOblique.ttf", 253_580, "91713a71d550bba22c2a6b2bb2a9ad8f9a159e12e4e9f0a5b2677998ba21213e"),
 ];
 
+/// Alpine Shell's fonts: where they come from.
+pub const SHELL_VERSIONS: &str = "geist-1.7.2-averia-6f3c56c";
+const GEIST_ZIP: &str = "geist-font-v1.7.2.zip";
+const GEIST_ZIP_URL: &str = "https://github.com/vercel/geist-font/releases/download/v1.7.2/geist-font-v1.7.2.zip";
+const GEIST_ZIP_SIZE: u64 = 8_207_303;
+const GEIST_ZIP_SHA256: &str = "7fc800d2ac6b92844895196e5041aca55d814c15db70c44f79b3b83ab82b04e2";
+/// (member of the archive, file, size, SHA-256).
+const GEIST_FILES: [(&str, &str, u64, &str); 4] = [
+    (
+        "geist-font/Geist/ttf/Geist-Regular.ttf",
+        "Geist-Regular.ttf",
+        126_048,
+        "5c8968eafb98a4c4f47033daf29e38e284a6f2a82eb017d171ab040fe7c4b615",
+    ),
+    (
+        "geist-font/Geist/ttf/Geist-Medium.ttf",
+        "Geist-Medium.ttf",
+        127_660,
+        "0090e004725f6f64b841715b4167920580f883fcf9b67fc6d744089103fec101",
+    ),
+    (
+        "geist-font/Geist/ttf/Geist-SemiBold.ttf",
+        "Geist-SemiBold.ttf",
+        127_872,
+        "612ec98df33935354f39e81e54101656961ab6e5549f64b63eb57868ba7bab8d",
+    ),
+    (
+        "geist-font/GeistMono/ttf/GeistMono-Regular.ttf",
+        "GeistMono-Regular.ttf",
+        148_516,
+        "42d8ad2e610238e64e8abfcde3037c63f7850a73928742b7ab7229d897bcb155",
+    ),
+];
+/// The Google Fonts repository's commit Averia Serif Libre is taken at.
+const AVERIA: &str =
+    "https://raw.githubusercontent.com/google/fonts/6f3c56c74008b97476b4f97e591a5dde93e7cd4d/ofl/averiaseriflibre";
+/// (URL, file, size, SHA-256): Averia Serif Libre and both licences.
+const SHELL_DOWNLOADS: [(&str, &str, &str, u64, &str); 4] = [
+    (
+        AVERIA,
+        "AveriaSerifLibre-Regular.ttf",
+        "AveriaSerifLibre-Regular.ttf",
+        109_948,
+        "c64545bce66be1d737832337c1188015f9acacc5230ccbeb4ce646a0eaa252da",
+    ),
+    (
+        AVERIA,
+        "AveriaSerifLibre-Bold.ttf",
+        "AveriaSerifLibre-Bold.ttf",
+        113_916,
+        "a4f49c9df1351b6151969737493446fa1add16ed1a22fa8b9a4aecbdffeb1b3b",
+    ),
+    (
+        AVERIA,
+        "OFL.txt",
+        "OFL-AveriaSerifLibre.txt",
+        4_402,
+        "46239ba6485d28553fd944da4ad32a00d9c403aa1c3e111676b0b96fe458d1d4",
+    ),
+    (
+        "https://raw.githubusercontent.com/vercel/geist-font/v1.7.2",
+        "OFL.txt",
+        "OFL-Geist.txt",
+        4_383,
+        "c683bfbcc7e087f5d37a54ef628f10387c451a83ddc459b151403a164ac46c90",
+    ),
+];
+/// Where the shell's fonts go on Poly's disks.
+pub const SHELL_STORE_DIR: &str = "usr/share/poly/fonts";
+
 /// The licence in the archive; the same text is `third_party/dejavu/LICENSE`.
 const LICENSE: &str = "LICENSE";
 
@@ -109,8 +195,111 @@ pub fn cached() -> Option<PathBuf> {
     ok.then_some(dir)
 }
 
-/// `cargo xtask fonts fetch`.
+/// `<main checkout>/target/fonts/shell-<versions>/`.
+pub fn shell_cache_dir() -> PathBuf {
+    cache_dir().with_file_name(format!("shell-{SHELL_VERSIONS}"))
+}
+
+/// SHA-256 in pure Rust, as lower-case hex.
+fn sha256_hex(data: &[u8]) -> String {
+    let mut h = poly_crypto::sha256::Sha256::new();
+    h.update(data);
+    h.finish().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn file_matches(path: &Path, size: u64, sum: &str) -> bool {
+    std::fs::read(path).is_ok_and(|d| d.len() as u64 == size && sha256_hex(&d) == sum)
+}
+
+/// Every file of the shell's fonts and licences: (file, size, SHA-256).
+fn shell_files() -> impl Iterator<Item = (&'static str, u64, &'static str)> {
+    GEIST_FILES.iter().map(|f| (f.1, f.2, f.3)).chain(SHELL_DOWNLOADS.iter().map(|f| (f.2, f.3, f.4)))
+}
+
+/// The shell's font directory, if it holds every pinned file.
+pub fn shell_cached() -> Option<PathBuf> {
+    let dir = shell_cache_dir();
+    shell_files().all(|(f, size, sum)| file_matches(&dir.join(f), size, sum)).then_some(dir)
+}
+
+/// Download `url` to `to` with curl (over HTTPS only).
+fn download(url: &str, to: &Path) -> Result {
+    eprintln!("==> downloading {url}");
+    let partial = to.with_extension("part");
+    let fetched = Command::new("curl")
+        .args(["-fsSL", "--proto", "=https", "--tlsv1.2", "--retry", "3", "-o"])
+        .arg(&partial)
+        .arg(url)
+        .status();
+    if !fetched.is_ok_and(|s| s.success()) {
+        let _ = std::fs::remove_file(&partial);
+        return Err(format!("downloading {url} failed"));
+    }
+    std::fs::rename(&partial, to).map_err(|e| e.to_string())
+}
+
+/// Fetch Alpine Shell's fonts (part of `fonts fetch`).
+pub fn fetch_shell() -> Result<PathBuf> {
+    if let Some(dir) = shell_cached() {
+        eprintln!("==> {} holds the pinned shell fonts (Geist, Averia Serif Libre)", dir.display());
+        return Ok(dir);
+    }
+    if Command::new("curl").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_err() {
+        return Err("fetching the fonts needs `curl`".into());
+    }
+    let dir = shell_cache_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    if !GEIST_FILES.iter().all(|f| file_matches(&dir.join(f.1), f.2, f.3)) {
+        let zip_path = dir.join(GEIST_ZIP);
+        if !file_matches(&zip_path, GEIST_ZIP_SIZE, GEIST_ZIP_SHA256) {
+            download(GEIST_ZIP_URL, &zip_path)?;
+        }
+        let zip = std::fs::read(&zip_path).map_err(|e| format!("{GEIST_ZIP}: {e}"))?;
+        if zip.len() as u64 != GEIST_ZIP_SIZE || sha256_hex(&zip) != GEIST_ZIP_SHA256 {
+            let _ = std::fs::remove_file(&zip_path);
+            return Err(format!("{GEIST_ZIP} is not the pinned file (SHA-256 {GEIST_ZIP_SHA256}); removed"));
+        }
+        for (member, file, size, sum) in GEIST_FILES {
+            let data = crate::unzip::extract(&zip, member)?;
+            if data.len() as u64 != size || sha256_hex(&data) != sum {
+                return Err(format!("{member} in {GEIST_ZIP} is not the pinned file"));
+            }
+            std::fs::write(dir.join(file), &data).map_err(|e| format!("{file}: {e}"))?;
+        }
+        let _ = std::fs::remove_file(&zip_path);
+    }
+    for (base, name, file, size, sum) in SHELL_DOWNLOADS {
+        let path = dir.join(file);
+        if file_matches(&path, size, sum) {
+            continue;
+        }
+        let url = format!("{base}/{name}");
+        download(&url, &path)?;
+        if !file_matches(&path, size, sum) {
+            let _ = std::fs::remove_file(&path);
+            return Err(format!("{file} from {url} is not the pinned file (SHA-256 {sum}); removed"));
+        }
+    }
+    eprintln!("==> the shell's fonts (Geist 1.7.2, Averia Serif Libre) in {}", dir.display());
+    Ok(dir)
+}
+
+/// The shell's fonts and their licences for a desktop image: (path on
+/// Poly, contents). Empty if they are not fetched.
+pub fn shell_tree() -> Vec<(String, Vec<u8>)> {
+    let Some(dir) = shell_cached() else { return Vec::new() };
+    shell_files()
+        .filter_map(|(f, _, _)| std::fs::read(dir.join(f)).ok().map(|d| (format!("{SHELL_STORE_DIR}/{f}"), d)))
+        .collect()
+}
+
+/// `cargo xtask fonts fetch`: DejaVu and the shell's fonts.
 pub fn fetch() -> Result<PathBuf> {
+    fetch_shell()?;
+    fetch_dejavu()
+}
+
+fn fetch_dejavu() -> Result<PathBuf> {
     if let Some(dir) = cached() {
         eprintln!("==> {} holds the pinned DejaVu {VERSION} fonts", dir.display());
         return Ok(dir);

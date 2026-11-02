@@ -42,6 +42,18 @@ pub fn interfaces() -> Vec<Interface> {
     }
 }
 
+/// Write the disks back and power the machine off; returns only with the
+/// reason it could not.
+pub fn power_off() -> crate::Error {
+    sys::power(crate::abi::power::POWER_OFF)
+}
+
+/// Write the disks back and restart the machine; returns only with the
+/// reason it could not.
+pub fn restart() -> crate::Error {
+    sys::power(crate::abi::power::RESTART)
+}
+
 /// The kernel's (system name, release, version, machine), as uname(2)
 /// reports them.
 pub fn uname() -> (String, String, String, String) {
@@ -65,5 +77,6 @@ mod tests {
         assert_eq!(ifs[1].name, "eth0");
         assert!(ifs[1].running && ifs[1].addressed && !ifs[1].up);
         assert!(interfaces().is_empty(), "none on the host");
+        assert_eq!(restart(), crate::Error::Unsupported, "no kernel to restart on the host");
     }
 }

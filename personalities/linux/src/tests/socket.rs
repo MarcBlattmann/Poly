@@ -8,7 +8,7 @@ extern crate std;
 
 use super::fake::*;
 use crate::abi::Iovec;
-use crate::abi::signal::SIGPIPE;
+use crate::abi::signal::{SIGCHLD, SIGPIPE, SIGUSR1};
 use crate::args::Args;
 use crate::errno::Errno;
 use crate::fileio::NewFd;
@@ -328,13 +328,24 @@ fn accept4_flags_peer_address_and_interruptions() {
     assert_eq!(sys(&mut k, nr::ACCEPT4, &[fd, 0, 0, 0x10]), Err(Errno::EINVAL));
     k.poke(S + 0x100, &(-5i32).to_le_bytes());
     assert_eq!(sys(&mut k, nr::ACCEPT, &[fd, S, S + 0x100]), Err(Errno::EINVAL));
-    // Interrupted: a restart under SA_RESTART, unless SO_RCVTIMEO is set.
+    // Interrupted: a restart under SA_RESTART, unless SO_RCVTIMEO is set:
+    // then EINTR for a signal that acts, on for one that is ignored.
     net(&mut k).accepts.push_back(Err(Errno::EINTR));
     let args = Args([fd, 0, 0, 0, 0, 0]);
     assert_eq!(socket::accept(&mut k, &args), Err(Errno::RESTART_IF_SA_RESTART));
     net(&mut k).timed = true;
+    k.me().traced = true;
+    pend(&mut k, SIGCHLD);
+    net(&mut k).accepts.push_back(Err(Errno::EINTR));
+    assert_eq!(socket::accept(&mut k, &args), Err(Errno::RESTART_IF_NO_HANDLER), "ignored SIGCHLD");
+    pend(&mut k, SIGUSR1);
     net(&mut k).accepts.push_back(Err(Errno::EINTR));
     assert_eq!(socket::accept(&mut k, &args), Err(Errno::EINTR));
+}
+
+/// Make `signal` pending for the calling thread (pid and tid 100).
+fn pend(k: &mut FakeKernel, signal: u32) {
+    assert_eq!(sys(k, nr::TKILL, &[100, u64::from(signal)]), Ok(0));
 }
 
 #[test]
@@ -346,6 +357,8 @@ fn connect_restarts_unless_timed() {
     let args = Args([fd, S, 16, 0, 0, 0]);
     assert_eq!(socket::connect(&mut k, &args), Err(Errno::RESTART_IF_SA_RESTART));
     net(&mut k).timed = true;
+    assert_eq!(socket::connect(&mut k, &args), Err(Errno::RESTART_IF_NO_HANDLER), "no signal acts");
+    pend(&mut k, SIGUSR1);
     assert_eq!(socket::connect(&mut k, &args), Err(Errno::EINTR));
     net(&mut k).connect_result = Some(Errno::EINPROGRESS);
     assert_eq!(socket::connect(&mut k, &args), Err(Errno::EINPROGRESS));
@@ -543,11 +556,13 @@ fn recvfrom_reports_the_sender_or_no_address() {
     k.poke(S + 0x100, &16u32.to_le_bytes());
     assert_eq!(sys(&mut k, nr::RECVFROM, &[fd, S, 100, 0, S + 0x200, S + 0x100]), Ok(1));
     assert_eq!(k.peek(S + 0x200, 16), from.encode());
-    // Interrupted with a receive timeout: EINTR, else a restart.
+    // Interrupted with a receive timeout: EINTR (by a signal that acts),
+    // else a restart.
     net(&mut k).recvs.push_back(Err(Errno::EINTR));
     let args = Args([fd, S, 10, 0, 0, 0]);
     assert_eq!(socket::recvfrom(&mut k, &args), Err(Errno::RESTART_IF_SA_RESTART));
     net(&mut k).timed = true;
+    pend(&mut k, SIGUSR1);
     net(&mut k).recvs.push_back(Err(Errno::EINTR));
     assert_eq!(socket::recvfrom(&mut k, &args), Err(Errno::EINTR));
 }

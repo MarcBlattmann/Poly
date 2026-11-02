@@ -362,6 +362,9 @@ pub fn collect() -> std::result::Result<Contents, String> {
         None => compositor::build_compositor()?,
     };
     tree.file("usr/local/bin/poly-compositor", 0o755, &compositor);
+    for (path, data) in crate::fonts::shell_tree() {
+        tree.file(&path, 0o644, &data);
+    }
     match compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo") {
         Ok(demo) => tree.file("usr/local/bin/wl-demo", 0o755, &demo),
         Err(why) => contents.notes.push(format!("wl-demo: {why}")),
@@ -755,9 +758,9 @@ const TEST_APPS: [App; 3] = [
 
 /// The active title bar of Poly's frame (`poly_wayland::compose::frame`,
 /// `Theme::NEUTRAL`).
-const TITLE_ACTIVE: [u8; 3] = [0x3c, 0x3c, 0x3c];
+const TITLE_ACTIVE: [u8; 3] = [0x1a, 0x1a, 0x19];
 /// The inactive one (a new window is not always activated yet).
-const TITLE_INACTIVE: [u8; 3] = [0x2a, 0x2a, 0x2a];
+const TITLE_INACTIVE: [u8; 3] = [0x24, 0x24, 0x23];
 /// How far above the button Poly's title bar may be: GTK's own title bar
 /// (client-side decorations) can be between them.
 const TITLE_SEARCH: u32 = 90;

@@ -141,10 +141,10 @@ const DESKTOP_FILES: [(&str, &str); 2] = [
 /// The desktop's screen.
 const SIZE: (u32, u32) = crate::desktop::SIZE;
 /// Poly's frame colours (`poly_wayland::compose::Theme::NEUTRAL`).
-const TITLE_ACTIVE: [u8; 3] = [0x3c, 0x3c, 0x3c];
-const TITLE_INACTIVE: [u8; 3] = [0x2a, 0x2a, 0x2a];
-const BORDER_ACTIVE: [u8; 3] = [0x5a, 0x5a, 0x5a];
-const BORDER_INACTIVE: [u8; 3] = [0x38, 0x38, 0x38];
+const TITLE_ACTIVE: [u8; 3] = [0x1a, 0x1a, 0x19];
+const TITLE_INACTIVE: [u8; 3] = [0x24, 0x24, 0x23];
+const BORDER_ACTIVE: [u8; 3] = [0x3b, 0x3b, 0x39];
+const BORDER_INACTIVE: [u8; 3] = [0x2e, 0x2e, 0x2d];
 /// How long one step may take (Xwayland's start under TCG is slow).
 const STEP_TIMEOUT: Duration = Duration::from_secs(400);
 /// How long the whole session may take.
@@ -166,6 +166,9 @@ fn image() -> crate::Result<Option<PathBuf>> {
     }
     let compositor = crate::compositor::build_compositor()?;
     contents.tree.file("usr/bin/poly-compositor", 0o755, &compositor);
+    for (path, data) in crate::fonts::shell_tree() {
+        contents.tree.file(&path, 0o644, &data);
+    }
     for (file, text) in DESKTOP_FILES {
         contents.tree.file(&format!("usr/share/applications/{file}"), 0o644, text.as_bytes());
     }
@@ -340,8 +343,14 @@ fn expect(what: &str, ok: bool) -> crate::Result {
 /// the left, which a later window placed down and right leaves visible).
 fn framed(img: &crate::screen::Image, (x, y, _, _): (i32, i32, i32, i32), active: bool) -> bool {
     let (title, border) = if active { (TITLE_ACTIVE, BORDER_ACTIVE) } else { (TITLE_INACTIVE, BORDER_INACTIVE) };
-    let px = |x: i32, y: i32| img.pixel(x as u32, y as u32);
-    px(x + 2, y - 2) == title && px(x + 2, y - 22) == title && px(x - 1, y + 5) == border
+    // The frame's colour, or a little darker where a window above casts
+    // its shadow on it (ADR 0127).
+    let is = |x: i32, y: i32, want: [u8; 3]| {
+        let p = img.pixel(x as u32, y as u32);
+        (0..3).all(|i| p[i] <= want[i] && p[i] + 6 >= want[i])
+    };
+    // Past the rounded top corners.
+    is(x + 12, y - 2, title) && is(x + 12, y - 22, title) && is(x - 1, y + 5, border)
 }
 
 /// How many pixels of the rectangle are `rgb`.

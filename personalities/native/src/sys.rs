@@ -540,3 +540,12 @@ pub fn net_interfaces(k: &mut dyn NativeKernel, a: &Args) -> Result<u64, Error> 
 pub fn truncate(k: &mut dyn NativeKernel, a: &Args) -> Result<u64, Error> {
     k.truncate(handle(a[0])?, a[1]).map(|()| 0)
 }
+
+pub fn power(k: &mut dyn NativeKernel, a: &Args) -> Result<u64, Error> {
+    let action = match a[0] {
+        abi::power::POWER_OFF => crate::kernel::Power::PowerOff,
+        abi::power::RESTART => crate::kernel::Power::Restart,
+        _ => return Err(Error::InvalidArgument),
+    };
+    Err(k.power(action))
+}

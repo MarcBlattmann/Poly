@@ -16,8 +16,52 @@ use poly_shell::apps::{App, parse_desktop_entry};
 /// Where desktop files are (the Desktop Entry Specification's
 /// `$XDG_DATA_DIRS/applications`, with the default data directory).
 pub const APPLICATIONS: &str = "/usr/share/applications";
-/// The shell's font (ADR 0105's font store).
+/// The shell's fallback font (ADR 0105's font store).
 pub const FONT: &str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+
+/// Alpine Shell's fonts, where the desktop's images put them (ADR 0127).
+pub const SHELL_FONTS: &str = "/usr/share/poly/fonts";
+
+/// A font file read and kept for the program's life.
+fn load_font(path: &str) -> Option<poly_font::Font<'static>> {
+    let data = poly_rt::fs::read(path).ok()?;
+    let data: &'static [u8] = Box::leak(data.into_boxed_slice());
+    poly_font::Font::parse(data).ok()
+}
+
+/// The shell's fonts: Geist (regular, medium, semibold), Averia Serif
+/// Libre and Geist Mono; without them DejaVu Sans for everything; without
+/// that the bitmap font.
+pub fn shell_fonts() -> poly_shell::draw::Fonts {
+    let f = |name: &str| load_font(&format!("{SHELL_FONTS}/{name}"));
+    let mut fonts = poly_shell::draw::Fonts {
+        sans: f("Geist-Regular.ttf"),
+        medium: f("Geist-Medium.ttf"),
+        semibold: f("Geist-SemiBold.ttf"),
+        display: f("AveriaSerifLibre-Regular.ttf"),
+        mono: f("GeistMono-Regular.ttf"),
+        display_bold: f("AveriaSerifLibre-Bold.ttf"),
+    };
+    if fonts.sans.is_none() {
+        println!(
+            "poly-compositor: no {SHELL_FONTS}/Geist-Regular.ttf (fonts not fetched?): the shell uses DejaVu Sans"
+        );
+        fonts.sans = load_font(FONT);
+        if fonts.sans.is_none() {
+            println!("poly-compositor: no {FONT} either: the shell uses the bitmap font");
+        }
+    }
+    fonts
+}
+
+/// The system menu's Restart or Shut Down, confirmed: the kernel writes
+/// the disks back and restarts or powers off (`os::power`); it says so if
+/// it cannot.
+pub fn power(action: poly_shell::Power) {
+    println!("poly-compositor: {action:?} from the system menu");
+    let e = os::power(action == poly_shell::Power::Restart);
+    println!("poly-compositor: reboot failed: {e}");
+}
 
 /// poly-input's modifiers for the seat's XKB modifier bits.
 pub fn modifiers(depressed: u32, locked: u32) -> Modifiers {

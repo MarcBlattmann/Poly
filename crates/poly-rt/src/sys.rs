@@ -330,6 +330,15 @@ pub fn net_interfaces(buf: &mut [u8]) -> Result<usize> {
         .map(|n| n as usize)
 }
 
+/// Write the disks back and power off (`abi::power::POWER_OFF`) or restart
+/// (`abi::power::RESTART`); returns only with the reason it could not.
+pub fn power(what: u64) -> abi::Error {
+    match call(nr::POWER, [what, 0, 0, 0, 0, 0]) {
+        Err(e) => e,
+        Ok(_) => abi::Error::Io,
+    }
+}
+
 pub fn truncate(handle: Handle, len: u64) -> Result<()> {
     call(nr::TRUNCATE, [handle.into(), len, 0, 0, 0, 0]).map(|_| ())
 }

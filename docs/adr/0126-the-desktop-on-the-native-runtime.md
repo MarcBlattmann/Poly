@@ -17,10 +17,10 @@ This ADR records what was built and the decisions the port forced.
 
 ## Decisions
 
-### 1. ABI version 2: 29 more calls
+### 1. ABI version 2: 30 more calls
 
 `poly-rt` now writes ABI version 2 into its programs; the kernel runs
-versions 1 and 2. The new calls (numbers 16 to 44):
+versions 1 and 2. The new calls (numbers 16 to 45):
 
 | Group | Calls | On the kernel's side |
 |---|---|---|
@@ -31,7 +31,7 @@ versions 1 and 2. The new calls (numbers 16 to 44):
 | Files | `stat`, `rename`, `remove`, `make_dir`, `set_mode`, `read_dir`, `sync`, `make_fifo`, `pipe` | `Files`' calls; `read_dir` writes packed records (`DirRecord`) and resumes where it stopped |
 | Sockets | `socket`, `socket_pair`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `socket_peer` | `poly-unix` sockets in the one name space the Linux personality uses (`linux::net::namespace`); names are paths or abstract names; handles travel with the first byte, as `SCM_RIGHTS` |
 | Processes | `process_handle(pid)`, `signal(pid, probe/terminate/kill)`, `wait(pid, NO_HANG)` | a handle object readable once the child ended (`Process::ended` notifies its queue); a Linux child gets `SIGTERM`/`SIGKILL`, a native child ends `Signaled` |
-| System | `net_interfaces` | the network stack's interfaces (`linux::net::interfaces`) |
+| System | `net_interfaces`, `power(off or restart)` | the network stack's interfaces (`linux::net::interfaces`); `power::power_off` and `power::reboot` after writing the disks back, for the system menu's Shut Down and Restart ([ADR 0127](0127-the-alpine-shell-look.md)) |
 
 `spawn`'s request grew from 64 to 80 bytes: a list of handle pairs
 (`HandleMap`, the caller's `from` as the child's `to`), which is how
@@ -134,16 +134,29 @@ host directories. The one difference left between a Windows and a Linux
 build is the separator inside workspace-relative paths of panic
 locations.
 
-### 7. Soft floats are fast enough: no target of our own yet
+### 7. Native programs build for `x86_64-unknown-poly`, with SSE2 floats
 
 ADR 0125 kept a hard-float target (`x86_64-unknown-poly`) for when the
-compositor's speed called for it. Measured on QEMU's emulator (TCG):
+compositor's speed called for it. With the first shell's look, soft floats
+were fast enough on QEMU's emulator (TCG): the desktop's first frame in
+62 to 68 ms, `wayland-kms` at 36 flips per second. The Alpine Shell look
+([ADR 0127](0127-the-alpine-shell-look.md)) draws in floats (anti-aliased
+shapes, shadows, the drawn wallpaper): on soft floats its first frame
+took 3.5 s in the Linux container and 5.0 s natively on Windows, and
+`desktop-shell` failed (a screenshot came before a maximized window was
+drawn).
 
-- the desktop's first frame: 62 to 68 ms;
-- `wayland-kms`: 73 flips in 2 s (36 per second);
-- every desktop boot group within its old timeouts.
-
-So the compositor stays on `x86_64-unknown-none`.
+So native programs now build for `x86_64-unknown-poly`
+(`userland/native/x86_64-unknown-poly.json`): `x86_64-unknown-none` with
+`+sse,+sse2` and the hard-float ABI, static, the small code model. The
+toolchain ships no core for it, so `userland/native/.cargo/config.toml`
+builds `core`, `alloc` and `compiler_builtins` from `rust-src`
+(`build-std`, a JSON target spec), which needs `RUSTC_BOOTSTRAP=1`:
+`native.rs` sets it, as `ntdll.rs` does for our `ntdll` (ADR 0071). That
+adds about 45 s to a clean build of the native programs and nothing to an
+incremental one. The Alpine look's first frame then takes 334 ms natively
+on Windows. The kernel already saves and restores user threads' SSE
+state, as Linux programs need.
 
 ### 8. Proof
 

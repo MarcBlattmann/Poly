@@ -1,12 +1,14 @@
 //! Native Poly programs (ADR 0125): building `userland/native/` and the
 //! native boot test.
 //!
-//! The programs are `no_std` + `alloc` Rust on `poly-rt`, for the
-//! `x86_64-unknown-none` target, whose standard library (core, alloc) the
-//! pinned toolchain ships and whose linker is `rust-lld`: no host C
-//! toolchain and no unstable flags, so the build is the same on Windows
-//! and Linux hosts. Cargo runs inside `userland/native/` so its
-//! `.cargo/config.toml` (target, static non-PIE flags) applies; the
+//! The programs are `no_std` + `alloc` Rust on `poly-rt`, for Poly's own
+//! target `x86_64-unknown-poly` (`userland/native/x86_64-unknown-poly.json`:
+//! `x86_64-unknown-none` with SSE2 floats, ADR 0126), whose `core` and
+//! `alloc` are built from the toolchain's `rust-src` (`build-std`, under
+//! `RUSTC_BOOTSTRAP=1`, as for `ntdll`) and whose linker is `rust-lld`: no
+//! host C toolchain, so the build is the same on Windows and Linux hosts.
+//! Cargo runs inside `userland/native/` so its `.cargo/config.toml`
+//! (target, build-std) applies; the
 //! artifacts go to `target/native/` (the checkout and the toolchain
 //! remapped to `/poly` and `/rust` in what they carry). Each built program
 //! is checked to be what the kernel runs natively: an ELF whose first page
@@ -60,9 +62,10 @@ fn native_cargo() -> std::process::Command {
         .filter(|s| !s.is_empty());
     let mut flags = vec![format!("'--remap-path-prefix={}=/poly'", root().display())];
     flags.extend(sysroot.map(|s| format!("'--remap-path-prefix={s}=/rust'")));
-    let remap = format!("target.x86_64-unknown-none.rustflags=[{}]", flags.join(", "));
+    let remap = format!("target.x86_64-unknown-poly.rustflags=[{}]", flags.join(", "));
     let mut cmd = cargo();
-    cmd.current_dir(workspace()).args(["--config", &remap]);
+    // Poly's target builds core and alloc from rust-src (build-std).
+    cmd.current_dir(workspace()).env("RUSTC_BOOTSTRAP", "1").args(["--config", &remap]);
     cmd
 }
 
@@ -72,7 +75,7 @@ pub fn build() -> Result<Vec<(String, Vec<u8>)>> {
     let mut cmd = native_cargo();
     cmd.args(["build", "--release", "--target-dir"]).arg(target_dir());
     step("build native programs (userland/native)", &mut cmd)?;
-    let dir = target_dir().join("x86_64-unknown-none").join("release");
+    let dir = target_dir().join("x86_64-unknown-poly").join("release");
     PROGRAMS
         .iter()
         .map(|name| {

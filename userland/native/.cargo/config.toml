@@ -1,13 +1,18 @@
+# Native Poly programs build for Poly's own target (ADR 0126):
+# `x86_64-unknown-none` with SSE2 floats instead of soft floats, static and
+# position-dependent (the small code model, at rust-lld's default
+# 0x200000), linked by rust-lld (no host C toolchain). Its core and alloc
+# are built from the toolchain's rust-src (`build-std`), which needs
+# `RUSTC_BOOTSTRAP=1` in the environment: `cargo xtask build` sets it, as it
+# does for ntdll (ADR 0071). Poly's ABI note comes from poly-rt (ADR 0125).
 [build]
-target = "x86_64-unknown-none"
+target = "x86_64-unknown-poly.json"
 
-[target.x86_64-unknown-none]
-# The target's own linker is rust-lld (no host C toolchain). Static and
-# position-dependent (no self-relocation in the runtime), the small code
-# model (the image sits low, at rust-lld's default 0x200000), no build id
-# so builds are reproducible. Poly's ABI note comes from poly-rt (ADR 0125).
-rustflags = [
-    "-C", "relocation-model=static",
-    "-C", "code-model=small",
-    "-C", "link-arg=--build-id=none",
-]
+[unstable]
+build-std = ["core", "alloc", "compiler_builtins"]
+build-std-features = ["compiler-builtins-mem"]
+json-target-spec = true
+
+[target.x86_64-unknown-poly]
+# No build id, so builds are reproducible.
+rustflags = ["-C", "link-arg=--build-id=none"]

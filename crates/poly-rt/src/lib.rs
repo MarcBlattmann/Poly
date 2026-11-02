@@ -1,7 +1,8 @@
 //! `poly-rt`: the runtime of native Poly programs (ADR 0125).
 //!
-//! A native program is a `no_std` + `alloc` Rust binary for the
-//! `x86_64-unknown-none` target, linked by `rust-lld` as a static,
+//! A native program is a `no_std` + `alloc` Rust binary for Poly's target
+//! `x86_64-unknown-poly` (`x86_64-unknown-none` with SSE2 floats, ADR
+//! 0126), linked by `rust-lld` as a static,
 //! position-dependent ELF executable (`cargo xtask` builds the ones in
 //! `userland/native/`). This crate gives it what `std` would:
 //!

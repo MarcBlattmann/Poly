@@ -5,7 +5,7 @@ extern crate std;
 use crate::abi::{
     self, Clock, Error, ExitStatus, FileInfo, Handle, PeerInfo, PollEntry, SpawnRequest, Str, Whence, nr,
 };
-use crate::kernel::{NativeKernel, OpenHow, Prot, Signal, SocketKind, SocketName, Spawn};
+use crate::kernel::{NativeKernel, OpenHow, Power, Prot, Signal, SocketKind, SocketName, Spawn};
 use crate::{Native, table};
 use alloc::collections::BTreeMap;
 use alloc::vec;
@@ -52,6 +52,8 @@ struct Fake {
     sockets: BTreeMap<Handle, FakeSocket>,
     listening: BTreeMap<Vec<u8>, Handle>,
     signals: Vec<(u32, Signal)>,
+    /// `power` requests (the fake refuses them).
+    powered: Vec<Power>,
 }
 
 /// A fake socket: its peer, and the messages that came in (bytes, the
@@ -471,6 +473,11 @@ impl NativeKernel for Fake {
         let (path, _) = self.handles.get(&handle).ok_or(Error::BadHandle)?;
         self.files.get_mut(path).ok_or(Error::Unsupported)?.resize(len as usize, 0);
         Ok(())
+    }
+
+    fn power(&mut self, action: Power) -> Error {
+        self.powered.push(action);
+        Error::PermissionDenied
     }
 }
 
@@ -965,4 +972,14 @@ fn pipes_processes_signals_and_interfaces() {
     assert!(rest.is_empty());
     assert_eq!(k.call(nr::NET_INTERFACES, [buf, 4, 0, 0, 0, 0]), Err(Error::TooLarge));
     let _ = SocketName::Path(Vec::new());
+}
+
+#[test]
+fn power_passes_the_action_and_reports_a_failure() {
+    let mut k = Fake::new();
+    assert_eq!(k.call(nr::POWER, [abi::power::RESTART, 0, 0, 0, 0, 0]), Err(Error::PermissionDenied));
+    assert_eq!(k.call(nr::POWER, [abi::power::POWER_OFF, 0, 0, 0, 0, 0]), Err(Error::PermissionDenied));
+    assert_eq!(k.powered, [Power::Restart, Power::PowerOff]);
+    assert_eq!(k.call(nr::POWER, [2, 0, 0, 0, 0, 0]), Err(Error::InvalidArgument));
+    assert_eq!(k.powered.len(), 2, "an unknown action reaches no kernel");
 }

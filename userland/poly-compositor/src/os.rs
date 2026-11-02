@@ -255,6 +255,14 @@ pub fn getpid() -> Pid {
     poly_rt::process::id()
 }
 
+/// Write the disks back and restart (`restart`) or power off the machine
+/// (the native `power` call, ADR 0126); returns only with the reason it
+/// could not.
+pub fn power(restart: bool) -> io::Error {
+    let e = if restart { poly_rt::system::restart() } else { poly_rt::system::power_off() };
+    e.into()
+}
+
 /// The user id the compositor runs as (native processes run as root).
 pub fn getuid() -> u32 {
     poly_rt::process::uid()

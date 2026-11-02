@@ -1315,7 +1315,7 @@ tty: ttyS0 (4,64) on COM1, tty1 (4,1) on the screen, /dev/console is ttyS0, ptys
   programs (`program::prepare`) and `wait` reaps them. Native programs link
   `poly-rt` (`crates/poly-rt`: entry point, calls, `poly-heap` over `map`,
   panics, output, args) and live in `userland/native`, built for
-  `x86_64-unknown-none` by `rust-lld` on any host. ABI version 2
+  `x86_64-unknown-poly` (`x86_64-unknown-none` with SSE2 floats, ADR 0126) by `rust-lld` on any host. ABI version 2
   ([ADR 0126](adr/0126-the-desktop-on-the-native-runtime.md)) adds device
   requests (`control`), `poll`, mappings of handles, memory objects, the
   file calls, AF_UNIX sockets in the Linux personality's name space (handles

@@ -4,10 +4,15 @@
 //! The interest and ready lists, level- and edge-triggered reporting and
 //! `EPOLLONESHOT` are the kernel's (`poly_vfs::epoll`); here are the
 //! argument rules, the timeouts and the signal mask of the `pwait`
-//! variants (as for `ppoll`, see `sys::poll`). An interrupted wait fails
-//! with `EINTR`, handler or not: signal(7) lists `epoll_wait` and
-//! `epoll_pwait` both among the calls never restarted after a handler and
-//! among those that fail with `EINTR` after a stop signal.
+//! variants (as for `ppoll`, see `sys::poll`). A wait a signal ends fails
+//! with `EINTR` when the signal does something, handler or not: signal(7)
+//! lists `epoll_wait` and `epoll_pwait` both among the calls never
+//! restarted after a handler and among those that fail with `EINTR` after
+//! a stop signal. A signal whose delivery does nothing (the default-ignored
+//! `SIGCHLD` of a child's exit, which a traced process keeps until it is
+//! taken) does not end the wait: the call continues, as a restart (the
+//! epoll_wait spec sheet: the read end of a pipe whose last writer exits
+//! reports `EPOLLHUP`, also while that exit's `SIGCHLD` is on its way).
 
 use super::pipe::file_io;
 use super::poll::{Waited, ms_timeout, sigmask_arg, timespec_timeout, wait_with_signals};
@@ -16,6 +21,7 @@ use crate::args::Args;
 use crate::errno::{Errno, SysResult};
 use crate::fileio::{EpollEvent, EpollOp, WaitTime, flags::O_CLOEXEC};
 use crate::kernel::{LinuxKernel, SigSet, UserPtr};
+use crate::signal::deliver::eintr_if_acting;
 use alloc::vec::Vec;
 
 /// `EP_MAX_EVENTS`: epoll_wait(2) "EINVAL ... maxevents is less than or
@@ -134,7 +140,7 @@ fn wait_events(
     let mask = if wait == WaitTime::Poll { None } else { mask };
     let events = match wait_with_signals(k, mask, wait, |io, w| io.epoll_wait(epfd, max, w), Vec::is_empty)? {
         Waited::Done(events) => events,
-        Waited::Interrupted => return Err(Errno::EINTR),
+        Waited::Interrupted => return Err(eintr_if_acting(k)),
     };
     let bytes: Vec<u8> = events.iter().flat_map(|e| e.to_bytes()).collect();
     if !bytes.is_empty() {
