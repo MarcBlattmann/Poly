@@ -111,6 +111,16 @@ fn objects_live_and_die_as_observed() {
     assert!(g.delete_object(b));
     assert_eq!(g.object_type(b), OBJ_BRUSH);
     assert!(!g.delete_object(b));
+    // Deleted and unselected: FillRect still paints with it, selecting it
+    // fails and the DC keeps its brush.
+    {
+        let (dc, px) = dib32(&mut g, 2, 1);
+        assert!(g.fill_rect(dc, Rect::new(0, 0, 1, 1), b));
+        assert_eq!(px[0], 0x0011_2233);
+        assert_eq!(g.select_object(dc, b), Ok(0));
+        g.pat_blt(dc, 1, 0, 1, 1, 0x00F0_0021);
+        assert_eq!(px[1], 0x00FF_FFFF);
+    }
     // A bitmap busy in one DC; free after that DC goes.
     let (dc, _px) = dib32(&mut g, 2, 2);
     let bmp = g.current_object(dc, OBJ_BITMAP);
@@ -128,6 +138,15 @@ fn objects_live_and_die_as_observed() {
     assert_eq!(px[0], 0x00FF_0000);
     g.select_object(dc, u64::from(g.stock(WHITE_BRUSH))).unwrap();
     assert_eq!(g.object_type(red), 0);
+    // Its slot used again: the old handle names nothing, selecting it
+    // fails and the DC keeps painting white.
+    let new = u64::from(g.create_solid_brush(0x0040_5060));
+    assert_ne!(new, red);
+    assert_eq!(g.object_type(red), 0);
+    assert_eq!(g.select_object(dc, red), Ok(0));
+    g.pat_blt(dc, 0, 0, 1, 1, 0x00F0_0021);
+    assert_eq!(px[0], 0x00FF_FFFF);
+    assert_eq!(g.object_type(new), OBJ_BRUSH);
 }
 
 #[test]

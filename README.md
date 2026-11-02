@@ -103,7 +103,7 @@ kernel, and all three share one core. More detail in
 | Linux | syscalls | 370 | 321 | 0 | 1 | 48 | 0 | 0 |
 | Linux | user-mode API | runs unchanged (glibc, Mesa, GTK, Qt) | | | | | | |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 3 | 1,808 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,147 | 41 | 4 | 2,725 | 54,101 | 0 | 73,276 |
+| Windows | user-mode DLL exports | 130,147 | 42 | 4 | 2,724 | 54,101 | 0 | 73,276 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 0 | 517 | 0 | 0 |
 | macOS | framework API | 712,565 | 0 | 0 | 0 | 712,565 | 0 | 0 |
 
@@ -129,6 +129,9 @@ statically linked BusyBox from the host (`busybox-static` on Debian and
 Ubuntu) or builds the pinned release.
 
 ```sh
+cargo xtask start   # a menu of everything that boots: the desktop, Chromium, the shells, boot tests, CI
+                    # (it remembers your choice: next time Enter runs it again; --last skips the menu)
+cargo xtask desktop # boot Poly's desktop in QEMU's window (the launcher lists the test apps)
 cargo xtask run     # boot the kernel in QEMU (Ctrl-A X to quit)
 cargo xtask run --busybox   # boot into BusyBox's init and shell (`poweroff` quits; add console=tty1 for the screen)
 cargo xtask test    # host unit tests + boot tests in QEMU
@@ -147,7 +150,10 @@ On Windows, `cargo xtask run` builds and boots the kernel natively (QEMU
 for Windows on the `PATH`). The parts that need a Linux host report so: the
 diff runner against real Linux, root disks assembled from Linux packages,
 and the boot tests that take screenshots or type through QEMU's Unix
-sockets. Run those in WSL or a Linux container.
+sockets. Run those in WSL or a Linux container; `cargo xtask start` shows
+them greyed out with the reason. In Git Bash, `winpty cargo xtask start`
+gives the full menu (mintty is not a Windows console; without winpty it
+asks with a numbered prompt instead).
 
 ## Repository layout
 

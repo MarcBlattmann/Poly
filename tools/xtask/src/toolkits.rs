@@ -368,10 +368,8 @@ pub fn collect() -> std::result::Result<Contents, String> {
     for (path, data) in crate::wallpapers::tree().map_err(|e| e.to_string())? {
         tree.file(&path, 0o644, &data);
     }
-    match compositor::build_c("tests/linux/wayland/wl-demo.c", "wl-demo") {
-        Ok(demo) => tree.file("usr/local/bin/wl-demo", 0o755, &demo),
-        Err(why) => contents.notes.push(format!("wl-demo: {why}")),
-    }
+    // The demo client, a native program (ADR 0133).
+    tree.file("usr/local/bin/wl-demo", 0o755, &crate::native::program("wl-demo")?);
     match compositor::build_c("tests/linux/toolkits/poly-runas.c", "poly-runas") {
         Ok(runas) => {
             tree.file("usr/local/bin/poly-runas", 0o755, &runas);

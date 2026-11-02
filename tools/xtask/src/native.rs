@@ -15,8 +15,10 @@
 //! holds Poly's ABI note for this ABI version (`poly-binfmt`).
 //!
 //! The programs: the test programs `native-hello` and `native-child`, the
-//! compositor and desktop `poly-compositor`, and `notify-send` (ADR 0126;
+//! compositor and desktop `poly-compositor`, `notify-send` (ADR 0126), and
+//! the desktop's Wayland test clients `wl-demo` and `wl-client` (ADR 0133;
 //! `compositor.rs` and the desktop boot tests take theirs from here).
+//! They are built once per xtask run ([`build`] keeps the result).
 //! `cargo xtask build` and every kernel build build them; `cargo xtask run`
 //! puts them into its initramfs as `/bin/<name>`, so
 //! `cargo xtask run poly.init=/bin/native-hello` boots into one.
@@ -36,8 +38,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// The native programs `userland/native/` builds, as `/bin/<name>`: the
-/// test programs, the compositor and desktop, and `notify-send`.
-pub const PROGRAMS: [&str; 4] = ["native-hello", "native-child", "poly-compositor", "notify-send"];
+/// test programs, the compositor and desktop, `notify-send`, and the
+/// desktop's Wayland test clients.
+pub const PROGRAMS: [&str; 6] =
+    ["native-hello", "native-child", "poly-compositor", "notify-send", "wl-demo", "wl-client"];
 
 /// What `/bin/native-hello` prints last when every check passed.
 pub const HELLO_OUTPUT: &str = "native-hello: done, 0 failed";
@@ -70,8 +74,25 @@ fn native_cargo() -> std::process::Command {
 }
 
 /// Build the native programs; returns `(name, ELF)` for each of
-/// [`PROGRAMS`], checked to carry Poly's ABI note.
-pub fn build() -> Result<Vec<(String, Vec<u8>)>> {
+/// [`PROGRAMS`], checked to carry Poly's ABI note. The first successful
+/// build of an xtask run is kept: every later call (the kernel's build, the
+/// desktop's image, the boot tests) gets it without running cargo again,
+/// and calls from several threads at once wait for the one build.
+pub fn build() -> Result<Programs> {
+    static BUILT: std::sync::Mutex<Option<Programs>> = std::sync::Mutex::new(None);
+    let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(programs) = built.as_ref() {
+        return Ok(programs.clone());
+    }
+    let programs = build_now()?;
+    *built = Some(programs.clone());
+    Ok(programs)
+}
+
+/// The built programs: `(name, ELF)`.
+pub type Programs = Vec<(String, Vec<u8>)>;
+
+fn build_now() -> Result<Programs> {
     let mut cmd = native_cargo();
     cmd.args(["build", "--release", "--target-dir"]).arg(target_dir());
     step("build native programs (userland/native)", &mut cmd)?;
