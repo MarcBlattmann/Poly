@@ -580,6 +580,11 @@ extern "C" fn irq_entry(frame: *mut TrapFrame) {
     if from_user {
         crate::cputime::entered_kernel();
     }
+    if vector == u64::from(super::irq::TIMER_VECTOR) {
+        // SAFETY: as above.
+        let (rip, rbp) = unsafe { ((*frame).rip, (*frame).rbp) };
+        crate::profile::sample(from_user, rip, || super::backtrace::stack_word(rbp.checked_add(8)?));
+    }
     super::irq::dispatch(vector as u8);
 }
 

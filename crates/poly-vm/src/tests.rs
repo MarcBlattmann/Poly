@@ -62,6 +62,7 @@ fn region(start: u64, end: u64, prot: Prot, kind: Kind, backing: Backing<u32>) -
         locked: false,
         sealed: false,
         uffd: 0,
+        name: None,
     }
 }
 
@@ -1062,4 +1063,40 @@ fn userfault_registration_turns_missing_pages_into_user_faults() {
     assert!(m.userfault_registered(MIN + P, 3), "another object's registration stays");
     m.forget_userfaults(Some(3));
     assert_eq!(m.region_count(), 1);
+}
+
+// ------------------------------------------------------------ anon names --
+
+#[test]
+fn anonymous_regions_take_names_and_split_for_them() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 3, Prot::RW);
+    let names = |m: &Map| {
+        m.regions().map(|v| (v.start, v.end, v.name.as_deref().map(std::string::String::from))).collect::<Vec<_>>()
+    };
+    let name = |s: &str| Some(Arc::<str>::from(s));
+    m.set_anon_name(MIN, 3 * P, name("region")).unwrap();
+    assert_eq!(names(&m), vec![(MIN, MIN + 3 * P, Some("region".into()))]);
+    m.set_anon_name(MIN + P, 1, name("mid")).unwrap();
+    assert_eq!(
+        names(&m),
+        vec![
+            (MIN, MIN + P, Some("region".into())),
+            (MIN + P, MIN + 2 * P, Some("mid".into())),
+            (MIN + 2 * P, MIN + 3 * P, Some("region".into()))
+        ],
+        "the length is rounded up to a page"
+    );
+    m.set_anon_name(MIN, 3 * P, None).unwrap();
+    assert_eq!(names(&m), vec![(MIN, MIN + 3 * P, None)], "unnamed again, merged");
+    assert_eq!(m.set_anon_name(MIN + 1, P, name("x")), Err(Error::Invalid));
+    assert_eq!(m.set_anon_name(MIN, 4 * P, name("x")), Err(Error::NoMemory), "a hole");
+    assert_eq!(names(&m), vec![(MIN, MIN + 3 * P, None)], "nothing changed");
+    assert_eq!(m.set_anon_name(MIN, 0, name("x")), Ok(()));
+    m.map(file(P, Prot::READ, 7, 0, false, Placement::Fixed(MIN + 10 * P))).unwrap();
+    assert_eq!(m.set_anon_name(MIN + 10 * P, P, name("x")), Err(Error::NotAnonymous));
+    assert_eq!(Error::NotAnonymous.linux_errno(), 9);
+    // A fork child's copy keeps the names.
+    m.set_anon_name(MIN, P, name("kept")).unwrap();
+    assert_eq!(m.clone().find(MIN).and_then(|v| v.name.clone()), name("kept"));
 }

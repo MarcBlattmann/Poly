@@ -425,9 +425,50 @@ pub trait ProcSource: Send + Sync {
         let _ = (pid, file, offset, data);
         Err(Errno::EROFS)
     }
+
+    /// What a process's magic link names, for following it
+    /// (`poly_vfs::FileSystem::magic_target`): the open file of
+    /// descriptor `fd`, the program, the working or root directory.
+    /// `None` follows the link's text instead.
+    fn magic_target(&self, pid: u32, link: MagicLink) -> Option<poly_vfs::MagicTarget> {
+        let _ = (pid, link);
+        None
+    }
+
+    /// The memory map for adding up sizes (`stat`, `statm`, `status`): as
+    /// [`maps`](Self::maps), but a file mapping's name need only be the
+    /// program's path ([`ProcessInfo::exe`]) for the program file and any
+    /// other path for other files, so a source can skip naming them (a
+    /// process with thousands of regions reads its `stat` often).
+    fn size_maps(&self, pid: u32) -> Vec<MapEntry> {
+        self.maps(pid)
+    }
+
+    /// `/proc/<pid>/oom_score_adj` (proc_pid_oom_score_adj(5)): the
+    /// process's adjustment, 0 unless set.
+    fn oom_score_adj(&self, pid: u32) -> i32 {
+        let _ = pid;
+        0
+    }
+
+    /// Sets it to `value` (already in range): `EACCES` if the caller may
+    /// not lower it.
+    fn set_oom_score_adj(&self, pid: u32, value: i32) -> Result<(), Errno> {
+        let _ = (pid, value);
+        Err(Errno::EROFS)
+    }
 }
 
 /// The names `/proc/sys/kernel` lets a write set.
+/// A process's magic links ([`ProcSource::magic_target`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MagicLink {
+    Fd(u32),
+    Exe,
+    Cwd,
+    Root,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KernelName {
     /// `hostname`: the UTS namespace's node name.

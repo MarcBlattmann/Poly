@@ -42,7 +42,11 @@
 //! - `cargo xtask chromium run`: boot it with the desktop in QEMU's window
 //!   and the disk's bash on the terminal (any host). The initramfs's
 //!   BusyBox is Debian's `busybox-static` from the lock (set `boot`), so no
-//!   host C toolchain is needed.
+//!   host C toolchain is needed. The initramfs switches to the disk as the
+//!   root (`initramfs::SWITCH_ROOT_SCRIPT`, ADR 0130's amendment): it is not
+//!   a chroot, so Chromium may make user namespaces and takes its
+//!   user-namespace sandbox; the same BusyBox, copied onto the disk
+//!   (`initramfs::DISK_BUSYBOX`), is init there with [`INITTAB`].
 //! - `cargo xtask chromium [--fresh-disk] [STEP...]`: a boot driven like
 //!   `cargo xtask toolkits` (steps; QMP, so Unix hosts).
 //! - `cargo xtask chromium apptest [--target linux|poly|both] [--tests-dir
@@ -216,6 +220,17 @@ exec setpriv --reuid=1000 --regid=1000 --init-groups env HOME=/home/poly XDG_RUN
     XDG_CONFIG_HOME=/home/poly/.config XDG_CACHE_HOME=/home/poly/.cache \\
     XDG_DATA_HOME=/home/poly/.local/share XDG_STATE_HOME=/home/poly/.local/state \\
     /usr/bin/chromium \"$@\"
+";
+
+/// `/etc/inittab` of Chromium's disk, read by BusyBox's init (from the disk,
+/// `initramfs::DISK_BUSYBOX`) once the initramfs made the disk the root:
+/// the desktop, the disk's bash on the console.
+pub const INITTAB: &str = "\
+# BusyBox init(8) table of Chromium's disk, the root (tools/xtask/src/chromium.rs)
+::once:/usr/local/sbin/poly-desktop
+::respawn:/usr/local/lib/poly/cttyhack /bin/bash -l
+::ctrlaltdel:/usr/local/lib/poly/busybox reboot
+::shutdown:/usr/local/lib/poly/busybox umount -a -r
 ";
 
 /// `cargo xtask chromium` work directory.
@@ -993,10 +1008,15 @@ pub fn collect() -> std::result::Result<Contents, String> {
     tree.file("usr/local/sbin/poly-desktop", 0o755, crate::toolkits::DESKTOP_SCRIPT.as_bytes());
     tree.file("usr/local/bin/poly-chromium", 0o755, LAUNCH_SCRIPT.as_bytes());
     // Debian's poweroff and reboot are systemd's (systemd-sysv comes with
-    // the dependencies) and cannot reach BusyBox's init outside the chroot:
-    // the root disk's own, first in PATH (ADR 0059).
+    // the dependencies), which is not running: the root disk's own, first
+    // in PATH (ADR 0059), signal BusyBox's init.
     tree.file("usr/local/sbin/poweroff", 0o755, rootdisk::POWEROFF.as_bytes());
     tree.file("usr/local/sbin/reboot", 0o755, rootdisk::REBOOT.as_bytes());
+    // BusyBox's init is pid 1 on the disk (the initramfs switched to it as
+    // the root), with its table and the applets the table runs.
+    tree.file(crate::initramfs::DISK_BUSYBOX, 0o755, &package_file("busybox-static", "usr/bin/busybox")?);
+    tree.symlink("usr/local/lib/poly/cttyhack", "busybox");
+    tree.file("etc/inittab", 0o644, INITTAB.as_bytes());
     tree.file("usr/share/applications/poly-chromium.desktop", 0o644, desktop_file().as_bytes());
     for d in ["root/.config", "root/.cache", "root/.local/share", "run/user"] {
         tree.dir(d, 0o755);
@@ -1017,18 +1037,26 @@ pub fn make(name: &str) -> std::result::Result<(PathBuf, Contents), String> {
     Ok((path, contents))
 }
 
-/// The initramfs: BusyBox's init (Debian's `busybox-static` from the lock)
-/// with the toolkits' table: mount the disk, start the desktop in it, the
-/// disk's bash on the console.
+/// The initramfs: BusyBox (Debian's `busybox-static` from the lock), whose
+/// shell is the first program: it mounts the disk and switches to it as the
+/// root (`initramfs::SWITCH_ROOT_SCRIPT`), where BusyBox's init runs
+/// [`INITTAB`]. Booted with [`INIT_ARGS`].
 pub fn write_initramfs() -> Result<PathBuf> {
     let busybox = package_file("busybox-static", "usr/bin/busybox")?;
-    let image = crate::initramfs::disk_root_image_with(&busybox, crate::toolkits::INITTAB);
+    let image = crate::initramfs::switch_root_image(&busybox);
     crate::initramfs::write(&root(), "poly-chromium-initramfs.cpio", &image)
 }
+
+/// The kernel arguments naming the first program of Chromium's boot.
+pub const INIT_ARGS: &str = crate::initramfs::SWITCH_ROOT_INIT_ARGS;
 
 /// Guest memory: Chromium's browser, zygotes, renderer and utility
 /// processes side by side.
 pub const MEMORY: &str = "4G";
+
+/// Virtual CPUs of Chromium's boots: its processes run side by side (QEMU's
+/// TCG emulates each CPU on a host thread of its own).
+pub const CPUS: Option<u32> = Some(4);
 
 /// `cargo xtask chromium run [--release] [--fresh-disk]`: the desktop in
 /// QEMU's window with Chromium in the launcher, the disk's bash on this
@@ -1041,9 +1069,12 @@ fn run(args: &[String]) -> Result {
         make(FILE_NAME)?;
     }
     let initrd = write_initramfs()?;
-    let append = format!("{} console=ttyS0 poly.terminal=off", crate::busybox::INIT_ARGS);
+    let append = format!("{INIT_ARGS} console=ttyS0 poly.terminal=off");
     let mut cmd = crate::qemu(&kernel, MEMORY, &append, crate::Devices::None, "mon:stdio");
     cmd.args(rootdisk::drive_args(&image)).arg("-initrd").arg(&initrd).args(crate::desktop::devices());
+    if let Some(n) = CPUS {
+        cmd.args(["-smp", &n.to_string()]);
+    }
     eprintln!(
         "==> the desktop is in QEMU's window (the Windows key or Ctrl+Space opens the launcher: type \"chromium\"); \
          the disk's bash is here (Ctrl-A X quits)"
@@ -1090,12 +1121,32 @@ pub fn command(args: &[String]) -> Result {
     fetch(false)?;
     let kernel = crate::build_kernel(release)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
-    let image = root().join("target").join(FILE_NAME);
-    if fresh || !image.exists() {
+    let mut image = root().join("target").join(FILE_NAME);
+    // POLY_CHROMIUM_PROBE_DIR: a directory of scripts to try things with,
+    // copied to /root/probe/ on a fresh image of its own.
+    if let Ok(dir) = std::env::var("POLY_CHROMIUM_PROBE_DIR") {
+        let mut contents = collect()?;
+        for e in std::fs::read_dir(&dir).map_err(|e| format!("{dir}: {e}"))?.flatten() {
+            let data = std::fs::read(e.path()).map_err(|e| e.to_string())?;
+            contents.tree.file(&format!("root/probe/{}", e.file_name().to_string_lossy()), 0o755, &data);
+        }
+        image = root().join("target/poly-chromium-probe.img");
+        rootdisk::write_image_poly_ext2(&contents.tree, &image)?;
+    } else if fresh || !image.exists() {
         make(FILE_NAME)?;
     }
     let initrd = write_initramfs()?;
-    let mut m = crate::toolkits::Machine::boot_with(&kernel, &syms, &image, &initrd, "chromium-probe", MEMORY)?;
+    let mut m = crate::toolkits::Machine::boot_with_init(
+        &kernel,
+        &syms,
+        &image,
+        &initrd,
+        "chromium-probe",
+        MEMORY,
+        INIT_ARGS,
+        CPUS,
+    )?;
+    m.set_timeouts(Duration::from_secs(3600), Duration::from_secs(4 * 3600));
     m.desktop_up()?;
     let mut result = Ok(());
     for step in &steps {
@@ -1353,7 +1404,16 @@ fn run_poly(tests: &[AppTest], release: bool) -> Result<BTreeMap<String, Outcome
     let image = root().join("target/poly-chromium-apptest.img");
     rootdisk::write_image_poly_ext2(&contents.tree, &image)?;
     let initrd = write_initramfs()?;
-    let mut m = crate::toolkits::Machine::boot_with(&kernel, &syms, &image, &initrd, "chromium-apptest", MEMORY)?;
+    let mut m = crate::toolkits::Machine::boot_with_init(
+        &kernel,
+        &syms,
+        &image,
+        &initrd,
+        "chromium-apptest",
+        MEMORY,
+        INIT_ARGS,
+        CPUS,
+    )?;
     m.set_timeouts(Duration::from_secs(900), Duration::from_secs(7200));
     m.desktop_up()?;
     let mut out = BTreeMap::new();
@@ -1472,7 +1532,16 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let initrd = write_initramfs()?;
     let (image, _) = make(TEST_FILE_NAME)?;
     eprintln!("==> boot test: Chromium headless and on the desktop with its sandbox, from its root disk");
-    let mut m = crate::toolkits::Machine::boot_with(kernel, syms, &image, &initrd, "chromium-test", MEMORY)?;
+    let mut m = crate::toolkits::Machine::boot_with_init(
+        kernel,
+        syms,
+        &image,
+        &initrd,
+        "chromium-test",
+        MEMORY,
+        INIT_ARGS,
+        CPUS,
+    )?;
     m.set_timeouts(Duration::from_secs(600), Duration::from_secs(3600));
     m.desktop_up()?;
     let mut failed = Vec::new();

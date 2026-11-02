@@ -192,3 +192,17 @@ fn the_namespace_generation_counts_every_change_of_a_name_and_nothing_else() {
     assert!(env.vfs.mkdir(&env.ctx, &env.root, At::Cwd, b"/missing/d", 0o755).is_err());
     assert_eq!(g(), start + 11);
 }
+
+#[test]
+fn remembered_directory_names_follow_renames() {
+    // `Vfs::name_in` keeps names until any name changes.
+    let env = Env::new();
+    env.mkdir("/d");
+    env.mkdir("/d/sub");
+    env.write("/d/sub/f", b"x");
+    let f = env.open("/d/sub/f", OpenFlags::RDONLY).unwrap();
+    assert_eq!(path_of(&env, &f).unwrap(), b"/d/sub/f");
+    assert_eq!(path_of(&env, &f).unwrap(), b"/d/sub/f", "again, from what was remembered");
+    env.vfs.rename(&env.ctx, &env.root, At::Cwd, b"/d/sub", At::Cwd, b"/d/other", RenameFlags::default()).unwrap();
+    assert_eq!(path_of(&env, &f).unwrap(), b"/d/other/f");
+}
