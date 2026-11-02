@@ -1,0 +1,13 @@
+[package]
+name = "poly-gdi"
+description = "GDI without the machine (ADR 0128): a process's GDI objects, DIB pixel formats, raster operations, rectangles, the stock fonts and DrawText's layout, for our gdi32.dll"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

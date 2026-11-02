@@ -289,9 +289,14 @@ fn verify(dir: &Path) -> Result {
 /// win32k service table, each export the system-call stub of its number.
 fn verify_gui(dir: &Path) -> Result {
     use poly_pe::ExportTarget;
-    use poly_win32k::exports::{GDI32_STUBS, USER32_STUBS};
+    use poly_win32k::exports::{GDI32_EXPORTS, GDI32_STUBS, USER32_EXPORTS, USER32_STUBS};
     use poly_win32k::services::{WIN32K_SERVICES, stub_bytes};
-    for (file, names) in [("user32.dll", USER32_STUBS), ("gdi32.dll", GDI32_STUBS)] {
+    for (file, names) in [
+        ("user32.dll", USER32_STUBS),
+        ("user32.dll", USER32_EXPORTS),
+        ("gdi32.dll", GDI32_STUBS),
+        ("gdi32.dll", GDI32_EXPORTS),
+    ] {
         let bytes = read(&dir.join(file))?;
         let dll = parse(&bytes)?;
         let exports =
