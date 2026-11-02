@@ -323,13 +323,14 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     let (ox, oy) = origin_of(&i);
     let mut class_name = c.class_name.clone();
     class_name.push(0);
+    let (cs_cx, cs_cy) = if c.default_size { (-1, -1) } else { (cx, cy) };
     let mut cs = CreateStructW {
         create_params: param,
         instance,
         menu,
         parent: c.cs_parent,
-        cy,
-        cx,
+        cy: cs_cy,
+        cx: cs_cx,
         y,
         x,
         style,
@@ -749,6 +750,9 @@ fn swp<E: Env + ?Sized>(
         let (dx, dy) = (nx - cur.left, ny - cur.top);
         Rect::new(old_client.left + dx, old_client.top + dy, old_client.right + dx, old_client.bottom + dy)
     };
+    // A minimized window's client area is empty at its corner
+    // (ShowWindow.yaml: WM_MOVE 0,740, client 0x0).
+    let new_client = if i.minimized { Rect::new(nx, ny, nx, ny) } else { new_client };
     let client_moved = (new_client.left, new_client.top) != (old_client.left, old_client.top);
     let client_sized = (new_client.width(), new_client.height()) != (old_client.width(), old_client.height());
     let mut changed = eff | extra;
@@ -992,7 +996,8 @@ pub fn dispatch_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> u64 {
         );
         if valid {
             env.call_proc(m.l, m.hwnd as u32, WM_TIMER, m.w, u64::from(env.tick()));
-            return 1;
+            // The value the oracle returned after a timer callback.
+            return 22;
         }
         return 0;
     }

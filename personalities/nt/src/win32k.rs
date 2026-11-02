@@ -11,6 +11,12 @@
 //! the win32k lockdown (`DisallowWin32kSystemCalls`,
 //! [`NtProcess::win32k_disabled`]) is refused.
 //!
+//! The desktop link (ADR 0131): after every call (and when a thread or
+//! process ends) the surfaces of top-level windows are brought in line
+//! with the window manager (`poly_win32k::surfaces`); `PolyUserCommitSurface`
+//! copies a window's pixels from the app into its surface buffer. The
+//! kernel's `/dev/win32k` device reaches [`Win32k`]'s link methods.
+//!
 //! [`NtProcess::win32k_disabled`]: crate::system::NtProcess::win32k_disabled
 
 use crate::kernel::NtKernel;
@@ -23,6 +29,7 @@ use poly_ntobj::{Handle, NtStatus, ObjectId, ObjectType};
 use poly_win32k::desktop::Desktop;
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::services::Win32kService;
+use poly_win32k::surfaces::{MAX_SIDE, Surfaces};
 use poly_win32k::wire;
 use poly_win32k::wm::{Ctx, Effects, Key, Wm};
 
@@ -43,6 +50,8 @@ pub struct Win32k {
     /// The desktop link's win32k end: the surfaces of top-level windows
     /// as the compositor is told about them.
     pub desktop: Desktop,
+    /// The surfaces' windows and buffers.
+    pub surfaces: Surfaces,
     /// Each thread's queue event (registered by `user32`) and the handle
     /// value it registered.
     events: BTreeMap<Key, (ObjectId, u64)>,
@@ -57,6 +66,7 @@ impl Win32k {
             let _ = objects.dereference(id);
         }
         self.wake(objects, &fx);
+        self.sync();
     }
 
     /// Forget a process.
@@ -70,6 +80,36 @@ impl Win32k {
             }
         }
         self.wake(objects, &fx);
+        self.sync();
+    }
+
+    /// Bring the desktop link's surfaces in line with the windows.
+    pub fn sync(&mut self) {
+        self.surfaces.sync(&self.wm, &mut self.desktop);
+    }
+
+    /// The device: bytes the compositor wrote (its greeting brings the
+    /// surfaces of the windows there are already).
+    pub fn link_receive(&mut self, bytes: &[u8]) {
+        // Input, focus and the shell's requests come with a later slice.
+        let _ = self.desktop.receive(bytes);
+        self.sync();
+    }
+
+    /// The device: what to hand the compositor's next `read`.
+    pub fn link_output(&mut self) -> alloc::vec::Vec<u8> {
+        self.desktop.take_output()
+    }
+
+    /// The device: the compositor closed it.
+    pub fn link_closed(&mut self) {
+        self.desktop.disconnect();
+        self.sync();
+    }
+
+    /// The device's `READ_BUFFER`: rows of a buffer.
+    pub fn link_rows(&self, buffer: u32, row: u32, rows: u32) -> Option<&[u8]> {
+        self.surfaces.rows(buffer, row, rows)
     }
 
     fn wake(&self, objects: &mut poly_ntobj::ObjectManager, fx: &Effects) {
@@ -99,8 +139,7 @@ pub fn dispatch<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Outcome {
     }
     let status = match Win32kService::from_number(number) {
         Some(Win32kService::Call) => call(k, regs).unwrap_or_else(|e| e),
-        // The desktop link's commit comes with its slice; nothing to do yet.
-        Some(Win32kService::CommitSurface) => STATUS_SUCCESS,
+        Some(Win32kService::CommitSurface) => commit(k, regs).unwrap_or_else(|e| e),
         None => {
             regs.rax = u64::from(STATUS_NOT_IMPLEMENTED);
             return Outcome::Unimplemented { table: Table::Win32k.name(), number: u64::from(index) };
@@ -123,12 +162,19 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
     let caller = k.caller();
     let ctx = Ctx { pid: caller.process.0, tid: caller.thread.0 as u32, now: k.monotonic_100ns() / 10_000 };
     let reply = k.with_state(|sys, _, _| {
-        if let Request::RegisterEvent { handle } = req {
-            return register_event(sys, &caller, ctx, handle);
+        match req {
+            Request::RegisterEvent { handle } => return register_event(sys, &caller, ctx, handle),
+            Request::Surface { hwnd } => {
+                let w = &sys.win32k;
+                let size = w.surfaces.size(&w.desktop, hwnd).map_or(0, |(x, y)| u64::from(x) | (u64::from(y) << 32));
+                return Reply::Value { value: size };
+            }
+            _ => {}
         }
         let mut fx = Effects::default();
         let reply = sys.win32k.wm.handle(ctx, req, &mut fx);
         sys.win32k.wake(&mut sys.objects, &fx);
+        sys.win32k.sync();
         reply
     });
     let out = wire::encode(&reply);
@@ -138,6 +184,30 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
     }
     abi::write(k, out_ptr, &out)?;
     Ok(STATUS_SUCCESS)
+}
+
+/// `PolyUserCommitSurface(hwnd, pixels, width, height, stride)`: the app
+/// drew window `hwnd`'s surface (32-bit pixels, rows `stride` bytes apart);
+/// they go into its buffer for the compositor. `STATUS_INVALID_PARAMETER`
+/// when the window has no surface of that size (it was resized or hidden
+/// since; `user32` asks for the size again next time).
+fn commit<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus> {
+    let [hwnd, pixels, width, height, stride] = abi::args::<K, 5>(k, regs)?;
+    let (hwnd, width, height) = (hwnd as u32, width as u32, height as u32);
+    let size = k.with_state(|sys, _, _| sys.win32k.surfaces.size(&sys.win32k.desktop, hwnd));
+    if size != Some((width, height)) || width > MAX_SIDE || height > MAX_SIDE || stride < u64::from(width) * 4 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let row = width as usize * 4;
+    let mut bytes = vec![0u8; row * height as usize];
+    for (y, chunk) in bytes.chunks_mut(row).enumerate() {
+        abi::read(k, pixels + y as u64 * stride, chunk)?;
+    }
+    let ok = k.with_state(|sys, _, _| {
+        let w = &mut sys.win32k;
+        w.surfaces.commit(&mut w.desktop, hwnd, width, height, &bytes)
+    });
+    Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
 }
 
 /// `RegisterEvent`: handle 0 asks which handle the thread registered (0:
@@ -157,6 +227,10 @@ fn register_event(sys: &mut crate::NtSystem, caller: &poly_ntobj::Caller, ctx: C
     }
     if let Some((old, _)) = sys.win32k.events.insert(key, (id, handle)) {
         let _ = sys.objects.dereference(old);
+    }
+    // What arrived before the event existed must not be lost.
+    if sys.win32k.wm.has_pending(key) {
+        let _ = sys.objects.set_event(id);
     }
     Reply::Ok {}
 }

@@ -14,14 +14,23 @@
 //! moves, the records to send back) comes back as [`Action`]s for the
 //! compositor's loop.
 //!
-//! The device and the poll-loop hook come with the first Phase 7 slice;
-//! this is the part that needs neither, tested on the host.
+//! This is the part that needs no device, tested on the host; [`Link`]
+//! is the device end in the compositor's loop (ADR 0131): it opens
+//! [`DEVICE`], greets win32k, reads records, keeps a copy of each buffer
+//! whose damaged rows it fetches with the device's
+//! [`READ_BUFFER`](poly_win32k::link::READ_BUFFER) request before the
+//! scene copies them ([`Copies`]), and writes back what the scene's end
+//! answers (buffer releases).
 
+use crate::os;
 use alloc::collections::BTreeMap;
+use alloc::vec;
 use alloc::vec::Vec;
 use poly_wayland::compose::{Content, Rect, Scene, WindowId};
+use poly_win32k::frame::FrameMetrics;
 use poly_win32k::link::{
-    BufferId, CursorShape, Edges, FromCompositor, PixelFormat, SurfaceId, SurfaceKind, ToCompositor, WindowState,
+    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Stream,
+    SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
 };
 
 /// The scene owner of Windows surfaces: this bit, or'ed with the surface,
@@ -72,6 +81,12 @@ impl WindowsSurfaces {
     /// The scene window showing `surface`.
     pub fn window(&self, surface: SurfaceId) -> Option<WindowId> {
         self.surfaces.get(&surface).map(|s| s.window)
+    }
+
+    /// The current buffer of `surface`: id, width, height, stride.
+    pub fn buffer_of(&self, surface: SurfaceId) -> Option<(BufferId, u32, u32, u32)> {
+        let (b, w, h, stride, _) = self.surfaces.get(&surface)?.buffer?;
+        Some((b, w, h, stride))
     }
 
     /// The surface a scene window shows, if it is a Windows one.
@@ -211,6 +226,137 @@ fn copy(
     }
     let damaged = Rect::new(x as i32, y as i32, x1.saturating_sub(x) as i32, y1.saturating_sub(y) as i32);
     scene.damage_content(window, damaged);
+}
+
+/// The compositor's copies of win32k's buffers, `stride` x `height` bytes
+/// each, refreshed from the device before the scene reads them.
+#[derive(Debug, Default)]
+pub struct Copies(pub BTreeMap<BufferId, Vec<u8>>);
+
+impl Buffers for Copies {
+    fn bytes(&self, id: BufferId) -> Option<&[u8]> {
+        self.0.get(&id).map(Vec::as_slice)
+    }
+}
+
+/// The most bytes one `READ_BUFFER` copies (the kernel's limit).
+const READ_CHUNK: usize = 512 * 1024;
+
+/// The desktop link's device in the compositor's loop.
+#[derive(Debug)]
+pub struct Link {
+    fd: os::RawFd,
+    surfaces: WindowsSurfaces,
+    copies: Copies,
+    incoming: Stream<ToCompositor>,
+}
+
+impl Link {
+    /// Open [`DEVICE`] and greet win32k with the output and Poly's frame;
+    /// `None` (logged) without the device.
+    pub fn open(scene: &Scene) -> Option<Link> {
+        let fd = match os::open_device(DEVICE, true, true) {
+            Ok(fd) => fd,
+            Err(e) => {
+                println!("poly-compositor: no desktop link to Windows apps ({e})");
+                return None;
+            }
+        };
+        let (width, height) = scene.logical_size();
+        let (_, _, scale) = scene.output();
+        let hello = FromCompositor::Hello {
+            version: VERSION,
+            width: width as u32,
+            height: height as u32,
+            scale,
+            frame: FrameMetrics::POLY,
+        };
+        let mut out = Vec::new();
+        hello.encode(&mut out);
+        if let Err(e) = os::write(fd, &out) {
+            println!("poly-compositor: {DEVICE}: {e}");
+            return None;
+        }
+        println!("poly-compositor: desktop link to Windows apps on {DEVICE}");
+        Some(Link { fd, surfaces: WindowsSurfaces::new(), copies: Copies::default(), incoming: Stream::new() })
+    }
+
+    /// The device, to poll for reading.
+    pub fn fd(&self) -> os::RawFd {
+        self.fd
+    }
+
+    /// The surfaces in the scene.
+    pub fn surfaces(&self) -> &WindowsSurfaces {
+        &self.surfaces
+    }
+
+    /// Read what win32k sent and apply it to the scene.
+    pub fn pump(&mut self, scene: &mut Scene) {
+        let mut buf = vec![0u8; 16 * 1024];
+        loop {
+            match os::read(self.fd, &mut buf) {
+                Ok(0) => break,
+                Ok(n) => self.incoming.push(&buf[..n]),
+                Err(e) => {
+                    eprintln!("poly-compositor: {DEVICE}: {e}");
+                    break;
+                }
+            }
+        }
+        let mut out = Vec::new();
+        while let Some(r) = self.incoming.next_record() {
+            let Ok(r) = r else { continue };
+            match r {
+                ToCompositor::Buffer { buffer, height, stride, .. } => {
+                    self.copies.0.insert(buffer, vec![0u8; stride as usize * height as usize]);
+                }
+                ToCompositor::Damage { surface, y, height, .. } => self.fetch(surface, y, height),
+                _ => {}
+            }
+            for a in self.surfaces.apply(scene, &r, &self.copies) {
+                match a {
+                    Action::DropBuffer(b) => {
+                        self.copies.0.remove(&b);
+                    }
+                    Action::Send(rec) => rec.encode(&mut out),
+                    Action::Activate(w) => scene.raise(w),
+                    // The copy was made with the buffer record; input,
+                    // cursors and interactive moves come with a later slice.
+                    Action::TakeBuffer(_) | Action::Cursor(..) | Action::BeginMove(_) | Action::BeginResize(..) => {}
+                }
+            }
+        }
+        if !out.is_empty()
+            && let Err(e) = os::write(self.fd, &out)
+        {
+            eprintln!("poly-compositor: {DEVICE}: {e}");
+        }
+    }
+
+    /// Fetch rows `y .. y + rows` of `surface`'s buffer into its copy.
+    fn fetch(&mut self, surface: SurfaceId, y: u32, rows: u32) {
+        let Some((b, _, height, stride)) = self.surfaces.buffer_of(surface) else { return };
+        let Some(copy) = self.copies.0.get_mut(&b) else { return };
+        let per = (READ_CHUNK / (stride as usize).max(1)).max(1) as u32;
+        let end = y.saturating_add(rows).min(height);
+        let mut row = y;
+        while row < end {
+            let n = per.min(end - row);
+            let at = row as usize * stride as usize;
+            if copy.len() < at + n as usize * stride as usize {
+                return;
+            }
+            let arg = ReadBuffer { buffer: b, row, rows: n, dst: copy[at..].as_mut_ptr() as u64 }.to_bytes();
+            // SAFETY: READ_BUFFER reads a ReadBuffer from `arg` and writes
+            // `n` rows of `stride` bytes at `dst`, inside `copy` (checked
+            // above).
+            if unsafe { os::control(self.fd, READ_BUFFER, arg.as_ptr() as u64) }.is_err() {
+                return;
+            }
+            row += n;
+        }
+    }
 }
 
 /// A window's content (for tests and the PPM dump's probes).

@@ -841,6 +841,8 @@ impl Gdi {
     fn brush_color(&self, brush: u32, state: &DcState) -> Option<Rgb> {
         match self.obj(u64::from(brush)) {
             Some(Obj::Brush { style: BS_NULL, .. }) => None,
+            // A deleted brush selected again paints nothing (observed).
+            Some(Obj::Brush { deleted: true, .. }) => None,
             Some(Obj::Brush { .. }) if brush == self.stock(DC_BRUSH) => Some(Rgb::from_colorref(state.dc_brush)),
             Some(Obj::Brush { color, .. }) => Some(Rgb::from_colorref(*color)),
             _ => None,
@@ -1019,7 +1021,17 @@ impl Gdi {
         let Some(sdc) = self.dc(src) else { return (false, 0) };
         let sbk = Rgb::from_colorref(sdc.state.bk);
         let pattern = self.brush_color(dstate.brush, &dstate);
-        let (w, h) = (w.abs(), h.abs());
+        let (mut x, mut y, mut sx, mut sy, mut w, mut h) = (x, y, sx, sy, w, h);
+        if w < 0 {
+            x += w;
+            sx += w;
+            w = -w;
+        }
+        if h < 0 {
+            y += h;
+            sy += h;
+            h = -h;
+        }
         if w == 0 || h == 0 {
             return (true, 0);
         }
@@ -1041,6 +1053,8 @@ impl Gdi {
             }
         }
         let src_bpp = s.bpp;
+        let src_dib = s.dib;
+        let src_colors = s.colors.clone();
         let src_mono = !s.dib && s.bpp == 1;
         let text = Rgb::from_colorref(dstate.text);
         let bk = Rgb::from_colorref(dstate.bk);
@@ -1058,7 +1072,7 @@ impl Gdi {
                         b.from_rgb(if raw & 1 == 0 { text } else { bk })
                     } else if b.bpp == 1 && !b.dib && !src_mono {
                         u32::from(is_bk)
-                    } else if src_bpp == b.bpp && b.bpp >= 16 {
+                    } else if src_bpp == b.bpp && (b.bpp >= 16 || (src_dib == b.dib && src_colors == b.colors)) {
                         raw
                     } else {
                         b.from_rgb(rgb)
