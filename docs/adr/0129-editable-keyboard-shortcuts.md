@@ -1,4 +1,4 @@
-# 0128: Editable keyboard shortcuts, as Alpine Shell records them
+# 0129: Editable keyboard shortcuts, as Alpine Shell records them
 
 **Status:** Accepted. The owner's request after ADR 0127: the Keyboard
 shortcuts page (Desktop tab) becomes editable, in Alpine Shell's style.

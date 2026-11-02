@@ -137,7 +137,7 @@ pub fn shortcut_mods(depressed: u32) -> Mods {
     m
 }
 
-/// The keyboard shortcuts (ADR 0128): evdev keys matched against the
+/// The keyboard shortcuts (ADR 0129): evdev keys matched against the
 /// shell's keymap (`poly_shell::shortcuts`), which the settings change.
 #[derive(Debug, Default)]
 pub struct Shortcuts {

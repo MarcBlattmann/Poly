@@ -1,4 +1,4 @@
-//! Keyboard shortcuts (ADR 0128), as Alpine Shell keeps them
+//! Keyboard shortcuts (ADR 0129), as Alpine Shell keeps them
 //! (`electron/modules/shellShortcutBindings.js`, `shellShortcuts.js`): one
 //! keymap of actions to key combinations, the defaults and the user's
 //! changes to them, recording a new combination (the first key that is

@@ -275,7 +275,7 @@ impl Desktop {
         match ev {
             InputEvent::Key { key, pressed, .. } => {
                 // A shortcut being recorded takes every key first (and the
-                // releases of the keys it took), ADR 0128.
+                // releases of the keys it took), ADR 0129.
                 if let Some(k) = u16::try_from(key).ok().and_then(poly_input::keycode::key)
                     && let Some((redraw, change)) = self.shell.shortcut_key(k, pressed, self.layout)
                 {

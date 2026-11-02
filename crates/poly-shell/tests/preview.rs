@@ -197,7 +197,7 @@ fn a_framed_window_and_the_settings() {
             save(&fb, &format!("settings-{name}{tag}.png"));
         }
     }
-    // Keyboard shortcuts being edited (ADR 0128): one changed (its reset
+    // Keyboard shortcuts being edited (ADR 0129): one changed (its reset
     // shows), one refused (its message in red), one recording.
     {
         use poly_input::Key as K;

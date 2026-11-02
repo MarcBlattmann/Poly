@@ -1713,7 +1713,7 @@ mod tests {
         assert_eq!(win.target_at(100, 138, W, H, &c), Some(Target::Nav(Page::Keyboard)));
         win.button(100, 138, true, W, H, &c);
         assert_eq!(win.target_at(500, 221, W, H, &c), Some(Target::Keyboard(1)));
-        // Keyboard shortcuts (ADR 0128): Up three times from Keyboard, the
+        // Keyboard shortcuts (ADR 0129): Up three times from Keyboard, the
         // Search hotkey's Set (its right edge does not move with the font).
         for _ in 0..3 {
             win.key(Key::Up);

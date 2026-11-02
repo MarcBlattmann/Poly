@@ -498,7 +498,7 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     thread::sleep(Duration::from_millis(1500));
     d.shot("settings-keyboard")?;
 
-    // 7. Keyboard shortcuts (ADR 0128): the Search hotkey rebound to
+    // 7. Keyboard shortcuts (ADR 0129): the Search hotkey rebound to
     // Ctrl+Alt+K in the settings with the pointer and keys; the new
     // combination opens and closes the launcher, the Windows key no longer
     // does; Restore all defaults brings the Windows key back.
@@ -654,7 +654,7 @@ fn just_up(socket: &Path, _lines: Lines, _sound: bool) -> std::result::Result<()
 /// `org.freedesktop.Notifications` on the session bus, the settings
 /// window changing the volume (through the mixer) and the keyboard layout
 /// (the client gets the new keymap), and a keyboard shortcut rebound,
-/// used and reset (ADR 0128); screenshots of each. A second boot
+/// used and reset (ADR 0129); screenshots of each. A second boot
 /// from the same disk reads the settings the first saved.
 pub fn shell_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     if cfg!(not(unix)) {

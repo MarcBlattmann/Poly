@@ -449,7 +449,7 @@ impl Shell {
     /// A key event for a shortcut being recorded (`key` on `layout`), before
     /// anything else sees it. None if it is not the recorder's; otherwise
     /// whether to draw the settings window again and the new combination
-    /// to apply (ADR 0128).
+    /// to apply (ADR 0129).
     pub fn shortcut_key(
         &mut self,
         key: poly_input::Key,

@@ -1,7 +1,7 @@
 //! The shell's settings (ADR 0117) and the file they persist in: display
 //! (resolution, scale), keyboard layout, wallpaper, sound (volume, mute),
 //! time zone, theme, tiling and the keyboard shortcuts changed from their
-//! defaults (`shortcut.<action>=<combination>`, ADR 0128).
+//! defaults (`shortcut.<action>=<combination>`, ADR 0129).
 //!
 //! The file is lines of `key=value` with `#` comments, written whole and
 //! renamed into place by the compositor (`$XDG_CONFIG_HOME/poly/shell.conf`
