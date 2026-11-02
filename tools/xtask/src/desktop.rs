@@ -134,16 +134,32 @@ pub fn image() -> Result<PathBuf> {
     initramfs::write(&root(), "poly-desktop-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))
 }
 
-/// `cargo xtask desktop [--release] [kernel args...]`: boot into the
-/// desktop in a QEMU window (no window without a desktop: then a VNC
-/// display on port 5900).
+/// The settings disk `cargo xtask desktop` keeps between runs (ext2,
+/// mounted on `/mnt`; the settings, keyboard shortcuts included, in
+/// `/mnt/poly/shell.conf`).
+pub const STATE_FILE: &str = "poly-desktop-state.img";
+
+/// `cargo xtask desktop [--release] [--fresh-state] [kernel args...]`: boot
+/// into the desktop in a QEMU window (no window without a desktop: then a
+/// VNC display on port 5900). The settings live on a small disk,
+/// `target/poly-desktop-state.img`, so they survive from one run to the
+/// next (`--fresh-state` starts again with the defaults).
 pub fn command(args: &[String]) -> Result {
     let release = args.iter().any(|a| a == "--release");
+    let fresh = args.iter().any(|a| a == "--fresh-state");
     let extra: Vec<&str> = args.iter().map(String::as_str).filter(|a| !a.starts_with("--")).collect();
     let kernel = super::build_kernel(release)?;
     let image = image()?;
-    let mut cmd = qemu(&kernel, MEMORY, &append(&extra.join(" ")), super::Devices::None, "mon:stdio");
-    cmd.arg("-initrd").arg(&image).args(devices());
+    let state = root().join("target").join(STATE_FILE);
+    if fresh || !state.exists() {
+        std::fs::write(&state, crate::ext2disk::image()?).map_err(|e| format!("{}: {e}", state.display()))?;
+        eprintln!("==> a new settings disk {}", state.display());
+    } else {
+        eprintln!("==> the settings disk {} is kept from before (--fresh-state starts again)", state.display());
+    }
+    let kernel_args = format!("{} {}", SETTINGS_ARGS, extra.join(" "));
+    let mut cmd = qemu(&kernel, MEMORY, &append(kernel_args.trim_end()), super::Devices::None, "mon:stdio");
+    cmd.arg("-initrd").arg(&image).args(devices()).args(state_drive(&state));
     if has_desktop() {
         eprintln!("==> the desktop is in QEMU's window; the Windows key or Ctrl+Space toggles the launcher");
     } else {
@@ -356,6 +372,15 @@ fn shown(d: &Driver, title: &str, secs: u64) -> std::result::Result<(i32, i32, i
     window_place(&line).ok_or_else(|| format!("unreadable window line {line:?}"))
 }
 
+/// What the compositor prints when a shortcut shows or hides the launcher.
+const LAUNCHER_SHOWN: &str = "poly-compositor: launcher shown";
+const LAUNCHER_HIDDEN: &str = "poly-compositor: launcher hidden";
+
+/// How many lines so far contain `text`.
+fn count(lines: &Lines, text: &str) -> usize {
+    lines.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|l| l.contains(text)).count()
+}
+
 /// Wait for the `n`th line containing `text`.
 fn wait_nth(lines: &Lines, text: &str, n: usize, secs: u64) -> std::result::Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(secs);
@@ -473,7 +498,40 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     thread::sleep(Duration::from_millis(1500));
     d.shot("settings-keyboard")?;
 
-    // 7. Alt+Tab: the switcher over the windows; releasing Alt switches
+    // 7. Keyboard shortcuts (ADR 0128): the Search hotkey rebound to
+    // Ctrl+Alt+K in the settings with the pointer and keys; the new
+    // combination opens and closes the launcher, the Windows key no longer
+    // does; Restore all defaults brings the Windows key back.
+    d.type_text(&["up", "up", "up"])?; // Keyboard -> Sound -> Displays -> Keyboard shortcuts
+    thread::sleep(Duration::from_millis(800));
+    click(&mut d, sx + 858, sy + 178)?; // the Search hotkey's Set
+    thread::sleep(Duration::from_millis(800));
+    d.shot("shortcut-recording")?;
+    chord(&mut d, &["ctrl", "alt", "k"])?;
+    d.wait("shortcut launcher is Ctrl+Alt+K", 30)?;
+    thread::sleep(Duration::from_millis(1000));
+    d.shot("shortcut-changed")?;
+    let (shown, hidden) = (count(&lines, LAUNCHER_SHOWN), count(&lines, LAUNCHER_HIDDEN));
+    d.type_text(&["meta_l"])?;
+    thread::sleep(Duration::from_millis(1500));
+    expect("the Windows key no longer toggles the launcher", count(&lines, LAUNCHER_SHOWN) == shown)?;
+    chord(&mut d, &["ctrl", "alt", "k"])?;
+    wait_nth(&lines, LAUNCHER_SHOWN, shown + 1, 30)?;
+    thread::sleep(Duration::from_millis(1500));
+    let img = d.shot("shortcut-launcher")?;
+    expect("Ctrl+Alt+K opened the launcher", img.pixel(900, 40) == RIDGE)?;
+    chord(&mut d, &["ctrl", "alt", "k"])?;
+    wait_nth(&lines, LAUNCHER_HIDDEN, hidden + 1, 30)?;
+    thread::sleep(Duration::from_millis(1000));
+    click(&mut d, sx + 872, sy + 77)?; // Restore all defaults
+    d.wait("every shortcut back to its default", 30)?;
+    d.type_text(&["meta_l"])?;
+    wait_nth(&lines, LAUNCHER_SHOWN, shown + 2, 30)?;
+    d.type_text(&["meta_l"])?;
+    wait_nth(&lines, LAUNCHER_HIDDEN, hidden + 2, 30)?;
+    thread::sleep(Duration::from_millis(1000));
+
+    // 8. Alt+Tab: the switcher over the windows; releasing Alt switches
     // back to the demo.
     d.send(&[key("alt", true)])?;
     d.send(&[key("tab", true)])?;
@@ -485,7 +543,7 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     d.send(&[key("alt", false)])?;
     d.wait("switched to \"Poly Demo\"", 30)?;
 
-    // 8. Minimized with the frame's button, back with Alt+Tab.
+    // 9. Minimized with the frame's button, back with Alt+Tab.
     let min_button = (645 + 630 - 4 - 8 - 44, 53 - 12);
     click(&mut d, min_button.0, min_button.1)?;
     thread::sleep(Duration::from_millis(4000));
@@ -500,7 +558,7 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     let img = d.shot("unminimized")?;
     expect("back from the switcher", img.pixel(1000, 700) == DEMO_A)?;
 
-    // 9. Alt+F4 closes it.
+    // 10. Alt+F4 closes it.
     chord(&mut d, &["alt", "f4"])?;
     d.wait("wl-demo: closed", 30)?;
     thread::sleep(Duration::from_millis(1000));
@@ -516,18 +574,27 @@ fn shell_devices(state: &Path, sound: bool) -> Vec<String> {
     if sound {
         v.extend(["-device", "virtio-sound-pci,audiodev=snd0", "-audiodev", "none,id=snd0"].map(String::from));
     }
-    v.extend([
+    v.extend(state_drive(state));
+    v
+}
+
+/// The settings disk as the first virtio-blk device.
+fn state_drive(state: &Path) -> Vec<String> {
+    vec![
         "-drive".to_string(),
         format!("if=none,id=state,format=raw,file={}", state.display()),
         "-device".to_string(),
         "virtio-blk-pci,drive=state,disable-legacy=on".to_string(),
-    ]);
-    v
+    ]
 }
+
+/// The kernel's arguments for the settings disk: mounted on `/mnt`, the
+/// compositor's settings file on it.
+const SETTINGS_ARGS: &str = "poly.mount=virtio0:/mnt poly.init.arg=--settings poly.init.arg=/mnt/poly/shell.conf";
 
 /// The kernel command line of the shell's boots.
 fn shell_append() -> String {
-    append("poly.mount=virtio0:/mnt poly.init.arg=--settings poly.init.arg=/mnt/poly/shell.conf")
+    append(SETTINGS_ARGS)
 }
 
 /// One boot of the shell test with `drive` run once the desktop is up.
@@ -584,9 +651,10 @@ fn just_up(socket: &Path, _lines: Lines, _sound: bool) -> std::result::Result<()
 /// maximize and minimize buttons, a double click on the title, Super+Left,
 /// dragging to the right edge with the snap preview, Alt+Tab with the
 /// switcher, Alt+F4), a notification sent by `notify-send` through
-/// `org.freedesktop.Notifications` on the session bus, and the settings
+/// `org.freedesktop.Notifications` on the session bus, the settings
 /// window changing the volume (through the mixer) and the keyboard layout
-/// (the client gets the new keymap); screenshots of each. A second boot
+/// (the client gets the new keymap), and a keyboard shortcut rebound,
+/// used and reset (ADR 0128); screenshots of each. A second boot
 /// from the same disk reads the settings the first saved.
 pub fn shell_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     if cfg!(not(unix)) {

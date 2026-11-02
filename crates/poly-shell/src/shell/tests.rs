@@ -466,3 +466,29 @@ fn the_ridge_gets_alpines_edge_over_windows() {
     assert_ne!(fb.pixel(100, 24), bare.pixel(100, 24));
     assert_eq!(fb.pixel(900, 24), bare.pixel(900, 24));
 }
+
+#[test]
+fn shortcuts_recorded_through_the_shell() {
+    use crate::shortcuts::{Action, Chord, Mods};
+    use poly_input::Key as K;
+    use poly_input::layout::US;
+    let mut s = shell();
+    // Not recording: the keys are not the shell's.
+    assert_eq!(s.shortcut_key(K::A, true, &US), None);
+    s.settings_window.open_at(Page::Shortcuts);
+    s.settings_window.recorder.start(Action::Launcher, 1_793_491_200);
+    // A key without a modifier is refused; the window is drawn again.
+    assert_eq!(s.shortcut_key(K::A, true, &US), Some((true, None)));
+    assert_eq!(s.shortcut_key(K::A, false, &US), Some((false, None)), "its release is swallowed too");
+    s.settings_window.recorder.start(Action::Launcher, 1_793_491_200);
+    assert_eq!(s.shortcut_key(K::ControlLeft, true, &US), Some((false, None)));
+    assert_eq!(s.shortcut_key(K::AltLeft, true, &US), Some((false, None)));
+    let chord = Chord::key(Mods::CTRL.union(Mods::ALT), "K");
+    assert_eq!(s.shortcut_key(K::K, true, &US), Some((true, Some(Change::Shortcut(Action::Launcher, chord.clone())))));
+    assert!(s.apply(&Change::Shortcut(Action::Launcher, chord.clone())));
+    assert_eq!(s.shortcuts().chord(Action::Launcher), chord);
+    // Recording gives up after 15 seconds.
+    s.settings_window.recorder.start(Action::Settings, 1_793_491_200);
+    assert!(s.set_time(1_793_491_215, 0));
+    assert!(!s.settings_window.recording());
+}

@@ -31,6 +31,7 @@ use crate::draw::{Face, Style, Text, fill, rounded_border, rounded_outline, roun
 use crate::icons::{Icon, lucide};
 use crate::launcher::Key;
 use crate::settings::{Change, KEYBOARDS, SCALES, Settings};
+use crate::shortcuts::{Action, Keymap, Recorded, Recorder, Refusal, key_name};
 use crate::theme::pal;
 use crate::theme::settings as t;
 use crate::theme::wallpaper::PRESETS;
@@ -39,6 +40,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use poly_input::layout::Layout;
 use poly_wayland::compose::paint::{self, Radii, Shadow};
 use poly_wayland::compose::{Framebuffer, Rect};
 
@@ -164,6 +166,10 @@ pub struct SystemInfo {
     pub session_bus: String,
 }
 
+/// The Search hotkey's description (Alpine's, less what Poly's launcher
+/// does not do).
+const LAUNCHER_HINT: &str = "Search apps and switch to open apps";
+
 /// What the pointer can hit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -184,6 +190,10 @@ pub enum Target {
     Tiling,
     SnapKeys,
     SnapDrag,
+    /// A shortcut's Set (or Cancel) button, its reset, every reset.
+    Record(Action),
+    ResetShortcut(Action),
+    ResetShortcuts,
 }
 
 /// One thing to draw.
@@ -249,6 +259,28 @@ enum Item {
     /// Key caps (Alpine's `KeyCaps`): 22 pixels high, radius 5, a ghost
     /// fill, a hairline ring and a stronger line under, Geist Mono 11 px.
     Caps(Vec<(Rect, String)>),
+    /// Alpine's small square ghost button (`h-7 px-3`, 13 px medium,
+    /// radius 8, the ghost fill on hover).
+    Button {
+        rect: Rect,
+        label: String,
+        hover: bool,
+    },
+    /// Alpine's `IconButton` (28 × 28, radius 8; faint when it does
+    /// nothing).
+    IconButton {
+        rect: Rect,
+        icon: Icon,
+        size: i32,
+        hover: bool,
+        enabled: bool,
+    },
+    /// Recording: "Press a shortcut" (22 high, radius 5, a quiet ring,
+    /// 11 px).
+    Pill {
+        rect: Rect,
+        text: String,
+    },
 }
 
 /// The window's state.
@@ -263,6 +295,9 @@ pub struct SettingsWindow {
     /// The settings search: its text, and whether it has the keys.
     search: String,
     searching: bool,
+    /// Recording a shortcut, and the last refusal (the row says why).
+    pub recorder: Recorder,
+    refusal: Option<(Action, String)>,
 }
 
 impl Default for SettingsWindow {
@@ -275,6 +310,8 @@ impl Default for SettingsWindow {
             at: 0,
             search: String::new(),
             searching: false,
+            recorder: Recorder::default(),
+            refusal: None,
         }
     }
 }
@@ -314,8 +351,11 @@ enum Control {
     Segmented(Vec<(String, bool, Target)>),
     Slider(u32, Option<Target>),
     Toggle(bool, Option<Target>),
-    /// Key caps, read-only.
-    Keys(Vec<&'static str>),
+    /// A shortcut: its caps (or "Press a shortcut"), its reset, Set.
+    Binding {
+        action: Action,
+        refused: bool,
+    },
 }
 
 /// Builds a page's items. `y` is the top of the next thing.
@@ -324,6 +364,9 @@ struct Builder<'a, 'b> {
     items: Vec<Item>,
     targets: Vec<(Rect, Target)>,
     hover: Option<Target>,
+    /// The shortcut being recorded, and the last refusal.
+    recording: Option<Action>,
+    refusal: Option<(Action, String)>,
     left: i32,
     right: i32,
     y: i32,
@@ -385,7 +428,12 @@ impl Builder<'_, '_> {
                     let b = self.baseline(r.y + 10, 20, LABEL);
                     self.text(x, b, max, &label, LABEL, pal().ink_primary);
                     let b = self.baseline(r.y + 32, 16, DESC);
-                    self.text(x, b, max, d, DESC, pal().quiet);
+                    let rgb = if matches!(control, Control::Binding { refused: true, .. }) {
+                        pal().danger
+                    } else {
+                        pal().quiet
+                    };
+                    self.text(x, b, max, d, DESC, rgb);
                 }
             }
             self.control(r, control);
@@ -430,20 +478,41 @@ impl Builder<'_, '_> {
                     self.targets.push((Rect::new(track.x - 6, r.y, track.width + 12, r.height), tg));
                 }
             }
-            Control::Keys(keys) => {
-                let mono = Style::new(Face::Mono, 11.0);
-                let mut caps = Vec::new();
-                // Alpine's fixed rows keep an invisible small "Set" button
-                // (28 pixels high, `px-2.5`, 12 px text) after the caps.
-                let set = self.cx.text.measure("Set", DESC) as i32 + 20;
-                let mut x = right - set - 8;
-                for k in keys.iter().rev() {
-                    let w = (self.cx.text.measure(k, mono) as i32 + 12).max(22);
-                    x -= w;
-                    caps.push((Rect::new(x, mid - 11, w, 22), (*k).to_string()));
-                    x -= 4;
+            Control::Binding { action, .. } => {
+                // Alpine's `BindingRow`: the caps (or "Press a shortcut"
+                // while recording), the reset when it differs from the
+                // default, then Set or Cancel; 8 pixels apart.
+                let recording = self.recording == Some(action);
+                let label = if recording { "Cancel" } else { "Set" };
+                let bst = Style::new(Face::Medium, t::DENSE_SIZE);
+                let bw = self.cx.text.measure(label, bst) as i32 + 24;
+                let btn = Rect::new(right - bw, mid - 14, bw, 28);
+                let hover = self.hover == Some(Target::Record(action));
+                self.items.push(Item::Button { rect: btn, label: label.into(), hover });
+                self.targets.push((btn, Target::Record(action)));
+                let mut x = btn.x - 8;
+                if !recording && self.cx.settings.shortcuts.is_custom(action) {
+                    let ib = Rect::new(x - 28, mid - 14, 28, 28);
+                    let hover = self.hover == Some(Target::ResetShortcut(action));
+                    self.items.push(Item::IconButton {
+                        rect: ib,
+                        icon: lucide::ROTATE_CCW,
+                        size: 14,
+                        hover,
+                        enabled: true,
+                    });
+                    self.targets.push((ib, Target::ResetShortcut(action)));
+                    x = ib.x - 8;
                 }
-                self.items.push(Item::Caps(caps));
+                if recording {
+                    let st = Style::new(Face::Sans, 11.0);
+                    let text = "Press a shortcut";
+                    let w = self.cx.text.measure(text, st) as i32 + 16;
+                    self.items.push(Item::Pill { rect: Rect::new(x - w, mid - 11, w, 22), text: text.into() });
+                } else {
+                    let keys = self.cx.settings.shortcuts.chord(action).caps();
+                    self.caps(x, mid, &keys);
+                }
             }
             Control::Toggle(on, target) => {
                 let rect = Rect::new(right - 38, mid - 11, 38, 22);
@@ -453,6 +522,35 @@ impl Builder<'_, '_> {
                 }
             }
         }
+    }
+
+    /// Key caps ending at `right`, centred on `mid`, 4 pixels apart.
+    fn caps(&mut self, right: i32, mid: i32, keys: &[String]) {
+        let mono = Style::new(Face::Mono, 11.0);
+        let mut caps = Vec::new();
+        let mut x = right;
+        for k in keys.iter().rev() {
+            let w = (self.cx.text.measure(k, mono) as i32 + 12).max(22);
+            x -= w;
+            caps.push((Rect::new(x, mid - 11, w, 22), k.clone()));
+            x -= 4;
+        }
+        caps.reverse();
+        self.items.push(Item::Caps(caps));
+    }
+
+    /// A card of shortcuts (Alpine's `ShortcutsPage` rows): each with its
+    /// description, or the refusal of its last recording in red.
+    fn bindings(&mut self, rows: &[(Action, Option<&str>)]) {
+        let rows = rows
+            .iter()
+            .map(|&(action, desc)| {
+                let refusal = self.refusal.as_ref().filter(|(a, _)| *a == action).map(|(_, m)| m.clone());
+                let refused = refusal.is_some();
+                (action.label().to_string(), refusal.or(desc.map(String::from)), Control::Binding { action, refused })
+            })
+            .collect();
+        self.rows(rows);
     }
 
     /// A card of choices (48-pixel rows, 36 for long lists): label,
@@ -606,6 +704,8 @@ impl SettingsWindow {
             items: Vec::new(),
             targets: Vec::new(),
             hover: self.hover,
+            recording: self.recorder.active(),
+            refusal: self.refusal.clone(),
             left: t::SIDEBAR + 1 + t::GUTTER,
             right: w - t::GUTTER,
             y: t::HEADER + 1 + t::GUTTER,
@@ -730,11 +830,7 @@ impl SettingsWindow {
             Page::Search => {
                 b.title("Search");
                 b.label("Hotkeys");
-                b.rows(vec![(
-                    "Search hotkey".into(),
-                    Some("Search apps and switch to open apps".into()),
-                    Control::Keys(vec!["Win"]),
-                )]);
+                b.bindings(&[(Action::Launcher, Some(LAUNCHER_HINT))]);
                 b.label("Search results");
                 b.rows(vec![(
                     "Maximum results".into(),
@@ -779,34 +875,35 @@ impl SettingsWindow {
                 }
             }
             Page::Shortcuts => {
-                // Alpine's page: two columns from its `lg` width (1024), the
-                // fixed rows (Poly's shortcuts are not rebound) with caps.
+                // Alpine's page: two columns from its `lg` width (1024),
+                // every row recordable (Set, Escape cancels, the reset when
+                // changed); once one is changed, Poly's "Restore all
+                // defaults" on the title's line (a small ghost button).
+                let title_top = b.y;
                 b.title("Keyboard shortcuts");
-                let keys = |label: &str, desc: Option<&str>, k: Vec<&'static str>| {
-                    (label.to_string(), desc.map(String::from), Control::Keys(k))
-                };
+                if st.shortcuts.any_custom() {
+                    let label = "Restore all defaults";
+                    let bw = cx.text.measure(label, Style::new(Face::Medium, t::DENSE_SIZE)) as i32 + 24;
+                    let rect = Rect::new(b.right - bw, title_top + 2, bw, 28);
+                    let hover = b.hover == Some(Target::ResetShortcuts);
+                    b.items.push(Item::Button { rect, label: label.into(), hover });
+                    b.targets.push((rect, Target::ResetShortcuts));
+                }
                 let (left, right, top) = (b.left, b.right, b.y);
                 let two = w >= 1024;
                 if two {
                     b.right = (left + right - 32) / 2;
                 }
                 b.label("Search");
-                b.rows(vec![
-                    keys("Search hotkey", Some("Search apps and switch to open apps"), vec!["Win"]),
-                    keys("Search, second hotkey", None, vec!["Ctrl", "Space"]),
-                ]);
+                b.bindings(&[(Action::Launcher, Some(LAUNCHER_HINT)), (Action::LauncherAlt, None)]);
                 b.label("Apps");
-                b.rows(vec![keys("Settings", None, vec!["Win", "I"]), keys("Notifications", None, vec!["Win", "N"])]);
+                b.bindings(&[(Action::Settings, None), (Action::Notifications, None)]);
                 let end = b.y;
                 if two {
                     (b.left, b.right, b.y) = ((left + right + 32) / 2, right, top);
                 }
                 b.label("Windows");
-                b.rows(vec![
-                    keys("Switch windows", None, vec!["Alt", "Tab"]),
-                    keys("Snap window", None, vec!["Win", "\u{2190}", "\u{2192}", "\u{2191}", "\u{2193}"]),
-                    keys("Close window", None, vec!["Alt", "F4"]),
-                ]);
+                b.bindings(&[(Action::SwitchWindows, None), (Action::SnapWindow, None), (Action::CloseWindow, None)]);
                 (b.left, b.right, b.y) = (left, right, b.y.max(end));
             }
             Page::Display => {
@@ -1000,8 +1097,36 @@ impl SettingsWindow {
         self.hover.take().is_some()
     }
 
+    /// Recording ended with `outcome` (keys named on `layout`): the
+    /// combination to store, or the refusal shown in the row.
+    pub fn recorded(&mut self, outcome: Recorded, keymap: &Keymap, layout: &Layout) -> Option<Change> {
+        self.refusal = None;
+        let Recorded::Chord(action, mods, key) = outcome else { return None };
+        let checked = match key_name(key, layout) {
+            Some(name) => keymap.validate(action, mods, &name),
+            None => Err(Refusal::Unknown),
+        };
+        match checked {
+            Ok(chord) => Some(Change::Shortcut(action, chord)),
+            Err(why) => {
+                self.refusal = Some((action, why.message()));
+                None
+            }
+        }
+    }
+
+    /// Whether a shortcut is being recorded (the compositor gives it the
+    /// keys first).
+    pub fn recording(&self) -> bool {
+        self.recorder.active().is_some()
+    }
+
     /// Go to page `p` (remembered for the arrows); the search ends.
     fn go(&mut self, p: Page) -> bool {
+        if p != self.page {
+            self.recorder.stop();
+            self.refusal = None;
+        }
         let was_searching = !self.search.is_empty();
         self.search.clear();
         self.searching = false;
@@ -1038,7 +1163,9 @@ impl SettingsWindow {
         if target != Some(Target::Search) && self.searching && self.search.is_empty() {
             self.searching = false;
         }
-        let Some(target) = target else { return (false, None) };
+        // A press anywhere else ends recording (Alpine's blur).
+        let stopped = !matches!(target, Some(Target::Record(_))) && self.recorder.stop();
+        let Some(target) = target else { return (stopped, None) };
         let st = cx.settings;
         let change = match target {
             Target::Nav(p) => return (self.go(p), None),
@@ -1087,6 +1214,23 @@ impl SettingsWindow {
             Target::Tiling => Some(Change::Tiling(!st.tiling)),
             Target::SnapKeys => Some(Change::SnapKeys(!st.snap_keys)),
             Target::SnapDrag => Some(Change::SnapDrag(!st.snap_drag)),
+            Target::Record(a) => {
+                self.refusal = None;
+                if self.recorder.active() == Some(a) {
+                    self.recorder.stop();
+                } else {
+                    self.recorder.start(a, cx.utc);
+                }
+                return (true, None);
+            }
+            Target::ResetShortcut(a) => {
+                self.refusal = None;
+                Some(Change::ResetShortcut(a))
+            }
+            Target::ResetShortcuts => {
+                self.refusal = None;
+                Some(Change::ResetShortcuts)
+            }
         };
         (true, change)
     }
@@ -1248,6 +1392,61 @@ impl SettingsWindow {
                 }
                 Item::Icon { icon, x, y, size, rgb, alpha } => {
                     icon.draw(fb, all, (x * s) as f32, (y * s) as f32, (size * s) as f32, *rgb, *alpha);
+                }
+                Item::Button { rect, label, hover } => {
+                    let r = rect.scale(s);
+                    if *hover {
+                        rounded_rect(fb, all, r, t::FIELD_RADIUS * s, pal().ink, pal().ghost);
+                    }
+                    let st = Style::new(Face::Medium, t::DENSE_SIZE).scaled(s);
+                    let lw = text.measure(label, st);
+                    let b = text.centre(r.y, r.height, st);
+                    text.draw_style(
+                        fb,
+                        all,
+                        r.x as f32 + (r.width as f32 - lw) / 2.0,
+                        b,
+                        r.right(),
+                        label,
+                        st,
+                        pal().ink_primary,
+                        255,
+                    );
+                }
+                Item::IconButton { rect, icon, size, hover, enabled } => {
+                    let r = rect.scale(s);
+                    if *hover {
+                        rounded_rect(fb, all, r, t::FIELD_RADIUS * s, pal().ink, pal().ghost);
+                    }
+                    let rgb = if *enabled { pal().ink_primary } else { pal().faint };
+                    let sz = size * s;
+                    icon.draw(
+                        fb,
+                        all,
+                        (r.x + (r.width - sz) / 2) as f32,
+                        (r.y + (r.height - sz) / 2) as f32,
+                        sz as f32,
+                        rgb,
+                        255,
+                    );
+                }
+                Item::Pill { rect, text: label } => {
+                    let r = rect.scale(s);
+                    rounded_border(fb, all, r, 5 * s, s, pal().quiet, 255);
+                    let st = Style::new(Face::Sans, 11.0).scaled(s);
+                    let lw = text.measure(label, st);
+                    let b = text.centre(r.y, r.height, st);
+                    text.draw_style(
+                        fb,
+                        all,
+                        r.x as f32 + (r.width as f32 - lw) / 2.0,
+                        b,
+                        r.right(),
+                        label,
+                        st,
+                        pal().ink_primary,
+                        255,
+                    );
                 }
                 Item::Caps(caps) => {
                     let mono = Style::new(Face::Mono, 11.0).scaled(s);
@@ -1514,6 +1713,18 @@ mod tests {
         assert_eq!(win.target_at(100, 138, W, H, &c), Some(Target::Nav(Page::Keyboard)));
         win.button(100, 138, true, W, H, &c);
         assert_eq!(win.target_at(500, 221, W, H, &c), Some(Target::Keyboard(1)));
+        // Keyboard shortcuts (ADR 0128): Up three times from Keyboard, the
+        // Search hotkey's Set (its right edge does not move with the font).
+        for _ in 0..3 {
+            win.key(Key::Up);
+        }
+        assert_eq!(win.page, Page::Shortcuts);
+        assert_eq!(win.target_at(858, 178, W, H, &c), Some(Target::Record(Action::Launcher)));
+        // Once one is changed, Restore all defaults on the title's line.
+        let mut changed = st.clone();
+        changed.apply(&Change::Shortcut(Action::Launcher, crate::shortcuts::Chord::parse("Ctrl+Alt+K").unwrap()));
+        let c = cx(&changed, &i, &text);
+        assert_eq!(win.target_at(872, 77, W, H, &c), Some(Target::ResetShortcuts));
     }
 
     #[test]
@@ -1545,6 +1756,77 @@ mod tests {
         assert!(targets.iter().any(|t| t.1 == Target::Tiling));
         assert!(!targets.iter().any(|t| t.1 == Target::SnapKeys));
         assert_eq!(off.snaps(), (false, false));
+    }
+
+    #[test]
+    fn shortcuts_are_recorded_refused_and_reset() {
+        use crate::shortcuts::{Chord, Mods};
+        use poly_input::Key as K;
+        use poly_input::layout::US;
+        let text = Text::new(None);
+        let (mut st, i) = (Settings::default(), info());
+        let mut win = SettingsWindow { page: Page::Shortcuts, ..SettingsWindow::default() };
+        let c = cx(&st, &i, &text);
+        // Set starts recording: "Press a shortcut", the button says Cancel.
+        let (x, y) = at(&win, &c, Target::Record(Action::Settings));
+        assert_eq!(win.button(x, y, true, W, H, &c), (true, None));
+        assert!(win.recording());
+        let (items, _) = win.layout(W, H, &c);
+        assert!(items.iter().any(|i| matches!(i, Item::Pill { text, .. } if text == "Press a shortcut")));
+        assert!(items.iter().any(|i| matches!(i, Item::Button { label, .. } if label == "Cancel")));
+        // Win+N is taken: refused, the row says so in red.
+        win.recorder.key(K::MetaLeft, true);
+        let (_, done) = win.recorder.key(K::N, true);
+        assert_eq!(win.recorded(done.unwrap(), &st.shortcuts, &US), None);
+        assert!(!win.recording());
+        let (items, _) = win.layout(W, H, &c);
+        let red = |items: &[Item]| {
+            items.iter().any(
+                |i| matches!(i, Item::Text { text, rgb, .. } if text == "Already used by Notifications." && *rgb == pal().danger),
+            )
+        };
+        assert!(red(&items));
+        // Again, Ctrl+Alt+O: taken.
+        win.button(x, y, true, W, H, &c);
+        assert!(!red(&win.layout(W, H, &c).0), "a new recording clears the refusal");
+        win.recorder.key(K::ControlLeft, true);
+        win.recorder.key(K::AltLeft, true);
+        let (_, done) = win.recorder.key(K::O, true);
+        let change = win.recorded(done.unwrap(), &st.shortcuts, &US).unwrap();
+        let chord = Chord::key(Mods::CTRL.union(Mods::ALT), "O");
+        assert_eq!(change, Change::Shortcut(Action::Settings, chord.clone()));
+        assert!(st.apply(&change));
+        assert_eq!(st.shortcuts.chord(Action::Settings), chord);
+        // Changed: its caps, its reset, and Restore all defaults.
+        let c = cx(&st, &i, &text);
+        let (items, targets) = win.layout(W, H, &c);
+        assert!(
+            items.iter().any(|i| matches!(i, Item::Caps(k) if k.iter().map(|k| k.1.as_str()).eq(["Ctrl", "Alt", "O"])))
+        );
+        assert!(targets.iter().any(|t| t.1 == Target::ResetShortcuts));
+        let (x, y) = at(&win, &c, Target::ResetShortcut(Action::Settings));
+        assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::ResetShortcut(Action::Settings)));
+        let (x, y) = at(&win, &c, Target::ResetShortcuts);
+        assert_eq!(win.button(x, y, true, W, H, &c).1, Some(Change::ResetShortcuts));
+        // Escape cancels; Cancel and a click elsewhere end it too.
+        let (x, y) = at(&win, &c, Target::Record(Action::Launcher));
+        win.button(x, y, true, W, H, &c);
+        let (_, done) = win.recorder.key(K::Escape, true);
+        assert_eq!(done, Some(Recorded::Cancelled));
+        assert_eq!(win.recorded(done.unwrap(), &st.shortcuts, &US), None);
+        win.button(x, y, true, W, H, &c);
+        win.button(x, y, true, W, H, &c);
+        assert!(!win.recording(), "Cancel");
+        win.button(x, y, true, W, H, &c);
+        win.button(W - 20, H - 20, true, W, H, &c);
+        assert!(!win.recording(), "a click elsewhere");
+        // Nothing changed: Restore all defaults does nothing.
+        let st = Settings::default();
+        let c = cx(&st, &i, &text);
+        assert!(!win.layout(W, H, &c).1.iter().any(|t| t.1 == Target::ResetShortcuts));
+        // The Search page's hotkey records the same binding.
+        win.page = Page::Search;
+        assert!(win.layout(W, H, &c).1.iter().any(|t| t.1 == Target::Record(Action::Launcher)));
     }
 
     #[test]
